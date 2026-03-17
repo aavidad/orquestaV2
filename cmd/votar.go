@@ -16,7 +16,7 @@ import (
 )
 
 var votarCmd = &cobra.Command{
-	Use:   "votar <codigo-op> <agente> <acuerdo|desacuerdo|abstencion> [comentario...]",
+	Use:   "votar <codigo-op> <acuerdo|desacuerdo|abstencion> [comentario...]",
 	Short: "Vota una propuesta",
 	Long: `Registra el voto de un agente en una propuesta OP-XXX.
 Reglas de consenso:
@@ -24,16 +24,42 @@ Reglas de consenso:
   - Si cualquier agente vota desacuerdo → Alberto decide manualmente.
 
 Ejemplos:
-  orquesta votar OP-030 claude acuerdo
-  orquesta votar OP-030 codex1 desacuerdo "requiere más análisis de rendimiento"`,
-	Args: cobra.MinimumNArgs(3),
+  orquesta votar OP-030 acuerdo --agente claude
+  orquesta votar OP-030 desacuerdo --agente codex1 --comentario "requiere más análisis de rendimiento"
+  orquesta votar OP-030 claude acuerdo`,
+	Args: cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		codigo := args[0]
-		agente := args[1]
-		posicion := args[2]
-		comentario := ""
-		if len(args) > 3 {
-			comentario = strings.Join(args[3:], " ")
+		agente, err := resolverValorFlag(cmd, "agente")
+		if err != nil {
+			return err
+		}
+		posicion := ""
+		comentario, _ := cmd.Flags().GetString("comentario")
+
+		switch {
+		case len(args) >= 3:
+			if agente != "" && agente != strings.TrimSpace(args[1]) {
+				return fmt.Errorf("el agente posicional (%s) no coincide con --agente (%s)", args[1], agente)
+			}
+			agente = strings.TrimSpace(args[1])
+			posicion = args[2]
+			if len(args) > 3 {
+				comentario = strings.Join(args[3:], " ")
+			}
+		case len(args) == 2:
+			posicion = args[1]
+			if strings.TrimSpace(agente) == "" {
+				return fmt.Errorf("--agente es obligatorio cuando no se pasa el agente como argumento posicional")
+			}
+		default:
+			return fmt.Errorf("uso inválido de votar")
+		}
+
+		switch db.PosicionVoto(posicion) {
+		case db.VotoAcuerdo, db.VotoDesacuerdo, db.VotoAbstencion:
+		default:
+			return fmt.Errorf("posición '%s' no válida", posicion)
 		}
 
 		p, err := db.GetPropuesta(codigo)
@@ -44,7 +70,7 @@ Ejemplos:
 			return fmt.Errorf("la propuesta %s ya está cerrada (%s)", codigo, p.Estado)
 		}
 
-		consenso, err := db.Votar(p.ID, agente, db.PosicionVoto(posicion), comentario)
+		consenso, err := db.Votar(p.ID, agente, db.PosicionVoto(posicion), strings.TrimSpace(comentario))
 		if err != nil {
 			return err
 		}
@@ -62,4 +88,9 @@ Ejemplos:
 		}
 		return nil
 	},
+}
+
+func init() {
+	votarCmd.Flags().String("agente", "", "Agente que emite el voto (requerido si no va en posición)")
+	votarCmd.Flags().String("comentario", "", "Comentario del voto")
 }

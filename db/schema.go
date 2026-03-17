@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS tareas (
     completada_at DATETIME
 );
 
--- ─── Propuestas (equivalente a Opinion.md OPs) ────────────────────────────
+-- ─── Propuestas de orquestación ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS propuestas (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     codigo        TEXT    NOT NULL UNIQUE,   -- OP-030, OP-031…
@@ -210,7 +210,7 @@ INSERT OR IGNORE INTO reglas (tipo_agente, categoria, titulo, descripcion) VALUE
 ('programador','calidad','Gate de cierre de módulo',
  'Al cerrar módulo: go build ./..., go vet ./..., go test ./... deben pasar.'),
 ('programador','calidad','Propuesta antes de código',
- 'No escribir código sin propuesta OP-XXX aprobada en Opinion.md o en la BD.'),
+ 'No escribir código sin propuesta OP-XXX aprobada en la app de orquestación.'),
 ('programador','calidad','Idioma castellano',
  'Todo en castellano. Inglés solo cuando lo exija framework, librería o protocolo.'),
 ('programador','calidad','Cabecera GPLv3',
@@ -227,7 +227,7 @@ INSERT OR IGNORE INTO reglas (tipo_agente, categoria, titulo, descripcion) VALUE
 ('programador','comandos','Gestión de tareas',
  'Iniciar: orquesta tarea iniciar <id> <agente>  |  Completar: orquesta tarea completar <id> <agente> --commit "feat(MXX): ..."  |  Bloquear: orquesta tarea bloquear <id> <agente> --motivo "razón"  |  Desbloquear: orquesta tarea desbloquear <id> <agente> --resolucion "cómo se resolvió"  |  Ver mis tareas: orquesta tarea listar --agente <nombre>'),
 ('programador','comandos','Propuestas y votación',
- 'Nueva propuesta: orquesta propuesta nueva "Título" --descripcion "Descripción" --agente <nombre>  |  Votar: orquesta votar <OP-XXX> <acuerdo|desacuerdo|abstencion> --comentario "razón"  |  Ver propuesta: orquesta propuesta ver <OP-XXX>  |  Ver pendientes de voto: incluidas en el briefing de sesion inicio.');
+ 'Nueva propuesta: orquesta propuesta nueva "Título" --descripcion "Descripción" --agente <nombre>  |  Votar: orquesta votar <OP-XXX> <acuerdo|desacuerdo|abstencion> --agente <nombre> --comentario "razón"  |  Ver propuesta: orquesta propuesta ver <OP-XXX>  |  Ver pendientes de voto: incluidas en el briefing de sesion inicio.');
 
 -- ─── Reglas: documentador ───────────────────────────────────────────────────
 INSERT OR IGNORE INTO reglas (tipo_agente, categoria, titulo, descripcion) VALUES
@@ -284,18 +284,18 @@ INSERT OR IGNORE INTO workflows (tipo_agente, nombre, descripcion, pasos) VALUES
 ('programador','inicio-sesion',
  'Protocolo obligatorio al comenzar cualquier sesión de trabajo.',
  '["1. Ejecutar: orquesta sesion inicio <mi-nombre>",
-   "2. Leer ContaGrx/orquestacion.md → identificar tareas libre o disponibles",
+   "2. Ver tareas asignadas: orquesta tarea listar --agente <mi-nombre>",
    "3. Votar todas las propuestas con posicion pendiente para mi agente",
-   "4. Registrar la tarea en orquestacion.md antes de tocar código",
+   "4. Iniciar la tarea en la app: orquesta tarea iniciar <id> <mi-nombre>",
    "5. Leer el doc del módulo asignado en docs/modulos/MXX_*.md"]'),
 ('programador','fin-sesion',
  'Protocolo obligatorio al terminar cualquier sesión de trabajo.',
  '["1. Asegurar que todo el trabajo está commiteado (git status limpio)",
-   "2. Actualizar estado de mis tareas en orquestacion.md",
+   "2. Completar o bloquear mis tareas en la app de orquestación según corresponda",
    "3. Ejecutar: orquesta sesion fin <mi-nombre>"]'),
 ('programador','crear-modulo',
  'Flujo completo para implementar un módulo nuevo (14 pasos).',
- '["1. Crear propuesta OP-XXX en Opinion.md o BD y esperar consenso",
+ '["1. Crear propuesta OP-XXX con orquesta propuesta nueva y esperar consenso en la app",
    "2. Crear fichero de dominio: internal/domain/<modulo>_entities.go",
    "3. Crear interfaces: internal/domain/<modulo>_interfaces.go",
    "4. Crear migración SQL: migrations/XXXXXX_<modulo>.up.sql",
@@ -311,9 +311,9 @@ INSERT OR IGNORE INTO workflows (tipo_agente, nombre, descripcion, pasos) VALUES
    "14. Gate final: go build ./... && go vet ./... && go test ./... → notificar a Antigravity"]'),
 ('programador','votar-propuesta',
  'Proceso para votar una propuesta OP-XXX.',
- '["1. Leer la propuesta completa en Opinion.md o: orquesta propuesta ver <codigo>",
+ '["1. Leer la propuesta completa: orquesta propuesta ver <codigo>",
    "2. Analizar impacto técnico en módulos asignados",
-   "3. Votar: orquesta votar <codigo> <acuerdo|desacuerdo|abstencion> [comentario]",
+   "3. Votar: orquesta votar <codigo> <acuerdo|desacuerdo|abstencion> --agente <mi-nombre> --comentario \"razón\"",
    "4. Si desacuerdo: añadir comentario técnico con alternativa concreta"]');
 
 -- ─── Workflows: documentador (antigravity) ──────────────────────────────────
@@ -321,7 +321,7 @@ INSERT OR IGNORE INTO workflows (tipo_agente, nombre, descripcion, pasos) VALUES
 ('documentador','inicio-sesion',
  'Protocolo obligatorio al comenzar cualquier sesión de trabajo.',
  '["1. Ejecutar: orquesta sesion inicio antigravity",
-   "2. Leer ContaGrx/orquestacion.md → identificar módulos cerrados sin documentar",
+   "2. Ver tareas asignadas: orquesta tarea listar --agente antigravity",
    "3. Votar propuestas con posicion pendiente para antigravity",
    "4. Revisar docs/00_INDICE.md para detectar gaps"]'),
 ('documentador','fin-sesion',

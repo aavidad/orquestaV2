@@ -16,8 +16,9 @@ var DB *sql.DB
 // Open abre (o crea) la base de datos SQLite y aplica el schema.
 // Orden de resolución de la ruta:
 //  1. Variable de entorno ORQUESTA_DB
-//  2. <git-root>/orquesta.db
-//  3. ./orquesta.db
+//  2. Repositorio `orquesta` del workspace actual (../orquesta/orquesta.db)
+//  3. Si el git-root ya es el repo `orquesta`, <git-root>/orquesta.db
+//  4. ./orquesta.db
 func Open() error {
 	path := resolverRuta()
 	db, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_foreign_keys=on&_busy_timeout=5000")
@@ -38,6 +39,52 @@ func Open() error {
 func postMigraciones() {
 	migraciones := []string{
 		`ALTER TABLE agentes ADD COLUMN estado_sesion TEXT DEFAULT NULL`,
+		`UPDATE reglas
+		 SET descripcion='No escribir código sin propuesta OP-XXX aprobada en la app de orquestación.'
+		 WHERE tipo_agente='programador' AND categoria='calidad' AND titulo='Propuesta antes de código'`,
+		`UPDATE reglas
+		 SET descripcion='Nueva propuesta: orquesta propuesta nueva "Título" --descripcion "Descripción" --agente <nombre>  |  Votar: orquesta votar <OP-XXX> <acuerdo|desacuerdo|abstencion> --agente <nombre> --comentario "razón"  |  Ver propuesta: orquesta propuesta ver <OP-XXX>  |  Ver pendientes de voto: incluidas en el briefing de sesion inicio.'
+		 WHERE tipo_agente='programador' AND categoria='comandos' AND titulo='Propuestas y votación'`,
+		`UPDATE workflows
+		 SET pasos='["1. Leer la propuesta completa: orquesta propuesta ver <codigo>",
+   "2. Analizar impacto técnico en módulos asignados",
+   "3. Votar: orquesta votar <codigo> <acuerdo|desacuerdo|abstencion> --agente <mi-nombre> --comentario \"razón\"",
+   "4. Si desacuerdo: añadir comentario técnico con alternativa concreta"]'
+		 WHERE tipo_agente='programador' AND nombre='votar-propuesta'`,
+		`UPDATE workflows
+		 SET pasos='["1. Ejecutar: orquesta sesion inicio <mi-nombre>",
+   "2. Ver tareas asignadas: orquesta tarea listar --agente <mi-nombre>",
+   "3. Votar todas las propuestas con posicion pendiente para mi agente",
+   "4. Iniciar la tarea en la app: orquesta tarea iniciar <id> <mi-nombre>",
+   "5. Leer el doc del módulo asignado en docs/modulos/MXX_*.md"]'
+		 WHERE tipo_agente='programador' AND nombre='inicio-sesion'`,
+		`UPDATE workflows
+		 SET pasos='["1. Asegurar que todo el trabajo está commiteado (git status limpio)",
+   "2. Completar o bloquear mis tareas en la app de orquestación según corresponda",
+   "3. Ejecutar: orquesta sesion fin <mi-nombre>"]'
+		 WHERE tipo_agente='programador' AND nombre='fin-sesion'`,
+		`UPDATE workflows
+		 SET pasos='["1. Crear propuesta OP-XXX con orquesta propuesta nueva y esperar consenso en la app",
+   "2. Crear fichero de dominio: internal/domain/<modulo>_entities.go",
+   "3. Crear interfaces: internal/domain/<modulo>_interfaces.go",
+   "4. Crear migración SQL: migrations/XXXXXX_<modulo>.up.sql",
+   "5. Crear repositorio: internal/repository/postgres_<modulo>.go",
+   "6. Commit: feat(MXX): dominio e interfaces",
+   "7. Crear servicio: internal/service/<modulo>_service.go",
+   "8. Commit: feat(MXX): servicio",
+   "9. Crear tests: internal/service/<modulo>_service_test.go",
+   "10. Ejecutar go test ./internal/service/... → debe pasar",
+   "11. Commit: feat(MXX): tests servicio",
+   "12. Crear handler REST: internal/api/<modulo>_handler.go",
+   "13. Commit: feat(MXX): handler REST",
+   "14. Gate final: go build ./... && go vet ./... && go test ./... → notificar a Antigravity"]'
+		 WHERE tipo_agente='programador' AND nombre='crear-modulo'`,
+		`UPDATE workflows
+		 SET pasos='["1. Ejecutar: orquesta sesion inicio antigravity",
+   "2. Ver tareas asignadas: orquesta tarea listar --agente antigravity",
+   "3. Votar propuestas con posicion pendiente para antigravity",
+   "4. Revisar docs/00_INDICE.md para detectar gaps"]'
+		 WHERE tipo_agente='documentador' AND nombre='inicio-sesion'`,
 	}
 	for _, m := range migraciones {
 		_, _ = DB.Exec(m) // ignorar "duplicate column name"
@@ -56,9 +103,55 @@ func resolverRuta() string {
 	}
 	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
 	if err == nil {
-		return filepath.Join(strings.TrimSpace(string(out)), "orquesta.db")
+		return resolverRutaDesdeGitRoot(strings.TrimSpace(string(out)))
+	}
+	if wd, err := os.Getwd(); err == nil {
+		if ruta := buscarRutaRepoOrquesta(wd); ruta != "" {
+			return ruta
+		}
 	}
 	return "orquesta.db"
+}
+
+func resolverRutaDesdeGitRoot(root string) string {
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return "orquesta.db"
+	}
+	if filepath.Base(root) == "orquesta" {
+		return filepath.Join(root, "orquesta.db")
+	}
+	if ruta := rutaRepoOrquestaEnDirectorio(filepath.Dir(root)); ruta != "" {
+		return ruta
+	}
+	return filepath.Join(root, "orquesta.db")
+}
+
+func buscarRutaRepoOrquesta(inicio string) string {
+	actual := filepath.Clean(inicio)
+	for {
+		if ruta := rutaRepoOrquestaEnDirectorio(actual); ruta != "" {
+			return ruta
+		}
+		siguiente := filepath.Dir(actual)
+		if siguiente == actual {
+			return ""
+		}
+		actual = siguiente
+	}
+}
+
+func rutaRepoOrquestaEnDirectorio(base string) string {
+	candidato := filepath.Join(base, "orquesta")
+	if existeFichero(filepath.Join(candidato, "go.mod")) {
+		return filepath.Join(candidato, "orquesta.db")
+	}
+	return ""
+}
+
+func existeFichero(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 func aplicarSchema(db *sql.DB) error {

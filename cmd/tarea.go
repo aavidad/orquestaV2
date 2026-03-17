@@ -210,15 +210,18 @@ var tareaCompletarCmd = &cobra.Command{
 }
 
 var tareaBloquearCmd = &cobra.Command{
-	Use:   "bloquear <id> <agente> <motivo>",
+	Use:   "bloquear <id> <agente> [motivo]",
 	Short: "Bloquea una tarea indicando el motivo",
-	Args:  cobra.MinimumNArgs(3),
+	Args:  cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
-		motivo := strings.Join(args[2:], " ")
+		motivo, err := resolverTextoFlagOPosicional(cmd, args, 2, "motivo")
+		if err != nil {
+			return err
+		}
 		if err := db.BloquearTarea(id, args[1], motivo); err != nil {
 			return err
 		}
@@ -267,15 +270,18 @@ var tareaReasignarCmd = &cobra.Command{
 }
 
 var tareaDesbloquearCmd = &cobra.Command{
-	Use:   "desbloquear <id> <agente> <resolución...>",
+	Use:   "desbloquear <id> <agente> [resolución...]",
 	Short: "Desbloquea una tarea indicando cómo se resolvió",
-	Args:  cobra.MinimumNArgs(3),
+	Args:  cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
-		resolucion := strings.Join(args[2:], " ")
+		resolucion, err := resolverTextoFlagOPosicional(cmd, args, 2, "resolucion")
+		if err != nil {
+			return err
+		}
 		if err := db.DesbloquearTarea(id, args[1], resolucion); err != nil {
 			return err
 		}
@@ -318,6 +324,8 @@ func init() {
 	tareaNuevaCmd.Flags().String("propuesta", "", "Código de propuesta vinculada (ej: OP-030)")
 
 	tareaCompletarCmd.Flags().String("commit", "", "Hash o referencia del commit de cierre")
+	tareaBloquearCmd.Flags().String("motivo", "", "Motivo del bloqueo")
+	tareaDesbloquearCmd.Flags().String("resolucion", "", "Cómo se resolvió el bloqueo")
 
 	tareaCmd.AddCommand(
 		tareaListarCmd, tareaVerCmd, tareaNuevaCmd,

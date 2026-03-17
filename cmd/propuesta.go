@@ -90,17 +90,24 @@ var propuestaVerCmd = &cobra.Command{
 }
 
 var propuestaNuevaCmd = &cobra.Command{
-	Use:   "nueva",
+	Use:   "nueva [titulo]",
 	Short: "Crea una nueva propuesta",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		titulo, _ := cmd.Flags().GetString("titulo")
 		desc, _ := cmd.Flags().GetString("descripcion")
 		tipo, _ := cmd.Flags().GetString("tipo")
-		por, _ := cmd.Flags().GetString("por")
 		codigo, _ := cmd.Flags().GetString("codigo")
+		if strings.TrimSpace(titulo) == "" && len(args) == 1 {
+			titulo = strings.TrimSpace(args[0])
+		}
+		por, err := resolverValorFlag(cmd, "agente", "por")
+		if err != nil {
+			return err
+		}
 
 		if titulo == "" {
-			return fmt.Errorf("--titulo es obligatorio")
+			return fmt.Errorf("debe indicar el título con --titulo o como argumento posicional")
 		}
 
 		p := &db.Propuesta{
@@ -126,7 +133,10 @@ var propuestaCerrarCmd = &cobra.Command{
 	Short: "Cierra manualmente una propuesta (consenso|rechazada|backlog)",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		agente, _ := cmd.Flags().GetString("por")
+		agente, err := resolverValorFlag(cmd, "agente", "por")
+		if err != nil {
+			return err
+		}
 		if err := db.CerrarPropuesta(args[0], args[1], agente); err != nil {
 			return err
 		}
@@ -142,9 +152,11 @@ func init() {
 	propuestaNuevaCmd.Flags().String("descripcion", "", "Descripción detallada")
 	propuestaNuevaCmd.Flags().String("tipo", "implementacion", "Tipo: implementacion, arquitectura, seguridad, backlog, otro")
 	propuestaNuevaCmd.Flags().String("por", "alberto", "Propuesto por")
+	propuestaNuevaCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	propuestaNuevaCmd.Flags().String("codigo", "", "Código manual (si se omite, se auto-genera OP-XXX)")
 
 	propuestaCerrarCmd.Flags().String("por", "alberto", "Agente que cierra")
+	propuestaCerrarCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 
 	propuestaCmd.AddCommand(propuestaListarCmd, propuestaVerCmd, propuestaNuevaCmd, propuestaCerrarCmd)
 }
