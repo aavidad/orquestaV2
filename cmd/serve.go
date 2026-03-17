@@ -585,53 +585,63 @@ const webTplDash = `{{define "content"}}
 <div class="pgbar">
   <div class="pgfill" style="width:{{if gt .Pct 0}}{{.Pct}}%{{else}}2.5rem{{end}}">{{.Pct}}%</div>
 </div>
-<div class="grid2">
-  <div>
-    <h4>Agentes</h4>
-    <table><tbody>
-    {{range .Agentes}}
-      <tr>
-        <td style="width:1rem">{{if .Activo}}<span class="dot-on">●</span>{{else}}<span class="dot-off">○</span>{{end}}</td>
-        <td><strong>{{.Nombre}}</strong></td>
-        <td><small>{{.Rol}}</small></td>
-        <td>{{if .EstadoSesion}}<span class="es-{{.EstadoSesion}}">{{.EstadoSesion}}</span>{{end}}</td>
+<div style="display:grid;grid-template-columns:220px 1fr;gap:1.5rem;align-items:start">
+  <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.5rem;padding:.8rem 1rem">
+    <h4 style="margin:0 0 .7rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Agentes</h4>
+    <table style="width:100%"><tbody>
+    {{range .Agentes}}{{if .Habilitado}}
+      <tr style="border-bottom:1px solid #f1f5f9">
+        <td style="width:1.2rem;padding:.3rem 0">{{if .Activo}}<span class="dot-on">●</span>{{else}}<span class="dot-off">○</span>{{end}}</td>
+        <td style="padding:.3rem .3rem">
+          <div style="font-weight:600;font-size:.85rem">{{.Nombre}}</div>
+          <div style="font-size:.72rem;color:#94a3b8">{{.Rol}}</div>
+        </td>
+        <td style="text-align:right;padding:.3rem 0">
+          {{if .EstadoSesion}}<span class="es-{{.EstadoSesion}}">{{.EstadoSesion}}</span>{{end}}
+        </td>
       </tr>
-    {{end}}
+    {{end}}{{end}}
     </tbody></table>
-    {{if .Abiertas}}
-    <h4 style="margin-top:1.2rem">Propuestas abiertas</h4>
-    <table><thead><tr><th>Código</th><th>✓</th><th>✗</th><th>⏳</th></tr></thead><tbody>
-    {{range .Abiertas}}
-      <tr>
-        <td><a href="/propuestas/{{.Codigo}}"><strong>{{.Codigo}}</strong></a><br><small>{{trunc .Titulo 30}}</small></td>
-        <td style="color:#16a34a;font-weight:700">{{.Acuerdo}}</td>
-        <td style="color:#dc2626;font-weight:700">{{.Desacuerdo}}</td>
-        <td style="color:#d97706;font-weight:700">{{.Pendiente}}</td>
-      </tr>
-    {{end}}
-    </tbody></table>
-    {{end}}
   </div>
   <div>
     {{if .EnProgreso}}
-    <h4>En progreso</h4>
-    <table><thead><tr><th>#</th><th>Módulo</th><th>Agente</th><th>Título</th></tr></thead><tbody>
+    <h4 style="margin:0 0 .5rem 0">En progreso</h4>
+    <table style="width:100%;margin-bottom:1.2rem"><thead><tr><th>#</th><th>Módulo</th><th>Agente</th><th>Título</th></tr></thead><tbody>
     {{range .EnProgreso}}
       <tr>
         <td><a href="/tareas/{{.ID}}">{{.ID}}</a></td>
         <td><span class="tag t-media">{{.Modulo}}</span></td>
-        <td>{{.Agente}}</td>
-        <td>{{trunc .Titulo 50}}</td>
+        <td>{{if .Agente}}<span style="font-size:.82rem">*{{.Agente}}</span>{{end}}</td>
+        <td style="font-size:.82rem">{{trunc .Titulo 55}}</td>
       </tr>
     {{end}}
     </tbody></table>
     {{end}}
-    <h4 style="margin-top:1.2rem">Por estado <a href="/tareas" style="font-size:.75em;font-weight:normal">ver todas →</a></h4>
-    <table><tbody>
-    {{range $est,$n := .Counts}}{{if gt $n 0}}
-      <tr><td><span class="tag t-{{$est}}">{{$est}}</span></td><td><strong>{{$n}}</strong></td></tr>
-    {{end}}{{end}}
-    </tbody></table>
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:start">
+      <div>
+        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Por estado <a href="/tareas" style="font-size:.9em;font-weight:normal;text-transform:none">ver todas →</a></h4>
+        <table><tbody>
+        {{range $est,$n := .Counts}}{{if gt $n 0}}
+          <tr><td style="padding:.2rem .4rem"><span class="tag t-{{$est}}">{{$est}}</span></td><td style="padding:.2rem .6rem"><strong>{{$n}}</strong></td></tr>
+        {{end}}{{end}}
+        </tbody></table>
+      </div>
+      {{if .Abiertas}}
+      <div>
+        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Propuestas abiertas</h4>
+        <table><thead><tr><th>Código</th><th>✓</th><th>✗</th><th>⏳</th></tr></thead><tbody>
+        {{range .Abiertas}}
+          <tr>
+            <td><a href="/propuestas/{{.Codigo}}"><strong>{{.Codigo}}</strong></a><br><small>{{trunc .Titulo 28}}</small></td>
+            <td style="color:#16a34a;font-weight:700;text-align:center">{{.Acuerdo}}</td>
+            <td style="color:#dc2626;font-weight:700;text-align:center">{{.Desacuerdo}}</td>
+            <td style="color:#d97706;font-weight:700;text-align:center">{{.Pendiente}}</td>
+          </tr>
+        {{end}}
+        </tbody></table>
+      </div>
+      {{end}}
+    </div>
   </div>
 </div>
 {{end}}
