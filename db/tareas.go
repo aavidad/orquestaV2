@@ -167,6 +167,7 @@ func IniciarTarea(id int64, agente string) error {
 	)
 	if err == nil {
 		Audit(agente, "iniciar_tarea", "tarea", id, t.Titulo)
+		SetEstadoSesion(agente, "programando")
 	}
 	return err
 }
@@ -186,6 +187,7 @@ func CompletarTarea(id int64, agente, commit string) error {
 	)
 	if err == nil {
 		Audit(agente, "completar_tarea", "tarea", id, t.Titulo+" commit="+commit)
+		SetEstadoSesion(agente, "disponible")
 	}
 	return err
 }
@@ -215,6 +217,7 @@ func BloquearTarea(id int64, agente, motivo string) error {
 		return err
 	}
 	Audit(agente, "bloquear_tarea", "tarea", id, t.Titulo+": "+motivo)
+	SetEstadoSesion(agente, "esperando")
 	return nil
 }
 
@@ -237,6 +240,7 @@ func DesbloquearTarea(id int64, agente, resolucion string) error {
 		return err
 	}
 	Audit(agente, "desbloquear_tarea", "tarea", id, resolucion)
+	SetEstadoSesion(agente, "disponible")
 	return nil
 }
 

@@ -524,6 +524,10 @@ const webTplLayout = `<!doctype html>
     .t-abstencion{background:#6b7280;color:#fff}
     .dot-on{color:#16a34a}
     .dot-off{color:#cbd5e1}
+    .es-disponible{background:#dcfce7;color:#166534;border-radius:.3em;padding:.1em .45em;font-size:.72em;font-weight:600}
+    .es-programando{background:#ede9fe;color:#5b21b6;border-radius:.3em;padding:.1em .45em;font-size:.72em;font-weight:600}
+    .es-esperando{background:#fef3c7;color:#92400e;border-radius:.3em;padding:.1em .45em;font-size:.72em;font-weight:600}
+    .es-votando{background:#dbeafe;color:#1e40af;border-radius:.3em;padding:.1em .45em;font-size:.72em;font-weight:600}
     .grid2{display:grid;grid-template-columns:260px 1fr;gap:1.5rem}
     .filtros{margin-bottom:.8rem;display:flex;flex-wrap:wrap;gap:.3rem}
     .filtros a{font-size:.8rem;padding:.25em .7em;border:1px solid #e2e8f0;border-radius:.3em;text-decoration:none;color:#475569}
@@ -590,6 +594,7 @@ const webTplDash = `{{define "content"}}
         <td style="width:1rem">{{if .Activo}}<span class="dot-on">●</span>{{else}}<span class="dot-off">○</span>{{end}}</td>
         <td><strong>{{.Nombre}}</strong></td>
         <td><small>{{.Rol}}</small></td>
+        <td>{{if .EstadoSesion}}<span class="es-{{.EstadoSesion}}">{{.EstadoSesion}}</span>{{end}}</td>
       </tr>
     {{end}}
     </tbody></table>

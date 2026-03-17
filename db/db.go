@@ -30,7 +30,18 @@ func Open() error {
 		return fmt.Errorf("aplicando schema: %w", err)
 	}
 	DB = db
+	postMigraciones()
 	return nil
+}
+
+// postMigraciones ejecuta ALTER TABLE idempotentes para columnas añadidas tras el schema inicial.
+func postMigraciones() {
+	migraciones := []string{
+		`ALTER TABLE agentes ADD COLUMN estado_sesion TEXT DEFAULT NULL`,
+	}
+	for _, m := range migraciones {
+		_, _ = DB.Exec(m) // ignorar "duplicate column name"
+	}
 }
 
 func Close() {

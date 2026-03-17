@@ -10,8 +10,9 @@ import (
 type Agente struct {
 	Nombre       string
 	Rol          string
-	Activo       bool  // en sesión ahora mismo
-	Habilitado   bool  // false = retirado por Alberto
+	Activo       bool   // en sesión ahora mismo
+	Habilitado   bool   // false = retirado por Alberto
+	EstadoSesion string // disponible | programando | esperando | votando
 	UltimaSesion *time.Time
 }
 
@@ -40,8 +41,8 @@ func IniciarSesion(agente string) (int64, error) {
 	// Cerrar sesiones anteriores abiertas
 	_, _ = tx.Exec(`UPDATE sesiones SET activa=0, fin=CURRENT_TIMESTAMP WHERE agente=? AND activa=1`, agente)
 
-	// Marcar activo
-	_, err = tx.Exec(`UPDATE agentes SET activo=1, ultima_sesion=CURRENT_TIMESTAMP WHERE nombre=?`, agente)
+	// Marcar activo y estado inicial
+	_, err = tx.Exec(`UPDATE agentes SET activo=1, estado_sesion='disponible', ultima_sesion=CURRENT_TIMESTAMP WHERE nombre=?`, agente)
 	if err != nil {
 		return 0, err
 	}
@@ -68,7 +69,7 @@ func FinSesion(agente string) error {
 	}
 	defer tx.Rollback()
 
-	_, err = tx.Exec(`UPDATE agentes SET activo=0 WHERE nombre=?`, agente)
+	_, err = tx.Exec(`UPDATE agentes SET activo=0, estado_sesion=NULL WHERE nombre=?`, agente)
 	if err != nil {
 		return err
 	}
@@ -91,7 +92,7 @@ func FinSesion(agente string) error {
 
 // ListarAgentes devuelve todos los agentes registrados.
 func ListarAgentes() ([]*Agente, error) {
-	rows, err := DB.Query(`SELECT nombre, rol, activo, habilitado, ultima_sesion FROM agentes ORDER BY nombre`)
+	rows, err := DB.Query(`SELECT nombre, rol, activo, habilitado, COALESCE(estado_sesion,''), ultima_sesion FROM agentes ORDER BY nombre`)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +101,7 @@ func ListarAgentes() ([]*Agente, error) {
 	for rows.Next() {
 		a := &Agente{}
 		var ultima sql.NullTime
-		if err := rows.Scan(&a.Nombre, &a.Rol, &a.Activo, &a.Habilitado, &ultima); err != nil {
+		if err := rows.Scan(&a.Nombre, &a.Rol, &a.Activo, &a.Habilitado, &a.EstadoSesion, &ultima); err != nil {
 			return nil, err
 		}
 		if ultima.Valid {
@@ -109,6 +110,14 @@ func ListarAgentes() ([]*Agente, error) {
 		list = append(list, a)
 	}
 	return list, rows.Err()
+}
+
+// SetEstadoSesion actualiza el estado de actividad de un agente en sesión.
+func SetEstadoSesion(agente, estado string) {
+	if DB == nil || agente == "" {
+		return
+	}
+	_, _ = DB.Exec(`UPDATE agentes SET estado_sesion=? WHERE nombre=? AND activo=1`, estado, agente)
 }
 
 // RegistrarAgente añade un nuevo agente al sistema.
