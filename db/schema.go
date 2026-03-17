@@ -221,7 +221,9 @@ INSERT OR IGNORE INTO reglas (tipo_agente, categoria, titulo, descripcion) VALUE
 ('programador','sesion','Protocolo de inicio',
  'Paso 1: orquesta sesion inicio <nombre>  |  Paso 2: ver tareas asignadas (orquesta tarea listar --agente <nombre>)  |  Paso 3: votar propuestas pendientes  |  Paso 4: registrar tarea antes de tocar código.'),
 ('programador','sesion','Protocolo de fin',
- 'Paso 1: git status limpio (todo commiteado)  |  Paso 2: orquesta sesion fin <nombre>.');
+ 'Paso 1: git status limpio (todo commiteado)  |  Paso 2: orquesta sesion fin <nombre>.'),
+('programador','sesion','Panel web de orquestación',
+ 'Alberto arranca el panel web con "orquesta serve" (http://localhost:8080). Muestra en tiempo real: agentes activos, progreso de tareas, propuestas abiertas con votos. Se auto-refresca cada 30 s. Secciones: Dashboard, Tareas (con filtros por estado), Propuestas (expandibles con votos). Los agentes NO necesitan arrancarlo; es para Alberto y para generar capturas de estado.');
 
 -- ─── Reglas: documentador ───────────────────────────────────────────────────
 INSERT OR IGNORE INTO reglas (tipo_agente, categoria, titulo, descripcion) VALUES
