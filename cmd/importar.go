@@ -17,19 +17,19 @@ import (
 // importarCmd agrupa los comandos de importación de datos históricos.
 var importarCmd = &cobra.Command{
 	Use:   "importar",
-	Short: "Importa datos históricos desde ficheros markdown al sistema",
+	Short: "Importa historial legado al sistema",
 }
 
-// importarHistorialCmd importa todas las OPs y votaciones históricas de Opinion.md
+// importarHistorialCmd importa propuestas y votaciones históricas desde el legado markdown.
 var importarHistorialCmd = &cobra.Command{
 	Use:   "historial",
 	Short: "Importa el historial completo de OPs y votaciones (OP-001 a OP-029)",
 	Long: `Carga en la base de datos todas las propuestas y sus votaciones históricas
-desde los ficheros Opinion.md y archivados. Útil para dejar constancia de cómo
-se tomaron las decisiones de arquitectura del proyecto.
+desde el legado markdown previo a la app de orquestación. Este comando sirve
+solo para migración histórica y no forma parte del flujo actual de trabajo.
 
 Las propuestas se crean con el código original (OP-001..OP-029) y el estado final
-que tenían en los ficheros Markdown.`,
+que tenían en el historial legado.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Importando historial de propuestas y votaciones…")
 		if err := db.ImportarHistorialOPs(); err != nil {
