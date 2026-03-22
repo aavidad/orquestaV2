@@ -7,11 +7,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	_ "modernc.org/sqlite"
 )
 
 var DB *sql.DB
+var dbMu sync.Mutex
 
 // Open abre (o crea) la base de datos SQLite y aplica el schema.
 // Orden de resolución de la ruta:
@@ -20,6 +22,11 @@ var DB *sql.DB
 //  3. Si el git-root ya es el repo `orquesta`, <git-root>/orquesta.db
 //  4. ./orquesta.db
 func Open() error {
+	dbMu.Lock()
+	defer dbMu.Unlock()
+	if DB != nil {
+		return nil
+	}
 	path := resolverRuta()
 	db, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_foreign_keys=on&_busy_timeout=5000")
 	if err != nil {
@@ -39,6 +46,18 @@ func Open() error {
 func postMigraciones() {
 	migraciones := []string{
 		`ALTER TABLE agentes ADD COLUMN estado_sesion TEXT DEFAULT NULL`,
+		`ALTER TABLE propuestas ADD COLUMN proyecto_id INTEGER REFERENCES proyectos(id)`,
+		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('pool_handoff_threshold_seconds', '1800')`,
+		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('pool_handoff_threshold_ratio', '0.10')`,
+		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('pool_default_budget_source', 'manual')`,
+		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('model_policy_default_profile', 'implementacion')`,
+		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('model_policy_default_reasoning', 'high')`,
+		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('language.policy.default_language', 'es')`,
+		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('language.policy.documentation_multilang', '1')`,
+		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('language.policy.apps_multilang', '1')`,
+		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('language.policy.documentation_default_language', 'es')`,
+		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('language.policy.apps_default_language', 'es')`,
+		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('language.policy.allowed_languages', 'es,en')`,
 		`UPDATE reglas
 		 SET descripcion='No escribir código sin propuesta OP-XXX aprobada en la app de orquestación.'
 		 WHERE tipo_agente='programador' AND categoria='calidad' AND titulo='Propuesta antes de código'`,
@@ -89,12 +108,22 @@ func postMigraciones() {
 	for _, m := range migraciones {
 		_, _ = DB.Exec(m) // ignorar "duplicate column name"
 	}
+	ensureLanguagePolicyDefaults()
 }
 
 func Close() {
+	dbMu.Lock()
+	defer dbMu.Unlock()
 	if DB != nil {
-		DB.Close()
+		_ = DB.Close()
+		DB = nil
 	}
+}
+
+func IsOpen() bool {
+	dbMu.Lock()
+	defer dbMu.Unlock()
+	return DB != nil
 }
 
 func resolverRuta() string {
@@ -111,6 +140,10 @@ func resolverRuta() string {
 		}
 	}
 	return "orquesta.db"
+}
+
+func CurrentDBPath() string {
+	return resolverRuta()
 }
 
 func resolverRutaDesdeGitRoot(root string) string {

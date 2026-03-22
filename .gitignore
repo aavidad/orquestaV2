@@ -3,3 +3,4 @@ orquesta.db
 orquesta.db-wal
 orquesta.db-shm
 *.bk
+.ssl-key.log

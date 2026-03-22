@@ -39,7 +39,11 @@ var statusCmd = &cobra.Command{
 			if a.Activo {
 				estado = "🟢"
 			}
-			fmt.Printf("   %s %-15s [%s]\n", estado, a.Nombre, a.Rol)
+			presupuesto := ""
+			if a.Activo {
+				presupuesto = " · presupuesto: " + presupuestoResumenAgente(a.Nombre)
+			}
+			fmt.Printf("   %s %-15s [%s]%s\n", estado, a.Nombre, a.Rol, presupuesto)
 		}
 		fmt.Println()
 
@@ -99,6 +103,30 @@ var statusCmd = &cobra.Command{
 				}
 				fmt.Printf("   [%d] %-40s → %s\n", t.ID, truncar(t.Titulo, 38), agente)
 			}
+			fmt.Println()
+		}
+
+		// ─── Presupuestos en handoff ─────────────────────────────────────
+		enRiesgo := 0
+		for _, a := range agentes {
+			if !a.Activo {
+				continue
+			}
+			p, _, err := db.UltimoPresupuestoAgente(a.Nombre)
+			if err != nil {
+				continue
+			}
+			ev, err := db.EvaluarPresupuestoSesion(p)
+			if err != nil || !ev.DebeHandoff {
+				continue
+			}
+			if enRiesgo == 0 {
+				fmt.Printf("⏳ Presupuestos en handoff preventivo:\n")
+			}
+			enRiesgo++
+			fmt.Printf("   %-15s %s\n", a.Nombre, ev.Motivo)
+		}
+		if enRiesgo > 0 {
 			fmt.Println()
 		}
 

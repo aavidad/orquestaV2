@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -24,6 +25,9 @@ type Propuesta struct {
 	Estado       EstadoPropuesta
 	PropuestoPor string
 	Distribuidor string
+	ProyectoID   *int64
+	ProyectoSlug string
+	Proyecto     string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	CerradaAt    *time.Time
@@ -32,16 +36,32 @@ type Propuesta struct {
 
 // CrearPropuesta inserta una nueva propuesta.
 func CrearPropuesta(p *Propuesta) (int64, error) {
+	if p.ProyectoID == nil && strings.TrimSpace(p.ProyectoSlug) != "" {
+		proyecto, err := EnsureProyectoRef(strings.TrimSpace(p.ProyectoSlug))
+		if err != nil {
+			return 0, err
+		}
+		p.ProyectoID = &proyecto.ID
+		p.ProyectoSlug = proyecto.Slug
+		p.Proyecto = proyecto.Nombre
+	}
+
+	tx, err := DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
 	// Auto-generar código si no se indica
 	if p.Codigo == "" {
 		var max int
-		_ = DB.QueryRow(`SELECT COALESCE(MAX(CAST(SUBSTR(codigo,4) AS INTEGER)),29) FROM propuestas WHERE codigo LIKE 'OP-%'`).Scan(&max)
+		_ = tx.QueryRow(`SELECT COALESCE(MAX(CAST(SUBSTR(codigo,4) AS INTEGER)),29) FROM propuestas WHERE codigo LIKE 'OP-%'`).Scan(&max)
 		p.Codigo = fmt.Sprintf("OP-%03d", max+1)
 	}
-	res, err := DB.Exec(`
-		INSERT INTO propuestas (codigo, titulo, descripcion, tipo, propuesto_por, distribuidor)
-		VALUES (?,?,?,?,?,?)`,
-		p.Codigo, p.Titulo, p.Descripcion, p.Tipo, p.PropuestoPor, p.Distribuidor,
+	res, err := tx.Exec(`
+		INSERT INTO propuestas (codigo, titulo, descripcion, tipo, propuesto_por, distribuidor, proyecto_id)
+		VALUES (?,?,?,?,?,?,?)`,
+		p.Codigo, p.Titulo, p.Descripcion, p.Tipo, p.PropuestoPor, p.Distribuidor, p.ProyectoID,
 	)
 	if err != nil {
 		return 0, err
@@ -49,17 +69,24 @@ func CrearPropuesta(p *Propuesta) (int64, error) {
 	id, _ := res.LastInsertId()
 
 	// Crear filas de voto pendiente solo para agentes habilitados (no admin, no retirados)
-	rows, _ := DB.Query(`SELECT nombre FROM agentes WHERE rol != 'admin' AND habilitado = 1`)
+	rows, _ := tx.Query(`SELECT nombre FROM agentes WHERE rol != 'admin' AND habilitado = 1`)
 	if rows != nil {
-		defer rows.Close()
+		var votantes []string
 		for rows.Next() {
 			var nombre string
 			_ = rows.Scan(&nombre)
-			_, _ = DB.Exec(
+			votantes = append(votantes, nombre)
+		}
+		rows.Close()
+		for _, nombre := range votantes {
+			_, _ = tx.Exec(
 				`INSERT OR IGNORE INTO votos (propuesta_id, agente, posicion) VALUES (?,?,'pendiente')`,
 				id, nombre,
 			)
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
 	}
 
 	Audit(p.PropuestoPor, "crear_propuesta", "propuesta", id, p.Codigo+": "+p.Titulo)
@@ -70,29 +97,70 @@ func CrearPropuesta(p *Propuesta) (int64, error) {
 func GetPropuesta(codigoOID string) (*Propuesta, error) {
 	var row *sql.Row
 	row = DB.QueryRow(`
-		SELECT id, codigo, titulo, descripcion, tipo, estado, propuesto_por, distribuidor,
-		       created_at, updated_at, cerrada_at
-		FROM propuestas WHERE codigo = ? OR CAST(id AS TEXT) = ?`, codigoOID, codigoOID)
+		SELECT p.id, p.codigo, p.titulo, p.descripcion, p.tipo, p.estado, p.propuesto_por, p.distribuidor,
+		       p.proyecto_id, COALESCE(pr.slug,''), COALESCE(pr.nombre,''), p.created_at, p.updated_at, p.cerrada_at
+		FROM propuestas p
+		LEFT JOIN proyectos pr ON pr.id = p.proyecto_id
+		WHERE p.codigo = ? OR CAST(p.id AS TEXT) = ?`, codigoOID, codigoOID)
 	return escanearPropuesta(row)
 }
 
 // ListarPropuestas devuelve propuestas, opcionalmente filtradas por estado.
 func ListarPropuestas(estado *EstadoPropuesta) ([]*Propuesta, error) {
-	q := `SELECT id, codigo, titulo, descripcion, tipo, estado, propuesto_por, distribuidor,
-		         created_at, updated_at, cerrada_at
-		  FROM propuestas`
+	q := `SELECT p.id, p.codigo, p.titulo, p.descripcion, p.tipo, p.estado, p.propuesto_por, p.distribuidor,
+		         p.proyecto_id, COALESCE(pr.slug,''), COALESCE(pr.nombre,''), p.created_at, p.updated_at, p.cerrada_at
+		  FROM propuestas p
+		  LEFT JOIN proyectos pr ON pr.id = p.proyecto_id`
 	args := []any{}
 	if estado != nil {
 		q += " WHERE estado = ?"
 		args = append(args, *estado)
 	}
-	q += " ORDER BY id DESC"
+	q += " ORDER BY p.id DESC"
 
 	rows, err := DB.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+	var list []*Propuesta
+	for rows.Next() {
+		p, err := escanearPropuesta(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, p)
+	}
+	return list, rows.Err()
+}
+
+func ListarPropuestasProyecto(selector string, estado *EstadoPropuesta) ([]*Propuesta, error) {
+	proyecto, err := GetProyectoRef(selector)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return []*Propuesta{}, nil
+		}
+		return nil, err
+	}
+
+	q := `SELECT p.id, p.codigo, p.titulo, p.descripcion, p.tipo, p.estado, p.propuesto_por, p.distribuidor,
+		         p.proyecto_id, COALESCE(pr.slug,''), COALESCE(pr.nombre,''), p.created_at, p.updated_at, p.cerrada_at
+		  FROM propuestas p
+		  LEFT JOIN proyectos pr ON pr.id = p.proyecto_id
+		  WHERE p.proyecto_id = ?`
+	args := []any{proyecto.ID}
+	if estado != nil {
+		q += ` AND p.estado = ?`
+		args = append(args, *estado)
+	}
+	q += ` ORDER BY p.id DESC`
+
+	rows, err := DB.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
 	var list []*Propuesta
 	for rows.Next() {
 		p, err := escanearPropuesta(rows)
@@ -124,6 +192,48 @@ func CerrarPropuesta(codigo, nuevoEstado, agente string) error {
 	}
 	Audit(agente, "cerrar_propuesta", "propuesta", 0, codigo+"→"+nuevoEstado)
 	return nil
+}
+
+// ReabrirPropuesta vuelve a abrir una propuesta cerrada y reinicia sus votos a pendiente.
+func ReabrirPropuesta(codigo, agente string) (int, error) {
+	p, err := GetPropuesta(codigo)
+	if err != nil {
+		return 0, fmt.Errorf("propuesta '%s' no encontrada", codigo)
+	}
+	if p.Estado == PropuestaAbierta {
+		return 0, fmt.Errorf("la propuesta %s ya está abierta", codigo)
+	}
+
+	tx, err := DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec(`
+		UPDATE propuestas
+		SET estado='abierta', cerrada_at=NULL
+		WHERE id=?`,
+		p.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return 0, fmt.Errorf("propuesta '%s' no encontrada", codigo)
+	}
+
+	reparados, err := repararVotosPendientesTx(tx, p.ID, true)
+	if err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	Audit(agente, "reabrir_propuesta", "propuesta", p.ID, fmt.Sprintf("%s→abierta votos=%d", codigo, reparados))
+	return reparados, nil
 }
 
 // EvaluarConsenso revisa los votos de una propuesta.
@@ -182,9 +292,10 @@ func EvaluarConsenso(propuestaID int64, agente string) (bool, error) {
 func PropuestasPendientesVoto(agente string) ([]*Propuesta, error) {
 	rows, err := DB.Query(`
 		SELECT p.id, p.codigo, p.titulo, p.descripcion, p.tipo, p.estado, p.propuesto_por,
-		       p.distribuidor, p.created_at, p.updated_at, p.cerrada_at
+		       p.distribuidor, p.proyecto_id, COALESCE(pr.slug,''), COALESCE(pr.nombre,''), p.created_at, p.updated_at, p.cerrada_at
 		FROM propuestas p
 		JOIN votos v ON v.propuesta_id = p.id
+		LEFT JOIN proyectos pr ON pr.id = p.proyecto_id
 		WHERE v.agente = ? AND v.posicion = 'pendiente' AND p.estado = 'abierta'
 		ORDER BY p.id`, agente)
 	if err != nil {
@@ -202,18 +313,40 @@ func PropuestasPendientesVoto(agente string) ([]*Propuesta, error) {
 	return list, rows.Err()
 }
 
+func VotantesHabilitados() ([]string, error) {
+	rows, err := DB.Query(`SELECT nombre FROM agentes WHERE rol != 'admin' AND habilitado = 1 ORDER BY nombre`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []string
+	for rows.Next() {
+		var nombre string
+		if err := rows.Scan(&nombre); err != nil {
+			return nil, err
+		}
+		list = append(list, nombre)
+	}
+	return list, rows.Err()
+}
+
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 func escanearPropuesta(s scanner) (*Propuesta, error) {
 	var p Propuesta
+	var proyectoID sql.NullInt64
 	var cerradaAt sql.NullTime
 	err := s.Scan(
 		&p.ID, &p.Codigo, &p.Titulo, &p.Descripcion, &p.Tipo, &p.Estado,
-		&p.PropuestoPor, &p.Distribuidor,
+		&p.PropuestoPor, &p.Distribuidor, &proyectoID, &p.ProyectoSlug, &p.Proyecto,
 		&p.CreatedAt, &p.UpdatedAt, &cerradaAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if proyectoID.Valid {
+		p.ProyectoID = &proyectoID.Int64
 	}
 	if cerradaAt.Valid {
 		p.CerradaAt = &cerradaAt.Time

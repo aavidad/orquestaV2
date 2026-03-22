@@ -258,12 +258,9 @@ var tareaReasignarCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		nuevoAgente := args[1]
-		_, err = db.DB.Exec(
-			`UPDATE tareas SET agente=?, estado='asignada' WHERE id=?`, nuevoAgente, id)
-		if err != nil {
+		if err := db.ReasignarTarea(id, nuevoAgente); err != nil {
 			return err
 		}
-		db.Audit("alberto", "reasignar_tarea", "tarea", id, nuevoAgente)
 		fmt.Printf("✓ Tarea #%d reasignada a %s\n", id, nuevoAgente)
 		return nil
 	},
@@ -299,11 +296,9 @@ var tareaBacklogCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
-		_, err = db.DB.Exec(`UPDATE tareas SET estado='backlog', agente=NULL WHERE id=?`, id)
-		if err != nil {
+		if err := db.MoverTareaABacklog(id); err != nil {
 			return err
 		}
-		db.Audit("alberto", "backlog_tarea", "tarea", id, "")
 		fmt.Printf("✓ Tarea #%d movida a backlog\n", id)
 		return nil
 	},
