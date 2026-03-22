@@ -8,16 +8,25 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"html/template"
+	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
+	"orquesta/dashboardapp"
 	"orquesta/db"
+	"orquesta/proposalapp"
+	"orquesta/runtimectl"
+	"orquesta/sessionapp"
+	"orquesta/taskapp"
 )
 
 // ─── Structs de datos ────────────────────────────────────────────────────────
@@ -92,6 +101,9 @@ type webPropDetalleData struct {
 	Err     string
 }
 
+var dashboardService = dashboardapp.NewService(dashboardapp.Repository{})
+var sessionAPIService = sessionapp.NewService(sessionapp.Repository{})
+
 // ─── FuncMap ─────────────────────────────────────────────────────────────────
 
 var webFuncMap = template.FuncMap{
@@ -149,6 +161,105 @@ func webRouterPropuestas(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func webRouterAPIPools(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) < 2 {
+		http.NotFound(w, r)
+		return
+	}
+	switch {
+	case len(parts) == 2 && r.Method == http.MethodGet:
+		webHandlerAPIPools(w, r)
+	case len(parts) == 3 && r.Method == http.MethodGet:
+		webHandlerAPIPoolDetalle(w, r, parts[2])
+	case len(parts) == 4 && parts[3] == "modelos" && r.Method == http.MethodGet:
+		webHandlerAPIPoolModelos(w, r, parts[2])
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func webRouterAPITareas(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) < 3 || parts[0] != "api" || parts[1] != "tareas" {
+		http.NotFound(w, r)
+		return
+	}
+	switch {
+	case len(parts) == 3 && r.Method == http.MethodGet:
+		webHandlerAPITareaDetalle(w, r, parts[2])
+	case len(parts) == 4 && r.Method == http.MethodPost:
+		webHandlerAPITareaAccion(w, r, parts[2], parts[3])
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func webRouterAPIPropuestasCLI(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) < 3 || parts[0] != "api" || parts[1] != "propuestas" {
+		http.NotFound(w, r)
+		return
+	}
+	switch {
+	case len(parts) == 3 && r.Method == http.MethodGet:
+		webHandlerAPIPropuestaDetalle(w, r, parts[2])
+	case len(parts) == 4 && parts[3] == "cerrar" && r.Method == http.MethodPost:
+		webHandlerAPIPropuestaCerrar(w, r, parts[2])
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func webRouterAPIModelos(w http.ResponseWriter, r *http.Request) {
+	switch {
+	case r.URL.Path == "/api/modelos/resolver" && r.Method == http.MethodGet:
+		webHandlerAPIModelosResolver(w, r)
+	case r.URL.Path == "/api/modelos/politicas" && r.Method == http.MethodGet:
+		webHandlerAPIModelosPoliticas(w, r)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func webRouterAPIExport(w http.ResponseWriter, r *http.Request) {
+	switch {
+	case r.URL.Path == "/api/export/estado" && r.Method == http.MethodGet:
+		webHandlerAPIExportEstado(w, r)
+	case r.URL.Path == "/api/export/audit" && r.Method == http.MethodGet:
+		webHandlerAPIExportAudit(w, r)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func webRouterAPIAgentes(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) < 4 || parts[0] != "api" || parts[1] != "agentes" {
+		http.NotFound(w, r)
+		return
+	}
+	agente := parts[2]
+	switch {
+	case len(parts) == 4 && parts[3] == "retirar" && r.Method == http.MethodPost:
+		webHandlerAPIAgenteRetirar(w, r, agente)
+	case len(parts) == 4 && parts[3] == "rehabilitar" && r.Method == http.MethodPost:
+		webHandlerAPIAgenteRehabilitar(w, r, agente)
+	case len(parts) == 4 && parts[3] == "runtime-handles" && r.Method == http.MethodGet:
+		webHandlerAPIAgenteRuntimeHandles(w, r, agente)
+	case len(parts) == 4 && parts[3] == "runtime-handles" && r.Method == http.MethodPost:
+		webHandlerAPIAgenteRuntimeHandleRegistrar(w, r, agente)
+	case len(parts) == 4 && parts[3] == "runtime-orders" && r.Method == http.MethodGet:
+		webHandlerAPIAgenteRuntimeOrders(w, r, agente)
+	case len(parts) == 4 && parts[3] == "runtime-orders" && r.Method == http.MethodPost:
+		webHandlerAPIAgenteRuntimeOrderCrear(w, r, agente)
+	case len(parts) == 5 && parts[3] == "runtime-orders" && parts[4] == "ejecutar" && r.Method == http.MethodPost:
+		webHandlerAPIAgenteRuntimeOrderEjecutar(w, r, agente)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 func webHandlerDash(w http.ResponseWriter, r *http.Request) {
@@ -156,40 +267,27 @@ func webHandlerDash(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	agentes, _ := db.ListarAgentes()
-	counts, _ := db.ContarTareasPorEstado()
-	total, completadas := 0, 0
-	for est, n := range counts {
-		total += n
-		if est == "completada" {
-			completadas = n
-		}
+	summary, err := dashboardService.BuildSummary()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	pct := 0
-	if total > 0 {
-		pct = completadas * 100 / total
-	}
-	estadoAb := db.PropuestaAbierta
-	abiertas, _ := db.ListarPropuestas(&estadoAb)
 	var resAbiertas []webPropResumen
-	for _, p := range abiertas {
-		ac, des, _, pend, _ := db.ContarVotos(p.ID)
+	for _, p := range summary.OpenProps {
 		resAbiertas = append(resAbiertas, webPropResumen{
 			Codigo: p.Codigo, Titulo: p.Titulo,
-			Acuerdo: ac, Desacuerdo: des, Pendiente: pend,
+			Acuerdo: p.Acuerdo, Desacuerdo: p.Desacuerdo, Pendiente: p.Pendiente,
 		})
 	}
-	estadoEP := db.EstadoEnProgreso
-	tareas, _ := db.ListarTareas(db.FiltroTareas{Estado: &estadoEP})
 	var ep []webTareaRow
-	for _, t := range tareas {
+	for _, t := range summary.ActiveTasks {
 		ep = append(ep, toWebTarea(t))
 	}
 	webRender(w, webTplLayout+webTplDash, webDashData{
-		Agentes: agentes, Counts: counts, Total: total,
-		Completadas: completadas, Pct: pct,
+		Agentes: summary.Agents, Counts: summary.TaskCounts, Total: summary.TotalTasks,
+		Completadas: summary.DoneTasks, Pct: summary.PercentDone,
 		Abiertas: resAbiertas, EnProgreso: ep,
-		Generado: time.Now().Format("2006-01-02 15:04:05"),
+		Generado: summary.GeneratedAt.Format("2006-01-02 15:04:05"),
 	})
 }
 
@@ -200,17 +298,13 @@ func webHandlerTareas(w http.ResponseWriter, r *http.Request) {
 	msg := r.URL.Query().Get("ok")
 	errMsg := r.URL.Query().Get("err")
 
-	var f db.FiltroTareas
-	if filtro != "" {
-		e := db.EstadoTarea(filtro)
-		f.Estado = &e
-	}
-	tareas, _ := db.ListarTareas(f)
+	f := taskFilterFromEstado(filtro)
+	tareas, _ := taskService.List(f)
 	var wt []webTareaRow
 	for _, t := range tareas {
 		wt = append(wt, toWebTarea(t))
 	}
-	agentes, _ := db.ListarAgentes()
+	agentes, _ := taskService.ListAgents()
 	webRender(w, webTplLayout+webTplTareas, webTareasData{
 		Tareas: wt, Filtro: filtro, Agentes: agentes,
 		Msg: msg, Err: errMsg,
@@ -226,26 +320,18 @@ func webHandlerTareaNueva(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/tareas?err="+url.QueryEscape("El título es obligatorio"), http.StatusSeeOther)
 		return
 	}
-	t := &db.Tarea{
-		Titulo:      titulo,
-		Descripcion: r.FormValue("descripcion"),
-		Modulo:      r.FormValue("modulo"),
-		Prioridad:   db.PrioridadTarea(r.FormValue("prioridad")),
-		CreadoPor:   "alberto",
-	}
-	if p := strings.TrimSpace(r.FormValue("propuesta")); p != "" {
-		prop, err := db.GetPropuesta(p)
-		if err == nil {
-			t.PropuestaID = &prop.ID
-		}
-	}
-	id, err := db.CrearTarea(t)
+	id, err := taskService.Create(taskapp.CreateTaskInput{
+		Titulo:          titulo,
+		Descripcion:     r.FormValue("descripcion"),
+		Modulo:          r.FormValue("modulo"),
+		Prioridad:       taskPriority(r.FormValue("prioridad")),
+		CreadoPor:       "alberto",
+		Agente:          strings.TrimSpace(r.FormValue("agente")),
+		PropuestaCodigo: strings.TrimSpace(r.FormValue("propuesta")),
+	})
 	if err != nil {
 		http.Redirect(w, r, "/tareas?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
-	}
-	if agente := strings.TrimSpace(r.FormValue("agente")); agente != "" {
-		_ = db.TomarTarea(id, agente)
 	}
 	http.Redirect(w, r, "/tareas?ok="+url.QueryEscape(fmt.Sprintf("Tarea #%d creada", id)), http.StatusSeeOther)
 }
@@ -258,12 +344,12 @@ func webHandlerTareaDetalle(w http.ResponseWriter, r *http.Request, idStr string
 		http.NotFound(w, r)
 		return
 	}
-	t, err := db.GetTarea(id)
+	t, err := taskService.Get(id)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	agentes, _ := db.ListarAgentes()
+	agentes, _ := taskService.ListAgents()
 	webRender(w, webTplLayout+webTplTareaDetalle, webTareaDetalleData{
 		T:       toWebTarea(t),
 		Agentes: agentes,
@@ -287,28 +373,22 @@ func webHandlerTareaAccion(w http.ResponseWriter, r *http.Request, idStr string)
 
 	switch accion {
 	case "tomar":
-		err = db.TomarTarea(id, agente)
+		err = taskService.Take(id, agente)
 	case "iniciar":
-		err = db.IniciarTarea(id, agente)
+		err = taskService.Start(id, agente)
 	case "completar":
-		err = db.CompletarTarea(id, agente, r.FormValue("commit"))
+		err = taskService.Complete(id, agente, r.FormValue("commit"))
 	case "bloquear":
-		err = db.BloquearTarea(id, agente, r.FormValue("motivo"))
+		err = taskService.Block(id, agente, r.FormValue("motivo"))
 	case "desbloquear":
-		err = db.DesbloquearTarea(id, agente, r.FormValue("resolucion"))
+		err = taskService.Unblock(id, agente, r.FormValue("resolucion"))
 	case "nota":
-		err = db.AnotarTarea(id, agente, r.FormValue("nota"))
+		err = taskService.Note(id, agente, r.FormValue("nota"))
 	case "backlog":
-		_, err = db.DB.Exec(`UPDATE tareas SET estado='backlog', agente=NULL WHERE id=?`, id)
-		if err == nil {
-			db.Audit("alberto", "backlog_tarea", "tarea", id, "")
-		}
+		err = taskService.MoveToBacklog(id)
 	case "reasignar":
 		nuevoAgente := strings.TrimSpace(r.FormValue("nuevo_agente"))
-		_, err = db.DB.Exec(`UPDATE tareas SET agente=?, estado='asignada' WHERE id=?`, nuevoAgente, id)
-		if err == nil {
-			db.Audit("alberto", "reasignar_tarea", "tarea", id, nuevoAgente)
-		}
+		err = taskService.Reassign(id, nuevoAgente)
 	default:
 		http.Redirect(w, r, back+"?err=Acción+desconocida", http.StatusSeeOther)
 		return
@@ -328,15 +408,14 @@ func webHandlerPropuestas(w http.ResponseWriter, r *http.Request) {
 	msg := r.URL.Query().Get("ok")
 	errMsg := r.URL.Query().Get("err")
 
-	var estadoPtr *db.EstadoPropuesta
-	if filtro != "" {
-		e := db.EstadoPropuesta(filtro)
-		estadoPtr = &e
-	}
-	props, _ := db.ListarPropuestas(estadoPtr)
+	props, _ := proposalService.List(proposalState(filtro))
 	var detalles []webPropDetalle
 	for _, p := range props {
-		votos, _ := db.VotosDePropuesta(p.ID)
+		detail, _ := proposalService.GetDetail(p.Codigo)
+		var votos []*db.Voto
+		if detail != nil {
+			votos = detail.Votes
+		}
 		cerrada := ""
 		if p.CerradaAt != nil {
 			cerrada = p.CerradaAt.Format("2006-01-02")
@@ -362,36 +441,36 @@ func webHandlerPropuestaNueva(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/propuestas?err="+url.QueryEscape("El título es obligatorio"), http.StatusSeeOther)
 		return
 	}
-	p := &db.Propuesta{
+	_, created, err := proposalService.Create(proposalapp.CreateProposalInput{
 		Codigo:       strings.TrimSpace(r.FormValue("codigo")),
 		Titulo:       titulo,
 		Descripcion:  r.FormValue("descripcion"),
 		Tipo:         r.FormValue("tipo"),
 		PropuestoPor: "alberto",
 		Distribuidor: "alberto",
-	}
-	_, err := db.CrearPropuesta(p)
+	})
 	if err != nil {
 		http.Redirect(w, r, "/propuestas?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/propuestas/"+p.Codigo+"?ok="+url.QueryEscape("Propuesta "+p.Codigo+" creada"), http.StatusSeeOther)
+	http.Redirect(w, r, "/propuestas/"+created.Codigo+"?ok="+url.QueryEscape("Propuesta "+created.Codigo+" creada"), http.StatusSeeOther)
 }
 
 // ─── Propuestas: detalle ──────────────────────────────────────────────────────
 
 func webHandlerPropuestaDetalle(w http.ResponseWriter, r *http.Request, codigo string) {
-	p, err := db.GetPropuesta(codigo)
+	detail, err := proposalService.GetDetail(codigo)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	votos, _ := db.VotosDePropuesta(p.ID)
+	p := detail.Proposal
+	votos := detail.Votes
 	cerrada := ""
 	if p.CerradaAt != nil {
 		cerrada = p.CerradaAt.Format("2006-01-02")
 	}
-	agentes, _ := db.ListarAgentes()
+	agentes, _ := proposalService.ListAgents()
 	webRender(w, webTplLayout+webTplPropuestaDetalle, webPropDetalleData{
 		P: webPropDetalle{
 			Codigo: p.Codigo, Titulo: p.Titulo, Descripcion: p.Descripcion,
@@ -412,21 +491,26 @@ func webHandlerPropuestaAccion(w http.ResponseWriter, r *http.Request, codigo st
 	accion := r.FormValue("accion")
 	back := "/propuestas/" + codigo
 
-	p, err := db.GetPropuesta(codigo)
+	detail, err := proposalService.GetDetail(codigo)
 	if err != nil {
 		http.Redirect(w, r, "/propuestas?err=Propuesta+no+encontrada", http.StatusSeeOther)
 		return
 	}
+	p := detail.Proposal
 
 	switch accion {
 	case "votar":
 		agente := strings.TrimSpace(r.FormValue("agente"))
-		posicion := db.PosicionVoto(r.FormValue("posicion"))
+		posicion, ok := votePosition(r.FormValue("posicion"))
+		if !ok {
+			http.Redirect(w, r, back+"?err=Posición+inválida", http.StatusSeeOther)
+			return
+		}
 		comentario := r.FormValue("comentario")
-		_, err = db.Votar(p.ID, agente, posicion, comentario)
+		err = proposalService.Vote(p.Codigo, agente, posicion, comentario)
 	case "cerrar":
 		nuevoEstado := r.FormValue("estado_cierre")
-		err = db.CerrarPropuesta(codigo, nuevoEstado, "alberto")
+		err = proposalService.Close(codigo, nuevoEstado, "alberto")
 	default:
 		http.Redirect(w, r, back+"?err=Acción+desconocida", http.StatusSeeOther)
 		return
@@ -437,6 +521,178 @@ func webHandlerPropuestaAccion(w http.ResponseWriter, r *http.Request, codigo st
 		return
 	}
 	http.Redirect(w, r, back+"?ok="+url.QueryEscape("Acción '"+accion+"' aplicada"), http.StatusSeeOther)
+}
+
+// ─── API JSON: pools y modelos ──────────────────────────────────────────────
+
+func webHandlerAPIPools(w http.ResponseWriter, r *http.Request) {
+	pools, err := capacityService.ListPoolsSummary(nil)
+	if err != nil {
+		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, map[string]any{"items": pools})
+}
+
+func webHandlerAPIPoolDetalle(w http.ResponseWriter, r *http.Request, slug string) {
+	detail, err := capacityService.GetPoolDetail(slug)
+	if err != nil {
+		webWriteJSON(w, http.StatusNotFound, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, map[string]any{
+		"pool":                 detail.Pool,
+		"sesiones_activas":     detail.SesionesActivas,
+		"capacidad_disponible": detail.CapacidadDisponible,
+		"modelos":              detail.Modelos,
+	})
+}
+
+func webHandlerAPIPoolModelos(w http.ResponseWriter, r *http.Request, slug string) {
+	modelos, err := capacityService.ListPoolModels(slug)
+	if err != nil {
+		webWriteJSON(w, http.StatusNotFound, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, map[string]any{"items": modelos})
+}
+
+func webHandlerAPIModelosPoliticas(w http.ResponseWriter, r *http.Request) {
+	scopeTipo := strings.TrimSpace(r.URL.Query().Get("scope_tipo"))
+	scopeRef := strings.TrimSpace(r.URL.Query().Get("scope_ref"))
+	var activaPtr *bool
+	if activaRaw := strings.TrimSpace(r.URL.Query().Get("activa")); activaRaw != "" {
+		activa := activaRaw == "1" || strings.EqualFold(activaRaw, "true")
+		activaPtr = &activa
+	}
+	items, err := capacityService.ListModelPolicies(scopeTipo, scopeRef, activaPtr)
+	if err != nil {
+		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func webHandlerAPIModelosResolver(w http.ResponseWriter, r *http.Request) {
+	var tareaIDPtr *int64
+	if tareaIDRaw := strings.TrimSpace(r.URL.Query().Get("tarea_id")); tareaIDRaw != "" {
+		value, err := strconv.ParseInt(tareaIDRaw, 10, 64)
+		if err != nil {
+			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "tarea_id invalido"})
+			return
+		}
+		tareaIDPtr = &value
+	}
+	res, err := capacityService.ResolveModelPolicy(db.ResolverPoliticaInput{
+		TareaID:      tareaIDPtr,
+		ProyectoSlug: strings.TrimSpace(r.URL.Query().Get("proyecto")),
+		Fase:         strings.TrimSpace(r.URL.Query().Get("fase")),
+		PerfilTarea:  strings.TrimSpace(r.URL.Query().Get("perfil")),
+	})
+	if err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, res)
+}
+
+func webHandlerAPIAgenteRuntimeHandles(w http.ResponseWriter, r *http.Request, agente string) {
+	estado := strings.TrimSpace(r.URL.Query().Get("estado"))
+	items, err := runtimeService.ListHandles(agente, estado)
+	if err != nil {
+		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func webHandlerAPIAgenteRuntimeHandleRegistrar(w http.ResponseWriter, r *http.Request, agente string) {
+	var payload struct {
+		SesionID     *int64 `json:"sesion_id"`
+		ProyectoSlug string `json:"proyecto_slug"`
+		Transporte   string `json:"transporte"`
+		HandleKind   string `json:"handle_kind"`
+		HandleRef    string `json:"handle_ref"`
+		Estado       string `json:"estado"`
+		MetadataJSON string `json:"metadata_json"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
+		return
+	}
+	id, err := runtimeService.RegisterHandle(runtimectl.RegisterHandleInput{
+		Agente:       agente,
+		SesionID:     payload.SesionID,
+		ProyectoSlug: payload.ProyectoSlug,
+		Transporte:   payload.Transporte,
+		HandleKind:   payload.HandleKind,
+		HandleRef:    payload.HandleRef,
+		Estado:       payload.Estado,
+		MetadataJSON: payload.MetadataJSON,
+	})
+	if err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusCreated, map[string]any{"id": id})
+}
+
+func webHandlerAPIAgenteRuntimeOrders(w http.ResponseWriter, r *http.Request, agente string) {
+	estado := strings.TrimSpace(r.URL.Query().Get("estado"))
+	items, err := runtimeService.ListOrders(agente, estado)
+	if err != nil {
+		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func webHandlerAPIAgenteRuntimeOrderCrear(w http.ResponseWriter, r *http.Request, agente string) {
+	var payload struct {
+		Tipo         string `json:"tipo"`
+		ProyectoSlug string `json:"proyecto_slug"`
+		Mensaje      string `json:"mensaje"`
+		Destino      string `json:"destino"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
+		return
+	}
+	var (
+		id  int64
+		err error
+	)
+	switch strings.TrimSpace(payload.Tipo) {
+	case "enviar_instruccion":
+		id, err = runtimeService.EnqueueInstruction(agente, payload.ProyectoSlug, payload.Mensaje)
+	case "pausar":
+		id, err = runtimeService.EnqueuePause(agente, payload.ProyectoSlug)
+	case "continuar":
+		id, err = runtimeService.EnqueueContinue(agente, payload.ProyectoSlug)
+	case "handoff":
+		id, err = runtimeService.EnqueueHandoff(agente, payload.Destino, payload.ProyectoSlug)
+	default:
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "tipo de runtime order no soportado"})
+		return
+	}
+	if err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusCreated, map[string]any{"id": id})
+}
+
+func webHandlerAPIAgenteRuntimeOrderEjecutar(w http.ResponseWriter, r *http.Request, agente string) {
+	item, err := runtimeService.ExecuteNext(agente)
+	if err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	if item == nil {
+		webWriteJSON(w, http.StatusOK, map[string]any{"item": nil, "message": "sin ordenes pendientes"})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, map[string]any{"item": item})
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -452,6 +708,40 @@ func toWebTarea(t *db.Tarea) webTareaRow {
 	}
 }
 
+func taskPriority(raw string) db.PrioridadTarea {
+	return db.PrioridadTarea(strings.TrimSpace(raw))
+}
+
+func taskFilterFromEstado(raw string) db.FiltroTareas {
+	var f db.FiltroTareas
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return f
+	}
+	e := db.EstadoTarea(raw)
+	f.Estado = &e
+	return f
+}
+
+func proposalState(raw string) *db.EstadoPropuesta {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	e := db.EstadoPropuesta(raw)
+	return &e
+}
+
+func votePosition(raw string) (db.PosicionVoto, bool) {
+	posicion := db.PosicionVoto(strings.TrimSpace(raw))
+	switch posicion {
+	case db.VotoAcuerdo, db.VotoDesacuerdo, db.VotoAbstencion:
+		return posicion, true
+	default:
+		return "", false
+	}
+}
+
 func webRender(w http.ResponseWriter, tplStr string, data any) {
 	tmpl, err := template.New("layout").Funcs(webFuncMap).Parse(tplStr)
 	if err != nil {
@@ -462,6 +752,349 @@ func webRender(w http.ResponseWriter, tplStr string, data any) {
 	_ = tmpl.Execute(w, data)
 }
 
+func webWriteJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func webHandlerAPIServerInfo(w http.ResponseWriter, r *http.Request) {
+	webWriteJSON(w, http.StatusOK, serverInfo{
+		Name:        "orquesta",
+		Version:     "v1",
+		StorageMode: "single-process",
+		Capabilities: []string{
+			"status",
+			"web",
+			"api",
+			"mcp",
+		},
+	})
+}
+
+func webHandlerAPIStatus(w http.ResponseWriter, r *http.Request) {
+	resumen, err := buildEstadoResumen()
+	if err != nil {
+		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, resumen)
+}
+
+func webHandlerAPIConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		var payload struct {
+			Clave string `json:"clave"`
+			Valor string `json:"valor"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
+			return
+		}
+		if strings.TrimSpace(payload.Clave) == "" {
+			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "clave obligatoria"})
+			return
+		}
+		if err := configService.Set(payload.Clave, payload.Valor); err != nil {
+			webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+			return
+		}
+		webWriteJSON(w, http.StatusOK, map[string]any{"clave": payload.Clave, "valor": payload.Valor})
+		return
+	}
+	clave := strings.TrimSpace(r.URL.Query().Get("clave"))
+	if clave != "" {
+		valor, err := configService.Get(clave)
+		if err != nil {
+			webWriteJSON(w, http.StatusNotFound, map[string]any{"error": err.Error()})
+			return
+		}
+		webWriteJSON(w, http.StatusOK, map[string]any{"clave": clave, "valor": valor})
+		return
+	}
+	items, err := configService.List()
+	if err != nil {
+		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func webHandlerAPIVotar(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.NotFound(w, r)
+		return
+	}
+	var payload struct {
+		Codigo     string `json:"codigo"`
+		Agente     string `json:"agente"`
+		Posicion   string `json:"posicion"`
+		Comentario string `json:"comentario"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
+		return
+	}
+	posicion, ok := votePosition(payload.Posicion)
+	if !ok {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "posicion invalida"})
+		return
+	}
+	result, err := proposalService.VoteDetail(strings.TrimSpace(payload.Codigo), strings.TrimSpace(payload.Agente), posicion, strings.TrimSpace(payload.Comentario))
+	if err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, map[string]any{
+		"codigo":            result.Proposal.Codigo,
+		"agente":            strings.TrimSpace(payload.Agente),
+		"posicion":          posicion,
+		"comentario":        strings.TrimSpace(payload.Comentario),
+		"consensoAlcanzado": result.Consenso,
+		"conteo": map[string]int{
+			"acuerdo":    result.Acuerdo,
+			"desacuerdo": result.Desacuerdo,
+			"abstencion": result.Abstencion,
+			"pendiente":  result.Pendiente,
+		},
+	})
+}
+
+func webHandlerAPISesionInicio(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.NotFound(w, r)
+		return
+	}
+	var payload struct {
+		Agente     string `json:"agente"`
+		NuevoCodex bool   `json:"nuevo_codex"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
+		return
+	}
+	agente := strings.TrimSpace(payload.Agente)
+	if agente == "" && !payload.NuevoCodex {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "agente obligatorio"})
+		return
+	}
+	result, err := sessionAPIService.Start(agente, payload.NuevoCodex)
+	if err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, serverSessionStartResult{
+		Agente:               result.Agente,
+		SesionID:             result.SesionID,
+		Rol:                  result.Rol,
+		PropuestasPendientes: result.PropuestasPendientes,
+		Reglas:               result.Reglas,
+		Skills:               result.Skills,
+		WorkflowPasos:        result.WorkflowPasos,
+	})
+}
+
+func webHandlerAPISesionFin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.NotFound(w, r)
+		return
+	}
+	var payload struct {
+		Agente string `json:"agente"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
+		return
+	}
+	agente := strings.TrimSpace(payload.Agente)
+	if agente == "" {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "agente obligatorio"})
+		return
+	}
+	if _, err := sessionAPIService.Finish(agente); err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "agente": agente})
+}
+
+func webHandlerAPITareas(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		var payload struct {
+			Titulo      string `json:"titulo"`
+			Descripcion string `json:"descripcion"`
+			Modulo      string `json:"modulo"`
+			Prioridad   string `json:"prioridad"`
+			CreadoPor   string `json:"creado_por"`
+			Agente      string `json:"agente"`
+			Propuesta   string `json:"propuesta"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
+			return
+		}
+		id, err := taskService.Create(taskapp.CreateTaskInput{
+			Titulo:          strings.TrimSpace(payload.Titulo),
+			Descripcion:     strings.TrimSpace(payload.Descripcion),
+			Modulo:          strings.TrimSpace(payload.Modulo),
+			Prioridad:       taskPriority(payload.Prioridad),
+			CreadoPor:       strings.TrimSpace(payload.CreadoPor),
+			Agente:          strings.TrimSpace(payload.Agente),
+			PropuestaCodigo: strings.TrimSpace(payload.Propuesta),
+		})
+		if err != nil {
+			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+			return
+		}
+		webWriteJSON(w, http.StatusCreated, map[string]any{"id": id})
+		return
+	}
+	estadoStr := strings.TrimSpace(r.URL.Query().Get("estado"))
+	agente := strings.TrimSpace(r.URL.Query().Get("agente"))
+	modulo := strings.TrimSpace(r.URL.Query().Get("modulo"))
+	propuestaCodigo := strings.TrimSpace(r.URL.Query().Get("propuesta"))
+
+	f := taskFilterFromEstado(estadoStr)
+	if agente != "" {
+		f.Agente = &agente
+	}
+	if modulo != "" {
+		f.Modulo = &modulo
+	}
+	if propuestaID, err := taskService.ResolveProposalID(propuestaCodigo); err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	} else if propuestaID != nil {
+		f.PropuestaID = propuestaID
+	}
+
+	items, err := taskService.List(f)
+	if err != nil {
+		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func webHandlerAPITareaDetalle(w http.ResponseWriter, r *http.Request, idRaw string) {
+	id, err := strconv.ParseInt(strings.TrimSpace(idRaw), 10, 64)
+	if err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "id invalido"})
+		return
+	}
+	item, err := taskService.Get(id)
+	if err != nil {
+		webWriteJSON(w, http.StatusNotFound, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, map[string]any{"item": item})
+}
+
+func webHandlerAPITareaAccion(w http.ResponseWriter, r *http.Request, idRaw, accion string) {
+	id, err := strconv.ParseInt(strings.TrimSpace(idRaw), 10, 64)
+	if err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "id invalido"})
+		return
+	}
+	var payload struct {
+		Agente     string `json:"agente"`
+		Commit     string `json:"commit"`
+		Motivo     string `json:"motivo"`
+		Resolucion string `json:"resolucion"`
+		Nota       string `json:"nota"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
+		return
+	}
+	agente := strings.TrimSpace(payload.Agente)
+	switch strings.TrimSpace(accion) {
+	case "tomar":
+		err = taskService.Take(id, agente)
+	case "iniciar":
+		err = taskService.Start(id, agente)
+	case "completar":
+		err = taskService.Complete(id, agente, strings.TrimSpace(payload.Commit))
+	case "bloquear":
+		err = taskService.Block(id, agente, strings.TrimSpace(payload.Motivo))
+	case "desbloquear":
+		err = taskService.Unblock(id, agente, strings.TrimSpace(payload.Resolucion))
+	case "nota":
+		err = taskService.Note(id, agente, strings.TrimSpace(payload.Nota))
+	default:
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id, "accion": accion})
+}
+
+func webHandlerAPIPropuestas(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		var payload struct {
+			Codigo       string `json:"codigo"`
+			Titulo       string `json:"titulo"`
+			Descripcion  string `json:"descripcion"`
+			Tipo         string `json:"tipo"`
+			PropuestoPor string `json:"propuesto_por"`
+			Distribuidor string `json:"distribuidor"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
+			return
+		}
+		id, p, err := proposalService.Create(proposalapp.CreateProposalInput{
+			Codigo:       strings.TrimSpace(payload.Codigo),
+			Titulo:       strings.TrimSpace(payload.Titulo),
+			Descripcion:  strings.TrimSpace(payload.Descripcion),
+			Tipo:         strings.TrimSpace(payload.Tipo),
+			PropuestoPor: strings.TrimSpace(payload.PropuestoPor),
+			Distribuidor: strings.TrimSpace(payload.Distribuidor),
+		})
+		if err != nil {
+			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+			return
+		}
+		webWriteJSON(w, http.StatusCreated, map[string]any{"id": id, "codigo": p.Codigo})
+		return
+	}
+	estadoStr := strings.TrimSpace(r.URL.Query().Get("estado"))
+	items, err := proposalService.List(proposalState(estadoStr))
+	if err != nil {
+		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func webHandlerAPIPropuestaDetalle(w http.ResponseWriter, r *http.Request, codigo string) {
+	detail, err := proposalService.GetDetail(codigo)
+	if err != nil {
+		webWriteJSON(w, http.StatusNotFound, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, detail)
+}
+
+func webHandlerAPIPropuestaCerrar(w http.ResponseWriter, r *http.Request, codigo string) {
+	var payload struct {
+		Estado string `json:"estado"`
+		Agente string `json:"agente"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
+		return
+	}
+	if err := proposalService.Close(codigo, strings.TrimSpace(payload.Estado), strings.TrimSpace(payload.Agente)); err != nil {
+		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	webWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "codigo": codigo, "estado": strings.TrimSpace(payload.Estado)})
+}
+
 // ─── Comando ──────────────────────────────────────────────────────────────────
 
 var serveCmd = &cobra.Command{
@@ -469,21 +1102,94 @@ var serveCmd = &cobra.Command{
 	Short: "Arranca el panel web (por defecto: http://localhost:8080)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		puerto, _ := cmd.Flags().GetInt("puerto")
-		addr := fmt.Sprintf(":%d", puerto)
+		host, _ := cmd.Flags().GetString("host")
+		tlsCertFile, _ := cmd.Flags().GetString("tls-cert")
+		tlsKeyFile, _ := cmd.Flags().GetString("tls-key")
+		tlsClientCAFile, _ := cmd.Flags().GetString("tls-client-ca")
+		host = strings.TrimSpace(host)
+		if host == "" {
+			host = "127.0.0.1"
+		}
+		addr := net.JoinHostPort(host, strconv.Itoa(puerto))
+		if err := validateServeSecurity(host, tlsCertFile, tlsKeyFile, tlsClientCAFile); err != nil {
+			return err
+		}
 		mux := http.NewServeMux()
 		mux.HandleFunc("/", webHandlerDash)
+		mux.HandleFunc("/agentes", webHandlerAgentes)
+		mux.HandleFunc("/asignaciones", webHandlerAsignaciones)
+		mux.HandleFunc("/git", webHandlerGitGov)
+		mux.HandleFunc("/git/", webRouterGitGov)
+		mux.HandleFunc("/sesiones", webHandlerSesiones)
 		mux.HandleFunc("/tareas", webHandlerTareas)
 		mux.HandleFunc("/tareas/", webRouterTareas)
 		mux.HandleFunc("/propuestas", webHandlerPropuestas)
 		mux.HandleFunc("/propuestas/", webRouterPropuestas)
-		fmt.Printf("✓ Panel web en http://localhost%s\n", addr)
+		mux.HandleFunc("/gobernanza", webHandlerGobernanza)
+		mux.HandleFunc("/gobernanza/", webRouterGobernanza)
+		mux.HandleFunc("/proyectos", webHandlerProyectos)
+		mux.HandleFunc("/proyectos/", webRouterProyectos)
+		mux.HandleFunc("/api/agentes", webHandlerAPIAgentesLista)
+		mux.HandleFunc("/api/asignaciones", webHandlerAPIAsignaciones)
+		mux.HandleFunc("/api/config", webHandlerAPIConfig)
+		mux.HandleFunc("/api/propuestas", webHandlerAPIPropuestas)
+		mux.HandleFunc("/api/propuestas/", webRouterAPIPropuestasCLI)
+		mux.HandleFunc("/api/server", webHandlerAPIServerInfo)
+		mux.HandleFunc("/api/sesiones/inicio", webHandlerAPISesionInicio)
+		mux.HandleFunc("/api/sesiones/fin", webHandlerAPISesionFin)
+		mux.HandleFunc("/api/status", webHandlerAPIStatus)
+		mux.HandleFunc("/api/tareas", webHandlerAPITareas)
+		mux.HandleFunc("/api/tareas/", webRouterAPITareas)
+		mux.HandleFunc("/api/votar", webHandlerAPIVotar)
+		mux.HandleFunc("/api/git/worktrees", webHandlerAPIWorktrees)
+		mux.HandleFunc("/api/git/locks", webHandlerAPILocks)
+		mux.HandleFunc("/api/git/merges", webHandlerAPIMerges)
+		mux.HandleFunc("/api/gobernanza/", webRouterAPIGobernanza)
+		mux.HandleFunc("/api/locks", webHandlerAPILocks)
+		mux.HandleFunc("/api/merges", webHandlerAPIMerges)
+		mux.HandleFunc("/api/proyectos", webRouterAPIProyectos)
+		mux.HandleFunc("/api/proyectos/", webRouterAPIProyectos)
+		mux.HandleFunc("/api/sesiones", webHandlerAPISesiones)
+		mux.HandleFunc("/api/worktrees", webHandlerAPIWorktrees)
+		mux.HandleFunc("/api/pools", webHandlerAPIPools)
+		mux.HandleFunc("/api/pools/", webRouterAPIPools)
+		mux.HandleFunc("/api/modelos/resolver", webRouterAPIModelos)
+		mux.HandleFunc("/api/modelos/politicas", webRouterAPIModelos)
+		mux.HandleFunc("/api/agentes/", webRouterAPIAgentes)
+		mux.HandleFunc("/api/export/", webRouterAPIExport)
+		server := &http.Server{Addr: addr, Handler: mux}
+		scheme := "http"
+		if strings.TrimSpace(tlsCertFile) != "" {
+			tlsConfig, err := buildServeTLSConfig(tlsClientCAFile)
+			if err != nil {
+				return err
+			}
+			server.TLSConfig = tlsConfig
+			scheme = "https"
+		}
+		for _, target := range describeServeTargets(host, puerto, scheme) {
+			fmt.Printf("✓ Panel web en %s\n", target)
+		}
+		if scheme == "https" && strings.TrimSpace(tlsClientCAFile) != "" {
+			fmt.Println("  mTLS activo: el cliente debe presentar un certificado válido.")
+		}
+		if !isLocalServeHost(host) {
+			fmt.Println("  Exposición remota permitida solo por HTTPS con certificado de cliente.")
+		}
 		fmt.Println("  Ctrl+C para detener.")
-		return http.ListenAndServe(addr, mux)
+		if scheme == "https" {
+			return server.ListenAndServeTLS(tlsCertFile, tlsKeyFile)
+		}
+		return server.ListenAndServe()
 	},
 }
 
 func init() {
+	serveCmd.Flags().String("host", "127.0.0.1", "Host de escucha (127.0.0.1 para solo local)")
 	serveCmd.Flags().Int("puerto", 8080, "Puerto HTTP")
+	serveCmd.Flags().String("tls-cert", "", "Certificado TLS del servidor (PEM)")
+	serveCmd.Flags().String("tls-key", "", "Clave privada TLS del servidor (PEM)")
+	serveCmd.Flags().String("tls-client-ca", "", "CA PEM para exigir certificado de cliente (mTLS)")
 	rootCmd.AddCommand(serveCmd)
 }
 
@@ -501,10 +1207,11 @@ const webTplLayout = `<!doctype html>
   <style>
     body{--pico-font-size:14px}
     header{background:#0f172a;padding:.7rem 0;margin-bottom:0}
-    header nav{display:flex;align-items:center;justify-content:space-between}
+    header nav{display:flex;align-items:center;justify-content:space-between;gap:.8rem;flex-wrap:wrap}
     header a{color:#94a3b8;text-decoration:none;margin-right:1.2rem;font-size:.95rem}
     header a:hover,header a.sel{color:#fff}
     header strong{color:#fff}
+    .toplinks{display:flex;flex-wrap:wrap;gap:.2rem .8rem;align-items:center}
     .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:.8rem;margin-bottom:1.2rem}
     .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:.5rem;padding:.9rem;text-align:center}
     .stat .n{font-size:1.9rem;font-weight:700;color:#1e293b;line-height:1.1}
@@ -545,17 +1252,29 @@ const webTplLayout = `<!doctype html>
     input[type=text],input[type=number],select,textarea{font-size:.85rem;padding:.35rem .6rem}
     .btn-sm{font-size:.8rem;padding:.3rem .8rem}
     footer{text-align:center;padding:1.5rem 0;color:#94a3b8;font-size:.78rem;margin-top:2rem}
-    @media(max-width:700px){.grid2{grid-template-columns:1fr}}
+    @media(max-width:700px){
+      .grid2{grid-template-columns:1fr}
+      header nav{align-items:flex-start}
+      header a{margin-right:.6rem;font-size:.88rem}
+      .toplinks{width:100%}
+    }
   </style>
 </head>
 <body>
 <header>
   <nav class="container">
     <div><a href="/"><strong>⚙ Orquesta</strong></a></div>
-    <div>
+    <div class="toplinks">
       <a href="/">Dashboard</a>
+      <a href="/git">Git</a>
+      <a href="/agentes">Agentes</a>
+      <a href="/sesiones">Sesiones</a>
+      <a href="/asignaciones">Asignaciones</a>
+      <a href="/git">Git</a>
       <a href="/tareas">Tareas</a>
       <a href="/propuestas">Propuestas</a>
+      <a href="/gobernanza">Gobernanza</a>
+      <a href="/proyectos">Proyectos</a>
     </div>
   </nav>
 </header>
@@ -565,6 +1284,100 @@ const webTplLayout = `<!doctype html>
 <footer>ContaGrx · OSL Diputación de Granada · GPLv3</footer>
 </body></html>
 `
+
+func validateServeSecurity(host, tlsCertFile, tlsKeyFile, tlsClientCAFile string) error {
+	host = strings.TrimSpace(host)
+	tlsCertFile = strings.TrimSpace(tlsCertFile)
+	tlsKeyFile = strings.TrimSpace(tlsKeyFile)
+	tlsClientCAFile = strings.TrimSpace(tlsClientCAFile)
+
+	if (tlsCertFile == "") != (tlsKeyFile == "") {
+		return fmt.Errorf("tls-cert y tls-key deben proporcionarse juntos")
+	}
+	if tlsClientCAFile != "" && tlsCertFile == "" {
+		return fmt.Errorf("tls-client-ca requiere también tls-cert y tls-key")
+	}
+	if !isLocalServeHost(host) && tlsClientCAFile == "" {
+		return fmt.Errorf("para exponer el panel fuera de localhost debes usar HTTPS con tls-client-ca")
+	}
+	return nil
+}
+
+func buildServeTLSConfig(clientCAFile string) (*tls.Config, error) {
+	clientCAFile = strings.TrimSpace(clientCAFile)
+	cfg := &tls.Config{
+		MinVersion: tls.VersionTLS13,
+	}
+	if clientCAFile == "" {
+		return cfg, nil
+	}
+	pemData, err := os.ReadFile(clientCAFile)
+	if err != nil {
+		return nil, fmt.Errorf("leyendo tls-client-ca: %w", err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(pemData) {
+		return nil, fmt.Errorf("tls-client-ca no contiene certificados PEM válidos")
+	}
+	cfg.ClientAuth = tls.RequireAndVerifyClientCert
+	cfg.ClientCAs = pool
+	return cfg, nil
+}
+
+func isLocalServeHost(host string) bool {
+	host = strings.TrimSpace(strings.ToLower(host))
+	return host == "" || host == "127.0.0.1" || host == "localhost" || host == "::1"
+}
+
+func describeServeTargets(host string, port int, scheme string) []string {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	if host != "0.0.0.0" && host != "::" {
+		return []string{fmt.Sprintf("%s://%s", scheme, net.JoinHostPort(host, strconv.Itoa(port)))}
+	}
+	targets := []string{fmt.Sprintf("%s://%s", scheme, net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))}
+	seen := map[string]bool{targets[0]: true}
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return targets
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			ip, ok := extractServeIP(addr)
+			if !ok || ip.IsLoopback() {
+				continue
+			}
+			if ip4 := ip.To4(); ip4 != nil {
+				url := fmt.Sprintf("%s://%s", scheme, net.JoinHostPort(ip4.String(), strconv.Itoa(port)))
+				if !seen[url] {
+					seen[url] = true
+					targets = append(targets, url)
+				}
+			}
+		}
+	}
+	return targets
+}
+
+func extractServeIP(addr net.Addr) (net.IP, bool) {
+	switch value := addr.(type) {
+	case *net.IPNet:
+		return value.IP, true
+	case *net.IPAddr:
+		return value.IP, true
+	default:
+		return nil, false
+	}
+}
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 

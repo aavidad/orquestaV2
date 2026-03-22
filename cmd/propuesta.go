@@ -9,16 +9,20 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
+	"orquesta/proposalapp"
 )
 
 var propuestaCmd = &cobra.Command{
 	Use:   "propuesta",
 	Short: "Gestión de propuestas (OPs)",
 }
+
+var proposalService = proposalapp.NewService(proposalapp.Repository{})
 
 var propuestaListarCmd = &cobra.Command{
 	Use:   "listar",
@@ -30,7 +34,19 @@ var propuestaListarCmd = &cobra.Command{
 			e := db.EstadoPropuesta(estadoStr)
 			f = &e
 		}
-		propuestas, err := db.ListarPropuestas(f)
+		var (
+			propuestas []*db.Propuesta
+			err        error
+		)
+		if serverURL := activeServerURL(); serverURL != "" {
+			query := url.Values{}
+			if estadoStr != "" {
+				query.Set("estado", estadoStr)
+			}
+			propuestas, err = fetchServerProposals(serverURL, query)
+		} else {
+			propuestas, err = proposalService.List(f)
+		}
 		if err != nil {
 			return err
 		}
@@ -52,10 +68,19 @@ var propuestaVerCmd = &cobra.Command{
 	Short: "Muestra el detalle y votos de una propuesta",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		p, err := db.GetPropuesta(args[0])
+		var (
+			detail *proposalapp.ProposalDetail
+			err    error
+		)
+		if serverURL := activeServerURL(); serverURL != "" {
+			detail, err = fetchServerProposalDetail(serverURL, args[0])
+		} else {
+			detail, err = proposalService.GetDetail(args[0])
+		}
 		if err != nil {
 			return fmt.Errorf("propuesta '%s' no encontrada", args[0])
 		}
+		p := detail.Proposal
 
 		fmt.Printf("╔══════════════════════════════════════════════╗\n")
 		fmt.Printf("║  %s — %s\n", p.Codigo, p.Titulo)
@@ -71,10 +96,7 @@ var propuestaVerCmd = &cobra.Command{
 			fmt.Printf("\nDescripción:\n  %s\n", strings.ReplaceAll(p.Descripcion, "\n", "\n  "))
 		}
 
-		votos, err := db.ResumenVotos(p.ID)
-		if err != nil {
-			return err
-		}
+		votos := detail.Votes
 		if len(votos) > 0 {
 			fmt.Printf("\nVotos:\n")
 			for _, v := range votos {
@@ -110,15 +132,31 @@ var propuestaNuevaCmd = &cobra.Command{
 			return fmt.Errorf("debe indicar el título con --titulo o como argumento posicional")
 		}
 
-		p := &db.Propuesta{
+		if serverURL := activeServerURL(); serverURL != "" {
+			id, codigo, err := submitServerCreateProposal(serverURL, map[string]any{
+				"codigo":        codigo,
+				"titulo":        titulo,
+				"descripcion":   desc,
+				"tipo":          tipo,
+				"propuesto_por": por,
+				"distribuidor":  "claude",
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Printf("✓ Propuesta %s creada (id: %d)\n", codigo, id)
+			fmt.Println("  Los agentes deben votar con: orquesta votar <codigo> <posicion>")
+			return nil
+		}
+
+		id, p, err := proposalService.Create(proposalapp.CreateProposalInput{
 			Codigo:       codigo,
 			Titulo:       titulo,
 			Descripcion:  desc,
 			Tipo:         tipo,
 			PropuestoPor: por,
 			Distribuidor: "claude",
-		}
-		id, err := db.CrearPropuesta(p)
+		})
 		if err != nil {
 			return err
 		}
@@ -137,7 +175,14 @@ var propuestaCerrarCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := db.CerrarPropuesta(args[0], args[1], agente); err != nil {
+		if serverURL := activeServerURL(); serverURL != "" {
+			if err := submitServerCloseProposal(serverURL, args[0], args[1], agente); err != nil {
+				return err
+			}
+			fmt.Printf("✓ Propuesta %s cerrada como '%s'\n", args[0], args[1])
+			return nil
+		}
+		if err := proposalService.Close(args[0], args[1], agente); err != nil {
 			return err
 		}
 		fmt.Printf("✓ Propuesta %s cerrada como '%s'\n", args[0], args[1])

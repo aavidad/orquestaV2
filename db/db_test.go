@@ -1,23 +1,157 @@
 package db
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 func TestResolverRutaDesdeGitRootRepoOrquesta(t *testing.T) {
 	t.Parallel()
 
-	got := resolverRutaDesdeGitRoot("/tmp/PlataformaMunicipal/orquesta")
-	want := "/tmp/PlataformaMunicipal/orquesta/orquesta.db"
+	got := resolverRutaDesdeGitRoot("/tmp/PlataformaMunicipal/orquestador")
+	want := "/tmp/PlataformaMunicipal/orquestador/orquesta.db"
 	if got != want {
 		t.Fatalf("ruta inesperada: %s", got)
 	}
 }
 
-func TestResolverRutaDesdeGitRootRepoContaGrxUsaSiblingOrquesta(t *testing.T) {
+func TestResolverRutaDesdeGitRootRepoContaGrxUsaSiblingOrquestador(t *testing.T) {
 	t.Parallel()
 
 	got := resolverRutaDesdeGitRoot("/home/alberto/Trabajo/PlataformaMunicipal/ContaGrx")
-	want := "/home/alberto/Trabajo/PlataformaMunicipal/orquesta/orquesta.db"
+	want := "/home/alberto/Trabajo/PlataformaMunicipal/orquestador/orquesta.db"
 	if got != want {
 		t.Fatalf("ruta inesperada: %s", got)
+	}
+}
+
+func TestOpenNuevaBDIncluyeEsquemaExtendido(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "orquesta.db")
+	prev := os.Getenv("ORQUESTA_DB")
+	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
+		t.Fatalf("setenv: %v", err)
+	}
+	defer func() {
+		_ = os.Setenv("ORQUESTA_DB", prev)
+		Close()
+	}()
+
+	if err := Open(); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	for _, table := range []string{"proyectos", "asignaciones", "conectores", "locks", "worktrees", "runtime_handles", "runtime_orders", "pools_capacidad", "pool_modelos", "decisiones_proyecto", "documentos_externos", "git_merges"} {
+		var name string
+		err := DB.QueryRow(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&name)
+		if err != nil {
+			t.Fatalf("tabla %s no creada: %v", table, err)
+		}
+	}
+
+	for _, column := range []string{"estado", "cwd", "external_session_id", "resumen_continuidad"} {
+		var found bool
+		rows, err := DB.Query(`PRAGMA table_info(sesiones)`)
+		if err != nil {
+			t.Fatalf("PRAGMA table_info(sesiones): %v", err)
+		}
+		for rows.Next() {
+			var cid int
+			var name, ctype string
+			var notnull int
+			var dfltValue any
+			var pk int
+			if err := rows.Scan(&cid, &name, &ctype, &notnull, &dfltValue, &pk); err != nil {
+				rows.Close()
+				t.Fatalf("scan table_info: %v", err)
+			}
+			if name == column {
+				found = true
+			}
+		}
+		rows.Close()
+		if !found {
+			t.Fatalf("columna %s no encontrada en sesiones", column)
+		}
+	}
+}
+
+func TestOpenFallaSinDSNParaDriverExterno(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "orquesta.db")
+	prevPath := os.Getenv("ORQUESTA_DB")
+	prevDriver := os.Getenv("ORQUESTA_DB_DRIVER")
+	prevDSN := os.Getenv("ORQUESTA_DB_DSN")
+	prevBootstrap := os.Getenv("ORQUESTA_DB_BOOTSTRAP")
+	defer func() {
+		_ = os.Setenv("ORQUESTA_DB", prevPath)
+		_ = os.Setenv("ORQUESTA_DB_DRIVER", prevDriver)
+		_ = os.Setenv("ORQUESTA_DB_DSN", prevDSN)
+		_ = os.Setenv("ORQUESTA_DB_BOOTSTRAP", prevBootstrap)
+		Close()
+	}()
+
+	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
+		t.Fatalf("setenv ORQUESTA_DB: %v", err)
+	}
+	if err := os.Setenv("ORQUESTA_DB_DRIVER", "postgres"); err != nil {
+		t.Fatalf("setenv ORQUESTA_DB_DRIVER: %v", err)
+	}
+	if err := os.Setenv("ORQUESTA_DB_DSN", ""); err != nil {
+		t.Fatalf("setenv ORQUESTA_DB_DSN: %v", err)
+	}
+	if err := os.Setenv("ORQUESTA_DB_BOOTSTRAP", "false"); err != nil {
+		t.Fatalf("setenv ORQUESTA_DB_BOOTSTRAP: %v", err)
+	}
+
+	err := Open()
+	if err == nil {
+		t.Fatalf("esperaba error por driver externo sin DSN")
+	}
+	if !strings.Contains(err.Error(), "ORQUESTA_DB_DSN") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
+func TestOpenSQLiteSinBootstrapNoCreaEsquema(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "orquesta.db")
+	prevPath := os.Getenv("ORQUESTA_DB")
+	prevDriver := os.Getenv("ORQUESTA_DB_DRIVER")
+	prevDSN := os.Getenv("ORQUESTA_DB_DSN")
+	prevBootstrap := os.Getenv("ORQUESTA_DB_BOOTSTRAP")
+	defer func() {
+		_ = os.Setenv("ORQUESTA_DB", prevPath)
+		_ = os.Setenv("ORQUESTA_DB_DRIVER", prevDriver)
+		_ = os.Setenv("ORQUESTA_DB_DSN", prevDSN)
+		_ = os.Setenv("ORQUESTA_DB_BOOTSTRAP", prevBootstrap)
+		Close()
+	}()
+
+	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
+		t.Fatalf("setenv ORQUESTA_DB: %v", err)
+	}
+	if err := os.Setenv("ORQUESTA_DB_DRIVER", "sqlite"); err != nil {
+		t.Fatalf("setenv ORQUESTA_DB_DRIVER: %v", err)
+	}
+	if err := os.Setenv("ORQUESTA_DB_DSN", ""); err != nil {
+		t.Fatalf("setenv ORQUESTA_DB_DSN: %v", err)
+	}
+	if err := os.Setenv("ORQUESTA_DB_BOOTSTRAP", "false"); err != nil {
+		t.Fatalf("setenv ORQUESTA_DB_BOOTSTRAP: %v", err)
+	}
+
+	if err := Open(); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	var count int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='proyectos'`).Scan(&count); err != nil {
+		t.Fatalf("sqlite_master: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("no esperaba esquema bootstrap con ORQUESTA_DB_BOOTSTRAP=false")
 	}
 }

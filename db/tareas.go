@@ -244,6 +244,32 @@ func DesbloquearTarea(id int64, agente, resolucion string) error {
 	return nil
 }
 
+// ReasignarTarea mueve una tarea a otro agente y la deja en estado asignada.
+func ReasignarTarea(id int64, nuevoAgente string) error {
+	t, err := GetTarea(id)
+	if err != nil {
+		return fmt.Errorf("tarea #%d no encontrada", id)
+	}
+	_, err = DB.Exec(`UPDATE tareas SET agente=?, estado='asignada' WHERE id=?`, nuevoAgente, id)
+	if err == nil {
+		Audit("alberto", "reasignar_tarea", "tarea", id, t.Titulo+" -> "+nuevoAgente)
+	}
+	return err
+}
+
+// EnviarTareaABacklog mueve una tarea a backlog y elimina su asignación actual.
+func EnviarTareaABacklog(id int64) error {
+	t, err := GetTarea(id)
+	if err != nil {
+		return fmt.Errorf("tarea #%d no encontrada", id)
+	}
+	_, err = DB.Exec(`UPDATE tareas SET estado='backlog', agente=NULL WHERE id=?`, id)
+	if err == nil {
+		Audit("alberto", "backlog_tarea", "tarea", id, t.Titulo)
+	}
+	return err
+}
+
 // AnotarTarea añade una nota a una tarea.
 func AnotarTarea(id int64, agente, nota string) error {
 	_, err := DB.Exec(

@@ -24,6 +24,7 @@ type Propuesta struct {
 	Estado       EstadoPropuesta
 	PropuestoPor string
 	Distribuidor string
+	ProyectoID   *int64
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	CerradaAt    *time.Time
@@ -38,10 +39,17 @@ func CrearPropuesta(p *Propuesta) (int64, error) {
 		_ = DB.QueryRow(`SELECT COALESCE(MAX(CAST(SUBSTR(codigo,4) AS INTEGER)),29) FROM propuestas WHERE codigo LIKE 'OP-%'`).Scan(&max)
 		p.Codigo = fmt.Sprintf("OP-%03d", max+1)
 	}
-	res, err := DB.Exec(`
-		INSERT INTO propuestas (codigo, titulo, descripcion, tipo, propuesto_por, distribuidor)
-		VALUES (?,?,?,?,?,?)`,
-		p.Codigo, p.Titulo, p.Descripcion, p.Tipo, p.PropuestoPor, p.Distribuidor,
+
+	tx, err := DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec(`
+		INSERT INTO propuestas (codigo, titulo, descripcion, tipo, propuesto_por, distribuidor, proyecto_id)
+		VALUES (?,?,?,?,?,?,?)`,
+		p.Codigo, p.Titulo, p.Descripcion, p.Tipo, p.PropuestoPor, p.Distribuidor, p.ProyectoID,
 	)
 	if err != nil {
 		return 0, err
@@ -49,17 +57,38 @@ func CrearPropuesta(p *Propuesta) (int64, error) {
 	id, _ := res.LastInsertId()
 
 	// Crear filas de voto pendiente solo para agentes habilitados (no admin, no retirados)
-	rows, _ := DB.Query(`SELECT nombre FROM agentes WHERE rol != 'admin' AND habilitado = 1`)
-	if rows != nil {
-		defer rows.Close()
-		for rows.Next() {
-			var nombre string
-			_ = rows.Scan(&nombre)
-			_, _ = DB.Exec(
-				`INSERT OR IGNORE INTO votos (propuesta_id, agente, posicion) VALUES (?,?,'pendiente')`,
-				id, nombre,
-			)
+	rows, err := tx.Query(`SELECT nombre FROM agentes WHERE rol != 'admin' AND habilitado = 1`)
+	if err != nil {
+		return 0, err
+	}
+	var agentes []string
+	for rows.Next() {
+		var nombre string
+		if err := rows.Scan(&nombre); err != nil {
+			rows.Close()
+			return 0, err
 		}
+		agentes = append(agentes, nombre)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, err
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+
+	for _, nombre := range agentes {
+		if _, err := tx.Exec(
+			`INSERT OR IGNORE INTO votos (propuesta_id, agente, posicion) VALUES (?,?,'pendiente')`,
+			id, nombre,
+		); err != nil {
+			return 0, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
 	}
 
 	Audit(p.PropuestoPor, "crear_propuesta", "propuesta", id, p.Codigo+": "+p.Titulo)
@@ -71,7 +100,7 @@ func GetPropuesta(codigoOID string) (*Propuesta, error) {
 	var row *sql.Row
 	row = DB.QueryRow(`
 		SELECT id, codigo, titulo, descripcion, tipo, estado, propuesto_por, distribuidor,
-		       created_at, updated_at, cerrada_at
+		       proyecto_id, created_at, updated_at, cerrada_at
 		FROM propuestas WHERE codigo = ? OR CAST(id AS TEXT) = ?`, codigoOID, codigoOID)
 	return escanearPropuesta(row)
 }
@@ -79,7 +108,7 @@ func GetPropuesta(codigoOID string) (*Propuesta, error) {
 // ListarPropuestas devuelve propuestas, opcionalmente filtradas por estado.
 func ListarPropuestas(estado *EstadoPropuesta) ([]*Propuesta, error) {
 	q := `SELECT id, codigo, titulo, descripcion, tipo, estado, propuesto_por, distribuidor,
-		         created_at, updated_at, cerrada_at
+		         proyecto_id, created_at, updated_at, cerrada_at
 		  FROM propuestas`
 	args := []any{}
 	if estado != nil {
@@ -182,7 +211,7 @@ func EvaluarConsenso(propuestaID int64, agente string) (bool, error) {
 func PropuestasPendientesVoto(agente string) ([]*Propuesta, error) {
 	rows, err := DB.Query(`
 		SELECT p.id, p.codigo, p.titulo, p.descripcion, p.tipo, p.estado, p.propuesto_por,
-		       p.distribuidor, p.created_at, p.updated_at, p.cerrada_at
+		       p.distribuidor, p.proyecto_id, p.created_at, p.updated_at, p.cerrada_at
 		FROM propuestas p
 		JOIN votos v ON v.propuesta_id = p.id
 		WHERE v.agente = ? AND v.posicion = 'pendiente' AND p.estado = 'abierta'
@@ -202,18 +231,34 @@ func PropuestasPendientesVoto(agente string) ([]*Propuesta, error) {
 	return list, rows.Err()
 }
 
+// BackfillVotosPendientes crea filas de voto pendiente para propuestas abiertas
+// que no tengan aún voto registrado para agentes habilitados no admin.
+func BackfillVotosPendientes() error {
+	_, err := DB.Exec(`
+		INSERT OR IGNORE INTO votos (propuesta_id, agente, posicion, comentario)
+		SELECT p.id, a.nombre, 'pendiente', ''
+		FROM propuestas p
+		JOIN agentes a ON a.rol != 'admin' AND a.habilitado = 1
+		WHERE p.estado = 'abierta'`)
+	return err
+}
+
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 func escanearPropuesta(s scanner) (*Propuesta, error) {
 	var p Propuesta
+	var proyectoID sql.NullInt64
 	var cerradaAt sql.NullTime
 	err := s.Scan(
 		&p.ID, &p.Codigo, &p.Titulo, &p.Descripcion, &p.Tipo, &p.Estado,
-		&p.PropuestoPor, &p.Distribuidor,
+		&p.PropuestoPor, &p.Distribuidor, &proyectoID,
 		&p.CreatedAt, &p.UpdatedAt, &cerradaAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if proyectoID.Valid {
+		p.ProyectoID = &proyectoID.Int64
 	}
 	if cerradaAt.Valid {
 		p.CerradaAt = &cerradaAt.Time

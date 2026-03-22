@@ -25,6 +25,7 @@ de ContaGrx. Los agentes deben iniciar sesión al comenzar y cerrarla al termina
 
 // Execute es el punto de entrada principal.
 func Execute() {
+	defer db.Close()
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -46,6 +47,9 @@ func init() {
 }
 
 func initDB() {
+	if shouldBypassLocalDB(os.Args[1:]) {
+		return
+	}
 	if err := db.Open(); err != nil {
 		fmt.Fprintf(os.Stderr, "error abriendo base de datos: %v\n", err)
 		os.Exit(1)

@@ -64,3 +64,29 @@ func TestResolverTextoFlagOPosicionalAceptaTextoPosicional(t *testing.T) {
 		t.Fatalf("valor inesperado: %s", valor)
 	}
 }
+
+func TestValidateServeSecurityRechazaRemotoSinMTLS(t *testing.T) {
+	t.Parallel()
+
+	err := validateServeSecurity("0.0.0.0", "", "", "")
+	if err == nil {
+		t.Fatalf("debería exigir tls-client-ca para exposición remota")
+	}
+}
+
+func TestValidateServeSecurityAceptaLocalSinTLS(t *testing.T) {
+	t.Parallel()
+
+	if err := validateServeSecurity("127.0.0.1", "", "", ""); err != nil {
+		t.Fatalf("local sin tls no debería fallar: %v", err)
+	}
+}
+
+func TestValidateServeSecurityExigeParCertKey(t *testing.T) {
+	t.Parallel()
+
+	err := validateServeSecurity("127.0.0.1", "/tmp/server.crt", "", "")
+	if err == nil {
+		t.Fatalf("debería exigir tls-key junto a tls-cert")
+	}
+}

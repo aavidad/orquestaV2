@@ -9,17 +9,21 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
+	"orquesta/taskapp"
 )
 
 var tareaCmd = &cobra.Command{
 	Use:   "tarea",
 	Short: "Gestión de tareas",
 }
+
+var taskService = taskapp.NewService(taskapp.Repository{})
 
 var tareaListarCmd = &cobra.Command{
 	Use:   "listar",
@@ -30,26 +34,46 @@ var tareaListarCmd = &cobra.Command{
 		modulo, _ := cmd.Flags().GetString("modulo")
 		propuestaCodigo, _ := cmd.Flags().GetString("propuesta")
 
-		f := db.FiltroTareas{Agente: &agente, Modulo: &modulo}
-		if estadoStr != "" {
-			e := db.EstadoTarea(estadoStr)
-			f.Estado = &e
-		}
-		if agente == "" {
-			f.Agente = nil
-		}
-		if modulo == "" {
-			f.Modulo = nil
-		}
-		if propuestaCodigo != "" {
-			p, err := db.GetPropuesta(propuestaCodigo)
-			if err != nil {
-				return fmt.Errorf("propuesta '%s' no encontrada", propuestaCodigo)
+		var (
+			tareas []*db.Tarea
+			err    error
+		)
+		if serverURL := activeServerURL(); serverURL != "" {
+			query := url.Values{}
+			if estadoStr != "" {
+				query.Set("estado", estadoStr)
 			}
-			f.PropuestaID = &p.ID
+			if agente != "" {
+				query.Set("agente", agente)
+			}
+			if modulo != "" {
+				query.Set("modulo", modulo)
+			}
+			if propuestaCodigo != "" {
+				query.Set("propuesta", propuestaCodigo)
+			}
+			tareas, err = fetchServerTasks(serverURL, query)
+		} else {
+			filtro := db.FiltroTareas{}
+			if estadoStr != "" {
+				e := db.EstadoTarea(estadoStr)
+				filtro.Estado = &e
+			}
+			if agente != "" {
+				filtro.Agente = &agente
+			}
+			if modulo != "" {
+				filtro.Modulo = &modulo
+			}
+			if propuestaCodigo != "" {
+				propuestaID, err := taskService.ResolveProposalID(propuestaCodigo)
+				if err != nil {
+					return fmt.Errorf("propuesta '%s' no encontrada", propuestaCodigo)
+				}
+				filtro.PropuestaID = propuestaID
+			}
+			tareas, err = taskService.List(filtro)
 		}
-
-		tareas, err := db.ListarTareas(f)
 		if err != nil {
 			return err
 		}
@@ -82,7 +106,12 @@ var tareaVerCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
-		t, err := db.GetTarea(id)
+		var t *db.Tarea
+		if serverURL := activeServerURL(); serverURL != "" {
+			t, err = fetchServerTaskDetail(serverURL, id)
+		} else {
+			t, err = taskService.Get(id)
+		}
 		if err != nil {
 			return err
 		}
@@ -123,35 +152,40 @@ var tareaNuevaCmd = &cobra.Command{
 			return fmt.Errorf("--titulo es obligatorio")
 		}
 
-		t := &db.Tarea{
-			Titulo:      titulo,
-			Descripcion: desc,
-			Modulo:      modulo,
-			Prioridad:   db.PrioridadTarea(prioridad),
-			CreadoPor:   creadorPor,
-		}
-
-		// Vincular a propuesta si se indicó
-		if propuestaCodigo != "" {
-			p, err := db.GetPropuesta(propuestaCodigo)
+		if serverURL := activeServerURL(); serverURL != "" {
+			id, err := submitServerCreateTask(serverURL, map[string]any{
+				"titulo":      titulo,
+				"descripcion": desc,
+				"modulo":      modulo,
+				"prioridad":   prioridad,
+				"creado_por":  creadorPor,
+				"agente":      agente,
+				"propuesta":   propuestaCodigo,
+			})
 			if err != nil {
-				return fmt.Errorf("propuesta '%s' no encontrada", propuestaCodigo)
+				return err
 			}
-			t.PropuestaID = &p.ID
+			fmt.Printf("✓ Tarea #%d creada: %s\n", id, titulo)
+			if agente != "" {
+				fmt.Printf("  → Asignada a %s\n", agente)
+			}
+			return nil
 		}
-		id, err := db.CrearTarea(t)
+		id, err := taskService.Create(taskapp.CreateTaskInput{
+			Titulo:          titulo,
+			Descripcion:     desc,
+			Modulo:          modulo,
+			Prioridad:       db.PrioridadTarea(prioridad),
+			CreadoPor:       creadorPor,
+			Agente:          agente,
+			PropuestaCodigo: propuestaCodigo,
+		})
 		if err != nil {
 			return err
 		}
 		fmt.Printf("✓ Tarea #%d creada: %s\n", id, titulo)
-
-		// Si se especificó agente, asignar directamente
 		if agente != "" {
-			if err := db.TomarTarea(id, agente); err != nil {
-				fmt.Printf("  ⚠ No se pudo asignar a %s: %v\n", agente, err)
-			} else {
-				fmt.Printf("  → Asignada a %s\n", agente)
-			}
+			fmt.Printf("  → Asignada a %s\n", agente)
 		}
 		return nil
 	},
@@ -166,7 +200,11 @@ var tareaTomar = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
-		if err := db.TomarTarea(id, args[1]); err != nil {
+		if serverURL := activeServerURL(); serverURL != "" {
+			if err := submitServerTaskAction(serverURL, id, "tomar", map[string]any{"agente": args[1]}); err != nil {
+				return err
+			}
+		} else if err := taskService.Take(id, args[1]); err != nil {
 			return err
 		}
 		fmt.Printf("✓ Tarea #%d asignada a %s\n", id, args[1])
@@ -183,7 +221,11 @@ var tareaIniciarCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
-		if err := db.IniciarTarea(id, args[1]); err != nil {
+		if serverURL := activeServerURL(); serverURL != "" {
+			if err := submitServerTaskAction(serverURL, id, "iniciar", map[string]any{"agente": args[1]}); err != nil {
+				return err
+			}
+		} else if err := taskService.Start(id, args[1]); err != nil {
 			return err
 		}
 		fmt.Printf("✓ Tarea #%d en progreso (%s)\n", id, args[1])
@@ -201,7 +243,11 @@ var tareaCompletarCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		commit, _ := cmd.Flags().GetString("commit")
-		if err := db.CompletarTarea(id, args[1], commit); err != nil {
+		if serverURL := activeServerURL(); serverURL != "" {
+			if err := submitServerTaskAction(serverURL, id, "completar", map[string]any{"agente": args[1], "commit": commit}); err != nil {
+				return err
+			}
+		} else if err := taskService.Complete(id, args[1], commit); err != nil {
 			return err
 		}
 		fmt.Printf("✓ Tarea #%d completada\n", id)
@@ -222,7 +268,11 @@ var tareaBloquearCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := db.BloquearTarea(id, args[1], motivo); err != nil {
+		if serverURL := activeServerURL(); serverURL != "" {
+			if err := submitServerTaskAction(serverURL, id, "bloquear", map[string]any{"agente": args[1], "motivo": motivo}); err != nil {
+				return err
+			}
+		} else if err := taskService.Block(id, args[1], motivo); err != nil {
 			return err
 		}
 		fmt.Printf("✓ Tarea #%d bloqueada: %s\n", id, motivo)
@@ -240,7 +290,11 @@ var tareaNotaCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		nota := strings.Join(args[2:], " ")
-		if err := db.AnotarTarea(id, args[1], nota); err != nil {
+		if serverURL := activeServerURL(); serverURL != "" {
+			if err := submitServerTaskAction(serverURL, id, "nota", map[string]any{"agente": args[1], "nota": nota}); err != nil {
+				return err
+			}
+		} else if err := taskService.Note(id, args[1], nota); err != nil {
 			return err
 		}
 		fmt.Printf("✓ Nota añadida a tarea #%d\n", id)
@@ -258,12 +312,9 @@ var tareaReasignarCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		nuevoAgente := args[1]
-		_, err = db.DB.Exec(
-			`UPDATE tareas SET agente=?, estado='asignada' WHERE id=?`, nuevoAgente, id)
-		if err != nil {
+		if err := taskService.Reassign(id, nuevoAgente); err != nil {
 			return err
 		}
-		db.Audit("alberto", "reasignar_tarea", "tarea", id, nuevoAgente)
 		fmt.Printf("✓ Tarea #%d reasignada a %s\n", id, nuevoAgente)
 		return nil
 	},
@@ -282,7 +333,11 @@ var tareaDesbloquearCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := db.DesbloquearTarea(id, args[1], resolucion); err != nil {
+		if serverURL := activeServerURL(); serverURL != "" {
+			if err := submitServerTaskAction(serverURL, id, "desbloquear", map[string]any{"agente": args[1], "resolucion": resolucion}); err != nil {
+				return err
+			}
+		} else if err := taskService.Unblock(id, args[1], resolucion); err != nil {
 			return err
 		}
 		fmt.Printf("✓ Tarea #%d desbloqueada: %s\n", id, resolucion)
@@ -299,11 +354,9 @@ var tareaBacklogCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
-		_, err = db.DB.Exec(`UPDATE tareas SET estado='backlog', agente=NULL WHERE id=?`, id)
-		if err != nil {
+		if err := taskService.MoveToBacklog(id); err != nil {
 			return err
 		}
-		db.Audit("alberto", "backlog_tarea", "tarea", id, "")
 		fmt.Printf("✓ Tarea #%d movida a backlog\n", id)
 		return nil
 	},

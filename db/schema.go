@@ -3,9 +3,6 @@ package db
 // Schema define el esquema completo de la base de datos de orquestación.
 // Las migraciones se aplican en orden; nunca se modifican las existentes.
 const Schema = `
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
-
 -- ─── Configuración global ──────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS config (
     clave TEXT PRIMARY KEY,
@@ -18,6 +15,7 @@ CREATE TABLE IF NOT EXISTS agentes (
     rol          TEXT NOT NULL CHECK (rol IN ('programador','documentador','admin')),
     activo       INTEGER NOT NULL DEFAULT 0,   -- 1 = en sesión ahora mismo
     habilitado   INTEGER NOT NULL DEFAULT 1,   -- 0 = retirado por Alberto (no vota, no trabaja)
+    estado_sesion TEXT DEFAULT NULL,
     ultima_sesion DATETIME
 );
 
@@ -54,6 +52,7 @@ CREATE TABLE IF NOT EXISTS propuestas (
                           CHECK (estado IN ('abierta','consenso','rechazada','backlog')),
     propuesto_por TEXT    NOT NULL,
     distribuidor  TEXT    NOT NULL DEFAULT 'claude',
+    proyecto_id   INTEGER REFERENCES proyectos(id),
     created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     cerrada_at    DATETIME
@@ -87,11 +86,250 @@ CREATE TABLE IF NOT EXISTS bloqueos (
 
 -- ─── Sesiones ──────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS sesiones (
-    id      INTEGER PRIMARY KEY AUTOINCREMENT,
-    agente  TEXT    NOT NULL REFERENCES agentes(nombre),
-    inicio  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    fin     DATETIME,
-    activa  INTEGER NOT NULL DEFAULT 1
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    agente              TEXT    NOT NULL REFERENCES agentes(nombre),
+    inicio              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fin                 DATETIME,
+    activa              INTEGER NOT NULL DEFAULT 1,
+    conector_id         INTEGER REFERENCES conectores(id),
+    proyecto_id         INTEGER REFERENCES proyectos(id),
+    pool_id             INTEGER REFERENCES pools_capacidad(id),
+    estado              TEXT    NOT NULL DEFAULT 'activa',
+    cwd                 TEXT    NOT NULL DEFAULT '',
+    herramienta         TEXT    NOT NULL DEFAULT '',
+    external_session_id TEXT    NOT NULL DEFAULT '',
+    resume_payload_json TEXT    NOT NULL DEFAULT '',
+    resumen_continuidad TEXT    NOT NULL DEFAULT '',
+    branch              TEXT    NOT NULL DEFAULT '',
+    heartbeat_at        DATETIME,
+    host                TEXT    NOT NULL DEFAULT '',
+    pid                 INTEGER
+);
+
+-- ─── Proyectos, asignaciones y coordinacion segura ─────────────────────────
+CREATE TABLE IF NOT EXISTS proyectos (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug       TEXT    NOT NULL UNIQUE,
+    nombre     TEXT    NOT NULL,
+    ruta_abs   TEXT    NOT NULL UNIQUE,
+    tipo       TEXT    NOT NULL DEFAULT 'repo'
+                         CHECK (tipo IN ('raiz','grupo','repo')),
+    parent_id  INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+    activo     INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS asignaciones (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    agente      TEXT    NOT NULL REFERENCES agentes(nombre),
+    proyecto_id INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
+    estado      TEXT    NOT NULL DEFAULT 'activa'
+                       CHECK (estado IN ('planificada','activa','pausada','cerrada')),
+    nota        TEXT    NOT NULL DEFAULT '',
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    cerrada_at  DATETIME
+);
+
+CREATE TABLE IF NOT EXISTS conectores (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug          TEXT    NOT NULL UNIQUE,
+    nombre        TEXT    NOT NULL,
+    transporte    TEXT    NOT NULL DEFAULT 'cli'
+                           CHECK (transporte IN ('cli','mcp_stdio','mcp_http','api','otro')),
+    comando       TEXT    NOT NULL DEFAULT '',
+    args_json     TEXT    NOT NULL DEFAULT '[]',
+    env_json      TEXT    NOT NULL DEFAULT '{}',
+    metadata_json TEXT    NOT NULL DEFAULT '{}',
+    activo        INTEGER NOT NULL DEFAULT 1,
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS locks (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    proyecto_id       INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+    tarea_id          INTEGER REFERENCES tareas(id) ON DELETE SET NULL,
+    sesion_id         INTEGER REFERENCES sesiones(id) ON DELETE SET NULL,
+    agente            TEXT    NOT NULL REFERENCES agentes(nombre),
+    scope_type        TEXT    NOT NULL
+                              CHECK (scope_type IN ('project','task','module','path','branch','worktree','otro')),
+    scope_key         TEXT    NOT NULL,
+    ruta_abs          TEXT    NOT NULL DEFAULT '',
+    branch            TEXT    NOT NULL DEFAULT '',
+    motivo            TEXT    NOT NULL DEFAULT '',
+    token_lease       TEXT    NOT NULL DEFAULT '',
+    estado            TEXT    NOT NULL DEFAULT 'activa'
+                              CHECK (estado IN ('activa','liberada','expirada','fallida')),
+    heartbeat_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    liberada_at       DATETIME
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_locks_scope_activo
+ON locks(scope_type, scope_key)
+WHERE estado = 'activa';
+
+CREATE TABLE IF NOT EXISTS worktrees (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    proyecto_id       INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
+    tarea_id          INTEGER REFERENCES tareas(id) ON DELETE SET NULL,
+    lock_id           INTEGER REFERENCES locks(id) ON DELETE SET NULL,
+    agente            TEXT    NOT NULL REFERENCES agentes(nombre),
+    nombre            TEXT    NOT NULL,
+    ruta_abs          TEXT    NOT NULL UNIQUE,
+    branch            TEXT    NOT NULL,
+    base_ref          TEXT    NOT NULL DEFAULT '',
+    estado            TEXT    NOT NULL DEFAULT 'activa'
+                              CHECK (estado IN ('activa','cerrada','fallida')),
+    motivo            TEXT    NOT NULL DEFAULT '',
+    created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    cerrada_at        DATETIME
+);
+
+-- ─── Gobierno Git y merges orquestados ────────────────────────────────────
+CREATE TABLE IF NOT EXISTS git_merges (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    proyecto_id   INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
+    source_branch TEXT    NOT NULL,
+    target_branch TEXT    NOT NULL,
+    requested_by  TEXT    NOT NULL REFERENCES agentes(nombre),
+    estado        TEXT    NOT NULL DEFAULT 'pendiente'
+                    CHECK (estado IN ('pendiente','validando','aprobado','rechazado','ejecutando','fusionado','fallido','cancelado')),
+    commit_origen TEXT    NOT NULL DEFAULT '',
+    commit_merge  TEXT    NOT NULL DEFAULT '',
+    notas         TEXT    NOT NULL DEFAULT '',
+    metadata_json TEXT    NOT NULL DEFAULT '{}',
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ─── Control activo de agentes ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS runtime_handles (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    agente           TEXT NOT NULL REFERENCES agentes(nombre),
+    sesion_id        INTEGER REFERENCES sesiones(id) ON DELETE SET NULL,
+    proyecto_id      INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+    transporte       TEXT NOT NULL,
+    handle_kind      TEXT NOT NULL,
+    handle_ref       TEXT NOT NULL,
+    estado           TEXT NOT NULL DEFAULT 'activo'
+                         CHECK (estado IN ('activo','pausado','cerrado','fallido')),
+    metadata_json    TEXT NOT NULL DEFAULT '{}',
+    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_handles_agente_activo
+ON runtime_handles(agente)
+WHERE estado IN ('activo','pausado');
+
+CREATE TABLE IF NOT EXISTS runtime_orders (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    agente           TEXT NOT NULL REFERENCES agentes(nombre),
+    proyecto_id      INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+    tipo             TEXT NOT NULL
+                         CHECK (tipo IN ('enviar_instruccion','pausar','continuar','handoff')),
+    payload_json     TEXT NOT NULL DEFAULT '{}',
+    estado           TEXT NOT NULL DEFAULT 'pendiente'
+                         CHECK (estado IN ('pendiente','ejecutando','completada','fallida')),
+    error_text       TEXT NOT NULL DEFAULT '',
+    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at       DATETIME,
+    finished_at      DATETIME
+);
+
+-- ─── Pools de capacidad y modelos ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS pools_capacidad (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug                  TEXT NOT NULL UNIQUE,
+    proveedor             TEXT NOT NULL,
+    runtime               TEXT NOT NULL,
+    plan                  TEXT NOT NULL DEFAULT '',
+    es_de_pago            INTEGER NOT NULL DEFAULT 0,
+    capacidad_total       INTEGER NOT NULL DEFAULT 1,
+    capacidad_reservada   INTEGER NOT NULL DEFAULT 0,
+    permite_hijos         INTEGER NOT NULL DEFAULT 1,
+    permite_modelos_multi INTEGER NOT NULL DEFAULT 1,
+    permite_sobrecoste    INTEGER NOT NULL DEFAULT 0,
+    politica_handoff      TEXT NOT NULL DEFAULT 'preventivo',
+    fuente_telemetria     TEXT NOT NULL DEFAULT 'manual',
+    metadata_json         TEXT NOT NULL DEFAULT '{}',
+    activo                INTEGER NOT NULL DEFAULT 1,
+    created_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS pool_modelos (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    pool_id              INTEGER NOT NULL REFERENCES pools_capacidad(id) ON DELETE CASCADE,
+    model_slug           TEXT NOT NULL,
+    activo               INTEGER NOT NULL DEFAULT 1,
+    prioridad            INTEGER NOT NULL DEFAULT 100,
+    coste_relativo       REAL NOT NULL DEFAULT 1.0,
+    limite_conocido_json TEXT NOT NULL DEFAULT '{}',
+    created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(pool_id, model_slug)
+);
+
+CREATE TABLE IF NOT EXISTS politicas_modelo (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    scope_tipo       TEXT NOT NULL
+                        CHECK (scope_tipo IN ('global','perfil','proyecto','fase','tarea')),
+    scope_ref        TEXT NOT NULL DEFAULT '',
+    perfil_tarea     TEXT NOT NULL DEFAULT '*',
+    pool_slug        TEXT NOT NULL DEFAULT '',
+    model_slug       TEXT NOT NULL DEFAULT '',
+    reasoning_effort TEXT NOT NULL DEFAULT '',
+    prioridad        INTEGER NOT NULL DEFAULT 100,
+    activa           INTEGER NOT NULL DEFAULT 1,
+    metadata_json    TEXT NOT NULL DEFAULT '{}',
+    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ─── Memoria y trazabilidad por proyecto ──────────────────────────────────
+CREATE TABLE IF NOT EXISTS decisiones_proyecto (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    proyecto_id  INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
+    categoria    TEXT NOT NULL DEFAULT 'general',
+    titulo       TEXT NOT NULL,
+    solucion     TEXT NOT NULL DEFAULT '',
+    motivo       TEXT NOT NULL DEFAULT '',
+    alternativas TEXT NOT NULL DEFAULT '',
+    impacto      TEXT NOT NULL DEFAULT '',
+    estado       TEXT NOT NULL DEFAULT 'vigente'
+                    CHECK (estado IN ('vigente','experimental','reemplazada','descartada','archivada')),
+    propuesta_id INTEGER REFERENCES propuestas(id) ON DELETE SET NULL,
+    tarea_id     INTEGER REFERENCES tareas(id) ON DELETE SET NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(proyecto_id, titulo)
+);
+
+CREATE TABLE IF NOT EXISTS documentos_externos (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    proyecto_id    INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
+    tipo_documento TEXT NOT NULL DEFAULT 'markdown',
+    titulo         TEXT NOT NULL,
+    ruta_ref       TEXT NOT NULL,
+    resumen        TEXT NOT NULL DEFAULT '',
+    estado         TEXT NOT NULL DEFAULT 'vigente'
+                      CHECK (estado IN ('vigente','borrador','archivado')),
+    fuente         TEXT NOT NULL DEFAULT 'manual'
+                      CHECK (fuente IN ('manual','propuesta','tarea','externo')),
+    propuesta_id   INTEGER REFERENCES propuestas(id) ON DELETE SET NULL,
+    tarea_id       INTEGER REFERENCES tareas(id) ON DELETE SET NULL,
+    metadata_json  TEXT NOT NULL DEFAULT '{}',
+    created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(proyecto_id, ruta_ref)
 );
 
 -- ─── Audit log ─────────────────────────────────────────────────────────────
@@ -122,6 +360,78 @@ CREATE TRIGGER IF NOT EXISTS trig_votos_updated
     AFTER UPDATE ON votos
 BEGIN
     UPDATE votos SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trig_proyectos_updated
+    AFTER UPDATE ON proyectos
+BEGIN
+    UPDATE proyectos SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trig_asignaciones_updated
+    AFTER UPDATE ON asignaciones
+BEGIN
+    UPDATE asignaciones SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trig_conectores_updated
+    AFTER UPDATE ON conectores
+BEGIN
+    UPDATE conectores SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trig_locks_updated
+    AFTER UPDATE ON locks
+BEGIN
+    UPDATE locks SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trig_worktrees_updated
+    AFTER UPDATE ON worktrees
+BEGIN
+    UPDATE worktrees SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trig_runtime_handles_updated
+    AFTER UPDATE ON runtime_handles
+BEGIN
+    UPDATE runtime_handles SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trig_pools_capacidad_updated
+    AFTER UPDATE ON pools_capacidad
+BEGIN
+    UPDATE pools_capacidad SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trig_pool_modelos_updated
+    AFTER UPDATE ON pool_modelos
+BEGIN
+    UPDATE pool_modelos SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trig_politicas_modelo_updated
+    AFTER UPDATE ON politicas_modelo
+BEGIN
+    UPDATE politicas_modelo SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trig_decisiones_proyecto_updated
+    AFTER UPDATE ON decisiones_proyecto
+BEGIN
+    UPDATE decisiones_proyecto SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trig_documentos_externos_updated
+    AFTER UPDATE ON documentos_externos
+BEGIN
+    UPDATE documentos_externos SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trig_git_merges_updated
+    AFTER UPDATE ON git_merges
+BEGIN
+    UPDATE git_merges SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
 
 -- ─── Reglas por tipo de agente ─────────────────────────────────────────────
@@ -169,7 +479,12 @@ INSERT OR IGNORE INTO agentes (nombre, rol) VALUES
 
 INSERT OR IGNORE INTO config (clave, valor) VALUES
     ('distribuidor', 'claude'),
-    ('version',      '1.0.0');
+    ('version',      '1.0.0'),
+    ('pool_handoff_threshold_seconds', '1800'),
+    ('pool_handoff_threshold_ratio', '0.10'),
+    ('pool_default_budget_source', 'manual'),
+    ('model_policy_default_profile', 'implementacion'),
+    ('model_policy_default_reasoning', 'high');
 
 -- ─── Reglas: programador ────────────────────────────────────────────────────
 INSERT OR IGNORE INTO reglas (tipo_agente, categoria, titulo, descripcion) VALUES

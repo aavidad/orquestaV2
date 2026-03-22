@@ -62,30 +62,19 @@ Ejemplos:
 			return fmt.Errorf("posición '%s' no válida", posicion)
 		}
 
-		p, err := db.GetPropuesta(codigo)
-		if err != nil {
-			return fmt.Errorf("propuesta '%s' no encontrada", codigo)
+		if serverURL := activeServerURL(); serverURL != "" {
+			res, err := submitServerVote(serverURL, codigo, agente, db.PosicionVoto(posicion), strings.TrimSpace(comentario))
+			if err != nil {
+				return err
+			}
+			renderVoteSummary(agente, codigo, posicion, res.ConsensoAlcanzado, res.Conteo["acuerdo"], res.Conteo["desacuerdo"], res.Conteo["abstencion"], res.Conteo["pendiente"])
+			return nil
 		}
-		if p.Estado != db.PropuestaAbierta {
-			return fmt.Errorf("la propuesta %s ya está cerrada (%s)", codigo, p.Estado)
-		}
-
-		consenso, err := db.Votar(p.ID, agente, db.PosicionVoto(posicion), strings.TrimSpace(comentario))
+		result, err := proposalService.VoteDetail(codigo, agente, db.PosicionVoto(posicion), strings.TrimSpace(comentario))
 		if err != nil {
 			return err
 		}
-
-		fmt.Printf("✓ Voto registrado: %s → %s [%s]\n", agente, codigo, posicion)
-		if consenso {
-			fmt.Printf("🎉 ¡CONSENSO UNÁNIME! La propuesta %s ha sido aprobada automáticamente.\n", codigo)
-		} else {
-			ac, des, abs, pend, _ := db.ContarVotos(p.ID)
-			fmt.Printf("Estado votos: ✓%d  ✗%d  ～%d  ⏳%d\n", ac, des, abs, pend)
-			if des > 0 {
-				fmt.Printf("⚠️  Hay %d voto(s) en desacuerdo — Alberto debe resolver antes de continuar.\n", des)
-				fmt.Printf("   Usa: orquesta propuesta cerrar %s consenso --por alberto\n", codigo)
-			}
-		}
+		renderVoteSummary(agente, codigo, posicion, result.Consenso, result.Acuerdo, result.Desacuerdo, result.Abstencion, result.Pendiente)
 		return nil
 	},
 }
@@ -93,4 +82,17 @@ Ejemplos:
 func init() {
 	votarCmd.Flags().String("agente", "", "Agente que emite el voto (requerido si no va en posición)")
 	votarCmd.Flags().String("comentario", "", "Comentario del voto")
+}
+
+func renderVoteSummary(agente, codigo, posicion string, consenso bool, acuerdo, desacuerdo, abstencion, pendiente int) {
+	fmt.Printf("✓ Voto registrado: %s → %s [%s]\n", agente, codigo, posicion)
+	if consenso {
+		fmt.Printf("🎉 ¡CONSENSO UNÁNIME! La propuesta %s ha sido aprobada automáticamente.\n", codigo)
+		return
+	}
+	fmt.Printf("Estado votos: ✓%d  ✗%d  ～%d  ⏳%d\n", acuerdo, desacuerdo, abstencion, pendiente)
+	if desacuerdo > 0 {
+		fmt.Printf("⚠️  Hay %d voto(s) en desacuerdo — Alberto debe resolver antes de continuar.\n", desacuerdo)
+		fmt.Printf("   Usa: orquesta propuesta cerrar %s consenso --por alberto\n", codigo)
+	}
 }
