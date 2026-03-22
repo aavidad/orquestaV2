@@ -32,15 +32,7 @@ var schemaSeedGroups = []schemaSeedGroup{
 		table:           "config",
 		columns:         []string{"clave", "valor"},
 		conflictColumns: []string{"clave"},
-		rows: [][]string{
-			{"distribuidor", "claude"},
-			{"version", "1.0.0"},
-			{"pool_handoff_threshold_seconds", "1800"},
-			{"pool_handoff_threshold_ratio", "0.10"},
-			{"pool_default_budget_source", "manual"},
-			{"model_policy_default_profile", "implementacion"},
-			{"model_policy_default_reasoning", "high"},
-		},
+		rows:            defaultConfigSeedRows(),
 	},
 	{
 		table:           "reglas",

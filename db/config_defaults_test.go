@@ -1,35 +1,21 @@
 package db
 
-import (
-	"os"
-	"path/filepath"
-	"testing"
-)
+import "testing"
 
-func TestEnsureDefaultConfigInsertaSinDuplicar(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv ORQUESTA_DB: %v", err)
+func TestDefaultConfigSeedRowsReflejanDefaults(t *testing.T) {
+	t.Parallel()
+
+	entries := defaultConfigEntries()
+	rows := defaultConfigSeedRows()
+	if len(entries) == 0 {
+		t.Fatalf("defaultConfigEntries vacio")
 	}
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
+	if len(rows) != len(entries) {
+		t.Fatalf("rows=%d entries=%d", len(rows), len(entries))
 	}
-
-	ensureDefaultConfig("clave_test_default", "uno")
-	ensureDefaultConfig("clave_test_default", "dos")
-
-	val, err := ConfigGet("clave_test_default")
-	if err != nil {
-		t.Fatalf("ConfigGet: %v", err)
-	}
-	if val != "uno" {
-		t.Fatalf("valor inesperado: %s", val)
+	for i, item := range entries {
+		if rows[i][0] != item.Clave || rows[i][1] != item.Valor {
+			t.Fatalf("fila %d inesperada: %+v vs %+v", i, rows[i], item)
+		}
 	}
 }

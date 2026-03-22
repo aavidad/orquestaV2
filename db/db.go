@@ -131,17 +131,8 @@ func postMigraciones() error {
 			return err
 		}
 	}
-	for _, item := range []struct {
-		clave string
-		valor string
-	}{
-		{"pool_handoff_threshold_seconds", "1800"},
-		{"pool_handoff_threshold_ratio", "0.10"},
-		{"pool_default_budget_source", "manual"},
-		{"model_policy_default_profile", "implementacion"},
-		{"model_policy_default_reasoning", "high"},
-	} {
-		ensureDefaultConfig(item.clave, item.valor)
+	for _, item := range defaultConfigEntries() {
+		ensureDefaultConfig(item.Clave, item.Valor)
 	}
 	if err := BackfillVotosPendientes(); err != nil {
 		return err
