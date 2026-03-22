@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -77,6 +78,12 @@ type apiSesionGuardarRequest struct {
 
 type apiSesionFinRequest struct {
 	Agente string `json:"agente"`
+}
+
+type apiRespaldoBDRequest struct {
+	Destino  string `json:"destino"`
+	Etiqueta string `json:"etiqueta"`
+	Retener  int    `json:"retener"`
 }
 
 type apiTareaCrearRequest struct {
@@ -148,9 +155,12 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/status", apiHandlerStatus)
 	mux.HandleFunc("/api/diagnostico", apiHandlerDiagnostico)
 	mux.HandleFunc("/api/agentes", apiHandlerAgentes)
+	mux.HandleFunc("/api/agentes/", apiRouterAgentes)
 	mux.HandleFunc("/api/config", apiHandlerConfig)
 	mux.HandleFunc("/api/audit", apiHandlerAudit)
+	mux.HandleFunc("/api/respaldo/bd", apiHandlerRespaldoBD)
 	mux.HandleFunc("/api/proyectos", apiHandlerProyectos)
+	mux.HandleFunc("/api/proyectos/descubrir", apiHandlerProyectoDescubrir)
 	mux.HandleFunc("/api/proyectos/", apiRouterProyectos)
 	mux.HandleFunc("/api/conectores", apiHandlerConectores)
 	mux.HandleFunc("/api/conectores/", apiRouterConectores)
@@ -250,15 +260,56 @@ func apiHandlerDiagnostico(w http.ResponseWriter, r *http.Request) {
 }
 
 func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
-	if !apiRequireMethod(w, r, http.MethodGet) {
+	switch r.Method {
+	case http.MethodGet:
+		agentes, err := db.ListarAgentes()
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"agentes": agentes})
+	case http.MethodPost:
+		var req apiAgenteRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		if err := db.RegistrarAgente(strings.TrimSpace(req.Nombre), strings.TrimSpace(req.Rol)); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
 		return
 	}
-	agentes, err := db.ListarAgentes()
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/agentes/"), "/"), "/")
+	if len(parts) != 2 || parts[0] == "" {
+		http.NotFound(w, r)
 		return
 	}
-	apiWriteJSON(w, http.StatusOK, map[string]any{"agentes": agentes})
+	nombre := parts[0]
+	switch parts[1] {
+	case "retirar":
+		if err := db.RetirarAgente(nombre); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+	case "rehabilitar":
+		if err := db.RehabilitarAgente(nombre); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+	default:
+		http.NotFound(w, r)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "agente": nombre})
 }
 
 func apiHandlerConfig(w http.ResponseWriter, r *http.Request) {
@@ -361,6 +412,23 @@ func apiHandlerAudit(w http.ResponseWriter, r *http.Request) {
 	apiWriteJSON(w, http.StatusOK, map[string]any{"audit": filtered})
 }
 
+func apiHandlerRespaldoBD(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiRespaldoBDRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	ruta, err := ejecutarRespaldoBD(req.Destino, req.Etiqueta, req.Retener)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiRespaldoBDResponse{OK: true, Ruta: ruta})
+}
+
 func apiHandlerProyectos(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
@@ -371,6 +439,29 @@ func apiHandlerProyectos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{"proyectos": proyectos})
+}
+
+func apiHandlerProyectoDescubrir(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiProyectoDescubrirRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	proyectos, err := db.DescubrirProyectos(req.Ruta)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	if strings.TrimSpace(req.Ruta) != "" {
+		abs, err := filepath.Abs(req.Ruta)
+		if err == nil {
+			_ = db.ConfigSet("workspace_root", abs)
+		}
+	}
+	apiWriteJSON(w, http.StatusCreated, map[string]any{"proyectos": proyectos})
 }
 
 func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {

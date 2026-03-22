@@ -219,3 +219,52 @@ func TestAPIPropuestaReabrirYRepararVotos(t *testing.T) {
 		t.Fatalf("conteo inesperado tras reparar via API: %d", total)
 	}
 }
+
+func TestAPIProyectoDescubrirYGestionAgentes(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoDir := filepath.Join(tmp, "demo")
+	if err := os.MkdirAll(filepath.Join(proyectoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("crear proyecto demo: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	descubrirBody, _ := json.Marshal(apiProyectoDescubrirRequest{Ruta: tmp})
+	recDescubrir := httptest.NewRecorder()
+	reqDescubrir := httptest.NewRequest(http.MethodPost, "/api/proyectos/descubrir", bytes.NewReader(descubrirBody))
+	mux.ServeHTTP(recDescubrir, reqDescubrir)
+	if recDescubrir.Code != http.StatusCreated {
+		t.Fatalf("status descubrir inesperado: %d body=%s", recDescubrir.Code, recDescubrir.Body.String())
+	}
+
+	recProyecto := httptest.NewRecorder()
+	reqProyecto := httptest.NewRequest(http.MethodGet, "/api/proyectos/demo", nil)
+	mux.ServeHTTP(recProyecto, reqProyecto)
+	if recProyecto.Code != http.StatusOK {
+		t.Fatalf("status proyecto inesperado: %d body=%s", recProyecto.Code, recProyecto.Body.String())
+	}
+
+	agenteBody, _ := json.Marshal(apiAgenteRequest{Nombre: "temporal", Rol: "programador"})
+	recAlta := httptest.NewRecorder()
+	reqAlta := httptest.NewRequest(http.MethodPost, "/api/agentes", bytes.NewReader(agenteBody))
+	mux.ServeHTTP(recAlta, reqAlta)
+	if recAlta.Code != http.StatusCreated {
+		t.Fatalf("status alta agente inesperado: %d body=%s", recAlta.Code, recAlta.Body.String())
+	}
+
+	recRetirar := httptest.NewRecorder()
+	reqRetirar := httptest.NewRequest(http.MethodPost, "/api/agentes/temporal/retirar", bytes.NewReader([]byte(`{}`)))
+	mux.ServeHTTP(recRetirar, reqRetirar)
+	if recRetirar.Code != http.StatusOK {
+		t.Fatalf("status retirar inesperado: %d body=%s", recRetirar.Code, recRetirar.Body.String())
+	}
+
+	recRehabilitar := httptest.NewRecorder()
+	reqRehabilitar := httptest.NewRequest(http.MethodPost, "/api/agentes/temporal/rehabilitar", bytes.NewReader([]byte(`{}`)))
+	mux.ServeHTTP(recRehabilitar, reqRehabilitar)
+	if recRehabilitar.Code != http.StatusOK {
+		t.Fatalf("status rehabilitar inesperado: %d body=%s", recRehabilitar.Code, recRehabilitar.Body.String())
+	}
+}

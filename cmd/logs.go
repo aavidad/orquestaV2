@@ -9,6 +9,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -26,18 +27,28 @@ Permite filtrar por agente, acción o entidad para rastrear cambios y eventos.`,
 		accionF, _ := cmd.Flags().GetString("accion")
 		entidadF, _ := cmd.Flags().GetString("entidad")
 
-		// Obtenemos los logs (el limit es aplicado en la query de AuditLog)
-		// Si queremos filtrado por servidor, tendríamos que ampliar db.AuditLog
-		// Por ahora, traemos N y filtramos en cliente si se pide, o mejor,
-		// traemos un número generoso y filtramos.
-		
-		// Para ser eficientes y "exhaustivos", voy a traer el limit pedido.
-		// NOTA: Si se quiere filtrar de forma potente, orquesta exportar audit ya permite algo.
-		// Pero este comando es para inspección rápida.
-		
-		entries, err := db.AuditLog(limit)
-		if err != nil {
+		query := url.Values{"limit": []string{fmt.Sprintf("%d", limit)}}
+		if strings.TrimSpace(agenteF) != "" {
+			query.Set("agente", strings.TrimSpace(agenteF))
+		}
+		if strings.TrimSpace(accionF) != "" {
+			query.Set("accion", strings.TrimSpace(accionF))
+		}
+		if strings.TrimSpace(entidadF) != "" {
+			query.Set("entidad", strings.TrimSpace(entidadF))
+		}
+
+		var entries []db.AuditEntry
+		var resp apiAuditResponse
+		if ok, err := apiGetQuery("/api/audit", query, &resp); err != nil {
 			return err
+		} else if ok {
+			entries = resp.Audit
+		} else {
+			entries, err = db.AuditLog(limit)
+			if err != nil {
+				return err
+			}
 		}
 
 		if len(entries) == 0 {
@@ -51,7 +62,6 @@ Permite filtrar por agente, acción o entidad para rastrear cambios y eventos.`,
 			"──────────────────", "────────────", "────────────────", "──────────", "────────", "──────────────────────────────────")
 
 		for _, e := range entries {
-			// Filtrado simple en cliente si se indicaron flags
 			if agenteF != "" && !strings.Contains(strings.ToLower(e.Agente), strings.ToLower(agenteF)) {
 				continue
 			}

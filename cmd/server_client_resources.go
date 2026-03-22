@@ -49,6 +49,15 @@ type apiWorktreesResponse struct {
 	Worktrees []*coordination.Worktree `json:"worktrees"`
 }
 
+type apiProyectoDescubrirRequest struct {
+	Ruta string `json:"ruta"`
+}
+
+type apiAgenteRequest struct {
+	Nombre string `json:"nombre"`
+	Rol    string `json:"rol"`
+}
+
 type apiConfigSetRequest struct {
 	Clave string `json:"clave"`
 	Valor string `json:"valor"`
@@ -97,6 +106,15 @@ func cargarProyectosDesdeAPI() ([]*db.Proyecto, bool, error) {
 	return resp.Proyectos, true, nil
 }
 
+func descubrirProyectosPorAPI(ruta string) ([]*db.Proyecto, bool, error) {
+	var resp apiProyectosResponse
+	ok, err := apiPost("/api/proyectos/descubrir", apiProyectoDescubrirRequest{Ruta: ruta}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Proyectos, true, nil
+}
+
 func cargarProyectoDesdeAPI(ref string) (*db.Proyecto, bool, error) {
 	var resp apiProyectoResponse
 	ok, err := apiGet(fmt.Sprintf("/api/proyectos/%s", url.PathEscape(ref)), &resp)
@@ -134,6 +152,21 @@ func registrarConectorPorAPI(req apiConectorUpsertRequest) (int64, bool, error) 
 		return 0, true, fmt.Errorf("respuesta sin conector")
 	}
 	return resp.Conector.ID, true, nil
+}
+
+func registrarAgentePorAPI(nombre, rol string) (bool, error) {
+	ok, err := apiPost("/api/agentes", apiAgenteRequest{Nombre: nombre, Rol: rol}, nil)
+	return ok, err
+}
+
+func retirarAgentePorAPI(nombre string) (bool, error) {
+	ok, err := apiPost(fmt.Sprintf("/api/agentes/%s/retirar", url.PathEscape(nombre)), map[string]any{}, nil)
+	return ok, err
+}
+
+func rehabilitarAgentePorAPI(nombre string) (bool, error) {
+	ok, err := apiPost(fmt.Sprintf("/api/agentes/%s/rehabilitar", url.PathEscape(nombre)), map[string]any{}, nil)
+	return ok, err
 }
 
 func cargarAsignacionesDesdeAPI(query url.Values) ([]*db.Asignacion, bool, error) {

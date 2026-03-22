@@ -77,7 +77,11 @@ var configAgenteNuevoCmd = &cobra.Command{
 	Short: "Registra un nuevo agente (rol: programador, documentador, admin)",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := db.RegistrarAgente(args[0], args[1]); err != nil {
+		if ok, err := registrarAgentePorAPI(args[0], args[1]); ok {
+			if err != nil {
+				return err
+			}
+		} else if err := db.RegistrarAgente(args[0], args[1]); err != nil {
 			return err
 		}
 		fmt.Printf("✓ Agente '%s' [%s] registrado\n", args[0], args[1])
@@ -97,7 +101,11 @@ Sus contribuciones históricas se conservan.`,
 		if nombre == "alberto" {
 			return fmt.Errorf("no puedes retirar al administrador")
 		}
-		if err := db.RetirarAgente(nombre); err != nil {
+		if ok, err := retirarAgentePorAPI(nombre); ok {
+			if err != nil {
+				return err
+			}
+		} else if err := db.RetirarAgente(nombre); err != nil {
 			return err
 		}
 		fmt.Printf("✓ Agente '%s' retirado del equipo.\n", nombre)
@@ -112,7 +120,11 @@ var configAgenteRehabilitarCmd = &cobra.Command{
 	Short: "Reactiva a un agente retirado",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := db.RehabilitarAgente(args[0]); err != nil {
+		if ok, err := rehabilitarAgentePorAPI(args[0]); ok {
+			if err != nil {
+				return err
+			}
+		} else if err := db.RehabilitarAgente(args[0]); err != nil {
 			return err
 		}
 		fmt.Printf("✓ Agente '%s' rehabilitado.\n", args[0])

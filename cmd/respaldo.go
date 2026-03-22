@@ -33,9 +33,22 @@ var respaldoBDCmd = &cobra.Command{
 		destino, _ := cmd.Flags().GetString("destino")
 		retener, _ := cmd.Flags().GetInt("retener")
 		etiqueta, _ := cmd.Flags().GetString("etiqueta")
-		ruta, err := ejecutarRespaldoBD(destino, etiqueta, retener)
-		if err != nil {
+		var ruta string
+		var resp apiRespaldoBDResponse
+		if ok, err := apiPost("/api/respaldo/bd", apiRespaldoBDRequest{
+			Destino:  destino,
+			Etiqueta: etiqueta,
+			Retener:  retener,
+		}, &resp); err != nil {
 			return err
+		} else if ok {
+			ruta = resp.Ruta
+		} else {
+			var err error
+			ruta, err = ejecutarRespaldoBD(destino, etiqueta, retener)
+			if err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ Respaldo creado: %s\n", ruta)
 		return nil

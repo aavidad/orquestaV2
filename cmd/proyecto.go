@@ -57,15 +57,20 @@ var proyectoDescubrirCmd = &cobra.Command{
 		if len(args) == 1 {
 			ruta = args[0]
 		}
-		proyectos, err := db.DescubrirProyectos(ruta)
-		if err != nil {
-			return err
-		}
-		if ruta != "" {
-			abs, err := filepath.Abs(ruta)
-			if err == nil {
-				_ = db.ConfigSet("workspace_root", abs)
+		proyectos, ok, err := descubrirProyectosPorAPI(ruta)
+		if !ok {
+			proyectos, err = db.DescubrirProyectos(ruta)
+			if err != nil {
+				return err
 			}
+			if ruta != "" {
+				abs, err := filepath.Abs(ruta)
+				if err == nil {
+					_ = db.ConfigSet("workspace_root", abs)
+				}
+			}
+		} else if err != nil {
+			return err
 		}
 		fmt.Printf("✓ %d proyectos registrados/actualizados\n", len(proyectos))
 		for _, p := range proyectos {

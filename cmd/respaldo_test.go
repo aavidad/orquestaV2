@@ -8,6 +8,8 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -79,5 +81,44 @@ func TestRespaldoBDCreaFicheroYAplicaRetencion(t *testing.T) {
 		if info.Size() == 0 {
 			t.Fatalf("respaldo vacio: %s", nombre)
 		}
+	}
+}
+
+func TestRespaldoBDUsaAPI(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/respaldo/bd", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiRespaldoBDResponse{
+			OK:   true,
+			Ruta: "/tmp/orquesta-api.bak",
+		})
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	if err := respaldoBDCmd.Flags().Set("destino", ""); err != nil {
+		t.Fatalf("set destino: %v", err)
+	}
+	if err := respaldoBDCmd.Flags().Set("etiqueta", ""); err != nil {
+		t.Fatalf("set etiqueta: %v", err)
+	}
+	if err := respaldoBDCmd.Flags().Set("retener", "0"); err != nil {
+		t.Fatalf("set retener: %v", err)
+	}
+
+	out := capturarStdout(t, func() {
+		if err := respaldoBDCmd.RunE(respaldoBDCmd, nil); err != nil {
+			t.Fatalf("run respaldo api: %v", err)
+		}
+	})
+	if !strings.Contains(out, "/tmp/orquesta-api.bak") {
+		t.Fatalf("salida respaldo via API inesperada: %s", out)
 	}
 }

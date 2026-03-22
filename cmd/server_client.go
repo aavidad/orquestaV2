@@ -75,6 +75,11 @@ type apiAuditResponse struct {
 	Audit []db.AuditEntry `json:"audit"`
 }
 
+type apiRespaldoBDResponse struct {
+	OK   bool   `json:"ok"`
+	Ruta string `json:"ruta"`
+}
+
 type apiDiagnosticoResponse struct {
 	Diagnostico db.SnapshotDiagnostico `json:"diagnostico"`
 }
@@ -147,6 +152,10 @@ func commandSupportsServerMode(args []string) bool {
 		}
 	case "exportar":
 		return len(tokens) > 1 && (tokens[1] == "estado" || tokens[1] == "audit" || tokens[1] == "diagnostico")
+	case "logs":
+		return true
+	case "respaldo":
+		return len(tokens) > 1 && tokens[1] == "bd"
 	case "votar":
 		return true
 	case "runtime":
@@ -164,7 +173,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "listar", "ver":
+		case "listar", "ver", "descubrir":
 			return true
 		default:
 			return false
@@ -184,7 +193,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "ver", "set":
+		case "ver", "set", "agente-nuevo", "agente-retirar", "agente-rehabilitar":
 			return true
 		default:
 			return false
