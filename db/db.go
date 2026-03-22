@@ -46,13 +46,17 @@ func Open() error {
 		return fmt.Errorf("verificando DB (%s): %w", cfg.Driver, err)
 	}
 	if cfg.BootstrapSchema {
-		postMigraciones()
+		if err := postMigraciones(); err != nil {
+			DB.Close()
+			DB = nil
+			return fmt.Errorf("aplicando post-migraciones: %w", err)
+		}
 	}
 	return nil
 }
 
 // postMigraciones ejecuta ALTER TABLE idempotentes para columnas añadidas tras el schema inicial.
-func postMigraciones() {
+func postMigraciones() error {
 	migraciones := []string{
 		`ALTER TABLE agentes ADD COLUMN estado_sesion TEXT DEFAULT NULL`,
 		`CREATE TABLE IF NOT EXISTS proyectos (
@@ -383,7 +387,9 @@ func postMigraciones() {
 		 WHERE tipo_agente='documentador' AND nombre='inicio-sesion'`,
 	}
 	for _, m := range migraciones {
-		_, _ = DB.Exec(m) // ignorar migraciones ya aplicadas
+		if _, err := DB.Exec(m); err != nil && !esErrorMigracionIgnorable(err) {
+			return err
+		}
 	}
 	for _, item := range []struct {
 		clave string
@@ -397,7 +403,28 @@ func postMigraciones() {
 	} {
 		ensureDefaultConfig(item.clave, item.valor)
 	}
-	_ = BackfillVotosPendientes()
+	if err := BackfillVotosPendientes(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func esErrorMigracionIgnorable(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	for _, fragmento := range []string{
+		"already exists",
+		"duplicate column name",
+		"duplicate key name",
+		"duplicate column",
+	} {
+		if strings.Contains(msg, fragmento) {
+			return true
+		}
+	}
+	return false
 }
 
 func Close() {
