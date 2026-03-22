@@ -218,3 +218,20 @@ func TestBootstrapPlanForDriver(t *testing.T) {
 		t.Fatalf("mysql no deberia tener bootstrap plan todavia")
 	}
 }
+
+func TestSchemaDDLPartsForDriver(t *testing.T) {
+	t.Parallel()
+
+	for _, driver := range []string{"sqlite", "postgres"} {
+		parts := schemaDDLPartsForDriver(driver)
+		if len(parts) != 2 {
+			t.Fatalf("%s deberia exponer 2 partes de DDL; obtuvo %d", driver, len(parts))
+		}
+		if strings.TrimSpace(parts[0]) == "" {
+			t.Fatalf("%s deberia tener DDL base", driver)
+		}
+		if strings.TrimSpace(parts[1]) == "" {
+			t.Fatalf("%s deberia tener DDL auxiliar", driver)
+		}
+	}
+}

@@ -12,17 +12,12 @@ func schemaDDL() string {
 }
 
 func schemaDDLForDriver(driver string) string {
-	switch normalizedDriverName(driver) {
-	case "postgres":
-		return renderPostgresBaseDDL()
-	default:
-		return renderSQLiteBaseDDL()
-	}
+	return joinDDLParts(schemaDDLPartsForDriver(driver)...)
 }
 
 func renderSQLiteBaseDDL() string {
 	statements := schemaStatements(schemaBaseDDL)
-	return joinDDLParts(strings.Join(statements, "\n\n"), renderSQLiteAuxDDL())
+	return strings.Join(statements, "\n\n")
 }
 
 func renderPostgresBaseDDL() string {
@@ -33,7 +28,16 @@ func renderPostgresBaseDDL() string {
 		stmt = strings.ReplaceAll(stmt, " DATETIME", " TIMESTAMP")
 		out = append(out, stmt)
 	}
-	return joinDDLParts(strings.Join(out, "\n\n"), renderPostgresAuxDDL())
+	return strings.Join(out, "\n\n")
+}
+
+func schemaDDLPartsForDriver(driver string) []string {
+	switch normalizedDriverName(driver) {
+	case "postgres":
+		return []string{renderPostgresBaseDDL(), renderPostgresAuxDDL()}
+	default:
+		return []string{renderSQLiteBaseDDL(), renderSQLiteAuxDDL()}
+	}
 }
 
 func renderSQLiteAuxDDL() string {

@@ -191,12 +191,12 @@ func bootstrapPlanForDriver(driver string) (bootstrapPlan, bool) {
 	switch normalizedDriverName(driver) {
 	case "sqlite":
 		return bootstrapPlan{
-			DDL:  schemaDDLForDriver("sqlite"),
+			DDL:  joinDDLParts(schemaDDLPartsForDriver("sqlite")...),
 			Seed: schemaSeedDataForDriver("sqlite"),
 		}, true
 	case "postgres":
 		return bootstrapPlan{
-			DDL:  schemaDDLForDriver("postgres"),
+			DDL:  joinDDLParts(schemaDDLPartsForDriver("postgres")...),
 			Seed: schemaSeedDataForDriver("postgres"),
 		}, true
 	default:
