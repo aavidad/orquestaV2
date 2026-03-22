@@ -123,7 +123,15 @@ func SetEstadoSesion(agente, estado string) {
 // RegistrarAgente añade un nuevo agente al sistema.
 func RegistrarAgente(nombre, rol string) error {
 	_, err := DB.Exec(
-		`INSERT INTO agentes (nombre, rol) VALUES (?,?) ON CONFLICT(nombre) DO UPDATE SET rol=excluded.rol, habilitado=1`,
+		upsertValuesSQL(
+			"agentes",
+			[]string{"nombre", "rol"},
+			[]string{"nombre"},
+			[]upsertAssignment{
+				{Column: "rol"},
+				{Column: "habilitado", Expr: "1"},
+			},
+		),
 		nombre, rol,
 	)
 	return err

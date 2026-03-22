@@ -517,7 +517,14 @@ func ConfigGet(clave string) (string, error) {
 // ConfigSet actualiza o inserta una clave de configuración.
 func ConfigSet(clave, valor string) error {
 	_, err := DB.Exec(
-		`INSERT INTO config (clave, valor) VALUES (?,?) ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor`,
+		upsertValuesSQL(
+			"config",
+			[]string{"clave", "valor"},
+			[]string{"clave"},
+			[]upsertAssignment{
+				{Column: "valor"},
+			},
+		),
 		clave, valor,
 	)
 	return err

@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+type upsertAssignment struct {
+	Column string
+	Expr   string
+}
+
 func insertIgnoreValuesSQL(table string, columns, conflictColumns []string) string {
 	return buildInsertIgnoreValuesSQL(DriverName(), table, columns, conflictColumns)
 }
@@ -35,4 +40,50 @@ func buildInsertIgnoreSQL(driver, table string, columns, conflictColumns []strin
 		return stmt
 	}
 	return stmt + " ON CONFLICT(" + strings.Join(conflictColumns, ",") + ") DO NOTHING"
+}
+
+func upsertValuesSQL(table string, insertColumns, conflictColumns []string, updateAssignments []upsertAssignment) string {
+	return buildUpsertValuesSQL(DriverName(), table, insertColumns, conflictColumns, updateAssignments)
+}
+
+func buildUpsertValuesSQL(driver, table string, insertColumns, conflictColumns []string, updateAssignments []upsertAssignment) string {
+	values := make([]string, len(insertColumns))
+	for i := range insertColumns {
+		values[i] = "?"
+	}
+	stmt := fmt.Sprintf(
+		"INSERT INTO %s (%s) VALUES (%s)",
+		table,
+		strings.Join(insertColumns, ","),
+		strings.Join(values, ","),
+	)
+	updates := buildUpsertAssignments(driver, updateAssignments)
+	if len(updates) == 0 {
+		return stmt
+	}
+	if strings.EqualFold(strings.TrimSpace(driver), "mysql") {
+		return stmt + " ON DUPLICATE KEY UPDATE " + strings.Join(updates, ",")
+	}
+	return stmt + " ON CONFLICT(" + strings.Join(conflictColumns, ",") + ") DO UPDATE SET " + strings.Join(updates, ",")
+}
+
+func buildUpsertAssignments(driver string, updateAssignments []upsertAssignment) []string {
+	assignments := make([]string, 0, len(updateAssignments))
+	isMySQL := strings.EqualFold(strings.TrimSpace(driver), "mysql")
+	for _, assignment := range updateAssignments {
+		column := strings.TrimSpace(assignment.Column)
+		if column == "" {
+			continue
+		}
+		expr := strings.TrimSpace(assignment.Expr)
+		if expr == "" {
+			if isMySQL {
+				expr = "VALUES(" + column + ")"
+			} else {
+				expr = "excluded." + column
+			}
+		}
+		assignments = append(assignments, column+"="+expr)
+	}
+	return assignments
 }

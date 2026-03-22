@@ -113,13 +113,17 @@ func GuardarRegla(r *Regla) (int64, error) {
 	if !tipoAgenteValido(r.TipoAgente) {
 		return 0, fmt.Errorf("tipo_agente invalido: %s", r.TipoAgente)
 	}
-	if _, err := DB.Exec(`
-		INSERT INTO reglas (tipo_agente, categoria, titulo, descripcion, activa)
-		VALUES (?,?,?,?,?)
-		ON CONFLICT(tipo_agente, titulo) DO UPDATE SET
-			categoria=excluded.categoria,
-			descripcion=excluded.descripcion,
-			activa=excluded.activa`,
+	if _, err := DB.Exec(
+		upsertValuesSQL(
+			"reglas",
+			[]string{"tipo_agente", "categoria", "titulo", "descripcion", "activa"},
+			[]string{"tipo_agente", "titulo"},
+			[]upsertAssignment{
+				{Column: "categoria"},
+				{Column: "descripcion"},
+				{Column: "activa"},
+			},
+		),
 		r.TipoAgente, r.Categoria, r.Titulo, r.Descripcion, r.Activa,
 	); err != nil {
 		return 0, err
@@ -198,13 +202,17 @@ func GuardarSkill(s *Skill) (int64, error) {
 	if !tipoAgenteValido(s.TipoAgente) {
 		return 0, fmt.Errorf("tipo_agente invalido: %s", s.TipoAgente)
 	}
-	if _, err := DB.Exec(`
-		INSERT INTO skills (tipo_agente, nombre, descripcion, cuando_usar, activa)
-		VALUES (?,?,?,?,?)
-		ON CONFLICT(tipo_agente, nombre) DO UPDATE SET
-			descripcion=excluded.descripcion,
-			cuando_usar=excluded.cuando_usar,
-			activa=excluded.activa`,
+	if _, err := DB.Exec(
+		upsertValuesSQL(
+			"skills",
+			[]string{"tipo_agente", "nombre", "descripcion", "cuando_usar", "activa"},
+			[]string{"tipo_agente", "nombre"},
+			[]upsertAssignment{
+				{Column: "descripcion"},
+				{Column: "cuando_usar"},
+				{Column: "activa"},
+			},
+		),
 		s.TipoAgente, s.Nombre, s.Descripcion, s.CuandoUsar, s.Activa,
 	); err != nil {
 		return 0, err
@@ -287,14 +295,18 @@ func GuardarWorkflow(w *Workflow) (int64, error) {
 	if err := json.Unmarshal([]byte(w.Pasos), &pasos); err != nil || len(pasos) == 0 {
 		return 0, fmt.Errorf("pasos debe ser un JSON array no vacio")
 	}
-	if _, err := DB.Exec(`
-		INSERT INTO workflows (tipo_agente, nombre, descripcion, pasos, activo)
-		VALUES (?,?,?,?,?)
-		ON CONFLICT(nombre) DO UPDATE SET
-			tipo_agente=excluded.tipo_agente,
-			descripcion=excluded.descripcion,
-			pasos=excluded.pasos,
-			activo=excluded.activo`,
+	if _, err := DB.Exec(
+		upsertValuesSQL(
+			"workflows",
+			[]string{"tipo_agente", "nombre", "descripcion", "pasos", "activo"},
+			[]string{"nombre"},
+			[]upsertAssignment{
+				{Column: "tipo_agente"},
+				{Column: "descripcion"},
+				{Column: "pasos"},
+				{Column: "activo"},
+			},
+		),
 		w.TipoAgente, w.Nombre, w.Descripcion, w.Pasos, w.Activo,
 	); err != nil {
 		return 0, err

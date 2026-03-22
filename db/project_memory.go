@@ -180,21 +180,26 @@ func GuardarDecisionProyecto(d *DecisionProyecto) (int64, error) {
 		return 0, fmt.Errorf("estado de decision invalido: %s", d.Estado)
 	}
 
-	if _, err := DB.Exec(`
-		INSERT INTO decisiones_proyecto (
-			proyecto_id, categoria, titulo, solucion, motivo, alternativas, impacto,
-			estado, propuesta_id, tarea_id, metadata_json
-		) VALUES (?,?,?,?,?,?,?,?,?,?,?)
-		ON CONFLICT(proyecto_id, titulo) DO UPDATE SET
-			categoria=excluded.categoria,
-			solucion=excluded.solucion,
-			motivo=excluded.motivo,
-			alternativas=excluded.alternativas,
-			impacto=excluded.impacto,
-			estado=excluded.estado,
-			propuesta_id=excluded.propuesta_id,
-			tarea_id=excluded.tarea_id,
-			metadata_json=excluded.metadata_json`,
+	if _, err := DB.Exec(
+		upsertValuesSQL(
+			"decisiones_proyecto",
+			[]string{
+				"proyecto_id", "categoria", "titulo", "solucion", "motivo", "alternativas", "impacto",
+				"estado", "propuesta_id", "tarea_id", "metadata_json",
+			},
+			[]string{"proyecto_id", "titulo"},
+			[]upsertAssignment{
+				{Column: "categoria"},
+				{Column: "solucion"},
+				{Column: "motivo"},
+				{Column: "alternativas"},
+				{Column: "impacto"},
+				{Column: "estado"},
+				{Column: "propuesta_id"},
+				{Column: "tarea_id"},
+				{Column: "metadata_json"},
+			},
+		),
 		d.ProyectoID, d.Categoria, d.Titulo, d.Solucion, d.Motivo, d.Alternativas,
 		d.Impacto, d.Estado, d.PropuestaID, d.TareaID, d.MetadataJSON,
 	); err != nil {
@@ -265,20 +270,25 @@ func GuardarDocumentoExterno(doc *DocumentoExterno) (int64, error) {
 		return 0, fmt.Errorf("fuente de documento invalida: %s", doc.Fuente)
 	}
 
-	if _, err := DB.Exec(`
-		INSERT INTO documentos_externos (
-			proyecto_id, tipo_documento, titulo, ruta_ref, resumen, estado, fuente,
-			propuesta_id, tarea_id, metadata_json
-		) VALUES (?,?,?,?,?,?,?,?,?,?)
-		ON CONFLICT(proyecto_id, ruta_ref) DO UPDATE SET
-			tipo_documento=excluded.tipo_documento,
-			titulo=excluded.titulo,
-			resumen=excluded.resumen,
-			estado=excluded.estado,
-			fuente=excluded.fuente,
-			propuesta_id=excluded.propuesta_id,
-			tarea_id=excluded.tarea_id,
-			metadata_json=excluded.metadata_json`,
+	if _, err := DB.Exec(
+		upsertValuesSQL(
+			"documentos_externos",
+			[]string{
+				"proyecto_id", "tipo_documento", "titulo", "ruta_ref", "resumen", "estado", "fuente",
+				"propuesta_id", "tarea_id", "metadata_json",
+			},
+			[]string{"proyecto_id", "ruta_ref"},
+			[]upsertAssignment{
+				{Column: "tipo_documento"},
+				{Column: "titulo"},
+				{Column: "resumen"},
+				{Column: "estado"},
+				{Column: "fuente"},
+				{Column: "propuesta_id"},
+				{Column: "tarea_id"},
+				{Column: "metadata_json"},
+			},
+		),
 		doc.ProyectoID, doc.TipoDocumento, doc.Titulo, doc.RutaRef, doc.Resumen,
 		doc.Estado, doc.Fuente, doc.PropuestaID, doc.TareaID, doc.MetadataJSON,
 	); err != nil {

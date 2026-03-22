@@ -4,18 +4,22 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+
+	"orquesta/storage"
 )
 
 type schemaSeedGroup struct {
-	table   string
-	columns []string
-	rows    [][]string
+	table           string
+	columns         []string
+	conflictColumns []string
+	rows            [][]string
 }
 
 var schemaSeedGroups = []schemaSeedGroup{
 	{
-		table:   "agentes",
-		columns: []string{"nombre", "rol"},
+		table:           "agentes",
+		columns:         []string{"nombre", "rol"},
+		conflictColumns: []string{"nombre"},
 		rows: [][]string{
 			{"alberto", "admin"},
 			{"claude", "programador"},
@@ -25,8 +29,9 @@ var schemaSeedGroups = []schemaSeedGroup{
 		},
 	},
 	{
-		table:   "config",
-		columns: []string{"clave", "valor"},
+		table:           "config",
+		columns:         []string{"clave", "valor"},
+		conflictColumns: []string{"clave"},
 		rows: [][]string{
 			{"distribuidor", "claude"},
 			{"version", "1.0.0"},
@@ -38,8 +43,9 @@ var schemaSeedGroups = []schemaSeedGroup{
 		},
 	},
 	{
-		table:   "reglas",
-		columns: []string{"tipo_agente", "categoria", "titulo", "descripcion"},
+		table:           "reglas",
+		columns:         []string{"tipo_agente", "categoria", "titulo", "descripcion"},
+		conflictColumns: []string{"tipo_agente", "titulo"},
 		rows: [][]string{
 			{"programador", "financiero", "decimal.Decimal obligatorio", "Usar decimal.Decimal para cualquier cifra monetaria. Cero float32/float64 para importes."},
 			{"programador", "financiero", "Redondeo HALF_UP", "Redondear siempre a 2 decimales con HALF_UP."},
@@ -76,8 +82,9 @@ var schemaSeedGroups = []schemaSeedGroup{
 		},
 	},
 	{
-		table:   "skills",
-		columns: []string{"tipo_agente", "nombre", "descripcion", "cuando_usar"},
+		table:           "skills",
+		columns:         []string{"tipo_agente", "nombre", "descripcion", "cuando_usar"},
+		conflictColumns: []string{"tipo_agente", "nombre"},
 		rows: [][]string{
 			{"programador", "create-module", "Crear un módulo nuevo completo (14 pasos): dominio, repositorio, servicio, handler, migración, tests, integración.", "Cuando se asigna un módulo nuevo de la lista de Ola 2 o posterior."},
 			{"programador", "develop-feature", "Desarrollar una feature dentro de un módulo existente sin romper otros módulos.", "Cuando hay una tarea de nueva funcionalidad dentro de un módulo ya existente."},
@@ -91,8 +98,9 @@ var schemaSeedGroups = []schemaSeedGroup{
 		},
 	},
 	{
-		table:   "workflows",
-		columns: []string{"tipo_agente", "nombre", "descripcion", "pasos"},
+		table:           "workflows",
+		columns:         []string{"tipo_agente", "nombre", "descripcion", "pasos"},
+		conflictColumns: []string{"nombre"},
 		rows: [][]string{
 			{"programador", "inicio-sesion", "Protocolo obligatorio al comenzar cualquier sesión de trabajo.", `["1. Ejecutar: orquesta sesion inicio <mi-nombre>","2. Ver tareas asignadas: orquesta tarea listar --agente <mi-nombre>","3. Votar todas las propuestas con posicion pendiente para mi agente","4. Iniciar la tarea en la app: orquesta tarea iniciar <id> <mi-nombre>","5. Leer el doc del módulo asignado en docs/modulos/MXX_*.md"]`},
 			{"programador", "fin-sesion", "Protocolo obligatorio al terminar cualquier sesión de trabajo.", `["1. Asegurar que todo el trabajo está commiteado (git status limpio)","2. Completar o bloquear mis tareas en la app de orquestación según corresponda","3. Ejecutar: orquesta sesion fin <mi-nombre>"]`},
@@ -110,20 +118,33 @@ func schemaDDL() string {
 }
 
 func schemaSeedData() string {
+	return schemaSeedDataForDriver(DriverName())
+}
+
+func schemaSeedDataForDriver(driver string) string {
 	var b strings.Builder
 	for _, group := range schemaSeedGroups {
-		b.WriteString(renderSchemaSeedGroup(group))
+		b.WriteString(renderSchemaSeedGroupForDriver(driver, group))
 	}
 	return strings.TrimSpace(b.String())
 }
 
 func renderSchemaSeedGroup(group schemaSeedGroup) string {
+	return renderSchemaSeedGroupForDriver(DriverName(), group)
+}
+
+func renderSchemaSeedGroupForDriver(driver string, group schemaSeedGroup) string {
 	if len(group.columns) == 0 || len(group.rows) == 0 {
 		return ""
 	}
 
+	dialect := storage.DialectForDriver(driver)
 	var b strings.Builder
-	b.WriteString("INSERT OR IGNORE INTO ")
+	if dialect.Name == "mysql" {
+		b.WriteString("INSERT IGNORE INTO ")
+	} else {
+		b.WriteString("INSERT INTO ")
+	}
 	b.WriteString(group.table)
 	b.WriteString(" (")
 	b.WriteString(strings.Join(group.columns, ", "))
@@ -140,6 +161,11 @@ func renderSchemaSeedGroup(group schemaSeedGroup) string {
 			b.WriteString(quoteSchemaSeedValue(value))
 		}
 		b.WriteString(")")
+	}
+	if dialect.Name != "mysql" && len(group.conflictColumns) > 0 {
+		b.WriteString("\nON CONFLICT(")
+		b.WriteString(strings.Join(group.conflictColumns, ", "))
+		b.WriteString(") DO NOTHING")
 	}
 	b.WriteString(";\n\n")
 	return b.String()

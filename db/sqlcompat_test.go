@@ -28,3 +28,25 @@ func TestBuildInsertIgnoreSelectSQL(t *testing.T) {
 		t.Fatalf("sql postgres inesperado:\n%s", got)
 	}
 }
+
+func TestBuildUpsertValuesSQL(t *testing.T) {
+	t.Parallel()
+
+	assignments := []upsertAssignment{
+		{Column: "posicion"},
+		{Column: "comentario"},
+		{Column: "updated_at", Expr: "CURRENT_TIMESTAMP"},
+	}
+
+	got := buildUpsertValuesSQL("sqlite", "votos", []string{"propuesta_id", "agente", "posicion", "comentario"}, []string{"propuesta_id", "agente"}, assignments)
+	want := "INSERT INTO votos (propuesta_id,agente,posicion,comentario) VALUES (?,?,?,?) ON CONFLICT(propuesta_id,agente) DO UPDATE SET posicion=excluded.posicion,comentario=excluded.comentario,updated_at=CURRENT_TIMESTAMP"
+	if got != want {
+		t.Fatalf("sql sqlite upsert inesperado:\n%s", got)
+	}
+
+	got = buildUpsertValuesSQL("mysql", "votos", []string{"propuesta_id", "agente", "posicion", "comentario"}, []string{"propuesta_id", "agente"}, assignments)
+	want = "INSERT INTO votos (propuesta_id,agente,posicion,comentario) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE posicion=VALUES(posicion),comentario=VALUES(comentario),updated_at=CURRENT_TIMESTAMP"
+	if got != want {
+		t.Fatalf("sql mysql upsert inesperado:\n%s", got)
+	}
+}

@@ -61,27 +61,32 @@ func GuardarPool(p *PoolCapacidad) (int64, error) {
 		return 0, fmt.Errorf("las capacidades no pueden ser negativas")
 	}
 
-	if _, err := DB.Exec(`
-		INSERT INTO pools_capacidad (
-			slug, proveedor, runtime, plan, es_de_pago, capacidad_total,
-			capacidad_reservada, permite_hijos, permite_modelos_multi,
-			permite_sobrecoste, politica_handoff, fuente_telemetria,
-			metadata_json, activo
-		) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-		ON CONFLICT(slug) DO UPDATE SET
-			proveedor=excluded.proveedor,
-			runtime=excluded.runtime,
-			plan=excluded.plan,
-			es_de_pago=excluded.es_de_pago,
-			capacidad_total=excluded.capacidad_total,
-			capacidad_reservada=excluded.capacidad_reservada,
-			permite_hijos=excluded.permite_hijos,
-			permite_modelos_multi=excluded.permite_modelos_multi,
-			permite_sobrecoste=excluded.permite_sobrecoste,
-			politica_handoff=excluded.politica_handoff,
-			fuente_telemetria=excluded.fuente_telemetria,
-			metadata_json=excluded.metadata_json,
-			activo=excluded.activo`,
+	if _, err := DB.Exec(
+		upsertValuesSQL(
+			"pools_capacidad",
+			[]string{
+				"slug", "proveedor", "runtime", "plan", "es_de_pago", "capacidad_total",
+				"capacidad_reservada", "permite_hijos", "permite_modelos_multi",
+				"permite_sobrecoste", "politica_handoff", "fuente_telemetria",
+				"metadata_json", "activo",
+			},
+			[]string{"slug"},
+			[]upsertAssignment{
+				{Column: "proveedor"},
+				{Column: "runtime"},
+				{Column: "plan"},
+				{Column: "es_de_pago"},
+				{Column: "capacidad_total"},
+				{Column: "capacidad_reservada"},
+				{Column: "permite_hijos"},
+				{Column: "permite_modelos_multi"},
+				{Column: "permite_sobrecoste"},
+				{Column: "politica_handoff"},
+				{Column: "fuente_telemetria"},
+				{Column: "metadata_json"},
+				{Column: "activo"},
+			},
+		),
 		p.Slug, p.Proveedor, p.Runtime, p.Plan, p.EsDePago, p.CapacidadTotal,
 		p.CapacidadReservada, p.PermiteHijos, p.PermiteModelosMulti,
 		p.PermiteSobrecoste, p.PoliticaHandoff, p.FuenteTelemetria,
@@ -169,15 +174,18 @@ func GuardarPoolModelo(poolSlug string, modelo *PoolModelo) (int64, error) {
 		return 0, err
 	}
 
-	if _, err := DB.Exec(`
-		INSERT INTO pool_modelos (
-			pool_id, model_slug, activo, prioridad, coste_relativo, limite_conocido_json
-		) VALUES (?,?,?,?,?,?)
-		ON CONFLICT(pool_id, model_slug) DO UPDATE SET
-			activo=excluded.activo,
-			prioridad=excluded.prioridad,
-			coste_relativo=excluded.coste_relativo,
-			limite_conocido_json=excluded.limite_conocido_json`,
+	if _, err := DB.Exec(
+		upsertValuesSQL(
+			"pool_modelos",
+			[]string{"pool_id", "model_slug", "activo", "prioridad", "coste_relativo", "limite_conocido_json"},
+			[]string{"pool_id", "model_slug"},
+			[]upsertAssignment{
+				{Column: "activo"},
+				{Column: "prioridad"},
+				{Column: "coste_relativo"},
+				{Column: "limite_conocido_json"},
+			},
+		),
 		pool.ID, modelo.ModelSlug, modelo.Activo, modelo.Prioridad,
 		modelo.CosteRelativo, modelo.LimiteConocidoJSON,
 	); err != nil {

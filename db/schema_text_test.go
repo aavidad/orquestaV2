@@ -61,37 +61,70 @@ func TestSchemaSeparadoEnDDLYSemillas(t *testing.T) {
 	if seeds == "" {
 		t.Fatalf("schema seeds vacio")
 	}
-	if strings.Contains(ddl, "INSERT OR IGNORE INTO agentes") {
-		t.Fatalf("el DDL no deberia incluir semillas de agentes")
+	if strings.Contains(seeds, "INSERT OR IGNORE INTO agentes") {
+		t.Fatalf("las semillas no deberian incluir agentes con INSERT OR IGNORE")
 	}
-	if strings.Contains(ddl, "INSERT OR IGNORE INTO config") {
-		t.Fatalf("el DDL no deberia incluir semillas de config")
+	if strings.Contains(seeds, "INSERT OR IGNORE INTO config") {
+		t.Fatalf("las semillas no deberian incluir config con INSERT OR IGNORE")
 	}
-	if strings.Contains(ddl, "INSERT OR IGNORE INTO reglas") {
-		t.Fatalf("el DDL no deberia incluir semillas de reglas")
+	if strings.Contains(seeds, "INSERT OR IGNORE INTO reglas") {
+		t.Fatalf("las semillas no deberian incluir reglas con INSERT OR IGNORE")
 	}
-	if strings.Contains(ddl, "INSERT OR IGNORE INTO skills") {
-		t.Fatalf("el DDL no deberia incluir semillas de skills")
+	if strings.Contains(seeds, "INSERT OR IGNORE INTO skills") {
+		t.Fatalf("las semillas no deberian incluir skills con INSERT OR IGNORE")
 	}
-	if strings.Contains(ddl, "INSERT OR IGNORE INTO workflows") {
-		t.Fatalf("el DDL no deberia incluir semillas de workflows")
+	if strings.Contains(seeds, "INSERT OR IGNORE INTO workflows") {
+		t.Fatalf("las semillas no deberian incluir workflows con INSERT OR IGNORE")
 	}
-	if !strings.Contains(seeds, "INSERT OR IGNORE INTO agentes") {
+	if strings.Contains(seeds, "INSERT OR IGNORE INTO") {
+		t.Fatalf("las semillas no deberian usar INSERT OR IGNORE fijo")
+	}
+	if !strings.Contains(seeds, "INSERT INTO agentes") {
 		t.Fatalf("las semillas deberian incluir agentes iniciales")
 	}
-	if !strings.Contains(seeds, "INSERT OR IGNORE INTO config") {
+	if !strings.Contains(seeds, "ON CONFLICT(nombre) DO NOTHING") {
+		t.Fatalf("las semillas deberian usar conflicto por nombre para agentes")
+	}
+	if !strings.Contains(seeds, "INSERT INTO config") {
 		t.Fatalf("las semillas deberian incluir config inicial")
 	}
-	if !strings.Contains(seeds, "INSERT OR IGNORE INTO reglas") {
+	if !strings.Contains(seeds, "ON CONFLICT(clave) DO NOTHING") {
+		t.Fatalf("las semillas deberian usar conflicto por clave para config")
+	}
+	if !strings.Contains(seeds, "INSERT INTO reglas") {
 		t.Fatalf("las semillas deberian incluir reglas iniciales")
 	}
-	if !strings.Contains(seeds, "INSERT OR IGNORE INTO skills") {
+	if !strings.Contains(seeds, "ON CONFLICT(tipo_agente, titulo) DO NOTHING") {
+		t.Fatalf("las semillas deberian usar conflicto compuesto para reglas")
+	}
+	if !strings.Contains(seeds, "INSERT INTO skills") {
 		t.Fatalf("las semillas deberian incluir skills iniciales")
 	}
-	if !strings.Contains(seeds, "INSERT OR IGNORE INTO workflows") {
+	if !strings.Contains(seeds, "ON CONFLICT(tipo_agente, nombre) DO NOTHING") {
+		t.Fatalf("las semillas deberian usar conflicto compuesto para skills")
+	}
+	if !strings.Contains(seeds, "INSERT INTO workflows") {
 		t.Fatalf("las semillas deberian incluir workflows iniciales")
+	}
+	if !strings.Contains(seeds, "ON CONFLICT(nombre) DO NOTHING") {
+		t.Fatalf("las semillas deberian usar conflicto por nombre para workflows")
 	}
 	if !strings.Contains(ddl, "CREATE TABLE IF NOT EXISTS reglas") {
 		t.Fatalf("el DDL deberia incluir tablas de gobernanza")
+	}
+}
+
+func TestSchemaSeedDataForDriverMySQLUsaInsertIgnore(t *testing.T) {
+	t.Parallel()
+
+	seeds := schemaSeedDataForDriver("mysql")
+	if seeds == "" {
+		t.Fatalf("schema seeds vacio para mysql")
+	}
+	if !strings.Contains(seeds, "INSERT IGNORE INTO agentes") {
+		t.Fatalf("mysql deberia usar INSERT IGNORE para agentes")
+	}
+	if strings.Contains(seeds, "ON CONFLICT(") {
+		t.Fatalf("mysql no deberia renderizar ON CONFLICT")
 	}
 }
