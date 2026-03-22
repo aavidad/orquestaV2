@@ -181,10 +181,10 @@ func TestSchemaDDLForDriverPostgresReduceSintaxisSQLite(t *testing.T) {
 	}
 }
 
-func TestSchemaWithoutUpdatedAtDDLExtraeSoloElBloqueDeTriggers(t *testing.T) {
+func TestSchemaBaseDDLNoIncluyeDDLAuxiliarEmbebido(t *testing.T) {
 	t.Parallel()
 
-	base := schemaWithoutUpdatedAtDDL(Schema)
+	base := schemaBaseDDL
 	if base == "" {
 		t.Fatalf("schema base vacio")
 	}

@@ -1,8 +1,8 @@
 package db
 
-// Schema define el esquema completo de la base de datos de orquestación.
-// Las migraciones se aplican en orden; nunca se modifican las existentes.
-const Schema = `
+// schemaBaseDDL define el DDL base comun de la base de datos de orquestación.
+// El DDL auxiliar por dialecto se ensambla aparte en el renderer.
+const schemaBaseDDL = `
 -- ─── Configuración global ──────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS config (
     clave TEXT PRIMARY KEY,
@@ -371,3 +371,6 @@ CREATE TABLE IF NOT EXISTS workflows (
 );
 
 `
+
+// Schema se mantiene como alias temporal del DDL base para compatibilidad.
+const Schema = schemaBaseDDL
