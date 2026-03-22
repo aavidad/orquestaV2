@@ -52,6 +52,8 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "exportar diagnostico", args: []string{"exportar", "diagnostico"}, want: true},
 		{nombre: "logs", args: []string{"logs"}, want: true},
 		{nombre: "respaldo bd", args: []string{"respaldo", "bd"}, want: true},
+		{nombre: "tarea cancelar", args: []string{"tarea", "cancelar", "12", "Codex1"}, want: true},
+		{nombre: "tarea notas", args: []string{"tarea", "notas", "12"}, want: true},
 		{nombre: "runtime no soportado", args: []string{"runtime", "foo"}, want: false},
 		{nombre: "serve", args: []string{"serve"}, want: false},
 	}
@@ -93,6 +95,32 @@ func TestShouldPreferServerForCurrentCommandUsaAPI(t *testing.T) {
 
 	if !shouldPreferServerForCurrentCommand() {
 		t.Fatalf("se esperaba preferencia por el servidor local")
+	}
+}
+
+func TestRequireServerForCurrentCommand(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarArgs(t, []string{"orquesta", "runtime", "listar"})()
+
+	if !requireServerForCurrentCommand() {
+		t.Fatalf("se esperaba exigir servidor para runtime listar")
+	}
+}
+
+func TestAPIGetNoHaceFallbackCuandoServidorEsObligatorio(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarArgs(t, []string{"orquesta", "runtime", "listar"})()
+
+	var resp apiRuntimesResponse
+	ok, err := apiGet("/api/runtimes", &resp)
+	if !ok {
+		t.Fatalf("se esperaba bloqueo explicito sin fallback local")
+	}
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "requiere el servidor") {
+		t.Fatalf("error inesperado: %v", err)
 	}
 }
 

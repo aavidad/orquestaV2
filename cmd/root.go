@@ -54,6 +54,13 @@ func init() {
 }
 
 func initDB() {
+	if requireServerForCurrentCommand() {
+		if !serverReachable() {
+			fmt.Fprintln(os.Stderr, "error: este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
+			os.Exit(1)
+		}
+		return
+	}
 	if shouldPreferServerForCurrentCommand() {
 		return
 	}

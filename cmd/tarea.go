@@ -521,11 +521,19 @@ var tareaCancelarCmd = &cobra.Command{
 		if len(args) > 2 {
 			motivo = strings.Join(args[2:], " ")
 		}
-		if err := ensureLocalDB(); err != nil {
+		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
+			Accion: "cancelar",
+			Agente: args[1],
+			Motivo: motivo,
+		}, &map[string]any{}); err != nil {
 			return err
-		}
-		if err := db.CancelarTarea(id, args[1], motivo); err != nil {
-			return err
+		} else if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			if err := db.CancelarTarea(id, args[1], motivo); err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ Tarea #%d cancelada: %s\n", id, motivo)
 		return nil
@@ -571,9 +579,17 @@ var tareaNotasCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido: %s", args[0])
 		}
-		t, err := db.GetTarea(id)
-		if err != nil {
-			return fmt.Errorf("tarea #%d no encontrada", id)
+		var t *db.Tarea
+		var resp apiTareaResponse
+		if ok, err := apiGet("/api/tareas/"+args[0], &resp); err != nil {
+			return err
+		} else if ok {
+			t = resp.Tarea
+		} else {
+			t, err = db.GetTarea(id)
+			if err != nil {
+				return fmt.Errorf("tarea #%d no encontrada", id)
+			}
 		}
 		fmt.Printf("Notas de la tarea #%d — %s\n", t.ID, t.Titulo)
 		fmt.Println("─────────────────────────────────────────")

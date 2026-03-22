@@ -885,6 +885,8 @@ func apiHandlerTareaAccion(w http.ResponseWriter, r *http.Request, idStr string)
 		if err == nil {
 			db.Audit("alberto", "backlog_tarea", "tarea", id, "")
 		}
+	case "cancelar":
+		err = db.CancelarTarea(id, req.Agente, valorConFallback(req.Motivo, "duplicado o error"))
 	case "reasignar":
 		_, err = db.DB.Exec(`UPDATE tareas SET agente=?, estado='asignada' WHERE id=?`, req.NuevoAgente, id)
 		if err == nil {

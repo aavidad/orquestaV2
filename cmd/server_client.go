@@ -122,6 +122,17 @@ func shouldPreferServerForCurrentCommand() bool {
 	return serverReachable()
 }
 
+func requireServerForCurrentCommand() bool {
+	if strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1" {
+		return false
+	}
+	requireServer := strings.TrimSpace(strings.ToLower(os.Getenv("ORQUESTA_REQUIRE_SERVER")))
+	if requireServer != "1" && requireServer != "true" && requireServer != "yes" {
+		return false
+	}
+	return commandSupportsServerMode(os.Args[1:])
+}
+
 func commandSupportsServerMode(args []string) bool {
 	tokens := commandPathTokens(args)
 	if len(tokens) == 0 {
@@ -135,7 +146,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "listar", "ver", "nueva", "tomar", "iniciar", "completar", "bloquear", "desbloquear", "nota", "reasignar", "backlog", "contrato":
+		case "listar", "ver", "nueva", "tomar", "iniciar", "completar", "bloquear", "desbloquear", "nota", "notas", "reasignar", "backlog", "contrato", "cancelar":
 			return true
 		default:
 			return false
@@ -301,7 +312,16 @@ func apiGet(path string, dst any) (bool, error) {
 
 func apiGetQuery(path string, query url.Values, dst any) (bool, error) {
 	base := serverBaseURL()
-	if base == "" || !serverReachable() {
+	if base == "" {
+		if requireServerForCurrentCommand() {
+			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o desactiva ORQUESTA_REQUIRE_SERVER")
+		}
+		return false, nil
+	}
+	if !serverReachable() {
+		if requireServerForCurrentCommand() {
+			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
+		}
 		return false, nil
 	}
 	endpoint := base + path
@@ -314,6 +334,9 @@ func apiGetQuery(path string, query url.Values, dst any) (bool, error) {
 	}
 	resp, err := httpClientOrquesta.Do(req)
 	if err != nil {
+		if requireServerForCurrentCommand() {
+			return true, fmt.Errorf("no se pudo contactar con el servidor de Orquesta: %w", err)
+		}
 		return false, nil
 	}
 	defer resp.Body.Close()
@@ -345,7 +368,16 @@ func apiProjectSlugMap() (map[int64]string, bool, error) {
 
 func apiPost(path string, payload any, dst any) (bool, error) {
 	base := serverBaseURL()
-	if base == "" || !serverReachable() {
+	if base == "" {
+		if requireServerForCurrentCommand() {
+			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o desactiva ORQUESTA_REQUIRE_SERVER")
+		}
+		return false, nil
+	}
+	if !serverReachable() {
+		if requireServerForCurrentCommand() {
+			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
+		}
 		return false, nil
 	}
 	body, err := json.Marshal(payload)
@@ -359,6 +391,9 @@ func apiPost(path string, payload any, dst any) (bool, error) {
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := httpClientOrquesta.Do(req)
 	if err != nil {
+		if requireServerForCurrentCommand() {
+			return true, fmt.Errorf("no se pudo contactar con el servidor de Orquesta: %w", err)
+		}
 		return false, nil
 	}
 	defer resp.Body.Close()
