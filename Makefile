@@ -1,8 +1,9 @@
 BINARY   = orquesta
 INSTALL  = $(HOME)/.local/bin/$(BINARY)
 LDFLAGS  = -s -w
+POSTGRES_BOOTSTRAP_TEST_SCRIPT = ./scripts/test-postgres-bootstrap.sh
 
-.PHONY: build install clean test
+.PHONY: build install clean test test-postgres-bootstrap
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) .
@@ -17,3 +18,6 @@ clean:
 
 test:
 	go test ./...
+
+test-postgres-bootstrap:
+	$(POSTGRES_BOOTSTRAP_TEST_SCRIPT)
