@@ -112,6 +112,9 @@ func TestSchemaSeparadoEnDDLYSemillas(t *testing.T) {
 	if !strings.Contains(ddl, "CREATE TABLE IF NOT EXISTS reglas") {
 		t.Fatalf("el DDL deberia incluir tablas de gobernanza")
 	}
+	if count := strings.Count(ddl, "CREATE TRIGGER IF NOT EXISTS trig_"); count != len(updatedAtTables()) {
+		t.Fatalf("sqlite deberia declarar %d triggers updated_at; obtuvo %d", len(updatedAtTables()), count)
+	}
 }
 
 func TestSchemaSeedDataForDriverMySQLUsaInsertIgnore(t *testing.T) {
@@ -158,8 +161,8 @@ func TestSchemaDDLForDriverPostgresReduceSintaxisSQLite(t *testing.T) {
 		if !strings.Contains(ddl, "CREATE OR REPLACE FUNCTION orquesta_set_updated_at()") {
 			t.Fatalf("%s deberia declarar la funcion de updated_at", driver)
 		}
-		if count := strings.Count(ddl, "EXECUTE FUNCTION orquesta_set_updated_at()"); count != len(postgresUpdatedAtTables()) {
-			t.Fatalf("%s deberia declarar %d triggers updated_at; obtuvo %d", driver, len(postgresUpdatedAtTables()), count)
+		if count := strings.Count(ddl, "EXECUTE FUNCTION orquesta_set_updated_at()"); count != len(updatedAtTables()) {
+			t.Fatalf("%s deberia declarar %d triggers updated_at; obtuvo %d", driver, len(updatedAtTables()), count)
 		}
 		if !strings.Contains(ddl, "BEFORE UPDATE ON tareas") {
 			t.Fatalf("%s deberia recrear trigger updated_at para tareas", driver)
@@ -167,6 +170,21 @@ func TestSchemaDDLForDriverPostgresReduceSintaxisSQLite(t *testing.T) {
 		if strings.Contains(ddl, "UPDATE tareas SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;") {
 			t.Fatalf("%s no deberia conservar el cuerpo de trigger SQLite", driver)
 		}
+	}
+}
+
+func TestSchemaWithoutUpdatedAtDDLExtraeSoloElBloqueDeTriggers(t *testing.T) {
+	t.Parallel()
+
+	base := schemaWithoutUpdatedAtDDL(Schema)
+	if base == "" {
+		t.Fatalf("schema base vacio")
+	}
+	if strings.Contains(base, "CREATE TRIGGER IF NOT EXISTS trig_tareas_updated") {
+		t.Fatalf("el schema base no deberia conservar triggers updated_at embebidos")
+	}
+	if !strings.Contains(base, "CREATE TABLE IF NOT EXISTS reglas") {
+		t.Fatalf("el schema base deberia conservar el resto del DDL")
 	}
 }
 
