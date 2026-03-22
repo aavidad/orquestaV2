@@ -27,6 +27,7 @@ var tareaListarCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		estadoStr, _ := cmd.Flags().GetString("estado")
 		agente, _ := cmd.Flags().GetString("agente")
+		proyectoRef, _ := cmd.Flags().GetString("proyecto")
 		modulo, _ := cmd.Flags().GetString("modulo")
 		propuestaCodigo, _ := cmd.Flags().GetString("propuesta")
 
@@ -37,6 +38,13 @@ var tareaListarCmd = &cobra.Command{
 		}
 		if agente == "" {
 			f.Agente = nil
+		}
+		if proyectoRef != "" {
+			p, err := db.GetProyecto(proyectoRef)
+			if err != nil {
+				return err
+			}
+			f.ProyectoID = &p.ID
 		}
 		if modulo == "" {
 			f.Modulo = nil
@@ -57,17 +65,23 @@ var tareaListarCmd = &cobra.Command{
 			fmt.Println("No hay tareas con ese filtro.")
 			return nil
 		}
-		fmt.Printf("%-5s %-10s %-10s %-12s %-8s %s\n",
-			"ID", "ESTADO", "PRIORIDAD", "AGENTE", "MÓDULO", "TÍTULO")
-		fmt.Printf("%-5s %-10s %-10s %-12s %-8s %s\n",
-			"─────", "──────────", "──────────", "────────────", "────────", "─────────────────────────────")
+		fmt.Printf("%-5s %-10s %-10s %-12s %-12s %-8s %s\n",
+			"ID", "ESTADO", "PRIORIDAD", "AGENTE", "PROYECTO", "MÓDULO", "TÍTULO")
+		fmt.Printf("%-5s %-10s %-10s %-12s %-12s %-8s %s\n",
+			"─────", "──────────", "──────────", "────────────", "────────────", "────────", "─────────────────────────────")
 		for _, t := range tareas {
 			agente := "—"
 			if t.Agente != nil {
 				agente = *t.Agente
 			}
-			fmt.Printf("%-5d %-10s %-10s %-12s %-8s %s\n",
-				t.ID, t.Estado, t.Prioridad, agente, t.Modulo, t.Titulo)
+			proyecto := "—"
+			if t.ProyectoID != nil {
+				if p, err := db.GetProyecto(strconv.FormatInt(*t.ProyectoID, 10)); err == nil {
+					proyecto = p.Slug
+				}
+			}
+			fmt.Printf("%-5d %-10s %-10s %-12s %-12s %-8s %s\n",
+				t.ID, t.Estado, t.Prioridad, agente, proyecto, t.Modulo, t.Titulo)
 		}
 		return nil
 	},
@@ -93,6 +107,11 @@ var tareaVerCmd = &cobra.Command{
 		fmt.Printf("Tarea #%d — %s\n", t.ID, t.Titulo)
 		fmt.Printf("  Estado:      %s\n", t.Estado)
 		fmt.Printf("  Prioridad:   %s\n", t.Prioridad)
+		if t.ProyectoID != nil {
+			if p, err := db.GetProyecto(strconv.FormatInt(*t.ProyectoID, 10)); err == nil {
+				fmt.Printf("  Proyecto:    %s\n", p.Slug)
+			}
+		}
 		fmt.Printf("  Módulo:      %s\n", t.Modulo)
 		fmt.Printf("  Agente:      %s\n", agente)
 		fmt.Printf("  Creado por:  %s\n", t.CreadoPor)
@@ -113,6 +132,7 @@ var tareaNuevaCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		titulo, _ := cmd.Flags().GetString("titulo")
 		desc, _ := cmd.Flags().GetString("descripcion")
+		proyectoRef, _ := cmd.Flags().GetString("proyecto")
 		modulo, _ := cmd.Flags().GetString("modulo")
 		prioridad, _ := cmd.Flags().GetString("prioridad")
 		creadorPor, _ := cmd.Flags().GetString("por")
@@ -129,6 +149,13 @@ var tareaNuevaCmd = &cobra.Command{
 			Modulo:      modulo,
 			Prioridad:   db.PrioridadTarea(prioridad),
 			CreadoPor:   creadorPor,
+		}
+		if proyectoRef != "" {
+			p, err := db.GetProyecto(proyectoRef)
+			if err != nil {
+				return err
+			}
+			t.ProyectoID = &p.ID
 		}
 
 		// Vincular a propuesta si se indicó
@@ -312,11 +339,13 @@ var tareaBacklogCmd = &cobra.Command{
 func init() {
 	tareaListarCmd.Flags().String("estado", "", "Filtrar por estado (libre, asignada, en_progreso, completada, bloqueada, backlog)")
 	tareaListarCmd.Flags().String("agente", "", "Filtrar por agente")
+	tareaListarCmd.Flags().String("proyecto", "", "Filtrar por proyecto")
 	tareaListarCmd.Flags().String("modulo", "", "Filtrar por módulo")
 	tareaListarCmd.Flags().String("propuesta", "", "Filtrar por propuesta (ej: OP-030)")
 
 	tareaNuevaCmd.Flags().String("titulo", "", "Título de la tarea (obligatorio)")
 	tareaNuevaCmd.Flags().String("descripcion", "", "Descripción")
+	tareaNuevaCmd.Flags().String("proyecto", "", "Proyecto al que pertenece")
 	tareaNuevaCmd.Flags().String("modulo", "", "Módulo al que pertenece")
 	tareaNuevaCmd.Flags().String("prioridad", "media", "Prioridad: alta, media, baja")
 	tareaNuevaCmd.Flags().String("por", "alberto", "Creado por")
@@ -332,5 +361,29 @@ func init() {
 		tareaTomar, tareaIniciarCmd, tareaCompletarCmd,
 		tareaBloquearCmd, tareaNotaCmd,
 		tareaReasignarCmd, tareaDesbloquearCmd, tareaBacklogCmd,
+		tareaContratoCmd,
 	)
+}
+
+// tareaContratoCmd marca una tarea como con contrato/interfaz de E/S definido (OP-069).
+var tareaContratoCmd = &cobra.Command{
+	Use:   "contrato <id> <agente>",
+	Short: "Marca una tarea como con contrato/interfaz de E/S definido (OP-069)",
+	Long: `Registra que la tarea tiene sus entradas y salidas documentadas,
+permitiendo que las tareas que dependen de ella puedan ser tomadas.
+
+OP-069: ninguna tarea dependiente puede tomarse o iniciarse hasta que
+su predecesora tenga el contrato definido o esté completada.`,
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("id inválido: %s", args[0])
+		}
+		if err := db.DefinirContrato(id, args[1]); err != nil {
+			return err
+		}
+		fmt.Printf("✓ Contrato definido para tarea #%d\n", id)
+		return nil
+	},
 }

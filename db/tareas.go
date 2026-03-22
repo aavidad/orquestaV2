@@ -38,26 +38,29 @@ const (
 )
 
 type Tarea struct {
-	ID           int64
-	Titulo       string
-	Descripcion  string
-	Modulo       string
-	Estado       EstadoTarea
-	Agente       *string // nil = sin asignar
-	PropuestaID  *int64  // nil = no vinculada a propuesta
-	Prioridad    PrioridadTarea
-	Dependencias []int64
-	CreadoPor    string
-	CommitCierre string
-	Notas        string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	CompletadaAt *time.Time
+	ID               int64
+	Titulo           string
+	Descripcion      string
+	ProyectoID       *int64
+	Modulo           string
+	Estado           EstadoTarea
+	Agente           *string // nil = sin asignar
+	PropuestaID      *int64  // nil = no vinculada a propuesta
+	Prioridad        PrioridadTarea
+	Dependencias     []int64
+	ContratoDefinido bool    // true = interfaz/contrato de E/S documentado (OP-069)
+	CreadoPor        string
+	CommitCierre     string
+	Notas            string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	CompletadaAt     *time.Time
 }
 
 type FiltroTareas struct {
 	Estado      *EstadoTarea
 	Agente      *string
+	ProyectoID  *int64
 	Modulo      *string
 	PropuestaID *int64
 	Libre       bool // solo las libre (sin agente)
@@ -67,9 +70,9 @@ type FiltroTareas struct {
 func CrearTarea(t *Tarea) (int64, error) {
 	deps, _ := json.Marshal(t.Dependencias)
 	res, err := DB.Exec(`
-		INSERT INTO tareas (titulo, descripcion, modulo, prioridad, dependencias, creado_por, notas, propuesta_id)
-		VALUES (?,?,?,?,?,?,?,?)`,
-		t.Titulo, t.Descripcion, t.Modulo, t.Prioridad, string(deps), t.CreadoPor, t.Notas, t.PropuestaID,
+		INSERT INTO tareas (titulo, descripcion, proyecto_id, modulo, prioridad, dependencias, creado_por, notas, propuesta_id)
+		VALUES (?,?,?,?,?,?,?,?,?)`,
+		t.Titulo, t.Descripcion, t.ProyectoID, t.Modulo, t.Prioridad, string(deps), t.CreadoPor, t.Notas, t.PropuestaID,
 	)
 	if err != nil {
 		return 0, err
@@ -82,18 +85,18 @@ func CrearTarea(t *Tarea) (int64, error) {
 // GetTarea devuelve una tarea por ID.
 func GetTarea(id int64) (*Tarea, error) {
 	row := DB.QueryRow(`
-		SELECT id, titulo, descripcion, modulo, estado, agente, propuesta_id, prioridad,
+		SELECT id, titulo, descripcion, proyecto_id, modulo, estado, agente, propuesta_id, prioridad,
 		       dependencias, creado_por, commit_cierre, notas,
-		       created_at, updated_at, completada_at
+		       created_at, updated_at, completada_at, contrato_definido
 		FROM tareas WHERE id = ?`, id)
 	return escanearTarea(row)
 }
 
 // ListarTareas devuelve tareas según filtros opcionales.
 func ListarTareas(f FiltroTareas) ([]*Tarea, error) {
-	q := `SELECT id, titulo, descripcion, modulo, estado, agente, propuesta_id, prioridad,
+	q := `SELECT id, titulo, descripcion, proyecto_id, modulo, estado, agente, propuesta_id, prioridad,
 		         dependencias, creado_por, commit_cierre, notas,
-		         created_at, updated_at, completada_at
+		         created_at, updated_at, completada_at, contrato_definido
 		  FROM tareas WHERE 1=1`
 	args := []any{}
 
@@ -106,6 +109,10 @@ func ListarTareas(f FiltroTareas) ([]*Tarea, error) {
 	if f.Agente != nil {
 		q += " AND agente = ?"
 		args = append(args, *f.Agente)
+	}
+	if f.ProyectoID != nil {
+		q += " AND proyecto_id = ?"
+		args = append(args, *f.ProyectoID)
 	}
 	if f.Modulo != nil {
 		q += " AND modulo = ?"
@@ -133,7 +140,30 @@ func ListarTareas(f FiltroTareas) ([]*Tarea, error) {
 	return list, rows.Err()
 }
 
+// ValidarDependencias comprueba que todas las dependencias de una tarea
+// tienen su contrato definido o están completadas. Implementa OP-069.
+func ValidarDependencias(t *Tarea) error {
+	for _, depID := range t.Dependencias {
+		dep, err := GetTarea(depID)
+		if err != nil {
+			return fmt.Errorf("dependencia #%d no encontrada", depID)
+		}
+		if dep.Estado == TareaCompletada {
+			continue // dependencia resuelta, no bloquea
+		}
+		if !dep.ContratoDefinido {
+			return fmt.Errorf(
+				"la tarea #%d depende de #%d ('%s') que aún no tiene contrato/interfaz definido (OP-069): "+
+					"usa 'orquesta tarea contrato %d' para registrarlo primero",
+				t.ID, depID, dep.Titulo, depID,
+			)
+		}
+	}
+	return nil
+}
+
 // TomarTarea asigna una tarea libre (o backlog) a un agente.
+// Valida dependencias (OP-069) antes de permitir la asignación.
 func TomarTarea(id int64, agente string) error {
 	t, err := GetTarea(id)
 	if err != nil {
@@ -141,6 +171,9 @@ func TomarTarea(id int64, agente string) error {
 	}
 	if t.Estado != TareaLibre && t.Estado != TareaBacklog {
 		return fmt.Errorf("la tarea #%d está en estado '%s', solo se pueden tomar tareas 'libre' o 'backlog'", id, t.Estado)
+	}
+	if err := ValidarDependencias(t); err != nil {
+		return err
 	}
 	_, err = DB.Exec(
 		`UPDATE tareas SET estado='asignada', agente=? WHERE id=?`,
@@ -152,7 +185,21 @@ func TomarTarea(id int64, agente string) error {
 	return err
 }
 
+// DefinirContrato marca una tarea como con contrato/interfaz de E/S definido (OP-069).
+func DefinirContrato(id int64, agente string) error {
+	t, err := GetTarea(id)
+	if err != nil {
+		return fmt.Errorf("tarea #%d no encontrada", id)
+	}
+	_, err = DB.Exec(`UPDATE tareas SET contrato_definido=1 WHERE id=?`, id)
+	if err == nil {
+		Audit(agente, "definir_contrato", "tarea", id, t.Titulo)
+	}
+	return err
+}
+
 // IniciarTarea marca una tarea como en_progreso.
+// También valida dependencias (OP-069) como segunda barrera de seguridad.
 func IniciarTarea(id int64, agente string) error {
 	t, err := GetTarea(id)
 	if err != nil {
@@ -160,6 +207,9 @@ func IniciarTarea(id int64, agente string) error {
 	}
 	if t.Estado != TareaAsignada {
 		return fmt.Errorf("la tarea #%d está en estado '%s', debe estar 'asignada' para iniciarla", id, t.Estado)
+	}
+	if err := ValidarDependencias(t); err != nil {
+		return err
 	}
 	_, err = DB.Exec(
 		`UPDATE tareas SET estado='en_progreso', agente=? WHERE id=?`,
@@ -282,18 +332,24 @@ func escanearTarea(s scanner) (*Tarea, error) {
 	var t Tarea
 	var depsJSON string
 	var agente sql.NullString
+	var proyectoID sql.NullInt64
 	var propuestaID sql.NullInt64
 	var completadaAt sql.NullTime
+	var contratoDefinido int
 	err := s.Scan(
-		&t.ID, &t.Titulo, &t.Descripcion, &t.Modulo, &t.Estado, &agente, &propuestaID,
+		&t.ID, &t.Titulo, &t.Descripcion, &proyectoID, &t.Modulo, &t.Estado, &agente, &propuestaID,
 		&t.Prioridad, &depsJSON, &t.CreadoPor, &t.CommitCierre, &t.Notas,
-		&t.CreatedAt, &t.UpdatedAt, &completadaAt,
+		&t.CreatedAt, &t.UpdatedAt, &completadaAt, &contratoDefinido,
 	)
 	if err != nil {
 		return nil, err
 	}
+	t.ContratoDefinido = contratoDefinido == 1
 	if agente.Valid {
 		t.Agente = &agente.String
+	}
+	if proyectoID.Valid {
+		t.ProyectoID = &proyectoID.Int64
 	}
 	if propuestaID.Valid {
 		t.PropuestaID = &propuestaID.Int64
