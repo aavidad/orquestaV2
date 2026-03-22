@@ -1,8 +1,7 @@
 package db
 
-// schemaBaseDDL define el DDL base comun de la base de datos de orquestación.
-// El DDL auxiliar por dialecto se ensambla aparte en el renderer.
-const schemaBaseDDL = `
+// schemaBootstrapDDL define configuración mínima global y catálogo de agentes.
+const schemaBootstrapDDL = `
 -- ─── Configuración global ──────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS config (
     clave TEXT PRIMARY KEY,
@@ -18,6 +17,11 @@ CREATE TABLE IF NOT EXISTS agentes (
     estado_sesion TEXT DEFAULT NULL,
     ultima_sesion DATETIME
 );
+
+`
+
+// schemaWorkflowDDL define el flujo operativo principal de Orquesta.
+const schemaWorkflowDDL = `
 
 -- ─── Tareas ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS tareas (
@@ -105,6 +109,11 @@ CREATE TABLE IF NOT EXISTS sesiones (
     host                TEXT    NOT NULL DEFAULT '',
     pid                 INTEGER
 );
+
+`
+
+// schemaCoordinationDDL define coordinación multi-proyecto, conectores y worktrees.
+const schemaCoordinationDDL = `
 
 -- ─── Proyectos, asignaciones y coordinacion segura ─────────────────────────
 CREATE TABLE IF NOT EXISTS proyectos (
@@ -204,6 +213,11 @@ CREATE TABLE IF NOT EXISTS git_merges (
     updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+`
+
+// schemaRuntimeDDL define control activo y órdenes runtime de agentes.
+const schemaRuntimeDDL = `
+
 -- ─── Control activo de agentes ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS runtime_handles (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -234,6 +248,11 @@ CREATE TABLE IF NOT EXISTS runtime_orders (
     started_at       DATETIME,
     finished_at      DATETIME
 );
+
+`
+
+// schemaCapacityDDL define pools, modelos y políticas de capacidad.
+const schemaCapacityDDL = `
 
 -- ─── Pools de capacidad y modelos ──────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS pools_capacidad (
@@ -284,6 +303,11 @@ CREATE TABLE IF NOT EXISTS politicas_modelo (
     created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+`
+
+// schemaKnowledgeDDL define memoria de proyecto, auditoría y gobernanza.
+const schemaKnowledgeDDL = `
 
 -- ─── Memoria y trazabilidad por proyecto ──────────────────────────────────
 CREATE TABLE IF NOT EXISTS decisiones_proyecto (
@@ -372,5 +396,16 @@ CREATE TABLE IF NOT EXISTS workflows (
 
 `
 
+// schemaBaseDDL define el DDL base comun de la base de datos de orquestación.
+// El DDL auxiliar por dialecto se ensambla aparte en el renderer.
+var schemaBaseDDL = joinDDLParts(
+	schemaBootstrapDDL,
+	schemaWorkflowDDL,
+	schemaCoordinationDDL,
+	schemaRuntimeDDL,
+	schemaCapacityDDL,
+	schemaKnowledgeDDL,
+)
+
 // Schema se mantiene como alias temporal del DDL base para compatibilidad.
-const Schema = schemaBaseDDL
+var Schema = schemaBaseDDL
