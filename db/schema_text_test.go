@@ -112,6 +112,14 @@ func TestSchemaSeparadoEnDDLYSemillas(t *testing.T) {
 	if !strings.Contains(ddl, "CREATE TABLE IF NOT EXISTS reglas") {
 		t.Fatalf("el DDL deberia incluir tablas de gobernanza")
 	}
+	for _, required := range []string{
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_locks_scope_activo",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_handles_agente_activo",
+	} {
+		if !strings.Contains(ddl, required) {
+			t.Fatalf("el DDL deberia incluir el indice auxiliar %q", required)
+		}
+	}
 	if count := strings.Count(ddl, "CREATE TRIGGER IF NOT EXISTS trig_"); count != len(updatedAtTables()) {
 		t.Fatalf("sqlite deberia declarar %d triggers updated_at; obtuvo %d", len(updatedAtTables()), count)
 	}
@@ -185,6 +193,9 @@ func TestSchemaWithoutUpdatedAtDDLExtraeSoloElBloqueDeTriggers(t *testing.T) {
 	}
 	if !strings.Contains(base, "CREATE TABLE IF NOT EXISTS reglas") {
 		t.Fatalf("el schema base deberia conservar el resto del DDL")
+	}
+	if strings.Contains(base, "CREATE UNIQUE INDEX IF NOT EXISTS idx_locks_scope_activo") {
+		t.Fatalf("el schema base no deberia conservar indices auxiliares embebidos")
 	}
 }
 

@@ -169,10 +169,6 @@ CREATE TABLE IF NOT EXISTS locks (
     liberada_at       DATETIME
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_locks_scope_activo
-ON locks(scope_type, scope_key)
-WHERE estado = 'activa';
-
 CREATE TABLE IF NOT EXISTS worktrees (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     proyecto_id       INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
@@ -223,10 +219,6 @@ CREATE TABLE IF NOT EXISTS runtime_handles (
     created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_handles_agente_activo
-ON runtime_handles(agente)
-WHERE estado IN ('activo','pausado');
 
 CREATE TABLE IF NOT EXISTS runtime_orders (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -342,97 +334,6 @@ CREATE TABLE IF NOT EXISTS audit_log (
     detalle    TEXT    NOT NULL DEFAULT '',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
--- ─── Triggers updated_at ───────────────────────────────────────────────────
-CREATE TRIGGER IF NOT EXISTS trig_tareas_updated
-    AFTER UPDATE ON tareas
-BEGIN
-    UPDATE tareas SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trig_propuestas_updated
-    AFTER UPDATE ON propuestas
-BEGIN
-    UPDATE propuestas SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trig_votos_updated
-    AFTER UPDATE ON votos
-BEGIN
-    UPDATE votos SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trig_proyectos_updated
-    AFTER UPDATE ON proyectos
-BEGIN
-    UPDATE proyectos SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trig_asignaciones_updated
-    AFTER UPDATE ON asignaciones
-BEGIN
-    UPDATE asignaciones SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trig_conectores_updated
-    AFTER UPDATE ON conectores
-BEGIN
-    UPDATE conectores SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trig_locks_updated
-    AFTER UPDATE ON locks
-BEGIN
-    UPDATE locks SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trig_worktrees_updated
-    AFTER UPDATE ON worktrees
-BEGIN
-    UPDATE worktrees SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trig_runtime_handles_updated
-    AFTER UPDATE ON runtime_handles
-BEGIN
-    UPDATE runtime_handles SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trig_pools_capacidad_updated
-    AFTER UPDATE ON pools_capacidad
-BEGIN
-    UPDATE pools_capacidad SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trig_pool_modelos_updated
-    AFTER UPDATE ON pool_modelos
-BEGIN
-    UPDATE pool_modelos SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trig_politicas_modelo_updated
-    AFTER UPDATE ON politicas_modelo
-BEGIN
-    UPDATE politicas_modelo SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trig_decisiones_proyecto_updated
-    AFTER UPDATE ON decisiones_proyecto
-BEGIN
-    UPDATE decisiones_proyecto SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trig_documentos_externos_updated
-    AFTER UPDATE ON documentos_externos
-BEGIN
-    UPDATE documentos_externos SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trig_git_merges_updated
-    AFTER UPDATE ON git_merges
-BEGIN
-    UPDATE git_merges SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-END;
 
 -- ─── Reglas por tipo de agente ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS reglas (

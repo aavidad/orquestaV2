@@ -31,7 +31,7 @@ func renderSQLiteSchemaDDL(schema string) string {
 	if ddl == "" {
 		return ""
 	}
-	return ddl + "\n\n" + renderSQLiteUpdatedAtDDL()
+	return ddl + "\n\n" + renderSQLiteAuxDDL()
 }
 
 func renderPostgresSchemaDDL(schema string) string {
@@ -46,7 +46,27 @@ func renderPostgresSchemaDDL(schema string) string {
 	if ddl == "" {
 		return ""
 	}
-	return ddl + "\n\n" + renderPostgresUpdatedAtDDL()
+	return ddl + "\n\n" + renderPostgresAuxDDL()
+}
+
+func renderSQLiteAuxDDL() string {
+	parts := []string{
+		renderIndexDDL(),
+		renderSQLiteUpdatedAtDDL(),
+	}
+	return joinDDLParts(parts...)
+}
+
+func renderPostgresAuxDDL() string {
+	parts := []string{
+		renderIndexDDL(),
+		renderPostgresUpdatedAtDDL(),
+	}
+	return joinDDLParts(parts...)
+}
+
+func renderIndexDDL() string {
+	return strings.Join(indexStatements(), "\n\n")
 }
 
 func renderSQLiteUpdatedAtDDL() string {
@@ -65,6 +85,17 @@ func renderSQLiteUpdatedAtDDL() string {
 		b.WriteString("END;\n\n")
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func indexStatements() []string {
+	return []string{
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_locks_scope_activo
+ON locks(scope_type, scope_key)
+WHERE estado = 'activa';`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_handles_agente_activo
+ON runtime_handles(agente)
+WHERE estado IN ('activo','pausado');`,
+	}
 }
 
 func renderPostgresUpdatedAtDDL() string {
@@ -136,6 +167,18 @@ func schemaWithoutUpdatedAtDDL(schema string) string {
 	default:
 		return before + "\n\n" + after
 	}
+}
+
+func joinDDLParts(parts ...string) string {
+	var out []string
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		out = append(out, part)
+	}
+	return strings.Join(out, "\n\n")
 }
 
 func aplicarDDL(db *sql.DB, ddl string) error {

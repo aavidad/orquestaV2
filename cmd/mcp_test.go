@@ -324,7 +324,6 @@ func withTempOrquestaDB(t *testing.T, fn func()) {
 	if err := db.Open(); err != nil {
 		t.Fatalf("db.Open: %v", err)
 	}
-	ensureMCPTestSchema(t)
 	fn()
 }
 
@@ -441,98 +440,5 @@ func insertTestPoliticaModelo(t *testing.T, politica db.PoliticaModelo) {
 	t.Helper()
 	if _, err := db.GuardarPoliticaModelo(&politica); err != nil {
 		t.Fatalf("insert politica modelo: %v", err)
-	}
-}
-
-func ensureMCPTestSchema(t *testing.T) {
-	t.Helper()
-	stmts := []string{
-		`CREATE TABLE IF NOT EXISTS proyectos (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			slug TEXT NOT NULL UNIQUE,
-			nombre TEXT NOT NULL,
-			ruta_abs TEXT NOT NULL UNIQUE,
-			tipo TEXT NOT NULL DEFAULT 'repo',
-			parent_id INTEGER,
-			activo INTEGER NOT NULL DEFAULT 1,
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		)`,
-		`CREATE TABLE IF NOT EXISTS asignaciones (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			agente TEXT NOT NULL REFERENCES agentes(nombre),
-			proyecto_id INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
-			estado TEXT NOT NULL DEFAULT 'activa',
-			nota TEXT NOT NULL DEFAULT '',
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			cerrada_at DATETIME
-		)`,
-		`CREATE TABLE IF NOT EXISTS conectores (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			slug TEXT NOT NULL UNIQUE,
-			nombre TEXT NOT NULL,
-			transporte TEXT NOT NULL DEFAULT 'cli',
-			comando TEXT NOT NULL DEFAULT '',
-			args_json TEXT NOT NULL DEFAULT '[]',
-			env_json TEXT NOT NULL DEFAULT '{}',
-			metadata_json TEXT NOT NULL DEFAULT '{}',
-			activo INTEGER NOT NULL DEFAULT 1,
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		)`,
-		`CREATE TABLE IF NOT EXISTS locks (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			proyecto_id INTEGER,
-			tarea_id INTEGER,
-			sesion_id INTEGER,
-			agente TEXT NOT NULL REFERENCES agentes(nombre),
-			scope_type TEXT NOT NULL,
-			scope_key TEXT NOT NULL,
-			ruta_abs TEXT NOT NULL DEFAULT '',
-			branch TEXT NOT NULL DEFAULT '',
-			motivo TEXT NOT NULL DEFAULT '',
-			token_lease TEXT NOT NULL DEFAULT '',
-			estado TEXT NOT NULL DEFAULT 'activa',
-			heartbeat_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			expires_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			liberada_at DATETIME
-		)`,
-		`CREATE TABLE IF NOT EXISTS worktrees (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			proyecto_id INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
-			tarea_id INTEGER,
-			lock_id INTEGER,
-			agente TEXT NOT NULL REFERENCES agentes(nombre),
-			nombre TEXT NOT NULL,
-			ruta_abs TEXT NOT NULL UNIQUE,
-			branch TEXT NOT NULL,
-			base_ref TEXT NOT NULL DEFAULT '',
-			estado TEXT NOT NULL DEFAULT 'activa',
-			motivo TEXT NOT NULL DEFAULT '',
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			cerrada_at DATETIME
-		)`,
-		`ALTER TABLE sesiones ADD COLUMN conector_id INTEGER REFERENCES conectores(id)`,
-		`ALTER TABLE sesiones ADD COLUMN proyecto_id INTEGER REFERENCES proyectos(id)`,
-		`ALTER TABLE sesiones ADD COLUMN estado TEXT NOT NULL DEFAULT 'activa'`,
-		`ALTER TABLE sesiones ADD COLUMN cwd TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE sesiones ADD COLUMN herramienta TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE sesiones ADD COLUMN external_session_id TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE sesiones ADD COLUMN resume_payload_json TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE sesiones ADD COLUMN resumen_continuidad TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE sesiones ADD COLUMN branch TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE sesiones ADD COLUMN heartbeat_at DATETIME`,
-		`ALTER TABLE sesiones ADD COLUMN host TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE sesiones ADD COLUMN pid INTEGER`,
-		`ALTER TABLE propuestas ADD COLUMN proyecto_id INTEGER REFERENCES proyectos(id)`,
-	}
-	for _, stmt := range stmts {
-		if _, err := db.DB.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-			t.Fatalf("aplicando schema MCP de test: %v", err)
-		}
 	}
 }
