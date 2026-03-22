@@ -10,6 +10,7 @@ const (
 	schemaColumnTypeText     schemaColumnType = "text"
 	schemaColumnTypeInteger  schemaColumnType = "integer"
 	schemaColumnTypeDateTime schemaColumnType = "datetime"
+	schemaColumnTypeReal     schemaColumnType = "real"
 )
 
 type schemaReferenceSpec struct {
@@ -25,13 +26,19 @@ type schemaColumnSpec struct {
 	DefaultSQL    string
 	PrimaryKey    bool
 	AutoIncrement bool
+	Unique        bool
 	CheckSQL      string
 	References    *schemaReferenceSpec
 }
 
+type schemaUniqueConstraintSpec struct {
+	Columns []string
+}
+
 type schemaTableSpec struct {
-	Name    string
-	Columns []schemaColumnSpec
+	Name              string
+	Columns           []schemaColumnSpec
+	UniqueConstraints []schemaUniqueConstraintSpec
 }
 
 func bootstrapSchemaSpecs() []schemaTableSpec {
@@ -93,6 +100,67 @@ func runtimeSchemaSpecs() []schemaTableSpec {
 	}
 }
 
+func capacitySchemaSpecs() []schemaTableSpec {
+	return []schemaTableSpec{
+		{
+			Name: "pools_capacidad",
+			Columns: []schemaColumnSpec{
+				{Name: "id", Type: schemaColumnTypeInteger, PrimaryKey: true, AutoIncrement: true},
+				{Name: "slug", Type: schemaColumnTypeText, NotNull: true, Unique: true},
+				{Name: "proveedor", Type: schemaColumnTypeText, NotNull: true},
+				{Name: "runtime", Type: schemaColumnTypeText, NotNull: true},
+				{Name: "plan", Type: schemaColumnTypeText, NotNull: true, DefaultSQL: quoteSchemaSeedValue("")},
+				{Name: "es_de_pago", Type: schemaColumnTypeInteger, NotNull: true, DefaultSQL: "0"},
+				{Name: "capacidad_total", Type: schemaColumnTypeInteger, NotNull: true, DefaultSQL: "1"},
+				{Name: "capacidad_reservada", Type: schemaColumnTypeInteger, NotNull: true, DefaultSQL: "0"},
+				{Name: "permite_hijos", Type: schemaColumnTypeInteger, NotNull: true, DefaultSQL: "1"},
+				{Name: "permite_modelos_multi", Type: schemaColumnTypeInteger, NotNull: true, DefaultSQL: "1"},
+				{Name: "permite_sobrecoste", Type: schemaColumnTypeInteger, NotNull: true, DefaultSQL: "0"},
+				{Name: "politica_handoff", Type: schemaColumnTypeText, NotNull: true, DefaultSQL: quoteSchemaSeedValue("preventivo")},
+				{Name: "fuente_telemetria", Type: schemaColumnTypeText, NotNull: true, DefaultSQL: quoteSchemaSeedValue("manual")},
+				{Name: "metadata_json", Type: schemaColumnTypeText, NotNull: true, DefaultSQL: quoteSchemaSeedValue("{}")},
+				{Name: "activo", Type: schemaColumnTypeInteger, NotNull: true, DefaultSQL: "1"},
+				{Name: "created_at", Type: schemaColumnTypeDateTime, NotNull: true, DefaultSQL: "CURRENT_TIMESTAMP"},
+				{Name: "updated_at", Type: schemaColumnTypeDateTime, NotNull: true, DefaultSQL: "CURRENT_TIMESTAMP"},
+			},
+		},
+		{
+			Name: "pool_modelos",
+			Columns: []schemaColumnSpec{
+				{Name: "id", Type: schemaColumnTypeInteger, PrimaryKey: true, AutoIncrement: true},
+				{Name: "pool_id", Type: schemaColumnTypeInteger, NotNull: true, References: &schemaReferenceSpec{Table: "pools_capacidad", Column: "id", OnDelete: "CASCADE"}},
+				{Name: "model_slug", Type: schemaColumnTypeText, NotNull: true},
+				{Name: "activo", Type: schemaColumnTypeInteger, NotNull: true, DefaultSQL: "1"},
+				{Name: "prioridad", Type: schemaColumnTypeInteger, NotNull: true, DefaultSQL: "100"},
+				{Name: "coste_relativo", Type: schemaColumnTypeReal, NotNull: true, DefaultSQL: "1.0"},
+				{Name: "limite_conocido_json", Type: schemaColumnTypeText, NotNull: true, DefaultSQL: quoteSchemaSeedValue("{}")},
+				{Name: "created_at", Type: schemaColumnTypeDateTime, NotNull: true, DefaultSQL: "CURRENT_TIMESTAMP"},
+				{Name: "updated_at", Type: schemaColumnTypeDateTime, NotNull: true, DefaultSQL: "CURRENT_TIMESTAMP"},
+			},
+			UniqueConstraints: []schemaUniqueConstraintSpec{
+				{Columns: []string{"pool_id", "model_slug"}},
+			},
+		},
+		{
+			Name: "politicas_modelo",
+			Columns: []schemaColumnSpec{
+				{Name: "id", Type: schemaColumnTypeInteger, PrimaryKey: true, AutoIncrement: true},
+				{Name: "scope_tipo", Type: schemaColumnTypeText, NotNull: true, CheckSQL: "scope_tipo IN ('global','perfil','proyecto','fase','tarea')"},
+				{Name: "scope_ref", Type: schemaColumnTypeText, NotNull: true, DefaultSQL: quoteSchemaSeedValue("")},
+				{Name: "perfil_tarea", Type: schemaColumnTypeText, NotNull: true, DefaultSQL: quoteSchemaSeedValue("*")},
+				{Name: "pool_slug", Type: schemaColumnTypeText, NotNull: true, DefaultSQL: quoteSchemaSeedValue("")},
+				{Name: "model_slug", Type: schemaColumnTypeText, NotNull: true, DefaultSQL: quoteSchemaSeedValue("")},
+				{Name: "reasoning_effort", Type: schemaColumnTypeText, NotNull: true, DefaultSQL: quoteSchemaSeedValue("")},
+				{Name: "prioridad", Type: schemaColumnTypeInteger, NotNull: true, DefaultSQL: "100"},
+				{Name: "activa", Type: schemaColumnTypeInteger, NotNull: true, DefaultSQL: "1"},
+				{Name: "metadata_json", Type: schemaColumnTypeText, NotNull: true, DefaultSQL: quoteSchemaSeedValue("{}")},
+				{Name: "created_at", Type: schemaColumnTypeDateTime, NotNull: true, DefaultSQL: "CURRENT_TIMESTAMP"},
+				{Name: "updated_at", Type: schemaColumnTypeDateTime, NotNull: true, DefaultSQL: "CURRENT_TIMESTAMP"},
+			},
+		},
+	}
+}
+
 func renderSectionDDLForDriver(driver string, tables []schemaTableSpec) string {
 	parts := make([]string, 0, len(tables))
 	for _, table := range tables {
@@ -109,15 +177,32 @@ func renderRuntimeSectionDDLForDriver(driver string) string {
 	return renderSectionDDLForDriver(driver, runtimeSchemaSpecs())
 }
 
+func renderCapacitySectionDDLForDriver(driver string) string {
+	return renderSectionDDLForDriver(driver, capacitySchemaSpecs())
+}
+
 func renderTableSpecForDriver(driver string, table schemaTableSpec) string {
 	var b strings.Builder
 	b.WriteString("CREATE TABLE IF NOT EXISTS ")
 	b.WriteString(table.Name)
 	b.WriteString(" (\n")
-	for i, column := range table.Columns {
+	lineCount := len(table.Columns) + len(table.UniqueConstraints)
+	lineNo := 0
+	for _, column := range table.Columns {
 		b.WriteString("    ")
 		b.WriteString(renderColumnSpecForDriver(driver, column))
-		if i < len(table.Columns)-1 {
+		lineNo++
+		if lineNo < lineCount {
+			b.WriteString(",")
+		}
+		b.WriteString("\n")
+	}
+	for _, unique := range table.UniqueConstraints {
+		b.WriteString("    UNIQUE(")
+		b.WriteString(strings.Join(unique.Columns, ", "))
+		b.WriteString(")")
+		lineNo++
+		if lineNo < lineCount {
 			b.WriteString(",")
 		}
 		b.WriteString("\n")
@@ -146,6 +231,9 @@ func renderColumnSpecForDriver(driver string, column schemaColumnSpec) string {
 	if column.PrimaryKey {
 		parts = append(parts, "PRIMARY KEY")
 	}
+	if column.Unique {
+		parts = append(parts, "UNIQUE")
+	}
 	if column.CheckSQL != "" {
 		parts = append(parts, "CHECK ("+column.CheckSQL+")")
 	}
@@ -168,6 +256,8 @@ func renderColumnTypeForDriver(driver string, columnType schemaColumnType) strin
 			return "TIMESTAMP"
 		}
 		return "DATETIME"
+	case schemaColumnTypeReal:
+		return "REAL"
 	default:
 		return "TEXT"
 	}

@@ -204,59 +204,8 @@ CREATE TABLE IF NOT EXISTS git_merges (
 var schemaRuntimeDDL = renderRuntimeSectionDDLForDriver("sqlite")
 
 // schemaCapacityDDL define pools, modelos y políticas de capacidad.
-const schemaCapacityDDL = `
-
--- ─── Pools de capacidad y modelos ──────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS pools_capacidad (
-    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-    slug                  TEXT NOT NULL UNIQUE,
-    proveedor             TEXT NOT NULL,
-    runtime               TEXT NOT NULL,
-    plan                  TEXT NOT NULL DEFAULT '',
-    es_de_pago            INTEGER NOT NULL DEFAULT 0,
-    capacidad_total       INTEGER NOT NULL DEFAULT 1,
-    capacidad_reservada   INTEGER NOT NULL DEFAULT 0,
-    permite_hijos         INTEGER NOT NULL DEFAULT 1,
-    permite_modelos_multi INTEGER NOT NULL DEFAULT 1,
-    permite_sobrecoste    INTEGER NOT NULL DEFAULT 0,
-    politica_handoff      TEXT NOT NULL DEFAULT 'preventivo',
-    fuente_telemetria     TEXT NOT NULL DEFAULT 'manual',
-    metadata_json         TEXT NOT NULL DEFAULT '{}',
-    activo                INTEGER NOT NULL DEFAULT 1,
-    created_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS pool_modelos (
-    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-    pool_id              INTEGER NOT NULL REFERENCES pools_capacidad(id) ON DELETE CASCADE,
-    model_slug           TEXT NOT NULL,
-    activo               INTEGER NOT NULL DEFAULT 1,
-    prioridad            INTEGER NOT NULL DEFAULT 100,
-    coste_relativo       REAL NOT NULL DEFAULT 1.0,
-    limite_conocido_json TEXT NOT NULL DEFAULT '{}',
-    created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(pool_id, model_slug)
-);
-
-CREATE TABLE IF NOT EXISTS politicas_modelo (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    scope_tipo       TEXT NOT NULL
-                        CHECK (scope_tipo IN ('global','perfil','proyecto','fase','tarea')),
-    scope_ref        TEXT NOT NULL DEFAULT '',
-    perfil_tarea     TEXT NOT NULL DEFAULT '*',
-    pool_slug        TEXT NOT NULL DEFAULT '',
-    model_slug       TEXT NOT NULL DEFAULT '',
-    reasoning_effort TEXT NOT NULL DEFAULT '',
-    prioridad        INTEGER NOT NULL DEFAULT 100,
-    activa           INTEGER NOT NULL DEFAULT 1,
-    metadata_json    TEXT NOT NULL DEFAULT '{}',
-    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-`
+// Sale de un schema spec estructurado para evitar sustituciones ciegas por driver.
+var schemaCapacityDDL = renderCapacitySectionDDLForDriver("sqlite")
 
 // schemaKnowledgeDDL define memoria de proyecto, auditoría y gobernanza.
 const schemaKnowledgeDDL = `

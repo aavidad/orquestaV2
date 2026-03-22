@@ -90,7 +90,7 @@ func schemaBaseSectionRenderers() []schemaSectionRenderer {
 		},
 		{
 			sqliteDDL: schemaCapacityDDL,
-			renderFor: func(driver string) string { return renderDriverSectionSyntax(driver, schemaCapacityDDL) },
+			renderFor: renderCapacitySectionDDLForDriver,
 		},
 		{
 			sqliteDDL: schemaKnowledgeDDL,
