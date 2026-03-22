@@ -14,7 +14,6 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -947,14 +946,9 @@ var serveCmd = &cobra.Command{
 		}
 		puerto, _ := cmd.Flags().GetInt("puerto")
 		addr := fmt.Sprintf(":%d", puerto)
-		info := localrpc.ServerInfo{
-			Addr:      "127.0.0.1" + addr,
-			PID:       os.Getpid(),
-			Kind:      "web",
-			ScopeID:   localrpc.CurrentScopeID(),
-			DBPath:    db.CurrentDBPath(),
-			StartedAt: time.Now().UTC(),
-			Version:   "dev",
+		info, err := newLocalRPCState("web", "127.0.0.1"+addr)
+		if err != nil {
+			return err
 		}
 		mux := http.NewServeMux()
 		registerRPCHandlers(mux, info)

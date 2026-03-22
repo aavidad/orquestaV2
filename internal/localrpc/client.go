@@ -14,6 +14,7 @@ import (
 type Client struct {
 	baseURL string
 	http    *http.Client
+	token   string
 }
 
 func NewClient(addr string, httpClient *http.Client) *Client {
@@ -31,7 +32,12 @@ func NewClientFromState(path string, httpClient *http.Client) (*Client, *State, 
 	if err != nil {
 		return nil, nil, err
 	}
-	return NewClient(state.Addr, httpClient), state, nil
+	return NewClient(state.Addr, httpClient).WithToken(state.Token), state, nil
+}
+
+func (c *Client) WithToken(token string) *Client {
+	c.token = strings.TrimSpace(token)
+	return c
 }
 
 func (c *Client) Ping(ctx context.Context) (*HealthResponse, error) {
@@ -68,6 +74,9 @@ func (c *Client) Exec(ctx context.Context, payload *ExecRequest) (*ExecResponse,
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if c.token != "" {
+		req.Header.Set(HeaderAuthToken, c.token)
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, err

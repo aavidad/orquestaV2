@@ -34,7 +34,7 @@ func TestServerHealthHandler(t *testing.T) {
 
 func TestServerExecHandler(t *testing.T) {
 	mux := NewMux(&Server{
-		State: State{Addr: "127.0.0.1:17899"},
+		State: State{Addr: "127.0.0.1:17899", Token: "secret-token"},
 		Executor: func(ctx context.Context, req *ExecRequest) (*ExecResponse, error) {
 			if len(req.Args) != 1 || req.Args[0] != "status" {
 				t.Fatalf("args inesperados: %+v", req.Args)
@@ -44,6 +44,7 @@ func TestServerExecHandler(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodPost, ExecPath, strings.NewReader(`{"args":["status"]}`))
+	req.Header.Set(HeaderAuthToken, "secret-token")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
@@ -52,5 +53,23 @@ func TestServerExecHandler(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"exit_code":0`) {
 		t.Fatalf("body inesperado: %s", rec.Body.String())
+	}
+}
+
+func TestServerExecHandlerRejectsMissingToken(t *testing.T) {
+	mux := NewMux(&Server{
+		State: State{Addr: "127.0.0.1:17899", Token: "secret-token"},
+		Executor: func(ctx context.Context, req *ExecRequest) (*ExecResponse, error) {
+			t.Fatalf("no deberia ejecutar con token ausente")
+			return nil, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, ExecPath, strings.NewReader(`{"args":["status"]}`))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
 	}
 }

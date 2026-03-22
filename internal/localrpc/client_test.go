@@ -45,6 +45,9 @@ func TestClientExec(t *testing.T) {
 			if req.Method != http.MethodPost || req.URL.Path != ExecPath {
 				t.Fatalf("request inesperada: %s %s", req.Method, req.URL.Path)
 			}
+			if got := req.Header.Get(HeaderAuthToken); got != "secret-token" {
+				t.Fatalf("header token inesperado: %q", got)
+			}
 			data, err := io.ReadAll(req.Body)
 			if err != nil {
 				t.Fatalf("ReadAll: %v", err)
@@ -61,7 +64,7 @@ func TestClientExec(t *testing.T) {
 		}),
 	}
 
-	resp, err := NewClient("127.0.0.1:17899", httpClient).Exec(context.Background(), &ExecRequest{
+	resp, err := NewClient("127.0.0.1:17899", httpClient).WithToken("secret-token").Exec(context.Background(), &ExecRequest{
 		Args: []string{"status"},
 	})
 	if err != nil {

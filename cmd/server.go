@@ -10,6 +10,8 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -48,14 +50,9 @@ var serverRunCmd = &cobra.Command{
 		}
 
 		mux := http.NewServeMux()
-		info := localrpc.ServerInfo{
-			Addr:      listenAddr,
-			PID:       os.Getpid(),
-			Kind:      "server",
-			ScopeID:   localrpc.CurrentScopeID(),
-			DBPath:    db.CurrentDBPath(),
-			StartedAt: time.Now().UTC(),
-			Version:   "dev",
+		info, err := newLocalRPCState("server", listenAddr)
+		if err != nil {
+			return err
 		}
 		registerRPCHandlers(mux, info)
 		if err := localrpc.SaveServerInfo(info); err != nil {
@@ -253,7 +250,12 @@ func executeViaLocalServer(args []string, stdout, stderr io.Writer) (bool, int, 
 
 	ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	resp, err := localrpc.Execute(ctx, addr, localrpc.ExecuteRequest{Args: args})
+	state, stateErr := localrpc.LoadServerInfo()
+	if stateErr != nil {
+		return false, 0, stateErr
+	}
+	addr = localrpc.BaseURL(state.Addr)
+	resp, err := localrpc.NewClient(addr, nil).WithToken(state.Token).Exec(ctx, &localrpc.ExecuteRequest{Args: args})
 	if err != nil {
 		return false, 0, err
 	}
@@ -299,6 +301,34 @@ func ensureLocalServer(addr string) error {
 		time.Sleep(150 * time.Millisecond)
 	}
 	return errors.New("timeout esperando al servidor local")
+}
+
+func newLocalRPCState(kind, addr string) (localrpc.ServerInfo, error) {
+	token, err := randomHexToken(32)
+	if err != nil {
+		return localrpc.ServerInfo{}, err
+	}
+	return localrpc.ServerInfo{
+		Addr:      strings.TrimPrefix(localrpc.BaseURL(addr), "http://"),
+		PID:       os.Getpid(),
+		Kind:      kind,
+		ScopeID:   localrpc.CurrentScopeID(),
+		DBPath:    db.CurrentDBPath(),
+		Token:     token,
+		StartedAt: time.Now().UTC(),
+		Version:   "dev",
+	}, nil
+}
+
+func randomHexToken(size int) (string, error) {
+	if size <= 0 {
+		size = 32
+	}
+	raw := make([]byte, size)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("generando token localrpc: %w", err)
+	}
+	return hex.EncodeToString(raw), nil
 }
 
 func registerRPCHandlers(mux *http.ServeMux, state localrpc.State) {

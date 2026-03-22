@@ -34,6 +34,10 @@ func NewMux(server *Server) *http.ServeMux {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		if server != nil && server.State.Token != "" && r.Header.Get(HeaderAuthToken) != server.State.Token {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
 		if server == nil || server.Executor == nil {
 			http.Error(w, "executor no configurado", http.StatusServiceUnavailable)
 			return
