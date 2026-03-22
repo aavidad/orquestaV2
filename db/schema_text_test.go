@@ -125,6 +125,51 @@ func TestSchemaSeparadoEnDDLYSemillas(t *testing.T) {
 	}
 }
 
+func TestBootstrapSchemaSpecRenderPorDriver(t *testing.T) {
+	t.Parallel()
+
+	specs := bootstrapSchemaSpecs()
+	if got := len(specs); got != 2 {
+		t.Fatalf("bootstrapSchemaSpecs deberia tener 2 tablas; obtuvo %d", got)
+	}
+	if specs[0].Name != "config" {
+		t.Fatalf("la primera tabla del bootstrap deberia ser config")
+	}
+	if specs[1].Name != "agentes" {
+		t.Fatalf("la segunda tabla del bootstrap deberia ser agentes")
+	}
+
+	sqliteDDL := renderBootstrapSectionDDLForDriver("sqlite")
+	postgresDDL := renderBootstrapSectionDDLForDriver("postgres")
+	if sqliteDDL == "" || postgresDDL == "" {
+		t.Fatalf("el bootstrap renderizado no deberia ser vacio")
+	}
+	if schemaBootstrapDDL != sqliteDDL {
+		t.Fatalf("schemaBootstrapDDL deberia coincidir con el render sqlite del spec")
+	}
+	for _, ddl := range []string{sqliteDDL, postgresDDL} {
+		for _, required := range []string{
+			"CREATE TABLE IF NOT EXISTS config",
+			"CREATE TABLE IF NOT EXISTS agentes",
+			"CHECK (rol IN ('programador','documentador','admin'))",
+			"DEFAULT NULL",
+		} {
+			if !strings.Contains(ddl, required) {
+				t.Fatalf("bootstrap renderizado no contiene %q", required)
+			}
+		}
+	}
+	if !strings.Contains(sqliteDDL, "ultima_sesion DATETIME") {
+		t.Fatalf("sqlite deberia conservar DATETIME en ultima_sesion")
+	}
+	if !strings.Contains(postgresDDL, "ultima_sesion TIMESTAMP") {
+		t.Fatalf("postgres deberia usar TIMESTAMP en ultima_sesion")
+	}
+	if strings.Contains(postgresDDL, "DATETIME") {
+		t.Fatalf("postgres no deberia conservar DATETIME en bootstrap")
+	}
+}
+
 func TestSchemaSeedDataForDriverMySQLUsaInsertIgnore(t *testing.T) {
 	t.Parallel()
 

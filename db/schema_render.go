@@ -7,6 +7,11 @@ import (
 	"strings"
 )
 
+type schemaSectionRenderer struct {
+	sqliteDDL  string
+	renderFor  func(driver string) string
+}
+
 func schemaDDL() string {
 	return schemaDDLForDriver(DriverName())
 }
@@ -37,11 +42,10 @@ func renderDriverColumnSyntax(driver, ddl string) string {
 }
 
 func renderBaseDDLForDriver(driver string) string {
-	sections := schemaBaseSections()
+	sections := schemaBaseSectionRenderers()
 	rendered := make([]string, 0, len(sections))
-	rendered = append(rendered, renderBootstrapSchemaDDLForDriver(driver))
-	for _, section := range sections[1:] {
-		if stmt := renderDriverSectionSyntax(driver, section); strings.TrimSpace(stmt) != "" {
+	for _, section := range sections {
+		if stmt := section.render(driver); strings.TrimSpace(stmt) != "" {
 			rendered = append(rendered, stmt)
 		}
 	}
@@ -58,13 +62,40 @@ func renderDriverSectionSyntax(driver, ddl string) string {
 }
 
 func schemaBaseSections() []string {
-	return []string{
-		schemaBootstrapDDL,
-		schemaWorkflowDDL,
-		schemaCoordinationDDL,
-		schemaRuntimeDDL,
-		schemaCapacityDDL,
-		schemaKnowledgeDDL,
+	renderers := schemaBaseSectionRenderers()
+	sections := make([]string, 0, len(renderers))
+	for _, section := range renderers {
+		sections = append(sections, section.sqliteDDL)
+	}
+	return sections
+}
+
+func schemaBaseSectionRenderers() []schemaSectionRenderer {
+	return []schemaSectionRenderer{
+		{
+			sqliteDDL: schemaBootstrapDDL,
+			renderFor: renderBootstrapSectionDDLForDriver,
+		},
+		{
+			sqliteDDL: schemaWorkflowDDL,
+			renderFor: func(driver string) string { return renderDriverSectionSyntax(driver, schemaWorkflowDDL) },
+		},
+		{
+			sqliteDDL: schemaCoordinationDDL,
+			renderFor: func(driver string) string { return renderDriverSectionSyntax(driver, schemaCoordinationDDL) },
+		},
+		{
+			sqliteDDL: schemaRuntimeDDL,
+			renderFor: func(driver string) string { return renderDriverSectionSyntax(driver, schemaRuntimeDDL) },
+		},
+		{
+			sqliteDDL: schemaCapacityDDL,
+			renderFor: func(driver string) string { return renderDriverSectionSyntax(driver, schemaCapacityDDL) },
+		},
+		{
+			sqliteDDL: schemaKnowledgeDDL,
+			renderFor: func(driver string) string { return renderDriverSectionSyntax(driver, schemaKnowledgeDDL) },
+		},
 	}
 }
 

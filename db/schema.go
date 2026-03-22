@@ -1,24 +1,8 @@
 package db
 
 // schemaBootstrapDDL define configuración mínima global y catálogo de agentes.
-const schemaBootstrapDDL = `
--- ─── Configuración global ──────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS config (
-    clave TEXT PRIMARY KEY,
-    valor TEXT NOT NULL
-);
-
--- ─── Agentes registrados ───────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS agentes (
-    nombre       TEXT PRIMARY KEY,
-    rol          TEXT NOT NULL CHECK (rol IN ('programador','documentador','admin')),
-    activo       INTEGER NOT NULL DEFAULT 0,   -- 1 = en sesión ahora mismo
-    habilitado   INTEGER NOT NULL DEFAULT 1,   -- 0 = retirado por Alberto (no vota, no trabaja)
-    estado_sesion TEXT DEFAULT NULL,
-    ultima_sesion DATETIME
-);
-
-`
+// Sale de un schema spec estructurado para evitar sustituciones ciegas por driver.
+var schemaBootstrapDDL = renderBootstrapSectionDDLForDriver("sqlite")
 
 // schemaWorkflowDDL define el flujo operativo principal de Orquesta.
 const schemaWorkflowDDL = `
