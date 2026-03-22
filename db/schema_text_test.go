@@ -64,8 +64,14 @@ func TestSchemaSeparadoEnDDLYSemillas(t *testing.T) {
 	if strings.Contains(ddl, "INSERT OR IGNORE INTO agentes") {
 		t.Fatalf("el DDL no deberia incluir semillas de agentes")
 	}
+	if strings.Contains(ddl, "INSERT OR IGNORE INTO config") {
+		t.Fatalf("el DDL no deberia incluir semillas de config")
+	}
 	if !strings.Contains(seeds, "INSERT OR IGNORE INTO agentes") {
 		t.Fatalf("las semillas deberian incluir agentes iniciales")
+	}
+	if !strings.Contains(seeds, "INSERT OR IGNORE INTO config") {
+		t.Fatalf("las semillas deberian incluir config inicial")
 	}
 	if !strings.Contains(ddl, "CREATE TABLE IF NOT EXISTS reglas") {
 		t.Fatalf("el DDL deberia incluir tablas de gobernanza")

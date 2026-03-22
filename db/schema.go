@@ -469,23 +469,6 @@ CREATE TABLE IF NOT EXISTS workflows (
     created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- ─── Datos iniciales ───────────────────────────────────────────────────────
-INSERT OR IGNORE INTO agentes (nombre, rol) VALUES
-    ('alberto',    'admin'),
-    ('claude',     'programador'),
-    ('codex1',     'programador'),
-    ('codex2',     'programador'),
-    ('antigravity','documentador');
-
-INSERT OR IGNORE INTO config (clave, valor) VALUES
-    ('distribuidor', 'claude'),
-    ('version',      '1.0.0'),
-    ('pool_handoff_threshold_seconds', '1800'),
-    ('pool_handoff_threshold_ratio', '0.10'),
-    ('pool_default_budget_source', 'manual'),
-    ('model_policy_default_profile', 'implementacion'),
-    ('model_policy_default_reasoning', 'high');
-
 -- ─── Reglas: programador ────────────────────────────────────────────────────
 INSERT OR IGNORE INTO reglas (tipo_agente, categoria, titulo, descripcion) VALUES
 -- Financiero
