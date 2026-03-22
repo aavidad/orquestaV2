@@ -11,7 +11,7 @@ import (
 	"orquesta/storage"
 )
 
-var DB *sql.DB
+var DB *Handle
 
 // Open abre la base de datos usando el conector configurado.
 // Por defecto usa SQLite resuelto desde ORQUESTA_DB o desde el repo actual.
@@ -31,7 +31,7 @@ func Open() error {
 			return fmt.Errorf("aplicando schema: %w", err)
 		}
 	}
-	DB = db
+	DB = newHandle(db, cfg.Driver)
 	if err := DB.Ping(); err != nil {
 		DB.Close()
 		DB = nil
