@@ -28,6 +28,7 @@ func Open() error {
 	if err != nil {
 		return fmt.Errorf("abriendo DB (%s): %w", cfg.Driver, err)
 	}
+	currentStorageConfig = cfg
 	if cfg.BootstrapSchema {
 		if err := aplicarSchema(db); err != nil {
 			db.Close()
@@ -47,7 +48,6 @@ func Open() error {
 	if cfg.BootstrapSchema {
 		postMigraciones()
 	}
-	currentStorageConfig = cfg
 	return nil
 }
 
@@ -381,14 +381,21 @@ func postMigraciones() {
    "3. Votar propuestas con posicion pendiente para antigravity",
    "4. Revisar docs/00_INDICE.md para detectar gaps"]'
 		 WHERE tipo_agente='documentador' AND nombre='inicio-sesion'`,
-		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('pool_handoff_threshold_seconds', '1800')`,
-		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('pool_handoff_threshold_ratio', '0.10')`,
-		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('pool_default_budget_source', 'manual')`,
-		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('model_policy_default_profile', 'implementacion')`,
-		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('model_policy_default_reasoning', 'high')`,
 	}
 	for _, m := range migraciones {
 		_, _ = DB.Exec(m) // ignorar migraciones ya aplicadas
+	}
+	for _, item := range []struct {
+		clave string
+		valor string
+	}{
+		{"pool_handoff_threshold_seconds", "1800"},
+		{"pool_handoff_threshold_ratio", "0.10"},
+		{"pool_default_budget_source", "manual"},
+		{"model_policy_default_profile", "implementacion"},
+		{"model_policy_default_reasoning", "high"},
+	} {
+		ensureDefaultConfig(item.clave, item.valor)
 	}
 	_ = BackfillVotosPendientes()
 }
@@ -514,6 +521,16 @@ func ConfigSet(clave, valor string) error {
 		clave, valor,
 	)
 	return err
+}
+
+func ensureDefaultConfig(clave, valor string) {
+	if DB == nil {
+		return
+	}
+	_, _ = DB.Exec(
+		insertIgnoreValuesSQL("config", []string{"clave", "valor"}, []string{"clave"}),
+		clave, valor,
+	)
 }
 
 // ConfigAll devuelve toda la configuración.
