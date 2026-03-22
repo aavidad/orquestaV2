@@ -44,10 +44,12 @@ func TestOpenNuevaBDIncluyeEsquemaExtendido(t *testing.T) {
 	}
 
 	for _, table := range []string{"proyectos", "asignaciones", "conectores", "locks", "worktrees", "runtime_handles", "runtime_orders", "pools_capacidad", "pool_modelos", "decisiones_proyecto", "documentos_externos", "git_merges"} {
-		var name string
-		err := DB.QueryRow(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&name)
+		exists, err := TableExists(table)
 		if err != nil {
-			t.Fatalf("tabla %s no creada: %v", table, err)
+			t.Fatalf("TableExists(%s): %v", table, err)
+		}
+		if !exists {
+			t.Fatalf("tabla %s no creada", table)
 		}
 	}
 
@@ -184,11 +186,11 @@ func TestOpenSQLiteSinBootstrapNoCreaEsquema(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 
-	var count int
-	if err := DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='proyectos'`).Scan(&count); err != nil {
-		t.Fatalf("sqlite_master: %v", err)
+	exists, err := TableExists("proyectos")
+	if err != nil {
+		t.Fatalf("TableExists(proyectos): %v", err)
 	}
-	if count != 0 {
+	if exists {
 		t.Fatalf("no esperaba esquema bootstrap con ORQUESTA_DB_BOOTSTRAP=false")
 	}
 }
