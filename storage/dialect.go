@@ -72,5 +72,5 @@ func (d Dialect) RebindParameters() bool {
 }
 
 func (d Dialect) SupportsSchemaBootstrap() bool {
-	return d.Name == "sqlite"
+	return d.Name == "sqlite" || d.Name == "postgres"
 }

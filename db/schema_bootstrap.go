@@ -105,10 +105,6 @@ var schemaSeedGroups = []schemaSeedGroup{
 	},
 }
 
-func schemaDDL() string {
-	return strings.TrimSpace(Schema)
-}
-
 func schemaSeedData() string {
 	return schemaSeedDataForDriver(DriverName())
 }

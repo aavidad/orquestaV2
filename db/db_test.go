@@ -135,10 +135,10 @@ func TestOpenFallaSiBootstrapSeFuerzaEnDriverNoSoportado(t *testing.T) {
 	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
 		t.Fatalf("setenv ORQUESTA_DB: %v", err)
 	}
-	if err := os.Setenv("ORQUESTA_DB_DRIVER", "postgres"); err != nil {
+	if err := os.Setenv("ORQUESTA_DB_DRIVER", "mysql"); err != nil {
 		t.Fatalf("setenv ORQUESTA_DB_DRIVER: %v", err)
 	}
-	if err := os.Setenv("ORQUESTA_DB_DSN", "postgres://example"); err != nil {
+	if err := os.Setenv("ORQUESTA_DB_DSN", "mysql://example"); err != nil {
 		t.Fatalf("setenv ORQUESTA_DB_DSN: %v", err)
 	}
 	if err := os.Setenv("ORQUESTA_DB_BOOTSTRAP", "true"); err != nil {
@@ -149,7 +149,7 @@ func TestOpenFallaSiBootstrapSeFuerzaEnDriverNoSoportado(t *testing.T) {
 	if err == nil {
 		t.Fatalf("esperaba error por bootstrap no soportado")
 	}
-	if !strings.Contains(err.Error(), "bootstrap de schema no soportado para driver postgres") {
+	if !strings.Contains(err.Error(), "bootstrap de schema no soportado para driver mysql") {
 		t.Fatalf("error inesperado: %v", err)
 	}
 }

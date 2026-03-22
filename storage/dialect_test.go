@@ -53,8 +53,8 @@ func TestDialectSupportsSchemaBootstrap(t *testing.T) {
 	if !DialectForDriver("sqlite").SupportsSchemaBootstrap() {
 		t.Fatalf("sqlite deberia soportar bootstrap de schema")
 	}
-	if DialectForDriver("postgres").SupportsSchemaBootstrap() {
-		t.Fatalf("postgres no deberia anunciar bootstrap de schema SQLite-first")
+	if !DialectForDriver("postgres").SupportsSchemaBootstrap() {
+		t.Fatalf("postgres deberia anunciar bootstrap de schema renderizado")
 	}
 	if DialectForDriver("mysql").SupportsSchemaBootstrap() {
 		t.Fatalf("mysql no deberia anunciar bootstrap de schema SQLite-first")
