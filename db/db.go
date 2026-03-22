@@ -1,7 +1,6 @@
 package db
 
 import (
-	"database/sql"
 	"fmt"
 	"os"
 	"os/exec"
@@ -33,6 +32,10 @@ func Open() error {
 		if err := aplicarSchema(db); err != nil {
 			db.Close()
 			return fmt.Errorf("aplicando schema: %w", err)
+		}
+		if err := aplicarSemillasSchema(db); err != nil {
+			db.Close()
+			return fmt.Errorf("aplicando semillas de schema: %w", err)
 		}
 	}
 	DB = newHandle(db, cfg.Driver)
@@ -484,11 +487,6 @@ func esRepoOrquesta(nombre string) bool {
 func existeFichero(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
-}
-
-func aplicarSchema(db *sql.DB) error {
-	_, err := db.Exec(Schema)
-	return err
 }
 
 // Audit registra una acción en el log de auditoría.

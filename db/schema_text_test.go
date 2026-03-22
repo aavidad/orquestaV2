@@ -49,3 +49,25 @@ func TestSchemaIncluyeCoordinacionMultiProyectoYMCP(t *testing.T) {
 		}
 	}
 }
+
+func TestSchemaSeparadoEnDDLYSemillas(t *testing.T) {
+	t.Parallel()
+
+	ddl := schemaDDL()
+	seeds := schemaSeedData()
+	if ddl == "" {
+		t.Fatalf("schema DDL vacio")
+	}
+	if seeds == "" {
+		t.Fatalf("schema seeds vacio")
+	}
+	if strings.Contains(ddl, "INSERT OR IGNORE INTO agentes") {
+		t.Fatalf("el DDL no deberia incluir semillas de agentes")
+	}
+	if !strings.Contains(seeds, "INSERT OR IGNORE INTO agentes") {
+		t.Fatalf("las semillas deberian incluir agentes iniciales")
+	}
+	if !strings.Contains(ddl, "CREATE TABLE IF NOT EXISTS reglas") {
+		t.Fatalf("el DDL deberia incluir tablas de gobernanza")
+	}
+}
