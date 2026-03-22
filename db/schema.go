@@ -469,39 +469,6 @@ CREATE TABLE IF NOT EXISTS workflows (
     created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- ─── Skills: programador ────────────────────────────────────────────────────
-INSERT OR IGNORE INTO skills (tipo_agente, nombre, descripcion, cuando_usar) VALUES
-('programador','create-module',
- 'Crear un módulo nuevo completo (14 pasos): dominio, repositorio, servicio, handler, migración, tests, integración.',
- 'Cuando se asigna un módulo nuevo de la lista de Ola 2 o posterior.'),
-('programador','develop-feature',
- 'Desarrollar una feature dentro de un módulo existente sin romper otros módulos.',
- 'Cuando hay una tarea de nueva funcionalidad dentro de un módulo ya existente.'),
-('programador','fix-bug',
- 'Corregir un bug con mínimo impacto, sin refactorizar código no relacionado.',
- 'Cuando hay un bug confirmado con reproducción conocida.'),
-('programador','security-review',
- 'Auditar seguridad de un módulo: RBAC, cifrado, auditoría, inyección SQL, OWASP Top 10.',
- 'Al cerrar un módulo o cuando se detecta deuda técnica de seguridad (ej: OP-022).'),
-('programador','autofirma-integration',
- 'Integrar firma digital AutoFirma según estándar @firma de la AEAT.',
- 'Cuando se implementa firma electrónica en flujos administrativos. Ver OP-027 (📋 BACKLOG).'),
-('programador','administracion-publica-segura',
- 'Referencia normativa ENS/LOPDGDD para diseño de módulos de administración pública.',
- 'Al diseñar módulos con datos personales o procesos sujetos a ENS.');
-
--- ─── Skills: documentador ───────────────────────────────────────────────────
-INSERT OR IGNORE INTO skills (tipo_agente, nombre, descripcion, cuando_usar) VALUES
-('documentador','document-module',
- 'Generar documentación completa de un módulo cerrado: descripción, endpoints, entidades, flujos.',
- 'Al recibir notificación de cierre de módulo de un agente programador.'),
-('documentador','update-index',
- 'Actualizar el índice maestro docs/00_INDICE.md con nuevos módulos documentados.',
- 'Después de documentar cualquier módulo.'),
-('documentador','review-docs',
- 'Revisar documentación existente por coherencia, completitud y actualidad.',
- 'Cuando se detectan discrepancias entre el código y la documentación.');
-
 -- ─── Workflows: programador (claude/codex) ──────────────────────────────────
 INSERT OR IGNORE INTO workflows (tipo_agente, nombre, descripcion, pasos) VALUES
 ('programador','inicio-sesion',
