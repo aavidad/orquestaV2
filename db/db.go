@@ -62,12 +62,7 @@ func postMigrationStatements() []string {
 }
 
 func postMigrationStatementsForDriver(driver string) []string {
-	switch normalizedDriverName(driver) {
-	case "postgres":
-		return nil
-	default:
-		return postMigrationStatementsSQLite()
-	}
+	return fallbackSchemaBackendSpec(driver).postMigrations()
 }
 
 func postMigrationStatementsSQLite() []string {

@@ -24,12 +24,7 @@ func renderPostgresBaseDDL() string {
 }
 
 func schemaDDLPartsForDriver(driver string) []string {
-	switch normalizedDriverName(driver) {
-	case "postgres":
-		return []string{renderPostgresBaseDDL(), renderPostgresAuxDDL()}
-	default:
-		return []string{renderSQLiteBaseDDL(), renderSQLiteAuxDDL()}
-	}
+	return fallbackSchemaBackendSpec(driver).ddlParts()
 }
 
 func renderDriverColumnSyntax(driver, ddl string) string {
@@ -44,7 +39,8 @@ func renderDriverColumnSyntax(driver, ddl string) string {
 func renderBaseDDLForDriver(driver string) string {
 	sections := schemaBaseSections()
 	rendered := make([]string, 0, len(sections))
-	for _, section := range sections {
+	rendered = append(rendered, renderBootstrapSchemaDDLForDriver(driver))
+	for _, section := range sections[1:] {
 		if stmt := renderDriverSectionSyntax(driver, section); strings.TrimSpace(stmt) != "" {
 			rendered = append(rendered, stmt)
 		}

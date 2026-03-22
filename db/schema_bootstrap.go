@@ -188,18 +188,9 @@ func aplicarSemillasSchema(db *sql.DB) error {
 }
 
 func bootstrapPlanForDriver(driver string) (bootstrapPlan, bool) {
-	switch normalizedDriverName(driver) {
-	case "sqlite":
-		return bootstrapPlan{
-			DDL:  joinDDLParts(schemaDDLPartsForDriver("sqlite")...),
-			Seed: schemaSeedDataForDriver("sqlite"),
-		}, true
-	case "postgres":
-		return bootstrapPlan{
-			DDL:  joinDDLParts(schemaDDLPartsForDriver("postgres")...),
-			Seed: schemaSeedDataForDriver("postgres"),
-		}, true
-	default:
+	spec, ok := schemaBackendSpecForDriver(driver)
+	if !ok {
 		return bootstrapPlan{}, false
 	}
+	return spec.bootstrapPlan()
 }
