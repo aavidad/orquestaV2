@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -39,7 +40,60 @@ func renderPostgresSchemaDDL(schema string) string {
 		line = strings.ReplaceAll(line, " DATETIME", " TIMESTAMP")
 		out = append(out, line)
 	}
-	return strings.TrimSpace(strings.Join(out, "\n"))
+	ddl := strings.TrimSpace(strings.Join(out, "\n"))
+	if ddl == "" {
+		return ""
+	}
+	return ddl + "\n\n" + renderPostgresUpdatedAtDDL()
+}
+
+func renderPostgresUpdatedAtDDL() string {
+	var b strings.Builder
+	b.WriteString(`CREATE OR REPLACE FUNCTION orquesta_set_updated_at()
+RETURNS trigger AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+`)
+	for _, table := range postgresUpdatedAtTables() {
+		triggerName := "trig_" + table + "_updated"
+		b.WriteString("\nDO $$\nBEGIN\n")
+		b.WriteString("    IF NOT EXISTS (\n")
+		b.WriteString("        SELECT 1 FROM pg_trigger WHERE tgname = ")
+		b.WriteString(strconv.Quote(triggerName))
+		b.WriteString("\n    ) THEN\n")
+		b.WriteString("        CREATE TRIGGER ")
+		b.WriteString(triggerName)
+		b.WriteString("\n")
+		b.WriteString("        BEFORE UPDATE ON ")
+		b.WriteString(table)
+		b.WriteString("\n")
+		b.WriteString("        FOR EACH ROW EXECUTE FUNCTION orquesta_set_updated_at();\n")
+		b.WriteString("    END IF;\nEND $$;\n")
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func postgresUpdatedAtTables() []string {
+	return []string{
+		"tareas",
+		"propuestas",
+		"votos",
+		"proyectos",
+		"asignaciones",
+		"conectores",
+		"locks",
+		"worktrees",
+		"runtime_handles",
+		"pools_capacidad",
+		"pool_modelos",
+		"politicas_modelo",
+		"decisiones_proyecto",
+		"documentos_externos",
+		"git_merges",
+	}
 }
 
 func aplicarDDL(db *sql.DB, ddl string) error {

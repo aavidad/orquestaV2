@@ -154,6 +154,18 @@ func TestSchemaDDLForDriverPostgresReduceSintaxisSQLite(t *testing.T) {
 	if !strings.Contains(ddl, "CREATE TABLE IF NOT EXISTS proyectos") {
 		t.Fatalf("postgres deberia conservar las tablas base")
 	}
+	if !strings.Contains(ddl, "CREATE OR REPLACE FUNCTION orquesta_set_updated_at()") {
+		t.Fatalf("postgres deberia declarar la funcion de updated_at")
+	}
+	if count := strings.Count(ddl, "EXECUTE FUNCTION orquesta_set_updated_at()"); count != len(postgresUpdatedAtTables()) {
+		t.Fatalf("postgres deberia declarar %d triggers updated_at; obtuvo %d", len(postgresUpdatedAtTables()), count)
+	}
+	if !strings.Contains(ddl, "BEFORE UPDATE ON tareas") {
+		t.Fatalf("postgres deberia recrear trigger updated_at para tareas")
+	}
+	if strings.Contains(ddl, "UPDATE tareas SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;") {
+		t.Fatalf("postgres no deberia conservar el cuerpo de trigger SQLite")
+	}
 }
 
 func TestBootstrapPlanForDriver(t *testing.T) {
