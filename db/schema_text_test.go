@@ -199,6 +199,63 @@ func TestSchemaBaseDDLNoIncluyeDDLAuxiliarEmbebido(t *testing.T) {
 	}
 }
 
+func TestSchemaBaseDDLComponeSeccionesSemanticas(t *testing.T) {
+	t.Parallel()
+
+	sections := []struct {
+		name string
+		ddl  string
+		want string
+	}{
+		{name: "bootstrap", ddl: schemaBootstrapDDL, want: "CREATE TABLE IF NOT EXISTS agentes"},
+		{name: "workflow", ddl: schemaWorkflowDDL, want: "CREATE TABLE IF NOT EXISTS sesiones"},
+		{name: "coordination", ddl: schemaCoordinationDDL, want: "CREATE TABLE IF NOT EXISTS worktrees"},
+		{name: "runtime", ddl: schemaRuntimeDDL, want: "CREATE TABLE IF NOT EXISTS runtime_orders"},
+		{name: "capacity", ddl: schemaCapacityDDL, want: "CREATE TABLE IF NOT EXISTS politicas_modelo"},
+		{name: "knowledge", ddl: schemaKnowledgeDDL, want: "CREATE TABLE IF NOT EXISTS workflows"},
+	}
+
+	for _, section := range sections {
+		if strings.TrimSpace(section.ddl) == "" {
+			t.Fatalf("seccion %s vacia", section.name)
+		}
+		if !strings.Contains(section.ddl, section.want) {
+			t.Fatalf("seccion %s no contiene %q", section.name, section.want)
+		}
+	}
+
+	for _, required := range []string{
+		"CREATE TABLE IF NOT EXISTS agentes",
+		"CREATE TABLE IF NOT EXISTS sesiones",
+		"CREATE TABLE IF NOT EXISTS worktrees",
+		"CREATE TABLE IF NOT EXISTS runtime_orders",
+		"CREATE TABLE IF NOT EXISTS politicas_modelo",
+		"CREATE TABLE IF NOT EXISTS workflows",
+	} {
+		if !strings.Contains(schemaBaseDDL, required) {
+			t.Fatalf("schemaBaseDDL no contiene %q", required)
+		}
+	}
+}
+
+func TestSchemaBaseSectionsMantieneOrdenEsperado(t *testing.T) {
+	t.Parallel()
+
+	sections := schemaBaseSections()
+	if len(sections) != 6 {
+		t.Fatalf("schemaBaseSections deberia exponer 6 secciones; obtuvo %d", len(sections))
+	}
+	if sections[0] != schemaBootstrapDDL {
+		t.Fatalf("la primera seccion deberia ser bootstrap")
+	}
+	if sections[1] != schemaWorkflowDDL {
+		t.Fatalf("la segunda seccion deberia ser workflow")
+	}
+	if sections[5] != schemaKnowledgeDDL {
+		t.Fatalf("la ultima seccion deberia ser knowledge")
+	}
+}
+
 func TestBootstrapPlanForDriver(t *testing.T) {
 	t.Parallel()
 
@@ -251,5 +308,28 @@ func TestRenderDriverColumnSyntaxPostgres(t *testing.T) {
 	}
 	if !strings.Contains(got, " TIMESTAMP NOT NULL") {
 		t.Fatalf("postgres deberia convertir DATETIME a TIMESTAMP: %s", got)
+	}
+}
+
+func TestRenderBaseDDLForDriverComponeSecciones(t *testing.T) {
+	t.Parallel()
+
+	for _, driver := range []string{"sqlite", "postgres"} {
+		ddl := renderBaseDDLForDriver(driver)
+		if strings.TrimSpace(ddl) == "" {
+			t.Fatalf("%s deberia producir DDL base", driver)
+		}
+		for _, required := range []string{
+			"CREATE TABLE IF NOT EXISTS agentes",
+			"CREATE TABLE IF NOT EXISTS sesiones",
+			"CREATE TABLE IF NOT EXISTS worktrees",
+			"CREATE TABLE IF NOT EXISTS runtime_orders",
+			"CREATE TABLE IF NOT EXISTS politicas_modelo",
+			"CREATE TABLE IF NOT EXISTS workflows",
+		} {
+			if !strings.Contains(ddl, required) {
+				t.Fatalf("%s no contiene %q", driver, required)
+			}
+		}
 	}
 }

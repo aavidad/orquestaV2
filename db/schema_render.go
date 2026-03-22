@@ -16,17 +16,11 @@ func schemaDDLForDriver(driver string) string {
 }
 
 func renderSQLiteBaseDDL() string {
-	statements := schemaStatements(schemaBaseDDL)
-	return strings.Join(statements, "\n\n")
+	return renderBaseDDLForDriver("sqlite")
 }
 
 func renderPostgresBaseDDL() string {
-	statements := schemaStatements(schemaBaseDDL)
-	out := make([]string, 0, len(statements))
-	for _, stmt := range statements {
-		out = append(out, renderDriverColumnSyntax("postgres", stmt))
-	}
-	return strings.Join(out, "\n\n")
+	return renderBaseDDLForDriver("postgres")
 }
 
 func schemaDDLPartsForDriver(driver string) []string {
@@ -45,6 +39,37 @@ func renderDriverColumnSyntax(driver, ddl string) string {
 		ddl = strings.ReplaceAll(ddl, " DATETIME", " TIMESTAMP")
 	}
 	return ddl
+}
+
+func renderBaseDDLForDriver(driver string) string {
+	sections := schemaBaseSections()
+	rendered := make([]string, 0, len(sections))
+	for _, section := range sections {
+		if stmt := renderDriverSectionSyntax(driver, section); strings.TrimSpace(stmt) != "" {
+			rendered = append(rendered, stmt)
+		}
+	}
+	return joinDDLParts(rendered...)
+}
+
+func renderDriverSectionSyntax(driver, ddl string) string {
+	statements := schemaStatements(ddl)
+	out := make([]string, 0, len(statements))
+	for _, stmt := range statements {
+		out = append(out, renderDriverColumnSyntax(driver, stmt))
+	}
+	return strings.Join(out, "\n\n")
+}
+
+func schemaBaseSections() []string {
+	return []string{
+		schemaBootstrapDDL,
+		schemaWorkflowDDL,
+		schemaCoordinationDDL,
+		schemaRuntimeDDL,
+		schemaCapacityDDL,
+		schemaKnowledgeDDL,
+	}
 }
 
 func renderSQLiteAuxDDL() string {
