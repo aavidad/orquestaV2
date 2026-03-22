@@ -3,6 +3,7 @@ package localrpc
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -52,6 +53,30 @@ func TestSaveLoadAndRemoveState(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("se esperaba eliminar %s", path)
+	}
+}
+
+func TestSaveStateUsesPrivatePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permisos POSIX no aplican en windows")
+	}
+
+	path := filepath.Join(t.TempDir(), "rpc-state.json")
+	if err := SaveState(path, &State{
+		Addr:      "127.0.0.1:17899",
+		PID:       42,
+		ScopeID:   CurrentScopeID(),
+		StartedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("SaveState: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		t.Fatalf("permisos inesperados: %o", mode)
 	}
 }
 

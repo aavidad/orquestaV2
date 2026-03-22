@@ -2,8 +2,8 @@ package localrpc
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -61,6 +61,9 @@ func SaveState(path string, state *State) error {
 		return err
 	}
 	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpPath, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmpPath, path)
