@@ -9,6 +9,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
@@ -18,15 +19,82 @@ var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Muestra el estado global del proyecto",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		var (
+			agentes             []*db.Agente
+			counts              map[string]int
+			proyectos           []*db.Proyecto
+			asignacionesActivas map[int64]int
+			sesionesPorProyecto map[int64]int
+			abiertas            []*db.Propuesta
+			tareas              []*db.Tarea
+		)
+		var statusResp apiStatusResponse
+		if ok, err := apiGet("/api/status", &statusResp); err != nil {
+			return err
+		} else if ok {
+			agentes = statusResp.Agentes
+			counts = statusResp.ConteoTareas
+			proyectos = statusResp.Proyectos
+			asignacionesActivas = statusResp.AsignacionesActivas
+			sesionesPorProyecto = statusResp.SesionesActivas
+			abiertas = statusResp.PropuestasAbiertas
+			for _, t := range counts {
+				_ = t
+			}
+			var tareasResp apiTareasResponse
+			if ok, err := apiGetQuery("/api/tareas", mapToValues(map[string]string{"estado": string(db.EstadoEnProgreso)}), &tareasResp); err != nil {
+				return err
+			} else if ok {
+				tareas = tareasResp.Tareas
+			}
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			var err error
+			agentes, err = db.ListarAgentes()
+			if err != nil {
+				return err
+			}
+			counts, err = db.ContarTareasPorEstado()
+			if err != nil {
+				return err
+			}
+			proyectos, err = db.ListarProyectos(db.FiltroProyectos{})
+			if err != nil {
+				return err
+			}
+			asignacionesActivas, err = db.ContarAsignacionesActivasPorProyecto()
+			if err != nil {
+				return err
+			}
+			sesionesActivas, err := db.ListarSesionesActivas()
+			if err != nil {
+				return err
+			}
+			sesionesPorProyecto = make(map[int64]int)
+			for _, s := range sesionesActivas {
+				if s.ProyectoID != nil {
+					sesionesPorProyecto[*s.ProyectoID]++
+				}
+			}
+			estado := db.PropuestaAbierta
+			abiertas, err = db.ListarPropuestas(&estado, nil)
+			if err != nil {
+				return err
+			}
+			enProgreso := db.EstadoEnProgreso
+			tareas, err = db.ListarTareas(db.FiltroTareas{Estado: &enProgreso})
+			if err != nil {
+				return err
+			}
+		}
+
 		fmt.Printf("╔═══════════════════════════════════════════════════════════╗\n")
 		fmt.Printf("║           ORQUESTA — ESTADO DEL PROYECTO                 ║\n")
 		fmt.Printf("╚═══════════════════════════════════════════════════════════╝\n\n")
 
 		// ─── Agentes activos ─────────────────────────────────────────────
-		agentes, err := db.ListarAgentes()
-		if err != nil {
-			return err
-		}
 		activos := 0
 		for _, a := range agentes {
 			if a.Activo {
@@ -43,11 +111,17 @@ var statusCmd = &cobra.Command{
 		}
 		fmt.Println()
 
-		// ─── Tareas ──────────────────────────────────────────────────────
-		counts, err := db.ContarTareasPorEstado()
-		if err != nil {
-			return err
+		// ─── Proyectos y asignaciones ───────────────────────────────────
+		if len(proyectos) > 0 {
+			fmt.Printf("🗂  Proyectos registrados: %d\n", len(proyectos))
+			for _, p := range proyectos {
+				fmt.Printf("   %-12s [%s]  asignados=%d  sesiones_activas=%d\n",
+					p.Slug, p.Tipo, asignacionesActivas[p.ID], sesionesPorProyecto[p.ID])
+			}
+			fmt.Println()
 		}
+
+		// ─── Tareas ──────────────────────────────────────────────────────
 		totalTareas := 0
 		completadasN := 0
 		for estado, n := range counts {
@@ -71,25 +145,28 @@ var statusCmd = &cobra.Command{
 		fmt.Println()
 
 		// ─── Propuestas abiertas ─────────────────────────────────────────
-		estado := db.PropuestaAbierta
-		abiertas, err := db.ListarPropuestas(&estado)
-		if err != nil {
-			return err
-		}
 		fmt.Printf("📣 Propuestas abiertas: %d\n", len(abiertas))
 		for _, p := range abiertas {
-			ac, des, _, pend, _ := db.ContarVotos(p.ID)
+			ac, des, _, pend := 0, 0, 0, 0
+			for _, v := range p.Votos {
+				switch v.Posicion {
+				case "acuerdo":
+					ac++
+				case "desacuerdo":
+					des++
+				case "pendiente":
+					pend++
+				}
+			}
+			if len(p.Votos) == 0 && db.DB != nil {
+				ac, des, _, pend, _ = db.ContarVotos(p.ID)
+			}
 			fmt.Printf("   %s %-40s  ✓%d ✗%d ⏳%d\n",
 				p.Codigo, truncar(p.Titulo, 38), ac, des, pend)
 		}
 		fmt.Println()
 
 		// ─── Tareas en progreso ───────────────────────────────────────────
-		enProgreso := db.EstadoEnProgreso
-		tareas, err := db.ListarTareas(db.FiltroTareas{Estado: &enProgreso})
-		if err != nil {
-			return err
-		}
 		if len(tareas) > 0 {
 			fmt.Printf("⚙️  En progreso ahora mismo:\n")
 			for _, t := range tareas {
@@ -112,4 +189,14 @@ func truncar(s string, n int) string {
 		return s
 	}
 	return string(runes[:n-1]) + "…"
+}
+
+func mapToValues(entries map[string]string) url.Values {
+	values := url.Values{}
+	for key, value := range entries {
+		if value != "" {
+			values.Set(key, value)
+		}
+	}
+	return values
 }

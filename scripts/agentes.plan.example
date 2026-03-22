@@ -1,0 +1,7 @@
+# agente|rol|ruta_proyecto|titulo_tarea|prioridad|modulo|nota_asignacion|conector|comando_runtime
+
+Codex2|programador|/home/alberto/Trabajo/PlataformaMunicipal/orquestador|Locks y worktrees|alta|orquestador|locks y worktrees|codex-cli|codex
+Codex3|programador|/home/alberto/Trabajo/PlataformaMunicipal/orquestador|Memoria de proyecto y hallazgos|alta|orquestador|memoria y hallazgos|codex-cli|codex
+Codex4|programador|/home/alberto/Trabajo/PlataformaMunicipal/orquestador|Drift detection|media|orquestador|drift detection|codex-cli|codex
+Codex5|programador|/home/alberto/Trabajo/PlataformaMunicipal/orquestador|Servidor MCP y recursos|alta|orquestador|mcp server|codex-cli|codex
+Codex6|programador|/home/alberto/Trabajo/PlataformaMunicipal/orquestador|Web de gestión y pruebas API|media|orquestador|web y api|codex-cli|codex

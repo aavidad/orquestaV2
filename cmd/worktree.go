@@ -1,0 +1,136 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
+package cmd
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/spf13/cobra"
+	"orquesta/coordination"
+	"orquesta/db"
+)
+
+var worktreeCmd = &cobra.Command{
+	Use:   "worktree",
+	Short: "Gestión de worktrees aislados por proyecto/tarea",
+}
+
+var worktreeListarCmd = &cobra.Command{
+	Use:   "listar",
+	Short: "Lista worktrees registrados",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		repo := db.SQLiteWorktreeRepository{}
+		filter := coordination.WorktreeFilter{}
+		if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
+			filter.Agent = &agente
+		}
+		if proyectoRef, _ := cmd.Flags().GetString("proyecto"); strings.TrimSpace(proyectoRef) != "" {
+			proyecto, err := db.GetProyecto(proyectoRef)
+			if err != nil {
+				return err
+			}
+			filter.ProjectID = &proyecto.ID
+		}
+		if estadoStr, _ := cmd.Flags().GetString("estado"); strings.TrimSpace(estadoStr) != "" {
+			estado := coordination.WorktreeState(estadoStr)
+			filter.State = &estado
+		}
+		worktrees, err := repo.List(filter)
+		if err != nil {
+			return err
+		}
+		if len(worktrees) == 0 {
+			fmt.Println("No hay worktrees con ese filtro.")
+			return nil
+		}
+		fmt.Printf("%-5s %-14s %-10s %-20s %s\n", "ID", "PROYECTO", "AGENTE", "BRANCH", "RUTA")
+		for _, worktree := range worktrees {
+			fmt.Printf("%-5d %-14d %-10s %-20s %s\n", worktree.ID, worktree.ProjectID, worktree.Agent, truncar(worktree.Branch, 20), worktree.Path)
+		}
+		return nil
+	},
+}
+
+var worktreeCrearCmd = &cobra.Command{
+	Use:   "crear <agente> <proyecto>",
+	Short: "Crea un worktree aislado para trabajo paralelo",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		svc := newCoordinationService()
+		var taskID *int64
+		if tareaRaw, _ := cmd.Flags().GetInt64("tarea"); tareaRaw > 0 {
+			taskID = &tareaRaw
+		}
+		var lockID *int64
+		if lockRaw, _ := cmd.Flags().GetInt64("lock"); lockRaw > 0 {
+			lockID = &lockRaw
+		}
+		name, _ := cmd.Flags().GetString("nombre")
+		branch, _ := cmd.Flags().GetString("branch")
+		baseRef, _ := cmd.Flags().GetString("base-ref")
+		reason, _ := cmd.Flags().GetString("motivo")
+		worktree, err := svc.PrepareWorktree(coordination.PrepareWorktreeInput{
+			ProjectRef: args[1],
+			Agent:      args[0],
+			TaskID:     taskID,
+			LockID:     lockID,
+			Name:       name,
+			Branch:     branch,
+			BaseRef:    baseRef,
+			Reason:     reason,
+		})
+		if err != nil {
+			return err
+		}
+		fmt.Printf("✓ Worktree %d creado para %s\n", worktree.ID, worktree.Agent)
+		fmt.Printf("  branch=%s\n", worktree.Branch)
+		fmt.Printf("  ruta=%s\n", worktree.Path)
+		return nil
+	},
+}
+
+var worktreeCerrarCmd = &cobra.Command{
+	Use:   "cerrar <id>",
+	Short: "Cierra un worktree y opcionalmente lo elimina del repo",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		svc := newCoordinationService()
+		id, err := strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
+			return err
+		}
+		remove, _ := cmd.Flags().GetBool("eliminar")
+		reason, _ := cmd.Flags().GetString("motivo")
+		worktree, err := svc.CloseWorktree(id, remove, reason)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("✓ Worktree %d cerrado (%s)\n", worktree.ID, worktree.Path)
+		return nil
+	},
+}
+
+func init() {
+	worktreeListarCmd.Flags().String("agente", "", "Filtrar por agente")
+	worktreeListarCmd.Flags().String("proyecto", "", "Filtrar por proyecto")
+	worktreeListarCmd.Flags().String("estado", "", "Filtrar por estado")
+
+	worktreeCrearCmd.Flags().Int64("tarea", 0, "Tarea asociada")
+	worktreeCrearCmd.Flags().Int64("lock", 0, "Lock asociado")
+	worktreeCrearCmd.Flags().String("nombre", "", "Nombre del worktree")
+	worktreeCrearCmd.Flags().String("branch", "", "Branch del worktree")
+	worktreeCrearCmd.Flags().String("base-ref", "HEAD", "Referencia base para crear el worktree")
+	worktreeCrearCmd.Flags().String("motivo", "", "Motivo del worktree")
+
+	worktreeCerrarCmd.Flags().Bool("eliminar", false, "Eliminar también el worktree del repo")
+	worktreeCerrarCmd.Flags().String("motivo", "", "Motivo del cierre")
+
+	worktreeCmd.AddCommand(worktreeListarCmd, worktreeCrearCmd, worktreeCerrarCmd)
+}

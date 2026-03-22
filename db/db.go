@@ -118,6 +118,57 @@ func postMigraciones() error {
 			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			cerrada_at DATETIME
 		)`,
+		`CREATE TABLE IF NOT EXISTS runtime_instances (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			agente TEXT NOT NULL REFERENCES agentes(nombre),
+			proyecto_id INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+			sesion_id INTEGER REFERENCES sesiones(id) ON DELETE SET NULL,
+			parent_runtime_id INTEGER REFERENCES runtime_instances(id) ON DELETE SET NULL,
+			provider TEXT NOT NULL DEFAULT '',
+			connector TEXT NOT NULL DEFAULT '',
+			external_session_id TEXT NOT NULL DEFAULT '',
+			logical_state TEXT NOT NULL DEFAULT 'arrancando',
+			process_state TEXT NOT NULL DEFAULT 'desconocido',
+			pid INTEGER,
+			ppid INTEGER,
+			child_count INTEGER NOT NULL DEFAULT 0,
+			thread_count INTEGER NOT NULL DEFAULT 0,
+			model TEXT NOT NULL DEFAULT '',
+			reasoning TEXT NOT NULL DEFAULT '',
+			task_profile TEXT NOT NULL DEFAULT '',
+			cwd TEXT NOT NULL DEFAULT '',
+			branch TEXT NOT NULL DEFAULT '',
+			last_event_at DATETIME,
+			last_heartbeat_at DATETIME,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_instances_sesion
+			ON runtime_instances(sesion_id)
+			WHERE sesion_id IS NOT NULL`,
+		`CREATE TABLE IF NOT EXISTS runtime_telemetry_samples (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			runtime_id INTEGER NOT NULL REFERENCES runtime_instances(id) ON DELETE CASCADE,
+			cpu_pct REAL NOT NULL DEFAULT 0,
+			mem_bytes INTEGER NOT NULL DEFAULT 0,
+			rss_bytes INTEGER NOT NULL DEFAULT 0,
+			open_fds INTEGER NOT NULL DEFAULT 0,
+			child_count INTEGER NOT NULL DEFAULT 0,
+			thread_count INTEGER NOT NULL DEFAULT 0,
+			logical_state TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL DEFAULT '',
+			sample_json TEXT NOT NULL DEFAULT '{}',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS runtime_events (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			runtime_id INTEGER NOT NULL REFERENCES runtime_instances(id) ON DELETE CASCADE,
+			kind TEXT NOT NULL,
+			level TEXT NOT NULL DEFAULT 'info',
+			message TEXT NOT NULL DEFAULT '',
+			payload_json TEXT NOT NULL DEFAULT '{}',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
 		`CREATE TABLE IF NOT EXISTS conectores (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			slug TEXT NOT NULL UNIQUE,
@@ -155,6 +206,11 @@ func postMigraciones() error {
 			AFTER UPDATE ON worktrees
 		BEGIN
 			UPDATE worktrees SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+		END`,
+		`CREATE TRIGGER IF NOT EXISTS trig_runtime_instances_updated
+			AFTER UPDATE ON runtime_instances
+		BEGIN
+			UPDATE runtime_instances SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 		END`,
 		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('workspace_root','')`,
 		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('agent_loop_mode','sticky')`,

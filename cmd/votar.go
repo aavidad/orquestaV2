@@ -18,9 +18,10 @@ import (
 var votarCmd = &cobra.Command{
 	Use:   "votar <codigo-op> <acuerdo|desacuerdo|abstencion> [comentario...]",
 	Short: "Vota una propuesta",
-	Long: `Registra el voto de un agente en una propuesta OP-XXX.
+Long: `Registra el voto de un agente en una propuesta OP-XXX.
 Reglas de consenso:
-  - Si todos los agentes votan acuerdo → consenso automático y propuesta cerrada.
+  - Solo hay consenso automático si todos los votantes habilitados votan acuerdo.
+  - Además, se exigen al menos 2 votos de acuerdo y al menos 2 votos de acuerdo de agentes no autores.
   - Si cualquier agente vota desacuerdo → Alberto decide manualmente.
 
 Ejemplos:
@@ -62,6 +63,39 @@ Ejemplos:
 			return fmt.Errorf("posición '%s' no válida", posicion)
 		}
 
+		if ok, err := apiPost("/api/propuestas/"+codigo+"/accion", apiPropuestaAccionRequest{
+			Accion:     "votar",
+			Agente:     agente,
+			Posicion:   posicion,
+			Comentario: strings.TrimSpace(comentario),
+		}, &map[string]any{}); err != nil {
+			return err
+		} else if ok {
+			var detalle apiPropuestaDetalleResponse
+			if _, err := apiGet("/api/propuestas/"+codigo, &detalle); err != nil {
+				return err
+			}
+			fmt.Printf("✓ Voto registrado: %s → %s [%s]\n", agente, codigo, posicion)
+			if detalle.Propuesta != nil && detalle.Propuesta.Estado == db.PropuestaConsenso {
+				fmt.Printf("🎉 ¡CONSENSO VÁLIDO! La propuesta %s ha sido aprobada automáticamente.\n", codigo)
+				return nil
+			}
+			fmt.Printf("Estado votos: ✓%d  ✗%d  ～%d  ⏳%d\n",
+				detalle.ConteoVotos.Acuerdo,
+				detalle.ConteoVotos.Desacuerdo,
+				detalle.ConteoVotos.Abstencion,
+				detalle.ConteoVotos.Pendiente,
+			)
+			if detalle.ConteoVotos.Desacuerdo > 0 {
+				fmt.Printf("⚠️  Hay %d voto(s) en desacuerdo — Alberto debe resolver antes de continuar.\n", detalle.ConteoVotos.Desacuerdo)
+				fmt.Printf("   Usa: orquesta propuesta cerrar %s consenso --por alberto\n", codigo)
+			}
+			return nil
+		}
+
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
 		p, err := db.GetPropuesta(codigo)
 		if err != nil {
 			return fmt.Errorf("propuesta '%s' no encontrada", codigo)
@@ -77,7 +111,7 @@ Ejemplos:
 
 		fmt.Printf("✓ Voto registrado: %s → %s [%s]\n", agente, codigo, posicion)
 		if consenso {
-			fmt.Printf("🎉 ¡CONSENSO UNÁNIME! La propuesta %s ha sido aprobada automáticamente.\n", codigo)
+			fmt.Printf("🎉 ¡CONSENSO VÁLIDO! La propuesta %s ha sido aprobada automáticamente.\n", codigo)
 		} else {
 			ac, des, abs, pend, _ := db.ContarVotos(p.ID)
 			fmt.Printf("Estado votos: ✓%d  ✗%d  ～%d  ⏳%d\n", ac, des, abs, pend)

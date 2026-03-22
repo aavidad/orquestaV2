@@ -1,0 +1,142 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
+package cmd
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/spf13/cobra"
+	"orquesta/db"
+)
+
+var sesionHistorialCmd = &cobra.Command{
+	Use:   "historial",
+	Short: "Lista sesiones con filtros de inspección",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		filtro := db.FiltroSesionesInspeccion{}
+
+		if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
+			agente = strings.TrimSpace(agente)
+			filtro.Agente = &agente
+		}
+		if proyectoRef, _ := cmd.Flags().GetString("proyecto"); strings.TrimSpace(proyectoRef) != "" {
+			proyecto, err := db.GetProyecto(proyectoRef)
+			if err != nil {
+				return err
+			}
+			filtro.ProyectoID = &proyecto.ID
+		}
+		if activaStr, _ := cmd.Flags().GetString("activa"); strings.TrimSpace(activaStr) != "" {
+			switch activaStr {
+			case "true":
+				v := true
+				filtro.Activa = &v
+			case "false":
+				v := false
+				filtro.Activa = &v
+			default:
+				return fmt.Errorf("activa debe ser true o false")
+			}
+		}
+		if estado, _ := cmd.Flags().GetString("estado"); strings.TrimSpace(estado) != "" {
+			estado = strings.TrimSpace(estado)
+			filtro.Estado = &estado
+		}
+
+		sesiones, err := db.ListarSesionesInspeccion(filtro)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("%-5s %-12s %-14s %-8s %-12s %-14s %s\n", "ID", "AGENTE", "PROYECTO", "ACTIVA", "ESTADO", "HERRAMIENTA", "EXTERNAL_ID")
+		fmt.Printf("%-5s %-12s %-14s %-8s %-12s %-14s %s\n", "─────", "────────────", "──────────────", "────────", "────────────", "──────────────", "────────────")
+		for _, sesion := range sesiones {
+			proyecto := "—"
+			if sesion.ProyectoSlug != "" {
+				proyecto = sesion.ProyectoSlug
+			}
+			activa := "no"
+			if sesion.Activa {
+				activa = "sí"
+			}
+			herramienta := "—"
+			if sesion.Herramienta != "" {
+				herramienta = sesion.Herramienta
+			}
+			externalID := "—"
+			if sesion.ExternalSessionID != "" {
+				externalID = sesion.ExternalSessionID
+			}
+			fmt.Printf("%-5d %-12s %-14s %-8s %-12s %-14s %s\n",
+				sesion.ID, sesion.Agente, proyecto, activa, sesion.Estado, herramienta, externalID)
+		}
+		return nil
+	},
+}
+
+var sesionVerCmd = &cobra.Command{
+	Use:   "ver <id>",
+	Short: "Muestra el detalle de una sesión por ID",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("id inválido")
+		}
+		s, err := db.GetSesionInspeccionByID(id)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Sesión %d\n", s.ID)
+		fmt.Printf("  Agente:      %s\n", s.Agente)
+		if s.ProyectoSlug != "" {
+			fmt.Printf("  Proyecto:    %s\n", s.ProyectoSlug)
+		}
+		fmt.Printf("  Activa:      %t\n", s.Activa)
+		fmt.Printf("  Estado:      %s\n", s.Estado)
+		if s.Herramienta != "" {
+			fmt.Printf("  Herramienta: %s\n", s.Herramienta)
+		}
+		if s.ConectorSlug != "" {
+			fmt.Printf("  Conector:    %s\n", s.ConectorSlug)
+		}
+		if s.CWD != "" {
+			fmt.Printf("  CWD:         %s\n", s.CWD)
+		}
+		if s.Branch != "" {
+			fmt.Printf("  Branch:      %s\n", s.Branch)
+		}
+		if s.ExternalSessionID != "" {
+			fmt.Printf("  External ID: %s\n", s.ExternalSessionID)
+		}
+		if s.ResumenContinuidad != "" {
+			fmt.Printf("  Resumen:     %s\n", s.ResumenContinuidad)
+		}
+		if s.Host != "" {
+			fmt.Printf("  Host:        %s\n", s.Host)
+		}
+		if s.PID != nil {
+			fmt.Printf("  PID:         %d\n", *s.PID)
+		}
+		if s.HeartbeatAt != nil {
+			fmt.Printf("  Heartbeat:   %s\n", s.HeartbeatAt.Format("2006-01-02 15:04:05"))
+		}
+		return nil
+	},
+}
+
+func init() {
+	sesionHistorialCmd.Flags().String("agente", "", "Filtra por agente")
+	sesionHistorialCmd.Flags().String("proyecto", "", "Filtra por proyecto")
+	sesionHistorialCmd.Flags().String("activa", "", "Filtra por activa=true|false")
+	sesionHistorialCmd.Flags().String("estado", "", "Filtra por estado lógico")
+
+	sesionCmd.AddCommand(sesionHistorialCmd, sesionVerCmd)
+}

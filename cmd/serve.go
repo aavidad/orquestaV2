@@ -92,6 +92,27 @@ type webPropDetalleData struct {
 	Err     string
 }
 
+type webRuntimeRow struct {
+	ID           int64
+	Nivel        int
+	Agente       string
+	Proyecto     string
+	Provider     string
+	Connector    string
+	Estado       string
+	PID          string
+	Hijos        int
+	Branch       string
+	Modelo       string
+	Razonamiento string
+	UltimaSenal  string
+}
+
+type webRuntimesData struct {
+	Runtimes []webRuntimeRow
+	Filtro   string
+}
+
 // ─── FuncMap ─────────────────────────────────────────────────────────────────
 
 var webFuncMap = template.FuncMap{
@@ -103,6 +124,7 @@ var webFuncMap = template.FuncMap{
 		return string(runes[:n-1]) + "…"
 	},
 	"eqStr": func(a, b string) bool { return a == b },
+	"neStr": func(a, b string) bool { return a != b },
 }
 
 // ─── Router principal ─────────────────────────────────────────────────────────
@@ -149,6 +171,41 @@ func webRouterPropuestas(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func webHandlerRuntimes(w http.ResponseWriter, r *http.Request) {
+	filtro := strings.TrimSpace(r.URL.Query().Get("activos"))
+	agenteFiltro := strings.TrimSpace(r.URL.Query().Get("agente"))
+	proyectoFiltro := strings.TrimSpace(r.URL.Query().Get("proyecto"))
+
+	filter := db.FiltroRuntimes{}
+	if agenteFiltro != "" {
+		filter.Agente = &agenteFiltro
+	}
+	if proyectoFiltro != "" {
+		proyecto, err := db.GetProyecto(proyectoFiltro)
+		if err == nil {
+			filter.ProyectoID = &proyecto.ID
+		}
+	}
+	if filtro != "" {
+		switch filtro {
+		case "true":
+			v := true
+			filter.Activos = &v
+		case "false":
+			v := false
+			filter.Activos = &v
+		}
+	}
+
+	tree, _ := db.ConstruirArbolRuntimes(filter)
+	rows := make([]webRuntimeRow, 0)
+	aplanarRuntimes(tree, 0, &rows)
+	webRender(w, webTplLayout+webTplRuntimes, webRuntimesData{
+		Runtimes: rows,
+		Filtro:   filtro,
+	})
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 func webHandlerDash(w http.ResponseWriter, r *http.Request) {
@@ -170,7 +227,7 @@ func webHandlerDash(w http.ResponseWriter, r *http.Request) {
 		pct = completadas * 100 / total
 	}
 	estadoAb := db.PropuestaAbierta
-	abiertas, _ := db.ListarPropuestas(&estadoAb)
+	abiertas, _ := db.ListarPropuestas(&estadoAb, nil)
 	var resAbiertas []webPropResumen
 	for _, p := range abiertas {
 		ac, des, _, pend, _ := db.ContarVotos(p.ID)
@@ -333,7 +390,7 @@ func webHandlerPropuestas(w http.ResponseWriter, r *http.Request) {
 		e := db.EstadoPropuesta(filtro)
 		estadoPtr = &e
 	}
-	props, _ := db.ListarPropuestas(estadoPtr)
+	props, _ := db.ListarPropuestas(estadoPtr, nil)
 	var detalles []webPropDetalle
 	for _, p := range props {
 		votos, _ := db.VotosDePropuesta(p.ID)
@@ -427,6 +484,10 @@ func webHandlerPropuestaAccion(w http.ResponseWriter, r *http.Request, codigo st
 	case "cerrar":
 		nuevoEstado := r.FormValue("estado_cierre")
 		err = db.CerrarPropuesta(codigo, nuevoEstado, "alberto")
+	case "reabrir":
+		_, err = db.ReabrirPropuesta(codigo, "alberto")
+	case "reparar-votos":
+		_, err = db.RepararVotosPendientesPropuesta(codigo, "alberto")
 	default:
 		http.Redirect(w, r, back+"?err=Acción+desconocida", http.StatusSeeOther)
 		return
@@ -450,6 +511,52 @@ func toWebTarea(t *db.Tarea) webTareaRow {
 		ID: t.ID, Titulo: t.Titulo, Modulo: t.Modulo,
 		Estado: string(t.Estado), Prioridad: string(t.Prioridad), Agente: ag,
 	}
+}
+
+func aplanarRuntimes(nodes []*db.RuntimeTreeNode, nivel int, out *[]webRuntimeRow) {
+	for _, node := range nodes {
+		if node == nil || node.Runtime == nil {
+			continue
+		}
+		r := node.Runtime
+		pid := "—"
+		if r.PID != nil {
+			pid = strconv.FormatInt(*r.PID, 10)
+		}
+		proyecto := r.ProyectoSlug
+		if proyecto == "" {
+			proyecto = "—"
+		}
+		ultima := "—"
+		if r.LastHeartbeatAt != nil {
+			ultima = r.LastHeartbeatAt.Format("2006-01-02 15:04:05")
+		} else if r.LastEventAt != nil {
+			ultima = r.LastEventAt.Format("2006-01-02 15:04:05")
+		}
+		*out = append(*out, webRuntimeRow{
+			ID:           r.ID,
+			Nivel:        nivel,
+			Agente:       r.Agente,
+			Proyecto:     proyecto,
+			Provider:     valorVacio(r.Provider),
+			Connector:    valorVacio(r.Connector),
+			Estado:       valorVacio(r.LogicalState),
+			PID:          pid,
+			Hijos:        len(node.Hijos),
+			Branch:       valorVacio(r.Branch),
+			Modelo:       valorVacio(r.Model),
+			Razonamiento: valorVacio(r.Reasoning),
+			UltimaSenal:  ultima,
+		})
+		aplanarRuntimes(node.Hijos, nivel+1, out)
+	}
+}
+
+func valorVacio(v string) string {
+	if strings.TrimSpace(v) == "" {
+		return "—"
+	}
+	return v
 }
 
 func webRender(w http.ResponseWriter, tplStr string, data any) {
@@ -476,6 +583,8 @@ var serveCmd = &cobra.Command{
 		mux.HandleFunc("/tareas/", webRouterTareas)
 		mux.HandleFunc("/propuestas", webHandlerPropuestas)
 		mux.HandleFunc("/propuestas/", webRouterPropuestas)
+		mux.HandleFunc("/runtimes", webHandlerRuntimes)
+		registerAPIRoutes(mux)
 		fmt.Printf("✓ Panel web en http://localhost%s\n", addr)
 		fmt.Println("  Ctrl+C para detener.")
 		return http.ListenAndServe(addr, mux)
@@ -528,6 +637,11 @@ const webTplLayout = `<!doctype html>
     .es-programando{background:#ede9fe;color:#5b21b6;border-radius:.3em;padding:.1em .45em;font-size:.72em;font-weight:600}
     .es-esperando{background:#fef3c7;color:#92400e;border-radius:.3em;padding:.1em .45em;font-size:.72em;font-weight:600}
     .es-votando{background:#dbeafe;color:#1e40af;border-radius:.3em;padding:.1em .45em;font-size:.72em;font-weight:600}
+    .rt-arrancando,.rt-disponible{background:#dcfce7;color:#166534}
+    .rt-pensando,.rt-ejecutando_herramienta{background:#ede9fe;color:#5b21b6}
+    .rt-esperando_io,.rt-handoff{background:#dbeafe;color:#1e40af}
+    .rt-pausado{background:#fef3c7;color:#92400e}
+    .rt-bloqueado,.rt-cerrado{background:#fee2e2;color:#991b1b}
     .grid2{display:grid;grid-template-columns:260px 1fr;gap:1.5rem}
     .filtros{margin-bottom:.8rem;display:flex;flex-wrap:wrap;gap:.3rem}
     .filtros a{font-size:.8rem;padding:.25em .7em;border:1px solid #e2e8f0;border-radius:.3em;text-decoration:none;color:#475569}
@@ -556,6 +670,7 @@ const webTplLayout = `<!doctype html>
       <a href="/">Dashboard</a>
       <a href="/tareas">Tareas</a>
       <a href="/propuestas">Propuestas</a>
+      <a href="/runtimes">Runtimes</a>
     </div>
   </nav>
 </header>
@@ -920,6 +1035,47 @@ const webTplPropuestas = `{{define "content"}}
 {{end}}
 `
 
+// ─── Runtimes: lista ─────────────────────────────────────────────────────────
+
+const webTplRuntimes = `{{define "content"}}
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
+  <h2 style="margin:0">Runtimes <small style="font-size:.5em;color:#94a3b8">{{len .Runtimes}}</small></h2>
+</div>
+
+<div class="filtros">
+  <a href="/runtimes"{{if eqStr .Filtro ""}} class="sel"{{end}}>Todos</a>
+  <a href="/runtimes?activos=true"{{if eqStr .Filtro "true"}} class="sel"{{end}}>Activos</a>
+  <a href="/runtimes?activos=false"{{if eqStr .Filtro "false"}} class="sel"{{end}}>Cerrados</a>
+</div>
+
+{{if .Runtimes}}
+<div style="overflow-x:auto">
+<table>
+  <thead><tr><th>ID</th><th>Estado</th><th>Agente</th><th>Proyecto</th><th>Provider</th><th>Connector</th><th>PID</th><th>Hijos</th><th>Branch</th><th>Última señal</th></tr></thead>
+  <tbody>
+  {{range .Runtimes}}
+    <tr>
+      <td style="padding-left:calc(.5rem + {{.Nivel}}rem)">#{{.ID}}</td>
+      <td><span class="tag rt-{{.Estado}}">{{.Estado}}</span></td>
+      <td>{{.Agente}}</td>
+      <td>{{.Proyecto}}</td>
+      <td>{{.Provider}}</td>
+      <td>{{.Connector}}</td>
+      <td>{{.PID}}</td>
+      <td>{{.Hijos}}</td>
+      <td><code style="font-size:.8em">{{.Branch}}</code></td>
+      <td style="font-size:.82em;color:#64748b">{{.UltimaSenal}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<p style="color:#94a3b8">No hay runtimes visibles con este filtro.</p>
+{{end}}
+{{end}}
+`
+
 // ─── Propuesta: detalle + acciones ───────────────────────────────────────────
 
 const webTplPropuestaDetalle = `{{define "content"}}
@@ -982,6 +1138,31 @@ const webTplPropuestaDetalle = `{{define "content"}}
   </div>
 </div>
 {{end}}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+  {{if neStr $estado "abierta"}}
+  <div class="action-box">
+    <h4>Reabrir propuesta (Alberto)</h4>
+    <form method="POST" action="/propuestas/{{$codigo}}/accion">
+      <input type="hidden" name="accion" value="reabrir">
+      <p style="margin:.2rem 0 .6rem 0;color:#64748b;font-size:.9rem">
+        Vuelve a estado abierto y reconstruye votos pendientes faltantes.
+      </p>
+      <button type="submit" class="btn-sm">Reabrir propuesta</button>
+    </form>
+  </div>
+  {{end}}
+  <div class="action-box">
+    <h4>Reparar votos pendientes (Alberto)</h4>
+    <form method="POST" action="/propuestas/{{$codigo}}/accion">
+      <input type="hidden" name="accion" value="reparar-votos">
+      <p style="margin:.2rem 0 .6rem 0;color:#64748b;font-size:.9rem">
+        Reconstruye filas de voto pendiente faltantes para agentes habilitados.
+      </p>
+      <button type="submit" class="btn-sm">Reparar votos</button>
+    </form>
+  </div>
+</div>
 
 <h4>Votos registrados</h4>
 {{if .P.Votos}}

@@ -9,6 +9,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -26,22 +27,41 @@ var propuestaListarCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		estadoStr, _ := cmd.Flags().GetString("estado")
 		proyectoRef, _ := cmd.Flags().GetString("proyecto")
-		var f *db.EstadoPropuesta
-		var proyectoID *int64
+		var propuestas []*db.Propuesta
+		params := url.Values{}
 		if estadoStr != "" {
-			e := db.EstadoPropuesta(estadoStr)
-			f = &e
+			params.Set("estado", estadoStr)
 		}
 		if proyectoRef != "" {
-			p, err := db.GetProyecto(proyectoRef)
+			params.Set("proyecto", proyectoRef)
+		}
+		var resp apiPropuestasResponse
+		if ok, err := apiGetQuery("/api/propuestas", params, &resp); err != nil {
+			return err
+		} else if ok {
+			propuestas = resp.Propuestas
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			var f *db.EstadoPropuesta
+			var proyectoID *int64
+			if estadoStr != "" {
+				e := db.EstadoPropuesta(estadoStr)
+				f = &e
+			}
+			if proyectoRef != "" {
+				p, err := db.GetProyecto(proyectoRef)
+				if err != nil {
+					return err
+				}
+				proyectoID = &p.ID
+			}
+			var err error
+			propuestas, err = db.ListarPropuestas(f, proyectoID)
 			if err != nil {
 				return err
 			}
-			proyectoID = &p.ID
-		}
-		propuestas, err := db.ListarPropuestas(f, proyectoID)
-		if err != nil {
-			return err
 		}
 		if len(propuestas) == 0 {
 			fmt.Println("No hay propuestas.")
@@ -61,9 +81,22 @@ var propuestaVerCmd = &cobra.Command{
 	Short: "Muestra el detalle y votos de una propuesta",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		p, err := db.GetPropuesta(args[0])
-		if err != nil {
-			return fmt.Errorf("propuesta '%s' no encontrada", args[0])
+		var p *db.Propuesta
+		var resp apiPropuestaDetalleResponse
+		if ok, err := apiGet("/api/propuestas/"+args[0], &resp); err != nil {
+			return err
+		} else if ok {
+			p = resp.Propuesta
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			var err error
+			p, err = db.GetPropuesta(args[0])
+			if err != nil {
+				return fmt.Errorf("propuesta '%s' no encontrada", args[0])
+			}
+			p.Votos, _ = db.ResumenVotos(p.ID)
 		}
 
 		fmt.Printf("╔══════════════════════════════════════════════╗\n")
@@ -80,10 +113,7 @@ var propuestaVerCmd = &cobra.Command{
 			fmt.Printf("\nDescripción:\n  %s\n", strings.ReplaceAll(p.Descripcion, "\n", "\n  "))
 		}
 
-		votos, err := db.ResumenVotos(p.ID)
-		if err != nil {
-			return err
-		}
+		votos := p.Votos
 		if len(votos) > 0 {
 			fmt.Printf("\nVotos:\n")
 			for _, v := range votos {
@@ -120,6 +150,30 @@ var propuestaNuevaCmd = &cobra.Command{
 			return fmt.Errorf("debe indicar el título con --titulo o como argumento posicional")
 		}
 
+		var resp struct {
+			OK        bool          `json:"ok"`
+			ID        int64         `json:"id"`
+			Propuesta *db.Propuesta `json:"propuesta"`
+		}
+		if ok, err := apiPost("/api/propuestas", apiPropuestaCrearRequest{
+			Codigo:       codigo,
+			Titulo:       titulo,
+			Descripcion:  desc,
+			Proyecto:     proyectoRef,
+			Tipo:         tipo,
+			PropuestoPor: por,
+			Distribuidor: "claude",
+		}, &resp); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Propuesta %s creada (id: %d)\n", resp.Propuesta.Codigo, resp.ID)
+			fmt.Println("  Los agentes deben votar con: orquesta votar <codigo> <posicion>")
+			return nil
+		}
+
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
 		p := &db.Propuesta{
 			Codigo:       codigo,
 			Titulo:       titulo,
@@ -154,6 +208,19 @@ var propuestaCerrarCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if ok, err := apiPost("/api/propuestas/"+args[0]+"/accion", apiPropuestaAccionRequest{
+			Accion:       "cerrar",
+			Agente:       agente,
+			EstadoCierre: args[1],
+		}, &map[string]any{}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Propuesta %s cerrada como '%s'\n", args[0], args[1])
+			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
 		if err := db.CerrarPropuesta(args[0], args[1], agente); err != nil {
 			return err
 		}
@@ -169,6 +236,18 @@ var propuestaReabrirCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agente, err := resolverValorFlag(cmd, "agente", "por")
 		if err != nil {
+			return err
+		}
+		if ok, err := apiPost("/api/propuestas/"+args[0]+"/accion", apiPropuestaAccionRequest{
+			Accion: "reabrir",
+			Agente: agente,
+		}, &map[string]any{}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Propuesta %s reabierta\n", args[0])
+			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
 			return err
 		}
 		insertados, err := db.ReabrirPropuesta(args[0], agente)
@@ -188,6 +267,18 @@ var propuestaRepararVotosCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agente, err := resolverValorFlag(cmd, "agente", "por")
 		if err != nil {
+			return err
+		}
+		if ok, err := apiPost("/api/propuestas/"+args[0]+"/accion", apiPropuestaAccionRequest{
+			Accion: "reparar_votos",
+			Agente: agente,
+		}, &map[string]any{}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Votos pendientes reparados en %s\n", args[0])
+			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
 			return err
 		}
 		insertados, err := db.RepararVotosPendientesPropuesta(args[0], agente)
@@ -236,13 +327,27 @@ var propuestaVotosCmd = &cobra.Command{
 	Short: "Lista los votos de una propuesta con comentarios completos",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		p, err := db.GetPropuesta(args[0])
-		if err != nil {
-			return fmt.Errorf("propuesta '%s' no encontrada", args[0])
-		}
-		votos, err := db.VotosDePropuesta(p.ID)
-		if err != nil {
+		var p *db.Propuesta
+		var votos []*db.Voto
+		var resp apiPropuestaDetalleResponse
+		if ok, err := apiGet("/api/propuestas/"+args[0], &resp); err != nil {
 			return err
+		} else if ok {
+			p = resp.Propuesta
+			votos = p.Votos
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			var err error
+			p, err = db.GetPropuesta(args[0])
+			if err != nil {
+				return fmt.Errorf("propuesta '%s' no encontrada", args[0])
+			}
+			votos, err = db.VotosDePropuesta(p.ID)
+			if err != nil {
+				return err
+			}
 		}
 		fmt.Printf("Votos de %s — %s\n", p.Codigo, p.Titulo)
 		fmt.Printf("Estado: %s\n", p.Estado)
@@ -269,4 +374,3 @@ var propuestaVotosCmd = &cobra.Command{
 		return nil
 	},
 }
-

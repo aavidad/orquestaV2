@@ -2,4 +2,6 @@ orquesta
 orquesta.db
 orquesta.db-wal
 orquesta.db-shm
+.orquesta-worktrees/
+backups/
 *.bk

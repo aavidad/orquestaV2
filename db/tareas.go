@@ -48,7 +48,7 @@ type Tarea struct {
 	PropuestaID      *int64  // nil = no vinculada a propuesta
 	Prioridad        PrioridadTarea
 	Dependencias     []int64
-	ContratoDefinido bool    // true = interfaz/contrato de E/S documentado (OP-069)
+	ContratoDefinido bool // true = interfaz/contrato de E/S documentado (OP-069)
 	CreadoPor        string
 	CommitCierre     string
 	Notas            string
@@ -140,22 +140,33 @@ func ListarTareas(f FiltroTareas) ([]*Tarea, error) {
 	return list, rows.Err()
 }
 
-// ValidarDependencias comprueba que todas las dependencias de una tarea
-// tienen su contrato definido o están completadas. Implementa OP-069.
+// ValidarDependencias comprueba que todas las dependencias previas de una tarea
+// estén completadas y tengan contrato/interfaz definido. Implementa OP-069.
 func ValidarDependencias(t *Tarea) error {
 	for _, depID := range t.Dependencias {
 		dep, err := GetTarea(depID)
 		if err != nil {
 			return fmt.Errorf("dependencia #%d no encontrada", depID)
 		}
-		if dep.Estado == TareaCompletada {
-			continue // dependencia resuelta, no bloquea
+		if !dep.ContratoDefinido && dep.Estado != TareaCompletada {
+			return fmt.Errorf(
+				"la tarea #%d depende de #%d ('%s') que aún no tiene contrato/interfaz definido ni está completada (OP-069): "+
+					"usa 'orquesta tarea contrato %d' y completa la tarea previa antes de tomarla",
+				t.ID, depID, dep.Titulo, depID,
+			)
 		}
 		if !dep.ContratoDefinido {
 			return fmt.Errorf(
 				"la tarea #%d depende de #%d ('%s') que aún no tiene contrato/interfaz definido (OP-069): "+
 					"usa 'orquesta tarea contrato %d' para registrarlo primero",
 				t.ID, depID, dep.Titulo, depID,
+			)
+		}
+		if dep.Estado != TareaCompletada {
+			return fmt.Errorf(
+				"la tarea #%d depende de #%d ('%s') que aún no está completada (OP-069): "+
+					"espera a que termine antes de tomar esta tarea",
+				t.ID, depID, dep.Titulo,
 			)
 		}
 	}

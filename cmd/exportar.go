@@ -9,6 +9,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -34,7 +35,32 @@ var exportarEstadoCmd = &cobra.Command{
 		sb.WriteString("## Agentes\n\n")
 		sb.WriteString("| Agente | Rol | Activo | Última sesión |\n")
 		sb.WriteString("|--------|-----|--------|---------------|\n")
-		agentes, _ := db.ListarAgentes()
+		var agentes []*db.Agente
+		var propuestas []*db.Propuesta
+		var tareas []*db.Tarea
+		var agentesResp apiAgentesResponse
+		if ok, err := apiGet("/api/agentes", &agentesResp); err != nil {
+			return err
+		} else if ok {
+			agentes = agentesResp.Agentes
+			var propuestasResp apiPropuestasResponse
+			if _, err := apiGet("/api/propuestas", &propuestasResp); err != nil {
+				return err
+			}
+			propuestas = propuestasResp.Propuestas
+			var tareasResp apiTareasResponse
+			if _, err := apiGet("/api/tareas", &tareasResp); err != nil {
+				return err
+			}
+			tareas = tareasResp.Tareas
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			agentes, _ = db.ListarAgentes()
+			propuestas, _ = db.ListarPropuestas(nil, nil)
+			tareas, _ = db.ListarTareas(db.FiltroTareas{})
+		}
 		for _, a := range agentes {
 			activo := "no"
 			if a.Activo {
@@ -50,8 +76,15 @@ var exportarEstadoCmd = &cobra.Command{
 
 		// ─── Propuestas ────────────────────────────────────────────────────
 		sb.WriteString("## Propuestas\n\n")
-		propuestas, _ := db.ListarPropuestas(nil)
 		for _, p := range propuestas {
+			if len(p.Votos) == 0 {
+				var resp apiPropuestaDetalleResponse
+				if ok, err := apiGet("/api/propuestas/"+p.Codigo, &resp); err == nil && ok && resp.Propuesta != nil {
+					p = resp.Propuesta
+				} else if db.DB != nil {
+					p.Votos, _ = db.ResumenVotos(p.ID)
+				}
+			}
 			cerrada := ""
 			if p.CerradaAt != nil {
 				cerrada = fmt.Sprintf(" _(cerrada: %s)_", p.CerradaAt.Format("2006-01-02"))
@@ -65,12 +98,11 @@ var exportarEstadoCmd = &cobra.Command{
 				sb.WriteString(fmt.Sprintf("- **Descripción:** %s\n", p.Descripcion))
 			}
 
-			votos, _ := db.ResumenVotos(p.ID)
-			if len(votos) > 0 {
+			if len(p.Votos) > 0 {
 				sb.WriteString("\n**Votos:**\n\n")
 				sb.WriteString("| Agente | Posición | Comentario |\n")
 				sb.WriteString("|--------|----------|------------|\n")
-				for _, v := range votos {
+				for _, v := range p.Votos {
 					sb.WriteString(fmt.Sprintf("| %s | %s | %s |\n",
 						v.Agente, v.Posicion, v.Comentario))
 				}
@@ -82,7 +114,6 @@ var exportarEstadoCmd = &cobra.Command{
 		sb.WriteString("## Tareas\n\n")
 		sb.WriteString("| # | Título | Estado | Prioridad | Agente | Módulo |\n")
 		sb.WriteString("|---|--------|--------|-----------|--------|--------|\n")
-		tareas, _ := db.ListarTareas(db.FiltroTareas{})
 		total := len(tareas)
 		completadas := 0
 		for _, t := range tareas {
@@ -117,9 +148,21 @@ var exportarAuditCmd = &cobra.Command{
 				return fmt.Errorf("n debe ser un número")
 			}
 		}
-		entries, err := db.AuditLog(limit)
-		if err != nil {
+		var entries []db.AuditEntry
+		var auditResp apiAuditResponse
+		if ok, err := apiGetQuery("/api/audit", url.Values{"limit": []string{fmt.Sprintf("%d", limit)}}, &auditResp); err != nil {
 			return err
+		} else if ok {
+			entries = auditResp.Audit
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			var err error
+			entries, err = db.AuditLog(limit)
+			if err != nil {
+				return err
+			}
 		}
 		fmt.Printf("# Audit Log (últimas %d entradas)\n\n", limit)
 		fmt.Printf("| Fecha | Agente | Acción | Entidad | ID | Detalle |\n")

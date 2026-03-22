@@ -16,7 +16,7 @@ func TestResolverRutaDesdeGitRootRepoContaGrxUsaSiblingOrquesta(t *testing.T) {
 	t.Parallel()
 
 	got := resolverRutaDesdeGitRoot("/home/alberto/Trabajo/PlataformaMunicipal/ContaGrx")
-	want := "/home/alberto/Trabajo/PlataformaMunicipal/orquesta/orquesta.db"
+	want := "/home/alberto/Trabajo/PlataformaMunicipal/orquestador/orquesta.db"
 	if got != want {
 		t.Fatalf("ruta inesperada: %s", got)
 	}

@@ -50,14 +50,99 @@ Ejemplos:
 			agente = args[0]
 		}
 
-		sesionID, err := db.IniciarSesion(agente)
+		proyectoRef, _ := cmd.Flags().GetString("proyecto")
+		conectorRef, _ := cmd.Flags().GetString("conector")
+		cwd, _ := cmd.Flags().GetString("cwd")
+		herramienta, _ := cmd.Flags().GetString("herramienta")
+		branch, _ := cmd.Flags().GetString("branch")
+		externalSessionID, _ := cmd.Flags().GetString("external-session-id")
+		resumePayload, _ := cmd.Flags().GetString("resume-payload")
+		resumen, _ := cmd.Flags().GetString("resumen")
+		host, _ := cmd.Flags().GetString("host")
+		pidRaw, _ := cmd.Flags().GetInt64("pid")
+
+		var proyectoID *int64
+		var conectorID *int64
+		var previo *db.Sesion
+		if strings.TrimSpace(conectorRef) != "" {
+			c, err := db.GetConector(conectorRef)
+			if err != nil {
+				return err
+			}
+			conectorID = &c.ID
+			if strings.TrimSpace(herramienta) == "" {
+				herramienta = c.Slug
+			}
+		}
+		if strings.TrimSpace(proyectoRef) != "" {
+			p, err := db.GetProyecto(proyectoRef)
+			if err != nil {
+				return err
+			}
+			proyectoID = &p.ID
+			if strings.TrimSpace(cwd) == "" {
+				cwd = p.RutaAbs
+			}
+			_ = db.ActivarAsignacion(agente, p.ID, "asignación automática al iniciar sesión")
+			previo, _ = db.ObtenerUltimaSesion(agente, proyectoID)
+		}
+
+		var pid *int64
+		if pidRaw > 0 {
+			pid = &pidRaw
+		}
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:             agente,
+			ConectorID:         conectorID,
+			ProyectoID:         proyectoID,
+			CWD:                cwd,
+			Herramienta:        herramienta,
+			ExternalSessionID:  externalSessionID,
+			ResumePayloadJSON:  resumePayload,
+			ResumenContinuidad: resumen,
+			Branch:             branch,
+			Host:               host,
+			PID:                pid,
+		})
 		if err != nil {
 			return fmt.Errorf("iniciando sesión: %w", err)
 		}
 
 		fmt.Printf("═══════════════════════════════════════════════════════════\n")
-		fmt.Printf("  SESIÓN INICIADA — agente: %s  (sesion_id: %d)\n", agente, sesionID)
+		fmt.Printf("  SESIÓN INICIADA — agente: %s  (sesion_id: %d)\n", agente, sesion.ID)
 		fmt.Printf("═══════════════════════════════════════════════════════════\n\n")
+		if sesion.ProyectoID != nil {
+			fmt.Printf("📁 Proyecto: %s (%s)\n", sesion.ProyectoSlug, sesion.ProyectoNombre)
+		}
+		if strings.TrimSpace(sesion.CWD) != "" {
+			fmt.Printf("📂 CWD: %s\n", sesion.CWD)
+		}
+		if strings.TrimSpace(sesion.Herramienta) != "" {
+			fmt.Printf("🛠  Herramienta: %s\n", sesion.Herramienta)
+		}
+		if sesion.ConectorSlug != "" {
+			fmt.Printf("🔌 Conector: %s\n", sesion.ConectorSlug)
+		}
+		if strings.TrimSpace(sesion.Branch) != "" {
+			fmt.Printf("🌿 Branch: %s\n", sesion.Branch)
+		}
+		if previo != nil && previo.ID > 0 && (strings.TrimSpace(previo.ResumenContinuidad) != "" || strings.TrimSpace(previo.ExternalSessionID) != "" || strings.TrimSpace(previo.ResumePayloadJSON) != "") {
+			fmt.Printf("\n♻️  CONTEXTO REANUDABLE DETECTADO:\n")
+			fmt.Printf("   • sesión previa: %d\n", previo.ID)
+			if previo.ProyectoSlug != "" {
+				fmt.Printf("   • proyecto: %s\n", previo.ProyectoSlug)
+			}
+			if previo.ExternalSessionID != "" {
+				fmt.Printf("   • external_session_id: %s\n", previo.ExternalSessionID)
+			}
+			if previo.Branch != "" {
+				fmt.Printf("   • branch previa: %s\n", previo.Branch)
+			}
+			if previo.ResumenContinuidad != "" {
+				fmt.Printf("   • resumen: %s\n", previo.ResumenContinuidad)
+			}
+			fmt.Println()
+		}
 
 		// Obtener el rol del agente para cargar su configuración
 		agentes, err := db.ListarAgentes()
@@ -136,6 +221,148 @@ Ejemplos:
 	},
 }
 
+var sesionGuardarCmd = &cobra.Command{
+	Use:   "guardar <agente>",
+	Short: "Guarda contexto de la sesión activa para reanudarla después",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agente := args[0]
+		proyectoRef, _ := cmd.Flags().GetString("proyecto")
+		cwd, _ := cmd.Flags().GetString("cwd")
+		herramienta, _ := cmd.Flags().GetString("herramienta")
+		branch, _ := cmd.Flags().GetString("branch")
+		externalSessionID, _ := cmd.Flags().GetString("external-session-id")
+		resumePayload, _ := cmd.Flags().GetString("resume-payload")
+		resumen, _ := cmd.Flags().GetString("resumen")
+		host, _ := cmd.Flags().GetString("host")
+		estado, _ := cmd.Flags().GetString("estado")
+		pidRaw, _ := cmd.Flags().GetInt64("pid")
+
+		if ok, err := apiPost("/api/sesiones/guardar", apiSesionGuardarRequest{
+			Agente:            agente,
+			Proyecto:          proyectoRef,
+			CWD:               cwd,
+			Herramienta:       herramienta,
+			Branch:            branch,
+			ExternalSessionID: externalSessionID,
+			ResumePayload:     resumePayload,
+			Resumen:           resumen,
+			Host:              host,
+			Estado:            estado,
+			PID:               pidRaw,
+		}, &apiSesionResponse{}); err != nil {
+			return err
+		} else if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			var proyectoID *int64
+			if strings.TrimSpace(proyectoRef) != "" {
+				p, err := db.GetProyecto(proyectoRef)
+				if err != nil {
+					return err
+				}
+				proyectoID = &p.ID
+			}
+			upd := db.SesionUpdate{Heartbeat: true}
+			if cwd != "" {
+				upd.CWD = &cwd
+			}
+			if herramienta != "" {
+				upd.Herramienta = &herramienta
+			}
+			if branch != "" {
+				upd.Branch = &branch
+			}
+			if externalSessionID != "" {
+				upd.ExternalSessionID = &externalSessionID
+			}
+			if resumePayload != "" {
+				upd.ResumePayloadJSON = &resumePayload
+			}
+			if resumen != "" {
+				upd.ResumenContinuidad = &resumen
+			}
+			if host != "" {
+				upd.Host = &host
+			}
+			if estado != "" {
+				upd.Estado = &estado
+			}
+			if pidRaw > 0 {
+				upd.PID = &pidRaw
+			}
+			if err := db.GuardarSesionActiva(agente, proyectoID, upd); err != nil {
+				return err
+			}
+		}
+		fmt.Printf("✓ Contexto de sesión guardado para %s\n", agente)
+		return nil
+	},
+}
+
+var sesionContinuarCmd = &cobra.Command{
+	Use:   "continuar <agente>",
+	Short: "Muestra la última sesión reanudable de un agente",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agente := args[0]
+		proyectoRef, _ := cmd.Flags().GetString("proyecto")
+		var s *db.Sesion
+		params := mapToValues(map[string]string{
+			"agente":   agente,
+			"proyecto": proyectoRef,
+		})
+		var resp apiSesionResponse
+		if ok, err := apiGetQuery("/api/sesiones/continuar", params, &resp); err != nil {
+			return err
+		} else if ok {
+			s = resp.Sesion
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			var proyectoID *int64
+			if strings.TrimSpace(proyectoRef) != "" {
+				p, err := db.GetProyecto(proyectoRef)
+				if err != nil {
+					return err
+				}
+				proyectoID = &p.ID
+			}
+			var err error
+			s, err = db.ObtenerUltimaSesion(agente, proyectoID)
+			if err != nil {
+				return err
+			}
+		}
+		fmt.Printf("Sesión %d\n", s.ID)
+		fmt.Printf("  Agente:      %s\n", s.Agente)
+		if s.ProyectoSlug != "" {
+			fmt.Printf("  Proyecto:    %s\n", s.ProyectoSlug)
+		}
+		if s.CWD != "" {
+			fmt.Printf("  CWD:         %s\n", s.CWD)
+		}
+		if s.Herramienta != "" {
+			fmt.Printf("  Herramienta: %s\n", s.Herramienta)
+		}
+		if s.ExternalSessionID != "" {
+			fmt.Printf("  External ID: %s\n", s.ExternalSessionID)
+		}
+		if s.Branch != "" {
+			fmt.Printf("  Branch:      %s\n", s.Branch)
+		}
+		if s.ResumenContinuidad != "" {
+			fmt.Printf("  Resumen:     %s\n", s.ResumenContinuidad)
+		}
+		if s.ResumePayloadJSON != "" {
+			fmt.Printf("  Resume JSON: %s\n", s.ResumePayloadJSON)
+		}
+		return nil
+	},
+}
+
 // sesion fin
 var sesionFinCmd = &cobra.Command{
 	Use:   "fin [agente]",
@@ -144,31 +371,36 @@ var sesionFinCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agente := args[0]
 
-		// Mostrar workflow de fin de sesión
-		agentes, _ := db.ListarAgentes()
-		var rol string
-		for _, a := range agentes {
-			if a.Nombre == agente {
-				rol = a.Rol
-				break
+		if ok, err := apiPost("/api/sesiones/fin", apiSesionFinRequest{Agente: agente}, &map[string]any{}); err != nil {
+			return err
+		} else if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
 			}
-		}
-		if rol != "" && rol != "admin" {
-			wf, err := db.GetWorkflow(rol, "fin-sesion")
-			if err == nil {
-				var pasos []string
-				if err2 := json.Unmarshal([]byte(wf.Pasos), &pasos); err2 == nil {
-					fmt.Printf("📌 CHECKLIST DE CIERRE:\n")
-					for _, paso := range pasos {
-						fmt.Printf("  %s\n", paso)
-					}
-					fmt.Println()
+			agentes, _ := db.ListarAgentes()
+			var rol string
+			for _, a := range agentes {
+				if a.Nombre == agente {
+					rol = a.Rol
+					break
 				}
 			}
-		}
-
-		if err := db.FinSesion(agente); err != nil {
-			return err
+			if rol != "" && rol != "admin" {
+				wf, err := db.GetWorkflow(rol, "fin-sesion")
+				if err == nil {
+					var pasos []string
+					if err2 := json.Unmarshal([]byte(wf.Pasos), &pasos); err2 == nil {
+						fmt.Printf("📌 CHECKLIST DE CIERRE:\n")
+						for _, paso := range pasos {
+							fmt.Printf("  %s\n", paso)
+						}
+						fmt.Println()
+					}
+				}
+			}
+			if err := db.FinSesion(agente); err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ Sesión cerrada — agente: %s\n", agente)
 		return nil
@@ -180,9 +412,21 @@ var sesionListarCmd = &cobra.Command{
 	Use:   "listar",
 	Short: "Lista todos los agentes y su estado de sesión",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		agentes, err := db.ListarAgentes()
-		if err != nil {
+		var agentes []*db.Agente
+		var resp apiAgentesResponse
+		if ok, err := apiGet("/api/agentes", &resp); err != nil {
 			return err
+		} else if ok {
+			agentes = resp.Agentes
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			var err error
+			agentes, err = db.ListarAgentes()
+			if err != nil {
+				return err
+			}
 		}
 		fmt.Printf("%-15s %-15s %-8s %s\n", "AGENTE", "ROL", "ACTIVO", "ÚLTIMA SESIÓN")
 		fmt.Printf("%-15s %-15s %-8s %s\n",
@@ -223,5 +467,29 @@ var sesionNuevoCodexCmd = &cobra.Command{
 
 func init() {
 	sesionInicioCmd.Flags().Bool("nuevo-codex", false, "Registra un nuevo agente Codex con nombre automático")
-	sesionCmd.AddCommand(sesionInicioCmd, sesionFinCmd, sesionListarCmd, sesionNuevoCodexCmd)
+	sesionInicioCmd.Flags().String("conector", "", "Conector/model runtime de la sesión")
+	sesionInicioCmd.Flags().String("proyecto", "", "Proyecto asignado a la sesión")
+	sesionInicioCmd.Flags().String("cwd", "", "Directorio de trabajo de la sesión")
+	sesionInicioCmd.Flags().String("herramienta", "", "Herramienta/runtine del agente (codex, claude, etc.)")
+	sesionInicioCmd.Flags().String("branch", "", "Branch asociada a la sesión")
+	sesionInicioCmd.Flags().String("external-session-id", "", "ID externo de sesión reanudable")
+	sesionInicioCmd.Flags().String("resume-payload", "", "Payload JSON para reanudar contexto")
+	sesionInicioCmd.Flags().String("resumen", "", "Resumen corto de continuidad")
+	sesionInicioCmd.Flags().String("host", "", "Host donde corre el agente")
+	sesionInicioCmd.Flags().Int64("pid", 0, "PID del proceso del agente")
+
+	sesionGuardarCmd.Flags().String("proyecto", "", "Proyecto de la sesión activa")
+	sesionGuardarCmd.Flags().String("cwd", "", "Directorio de trabajo actual")
+	sesionGuardarCmd.Flags().String("herramienta", "", "Herramienta/runtine del agente")
+	sesionGuardarCmd.Flags().String("branch", "", "Branch actual")
+	sesionGuardarCmd.Flags().String("external-session-id", "", "ID externo de sesión reanudable")
+	sesionGuardarCmd.Flags().String("resume-payload", "", "Payload JSON para reanudar contexto")
+	sesionGuardarCmd.Flags().String("resumen", "", "Resumen corto de continuidad")
+	sesionGuardarCmd.Flags().String("host", "", "Host donde corre el agente")
+	sesionGuardarCmd.Flags().String("estado", "pausada", "Estado lógico de la sesión al guardarla")
+	sesionGuardarCmd.Flags().Int64("pid", 0, "PID del proceso del agente")
+
+	sesionContinuarCmd.Flags().String("proyecto", "", "Proyecto concreto cuya sesión quieres reanudar")
+
+	sesionCmd.AddCommand(sesionInicioCmd, sesionFinCmd, sesionListarCmd, sesionNuevoCodexCmd, sesionGuardarCmd, sesionContinuarCmd)
 }

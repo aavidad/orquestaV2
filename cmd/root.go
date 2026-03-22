@@ -54,6 +54,9 @@ func init() {
 }
 
 func initDB() {
+	if shouldPreferServerForCurrentCommand() {
+		return
+	}
 	if err := db.Open(); err != nil {
 		fmt.Fprintf(os.Stderr, "error abriendo base de datos: %v\n", err)
 		os.Exit(1)

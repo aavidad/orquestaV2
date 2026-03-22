@@ -9,6 +9,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -31,35 +32,64 @@ var tareaListarCmd = &cobra.Command{
 		modulo, _ := cmd.Flags().GetString("modulo")
 		propuestaCodigo, _ := cmd.Flags().GetString("propuesta")
 
-		f := db.FiltroTareas{Agente: &agente, Modulo: &modulo}
+		var tareas []*db.Tarea
+		projectSlugs := map[int64]string{}
+		params := url.Values{}
 		if estadoStr != "" {
-			e := db.EstadoTarea(estadoStr)
-			f.Estado = &e
+			params.Set("estado", estadoStr)
 		}
-		if agente == "" {
-			f.Agente = nil
+		if agente != "" {
+			params.Set("agente", agente)
 		}
 		if proyectoRef != "" {
-			p, err := db.GetProyecto(proyectoRef)
+			params.Set("proyecto", proyectoRef)
+		}
+		if modulo != "" {
+			params.Set("modulo", modulo)
+		}
+		if propuestaCodigo != "" {
+			params.Set("propuesta", propuestaCodigo)
+		}
+		var tareasResp apiTareasResponse
+		if ok, err := apiGetQuery("/api/tareas", params, &tareasResp); err != nil {
+			return err
+		} else if ok {
+			tareas = tareasResp.Tareas
+			projectSlugs, _, _ = apiProjectSlugMap()
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			f := db.FiltroTareas{Agente: &agente, Modulo: &modulo}
+			if estadoStr != "" {
+				e := db.EstadoTarea(estadoStr)
+				f.Estado = &e
+			}
+			if agente == "" {
+				f.Agente = nil
+			}
+			if proyectoRef != "" {
+				p, err := db.GetProyecto(proyectoRef)
+				if err != nil {
+					return err
+				}
+				f.ProyectoID = &p.ID
+			}
+			if modulo == "" {
+				f.Modulo = nil
+			}
+			if propuestaCodigo != "" {
+				p, err := db.GetPropuesta(propuestaCodigo)
+				if err != nil {
+					return fmt.Errorf("propuesta '%s' no encontrada", propuestaCodigo)
+				}
+				f.PropuestaID = &p.ID
+			}
+			var err error
+			tareas, err = db.ListarTareas(f)
 			if err != nil {
 				return err
 			}
-			f.ProyectoID = &p.ID
-		}
-		if modulo == "" {
-			f.Modulo = nil
-		}
-		if propuestaCodigo != "" {
-			p, err := db.GetPropuesta(propuestaCodigo)
-			if err != nil {
-				return fmt.Errorf("propuesta '%s' no encontrada", propuestaCodigo)
-			}
-			f.PropuestaID = &p.ID
-		}
-
-		tareas, err := db.ListarTareas(f)
-		if err != nil {
-			return err
 		}
 		if len(tareas) == 0 {
 			fmt.Println("No hay tareas con ese filtro.")
@@ -76,7 +106,9 @@ var tareaListarCmd = &cobra.Command{
 			}
 			proyecto := "—"
 			if t.ProyectoID != nil {
-				if p, err := db.GetProyecto(strconv.FormatInt(*t.ProyectoID, 10)); err == nil {
+				if slug := projectSlugs[*t.ProyectoID]; slug != "" {
+					proyecto = slug
+				} else if p, err := db.GetProyecto(strconv.FormatInt(*t.ProyectoID, 10)); err == nil {
 					proyecto = p.Slug
 				}
 			}
@@ -96,9 +128,22 @@ var tareaVerCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
-		t, err := db.GetTarea(id)
-		if err != nil {
+		var t *db.Tarea
+		projectSlugs := map[int64]string{}
+		var tareaResp apiTareaResponse
+		if ok, err := apiGet("/api/tareas/"+args[0], &tareaResp); err != nil {
 			return err
+		} else if ok {
+			t = tareaResp.Tarea
+			projectSlugs, _, _ = apiProjectSlugMap()
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			t, err = db.GetTarea(id)
+			if err != nil {
+				return err
+			}
 		}
 		agente := "—"
 		if t.Agente != nil {
@@ -108,7 +153,9 @@ var tareaVerCmd = &cobra.Command{
 		fmt.Printf("  Estado:      %s\n", t.Estado)
 		fmt.Printf("  Prioridad:   %s\n", t.Prioridad)
 		if t.ProyectoID != nil {
-			if p, err := db.GetProyecto(strconv.FormatInt(*t.ProyectoID, 10)); err == nil {
+			if slug := projectSlugs[*t.ProyectoID]; slug != "" {
+				fmt.Printf("  Proyecto:    %s\n", slug)
+			} else if p, err := db.GetProyecto(strconv.FormatInt(*t.ProyectoID, 10)); err == nil {
 				fmt.Printf("  Proyecto:    %s\n", p.Slug)
 			}
 		}
@@ -143,6 +190,32 @@ var tareaNuevaCmd = &cobra.Command{
 			return fmt.Errorf("--titulo es obligatorio")
 		}
 
+		var resp struct {
+			OK    bool      `json:"ok"`
+			Tarea *db.Tarea `json:"tarea"`
+		}
+		if ok, err := apiPost("/api/tareas", apiTareaCrearRequest{
+			Titulo:      titulo,
+			Descripcion: desc,
+			Proyecto:    proyectoRef,
+			Modulo:      modulo,
+			Prioridad:   prioridad,
+			CreadoPor:   creadorPor,
+			Propuesta:   propuestaCodigo,
+			Agente:      agente,
+		}, &resp); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Tarea #%d creada: %s\n", resp.Tarea.ID, titulo)
+			if agente != "" {
+				fmt.Printf("  → Asignada a %s\n", agente)
+			}
+			return nil
+		}
+
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
 		t := &db.Tarea{
 			Titulo:      titulo,
 			Descripcion: desc,
@@ -193,6 +266,18 @@ var tareaTomar = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
+		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
+			Accion: "tomar",
+			Agente: args[1],
+		}, &map[string]any{}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Tarea #%d asignada a %s\n", id, args[1])
+			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
 		if err := db.TomarTarea(id, args[1]); err != nil {
 			return err
 		}
@@ -209,6 +294,18 @@ var tareaIniciarCmd = &cobra.Command{
 		id, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			return fmt.Errorf("id inválido")
+		}
+		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
+			Accion: "iniciar",
+			Agente: args[1],
+		}, &map[string]any{}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Tarea #%d en progreso (%s)\n", id, args[1])
+			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
+			return err
 		}
 		if err := db.IniciarTarea(id, args[1]); err != nil {
 			return err
@@ -228,6 +325,19 @@ var tareaCompletarCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		commit, _ := cmd.Flags().GetString("commit")
+		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
+			Accion: "completar",
+			Agente: args[1],
+			Commit: commit,
+		}, &map[string]any{}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Tarea #%d completada\n", id)
+			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
 		if err := db.CompletarTarea(id, args[1], commit); err != nil {
 			return err
 		}
@@ -249,6 +359,19 @@ var tareaBloquearCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
+			Accion: "bloquear",
+			Agente: args[1],
+			Motivo: motivo,
+		}, &map[string]any{}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Tarea #%d bloqueada: %s\n", id, motivo)
+			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
 		if err := db.BloquearTarea(id, args[1], motivo); err != nil {
 			return err
 		}
@@ -267,6 +390,19 @@ var tareaNotaCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		nota := strings.Join(args[2:], " ")
+		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
+			Accion: "nota",
+			Agente: args[1],
+			Nota:   nota,
+		}, &map[string]any{}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Nota añadida a tarea #%d\n", id)
+			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
 		if err := db.AnotarTarea(id, args[1], nota); err != nil {
 			return err
 		}
@@ -285,6 +421,18 @@ var tareaReasignarCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		nuevoAgente := args[1]
+		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
+			Accion:      "reasignar",
+			NuevoAgente: nuevoAgente,
+		}, &map[string]any{}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Tarea #%d reasignada a %s\n", id, nuevoAgente)
+			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
 		_, err = db.DB.Exec(
 			`UPDATE tareas SET agente=?, estado='asignada' WHERE id=?`, nuevoAgente, id)
 		if err != nil {
@@ -309,6 +457,19 @@ var tareaDesbloquearCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
+			Accion:     "desbloquear",
+			Agente:     args[1],
+			Resolucion: resolucion,
+		}, &map[string]any{}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Tarea #%d desbloqueada: %s\n", id, resolucion)
+			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
 		if err := db.DesbloquearTarea(id, args[1], resolucion); err != nil {
 			return err
 		}
@@ -325,6 +486,17 @@ var tareaBacklogCmd = &cobra.Command{
 		id, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			return fmt.Errorf("id inválido")
+		}
+		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
+			Accion: "backlog",
+		}, &map[string]any{}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Tarea #%d movida a backlog\n", id)
+			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
+			return err
 		}
 		_, err = db.DB.Exec(`UPDATE tareas SET estado='backlog', agente=NULL WHERE id=?`, id)
 		if err != nil {
@@ -410,6 +582,18 @@ su predecesora tenga el contrato definido o esté completada.`,
 		id, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			return fmt.Errorf("id inválido: %s", args[0])
+		}
+		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
+			Accion: "contrato",
+			Agente: args[1],
+		}, &map[string]any{}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Contrato definido para tarea #%d\n", id)
+			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
+			return err
 		}
 		if err := db.DefinirContrato(id, args[1]); err != nil {
 			return err
