@@ -46,3 +46,17 @@ func TestDialectPlaceholderStyle(t *testing.T) {
 		t.Fatalf("placeholder postgres inesperado: %s", got)
 	}
 }
+
+func TestDialectSupportsSchemaBootstrap(t *testing.T) {
+	t.Parallel()
+
+	if !DialectForDriver("sqlite").SupportsSchemaBootstrap() {
+		t.Fatalf("sqlite deberia soportar bootstrap de schema")
+	}
+	if DialectForDriver("postgres").SupportsSchemaBootstrap() {
+		t.Fatalf("postgres no deberia anunciar bootstrap de schema SQLite-first")
+	}
+	if DialectForDriver("mysql").SupportsSchemaBootstrap() {
+		t.Fatalf("mysql no deberia anunciar bootstrap de schema SQLite-first")
+	}
+}

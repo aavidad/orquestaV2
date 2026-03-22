@@ -115,6 +115,43 @@ func TestOpenFallaSinDSNParaDriverExterno(t *testing.T) {
 	}
 }
 
+func TestOpenFallaSiBootstrapSeFuerzaEnDriverNoSoportado(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "orquesta.db")
+	prevPath := os.Getenv("ORQUESTA_DB")
+	prevDriver := os.Getenv("ORQUESTA_DB_DRIVER")
+	prevDSN := os.Getenv("ORQUESTA_DB_DSN")
+	prevBootstrap := os.Getenv("ORQUESTA_DB_BOOTSTRAP")
+	defer func() {
+		_ = os.Setenv("ORQUESTA_DB", prevPath)
+		_ = os.Setenv("ORQUESTA_DB_DRIVER", prevDriver)
+		_ = os.Setenv("ORQUESTA_DB_DSN", prevDSN)
+		_ = os.Setenv("ORQUESTA_DB_BOOTSTRAP", prevBootstrap)
+		Close()
+	}()
+
+	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
+		t.Fatalf("setenv ORQUESTA_DB: %v", err)
+	}
+	if err := os.Setenv("ORQUESTA_DB_DRIVER", "postgres"); err != nil {
+		t.Fatalf("setenv ORQUESTA_DB_DRIVER: %v", err)
+	}
+	if err := os.Setenv("ORQUESTA_DB_DSN", "postgres://example"); err != nil {
+		t.Fatalf("setenv ORQUESTA_DB_DSN: %v", err)
+	}
+	if err := os.Setenv("ORQUESTA_DB_BOOTSTRAP", "true"); err != nil {
+		t.Fatalf("setenv ORQUESTA_DB_BOOTSTRAP: %v", err)
+	}
+
+	err := Open()
+	if err == nil {
+		t.Fatalf("esperaba error por bootstrap no soportado")
+	}
+	if !strings.Contains(err.Error(), "bootstrap de schema no soportado para driver postgres") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
 func TestOpenSQLiteSinBootstrapNoCreaEsquema(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "orquesta.db")

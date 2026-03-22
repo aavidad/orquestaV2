@@ -70,3 +70,7 @@ func (d Dialect) PlaceholderStyle() string {
 func (d Dialect) RebindParameters() bool {
 	return d.Name == "postgres"
 }
+
+func (d Dialect) SupportsSchemaBootstrap() bool {
+	return d.Name == "sqlite"
+}

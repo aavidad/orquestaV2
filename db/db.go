@@ -22,6 +22,9 @@ func Open() error {
 	if err != nil {
 		return fmt.Errorf("resolviendo almacenamiento: %w", err)
 	}
+	if cfg.BootstrapSchema && !storage.DialectForDriver(cfg.Driver).SupportsSchemaBootstrap() {
+		return fmt.Errorf("bootstrap de schema no soportado para driver %s", cfg.Driver)
+	}
 	db, err := storage.Open(cfg)
 	if err != nil {
 		return fmt.Errorf("abriendo DB (%s): %w", cfg.Driver, err)
