@@ -359,10 +359,41 @@ func init() {
 	tareaCmd.AddCommand(
 		tareaListarCmd, tareaVerCmd, tareaNuevaCmd,
 		tareaTomar, tareaIniciarCmd, tareaCompletarCmd,
-		tareaBloquearCmd, tareaNotaCmd,
+		tareaBloquearCmd, tareaNotaCmd, tareaNotasCmd,
 		tareaReasignarCmd, tareaDesbloquearCmd, tareaBacklogCmd,
 		tareaContratoCmd,
 	)
+}
+
+// tareaNotasCmd muestra las notas de una tarea (solo lectura, sin ver todo el detalle).
+var tareaNotasCmd = &cobra.Command{
+	Use:   "notas <id>",
+	Short: "Muestra las notas registradas en una tarea",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("id inválido: %s", args[0])
+		}
+		t, err := db.GetTarea(id)
+		if err != nil {
+			return fmt.Errorf("tarea #%d no encontrada", id)
+		}
+		fmt.Printf("Notas de la tarea #%d — %s\n", t.ID, t.Titulo)
+		fmt.Println("─────────────────────────────────────────")
+		if strings.TrimSpace(t.Notas) == "" {
+			fmt.Println("(sin notas)")
+		} else {
+			// Cada nota está separada por saltos de línea; las mostramos numeradas.
+			lineas := strings.Split(strings.TrimSpace(t.Notas), "\n")
+			for i, l := range lineas {
+				if strings.TrimSpace(l) != "" {
+					fmt.Printf("  %d. %s\n", i+1, l)
+				}
+			}
+		}
+		return nil
+	},
 }
 
 // tareaContratoCmd marca una tarea como con contrato/interfaz de E/S definido (OP-069).

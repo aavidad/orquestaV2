@@ -17,9 +17,10 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "orquesta",
-	Short: "CLI de orquestación multi-agente — PlataformaMunicipal",
-	Long: `Orquesta coordina tareas, propuestas y sesiones de los agentes de desarrollo
-de ContaGrx. Los agentes deben iniciar sesión al comenzar y cerrarla al terminar.`,
+	Short: "CLI de orquestación multi-agente del workspace",
+	Long: `Orquesta coordina proyectos, asignaciones, tareas, propuestas y sesiones
+de los agentes del workspace. Los agentes deben iniciar sesión al comenzar,
+obtener desde la BD sus reglas/skills/workflows y cerrar la sesión al terminar.`,
 	SilenceUsage: true,
 }
 
@@ -35,13 +36,20 @@ func init() {
 	cobra.OnInitialize(initDB)
 
 	rootCmd.AddCommand(
+		agenteCmd,
 		sesionCmd,
+		conectorCmd,
+		proyectoCmd,
+		asignacionCmd,
+		lockCmd,
+		worktreeCmd,
 		tareaCmd,
 		propuestaCmd,
 		votarCmd,
 		configCmd,
 		exportarCmd,
 		statusCmd,
+		logsCmd,
 	)
 }
 
