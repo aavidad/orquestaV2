@@ -54,26 +54,10 @@ func TestOpenNuevaBDIncluyeEsquemaExtendido(t *testing.T) {
 	}
 
 	for _, column := range []string{"estado", "cwd", "external_session_id", "resumen_continuidad"} {
-		var found bool
-		rows, err := DB.Query(`PRAGMA table_info(sesiones)`)
+		found, err := ColumnExists("sesiones", column)
 		if err != nil {
-			t.Fatalf("PRAGMA table_info(sesiones): %v", err)
+			t.Fatalf("ColumnExists(sesiones,%s): %v", column, err)
 		}
-		for rows.Next() {
-			var cid int
-			var name, ctype string
-			var notnull int
-			var dfltValue any
-			var pk int
-			if err := rows.Scan(&cid, &name, &ctype, &notnull, &dfltValue, &pk); err != nil {
-				rows.Close()
-				t.Fatalf("scan table_info: %v", err)
-			}
-			if name == column {
-				found = true
-			}
-		}
-		rows.Close()
 		if !found {
 			t.Fatalf("columna %s no encontrada en sesiones", column)
 		}

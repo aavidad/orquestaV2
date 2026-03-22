@@ -82,14 +82,11 @@ func TestOpenBootstrapCreaTriggersEIndicesDesdeSchema(t *testing.T) {
 		{typ: "index", name: "idx_locks_scope_activo"},
 		{typ: "index", name: "idx_runtime_handles_agente_activo"},
 	} {
-		var count int
-		if err := DB.QueryRow(
-			`SELECT COUNT(*) FROM sqlite_master WHERE type = ? AND name = ?`,
-			obj.typ, obj.name,
-		).Scan(&count); err != nil {
+		exists, err := SchemaObjectExists(obj.typ, obj.name)
+		if err != nil {
 			t.Fatalf("consultando %s %s: %v", obj.typ, obj.name, err)
 		}
-		if count != 1 {
+		if !exists {
 			t.Fatalf("%s %s no existe tras bootstrap", obj.typ, obj.name)
 		}
 	}

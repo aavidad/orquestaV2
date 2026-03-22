@@ -27,12 +27,13 @@ func TestAPIOpsListados(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 
-	res, err := db.DB.Exec(`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1)`,
-		"orquestador", "Orquestador", "/tmp/orquestador", "repo")
-	if err != nil {
+	var proyectoID int64
+	if err := db.DB.QueryRow(
+		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,
+		"orquestador", "Orquestador", "/tmp/orquestador", "repo",
+	).Scan(&proyectoID); err != nil {
 		t.Fatalf("insert proyecto: %v", err)
 	}
-	proyectoID, _ := res.LastInsertId()
 	if _, err := db.DB.Exec(`INSERT INTO asignaciones (agente, proyecto_id, estado, nota) VALUES (?,?,?,?)`,
 		"codex1", proyectoID, "activa", "principal"); err != nil {
 		t.Fatalf("insert asignacion: %v", err)
