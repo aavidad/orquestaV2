@@ -8,8 +8,8 @@ import (
 )
 
 type schemaSectionRenderer struct {
-	sqliteDDL  string
-	renderFor  func(driver string) string
+	sqliteDDL string
+	renderFor func(driver string) string
 }
 
 func schemaDDL() string {
@@ -86,7 +86,7 @@ func schemaBaseSectionRenderers() []schemaSectionRenderer {
 		},
 		{
 			sqliteDDL: schemaRuntimeDDL,
-			renderFor: func(driver string) string { return renderDriverSectionSyntax(driver, schemaRuntimeDDL) },
+			renderFor: renderRuntimeSectionDDLForDriver,
 		},
 		{
 			sqliteDDL: schemaCapacityDDL,

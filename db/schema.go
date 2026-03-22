@@ -200,40 +200,8 @@ CREATE TABLE IF NOT EXISTS git_merges (
 `
 
 // schemaRuntimeDDL define control activo y órdenes runtime de agentes.
-const schemaRuntimeDDL = `
-
--- ─── Control activo de agentes ────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS runtime_handles (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    agente           TEXT NOT NULL REFERENCES agentes(nombre),
-    sesion_id        INTEGER REFERENCES sesiones(id) ON DELETE SET NULL,
-    proyecto_id      INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
-    transporte       TEXT NOT NULL,
-    handle_kind      TEXT NOT NULL,
-    handle_ref       TEXT NOT NULL,
-    estado           TEXT NOT NULL DEFAULT 'activo'
-                         CHECK (estado IN ('activo','pausado','cerrado','fallido')),
-    metadata_json    TEXT NOT NULL DEFAULT '{}',
-    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS runtime_orders (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    agente           TEXT NOT NULL REFERENCES agentes(nombre),
-    proyecto_id      INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
-    tipo             TEXT NOT NULL
-                         CHECK (tipo IN ('enviar_instruccion','pausar','continuar','handoff')),
-    payload_json     TEXT NOT NULL DEFAULT '{}',
-    estado           TEXT NOT NULL DEFAULT 'pendiente'
-                         CHECK (estado IN ('pendiente','ejecutando','completada','fallida')),
-    error_text       TEXT NOT NULL DEFAULT '',
-    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    started_at       DATETIME,
-    finished_at      DATETIME
-);
-
-`
+// Sale de un schema spec estructurado para evitar sustituciones ciegas por driver.
+var schemaRuntimeDDL = renderRuntimeSectionDDLForDriver("sqlite")
 
 // schemaCapacityDDL define pools, modelos y políticas de capacidad.
 const schemaCapacityDDL = `
