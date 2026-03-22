@@ -38,7 +38,7 @@ func TestWebRuntimesPageYFiltros(t *testing.T) {
 	}
 
 	// Runtime activo.
-	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+	sesionActiva, err := db.IniciarSesionContexto(db.SesionInicio{
 		Agente:             "Codex1",
 		ProyectoID:         &proyectoID,
 		CWD:                filepath.Join(tmp, "orquestador"),
@@ -46,8 +46,13 @@ func TestWebRuntimesPageYFiltros(t *testing.T) {
 		ExternalSessionID:  "sess-web-001",
 		ResumenContinuidad: "runtime activo",
 		Branch:             "main",
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("iniciar sesion activa: %v", err)
+	}
+	runtimeActivo, err := db.GetRuntimeBySesionID(sesionActiva.ID)
+	if err != nil || runtimeActivo == nil {
+		t.Fatalf("get runtime activo: %v", err)
 	}
 
 	// Runtime cerrado.
@@ -73,6 +78,7 @@ func TestWebRuntimesPageYFiltros(t *testing.T) {
 	mux.HandleFunc("/propuestas", webHandlerPropuestas)
 	mux.HandleFunc("/propuestas/", webRouterPropuestas)
 	mux.HandleFunc("/runtimes", webHandlerRuntimes)
+	mux.HandleFunc("/runtimes/", webRouterRuntimes)
 	registerAPIRoutes(mux)
 
 	assertContains := func(path, needle string) {
@@ -92,4 +98,5 @@ func TestWebRuntimesPageYFiltros(t *testing.T) {
 	assertContains("/runtimes", "Codex1")
 	assertContains("/runtimes?activos=true", "Codex1")
 	assertContains("/runtimes?activos=false", "Codex2")
+	assertContains("/runtimes/"+itoa(runtimeActivo.ID), "Runtime #")
 }

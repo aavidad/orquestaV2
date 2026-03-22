@@ -47,6 +47,7 @@ type apiAsignacionActivarRequest struct {
 }
 
 type apiSesionInicioRequest struct {
+	NuevoCodex        bool   `json:"nuevo_codex"`
 	Agente            string `json:"agente"`
 	Conector          string `json:"conector"`
 	Proyecto          string `json:"proyecto"`
@@ -150,7 +151,9 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/config", apiHandlerConfig)
 	mux.HandleFunc("/api/audit", apiHandlerAudit)
 	mux.HandleFunc("/api/proyectos", apiHandlerProyectos)
+	mux.HandleFunc("/api/proyectos/", apiRouterProyectos)
 	mux.HandleFunc("/api/conectores", apiHandlerConectores)
+	mux.HandleFunc("/api/conectores/", apiRouterConectores)
 	mux.HandleFunc("/api/asignaciones", apiHandlerAsignaciones)
 	mux.HandleFunc("/api/asignaciones/activar", apiHandlerAsignacionActivar)
 	mux.HandleFunc("/api/locks", apiHandlerLocks)
@@ -259,24 +262,42 @@ func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 }
 
 func apiHandlerConfig(w http.ResponseWriter, r *http.Request) {
-	if !apiRequireMethod(w, r, http.MethodGet) {
-		return
-	}
-	if clave := strings.TrimSpace(r.URL.Query().Get("clave")); clave != "" {
-		valor, err := db.ConfigGet(clave)
-		if err != nil {
-			apiError(w, http.StatusNotFound, err)
+	switch r.Method {
+	case http.MethodGet:
+		if clave := strings.TrimSpace(r.URL.Query().Get("clave")); clave != "" {
+			valor, err := db.ConfigGet(clave)
+			if err != nil {
+				apiError(w, http.StatusNotFound, err)
+				return
+			}
+			apiWriteJSON(w, http.StatusOK, map[string]any{"clave": clave, "valor": valor})
 			return
 		}
-		apiWriteJSON(w, http.StatusOK, map[string]any{"clave": clave, "valor": valor})
-		return
+		config, err := db.ConfigAll()
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"config": config})
+	case http.MethodPost:
+		var req apiConfigSetRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		req.Clave = strings.TrimSpace(req.Clave)
+		if req.Clave == "" {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("clave obligatoria"))
+			return
+		}
+		if err := db.ConfigSet(req.Clave, req.Valor); err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "clave": req.Clave, "valor": req.Valor})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
-	config, err := db.ConfigAll()
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	apiWriteJSON(w, http.StatusOK, map[string]any{"config": config})
 }
 
 func apiHandlerAudit(w http.ResponseWriter, r *http.Request) {
@@ -352,16 +373,78 @@ func apiHandlerProyectos(w http.ResponseWriter, r *http.Request) {
 	apiWriteJSON(w, http.StatusOK, map[string]any{"proyectos": proyectos})
 }
 
-func apiHandlerConectores(w http.ResponseWriter, r *http.Request) {
+func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
 	}
-	conectores, err := db.ListarConectores()
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
+	ref := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/proyectos/"), "/")
+	if ref == "" {
+		http.NotFound(w, r)
 		return
 	}
-	apiWriteJSON(w, http.StatusOK, map[string]any{"conectores": conectores})
+	proyecto, err := db.GetProyecto(ref)
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"proyecto": proyecto})
+}
+
+func apiHandlerConectores(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		conectores, err := db.ListarConectores()
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"conectores": conectores})
+	case http.MethodPost:
+		var req apiConectorUpsertRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		id, err := db.UpsertConector(&db.Conector{
+			Slug:         strings.TrimSpace(req.Slug),
+			Nombre:       strings.TrimSpace(req.Nombre),
+			Transporte:   strings.TrimSpace(req.Transporte),
+			Comando:      req.Comando,
+			ArgsJSON:     req.ArgsJSON,
+			EnvJSON:      req.EnvJSON,
+			MetadataJSON: req.MetadataJSON,
+			Activo:       req.Activo,
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		conector, err := db.GetConector(strconv.FormatInt(id, 10))
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true, "conector": conector})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func apiRouterConectores(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	ref := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/conectores/"), "/")
+	if ref == "" {
+		http.NotFound(w, r)
+		return
+	}
+	conector, err := db.GetConector(ref)
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"conector": conector})
 }
 
 func apiHandlerAsignaciones(w http.ResponseWriter, r *http.Request) {
@@ -1151,12 +1234,12 @@ func apiHandlerSesionInicio(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	sesion, err := iniciarSesionDesdeRequest(req)
+	resp, err := construirSesionInicioResponse(req)
 	if err != nil {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true, "sesion": sesion})
+	apiWriteJSON(w, http.StatusCreated, resp)
 }
 
 func apiHandlerSesionGuardar(w http.ResponseWriter, r *http.Request) {
@@ -1538,6 +1621,82 @@ func iniciarSesionDesdeRequest(req apiSesionInicioRequest) (*db.Sesion, error) {
 		Host:               req.Host,
 		PID:                pid,
 	})
+}
+
+func construirSesionInicioResponse(req apiSesionInicioRequest) (*apiSesionInicioResponse, error) {
+	if req.NuevoCodex {
+		nombre, err := db.RegistrarCodex()
+		if err != nil {
+			return nil, fmt.Errorf("registrando codex: %w", err)
+		}
+		req.Agente = nombre
+	}
+	if strings.TrimSpace(req.Agente) == "" {
+		return nil, fmt.Errorf("indica el nombre del agente o usa --nuevo-codex")
+	}
+
+	var previo *db.Sesion
+	if strings.TrimSpace(req.Proyecto) != "" {
+		proyecto, err := db.GetProyecto(req.Proyecto)
+		if err != nil {
+			return nil, err
+		}
+		previo, err = db.ObtenerUltimaSesion(req.Agente, &proyecto.ID)
+		if err != nil && err != sql.ErrNoRows {
+			return nil, err
+		}
+	}
+
+	sesion, err := iniciarSesionDesdeRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	agentes, err := db.ListarAgentes()
+	if err != nil {
+		return nil, err
+	}
+	rol := ""
+	for _, agente := range agentes {
+		if agente.Nombre == sesion.Agente {
+			rol = agente.Rol
+			break
+		}
+	}
+
+	resp := &apiSesionInicioResponse{
+		Sesion:       sesion,
+		SesionPrevia: previo,
+		Rol:          rol,
+	}
+	if rol == "" || rol == "admin" {
+		return resp, nil
+	}
+
+	pendientes, err := db.PropuestasPendientesVoto(sesion.Agente)
+	if err != nil {
+		return nil, err
+	}
+	resp.PropuestasPendientes = pendientes
+
+	reglas, err := db.GetReglasAgente(rol)
+	if err != nil {
+		return nil, err
+	}
+	resp.Reglas = reglas
+
+	skills, err := db.GetSkillsAgente(rol)
+	if err != nil {
+		return nil, err
+	}
+	resp.Skills = skills
+
+	workflow, err := db.GetWorkflow(rol, "inicio-sesion")
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	resp.Workflow = workflow
+	return resp, nil
 }
 
 func apiDecodeJSON(r *http.Request, dst any) error {

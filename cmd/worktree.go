@@ -9,6 +9,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -26,6 +27,17 @@ var worktreeListarCmd = &cobra.Command{
 	Use:   "listar",
 	Short: "Lista worktrees registrados",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		query := url.Values{}
+		if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
+			query.Set("agente", agente)
+		}
+		if proyectoRef, _ := cmd.Flags().GetString("proyecto"); strings.TrimSpace(proyectoRef) != "" {
+			query.Set("proyecto", proyectoRef)
+		}
+		if estadoStr, _ := cmd.Flags().GetString("estado"); strings.TrimSpace(estadoStr) != "" {
+			query.Set("estado", estadoStr)
+		}
+
 		repo := db.SQLiteWorktreeRepository{}
 		filter := coordination.WorktreeFilter{}
 		if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
@@ -42,7 +54,10 @@ var worktreeListarCmd = &cobra.Command{
 			estado := coordination.WorktreeState(estadoStr)
 			filter.State = &estado
 		}
-		worktrees, err := repo.List(filter)
+		worktrees, ok, err := cargarWorktreesDesdeAPI(query)
+		if !ok {
+			worktrees, err = repo.List(filter)
+		}
 		if err != nil {
 			return err
 		}
@@ -63,19 +78,39 @@ var worktreeCrearCmd = &cobra.Command{
 	Short: "Crea un worktree aislado para trabajo paralelo",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		svc := newCoordinationService()
-		var taskID *int64
-		if tareaRaw, _ := cmd.Flags().GetInt64("tarea"); tareaRaw > 0 {
-			taskID = &tareaRaw
-		}
-		var lockID *int64
-		if lockRaw, _ := cmd.Flags().GetInt64("lock"); lockRaw > 0 {
-			lockID = &lockRaw
-		}
+		tareaRaw, _ := cmd.Flags().GetInt64("tarea")
+		lockRaw, _ := cmd.Flags().GetInt64("lock")
 		name, _ := cmd.Flags().GetString("nombre")
 		branch, _ := cmd.Flags().GetString("branch")
 		baseRef, _ := cmd.Flags().GetString("base-ref")
 		reason, _ := cmd.Flags().GetString("motivo")
+		if worktree, ok, err := crearWorktreePorAPI(apiWorktreeRequest{
+			Agente:   args[0],
+			Proyecto: args[1],
+			TareaID:  tareaRaw,
+			LockID:   lockRaw,
+			Nombre:   name,
+			Branch:   branch,
+			BaseRef:  baseRef,
+			Motivo:   reason,
+		}); ok {
+			if err != nil {
+				return err
+			}
+			fmt.Printf("✓ Worktree %d creado para %s\n", worktree.ID, worktree.Agent)
+			fmt.Printf("  branch=%s\n", worktree.Branch)
+			fmt.Printf("  ruta=%s\n", worktree.Path)
+			return nil
+		}
+		svc := newCoordinationService()
+		var taskID *int64
+		if tareaRaw > 0 {
+			taskID = &tareaRaw
+		}
+		var lockID *int64
+		if lockRaw > 0 {
+			lockID = &lockRaw
+		}
 		worktree, err := svc.PrepareWorktree(coordination.PrepareWorktreeInput{
 			ProjectRef: args[1],
 			Agent:      args[0],
@@ -101,13 +136,23 @@ var worktreeCerrarCmd = &cobra.Command{
 	Short: "Cierra un worktree y opcionalmente lo elimina del repo",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		svc := newCoordinationService()
 		id, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			return err
 		}
 		remove, _ := cmd.Flags().GetBool("eliminar")
 		reason, _ := cmd.Flags().GetString("motivo")
+		if worktree, ok, err := cerrarWorktreePorAPI(id, apiWorktreeRequest{
+			Eliminar: remove,
+			Motivo:   reason,
+		}); ok {
+			if err != nil {
+				return err
+			}
+			fmt.Printf("✓ Worktree %d cerrado (%s)\n", worktree.ID, worktree.Path)
+			return nil
+		}
+		svc := newCoordinationService()
 		worktree, err := svc.CloseWorktree(id, remove, reason)
 		if err != nil {
 			return err

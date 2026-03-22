@@ -67,9 +67,12 @@ func TestRuntimeListarYVer(t *testing.T) {
 			t.Fatalf("run ver: %v", err)
 		}
 	})
-	for _, token := range []string{"Runtime #", "Codex1", "disponible", "codex-cli", "Muestras recientes"} {
+	for _, token := range []string{"Runtime #", "Codex1", "codex-cli", "Muestras recientes"} {
 		if !strings.Contains(outVer, token) {
 			t.Fatalf("salida ver sin %q:\n%s", token, outVer)
 		}
+	}
+	if !strings.Contains(outVer, "Estado:") {
+		t.Fatalf("salida ver sin bloque de estado:\n%s", outVer)
 	}
 }

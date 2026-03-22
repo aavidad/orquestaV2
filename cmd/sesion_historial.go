@@ -9,6 +9,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -21,19 +22,19 @@ var sesionHistorialCmd = &cobra.Command{
 	Short: "Lista sesiones con filtros de inspección",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		filtro := db.FiltroSesionesInspeccion{}
+		params := url.Values{}
+		proyectoRef, _ := cmd.Flags().GetString("proyecto")
 
 		if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
 			agente = strings.TrimSpace(agente)
 			filtro.Agente = &agente
+			params.Set("agente", agente)
 		}
-		if proyectoRef, _ := cmd.Flags().GetString("proyecto"); strings.TrimSpace(proyectoRef) != "" {
-			proyecto, err := db.GetProyecto(proyectoRef)
-			if err != nil {
-				return err
-			}
-			filtro.ProyectoID = &proyecto.ID
+		if strings.TrimSpace(proyectoRef) != "" {
+			params.Set("proyecto", strings.TrimSpace(proyectoRef))
 		}
 		if activaStr, _ := cmd.Flags().GetString("activa"); strings.TrimSpace(activaStr) != "" {
+			params.Set("activa", strings.TrimSpace(activaStr))
 			switch activaStr {
 			case "true":
 				v := true
@@ -48,11 +49,27 @@ var sesionHistorialCmd = &cobra.Command{
 		if estado, _ := cmd.Flags().GetString("estado"); strings.TrimSpace(estado) != "" {
 			estado = strings.TrimSpace(estado)
 			filtro.Estado = &estado
+			params.Set("estado", estado)
 		}
 
-		sesiones, err := db.ListarSesionesInspeccion(filtro)
-		if err != nil {
+		var sesiones []*db.Sesion
+		var resp apiSesionesInspeccionResponse
+		if ok, err := apiGetQuery("/api/sesiones", params, &resp); err != nil {
 			return err
+		} else if ok {
+			sesiones = resp.Sesiones
+		} else {
+			if strings.TrimSpace(proyectoRef) != "" {
+				proyecto, err := db.GetProyecto(proyectoRef)
+				if err != nil {
+					return err
+				}
+				filtro.ProyectoID = &proyecto.ID
+			}
+			sesiones, err = db.ListarSesionesInspeccion(filtro)
+			if err != nil {
+				return err
+			}
 		}
 
 		fmt.Printf("%-5s %-12s %-14s %-8s %-12s %-14s %s\n", "ID", "AGENTE", "PROYECTO", "ACTIVA", "ESTADO", "HERRAMIENTA", "EXTERNAL_ID")
@@ -90,9 +107,17 @@ var sesionVerCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
-		s, err := db.GetSesionInspeccionByID(id)
-		if err != nil {
+		var s *db.Sesion
+		var resp apiSesionResponse
+		if ok, err := apiGet("/api/sesiones/"+strconv.FormatInt(id, 10), &resp); err != nil {
 			return err
+		} else if ok {
+			s = resp.Sesion
+		} else {
+			s, err = db.GetSesionInspeccionByID(id)
+			if err != nil {
+				return err
+			}
 		}
 		fmt.Printf("Sesión %d\n", s.ID)
 		fmt.Printf("  Agente:      %s\n", s.Agente)

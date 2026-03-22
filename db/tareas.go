@@ -253,6 +253,23 @@ func CompletarTarea(id int64, agente, commit string) error {
 	return err
 }
 
+// CancelarTarea marca una tarea como cancelada (no se va a realizar).
+func CancelarTarea(id int64, agente, motivo string) error {
+	t, err := GetTarea(id)
+	if err != nil {
+		return fmt.Errorf("tarea #%d no encontrada", id)
+	}
+	_, err = DB.Exec(
+		`UPDATE tareas SET estado='cancelada', notas = notas || char(10) || 'CANCELADA: ' || ? WHERE id=?`,
+		motivo, id,
+	)
+	if err == nil {
+		Audit(agente, "cancelar_tarea", "tarea", id, t.Titulo+": "+motivo)
+		SetEstadoSesion(agente, "disponible")
+	}
+	return err
+}
+
 // BloquearTarea marca una tarea como bloqueada y registra el bloqueo.
 func BloquearTarea(id int64, agente, motivo string) error {
 	t, err := GetTarea(id)

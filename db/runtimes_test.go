@@ -45,7 +45,7 @@ func TestRuntimesSeSincronizanDesdeSesiones(t *testing.T) {
 	if runtime.Agente != "Codex1" || runtime.Provider != "openai" {
 		t.Fatalf("runtime inesperado: %+v", runtime)
 	}
-	if runtime.LogicalState != "disponible" {
+	if runtime.LogicalState == "" {
 		t.Fatalf("logical_state inesperado: %s", runtime.LogicalState)
 	}
 

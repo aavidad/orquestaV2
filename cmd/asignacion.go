@@ -9,6 +9,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
@@ -27,6 +28,17 @@ var asignacionListarCmd = &cobra.Command{
 		proyectoRef, _ := cmd.Flags().GetString("proyecto")
 		estadoStr, _ := cmd.Flags().GetString("estado")
 
+		query := url.Values{}
+		if agente != "" {
+			query.Set("agente", agente)
+		}
+		if proyectoRef != "" {
+			query.Set("proyecto", proyectoRef)
+		}
+		if estadoStr != "" {
+			query.Set("estado", estadoStr)
+		}
+
 		f := db.FiltroAsignaciones{}
 		if agente != "" {
 			f.Agente = &agente
@@ -43,7 +55,10 @@ var asignacionListarCmd = &cobra.Command{
 			f.Estado = &estado
 		}
 
-		asignaciones, err := db.ListarAsignaciones(f)
+		asignaciones, ok, err := cargarAsignacionesDesdeAPI(query)
+		if !ok {
+			asignaciones, err = db.ListarAsignaciones(f)
+		}
 		if err != nil {
 			return err
 		}
@@ -66,6 +81,17 @@ var asignacionActivarCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		nota, _ := cmd.Flags().GetString("nota")
+		if ok, err := activarAsignacionPorAPI(apiAsignacionActivarRequest{
+			Agente:   args[0],
+			Proyecto: args[1],
+			Nota:     nota,
+		}); ok {
+			if err != nil {
+				return err
+			}
+			fmt.Printf("✓ %s asignado a %s\n", args[0], args[1])
+			return nil
+		}
 		p, err := db.GetProyecto(args[1])
 		if err != nil {
 			return err

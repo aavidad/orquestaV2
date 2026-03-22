@@ -25,18 +25,30 @@ var configVerCmd = &cobra.Command{
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 1 {
-			val, err := db.ConfigGet(args[0])
+			resp, ok, err := cargarConfigDesdeAPI(args[0])
+			if !ok {
+				val, err := db.ConfigGet(args[0])
+				if err != nil {
+					return fmt.Errorf("clave '%s' no encontrada", args[0])
+				}
+				fmt.Printf("%s = %s\n", args[0], val)
+				return nil
+			}
 			if err != nil {
 				return fmt.Errorf("clave '%s' no encontrada", args[0])
 			}
-			fmt.Printf("%s = %s\n", args[0], val)
+			fmt.Printf("%s = %s\n", args[0], resp.Valor)
 			return nil
 		}
-		all, err := db.ConfigAll()
+		resp, ok, err := cargarConfigDesdeAPI("")
+		if !ok {
+			resp = &apiConfigResponse{}
+			resp.Config, err = db.ConfigAll()
+		}
 		if err != nil {
 			return err
 		}
-		for k, v := range all {
+		for k, v := range resp.Config {
 			fmt.Printf("%-30s = %s\n", k, v)
 		}
 		return nil
@@ -48,7 +60,11 @@ var configSetCmd = &cobra.Command{
 	Short: "Establece el valor de una clave de configuración",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := db.ConfigSet(args[0], args[1]); err != nil {
+		if ok, err := configurarValorPorAPI(args[0], args[1]); ok {
+			if err != nil {
+				return err
+			}
+		} else if err := db.ConfigSet(args[0], args[1]); err != nil {
 			return err
 		}
 		fmt.Printf("✓ %s = %s\n", args[0], args[1])

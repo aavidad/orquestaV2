@@ -24,7 +24,10 @@ var proyectoListarCmd = &cobra.Command{
 	Use:   "listar",
 	Short: "Lista los proyectos registrados",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		proyectos, err := db.ListarProyectos(db.FiltroProyectos{})
+		proyectos, ok, err := cargarProyectosDesdeAPI()
+		if !ok {
+			proyectos, err = db.ListarProyectos(db.FiltroProyectos{})
+		}
 		if err != nil {
 			return err
 		}
@@ -77,7 +80,10 @@ var proyectoVerCmd = &cobra.Command{
 	Short: "Muestra el detalle de un proyecto",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		p, err := db.GetProyecto(args[0])
+		p, ok, err := cargarProyectoDesdeAPI(args[0])
+		if !ok {
+			p, err = db.GetProyecto(args[0])
+		}
 		if err != nil {
 			return err
 		}

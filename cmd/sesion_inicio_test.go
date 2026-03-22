@@ -1,0 +1,88 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
+package cmd
+
+import (
+	"encoding/json"
+	"net/http"
+	"strings"
+	"testing"
+
+	"orquesta/db"
+)
+
+func TestSesionInicioUsaAPIBriefing(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/sesiones/inicio", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiSesionInicioResponse{
+			Sesion: &db.Sesion{
+				ID:             77,
+				Agente:         "Codex1",
+				ProyectoSlug:   "orquestador",
+				ProyectoNombre: "Orquestador",
+				CWD:            "/tmp/orquestador",
+				Herramienta:    "codex-cli",
+				Branch:         "main",
+			},
+			Rol: "programador",
+			PropuestasPendientes: []*db.Propuesta{
+				{Codigo: "OP-082", Titulo: "Observabilidad pasiva"},
+			},
+			Reglas: []*db.Regla{
+				{Categoria: "sesion", Titulo: "Fuente de verdad", Descripcion: "Usar Orquesta"},
+			},
+			Skills: []*db.Skill{
+				{Nombre: "fix-bug", CuandoUsar: "Cuando hay un bug confirmado"},
+			},
+			Workflow: &db.Workflow{
+				Nombre: "inicio-sesion",
+				Pasos:  `["1. Iniciar","2. Trabajar"]`,
+			},
+		})
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	_ = sesionInicioCmd.Flags().Set("nuevo-codex", "false")
+	_ = sesionInicioCmd.Flags().Set("proyecto", "")
+	_ = sesionInicioCmd.Flags().Set("conector", "")
+	_ = sesionInicioCmd.Flags().Set("cwd", "")
+	_ = sesionInicioCmd.Flags().Set("herramienta", "")
+	_ = sesionInicioCmd.Flags().Set("branch", "")
+	_ = sesionInicioCmd.Flags().Set("external-session-id", "")
+	_ = sesionInicioCmd.Flags().Set("resume-payload", "")
+	_ = sesionInicioCmd.Flags().Set("resumen", "")
+	_ = sesionInicioCmd.Flags().Set("host", "")
+	_ = sesionInicioCmd.Flags().Set("pid", "0")
+
+	out := capturarStdout(t, func() {
+		if err := sesionInicioCmd.RunE(sesionInicioCmd, []string{"Codex1"}); err != nil {
+			t.Fatalf("sesion inicio via API: %v", err)
+		}
+	})
+
+	for _, token := range []string{
+		"SESIÓN INICIADA — agente: Codex1",
+		"PROPUESTAS PENDIENTES DE TU VOTO",
+		"REGLAS ACTIVAS (PROGRAMADOR)",
+		"SKILLS DISPONIBLES",
+		"WORKFLOW — INICIO-SESION",
+	} {
+		if !strings.Contains(out, token) {
+			t.Fatalf("salida sin %q:\n%s", token, out)
+		}
+	}
+}

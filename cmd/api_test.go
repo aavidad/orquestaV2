@@ -120,6 +120,19 @@ func TestAPIAsignacionActivarYSesionInicio(t *testing.T) {
 	if recSesion.Code != http.StatusCreated {
 		t.Fatalf("status sesion inesperado: %d body=%s", recSesion.Code, recSesion.Body.String())
 	}
+	var resp apiSesionInicioResponse
+	if err := json.Unmarshal(recSesion.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode sesion inicio: %v", err)
+	}
+	if resp.Sesion == nil || resp.Sesion.Agente != "codex1" {
+		t.Fatalf("respuesta de sesion inesperada: %+v", resp.Sesion)
+	}
+	if resp.Rol == "" {
+		t.Fatalf("se esperaba rol en la respuesta de sesion inicio")
+	}
+	if len(resp.Reglas) == 0 {
+		t.Fatalf("se esperaban reglas en la respuesta de sesion inicio")
+	}
 
 	sesion, err := db.GetSesionActiva("codex1", &proyectoID)
 	if err != nil {

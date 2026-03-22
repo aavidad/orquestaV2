@@ -30,6 +30,7 @@ type webDashData struct {
 	Pct         int
 	Abiertas    []webPropResumen
 	EnProgreso  []webTareaRow
+	Runtimes    []webRuntimeRow
 	Generado    string
 	Msg         string
 }
@@ -113,6 +114,23 @@ type webRuntimesData struct {
 	Filtro   string
 }
 
+type webRuntimeSampleRow struct {
+	Creada      string
+	CPUPct      string
+	MemBytes    int64
+	RSSBytes    int64
+	OpenFDs     int64
+	ChildCount  int
+	ThreadCount int
+	Estado      string
+	Fuente      string
+}
+
+type webRuntimeDetalleData struct {
+	Runtime  webRuntimeRow
+	Muestras []webRuntimeSampleRow
+}
+
 // ─── FuncMap ─────────────────────────────────────────────────────────────────
 
 var webFuncMap = template.FuncMap{
@@ -171,6 +189,19 @@ func webRouterPropuestas(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func webRouterRuntimes(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) != 2 || parts[0] != "runtimes" {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	webHandlerRuntimeDetalle(w, r, parts[1])
+}
+
 func webHandlerRuntimes(w http.ResponseWriter, r *http.Request) {
 	filtro := strings.TrimSpace(r.URL.Query().Get("activos"))
 	agenteFiltro := strings.TrimSpace(r.URL.Query().Get("agente"))
@@ -204,6 +235,27 @@ func webHandlerRuntimes(w http.ResponseWriter, r *http.Request) {
 		Runtimes: rows,
 		Filtro:   filtro,
 	})
+}
+
+func webHandlerRuntimeDetalle(w http.ResponseWriter, r *http.Request, idStr string) {
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	runtime, err := db.GetRuntime(id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	samples, _ := db.ListarMuestrasRuntime(id, 20)
+
+	row := runtimeRowToWeb(runtimeRowDesdeModelo(runtime, 0, runtime.ChildCount))
+	data := webRuntimeDetalleData{
+		Runtime:  row,
+		Muestras: runtimeSamplesToWeb(samples),
+	}
+	webRender(w, webTplLayout+webTplRuntimeDetalle, data)
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
@@ -242,10 +294,14 @@ func webHandlerDash(w http.ResponseWriter, r *http.Request) {
 	for _, t := range tareas {
 		ep = append(ep, toWebTarea(t))
 	}
+	activos := true
+	runtimeTree, _ := db.ConstruirArbolRuntimes(db.FiltroRuntimes{Activos: &activos})
+	var runtimes []webRuntimeRow
+	aplanarRuntimes(runtimeTree, 0, &runtimes)
 	webRender(w, webTplLayout+webTplDash, webDashData{
 		Agentes: agentes, Counts: counts, Total: total,
 		Completadas: completadas, Pct: pct,
-		Abiertas: resAbiertas, EnProgreso: ep,
+		Abiertas: resAbiertas, EnProgreso: ep, Runtimes: runtimes,
 		Generado: time.Now().Format("2006-01-02 15:04:05"),
 	})
 }
@@ -559,6 +615,45 @@ func valorVacio(v string) string {
 	return v
 }
 
+func runtimeSamplesToWeb(samples []*db.RuntimeTelemetrySample) []webRuntimeSampleRow {
+	out := make([]webRuntimeSampleRow, 0, len(samples))
+	for _, s := range samples {
+		if s == nil {
+			continue
+		}
+		out = append(out, webRuntimeSampleRow{
+			Creada:      s.CreatedAt.Format("2006-01-02 15:04:05"),
+			CPUPct:      fmt.Sprintf("%.1f", s.CPUPct),
+			MemBytes:    s.MemBytes,
+			RSSBytes:    s.RSSBytes,
+			OpenFDs:     s.OpenFDs,
+			ChildCount:  s.ChildCount,
+			ThreadCount: s.ThreadCount,
+			Estado:      valorVacio(s.LogicalState),
+			Fuente:      valorVacio(s.Source),
+		})
+	}
+	return out
+}
+
+func runtimeRowToWeb(row runtimeRow) webRuntimeRow {
+	return webRuntimeRow{
+		ID:           row.ID,
+		Nivel:        row.Nivel,
+		Agente:       row.Agente,
+		Proyecto:     row.Proyecto,
+		Provider:     row.Provider,
+		Connector:    row.Connector,
+		Estado:       row.Estado,
+		PID:          row.PID,
+		Hijos:        row.Hijos,
+		Branch:       row.Branch,
+		Modelo:       row.Modelo,
+		Razonamiento: row.Razonamiento,
+		UltimaSenal:  row.Ultima,
+	}
+}
+
 func webRender(w http.ResponseWriter, tplStr string, data any) {
 	tmpl, err := template.New("layout").Funcs(webFuncMap).Parse(tplStr)
 	if err != nil {
@@ -584,6 +679,7 @@ var serveCmd = &cobra.Command{
 		mux.HandleFunc("/propuestas", webHandlerPropuestas)
 		mux.HandleFunc("/propuestas/", webRouterPropuestas)
 		mux.HandleFunc("/runtimes", webHandlerRuntimes)
+		mux.HandleFunc("/runtimes/", webRouterRuntimes)
 		registerAPIRoutes(mux)
 		fmt.Printf("✓ Panel web en http://localhost%s\n", addr)
 		fmt.Println("  Ctrl+C para detener.")
@@ -751,6 +847,21 @@ const webTplDash = `{{define "content"}}
             <td style="color:#16a34a;font-weight:700;text-align:center">{{.Acuerdo}}</td>
             <td style="color:#dc2626;font-weight:700;text-align:center">{{.Desacuerdo}}</td>
             <td style="color:#d97706;font-weight:700;text-align:center">{{.Pendiente}}</td>
+          </tr>
+        {{end}}
+        </tbody></table>
+      </div>
+      {{end}}
+      {{if .Runtimes}}
+      <div>
+        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Runtimes activos <a href="/runtimes" style="font-size:.9em;font-weight:normal;text-transform:none">ver todos →</a></h4>
+        <table><thead><tr><th>Agente</th><th>Estado</th><th>PID</th><th>Hijos</th></tr></thead><tbody>
+        {{range .Runtimes}}
+          <tr>
+            <td style="padding-left:{{.Nivel}}rem"><a href="/runtimes/{{.ID}}">{{if gt .Nivel 0}}↳ {{end}}{{.Agente}}</a></td>
+            <td><span class="tag rt-{{.Estado}}">{{.Estado}}</span></td>
+            <td>{{.PID}}</td>
+            <td>{{.Hijos}}</td>
           </tr>
         {{end}}
         </tbody></table>
@@ -1055,7 +1166,7 @@ const webTplRuntimes = `{{define "content"}}
   <tbody>
   {{range .Runtimes}}
     <tr>
-      <td style="padding-left:calc(.5rem + {{.Nivel}}rem)">#{{.ID}}</td>
+      <td style="padding-left:calc(.5rem + {{.Nivel}}rem)"><a href="/runtimes/{{.ID}}">#{{.ID}}</a></td>
       <td><span class="tag rt-{{.Estado}}">{{.Estado}}</span></td>
       <td>{{.Agente}}</td>
       <td>{{.Proyecto}}</td>
@@ -1072,6 +1183,51 @@ const webTplRuntimes = `{{define "content"}}
 </div>
 {{else}}
 <p style="color:#94a3b8">No hay runtimes visibles con este filtro.</p>
+{{end}}
+{{end}}
+`
+
+const webTplRuntimeDetalle = `{{define "content"}}
+<a href="/runtimes" style="font-size:.85rem;color:#64748b">← volver a runtimes</a>
+<h2 style="margin:.5rem 0">Runtime #{{.Runtime.ID}} — {{.Runtime.Agente}}</h2>
+<p>
+  <span class="tag rt-{{.Runtime.Estado}}">{{.Runtime.Estado}}</span>
+  <span style="color:#64748b;font-size:.85rem;margin-left:.5rem">Proyecto: {{.Runtime.Proyecto}} · Provider: {{.Runtime.Provider}} · Connector: {{.Runtime.Connector}}</span>
+</p>
+
+<div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr));margin-bottom:1rem">
+  <div class="stat"><div class="n" style="font-size:1.2rem">{{.Runtime.PID}}</div><div class="l">pid</div></div>
+  <div class="stat"><div class="n" style="font-size:1.2rem">{{.Runtime.Hijos}}</div><div class="l">hijos</div></div>
+  <div class="stat"><div class="n" style="font-size:1rem">{{.Runtime.Branch}}</div><div class="l">branch</div></div>
+  <div class="stat"><div class="n" style="font-size:1rem">{{.Runtime.Modelo}}</div><div class="l">modelo</div></div>
+  <div class="stat"><div class="n" style="font-size:1rem">{{.Runtime.Razonamiento}}</div><div class="l">reasoning</div></div>
+  <div class="stat"><div class="n" style="font-size:1rem">{{.Runtime.UltimaSenal}}</div><div class="l">última señal</div></div>
+</div>
+
+<h4 style="margin:0 0 .6rem 0">Muestras recientes</h4>
+{{if .Muestras}}
+<div style="overflow-x:auto">
+<table>
+  <thead><tr><th>Creada</th><th>Estado</th><th>CPU%</th><th>MEM</th><th>RSS</th><th>FDs</th><th>Hijos</th><th>Hilos</th><th>Fuente</th></tr></thead>
+  <tbody>
+  {{range .Muestras}}
+    <tr>
+      <td>{{.Creada}}</td>
+      <td><span class="tag rt-{{.Estado}}">{{.Estado}}</span></td>
+      <td>{{.CPUPct}}</td>
+      <td>{{.MemBytes}}</td>
+      <td>{{.RSSBytes}}</td>
+      <td>{{.OpenFDs}}</td>
+      <td>{{.ChildCount}}</td>
+      <td>{{.ThreadCount}}</td>
+      <td>{{.Fuente}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<p style="color:#94a3b8">No hay muestras registradas para este runtime.</p>
 {{end}}
 {{end}}
 `

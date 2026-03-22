@@ -115,7 +115,10 @@ func UpsertRuntimeDesdeSesion(s *Sesion) error {
 	if err != nil || runtime == nil {
 		return err
 	}
-	return insertarMuestraRuntime(runtime.ID, runtime.LogicalState, "sesion_sync")
+	if _, err := RegistrarMuestraGenericProcess(runtime.ID, runtime); err != nil {
+		return insertarMuestraRuntime(runtime.ID, runtime.LogicalState, "sesion_sync")
+	}
+	return nil
 }
 
 func MarcarRuntimesCerradosPorAgente(agente string) error {

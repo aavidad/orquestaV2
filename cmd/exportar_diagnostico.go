@@ -10,6 +10,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -23,9 +24,19 @@ var exportarDiagnosticoCmd = &cobra.Command{
 		limitAudit, _ := cmd.Flags().GetInt("audit-limit")
 		asJSON, _ := cmd.Flags().GetBool("json")
 
-		snapshot, err := db.ConstruirSnapshotDiagnostico(limitAudit)
-		if err != nil {
+		var snapshot *db.SnapshotDiagnostico
+		query := url.Values{"audit_limit": []string{fmt.Sprintf("%d", limitAudit)}}
+		var resp apiDiagnosticoResponse
+		if ok, err := apiGetQuery("/api/diagnostico", query, &resp); err != nil {
 			return err
+		} else if ok {
+			snapshot = &resp.Diagnostico
+		} else {
+			var err error
+			snapshot, err = db.ConstruirSnapshotDiagnostico(limitAudit)
+			if err != nil {
+				return err
+			}
 		}
 
 		if asJSON {

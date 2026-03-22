@@ -9,6 +9,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -26,6 +27,17 @@ var lockListarCmd = &cobra.Command{
 	Use:   "listar",
 	Short: "Lista locks registrados",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		query := url.Values{}
+		if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
+			query.Set("agente", agente)
+		}
+		if proyectoRef, _ := cmd.Flags().GetString("proyecto"); strings.TrimSpace(proyectoRef) != "" {
+			query.Set("proyecto", proyectoRef)
+		}
+		if estadoStr, _ := cmd.Flags().GetString("estado"); strings.TrimSpace(estadoStr) != "" {
+			query.Set("estado", estadoStr)
+		}
+
 		repo := db.SQLiteLockRepository{}
 		filter := coordination.LockFilter{}
 		if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
@@ -42,7 +54,10 @@ var lockListarCmd = &cobra.Command{
 			estado := coordination.LockState(estadoStr)
 			filter.State = &estado
 		}
-		locks, err := repo.List(filter)
+		locks, ok, err := cargarLocksDesdeAPI(query)
+		if !ok {
+			locks, err = repo.List(filter)
+		}
 		if err != nil {
 			return err
 		}
@@ -64,18 +79,44 @@ var lockTomarCmd = &cobra.Command{
 	Short: "Toma un lock sobre un recurso",
 	Args:  cobra.ExactArgs(3),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		projectRef, _ := cmd.Flags().GetString("proyecto")
+		taskRaw, _ := cmd.Flags().GetInt64("tarea")
+		path, _ := cmd.Flags().GetString("ruta")
+		branch, _ := cmd.Flags().GetString("branch")
+		reason, _ := cmd.Flags().GetString("motivo")
+		leaseSeconds, _ := cmd.Flags().GetInt("lease-seconds")
+		if lock, ok, err := tomarLockPorAPI(apiLockRequest{
+			Agente:       args[0],
+			Proyecto:     projectRef,
+			TareaID:      taskRaw,
+			ScopeType:    args[1],
+			ScopeKey:     args[2],
+			Ruta:         path,
+			Branch:       branch,
+			Motivo:       reason,
+			LeaseSeconds: leaseSeconds,
+		}); ok {
+			if err != nil {
+				return err
+			}
+			fmt.Printf("✓ Lock %d tomado por %s (%s:%s)\n", lock.ID, lock.Agent, lock.ScopeType, lock.ScopeKey)
+			fmt.Printf("  lease_token=%s\n", lock.LeaseToken)
+			fmt.Printf("  expira=%s\n", lock.ExpiresAt.Format("2006-01-02 15:04:05"))
+			return nil
+		}
+
 		svc := newCoordinationService()
 		var projectID *int64
-		if proyectoRef, _ := cmd.Flags().GetString("proyecto"); strings.TrimSpace(proyectoRef) != "" {
-			proyecto, err := db.GetProyecto(proyectoRef)
+		if strings.TrimSpace(projectRef) != "" {
+			proyecto, err := db.GetProyecto(projectRef)
 			if err != nil {
 				return err
 			}
 			projectID = &proyecto.ID
 		}
 		var taskID *int64
-		if tareaRaw, _ := cmd.Flags().GetInt64("tarea"); tareaRaw > 0 {
-			taskID = &tareaRaw
+		if taskRaw > 0 {
+			taskID = &taskRaw
 		}
 		var sessionID *int64
 		if projectID != nil {
@@ -84,10 +125,6 @@ var lockTomarCmd = &cobra.Command{
 				sessionID = &sesion.ID
 			}
 		}
-		branch, _ := cmd.Flags().GetString("branch")
-		path, _ := cmd.Flags().GetString("ruta")
-		reason, _ := cmd.Flags().GetString("motivo")
-		leaseSeconds, _ := cmd.Flags().GetInt("lease-seconds")
 		lock, err := svc.AcquireLock(coordination.AcquireLockInput{
 			ProjectID:    projectID,
 			TaskID:       taskID,
@@ -115,12 +152,23 @@ var lockRenovarCmd = &cobra.Command{
 	Short: "Renueva el lease de un lock activo",
 	Args:  cobra.ExactArgs(3),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		svc := newCoordinationService()
 		id, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			return err
 		}
 		leaseSeconds, _ := cmd.Flags().GetInt("lease-seconds")
+		if lock, ok, err := renovarLockPorAPI(id, apiLockRequest{
+			Agente:       args[1],
+			LeaseToken:   args[2],
+			LeaseSeconds: leaseSeconds,
+		}); ok {
+			if err != nil {
+				return err
+			}
+			fmt.Printf("✓ Lock %d renovado hasta %s\n", lock.ID, lock.ExpiresAt.Format("2006-01-02 15:04:05"))
+			return nil
+		}
+		svc := newCoordinationService()
 		lock, err := svc.RenewLock(coordination.RenewLockInput{
 			ID:           id,
 			Agent:        args[1],
@@ -140,12 +188,23 @@ var lockLiberarCmd = &cobra.Command{
 	Short: "Libera un lock activo",
 	Args:  cobra.ExactArgs(3),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		svc := newCoordinationService()
 		id, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			return err
 		}
 		reason, _ := cmd.Flags().GetString("motivo")
+		if lock, ok, err := liberarLockPorAPI(id, apiLockRequest{
+			Agente:     args[1],
+			LeaseToken: args[2],
+			Motivo:     reason,
+		}); ok {
+			if err != nil {
+				return err
+			}
+			fmt.Printf("✓ Lock %d liberado (%s:%s)\n", lock.ID, lock.ScopeType, lock.ScopeKey)
+			return nil
+		}
+		svc := newCoordinationService()
 		lock, err := svc.ReleaseLock(coordination.ReleaseLockInput{
 			ID:         id,
 			Agent:      args[1],

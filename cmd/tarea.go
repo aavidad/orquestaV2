@@ -508,6 +508,30 @@ var tareaBacklogCmd = &cobra.Command{
 	},
 }
 
+var tareaCancelarCmd = &cobra.Command{
+	Use:   "cancelar <id> <agente> [motivo]",
+	Short: "Marca una tarea como cancelada",
+	Args:  cobra.MinimumNArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("id inválido")
+		}
+		motivo := "duplicado o error"
+		if len(args) > 2 {
+			motivo = strings.Join(args[2:], " ")
+		}
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
+		if err := db.CancelarTarea(id, args[1], motivo); err != nil {
+			return err
+		}
+		fmt.Printf("✓ Tarea #%d cancelada: %s\n", id, motivo)
+		return nil
+	},
+}
+
 func init() {
 	tareaListarCmd.Flags().String("estado", "", "Filtrar por estado (libre, asignada, en_progreso, completada, bloqueada, backlog)")
 	tareaListarCmd.Flags().String("agente", "", "Filtrar por agente")
@@ -533,7 +557,7 @@ func init() {
 		tareaTomar, tareaIniciarCmd, tareaCompletarCmd,
 		tareaBloquearCmd, tareaNotaCmd, tareaNotasCmd,
 		tareaReasignarCmd, tareaDesbloquearCmd, tareaBacklogCmd,
-		tareaContratoCmd,
+		tareaContratoCmd, tareaCancelarCmd,
 	)
 }
 

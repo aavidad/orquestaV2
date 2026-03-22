@@ -32,6 +32,10 @@ type apiProyectosResponse struct {
 	Proyectos []*db.Proyecto `json:"proyectos"`
 }
 
+type apiConectoresResponse struct {
+	Conectores []*db.Conector `json:"conectores"`
+}
+
 type apiTareasResponse struct {
 	Tareas []*db.Tarea `json:"tareas"`
 }
@@ -42,6 +46,20 @@ type apiTareaResponse struct {
 
 type apiSesionResponse struct {
 	Sesion *db.Sesion `json:"sesion"`
+}
+
+type apiSesionesInspeccionResponse struct {
+	Sesiones []*db.Sesion `json:"sesiones"`
+}
+
+type apiSesionInicioResponse struct {
+	Sesion               *db.Sesion      `json:"sesion"`
+	SesionPrevia         *db.Sesion      `json:"sesion_previa"`
+	Rol                  string          `json:"rol"`
+	PropuestasPendientes []*db.Propuesta `json:"propuestas_pendientes"`
+	Reglas               []*db.Regla     `json:"reglas"`
+	Skills               []*db.Skill     `json:"skills"`
+	Workflow             *db.Workflow    `json:"workflow"`
 }
 
 type apiPropuestasResponse struct {
@@ -55,6 +73,10 @@ type apiPropuestaDetalleResponse struct {
 
 type apiAuditResponse struct {
 	Audit []db.AuditEntry `json:"audit"`
+}
+
+type apiDiagnosticoResponse struct {
+	Diagnostico db.SnapshotDiagnostico `json:"diagnostico"`
 }
 
 type apiRuntimesResponse struct {
@@ -124,7 +146,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 	case "exportar":
-		return len(tokens) > 1 && (tokens[1] == "estado" || tokens[1] == "audit")
+		return len(tokens) > 1 && (tokens[1] == "estado" || tokens[1] == "audit" || tokens[1] == "diagnostico")
 	case "votar":
 		return true
 	case "runtime":
@@ -137,6 +159,66 @@ func commandSupportsServerMode(args []string) bool {
 		default:
 			return false
 		}
+	case "proyecto":
+		if len(tokens) <= 1 {
+			return false
+		}
+		switch tokens[1] {
+		case "listar", "ver":
+			return true
+		default:
+			return false
+		}
+	case "conector":
+		if len(tokens) <= 1 {
+			return false
+		}
+		switch tokens[1] {
+		case "listar", "ver", "registrar":
+			return true
+		default:
+			return false
+		}
+	case "config":
+		if len(tokens) <= 1 {
+			return false
+		}
+		switch tokens[1] {
+		case "ver", "set":
+			return true
+		default:
+			return false
+		}
+	case "asignacion":
+		if len(tokens) <= 1 {
+			return false
+		}
+		switch tokens[1] {
+		case "listar", "activar":
+			return true
+		default:
+			return false
+		}
+	case "lock":
+		if len(tokens) <= 1 {
+			return false
+		}
+		switch tokens[1] {
+		case "listar", "tomar", "renovar", "liberar":
+			return true
+		default:
+			return false
+		}
+	case "worktree":
+		if len(tokens) <= 1 {
+			return false
+		}
+		switch tokens[1] {
+		case "listar", "crear", "cerrar":
+			return true
+		default:
+			return false
+		}
 	case "agente":
 		return len(tokens) > 1 && (tokens[1] == "preparar" || tokens[1] == "tick")
 	case "sesion":
@@ -144,7 +226,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "guardar", "continuar", "fin", "listar":
+		case "inicio", "guardar", "continuar", "fin", "listar", "historial", "ver", "nuevo-codex":
 			return true
 		default:
 			return false

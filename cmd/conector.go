@@ -23,7 +23,10 @@ var conectorListarCmd = &cobra.Command{
 	Use:   "listar",
 	Short: "Lista los conectores registrados",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		conectores, err := db.ListarConectores()
+		conectores, ok, err := cargarConectoresDesdeAPI()
+		if !ok {
+			conectores, err = db.ListarConectores()
+		}
 		if err != nil {
 			return err
 		}
@@ -49,7 +52,10 @@ var conectorVerCmd = &cobra.Command{
 	Short: "Muestra el detalle de un conector",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := db.GetConector(args[0])
+		c, ok, err := cargarConectorDesdeAPI(args[0])
+		if !ok {
+			c, err = db.GetConector(args[0])
+		}
 		if err != nil {
 			return err
 		}
@@ -78,7 +84,7 @@ var conectorRegistrarCmd = &cobra.Command{
 		metadataJSON, _ := cmd.Flags().GetString("metadata-json")
 		inactivo, _ := cmd.Flags().GetBool("inactivo")
 
-		id, err := db.UpsertConector(&db.Conector{
+		id, ok, err := registrarConectorPorAPI(apiConectorUpsertRequest{
 			Slug:         slug,
 			Nombre:       nombre,
 			Transporte:   transporte,
@@ -88,6 +94,18 @@ var conectorRegistrarCmd = &cobra.Command{
 			MetadataJSON: metadataJSON,
 			Activo:       !inactivo,
 		})
+		if !ok {
+			id, err = db.UpsertConector(&db.Conector{
+				Slug:         slug,
+				Nombre:       nombre,
+				Transporte:   transporte,
+				Comando:      comando,
+				ArgsJSON:     argsJSON,
+				EnvJSON:      envJSON,
+				MetadataJSON: metadataJSON,
+				Activo:       !inactivo,
+			})
+		}
 		if err != nil {
 			return err
 		}
