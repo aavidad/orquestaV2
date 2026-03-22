@@ -80,8 +80,8 @@ func CrearPropuesta(p *Propuesta) (int64, error) {
 
 	for _, nombre := range agentes {
 		if _, err := tx.Exec(
-			`INSERT OR IGNORE INTO votos (propuesta_id, agente, posicion) VALUES (?,?,'pendiente')`,
-			id, nombre,
+			insertIgnoreValuesSQL("votos", []string{"propuesta_id", "agente", "posicion"}, []string{"propuesta_id", "agente"}),
+			id, nombre, "pendiente",
 		); err != nil {
 			return 0, err
 		}
@@ -235,11 +235,14 @@ func PropuestasPendientesVoto(agente string) ([]*Propuesta, error) {
 // que no tengan aún voto registrado para agentes habilitados no admin.
 func BackfillVotosPendientes() error {
 	_, err := DB.Exec(`
-		INSERT OR IGNORE INTO votos (propuesta_id, agente, posicion, comentario)
-		SELECT p.id, a.nombre, 'pendiente', ''
+		` + insertIgnoreSelectSQL(
+		"votos",
+		[]string{"propuesta_id", "agente", "posicion", "comentario"},
+		[]string{"propuesta_id", "agente"},
+		`SELECT p.id, a.nombre, 'pendiente', ''
 		FROM propuestas p
 		JOIN agentes a ON a.rol != 'admin' AND a.habilitado = 1
-		WHERE p.estado = 'abierta'`)
+		WHERE p.estado = 'abierta'`))
 	return err
 }
 
