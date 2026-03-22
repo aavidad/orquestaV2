@@ -62,8 +62,8 @@ func postMigrationStatements() []string {
 }
 
 func postMigrationStatementsForDriver(driver string) []string {
-	switch strings.TrimSpace(strings.ToLower(driver)) {
-	case "postgres", "postgresql":
+	switch normalizedDriverName(driver) {
+	case "postgres":
 		return nil
 	default:
 		return postMigrationStatementsSQLite()
@@ -182,6 +182,10 @@ func Close() {
 
 func DriverName() string {
 	return currentStorageConfig.Driver
+}
+
+func normalizedDriverName(driver string) string {
+	return storage.DialectForDriver(driver).Name
 }
 
 func BootstrapSchemaEnabled() bool {

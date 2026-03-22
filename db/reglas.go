@@ -113,7 +113,7 @@ func GuardarRegla(r *Regla) (int64, error) {
 	if !tipoAgenteValido(r.TipoAgente) {
 		return 0, fmt.Errorf("tipo_agente invalido: %s", r.TipoAgente)
 	}
-	if _, err := DB.Exec(
+	id, err := execAndResolveID(
 		upsertValuesSQL(
 			"reglas",
 			[]string{"tipo_agente", "categoria", "titulo", "descripcion", "activa"},
@@ -124,13 +124,11 @@ func GuardarRegla(r *Regla) (int64, error) {
 				{Column: "activa"},
 			},
 		),
-		r.TipoAgente, r.Categoria, r.Titulo, r.Descripcion, r.Activa,
-	); err != nil {
-		return 0, err
-	}
-	var id int64
-	if err := DB.QueryRow(`SELECT id FROM reglas WHERE tipo_agente = ? AND titulo = ?`,
-		r.TipoAgente, r.Titulo).Scan(&id); err != nil {
+		[]any{r.TipoAgente, r.Categoria, r.Titulo, r.Descripcion, r.Activa},
+		`SELECT id FROM reglas WHERE tipo_agente = ? AND titulo = ?`,
+		r.TipoAgente, r.Titulo,
+	)
+	if err != nil {
 		return 0, err
 	}
 	return id, nil
@@ -202,7 +200,7 @@ func GuardarSkill(s *Skill) (int64, error) {
 	if !tipoAgenteValido(s.TipoAgente) {
 		return 0, fmt.Errorf("tipo_agente invalido: %s", s.TipoAgente)
 	}
-	if _, err := DB.Exec(
+	id, err := execAndResolveID(
 		upsertValuesSQL(
 			"skills",
 			[]string{"tipo_agente", "nombre", "descripcion", "cuando_usar", "activa"},
@@ -213,13 +211,11 @@ func GuardarSkill(s *Skill) (int64, error) {
 				{Column: "activa"},
 			},
 		),
-		s.TipoAgente, s.Nombre, s.Descripcion, s.CuandoUsar, s.Activa,
-	); err != nil {
-		return 0, err
-	}
-	var id int64
-	if err := DB.QueryRow(`SELECT id FROM skills WHERE tipo_agente = ? AND nombre = ?`,
-		s.TipoAgente, s.Nombre).Scan(&id); err != nil {
+		[]any{s.TipoAgente, s.Nombre, s.Descripcion, s.CuandoUsar, s.Activa},
+		`SELECT id FROM skills WHERE tipo_agente = ? AND nombre = ?`,
+		s.TipoAgente, s.Nombre,
+	)
+	if err != nil {
 		return 0, err
 	}
 	return id, nil
@@ -295,7 +291,7 @@ func GuardarWorkflow(w *Workflow) (int64, error) {
 	if err := json.Unmarshal([]byte(w.Pasos), &pasos); err != nil || len(pasos) == 0 {
 		return 0, fmt.Errorf("pasos debe ser un JSON array no vacio")
 	}
-	if _, err := DB.Exec(
+	id, err := execAndResolveID(
 		upsertValuesSQL(
 			"workflows",
 			[]string{"tipo_agente", "nombre", "descripcion", "pasos", "activo"},
@@ -307,12 +303,11 @@ func GuardarWorkflow(w *Workflow) (int64, error) {
 				{Column: "activo"},
 			},
 		),
-		w.TipoAgente, w.Nombre, w.Descripcion, w.Pasos, w.Activo,
-	); err != nil {
-		return 0, err
-	}
-	var id int64
-	if err := DB.QueryRow(`SELECT id FROM workflows WHERE nombre = ?`, w.Nombre).Scan(&id); err != nil {
+		[]any{w.TipoAgente, w.Nombre, w.Descripcion, w.Pasos, w.Activo},
+		`SELECT id FROM workflows WHERE nombre = ?`,
+		w.Nombre,
+	)
+	if err != nil {
 		return 0, err
 	}
 	return id, nil

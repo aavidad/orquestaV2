@@ -93,6 +93,11 @@ type queryRower interface {
 	QueryRow(query string, args ...any) *sql.Row
 }
 
+type execQueryRower interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
 func insertReturningID(query string, args ...any) (int64, error) {
 	return insertReturningIDWith(DB, query, args...)
 }
@@ -107,4 +112,27 @@ func insertReturningIDWith(q queryRower, query string, args ...any) (int64, erro
 		return 0, err
 	}
 	return id, nil
+}
+
+func resolveID(query string, args ...any) (int64, error) {
+	return resolveIDWith(DB, query, args...)
+}
+
+func resolveIDWith(q queryRower, query string, args ...any) (int64, error) {
+	var id int64
+	if err := q.QueryRow(strings.TrimSpace(query), args...).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func execAndResolveID(execQuery string, execArgs []any, selectQuery string, selectArgs ...any) (int64, error) {
+	return execAndResolveIDWith(DB, execQuery, execArgs, selectQuery, selectArgs...)
+}
+
+func execAndResolveIDWith(q execQueryRower, execQuery string, execArgs []any, selectQuery string, selectArgs ...any) (int64, error) {
+	if _, err := q.Exec(execQuery, execArgs...); err != nil {
+		return 0, err
+	}
+	return resolveIDWith(q, selectQuery, selectArgs...)
 }

@@ -10,8 +10,10 @@ func TestTableExistsQueryPorDriver(t *testing.T) {
 		want   string
 	}{
 		{"sqlite", `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`},
+		{"sqlite3", `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`},
 		{"mysql", `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?`},
 		{"postgres", `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = ?`},
+		{"postgresql", `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = ?`},
 	}
 
 	for _, tc := range cases {

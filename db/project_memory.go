@@ -180,7 +180,7 @@ func GuardarDecisionProyecto(d *DecisionProyecto) (int64, error) {
 		return 0, fmt.Errorf("estado de decision invalido: %s", d.Estado)
 	}
 
-	if _, err := DB.Exec(
+	id, err := execAndResolveID(
 		upsertValuesSQL(
 			"decisiones_proyecto",
 			[]string{
@@ -200,16 +200,14 @@ func GuardarDecisionProyecto(d *DecisionProyecto) (int64, error) {
 				{Column: "metadata_json"},
 			},
 		),
-		d.ProyectoID, d.Categoria, d.Titulo, d.Solucion, d.Motivo, d.Alternativas,
-		d.Impacto, d.Estado, d.PropuestaID, d.TareaID, d.MetadataJSON,
-	); err != nil {
-		return 0, err
-	}
-	var id int64
-	if err := DB.QueryRow(
+		[]any{
+			d.ProyectoID, d.Categoria, d.Titulo, d.Solucion, d.Motivo, d.Alternativas,
+			d.Impacto, d.Estado, d.PropuestaID, d.TareaID, d.MetadataJSON,
+		},
 		`SELECT id FROM decisiones_proyecto WHERE proyecto_id = ? AND titulo = ?`,
 		d.ProyectoID, d.Titulo,
-	).Scan(&id); err != nil {
+	)
+	if err != nil {
 		return 0, err
 	}
 	return id, nil
@@ -270,7 +268,7 @@ func GuardarDocumentoExterno(doc *DocumentoExterno) (int64, error) {
 		return 0, fmt.Errorf("fuente de documento invalida: %s", doc.Fuente)
 	}
 
-	if _, err := DB.Exec(
+	id, err := execAndResolveID(
 		upsertValuesSQL(
 			"documentos_externos",
 			[]string{
@@ -289,16 +287,14 @@ func GuardarDocumentoExterno(doc *DocumentoExterno) (int64, error) {
 				{Column: "metadata_json"},
 			},
 		),
-		doc.ProyectoID, doc.TipoDocumento, doc.Titulo, doc.RutaRef, doc.Resumen,
-		doc.Estado, doc.Fuente, doc.PropuestaID, doc.TareaID, doc.MetadataJSON,
-	); err != nil {
-		return 0, err
-	}
-	var id int64
-	if err := DB.QueryRow(
+		[]any{
+			doc.ProyectoID, doc.TipoDocumento, doc.Titulo, doc.RutaRef, doc.Resumen,
+			doc.Estado, doc.Fuente, doc.PropuestaID, doc.TareaID, doc.MetadataJSON,
+		},
 		`SELECT id FROM documentos_externos WHERE proyecto_id = ? AND ruta_ref = ?`,
 		doc.ProyectoID, doc.RutaRef,
-	).Scan(&id); err != nil {
+	)
+	if err != nil {
 		return 0, err
 	}
 	return id, nil

@@ -12,7 +12,7 @@ func schemaDDL() string {
 }
 
 func schemaDDLForDriver(driver string) string {
-	switch strings.TrimSpace(strings.ToLower(driver)) {
+	switch normalizedDriverName(driver) {
 	case "postgres":
 		return renderPostgresSchemaDDL(Schema)
 	default:

@@ -115,6 +115,7 @@ func schemaSeedData() string {
 }
 
 func schemaSeedDataForDriver(driver string) string {
+	driver = normalizedDriverName(driver)
 	var b strings.Builder
 	for _, group := range schemaSeedGroups {
 		b.WriteString(renderSchemaSeedGroupForDriver(driver, group))
@@ -131,7 +132,7 @@ func renderSchemaSeedGroupForDriver(driver string, group schemaSeedGroup) string
 		return ""
 	}
 
-	dialect := storage.DialectForDriver(driver)
+	dialect := storage.DialectForDriver(normalizedDriverName(driver))
 	var b strings.Builder
 	if dialect.Name == "mysql" {
 		b.WriteString("INSERT IGNORE INTO ")
@@ -187,13 +188,13 @@ func aplicarSemillasSchema(db *sql.DB) error {
 }
 
 func bootstrapPlanForDriver(driver string) (bootstrapPlan, bool) {
-	switch strings.TrimSpace(strings.ToLower(driver)) {
-	case "", "sqlite", "sqlite3":
+	switch normalizedDriverName(driver) {
+	case "sqlite":
 		return bootstrapPlan{
 			DDL:  schemaDDLForDriver("sqlite"),
 			Seed: schemaSeedDataForDriver("sqlite"),
 		}, true
-	case "postgres", "postgresql":
+	case "postgres":
 		return bootstrapPlan{
 			DDL:  schemaDDLForDriver("postgres"),
 			Seed: schemaSeedDataForDriver("postgres"),

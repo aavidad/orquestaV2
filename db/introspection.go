@@ -14,7 +14,7 @@ func TableExists(table string) (bool, error) {
 }
 
 func tableExistsQuery(driver string) string {
-	switch driver {
+	switch normalizedDriverName(driver) {
 	case "postgres":
 		return `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = ?`
 	case "mysql":

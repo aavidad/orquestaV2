@@ -61,7 +61,7 @@ func GuardarPool(p *PoolCapacidad) (int64, error) {
 		return 0, fmt.Errorf("las capacidades no pueden ser negativas")
 	}
 
-	if _, err := DB.Exec(
+	id, err := execAndResolveID(
 		upsertValuesSQL(
 			"pools_capacidad",
 			[]string{
@@ -87,15 +87,16 @@ func GuardarPool(p *PoolCapacidad) (int64, error) {
 				{Column: "activo"},
 			},
 		),
-		p.Slug, p.Proveedor, p.Runtime, p.Plan, p.EsDePago, p.CapacidadTotal,
-		p.CapacidadReservada, p.PermiteHijos, p.PermiteModelosMulti,
-		p.PermiteSobrecoste, p.PoliticaHandoff, p.FuenteTelemetria,
-		p.MetadataJSON, p.Activo,
-	); err != nil {
-		return 0, err
-	}
-	var id int64
-	if err := DB.QueryRow(`SELECT id FROM pools_capacidad WHERE slug = ?`, p.Slug).Scan(&id); err != nil {
+		[]any{
+			p.Slug, p.Proveedor, p.Runtime, p.Plan, p.EsDePago, p.CapacidadTotal,
+			p.CapacidadReservada, p.PermiteHijos, p.PermiteModelosMulti,
+			p.PermiteSobrecoste, p.PoliticaHandoff, p.FuenteTelemetria,
+			p.MetadataJSON, p.Activo,
+		},
+		`SELECT id FROM pools_capacidad WHERE slug = ?`,
+		p.Slug,
+	)
+	if err != nil {
 		return 0, err
 	}
 	return id, nil
@@ -174,7 +175,7 @@ func GuardarPoolModelo(poolSlug string, modelo *PoolModelo) (int64, error) {
 		return 0, err
 	}
 
-	if _, err := DB.Exec(
+	id, err := execAndResolveID(
 		upsertValuesSQL(
 			"pool_modelos",
 			[]string{"pool_id", "model_slug", "activo", "prioridad", "coste_relativo", "limite_conocido_json"},
@@ -186,17 +187,14 @@ func GuardarPoolModelo(poolSlug string, modelo *PoolModelo) (int64, error) {
 				{Column: "limite_conocido_json"},
 			},
 		),
-		pool.ID, modelo.ModelSlug, modelo.Activo, modelo.Prioridad,
-		modelo.CosteRelativo, modelo.LimiteConocidoJSON,
-	); err != nil {
-		return 0, err
-	}
-
-	var id int64
-	if err := DB.QueryRow(
+		[]any{
+			pool.ID, modelo.ModelSlug, modelo.Activo, modelo.Prioridad,
+			modelo.CosteRelativo, modelo.LimiteConocidoJSON,
+		},
 		`SELECT id FROM pool_modelos WHERE pool_id = ? AND model_slug = ?`,
 		pool.ID, modelo.ModelSlug,
-	).Scan(&id); err != nil {
+	)
+	if err != nil {
 		return 0, err
 	}
 	return id, nil
