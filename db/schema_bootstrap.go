@@ -90,6 +90,19 @@ var schemaSeedGroups = []schemaSeedGroup{
 			{"documentador", "review-docs", "Revisar documentación existente por coherencia, completitud y actualidad.", "Cuando se detectan discrepancias entre el código y la documentación."},
 		},
 	},
+	{
+		table:   "workflows",
+		columns: []string{"tipo_agente", "nombre", "descripcion", "pasos"},
+		rows: [][]string{
+			{"programador", "inicio-sesion", "Protocolo obligatorio al comenzar cualquier sesión de trabajo.", `["1. Ejecutar: orquesta sesion inicio <mi-nombre>","2. Ver tareas asignadas: orquesta tarea listar --agente <mi-nombre>","3. Votar todas las propuestas con posicion pendiente para mi agente","4. Iniciar la tarea en la app: orquesta tarea iniciar <id> <mi-nombre>","5. Leer el doc del módulo asignado en docs/modulos/MXX_*.md"]`},
+			{"programador", "fin-sesion", "Protocolo obligatorio al terminar cualquier sesión de trabajo.", `["1. Asegurar que todo el trabajo está commiteado (git status limpio)","2. Completar o bloquear mis tareas en la app de orquestación según corresponda","3. Ejecutar: orquesta sesion fin <mi-nombre>"]`},
+			{"programador", "crear-modulo", "Flujo completo para implementar un módulo nuevo (14 pasos).", `["1. Crear propuesta OP-XXX con orquesta propuesta nueva y esperar consenso en la app","2. Crear fichero de dominio: internal/domain/<modulo>_entities.go","3. Crear interfaces: internal/domain/<modulo>_interfaces.go","4. Crear migración SQL: migrations/XXXXXX_<modulo>.up.sql","5. Crear repositorio: internal/repository/postgres_<modulo>.go","6. Commit: feat(MXX): dominio e interfaces","7. Crear servicio: internal/service/<modulo>_service.go","8. Commit: feat(MXX): servicio","9. Crear tests: internal/service/<modulo>_service_test.go","10. Ejecutar go test ./internal/service/... → debe pasar","11. Commit: feat(MXX): tests servicio","12. Crear handler REST: internal/api/<modulo>_handler.go","13. Commit: feat(MXX): handler REST","14. Gate final: go build ./... && go vet ./... && go test ./... → notificar a Antigravity"]`},
+			{"programador", "votar-propuesta", "Proceso para votar una propuesta OP-XXX.", `["1. Leer la propuesta completa: orquesta propuesta ver <codigo>","2. Analizar impacto técnico en módulos asignados","3. Votar: orquesta votar <codigo> <acuerdo|desacuerdo|abstencion> --agente <mi-nombre> --comentario \"razón\"","4. Si desacuerdo: añadir comentario técnico con alternativa concreta"]`},
+			{"documentador", "inicio-sesion", "Protocolo obligatorio al comenzar cualquier sesión de trabajo.", `["1. Ejecutar: orquesta sesion inicio antigravity","2. Ver tareas asignadas: orquesta tarea listar --agente antigravity","3. Votar propuestas con posicion pendiente para antigravity","4. Revisar docs/00_INDICE.md para detectar gaps"]`},
+			{"documentador", "fin-sesion", "Protocolo obligatorio al terminar cualquier sesión de trabajo.", `["1. Actualizar docs/00_INDICE.md si se añadieron módulos","2. Confirmar con el agente programador que la documentación es correcta","3. Ejecutar: orquesta sesion fin antigravity"]`},
+			{"documentador", "documentar-modulo", "Flujo para documentar un módulo cerrado.", `["1. Recibir notificación del agente programador con el código del módulo","2. Leer el código fuente del módulo (solo lectura, nunca editar)","3. Crear docs/modulos/MXX_<nombre>.md con: descripción, entidades, endpoints, flujos, seguridad","4. Actualizar docs/00_INDICE.md","5. Notificar al programador que la documentación está lista"]`},
+		},
+	},
 }
 
 func schemaDDL() string {
