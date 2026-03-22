@@ -72,3 +72,11 @@ func TestPostMigrationStatementsIncluyenAlterYAjustesDatos(t *testing.T) {
 		}
 	}
 }
+
+func TestPostMigrationStatementsForDriverPostgresVacioPorAhora(t *testing.T) {
+	t.Parallel()
+
+	if got := postMigrationStatementsForDriver("postgres"); len(got) != 0 {
+		t.Fatalf("postgres no deberia reutilizar post-migraciones sqlite-first por ahora: %v", got)
+	}
+}

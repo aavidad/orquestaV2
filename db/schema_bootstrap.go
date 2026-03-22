@@ -15,6 +15,11 @@ type schemaSeedGroup struct {
 	rows            [][]string
 }
 
+type bootstrapPlan struct {
+	DDL  string
+	Seed string
+}
+
 var schemaSeedGroups = []schemaSeedGroup{
 	{
 		table:           "agentes",
@@ -179,4 +184,21 @@ func aplicarSemillasSchema(db *sql.DB) error {
 	}
 	_, err := db.Exec(seeds)
 	return err
+}
+
+func bootstrapPlanForDriver(driver string) (bootstrapPlan, bool) {
+	switch strings.TrimSpace(strings.ToLower(driver)) {
+	case "", "sqlite", "sqlite3":
+		return bootstrapPlan{
+			DDL:  schemaDDLForDriver("sqlite"),
+			Seed: schemaSeedDataForDriver("sqlite"),
+		}, true
+	case "postgres", "postgresql":
+		return bootstrapPlan{
+			DDL:  schemaDDLForDriver("postgres"),
+			Seed: schemaSeedDataForDriver("postgres"),
+		}, true
+	default:
+		return bootstrapPlan{}, false
+	}
 }

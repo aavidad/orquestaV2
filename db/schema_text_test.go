@@ -155,3 +155,23 @@ func TestSchemaDDLForDriverPostgresReduceSintaxisSQLite(t *testing.T) {
 		t.Fatalf("postgres deberia conservar las tablas base")
 	}
 }
+
+func TestBootstrapPlanForDriver(t *testing.T) {
+	t.Parallel()
+
+	for _, driver := range []string{"sqlite", "postgres"} {
+		plan, ok := bootstrapPlanForDriver(driver)
+		if !ok {
+			t.Fatalf("%s deberia tener bootstrap plan", driver)
+		}
+		if strings.TrimSpace(plan.DDL) == "" {
+			t.Fatalf("%s deberia tener DDL", driver)
+		}
+		if strings.TrimSpace(plan.Seed) == "" {
+			t.Fatalf("%s deberia tener semillas", driver)
+		}
+	}
+	if _, ok := bootstrapPlanForDriver("mysql"); ok {
+		t.Fatalf("mysql no deberia tener bootstrap plan todavia")
+	}
+}

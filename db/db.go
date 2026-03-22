@@ -21,7 +21,8 @@ func Open() error {
 	if err != nil {
 		return fmt.Errorf("resolviendo almacenamiento: %w", err)
 	}
-	if cfg.BootstrapSchema && !storage.DialectForDriver(cfg.Driver).SupportsSchemaBootstrap() {
+	plan, ok := bootstrapPlanForDriver(cfg.Driver)
+	if cfg.BootstrapSchema && !ok {
 		return fmt.Errorf("bootstrap de schema no soportado para driver %s", cfg.Driver)
 	}
 	db, err := storage.Open(cfg)
@@ -30,11 +31,11 @@ func Open() error {
 	}
 	currentStorageConfig = cfg
 	if cfg.BootstrapSchema {
-		if err := aplicarSchema(db); err != nil {
+		if err := aplicarDDL(db, plan.DDL); err != nil {
 			db.Close()
 			return fmt.Errorf("aplicando schema: %w", err)
 		}
-		if err := aplicarSemillasSchema(db); err != nil {
+		if err := aplicarSeedSQL(db, plan.Seed); err != nil {
 			db.Close()
 			return fmt.Errorf("aplicando semillas de schema: %w", err)
 		}
@@ -57,6 +58,19 @@ func Open() error {
 
 // postMigrationStatements contiene solo migraciones de datos/esquema incremental.
 func postMigrationStatements() []string {
+	return postMigrationStatementsForDriver(DriverName())
+}
+
+func postMigrationStatementsForDriver(driver string) []string {
+	switch strings.TrimSpace(strings.ToLower(driver)) {
+	case "postgres", "postgresql":
+		return nil
+	default:
+		return postMigrationStatementsSQLite()
+	}
+}
+
+func postMigrationStatementsSQLite() []string {
 	return []string{
 		`ALTER TABLE agentes ADD COLUMN estado_sesion TEXT DEFAULT NULL`,
 		`ALTER TABLE propuestas ADD COLUMN proyecto_id INTEGER REFERENCES proyectos(id)`,

@@ -1,6 +1,10 @@
 package db
 
-import "strings"
+import (
+	"database/sql"
+	"fmt"
+	"strings"
+)
 
 func schemaDDL() string {
 	return schemaDDLForDriver(DriverName())
@@ -36,4 +40,22 @@ func renderPostgresSchemaDDL(schema string) string {
 		out = append(out, line)
 	}
 	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
+func aplicarDDL(db *sql.DB, ddl string) error {
+	ddl = strings.TrimSpace(ddl)
+	if ddl == "" {
+		return fmt.Errorf("schema DDL vacio")
+	}
+	_, err := db.Exec(ddl)
+	return err
+}
+
+func aplicarSeedSQL(db *sql.DB, seeds string) error {
+	seeds = strings.TrimSpace(seeds)
+	if seeds == "" {
+		return nil
+	}
+	_, err := db.Exec(seeds)
+	return err
 }
