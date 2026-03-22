@@ -760,9 +760,13 @@ func webWriteJSON(w http.ResponseWriter, status int, payload any) {
 
 func webHandlerAPIServerInfo(w http.ResponseWriter, r *http.Request) {
 	webWriteJSON(w, http.StatusOK, serverInfo{
-		Name:        "orquesta",
-		Version:     "v1",
-		StorageMode: "single-process",
+		Name:            "orquesta",
+		Version:         "v1",
+		StorageMode:     "single-process",
+		StorageDriver:   db.DriverName(),
+		SQLPlaceholder:  db.PlaceholderStyle(),
+		BootstrapSchema: db.BootstrapSchemaEnabled(),
+		QueryRebinding:  db.QueryRebindingEnabled(),
 		Capabilities: []string{
 			"status",
 			"web",

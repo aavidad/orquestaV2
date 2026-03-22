@@ -9,20 +9,26 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
 )
 
+type statusContext struct {
+	resumen *estadoResumen
+	backend *serverInfo
+}
+
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Muestra el estado global del proyecto",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		resumen, err := loadStatusSummary()
+		ctx, err := loadStatusSummary()
 		if err != nil {
 			return err
 		}
-		renderStatusSummary(resumen)
+		renderStatusSummary(ctx)
 		return nil
 	},
 }
@@ -35,14 +41,38 @@ func truncar(s string, n int) string {
 	return string(runes[:n-1]) + "…"
 }
 
-func loadStatusSummary() (*estadoResumen, error) {
+func loadStatusSummary() (*statusContext, error) {
 	if serverURL := activeServerURL(); serverURL != "" {
-		return fetchServerStatus(serverURL)
+		resumen, err := fetchServerStatus(serverURL)
+		if err != nil {
+			return nil, err
+		}
+		backend, err := fetchServerInfo(serverURL)
+		if err != nil {
+			backend = nil
+		}
+		return &statusContext{resumen: resumen, backend: backend}, nil
 	}
-	return buildEstadoResumen()
+	resumen, err := buildEstadoResumen()
+	if err != nil {
+		return nil, err
+	}
+	return &statusContext{resumen: resumen}, nil
 }
 
-func renderStatusSummary(resumen *estadoResumen) {
+func renderStatusSummary(ctx *statusContext) {
+	if ctx == nil {
+		return
+	}
+
+	if lines := serverInfoLines(ctx.backend); len(lines) > 0 {
+		for _, line := range lines {
+			fmt.Println(line)
+		}
+		fmt.Println()
+	}
+
+	resumen := ctx.resumen
 	fmt.Printf("╔═══════════════════════════════════════════════════════════╗\n")
 	fmt.Printf("║           ORQUESTA — ESTADO DEL PROYECTO                 ║\n")
 	fmt.Printf("╚═══════════════════════════════════════════════════════════╝\n\n")
@@ -97,4 +127,46 @@ func renderStatusSummary(resumen *estadoResumen) {
 		}
 		fmt.Println()
 	}
+}
+
+func serverInfoLines(info *serverInfo) []string {
+	if info == nil {
+		return nil
+	}
+
+	backend := "backend remoto"
+	if info.Name != "" {
+		backend = info.Name
+		if info.Version != "" {
+			backend += " " + info.Version
+		}
+	} else if info.Version != "" {
+		backend = info.Version
+	}
+
+	details := make([]string, 0, 5)
+	if info.StorageMode != "" {
+		details = append(details, "modo "+info.StorageMode)
+	}
+	if info.StorageDriver != "" {
+		details = append(details, "driver "+info.StorageDriver)
+	}
+	if info.SQLPlaceholder != "" {
+		details = append(details, "placeholder "+info.SQLPlaceholder)
+	}
+	if info.BootstrapSchema {
+		details = append(details, "bootstrap schema")
+	}
+	if info.QueryRebinding {
+		details = append(details, "query rebinding")
+	}
+
+	lines := []string{fmt.Sprintf("🖥️  Backend activo: %s", backend)}
+	if len(details) > 0 {
+		lines = append(lines, fmt.Sprintf("   %s", strings.Join(details, " | ")))
+	}
+	if len(info.Capabilities) > 0 {
+		lines = append(lines, fmt.Sprintf("   capacidades: %s", strings.Join(info.Capabilities, ", ")))
+	}
+	return lines
 }

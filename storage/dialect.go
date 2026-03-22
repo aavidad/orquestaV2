@@ -59,3 +59,14 @@ func (d Dialect) Rebind(query string) string {
 func RebindQuery(driver, query string) string {
 	return DialectForDriver(driver).Rebind(query)
 }
+
+func (d Dialect) PlaceholderStyle() string {
+	if d.Name == "postgres" {
+		return "numbered"
+	}
+	return "qmark"
+}
+
+func (d Dialect) RebindParameters() bool {
+	return d.Name == "postgres"
+}

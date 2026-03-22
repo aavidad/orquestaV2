@@ -32,3 +32,17 @@ func TestRebindQueryRespetaInterrogantesEnLiterales(t *testing.T) {
 		t.Fatalf("query inesperada:\n%s", got)
 	}
 }
+
+func TestDialectPlaceholderStyle(t *testing.T) {
+	t.Parallel()
+
+	if got := DialectForDriver("sqlite").PlaceholderStyle(); got != "qmark" {
+		t.Fatalf("placeholder sqlite inesperado: %s", got)
+	}
+	if got := DialectForDriver("mysql").PlaceholderStyle(); got != "qmark" {
+		t.Fatalf("placeholder mysql inesperado: %s", got)
+	}
+	if got := DialectForDriver("postgres").PlaceholderStyle(); got != "numbered" {
+		t.Fatalf("placeholder postgres inesperado: %s", got)
+	}
+}

@@ -20,10 +20,14 @@ func TestCmdNoUsaDBDirectoFueraDeExcepcionesControladas(t *testing.T) {
 		},
 	}
 	allowEverywhere := map[string]bool{
-		"EstadoPropuesta": true,
-		"EstadoTarea":     true,
-		"PosicionVoto":    true,
-		"PrioridadTarea":  true,
+		"EstadoPropuesta":        true,
+		"EstadoTarea":            true,
+		"PosicionVoto":           true,
+		"PrioridadTarea":         true,
+		"DriverName":             true,
+		"PlaceholderStyle":       true,
+		"BootstrapSchemaEnabled": true,
+		"QueryRebindingEnabled":  true,
 	}
 
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {

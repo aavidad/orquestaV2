@@ -12,6 +12,7 @@ import (
 )
 
 var DB *Handle
+var currentStorageConfig storage.Config
 
 // Open abre la base de datos usando el conector configurado.
 // Por defecto usa SQLite resuelto desde ORQUESTA_DB o desde el repo actual.
@@ -40,6 +41,7 @@ func Open() error {
 	if cfg.BootstrapSchema {
 		postMigraciones()
 	}
+	currentStorageConfig = cfg
 	return nil
 }
 
@@ -389,6 +391,24 @@ func Close() {
 	if DB != nil {
 		DB.Close()
 	}
+	DB = nil
+	currentStorageConfig = storage.Config{}
+}
+
+func DriverName() string {
+	return currentStorageConfig.Driver
+}
+
+func BootstrapSchemaEnabled() bool {
+	return currentStorageConfig.BootstrapSchema
+}
+
+func PlaceholderStyle() string {
+	return storage.DialectForDriver(currentStorageConfig.Driver).PlaceholderStyle()
+}
+
+func QueryRebindingEnabled() bool {
+	return storage.DialectForDriver(currentStorageConfig.Driver).RebindParameters()
 }
 
 func resolverRuta() string {

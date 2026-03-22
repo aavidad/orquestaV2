@@ -25,10 +25,14 @@ var (
 )
 
 type serverInfo struct {
-	Name         string   `json:"name"`
-	Version      string   `json:"version"`
-	StorageMode  string   `json:"storageMode"`
-	Capabilities []string `json:"capabilities"`
+	Name            string   `json:"name"`
+	Version         string   `json:"version"`
+	StorageMode     string   `json:"storageMode"`
+	StorageDriver   string   `json:"storageDriver"`
+	SQLPlaceholder  string   `json:"sqlPlaceholder"`
+	BootstrapSchema bool     `json:"bootstrapSchema"`
+	QueryRebinding  bool     `json:"queryRebinding"`
+	Capabilities    []string `json:"capabilities"`
 }
 
 func configuredServerURL() string {
