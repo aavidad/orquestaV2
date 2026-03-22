@@ -60,6 +60,41 @@ func TestResolveConfigUsaDriverYDSNDesdeEntorno(t *testing.T) {
 	}
 }
 
+func TestResolveConfigPostgresActivaBootstrapPorDefecto(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "postgres")
+	t.Setenv("ORQUESTA_DB_DSN", "postgres://user:pass@localhost/orquesta?sslmode=disable")
+	t.Setenv("ORQUESTA_DB_BOOTSTRAP", "")
+	t.Setenv("ORQUESTA_DB_MAX_OPEN_CONNS", "")
+
+	cfg, err := ResolveConfig(func() string { return "/tmp/ignorado.db" })
+	if err != nil {
+		t.Fatalf("ResolveConfig: %v", err)
+	}
+	if cfg.Driver != "postgres" {
+		t.Fatalf("driver inesperado: %s", cfg.Driver)
+	}
+	if !cfg.BootstrapSchema {
+		t.Fatalf("postgres deberia arrancar con bootstrap activo por defecto")
+	}
+}
+
+func TestResolveConfigNormalizaPostgreSQLAPostgres(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "postgresql")
+	t.Setenv("ORQUESTA_DB_DSN", "postgres://user:pass@localhost/orquesta?sslmode=disable")
+	t.Setenv("ORQUESTA_DB_BOOTSTRAP", "")
+
+	cfg, err := ResolveConfig(func() string { return "/tmp/ignorado.db" })
+	if err != nil {
+		t.Fatalf("ResolveConfig: %v", err)
+	}
+	if cfg.Driver != "postgres" {
+		t.Fatalf("driver inesperado: %s", cfg.Driver)
+	}
+	if !cfg.BootstrapSchema {
+		t.Fatalf("postgres deberia arrancar con bootstrap activo tras normalizar postgresql")
+	}
+}
+
 func TestResolveConfigNormalizaSQLite3ASQLite(t *testing.T) {
 	t.Setenv("ORQUESTA_DB_DRIVER", "sqlite3")
 	t.Setenv("ORQUESTA_DB_DSN", "")

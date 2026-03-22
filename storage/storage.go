@@ -124,7 +124,12 @@ func defaultMaxOpenConns(driver string) int {
 }
 
 func defaultBootstrapSchema(driver string) bool {
-	return normalizeDriver(driver) == "sqlite" || normalizeDriver(driver) == ""
+	switch normalizeDriver(driver) {
+	case "", "sqlite", "postgres":
+		return true
+	default:
+		return false
+	}
 }
 
 func sqlDriverName(driver string) string {

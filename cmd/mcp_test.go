@@ -339,17 +339,14 @@ func mustJSON(t *testing.T, v any) json.RawMessage {
 
 func insertTestPropuesta(t *testing.T, codigo, titulo, descripcion string) int64 {
 	t.Helper()
-	res, err := db.DB.Exec(`
+	var id int64
+	if err := db.DB.QueryRow(`
 		INSERT INTO propuestas (codigo, titulo, descripcion, tipo, propuesto_por, distribuidor)
-		VALUES (?,?,?,?,?,?)`,
+		VALUES (?,?,?,?,?,?)
+		RETURNING id`,
 		codigo, titulo, descripcion, "arquitectura", "Codex1", "Codex1",
-	)
-	if err != nil {
+	).Scan(&id); err != nil {
 		t.Fatalf("insert propuesta: %v", err)
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		t.Fatalf("LastInsertId propuesta: %v", err)
 	}
 	return id
 }
@@ -371,17 +368,14 @@ func insertTestProyecto(t *testing.T, slug, nombre, rutaAbs string) int64 {
 
 func insertTestProyectoConTipoActivo(t *testing.T, slug, nombre, rutaAbs, tipo string, activo bool) int64 {
 	t.Helper()
-	res, err := db.DB.Exec(`
+	var id int64
+	if err := db.DB.QueryRow(`
 		INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo)
-		VALUES (?,?,?,?,?)`,
+		VALUES (?,?,?,?,?)
+		RETURNING id`,
 		slug, nombre, rutaAbs, tipo, activo,
-	)
-	if err != nil {
+	).Scan(&id); err != nil {
 		t.Fatalf("insert proyecto: %v", err)
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		t.Fatalf("LastInsertId proyecto: %v", err)
 	}
 	return id
 }
