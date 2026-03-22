@@ -103,7 +103,7 @@ func TestSQLiteDSNAniadeParametrosSinRomperQueryExistente(t *testing.T) {
 }
 
 func TestOpenFallaConDriverExternoNoEnlazado(t *testing.T) {
-	for _, driver := range []string{"postgres", "mysql"} {
+	for _, driver := range []string{"mysql"} {
 		t.Run(driver, func(t *testing.T) {
 			_, err := Open(Config{
 				Driver: driver,
@@ -116,5 +116,33 @@ func TestOpenFallaConDriverExternoNoEnlazado(t *testing.T) {
 				t.Fatalf("error no explicito para %s: %v", driver, err)
 			}
 		})
+	}
+}
+
+func TestSQLDriverName(t *testing.T) {
+	t.Parallel()
+
+	if got := sqlDriverName("postgres"); got != "pgx" {
+		t.Fatalf("sqlDriverName(postgres)=%q", got)
+	}
+	if got := sqlDriverName("sqlite"); got != "sqlite" {
+		t.Fatalf("sqlDriverName(sqlite)=%q", got)
+	}
+}
+
+func TestOpenPostgresUsaDriverEnlazado(t *testing.T) {
+	t.Parallel()
+
+	db, err := Open(Config{
+		Driver: "postgres",
+		DSN:    "postgres://user:pass@localhost/orquesta?sslmode=disable",
+	})
+	if err != nil {
+		t.Fatalf("Open postgres: %v", err)
+	}
+	defer db.Close()
+
+	if !driverRegistered(sqlDriverName("postgres")) {
+		t.Fatalf("el driver postgres deberia estar enlazado en el binario")
 	}
 }

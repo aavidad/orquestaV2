@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 )
 
@@ -72,16 +73,17 @@ func ResolveConfig(pathResolver func() string) (Config, error) {
 
 func Open(cfg Config) (*sql.DB, error) {
 	driver := normalizeDriver(cfg.Driver)
+	sqlDriver := sqlDriverName(driver)
 	if driver == "" {
 		return nil, fmt.Errorf("driver de almacenamiento obligatorio")
 	}
 	if strings.TrimSpace(cfg.DSN) == "" {
 		return nil, fmt.Errorf("dsn de almacenamiento obligatorio para driver %s", driver)
 	}
-	if !driverRegistered(driver) {
+	if !driverRegistered(sqlDriver) {
 		return nil, fmt.Errorf("driver de almacenamiento %q no está enlazado en el binario", driver)
 	}
-	db, err := sql.Open(driver, cfg.DSN)
+	db, err := sql.Open(sqlDriver, cfg.DSN)
 	if err != nil {
 		return nil, err
 	}
@@ -123,6 +125,15 @@ func defaultMaxOpenConns(driver string) int {
 
 func defaultBootstrapSchema(driver string) bool {
 	return normalizeDriver(driver) == "sqlite" || normalizeDriver(driver) == ""
+}
+
+func sqlDriverName(driver string) string {
+	switch normalizeDriver(driver) {
+	case "postgres":
+		return "pgx"
+	default:
+		return normalizeDriver(driver)
+	}
 }
 
 func parseBool(v string) (bool, error) {
