@@ -74,7 +74,7 @@ func ejecutarRespaldoBD(destino, etiqueta string, retener int) (string, error) {
 
 	nombre := nombreRespaldoFechable(ahoraRespaldo(), etiqueta)
 	rutaSalida := filepath.Join(destinoAbs, nombre)
-	if err := crearRespaldoSQLite(rutaSalida); err != nil {
+	if err := db.BackupTo(rutaSalida); err != nil {
 		return "", err
 	}
 
@@ -85,17 +85,6 @@ func ejecutarRespaldoBD(destino, etiqueta string, retener int) (string, error) {
 	}
 
 	return rutaSalida, nil
-}
-
-func crearRespaldoSQLite(rutaSalida string) error {
-	rutaSalida = strings.TrimSpace(rutaSalida)
-	if rutaSalida == "" {
-		return fmt.Errorf("ruta de salida vacía")
-	}
-	if _, err := db.DB.Exec(fmt.Sprintf("VACUUM INTO %s", literalSQLite(rutaSalida))); err != nil {
-		return fmt.Errorf("crear respaldo sqlite: %w", err)
-	}
-	return nil
 }
 
 func aplicarRetencionRespaldo(destino string, retener int) error {

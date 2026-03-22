@@ -8,40 +8,61 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	_ "modernc.org/sqlite"
 )
 
 var DB *sql.DB
 
-// Open abre (o crea) la base de datos SQLite y aplica el schema.
-// Orden de resolución de la ruta:
+// Open abre (o crea) la base de datos usando el backend configurado y aplica su preparación.
+func Open() error {
+	backend, target, err := resolveBackend()
+	if err != nil {
+		return err
+	}
+	db, err := backend.Open(target)
+	if err != nil {
+		return err
+	}
+	currentBackend = backend
+	if err := backend.Prepare(db); err != nil {
+		_ = db.Close()
+		currentBackend = nil
+		return err
+	}
+	DB = db
+	return nil
+}
+
+func Close() {
+	if DB != nil {
+		_ = DB.Close()
+	}
+	DB = nil
+	currentBackend = nil
+}
+
+// Orden de resolución de la ruta SQLite:
 //  1. Variable de entorno ORQUESTA_DB
 //  2. Repositorio `orquesta` del workspace actual (../orquesta/orquesta.db)
 //  3. Si el git-root ya es el repo `orquesta`, <git-root>/orquesta.db
 //  4. ./orquesta.db
-func Open() error {
-	path := resolverRuta()
-	db, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_foreign_keys=on&_busy_timeout=5000")
-	if err != nil {
-		return fmt.Errorf("abriendo DB en %s: %w", path, err)
+func resolverRuta() string {
+	if v := os.Getenv("ORQUESTA_DB"); strings.TrimSpace(v) != "" {
+		return v
 	}
-	db.SetMaxOpenConns(1) // SQLite no soporta escrituras concurrentes
-	if err := aplicarSchema(db); err != nil {
-		db.Close()
-		return fmt.Errorf("aplicando schema: %w", err)
+	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	if err == nil {
+		return resolverRutaDesdeGitRoot(strings.TrimSpace(string(out)))
 	}
-	DB = db
-	if err := postMigraciones(); err != nil {
-		db.Close()
-		DB = nil
-		return fmt.Errorf("post-migraciones: %w", err)
+	if wd, err := os.Getwd(); err == nil {
+		if ruta := buscarRutaRepoOrquesta(wd); ruta != "" {
+			return ruta
+		}
 	}
-	return nil
+	return "orquesta.db"
 }
 
 // postMigraciones ejecuta ALTER TABLE idempotentes para columnas añadidas tras el schema inicial.
-func postMigraciones() error {
+func postMigraciones(conn *sql.DB) error {
 	migraciones := []string{
 		`ALTER TABLE sesiones ADD COLUMN conector_id INTEGER REFERENCES conectores(id)`,
 		`ALTER TABLE agentes ADD COLUMN estado_sesion TEXT DEFAULT NULL`,
@@ -231,9 +252,9 @@ func postMigraciones() error {
 		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('pool_default_budget_source','manual')`,
 		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('model_policy_default_profile','implementacion')`,
 		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('model_policy_default_reasoning','high')`,
-		`INSERT OR IGNORE INTO conectores (slug, nombre, transporte, comando, metadata_json) VALUES ('claude-code','Claude Code','cli','claude','{"familia":"anthropic","reanudable":true}')`,
-		`INSERT OR IGNORE INTO conectores (slug, nombre, transporte, comando, metadata_json) VALUES ('codex-cli','Codex CLI','cli','codex','{"familia":"openai","reanudable":true}')`,
-		`INSERT OR IGNORE INTO conectores (slug, nombre, transporte, comando, metadata_json) VALUES ('gemini-cli','Gemini CLI','cli','gemini','{"familia":"google","reanudable":true}')`,
+		`INSERT OR IGNORE INTO conectores (slug, nombre, transporte, comando, metadata_json) VALUES ('claude-code','Claude Code','cli','claude','{\"familia\":\"anthropic\",\"reanudable\":true}')`,
+		`INSERT OR IGNORE INTO conectores (slug, nombre, transporte, comando, metadata_json) VALUES ('codex-cli','Codex CLI','cli','codex','{\"familia\":\"openai\",\"reanudable\":true}')`,
+		`INSERT OR IGNORE INTO conectores (slug, nombre, transporte, comando, metadata_json) VALUES ('gemini-cli','Gemini CLI','cli','gemini','{\"familia\":\"google\",\"reanudable\":true}')`,
 		`UPDATE reglas
 		 SET descripcion='No escribir código sin propuesta OP-XXX aprobada en la app de orquestación.'
 		 WHERE tipo_agente='programador' AND categoria='calidad' AND titulo='Propuesta antes de código'`,
@@ -296,35 +317,13 @@ func postMigraciones() error {
 	}
 	for _, m := range migraciones {
 		if err := ejecutarConReintentos(func() error {
-			_, err := DB.Exec(m)
+			_, err := conn.Exec(m)
 			return err
 		}); err != nil && !esErrorMigracionIgnorable(err) {
-			return err
+			return fmt.Errorf("post-migraciones: %w", err)
 		}
 	}
 	return nil
-}
-
-func Close() {
-	if DB != nil {
-		DB.Close()
-	}
-}
-
-func resolverRuta() string {
-	if v := os.Getenv("ORQUESTA_DB"); strings.TrimSpace(v) != "" {
-		return v
-	}
-	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
-	if err == nil {
-		return resolverRutaDesdeGitRoot(strings.TrimSpace(string(out)))
-	}
-	if wd, err := os.Getwd(); err == nil {
-		if ruta := buscarRutaRepoOrquesta(wd); ruta != "" {
-			return ruta
-		}
-	}
-	return "orquesta.db"
 }
 
 func resolverRutaDesdeGitRoot(root string) string {
@@ -384,7 +383,7 @@ func ejecutarConReintentos(fn func() error) error {
 		if err == nil {
 			return nil
 		}
-		if !esErrorSQLiteBusy(err) {
+		if !esErrorPersistenciaBusy(err) {
 			return err
 		}
 		time.Sleep(200 * time.Millisecond)
@@ -392,12 +391,11 @@ func ejecutarConReintentos(fn func() error) error {
 	return err
 }
 
-func esErrorSQLiteBusy(err error) bool {
-	if err == nil {
-		return false
+func esErrorPersistenciaBusy(err error) bool {
+	if currentBackend != nil {
+		return currentBackend.IsBusy(err)
 	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "database is locked") || strings.Contains(msg, "sqlite_busy")
+	return false
 }
 
 func esErrorMigracionIgnorable(err error) bool {

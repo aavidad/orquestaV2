@@ -1,0 +1,56 @@
+package db
+
+import (
+	"path/filepath"
+	"testing"
+)
+
+func TestResolveBackendPorDefectoSQLite(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_BACKEND", "")
+	t.Setenv("ORQUESTA_DB", filepath.Join(t.TempDir(), "orquesta.db"))
+
+	backend, target, err := resolveBackend()
+	if err != nil {
+		t.Fatalf("resolveBackend: %v", err)
+	}
+	if backend.Name() != "sqlite" {
+		t.Fatalf("backend inesperado: %s", backend.Name())
+	}
+	if target == "" {
+		t.Fatalf("target vacío")
+	}
+}
+
+func TestResolveBackendFallaConBackendNoSoportado(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_BACKEND", "mysql")
+	t.Setenv("ORQUESTA_DB_DSN", "usuario:pass@tcp(localhost:3306)/orquesta")
+
+	_, _, err := resolveBackend()
+	if err == nil {
+		t.Fatalf("se esperaba error por backend no soportado")
+	}
+}
+
+func TestBackupToRequiereBackendInicializado(t *testing.T) {
+	prevDB := DB
+	prevBackend := currentBackend
+	DB = nil
+	currentBackend = nil
+	t.Cleanup(func() {
+		DB = prevDB
+		currentBackend = prevBackend
+	})
+
+	err := BackupTo(filepath.Join(t.TempDir(), "x.db"))
+	if err == nil {
+		t.Fatalf("se esperaba error sin DB inicializada")
+	}
+}
+
+func TestRegisterBackendIgnoraNil(t *testing.T) {
+	prev := len(backendRegistry)
+	RegisterBackend(nil)
+	if len(backendRegistry) != prev {
+		t.Fatalf("register nil no debe alterar el registro")
+	}
+}
