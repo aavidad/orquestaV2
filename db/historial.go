@@ -45,7 +45,7 @@ func ImportarHistorialOPs() error {
 			estado = "consenso"
 		}
 
-		res, err := DB.Exec(`
+		propID, err := insertReturningID(`
 			INSERT INTO propuestas (codigo, titulo, descripcion, tipo, estado, propuesto_por, distribuidor, cerrada_at)
 			VALUES (?,?,?,?,?,?,'alberto',
 			  CASE WHEN ? IN ('consenso','cerrado') THEN CURRENT_TIMESTAMP ELSE NULL END)`,
@@ -54,7 +54,6 @@ func ImportarHistorialOPs() error {
 		if err != nil {
 			return fmt.Errorf("insertando %s: %w", op.codigo, err)
 		}
-		propID, _ := res.LastInsertId()
 
 		// Insertar votos
 		for _, v := range op.votos {

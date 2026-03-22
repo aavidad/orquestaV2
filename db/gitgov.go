@@ -61,7 +61,7 @@ func GuardarGitMerge(m *GitMerge) (int64, error) {
 	}
 
 	if m.ID == 0 {
-		res, err := DB.Exec(`
+		id, err := insertReturningID(`
 			INSERT INTO git_merges (
 				proyecto_id, source_branch, target_branch, requested_by, estado,
 				commit_origen, commit_merge, notas, metadata_json
@@ -69,10 +69,6 @@ func GuardarGitMerge(m *GitMerge) (int64, error) {
 			m.ProyectoID, m.SourceBranch, m.TargetBranch, m.RequestedBy, m.Estado,
 			m.CommitOrigen, m.CommitMerge, m.Notas, m.MetadataJSON,
 		)
-		if err != nil {
-			return 0, err
-		}
-		id, err := res.LastInsertId()
 		if err != nil {
 			return 0, err
 		}

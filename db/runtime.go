@@ -80,16 +80,12 @@ func GuardarRuntimeHandle(h *RuntimeHandle) (int64, error) {
 		}
 	}
 
-	res, err := tx.Exec(`
+	id, err := insertReturningIDWith(tx, `
 		INSERT INTO runtime_handles (
 			agente, sesion_id, proyecto_id, transporte, handle_kind, handle_ref, estado, metadata_json
 		) VALUES (?,?,?,?,?,?,?,?)`,
 		h.Agente, h.SesionID, h.ProyectoID, h.Transporte, h.HandleKind, h.HandleRef, h.Estado, h.MetadataJSON,
 	)
-	if err != nil {
-		return 0, err
-	}
-	id, err := res.LastInsertId()
 	if err != nil {
 		return 0, err
 	}
@@ -164,15 +160,11 @@ func CrearRuntimeOrder(o *RuntimeOrder) (int64, error) {
 	if !runtimeOrderEstadoValido(o.Estado) {
 		return 0, fmt.Errorf("estado de runtime_order invalido: %s", o.Estado)
 	}
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO runtime_orders (agente, proyecto_id, tipo, payload_json, estado, error_text)
 		VALUES (?,?,?,?,?,?)`,
 		o.Agente, o.ProyectoID, o.Tipo, o.PayloadJSON, o.Estado, o.ErrorText,
 	)
-	if err != nil {
-		return 0, err
-	}
-	id, err := res.LastInsertId()
 	if err != nil {
 		return 0, err
 	}

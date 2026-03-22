@@ -1,6 +1,7 @@
 package db
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 )
@@ -86,4 +87,24 @@ func buildUpsertAssignments(driver string, updateAssignments []upsertAssignment)
 		assignments = append(assignments, column+"="+expr)
 	}
 	return assignments
+}
+
+type queryRower interface {
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+func insertReturningID(query string, args ...any) (int64, error) {
+	return insertReturningIDWith(DB, query, args...)
+}
+
+func insertReturningIDWith(q queryRower, query string, args ...any) (int64, error) {
+	stmt := strings.TrimRight(strings.TrimSpace(query), ";")
+	if !strings.Contains(strings.ToUpper(stmt), "RETURNING") {
+		stmt += "\nRETURNING id"
+	}
+	var id int64
+	if err := q.QueryRow(stmt, args...).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }

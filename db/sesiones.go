@@ -48,11 +48,10 @@ func IniciarSesion(agente string) (int64, error) {
 	}
 
 	// Crear nueva sesión
-	res, err := tx.Exec(`INSERT INTO sesiones (agente) VALUES (?)`, agente)
+	id, err := insertReturningIDWith(tx, `INSERT INTO sesiones (agente) VALUES (?)`, agente)
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 
 	if err = tx.Commit(); err != nil {
 		return 0, err

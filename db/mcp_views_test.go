@@ -56,12 +56,13 @@ func TestListarWorktrees(t *testing.T) {
 	if err := Open(); err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	res, err := DB.Exec(`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1)`,
-		"orquestador", "Orquestador", "/tmp/orquestador", "repo")
-	if err != nil {
+	var proyectoID int64
+	if err := DB.QueryRow(
+		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,
+		"orquestador", "Orquestador", "/tmp/orquestador", "repo",
+	).Scan(&proyectoID); err != nil {
 		t.Fatalf("insert proyecto: %v", err)
 	}
-	proyectoID, _ := res.LastInsertId()
 	if _, err := DB.Exec(`INSERT INTO tareas (titulo, descripcion, modulo, prioridad, creado_por) VALUES (?,?,?,?,?)`,
 		"tarea-base", "", "orquestador", "media", "alberto"); err != nil {
 		t.Fatalf("insert tarea: %v", err)
@@ -105,12 +106,13 @@ func TestListarLocks(t *testing.T) {
 	if err := Open(); err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	res, err := DB.Exec(`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1)`,
-		"orquestador", "Orquestador", "/tmp/orquestador", "repo")
-	if err != nil {
+	var proyectoID int64
+	if err := DB.QueryRow(
+		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,
+		"orquestador", "Orquestador", "/tmp/orquestador", "repo",
+	).Scan(&proyectoID); err != nil {
 		t.Fatalf("insert proyecto: %v", err)
 	}
-	proyectoID, _ := res.LastInsertId()
 	if _, err := DB.Exec(`
 		INSERT INTO locks (proyecto_id, agente, scope_type, scope_key, ruta_abs, branch, motivo, token_lease, estado, expires_at)
 		VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`,

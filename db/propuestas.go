@@ -46,7 +46,7 @@ func CrearPropuesta(p *Propuesta) (int64, error) {
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(`
+	id, err := insertReturningIDWith(tx, `
 		INSERT INTO propuestas (codigo, titulo, descripcion, tipo, propuesto_por, distribuidor, proyecto_id)
 		VALUES (?,?,?,?,?,?,?)`,
 		p.Codigo, p.Titulo, p.Descripcion, p.Tipo, p.PropuestoPor, p.Distribuidor, p.ProyectoID,
@@ -54,7 +54,6 @@ func CrearPropuesta(p *Propuesta) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 
 	// Crear filas de voto pendiente solo para agentes habilitados (no admin, no retirados)
 	rows, err := tx.Query(`SELECT nombre FROM agentes WHERE rol != 'admin' AND habilitado = 1`)

@@ -66,7 +66,7 @@ type FiltroTareas struct {
 // CrearTarea inserta una nueva tarea y devuelve su ID.
 func CrearTarea(t *Tarea) (int64, error) {
 	deps, _ := json.Marshal(t.Dependencias)
-	res, err := DB.Exec(`
+	id, err := insertReturningID(`
 		INSERT INTO tareas (titulo, descripcion, modulo, prioridad, dependencias, creado_por, notas, propuesta_id)
 		VALUES (?,?,?,?,?,?,?,?)`,
 		t.Titulo, t.Descripcion, t.Modulo, t.Prioridad, string(deps), t.CreadoPor, t.Notas, t.PropuestaID,
@@ -74,7 +74,6 @@ func CrearTarea(t *Tarea) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 	Audit(t.CreadoPor, "crear_tarea", "tarea", id, t.Titulo)
 	return id, nil
 }
@@ -272,9 +271,10 @@ func EnviarTareaABacklog(id int64) error {
 
 // AnotarTarea añade una nota a una tarea.
 func AnotarTarea(id int64, agente, nota string) error {
+	anotacion := formatearAnotacionTarea(agente, nota, time.Now())
 	_, err := DB.Exec(
-		`UPDATE tareas SET notas = notas || char(10) || ? || ' [' || datetime('now') || ' ' || ? || ']' WHERE id=?`,
-		nota, agente, id,
+		`UPDATE tareas SET notas = notas || ? WHERE id=?`,
+		anotacion, id,
 	)
 	return err
 }
@@ -329,4 +329,8 @@ func escanearTarea(s scanner) (*Tarea, error) {
 		t.CompletadaAt = &completadaAt.Time
 	}
 	return &t, nil
+}
+
+func formatearAnotacionTarea(agente, nota string, ts time.Time) string {
+	return "\n" + nota + " [" + ts.UTC().Format("2006-01-02 15:04:05") + " " + agente + "]"
 }

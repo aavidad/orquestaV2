@@ -22,12 +22,13 @@ func TestHistorialVotacionesProyecto(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 
-	res, err := DB.Exec(`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1)`,
-		"orquestador", "Orquestador", "/tmp/orquestador", "repo")
-	if err != nil {
+	var proyectoID int64
+	if err := DB.QueryRow(
+		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,
+		"orquestador", "Orquestador", "/tmp/orquestador", "repo",
+	).Scan(&proyectoID); err != nil {
 		t.Fatalf("insert proyecto: %v", err)
 	}
-	proyectoID, _ := res.LastInsertId()
 
 	prop := &Propuesta{
 		Codigo:       "OP-900",
@@ -82,12 +83,13 @@ func TestGuardarYListarDecisionesProyecto(t *testing.T) {
 	if err := Open(); err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	res, err := DB.Exec(`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1)`,
-		"orquestador", "Orquestador", "/tmp/orquestador", "repo")
-	if err != nil {
+	var proyectoID int64
+	if err := DB.QueryRow(
+		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,
+		"orquestador", "Orquestador", "/tmp/orquestador", "repo",
+	).Scan(&proyectoID); err != nil {
 		t.Fatalf("insert proyecto: %v", err)
 	}
-	proyectoID, _ := res.LastInsertId()
 
 	id, err := GuardarDecisionProyecto(&DecisionProyecto{
 		ProyectoID:   proyectoID,
@@ -132,12 +134,13 @@ func TestGuardarYListarDocumentosExternosProyecto(t *testing.T) {
 	if err := Open(); err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	res, err := DB.Exec(`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1)`,
-		"orquestador", "Orquestador", "/tmp/orquestador", "repo")
-	if err != nil {
+	var proyectoID int64
+	if err := DB.QueryRow(
+		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,
+		"orquestador", "Orquestador", "/tmp/orquestador", "repo",
+	).Scan(&proyectoID); err != nil {
 		t.Fatalf("insert proyecto: %v", err)
 	}
-	proyectoID, _ := res.LastInsertId()
 
 	id, err := GuardarDocumentoExterno(&DocumentoExterno{
 		ProyectoID:    proyectoID,
