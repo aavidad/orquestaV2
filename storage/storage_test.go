@@ -1,6 +1,9 @@
 package storage
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestResolveConfigSQLitePorDefectoUsaPathDelCallback(t *testing.T) {
 	t.Setenv("ORQUESTA_DB_DRIVER", "")
@@ -96,5 +99,22 @@ func TestSQLiteDSNAniadeParametrosSinRomperQueryExistente(t *testing.T) {
 	want := "/tmp/orquesta.db?cache=shared&_journal_mode=WAL&_foreign_keys=on&_busy_timeout=5000"
 	if got != want {
 		t.Fatalf("dsn inesperado: %s", got)
+	}
+}
+
+func TestOpenFallaConDriverExternoNoEnlazado(t *testing.T) {
+	for _, driver := range []string{"postgres", "mysql"} {
+		t.Run(driver, func(t *testing.T) {
+			_, err := Open(Config{
+				Driver: driver,
+				DSN:    "dsn://usuario:clave@localhost/orquesta",
+			})
+			if err == nil {
+				t.Fatalf("esperaba error para driver %s no enlazado", driver)
+			}
+			if !strings.Contains(err.Error(), "no está enlazado en el binario") {
+				t.Fatalf("error no explicito para %s: %v", driver, err)
+			}
+		})
 	}
 }

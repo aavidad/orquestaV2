@@ -2,6 +2,7 @@ package db
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -29,5 +30,45 @@ func TestEsErrorMigracionIgnorable(t *testing.T) {
 				t.Fatalf("esErrorMigracionIgnorable(%v)=%v want %v", tc.err, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestPostMigrationStatementsNoRecreanDDL(t *testing.T) {
+	t.Parallel()
+
+	stmts := postMigrationStatements()
+	if len(stmts) == 0 {
+		t.Fatalf("postMigrationStatements vacio")
+	}
+
+	for _, stmt := range stmts {
+		upper := strings.ToUpper(strings.TrimSpace(stmt))
+		for _, forbidden := range []string{
+			"CREATE TABLE",
+			"CREATE TRIGGER",
+			"CREATE UNIQUE INDEX",
+			"CREATE INDEX",
+		} {
+			if strings.HasPrefix(upper, forbidden) {
+				t.Fatalf("postMigrationStatements no deberia contener %q: %s", forbidden, stmt)
+			}
+		}
+	}
+}
+
+func TestPostMigrationStatementsIncluyenAlterYAjustesDatos(t *testing.T) {
+	t.Parallel()
+
+	stmts := strings.Join(postMigrationStatements(), "\n")
+	for _, required := range []string{
+		"ALTER TABLE agentes ADD COLUMN estado_sesion",
+		"ALTER TABLE propuestas ADD COLUMN proyecto_id",
+		"ALTER TABLE sesiones ADD COLUMN conector_id",
+		"UPDATE reglas",
+		"UPDATE workflows",
+	} {
+		if !strings.Contains(stmts, required) {
+			t.Fatalf("postMigrationStatements deberia incluir %q", required)
+		}
 	}
 }

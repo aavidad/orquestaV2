@@ -78,6 +78,9 @@ func Open(cfg Config) (*sql.DB, error) {
 	if strings.TrimSpace(cfg.DSN) == "" {
 		return nil, fmt.Errorf("dsn de almacenamiento obligatorio para driver %s", driver)
 	}
+	if !driverRegistered(driver) {
+		return nil, fmt.Errorf("driver de almacenamiento %q no está enlazado en el binario", driver)
+	}
 	db, err := sql.Open(driver, cfg.DSN)
 	if err != nil {
 		return nil, err
@@ -131,4 +134,13 @@ func parseBool(v string) (bool, error) {
 	default:
 		return false, fmt.Errorf("valor booleano invalido")
 	}
+}
+
+func driverRegistered(name string) bool {
+	for _, registered := range sql.Drivers() {
+		if registered == name {
+			return true
+		}
+	}
+	return false
 }
