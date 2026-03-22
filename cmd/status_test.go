@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 	"testing"
 
 	"orquesta/db"
@@ -23,6 +26,30 @@ func setServerHTTPClientForTest(t *testing.T, transport roundTripFunc) {
 		serverHTTPClient = prevClient
 		resetServerDiscovery()
 	})
+}
+
+func captureOutput(t *testing.T, fn func()) string {
+	t.Helper()
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stdout = w
+	defer func() {
+		os.Stdout = oldStdout
+	}()
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("cerrando stdout capturado: %v", err)
+	}
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("leyendo stdout capturado: %v", err)
+	}
+	return buf.String()
 }
 
 func TestShouldBypassLocalDBConServidorLocalDescubierto(t *testing.T) {
@@ -160,7 +187,7 @@ func TestFetchServerInfoAndStatus(t *testing.T) {
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			switch req.URL.Path {
 			case "/api/server":
-				return newJSONResponse(http.StatusOK, `{"name":"orquesta","version":"v1","storageMode":"single-process","capabilities":["status","api"]}`), nil
+				return newJSONResponse(http.StatusOK, `{"name":"orquesta","version":"v1","storageMode":"single-process","storageDriver":"sqlite","sqlPlaceholder":"?","bootstrapSchema":true,"queryRebinding":true,"capabilities":["status","api"]}`), nil
 			case "/api/status":
 				return newJSONResponse(http.StatusOK, `{"generado":"2026-03-22T18:00:00Z","tareasPorEstado":{"completada":2,"en_progreso":1},"propuestasAbiertas":[{"codigo":"OP-080","titulo":"Servidor unico","acuerdo":3,"pendiente":1}],"tareasActivas":[{"id":7,"titulo":"Mover status a cliente HTTP","agente":"Codex2"}]}`), nil
 			default:
@@ -179,6 +206,12 @@ func TestFetchServerInfoAndStatus(t *testing.T) {
 	if info.Name != "orquesta" || info.StorageMode != "single-process" {
 		t.Fatalf("serverInfo inesperado: %+v", info)
 	}
+	if info.StorageDriver != "sqlite" || info.SQLPlaceholder != "?" || !info.BootstrapSchema || !info.QueryRebinding {
+		t.Fatalf("serverInfo con metadatos inesperados: %+v", info)
+	}
+	if got := serverInfoLines(info); len(got) != 3 || got[0] != "🖥️  Backend activo: orquesta v1" || !strings.Contains(got[1], "modo single-process") || !strings.Contains(got[1], "driver sqlite") {
+		t.Fatalf("lineas de backend inesperadas: %+v", got)
+	}
 
 	status, err := fetchServerStatus("http://orquesta.local")
 	if err != nil {
@@ -189,6 +222,59 @@ func TestFetchServerInfoAndStatus(t *testing.T) {
 	}
 	if len(status.PropuestasAbiertas) != 1 || status.PropuestasAbiertas[0].Codigo != "OP-080" {
 		t.Fatalf("propuestas inesperadas: %+v", status.PropuestasAbiertas)
+	}
+}
+
+func TestLoadStatusSummaryIgnoraServerInfoInvalido(t *testing.T) {
+	prevClient := serverHTTPClient
+	serverHTTPClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			switch req.URL.Path {
+			case "/api/server":
+				return newJSONResponse(http.StatusOK, `{"name":"orquesta"`), nil
+			case "/api/status":
+				return newJSONResponse(http.StatusOK, `{"generado":"2026-03-22T18:00:00Z","tareasPorEstado":{"completada":1}}`), nil
+			default:
+				return newJSONResponse(http.StatusNotFound, `{"error":"not found"}`), nil
+			}
+		}),
+	}
+	defer func() {
+		serverHTTPClient = prevClient
+		resetServerDiscovery()
+	}()
+
+	ctx, err := loadStatusSummary()
+	if err != nil {
+		t.Fatalf("loadStatusSummary: %v", err)
+	}
+	if ctx == nil || ctx.resumen == nil {
+		t.Fatalf("contexto de estado inesperado: %+v", ctx)
+	}
+	if ctx.backend != nil {
+		t.Fatalf("backend no deberia parsearse con JSON invalido: %+v", ctx.backend)
+	}
+}
+
+func TestRenderStatusSummaryMuestraBackendActivo(t *testing.T) {
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				TareasPorEstado: map[string]int{},
+			},
+			backend: &serverInfo{
+				Name:         "orquesta",
+				Version:      "v1",
+				StorageMode:  "single-process",
+				Capabilities: []string{"status", "api"},
+			},
+		})
+	})
+	if !strings.Contains(out, "Backend activo: orquesta v1") {
+		t.Fatalf("salida sin backend activo: %s", out)
+	}
+	if !strings.Contains(out, "capacidades: status, api") {
+		t.Fatalf("salida sin capacidades: %s", out)
 	}
 }
 
