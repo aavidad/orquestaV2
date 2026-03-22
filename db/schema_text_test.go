@@ -301,6 +301,24 @@ func TestSchemaBaseSectionsMantieneOrdenEsperado(t *testing.T) {
 	}
 }
 
+func TestSchemaBaseSectionRenderersMantieneContratoBase(t *testing.T) {
+	t.Parallel()
+
+	renderers := schemaBaseSectionRenderers()
+	if len(renderers) != 6 {
+		t.Fatalf("schemaBaseSectionRenderers deberia exponer 6 secciones; obtuvo %d", len(renderers))
+	}
+	if renderers[0].sqliteDDL != schemaBootstrapDDL {
+		t.Fatalf("la primera seccion renderizada deberia ser bootstrap")
+	}
+	if got := renderers[0].renderFor("postgres"); !strings.Contains(got, "ultima_sesion TIMESTAMP") {
+		t.Fatalf("bootstrap postgres deberia salir del spec renderizado; obtuvo: %s", got)
+	}
+	if got := renderers[1].renderFor("postgres"); !strings.Contains(got, "CREATE TABLE IF NOT EXISTS tareas") {
+		t.Fatalf("workflow postgres deberia conservar tareas")
+	}
+}
+
 func TestBootstrapPlanForDriver(t *testing.T) {
 	t.Parallel()
 

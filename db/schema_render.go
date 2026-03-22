@@ -45,7 +45,7 @@ func renderBaseDDLForDriver(driver string) string {
 	sections := schemaBaseSectionRenderers()
 	rendered := make([]string, 0, len(sections))
 	for _, section := range sections {
-		if stmt := section.render(driver); strings.TrimSpace(stmt) != "" {
+		if stmt := section.renderFor(driver); strings.TrimSpace(stmt) != "" {
 			rendered = append(rendered, stmt)
 		}
 	}
