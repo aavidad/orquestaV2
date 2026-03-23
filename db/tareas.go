@@ -66,6 +66,13 @@ type FiltroTareas struct {
 	Libre       bool // solo las libre (sin agente)
 }
 
+type ResumenBloqueo struct {
+	ID     int64
+	Titulo string
+	Agente string
+	Motivo string
+}
+
 // CrearTarea inserta una nueva tarea y devuelve su ID.
 func CrearTarea(t *Tarea) (int64, error) {
 	deps, _ := json.Marshal(t.Dependencias)
@@ -249,6 +256,22 @@ func CompletarTarea(id int64, agente, commit string) error {
 	if err == nil {
 		Audit(agente, "completar_tarea", "tarea", id, t.Titulo+" commit="+commit)
 		SetEstadoSesion(agente, "disponible")
+
+		// Detección de fin de proyecto (Autonomía Total)
+		if t.ProyectoID != nil {
+			stats, _ := GetEstadisticasProyecto(*t.ProyectoID)
+			if stats.Total > 0 && stats.Completadas == stats.Total {
+				p, _ := GetProyecto(fmt.Sprintf("%d", *t.ProyectoID))
+				if p != nil {
+					CanalNotificaciones <- EventoNotificacion{
+						Tipo:       "fin_proyecto",
+						ID:         p.ID,
+						Texto:      p.Nombre,
+						ProyectoID: p.ID,
+					}
+				}
+			}
+		}
 	}
 	return err
 }
@@ -296,6 +319,13 @@ func BloquearTarea(id int64, agente, motivo string) error {
 	}
 	Audit(agente, "bloquear_tarea", "tarea", id, t.Titulo+": "+motivo)
 	SetEstadoSesion(agente, "esperando")
+
+	CanalNotificaciones <- EventoNotificacion{
+		Tipo:   "bloqueo",
+		ID:     id,
+		Agente: agente,
+		Texto:  motivo,
+	}
 	return nil
 }
 
@@ -319,6 +349,11 @@ func DesbloquearTarea(id int64, agente, resolucion string) error {
 	}
 	Audit(agente, "desbloquear_tarea", "tarea", id, resolucion)
 	SetEstadoSesion(agente, "disponible")
+
+	CanalNotificaciones <- EventoNotificacion{
+		Tipo:  "mensaje",
+		Texto: fmt.Sprintf("🔓 *Tarea #%d Desbloqueada*\n\nResolución: %s", id, resolucion),
+	}
 	return nil
 }
 
@@ -387,4 +422,29 @@ func escanearTarea(s scanner) (*Tarea, error) {
 		t.CompletadaAt = &completadaAt.Time
 	}
 	return &t, nil
+}
+
+// ListarResumenBloqueos devuelve una lista de tareas bloqueadas con su motivo actual.
+func ListarResumenBloqueos() ([]ResumenBloqueo, error) {
+	rows, err := DB.Query(`
+		SELECT t.id, t.titulo, b.bloqueado_por, b.motivo
+		FROM tareas t
+		JOIN bloqueos b ON t.id = b.tarea_id
+		WHERE t.estado = 'bloqueada' AND b.resuelto = 0
+		ORDER BY t.updated_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var res []ResumenBloqueo
+	for rows.Next() {
+		var rb ResumenBloqueo
+		if err := rows.Scan(&rb.ID, &rb.Titulo, &rb.Agente, &rb.Motivo); err != nil {
+			return nil, err
+		}
+		res = append(res, rb)
+	}
+	return res, nil
 }

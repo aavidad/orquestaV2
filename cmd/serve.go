@@ -18,6 +18,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
+	"orquesta/notificaciones"
 )
 
 // ─── Structs de datos ────────────────────────────────────────────────────────
@@ -143,6 +144,19 @@ var webFuncMap = template.FuncMap{
 	},
 	"eqStr": func(a, b string) bool { return a == b },
 	"neStr": func(a, b string) bool { return a != b },
+	"reanimacionEn": func(t *time.Time) string {
+		if t == nil || t.IsZero() {
+			return ""
+		}
+		rem := time.Until(*t)
+		if rem <= 0 {
+			return "reanimando..."
+		}
+		if rem.Minutes() < 1 {
+			return "reanima en segundos"
+		}
+		return fmt.Sprintf("reanima en %d min", int(rem.Minutes()))
+	},
 }
 
 // ─── Router principal ─────────────────────────────────────────────────────────
@@ -668,7 +682,7 @@ func webRender(w http.ResponseWriter, tplStr string, data any) {
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "Arranca el panel web (por defecto: http://localhost:8080)",
+	Short: "Arranca el panel web (por defecto: http://localhost:16543)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		puerto, _ := cmd.Flags().GetInt("puerto")
 		addr := fmt.Sprintf(":%d", puerto)
@@ -679,16 +693,67 @@ var serveCmd = &cobra.Command{
 		mux.HandleFunc("/propuestas", webHandlerPropuestas)
 		mux.HandleFunc("/propuestas/", webRouterPropuestas)
 		mux.HandleFunc("/runtimes", webHandlerRuntimes)
-		mux.HandleFunc("/runtimes/", webRouterRuntimes)
 		registerAPIRoutes(mux)
 		fmt.Printf("✓ Panel web en http://localhost%s\n", addr)
 		fmt.Println("  Ctrl+C para detener.")
+
+		// Worker de reanimación
+		go func() {
+			for {
+				// Auto-reanimación: Despertar agentes cada minuto
+				reanimar, err := db.CheckReanimaciones()
+				if err == nil {
+					for _, a := range reanimar {
+						db.Audit("server", "reanimar_agente", "agente", 0, fmt.Sprintf("Agente %s reanimado tras pausa: %s", a.Nombre, a.MotivoPausa))
+						_ = db.ResetReanimacion(a.Nombre)
+					}
+				}
+				time.Sleep(1 * time.Minute)
+			}
+		}()
+
+		// 2. Worker de Gestión de Cuotas y Salud (Autónomo)
+		go func() {
+			for {
+				_ = db.GarantizarSaludAgentes()
+				time.Sleep(60 * time.Second)
+			}
+		}()
+
+		// 3. Worker de Planificación Automática (Autonomía Total)
+		go func() {
+			for {
+				time.Sleep(30 * time.Second)
+				_ = db.PlanificarTareasAutomaticamente()
+			}
+		}()
+
+		// 3. Worker de Notificaciones (Telegram / Mobile)
+		notificaciones.InicializarDesdeConfig()
+		go func() {
+			for ev := range db.CanalNotificaciones {
+				if notificaciones.GlobalNotificador == nil {
+					continue
+				}
+				switch ev.Tipo {
+				case "bloqueo":
+					_ = notificaciones.GlobalNotificador.EnviarAlertaBloqueo(ev.ID, ev.Agente, ev.Texto)
+				case "propuesta":
+					_ = notificaciones.GlobalNotificador.EnviarPropuestaVotacion(ev.Codigo, ev.Texto)
+				case "fin_proyecto":
+					_ = notificaciones.GlobalNotificador.EnviarAvisoFinProyecto(ev.ID, ev.Texto)
+				case "mensaje":
+					_ = notificaciones.GlobalNotificador.EnviarMensaje(ev.Texto)
+				}
+			}
+		}()
+
 		return http.ListenAndServe(addr, mux)
 	},
 }
 
 func init() {
-	serveCmd.Flags().Int("puerto", 8080, "Puerto HTTP")
+	serveCmd.Flags().Int("puerto", 16543, "Puerto HTTP")
 	rootCmd.AddCommand(serveCmd)
 }
 
@@ -782,16 +847,16 @@ const webTplLayout = `<!doctype html>
 const webTplDash = `{{define "content"}}
 <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1.2rem">
   <h2 style="margin:0">Estado del Proyecto</h2>
-  <small style="color:#94a3b8">{{.Generado}} · auto-refresca cada 30 s</small>
+  <small style="color:#94a3b8">{{.Generado}} · auto-refresca cada 10 s</small>
 </div>
-<meta http-equiv="refresh" content="30">
+<meta http-equiv="refresh" content="10">
 <div class="stats">
-  <div class="stat"><div class="n">{{.Total}}</div><div class="l">tareas totales</div></div>
-  <div class="stat"><div class="n" style="color:#16a34a">{{.Completadas}}</div><div class="l">completadas</div></div>
-  <div class="stat"><div class="n" style="color:#7c3aed">{{index .Counts "en_progreso"}}</div><div class="l">en progreso</div></div>
-  <div class="stat"><div class="n" style="color:#2563eb">{{index .Counts "asignada"}}</div><div class="l">asignadas</div></div>
-  <div class="stat"><div class="n" style="color:#dc2626">{{index .Counts "bloqueada"}}</div><div class="l">bloqueadas</div></div>
-  <div class="stat"><div class="n">{{len .Abiertas}}</div><div class="l">props. abiertas</div></div>
+  <div class="stat"><a href="/tareas"><div class="n">{{.Total}}</div><div class="l">tareas totales</div></a></div>
+  <div class="stat"><a href="/tareas?estado=completada"><div class="n" style="color:#16a34a">{{.Completadas}}</div><div class="l">completadas</div></a></div>
+  <div class="stat"><a href="/tareas?estado=en_progreso"><div class="n" style="color:#7c3aed">{{index .Counts "en_progreso"}}</div><div class="l">en progreso</div></a></div>
+  <div class="stat"><a href="/tareas?estado=asignada"><div class="n" style="color:#2563eb">{{index .Counts "asignada"}}</div><div class="l">asignadas</div></a></div>
+  <div class="stat"><a href="/tareas?estado=bloqueada"><div class="n" style="color:#dc2626">{{index .Counts "bloqueada"}}</div><div class="l">bloqueadas</div></a></div>
+  <div class="stat"><a href="/propuestas"><div class="n">{{len .Abiertas}}</div><div class="l">props. abiertas</div></a></div>
 </div>
 <div class="pgbar">
   <div class="pgfill" style="width:{{if gt .Pct 0}}{{.Pct}}%{{else}}2.5rem{{end}}">{{.Pct}}%</div>
@@ -802,10 +867,25 @@ const webTplDash = `{{define "content"}}
     <table style="width:100%"><tbody>
     {{range .Agentes}}{{if .Habilitado}}
       <tr style="border-bottom:1px solid #f1f5f9">
-        <td style="width:1.2rem;padding:.3rem 0">{{if .Activo}}<span class="dot-on">●</span>{{else}}<span class="dot-off">○</span>{{end}}</td>
+        <td style="width:1.2rem;padding:.3rem 0">
+          {{if eq .EstadoCuota "enfriamiento"}}
+            <span class="dot-off" style="color:#f59e0b">💤</span>
+          {{else if .Activo}}
+            <span class="dot-on">●</span>
+          {{else}}
+            <span class="dot-off">○</span>
+          {{end}}
+        </td>
         <td style="padding:.3rem .3rem">
           <div style="font-weight:600;font-size:.85rem">{{.Nombre}}</div>
-          <div style="font-size:.72rem;color:#94a3b8">{{.Rol}}</div>
+          {{if eq .EstadoCuota "enfriamiento"}}
+            <div style="font-size:.7rem;color:#f59e0b;font-style:italic">Dormido: {{.MotivoPausa}}</div>
+            <div style="font-size:.65rem;color:#94a3b8">{{reanimacionEn .ReanimarAt}}</div>
+          {{else if eq .EstadoCuota "agotado"}}
+            <div style="font-size:.7rem;color:#dc2626">Agotado semanal</div>
+          {{else}}
+            <div style="font-size:.72rem;color:#94a3b8">{{.Rol}}</div>
+          {{end}}
         </td>
         <td style="text-align:right;padding:.3rem 0">
           {{if .EstadoSesion}}<span class="es-{{.EstadoSesion}}">{{.EstadoSesion}}</span>{{end}}
@@ -833,7 +913,7 @@ const webTplDash = `{{define "content"}}
         <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Por estado <a href="/tareas" style="font-size:.9em;font-weight:normal;text-transform:none">ver todas →</a></h4>
         <table><tbody>
         {{range $est,$n := .Counts}}{{if gt $n 0}}
-          <tr><td style="padding:.2rem .4rem"><span class="tag t-{{$est}}">{{$est}}</span></td><td style="padding:.2rem .6rem"><strong>{{$n}}</strong></td></tr>
+          <tr><td style="padding:.2rem .4rem"><a href="/tareas?estado={{$est}}"><span class="tag t-{{$est}}">{{$est}}</span></a></td><td style="padding:.2rem .6rem"><a href="/tareas?estado={{$est}}"><strong>{{$n}}</strong></a></td></tr>
         {{end}}{{end}}
         </tbody></table>
       </div>

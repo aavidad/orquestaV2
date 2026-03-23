@@ -8,12 +8,20 @@ import (
 )
 
 type Agente struct {
-	Nombre       string
-	Rol          string
-	Activo       bool   // en sesión ahora mismo
-	Habilitado   bool   // false = retirado por Alberto
-	EstadoSesion string // disponible | programando | esperando | votando
-	UltimaSesion *time.Time
+	Nombre                 string
+	Rol                    string
+	Activo                 bool   // en sesión ahora mismo
+	Habilitado             bool   // false = retirado por Alberto
+	EstadoSesion          string // disponible | programando | esperando | votando
+	UltimaSesion          *time.Time
+	ConsumoDiaSegundos     int
+	ConsumoSemanalSegundos int
+	LimiteDiaSegundos      int
+	LimiteSemanalSegundos  int
+	LastUsageResetAt      *time.Time
+	EstadoCuota            string
+	ReanimarAt             *time.Time
+	MotivoPausa           string
 }
 
 type Sesion struct {
@@ -255,6 +263,13 @@ func GuardarSesionActiva(agente string, proyectoID *int64, upd SesionUpdate) err
 	}
 	if upd.Heartbeat {
 		partes = append(partes, "heartbeat_at = CURRENT_TIMESTAMP")
+		// Solo incrementamos estadísticas de uso estimado, pero ya no bloqueamos localmente (OP-084)
+		tick := configIntOrDefault("agent_tick_seconds", 30)
+		_, _ = DB.Exec(`
+			UPDATE agentes 
+			SET consumo_dia_segundos = consumo_dia_segundos + ?, 
+			    consumo_semanal_segundos = consumo_semanal_segundos + ?
+			WHERE nombre = ?`, tick, tick, agente)
 	}
 	if len(partes) == 0 {
 		return nil
@@ -304,9 +319,14 @@ func ListarSesionesActivas() ([]*Sesion, error) {
 	return out, rows.Err()
 }
 
-// ListarAgentes devuelve todos los agentes registrados.
+// ListarAgentes devuelve todos los agentes registrados con su estado de cuota.
 func ListarAgentes() ([]*Agente, error) {
-	rows, err := DB.Query(`SELECT nombre, rol, activo, habilitado, COALESCE(estado_sesion,''), ultima_sesion FROM agentes ORDER BY nombre`)
+	rows, err := DB.Query(`
+		SELECT nombre, rol, activo, habilitado, COALESCE(estado_sesion,''), ultima_sesion,
+		       consumo_dia_segundos, consumo_semanal_segundos, limite_dia_segundos,
+		       limite_semanal_segundos, last_usage_reset_at, estado_cuota,
+		       reanimar_at, motivo_pausa
+		FROM agentes ORDER BY nombre`)
 	if err != nil {
 		return nil, err
 	}
@@ -315,28 +335,114 @@ func ListarAgentes() ([]*Agente, error) {
 	for rows.Next() {
 		a := &Agente{}
 		var ultima sql.NullTime
-		if err := rows.Scan(&a.Nombre, &a.Rol, &a.Activo, &a.Habilitado, &a.EstadoSesion, &ultima); err != nil {
+		var lastReset sql.NullTime
+		var reanimar sql.NullTime
+		var motivo sql.NullString
+		if err := rows.Scan(
+			&a.Nombre, &a.Rol, &a.Activo, &a.Habilitado, &a.EstadoSesion, &ultima,
+			&a.ConsumoDiaSegundos, &a.ConsumoSemanalSegundos, &a.LimiteDiaSegundos,
+			&a.LimiteSemanalSegundos, &lastReset, &a.EstadoCuota,
+			&reanimar, &motivo,
+		); err != nil {
 			return nil, err
 		}
 		if ultima.Valid {
 			a.UltimaSesion = &ultima.Time
 		}
+		if lastReset.Valid {
+			a.LastUsageResetAt = &lastReset.Time
+		}
+		if reanimar.Valid {
+			a.ReanimarAt = &reanimar.Time
+		}
+		a.MotivoPausa = motivo.String
 		list = append(list, a)
 	}
 	return list, rows.Err()
 }
 
 func GetAgente(nombre string) (*Agente, error) {
-	row := DB.QueryRow(`SELECT nombre, rol, activo, habilitado, COALESCE(estado_sesion,''), ultima_sesion FROM agentes WHERE nombre = ?`, nombre)
+	row := DB.QueryRow(`
+		SELECT nombre, rol, activo, habilitado, COALESCE(estado_sesion,''), ultima_sesion,
+		       consumo_dia_segundos, consumo_semanal_segundos, limite_dia_segundos,
+		       limite_semanal_segundos, last_usage_reset_at, estado_cuota,
+		       reanimar_at, motivo_pausa
+		FROM agentes WHERE nombre = ?`, nombre)
 	a := &Agente{}
 	var ultima sql.NullTime
-	if err := row.Scan(&a.Nombre, &a.Rol, &a.Activo, &a.Habilitado, &a.EstadoSesion, &ultima); err != nil {
+	var lastReset sql.NullTime
+	var reanimar sql.NullTime
+	var motivo sql.NullString
+	if err := row.Scan(
+		&a.Nombre, &a.Rol, &a.Activo, &a.Habilitado, &a.EstadoSesion, &ultima,
+		&a.ConsumoDiaSegundos, &a.ConsumoSemanalSegundos, &a.LimiteDiaSegundos,
+		&a.LimiteSemanalSegundos, &lastReset, &a.EstadoCuota,
+		&reanimar, &motivo,
+	); err != nil {
 		return nil, err
 	}
-	if ultima.Valid {
-		a.UltimaSesion = &ultima.Time
-	}
+	if ultima.Valid { a.UltimaSesion = &ultima.Time }
+	if lastReset.Valid { a.LastUsageResetAt = &lastReset.Time }
+	if reanimar.Valid { a.ReanimarAt = &reanimar.Time }
+	a.MotivoPausa = motivo.String
 	return a, nil
+}
+
+// CheckReanimaciones busca agentes cuya fecha de reanimación ha vencido.
+func CheckReanimaciones() ([]*Agente, error) {
+	rows, err := DB.Query(`
+		SELECT nombre, rol, activo, habilitado, COALESCE(estado_sesion,''), ultima_sesion,
+		       consumo_dia_segundos, consumo_semanal_segundos, limite_dia_segundos,
+		       limite_semanal_segundos, last_usage_reset_at, estado_cuota,
+		       reanimar_at, motivo_pausa
+		FROM agentes
+		WHERE reanimar_at IS NOT NULL AND reanimar_at <= CURRENT_TIMESTAMP`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []*Agente
+	for rows.Next() {
+		a := &Agente{}
+		var ultima, lastReset, reanimar sql.NullTime
+		var motivo sql.NullString
+		if err := rows.Scan(
+			&a.Nombre, &a.Rol, &a.Activo, &a.Habilitado, &a.EstadoSesion, &ultima,
+			&a.ConsumoDiaSegundos, &a.ConsumoSemanalSegundos, &a.LimiteDiaSegundos,
+			&a.LimiteSemanalSegundos, &lastReset, &a.EstadoCuota,
+			&reanimar, &motivo,
+		); err != nil {
+			return nil, err
+		}
+		if ultima.Valid { a.UltimaSesion = &ultima.Time }
+		if lastReset.Valid { a.LastUsageResetAt = &lastReset.Time }
+		if reanimar.Valid { a.ReanimarAt = &reanimar.Time }
+		a.MotivoPausa = motivo.String
+		list = append(list, a)
+	}
+	return list, rows.Err()
+}
+
+// ResetReanimacion limpia los campos de reanimación de un agente.
+func ResetReanimacion(nombre string) error {
+	_, err := DB.Exec(`UPDATE agentes SET reanimar_at = NULL, motivo_pausa = NULL, estado_cuota = 'activo' WHERE nombre = ?`, nombre)
+	return err
+}
+
+// EliminarAgente borra físicamente un agente de la base de datos.
+func EliminarAgente(nombre string) error {
+	_, err := DB.Exec(`DELETE FROM agentes WHERE nombre = ?`, nombre)
+	return err
+}
+
+// PausarAgente establece una pausa forzada (por rate-limit externo) para un agente.
+func PausarAgente(nombre string, minutos int, motivo string) error {
+	reanimar := time.Now().Add(time.Duration(minutos) * time.Minute)
+	_, err := DB.Exec(`
+		UPDATE agentes 
+		SET estado_cuota = 'enfriamiento', reanimar_at = ?, motivo_pausa = ? 
+		WHERE nombre = ?`, reanimar, motivo, nombre)
+	return err
 }
 
 // SetEstadoSesion actualiza el estado de actividad de un agente en sesión.

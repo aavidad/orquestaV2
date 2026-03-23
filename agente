@@ -1,0 +1,18 @@
+#!/bin/bash
+# Lanzador simplificado para agentes Orquesta con Terminator visual
+# Uso: ./agente <nombre> -p <proyecto> [otras flags]
+
+# Localizamos el directorio real del script
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Si estamos en la raíz, entramos en orquestador
+# Si ya estamos en orquestador, nos quedamos
+if [ -d "$DIR/orquestador" ]; then
+    TARGET_DIR="$DIR/orquestador"
+else
+    TARGET_DIR="$DIR"
+fi
+
+# Lanzamos terminator silenciando los avisos de dbus
+# El 'exec bash' al final mantiene la ventana abierta si el agente se detiene
+terminator -u -T "Orquesta: Agente $1" -x bash -c "cd $TARGET_DIR && ./orquesta agente ejecutar $*; exec bash" 2>/dev/null &

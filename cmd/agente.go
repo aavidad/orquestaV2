@@ -8,12 +8,18 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"bufio"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
+	"os"
+	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"orquesta/agentruntime"
@@ -72,6 +78,9 @@ type agentePrepararOutput struct {
 	Reglas       []*db.Regla              `json:"reglas"`
 	Skills       []*db.Skill              `json:"skills"`
 	Workflows    []*db.Workflow           `json:"workflows"`
+	ReanimarAt   *time.Time               `json:"reanimar_at,omitempty"`
+	MotivoPausa  string                   `json:"motivo_pausa,omitempty"`
+	EstadoCuota  string                   `json:"estado_cuota,omitempty"`
 }
 
 type itemLigero struct {
@@ -94,6 +103,12 @@ type agenteTickOutput struct {
 	TareasActivas        []itemLigero   `json:"tareas_activas,omitempty"`
 	PropuestasPendientes []itemLigero   `json:"propuestas_pendientes,omitempty"`
 	PropuestasAbiertas   []itemLigero   `json:"propuestas_abiertas,omitempty"`
+	ConsumoDia          int            `json:"consumo_dia_segundos"`
+	LimiteDia           int            `json:"limite_dia_segundos"`
+	EstadoCuota          string         `json:"estado_cuota"`
+	ReanimarAt           *time.Time     `json:"reanimar_at,omitempty"`
+	MotivoPausa          string         `json:"motivo_pausa,omitempty"`
+	CuotaPct             int            `json:"cuota_pct,omitempty"`
 }
 
 var agentePrepararCmd = &cobra.Command{
@@ -136,107 +151,119 @@ var agentePrepararCmd = &cobra.Command{
 			return imprimirAgentePreparar(out, jsonOut)
 		}
 
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-
-		agente, err := db.GetAgente(agenteNombre)
+		out, err := prepararAgenteLocal(agenteNombre, proyectoRef, conectorRef, modelo, razonamiento, perfilTarea)
 		if err != nil {
 			return err
 		}
-		proyecto, err := db.GetProyecto(proyectoRef)
-		if err != nil {
-			return err
-		}
-
-		var ultima *db.Sesion
-		ultima, err = db.ObtenerUltimaSesion(agenteNombre, &proyecto.ID)
-		if err != nil && err != sql.ErrNoRows {
-			return err
-		}
-
-		conector, err := resolverConectorPreparacion(conectorRef, ultima)
-		if err != nil {
-			return err
-		}
-
-		reglas, err := db.GetReglasAgente(agente.Rol)
-		if err != nil {
-			return err
-		}
-		skills, err := db.GetSkillsAgente(agente.Rol)
-		if err != nil {
-			return err
-		}
-		workflows, err := db.GetWorkflowsAgente(agente.Rol)
-		if err != nil {
-			return err
-		}
-
-		req := agentruntime.LaunchRequest{
-			Agente:       agente.Nombre,
-			Rol:          agente.Rol,
-			ProyectoSlug: proyecto.Slug,
-			ProyectoRuta: proyecto.RutaAbs,
-			Modelo:       strings.TrimSpace(modelo),
-			Razonamiento: strings.TrimSpace(razonamiento),
-			PerfilTarea:  strings.TrimSpace(perfilTarea),
-			Conector: agentruntime.ConnectorConfig{
-				Slug:         conector.Slug,
-				Nombre:       conector.Nombre,
-				Transporte:   conector.Transporte,
-				Comando:      conector.Comando,
-				ArgsJSON:     conector.ArgsJSON,
-				EnvJSON:      conector.EnvJSON,
-				MetadataJSON: conector.MetadataJSON,
-				Activo:       conector.Activo,
-			},
-		}
-		if ultima != nil {
-			req.Resume = agentruntime.ResumeContext{
-				ExternalSessionID:  ultima.ExternalSessionID,
-				ResumePayloadJSON:  ultima.ResumePayloadJSON,
-				ResumenContinuidad: ultima.ResumenContinuidad,
-				Branch:             ultima.Branch,
-				CWD:                ultima.CWD,
-			}
-		}
-		plan, err := agentruntime.DefaultRegistry().Prepare(req)
-		if err != nil {
-			return err
-		}
-
-		out = agentePrepararOutput{
-			Agente: agente.Nombre,
-			Rol:    agente.Rol,
-			Proyecto: proyectoBundle{
-				ID:      proyecto.ID,
-				Slug:    proyecto.Slug,
-				Nombre:  proyecto.Nombre,
-				RutaAbs: proyecto.RutaAbs,
-			},
-			Conector: conectorBundle{
-				ID:         conector.ID,
-				Slug:       conector.Slug,
-				Nombre:     conector.Nombre,
-				Transporte: conector.Transporte,
-				Comando:    conector.Comando,
-			},
-			Politica:  cargarPoliticaAgente(),
-			Plan:      plan,
-			Reglas:    reglas,
-			Skills:    skills,
-			Workflows: workflows,
-		}
-		out.Politica.Modelo = plan.Modelo
-		out.Politica.Razonamiento = plan.Razonamiento
-		out.Politica.PerfilTarea = plan.PerfilTarea
-		if ultima != nil {
-			out.UltimaSesion = resumirSesion(ultima)
-		}
-
 		return imprimirAgentePreparar(out, jsonOut)
 	},
+}
+
+func prepararAgenteLocal(agenteNombre, proyectoRef, conectorRef, modelo, razonamiento, perfilTarea string) (agentePrepararOutput, error) {
+	var out agentePrepararOutput
+	if err := ensureLocalDB(); err != nil {
+		return out, err
+	}
+
+	agente, err := db.GetAgente(agenteNombre)
+	if err != nil {
+		return out, err
+	}
+	proyecto, err := db.GetProyecto(proyectoRef)
+	if err != nil {
+		return out, err
+	}
+
+	var ultima *db.Sesion
+	ultima, err = db.ObtenerUltimaSesion(agenteNombre, &proyecto.ID)
+	if err != nil && err != sql.ErrNoRows {
+		return out, err
+	}
+
+	conector, err := resolverConectorPreparacion(agenteNombre, conectorRef, ultima)
+	if err != nil {
+		return out, err
+	}
+
+	reglas, err := db.GetReglasAgente(agente.Rol)
+	if err != nil {
+		return out, err
+	}
+	skills, err := db.GetSkillsAgente(agente.Rol)
+	if err != nil {
+		return out, err
+	}
+	workflows, err := db.GetWorkflowsAgente(agente.Rol)
+	if err != nil {
+		return out, err
+	}
+
+	req := agentruntime.LaunchRequest{
+		Agente:       agente.Nombre,
+		Rol:          agente.Rol,
+		ProyectoSlug: proyecto.Slug,
+		ProyectoRuta: proyecto.RutaAbs,
+		Modelo:       strings.TrimSpace(modelo),
+		Razonamiento: strings.TrimSpace(razonamiento),
+		PerfilTarea:  strings.TrimSpace(perfilTarea),
+		Conector: agentruntime.ConnectorConfig{
+			Slug:         conector.Slug,
+			Nombre:       conector.Nombre,
+			Transporte:   conector.Transporte,
+			Comando:      conector.Comando,
+			ArgsJSON:     conector.ArgsJSON,
+			EnvJSON:      conector.EnvJSON,
+			MetadataJSON: conector.MetadataJSON,
+			Activo:       conector.Activo,
+		},
+	}
+	if ultima != nil {
+		req.Resume = agentruntime.ResumeContext{
+			ExternalSessionID:  ultima.ExternalSessionID,
+			ResumePayloadJSON:  ultima.ResumePayloadJSON,
+			ResumenContinuidad: ultima.ResumenContinuidad,
+			Branch:             ultima.Branch,
+			CWD:                ultima.CWD,
+		}
+	}
+	plan, err := agentruntime.DefaultRegistry().Prepare(req)
+	if err != nil {
+		return out, err
+	}
+
+	out = agentePrepararOutput{
+		Agente: agente.Nombre,
+		Rol:    agente.Rol,
+		Proyecto: proyectoBundle{
+			ID:      proyecto.ID,
+			Slug:    proyecto.Slug,
+			Nombre:  proyecto.Nombre,
+			RutaAbs: proyecto.RutaAbs,
+		},
+		Conector: conectorBundle{
+			ID:         conector.ID,
+			Slug:       conector.Slug,
+			Nombre:     conector.Nombre,
+			Transporte: conector.Transporte,
+			Comando:    conector.Comando,
+		},
+		Politica:    cargarPoliticaAgente(),
+		Plan:        plan,
+		Reglas:      reglas,
+		Skills:      skills,
+		Workflows:   workflows,
+		ReanimarAt:  agente.ReanimarAt,
+		MotivoPausa: agente.MotivoPausa,
+		EstadoCuota: agente.EstadoCuota,
+	}
+	out.Politica.Modelo = plan.Modelo
+	out.Politica.Razonamiento = plan.Razonamiento
+	out.Politica.PerfilTarea = plan.PerfilTarea
+	if ultima != nil {
+		out.UltimaSesion = resumirSesion(ultima)
+	}
+
+	return out, nil
 }
 
 var agenteTickCmd = &cobra.Command{
@@ -249,6 +276,9 @@ var agenteTickCmd = &cobra.Command{
 		jsonOut, _ := cmd.Flags().GetBool("json")
 		host, _ := cmd.Flags().GetString("host")
 		pidRaw, _ := cmd.Flags().GetInt64("pid")
+		cuotaPct, _ := cmd.Flags().GetInt("cuota-pct")
+		finalizado, _ := cmd.Flags().GetBool("finalizado")
+		motivo, _ := cmd.Flags().GetString("motivo")
 
 		if strings.TrimSpace(proyectoRef) == "" {
 			return fmt.Errorf("debes indicar --proyecto")
@@ -256,10 +286,13 @@ var agenteTickCmd = &cobra.Command{
 
 		var out agenteTickOutput
 		if ok, err := apiPost("/api/agente/tick", map[string]any{
-			"agente":   agenteNombre,
-			"proyecto": proyectoRef,
-			"host":     host,
-			"pid":      pidRaw,
+			"agente":      agenteNombre,
+			"proyecto":    proyectoRef,
+			"host":        host,
+			"pid":         pidRaw,
+			"cuota_pct":   cuotaPct,
+			"finalizado":  finalizado,
+			"motivo":      motivo,
 		}, &out); err != nil {
 			return err
 		} else if ok {
@@ -293,6 +326,13 @@ var agenteTickCmd = &cobra.Command{
 			sesionActiva, err = db.GetSesionActiva(agenteNombre, &proyecto.ID)
 			if err != nil {
 				return err
+			}
+			// Si termina por cuota, pausamos (OP-084)
+			if finalizado {
+				motivoLower := strings.ToLower(motivo)
+				if cuotaPct < 5 || strings.Contains(motivoLower, "token") || strings.Contains(motivoLower, "cuota") || strings.Contains(motivoLower, "rate limit") {
+					_ = db.PausarAgente(agenteNombre, 60, "Auto-pausa local: "+motivo)
+				}
 			}
 		}
 
@@ -355,6 +395,11 @@ var agenteTickCmd = &cobra.Command{
 			})
 		}
 
+		agente, err := db.GetAgente(agenteNombre)
+		if err != nil {
+			return err
+		}
+
 		out = agenteTickOutput{
 			Agente:               agenteNombre,
 			Proyecto:             proyectoBundle{ID: proyecto.ID, Slug: proyecto.Slug, Nombre: proyecto.Nombre, RutaAbs: proyecto.RutaAbs},
@@ -364,12 +409,27 @@ var agenteTickCmd = &cobra.Command{
 			TareasActivas:        tareasActivas,
 			PropuestasPendientes: propuestasPendientes,
 			PropuestasAbiertas:   propuestasAbiertas,
+			ConsumoDia:          agente.ConsumoDiaSegundos,
+			LimiteDia:           agente.LimiteDiaSegundos,
+			EstadoCuota:          agente.EstadoCuota,
+			ReanimarAt:           agente.ReanimarAt,
+			MotivoPausa:          agente.MotivoPausa,
+			CuotaPct:             cuotaPct,
 		}
 		if sesionActiva != nil {
 			out.SesionActiva = resumirSesion(sesionActiva)
 		}
 
 		switch {
+		case agente.EstadoCuota != "activo":
+			out.AccionRecomendada = "pausar_por_cuota"
+			out.DebePausar = true
+			if agente.ReanimarAt != nil {
+				out.Motivo = fmt.Sprintf("Cuota agotada (%s). Reanimación programada para: %s. Motivo: %s", 
+					agente.EstadoCuota, agente.ReanimarAt.Format("15:04:05"), agente.MotivoPausa)
+			} else {
+				out.Motivo = "Cuota agotada o modo enfriamiento activo."
+			}
 		case !asignadoAProyecto && proyectoAsignado != "":
 			out.AccionRecomendada = "pausar_y_reasignar"
 			out.DebePausar = true
@@ -400,22 +460,237 @@ func init() {
 	agentePrepararCmd.Flags().String("perfil", "", "Perfil de tarea: orquestacion, analisis, script, implementacion, revision, etc.")
 	agentePrepararCmd.Flags().Bool("json", false, "Salida JSON")
 
-	agenteTickCmd.Flags().String("proyecto", "", "Proyecto a vigilar")
-	agenteTickCmd.Flags().String("host", "", "Host del proceso del agente")
-	agenteTickCmd.Flags().Int64("pid", 0, "PID del proceso del agente")
+	agenteTickCmd.Flags().String("motivo", "", "Motivo del estado actual")
 	agenteTickCmd.Flags().Bool("json", false, "Salida JSON")
 
-	agenteCmd.AddCommand(agentePrepararCmd, agenteTickCmd)
+	agenteEjecutarCmd.Flags().StringP("proyecto", "p", "", "Proyecto en el que ejecutar")
+	agenteEjecutarCmd.Flags().StringP("conector", "c", "", "Conector a usar")
+	agenteEjecutarCmd.Flags().String("modelo", "", "Modelo a usar")
+	agenteEjecutarCmd.Flags().Int("pausa-minutos", 60, "Minutos de espera si se detecta bloqueo")
+
+	agenteCmd.AddCommand(agentePrepararCmd, agenteTickCmd, agentePurgarCmd, agentePausarCmd, agenteRehabilitarCmd, agenteEjecutarCmd)
 }
 
-func resolverConectorPreparacion(conectorRef string, ultima *db.Sesion) (*db.Conector, error) {
+var agenteEjecutarCmd = &cobra.Command{
+	Use:   "ejecutar <agente>",
+	Short: "Lanza y vigila automáticamente la ejecución de un agente (Mando y Control)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agente := args[0]
+		proyecto, _ := cmd.Flags().GetString("proyecto")
+		conector, _ := cmd.Flags().GetString("conector")
+		modelo, _ := cmd.Flags().GetString("modelo")
+		pausaMin, _ := cmd.Flags().GetInt("pausa-minutos")
+
+		if proyecto == "" {
+			return fmt.Errorf("debes indicar --proyecto")
+		}
+
+		fmt.Printf("🚀 [Orquesta] Iniciando supervisión automática para: %s\n", agente)
+
+		for {
+			// 1. Preparar
+			params := url.Values{"agente": {agente}, "proyecto": {proyecto}}
+			if conector != "" {
+				params.Set("conector", conector)
+			}
+			if modelo != "" {
+				params.Set("modelo", modelo)
+			}
+
+			var prep agentePrepararOutput
+			if ok, err := apiGetQuery("/api/agente/preparar", params, &prep); err != nil {
+				return fmt.Errorf("error preparando agente: %w", err)
+			} else if !ok {
+				// Fallback local robusto (OP-086)
+				prep, err = prepararAgenteLocal(agente, proyecto, conector, modelo, "", "")
+				if err != nil {
+					return fmt.Errorf("error preparando agente (local fallback): %w", err)
+				}
+			}
+
+			if prep.EstadoCuota == "enfriamiento" || prep.EstadoCuota == "agotado" {
+				fmt.Printf("💤 [Orquesta] Agente en pausa. Reanimación estimada: %s\n", prep.ReanimarAt.Format("15:04"))
+				time.Sleep(1 * time.Minute)
+				continue
+			}
+
+			// 2. Ejecutar (Modo PTY con 'script' - Funcionalidad Total confirmada por USER)
+			fullCmdStr := agentruntime.RenderCommand(prep.Plan)
+			fmt.Printf("🎬 [Orquesta] Ejecutando: %s\n", fullCmdStr)
+
+			// script -q (quiet) -e (mantiene exit code) -c (comando)
+			wrappedCmd := fmt.Sprintf("script -q -e -c %q /dev/null", fullCmdStr)
+			proc := exec.Command("bash", "-c", wrappedCmd)
+
+			proc.Dir = prep.Plan.WorkingDir
+			proc.Env = append(os.Environ(), "ORQUESTA_AGENTE="+agente, "ORQUESTA_PROYECTO="+proyecto)
+			for k, v := range prep.Plan.Env {
+				proc.Env = append(proc.Env, k+"="+v)
+			}
+
+			// Tubería de espionaje para la cuota (OP-084)
+			pr, pw := io.Pipe()
+
+			// Conexión TTY Real (OP-TTY)
+			proc.Stdin = os.Stdin
+			// Usamos MultiWriter solo para la salida, para poder "espiar" sin romper el visual
+			proc.Stdout = io.MultiWriter(os.Stdout, pw)
+			proc.Stderr = io.MultiWriter(os.Stderr, pw)
+
+			if err := proc.Start(); err != nil {
+				return fmt.Errorf("error arrancando proceso: %w", err)
+			}
+
+			// Goroutine Silenciosa: Vigilancia de cuota y resets
+			done := make(chan bool)
+			go func() {
+				scanner := bufio.NewScanner(pr)
+				for scanner.Scan() {
+					line := scanner.Text()
+					lower := strings.ToLower(line)
+					if strings.Contains(lower, "hit your usage limit") || 
+					   strings.Contains(lower, "try again at") || 
+					   strings.Contains(lower, "resets") {
+						
+						fmt.Printf("\n🚨 [Orquesta] DETECTADO BLOQUEO EXTERNO: %s\n", line)
+						
+						pausaFinal := 60
+						re2 := regexp.MustCompile(`resets (\d+):(\d+)( on (\d+) (\w{3}))?`)
+						matches := re2.FindAllStringSubmatch(line, -1)
+						var selectedTarget time.Time
+						now := time.Now()
+						for _, m := range matches {
+							h, _ := strconv.Atoi(m[1])
+							mi, _ := strconv.Atoi(m[2])
+							target := time.Date(now.Year(), now.Month(), now.Day(), h, mi, 0, 0, time.Local)
+							if m[4] != "" {
+								d, _ := strconv.Atoi(m[4])
+								target = time.Date(now.Year(), now.Month(), d, h, mi, 0, 0, time.Local)
+							}
+							if target.Before(now) { target = target.AddDate(0, 0, 1) }
+							if selectedTarget.IsZero() || target.Before(selectedTarget) { selectedTarget = target }
+						}
+						if !selectedTarget.IsZero() {
+							pausaFinal = int(time.Until(selectedTarget).Minutes()) + 1
+						}
+
+						_ = db.PausarAgente(agente, pausaFinal, "Detección inteligente: "+line)
+						db.Audit(agente, "auto_pausa", "sistema", 0, fmt.Sprintf("Bloqueo detectado: %s", line))
+						fmt.Printf("⏸ [Orquesta] Agente pausado por %d min.\n", pausaFinal)
+						_ = proc.Process.Kill()
+						break
+					}
+				}
+				done <- true
+			}()
+
+			_ = proc.Wait()
+			pw.Close()
+			<-done
+
+			fmt.Println("\n🏁 [Orquesta] Proceso finalizado. Reiniciando bucle de vigilancia...")
+			time.Sleep(5 * time.Second)
+		}
+	},
+}
+
+var agentePausarCmd = &cobra.Command{
+	Use:   "pausar <nombre> <minutos> <motivo...>",
+	Short: "Registra una pausa forzada (rate-limit externo) para un agente",
+	Args:  cobra.MinimumNArgs(3),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		nombre := args[0]
+		minutos, err := strconv.Atoi(args[1])
+		if err != nil {
+			return fmt.Errorf("duración (minutos) inválida: %s", args[1])
+		}
+		motivo := strings.Join(args[2:], " ")
+
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
+		if err := db.PausarAgente(nombre, minutos, motivo); err != nil {
+			return err
+		}
+		db.Audit(nombre, "pausa_externa", "agente", 0, fmt.Sprintf("Bloqueado %d min por: %s", minutos, motivo))
+		fmt.Printf("✓ Agente %s pausado por %d minutos. Orquesta lo reanimará automáticamente.\n", nombre, minutos)
+		return nil
+	},
+}
+
+var agentePurgarCmd = &cobra.Command{
+	Use:   "eliminar <nombre>",
+	Short: "Elimina un agente de la base de datos (solo Alberto)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		nombre := args[0]
+		// TODO: Validar que el agente no tenga tareas activas antes de borrarlo
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
+		if err := db.EliminarAgente(nombre); err != nil {
+			return err
+		}
+		db.Audit("alberto", "purgar_agente", "agente", 0, nombre)
+		fmt.Printf("✓ Agente %s eliminado correctamente\n", nombre)
+		return nil
+	},
+}
+
+var agenteRehabilitarCmd = &cobra.Command{
+	Use:   "rehabilitar <agente>",
+	Short: "Despierta forzosamente a un agente (limpia cuotas y pausas)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		nombre := args[0]
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
+		err := db.ResetReanimacion(nombre)
+		if err != nil {
+			return fmt.Errorf("error rehabilitando agente: %w", err)
+		}
+		fmt.Printf("✓ Agente %s rehabilitado correctamente y listo para trabajar.\n", nombre)
+		return nil
+	},
+}
+
+func resolverConectorPreparacion(agente string, conectorRef string, ultima *db.Sesion) (*db.Conector, error) {
 	if strings.TrimSpace(conectorRef) != "" {
 		return db.GetConector(conectorRef)
 	}
+
+	var conector *db.Conector
 	if ultima != nil && ultima.ConectorID != nil {
-		return db.GetConector(strconv.FormatInt(*ultima.ConectorID, 10))
+		c, err := db.GetConector(strconv.FormatInt(*ultima.ConectorID, 10))
+		if err == nil {
+			conector = c
+		}
 	}
-	return nil, fmt.Errorf("debes indicar --conector o disponer de una sesión previa con conector asociado")
+
+	// Heurísticas inteligentes según el nombre del agente (OP-H)
+	if conector == nil {
+		lowerAgente := strings.ToLower(agente)
+		var err error
+		if strings.HasPrefix(lowerAgente, "codex") {
+			conector, err = db.GetConector("codex-cli")
+		} else if strings.HasPrefix(lowerAgente, "claude") {
+			conector, err = db.GetConector("claude-code")
+		} else if strings.HasPrefix(lowerAgente, "antigravity") {
+			conector, err = db.GetConector("antigravity")
+		} else if strings.HasPrefix(lowerAgente, "gemini") {
+			conector, err = db.GetConector("gemini-cli")
+		}
+		if err != nil {
+			conector = nil
+		}
+	}
+
+	if conector == nil {
+		return nil, fmt.Errorf("debes indicar --conector o disponer de una sesión previa con conector asociado")
+	}
+	return conector, nil
 }
 
 func cargarPoliticaAgente() politicaAgente {
@@ -520,6 +795,13 @@ func imprimirAgentePreparar(out agentePrepararOutput, jsonOut bool) error {
 			fmt.Printf("Continuidad: %s\n", out.Plan.ContinuityPrompt)
 		}
 	}
+	if out.EstadoCuota != "activo" {
+		msg := fmt.Sprintf("⚠️  AVISO: Agente en estado [%s]", out.EstadoCuota)
+		if out.ReanimarAt != nil {
+			msg += fmt.Sprintf(" hasta las %s", out.ReanimarAt.Format("15:04:05"))
+		}
+		fmt.Println(msg)
+	}
 	fmt.Printf("Reglas:    %d  Skills: %d  Workflows: %d\n", len(out.Reglas), len(out.Skills), len(out.Workflows))
 	return nil
 }
@@ -540,6 +822,13 @@ func imprimirAgenteTick(out agenteTickOutput, jsonOut bool) error {
 		fmt.Printf(" (activo en %s)", out.ProyectoAsignado)
 	}
 	fmt.Println()
+	if out.EstadoCuota != "activo" {
+		fmt.Printf("Cuota:     [%s] Consumido: %dh %dm / %dh\n",
+			out.EstadoCuota, out.ConsumoDia/3600, (out.ConsumoDia%3600)/60, out.LimiteDia/3600)
+		if out.ReanimarAt != nil {
+			fmt.Printf("Siguiente: %s (Motivo: %s)\n", out.ReanimarAt.Format("15:04:05"), out.MotivoPausa)
+		}
+	}
 	fmt.Printf("Tareas activas: %d  Propuestas pendientes: %d  Propuestas abiertas: %d\n", len(out.TareasActivas), len(out.PropuestasPendientes), len(out.PropuestasAbiertas))
 	return nil
 }

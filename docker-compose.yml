@@ -1,0 +1,38 @@
+version: '3.9'
+
+# Despliegue de Orquesta Platform - V1 (Plano de Control Central)
+# Autor: OSL - Diputación de Granada
+
+services:
+  # El servidor de Orquesta: gestiona persistencia, API, Web y gobernanza de agentes.
+  orquesta:
+    build: .
+    container_name: orquesta-platform
+    restart: unless-stopped
+    ports:
+      # Puerto 8080 para el panel web y la API de control
+      - "8080:8080"
+    volumes:
+      # Persistencia de la base de datos de gobernanza y tareas
+      - orquesta-data:/app/data
+      # Logs centrales para auditoría y telemetría de agentes
+      - orquesta-logs:/app/logs
+    environment:
+      # Forzamos la ruta de la base de datos dentro del contenedor
+      - ORQUESTA_DB=/app/data/orquesta.db
+      # Raíz del workspace si el contenedor necesita acceder a otros proyectos (montar si procede)
+      - ORQUESTA_WORKSPACE_ROOT=/app/workspace
+    working_dir: /app
+
+volumes:
+  # Volumen para persistir orquesta.db entre reinicios
+  orquesta-data:
+    driver: local
+  # Volumen para logs históricos
+  orquesta-logs:
+    driver: local
+
+# Red interna para futuros servicios hijos (agentes containerizados si se opta por OP-079 remotos)
+networks:
+  default:
+    name: orquesta-network

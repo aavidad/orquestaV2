@@ -91,6 +91,13 @@ func CrearPropuesta(p *Propuesta) (int64, error) {
 	}
 
 	Audit(p.PropuestoPor, "crear_propuesta", "propuesta", id, p.Codigo+": "+p.Titulo)
+
+	CanalNotificaciones <- EventoNotificacion{
+		Tipo:   "propuesta",
+		ID:     id,
+		Codigo: p.Codigo,
+		Texto:  p.Titulo,
+	}
 	return id, nil
 }
 

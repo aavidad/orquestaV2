@@ -1,0 +1,32 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez (OSL - Diputacion de Granada)
+*/
+[Unit]
+Description=Orquesta — Control Plane de Agentes IA
+Documentation=https://github.com/OSL-Granada/orquestador
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+WorkingDirectory=/home/%i/Trabajo/PlataformaMunicipal/orquestador
+ExecStart=/home/%i/Trabajo/PlataformaMunicipal/orquestador/orquesta servidor
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=orquesta
+
+# Seguridad
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/%i/Trabajo/PlataformaMunicipal/orquestador
+
+[Install]
+WantedBy=multi-user.target

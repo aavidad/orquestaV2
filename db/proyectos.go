@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -29,6 +30,14 @@ type Proyecto struct {
 	Activo    bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type EstadisticasProyecto struct {
+	Total       int
+	Completadas int
+	EnProgreso  int
+	Asignadas   int
+	Bloqueadas  int
 }
 
 type FiltroProyectos struct {
@@ -357,4 +366,64 @@ func escanearProyecto(s scanner) (*Proyecto, error) {
 		p.ParentID = &parentID.Int64
 	}
 	return &p, nil
+}
+
+// ListarProyectosActivos devuelve todos los proyectos marcados como activos.
+func ListarProyectosActivos() ([]*Proyecto, error) {
+	rows, err := DB.Query(`SELECT id, slug, nombre, ruta_abs, tipo, parent_id, activo, created_at, updated_at FROM proyectos WHERE activo = 1 ORDER BY nombre`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*Proyecto
+	for rows.Next() {
+		p, err := escanearProyecto(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, p)
+	}
+	return list, nil
+}
+
+// GetEstadisticasProyecto calcula el recuento de tareas por estado para un proyecto.
+func GetEstadisticasProyecto(proyectoID int64) (EstadisticasProyecto, error) {
+	var stats EstadisticasProyecto
+	rows, err := DB.Query(`SELECT estado, COUNT(*) FROM tareas WHERE proyecto_id = ? GROUP BY estado`, proyectoID)
+	if err != nil {
+		return stats, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var estado string
+		var count int
+		if err := rows.Scan(&estado, &count); err != nil {
+			return stats, err
+		}
+		stats.Total += count
+		switch estado {
+		case "completada":
+			stats.Completadas = count
+		case "en_progreso":
+			stats.EnProgreso = count
+		case "asignada":
+			stats.Asignadas = count
+		case "bloqueada":
+			stats.Bloqueadas = count
+		}
+	}
+	return stats, nil
+}
+
+// GetEstadoGit devuelve un resumen corto de cambios pendientes en el repo.
+func GetEstadoGit(ruta string) (string, error) {
+	cmd := exec.Command("git", "status", "--short")
+	cmd.Dir = ruta
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }

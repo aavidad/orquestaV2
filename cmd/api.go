@@ -1465,7 +1465,7 @@ func apiHandlerAgentePreparar(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
-	conector, err := resolverConectorPreparacion(conectorRef, ultima)
+	conector, err := resolverConectorPreparacion(agenteNombre, conectorRef, ultima)
 	if err != nil {
 		apiError(w, http.StatusBadRequest, err)
 		return
@@ -1527,11 +1527,14 @@ func apiHandlerAgentePreparar(w http.ResponseWriter, r *http.Request) {
 		Conector: conectorBundle{
 			ID: conector.ID, Slug: conector.Slug, Nombre: conector.Nombre, Transporte: conector.Transporte, Comando: conector.Comando,
 		},
-		Politica:  cargarPoliticaAgente(),
-		Plan:      plan,
-		Reglas:    reglas,
-		Skills:    skills,
-		Workflows: workflows,
+		Politica:    cargarPoliticaAgente(),
+		Plan:        plan,
+		Reglas:      reglas,
+		Skills:      skills,
+		Workflows:   workflows,
+		EstadoCuota: agente.EstadoCuota,
+		ReanimarAt:  agente.ReanimarAt,
+		MotivoPausa: agente.MotivoPausa,
 	}
 	if ultima != nil {
 		out.UltimaSesion = resumirSesion(ultima)
@@ -1547,10 +1550,13 @@ func apiHandlerAgenteTick(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Agente   string `json:"agente"`
-		Proyecto string `json:"proyecto"`
-		Host     string `json:"host"`
-		PID      int64  `json:"pid"`
+		Agente     string `json:"agente"`
+		Proyecto   string `json:"proyecto"`
+		Host       string `json:"host"`
+		PID        int64  `json:"pid"`
+		CuotaPct   int    `json:"cuota_pct"`
+		Finalizado bool   `json:"finalizado"`
+		Motivo     string `json:"motivo"`
 	}
 	if err := apiDecodeJSON(r, &req); err != nil {
 		apiError(w, http.StatusBadRequest, err)
@@ -1581,6 +1587,14 @@ func apiHandlerAgenteTick(w http.ResponseWriter, r *http.Request) {
 		if err := db.GuardarSesionActiva(req.Agente, &proyecto.ID, upd); err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
+		}
+		// Si el agente informa que termina por cuota, lo pausamos automáticamente (OP-084)
+		if req.Finalizado {
+			motivoLower := strings.ToLower(req.Motivo)
+			if req.CuotaPct < 5 || strings.Contains(motivoLower, "token") || strings.Contains(motivoLower, "cuota") || strings.Contains(motivoLower, "rate limit") {
+				_ = db.PausarAgente(req.Agente, 60, "Auto-pausa por agotamiento: "+req.Motivo)
+				db.Audit(req.Agente, "auto_pausa", "agente", 0, "Detección de agotamiento en tick final: "+req.Motivo)
+			}
 		}
 		sesionActiva, err = db.GetSesionActiva(req.Agente, &proyecto.ID)
 		if err != nil {

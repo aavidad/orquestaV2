@@ -1,0 +1,32 @@
+# Excluir de la copia al contenedor Docker
+# para mejorar la velocidad y el tamaño de la imagen
+
+.git
+.github
+.gitignore
+.dockerignore
+.vscode
+.idea
+.gemini
+.agents
+*.md
+*.log
+*.db
+*.db-journal
+*.db-wal
+orquesta
+orquesta-bin
+bin/
+data/
+logs/
+tmp/
+node_modules/
+dist/
+build/
+docker-compose.yml
+Dockerfile
+Dockerfile*
+*.test
+*.exe
+coverage.out
+vendor/

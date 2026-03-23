@@ -12,6 +12,17 @@ import (
 
 var DB *sql.DB
 
+type EventoNotificacion struct {
+	Tipo       string // bloqueo | propuesta | fin_proyecto | mensaje
+	ID         int64
+	Codigo     string
+	Agente     string
+	Texto      string
+	ProyectoID int64
+}
+
+var CanalNotificaciones = make(chan EventoNotificacion, 100)
+
 // Open abre (o crea) la base de datos usando el backend configurado y aplica su preparación.
 func Open() error {
 	backend, target, err := resolveBackend()
@@ -311,9 +322,15 @@ func postMigraciones(conn *sql.DB) error {
 		`INSERT OR IGNORE INTO reglas (tipo_agente, categoria, titulo, descripcion)
 		 VALUES ('documentador','general','Referencia obligatoria de documentación externa',
 		 'Si Antigravity crea o mantiene documentación fuera de orquestador, debe quedar siempre documentada también en Orquesta. La BD debe guardar una referencia clara con la ruta de esos ficheros y un resumen de su contenido o propósito.')`,
-		`INSERT OR IGNORE INTO reglas (tipo_agente, categoria, titulo, descripcion)
-		 VALUES ('documentador','general','Multilenguaje por defecto donde aplique',
-		 'La documentación debe mantenerse al menos en castellano e inglés cuando el proyecto tenga sentido multilenguaje. Los idiomas deben ir en ficheros separados y el castellano actúa como idioma por defecto salvo indicación distinta.')`,
+		`ALTER TABLE agentes ADD COLUMN consumo_dia_segundos INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE agentes ADD COLUMN consumo_semanal_segundos INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE agentes ADD COLUMN limite_dia_segundos INTEGER NOT NULL DEFAULT 18000`,
+		`ALTER TABLE agentes ADD COLUMN limite_semanal_segundos INTEGER NOT NULL DEFAULT 126000`,
+		`ALTER TABLE agentes ADD COLUMN last_usage_reset_at DATETIME`,
+		`ALTER TABLE agentes ADD COLUMN estado_cuota TEXT NOT NULL DEFAULT 'activo' CHECK (estado_cuota IN ('activo','enfriamiento','agotado'))`,
+		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('quota_daily_seconds','18000')`,
+		`ALTER TABLE agentes ADD COLUMN reanimar_at DATETIME`,
+		`ALTER TABLE agentes ADD COLUMN motivo_pausa TEXT`,
 	}
 	for _, m := range migraciones {
 		if err := ejecutarConReintentos(func() error {
@@ -407,15 +424,90 @@ func esErrorMigracionIgnorable(err error) bool {
 		strings.Contains(msg, "already exists")
 }
 
+// DetectarActividadSospechosa analiza una cadena en busca de patrones de ataque o bypass.
+func DetectarActividadSospechosa(input string) (bool, string) {
+	dangerous := []string{"DROP TABLE", "DELETE FROM agents", "UPDATE agentes SET", "sqlite3 ", "os.Remove", "os.Exit", "eval(", "exec("}
+	for _, p := range dangerous {
+		if strings.Contains(strings.ToUpper(input), strings.ToUpper(p)) {
+			return true, fmt.Sprintf("Patrón detectado: %s", p)
+		}
+	}
+	return false, ""
+}
+
+type LogAuditoria struct {
+	ID        int64     `json:"id"`
+	Agente    string    `json:"agente"`
+	Accion    string    `json:"accion"`
+	Entidad   string    `json:"entidad"`
+	EntidadID int64     `json:"entidad_id"`
+	Detalle   string    `json:"detalle"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type FiltroAuditoria struct {
+	Agente  *string
+	Accion  *string
+	Entidad *string
+	Limite  int
+}
+
 // Audit registra una acción en el log de auditoría.
 func Audit(agente, accion, entidad string, entidadID int64, detalle string) {
 	if DB == nil {
 		return
 	}
+	// Monitorización defensiva de auditoría
+	if sos, motivo := DetectarActividadSospechosa(detalle); sos {
+		detalle = fmt.Sprintf("⚠️ ALERTA SEGURIDAD: %s | %s", motivo, detalle)
+		// Auto-bloqueo preventivo
+		reanimar := time.Now().Add(6 * time.Hour)
+		_, _ = DB.Exec(`UPDATE agentes SET estado_cuota = 'enfriamiento', reanimar_at = ?, motivo_pausa = ? WHERE nombre = ?`, 
+			reanimar, "Intento de bypass de seguridad detectado (audit-warden)", agente)
+	}
+
 	_, _ = DB.Exec(
 		`INSERT INTO audit_log (agente, accion, entidad, entidad_id, detalle) VALUES (?,?,?,?,?)`,
 		agente, accion, entidad, entidadID, detalle,
 	)
+}
+
+// ListarAuditoria recupera registros del log de auditoría.
+func ListarAuditoria(f FiltroAuditoria) ([]*LogAuditoria, error) {
+	q := `SELECT id, agente, accion, entidad, entidad_id, detalle, created_at FROM audit_log WHERE 1=1`
+	args := []any{}
+	if f.Agente != nil {
+		q += " AND agente = ?"
+		args = append(args, *f.Agente)
+	}
+	if f.Accion != nil {
+		q += " AND accion = ?"
+		args = append(args, *f.Accion)
+	}
+	if f.Entidad != nil {
+		q += " AND entidad = ?"
+		args = append(args, *f.Entidad)
+	}
+	q += " ORDER BY id DESC"
+	if f.Limite > 0 {
+		q += fmt.Sprintf(" LIMIT %d", f.Limite)
+	} else {
+		q += " LIMIT 50"
+	}
+	rows, err := DB.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []*LogAuditoria
+	for rows.Next() {
+		l := &LogAuditoria{}
+		if err := rows.Scan(&l.ID, &l.Agente, &l.Accion, &l.Entidad, &l.EntidadID, &l.Detalle, &l.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, l)
+	}
+	return list, rows.Err()
 }
 
 // ConfigGet devuelve el valor de una clave de configuración.

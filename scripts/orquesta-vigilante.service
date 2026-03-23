@@ -1,0 +1,26 @@
+[Unit]
+Description=Orquesta — Agente Vigilante (antigravity)
+Documentation=https://github.com/OSL-Granada/orquestador
+After=network.target orquesta@%i.service
+Wants=orquesta@%i.service
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+WorkingDirectory=/home/%i/Trabajo/PlataformaMunicipal/orquestador
+ExecStart=/bin/bash /home/%i/Trabajo/PlataformaMunicipal/orquestador/scripts/vigilante.sh orquestador
+Restart=always
+RestartSec=10s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=orquesta-vigilante
+
+# Seguridad mínima
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/%i/Trabajo/PlataformaMunicipal/orquestador
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=Orquesta Control Plane Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=alberto
+WorkingDirectory=/home/alberto/Trabajo/PlataformaMunicipal/orquestador
+ExecStart=/home/alberto/Trabajo/PlataformaMunicipal/orquestador/orquesta serve --puerto 8080
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/alberto/Trabajo/PlataformaMunicipal/orquestador/logs/daemon.log
+StandardError=append:/home/alberto/Trabajo/PlataformaMunicipal/orquestador/logs/daemon.err
+
+[Install]
+WantedBy=multi-user.target
