@@ -116,3 +116,49 @@ func TestWebTimeTravelPageYDetalle(t *testing.T) {
 	assertNotContains("/time-travel?kind=handoff", "analisis inicial")
 	assertContains("/time-travel/"+itoa(cp1ID), "Checkpoint #", "analisis inicial", "Core_API", "step", "version")
 }
+
+func TestWebDashboardMuestraCheckpointsRecientes(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	cpID, err := db.CrearRuntimeCheckpoint(&db.RuntimeCheckpoint{
+		Agente:         "Codex1",
+		ProyectoID:     &proyectoID,
+		CheckpointKind: "checkpoint",
+		Resumen:        "preparar rollback seguro",
+		Branch:         "main",
+		CWD:            filepath.Join(tmp, "orquestador"),
+		PayloadJSON:    `{"step":"checkpoint"}`,
+		ResumeStrategy: "resume-thread",
+		Source:         "manual:dashboard",
+	})
+	if err != nil {
+		t.Fatalf("crear checkpoint: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	webHandlerDash(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado dashboard: %d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, needle := range []string{"Checkpoints recientes", "preparar rollback seguro", "/time-travel/" + itoa(cpID)} {
+		if !strings.Contains(body, needle) {
+			t.Fatalf("dashboard sin %q: %s", needle, body)
+		}
+	}
+}

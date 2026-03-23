@@ -32,6 +32,7 @@ type webDashData struct {
 	Abiertas    []webPropResumen
 	EnProgreso  []webTareaRow
 	Runtimes    []webRuntimeRow
+	Checkpoints []webTimeTravelCheckpointRow
 	Generado    string
 	Msg         string
 }
@@ -414,10 +415,18 @@ func webHandlerDash(w http.ResponseWriter, r *http.Request) {
 	runtimeTree, _ := db.ConstruirArbolRuntimes(db.FiltroRuntimes{Activos: &activos})
 	var runtimes []webRuntimeRow
 	aplanarRuntimes(runtimeTree, 0, &runtimes)
+	checkpoints, _ := db.ListarRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{Limit: 5})
+	var recentCheckpoints []webTimeTravelCheckpointRow
+	for _, cp := range checkpoints {
+		if cp == nil {
+			continue
+		}
+		recentCheckpoints = append(recentCheckpoints, runtimeCheckpointToWeb(cp))
+	}
 	webRender(w, webTplLayout+webTplDash, webDashData{
 		Agentes: agentes, Counts: counts, Total: total,
 		Completadas: completadas, Pct: pct,
-		Abiertas: resAbiertas, EnProgreso: ep, Runtimes: runtimes,
+		Abiertas: resAbiertas, EnProgreso: ep, Runtimes: runtimes, Checkpoints: recentCheckpoints,
 		Generado: time.Now().Format("2006-01-02 15:04:05"),
 	})
 }
@@ -1024,6 +1033,20 @@ const webTplDash = `{{define "content"}}
             <td><span class="tag rt-{{.Estado}}">{{.Estado}}</span></td>
             <td>{{.PID}}</td>
             <td>{{.Hijos}}</td>
+          </tr>
+        {{end}}
+        </tbody></table>
+      </div>
+      {{end}}
+      {{if .Checkpoints}}
+      <div>
+        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Checkpoints recientes <a href="/time-travel" style="font-size:.9em;font-weight:normal;text-transform:none">ver todos →</a></h4>
+        <table><thead><tr><th>Agente</th><th>Tipo</th><th>Resumen</th></tr></thead><tbody>
+        {{range .Checkpoints}}
+          <tr>
+            <td><a href="/time-travel/{{.ID}}">{{.Agente}}</a></td>
+            <td><span class="tag t-media">{{.CheckpointKind}}</span></td>
+            <td style="font-size:.82rem">{{trunc .Resumen 32}}</td>
           </tr>
         {{end}}
         </tbody></table>
