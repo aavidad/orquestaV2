@@ -53,10 +53,11 @@ func asegurarVotosPendientesPropuesta(propuestaID int64) (int, error) {
 	}
 
 	insertados := 0
+	stmt := insertIgnoreValuesSQL("votos", []string{"propuesta_id", "agente", "posicion"}, []string{"propuesta_id", "agente"})
 	for _, nombre := range agentes {
 		res, err := DB.Exec(
-			`INSERT OR IGNORE INTO votos (propuesta_id, agente, posicion) VALUES (?,?,'pendiente')`,
-			propuestaID, nombre,
+			stmt,
+			propuestaID, nombre, VotoPendiente,
 		)
 		if err != nil {
 			return insertados, err

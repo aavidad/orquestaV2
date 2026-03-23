@@ -60,24 +60,22 @@ func RegistrarMuestraGenericProcess(runtimeID int64, runtimeInst *RuntimeInstanc
 		SampleJSON:   string(sampleJSON),
 		RuntimeID:    runtimeID,
 	}
-	res, err := DB.Exec(`
-		INSERT INTO runtime_telemetry_samples (
-			runtime_id, cpu_pct, mem_bytes, rss_bytes, open_fds, child_count, thread_count,
-			logical_state, source, sample_json
-		) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-		sample.RuntimeID, sample.CPUPct, sample.MemBytes, sample.RSSBytes, sample.OpenFDs,
-		sample.ChildCount, sample.ThreadCount, sample.LogicalState, sample.Source, sample.SampleJSON,
-	)
+	tx, err := DB.Begin()
 	if err != nil {
 		return nil, err
 	}
-	id, _ := res.LastInsertId()
+	defer tx.Rollback()
+
+	id, err := registrarRuntimeTelemetrySampleTx(tx, sample)
+	if err != nil {
+		return nil, err
+	}
 	sample.ID = id
 	rawProcessState := snap.RawState
 	if strings.TrimSpace(rawProcessState) == "" {
-		rawProcessState = "unknown"
+		rawProcessState = "desconocido"
 	}
-	_, _ = DB.Exec(`
+	if _, err := tx.Exec(`
 		UPDATE runtime_instances
 		SET pid = COALESCE(?, pid),
 		    ppid = COALESCE(?, ppid),
@@ -90,7 +88,12 @@ func RegistrarMuestraGenericProcess(runtimeID int64, runtimeInst *RuntimeInstanc
 		WHERE id = ?`,
 		int64PtrOrNil(snap.PID), int64PtrOrNil(snap.PPID),
 		sample.ChildCount, sample.ThreadCount, sample.LogicalState, rawProcessState, runtimeID,
-	)
+	); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 	return sample, nil
 }
 

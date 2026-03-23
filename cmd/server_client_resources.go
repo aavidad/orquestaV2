@@ -49,6 +49,16 @@ type apiWorktreesResponse struct {
 	Worktrees []*coordination.Worktree `json:"worktrees"`
 }
 
+type apiAgenteHandoffResponse struct {
+	ID      int64 `json:"id"`
+	OrderID int64 `json:"order_id"`
+}
+
+type apiRuntimeMailboxCreateResponse struct {
+	OK bool  `json:"ok"`
+	ID int64 `json:"id"`
+}
+
 type apiProyectoDescubrirRequest struct {
 	Ruta string `json:"ruta"`
 }
@@ -166,6 +176,89 @@ func retirarAgentePorAPI(nombre string) (bool, error) {
 
 func rehabilitarAgentePorAPI(nombre string) (bool, error) {
 	ok, err := apiPost(fmt.Sprintf("/api/agentes/%s/rehabilitar", url.PathEscape(nombre)), map[string]any{}, nil)
+	return ok, err
+}
+
+func eliminarAgentePorAPI(nombre string) (bool, error) {
+	ok, err := apiPost(fmt.Sprintf("/api/agentes/%s/eliminar", url.PathEscape(nombre)), map[string]any{}, nil)
+	return ok, err
+}
+
+func resetReanimacionAgentePorAPI(nombre string) (bool, error) {
+	ok, err := apiPost(fmt.Sprintf("/api/agentes/%s/reset-reanimacion", url.PathEscape(nombre)), map[string]any{}, nil)
+	return ok, err
+}
+
+func pausarAgentePorAPI(nombre string, minutos int, motivo string) (bool, error) {
+	return registrarPausaAgentePorAPI(nombre, minutos, motivo, "", "", "")
+}
+
+func registrarPausaAgentePorAPI(nombre string, minutos int, motivo, accion, entidad, detalle string) (bool, error) {
+	ok, err := apiPost("/api/agente/pausar", apiAgentePausarRequest{
+		Agente:  nombre,
+		Minutos: minutos,
+		Motivo:  motivo,
+		Accion:  accion,
+		Entidad: entidad,
+		Detalle: detalle,
+	}, nil)
+	return ok, err
+}
+
+func crearHandoffAgentePorAPI(origen, destino string, tareaID *int64, motivo, resumen, externalSessionID string) (int64, bool, error) {
+	req := apiRuntimeHandoffRequest{
+		AgenteOrigen:      origen,
+		AgenteDestino:     destino,
+		Motivo:            motivo,
+		Resumen:           resumen,
+		ExternalSessionID: externalSessionID,
+	}
+	if tareaID != nil {
+		req.TareaID = *tareaID
+	}
+	var resp apiAgenteHandoffResponse
+	ok, err := apiPost("/api/agente/handoff", req, &resp)
+	if !ok || err != nil {
+		return 0, ok, err
+	}
+	if resp.OrderID == 0 {
+		resp.OrderID = resp.ID
+	}
+	return resp.OrderID, true, nil
+}
+
+func cargarRuntimeMailboxDesdeAPI(query url.Values) ([]*db.RuntimeMailboxMessage, bool, error) {
+	var resp apiRuntimeMailboxResponse
+	ok, err := apiGetQuery("/api/runtime-mailbox", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Mailbox, true, nil
+}
+
+func crearRuntimeMailboxDesdeAPI(fromAgente, toAgente, proyecto string, runtimeOrderID int64, kind, payload string) (int64, bool, error) {
+	var resp apiRuntimeMailboxCreateResponse
+	ok, err := apiPost("/api/runtime-mailbox", apiRuntimeMailboxCreateRequest{
+		FromAgente:     fromAgente,
+		ToAgente:       toAgente,
+		Proyecto:       proyecto,
+		RuntimeOrderID: runtimeOrderID,
+		Kind:           kind,
+		Payload:        payload,
+	}, &resp)
+	if !ok || err != nil {
+		return 0, ok, err
+	}
+	return resp.ID, true, nil
+}
+
+func marcarRuntimeMailboxEntregadoPorAPI(id int64) (bool, error) {
+	ok, err := apiPost(fmt.Sprintf("/api/runtime-mailbox/%d/entregar", id), map[string]any{}, nil)
+	return ok, err
+}
+
+func marcarRuntimeMailboxConsumidoPorAPI(id int64) (bool, error) {
+	ok, err := apiPost(fmt.Sprintf("/api/runtime-mailbox/%d/consumir", id), map[string]any{}, nil)
 	return ok, err
 }
 

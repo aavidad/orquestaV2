@@ -8,6 +8,7 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -18,7 +19,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
-	"orquesta/notificaciones"
 )
 
 // ─── Structs de datos ────────────────────────────────────────────────────────
@@ -697,56 +697,9 @@ var serveCmd = &cobra.Command{
 		fmt.Printf("✓ Panel web en http://localhost%s\n", addr)
 		fmt.Println("  Ctrl+C para detener.")
 
-		// Worker de reanimación
-		go func() {
-			for {
-				// Auto-reanimación: Despertar agentes cada minuto
-				reanimar, err := db.CheckReanimaciones()
-				if err == nil {
-					for _, a := range reanimar {
-						db.Audit("server", "reanimar_agente", "agente", 0, fmt.Sprintf("Agente %s reanimado tras pausa: %s", a.Nombre, a.MotivoPausa))
-						_ = db.ResetReanimacion(a.Nombre)
-					}
-				}
-				time.Sleep(1 * time.Minute)
-			}
-		}()
-
-		// 2. Worker de Gestión de Cuotas y Salud (Autónomo)
-		go func() {
-			for {
-				_ = db.GarantizarSaludAgentes()
-				time.Sleep(60 * time.Second)
-			}
-		}()
-
-		// 3. Worker de Planificación Automática (Autonomía Total)
-		go func() {
-			for {
-				time.Sleep(30 * time.Second)
-				_ = db.PlanificarTareasAutomaticamente()
-			}
-		}()
-
-		// 3. Worker de Notificaciones (Telegram / Mobile)
-		notificaciones.InicializarDesdeConfig()
-		go func() {
-			for ev := range db.CanalNotificaciones {
-				if notificaciones.GlobalNotificador == nil {
-					continue
-				}
-				switch ev.Tipo {
-				case "bloqueo":
-					_ = notificaciones.GlobalNotificador.EnviarAlertaBloqueo(ev.ID, ev.Agente, ev.Texto)
-				case "propuesta":
-					_ = notificaciones.GlobalNotificador.EnviarPropuestaVotacion(ev.Codigo, ev.Texto)
-				case "fin_proyecto":
-					_ = notificaciones.GlobalNotificador.EnviarAvisoFinProyecto(ev.ID, ev.Texto)
-				case "mensaje":
-					_ = notificaciones.GlobalNotificador.EnviarMensaje(ev.Texto)
-				}
-			}
-		}()
+		controlCtx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		newControlPlaneRunner().Start(controlCtx)
 
 		return http.ListenAndServe(addr, mux)
 	},

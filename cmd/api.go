@@ -151,6 +151,40 @@ type apiWorktreeRequest struct {
 	Eliminar bool   `json:"eliminar"`
 }
 
+type apiRuntimeOrderCreateRequest struct {
+	Agente   string `json:"agente"`
+	Proyecto string `json:"proyecto"`
+	Tipo     string `json:"tipo"`
+	Payload  string `json:"payload"`
+}
+
+type apiRuntimeMailboxCreateRequest struct {
+	FromAgente     string `json:"from_agente"`
+	ToAgente       string `json:"to_agente"`
+	Proyecto       string `json:"proyecto"`
+	RuntimeOrderID int64  `json:"runtime_order_id"`
+	Kind           string `json:"kind"`
+	Payload        string `json:"payload"`
+}
+
+type apiAgentePausarRequest struct {
+	Agente  string `json:"agente"`
+	Minutos int    `json:"minutos"`
+	Motivo  string `json:"motivo"`
+	Accion  string `json:"accion"`
+	Entidad string `json:"entidad"`
+	Detalle string `json:"detalle"`
+}
+
+type apiRuntimeHandoffRequest struct {
+	AgenteOrigen      string `json:"agente_origen"`
+	AgenteDestino     string `json:"agente_destino"`
+	TareaID           int64  `json:"tarea_id"`
+	Motivo            string `json:"motivo"`
+	Resumen           string `json:"resumen_continuidad"`
+	ExternalSessionID string `json:"external_session_id"`
+}
+
 func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/status", apiHandlerStatus)
 	mux.HandleFunc("/api/diagnostico", apiHandlerDiagnostico)
@@ -177,14 +211,21 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtimes", apiHandlerRuntimes)
 	mux.HandleFunc("/api/runtimes/tree", apiHandlerRuntimesTree)
 	mux.HandleFunc("/api/runtimes/", apiRouterRuntimes)
+	mux.HandleFunc("/api/runtime-handles", apiHandlerRuntimeHandles)
+	mux.HandleFunc("/api/runtime-orders", apiHandlerRuntimeOrders)
+	mux.HandleFunc("/api/runtime-mailbox", apiHandlerRuntimeMailbox)
+	mux.HandleFunc("/api/runtime-mailbox/", apiRouterRuntimeMailbox)
+	mux.HandleFunc("/api/runtime-checkpoints/latest", apiHandlerRuntimeCheckpointLatest)
 	mux.HandleFunc("/api/sesiones", apiHandlerSesiones)
 	mux.HandleFunc("/api/sesiones/", apiRouterSesiones)
 	mux.HandleFunc("/api/sesiones/inicio", apiHandlerSesionInicio)
 	mux.HandleFunc("/api/sesiones/guardar", apiHandlerSesionGuardar)
 	mux.HandleFunc("/api/sesiones/fin", apiHandlerSesionFin)
 	mux.HandleFunc("/api/sesiones/continuar", apiHandlerSesionContinuar)
+	mux.HandleFunc("/api/agente/handoff", apiHandlerAgenteHandoff)
 	mux.HandleFunc("/api/agente/preparar", apiHandlerAgentePreparar)
 	mux.HandleFunc("/api/agente/tick", apiHandlerAgenteTick)
+	mux.HandleFunc("/api/agente/pausar", apiHandlerAgentePausar)
 }
 
 func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
@@ -302,6 +343,17 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 		}
 	case "rehabilitar":
 		if err := db.RehabilitarAgente(nombre); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+	case "eliminar":
+		if err := db.EliminarAgente(nombre); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		db.Audit("alberto", "purgar_agente", "agente", 0, nombre)
+	case "reset-reanimacion":
+		if err := db.ResetReanimacion(nombre); err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
@@ -1041,6 +1093,237 @@ func apiRouterRuntimes(w http.ResponseWriter, r *http.Request) {
 	apiWriteJSON(w, http.StatusOK, map[string]any{"runtime": runtime, "samples": samples})
 }
 
+func apiHandlerRuntimeHandles(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	agente := strings.TrimSpace(r.URL.Query().Get("agente"))
+	var filtro *string
+	if agente != "" {
+		filtro = &agente
+	}
+	handles, err := db.ListarRuntimeHandles(filtro)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"handles": handles})
+}
+
+func apiHandlerRuntimeOrders(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		filter := db.FiltroRuntimeOrders{}
+		if agente := strings.TrimSpace(r.URL.Query().Get("agente")); agente != "" {
+			filter.Agente = &agente
+		}
+		if estado := strings.TrimSpace(r.URL.Query().Get("estado")); estado != "" {
+			filter.Estado = &estado
+		}
+		if proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyecto != "" {
+			p, err := db.GetProyecto(proyecto)
+			if err != nil {
+				apiError(w, http.StatusBadRequest, err)
+				return
+			}
+			filter.ProyectoID = &p.ID
+		}
+		orders, err := db.ListarRuntimeOrders(filter)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"orders": orders})
+	case http.MethodPost:
+		var req apiRuntimeOrderCreateRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		payload := strings.TrimSpace(req.Payload)
+		if payload == "" {
+			payload = "{}"
+		}
+		var proyectoID *int64
+		if proyecto := strings.TrimSpace(req.Proyecto); proyecto != "" {
+			p, err := db.GetProyecto(proyecto)
+			if err != nil {
+				apiError(w, http.StatusBadRequest, err)
+				return
+			}
+			proyectoID = &p.ID
+		}
+		id, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+			Agente:      strings.TrimSpace(req.Agente),
+			ProyectoID:  proyectoID,
+			Tipo:        strings.TrimSpace(req.Tipo),
+			PayloadJSON: payload,
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true, "id": id})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func apiHandlerRuntimeMailbox(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		filter := db.FiltroRuntimeMailbox{}
+		if toAgente := strings.TrimSpace(r.URL.Query().Get("to_agente")); toAgente != "" {
+			filter.ToAgente = &toAgente
+		}
+		if fromAgente := strings.TrimSpace(r.URL.Query().Get("from_agente")); fromAgente != "" {
+			filter.FromAgente = &fromAgente
+		}
+		if estado := strings.TrimSpace(r.URL.Query().Get("estado")); estado != "" {
+			filter.Estado = &estado
+		}
+		if proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyecto != "" {
+			p, err := db.GetProyecto(proyecto)
+			if err != nil {
+				apiError(w, http.StatusBadRequest, err)
+				return
+			}
+			filter.ProyectoID = &p.ID
+		}
+		mailbox, err := db.ListarRuntimeMailbox(filter)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"mailbox": mailbox})
+	case http.MethodPost:
+		var req apiRuntimeMailboxCreateRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		payload := strings.TrimSpace(req.Payload)
+		if payload == "" {
+			payload = "{}"
+		}
+		var proyectoID *int64
+		if proyecto := strings.TrimSpace(req.Proyecto); proyecto != "" {
+			p, err := db.GetProyecto(proyecto)
+			if err != nil {
+				apiError(w, http.StatusBadRequest, err)
+				return
+			}
+			proyectoID = &p.ID
+		}
+		var runtimeOrderID *int64
+		if req.RuntimeOrderID > 0 {
+			runtimeOrderID = &req.RuntimeOrderID
+		}
+		id, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+			FromAgente:     strings.TrimSpace(req.FromAgente),
+			ToAgente:       strings.TrimSpace(req.ToAgente),
+			ProyectoID:     proyectoID,
+			RuntimeOrderID: runtimeOrderID,
+			Kind:           strings.TrimSpace(req.Kind),
+			PayloadJSON:    payload,
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true, "id": id})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func apiRouterRuntimeMailbox(w http.ResponseWriter, r *http.Request) {
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/runtime-mailbox/"), "/")
+	parts := strings.Split(path, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		http.NotFound(w, r)
+		return
+	}
+	id, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil || id <= 0 {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
+		return
+	}
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	switch parts[1] {
+	case "entregar":
+		if err := db.MarcarRuntimeMailboxEntregado(id); err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+	case "consumir":
+		if err := db.MarcarRuntimeMailboxConsumido(id); err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+	default:
+		http.NotFound(w, r)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+}
+
+func apiHandlerRuntimeCheckpointLatest(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	agente := strings.TrimSpace(r.URL.Query().Get("agente"))
+	if agente == "" {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("agente obligatorio"))
+		return
+	}
+	var proyectoID *int64
+	if proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyecto != "" {
+		p, err := db.GetProyecto(proyecto)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		proyectoID = &p.ID
+	}
+	checkpoint, err := db.UltimoRuntimeCheckpoint(agente, proyectoID)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"checkpoint": checkpoint})
+}
+
+func apiHandlerAgenteHandoff(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiRuntimeHandoffRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	var tareaID *int64
+	if req.TareaID > 0 {
+		tareaID = &req.TareaID
+	}
+	id, err := db.CrearHandoffAgenteVivo(
+		strings.TrimSpace(req.AgenteOrigen),
+		strings.TrimSpace(req.AgenteDestino),
+		tareaID,
+		strings.TrimSpace(req.Motivo),
+		strings.TrimSpace(req.Resumen),
+		strings.TrimSpace(req.ExternalSessionID),
+	)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true, "id": id, "order_id": id})
+}
+
 func apiRouterWorktrees(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/worktrees/"), "/"), "/")
 	if len(parts) == 1 && r.Method == http.MethodGet {
@@ -1419,6 +1702,7 @@ func apiHandlerSesionContinuar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var proyectoID *int64
+	cwd := strings.TrimSpace(r.URL.Query().Get("cwd"))
 	if proyectoRef := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyectoRef != "" {
 		proyecto, err := db.GetProyecto(proyectoRef)
 		if err != nil {
@@ -1427,7 +1711,7 @@ func apiHandlerSesionContinuar(w http.ResponseWriter, r *http.Request) {
 		}
 		proyectoID = &proyecto.ID
 	}
-	sesion, err := db.ObtenerUltimaSesion(agente, proyectoID)
+	sesion, err := db.ObtenerUltimaSesionConFiltro(agente, proyectoID, cwd)
 	if err != nil {
 		apiError(w, http.StatusNotFound, err)
 		return
@@ -1589,11 +1873,15 @@ func apiHandlerAgenteTick(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Si el agente informa que termina por cuota, lo pausamos automáticamente (OP-084)
-		if req.Finalizado {
-			motivoLower := strings.ToLower(req.Motivo)
-			if req.CuotaPct < 5 || strings.Contains(motivoLower, "token") || strings.Contains(motivoLower, "cuota") || strings.Contains(motivoLower, "rate limit") {
-				_ = db.PausarAgente(req.Agente, 60, "Auto-pausa por agotamiento: "+req.Motivo)
-				db.Audit(req.Agente, "auto_pausa", "agente", 0, "Detección de agotamiento en tick final: "+req.Motivo)
+		if req.Finalizado && debeAutoPausarPorAgotamiento(req.CuotaPct, req.Motivo) {
+			if err := registrarAutoPausaLocal(
+				req.Agente,
+				60,
+				"Auto-pausa por agotamiento: "+req.Motivo,
+				"Detección de agotamiento en tick final: "+req.Motivo,
+			); err != nil {
+				apiError(w, http.StatusInternalServerError, err)
+				return
 			}
 		}
 		sesionActiva, err = db.GetSesionActiva(req.Agente, &proyecto.ID)
@@ -1602,87 +1890,41 @@ func apiHandlerAgenteTick(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	politica := cargarPoliticaAgente()
-	asignadoAProyecto, proyectoAsignado, err := resolverAsignacionActiva(req.Agente, proyecto.ID)
+	out, err := construirAgenteTickOutput(req.Agente, proyecto, sesionActiva, req.CuotaPct)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
-	}
-	tareas, err := db.ListarTareas(db.FiltroTareas{Agente: &req.Agente, ProyectoID: &proyecto.ID})
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	var tareasActivas []itemLigero
-	var tieneBloqueos bool
-	var tieneTrabajo bool
-	for _, tarea := range tareas {
-		if tarea.Estado == db.TareaCompletada || tarea.Estado == db.TareaCancelada || tarea.Estado == db.TareaBacklog {
-			continue
-		}
-		tareasActivas = append(tareasActivas, itemLigero{ID: tarea.ID, Titulo: tarea.Titulo, Estado: string(tarea.Estado)})
-		if tarea.Estado == db.TareaBloqueada {
-			tieneBloqueos = true
-		}
-		if tarea.Estado == db.TareaAsignada || tarea.Estado == db.TareaEnProgreso {
-			tieneTrabajo = true
-		}
-	}
-	pendientes, err := db.PropuestasPendientesVotoProyecto(req.Agente, &proyecto.ID)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	var propuestasPendientes []itemLigero
-	for _, propuesta := range pendientes {
-		propuestasPendientes = append(propuestasPendientes, itemLigero{
-			ID: propuesta.ID, Codigo: propuesta.Codigo, Titulo: propuesta.Titulo, Estado: string(propuesta.Estado),
-		})
-	}
-	estadoAb := db.PropuestaAbierta
-	abiertas, err := db.ListarPropuestas(&estadoAb, &proyecto.ID)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	var propuestasAbiertas []itemLigero
-	for _, propuesta := range abiertas {
-		propuestasAbiertas = append(propuestasAbiertas, itemLigero{
-			ID: propuesta.ID, Codigo: propuesta.Codigo, Titulo: propuesta.Titulo, Estado: string(propuesta.Estado),
-		})
-	}
-	out := agenteTickOutput{
-		Agente:               req.Agente,
-		Proyecto:             proyectoBundle{ID: proyecto.ID, Slug: proyecto.Slug, Nombre: proyecto.Nombre, RutaAbs: proyecto.RutaAbs},
-		Politica:             politica,
-		AsignadoAProyecto:    asignadoAProyecto,
-		ProyectoAsignado:     proyectoAsignado,
-		TareasActivas:        tareasActivas,
-		PropuestasPendientes: propuestasPendientes,
-		PropuestasAbiertas:   propuestasAbiertas,
-	}
-	if sesionActiva != nil {
-		out.SesionActiva = resumirSesion(sesionActiva)
-	}
-	switch {
-	case !asignadoAProyecto && proyectoAsignado != "":
-		out.AccionRecomendada = "pausar_y_reasignar"
-		out.DebePausar = true
-		out.Motivo = "La asignación activa del agente ha cambiado al proyecto " + proyectoAsignado
-	case len(propuestasPendientes) > 0:
-		out.AccionRecomendada = "votar_propuestas_pendientes"
-		out.Motivo = fmt.Sprintf("Hay %d propuestas pendientes de voto para este proyecto", len(propuestasPendientes))
-	case tieneBloqueos:
-		out.AccionRecomendada = "pedir_intervencion"
-		out.Motivo = "Hay tareas bloqueadas que requieren resolución"
-	case tieneTrabajo:
-		out.AccionRecomendada = "continuar_trabajo"
-		out.Motivo = "Sigue trabajando hasta completar la tarea o detectar una duda real"
-	default:
-		out.AccionRecomendada = "esperar_o_pedir_tarea"
-		out.Motivo = "No hay tarea activa asignada en este proyecto"
 	}
 	apiWriteJSON(w, http.StatusOK, out)
+}
+
+func apiHandlerAgentePausar(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiAgentePausarRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	req.Agente = strings.TrimSpace(req.Agente)
+	req.Motivo = strings.TrimSpace(req.Motivo)
+	if req.Agente == "" || req.Minutos <= 0 || req.Motivo == "" {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("debes indicar agente, minutos positivos y motivo"))
+		return
+	}
+	if err := db.PausarAgente(req.Agente, req.Minutos, req.Motivo); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	accion := valorConFallback(strings.TrimSpace(req.Accion), "pausa_externa")
+	entidad := valorConFallback(strings.TrimSpace(req.Entidad), "agente")
+	detalle := strings.TrimSpace(req.Detalle)
+	if detalle == "" {
+		detalle = fmt.Sprintf("Bloqueado %d min por: %s", req.Minutos, req.Motivo)
+	}
+	db.Audit(req.Agente, accion, entidad, 0, detalle)
+	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "agente": req.Agente})
 }
 
 func iniciarSesionDesdeRequest(req apiSesionInicioRequest) (*db.Sesion, error) {

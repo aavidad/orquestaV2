@@ -268,3 +268,148 @@ func TestAPIProyectoDescubrirYGestionAgentes(t *testing.T) {
 		t.Fatalf("status rehabilitar inesperado: %d body=%s", recRehabilitar.Code, recRehabilitar.Body.String())
 	}
 }
+
+func TestAPIAgenteControlPlaneAcciones(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar Codex3: %v", err)
+	}
+	if _, err := db.IniciarSesion("Codex1"); err != nil {
+		t.Fatalf("iniciar sesion origen: %v", err)
+	}
+	if _, err := db.IniciarSesion("Codex2"); err != nil {
+		t.Fatalf("iniciar sesion destino: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:    "Handoff API",
+		Modulo:    "orquestador",
+		Prioridad: db.PrioridadAlta,
+		CreadoPor: "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	pausaBody, _ := json.Marshal(apiAgentePausarRequest{Agente: "Codex1", Minutos: 15, Motivo: "rate limit"})
+	recPausa := httptest.NewRecorder()
+	reqPausa := httptest.NewRequest(http.MethodPost, "/api/agente/pausar", bytes.NewReader(pausaBody))
+	mux.ServeHTTP(recPausa, reqPausa)
+	if recPausa.Code != http.StatusOK {
+		t.Fatalf("status pausar inesperado: %d body=%s", recPausa.Code, recPausa.Body.String())
+	}
+
+	recReset := httptest.NewRecorder()
+	reqReset := httptest.NewRequest(http.MethodPost, "/api/agentes/Codex1/reset-reanimacion", bytes.NewReader([]byte(`{}`)))
+	mux.ServeHTTP(recReset, reqReset)
+	if recReset.Code != http.StatusOK {
+		t.Fatalf("status reset inesperado: %d body=%s", recReset.Code, recReset.Body.String())
+	}
+
+	handoffBody, _ := json.Marshal(apiRuntimeHandoffRequest{
+		AgenteOrigen:  "Codex1",
+		AgenteDestino: "Codex2",
+		TareaID:       tareaID,
+		Motivo:        "cambio de turno",
+		Resumen:       "seguir desde api",
+	})
+	recHandoff := httptest.NewRecorder()
+	reqHandoff := httptest.NewRequest(http.MethodPost, "/api/agente/handoff", bytes.NewReader(handoffBody))
+	mux.ServeHTTP(recHandoff, reqHandoff)
+	if recHandoff.Code != http.StatusCreated {
+		t.Fatalf("status handoff inesperado: %d body=%s", recHandoff.Code, recHandoff.Body.String())
+	}
+
+	var resp struct {
+		ID      int64 `json:"id"`
+		OrderID int64 `json:"order_id"`
+	}
+	if err := json.Unmarshal(recHandoff.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode handoff: %v", err)
+	}
+	if resp.OrderID == 0 && resp.ID == 0 {
+		t.Fatalf("order id inesperado: %d", resp.OrderID)
+	}
+
+	recEliminar := httptest.NewRecorder()
+	reqEliminar := httptest.NewRequest(http.MethodPost, "/api/agentes/Codex3/eliminar", bytes.NewReader([]byte(`{}`)))
+	mux.ServeHTTP(recEliminar, reqEliminar)
+	if recEliminar.Code != http.StatusOK {
+		t.Fatalf("status eliminar inesperado: %d body=%s", recEliminar.Code, recEliminar.Body.String())
+	}
+}
+
+func TestAPIAgenteTickAutoPausaPorAgotamiento(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex1",
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador"),
+		Herramienta:        "codex-cli",
+		ExternalSessionID:  "sess-tick-auto-pausa",
+		ResumenContinuidad: "tick final",
+		Branch:             "main",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	body, _ := json.Marshal(map[string]any{
+		"agente":     "Codex1",
+		"proyecto":   "orquestador",
+		"cuota_pct":  3,
+		"finalizado": true,
+		"motivo":     "rate limit de proveedor",
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/agente/tick", bytes.NewReader(body))
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status tick inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	agente, err := db.GetAgente("Codex1")
+	if err != nil {
+		t.Fatalf("get agente: %v", err)
+	}
+	if agente.EstadoCuota != "enfriamiento" {
+		t.Fatalf("estado_cuota inesperado: %s", agente.EstadoCuota)
+	}
+	if agente.ReanimarAt == nil {
+		t.Fatalf("reanimar_at no deberia ser nil")
+	}
+	if agente.MotivoPausa == "" || agente.MotivoPausa != "Auto-pausa por agotamiento: rate limit de proveedor" {
+		t.Fatalf("motivo_pausa inesperado: %q", agente.MotivoPausa)
+	}
+}

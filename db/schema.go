@@ -254,6 +254,113 @@ CREATE TABLE IF NOT EXISTS runtime_events (
     created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS runtime_handles (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    agente              TEXT    NOT NULL REFERENCES agentes(nombre),
+    proyecto_id         INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+    sesion_id           INTEGER REFERENCES sesiones(id) ON DELETE SET NULL,
+    runtime_id          INTEGER REFERENCES runtime_instances(id) ON DELETE SET NULL,
+    transporte          TEXT    NOT NULL DEFAULT 'cli',
+    handle_kind         TEXT    NOT NULL DEFAULT 'session',
+    handle_ref          TEXT    NOT NULL DEFAULT '',
+    estado              TEXT    NOT NULL DEFAULT 'activo'
+                               CHECK (estado IN ('activo','pausado','cerrado','fallido')),
+    lease_token         TEXT    NOT NULL DEFAULT '',
+    capabilities_json   TEXT    NOT NULL DEFAULT '{}',
+    metadata_json       TEXT    NOT NULL DEFAULT '{}',
+    last_seen_at        DATETIME,
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_handles_sesion
+ON runtime_handles(sesion_id)
+WHERE sesion_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_runtime_handles_agente_estado
+ON runtime_handles(agente, estado, id DESC);
+
+CREATE TABLE IF NOT EXISTS runtime_orders (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    agente              TEXT    NOT NULL REFERENCES agentes(nombre),
+    proyecto_id         INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+    runtime_id          INTEGER REFERENCES runtime_instances(id) ON DELETE SET NULL,
+    handle_id           INTEGER REFERENCES runtime_handles(id) ON DELETE SET NULL,
+    tipo                TEXT    NOT NULL,
+    payload_json        TEXT    NOT NULL DEFAULT '{}',
+    resultado_json      TEXT    NOT NULL DEFAULT '{}',
+    error_text          TEXT    NOT NULL DEFAULT '',
+    estado              TEXT    NOT NULL DEFAULT 'pendiente'
+                               CHECK (estado IN ('pendiente','tomada','ejecutando','completada','fallida','expirada','cancelada')),
+    available_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at          DATETIME,
+    finished_at         DATETIME,
+    updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_runtime_orders_estado_created
+ON runtime_orders(estado, available_at, id);
+
+CREATE TABLE IF NOT EXISTS runtime_mailbox (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_agente         TEXT    NOT NULL REFERENCES agentes(nombre),
+    to_agente           TEXT    NOT NULL REFERENCES agentes(nombre),
+    proyecto_id         INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+    runtime_order_id    INTEGER REFERENCES runtime_orders(id) ON DELETE SET NULL,
+    kind                TEXT    NOT NULL,
+    payload_json        TEXT    NOT NULL DEFAULT '{}',
+    estado              TEXT    NOT NULL DEFAULT 'pendiente'
+                               CHECK (estado IN ('pendiente','entregado','consumido','expirado','cancelado')),
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    delivered_at        DATETIME,
+    consumed_at         DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_runtime_mailbox_destino_estado
+ON runtime_mailbox(to_agente, estado, id DESC);
+
+CREATE TABLE IF NOT EXISTS runtime_checkpoints (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    agente              TEXT    NOT NULL REFERENCES agentes(nombre),
+    proyecto_id         INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+    sesion_id           INTEGER REFERENCES sesiones(id) ON DELETE SET NULL,
+    runtime_id          INTEGER REFERENCES runtime_instances(id) ON DELETE SET NULL,
+    checkpoint_kind     TEXT    NOT NULL DEFAULT 'manual',
+    resumen             TEXT    NOT NULL DEFAULT '',
+    branch              TEXT    NOT NULL DEFAULT '',
+    cwd                 TEXT    NOT NULL DEFAULT '',
+    payload_json        TEXT    NOT NULL DEFAULT '{}',
+    resume_strategy     TEXT    NOT NULL DEFAULT '',
+    source              TEXT    NOT NULL DEFAULT '',
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_runtime_checkpoints_agente_created
+ON runtime_checkpoints(agente, created_at DESC, id DESC);
+
+-- ─── Refinería: cola de validación antes de merge ───────────────────────────
+CREATE TABLE IF NOT EXISTS refineria_solicitudes (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    tarea_id     INTEGER NOT NULL REFERENCES tareas(id) ON DELETE CASCADE,
+    agente       TEXT    NOT NULL REFERENCES agentes(nombre),
+    proyecto_id  INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+    rama         TEXT    NOT NULL DEFAULT '',
+    dir_trabajo  TEXT    NOT NULL DEFAULT '',
+    cmd_test     TEXT    NOT NULL DEFAULT 'go test ./...',
+    estado       TEXT    NOT NULL DEFAULT 'pendiente'
+                         CHECK (estado IN ('pendiente','ejecutando','aprobada','rechazada','cancelada')),
+    resultado    TEXT    NOT NULL DEFAULT '',
+    error_texto  TEXT    NOT NULL DEFAULT '',
+    commit_merge TEXT    NOT NULL DEFAULT '',
+    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at   DATETIME,
+    finished_at  DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_refineria_estado
+ON refineria_solicitudes(estado, created_at, id);
+
 -- ─── Audit log ─────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS audit_log (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -312,6 +419,18 @@ CREATE TRIGGER IF NOT EXISTS trig_runtime_instances_updated
     AFTER UPDATE ON runtime_instances
 BEGIN
     UPDATE runtime_instances SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trig_runtime_handles_updated
+    AFTER UPDATE ON runtime_handles
+BEGIN
+    UPDATE runtime_handles SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trig_runtime_orders_updated
+    AFTER UPDATE ON runtime_orders
+BEGIN
+    UPDATE runtime_orders SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
 
 CREATE TRIGGER IF NOT EXISTS trig_conectores_updated
@@ -384,7 +503,10 @@ INSERT OR IGNORE INTO config (clave, valor) VALUES
     ('pool_handoff_threshold_ratio','0.10'),
     ('pool_default_budget_source','manual'),
     ('model_policy_default_profile','implementacion'),
-    ('model_policy_default_reasoning','high');
+    ('model_policy_default_reasoning','high'),
+    ('runtime_handle_stale_seconds','120'),
+    ('runtime_order_batch_size','10'),
+    ('runtime_order_stale_seconds','120');
 
 INSERT OR IGNORE INTO conectores (slug, nombre, transporte, comando, metadata_json) VALUES
     ('claude-code', 'Claude Code', 'cli', 'claude', '{"familia":"anthropic","reanudable":true}'),

@@ -31,6 +31,11 @@ var tareaListarCmd = &cobra.Command{
 		proyectoRef, _ := cmd.Flags().GetString("proyecto")
 		modulo, _ := cmd.Flags().GetString("modulo")
 		propuestaCodigo, _ := cmd.Flags().GetString("propuesta")
+		jsonOut, _ := cmd.Flags().GetBool("json")
+		tsvOut, _ := cmd.Flags().GetBool("tsv")
+		if jsonOut && tsvOut {
+			return fmt.Errorf("usa solo uno de --json o --tsv")
+		}
 
 		var tareas []*db.Tarea
 		projectSlugs := map[int64]string{}
@@ -92,7 +97,33 @@ var tareaListarCmd = &cobra.Command{
 			}
 		}
 		if len(tareas) == 0 {
+			if jsonOut {
+				return imprimirJSON([]*db.Tarea{})
+			}
 			fmt.Println("No hay tareas con ese filtro.")
+			return nil
+		}
+		if jsonOut {
+			return imprimirJSON(tareas)
+		}
+		if tsvOut {
+			for _, t := range tareas {
+				agente := ""
+				if t.Agente != nil {
+					agente = *t.Agente
+				}
+				proyecto := ""
+				if t.ProyectoID != nil {
+					if slug := projectSlugs[*t.ProyectoID]; slug != "" {
+						proyecto = slug
+					} else if p, err := db.GetProyecto(strconv.FormatInt(*t.ProyectoID, 10)); err == nil {
+						proyecto = p.Slug
+					}
+				}
+				titulo := strings.NewReplacer("\t", " ", "\n", " ", "\r", " ").Replace(t.Titulo)
+				fmt.Printf("%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					t.ID, t.Estado, t.Prioridad, agente, proyecto, t.Modulo, titulo)
+			}
 			return nil
 		}
 		fmt.Printf("%-5s %-10s %-10s %-12s %-12s %-8s %s\n",
@@ -508,6 +539,40 @@ var tareaBacklogCmd = &cobra.Command{
 	},
 }
 
+var tareaRefineriaCmd = &cobra.Command{
+	Use:   "refineria <id> <agente>",
+	Short: "Envía una tarea a la Refinería para validación de tests antes de completarla (OP-093)",
+	Long: `Encola la tarea en el Canal de Refinería.
+
+El control plane ejecutará el comando de tests en el directorio indicado.
+Si los tests pasan la tarea se completa automáticamente; si fallan, recibirás
+un mensaje en tu buzón con el output de error para que corrijas y reintentes.`,
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("id inválido")
+		}
+		agente := args[1]
+		rama, _ := cmd.Flags().GetString("rama")
+		dir, _ := cmd.Flags().GetString("dir")
+		cmdTest, _ := cmd.Flags().GetString("cmd")
+
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
+		s, err := db.SolicitarRefineria(id, agente, rama, dir, cmdTest)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("✓ Tarea #%d enviada a Refinería (solicitud #%d)\n", id, s.ID)
+		fmt.Printf("  rama=%s  dir=%s  cmd=%s\n", s.Rama, s.DirTrabajo, s.CmdTest)
+		fmt.Println("  El control plane procesará la solicitud en el próximo ciclo (≤15s).")
+		fmt.Println("  Consulta tu buzón con: orquesta runtime mailbox --agente " + agente)
+		return nil
+	},
+}
+
 var tareaCancelarCmd = &cobra.Command{
 	Use:   "cancelar <id> <agente> [motivo]",
 	Short: "Marca una tarea como cancelada",
@@ -541,6 +606,8 @@ var tareaCancelarCmd = &cobra.Command{
 }
 
 func init() {
+	tareaListarCmd.Flags().Bool("json", false, "Salida JSON")
+	tareaListarCmd.Flags().Bool("tsv", false, "Salida TSV pensada para scripts")
 	tareaListarCmd.Flags().String("estado", "", "Filtrar por estado (libre, asignada, en_progreso, completada, bloqueada, backlog)")
 	tareaListarCmd.Flags().String("agente", "", "Filtrar por agente")
 	tareaListarCmd.Flags().String("proyecto", "", "Filtrar por proyecto")

@@ -41,14 +41,25 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "lock renovar", args: []string{"lock", "renovar", "1", "Codex1", "lease"}, want: true},
 		{nombre: "lock liberar", args: []string{"lock", "liberar", "1", "Codex1", "lease"}, want: true},
 		{nombre: "worktree listar", args: []string{"worktree", "listar"}, want: true},
+		{nombre: "worktree resolver", args: []string{"worktree", "resolver", "Codex1", "orquestador"}, want: true},
 		{nombre: "worktree crear", args: []string{"worktree", "crear", "Codex1", "orquestador"}, want: true},
 		{nombre: "worktree cerrar", args: []string{"worktree", "cerrar", "1"}, want: true},
 		{nombre: "runtime listar", args: []string{"runtime", "listar"}, want: true},
 		{nombre: "runtime ver", args: []string{"runtime", "ver", "12"}, want: true},
+		{nombre: "runtime handles", args: []string{"runtime", "handles"}, want: true},
+		{nombre: "runtime ordenes", args: []string{"runtime", "ordenes"}, want: true},
+		{nombre: "runtime orden nueva", args: []string{"runtime", "orden-nueva", "Codex1", "checkpoint"}, want: true},
+		{nombre: "runtime nudge", args: []string{"runtime", "nudge", "Codex1", "retoma", "el", "bloqueo"}, want: true},
+		{nombre: "runtime checkpoints", args: []string{"runtime", "checkpoints", "--agente", "Codex1"}, want: true},
+		{nombre: "runtime mailbox", args: []string{"runtime", "mailbox", "--to", "Codex1"}, want: true},
+		{nombre: "runtime mailbox enviar", args: []string{"runtime", "mailbox-enviar", "Codex1", "Codex2", "handoff"}, want: true},
+		{nombre: "runtime mailbox entregar", args: []string{"runtime", "mailbox-entregar", "12"}, want: true},
+		{nombre: "runtime mailbox consumir", args: []string{"runtime", "mailbox-consumir", "12"}, want: true},
 		{nombre: "sesion inicio", args: []string{"sesion", "inicio", "Codex1"}, want: true},
 		{nombre: "sesion historial", args: []string{"sesion", "historial"}, want: true},
 		{nombre: "sesion ver", args: []string{"sesion", "ver", "12"}, want: true},
 		{nombre: "sesion nuevo-codex", args: []string{"sesion", "nuevo-codex"}, want: true},
+		{nombre: "agente lanzar plan", args: []string{"agente", "lanzar-plan", "scripts/agentes.orquestador.plan"}, want: false},
 		{nombre: "exportar diagnostico", args: []string{"exportar", "diagnostico"}, want: true},
 		{nombre: "logs", args: []string{"logs"}, want: true},
 		{nombre: "respaldo bd", args: []string{"respaldo", "bd"}, want: true},
@@ -68,7 +79,7 @@ func TestCommandSupportsServerMode(t *testing.T) {
 	}
 }
 
-func TestShouldPreferServerForCurrentCommandUsaAPI(t *testing.T) {
+func TestShouldPreferAPIClientUsaHTTPServer(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -90,11 +101,11 @@ func TestShouldPreferServerForCurrentCommandUsaAPI(t *testing.T) {
 	restaurarForceLocal := cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")
 	defer restaurarForceLocal()
 
-	restaurarArgs := cambiarArgs(t, []string{"orquesta", "runtime", "listar"})
-	defer restaurarArgs()
-
-	if !shouldPreferServerForCurrentCommand() {
-		t.Fatalf("se esperaba preferencia por el servidor local")
+	if !shouldPreferAPIClient([]string{"runtime", "listar"}) {
+		t.Fatalf("se esperaba preferencia por el cliente HTTP API")
+	}
+	if shouldPreferAPIClient([]string{"server", "status"}) {
+		t.Fatalf("no deberia preferir API para comandos de server")
 	}
 }
 
@@ -121,6 +132,15 @@ func TestAPIGetNoHaceFallbackCuandoServidorEsObligatorio(t *testing.T) {
 	}
 	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "requiere el servidor") {
 		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
+func TestServerBaseURLUsaPuertoPorDefectoDeServe(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	if got := serverBaseURL(); got != "http://127.0.0.1:16543" {
+		t.Fatalf("serverBaseURL() = %q, want %q", got, "http://127.0.0.1:16543")
 	}
 }
 
