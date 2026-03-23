@@ -34,6 +34,7 @@ var (
 
 // Execute es el punto de entrada principal.
 func Execute() {
+<<<<<<< HEAD
 	args := os.Args[1:]
 	if localRPCEnabled(args) && !forceLocalMode(args) && !skipRemoteDelegation(args) {
 		handled, exitCode, err := executeViaLocalServer(args, os.Stdout, os.Stderr)
@@ -51,6 +52,10 @@ func Execute() {
 		}
 	}
 	if err := executeLocalArgs(args, os.Stdout, os.Stderr); err != nil {
+=======
+	defer db.Close()
+	if err := rootCmd.Execute(); err != nil {
+>>>>>>> origin/orq-orquestador-codex2
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -84,6 +89,7 @@ func init() {
 }
 
 func initDB() {
+<<<<<<< HEAD
 	if !commandNeedsDB(getCurrentExecArgs()) {
 		return
 	}
@@ -91,6 +97,9 @@ func initDB() {
 		return
 	}
 	if shouldPreferAPIClient(getCurrentExecArgs()) {
+=======
+	if shouldBypassLocalDB(os.Args[1:]) {
+>>>>>>> origin/orq-orquestador-codex2
 		return
 	}
 	if err := db.Open(); err != nil {

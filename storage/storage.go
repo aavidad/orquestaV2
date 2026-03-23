@@ -7,6 +7,10 @@ import (
 	"strconv"
 	"strings"
 
+<<<<<<< HEAD
+=======
+	_ "github.com/jackc/pgx/v5/stdlib"
+>>>>>>> origin/orq-orquestador-codex2
 	_ "modernc.org/sqlite"
 )
 
@@ -19,7 +23,11 @@ type Config struct {
 }
 
 func ResolveConfig(pathResolver func() string) (Config, error) {
+<<<<<<< HEAD
 	driver := normalizeDriver(envFirst("ORQUESTA_DB_DRIVER", "ORQUESTA_DB_BACKEND"))
+=======
+	driver := normalizeDriver(os.Getenv("ORQUESTA_DB_DRIVER"))
+>>>>>>> origin/orq-orquestador-codex2
 	if driver == "" {
 		driver = "sqlite"
 	}
@@ -29,14 +37,22 @@ func ResolveConfig(pathResolver func() string) (Config, error) {
 		MaxOpenConns:    defaultMaxOpenConns(driver),
 		BootstrapSchema: defaultBootstrapSchema(driver),
 	}
+<<<<<<< HEAD
 	if v := strings.TrimSpace(envFirst("ORQUESTA_DB_MAX_OPEN_CONNS")); v != "" {
+=======
+	if v := strings.TrimSpace(os.Getenv("ORQUESTA_DB_MAX_OPEN_CONNS")); v != "" {
+>>>>>>> origin/orq-orquestador-codex2
 		n, err := strconv.Atoi(v)
 		if err != nil || n <= 0 {
 			return Config{}, fmt.Errorf("ORQUESTA_DB_MAX_OPEN_CONNS invalido: %q", v)
 		}
 		cfg.MaxOpenConns = n
 	}
+<<<<<<< HEAD
 	if v := strings.TrimSpace(envFirst("ORQUESTA_DB_BOOTSTRAP")); v != "" {
+=======
+	if v := strings.TrimSpace(os.Getenv("ORQUESTA_DB_BOOTSTRAP")); v != "" {
+>>>>>>> origin/orq-orquestador-codex2
 		enabled, err := parseBool(v)
 		if err != nil {
 			return Config{}, fmt.Errorf("ORQUESTA_DB_BOOTSTRAP invalido: %q", v)
@@ -44,10 +60,17 @@ func ResolveConfig(pathResolver func() string) (Config, error) {
 		cfg.BootstrapSchema = enabled
 	}
 
+<<<<<<< HEAD
 	dsn := strings.TrimSpace(envFirst("ORQUESTA_DB_DSN"))
 	switch driver {
 	case "sqlite":
 		cfg.Path = strings.TrimSpace(envFirst("ORQUESTA_DB"))
+=======
+	dsn := strings.TrimSpace(os.Getenv("ORQUESTA_DB_DSN"))
+	switch driver {
+	case "sqlite":
+		cfg.Path = strings.TrimSpace(os.Getenv("ORQUESTA_DB"))
+>>>>>>> origin/orq-orquestador-codex2
 		if cfg.Path == "" && pathResolver != nil {
 			cfg.Path = strings.TrimSpace(pathResolver())
 		}
@@ -57,6 +80,13 @@ func ResolveConfig(pathResolver func() string) (Config, error) {
 		if dsn == "" {
 			dsn = SQLiteDSN(cfg.Path)
 		}
+<<<<<<< HEAD
+=======
+	case "mysql", "postgres":
+		if dsn == "" {
+			return Config{}, fmt.Errorf("ORQUESTA_DB_DSN es obligatorio para driver %s", driver)
+		}
+>>>>>>> origin/orq-orquestador-codex2
 	default:
 		if dsn == "" {
 			return Config{}, fmt.Errorf("ORQUESTA_DB_DSN es obligatorio para driver %s", driver)
@@ -68,13 +98,20 @@ func ResolveConfig(pathResolver func() string) (Config, error) {
 
 func Open(cfg Config) (*sql.DB, error) {
 	driver := normalizeDriver(cfg.Driver)
+<<<<<<< HEAD
+=======
+	sqlDriver := sqlDriverName(driver)
+>>>>>>> origin/orq-orquestador-codex2
 	if driver == "" {
 		return nil, fmt.Errorf("driver de almacenamiento obligatorio")
 	}
 	if strings.TrimSpace(cfg.DSN) == "" {
 		return nil, fmt.Errorf("dsn de almacenamiento obligatorio para driver %s", driver)
 	}
+<<<<<<< HEAD
 	sqlDriver := sqlDriverName(driver)
+=======
+>>>>>>> origin/orq-orquestador-codex2
 	if !driverRegistered(sqlDriver) {
 		return nil, fmt.Errorf("driver de almacenamiento %q no está enlazado en el binario", driver)
 	}
@@ -120,7 +157,11 @@ func defaultMaxOpenConns(driver string) int {
 
 func defaultBootstrapSchema(driver string) bool {
 	switch normalizeDriver(driver) {
+<<<<<<< HEAD
 	case "", "sqlite":
+=======
+	case "", "sqlite", "postgres":
+>>>>>>> origin/orq-orquestador-codex2
 		return true
 	default:
 		return false
@@ -155,6 +196,7 @@ func driverRegistered(name string) bool {
 	}
 	return false
 }
+<<<<<<< HEAD
 
 func envFirst(keys ...string) string {
 	for _, key := range keys {
@@ -170,3 +212,5 @@ func lookupEnv(key string) (string, bool) {
 	value = strings.TrimSpace(value)
 	return value, ok && value != ""
 }
+=======
+>>>>>>> origin/orq-orquestador-codex2

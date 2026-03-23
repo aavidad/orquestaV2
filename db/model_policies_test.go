@@ -1,0 +1,193 @@
+package db
+
+import "testing"
+
+func TestGuardarYListarPoliticasModelo(t *testing.T) {
+	withTempDBPools(t, func() {
+		if _, err := GuardarPool(&PoolCapacidad{
+			Slug:                "codex",
+			Proveedor:           "OpenAI",
+			Runtime:             "codex",
+			Plan:                "default",
+			EsDePago:            true,
+			CapacidadTotal:      4,
+			CapacidadReservada:  0,
+			PermiteHijos:        true,
+			PermiteModelosMulti: true,
+			PermiteSobrecoste:   false,
+			PoliticaHandoff:     "preventivo",
+			FuenteTelemetria:    "manual",
+			MetadataJSON:        "{}",
+			Activo:              true,
+		}); err != nil {
+			t.Fatalf("GuardarPool: %v", err)
+		}
+
+		id, err := GuardarPoliticaModelo(&PoliticaModelo{
+			ScopeTipo:       "proyecto",
+			ScopeRef:        "orquestador",
+			PerfilTarea:     "implementacion",
+			PoolSlug:        "codex",
+			ReasoningEffort: "high",
+			Prioridad:       20,
+			Activa:          true,
+		})
+		if err != nil {
+			t.Fatalf("GuardarPoliticaModelo: %v", err)
+		}
+		if id == 0 {
+			t.Fatalf("id inesperado: %d", id)
+		}
+
+		items, err := ListarPoliticasModelo("proyecto", "orquestador", boolPtr(true))
+		if err != nil {
+			t.Fatalf("ListarPoliticasModelo: %v", err)
+		}
+		if len(items) != 1 {
+			t.Fatalf("numero de politicas inesperado: %+v", items)
+		}
+		if items[0].PoolSlug != "codex" || items[0].ReasoningEffort != "high" {
+			t.Fatalf("politica inesperada: %+v", items[0])
+		}
+	})
+}
+
+func TestResolverPoliticaModeloConOverridesPorProyectoYTarea(t *testing.T) {
+	withTempDBPools(t, func() {
+		insertPoolsYModelosTest(t)
+
+		if _, err := GuardarPoliticaModelo(&PoliticaModelo{
+			ScopeTipo:       "perfil",
+			ScopeRef:        "implementacion",
+			PerfilTarea:     "implementacion",
+			PoolSlug:        "codex",
+			ReasoningEffort: "high",
+			Prioridad:       10,
+			Activa:          true,
+		}); err != nil {
+			t.Fatalf("politica perfil: %v", err)
+		}
+		if _, err := GuardarPoliticaModelo(&PoliticaModelo{
+			ScopeTipo:   "proyecto",
+			ScopeRef:    "orquestador",
+			PerfilTarea: "implementacion",
+			ModelSlug:   "gpt-5.4",
+			Prioridad:   20,
+			Activa:      true,
+		}); err != nil {
+			t.Fatalf("politica proyecto: %v", err)
+		}
+		if _, err := GuardarPoliticaModelo(&PoliticaModelo{
+			ScopeTipo:       "tarea",
+			ScopeRef:        "154",
+			PerfilTarea:     "implementacion",
+			ModelSlug:       "gpt-5.4-mini",
+			ReasoningEffort: "medium",
+			Prioridad:       5,
+			Activa:          true,
+		}); err != nil {
+			t.Fatalf("politica tarea: %v", err)
+		}
+
+		tareaID := int64(154)
+		res, err := ResolverPoliticaModelo(ResolverPoliticaInput{
+			TareaID:      &tareaID,
+			ProyectoSlug: "orquestador",
+			PerfilTarea:  "implementacion",
+		})
+		if err != nil {
+			t.Fatalf("ResolverPoliticaModelo: %v", err)
+		}
+		if res.PoolSlug != "codex" {
+			t.Fatalf("pool inesperado: %+v", res)
+		}
+		if res.ModelSlug != "gpt-5.4-mini" {
+			t.Fatalf("modelo inesperado: %+v", res)
+		}
+		if res.ReasoningEffort != "medium" {
+			t.Fatalf("reasoning inesperado: %+v", res)
+		}
+		if len(res.PoliticasAplicadas) != 3 {
+			t.Fatalf("politicas aplicadas inesperadas: %+v", res.PoliticasAplicadas)
+		}
+	})
+}
+
+func TestResolverPoliticaModeloEconomicaPorPerfil(t *testing.T) {
+	withTempDBPools(t, func() {
+		insertPoolsYModelosTest(t)
+
+		if err := SeedPoliticasModeloIniciales(); err != nil {
+			t.Fatalf("SeedPoliticasModeloIniciales: %v", err)
+		}
+
+		res, err := ResolverPoliticaModelo(ResolverPoliticaInput{
+			PerfilTarea: "script",
+		})
+		if err != nil {
+			t.Fatalf("ResolverPoliticaModelo: %v", err)
+		}
+		if res.ModelSlug != "android-shell" {
+			t.Fatalf("modelo economico inesperado: %+v", res)
+		}
+		if res.ReasoningEffort != "medium" {
+			t.Fatalf("reasoning inesperado: %+v", res)
+		}
+	})
+}
+
+func insertPoolsYModelosTest(t *testing.T) {
+	t.Helper()
+	for _, pool := range []PoolCapacidad{
+		{
+			Slug:                "codex",
+			Proveedor:           "OpenAI",
+			Runtime:             "codex",
+			Plan:                "default",
+			EsDePago:            true,
+			CapacidadTotal:      4,
+			CapacidadReservada:  0,
+			PermiteHijos:        true,
+			PermiteModelosMulti: true,
+			PermiteSobrecoste:   false,
+			PoliticaHandoff:     "preventivo",
+			FuenteTelemetria:    "manual",
+			MetadataJSON:        "{}",
+			Activo:              true,
+		},
+		{
+			Slug:                "android",
+			Proveedor:           "Android",
+			Runtime:             "android",
+			Plan:                "default",
+			EsDePago:            false,
+			CapacidadTotal:      1,
+			CapacidadReservada:  0,
+			PermiteHijos:        false,
+			PermiteModelosMulti: false,
+			PermiteSobrecoste:   false,
+			PoliticaHandoff:     "preventivo",
+			FuenteTelemetria:    "manual",
+			MetadataJSON:        "{}",
+			Activo:              true,
+		},
+	} {
+		pool := pool
+		if _, err := GuardarPool(&pool); err != nil {
+			t.Fatalf("GuardarPool %s: %v", pool.Slug, err)
+		}
+	}
+	for _, item := range []struct {
+		poolSlug string
+		model    PoolModelo
+	}{
+		{poolSlug: "codex", model: PoolModelo{ModelSlug: "gpt-5.4", Activo: true, Prioridad: 10, CosteRelativo: 1.5, LimiteConocidoJSON: "{}"}},
+		{poolSlug: "codex", model: PoolModelo{ModelSlug: "gpt-5.4-mini", Activo: true, Prioridad: 20, CosteRelativo: 0.5, LimiteConocidoJSON: "{}"}},
+		{poolSlug: "android", model: PoolModelo{ModelSlug: "android-shell", Activo: true, Prioridad: 30, CosteRelativo: 0.1, LimiteConocidoJSON: "{}"}},
+	} {
+		model := item.model
+		if _, err := GuardarPoolModelo(item.poolSlug, &model); err != nil {
+			t.Fatalf("GuardarPoolModelo %s/%s: %v", item.poolSlug, model.ModelSlug, err)
+		}
+	}
+}

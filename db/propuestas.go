@@ -27,6 +27,7 @@ type Propuesta struct {
 	Estado       EstadoPropuesta
 	PropuestoPor string
 	Distribuidor string
+	ProyectoID   *int64
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	CerradaAt    *time.Time
@@ -79,18 +80,67 @@ func CrearPropuesta(p *Propuesta) (int64, error) {
 		_ = DB.QueryRow(`SELECT COALESCE(MAX(CAST(SUBSTR(codigo,4) AS INTEGER)),29) FROM propuestas WHERE codigo LIKE 'OP-%'`).Scan(&max)
 		p.Codigo = fmt.Sprintf("OP-%03d", max+1)
 	}
+<<<<<<< HEAD
 	res, err := DB.Exec(`
 		INSERT INTO propuestas (codigo, titulo, descripcion, proyecto_id, tipo, propuesto_por, distribuidor)
 		VALUES (?,?,?,?,?,?,?)`,
 		p.Codigo, p.Titulo, p.Descripcion, p.ProyectoID, p.Tipo, p.PropuestoPor, p.Distribuidor,
+=======
+
+	tx, err := DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	id, err := insertReturningIDWith(tx, `
+		INSERT INTO propuestas (codigo, titulo, descripcion, tipo, propuesto_por, distribuidor, proyecto_id)
+		VALUES (?,?,?,?,?,?,?)`,
+		p.Codigo, p.Titulo, p.Descripcion, p.Tipo, p.PropuestoPor, p.Distribuidor, p.ProyectoID,
+>>>>>>> origin/orq-orquestador-codex2
 	)
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
 
+<<<<<<< HEAD
 	if _, err := asegurarVotosPendientesPropuesta(id); err != nil {
 		return id, err
+=======
+	// Crear filas de voto pendiente solo para agentes habilitados (no admin, no retirados)
+	rows, err := tx.Query(`SELECT nombre FROM agentes WHERE rol != 'admin' AND habilitado = 1`)
+	if err != nil {
+		return 0, err
+	}
+	var agentes []string
+	for rows.Next() {
+		var nombre string
+		if err := rows.Scan(&nombre); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		agentes = append(agentes, nombre)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, err
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+
+	for _, nombre := range agentes {
+		if _, err := tx.Exec(
+			insertIgnoreValuesSQL("votos", []string{"propuesta_id", "agente", "posicion"}, []string{"propuesta_id", "agente"}),
+			id, nombre, "pendiente",
+		); err != nil {
+			return 0, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+>>>>>>> origin/orq-orquestador-codex2
 	}
 
 	Audit(p.PropuestoPor, "crear_propuesta", "propuesta", id, p.Codigo+": "+p.Titulo)
@@ -108,16 +158,27 @@ func CrearPropuesta(p *Propuesta) (int64, error) {
 func GetPropuesta(codigoOID string) (*Propuesta, error) {
 	var row *sql.Row
 	row = DB.QueryRow(`
+<<<<<<< HEAD
 		SELECT id, codigo, titulo, descripcion, proyecto_id, tipo, estado, propuesto_por, distribuidor,
 		       created_at, updated_at, cerrada_at
+=======
+		SELECT id, codigo, titulo, descripcion, tipo, estado, propuesto_por, distribuidor,
+		       proyecto_id, created_at, updated_at, cerrada_at
+>>>>>>> origin/orq-orquestador-codex2
 		FROM propuestas WHERE codigo = ? OR CAST(id AS TEXT) = ?`, codigoOID, codigoOID)
 	return escanearPropuesta(row)
 }
 
 // ListarPropuestas devuelve propuestas, opcionalmente filtradas por estado.
+<<<<<<< HEAD
 func ListarPropuestas(estado *EstadoPropuesta, proyectoID *int64) ([]*Propuesta, error) {
 	q := `SELECT id, codigo, titulo, descripcion, proyecto_id, tipo, estado, propuesto_por, distribuidor,
 		         created_at, updated_at, cerrada_at
+=======
+func ListarPropuestas(estado *EstadoPropuesta) ([]*Propuesta, error) {
+	q := `SELECT id, codigo, titulo, descripcion, tipo, estado, propuesto_por, distribuidor,
+		         proyecto_id, created_at, updated_at, cerrada_at
+>>>>>>> origin/orq-orquestador-codex2
 		  FROM propuestas`
 	args := []any{}
 	var filtros []string
@@ -322,6 +383,7 @@ func configIntOrDefault(key string, defaultValue int) int {
 
 // PropuestasPendientesVoto devuelve las propuestas donde el agente tiene voto pendiente.
 func PropuestasPendientesVoto(agente string) ([]*Propuesta, error) {
+<<<<<<< HEAD
 	return PropuestasPendientesVotoProyecto(agente, nil)
 }
 
@@ -329,6 +391,11 @@ func PropuestasPendientesVotoProyecto(agente string, proyectoID *int64) ([]*Prop
 	q := `
 		SELECT p.id, p.codigo, p.titulo, p.descripcion, p.proyecto_id, p.tipo, p.estado, p.propuesto_por,
 		       p.distribuidor, p.created_at, p.updated_at, p.cerrada_at
+=======
+	rows, err := DB.Query(`
+		SELECT p.id, p.codigo, p.titulo, p.descripcion, p.tipo, p.estado, p.propuesto_por,
+		       p.distribuidor, p.proyecto_id, p.created_at, p.updated_at, p.cerrada_at
+>>>>>>> origin/orq-orquestador-codex2
 		FROM propuestas p
 		JOIN votos v ON v.propuesta_id = p.id
 		WHERE v.agente = ? AND v.posicion = 'pendiente' AND p.estado = 'abierta'
@@ -356,6 +423,21 @@ func PropuestasPendientesVotoProyecto(agente string, proyectoID *int64) ([]*Prop
 	return list, rows.Err()
 }
 
+// BackfillVotosPendientes crea filas de voto pendiente para propuestas abiertas
+// que no tengan aún voto registrado para agentes habilitados no admin.
+func BackfillVotosPendientes() error {
+	_, err := DB.Exec(`
+		` + insertIgnoreSelectSQL(
+		"votos",
+		[]string{"propuesta_id", "agente", "posicion", "comentario"},
+		[]string{"propuesta_id", "agente"},
+		`SELECT p.id, a.nombre, 'pendiente', ''
+		FROM propuestas p
+		JOIN agentes a ON a.rol != 'admin' AND a.habilitado = 1
+		WHERE p.estado = 'abierta'`))
+	return err
+}
+
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 func escanearPropuesta(s scanner) (*Propuesta, error) {
@@ -363,12 +445,20 @@ func escanearPropuesta(s scanner) (*Propuesta, error) {
 	var proyectoID sql.NullInt64
 	var cerradaAt sql.NullTime
 	err := s.Scan(
+<<<<<<< HEAD
 		&p.ID, &p.Codigo, &p.Titulo, &p.Descripcion, &proyectoID, &p.Tipo, &p.Estado,
 		&p.PropuestoPor, &p.Distribuidor,
+=======
+		&p.ID, &p.Codigo, &p.Titulo, &p.Descripcion, &p.Tipo, &p.Estado,
+		&p.PropuestoPor, &p.Distribuidor, &proyectoID,
+>>>>>>> origin/orq-orquestador-codex2
 		&p.CreatedAt, &p.UpdatedAt, &cerradaAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if proyectoID.Valid {
+		p.ProyectoID = &proyectoID.Int64
 	}
 	if cerradaAt.Valid {
 		p.CerradaAt = &cerradaAt.Time

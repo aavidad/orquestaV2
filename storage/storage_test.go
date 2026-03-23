@@ -1,10 +1,20 @@
 package storage
 
+<<<<<<< HEAD
 import "testing"
 
 func TestResolveConfigSQLitePorDefectoUsaPathDelCallback(t *testing.T) {
 	t.Setenv("ORQUESTA_DB_DRIVER", "")
 	t.Setenv("ORQUESTA_DB_BACKEND", "")
+=======
+import (
+	"strings"
+	"testing"
+)
+
+func TestResolveConfigSQLitePorDefectoUsaPathDelCallback(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "")
+>>>>>>> origin/orq-orquestador-codex2
 	t.Setenv("ORQUESTA_DB_DSN", "")
 	t.Setenv("ORQUESTA_DB", "")
 	t.Setenv("ORQUESTA_DB_MAX_OPEN_CONNS", "")
@@ -31,6 +41,7 @@ func TestResolveConfigSQLitePorDefectoUsaPathDelCallback(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 func TestResolveConfigAceptaBackendLegacy(t *testing.T) {
 	t.Setenv("ORQUESTA_DB_DRIVER", "")
 	t.Setenv("ORQUESTA_DB_BACKEND", "sqlite3")
@@ -46,6 +57,8 @@ func TestResolveConfigAceptaBackendLegacy(t *testing.T) {
 	}
 }
 
+=======
+>>>>>>> origin/orq-orquestador-codex2
 func TestResolveConfigUsaDriverYDSNDesdeEntorno(t *testing.T) {
 	t.Setenv("ORQUESTA_DB_DRIVER", "postgres")
 	t.Setenv("ORQUESTA_DB_DSN", "postgres://user:pass@localhost/orquesta?sslmode=disable")
@@ -73,6 +86,7 @@ func TestResolveConfigUsaDriverYDSNDesdeEntorno(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 func TestResolveConfigNormalizaDrivers(t *testing.T) {
 	cases := []struct {
 		envValue string
@@ -100,6 +114,64 @@ func TestResolveConfigNormalizaDrivers(t *testing.T) {
 }
 
 func TestResolveConfigFallaSinDSNParaDriversExternos(t *testing.T) {
+=======
+func TestResolveConfigPostgresActivaBootstrapPorDefecto(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "postgres")
+	t.Setenv("ORQUESTA_DB_DSN", "postgres://user:pass@localhost/orquesta?sslmode=disable")
+	t.Setenv("ORQUESTA_DB_BOOTSTRAP", "")
+	t.Setenv("ORQUESTA_DB_MAX_OPEN_CONNS", "")
+
+	cfg, err := ResolveConfig(func() string { return "/tmp/ignorado.db" })
+	if err != nil {
+		t.Fatalf("ResolveConfig: %v", err)
+	}
+	if cfg.Driver != "postgres" {
+		t.Fatalf("driver inesperado: %s", cfg.Driver)
+	}
+	if !cfg.BootstrapSchema {
+		t.Fatalf("postgres deberia arrancar con bootstrap activo por defecto")
+	}
+}
+
+func TestResolveConfigNormalizaPostgreSQLAPostgres(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "postgresql")
+	t.Setenv("ORQUESTA_DB_DSN", "postgres://user:pass@localhost/orquesta?sslmode=disable")
+	t.Setenv("ORQUESTA_DB_BOOTSTRAP", "")
+
+	cfg, err := ResolveConfig(func() string { return "/tmp/ignorado.db" })
+	if err != nil {
+		t.Fatalf("ResolveConfig: %v", err)
+	}
+	if cfg.Driver != "postgres" {
+		t.Fatalf("driver inesperado: %s", cfg.Driver)
+	}
+	if !cfg.BootstrapSchema {
+		t.Fatalf("postgres deberia arrancar con bootstrap activo tras normalizar postgresql")
+	}
+}
+
+func TestResolveConfigNormalizaSQLite3ASQLite(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "sqlite3")
+	t.Setenv("ORQUESTA_DB_DSN", "")
+	t.Setenv("ORQUESTA_DB", "/tmp/orquesta.db")
+
+	cfg, err := ResolveConfig(func() string { return "/tmp/ignorado.db" })
+	if err != nil {
+		t.Fatalf("ResolveConfig: %v", err)
+	}
+	if cfg.Driver != "sqlite" {
+		t.Fatalf("driver inesperado: %s", cfg.Driver)
+	}
+	if cfg.MaxOpenConns != 1 {
+		t.Fatalf("MaxOpenConns inesperado: %d", cfg.MaxOpenConns)
+	}
+	if !cfg.BootstrapSchema {
+		t.Fatalf("sqlite deberia arrancar con bootstrap activo")
+	}
+}
+
+func TestResolveConfigFallaSinDSNParaMySQLYPostgres(t *testing.T) {
+>>>>>>> origin/orq-orquestador-codex2
 	for _, driver := range []string{"mysql", "postgres"} {
 		t.Run(driver, func(t *testing.T) {
 			t.Setenv("ORQUESTA_DB_DRIVER", driver)
@@ -121,6 +193,7 @@ func TestSQLiteDSNAniadeParametrosSinRomperQueryExistente(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 func TestOpenFallaConDriverNoEnlazado(t *testing.T) {
 	_, err := Open(Config{
 		Driver: "mysql",
@@ -128,5 +201,49 @@ func TestOpenFallaConDriverNoEnlazado(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatalf("esperaba error para driver no enlazado")
+=======
+func TestOpenFallaConDriverExternoNoEnlazado(t *testing.T) {
+	for _, driver := range []string{"mysql"} {
+		t.Run(driver, func(t *testing.T) {
+			_, err := Open(Config{
+				Driver: driver,
+				DSN:    "dsn://usuario:clave@localhost/orquesta",
+			})
+			if err == nil {
+				t.Fatalf("esperaba error para driver %s no enlazado", driver)
+			}
+			if !strings.Contains(err.Error(), "no está enlazado en el binario") {
+				t.Fatalf("error no explicito para %s: %v", driver, err)
+			}
+		})
+	}
+}
+
+func TestSQLDriverName(t *testing.T) {
+	t.Parallel()
+
+	if got := sqlDriverName("postgres"); got != "pgx" {
+		t.Fatalf("sqlDriverName(postgres)=%q", got)
+	}
+	if got := sqlDriverName("sqlite"); got != "sqlite" {
+		t.Fatalf("sqlDriverName(sqlite)=%q", got)
+	}
+}
+
+func TestOpenPostgresUsaDriverEnlazado(t *testing.T) {
+	t.Parallel()
+
+	db, err := Open(Config{
+		Driver: "postgres",
+		DSN:    "postgres://user:pass@localhost/orquesta?sslmode=disable",
+	})
+	if err != nil {
+		t.Fatalf("Open postgres: %v", err)
+	}
+	defer db.Close()
+
+	if !driverRegistered(sqlDriverName("postgres")) {
+		t.Fatalf("el driver postgres deberia estar enlazado en el binario")
+>>>>>>> origin/orq-orquestador-codex2
 	}
 }

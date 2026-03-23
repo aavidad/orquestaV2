@@ -14,12 +14,15 @@ import (
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
+	"orquesta/proposalapp"
 )
 
 var propuestaCmd = &cobra.Command{
 	Use:   "propuesta",
 	Short: "Gestión de propuestas (OPs)",
 }
+
+var proposalService = proposalapp.NewService(proposalapp.Repository{})
 
 var propuestaListarCmd = &cobra.Command{
 	Use:   "listar",
@@ -32,11 +35,28 @@ var propuestaListarCmd = &cobra.Command{
 		if estadoStr != "" {
 			params.Set("estado", estadoStr)
 		}
+<<<<<<< HEAD
 		if proyectoRef != "" {
 			params.Set("proyecto", proyectoRef)
 		}
 		var resp apiPropuestasResponse
 		if ok, err := apiGetQuery("/api/propuestas", params, &resp); err != nil {
+=======
+		var (
+			propuestas []*db.Propuesta
+			err        error
+		)
+		if serverURL := activeServerURL(); serverURL != "" {
+			query := url.Values{}
+			if estadoStr != "" {
+				query.Set("estado", estadoStr)
+			}
+			propuestas, err = fetchServerProposals(serverURL, query)
+		} else {
+			propuestas, err = proposalService.List(f)
+		}
+		if err != nil {
+>>>>>>> origin/orq-orquestador-codex2
 			return err
 		} else if ok {
 			propuestas = resp.Propuestas
@@ -81,6 +101,7 @@ var propuestaVerCmd = &cobra.Command{
 	Short: "Muestra el detalle y votos de una propuesta",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+<<<<<<< HEAD
 		var p *db.Propuesta
 		var resp apiPropuestaDetalleResponse
 		if ok, err := apiGet("/api/propuestas/"+args[0], &resp); err != nil {
@@ -97,7 +118,21 @@ var propuestaVerCmd = &cobra.Command{
 				return fmt.Errorf("propuesta '%s' no encontrada", args[0])
 			}
 			p.Votos, _ = db.ResumenVotos(p.ID)
+=======
+		var (
+			detail *proposalapp.ProposalDetail
+			err    error
+		)
+		if serverURL := activeServerURL(); serverURL != "" {
+			detail, err = fetchServerProposalDetail(serverURL, args[0])
+		} else {
+			detail, err = proposalService.GetDetail(args[0])
 		}
+		if err != nil {
+			return fmt.Errorf("propuesta '%s' no encontrada", args[0])
+>>>>>>> origin/orq-orquestador-codex2
+		}
+		p := detail.Proposal
 
 		fmt.Printf("╔══════════════════════════════════════════════╗\n")
 		fmt.Printf("║  %s — %s\n", p.Codigo, p.Titulo)
@@ -113,7 +148,11 @@ var propuestaVerCmd = &cobra.Command{
 			fmt.Printf("\nDescripción:\n  %s\n", strings.ReplaceAll(p.Descripcion, "\n", "\n  "))
 		}
 
+<<<<<<< HEAD
 		votos := p.Votos
+=======
+		votos := detail.Votes
+>>>>>>> origin/orq-orquestador-codex2
 		if len(votos) > 0 {
 			fmt.Printf("\nVotos:\n")
 			for _, v := range votos {
@@ -150,6 +189,7 @@ var propuestaNuevaCmd = &cobra.Command{
 			return fmt.Errorf("debe indicar el título con --titulo o como argumento posicional")
 		}
 
+<<<<<<< HEAD
 		var resp struct {
 			OK        bool          `json:"ok"`
 			ID        int64         `json:"id"`
@@ -167,20 +207,40 @@ var propuestaNuevaCmd = &cobra.Command{
 			return err
 		} else if ok {
 			fmt.Printf("✓ Propuesta %s creada (id: %d)\n", resp.Propuesta.Codigo, resp.ID)
+=======
+		if serverURL := activeServerURL(); serverURL != "" {
+			id, codigo, err := submitServerCreateProposal(serverURL, map[string]any{
+				"codigo":        codigo,
+				"titulo":        titulo,
+				"descripcion":   desc,
+				"tipo":          tipo,
+				"propuesto_por": por,
+				"distribuidor":  "claude",
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Printf("✓ Propuesta %s creada (id: %d)\n", codigo, id)
+>>>>>>> origin/orq-orquestador-codex2
 			fmt.Println("  Los agentes deben votar con: orquesta votar <codigo> <posicion>")
 			return nil
 		}
 
+<<<<<<< HEAD
 		if err := ensureLocalDB(); err != nil {
 			return err
 		}
 		p := &db.Propuesta{
+=======
+		id, p, err := proposalService.Create(proposalapp.CreateProposalInput{
+>>>>>>> origin/orq-orquestador-codex2
 			Codigo:       codigo,
 			Titulo:       titulo,
 			Descripcion:  desc,
 			Tipo:         tipo,
 			PropuestoPor: por,
 			Distribuidor: "claude",
+<<<<<<< HEAD
 		}
 		if proyectoRef != "" {
 			proyecto, err := db.GetProyecto(proyectoRef)
@@ -190,6 +250,9 @@ var propuestaNuevaCmd = &cobra.Command{
 			p.ProyectoID = &proyecto.ID
 		}
 		id, err := db.CrearPropuesta(p)
+=======
+		})
+>>>>>>> origin/orq-orquestador-codex2
 		if err != nil {
 			return err
 		}
@@ -208,6 +271,7 @@ var propuestaCerrarCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+<<<<<<< HEAD
 		if ok, err := apiPost("/api/propuestas/"+args[0]+"/accion", apiPropuestaAccionRequest{
 			Accion:       "cerrar",
 			Agente:       agente,
@@ -222,6 +286,16 @@ var propuestaCerrarCmd = &cobra.Command{
 			return err
 		}
 		if err := db.CerrarPropuesta(args[0], args[1], agente); err != nil {
+=======
+		if serverURL := activeServerURL(); serverURL != "" {
+			if err := submitServerCloseProposal(serverURL, args[0], args[1], agente); err != nil {
+				return err
+			}
+			fmt.Printf("✓ Propuesta %s cerrada como '%s'\n", args[0], args[1])
+			return nil
+		}
+		if err := proposalService.Close(args[0], args[1], agente); err != nil {
+>>>>>>> origin/orq-orquestador-codex2
 			return err
 		}
 		fmt.Printf("✓ Propuesta %s cerrada como '%s'\n", args[0], args[1])

@@ -116,15 +116,18 @@ func IniciarSesionContexto(in SesionInicio) (*Sesion, error) {
 	}
 
 	// Crear nueva sesión
+<<<<<<< HEAD
 	res, err := tx.Exec(`
 		INSERT INTO sesiones (agente, conector_id, proyecto_id, cwd, herramienta, external_session_id, resume_payload_json, resumen_continuidad, branch, heartbeat_at, host, pid)
 		VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,?,?)`,
 		agente, in.ConectorID, in.ProyectoID, in.CWD, in.Herramienta, in.ExternalSessionID, in.ResumePayloadJSON, in.ResumenContinuidad, in.Branch, in.Host, in.PID,
 	)
+=======
+	id, err := insertReturningIDWith(tx, `INSERT INTO sesiones (agente) VALUES (?)`, agente)
+>>>>>>> origin/orq-orquestador-codex2
 	if err != nil {
 		return nil, err
 	}
-	id, _ := res.LastInsertId()
 
 	if err = tx.Commit(); err != nil {
 		return nil, err
@@ -505,7 +508,15 @@ func GetSesionActiva(agente string, proyectoID *int64) (*Sesion, error) {
 // RegistrarAgente añade un nuevo agente al sistema.
 func RegistrarAgente(nombre, rol string) error {
 	_, err := DB.Exec(
-		`INSERT INTO agentes (nombre, rol) VALUES (?,?) ON CONFLICT(nombre) DO UPDATE SET rol=excluded.rol, habilitado=1`,
+		upsertValuesSQL(
+			"agentes",
+			[]string{"nombre", "rol"},
+			[]string{"nombre"},
+			[]upsertAssignment{
+				{Column: "rol"},
+				{Column: "habilitado", Expr: "1"},
+			},
+		),
 		nombre, rol,
 	)
 	return err

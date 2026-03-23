@@ -15,6 +15,13 @@ func insertIgnoreValuesSQL(table string, columns, conflictColumns []string) stri
 	return buildInsertIgnoreValuesSQL(DriverName(), table, columns, conflictColumns)
 }
 
+<<<<<<< HEAD
+=======
+func insertIgnoreSelectSQL(table string, columns, conflictColumns []string, selectSQL string) string {
+	return buildInsertIgnoreSelectSQL(DriverName(), table, columns, conflictColumns, selectSQL)
+}
+
+>>>>>>> origin/orq-orquestador-codex2
 func buildInsertIgnoreValuesSQL(driver, table string, columns, conflictColumns []string) string {
 	values := make([]string, len(columns))
 	for i := range columns {
@@ -23,6 +30,13 @@ func buildInsertIgnoreValuesSQL(driver, table string, columns, conflictColumns [
 	return buildInsertIgnoreSQL(driver, table, columns, conflictColumns, "VALUES ("+strings.Join(values, ",")+")")
 }
 
+<<<<<<< HEAD
+=======
+func buildInsertIgnoreSelectSQL(driver, table string, columns, conflictColumns []string, selectSQL string) string {
+	return buildInsertIgnoreSQL(driver, table, columns, conflictColumns, strings.TrimSpace(selectSQL))
+}
+
+>>>>>>> origin/orq-orquestador-codex2
 func buildInsertIgnoreSQL(driver, table string, columns, conflictColumns []string, tail string) string {
 	head := "INSERT INTO"
 	if strings.EqualFold(strings.TrimSpace(driver), "mysql") {
@@ -85,6 +99,14 @@ type queryRower interface {
 	QueryRow(query string, args ...any) *sql.Row
 }
 
+<<<<<<< HEAD
+=======
+type execQueryRower interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+>>>>>>> origin/orq-orquestador-codex2
 func insertReturningID(query string, args ...any) (int64, error) {
 	return insertReturningIDWith(DB, query, args...)
 }
@@ -100,3 +122,29 @@ func insertReturningIDWith(q queryRower, query string, args ...any) (int64, erro
 	}
 	return id, nil
 }
+<<<<<<< HEAD
+=======
+
+func resolveID(query string, args ...any) (int64, error) {
+	return resolveIDWith(DB, query, args...)
+}
+
+func resolveIDWith(q queryRower, query string, args ...any) (int64, error) {
+	var id int64
+	if err := q.QueryRow(strings.TrimSpace(query), args...).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func execAndResolveID(execQuery string, execArgs []any, selectQuery string, selectArgs ...any) (int64, error) {
+	return execAndResolveIDWith(DB, execQuery, execArgs, selectQuery, selectArgs...)
+}
+
+func execAndResolveIDWith(q execQueryRower, execQuery string, execArgs []any, selectQuery string, selectArgs ...any) (int64, error) {
+	if _, err := q.Exec(execQuery, execArgs...); err != nil {
+		return 0, err
+	}
+	return resolveIDWith(q, selectQuery, selectArgs...)
+}
+>>>>>>> origin/orq-orquestador-codex2

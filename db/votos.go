@@ -26,6 +26,7 @@ type Voto struct {
 // Votar registra o actualiza el voto de un agente en una propuesta.
 // Devuelve (consensoAlcanzado bool, error).
 func Votar(propuestaID int64, agente string, posicion PosicionVoto, comentario string) (bool, error) {
+<<<<<<< HEAD
 	stmt := upsertValuesSQL(
 		"votos",
 		[]string{"propuesta_id", "agente", "posicion", "comentario"},
@@ -36,6 +37,18 @@ func Votar(propuestaID int64, agente string, posicion PosicionVoto, comentario s
 		},
 	)
 	_, err := DB.Exec(stmt,
+=======
+	_, err := DB.Exec(
+		upsertValuesSQL(
+			"votos",
+			[]string{"propuesta_id", "agente", "posicion", "comentario"},
+			[]string{"propuesta_id", "agente"},
+			[]upsertAssignment{
+				{Column: "posicion"},
+				{Column: "comentario"},
+			},
+		),
+>>>>>>> origin/orq-orquestador-codex2
 		propuestaID, agente, posicion, comentario,
 	)
 	if err != nil {

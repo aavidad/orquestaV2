@@ -8,7 +8,13 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package db
 
 import (
+<<<<<<< HEAD
 	"fmt"
+=======
+	"encoding/json"
+	"fmt"
+	"strings"
+>>>>>>> origin/orq-orquestador-codex2
 	"time"
 )
 
@@ -67,6 +73,71 @@ func GetReglasAgente(tipoAgente string) ([]*Regla, error) {
 	return list, rows.Err()
 }
 
+func ListarReglas(tipoAgente string, activa *bool) ([]*Regla, error) {
+	q := `SELECT id, tipo_agente, categoria, titulo, descripcion, activa, created_at
+		FROM reglas WHERE 1=1`
+	args := []any{}
+	if tipoAgente = strings.TrimSpace(tipoAgente); tipoAgente != "" {
+		q += ` AND tipo_agente = ?`
+		args = append(args, tipoAgente)
+	}
+	if activa != nil {
+		q += ` AND activa = ?`
+		args = append(args, *activa)
+	}
+	q += ` ORDER BY tipo_agente, categoria, id`
+	rows, err := DB.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []*Regla
+	for rows.Next() {
+		r := &Regla{}
+		if err := rows.Scan(&r.ID, &r.TipoAgente, &r.Categoria, &r.Titulo,
+			&r.Descripcion, &r.Activa, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, r)
+	}
+	return list, rows.Err()
+}
+
+func GuardarRegla(r *Regla) (int64, error) {
+	if r == nil {
+		return 0, fmt.Errorf("regla obligatoria")
+	}
+	r.TipoAgente = strings.TrimSpace(r.TipoAgente)
+	r.Categoria = strings.TrimSpace(r.Categoria)
+	r.Titulo = strings.TrimSpace(r.Titulo)
+	r.Descripcion = strings.TrimSpace(r.Descripcion)
+	if r.TipoAgente == "" || r.Categoria == "" || r.Titulo == "" || r.Descripcion == "" {
+		return 0, fmt.Errorf("tipo_agente, categoria, titulo y descripcion son obligatorios")
+	}
+	if !tipoAgenteValido(r.TipoAgente) {
+		return 0, fmt.Errorf("tipo_agente invalido: %s", r.TipoAgente)
+	}
+	id, err := execAndResolveID(
+		upsertValuesSQL(
+			"reglas",
+			[]string{"tipo_agente", "categoria", "titulo", "descripcion", "activa"},
+			[]string{"tipo_agente", "titulo"},
+			[]upsertAssignment{
+				{Column: "categoria"},
+				{Column: "descripcion"},
+				{Column: "activa"},
+			},
+		),
+		[]any{r.TipoAgente, r.Categoria, r.Titulo, r.Descripcion, r.Activa},
+		`SELECT id FROM reglas WHERE tipo_agente = ? AND titulo = ?`,
+		r.TipoAgente, r.Titulo,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 // GetSkillsAgente devuelve los skills activos para el rol de un agente.
 func GetSkillsAgente(tipoAgente string) ([]*Skill, error) {
 	rows, err := DB.Query(
@@ -87,6 +158,71 @@ func GetSkillsAgente(tipoAgente string) ([]*Skill, error) {
 		list = append(list, s)
 	}
 	return list, rows.Err()
+}
+
+func ListarSkills(tipoAgente string, activa *bool) ([]*Skill, error) {
+	q := `SELECT id, tipo_agente, nombre, descripcion, cuando_usar, activa, created_at
+		FROM skills WHERE 1=1`
+	args := []any{}
+	if tipoAgente = strings.TrimSpace(tipoAgente); tipoAgente != "" {
+		q += ` AND tipo_agente = ?`
+		args = append(args, tipoAgente)
+	}
+	if activa != nil {
+		q += ` AND activa = ?`
+		args = append(args, *activa)
+	}
+	q += ` ORDER BY tipo_agente, nombre`
+	rows, err := DB.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []*Skill
+	for rows.Next() {
+		s := &Skill{}
+		if err := rows.Scan(&s.ID, &s.TipoAgente, &s.Nombre, &s.Descripcion,
+			&s.CuandoUsar, &s.Activa, &s.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, s)
+	}
+	return list, rows.Err()
+}
+
+func GuardarSkill(s *Skill) (int64, error) {
+	if s == nil {
+		return 0, fmt.Errorf("skill obligatoria")
+	}
+	s.TipoAgente = strings.TrimSpace(s.TipoAgente)
+	s.Nombre = strings.TrimSpace(s.Nombre)
+	s.Descripcion = strings.TrimSpace(s.Descripcion)
+	s.CuandoUsar = strings.TrimSpace(s.CuandoUsar)
+	if s.TipoAgente == "" || s.Nombre == "" || s.Descripcion == "" {
+		return 0, fmt.Errorf("tipo_agente, nombre y descripcion son obligatorios")
+	}
+	if !tipoAgenteValido(s.TipoAgente) {
+		return 0, fmt.Errorf("tipo_agente invalido: %s", s.TipoAgente)
+	}
+	id, err := execAndResolveID(
+		upsertValuesSQL(
+			"skills",
+			[]string{"tipo_agente", "nombre", "descripcion", "cuando_usar", "activa"},
+			[]string{"tipo_agente", "nombre"},
+			[]upsertAssignment{
+				{Column: "descripcion"},
+				{Column: "cuando_usar"},
+				{Column: "activa"},
+			},
+		),
+		[]any{s.TipoAgente, s.Nombre, s.Descripcion, s.CuandoUsar, s.Activa},
+		`SELECT id FROM skills WHERE tipo_agente = ? AND nombre = ?`,
+		s.TipoAgente, s.Nombre,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 // GetWorkflowsAgente devuelve los workflows activos para el rol de un agente.
@@ -111,6 +247,76 @@ func GetWorkflowsAgente(tipoAgente string) ([]*Workflow, error) {
 	return list, rows.Err()
 }
 
+func ListarWorkflows(tipoAgente string, activo *bool) ([]*Workflow, error) {
+	q := `SELECT id, tipo_agente, nombre, descripcion, pasos, activo, created_at
+		FROM workflows WHERE 1=1`
+	args := []any{}
+	if tipoAgente = strings.TrimSpace(tipoAgente); tipoAgente != "" {
+		q += ` AND tipo_agente = ?`
+		args = append(args, tipoAgente)
+	}
+	if activo != nil {
+		q += ` AND activo = ?`
+		args = append(args, *activo)
+	}
+	q += ` ORDER BY tipo_agente, nombre`
+	rows, err := DB.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []*Workflow
+	for rows.Next() {
+		w := &Workflow{}
+		if err := rows.Scan(&w.ID, &w.TipoAgente, &w.Nombre, &w.Descripcion,
+			&w.Pasos, &w.Activo, &w.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, w)
+	}
+	return list, rows.Err()
+}
+
+func GuardarWorkflow(w *Workflow) (int64, error) {
+	if w == nil {
+		return 0, fmt.Errorf("workflow obligatorio")
+	}
+	w.TipoAgente = strings.TrimSpace(w.TipoAgente)
+	w.Nombre = strings.TrimSpace(w.Nombre)
+	w.Descripcion = strings.TrimSpace(w.Descripcion)
+	w.Pasos = strings.TrimSpace(w.Pasos)
+	if w.TipoAgente == "" || w.Nombre == "" || w.Descripcion == "" || w.Pasos == "" {
+		return 0, fmt.Errorf("tipo_agente, nombre, descripcion y pasos son obligatorios")
+	}
+	if !tipoAgenteValido(w.TipoAgente) {
+		return 0, fmt.Errorf("tipo_agente invalido: %s", w.TipoAgente)
+	}
+	var pasos []string
+	if err := json.Unmarshal([]byte(w.Pasos), &pasos); err != nil || len(pasos) == 0 {
+		return 0, fmt.Errorf("pasos debe ser un JSON array no vacio")
+	}
+	id, err := execAndResolveID(
+		upsertValuesSQL(
+			"workflows",
+			[]string{"tipo_agente", "nombre", "descripcion", "pasos", "activo"},
+			[]string{"nombre"},
+			[]upsertAssignment{
+				{Column: "tipo_agente"},
+				{Column: "descripcion"},
+				{Column: "pasos"},
+				{Column: "activo"},
+			},
+		),
+		[]any{w.TipoAgente, w.Nombre, w.Descripcion, w.Pasos, w.Activo},
+		`SELECT id FROM workflows WHERE nombre = ?`,
+		w.Nombre,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 // GetWorkflow devuelve un workflow concreto por nombre y tipo de agente.
 func GetWorkflow(tipoAgente, nombre string) (*Workflow, error) {
 	w := &Workflow{}
@@ -123,6 +329,7 @@ func GetWorkflow(tipoAgente, nombre string) (*Workflow, error) {
 	return w, err
 }
 
+<<<<<<< HEAD
 // UpsertRegla crea o actualiza una regla por título y tipo de agente.
 func UpsertRegla(r *Regla) (int64, error) {
 	res, err := DB.Exec(`
@@ -176,4 +383,39 @@ func UpsertWorkflow(w *Workflow) (int64, error) {
 	id, _ := res.LastInsertId()
 	Audit("telegram_admin", "upsert_workflow", "workflow", id, fmt.Sprintf("%s: %s", w.TipoAgente, w.Nombre))
 	return id, nil
+=======
+type GovernanceRepository struct{}
+
+func (GovernanceRepository) ListRules(tipoAgente string, activa *bool) ([]*Regla, error) {
+	return ListarReglas(tipoAgente, activa)
+}
+
+func (GovernanceRepository) SaveRule(r *Regla) (int64, error) {
+	return GuardarRegla(r)
+}
+
+func (GovernanceRepository) ListSkills(tipoAgente string, activa *bool) ([]*Skill, error) {
+	return ListarSkills(tipoAgente, activa)
+}
+
+func (GovernanceRepository) SaveSkill(s *Skill) (int64, error) {
+	return GuardarSkill(s)
+}
+
+func (GovernanceRepository) ListWorkflows(tipoAgente string, activo *bool) ([]*Workflow, error) {
+	return ListarWorkflows(tipoAgente, activo)
+}
+
+func (GovernanceRepository) SaveWorkflow(w *Workflow) (int64, error) {
+	return GuardarWorkflow(w)
+}
+
+func tipoAgenteValido(tipo string) bool {
+	switch tipo {
+	case "programador", "documentador", "admin":
+		return true
+	default:
+		return false
+	}
+>>>>>>> origin/orq-orquestador-codex2
 }

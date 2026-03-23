@@ -2,6 +2,11 @@ orquesta
 orquesta.db
 orquesta.db-wal
 orquesta.db-shm
+<<<<<<< HEAD
 .orquesta-worktrees/
 backups/
+=======
+certs/
+.ssl-key.log
+>>>>>>> origin/orq-orquestador-codex2
 *.bk

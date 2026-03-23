@@ -15,12 +15,15 @@ import (
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
+	"orquesta/taskapp"
 )
 
 var tareaCmd = &cobra.Command{
 	Use:   "tarea",
 	Short: "Gestión de tareas",
 }
+
+var taskService = taskapp.NewService(taskapp.Repository{})
 
 var tareaListarCmd = &cobra.Command{
 	Use:   "listar",
@@ -37,6 +40,7 @@ var tareaListarCmd = &cobra.Command{
 			return fmt.Errorf("usa solo uno de --json o --tsv")
 		}
 
+<<<<<<< HEAD
 		var tareas []*db.Tarea
 		projectSlugs := map[int64]string{}
 		params := url.Values{}
@@ -57,6 +61,49 @@ var tareaListarCmd = &cobra.Command{
 		}
 		var tareasResp apiTareasResponse
 		if ok, err := apiGetQuery("/api/tareas", params, &tareasResp); err != nil {
+=======
+		var (
+			tareas []*db.Tarea
+			err    error
+		)
+		if serverURL := activeServerURL(); serverURL != "" {
+			query := url.Values{}
+			if estadoStr != "" {
+				query.Set("estado", estadoStr)
+			}
+			if agente != "" {
+				query.Set("agente", agente)
+			}
+			if modulo != "" {
+				query.Set("modulo", modulo)
+			}
+			if propuestaCodigo != "" {
+				query.Set("propuesta", propuestaCodigo)
+			}
+			tareas, err = fetchServerTasks(serverURL, query)
+		} else {
+			filtro := db.FiltroTareas{}
+			if estadoStr != "" {
+				e := db.EstadoTarea(estadoStr)
+				filtro.Estado = &e
+			}
+			if agente != "" {
+				filtro.Agente = &agente
+			}
+			if modulo != "" {
+				filtro.Modulo = &modulo
+			}
+			if propuestaCodigo != "" {
+				propuestaID, err := taskService.ResolveProposalID(propuestaCodigo)
+				if err != nil {
+					return fmt.Errorf("propuesta '%s' no encontrada", propuestaCodigo)
+				}
+				filtro.PropuestaID = propuestaID
+			}
+			tareas, err = taskService.List(filtro)
+		}
+		if err != nil {
+>>>>>>> origin/orq-orquestador-codex2
 			return err
 		} else if ok {
 			tareas = tareasResp.Tareas
@@ -160,9 +207,18 @@ var tareaVerCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		var t *db.Tarea
+<<<<<<< HEAD
 		projectSlugs := map[int64]string{}
 		var tareaResp apiTareaResponse
 		if ok, err := apiGet("/api/tareas/"+args[0], &tareaResp); err != nil {
+=======
+		if serverURL := activeServerURL(); serverURL != "" {
+			t, err = fetchServerTaskDetail(serverURL, id)
+		} else {
+			t, err = taskService.Get(id)
+		}
+		if err != nil {
+>>>>>>> origin/orq-orquestador-codex2
 			return err
 		} else if ok {
 			t = tareaResp.Tarea
@@ -221,6 +277,7 @@ var tareaNuevaCmd = &cobra.Command{
 			return fmt.Errorf("--titulo es obligatorio")
 		}
 
+<<<<<<< HEAD
 		var resp struct {
 			OK    bool      `json:"ok"`
 			Tarea *db.Tarea `json:"tarea"`
@@ -265,24 +322,42 @@ var tareaNuevaCmd = &cobra.Command{
 		// Vincular a propuesta si se indicó
 		if propuestaCodigo != "" {
 			p, err := db.GetPropuesta(propuestaCodigo)
+=======
+		if serverURL := activeServerURL(); serverURL != "" {
+			id, err := submitServerCreateTask(serverURL, map[string]any{
+				"titulo":      titulo,
+				"descripcion": desc,
+				"modulo":      modulo,
+				"prioridad":   prioridad,
+				"creado_por":  creadorPor,
+				"agente":      agente,
+				"propuesta":   propuestaCodigo,
+			})
+>>>>>>> origin/orq-orquestador-codex2
 			if err != nil {
-				return fmt.Errorf("propuesta '%s' no encontrada", propuestaCodigo)
+				return err
 			}
-			t.PropuestaID = &p.ID
+			fmt.Printf("✓ Tarea #%d creada: %s\n", id, titulo)
+			if agente != "" {
+				fmt.Printf("  → Asignada a %s\n", agente)
+			}
+			return nil
 		}
-		id, err := db.CrearTarea(t)
+		id, err := taskService.Create(taskapp.CreateTaskInput{
+			Titulo:          titulo,
+			Descripcion:     desc,
+			Modulo:          modulo,
+			Prioridad:       db.PrioridadTarea(prioridad),
+			CreadoPor:       creadorPor,
+			Agente:          agente,
+			PropuestaCodigo: propuestaCodigo,
+		})
 		if err != nil {
 			return err
 		}
 		fmt.Printf("✓ Tarea #%d creada: %s\n", id, titulo)
-
-		// Si se especificó agente, asignar directamente
 		if agente != "" {
-			if err := db.TomarTarea(id, agente); err != nil {
-				fmt.Printf("  ⚠ No se pudo asignar a %s: %v\n", agente, err)
-			} else {
-				fmt.Printf("  → Asignada a %s\n", agente)
-			}
+			fmt.Printf("  → Asignada a %s\n", agente)
 		}
 		return nil
 	},
@@ -297,6 +372,7 @@ var tareaTomar = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
+<<<<<<< HEAD
 		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
 			Accion: "tomar",
 			Agente: args[1],
@@ -310,6 +386,13 @@ var tareaTomar = &cobra.Command{
 			return err
 		}
 		if err := db.TomarTarea(id, args[1]); err != nil {
+=======
+		if serverURL := activeServerURL(); serverURL != "" {
+			if err := submitServerTaskAction(serverURL, id, "tomar", map[string]any{"agente": args[1]}); err != nil {
+				return err
+			}
+		} else if err := taskService.Take(id, args[1]); err != nil {
+>>>>>>> origin/orq-orquestador-codex2
 			return err
 		}
 		fmt.Printf("✓ Tarea #%d asignada a %s\n", id, args[1])
@@ -326,6 +409,7 @@ var tareaIniciarCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
+<<<<<<< HEAD
 		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
 			Accion: "iniciar",
 			Agente: args[1],
@@ -339,6 +423,13 @@ var tareaIniciarCmd = &cobra.Command{
 			return err
 		}
 		if err := db.IniciarTarea(id, args[1]); err != nil {
+=======
+		if serverURL := activeServerURL(); serverURL != "" {
+			if err := submitServerTaskAction(serverURL, id, "iniciar", map[string]any{"agente": args[1]}); err != nil {
+				return err
+			}
+		} else if err := taskService.Start(id, args[1]); err != nil {
+>>>>>>> origin/orq-orquestador-codex2
 			return err
 		}
 		fmt.Printf("✓ Tarea #%d en progreso (%s)\n", id, args[1])
@@ -356,6 +447,7 @@ var tareaCompletarCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		commit, _ := cmd.Flags().GetString("commit")
+<<<<<<< HEAD
 		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
 			Accion: "completar",
 			Agente: args[1],
@@ -370,6 +462,13 @@ var tareaCompletarCmd = &cobra.Command{
 			return err
 		}
 		if err := db.CompletarTarea(id, args[1], commit); err != nil {
+=======
+		if serverURL := activeServerURL(); serverURL != "" {
+			if err := submitServerTaskAction(serverURL, id, "completar", map[string]any{"agente": args[1], "commit": commit}); err != nil {
+				return err
+			}
+		} else if err := taskService.Complete(id, args[1], commit); err != nil {
+>>>>>>> origin/orq-orquestador-codex2
 			return err
 		}
 		fmt.Printf("✓ Tarea #%d completada\n", id)
@@ -390,6 +489,7 @@ var tareaBloquearCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+<<<<<<< HEAD
 		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
 			Accion: "bloquear",
 			Agente: args[1],
@@ -404,6 +504,13 @@ var tareaBloquearCmd = &cobra.Command{
 			return err
 		}
 		if err := db.BloquearTarea(id, args[1], motivo); err != nil {
+=======
+		if serverURL := activeServerURL(); serverURL != "" {
+			if err := submitServerTaskAction(serverURL, id, "bloquear", map[string]any{"agente": args[1], "motivo": motivo}); err != nil {
+				return err
+			}
+		} else if err := taskService.Block(id, args[1], motivo); err != nil {
+>>>>>>> origin/orq-orquestador-codex2
 			return err
 		}
 		fmt.Printf("✓ Tarea #%d bloqueada: %s\n", id, motivo)
@@ -421,6 +528,7 @@ var tareaNotaCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		nota := strings.Join(args[2:], " ")
+<<<<<<< HEAD
 		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
 			Accion: "nota",
 			Agente: args[1],
@@ -435,6 +543,13 @@ var tareaNotaCmd = &cobra.Command{
 			return err
 		}
 		if err := db.AnotarTarea(id, args[1], nota); err != nil {
+=======
+		if serverURL := activeServerURL(); serverURL != "" {
+			if err := submitServerTaskAction(serverURL, id, "nota", map[string]any{"agente": args[1], "nota": nota}); err != nil {
+				return err
+			}
+		} else if err := taskService.Note(id, args[1], nota); err != nil {
+>>>>>>> origin/orq-orquestador-codex2
 			return err
 		}
 		fmt.Printf("✓ Nota añadida a tarea #%d\n", id)
@@ -452,6 +567,7 @@ var tareaReasignarCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		nuevoAgente := args[1]
+<<<<<<< HEAD
 		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
 			Accion:      "reasignar",
 			NuevoAgente: nuevoAgente,
@@ -467,9 +583,11 @@ var tareaReasignarCmd = &cobra.Command{
 		_, err = db.DB.Exec(
 			`UPDATE tareas SET agente=?, estado='asignada' WHERE id=?`, nuevoAgente, id)
 		if err != nil {
+=======
+		if err := taskService.Reassign(id, nuevoAgente); err != nil {
+>>>>>>> origin/orq-orquestador-codex2
 			return err
 		}
-		db.Audit("alberto", "reasignar_tarea", "tarea", id, nuevoAgente)
 		fmt.Printf("✓ Tarea #%d reasignada a %s\n", id, nuevoAgente)
 		return nil
 	},
@@ -488,6 +606,7 @@ var tareaDesbloquearCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+<<<<<<< HEAD
 		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
 			Accion:     "desbloquear",
 			Agente:     args[1],
@@ -502,6 +621,13 @@ var tareaDesbloquearCmd = &cobra.Command{
 			return err
 		}
 		if err := db.DesbloquearTarea(id, args[1], resolucion); err != nil {
+=======
+		if serverURL := activeServerURL(); serverURL != "" {
+			if err := submitServerTaskAction(serverURL, id, "desbloquear", map[string]any{"agente": args[1], "resolucion": resolucion}); err != nil {
+				return err
+			}
+		} else if err := taskService.Unblock(id, args[1], resolucion); err != nil {
+>>>>>>> origin/orq-orquestador-codex2
 			return err
 		}
 		fmt.Printf("✓ Tarea #%d desbloqueada: %s\n", id, resolucion)
@@ -518,6 +644,7 @@ var tareaBacklogCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
+<<<<<<< HEAD
 		if ok, err := apiPost("/api/tareas/"+args[0]+"/accion", apiTareaAccionRequest{
 			Accion: "backlog",
 		}, &map[string]any{}); err != nil {
@@ -531,9 +658,11 @@ var tareaBacklogCmd = &cobra.Command{
 		}
 		_, err = db.DB.Exec(`UPDATE tareas SET estado='backlog', agente=NULL WHERE id=?`, id)
 		if err != nil {
+=======
+		if err := taskService.MoveToBacklog(id); err != nil {
+>>>>>>> origin/orq-orquestador-codex2
 			return err
 		}
-		db.Audit("alberto", "backlog_tarea", "tarea", id, "")
 		fmt.Printf("✓ Tarea #%d movida a backlog\n", id)
 		return nil
 	},
