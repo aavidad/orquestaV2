@@ -24,6 +24,7 @@ type AutomationService interface {
 	ReconciliarRuntimeHandlesStale() (int, error)
 	ReconciliarRuntimeOrdersStale() (int, error)
 	ProcesarRuntimeOrdersBatch() (int, error)
+	ProcesarRefineriaBatch() (int, error)
 	Audit(agente, accion, entidad string, entidadID int64, detalle string)
 }
 
@@ -131,6 +132,12 @@ func (r *Runner) runControlPlane() {
 		r.Automation.Audit("server", "runtime_orders_batch_error", "runtime_order", 0, err.Error())
 	} else if processed > 0 {
 		r.Automation.Audit("server", "runtime_orders_batch", "runtime_order", 0, fmt.Sprintf("Órdenes procesadas en batch: %d", processed))
+	}
+	refined, err := r.Automation.ProcesarRefineriaBatch()
+	if err != nil {
+		r.Automation.Audit("server", "refineria_batch_error", "refineria_solicitud", 0, err.Error())
+	} else if refined > 0 {
+		r.Automation.Audit("server", "refineria_batch", "refineria_solicitud", 0, fmt.Sprintf("Solicitudes de refinería procesadas: %d", refined))
 	}
 }
 

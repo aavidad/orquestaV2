@@ -43,6 +43,10 @@ func (dbAutomationService) ProcesarRuntimeOrdersBatch() (int, error) {
 	return db.ProcesarRuntimeOrdersBatch()
 }
 
+func (dbAutomationService) ProcesarRefineriaBatch() (int, error) {
+	return db.ProcesarRefineriaBatch()
+}
+
 func (dbAutomationService) Audit(agente, accion, entidad string, entidadID int64, detalle string) {
 	db.Audit(agente, accion, entidad, entidadID, detalle)
 }

@@ -626,13 +626,16 @@ func init() {
 	tareaCompletarCmd.Flags().String("commit", "", "Hash o referencia del commit de cierre")
 	tareaBloquearCmd.Flags().String("motivo", "", "Motivo del bloqueo")
 	tareaDesbloquearCmd.Flags().String("resolucion", "", "Cómo se resolvió el bloqueo")
+	tareaRefineriaCmd.Flags().String("rama", "", "Rama o worktree con los cambios")
+	tareaRefineriaCmd.Flags().String("dir", "", "Directorio de trabajo donde ejecutar los tests")
+	tareaRefineriaCmd.Flags().String("cmd", "go test ./...", "Comando de tests a ejecutar")
 
 	tareaCmd.AddCommand(
 		tareaListarCmd, tareaVerCmd, tareaNuevaCmd,
 		tareaTomar, tareaIniciarCmd, tareaCompletarCmd,
 		tareaBloquearCmd, tareaNotaCmd, tareaNotasCmd,
 		tareaReasignarCmd, tareaDesbloquearCmd, tareaBacklogCmd,
-		tareaContratoCmd, tareaCancelarCmd,
+		tareaContratoCmd, tareaCancelarCmd, tareaRefineriaCmd,
 	)
 }
 
