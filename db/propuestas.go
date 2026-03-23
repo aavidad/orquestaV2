@@ -69,7 +69,9 @@ func asegurarVotosPendientesPropuesta(propuestaID int64) (int, error) {
 	return insertados, nil
 }
 
-// CrearPropuesta inserta una nueva propuesta.
+// CrearPropuesta inserta una nueva propuesta en el sistema de gobernanza de Orquesta.
+// Además de la persistencia, inicia automáticamente el ciclo de votos pendientes
+// para todos los agentes habilitados y emite una auditoría completa.
 func CrearPropuesta(p *Propuesta) (int64, error) {
 	// Auto-generar código si no se indica
 	if p.Codigo == "" {

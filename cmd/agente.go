@@ -259,78 +259,10 @@ func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesio
 	return out, nil
 }
 
-var agentePrepararCmd = &cobra.Command{
-	Use:   "preparar <agente>",
-	Short: "Resuelve el bundle de arranque/reanudación para un agente",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		agenteNombre := args[0]
-		proyectoRef, _ := cmd.Flags().GetString("proyecto")
-		conectorRef, _ := cmd.Flags().GetString("conector")
-		modelo, _ := cmd.Flags().GetString("modelo")
-		razonamiento, _ := cmd.Flags().GetString("razonamiento")
-		perfilTarea, _ := cmd.Flags().GetString("perfil")
-		jsonOut, _ := cmd.Flags().GetBool("json")
-
-		if strings.TrimSpace(proyectoRef) == "" {
-			return fmt.Errorf("debes indicar --proyecto")
-		}
-
-		params := url.Values{
-			"agente":   []string{agenteNombre},
-			"proyecto": []string{proyectoRef},
-		}
-		if conectorRef != "" {
-			params.Set("conector", conectorRef)
-		}
-		if modelo != "" {
-			params.Set("modelo", modelo)
-		}
-		if razonamiento != "" {
-			params.Set("razonamiento", razonamiento)
-		}
-		if perfilTarea != "" {
-			params.Set("perfil", perfilTarea)
-		}
-		var out agentePrepararOutput
-		if ok, err := apiGetQuery("/api/agente/preparar", params, &out); err != nil {
-			return err
-		} else if ok {
-			return imprimirAgentePreparar(out, jsonOut)
-		}
-
-		out, err := prepararAgenteLocal(agenteNombre, proyectoRef, conectorRef, modelo, razonamiento, perfilTarea)
-		if err != nil {
-			return err
-		}
-		return imprimirAgentePreparar(out, jsonOut)
-	},
-}
-
-func prepararAgenteLocal(agenteNombre, proyectoRef, conectorRef, modelo, razonamiento, perfilTarea string) (agentePrepararOutput, error) {
+func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Proyecto, conector *db.Conector, ultima *db.Sesion, modelo, razonamiento, perfilTarea string) (agentePrepararOutput, error) {
 	var out agentePrepararOutput
-	if err := ensureLocalDB(); err != nil {
-		return out, err
-	}
-
-	agente, err := db.GetAgente(agenteNombre)
-	if err != nil {
-		return out, err
-	}
-	proyecto, err := db.GetProyecto(proyectoRef)
-	if err != nil {
-		return out, err
-	}
-
-	var ultima *db.Sesion
-	ultima, err = db.ObtenerUltimaSesion(agenteNombre, &proyecto.ID)
-	if err != nil && err != sql.ErrNoRows {
-		return out, err
-	}
-
-	conector, err := resolverConectorPreparacion(agenteNombre, conectorRef, ultima)
-	if err != nil {
-		return out, err
+	if agente == nil || proyecto == nil || conector == nil {
+		return out, fmt.Errorf("agente, proyecto y conector son obligatorios")
 	}
 
 	reglas, err := db.GetReglasAgente(agente.Rol)
@@ -412,6 +344,83 @@ func prepararAgenteLocal(agenteNombre, proyectoRef, conectorRef, modelo, razonam
 	}
 
 	return out, nil
+}
+
+var agentePrepararCmd = &cobra.Command{
+	Use:   "preparar <agente>",
+	Short: "Resuelve el bundle de arranque/reanudación para un agente",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agenteNombre := args[0]
+		proyectoRef, _ := cmd.Flags().GetString("proyecto")
+		conectorRef, _ := cmd.Flags().GetString("conector")
+		modelo, _ := cmd.Flags().GetString("modelo")
+		razonamiento, _ := cmd.Flags().GetString("razonamiento")
+		perfilTarea, _ := cmd.Flags().GetString("perfil")
+		jsonOut, _ := cmd.Flags().GetBool("json")
+
+		if strings.TrimSpace(proyectoRef) == "" {
+			return fmt.Errorf("debes indicar --proyecto")
+		}
+
+		params := url.Values{
+			"agente":   []string{agenteNombre},
+			"proyecto": []string{proyectoRef},
+		}
+		if conectorRef != "" {
+			params.Set("conector", conectorRef)
+		}
+		if modelo != "" {
+			params.Set("modelo", modelo)
+		}
+		if razonamiento != "" {
+			params.Set("razonamiento", razonamiento)
+		}
+		if perfilTarea != "" {
+			params.Set("perfil", perfilTarea)
+		}
+		var out agentePrepararOutput
+		if ok, err := apiGetQuery("/api/agente/preparar", params, &out); err != nil {
+			return err
+		} else if ok {
+			return imprimirAgentePreparar(out, jsonOut)
+		}
+
+		out, err := prepararAgenteLocal(agenteNombre, proyectoRef, conectorRef, modelo, razonamiento, perfilTarea)
+		if err != nil {
+			return err
+		}
+		return imprimirAgentePreparar(out, jsonOut)
+	},
+}
+
+func prepararAgenteLocal(agenteNombre, proyectoRef, conectorRef, modelo, razonamiento, perfilTarea string) (agentePrepararOutput, error) {
+	var out agentePrepararOutput
+	if err := ensureLocalDB(); err != nil {
+		return out, err
+	}
+
+	agente, err := db.GetAgente(agenteNombre)
+	if err != nil {
+		return out, err
+	}
+	proyecto, err := db.GetProyecto(proyectoRef)
+	if err != nil {
+		return out, err
+	}
+
+	var ultima *db.Sesion
+	ultima, err = db.ObtenerUltimaSesion(agenteNombre, &proyecto.ID)
+	if err != nil && err != sql.ErrNoRows {
+		return out, err
+	}
+
+	conector, err := resolverConectorPreparacion(agenteNombre, conectorRef, ultima)
+	if err != nil {
+		return out, err
+	}
+
+	return construirAgentePrepararOutputDesdeDatos(agente, proyecto, conector, ultima, modelo, razonamiento, perfilTarea)
 }
 
 var agenteTickCmd = &cobra.Command{

@@ -339,6 +339,22 @@ CREATE TABLE IF NOT EXISTS runtime_checkpoints (
 CREATE INDEX IF NOT EXISTS idx_runtime_checkpoints_agente_created
 ON runtime_checkpoints(agente, created_at DESC, id DESC);
 
+CREATE TABLE IF NOT EXISTS entidades_memoria (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre              TEXT    NOT NULL,
+    tipo                TEXT    NOT NULL
+                               CHECK (tipo IN ('negocio','api','db','infra','regla')),
+    valor_json          TEXT    NOT NULL DEFAULT '{}',
+    metadata_json       TEXT    NOT NULL DEFAULT '{}',
+    ultima_verificacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    verificado_por      TEXT    NOT NULL DEFAULT '',
+    proyecto_id         INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+    UNIQUE(nombre, proyecto_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_entidades_memoria_proyecto_tipo
+ON entidades_memoria(proyecto_id, tipo, nombre);
+
 -- ─── Refinería: cola de validación antes de merge ───────────────────────────
 CREATE TABLE IF NOT EXISTS refineria_solicitudes (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,

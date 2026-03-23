@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 
-	"orquesta/agentruntime"
 	"orquesta/coordination"
 	"orquesta/db"
 )
@@ -1754,78 +1753,11 @@ func apiHandlerAgentePreparar(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	reglas, err := db.GetReglasAgente(agente.Rol)
+	out, err := construirAgentePrepararOutputDesdeDatos(agente, proyecto, conector, ultima, modelo, razonamiento, perfilTarea)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
-	skills, err := db.GetSkillsAgente(agente.Rol)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	workflows, err := db.GetWorkflowsAgente(agente.Rol)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	req := agentruntime.LaunchRequest{
-		Agente:       agente.Nombre,
-		Rol:          agente.Rol,
-		ProyectoSlug: proyecto.Slug,
-		ProyectoRuta: proyecto.RutaAbs,
-		Modelo:       modelo,
-		Razonamiento: razonamiento,
-		PerfilTarea:  perfilTarea,
-		Conector: agentruntime.ConnectorConfig{
-			Slug:         conector.Slug,
-			Nombre:       conector.Nombre,
-			Transporte:   conector.Transporte,
-			Comando:      conector.Comando,
-			ArgsJSON:     conector.ArgsJSON,
-			EnvJSON:      conector.EnvJSON,
-			MetadataJSON: conector.MetadataJSON,
-			Activo:       conector.Activo,
-		},
-	}
-	if ultima != nil {
-		req.Resume = agentruntime.ResumeContext{
-			ExternalSessionID:  ultima.ExternalSessionID,
-			ResumePayloadJSON:  ultima.ResumePayloadJSON,
-			ResumenContinuidad: ultima.ResumenContinuidad,
-			Branch:             ultima.Branch,
-			CWD:                ultima.CWD,
-		}
-	}
-	plan, err := agentruntime.DefaultRegistry().Prepare(req)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	out := agentePrepararOutput{
-		Agente: agente.Nombre,
-		Rol:    agente.Rol,
-		Proyecto: proyectoBundle{
-			ID: proyecto.ID, Slug: proyecto.Slug, Nombre: proyecto.Nombre, RutaAbs: proyecto.RutaAbs,
-		},
-		Conector: conectorBundle{
-			ID: conector.ID, Slug: conector.Slug, Nombre: conector.Nombre, Transporte: conector.Transporte, Comando: conector.Comando,
-		},
-		Politica:    cargarPoliticaAgente(),
-		Plan:        plan,
-		Reglas:      reglas,
-		Skills:      skills,
-		Workflows:   workflows,
-		EstadoCuota: agente.EstadoCuota,
-		ReanimarAt:  agente.ReanimarAt,
-		MotivoPausa: agente.MotivoPausa,
-	}
-	if ultima != nil {
-		out.UltimaSesion = resumirSesion(ultima)
-	}
-	out.Politica.Modelo = plan.Modelo
-	out.Politica.Razonamiento = plan.Razonamiento
-	out.Politica.PerfilTarea = plan.PerfilTarea
 	apiWriteJSON(w, http.StatusOK, out)
 }
 

@@ -15,6 +15,11 @@ La especificacion ampliada de trabajo y la matriz de voto viven en:
 - `docs/orquesta_v1_roadmap.md`
 - `docs/operacion_agentes_manuales.md`
 
+### Manuales Oficiales v1.0
+- [Manual de Usuario](docs/manual_usuario.md): Guía funcional y operativa.
+- [Manual de Programador](docs/manual_programador.md): Guía de integración y APIs (MCP, A2UI).
+- [Manual de Técnico de Sistemas](docs/manual_tecnico_sistemas.md): Guía de despliegue y mantenimiento (Docker, DB).
+
 ## Objetivo
 
 Orquesta pasa de ser un coordinador local de tareas a ser el nucleo de orquestacion de todo el workspace `~/Trabajo`.

@@ -23,7 +23,9 @@ type EventoNotificacion struct {
 
 var CanalNotificaciones = make(chan EventoNotificacion, 100)
 
-// Open abre (o crea) la base de datos usando el backend configurado y aplica su preparación.
+// Open inicializa el sistema de persistencia de Orquesta.
+// Resuelve el backend (SQLite/otros), aplica migraciones idempotentes y
+// prepara los canales de notificación en tiempo real.
 func Open() error {
 	backend, target, err := resolveBackend()
 	if err != nil {
@@ -278,6 +280,19 @@ func postMigraciones(conn *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_runtime_checkpoints_agente_created
 			ON runtime_checkpoints(agente, created_at DESC, id DESC)`,
+		`CREATE TABLE IF NOT EXISTS entidades_memoria (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			nombre TEXT NOT NULL,
+			tipo TEXT NOT NULL CHECK (tipo IN ('negocio','api','db','infra','regla')),
+			valor_json TEXT NOT NULL DEFAULT '{}',
+			metadata_json TEXT NOT NULL DEFAULT '{}',
+			ultima_verificacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			verificado_por TEXT NOT NULL DEFAULT '',
+			proyecto_id INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+			UNIQUE(nombre, proyecto_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_entidades_memoria_proyecto_tipo
+			ON entidades_memoria(proyecto_id, tipo, nombre)`,
 		`CREATE TABLE IF NOT EXISTS conectores (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			slug TEXT NOT NULL UNIQUE,
