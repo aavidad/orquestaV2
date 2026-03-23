@@ -413,3 +413,50 @@ func TestAPIAgenteTickAutoPausaPorAgotamiento(t *testing.T) {
 		t.Fatalf("motivo_pausa inesperado: %q", agente.MotivoPausa)
 	}
 }
+
+func TestAPIAgentePrepararDevuelveBundle(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/agente/preparar?agente=Codex1&proyecto=orquestador", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status preparar inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var out agentePrepararOutput
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode preparar: %v", err)
+	}
+	if out.Agente != "Codex1" {
+		t.Fatalf("agente inesperado: %s", out.Agente)
+	}
+	if out.Proyecto.Slug != "orquestador" {
+		t.Fatalf("proyecto inesperado: %s", out.Proyecto.Slug)
+	}
+	if out.Conector.Slug != "codex-cli" {
+		t.Fatalf("conector inesperado: %s", out.Conector.Slug)
+	}
+	if out.Plan == nil {
+		t.Fatalf("plan no deberia ser nil")
+	}
+	if out.EstadoCuota == "" {
+		t.Fatalf("estado_cuota no deberia venir vacio")
+	}
+}

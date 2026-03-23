@@ -18,14 +18,14 @@ const (
 )
 
 type EntidadMemoria struct {
-	ID                 int64      `json:"id"`
-	Nombre             string     `json:"nombre"`
-	Tipo               string     `json:"tipo"`
-	ValorJSON          string     `json:"valor_json"`
-	MetadataJSON       string     `json:"metadata_json"`
-	UltimaVerificacion time.Time  `json:"ultima_verificacion"`
-	VerificadoPor      string     `json:"verificado_por"`
-	ProyectoID         *int64     `json:"proyecto_id,omitempty"`
+	ID                 int64     `json:"id"`
+	Nombre             string    `json:"nombre"`
+	Tipo               string    `json:"tipo"`
+	ValorJSON          string    `json:"valor_json"`
+	MetadataJSON       string    `json:"metadata_json"`
+	UltimaVerificacion time.Time `json:"ultima_verificacion"`
+	VerificadoPor      string    `json:"verificado_por"`
+	ProyectoID         *int64    `json:"proyecto_id,omitempty"`
 }
 
 type FiltroEntidadesMemoria struct {

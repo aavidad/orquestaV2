@@ -75,6 +75,7 @@ func init() {
 		tareaCmd,
 		propuestaCmd,
 		votarCmd,
+		memoriaCmd,
 		configCmd,
 		exportarCmd,
 		statusCmd,
