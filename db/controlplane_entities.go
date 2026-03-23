@@ -96,6 +96,14 @@ type FiltroRuntimeMailbox struct {
 	Estado     *string
 }
 
+type FiltroRuntimeCheckpoints struct {
+	Agente         *string
+	ProyectoID     *int64
+	CheckpointKind *string
+	Source         *string
+	Limit          int
+}
+
 func UpsertRuntimeHandleDesdeSesion(s *Sesion) error {
 	if s == nil {
 		return nil
@@ -540,6 +548,15 @@ func UltimoRuntimeCheckpoint(agente string, proyectoID *int64) (*RuntimeCheckpoi
 	return cp, err
 }
 
+func GetRuntimeCheckpoint(id int64) (*RuntimeCheckpoint, error) {
+	row := DB.QueryRow(runtimeCheckpointSelectBase()+` WHERE id = ?`, id)
+	cp, err := scanRuntimeCheckpoint(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return cp, err
+}
+
 func GetRuntimeCheckpointBySource(source string) (*RuntimeCheckpoint, error) {
 	row := DB.QueryRow(runtimeCheckpointSelectBase()+` WHERE source = ? ORDER BY id DESC LIMIT 1`, strings.TrimSpace(source))
 	cp, err := scanRuntimeCheckpoint(row)
@@ -547,6 +564,46 @@ func GetRuntimeCheckpointBySource(source string) (*RuntimeCheckpoint, error) {
 		return nil, nil
 	}
 	return cp, err
+}
+
+func ListarRuntimeCheckpoints(filter FiltroRuntimeCheckpoints) ([]*RuntimeCheckpoint, error) {
+	q := runtimeCheckpointSelectBase() + ` WHERE 1=1`
+	var args []any
+	if filter.Agente != nil {
+		q += ` AND agente = ?`
+		args = append(args, strings.TrimSpace(*filter.Agente))
+	}
+	if filter.ProyectoID != nil {
+		q += ` AND proyecto_id = ?`
+		args = append(args, *filter.ProyectoID)
+	}
+	if filter.CheckpointKind != nil {
+		q += ` AND checkpoint_kind = ?`
+		args = append(args, strings.TrimSpace(*filter.CheckpointKind))
+	}
+	if filter.Source != nil {
+		q += ` AND source = ?`
+		args = append(args, strings.TrimSpace(*filter.Source))
+	}
+	q += ` ORDER BY id DESC`
+	if filter.Limit > 0 {
+		q += ` LIMIT ?`
+		args = append(args, filter.Limit)
+	}
+	rows, err := DB.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*RuntimeCheckpoint
+	for rows.Next() {
+		cp, err := scanRuntimeCheckpoint(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, cp)
+	}
+	return out, rows.Err()
 }
 
 func EnviarRuntimeMailbox(msg *RuntimeMailboxMessage) (int64, error) {

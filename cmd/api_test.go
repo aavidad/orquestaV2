@@ -429,6 +429,20 @@ func TestAPIAgentePrepararDevuelveBundle(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert proyecto: %v", err)
 	}
+	proyecto, err := db.GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	if _, err := db.UpsertEntidadMemoria(&db.EntidadMemoria{
+		Nombre:        "Core_API",
+		Tipo:          string(db.EntidadMemoriaAPI),
+		ValorJSON:     `{"version":"v2"}`,
+		MetadataJSON:  `{"fuente":"manual"}`,
+		VerificadoPor: "Codex1",
+		ProyectoID:    &proyecto.ID,
+	}); err != nil {
+		t.Fatalf("upsert entidad memoria: %v", err)
+	}
 
 	mux := http.NewServeMux()
 	registerAPIRoutes(mux)
@@ -458,5 +472,8 @@ func TestAPIAgentePrepararDevuelveBundle(t *testing.T) {
 	}
 	if out.EstadoCuota == "" {
 		t.Fatalf("estado_cuota no deberia venir vacio")
+	}
+	if len(out.Memoria) != 1 || out.Memoria[0].Nombre != "Core_API" {
+		t.Fatalf("memoria inesperada: %+v", out.Memoria)
 	}
 }

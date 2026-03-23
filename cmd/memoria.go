@@ -9,6 +9,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -24,27 +25,43 @@ var memoriaListarCmd = &cobra.Command{
 	Use:   "listar",
 	Short: "Lista entidades de memoria persistente",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
 		proyectoRef, _ := cmd.Flags().GetString("proyecto")
 		tipo, _ := cmd.Flags().GetString("tipo")
-
-		filter := db.FiltroEntidadesMemoria{}
+		params := url.Values{}
 		if strings.TrimSpace(proyectoRef) != "" {
-			proyecto, err := db.GetProyecto(proyectoRef)
+			params.Set("proyecto", strings.TrimSpace(proyectoRef))
+		}
+		if strings.TrimSpace(tipo) != "" {
+			params.Set("tipo", strings.TrimSpace(tipo))
+		}
+
+		var entidades []*db.EntidadMemoria
+		var resp apiMemoriaEntidadesResponse
+		if ok, err := apiGetQuery("/api/memoria", params, &resp); err != nil {
+			return err
+		} else if ok {
+			entidades = resp.Entidades
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			filter := db.FiltroEntidadesMemoria{}
+			if strings.TrimSpace(proyectoRef) != "" {
+				proyecto, err := db.GetProyecto(proyectoRef)
+				if err != nil {
+					return err
+				}
+				filter.ProyectoID = &proyecto.ID
+			}
+			if strings.TrimSpace(tipo) != "" {
+				filter.Tipo = &tipo
+			}
+
+			var err error
+			entidades, err = db.ListarEntidadesMemoria(filter)
 			if err != nil {
 				return err
 			}
-			filter.ProyectoID = &proyecto.ID
-		}
-		if strings.TrimSpace(tipo) != "" {
-			filter.Tipo = &tipo
-		}
-
-		entidades, err := db.ListarEntidadesMemoria(filter)
-		if err != nil {
-			return err
 		}
 		if len(entidades) == 0 {
 			fmt.Println("No hay entidades de memoria con ese filtro.")
@@ -69,25 +86,39 @@ var memoriaVerCmd = &cobra.Command{
 	Short: "Muestra una entidad de memoria",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
 		proyectoRef, _ := cmd.Flags().GetString("proyecto")
-		var proyectoID *int64
+		params := url.Values{}
 		if strings.TrimSpace(proyectoRef) != "" {
-			proyecto, err := db.GetProyecto(proyectoRef)
+			params.Set("proyecto", strings.TrimSpace(proyectoRef))
+		}
+
+		var entidad *db.EntidadMemoria
+		var resp apiMemoriaEntidadResponse
+		if ok, err := apiGetQuery("/api/memoria/"+args[0], params, &resp); err != nil {
+			return err
+		} else if ok {
+			entidad = resp.Entidad
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			var proyectoID *int64
+			if strings.TrimSpace(proyectoRef) != "" {
+				proyecto, err := db.GetProyecto(proyectoRef)
+				if err != nil {
+					return err
+				}
+				proyectoID = &proyecto.ID
+			}
+
+			var err error
+			entidad, err = db.GetEntidadMemoria(args[0], proyectoID)
 			if err != nil {
 				return err
 			}
-			proyectoID = &proyecto.ID
-		}
-
-		entidad, err := db.GetEntidadMemoria(args[0], proyectoID)
-		if err != nil {
-			return err
-		}
-		if entidad == nil {
-			return fmt.Errorf("entidad '%s' no encontrada", args[0])
+			if entidad == nil {
+				return fmt.Errorf("entidad '%s' no encontrada", args[0])
+			}
 		}
 
 		fmt.Printf("Entidad:      %s\n", entidad.Nombre)
@@ -105,9 +136,6 @@ var memoriaGuardarCmd = &cobra.Command{
 	Short: "Crea o actualiza una entidad de memoria",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
 		nombre := strings.TrimSpace(args[0])
 		tipo := strings.TrimSpace(args[1])
 		valor, _ := cmd.Flags().GetString("valor")
@@ -118,6 +146,23 @@ var memoriaGuardarCmd = &cobra.Command{
 			return fmt.Errorf("--valor es obligatorio")
 		}
 
+		if ok, err := apiPost("/api/memoria", apiMemoriaEntidadRequest{
+			Nombre:        nombre,
+			Tipo:          tipo,
+			Valor:         valor,
+			Metadata:      metadata,
+			VerificadoPor: verificadoPor,
+			Proyecto:      proyectoRef,
+		}, &map[string]any{}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Entidad de memoria guardada: %s\n", nombre)
+			return nil
+		}
+
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
 		var proyectoID *int64
 		if strings.TrimSpace(proyectoRef) != "" {
 			proyecto, err := db.GetProyecto(proyectoRef)
@@ -126,7 +171,6 @@ var memoriaGuardarCmd = &cobra.Command{
 			}
 			proyectoID = &proyecto.ID
 		}
-
 		id, err := db.UpsertEntidadMemoria(&db.EntidadMemoria{
 			Nombre:        nombre,
 			Tipo:          tipo,

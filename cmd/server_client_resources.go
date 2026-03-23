@@ -252,6 +252,27 @@ func crearRuntimeMailboxDesdeAPI(fromAgente, toAgente, proyecto string, runtimeO
 	return resp.ID, true, nil
 }
 
+func crearRuntimeCheckpointDesdeAPI(agente, proyecto string, sesionID, runtimeID int64, checkpointKind, resumen, branch, cwd, payload, resumeStrategy, source string) (int64, bool, error) {
+	var resp apiRuntimeCheckpointCreateResponse
+	ok, err := apiPost("/api/runtime-checkpoints", apiRuntimeCheckpointCreateRequest{
+		Agente:         agente,
+		Proyecto:       proyecto,
+		SesionID:       sesionID,
+		RuntimeID:      runtimeID,
+		CheckpointKind: checkpointKind,
+		Resumen:        resumen,
+		Branch:         branch,
+		CWD:            cwd,
+		Payload:        payload,
+		ResumeStrategy: resumeStrategy,
+		Source:         source,
+	}, &resp)
+	if !ok || err != nil {
+		return 0, ok, err
+	}
+	return resp.ID, true, nil
+}
+
 func marcarRuntimeMailboxEntregadoPorAPI(id int64) (bool, error) {
 	ok, err := apiPost(fmt.Sprintf("/api/runtime-mailbox/%d/entregar", id), map[string]any{}, nil)
 	return ok, err

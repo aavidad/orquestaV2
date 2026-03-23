@@ -118,9 +118,22 @@ type apiRuntimeCheckpointResponse struct {
 	Checkpoint *db.RuntimeCheckpoint `json:"checkpoint"`
 }
 
+type apiRuntimeCheckpointCreateResponse struct {
+	OK bool  `json:"ok"`
+	ID int64 `json:"id"`
+}
+
 type apiRuntimeOrderCreateResponse struct {
 	OK bool  `json:"ok"`
 	ID int64 `json:"id"`
+}
+
+type apiMemoriaEntidadesResponse struct {
+	Entidades []*db.EntidadMemoria `json:"entidades"`
+}
+
+type apiMemoriaEntidadResponse struct {
+	Entidad *db.EntidadMemoria `json:"entidad"`
 }
 
 var httpClientOrquesta = &http.Client{
@@ -182,6 +195,16 @@ func commandSupportsServerMode(args []string) bool {
 		default:
 			return false
 		}
+	case "memoria":
+		if len(tokens) <= 1 {
+			return false
+		}
+		switch tokens[1] {
+		case "listar", "ver", "guardar":
+			return true
+		default:
+			return false
+		}
 	case "exportar":
 		return len(tokens) > 1 && (tokens[1] == "estado" || tokens[1] == "audit" || tokens[1] == "diagnostico")
 	case "logs":
@@ -195,7 +218,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "listar", "ver", "handles", "ordenes", "orden-nueva", "nudge", "checkpoints", "mailbox", "mailbox-enviar", "mailbox-entregar", "mailbox-consumir":
+		case "listar", "ver", "handles", "ordenes", "orden-nueva", "nudge", "checkpoints", "checkpoint-nuevo", "mailbox", "mailbox-enviar", "mailbox-entregar", "mailbox-consumir":
 			return true
 		default:
 			return false

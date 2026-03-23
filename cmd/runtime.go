@@ -259,14 +259,23 @@ var runtimeCheckpointsCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agente, _ := cmd.Flags().GetString("agente")
 		proyectoRef, _ := cmd.Flags().GetString("proyecto")
+		checkpointKind, _ := cmd.Flags().GetString("kind")
+		source, _ := cmd.Flags().GetString("source")
+		limit, _ := cmd.Flags().GetInt("limit")
 		if strings.TrimSpace(agente) == "" {
 			return fmt.Errorf("--agente es obligatorio")
 		}
-		if cp, ok, err := cargarCheckpointRuntimeDesdeAPI(agente, proyectoRef); ok {
-			if err != nil {
-				return err
+		if limit <= 0 {
+			limit = 1
+		}
+		usarHistorialLocal := strings.TrimSpace(checkpointKind) != "" || strings.TrimSpace(source) != "" || limit > 1
+		if !usarHistorialLocal {
+			if cp, ok, err := cargarCheckpointRuntimeDesdeAPI(agente, proyectoRef); ok {
+				if err != nil {
+					return err
+				}
+				return imprimirRuntimeCheckpoint(cp)
 			}
-			return imprimirRuntimeCheckpoint(cp)
 		}
 
 		var proyectoID *int64
@@ -277,7 +286,116 @@ var runtimeCheckpointsCmd = &cobra.Command{
 			}
 			proyectoID = &p.ID
 		}
+		if usarHistorialLocal {
+			filter := db.FiltroRuntimeCheckpoints{
+				Agente:     &agente,
+				ProyectoID: proyectoID,
+				Limit:      limit,
+			}
+			if strings.TrimSpace(checkpointKind) != "" {
+				filter.CheckpointKind = &checkpointKind
+			}
+			if strings.TrimSpace(source) != "" {
+				filter.Source = &source
+			}
+			checkpoints, err := db.ListarRuntimeCheckpoints(filter)
+			if err != nil {
+				return err
+			}
+			return imprimirRuntimeCheckpointLista(checkpoints)
+		}
 		cp, err := db.UltimoRuntimeCheckpoint(agente, proyectoID)
+		if err != nil {
+			return err
+		}
+		return imprimirRuntimeCheckpoint(cp)
+	},
+}
+
+var runtimeCheckpointNuevoCmd = &cobra.Command{
+	Use:   "checkpoint-nuevo <agente>",
+	Short: "Crea un checkpoint manual para un agente",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agente := strings.TrimSpace(args[0])
+		proyectoRef, _ := cmd.Flags().GetString("proyecto")
+		sesionID, _ := cmd.Flags().GetInt64("sesion-id")
+		runtimeID, _ := cmd.Flags().GetInt64("runtime-id")
+		checkpointKind, _ := cmd.Flags().GetString("kind")
+		resumen, _ := cmd.Flags().GetString("resumen")
+		branch, _ := cmd.Flags().GetString("branch")
+		cwd, _ := cmd.Flags().GetString("cwd")
+		payload, _ := cmd.Flags().GetString("payload")
+		resumeStrategy, _ := cmd.Flags().GetString("resume-strategy")
+		source, _ := cmd.Flags().GetString("source")
+		if strings.TrimSpace(payload) == "" {
+			payload = "{}"
+		}
+		if strings.TrimSpace(checkpointKind) == "" {
+			checkpointKind = "manual"
+		}
+		if strings.TrimSpace(resumeStrategy) == "" {
+			resumeStrategy = "resumen_y_payload"
+		}
+		if strings.TrimSpace(source) == "" {
+			source = "runtime-cli"
+		}
+
+		if id, ok, err := crearRuntimeCheckpointDesdeAPI(agente, proyectoRef, sesionID, runtimeID, checkpointKind, resumen, branch, cwd, payload, resumeStrategy, source); ok {
+			if err != nil {
+				return err
+			}
+			fmt.Printf("✓ Checkpoint runtime #%d creado para %s (%s)\n", id, agente, checkpointKind)
+			return nil
+		}
+
+		var proyectoID *int64
+		if strings.TrimSpace(proyectoRef) != "" {
+			p, err := db.GetProyecto(proyectoRef)
+			if err != nil {
+				return err
+			}
+			proyectoID = &p.ID
+		}
+		var sesionIDPtr *int64
+		if sesionID > 0 {
+			sesionIDPtr = &sesionID
+		}
+		var runtimeIDPtr *int64
+		if runtimeID > 0 {
+			runtimeIDPtr = &runtimeID
+		}
+		id, err := db.CrearRuntimeCheckpoint(&db.RuntimeCheckpoint{
+			Agente:         agente,
+			ProyectoID:     proyectoID,
+			SesionID:       sesionIDPtr,
+			RuntimeID:      runtimeIDPtr,
+			CheckpointKind: checkpointKind,
+			Resumen:        strings.TrimSpace(resumen),
+			Branch:         strings.TrimSpace(branch),
+			CWD:            strings.TrimSpace(cwd),
+			PayloadJSON:    payload,
+			ResumeStrategy: strings.TrimSpace(resumeStrategy),
+			Source:         strings.TrimSpace(source),
+		})
+		if err != nil {
+			return err
+		}
+		fmt.Printf("✓ Checkpoint runtime #%d creado para %s (%s)\n", id, agente, checkpointKind)
+		return nil
+	},
+}
+
+var runtimeCheckpointVerCmd = &cobra.Command{
+	Use:   "checkpoint-ver <id>",
+	Short: "Muestra un checkpoint concreto por id",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := strconv.ParseInt(args[0], 10, 64)
+		if err != nil || id <= 0 {
+			return fmt.Errorf("id inválido")
+		}
+		cp, err := db.GetRuntimeCheckpoint(id)
 		if err != nil {
 			return err
 		}
@@ -450,6 +568,20 @@ func imprimirRuntimeCheckpoint(cp *db.RuntimeCheckpoint) error {
 	fmt.Printf("  Fuente:    %s\n", valorVacio(cp.Source))
 	fmt.Printf("  Creado:    %s\n", cp.CreatedAt.Format("2006-01-02 15:04:05"))
 	fmt.Printf("  Resumen:   %s\n", valorVacio(cp.Resumen))
+	return nil
+}
+
+func imprimirRuntimeCheckpointLista(checkpoints []*db.RuntimeCheckpoint) error {
+	if len(checkpoints) == 0 {
+		fmt.Println("No hay checkpoints para ese filtro.")
+		return nil
+	}
+	fmt.Printf("%-5s %-12s %-16s %-18s %-16s %s\n", "ID", "AGENTE", "KIND", "SOURCE", "BRANCH", "CREADO")
+	for _, cp := range checkpoints {
+		fmt.Printf("%-5d %-12s %-16s %-18s %-16s %s\n",
+			cp.ID, truncar(cp.Agente, 12), truncar(cp.CheckpointKind, 16), truncar(cp.Source, 18),
+			truncar(cp.Branch, 16), cp.CreatedAt.Format("2006-01-02 15:04:05"))
+	}
 	return nil
 }
 
@@ -770,6 +902,19 @@ func init() {
 	runtimeNudgeCmd.Flags().String("kind", "nudge", "Kind del mensaje mailbox generado")
 	runtimeCheckpointsCmd.Flags().String("agente", "", "Agente del checkpoint")
 	runtimeCheckpointsCmd.Flags().String("proyecto", "", "Proyecto del checkpoint")
+	runtimeCheckpointsCmd.Flags().String("kind", "", "Filtrar checkpoints por tipo")
+	runtimeCheckpointsCmd.Flags().String("source", "", "Filtrar checkpoints por source")
+	runtimeCheckpointsCmd.Flags().Int("limit", 1, "Numero maximo de checkpoints a mostrar")
+	runtimeCheckpointNuevoCmd.Flags().String("proyecto", "", "Proyecto asociado al checkpoint")
+	runtimeCheckpointNuevoCmd.Flags().Int64("sesion-id", 0, "Sesion asociada al checkpoint")
+	runtimeCheckpointNuevoCmd.Flags().Int64("runtime-id", 0, "Runtime asociado al checkpoint")
+	runtimeCheckpointNuevoCmd.Flags().String("kind", "manual", "Tipo de checkpoint")
+	runtimeCheckpointNuevoCmd.Flags().String("resumen", "", "Resumen del checkpoint")
+	runtimeCheckpointNuevoCmd.Flags().String("branch", "", "Branch asociado al checkpoint")
+	runtimeCheckpointNuevoCmd.Flags().String("cwd", "", "Directorio de trabajo asociado al checkpoint")
+	runtimeCheckpointNuevoCmd.Flags().String("payload", "{}", "Payload JSON del checkpoint")
+	runtimeCheckpointNuevoCmd.Flags().String("resume-strategy", "resumen_y_payload", "Estrategia de reanudacion del checkpoint")
+	runtimeCheckpointNuevoCmd.Flags().String("source", "runtime-cli", "Origen del checkpoint")
 	runtimeMailboxCmd.Flags().String("to", "", "Filtrar mensajes por agente destino")
 	runtimeMailboxCmd.Flags().String("from", "", "Filtrar mensajes por agente origen")
 	runtimeMailboxCmd.Flags().String("estado", "", "Filtrar mensajes por estado")
@@ -777,6 +922,6 @@ func init() {
 	runtimeMailboxEnviarCmd.Flags().String("proyecto", "", "Proyecto asociado al mensaje")
 	runtimeMailboxEnviarCmd.Flags().String("payload", "{}", "Payload JSON del mensaje")
 	runtimeMailboxEnviarCmd.Flags().Int64("runtime-order-id", 0, "Orden runtime asociada al mensaje")
-	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimeOrdenesCmd, runtimeOrdenNuevaCmd, runtimeNudgeCmd, runtimeCheckpointsCmd, runtimeMailboxCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd)
+	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimeOrdenesCmd, runtimeOrdenNuevaCmd, runtimeNudgeCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd)
 	rootCmd.AddCommand(runtimeCmd)
 }

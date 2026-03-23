@@ -200,6 +200,23 @@ func TestRuntimeOrdersMailboxYCheckpoint(t *testing.T) {
 	if cp.ResumeStrategy != "resumen_y_payload" {
 		t.Fatalf("resume strategy inesperada: %s", cp.ResumeStrategy)
 	}
+
+	kind := "handoff_prepare"
+	source := "test"
+	limit := 1
+	lista, err := ListarRuntimeCheckpoints(FiltroRuntimeCheckpoints{
+		Agente:         &cp.Agente,
+		ProyectoID:     &proyectoID,
+		CheckpointKind: &kind,
+		Source:         &source,
+		Limit:          limit,
+	})
+	if err != nil {
+		t.Fatalf("listar runtime checkpoints: %v", err)
+	}
+	if len(lista) != 1 || lista[0].ID != cpID {
+		t.Fatalf("listado de checkpoints inesperado: %+v", lista)
+	}
 }
 
 func TestMarcarRuntimeHandlesCerradosPorAgenteRespetaSesionActivaMasNueva(t *testing.T) {

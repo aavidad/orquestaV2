@@ -105,6 +105,7 @@ type agentePrepararOutput struct {
 	Reglas       []*db.Regla              `json:"reglas"`
 	Skills       []*db.Skill              `json:"skills"`
 	Workflows    []*db.Workflow           `json:"workflows"`
+	Memoria      []*db.EntidadMemoria     `json:"memoria,omitempty"`
 	ReanimarAt   *time.Time               `json:"reanimar_at,omitempty"`
 	MotivoPausa  string                   `json:"motivo_pausa,omitempty"`
 	EstadoCuota  string                   `json:"estado_cuota,omitempty"`
@@ -277,6 +278,10 @@ func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Pro
 	if err != nil {
 		return out, err
 	}
+	memoria, err := db.ListarEntidadesMemoria(db.FiltroEntidadesMemoria{ProyectoID: &proyecto.ID})
+	if err != nil {
+		return out, err
+	}
 
 	req := agentruntime.LaunchRequest{
 		Agente:       agente.Nombre,
@@ -332,6 +337,7 @@ func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Pro
 		Reglas:      reglas,
 		Skills:      skills,
 		Workflows:   workflows,
+		Memoria:     memoria,
 		ReanimarAt:  agente.ReanimarAt,
 		MotivoPausa: agente.MotivoPausa,
 		EstadoCuota: agente.EstadoCuota,
@@ -991,7 +997,12 @@ func imprimirAgentePreparar(out agentePrepararOutput, jsonOut bool) error {
 		}
 		fmt.Println(msg)
 	}
-	fmt.Printf("Reglas:    %d  Skills: %d  Workflows: %d\n", len(out.Reglas), len(out.Skills), len(out.Workflows))
+	fmt.Printf("Reglas:    %d  Skills: %d  Workflows: %d  Memoria: %d\n", len(out.Reglas), len(out.Skills), len(out.Workflows), len(out.Memoria))
+	if len(out.Memoria) > 0 {
+		for _, entidad := range out.Memoria {
+			fmt.Printf("Memoria:   %s [%s] %s\n", entidad.Nombre, entidad.Tipo, truncar(entidad.ValorJSON, 72))
+		}
+	}
 	return nil
 }
 

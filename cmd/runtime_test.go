@@ -111,6 +111,124 @@ func TestRuntimeNudgeEncolaOrdenLocal(t *testing.T) {
 	}
 }
 
+func TestRuntimeCheckpointsHistorialLocal(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.CrearRuntimeCheckpoint(&db.RuntimeCheckpoint{
+		Agente:         "Codex1",
+		ProyectoID:     &proyectoID,
+		CheckpointKind: "manual",
+		Resumen:        "checkpoint uno",
+		Branch:         "main",
+		CWD:            filepath.Join(tmp, "orquestador"),
+		PayloadJSON:    `{"n":1}`,
+		ResumeStrategy: "resumen_y_payload",
+		Source:         "manual-1",
+	}); err != nil {
+		t.Fatalf("crear checkpoint 1: %v", err)
+	}
+	if _, err := db.CrearRuntimeCheckpoint(&db.RuntimeCheckpoint{
+		Agente:         "Codex1",
+		ProyectoID:     &proyectoID,
+		CheckpointKind: "manual",
+		Resumen:        "checkpoint dos",
+		Branch:         "feature/controlplane",
+		CWD:            filepath.Join(tmp, "orquestador"),
+		PayloadJSON:    `{"n":2}`,
+		ResumeStrategy: "resumen_y_payload",
+		Source:         "manual-2",
+	}); err != nil {
+		t.Fatalf("crear checkpoint 2: %v", err)
+	}
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "1")()
+	if err := runtimeCheckpointsCmd.Flags().Set("agente", "Codex1"); err != nil {
+		t.Fatalf("set agente: %v", err)
+	}
+	if err := runtimeCheckpointsCmd.Flags().Set("proyecto", "orquestador"); err != nil {
+		t.Fatalf("set proyecto: %v", err)
+	}
+	if err := runtimeCheckpointsCmd.Flags().Set("limit", "2"); err != nil {
+		t.Fatalf("set limit: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = runtimeCheckpointsCmd.Flags().Set("agente", "")
+		_ = runtimeCheckpointsCmd.Flags().Set("proyecto", "")
+		_ = runtimeCheckpointsCmd.Flags().Set("limit", "1")
+	})
+
+	out := capturarStdout(t, func() {
+		if err := runtimeCheckpointsCmd.RunE(runtimeCheckpointsCmd, nil); err != nil {
+			t.Fatalf("runtime checkpoints historial local: %v", err)
+		}
+	})
+	for _, token := range []string{"AGENTE", "manual-1", "manual-2", "feature/control"} {
+		if !strings.Contains(out, token) {
+			t.Fatalf("salida checkpoints historial sin %q:\n%s", token, out)
+		}
+	}
+}
+
+func TestRuntimeCheckpointVerLocal(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	checkpointID, err := db.CrearRuntimeCheckpoint(&db.RuntimeCheckpoint{
+		Agente:         "Codex1",
+		ProyectoID:     &proyectoID,
+		CheckpointKind: "manual",
+		Resumen:        "checkpoint inspeccionable",
+		Branch:         "main",
+		CWD:            filepath.Join(tmp, "orquestador"),
+		PayloadJSON:    `{"paso":"revisar"}`,
+		ResumeStrategy: "resumen_y_payload",
+		Source:         "manual-ver",
+	})
+	if err != nil {
+		t.Fatalf("crear checkpoint: %v", err)
+	}
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "1")()
+
+	out := capturarStdout(t, func() {
+		if err := runtimeCheckpointVerCmd.RunE(runtimeCheckpointVerCmd, []string{itoa(checkpointID)}); err != nil {
+			t.Fatalf("runtime checkpoint-ver local: %v", err)
+		}
+	})
+	for _, token := range []string{"Checkpoint #", "Codex1", "checkpoint inspeccionable", "manual-ver"} {
+		if !strings.Contains(out, token) {
+			t.Fatalf("salida checkpoint-ver sin %q:\n%s", token, out)
+		}
+	}
+}
+
 func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -146,6 +264,8 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 			})
 		case r.URL.Path == "/api/runtime-orders" && r.Method == http.MethodPost:
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": 15})
+		case r.URL.Path == "/api/runtime-checkpoints" && r.Method == http.MethodPost:
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": 16})
 		case r.URL.Path == "/api/runtime-mailbox" && r.Method == http.MethodGet:
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"mailbox": []map[string]any{{
@@ -237,6 +357,15 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	})
 	if !strings.Contains(outCheckpoint, "seguir desde API") {
 		t.Fatalf("salida checkpoints sin datos del servidor:\n%s", outCheckpoint)
+	}
+
+	outCheckpointCrear := capturarStdout(t, func() {
+		if err := runtimeCheckpointNuevoCmd.RunE(runtimeCheckpointNuevoCmd, []string{"Codex1"}); err != nil {
+			t.Fatalf("runtime checkpoint-nuevo via api: %v", err)
+		}
+	})
+	if !strings.Contains(outCheckpointCrear, "#16") {
+		t.Fatalf("salida checkpoint-nuevo sin id remoto:\n%s", outCheckpointCrear)
 	}
 
 	if err := runtimeMailboxCmd.Flags().Set("to", "Codex2"); err != nil {
