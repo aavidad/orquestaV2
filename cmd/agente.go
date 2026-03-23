@@ -31,6 +31,33 @@ var agenteCmd = &cobra.Command{
 	Short: "Operaciones de orquestación para agentes",
 }
 
+func int64FlagOpt(cmd *cobra.Command, name string) (*int64, error) {
+	value, err := cmd.Flags().GetInt64(name)
+	if err != nil {
+		return nil, err
+	}
+	if !cmd.Flags().Changed(name) {
+		return nil, nil
+	}
+	return &value, nil
+}
+
+func debeAutoPausarPorAgotamiento(cuotaPct int, motivo string) bool {
+	motivoLower := strings.ToLower(strings.TrimSpace(motivo))
+	return cuotaPct < 5 ||
+		strings.Contains(motivoLower, "token") ||
+		strings.Contains(motivoLower, "cuota") ||
+		strings.Contains(motivoLower, "rate limit")
+}
+
+func registrarAutoPausaLocal(nombre string, minutos int, motivoPausa, detalle string) error {
+	if err := db.PausarAgente(nombre, minutos, motivoPausa); err != nil {
+		return err
+	}
+	db.Audit(nombre, "auto_pausa", "sistema", 0, detalle)
+	return nil
+}
+
 type proyectoBundle struct {
 	ID      int64  `json:"id"`
 	Slug    string `json:"slug"`
@@ -78,6 +105,7 @@ type agentePrepararOutput struct {
 	Reglas       []*db.Regla              `json:"reglas"`
 	Skills       []*db.Skill              `json:"skills"`
 	Workflows    []*db.Workflow           `json:"workflows"`
+	Memoria      []*db.EntidadMemoria     `json:"memoria,omitempty"`
 	ReanimarAt   *time.Time               `json:"reanimar_at,omitempty"`
 	MotivoPausa  string                   `json:"motivo_pausa,omitempty"`
 	EstadoCuota  string                   `json:"estado_cuota,omitempty"`
@@ -103,12 +131,225 @@ type agenteTickOutput struct {
 	TareasActivas        []itemLigero   `json:"tareas_activas,omitempty"`
 	PropuestasPendientes []itemLigero   `json:"propuestas_pendientes,omitempty"`
 	PropuestasAbiertas   []itemLigero   `json:"propuestas_abiertas,omitempty"`
-	ConsumoDia          int            `json:"consumo_dia_segundos"`
-	LimiteDia           int            `json:"limite_dia_segundos"`
+	ConsumoDia           int            `json:"consumo_dia_segundos"`
+	LimiteDia            int            `json:"limite_dia_segundos"`
 	EstadoCuota          string         `json:"estado_cuota"`
 	ReanimarAt           *time.Time     `json:"reanimar_at,omitempty"`
 	MotivoPausa          string         `json:"motivo_pausa,omitempty"`
 	CuotaPct             int            `json:"cuota_pct,omitempty"`
+}
+
+func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesionActiva *db.Sesion, cuotaPct int) (agenteTickOutput, error) {
+	var out agenteTickOutput
+	if proyecto == nil {
+		return out, fmt.Errorf("proyecto obligatorio")
+	}
+
+	politica := cargarPoliticaAgente()
+	asignadoAProyecto, proyectoAsignado, err := resolverAsignacionActiva(agenteNombre, proyecto.ID)
+	if err != nil {
+		return out, err
+	}
+
+	tareas, err := db.ListarTareas(db.FiltroTareas{Agente: &agenteNombre, ProyectoID: &proyecto.ID})
+	if err != nil {
+		return out, err
+	}
+	var tareasActivas []itemLigero
+	var tieneBloqueos bool
+	var tieneTrabajo bool
+	for _, tarea := range tareas {
+		if tarea.Estado == db.TareaCompletada || tarea.Estado == db.TareaCancelada || tarea.Estado == db.TareaBacklog {
+			continue
+		}
+		tareasActivas = append(tareasActivas, itemLigero{
+			ID:     tarea.ID,
+			Titulo: tarea.Titulo,
+			Estado: string(tarea.Estado),
+		})
+		if tarea.Estado == db.TareaBloqueada {
+			tieneBloqueos = true
+		}
+		if tarea.Estado == db.TareaAsignada || tarea.Estado == db.TareaEnProgreso {
+			tieneTrabajo = true
+		}
+	}
+
+	pendientes, err := db.PropuestasPendientesVotoProyecto(agenteNombre, &proyecto.ID)
+	if err != nil {
+		return out, err
+	}
+	var propuestasPendientes []itemLigero
+	for _, propuesta := range pendientes {
+		propuestasPendientes = append(propuestasPendientes, itemLigero{
+			ID:     propuesta.ID,
+			Codigo: propuesta.Codigo,
+			Titulo: propuesta.Titulo,
+			Estado: string(propuesta.Estado),
+		})
+	}
+
+	estadoAbierta := db.PropuestaAbierta
+	abiertas, err := db.ListarPropuestas(&estadoAbierta, &proyecto.ID)
+	if err != nil {
+		return out, err
+	}
+	var propuestasAbiertas []itemLigero
+	for _, propuesta := range abiertas {
+		propuestasAbiertas = append(propuestasAbiertas, itemLigero{
+			ID:     propuesta.ID,
+			Codigo: propuesta.Codigo,
+			Titulo: propuesta.Titulo,
+			Estado: string(propuesta.Estado),
+		})
+	}
+
+	agente, err := db.GetAgente(agenteNombre)
+	if err != nil {
+		return out, err
+	}
+
+	out = agenteTickOutput{
+		Agente:               agenteNombre,
+		Proyecto:             proyectoBundle{ID: proyecto.ID, Slug: proyecto.Slug, Nombre: proyecto.Nombre, RutaAbs: proyecto.RutaAbs},
+		Politica:             politica,
+		AsignadoAProyecto:    asignadoAProyecto,
+		ProyectoAsignado:     proyectoAsignado,
+		TareasActivas:        tareasActivas,
+		PropuestasPendientes: propuestasPendientes,
+		PropuestasAbiertas:   propuestasAbiertas,
+		ConsumoDia:           agente.ConsumoDiaSegundos,
+		LimiteDia:            agente.LimiteDiaSegundos,
+		EstadoCuota:          agente.EstadoCuota,
+		ReanimarAt:           agente.ReanimarAt,
+		MotivoPausa:          agente.MotivoPausa,
+		CuotaPct:             cuotaPct,
+	}
+	if sesionActiva != nil {
+		out.SesionActiva = resumirSesion(sesionActiva)
+	}
+
+	switch {
+	case agente.EstadoCuota != "activo":
+		out.AccionRecomendada = "pausar_por_cuota"
+		out.DebePausar = true
+		if agente.ReanimarAt != nil {
+			out.Motivo = fmt.Sprintf("Cuota agotada (%s). Reanimación programada para: %s. Motivo: %s",
+				agente.EstadoCuota, agente.ReanimarAt.Format("15:04:05"), agente.MotivoPausa)
+		} else {
+			out.Motivo = "Cuota agotada o modo enfriamiento activo."
+		}
+	case !asignadoAProyecto && proyectoAsignado != "":
+		out.AccionRecomendada = "pausar_y_reasignar"
+		out.DebePausar = true
+		out.Motivo = "La asignación activa del agente ha cambiado al proyecto " + proyectoAsignado
+	case len(propuestasPendientes) > 0:
+		out.AccionRecomendada = "votar_propuestas_pendientes"
+		out.Motivo = fmt.Sprintf("Hay %d propuestas pendientes de voto para este proyecto", len(propuestasPendientes))
+	case tieneBloqueos:
+		out.AccionRecomendada = "pedir_intervencion"
+		out.Motivo = "Hay tareas bloqueadas que requieren resolución"
+	case tieneTrabajo:
+		out.AccionRecomendada = "continuar_trabajo"
+		out.Motivo = "Sigue trabajando hasta completar la tarea o detectar una duda real"
+	default:
+		out.AccionRecomendada = "esperar_o_pedir_tarea"
+		out.Motivo = "No hay tarea activa asignada en este proyecto"
+	}
+
+	return out, nil
+}
+
+func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Proyecto, conector *db.Conector, ultima *db.Sesion, modelo, razonamiento, perfilTarea string) (agentePrepararOutput, error) {
+	var out agentePrepararOutput
+	if agente == nil || proyecto == nil || conector == nil {
+		return out, fmt.Errorf("agente, proyecto y conector son obligatorios")
+	}
+
+	reglas, err := db.GetReglasAgente(agente.Rol)
+	if err != nil {
+		return out, err
+	}
+	skills, err := db.GetSkillsAgente(agente.Rol)
+	if err != nil {
+		return out, err
+	}
+	workflows, err := db.GetWorkflowsAgente(agente.Rol)
+	if err != nil {
+		return out, err
+	}
+	memoria, err := db.ListarEntidadesMemoria(db.FiltroEntidadesMemoria{ProyectoID: &proyecto.ID})
+	if err != nil {
+		return out, err
+	}
+
+	req := agentruntime.LaunchRequest{
+		Agente:       agente.Nombre,
+		Rol:          agente.Rol,
+		ProyectoSlug: proyecto.Slug,
+		ProyectoRuta: proyecto.RutaAbs,
+		Modelo:       strings.TrimSpace(modelo),
+		Razonamiento: strings.TrimSpace(razonamiento),
+		PerfilTarea:  strings.TrimSpace(perfilTarea),
+		Conector: agentruntime.ConnectorConfig{
+			Slug:         conector.Slug,
+			Nombre:       conector.Nombre,
+			Transporte:   conector.Transporte,
+			Comando:      conector.Comando,
+			ArgsJSON:     conector.ArgsJSON,
+			EnvJSON:      conector.EnvJSON,
+			MetadataJSON: conector.MetadataJSON,
+			Activo:       conector.Activo,
+		},
+	}
+	if ultima != nil {
+		req.Resume = agentruntime.ResumeContext{
+			ExternalSessionID:  ultima.ExternalSessionID,
+			ResumePayloadJSON:  ultima.ResumePayloadJSON,
+			ResumenContinuidad: ultima.ResumenContinuidad,
+			Branch:             ultima.Branch,
+			CWD:                ultima.CWD,
+		}
+	}
+	plan, err := agentruntime.DefaultRegistry().Prepare(req)
+	if err != nil {
+		return out, err
+	}
+
+	out = agentePrepararOutput{
+		Agente: agente.Nombre,
+		Rol:    agente.Rol,
+		Proyecto: proyectoBundle{
+			ID:      proyecto.ID,
+			Slug:    proyecto.Slug,
+			Nombre:  proyecto.Nombre,
+			RutaAbs: proyecto.RutaAbs,
+		},
+		Conector: conectorBundle{
+			ID:         conector.ID,
+			Slug:       conector.Slug,
+			Nombre:     conector.Nombre,
+			Transporte: conector.Transporte,
+			Comando:    conector.Comando,
+		},
+		Politica:    cargarPoliticaAgente(),
+		Plan:        plan,
+		Reglas:      reglas,
+		Skills:      skills,
+		Workflows:   workflows,
+		Memoria:     memoria,
+		ReanimarAt:  agente.ReanimarAt,
+		MotivoPausa: agente.MotivoPausa,
+		EstadoCuota: agente.EstadoCuota,
+	}
+	out.Politica.Modelo = plan.Modelo
+	out.Politica.Razonamiento = plan.Razonamiento
+	out.Politica.PerfilTarea = plan.PerfilTarea
+	if ultima != nil {
+		out.UltimaSesion = resumirSesion(ultima)
+	}
+
+	return out, nil
 }
 
 var agentePrepararCmd = &cobra.Command{
@@ -185,85 +426,7 @@ func prepararAgenteLocal(agenteNombre, proyectoRef, conectorRef, modelo, razonam
 		return out, err
 	}
 
-	reglas, err := db.GetReglasAgente(agente.Rol)
-	if err != nil {
-		return out, err
-	}
-	skills, err := db.GetSkillsAgente(agente.Rol)
-	if err != nil {
-		return out, err
-	}
-	workflows, err := db.GetWorkflowsAgente(agente.Rol)
-	if err != nil {
-		return out, err
-	}
-
-	req := agentruntime.LaunchRequest{
-		Agente:       agente.Nombre,
-		Rol:          agente.Rol,
-		ProyectoSlug: proyecto.Slug,
-		ProyectoRuta: proyecto.RutaAbs,
-		Modelo:       strings.TrimSpace(modelo),
-		Razonamiento: strings.TrimSpace(razonamiento),
-		PerfilTarea:  strings.TrimSpace(perfilTarea),
-		Conector: agentruntime.ConnectorConfig{
-			Slug:         conector.Slug,
-			Nombre:       conector.Nombre,
-			Transporte:   conector.Transporte,
-			Comando:      conector.Comando,
-			ArgsJSON:     conector.ArgsJSON,
-			EnvJSON:      conector.EnvJSON,
-			MetadataJSON: conector.MetadataJSON,
-			Activo:       conector.Activo,
-		},
-	}
-	if ultima != nil {
-		req.Resume = agentruntime.ResumeContext{
-			ExternalSessionID:  ultima.ExternalSessionID,
-			ResumePayloadJSON:  ultima.ResumePayloadJSON,
-			ResumenContinuidad: ultima.ResumenContinuidad,
-			Branch:             ultima.Branch,
-			CWD:                ultima.CWD,
-		}
-	}
-	plan, err := agentruntime.DefaultRegistry().Prepare(req)
-	if err != nil {
-		return out, err
-	}
-
-	out = agentePrepararOutput{
-		Agente: agente.Nombre,
-		Rol:    agente.Rol,
-		Proyecto: proyectoBundle{
-			ID:      proyecto.ID,
-			Slug:    proyecto.Slug,
-			Nombre:  proyecto.Nombre,
-			RutaAbs: proyecto.RutaAbs,
-		},
-		Conector: conectorBundle{
-			ID:         conector.ID,
-			Slug:       conector.Slug,
-			Nombre:     conector.Nombre,
-			Transporte: conector.Transporte,
-			Comando:    conector.Comando,
-		},
-		Politica:    cargarPoliticaAgente(),
-		Plan:        plan,
-		Reglas:      reglas,
-		Skills:      skills,
-		Workflows:   workflows,
-		ReanimarAt:  agente.ReanimarAt,
-		MotivoPausa: agente.MotivoPausa,
-		EstadoCuota: agente.EstadoCuota,
-	}
-	out.Politica.Modelo = plan.Modelo
-	out.Politica.Razonamiento = plan.Razonamiento
-	out.Politica.PerfilTarea = plan.PerfilTarea
-	if ultima != nil {
-		out.UltimaSesion = resumirSesion(ultima)
-	}
-
-	return out, nil
+	return construirAgentePrepararOutputDesdeDatos(agente, proyecto, conector, ultima, modelo, razonamiento, perfilTarea)
 }
 
 var agenteTickCmd = &cobra.Command{
@@ -286,13 +449,13 @@ var agenteTickCmd = &cobra.Command{
 
 		var out agenteTickOutput
 		if ok, err := apiPost("/api/agente/tick", map[string]any{
-			"agente":      agenteNombre,
-			"proyecto":    proyectoRef,
-			"host":        host,
-			"pid":         pidRaw,
-			"cuota_pct":   cuotaPct,
-			"finalizado":  finalizado,
-			"motivo":      motivo,
+			"agente":     agenteNombre,
+			"proyecto":   proyectoRef,
+			"host":       host,
+			"pid":        pidRaw,
+			"cuota_pct":  cuotaPct,
+			"finalizado": finalizado,
+			"motivo":     motivo,
 		}, &out); err != nil {
 			return err
 		} else if ok {
@@ -328,124 +491,21 @@ var agenteTickCmd = &cobra.Command{
 				return err
 			}
 			// Si termina por cuota, pausamos (OP-084)
-			if finalizado {
-				motivoLower := strings.ToLower(motivo)
-				if cuotaPct < 5 || strings.Contains(motivoLower, "token") || strings.Contains(motivoLower, "cuota") || strings.Contains(motivoLower, "rate limit") {
-					_ = db.PausarAgente(agenteNombre, 60, "Auto-pausa local: "+motivo)
+			if finalizado && debeAutoPausarPorAgotamiento(cuotaPct, motivo) {
+				if err := registrarAutoPausaLocal(
+					agenteNombre,
+					60,
+					"Auto-pausa por agotamiento: "+motivo,
+					"Detección de agotamiento en tick final: "+motivo,
+				); err != nil {
+					return err
 				}
 			}
 		}
 
-		politica := cargarPoliticaAgente()
-		asignadoAProyecto, proyectoAsignado, err := resolverAsignacionActiva(agenteNombre, proyecto.ID)
+		out, err = construirAgenteTickOutput(agenteNombre, proyecto, sesionActiva, cuotaPct)
 		if err != nil {
 			return err
-		}
-
-		tareas, err := db.ListarTareas(db.FiltroTareas{Agente: &agenteNombre, ProyectoID: &proyecto.ID})
-		if err != nil {
-			return err
-		}
-		var tareasActivas []itemLigero
-		var tieneBloqueos bool
-		var tieneTrabajo bool
-		for _, tarea := range tareas {
-			if tarea.Estado == db.TareaCompletada || tarea.Estado == db.TareaCancelada || tarea.Estado == db.TareaBacklog {
-				continue
-			}
-			tareasActivas = append(tareasActivas, itemLigero{
-				ID:     tarea.ID,
-				Titulo: tarea.Titulo,
-				Estado: string(tarea.Estado),
-			})
-			if tarea.Estado == db.TareaBloqueada {
-				tieneBloqueos = true
-			}
-			if tarea.Estado == db.TareaAsignada || tarea.Estado == db.TareaEnProgreso {
-				tieneTrabajo = true
-			}
-		}
-
-		pendientes, err := db.PropuestasPendientesVotoProyecto(agenteNombre, &proyecto.ID)
-		if err != nil {
-			return err
-		}
-		var propuestasPendientes []itemLigero
-		for _, propuesta := range pendientes {
-			propuestasPendientes = append(propuestasPendientes, itemLigero{
-				ID:     propuesta.ID,
-				Codigo: propuesta.Codigo,
-				Titulo: propuesta.Titulo,
-				Estado: string(propuesta.Estado),
-			})
-		}
-
-		estadoAbierta := db.PropuestaAbierta
-		abiertas, err := db.ListarPropuestas(&estadoAbierta, &proyecto.ID)
-		if err != nil {
-			return err
-		}
-		var propuestasAbiertas []itemLigero
-		for _, propuesta := range abiertas {
-			propuestasAbiertas = append(propuestasAbiertas, itemLigero{
-				ID:     propuesta.ID,
-				Codigo: propuesta.Codigo,
-				Titulo: propuesta.Titulo,
-				Estado: string(propuesta.Estado),
-			})
-		}
-
-		agente, err := db.GetAgente(agenteNombre)
-		if err != nil {
-			return err
-		}
-
-		out = agenteTickOutput{
-			Agente:               agenteNombre,
-			Proyecto:             proyectoBundle{ID: proyecto.ID, Slug: proyecto.Slug, Nombre: proyecto.Nombre, RutaAbs: proyecto.RutaAbs},
-			Politica:             politica,
-			AsignadoAProyecto:    asignadoAProyecto,
-			ProyectoAsignado:     proyectoAsignado,
-			TareasActivas:        tareasActivas,
-			PropuestasPendientes: propuestasPendientes,
-			PropuestasAbiertas:   propuestasAbiertas,
-			ConsumoDia:          agente.ConsumoDiaSegundos,
-			LimiteDia:           agente.LimiteDiaSegundos,
-			EstadoCuota:          agente.EstadoCuota,
-			ReanimarAt:           agente.ReanimarAt,
-			MotivoPausa:          agente.MotivoPausa,
-			CuotaPct:             cuotaPct,
-		}
-		if sesionActiva != nil {
-			out.SesionActiva = resumirSesion(sesionActiva)
-		}
-
-		switch {
-		case agente.EstadoCuota != "activo":
-			out.AccionRecomendada = "pausar_por_cuota"
-			out.DebePausar = true
-			if agente.ReanimarAt != nil {
-				out.Motivo = fmt.Sprintf("Cuota agotada (%s). Reanimación programada para: %s. Motivo: %s", 
-					agente.EstadoCuota, agente.ReanimarAt.Format("15:04:05"), agente.MotivoPausa)
-			} else {
-				out.Motivo = "Cuota agotada o modo enfriamiento activo."
-			}
-		case !asignadoAProyecto && proyectoAsignado != "":
-			out.AccionRecomendada = "pausar_y_reasignar"
-			out.DebePausar = true
-			out.Motivo = "La asignación activa del agente ha cambiado al proyecto " + proyectoAsignado
-		case len(propuestasPendientes) > 0:
-			out.AccionRecomendada = "votar_propuestas_pendientes"
-			out.Motivo = fmt.Sprintf("Hay %d propuestas pendientes de voto para este proyecto", len(propuestasPendientes))
-		case tieneBloqueos:
-			out.AccionRecomendada = "pedir_intervencion"
-			out.Motivo = "Hay tareas bloqueadas que requieren resolución"
-		case tieneTrabajo:
-			out.AccionRecomendada = "continuar_trabajo"
-			out.Motivo = "Sigue trabajando hasta completar la tarea o detectar una duda real"
-		default:
-			out.AccionRecomendada = "esperar_o_pedir_tarea"
-			out.Motivo = "No hay tarea activa asignada en este proyecto"
 		}
 
 		return imprimirAgenteTick(out, jsonOut)
@@ -467,8 +527,24 @@ func init() {
 	agenteEjecutarCmd.Flags().StringP("conector", "c", "", "Conector a usar")
 	agenteEjecutarCmd.Flags().String("modelo", "", "Modelo a usar")
 	agenteEjecutarCmd.Flags().Int("pausa-minutos", 60, "Minutos de espera si se detecta bloqueo")
+	agenteHandoffCmd.Flags().Int64("tarea", 0, "Tarea viva a reasignar durante el handoff")
+	agenteHandoffCmd.Flags().String("motivo", "", "Motivo del handoff")
+	agenteHandoffCmd.Flags().String("resumen", "", "Resumen de continuidad para el agente destino")
+	agenteHandoffCmd.Flags().String("external-session-id", "", "External session id de continuidad si existe")
+	agenteReasignarVivoCmd.Flags().String("motivo", "", "Motivo del handoff")
+	agenteReasignarVivoCmd.Flags().String("resumen", "", "Resumen de continuidad para el agente destino")
+	agenteReasignarVivoCmd.Flags().String("external-session-id", "", "External session id de continuidad si existe")
 
-	agenteCmd.AddCommand(agentePrepararCmd, agenteTickCmd, agentePurgarCmd, agentePausarCmd, agenteRehabilitarCmd, agenteEjecutarCmd)
+	agenteCmd.AddCommand(
+		agentePrepararCmd,
+		agenteTickCmd,
+		agentePurgarCmd,
+		agentePausarCmd,
+		agenteRehabilitarCmd,
+		agenteEjecutarCmd,
+		agenteHandoffCmd,
+		agenteReasignarVivoCmd,
+	)
 }
 
 var agenteEjecutarCmd = &cobra.Command{
@@ -549,13 +625,13 @@ var agenteEjecutarCmd = &cobra.Command{
 				for scanner.Scan() {
 					line := scanner.Text()
 					lower := strings.ToLower(line)
-					if strings.Contains(lower, "hit your usage limit") || 
-					   strings.Contains(lower, "try again at") || 
-					   strings.Contains(lower, "resets") {
-						
+					if strings.Contains(lower, "hit your usage limit") ||
+						strings.Contains(lower, "try again at") ||
+						strings.Contains(lower, "resets") {
+
 						fmt.Printf("\n🚨 [Orquesta] DETECTADO BLOQUEO EXTERNO: %s\n", line)
-						
-						pausaFinal := 60
+
+						pausaFinal := pausaMin
 						re2 := regexp.MustCompile(`resets (\d+):(\d+)( on (\d+) (\w{3}))?`)
 						matches := re2.FindAllStringSubmatch(line, -1)
 						var selectedTarget time.Time
@@ -568,15 +644,32 @@ var agenteEjecutarCmd = &cobra.Command{
 								d, _ := strconv.Atoi(m[4])
 								target = time.Date(now.Year(), now.Month(), d, h, mi, 0, 0, time.Local)
 							}
-							if target.Before(now) { target = target.AddDate(0, 0, 1) }
-							if selectedTarget.IsZero() || target.Before(selectedTarget) { selectedTarget = target }
+							if target.Before(now) {
+								target = target.AddDate(0, 0, 1)
+							}
+							if selectedTarget.IsZero() || target.Before(selectedTarget) {
+								selectedTarget = target
+							}
 						}
 						if !selectedTarget.IsZero() {
 							pausaFinal = int(time.Until(selectedTarget).Minutes()) + 1
 						}
 
-						_ = db.PausarAgente(agente, pausaFinal, "Detección inteligente: "+line)
-						db.Audit(agente, "auto_pausa", "sistema", 0, fmt.Sprintf("Bloqueo detectado: %s", line))
+						motivoPausa := "Detección inteligente: " + line
+						detalle := fmt.Sprintf("Bloqueo detectado: %s", line)
+						if ok, err := registrarPausaAgentePorAPI(
+							agente,
+							pausaFinal,
+							motivoPausa,
+							"auto_pausa",
+							"sistema",
+							detalle,
+						); !ok {
+							_ = registrarAutoPausaLocal(agente, pausaFinal, motivoPausa, detalle)
+						} else if err != nil {
+							fmt.Fprintf(os.Stderr, "\n[Orquesta] aviso: no se pudo registrar la auto-pausa via API (%v); usando DB local\n", err)
+							_ = registrarAutoPausaLocal(agente, pausaFinal, motivoPausa, detalle)
+						}
 						fmt.Printf("⏸ [Orquesta] Agente pausado por %d min.\n", pausaFinal)
 						_ = proc.Process.Kill()
 						break
@@ -595,6 +688,93 @@ var agenteEjecutarCmd = &cobra.Command{
 	},
 }
 
+var agenteHandoffCmd = &cobra.Command{
+	Use:   "handoff <agente-origen> <agente-destino>",
+	Short: "Crea un handoff real y reasigna la tarea al agente destino",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		tareaID, err := int64FlagOpt(cmd, "tarea")
+		if err != nil {
+			return err
+		}
+		resumen, _ := cmd.Flags().GetString("resumen")
+		externalSessionID, _ := cmd.Flags().GetString("external-session-id")
+		motivo, _ := cmd.Flags().GetString("motivo")
+
+		orderID, ok, err := crearHandoffAgentePorAPI(
+			strings.TrimSpace(args[0]),
+			strings.TrimSpace(args[1]),
+			tareaID,
+			strings.TrimSpace(motivo),
+			strings.TrimSpace(resumen),
+			strings.TrimSpace(externalSessionID),
+		)
+		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			orderID, err = db.CrearHandoffAgenteVivo(
+				strings.TrimSpace(args[0]),
+				strings.TrimSpace(args[1]),
+				tareaID,
+				strings.TrimSpace(motivo),
+				strings.TrimSpace(resumen),
+				strings.TrimSpace(externalSessionID),
+			)
+		}
+		if err != nil {
+			return err
+		}
+		fmt.Printf("✓ Handoff creado %s → %s (runtime_order: %d)\n", args[0], args[1], orderID)
+		if tareaID != nil {
+			fmt.Printf("  Tarea #%d reasignada al agente destino\n", *tareaID)
+		}
+		return nil
+	},
+}
+
+var agenteReasignarVivoCmd = &cobra.Command{
+	Use:   "reasignar-vivo <tarea-id> <agente-origen> <agente-destino>",
+	Short: "Atajo de handoff con reasignación explícita de tarea viva",
+	Args:  cobra.ExactArgs(3),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		tareaID, err := strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("tarea-id inválido")
+		}
+		resumen, _ := cmd.Flags().GetString("resumen")
+		externalSessionID, _ := cmd.Flags().GetString("external-session-id")
+		motivo, _ := cmd.Flags().GetString("motivo")
+
+		orderID, ok, err := crearHandoffAgentePorAPI(
+			strings.TrimSpace(args[1]),
+			strings.TrimSpace(args[2]),
+			&tareaID,
+			strings.TrimSpace(motivo),
+			strings.TrimSpace(resumen),
+			strings.TrimSpace(externalSessionID),
+		)
+		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			orderID, err = db.CrearHandoffAgenteVivo(
+				strings.TrimSpace(args[1]),
+				strings.TrimSpace(args[2]),
+				&tareaID,
+				strings.TrimSpace(motivo),
+				strings.TrimSpace(resumen),
+				strings.TrimSpace(externalSessionID),
+			)
+		}
+		if err != nil {
+			return err
+		}
+		fmt.Printf("✓ Reasignación viva creada sobre tarea #%d (runtime_order: %d)\n", tareaID, orderID)
+		return nil
+	},
+}
+
 var agentePausarCmd = &cobra.Command{
 	Use:   "pausar <nombre> <minutos> <motivo...>",
 	Short: "Registra una pausa forzada (rate-limit externo) para un agente",
@@ -607,13 +787,19 @@ var agentePausarCmd = &cobra.Command{
 		}
 		motivo := strings.Join(args[2:], " ")
 
-		if err := ensureLocalDB(); err != nil {
-			return err
+		if ok, err := pausarAgentePorAPI(nombre, minutos, motivo); ok {
+			if err != nil {
+				return err
+			}
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			if err := db.PausarAgente(nombre, minutos, motivo); err != nil {
+				return err
+			}
+			db.Audit(nombre, "pausa_externa", "agente", 0, fmt.Sprintf("Bloqueado %d min por: %s", minutos, motivo))
 		}
-		if err := db.PausarAgente(nombre, minutos, motivo); err != nil {
-			return err
-		}
-		db.Audit(nombre, "pausa_externa", "agente", 0, fmt.Sprintf("Bloqueado %d min por: %s", minutos, motivo))
 		fmt.Printf("✓ Agente %s pausado por %d minutos. Orquesta lo reanimará automáticamente.\n", nombre, minutos)
 		return nil
 	},
@@ -626,13 +812,19 @@ var agentePurgarCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		nombre := args[0]
 		// TODO: Validar que el agente no tenga tareas activas antes de borrarlo
-		if err := ensureLocalDB(); err != nil {
-			return err
+		if ok, err := eliminarAgentePorAPI(nombre); ok {
+			if err != nil {
+				return err
+			}
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			if err := db.EliminarAgente(nombre); err != nil {
+				return err
+			}
+			db.Audit("alberto", "purgar_agente", "agente", 0, nombre)
 		}
-		if err := db.EliminarAgente(nombre); err != nil {
-			return err
-		}
-		db.Audit("alberto", "purgar_agente", "agente", 0, nombre)
 		fmt.Printf("✓ Agente %s eliminado correctamente\n", nombre)
 		return nil
 	},
@@ -644,10 +836,13 @@ var agenteRehabilitarCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		nombre := args[0]
-		if err := ensureLocalDB(); err != nil {
-			return err
+		ok, err := resetReanimacionAgentePorAPI(nombre)
+		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			err = db.ResetReanimacion(nombre)
 		}
-		err := db.ResetReanimacion(nombre)
 		if err != nil {
 			return fmt.Errorf("error rehabilitando agente: %w", err)
 		}
@@ -802,7 +997,12 @@ func imprimirAgentePreparar(out agentePrepararOutput, jsonOut bool) error {
 		}
 		fmt.Println(msg)
 	}
-	fmt.Printf("Reglas:    %d  Skills: %d  Workflows: %d\n", len(out.Reglas), len(out.Skills), len(out.Workflows))
+	fmt.Printf("Reglas:    %d  Skills: %d  Workflows: %d  Memoria: %d\n", len(out.Reglas), len(out.Skills), len(out.Workflows), len(out.Memoria))
+	if len(out.Memoria) > 0 {
+		for _, entidad := range out.Memoria {
+			fmt.Printf("Memoria:   %s [%s] %s\n", entidad.Nombre, entidad.Tipo, truncar(entidad.ValorJSON, 72))
+		}
+	}
 	return nil
 }
 

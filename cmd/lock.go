@@ -38,24 +38,24 @@ var lockListarCmd = &cobra.Command{
 			query.Set("estado", estadoStr)
 		}
 
-		repo := db.SQLiteLockRepository{}
-		filter := coordination.LockFilter{}
-		if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
-			filter.Agent = &agente
-		}
-		if proyectoRef, _ := cmd.Flags().GetString("proyecto"); strings.TrimSpace(proyectoRef) != "" {
-			proyecto, err := db.GetProyecto(proyectoRef)
-			if err != nil {
-				return err
-			}
-			filter.ProjectID = &proyecto.ID
-		}
-		if estadoStr, _ := cmd.Flags().GetString("estado"); strings.TrimSpace(estadoStr) != "" {
-			estado := coordination.LockState(estadoStr)
-			filter.State = &estado
-		}
 		locks, ok, err := cargarLocksDesdeAPI(query)
 		if !ok {
+			repo := db.SQLiteLockRepository{}
+			filter := coordination.LockFilter{}
+			if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
+				filter.Agent = &agente
+			}
+			if proyectoRef, _ := cmd.Flags().GetString("proyecto"); strings.TrimSpace(proyectoRef) != "" {
+				proyecto, err := db.GetProyecto(proyectoRef)
+				if err != nil {
+					return err
+				}
+				filter.ProjectID = &proyecto.ID
+			}
+			if estadoStr, _ := cmd.Flags().GetString("estado"); strings.TrimSpace(estadoStr) != "" {
+				estado := coordination.LockState(estadoStr)
+				filter.State = &estado
+			}
 			locks, err = repo.List(filter)
 		}
 		if err != nil {

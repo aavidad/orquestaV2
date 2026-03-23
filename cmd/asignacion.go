@@ -39,24 +39,23 @@ var asignacionListarCmd = &cobra.Command{
 			query.Set("estado", estadoStr)
 		}
 
-		f := db.FiltroAsignaciones{}
-		if agente != "" {
-			f.Agente = &agente
-		}
-		if proyectoRef != "" {
-			p, err := db.GetProyecto(proyectoRef)
-			if err != nil {
-				return err
-			}
-			f.ProyectoID = &p.ID
-		}
-		if estadoStr != "" {
-			estado := db.EstadoAsignacion(estadoStr)
-			f.Estado = &estado
-		}
-
 		asignaciones, ok, err := cargarAsignacionesDesdeAPI(query)
 		if !ok {
+			f := db.FiltroAsignaciones{}
+			if agente != "" {
+				f.Agente = &agente
+			}
+			if proyectoRef != "" {
+				p, err := db.GetProyecto(proyectoRef)
+				if err != nil {
+					return err
+				}
+				f.ProyectoID = &p.ID
+			}
+			if estadoStr != "" {
+				estado := db.EstadoAsignacion(estadoStr)
+				f.Estado = &estado
+			}
 			asignaciones, err = db.ListarAsignaciones(f)
 		}
 		if err != nil {

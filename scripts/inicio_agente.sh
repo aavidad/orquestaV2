@@ -3,7 +3,6 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ORQUESTA_BIN="$ROOT_DIR/orquesta"
-ORQUESTA_DB_PATH="${ORQUESTA_DB:-$ROOT_DIR/orquesta.db}"
 
 usage() {
   cat <<'EOF'
@@ -70,37 +69,29 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-sql_escape() {
-  printf "%s" "$1" | sed "s/'/''/g"
-}
-
 query_task_rows() {
-  local estados_sql="$1"
-  sqlite3 -readonly "$ORQUESTA_DB_PATH" "
-    SELECT id || '|' || estado || '|' || titulo
-    FROM tareas
-    WHERE lower(agente) = lower('$(sql_escape "$AGENTE")')
-      AND estado IN ($estados_sql)
-    ORDER BY
-      CASE estado
-        WHEN 'en_progreso' THEN 0
-        WHEN 'asignada' THEN 1
-        WHEN 'bloqueada' THEN 2
-        ELSE 9
-      END,
-      id;
-  " 2>/dev/null || true
+  local estado="$1"
+  local cmd=("$ORQUESTA_BIN" tarea listar --agente "$AGENTE" --estado "$estado" --tsv)
+  if [[ -n "$PROYECTO" ]]; then
+    cmd+=(--proyecto "$PROYECTO")
+  fi
+  "${cmd[@]}" 2>/dev/null || true
 }
 
 query_task_status() {
   local task_id="$1"
-  sqlite3 -readonly "$ORQUESTA_DB_PATH" "
-    SELECT COALESCE(estado, '')
-    FROM tareas
-    WHERE id = $task_id
-      AND lower(agente) = lower('$(sql_escape "$AGENTE")')
-    LIMIT 1;
-  " 2>/dev/null | head -n 1
+  local row_id row_status
+  while IFS=$'\t' read -r row_id row_status _rest; do
+    if [[ "$row_id" == "$task_id" ]]; then
+      printf '%s\n' "$row_status"
+      return 0
+    fi
+  done < <(
+    query_task_rows "en_progreso"
+    query_task_rows "asignada"
+    query_task_rows "bloqueada"
+  )
+  return 0
 }
 
 start_session() {
@@ -135,12 +126,15 @@ start_task_if_needed() {
 start_session
 echo
 echo "Tareas activas de $AGENTE:"
-mapfile -t ACTIVE_ROWS < <(query_task_rows "'en_progreso','asignada','bloqueada'")
+mapfile -t IN_PROGRESS_ROWS < <(query_task_rows "en_progreso")
+mapfile -t ASSIGNED_ROWS < <(query_task_rows "asignada")
+mapfile -t BLOCKED_ROWS < <(query_task_rows "bloqueada")
+ACTIVE_ROWS=("${IN_PROGRESS_ROWS[@]}" "${ASSIGNED_ROWS[@]}" "${BLOCKED_ROWS[@]}")
 if [[ ${#ACTIVE_ROWS[@]} -eq 0 ]]; then
   echo "  - sin tareas activas"
 else
   for row in "${ACTIVE_ROWS[@]}"; do
-    IFS='|' read -r row_id row_status row_title <<<"$row"
+    IFS=$'\t' read -r row_id row_status _row_priority _row_agent _row_project _row_module row_title <<<"$row"
     printf '  - #%s [%s] %s\n' "$row_id" "$row_status" "$row_title"
   done
 fi
@@ -156,11 +150,8 @@ if [[ "$AUTO_START" -eq 0 ]]; then
   exit 0
 fi
 
-mapfile -t IN_PROGRESS_ROWS < <(query_task_rows "'en_progreso'")
-mapfile -t ASSIGNED_ROWS < <(query_task_rows "'asignada'")
-
 if [[ ${#IN_PROGRESS_ROWS[@]} -eq 1 ]]; then
-  IFS='|' read -r only_id _only_status only_title <<<"${IN_PROGRESS_ROWS[0]}"
+  IFS=$'\t' read -r only_id _only_status _only_priority _only_agent _only_project _only_module only_title <<<"${IN_PROGRESS_ROWS[0]}"
   echo
   echo "Continuación detectada: tarea $only_id ya en progreso."
   echo "Título: $only_title"
@@ -168,7 +159,7 @@ if [[ ${#IN_PROGRESS_ROWS[@]} -eq 1 ]]; then
 fi
 
 if [[ ${#IN_PROGRESS_ROWS[@]} -eq 0 && ${#ASSIGNED_ROWS[@]} -eq 1 ]]; then
-  IFS='|' read -r only_id _only_status _only_title <<<"${ASSIGNED_ROWS[0]}"
+  IFS=$'\t' read -r only_id _only_status _only_priority _only_agent _only_project _only_module _only_title <<<"${ASSIGNED_ROWS[0]}"
   start_task_if_needed "$only_id"
   exit 0
 fi

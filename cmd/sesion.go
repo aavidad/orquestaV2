@@ -10,6 +10,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -277,10 +278,14 @@ var sesionContinuarCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agente := args[0]
 		proyectoRef, _ := cmd.Flags().GetString("proyecto")
+		cwd, _ := cmd.Flags().GetString("cwd")
+		jsonOut, _ := cmd.Flags().GetBool("json")
+		campo, _ := cmd.Flags().GetString("campo")
 		var s *db.Sesion
 		params := mapToValues(map[string]string{
 			"agente":   agente,
 			"proyecto": proyectoRef,
+			"cwd":      cwd,
 		})
 		var resp apiSesionResponse
 		if ok, err := apiGetQuery("/api/sesiones/continuar", params, &resp); err != nil {
@@ -300,10 +305,21 @@ var sesionContinuarCmd = &cobra.Command{
 				proyectoID = &p.ID
 			}
 			var err error
-			s, err = db.ObtenerUltimaSesion(agente, proyectoID)
+			s, err = db.ObtenerUltimaSesionConFiltro(agente, proyectoID, cwd)
 			if err != nil {
 				return err
 			}
+		}
+		if jsonOut {
+			return imprimirJSON(s)
+		}
+		if strings.TrimSpace(campo) != "" {
+			v, err := valorCampoSesion(s, campo)
+			if err != nil {
+				return err
+			}
+			fmt.Println(v)
+			return nil
 		}
 		fmt.Printf("Sesión %d\n", s.ID)
 		fmt.Printf("  Agente:      %s\n", s.Agente)
@@ -330,6 +346,43 @@ var sesionContinuarCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func valorCampoSesion(s *db.Sesion, campo string) (string, error) {
+	if s == nil {
+		return "", fmt.Errorf("sesión nil")
+	}
+	switch strings.TrimSpace(strings.ToLower(campo)) {
+	case "id":
+		return strconv.FormatInt(s.ID, 10), nil
+	case "agente":
+		return s.Agente, nil
+	case "proyecto":
+		return s.ProyectoSlug, nil
+	case "cwd":
+		return s.CWD, nil
+	case "herramienta":
+		return s.Herramienta, nil
+	case "external-session-id", "external_session_id":
+		return s.ExternalSessionID, nil
+	case "branch":
+		return s.Branch, nil
+	case "resumen", "resumen_continuidad":
+		return s.ResumenContinuidad, nil
+	case "resume-payload", "resume_payload_json":
+		return s.ResumePayloadJSON, nil
+	case "estado":
+		return s.Estado, nil
+	case "host":
+		return s.Host, nil
+	case "pid":
+		if s.PID == nil {
+			return "", nil
+		}
+		return strconv.FormatInt(*s.PID, 10), nil
+	default:
+		return "", fmt.Errorf("campo de sesión no soportado: %s", campo)
+	}
 }
 
 // sesion fin
@@ -449,6 +502,9 @@ func init() {
 	sesionGuardarCmd.Flags().Int64("pid", 0, "PID del proceso del agente")
 
 	sesionContinuarCmd.Flags().String("proyecto", "", "Proyecto concreto cuya sesión quieres reanudar")
+	sesionContinuarCmd.Flags().String("cwd", "", "Directorio de trabajo concreto cuya sesión quieres reanudar")
+	sesionContinuarCmd.Flags().Bool("json", false, "Salida JSON")
+	sesionContinuarCmd.Flags().String("campo", "", "Emitir solo un campo (id, agente, proyecto, cwd, herramienta, external-session-id, branch, resumen, resume-payload, estado, host, pid)")
 
 	sesionCmd.AddCommand(sesionInicioCmd, sesionFinCmd, sesionListarCmd, sesionNuevoCodexCmd, sesionGuardarCmd, sesionContinuarCmd)
 }

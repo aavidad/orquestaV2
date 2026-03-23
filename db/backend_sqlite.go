@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"orquesta/storage"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -17,7 +19,7 @@ func init() {
 func (sqliteBackend) Name() string { return "sqlite" }
 
 func (sqliteBackend) Open(target string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", target+"?_journal_mode=WAL&_foreign_keys=on&_busy_timeout=5000")
+	db, err := sql.Open("sqlite", storage.SQLiteDSN(target))
 	if err != nil {
 		return nil, fmt.Errorf("abriendo DB sqlite en %s: %w", target, err)
 	}

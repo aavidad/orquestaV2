@@ -12,16 +12,16 @@ type Agente struct {
 	Rol                    string
 	Activo                 bool   // en sesión ahora mismo
 	Habilitado             bool   // false = retirado por Alberto
-	EstadoSesion          string // disponible | programando | esperando | votando
-	UltimaSesion          *time.Time
+	EstadoSesion           string // disponible | programando | esperando | votando
+	UltimaSesion           *time.Time
 	ConsumoDiaSegundos     int
 	ConsumoSemanalSegundos int
 	LimiteDiaSegundos      int
 	LimiteSemanalSegundos  int
-	LastUsageResetAt      *time.Time
+	LastUsageResetAt       *time.Time
 	EstadoCuota            string
 	ReanimarAt             *time.Time
-	MotivoPausa           string
+	MotivoPausa            string
 }
 
 type Sesion struct {
@@ -137,6 +137,9 @@ func IniciarSesionContexto(in SesionInicio) (*Sesion, error) {
 	if err := UpsertRuntimeDesdeSesion(sesion); err != nil {
 		return nil, err
 	}
+	if err := UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		return nil, err
+	}
 	return sesion, nil
 }
 
@@ -168,6 +171,9 @@ func FinSesion(agente string) error {
 	if err := MarcarRuntimesCerradosPorAgente(agente); err != nil {
 		return err
 	}
+	if err := MarcarRuntimeHandlesCerradosPorAgente(agente); err != nil {
+		return err
+	}
 	Audit(agente, "fin_sesion", "sesion", 0, "")
 	return nil
 }
@@ -187,6 +193,10 @@ func GetSesionByID(id int64) (*Sesion, error) {
 }
 
 func ObtenerUltimaSesion(agente string, proyectoID *int64) (*Sesion, error) {
+	return ObtenerUltimaSesionConFiltro(agente, proyectoID, "")
+}
+
+func ObtenerUltimaSesionConFiltro(agente string, proyectoID *int64, cwd string) (*Sesion, error) {
 	q := `
 		SELECT s.id, s.agente, s.conector_id, COALESCE(c.slug,''), COALESCE(c.nombre,''),
 		       s.proyecto_id, COALESCE(p.slug,''), COALESCE(p.nombre,''),
@@ -201,6 +211,10 @@ func ObtenerUltimaSesion(agente string, proyectoID *int64) (*Sesion, error) {
 	if proyectoID != nil {
 		q += ` AND s.proyecto_id = ?`
 		args = append(args, *proyectoID)
+	}
+	if strings.TrimSpace(cwd) != "" {
+		q += ` AND s.cwd = ?`
+		args = append(args, strings.TrimSpace(cwd))
 	}
 	q += ` ORDER BY s.id DESC LIMIT 1`
 	return escanearSesion(DB.QueryRow(q, args...))
@@ -283,6 +297,9 @@ func GuardarSesionActiva(agente string, proyectoID *int64, upd SesionUpdate) err
 			err = getErr
 		} else {
 			err = UpsertRuntimeDesdeSesion(sesion)
+			if err == nil {
+				err = UpsertRuntimeHandleDesdeSesion(sesion)
+			}
 		}
 	}
 	if err == nil {
@@ -381,9 +398,15 @@ func GetAgente(nombre string) (*Agente, error) {
 	); err != nil {
 		return nil, err
 	}
-	if ultima.Valid { a.UltimaSesion = &ultima.Time }
-	if lastReset.Valid { a.LastUsageResetAt = &lastReset.Time }
-	if reanimar.Valid { a.ReanimarAt = &reanimar.Time }
+	if ultima.Valid {
+		a.UltimaSesion = &ultima.Time
+	}
+	if lastReset.Valid {
+		a.LastUsageResetAt = &lastReset.Time
+	}
+	if reanimar.Valid {
+		a.ReanimarAt = &reanimar.Time
+	}
 	a.MotivoPausa = motivo.String
 	return a, nil
 }
@@ -414,9 +437,15 @@ func CheckReanimaciones() ([]*Agente, error) {
 		); err != nil {
 			return nil, err
 		}
-		if ultima.Valid { a.UltimaSesion = &ultima.Time }
-		if lastReset.Valid { a.LastUsageResetAt = &lastReset.Time }
-		if reanimar.Valid { a.ReanimarAt = &reanimar.Time }
+		if ultima.Valid {
+			a.UltimaSesion = &ultima.Time
+		}
+		if lastReset.Valid {
+			a.LastUsageResetAt = &lastReset.Time
+		}
+		if reanimar.Valid {
+			a.ReanimarAt = &reanimar.Time
+		}
 		a.MotivoPausa = motivo.String
 		list = append(list, a)
 	}
