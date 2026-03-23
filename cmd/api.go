@@ -219,6 +219,9 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/diagnostico", apiHandlerDiagnostico)
 	mux.HandleFunc("/api/agentes", apiHandlerAgentes)
 	mux.HandleFunc("/api/agentes/", apiRouterAgentes)
+	mux.HandleFunc("/api/reglas", apiHandlerReglas)
+	mux.HandleFunc("/api/skills", apiHandlerSkills)
+	mux.HandleFunc("/api/workflows", apiHandlerWorkflows)
 	mux.HandleFunc("/api/config", apiHandlerConfig)
 	mux.HandleFunc("/api/audit", apiHandlerAudit)
 	mux.HandleFunc("/api/respaldo/bd", apiHandlerRespaldoBD)
@@ -435,6 +438,92 @@ func apiHandlerConfig(w http.ResponseWriter, r *http.Request) {
 	default:
 		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
+}
+
+func apiResolverTipoAgente(r *http.Request) (string, error) {
+	if tipo := strings.TrimSpace(r.URL.Query().Get("tipo_agente")); tipo != "" {
+		return tipo, nil
+	}
+	if nombre := strings.TrimSpace(r.URL.Query().Get("agente")); nombre != "" {
+		agente, err := db.GetAgente(nombre)
+		if err != nil {
+			return "", fmt.Errorf("agente '%s' no encontrado", nombre)
+		}
+		return strings.TrimSpace(agente.Rol), nil
+	}
+	return "", fmt.Errorf("debes indicar tipo_agente o agente")
+}
+
+func apiHandlerReglas(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	tipoAgente, err := apiResolverTipoAgente(r)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	reglas, err := db.GetReglasAgente(tipoAgente)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{
+		"tipo_agente": tipoAgente,
+		"reglas":      reglas,
+	})
+}
+
+func apiHandlerSkills(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	tipoAgente, err := apiResolverTipoAgente(r)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	skills, err := db.GetSkillsAgente(tipoAgente)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{
+		"tipo_agente": tipoAgente,
+		"skills":      skills,
+	})
+}
+
+func apiHandlerWorkflows(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	tipoAgente, err := apiResolverTipoAgente(r)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	if nombre := strings.TrimSpace(r.URL.Query().Get("nombre")); nombre != "" {
+		workflow, err := db.GetWorkflow(tipoAgente, nombre)
+		if err != nil {
+			apiError(w, http.StatusNotFound, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{
+			"tipo_agente": tipoAgente,
+			"workflow":    workflow,
+		})
+		return
+	}
+	workflows, err := db.GetWorkflowsAgente(tipoAgente)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{
+		"tipo_agente": tipoAgente,
+		"workflows":   workflows,
+	})
 }
 
 func apiHandlerAudit(w http.ResponseWriter, r *http.Request) {

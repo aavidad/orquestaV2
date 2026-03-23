@@ -1,5 +1,5 @@
 # Multi-stage Dockerfile para Orquesta
-# Autor: OSL - Diputación de Granada (Plataforma Municipal)
+# Perfil opcional de despliegue para el plano de control.
 
 # --- Fase de construcción (Build) ---
 FROM golang:1.21-alpine AS builder
@@ -34,13 +34,13 @@ COPY --from=builder /app/orquesta-bin /app/orquesta
 RUN mkdir -p /app/data /app/logs
 
 # Variables de entorno por defecto
-# Se recomienda sobreescribir ORQUESTA_DB_PATH al arrancar el contenedor
-ENV ORQUESTA_DB_PATH=/app/data/orquesta.db
-ENV PORT=8080
+# El backend SQLite de Orquesta lee ORQUESTA_DB como ruta efectiva.
+ENV ORQUESTA_DB=/app/data/orquesta.db
 
 # Exponemos el puerto del panel web / API
 EXPOSE 8080
 
-# Punto de entrada por defecto: arrancar el servidor
-# Podríamos permitir que el usuario pase argumentos personalizados
-ENTRYPOINT ["/app/orquesta", "serve", "--puerto", "8080"]
+# Punto de entrada por defecto.
+# Se deja el comando separado para poder sobreescribirlo desde compose o docker run.
+ENTRYPOINT ["/app/orquesta"]
+CMD ["serve", "--puerto", "8080"]

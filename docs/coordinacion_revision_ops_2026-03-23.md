@@ -69,6 +69,25 @@ Criterio recomendado de voto:
 
 ## Propuestas abiertas que ya requieren cierre humano
 
+## Preparaciones seguras ya hechas
+
+### OP-094
+
+Estado técnico:
+
+- ya existe preparación aislada del contrato A2UI en `internal/a2ui`
+- ya existe envelope versionado para `runtime_mailbox`
+- no está activado todavía en dashboard ni en flujo operativo
+
+Lectura operativa:
+
+- esta OP sigue sin estar lista para uso real
+- pero ya no parte de cero: el contrato y la validación estricta están preparados para una integración futura más segura
+
+Referencia:
+
+- ver `docs/op_094_ui_declarativa_agentes.md`
+
 ### OP-085
 
 Estado real:

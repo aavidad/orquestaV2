@@ -22,6 +22,7 @@
 - [D05 - Diseño Mínimo de Pools y Presupuestos](diseno_minimo_pools_y_presupuestos.md)
 - [D06 - Autogestión Supervisada de Agentes](op_087_autogestion_supervisada_agentes.md)
 - [D07 - Plan de Integración de ramas Codex2 y Codex3](plan_integracion_codex2_codex3_2026-03-23.md)
+- [D08 - UI Declarativa para Agentes (OP-094)](op_094_ui_declarativa_agentes.md)
 
 ## Plantillas de Documentación
 - [README (ES/EN)](plantillas_documentacion/README_es.md)

@@ -1,5 +1,56 @@
 # OP-094: UI Declarativa (A2UI)
 
+## Estado actual
+
+Fecha: 2026-03-23
+
+Preparación técnica ya realizada, pero todavía no activada en la operativa normal.
+
+Hecho:
+
+- contrato A2UI aislado en `internal/a2ui`
+- validación estricta de envelopes y `props`
+- componentes soportados en esta fase:
+  - `DataTable`
+  - `Chart`
+  - `ApprovalForm`
+  - `MarkdownBlock`
+- adaptador dormido para encapsular mensajes A2UI en `runtime_mailbox`
+- tests unitarios del contrato y del envelope de mailbox
+
+Rutas de código:
+
+- `internal/a2ui/a2ui.go`
+- `internal/a2ui/a2ui_test.go`
+
+Preparado pero no activado:
+
+- no hay renderizado en el dashboard
+- no se han añadido rutas operativas nuevas para uso humano
+- no se ha cableado todavía a `serve`
+- no cambia el flujo actual de agentes ni de Alberto
+
+Envelope de mailbox preparado:
+
+- `kind`: `a2ui_render`
+- `version`: `a2ui.mailbox.v1`
+- helper canónico de emisión: `BuildMailboxMessage(fromAgente, toAgente, req)`
+
+Ejemplo canónico de payload en `runtime_mailbox`:
+
+```json
+{
+  "from_agente": "Codex3",
+  "to_agente": "alberto",
+  "kind": "a2ui_render",
+  "payload": "{\"version\":\"a2ui.mailbox.v1\",\"request\":{\"type\":\"a2ui_render\",\"component\":\"MarkdownBlock\",\"props\":{\"title\":\"Nota\",\"markdown\":\"hola\"}}}"
+}
+```
+
+Objetivo de esta fase:
+
+- dejar cerrado el contrato y la validación para poder integrar después el lector y el renderizado sin abrir ahora una superficie inestable en `serve` o en la API caliente
+
 ## Contexto
 Los agentes a menudo necesitan presentar información estructurada (gráficos, tablas, formularios) que el chat convencional no soporta bien. Se propone el protocolo **A2UI (Agent-to-UI)** para que los agentes inyecten componentes interactivos en el dashboard de Orquesta.
 

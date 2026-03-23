@@ -59,12 +59,12 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	}
 
 	tareaID, err := db.CrearTarea(&db.Tarea{
-		Titulo:     "Tarea API read-only",
-		Descripcion:"Detalle de tarea",
-		Modulo:     "orquestador",
-		Prioridad:  db.PrioridadAlta,
-		CreadoPor:  "Codex1",
-		ProyectoID: &proyectoID,
+		Titulo:      "Tarea API read-only",
+		Descripcion: "Detalle de tarea",
+		Modulo:      "orquestador",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "Codex1",
+		ProyectoID:  &proyectoID,
 	})
 	if err != nil {
 		t.Fatalf("crear tarea: %v", err)
@@ -144,6 +144,9 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	assertOK("/api/config?clave=clave_test_observabilidad", "valor")
 	assertOK("/api/audit?limit=10&agente=Codex1", "audit")
 	assertOK("/api/diagnostico?audit_limit=5", "diagnostico")
+	assertOK("/api/reglas?tipo_agente=programador", "reglas")
+	assertOK("/api/skills?agente=Codex1", "skills")
+	assertOK("/api/workflows?tipo_agente=programador", "workflows")
 	assertOK("/api/sesiones", "sesiones")
 	assertOK("/api/sesiones?agente=Codex1&proyecto=orquestador&activa=true&estado=activa&limit=1", "sesiones")
 	assertOK("/api/sesiones/"+itoa(sesion.ID), "sesion")
@@ -151,6 +154,28 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	assertOK("/api/propuestas/"+propuestaDB.Codigo, "propuesta")
 	assertOK("/api/locks/"+itoa(lock.ID), "lock")
 	assertOK("/api/worktrees/"+itoa(worktree.ID), "worktree")
+}
+
+func TestAPIWorkflowsDetalleReadOnly(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/workflows?tipo_agente=programador&nombre=inicio-sesion", nil)
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&body); err != nil {
+		t.Fatalf("decode workflow detalle: %v", err)
+	}
+	if _, ok := body["workflow"]; !ok {
+		t.Fatalf("respuesta sin workflow: %s", rec.Body.String())
+	}
 }
 
 func itoa(v int64) string {
