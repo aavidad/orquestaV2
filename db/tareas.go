@@ -399,6 +399,32 @@ func AnotarTarea(id int64, agente, nota string) error {
 	return err
 }
 
+func ReasignarTarea(id int64, nuevoAgente string) error {
+	t, err := GetTarea(id)
+	if err != nil {
+		return fmt.Errorf("tarea #%d no encontrada", id)
+	}
+	_, err = DB.Exec(`UPDATE tareas SET agente=?, estado='asignada' WHERE id=?`, nuevoAgente, id)
+	if err != nil {
+		return err
+	}
+	Audit("alberto", "reasignar_tarea", "tarea", id, t.Titulo+" -> "+nuevoAgente)
+	return nil
+}
+
+func MoverTareaABacklog(id int64) error {
+	t, err := GetTarea(id)
+	if err != nil {
+		return fmt.Errorf("tarea #%d no encontrada", id)
+	}
+	_, err = DB.Exec(`UPDATE tareas SET estado='backlog', agente=NULL WHERE id=?`, id)
+	if err != nil {
+		return err
+	}
+	Audit("alberto", "backlog_tarea", "tarea", id, t.Titulo)
+	return nil
+}
+
 // ContarTareasPorEstado devuelve un mapa estado→cantidad.
 func ContarTareasPorEstado() (map[string]int, error) {
 	rows, err := DB.Query(`SELECT estado, COUNT(*) FROM tareas GROUP BY estado`)

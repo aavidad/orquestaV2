@@ -54,6 +54,19 @@ CREATE TABLE IF NOT EXISTS agentes (
 const schemaWorkflowDDL = `
 >>>>>>> origin/orq-orquestador-codex2
 
+-- ─── Proyectos registrados ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS proyectos (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug       TEXT    NOT NULL UNIQUE,
+    nombre     TEXT    NOT NULL,
+    ruta_abs   TEXT    NOT NULL DEFAULT '',
+    tipo       TEXT    NOT NULL DEFAULT 'repo',
+    parent_id  INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+    activo     INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ─── Tareas ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS tareas (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -866,6 +879,31 @@ INSERT OR IGNORE INTO workflows (tipo_agente, nombre, descripcion, pasos) VALUES
    "2. Analizar impacto técnico en módulos asignados",
    "3. Votar: orquesta votar <codigo> <acuerdo|desacuerdo|abstencion> --agente <mi-nombre> --comentario \"razón\"",
    "4. Si desacuerdo: añadir comentario técnico con alternativa concreta"]');
+
+-- ─── Permisos del catálogo editable ───────────────────────────────────────
+INSERT OR IGNORE INTO catalogo_edicion_permisos (entidad, rol, alcance, puede_crear, puede_editar, puede_activar, puede_versionar) VALUES
+('reglas','programador','mismo_rol',1,1,1,1),
+('reglas','documentador','mismo_rol',1,1,1,1),
+('reglas','admin','todos',1,1,1,1),
+('skills','programador','mismo_rol',1,1,1,1),
+('skills','documentador','mismo_rol',1,1,1,1),
+('skills','admin','todos',1,1,1,1),
+('workflows','programador','mismo_rol',1,1,1,1),
+('workflows','documentador','mismo_rol',1,1,1,1),
+('workflows','admin','todos',1,1,1,1);
+
+-- ─── Versiones iniciales del catálogo ─────────────────────────────────────
+INSERT OR IGNORE INTO reglas_versiones (regla_id, version_num, tipo_agente, categoria, titulo, descripcion, activa, actor, accion)
+SELECT id, 1, tipo_agente, categoria, titulo, descripcion, activa, 'orquesta', 'seed'
+FROM reglas;
+
+INSERT OR IGNORE INTO skills_versiones (skill_id, version_num, tipo_agente, nombre, descripcion, cuando_usar, activa, actor, accion)
+SELECT id, 1, tipo_agente, nombre, descripcion, cuando_usar, activa, 'orquesta', 'seed'
+FROM skills;
+
+INSERT OR IGNORE INTO workflows_versiones (workflow_id, version_num, tipo_agente, nombre, descripcion, pasos, activo, actor, accion)
+SELECT id, 1, tipo_agente, nombre, descripcion, pasos, activo, 'orquesta', 'seed'
+FROM workflows;
 
 -- ─── Workflows: documentador (antigravity) ──────────────────────────────────
 INSERT OR IGNORE INTO workflows (tipo_agente, nombre, descripcion, pasos) VALUES

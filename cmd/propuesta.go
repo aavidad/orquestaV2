@@ -87,10 +87,14 @@ var propuestaListarCmd = &cobra.Command{
 			fmt.Println("No hay propuestas.")
 			return nil
 		}
-		fmt.Printf("%-8s %-10s %-15s %s\n", "CÓDIGO", "ESTADO", "TIPO", "TÍTULO")
-		fmt.Printf("%-8s %-10s %-15s %s\n", "────────", "──────────", "───────────────", "────────────────────────────────────")
+		fmt.Printf("%-8s %-10s %-15s %-16s %s\n", "CÓDIGO", "ESTADO", "TIPO", "PROYECTO", "TÍTULO")
+		fmt.Printf("%-8s %-10s %-15s %-16s %s\n", "────────", "──────────", "───────────────", "────────────────", "────────────────────────────────────")
 		for _, p := range propuestas {
-			fmt.Printf("%-8s %-10s %-15s %s\n", p.Codigo, p.Estado, p.Tipo, truncar(p.Titulo, 40))
+			proy := p.Proyecto
+			if strings.TrimSpace(proy) == "" {
+				proy = "—"
+			}
+			fmt.Printf("%-8s %-10s %-15s %-16s %s\n", p.Codigo, p.Estado, p.Tipo, proy, truncar(p.Titulo, 40))
 		}
 		return nil
 	},
@@ -177,6 +181,7 @@ var propuestaNuevaCmd = &cobra.Command{
 		proyectoRef, _ := cmd.Flags().GetString("proyecto")
 		tipo, _ := cmd.Flags().GetString("tipo")
 		codigo, _ := cmd.Flags().GetString("codigo")
+		proyecto, _ := cmd.Flags().GetString("proyecto")
 		if strings.TrimSpace(titulo) == "" && len(args) == 1 {
 			titulo = strings.TrimSpace(args[0])
 		}
@@ -258,6 +263,34 @@ var propuestaNuevaCmd = &cobra.Command{
 		}
 		fmt.Printf("✓ Propuesta %s creada (id: %d)\n", p.Codigo, id)
 		fmt.Println("  Los agentes deben votar con: orquesta votar <codigo> <posicion>")
+		return nil
+	},
+}
+
+var propuestaHistorialProyectoCmd = &cobra.Command{
+	Use:   "historial-proyecto <proyecto>",
+	Short: "Muestra el historial de votaciones de un proyecto",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		historial, err := db.ListarHistorialVotacionesProyecto(strings.TrimSpace(args[0]))
+		if err != nil {
+			return err
+		}
+		if len(historial) == 0 {
+			fmt.Println("No hay propuestas para ese proyecto.")
+			return nil
+		}
+		fmt.Printf("HISTORIAL DE VOTACIONES — %s\n\n", historial[0].Propuesta.Proyecto)
+		for _, item := range historial {
+			p := item.Propuesta
+			fmt.Printf("%s  [%s/%s]\n", p.Codigo, p.Estado, p.Tipo)
+			fmt.Printf("  %s\n", p.Titulo)
+			fmt.Printf("  Votos: ✓%d  ✗%d  ～%d  ⏳%d\n", item.Acuerdo, item.Desacuerdo, item.Abstencion, item.Pendiente)
+			for _, v := range item.Votos {
+				fmt.Printf("    %-15s %-12s %s\n", v.Agente, v.Posicion, v.Comentario)
+			}
+			fmt.Println()
+		}
 		return nil
 	},
 }
@@ -376,6 +409,7 @@ func init() {
 	propuestaNuevaCmd.Flags().String("por", "alberto", "Propuesto por")
 	propuestaNuevaCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	propuestaNuevaCmd.Flags().String("codigo", "", "Código manual (si se omite, se auto-genera OP-XXX)")
+	propuestaNuevaCmd.Flags().String("proyecto", "", "Proyecto al que aplica la propuesta")
 
 	propuestaCerrarCmd.Flags().String("por", "alberto", "Agente que cierra")
 	propuestaCerrarCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")

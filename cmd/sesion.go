@@ -524,9 +524,9 @@ var sesionListarCmd = &cobra.Command{
 				return err
 			}
 		}
-		fmt.Printf("%-15s %-15s %-8s %s\n", "AGENTE", "ROL", "ACTIVO", "ÚLTIMA SESIÓN")
-		fmt.Printf("%-15s %-15s %-8s %s\n",
-			"───────────────", "───────────────", "────────", "────────────────────")
+		fmt.Printf("%-15s %-15s %-8s %-18s %s\n", "AGENTE", "ROL", "ACTIVO", "ÚLTIMA SESIÓN", "PRESUPUESTO")
+		fmt.Printf("%-15s %-15s %-8s %-18s %s\n",
+			"───────────────", "───────────────", "────────", "──────────────────", "────────────────────────")
 		for _, a := range agentes {
 			activo := "no"
 			if a.Activo {
@@ -536,7 +536,7 @@ var sesionListarCmd = &cobra.Command{
 			if a.UltimaSesion != nil {
 				ultima = a.UltimaSesion.Format("2006-01-02 15:04")
 			}
-			fmt.Printf("%-15s %-15s %-8s %s\n", a.Nombre, a.Rol, activo, ultima)
+			fmt.Printf("%-15s %-15s %-8s %-18s %s\n", a.Nombre, a.Rol, activo, ultima, presupuestoResumenAgente(a.Nombre))
 		}
 		return nil
 	},

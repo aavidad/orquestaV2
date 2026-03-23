@@ -117,7 +117,11 @@ var statusCmd = &cobra.Command{
 			if a.Activo {
 				estado = "🟢"
 			}
-			fmt.Printf("   %s %-15s [%s]\n", estado, a.Nombre, a.Rol)
+			presupuesto := ""
+			if a.Activo {
+				presupuesto = " · presupuesto: " + presupuestoResumenAgente(a.Nombre)
+			}
+			fmt.Printf("   %s %-15s [%s]%s\n", estado, a.Nombre, a.Rol, presupuesto)
 		}
 		fmt.Println()
 

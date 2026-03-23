@@ -74,10 +74,26 @@ func asegurarVotosPendientesPropuesta(propuestaID int64) (int, error) {
 // Además de la persistencia, inicia automáticamente el ciclo de votos pendientes
 // para todos los agentes habilitados y emite una auditoría completa.
 func CrearPropuesta(p *Propuesta) (int64, error) {
+	if p.ProyectoID == nil && strings.TrimSpace(p.ProyectoSlug) != "" {
+		proyecto, err := EnsureProyectoRef(strings.TrimSpace(p.ProyectoSlug))
+		if err != nil {
+			return 0, err
+		}
+		p.ProyectoID = &proyecto.ID
+		p.ProyectoSlug = proyecto.Slug
+		p.Proyecto = proyecto.Nombre
+	}
+
+	tx, err := DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
 	// Auto-generar código si no se indica
 	if p.Codigo == "" {
 		var max int
-		_ = DB.QueryRow(`SELECT COALESCE(MAX(CAST(SUBSTR(codigo,4) AS INTEGER)),29) FROM propuestas WHERE codigo LIKE 'OP-%'`).Scan(&max)
+		_ = tx.QueryRow(`SELECT COALESCE(MAX(CAST(SUBSTR(codigo,4) AS INTEGER)),29) FROM propuestas WHERE codigo LIKE 'OP-%'`).Scan(&max)
 		p.Codigo = fmt.Sprintf("OP-%03d", max+1)
 	}
 <<<<<<< HEAD
@@ -136,6 +152,9 @@ func CrearPropuesta(p *Propuesta) (int64, error) {
 		); err != nil {
 			return 0, err
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -200,6 +219,44 @@ func ListarPropuestas(estado *EstadoPropuesta) ([]*Propuesta, error) {
 		return nil, err
 	}
 	defer rows.Close()
+	var list []*Propuesta
+	for rows.Next() {
+		p, err := escanearPropuesta(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, p)
+	}
+	return list, rows.Err()
+}
+
+func ListarPropuestasProyecto(selector string, estado *EstadoPropuesta) ([]*Propuesta, error) {
+	proyecto, err := GetProyectoRef(selector)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return []*Propuesta{}, nil
+		}
+		return nil, err
+	}
+
+	q := `SELECT p.id, p.codigo, p.titulo, p.descripcion, p.tipo, p.estado, p.propuesto_por, p.distribuidor,
+		         p.proyecto_id, COALESCE(pr.slug,''), COALESCE(pr.nombre,''), p.created_at, p.updated_at, p.cerrada_at
+		  FROM propuestas p
+		  LEFT JOIN proyectos pr ON pr.id = p.proyecto_id
+		  WHERE p.proyecto_id = ?`
+	args := []any{proyecto.ID}
+	if estado != nil {
+		q += ` AND p.estado = ?`
+		args = append(args, *estado)
+	}
+	q += ` ORDER BY p.id DESC`
+
+	rows, err := DB.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
 	var list []*Propuesta
 	for rows.Next() {
 		p, err := escanearPropuesta(rows)
@@ -398,6 +455,7 @@ func PropuestasPendientesVotoProyecto(agente string, proyectoID *int64) ([]*Prop
 >>>>>>> origin/orq-orquestador-codex2
 		FROM propuestas p
 		JOIN votos v ON v.propuesta_id = p.id
+		LEFT JOIN proyectos pr ON pr.id = p.proyecto_id
 		WHERE v.agente = ? AND v.posicion = 'pendiente' AND p.estado = 'abierta'
 	`
 	args := []any{agente}

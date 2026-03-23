@@ -94,6 +94,8 @@ type webPropDetalle struct {
 	Descripcion  string
 	Tipo         string
 	Estado       string
+	Proyecto     string
+	ProyectoSlug string
 	PropuestoPor string
 	Fecha        string
 	CerradaFecha string
@@ -203,6 +205,8 @@ var webFuncMap = template.FuncMap{
 	},
 }
 
+var webI18n = appi18n.NewBundle(appi18n.ResolveDir(), appi18n.DefaultLang)
+
 // ─── Router principal ─────────────────────────────────────────────────────────
 
 func webRouterTareas(w http.ResponseWriter, r *http.Request) {
@@ -238,6 +242,8 @@ func webRouterPropuestas(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case parts[1] == "nueva" && r.Method == http.MethodPost:
 		webHandlerPropuestaNueva(w, r)
+	case len(parts) == 3 && parts[1] == "historial" && r.Method == http.MethodGet:
+		webHandlerHistorialProyecto(w, r, parts[2])
 	case len(parts) == 2 && r.Method == http.MethodGet:
 		webHandlerPropuestaDetalle(w, r, parts[1])
 	case len(parts) == 3 && parts[2] == "accion" && r.Method == http.MethodPost:
@@ -665,6 +671,7 @@ func webHandlerTareaAccion(w http.ResponseWriter, r *http.Request, idStr string)
 
 func webHandlerPropuestas(w http.ResponseWriter, r *http.Request) {
 	filtro := r.URL.Query().Get("estado")
+	proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto"))
 	msg := r.URL.Query().Get("ok")
 	errMsg := r.URL.Query().Get("err")
 
@@ -691,12 +698,12 @@ func webHandlerPropuestas(w http.ResponseWriter, r *http.Request) {
 		}
 		detalles = append(detalles, webPropDetalle{
 			Codigo: p.Codigo, Titulo: p.Titulo, Descripcion: p.Descripcion,
-			Tipo: p.Tipo, Estado: string(p.Estado), PropuestoPor: p.PropuestoPor,
+			Tipo: p.Tipo, Estado: string(p.Estado), Proyecto: p.Proyecto, ProyectoSlug: p.ProyectoSlug, PropuestoPor: p.PropuestoPor,
 			Fecha: p.CreatedAt.Format("2006-01-02"), CerradaFecha: cerrada,
 			Votos: votos,
 		})
 	}
-	webRender(w, webTplLayout+webTplPropuestas, webPropData{
+	webRender(w, r, webTplLayout+webTplPropuestas, webPropData{
 		Propuestas: detalles, Filtro: filtro, Msg: msg, Err: errMsg,
 	})
 }
@@ -715,6 +722,7 @@ func webHandlerPropuestaNueva(w http.ResponseWriter, r *http.Request) {
 		Titulo:       titulo,
 		Descripcion:  r.FormValue("descripcion"),
 		Tipo:         r.FormValue("tipo"),
+		ProyectoSlug: strings.TrimSpace(r.FormValue("proyecto")),
 		PropuestoPor: "alberto",
 		Distribuidor: "alberto",
 	})
@@ -743,7 +751,7 @@ func webHandlerPropuestaDetalle(w http.ResponseWriter, r *http.Request, codigo s
 	webRender(w, webTplLayout+webTplPropuestaDetalle, webPropDetalleData{
 		P: webPropDetalle{
 			Codigo: p.Codigo, Titulo: p.Titulo, Descripcion: p.Descripcion,
-			Tipo: p.Tipo, Estado: string(p.Estado), PropuestoPor: p.PropuestoPor,
+			Tipo: p.Tipo, Estado: string(p.Estado), Proyecto: p.Proyecto, ProyectoSlug: p.ProyectoSlug, PropuestoPor: p.PropuestoPor,
 			Fecha: p.CreatedAt.Format("2006-01-02"), CerradaFecha: cerrada,
 			Votos: votos,
 		},
@@ -1490,6 +1498,12 @@ var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Arranca el panel web (por defecto: http://localhost:16543)",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := webI18n.Reload(); err != nil {
+			return err
+		}
+		if policy, err := db.GetLanguagePolicy(); err == nil {
+			webI18n.SetDefaultLang(policy.DefaultLanguage)
+		}
 		puerto, _ := cmd.Flags().GetInt("puerto")
 		host, _ := cmd.Flags().GetString("host")
 		tlsCertFile, _ := cmd.Flags().GetString("tls-cert")
@@ -1504,6 +1518,7 @@ var serveCmd = &cobra.Command{
 			return err
 		}
 		mux := http.NewServeMux()
+		registerRPCHandlers(mux, info)
 		mux.HandleFunc("/", webHandlerDash)
 		mux.HandleFunc("/agentes", webHandlerAgentes)
 		mux.HandleFunc("/asignaciones", webHandlerAsignaciones)
@@ -1607,11 +1622,11 @@ func init() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const webTplLayout = `<!doctype html>
-<html lang="es">
+<html lang="{{lang}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Orquesta — ContaGrx</title>
+  <title>{{t "app.title"}}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
   <style>
     body{--pico-font-size:14px}
@@ -1700,7 +1715,7 @@ const webTplLayout = `<!doctype html>
 <main class="container" style="padding-top:1.5rem;padding-bottom:2rem">
 {{template "content" .}}
 </main>
-<footer>ContaGrx · OSL Diputación de Granada · GPLv3</footer>
+<footer>{{t "ContaGrx footer"}}</footer>
 </body></html>
 `
 
@@ -1819,7 +1834,7 @@ const webTplDash = `{{define "content"}}
 </div>
 <div style="display:grid;grid-template-columns:220px 1fr;gap:1.5rem;align-items:start">
   <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.5rem;padding:.8rem 1rem">
-    <h4 style="margin:0 0 .7rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Agentes</h4>
+    <h4 style="margin:0 0 .7rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">{{t "Agentes"}}</h4>
     <table style="width:100%"><tbody>
     {{range .Agentes}}{{if .Habilitado}}
       <tr style="border-bottom:1px solid #f1f5f9">
@@ -1844,7 +1859,7 @@ const webTplDash = `{{define "content"}}
           {{end}}
         </td>
         <td style="text-align:right;padding:.3rem 0">
-          {{if .EstadoSesion}}<span class="es-{{.EstadoSesion}}">{{.EstadoSesion}}</span>{{end}}
+          {{if .EstadoSesion}}<span class="es-{{.EstadoSesion}}">{{t .EstadoSesion}}</span>{{end}}
         </td>
       </tr>
     {{end}}{{end}}
@@ -1852,7 +1867,7 @@ const webTplDash = `{{define "content"}}
   </div>
   <div>
     {{if .EnProgreso}}
-    <h4 style="margin:0 0 .5rem 0">En progreso</h4>
+    <h4 style="margin:0 0 .5rem 0">{{t "En progreso"}}</h4>
     <table style="width:100%;margin-bottom:1.2rem"><thead><tr><th>#</th><th>Módulo</th><th>Agente</th><th>Título</th></tr></thead><tbody>
     {{range .EnProgreso}}
       <tr>
@@ -1866,7 +1881,7 @@ const webTplDash = `{{define "content"}}
     {{end}}
     <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:start">
       <div>
-        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Por estado <a href="/tareas" style="font-size:.9em;font-weight:normal;text-transform:none">ver todas →</a></h4>
+        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">{{t "Estado"}} <a href="/tareas" style="font-size:.9em;font-weight:normal;text-transform:none">{{t "Ver"}} →</a></h4>
         <table><tbody>
         {{range $est,$n := .Counts}}{{if gt $n 0}}
           <tr><td style="padding:.2rem .4rem"><a href="/tareas?estado={{$est}}"><span class="tag t-{{$est}}">{{$est}}</span></a></td><td style="padding:.2rem .6rem"><a href="/tareas?estado={{$est}}"><strong>{{$n}}</strong></a></td></tr>
@@ -1875,7 +1890,7 @@ const webTplDash = `{{define "content"}}
       </div>
       {{if .Abiertas}}
       <div>
-        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Propuestas abiertas</h4>
+        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">{{t "Propuestas abiertas"}}</h4>
         <table><thead><tr><th>Código</th><th>✓</th><th>✗</th><th>⏳</th></tr></thead><tbody>
         {{range .Abiertas}}
           <tr>
@@ -1927,7 +1942,7 @@ const webTplDash = `{{define "content"}}
 
 const webTplTareas = `{{define "content"}}
 <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
-  <h2 style="margin:0">Tareas <small style="font-size:.5em;color:#94a3b8">{{len .Tareas}}</small></h2>
+  <h2 style="margin:0">{{t "Tareas"}} <small style="font-size:.5em;color:#94a3b8">{{len .Tareas}}</small></h2>
 </div>
 {{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert-err">✗ {{.Err}}</div>{{end}}
@@ -1961,29 +1976,29 @@ const webTplTareas = `{{define "content"}}
 </details>
 
 <div class="filtros">
-  <a href="/tareas"{{if eqStr .Filtro ""}} class="sel"{{end}}>Todas</a>
-  <a href="/tareas?estado=en_progreso"{{if eqStr .Filtro "en_progreso"}} class="sel"{{end}}>En progreso</a>
-  <a href="/tareas?estado=asignada"{{if eqStr .Filtro "asignada"}} class="sel"{{end}}>Asignadas</a>
-  <a href="/tareas?estado=libre"{{if eqStr .Filtro "libre"}} class="sel"{{end}}>Libres</a>
-  <a href="/tareas?estado=bloqueada"{{if eqStr .Filtro "bloqueada"}} class="sel"{{end}}>Bloqueadas</a>
+  <a href="/tareas"{{if eqStr .Filtro ""}} class="sel"{{end}}>{{t "Todas"}}</a>
+  <a href="/tareas?estado=en_progreso"{{if eqStr .Filtro "en_progreso"}} class="sel"{{end}}>{{t "En progreso"}}</a>
+  <a href="/tareas?estado=asignada"{{if eqStr .Filtro "asignada"}} class="sel"{{end}}>{{t "Asignadas"}}</a>
+  <a href="/tareas?estado=libre"{{if eqStr .Filtro "libre"}} class="sel"{{end}}>{{t "Libres"}}</a>
+  <a href="/tareas?estado=bloqueada"{{if eqStr .Filtro "bloqueada"}} class="sel"{{end}}>{{t "Bloqueadas"}}</a>
   <a href="/tareas?estado=backlog"{{if eqStr .Filtro "backlog"}} class="sel"{{end}}>Backlog</a>
-  <a href="/tareas?estado=completada"{{if eqStr .Filtro "completada"}} class="sel"{{end}}>Completadas</a>
+  <a href="/tareas?estado=completada"{{if eqStr .Filtro "completada"}} class="sel"{{end}}>{{t "Completadas"}}</a>
 </div>
 
 {{if .Tareas}}
 <div style="overflow-x:auto">
 <table>
-  <thead><tr><th>#</th><th>Estado</th><th>Prioridad</th><th>Módulo</th><th>Agente</th><th>Título</th><th></th></tr></thead>
+  <thead><tr><th>#</th><th>{{t "Estado"}}</th><th>{{t "Prioridad"}}</th><th>Modulo</th><th>{{t "Agentes"}}</th><th>Titulo</th><th></th></tr></thead>
   <tbody>
   {{range .Tareas}}
     <tr>
       <td style="color:#94a3b8">{{.ID}}</td>
-      <td><span class="tag t-{{.Estado}}">{{.Estado}}</span></td>
-      <td><span class="tag t-{{.Prioridad}}">{{.Prioridad}}</span></td>
+      <td><span class="tag t-{{.Estado}}">{{t .Estado}}</span></td>
+      <td><span class="tag t-{{.Prioridad}}">{{t .Prioridad}}</span></td>
       <td><code style="font-size:.8em">{{.Modulo}}</code></td>
       <td>{{.Agente}}</td>
       <td>{{.Titulo}}</td>
-      <td><a href="/tareas/{{.ID}}" class="btn-sm">Gestionar →</a></td>
+      <td><a href="/tareas/{{.ID}}" class="btn-sm">{{t "Ver"}} →</a></td>
     </tr>
   {{end}}
   </tbody>
@@ -1998,11 +2013,11 @@ const webTplTareas = `{{define "content"}}
 // ─── Tarea: detalle + acciones ────────────────────────────────────────────────
 
 const webTplTareaDetalle = `{{define "content"}}
-<a href="/tareas" style="font-size:.85rem;color:#64748b">← volver a tareas</a>
+<a href="/tareas" style="font-size:.85rem;color:#64748b">← {{t "Volver"}} {{t "Tareas"}}</a>
 <h2 style="margin:.5rem 0">#{{.T.ID}} — {{.T.Titulo}}</h2>
 <p>
-  <span class="tag t-{{.T.Estado}}">{{.T.Estado}}</span>
-  <span class="tag t-{{.T.Prioridad}}">{{.T.Prioridad}}</span>
+  <span class="tag t-{{.T.Estado}}">{{t .T.Estado}}</span>
+  <span class="tag t-{{.T.Prioridad}}">{{t .T.Prioridad}}</span>
   <span style="color:#64748b;font-size:.85rem;margin-left:.5rem">Módulo: {{.T.Modulo}} · Agente: {{.T.Agente}}</span>
 </p>
 
@@ -2134,7 +2149,7 @@ const webTplTareaDetalle = `{{define "content"}}
 
 const webTplPropuestas = `{{define "content"}}
 <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
-  <h2 style="margin:0">Propuestas (OPs) <small style="font-size:.5em;color:#94a3b8">{{len .Propuestas}}</small></h2>
+  <h2 style="margin:0">{{t "Propuestas (OPs)"}} <small style="font-size:.5em;color:#94a3b8">{{len .Propuestas}}</small></h2>
 </div>
 {{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert-err">✗ {{.Err}}</div>{{end}}
@@ -2155,6 +2170,9 @@ const webTplPropuestas = `{{define "content"}}
       </div>
       <div><label>Código (opcional)</label><input type="text" name="codigo" placeholder="OP-030 (auto si vacío)"></div>
     </div>
+    <div style="margin-top:.4rem"><label>Proyecto</label>
+      <input type="text" name="proyecto" placeholder="orquestador">
+    </div>
     <div style="margin-top:.4rem"><label>Descripción</label>
       <textarea name="descripcion" rows="2" placeholder="Descripción detallada de la propuesta" style="width:100%"></textarea>
     </div>
@@ -2163,29 +2181,31 @@ const webTplPropuestas = `{{define "content"}}
 </details>
 
 <div class="filtros">
-  <a href="/propuestas"{{if eqStr .Filtro ""}} class="sel"{{end}}>Todas</a>
-  <a href="/propuestas?estado=abierta"{{if eqStr .Filtro "abierta"}} class="sel"{{end}}>Abiertas</a>
-  <a href="/propuestas?estado=consenso"{{if eqStr .Filtro "consenso"}} class="sel"{{end}}>Consenso</a>
+  <a href="/propuestas"{{if eqStr .Filtro ""}} class="sel"{{end}}>{{t "Todas"}}</a>
+  <a href="/propuestas?estado=abierta"{{if eqStr .Filtro "abierta"}} class="sel"{{end}}>{{t "abierta"}}</a>
+  <a href="/propuestas?estado=consenso"{{if eqStr .Filtro "consenso"}} class="sel"{{end}}>{{t "consenso"}}</a>
   <a href="/propuestas?estado=backlog"{{if eqStr .Filtro "backlog"}} class="sel"{{end}}>Backlog</a>
-  <a href="/propuestas?estado=rechazada"{{if eqStr .Filtro "rechazada"}} class="sel"{{end}}>Rechazadas</a>
+  <a href="/propuestas?estado=rechazada"{{if eqStr .Filtro "rechazada"}} class="sel"{{end}}>{{t "rechazada"}}</a>
 </div>
 
 {{range .Propuestas}}
 <details class="card">
   <summary>
     <span style="color:#94a3b8;margin-right:.4rem">{{.Codigo}}</span>
-    <span class="tag t-{{.Estado}}">{{.Estado}}</span>
+    <span class="tag t-{{.Estado}}">{{t .Estado}}</span>
     &nbsp;<strong>{{trunc .Titulo 65}}</strong>
     <span style="color:#94a3b8;font-weight:normal;font-size:.82em;margin-left:.5rem">· {{.PropuestoPor}} · {{.Fecha}}</span>
+    {{if .ProyectoSlug}}<a href="/propuestas/historial/{{pathEsc .ProyectoSlug}}" style="margin-left:.5rem;font-size:.78em;color:#2563eb" onclick="event.stopPropagation()">historial {{.Proyecto}}</a>{{end}}
     <a href="/propuestas/{{.Codigo}}" style="float:right;font-size:.8em;font-weight:normal;color:#2563eb" onclick="event.stopPropagation()">Gestionar →</a>
   </summary>
   {{if .Descripcion}}<p style="color:#475569;font-size:.88em;margin:.6rem 0">{{.Descripcion}}</p>{{end}}
+  {{if .Proyecto}}<p style="margin:.2rem 0 .6rem 0;font-size:.82em;color:#64748b">Proyecto: <strong>{{.Proyecto}}</strong></p>{{end}}
   {{if .Votos}}
   <table style="font-size:.82em"><thead><tr><th>Agente</th><th>Posición</th><th>Comentario</th></tr></thead><tbody>
   {{range .Votos}}
     <tr>
       <td><strong>{{.Agente}}</strong></td>
-      <td><span class="tag t-{{.Posicion}}">{{.Posicion}}</span></td>
+      <td><span class="tag t-{{.Posicion}}">{{t .Posicion}}</span></td>
       <td style="color:#64748b">{{.Comentario}}</td>
     </tr>
   {{end}}
@@ -2378,14 +2398,15 @@ const webTplTimeTravelDetalle = `{{define "content"}}
 // ─── Propuesta: detalle + acciones ───────────────────────────────────────────
 
 const webTplPropuestaDetalle = `{{define "content"}}
-<a href="/propuestas" style="font-size:.85rem;color:#64748b">← volver a propuestas</a>
+<a href="/propuestas" style="font-size:.85rem;color:#64748b">← {{t "Volver"}} {{t "Propuestas"}}</a>
 <h2 style="margin:.5rem 0">{{.P.Codigo}} — {{.P.Titulo}}</h2>
 <p>
-  <span class="tag t-{{.P.Estado}}">{{.P.Estado}}</span>
-  <span class="tag" style="background:#e2e8f0;color:#475569">{{.P.Tipo}}</span>
+  <span class="tag t-{{.P.Estado}}">{{t .P.Estado}}</span>
+  <span class="tag" style="background:#e2e8f0;color:#475569">{{t .P.Tipo}}</span>
   <span style="color:#64748b;font-size:.85rem;margin-left:.5rem">Propuesto por {{.P.PropuestoPor}} · {{.P.Fecha}}</span>
   {{if .P.CerradaFecha}}<span style="color:#94a3b8;font-size:.82rem;margin-left:.5rem">(cerrada {{.P.CerradaFecha}})</span>{{end}}
 </p>
+{{if .P.Proyecto}}<p style="margin-top:-.4rem"><a href="/propuestas/historial/{{pathEsc .P.ProyectoSlug}}" style="font-size:.85rem">Ver historial del proyecto {{.P.Proyecto}}</a></p>{{end}}
 {{if .P.Descripcion}}<p style="color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:.4rem;padding:.8rem 1rem;font-size:.9rem">{{.P.Descripcion}}</p>{{end}}
 
 {{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
@@ -2409,8 +2430,8 @@ const webTplPropuestaDetalle = `{{define "content"}}
         </div>
         <div><label>Posición</label>
           <select name="posicion">
-            <option value="acuerdo">Acuerdo</option>
-            <option value="desacuerdo">Desacuerdo</option>
+            <option value="acuerdo">{{t "acuerdo"}}</option>
+            <option value="desacuerdo">{{t "desacuerdo"}}</option>
             <option value="abstencion">Abstención</option>
           </select>
         </div>
@@ -2469,13 +2490,304 @@ const webTplPropuestaDetalle = `{{define "content"}}
 {{range .P.Votos}}
   <tr>
     <td><strong>{{.Agente}}</strong></td>
-    <td><span class="tag t-{{.Posicion}}">{{.Posicion}}</span></td>
+    <td><span class="tag t-{{.Posicion}}">{{t .Posicion}}</span></td>
     <td style="color:#64748b">{{.Comentario}}</td>
   </tr>
 {{end}}
 </tbody></table>
 {{else}}
 <p style="color:#94a3b8">No hay votos registrados aún.</p>
+{{end}}
+{{end}}
+`
+
+const webTplHistorialProyecto = `{{define "content"}}
+<a href="/propuestas" style="font-size:.85rem;color:#64748b">← {{t "Volver"}} {{t "Propuestas"}}</a>
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin:.5rem 0 1rem 0">
+  <h2 style="margin:0">Historial de votaciones <small style="font-size:.5em;color:#94a3b8">{{.Proyecto}}</small></h2>
+</div>
+{{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
+{{if .Err}}<div class="alert-err">✗ {{.Err}}</div>{{end}}
+
+{{range .Items}}
+<details class="card">
+  <summary>
+    <span style="color:#94a3b8;margin-right:.4rem">{{.Codigo}}</span>
+    <span class="tag t-{{.Estado}}">{{t .Estado}}</span>
+    &nbsp;<strong>{{trunc .Titulo 65}}</strong>
+    <span style="color:#94a3b8;font-weight:normal;font-size:.82em;margin-left:.5rem">· {{.Tipo}} · {{.Fecha}}</span>
+    <span style="float:right;font-size:.82em;color:#475569">✓{{.Acuerdo}} · ✗{{.Desacuerdo}} · ～{{.Abstencion}} · ⏳{{.Pendiente}}</span>
+  </summary>
+  {{if .Votos}}
+  <table style="font-size:.82em"><thead><tr><th>Agente</th><th>Posición</th><th>Comentario</th></tr></thead><tbody>
+  {{range .Votos}}
+    <tr>
+      <td><strong>{{.Agente}}</strong></td>
+      <td><span class="tag t-{{.Posicion}}">{{t .Posicion}}</span></td>
+      <td style="color:#64748b">{{.Comentario}}</td>
+    </tr>
+  {{end}}
+  </tbody></table>
+  {{else}}
+  <p style="color:#94a3b8">No hay votos registrados aún.</p>
+  {{end}}
+</details>
+{{end}}
+{{end}}
+`
+
+// ─── Memoria: lista y detalle ────────────────────────────────────────────────
+
+const webTplMemoria = `{{define "content"}}
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
+  <h2 style="margin:0">{{t "Memoria de proyecto"}} <small style="font-size:.5em;color:#94a3b8">{{len .Items}}</small></h2>
+</div>
+{{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
+{{if .Err}}<div class="alert-err">✗ {{.Err}}</div>{{end}}
+
+<details class="form-panel">
+  <summary>＋ Nueva memoria de proyecto</summary>
+  <form method="POST" action="/memoria/nueva" style="margin-top:.8rem">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+      <div><label>Proyecto *</label><input type="text" name="proyecto" required placeholder="orquestador"></div>
+      <div><label>Agente</label><input type="text" name="agente" placeholder="Codex3"></div>
+    </div>
+    <div style="margin-top:.4rem"><label>Resumen</label><textarea name="resumen" rows="2" style="width:100%"></textarea></div>
+    <div style="margin-top:.4rem"><label>Contexto</label><textarea name="contexto" rows="2" style="width:100%"></textarea></div>
+    <div style="margin-top:.4rem"><label>Preguntas abiertas</label><textarea name="preguntas" rows="2" style="width:100%"></textarea></div>
+    <button type="submit" class="btn-sm" style="margin-top:.4rem">Crear memoria</button>
+  </form>
+</details>
+
+{{if .Items}}
+<table>
+  <thead><tr><th>Proyecto</th><th>Resumen</th><th>Fuentes</th><th>Hallazgos</th><th>Derivas</th><th>Abiertas</th><th>Actualizado</th><th></th></tr></thead>
+  <tbody>
+  {{range .Items}}
+    <tr>
+      <td><strong>{{.Proyecto}}</strong></td>
+      <td style="font-size:.84rem;color:#475569">{{trunc .Resumen 72}}</td>
+      <td>{{.Fuentes}}</td>
+      <td>{{.Hallazgos}}</td>
+      <td>{{.Derivas}}</td>
+      <td>{{if gt .DerivasAbiertas 0}}<span class="tag t-media">{{.DerivasAbiertas}}</span>{{else}}<span class="tag t-consenso">0</span>{{end}}</td>
+      <td style="font-size:.82rem;color:#64748b">{{.Actualizado}} · {{.ActualizadoPor}}</td>
+      <td><a href="/memoria/{{pathEsc .Proyecto}}" class="btn-sm">Abrir →</a></td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+{{else}}
+<p style="color:#94a3b8">Todavía no hay memorias registradas.</p>
+{{end}}
+{{end}}
+`
+
+const webTplMemoriaDetalle = `{{define "content"}}
+<a href="/memoria" style="font-size:.85rem;color:#64748b">← {{t "Volver"}} {{t "Memoria"}}</a>
+<h2 style="margin:.5rem 0">{{t "Memoria"}} — {{.Proyecto}}</h2>
+{{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
+{{if .Err}}<div class="alert-err">✗ {{.Err}}</div>{{end}}
+
+<div class="action-box">
+  <h4>Resumen vivo</h4>
+  <form method="POST" action="/memoria/{{pathEsc .Proyecto}}/accion">
+    <input type="hidden" name="accion" value="guardar">
+    <div style="display:grid;grid-template-columns:1fr 220px;gap:.5rem">
+      <div><label>Agente</label><input type="text" name="agente" value="{{if .M}}{{.M.ActualizadoPor}}{{end}}" placeholder="Codex3"></div>
+      <div><label>Proyecto</label><input type="text" value="{{.Proyecto}}" disabled></div>
+    </div>
+    <div style="margin-top:.4rem"><label>Resumen</label><textarea name="resumen" rows="3" style="width:100%">{{if .M}}{{.M.Resumen}}{{end}}</textarea></div>
+    <div style="margin-top:.4rem"><label>Contexto</label><textarea name="contexto" rows="3" style="width:100%">{{if .M}}{{.M.Contexto}}{{end}}</textarea></div>
+    <div style="margin-top:.4rem"><label>Preguntas abiertas</label><textarea name="preguntas" rows="2" style="width:100%">{{if .M}}{{.M.PreguntasAbiertas}}{{end}}</textarea></div>
+    <button type="submit" class="btn-sm" style="margin-top:.5rem">Guardar memoria</button>
+  </form>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+  <div class="action-box">
+    <h4>Registrar fuente</h4>
+    <form method="POST" action="/memoria/{{pathEsc .Proyecto}}/accion">
+      <input type="hidden" name="accion" value="fuente">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+        <div><label>Agente</label><input type="text" name="agente" placeholder="Codex3"></div>
+        <div><label>Tipo</label><input type="text" name="tipo" value="documentacion"></div>
+      </div>
+      <div style="margin-top:.4rem"><label>Referencia *</label><input type="text" name="referencia" required style="width:100%"></div>
+      <div style="margin-top:.4rem"><label>Título</label><input type="text" name="titulo" style="width:100%"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.4rem">
+        <div><label>URL</label><input type="text" name="url"></div>
+        <div><label>Confianza</label><input type="text" name="confianza" value="media"></div>
+      </div>
+      <div style="margin-top:.4rem"><label>Detalle</label><textarea name="detalle" rows="2" style="width:100%"></textarea></div>
+      <button type="submit" class="btn-sm" style="margin-top:.5rem">Registrar fuente</button>
+    </form>
+  </div>
+
+  <div class="action-box">
+    <h4>Registrar hallazgo</h4>
+    <form method="POST" action="/memoria/{{pathEsc .Proyecto}}/accion">
+      <input type="hidden" name="accion" value="hallazgo">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+        <div><label>Agente</label><input type="text" name="agente" placeholder="Codex3"></div>
+        <div><label>Fuente ID</label><input type="number" name="fuente_id" min="1" placeholder="opcional"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin-top:.4rem">
+        <div><label>Tipo</label><input type="text" name="tipo" value="hecho"></div>
+        <div><label>Impacto</label><input type="text" name="impacto" value="medio"></div>
+        <div><label>Confianza</label><input type="text" name="confianza" value="media"></div>
+      </div>
+      <div style="margin-top:.4rem"><label>Título *</label><input type="text" name="titulo" required style="width:100%"></div>
+      <div style="margin-top:.4rem"><label>Descripción</label><textarea name="descripcion" rows="3" style="width:100%"></textarea></div>
+      <button type="submit" class="btn-sm" style="margin-top:.5rem">Registrar hallazgo</button>
+    </form>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem">
+  <div class="action-box">
+    <h4>Registrar deriva</h4>
+    <form method="POST" action="/memoria/{{pathEsc .Proyecto}}/accion">
+      <input type="hidden" name="accion" value="deriva">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+        <div><label>Agente</label><input type="text" name="agente" placeholder="Codex3"></div>
+        <div><label>Hallazgo ID</label><input type="number" name="hallazgo_id" min="1" placeholder="opcional"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin-top:.4rem">
+        <div><label>Tipo</label><input type="text" name="tipo" value="documental"></div>
+        <div><label>Severidad</label><input type="text" name="severidad" value="media"></div>
+        <div><label>Estado</label><input type="text" name="estado" value="abierta"></div>
+      </div>
+      <div style="margin-top:.4rem"><label>Descripción *</label><textarea name="descripcion" rows="3" required style="width:100%"></textarea></div>
+      <div style="margin-top:.4rem"><label>Evidencia</label><textarea name="evidencia" rows="2" style="width:100%"></textarea></div>
+      <button type="submit" class="btn-sm" style="margin-top:.5rem">Registrar deriva</button>
+    </form>
+  </div>
+
+  <div class="action-box">
+    <h4>Resolver deriva</h4>
+    <form method="POST" action="/memoria/{{pathEsc .Proyecto}}/accion">
+      <input type="hidden" name="accion" value="resolver-deriva">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+        <div><label>Agente</label><input type="text" name="agente" placeholder="Codex3"></div>
+        <div><label>Deriva ID *</label><input type="number" name="deriva_id" min="1" required></div>
+      </div>
+      <div style="margin-top:.4rem"><label>Estado</label><input type="text" name="estado" value="resuelta"></div>
+      <div style="margin-top:.4rem"><label>Resolución *</label><textarea name="resolucion" rows="3" required style="width:100%"></textarea></div>
+      <button type="submit" class="btn-sm" style="margin-top:.5rem">Actualizar deriva</button>
+    </form>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-top:1rem">
+  <div>
+    <h4>Fuentes</h4>
+    {{if .Fuentes}}
+    <table><thead><tr><th>ID</th><th>Referencia</th></tr></thead><tbody>
+    {{range .Fuentes}}
+      <tr><td>{{.ID}}</td><td><strong>{{.Referencia}}</strong><br><small>{{.Tipo}} / {{.Confianza}}{{if .Titulo}} · {{.Titulo}}{{end}}</small></td></tr>
+    {{end}}
+    </tbody></table>
+    {{else}}<p style="color:#94a3b8">Sin fuentes.</p>{{end}}
+  </div>
+  <div>
+    <h4>Hallazgos</h4>
+    {{if .Hallazgos}}
+    <table><thead><tr><th>ID</th><th>Título</th></tr></thead><tbody>
+    {{range .Hallazgos}}
+      <tr><td>{{.ID}}</td><td><strong>{{.Titulo}}</strong><br><small>{{.Tipo}} / {{.Impacto}} / {{.Confianza}}</small></td></tr>
+    {{end}}
+    </tbody></table>
+    {{else}}<p style="color:#94a3b8">Sin hallazgos.</p>{{end}}
+  </div>
+  <div>
+    <h4>Derivas</h4>
+    {{if .Derivas}}
+    <table><thead><tr><th>ID</th><th>Descripción</th></tr></thead><tbody>
+    {{range .Derivas}}
+      <tr><td>{{.ID}}</td><td><strong>{{.Descripcion}}</strong><br><small>{{.Tipo}} / {{.Severidad}} / {{.Estado}}</small></td></tr>
+    {{end}}
+    </tbody></table>
+    {{else}}<p style="color:#94a3b8">Sin derivas.</p>{{end}}
+  </div>
+</div>
+{{end}}
+`
+
+const webTplProgreso = `{{define "content"}}
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
+  <h2 style="margin:0">{{t "Progreso real por proyecto"}} <small style="font-size:.5em;color:#94a3b8">{{len .Items}}</small></h2>
+</div>
+{{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
+{{if .Err}}<div class="alert-err">✗ {{.Err}}</div>{{end}}
+{{if .Items}}
+<table>
+  <thead><tr><th>{{t "Proyecto"}}</th><th>{{t "Progreso"}}</th><th>{{t "Tareas"}}</th><th></th></tr></thead>
+  <tbody>
+  {{range .Items}}
+    <tr>
+      <td><strong>{{.Proyecto}}</strong></td>
+      <td>{{printf "%.1f" .ProgresoPct}}%</td>
+      <td>{{.TareasCompletadas}} / {{.TareasTotales}}</td>
+      <td><a href="/progreso/{{pathEsc .Proyecto}}" class="btn-sm">{{t "Ver"}} →</a></td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+{{else}}
+<p style="color:#94a3b8">Todavía no hay proyectos con fases o avance registrados.</p>
+{{end}}
+{{end}}
+`
+
+const webTplProgresoDetalle = `{{define "content"}}
+{{if .R}}<a href="/progreso" style="font-size:.85rem;color:#64748b">← {{t "Volver"}} {{t "Progreso"}}</a>{{end}}
+{{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
+{{if .Err}}<div class="alert-err">✗ {{.Err}}</div>{{end}}
+{{if .R}}
+<h2 style="margin:.5rem 0">{{.R.Proyecto}}</h2>
+<div class="stats">
+  <div class="stat"><div class="n">{{printf "%.1f" .R.ProgresoPct}}%</div><div class="l">{{t "Progreso real"}}</div></div>
+  <div class="stat"><div class="n">{{.R.TareasTotales}}</div><div class="l">{{t "Tareas registradas"}}</div></div>
+  <div class="stat"><div class="n">{{.R.TareasCompletadas}}</div><div class="l">{{t "Tareas completadas"}}</div></div>
+</div>
+<p style="font-size:.85rem;color:#64748b">API JSON: <code>/api/progreso/{{pathEsc .R.Proyecto}}</code></p>
+
+{{if .R.Fases}}
+<h4>{{t "Fase"}}s</h4>
+<table>
+  <thead><tr><th>Orden</th><th>{{t "Fase"}}</th><th>{{t "Estado"}}</th><th>{{t "Peso"}}</th><th>{{t "Progreso"}}</th><th>{{t "Tareas"}}</th></tr></thead>
+  <tbody>
+  {{range .R.Fases}}
+    <tr>
+      <td>{{.Fase.Orden}}</td>
+      <td><strong>{{.Fase.Nombre}}</strong><br><small style="color:#64748b">{{.Fase.Descripcion}}</small></td>
+      <td><span class="tag t-{{.Fase.Estado}}">{{t .Fase.Estado}}</span></td>
+      <td>{{printf "%.1f" .Fase.Peso}}</td>
+      <td>{{printf "%.1f" .ProgresoPct}}%</td>
+      <td>{{.TareasCompletadas}} / {{.TareasTotales}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{if .R.TareasSinFase}}
+<h4>{{t "Tareas"}} sin {{t "Fase"}}</h4>
+<table>
+  <thead><tr><th>ID</th><th>Titulo</th><th>{{t "Estado"}}</th><th>{{t "Progreso"}}</th></tr></thead>
+  <tbody>
+  {{range .R.TareasSinFase}}
+    <tr>
+      <td>{{.Tarea.ID}}</td>
+      <td>{{.Tarea.Titulo}}</td>
+      <td><span class="tag t-{{.Tarea.Estado}}">{{t .Tarea.Estado}}</span></td>
+      <td>{{printf "%.1f" .ProgresoPct}}%</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
 {{end}}
 {{end}}
 `

@@ -554,8 +554,11 @@ func esErrorMigracionIgnorable(err error) bool {
 }
 
 func Close() {
+	dbMu.Lock()
+	defer dbMu.Unlock()
 	if DB != nil {
-		DB.Close()
+		_ = DB.Close()
+		DB = nil
 	}
 	DB = nil
 	currentStorageConfig = storage.Config{}
@@ -581,6 +584,12 @@ func QueryRebindingEnabled() bool {
 	return storage.DialectForDriver(currentStorageConfig.Driver).RebindParameters()
 }
 
+func IsOpen() bool {
+	dbMu.Lock()
+	defer dbMu.Unlock()
+	return DB != nil
+}
+
 func resolverRuta() string {
 	if v := os.Getenv("ORQUESTA_DB"); strings.TrimSpace(v) != "" {
 		return v
@@ -596,6 +605,10 @@ func resolverRuta() string {
 		}
 	}
 	return nil
+}
+
+func CurrentDBPath() string {
+	return resolverRuta()
 }
 
 func resolverRutaDesdeGitRoot(root string) string {

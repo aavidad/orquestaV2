@@ -10,3 +10,4 @@ certs/
 .ssl-key.log
 >>>>>>> origin/orq-orquestador-codex2
 *.bk
+.ssl-key.log
