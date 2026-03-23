@@ -166,6 +166,36 @@ type apiRuntimeMailboxCreateRequest struct {
 	Payload        string `json:"payload"`
 }
 
+type apiRuntimeCheckpointCreateRequest struct {
+	Agente         string `json:"agente"`
+	Proyecto       string `json:"proyecto"`
+	SesionID       int64  `json:"sesion_id"`
+	RuntimeID      int64  `json:"runtime_id"`
+	CheckpointKind string `json:"checkpoint_kind"`
+	Resumen        string `json:"resumen"`
+	Branch         string `json:"branch"`
+	CWD            string `json:"cwd"`
+	Payload        string `json:"payload"`
+	ResumeStrategy string `json:"resume_strategy"`
+	Source         string `json:"source"`
+}
+
+type apiRefineriaRequest struct {
+	Agente  string `json:"agente"`
+	Rama    string `json:"rama"`
+	Dir     string `json:"dir"`
+	CmdTest string `json:"cmd_test"`
+}
+
+type apiMemoriaEntidadRequest struct {
+	Nombre        string `json:"nombre"`
+	Tipo          string `json:"tipo"`
+	Valor         string `json:"valor"`
+	Metadata      string `json:"metadata"`
+	VerificadoPor string `json:"verificado_por"`
+	Proyecto      string `json:"proyecto"`
+}
+
 type apiAgentePausarRequest struct {
 	Agente  string `json:"agente"`
 	Minutos int    `json:"minutos"`
@@ -214,7 +244,12 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtime-orders", apiHandlerRuntimeOrders)
 	mux.HandleFunc("/api/runtime-mailbox", apiHandlerRuntimeMailbox)
 	mux.HandleFunc("/api/runtime-mailbox/", apiRouterRuntimeMailbox)
+	mux.HandleFunc("/api/runtime-checkpoints", apiHandlerRuntimeCheckpoints)
 	mux.HandleFunc("/api/runtime-checkpoints/latest", apiHandlerRuntimeCheckpointLatest)
+	mux.HandleFunc("/api/refineria", apiHandlerRefineria)
+	mux.HandleFunc("/api/refineria/", apiRouterRefineria)
+	mux.HandleFunc("/api/memoria", apiHandlerMemoria)
+	mux.HandleFunc("/api/memoria/", apiRouterMemoria)
 	mux.HandleFunc("/api/sesiones", apiHandlerSesiones)
 	mux.HandleFunc("/api/sesiones/", apiRouterSesiones)
 	mux.HandleFunc("/api/sesiones/inicio", apiHandlerSesionInicio)
@@ -902,7 +937,86 @@ func apiRouterTareas(w http.ResponseWriter, r *http.Request) {
 		apiHandlerTareaAccion(w, r, parts[0])
 		return
 	}
+	if len(parts) == 2 && parts[1] == "refineria" && r.Method == http.MethodPost {
+		apiHandlerTareaRefineria(w, r, parts[0])
+		return
+	}
 	http.NotFound(w, r)
+}
+
+func apiHandlerTareaRefineria(w http.ResponseWriter, r *http.Request, idStr string) {
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
+		return
+	}
+	var req apiRefineriaRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	if strings.TrimSpace(req.Agente) == "" {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("agente requerido"))
+		return
+	}
+	s, err := db.SolicitarRefineria(id, req.Agente, req.Rama, req.Dir, req.CmdTest)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true, "solicitud": s})
+}
+
+// apiHandlerRefineria gestiona GET /api/refineria (lista solicitudes pendientes).
+func apiHandlerRefineria(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	solicitudes, err := db.ListarRefineriasPendientes()
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"solicitudes": solicitudes})
+}
+
+// apiRouterRefineria gestiona GET /api/refineria/:id y GET /api/refineria/tarea/:id.
+func apiRouterRefineria(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/refineria/"), "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		http.NotFound(w, r)
+		return
+	}
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	// GET /api/refineria/tarea/:tareaID
+	if len(parts) == 2 && parts[0] == "tarea" {
+		tareaID, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
+			return
+		}
+		ss, err := db.ListarRefineriaPorTarea(tareaID)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"solicitudes": ss})
+		return
+	}
+	// GET /api/refineria/:id
+	id, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
+		return
+	}
+	s, err := db.GetRefineriaSolicitud(id)
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"solicitud": s})
 }
 
 func apiHandlerTareaAccion(w http.ResponseWriter, r *http.Request, idStr string) {
@@ -1269,6 +1383,56 @@ func apiRouterRuntimeMailbox(w http.ResponseWriter, r *http.Request) {
 	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
 }
 
+func apiHandlerRuntimeCheckpoints(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiRuntimeCheckpointCreateRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	payload := strings.TrimSpace(req.Payload)
+	if payload == "" {
+		payload = "{}"
+	}
+	var proyectoID *int64
+	if proyecto := strings.TrimSpace(req.Proyecto); proyecto != "" {
+		p, err := db.GetProyecto(proyecto)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		proyectoID = &p.ID
+	}
+	var sesionID *int64
+	if req.SesionID > 0 {
+		sesionID = &req.SesionID
+	}
+	var runtimeID *int64
+	if req.RuntimeID > 0 {
+		runtimeID = &req.RuntimeID
+	}
+	id, err := db.CrearRuntimeCheckpoint(&db.RuntimeCheckpoint{
+		Agente:         strings.TrimSpace(req.Agente),
+		ProyectoID:     proyectoID,
+		SesionID:       sesionID,
+		RuntimeID:      runtimeID,
+		CheckpointKind: strings.TrimSpace(req.CheckpointKind),
+		Resumen:        strings.TrimSpace(req.Resumen),
+		Branch:         strings.TrimSpace(req.Branch),
+		CWD:            strings.TrimSpace(req.CWD),
+		PayloadJSON:    payload,
+		ResumeStrategy: strings.TrimSpace(req.ResumeStrategy),
+		Source:         strings.TrimSpace(req.Source),
+	})
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true, "id": id})
+}
+
 func apiHandlerRuntimeCheckpointLatest(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
@@ -1452,6 +1616,92 @@ func apiHandlerPropuestasCrear(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true, "id": id, "propuesta": propuesta})
+}
+
+func apiHandlerMemoria(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		filter := db.FiltroEntidadesMemoria{}
+		if proyectoRef := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyectoRef != "" {
+			proyecto, err := db.GetProyecto(proyectoRef)
+			if err != nil {
+				apiError(w, http.StatusBadRequest, err)
+				return
+			}
+			filter.ProyectoID = &proyecto.ID
+		}
+		if tipo := strings.TrimSpace(r.URL.Query().Get("tipo")); tipo != "" {
+			filter.Tipo = &tipo
+		}
+		entidades, err := db.ListarEntidadesMemoria(filter)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"entidades": entidades})
+	case http.MethodPost:
+		var req apiMemoriaEntidadRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		var proyectoID *int64
+		if proyectoRef := strings.TrimSpace(req.Proyecto); proyectoRef != "" {
+			proyecto, err := db.GetProyecto(proyectoRef)
+			if err != nil {
+				apiError(w, http.StatusBadRequest, err)
+				return
+			}
+			proyectoID = &proyecto.ID
+		}
+		id, err := db.UpsertEntidadMemoria(&db.EntidadMemoria{
+			Nombre:        strings.TrimSpace(req.Nombre),
+			Tipo:          strings.TrimSpace(req.Tipo),
+			ValorJSON:     strings.TrimSpace(req.Valor),
+			MetadataJSON:  strings.TrimSpace(req.Metadata),
+			VerificadoPor: strings.TrimSpace(req.VerificadoPor),
+			ProyectoID:    proyectoID,
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		entidad, err := db.GetEntidadMemoria(strings.TrimSpace(req.Nombre), proyectoID)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true, "id": id, "entidad": entidad})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func apiRouterMemoria(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/memoria/"), "/"), "/")
+	if len(parts) != 1 || parts[0] == "" || r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	var proyectoID *int64
+	if proyectoRef := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyectoRef != "" {
+		proyecto, err := db.GetProyecto(proyectoRef)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		proyectoID = &proyecto.ID
+	}
+	entidad, err := db.GetEntidadMemoria(parts[0], proyectoID)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if entidad == nil {
+		apiError(w, http.StatusNotFound, fmt.Errorf("entidad '%s' no encontrada", parts[0]))
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"entidad": entidad})
 }
 
 func apiRouterPropuestas(w http.ResponseWriter, r *http.Request) {
