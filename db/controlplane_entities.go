@@ -451,6 +451,80 @@ func ClaimNextRuntimeOrder(agente string) (*RuntimeOrder, error) {
 	}
 }
 
+func ClaimNextBootstrapRuntimeOrder(agente string, proyectoID *int64) (*RuntimeOrder, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil, nil
+	}
+	tipos := runtimeOrderTiposBootstrap()
+	placeholders, tipoArgs := runtimeOrderPlaceholders(tipos)
+	argsBase := make([]any, 0, len(tipoArgs)+3)
+	argsBase = append(argsBase, agente)
+	argsBase = append(argsBase, tipoArgs...)
+
+	for {
+		q := `
+			SELECT id
+			FROM runtime_orders
+			WHERE agente = ?
+			  AND estado = 'pendiente'
+			  AND available_at <= CURRENT_TIMESTAMP
+			  AND tipo IN (` + placeholders + `)`
+		args := append([]any(nil), argsBase...)
+		if proyectoID != nil {
+			q += `
+			  AND (proyecto_id = ? OR proyecto_id IS NULL)
+			ORDER BY
+			  CASE
+			    WHEN proyecto_id = ? THEN 0
+			    WHEN proyecto_id IS NULL THEN 1
+			    ELSE 2
+			  END,
+			  CASE tipo
+			    WHEN 'handoff' THEN 0
+			    WHEN 'resume' THEN 1
+			    WHEN 'start' THEN 2
+			    ELSE 9
+			  END,
+			  id
+			LIMIT 1`
+			args = append(args, *proyectoID, *proyectoID)
+		} else {
+			q += `
+			ORDER BY
+			  CASE
+			    WHEN proyecto_id IS NULL THEN 0
+			    ELSE 1
+			  END,
+			  CASE tipo
+			    WHEN 'handoff' THEN 0
+			    WHEN 'resume' THEN 1
+			    WHEN 'start' THEN 2
+			    ELSE 9
+			  END,
+			  id
+			LIMIT 1`
+		}
+
+		var id int64
+		err := DB.QueryRow(q, args...).Scan(&id)
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		order, err := claimRuntimeOrderByID(id)
+		if err != nil {
+			return nil, err
+		}
+		if order == nil {
+			continue
+		}
+		return order, nil
+	}
+}
+
 func GetRuntimeOrder(id int64) (*RuntimeOrder, error) {
 	row := DB.QueryRow(runtimeOrderSelectBase()+` WHERE id = ?`, id)
 	return scanRuntimeOrder(row)
@@ -1178,6 +1252,10 @@ func runtimePrincipalAgenteProyecto(agente string, proyectoID *int64) (*RuntimeI
 
 func runtimeOrderTiposBasicos() []string {
 	return []string{"sync_status", "checkpoint", "nudge"}
+}
+
+func runtimeOrderTiposBootstrap() []string {
+	return []string{"handoff", "resume", "start"}
 }
 
 func runtimeOrderTipoBasico(tipo string) bool {

@@ -95,20 +95,21 @@ type politicaAgente struct {
 }
 
 type agentePrepararOutput struct {
-	Agente       string                    `json:"agente"`
-	Rol          string                    `json:"rol"`
-	Proyecto     proyectoBundle            `json:"proyecto"`
-	Conector     conectorBundle            `json:"conector"`
-	Politica     politicaAgente            `json:"politica"`
-	UltimaSesion *sesionBundle             `json:"ultima_sesion,omitempty"`
-	Plan         *runtimeagente.LaunchPlan `json:"plan"`
-	Reglas       []*db.Regla               `json:"reglas"`
-	Skills       []*db.Skill               `json:"skills"`
-	Workflows    []*db.Workflow            `json:"workflows"`
-	Memoria      []*db.EntidadMemoria      `json:"memoria,omitempty"`
-	ReanimarAt   *time.Time                `json:"reanimar_at,omitempty"`
-	MotivoPausa  string                    `json:"motivo_pausa,omitempty"`
-	EstadoCuota  string                    `json:"estado_cuota,omitempty"`
+	Agente       string                       `json:"agente"`
+	Rol          string                       `json:"rol"`
+	Proyecto     proyectoBundle               `json:"proyecto"`
+	Conector     conectorBundle               `json:"conector"`
+	Politica     politicaAgente               `json:"politica"`
+	UltimaSesion *sesionBundle                `json:"ultima_sesion,omitempty"`
+	Plan         *runtimeagente.LaunchPlan    `json:"plan"`
+	Reglas       []*db.Regla                  `json:"reglas"`
+	Skills       []*db.Skill                  `json:"skills"`
+	Workflows    []*db.Workflow               `json:"workflows"`
+	Memoria      []*db.EntidadMemoria         `json:"memoria,omitempty"`
+	Bootstrap    *agenteBootstrapRuntimeState `json:"bootstrap,omitempty"`
+	ReanimarAt   *time.Time                   `json:"reanimar_at,omitempty"`
+	MotivoPausa  string                       `json:"motivo_pausa,omitempty"`
+	EstadoCuota  string                       `json:"estado_cuota,omitempty"`
 }
 
 type itemLigero struct {
@@ -283,6 +284,11 @@ func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Pro
 		return out, err
 	}
 
+	resume, bootstrap, err := prepararBootstrapRuntimeAgente(agente.Nombre, proyecto, ultima)
+	if err != nil {
+		return out, err
+	}
+
 	req := runtimeagente.LaunchRequest{
 		Agente:       agente.Nombre,
 		Rol:          agente.Rol,
@@ -302,14 +308,8 @@ func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Pro
 			Activo:       conector.Activo,
 		},
 	}
-	if ultima != nil {
-		req.Resume = runtimeagente.ResumeContext{
-			ExternalSessionID:  ultima.ExternalSessionID,
-			ResumePayloadJSON:  ultima.ResumePayloadJSON,
-			ResumenContinuidad: ultima.ResumenContinuidad,
-			Branch:             ultima.Branch,
-			CWD:                ultima.CWD,
-		}
+	if resumeContextNoVacio(resume) {
+		req.Resume = resume
 	}
 	plan, err := runtimeagente.DefaultRegistry().Prepare(req)
 	if err != nil {
@@ -338,6 +338,7 @@ func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Pro
 		Skills:      skills,
 		Workflows:   workflows,
 		Memoria:     memoria,
+		Bootstrap:   bootstrap,
 		ReanimarAt:  agente.ReanimarAt,
 		MotivoPausa: agente.MotivoPausa,
 		EstadoCuota: agente.EstadoCuota,
@@ -350,6 +351,14 @@ func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Pro
 	}
 
 	return out, nil
+}
+
+func resumeContextNoVacio(resume runtimeagente.ResumeContext) bool {
+	return strings.TrimSpace(resume.ExternalSessionID) != "" ||
+		strings.TrimSpace(resume.ResumePayloadJSON) != "" ||
+		strings.TrimSpace(resume.ResumenContinuidad) != "" ||
+		strings.TrimSpace(resume.Branch) != "" ||
+		strings.TrimSpace(resume.CWD) != ""
 }
 
 var agentePrepararCmd = &cobra.Command{
