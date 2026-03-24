@@ -1022,6 +1022,149 @@ func TestRuntimeOrderStartYSendInstructionGobiernanProcesoReal(t *testing.T) {
 	}
 }
 
+func TestRuntimeOrderStartIntegraBootstrapDeHandoffMailboxYCheckpoint(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "cat-cli",
+		Nombre:     "Cat CLI",
+		Transporte: "cli",
+		Comando:    "cat",
+		Activo:     true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:             "Codex1",
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador", "sesion-previa"),
+		Herramienta:        "codex-cli",
+		ResumenContinuidad: "continuidad previa",
+		ResumePayloadJSON:  `{"previo":true}`,
+	}); err != nil {
+		t.Fatalf("iniciar sesion previa: %v", err)
+	}
+
+	handoffPayload, err := json.Marshal(HandoffPayload{
+		AgenteOrigen:       "Codex0",
+		AgenteDestino:      "Codex1",
+		Motivo:             "traspaso",
+		ResumenContinuidad: "handoff listo",
+		ExternalSessionID:  "sess-handoff",
+	})
+	if err != nil {
+		t.Fatalf("marshal handoff: %v", err)
+	}
+	handoffID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "handoff",
+		PayloadJSON: string(handoffPayload),
+	})
+	if err != nil {
+		t.Fatalf("encolar handoff: %v", err)
+	}
+	msgID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "Coordinador",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "handoff_note",
+		PayloadJSON: `{"texto":"revisa el checkpoint"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	if _, err := CrearRuntimeCheckpoint(&RuntimeCheckpoint{
+		Agente:         "Codex1",
+		ProyectoID:     &proyectoID,
+		CheckpointKind: "handoff_prepare",
+		Resumen:        "checkpoint reciente",
+		Branch:         "feature/bootstrap",
+		CWD:            filepath.Join(tmp, "orquestador", "checkpoint"),
+		PayloadJSON:    `{"archivos":["a.go","b.go"]}`,
+		ResumeStrategy: "resumen_y_payload",
+		Source:         "test:bootstrap-start",
+	}); err != nil {
+		t.Fatalf("checkpoint: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"cat-cli"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStart(startOrder); err != nil {
+		t.Fatalf("ejecutar start: %v", err)
+	}
+
+	sesion, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion activa: %+v err=%v", sesion, err)
+	}
+	if sesion.ExternalSessionID != "sess-handoff" {
+		t.Fatalf("external_session_id inesperado: %s", sesion.ExternalSessionID)
+	}
+	if !strings.Contains(sesion.ResumePayloadJSON, `"mailbox"`) || !strings.Contains(sesion.ResumePayloadJSON, `"checkpoint"`) {
+		t.Fatalf("resume payload sin bootstrap: %s", sesion.ResumePayloadJSON)
+	}
+	if !strings.Contains(sesion.ResumenContinuidad, "handoff listo") || !strings.Contains(sesion.ResumenContinuidad, "Mailbox: 1 mensaje(s) inyectados") {
+		t.Fatalf("resumen continuidad inesperado: %s", sesion.ResumenContinuidad)
+	}
+	if sesion.Branch != "feature/bootstrap" {
+		t.Fatalf("branch inesperada: %s", sesion.Branch)
+	}
+
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if !strings.Contains(handle.MetadataJSON, `"continuity_prompt"`) || !strings.Contains(handle.MetadataJSON, "handoff listo") {
+		t.Fatalf("metadata de handle sin continuidad: %s", handle.MetadataJSON)
+	}
+
+	handoffOrder, err := GetRuntimeOrder(handoffID)
+	if err != nil {
+		t.Fatalf("get handoff: %v", err)
+	}
+	if handoffOrder.Estado != "completada" {
+		t.Fatalf("handoff no completada: %+v", handoffOrder)
+	}
+	msgsConsumidos, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{
+		ToAgente:   strPtrTest("Codex1"),
+		ProyectoID: &proyectoID,
+		Estado:     strPtrTest("consumido"),
+	})
+	if err != nil {
+		t.Fatalf("mailbox consumido: %v", err)
+	}
+	if len(msgsConsumidos) != 1 || msgsConsumidos[0].ID != msgID {
+		t.Fatalf("mailbox consumido inesperado: %+v", msgsConsumidos)
+	}
+}
+
+func strPtrTest(v string) *string { return &v }
+
 func TestProcesarRuntimeOrdersBatchCompletaNudgeEnMailbox(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
