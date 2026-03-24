@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"orquesta/capacidadapp"
 	"orquesta/db"
 )
 
@@ -32,6 +33,34 @@ type apiProyectosResponse struct {
 
 type apiConectoresResponse struct {
 	Conectores []*db.Conector `json:"conectores"`
+}
+
+type apiPoolsResponse struct {
+	Pools []*db.PoolCapacidadResumen `json:"pools"`
+}
+
+type apiPoolResponse struct {
+	Detalle *capacidadapp.PoolDetail `json:"detalle"`
+}
+
+type apiPoolModelosResponse struct {
+	Modelos []*db.PoolModelo `json:"modelos"`
+}
+
+type apiPoolSaveResponse struct {
+	ID int64 `json:"id"`
+}
+
+type apiPoliticasModeloResponse struct {
+	Politicas []*db.PoliticaModelo `json:"politicas"`
+}
+
+type apiPoliticaModeloSaveResponse struct {
+	ID int64 `json:"id"`
+}
+
+type apiResolucionModeloResponse struct {
+	Resolucion *db.ResolucionModelo `json:"resolucion"`
 }
 
 type apiReglasResponse struct {

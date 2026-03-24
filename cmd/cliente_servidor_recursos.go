@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"orquesta/capacidadapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
 )
@@ -116,6 +117,157 @@ type apiConectorUpsertRequest struct {
 	EnvJSON      string `json:"env_json"`
 	MetadataJSON string `json:"metadata_json"`
 	Activo       bool   `json:"activo"`
+}
+
+func cargarPoolsDesdeAPI(activo *bool) ([]*db.PoolCapacidadResumen, bool, error) {
+	var resp apiPoolsResponse
+	query := url.Values{}
+	if activo != nil {
+		query.Set("activo", strconv.FormatBool(*activo))
+	}
+	ok, err := apiGetQuery("/api/pools", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Pools, true, nil
+}
+
+func cargarPoolDetalleDesdeAPI(slug string) (*capacidadapp.PoolDetail, bool, error) {
+	var resp apiPoolResponse
+	ok, err := apiGet(fmt.Sprintf("/api/pools/%s", url.PathEscape(strings.TrimSpace(slug))), &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Detalle, true, nil
+}
+
+func guardarPoolPorAPI(pool *db.PoolCapacidad) (int64, bool, error) {
+	if pool == nil {
+		return 0, false, fmt.Errorf("pool obligatorio")
+	}
+	var resp apiPoolSaveResponse
+	ok, err := apiPost("/api/pools", apiPoolSaveRequest{
+		Slug:                strings.TrimSpace(pool.Slug),
+		Proveedor:           strings.TrimSpace(pool.Proveedor),
+		Runtime:             strings.TrimSpace(pool.Runtime),
+		Plan:                strings.TrimSpace(pool.Plan),
+		EsDePago:            pool.EsDePago,
+		CapacidadTotal:      pool.CapacidadTotal,
+		CapacidadReservada:  pool.CapacidadReservada,
+		PermiteHijos:        pool.PermiteHijos,
+		PermiteModelosMulti: pool.PermiteModelosMulti,
+		PermiteSobrecoste:   pool.PermiteSobrecoste,
+		PoliticaHandoff:     strings.TrimSpace(pool.PoliticaHandoff),
+		FuenteTelemetria:    strings.TrimSpace(pool.FuenteTelemetria),
+		MetadataJSON:        strings.TrimSpace(pool.MetadataJSON),
+		Activo:              pool.Activo,
+	}, &resp)
+	if !ok || err != nil {
+		return 0, ok, err
+	}
+	return resp.ID, true, nil
+}
+
+func seedInicialPoolsPorAPI() (bool, error) {
+	return apiPost("/api/pools/seed-inicial", map[string]any{}, nil)
+}
+
+func cargarModelosPoolDesdeAPI(slug string) ([]*db.PoolModelo, bool, error) {
+	var resp apiPoolModelosResponse
+	ok, err := apiGet(fmt.Sprintf("/api/pools/%s/modelos", url.PathEscape(strings.TrimSpace(slug))), &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Modelos, true, nil
+}
+
+func guardarModeloPoolPorAPI(poolSlug string, modelo *db.PoolModelo) (int64, bool, error) {
+	if modelo == nil {
+		return 0, false, fmt.Errorf("modelo obligatorio")
+	}
+	var resp apiPoolSaveResponse
+	ok, err := apiPost(fmt.Sprintf("/api/pools/%s/modelos", url.PathEscape(strings.TrimSpace(poolSlug))), apiPoolModeloSaveRequest{
+		ModelSlug:          strings.TrimSpace(modelo.ModelSlug),
+		Activo:             modelo.Activo,
+		Prioridad:          modelo.Prioridad,
+		CosteRelativo:      modelo.CosteRelativo,
+		LimiteConocidoJSON: strings.TrimSpace(modelo.LimiteConocidoJSON),
+	}, &resp)
+	if !ok || err != nil {
+		return 0, ok, err
+	}
+	return resp.ID, true, nil
+}
+
+func seedInicialModelosPoolPorAPI() (bool, error) {
+	return apiPost("/api/pools/modelos/seed-inicial", map[string]any{}, nil)
+}
+
+func cargarPoliticasModeloDesdeAPI(scopeTipo, scopeRef string, activa *bool) ([]*db.PoliticaModelo, bool, error) {
+	var resp apiPoliticasModeloResponse
+	query := url.Values{}
+	if strings.TrimSpace(scopeTipo) != "" {
+		query.Set("scope_tipo", strings.TrimSpace(scopeTipo))
+	}
+	if strings.TrimSpace(scopeRef) != "" {
+		query.Set("scope_ref", strings.TrimSpace(scopeRef))
+	}
+	if activa != nil {
+		query.Set("activa", strconv.FormatBool(*activa))
+	}
+	ok, err := apiGetQuery("/api/politicas-modelo", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Politicas, true, nil
+}
+
+func guardarPoliticaModeloPorAPI(policy *db.PoliticaModelo) (int64, bool, error) {
+	if policy == nil {
+		return 0, false, fmt.Errorf("politica obligatoria")
+	}
+	var resp apiPoliticaModeloSaveResponse
+	ok, err := apiPost("/api/politicas-modelo", apiPoliticaModeloSaveRequest{
+		ScopeTipo:       strings.TrimSpace(policy.ScopeTipo),
+		ScopeRef:        strings.TrimSpace(policy.ScopeRef),
+		PerfilTarea:     strings.TrimSpace(policy.PerfilTarea),
+		PoolSlug:        strings.TrimSpace(policy.PoolSlug),
+		ModelSlug:       strings.TrimSpace(policy.ModelSlug),
+		ReasoningEffort: strings.TrimSpace(policy.ReasoningEffort),
+		Prioridad:       policy.Prioridad,
+		Activa:          policy.Activa,
+		MetadataJSON:    strings.TrimSpace(policy.MetadataJSON),
+	}, &resp)
+	if !ok || err != nil {
+		return 0, ok, err
+	}
+	return resp.ID, true, nil
+}
+
+func seedInicialPoliticasModeloPorAPI() (bool, error) {
+	return apiPost("/api/politicas-modelo/seed-inicial", map[string]any{}, nil)
+}
+
+func resolverModeloPorAPI(input db.ResolverPoliticaInput) (*db.ResolucionModelo, bool, error) {
+	var resp apiResolucionModeloResponse
+	query := url.Values{}
+	if input.TareaID != nil && *input.TareaID > 0 {
+		query.Set("tarea_id", strconv.FormatInt(*input.TareaID, 10))
+	}
+	if strings.TrimSpace(input.ProyectoSlug) != "" {
+		query.Set("proyecto", strings.TrimSpace(input.ProyectoSlug))
+	}
+	if strings.TrimSpace(input.Fase) != "" {
+		query.Set("fase", strings.TrimSpace(input.Fase))
+	}
+	if strings.TrimSpace(input.PerfilTarea) != "" {
+		query.Set("perfil", strings.TrimSpace(input.PerfilTarea))
+	}
+	ok, err := apiGetQuery("/api/modelo/resolver", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Resolucion, true, nil
 }
 
 func cargarResumenProgresoDesdeAPI(proyecto string) (*db.ResumenProgresoProyecto, bool, error) {

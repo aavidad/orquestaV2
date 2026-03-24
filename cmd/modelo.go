@@ -31,9 +31,15 @@ var politicaModeloListarCmd = &cobra.Command{
 			activaPtr = &activa
 		}
 
-		items, err := capacidadService.ListModelPolicies(scopeTipo, scopeRef, activaPtr)
+		items, ok, err := cargarPoliticasModeloDesdeAPI(scopeTipo, scopeRef, activaPtr)
 		if err != nil {
 			return err
+		}
+		if !ok {
+			items, err = capacidadService.ListModelPolicies(scopeTipo, scopeRef, activaPtr)
+			if err != nil {
+				return err
+			}
 		}
 		if len(items) == 0 {
 			fmt.Println("No hay politicas de modelo.")
@@ -66,7 +72,7 @@ var politicaModeloGuardarCmd = &cobra.Command{
 		metadataJSON, _ := cmd.Flags().GetString("metadata-json")
 		activa, _ := cmd.Flags().GetBool("activa")
 
-		id, err := capacidadService.SaveModelPolicy(&db.PoliticaModelo{
+		politica := &db.PoliticaModelo{
 			ScopeTipo:       scopeTipo,
 			ScopeRef:        scopeRef,
 			PerfilTarea:     perfil,
@@ -76,9 +82,16 @@ var politicaModeloGuardarCmd = &cobra.Command{
 			Prioridad:       prioridad,
 			Activa:          activa,
 			MetadataJSON:    metadataJSON,
-		})
+		}
+		id, ok, err := guardarPoliticaModeloPorAPI(politica)
 		if err != nil {
 			return err
+		}
+		if !ok {
+			id, err = capacidadService.SaveModelPolicy(politica)
+			if err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ Politica de modelo guardada (id: %d)\n", id)
 		return nil
@@ -89,8 +102,12 @@ var politicaModeloSeedCmd = &cobra.Command{
 	Use:   "seed-inicial",
 	Short: "Carga politicas base para los perfiles recomendados",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := capacidadService.SeedInitialModelPolicies(); err != nil {
+		if ok, err := seedInicialPoliticasModeloPorAPI(); err != nil {
 			return err
+		} else if !ok {
+			if err := capacidadService.SeedInitialModelPolicies(); err != nil {
+				return err
+			}
 		}
 		fmt.Println("✓ Politicas iniciales de modelo cargadas")
 		return nil
@@ -115,14 +132,21 @@ var modeloResolverCmd = &cobra.Command{
 		fase, _ := cmd.Flags().GetString("fase")
 		perfil, _ := cmd.Flags().GetString("perfil")
 
-		res, err := capacidadService.ResolveModelPolicy(db.ResolverPoliticaInput{
+		input := db.ResolverPoliticaInput{
 			TareaID:      tareaIDPtr,
 			ProyectoSlug: proyecto,
 			Fase:         fase,
 			PerfilTarea:  perfil,
-		})
+		}
+		res, ok, err := resolverModeloPorAPI(input)
 		if err != nil {
 			return err
+		}
+		if !ok {
+			res, err = capacidadService.ResolveModelPolicy(input)
+			if err != nil {
+				return err
+			}
 		}
 
 		fmt.Printf("Perfil:      %s\n", res.PerfilTarea)

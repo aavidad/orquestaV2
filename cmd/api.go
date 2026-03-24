@@ -149,6 +149,43 @@ type apiProgresoTareaRegistrarRequest struct {
 	ActualizadoPor string  `json:"actualizado_por"`
 }
 
+type apiPoolSaveRequest struct {
+	Slug                string `json:"slug"`
+	Proveedor           string `json:"proveedor"`
+	Runtime             string `json:"runtime"`
+	Plan                string `json:"plan"`
+	EsDePago            bool   `json:"es_de_pago"`
+	CapacidadTotal      int    `json:"capacidad_total"`
+	CapacidadReservada  int    `json:"capacidad_reservada"`
+	PermiteHijos        bool   `json:"permite_hijos"`
+	PermiteModelosMulti bool   `json:"permite_modelos_multi"`
+	PermiteSobrecoste   bool   `json:"permite_sobrecoste"`
+	PoliticaHandoff     string `json:"politica_handoff"`
+	FuenteTelemetria    string `json:"fuente_telemetria"`
+	MetadataJSON        string `json:"metadata_json"`
+	Activo              bool   `json:"activo"`
+}
+
+type apiPoolModeloSaveRequest struct {
+	ModelSlug          string  `json:"model_slug"`
+	Activo             bool    `json:"activo"`
+	Prioridad          int     `json:"prioridad"`
+	CosteRelativo      float64 `json:"coste_relativo"`
+	LimiteConocidoJSON string  `json:"limite_conocido_json"`
+}
+
+type apiPoliticaModeloSaveRequest struct {
+	ScopeTipo       string `json:"scope_tipo"`
+	ScopeRef        string `json:"scope_ref"`
+	PerfilTarea     string `json:"perfil_tarea"`
+	PoolSlug        string `json:"pool_slug"`
+	ModelSlug       string `json:"model_slug"`
+	ReasoningEffort string `json:"reasoning_effort"`
+	Prioridad       int    `json:"prioridad"`
+	Activa          bool   `json:"activa"`
+	MetadataJSON    string `json:"metadata_json"`
+}
+
 type apiPropuestaCrearRequest struct {
 	Codigo       string `json:"codigo"`
 	Titulo       string `json:"titulo"`
@@ -294,6 +331,13 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/proyectos", apiHandlerProyectos)
 	mux.HandleFunc("/api/proyectos/descubrir", apiHandlerProyectoDescubrir)
 	mux.HandleFunc("/api/proyectos/", apiRouterProyectos)
+	mux.HandleFunc("/api/pools", apiHandlerPools)
+	mux.HandleFunc("/api/pools/seed-inicial", apiHandlerPoolsSeedInicial)
+	mux.HandleFunc("/api/pools/modelos/seed-inicial", apiHandlerPoolsModelosSeedInicial)
+	mux.HandleFunc("/api/pools/", apiRouterPools)
+	mux.HandleFunc("/api/politicas-modelo", apiHandlerPoliticasModelo)
+	mux.HandleFunc("/api/politicas-modelo/seed-inicial", apiHandlerPoliticasModeloSeedInicial)
+	mux.HandleFunc("/api/modelo/resolver", apiHandlerModeloResolver)
 	mux.HandleFunc("/api/progreso", apiHandlerProgreso)
 	mux.HandleFunc("/api/progreso/fases", apiHandlerProgresoFases)
 	mux.HandleFunc("/api/progreso/fases/", apiRouterProgresoFases)
@@ -810,6 +854,264 @@ func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{"proyecto": proyecto})
+}
+
+func apiHandlerPools(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		var activoPtr *bool
+		if activoRaw := strings.TrimSpace(r.URL.Query().Get("activo")); activoRaw != "" {
+			activo := activoRaw == "1" || strings.EqualFold(activoRaw, "true")
+			activoPtr = &activo
+		}
+		pools, err := capacidadService.ListPoolsSummary(activoPtr)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiPoolsResponse{Pools: pools})
+	case http.MethodPost:
+		var req apiPoolSaveRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		id, err := capacidadService.SavePool(&db.PoolCapacidad{
+			Slug:                strings.TrimSpace(req.Slug),
+			Proveedor:           strings.TrimSpace(req.Proveedor),
+			Runtime:             strings.TrimSpace(req.Runtime),
+			Plan:                strings.TrimSpace(req.Plan),
+			EsDePago:            req.EsDePago,
+			CapacidadTotal:      req.CapacidadTotal,
+			CapacidadReservada:  req.CapacidadReservada,
+			PermiteHijos:        req.PermiteHijos,
+			PermiteModelosMulti: req.PermiteModelosMulti,
+			PermiteSobrecoste:   req.PermiteSobrecoste,
+			PoliticaHandoff:     strings.TrimSpace(req.PoliticaHandoff),
+			FuenteTelemetria:    strings.TrimSpace(req.FuenteTelemetria),
+			MetadataJSON:        strings.TrimSpace(req.MetadataJSON),
+			Activo:              req.Activo,
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusCreated, apiPoolSaveResponse{ID: id})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func apiRouterPools(w http.ResponseWriter, r *http.Request) {
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/pools/"), "/")
+	if path == "" {
+		http.NotFound(w, r)
+		return
+	}
+	if strings.HasSuffix(path, "/modelos") {
+		slug := strings.Trim(strings.TrimSuffix(path, "/modelos"), "/")
+		if slug == "" {
+			http.NotFound(w, r)
+			return
+		}
+		apiHandlerPoolModelos(w, r, slug)
+		return
+	}
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	detalle, err := capacidadService.GetPoolDetail(path)
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiPoolResponse{Detalle: detalle})
+}
+
+func apiHandlerPoolModelos(w http.ResponseWriter, r *http.Request, slug string) {
+	switch r.Method {
+	case http.MethodGet:
+		modelos, err := capacidadService.ListPoolModels(slug)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiPoolModelosResponse{Modelos: modelos})
+	case http.MethodPost:
+		var req apiPoolModeloSaveRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		id, err := capacidadService.SavePoolModel(slug, &db.PoolModelo{
+			ModelSlug:          strings.TrimSpace(req.ModelSlug),
+			Activo:             req.Activo,
+			Prioridad:          req.Prioridad,
+			CosteRelativo:      req.CosteRelativo,
+			LimiteConocidoJSON: strings.TrimSpace(req.LimiteConocidoJSON),
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusCreated, apiPoolSaveResponse{ID: id})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func apiHandlerPoolsSeedInicial(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	seeds := []db.PoolCapacidad{
+		{
+			Slug:                "codex",
+			Proveedor:           "OpenAI",
+			Runtime:             "codex",
+			Plan:                "default",
+			EsDePago:            true,
+			CapacidadTotal:      4,
+			CapacidadReservada:  0,
+			PermiteHijos:        true,
+			PermiteModelosMulti: true,
+			PermiteSobrecoste:   false,
+			PoliticaHandoff:     "preventivo",
+			FuenteTelemetria:    "manual",
+			MetadataJSON:        "{}",
+			Activo:              true,
+		},
+		{
+			Slug:                "claude",
+			Proveedor:           "Anthropic",
+			Runtime:             "claude",
+			Plan:                "default",
+			EsDePago:            true,
+			CapacidadTotal:      1,
+			CapacidadReservada:  0,
+			PermiteHijos:        true,
+			PermiteModelosMulti: true,
+			PermiteSobrecoste:   false,
+			PoliticaHandoff:     "preventivo",
+			FuenteTelemetria:    "manual",
+			MetadataJSON:        "{}",
+			Activo:              true,
+		},
+		{
+			Slug:                "android",
+			Proveedor:           "Android",
+			Runtime:             "android",
+			Plan:                "default",
+			EsDePago:            false,
+			CapacidadTotal:      1,
+			CapacidadReservada:  0,
+			PermiteHijos:        false,
+			PermiteModelosMulti: false,
+			PermiteSobrecoste:   false,
+			PoliticaHandoff:     "preventivo",
+			FuenteTelemetria:    "manual",
+			MetadataJSON:        "{}",
+			Activo:              true,
+		},
+	}
+	for _, seed := range seeds {
+		if _, err := capacidadService.SavePool(&seed); err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "count": len(seeds)})
+}
+
+func apiHandlerPoolsModelosSeedInicial(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	if err := capacidadService.SeedInitialModels(); err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func apiHandlerPoliticasModelo(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		scopeTipo := strings.TrimSpace(r.URL.Query().Get("scope_tipo"))
+		scopeRef := strings.TrimSpace(r.URL.Query().Get("scope_ref"))
+		var activaPtr *bool
+		if activaRaw := strings.TrimSpace(r.URL.Query().Get("activa")); activaRaw != "" {
+			activa := activaRaw == "1" || strings.EqualFold(activaRaw, "true")
+			activaPtr = &activa
+		}
+		politicas, err := capacidadService.ListModelPolicies(scopeTipo, scopeRef, activaPtr)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiPoliticasModeloResponse{Politicas: politicas})
+	case http.MethodPost:
+		var req apiPoliticaModeloSaveRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		id, err := capacidadService.SaveModelPolicy(&db.PoliticaModelo{
+			ScopeTipo:       strings.TrimSpace(req.ScopeTipo),
+			ScopeRef:        strings.TrimSpace(req.ScopeRef),
+			PerfilTarea:     strings.TrimSpace(req.PerfilTarea),
+			PoolSlug:        strings.TrimSpace(req.PoolSlug),
+			ModelSlug:       strings.TrimSpace(req.ModelSlug),
+			ReasoningEffort: strings.TrimSpace(req.ReasoningEffort),
+			Prioridad:       req.Prioridad,
+			Activa:          req.Activa,
+			MetadataJSON:    strings.TrimSpace(req.MetadataJSON),
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusCreated, apiPoliticaModeloSaveResponse{ID: id})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func apiHandlerPoliticasModeloSeedInicial(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	if err := capacidadService.SeedInitialModelPolicies(); err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func apiHandlerModeloResolver(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	var tareaIDPtr *int64
+	if tareaIDRaw := strings.TrimSpace(r.URL.Query().Get("tarea_id")); tareaIDRaw != "" {
+		tareaID, err := strconv.ParseInt(tareaIDRaw, 10, 64)
+		if err != nil || tareaID <= 0 {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("tarea_id inválido"))
+			return
+		}
+		tareaIDPtr = &tareaID
+	}
+	resolucion, err := capacidadService.ResolveModelPolicy(db.ResolverPoliticaInput{
+		TareaID:      tareaIDPtr,
+		ProyectoSlug: strings.TrimSpace(r.URL.Query().Get("proyecto")),
+		Fase:         strings.TrimSpace(r.URL.Query().Get("fase")),
+		PerfilTarea:  strings.TrimSpace(r.URL.Query().Get("perfil")),
+	})
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiResolucionModeloResponse{Resolucion: resolucion})
 }
 
 func apiHandlerConectores(w http.ResponseWriter, r *http.Request) {

@@ -36,9 +36,15 @@ var poolListarCmd = &cobra.Command{
 			filtro = &activo
 		}
 
-		pools, err := capacidadService.ListPoolsSummary(filtro)
+		pools, ok, err := cargarPoolsDesdeAPI(filtro)
 		if err != nil {
 			return err
+		}
+		if !ok {
+			pools, err = capacidadService.ListPoolsSummary(filtro)
+			if err != nil {
+				return err
+			}
 		}
 		if len(pools) == 0 {
 			fmt.Println("No hay pools.")
@@ -62,9 +68,15 @@ var poolVerCmd = &cobra.Command{
 	Short: "Muestra detalle de un pool y sus modelos",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		detail, err := capacidadService.GetPoolDetail(args[0])
+		detail, ok, err := cargarPoolDetalleDesdeAPI(args[0])
 		if err != nil {
 			return err
+		}
+		if !ok {
+			detail, err = capacidadService.GetPoolDetail(args[0])
+			if err != nil {
+				return err
+			}
 		}
 		pool := detail.Pool
 		fmt.Printf("Pool %s\n", pool.Slug)
@@ -109,7 +121,7 @@ var poolGuardarCmd = &cobra.Command{
 		metadataJSON, _ := cmd.Flags().GetString("metadata-json")
 		activo, _ := cmd.Flags().GetBool("activo")
 
-		id, err := capacidadService.SavePool(&db.PoolCapacidad{
+		pool := &db.PoolCapacidad{
 			Slug:                args[0],
 			Proveedor:           proveedor,
 			Runtime:             runtime,
@@ -124,9 +136,16 @@ var poolGuardarCmd = &cobra.Command{
 			FuenteTelemetria:    fuenteTelemetria,
 			MetadataJSON:        metadataJSON,
 			Activo:              activo,
-		})
+		}
+		id, ok, err := guardarPoolPorAPI(pool)
 		if err != nil {
 			return err
+		}
+		if !ok {
+			id, err = capacidadService.SavePool(pool)
+			if err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ Pool %s guardado (id: %d)\n", args[0], id)
 		return nil
@@ -143,9 +162,15 @@ var poolModeloListarCmd = &cobra.Command{
 	Short: "Lista modelos de un pool",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		modelos, err := capacidadService.ListPoolModels(args[0])
+		modelos, ok, err := cargarModelosPoolDesdeAPI(args[0])
 		if err != nil {
 			return err
+		}
+		if !ok {
+			modelos, err = capacidadService.ListPoolModels(args[0])
+			if err != nil {
+				return err
+			}
 		}
 		if len(modelos) == 0 {
 			fmt.Println("No hay modelos para ese pool.")
@@ -170,15 +195,23 @@ var poolModeloGuardarCmd = &cobra.Command{
 		costeRelativo, _ := cmd.Flags().GetFloat64("coste-relativo")
 		limiteJSON, _ := cmd.Flags().GetString("limite-json")
 
-		id, err := capacidadService.SavePoolModel(args[0], &db.PoolModelo{
+		modelo := &db.PoolModelo{
 			ModelSlug:          args[1],
 			Activo:             activo,
 			Prioridad:          prioridad,
 			CosteRelativo:      costeRelativo,
 			LimiteConocidoJSON: limiteJSON,
-		})
+		}
+
+		id, ok, err := guardarModeloPoolPorAPI(args[0], modelo)
 		if err != nil {
 			return err
+		}
+		if !ok {
+			id, err = capacidadService.SavePoolModel(args[0], modelo)
+			if err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ Modelo %s guardado en pool %s (id: %d)\n", args[1], args[0], id)
 		return nil
@@ -189,8 +222,12 @@ var poolModeloSeedCmd = &cobra.Command{
 	Use:   "seed-inicial",
 	Short: "Carga modelos iniciales conocidos para los pools base",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := capacidadService.SeedInitialModels(); err != nil {
+		if ok, err := seedInicialModelosPoolPorAPI(); err != nil {
 			return err
+		} else if !ok {
+			if err := capacidadService.SeedInitialModels(); err != nil {
+				return err
+			}
 		}
 		fmt.Println("✓ Modelos iniciales cargados")
 		return nil
@@ -201,6 +238,12 @@ var poolSeedCmd = &cobra.Command{
 	Use:   "seed-inicial",
 	Short: "Carga pools iniciales conocidos",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if ok, err := seedInicialPoolsPorAPI(); err != nil {
+			return err
+		} else if ok {
+			fmt.Println("✓ Pools iniciales cargados")
+			return nil
+		}
 		seeds := []db.PoolCapacidad{
 			{
 				Slug:                "codex",
