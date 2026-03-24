@@ -108,7 +108,10 @@ var reglasEditarCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
-		r, err := db.GetRegla(id)
+		r, ok, err := cargarReglaDesdeAPI(id)
+		if !ok {
+			r, err = db.GetRegla(id)
+		}
 		if err != nil {
 			return err
 		}
@@ -128,8 +131,19 @@ var reglasEditarCmd = &cobra.Command{
 			descripcion, _ := cmd.Flags().GetString("descripcion")
 			r.Descripcion = strings.TrimSpace(descripcion)
 		}
-		if err := db.ActualizarRegla(actor, r); err != nil {
+		if ok, err := actualizarReglaPorAPI(id, apiReglaActualizarRequest{
+			Actor:       actor,
+			TipoAgente:  r.TipoAgente,
+			Categoria:   r.Categoria,
+			Titulo:      r.Titulo,
+			Descripcion: r.Descripcion,
+			Activa:      r.Activa,
+		}); err != nil {
 			return err
+		} else if !ok {
+			if err := db.ActualizarRegla(actor, r); err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ Regla #%d actualizada\n", id)
 		return nil
@@ -147,7 +161,10 @@ var reglasVersionesCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
-		versiones, err := db.ListarVersionesRegla(id)
+		versiones, ok, err := cargarVersionesReglaDesdeAPI(id)
+		if !ok {
+			versiones, err = db.ListarVersionesRegla(id)
+		}
 		if err != nil {
 			return err
 		}
@@ -250,7 +267,10 @@ var skillsEditarCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
-		s, err := db.GetSkill(id)
+		s, ok, err := cargarSkillDesdeAPI(id)
+		if !ok {
+			s, err = db.GetSkill(id)
+		}
 		if err != nil {
 			return err
 		}
@@ -270,8 +290,19 @@ var skillsEditarCmd = &cobra.Command{
 			cuandoUsar, _ := cmd.Flags().GetString("cuando-usar")
 			s.CuandoUsar = strings.TrimSpace(cuandoUsar)
 		}
-		if err := db.ActualizarSkill(actor, s); err != nil {
+		if ok, err := actualizarSkillPorAPI(id, apiSkillActualizarRequest{
+			Actor:       actor,
+			TipoAgente:  s.TipoAgente,
+			Nombre:      s.Nombre,
+			Descripcion: s.Descripcion,
+			CuandoUsar:  s.CuandoUsar,
+			Activa:      s.Activa,
+		}); err != nil {
 			return err
+		} else if !ok {
+			if err := db.ActualizarSkill(actor, s); err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ Skill #%d actualizado\n", id)
 		return nil
@@ -289,7 +320,10 @@ var skillsVersionesCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
-		versiones, err := db.ListarVersionesSkill(id)
+		versiones, ok, err := cargarVersionesSkillDesdeAPI(id)
+		if !ok {
+			versiones, err = db.ListarVersionesSkill(id)
+		}
 		if err != nil {
 			return err
 		}
@@ -348,7 +382,10 @@ var workflowsVerCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
-		w, err := db.GetWorkflowByID(id)
+		w, ok, err := cargarWorkflowDesdeAPI(id)
+		if !ok {
+			w, err = db.GetWorkflowByID(id)
+		}
 		if err != nil {
 			return err
 		}
@@ -422,7 +459,10 @@ var workflowsEditarCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
-		w, err := db.GetWorkflowByID(id)
+		w, ok, err := cargarWorkflowDesdeAPI(id)
+		if !ok {
+			w, err = db.GetWorkflowByID(id)
+		}
 		if err != nil {
 			return err
 		}
@@ -443,8 +483,19 @@ var workflowsEditarCmd = &cobra.Command{
 		} else if reemplazar {
 			w.Pasos = pasosJSON
 		}
-		if err := db.ActualizarWorkflow(actor, w); err != nil {
+		if ok, err := actualizarWorkflowPorAPI(id, apiWorkflowActualizarRequest{
+			Actor:       actor,
+			TipoAgente:  w.TipoAgente,
+			Nombre:      w.Nombre,
+			Descripcion: w.Descripcion,
+			PasosJSON:   w.Pasos,
+			Activo:      w.Activo,
+		}); err != nil {
 			return err
+		} else if !ok {
+			if err := db.ActualizarWorkflow(actor, w); err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ Workflow #%d actualizado\n", id)
 		return nil
@@ -462,7 +513,10 @@ var workflowsVersionesCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
-		versiones, err := db.ListarVersionesWorkflow(id)
+		versiones, ok, err := cargarVersionesWorkflowDesdeAPI(id)
+		if !ok {
+			versiones, err = db.ListarVersionesWorkflow(id)
+		}
 		if err != nil {
 			return err
 		}
@@ -646,8 +700,12 @@ func activarReglaCmd(activa bool) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("id inválido")
 			}
-			if err := db.SetReglaActiva(actor, id, activa); err != nil {
+			if ok, err := setReglaActivaPorAPI(id, actor, activa); err != nil {
 				return err
+			} else if !ok {
+				if err := db.SetReglaActiva(actor, id, activa); err != nil {
+					return err
+				}
 			}
 			fmt.Printf("✓ Regla #%d %s\n", id, estadoVerbo(activa))
 			return nil
@@ -675,8 +733,12 @@ func activarSkillCmd(activo bool) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("id inválido")
 			}
-			if err := db.SetSkillActivo(actor, id, activo); err != nil {
+			if ok, err := setSkillActivoPorAPI(id, actor, activo); err != nil {
 				return err
+			} else if !ok {
+				if err := db.SetSkillActivo(actor, id, activo); err != nil {
+					return err
+				}
 			}
 			fmt.Printf("✓ Skill #%d %s\n", id, estadoVerbo(activo))
 			return nil
@@ -704,8 +766,12 @@ func activarWorkflowCmd(activo bool) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("id inválido")
 			}
-			if err := db.SetWorkflowActivo(actor, id, activo); err != nil {
+			if ok, err := setWorkflowActivoPorAPI(id, actor, activo); err != nil {
 				return err
+			} else if !ok {
+				if err := db.SetWorkflowActivo(actor, id, activo); err != nil {
+					return err
+				}
 			}
 			fmt.Printf("✓ Workflow #%d %s\n", id, estadoVerbo(activo))
 			return nil

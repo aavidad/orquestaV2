@@ -75,6 +75,30 @@ type apiWorkflowsResponse struct {
 	Workflows []*db.Workflow `json:"workflows"`
 }
 
+type apiReglaResponse struct {
+	Regla *db.Regla `json:"regla"`
+}
+
+type apiSkillResponse struct {
+	Skill *db.Skill `json:"skill"`
+}
+
+type apiWorkflowResponse struct {
+	Workflow *db.Workflow `json:"workflow"`
+}
+
+type apiReglaVersionesResponse struct {
+	Versiones []*db.ReglaVersion `json:"versiones"`
+}
+
+type apiSkillVersionesResponse struct {
+	Versiones []*db.SkillVersion `json:"versiones"`
+}
+
+type apiWorkflowVersionesResponse struct {
+	Versiones []*db.WorkflowVersion `json:"versiones"`
+}
+
 type apiPermisosCatalogoResponse struct {
 	Permisos []*db.PermisoEdicionCatalogo `json:"permisos"`
 }
@@ -351,11 +375,11 @@ func commandSupportsServerMode(args []string) bool {
 	case "modelo":
 		return len(tokens) > 1 && tokens[1] == "resolver"
 	case "reglas":
-		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "crear")
+		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "crear" || tokens[1] == "editar" || tokens[1] == "activar" || tokens[1] == "desactivar" || tokens[1] == "versiones")
 	case "skills":
-		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "crear")
+		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "crear" || tokens[1] == "editar" || tokens[1] == "activar" || tokens[1] == "desactivar" || tokens[1] == "versiones")
 	case "workflows":
-		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "crear")
+		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "crear" || tokens[1] == "ver" || tokens[1] == "editar" || tokens[1] == "activar" || tokens[1] == "desactivar" || tokens[1] == "versiones")
 	case "permisos":
 		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "fijar")
 	case "conector":

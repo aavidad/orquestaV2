@@ -221,6 +221,38 @@ type apiPermisoCatalogoSetRequest struct {
 	PuedeVersionar bool   `json:"puede_versionar"`
 }
 
+type apiCatalogoActivacionRequest struct {
+	Actor  string `json:"actor"`
+	Activa bool   `json:"activa"`
+}
+
+type apiReglaActualizarRequest struct {
+	Actor       string `json:"actor"`
+	TipoAgente  string `json:"tipo_agente"`
+	Categoria   string `json:"categoria"`
+	Titulo      string `json:"titulo"`
+	Descripcion string `json:"descripcion"`
+	Activa      bool   `json:"activa"`
+}
+
+type apiSkillActualizarRequest struct {
+	Actor       string `json:"actor"`
+	TipoAgente  string `json:"tipo_agente"`
+	Nombre      string `json:"nombre"`
+	Descripcion string `json:"descripcion"`
+	CuandoUsar  string `json:"cuando_usar"`
+	Activa      bool   `json:"activa"`
+}
+
+type apiWorkflowActualizarRequest struct {
+	Actor       string `json:"actor"`
+	TipoAgente  string `json:"tipo_agente"`
+	Nombre      string `json:"nombre"`
+	Descripcion string `json:"descripcion"`
+	PasosJSON   string `json:"pasos_json"`
+	Activo      bool   `json:"activo"`
+}
+
 type apiPropuestaCrearRequest struct {
 	Codigo       string `json:"codigo"`
 	Titulo       string `json:"titulo"`
@@ -353,8 +385,11 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/agentes", apiHandlerAgentes)
 	mux.HandleFunc("/api/agentes/", apiRouterAgentes)
 	mux.HandleFunc("/api/reglas", apiHandlerReglas)
+	mux.HandleFunc("/api/reglas/", apiRouterReglas)
 	mux.HandleFunc("/api/skills", apiHandlerSkills)
+	mux.HandleFunc("/api/skills/", apiRouterSkills)
 	mux.HandleFunc("/api/workflows", apiHandlerWorkflows)
+	mux.HandleFunc("/api/workflows/", apiRouterWorkflows)
 	mux.HandleFunc("/api/permisos-catalogo", apiHandlerPermisosCatalogo)
 	mux.HandleFunc("/api/lenguaje/politica", apiHandlerLenguajePolitica)
 	mux.HandleFunc("/api/lenguaje/matriz", apiHandlerLenguajeMatriz)
@@ -702,6 +737,84 @@ func apiHandlerReglas(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func apiRouterReglas(w http.ResponseWriter, r *http.Request) {
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/reglas/"), "/")
+	parts := strings.Split(path, "/")
+	if len(parts) == 0 || parts[0] == "" {
+		http.NotFound(w, r)
+		return
+	}
+	id, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil || id <= 0 {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
+		return
+	}
+	if len(parts) == 1 {
+		switch r.Method {
+		case http.MethodGet:
+			regla, err := db.GetRegla(id)
+			if err != nil {
+				apiError(w, http.StatusNotFound, err)
+				return
+			}
+			apiWriteJSON(w, http.StatusOK, apiReglaResponse{Regla: regla})
+		case http.MethodPost:
+			var req apiReglaActualizarRequest
+			if err := apiDecodeJSON(r, &req); err != nil {
+				apiError(w, http.StatusBadRequest, err)
+				return
+			}
+			if err := db.ActualizarRegla(strings.TrimSpace(req.Actor), &db.Regla{
+				ID:          id,
+				TipoAgente:  strings.TrimSpace(req.TipoAgente),
+				Categoria:   strings.TrimSpace(req.Categoria),
+				Titulo:      strings.TrimSpace(req.Titulo),
+				Descripcion: strings.TrimSpace(req.Descripcion),
+				Activa:      req.Activa,
+			}); err != nil {
+				apiError(w, http.StatusBadRequest, err)
+				return
+			}
+			apiWriteJSON(w, http.StatusOK, apiCatalogoMutationResponse{ID: id})
+		default:
+			apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+		}
+		return
+	}
+	if len(parts) != 2 {
+		http.NotFound(w, r)
+		return
+	}
+	switch parts[1] {
+	case "activa":
+		if !apiRequireMethod(w, r, http.MethodPost) {
+			return
+		}
+		var req apiCatalogoActivacionRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		if err := db.SetReglaActiva(strings.TrimSpace(req.Actor), id, req.Activa); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+	case "versiones":
+		if !apiRequireMethod(w, r, http.MethodGet) {
+			return
+		}
+		versiones, err := db.ListarVersionesRegla(id)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiReglaVersionesResponse{Versiones: versiones})
+	default:
+		http.NotFound(w, r)
+	}
+}
+
 func apiHandlerSkills(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -742,6 +855,84 @@ func apiHandlerSkills(w http.ResponseWriter, r *http.Request) {
 		apiWriteJSON(w, http.StatusCreated, apiCatalogoMutationResponse{ID: id})
 	default:
 		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func apiRouterSkills(w http.ResponseWriter, r *http.Request) {
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/skills/"), "/")
+	parts := strings.Split(path, "/")
+	if len(parts) == 0 || parts[0] == "" {
+		http.NotFound(w, r)
+		return
+	}
+	id, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil || id <= 0 {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
+		return
+	}
+	if len(parts) == 1 {
+		switch r.Method {
+		case http.MethodGet:
+			skill, err := db.GetSkill(id)
+			if err != nil {
+				apiError(w, http.StatusNotFound, err)
+				return
+			}
+			apiWriteJSON(w, http.StatusOK, apiSkillResponse{Skill: skill})
+		case http.MethodPost:
+			var req apiSkillActualizarRequest
+			if err := apiDecodeJSON(r, &req); err != nil {
+				apiError(w, http.StatusBadRequest, err)
+				return
+			}
+			if err := db.ActualizarSkill(strings.TrimSpace(req.Actor), &db.Skill{
+				ID:          id,
+				TipoAgente:  strings.TrimSpace(req.TipoAgente),
+				Nombre:      strings.TrimSpace(req.Nombre),
+				Descripcion: strings.TrimSpace(req.Descripcion),
+				CuandoUsar:  strings.TrimSpace(req.CuandoUsar),
+				Activa:      req.Activa,
+			}); err != nil {
+				apiError(w, http.StatusBadRequest, err)
+				return
+			}
+			apiWriteJSON(w, http.StatusOK, apiCatalogoMutationResponse{ID: id})
+		default:
+			apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+		}
+		return
+	}
+	if len(parts) != 2 {
+		http.NotFound(w, r)
+		return
+	}
+	switch parts[1] {
+	case "activa":
+		if !apiRequireMethod(w, r, http.MethodPost) {
+			return
+		}
+		var req apiCatalogoActivacionRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		if err := db.SetSkillActivo(strings.TrimSpace(req.Actor), id, req.Activa); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+	case "versiones":
+		if !apiRequireMethod(w, r, http.MethodGet) {
+			return
+		}
+		versiones, err := db.ListarVersionesSkill(id)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiSkillVersionesResponse{Versiones: versiones})
+	default:
+		http.NotFound(w, r)
 	}
 }
 
@@ -802,6 +993,84 @@ func apiHandlerWorkflows(w http.ResponseWriter, r *http.Request) {
 		apiWriteJSON(w, http.StatusCreated, apiCatalogoMutationResponse{ID: id})
 	default:
 		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func apiRouterWorkflows(w http.ResponseWriter, r *http.Request) {
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/workflows/"), "/")
+	parts := strings.Split(path, "/")
+	if len(parts) == 0 || parts[0] == "" {
+		http.NotFound(w, r)
+		return
+	}
+	id, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil || id <= 0 {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
+		return
+	}
+	if len(parts) == 1 {
+		switch r.Method {
+		case http.MethodGet:
+			workflow, err := db.GetWorkflowByID(id)
+			if err != nil {
+				apiError(w, http.StatusNotFound, err)
+				return
+			}
+			apiWriteJSON(w, http.StatusOK, apiWorkflowResponse{Workflow: workflow})
+		case http.MethodPost:
+			var req apiWorkflowActualizarRequest
+			if err := apiDecodeJSON(r, &req); err != nil {
+				apiError(w, http.StatusBadRequest, err)
+				return
+			}
+			if err := db.ActualizarWorkflow(strings.TrimSpace(req.Actor), &db.Workflow{
+				ID:          id,
+				TipoAgente:  strings.TrimSpace(req.TipoAgente),
+				Nombre:      strings.TrimSpace(req.Nombre),
+				Descripcion: strings.TrimSpace(req.Descripcion),
+				Pasos:       strings.TrimSpace(req.PasosJSON),
+				Activo:      req.Activo,
+			}); err != nil {
+				apiError(w, http.StatusBadRequest, err)
+				return
+			}
+			apiWriteJSON(w, http.StatusOK, apiCatalogoMutationResponse{ID: id})
+		default:
+			apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+		}
+		return
+	}
+	if len(parts) != 2 {
+		http.NotFound(w, r)
+		return
+	}
+	switch parts[1] {
+	case "activa":
+		if !apiRequireMethod(w, r, http.MethodPost) {
+			return
+		}
+		var req apiCatalogoActivacionRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		if err := db.SetWorkflowActivo(strings.TrimSpace(req.Actor), id, req.Activa); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+	case "versiones":
+		if !apiRequireMethod(w, r, http.MethodGet) {
+			return
+		}
+		versiones, err := db.ListarVersionesWorkflow(id)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiWorkflowVersionesResponse{Versiones: versiones})
+	default:
+		http.NotFound(w, r)
 	}
 }
 

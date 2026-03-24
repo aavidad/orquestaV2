@@ -747,6 +747,52 @@ CREATE TABLE IF NOT EXISTS workflows (
     created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ─── Versionado de catálogo ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS reglas_versiones (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    regla_id     INTEGER NOT NULL REFERENCES reglas(id) ON DELETE CASCADE,
+    version_num  INTEGER NOT NULL,
+    tipo_agente  TEXT NOT NULL CHECK (tipo_agente IN ('programador','documentador','admin')),
+    categoria    TEXT NOT NULL,
+    titulo       TEXT NOT NULL,
+    descripcion  TEXT NOT NULL DEFAULT '',
+    activa       INTEGER NOT NULL DEFAULT 1,
+    actor        TEXT NOT NULL DEFAULT '',
+    accion       TEXT NOT NULL DEFAULT '',
+    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(regla_id, version_num)
+);
+
+CREATE TABLE IF NOT EXISTS skills_versiones (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    skill_id     INTEGER NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    version_num  INTEGER NOT NULL,
+    tipo_agente  TEXT NOT NULL CHECK (tipo_agente IN ('programador','documentador','admin')),
+    nombre       TEXT NOT NULL,
+    descripcion  TEXT NOT NULL DEFAULT '',
+    cuando_usar  TEXT NOT NULL DEFAULT '',
+    activa       INTEGER NOT NULL DEFAULT 1,
+    actor        TEXT NOT NULL DEFAULT '',
+    accion       TEXT NOT NULL DEFAULT '',
+    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(skill_id, version_num)
+);
+
+CREATE TABLE IF NOT EXISTS workflows_versiones (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    workflow_id  INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+    version_num  INTEGER NOT NULL,
+    tipo_agente  TEXT NOT NULL CHECK (tipo_agente IN ('programador','documentador','admin')),
+    nombre       TEXT NOT NULL,
+    descripcion  TEXT NOT NULL DEFAULT '',
+    pasos        TEXT NOT NULL DEFAULT '[]',
+    activo       INTEGER NOT NULL DEFAULT 1,
+    actor        TEXT NOT NULL DEFAULT '',
+    accion       TEXT NOT NULL DEFAULT '',
+    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(workflow_id, version_num)
+);
+
 -- ─── Permisos de edición del catálogo ──────────────────────────────────────
 CREATE TABLE IF NOT EXISTS catalogo_edicion_permisos (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,

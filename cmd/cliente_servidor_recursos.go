@@ -416,6 +416,35 @@ func crearReglaPorAPI(req apiReglaCrearRequest) (int64, bool, error) {
 	return resp.ID, true, nil
 }
 
+func cargarReglaDesdeAPI(id int64) (*db.Regla, bool, error) {
+	var resp apiReglaResponse
+	ok, err := apiGet(fmt.Sprintf("/api/reglas/%d", id), &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Regla, true, nil
+}
+
+func actualizarReglaPorAPI(id int64, req apiReglaActualizarRequest) (bool, error) {
+	return apiPost(fmt.Sprintf("/api/reglas/%d", id), req, nil)
+}
+
+func setReglaActivaPorAPI(id int64, actor string, activa bool) (bool, error) {
+	return apiPost(fmt.Sprintf("/api/reglas/%d/activa", id), apiCatalogoActivacionRequest{
+		Actor:  strings.TrimSpace(actor),
+		Activa: activa,
+	}, nil)
+}
+
+func cargarVersionesReglaDesdeAPI(id int64) ([]*db.ReglaVersion, bool, error) {
+	var resp apiReglaVersionesResponse
+	ok, err := apiGet(fmt.Sprintf("/api/reglas/%d/versiones", id), &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Versiones, true, nil
+}
+
 func cargarSkillsDesdeAPI(rol string, activa *bool) ([]*db.Skill, bool, error) {
 	var resp apiSkillsResponse
 	query := url.Values{}
@@ -441,6 +470,35 @@ func crearSkillPorAPI(req apiSkillCrearRequest) (int64, bool, error) {
 	return resp.ID, true, nil
 }
 
+func cargarSkillDesdeAPI(id int64) (*db.Skill, bool, error) {
+	var resp apiSkillResponse
+	ok, err := apiGet(fmt.Sprintf("/api/skills/%d", id), &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Skill, true, nil
+}
+
+func actualizarSkillPorAPI(id int64, req apiSkillActualizarRequest) (bool, error) {
+	return apiPost(fmt.Sprintf("/api/skills/%d", id), req, nil)
+}
+
+func setSkillActivoPorAPI(id int64, actor string, activa bool) (bool, error) {
+	return apiPost(fmt.Sprintf("/api/skills/%d/activa", id), apiCatalogoActivacionRequest{
+		Actor:  strings.TrimSpace(actor),
+		Activa: activa,
+	}, nil)
+}
+
+func cargarVersionesSkillDesdeAPI(id int64) ([]*db.SkillVersion, bool, error) {
+	var resp apiSkillVersionesResponse
+	ok, err := apiGet(fmt.Sprintf("/api/skills/%d/versiones", id), &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Versiones, true, nil
+}
+
 func cargarWorkflowsDesdeAPI(rol string, activo *bool) ([]*db.Workflow, bool, error) {
 	var resp apiWorkflowsResponse
 	query := url.Values{}
@@ -464,6 +522,35 @@ func crearWorkflowPorAPI(req apiWorkflowCrearRequest) (int64, bool, error) {
 		return 0, ok, err
 	}
 	return resp.ID, true, nil
+}
+
+func cargarWorkflowDesdeAPI(id int64) (*db.Workflow, bool, error) {
+	var resp apiWorkflowResponse
+	ok, err := apiGet(fmt.Sprintf("/api/workflows/%d", id), &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Workflow, true, nil
+}
+
+func actualizarWorkflowPorAPI(id int64, req apiWorkflowActualizarRequest) (bool, error) {
+	return apiPost(fmt.Sprintf("/api/workflows/%d", id), req, nil)
+}
+
+func setWorkflowActivoPorAPI(id int64, actor string, activa bool) (bool, error) {
+	return apiPost(fmt.Sprintf("/api/workflows/%d/activa", id), apiCatalogoActivacionRequest{
+		Actor:  strings.TrimSpace(actor),
+		Activa: activa,
+	}, nil)
+}
+
+func cargarVersionesWorkflowDesdeAPI(id int64) ([]*db.WorkflowVersion, bool, error) {
+	var resp apiWorkflowVersionesResponse
+	ok, err := apiGet(fmt.Sprintf("/api/workflows/%d/versiones", id), &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Versiones, true, nil
 }
 
 func cargarPermisosCatalogoDesdeAPI(entidad string) ([]*db.PermisoEdicionCatalogo, bool, error) {
