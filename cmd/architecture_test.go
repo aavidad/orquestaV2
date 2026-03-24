@@ -8,26 +8,29 @@ import (
 	"testing"
 )
 
-func TestCmdNoUsaDBDirectoFueraDeExcepcionesControladas(t *testing.T) {
+func TestCmdNoUsaSQLDirectoNiAperturasFueraDeExcepcionesControladas(t *testing.T) {
 	t.Parallel()
 
 	root := "."
-	pattern := regexp.MustCompile(`db\.([A-Za-z0-9_]+)\(`)
-	allowByFile := map[string]map[string]bool{
+	patronApertura := regexp.MustCompile(`db\.(Open|Close|IsOpen|CurrentDBPath)\(`)
+	patronSQLDirecto := regexp.MustCompile(`db\.DB\.(Exec|Query|QueryRow|QueryContext|QueryRowContext|ExecContext)\(`)
+	permitidosPorFichero := map[string]map[string]bool{
 		"root.go": {
-			"Open":  true,
-			"Close": true,
+			"Open":   true,
+			"Close":  true,
+			"IsOpen": true,
 		},
-	}
-	allowEverywhere := map[string]bool{
-		"EstadoPropuesta":        true,
-		"EstadoTarea":            true,
-		"PosicionVoto":           true,
-		"PrioridadTarea":         true,
-		"DriverName":             true,
-		"PlaceholderStyle":       true,
-		"BootstrapSchemaEnabled": true,
-		"QueryRebindingEnabled":  true,
+		"server.go": {
+			"Open":          true,
+			"IsOpen":        true,
+			"CurrentDBPath": true,
+		},
+		"server_client.go": {
+			"Open": true,
+		},
+		"persistencia.go": {
+			"CurrentDBPath": true,
+		},
 	}
 
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
@@ -45,16 +48,16 @@ func TestCmdNoUsaDBDirectoFueraDeExcepcionesControladas(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		matches := pattern.FindAllStringSubmatch(string(data), -1)
-		for _, match := range matches {
-			call := match[1]
-			if allowEverywhere[call] {
+		texto := string(data)
+		for _, match := range patronApertura.FindAllStringSubmatch(texto, -1) {
+			llamada := match[1]
+			if permitidosPorFichero[base][llamada] {
 				continue
 			}
-			if allowByFile[base][call] {
-				continue
-			}
-			t.Errorf("%s usa db.%s() directamente", base, call)
+			t.Errorf("%s usa db.%s() fuera de los puntos de apertura controlados", base, llamada)
+		}
+		for _, match := range patronSQLDirecto.FindAllStringSubmatch(texto, -1) {
+			t.Errorf("%s usa db.DB.%s() con SQL directo", base, match[1])
 		}
 		return nil
 	})

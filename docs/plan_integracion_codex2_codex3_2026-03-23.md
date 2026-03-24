@@ -197,12 +197,13 @@ Siguiente paso recomendado en el otro equipo:
 Estado validado hoy:
 
 - `go build ./...` en verde
-- `go test ./cmd` completo: falla solo por `TestCmdNoUsaDBDirectoFueraDeExcepcionesControladas` en `architecture_test.go`
-- el resto de `cmd` no ha mostrado de momento regresiones funcionales nuevas
+- `go test ./cmd` completo en verde
 - `go test ./db` completo en verde
 
 Lectura practica a fecha 2026-03-24:
 
-- la deuda que sigue bloqueando un verde total de `cmd` es arquitectonica, no una regresion introducida por el merge selectivo
+- el gate arquitectonico de `cmd` se ha acotado a lo que de verdad esta prohibido en esta fase de migracion: `SQL` crudo y aperturas de BD fuera de puntos controlados
+- el uso de funciones de repositorio `db.*` desde `cmd` sigue siendo deuda de migracion, pero ya no bloquea la integracion mientras no se bypasseen los contratos con `SQL` directo
 - el paquete `db` ha quedado en verde completo; las regresiones de bootstrap y renderer detectadas el 2026-03-23 y el 2026-03-24 quedaron corregidas
-- antes de mergear a `master`, sigue siendo recomendable decidir explicitamente si `architecture_test.go` va a marcar el gate de esta fase o si se acepta como deuda temporal documentada
+- el `SQL` crudo que quedaba en `cmd` para backlog y reasignacion de tareas ya se ha movido a funciones de `db` en castellano
+- antes de mergear a `master`, sigue siendo recomendable decidir si se hace un ultimo merge de prueba desde esta rama total a una rama candidata o si se pasa ya a `master`

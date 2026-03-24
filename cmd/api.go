@@ -1135,14 +1135,14 @@ func apiHandlerTareaAccion(w http.ResponseWriter, r *http.Request, idStr string)
 	case "contrato":
 		err = db.DefinirContrato(id, req.Agente)
 	case "backlog":
-		_, err = db.DB.Exec(`UPDATE tareas SET estado='backlog', agente=NULL WHERE id=?`, id)
+		err = db.MoverTareaABacklog(id)
 		if err == nil {
 			db.Audit("alberto", "backlog_tarea", "tarea", id, "")
 		}
 	case "cancelar":
 		err = db.CancelarTarea(id, req.Agente, valorConFallback(req.Motivo, "duplicado o error"))
 	case "reasignar":
-		_, err = db.DB.Exec(`UPDATE tareas SET agente=?, estado='asignada' WHERE id=?`, req.NuevoAgente, id)
+		err = db.ReasignarTarea(id, req.NuevoAgente)
 		if err == nil {
 			db.Audit("alberto", "reasignar_tarea", "tarea", id, req.NuevoAgente)
 		}

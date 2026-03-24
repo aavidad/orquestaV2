@@ -464,9 +464,7 @@ var tareaReasignarCmd = &cobra.Command{
 		if err := ensureLocalDB(); err != nil {
 			return err
 		}
-		_, err = db.DB.Exec(
-			`UPDATE tareas SET agente=?, estado='asignada' WHERE id=?`, nuevoAgente, id)
-		if err != nil {
+		if err := db.ReasignarTarea(id, nuevoAgente); err != nil {
 			return err
 		}
 		db.Audit("alberto", "reasignar_tarea", "tarea", id, nuevoAgente)
@@ -529,8 +527,7 @@ var tareaBacklogCmd = &cobra.Command{
 		if err := ensureLocalDB(); err != nil {
 			return err
 		}
-		_, err = db.DB.Exec(`UPDATE tareas SET estado='backlog', agente=NULL WHERE id=?`, id)
-		if err != nil {
+		if err := db.MoverTareaABacklog(id); err != nil {
 			return err
 		}
 		db.Audit("alberto", "backlog_tarea", "tarea", id, "")

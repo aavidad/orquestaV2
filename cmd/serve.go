@@ -537,13 +537,13 @@ func webHandlerTareaAccion(w http.ResponseWriter, r *http.Request, idStr string)
 	case "nota":
 		err = db.AnotarTarea(id, agente, r.FormValue("nota"))
 	case "backlog":
-		_, err = db.DB.Exec(`UPDATE tareas SET estado='backlog', agente=NULL WHERE id=?`, id)
+		err = db.MoverTareaABacklog(id)
 		if err == nil {
 			db.Audit("alberto", "backlog_tarea", "tarea", id, "")
 		}
 	case "reasignar":
 		nuevoAgente := strings.TrimSpace(r.FormValue("nuevo_agente"))
-		_, err = db.DB.Exec(`UPDATE tareas SET agente=?, estado='asignada' WHERE id=?`, nuevoAgente, id)
+		err = db.ReasignarTarea(id, nuevoAgente)
 		if err == nil {
 			db.Audit("alberto", "reasignar_tarea", "tarea", id, nuevoAgente)
 		}
