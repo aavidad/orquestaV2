@@ -206,6 +206,15 @@ func ProcesarHandoffsBatch() (int, error) {
 	var excluidos []string // agentes ya usados como destino en este batch
 
 	for _, c := range candidatos {
+		procede, err := asegurarSondeoPrevioHandoff(c)
+		if err != nil {
+			Audit("server", "handoff_watchdog_error", "agente", 0,
+				fmt.Sprintf("agente=%s error=%s", c.Agente, err.Error()))
+			continue
+		}
+		if !procede {
+			continue
+		}
 		destino, err := SeleccionarAgenteReemplazo(c.Agente, excluidos)
 		if err != nil {
 			// Sin reemplazo disponible: no es error crítico, sólo lo auditamos
@@ -234,6 +243,105 @@ func ProcesarHandoffsBatch() (int, error) {
 	}
 
 	return procesados, nil
+}
+
+func asegurarSondeoPrevioHandoff(c *HandoffCandidato) (bool, error) {
+	if c == nil {
+		return false, nil
+	}
+	reciente, err := existeSondeoWatchdogReciente(c.Agente, c.ProyectoID)
+	if err != nil {
+		return false, err
+	}
+	if reciente {
+		return true, nil
+	}
+	if err := encolarSondeoWatchdog(c); err != nil {
+		return false, err
+	}
+	return false, nil
+}
+
+func existeSondeoWatchdogReciente(agente string, proyectoID *int64) (bool, error) {
+	desde := time.Now().UTC().Add(-time.Minute)
+	q := runtimeOrderSelectBase() + `
+		WHERE agente = ?
+		  AND tipo IN ('sync_status','nudge')
+		  AND created_at >= ?`
+	args := []any{strings.TrimSpace(agente), desde}
+	if proyectoID != nil {
+		q += ` AND (proyecto_id = ? OR proyecto_id IS NULL)`
+		args = append(args, *proyectoID)
+	}
+	rows, err := DB.Query(q, args...)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		order, err := scanRuntimeOrder(rows)
+		if err != nil {
+			return false, err
+		}
+		if order == nil {
+			continue
+		}
+		if strings.TrimSpace(order.Tipo) == "sync_status" {
+			return true, nil
+		}
+		if strings.TrimSpace(order.Tipo) == "nudge" && strings.Contains(strings.ToLower(order.PayloadJSON), `"kind":"watchdog"`) {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
+func encolarSondeoWatchdog(c *HandoffCandidato) error {
+	var runtimeID *int64
+	var handleID *int64
+	if c.HandleID != nil {
+		handleID = c.HandleID
+		handle, err := GetRuntimeHandle(*c.HandleID)
+		if err != nil {
+			return err
+		}
+		if handle != nil && handle.RuntimeID != nil {
+			runtimeID = handle.RuntimeID
+		}
+	}
+	payloadSync, _ := json.Marshal(map[string]any{
+		"motivo":      "watchdog_heartbeat_stale",
+		"inactividad": c.Inactividad.String(),
+	})
+	if _, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      c.Agente,
+		ProyectoID:  c.ProyectoID,
+		RuntimeID:   runtimeID,
+		HandleID:    handleID,
+		Tipo:        "sync_status",
+		PayloadJSON: string(payloadSync),
+	}); err != nil {
+		return err
+	}
+	payloadNudge, _ := json.Marshal(map[string]any{
+		"from_agente": "server",
+		"to_agente":   c.Agente,
+		"kind":        "watchdog",
+		"texto":       fmt.Sprintf("Orquesta detecta heartbeat obsoleto (%s). Confirma estado o reanuda tick.", c.Motivo),
+	})
+	if _, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      c.Agente,
+		ProyectoID:  c.ProyectoID,
+		RuntimeID:   runtimeID,
+		HandleID:    handleID,
+		Tipo:        "nudge",
+		PayloadJSON: string(payloadNudge),
+	}); err != nil {
+		return err
+	}
+	Audit("server", "watchdog_runtime_sondeo", "agente", 0,
+		fmt.Sprintf("agente=%s motivo=%s", c.Agente, c.Motivo))
+	return nil
 }
 
 // ─── helper local ────────────────────────────────────────────────────────────

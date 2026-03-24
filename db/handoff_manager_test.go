@@ -195,8 +195,8 @@ func TestGuardarCheckpointHandoffFallaSinSesion(t *testing.T) {
 	prepararDBTemporal(t)
 
 	c := &HandoffCandidato{
-		Agente:  "Codex1",
-		Motivo:  "test",
+		Agente:   "Codex1",
+		Motivo:   "test",
 		SesionID: nil,
 	}
 	if _, err := GuardarCheckpointHandoff(c, ""); err == nil {
@@ -216,7 +216,7 @@ func TestProcesarHandoffsBatchSinCandidatos(t *testing.T) {
 	}
 }
 
-func TestProcesarHandoffsBatchEjecutaHandoffCompleto(t *testing.T) {
+func TestProcesarHandoffsBatchEscalaDeSondeoAHandoff(t *testing.T) {
 	prepararDBTemporal(t)
 
 	sesionID, _ := prepararAgenteConTareaEnProgreso(t, "Codex1")
@@ -231,14 +231,30 @@ func TestProcesarHandoffsBatchEjecutaHandoffCompleto(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProcesarHandoffsBatch: %v", err)
 	}
-	if n != 1 {
-		t.Fatalf("esperaba 1 handoff, got=%d", n)
+	if n != 0 {
+		t.Fatalf("el primer ciclo debe sondar antes de handoff, got=%d", n)
 	}
 
-	// Verificar que Codex2 tiene una orden de handoff pendiente
+	estadoPendiente := "pendiente"
+	agenteOrigen := "Codex1"
+	sondeo, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agenteOrigen, Estado: &estadoPendiente})
+	if err != nil {
+		t.Fatalf("ListarRuntimeOrders origen: %v", err)
+	}
+	if len(sondeo) != 2 {
+		t.Fatalf("esperaba sync_status y nudge en el primer ciclo, got=%d", len(sondeo))
+	}
+
+	n, err = ProcesarHandoffsBatch()
+	if err != nil {
+		t.Fatalf("ProcesarHandoffsBatch segundo ciclo: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 handoff en el segundo ciclo, got=%d", n)
+	}
+
 	agente := "Codex2"
-	estado := "pendiente"
-	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agente, Estado: &estado})
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agente, Estado: &estadoPendiente})
 	if err != nil {
 		t.Fatalf("ListarRuntimeOrders: %v", err)
 	}
