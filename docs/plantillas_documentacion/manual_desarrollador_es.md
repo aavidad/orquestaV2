@@ -1,16 +1,31 @@
 # Manual del Desarrollador - [Nombre del Proyecto]
 
-## 1. Arquitectura del software
-[Descripción técnica de los patrones, módulos y flujo de datos interno.]
+## 1. Alcance técnico
+[Describa qué cubre el proyecto, sus límites y qué componentes externos son críticos.]
 
-## 2. Entorno de Desarrollo Local
-[Requisitos, dependencias (ej. versiones de Go, Node, bases de datos), y pasos para arrancar el entorno en local.]
+## 2. Tipo de proyecto y arquitectura
+[Indique si es servicio core, herramienta operativa o controlador de infraestructura, y describa el estilo arquitectónico aplicado.]
 
-## 3. Estructura del Repositorio
-[Explicación de las carpetas principales y qué contiene cada una.]
+## 3. Dependencias y requisitos locales
+[Detalle versiones de lenguaje, runtimes, bases de datos, CLIs, contenedores y herramientas necesarias.]
 
-## 4. Directrices de Codificación
-[Convenciones adoptadas, normas de estilo, testing y uso de documentación interna en el código.]
+## 4. Arranque en local
+[Explique cómo clonar, configurar variables, cargar datos de ejemplo y arrancar la aplicación o servicios auxiliares.]
 
-## 5. Integración y Despliegue (CI/CD)
-[Información para desarrolladores sobre pipelines y metodologías de integración continua.]
+## 5. Estructura del repositorio
+[Describa carpetas, módulos, capas y convenciones de nombres.]
+
+## 6. Configuración y contratos
+[Documente variables de entorno, contratos de entrada y salida, APIs, eventos, colas o formatos de fichero.]
+
+## 7. Calidad y pruebas
+[Indique estrategia de testing, comandos de validación, cobertura mínima y criterios de revisión.]
+
+## 8. Integración continua y entrega
+[Explique pipelines, validaciones obligatorias, versionado y cómo se prepara una entrega.]
+
+## 9. Puntos de extensión
+[Documente dónde añadir funcionalidades, adaptadores, integraciones o módulos opcionales sin romper el diseño.]
+
+## 10. Relación con la documentación operativa
+[Enlace a guía de instalación, guía de despliegue y runbook cuando existan para evitar duplicidad.]

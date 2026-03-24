@@ -1,16 +1,31 @@
 # Operations / Sysadmin Manual - [Project Name]
 
-## 1. Production Requirements
-[Required hardware, OS, databases, networking, exact required versions.]
+## 1. Goal and owners
+[Explain what this manual covers, who operates the system, and which responsibilities are out of scope.]
 
-## 2. Deployment Procedure
-[Step-by-step production deployment instructions (via containers, binaries, or scripts).]
+## 2. Deployment architecture
+[Describe nodes, networks, external dependencies, ports, storage, and environment topology.]
 
-## 3. Environment Variables and Configuration
-[Explanatory table covering all operational ENV VARS and critical server configurations.]
+## 3. Platform requirements
+[Detail operating system, CPU, memory, disk, database, load balancers, and supported versions.]
 
-## 4. Monitoring and Telemetry
-[Health-check endpoints, log integrations, available metrics.]
+## 4. Base installation
+[Document how to prepare the host or cluster before deploying the application.]
 
-## 5. Backup and Disaster Recovery (DR)
-[Periodic backup procedures, retention policies, and full restoration handbook in case of catastrophic failures.]
+## 5. Operational configuration
+[Include environment variables, secrets, certificates, key rotation, and critical runtime parameters.]
+
+## 6. Deployment, rollback, and upgrade
+[Explain the standard deployment procedure, post-deploy verification, rollback, and maintenance windows.]
+
+## 7. Monitoring and alerting
+[Document health checks, logs, metrics, traces, thresholds, and expected alerts.]
+
+## 8. Backup, restore, and continuity
+[Define schedule, restore drills, RPO, RTO, and recovery dependencies.]
+
+## 9. Day-2 operations
+[List recurring tasks: queue review, cleanup, log rotation, certificate renewal, scheduled jobs.]
+
+## 10. Incident response and escalation
+[Explain how to diagnose, register, escalate, and close operational incidents.]
