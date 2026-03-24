@@ -381,6 +381,7 @@ func init() {
 	propuestaReabrirCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	propuestaRepararVotosCmd.Flags().String("por", "alberto", "Agente que repara votos")
 	propuestaRepararVotosCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
+	propuestaVotosCmd.Flags().String("agente", "", "Filtrar votos por agente (case-insensitive)")
 
 	propuestaCmd.AddCommand(
 		propuestaListarCmd,
@@ -400,6 +401,7 @@ var propuestaVotosCmd = &cobra.Command{
 	Short: "Lista los votos de una propuesta con comentarios completos",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		agenteFiltro, _ := cmd.Flags().GetString("agente")
 		var p *db.Propuesta
 		var votos []*db.Voto
 		var resp apiPropuestaDetalleResponse
@@ -422,6 +424,7 @@ var propuestaVotosCmd = &cobra.Command{
 				return err
 			}
 		}
+		votos = filtrarVotosPorAgente(votos, agenteFiltro)
 		fmt.Printf("Votos de %s — %s\n", p.Codigo, p.Titulo)
 		fmt.Printf("Estado: %s\n", p.Estado)
 		fmt.Println("─────────────────────────────────────────")
@@ -446,4 +449,18 @@ var propuestaVotosCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func filtrarVotosPorAgente(votos []*db.Voto, agente string) []*db.Voto {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return votos
+	}
+	filtrados := make([]*db.Voto, 0, len(votos))
+	for _, voto := range votos {
+		if strings.EqualFold(voto.Agente, agente) {
+			filtrados = append(filtrados, voto)
+		}
+	}
+	return filtrados
 }
