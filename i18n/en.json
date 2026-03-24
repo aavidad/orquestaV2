@@ -63,5 +63,14 @@
   "Tareas registradas": "Tracked tasks",
   "Tareas completadas": "Completed tasks",
   "Progreso real": "Real progress",
-  "ContaGrx footer": "ContaGrx · OSL Diputacion de Granada · GPLv3"
+  "ContaGrx footer": "ContaGrx · OSL Diputacion de Granada · GPLv3",
+  "runtime.a2ui.title": "A2UI Messages",
+  "runtime.a2ui.none": "No visible A2UI messages for this runtime.",
+  "runtime.a2ui.from": "From",
+  "runtime.a2ui.invalid": "Invalid A2UI payload",
+  "runtime.a2ui.chart_type": "Chart type",
+  "runtime.a2ui.label": "Label",
+  "runtime.a2ui.confirm": "Confirm",
+  "runtime.a2ui.cancel": "Cancel",
+  "runtime.a2ui.action_id": "Action ID"
 }

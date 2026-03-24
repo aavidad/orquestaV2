@@ -13,13 +13,19 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
+	"orquesta/i18n"
+	"orquesta/internal/a2ui"
 )
 
 // ─── Structs de datos ────────────────────────────────────────────────────────
@@ -140,9 +146,40 @@ type webRuntimeTimelineRow struct {
 	Link    string
 }
 
+type webRuntimeA2UIRow struct {
+	Creado     string
+	FromAgente string
+	Estado     string
+	Component  string
+	Error      string
+	DataTable  *webRuntimeA2UITable
+	Chart      *webRuntimeA2UIChart
+	Approval   *a2ui.ApprovalFormProps
+	Markdown   *a2ui.MarkdownBlockProps
+}
+
+type webRuntimeA2UITable struct {
+	Title   string
+	Columns []string
+	Rows    [][]string
+}
+
+type webRuntimeA2UIChart struct {
+	Title     string
+	ChartType string
+	Series    []string
+	Rows      []webRuntimeA2UIChartRow
+}
+
+type webRuntimeA2UIChartRow struct {
+	Label  string
+	Values []string
+}
+
 type webRuntimeDetalleData struct {
 	Runtime  webRuntimeRow
 	Muestras []webRuntimeSampleRow
+	A2UI     []webRuntimeA2UIRow
 	Timeline []webRuntimeTimelineRow
 }
 
@@ -184,6 +221,7 @@ var webFuncMap = template.FuncMap{
 	},
 	"eqStr": func(a, b string) bool { return a == b },
 	"neStr": func(a, b string) bool { return a != b },
+	"tr":    webTranslate,
 	"reanimacionEn": func(t *time.Time) string {
 		if t == nil || t.IsZero() {
 			return ""
@@ -197,6 +235,33 @@ var webFuncMap = template.FuncMap{
 		}
 		return fmt.Sprintf("reanima en %d min", int(rem.Minutes()))
 	},
+}
+
+var (
+	webI18nBundle     = i18n.NewBundle(resolveWebI18nDir(), i18n.DefaultLang)
+	webI18nBundleOnce sync.Once
+)
+
+func resolveWebI18nDir() string {
+	if dir := strings.TrimSpace(i18n.ResolveDir()); dir != "" {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir
+		}
+	}
+	if _, file, _, ok := runtime.Caller(0); ok {
+		dir := filepath.Join(filepath.Dir(file), "..", "i18n")
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir
+		}
+	}
+	return i18n.ResolveDir()
+}
+
+func webTranslate(key string) string {
+	webI18nBundleOnce.Do(func() {
+		_ = webI18nBundle.Reload()
+	})
+	return webI18nBundle.T(i18n.DefaultLang, key)
 }
 
 // ─── Router principal ─────────────────────────────────────────────────────────
@@ -354,6 +419,7 @@ func webHandlerRuntimeDetalle(w http.ResponseWriter, r *http.Request, idStr stri
 	data := webRuntimeDetalleData{
 		Runtime:  row,
 		Muestras: runtimeSamplesToWeb(samples),
+		A2UI:     runtimeA2UIToWeb(runtime, 8),
 		Timeline: runtimeTimelineToWeb(runtime, 24),
 	}
 	webRender(w, webTplLayout+webTplRuntimeDetalle, data)
@@ -847,6 +913,94 @@ func runtimeCheckpointToWeb(cp *db.RuntimeCheckpoint) webTimeTravelCheckpointRow
 		ResumeStrategy: valorVacio(cp.ResumeStrategy),
 		Source:         valorVacio(cp.Source),
 	}
+}
+
+func runtimeA2UIToWeb(runtime *db.RuntimeInstance, limit int) []webRuntimeA2UIRow {
+	if runtime == nil {
+		return nil
+	}
+	agente := strings.TrimSpace(runtime.Agente)
+	if agente == "" {
+		return nil
+	}
+	if limit <= 0 {
+		limit = 8
+	}
+	messages, _ := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente:   &agente,
+		ProyectoID: runtime.ProyectoID,
+	})
+	out := make([]webRuntimeA2UIRow, 0, min(limit, len(messages)))
+	for _, msg := range messages {
+		if msg == nil || strings.TrimSpace(msg.Kind) != a2ui.MailboxKindRender {
+			continue
+		}
+		row := webRuntimeA2UIRow{
+			Creado:     msg.CreatedAt.Format("2006-01-02 15:04:05"),
+			FromAgente: valorVacio(msg.FromAgente),
+			Estado:     valorVacio(msg.Estado),
+			Component:  valorVacio(msg.Kind),
+		}
+		envelope, props, err := a2ui.DecodeMailboxPayload(msg.Kind, msg.PayloadJSON)
+		if err != nil {
+			row.Error = err.Error()
+			out = append(out, row)
+			if len(out) >= limit {
+				break
+			}
+			continue
+		}
+		row.Component = valorVacio(string(envelope.Request.Component))
+		switch v := props.(type) {
+		case a2ui.DataTableProps:
+			rows := make([][]string, 0, len(v.Data))
+			for _, src := range v.Data {
+				rowVals := make([]string, 0, len(src))
+				for _, cell := range src {
+					rowVals = append(rowVals, fmt.Sprintf("%v", cell))
+				}
+				rows = append(rows, rowVals)
+			}
+			row.DataTable = &webRuntimeA2UITable{
+				Title:   valorVacio(v.Title),
+				Columns: append([]string(nil), v.Columns...),
+				Rows:    rows,
+			}
+		case a2ui.ChartProps:
+			chartRows := make([]webRuntimeA2UIChartRow, 0, len(v.Labels))
+			series := make([]string, 0, len(v.Series))
+			for _, s := range v.Series {
+				series = append(series, s.Name)
+			}
+			for idx, label := range v.Labels {
+				values := make([]string, 0, len(v.Series))
+				for _, s := range v.Series {
+					values = append(values, fmt.Sprintf("%.2f", s.Values[idx]))
+				}
+				chartRows = append(chartRows, webRuntimeA2UIChartRow{
+					Label:  label,
+					Values: values,
+				})
+			}
+			row.Chart = &webRuntimeA2UIChart{
+				Title:     valorVacio(v.Title),
+				ChartType: valorVacio(v.ChartType),
+				Series:    series,
+				Rows:      chartRows,
+			}
+		case a2ui.ApprovalFormProps:
+			copy := v
+			row.Approval = &copy
+		case a2ui.MarkdownBlockProps:
+			copy := v
+			row.Markdown = &copy
+		}
+		out = append(out, row)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
 }
 
 func runtimeTimelineToWeb(runtime *db.RuntimeInstance, limit int) []webRuntimeTimelineRow {
@@ -1635,6 +1789,73 @@ const webTplRuntimeDetalle = `{{define "content"}}
 </div>
 {{else}}
 <p style="color:#94a3b8">No hay muestras registradas para este runtime.</p>
+{{end}}
+
+<h4 style="margin:1.1rem 0 .6rem 0">{{tr "runtime.a2ui.title"}}</h4>
+{{if .A2UI}}
+  {{range .A2UI}}
+  <article style="padding:1rem;border:1px solid #e2e8f0;border-radius:.5rem;margin-bottom:.8rem">
+    <div style="display:flex;justify-content:space-between;gap:.6rem;align-items:baseline;flex-wrap:wrap">
+      <strong>{{.Component}}</strong>
+      <small style="color:#64748b">{{tr "runtime.a2ui.from"}} {{.FromAgente}} · {{.Creado}} · {{.Estado}}</small>
+    </div>
+    {{if .Error}}
+      <p class="alert-err" style="margin:.75rem 0 0 0">{{tr "runtime.a2ui.invalid"}}: {{.Error}}</p>
+    {{end}}
+    {{if .DataTable}}
+      <h5 style="margin:.8rem 0 .5rem 0">{{.DataTable.Title}}</h5>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>{{range .DataTable.Columns}}<th>{{.}}</th>{{end}}</tr>
+          </thead>
+          <tbody>
+          {{range .DataTable.Rows}}
+            <tr>{{range .}}<td>{{.}}</td>{{end}}</tr>
+          {{end}}
+          </tbody>
+        </table>
+      </div>
+    {{end}}
+    {{if .Chart}}
+      <h5 style="margin:.8rem 0 .2rem 0">{{.Chart.Title}}</h5>
+      <p style="margin:0 0 .5rem 0;color:#64748b;font-size:.84rem">{{tr "runtime.a2ui.chart_type"}}: {{.Chart.ChartType}}</p>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>{{tr "runtime.a2ui.label"}}</th>
+              {{range .Chart.Series}}<th>{{.}}</th>{{end}}
+            </tr>
+          </thead>
+          <tbody>
+          {{range .Chart.Rows}}
+            <tr>
+              <td>{{.Label}}</td>
+              {{range .Values}}<td>{{.}}</td>{{end}}
+            </tr>
+          {{end}}
+          </tbody>
+        </table>
+      </div>
+    {{end}}
+    {{if .Approval}}
+      <h5 style="margin:.8rem 0 .2rem 0">{{.Approval.Title}}</h5>
+      <p style="margin:0 0 .5rem 0">{{.Approval.Message}}</p>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        <button type="button" class="btn-sm" disabled>{{if .Approval.ConfirmLabel}}{{.Approval.ConfirmLabel}}{{else}}{{tr "runtime.a2ui.confirm"}}{{end}}</button>
+        <button type="button" class="btn-sm" disabled>{{if .Approval.CancelLabel}}{{.Approval.CancelLabel}}{{else}}{{tr "runtime.a2ui.cancel"}}{{end}}</button>
+        <small style="color:#64748b">{{tr "runtime.a2ui.action_id"}}: {{.Approval.ActionID}}</small>
+      </div>
+    {{end}}
+    {{if .Markdown}}
+      <h5 style="margin:.8rem 0 .2rem 0">{{.Markdown.Title}}</h5>
+      <pre style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:.4rem;padding:.8rem;margin:0">{{.Markdown.Markdown}}</pre>
+    {{end}}
+  </article>
+  {{end}}
+{{else}}
+<p style="color:#94a3b8">{{tr "runtime.a2ui.none"}}</p>
 {{end}}
 
 <h4 style="margin:1.1rem 0 .6rem 0">Timeline operativa</h4>
