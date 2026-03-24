@@ -186,6 +186,41 @@ type apiPoliticaModeloSaveRequest struct {
 	MetadataJSON    string `json:"metadata_json"`
 }
 
+type apiReglaCrearRequest struct {
+	Actor       string `json:"actor"`
+	TipoAgente  string `json:"tipo_agente"`
+	Categoria   string `json:"categoria"`
+	Titulo      string `json:"titulo"`
+	Descripcion string `json:"descripcion"`
+}
+
+type apiSkillCrearRequest struct {
+	Actor       string `json:"actor"`
+	TipoAgente  string `json:"tipo_agente"`
+	Nombre      string `json:"nombre"`
+	Descripcion string `json:"descripcion"`
+	CuandoUsar  string `json:"cuando_usar"`
+}
+
+type apiWorkflowCrearRequest struct {
+	Actor       string `json:"actor"`
+	TipoAgente  string `json:"tipo_agente"`
+	Nombre      string `json:"nombre"`
+	Descripcion string `json:"descripcion"`
+	PasosJSON   string `json:"pasos_json"`
+}
+
+type apiPermisoCatalogoSetRequest struct {
+	Actor          string `json:"actor"`
+	Entidad        string `json:"entidad"`
+	Rol            string `json:"rol"`
+	Alcance        string `json:"alcance"`
+	PuedeCrear     bool   `json:"puede_crear"`
+	PuedeEditar    bool   `json:"puede_editar"`
+	PuedeActivar   bool   `json:"puede_activar"`
+	PuedeVersionar bool   `json:"puede_versionar"`
+}
+
 type apiPropuestaCrearRequest struct {
 	Codigo       string `json:"codigo"`
 	Titulo       string `json:"titulo"`
@@ -625,105 +660,183 @@ func apiBoolOpcional(r *http.Request, key string) (*bool, error) {
 }
 
 func apiHandlerReglas(w http.ResponseWriter, r *http.Request) {
-	if !apiRequireMethod(w, r, http.MethodGet) {
-		return
-	}
-	activa, err := apiBoolOpcional(r, "activa")
-	if err != nil {
-		apiError(w, http.StatusBadRequest, err)
-		return
-	}
-	tipoAgente, err := apiResolverTipoAgente(r)
-	if err != nil {
-		tipoAgente = ""
-	}
-	reglas, err := db.ListarReglas(tipoAgente, activa)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	apiWriteJSON(w, http.StatusOK, map[string]any{
-		"tipo_agente": tipoAgente,
-		"reglas":      reglas,
-	})
-}
-
-func apiHandlerSkills(w http.ResponseWriter, r *http.Request) {
-	if !apiRequireMethod(w, r, http.MethodGet) {
-		return
-	}
-	activa, err := apiBoolOpcional(r, "activa")
-	if err != nil {
-		apiError(w, http.StatusBadRequest, err)
-		return
-	}
-	tipoAgente, err := apiResolverTipoAgente(r)
-	if err != nil {
-		tipoAgente = ""
-	}
-	skills, err := db.ListarSkills(tipoAgente, activa)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	apiWriteJSON(w, http.StatusOK, map[string]any{
-		"tipo_agente": tipoAgente,
-		"skills":      skills,
-	})
-}
-
-func apiHandlerWorkflows(w http.ResponseWriter, r *http.Request) {
-	if !apiRequireMethod(w, r, http.MethodGet) {
-		return
-	}
-	if nombre := strings.TrimSpace(r.URL.Query().Get("nombre")); nombre != "" {
-		tipoAgente, err := apiResolverTipoAgente(r)
+	switch r.Method {
+	case http.MethodGet:
+		activa, err := apiBoolOpcional(r, "activa")
 		if err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		workflow, err := db.GetWorkflow(tipoAgente, nombre)
+		tipoAgente, err := apiResolverTipoAgente(r)
 		if err != nil {
-			apiError(w, http.StatusNotFound, err)
+			tipoAgente = ""
+		}
+		reglas, err := db.ListarReglas(tipoAgente, activa)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
 			return
 		}
 		apiWriteJSON(w, http.StatusOK, map[string]any{
 			"tipo_agente": tipoAgente,
-			"workflow":    workflow,
+			"reglas":      reglas,
 		})
-		return
+	case http.MethodPost:
+		var req apiReglaCrearRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		id, err := db.CrearRegla(strings.TrimSpace(req.Actor), &db.Regla{
+			TipoAgente:  strings.TrimSpace(req.TipoAgente),
+			Categoria:   strings.TrimSpace(req.Categoria),
+			Titulo:      strings.TrimSpace(req.Titulo),
+			Descripcion: strings.TrimSpace(req.Descripcion),
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusCreated, apiCatalogoMutationResponse{ID: id})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
-	activo, err := apiBoolOpcional(r, "activa")
-	if err != nil {
-		apiError(w, http.StatusBadRequest, err)
-		return
+}
+
+func apiHandlerSkills(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		activa, err := apiBoolOpcional(r, "activa")
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		tipoAgente, err := apiResolverTipoAgente(r)
+		if err != nil {
+			tipoAgente = ""
+		}
+		skills, err := db.ListarSkills(tipoAgente, activa)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{
+			"tipo_agente": tipoAgente,
+			"skills":      skills,
+		})
+	case http.MethodPost:
+		var req apiSkillCrearRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		id, err := db.CrearSkill(strings.TrimSpace(req.Actor), &db.Skill{
+			TipoAgente:  strings.TrimSpace(req.TipoAgente),
+			Nombre:      strings.TrimSpace(req.Nombre),
+			Descripcion: strings.TrimSpace(req.Descripcion),
+			CuandoUsar:  strings.TrimSpace(req.CuandoUsar),
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusCreated, apiCatalogoMutationResponse{ID: id})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
-	tipoAgente, err := apiResolverTipoAgente(r)
-	if err != nil {
-		tipoAgente = ""
+}
+
+func apiHandlerWorkflows(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		if nombre := strings.TrimSpace(r.URL.Query().Get("nombre")); nombre != "" {
+			tipoAgente, err := apiResolverTipoAgente(r)
+			if err != nil {
+				apiError(w, http.StatusBadRequest, err)
+				return
+			}
+			workflow, err := db.GetWorkflow(tipoAgente, nombre)
+			if err != nil {
+				apiError(w, http.StatusNotFound, err)
+				return
+			}
+			apiWriteJSON(w, http.StatusOK, map[string]any{
+				"tipo_agente": tipoAgente,
+				"workflow":    workflow,
+			})
+			return
+		}
+		activo, err := apiBoolOpcional(r, "activa")
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		tipoAgente, err := apiResolverTipoAgente(r)
+		if err != nil {
+			tipoAgente = ""
+		}
+		workflows, err := db.ListarWorkflows(tipoAgente, activo)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{
+			"tipo_agente": tipoAgente,
+			"workflows":   workflows,
+		})
+	case http.MethodPost:
+		var req apiWorkflowCrearRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		id, err := db.CrearWorkflow(strings.TrimSpace(req.Actor), &db.Workflow{
+			TipoAgente:  strings.TrimSpace(req.TipoAgente),
+			Nombre:      strings.TrimSpace(req.Nombre),
+			Descripcion: strings.TrimSpace(req.Descripcion),
+			Pasos:       strings.TrimSpace(req.PasosJSON),
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusCreated, apiCatalogoMutationResponse{ID: id})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
-	workflows, err := db.ListarWorkflows(tipoAgente, activo)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	apiWriteJSON(w, http.StatusOK, map[string]any{
-		"tipo_agente": tipoAgente,
-		"workflows":   workflows,
-	})
 }
 
 func apiHandlerPermisosCatalogo(w http.ResponseWriter, r *http.Request) {
-	if !apiRequireMethod(w, r, http.MethodGet) {
-		return
+	switch r.Method {
+	case http.MethodGet:
+		entidad := strings.TrimSpace(r.URL.Query().Get("entidad"))
+		permisos, err := db.ListarPermisosEdicionCatalogo(entidad)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"permisos": permisos})
+	case http.MethodPost:
+		var req apiPermisoCatalogoSetRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		if err := db.GuardarPermisoEdicionCatalogo(strings.TrimSpace(req.Actor), &db.PermisoEdicionCatalogo{
+			Entidad:        strings.TrimSpace(req.Entidad),
+			Rol:            strings.TrimSpace(req.Rol),
+			Alcance:        strings.TrimSpace(req.Alcance),
+			PuedeCrear:     req.PuedeCrear,
+			PuedeEditar:    req.PuedeEditar,
+			PuedeActivar:   req.PuedeActivar,
+			PuedeVersionar: req.PuedeVersionar,
+		}); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
-	entidad := strings.TrimSpace(r.URL.Query().Get("entidad"))
-	permisos, err := db.ListarPermisosEdicionCatalogo(entidad)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	apiWriteJSON(w, http.StatusOK, map[string]any{"permisos": permisos})
 }
 
 func apiHandlerAudit(w http.ResponseWriter, r *http.Request) {

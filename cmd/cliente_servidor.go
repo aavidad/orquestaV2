@@ -79,6 +79,10 @@ type apiPermisosCatalogoResponse struct {
 	Permisos []*db.PermisoEdicionCatalogo `json:"permisos"`
 }
 
+type apiCatalogoMutationResponse struct {
+	ID int64 `json:"id"`
+}
+
 type apiTareasResponse struct {
 	Tareas []*db.Tarea `json:"tareas"`
 }
@@ -347,13 +351,13 @@ func commandSupportsServerMode(args []string) bool {
 	case "modelo":
 		return len(tokens) > 1 && tokens[1] == "resolver"
 	case "reglas":
-		return len(tokens) > 1 && tokens[1] == "listar"
+		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "crear")
 	case "skills":
-		return len(tokens) > 1 && tokens[1] == "listar"
+		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "crear")
 	case "workflows":
-		return len(tokens) > 1 && tokens[1] == "listar"
+		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "crear")
 	case "permisos":
-		return len(tokens) > 1 && tokens[1] == "listar"
+		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "fijar")
 	case "conector":
 		if len(tokens) <= 1 {
 			return false

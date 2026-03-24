@@ -407,6 +407,15 @@ func cargarReglasDesdeAPI(rol string, activa *bool) ([]*db.Regla, bool, error) {
 	return resp.Reglas, true, nil
 }
 
+func crearReglaPorAPI(req apiReglaCrearRequest) (int64, bool, error) {
+	var resp apiCatalogoMutationResponse
+	ok, err := apiPost("/api/reglas", req, &resp)
+	if !ok || err != nil {
+		return 0, ok, err
+	}
+	return resp.ID, true, nil
+}
+
 func cargarSkillsDesdeAPI(rol string, activa *bool) ([]*db.Skill, bool, error) {
 	var resp apiSkillsResponse
 	query := url.Values{}
@@ -421,6 +430,15 @@ func cargarSkillsDesdeAPI(rol string, activa *bool) ([]*db.Skill, bool, error) {
 		return nil, ok, err
 	}
 	return resp.Skills, true, nil
+}
+
+func crearSkillPorAPI(req apiSkillCrearRequest) (int64, bool, error) {
+	var resp apiCatalogoMutationResponse
+	ok, err := apiPost("/api/skills", req, &resp)
+	if !ok || err != nil {
+		return 0, ok, err
+	}
+	return resp.ID, true, nil
 }
 
 func cargarWorkflowsDesdeAPI(rol string, activo *bool) ([]*db.Workflow, bool, error) {
@@ -439,6 +457,15 @@ func cargarWorkflowsDesdeAPI(rol string, activo *bool) ([]*db.Workflow, bool, er
 	return resp.Workflows, true, nil
 }
 
+func crearWorkflowPorAPI(req apiWorkflowCrearRequest) (int64, bool, error) {
+	var resp apiCatalogoMutationResponse
+	ok, err := apiPost("/api/workflows", req, &resp)
+	if !ok || err != nil {
+		return 0, ok, err
+	}
+	return resp.ID, true, nil
+}
+
 func cargarPermisosCatalogoDesdeAPI(entidad string) ([]*db.PermisoEdicionCatalogo, bool, error) {
 	var resp apiPermisosCatalogoResponse
 	query := url.Values{}
@@ -450,6 +477,10 @@ func cargarPermisosCatalogoDesdeAPI(entidad string) ([]*db.PermisoEdicionCatalog
 		return nil, ok, err
 	}
 	return resp.Permisos, true, nil
+}
+
+func guardarPermisoCatalogoPorAPI(req apiPermisoCatalogoSetRequest) (bool, error) {
+	return apiPost("/api/permisos-catalogo", req, nil)
 }
 
 func cargarPoliticaLenguajeDesdeAPI() (*db.LanguagePolicy, bool, error) {

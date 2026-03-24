@@ -68,6 +68,19 @@ var reglasCrearCmd = &cobra.Command{
 		titulo, _ := cmd.Flags().GetString("titulo")
 		descripcion, _ := cmd.Flags().GetString("descripcion")
 
+		if id, ok, err := crearReglaPorAPI(apiReglaCrearRequest{
+			Actor:       actor,
+			TipoAgente:  strings.TrimSpace(rol),
+			Categoria:   strings.TrimSpace(categoria),
+			Titulo:      strings.TrimSpace(titulo),
+			Descripcion: strings.TrimSpace(descripcion),
+		}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Regla #%d creada\n", id)
+			return nil
+		}
+
 		id, err := db.CrearRegla(actor, &db.Regla{
 			TipoAgente:  strings.TrimSpace(rol),
 			Categoria:   strings.TrimSpace(categoria),
@@ -196,6 +209,19 @@ var skillsCrearCmd = &cobra.Command{
 		nombre, _ := cmd.Flags().GetString("nombre")
 		descripcion, _ := cmd.Flags().GetString("descripcion")
 		cuandoUsar, _ := cmd.Flags().GetString("cuando-usar")
+
+		if id, ok, err := crearSkillPorAPI(apiSkillCrearRequest{
+			Actor:       actor,
+			TipoAgente:  strings.TrimSpace(rol),
+			Nombre:      strings.TrimSpace(nombre),
+			Descripcion: strings.TrimSpace(descripcion),
+			CuandoUsar:  strings.TrimSpace(cuandoUsar),
+		}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Skill #%d creado\n", id)
+			return nil
+		}
 
 		id, err := db.CrearSkill(actor, &db.Skill{
 			TipoAgente:  strings.TrimSpace(rol),
@@ -355,6 +381,20 @@ var workflowsCrearCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
+		if id, ok, err := crearWorkflowPorAPI(apiWorkflowCrearRequest{
+			Actor:       actor,
+			TipoAgente:  strings.TrimSpace(rol),
+			Nombre:      strings.TrimSpace(nombre),
+			Descripcion: strings.TrimSpace(descripcion),
+			PasosJSON:   pasosJSON,
+		}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Workflow #%d creado\n", id)
+			return nil
+		}
+
 		id, err := db.CrearWorkflow(actor, &db.Workflow{
 			TipoAgente:  strings.TrimSpace(rol),
 			Nombre:      strings.TrimSpace(nombre),
@@ -486,6 +526,21 @@ var permisosFijarCmd = &cobra.Command{
 			PuedeEditar:    flagBool(cmd, "editar"),
 			PuedeActivar:   flagBool(cmd, "activar"),
 			PuedeVersionar: flagBool(cmd, "versionar"),
+		}
+		if ok, err := guardarPermisoCatalogoPorAPI(apiPermisoCatalogoSetRequest{
+			Actor:          actor,
+			Entidad:        permiso.Entidad,
+			Rol:            permiso.Rol,
+			Alcance:        permiso.Alcance,
+			PuedeCrear:     permiso.PuedeCrear,
+			PuedeEditar:    permiso.PuedeEditar,
+			PuedeActivar:   permiso.PuedeActivar,
+			PuedeVersionar: permiso.PuedeVersionar,
+		}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Permiso actualizado: %s/%s\n", permiso.Entidad, permiso.Rol)
+			return nil
 		}
 		if err := db.GuardarPermisoEdicionCatalogo(actor, permiso); err != nil {
 			return err

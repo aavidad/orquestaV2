@@ -747,6 +747,21 @@ CREATE TABLE IF NOT EXISTS workflows (
     created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ─── Permisos de edición del catálogo ──────────────────────────────────────
+CREATE TABLE IF NOT EXISTS catalogo_edicion_permisos (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    entidad          TEXT NOT NULL CHECK (entidad IN ('reglas','skills','workflows')),
+    rol              TEXT NOT NULL CHECK (rol IN ('programador','documentador','admin')),
+    alcance          TEXT NOT NULL CHECK (alcance IN ('mismo_rol','todos')),
+    puede_crear      INTEGER NOT NULL DEFAULT 0,
+    puede_editar     INTEGER NOT NULL DEFAULT 0,
+    puede_activar    INTEGER NOT NULL DEFAULT 0,
+    puede_versionar  INTEGER NOT NULL DEFAULT 0,
+    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(entidad, rol)
+);
+
 -- ─── Datos iniciales ───────────────────────────────────────────────────────
 INSERT OR IGNORE INTO agentes (nombre, rol) VALUES
     ('alberto',    'admin'),
