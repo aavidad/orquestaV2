@@ -748,13 +748,12 @@ CREATE TABLE IF NOT EXISTS workflows (
 );
 
 -- ─── Datos iniciales ───────────────────────────────────────────────────────
-INSERT INTO agentes (nombre, rol) VALUES
+INSERT OR IGNORE INTO agentes (nombre, rol) VALUES
     ('alberto',    'admin'),
     ('claude',     'programador'),
-    ('codex1',     'programador'),
-    ('codex2',     'programador'),
-    ('antigravity','documentador')
-ON CONFLICT(nombre) DO NOTHING;
+    ('Codex1',     'programador'),
+    ('Codex2',     'programador'),
+    ('antigravity','documentador');
 
 INSERT INTO config (clave, valor) VALUES
     ('distribuidor', 'claude'),

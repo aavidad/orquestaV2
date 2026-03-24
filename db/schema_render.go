@@ -61,12 +61,18 @@ func renderSeedStatementForDriver(driver, stmt string) string {
 		switch driver {
 		case "mysql":
 			stmt = strings.Replace(stmt, "INSERT OR IGNORE INTO", "INSERT IGNORE INTO", 1)
-		default:
+		case "postgres":
 			stmt = strings.Replace(stmt, "INSERT OR IGNORE INTO", "INSERT INTO", 1)
 			if conflict := seedConflictTarget(table); conflict != "" {
 				stmt = strings.TrimSuffix(stmt, ";")
 				stmt += " ON CONFLICT(" + conflict + ") DO NOTHING;"
 			}
+		default:
+			// SQLite: ON CONFLICT DO NOTHING (sin columna) captura TODOS los
+			// unique constraints, incluidos índices CI como idx_agentes_nombre_ci.
+			stmt = strings.Replace(stmt, "INSERT OR IGNORE INTO", "INSERT INTO", 1)
+			stmt = strings.TrimSuffix(stmt, ";")
+			stmt += " ON CONFLICT DO NOTHING;"
 		}
 	}
 	if driver == "mysql" && strings.Contains(strings.ToUpper(stmt), "ON CONFLICT(") {
