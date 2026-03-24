@@ -213,6 +213,8 @@ func commandSupportsServerMode(args []string) bool {
 		return len(tokens) > 1 && (tokens[1] == "estado" || tokens[1] == "audit" || tokens[1] == "diagnostico")
 	case "logs":
 		return true
+	case "auditoria":
+		return len(tokens) > 1 && tokens[1] == "listar"
 	case "respaldo":
 		return len(tokens) > 1 && tokens[1] == "bd"
 	case "votar":

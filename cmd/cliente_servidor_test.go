@@ -66,6 +66,7 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "agente lanzar plan", args: []string{"agente", "lanzar-plan", "scripts/agentes.orquestador.plan"}, want: false},
 		{nombre: "exportar diagnostico", args: []string{"exportar", "diagnostico"}, want: true},
 		{nombre: "logs", args: []string{"logs"}, want: true},
+		{nombre: "auditoria listar", args: []string{"auditoria", "listar"}, want: true},
 		{nombre: "respaldo bd", args: []string{"respaldo", "bd"}, want: true},
 		{nombre: "tarea cancelar", args: []string{"tarea", "cancelar", "12", "Codex1"}, want: true},
 		{nombre: "tarea notas", args: []string{"tarea", "notas", "12"}, want: true},

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -22,18 +23,53 @@ var auditListarCmd = &cobra.Command{
 		entidad, _ := cmd.Flags().GetString("entidad")
 		limite, _ := cmd.Flags().GetInt("limite")
 
-		if err := ensureLocalDB(); err != nil {
-			return err
+		f := db.FiltroAuditoria{Limite: limite}
+		if agente != "" {
+			f.Agente = &agente
+		}
+		if accion != "" {
+			f.Accion = &accion
+		}
+		if entidad != "" {
+			f.Entidad = &entidad
 		}
 
-		f := db.FiltroAuditoria{Limite: limite}
-		if agente != "" { f.Agente = &agente }
-		if accion != "" { f.Accion = &accion }
-		if entidad != "" { f.Entidad = &entidad }
+		logs := []*db.LogAuditoria(nil)
+		query := url.Values{"limit": []string{fmt.Sprintf("%d", limite)}}
+		if strings.TrimSpace(agente) != "" {
+			query.Set("agente", strings.TrimSpace(agente))
+		}
+		if strings.TrimSpace(accion) != "" {
+			query.Set("accion", strings.TrimSpace(accion))
+		}
+		if strings.TrimSpace(entidad) != "" {
+			query.Set("entidad", strings.TrimSpace(entidad))
+		}
 
-		logs, err := db.ListarAuditoria(f)
-		if err != nil {
+		var resp apiAuditResponse
+		if ok, err := apiGetQuery("/api/audit", query, &resp); err != nil {
 			return err
+		} else if ok {
+			for _, entry := range resp.Audit {
+				entryCopy := entry
+				logs = append(logs, &db.LogAuditoria{
+					Agente:    entryCopy.Agente,
+					Accion:    entryCopy.Accion,
+					Entidad:   entryCopy.Entidad,
+					EntidadID: entryCopy.EntidadID,
+					Detalle:   entryCopy.Detalle,
+					CreatedAt: entryCopy.CreatedAt,
+				})
+			}
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			localLogs, err := db.ListarAuditoria(f)
+			if err != nil {
+				return err
+			}
+			logs = localLogs
 		}
 
 		if len(logs) == 0 {
