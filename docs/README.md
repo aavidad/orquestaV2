@@ -46,6 +46,15 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 - `diseno_control_activo_agentes.md`
   Diseño mínimo para enviar instrucciones, pausar, continuar y hacer handoff sobre agentes vivos.
 
+- `diseno_app_escritorio_orquesta.md`
+  Diseño de la futura app de escritorio como cliente rico sobre la API de Orquesta, sin acceso directo a persistencia.
+
+- `diseno_orquestador_jerarquico_y_presupuesto.md`
+  Documento integrador que une pools de capacidad, presupuesto de sesión y handoff preventivo dentro del mismo plano de control.
+
+- `plan_traslado_orquestador_a_trabajo.md`
+  Plan operativo para mover el repo a `~/Trabajo/orquestador` sin romper sesiones, rutas ni automatizaciones.
+
 - `diseno_observabilidad_pasiva_runtimes_es.md`
   Diseño mínimo en castellano para árbol de runtimes, agentes hijos y telemetría pasiva del panel.
 

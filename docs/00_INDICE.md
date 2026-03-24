@@ -23,6 +23,9 @@
 - [D06 - Autogestión Supervisada de Agentes](op_087_autogestion_supervisada_agentes.md)
 - [D07 - Plan de Integración de ramas Codex2 y Codex3](plan_integracion_codex2_codex3_2026-03-23.md)
 - [D08 - UI Declarativa para Agentes (OP-094)](op_094_ui_declarativa_agentes.md)
+- [D09 - Diseño de app de escritorio sobre la API de Orquesta](diseno_app_escritorio_orquesta.md)
+- [D10 - Diseño integrado de orquestador jerárquico y presupuesto de sesión](diseno_orquestador_jerarquico_y_presupuesto.md)
+- [D11 - Plan de traslado físico a ~/Trabajo/orquestador](plan_traslado_orquestador_a_trabajo.md)
 
 ## Plantillas de Documentación
 - [README (ES/EN)](plantillas_documentacion/README_es.md)
