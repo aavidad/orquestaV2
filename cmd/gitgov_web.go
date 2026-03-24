@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/gitgobernanza"
 )
@@ -32,6 +33,14 @@ type webGitGovData struct {
 	Err         string
 }
 
+type webGitWorktreeDetalleData struct {
+	Worktree *coordinacion.Worktree
+}
+
+type webGitLockDetalleData struct {
+	Lock *coordinacion.Lock
+}
+
 func webRouterGitGov(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if len(parts) < 2 {
@@ -41,6 +50,20 @@ func webRouterGitGov(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case len(parts) == 2 && parts[1] == "merges" && r.Method == http.MethodPost:
 		webHandlerGitMergeNueva(w, r)
+	case len(parts) == 3 && parts[1] == "worktrees" && r.Method == http.MethodGet:
+		id, err := strconv.ParseInt(parts[2], 10, 64)
+		if err != nil || id <= 0 {
+			http.NotFound(w, r)
+			return
+		}
+		webHandlerGitWorktreeDetalle(w, r, id)
+	case len(parts) == 3 && parts[1] == "locks" && r.Method == http.MethodGet:
+		id, err := strconv.ParseInt(parts[2], 10, 64)
+		if err != nil || id <= 0 {
+			http.NotFound(w, r)
+			return
+		}
+		webHandlerGitLockDetalle(w, r, id)
 	default:
 		http.NotFound(w, r)
 	}
@@ -112,6 +135,24 @@ func webHandlerGitMergeNueva(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/git?ok="+url.QueryEscape("Solicitud de merge guardada #"+strconv.FormatInt(id, 10)), http.StatusSeeOther)
+}
+
+func webHandlerGitWorktreeDetalle(w http.ResponseWriter, r *http.Request, id int64) {
+	worktree, err := (db.SQLiteWorktreeRepository{}).GetByID(id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	webRender(w, webTplLayout+webTplGitWorktreeDetalle, webGitWorktreeDetalleData{Worktree: worktree})
+}
+
+func webHandlerGitLockDetalle(w http.ResponseWriter, r *http.Request, id int64) {
+	lock, err := (db.SQLiteLockRepository{}).GetByID(id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	webRender(w, webTplLayout+webTplGitLockDetalle, webGitLockDetalleData{Lock: lock})
 }
 
 func webHandlerAPIWorktrees(w http.ResponseWriter, r *http.Request) {
@@ -224,7 +265,7 @@ const webTplGitGov = `{{define "content"}}
       <tbody>
         {{range .Worktrees}}
         <tr>
-          <td>{{.ID}}</td>
+          <td><a href="/git/worktrees/{{.ID}}">{{.ID}}</a></td>
           <td>{{.ProyectoSlug}}</td>
           <td>{{.Agente}}</td>
           <td>{{.Nombre}}</td>
@@ -247,7 +288,7 @@ const webTplGitGov = `{{define "content"}}
       <tbody>
         {{range .Locks}}
         <tr>
-          <td>{{.ID}}</td>
+          <td><a href="/git/locks/{{.ID}}">{{.ID}}</a></td>
           <td>{{.Agente}}</td>
           <td>{{.ScopeType}}</td>
           <td>{{.ScopeKey}}</td>
@@ -315,5 +356,56 @@ const webTplGitGov = `{{define "content"}}
         <button type="submit">Guardar solicitud</button>
       </form>
   </article>
+</section>
+{{end}}`
+
+const webTplGitWorktreeDetalle = `{{define "content"}}
+<section class="container">
+  <p style="margin:0 0 .35rem 0"><a href="/git">← Volver a GitGov</a></p>
+  <h2 style="margin:0">Worktree #{{.Worktree.ID}}</h2>
+  <table>
+    <tbody>
+      <tr><th>Proyecto</th><td>{{.Worktree.ProjectID}}</td></tr>
+      <tr><th>Tarea</th><td>{{pid .Worktree.TaskID}}</td></tr>
+      <tr><th>Lock</th><td>{{pid .Worktree.LockID}}</td></tr>
+      <tr><th>Agente</th><td>{{.Worktree.Agent}}</td></tr>
+      <tr><th>Nombre</th><td>{{.Worktree.Name}}</td></tr>
+      <tr><th>Ruta</th><td><code>{{.Worktree.Path}}</code></td></tr>
+      <tr><th>Branch</th><td><code>{{.Worktree.Branch}}</code></td></tr>
+      <tr><th>Base ref</th><td><code>{{.Worktree.BaseRef}}</code></td></tr>
+      <tr><th>Estado</th><td>{{.Worktree.State}}</td></tr>
+      <tr><th>Motivo</th><td>{{.Worktree.Reason}}</td></tr>
+      <tr><th>Creado</th><td>{{.Worktree.CreatedAt.Format "2006-01-02 15:04:05"}}</td></tr>
+      <tr><th>Actualizado</th><td>{{.Worktree.UpdatedAt.Format "2006-01-02 15:04:05"}}</td></tr>
+      <tr><th>Cerrado</th><td>{{if .Worktree.ClosedAt}}{{.Worktree.ClosedAt.Format "2006-01-02 15:04:05"}}{{end}}</td></tr>
+    </tbody>
+  </table>
+</section>
+{{end}}`
+
+const webTplGitLockDetalle = `{{define "content"}}
+<section class="container">
+  <p style="margin:0 0 .35rem 0"><a href="/git">← Volver a GitGov</a></p>
+  <h2 style="margin:0">Lock #{{.Lock.ID}}</h2>
+  <table>
+    <tbody>
+      <tr><th>Proyecto</th><td>{{pid .Lock.ProjectID}}</td></tr>
+      <tr><th>Tarea</th><td>{{pid .Lock.TaskID}}</td></tr>
+      <tr><th>Sesión</th><td>{{pid .Lock.SessionID}}</td></tr>
+      <tr><th>Agente</th><td>{{.Lock.Agent}}</td></tr>
+      <tr><th>Scope</th><td>{{.Lock.ScopeType}}</td></tr>
+      <tr><th>Key</th><td>{{.Lock.ScopeKey}}</td></tr>
+      <tr><th>Ruta</th><td><code>{{.Lock.Path}}</code></td></tr>
+      <tr><th>Branch</th><td><code>{{.Lock.Branch}}</code></td></tr>
+      <tr><th>Motivo</th><td>{{.Lock.Reason}}</td></tr>
+      <tr><th>Lease token</th><td><code>{{.Lock.LeaseToken}}</code></td></tr>
+      <tr><th>Estado</th><td>{{.Lock.State}}</td></tr>
+      <tr><th>Heartbeat</th><td>{{if .Lock.HeartbeatAt}}{{.Lock.HeartbeatAt.Format "2006-01-02 15:04:05"}}{{end}}</td></tr>
+      <tr><th>Expira</th><td>{{.Lock.ExpiresAt.Format "2006-01-02 15:04:05"}}</td></tr>
+      <tr><th>Creado</th><td>{{.Lock.CreatedAt.Format "2006-01-02 15:04:05"}}</td></tr>
+      <tr><th>Actualizado</th><td>{{.Lock.UpdatedAt.Format "2006-01-02 15:04:05"}}</td></tr>
+      <tr><th>Liberado</th><td>{{if .Lock.ReleasedAt}}{{.Lock.ReleasedAt.Format "2006-01-02 15:04:05"}}{{end}}</td></tr>
+    </tbody>
+  </table>
 </section>
 {{end}}`

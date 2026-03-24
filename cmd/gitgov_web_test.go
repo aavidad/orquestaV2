@@ -184,3 +184,75 @@ func TestAPIMergesCrearYListar(t *testing.T) {
 		t.Fatalf("merges inesperados: %s", rec.Body.String())
 	}
 }
+
+func TestWebGitDetalleRenderizaWorktreeYLock(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "orquesta.db")
+	prev := os.Getenv("ORQUESTA_DB")
+	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
+		t.Fatalf("setenv: %v", err)
+	}
+	defer func() {
+		_ = os.Setenv("ORQUESTA_DB", prev)
+		db.Close()
+	}()
+	if err := db.Open(); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	var proyectoID int64
+	if err := db.DB.QueryRow(
+		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,
+		"orquestador", "Orquestador", "/tmp/orquestador", "repo",
+	).Scan(&proyectoID); err != nil {
+		t.Fatalf("insert proyecto: %v", err)
+	}
+	if _, err := db.DB.Exec(`INSERT INTO tareas (titulo, descripcion, modulo, prioridad, creado_por) VALUES (?,?,?,?,?)`,
+		"git-detalle", "", "orquestador", "media", "alberto"); err != nil {
+		t.Fatalf("insert tarea: %v", err)
+	}
+	var tareaID int64
+	if err := db.DB.QueryRow(`SELECT id FROM tareas WHERE titulo = ?`, "git-detalle").Scan(&tareaID); err != nil {
+		t.Fatalf("query tarea: %v", err)
+	}
+	res, err := db.DB.Exec(`
+		INSERT INTO locks (proyecto_id, tarea_id, agente, scope_type, scope_key, ruta_abs, branch, motivo, token_lease, estado, expires_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`,
+		proyectoID, tareaID, "codex2", "worktree", "wt-detalle", "/tmp/wt-detalle", "feature/detalle", "proteccion", "lease-1", "activa",
+	)
+	if err != nil {
+		t.Fatalf("insert lock: %v", err)
+	}
+	lockID, _ := res.LastInsertId()
+	res, err = db.DB.Exec(`
+		INSERT INTO worktrees (proyecto_id, tarea_id, lock_id, agente, nombre, ruta_abs, branch, base_ref, estado, motivo)
+		VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		proyectoID, tareaID, lockID, "codex2", "wt-detalle", "/tmp/wt-detalle", "feature/detalle", "origin/main", "activa", "detalle",
+	)
+	if err != nil {
+		t.Fatalf("insert worktree: %v", err)
+	}
+	worktreeID, _ := res.LastInsertId()
+
+	req := httptest.NewRequest(http.MethodGet, "/git/worktrees/"+itoa(worktreeID), nil)
+	rec := httptest.NewRecorder()
+	webRouterGitGov(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detalle worktree status=%d cuerpo=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "wt-detalle") || !strings.Contains(body, "feature/detalle") {
+		t.Fatalf("detalle worktree incompleto: %s", body)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/git/locks/"+itoa(lockID), nil)
+	rec = httptest.NewRecorder()
+	webRouterGitGov(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detalle lock status=%d cuerpo=%s", rec.Code, rec.Body.String())
+	}
+	body = rec.Body.String()
+	if !strings.Contains(body, "lease-1") || !strings.Contains(body, "wt-detalle") {
+		t.Fatalf("detalle lock incompleto: %s", body)
+	}
+}
