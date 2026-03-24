@@ -16,6 +16,10 @@ al salir, guarda automáticamente en Orquesta:
   - resumen_continuidad
   - cwd
   - branch
+
+La detección de external_session_id depende del estado ya guardado en Orquesta
+o del hook ORQUESTA_RUNTIME_CONNECTOR_SCRIPT. El script ya no inspecciona
+almacenamientos locales del runtime por su cuenta.
 EOF
 }
 
@@ -96,6 +100,8 @@ save_and_close() {
   printf '\nSesión guardada.\n'
   if resume_hint="$(runtime_resume_hint "$RUNTIME_CMD" "$detected_id" 2>/dev/null)"; then
     printf 'Reanudar con: %s\n' "$resume_hint"
+  elif [[ -z "$detected_id" && -z "$PREV_EXTERNAL_ID" ]]; then
+    printf 'Aviso: no se detectó external_session_id; configura ORQUESTA_RUNTIME_CONNECTOR_SCRIPT si el conector soporta reanudación nativa.\n'
   fi
 }
 
