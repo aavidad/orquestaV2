@@ -206,4 +206,6 @@ Lectura practica a fecha 2026-03-24:
 - el uso de funciones de repositorio `db.*` desde `cmd` sigue siendo deuda de migracion, pero ya no bloquea la integracion mientras no se bypasseen los contratos con `SQL` directo
 - el paquete `db` ha quedado en verde completo; las regresiones de bootstrap y renderer detectadas el 2026-03-23 y el 2026-03-24 quedaron corregidas
 - el `SQL` crudo que quedaba en `cmd` para backlog y reasignacion de tareas ya se ha movido a funciones de `db` en castellano
-- antes de mergear a `master`, sigue siendo recomendable decidir si se hace un ultimo merge de prueba desde esta rama total a una rama candidata o si se pasa ya a `master`
+- se ha creado y validado la rama candidata `prueba/candidata-master-20260324` a partir de `master`, mergeando `prueba/merge-total-agentes-20260323`
+- validacion de la candidata: `go build ./...`, `go test ./db` y `go test ./cmd`, todo en verde
+- `orquesta.db` sigue siendo un fichero binario versionado: antes de pasar a `master`, conviene preservar exactamente la version validada en la rama candidata y no mezclarla con otra copia local distinta
