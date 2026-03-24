@@ -7,7 +7,8 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 package cmd
 
-const (
-	defaultServePort = 16543
-	defaultServerURL = "http://127.0.0.1:16543"
-)
+import "fmt"
+
+const defaultServePort = 16543
+
+var defaultServerURL = fmt.Sprintf("http://127.0.0.1:%d", defaultServePort)
