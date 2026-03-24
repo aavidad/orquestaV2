@@ -58,7 +58,10 @@ var lenguajePoliticaSetCmd = &cobra.Command{
 	Use:   "fijar",
 	Short: "Actualiza la politica global de lenguaje",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		p, err := db.GetLanguagePolicy()
+		p, ok, err := cargarPoliticaLenguajeDesdeAPI()
+		if !ok {
+			p, err = db.GetLanguagePolicy()
+		}
 		if err != nil {
 			return err
 		}
@@ -91,6 +94,12 @@ var lenguajePoliticaSetCmd = &cobra.Command{
 			p.Notes = strings.TrimSpace(v)
 		}
 		por, _ := cmd.Flags().GetString("por")
+		if ok, err := fijarPoliticaLenguajePorAPI(p, por); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Politica de lenguaje actualizada (%s)\n", p.DefaultLanguage)
+			return nil
+		}
 		if err := db.SetLanguagePolicy(p, por); err != nil {
 			return err
 		}
@@ -138,6 +147,12 @@ var lenguajeMatrizFijarCmd = &cobra.Command{
 		contexto, _ := cmd.Flags().GetString("contexto")
 		razon, _ := cmd.Flags().GetString("razon")
 		por, _ := cmd.Flags().GetString("por")
+		if ok, err := fijarEntradaMatrizLenguajePorAPI(args[0], args[1], contexto, args[2], razon, por); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Matriz fijada: %s/%s [%s] = %s\n", args[0], args[1], normalizeContextCmd(contexto), args[2])
+			return nil
+		}
 		entry, err := db.SetLanguageMatrixEntry(args[0], args[1], contexto, args[2], razon, por)
 		if err != nil {
 			return err
@@ -153,6 +168,12 @@ var lenguajeMatrizBorrarCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		contexto, _ := cmd.Flags().GetString("contexto")
+		if ok, err := borrarEntradaMatrizLenguajePorAPI(args[0], args[1], contexto); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Matriz borrada: %s/%s [%s]\n", args[0], args[1], normalizeContextCmd(contexto))
+			return nil
+		}
 		if err := db.DeleteLanguageMatrixEntry(args[0], args[1], contexto); err != nil {
 			return err
 		}

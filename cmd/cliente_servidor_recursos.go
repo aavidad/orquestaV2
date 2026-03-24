@@ -76,6 +76,26 @@ type apiLenguajeResolucionResponse struct {
 	Resolucion *db.LanguageResolution `json:"resolucion"`
 }
 
+type apiLenguajePoliticaSetRequest struct {
+	Politica *db.LanguagePolicy `json:"politica"`
+	Por      string             `json:"por"`
+}
+
+type apiLenguajeMatrizSetRequest struct {
+	Scope    string `json:"scope"`
+	Selector string `json:"selector"`
+	Contexto string `json:"contexto"`
+	Idioma   string `json:"idioma"`
+	Razon    string `json:"razon"`
+	Por      string `json:"por"`
+}
+
+type apiLenguajeMatrizDeleteRequest struct {
+	Scope    string `json:"scope"`
+	Selector string `json:"selector"`
+	Contexto string `json:"contexto"`
+}
+
 type apiAgenteRequest struct {
 	Nombre string `json:"nombre"`
 	Rol    string `json:"rol"`
@@ -182,6 +202,35 @@ func resolverLenguajePorAPI(proyecto string, tareaID *int64, contexto string) (*
 		return nil, ok, err
 	}
 	return resp.Resolucion, true, nil
+}
+
+func fijarPoliticaLenguajePorAPI(policy *db.LanguagePolicy, por string) (bool, error) {
+	ok, err := apiPost("/api/lenguaje/politica", apiLenguajePoliticaSetRequest{
+		Politica: policy,
+		Por:      strings.TrimSpace(por),
+	}, nil)
+	return ok, err
+}
+
+func fijarEntradaMatrizLenguajePorAPI(scope, selector, contexto, idioma, razon, por string) (bool, error) {
+	ok, err := apiPost("/api/lenguaje/matriz", apiLenguajeMatrizSetRequest{
+		Scope:    strings.TrimSpace(scope),
+		Selector: strings.TrimSpace(selector),
+		Contexto: strings.TrimSpace(contexto),
+		Idioma:   strings.TrimSpace(idioma),
+		Razon:    strings.TrimSpace(razon),
+		Por:      strings.TrimSpace(por),
+	}, nil)
+	return ok, err
+}
+
+func borrarEntradaMatrizLenguajePorAPI(scope, selector, contexto string) (bool, error) {
+	ok, err := apiPost("/api/lenguaje/matriz/borrar", apiLenguajeMatrizDeleteRequest{
+		Scope:    strings.TrimSpace(scope),
+		Selector: strings.TrimSpace(selector),
+		Contexto: strings.TrimSpace(contexto),
+	}, nil)
+	return ok, err
 }
 
 func cargarConectoresDesdeAPI() ([]*db.Conector, bool, error) {

@@ -222,6 +222,10 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/reglas", apiHandlerReglas)
 	mux.HandleFunc("/api/skills", apiHandlerSkills)
 	mux.HandleFunc("/api/workflows", apiHandlerWorkflows)
+	mux.HandleFunc("/api/lenguaje/politica", apiHandlerLenguajePolitica)
+	mux.HandleFunc("/api/lenguaje/matriz", apiHandlerLenguajeMatriz)
+	mux.HandleFunc("/api/lenguaje/matriz/borrar", apiHandlerLenguajeMatrizBorrar)
+	mux.HandleFunc("/api/lenguaje/resolver", apiHandlerLenguajeResolver)
 	mux.HandleFunc("/api/config", apiHandlerConfig)
 	mux.HandleFunc("/api/audit", apiHandlerAudit)
 	mux.HandleFunc("/api/respaldo/bd", apiHandlerRespaldoBD)
@@ -1701,6 +1705,100 @@ func apiHandlerPropuestasListar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{"propuestas": propuestas})
+}
+
+func apiHandlerLenguajePolitica(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		policy, err := db.GetLanguagePolicy()
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"politica": policy})
+	case http.MethodPost:
+		var req apiLenguajePoliticaSetRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		if req.Politica == nil {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("politica requerida"))
+			return
+		}
+		if err := db.SetLanguagePolicy(req.Politica, strings.TrimSpace(req.Por)); err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+	default:
+		apiError(w, http.StatusMethodNotAllowed, fmt.Errorf("metodo no permitido"))
+	}
+}
+
+func apiHandlerLenguajeMatriz(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		entries, err := db.ListLanguageMatrixEntries()
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"matriz": entries})
+	case http.MethodPost:
+		var req apiLenguajeMatrizSetRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		entry, err := db.SetLanguageMatrixEntry(req.Scope, req.Selector, req.Contexto, req.Idioma, req.Razon, req.Por)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"entrada": entry})
+	default:
+		apiError(w, http.StatusMethodNotAllowed, fmt.Errorf("metodo no permitido"))
+	}
+}
+
+func apiHandlerLenguajeMatrizBorrar(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiLenguajeMatrizDeleteRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := db.DeleteLanguageMatrixEntry(req.Scope, req.Selector, req.Contexto); err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func apiHandlerLenguajeResolver(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	project := strings.TrimSpace(r.URL.Query().Get("proyecto"))
+	contexto := strings.TrimSpace(r.URL.Query().Get("contexto"))
+	var tareaPtr *int64
+	if tareaStr := strings.TrimSpace(r.URL.Query().Get("tarea")); tareaStr != "" {
+		tareaID, err := strconv.ParseInt(tareaStr, 10, 64)
+		if err != nil || tareaID <= 0 {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("tarea inválida"))
+			return
+		}
+		tareaPtr = &tareaID
+	}
+	res, err := db.ResolveLanguage(project, tareaPtr, contexto)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"resolucion": res})
 }
 
 func apiFiltroRuntimesDesdeRequest(r *http.Request) (db.FiltroRuntimes, error) {

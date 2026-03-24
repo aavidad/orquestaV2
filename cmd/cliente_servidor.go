@@ -221,9 +221,9 @@ func commandSupportsServerMode(args []string) bool {
 		}
 		switch tokens[1] {
 		case "politica":
-			return tokens[2] == "ver"
+			return tokens[2] == "ver" || tokens[2] == "fijar"
 		case "matriz":
-			return tokens[2] == "listar"
+			return tokens[2] == "listar" || tokens[2] == "fijar" || tokens[2] == "borrar"
 		case "resolver":
 			return true
 		default:
