@@ -1056,6 +1056,72 @@ func TestEjecutarRuntimeOrderNudgeReutilizaMailboxExistente(t *testing.T) {
 	}
 }
 
+func TestProcesarRuntimeOrdersBatchCompletaDiscordiaEnMailbox(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := RegistrarAgente("alberto", "admin"); err != nil {
+		t.Fatalf("registrar alberto: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "alberto",
+		ProyectoID:  &proyectoID,
+		Tipo:        "discordia",
+		PayloadJSON: `{"from_agente":"Codex1","to_agente":"alberto","kind":"discordia","contra_agente":"Codex2","motivo":"desacuerdo tecnico"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar discordia: %v", err)
+	}
+
+	n, err := ProcesarRuntimeOrdersBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime orders batch: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("processed inesperado: %d", n)
+	}
+
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get order: %v", err)
+	}
+	if order == nil || order.Estado != "completada" {
+		t.Fatalf("order no completada: %+v", order)
+	}
+
+	toAgente := "alberto"
+	estado := "pendiente"
+	mailbox, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{
+		ToAgente: &toAgente,
+		Estado:   &estado,
+	})
+	if err != nil {
+		t.Fatalf("listar mailbox: %v", err)
+	}
+	if len(mailbox) != 1 {
+		t.Fatalf("mailbox inesperado: %+v", mailbox)
+	}
+	if mailbox[0].RuntimeOrderID == nil || *mailbox[0].RuntimeOrderID != orderID {
+		t.Fatalf("runtime_order_id inesperado en mailbox: %+v", mailbox[0])
+	}
+	if mailbox[0].FromAgente != "Codex1" || mailbox[0].Kind != "discordia" {
+		t.Fatalf("mailbox discordia inesperado: %+v", mailbox[0])
+	}
+}
+
 func TestReconciliarRuntimeOrdersStaleRecuperaBasicasYExpiraNoSoportadas(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

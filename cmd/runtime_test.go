@@ -111,6 +111,44 @@ func TestRuntimeNudgeEncolaOrdenLocal(t *testing.T) {
 	}
 }
 
+func TestRuntimeDiscordiaEncolaOrdenLocal(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := db.RegistrarAgente("alberto", "admin"); err != nil {
+		t.Fatalf("registrar alberto: %v", err)
+	}
+	if err := runtimeDiscordiaCmd.Flags().Set("from", "Codex1"); err != nil {
+		t.Fatalf("set from discordia: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = runtimeDiscordiaCmd.Flags().Set("from", "server")
+	})
+
+	out := capturarStdout(t, func() {
+		if err := runtimeDiscordiaCmd.RunE(runtimeDiscordiaCmd, []string{"alberto", "Codex2", "desacuerdo", "sobre", "la", "solucion"}); err != nil {
+			t.Fatalf("runtime discordia local: %v", err)
+		}
+	})
+	if !strings.Contains(out, "Discordia runtime #") {
+		t.Fatalf("salida runtime discordia inesperada:\n%s", out)
+	}
+
+	agente := "alberto"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "discordia" {
+		t.Fatalf("orden discordia inesperada: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, "\"contra_agente\":\"Codex2\"") || !strings.Contains(orders[0].PayloadJSON, "\"motivo\":\"desacuerdo sobre la solucion\"") {
+		t.Fatalf("payload discordia inesperado: %s", orders[0].PayloadJSON)
+	}
+}
+
 func TestRuntimeCheckpointsHistorialLocal(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -386,6 +424,15 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	})
 	if !strings.Contains(outNudge, "#15") {
 		t.Fatalf("salida nudge sin id remoto:\n%s", outNudge)
+	}
+
+	outDiscordia := capturarStdout(t, func() {
+		if err := runtimeDiscordiaCmd.RunE(runtimeDiscordiaCmd, []string{"alberto", "Codex2", "desacuerdo", "tecnico"}); err != nil {
+			t.Fatalf("runtime discordia via api: %v", err)
+		}
+	})
+	if !strings.Contains(outDiscordia, "#15") {
+		t.Fatalf("salida discordia sin id remoto:\n%s", outDiscordia)
 	}
 
 	if err := runtimeCheckpointsCmd.Flags().Set("agente", "Codex1"); err != nil {

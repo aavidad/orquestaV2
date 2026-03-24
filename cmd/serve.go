@@ -1203,7 +1203,7 @@ const webTplLayout = `<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Orquesta — ContaGrx</title>
+  <title>{{tr "app.title"}}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
   <style>
     body{--pico-font-size:14px}
@@ -1263,20 +1263,20 @@ const webTplLayout = `<!doctype html>
 <body>
 <header>
   <nav class="container">
-    <div><a href="/"><strong>⚙ Orquesta</strong></a></div>
+    <div><a href="/"><strong>⚙ {{tr "app.name"}}</strong></a></div>
     <div>
-      <a href="/">Dashboard</a>
-      <a href="/tareas">Tareas</a>
-      <a href="/propuestas">Propuestas</a>
-      <a href="/runtimes">Runtimes</a>
-      <a href="/time-travel">Time Travel</a>
+      <a href="/">{{tr "Dashboard"}}</a>
+      <a href="/tareas">{{tr "Tareas"}}</a>
+      <a href="/propuestas">{{tr "Propuestas"}}</a>
+      <a href="/runtimes">{{tr "Runtimes"}}</a>
+      <a href="/time-travel">{{tr "Time Travel"}}</a>
     </div>
   </nav>
 </header>
 <main class="container" style="padding-top:1.5rem;padding-bottom:2rem">
 {{template "content" .}}
 </main>
-<footer>ContaGrx · OSL Diputación de Granada · GPLv3</footer>
+<footer>{{tr "ContaGrx footer"}}</footer>
 </body></html>
 `
 
@@ -1682,45 +1682,45 @@ const webTplPropuestas = `{{define "content"}}
 
 const webTplRuntimes = `{{define "content"}}
 <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
-  <h2 style="margin:0">Runtimes <small style="font-size:.5em;color:#94a3b8">{{len .Runtimes}}</small></h2>
+  <h2 style="margin:0">{{tr "Runtimes"}} <small style="font-size:.5em;color:#94a3b8">{{len .Runtimes}}</small></h2>
 </div>
 
 {{if .Msg}}<div class="alert-ok">{{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert-err">{{.Err}}</div>{{end}}
 
 <div class="filtros">
-  <a href="/runtimes"{{if eqStr .Filtro ""}} class="sel"{{end}}>Todos</a>
-  <a href="/runtimes?activos=true"{{if eqStr .Filtro "true"}} class="sel"{{end}}>Activos</a>
-  <a href="/runtimes?activos=false"{{if eqStr .Filtro "false"}} class="sel"{{end}}>Cerrados</a>
+  <a href="/runtimes"{{if eqStr .Filtro ""}} class="sel"{{end}}>{{tr "Todas"}}</a>
+  <a href="/runtimes?activos=true"{{if eqStr .Filtro "true"}} class="sel"{{end}}>{{tr "runtime.filter.active"}}</a>
+  <a href="/runtimes?activos=false"{{if eqStr .Filtro "false"}} class="sel"{{end}}>{{tr "runtime.filter.closed"}}</a>
 </div>
 
 <div class="action-box">
-  <h4>Control de agentes</h4>
+  <h4>{{tr "runtime.control.title"}}</h4>
   <form method="POST" action="/runtimes/control" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:.6rem">
-    <div><label>Agente</label><input type="text" name="agente" placeholder="Codex1" required></div>
-    <div><label>Proyecto</label><input type="text" name="proyecto" placeholder="orquestador"></div>
+    <div><label>{{tr "Agente"}}</label><input type="text" name="agente" placeholder="Codex1" required></div>
+    <div><label>{{tr "Proyecto"}}</label><input type="text" name="proyecto" placeholder="orquestador"></div>
     <div>
-      <label>Acción</label>
+      <label>{{tr "Acción"}}</label>
       <select name="accion">
-        <option value="arrancar">Arrancar</option>
-        <option value="pausar">Pausar</option>
-        <option value="continuar">Continuar</option>
-        <option value="detener">Detener</option>
+        <option value="arrancar">{{tr "Arrancar"}}</option>
+        <option value="pausar">{{tr "Pausar"}}</option>
+        <option value="continuar">{{tr "Continuar"}}</option>
+        <option value="detener">{{tr "Detener"}}</option>
       </select>
     </div>
-    <div><label>Motivo</label><input type="text" name="motivo" placeholder="motivo operativo"></div>
-    <div><label>Conector</label><input type="text" name="conector" placeholder="codex-cli"></div>
-    <div><label>Modelo</label><input type="text" name="modelo" placeholder="gpt-5.4"></div>
-    <div><label>Reasoning</label><input type="text" name="razonamiento" placeholder="high"></div>
-    <div><label>Perfil</label><input type="text" name="perfil" placeholder="implementacion"></div>
-    <div style="grid-column:1/-1"><button type="submit" class="btn-sm">Encolar orden</button></div>
+    <div><label>{{tr "Motivo"}}</label><input type="text" name="motivo" placeholder="{{tr "runtime.control.reason_placeholder"}}"></div>
+    <div><label>{{tr "Conector"}}</label><input type="text" name="conector" placeholder="codex-cli"></div>
+    <div><label>{{tr "Modelo"}}</label><input type="text" name="modelo" placeholder="gpt-5.4"></div>
+    <div><label>{{tr "Reasoning"}}</label><input type="text" name="razonamiento" placeholder="high"></div>
+    <div><label>{{tr "Perfil"}}</label><input type="text" name="perfil" placeholder="implementacion"></div>
+    <div style="grid-column:1/-1"><button type="submit" class="btn-sm">{{tr "runtime.control.enqueue"}}</button></div>
   </form>
 </div>
 
 {{if .Runtimes}}
 <div style="overflow-x:auto">
 <table>
-  <thead><tr><th>ID</th><th>Estado</th><th>Agente</th><th>Proyecto</th><th>Provider</th><th>Connector</th><th>PID</th><th>Hijos</th><th>Branch</th><th>Última señal</th></tr></thead>
+  <thead><tr><th>ID</th><th>{{tr "Estado"}}</th><th>{{tr "Agente"}}</th><th>{{tr "Proyecto"}}</th><th>{{tr "Provider"}}</th><th>{{tr "Connector"}}</th><th>PID</th><th>{{tr "runtime.children"}}</th><th>{{tr "branch"}}</th><th>{{tr "runtime.last_signal"}}</th></tr></thead>
   <tbody>
   {{range .Runtimes}}
     <tr>
@@ -1740,36 +1740,36 @@ const webTplRuntimes = `{{define "content"}}
 </table>
 </div>
 {{else}}
-<p style="color:#94a3b8">No hay runtimes visibles con este filtro.</p>
+<p style="color:#94a3b8">{{tr "runtime.none_visible"}}</p>
 {{end}}
 {{end}}
 `
 
 const webTplRuntimeDetalle = `{{define "content"}}
-<a href="/runtimes" style="font-size:.85rem;color:#64748b">← volver a runtimes</a>
-<h2 style="margin:.5rem 0">Runtime #{{.Runtime.ID}} — {{.Runtime.Agente}}</h2>
+<a href="/runtimes" style="font-size:.85rem;color:#64748b">← {{tr "runtime.back_to_list"}}</a>
+<h2 style="margin:.5rem 0">{{tr "runtime.detail.title"}} #{{.Runtime.ID}} — {{.Runtime.Agente}}</h2>
 <p>
   <span class="tag rt-{{.Runtime.Estado}}">{{.Runtime.Estado}}</span>
-  <span style="color:#64748b;font-size:.85rem;margin-left:.5rem">Proyecto: {{.Runtime.Proyecto}} · Provider: {{.Runtime.Provider}} · Connector: {{.Runtime.Connector}}</span>
+  <span style="color:#64748b;font-size:.85rem;margin-left:.5rem">{{tr "Proyecto"}}: {{.Runtime.Proyecto}} · {{tr "Provider"}}: {{.Runtime.Provider}} · {{tr "Connector"}}: {{.Runtime.Connector}}</span>
 </p>
 <p style="margin-top:-.2rem">
-  <a href="/time-travel?agente={{.Runtime.Agente}}{{if neStr .Runtime.Proyecto "—"}}&proyecto={{.Runtime.Proyecto}}{{end}}" style="font-size:.84rem">Ver checkpoints del agente →</a>
+  <a href="/time-travel?agente={{.Runtime.Agente}}{{if neStr .Runtime.Proyecto "—"}}&proyecto={{.Runtime.Proyecto}}{{end}}" style="font-size:.84rem">{{tr "runtime.view_checkpoints"}} →</a>
 </p>
 
 <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr));margin-bottom:1rem">
-  <div class="stat"><div class="n" style="font-size:1.2rem">{{.Runtime.PID}}</div><div class="l">pid</div></div>
-  <div class="stat"><div class="n" style="font-size:1.2rem">{{.Runtime.Hijos}}</div><div class="l">hijos</div></div>
-  <div class="stat"><div class="n" style="font-size:1rem">{{.Runtime.Branch}}</div><div class="l">branch</div></div>
-  <div class="stat"><div class="n" style="font-size:1rem">{{.Runtime.Modelo}}</div><div class="l">modelo</div></div>
-  <div class="stat"><div class="n" style="font-size:1rem">{{.Runtime.Razonamiento}}</div><div class="l">reasoning</div></div>
-  <div class="stat"><div class="n" style="font-size:1rem">{{.Runtime.UltimaSenal}}</div><div class="l">última señal</div></div>
+  <div class="stat"><div class="n" style="font-size:1.2rem">{{.Runtime.PID}}</div><div class="l">PID</div></div>
+  <div class="stat"><div class="n" style="font-size:1.2rem">{{.Runtime.Hijos}}</div><div class="l">{{tr "runtime.children"}}</div></div>
+  <div class="stat"><div class="n" style="font-size:1rem">{{.Runtime.Branch}}</div><div class="l">{{tr "branch"}}</div></div>
+  <div class="stat"><div class="n" style="font-size:1rem">{{.Runtime.Modelo}}</div><div class="l">{{tr "runtime.model"}}</div></div>
+  <div class="stat"><div class="n" style="font-size:1rem">{{.Runtime.Razonamiento}}</div><div class="l">{{tr "Reasoning"}}</div></div>
+  <div class="stat"><div class="n" style="font-size:1rem">{{.Runtime.UltimaSenal}}</div><div class="l">{{tr "runtime.last_signal"}}</div></div>
 </div>
 
-<h4 style="margin:0 0 .6rem 0">Muestras recientes</h4>
+<h4 style="margin:0 0 .6rem 0">{{tr "runtime.samples.title"}}</h4>
 {{if .Muestras}}
 <div style="overflow-x:auto">
 <table>
-  <thead><tr><th>Creada</th><th>Estado</th><th>CPU%</th><th>MEM</th><th>RSS</th><th>FDs</th><th>Hijos</th><th>Hilos</th><th>Fuente</th></tr></thead>
+  <thead><tr><th>{{tr "runtime.created_feminine"}}</th><th>{{tr "Estado"}}</th><th>CPU%</th><th>MEM</th><th>RSS</th><th>FDs</th><th>{{tr "runtime.children"}}</th><th>{{tr "runtime.threads"}}</th><th>{{tr "runtime.source"}}</th></tr></thead>
   <tbody>
   {{range .Muestras}}
     <tr>
@@ -1788,7 +1788,7 @@ const webTplRuntimeDetalle = `{{define "content"}}
 </table>
 </div>
 {{else}}
-<p style="color:#94a3b8">No hay muestras registradas para este runtime.</p>
+<p style="color:#94a3b8">{{tr "runtime.samples.none"}}</p>
 {{end}}
 
 <h4 style="margin:1.1rem 0 .6rem 0">{{tr "runtime.a2ui.title"}}</h4>
@@ -1858,11 +1858,11 @@ const webTplRuntimeDetalle = `{{define "content"}}
 <p style="color:#94a3b8">{{tr "runtime.a2ui.none"}}</p>
 {{end}}
 
-<h4 style="margin:1.1rem 0 .6rem 0">Timeline operativa</h4>
+<h4 style="margin:1.1rem 0 .6rem 0">{{tr "runtime.timeline.title"}}</h4>
 {{if .Timeline}}
 <div style="overflow-x:auto">
 <table>
-  <thead><tr><th>Cuándo</th><th>Canal</th><th>Evento</th><th>Estado</th><th>Detalle</th></tr></thead>
+  <thead><tr><th>{{tr "runtime.when"}}</th><th>{{tr "runtime.channel"}}</th><th>{{tr "runtime.event"}}</th><th>{{tr "Estado"}}</th><th>{{tr "runtime.detail"}}</th></tr></thead>
   <tbody>
   {{range .Timeline}}
     <tr>
@@ -1877,34 +1877,34 @@ const webTplRuntimeDetalle = `{{define "content"}}
 </table>
 </div>
 {{else}}
-<p style="color:#94a3b8">Sin órdenes, mailbox ni checkpoints asociados.</p>
+<p style="color:#94a3b8">{{tr "runtime.timeline.none"}}</p>
 {{end}}
 {{end}}
 `
 
 const webTplTimeTravel = `{{define "content"}}
 <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
-  <h2 style="margin:0">Time Travel <small style="font-size:.5em;color:#94a3b8">{{len .Checkpoints}}</small></h2>
+  <h2 style="margin:0">{{tr "Time Travel"}} <small style="font-size:.5em;color:#94a3b8">{{len .Checkpoints}}</small></h2>
 </div>
 
 <div class="filtros">
-  <a href="/time-travel"{{if and (eqStr .FiltroAgente "") (eqStr .FiltroProyecto "") (eqStr .FiltroKind "")}} class="sel"{{end}}>Todos</a>
-  <a href="/time-travel?kind=checkpoint"{{if eqStr .FiltroKind "checkpoint"}} class="sel"{{end}}>Checkpoints</a>
-  <a href="/time-travel?kind=handoff"{{if eqStr .FiltroKind "handoff"}} class="sel"{{end}}>Handoffs</a>
-  <a href="/time-travel?kind=sync_status"{{if eqStr .FiltroKind "sync_status"}} class="sel"{{end}}>Sync status</a>
+  <a href="/time-travel"{{if and (eqStr .FiltroAgente "") (eqStr .FiltroProyecto "") (eqStr .FiltroKind "")}} class="sel"{{end}}>{{tr "Todas"}}</a>
+  <a href="/time-travel?kind=checkpoint"{{if eqStr .FiltroKind "checkpoint"}} class="sel"{{end}}>{{tr "time_travel.filter.checkpoints"}}</a>
+  <a href="/time-travel?kind=handoff"{{if eqStr .FiltroKind "handoff"}} class="sel"{{end}}>{{tr "time_travel.filter.handoffs"}}</a>
+  <a href="/time-travel?kind=sync_status"{{if eqStr .FiltroKind "sync_status"}} class="sel"{{end}}>{{tr "time_travel.filter.sync_status"}}</a>
 </div>
 
 <form method="GET" action="/time-travel" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">
-  <div><label>Agente</label><input type="text" name="agente" value="{{.FiltroAgente}}" placeholder="Codex1"></div>
-  <div><label>Proyecto</label><input type="text" name="proyecto" value="{{.FiltroProyecto}}" placeholder="orquestador"></div>
-  <div><label>Tipo</label><input type="text" name="kind" value="{{.FiltroKind}}" placeholder="checkpoint"></div>
-  <div><button type="submit" class="btn-sm">Filtrar</button></div>
+  <div><label>{{tr "Agente"}}</label><input type="text" name="agente" value="{{.FiltroAgente}}" placeholder="Codex1"></div>
+  <div><label>{{tr "Proyecto"}}</label><input type="text" name="proyecto" value="{{.FiltroProyecto}}" placeholder="orquestador"></div>
+  <div><label>{{tr "Tipo"}}</label><input type="text" name="kind" value="{{.FiltroKind}}" placeholder="checkpoint"></div>
+  <div><button type="submit" class="btn-sm">{{tr "time_travel.filter.submit"}}</button></div>
 </form>
 
 {{if .Checkpoints}}
 <div style="overflow-x:auto">
 <table>
-  <thead><tr><th>ID</th><th>Creado</th><th>Agente</th><th>Proyecto</th><th>Tipo</th><th>Resumen</th><th>Branch</th><th>Resume</th><th></th></tr></thead>
+  <thead><tr><th>ID</th><th>{{tr "time_travel.created"}}</th><th>{{tr "Agente"}}</th><th>{{tr "Proyecto"}}</th><th>{{tr "Tipo"}}</th><th>{{tr "time_travel.summary"}}</th><th>{{tr "branch"}}</th><th>{{tr "time_travel.resume"}}</th><th></th></tr></thead>
   <tbody>
   {{range .Checkpoints}}
     <tr>
@@ -1916,44 +1916,44 @@ const webTplTimeTravel = `{{define "content"}}
       <td>{{trunc .Resumen 64}}</td>
       <td><code style="font-size:.8em">{{.Branch}}</code></td>
       <td>{{.ResumeStrategy}}</td>
-      <td><a href="/time-travel/{{.ID}}" class="btn-sm">Inspeccionar →</a></td>
+      <td><a href="/time-travel/{{.ID}}" class="btn-sm">{{tr "time_travel.inspect"}} →</a></td>
     </tr>
   {{end}}
   </tbody>
 </table>
 </div>
 {{else}}
-<p style="color:#94a3b8">No hay checkpoints visibles con este filtro.</p>
+<p style="color:#94a3b8">{{tr "time_travel.none_visible"}}</p>
 {{end}}
 {{end}}
 `
 
 const webTplTimeTravelDetalle = `{{define "content"}}
-<a href="/time-travel" style="font-size:.85rem;color:#64748b">← volver a Time Travel</a>
-<h2 style="margin:.5rem 0">Checkpoint #{{.Checkpoint.ID}} — {{.Checkpoint.Agente}}</h2>
+<a href="/time-travel" style="font-size:.85rem;color:#64748b">← {{tr "time_travel.back"}}</a>
+<h2 style="margin:.5rem 0">{{tr "time_travel.checkpoint"}} #{{.Checkpoint.ID}} — {{.Checkpoint.Agente}}</h2>
 <p>
   <span class="tag t-media">{{.Checkpoint.CheckpointKind}}</span>
-  <span style="color:#64748b;font-size:.85rem;margin-left:.5rem">Proyecto: {{.Checkpoint.Proyecto}} · Branch: {{.Checkpoint.Branch}} · {{.Checkpoint.Creado}}</span>
+  <span style="color:#64748b;font-size:.85rem;margin-left:.5rem">{{tr "Proyecto"}}: {{.Checkpoint.Proyecto}} · {{tr "branch"}}: {{.Checkpoint.Branch}} · {{.Checkpoint.Creado}}</span>
 </p>
 
 <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:1rem">
-  <div class="stat"><div class="n" style="font-size:1rem">{{.Checkpoint.ResumeStrategy}}</div><div class="l">resume</div></div>
-  <div class="stat"><div class="n" style="font-size:1rem">{{.Checkpoint.Source}}</div><div class="l">source</div></div>
-  <div class="stat"><div class="n" style="font-size:1rem">{{.Checkpoint.Branch}}</div><div class="l">branch</div></div>
-  <div class="stat"><div class="n" style="font-size:.92rem">{{trunc .Checkpoint.CWD 28}}</div><div class="l">cwd</div></div>
+  <div class="stat"><div class="n" style="font-size:1rem">{{.Checkpoint.ResumeStrategy}}</div><div class="l">{{tr "time_travel.resume"}}</div></div>
+  <div class="stat"><div class="n" style="font-size:1rem">{{.Checkpoint.Source}}</div><div class="l">{{tr "time_travel.source"}}</div></div>
+  <div class="stat"><div class="n" style="font-size:1rem">{{.Checkpoint.Branch}}</div><div class="l">{{tr "branch"}}</div></div>
+  <div class="stat"><div class="n" style="font-size:.92rem">{{trunc .Checkpoint.CWD 28}}</div><div class="l">{{tr "time_travel.cwd"}}</div></div>
 </div>
 
-<h4 style="margin:0 0 .5rem 0">Resumen</h4>
+<h4 style="margin:0 0 .5rem 0">{{tr "time_travel.summary"}}</h4>
 <p style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.4rem;padding:.8rem 1rem">{{.Checkpoint.Resumen}}</p>
 
-<h4 style="margin:1rem 0 .5rem 0">Payload</h4>
+<h4 style="margin:1rem 0 .5rem 0">{{tr "time_travel.payload"}}</h4>
 <pre style="background:#0f172a;color:#e2e8f0;padding:1rem;border-radius:.5rem;overflow:auto;font-size:.8rem">{{.Payload}}</pre>
 
-<h4 style="margin:1rem 0 .5rem 0">Memoria de proyecto</h4>
+<h4 style="margin:1rem 0 .5rem 0">{{tr "Memoria de proyecto"}}</h4>
 {{if .Memoria}}
 <div style="overflow-x:auto">
 <table>
-  <thead><tr><th>Entidad</th><th>Tipo</th><th>Verificado por</th><th>Valor</th></tr></thead>
+  <thead><tr><th>{{tr "time_travel.entity"}}</th><th>{{tr "Tipo"}}</th><th>{{tr "time_travel.verified_by"}}</th><th>{{tr "time_travel.value"}}</th></tr></thead>
   <tbody>
   {{range .Memoria}}
     <tr>
@@ -1967,7 +1967,7 @@ const webTplTimeTravelDetalle = `{{define "content"}}
 </table>
 </div>
 {{else}}
-<p style="color:#94a3b8">No hay memoria asociada a este proyecto.</p>
+<p style="color:#94a3b8">{{tr "time_travel.memory.none"}}</p>
 {{end}}
 {{end}}
 `

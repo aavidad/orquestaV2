@@ -205,52 +205,84 @@ var runtimeNudgeCmd = &cobra.Command{
 	Short: "Encola un nudge para un agente a través del control plane",
 	Args:  cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		toAgente := strings.TrimSpace(args[0])
-		texto := strings.TrimSpace(strings.Join(args[1:], " "))
 		fromAgente, _ := cmd.Flags().GetString("from")
 		proyectoRef, _ := cmd.Flags().GetString("proyecto")
 		kind, _ := cmd.Flags().GetString("kind")
 		if strings.TrimSpace(kind) == "" {
 			kind = "nudge"
 		}
-		payload, err := json.Marshal(map[string]any{
-			"from_agente": strings.TrimSpace(fromAgente),
-			"to_agente":   toAgente,
-			"kind":        strings.TrimSpace(kind),
-			"texto":       texto,
-		})
+		id, err := encolarRuntimeMensajeSimple(
+			"nudge",
+			strings.TrimSpace(args[0]),
+			proyectoRef,
+			map[string]any{
+				"from_agente": strings.TrimSpace(fromAgente),
+				"to_agente":   strings.TrimSpace(args[0]),
+				"kind":        strings.TrimSpace(kind),
+				"texto":       strings.TrimSpace(strings.Join(args[1:], " ")),
+			},
+		)
 		if err != nil {
 			return err
 		}
-
-		if id, ok, err := crearRuntimeOrderDesdeAPI(toAgente, "nudge", proyectoRef, string(payload)); ok {
-			if err != nil {
-				return err
-			}
-			fmt.Printf("✓ Nudge runtime #%d encolado para %s\n", id, toAgente)
-			return nil
-		}
-
-		var proyectoID *int64
-		if strings.TrimSpace(proyectoRef) != "" {
-			p, err := db.GetProyecto(proyectoRef)
-			if err != nil {
-				return err
-			}
-			proyectoID = &p.ID
-		}
-		id, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
-			Agente:      toAgente,
-			ProyectoID:  proyectoID,
-			Tipo:        "nudge",
-			PayloadJSON: string(payload),
-		})
-		if err != nil {
-			return err
-		}
-		fmt.Printf("✓ Nudge runtime #%d encolado para %s\n", id, toAgente)
+		fmt.Printf("✓ Nudge runtime #%d encolado para %s\n", id, strings.TrimSpace(args[0]))
 		return nil
 	},
+}
+
+var runtimeDiscordiaCmd = &cobra.Command{
+	Use:   "discordia <supervisor> <contra_agente> <motivo...>",
+	Short: "Escala una discordia técnica al supervisor a través del control plane",
+	Args:  cobra.MinimumNArgs(3),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		supervisor := strings.TrimSpace(args[0])
+		contraAgente := strings.TrimSpace(args[1])
+		motivo := strings.TrimSpace(strings.Join(args[2:], " "))
+		fromAgente, _ := cmd.Flags().GetString("from")
+		proyectoRef, _ := cmd.Flags().GetString("proyecto")
+		id, err := encolarRuntimeMensajeSimple(
+			"discordia",
+			supervisor,
+			proyectoRef,
+			map[string]any{
+				"from_agente":   strings.TrimSpace(fromAgente),
+				"to_agente":     supervisor,
+				"kind":          "discordia",
+				"contra_agente": contraAgente,
+				"motivo":        motivo,
+			},
+		)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("✓ Discordia runtime #%d encolada para %s\n", id, supervisor)
+		return nil
+	},
+}
+
+func encolarRuntimeMensajeSimple(tipo, agenteDestino, proyectoRef string, payload map[string]any) (int64, error) {
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return 0, err
+	}
+	if id, ok, err := crearRuntimeOrderDesdeAPI(agenteDestino, tipo, proyectoRef, string(payloadJSON)); ok {
+		return id, err
+	}
+
+	var proyectoID *int64
+	if strings.TrimSpace(proyectoRef) != "" {
+		p, err := db.GetProyecto(proyectoRef)
+		if err != nil {
+			return 0, err
+		}
+		proyectoID = &p.ID
+	}
+	return db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      agenteDestino,
+		ProyectoID:  proyectoID,
+		Tipo:        tipo,
+		PayloadJSON: string(payloadJSON),
+	})
 }
 
 var runtimeCheckpointsCmd = &cobra.Command{
@@ -943,6 +975,8 @@ func init() {
 	runtimeNudgeCmd.Flags().String("from", "server", "Agente o actor que emite el nudge")
 	runtimeNudgeCmd.Flags().String("proyecto", "", "Proyecto asociado al nudge")
 	runtimeNudgeCmd.Flags().String("kind", "nudge", "Kind del mensaje mailbox generado")
+	runtimeDiscordiaCmd.Flags().String("from", "server", "Agente o actor que escala la discordia")
+	runtimeDiscordiaCmd.Flags().String("proyecto", "", "Proyecto asociado a la discordia")
 	runtimeCheckpointsCmd.Flags().String("agente", "", "Agente del checkpoint")
 	runtimeCheckpointsCmd.Flags().String("proyecto", "", "Proyecto del checkpoint")
 	runtimeCheckpointsCmd.Flags().String("kind", "", "Filtrar checkpoints por tipo")
@@ -965,6 +999,6 @@ func init() {
 	runtimeMailboxEnviarCmd.Flags().String("proyecto", "", "Proyecto asociado al mensaje")
 	runtimeMailboxEnviarCmd.Flags().String("payload", "{}", "Payload JSON del mensaje")
 	runtimeMailboxEnviarCmd.Flags().Int64("runtime-order-id", 0, "Orden runtime asociada al mensaje")
-	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimeOrdenesCmd, runtimeOrdenNuevaCmd, runtimeNudgeCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd)
+	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimeOrdenesCmd, runtimeOrdenNuevaCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd)
 	rootCmd.AddCommand(runtimeCmd)
 }

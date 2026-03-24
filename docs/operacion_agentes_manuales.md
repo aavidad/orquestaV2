@@ -141,4 +141,15 @@ La operacion manual debe convivir con un modelo mas robusto:
 - `orquesta agente pausar`
 - `orquesta agente continuar`
 
+Ya existe además una operación administrativa conservadora para sanear duplicados históricos de identidad:
+
+- `orquesta agente fusionar <origen> <destino>`
+
+Debe usarse solo cuando:
+
+- ya existe un nombre canónico claro
+- el origen no tiene sesión activa
+- no hay locks, worktrees ni runtime vivo asociados al origen
+- interesa preservar trazabilidad histórica sin tocar la BD a mano
+
 Mientras eso no exista completo, los wrappers manuales siguen siendo una capa operativa valida.
