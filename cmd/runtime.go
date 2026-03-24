@@ -269,13 +269,18 @@ var runtimeCheckpointsCmd = &cobra.Command{
 			limit = 1
 		}
 		usarHistorialLocal := strings.TrimSpace(checkpointKind) != "" || strings.TrimSpace(source) != "" || limit > 1
-		if !usarHistorialLocal {
-			if cp, ok, err := cargarCheckpointRuntimeDesdeAPI(agente, proyectoRef); ok {
+		if usarHistorialLocal {
+			if checkpoints, ok, err := cargarRuntimeCheckpointsDesdeAPI(agente, proyectoRef, checkpointKind, source, limit); ok {
 				if err != nil {
 					return err
 				}
-				return imprimirRuntimeCheckpoint(cp)
+				return imprimirRuntimeCheckpointLista(checkpoints)
 			}
+		} else if cp, ok, err := cargarCheckpointRuntimeDesdeAPI(agente, proyectoRef); ok {
+			if err != nil {
+				return err
+			}
+			return imprimirRuntimeCheckpoint(cp)
 		}
 
 		var proyectoID *int64
@@ -752,6 +757,29 @@ func cargarCheckpointRuntimeDesdeAPI(agente, proyecto string) (*db.RuntimeCheckp
 		return nil, ok, err
 	}
 	return resp.Checkpoint, true, nil
+}
+
+func cargarRuntimeCheckpointsDesdeAPI(agente, proyecto, checkpointKind, source string, limit int) ([]*db.RuntimeCheckpoint, bool, error) {
+	query := url.Values{}
+	query.Set("agente", strings.TrimSpace(agente))
+	if strings.TrimSpace(proyecto) != "" {
+		query.Set("proyecto", strings.TrimSpace(proyecto))
+	}
+	if strings.TrimSpace(checkpointKind) != "" {
+		query.Set("kind", strings.TrimSpace(checkpointKind))
+	}
+	if strings.TrimSpace(source) != "" {
+		query.Set("source", strings.TrimSpace(source))
+	}
+	if limit > 0 {
+		query.Set("limit", strconv.Itoa(limit))
+	}
+	var resp apiRuntimeCheckpointsResponse
+	ok, err := apiGetQuery("/api/runtime-checkpoints", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Checkpoints, true, nil
 }
 
 func cargarRuntimeCheckpointPorIDDesdeAPI(id int64) (*db.RuntimeCheckpoint, bool, error) {

@@ -1474,7 +1474,13 @@ func apiRouterRuntimeMailbox(w http.ResponseWriter, r *http.Request) {
 }
 
 func apiHandlerRuntimeCheckpoints(w http.ResponseWriter, r *http.Request) {
-	if !apiRequireMethod(w, r, http.MethodPost) {
+	switch r.Method {
+	case http.MethodGet:
+		apiHandlerRuntimeCheckpointsListar(w, r)
+		return
+	case http.MethodPost:
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 		return
 	}
 	var req apiRuntimeCheckpointCreateRequest
@@ -1521,6 +1527,43 @@ func apiHandlerRuntimeCheckpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true, "id": id})
+}
+
+func apiHandlerRuntimeCheckpointsListar(w http.ResponseWriter, r *http.Request) {
+	agente := strings.TrimSpace(r.URL.Query().Get("agente"))
+	if agente == "" {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("agente obligatorio"))
+		return
+	}
+	filter := db.FiltroRuntimeCheckpoints{Agente: &agente}
+	if proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyecto != "" {
+		p, err := db.GetProyecto(proyecto)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		filter.ProyectoID = &p.ID
+	}
+	if checkpointKind := strings.TrimSpace(r.URL.Query().Get("kind")); checkpointKind != "" {
+		filter.CheckpointKind = &checkpointKind
+	}
+	if source := strings.TrimSpace(r.URL.Query().Get("source")); source != "" {
+		filter.Source = &source
+	}
+	if limitStr := strings.TrimSpace(r.URL.Query().Get("limit")); limitStr != "" {
+		limit, err := strconv.Atoi(limitStr)
+		if err != nil || limit <= 0 {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("limit inválido"))
+			return
+		}
+		filter.Limit = limit
+	}
+	checkpoints, err := db.ListarRuntimeCheckpoints(filter)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"checkpoints": checkpoints})
 }
 
 func apiRouterRuntimeCheckpoints(w http.ResponseWriter, r *http.Request) {

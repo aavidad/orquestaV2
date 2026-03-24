@@ -264,6 +264,35 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 			})
 		case r.URL.Path == "/api/runtime-orders" && r.Method == http.MethodPost:
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": 15})
+		case r.URL.Path == "/api/runtime-checkpoints" && r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"checkpoints": []map[string]any{
+					{
+						"id":              31,
+						"agente":          "Codex1",
+						"checkpoint_kind": "manual",
+						"resumen":         "checkpoint remoto 1",
+						"branch":          "main",
+						"cwd":             "/tmp/orquestador",
+						"payload_json":    "{}",
+						"resume_strategy": "resumen_y_payload",
+						"source":          "api-listado-1",
+						"created_at":      "2026-03-23T10:00:00Z",
+					},
+					{
+						"id":              30,
+						"agente":          "Codex1",
+						"checkpoint_kind": "manual",
+						"resumen":         "checkpoint remoto 2",
+						"branch":          "main",
+						"cwd":             "/tmp/orquestador",
+						"payload_json":    "{}",
+						"resume_strategy": "resumen_y_payload",
+						"source":          "api-listado-2",
+						"created_at":      "2026-03-23T09:00:00Z",
+					},
+				},
+			})
 		case r.URL.Path == "/api/runtime-checkpoints" && r.Method == http.MethodPost:
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": 16})
 		case r.URL.Path == "/api/runtime-checkpoints/21":
@@ -381,6 +410,27 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	})
 	if !strings.Contains(outCheckpointCrear, "#16") {
 		t.Fatalf("salida checkpoint-nuevo sin id remoto:\n%s", outCheckpointCrear)
+	}
+
+	if err := runtimeCheckpointsCmd.Flags().Set("kind", "manual"); err != nil {
+		t.Fatalf("set kind checkpoints: %v", err)
+	}
+	if err := runtimeCheckpointsCmd.Flags().Set("limit", "2"); err != nil {
+		t.Fatalf("set limit checkpoints: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = runtimeCheckpointsCmd.Flags().Set("kind", "")
+		_ = runtimeCheckpointsCmd.Flags().Set("limit", "1")
+	})
+	outCheckpointHistorial := capturarStdout(t, func() {
+		if err := runtimeCheckpointsCmd.RunE(runtimeCheckpointsCmd, nil); err != nil {
+			t.Fatalf("runtime checkpoints historial via api: %v", err)
+		}
+	})
+	for _, token := range []string{"api-listado-1", "api-listado-2", "manual"} {
+		if !strings.Contains(outCheckpointHistorial, token) {
+			t.Fatalf("salida checkpoints historial sin %q:\n%s", token, outCheckpointHistorial)
+		}
 	}
 
 	outCheckpointVer := capturarStdout(t, func() {

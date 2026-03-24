@@ -118,6 +118,10 @@ type apiRuntimeCheckpointResponse struct {
 	Checkpoint *db.RuntimeCheckpoint `json:"checkpoint"`
 }
 
+type apiRuntimeCheckpointsResponse struct {
+	Checkpoints []*db.RuntimeCheckpoint `json:"checkpoints"`
+}
+
 type apiRuntimeCheckpointCreateResponse struct {
 	OK bool  `json:"ok"`
 	ID int64 `json:"id"`
