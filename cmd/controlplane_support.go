@@ -8,9 +8,9 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
-	"orquesta/controlplane"
 	"orquesta/db"
 	"orquesta/notificaciones"
+	"orquesta/planocontrol"
 )
 
 type dbAutomationService struct{}
@@ -55,8 +55,8 @@ func (dbAutomationService) Audit(agente, accion, entidad string, entidadID int64
 	db.Audit(agente, accion, entidad, entidadID, detalle)
 }
 
-func newControlPlaneRunner() *controlplane.Runner {
-	return &controlplane.Runner{
+func newControlPlaneRunner() *planocontrol.Runner {
+	return &planocontrol.Runner{
 		Automation:        dbAutomationService{},
 		NotificationFeed:  db.CanalNotificaciones,
 		InitNotifications: notificaciones.InicializarDesdeConfig,
