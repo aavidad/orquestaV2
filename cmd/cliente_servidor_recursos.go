@@ -344,6 +344,20 @@ func eliminarAgentePorAPI(nombre string) (bool, error) {
 	return ok, err
 }
 
+func fusionarAgentePorAPI(origen, destino, destinoRespaldo, etiqueta string, retener int) (*apiAgenteFusionResponse, bool, error) {
+	var resp apiAgenteFusionResponse
+	ok, err := apiPost(fmt.Sprintf("/api/agentes/%s/fusionar", url.PathEscape(origen)), apiAgenteFusionRequest{
+		Destino:          strings.TrimSpace(destino),
+		DestinoRespaldo:  strings.TrimSpace(destinoRespaldo),
+		EtiquetaRespaldo: strings.TrimSpace(etiqueta),
+		Retener:          retener,
+	}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
 func resetReanimacionAgentePorAPI(nombre string) (bool, error) {
 	ok, err := apiPost(fmt.Sprintf("/api/agentes/%s/reset-reanimacion", url.PathEscape(nombre)), map[string]any{}, nil)
 	return ok, err

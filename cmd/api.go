@@ -209,6 +209,21 @@ type apiAgentePausarRequest struct {
 	Detalle string `json:"detalle"`
 }
 
+type apiAgenteFusionRequest struct {
+	Destino          string `json:"destino"`
+	DestinoRespaldo  string `json:"destino_respaldo"`
+	EtiquetaRespaldo string `json:"etiqueta_respaldo"`
+	Retener          int    `json:"retener"`
+}
+
+type apiAgenteFusionResponse struct {
+	OK           bool                       `json:"ok"`
+	Origen       string                     `json:"origen"`
+	Destino      string                     `json:"destino"`
+	RutaRespaldo string                     `json:"ruta_respaldo"`
+	Resultado    *db.FusionAgentesResultado `json:"resultado"`
+}
+
 type apiRuntimeHandoffRequest struct {
 	AgenteOrigen      string `json:"agente_origen"`
 	AgenteDestino     string `json:"agente_destino"`
@@ -400,6 +415,39 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		db.Audit("alberto", "purgar_agente", "agente", 0, nombre)
+	case "fusionar":
+		var req apiAgenteFusionRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		req.Destino = strings.TrimSpace(req.Destino)
+		if req.Destino == "" {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("debes indicar el agente destino"))
+			return
+		}
+		etiqueta := strings.TrimSpace(req.EtiquetaRespaldo)
+		if etiqueta == "" {
+			etiqueta = fmt.Sprintf("fusion_%s_%s", strings.ToLower(nombre), strings.ToLower(req.Destino))
+		}
+		rutaRespaldo, err := ejecutarRespaldoBD(req.DestinoRespaldo, etiqueta, req.Retener)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		resultado, err := db.FusionarAgentes(nombre, req.Destino)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiAgenteFusionResponse{
+			OK:           true,
+			Origen:       nombre,
+			Destino:      req.Destino,
+			RutaRespaldo: rutaRespaldo,
+			Resultado:    resultado,
+		})
+		return
 	case "reset-reanimacion":
 		if err := db.ResetReanimacion(nombre); err != nil {
 			apiError(w, http.StatusBadRequest, err)
