@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"orquesta/i18n"
 )
 
 const (
@@ -73,7 +75,7 @@ func defaultLanguagePolicy() *LanguagePolicy {
 		AppsMultilang:            true,
 		DocumentationDefaultLang: "es",
 		AppsDefaultLang:          "es",
-		AllowedLanguages:         []string{"es", "en"},
+		AllowedLanguages:         i18n.DefaultProjectSkeletonLanguages(),
 	}
 }
 
@@ -170,7 +172,7 @@ func ensureLanguagePolicyDefaults() {
 	_, _ = DB.Exec(`INSERT OR IGNORE INTO config (clave, valor) VALUES (?, ?)`, languagePolicyAppsMultilangKey, "1")
 	_, _ = DB.Exec(`INSERT OR IGNORE INTO config (clave, valor) VALUES (?, ?)`, languagePolicyDocsDefaultKey, "es")
 	_, _ = DB.Exec(`INSERT OR IGNORE INTO config (clave, valor) VALUES (?, ?)`, languagePolicyAppsDefaultKey, "es")
-	_, _ = DB.Exec(`INSERT OR IGNORE INTO config (clave, valor) VALUES (?, ?)`, languagePolicyAllowedLanguagesKey, "es,en")
+	_, _ = DB.Exec(`INSERT OR IGNORE INTO config (clave, valor) VALUES (?, ?)`, languagePolicyAllowedLanguagesKey, strings.Join(i18n.DefaultProjectSkeletonLanguages(), ","))
 }
 
 func GetLanguagePolicy() (*LanguagePolicy, error) {

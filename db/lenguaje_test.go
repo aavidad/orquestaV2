@@ -22,6 +22,12 @@ func TestLanguagePolicyDefaults(t *testing.T) {
 	if !p.DocumentationMultilang || !p.AppsMultilang {
 		t.Fatalf("multilenguaje por defecto inesperado: %+v", p)
 	}
+	if len(p.AllowedLanguages) != 10 {
+		t.Fatalf("pack de idiomas por defecto inesperado: %+v", p.AllowedLanguages)
+	}
+	if p.AllowedLanguages[0] != "es" || p.AllowedLanguages[1] != "en" {
+		t.Fatalf("orden inicial de idiomas inesperado: %+v", p.AllowedLanguages)
+	}
 }
 
 func TestLanguageMatrixAndResolution(t *testing.T) {
@@ -66,7 +72,7 @@ func TestLanguageMatrixAndResolution(t *testing.T) {
 func TestLanguageMatrixRejectsUnsupportedLanguage(t *testing.T) {
 	prepararDBTemporal(t)
 
-	if _, err := SetLanguageMatrixEntry("project", "orquestador", "docs", "fr", "no soportado", "Codex3"); err == nil {
+	if _, err := SetLanguageMatrixEntry("project", "orquestador", "docs", "pt", "no soportado", "Codex3"); err == nil {
 		t.Fatalf("se esperaba error por idioma no permitido")
 	}
 }

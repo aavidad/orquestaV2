@@ -9,11 +9,14 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
+	"orquesta/i18n"
 )
 
 var lenguajeCmd = &cobra.Command{
@@ -218,6 +221,59 @@ var lenguajeResolverCmd = &cobra.Command{
 	},
 }
 
+var lenguajeEsqueletoCmd = &cobra.Command{
+	Use:   "esqueleto <ruta-proyecto>",
+	Short: "Materializa el esqueleto base de i18n para un proyecto",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		rootDir := strings.TrimSpace(args[0])
+		if rootDir == "" {
+			return fmt.Errorf("ruta de proyecto obligatoria")
+		}
+		rootDir = filepath.Clean(rootDir)
+		if err := os.MkdirAll(rootDir, 0o755); err != nil {
+			return err
+		}
+
+		p, ok, err := cargarPoliticaLenguajeDesdeAPI()
+		if !ok {
+			p, err = db.GetLanguagePolicy()
+		}
+		if err != nil {
+			return err
+		}
+
+		defaultLang, _ := cmd.Flags().GetString("default")
+		if strings.TrimSpace(defaultLang) == "" {
+			defaultLang = p.DefaultLanguage
+		}
+		fallbackLang, _ := cmd.Flags().GetString("fallback")
+		if strings.TrimSpace(fallbackLang) == "" {
+			fallbackLang = p.DefaultLanguage
+		}
+		langsFlag, _ := cmd.Flags().GetString("idiomas")
+		domainsFlag, _ := cmd.Flags().GetString("dominios")
+
+		cfg, err := i18n.MaterializeProjectSkeleton(i18n.ProjectSkeletonSpec{
+			RootDir:          rootDir,
+			DefaultLanguage:  defaultLang,
+			FallbackLanguage: fallbackLang,
+			Languages:        pickSkeletonLanguages(langsFlag, p.AllowedLanguages, defaultLang, fallbackLang),
+			Domains:          splitCSVNonEmpty(domainsFlag),
+		})
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("✓ Esqueleto i18n creado en %s\n", filepath.Join(rootDir, "i18n"))
+		fmt.Printf("  Idioma por defecto: %s\n", cfg.DefaultLanguage)
+		fmt.Printf("  Fallback inicial:   %s\n", cfg.FallbackLanguage)
+		fmt.Printf("  Idiomas:            %s\n", strings.Join(cfg.Languages, ", "))
+		fmt.Printf("  Dominios:           %s\n", strings.Join(cfg.Domains, ", "))
+		return nil
+	},
+}
+
 func splitLanguages(v string) []string {
 	parts := strings.Split(v, ",")
 	out := make([]string, 0, len(parts))
@@ -225,6 +281,39 @@ func splitLanguages(v string) []string {
 		if lang := strings.TrimSpace(part); lang != "" {
 			out = append(out, lang)
 		}
+	}
+	return out
+}
+
+func splitCSVNonEmpty(v string) []string {
+	parts := strings.Split(v, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if item := strings.TrimSpace(part); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func pickSkeletonLanguages(explicit string, policy []string, required ...string) []string {
+	values := splitLanguages(explicit)
+	if len(values) == 0 {
+		values = append(values, policy...)
+	}
+	values = append(values, required...)
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		lang := i18n.NormalizeLang(value)
+		if lang == "" {
+			continue
+		}
+		if _, ok := seen[lang]; ok {
+			continue
+		}
+		seen[lang] = struct{}{}
+		out = append(out, lang)
 	}
 	return out
 }
@@ -261,9 +350,13 @@ func init() {
 	lenguajeResolverCmd.Flags().String("proyecto", "", "Proyecto")
 	lenguajeResolverCmd.Flags().Int64("tarea", 0, "ID de tarea")
 	lenguajeResolverCmd.Flags().String("contexto", "all", "Contexto: docs, apps o all")
+	lenguajeEsqueletoCmd.Flags().String("default", "", "Idioma por defecto del esqueleto")
+	lenguajeEsqueletoCmd.Flags().String("fallback", "", "Idioma fallback inicial del esqueleto")
+	lenguajeEsqueletoCmd.Flags().String("idiomas", "", "Lista separada por comas de idiomas a generar")
+	lenguajeEsqueletoCmd.Flags().String("dominios", "", "Lista separada por comas de dominios JSON a crear")
 
 	lenguajePoliticaCmd.AddCommand(lenguajePoliticaVerCmd, lenguajePoliticaSetCmd)
 	lenguajeMatrizCmd.AddCommand(lenguajeMatrizListarCmd, lenguajeMatrizFijarCmd, lenguajeMatrizBorrarCmd)
-	lenguajeCmd.AddCommand(lenguajePoliticaCmd, lenguajeMatrizCmd, lenguajeResolverCmd)
+	lenguajeCmd.AddCommand(lenguajePoliticaCmd, lenguajeMatrizCmd, lenguajeResolverCmd, lenguajeEsqueletoCmd)
 	rootCmd.AddCommand(lenguajeCmd)
 }

@@ -3,6 +3,8 @@ package cmd
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -192,5 +194,52 @@ func TestLenguajeUsaAPIParaEscrituras(t *testing.T) {
 	})
 	if !strings.Contains(outBorrar, "✓ Matriz borrada: proyecto/orquestador [apps]") {
 		t.Fatalf("salida matriz borrar inesperada:\n%s", outBorrar)
+	}
+}
+
+func TestLenguajeEsqueletoUsaPoliticaYMaterializaEstructura(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/lenguaje/politica", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiLenguajePoliticaResponse{
+			Politica: &db.LanguagePolicy{
+				DefaultLanguage:          "es",
+				DocumentationMultilang:   true,
+				AppsMultilang:            true,
+				DocumentationDefaultLang: "es",
+				AppsDefaultLang:          "es",
+				AllowedLanguages:         []string{"es", "en"},
+			},
+		})
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	root := filepath.Join(t.TempDir(), "demo")
+	out := capturarStdout(t, func() {
+		if err := lenguajeEsqueletoCmd.RunE(lenguajeEsqueletoCmd, []string{root}); err != nil {
+			t.Fatalf("lenguaje esqueleto: %v", err)
+		}
+	})
+	if !strings.Contains(out, "Esqueleto i18n creado") {
+		t.Fatalf("salida esqueleto inesperada:\n%s", out)
+	}
+
+	for _, rel := range []string{
+		"i18n/config.json",
+		"i18n/README.md",
+		"i18n/es/common.json",
+		"i18n/en/errors.json",
+	} {
+		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
+			t.Fatalf("falta %s: %v", rel, err)
+		}
 	}
 }
