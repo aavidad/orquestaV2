@@ -62,7 +62,7 @@ func ListarWorktrees(estado, agente string) ([]*Worktree, error) {
 		args = append(args, estado)
 	}
 	if agente = strings.TrimSpace(agente); agente != "" {
-		q += ` AND w.agente = ?`
+		q += ` AND LOWER(w.agente) = LOWER(?)`
 		args = append(args, agente)
 	}
 	q += ` ORDER BY w.id`
@@ -91,7 +91,7 @@ func ListarLocks(estado, agente string) ([]*Lock, error) {
 		args = append(args, estado)
 	}
 	if agente = strings.TrimSpace(agente); agente != "" {
-		q += ` AND agente = ?`
+		q += ` AND LOWER(agente) = LOWER(?)`
 		args = append(args, agente)
 	}
 	q += ` ORDER BY id`
