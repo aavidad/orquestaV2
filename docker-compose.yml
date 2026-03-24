@@ -19,10 +19,12 @@ services:
       - orquesta-data:/app/data
       # Logs centrales para auditoría y telemetría de agentes
       - orquesta-logs:/app/logs
+      # Workspace visible para que Orquesta pueda resolver rutas de proyectos externos
+      - ${ORQUESTA_WORKSPACE_DIR:-..}:/app/workspace
     environment:
       # Forzamos la ruta de la base de datos dentro del contenedor
       ORQUESTA_DB: /app/data/orquesta.db
-      # Raíz del workspace si el contenedor necesita acceder a otros proyectos (montar si procede)
+      # Raíz del workspace montado dentro del contenedor
       ORQUESTA_WORKSPACE_ROOT: /app/workspace
     working_dir: /app
     healthcheck:

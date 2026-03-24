@@ -2,7 +2,7 @@
 # Perfil opcional de despliegue para el plano de control.
 
 # --- Fase de construcción (Build) ---
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Instalamos dependencias básicas para Go/SQLite si hiciera falta (modernc no las requiere normalmente)
 RUN apk add --no-cache git gcc musl-dev
@@ -30,12 +30,13 @@ WORKDIR /app
 # Copiamos el binario desde la fase anterior
 COPY --from=builder /app/orquesta-bin /app/orquesta
 
-# Creamos directorio para persistencia de datos y logs
-RUN mkdir -p /app/data /app/logs
+# Creamos directorios para persistencia de datos, logs y workspace montado
+RUN mkdir -p /app/data /app/logs /app/workspace
 
 # Variables de entorno por defecto
 # El backend SQLite de Orquesta lee ORQUESTA_DB como ruta efectiva.
 ENV ORQUESTA_DB=/app/data/orquesta.db
+ENV ORQUESTA_WORKSPACE_ROOT=/app/workspace
 
 # Exponemos el puerto del panel web / API
 EXPOSE 8080
