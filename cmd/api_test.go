@@ -221,6 +221,65 @@ func TestAPIPropuestaReabrirYRepararVotos(t *testing.T) {
 	}
 }
 
+func TestAPIStatusIncluyeVotosDePropuestasAbiertas(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	for _, agente := range []string{"autor", "revisor1", "revisor2"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar %s: %v", agente, err)
+		}
+	}
+
+	propuesta := &db.Propuesta{
+		Titulo:       "Status con votos",
+		Descripcion:  "Verificar carga de votos en /api/status",
+		Tipo:         "implementacion",
+		PropuestoPor: "autor",
+		Distribuidor: "codex",
+	}
+	if _, err := db.CrearPropuesta(propuesta); err != nil {
+		t.Fatalf("crear propuesta: %v", err)
+	}
+	p, err := db.GetPropuesta(propuesta.Codigo)
+	if err != nil {
+		t.Fatalf("get propuesta: %v", err)
+	}
+	if _, err := db.Votar(p.ID, "revisor1", db.VotoAcuerdo, "ok"); err != nil {
+		t.Fatalf("votar revisor1: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp apiStatusResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	if len(resp.PropuestasAbiertas) == 0 {
+		t.Fatalf("se esperaban propuestas abiertas en status")
+	}
+	var encontrada *db.Propuesta
+	for _, item := range resp.PropuestasAbiertas {
+		if item != nil && item.Codigo == propuesta.Codigo {
+			encontrada = item
+			break
+		}
+	}
+	if encontrada == nil {
+		t.Fatalf("no se encontró la propuesta %s en status", propuesta.Codigo)
+	}
+	if len(encontrada.Votos) == 0 {
+		t.Fatalf("status no incluyó votos para la propuesta abierta")
+	}
+}
+
 func TestAPIPropuestaActualizarAnexaDescripcion(t *testing.T) {
 	prepararDBTemporalCmd(t)
 
@@ -462,6 +521,68 @@ func TestAPIAgenteControlPlaneAcciones(t *testing.T) {
 	mux.ServeHTTP(recEliminar, reqEliminar)
 	if recEliminar.Code != http.StatusOK {
 		t.Fatalf("status eliminar inesperado: %d body=%s", recEliminar.Code, recEliminar.Body.String())
+	}
+}
+
+func TestAPIAgenteFusionarCreaRespaldoYMueveReferencias(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("registrar codex1: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:    "Fusion API",
+		Modulo:    "orquestador",
+		Prioridad: db.PrioridadAlta,
+		CreadoPor: "codex1",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	backupDir := filepath.Join(tmp, "backups")
+	body, _ := json.Marshal(apiAgenteFusionRequest{
+		Destino:          "Codex1",
+		DestinoRespaldo:  backupDir,
+		EtiquetaRespaldo: "fusion-api",
+		Retener:          2,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/agentes/codex1/fusionar", bytes.NewReader(body))
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status fusion inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp apiAgenteFusionResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode fusion: %v", err)
+	}
+	if resp.RutaRespaldo == "" {
+		t.Fatalf("ruta respaldo vacia")
+	}
+	if _, err := os.Stat(resp.RutaRespaldo); err != nil {
+		t.Fatalf("respaldo no creado: %v", err)
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "Codex1" {
+		t.Fatalf("agente tarea inesperado tras fusion: %+v", tarea.Agente)
+	}
+	if _, err := db.GetAgente("codex1"); err == nil {
+		t.Fatalf("el agente origen deberia haberse eliminado")
 	}
 }
 

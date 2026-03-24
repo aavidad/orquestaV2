@@ -543,6 +543,9 @@ func init() {
 	agenteReasignarVivoCmd.Flags().String("motivo", "", "Motivo del handoff")
 	agenteReasignarVivoCmd.Flags().String("resumen", "", "Resumen de continuidad para el agente destino")
 	agenteReasignarVivoCmd.Flags().String("external-session-id", "", "External session id de continuidad si existe")
+	agenteFusionarCmd.Flags().String("respaldo-destino", "", "Directorio destino del backup previo obligatorio")
+	agenteFusionarCmd.Flags().String("etiqueta", "", "Etiqueta opcional para el backup previo")
+	agenteFusionarCmd.Flags().Int("retener", 0, "Número máximo de backups a conservar en el destino")
 
 	agenteCmd.AddCommand(
 		agentePrepararCmd,
@@ -550,6 +553,7 @@ func init() {
 		agentePurgarCmd,
 		agentePausarCmd,
 		agenteRehabilitarCmd,
+		agenteFusionarCmd,
 		agenteEjecutarCmd,
 		agenteHandoffCmd,
 		agenteReasignarVivoCmd,
@@ -856,6 +860,55 @@ var agenteRehabilitarCmd = &cobra.Command{
 			return fmt.Errorf("error rehabilitando agente: %w", err)
 		}
 		fmt.Printf("✓ Agente %s rehabilitado correctamente y listo para trabajar.\n", nombre)
+		return nil
+	},
+}
+
+var agenteFusionarCmd = &cobra.Command{
+	Use:   "fusionar <origen> <destino>",
+	Short: "Fusiona un agente duplicado sobre otro con backup previo obligatorio",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		origen := strings.TrimSpace(args[0])
+		destino := strings.TrimSpace(args[1])
+		destinoRespaldo, _ := cmd.Flags().GetString("respaldo-destino")
+		etiqueta, _ := cmd.Flags().GetString("etiqueta")
+		retener, _ := cmd.Flags().GetInt("retener")
+		if etiqueta == "" {
+			etiqueta = fmt.Sprintf("fusion_%s_%s", strings.ToLower(origen), strings.ToLower(destino))
+		}
+
+		var (
+			rutaRespaldo string
+			resultado    *db.FusionAgentesResultado
+			err          error
+		)
+		if resp, ok, apiErr := fusionarAgentePorAPI(origen, destino, destinoRespaldo, etiqueta, retener); ok {
+			if apiErr != nil {
+				return apiErr
+			}
+			rutaRespaldo = resp.RutaRespaldo
+			resultado = resp.Resultado
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			rutaRespaldo, err = ejecutarRespaldoBD(destinoRespaldo, etiqueta, retener)
+			if err != nil {
+				return err
+			}
+			resultado, err = db.FusionarAgentes(origen, destino)
+			if err != nil {
+				return err
+			}
+		}
+
+		fmt.Printf("✓ Agente %s fusionado sobre %s\n", origen, destino)
+		fmt.Printf("  Respaldo: %s\n", rutaRespaldo)
+		if resultado != nil {
+			fmt.Printf("  Referencias actualizadas: %d\n", resultado.TotalActualizaciones())
+			fmt.Printf("  Votos descartados por colisión: %d\n", resultado.VotosDescartados)
+		}
 		return nil
 	},
 }

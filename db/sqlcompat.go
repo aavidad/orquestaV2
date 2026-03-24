@@ -85,6 +85,10 @@ type queryRower interface {
 	QueryRow(query string, args ...any) *sql.Row
 }
 
+type execer interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
 func insertReturningID(query string, args ...any) (int64, error) {
 	return insertReturningIDWith(DB, query, args...)
 }
