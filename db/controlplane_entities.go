@@ -959,6 +959,22 @@ func ejecutarRuntimeOrderBasica(order *RuntimeOrder) error {
 		return ejecutarRuntimeOrderCheckpoint(order)
 	case "nudge":
 		return ejecutarRuntimeOrderNudge(order)
+	case "discordia":
+		return ejecutarRuntimeOrderDiscordia(order)
+	case "start":
+		return ejecutarRuntimeOrderStart(order)
+	case "pause":
+		return ejecutarRuntimeOrderPause(order)
+	case "resume":
+		return ejecutarRuntimeOrderResume(order)
+	case "stop":
+		return ejecutarRuntimeOrderStop(order)
+	case "restart":
+		return ejecutarRuntimeOrderRestart(order)
+	case "send_instruction":
+		return ejecutarRuntimeOrderSendInstruction(order)
+	case "handoff":
+		return ejecutarRuntimeOrderHandoff(order)
 	default:
 		return fmt.Errorf("tipo de orden aún no soportado por el dispatcher básico: %s", order.Tipo)
 	}
@@ -1069,14 +1085,22 @@ func ejecutarRuntimeOrderCheckpoint(order *RuntimeOrder) error {
 }
 
 func ejecutarRuntimeOrderNudge(order *RuntimeOrder) error {
+	return ejecutarRuntimeOrderMailboxSimple(order, "nudge", "nudge sin agente destino")
+}
+
+func ejecutarRuntimeOrderDiscordia(order *RuntimeOrder) error {
+	return ejecutarRuntimeOrderMailboxSimple(order, "discordia", "discordia sin supervisor destino")
+}
+
+func ejecutarRuntimeOrderMailboxSimple(order *RuntimeOrder, defaultKind, missingTargetError string) error {
 	payload := map[string]any{}
 	_ = json.Unmarshal([]byte(order.PayloadJSON), &payload)
 
 	toAgente := stringFromMap(payload, "to_agente", order.Agente)
 	fromAgente := stringFromMap(payload, "from_agente", "server")
-	kind := stringFromMap(payload, "kind", "nudge")
+	kind := stringFromMap(payload, "kind", defaultKind)
 	if strings.TrimSpace(toAgente) == "" {
-		return fmt.Errorf("nudge sin agente destino")
+		return fmt.Errorf("%s", missingTargetError)
 	}
 
 	existente, err := GetRuntimeMailboxByRuntimeOrderID(order.ID)
@@ -1114,6 +1138,202 @@ func ejecutarRuntimeOrderNudge(order *RuntimeOrder) error {
 		"to_agente":   toAgente,
 		"from_agente": fromAgente,
 		"kind":        kind,
+	}
+	data, _ := json.Marshal(result)
+	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+}
+
+func actualizarEstadoRuntime(order *RuntimeOrder, logicalState, processState string) (*RuntimeInstance, error) {
+	runtime, err := resolverRuntimeParaOrden(order)
+	if err != nil {
+		return nil, err
+	}
+	if runtime == nil {
+		return nil, fmt.Errorf("no existe runtime activo para %s", order.Agente)
+	}
+	q := `UPDATE runtime_instances SET logical_state = ?, last_event_at = CURRENT_TIMESTAMP WHERE id = ?`
+	args := []any{logicalState, runtime.ID}
+	if processState != "" {
+		q = `UPDATE runtime_instances SET logical_state = ?, process_state = ?, last_event_at = CURRENT_TIMESTAMP WHERE id = ?`
+		args = []any{logicalState, processState, runtime.ID}
+	}
+	if _, err := DB.Exec(q, args...); err != nil {
+		return nil, err
+	}
+	runtime.LogicalState = logicalState
+	if processState != "" {
+		runtime.ProcessState = processState
+	}
+	return runtime, nil
+}
+
+func ejecutarRuntimeOrderStart(order *RuntimeOrder) error {
+	runtime, err := actualizarEstadoRuntime(order, "activo", "corriendo")
+	if err != nil {
+		return err
+	}
+	result := map[string]any{
+		"ok":            true,
+		"runtime_id":    runtime.ID,
+		"logical_state": runtime.LogicalState,
+		"process_state": runtime.ProcessState,
+	}
+	data, _ := json.Marshal(result)
+	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+}
+
+func ejecutarRuntimeOrderPause(order *RuntimeOrder) error {
+	runtime, err := actualizarEstadoRuntime(order, "pausado", "")
+	if err != nil {
+		return err
+	}
+	if _, err := DB.Exec(`
+		UPDATE runtime_handles SET estado='pausado', last_seen_at=CURRENT_TIMESTAMP
+		WHERE agente=? AND estado='activo'`, order.Agente); err != nil {
+		return err
+	}
+	result := map[string]any{
+		"ok":            true,
+		"runtime_id":    runtime.ID,
+		"logical_state": runtime.LogicalState,
+	}
+	data, _ := json.Marshal(result)
+	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+}
+
+func ejecutarRuntimeOrderResume(order *RuntimeOrder) error {
+	runtime, err := actualizarEstadoRuntime(order, "activo", "corriendo")
+	if err != nil {
+		return err
+	}
+	if _, err := DB.Exec(`
+		UPDATE runtime_handles SET estado='activo', last_seen_at=CURRENT_TIMESTAMP
+		WHERE agente=? AND estado='pausado'`, order.Agente); err != nil {
+		return err
+	}
+	result := map[string]any{
+		"ok":            true,
+		"runtime_id":    runtime.ID,
+		"logical_state": runtime.LogicalState,
+		"process_state": runtime.ProcessState,
+	}
+	data, _ := json.Marshal(result)
+	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+}
+
+func ejecutarRuntimeOrderStop(order *RuntimeOrder) error {
+	runtime, err := actualizarEstadoRuntime(order, "cerrado", "finalizado")
+	if err != nil {
+		return err
+	}
+	if _, err := DB.Exec(`
+		UPDATE runtime_handles SET estado='cerrado', last_seen_at=CURRENT_TIMESTAMP
+		WHERE agente=? AND estado IN ('activo','pausado')`, order.Agente); err != nil {
+		return err
+	}
+	result := map[string]any{
+		"ok":            true,
+		"runtime_id":    runtime.ID,
+		"logical_state": runtime.LogicalState,
+		"process_state": runtime.ProcessState,
+	}
+	data, _ := json.Marshal(result)
+	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+}
+
+func ejecutarRuntimeOrderRestart(order *RuntimeOrder) error {
+	runtime, err := actualizarEstadoRuntime(order, "activo", "corriendo")
+	if err != nil {
+		return err
+	}
+	if _, err := DB.Exec(`
+		UPDATE runtime_handles SET estado='activo', last_seen_at=CURRENT_TIMESTAMP
+		WHERE agente=? AND estado IN ('pausado','cerrado')`, order.Agente); err != nil {
+		return err
+	}
+	result := map[string]any{
+		"ok":            true,
+		"runtime_id":    runtime.ID,
+		"logical_state": runtime.LogicalState,
+		"process_state": runtime.ProcessState,
+		"restarted":     true,
+	}
+	data, _ := json.Marshal(result)
+	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+}
+
+func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
+	payload := map[string]any{}
+	_ = json.Unmarshal([]byte(order.PayloadJSON), &payload)
+
+	toAgente := stringFromMap(payload, "to_agente", order.Agente)
+	fromAgente := stringFromMap(payload, "from_agente", "server")
+	if strings.TrimSpace(toAgente) == "" {
+		return fmt.Errorf("send_instruction sin agente destino")
+	}
+
+	existente, err := GetRuntimeMailboxByRuntimeOrderID(order.ID)
+	if err != nil {
+		return err
+	}
+	if existente != nil {
+		result := map[string]any{
+			"ok":          true,
+			"mailbox_id":  existente.ID,
+			"to_agente":   existente.ToAgente,
+			"from_agente": existente.FromAgente,
+			"reused":      true,
+		}
+		data, _ := json.Marshal(result)
+		return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+	}
+
+	id, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:     fromAgente,
+		ToAgente:       toAgente,
+		ProyectoID:     order.ProyectoID,
+		RuntimeOrderID: &order.ID,
+		Kind:           "instruction",
+		PayloadJSON:    order.PayloadJSON,
+	})
+	if err != nil {
+		return err
+	}
+	result := map[string]any{
+		"ok":          true,
+		"mailbox_id":  id,
+		"to_agente":   toAgente,
+		"from_agente": fromAgente,
+		"kind":        "instruction",
+	}
+	data, _ := json.Marshal(result)
+	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+}
+
+func ejecutarRuntimeOrderHandoff(order *RuntimeOrder) error {
+	var p HandoffPayload
+	if err := json.Unmarshal([]byte(order.PayloadJSON), &p); err != nil {
+		return fmt.Errorf("payload de handoff inválido: %w", err)
+	}
+	if strings.TrimSpace(p.AgenteOrigen) == "" {
+		p.AgenteOrigen = order.Agente
+	}
+	if strings.TrimSpace(p.AgenteDestino) == "" {
+		return fmt.Errorf("handoff sin agente destino")
+	}
+
+	orderID, err := CrearHandoffAgenteVivo(
+		p.AgenteOrigen, p.AgenteDestino, p.TareaID,
+		p.Motivo, p.ResumenContinuidad, p.ExternalSessionID,
+	)
+	if err != nil {
+		return err
+	}
+	result := map[string]any{
+		"ok":               true,
+		"handoff_order_id": orderID,
+		"agente_origen":    p.AgenteOrigen,
+		"agente_destino":   p.AgenteDestino,
 	}
 	data, _ := json.Marshal(result)
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
@@ -1251,7 +1471,7 @@ func runtimePrincipalAgenteProyecto(agente string, proyectoID *int64) (*RuntimeI
 }
 
 func runtimeOrderTiposBasicos() []string {
-	return []string{"sync_status", "checkpoint", "nudge"}
+	return []string{"sync_status", "checkpoint", "nudge", "discordia"}
 }
 
 func runtimeOrderTiposBootstrap() []string {
@@ -1260,7 +1480,7 @@ func runtimeOrderTiposBootstrap() []string {
 
 func runtimeOrderTipoBasico(tipo string) bool {
 	switch strings.TrimSpace(tipo) {
-	case "sync_status", "checkpoint", "nudge":
+	case "sync_status", "checkpoint", "nudge", "discordia":
 		return true
 	default:
 		return false
