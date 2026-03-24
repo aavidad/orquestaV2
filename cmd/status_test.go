@@ -138,6 +138,48 @@ func TestShouldBypassLocalDBConServidorLocalDescubierto(t *testing.T) {
 	if !shouldBypassLocalDB([]string{"exportar", "audit", "10"}) {
 		t.Fatalf("exportar audit deberia saltarse la BD local con servidor local descubierto")
 	}
+	if !shouldBypassLocalDB([]string{"exportar", "diagnostico"}) {
+		t.Fatalf("exportar diagnostico deberia saltarse la BD local con servidor local descubierto")
+	}
+	if !shouldBypassLocalDB([]string{"runtime", "listar"}) {
+		t.Fatalf("runtime listar deberia saltarse la BD local con servidor local descubierto")
+	}
+	if !shouldBypassLocalDB([]string{"runtime", "mailbox-enviar", "Codex1", "Codex2", "handoff"}) {
+		t.Fatalf("runtime mailbox-enviar deberia saltarse la BD local con servidor local descubierto")
+	}
+	if !shouldBypassLocalDB([]string{"progreso", "fase", "listar", "orquestador"}) {
+		t.Fatalf("progreso fase listar deberia saltarse la BD local con servidor local descubierto")
+	}
+	if !shouldBypassLocalDB([]string{"pool", "listar"}) {
+		t.Fatalf("pool listar deberia saltarse la BD local con servidor local descubierto")
+	}
+	if !shouldBypassLocalDB([]string{"politica-modelo", "listar"}) {
+		t.Fatalf("politica-modelo listar deberia saltarse la BD local con servidor local descubierto")
+	}
+	if !shouldBypassLocalDB([]string{"modelo", "resolver", "--perfil", "programador"}) {
+		t.Fatalf("modelo resolver deberia saltarse la BD local con servidor local descubierto")
+	}
+	if !shouldBypassLocalDB([]string{"lenguaje", "politica", "ver"}) {
+		t.Fatalf("lenguaje politica ver deberia saltarse la BD local con servidor local descubierto")
+	}
+	if !shouldBypassLocalDB([]string{"reglas", "listar"}) {
+		t.Fatalf("reglas listar deberia saltarse la BD local con servidor local descubierto")
+	}
+	if !shouldBypassLocalDB([]string{"skills", "listar"}) {
+		t.Fatalf("skills listar deberia saltarse la BD local con servidor local descubierto")
+	}
+	if !shouldBypassLocalDB([]string{"workflows", "listar"}) {
+		t.Fatalf("workflows listar deberia saltarse la BD local con servidor local descubierto")
+	}
+	if !shouldBypassLocalDB([]string{"permisos", "listar"}) {
+		t.Fatalf("permisos listar deberia saltarse la BD local con servidor local descubierto")
+	}
+	if !shouldBypassLocalDB([]string{"agente", "control", "arrancar", "Codex1"}) {
+		t.Fatalf("agente control arrancar deberia saltarse la BD local con servidor local descubierto")
+	}
+	if !shouldBypassLocalDB([]string{"sesion", "presupuesto", "ver", "--agente", "Codex1"}) {
+		t.Fatalf("sesion presupuesto ver deberia saltarse la BD local con servidor local descubierto")
+	}
 	if shouldBypassLocalDB(nil) {
 		t.Fatalf("sin comando no deberia saltarse la BD local")
 	}

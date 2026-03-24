@@ -101,38 +101,10 @@ func resetServerDiscovery() {
 }
 
 func shouldBypassLocalDB(args []string) bool {
-	if !isRemoteCapableCommand(args) {
+	if !commandSupportsServerMode(normalizedCommandArgs(args)) {
 		return false
 	}
 	return activeServerURL() != ""
-}
-
-func isRemoteCapableCommand(args []string) bool {
-	if len(args) == 0 {
-		return false
-	}
-	switch strings.TrimSpace(args[0]) {
-	case "status":
-		return true
-	case "config":
-		return len(args) > 1 && (strings.TrimSpace(args[1]) == "ver" ||
-			strings.TrimSpace(args[1]) == "set" ||
-			strings.TrimSpace(args[1]) == "agente-nuevo" ||
-			strings.TrimSpace(args[1]) == "agente-retirar" ||
-			strings.TrimSpace(args[1]) == "agente-rehabilitar")
-	case "exportar":
-		return len(args) > 1 && (strings.TrimSpace(args[1]) == "estado" || strings.TrimSpace(args[1]) == "audit")
-	case "sesion":
-		return len(args) > 1 && (strings.TrimSpace(args[1]) == "inicio" || strings.TrimSpace(args[1]) == "fin" || strings.TrimSpace(args[1]) == "listar" || strings.TrimSpace(args[1]) == "nuevo-codex")
-	case "tarea":
-		return len(args) > 1 && (strings.TrimSpace(args[1]) == "listar" || strings.TrimSpace(args[1]) == "ver" || strings.TrimSpace(args[1]) == "nueva" || strings.TrimSpace(args[1]) == "tomar" || strings.TrimSpace(args[1]) == "iniciar" || strings.TrimSpace(args[1]) == "completar" || strings.TrimSpace(args[1]) == "bloquear" || strings.TrimSpace(args[1]) == "desbloquear" || strings.TrimSpace(args[1]) == "nota")
-	case "propuesta":
-		return len(args) > 1 && (strings.TrimSpace(args[1]) == "listar" || strings.TrimSpace(args[1]) == "ver" || strings.TrimSpace(args[1]) == "nueva" || strings.TrimSpace(args[1]) == "cerrar")
-	case "votar":
-		return true
-	default:
-		return false
-	}
 }
 
 func loadStatusSummary() (*statusContext, error) {
