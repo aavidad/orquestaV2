@@ -10,6 +10,7 @@ package cmd
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"orquesta/coordinacion"
 	"orquesta/db"
@@ -61,6 +62,18 @@ type apiRuntimeMailboxCreateResponse struct {
 
 type apiProyectoDescubrirRequest struct {
 	Ruta string `json:"ruta"`
+}
+
+type apiLenguajePoliticaResponse struct {
+	Politica *db.LanguagePolicy `json:"politica"`
+}
+
+type apiLenguajeMatrizResponse struct {
+	Matriz []*db.LanguageMatrixEntry `json:"matriz"`
+}
+
+type apiLenguajeResolucionResponse struct {
+	Resolucion *db.LanguageResolution `json:"resolucion"`
 }
 
 type apiAgenteRequest struct {
@@ -132,6 +145,43 @@ func cargarProyectoDesdeAPI(ref string) (*db.Proyecto, bool, error) {
 		return nil, ok, err
 	}
 	return resp.Proyecto, true, nil
+}
+
+func cargarPoliticaLenguajeDesdeAPI() (*db.LanguagePolicy, bool, error) {
+	var resp apiLenguajePoliticaResponse
+	ok, err := apiGet("/api/lenguaje/politica", &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Politica, true, nil
+}
+
+func cargarMatrizLenguajeDesdeAPI() ([]*db.LanguageMatrixEntry, bool, error) {
+	var resp apiLenguajeMatrizResponse
+	ok, err := apiGet("/api/lenguaje/matriz", &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Matriz, true, nil
+}
+
+func resolverLenguajePorAPI(proyecto string, tareaID *int64, contexto string) (*db.LanguageResolution, bool, error) {
+	query := url.Values{}
+	if strings.TrimSpace(proyecto) != "" {
+		query.Set("proyecto", strings.TrimSpace(proyecto))
+	}
+	if tareaID != nil && *tareaID > 0 {
+		query.Set("tarea", fmt.Sprintf("%d", *tareaID))
+	}
+	if strings.TrimSpace(contexto) != "" {
+		query.Set("contexto", strings.TrimSpace(contexto))
+	}
+	var resp apiLenguajeResolucionResponse
+	ok, err := apiGetQuery("/api/lenguaje/resolver", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Resolucion, true, nil
 }
 
 func cargarConectoresDesdeAPI() ([]*db.Conector, bool, error) {

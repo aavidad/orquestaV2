@@ -18,20 +18,25 @@ func init() {
 
 func (sqliteBackend) Name() string { return "sqlite" }
 
-func (sqliteBackend) Open(target string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", storage.SQLiteDSN(target))
+func (sqliteBackend) Open(cfg storage.Config) (*sql.DB, error) {
+	target := strings.TrimSpace(cfg.Path)
+	if target == "" {
+		target = strings.TrimSpace(cfg.DSN)
+	}
+	db, err := storage.Open(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("abriendo DB sqlite en %s: %w", target, err)
 	}
-	db.SetMaxOpenConns(1)
 	return db, nil
 }
 
-func (sqliteBackend) Prepare(db *sql.DB) error {
-	if err := aplicarSchema(db); err != nil {
-		return fmt.Errorf("aplicando schema sqlite: %w", err)
+func (sqliteBackend) Prepare(db *sql.DB, cfg storage.Config) error {
+	if cfg.BootstrapSchema {
+		if err := aplicarSchemaPorDriver(db, "sqlite"); err != nil {
+			return fmt.Errorf("aplicando schema sqlite: %w", err)
+		}
 	}
-	if err := postMigraciones(db); err != nil {
+	if err := postMigracionesPorDriver(db, "sqlite"); err != nil {
 		return fmt.Errorf("post-migraciones sqlite: %w", err)
 	}
 	return nil

@@ -30,7 +30,10 @@ var lenguajePoliticaVerCmd = &cobra.Command{
 	Use:   "ver",
 	Short: "Muestra la politica global actual",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		p, err := db.GetLanguagePolicy()
+		p, ok, err := cargarPoliticaLenguajeDesdeAPI()
+		if !ok {
+			p, err = db.GetLanguagePolicy()
+		}
 		if err != nil {
 			return err
 		}
@@ -105,7 +108,10 @@ var lenguajeMatrizListarCmd = &cobra.Command{
 	Use:   "listar",
 	Short: "Lista la matriz de lenguaje",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		lista, err := db.ListLanguageMatrixEntries()
+		lista, ok, err := cargarMatrizLenguajeDesdeAPI()
+		if !ok {
+			lista, err = db.ListLanguageMatrixEntries()
+		}
 		if err != nil {
 			return err
 		}
@@ -169,7 +175,10 @@ var lenguajeResolverCmd = &cobra.Command{
 		if tareaID != nil && *tareaID > 0 {
 			tareaPtr = tareaID
 		}
-		res, err := db.ResolveLanguage(strings.TrimSpace(proyecto), tareaPtr, contexto)
+		res, ok, err := resolverLenguajePorAPI(strings.TrimSpace(proyecto), tareaPtr, contexto)
+		if !ok {
+			res, err = db.ResolveLanguage(strings.TrimSpace(proyecto), tareaPtr, contexto)
+		}
 		if err != nil {
 			return err
 		}

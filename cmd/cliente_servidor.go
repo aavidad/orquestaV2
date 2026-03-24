@@ -215,6 +215,20 @@ func commandSupportsServerMode(args []string) bool {
 		return true
 	case "auditoria":
 		return len(tokens) > 1 && tokens[1] == "listar"
+	case "lenguaje":
+		if len(tokens) <= 2 {
+			return false
+		}
+		switch tokens[1] {
+		case "politica":
+			return tokens[2] == "ver"
+		case "matriz":
+			return tokens[2] == "listar"
+		case "resolver":
+			return true
+		default:
+			return false
+		}
 	case "respaldo":
 		return len(tokens) > 1 && tokens[1] == "bd"
 	case "votar":

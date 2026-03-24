@@ -3,7 +3,6 @@ package db
 import (
 	"database/sql"
 	"fmt"
-	"os"
 	"strings"
 
 	"orquesta/storage"
@@ -11,8 +10,8 @@ import (
 
 type Backend interface {
 	Name() string
-	Open(target string) (*sql.DB, error)
-	Prepare(*sql.DB) error
+	Open(storage.Config) (*sql.DB, error)
+	Prepare(*sql.DB, storage.Config) error
 	Backup(*sql.DB, string) error
 	IsBusy(error) bool
 }
@@ -20,6 +19,7 @@ type Backend interface {
 var (
 	backendRegistry = map[string]Backend{}
 	currentBackend  Backend
+	currentConfig   storage.Config
 	currentTarget   string
 )
 
@@ -31,7 +31,11 @@ func CurrentDBPath() string {
 	if strings.TrimSpace(currentTarget) != "" {
 		return currentTarget
 	}
-	return backendTarget(backendName())
+	cfg, err := storage.ResolveConfig(resolverRuta)
+	if err != nil {
+		return ""
+	}
+	return configTarget(cfg)
 }
 
 func RegisterBackend(backend Backend) {
@@ -42,45 +46,33 @@ func RegisterBackend(backend Backend) {
 }
 
 func backendName() string {
-	if v := strings.TrimSpace(os.Getenv("ORQUESTA_DB_DRIVER")); v != "" {
-		if name := storage.DialectForDriver(v).Name; name != "" {
-			return name
-		}
-	}
-	if v := strings.TrimSpace(strings.ToLower(os.Getenv("ORQUESTA_DB_BACKEND"))); v != "" {
-		if name := storage.DialectForDriver(v).Name; name != "" {
-			return name
-		}
+	cfg, err := storage.ResolveConfig(resolverRuta)
+	if err == nil && cfg.Driver != "" {
+		return cfg.Driver
 	}
 	return "sqlite"
 }
 
-func backendTarget(name string) string {
-	switch strings.TrimSpace(strings.ToLower(name)) {
-	case "sqlite":
-		return resolverRuta()
-	default:
-		if v := strings.TrimSpace(os.Getenv("ORQUESTA_DB_DSN")); v != "" {
-			return v
-		}
-		if v := strings.TrimSpace(os.Getenv("ORQUESTA_DB")); v != "" {
-			return v
-		}
-		return ""
+func configTarget(cfg storage.Config) string {
+	if strings.TrimSpace(cfg.Path) != "" {
+		return cfg.Path
 	}
+	return strings.TrimSpace(cfg.DSN)
 }
 
-func resolveBackend() (Backend, string, error) {
-	name := backendName()
-	backend, ok := backendRegistry[name]
+func resolveBackend() (Backend, storage.Config, error) {
+	cfg, err := storage.ResolveConfig(resolverRuta)
+	if err != nil {
+		return nil, storage.Config{}, err
+	}
+	backend, ok := backendRegistry[cfg.Driver]
 	if !ok {
-		return nil, "", fmt.Errorf("backend de persistencia no soportado: %s", name)
+		return nil, storage.Config{}, fmt.Errorf("backend de persistencia no soportado: %s", cfg.Driver)
 	}
-	target := backendTarget(name)
-	if strings.TrimSpace(target) == "" {
-		return nil, "", fmt.Errorf("target/DSN vacío para backend %s", name)
+	if strings.TrimSpace(configTarget(cfg)) == "" {
+		return nil, storage.Config{}, fmt.Errorf("target/DSN vacío para backend %s", cfg.Driver)
 	}
-	return backend, target, nil
+	return backend, cfg, nil
 }
 
 func CurrentBackendName() string {
