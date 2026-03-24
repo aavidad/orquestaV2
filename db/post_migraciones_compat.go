@@ -23,6 +23,13 @@ func postMigrationStatements() []string {
 		`ALTER TABLE tareas ADD COLUMN contrato_definido INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE runtime_orders ADD COLUMN available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`,
 		`ALTER TABLE agentes ADD COLUMN consumo_dia_segundos INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE agentes ADD COLUMN consumo_semanal_segundos INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE agentes ADD COLUMN limite_dia_segundos INTEGER NOT NULL DEFAULT 14400`,
+		`ALTER TABLE agentes ADD COLUMN limite_semanal_segundos INTEGER NOT NULL DEFAULT 43200`,
+		`ALTER TABLE agentes ADD COLUMN last_usage_reset_at DATETIME`,
+		`ALTER TABLE agentes ADD COLUMN estado_cuota TEXT NOT NULL DEFAULT 'activo'`,
+		`ALTER TABLE agentes ADD COLUMN reanimar_at DATETIME`,
+		`ALTER TABLE agentes ADD COLUMN motivo_pausa TEXT`,
 		`UPDATE reglas
 		 SET descripcion='No escribir código sin propuesta OP-XXX aprobada en la app de orquestación.'
 		 WHERE tipo_agente='programador' AND categoria='calidad' AND titulo='Propuesta antes de código'`,
