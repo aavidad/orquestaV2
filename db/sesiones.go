@@ -336,6 +336,44 @@ func ListarSesionesActivas() ([]*Sesion, error) {
 	return out, rows.Err()
 }
 
+func aplicarEstadoVisibleAgente(agente *Agente, sesion *Sesion) {
+	if agente == nil {
+		return
+	}
+	if sesion == nil {
+		agente.Activo = false
+		agente.EstadoSesion = ""
+		return
+	}
+	agente.Activo = true
+	if estado := strings.TrimSpace(sesion.Estado); estado != "" {
+		agente.EstadoSesion = estado
+		return
+	}
+	if strings.TrimSpace(agente.EstadoSesion) == "" {
+		agente.EstadoSesion = "disponible"
+	}
+}
+
+func aplicarEstadoVisibleAgentes(agentes []*Agente, sesiones []*Sesion) {
+	if len(agentes) == 0 {
+		return
+	}
+	sesionesPorAgente := make(map[string]*Sesion, len(sesiones))
+	for _, sesion := range sesiones {
+		if sesion == nil {
+			continue
+		}
+		actual, existe := sesionesPorAgente[sesion.Agente]
+		if !existe || sesion.ID > actual.ID {
+			sesionesPorAgente[sesion.Agente] = sesion
+		}
+	}
+	for _, agente := range agentes {
+		aplicarEstadoVisibleAgente(agente, sesionesPorAgente[agente.Nombre])
+	}
+}
+
 // ListarAgentes devuelve todos los agentes registrados con su estado de cuota.
 func ListarAgentes() ([]*Agente, error) {
 	rows, err := DB.Query(`
@@ -375,7 +413,15 @@ func ListarAgentes() ([]*Agente, error) {
 		a.MotivoPausa = motivo.String
 		list = append(list, a)
 	}
-	return list, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sesionesActivas, err := ListarSesionesActivas()
+	if err != nil {
+		return nil, err
+	}
+	aplicarEstadoVisibleAgentes(list, sesionesActivas)
+	return list, nil
 }
 
 func GetAgente(nombre string) (*Agente, error) {
@@ -408,6 +454,11 @@ func GetAgente(nombre string) (*Agente, error) {
 		a.ReanimarAt = &reanimar.Time
 	}
 	a.MotivoPausa = motivo.String
+	sesionActiva, err := GetSesionActiva(nombre, nil)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	aplicarEstadoVisibleAgente(a, sesionActiva)
 	return a, nil
 }
 
@@ -460,8 +511,64 @@ func ResetReanimacion(nombre string) error {
 
 // EliminarAgente borra físicamente un agente de la base de datos.
 func EliminarAgente(nombre string) error {
-	_, err := DB.Exec(`DELETE FROM agentes WHERE nombre = ?`, nombre)
-	return err
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return fmt.Errorf("agente obligatorio")
+	}
+	tareasActivas, err := listarTareasActivasAgente(nombre)
+	if err != nil {
+		return err
+	}
+	if len(tareasActivas) > 0 {
+		return fmt.Errorf("no se puede eliminar el agente '%s': tiene %d tarea(s) activas (%s)", nombre, len(tareasActivas), resumirTareasActivasAgente(tareasActivas))
+	}
+	res, err := DB.Exec(`DELETE FROM agentes WHERE nombre = ?`, nombre)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("agente '%s' no encontrado", nombre)
+	}
+	return nil
+}
+
+func listarTareasActivasAgente(nombre string) ([]*Tarea, error) {
+	tareas, err := ListarTareas(FiltroTareas{Agente: &nombre})
+	if err != nil {
+		return nil, err
+	}
+	activas := make([]*Tarea, 0, len(tareas))
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case TareaCompletada, TareaCancelada, TareaBacklog:
+			continue
+		default:
+			activas = append(activas, tarea)
+		}
+	}
+	return activas, nil
+}
+
+func resumirTareasActivasAgente(tareas []*Tarea) string {
+	if len(tareas) == 0 {
+		return ""
+	}
+	partes := make([]string, 0, min(len(tareas), 3))
+	for i, tarea := range tareas {
+		if i == 3 {
+			partes = append(partes, "...")
+			break
+		}
+		partes = append(partes, fmt.Sprintf("#%d %s", tarea.ID, tarea.Estado))
+	}
+	return strings.Join(partes, ", ")
 }
 
 // PausarAgente establece una pausa forzada (por rate-limit externo) para un agente.

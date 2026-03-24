@@ -3,6 +3,7 @@ package db
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -77,5 +78,50 @@ func TestRegistrarCodexUsaNombreCanonicoYRespetaExistentes(t *testing.T) {
 	}
 	if nombre != "Codex3" {
 		t.Fatalf("nombre inesperado: %s", nombre)
+	}
+}
+
+func TestEliminarAgenteBloqueaTareasActivas(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "orquesta.db")
+	prev := os.Getenv("ORQUESTA_DB")
+	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
+		t.Fatalf("setenv: %v", err)
+	}
+	defer func() {
+		_ = os.Setenv("ORQUESTA_DB", prev)
+		Close()
+	}()
+
+	if err := Open(); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := RegistrarAgente("Codex7", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Coordinar runtime order",
+		Descripcion: "no borrar agente con trabajo vivo",
+		Modulo:      "controlplane",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "Codex7"); err != nil {
+		t.Fatalf("TomarTarea: %v", err)
+	}
+
+	err = EliminarAgente("Codex7")
+	if err == nil {
+		t.Fatalf("esperaba bloqueo al eliminar agente con tareas activas")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "tarea") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if _, err := GetAgente("Codex7"); err != nil {
+		t.Fatalf("el agente no deberia haberse borrado: %v", err)
 	}
 }

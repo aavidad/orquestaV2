@@ -604,6 +604,47 @@ func TestAPIAgenteFusionarCreaRespaldoYMueveReferencias(t *testing.T) {
 	}
 }
 
+func TestAPIAgenteEliminarBloqueaTareasActivas(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex5", "programador"); err != nil {
+		t.Fatalf("registrar Codex5: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:    "No borrar agente con trabajo vivo",
+		Modulo:    "controlplane",
+		Prioridad: db.PrioridadAlta,
+		CreadoPor: "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex5"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/agentes/Codex5/eliminar", bytes.NewReader([]byte(`{}`)))
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status eliminar inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var apiErr apiErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &apiErr); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(apiErr.Error), "tarea") {
+		t.Fatalf("mensaje inesperado: %s", apiErr.Error)
+	}
+	if _, err := db.GetAgente("Codex5"); err != nil {
+		t.Fatalf("el agente no deberia haberse eliminado: %v", err)
+	}
+}
+
 func TestAPIAgenteTickAutoPausaPorAgotamiento(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
