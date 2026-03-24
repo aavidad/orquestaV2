@@ -11,6 +11,10 @@ import (
 
 type SQLiteLockRepository struct{}
 
+func ListarLocksCoord(filter coordinacion.LockFilter) ([]*coordinacion.Lock, error) {
+	return (SQLiteLockRepository{}).List(filter)
+}
+
 func (SQLiteLockRepository) ExpireActiveBefore(now time.Time) error {
 	_, err := DB.Exec(`
 		UPDATE locks

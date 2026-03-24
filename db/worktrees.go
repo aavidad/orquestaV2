@@ -11,6 +11,10 @@ import (
 
 type SQLiteWorktreeRepository struct{}
 
+func ListarWorktreesCoord(filter coordinacion.WorktreeFilter) ([]*coordinacion.Worktree, error) {
+	return (SQLiteWorktreeRepository{}).List(filter)
+}
+
 func (SQLiteWorktreeRepository) Create(worktree *coordinacion.Worktree) (*coordinacion.Worktree, error) {
 	if worktree == nil {
 		return nil, fmt.Errorf("worktree nil")

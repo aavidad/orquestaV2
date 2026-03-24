@@ -84,12 +84,12 @@ func ConstruirSnapshotDiagnostico(limitAudit int) (*SnapshotDiagnostico, error) 
 	}
 
 	lockState := coordinacion.LockState("activa")
-	locksActivos, err := (SQLiteLockRepository{}).List(coordinacion.LockFilter{State: &lockState})
+	locksActivos, err := ListarLocksCoord(coordinacion.LockFilter{State: &lockState})
 	if err != nil {
 		return nil, err
 	}
 	worktreeState := coordinacion.WorktreeState("activa")
-	worktreesActivos, err := (SQLiteWorktreeRepository{}).List(coordinacion.WorktreeFilter{State: &worktreeState})
+	worktreesActivos, err := ListarWorktreesCoord(coordinacion.WorktreeFilter{State: &worktreeState})
 	if err != nil {
 		return nil, err
 	}
