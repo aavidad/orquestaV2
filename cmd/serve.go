@@ -8,7 +8,6 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -1191,27 +1190,7 @@ var serveCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		puerto, _ := cmd.Flags().GetInt("puerto")
 		addr := fmt.Sprintf(":%d", puerto)
-		mux := http.NewServeMux()
-		mux.HandleFunc("/", webHandlerDash)
-		mux.HandleFunc("/tareas", webHandlerTareas)
-		mux.HandleFunc("/tareas/", webRouterTareas)
-		mux.HandleFunc("/propuestas", webHandlerPropuestas)
-		mux.HandleFunc("/propuestas/", webRouterPropuestas)
-		mux.HandleFunc("/agentes", webHandlerAgentes)
-		mux.HandleFunc("/agentes/", webRouterAgentes)
-		mux.HandleFunc("/runtimes", webHandlerRuntimes)
-		mux.HandleFunc("/runtimes/", webRouterRuntimes)
-		mux.HandleFunc("/time-travel", webHandlerTimeTravel)
-		mux.HandleFunc("/time-travel/", webRouterTimeTravel)
-		registerAPIRoutes(mux)
-		fmt.Printf("✓ Panel web en http://localhost%s\n", addr)
-		fmt.Println("  Ctrl+C para detener.")
-
-		controlCtx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		newControlPlaneRunner().Start(controlCtx)
-
-		return http.ListenAndServe(addr, mux)
+		return arrancarServidorUnificado(addr, "serve", true)
 	},
 }
 
