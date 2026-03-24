@@ -219,6 +219,112 @@ func TestRuntimeOrdersMailboxYCheckpoint(t *testing.T) {
 	}
 }
 
+func TestClaimNextBootstrapRuntimeOrderPriorizaProyectoYTiposBootstrap(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	otroProyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "contabilidad",
+		Nombre:  "Contabilidad",
+		RutaAbs: filepath.Join(tmp, "contabilidad"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert otro proyecto: %v", err)
+	}
+
+	globalStartID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		Tipo:        "start",
+		PayloadJSON: `{"motivo":"global"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start global: %v", err)
+	}
+	proyectoStartID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"motivo":"proyecto"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start proyecto: %v", err)
+	}
+	handoffID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "handoff",
+		PayloadJSON: `{"resumen_continuidad":"handoff preferente"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar handoff: %v", err)
+	}
+	if _, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &otroProyectoID,
+		Tipo:        "resume",
+		PayloadJSON: `{"motivo":"otro proyecto"}`,
+	}); err != nil {
+		t.Fatalf("encolar resume otro proyecto: %v", err)
+	}
+	if _, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "sync_status",
+		PayloadJSON: `{"motivo":"ignorar"}`,
+	}); err != nil {
+		t.Fatalf("encolar sync_status: %v", err)
+	}
+
+	claimed, err := ClaimNextBootstrapRuntimeOrder("Codex1", &proyectoID)
+	if err != nil {
+		t.Fatalf("claim bootstrap 1: %v", err)
+	}
+	if claimed == nil || claimed.ID != handoffID || claimed.Tipo != "handoff" {
+		t.Fatalf("claim bootstrap 1 inesperado: %+v", claimed)
+	}
+	if claimed.Estado != "tomada" {
+		t.Fatalf("estado claim 1 inesperado: %s", claimed.Estado)
+	}
+
+	claimed, err = ClaimNextBootstrapRuntimeOrder("Codex1", &proyectoID)
+	if err != nil {
+		t.Fatalf("claim bootstrap 2: %v", err)
+	}
+	if claimed == nil || claimed.ID != proyectoStartID || claimed.Tipo != "start" {
+		t.Fatalf("claim bootstrap 2 inesperado: %+v", claimed)
+	}
+
+	claimed, err = ClaimNextBootstrapRuntimeOrder("Codex1", &proyectoID)
+	if err != nil {
+		t.Fatalf("claim bootstrap 3: %v", err)
+	}
+	if claimed == nil || claimed.ID != globalStartID || claimed.Tipo != "start" {
+		t.Fatalf("claim bootstrap 3 inesperado: %+v", claimed)
+	}
+
+	claimed, err = ClaimNextBootstrapRuntimeOrder("Codex1", &proyectoID)
+	if err != nil {
+		t.Fatalf("claim bootstrap 4: %v", err)
+	}
+	if claimed != nil {
+		t.Fatalf("no esperaba más órdenes bootstrap para el proyecto: %+v", claimed)
+	}
+}
+
 func TestMarcarRuntimeHandlesCerradosPorAgenteRespetaSesionActivaMasNueva(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
