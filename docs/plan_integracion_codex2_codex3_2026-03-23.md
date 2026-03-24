@@ -100,7 +100,7 @@ Motivo:
 
 ### Integrar primero
 
-- `internal/runtimeobs/*`
+- `internal/observabilidadruntime/*`
 - contratos de persistencia y observabilidad de runtimes
 - `runtime_handles`
 - `runtime_orders`
@@ -109,7 +109,7 @@ Motivo:
 ### No integrar tal cual
 
 - `cmd/server.go`
-- `internal/localrpc/*` como sustitucion del cliente-servidor actual
+- `internal/rpclocal/*` como sustitucion del cliente-servidor actual
 - delegacion global de comandos por `exec` RPC
 
 Motivo:

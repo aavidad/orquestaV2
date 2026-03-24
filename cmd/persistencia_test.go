@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"orquesta/internal/localrpc"
+	"orquesta/internal/rpclocal"
 )
 
 func TestCommandNeedsDBPersistenciaInfo(t *testing.T) {
@@ -73,7 +73,7 @@ func TestRenderPersistenciaInfoConServidor(t *testing.T) {
 		"/tmp/orquesta-localrpc.json",
 		"/tmp/orquesta.db",
 		"http://127.0.0.1:17899",
-		&localrpc.ServerInfo{
+		&rpclocal.ServerInfo{
 			Addr:      "127.0.0.1:17899",
 			PID:       42,
 			StartedAt: time.Date(2026, 3, 22, 18, 0, 0, 0, time.UTC),

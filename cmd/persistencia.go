@@ -15,7 +15,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
-	"orquesta/internal/localrpc"
+	"orquesta/internal/rpclocal"
 )
 
 var persistenciaCmd = &cobra.Command{
@@ -27,14 +27,14 @@ var persistenciaInfoCmd = &cobra.Command{
 	Use:   "info",
 	Short: "Muestra estado esperado de persistencia y servidor local",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		infoPath := localrpc.DefaultInfoPath()
+		infoPath := rpclocal.DefaultInfoPath()
 		dbPath := db.CurrentDBPath()
-		addr := localrpc.ResolveServerAddr()
+		addr := rpclocal.ResolveServerAddr()
 
-		info, err := localrpc.LoadServerInfo()
+		info, err := rpclocal.LoadServerInfo()
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		pingErr := localrpc.Ping(ctx, addr)
+		pingErr := rpclocal.Ping(ctx, addr)
 
 		renderPersistenciaInfo(cmd.OutOrStdout(), infoPath, dbPath, addr, info, err, pingErr)
 		return nil
@@ -46,7 +46,7 @@ func init() {
 	rootCmd.AddCommand(persistenciaCmd)
 }
 
-func renderPersistenciaInfo(w io.Writer, infoPath, dbPath, addr string, info *localrpc.ServerInfo, infoErr, pingErr error) {
+func renderPersistenciaInfo(w io.Writer, infoPath, dbPath, addr string, info *rpclocal.ServerInfo, infoErr, pingErr error) {
 	fmt.Fprintf(w, "Modo esperado: servidor local\n")
 	fmt.Fprintf(w, "DB objetivo:   %s\n", dbPath)
 	fmt.Fprintf(w, "Statefile:     %s\n", infoPath)

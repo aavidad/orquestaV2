@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"orquesta/internal/runtimeobs"
+	"orquesta/internal/observabilidadruntime"
 	"strings"
 	"time"
 )
@@ -290,14 +290,14 @@ func UltimaMuestraRuntime(runtimeID int64) (*RuntimeTelemetrySample, error) {
 	return sample, err
 }
 
-func NormalizarMuestraRuntime(sample *RuntimeTelemetrySample) (*runtimeobs.Sample, error) {
+func NormalizarMuestraRuntime(sample *RuntimeTelemetrySample) (*observabilidadruntime.Sample, error) {
 	if sample == nil {
 		return nil, fmt.Errorf("runtime telemetry sample nula")
 	}
-	return runtimeobs.Normalize(sample.Source, json.RawMessage(sample.SampleJSON))
+	return observabilidadruntime.Normalize(sample.Source, json.RawMessage(sample.SampleJSON))
 }
 
-func NormalizarUltimaMuestraRuntime(runtimeID int64) (*runtimeobs.Sample, error) {
+func NormalizarUltimaMuestraRuntime(runtimeID int64) (*observabilidadruntime.Sample, error) {
 	sample, err := UltimaMuestraRuntime(runtimeID)
 	if err != nil {
 		return nil, err

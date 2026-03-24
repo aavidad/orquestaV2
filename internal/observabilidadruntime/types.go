@@ -1,4 +1,4 @@
-package runtimeobs
+package observabilidadruntime
 
 import "time"
 

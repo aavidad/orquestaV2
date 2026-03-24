@@ -1,4 +1,4 @@
-package localrpc
+package rpclocal
 
 import (
 	"bytes"
