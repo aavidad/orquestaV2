@@ -8,7 +8,6 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -217,13 +216,8 @@ func encolarControlAgenteLocal(req apiAgenteControlRequest) (int64, string, erro
 }
 
 func validarAgenteControlExiste(agente string) error {
-	var total int
-	err := db.DB.QueryRow(`SELECT COUNT(*) FROM agentes WHERE nombre = ?`, strings.TrimSpace(agente)).Scan(&total)
-	if err != nil {
+	if _, err := db.GetAgente(strings.TrimSpace(agente)); err != nil {
 		return err
-	}
-	if total == 0 {
-		return sql.ErrNoRows
 	}
 	return nil
 }

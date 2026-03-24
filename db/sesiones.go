@@ -615,7 +615,7 @@ func RegistrarCodex() (string, error) {
 		}
 		var n int
 		// codex1, codex2… extraemos el número
-		suffix := strings.TrimPrefix(nombre, "codex")
+		suffix := strings.TrimPrefix(strings.ToLower(nombre), "codex")
 		if _, err := fmt.Sscanf(suffix, "%d", &n); err == nil && n > maxN {
 			maxN = n
 		}
@@ -624,7 +624,7 @@ func RegistrarCodex() (string, error) {
 		return "", err
 	}
 
-	nombre := fmt.Sprintf("codex%d", maxN+1)
+	nombre := fmt.Sprintf("Codex%d", maxN+1)
 	if err := RegistrarAgente(nombre, "programador"); err != nil {
 		return "", err
 	}

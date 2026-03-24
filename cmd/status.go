@@ -158,9 +158,6 @@ var statusCmd = &cobra.Command{
 					pend++
 				}
 			}
-			if len(p.Votos) == 0 && db.DB != nil {
-				ac, des, _, pend, _ = db.ContarVotos(p.ID)
-			}
 			fmt.Printf("   %s %-40s  ✓%d ✗%d ⏳%d\n",
 				p.Codigo, truncar(p.Titulo, 38), ac, des, pend)
 		}

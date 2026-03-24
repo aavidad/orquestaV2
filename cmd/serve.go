@@ -13,6 +13,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -130,9 +131,19 @@ type webRuntimeSampleRow struct {
 	Fuente      string
 }
 
+type webRuntimeTimelineRow struct {
+	Creado  string
+	Canal   string
+	Tipo    string
+	Estado  string
+	Detalle string
+	Link    string
+}
+
 type webRuntimeDetalleData struct {
 	Runtime  webRuntimeRow
 	Muestras []webRuntimeSampleRow
+	Timeline []webRuntimeTimelineRow
 }
 
 type webTimeTravelCheckpointRow struct {
@@ -343,6 +354,7 @@ func webHandlerRuntimeDetalle(w http.ResponseWriter, r *http.Request, idStr stri
 	data := webRuntimeDetalleData{
 		Runtime:  row,
 		Muestras: runtimeSamplesToWeb(samples),
+		Timeline: runtimeTimelineToWeb(runtime, 24),
 	}
 	webRender(w, webTplLayout+webTplRuntimeDetalle, data)
 }
@@ -835,6 +847,152 @@ func runtimeCheckpointToWeb(cp *db.RuntimeCheckpoint) webTimeTravelCheckpointRow
 		ResumeStrategy: valorVacio(cp.ResumeStrategy),
 		Source:         valorVacio(cp.Source),
 	}
+}
+
+func runtimeTimelineToWeb(runtime *db.RuntimeInstance, limit int) []webRuntimeTimelineRow {
+	if runtime == nil {
+		return nil
+	}
+	agente := strings.TrimSpace(runtime.Agente)
+	if agente == "" {
+		return nil
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+
+	orderFilter := db.FiltroRuntimeOrders{Agente: &agente}
+	if runtime.ProyectoID != nil {
+		orderFilter.ProyectoID = runtime.ProyectoID
+	}
+	orders, _ := db.ListarRuntimeOrders(orderFilter)
+
+	toAgente := agente
+	mailboxTo, _ := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente:   &toAgente,
+		ProyectoID: runtime.ProyectoID,
+	})
+	fromAgente := agente
+	mailboxFrom, _ := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+		FromAgente: &fromAgente,
+		ProyectoID: runtime.ProyectoID,
+	})
+	checkpoints, _ := db.ListarRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{
+		Agente:     &agente,
+		ProyectoID: runtime.ProyectoID,
+		Limit:      limit,
+	})
+
+	type timelineEvent struct {
+		When time.Time
+		Row  webRuntimeTimelineRow
+	}
+	events := make([]timelineEvent, 0, len(orders)+len(mailboxTo)+len(mailboxFrom)+len(checkpoints))
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		when := order.UpdatedAt
+		if order.FinishedAt != nil {
+			when = *order.FinishedAt
+		} else if order.StartedAt != nil {
+			when = *order.StartedAt
+		}
+		detalle := truncar(strings.TrimSpace(order.PayloadJSON), 120)
+		if strings.TrimSpace(order.ErrorText) != "" {
+			detalle = truncar(strings.TrimSpace(detalle+" · "+order.ErrorText), 120)
+		}
+		events = append(events, timelineEvent{
+			When: when,
+			Row: webRuntimeTimelineRow{
+				Creado:  when.Format("2006-01-02 15:04:05"),
+				Canal:   "runtime_order",
+				Tipo:    fmt.Sprintf("#%d %s", order.ID, valorVacio(order.Tipo)),
+				Estado:  valorVacio(order.Estado),
+				Detalle: valorVacio(detalle),
+			},
+		})
+	}
+
+	mailboxByID := make(map[int64]struct{}, len(mailboxTo)+len(mailboxFrom))
+	appendMailbox := func(msg *db.RuntimeMailboxMessage) {
+		if msg == nil {
+			return
+		}
+		if _, seen := mailboxByID[msg.ID]; seen {
+			return
+		}
+		mailboxByID[msg.ID] = struct{}{}
+		when := msg.CreatedAt
+		if msg.ConsumedAt != nil {
+			when = *msg.ConsumedAt
+		} else if msg.DeliveredAt != nil {
+			when = *msg.DeliveredAt
+		}
+		detalle := fmt.Sprintf("%s → %s", valorVacio(msg.FromAgente), valorVacio(msg.ToAgente))
+		payload := strings.TrimSpace(msg.PayloadJSON)
+		if payload != "" && payload != "{}" {
+			detalle += " · " + truncar(payload, 96)
+		}
+		events = append(events, timelineEvent{
+			When: when,
+			Row: webRuntimeTimelineRow{
+				Creado:  when.Format("2006-01-02 15:04:05"),
+				Canal:   "mailbox",
+				Tipo:    fmt.Sprintf("#%d %s", msg.ID, valorVacio(msg.Kind)),
+				Estado:  valorVacio(msg.Estado),
+				Detalle: detalle,
+			},
+		})
+	}
+	for _, msg := range mailboxTo {
+		appendMailbox(msg)
+	}
+	for _, msg := range mailboxFrom {
+		appendMailbox(msg)
+	}
+
+	for _, cp := range checkpoints {
+		if cp == nil {
+			continue
+		}
+		detalle := strings.TrimSpace(cp.Resumen)
+		if strings.TrimSpace(cp.Source) != "" {
+			if detalle != "" {
+				detalle += " · "
+			}
+			detalle += "source=" + strings.TrimSpace(cp.Source)
+		}
+		if strings.TrimSpace(cp.ResumeStrategy) != "" {
+			if detalle != "" {
+				detalle += " · "
+			}
+			detalle += "resume=" + strings.TrimSpace(cp.ResumeStrategy)
+		}
+		events = append(events, timelineEvent{
+			When: cp.CreatedAt,
+			Row: webRuntimeTimelineRow{
+				Creado:  cp.CreatedAt.Format("2006-01-02 15:04:05"),
+				Canal:   "checkpoint",
+				Tipo:    fmt.Sprintf("#%d %s", cp.ID, valorVacio(cp.CheckpointKind)),
+				Estado:  valorVacio(cp.Branch),
+				Detalle: valorVacio(detalle),
+				Link:    "/time-travel/" + strconv.FormatInt(cp.ID, 10),
+			},
+		})
+	}
+
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].When.After(events[j].When)
+	})
+	if len(events) > limit {
+		events = events[:limit]
+	}
+	rows := make([]webRuntimeTimelineRow, 0, len(events))
+	for _, ev := range events {
+		rows = append(rows, ev.Row)
+	}
+	return rows
 }
 
 func webRender(w http.ResponseWriter, tplStr string, data any) {
@@ -1477,6 +1635,28 @@ const webTplRuntimeDetalle = `{{define "content"}}
 </div>
 {{else}}
 <p style="color:#94a3b8">No hay muestras registradas para este runtime.</p>
+{{end}}
+
+<h4 style="margin:1.1rem 0 .6rem 0">Timeline operativa</h4>
+{{if .Timeline}}
+<div style="overflow-x:auto">
+<table>
+  <thead><tr><th>Cuándo</th><th>Canal</th><th>Evento</th><th>Estado</th><th>Detalle</th></tr></thead>
+  <tbody>
+  {{range .Timeline}}
+    <tr>
+      <td>{{.Creado}}</td>
+      <td><span class="tag">{{.Canal}}</span></td>
+      <td>{{if .Link}}<a href="{{.Link}}">{{.Tipo}}</a>{{else}}{{.Tipo}}{{end}}</td>
+      <td><span class="tag">{{.Estado}}</span></td>
+      <td style="color:#64748b">{{.Detalle}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<p style="color:#94a3b8">Sin órdenes, mailbox ni checkpoints asociados.</p>
 {{end}}
 {{end}}
 `

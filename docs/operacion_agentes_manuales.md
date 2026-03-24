@@ -83,6 +83,16 @@ Hasta que la web y la app de escritorio controlen el ciclo completo, el punto de
 scripts/inicio_agente.sh <agente>
 ```
 
+Este script debe considerarse el **wrapper canónico y único de entrada manual**.
+
+El resto de scripts del directorio `scripts/` cumplen funciones de:
+
+- backend de lanzamiento
+- integración con terminal concreta
+- utilidades de soporte
+
+No deben usarse como sustituto directo del arranque manual base salvo que una tarea concreta lo exija.
+
 Hace en una sola llamada:
 
 1. `orquesta sesion inicio <agente>`

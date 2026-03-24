@@ -150,3 +150,102 @@ func TestWebRuntimesControlEncolaOrden(t *testing.T) {
 		t.Fatalf("runtime orders inesperadas: %+v", orders)
 	}
 }
+
+func TestWebRuntimeDetalleMuestraTimelineOperativa(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex1",
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador"),
+		Herramienta:        "codex-cli",
+		ExternalSessionID:  "sess-web-timeline",
+		ResumenContinuidad: "runtime con timeline",
+		Branch:             "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtimeInst, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtimeInst == nil {
+		t.Fatalf("get runtime: runtime=%+v err=%v", runtimeInst, err)
+	}
+	orderID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "checkpoint",
+		PayloadJSON: `{"motivo":"timeline-web"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar runtime order: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "Codex0",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "handoff_note",
+		PayloadJSON: `{"texto":"revisa el handoff"}`,
+	}); err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	cpID, err := db.CrearRuntimeCheckpoint(&db.RuntimeCheckpoint{
+		Agente:         "Codex1",
+		ProyectoID:     &proyectoID,
+		SesionID:       &sesion.ID,
+		CheckpointKind: "handoff_prepare",
+		Resumen:        "checkpoint web",
+		Branch:         "feature/timeline",
+		CWD:            filepath.Join(tmp, "orquestador"),
+		PayloadJSON:    `{"ok":true}`,
+		ResumeStrategy: "resumen_y_payload",
+		Source:         "web-test",
+	})
+	if err != nil {
+		t.Fatalf("crear checkpoint: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", webHandlerDash)
+	mux.HandleFunc("/tareas", webHandlerTareas)
+	mux.HandleFunc("/tareas/", webRouterTareas)
+	mux.HandleFunc("/propuestas", webHandlerPropuestas)
+	mux.HandleFunc("/propuestas/", webRouterPropuestas)
+	mux.HandleFunc("/runtimes", webHandlerRuntimes)
+	mux.HandleFunc("/runtimes/", webRouterRuntimes)
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/runtimes/"+itoa(runtimeInst.ID), nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, token := range []string{
+		"Timeline operativa",
+		"runtime_order",
+		"#" + itoa(orderID) + " checkpoint",
+		"mailbox",
+		"handoff_note",
+		"checkpoint",
+		"#" + itoa(cpID) + " handoff_prepare",
+		"web-test",
+	} {
+		if !strings.Contains(body, token) {
+			t.Fatalf("detalle runtime sin %q:\n%s", token, body)
+		}
+	}
+}

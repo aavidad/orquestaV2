@@ -38,10 +38,12 @@ var exportarEstadoCmd = &cobra.Command{
 		var agentes []*db.Agente
 		var propuestas []*db.Propuesta
 		var tareas []*db.Tarea
+		usaAPI := false
 		var agentesResp apiAgentesResponse
 		if ok, err := apiGet("/api/agentes", &agentesResp); err != nil {
 			return err
 		} else if ok {
+			usaAPI = true
 			agentes = agentesResp.Agentes
 			var propuestasResp apiPropuestasResponse
 			if _, err := apiGet("/api/propuestas", &propuestasResp); err != nil {
@@ -81,7 +83,7 @@ var exportarEstadoCmd = &cobra.Command{
 				var resp apiPropuestaDetalleResponse
 				if ok, err := apiGet("/api/propuestas/"+p.Codigo, &resp); err == nil && ok && resp.Propuesta != nil {
 					p = resp.Propuesta
-				} else if db.DB != nil {
+				} else if !usaAPI && db.DB != nil {
 					p.Votos, _ = db.ResumenVotos(p.ID)
 				}
 			}
