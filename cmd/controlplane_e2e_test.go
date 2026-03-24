@@ -9,12 +9,15 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"orquesta/db"
 )
@@ -316,5 +319,148 @@ func TestAPIControlPlaneOrquestacionEndToEnd(t *testing.T) {
 	}
 	if startOrder == nil || startOrder.Estado != "completada" {
 		t.Fatalf("start order no completada: %+v", startOrder)
+	}
+}
+
+func TestControlPlaneRunnerRecuperaRuntimeOrderStaleYLaProcesaEndToEnd(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex1",
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador", "sesion-codex1"),
+		Herramienta:        "codex-cli",
+		ExternalSessionID:  "sess-codex1-stale",
+		ResumenContinuidad: "sesion activa para stale e2e",
+		Branch:             "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if _, err := db.GetRuntimeBySesionID(sesion.ID); err != nil {
+		t.Fatalf("runtime por sesion: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE config SET valor = '1' WHERE clave = 'runtime_order_stale_seconds'`); err != nil {
+		t.Fatalf("config stale seconds: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	postJSON := func(path string, body any, wantCode int) []byte {
+		t.Helper()
+		data, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(data))
+		req.Header.Set("Content-Type", "application/json")
+		mux.ServeHTTP(rec, req)
+		if rec.Code != wantCode {
+			t.Fatalf("status inesperado POST %s: %d body=%s", path, rec.Code, rec.Body.String())
+		}
+		return rec.Body.Bytes()
+	}
+	decodeID := func(body []byte) int64 {
+		t.Helper()
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("decode id: %v body=%s", err, string(body))
+		}
+		id, _ := payload["id"].(float64)
+		return int64(id)
+	}
+
+	orderID := decodeID(postJSON("/api/runtime-orders", map[string]any{
+		"agente":   "Codex1",
+		"proyecto": "orquestador",
+		"tipo":     "checkpoint",
+		"payload":  `{"checkpoint_kind":"handoff_prepare","resumen":"checkpoint stale e2e"}`,
+	}, http.StatusCreated))
+	if err := db.MarcarRuntimeOrderEstado(orderID, "ejecutando", `{}`, ""); err != nil {
+		t.Fatalf("marcar order ejecutando: %v", err)
+	}
+	staleAt := time.Now().UTC().Add(-10 * time.Minute)
+	if _, err := db.DB.Exec(`
+		UPDATE runtime_orders
+		SET started_at = ?, updated_at = ?
+		WHERE id = ?`,
+		staleAt, staleAt, orderID,
+	); err != nil {
+		t.Fatalf("envejecer order: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runner := newControlPlaneRunner()
+	runner.NotificationFeed = nil
+	runner.InitNotifications = nil
+	runner.Notifier = nil
+	runner.ReanimacionCada = time.Hour
+	runner.SaludCada = time.Hour
+	runner.PlanificacionCada = time.Hour
+	runner.ControlPlaneCada = 20 * time.Millisecond
+	runner.Start(ctx)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		order, err := db.GetRuntimeOrder(orderID)
+		if err != nil {
+			t.Fatalf("get runtime order: %v", err)
+		}
+		if order != nil && order.Estado == "completada" {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	order, err := db.GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get runtime order final: %v", err)
+	}
+	if order == nil || order.Estado != "completada" {
+		t.Fatalf("runtime order stale no completada: %+v", order)
+	}
+	if order.StartedAt == nil {
+		t.Fatalf("runtime order stale sin started_at tras reproceso: %+v", order)
+	}
+
+	cp, err := db.GetRuntimeCheckpointBySource("runtime_order:" + strconv.FormatInt(orderID, 10))
+	if err != nil {
+		t.Fatalf("checkpoint por source: %v", err)
+	}
+	if cp == nil || cp.Resumen != "checkpoint stale e2e" || cp.CheckpointKind != "handoff_prepare" {
+		t.Fatalf("checkpoint stale e2e inesperado: %+v", cp)
+	}
+
+	logs, err := db.ListarAuditoria(db.FiltroAuditoria{Limite: 20})
+	if err != nil {
+		t.Fatalf("listar auditoria: %v", err)
+	}
+	var sawStale, sawBatch bool
+	for _, item := range logs {
+		switch item.Accion {
+		case "runtime_orders_stale":
+			sawStale = true
+		case "runtime_orders_batch":
+			sawBatch = true
+		}
+	}
+	if !sawStale || !sawBatch {
+		t.Fatalf("auditoria control plane incompleta: stale=%v batch=%v logs=%+v", sawStale, sawBatch, logs)
 	}
 }
