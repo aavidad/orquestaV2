@@ -58,6 +58,19 @@ type apiTareaResponse struct {
 	Tarea *db.Tarea `json:"tarea"`
 }
 
+type apiProgresoResumenResponse struct {
+	Resumen *db.ResumenProgresoProyecto `json:"resumen"`
+}
+
+type apiProgresoFasesResponse struct {
+	Fases []*db.FaseProyecto `json:"fases"`
+}
+
+type apiProgresoFaseResponse struct {
+	ID   int64            `json:"id"`
+	Fase *db.FaseProyecto `json:"fase"`
+}
+
 type apiSesionResponse struct {
 	Sesion *db.Sesion `json:"sesion"`
 }

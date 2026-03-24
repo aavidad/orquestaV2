@@ -124,6 +124,31 @@ type apiTareaAccionRequest struct {
 	NuevoAgente string `json:"nuevo_agente"`
 }
 
+type apiProgresoFaseRegistrarRequest struct {
+	Proyecto    string  `json:"proyecto"`
+	Nombre      string  `json:"nombre"`
+	Descripcion string  `json:"descripcion"`
+	Orden       int64   `json:"orden"`
+	Peso        float64 `json:"peso"`
+	Estado      string  `json:"estado"`
+}
+
+type apiProgresoFaseActualizarRequest struct {
+	Proyecto    *string  `json:"proyecto,omitempty"`
+	Nombre      *string  `json:"nombre,omitempty"`
+	Descripcion *string  `json:"descripcion,omitempty"`
+	Orden       *int64   `json:"orden,omitempty"`
+	Peso        *float64 `json:"peso,omitempty"`
+	Estado      *string  `json:"estado,omitempty"`
+}
+
+type apiProgresoTareaRegistrarRequest struct {
+	Proyecto       string  `json:"proyecto"`
+	FaseID         *int64  `json:"fase_id"`
+	ProgresoPct    float64 `json:"progreso_pct"`
+	ActualizadoPor string  `json:"actualizado_por"`
+}
+
 type apiPropuestaCrearRequest struct {
 	Codigo       string `json:"codigo"`
 	Titulo       string `json:"titulo"`
@@ -269,6 +294,10 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/proyectos", apiHandlerProyectos)
 	mux.HandleFunc("/api/proyectos/descubrir", apiHandlerProyectoDescubrir)
 	mux.HandleFunc("/api/proyectos/", apiRouterProyectos)
+	mux.HandleFunc("/api/progreso", apiHandlerProgreso)
+	mux.HandleFunc("/api/progreso/fases", apiHandlerProgresoFases)
+	mux.HandleFunc("/api/progreso/fases/", apiRouterProgresoFases)
+	mux.HandleFunc("/api/progreso/tareas/", apiRouterProgresoTareas)
 	mux.HandleFunc("/api/conectores", apiHandlerConectores)
 	mux.HandleFunc("/api/conectores/", apiRouterConectores)
 	mux.HandleFunc("/api/asignaciones", apiHandlerAsignaciones)
@@ -2164,6 +2193,139 @@ func apiHandlerSesiones(w http.ResponseWriter, r *http.Request) {
 		sesiones = sesiones[:limit]
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{"sesiones": sesiones})
+}
+
+func apiHandlerProgreso(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto"))
+	if proyecto == "" {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("proyecto obligatorio"))
+		return
+	}
+	resumen, err := db.CalcularResumenProgresoProyecto(proyecto)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiProgresoResumenResponse{Resumen: resumen})
+}
+
+func apiHandlerProgresoFases(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto"))
+		if proyecto == "" {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("proyecto obligatorio"))
+			return
+		}
+		fases, err := db.ListarFasesProyecto(proyecto)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiProgresoFasesResponse{Fases: fases})
+	case http.MethodPost:
+		var req apiProgresoFaseRegistrarRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		id, err := db.RegistrarFaseProyecto(&db.FaseProyecto{
+			Proyecto:    strings.TrimSpace(req.Proyecto),
+			Nombre:      strings.TrimSpace(req.Nombre),
+			Descripcion: strings.TrimSpace(req.Descripcion),
+			Orden:       req.Orden,
+			Peso:        req.Peso,
+			Estado:      strings.TrimSpace(req.Estado),
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		fase, err := db.GetFaseProyecto(id)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusCreated, apiProgresoFaseResponse{ID: id, Fase: fase})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func apiRouterProgresoFases(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	idStr := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/progreso/fases/"), "/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
+		return
+	}
+	fase, err := db.GetFaseProyecto(id)
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	var req apiProgresoFaseActualizarRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	if req.Proyecto != nil {
+		fase.Proyecto = strings.TrimSpace(*req.Proyecto)
+	}
+	if req.Nombre != nil {
+		fase.Nombre = strings.TrimSpace(*req.Nombre)
+	}
+	if req.Descripcion != nil {
+		fase.Descripcion = strings.TrimSpace(*req.Descripcion)
+	}
+	if req.Orden != nil {
+		fase.Orden = *req.Orden
+	}
+	if req.Peso != nil {
+		fase.Peso = *req.Peso
+	}
+	if req.Estado != nil {
+		fase.Estado = strings.TrimSpace(*req.Estado)
+	}
+	if err := db.ActualizarFaseProyecto(fase); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiProgresoFaseResponse{ID: fase.ID, Fase: fase})
+}
+
+func apiRouterProgresoTareas(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	idStr := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/progreso/tareas/"), "/")
+	tareaID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || tareaID <= 0 {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("tarea-id inválido"))
+		return
+	}
+	var req apiProgresoTareaRegistrarRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := db.RegistrarAvanceTarea(&db.AvanceTarea{
+		TareaID:        tareaID,
+		Proyecto:       strings.TrimSpace(req.Proyecto),
+		FaseID:         req.FaseID,
+		ProgresoPct:    req.ProgresoPct,
+		ActualizadoPor: strings.TrimSpace(req.ActualizadoPor),
+	}); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func apiRouterSesiones(w http.ResponseWriter, r *http.Request) {

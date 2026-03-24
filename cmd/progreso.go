@@ -26,9 +26,16 @@ var progresoVerCmd = &cobra.Command{
 	Short: "Muestra el resumen de progreso real de un proyecto",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		resumen, err := db.CalcularResumenProgresoProyecto(strings.TrimSpace(args[0]))
+		proyecto := strings.TrimSpace(args[0])
+		resumen, ok, err := cargarResumenProgresoDesdeAPI(proyecto)
 		if err != nil {
 			return err
+		}
+		if !ok {
+			resumen, err = db.CalcularResumenProgresoProyecto(proyecto)
+			if err != nil {
+				return err
+			}
 		}
 		fmt.Printf("Proyecto: %s\n", resumen.Proyecto)
 		fmt.Printf("Progreso: %.1f%%\n", resumen.ProgresoPct)
@@ -60,9 +67,16 @@ var progresoFaseListarCmd = &cobra.Command{
 	Short: "Lista fases de un proyecto",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fases, err := db.ListarFasesProyecto(strings.TrimSpace(args[0]))
+		proyecto := strings.TrimSpace(args[0])
+		fases, ok, err := cargarFasesProgresoDesdeAPI(proyecto)
 		if err != nil {
 			return err
+		}
+		if !ok {
+			fases, err = db.ListarFasesProyecto(proyecto)
+			if err != nil {
+				return err
+			}
 		}
 		if len(fases) == 0 {
 			fmt.Println("No hay fases para ese proyecto.")
@@ -81,18 +95,33 @@ var progresoFaseRegistrarCmd = &cobra.Command{
 	Short: "Registra una fase para un proyecto",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		proyecto := strings.TrimSpace(args[0])
 		nombre, _ := cmd.Flags().GetString("nombre")
 		descripcion, _ := cmd.Flags().GetString("descripcion")
 		orden, _ := cmd.Flags().GetInt64("orden")
 		peso, _ := cmd.Flags().GetFloat64("peso")
 		estado, _ := cmd.Flags().GetString("estado")
-		id, err := db.RegistrarFaseProyecto(&db.FaseProyecto{
-			Proyecto:    strings.TrimSpace(args[0]),
+		req := apiProgresoFaseRegistrarRequest{
+			Proyecto:    proyecto,
 			Nombre:      strings.TrimSpace(nombre),
 			Descripcion: strings.TrimSpace(descripcion),
 			Orden:       orden,
 			Peso:        peso,
 			Estado:      strings.TrimSpace(estado),
+		}
+		if resp, ok, err := registrarFaseProgresoPorAPI(proyecto, req); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Fase #%d registrada\n", resp.ID)
+			return nil
+		}
+		id, err := db.RegistrarFaseProyecto(&db.FaseProyecto{
+			Proyecto:    req.Proyecto,
+			Nombre:      req.Nombre,
+			Descripcion: req.Descripcion,
+			Orden:       req.Orden,
+			Peso:        req.Peso,
+			Estado:      req.Estado,
 		})
 		if err != nil {
 			return err
@@ -111,33 +140,62 @@ var progresoFaseActualizarCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("id inválido")
 		}
+		req := apiProgresoFaseActualizarRequest{}
+		if cmd.Flags().Changed("proyecto") {
+			v, _ := cmd.Flags().GetString("proyecto")
+			v = strings.TrimSpace(v)
+			req.Proyecto = &v
+		}
+		if cmd.Flags().Changed("nombre") {
+			v, _ := cmd.Flags().GetString("nombre")
+			v = strings.TrimSpace(v)
+			req.Nombre = &v
+		}
+		if cmd.Flags().Changed("descripcion") {
+			v, _ := cmd.Flags().GetString("descripcion")
+			v = strings.TrimSpace(v)
+			req.Descripcion = &v
+		}
+		if cmd.Flags().Changed("orden") {
+			v, _ := cmd.Flags().GetInt64("orden")
+			req.Orden = &v
+		}
+		if cmd.Flags().Changed("peso") {
+			v, _ := cmd.Flags().GetFloat64("peso")
+			req.Peso = &v
+		}
+		if cmd.Flags().Changed("estado") {
+			v, _ := cmd.Flags().GetString("estado")
+			v = strings.TrimSpace(v)
+			req.Estado = &v
+		}
+		if resp, ok, err := actualizarFaseProgresoPorAPI(id, req); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Fase #%d actualizada\n", resp.ID)
+			return nil
+		}
 		fase, err := db.GetFaseProyecto(id)
 		if err != nil {
 			return err
 		}
-		if cmd.Flags().Changed("proyecto") {
-			v, _ := cmd.Flags().GetString("proyecto")
-			fase.Proyecto = strings.TrimSpace(v)
+		if req.Proyecto != nil {
+			fase.Proyecto = *req.Proyecto
 		}
-		if cmd.Flags().Changed("nombre") {
-			v, _ := cmd.Flags().GetString("nombre")
-			fase.Nombre = strings.TrimSpace(v)
+		if req.Nombre != nil {
+			fase.Nombre = *req.Nombre
 		}
-		if cmd.Flags().Changed("descripcion") {
-			v, _ := cmd.Flags().GetString("descripcion")
-			fase.Descripcion = strings.TrimSpace(v)
+		if req.Descripcion != nil {
+			fase.Descripcion = *req.Descripcion
 		}
-		if cmd.Flags().Changed("orden") {
-			v, _ := cmd.Flags().GetInt64("orden")
-			fase.Orden = v
+		if req.Orden != nil {
+			fase.Orden = *req.Orden
 		}
-		if cmd.Flags().Changed("peso") {
-			v, _ := cmd.Flags().GetFloat64("peso")
-			fase.Peso = v
+		if req.Peso != nil {
+			fase.Peso = *req.Peso
 		}
-		if cmd.Flags().Changed("estado") {
-			v, _ := cmd.Flags().GetString("estado")
-			fase.Estado = strings.TrimSpace(v)
+		if req.Estado != nil {
+			fase.Estado = *req.Estado
 		}
 		if err := db.ActualizarFaseProyecto(fase); err != nil {
 			return err
@@ -171,14 +229,24 @@ var progresoTareaRegistrarCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := db.RegistrarAvanceTarea(&db.AvanceTarea{
-			TareaID:        tareaID,
+		req := apiProgresoTareaRegistrarRequest{
 			Proyecto:       strings.TrimSpace(proyecto),
 			FaseID:         faseID,
 			ProgresoPct:    pct,
 			ActualizadoPor: por,
-		}); err != nil {
+		}
+		if ok, err := registrarAvanceProgresoPorAPI(tareaID, req); err != nil {
 			return err
+		} else if !ok {
+			if err := db.RegistrarAvanceTarea(&db.AvanceTarea{
+				TareaID:        tareaID,
+				Proyecto:       req.Proyecto,
+				FaseID:         req.FaseID,
+				ProgresoPct:    req.ProgresoPct,
+				ActualizadoPor: req.ActualizadoPor,
+			}); err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ Avance registrado para tarea #%d\n", tareaID)
 		return nil

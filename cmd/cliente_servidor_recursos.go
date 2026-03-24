@@ -118,6 +118,52 @@ type apiConectorUpsertRequest struct {
 	Activo       bool   `json:"activo"`
 }
 
+func cargarResumenProgresoDesdeAPI(proyecto string) (*db.ResumenProgresoProyecto, bool, error) {
+	var resp apiProgresoResumenResponse
+	query := url.Values{}
+	query.Set("proyecto", strings.TrimSpace(proyecto))
+	ok, err := apiGetQuery("/api/progreso", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Resumen, true, nil
+}
+
+func cargarFasesProgresoDesdeAPI(proyecto string) ([]*db.FaseProyecto, bool, error) {
+	var resp apiProgresoFasesResponse
+	query := url.Values{}
+	query.Set("proyecto", strings.TrimSpace(proyecto))
+	ok, err := apiGetQuery("/api/progreso/fases", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Fases, true, nil
+}
+
+func registrarFaseProgresoPorAPI(proyecto string, req apiProgresoFaseRegistrarRequest) (*apiProgresoFaseResponse, bool, error) {
+	req.Proyecto = strings.TrimSpace(proyecto)
+	var resp apiProgresoFaseResponse
+	ok, err := apiPost("/api/progreso/fases", req, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
+func actualizarFaseProgresoPorAPI(id int64, req apiProgresoFaseActualizarRequest) (*apiProgresoFaseResponse, bool, error) {
+	var resp apiProgresoFaseResponse
+	ok, err := apiPost(fmt.Sprintf("/api/progreso/fases/%d", id), req, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
+func registrarAvanceProgresoPorAPI(tareaID int64, req apiProgresoTareaRegistrarRequest) (bool, error) {
+	ok, err := apiPost(fmt.Sprintf("/api/progreso/tareas/%d", tareaID), req, nil)
+	return ok, err
+}
+
 func cargarPresupuestoSesionDesdeAPI(sesionID int64, agente string) (*apiSesionPresupuestoResponse, bool, error) {
 	var resp apiSesionPresupuestoResponse
 	query := url.Values{}
