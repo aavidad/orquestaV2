@@ -22,8 +22,6 @@ import (
 	"orquesta/db"
 )
 
-const defaultOrquestaServerURL = "http://127.0.0.1:16543"
-
 type apiAgentesResponse struct {
 	Agentes []*db.Agente `json:"agentes"`
 }
@@ -365,7 +363,7 @@ func serverBaseURL() string {
 	if strings.TrimSpace(os.Getenv("ORQUESTA_DISABLE_SERVER_CLIENT")) == "1" {
 		return ""
 	}
-	return defaultOrquestaServerURL
+	return defaultServerURL
 }
 
 func serverReachable() bool {

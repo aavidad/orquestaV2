@@ -162,8 +162,8 @@ func TestServerBaseURLUsaPuertoPorDefectoDeServe(t *testing.T) {
 	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
 	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
 
-	if got := serverBaseURL(); got != "http://127.0.0.1:16543" {
-		t.Fatalf("serverBaseURL() = %q, want %q", got, "http://127.0.0.1:16543")
+	if got := serverBaseURL(); got != defaultServerURL {
+		t.Fatalf("serverBaseURL() = %q, want %q", got, defaultServerURL)
 	}
 }
 

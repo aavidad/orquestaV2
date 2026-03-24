@@ -1190,7 +1190,7 @@ var serveCmd = &cobra.Command{
 }
 
 func init() {
-	serveCmd.Flags().Int("puerto", 16543, "Puerto HTTP")
+	serveCmd.Flags().Int("puerto", defaultServePort, "Puerto HTTP")
 	rootCmd.AddCommand(serveCmd)
 }
 

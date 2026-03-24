@@ -23,7 +23,6 @@ import (
 )
 
 const serverURLVar = "ORQUESTA_SERVER_URL"
-const defaultServerURL = "http://127.0.0.1:16543"
 
 var serverHTTPClient = &http.Client{Timeout: 3 * time.Second}
 
