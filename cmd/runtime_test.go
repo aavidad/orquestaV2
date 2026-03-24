@@ -266,6 +266,21 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": 15})
 		case r.URL.Path == "/api/runtime-checkpoints" && r.Method == http.MethodPost:
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": 16})
+		case r.URL.Path == "/api/runtime-checkpoints/21":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"checkpoint": map[string]any{
+					"id":              21,
+					"agente":          "Codex1",
+					"checkpoint_kind": "manual",
+					"resumen":         "checkpoint remoto",
+					"branch":          "main",
+					"cwd":             "/tmp/orquestador",
+					"payload_json":    "{}",
+					"resume_strategy": "resumen_y_payload",
+					"source":          "api-checkpoint",
+					"created_at":      "2026-03-23T10:00:00Z",
+				},
+			})
 		case r.URL.Path == "/api/runtime-mailbox" && r.Method == http.MethodGet:
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"mailbox": []map[string]any{{
@@ -366,6 +381,17 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	})
 	if !strings.Contains(outCheckpointCrear, "#16") {
 		t.Fatalf("salida checkpoint-nuevo sin id remoto:\n%s", outCheckpointCrear)
+	}
+
+	outCheckpointVer := capturarStdout(t, func() {
+		if err := runtimeCheckpointVerCmd.RunE(runtimeCheckpointVerCmd, []string{"21"}); err != nil {
+			t.Fatalf("runtime checkpoint-ver via api: %v", err)
+		}
+	})
+	for _, token := range []string{"Checkpoint #21", "Codex1", "checkpoint remoto", "api-checkpoint"} {
+		if !strings.Contains(outCheckpointVer, token) {
+			t.Fatalf("salida checkpoint-ver sin %q:\n%s", token, outCheckpointVer)
+		}
 	}
 
 	if err := runtimeMailboxCmd.Flags().Set("to", "Codex2"); err != nil {

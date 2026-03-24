@@ -218,7 +218,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "listar", "ver", "handles", "ordenes", "orden-nueva", "nudge", "checkpoints", "checkpoint-nuevo", "mailbox", "mailbox-enviar", "mailbox-entregar", "mailbox-consumir":
+		case "listar", "ver", "handles", "ordenes", "orden-nueva", "nudge", "checkpoints", "checkpoint-nuevo", "checkpoint-ver", "mailbox", "mailbox-enviar", "mailbox-entregar", "mailbox-consumir":
 			return true
 		default:
 			return false
@@ -355,6 +355,9 @@ func apiGet(path string, dst any) (bool, error) {
 }
 
 func apiGetQuery(path string, query url.Values, dst any) (bool, error) {
+	if strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1" {
+		return false, nil
+	}
 	base := serverBaseURL()
 	if base == "" {
 		if requireServerForCurrentCommand() {
@@ -411,6 +414,9 @@ func apiProjectSlugMap() (map[int64]string, bool, error) {
 }
 
 func apiPost(path string, payload any, dst any) (bool, error) {
+	if strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1" {
+		return false, nil
+	}
 	base := serverBaseURL()
 	if base == "" {
 		if requireServerForCurrentCommand() {

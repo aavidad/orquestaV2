@@ -249,6 +249,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtime-mailbox/", apiRouterRuntimeMailbox)
 	mux.HandleFunc("/api/runtime-checkpoints", apiHandlerRuntimeCheckpoints)
 	mux.HandleFunc("/api/runtime-checkpoints/latest", apiHandlerRuntimeCheckpointLatest)
+	mux.HandleFunc("/api/runtime-checkpoints/", apiRouterRuntimeCheckpoints)
 	mux.HandleFunc("/api/refineria", apiHandlerRefineria)
 	mux.HandleFunc("/api/refineria/", apiRouterRefineria)
 	mux.HandleFunc("/api/memoria", apiHandlerMemoria)
@@ -1520,6 +1521,24 @@ func apiHandlerRuntimeCheckpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true, "id": id})
+}
+
+func apiRouterRuntimeCheckpoints(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	idStr := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/runtime-checkpoints/"), "/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || id <= 0 {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
+		return
+	}
+	checkpoint, err := db.GetRuntimeCheckpoint(id)
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"checkpoint": checkpoint})
 }
 
 func apiHandlerRuntimeCheckpointLatest(w http.ResponseWriter, r *http.Request) {

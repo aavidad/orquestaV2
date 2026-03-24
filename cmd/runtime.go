@@ -395,6 +395,12 @@ var runtimeCheckpointVerCmd = &cobra.Command{
 		if err != nil || id <= 0 {
 			return fmt.Errorf("id inválido")
 		}
+		if cp, ok, err := cargarRuntimeCheckpointPorIDDesdeAPI(id); ok {
+			if err != nil {
+				return err
+			}
+			return imprimirRuntimeCheckpoint(cp)
+		}
 		cp, err := db.GetRuntimeCheckpoint(id)
 		if err != nil {
 			return err
@@ -742,6 +748,15 @@ func cargarCheckpointRuntimeDesdeAPI(agente, proyecto string) (*db.RuntimeCheckp
 	}
 	var resp apiRuntimeCheckpointResponse
 	ok, err := apiGetQuery("/api/runtime-checkpoints/latest", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Checkpoint, true, nil
+}
+
+func cargarRuntimeCheckpointPorIDDesdeAPI(id int64) (*db.RuntimeCheckpoint, bool, error) {
+	var resp apiRuntimeCheckpointResponse
+	ok, err := apiGet(fmt.Sprintf("/api/runtime-checkpoints/%d", id), &resp)
 	if !ok || err != nil {
 		return nil, ok, err
 	}
