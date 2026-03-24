@@ -208,7 +208,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "listar", "ver", "votos", "nueva", "cerrar", "reabrir", "reparar-votos":
+		case "listar", "ver", "votos", "nueva", "actualizar", "cerrar", "reabrir", "reparar-votos":
 			return true
 		default:
 			return false
@@ -252,7 +252,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "listar", "ver", "handles", "ordenes", "orden-nueva", "nudge", "discordia", "checkpoints", "checkpoint-nuevo", "checkpoint-ver", "mailbox", "mailbox-enviar", "mailbox-entregar", "mailbox-consumir":
+		case "listar", "ver", "handles", "diagnostico", "ordenes", "orden-nueva", "nudge", "discordia", "checkpoints", "checkpoint-nuevo", "checkpoint-ver", "mailbox", "mailbox-enviar", "mailbox-entregar", "mailbox-consumir":
 			return true
 		default:
 			return false
@@ -267,6 +267,36 @@ func commandSupportsServerMode(args []string) bool {
 		default:
 			return false
 		}
+	case "progreso":
+		if len(tokens) <= 1 {
+			return false
+		}
+		switch tokens[1] {
+		case "ver":
+			return true
+		case "fase":
+			return len(tokens) > 2 && (tokens[2] == "listar" || tokens[2] == "registrar" || tokens[2] == "actualizar")
+		case "tarea":
+			return len(tokens) > 2 && tokens[2] == "registrar"
+		default:
+			return false
+		}
+	case "pool":
+		if len(tokens) <= 1 {
+			return false
+		}
+		switch tokens[1] {
+		case "listar", "ver", "guardar", "seed-inicial":
+			return true
+		case "modelo":
+			return len(tokens) > 2 && (tokens[2] == "listar" || tokens[2] == "guardar" || tokens[2] == "seed-inicial")
+		default:
+			return false
+		}
+	case "politica-modelo":
+		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "guardar" || tokens[1] == "seed-inicial")
+	case "modelo":
+		return len(tokens) > 1 && tokens[1] == "resolver"
 	case "reglas":
 		return len(tokens) > 1 && tokens[1] == "listar"
 	case "skills":
@@ -334,6 +364,8 @@ func commandSupportsServerMode(args []string) bool {
 		switch tokens[1] {
 		case "inicio", "guardar", "continuar", "fin", "listar", "historial", "ver", "nuevo-codex":
 			return true
+		case "presupuesto":
+			return len(tokens) > 2 && (tokens[2] == "registrar" || tokens[2] == "ver")
 		default:
 			return false
 		}

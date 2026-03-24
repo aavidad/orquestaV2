@@ -4,6 +4,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"orquesta/internal/controlruntime"
+	"os"
+	"orquesta/runtimeagente"
 	"strings"
 	"time"
 )
@@ -1167,22 +1170,113 @@ func actualizarEstadoRuntime(order *RuntimeOrder, logicalState, processState str
 	return runtime, nil
 }
 
+func controlarProcesoRuntime(order *RuntimeOrder, signaler func(controlruntime.ObjetivoProceso) (bool, int, error)) (bool, int, error) {
+	runtime, err := resolverRuntimeParaOrden(order)
+	if err != nil {
+		return false, 0, err
+	}
+	handle, err := resolverHandleParaOrden(order)
+	if err != nil {
+		return false, 0, err
+	}
+	obj := controlruntime.ObjetivoProceso{}
+	if runtime != nil {
+		obj.PID = runtime.PID
+	}
+	if handle != nil {
+		obj.HandleKind = handle.HandleKind
+		obj.HandleRef = handle.HandleRef
+		obj.MetadataJSON = handle.MetadataJSON
+	}
+	return signaler(obj)
+}
+
 func ejecutarRuntimeOrderStart(order *RuntimeOrder) error {
-	runtime, err := actualizarEstadoRuntime(order, "activo", "corriendo")
+	payload := map[string]any{}
+	_ = json.Unmarshal([]byte(order.PayloadJSON), &payload)
+
+	proyectoRef := stringFromMap(payload, "proyecto", "")
+	if strings.TrimSpace(proyectoRef) == "" && order.ProyectoID != nil {
+		proyectoRef = jsonNumber(*order.ProyectoID)
+	}
+	if strings.TrimSpace(proyectoRef) == "" {
+		return fmt.Errorf("start sin proyecto")
+	}
+
+	agente, proyecto, conector, ultima, plan, err := prepararStartRuntimeOrder(
+		order.Agente,
+		proyectoRef,
+		stringFromMap(payload, "conector", ""),
+		stringFromMap(payload, "modelo", ""),
+		stringFromMap(payload, "razonamiento", ""),
+		stringFromMap(payload, "perfil", ""),
+	)
 	if err != nil {
 		return err
 	}
+	arranque, err := controlruntime.ArrancarPlan(controlruntime.SolicitudArranque{
+		Agente:   order.Agente,
+		Proyecto: proyecto.Slug,
+		Plan:     plan,
+	})
+	if err != nil {
+		return err
+	}
+
+	pid64 := int64(arranque.PID)
+	host, _ := os.Hostname()
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:            order.Agente,
+		ConectorID:        &conector.ID,
+		ProyectoID:        &proyecto.ID,
+		CWD:               plan.WorkingDir,
+		Herramienta:       conector.Slug,
+		Host:              strings.TrimSpace(host),
+		PID:               &pid64,
+		ResumePayloadJSON: payloadJSONDesdePlan(plan),
+		ResumenContinuidad: resumenContinuidadDesdeSesion(ultima),
+		Branch:            branchDesdeSesion(ultima),
+	})
+	if err != nil {
+		_, _, _ = controlruntime.DetenerProceso(controlruntime.ObjetivoProceso{PID: &pid64})
+		return err
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil {
+		return err
+	}
+	if handle != nil {
+		if err := actualizarHandleRuntimeProceso(handle.ID, arranque, conector); err != nil {
+			return err
+		}
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil {
+		return err
+	}
+	if runtime == nil {
+		return fmt.Errorf("no se pudo registrar runtime para la sesion %d", sesion.ID)
+	}
 	result := map[string]any{
 		"ok":            true,
+		"agente":        agente.Nombre,
+		"sesion_id":     sesion.ID,
+		"handle_id":     runtimeHandleID(handle),
 		"runtime_id":    runtime.ID,
 		"logical_state": runtime.LogicalState,
 		"process_state": runtime.ProcessState,
+		"pid":           arranque.PID,
+		"control_real":  true,
 	}
 	data, _ := json.Marshal(result)
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
 }
 
 func ejecutarRuntimeOrderPause(order *RuntimeOrder) error {
+	aplicado, pid, err := controlarProcesoRuntime(order, controlruntime.PausarProceso)
+	if err != nil {
+		return err
+	}
 	runtime, err := actualizarEstadoRuntime(order, "pausado", "")
 	if err != nil {
 		return err
@@ -1196,12 +1290,18 @@ func ejecutarRuntimeOrderPause(order *RuntimeOrder) error {
 		"ok":            true,
 		"runtime_id":    runtime.ID,
 		"logical_state": runtime.LogicalState,
+		"control_real":  aplicado,
+		"pid":           pid,
 	}
 	data, _ := json.Marshal(result)
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
 }
 
 func ejecutarRuntimeOrderResume(order *RuntimeOrder) error {
+	aplicado, pid, err := controlarProcesoRuntime(order, controlruntime.ContinuarProceso)
+	if err != nil {
+		return err
+	}
 	runtime, err := actualizarEstadoRuntime(order, "activo", "corriendo")
 	if err != nil {
 		return err
@@ -1216,12 +1316,18 @@ func ejecutarRuntimeOrderResume(order *RuntimeOrder) error {
 		"runtime_id":    runtime.ID,
 		"logical_state": runtime.LogicalState,
 		"process_state": runtime.ProcessState,
+		"control_real":  aplicado,
+		"pid":           pid,
 	}
 	data, _ := json.Marshal(result)
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
 }
 
 func ejecutarRuntimeOrderStop(order *RuntimeOrder) error {
+	aplicado, pid, err := controlarProcesoRuntime(order, controlruntime.DetenerProceso)
+	if err != nil {
+		return err
+	}
 	runtime, err := actualizarEstadoRuntime(order, "cerrado", "finalizado")
 	if err != nil {
 		return err
@@ -1236,6 +1342,8 @@ func ejecutarRuntimeOrderStop(order *RuntimeOrder) error {
 		"runtime_id":    runtime.ID,
 		"logical_state": runtime.LogicalState,
 		"process_state": runtime.ProcessState,
+		"control_real":  aplicado,
+		"pid":           pid,
 	}
 	data, _ := json.Marshal(result)
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
@@ -1270,6 +1378,26 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 	fromAgente := stringFromMap(payload, "from_agente", "server")
 	if strings.TrimSpace(toAgente) == "" {
 		return fmt.Errorf("send_instruction sin agente destino")
+	}
+	texto := stringFromMap(payload, "texto", stringFromMap(payload, "instruction", ""))
+
+	aplicado, pid, err := controlarProcesoRuntime(order, func(obj controlruntime.ObjetivoProceso) (bool, int, error) {
+		return controlruntime.EnviarInstruccionProceso(obj, texto)
+	})
+	if err != nil {
+		return err
+	}
+	if aplicado {
+		result := map[string]any{
+			"ok":           true,
+			"to_agente":    toAgente,
+			"from_agente":  fromAgente,
+			"kind":         "instruction",
+			"control_real": true,
+			"pid":          pid,
+		}
+		data, _ := json.Marshal(result)
+		return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
 	}
 
 	existente, err := GetRuntimeMailboxByRuntimeOrderID(order.ID)
@@ -1308,6 +1436,144 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 	}
 	data, _ := json.Marshal(result)
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+}
+
+func runtimeHandleID(handle *RuntimeHandle) any {
+	if handle == nil {
+		return nil
+	}
+	return handle.ID
+}
+
+func payloadJSONDesdePlan(plan *runtimeagente.LaunchPlan) string {
+	if plan == nil {
+		return "{}"
+	}
+	data, err := json.Marshal(map[string]any{
+		"modo":              strings.TrimSpace(plan.Modo),
+		"native_resume":     plan.NativeResume,
+		"continuity_prompt": strings.TrimSpace(plan.ContinuityPrompt),
+	})
+	if err != nil {
+		return "{}"
+	}
+	return string(data)
+}
+
+func branchDesdeSesion(ultima *Sesion) string {
+	if ultima == nil {
+		return ""
+	}
+	return strings.TrimSpace(ultima.Branch)
+}
+
+func resumenContinuidadDesdeSesion(ultima *Sesion) string {
+	if ultima == nil {
+		return ""
+	}
+	return strings.TrimSpace(ultima.ResumenContinuidad)
+}
+
+func actualizarHandleRuntimeProceso(handleID int64, arranque *controlruntime.ProcesoArrancado, conector *Conector) error {
+	if handleID == 0 || arranque == nil {
+		return nil
+	}
+	meta := map[string]any{
+		"stdin_path":       arranque.StdinPath,
+		"log_path":         arranque.LogPath,
+		"working_dir":      arranque.WorkingDir,
+		"wrapped_command":  arranque.WrappedCommand,
+		"rendered_command": arranque.RenderedCommand,
+		"driver":           "process_pty_cli",
+	}
+	if conector != nil {
+		meta["conector"] = strings.TrimSpace(conector.Slug)
+	}
+	metaJSON, _ := json.Marshal(meta)
+	capsJSON, _ := json.Marshal(map[string]any{
+		"can_send_input":       true,
+		"can_checkpoint":       true,
+		"can_resume":           true,
+		"can_capture_pid":      true,
+		"can_track_continuity": true,
+		"can_pause":            true,
+		"can_stop":             true,
+	})
+	_, err := DB.Exec(`
+		UPDATE runtime_handles
+		SET metadata_json = ?,
+		    capabilities_json = ?,
+		    last_seen_at = CURRENT_TIMESTAMP
+		WHERE id = ?`, string(metaJSON), string(capsJSON), handleID)
+	return err
+}
+
+func prepararStartRuntimeOrder(agenteRef, proyectoRef, conectorRef, modelo, razonamiento, perfilTarea string) (*Agente, *Proyecto, *Conector, *Sesion, *runtimeagente.LaunchPlan, error) {
+	agente, err := GetAgente(strings.TrimSpace(agenteRef))
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	proyecto, err := GetProyecto(strings.TrimSpace(proyectoRef))
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	ultima, err := ObtenerUltimaSesion(strings.TrimSpace(agenteRef), &proyecto.ID)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, nil, nil, nil, nil, err
+	}
+	conector, err := resolverConectorRuntimeOrder(conectorRef, ultima)
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	resume := runtimeagente.ResumeContext{}
+	if ultima != nil {
+		resume = runtimeagente.ResumeContext{
+			ExternalSessionID:  strings.TrimSpace(ultima.ExternalSessionID),
+			ResumePayloadJSON:  strings.TrimSpace(ultima.ResumePayloadJSON),
+			ResumenContinuidad: strings.TrimSpace(ultima.ResumenContinuidad),
+			Branch:             strings.TrimSpace(ultima.Branch),
+			CWD:                strings.TrimSpace(ultima.CWD),
+		}
+	}
+	plan, err := runtimeagente.DefaultRegistry().Prepare(runtimeagente.LaunchRequest{
+		Agente:       strings.TrimSpace(agente.Nombre),
+		Rol:          strings.TrimSpace(agente.Rol),
+		ProyectoSlug: strings.TrimSpace(proyecto.Slug),
+		ProyectoRuta: strings.TrimSpace(proyecto.RutaAbs),
+		Modelo:       strings.TrimSpace(modelo),
+		Razonamiento: strings.TrimSpace(razonamiento),
+		PerfilTarea:  strings.TrimSpace(perfilTarea),
+		Conector: runtimeagente.ConnectorConfig{
+			Slug:         strings.TrimSpace(conector.Slug),
+			Nombre:       strings.TrimSpace(conector.Nombre),
+			Transporte:   strings.TrimSpace(conector.Transporte),
+			Comando:      strings.TrimSpace(conector.Comando),
+			ArgsJSON:     strings.TrimSpace(conector.ArgsJSON),
+			EnvJSON:      strings.TrimSpace(conector.EnvJSON),
+			MetadataJSON: strings.TrimSpace(conector.MetadataJSON),
+			Activo:       conector.Activo,
+		},
+		Resume: resume,
+	})
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	return agente, proyecto, conector, ultima, plan, nil
+}
+
+func resolverConectorRuntimeOrder(conectorRef string, ultima *Sesion) (*Conector, error) {
+	ref := strings.TrimSpace(conectorRef)
+	if ref == "" && ultima != nil {
+		if strings.TrimSpace(ultima.ConectorSlug) != "" {
+			ref = strings.TrimSpace(ultima.ConectorSlug)
+		} else if ultima.ConectorID != nil && *ultima.ConectorID > 0 {
+			ref = jsonNumber(*ultima.ConectorID)
+		}
+	}
+	if ref == "" {
+		ref = "codex-cli"
+	}
+	return GetConector(ref)
 }
 
 func ejecutarRuntimeOrderHandoff(order *RuntimeOrder) error {

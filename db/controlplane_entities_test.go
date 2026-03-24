@@ -2,9 +2,13 @@ package db
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"orquesta/internal/controlruntime"
 )
 
 func TestRuntimeHandleSeSincronizaDesdeSesion(t *testing.T) {
@@ -900,6 +904,121 @@ func TestEjecutarRuntimeOrderCheckpointReutilizaCheckpointExistente(t *testing.T
 	checkpointID, ok := result["checkpoint_id"].(float64)
 	if !ok || int64(checkpointID) != existenteID {
 		t.Fatalf("resultado no reutiliza checkpoint existente: %+v", result)
+	}
+}
+
+func TestRuntimeOrderStartYSendInstructionGobiernanProcesoReal(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "cat-cli",
+		Nombre:     "Cat CLI",
+		Transporte: "cli",
+		Comando:    "cat",
+		Activo:     true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"cat-cli"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStart(startOrder); err != nil {
+		t.Fatalf("ejecutar start: %v", err)
+	}
+
+	startOrder, err = GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order final: %v", err)
+	}
+	if startOrder.Estado != "completada" {
+		t.Fatalf("start order no completada: %+v", startOrder)
+	}
+
+	sesion, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion activa: %+v err=%v", sesion, err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil || runtime.PID == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	t.Cleanup(func() {
+		_, _, _ = controlruntime.DetenerProceso(controlruntime.ObjetivoProceso{
+			PID: runtime.PID,
+		})
+	})
+
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(handle.MetadataJSON), &meta); err != nil {
+		t.Fatalf("metadata handle: %v", err)
+	}
+	stdinPath, _ := meta["stdin_path"].(string)
+	logPath, _ := meta["log_path"].(string)
+	if strings.TrimSpace(stdinPath) == "" || strings.TrimSpace(logPath) == "" {
+		t.Fatalf("metadata de proceso incompleta: %+v", meta)
+	}
+
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: `{"to_agente":"Codex1","texto":"hola runtime"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderSendInstruction(sendOrder); err != nil {
+		t.Fatalf("ejecutar send_instruction: %v", err)
+	}
+	sendOrder, err = GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "completada" {
+		t.Fatalf("send_instruction no completada: %+v", sendOrder)
+	}
+
+	time.Sleep(250 * time.Millisecond)
+	logData, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("leer log: %v", err)
+	}
+	if !strings.Contains(string(logData), "hola runtime") {
+		t.Fatalf("el proceso no recibio la instruccion: %s", string(logData))
 	}
 }
 

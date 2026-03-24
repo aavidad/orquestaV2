@@ -23,6 +23,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
+	"orquesta/internal/lanzamientoruntime"
 	"orquesta/runtimeagente"
 )
 
@@ -284,34 +285,7 @@ func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Pro
 		return out, err
 	}
 
-	resume, bootstrap, err := prepararBootstrapRuntimeAgente(agente.Nombre, proyecto, ultima)
-	if err != nil {
-		return out, err
-	}
-
-	req := runtimeagente.LaunchRequest{
-		Agente:       agente.Nombre,
-		Rol:          agente.Rol,
-		ProyectoSlug: proyecto.Slug,
-		ProyectoRuta: proyecto.RutaAbs,
-		Modelo:       strings.TrimSpace(modelo),
-		Razonamiento: strings.TrimSpace(razonamiento),
-		PerfilTarea:  strings.TrimSpace(perfilTarea),
-		Conector: runtimeagente.ConnectorConfig{
-			Slug:         conector.Slug,
-			Nombre:       conector.Nombre,
-			Transporte:   conector.Transporte,
-			Comando:      conector.Comando,
-			ArgsJSON:     conector.ArgsJSON,
-			EnvJSON:      conector.EnvJSON,
-			MetadataJSON: conector.MetadataJSON,
-			Activo:       conector.Activo,
-		},
-	}
-	if resumeContextNoVacio(resume) {
-		req.Resume = resume
-	}
-	plan, err := runtimeagente.DefaultRegistry().Prepare(req)
+	prep, err := lanzamientoruntime.PrepararDesdeDatos(agente, proyecto, conector, ultima, modelo, razonamiento, perfilTarea)
 	if err != nil {
 		return out, err
 	}
@@ -333,19 +307,19 @@ func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Pro
 			Comando:    conector.Comando,
 		},
 		Politica:    cargarPoliticaAgente(),
-		Plan:        plan,
+		Plan:        prep.Plan,
 		Reglas:      reglas,
 		Skills:      skills,
 		Workflows:   workflows,
 		Memoria:     memoria,
-		Bootstrap:   bootstrap,
+		Bootstrap:   prep.Bootstrap,
 		ReanimarAt:  agente.ReanimarAt,
 		MotivoPausa: agente.MotivoPausa,
 		EstadoCuota: agente.EstadoCuota,
 	}
-	out.Politica.Modelo = plan.Modelo
-	out.Politica.Razonamiento = plan.Razonamiento
-	out.Politica.PerfilTarea = plan.PerfilTarea
+	out.Politica.Modelo = prep.Plan.Modelo
+	out.Politica.Razonamiento = prep.Plan.Razonamiento
+	out.Politica.PerfilTarea = prep.Plan.PerfilTarea
 	if ultima != nil {
 		out.UltimaSesion = resumirSesion(ultima)
 	}
@@ -354,11 +328,7 @@ func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Pro
 }
 
 func resumeContextNoVacio(resume runtimeagente.ResumeContext) bool {
-	return strings.TrimSpace(resume.ExternalSessionID) != "" ||
-		strings.TrimSpace(resume.ResumePayloadJSON) != "" ||
-		strings.TrimSpace(resume.ResumenContinuidad) != "" ||
-		strings.TrimSpace(resume.Branch) != "" ||
-		strings.TrimSpace(resume.CWD) != ""
+	return lanzamientoruntime.ResumeContextNoVacio(resume)
 }
 
 var agentePrepararCmd = &cobra.Command{
@@ -415,27 +385,11 @@ func prepararAgenteLocal(agenteNombre, proyectoRef, conectorRef, modelo, razonam
 		return out, err
 	}
 
-	agente, err := db.GetAgente(agenteNombre)
+	prep, err := lanzamientoruntime.PrepararDesdeRefs(agenteNombre, proyectoRef, conectorRef, modelo, razonamiento, perfilTarea)
 	if err != nil {
 		return out, err
 	}
-	proyecto, err := db.GetProyecto(proyectoRef)
-	if err != nil {
-		return out, err
-	}
-
-	var ultima *db.Sesion
-	ultima, err = db.ObtenerUltimaSesion(agenteNombre, &proyecto.ID)
-	if err != nil && err != sql.ErrNoRows {
-		return out, err
-	}
-
-	conector, err := resolverConectorPreparacion(agenteNombre, conectorRef, ultima)
-	if err != nil {
-		return out, err
-	}
-
-	return construirAgentePrepararOutputDesdeDatos(agente, proyecto, conector, ultima, modelo, razonamiento, perfilTarea)
+	return construirAgentePrepararOutputDesdeDatos(prep.Agente, prep.Proyecto, prep.Conector, prep.Ultima, modelo, razonamiento, perfilTarea)
 }
 
 var agenteTickCmd = &cobra.Command{
@@ -913,40 +867,7 @@ var agenteFusionarCmd = &cobra.Command{
 }
 
 func resolverConectorPreparacion(agente string, conectorRef string, ultima *db.Sesion) (*db.Conector, error) {
-	if strings.TrimSpace(conectorRef) != "" {
-		return db.GetConector(conectorRef)
-	}
-
-	var conector *db.Conector
-	if ultima != nil && ultima.ConectorID != nil {
-		c, err := db.GetConector(strconv.FormatInt(*ultima.ConectorID, 10))
-		if err == nil {
-			conector = c
-		}
-	}
-
-	// Heurísticas inteligentes según el nombre del agente (OP-H)
-	if conector == nil {
-		lowerAgente := strings.ToLower(agente)
-		var err error
-		if strings.HasPrefix(lowerAgente, "codex") {
-			conector, err = db.GetConector("codex-cli")
-		} else if strings.HasPrefix(lowerAgente, "claude") {
-			conector, err = db.GetConector("claude-code")
-		} else if strings.HasPrefix(lowerAgente, "antigravity") {
-			conector, err = db.GetConector("antigravity")
-		} else if strings.HasPrefix(lowerAgente, "gemini") {
-			conector, err = db.GetConector("gemini-cli")
-		}
-		if err != nil {
-			conector = nil
-		}
-	}
-
-	if conector == nil {
-		return nil, fmt.Errorf("debes indicar --conector o disponer de una sesión previa con conector asociado")
-	}
-	return conector, nil
+	return lanzamientoruntime.ResolverConector(agente, conectorRef, ultima)
 }
 
 func cargarPoliticaAgente() politicaAgente {
