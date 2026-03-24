@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"orquesta/db"
 )
 
 func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
@@ -74,5 +76,36 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	})
 	if !strings.Contains(outControl, "Orden start #") {
 		t.Fatalf("salida control inesperada:\n%s", outControl)
+	}
+}
+
+func TestAgentePurgarBloqueaTareasActivasEnModoLocal(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexLocal", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:    "No borrar agente con trabajo vivo",
+		Modulo:    "controlplane",
+		Prioridad: db.PrioridadAlta,
+		CreadoPor: "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexLocal"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+
+	err = agentePurgarCmd.RunE(agentePurgarCmd, []string{"CodexLocal"})
+	if err == nil {
+		t.Fatalf("esperaba bloqueo al eliminar agente con tareas activas")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "tarea") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if _, err := db.GetAgente("CodexLocal"); err != nil {
+		t.Fatalf("el agente no deberia haberse eliminado: %v", err)
 	}
 }

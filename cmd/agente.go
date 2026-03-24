@@ -824,7 +824,6 @@ var agentePurgarCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		nombre := args[0]
-		// TODO: Validar que el agente no tenga tareas activas antes de borrarlo
 		if ok, err := eliminarAgentePorAPI(nombre); ok {
 			if err != nil {
 				return err
