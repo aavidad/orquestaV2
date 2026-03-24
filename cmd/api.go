@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"orquesta/coordinacion"
 	"orquesta/db"
@@ -77,6 +78,22 @@ type apiSesionGuardarRequest struct {
 
 type apiSesionFinRequest struct {
 	Agente string `json:"agente"`
+}
+
+type apiSesionPresupuestoRequest struct {
+	SesionID          int64      `json:"sesion_id"`
+	Agente            string     `json:"agente"`
+	PoolID            *int64     `json:"pool_id"`
+	ModelSlug         string     `json:"model_slug"`
+	WindowKind        string     `json:"window_kind"`
+	WindowStartedAt   *time.Time `json:"window_started_at"`
+	ResetAt           *time.Time `json:"reset_at"`
+	RemainingSeconds  *int64     `json:"remaining_seconds"`
+	RemainingMessages *int64     `json:"remaining_messages"`
+	RemainingTokens   *int64     `json:"remaining_tokens"`
+	RemainingCredits  *float64   `json:"remaining_credits"`
+	BudgetSource      string     `json:"budget_source"`
+	RawSnapshotJSON   string     `json:"raw_snapshot_json"`
 }
 
 type apiRespaldoBDRequest struct {
@@ -284,6 +301,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/sesiones/guardar", apiHandlerSesionGuardar)
 	mux.HandleFunc("/api/sesiones/fin", apiHandlerSesionFin)
 	mux.HandleFunc("/api/sesiones/continuar", apiHandlerSesionContinuar)
+	mux.HandleFunc("/api/sesiones/presupuesto", apiHandlerSesionPresupuesto)
 	mux.HandleFunc("/api/agente/handoff", apiHandlerAgenteHandoff)
 	mux.HandleFunc("/api/agente/control", apiHandlerAgenteControl)
 	mux.HandleFunc("/api/agente/preparar", apiHandlerAgentePreparar)
@@ -2326,6 +2344,105 @@ func apiHandlerSesionContinuar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{"sesion": sesion})
+}
+
+func apiHandlerSesionPresupuesto(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		sesionID, sesion, err := resolverSesionPresupuestoAPI(
+			strings.TrimSpace(r.URL.Query().Get("sesion")),
+			strings.TrimSpace(r.URL.Query().Get("agente")),
+		)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		p, err := db.UltimoPresupuestoSesion(sesionID)
+		if err == sql.ErrNoRows {
+			apiError(w, http.StatusNotFound, fmt.Errorf("la sesión #%d no tiene presupuestos registrados", sesionID))
+			return
+		}
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		ev, err := db.EvaluarPresupuestoSesion(p)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiSesionPresupuestoResponse{
+			Sesion:      sesion,
+			Presupuesto: p,
+			Evaluacion:  ev,
+		})
+	case http.MethodPost:
+		var req apiSesionPresupuestoRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		sesion, err := resolverSesionPresupuestoPorReferencia(req.SesionID, req.Agente)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		id, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+			SesionID:          sesion.ID,
+			PoolID:            req.PoolID,
+			ModelSlug:         strings.TrimSpace(req.ModelSlug),
+			WindowKind:        strings.TrimSpace(req.WindowKind),
+			WindowStartedAt:   req.WindowStartedAt,
+			ResetAt:           req.ResetAt,
+			RemainingSeconds:  req.RemainingSeconds,
+			RemainingMessages: req.RemainingMessages,
+			RemainingTokens:   req.RemainingTokens,
+			RemainingCredits:  req.RemainingCredits,
+			BudgetSource:      strings.TrimSpace(req.BudgetSource),
+			RawSnapshotJSON:   strings.TrimSpace(req.RawSnapshotJSON),
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		p, err := db.UltimoPresupuestoSesion(sesion.ID)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		ev, err := db.EvaluarPresupuestoSesion(p)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusCreated, apiSesionPresupuestoResponse{
+			ID:          id,
+			Sesion:      sesion,
+			Presupuesto: p,
+			Evaluacion:  ev,
+		})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func resolverSesionPresupuestoAPI(sesionRaw, agente string) (int64, *db.Sesion, error) {
+	if strings.TrimSpace(sesionRaw) != "" {
+		sesionID, err := strconv.ParseInt(strings.TrimSpace(sesionRaw), 10, 64)
+		if err != nil || sesionID <= 0 {
+			return 0, nil, fmt.Errorf("sesion inválida")
+		}
+		sesion, err := resolverSesionPresupuestoPorReferencia(sesionID, "")
+		if err != nil {
+			return 0, nil, err
+		}
+		return sesion.ID, sesion, nil
+	}
+	sesion, err := resolverSesionPresupuestoPorReferencia(0, agente)
+	if err != nil {
+		return 0, nil, err
+	}
+	return sesion.ID, sesion, nil
 }
 
 func apiHandlerAgentePreparar(w http.ResponseWriter, r *http.Request) {

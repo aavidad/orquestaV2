@@ -10,6 +10,7 @@ package cmd
 import (
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"orquesta/coordinacion"
@@ -115,6 +116,31 @@ type apiConectorUpsertRequest struct {
 	EnvJSON      string `json:"env_json"`
 	MetadataJSON string `json:"metadata_json"`
 	Activo       bool   `json:"activo"`
+}
+
+func cargarPresupuestoSesionDesdeAPI(sesionID int64, agente string) (*apiSesionPresupuestoResponse, bool, error) {
+	var resp apiSesionPresupuestoResponse
+	query := url.Values{}
+	if sesionID > 0 {
+		query.Set("sesion", strconv.FormatInt(sesionID, 10))
+	}
+	if strings.TrimSpace(agente) != "" {
+		query.Set("agente", strings.TrimSpace(agente))
+	}
+	ok, err := apiGetQuery("/api/sesiones/presupuesto", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
+func registrarPresupuestoSesionPorAPI(req apiSesionPresupuestoRequest) (*apiSesionPresupuestoResponse, bool, error) {
+	var resp apiSesionPresupuestoResponse
+	ok, err := apiPost("/api/sesiones/presupuesto", req, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
 }
 
 func cargarConfigDesdeAPI(clave string) (*apiConfigResponse, bool, error) {

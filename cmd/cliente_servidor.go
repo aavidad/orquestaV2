@@ -66,6 +66,13 @@ type apiSesionesInspeccionResponse struct {
 	Sesiones []*db.Sesion `json:"sesiones"`
 }
 
+type apiSesionPresupuestoResponse struct {
+	ID          int64                     `json:"id"`
+	Sesion      *db.Sesion                `json:"sesion,omitempty"`
+	Presupuesto *db.PresupuestoSesion     `json:"presupuesto"`
+	Evaluacion  *db.EvaluacionPresupuesto `json:"evaluacion"`
+}
+
 type apiSesionInicioResponse struct {
 	Sesion               *db.Sesion      `json:"sesion"`
 	SesionPrevia         *db.Sesion      `json:"sesion_previa"`
