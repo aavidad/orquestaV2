@@ -167,6 +167,67 @@ func cargarProyectoDesdeAPI(ref string) (*db.Proyecto, bool, error) {
 	return resp.Proyecto, true, nil
 }
 
+func cargarReglasDesdeAPI(rol string, activa *bool) ([]*db.Regla, bool, error) {
+	var resp apiReglasResponse
+	query := url.Values{}
+	if strings.TrimSpace(rol) != "" {
+		query.Set("rol", strings.TrimSpace(rol))
+	}
+	if activa != nil {
+		query.Set("activa", fmt.Sprintf("%t", *activa))
+	}
+	ok, err := apiGetQuery("/api/reglas", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Reglas, true, nil
+}
+
+func cargarSkillsDesdeAPI(rol string, activa *bool) ([]*db.Skill, bool, error) {
+	var resp apiSkillsResponse
+	query := url.Values{}
+	if strings.TrimSpace(rol) != "" {
+		query.Set("rol", strings.TrimSpace(rol))
+	}
+	if activa != nil {
+		query.Set("activa", fmt.Sprintf("%t", *activa))
+	}
+	ok, err := apiGetQuery("/api/skills", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Skills, true, nil
+}
+
+func cargarWorkflowsDesdeAPI(rol string, activo *bool) ([]*db.Workflow, bool, error) {
+	var resp apiWorkflowsResponse
+	query := url.Values{}
+	if strings.TrimSpace(rol) != "" {
+		query.Set("rol", strings.TrimSpace(rol))
+	}
+	if activo != nil {
+		query.Set("activa", fmt.Sprintf("%t", *activo))
+	}
+	ok, err := apiGetQuery("/api/workflows", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Workflows, true, nil
+}
+
+func cargarPermisosCatalogoDesdeAPI(entidad string) ([]*db.PermisoEdicionCatalogo, bool, error) {
+	var resp apiPermisosCatalogoResponse
+	query := url.Values{}
+	if strings.TrimSpace(entidad) != "" {
+		query.Set("entidad", strings.TrimSpace(entidad))
+	}
+	ok, err := apiGetQuery("/api/permisos-catalogo", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Permisos, true, nil
+}
+
 func cargarPoliticaLenguajeDesdeAPI() (*db.LanguagePolicy, bool, error) {
 	var resp apiLenguajePoliticaResponse
 	ok, err := apiGet("/api/lenguaje/politica", &resp)

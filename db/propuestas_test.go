@@ -99,3 +99,44 @@ func TestBackfillVotosPendientesRellenaPropuestasAbiertasSinVotos(t *testing.T) 
 		t.Fatalf("se generaron votos para propuesta cerrada")
 	}
 }
+
+func TestActualizarPropuestaPermiteAnexarDescripcion(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "orquesta.db")
+	prev := os.Getenv("ORQUESTA_DB")
+	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
+		t.Fatalf("setenv: %v", err)
+	}
+	defer func() {
+		_ = os.Setenv("ORQUESTA_DB", prev)
+		Close()
+	}()
+
+	if err := Open(); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	if _, err := CrearPropuesta(&Propuesta{
+		Codigo:       "OP-901",
+		Titulo:       "Base",
+		Descripcion:  "Inicio",
+		Tipo:         "implementacion",
+		PropuestoPor: "alberto",
+		Distribuidor: "claude",
+	}); err != nil {
+		t.Fatalf("CrearPropuesta: %v", err)
+	}
+
+	extra := " + detalle"
+	if err := ActualizarPropuesta("OP-901", PropuestaPatch{AnexarDescripcion: &extra}, "Codex3"); err != nil {
+		t.Fatalf("ActualizarPropuesta: %v", err)
+	}
+
+	p, err := GetPropuesta("OP-901")
+	if err != nil {
+		t.Fatalf("GetPropuesta: %v", err)
+	}
+	if p.Descripcion != "Inicio + detalle" {
+		t.Fatalf("descripcion inesperada: %q", p.Descripcion)
+	}
+}

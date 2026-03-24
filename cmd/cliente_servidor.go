@@ -36,6 +36,22 @@ type apiConectoresResponse struct {
 	Conectores []*db.Conector `json:"conectores"`
 }
 
+type apiReglasResponse struct {
+	Reglas []*db.Regla `json:"reglas"`
+}
+
+type apiSkillsResponse struct {
+	Skills []*db.Skill `json:"skills"`
+}
+
+type apiWorkflowsResponse struct {
+	Workflows []*db.Workflow `json:"workflows"`
+}
+
+type apiPermisosCatalogoResponse struct {
+	Permisos []*db.PermisoEdicionCatalogo `json:"permisos"`
+}
+
 type apiTareasResponse struct {
 	Tareas []*db.Tarea `json:"tareas"`
 }
@@ -253,6 +269,14 @@ func commandSupportsServerMode(args []string) bool {
 		default:
 			return false
 		}
+	case "reglas":
+		return len(tokens) > 1 && tokens[1] == "listar"
+	case "skills":
+		return len(tokens) > 1 && tokens[1] == "listar"
+	case "workflows":
+		return len(tokens) > 1 && tokens[1] == "listar"
+	case "permisos":
+		return len(tokens) > 1 && tokens[1] == "listar"
 	case "conector":
 		if len(tokens) <= 1 {
 			return false

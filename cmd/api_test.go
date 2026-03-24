@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"orquesta/db"
@@ -95,7 +96,7 @@ func TestAPIAsignacionActivarYSesionInicio(t *testing.T) {
 	registerAPIRoutes(mux)
 
 	asignacionBody, _ := json.Marshal(apiAsignacionActivarRequest{
-		Agente:   "codex1",
+		Agente:   "Codex1",
 		Proyecto: "autofirmav2",
 		Nota:     "slot 1",
 	})
@@ -107,7 +108,7 @@ func TestAPIAsignacionActivarYSesionInicio(t *testing.T) {
 	}
 
 	sesionBody, _ := json.Marshal(apiSesionInicioRequest{
-		Agente:            "codex1",
+		Agente:            "Codex1",
 		Proyecto:          "autofirmav2",
 		Conector:          "codex-cli",
 		CWD:               filepath.Join(tmp, "AutofirmaV2"),
@@ -124,7 +125,7 @@ func TestAPIAsignacionActivarYSesionInicio(t *testing.T) {
 	if err := json.Unmarshal(recSesion.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode sesion inicio: %v", err)
 	}
-	if resp.Sesion == nil || resp.Sesion.Agente != "codex1" {
+	if resp.Sesion == nil || resp.Sesion.Agente != "Codex1" {
 		t.Fatalf("respuesta de sesion inesperada: %+v", resp.Sesion)
 	}
 	if resp.Rol == "" {
@@ -134,7 +135,7 @@ func TestAPIAsignacionActivarYSesionInicio(t *testing.T) {
 		t.Fatalf("se esperaban reglas en la respuesta de sesion inicio")
 	}
 
-	sesion, err := db.GetSesionActiva("codex1", &proyectoID)
+	sesion, err := db.GetSesionActiva("Codex1", &proyectoID)
 	if err != nil {
 		t.Fatalf("get sesion activa: %v", err)
 	}
@@ -217,6 +218,116 @@ func TestAPIPropuestaReabrirYRepararVotos(t *testing.T) {
 	}
 	if total != 1 {
 		t.Fatalf("conteo inesperado tras reparar via API: %d", total)
+	}
+}
+
+func TestAPIPropuestaActualizarAnexaDescripcion(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	propuesta := &db.Propuesta{
+		Codigo:       "OP-910",
+		Titulo:       "Propuesta API update",
+		Descripcion:  "Base",
+		Tipo:         "implementacion",
+		PropuestoPor: "autor",
+		Distribuidor: "codex",
+	}
+	if _, err := db.CrearPropuesta(propuesta); err != nil {
+		t.Fatalf("crear propuesta: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	appendText := " + docs"
+	body, _ := json.Marshal(apiPropuestaAccionRequest{
+		Accion:     "actualizar",
+		Agente:     "alberto",
+		AnexarDesc: &appendText,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/propuestas/"+propuesta.Codigo+"/accion", bytes.NewReader(body))
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status actualizar inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	updated, err := db.GetPropuesta(propuesta.Codigo)
+	if err != nil {
+		t.Fatalf("get propuesta actualizada: %v", err)
+	}
+	if updated.Descripcion != "Base + docs" {
+		t.Fatalf("descripcion inesperada: %q", updated.Descripcion)
+	}
+}
+
+func TestAPILenguajePoliticaMatrizYResolver(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.SetLanguagePolicy(&db.LanguagePolicy{
+		DefaultLanguage:          "es",
+		DocumentationMultilang:   true,
+		AppsMultilang:            true,
+		DocumentationDefaultLang: "es",
+		AppsDefaultLang:          "en",
+		AllowedLanguages:         []string{"es", "en", "fr"},
+		Notes:                    "politica de prueba",
+	}, "Codex3"); err != nil {
+		t.Fatalf("SetLanguagePolicy: %v", err)
+	}
+	if _, err := db.SetLanguageMatrixEntry("project", "orquestador", "apps", "fr", "demo", "Codex3"); err != nil {
+		t.Fatalf("SetLanguageMatrixEntry: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recPolicy := httptest.NewRecorder()
+	reqPolicy := httptest.NewRequest(http.MethodGet, "/api/lenguaje/politica", nil)
+	mux.ServeHTTP(recPolicy, reqPolicy)
+	if recPolicy.Code != http.StatusOK {
+		t.Fatalf("status politica inesperado: %d body=%s", recPolicy.Code, recPolicy.Body.String())
+	}
+	var policyResp struct {
+		Politica *db.LanguagePolicy `json:"politica"`
+	}
+	if err := json.Unmarshal(recPolicy.Body.Bytes(), &policyResp); err != nil {
+		t.Fatalf("decode politica: %v", err)
+	}
+	if policyResp.Politica == nil || policyResp.Politica.AppsDefaultLang != "en" {
+		t.Fatalf("politica inesperada: %+v", policyResp.Politica)
+	}
+
+	recMatrix := httptest.NewRecorder()
+	reqMatrix := httptest.NewRequest(http.MethodGet, "/api/lenguaje/matriz", nil)
+	mux.ServeHTTP(recMatrix, reqMatrix)
+	if recMatrix.Code != http.StatusOK {
+		t.Fatalf("status matriz inesperado: %d body=%s", recMatrix.Code, recMatrix.Body.String())
+	}
+	var matrixResp struct {
+		Matriz []*db.LanguageMatrixEntry `json:"matriz"`
+	}
+	if err := json.Unmarshal(recMatrix.Body.Bytes(), &matrixResp); err != nil {
+		t.Fatalf("decode matriz: %v", err)
+	}
+	if len(matrixResp.Matriz) != 1 || matrixResp.Matriz[0].Language != "fr" {
+		t.Fatalf("matriz inesperada: %+v", matrixResp.Matriz)
+	}
+
+	recResolve := httptest.NewRecorder()
+	reqResolve := httptest.NewRequest(http.MethodGet, "/api/lenguaje/resolver?proyecto=orquestador&contexto=apps", nil)
+	mux.ServeHTTP(recResolve, reqResolve)
+	if recResolve.Code != http.StatusOK {
+		t.Fatalf("status resolver inesperado: %d body=%s", recResolve.Code, recResolve.Body.String())
+	}
+	var resolveResp struct {
+		Resolucion *db.LanguageResolution `json:"resolucion"`
+	}
+	if err := json.Unmarshal(recResolve.Body.Bytes(), &resolveResp); err != nil {
+		t.Fatalf("decode resolucion: %v", err)
+	}
+	if resolveResp.Resolucion == nil || resolveResp.Resolucion.Idioma != "fr" {
+		t.Fatalf("resolucion inesperada: %+v", resolveResp.Resolucion)
 	}
 }
 
@@ -475,5 +586,143 @@ func TestAPIAgentePrepararDevuelveBundle(t *testing.T) {
 	}
 	if len(out.Memoria) != 1 || out.Memoria[0].Nombre != "Core_API" {
 		t.Fatalf("memoria inesperada: %+v", out.Memoria)
+	}
+}
+
+func TestAPIAgentePrepararIntegraBootstrapRuntime(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	proyecto, err := db.GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex1",
+		ProyectoID:         &proyecto.ID,
+		CWD:                filepath.Join(tmp, "orquestador", "sesion-previa"),
+		Herramienta:        "codex-cli",
+		ResumenContinuidad: "continuidad previa",
+		ResumePayloadJSON:  `{"previo":true}`,
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	handoffPayload, err := json.Marshal(db.HandoffPayload{
+		AgenteOrigen:       "Codex0",
+		AgenteDestino:      "Codex1",
+		Motivo:             "traspaso",
+		ResumenContinuidad: "handoff listo",
+		ExternalSessionID:  "sess-handoff",
+	})
+	if err != nil {
+		t.Fatalf("marshal handoff: %v", err)
+	}
+	orderID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyecto.ID,
+		Tipo:        "handoff",
+		PayloadJSON: string(handoffPayload),
+	})
+	if err != nil {
+		t.Fatalf("encolar handoff: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyecto.ID,
+		Tipo:       "nudge",
+		PayloadJSON: `{
+			"to_agente":"Codex1",
+			"from_agente":"Coordinador",
+			"kind":"handoff_note",
+			"texto":"revisa el checkpoint"
+		}`,
+	}); err != nil {
+		t.Fatalf("encolar nudge: %v", err)
+	}
+	if _, err := db.CrearRuntimeCheckpoint(&db.RuntimeCheckpoint{
+		Agente:         "Codex1",
+		ProyectoID:     &proyecto.ID,
+		CheckpointKind: "handoff_prepare",
+		Resumen:        "checkpoint reciente",
+		Branch:         "feature/bootstrap",
+		CWD:            filepath.Join(tmp, "orquestador", "checkpoint"),
+		PayloadJSON:    `{"archivos":["a.go","b.go"]}`,
+		ResumeStrategy: "resumen_y_payload",
+		Source:         "test:bootstrap",
+	}); err != nil {
+		t.Fatalf("crear checkpoint: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/agente/preparar?agente=Codex1&proyecto=orquestador", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status preparar inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var out agentePrepararOutput
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode preparar: %v", err)
+	}
+	if out.Bootstrap == nil {
+		t.Fatalf("bootstrap no deberia ser nil")
+	}
+	if out.Bootstrap.Order == nil || out.Bootstrap.Order.Tipo != "handoff" {
+		t.Fatalf("order bootstrap inesperada: %+v", out.Bootstrap.Order)
+	}
+	if len(out.Bootstrap.Mailbox) != 1 || out.Bootstrap.Mailbox[0].Kind != "handoff_note" {
+		t.Fatalf("mailbox bootstrap inesperado: %+v", out.Bootstrap.Mailbox)
+	}
+	if out.Bootstrap.Checkpoint == nil || out.Bootstrap.Checkpoint.Branch != "feature/bootstrap" {
+		t.Fatalf("checkpoint bootstrap inesperado: %+v", out.Bootstrap.Checkpoint)
+	}
+	if out.Plan == nil || out.Plan.Modo != "resume" {
+		t.Fatalf("plan de arranque inesperado: %+v", out.Plan)
+	}
+	if out.Plan.WorkingDir != filepath.Join(tmp, "orquestador", "sesion-previa") {
+		t.Fatalf("working_dir inesperado: %s", out.Plan.WorkingDir)
+	}
+	if !strings.Contains(out.Plan.ContinuityPrompt, "handoff listo") {
+		t.Fatalf("continuity prompt sin handoff: %s", out.Plan.ContinuityPrompt)
+	}
+	if !strings.Contains(out.Plan.ContinuityPrompt, `"mailbox"`) || !strings.Contains(out.Plan.ContinuityPrompt, `"checkpoint"`) {
+		t.Fatalf("continuity prompt sin payload bootstrap: %s", out.Plan.ContinuityPrompt)
+	}
+
+	order, err := db.GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get order: %v", err)
+	}
+	if order == nil || order.Estado != "completada" {
+		t.Fatalf("runtime order no completada tras preparar: %+v", order)
+	}
+
+	estadoConsumido := "consumido"
+	toAgente := "Codex1"
+	mailbox, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente:   &toAgente,
+		ProyectoID: &proyecto.ID,
+		Estado:     &estadoConsumido,
+	})
+	if err != nil {
+		t.Fatalf("listar mailbox consumido: %v", err)
+	}
+	if len(mailbox) != 1 {
+		t.Fatalf("mailbox consumido inesperado: %+v", mailbox)
 	}
 }

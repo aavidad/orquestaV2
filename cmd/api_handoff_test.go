@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"orquesta/db"
@@ -93,5 +94,58 @@ func TestAPIAgenteHandoff(t *testing.T) {
 	}
 	if len(orders) != 1 || orders[0].Tipo != "handoff" {
 		t.Fatalf("runtime orders inesperadas: %+v", orders)
+	}
+}
+
+func TestAPIAgenteControl(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: tmp,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("crear proyecto: %v", err)
+	}
+
+	body, err := json.Marshal(apiAgenteControlRequest{
+		Agente:       "Codex1",
+		Proyecto:     "orquestador",
+		Accion:       "arrancar",
+		Conector:     "codex-cli",
+		Modelo:       "gpt-5.4",
+		Razonamiento: "high",
+		Perfil:       "implementacion",
+		Motivo:       "arranque de prueba",
+		Por:          "test",
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/agente/control", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	apiHandlerAgenteControl(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != agenteControlAccionStart {
+		t.Fatalf("runtime orders inesperadas: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"conector":"codex-cli"`) {
+		t.Fatalf("payload inesperado: %s", orders[0].PayloadJSON)
 	}
 }

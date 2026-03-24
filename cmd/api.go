@@ -118,11 +118,15 @@ type apiPropuestaCrearRequest struct {
 }
 
 type apiPropuestaAccionRequest struct {
-	Accion       string `json:"accion"`
-	Agente       string `json:"agente"`
-	Posicion     string `json:"posicion"`
-	Comentario   string `json:"comentario"`
-	EstadoCierre string `json:"estado_cierre"`
+	Accion       string  `json:"accion"`
+	Agente       string  `json:"agente"`
+	Posicion     string  `json:"posicion"`
+	Comentario   string  `json:"comentario"`
+	EstadoCierre string  `json:"estado_cierre"`
+	Titulo       *string `json:"titulo"`
+	Descripcion  *string `json:"descripcion"`
+	AnexarDesc   *string `json:"anexar_descripcion"`
+	Tipo         *string `json:"tipo"`
 }
 
 type apiLockRequest struct {
@@ -222,6 +226,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/reglas", apiHandlerReglas)
 	mux.HandleFunc("/api/skills", apiHandlerSkills)
 	mux.HandleFunc("/api/workflows", apiHandlerWorkflows)
+	mux.HandleFunc("/api/permisos-catalogo", apiHandlerPermisosCatalogo)
 	mux.HandleFunc("/api/lenguaje/politica", apiHandlerLenguajePolitica)
 	mux.HandleFunc("/api/lenguaje/matriz", apiHandlerLenguajeMatriz)
 	mux.HandleFunc("/api/lenguaje/matriz/borrar", apiHandlerLenguajeMatrizBorrar)
@@ -265,6 +270,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/sesiones/fin", apiHandlerSesionFin)
 	mux.HandleFunc("/api/sesiones/continuar", apiHandlerSesionContinuar)
 	mux.HandleFunc("/api/agente/handoff", apiHandlerAgenteHandoff)
+	mux.HandleFunc("/api/agente/control", apiHandlerAgenteControl)
 	mux.HandleFunc("/api/agente/preparar", apiHandlerAgentePreparar)
 	mux.HandleFunc("/api/agente/tick", apiHandlerAgenteTick)
 	mux.HandleFunc("/api/agente/pausar", apiHandlerAgentePausar)
@@ -446,6 +452,9 @@ func apiHandlerConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func apiResolverTipoAgente(r *http.Request) (string, error) {
+	if tipo := strings.TrimSpace(r.URL.Query().Get("rol")); tipo != "" {
+		return tipo, nil
+	}
 	if tipo := strings.TrimSpace(r.URL.Query().Get("tipo_agente")); tipo != "" {
 		return tipo, nil
 	}
@@ -459,16 +468,37 @@ func apiResolverTipoAgente(r *http.Request) (string, error) {
 	return "", fmt.Errorf("debes indicar tipo_agente o agente")
 }
 
+func apiBoolOpcional(r *http.Request, key string) (*bool, error) {
+	v := strings.TrimSpace(strings.ToLower(r.URL.Query().Get(key)))
+	if v == "" {
+		return nil, nil
+	}
+	switch v {
+	case "true", "1", "si", "sí", "yes":
+		b := true
+		return &b, nil
+	case "false", "0", "no":
+		b := false
+		return &b, nil
+	default:
+		return nil, fmt.Errorf("%s inválida", key)
+	}
+}
+
 func apiHandlerReglas(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
 	}
-	tipoAgente, err := apiResolverTipoAgente(r)
+	activa, err := apiBoolOpcional(r, "activa")
 	if err != nil {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	reglas, err := db.GetReglasAgente(tipoAgente)
+	tipoAgente, err := apiResolverTipoAgente(r)
+	if err != nil {
+		tipoAgente = ""
+	}
+	reglas, err := db.ListarReglas(tipoAgente, activa)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -483,12 +513,16 @@ func apiHandlerSkills(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
 	}
-	tipoAgente, err := apiResolverTipoAgente(r)
+	activa, err := apiBoolOpcional(r, "activa")
 	if err != nil {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	skills, err := db.GetSkillsAgente(tipoAgente)
+	tipoAgente, err := apiResolverTipoAgente(r)
+	if err != nil {
+		tipoAgente = ""
+	}
+	skills, err := db.ListarSkills(tipoAgente, activa)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -503,12 +537,12 @@ func apiHandlerWorkflows(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
 	}
-	tipoAgente, err := apiResolverTipoAgente(r)
-	if err != nil {
-		apiError(w, http.StatusBadRequest, err)
-		return
-	}
 	if nombre := strings.TrimSpace(r.URL.Query().Get("nombre")); nombre != "" {
+		tipoAgente, err := apiResolverTipoAgente(r)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
 		workflow, err := db.GetWorkflow(tipoAgente, nombre)
 		if err != nil {
 			apiError(w, http.StatusNotFound, err)
@@ -520,7 +554,16 @@ func apiHandlerWorkflows(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	workflows, err := db.GetWorkflowsAgente(tipoAgente)
+	activo, err := apiBoolOpcional(r, "activa")
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	tipoAgente, err := apiResolverTipoAgente(r)
+	if err != nil {
+		tipoAgente = ""
+	}
+	workflows, err := db.ListarWorkflows(tipoAgente, activo)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -529,6 +572,19 @@ func apiHandlerWorkflows(w http.ResponseWriter, r *http.Request) {
 		"tipo_agente": tipoAgente,
 		"workflows":   workflows,
 	})
+}
+
+func apiHandlerPermisosCatalogo(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	entidad := strings.TrimSpace(r.URL.Query().Get("entidad"))
+	permisos, err := db.ListarPermisosEdicionCatalogo(entidad)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"permisos": permisos})
 }
 
 func apiHandlerAudit(w http.ResponseWriter, r *http.Request) {
@@ -2077,6 +2133,13 @@ func apiHandlerPropuestaAccion(w http.ResponseWriter, r *http.Request, codigo st
 	switch req.Accion {
 	case "votar":
 		_, err = db.Votar(propuesta.ID, req.Agente, db.PosicionVoto(req.Posicion), req.Comentario)
+	case "actualizar":
+		err = db.ActualizarPropuesta(codigo, db.PropuestaPatch{
+			Titulo:            req.Titulo,
+			Descripcion:       req.Descripcion,
+			AnexarDescripcion: req.AnexarDesc,
+			Tipo:              req.Tipo,
+		}, valorConFallback(req.Agente, "alberto"))
 	case "cerrar":
 		err = db.CerrarPropuesta(codigo, req.EstadoCierre, valorConFallback(req.Agente, "alberto"))
 	case "reabrir":

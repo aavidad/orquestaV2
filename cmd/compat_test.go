@@ -65,6 +65,31 @@ func TestResolverTextoFlagOPosicionalAceptaTextoPosicional(t *testing.T) {
 	}
 }
 
+func TestCatalogoBriefingCommandsExposeAgenteAlias(t *testing.T) {
+	t.Parallel()
+
+	cmds := []*cobra.Command{
+		reglasCrearCmd,
+		reglasEditarCmd,
+		reglasActivarCmd,
+		reglasDesactivarCmd,
+		skillsCrearCmd,
+		skillsEditarCmd,
+		skillsActivarCmd,
+		skillsDesactivarCmd,
+		workflowsCrearCmd,
+		workflowsEditarCmd,
+		workflowsActivarCmd,
+		workflowsDesactivarCmd,
+	}
+
+	for _, cmd := range cmds {
+		if cmd.Flags().Lookup("agente") == nil {
+			t.Fatalf("el comando %s no expone alias --agente", cmd.Use)
+		}
+	}
+}
+
 func TestValidateServeSecurityRechazaRemotoSinMTLS(t *testing.T) {
 	t.Parallel()
 

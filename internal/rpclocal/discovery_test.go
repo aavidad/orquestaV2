@@ -91,13 +91,27 @@ func TestBaseURL(t *testing.T) {
 
 func TestDefaultStatePathScopedByDB(t *testing.T) {
 	prev := os.Getenv("ORQUESTA_DB")
+	prevDriver := os.Getenv("ORQUESTA_DB_DRIVER")
+	prevDSN := os.Getenv("ORQUESTA_DB_DSN")
 	t.Cleanup(func() {
 		if prev == "" {
 			_ = os.Unsetenv("ORQUESTA_DB")
-			return
+		} else {
+			_ = os.Setenv("ORQUESTA_DB", prev)
 		}
-		_ = os.Setenv("ORQUESTA_DB", prev)
+		if prevDriver == "" {
+			_ = os.Unsetenv("ORQUESTA_DB_DRIVER")
+		} else {
+			_ = os.Setenv("ORQUESTA_DB_DRIVER", prevDriver)
+		}
+		if prevDSN == "" {
+			_ = os.Unsetenv("ORQUESTA_DB_DSN")
+		} else {
+			_ = os.Setenv("ORQUESTA_DB_DSN", prevDSN)
+		}
 	})
+	_ = os.Unsetenv("ORQUESTA_DB_DRIVER")
+	_ = os.Unsetenv("ORQUESTA_DB_DSN")
 
 	if err := os.Setenv("ORQUESTA_DB", "/tmp/orquesta-a.db"); err != nil {
 		t.Fatalf("Setenv a: %v", err)
@@ -109,6 +123,45 @@ func TestDefaultStatePathScopedByDB(t *testing.T) {
 	pathB := DefaultStatePath()
 	if pathA == pathB {
 		t.Fatalf("se esperaban statefiles distintos por DB: %s", pathA)
+	}
+}
+
+func TestDefaultStatePathScopedByDSN(t *testing.T) {
+	prevDB := os.Getenv("ORQUESTA_DB")
+	prevDriver := os.Getenv("ORQUESTA_DB_DRIVER")
+	prevDSN := os.Getenv("ORQUESTA_DB_DSN")
+	t.Cleanup(func() {
+		if prevDB == "" {
+			_ = os.Unsetenv("ORQUESTA_DB")
+		} else {
+			_ = os.Setenv("ORQUESTA_DB", prevDB)
+		}
+		if prevDriver == "" {
+			_ = os.Unsetenv("ORQUESTA_DB_DRIVER")
+		} else {
+			_ = os.Setenv("ORQUESTA_DB_DRIVER", prevDriver)
+		}
+		if prevDSN == "" {
+			_ = os.Unsetenv("ORQUESTA_DB_DSN")
+		} else {
+			_ = os.Setenv("ORQUESTA_DB_DSN", prevDSN)
+		}
+	})
+
+	_ = os.Unsetenv("ORQUESTA_DB")
+	if err := os.Setenv("ORQUESTA_DB_DRIVER", "postgres"); err != nil {
+		t.Fatalf("Setenv driver: %v", err)
+	}
+	if err := os.Setenv("ORQUESTA_DB_DSN", "postgres://user:pass@localhost/orquesta_a"); err != nil {
+		t.Fatalf("Setenv dsn a: %v", err)
+	}
+	pathA := DefaultStatePath()
+	if err := os.Setenv("ORQUESTA_DB_DSN", "postgres://user:pass@localhost/orquesta_b"); err != nil {
+		t.Fatalf("Setenv dsn b: %v", err)
+	}
+	pathB := DefaultStatePath()
+	if pathA == pathB {
+		t.Fatalf("se esperaban statefiles distintos por DSN: %s", pathA)
 	}
 }
 

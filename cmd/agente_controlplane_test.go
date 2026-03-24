@@ -12,6 +12,8 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 		switch {
 		case r.URL.Path == "/api/status":
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		case r.URL.Path == "/api/agente/control" && r.Method == http.MethodPost:
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": 41, "agente": "Codex1", "accion": "start"})
 		case r.URL.Path == "/api/agente/pausar" && r.Method == http.MethodPost:
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agente": "Codex1"})
 		case r.URL.Path == "/api/agente/handoff" && r.Method == http.MethodPost:
@@ -63,5 +65,14 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	})
 	if !strings.Contains(outEliminar, "eliminado correctamente") {
 		t.Fatalf("salida eliminar inesperada:\n%s", outEliminar)
+	}
+
+	outControl := capturarStdout(t, func() {
+		if err := agenteControlCmd.RunE(agenteControlCmd, []string{"arrancar", "Codex1"}); err != nil {
+			t.Fatalf("agente control via api: %v", err)
+		}
+	})
+	if !strings.Contains(outControl, "Orden start #") {
+		t.Fatalf("salida control inesperada:\n%s", outControl)
 	}
 }

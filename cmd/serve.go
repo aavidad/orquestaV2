@@ -114,6 +114,8 @@ type webRuntimeRow struct {
 type webRuntimesData struct {
 	Runtimes []webRuntimeRow
 	Filtro   string
+	Msg      string
+	Err      string
 }
 
 type webRuntimeSampleRow struct {
@@ -236,11 +238,17 @@ func webRouterRuntimes(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if r.Method != http.MethodGet {
+	switch {
+	case parts[1] == "control" && r.Method == http.MethodPost:
+		webHandlerRuntimeControl(w, r)
+		return
+	case r.Method == http.MethodGet:
+		webHandlerRuntimeDetalle(w, r, parts[1])
+		return
+	default:
 		http.NotFound(w, r)
 		return
 	}
-	webHandlerRuntimeDetalle(w, r, parts[1])
 }
 
 func webRouterTimeTravel(w http.ResponseWriter, r *http.Request) {
@@ -288,7 +296,34 @@ func webHandlerRuntimes(w http.ResponseWriter, r *http.Request) {
 	webRender(w, webTplLayout+webTplRuntimes, webRuntimesData{
 		Runtimes: rows,
 		Filtro:   filtro,
+		Msg:      r.URL.Query().Get("ok"),
+		Err:      r.URL.Query().Get("err"),
 	})
+}
+
+func webHandlerRuntimeControl(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/runtimes?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	req := apiAgenteControlRequest{
+		Agente:       strings.TrimSpace(r.FormValue("agente")),
+		Proyecto:     strings.TrimSpace(r.FormValue("proyecto")),
+		Accion:       strings.TrimSpace(r.FormValue("accion")),
+		Conector:     strings.TrimSpace(r.FormValue("conector")),
+		Modelo:       strings.TrimSpace(r.FormValue("modelo")),
+		Razonamiento: strings.TrimSpace(r.FormValue("razonamiento")),
+		Perfil:       strings.TrimSpace(r.FormValue("perfil")),
+		Motivo:       strings.TrimSpace(r.FormValue("motivo")),
+		Por:          "web",
+	}
+	orderID, accion, err := encolarControlAgenteLocal(req)
+	if err != nil {
+		http.Redirect(w, r, "/runtimes?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	msg := fmt.Sprintf("Orden %s #%d encolada para %s", accion, orderID, req.Agente)
+	http.Redirect(w, r, "/runtimes?ok="+url.QueryEscape(msg), http.StatusSeeOther)
 }
 
 func webHandlerRuntimeDetalle(w http.ResponseWriter, r *http.Request, idStr string) {
@@ -1338,10 +1373,36 @@ const webTplRuntimes = `{{define "content"}}
   <h2 style="margin:0">Runtimes <small style="font-size:.5em;color:#94a3b8">{{len .Runtimes}}</small></h2>
 </div>
 
+{{if .Msg}}<div class="alert-ok">{{.Msg}}</div>{{end}}
+{{if .Err}}<div class="alert-err">{{.Err}}</div>{{end}}
+
 <div class="filtros">
   <a href="/runtimes"{{if eqStr .Filtro ""}} class="sel"{{end}}>Todos</a>
   <a href="/runtimes?activos=true"{{if eqStr .Filtro "true"}} class="sel"{{end}}>Activos</a>
   <a href="/runtimes?activos=false"{{if eqStr .Filtro "false"}} class="sel"{{end}}>Cerrados</a>
+</div>
+
+<div class="action-box">
+  <h4>Control de agentes</h4>
+  <form method="POST" action="/runtimes/control" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:.6rem">
+    <div><label>Agente</label><input type="text" name="agente" placeholder="Codex1" required></div>
+    <div><label>Proyecto</label><input type="text" name="proyecto" placeholder="orquestador"></div>
+    <div>
+      <label>Acción</label>
+      <select name="accion">
+        <option value="arrancar">Arrancar</option>
+        <option value="pausar">Pausar</option>
+        <option value="continuar">Continuar</option>
+        <option value="detener">Detener</option>
+      </select>
+    </div>
+    <div><label>Motivo</label><input type="text" name="motivo" placeholder="motivo operativo"></div>
+    <div><label>Conector</label><input type="text" name="conector" placeholder="codex-cli"></div>
+    <div><label>Modelo</label><input type="text" name="modelo" placeholder="gpt-5.4"></div>
+    <div><label>Reasoning</label><input type="text" name="razonamiento" placeholder="high"></div>
+    <div><label>Perfil</label><input type="text" name="perfil" placeholder="implementacion"></div>
+    <div style="grid-column:1/-1"><button type="submit" class="btn-sm">Encolar orden</button></div>
+  </form>
 </div>
 
 {{if .Runtimes}}

@@ -38,6 +38,29 @@ func CurrentDBPath() string {
 	return configTarget(cfg)
 }
 
+func CurrentStorageDriver() string {
+	if strings.TrimSpace(currentConfig.Driver) != "" {
+		return normalizedDriverName(currentConfig.Driver)
+	}
+	cfg, err := storage.ResolveConfig(resolverRuta)
+	if err != nil {
+		return ""
+	}
+	return normalizedDriverName(cfg.Driver)
+}
+
+func BackupFilenameSuffix() string {
+	driver := strings.TrimSpace(CurrentStorageDriver())
+	if driver == "" || driver == "sqlite" {
+		return "_orquesta.db.bak"
+	}
+	return "_orquesta." + driver + ".bak"
+}
+
+func BackupFilenameGlob() string {
+	return "*" + BackupFilenameSuffix()
+}
+
 func RegisterBackend(backend Backend) {
 	if backend == nil {
 		return

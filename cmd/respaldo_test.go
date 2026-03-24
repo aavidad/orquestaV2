@@ -29,6 +29,18 @@ func TestNombreRespaldoFechableSanitizaEtiqueta(t *testing.T) {
 	}
 }
 
+func TestNombreRespaldoFechableUsaSufijoDelBackendActual(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "postgres")
+	t.Setenv("ORQUESTA_DB_BACKEND", "")
+	t.Setenv("ORQUESTA_DB_DSN", "postgres://user:pass@localhost/orquesta")
+	t.Setenv("ORQUESTA_DB", "")
+
+	got := nombreRespaldoFechable(time.Date(2026, 3, 22, 10, 11, 12, 123456789, time.UTC), "Manual Final")
+	if !strings.HasSuffix(got, "_orquesta.postgres.bak") {
+		t.Fatalf("sufijo inesperado: %s", got)
+	}
+}
+
 func TestRespaldoBDCreaFicheroYAplicaRetencion(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	destino := filepath.Join(tmp, "respaldos")
@@ -120,5 +132,40 @@ func TestRespaldoBDUsaAPI(t *testing.T) {
 	})
 	if !strings.Contains(out, "/tmp/orquesta-api.bak") {
 		t.Fatalf("salida respaldo via API inesperada: %s", out)
+	}
+}
+
+func TestAplicarRetencionRespaldoFiltraPorSufijoDelBackendActual(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "postgres")
+	t.Setenv("ORQUESTA_DB_BACKEND", "")
+	t.Setenv("ORQUESTA_DB_DSN", "postgres://user:pass@localhost/orquesta")
+	t.Setenv("ORQUESTA_DB", "")
+
+	destino := t.TempDir()
+	ficheros := []string{
+		"2026-03-22_10-00-00_orquesta.postgres.bak",
+		"2026-03-22_10-00-01_orquesta.postgres.bak",
+		"2026-03-22_10-00-02_orquesta.db.bak",
+	}
+	for _, nombre := range ficheros {
+		if err := os.WriteFile(filepath.Join(destino, nombre), []byte("x"), 0o644); err != nil {
+			t.Fatalf("write backup %s: %v", nombre, err)
+		}
+	}
+
+	if err := aplicarRetencionRespaldo(destino, 1); err != nil {
+		t.Fatalf("retencion: %v", err)
+	}
+
+	postgresFicheros, err := filepath.Glob(filepath.Join(destino, "*_orquesta.postgres.bak"))
+	if err != nil {
+		t.Fatalf("glob postgres: %v", err)
+	}
+	if len(postgresFicheros) != 1 {
+		t.Fatalf("retencion postgres inesperada: %v", postgresFicheros)
+	}
+
+	if _, err := os.Stat(filepath.Join(destino, "2026-03-22_10-00-02_orquesta.db.bak")); err != nil {
+		t.Fatalf("el backup sqlite no deberia tocarse: %v", err)
 	}
 }

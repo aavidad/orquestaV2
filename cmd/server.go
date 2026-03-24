@@ -345,16 +345,16 @@ func executeRPCRequest(ctx context.Context, req *rpclocal.ExecRequest) (*rpcloca
 }
 
 func shouldExecuteRemotely(args []string) bool {
-	if !shouldDelegateToLocalServer(args) {
-		return false
-	}
-	if !commandSupportsServerMode(normalizedCommandArgs(args)) {
+	if len(args) == 0 {
 		return false
 	}
 	for _, arg := range args {
-		if arg == "--local" {
+		if arg == "--help" || arg == "-h" || arg == "--local" {
 			return false
 		}
+	}
+	if !commandSupportsServerMode(normalizedCommandArgs(args)) {
+		return false
 	}
 	return true
 }

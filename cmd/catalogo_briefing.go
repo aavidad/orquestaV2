@@ -36,7 +36,10 @@ var reglasListarCmd = &cobra.Command{
 		if !todas {
 			activa = ptrBool(true)
 		}
-		reglas, err := db.ListarReglas(strings.TrimSpace(rol), activa)
+		reglas, ok, err := cargarReglasDesdeAPI(strings.TrimSpace(rol), activa)
+		if !ok {
+			reglas, err = db.ListarReglas(strings.TrimSpace(rol), activa)
+		}
 		if err != nil {
 			return err
 		}
@@ -162,7 +165,10 @@ var skillsListarCmd = &cobra.Command{
 		if !todos {
 			activa = ptrBool(true)
 		}
-		skills, err := db.ListarSkills(strings.TrimSpace(rol), activa)
+		skills, ok, err := cargarSkillsDesdeAPI(strings.TrimSpace(rol), activa)
+		if !ok {
+			skills, err = db.ListarSkills(strings.TrimSpace(rol), activa)
+		}
 		if err != nil {
 			return err
 		}
@@ -288,7 +294,10 @@ var workflowsListarCmd = &cobra.Command{
 		if !todos {
 			activo = ptrBool(true)
 		}
-		workflows, err := db.ListarWorkflows(strings.TrimSpace(rol), activo)
+		workflows, ok, err := cargarWorkflowsDesdeAPI(strings.TrimSpace(rol), activo)
+		if !ok {
+			workflows, err = db.ListarWorkflows(strings.TrimSpace(rol), activo)
+		}
 		if err != nil {
 			return err
 		}
@@ -439,7 +448,10 @@ var permisosListarCmd = &cobra.Command{
 	Short: "Lista permisos por entidad",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		entidad, _ := cmd.Flags().GetString("entidad")
-		permisos, err := db.ListarPermisosEdicionCatalogo(strings.TrimSpace(entidad))
+		permisos, ok, err := cargarPermisosCatalogoDesdeAPI(strings.TrimSpace(entidad))
+		if !ok {
+			permisos, err = db.ListarPermisosEdicionCatalogo(strings.TrimSpace(entidad))
+		}
 		if err != nil {
 			return err
 		}
@@ -491,13 +503,17 @@ func init() {
 	reglasCrearCmd.Flags().String("titulo", "", "Título de la regla")
 	reglasCrearCmd.Flags().String("descripcion", "", "Descripción de la regla")
 	reglasCrearCmd.Flags().String("por", "alberto", "Actor que ejecuta la operación")
+	reglasCrearCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	reglasEditarCmd.Flags().String("rol", "", "Nuevo rol")
 	reglasEditarCmd.Flags().String("categoria", "", "Nueva categoría")
 	reglasEditarCmd.Flags().String("titulo", "", "Nuevo título")
 	reglasEditarCmd.Flags().String("descripcion", "", "Nueva descripción")
 	reglasEditarCmd.Flags().String("por", "alberto", "Actor que ejecuta la operación")
+	reglasEditarCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	reglasActivarCmd.Flags().String("por", "alberto", "Actor que ejecuta la operación")
+	reglasActivarCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	reglasDesactivarCmd.Flags().String("por", "alberto", "Actor que ejecuta la operación")
+	reglasDesactivarCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	reglasCmd.AddCommand(reglasListarCmd, reglasCrearCmd, reglasEditarCmd, reglasActivarCmd, reglasDesactivarCmd, reglasVersionesCmd)
 
 	skillsListarCmd.Flags().String("rol", "", "Filtrar por rol")
@@ -507,13 +523,17 @@ func init() {
 	skillsCrearCmd.Flags().String("descripcion", "", "Descripción del skill")
 	skillsCrearCmd.Flags().String("cuando-usar", "", "Cuándo usar el skill")
 	skillsCrearCmd.Flags().String("por", "alberto", "Actor que ejecuta la operación")
+	skillsCrearCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	skillsEditarCmd.Flags().String("rol", "", "Nuevo rol")
 	skillsEditarCmd.Flags().String("nombre", "", "Nuevo nombre")
 	skillsEditarCmd.Flags().String("descripcion", "", "Nueva descripción")
 	skillsEditarCmd.Flags().String("cuando-usar", "", "Nuevo texto de cuándo usar")
 	skillsEditarCmd.Flags().String("por", "alberto", "Actor que ejecuta la operación")
+	skillsEditarCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	skillsActivarCmd.Flags().String("por", "alberto", "Actor que ejecuta la operación")
+	skillsActivarCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	skillsDesactivarCmd.Flags().String("por", "alberto", "Actor que ejecuta la operación")
+	skillsDesactivarCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	skillsCmd.AddCommand(skillsListarCmd, skillsCrearCmd, skillsEditarCmd, skillsActivarCmd, skillsDesactivarCmd, skillsVersionesCmd)
 
 	workflowsListarCmd.Flags().String("rol", "", "Filtrar por rol")
@@ -523,14 +543,18 @@ func init() {
 	workflowsCrearCmd.Flags().String("descripcion", "", "Descripción del workflow")
 	workflowsCrearCmd.Flags().StringArray("paso", nil, "Paso del workflow; repetir para varios")
 	workflowsCrearCmd.Flags().String("por", "alberto", "Actor que ejecuta la operación")
+	workflowsCrearCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	workflowsEditarCmd.Flags().String("rol", "", "Nuevo rol")
 	workflowsEditarCmd.Flags().String("nombre", "", "Nuevo nombre")
 	workflowsEditarCmd.Flags().String("descripcion", "", "Nueva descripción")
 	workflowsEditarCmd.Flags().StringArray("paso", nil, "Reemplaza todos los pasos; repetir para varios")
 	workflowsEditarCmd.Flags().Bool("vaciar-pasos", false, "Deja el workflow sin pasos")
 	workflowsEditarCmd.Flags().String("por", "alberto", "Actor que ejecuta la operación")
+	workflowsEditarCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	workflowsActivarCmd.Flags().String("por", "alberto", "Actor que ejecuta la operación")
+	workflowsActivarCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	workflowsDesactivarCmd.Flags().String("por", "alberto", "Actor que ejecuta la operación")
+	workflowsDesactivarCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	workflowsCmd.AddCommand(workflowsListarCmd, workflowsVerCmd, workflowsCrearCmd, workflowsEditarCmd, workflowsActivarCmd, workflowsDesactivarCmd, workflowsVersionesCmd)
 	permisosListarCmd.Flags().String("entidad", "", "Filtrar por entidad")
 	permisosFijarCmd.Flags().String("entidad", "", "Entidad: reglas, skills o workflows")

@@ -100,3 +100,53 @@ func TestWebRuntimesPageYFiltros(t *testing.T) {
 	assertContains("/runtimes?activos=false", "Codex2")
 	assertContains("/runtimes/"+itoa(runtimeActivo.ID), "Runtime #")
 }
+
+func TestWebRuntimesControlEncolaOrden(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", webHandlerDash)
+	mux.HandleFunc("/tareas", webHandlerTareas)
+	mux.HandleFunc("/tareas/", webRouterTareas)
+	mux.HandleFunc("/propuestas", webHandlerPropuestas)
+	mux.HandleFunc("/propuestas/", webRouterPropuestas)
+	mux.HandleFunc("/runtimes", webHandlerRuntimes)
+	mux.HandleFunc("/runtimes/", webRouterRuntimes)
+	registerAPIRoutes(mux)
+
+	form := strings.NewReader("agente=Codex1&proyecto=orquestador&accion=arrancar&conector=codex-cli&modelo=gpt-5.4&motivo=web")
+	req := httptest.NewRequest(http.MethodPost, "/runtimes/control", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	if location := rec.Header().Get("Location"); !strings.Contains(location, "/runtimes?ok=") {
+		t.Fatalf("redirect inesperado: %s", location)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != agenteControlAccionStart {
+		t.Fatalf("runtime orders inesperadas: %+v", orders)
+	}
+}

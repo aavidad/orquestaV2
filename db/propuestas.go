@@ -33,6 +33,13 @@ type Propuesta struct {
 	Votos        []*Voto // cargados aparte
 }
 
+type PropuestaPatch struct {
+	Titulo            *string
+	Descripcion       *string
+	AnexarDescripcion *string
+	Tipo              *string
+}
+
 func asegurarVotosPendientesPropuesta(propuestaID int64) (int, error) {
 	rows, err := DB.Query(`SELECT nombre FROM agentes WHERE rol != 'admin' AND habilitado = 1`)
 	if err != nil {
@@ -225,6 +232,63 @@ func RepararVotosPendientesPropuesta(codigo, agente string) (int, error) {
 	}
 	Audit(agente, "reparar_votos_propuesta", "propuesta", propuesta.ID, propuesta.Codigo)
 	return insertados, nil
+}
+
+func ActualizarPropuesta(codigo string, patch PropuestaPatch, agente string) error {
+	propuesta, err := GetPropuesta(codigo)
+	if err != nil {
+		return err
+	}
+	if patch.Descripcion != nil && patch.AnexarDescripcion != nil {
+		return fmt.Errorf("no puedes usar descripcion y anexar_descripcion a la vez")
+	}
+
+	assignments := []string{}
+	args := []any{}
+	cambios := []string{}
+
+	if patch.Titulo != nil {
+		titulo := strings.TrimSpace(*patch.Titulo)
+		if titulo == "" {
+			return fmt.Errorf("el título no puede quedar vacío")
+		}
+		assignments = append(assignments, "titulo = ?")
+		args = append(args, titulo)
+		cambios = append(cambios, "titulo")
+	}
+	if patch.Descripcion != nil {
+		assignments = append(assignments, "descripcion = ?")
+		args = append(args, *patch.Descripcion)
+		cambios = append(cambios, "descripcion")
+	}
+	if patch.AnexarDescripcion != nil {
+		assignments = append(assignments, "descripcion = COALESCE(descripcion, '') || ?")
+		args = append(args, *patch.AnexarDescripcion)
+		cambios = append(cambios, "anexar_descripcion")
+	}
+	if patch.Tipo != nil {
+		tipo := strings.TrimSpace(*patch.Tipo)
+		if tipo == "" {
+			return fmt.Errorf("el tipo no puede quedar vacío")
+		}
+		assignments = append(assignments, "tipo = ?")
+		args = append(args, tipo)
+		cambios = append(cambios, "tipo")
+	}
+	if len(assignments) == 0 {
+		return fmt.Errorf("no se indicó ningún cambio")
+	}
+
+	assignments = append(assignments, "updated_at = CURRENT_TIMESTAMP")
+	args = append(args, propuesta.ID)
+	if _, err := DB.Exec(
+		"UPDATE propuestas SET "+strings.Join(assignments, ", ")+" WHERE id = ?",
+		args...,
+	); err != nil {
+		return err
+	}
+	Audit(agente, "actualizar_propuesta", "propuesta", propuesta.ID, propuesta.Codigo+" ["+strings.Join(cambios, ",")+"]")
+	return nil
 }
 
 // EvaluarConsenso revisa los votos de una propuesta.

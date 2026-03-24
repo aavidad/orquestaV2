@@ -199,6 +199,72 @@ var propuestaNuevaCmd = &cobra.Command{
 	},
 }
 
+var propuestaActualizarCmd = &cobra.Command{
+	Use:   "actualizar <codigo>",
+	Short: "Actualiza una propuesta existente",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agente, err := resolverValorFlag(cmd, "agente", "por")
+		if err != nil {
+			return err
+		}
+
+		var (
+			titulo     *string
+			desc       *string
+			appendDesc *string
+			tipo       *string
+		)
+		if cmd.Flags().Changed("titulo") {
+			v, _ := cmd.Flags().GetString("titulo")
+			titulo = &v
+		}
+		if cmd.Flags().Changed("descripcion") {
+			v, _ := cmd.Flags().GetString("descripcion")
+			desc = &v
+		}
+		if cmd.Flags().Changed("anexar-descripcion") {
+			v, _ := cmd.Flags().GetString("anexar-descripcion")
+			appendDesc = &v
+		}
+		if cmd.Flags().Changed("tipo") {
+			v, _ := cmd.Flags().GetString("tipo")
+			tipo = &v
+		}
+		if titulo == nil && desc == nil && appendDesc == nil && tipo == nil {
+			return fmt.Errorf("debes indicar al menos un cambio con --titulo, --descripcion, --anexar-descripcion o --tipo")
+		}
+
+		if ok, err := apiPost("/api/propuestas/"+args[0]+"/accion", apiPropuestaAccionRequest{
+			Accion:      "actualizar",
+			Agente:      agente,
+			Titulo:      titulo,
+			Descripcion: desc,
+			AnexarDesc:  appendDesc,
+			Tipo:        tipo,
+		}, &map[string]any{}); err != nil {
+			return err
+		} else if ok {
+			fmt.Printf("✓ Propuesta %s actualizada\n", args[0])
+			return nil
+		}
+
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
+		if err := db.ActualizarPropuesta(args[0], db.PropuestaPatch{
+			Titulo:            titulo,
+			Descripcion:       desc,
+			AnexarDescripcion: appendDesc,
+			Tipo:              tipo,
+		}, agente); err != nil {
+			return err
+		}
+		fmt.Printf("✓ Propuesta %s actualizada\n", args[0])
+		return nil
+	},
+}
+
 var propuestaCerrarCmd = &cobra.Command{
 	Use:   "cerrar <codigo> <estado>",
 	Short: "Cierra manualmente una propuesta (consenso|rechazada|backlog)",
@@ -302,6 +368,12 @@ func init() {
 	propuestaNuevaCmd.Flags().String("por", "alberto", "Propuesto por")
 	propuestaNuevaCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	propuestaNuevaCmd.Flags().String("codigo", "", "Código manual (si se omite, se auto-genera OP-XXX)")
+	propuestaActualizarCmd.Flags().String("titulo", "", "Nuevo título")
+	propuestaActualizarCmd.Flags().String("descripcion", "", "Nueva descripción completa")
+	propuestaActualizarCmd.Flags().String("anexar-descripcion", "", "Texto a anexar a la descripción existente")
+	propuestaActualizarCmd.Flags().String("tipo", "", "Nuevo tipo")
+	propuestaActualizarCmd.Flags().String("por", "alberto", "Agente que actualiza")
+	propuestaActualizarCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 
 	propuestaCerrarCmd.Flags().String("por", "alberto", "Agente que cierra")
 	propuestaCerrarCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
@@ -314,6 +386,7 @@ func init() {
 		propuestaListarCmd,
 		propuestaVerCmd,
 		propuestaNuevaCmd,
+		propuestaActualizarCmd,
 		propuestaCerrarCmd,
 		propuestaReabrirCmd,
 		propuestaRepararVotosCmd,

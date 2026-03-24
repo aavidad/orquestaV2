@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"orquesta/storage"
 )
 
 const (
@@ -141,8 +143,20 @@ func ResolveServerAddr() string {
 }
 
 func currentScopeSource() string {
-	if path := strings.TrimSpace(os.Getenv("ORQUESTA_DB")); path != "" {
-		return "db:" + filepath.Clean(path)
+	cfg, err := storage.ResolveConfig(func() string {
+		if wd, err := os.Getwd(); err == nil && strings.TrimSpace(wd) != "" {
+			return filepath.Join(wd, "orquesta.db")
+		}
+		return "orquesta.db"
+	})
+	if err == nil {
+		driver := strings.TrimSpace(cfg.Driver)
+		if path := strings.TrimSpace(cfg.Path); path != "" {
+			return "db:" + driver + ":" + filepath.Clean(path)
+		}
+		if dsn := strings.TrimSpace(cfg.DSN); dsn != "" {
+			return "db:" + driver + ":" + dsn
+		}
 	}
 	if wd, err := os.Getwd(); err == nil && strings.TrimSpace(wd) != "" {
 		return "cwd:" + filepath.Clean(wd)

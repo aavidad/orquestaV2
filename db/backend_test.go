@@ -10,14 +10,14 @@ func TestResolveBackendPorDefectoSQLite(t *testing.T) {
 	t.Setenv("ORQUESTA_DB_BACKEND", "")
 	t.Setenv("ORQUESTA_DB", filepath.Join(t.TempDir(), "orquesta.db"))
 
-	backend, target, err := resolveBackend()
+	backend, cfg, err := resolveBackend()
 	if err != nil {
 		t.Fatalf("resolveBackend: %v", err)
 	}
 	if backend.Name() != "sqlite" {
 		t.Fatalf("backend inesperado: %s", backend.Name())
 	}
-	if target == "" {
+	if configTarget(cfg) == "" {
 		t.Fatalf("target vacío")
 	}
 }
@@ -68,5 +68,27 @@ func TestRegisterBackendIgnoraNil(t *testing.T) {
 	RegisterBackend(nil)
 	if len(backendRegistry) != prev {
 		t.Fatalf("register nil no debe alterar el registro")
+	}
+}
+
+func TestBackupFilenameSuffixSQLitePorDefecto(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "")
+	t.Setenv("ORQUESTA_DB_BACKEND", "")
+	t.Setenv("ORQUESTA_DB_DSN", "")
+	t.Setenv("ORQUESTA_DB", filepath.Join(t.TempDir(), "orquesta.db"))
+
+	if got := BackupFilenameSuffix(); got != "_orquesta.db.bak" {
+		t.Fatalf("sufijo inesperado: %s", got)
+	}
+}
+
+func TestBackupFilenameSuffixUsaDriverActual(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "postgres")
+	t.Setenv("ORQUESTA_DB_BACKEND", "")
+	t.Setenv("ORQUESTA_DB_DSN", "postgres://user:pass@localhost/orquesta")
+	t.Setenv("ORQUESTA_DB", "")
+
+	if got := BackupFilenameSuffix(); got != "_orquesta.postgres.bak" {
+		t.Fatalf("sufijo inesperado: %s", got)
 	}
 }
