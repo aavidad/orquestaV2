@@ -86,3 +86,53 @@ func TestSesionInicioUsaAPIBriefing(t *testing.T) {
 		}
 	}
 }
+
+func TestSesionNuevoCodexUsaAPIBriefing(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/sesiones/inicio", func(w http.ResponseWriter, r *http.Request) {
+		var req apiSesionInicioRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode sesion inicio: %v", err)
+		}
+		if !req.NuevoCodex {
+			t.Fatalf("esperaba NuevoCodex=true: %+v", req)
+		}
+		_ = json.NewEncoder(w).Encode(apiSesionInicioResponse{
+			Sesion: &db.Sesion{
+				ID:             88,
+				Agente:         "Codex9",
+				ProyectoSlug:   "orquestador",
+				ProyectoNombre: "Orquestador",
+				CWD:            "/tmp/orquestador",
+				Herramienta:    "codex-cli",
+				Branch:         "main",
+			},
+			Rol: "programador",
+		})
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	out := capturarStdout(t, func() {
+		if err := sesionNuevoCodexCmd.RunE(sesionNuevoCodexCmd, nil); err != nil {
+			t.Fatalf("sesion nuevo-codex via API: %v", err)
+		}
+	})
+
+	for _, token := range []string{
+		"Nuevo agente Codex registrado como: Codex9",
+		"SESIÓN INICIADA — agente: Codex9",
+	} {
+		if !strings.Contains(out, token) {
+			t.Fatalf("salida sin %q:\n%s", token, out)
+		}
+	}
+}
