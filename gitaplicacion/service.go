@@ -1,4 +1,4 @@
-package gitapp
+package gitaplicacion
 
 import "orquesta/db"
 

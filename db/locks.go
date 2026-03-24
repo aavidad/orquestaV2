@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"orquesta/coordination"
+	"orquesta/coordinacion"
 )
 
 type SQLiteLockRepository struct{}
@@ -19,7 +19,7 @@ func (SQLiteLockRepository) ExpireActiveBefore(now time.Time) error {
 	return err
 }
 
-func (SQLiteLockRepository) FindActive(scopeType, scopeKey string) (*coordination.Lock, error) {
+func (SQLiteLockRepository) FindActive(scopeType, scopeKey string) (*coordinacion.Lock, error) {
 	row := DB.QueryRow(`
 		SELECT id, proyecto_id, tarea_id, sesion_id, agente, scope_type, scope_key, ruta_abs, branch,
 		       motivo, token_lease, estado, heartbeat_at, expires_at, created_at, updated_at, liberada_at
@@ -33,7 +33,7 @@ func (SQLiteLockRepository) FindActive(scopeType, scopeKey string) (*coordinatio
 	return lock, err
 }
 
-func (SQLiteLockRepository) Create(lock *coordination.Lock) (*coordination.Lock, error) {
+func (SQLiteLockRepository) Create(lock *coordinacion.Lock) (*coordinacion.Lock, error) {
 	if lock == nil {
 		return nil, fmt.Errorf("lock nil")
 	}
@@ -52,7 +52,7 @@ func (SQLiteLockRepository) Create(lock *coordination.Lock) (*coordination.Lock,
 	return (SQLiteLockRepository{}).GetByID(id)
 }
 
-func (SQLiteLockRepository) GetByID(id int64) (*coordination.Lock, error) {
+func (SQLiteLockRepository) GetByID(id int64) (*coordinacion.Lock, error) {
 	row := DB.QueryRow(`
 		SELECT id, proyecto_id, tarea_id, sesion_id, agente, scope_type, scope_key, ruta_abs, branch,
 		       motivo, token_lease, estado, heartbeat_at, expires_at, created_at, updated_at, liberada_at
@@ -61,7 +61,7 @@ func (SQLiteLockRepository) GetByID(id int64) (*coordination.Lock, error) {
 	return scanCoordinationLock(row)
 }
 
-func (SQLiteLockRepository) Renew(id int64, expiresAt time.Time, agent, leaseToken string) (*coordination.Lock, error) {
+func (SQLiteLockRepository) Renew(id int64, expiresAt time.Time, agent, leaseToken string) (*coordinacion.Lock, error) {
 	res, err := DB.Exec(`
 		UPDATE locks
 		SET heartbeat_at = CURRENT_TIMESTAMP, expires_at = ?
@@ -78,7 +78,7 @@ func (SQLiteLockRepository) Renew(id int64, expiresAt time.Time, agent, leaseTok
 	return (SQLiteLockRepository{}).GetByID(id)
 }
 
-func (SQLiteLockRepository) Release(id int64, releasedAt time.Time, agent, leaseToken string) (*coordination.Lock, error) {
+func (SQLiteLockRepository) Release(id int64, releasedAt time.Time, agent, leaseToken string) (*coordinacion.Lock, error) {
 	res, err := DB.Exec(`
 		UPDATE locks
 		SET estado = 'liberada', liberada_at = ?, heartbeat_at = CURRENT_TIMESTAMP
@@ -95,7 +95,7 @@ func (SQLiteLockRepository) Release(id int64, releasedAt time.Time, agent, lease
 	return (SQLiteLockRepository{}).GetByID(id)
 }
 
-func (SQLiteLockRepository) List(filter coordination.LockFilter) ([]*coordination.Lock, error) {
+func (SQLiteLockRepository) List(filter coordinacion.LockFilter) ([]*coordinacion.Lock, error) {
 	q := `
 		SELECT id, proyecto_id, tarea_id, sesion_id, agente, scope_type, scope_key, ruta_abs, branch,
 		       motivo, token_lease, estado, heartbeat_at, expires_at, created_at, updated_at, liberada_at
@@ -120,7 +120,7 @@ func (SQLiteLockRepository) List(filter coordination.LockFilter) ([]*coordinatio
 		return nil, err
 	}
 	defer rows.Close()
-	var out []*coordination.Lock
+	var out []*coordinacion.Lock
 	for rows.Next() {
 		lock, err := scanCoordinationLock(rows)
 		if err != nil {
@@ -131,8 +131,8 @@ func (SQLiteLockRepository) List(filter coordination.LockFilter) ([]*coordinatio
 	return out, rows.Err()
 }
 
-func scanCoordinationLock(s scanner) (*coordination.Lock, error) {
-	var lock coordination.Lock
+func scanCoordinationLock(s scanner) (*coordinacion.Lock, error) {
+	var lock coordinacion.Lock
 	var projectID sql.NullInt64
 	var taskID sql.NullInt64
 	var sessionID sql.NullInt64
@@ -158,6 +158,6 @@ func scanCoordinationLock(s scanner) (*coordination.Lock, error) {
 	if releasedAt.Valid {
 		lock.ReleasedAt = &releasedAt.Time
 	}
-	lock.State = coordination.LockState(strings.TrimSpace(state))
+	lock.State = coordinacion.LockState(strings.TrimSpace(state))
 	return &lock, nil
 }

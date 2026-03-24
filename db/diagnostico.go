@@ -4,30 +4,30 @@ import (
 	"sort"
 	"time"
 
-	"orquesta/coordination"
+	"orquesta/coordinacion"
 )
 
 type PropuestaDiagnostico struct {
-	Propuesta   *Propuesta
-	Acuerdo     int
-	Desacuerdo  int
-	Abstencion  int
-	Pendiente   int
+	Propuesta  *Propuesta
+	Acuerdo    int
+	Desacuerdo int
+	Abstencion int
+	Pendiente  int
 }
 
 type SnapshotDiagnostico struct {
-	GeneradoEn        time.Time
-	Agentes           []*Agente
-	SesionesActivas   []*Sesion
-	ConteoTareas      map[string]int
-	TareasBloqueadas  []*Tarea
-	TareasEnProgreso  []*Tarea
-	TareasLibres      []*Tarea
+	GeneradoEn         time.Time
+	Agentes            []*Agente
+	SesionesActivas    []*Sesion
+	ConteoTareas       map[string]int
+	TareasBloqueadas   []*Tarea
+	TareasEnProgreso   []*Tarea
+	TareasLibres       []*Tarea
 	PropuestasAbiertas []PropuestaDiagnostico
-	LocksActivos      []*coordination.Lock
-	WorktreesActivos  []*coordination.Worktree
-	Config            map[string]string
-	AuditoriaReciente []AuditEntry
+	LocksActivos       []*coordinacion.Lock
+	WorktreesActivos   []*coordinacion.Worktree
+	Config             map[string]string
+	AuditoriaReciente  []AuditEntry
 }
 
 func ConstruirSnapshotDiagnostico(limitAudit int) (*SnapshotDiagnostico, error) {
@@ -83,13 +83,13 @@ func ConstruirSnapshotDiagnostico(limitAudit int) (*SnapshotDiagnostico, error) 
 		})
 	}
 
-	lockState := coordination.LockState("activa")
-	locksActivos, err := (SQLiteLockRepository{}).List(coordination.LockFilter{State: &lockState})
+	lockState := coordinacion.LockState("activa")
+	locksActivos, err := (SQLiteLockRepository{}).List(coordinacion.LockFilter{State: &lockState})
 	if err != nil {
 		return nil, err
 	}
-	worktreeState := coordination.WorktreeState("activa")
-	worktreesActivos, err := (SQLiteWorktreeRepository{}).List(coordination.WorktreeFilter{State: &worktreeState})
+	worktreeState := coordinacion.WorktreeState("activa")
+	worktreesActivos, err := (SQLiteWorktreeRepository{}).List(coordinacion.WorktreeFilter{State: &worktreeState})
 	if err != nil {
 		return nil, err
 	}

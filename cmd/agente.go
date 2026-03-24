@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"orquesta/agentruntime"
 	"orquesta/db"
+	"orquesta/runtimeagente"
 )
 
 var agenteCmd = &cobra.Command{
@@ -95,20 +95,20 @@ type politicaAgente struct {
 }
 
 type agentePrepararOutput struct {
-	Agente       string                   `json:"agente"`
-	Rol          string                   `json:"rol"`
-	Proyecto     proyectoBundle           `json:"proyecto"`
-	Conector     conectorBundle           `json:"conector"`
-	Politica     politicaAgente           `json:"politica"`
-	UltimaSesion *sesionBundle            `json:"ultima_sesion,omitempty"`
-	Plan         *agentruntime.LaunchPlan `json:"plan"`
-	Reglas       []*db.Regla              `json:"reglas"`
-	Skills       []*db.Skill              `json:"skills"`
-	Workflows    []*db.Workflow           `json:"workflows"`
-	Memoria      []*db.EntidadMemoria     `json:"memoria,omitempty"`
-	ReanimarAt   *time.Time               `json:"reanimar_at,omitempty"`
-	MotivoPausa  string                   `json:"motivo_pausa,omitempty"`
-	EstadoCuota  string                   `json:"estado_cuota,omitempty"`
+	Agente       string                    `json:"agente"`
+	Rol          string                    `json:"rol"`
+	Proyecto     proyectoBundle            `json:"proyecto"`
+	Conector     conectorBundle            `json:"conector"`
+	Politica     politicaAgente            `json:"politica"`
+	UltimaSesion *sesionBundle             `json:"ultima_sesion,omitempty"`
+	Plan         *runtimeagente.LaunchPlan `json:"plan"`
+	Reglas       []*db.Regla               `json:"reglas"`
+	Skills       []*db.Skill               `json:"skills"`
+	Workflows    []*db.Workflow            `json:"workflows"`
+	Memoria      []*db.EntidadMemoria      `json:"memoria,omitempty"`
+	ReanimarAt   *time.Time                `json:"reanimar_at,omitempty"`
+	MotivoPausa  string                    `json:"motivo_pausa,omitempty"`
+	EstadoCuota  string                    `json:"estado_cuota,omitempty"`
 }
 
 type itemLigero struct {
@@ -283,7 +283,7 @@ func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Pro
 		return out, err
 	}
 
-	req := agentruntime.LaunchRequest{
+	req := runtimeagente.LaunchRequest{
 		Agente:       agente.Nombre,
 		Rol:          agente.Rol,
 		ProyectoSlug: proyecto.Slug,
@@ -291,7 +291,7 @@ func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Pro
 		Modelo:       strings.TrimSpace(modelo),
 		Razonamiento: strings.TrimSpace(razonamiento),
 		PerfilTarea:  strings.TrimSpace(perfilTarea),
-		Conector: agentruntime.ConnectorConfig{
+		Conector: runtimeagente.ConnectorConfig{
 			Slug:         conector.Slug,
 			Nombre:       conector.Nombre,
 			Transporte:   conector.Transporte,
@@ -303,7 +303,7 @@ func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Pro
 		},
 	}
 	if ultima != nil {
-		req.Resume = agentruntime.ResumeContext{
+		req.Resume = runtimeagente.ResumeContext{
 			ExternalSessionID:  ultima.ExternalSessionID,
 			ResumePayloadJSON:  ultima.ResumePayloadJSON,
 			ResumenContinuidad: ultima.ResumenContinuidad,
@@ -311,7 +311,7 @@ func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Pro
 			CWD:                ultima.CWD,
 		}
 	}
-	plan, err := agentruntime.DefaultRegistry().Prepare(req)
+	plan, err := runtimeagente.DefaultRegistry().Prepare(req)
 	if err != nil {
 		return out, err
 	}
@@ -592,7 +592,7 @@ var agenteEjecutarCmd = &cobra.Command{
 			}
 
 			// 2. Ejecutar (Modo PTY con 'script' - Funcionalidad Total confirmada por USER)
-			fullCmdStr := agentruntime.RenderCommand(prep.Plan)
+			fullCmdStr := runtimeagente.RenderCommand(prep.Plan)
 			fmt.Printf("🎬 [Orquesta] Ejecutando: %s\n", fullCmdStr)
 
 			// script -q (quiet) -e (mantiene exit code) -c (comando)
@@ -984,7 +984,7 @@ func imprimirAgentePreparar(out agentePrepararOutput, jsonOut bool) error {
 		fmt.Printf("Sesión previa: %d estado=%s branch=%s\n", out.UltimaSesion.ID, out.UltimaSesion.Estado, valorOGuion(out.UltimaSesion.Branch))
 	}
 	if out.Plan != nil {
-		fmt.Printf("Plan:      %s\n", agentruntime.RenderCommand(out.Plan))
+		fmt.Printf("Plan:      %s\n", runtimeagente.RenderCommand(out.Plan))
 		fmt.Printf("Modo:      %s (native_resume=%t)\n", out.Plan.Modo, out.Plan.NativeResume)
 		if out.Plan.ContinuityPrompt != "" {
 			fmt.Printf("Continuidad: %s\n", out.Plan.ContinuityPrompt)

@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"orquesta/coordination"
+	"orquesta/coordinacion"
 	"orquesta/db"
 )
 
@@ -34,19 +34,19 @@ type apiAsignacionesResponse struct {
 }
 
 type apiLockResponse struct {
-	Lock *coordination.Lock `json:"lock"`
+	Lock *coordinacion.Lock `json:"lock"`
 }
 
 type apiLocksResponse struct {
-	Locks []*coordination.Lock `json:"locks"`
+	Locks []*coordinacion.Lock `json:"locks"`
 }
 
 type apiWorktreeResponse struct {
-	Worktree *coordination.Worktree `json:"worktree"`
+	Worktree *coordinacion.Worktree `json:"worktree"`
 }
 
 type apiWorktreesResponse struct {
-	Worktrees []*coordination.Worktree `json:"worktrees"`
+	Worktrees []*coordinacion.Worktree `json:"worktrees"`
 }
 
 type apiAgenteHandoffResponse struct {
@@ -297,7 +297,7 @@ func activarAsignacionPorAPI(req apiAsignacionActivarRequest) (bool, error) {
 	return ok, err
 }
 
-func cargarLocksDesdeAPI(query url.Values) ([]*coordination.Lock, bool, error) {
+func cargarLocksDesdeAPI(query url.Values) ([]*coordinacion.Lock, bool, error) {
 	var resp apiLocksResponse
 	ok, err := apiGetQuery("/api/locks", query, &resp)
 	if !ok || err != nil {
@@ -306,7 +306,7 @@ func cargarLocksDesdeAPI(query url.Values) ([]*coordination.Lock, bool, error) {
 	return resp.Locks, true, nil
 }
 
-func tomarLockPorAPI(req apiLockRequest) (*coordination.Lock, bool, error) {
+func tomarLockPorAPI(req apiLockRequest) (*coordinacion.Lock, bool, error) {
 	var resp apiLockResponse
 	ok, err := apiPost("/api/locks", req, &resp)
 	if !ok || err != nil {
@@ -315,7 +315,7 @@ func tomarLockPorAPI(req apiLockRequest) (*coordination.Lock, bool, error) {
 	return resp.Lock, true, nil
 }
 
-func renovarLockPorAPI(id int64, req apiLockRequest) (*coordination.Lock, bool, error) {
+func renovarLockPorAPI(id int64, req apiLockRequest) (*coordinacion.Lock, bool, error) {
 	var resp apiLockResponse
 	ok, err := apiPost(fmt.Sprintf("/api/locks/%d/renovar", id), req, &resp)
 	if !ok || err != nil {
@@ -324,7 +324,7 @@ func renovarLockPorAPI(id int64, req apiLockRequest) (*coordination.Lock, bool, 
 	return resp.Lock, true, nil
 }
 
-func liberarLockPorAPI(id int64, req apiLockRequest) (*coordination.Lock, bool, error) {
+func liberarLockPorAPI(id int64, req apiLockRequest) (*coordinacion.Lock, bool, error) {
 	var resp apiLockResponse
 	ok, err := apiPost(fmt.Sprintf("/api/locks/%d/liberar", id), req, &resp)
 	if !ok || err != nil {
@@ -333,7 +333,7 @@ func liberarLockPorAPI(id int64, req apiLockRequest) (*coordination.Lock, bool, 
 	return resp.Lock, true, nil
 }
 
-func cargarWorktreesDesdeAPI(query url.Values) ([]*coordination.Worktree, bool, error) {
+func cargarWorktreesDesdeAPI(query url.Values) ([]*coordinacion.Worktree, bool, error) {
 	var resp apiWorktreesResponse
 	ok, err := apiGetQuery("/api/worktrees", query, &resp)
 	if !ok || err != nil {
@@ -342,7 +342,7 @@ func cargarWorktreesDesdeAPI(query url.Values) ([]*coordination.Worktree, bool, 
 	return resp.Worktrees, true, nil
 }
 
-func crearWorktreePorAPI(req apiWorktreeRequest) (*coordination.Worktree, bool, error) {
+func crearWorktreePorAPI(req apiWorktreeRequest) (*coordinacion.Worktree, bool, error) {
 	var resp apiWorktreeResponse
 	ok, err := apiPost("/api/worktrees", req, &resp)
 	if !ok || err != nil {
@@ -351,7 +351,7 @@ func crearWorktreePorAPI(req apiWorktreeRequest) (*coordination.Worktree, bool, 
 	return resp.Worktree, true, nil
 }
 
-func cerrarWorktreePorAPI(id int64, req apiWorktreeRequest) (*coordination.Worktree, bool, error) {
+func cerrarWorktreePorAPI(id int64, req apiWorktreeRequest) (*coordinacion.Worktree, bool, error) {
 	var resp apiWorktreeResponse
 	ok, err := apiPost(fmt.Sprintf("/api/worktrees/%d/cerrar", id), req, &resp)
 	if !ok || err != nil {

@@ -8,18 +8,18 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
-	"orquesta/coordination"
+	"orquesta/coordinacion"
 	"orquesta/db"
-	"orquesta/gitops"
+	"orquesta/gitoperaciones"
 )
 
-func newCoordinationService() *coordination.Service {
-	return &coordination.Service{
+func newCoordinationService() *coordinacion.Service {
+	return &coordinacion.Service{
 		Locks:     db.SQLiteLockRepository{},
 		Worktrees: db.SQLiteWorktreeRepository{},
 		Projects:  db.SQLiteProjectRepository{},
 		Sessions:  db.SQLiteSessionRepository{},
 		Config:    db.SQLiteConfigRepository{},
-		Workspace: gitops.WorktreeManager{},
+		Workspace: gitoperaciones.WorktreeManager{},
 	}
 }

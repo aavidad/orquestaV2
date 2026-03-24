@@ -16,7 +16,7 @@ import (
 	"strconv"
 	"strings"
 
-	"orquesta/coordination"
+	"orquesta/coordinacion"
 	"orquesta/db"
 )
 
@@ -770,7 +770,7 @@ func apiHandlerLocks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		repo := db.SQLiteLockRepository{}
-		filter := coordination.LockFilter{}
+		filter := coordinacion.LockFilter{}
 		if agente := strings.TrimSpace(r.URL.Query().Get("agente")); agente != "" {
 			filter.Agent = &agente
 		}
@@ -783,7 +783,7 @@ func apiHandlerLocks(w http.ResponseWriter, r *http.Request) {
 			filter.ProjectID = &proyecto.ID
 		}
 		if estadoStr := strings.TrimSpace(r.URL.Query().Get("estado")); estadoStr != "" {
-			estado := coordination.LockState(estadoStr)
+			estado := coordinacion.LockState(estadoStr)
 			filter.State = &estado
 		}
 		locks, err := repo.List(filter)
@@ -819,7 +819,7 @@ func apiHandlerLocks(w http.ResponseWriter, r *http.Request) {
 				sessionID = &sesion.ID
 			}
 		}
-		lock, err := svc.AcquireLock(coordination.AcquireLockInput{
+		lock, err := svc.AcquireLock(coordinacion.AcquireLockInput{
 			ProjectID:    projectID,
 			TaskID:       taskID,
 			SessionID:    sessionID,
@@ -874,7 +874,7 @@ func apiRouterLocks(w http.ResponseWriter, r *http.Request) {
 	svc := newCoordinationService()
 	switch {
 	case parts[1] == "renovar" && r.Method == http.MethodPost:
-		lock, err := svc.RenewLock(coordination.RenewLockInput{
+		lock, err := svc.RenewLock(coordinacion.RenewLockInput{
 			ID:           id,
 			Agent:        req.Agente,
 			LeaseToken:   req.LeaseToken,
@@ -886,7 +886,7 @@ func apiRouterLocks(w http.ResponseWriter, r *http.Request) {
 		}
 		apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "lock": lock})
 	case parts[1] == "liberar" && r.Method == http.MethodPost:
-		lock, err := svc.ReleaseLock(coordination.ReleaseLockInput{
+		lock, err := svc.ReleaseLock(coordinacion.ReleaseLockInput{
 			ID:         id,
 			Agent:      req.Agente,
 			LeaseToken: req.LeaseToken,
@@ -1177,7 +1177,7 @@ func apiHandlerWorktrees(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		repo := db.SQLiteWorktreeRepository{}
-		filter := coordination.WorktreeFilter{}
+		filter := coordinacion.WorktreeFilter{}
 		if agente := strings.TrimSpace(r.URL.Query().Get("agente")); agente != "" {
 			filter.Agent = &agente
 		}
@@ -1190,7 +1190,7 @@ func apiHandlerWorktrees(w http.ResponseWriter, r *http.Request) {
 			filter.ProjectID = &proyecto.ID
 		}
 		if estadoStr := strings.TrimSpace(r.URL.Query().Get("estado")); estadoStr != "" {
-			estado := coordination.WorktreeState(estadoStr)
+			estado := coordinacion.WorktreeState(estadoStr)
 			filter.State = &estado
 		}
 		worktrees, err := repo.List(filter)
@@ -1214,7 +1214,7 @@ func apiHandlerWorktrees(w http.ResponseWriter, r *http.Request) {
 		if req.LockID > 0 {
 			lockID = &req.LockID
 		}
-		worktree, err := svc.PrepareWorktree(coordination.PrepareWorktreeInput{
+		worktree, err := svc.PrepareWorktree(coordinacion.PrepareWorktreeInput{
 			ProjectRef: req.Proyecto,
 			Agent:      req.Agente,
 			TaskID:     taskID,

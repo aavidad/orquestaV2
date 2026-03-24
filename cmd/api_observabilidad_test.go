@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"orquesta/coordination"
+	"orquesta/coordinacion"
 	"orquesta/db"
 )
 
@@ -85,7 +85,7 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 		t.Fatalf("get propuesta: %v", err)
 	}
 
-	lock, err := (db.SQLiteLockRepository{}).Create(&coordination.Lock{
+	lock, err := (db.SQLiteLockRepository{}).Create(&coordinacion.Lock{
 		ProjectID:   &proyectoID,
 		TaskID:      &tareaID,
 		SessionID:   &sesion.ID,
@@ -96,7 +96,7 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 		Branch:      "main",
 		Reason:      "prueba api",
 		LeaseToken:  "lease-001",
-		State:       coordination.LockState("activa"),
+		State:       coordinacion.LockState("activa"),
 		HeartbeatAt: time.Now(),
 		ExpiresAt:   time.Now().Add(5 * time.Minute),
 	})
@@ -104,7 +104,7 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 		t.Fatalf("crear lock: %v", err)
 	}
 
-	worktree, err := (db.SQLiteWorktreeRepository{}).Create(&coordination.Worktree{
+	worktree, err := (db.SQLiteWorktreeRepository{}).Create(&coordinacion.Worktree{
 		ProjectID: proyectoID,
 		TaskID:    &tareaID,
 		LockID:    &lock.ID,
@@ -113,7 +113,7 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 		Path:      filepath.Join(tmp, ".orquesta-worktrees", "wt-api"),
 		Branch:    "feat/api-read-only",
 		BaseRef:   "main",
-		State:     coordination.WorktreeState("activa"),
+		State:     coordinacion.WorktreeState("activa"),
 		Reason:    "prueba api",
 	})
 	if err != nil {

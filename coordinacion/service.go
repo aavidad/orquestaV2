@@ -5,7 +5,7 @@ Autor: Alberto Avidad Fernandez
 Oficina de Software Libre (OSL) - Diputacion de Granada
 */
 
-package coordination
+package coordinacion
 
 import (
 	"crypto/rand"

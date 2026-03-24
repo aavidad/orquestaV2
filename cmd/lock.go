@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"orquesta/coordination"
+	"orquesta/coordinacion"
 	"orquesta/db"
 )
 
@@ -41,7 +41,7 @@ var lockListarCmd = &cobra.Command{
 		locks, ok, err := cargarLocksDesdeAPI(query)
 		if !ok {
 			repo := db.SQLiteLockRepository{}
-			filter := coordination.LockFilter{}
+			filter := coordinacion.LockFilter{}
 			if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
 				filter.Agent = &agente
 			}
@@ -53,7 +53,7 @@ var lockListarCmd = &cobra.Command{
 				filter.ProjectID = &proyecto.ID
 			}
 			if estadoStr, _ := cmd.Flags().GetString("estado"); strings.TrimSpace(estadoStr) != "" {
-				estado := coordination.LockState(estadoStr)
+				estado := coordinacion.LockState(estadoStr)
 				filter.State = &estado
 			}
 			locks, err = repo.List(filter)
@@ -125,7 +125,7 @@ var lockTomarCmd = &cobra.Command{
 				sessionID = &sesion.ID
 			}
 		}
-		lock, err := svc.AcquireLock(coordination.AcquireLockInput{
+		lock, err := svc.AcquireLock(coordinacion.AcquireLockInput{
 			ProjectID:    projectID,
 			TaskID:       taskID,
 			SessionID:    sessionID,
@@ -169,7 +169,7 @@ var lockRenovarCmd = &cobra.Command{
 			return nil
 		}
 		svc := newCoordinationService()
-		lock, err := svc.RenewLock(coordination.RenewLockInput{
+		lock, err := svc.RenewLock(coordinacion.RenewLockInput{
 			ID:           id,
 			Agent:        args[1],
 			LeaseToken:   args[2],
@@ -205,7 +205,7 @@ var lockLiberarCmd = &cobra.Command{
 			return nil
 		}
 		svc := newCoordinationService()
-		lock, err := svc.ReleaseLock(coordination.ReleaseLockInput{
+		lock, err := svc.ReleaseLock(coordinacion.ReleaseLockInput{
 			ID:         id,
 			Agent:      args[1],
 			LeaseToken: args[2],

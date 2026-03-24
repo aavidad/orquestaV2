@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"orquesta/coordination"
+	"orquesta/coordinacion"
 	"orquesta/db"
 )
 
@@ -44,7 +44,7 @@ var worktreeListarCmd = &cobra.Command{
 				return err
 			}
 			repo := db.SQLiteWorktreeRepository{}
-			filter := coordination.WorktreeFilter{}
+			filter := coordinacion.WorktreeFilter{}
 			if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
 				filter.Agent = &agente
 			}
@@ -56,7 +56,7 @@ var worktreeListarCmd = &cobra.Command{
 				filter.ProjectID = &proyecto.ID
 			}
 			if estadoStr, _ := cmd.Flags().GetString("estado"); strings.TrimSpace(estadoStr) != "" {
-				estado := coordination.WorktreeState(estadoStr)
+				estado := coordinacion.WorktreeState(estadoStr)
 				filter.State = &estado
 			}
 			worktrees, err = repo.List(filter)
@@ -85,12 +85,12 @@ var worktreeResolverCmd = &cobra.Command{
 		query := url.Values{
 			"agente":   {args[0]},
 			"proyecto": {args[1]},
-			"estado":   {string(coordination.WorktreeActive)},
+			"estado":   {string(coordinacion.WorktreeActive)},
 		}
 
 		repo := db.SQLiteWorktreeRepository{}
-		estado := coordination.WorktreeActive
-		filter := coordination.WorktreeFilter{Agent: &args[0], State: &estado}
+		estado := coordinacion.WorktreeActive
+		filter := coordinacion.WorktreeFilter{Agent: &args[0], State: &estado}
 
 		worktrees, ok, err := cargarWorktreesDesdeAPI(query)
 		if !ok {
@@ -157,7 +157,7 @@ var worktreeCrearCmd = &cobra.Command{
 		if lockRaw > 0 {
 			lockID = &lockRaw
 		}
-		worktree, err := svc.PrepareWorktree(coordination.PrepareWorktreeInput{
+		worktree, err := svc.PrepareWorktree(coordinacion.PrepareWorktreeInput{
 			ProjectRef: args[1],
 			Agent:      args[0],
 			TaskID:     taskID,
