@@ -12,3 +12,20 @@ Orquesta es el único portal de entrada y salida para los datos del sistema. La 
 
 ## Independencia del Backend
 Esta política se formula contra la capa de aplicación y no contra el motor de base de datos concreto. Esto permite que el sistema pueda migrar de SQLite a otros motores (como MySQL/MariaDB) en el futuro sin romper la operativa de los agentes ni comprometer el gobierno de los datos.
+
+## Estado de Transición
+
+A fecha de `2026-03-24`, la dirección del proyecto ya es estable:
+
+- la CLI y la API cubren la mayor parte de lecturas y mutaciones operativas frecuentes
+- el objetivo sigue siendo `cero acceso directo` como flujo normal
+- el acceso excepcional de diagnóstico sigue tolerado solo mientras existan huecos técnicos reales
+
+Los bloqueos que impiden activar ya el bloqueo técnico total son:
+
+- consolidar un único daemon oficial para operación continua
+- sacar `runtime_connector` y `agente_console` del camino operativo principal
+- cerrar la capa web como cliente fino completo
+- completar humo extremo a extremo con runtime vivo real
+
+El inventario operativo de estos huecos y su orden recomendado de cierre se mantiene en [Inventario de pendientes para orquestación autónoma](inventario_pendientes_orquestacion_autonoma_2026-03-24.md).

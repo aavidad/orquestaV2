@@ -12,3 +12,20 @@ Orquesta is the only entry and exit portal for system data. The internal integri
 
 ## Backend Independence
 This policy is formulated against the application layer and not against the specific database engine. This allows the system to migrate from SQLite to other engines (such as MySQL/MariaDB) in the future without breaking agent operations or compromising data governance.
+
+## Transition Status
+
+As of `2026-03-24`, the project direction is already stable:
+
+- the CLI and API cover most frequent operational reads and mutations
+- the target remains `zero direct access` as the normal path
+- exceptional diagnostic access is still tolerated only while real technical gaps remain
+
+The blockers that still prevent turning on full technical blocking are:
+
+- consolidating a single official daemon for continuous operation
+- removing `runtime_connector` and `agente_console` from the main operational path
+- closing the web layer as a full thin client
+- completing end-to-end smoke tests with a real live runtime
+
+The operational inventory of those gaps and their recommended closure order lives in [Inventory of pending work for autonomous orchestration](inventario_pendientes_orquestacion_autonoma_2026-03-24.md).
