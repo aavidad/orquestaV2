@@ -45,9 +45,36 @@ Permite filtrar por agente, acción o entidad para rastrear cambios y eventos.`,
 		} else if ok {
 			entries = resp.Audit
 		} else {
-			entries, err = db.AuditLog(limit)
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			filtro := db.FiltroAuditoria{Limite: limit}
+			if strings.TrimSpace(agenteF) != "" {
+				agente := strings.TrimSpace(agenteF)
+				filtro.Agente = &agente
+			}
+			if strings.TrimSpace(accionF) != "" {
+				accion := strings.TrimSpace(accionF)
+				filtro.Accion = &accion
+			}
+			if strings.TrimSpace(entidadF) != "" {
+				entidad := strings.TrimSpace(entidadF)
+				filtro.Entidad = &entidad
+			}
+			items, err := db.ListarAuditoria(filtro)
 			if err != nil {
 				return err
+			}
+			entries = make([]db.AuditEntry, 0, len(items))
+			for _, item := range items {
+				entries = append(entries, db.AuditEntry{
+					Agente:    item.Agente,
+					Accion:    item.Accion,
+					Entidad:   item.Entidad,
+					EntidadID: item.EntidadID,
+					Detalle:   item.Detalle,
+					CreatedAt: item.CreatedAt,
+				})
 			}
 		}
 
