@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -98,6 +99,47 @@ func SQLiteDSN(path string) string {
 		sep = "&"
 	}
 	return path + sep + "_journal_mode=WAL&_foreign_keys=on&_busy_timeout=5000"
+}
+
+func DisplayTarget(cfg Config) string {
+	driver := normalizeDriver(cfg.Driver)
+	if driver == "sqlite" || driver == "" {
+		if strings.TrimSpace(cfg.Path) != "" {
+			return strings.TrimSpace(cfg.Path)
+		}
+		return strings.TrimSpace(cfg.DSN)
+	}
+	return redactDSN(strings.TrimSpace(cfg.DSN))
+}
+
+func redactDSN(dsn string) string {
+	dsn = strings.TrimSpace(dsn)
+	if dsn == "" {
+		return ""
+	}
+	if strings.Contains(dsn, "://") {
+		if parsed, err := url.Parse(dsn); err == nil {
+			if parsed.User != nil {
+				username := parsed.User.Username()
+				if _, hasPassword := parsed.User.Password(); hasPassword {
+					parsed.User = url.UserPassword(username, "***")
+					return parsed.String()
+				}
+			}
+			return parsed.String()
+		}
+	}
+	at := strings.LastIndex(dsn, "@")
+	if at <= 0 {
+		return dsn
+	}
+	auth := dsn[:at]
+	rest := dsn[at:]
+	colon := strings.Index(auth, ":")
+	if colon < 0 {
+		return dsn
+	}
+	return auth[:colon+1] + "***" + rest
 }
 
 func normalizeDriver(v string) string {

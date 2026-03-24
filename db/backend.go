@@ -38,6 +38,17 @@ func CurrentDBPath() string {
 	return configTarget(cfg)
 }
 
+func CurrentStorageDisplayTarget() string {
+	if strings.TrimSpace(currentConfig.Driver) != "" {
+		return storage.DisplayTarget(currentConfig)
+	}
+	cfg, err := storage.ResolveConfig(resolverRuta)
+	if err != nil {
+		return ""
+	}
+	return storage.DisplayTarget(cfg)
+}
+
 func CurrentStorageDriver() string {
 	if strings.TrimSpace(currentConfig.Driver) != "" {
 		return normalizedDriverName(currentConfig.Driver)

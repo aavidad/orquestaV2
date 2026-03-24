@@ -92,3 +92,14 @@ func TestBackupFilenameSuffixUsaDriverActual(t *testing.T) {
 		t.Fatalf("sufijo inesperado: %s", got)
 	}
 }
+
+func TestCurrentStorageDisplayTargetRedactaDSN(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "postgres")
+	t.Setenv("ORQUESTA_DB_BACKEND", "")
+	t.Setenv("ORQUESTA_DB_DSN", "postgres://user:pass@localhost/orquesta?sslmode=disable")
+	t.Setenv("ORQUESTA_DB", "")
+
+	if got := CurrentStorageDisplayTarget(); got != "postgres://user:%2A%2A%2A@localhost/orquesta?sslmode=disable" {
+		t.Fatalf("target visible inesperado: %s", got)
+	}
+}

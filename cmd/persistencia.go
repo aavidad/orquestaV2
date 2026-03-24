@@ -28,7 +28,7 @@ var persistenciaInfoCmd = &cobra.Command{
 	Short: "Muestra estado esperado de persistencia y servidor local",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		infoPath := rpclocal.DefaultInfoPath()
-		dbPath := db.CurrentDBPath()
+		dbPath := db.CurrentStorageDisplayTarget()
 		addr := rpclocal.ResolveServerAddr()
 
 		info, err := rpclocal.LoadServerInfo()

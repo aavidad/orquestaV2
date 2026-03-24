@@ -130,3 +130,40 @@ func TestOpenFallaConDriverNoEnlazado(t *testing.T) {
 		t.Fatalf("esperaba error para driver no enlazado")
 	}
 }
+
+func TestDisplayTargetRedactaPasswordEnDSNURL(t *testing.T) {
+	cfg := Config{
+		Driver: "postgres",
+		DSN:    "postgres://user:secret@localhost/orquesta?sslmode=disable",
+	}
+
+	got := DisplayTarget(cfg)
+	if got != "postgres://user:%2A%2A%2A@localhost/orquesta?sslmode=disable" {
+		t.Fatalf("display target inesperado: %s", got)
+	}
+}
+
+func TestDisplayTargetRedactaPasswordEnDSNNoURL(t *testing.T) {
+	cfg := Config{
+		Driver: "mysql",
+		DSN:    "user:secret@tcp(localhost:3306)/orquesta?parseTime=true",
+	}
+
+	got := DisplayTarget(cfg)
+	if got != "user:***@tcp(localhost:3306)/orquesta?parseTime=true" {
+		t.Fatalf("display target inesperado: %s", got)
+	}
+}
+
+func TestDisplayTargetMantienePathEnSQLite(t *testing.T) {
+	cfg := Config{
+		Driver: "sqlite",
+		Path:   "/tmp/orquesta.db",
+		DSN:    "/tmp/orquesta.db?_busy_timeout=5000",
+	}
+
+	got := DisplayTarget(cfg)
+	if got != "/tmp/orquesta.db" {
+		t.Fatalf("display target inesperado: %s", got)
+	}
+}
