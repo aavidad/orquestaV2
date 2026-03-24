@@ -13,17 +13,6 @@ import (
 	"time"
 )
 
-type Conector struct {
-	Slug         string
-	Nombre       string
-	Transporte   string
-	Comando      string
-	ArgsJSON     string
-	EnvJSON      string
-	MetadataJSON string
-	Activo       bool
-}
-
 type Worktree struct {
 	ID           int64
 	ProyectoID   int64
@@ -60,25 +49,6 @@ type Lock struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	LiberadaAt  *time.Time
-}
-
-func ListarConectores() ([]*Conector, error) {
-	rows, err := DB.Query(`
-		SELECT slug, nombre, transporte, comando, args_json, env_json, metadata_json, activo
-		FROM conectores ORDER BY slug`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var list []*Conector
-	for rows.Next() {
-		item := &Conector{}
-		if err := rows.Scan(&item.Slug, &item.Nombre, &item.Transporte, &item.Comando, &item.ArgsJSON, &item.EnvJSON, &item.MetadataJSON, &item.Activo); err != nil {
-			return nil, err
-		}
-		list = append(list, item)
-	}
-	return list, rows.Err()
 }
 
 func ListarWorktrees(estado, agente string) ([]*Worktree, error) {

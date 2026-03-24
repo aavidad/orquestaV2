@@ -1,8 +1,6 @@
 package db
 
 import (
-	"database/sql"
-	"fmt"
 	"time"
 )
 
@@ -28,7 +26,6 @@ type Voto struct {
 // Votar registra o actualiza el voto de un agente en una propuesta.
 // Devuelve (consensoAlcanzado bool, error).
 func Votar(propuestaID int64, agente string, posicion PosicionVoto, comentario string) (bool, error) {
-<<<<<<< HEAD
 	stmt := upsertValuesSQL(
 		"votos",
 		[]string{"propuesta_id", "agente", "posicion", "comentario"},
@@ -39,18 +36,6 @@ func Votar(propuestaID int64, agente string, posicion PosicionVoto, comentario s
 		},
 	)
 	_, err := DB.Exec(stmt,
-=======
-	_, err := DB.Exec(
-		upsertValuesSQL(
-			"votos",
-			[]string{"propuesta_id", "agente", "posicion", "comentario"},
-			[]string{"propuesta_id", "agente"},
-			[]upsertAssignment{
-				{Column: "posicion"},
-				{Column: "comentario"},
-			},
-		),
->>>>>>> origin/orq-orquestador-codex2
 		propuestaID, agente, posicion, comentario,
 	)
 	if err != nil {
@@ -82,28 +67,6 @@ func VotosDePropuesta(propuestaID int64) ([]*Voto, error) {
 		list = append(list, v)
 	}
 	return list, rows.Err()
-}
-
-// RepararVotosPendientes sincroniza los votos pendientes de una propuesta.
-// Si reiniciar=true, todos los votantes habilitados vuelven a pendiente.
-// Si reiniciar=false, solo se crean los votos que faltan.
-func RepararVotosPendientes(propuestaID int64, agente string, reiniciar bool) (int, error) {
-	tx, err := DB.Begin()
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-
-	count, err := repararVotosPendientesTx(tx, propuestaID, reiniciar)
-	if err != nil {
-		return 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-	detalle := fmt.Sprintf("propuesta=%d votos=%d reiniciar=%t", propuestaID, count, reiniciar)
-	Audit(agente, "reparar_votos_pendientes", "propuesta", propuestaID, detalle)
-	return count, nil
 }
 
 // ResumenVotos devuelve todos los votos de una propuesta (detalle por agente).
@@ -138,63 +101,4 @@ func ContarVotos(propuestaID int64) (acuerdo, desacuerdo, abstencion, pendiente 
 		}
 	}
 	return
-}
-
-func repararVotosPendientesTx(tx *sql.Tx, propuestaID int64, reiniciar bool) (int, error) {
-	rows, err := tx.Query(`
-		SELECT nombre
-		FROM agentes
-		WHERE rol != 'admin' AND habilitado = 1
-		ORDER BY nombre`)
-	if err != nil {
-		return 0, err
-	}
-	defer rows.Close()
-
-	var votantes []string
-	for rows.Next() {
-		var agente string
-		if err := rows.Scan(&agente); err != nil {
-			return 0, err
-		}
-		votantes = append(votantes, agente)
-	}
-	if err := rows.Err(); err != nil {
-		return 0, err
-	}
-
-	var count int
-	for _, agente := range votantes {
-		if reiniciar {
-			res, err := tx.Exec(`
-				INSERT INTO votos (propuesta_id, agente, posicion, comentario)
-				VALUES (?,?, 'pendiente', '')
-				ON CONFLICT(propuesta_id, agente) DO UPDATE SET
-					posicion='pendiente',
-					comentario=''`,
-				propuestaID, agente,
-			)
-			if err != nil {
-				return 0, err
-			}
-			n, _ := res.RowsAffected()
-			if n > 0 {
-				count++
-			}
-			continue
-		}
-
-		res, err := tx.Exec(
-			`INSERT OR IGNORE INTO votos (propuesta_id, agente, posicion) VALUES (?,?, 'pendiente')`,
-			propuestaID, agente,
-		)
-		if err != nil {
-			return 0, err
-		}
-		n, _ := res.RowsAffected()
-		if n > 0 {
-			count++
-		}
-	}
-	return count, nil
 }

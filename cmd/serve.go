@@ -8,29 +8,17 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
-<<<<<<< HEAD
 	"context"
-=======
-	"crypto/tls"
-	"crypto/x509"
-	"encoding/json"
->>>>>>> origin/orq-orquestador-codex2
 	"fmt"
 	"html/template"
-	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
-	"orquesta/dashboardapp"
 	"orquesta/db"
-	"orquesta/proposalapp"
-	"orquesta/runtimectl"
-	"orquesta/sessionapp"
-	"orquesta/taskapp"
 )
 
 // ─── Structs de datos ────────────────────────────────────────────────────────
@@ -94,8 +82,6 @@ type webPropDetalle struct {
 	Descripcion  string
 	Tipo         string
 	Estado       string
-	Proyecto     string
-	ProyectoSlug string
 	PropuestoPor string
 	Fecha        string
 	CerradaFecha string
@@ -109,7 +95,6 @@ type webPropDetalleData struct {
 	Err     string
 }
 
-<<<<<<< HEAD
 type webRuntimeRow struct {
 	ID           int64
 	Nivel        int
@@ -173,10 +158,6 @@ type webTimeTravelDetalleData struct {
 	Payload    string
 	Memoria    []*db.EntidadMemoria
 }
-=======
-var dashboardService = dashboardapp.NewService(dashboardapp.Repository{})
-var sessionAPIService = sessionapp.NewService(sessionapp.Repository{})
->>>>>>> origin/orq-orquestador-codex2
 
 // ─── FuncMap ─────────────────────────────────────────────────────────────────
 
@@ -204,8 +185,6 @@ var webFuncMap = template.FuncMap{
 		return fmt.Sprintf("reanima en %d min", int(rem.Minutes()))
 	},
 }
-
-var webI18n = appi18n.NewBundle(appi18n.ResolveDir(), appi18n.DefaultLang)
 
 // ─── Router principal ─────────────────────────────────────────────────────────
 
@@ -242,8 +221,6 @@ func webRouterPropuestas(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case parts[1] == "nueva" && r.Method == http.MethodPost:
 		webHandlerPropuestaNueva(w, r)
-	case len(parts) == 3 && parts[1] == "historial" && r.Method == http.MethodGet:
-		webHandlerHistorialProyecto(w, r, parts[2])
 	case len(parts) == 2 && r.Method == http.MethodGet:
 		webHandlerPropuestaDetalle(w, r, parts[1])
 	case len(parts) == 3 && parts[2] == "accion" && r.Method == http.MethodPost:
@@ -253,7 +230,6 @@ func webRouterPropuestas(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-<<<<<<< HEAD
 func webRouterRuntimes(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if len(parts) != 2 || parts[0] != "runtimes" {
@@ -397,105 +373,6 @@ func webHandlerTimeTravelDetalle(w http.ResponseWriter, r *http.Request, idStr s
 		Payload:    payload,
 		Memoria:    memoria,
 	})
-=======
-func webRouterAPIPools(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) < 2 {
-		http.NotFound(w, r)
-		return
-	}
-	switch {
-	case len(parts) == 2 && r.Method == http.MethodGet:
-		webHandlerAPIPools(w, r)
-	case len(parts) == 3 && r.Method == http.MethodGet:
-		webHandlerAPIPoolDetalle(w, r, parts[2])
-	case len(parts) == 4 && parts[3] == "modelos" && r.Method == http.MethodGet:
-		webHandlerAPIPoolModelos(w, r, parts[2])
-	default:
-		http.NotFound(w, r)
-	}
-}
-
-func webRouterAPITareas(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) < 3 || parts[0] != "api" || parts[1] != "tareas" {
-		http.NotFound(w, r)
-		return
-	}
-	switch {
-	case len(parts) == 3 && r.Method == http.MethodGet:
-		webHandlerAPITareaDetalle(w, r, parts[2])
-	case len(parts) == 4 && r.Method == http.MethodPost:
-		webHandlerAPITareaAccion(w, r, parts[2], parts[3])
-	default:
-		http.NotFound(w, r)
-	}
-}
-
-func webRouterAPIPropuestasCLI(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) < 3 || parts[0] != "api" || parts[1] != "propuestas" {
-		http.NotFound(w, r)
-		return
-	}
-	switch {
-	case len(parts) == 3 && r.Method == http.MethodGet:
-		webHandlerAPIPropuestaDetalle(w, r, parts[2])
-	case len(parts) == 4 && parts[3] == "cerrar" && r.Method == http.MethodPost:
-		webHandlerAPIPropuestaCerrar(w, r, parts[2])
-	default:
-		http.NotFound(w, r)
-	}
-}
-
-func webRouterAPIModelos(w http.ResponseWriter, r *http.Request) {
-	switch {
-	case r.URL.Path == "/api/modelos/resolver" && r.Method == http.MethodGet:
-		webHandlerAPIModelosResolver(w, r)
-	case r.URL.Path == "/api/modelos/politicas" && r.Method == http.MethodGet:
-		webHandlerAPIModelosPoliticas(w, r)
-	default:
-		http.NotFound(w, r)
-	}
-}
-
-func webRouterAPIExport(w http.ResponseWriter, r *http.Request) {
-	switch {
-	case r.URL.Path == "/api/export/estado" && r.Method == http.MethodGet:
-		webHandlerAPIExportEstado(w, r)
-	case r.URL.Path == "/api/export/audit" && r.Method == http.MethodGet:
-		webHandlerAPIExportAudit(w, r)
-	default:
-		http.NotFound(w, r)
-	}
-}
-
-func webRouterAPIAgentes(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) < 4 || parts[0] != "api" || parts[1] != "agentes" {
-		http.NotFound(w, r)
-		return
-	}
-	agente := parts[2]
-	switch {
-	case len(parts) == 4 && parts[3] == "retirar" && r.Method == http.MethodPost:
-		webHandlerAPIAgenteRetirar(w, r, agente)
-	case len(parts) == 4 && parts[3] == "rehabilitar" && r.Method == http.MethodPost:
-		webHandlerAPIAgenteRehabilitar(w, r, agente)
-	case len(parts) == 4 && parts[3] == "runtime-handles" && r.Method == http.MethodGet:
-		webHandlerAPIAgenteRuntimeHandles(w, r, agente)
-	case len(parts) == 4 && parts[3] == "runtime-handles" && r.Method == http.MethodPost:
-		webHandlerAPIAgenteRuntimeHandleRegistrar(w, r, agente)
-	case len(parts) == 4 && parts[3] == "runtime-orders" && r.Method == http.MethodGet:
-		webHandlerAPIAgenteRuntimeOrders(w, r, agente)
-	case len(parts) == 4 && parts[3] == "runtime-orders" && r.Method == http.MethodPost:
-		webHandlerAPIAgenteRuntimeOrderCrear(w, r, agente)
-	case len(parts) == 5 && parts[3] == "runtime-orders" && parts[4] == "ejecutar" && r.Method == http.MethodPost:
-		webHandlerAPIAgenteRuntimeOrderEjecutar(w, r, agente)
-	default:
-		http.NotFound(w, r)
-	}
->>>>>>> origin/orq-orquestador-codex2
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
@@ -505,29 +382,33 @@ func webHandlerDash(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	summary, err := dashboardService.BuildSummary()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	agentes, _ := db.ListarAgentes()
+	counts, _ := db.ContarTareasPorEstado()
+	total, completadas := 0, 0
+	for est, n := range counts {
+		total += n
+		if est == "completada" {
+			completadas = n
+		}
 	}
-<<<<<<< HEAD
 	pct := 0
 	if total > 0 {
 		pct = completadas * 100 / total
 	}
 	estadoAb := db.PropuestaAbierta
 	abiertas, _ := db.ListarPropuestas(&estadoAb, nil)
-=======
->>>>>>> origin/orq-orquestador-codex2
 	var resAbiertas []webPropResumen
-	for _, p := range summary.OpenProps {
+	for _, p := range abiertas {
+		ac, des, _, pend, _ := db.ContarVotos(p.ID)
 		resAbiertas = append(resAbiertas, webPropResumen{
 			Codigo: p.Codigo, Titulo: p.Titulo,
-			Acuerdo: p.Acuerdo, Desacuerdo: p.Desacuerdo, Pendiente: p.Pendiente,
+			Acuerdo: ac, Desacuerdo: des, Pendiente: pend,
 		})
 	}
+	estadoEP := db.EstadoEnProgreso
+	tareas, _ := db.ListarTareas(db.FiltroTareas{Estado: &estadoEP})
 	var ep []webTareaRow
-	for _, t := range summary.ActiveTasks {
+	for _, t := range tareas {
 		ep = append(ep, toWebTarea(t))
 	}
 	activos := true
@@ -543,17 +424,10 @@ func webHandlerDash(w http.ResponseWriter, r *http.Request) {
 		recentCheckpoints = append(recentCheckpoints, runtimeCheckpointToWeb(cp))
 	}
 	webRender(w, webTplLayout+webTplDash, webDashData{
-<<<<<<< HEAD
 		Agentes: agentes, Counts: counts, Total: total,
 		Completadas: completadas, Pct: pct,
 		Abiertas: resAbiertas, EnProgreso: ep, Runtimes: runtimes, Checkpoints: recentCheckpoints,
 		Generado: time.Now().Format("2006-01-02 15:04:05"),
-=======
-		Agentes: summary.Agents, Counts: summary.TaskCounts, Total: summary.TotalTasks,
-		Completadas: summary.DoneTasks, Pct: summary.PercentDone,
-		Abiertas: resAbiertas, EnProgreso: ep,
-		Generado: summary.GeneratedAt.Format("2006-01-02 15:04:05"),
->>>>>>> origin/orq-orquestador-codex2
 	})
 }
 
@@ -564,13 +438,17 @@ func webHandlerTareas(w http.ResponseWriter, r *http.Request) {
 	msg := r.URL.Query().Get("ok")
 	errMsg := r.URL.Query().Get("err")
 
-	f := taskFilterFromEstado(filtro)
-	tareas, _ := taskService.List(f)
+	var f db.FiltroTareas
+	if filtro != "" {
+		e := db.EstadoTarea(filtro)
+		f.Estado = &e
+	}
+	tareas, _ := db.ListarTareas(f)
 	var wt []webTareaRow
 	for _, t := range tareas {
 		wt = append(wt, toWebTarea(t))
 	}
-	agentes, _ := taskService.ListAgents()
+	agentes, _ := db.ListarAgentes()
 	webRender(w, webTplLayout+webTplTareas, webTareasData{
 		Tareas: wt, Filtro: filtro, Agentes: agentes,
 		Msg: msg, Err: errMsg,
@@ -586,18 +464,26 @@ func webHandlerTareaNueva(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/tareas?err="+url.QueryEscape("El título es obligatorio"), http.StatusSeeOther)
 		return
 	}
-	id, err := taskService.Create(taskapp.CreateTaskInput{
-		Titulo:          titulo,
-		Descripcion:     r.FormValue("descripcion"),
-		Modulo:          r.FormValue("modulo"),
-		Prioridad:       taskPriority(r.FormValue("prioridad")),
-		CreadoPor:       "alberto",
-		Agente:          strings.TrimSpace(r.FormValue("agente")),
-		PropuestaCodigo: strings.TrimSpace(r.FormValue("propuesta")),
-	})
+	t := &db.Tarea{
+		Titulo:      titulo,
+		Descripcion: r.FormValue("descripcion"),
+		Modulo:      r.FormValue("modulo"),
+		Prioridad:   db.PrioridadTarea(r.FormValue("prioridad")),
+		CreadoPor:   "alberto",
+	}
+	if p := strings.TrimSpace(r.FormValue("propuesta")); p != "" {
+		prop, err := db.GetPropuesta(p)
+		if err == nil {
+			t.PropuestaID = &prop.ID
+		}
+	}
+	id, err := db.CrearTarea(t)
 	if err != nil {
 		http.Redirect(w, r, "/tareas?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
+	}
+	if agente := strings.TrimSpace(r.FormValue("agente")); agente != "" {
+		_ = db.TomarTarea(id, agente)
 	}
 	http.Redirect(w, r, "/tareas?ok="+url.QueryEscape(fmt.Sprintf("Tarea #%d creada", id)), http.StatusSeeOther)
 }
@@ -610,12 +496,12 @@ func webHandlerTareaDetalle(w http.ResponseWriter, r *http.Request, idStr string
 		http.NotFound(w, r)
 		return
 	}
-	t, err := taskService.Get(id)
+	t, err := db.GetTarea(id)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	agentes, _ := taskService.ListAgents()
+	agentes, _ := db.ListarAgentes()
 	webRender(w, webTplLayout+webTplTareaDetalle, webTareaDetalleData{
 		T:       toWebTarea(t),
 		Agentes: agentes,
@@ -639,22 +525,28 @@ func webHandlerTareaAccion(w http.ResponseWriter, r *http.Request, idStr string)
 
 	switch accion {
 	case "tomar":
-		err = taskService.Take(id, agente)
+		err = db.TomarTarea(id, agente)
 	case "iniciar":
-		err = taskService.Start(id, agente)
+		err = db.IniciarTarea(id, agente)
 	case "completar":
-		err = taskService.Complete(id, agente, r.FormValue("commit"))
+		err = db.CompletarTarea(id, agente, r.FormValue("commit"))
 	case "bloquear":
-		err = taskService.Block(id, agente, r.FormValue("motivo"))
+		err = db.BloquearTarea(id, agente, r.FormValue("motivo"))
 	case "desbloquear":
-		err = taskService.Unblock(id, agente, r.FormValue("resolucion"))
+		err = db.DesbloquearTarea(id, agente, r.FormValue("resolucion"))
 	case "nota":
-		err = taskService.Note(id, agente, r.FormValue("nota"))
+		err = db.AnotarTarea(id, agente, r.FormValue("nota"))
 	case "backlog":
-		err = taskService.MoveToBacklog(id)
+		_, err = db.DB.Exec(`UPDATE tareas SET estado='backlog', agente=NULL WHERE id=?`, id)
+		if err == nil {
+			db.Audit("alberto", "backlog_tarea", "tarea", id, "")
+		}
 	case "reasignar":
 		nuevoAgente := strings.TrimSpace(r.FormValue("nuevo_agente"))
-		err = taskService.Reassign(id, nuevoAgente)
+		_, err = db.DB.Exec(`UPDATE tareas SET agente=?, estado='asignada' WHERE id=?`, nuevoAgente, id)
+		if err == nil {
+			db.Audit("alberto", "reasignar_tarea", "tarea", id, nuevoAgente)
+		}
 	default:
 		http.Redirect(w, r, back+"?err=Acción+desconocida", http.StatusSeeOther)
 		return
@@ -671,39 +563,30 @@ func webHandlerTareaAccion(w http.ResponseWriter, r *http.Request, idStr string)
 
 func webHandlerPropuestas(w http.ResponseWriter, r *http.Request) {
 	filtro := r.URL.Query().Get("estado")
-	proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto"))
 	msg := r.URL.Query().Get("ok")
 	errMsg := r.URL.Query().Get("err")
 
-<<<<<<< HEAD
 	var estadoPtr *db.EstadoPropuesta
 	if filtro != "" {
 		e := db.EstadoPropuesta(filtro)
 		estadoPtr = &e
 	}
 	props, _ := db.ListarPropuestas(estadoPtr, nil)
-=======
-	props, _ := proposalService.List(proposalState(filtro))
->>>>>>> origin/orq-orquestador-codex2
 	var detalles []webPropDetalle
 	for _, p := range props {
-		detail, _ := proposalService.GetDetail(p.Codigo)
-		var votos []*db.Voto
-		if detail != nil {
-			votos = detail.Votes
-		}
+		votos, _ := db.VotosDePropuesta(p.ID)
 		cerrada := ""
 		if p.CerradaAt != nil {
 			cerrada = p.CerradaAt.Format("2006-01-02")
 		}
 		detalles = append(detalles, webPropDetalle{
 			Codigo: p.Codigo, Titulo: p.Titulo, Descripcion: p.Descripcion,
-			Tipo: p.Tipo, Estado: string(p.Estado), Proyecto: p.Proyecto, ProyectoSlug: p.ProyectoSlug, PropuestoPor: p.PropuestoPor,
+			Tipo: p.Tipo, Estado: string(p.Estado), PropuestoPor: p.PropuestoPor,
 			Fecha: p.CreatedAt.Format("2006-01-02"), CerradaFecha: cerrada,
 			Votos: votos,
 		})
 	}
-	webRender(w, r, webTplLayout+webTplPropuestas, webPropData{
+	webRender(w, webTplLayout+webTplPropuestas, webPropData{
 		Propuestas: detalles, Filtro: filtro, Msg: msg, Err: errMsg,
 	})
 }
@@ -717,41 +600,40 @@ func webHandlerPropuestaNueva(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/propuestas?err="+url.QueryEscape("El título es obligatorio"), http.StatusSeeOther)
 		return
 	}
-	_, created, err := proposalService.Create(proposalapp.CreateProposalInput{
+	p := &db.Propuesta{
 		Codigo:       strings.TrimSpace(r.FormValue("codigo")),
 		Titulo:       titulo,
 		Descripcion:  r.FormValue("descripcion"),
 		Tipo:         r.FormValue("tipo"),
-		ProyectoSlug: strings.TrimSpace(r.FormValue("proyecto")),
 		PropuestoPor: "alberto",
 		Distribuidor: "alberto",
-	})
+	}
+	_, err := db.CrearPropuesta(p)
 	if err != nil {
 		http.Redirect(w, r, "/propuestas?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/propuestas/"+created.Codigo+"?ok="+url.QueryEscape("Propuesta "+created.Codigo+" creada"), http.StatusSeeOther)
+	http.Redirect(w, r, "/propuestas/"+p.Codigo+"?ok="+url.QueryEscape("Propuesta "+p.Codigo+" creada"), http.StatusSeeOther)
 }
 
 // ─── Propuestas: detalle ──────────────────────────────────────────────────────
 
 func webHandlerPropuestaDetalle(w http.ResponseWriter, r *http.Request, codigo string) {
-	detail, err := proposalService.GetDetail(codigo)
+	p, err := db.GetPropuesta(codigo)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	p := detail.Proposal
-	votos := detail.Votes
+	votos, _ := db.VotosDePropuesta(p.ID)
 	cerrada := ""
 	if p.CerradaAt != nil {
 		cerrada = p.CerradaAt.Format("2006-01-02")
 	}
-	agentes, _ := proposalService.ListAgents()
+	agentes, _ := db.ListarAgentes()
 	webRender(w, webTplLayout+webTplPropuestaDetalle, webPropDetalleData{
 		P: webPropDetalle{
 			Codigo: p.Codigo, Titulo: p.Titulo, Descripcion: p.Descripcion,
-			Tipo: p.Tipo, Estado: string(p.Estado), Proyecto: p.Proyecto, ProyectoSlug: p.ProyectoSlug, PropuestoPor: p.PropuestoPor,
+			Tipo: p.Tipo, Estado: string(p.Estado), PropuestoPor: p.PropuestoPor,
 			Fecha: p.CreatedAt.Format("2006-01-02"), CerradaFecha: cerrada,
 			Votos: votos,
 		},
@@ -768,34 +650,25 @@ func webHandlerPropuestaAccion(w http.ResponseWriter, r *http.Request, codigo st
 	accion := r.FormValue("accion")
 	back := "/propuestas/" + codigo
 
-	detail, err := proposalService.GetDetail(codigo)
+	p, err := db.GetPropuesta(codigo)
 	if err != nil {
 		http.Redirect(w, r, "/propuestas?err=Propuesta+no+encontrada", http.StatusSeeOther)
 		return
 	}
-	p := detail.Proposal
 
 	switch accion {
 	case "votar":
 		agente := strings.TrimSpace(r.FormValue("agente"))
-		posicion, ok := votePosition(r.FormValue("posicion"))
-		if !ok {
-			http.Redirect(w, r, back+"?err=Posición+inválida", http.StatusSeeOther)
-			return
-		}
+		posicion := db.PosicionVoto(r.FormValue("posicion"))
 		comentario := r.FormValue("comentario")
-		err = proposalService.Vote(p.Codigo, agente, posicion, comentario)
+		_, err = db.Votar(p.ID, agente, posicion, comentario)
 	case "cerrar":
 		nuevoEstado := r.FormValue("estado_cierre")
-<<<<<<< HEAD
 		err = db.CerrarPropuesta(codigo, nuevoEstado, "alberto")
 	case "reabrir":
 		_, err = db.ReabrirPropuesta(codigo, "alberto")
 	case "reparar-votos":
 		_, err = db.RepararVotosPendientesPropuesta(codigo, "alberto")
-=======
-		err = proposalService.Close(codigo, nuevoEstado, "alberto")
->>>>>>> origin/orq-orquestador-codex2
 	default:
 		http.Redirect(w, r, back+"?err=Acción+desconocida", http.StatusSeeOther)
 		return
@@ -806,178 +679,6 @@ func webHandlerPropuestaAccion(w http.ResponseWriter, r *http.Request, codigo st
 		return
 	}
 	http.Redirect(w, r, back+"?ok="+url.QueryEscape("Acción '"+accion+"' aplicada"), http.StatusSeeOther)
-}
-
-// ─── API JSON: pools y modelos ──────────────────────────────────────────────
-
-func webHandlerAPIPools(w http.ResponseWriter, r *http.Request) {
-	pools, err := capacityService.ListPoolsSummary(nil)
-	if err != nil {
-		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"items": pools})
-}
-
-func webHandlerAPIPoolDetalle(w http.ResponseWriter, r *http.Request, slug string) {
-	detail, err := capacityService.GetPoolDetail(slug)
-	if err != nil {
-		webWriteJSON(w, http.StatusNotFound, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{
-		"pool":                 detail.Pool,
-		"sesiones_activas":     detail.SesionesActivas,
-		"capacidad_disponible": detail.CapacidadDisponible,
-		"modelos":              detail.Modelos,
-	})
-}
-
-func webHandlerAPIPoolModelos(w http.ResponseWriter, r *http.Request, slug string) {
-	modelos, err := capacityService.ListPoolModels(slug)
-	if err != nil {
-		webWriteJSON(w, http.StatusNotFound, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"items": modelos})
-}
-
-func webHandlerAPIModelosPoliticas(w http.ResponseWriter, r *http.Request) {
-	scopeTipo := strings.TrimSpace(r.URL.Query().Get("scope_tipo"))
-	scopeRef := strings.TrimSpace(r.URL.Query().Get("scope_ref"))
-	var activaPtr *bool
-	if activaRaw := strings.TrimSpace(r.URL.Query().Get("activa")); activaRaw != "" {
-		activa := activaRaw == "1" || strings.EqualFold(activaRaw, "true")
-		activaPtr = &activa
-	}
-	items, err := capacityService.ListModelPolicies(scopeTipo, scopeRef, activaPtr)
-	if err != nil {
-		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-func webHandlerAPIModelosResolver(w http.ResponseWriter, r *http.Request) {
-	var tareaIDPtr *int64
-	if tareaIDRaw := strings.TrimSpace(r.URL.Query().Get("tarea_id")); tareaIDRaw != "" {
-		value, err := strconv.ParseInt(tareaIDRaw, 10, 64)
-		if err != nil {
-			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "tarea_id invalido"})
-			return
-		}
-		tareaIDPtr = &value
-	}
-	res, err := capacityService.ResolveModelPolicy(db.ResolverPoliticaInput{
-		TareaID:      tareaIDPtr,
-		ProyectoSlug: strings.TrimSpace(r.URL.Query().Get("proyecto")),
-		Fase:         strings.TrimSpace(r.URL.Query().Get("fase")),
-		PerfilTarea:  strings.TrimSpace(r.URL.Query().Get("perfil")),
-	})
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, res)
-}
-
-func webHandlerAPIAgenteRuntimeHandles(w http.ResponseWriter, r *http.Request, agente string) {
-	estado := strings.TrimSpace(r.URL.Query().Get("estado"))
-	items, err := runtimeService.ListHandles(agente, estado)
-	if err != nil {
-		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-func webHandlerAPIAgenteRuntimeHandleRegistrar(w http.ResponseWriter, r *http.Request, agente string) {
-	var payload struct {
-		SesionID     *int64 `json:"sesion_id"`
-		ProyectoSlug string `json:"proyecto_slug"`
-		Transporte   string `json:"transporte"`
-		HandleKind   string `json:"handle_kind"`
-		HandleRef    string `json:"handle_ref"`
-		Estado       string `json:"estado"`
-		MetadataJSON string `json:"metadata_json"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
-		return
-	}
-	id, err := runtimeService.RegisterHandle(runtimectl.RegisterHandleInput{
-		Agente:       agente,
-		SesionID:     payload.SesionID,
-		ProyectoSlug: payload.ProyectoSlug,
-		Transporte:   payload.Transporte,
-		HandleKind:   payload.HandleKind,
-		HandleRef:    payload.HandleRef,
-		Estado:       payload.Estado,
-		MetadataJSON: payload.MetadataJSON,
-	})
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusCreated, map[string]any{"id": id})
-}
-
-func webHandlerAPIAgenteRuntimeOrders(w http.ResponseWriter, r *http.Request, agente string) {
-	estado := strings.TrimSpace(r.URL.Query().Get("estado"))
-	items, err := runtimeService.ListOrders(agente, estado)
-	if err != nil {
-		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-func webHandlerAPIAgenteRuntimeOrderCrear(w http.ResponseWriter, r *http.Request, agente string) {
-	var payload struct {
-		Tipo         string `json:"tipo"`
-		ProyectoSlug string `json:"proyecto_slug"`
-		Mensaje      string `json:"mensaje"`
-		Destino      string `json:"destino"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
-		return
-	}
-	var (
-		id  int64
-		err error
-	)
-	switch strings.TrimSpace(payload.Tipo) {
-	case "enviar_instruccion":
-		id, err = runtimeService.EnqueueInstruction(agente, payload.ProyectoSlug, payload.Mensaje)
-	case "pausar":
-		id, err = runtimeService.EnqueuePause(agente, payload.ProyectoSlug)
-	case "continuar":
-		id, err = runtimeService.EnqueueContinue(agente, payload.ProyectoSlug)
-	case "handoff":
-		id, err = runtimeService.EnqueueHandoff(agente, payload.Destino, payload.ProyectoSlug)
-	default:
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "tipo de runtime order no soportado"})
-		return
-	}
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusCreated, map[string]any{"id": id})
-}
-
-func webHandlerAPIAgenteRuntimeOrderEjecutar(w http.ResponseWriter, r *http.Request, agente string) {
-	item, err := runtimeService.ExecuteNext(agente)
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	if item == nil {
-		webWriteJSON(w, http.StatusOK, map[string]any{"item": nil, "message": "sin ordenes pendientes"})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"item": item})
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -993,7 +694,6 @@ func toWebTarea(t *db.Tarea) webTareaRow {
 	}
 }
 
-<<<<<<< HEAD
 func aplanarRuntimes(nodes []*db.RuntimeTreeNode, nivel int, out *[]webRuntimeRow) {
 	for _, node := range nodes {
 		if node == nil || node.Runtime == nil {
@@ -1099,39 +799,6 @@ func runtimeCheckpointToWeb(cp *db.RuntimeCheckpoint) webTimeTravelCheckpointRow
 		CWD:            valorVacio(cp.CWD),
 		ResumeStrategy: valorVacio(cp.ResumeStrategy),
 		Source:         valorVacio(cp.Source),
-=======
-func taskPriority(raw string) db.PrioridadTarea {
-	return db.PrioridadTarea(strings.TrimSpace(raw))
-}
-
-func taskFilterFromEstado(raw string) db.FiltroTareas {
-	var f db.FiltroTareas
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return f
-	}
-	e := db.EstadoTarea(raw)
-	f.Estado = &e
-	return f
-}
-
-func proposalState(raw string) *db.EstadoPropuesta {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-	e := db.EstadoPropuesta(raw)
-	return &e
-}
-
-func votePosition(raw string) (db.PosicionVoto, bool) {
-	posicion := db.PosicionVoto(strings.TrimSpace(raw))
-	switch posicion {
-	case db.VotoAcuerdo, db.VotoDesacuerdo, db.VotoAbstencion:
-		return posicion, true
-	default:
-		return "", false
->>>>>>> origin/orq-orquestador-codex2
 	}
 }
 
@@ -1145,391 +812,20 @@ func webRender(w http.ResponseWriter, tplStr string, data any) {
 	_ = tmpl.Execute(w, data)
 }
 
-func webWriteJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
-}
-
-func webHandlerAPIServerInfo(w http.ResponseWriter, r *http.Request) {
-	webWriteJSON(w, http.StatusOK, serverInfo{
-		Name:            "orquesta",
-		Version:         "v1",
-		StorageMode:     "single-process",
-		StorageDriver:   db.DriverName(),
-		SQLPlaceholder:  db.PlaceholderStyle(),
-		BootstrapSchema: db.BootstrapSchemaEnabled(),
-		QueryRebinding:  db.QueryRebindingEnabled(),
-		Capabilities: []string{
-			"status",
-			"web",
-			"api",
-			"mcp",
-		},
-	})
-}
-
-func webHandlerAPIStatus(w http.ResponseWriter, r *http.Request) {
-	resumen, err := buildEstadoResumen()
-	if err != nil {
-		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, resumen)
-}
-
-func webHandlerAPIConfig(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		var payload struct {
-			Clave string `json:"clave"`
-			Valor string `json:"valor"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
-			return
-		}
-		if strings.TrimSpace(payload.Clave) == "" {
-			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "clave obligatoria"})
-			return
-		}
-		if err := configService.Set(payload.Clave, payload.Valor); err != nil {
-			webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-			return
-		}
-		webWriteJSON(w, http.StatusOK, map[string]any{"clave": payload.Clave, "valor": payload.Valor})
-		return
-	}
-	clave := strings.TrimSpace(r.URL.Query().Get("clave"))
-	if clave != "" {
-		valor, err := configService.Get(clave)
-		if err != nil {
-			webWriteJSON(w, http.StatusNotFound, map[string]any{"error": err.Error()})
-			return
-		}
-		webWriteJSON(w, http.StatusOK, map[string]any{"clave": clave, "valor": valor})
-		return
-	}
-	items, err := configService.List()
-	if err != nil {
-		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-func webHandlerAPIVotar(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.NotFound(w, r)
-		return
-	}
-	var payload struct {
-		Codigo     string `json:"codigo"`
-		Agente     string `json:"agente"`
-		Posicion   string `json:"posicion"`
-		Comentario string `json:"comentario"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
-		return
-	}
-	posicion, ok := votePosition(payload.Posicion)
-	if !ok {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "posicion invalida"})
-		return
-	}
-	result, err := proposalService.VoteDetail(strings.TrimSpace(payload.Codigo), strings.TrimSpace(payload.Agente), posicion, strings.TrimSpace(payload.Comentario))
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{
-		"codigo":            result.Proposal.Codigo,
-		"agente":            strings.TrimSpace(payload.Agente),
-		"posicion":          posicion,
-		"comentario":        strings.TrimSpace(payload.Comentario),
-		"consensoAlcanzado": result.Consenso,
-		"conteo": map[string]int{
-			"acuerdo":    result.Acuerdo,
-			"desacuerdo": result.Desacuerdo,
-			"abstencion": result.Abstencion,
-			"pendiente":  result.Pendiente,
-		},
-	})
-}
-
-func webHandlerAPISesionInicio(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.NotFound(w, r)
-		return
-	}
-	var payload struct {
-		Agente     string `json:"agente"`
-		NuevoCodex bool   `json:"nuevo_codex"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
-		return
-	}
-	agente := strings.TrimSpace(payload.Agente)
-	if agente == "" && !payload.NuevoCodex {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "agente obligatorio"})
-		return
-	}
-	result, err := sessionAPIService.Start(agente, payload.NuevoCodex)
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, serverSessionStartResult{
-		Agente:               result.Agente,
-		SesionID:             result.SesionID,
-		Rol:                  result.Rol,
-		PropuestasPendientes: result.PropuestasPendientes,
-		Reglas:               result.Reglas,
-		Skills:               result.Skills,
-		WorkflowPasos:        result.WorkflowPasos,
-	})
-}
-
-func webHandlerAPISesionFin(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.NotFound(w, r)
-		return
-	}
-	var payload struct {
-		Agente string `json:"agente"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
-		return
-	}
-	agente := strings.TrimSpace(payload.Agente)
-	if agente == "" {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "agente obligatorio"})
-		return
-	}
-	if _, err := sessionAPIService.Finish(agente); err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "agente": agente})
-}
-
-func webHandlerAPITareas(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		var payload struct {
-			Titulo      string `json:"titulo"`
-			Descripcion string `json:"descripcion"`
-			Modulo      string `json:"modulo"`
-			Prioridad   string `json:"prioridad"`
-			CreadoPor   string `json:"creado_por"`
-			Agente      string `json:"agente"`
-			Propuesta   string `json:"propuesta"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
-			return
-		}
-		id, err := taskService.Create(taskapp.CreateTaskInput{
-			Titulo:          strings.TrimSpace(payload.Titulo),
-			Descripcion:     strings.TrimSpace(payload.Descripcion),
-			Modulo:          strings.TrimSpace(payload.Modulo),
-			Prioridad:       taskPriority(payload.Prioridad),
-			CreadoPor:       strings.TrimSpace(payload.CreadoPor),
-			Agente:          strings.TrimSpace(payload.Agente),
-			PropuestaCodigo: strings.TrimSpace(payload.Propuesta),
-		})
-		if err != nil {
-			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-			return
-		}
-		webWriteJSON(w, http.StatusCreated, map[string]any{"id": id})
-		return
-	}
-	estadoStr := strings.TrimSpace(r.URL.Query().Get("estado"))
-	agente := strings.TrimSpace(r.URL.Query().Get("agente"))
-	modulo := strings.TrimSpace(r.URL.Query().Get("modulo"))
-	propuestaCodigo := strings.TrimSpace(r.URL.Query().Get("propuesta"))
-
-	f := taskFilterFromEstado(estadoStr)
-	if agente != "" {
-		f.Agente = &agente
-	}
-	if modulo != "" {
-		f.Modulo = &modulo
-	}
-	if propuestaID, err := taskService.ResolveProposalID(propuestaCodigo); err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	} else if propuestaID != nil {
-		f.PropuestaID = propuestaID
-	}
-
-	items, err := taskService.List(f)
-	if err != nil {
-		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-func webHandlerAPITareaDetalle(w http.ResponseWriter, r *http.Request, idRaw string) {
-	id, err := strconv.ParseInt(strings.TrimSpace(idRaw), 10, 64)
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "id invalido"})
-		return
-	}
-	item, err := taskService.Get(id)
-	if err != nil {
-		webWriteJSON(w, http.StatusNotFound, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"item": item})
-}
-
-func webHandlerAPITareaAccion(w http.ResponseWriter, r *http.Request, idRaw, accion string) {
-	id, err := strconv.ParseInt(strings.TrimSpace(idRaw), 10, 64)
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "id invalido"})
-		return
-	}
-	var payload struct {
-		Agente     string `json:"agente"`
-		Commit     string `json:"commit"`
-		Motivo     string `json:"motivo"`
-		Resolucion string `json:"resolucion"`
-		Nota       string `json:"nota"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
-		return
-	}
-	agente := strings.TrimSpace(payload.Agente)
-	switch strings.TrimSpace(accion) {
-	case "tomar":
-		err = taskService.Take(id, agente)
-	case "iniciar":
-		err = taskService.Start(id, agente)
-	case "completar":
-		err = taskService.Complete(id, agente, strings.TrimSpace(payload.Commit))
-	case "bloquear":
-		err = taskService.Block(id, agente, strings.TrimSpace(payload.Motivo))
-	case "desbloquear":
-		err = taskService.Unblock(id, agente, strings.TrimSpace(payload.Resolucion))
-	case "nota":
-		err = taskService.Note(id, agente, strings.TrimSpace(payload.Nota))
-	default:
-		http.NotFound(w, r)
-		return
-	}
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id, "accion": accion})
-}
-
-func webHandlerAPIPropuestas(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		var payload struct {
-			Codigo       string `json:"codigo"`
-			Titulo       string `json:"titulo"`
-			Descripcion  string `json:"descripcion"`
-			Tipo         string `json:"tipo"`
-			PropuestoPor string `json:"propuesto_por"`
-			Distribuidor string `json:"distribuidor"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
-			return
-		}
-		id, p, err := proposalService.Create(proposalapp.CreateProposalInput{
-			Codigo:       strings.TrimSpace(payload.Codigo),
-			Titulo:       strings.TrimSpace(payload.Titulo),
-			Descripcion:  strings.TrimSpace(payload.Descripcion),
-			Tipo:         strings.TrimSpace(payload.Tipo),
-			PropuestoPor: strings.TrimSpace(payload.PropuestoPor),
-			Distribuidor: strings.TrimSpace(payload.Distribuidor),
-		})
-		if err != nil {
-			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-			return
-		}
-		webWriteJSON(w, http.StatusCreated, map[string]any{"id": id, "codigo": p.Codigo})
-		return
-	}
-	estadoStr := strings.TrimSpace(r.URL.Query().Get("estado"))
-	items, err := proposalService.List(proposalState(estadoStr))
-	if err != nil {
-		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-func webHandlerAPIPropuestaDetalle(w http.ResponseWriter, r *http.Request, codigo string) {
-	detail, err := proposalService.GetDetail(codigo)
-	if err != nil {
-		webWriteJSON(w, http.StatusNotFound, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, detail)
-}
-
-func webHandlerAPIPropuestaCerrar(w http.ResponseWriter, r *http.Request, codigo string) {
-	var payload struct {
-		Estado string `json:"estado"`
-		Agente string `json:"agente"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
-		return
-	}
-	if err := proposalService.Close(codigo, strings.TrimSpace(payload.Estado), strings.TrimSpace(payload.Agente)); err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "codigo": codigo, "estado": strings.TrimSpace(payload.Estado)})
-}
-
 // ─── Comando ──────────────────────────────────────────────────────────────────
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Arranca el panel web (por defecto: http://localhost:16543)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := webI18n.Reload(); err != nil {
-			return err
-		}
-		if policy, err := db.GetLanguagePolicy(); err == nil {
-			webI18n.SetDefaultLang(policy.DefaultLanguage)
-		}
 		puerto, _ := cmd.Flags().GetInt("puerto")
-		host, _ := cmd.Flags().GetString("host")
-		tlsCertFile, _ := cmd.Flags().GetString("tls-cert")
-		tlsKeyFile, _ := cmd.Flags().GetString("tls-key")
-		tlsClientCAFile, _ := cmd.Flags().GetString("tls-client-ca")
-		host = strings.TrimSpace(host)
-		if host == "" {
-			host = "127.0.0.1"
-		}
-		addr := net.JoinHostPort(host, strconv.Itoa(puerto))
-		if err := validateServeSecurity(host, tlsCertFile, tlsKeyFile, tlsClientCAFile); err != nil {
-			return err
-		}
+		addr := fmt.Sprintf(":%d", puerto)
 		mux := http.NewServeMux()
-		registerRPCHandlers(mux, info)
 		mux.HandleFunc("/", webHandlerDash)
-		mux.HandleFunc("/agentes", webHandlerAgentes)
-		mux.HandleFunc("/asignaciones", webHandlerAsignaciones)
-		mux.HandleFunc("/git", webHandlerGitGov)
-		mux.HandleFunc("/git/", webRouterGitGov)
-		mux.HandleFunc("/sesiones", webHandlerSesiones)
 		mux.HandleFunc("/tareas", webHandlerTareas)
 		mux.HandleFunc("/tareas/", webRouterTareas)
 		mux.HandleFunc("/propuestas", webHandlerPropuestas)
 		mux.HandleFunc("/propuestas/", webRouterPropuestas)
-<<<<<<< HEAD
 		mux.HandleFunc("/runtimes", webHandlerRuntimes)
 		mux.HandleFunc("/runtimes/", webRouterRuntimes)
 		mux.HandleFunc("/time-travel", webHandlerTimeTravel)
@@ -1543,77 +839,11 @@ var serveCmd = &cobra.Command{
 		newControlPlaneRunner().Start(controlCtx)
 
 		return http.ListenAndServe(addr, mux)
-=======
-		mux.HandleFunc("/gobernanza", webHandlerGobernanza)
-		mux.HandleFunc("/gobernanza/", webRouterGobernanza)
-		mux.HandleFunc("/proyectos", webHandlerProyectos)
-		mux.HandleFunc("/proyectos/", webRouterProyectos)
-		mux.HandleFunc("/api/agentes", webHandlerAPIAgentesLista)
-		mux.HandleFunc("/api/asignaciones", webHandlerAPIAsignaciones)
-		mux.HandleFunc("/api/config", webHandlerAPIConfig)
-		mux.HandleFunc("/api/propuestas", webHandlerAPIPropuestas)
-		mux.HandleFunc("/api/propuestas/", webRouterAPIPropuestasCLI)
-		mux.HandleFunc("/api/server", webHandlerAPIServerInfo)
-		mux.HandleFunc("/api/sesiones/inicio", webHandlerAPISesionInicio)
-		mux.HandleFunc("/api/sesiones/fin", webHandlerAPISesionFin)
-		mux.HandleFunc("/api/status", webHandlerAPIStatus)
-		mux.HandleFunc("/api/tareas", webHandlerAPITareas)
-		mux.HandleFunc("/api/tareas/", webRouterAPITareas)
-		mux.HandleFunc("/api/votar", webHandlerAPIVotar)
-		mux.HandleFunc("/api/git/worktrees", webHandlerAPIWorktrees)
-		mux.HandleFunc("/api/git/locks", webHandlerAPILocks)
-		mux.HandleFunc("/api/git/merges", webHandlerAPIMerges)
-		mux.HandleFunc("/api/gobernanza/", webRouterAPIGobernanza)
-		mux.HandleFunc("/api/locks", webHandlerAPILocks)
-		mux.HandleFunc("/api/merges", webHandlerAPIMerges)
-		mux.HandleFunc("/api/proyectos", webRouterAPIProyectos)
-		mux.HandleFunc("/api/proyectos/", webRouterAPIProyectos)
-		mux.HandleFunc("/api/sesiones", webHandlerAPISesiones)
-		mux.HandleFunc("/api/worktrees", webHandlerAPIWorktrees)
-		mux.HandleFunc("/api/pools", webHandlerAPIPools)
-		mux.HandleFunc("/api/pools/", webRouterAPIPools)
-		mux.HandleFunc("/api/modelos/resolver", webRouterAPIModelos)
-		mux.HandleFunc("/api/modelos/politicas", webRouterAPIModelos)
-		mux.HandleFunc("/api/agentes/", webRouterAPIAgentes)
-		mux.HandleFunc("/api/export/", webRouterAPIExport)
-		server := &http.Server{Addr: addr, Handler: mux}
-		scheme := "http"
-		if strings.TrimSpace(tlsCertFile) != "" {
-			tlsConfig, err := buildServeTLSConfig(tlsClientCAFile)
-			if err != nil {
-				return err
-			}
-			server.TLSConfig = tlsConfig
-			scheme = "https"
-		}
-		for _, target := range describeServeTargets(host, puerto, scheme) {
-			fmt.Printf("✓ Panel web en %s\n", target)
-		}
-		if scheme == "https" && strings.TrimSpace(tlsClientCAFile) != "" {
-			fmt.Println("  mTLS activo: el cliente debe presentar un certificado válido.")
-		}
-		if !isLocalServeHost(host) {
-			fmt.Println("  Exposición remota permitida solo por HTTPS con certificado de cliente.")
-		}
-		fmt.Println("  Ctrl+C para detener.")
-		if scheme == "https" {
-			return server.ListenAndServeTLS(tlsCertFile, tlsKeyFile)
-		}
-		return server.ListenAndServe()
->>>>>>> origin/orq-orquestador-codex2
 	},
 }
 
 func init() {
-<<<<<<< HEAD
 	serveCmd.Flags().Int("puerto", 16543, "Puerto HTTP")
-=======
-	serveCmd.Flags().String("host", "127.0.0.1", "Host de escucha (127.0.0.1 para solo local)")
-	serveCmd.Flags().Int("puerto", 8080, "Puerto HTTP")
-	serveCmd.Flags().String("tls-cert", "", "Certificado TLS del servidor (PEM)")
-	serveCmd.Flags().String("tls-key", "", "Clave privada TLS del servidor (PEM)")
-	serveCmd.Flags().String("tls-client-ca", "", "CA PEM para exigir certificado de cliente (mTLS)")
->>>>>>> origin/orq-orquestador-codex2
 	rootCmd.AddCommand(serveCmd)
 }
 
@@ -1622,20 +852,19 @@ func init() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const webTplLayout = `<!doctype html>
-<html lang="{{lang}}">
+<html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{{t "app.title"}}</title>
+  <title>Orquesta — ContaGrx</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
   <style>
     body{--pico-font-size:14px}
     header{background:#0f172a;padding:.7rem 0;margin-bottom:0}
-    header nav{display:flex;align-items:center;justify-content:space-between;gap:.8rem;flex-wrap:wrap}
+    header nav{display:flex;align-items:center;justify-content:space-between}
     header a{color:#94a3b8;text-decoration:none;margin-right:1.2rem;font-size:.95rem}
     header a:hover,header a.sel{color:#fff}
     header strong{color:#fff}
-    .toplinks{display:flex;flex-wrap:wrap;gap:.2rem .8rem;align-items:center}
     .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:.8rem;margin-bottom:1.2rem}
     .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:.5rem;padding:.9rem;text-align:center}
     .stat .n{font-size:1.9rem;font-weight:700;color:#1e293b;line-height:1.1}
@@ -1681,137 +910,28 @@ const webTplLayout = `<!doctype html>
     input[type=text],input[type=number],select,textarea{font-size:.85rem;padding:.35rem .6rem}
     .btn-sm{font-size:.8rem;padding:.3rem .8rem}
     footer{text-align:center;padding:1.5rem 0;color:#94a3b8;font-size:.78rem;margin-top:2rem}
-    @media(max-width:700px){
-      .grid2{grid-template-columns:1fr}
-      header nav{align-items:flex-start}
-      header a{margin-right:.6rem;font-size:.88rem}
-      .toplinks{width:100%}
-    }
+    @media(max-width:700px){.grid2{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
 <header>
   <nav class="container">
     <div><a href="/"><strong>⚙ Orquesta</strong></a></div>
-    <div class="toplinks">
+    <div>
       <a href="/">Dashboard</a>
-      <a href="/git">Git</a>
-      <a href="/agentes">Agentes</a>
-      <a href="/sesiones">Sesiones</a>
-      <a href="/asignaciones">Asignaciones</a>
-      <a href="/git">Git</a>
       <a href="/tareas">Tareas</a>
       <a href="/propuestas">Propuestas</a>
-<<<<<<< HEAD
       <a href="/runtimes">Runtimes</a>
       <a href="/time-travel">Time Travel</a>
-=======
-      <a href="/gobernanza">Gobernanza</a>
-      <a href="/proyectos">Proyectos</a>
->>>>>>> origin/orq-orquestador-codex2
     </div>
   </nav>
 </header>
 <main class="container" style="padding-top:1.5rem;padding-bottom:2rem">
 {{template "content" .}}
 </main>
-<footer>{{t "ContaGrx footer"}}</footer>
+<footer>ContaGrx · OSL Diputación de Granada · GPLv3</footer>
 </body></html>
 `
-
-func validateServeSecurity(host, tlsCertFile, tlsKeyFile, tlsClientCAFile string) error {
-	host = strings.TrimSpace(host)
-	tlsCertFile = strings.TrimSpace(tlsCertFile)
-	tlsKeyFile = strings.TrimSpace(tlsKeyFile)
-	tlsClientCAFile = strings.TrimSpace(tlsClientCAFile)
-
-	if (tlsCertFile == "") != (tlsKeyFile == "") {
-		return fmt.Errorf("tls-cert y tls-key deben proporcionarse juntos")
-	}
-	if tlsClientCAFile != "" && tlsCertFile == "" {
-		return fmt.Errorf("tls-client-ca requiere también tls-cert y tls-key")
-	}
-	if !isLocalServeHost(host) && tlsClientCAFile == "" {
-		return fmt.Errorf("para exponer el panel fuera de localhost debes usar HTTPS con tls-client-ca")
-	}
-	return nil
-}
-
-func buildServeTLSConfig(clientCAFile string) (*tls.Config, error) {
-	clientCAFile = strings.TrimSpace(clientCAFile)
-	cfg := &tls.Config{
-		MinVersion: tls.VersionTLS13,
-	}
-	if clientCAFile == "" {
-		return cfg, nil
-	}
-	pemData, err := os.ReadFile(clientCAFile)
-	if err != nil {
-		return nil, fmt.Errorf("leyendo tls-client-ca: %w", err)
-	}
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(pemData) {
-		return nil, fmt.Errorf("tls-client-ca no contiene certificados PEM válidos")
-	}
-	cfg.ClientAuth = tls.RequireAndVerifyClientCert
-	cfg.ClientCAs = pool
-	return cfg, nil
-}
-
-func isLocalServeHost(host string) bool {
-	host = strings.TrimSpace(strings.ToLower(host))
-	return host == "" || host == "127.0.0.1" || host == "localhost" || host == "::1"
-}
-
-func describeServeTargets(host string, port int, scheme string) []string {
-	host = strings.TrimSpace(host)
-	if host == "" {
-		host = "127.0.0.1"
-	}
-	if host != "0.0.0.0" && host != "::" {
-		return []string{fmt.Sprintf("%s://%s", scheme, net.JoinHostPort(host, strconv.Itoa(port)))}
-	}
-	targets := []string{fmt.Sprintf("%s://%s", scheme, net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))}
-	seen := map[string]bool{targets[0]: true}
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return targets
-	}
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		addrs, err := iface.Addrs()
-		if err != nil {
-			continue
-		}
-		for _, addr := range addrs {
-			ip, ok := extractServeIP(addr)
-			if !ok || ip.IsLoopback() {
-				continue
-			}
-			if ip4 := ip.To4(); ip4 != nil {
-				url := fmt.Sprintf("%s://%s", scheme, net.JoinHostPort(ip4.String(), strconv.Itoa(port)))
-				if !seen[url] {
-					seen[url] = true
-					targets = append(targets, url)
-				}
-			}
-		}
-	}
-	return targets
-}
-
-func extractServeIP(addr net.Addr) (net.IP, bool) {
-	switch value := addr.(type) {
-	case *net.IPNet:
-		return value.IP, true
-	case *net.IPAddr:
-		return value.IP, true
-	default:
-		return nil, false
-	}
-}
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
@@ -1834,7 +954,7 @@ const webTplDash = `{{define "content"}}
 </div>
 <div style="display:grid;grid-template-columns:220px 1fr;gap:1.5rem;align-items:start">
   <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.5rem;padding:.8rem 1rem">
-    <h4 style="margin:0 0 .7rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">{{t "Agentes"}}</h4>
+    <h4 style="margin:0 0 .7rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Agentes</h4>
     <table style="width:100%"><tbody>
     {{range .Agentes}}{{if .Habilitado}}
       <tr style="border-bottom:1px solid #f1f5f9">
@@ -1859,7 +979,7 @@ const webTplDash = `{{define "content"}}
           {{end}}
         </td>
         <td style="text-align:right;padding:.3rem 0">
-          {{if .EstadoSesion}}<span class="es-{{.EstadoSesion}}">{{t .EstadoSesion}}</span>{{end}}
+          {{if .EstadoSesion}}<span class="es-{{.EstadoSesion}}">{{.EstadoSesion}}</span>{{end}}
         </td>
       </tr>
     {{end}}{{end}}
@@ -1867,7 +987,7 @@ const webTplDash = `{{define "content"}}
   </div>
   <div>
     {{if .EnProgreso}}
-    <h4 style="margin:0 0 .5rem 0">{{t "En progreso"}}</h4>
+    <h4 style="margin:0 0 .5rem 0">En progreso</h4>
     <table style="width:100%;margin-bottom:1.2rem"><thead><tr><th>#</th><th>Módulo</th><th>Agente</th><th>Título</th></tr></thead><tbody>
     {{range .EnProgreso}}
       <tr>
@@ -1881,7 +1001,7 @@ const webTplDash = `{{define "content"}}
     {{end}}
     <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:start">
       <div>
-        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">{{t "Estado"}} <a href="/tareas" style="font-size:.9em;font-weight:normal;text-transform:none">{{t "Ver"}} →</a></h4>
+        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Por estado <a href="/tareas" style="font-size:.9em;font-weight:normal;text-transform:none">ver todas →</a></h4>
         <table><tbody>
         {{range $est,$n := .Counts}}{{if gt $n 0}}
           <tr><td style="padding:.2rem .4rem"><a href="/tareas?estado={{$est}}"><span class="tag t-{{$est}}">{{$est}}</span></a></td><td style="padding:.2rem .6rem"><a href="/tareas?estado={{$est}}"><strong>{{$n}}</strong></a></td></tr>
@@ -1890,7 +1010,7 @@ const webTplDash = `{{define "content"}}
       </div>
       {{if .Abiertas}}
       <div>
-        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">{{t "Propuestas abiertas"}}</h4>
+        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Propuestas abiertas</h4>
         <table><thead><tr><th>Código</th><th>✓</th><th>✗</th><th>⏳</th></tr></thead><tbody>
         {{range .Abiertas}}
           <tr>
@@ -1942,7 +1062,7 @@ const webTplDash = `{{define "content"}}
 
 const webTplTareas = `{{define "content"}}
 <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
-  <h2 style="margin:0">{{t "Tareas"}} <small style="font-size:.5em;color:#94a3b8">{{len .Tareas}}</small></h2>
+  <h2 style="margin:0">Tareas <small style="font-size:.5em;color:#94a3b8">{{len .Tareas}}</small></h2>
 </div>
 {{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert-err">✗ {{.Err}}</div>{{end}}
@@ -1976,29 +1096,29 @@ const webTplTareas = `{{define "content"}}
 </details>
 
 <div class="filtros">
-  <a href="/tareas"{{if eqStr .Filtro ""}} class="sel"{{end}}>{{t "Todas"}}</a>
-  <a href="/tareas?estado=en_progreso"{{if eqStr .Filtro "en_progreso"}} class="sel"{{end}}>{{t "En progreso"}}</a>
-  <a href="/tareas?estado=asignada"{{if eqStr .Filtro "asignada"}} class="sel"{{end}}>{{t "Asignadas"}}</a>
-  <a href="/tareas?estado=libre"{{if eqStr .Filtro "libre"}} class="sel"{{end}}>{{t "Libres"}}</a>
-  <a href="/tareas?estado=bloqueada"{{if eqStr .Filtro "bloqueada"}} class="sel"{{end}}>{{t "Bloqueadas"}}</a>
+  <a href="/tareas"{{if eqStr .Filtro ""}} class="sel"{{end}}>Todas</a>
+  <a href="/tareas?estado=en_progreso"{{if eqStr .Filtro "en_progreso"}} class="sel"{{end}}>En progreso</a>
+  <a href="/tareas?estado=asignada"{{if eqStr .Filtro "asignada"}} class="sel"{{end}}>Asignadas</a>
+  <a href="/tareas?estado=libre"{{if eqStr .Filtro "libre"}} class="sel"{{end}}>Libres</a>
+  <a href="/tareas?estado=bloqueada"{{if eqStr .Filtro "bloqueada"}} class="sel"{{end}}>Bloqueadas</a>
   <a href="/tareas?estado=backlog"{{if eqStr .Filtro "backlog"}} class="sel"{{end}}>Backlog</a>
-  <a href="/tareas?estado=completada"{{if eqStr .Filtro "completada"}} class="sel"{{end}}>{{t "Completadas"}}</a>
+  <a href="/tareas?estado=completada"{{if eqStr .Filtro "completada"}} class="sel"{{end}}>Completadas</a>
 </div>
 
 {{if .Tareas}}
 <div style="overflow-x:auto">
 <table>
-  <thead><tr><th>#</th><th>{{t "Estado"}}</th><th>{{t "Prioridad"}}</th><th>Modulo</th><th>{{t "Agentes"}}</th><th>Titulo</th><th></th></tr></thead>
+  <thead><tr><th>#</th><th>Estado</th><th>Prioridad</th><th>Módulo</th><th>Agente</th><th>Título</th><th></th></tr></thead>
   <tbody>
   {{range .Tareas}}
     <tr>
       <td style="color:#94a3b8">{{.ID}}</td>
-      <td><span class="tag t-{{.Estado}}">{{t .Estado}}</span></td>
-      <td><span class="tag t-{{.Prioridad}}">{{t .Prioridad}}</span></td>
+      <td><span class="tag t-{{.Estado}}">{{.Estado}}</span></td>
+      <td><span class="tag t-{{.Prioridad}}">{{.Prioridad}}</span></td>
       <td><code style="font-size:.8em">{{.Modulo}}</code></td>
       <td>{{.Agente}}</td>
       <td>{{.Titulo}}</td>
-      <td><a href="/tareas/{{.ID}}" class="btn-sm">{{t "Ver"}} →</a></td>
+      <td><a href="/tareas/{{.ID}}" class="btn-sm">Gestionar →</a></td>
     </tr>
   {{end}}
   </tbody>
@@ -2013,11 +1133,11 @@ const webTplTareas = `{{define "content"}}
 // ─── Tarea: detalle + acciones ────────────────────────────────────────────────
 
 const webTplTareaDetalle = `{{define "content"}}
-<a href="/tareas" style="font-size:.85rem;color:#64748b">← {{t "Volver"}} {{t "Tareas"}}</a>
+<a href="/tareas" style="font-size:.85rem;color:#64748b">← volver a tareas</a>
 <h2 style="margin:.5rem 0">#{{.T.ID}} — {{.T.Titulo}}</h2>
 <p>
-  <span class="tag t-{{.T.Estado}}">{{t .T.Estado}}</span>
-  <span class="tag t-{{.T.Prioridad}}">{{t .T.Prioridad}}</span>
+  <span class="tag t-{{.T.Estado}}">{{.T.Estado}}</span>
+  <span class="tag t-{{.T.Prioridad}}">{{.T.Prioridad}}</span>
   <span style="color:#64748b;font-size:.85rem;margin-left:.5rem">Módulo: {{.T.Modulo}} · Agente: {{.T.Agente}}</span>
 </p>
 
@@ -2149,7 +1269,7 @@ const webTplTareaDetalle = `{{define "content"}}
 
 const webTplPropuestas = `{{define "content"}}
 <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
-  <h2 style="margin:0">{{t "Propuestas (OPs)"}} <small style="font-size:.5em;color:#94a3b8">{{len .Propuestas}}</small></h2>
+  <h2 style="margin:0">Propuestas (OPs) <small style="font-size:.5em;color:#94a3b8">{{len .Propuestas}}</small></h2>
 </div>
 {{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert-err">✗ {{.Err}}</div>{{end}}
@@ -2170,9 +1290,6 @@ const webTplPropuestas = `{{define "content"}}
       </div>
       <div><label>Código (opcional)</label><input type="text" name="codigo" placeholder="OP-030 (auto si vacío)"></div>
     </div>
-    <div style="margin-top:.4rem"><label>Proyecto</label>
-      <input type="text" name="proyecto" placeholder="orquestador">
-    </div>
     <div style="margin-top:.4rem"><label>Descripción</label>
       <textarea name="descripcion" rows="2" placeholder="Descripción detallada de la propuesta" style="width:100%"></textarea>
     </div>
@@ -2181,31 +1298,29 @@ const webTplPropuestas = `{{define "content"}}
 </details>
 
 <div class="filtros">
-  <a href="/propuestas"{{if eqStr .Filtro ""}} class="sel"{{end}}>{{t "Todas"}}</a>
-  <a href="/propuestas?estado=abierta"{{if eqStr .Filtro "abierta"}} class="sel"{{end}}>{{t "abierta"}}</a>
-  <a href="/propuestas?estado=consenso"{{if eqStr .Filtro "consenso"}} class="sel"{{end}}>{{t "consenso"}}</a>
+  <a href="/propuestas"{{if eqStr .Filtro ""}} class="sel"{{end}}>Todas</a>
+  <a href="/propuestas?estado=abierta"{{if eqStr .Filtro "abierta"}} class="sel"{{end}}>Abiertas</a>
+  <a href="/propuestas?estado=consenso"{{if eqStr .Filtro "consenso"}} class="sel"{{end}}>Consenso</a>
   <a href="/propuestas?estado=backlog"{{if eqStr .Filtro "backlog"}} class="sel"{{end}}>Backlog</a>
-  <a href="/propuestas?estado=rechazada"{{if eqStr .Filtro "rechazada"}} class="sel"{{end}}>{{t "rechazada"}}</a>
+  <a href="/propuestas?estado=rechazada"{{if eqStr .Filtro "rechazada"}} class="sel"{{end}}>Rechazadas</a>
 </div>
 
 {{range .Propuestas}}
 <details class="card">
   <summary>
     <span style="color:#94a3b8;margin-right:.4rem">{{.Codigo}}</span>
-    <span class="tag t-{{.Estado}}">{{t .Estado}}</span>
+    <span class="tag t-{{.Estado}}">{{.Estado}}</span>
     &nbsp;<strong>{{trunc .Titulo 65}}</strong>
     <span style="color:#94a3b8;font-weight:normal;font-size:.82em;margin-left:.5rem">· {{.PropuestoPor}} · {{.Fecha}}</span>
-    {{if .ProyectoSlug}}<a href="/propuestas/historial/{{pathEsc .ProyectoSlug}}" style="margin-left:.5rem;font-size:.78em;color:#2563eb" onclick="event.stopPropagation()">historial {{.Proyecto}}</a>{{end}}
     <a href="/propuestas/{{.Codigo}}" style="float:right;font-size:.8em;font-weight:normal;color:#2563eb" onclick="event.stopPropagation()">Gestionar →</a>
   </summary>
   {{if .Descripcion}}<p style="color:#475569;font-size:.88em;margin:.6rem 0">{{.Descripcion}}</p>{{end}}
-  {{if .Proyecto}}<p style="margin:.2rem 0 .6rem 0;font-size:.82em;color:#64748b">Proyecto: <strong>{{.Proyecto}}</strong></p>{{end}}
   {{if .Votos}}
   <table style="font-size:.82em"><thead><tr><th>Agente</th><th>Posición</th><th>Comentario</th></tr></thead><tbody>
   {{range .Votos}}
     <tr>
       <td><strong>{{.Agente}}</strong></td>
-      <td><span class="tag t-{{.Posicion}}">{{t .Posicion}}</span></td>
+      <td><span class="tag t-{{.Posicion}}">{{.Posicion}}</span></td>
       <td style="color:#64748b">{{.Comentario}}</td>
     </tr>
   {{end}}
@@ -2398,15 +1513,14 @@ const webTplTimeTravelDetalle = `{{define "content"}}
 // ─── Propuesta: detalle + acciones ───────────────────────────────────────────
 
 const webTplPropuestaDetalle = `{{define "content"}}
-<a href="/propuestas" style="font-size:.85rem;color:#64748b">← {{t "Volver"}} {{t "Propuestas"}}</a>
+<a href="/propuestas" style="font-size:.85rem;color:#64748b">← volver a propuestas</a>
 <h2 style="margin:.5rem 0">{{.P.Codigo}} — {{.P.Titulo}}</h2>
 <p>
-  <span class="tag t-{{.P.Estado}}">{{t .P.Estado}}</span>
-  <span class="tag" style="background:#e2e8f0;color:#475569">{{t .P.Tipo}}</span>
+  <span class="tag t-{{.P.Estado}}">{{.P.Estado}}</span>
+  <span class="tag" style="background:#e2e8f0;color:#475569">{{.P.Tipo}}</span>
   <span style="color:#64748b;font-size:.85rem;margin-left:.5rem">Propuesto por {{.P.PropuestoPor}} · {{.P.Fecha}}</span>
   {{if .P.CerradaFecha}}<span style="color:#94a3b8;font-size:.82rem;margin-left:.5rem">(cerrada {{.P.CerradaFecha}})</span>{{end}}
 </p>
-{{if .P.Proyecto}}<p style="margin-top:-.4rem"><a href="/propuestas/historial/{{pathEsc .P.ProyectoSlug}}" style="font-size:.85rem">Ver historial del proyecto {{.P.Proyecto}}</a></p>{{end}}
 {{if .P.Descripcion}}<p style="color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:.4rem;padding:.8rem 1rem;font-size:.9rem">{{.P.Descripcion}}</p>{{end}}
 
 {{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
@@ -2430,8 +1544,8 @@ const webTplPropuestaDetalle = `{{define "content"}}
         </div>
         <div><label>Posición</label>
           <select name="posicion">
-            <option value="acuerdo">{{t "acuerdo"}}</option>
-            <option value="desacuerdo">{{t "desacuerdo"}}</option>
+            <option value="acuerdo">Acuerdo</option>
+            <option value="desacuerdo">Desacuerdo</option>
             <option value="abstencion">Abstención</option>
           </select>
         </div>
@@ -2490,304 +1604,13 @@ const webTplPropuestaDetalle = `{{define "content"}}
 {{range .P.Votos}}
   <tr>
     <td><strong>{{.Agente}}</strong></td>
-    <td><span class="tag t-{{.Posicion}}">{{t .Posicion}}</span></td>
+    <td><span class="tag t-{{.Posicion}}">{{.Posicion}}</span></td>
     <td style="color:#64748b">{{.Comentario}}</td>
   </tr>
 {{end}}
 </tbody></table>
 {{else}}
 <p style="color:#94a3b8">No hay votos registrados aún.</p>
-{{end}}
-{{end}}
-`
-
-const webTplHistorialProyecto = `{{define "content"}}
-<a href="/propuestas" style="font-size:.85rem;color:#64748b">← {{t "Volver"}} {{t "Propuestas"}}</a>
-<div style="display:flex;justify-content:space-between;align-items:baseline;margin:.5rem 0 1rem 0">
-  <h2 style="margin:0">Historial de votaciones <small style="font-size:.5em;color:#94a3b8">{{.Proyecto}}</small></h2>
-</div>
-{{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
-{{if .Err}}<div class="alert-err">✗ {{.Err}}</div>{{end}}
-
-{{range .Items}}
-<details class="card">
-  <summary>
-    <span style="color:#94a3b8;margin-right:.4rem">{{.Codigo}}</span>
-    <span class="tag t-{{.Estado}}">{{t .Estado}}</span>
-    &nbsp;<strong>{{trunc .Titulo 65}}</strong>
-    <span style="color:#94a3b8;font-weight:normal;font-size:.82em;margin-left:.5rem">· {{.Tipo}} · {{.Fecha}}</span>
-    <span style="float:right;font-size:.82em;color:#475569">✓{{.Acuerdo}} · ✗{{.Desacuerdo}} · ～{{.Abstencion}} · ⏳{{.Pendiente}}</span>
-  </summary>
-  {{if .Votos}}
-  <table style="font-size:.82em"><thead><tr><th>Agente</th><th>Posición</th><th>Comentario</th></tr></thead><tbody>
-  {{range .Votos}}
-    <tr>
-      <td><strong>{{.Agente}}</strong></td>
-      <td><span class="tag t-{{.Posicion}}">{{t .Posicion}}</span></td>
-      <td style="color:#64748b">{{.Comentario}}</td>
-    </tr>
-  {{end}}
-  </tbody></table>
-  {{else}}
-  <p style="color:#94a3b8">No hay votos registrados aún.</p>
-  {{end}}
-</details>
-{{end}}
-{{end}}
-`
-
-// ─── Memoria: lista y detalle ────────────────────────────────────────────────
-
-const webTplMemoria = `{{define "content"}}
-<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
-  <h2 style="margin:0">{{t "Memoria de proyecto"}} <small style="font-size:.5em;color:#94a3b8">{{len .Items}}</small></h2>
-</div>
-{{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
-{{if .Err}}<div class="alert-err">✗ {{.Err}}</div>{{end}}
-
-<details class="form-panel">
-  <summary>＋ Nueva memoria de proyecto</summary>
-  <form method="POST" action="/memoria/nueva" style="margin-top:.8rem">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
-      <div><label>Proyecto *</label><input type="text" name="proyecto" required placeholder="orquestador"></div>
-      <div><label>Agente</label><input type="text" name="agente" placeholder="Codex3"></div>
-    </div>
-    <div style="margin-top:.4rem"><label>Resumen</label><textarea name="resumen" rows="2" style="width:100%"></textarea></div>
-    <div style="margin-top:.4rem"><label>Contexto</label><textarea name="contexto" rows="2" style="width:100%"></textarea></div>
-    <div style="margin-top:.4rem"><label>Preguntas abiertas</label><textarea name="preguntas" rows="2" style="width:100%"></textarea></div>
-    <button type="submit" class="btn-sm" style="margin-top:.4rem">Crear memoria</button>
-  </form>
-</details>
-
-{{if .Items}}
-<table>
-  <thead><tr><th>Proyecto</th><th>Resumen</th><th>Fuentes</th><th>Hallazgos</th><th>Derivas</th><th>Abiertas</th><th>Actualizado</th><th></th></tr></thead>
-  <tbody>
-  {{range .Items}}
-    <tr>
-      <td><strong>{{.Proyecto}}</strong></td>
-      <td style="font-size:.84rem;color:#475569">{{trunc .Resumen 72}}</td>
-      <td>{{.Fuentes}}</td>
-      <td>{{.Hallazgos}}</td>
-      <td>{{.Derivas}}</td>
-      <td>{{if gt .DerivasAbiertas 0}}<span class="tag t-media">{{.DerivasAbiertas}}</span>{{else}}<span class="tag t-consenso">0</span>{{end}}</td>
-      <td style="font-size:.82rem;color:#64748b">{{.Actualizado}} · {{.ActualizadoPor}}</td>
-      <td><a href="/memoria/{{pathEsc .Proyecto}}" class="btn-sm">Abrir →</a></td>
-    </tr>
-  {{end}}
-  </tbody>
-</table>
-{{else}}
-<p style="color:#94a3b8">Todavía no hay memorias registradas.</p>
-{{end}}
-{{end}}
-`
-
-const webTplMemoriaDetalle = `{{define "content"}}
-<a href="/memoria" style="font-size:.85rem;color:#64748b">← {{t "Volver"}} {{t "Memoria"}}</a>
-<h2 style="margin:.5rem 0">{{t "Memoria"}} — {{.Proyecto}}</h2>
-{{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
-{{if .Err}}<div class="alert-err">✗ {{.Err}}</div>{{end}}
-
-<div class="action-box">
-  <h4>Resumen vivo</h4>
-  <form method="POST" action="/memoria/{{pathEsc .Proyecto}}/accion">
-    <input type="hidden" name="accion" value="guardar">
-    <div style="display:grid;grid-template-columns:1fr 220px;gap:.5rem">
-      <div><label>Agente</label><input type="text" name="agente" value="{{if .M}}{{.M.ActualizadoPor}}{{end}}" placeholder="Codex3"></div>
-      <div><label>Proyecto</label><input type="text" value="{{.Proyecto}}" disabled></div>
-    </div>
-    <div style="margin-top:.4rem"><label>Resumen</label><textarea name="resumen" rows="3" style="width:100%">{{if .M}}{{.M.Resumen}}{{end}}</textarea></div>
-    <div style="margin-top:.4rem"><label>Contexto</label><textarea name="contexto" rows="3" style="width:100%">{{if .M}}{{.M.Contexto}}{{end}}</textarea></div>
-    <div style="margin-top:.4rem"><label>Preguntas abiertas</label><textarea name="preguntas" rows="2" style="width:100%">{{if .M}}{{.M.PreguntasAbiertas}}{{end}}</textarea></div>
-    <button type="submit" class="btn-sm" style="margin-top:.5rem">Guardar memoria</button>
-  </form>
-</div>
-
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
-  <div class="action-box">
-    <h4>Registrar fuente</h4>
-    <form method="POST" action="/memoria/{{pathEsc .Proyecto}}/accion">
-      <input type="hidden" name="accion" value="fuente">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
-        <div><label>Agente</label><input type="text" name="agente" placeholder="Codex3"></div>
-        <div><label>Tipo</label><input type="text" name="tipo" value="documentacion"></div>
-      </div>
-      <div style="margin-top:.4rem"><label>Referencia *</label><input type="text" name="referencia" required style="width:100%"></div>
-      <div style="margin-top:.4rem"><label>Título</label><input type="text" name="titulo" style="width:100%"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.4rem">
-        <div><label>URL</label><input type="text" name="url"></div>
-        <div><label>Confianza</label><input type="text" name="confianza" value="media"></div>
-      </div>
-      <div style="margin-top:.4rem"><label>Detalle</label><textarea name="detalle" rows="2" style="width:100%"></textarea></div>
-      <button type="submit" class="btn-sm" style="margin-top:.5rem">Registrar fuente</button>
-    </form>
-  </div>
-
-  <div class="action-box">
-    <h4>Registrar hallazgo</h4>
-    <form method="POST" action="/memoria/{{pathEsc .Proyecto}}/accion">
-      <input type="hidden" name="accion" value="hallazgo">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
-        <div><label>Agente</label><input type="text" name="agente" placeholder="Codex3"></div>
-        <div><label>Fuente ID</label><input type="number" name="fuente_id" min="1" placeholder="opcional"></div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin-top:.4rem">
-        <div><label>Tipo</label><input type="text" name="tipo" value="hecho"></div>
-        <div><label>Impacto</label><input type="text" name="impacto" value="medio"></div>
-        <div><label>Confianza</label><input type="text" name="confianza" value="media"></div>
-      </div>
-      <div style="margin-top:.4rem"><label>Título *</label><input type="text" name="titulo" required style="width:100%"></div>
-      <div style="margin-top:.4rem"><label>Descripción</label><textarea name="descripcion" rows="3" style="width:100%"></textarea></div>
-      <button type="submit" class="btn-sm" style="margin-top:.5rem">Registrar hallazgo</button>
-    </form>
-  </div>
-</div>
-
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem">
-  <div class="action-box">
-    <h4>Registrar deriva</h4>
-    <form method="POST" action="/memoria/{{pathEsc .Proyecto}}/accion">
-      <input type="hidden" name="accion" value="deriva">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
-        <div><label>Agente</label><input type="text" name="agente" placeholder="Codex3"></div>
-        <div><label>Hallazgo ID</label><input type="number" name="hallazgo_id" min="1" placeholder="opcional"></div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin-top:.4rem">
-        <div><label>Tipo</label><input type="text" name="tipo" value="documental"></div>
-        <div><label>Severidad</label><input type="text" name="severidad" value="media"></div>
-        <div><label>Estado</label><input type="text" name="estado" value="abierta"></div>
-      </div>
-      <div style="margin-top:.4rem"><label>Descripción *</label><textarea name="descripcion" rows="3" required style="width:100%"></textarea></div>
-      <div style="margin-top:.4rem"><label>Evidencia</label><textarea name="evidencia" rows="2" style="width:100%"></textarea></div>
-      <button type="submit" class="btn-sm" style="margin-top:.5rem">Registrar deriva</button>
-    </form>
-  </div>
-
-  <div class="action-box">
-    <h4>Resolver deriva</h4>
-    <form method="POST" action="/memoria/{{pathEsc .Proyecto}}/accion">
-      <input type="hidden" name="accion" value="resolver-deriva">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
-        <div><label>Agente</label><input type="text" name="agente" placeholder="Codex3"></div>
-        <div><label>Deriva ID *</label><input type="number" name="deriva_id" min="1" required></div>
-      </div>
-      <div style="margin-top:.4rem"><label>Estado</label><input type="text" name="estado" value="resuelta"></div>
-      <div style="margin-top:.4rem"><label>Resolución *</label><textarea name="resolucion" rows="3" required style="width:100%"></textarea></div>
-      <button type="submit" class="btn-sm" style="margin-top:.5rem">Actualizar deriva</button>
-    </form>
-  </div>
-</div>
-
-<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-top:1rem">
-  <div>
-    <h4>Fuentes</h4>
-    {{if .Fuentes}}
-    <table><thead><tr><th>ID</th><th>Referencia</th></tr></thead><tbody>
-    {{range .Fuentes}}
-      <tr><td>{{.ID}}</td><td><strong>{{.Referencia}}</strong><br><small>{{.Tipo}} / {{.Confianza}}{{if .Titulo}} · {{.Titulo}}{{end}}</small></td></tr>
-    {{end}}
-    </tbody></table>
-    {{else}}<p style="color:#94a3b8">Sin fuentes.</p>{{end}}
-  </div>
-  <div>
-    <h4>Hallazgos</h4>
-    {{if .Hallazgos}}
-    <table><thead><tr><th>ID</th><th>Título</th></tr></thead><tbody>
-    {{range .Hallazgos}}
-      <tr><td>{{.ID}}</td><td><strong>{{.Titulo}}</strong><br><small>{{.Tipo}} / {{.Impacto}} / {{.Confianza}}</small></td></tr>
-    {{end}}
-    </tbody></table>
-    {{else}}<p style="color:#94a3b8">Sin hallazgos.</p>{{end}}
-  </div>
-  <div>
-    <h4>Derivas</h4>
-    {{if .Derivas}}
-    <table><thead><tr><th>ID</th><th>Descripción</th></tr></thead><tbody>
-    {{range .Derivas}}
-      <tr><td>{{.ID}}</td><td><strong>{{.Descripcion}}</strong><br><small>{{.Tipo}} / {{.Severidad}} / {{.Estado}}</small></td></tr>
-    {{end}}
-    </tbody></table>
-    {{else}}<p style="color:#94a3b8">Sin derivas.</p>{{end}}
-  </div>
-</div>
-{{end}}
-`
-
-const webTplProgreso = `{{define "content"}}
-<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
-  <h2 style="margin:0">{{t "Progreso real por proyecto"}} <small style="font-size:.5em;color:#94a3b8">{{len .Items}}</small></h2>
-</div>
-{{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
-{{if .Err}}<div class="alert-err">✗ {{.Err}}</div>{{end}}
-{{if .Items}}
-<table>
-  <thead><tr><th>{{t "Proyecto"}}</th><th>{{t "Progreso"}}</th><th>{{t "Tareas"}}</th><th></th></tr></thead>
-  <tbody>
-  {{range .Items}}
-    <tr>
-      <td><strong>{{.Proyecto}}</strong></td>
-      <td>{{printf "%.1f" .ProgresoPct}}%</td>
-      <td>{{.TareasCompletadas}} / {{.TareasTotales}}</td>
-      <td><a href="/progreso/{{pathEsc .Proyecto}}" class="btn-sm">{{t "Ver"}} →</a></td>
-    </tr>
-  {{end}}
-  </tbody>
-</table>
-{{else}}
-<p style="color:#94a3b8">Todavía no hay proyectos con fases o avance registrados.</p>
-{{end}}
-{{end}}
-`
-
-const webTplProgresoDetalle = `{{define "content"}}
-{{if .R}}<a href="/progreso" style="font-size:.85rem;color:#64748b">← {{t "Volver"}} {{t "Progreso"}}</a>{{end}}
-{{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
-{{if .Err}}<div class="alert-err">✗ {{.Err}}</div>{{end}}
-{{if .R}}
-<h2 style="margin:.5rem 0">{{.R.Proyecto}}</h2>
-<div class="stats">
-  <div class="stat"><div class="n">{{printf "%.1f" .R.ProgresoPct}}%</div><div class="l">{{t "Progreso real"}}</div></div>
-  <div class="stat"><div class="n">{{.R.TareasTotales}}</div><div class="l">{{t "Tareas registradas"}}</div></div>
-  <div class="stat"><div class="n">{{.R.TareasCompletadas}}</div><div class="l">{{t "Tareas completadas"}}</div></div>
-</div>
-<p style="font-size:.85rem;color:#64748b">API JSON: <code>/api/progreso/{{pathEsc .R.Proyecto}}</code></p>
-
-{{if .R.Fases}}
-<h4>{{t "Fase"}}s</h4>
-<table>
-  <thead><tr><th>Orden</th><th>{{t "Fase"}}</th><th>{{t "Estado"}}</th><th>{{t "Peso"}}</th><th>{{t "Progreso"}}</th><th>{{t "Tareas"}}</th></tr></thead>
-  <tbody>
-  {{range .R.Fases}}
-    <tr>
-      <td>{{.Fase.Orden}}</td>
-      <td><strong>{{.Fase.Nombre}}</strong><br><small style="color:#64748b">{{.Fase.Descripcion}}</small></td>
-      <td><span class="tag t-{{.Fase.Estado}}">{{t .Fase.Estado}}</span></td>
-      <td>{{printf "%.1f" .Fase.Peso}}</td>
-      <td>{{printf "%.1f" .ProgresoPct}}%</td>
-      <td>{{.TareasCompletadas}} / {{.TareasTotales}}</td>
-    </tr>
-  {{end}}
-  </tbody>
-</table>
-{{end}}
-
-{{if .R.TareasSinFase}}
-<h4>{{t "Tareas"}} sin {{t "Fase"}}</h4>
-<table>
-  <thead><tr><th>ID</th><th>Titulo</th><th>{{t "Estado"}}</th><th>{{t "Progreso"}}</th></tr></thead>
-  <tbody>
-  {{range .R.TareasSinFase}}
-    <tr>
-      <td>{{.Tarea.ID}}</td>
-      <td>{{.Tarea.Titulo}}</td>
-      <td><span class="tag t-{{.Tarea.Estado}}">{{t .Tarea.Estado}}</span></td>
-      <td>{{printf "%.1f" .ProgresoPct}}%</td>
-    </tr>
-  {{end}}
-  </tbody>
-</table>
-{{end}}
 {{end}}
 {{end}}
 `

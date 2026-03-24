@@ -37,7 +37,7 @@ func TestListarAsignacionesYSesionesActivas(t *testing.T) {
 		t.Fatalf("insert sesion: %v", err)
 	}
 
-	asignaciones, err := ListarAsignaciones("activa", "codex1")
+	asignaciones, err := ListarAsignacionesOpsView("activa", "codex1")
 	if err != nil {
 		t.Fatalf("ListarAsignaciones: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestListarAsignacionesYSesionesActivas(t *testing.T) {
 		t.Fatalf("asignaciones inesperadas: %+v", asignaciones)
 	}
 
-	sesiones, err := ListarSesionesActivas()
+	sesiones, err := ListarSesionesActivasOpsView()
 	if err != nil {
 		t.Fatalf("ListarSesionesActivas: %v", err)
 	}

@@ -9,64 +9,57 @@ package db
 
 import "testing"
 
-func TestRegistrarConectorForgeYSubproyectoRemoto(t *testing.T) {
+func TestUpsertConectorYListarConectores(t *testing.T) {
 	abrirDBTemporalMemoria(t)
 
-	id, err := RegistrarConectorForge(&ConectorForge{
-		Slug:       "gh-main",
-		Tipo:       "github",
-		Owner:      "dipgra",
-		OwnerKind:  "org",
-		APIBaseURL: "https://api.github.test",
-		TokenEnv:   "GITHUB_TOKEN",
-		Activo:     true,
+	id, err := UpsertConector(&Conector{
+		Slug:         "codex-cli-test",
+		Nombre:       "Codex CLI Test",
+		Transporte:   "cli",
+		Comando:      "codex",
+		ArgsJSON:     `["--sandbox","workspace-write"]`,
+		EnvJSON:      `{"OPENAI_API_KEY":"$OPENAI_API_KEY"}`,
+		MetadataJSON: `{"familia":"openai"}`,
+		Activo:       true,
 	})
 	if err != nil {
-		t.Fatalf("RegistrarConectorForge: %v", err)
+		t.Fatalf("UpsertConector: %v", err)
 	}
 	if id == 0 {
 		t.Fatalf("id de conector inesperado")
 	}
 
-	conector, err := GetConectorForge("gh-main")
+	conector, err := GetConector("codex-cli-test")
 	if err != nil {
-		t.Fatalf("GetConectorForge: %v", err)
+		t.Fatalf("GetConector: %v", err)
 	}
-	if conector.Owner != "dipgra" || conector.Tipo != "github" {
+	if conector.Nombre != "Codex CLI Test" || conector.Transporte != "cli" {
 		t.Fatalf("conector inesperado: %+v", conector)
 	}
 
-	spID, err := RegistrarSubproyectoRemoto(&SubproyectoRemoto{
-		Proyecto:      "orquestador",
-		ConectorSlug:  "gh-main",
-		ForgeTipo:     "github",
-		Owner:         "dipgra",
-		RepoName:      "subproyecto-demo",
-		RepoFullName:  "dipgra/subproyecto-demo",
-		Visibility:    "private",
-		Descripcion:   "Demo",
-		HTMLURL:       "https://github.test/dipgra/subproyecto-demo",
-		CloneURL:      "https://github.test/dipgra/subproyecto-demo.git",
-		SSHURL:        "git@github.test:dipgra/subproyecto-demo.git",
-		DefaultBranch: "main",
-		Estado:        "creado",
-		RegistradoPor: "Codex3",
+	id2, err := UpsertConector(&Conector{
+		Slug:         "claude-cli-test",
+		Nombre:       "Claude CLI Test",
+		Transporte:   "cli",
+		Comando:      "claude",
+		MetadataJSON: `{"familia":"anthropic"}`,
+		Activo:       true,
 	})
 	if err != nil {
-		t.Fatalf("RegistrarSubproyectoRemoto: %v", err)
+		t.Fatalf("UpsertConector segundo: %v", err)
 	}
-	if spID == 0 {
-		t.Fatalf("id de subproyecto inesperado")
+	if id2 == 0 || id2 == id {
+		t.Fatalf("id de segundo conector inesperado: %d", id2)
 	}
 
-	items, err := ListarSubproyectosRemotos("orquestador")
+	items, err := ListarConectores()
 	if err != nil {
-		t.Fatalf("ListarSubproyectosRemotos: %v", err)
+		t.Fatalf("ListarConectores: %v", err)
 	}
-	if len(items) != 1 {
-		t.Fatalf("subproyectos inesperados: %+v", items)
+	if len(items) < 2 {
+		t.Fatalf("conectores inesperados: %+v", items)
 	}
-	if items[0].RepoFullName != "dipgra/subproyecto-demo" {
-		t.Fatalf("repo inesperado: %+v", items[0])
+	if items[0].Slug == "" || items[1].Slug == "" {
+		t.Fatalf("slugs inesperados: %+v", items)
 	}
 }

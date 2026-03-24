@@ -214,7 +214,7 @@ func RegistrarDerivaMemoria(d *DerivaMemoria) (int64, error) {
 	res, err := DB.Exec(`
 		INSERT INTO memoria_derivas (proyecto, hallazgo_id, tipo, severidad, estado, descripcion, evidencia, detectada_por, resolucion, resuelta_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?)`,
-		d.Proyecto, d.HallazgoID, d.Tipo, d.Severidad, d.Estado, d.Descripcion, d.Evidencia, d.DetectadaPor, d.Resolucion, nullableTime(d.ResueltaAt),
+		d.Proyecto, d.HallazgoID, d.Tipo, d.Severidad, d.Estado, d.Descripcion, d.Evidencia, d.DetectadaPor, d.Resolucion, nullableTimePtr(d.ResueltaAt),
 	)
 	if err != nil {
 		return 0, err
@@ -355,7 +355,7 @@ func escanearDerivaMemoria(s scanner) (*DerivaMemoria, error) {
 	return d, nil
 }
 
-func nullableTime(v *time.Time) any {
+func nullableTimePtr(v *time.Time) any {
 	if v == nil {
 		return nil
 	}

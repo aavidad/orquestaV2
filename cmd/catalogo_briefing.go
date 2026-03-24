@@ -17,6 +17,10 @@ import (
 	"orquesta/db"
 )
 
+func ptrBool(v bool) *bool {
+	return &v
+}
+
 var reglasCmd = &cobra.Command{
 	Use:   "reglas",
 	Short: "Gestión CLI de reglas de briefing",
@@ -28,7 +32,11 @@ var reglasListarCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		rol, _ := cmd.Flags().GetString("rol")
 		todas, _ := cmd.Flags().GetBool("todas")
-		reglas, err := db.ListarReglas(strings.TrimSpace(rol), todas)
+		var activa *bool
+		if !todas {
+			activa = ptrBool(true)
+		}
+		reglas, err := db.ListarReglas(strings.TrimSpace(rol), activa)
 		if err != nil {
 			return err
 		}
@@ -150,7 +158,11 @@ var skillsListarCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		rol, _ := cmd.Flags().GetString("rol")
 		todos, _ := cmd.Flags().GetBool("todos")
-		skills, err := db.ListarSkills(strings.TrimSpace(rol), todos)
+		var activa *bool
+		if !todos {
+			activa = ptrBool(true)
+		}
+		skills, err := db.ListarSkills(strings.TrimSpace(rol), activa)
 		if err != nil {
 			return err
 		}
@@ -272,7 +284,11 @@ var workflowsListarCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		rol, _ := cmd.Flags().GetString("rol")
 		todos, _ := cmd.Flags().GetBool("todos")
-		workflows, err := db.ListarWorkflows(strings.TrimSpace(rol), todos)
+		var activo *bool
+		if !todos {
+			activo = ptrBool(true)
+		}
+		workflows, err := db.ListarWorkflows(strings.TrimSpace(rol), activo)
 		if err != nil {
 			return err
 		}

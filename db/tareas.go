@@ -76,21 +76,15 @@ type ResumenBloqueo struct {
 // CrearTarea inserta una nueva tarea y devuelve su ID.
 func CrearTarea(t *Tarea) (int64, error) {
 	deps, _ := json.Marshal(t.Dependencias)
-<<<<<<< HEAD
 	res, err := DB.Exec(`
 		INSERT INTO tareas (titulo, descripcion, proyecto_id, modulo, prioridad, dependencias, creado_por, notas, propuesta_id)
 		VALUES (?,?,?,?,?,?,?,?,?)`,
 		t.Titulo, t.Descripcion, t.ProyectoID, t.Modulo, t.Prioridad, string(deps), t.CreadoPor, t.Notas, t.PropuestaID,
-=======
-	id, err := insertReturningID(`
-		INSERT INTO tareas (titulo, descripcion, modulo, prioridad, dependencias, creado_por, notas, propuesta_id)
-		VALUES (?,?,?,?,?,?,?,?)`,
-		t.Titulo, t.Descripcion, t.Modulo, t.Prioridad, string(deps), t.CreadoPor, t.Notas, t.PropuestaID,
->>>>>>> origin/orq-orquestador-codex2
 	)
 	if err != nil {
 		return 0, err
 	}
+	id, _ := res.LastInsertId()
 	Audit(t.CreadoPor, "crear_tarea", "tarea", id, t.Titulo)
 	return id, nil
 }
@@ -363,35 +357,9 @@ func DesbloquearTarea(id int64, agente, resolucion string) error {
 	return nil
 }
 
-// ReasignarTarea mueve una tarea a otro agente y la deja en estado asignada.
-func ReasignarTarea(id int64, nuevoAgente string) error {
-	t, err := GetTarea(id)
-	if err != nil {
-		return fmt.Errorf("tarea #%d no encontrada", id)
-	}
-	_, err = DB.Exec(`UPDATE tareas SET agente=?, estado='asignada' WHERE id=?`, nuevoAgente, id)
-	if err == nil {
-		Audit("alberto", "reasignar_tarea", "tarea", id, t.Titulo+" -> "+nuevoAgente)
-	}
-	return err
-}
-
-// EnviarTareaABacklog mueve una tarea a backlog y elimina su asignación actual.
-func EnviarTareaABacklog(id int64) error {
-	t, err := GetTarea(id)
-	if err != nil {
-		return fmt.Errorf("tarea #%d no encontrada", id)
-	}
-	_, err = DB.Exec(`UPDATE tareas SET estado='backlog', agente=NULL WHERE id=?`, id)
-	if err == nil {
-		Audit("alberto", "backlog_tarea", "tarea", id, t.Titulo)
-	}
-	return err
-}
-
 // AnotarTarea añade una nota a una tarea.
 func AnotarTarea(id int64, agente, nota string) error {
-	anotacion := formatearAnotacionTarea(agente, nota, time.Now())
+	anotacion := formatearAnotacionTarea(agente, nota, time.Now().UTC())
 	_, err := DB.Exec(
 		`UPDATE tareas SET notas = notas || ? WHERE id=?`,
 		anotacion, id,
@@ -399,30 +367,27 @@ func AnotarTarea(id int64, agente, nota string) error {
 	return err
 }
 
-func ReasignarTarea(id int64, nuevoAgente string) error {
-	t, err := GetTarea(id)
-	if err != nil {
-		return fmt.Errorf("tarea #%d no encontrada", id)
-	}
-	_, err = DB.Exec(`UPDATE tareas SET agente=?, estado='asignada' WHERE id=?`, nuevoAgente, id)
-	if err != nil {
-		return err
-	}
-	Audit("alberto", "reasignar_tarea", "tarea", id, t.Titulo+" -> "+nuevoAgente)
-	return nil
+func formatearAnotacionTarea(agente, nota string, marcaTiempo time.Time) string {
+	return fmt.Sprintf(
+		"\n%s [%s %s]",
+		nota,
+		marcaTiempo.UTC().Format("2006-01-02 15:04:05"),
+		agente,
+	)
+}
+
+func EnviarTareaABacklog(id int64) error {
+	return MoverTareaABacklog(id)
 }
 
 func MoverTareaABacklog(id int64) error {
-	t, err := GetTarea(id)
-	if err != nil {
-		return fmt.Errorf("tarea #%d no encontrada", id)
-	}
-	_, err = DB.Exec(`UPDATE tareas SET estado='backlog', agente=NULL WHERE id=?`, id)
-	if err != nil {
-		return err
-	}
-	Audit("alberto", "backlog_tarea", "tarea", id, t.Titulo)
-	return nil
+	_, err := DB.Exec(`UPDATE tareas SET estado='backlog', agente=NULL WHERE id=?`, id)
+	return err
+}
+
+func ReasignarTarea(id int64, nuevoAgente string) error {
+	_, err := DB.Exec(`UPDATE tareas SET estado='asignada', agente=? WHERE id=?`, nuevoAgente, id)
+	return err
 }
 
 // ContarTareasPorEstado devuelve un mapa estado→cantidad.
@@ -483,7 +448,6 @@ func escanearTarea(s scanner) (*Tarea, error) {
 	return &t, nil
 }
 
-<<<<<<< HEAD
 // ListarResumenBloqueos devuelve una lista de tareas bloqueadas con su motivo actual.
 func ListarResumenBloqueos() ([]ResumenBloqueo, error) {
 	rows, err := DB.Query(`
@@ -507,8 +471,4 @@ func ListarResumenBloqueos() ([]ResumenBloqueo, error) {
 		res = append(res, rb)
 	}
 	return res, nil
-=======
-func formatearAnotacionTarea(agente, nota string, ts time.Time) string {
-	return "\n" + nota + " [" + ts.UTC().Format("2006-01-02 15:04:05") + " " + agente + "]"
->>>>>>> origin/orq-orquestador-codex2
 }

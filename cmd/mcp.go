@@ -20,7 +20,11 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"orquesta/dashboardapp"
 	"orquesta/db"
+	"orquesta/proposalapp"
+	"orquesta/sessionapp"
+	"orquesta/taskapp"
 )
 
 const (
@@ -35,6 +39,11 @@ var mcpSupportedProtocols = []string{
 	"2025-03-26",
 	"2024-11-05",
 }
+
+var dashboardService = dashboardapp.NewService(dashboardapp.Repository{})
+var proposalService = proposalapp.NewService(proposalapp.Repository{})
+var sessionAPIService = sessionapp.NewService(sessionapp.Repository{})
+var taskService = taskapp.NewService(taskapp.Repository{})
 
 type mcpRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -1562,7 +1571,7 @@ func listarProyectosFiltrados(tipo string, activo *bool) ([]map[string]any, erro
 
 	var list []map[string]any
 	for _, row := range rows {
-		if strings.TrimSpace(tipo) != "" && row.Tipo != strings.TrimSpace(tipo) {
+		if strings.TrimSpace(tipo) != "" && string(row.Tipo) != strings.TrimSpace(tipo) {
 			continue
 		}
 		var parentID any

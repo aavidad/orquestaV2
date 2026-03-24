@@ -14,14 +14,6 @@ import (
 	"time"
 )
 
-type Sesion struct {
-	ID     int64
-	Agente string
-	Inicio time.Time
-	Fin    *time.Time
-	Activa bool
-}
-
 type PresupuestoSesion struct {
 	ID                int64
 	SesionID          int64
@@ -49,21 +41,6 @@ type EvaluacionPresupuesto struct {
 	RemainingRatio   *float64
 }
 
-func GetSesion(id int64) (*Sesion, error) {
-	row := DB.QueryRow(`SELECT id, agente, inicio, fin, activa FROM sesiones WHERE id = ?`, id)
-	return escanearSesion(row)
-}
-
-func SesionActivaDeAgente(agente string) (*Sesion, error) {
-	row := DB.QueryRow(`
-		SELECT id, agente, inicio, fin, activa
-		FROM sesiones
-		WHERE agente = ? AND activa = 1
-		ORDER BY id DESC
-		LIMIT 1`, agente)
-	return escanearSesion(row)
-}
-
 func RegistrarPresupuestoSesion(p *PresupuestoSesion) (int64, error) {
 	if p == nil {
 		return 0, fmt.Errorf("presupuesto nulo")
@@ -71,7 +48,7 @@ func RegistrarPresupuestoSesion(p *PresupuestoSesion) (int64, error) {
 	if p.SesionID <= 0 {
 		return 0, fmt.Errorf("sesion_id obligatorio")
 	}
-	if _, err := GetSesion(p.SesionID); err != nil {
+	if _, err := GetSesionByID(p.SesionID); err != nil {
 		if err == sql.ErrNoRows {
 			return 0, fmt.Errorf("sesión #%d no encontrada", p.SesionID)
 		}
@@ -109,7 +86,7 @@ func RegistrarPresupuestoSesion(p *PresupuestoSesion) (int64, error) {
 			remaining_seconds, remaining_messages, remaining_tokens, remaining_credits,
 			budget_source, raw_snapshot_json, checked_at
 		) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		p.SesionID, p.PoolID, p.ModelSlug, p.WindowKind, nullableTime(p.WindowStartedAt), nullableTime(p.ResetAt),
+		p.SesionID, p.PoolID, p.ModelSlug, p.WindowKind, nullableTimePresupuesto(p.WindowStartedAt), nullableTimePresupuesto(p.ResetAt),
 		nullableInt64(p.RemainingSeconds), nullableInt64(p.RemainingMessages), nullableInt64(p.RemainingTokens),
 		nullableFloat64(p.RemainingCredits), p.BudgetSource, p.RawSnapshotJSON, checkedAtOrNow(p.CheckedAt),
 	)
@@ -134,7 +111,7 @@ func UltimoPresupuestoSesion(sesionID int64) (*PresupuestoSesion, error) {
 }
 
 func UltimoPresupuestoAgente(agente string) (*PresupuestoSesion, *Sesion, error) {
-	sesion, err := SesionActivaDeAgente(agente)
+	sesion, err := GetSesionActiva(agente, nil)
 	if err == sql.ErrNoRows {
 		return nil, nil, err
 	}
@@ -192,18 +169,6 @@ func EvaluarPresupuestoSesion(p *PresupuestoSesion) (*EvaluacionPresupuesto, err
 	ev.Estado = "sin_datos"
 	ev.Motivo = "sin telemetría suficiente para decidir handoff"
 	return ev, nil
-}
-
-func escanearSesion(s scanner) (*Sesion, error) {
-	var sesion Sesion
-	var fin sql.NullTime
-	if err := s.Scan(&sesion.ID, &sesion.Agente, &sesion.Inicio, &fin, &sesion.Activa); err != nil {
-		return nil, err
-	}
-	if fin.Valid {
-		sesion.Fin = &fin.Time
-	}
-	return &sesion, nil
 }
 
 func escanearPresupuestoSesion(s scanner) (*PresupuestoSesion, error) {
@@ -283,6 +248,13 @@ func checkedAtOrNow(v time.Time) time.Time {
 		return time.Now()
 	}
 	return v
+}
+
+func nullableTimePresupuesto(v *time.Time) any {
+	if v == nil {
+		return nil
+	}
+	return *v
 }
 
 func nullableInt64(v *int64) any {

@@ -149,3 +149,60 @@ La integracion se considerara correcta cuando se cumpla todo esto:
 - la capa de persistencia puede apuntar a mas de un backend
 - la observabilidad de runtimes entra por adaptadores y contratos claros
 - la logica de aplicacion sale progresivamente de `db/` y de scripts
+
+## Estado actual para handoff entre equipos
+
+Fecha: 2026-03-23
+
+Rama de trabajo actual:
+
+- `prueba/merge-total-agentes-20260323`
+
+Bloques ya integrados en esta rama:
+
+- limpieza del bloque de terminales y daemon para no depender de SQL directo desde scripts
+- base portable de persistencia y compat SQL de `codex2`
+- observabilidad de runtimes y control plane util de `codex3`
+- `runtime_mailbox`, checkpoints y cliente fino para operaciones activas
+- reintegracion al bootstrap de BD de piezas vivas que se habian quedado fuera:
+  - `pools_capacidad`, `pool_modelos`, `politicas_modelo`
+  - `decisiones_proyecto`, `documentos_externos`, `git_merges`
+  - `memoria_proyectos`, `memoria_fuentes`, `memoria_hallazgos`, `memoria_derivas`
+  - `fases_proyecto`, `avance_tareas`, `presupuestos_sesion`
+  - `sesiones.pool_id`
+- ajuste de `persistencia info` para no requerir apertura de BD
+- correccion del flujo MCP de voto de propuesta y refresco del estado devuelto
+
+Validacion rapida hecha antes del handoff:
+
+- `go build ./...`
+- `go test ./db -run 'TestGuardarYLeerMemoriaProyecto|TestRegistrarFuentesHallazgosYDerivas|TestRegistrarYLeerPresupuestoSesion|TestEvaluarPresupuestoSesionHandoffPreventivo|TestCalcularResumenProgresoProyecto|TestCalcularResumenProgresoProyectoConFallbackDeEstado|TestGuardarPoolYListarResumen|TestResolverPoliticaModeloEconomicaPorPerfil|TestSchemaNoIncluyeCoordinacionPorFicherosObsoletos|TestSchemaSeparadoEnDDLYSemillas|TestSchemaDDLForDriverPostgresReduceSintaxisSQLite|TestBootstrapPlanForDriver|TestEsErrorMigracionIgnorable|TestListarConectores'`
+- `go test ./cmd -run 'TestMCPToolVotarPropuestaActualizaEstado|TestCommandNeedsDBPersistenciaInfo|TestCommandNeedsDBPersistenciaHelp'`
+
+Pendiente explicitamente no cerrado en esta pasada:
+
+- no se ha revalidado aun la bateria completa de `go test ./cmd`
+- `architecture_test.go` sigue reflejando deuda real de acceso directo a `db.*` desde `cmd/`
+- hay cambios amplios y mezclados en `cmd/`, `db/`, `storage/`, `dashboardapp/` y `proposalapp/`; antes de merge a `master` conviene hacer una pasada final de ordenacion y validacion completa
+
+Siguiente paso recomendado en el otro equipo:
+
+1. partir de `prueba/merge-total-agentes-20260323`
+2. ejecutar `go test ./db` completo y despues `go test ./cmd` completo
+3. decidir si `architecture_test.go` se deja como gate duro o como deuda explicitamente aceptada para esta fase
+4. si la pasada completa cuadra, preparar merge controlado a `master` sin tocar el remoto principal hasta validar
+
+## Actualizacion 2026-03-24
+
+Estado validado hoy:
+
+- `go build ./...` en verde
+- `go test ./cmd` completo: falla solo por `TestCmdNoUsaDBDirectoFueraDeExcepcionesControladas` en `architecture_test.go`
+- el resto de `cmd` no ha mostrado de momento regresiones funcionales nuevas
+- `go test ./db` completo en verde
+
+Lectura practica a fecha 2026-03-24:
+
+- la deuda que sigue bloqueando un verde total de `cmd` es arquitectonica, no una regresion introducida por el merge selectivo
+- el paquete `db` ha quedado en verde completo; las regresiones de bootstrap y renderer detectadas el 2026-03-23 y el 2026-03-24 quedaron corregidas
+- antes de mergear a `master`, sigue siendo recomendable decidir explicitamente si `architecture_test.go` va a marcar el gate de esta fase o si se acepta como deuda temporal documentada

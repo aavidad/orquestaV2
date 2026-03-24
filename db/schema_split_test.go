@@ -33,12 +33,17 @@ func TestSchemaSeSeparaEnDDLYSeeds(t *testing.T) {
 		}
 	}
 	for _, required := range []string{
-		"INSERT OR IGNORE INTO agentes",
-		"INSERT OR IGNORE INTO config",
-		"INSERT OR IGNORE INTO conectores",
-		"INSERT OR IGNORE INTO reglas",
-		"INSERT OR IGNORE INTO skills",
-		"INSERT OR IGNORE INTO workflows",
+		"INSERT INTO agentes",
+		"ON CONFLICT(nombre) DO NOTHING",
+		"INSERT INTO config",
+		"ON CONFLICT(clave) DO NOTHING",
+		"INSERT INTO conectores",
+		"ON CONFLICT(slug) DO NOTHING",
+		"INSERT INTO reglas",
+		"ON CONFLICT(tipo_agente, titulo) DO NOTHING",
+		"INSERT INTO skills",
+		"ON CONFLICT(tipo_agente, nombre) DO NOTHING",
+		"INSERT INTO workflows",
 	} {
 		if !strings.Contains(seeds, required) {
 			t.Fatalf("seeds no contiene %q", required)
@@ -46,7 +51,7 @@ func TestSchemaSeSeparaEnDDLYSeeds(t *testing.T) {
 	}
 }
 
-func TestSchemaSeedDataForDriverMySQLUsaInsertIgnore(t *testing.T) {
+func TestSchemaSeedDataForDriverMySQLUsaInsertIgnoreEnSplit(t *testing.T) {
 	t.Parallel()
 
 	seeds := schemaSeedDataForDriver("mysql")

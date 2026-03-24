@@ -16,18 +16,6 @@ import (
 
 type ProjectMemoryRepository struct{}
 
-type Proyecto struct {
-	ID        int64
-	Slug      string
-	Nombre    string
-	RutaAbs   string
-	Tipo      string
-	ParentID  *int64
-	Activo    bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
-}
-
 type HistorialVotacionProyecto struct {
 	PropuestaID  int64
 	Codigo       string
@@ -75,40 +63,6 @@ type DocumentoExterno struct {
 	MetadataJSON  string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
-}
-
-func GetProyectoBySlug(slug string) (*Proyecto, error) {
-	row := DB.QueryRow(`
-		SELECT id, slug, nombre, ruta_abs, tipo, parent_id, activo, created_at, updated_at
-		FROM proyectos WHERE slug = ?`, strings.TrimSpace(slug))
-	return scanProyecto(row)
-}
-
-func ListarProyectos(activo *bool) ([]*Proyecto, error) {
-	q := `
-		SELECT id, slug, nombre, ruta_abs, tipo, parent_id, activo, created_at, updated_at
-		FROM proyectos`
-	args := []any{}
-	if activo != nil {
-		q += ` WHERE activo = ?`
-		args = append(args, *activo)
-	}
-	q += ` ORDER BY slug`
-	rows, err := DB.Query(q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var list []*Proyecto
-	for rows.Next() {
-		item, err := scanProyecto(rows)
-		if err != nil {
-			return nil, err
-		}
-		list = append(list, item)
-	}
-	return list, rows.Err()
 }
 
 func ListarHistorialVotacionesProyecto(proyectoID int64) ([]*HistorialVotacionProyecto, error) {
@@ -328,11 +282,11 @@ func (ProjectMemoryRepository) ResolveProyectoIDBySlug(slug string) (*int64, err
 }
 
 func (ProjectMemoryRepository) ListProjects(activo *bool) ([]*Proyecto, error) {
-	return ListarProyectos(activo)
+	return ListarProyectos(FiltroProyectos{Activo: activo})
 }
 
 func (ProjectMemoryRepository) GetProjectBySlug(slug string) (*Proyecto, error) {
-	return GetProyectoBySlug(slug)
+	return GetProyecto(slug)
 }
 
 func (ProjectMemoryRepository) ListVoteHistoryByProjectID(proyectoID int64) ([]*HistorialVotacionProyecto, error) {
@@ -353,21 +307,6 @@ func (ProjectMemoryRepository) SaveExternalDoc(doc *DocumentoExterno) (int64, er
 
 func (ProjectMemoryRepository) ListExternalDocsByProjectID(proyectoID int64) ([]*DocumentoExterno, error) {
 	return ListarDocumentosExternosProyecto(proyectoID)
-}
-
-func scanProyecto(s scanner) (*Proyecto, error) {
-	var item Proyecto
-	var parentID sql.NullInt64
-	if err := s.Scan(
-		&item.ID, &item.Slug, &item.Nombre, &item.RutaAbs, &item.Tipo, &parentID,
-		&item.Activo, &item.CreatedAt, &item.UpdatedAt,
-	); err != nil {
-		return nil, err
-	}
-	if parentID.Valid {
-		item.ParentID = &parentID.Int64
-	}
-	return &item, nil
 }
 
 func scanDecisionProyecto(s scanner) (*DecisionProyecto, error) {

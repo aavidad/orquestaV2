@@ -112,6 +112,16 @@ func GetPool(slug string) (*PoolCapacidad, error) {
 	return scanPool(row)
 }
 
+func GetPoolCapacidad(id int64) (*PoolCapacidad, error) {
+	row := DB.QueryRow(`
+		SELECT id, slug, proveedor, runtime, plan, es_de_pago, capacidad_total,
+		       capacidad_reservada, permite_hijos, permite_modelos_multi,
+		       permite_sobrecoste, politica_handoff, fuente_telemetria,
+		       metadata_json, activo, created_at, updated_at
+		FROM pools_capacidad WHERE id = ?`, id)
+	return scanPool(row)
+}
+
 func ListarPools(activo *bool) ([]*PoolCapacidad, error) {
 	q := `
 		SELECT id, slug, proveedor, runtime, plan, es_de_pago, capacidad_total,
@@ -225,6 +235,15 @@ func ListarModelosPool(poolSlug string) ([]*PoolModelo, error) {
 		list = append(list, m)
 	}
 	return list, rows.Err()
+}
+
+func GetPoolModeloPorSlug(poolID int64, modelSlug string) (*PoolModelo, error) {
+	row := DB.QueryRow(`
+		SELECT id, pool_id, model_slug, activo, prioridad, coste_relativo,
+		       limite_conocido_json, created_at, updated_at
+		FROM pool_modelos
+		WHERE pool_id = ? AND model_slug = ?`, poolID, modelSlug)
+	return scanPoolModelo(row)
 }
 
 func SeedModelosIniciales() error {

@@ -41,3 +41,15 @@ func resolverTextoFlagOPosicional(cmd *cobra.Command, args []string, desde int, 
 	}
 	return valor, nil
 }
+
+func resolverAgenteMemoria(cmd *cobra.Command) (string, error) {
+	valor, err := resolverValorFlag(cmd, "agente", "por")
+	if err != nil {
+		return "", err
+	}
+	valor = strings.TrimSpace(valor)
+	if valor == "" {
+		return "", fmt.Errorf("debe indicar --agente o --por")
+	}
+	return valor, nil
+}

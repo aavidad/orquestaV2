@@ -33,11 +33,21 @@ func TestListarConectores(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListarConectores: %v", err)
 	}
-	if len(items) != 1 {
-		t.Fatalf("esperaba 1 conector, tengo %d", len(items))
+	if len(items) == 0 {
+		t.Fatalf("no se devolvieron conectores")
 	}
-	if items[0].Slug != "cli-local" || items[0].Nombre != "CLI local" || items[0].Transporte != "cli" {
-		t.Fatalf("conector inesperado: %+v", items[0])
+	var encontrado *Conector
+	for _, item := range items {
+		if item.Slug == "cli-local" {
+			encontrado = item
+			break
+		}
+	}
+	if encontrado == nil {
+		t.Fatalf("no se encontró el conector insertado: %+v", items)
+	}
+	if encontrado.Nombre != "CLI local" || encontrado.Transporte != "cli" {
+		t.Fatalf("conector inesperado: %+v", encontrado)
 	}
 }
 

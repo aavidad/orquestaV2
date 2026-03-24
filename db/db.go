@@ -1,12 +1,12 @@
 package db
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-<<<<<<< HEAD
 	"time"
 )
 
@@ -85,74 +85,7 @@ func postMigraciones(conn *sql.DB) error {
 		`ALTER TABLE tareas ADD COLUMN proyecto_id INTEGER REFERENCES proyectos(id)`,
 		`ALTER TABLE propuestas ADD COLUMN proyecto_id INTEGER REFERENCES proyectos(id)`,
 		`ALTER TABLE sesiones ADD COLUMN proyecto_id INTEGER REFERENCES proyectos(id)`,
-=======
-
-	"orquesta/storage"
-)
-
-var DB *Handle
-var currentStorageConfig storage.Config
-
-// Open abre la base de datos usando el conector configurado.
-// Por defecto usa SQLite resuelto desde ORQUESTA_DB o desde el repo actual.
-// Para otros drivers, ORQUESTA_DB_DRIVER y ORQUESTA_DB_DSN pasan a ser obligatorios.
-func Open() error {
-	cfg, err := storage.ResolveConfig(resolverRuta)
-	if err != nil {
-		return fmt.Errorf("resolviendo almacenamiento: %w", err)
-	}
-	plan, ok := bootstrapPlanForDriver(cfg.Driver)
-	if cfg.BootstrapSchema && !ok {
-		return fmt.Errorf("bootstrap de schema no soportado para driver %s", cfg.Driver)
-	}
-	db, err := storage.Open(cfg)
-	if err != nil {
-		return fmt.Errorf("abriendo DB (%s): %w", cfg.Driver, err)
-	}
-	currentStorageConfig = cfg
-	if cfg.BootstrapSchema {
-		if err := aplicarDDL(db, plan.DDL); err != nil {
-			db.Close()
-			return fmt.Errorf("aplicando schema: %w", err)
-		}
-		if err := aplicarSeedSQL(db, plan.Seed); err != nil {
-			db.Close()
-			return fmt.Errorf("aplicando semillas de schema: %w", err)
-		}
-	}
-	DB = newHandle(db, cfg.Driver)
-	if err := DB.Ping(); err != nil {
-		DB.Close()
-		DB = nil
-		return fmt.Errorf("verificando DB (%s): %w", cfg.Driver, err)
-	}
-	if cfg.BootstrapSchema {
-		if err := postMigraciones(); err != nil {
-			DB.Close()
-			DB = nil
-			return fmt.Errorf("aplicando post-migraciones: %w", err)
-		}
-	}
-	return nil
-}
-
-// postMigrationStatements contiene solo migraciones de datos/esquema incremental.
-func postMigrationStatements() []string {
-	return postMigrationStatementsForDriver(DriverName())
-}
-
-func postMigrationStatementsForDriver(driver string) []string {
-	return fallbackSchemaBackendSpec(driver).postMigrations()
-}
-
-func postMigrationStatementsSQLite() []string {
-	return []string{
-		`ALTER TABLE agentes ADD COLUMN estado_sesion TEXT DEFAULT NULL`,
-		`ALTER TABLE propuestas ADD COLUMN proyecto_id INTEGER REFERENCES proyectos(id)`,
-		`ALTER TABLE sesiones ADD COLUMN conector_id INTEGER REFERENCES conectores(id)`,
-		`ALTER TABLE sesiones ADD COLUMN proyecto_id INTEGER REFERENCES proyectos(id)`,
 		`ALTER TABLE sesiones ADD COLUMN pool_id INTEGER REFERENCES pools_capacidad(id)`,
->>>>>>> origin/orq-orquestador-codex2
 		`ALTER TABLE sesiones ADD COLUMN estado TEXT NOT NULL DEFAULT 'activa'`,
 		`ALTER TABLE sesiones ADD COLUMN cwd TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE sesiones ADD COLUMN herramienta TEXT NOT NULL DEFAULT ''`,
@@ -163,7 +96,6 @@ func postMigrationStatementsSQLite() []string {
 		`ALTER TABLE sesiones ADD COLUMN heartbeat_at DATETIME`,
 		`ALTER TABLE sesiones ADD COLUMN host TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE sesiones ADD COLUMN pid INTEGER`,
-<<<<<<< HEAD
 		`ALTER TABLE tareas ADD COLUMN contrato_definido INTEGER NOT NULL DEFAULT 0`,
 		`CREATE TABLE IF NOT EXISTS proyectos (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -440,8 +372,6 @@ func postMigrationStatementsSQLite() []string {
 		`INSERT OR IGNORE INTO conectores (slug, nombre, transporte, comando, metadata_json) VALUES ('claude-code','Claude Code','cli','claude','{\"familia\":\"anthropic\",\"reanudable\":true}')`,
 		`INSERT OR IGNORE INTO conectores (slug, nombre, transporte, comando, metadata_json) VALUES ('codex-cli','Codex CLI','cli','codex','{\"familia\":\"openai\",\"reanudable\":true}')`,
 		`INSERT OR IGNORE INTO conectores (slug, nombre, transporte, comando, metadata_json) VALUES ('gemini-cli','Gemini CLI','cli','gemini','{\"familia\":\"google\",\"reanudable\":true}')`,
-=======
->>>>>>> origin/orq-orquestador-codex2
 		`UPDATE reglas
 		 SET descripcion='No escribir código sin propuesta OP-XXX aprobada en la app de orquestación.'
 		 WHERE tipo_agente='programador' AND categoria='calidad' AND titulo='Propuesta antes de código'`,
@@ -508,107 +438,15 @@ func postMigrationStatementsSQLite() []string {
 		`ALTER TABLE agentes ADD COLUMN reanimar_at DATETIME`,
 		`ALTER TABLE agentes ADD COLUMN motivo_pausa TEXT`,
 	}
-}
-
-// postMigraciones ejecuta ALTER TABLE idempotentes, ajustes de datos y backfills
-// para columnas y contenidos añadidos después del schema base.
-func postMigraciones() error {
-	migraciones := postMigrationStatements()
 	for _, m := range migraciones {
-<<<<<<< HEAD
 		if err := ejecutarConReintentos(func() error {
 			_, err := conn.Exec(m)
 			return err
 		}); err != nil && !esErrorMigracionIgnorable(err) {
 			return fmt.Errorf("post-migraciones: %w", err)
-=======
-		if _, err := DB.Exec(m); err != nil && !esErrorMigracionIgnorable(err) {
-			return err
-		}
-	}
-	for _, item := range defaultConfigEntries() {
-		ensureDefaultConfig(item.Clave, item.Valor)
-	}
-	if err := BackfillVotosPendientes(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func esErrorMigracionIgnorable(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(strings.TrimSpace(err.Error()))
-	for _, fragmento := range []string{
-		"already exists",
-		"duplicate column name",
-		"duplicate key name",
-		"duplicate column",
-	} {
-		if strings.Contains(msg, fragmento) {
-			return true
-		}
-	}
-	return false
-}
-
-func Close() {
-	dbMu.Lock()
-	defer dbMu.Unlock()
-	if DB != nil {
-		_ = DB.Close()
-		DB = nil
-	}
-	DB = nil
-	currentStorageConfig = storage.Config{}
-}
-
-func DriverName() string {
-	return currentStorageConfig.Driver
-}
-
-func normalizedDriverName(driver string) string {
-	return storage.DialectForDriver(driver).Name
-}
-
-func BootstrapSchemaEnabled() bool {
-	return currentStorageConfig.BootstrapSchema
-}
-
-func PlaceholderStyle() string {
-	return storage.DialectForDriver(currentStorageConfig.Driver).PlaceholderStyle()
-}
-
-func QueryRebindingEnabled() bool {
-	return storage.DialectForDriver(currentStorageConfig.Driver).RebindParameters()
-}
-
-func IsOpen() bool {
-	dbMu.Lock()
-	defer dbMu.Unlock()
-	return DB != nil
-}
-
-func resolverRuta() string {
-	if v := os.Getenv("ORQUESTA_DB"); strings.TrimSpace(v) != "" {
-		return v
-	}
-	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
-	if err == nil {
-		return resolverRutaDesdeGitRoot(strings.TrimSpace(string(out)))
-	}
-	if wd, err := os.Getwd(); err == nil {
-		if ruta := buscarRutaRepoOrquesta(wd); ruta != "" {
-			return ruta
->>>>>>> origin/orq-orquestador-codex2
 		}
 	}
 	return nil
-}
-
-func CurrentDBPath() string {
-	return resolverRuta()
 }
 
 func resolverRutaDesdeGitRoot(root string) string {
@@ -616,7 +454,7 @@ func resolverRutaDesdeGitRoot(root string) string {
 	if root == "" {
 		return "orquesta.db"
 	}
-	if esRepoOrquesta(filepath.Base(root)) {
+	if filepath.Base(root) == "orquesta" {
 		return filepath.Join(root, "orquesta.db")
 	}
 	if ruta := rutaRepoOrquestaEnDirectorio(filepath.Dir(root)); ruta != "" {
@@ -640,13 +478,8 @@ func buscarRutaRepoOrquesta(inicio string) string {
 }
 
 func rutaRepoOrquestaEnDirectorio(base string) string {
-<<<<<<< HEAD
 	for _, nombre := range []string{"orquesta", "orquestador"} {
 		candidato := filepath.Join(base, nombre)
-=======
-	for _, nombreRepo := range nombresRepoOrquesta() {
-		candidato := filepath.Join(base, nombreRepo)
->>>>>>> origin/orq-orquestador-codex2
 		if existeFichero(filepath.Join(candidato, "go.mod")) {
 			return filepath.Join(candidato, "orquesta.db")
 		}
@@ -654,25 +487,11 @@ func rutaRepoOrquestaEnDirectorio(base string) string {
 	return ""
 }
 
-func nombresRepoOrquesta() []string {
-	return []string{"orquestador", "orquesta"}
-}
-
-func esRepoOrquesta(nombre string) bool {
-	for _, candidato := range nombresRepoOrquesta() {
-		if nombre == candidato {
-			return true
-		}
-	}
-	return false
-}
-
 func existeFichero(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
 }
 
-<<<<<<< HEAD
 func aplicarSchema(db *sql.DB) error {
 	if err := prepararSchemaLegacy(db); err != nil {
 		return err
@@ -715,7 +534,8 @@ func esErrorMigracionIgnorable(err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "duplicate column name") ||
-		strings.Contains(msg, "already exists")
+		strings.Contains(msg, "already exists") ||
+		strings.Contains(msg, "duplicate key name")
 }
 
 func prepararSchemaLegacy(db *sql.DB) error {
@@ -1088,8 +908,6 @@ type FiltroAuditoria struct {
 	Limite  int
 }
 
-=======
->>>>>>> origin/orq-orquestador-codex2
 // Audit registra una acción en el log de auditoría.
 func Audit(agente, accion, entidad string, entidadID int64, detalle string) {
 	if DB == nil {
@@ -1158,27 +976,10 @@ func ConfigGet(clave string) (string, error) {
 // ConfigSet actualiza o inserta una clave de configuración.
 func ConfigSet(clave, valor string) error {
 	_, err := DB.Exec(
-		upsertValuesSQL(
-			"config",
-			[]string{"clave", "valor"},
-			[]string{"clave"},
-			[]upsertAssignment{
-				{Column: "valor"},
-			},
-		),
+		`INSERT INTO config (clave, valor) VALUES (?,?) ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor`,
 		clave, valor,
 	)
 	return err
-}
-
-func ensureDefaultConfig(clave, valor string) {
-	if DB == nil {
-		return
-	}
-	_, _ = DB.Exec(
-		insertIgnoreValuesSQL("config", []string{"clave", "valor"}, []string{"clave"}),
-		clave, valor,
-	)
 }
 
 // ConfigAll devuelve toda la configuración.

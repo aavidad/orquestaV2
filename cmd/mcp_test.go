@@ -103,6 +103,12 @@ func TestMCPToolVotarPropuestaActualizaEstado(t *testing.T) {
 		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
 			t.Fatalf("registrando agente: %v", err)
 		}
+		if err := db.ConfigSet("propuesta_min_votes", "1"); err != nil {
+			t.Fatalf("config propuesta_min_votes: %v", err)
+		}
+		if err := db.ConfigSet("propuesta_min_non_author_votes", "1"); err != nil {
+			t.Fatalf("config propuesta_min_non_author_votes: %v", err)
+		}
 		propuestaID := insertTestPropuesta(t, "OP-049", "Arquitectura objetivo", "Descripcion")
 		insertTestVotoPendiente(t, propuestaID, "Codex2")
 

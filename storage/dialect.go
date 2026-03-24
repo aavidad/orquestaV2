@@ -13,13 +13,10 @@ func DialectForDriver(driver string) Dialect {
 	return Dialect{Name: normalizeDriver(driver)}
 }
 
-<<<<<<< HEAD
 func RebindQuery(driver, query string) string {
 	return DialectForDriver(driver).Rebind(query)
 }
 
-=======
->>>>>>> origin/orq-orquestador-codex2
 func (d Dialect) Rebind(query string) string {
 	if d.Name != "postgres" {
 		return query
@@ -63,13 +60,6 @@ func (d Dialect) Rebind(query string) string {
 	return b.String()
 }
 
-<<<<<<< HEAD
-=======
-func RebindQuery(driver, query string) string {
-	return DialectForDriver(driver).Rebind(query)
-}
-
->>>>>>> origin/orq-orquestador-codex2
 func (d Dialect) PlaceholderStyle() string {
 	if d.Name == "postgres" {
 		return "numbered"

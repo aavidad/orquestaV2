@@ -9,10 +9,9 @@ package cmd
 
 import (
 	"fmt"
-	"sort"
 
 	"github.com/spf13/cobra"
-	"orquesta/configapp"
+	"orquesta/db"
 )
 
 var configCmd = &cobra.Command{
@@ -20,16 +19,12 @@ var configCmd = &cobra.Command{
 	Short: "Gestión de configuración global",
 }
 
-var configService = configapp.NewService(configapp.Repository{})
-
 var configVerCmd = &cobra.Command{
 	Use:   "ver [clave]",
 	Short: "Muestra toda la configuración o el valor de una clave",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		serverURL := activeServerURL()
 		if len(args) == 1 {
-<<<<<<< HEAD
 			resp, ok, err := cargarConfigDesdeAPI(args[0])
 			if !ok {
 				val, err := db.ConfigGet(args[0])
@@ -38,16 +33,6 @@ var configVerCmd = &cobra.Command{
 				}
 				fmt.Printf("%s = %s\n", args[0], val)
 				return nil
-=======
-			var (
-				val string
-				err error
-			)
-			if serverURL != "" {
-				val, err = fetchServerConfigValue(serverURL, args[0])
-			} else {
-				val, err = configService.Get(args[0])
->>>>>>> origin/orq-orquestador-codex2
 			}
 			if err != nil {
 				return fmt.Errorf("clave '%s' no encontrada", args[0])
@@ -55,36 +40,15 @@ var configVerCmd = &cobra.Command{
 			fmt.Printf("%s = %s\n", args[0], resp.Valor)
 			return nil
 		}
-<<<<<<< HEAD
 		resp, ok, err := cargarConfigDesdeAPI("")
 		if !ok {
 			resp = &apiConfigResponse{}
 			resp.Config, err = db.ConfigAll()
-=======
-		var (
-			all map[string]string
-			err error
-		)
-		if serverURL != "" {
-			all, err = fetchServerConfigAll(serverURL)
-		} else {
-			all, err = configService.List()
->>>>>>> origin/orq-orquestador-codex2
 		}
 		if err != nil {
 			return err
 		}
-<<<<<<< HEAD
 		for k, v := range resp.Config {
-=======
-		claves := make([]string, 0, len(all))
-		for k := range all {
-			claves = append(claves, k)
-		}
-		sort.Strings(claves)
-		for _, k := range claves {
-			v := all[k]
->>>>>>> origin/orq-orquestador-codex2
 			fmt.Printf("%-30s = %s\n", k, v)
 		}
 		return nil
@@ -96,21 +60,11 @@ var configSetCmd = &cobra.Command{
 	Short: "Establece el valor de una clave de configuración",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-<<<<<<< HEAD
 		if ok, err := configurarValorPorAPI(args[0], args[1]); ok {
 			if err != nil {
 				return err
 			}
 		} else if err := db.ConfigSet(args[0], args[1]); err != nil {
-=======
-		var err error
-		if serverURL := activeServerURL(); serverURL != "" {
-			err = submitServerConfigValue(serverURL, args[0], args[1])
-		} else {
-			err = configService.Set(args[0], args[1])
-		}
-		if err != nil {
->>>>>>> origin/orq-orquestador-codex2
 			return err
 		}
 		fmt.Printf("✓ %s = %s\n", args[0], args[1])
@@ -123,21 +77,11 @@ var configAgenteNuevoCmd = &cobra.Command{
 	Short: "Registra un nuevo agente (rol: programador, documentador, admin)",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-<<<<<<< HEAD
 		if ok, err := registrarAgentePorAPI(args[0], args[1]); ok {
 			if err != nil {
 				return err
 			}
 		} else if err := db.RegistrarAgente(args[0], args[1]); err != nil {
-=======
-		var err error
-		if serverURL := activeServerURL(); serverURL != "" {
-			err = submitServerCreateAgent(serverURL, args[0], args[1])
-		} else {
-			err = configService.RegisterAgent(args[0], args[1])
-		}
-		if err != nil {
->>>>>>> origin/orq-orquestador-codex2
 			return err
 		}
 		fmt.Printf("✓ Agente '%s' [%s] registrado\n", args[0], args[1])
@@ -157,21 +101,11 @@ Sus contribuciones históricas se conservan.`,
 		if nombre == "alberto" {
 			return fmt.Errorf("no puedes retirar al administrador")
 		}
-<<<<<<< HEAD
 		if ok, err := retirarAgentePorAPI(nombre); ok {
 			if err != nil {
 				return err
 			}
 		} else if err := db.RetirarAgente(nombre); err != nil {
-=======
-		var err error
-		if serverURL := activeServerURL(); serverURL != "" {
-			err = submitServerAgentAction(serverURL, nombre, "retirar")
-		} else {
-			err = configService.RetireAgent(nombre)
-		}
-		if err != nil {
->>>>>>> origin/orq-orquestador-codex2
 			return err
 		}
 		fmt.Printf("✓ Agente '%s' retirado del equipo.\n", nombre)
@@ -186,21 +120,11 @@ var configAgenteRehabilitarCmd = &cobra.Command{
 	Short: "Reactiva a un agente retirado",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-<<<<<<< HEAD
 		if ok, err := rehabilitarAgentePorAPI(args[0]); ok {
 			if err != nil {
 				return err
 			}
 		} else if err := db.RehabilitarAgente(args[0]); err != nil {
-=======
-		var err error
-		if serverURL := activeServerURL(); serverURL != "" {
-			err = submitServerAgentAction(serverURL, args[0], "rehabilitar")
-		} else {
-			err = configService.RehabilitateAgent(args[0])
-		}
-		if err != nil {
->>>>>>> origin/orq-orquestador-codex2
 			return err
 		}
 		fmt.Printf("✓ Agente '%s' rehabilitado.\n", args[0])

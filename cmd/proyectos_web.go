@@ -105,7 +105,7 @@ func webHandlerProyectos(w http.ResponseWriter, r *http.Request) {
 		proyectos = append(proyectos, webProyectoResumen{
 			Slug:    item.Slug,
 			Nombre:  item.Nombre,
-			Tipo:    item.Tipo,
+			Tipo:    string(item.Tipo),
 			RutaAbs: item.RutaAbs,
 			Activo:  item.Activo,
 		})

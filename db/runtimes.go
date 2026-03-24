@@ -74,6 +74,32 @@ type FiltroRuntimes struct {
 	Activos    *bool
 }
 
+func RegistrarRuntimeInstance(r *RuntimeInstance) (int64, error) {
+	if r == nil {
+		return 0, fmt.Errorf("runtime instance nula")
+	}
+	if strings.TrimSpace(r.Agente) == "" {
+		return 0, fmt.Errorf("agente es obligatorio")
+	}
+	normalizarRuntimeInstance(r)
+
+	tx, err := DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	id, err := upsertRuntimeInstanceTx(tx, r)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	Audit(r.Agente, "registrar_runtime_instance", "runtime_instance", id, r.Provider)
+	return id, nil
+}
+
 func UpsertRuntimeDesdeSesion(s *Sesion) error {
 	if s == nil {
 		return nil
@@ -418,6 +444,15 @@ func ListarRuntimesConUltimaActividad() ([]*RuntimeInstance, error) {
 	return out, rows.Err()
 }
 
+func RuntimeInstancePorSesionID(sesionID int64) (*RuntimeInstance, error) {
+	row := DB.QueryRow(runtimeSelectBase()+` WHERE r.sesion_id = ?`, sesionID)
+	runtime, err := escanearRuntime(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return runtime, err
+}
+
 func runtimeSelectBase() string {
 	return `
 		SELECT r.id, r.agente, r.proyecto_id, COALESCE(p.slug,''), COALESCE(p.nombre,''),
@@ -616,4 +651,113 @@ func runtimeActividadExpr(alias string) string {
 			WHEN ` + alias + `.last_event_at >= ` + alias + `.last_heartbeat_at THEN ` + alias + `.last_event_at
 			ELSE ` + alias + `.last_heartbeat_at
 		END`
+}
+
+func upsertRuntimeInstanceTx(tx *Tx, r *RuntimeInstance) (int64, error) {
+	existente, err := runtimeInstancePorSesionTx(tx, r.SesionID)
+	if err != nil {
+		return 0, err
+	}
+	if r.ID <= 0 && existente != nil {
+		r.ID = existente.ID
+	}
+
+	if r.ID > 0 {
+		if err := actualizarRuntimeInstanceTx(tx, r); err != nil {
+			return 0, err
+		}
+		return r.ID, nil
+	}
+
+	res, err := tx.Exec(`
+		INSERT INTO runtime_instances (
+			agente, proyecto_id, sesion_id, parent_runtime_id, provider, connector, external_session_id,
+			logical_state, process_state, pid, ppid, child_count, thread_count, model, reasoning,
+			task_profile, cwd, branch, last_event_at, last_heartbeat_at
+		) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.Agente, runtimeNullableInt64(r.ProyectoID), runtimeNullableInt64(r.SesionID), runtimeNullableInt64(r.ParentRuntimeID),
+		r.Provider, r.Connector, r.ExternalSessionID, r.LogicalState, r.ProcessState,
+		runtimeNullableInt64(r.PID), runtimeNullableInt64(r.PPID), r.ChildCount, r.ThreadCount, r.Model,
+		r.Reasoning, r.TaskProfile, r.CWD, r.Branch, runtimeNullableTime(r.LastEventAt), runtimeNullableTime(r.LastHeartbeatAt),
+	)
+	if err != nil {
+		return 0, err
+	}
+	id, _ := res.LastInsertId()
+	return id, nil
+}
+
+func actualizarRuntimeInstanceTx(tx *Tx, r *RuntimeInstance) error {
+	res, err := tx.Exec(`
+		UPDATE runtime_instances
+		SET agente = ?,
+		    proyecto_id = ?,
+		    sesion_id = ?,
+		    parent_runtime_id = ?,
+		    provider = ?,
+		    connector = ?,
+		    external_session_id = ?,
+		    logical_state = ?,
+		    process_state = ?,
+		    pid = ?,
+		    ppid = ?,
+		    child_count = ?,
+		    thread_count = ?,
+		    model = ?,
+		    reasoning = ?,
+		    task_profile = ?,
+		    cwd = ?,
+		    branch = ?,
+		    last_event_at = ?,
+		    last_heartbeat_at = ?
+		WHERE id = ?`,
+		r.Agente, runtimeNullableInt64(r.ProyectoID), runtimeNullableInt64(r.SesionID), runtimeNullableInt64(r.ParentRuntimeID),
+		r.Provider, r.Connector, r.ExternalSessionID, r.LogicalState, r.ProcessState,
+		runtimeNullableInt64(r.PID), runtimeNullableInt64(r.PPID), r.ChildCount, r.ThreadCount, r.Model,
+		r.Reasoning, r.TaskProfile, r.CWD, r.Branch, runtimeNullableTime(r.LastEventAt), runtimeNullableTime(r.LastHeartbeatAt),
+		r.ID,
+	)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("runtime instance #%d no encontrada", r.ID)
+	}
+	return nil
+}
+
+func runtimeInstancePorSesionTx(tx *Tx, sesionID *int64) (*RuntimeInstance, error) {
+	if sesionID == nil {
+		return nil, nil
+	}
+	row := tx.QueryRow(runtimeSelectBase()+` WHERE r.sesion_id = ?`, *sesionID)
+	runtime, err := escanearRuntime(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return runtime, err
+}
+
+func normalizarRuntimeInstance(r *RuntimeInstance) {
+	if strings.TrimSpace(r.LogicalState) == "" {
+		r.LogicalState = "arrancando"
+	}
+	if strings.TrimSpace(r.ProcessState) == "" {
+		r.ProcessState = "desconocido"
+	}
+}
+
+func runtimeNullableInt64(v *int64) any {
+	if v == nil {
+		return nil
+	}
+	return *v
+}
+
+func runtimeNullableTime(v *time.Time) any {
+	if v == nil {
+		return nil
+	}
+	return *v
 }

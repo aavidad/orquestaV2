@@ -197,7 +197,7 @@ func resolverSesionPresupuesto(cmd *cobra.Command) (int64, error) {
 	if agente == "" {
 		return 0, fmt.Errorf("debe indicar --sesion o --agente")
 	}
-	sesion, err := db.SesionActivaDeAgente(agente)
+	sesion, err := db.GetSesionActiva(agente, nil)
 	if err == sql.ErrNoRows {
 		return 0, fmt.Errorf("el agente %s no tiene sesión activa", agente)
 	}

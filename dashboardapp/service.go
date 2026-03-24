@@ -112,7 +112,7 @@ func (Repository) CountTasksByState() (map[string]int, error) {
 }
 
 func (Repository) ListProposals(estado *db.EstadoPropuesta) ([]*db.Propuesta, error) {
-	return db.ListarPropuestas(estado)
+	return db.ListarPropuestas(estado, nil)
 }
 
 func (Repository) CountVotes(propuestaID int64) (int, int, int, int, error) {

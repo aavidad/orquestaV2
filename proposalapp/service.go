@@ -103,8 +103,12 @@ func (s *Service) VoteDetail(codigo, agente string, posicion db.PosicionVoto, co
 	if err != nil {
 		return nil, err
 	}
+	propuestaActualizada, err := s.store.GetProposal(p.Codigo)
+	if err != nil {
+		return nil, err
+	}
 	return &VoteResult{
-		Proposal:   p,
+		Proposal:   propuestaActualizada,
 		Consenso:   consenso,
 		Acuerdo:    acuerdo,
 		Desacuerdo: desacuerdo,
@@ -120,7 +124,7 @@ func (s *Service) ListAgents() ([]*db.Agente, error) {
 type Repository struct{}
 
 func (Repository) ListProposals(estado *db.EstadoPropuesta) ([]*db.Propuesta, error) {
-	return db.ListarPropuestas(estado)
+	return db.ListarPropuestas(estado, nil)
 }
 
 func (Repository) GetProposal(codigo string) (*db.Propuesta, error) {

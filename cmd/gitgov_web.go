@@ -192,6 +192,10 @@ func listGitMerges(proyecto, estado string) ([]*db.GitMerge, error) {
 	return gitService.ListRequests(proyecto, estado)
 }
 
+func webWriteJSON(w http.ResponseWriter, status int, data any) {
+	apiWriteJSON(w, status, data)
+}
+
 const webTplGitGov = `{{define "content"}}
 <section class="container">
   <h2 style="margin:0">Gobierno Git</h2>

@@ -72,9 +72,13 @@ func ListarProyectosConProgreso() ([]string, error) {
 			UNION
 			SELECT proyecto FROM memoria_proyectos
 			UNION
-			SELECT proyecto FROM decisiones_proyecto
+			SELECT p.slug AS proyecto
+			FROM decisiones_proyecto dp
+			JOIN proyectos p ON p.id = dp.proyecto_id
 			UNION
-			SELECT proyecto FROM documentacion_externa
+			SELECT p.slug AS proyecto
+			FROM documentos_externos de
+			JOIN proyectos p ON p.id = de.proyecto_id
 		)
 		WHERE proyecto != ''
 		ORDER BY proyecto`)
