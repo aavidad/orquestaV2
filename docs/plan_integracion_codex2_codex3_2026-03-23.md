@@ -88,7 +88,7 @@ Nota:
 ### No integrar tal cual
 
 - `cmd/sesion.go`
-- `cmd/server_client.go`
+- `cmd/cliente_servidor.go`
 - `db/sesiones.go`
 
 Motivo:
@@ -135,7 +135,7 @@ Motivo:
 - volver a introducir acceso SQL directo a la BD de Orquesta desde scripts
 - perder campos de continuidad de sesion
 - mezclar dos clientes finos distintos en paralelo
-- reescribir `cmd/sesion.go`, `cmd/agente.go` o `cmd/server_client.go`
+- reescribir `cmd/sesion.go`, `cmd/agente.go` o `cmd/cliente_servidor.go`
   sin preservar los contratos de runtime ya usados por Terminator
 - integrar ramas que borran documentacion o scripts utiles del repositorio
 

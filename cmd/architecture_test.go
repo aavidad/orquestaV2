@@ -25,7 +25,7 @@ func TestCmdNoUsaSQLDirectoNiAperturasFueraDeExcepcionesControladas(t *testing.T
 			"IsOpen":        true,
 			"CurrentDBPath": true,
 		},
-		"server_client.go": {
+		"cliente_servidor.go": {
 			"Open": true,
 		},
 		"persistencia.go": {
