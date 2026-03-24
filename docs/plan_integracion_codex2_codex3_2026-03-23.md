@@ -79,11 +79,11 @@ Nota:
 ### Integrar despues
 
 - contratos de servicios de aplicacion:
-  - `sessionapp`
-  - `taskapp`
-  - `dashboardapp`
-  - `governance`
-  - `runtimectl`
+  - `sesionesapp`
+  - `tareasapp`
+  - `panelapp`
+  - `gobernanzaapp`
+  - `controlruntimes`
 
 ### No integrar tal cual
 
@@ -183,7 +183,7 @@ Pendiente explicitamente no cerrado en esta pasada:
 
 - no se ha revalidado aun la bateria completa de `go test ./cmd`
 - `architecture_test.go` sigue reflejando deuda real de acceso directo a `db.*` desde `cmd/`
-- hay cambios amplios y mezclados en `cmd/`, `db/`, `storage/`, `dashboardapp/` y `proposalapp/`; antes de merge a `master` conviene hacer una pasada final de ordenacion y validacion completa
+- hay cambios amplios y mezclados en `cmd/`, `db/`, `storage/`, `panelapp/` y `propuestasapp/`; antes de merge a `master` conviene hacer una pasada final de ordenacion y validacion completa
 
 Siguiente paso recomendado en el otro equipo:
 

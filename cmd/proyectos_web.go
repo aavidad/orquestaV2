@@ -15,10 +15,10 @@ import (
 	"strings"
 
 	"orquesta/db"
-	"orquesta/projectmem"
+	"orquesta/memoriaproyecto"
 )
 
-var projectMemoryService = projectmem.NewService(db.ProjectMemoryRepository{})
+var memoriaProyectoService = memoriaproyecto.NewService(db.ProjectMemoryRepository{})
 
 type webProyectoResumen struct {
 	Slug    string
@@ -93,7 +93,7 @@ func webHandlerProyectos(w http.ResponseWriter, r *http.Request) {
 		value := raw == "1" || strings.EqualFold(raw, "true")
 		activaPtr = &value
 	}
-	items, err := projectMemoryService.ListProjects(activaPtr)
+	items, err := memoriaProyectoService.ListProjects(activaPtr)
 	if err != nil {
 		webRender(w, webTplLayout+webTplProyectos, webProyectosData{
 			Err: err.Error(),
@@ -118,7 +118,7 @@ func webHandlerProyectos(w http.ResponseWriter, r *http.Request) {
 }
 
 func webHandlerProyectoDetalle(w http.ResponseWriter, r *http.Request, slug string) {
-	overview, err := projectMemoryService.Overview(slug)
+	overview, err := memoriaProyectoService.Overview(slug)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -135,7 +135,7 @@ func webHandlerProyectoDetalle(w http.ResponseWriter, r *http.Request, slug stri
 
 func webHandlerProyectoDecisionNueva(w http.ResponseWriter, r *http.Request, slug string) {
 	_ = r.ParseForm()
-	_, err := projectMemoryService.CreateDecision(projectmem.CreateDecisionInput{
+	_, err := memoriaProyectoService.CreateDecision(memoriaproyecto.CreateDecisionInput{
 		ProyectoSlug: slug,
 		Categoria:    r.FormValue("categoria"),
 		Titulo:       r.FormValue("titulo"),
@@ -156,7 +156,7 @@ func webHandlerProyectoDecisionNueva(w http.ResponseWriter, r *http.Request, slu
 
 func webHandlerProyectoDocumentoNuevo(w http.ResponseWriter, r *http.Request, slug string) {
 	_ = r.ParseForm()
-	_, err := projectMemoryService.CreateExternalDoc(projectmem.CreateExternalDocInput{
+	_, err := memoriaProyectoService.CreateExternalDoc(memoriaproyecto.CreateExternalDocInput{
 		ProyectoSlug:  slug,
 		TipoDocumento: r.FormValue("tipo_documento"),
 		Titulo:        r.FormValue("titulo"),
@@ -180,7 +180,7 @@ func webHandlerAPIProyectos(w http.ResponseWriter, r *http.Request) {
 		value := raw == "1" || strings.EqualFold(raw, "true")
 		activaPtr = &value
 	}
-	items, err := projectMemoryService.ListProjects(activaPtr)
+	items, err := memoriaProyectoService.ListProjects(activaPtr)
 	if err != nil {
 		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
@@ -189,7 +189,7 @@ func webHandlerAPIProyectos(w http.ResponseWriter, r *http.Request) {
 }
 
 func webHandlerAPIProyectoDetalle(w http.ResponseWriter, r *http.Request, slug string) {
-	overview, err := projectMemoryService.Overview(slug)
+	overview, err := memoriaProyectoService.Overview(slug)
 	if err != nil {
 		webWriteJSON(w, http.StatusNotFound, map[string]any{"error": err.Error()})
 		return
@@ -198,7 +198,7 @@ func webHandlerAPIProyectoDetalle(w http.ResponseWriter, r *http.Request, slug s
 }
 
 func webHandlerAPIProyectoVotaciones(w http.ResponseWriter, r *http.Request, slug string) {
-	items, err := projectMemoryService.ListVoteHistory(slug)
+	items, err := memoriaProyectoService.ListVoteHistory(slug)
 	if err != nil {
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
@@ -207,7 +207,7 @@ func webHandlerAPIProyectoVotaciones(w http.ResponseWriter, r *http.Request, slu
 }
 
 func webHandlerAPIProyectoDecisiones(w http.ResponseWriter, r *http.Request, slug string) {
-	items, err := projectMemoryService.ListDecisions(slug)
+	items, err := memoriaProyectoService.ListDecisions(slug)
 	if err != nil {
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
@@ -232,7 +232,7 @@ func webHandlerAPIProyectoDecisionCrear(w http.ResponseWriter, r *http.Request, 
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
 		return
 	}
-	id, err := projectMemoryService.CreateDecision(projectmem.CreateDecisionInput{
+	id, err := memoriaProyectoService.CreateDecision(memoriaproyecto.CreateDecisionInput{
 		ProyectoSlug: slug,
 		Categoria:    payload.Categoria,
 		Titulo:       payload.Titulo,
@@ -253,7 +253,7 @@ func webHandlerAPIProyectoDecisionCrear(w http.ResponseWriter, r *http.Request, 
 }
 
 func webHandlerAPIProyectoDocumentacion(w http.ResponseWriter, r *http.Request, slug string) {
-	items, err := projectMemoryService.ListExternalDocs(slug)
+	items, err := memoriaProyectoService.ListExternalDocs(slug)
 	if err != nil {
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
@@ -277,7 +277,7 @@ func webHandlerAPIProyectoDocumentoCrear(w http.ResponseWriter, r *http.Request,
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
 		return
 	}
-	id, err := projectMemoryService.CreateExternalDoc(projectmem.CreateExternalDocInput{
+	id, err := memoriaProyectoService.CreateExternalDoc(memoriaproyecto.CreateExternalDocInput{
 		ProyectoSlug:  slug,
 		TipoDocumento: payload.TipoDocumento,
 		Titulo:        payload.Titulo,

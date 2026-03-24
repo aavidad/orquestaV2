@@ -14,10 +14,10 @@ import (
 	"strings"
 
 	"orquesta/db"
-	"orquesta/governance"
+	"orquesta/gobernanzaapp"
 )
 
-var governanceService = governance.NewService(db.GovernanceRepository{})
+var gobernanzaService = gobernanzaapp.NewService(db.GovernanceRepository{})
 
 type webGobernanzaData struct {
 	TipoAgente string
@@ -42,17 +42,17 @@ func webHandlerGobernanza(w http.ResponseWriter, r *http.Request) {
 	if tipoAgente == "" {
 		tipoAgente = "programador"
 	}
-	itemsReglas, err := governanceService.ListRules(tipoAgente, nil)
+	itemsReglas, err := gobernanzaService.ListRules(tipoAgente, nil)
 	if err != nil {
 		webRender(w, webTplLayout+webTplGobernanza, webGobernanzaData{Err: err.Error(), TipoAgente: tipoAgente})
 		return
 	}
-	itemsSkills, err := governanceService.ListSkills(tipoAgente, nil)
+	itemsSkills, err := gobernanzaService.ListSkills(tipoAgente, nil)
 	if err != nil {
 		webRender(w, webTplLayout+webTplGobernanza, webGobernanzaData{Err: err.Error(), TipoAgente: tipoAgente})
 		return
 	}
-	itemsWorkflows, err := governanceService.ListWorkflows(tipoAgente, nil)
+	itemsWorkflows, err := gobernanzaService.ListWorkflows(tipoAgente, nil)
 	if err != nil {
 		webRender(w, webTplLayout+webTplGobernanza, webGobernanzaData{Err: err.Error(), TipoAgente: tipoAgente})
 		return
@@ -112,7 +112,7 @@ func webRouterAPIGobernanza(w http.ResponseWriter, r *http.Request) {
 func webHandlerGobernanzaReglaNueva(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	tipoAgente := strings.TrimSpace(r.FormValue("tipo_agente"))
-	if _, err := governanceService.SaveRule(governance.SaveRuleInput{
+	if _, err := gobernanzaService.SaveRule(gobernanzaapp.SaveRuleInput{
 		TipoAgente:  tipoAgente,
 		Categoria:   r.FormValue("categoria"),
 		Titulo:      r.FormValue("titulo"),
@@ -128,7 +128,7 @@ func webHandlerGobernanzaReglaNueva(w http.ResponseWriter, r *http.Request) {
 func webHandlerGobernanzaSkillNueva(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	tipoAgente := strings.TrimSpace(r.FormValue("tipo_agente"))
-	if _, err := governanceService.SaveSkill(governance.SaveSkillInput{
+	if _, err := gobernanzaService.SaveSkill(gobernanzaapp.SaveSkillInput{
 		TipoAgente:  tipoAgente,
 		Nombre:      r.FormValue("nombre"),
 		Descripcion: r.FormValue("descripcion"),
@@ -144,7 +144,7 @@ func webHandlerGobernanzaSkillNueva(w http.ResponseWriter, r *http.Request) {
 func webHandlerGobernanzaWorkflowNuevo(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	tipoAgente := strings.TrimSpace(r.FormValue("tipo_agente"))
-	if _, err := governanceService.SaveWorkflow(governance.SaveWorkflowInput{
+	if _, err := gobernanzaService.SaveWorkflow(gobernanzaapp.SaveWorkflowInput{
 		TipoAgente:  tipoAgente,
 		Nombre:      r.FormValue("nombre"),
 		Descripcion: r.FormValue("descripcion"),
@@ -159,7 +159,7 @@ func webHandlerGobernanzaWorkflowNuevo(w http.ResponseWriter, r *http.Request) {
 
 func webHandlerAPIGobernanzaReglas(w http.ResponseWriter, r *http.Request) {
 	tipoAgente := strings.TrimSpace(r.URL.Query().Get("tipo_agente"))
-	items, err := governanceService.ListRules(tipoAgente, parseOptionalBool(r.URL.Query().Get("activa")))
+	items, err := gobernanzaService.ListRules(tipoAgente, parseOptionalBool(r.URL.Query().Get("activa")))
 	if err != nil {
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
@@ -179,7 +179,7 @@ func webHandlerAPIGobernanzaReglaCrear(w http.ResponseWriter, r *http.Request) {
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
 		return
 	}
-	id, err := governanceService.SaveRule(governance.SaveRuleInput(payload))
+	id, err := gobernanzaService.SaveRule(gobernanzaapp.SaveRuleInput(payload))
 	if err != nil {
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
@@ -189,7 +189,7 @@ func webHandlerAPIGobernanzaReglaCrear(w http.ResponseWriter, r *http.Request) {
 
 func webHandlerAPIGobernanzaSkills(w http.ResponseWriter, r *http.Request) {
 	tipoAgente := strings.TrimSpace(r.URL.Query().Get("tipo_agente"))
-	items, err := governanceService.ListSkills(tipoAgente, parseOptionalBool(r.URL.Query().Get("activa")))
+	items, err := gobernanzaService.ListSkills(tipoAgente, parseOptionalBool(r.URL.Query().Get("activa")))
 	if err != nil {
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
@@ -209,7 +209,7 @@ func webHandlerAPIGobernanzaSkillCrear(w http.ResponseWriter, r *http.Request) {
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
 		return
 	}
-	id, err := governanceService.SaveSkill(governance.SaveSkillInput(payload))
+	id, err := gobernanzaService.SaveSkill(gobernanzaapp.SaveSkillInput(payload))
 	if err != nil {
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
@@ -219,7 +219,7 @@ func webHandlerAPIGobernanzaSkillCrear(w http.ResponseWriter, r *http.Request) {
 
 func webHandlerAPIGobernanzaWorkflows(w http.ResponseWriter, r *http.Request) {
 	tipoAgente := strings.TrimSpace(r.URL.Query().Get("tipo_agente"))
-	items, err := governanceService.ListWorkflows(tipoAgente, parseOptionalBool(r.URL.Query().Get("activo")))
+	items, err := gobernanzaService.ListWorkflows(tipoAgente, parseOptionalBool(r.URL.Query().Get("activo")))
 	if err != nil {
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
@@ -239,7 +239,7 @@ func webHandlerAPIGobernanzaWorkflowCrear(w http.ResponseWriter, r *http.Request
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
 		return
 	}
-	id, err := governanceService.SaveWorkflow(governance.SaveWorkflowInput(payload))
+	id, err := gobernanzaService.SaveWorkflow(gobernanzaapp.SaveWorkflowInput(payload))
 	if err != nil {
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return

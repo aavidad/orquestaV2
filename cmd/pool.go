@@ -12,7 +12,7 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
-	"orquesta/capacityapp"
+	"orquesta/capacidadapp"
 	"orquesta/db"
 )
 
@@ -21,7 +21,7 @@ var poolCmd = &cobra.Command{
 	Short: "Gestion de pools de capacidad y modelos",
 }
 
-var capacityService = capacityapp.NewService(capacityapp.Repository{})
+var capacidadService = capacidadapp.NewService(capacidadapp.Repository{})
 
 var poolListarCmd = &cobra.Command{
 	Use:   "listar",
@@ -36,7 +36,7 @@ var poolListarCmd = &cobra.Command{
 			filtro = &activo
 		}
 
-		pools, err := capacityService.ListPoolsSummary(filtro)
+		pools, err := capacidadService.ListPoolsSummary(filtro)
 		if err != nil {
 			return err
 		}
@@ -62,7 +62,7 @@ var poolVerCmd = &cobra.Command{
 	Short: "Muestra detalle de un pool y sus modelos",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		detail, err := capacityService.GetPoolDetail(args[0])
+		detail, err := capacidadService.GetPoolDetail(args[0])
 		if err != nil {
 			return err
 		}
@@ -109,7 +109,7 @@ var poolGuardarCmd = &cobra.Command{
 		metadataJSON, _ := cmd.Flags().GetString("metadata-json")
 		activo, _ := cmd.Flags().GetBool("activo")
 
-		id, err := capacityService.SavePool(&db.PoolCapacidad{
+		id, err := capacidadService.SavePool(&db.PoolCapacidad{
 			Slug:                args[0],
 			Proveedor:           proveedor,
 			Runtime:             runtime,
@@ -143,7 +143,7 @@ var poolModeloListarCmd = &cobra.Command{
 	Short: "Lista modelos de un pool",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		modelos, err := capacityService.ListPoolModels(args[0])
+		modelos, err := capacidadService.ListPoolModels(args[0])
 		if err != nil {
 			return err
 		}
@@ -170,7 +170,7 @@ var poolModeloGuardarCmd = &cobra.Command{
 		costeRelativo, _ := cmd.Flags().GetFloat64("coste-relativo")
 		limiteJSON, _ := cmd.Flags().GetString("limite-json")
 
-		id, err := capacityService.SavePoolModel(args[0], &db.PoolModelo{
+		id, err := capacidadService.SavePoolModel(args[0], &db.PoolModelo{
 			ModelSlug:          args[1],
 			Activo:             activo,
 			Prioridad:          prioridad,
@@ -189,7 +189,7 @@ var poolModeloSeedCmd = &cobra.Command{
 	Use:   "seed-inicial",
 	Short: "Carga modelos iniciales conocidos para los pools base",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := capacityService.SeedInitialModels(); err != nil {
+		if err := capacidadService.SeedInitialModels(); err != nil {
 			return err
 		}
 		fmt.Println("✓ Modelos iniciales cargados")
@@ -252,7 +252,7 @@ var poolSeedCmd = &cobra.Command{
 			},
 		}
 		for _, seed := range seeds {
-			if _, err := capacityService.SavePool(&seed); err != nil {
+			if _, err := capacidadService.SavePool(&seed); err != nil {
 				return err
 			}
 		}

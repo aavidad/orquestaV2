@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"orquesta/db"
-	"orquesta/proposalapp"
+	"orquesta/propuestasapp"
 )
 
 const serverURLVar = "ORQUESTA_SERVER_URL"
@@ -397,8 +397,8 @@ func fetchServerTaskDetail(baseURL string, id int64) (*db.Tarea, error) {
 	return payload.Item, nil
 }
 
-func fetchServerProposalDetail(baseURL, codigo string) (*proposalapp.ProposalDetail, error) {
-	var payload proposalapp.ProposalDetail
+func fetchServerProposalDetail(baseURL, codigo string) (*propuestasapp.ProposalDetail, error) {
+	var payload propuestasapp.ProposalDetail
 	if err := fetchServerJSON(baseURL+"/api/propuestas/"+url.PathEscape(codigo), &payload); err != nil {
 		return nil, err
 	}

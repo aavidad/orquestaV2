@@ -20,11 +20,11 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"orquesta/dashboardapp"
 	"orquesta/db"
-	"orquesta/proposalapp"
-	"orquesta/sessionapp"
-	"orquesta/taskapp"
+	"orquesta/panelapp"
+	"orquesta/propuestasapp"
+	"orquesta/sesionesapp"
+	"orquesta/tareasapp"
 )
 
 const (
@@ -40,10 +40,10 @@ var mcpSupportedProtocols = []string{
 	"2024-11-05",
 }
 
-var dashboardService = dashboardapp.NewService(dashboardapp.Repository{})
-var proposalService = proposalapp.NewService(proposalapp.Repository{})
-var sessionAPIService = sessionapp.NewService(sessionapp.Repository{})
-var taskService = taskapp.NewService(taskapp.Repository{})
+var panelService = panelapp.NewService(panelapp.Repository{})
+var propuestasService = propuestasapp.NewService(propuestasapp.Repository{})
+var sesionesAPIService = sesionesapp.NewService(sesionesapp.Repository{})
+var tareasService = tareasapp.NewService(tareasapp.Repository{})
 
 type mcpRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -604,7 +604,7 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 		}
 		return resourceText(uri, "application/json", prettyJSON(asignaciones)), nil
 	case uri == "orquesta://agentes/activos":
-		agentes, err := proposalService.ListAgents()
+		agentes, err := propuestasService.ListAgents()
 		if err != nil {
 			return nil, err
 		}
@@ -616,13 +616,13 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 		}
 		return resourceText(uri, "application/json", prettyJSON(activos)), nil
 	case uri == "orquesta://propuestas/abiertas":
-		propuestas, err := proposalService.List(ptrPropuestaEstado(db.PropuestaAbierta))
+		propuestas, err := propuestasService.List(ptrPropuestaEstado(db.PropuestaAbierta))
 		if err != nil {
 			return nil, err
 		}
 		return resourceText(uri, "application/json", prettyJSON(propuestas)), nil
 	case uri == "orquesta://tareas/en_progreso":
-		tareas, err := taskService.List(db.FiltroTareas{Estado: ptrEstadoTarea(db.TareaEnProgreso)})
+		tareas, err := tareasService.List(db.FiltroTareas{Estado: ptrEstadoTarea(db.TareaEnProgreso)})
 		if err != nil {
 			return nil, err
 		}
@@ -680,7 +680,7 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 		return resourceText(uri, "application/json", prettyJSON(pool)), nil
 	case strings.HasPrefix(uri, "orquesta://propuestas/"):
 		codigo := strings.TrimPrefix(uri, "orquesta://propuestas/")
-		detail, err := proposalService.GetDetail(codigo)
+		detail, err := propuestasService.GetDetail(codigo)
 		if err != nil {
 			return nil, err
 		}
@@ -695,7 +695,7 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("id de tarea inválido")
 		}
-		t, err := taskService.Get(id)
+		t, err := tareasService.Get(id)
 		if err != nil {
 			return nil, err
 		}
@@ -1052,7 +1052,7 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		tareas, err := taskService.List(filtro)
+		tareas, err := tareasService.List(filtro)
 		if err != nil {
 			return nil, err
 		}
@@ -1067,10 +1067,10 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := taskService.Start(id, agente); err != nil {
+		if err := tareasService.Start(id, agente); err != nil {
 			return toolResult(err.Error(), nil, true), nil
 		}
-		t, err := taskService.Get(id)
+		t, err := tareasService.Get(id)
 		if err != nil {
 			return nil, err
 		}
@@ -1082,7 +1082,7 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			e := db.EstadoPropuesta(estado)
 			estadoPtr = &e
 		}
-		propuestas, err := proposalService.List(estadoPtr)
+		propuestas, err := propuestasService.List(estadoPtr)
 		if err != nil {
 			return nil, err
 		}
@@ -1107,7 +1107,7 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		modelos, err := capacityService.ListPoolModels(poolSlug)
+		modelos, err := capacidadService.ListPoolModels(poolSlug)
 		if err != nil {
 			return nil, err
 		}
@@ -1129,7 +1129,7 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			}
 			tareaIDPtr = &value
 		}
-		res, err := capacityService.ResolveModelPolicy(db.ResolverPoliticaInput{
+		res, err := capacidadService.ResolveModelPolicy(db.ResolverPoliticaInput{
 			TareaID:      tareaIDPtr,
 			ProyectoSlug: optionalStringArg(args, "proyecto"),
 			Fase:         optionalStringArg(args, "fase"),
@@ -1188,7 +1188,7 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return nil, fmt.Errorf("posicion inválida: %s", posicionStr)
 		}
 		comentario := optionalStringArg(args, "comentario")
-		result, err := proposalService.VoteDetail(codigo, agente, posicion, comentario)
+		result, err := propuestasService.VoteDetail(codigo, agente, posicion, comentario)
 		if err != nil {
 			return toolResult(err.Error(), nil, true), nil
 		}
@@ -1248,7 +1248,7 @@ type tareaLite struct {
 }
 
 func buildEstadoResumen() (*estadoResumen, error) {
-	summary, err := dashboardService.BuildSummary()
+	summary, err := panelService.BuildSummary()
 	if err != nil {
 		return nil, err
 	}
@@ -1270,7 +1270,7 @@ func buildEstadoResumen() (*estadoResumen, error) {
 		})
 	}
 
-	tareas, err := taskService.List(db.FiltroTareas{})
+	tareas, err := tareasService.List(db.FiltroTareas{})
 	if err != nil {
 		return nil, err
 	}
@@ -1338,7 +1338,7 @@ func buildEstadoResumen() (*estadoResumen, error) {
 }
 
 func listarPoolsResumenDesdeServicio(activo *bool) ([]map[string]any, error) {
-	rows, err := capacityService.ListPoolsSummary(activo)
+	rows, err := capacidadService.ListPoolsSummary(activo)
 	if err != nil {
 		return nil, err
 	}
@@ -1366,7 +1366,7 @@ func buildAgentBriefing(agente string) (string, error) {
 	if agente == "" {
 		return "", fmt.Errorf("agente obligatorio")
 	}
-	briefing, err := sessionAPIService.BuildBriefing(agente)
+	briefing, err := sesionesAPIService.BuildBriefing(agente)
 	if err != nil {
 		return "", fmt.Errorf("agente no encontrado: %s", agente)
 	}
@@ -1418,7 +1418,7 @@ func buildAgentBriefing(agente string) (string, error) {
 		b.WriteString("\n")
 	}
 
-	tareas, err := taskService.List(db.FiltroTareas{Agente: &actual.Nombre})
+	tareas, err := tareasService.List(db.FiltroTareas{Agente: &actual.Nombre})
 	if err != nil {
 		return "", err
 	}
@@ -1433,7 +1433,7 @@ func buildAgentBriefing(agente string) (string, error) {
 }
 
 func buildProposalReviewPrompt(codigo, agente string) (string, error) {
-	detail, err := proposalService.GetDetail(codigo)
+	detail, err := propuestasService.GetDetail(codigo)
 	if err != nil {
 		return "", err
 	}
@@ -1465,7 +1465,7 @@ func buildProposalReviewPrompt(codigo, agente string) (string, error) {
 }
 
 func buildTaskPlanPrompt(id int64, agente string) (string, error) {
-	t, err := taskService.Get(id)
+	t, err := tareasService.Get(id)
 	if err != nil {
 		return "", err
 	}
@@ -1526,7 +1526,7 @@ func buildFiltroTareas(args map[string]any) (db.FiltroTareas, error) {
 		filtro.Modulo = &modulo
 	}
 	if propuesta := optionalStringArg(args, "propuesta"); propuesta != "" {
-		pid, err := taskService.ResolveProposalID(propuesta)
+		pid, err := tareasService.ResolveProposalID(propuesta)
 		if err != nil {
 			return filtro, err
 		}
@@ -1539,7 +1539,7 @@ func buildFiltroTareas(args map[string]any) (db.FiltroTareas, error) {
 }
 
 func listarConectores() ([]map[string]any, error) {
-	rows, err := opsViewService.ListConnectors()
+	rows, err := operacionesService.ListConnectors()
 	if err != nil {
 		return nil, err
 	}
@@ -1564,7 +1564,7 @@ func listarProyectos() ([]map[string]any, error) {
 }
 
 func listarProyectosFiltrados(tipo string, activo *bool) ([]map[string]any, error) {
-	rows, err := projectMemoryService.ListProjects(activo)
+	rows, err := memoriaProyectoService.ListProjects(activo)
 	if err != nil {
 		return nil, err
 	}
@@ -1598,7 +1598,7 @@ func listarAsignaciones(estado string) ([]map[string]any, error) {
 }
 
 func listarAsignacionesFiltradas(estado, agente string) ([]map[string]any, error) {
-	rows, err := opsViewService.ListAssignments(estado, agente)
+	rows, err := operacionesService.ListAssignments(estado, agente)
 	if err != nil {
 		return nil, err
 	}
@@ -1629,7 +1629,7 @@ func listarWorktrees(estado string) ([]map[string]any, error) {
 }
 
 func listarWorktreesFiltradas(estado, agente string) ([]map[string]any, error) {
-	rows, err := gitService.ListWorktrees(estado, agente)
+	rows, err := gitGobernanzaService.ListWorktrees(estado, agente)
 	if err != nil {
 		return nil, err
 	}
@@ -1672,7 +1672,7 @@ func listarLocks(estado string) ([]map[string]any, error) {
 }
 
 func listarLocksFiltrados(estado, agente string) ([]map[string]any, error) {
-	rows, err := gitService.ListLocks(estado, agente)
+	rows, err := gitGobernanzaService.ListLocks(estado, agente)
 	if err != nil {
 		return nil, err
 	}
@@ -1719,7 +1719,7 @@ func listarLocksFiltrados(estado, agente string) ([]map[string]any, error) {
 }
 
 func listarSesionesActivas() ([]map[string]any, error) {
-	rows, err := opsViewService.ListActiveSessions()
+	rows, err := operacionesService.ListActiveSessions()
 	if err != nil {
 		return nil, err
 	}
@@ -1790,11 +1790,11 @@ func detalleProyecto(slug string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	tareas, err := taskService.List(db.FiltroTareas{Modulo: strPtr(slug)})
+	tareas, err := tareasService.List(db.FiltroTareas{Modulo: strPtr(slug)})
 	if err != nil {
 		return nil, err
 	}
-	propuestas, err := proposalService.List(ptrPropuestaEstado(db.PropuestaAbierta))
+	propuestas, err := propuestasService.List(ptrPropuestaEstado(db.PropuestaAbierta))
 	if err != nil {
 		return nil, err
 	}
@@ -1832,7 +1832,7 @@ func detalleProyecto(slug string) (map[string]any, error) {
 }
 
 func listarPoolsResumenMCP(activo *bool) ([]map[string]any, error) {
-	pools, err := capacityService.ListPoolsSummary(activo)
+	pools, err := capacidadService.ListPoolsSummary(activo)
 	if err != nil {
 		return nil, err
 	}
@@ -1862,7 +1862,7 @@ func listarPoolsResumenMCP(activo *bool) ([]map[string]any, error) {
 }
 
 func listarPoliticasModeloMCP(scopeTipo, scopeRef string, activa *bool) ([]map[string]any, error) {
-	items, err := capacityService.ListModelPolicies(scopeTipo, scopeRef, activa)
+	items, err := capacidadService.ListModelPolicies(scopeTipo, scopeRef, activa)
 	if err != nil {
 		return nil, err
 	}
@@ -1887,7 +1887,7 @@ func listarPoliticasModeloMCP(scopeTipo, scopeRef string, activa *bool) ([]map[s
 }
 
 func detallePoolMCP(slug string) (map[string]any, error) {
-	detail, err := capacityService.GetPoolDetail(slug)
+	detail, err := capacidadService.GetPoolDetail(slug)
 	if err != nil {
 		return nil, err
 	}

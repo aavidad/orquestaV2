@@ -101,7 +101,7 @@ func TestAPIProyectoDecisionCrear(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status inesperado: %d cuerpo=%s", rec.Code, rec.Body.String())
 	}
-	items, err := projectMemoryService.ListDecisions("orquestador")
+	items, err := memoriaProyectoService.ListDecisions("orquestador")
 	if err != nil {
 		t.Fatalf("ListDecisions: %v", err)
 	}

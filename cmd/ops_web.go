@@ -14,10 +14,10 @@ import (
 	"strings"
 
 	"orquesta/db"
-	"orquesta/opsview"
+	"orquesta/operacionesapp"
 )
 
-var opsViewService = opsview.NewService(db.OpsViewRepository{})
+var operacionesService = operacionesapp.NewService(db.OpsViewRepository{})
 
 type webAgentesData struct {
 	Agentes []*db.Agente
@@ -34,7 +34,7 @@ type webSesionesData struct {
 }
 
 func webHandlerAgentes(w http.ResponseWriter, r *http.Request) {
-	items, err := opsViewService.ListAgents()
+	items, err := operacionesService.ListAgents()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -45,7 +45,7 @@ func webHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 func webHandlerAsignaciones(w http.ResponseWriter, r *http.Request) {
 	estado := strings.TrimSpace(r.URL.Query().Get("estado"))
 	agente := strings.TrimSpace(r.URL.Query().Get("agente"))
-	items, err := opsViewService.ListAssignments(estado, agente)
+	items, err := operacionesService.ListAssignments(estado, agente)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -58,7 +58,7 @@ func webHandlerAsignaciones(w http.ResponseWriter, r *http.Request) {
 }
 
 func webHandlerSesiones(w http.ResponseWriter, r *http.Request) {
-	items, err := opsViewService.ListActiveSessions()
+	items, err := operacionesService.ListActiveSessions()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -76,14 +76,14 @@ func webHandlerAPIAgentesLista(w http.ResponseWriter, r *http.Request) {
 			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
 			return
 		}
-		if err := opsViewService.RegisterAgent(strings.TrimSpace(payload.Nombre), strings.TrimSpace(payload.Rol)); err != nil {
+		if err := operacionesService.RegisterAgent(strings.TrimSpace(payload.Nombre), strings.TrimSpace(payload.Rol)); err != nil {
 			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 			return
 		}
 		webWriteJSON(w, http.StatusCreated, map[string]any{"ok": true, "nombre": strings.TrimSpace(payload.Nombre), "rol": strings.TrimSpace(payload.Rol)})
 		return
 	}
-	items, err := opsViewService.ListAgents()
+	items, err := operacionesService.ListAgents()
 	if err != nil {
 		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
@@ -101,7 +101,7 @@ func webHandlerAPIAgenteRetirar(w http.ResponseWriter, r *http.Request, agente s
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "no puedes retirar al administrador"})
 		return
 	}
-	if err := opsViewService.RetireAgent(nombre); err != nil {
+	if err := operacionesService.RetireAgent(nombre); err != nil {
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
@@ -114,7 +114,7 @@ func webHandlerAPIAgenteRehabilitar(w http.ResponseWriter, r *http.Request, agen
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "agente obligatorio"})
 		return
 	}
-	if err := opsViewService.RehabilitateAgent(nombre); err != nil {
+	if err := operacionesService.RehabilitateAgent(nombre); err != nil {
 		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
@@ -122,7 +122,7 @@ func webHandlerAPIAgenteRehabilitar(w http.ResponseWriter, r *http.Request, agen
 }
 
 func webHandlerAPIAsignaciones(w http.ResponseWriter, r *http.Request) {
-	items, err := opsViewService.ListAssignments(
+	items, err := operacionesService.ListAssignments(
 		strings.TrimSpace(r.URL.Query().Get("estado")),
 		strings.TrimSpace(r.URL.Query().Get("agente")),
 	)
@@ -134,7 +134,7 @@ func webHandlerAPIAsignaciones(w http.ResponseWriter, r *http.Request) {
 }
 
 func webHandlerAPISesiones(w http.ResponseWriter, r *http.Request) {
-	items, err := opsViewService.ListActiveSessions()
+	items, err := operacionesService.ListActiveSessions()
 	if err != nil {
 		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return

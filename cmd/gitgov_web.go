@@ -15,10 +15,10 @@ import (
 	"strings"
 
 	"orquesta/db"
-	"orquesta/gitgov"
+	"orquesta/gitgobernanza"
 )
 
-var gitService = gitgov.NewService(gitgov.Repository{})
+var gitGobernanzaService = gitgobernanza.NewService(gitgobernanza.Repository{})
 
 type webGitGovData struct {
 	Estado      string
@@ -52,7 +52,7 @@ func webHandlerGitGov(w http.ResponseWriter, r *http.Request) {
 	proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto"))
 	mergeEstado := strings.TrimSpace(r.URL.Query().Get("merge_estado"))
 
-	worktrees, err := gitService.ListWorktrees(estado, agente)
+	worktrees, err := gitGobernanzaService.ListWorktrees(estado, agente)
 	if err != nil {
 		webRender(w, webTplLayout+webTplGitGov, webGitGovData{
 			Estado:      estado,
@@ -63,7 +63,7 @@ func webHandlerGitGov(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	locks, err := gitService.ListLocks(estado, agente)
+	locks, err := gitGobernanzaService.ListLocks(estado, agente)
 	if err != nil {
 		webRender(w, webTplLayout+webTplGitGov, webGitGovData{
 			Estado:      estado,
@@ -96,7 +96,7 @@ func webHandlerGitGov(w http.ResponseWriter, r *http.Request) {
 
 func webHandlerGitMergeNueva(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
-	id, err := gitService.SaveRequest(gitgov.SaveMergeRequestInput{
+	id, err := gitGobernanzaService.SaveRequest(gitgobernanza.SaveMergeRequestInput{
 		ProyectoSlug: strings.TrimSpace(r.FormValue("proyecto_slug")),
 		SourceBranch: strings.TrimSpace(r.FormValue("source_branch")),
 		TargetBranch: strings.TrimSpace(r.FormValue("target_branch")),
@@ -115,7 +115,7 @@ func webHandlerGitMergeNueva(w http.ResponseWriter, r *http.Request) {
 }
 
 func webHandlerAPIWorktrees(w http.ResponseWriter, r *http.Request) {
-	items, err := gitService.ListWorktrees(
+	items, err := gitGobernanzaService.ListWorktrees(
 		strings.TrimSpace(r.URL.Query().Get("estado")),
 		strings.TrimSpace(r.URL.Query().Get("agente")),
 	)
@@ -127,7 +127,7 @@ func webHandlerAPIWorktrees(w http.ResponseWriter, r *http.Request) {
 }
 
 func webHandlerAPILocks(w http.ResponseWriter, r *http.Request) {
-	items, err := gitService.ListLocks(
+	items, err := gitGobernanzaService.ListLocks(
 		strings.TrimSpace(r.URL.Query().Get("estado")),
 		strings.TrimSpace(r.URL.Query().Get("agente")),
 	)
@@ -166,7 +166,7 @@ func webHandlerAPIMerges(w http.ResponseWriter, r *http.Request) {
 			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
 			return
 		}
-		id, err := gitService.SaveRequest(gitgov.SaveMergeRequestInput{
+		id, err := gitGobernanzaService.SaveRequest(gitgobernanza.SaveMergeRequestInput{
 			ProyectoSlug: payload.ProyectoSlug,
 			SourceBranch: payload.SourceBranch,
 			TargetBranch: payload.TargetBranch,
@@ -189,7 +189,7 @@ func webHandlerAPIMerges(w http.ResponseWriter, r *http.Request) {
 }
 
 func listGitMerges(proyecto, estado string) ([]*db.GitMerge, error) {
-	return gitService.ListRequests(proyecto, estado)
+	return gitGobernanzaService.ListRequests(proyecto, estado)
 }
 
 func webWriteJSON(w http.ResponseWriter, status int, data any) {

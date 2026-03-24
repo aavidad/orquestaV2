@@ -11,7 +11,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"orquesta/importapp"
+	"orquesta/importacionapp"
 )
 
 // importarCmd agrupa los comandos de importación de datos históricos.
@@ -20,7 +20,7 @@ var importarCmd = &cobra.Command{
 	Short: "Importa historial legado al sistema",
 }
 
-var importService = importapp.NewService(importapp.Repository{})
+var importacionService = importacionapp.NewService(importacionapp.Repository{})
 
 // importarHistorialCmd importa propuestas y votaciones históricas desde el legado markdown.
 var importarHistorialCmd = &cobra.Command{
@@ -34,7 +34,7 @@ Las propuestas se crean con el código original (OP-001..OP-029) y el estado fin
 que tenían en el historial legado.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Importando historial de propuestas y votaciones…")
-		if err := importService.ImportHistory(); err != nil {
+		if err := importacionService.ImportHistory(); err != nil {
 			return err
 		}
 		fmt.Println("✓ Historial importado correctamente.")

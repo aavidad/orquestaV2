@@ -75,7 +75,7 @@ func TestAPIGobernanzaWorkflowCrear(t *testing.T) {
 		t.Fatalf("status inesperado: %d cuerpo=%s", rec.Code, rec.Body.String())
 	}
 
-	items, err := governanceService.ListWorkflows("programador", nil)
+	items, err := gobernanzaService.ListWorkflows("programador", nil)
 	if err != nil {
 		t.Fatalf("ListWorkflows: %v", err)
 	}
