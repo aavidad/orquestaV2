@@ -54,7 +54,7 @@ func captureOutput(t *testing.T, fn func()) string {
 
 func TestShouldBypassLocalDBConServidorLocalDescubierto(t *testing.T) {
 	setServerHTTPClientForTest(t, func(req *http.Request) (*http.Response, error) {
-		if req.URL.Host == "127.0.0.1:8080" && req.URL.Path == "/api/server" {
+		if req.URL.Host == "127.0.0.1:16543" && req.URL.Path == "/api/server" {
 			return newJSONResponse(http.StatusOK, `{"name":"orquesta"}`), nil
 		}
 		return nil, fmt.Errorf("sin servidor en %s", req.URL.String())
@@ -152,7 +152,7 @@ func TestShouldBypassLocalDBCaeADefaultSiEnvNoResponde(t *testing.T) {
 		switch {
 		case req.URL.Host == "remote.invalid:9999":
 			return nil, fmt.Errorf("sin respuesta remota")
-		case req.URL.Host == "127.0.0.1:8080" && req.URL.Path == "/api/server":
+		case req.URL.Host == "127.0.0.1:16543" && req.URL.Path == "/api/server":
 			return newJSONResponse(http.StatusOK, `{"name":"orquesta"}`), nil
 		default:
 			return nil, fmt.Errorf("sin servidor en %s", req.URL.String())

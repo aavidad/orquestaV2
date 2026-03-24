@@ -39,9 +39,9 @@ ENV ORQUESTA_DB=/app/data/orquesta.db
 ENV ORQUESTA_WORKSPACE_ROOT=/app/workspace
 
 # Exponemos el puerto del panel web / API
-EXPOSE 8080
+EXPOSE 16543
 
 # Punto de entrada por defecto.
 # Se deja el comando separado para poder sobreescribirlo desde compose o docker run.
 ENTRYPOINT ["/app/orquesta"]
-CMD ["serve", "--puerto", "8080"]
+CMD ["serve", "--puerto", "16543"]

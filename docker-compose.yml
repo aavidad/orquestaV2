@@ -12,8 +12,8 @@ services:
     init: true
     restart: unless-stopped
     ports:
-      # Puerto HTTP externo configurable; por defecto se mantiene 8080.
-      - "${ORQUESTA_HTTP_PORT:-8080}:8080"
+      # Puerto HTTP externo configurable; por defecto se mantiene 16543.
+      - "${ORQUESTA_HTTP_PORT:-16543}:16543"
     volumes:
       # Persistencia de la base de datos de gobernanza y tareas
       - orquesta-data:/app/data
@@ -28,7 +28,7 @@ services:
       ORQUESTA_WORKSPACE_ROOT: /app/workspace
     working_dir: /app
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/api/status >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:16543/api/status >/dev/null || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 5

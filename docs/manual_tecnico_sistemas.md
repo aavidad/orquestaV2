@@ -16,12 +16,12 @@ docker compose up -d --build
 
 Parámetros útiles:
 
-- `ORQUESTA_HTTP_PORT`: puerto publicado hacia el host. Por defecto `8080`.
+- `ORQUESTA_HTTP_PORT`: puerto publicado hacia el host. Por defecto `16543`.
 - `ORQUESTA_WORKSPACE_DIR`: ruta del workspace host que se monta en `/app/workspace`. Por defecto `..` respecto al repositorio de Orquesta.
 
 El servicio publica:
 
-- panel web y API en `http://localhost:8080`
+- panel web y API en `http://localhost:16543`
 - base SQLite persistida en el volumen `orquesta-data`
 - logs persistidos en el volumen `orquesta-logs`
 
@@ -37,7 +37,7 @@ Si se necesita imagen suelta sin Compose:
 
 ```bash
 docker build -t orquesta:local .
-docker run --rm -p 8080:8080 \
+docker run --rm -p 16543:16543 \
   -e ORQUESTA_DB=/app/data/orquesta.db \
   -e ORQUESTA_WORKSPACE_ROOT=/app/workspace \
   -v "$(pwd)/data:/app/data" \
@@ -48,7 +48,7 @@ docker run --rm -p 8080:8080 \
 ## 3. Configuración del Servidor MCP
 El servidor MCP se activa mediante variables de entorno:
 - `ORQUESTA_MCP_ENABLED=true`
-- `ORQUESTA_MCP_PORT=8080`
+- `ORQUESTA_MCP_PORT=16543`
 - `ORQUESTA_AUTH_TOKEN`: Token para clientes externos.
 
 ## 4. Mantenimiento de la Refinería (OP-093)
