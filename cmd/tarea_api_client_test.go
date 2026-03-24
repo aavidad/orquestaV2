@@ -82,3 +82,55 @@ func TestTareaCancelarUsaAPI(t *testing.T) {
 		t.Fatalf("salida cancelar inesperada:\n%s", out)
 	}
 }
+
+func TestTareaRefineriaUsaAPI(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/tareas/21/refineria", func(w http.ResponseWriter, r *http.Request) {
+		var req apiRefineriaRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode req refineria: %v", err)
+		}
+		if req.Agente != "Codex1" || req.Rama != "feature/refineria" || req.Dir != "/tmp/orquesta" || req.CmdTest != "go test ./cmd" {
+			t.Fatalf("payload refineria inesperado: %+v", req)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": true,
+			"solicitud": &db.RefineriaSolicitud{
+				ID:         44,
+				TareaID:    21,
+				Agente:     "Codex1",
+				Rama:       "feature/refineria",
+				DirTrabajo: "/tmp/orquesta",
+				CmdTest:    "go test ./cmd",
+			},
+		})
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	tareaRefineriaCmd.Flags().Set("rama", "feature/refineria")
+	tareaRefineriaCmd.Flags().Set("dir", "/tmp/orquesta")
+	tareaRefineriaCmd.Flags().Set("cmd", "go test ./cmd")
+	defer tareaRefineriaCmd.Flags().Set("rama", "")
+	defer tareaRefineriaCmd.Flags().Set("dir", "")
+	defer tareaRefineriaCmd.Flags().Set("cmd", "go test ./...")
+
+	out := capturarStdout(t, func() {
+		if err := tareaRefineriaCmd.RunE(tareaRefineriaCmd, []string{"21", "Codex1"}); err != nil {
+			t.Fatalf("tarea refineria via API: %v", err)
+		}
+	})
+	for _, token := range []string{"Tarea #21 enviada a Refinería", "solicitud #44", "feature/refineria", "go test ./cmd"} {
+		if !strings.Contains(out, token) {
+			t.Fatalf("salida refineria sin %q:\n%s", token, out)
+		}
+	}
+}

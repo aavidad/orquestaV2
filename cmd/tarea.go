@@ -555,15 +555,33 @@ un mensaje en tu buzón con el output de error para que corrijas y reintentes.`,
 		dir, _ := cmd.Flags().GetString("dir")
 		cmdTest, _ := cmd.Flags().GetString("cmd")
 
-		if err := ensureLocalDB(); err != nil {
-			return err
+		var solicitud *db.RefineriaSolicitud
+		var resp struct {
+			OK        bool                   `json:"ok"`
+			Solicitud *db.RefineriaSolicitud `json:"solicitud"`
 		}
-		s, err := db.SolicitarRefineria(id, agente, rama, dir, cmdTest)
-		if err != nil {
+		if ok, err := apiPost("/api/tareas/"+args[0]+"/refineria", apiRefineriaRequest{
+			Agente:  agente,
+			Rama:    rama,
+			Dir:     dir,
+			CmdTest: cmdTest,
+		}, &resp); err != nil {
 			return err
+		} else if ok {
+			solicitud = resp.Solicitud
 		}
-		fmt.Printf("✓ Tarea #%d enviada a Refinería (solicitud #%d)\n", id, s.ID)
-		fmt.Printf("  rama=%s  dir=%s  cmd=%s\n", s.Rama, s.DirTrabajo, s.CmdTest)
+		if solicitud == nil {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			s, err := db.SolicitarRefineria(id, agente, rama, dir, cmdTest)
+			if err != nil {
+				return err
+			}
+			solicitud = s
+		}
+		fmt.Printf("✓ Tarea #%d enviada a Refinería (solicitud #%d)\n", id, solicitud.ID)
+		fmt.Printf("  rama=%s  dir=%s  cmd=%s\n", solicitud.Rama, solicitud.DirTrabajo, solicitud.CmdTest)
 		fmt.Println("  El control plane procesará la solicitud en el próximo ciclo (≤15s).")
 		fmt.Println("  Consulta tu buzón con: orquesta runtime mailbox --agente " + agente)
 		return nil

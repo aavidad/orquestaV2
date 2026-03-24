@@ -180,7 +180,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "listar", "ver", "nueva", "tomar", "iniciar", "completar", "bloquear", "desbloquear", "nota", "notas", "reasignar", "backlog", "contrato", "cancelar":
+		case "listar", "ver", "nueva", "tomar", "iniciar", "completar", "bloquear", "desbloquear", "nota", "notas", "reasignar", "backlog", "contrato", "cancelar", "refineria":
 			return true
 		default:
 			return false
