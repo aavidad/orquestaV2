@@ -1057,10 +1057,30 @@ func TestRuntimeOrderStartIntegraBootstrapDeHandoffMailboxYCheckpoint(t *testing
 	}); err != nil {
 		t.Fatalf("iniciar sesion previa: %v", err)
 	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:     "Cerrar relevo",
+		Modulo:     "orquestador",
+		Prioridad:  PrioridadAlta,
+		CreadoPor:  "alberto",
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE tareas SET estado='asignada' WHERE id=?`, tareaID); err != nil {
+		t.Fatalf("marcar tarea asignada: %v", err)
+	}
 
 	handoffPayload, err := json.Marshal(HandoffPayload{
 		AgenteOrigen:       "Codex0",
 		AgenteDestino:      "Codex1",
+		TareaID:            &tareaID,
 		Motivo:             "traspaso",
 		ResumenContinuidad: "handoff listo",
 		ExternalSessionID:  "sess-handoff",
@@ -1149,6 +1169,19 @@ func TestRuntimeOrderStartIntegraBootstrapDeHandoffMailboxYCheckpoint(t *testing
 	}
 	if handoffOrder.Estado != "completada" {
 		t.Fatalf("handoff no completada: %+v", handoffOrder)
+	}
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != TareaEnProgreso {
+		t.Fatalf("la tarea deberia quedar en progreso tras la reanudacion real: %s", tarea.Estado)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "Codex1" {
+		t.Fatalf("agente de tarea inesperado: %+v", tarea.Agente)
+	}
+	if !strings.Contains(tarea.Notas, "handoff completado por Codex1") {
+		t.Fatalf("notas sin evidencia de handoff completado: %s", tarea.Notas)
 	}
 	msgsConsumidos, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{
 		ToAgente:   strPtrTest("Codex1"),

@@ -89,6 +89,14 @@ func TestCrearHandoffAgenteVivoReasignaTareaYCreaOrden(t *testing.T) {
 	if payload.TareaID == nil || *payload.TareaID != tareaID {
 		t.Fatalf("tarea en payload inesperada: %+v", payload.TareaID)
 	}
+
+	handleOrigen, err = GetRuntimeHandleBySesionID(sesionOrigenID)
+	if err != nil {
+		t.Fatalf("handle origen tras handoff: %v", err)
+	}
+	if handleOrigen == nil || handleOrigen.Estado != "pausado" {
+		t.Fatalf("el origen deberia quedar pausado tras el handoff: %+v", handleOrigen)
+	}
 }
 
 func TestCrearHandoffAgenteVivoExigeHandleActivoEnOrigen(t *testing.T) {
@@ -112,5 +120,60 @@ func TestCrearHandoffAgenteVivoExigeHandleActivoEnOrigen(t *testing.T) {
 
 	if _, err := CrearHandoffAgenteVivo("Codex1", "Codex2", nil, "", "", ""); err == nil {
 		t.Fatalf("se esperaba error por falta de handle activo")
+	}
+}
+
+func TestCrearHandoffAgenteVivoReutilizaPendienteEquivalente(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	if _, err := IniciarSesion("Codex1"); err != nil {
+		t.Fatalf("IniciarSesion origen: %v", err)
+	}
+	if _, err := IniciarSesion("Codex2"); err != nil {
+		t.Fatalf("IniciarSesion destino: %v", err)
+	}
+
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:    "Revisar handoff idempotente",
+		Modulo:    "orquestador",
+		Prioridad: PrioridadAlta,
+		CreadoPor: "alberto",
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("TomarTarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("IniciarTarea: %v", err)
+	}
+
+	orderA, err := CrearHandoffAgenteVivo("Codex1", "Codex2", &tareaID, "presupuesto", "Continuar", "ext-123")
+	if err != nil {
+		t.Fatalf("CrearHandoffAgenteVivo A: %v", err)
+	}
+	orderB, err := CrearHandoffAgenteVivo("Codex1", "Codex2", &tareaID, "presupuesto", "Continuar", "ext-123")
+	if err != nil {
+		t.Fatalf("CrearHandoffAgenteVivo B: %v", err)
+	}
+	if orderA != orderB {
+		t.Fatalf("se esperaba reutilizar la orden pendiente: %d != %d", orderA, orderB)
+	}
+
+	agente := "Codex2"
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agente, Estado: &estado})
+	if err != nil {
+		t.Fatalf("ListarRuntimeOrders: %v", err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("deberia existir una sola orden pendiente equivalente: %+v", orders)
 	}
 }
