@@ -222,6 +222,30 @@ var webFuncMap = template.FuncMap{
 	"eqStr": func(a, b string) bool { return a == b },
 	"neStr": func(a, b string) bool { return a != b },
 	"tr":    webTranslate,
+	"ftime": func(t *time.Time) string {
+		if t == nil || t.IsZero() {
+			return "—"
+		}
+		return t.Format("2006-01-02 15:04:05")
+	},
+	"ftimev": func(t time.Time) string {
+		if t.IsZero() {
+			return "—"
+		}
+		return t.Format("2006-01-02 15:04:05")
+	},
+	"orDash": func(s string) string {
+		if strings.TrimSpace(s) == "" {
+			return "—"
+		}
+		return s
+	},
+	"pid": func(v *int64) string {
+		if v == nil || *v <= 0 {
+			return "—"
+		}
+		return strconv.FormatInt(*v, 10)
+	},
 	"reanimacionEn": func(t *time.Time) string {
 		if t == nil || t.IsZero() {
 			return ""
@@ -1173,6 +1197,8 @@ var serveCmd = &cobra.Command{
 		mux.HandleFunc("/tareas/", webRouterTareas)
 		mux.HandleFunc("/propuestas", webHandlerPropuestas)
 		mux.HandleFunc("/propuestas/", webRouterPropuestas)
+		mux.HandleFunc("/agentes", webHandlerAgentes)
+		mux.HandleFunc("/agentes/", webRouterAgentes)
 		mux.HandleFunc("/runtimes", webHandlerRuntimes)
 		mux.HandleFunc("/runtimes/", webRouterRuntimes)
 		mux.HandleFunc("/time-travel", webHandlerTimeTravel)
@@ -1268,6 +1294,7 @@ const webTplLayout = `<!doctype html>
       <a href="/">{{tr "Dashboard"}}</a>
       <a href="/tareas">{{tr "Tareas"}}</a>
       <a href="/propuestas">{{tr "Propuestas"}}</a>
+      <a href="/agentes">{{tr "Agentes"}}</a>
       <a href="/runtimes">{{tr "Runtimes"}}</a>
       <a href="/time-travel">{{tr "Time Travel"}}</a>
     </div>

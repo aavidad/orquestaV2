@@ -19,10 +19,6 @@ import (
 
 var operacionesService = operacionesapp.NewService(db.OpsViewRepository{})
 
-type webAgentesData struct {
-	Agentes []*db.Agente
-}
-
 type webAsignacionesData struct {
 	Asignaciones []*db.Asignacion
 	Estado       string
@@ -34,12 +30,7 @@ type webSesionesData struct {
 }
 
 func webHandlerAgentes(w http.ResponseWriter, r *http.Request) {
-	items, err := operacionesService.ListAgents()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	webRender(w, webTplLayout+webTplAgentes, webAgentesData{Agentes: items})
+	webHandlerAgentesPanel(w, r)
 }
 
 func webHandlerAsignaciones(w http.ResponseWriter, r *http.Request) {
@@ -172,27 +163,6 @@ func webHandlerAPIExportAudit(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(body))
 }
-
-const webTplAgentes = `{{define "content"}}
-<section class="container">
-  <h2 style="margin:0">Agentes</h2>
-  <table>
-    <thead><tr><th>Agente</th><th>Rol</th><th>Activo</th><th>Estado</th><th>Habilitado</th><th>Última sesión</th></tr></thead>
-    <tbody>
-      {{range .Agentes}}
-      <tr>
-        <td>{{.Nombre}}</td>
-        <td>{{.Rol}}</td>
-        <td>{{if .Activo}}sí{{else}}no{{end}}</td>
-        <td>{{.EstadoSesion}}</td>
-        <td>{{if .Habilitado}}sí{{else}}no{{end}}</td>
-        <td>{{if .UltimaSesion}}{{.UltimaSesion.Format "2006-01-02 15:04:05"}}{{else}}—{{end}}</td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table>
-</section>
-{{end}}`
 
 const webTplAsignaciones = `{{define "content"}}
 <section class="container">
