@@ -4,7 +4,7 @@ import "time"
 
 const (
 	DefaultHost      = "127.0.0.1"
-	DefaultPort      = "17899"
+	DefaultPort      = "16543"
 	DefaultStateFile = "orquesta-localrpc.json"
 	HeaderAuthToken  = "X-Orquesta-Token"
 

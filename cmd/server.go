@@ -15,10 +15,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
-	"os/signal"
 	"strings"
 	"sync"
 	"syscall"
@@ -42,50 +40,7 @@ var serverRunCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		addr, _ := cmd.Flags().GetString("addr")
 		listenAddr := strings.TrimPrefix(rpclocal.BaseURL(addr), "http://")
-		if !db.IsOpen() {
-			if err := db.Open(); err != nil {
-				return err
-			}
-		}
-
-		info, err := newLocalRPCState("server", listenAddr)
-		if err != nil {
-			return err
-		}
-		if err := rpclocal.SaveServerInfo(info); err != nil {
-			return err
-		}
-		defer rpclocal.RemoveState("")
-
-		server := &http.Server{
-			Addr:    listenAddr,
-			Handler: rpclocal.NewMux(&rpclocal.Server{State: info, Executor: executeRPCRequest}),
-		}
-
-		ctx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		defer stopSignals()
-		errCh := make(chan error, 1)
-		go func() {
-			errCh <- server.ListenAndServe()
-		}()
-
-		fmt.Printf("Servidor local de Orquesta en %s\n", rpclocal.BaseURL(listenAddr))
-		select {
-		case <-ctx.Done():
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
-			_ = server.Shutdown(shutdownCtx)
-			err := <-errCh
-			if err != nil && !errors.Is(err, http.ErrServerClosed) {
-				return err
-			}
-			return nil
-		case err := <-errCh:
-			if err != nil && !errors.Is(err, http.ErrServerClosed) {
-				return err
-			}
-			return nil
-		}
+		return arrancarServidorUnificado(listenAddr, "server", false)
 	},
 }
 

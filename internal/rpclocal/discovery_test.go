@@ -29,7 +29,7 @@ func TestDefaultAddr(t *testing.T) {
 func TestSaveLoadAndRemoveState(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "rpc-state.json")
 	want := &State{
-		Addr:      "127.0.0.1:17899",
+		Addr:      "127.0.0.1:16543",
 		PID:       42,
 		ScopeID:   CurrentScopeID(),
 		DBPath:    "/tmp/orquesta.db",
@@ -63,7 +63,7 @@ func TestSaveStateUsesPrivatePermissions(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "rpc-state.json")
 	if err := SaveState(path, &State{
-		Addr:      "127.0.0.1:17899",
+		Addr:      "127.0.0.1:16543",
 		PID:       42,
 		ScopeID:   CurrentScopeID(),
 		StartedAt: time.Now().UTC(),
@@ -81,10 +81,10 @@ func TestSaveStateUsesPrivatePermissions(t *testing.T) {
 }
 
 func TestBaseURL(t *testing.T) {
-	if got := BaseURL("127.0.0.1:17899"); got != "http://127.0.0.1:17899" {
+	if got := BaseURL("127.0.0.1:16543"); got != "http://127.0.0.1:16543" {
 		t.Fatalf("BaseURL addr inesperado: %s", got)
 	}
-	if got := BaseURL("http://127.0.0.1:17899/"); got != "http://127.0.0.1:17899" {
+	if got := BaseURL("http://127.0.0.1:16543/"); got != "http://127.0.0.1:16543" {
 		t.Fatalf("BaseURL url inesperado: %s", got)
 	}
 }
