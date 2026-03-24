@@ -346,13 +346,15 @@ func aplicarEstadoVisibleAgente(agente *Agente, sesion *Sesion) {
 		return
 	}
 	agente.Activo = true
-	if estado := strings.TrimSpace(sesion.Estado); estado != "" {
+	if estado := strings.TrimSpace(agente.EstadoSesion); estado != "" {
 		agente.EstadoSesion = estado
 		return
 	}
-	if strings.TrimSpace(agente.EstadoSesion) == "" {
-		agente.EstadoSesion = "disponible"
+	if estado := strings.TrimSpace(sesion.Estado); estado != "" && estado != "activa" {
+		agente.EstadoSesion = estado
+		return
 	}
+	agente.EstadoSesion = "disponible"
 }
 
 func aplicarEstadoVisibleAgentes(agentes []*Agente, sesiones []*Sesion) {

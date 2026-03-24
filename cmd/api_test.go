@@ -93,6 +93,74 @@ func TestAPIAgentesListaJSON(t *testing.T) {
 	}
 }
 
+func TestAPIAgentesYStatusAlineanActivoConSesionReal(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	for _, agente := range []string{"CodexVisible1", "CodexVisible2"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", agente, err)
+		}
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_sesion='pensando' WHERE nombre='CodexVisible1'`); err != nil {
+		t.Fatalf("marcar estado visible1: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET activo=1, estado_sesion='disponible' WHERE nombre='CodexVisible2'`); err != nil {
+		t.Fatalf("marcar activo visible2: %v", err)
+	}
+	if _, err := db.DB.Exec(`INSERT INTO sesiones (agente, activa, estado, herramienta, host) VALUES (?,?,?,?,?)`,
+		"CodexVisible1", 1, "activa", "codex", "localhost",
+	); err != nil {
+		t.Fatalf("insert sesion visible1: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recAgentes := httptest.NewRecorder()
+	reqAgentes := httptest.NewRequest(http.MethodGet, "/api/agentes", nil)
+	mux.ServeHTTP(recAgentes, reqAgentes)
+	if recAgentes.Code != http.StatusOK {
+		t.Fatalf("status agentes inesperado: %d body=%s", recAgentes.Code, recAgentes.Body.String())
+	}
+	var agentesResp struct {
+		Agentes []*db.Agente `json:"agentes"`
+	}
+	if err := json.Unmarshal(recAgentes.Body.Bytes(), &agentesResp); err != nil {
+		t.Fatalf("decode agentes: %v", err)
+	}
+	estadoAgentes := map[string]*db.Agente{}
+	for _, agente := range agentesResp.Agentes {
+		estadoAgentes[agente.Nombre] = agente
+	}
+	if !estadoAgentes["CodexVisible1"].Activo || estadoAgentes["CodexVisible1"].EstadoSesion != "pensando" {
+		t.Fatalf("agente visible1 inesperado via /api/agentes: %+v", estadoAgentes["CodexVisible1"])
+	}
+	if estadoAgentes["CodexVisible2"].Activo || estadoAgentes["CodexVisible2"].EstadoSesion != "" {
+		t.Fatalf("agente visible2 inesperado via /api/agentes: %+v", estadoAgentes["CodexVisible2"])
+	}
+
+	recStatus := httptest.NewRecorder()
+	reqStatus := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	mux.ServeHTTP(recStatus, reqStatus)
+	if recStatus.Code != http.StatusOK {
+		t.Fatalf("status global inesperado: %d body=%s", recStatus.Code, recStatus.Body.String())
+	}
+	var statusResp apiStatusResponse
+	if err := json.Unmarshal(recStatus.Body.Bytes(), &statusResp); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	estadoStatus := map[string]*db.Agente{}
+	for _, agente := range statusResp.Agentes {
+		estadoStatus[agente.Nombre] = agente
+	}
+	if !estadoStatus["CodexVisible1"].Activo || estadoStatus["CodexVisible1"].EstadoSesion != "pensando" {
+		t.Fatalf("agente visible1 inesperado via /api/status: %+v", estadoStatus["CodexVisible1"])
+	}
+	if estadoStatus["CodexVisible2"].Activo || estadoStatus["CodexVisible2"].EstadoSesion != "" {
+		t.Fatalf("agente visible2 inesperado via /api/status: %+v", estadoStatus["CodexVisible2"])
+	}
+}
+
 func TestAPIAsignacionActivarYSesionInicio(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

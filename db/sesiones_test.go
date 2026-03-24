@@ -125,3 +125,68 @@ func TestEliminarAgenteBloqueaTareasActivas(t *testing.T) {
 		t.Fatalf("el agente no deberia haberse borrado: %v", err)
 	}
 }
+
+func TestListarAgentesAlineaEstadoVisibleConSesiones(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "orquesta.db")
+	prev := os.Getenv("ORQUESTA_DB")
+	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
+		t.Fatalf("setenv: %v", err)
+	}
+	defer func() {
+		_ = os.Setenv("ORQUESTA_DB", prev)
+		Close()
+	}()
+
+	if err := Open(); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	for _, agente := range []string{"CodexVisible1", "CodexVisible2"} {
+		if err := RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", agente, err)
+		}
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='pensando' WHERE nombre='CodexVisible1'`); err != nil {
+		t.Fatalf("marcar estado visible1: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET activo=1, estado_sesion='disponible' WHERE nombre='CodexVisible2'`); err != nil {
+		t.Fatalf("marcar CodexVisible2 activo: %v", err)
+	}
+	if _, err := DB.Exec(`INSERT INTO sesiones (agente, activa, estado, herramienta, host) VALUES (?,?,?,?,?)`,
+		"CodexVisible1", 1, "activa", "codex", "localhost",
+	); err != nil {
+		t.Fatalf("insert sesion activa visible: %v", err)
+	}
+
+	agentes, err := ListarAgentes()
+	if err != nil {
+		t.Fatalf("ListarAgentes: %v", err)
+	}
+	estado := map[string]*Agente{}
+	for _, agente := range agentes {
+		estado[agente.Nombre] = agente
+	}
+
+	if !estado["CodexVisible1"].Activo || estado["CodexVisible1"].EstadoSesion != "pensando" {
+		t.Fatalf("CodexVisible1 visible inesperado: %+v", estado["CodexVisible1"])
+	}
+	if estado["CodexVisible2"].Activo || estado["CodexVisible2"].EstadoSesion != "" {
+		t.Fatalf("CodexVisible2 visible inesperado: %+v", estado["CodexVisible2"])
+	}
+
+	visible1, err := GetAgente("CodexVisible1")
+	if err != nil {
+		t.Fatalf("GetAgente visible1: %v", err)
+	}
+	if !visible1.Activo || visible1.EstadoSesion != "pensando" {
+		t.Fatalf("GetAgente visible1 inesperado: %+v", visible1)
+	}
+
+	visible2, err := GetAgente("CodexVisible2")
+	if err != nil {
+		t.Fatalf("GetAgente visible2: %v", err)
+	}
+	if visible2.Activo || visible2.EstadoSesion != "" {
+		t.Fatalf("GetAgente visible2 inesperado: %+v", visible2)
+	}
+}
