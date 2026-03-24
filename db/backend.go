@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"orquesta/storage"
 )
 
 type Backend interface {
@@ -18,7 +20,19 @@ type Backend interface {
 var (
 	backendRegistry = map[string]Backend{}
 	currentBackend  Backend
+	currentTarget   string
 )
+
+func IsOpen() bool {
+	return DB != nil
+}
+
+func CurrentDBPath() string {
+	if strings.TrimSpace(currentTarget) != "" {
+		return currentTarget
+	}
+	return backendTarget(backendName())
+}
 
 func RegisterBackend(backend Backend) {
 	if backend == nil {
@@ -28,8 +42,15 @@ func RegisterBackend(backend Backend) {
 }
 
 func backendName() string {
+	if v := strings.TrimSpace(os.Getenv("ORQUESTA_DB_DRIVER")); v != "" {
+		if name := storage.DialectForDriver(v).Name; name != "" {
+			return name
+		}
+	}
 	if v := strings.TrimSpace(strings.ToLower(os.Getenv("ORQUESTA_DB_BACKEND"))); v != "" {
-		return v
+		if name := storage.DialectForDriver(v).Name; name != "" {
+			return name
+		}
 	}
 	return "sqlite"
 }
@@ -69,6 +90,25 @@ func CurrentBackendName() string {
 	return currentBackend.Name()
 }
 
+func DriverName() string {
+	if currentBackend != nil {
+		return normalizedDriverName(currentBackend.Name())
+	}
+	return normalizedDriverName(backendName())
+}
+
+func normalizedDriverName(driver string) string {
+	return storage.DialectForDriver(driver).Name
+}
+
+func PlaceholderStyle() string {
+	return storage.DialectForDriver(DriverName()).PlaceholderStyle()
+}
+
+func QueryRebindingEnabled() bool {
+	return storage.DialectForDriver(DriverName()).RebindParameters()
+}
+
 func BackupTo(path string) error {
 	if DB == nil {
 		return fmt.Errorf("la base de datos no está inicializada")
@@ -76,5 +116,5 @@ func BackupTo(path string) error {
 	if currentBackend == nil {
 		return fmt.Errorf("backend de persistencia no inicializado")
 	}
-	return currentBackend.Backup(DB, path)
+	return currentBackend.Backup(DB.DB, path)
 }

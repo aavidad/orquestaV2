@@ -38,24 +38,27 @@ var worktreeListarCmd = &cobra.Command{
 			query.Set("estado", estadoStr)
 		}
 
-		repo := db.SQLiteWorktreeRepository{}
-		filter := coordination.WorktreeFilter{}
-		if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
-			filter.Agent = &agente
-		}
-		if proyectoRef, _ := cmd.Flags().GetString("proyecto"); strings.TrimSpace(proyectoRef) != "" {
-			proyecto, err := db.GetProyecto(proyectoRef)
-			if err != nil {
-				return err
-			}
-			filter.ProjectID = &proyecto.ID
-		}
-		if estadoStr, _ := cmd.Flags().GetString("estado"); strings.TrimSpace(estadoStr) != "" {
-			estado := coordination.WorktreeState(estadoStr)
-			filter.State = &estado
-		}
 		worktrees, ok, err := cargarWorktreesDesdeAPI(query)
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			repo := db.SQLiteWorktreeRepository{}
+			filter := coordination.WorktreeFilter{}
+			if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
+				filter.Agent = &agente
+			}
+			if proyectoRef, _ := cmd.Flags().GetString("proyecto"); strings.TrimSpace(proyectoRef) != "" {
+				proyecto, err := db.GetProyecto(proyectoRef)
+				if err != nil {
+					return err
+				}
+				filter.ProjectID = &proyecto.ID
+			}
+			if estadoStr, _ := cmd.Flags().GetString("estado"); strings.TrimSpace(estadoStr) != "" {
+				estado := coordination.WorktreeState(estadoStr)
+				filter.State = &estado
+			}
 			worktrees, err = repo.List(filter)
 		}
 		if err != nil {
@@ -69,6 +72,49 @@ var worktreeListarCmd = &cobra.Command{
 		for _, worktree := range worktrees {
 			fmt.Printf("%-5d %-14d %-10s %-20s %s\n", worktree.ID, worktree.ProjectID, worktree.Agent, truncar(worktree.Branch, 20), worktree.Path)
 		}
+		return nil
+	},
+}
+
+var worktreeResolverCmd = &cobra.Command{
+	Use:   "resolver <agente> <proyecto>",
+	Short: "Resuelve la ruta del worktree activo de un agente para un proyecto",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		jsonOut, _ := cmd.Flags().GetBool("json")
+		query := url.Values{
+			"agente":   {args[0]},
+			"proyecto": {args[1]},
+			"estado":   {string(coordination.WorktreeActive)},
+		}
+
+		repo := db.SQLiteWorktreeRepository{}
+		estado := coordination.WorktreeActive
+		filter := coordination.WorktreeFilter{Agent: &args[0], State: &estado}
+
+		worktrees, ok, err := cargarWorktreesDesdeAPI(query)
+		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			proyecto, err := db.GetProyecto(args[1])
+			if err != nil {
+				return err
+			}
+			filter.ProjectID = &proyecto.ID
+			worktrees, err = repo.List(filter)
+		}
+		if err != nil {
+			return err
+		}
+		if len(worktrees) == 0 {
+			return fmt.Errorf("no hay worktree activo para %s en %s", args[0], args[1])
+		}
+		worktree := worktrees[0]
+		if jsonOut {
+			return imprimirJSON(worktree)
+		}
+		fmt.Println(worktree.Path)
 		return nil
 	},
 }
@@ -176,6 +222,7 @@ func init() {
 
 	worktreeCerrarCmd.Flags().Bool("eliminar", false, "Eliminar también el worktree del repo")
 	worktreeCerrarCmd.Flags().String("motivo", "", "Motivo del cierre")
+	worktreeResolverCmd.Flags().Bool("json", false, "Salida JSON")
 
-	worktreeCmd.AddCommand(worktreeListarCmd, worktreeCrearCmd, worktreeCerrarCmd)
+	worktreeCmd.AddCommand(worktreeListarCmd, worktreeResolverCmd, worktreeCrearCmd, worktreeCerrarCmd)
 }

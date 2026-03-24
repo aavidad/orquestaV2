@@ -53,10 +53,11 @@ func asegurarVotosPendientesPropuesta(propuestaID int64) (int, error) {
 	}
 
 	insertados := 0
+	stmt := insertIgnoreValuesSQL("votos", []string{"propuesta_id", "agente", "posicion"}, []string{"propuesta_id", "agente"})
 	for _, nombre := range agentes {
 		res, err := DB.Exec(
-			`INSERT OR IGNORE INTO votos (propuesta_id, agente, posicion) VALUES (?,?,'pendiente')`,
-			propuestaID, nombre,
+			stmt,
+			propuestaID, nombre, VotoPendiente,
 		)
 		if err != nil {
 			return insertados, err
@@ -68,7 +69,9 @@ func asegurarVotosPendientesPropuesta(propuestaID int64) (int, error) {
 	return insertados, nil
 }
 
-// CrearPropuesta inserta una nueva propuesta.
+// CrearPropuesta inserta una nueva propuesta en el sistema de gobernanza de Orquesta.
+// Además de la persistencia, inicia automáticamente el ciclo de votos pendientes
+// para todos los agentes habilitados y emite una auditoría completa.
 func CrearPropuesta(p *Propuesta) (int64, error) {
 	// Auto-generar código si no se indica
 	if p.Codigo == "" {
@@ -111,20 +114,24 @@ func GetPropuesta(codigoOID string) (*Propuesta, error) {
 	return escanearPropuesta(row)
 }
 
-// ListarPropuestas devuelve propuestas, opcionalmente filtradas por estado.
-func ListarPropuestas(estado *EstadoPropuesta, proyectoID *int64) ([]*Propuesta, error) {
+// ListarPropuestas devuelve propuestas, opcionalmente filtradas por estado y proyecto.
+func ListarPropuestas(estado *EstadoPropuesta, proyectoID ...*int64) ([]*Propuesta, error) {
 	q := `SELECT id, codigo, titulo, descripcion, proyecto_id, tipo, estado, propuesto_por, distribuidor,
 		         created_at, updated_at, cerrada_at
 		  FROM propuestas`
 	args := []any{}
 	var filtros []string
+	var proyectoFiltro *int64
+	if len(proyectoID) > 0 {
+		proyectoFiltro = proyectoID[0]
+	}
 	if estado != nil {
 		filtros = append(filtros, "estado = ?")
 		args = append(args, *estado)
 	}
-	if proyectoID != nil {
+	if proyectoFiltro != nil {
 		filtros = append(filtros, "proyecto_id = ?")
-		args = append(args, *proyectoID)
+		args = append(args, *proyectoFiltro)
 	}
 	if len(filtros) > 0 {
 		q += " WHERE " + strings.Join(filtros, " AND ")

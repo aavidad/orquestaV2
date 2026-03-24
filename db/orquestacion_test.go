@@ -127,6 +127,47 @@ func TestSesionReanudableConProyectoYConector(t *testing.T) {
 	}
 }
 
+func TestObtenerUltimaSesionConFiltroPorCWD(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	cwdA := filepath.Join(tmp, "orquestador", ".orquesta-worktrees", "a")
+	cwdB := filepath.Join(tmp, "orquestador", ".orquesta-worktrees", "b")
+
+	for _, in := range []SesionInicio{
+		{Agente: "codex1", ProyectoID: &proyectoID, CWD: cwdA, Herramienta: "codex", ExternalSessionID: "sess-a", ResumenContinuidad: "resumen-a", Branch: "branch-a"},
+		{Agente: "codex1", ProyectoID: &proyectoID, CWD: cwdB, Herramienta: "codex", ExternalSessionID: "sess-b", ResumenContinuidad: "resumen-b", Branch: "branch-b"},
+	} {
+		if _, err := IniciarSesionContexto(in); err != nil {
+			t.Fatalf("iniciar sesion %+v: %v", in, err)
+		}
+		if err := FinSesion("codex1"); err != nil {
+			t.Fatalf("fin sesion: %v", err)
+		}
+	}
+
+	sesion, err := ObtenerUltimaSesionConFiltro("codex1", &proyectoID, cwdA)
+	if err != nil {
+		t.Fatalf("obtener ultima sesion filtrada: %v", err)
+	}
+	if sesion.CWD != cwdA {
+		t.Fatalf("cwd inesperado: %q", sesion.CWD)
+	}
+	if sesion.ExternalSessionID != "sess-a" {
+		t.Fatalf("external_session_id inesperado: %q", sesion.ExternalSessionID)
+	}
+}
+
 func TestListarTareasConProyectoID(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

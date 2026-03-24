@@ -98,7 +98,9 @@ var proyectoVerCmd = &cobra.Command{
 		fmt.Printf("  Ruta ABS:  %s\n", p.RutaAbs)
 		padre := "—"
 		if p.ParentID != nil {
-			if pad, err := db.GetProyecto(fmt.Sprintf("%d", *p.ParentID)); err == nil {
+			if pad, ok, err := cargarProyectoDesdeAPI(fmt.Sprintf("%d", *p.ParentID)); ok && err == nil && pad != nil {
+				padre = fmt.Sprintf("%d (%s)", *p.ParentID, pad.Slug)
+			} else if pad, err := db.GetProyecto(fmt.Sprintf("%d", *p.ParentID)); err == nil {
 				padre = fmt.Sprintf("%d (%s)", *p.ParentID, pad.Slug)
 			} else {
 				padre = fmt.Sprintf("%d", *p.ParentID)

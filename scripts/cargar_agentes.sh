@@ -4,11 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ORQUESTA_BIN="$ROOT_DIR/orquesta"
 
-if [[ ! -x "$ORQUESTA_BIN" ]]; then
-  echo "No encuentro el binario ejecutable en: $ORQUESTA_BIN" >&2
-  exit 1
-fi
-
 usage() {
   cat <<'EOF'
 Uso:
@@ -64,6 +59,11 @@ fi
 
 if [[ ! -f "$PLAN_FILE" ]]; then
   echo "No existe el fichero: $PLAN_FILE" >&2
+  exit 1
+fi
+
+if [[ "$MODE" == "apply" && ! -x "$ORQUESTA_BIN" ]]; then
+  echo "No encuentro el binario ejecutable en: $ORQUESTA_BIN" >&2
   exit 1
 fi
 

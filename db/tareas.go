@@ -359,10 +359,34 @@ func DesbloquearTarea(id int64, agente, resolucion string) error {
 
 // AnotarTarea añade una nota a una tarea.
 func AnotarTarea(id int64, agente, nota string) error {
+	anotacion := formatearAnotacionTarea(agente, nota, time.Now().UTC())
 	_, err := DB.Exec(
-		`UPDATE tareas SET notas = notas || char(10) || ? || ' [' || datetime('now') || ' ' || ? || ']' WHERE id=?`,
-		nota, agente, id,
+		`UPDATE tareas SET notas = notas || ? WHERE id=?`,
+		anotacion, id,
 	)
+	return err
+}
+
+func formatearAnotacionTarea(agente, nota string, marcaTiempo time.Time) string {
+	return fmt.Sprintf(
+		"\n%s [%s %s]",
+		nota,
+		marcaTiempo.UTC().Format("2006-01-02 15:04:05"),
+		agente,
+	)
+}
+
+func EnviarTareaABacklog(id int64) error {
+	return MoverTareaABacklog(id)
+}
+
+func MoverTareaABacklog(id int64) error {
+	_, err := DB.Exec(`UPDATE tareas SET estado='backlog', agente=NULL WHERE id=?`, id)
+	return err
+}
+
+func ReasignarTarea(id int64, nuevoAgente string) error {
+	_, err := DB.Exec(`UPDATE tareas SET estado='asignada', agente=? WHERE id=?`, nuevoAgente, id)
 	return err
 }
 

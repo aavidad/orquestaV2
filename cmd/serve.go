@@ -8,6 +8,7 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -18,7 +19,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
-	"orquesta/notificaciones"
 )
 
 // ─── Structs de datos ────────────────────────────────────────────────────────
@@ -32,6 +32,7 @@ type webDashData struct {
 	Abiertas    []webPropResumen
 	EnProgreso  []webTareaRow
 	Runtimes    []webRuntimeRow
+	Checkpoints []webTimeTravelCheckpointRow
 	Generado    string
 	Msg         string
 }
@@ -132,6 +133,32 @@ type webRuntimeDetalleData struct {
 	Muestras []webRuntimeSampleRow
 }
 
+type webTimeTravelCheckpointRow struct {
+	ID             int64
+	Creado         string
+	Agente         string
+	Proyecto       string
+	CheckpointKind string
+	Resumen        string
+	Branch         string
+	CWD            string
+	ResumeStrategy string
+	Source         string
+}
+
+type webTimeTravelData struct {
+	Checkpoints    []webTimeTravelCheckpointRow
+	FiltroAgente   string
+	FiltroProyecto string
+	FiltroKind     string
+}
+
+type webTimeTravelDetalleData struct {
+	Checkpoint webTimeTravelCheckpointRow
+	Payload    string
+	Memoria    []*db.EntidadMemoria
+}
+
 // ─── FuncMap ─────────────────────────────────────────────────────────────────
 
 var webFuncMap = template.FuncMap{
@@ -216,6 +243,19 @@ func webRouterRuntimes(w http.ResponseWriter, r *http.Request) {
 	webHandlerRuntimeDetalle(w, r, parts[1])
 }
 
+func webRouterTimeTravel(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) != 2 || parts[0] != "time-travel" {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	webHandlerTimeTravelDetalle(w, r, parts[1])
+}
+
 func webHandlerRuntimes(w http.ResponseWriter, r *http.Request) {
 	filtro := strings.TrimSpace(r.URL.Query().Get("activos"))
 	agenteFiltro := strings.TrimSpace(r.URL.Query().Get("agente"))
@@ -272,6 +312,69 @@ func webHandlerRuntimeDetalle(w http.ResponseWriter, r *http.Request, idStr stri
 	webRender(w, webTplLayout+webTplRuntimeDetalle, data)
 }
 
+func webHandlerTimeTravel(w http.ResponseWriter, r *http.Request) {
+	agenteFiltro := strings.TrimSpace(r.URL.Query().Get("agente"))
+	proyectoFiltro := strings.TrimSpace(r.URL.Query().Get("proyecto"))
+	kindFiltro := strings.TrimSpace(r.URL.Query().Get("kind"))
+
+	filter := db.FiltroRuntimeCheckpoints{Limit: 100}
+	if agenteFiltro != "" {
+		filter.Agente = &agenteFiltro
+	}
+	if proyectoFiltro != "" {
+		if proyecto, err := db.GetProyecto(proyectoFiltro); err == nil {
+			filter.ProyectoID = &proyecto.ID
+		}
+	}
+	if kindFiltro != "" {
+		filter.CheckpointKind = &kindFiltro
+	}
+
+	checkpoints, _ := db.ListarRuntimeCheckpoints(filter)
+	rows := make([]webTimeTravelCheckpointRow, 0, len(checkpoints))
+	for _, cp := range checkpoints {
+		if cp == nil {
+			continue
+		}
+		rows = append(rows, runtimeCheckpointToWeb(cp))
+	}
+
+	webRender(w, webTplLayout+webTplTimeTravel, webTimeTravelData{
+		Checkpoints:    rows,
+		FiltroAgente:   agenteFiltro,
+		FiltroProyecto: proyectoFiltro,
+		FiltroKind:     kindFiltro,
+	})
+}
+
+func webHandlerTimeTravelDetalle(w http.ResponseWriter, r *http.Request, idStr string) {
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	checkpoint, err := db.GetRuntimeCheckpoint(id)
+	if err != nil || checkpoint == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	var memoria []*db.EntidadMemoria
+	if checkpoint.ProyectoID != nil {
+		memoria, _ = db.ListarEntidadesMemoria(db.FiltroEntidadesMemoria{ProyectoID: checkpoint.ProyectoID})
+	}
+	payload := strings.TrimSpace(checkpoint.PayloadJSON)
+	if payload == "" {
+		payload = "{}"
+	}
+
+	webRender(w, webTplLayout+webTplTimeTravelDetalle, webTimeTravelDetalleData{
+		Checkpoint: runtimeCheckpointToWeb(checkpoint),
+		Payload:    payload,
+		Memoria:    memoria,
+	})
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 func webHandlerDash(w http.ResponseWriter, r *http.Request) {
@@ -312,10 +415,18 @@ func webHandlerDash(w http.ResponseWriter, r *http.Request) {
 	runtimeTree, _ := db.ConstruirArbolRuntimes(db.FiltroRuntimes{Activos: &activos})
 	var runtimes []webRuntimeRow
 	aplanarRuntimes(runtimeTree, 0, &runtimes)
+	checkpoints, _ := db.ListarRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{Limit: 5})
+	var recentCheckpoints []webTimeTravelCheckpointRow
+	for _, cp := range checkpoints {
+		if cp == nil {
+			continue
+		}
+		recentCheckpoints = append(recentCheckpoints, runtimeCheckpointToWeb(cp))
+	}
 	webRender(w, webTplLayout+webTplDash, webDashData{
 		Agentes: agentes, Counts: counts, Total: total,
 		Completadas: completadas, Pct: pct,
-		Abiertas: resAbiertas, EnProgreso: ep, Runtimes: runtimes,
+		Abiertas: resAbiertas, EnProgreso: ep, Runtimes: runtimes, Checkpoints: recentCheckpoints,
 		Generado: time.Now().Format("2006-01-02 15:04:05"),
 	})
 }
@@ -426,13 +537,13 @@ func webHandlerTareaAccion(w http.ResponseWriter, r *http.Request, idStr string)
 	case "nota":
 		err = db.AnotarTarea(id, agente, r.FormValue("nota"))
 	case "backlog":
-		_, err = db.DB.Exec(`UPDATE tareas SET estado='backlog', agente=NULL WHERE id=?`, id)
+		err = db.MoverTareaABacklog(id)
 		if err == nil {
 			db.Audit("alberto", "backlog_tarea", "tarea", id, "")
 		}
 	case "reasignar":
 		nuevoAgente := strings.TrimSpace(r.FormValue("nuevo_agente"))
-		_, err = db.DB.Exec(`UPDATE tareas SET agente=?, estado='asignada' WHERE id=?`, nuevoAgente, id)
+		err = db.ReasignarTarea(id, nuevoAgente)
 		if err == nil {
 			db.Audit("alberto", "reasignar_tarea", "tarea", id, nuevoAgente)
 		}
@@ -668,6 +779,29 @@ func runtimeRowToWeb(row runtimeRow) webRuntimeRow {
 	}
 }
 
+func runtimeCheckpointToWeb(cp *db.RuntimeCheckpoint) webTimeTravelCheckpointRow {
+	proyecto := "—"
+	if cp.ProyectoID != nil {
+		if p, err := db.GetProyecto(strconv.FormatInt(*cp.ProyectoID, 10)); err == nil && p != nil {
+			proyecto = p.Slug
+		} else {
+			proyecto = strconv.FormatInt(*cp.ProyectoID, 10)
+		}
+	}
+	return webTimeTravelCheckpointRow{
+		ID:             cp.ID,
+		Creado:         cp.CreatedAt.Format("2006-01-02 15:04:05"),
+		Agente:         cp.Agente,
+		Proyecto:       proyecto,
+		CheckpointKind: valorVacio(cp.CheckpointKind),
+		Resumen:        valorVacio(cp.Resumen),
+		Branch:         valorVacio(cp.Branch),
+		CWD:            valorVacio(cp.CWD),
+		ResumeStrategy: valorVacio(cp.ResumeStrategy),
+		Source:         valorVacio(cp.Source),
+	}
+}
+
 func webRender(w http.ResponseWriter, tplStr string, data any) {
 	tmpl, err := template.New("layout").Funcs(webFuncMap).Parse(tplStr)
 	if err != nil {
@@ -693,60 +827,16 @@ var serveCmd = &cobra.Command{
 		mux.HandleFunc("/propuestas", webHandlerPropuestas)
 		mux.HandleFunc("/propuestas/", webRouterPropuestas)
 		mux.HandleFunc("/runtimes", webHandlerRuntimes)
+		mux.HandleFunc("/runtimes/", webRouterRuntimes)
+		mux.HandleFunc("/time-travel", webHandlerTimeTravel)
+		mux.HandleFunc("/time-travel/", webRouterTimeTravel)
 		registerAPIRoutes(mux)
 		fmt.Printf("✓ Panel web en http://localhost%s\n", addr)
 		fmt.Println("  Ctrl+C para detener.")
 
-		// Worker de reanimación
-		go func() {
-			for {
-				// Auto-reanimación: Despertar agentes cada minuto
-				reanimar, err := db.CheckReanimaciones()
-				if err == nil {
-					for _, a := range reanimar {
-						db.Audit("server", "reanimar_agente", "agente", 0, fmt.Sprintf("Agente %s reanimado tras pausa: %s", a.Nombre, a.MotivoPausa))
-						_ = db.ResetReanimacion(a.Nombre)
-					}
-				}
-				time.Sleep(1 * time.Minute)
-			}
-		}()
-
-		// 2. Worker de Gestión de Cuotas y Salud (Autónomo)
-		go func() {
-			for {
-				_ = db.GarantizarSaludAgentes()
-				time.Sleep(60 * time.Second)
-			}
-		}()
-
-		// 3. Worker de Planificación Automática (Autonomía Total)
-		go func() {
-			for {
-				time.Sleep(30 * time.Second)
-				_ = db.PlanificarTareasAutomaticamente()
-			}
-		}()
-
-		// 3. Worker de Notificaciones (Telegram / Mobile)
-		notificaciones.InicializarDesdeConfig()
-		go func() {
-			for ev := range db.CanalNotificaciones {
-				if notificaciones.GlobalNotificador == nil {
-					continue
-				}
-				switch ev.Tipo {
-				case "bloqueo":
-					_ = notificaciones.GlobalNotificador.EnviarAlertaBloqueo(ev.ID, ev.Agente, ev.Texto)
-				case "propuesta":
-					_ = notificaciones.GlobalNotificador.EnviarPropuestaVotacion(ev.Codigo, ev.Texto)
-				case "fin_proyecto":
-					_ = notificaciones.GlobalNotificador.EnviarAvisoFinProyecto(ev.ID, ev.Texto)
-				case "mensaje":
-					_ = notificaciones.GlobalNotificador.EnviarMensaje(ev.Texto)
-				}
-			}
-		}()
+		controlCtx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		newControlPlaneRunner().Start(controlCtx)
 
 		return http.ListenAndServe(addr, mux)
 	},
@@ -832,6 +922,7 @@ const webTplLayout = `<!doctype html>
       <a href="/tareas">Tareas</a>
       <a href="/propuestas">Propuestas</a>
       <a href="/runtimes">Runtimes</a>
+      <a href="/time-travel">Time Travel</a>
     </div>
   </nav>
 </header>
@@ -942,6 +1033,20 @@ const webTplDash = `{{define "content"}}
             <td><span class="tag rt-{{.Estado}}">{{.Estado}}</span></td>
             <td>{{.PID}}</td>
             <td>{{.Hijos}}</td>
+          </tr>
+        {{end}}
+        </tbody></table>
+      </div>
+      {{end}}
+      {{if .Checkpoints}}
+      <div>
+        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Checkpoints recientes <a href="/time-travel" style="font-size:.9em;font-weight:normal;text-transform:none">ver todos →</a></h4>
+        <table><thead><tr><th>Agente</th><th>Tipo</th><th>Resumen</th></tr></thead><tbody>
+        {{range .Checkpoints}}
+          <tr>
+            <td><a href="/time-travel/{{.ID}}">{{.Agente}}</a></td>
+            <td><span class="tag t-media">{{.CheckpointKind}}</span></td>
+            <td style="font-size:.82rem">{{trunc .Resumen 32}}</td>
           </tr>
         {{end}}
         </tbody></table>
@@ -1274,6 +1379,9 @@ const webTplRuntimeDetalle = `{{define "content"}}
   <span class="tag rt-{{.Runtime.Estado}}">{{.Runtime.Estado}}</span>
   <span style="color:#64748b;font-size:.85rem;margin-left:.5rem">Proyecto: {{.Runtime.Proyecto}} · Provider: {{.Runtime.Provider}} · Connector: {{.Runtime.Connector}}</span>
 </p>
+<p style="margin-top:-.2rem">
+  <a href="/time-travel?agente={{.Runtime.Agente}}{{if neStr .Runtime.Proyecto "—"}}&proyecto={{.Runtime.Proyecto}}{{end}}" style="font-size:.84rem">Ver checkpoints del agente →</a>
+</p>
 
 <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr));margin-bottom:1rem">
   <div class="stat"><div class="n" style="font-size:1.2rem">{{.Runtime.PID}}</div><div class="l">pid</div></div>
@@ -1308,6 +1416,96 @@ const webTplRuntimeDetalle = `{{define "content"}}
 </div>
 {{else}}
 <p style="color:#94a3b8">No hay muestras registradas para este runtime.</p>
+{{end}}
+{{end}}
+`
+
+const webTplTimeTravel = `{{define "content"}}
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
+  <h2 style="margin:0">Time Travel <small style="font-size:.5em;color:#94a3b8">{{len .Checkpoints}}</small></h2>
+</div>
+
+<div class="filtros">
+  <a href="/time-travel"{{if and (eqStr .FiltroAgente "") (eqStr .FiltroProyecto "") (eqStr .FiltroKind "")}} class="sel"{{end}}>Todos</a>
+  <a href="/time-travel?kind=checkpoint"{{if eqStr .FiltroKind "checkpoint"}} class="sel"{{end}}>Checkpoints</a>
+  <a href="/time-travel?kind=handoff"{{if eqStr .FiltroKind "handoff"}} class="sel"{{end}}>Handoffs</a>
+  <a href="/time-travel?kind=sync_status"{{if eqStr .FiltroKind "sync_status"}} class="sel"{{end}}>Sync status</a>
+</div>
+
+<form method="GET" action="/time-travel" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.5rem;align-items:end;margin-bottom:1rem">
+  <div><label>Agente</label><input type="text" name="agente" value="{{.FiltroAgente}}" placeholder="Codex1"></div>
+  <div><label>Proyecto</label><input type="text" name="proyecto" value="{{.FiltroProyecto}}" placeholder="orquestador"></div>
+  <div><label>Tipo</label><input type="text" name="kind" value="{{.FiltroKind}}" placeholder="checkpoint"></div>
+  <div><button type="submit" class="btn-sm">Filtrar</button></div>
+</form>
+
+{{if .Checkpoints}}
+<div style="overflow-x:auto">
+<table>
+  <thead><tr><th>ID</th><th>Creado</th><th>Agente</th><th>Proyecto</th><th>Tipo</th><th>Resumen</th><th>Branch</th><th>Resume</th><th></th></tr></thead>
+  <tbody>
+  {{range .Checkpoints}}
+    <tr>
+      <td>#{{.ID}}</td>
+      <td style="font-size:.82em;color:#64748b">{{.Creado}}</td>
+      <td>{{.Agente}}</td>
+      <td>{{.Proyecto}}</td>
+      <td><span class="tag t-media">{{.CheckpointKind}}</span></td>
+      <td>{{trunc .Resumen 64}}</td>
+      <td><code style="font-size:.8em">{{.Branch}}</code></td>
+      <td>{{.ResumeStrategy}}</td>
+      <td><a href="/time-travel/{{.ID}}" class="btn-sm">Inspeccionar →</a></td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<p style="color:#94a3b8">No hay checkpoints visibles con este filtro.</p>
+{{end}}
+{{end}}
+`
+
+const webTplTimeTravelDetalle = `{{define "content"}}
+<a href="/time-travel" style="font-size:.85rem;color:#64748b">← volver a Time Travel</a>
+<h2 style="margin:.5rem 0">Checkpoint #{{.Checkpoint.ID}} — {{.Checkpoint.Agente}}</h2>
+<p>
+  <span class="tag t-media">{{.Checkpoint.CheckpointKind}}</span>
+  <span style="color:#64748b;font-size:.85rem;margin-left:.5rem">Proyecto: {{.Checkpoint.Proyecto}} · Branch: {{.Checkpoint.Branch}} · {{.Checkpoint.Creado}}</span>
+</p>
+
+<div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:1rem">
+  <div class="stat"><div class="n" style="font-size:1rem">{{.Checkpoint.ResumeStrategy}}</div><div class="l">resume</div></div>
+  <div class="stat"><div class="n" style="font-size:1rem">{{.Checkpoint.Source}}</div><div class="l">source</div></div>
+  <div class="stat"><div class="n" style="font-size:1rem">{{.Checkpoint.Branch}}</div><div class="l">branch</div></div>
+  <div class="stat"><div class="n" style="font-size:.92rem">{{trunc .Checkpoint.CWD 28}}</div><div class="l">cwd</div></div>
+</div>
+
+<h4 style="margin:0 0 .5rem 0">Resumen</h4>
+<p style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.4rem;padding:.8rem 1rem">{{.Checkpoint.Resumen}}</p>
+
+<h4 style="margin:1rem 0 .5rem 0">Payload</h4>
+<pre style="background:#0f172a;color:#e2e8f0;padding:1rem;border-radius:.5rem;overflow:auto;font-size:.8rem">{{.Payload}}</pre>
+
+<h4 style="margin:1rem 0 .5rem 0">Memoria de proyecto</h4>
+{{if .Memoria}}
+<div style="overflow-x:auto">
+<table>
+  <thead><tr><th>Entidad</th><th>Tipo</th><th>Verificado por</th><th>Valor</th></tr></thead>
+  <tbody>
+  {{range .Memoria}}
+    <tr>
+      <td><strong>{{.Nombre}}</strong></td>
+      <td><span class="tag t-media">{{.Tipo}}</span></td>
+      <td>{{.VerificadoPor}}</td>
+      <td><code style="font-size:.78em">{{trunc .ValorJSON 96}}</code></td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<p style="color:#94a3b8">No hay memoria asociada a este proyecto.</p>
 {{end}}
 {{end}}
 `

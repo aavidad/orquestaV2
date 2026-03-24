@@ -1,0 +1,67 @@
+package cmd
+
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+)
+
+func TestCmdNoUsaSQLDirectoNiAperturasFueraDeExcepcionesControladas(t *testing.T) {
+	t.Parallel()
+
+	root := "."
+	patronApertura := regexp.MustCompile(`db\.(Open|Close|IsOpen|CurrentDBPath)\(`)
+	patronSQLDirecto := regexp.MustCompile(`db\.DB\.(Exec|Query|QueryRow|QueryContext|QueryRowContext|ExecContext)\(`)
+	permitidosPorFichero := map[string]map[string]bool{
+		"root.go": {
+			"Open":   true,
+			"Close":  true,
+			"IsOpen": true,
+		},
+		"server.go": {
+			"Open":          true,
+			"IsOpen":        true,
+			"CurrentDBPath": true,
+		},
+		"server_client.go": {
+			"Open": true,
+		},
+		"persistencia.go": {
+			"CurrentDBPath": true,
+		},
+	}
+
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		base := filepath.Base(path)
+		if filepath.Ext(base) != ".go" || strings.HasSuffix(base, "_test.go") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		texto := string(data)
+		for _, match := range patronApertura.FindAllStringSubmatch(texto, -1) {
+			llamada := match[1]
+			if permitidosPorFichero[base][llamada] {
+				continue
+			}
+			t.Errorf("%s usa db.%s() fuera de los puntos de apertura controlados", base, llamada)
+		}
+		for _, match := range patronSQLDirecto.FindAllStringSubmatch(texto, -1) {
+			t.Errorf("%s usa db.DB.%s() con SQL directo", base, match[1])
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk cmd dir: %v", err)
+	}
+}

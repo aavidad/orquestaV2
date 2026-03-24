@@ -118,6 +118,20 @@ func GetProyecto(ref string) (*Proyecto, error) {
 	return escanearProyecto(DB.QueryRow(q, args...))
 }
 
+func ResolveProyectoIDBySlug(slug string) (*int64, error) {
+	proyecto, err := GetProyecto(slug)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if proyecto == nil {
+		return nil, nil
+	}
+	return &proyecto.ID, nil
+}
+
 func ListarProyectos(f FiltroProyectos) ([]*Proyecto, error) {
 	q := `
 		SELECT id, slug, nombre, ruta_abs, tipo, parent_id, activo, created_at, updated_at

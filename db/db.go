@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-var DB *sql.DB
+var DB *Handle
 
 type EventoNotificacion struct {
 	Tipo       string // bloqueo | propuesta | fin_proyecto | mensaje
@@ -23,7 +23,9 @@ type EventoNotificacion struct {
 
 var CanalNotificaciones = make(chan EventoNotificacion, 100)
 
-// Open abre (o crea) la base de datos usando el backend configurado y aplica su preparación.
+// Open inicializa el sistema de persistencia de Orquesta.
+// Resuelve el backend (SQLite/otros), aplica migraciones idempotentes y
+// prepara los canales de notificación en tiempo real.
 func Open() error {
 	backend, target, err := resolveBackend()
 	if err != nil {
@@ -34,12 +36,14 @@ func Open() error {
 		return err
 	}
 	currentBackend = backend
+	currentTarget = target
 	if err := backend.Prepare(db); err != nil {
 		_ = db.Close()
 		currentBackend = nil
+		currentTarget = ""
 		return err
 	}
-	DB = db
+	DB = newHandle(db, backend.Name())
 	return nil
 }
 
@@ -49,6 +53,7 @@ func Close() {
 	}
 	DB = nil
 	currentBackend = nil
+	currentTarget = ""
 }
 
 // Orden de resolución de la ruta SQLite:
@@ -80,6 +85,7 @@ func postMigraciones(conn *sql.DB) error {
 		`ALTER TABLE tareas ADD COLUMN proyecto_id INTEGER REFERENCES proyectos(id)`,
 		`ALTER TABLE propuestas ADD COLUMN proyecto_id INTEGER REFERENCES proyectos(id)`,
 		`ALTER TABLE sesiones ADD COLUMN proyecto_id INTEGER REFERENCES proyectos(id)`,
+		`ALTER TABLE sesiones ADD COLUMN pool_id INTEGER REFERENCES pools_capacidad(id)`,
 		`ALTER TABLE sesiones ADD COLUMN estado TEXT NOT NULL DEFAULT 'activa'`,
 		`ALTER TABLE sesiones ADD COLUMN cwd TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE sesiones ADD COLUMN herramienta TEXT NOT NULL DEFAULT ''`,
@@ -201,6 +207,93 @@ func postMigraciones(conn *sql.DB) error {
 			payload_json TEXT NOT NULL DEFAULT '{}',
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
+		`CREATE TABLE IF NOT EXISTS runtime_handles (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			agente TEXT NOT NULL REFERENCES agentes(nombre),
+			proyecto_id INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+			sesion_id INTEGER REFERENCES sesiones(id) ON DELETE SET NULL,
+			runtime_id INTEGER REFERENCES runtime_instances(id) ON DELETE SET NULL,
+			transporte TEXT NOT NULL DEFAULT 'cli',
+			handle_kind TEXT NOT NULL DEFAULT 'session',
+			handle_ref TEXT NOT NULL DEFAULT '',
+			estado TEXT NOT NULL DEFAULT 'activo' CHECK (estado IN ('activo','pausado','cerrado','fallido')),
+			lease_token TEXT NOT NULL DEFAULT '',
+			capabilities_json TEXT NOT NULL DEFAULT '{}',
+			metadata_json TEXT NOT NULL DEFAULT '{}',
+			last_seen_at DATETIME,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_handles_sesion
+			ON runtime_handles(sesion_id)
+			WHERE sesion_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_runtime_handles_agente_estado
+			ON runtime_handles(agente, estado, id DESC)`,
+		`CREATE TABLE IF NOT EXISTS runtime_orders (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			agente TEXT NOT NULL REFERENCES agentes(nombre),
+			proyecto_id INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+			runtime_id INTEGER REFERENCES runtime_instances(id) ON DELETE SET NULL,
+			handle_id INTEGER REFERENCES runtime_handles(id) ON DELETE SET NULL,
+			tipo TEXT NOT NULL,
+			payload_json TEXT NOT NULL DEFAULT '{}',
+			resultado_json TEXT NOT NULL DEFAULT '{}',
+			error_text TEXT NOT NULL DEFAULT '',
+			estado TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente','tomada','ejecutando','completada','fallida','expirada','cancelada')),
+			available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			started_at DATETIME,
+			finished_at DATETIME,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`ALTER TABLE runtime_orders ADD COLUMN available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`,
+		`CREATE INDEX IF NOT EXISTS idx_runtime_orders_estado_created
+			ON runtime_orders(estado, available_at, id)`,
+		`CREATE TABLE IF NOT EXISTS runtime_mailbox (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			from_agente TEXT NOT NULL REFERENCES agentes(nombre),
+			to_agente TEXT NOT NULL REFERENCES agentes(nombre),
+			proyecto_id INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+			runtime_order_id INTEGER REFERENCES runtime_orders(id) ON DELETE SET NULL,
+			kind TEXT NOT NULL,
+			payload_json TEXT NOT NULL DEFAULT '{}',
+			estado TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente','entregado','consumido','expirado','cancelado')),
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			delivered_at DATETIME,
+			consumed_at DATETIME
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_runtime_mailbox_destino_estado
+			ON runtime_mailbox(to_agente, estado, id DESC)`,
+		`CREATE TABLE IF NOT EXISTS runtime_checkpoints (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			agente TEXT NOT NULL REFERENCES agentes(nombre),
+			proyecto_id INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+			sesion_id INTEGER REFERENCES sesiones(id) ON DELETE SET NULL,
+			runtime_id INTEGER REFERENCES runtime_instances(id) ON DELETE SET NULL,
+			checkpoint_kind TEXT NOT NULL DEFAULT 'manual',
+			resumen TEXT NOT NULL DEFAULT '',
+			branch TEXT NOT NULL DEFAULT '',
+			cwd TEXT NOT NULL DEFAULT '',
+			payload_json TEXT NOT NULL DEFAULT '{}',
+			resume_strategy TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_runtime_checkpoints_agente_created
+			ON runtime_checkpoints(agente, created_at DESC, id DESC)`,
+		`CREATE TABLE IF NOT EXISTS entidades_memoria (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			nombre TEXT NOT NULL,
+			tipo TEXT NOT NULL CHECK (tipo IN ('negocio','api','db','infra','regla')),
+			valor_json TEXT NOT NULL DEFAULT '{}',
+			metadata_json TEXT NOT NULL DEFAULT '{}',
+			ultima_verificacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			verificado_por TEXT NOT NULL DEFAULT '',
+			proyecto_id INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+			UNIQUE(nombre, proyecto_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_entidades_memoria_proyecto_tipo
+			ON entidades_memoria(proyecto_id, tipo, nombre)`,
 		`CREATE TABLE IF NOT EXISTS conectores (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			slug TEXT NOT NULL UNIQUE,
@@ -244,6 +337,16 @@ func postMigraciones(conn *sql.DB) error {
 		BEGIN
 			UPDATE runtime_instances SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 		END`,
+		`CREATE TRIGGER IF NOT EXISTS trig_runtime_handles_updated
+			AFTER UPDATE ON runtime_handles
+		BEGIN
+			UPDATE runtime_handles SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+		END`,
+		`CREATE TRIGGER IF NOT EXISTS trig_runtime_orders_updated
+			AFTER UPDATE ON runtime_orders
+		BEGIN
+			UPDATE runtime_orders SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+		END`,
 		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('workspace_root','')`,
 		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('agent_loop_mode','sticky')`,
 		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('agent_tick_seconds','30')`,
@@ -263,6 +366,9 @@ func postMigraciones(conn *sql.DB) error {
 		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('pool_default_budget_source','manual')`,
 		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('model_policy_default_profile','implementacion')`,
 		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('model_policy_default_reasoning','high')`,
+		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('runtime_handle_stale_seconds','120')`,
+		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('runtime_order_batch_size','10')`,
+		`INSERT OR IGNORE INTO config (clave, valor) VALUES ('runtime_order_stale_seconds','120')`,
 		`INSERT OR IGNORE INTO conectores (slug, nombre, transporte, comando, metadata_json) VALUES ('claude-code','Claude Code','cli','claude','{\"familia\":\"anthropic\",\"reanudable\":true}')`,
 		`INSERT OR IGNORE INTO conectores (slug, nombre, transporte, comando, metadata_json) VALUES ('codex-cli','Codex CLI','cli','codex','{\"familia\":\"openai\",\"reanudable\":true}')`,
 		`INSERT OR IGNORE INTO conectores (slug, nombre, transporte, comando, metadata_json) VALUES ('gemini-cli','Gemini CLI','cli','gemini','{\"familia\":\"google\",\"reanudable\":true}')`,
@@ -387,9 +493,16 @@ func existeFichero(path string) bool {
 }
 
 func aplicarSchema(db *sql.DB) error {
-	return ejecutarConReintentos(func() error {
-		_, err := db.Exec(Schema)
+	if err := prepararSchemaLegacy(db); err != nil {
 		return err
+	}
+	if err := ejecutarConReintentos(func() error {
+		return aplicarDDL(db, schemaDDL())
+	}); err != nil {
+		return err
+	}
+	return ejecutarConReintentos(func() error {
+		return aplicarSeedSQL(db, schemaSeedData())
 	})
 }
 
@@ -421,7 +534,350 @@ func esErrorMigracionIgnorable(err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "duplicate column name") ||
-		strings.Contains(msg, "already exists")
+		strings.Contains(msg, "already exists") ||
+		strings.Contains(msg, "duplicate key name")
+}
+
+func prepararSchemaLegacy(db *sql.DB) error {
+	if err := reconstruirRuntimeHandlesLegacy(db); err != nil {
+		return err
+	}
+	if err := reconstruirRuntimeOrdersLegacy(db); err != nil {
+		return err
+	}
+	return nil
+}
+
+func tablaExiste(db *sql.DB, nombre string) (bool, error) {
+	var total int
+	err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = ?`, nombre).Scan(&total)
+	return total > 0, err
+}
+
+func tablaTieneColumna(db *sql.DB, tabla, columna string) (bool, error) {
+	rows, err := db.Query(`PRAGMA table_info(` + tabla + `)`)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			cid       int
+			name      string
+			typ       string
+			notNull   int
+			dfltValue sql.NullString
+			pk        int
+		)
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &dfltValue, &pk); err != nil {
+			return false, err
+		}
+		if strings.EqualFold(strings.TrimSpace(name), columna) {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
+func tablaSQL(db *sql.DB, nombre string) (string, error) {
+	var sqlText sql.NullString
+	err := db.QueryRow(`SELECT sql FROM sqlite_master WHERE type='table' AND name = ?`, nombre).Scan(&sqlText)
+	if err == sql.ErrNoRows || !sqlText.Valid {
+		return "", nil
+	}
+	return sqlText.String, err
+}
+
+func tablaTieneFilas(db *sql.DB, nombre string) (bool, error) {
+	var total int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM ` + nombre).Scan(&total); err != nil {
+		return false, err
+	}
+	return total > 0, nil
+}
+
+func reconstruirRuntimeHandlesLegacy(db *sql.DB) error {
+	const tableName = "runtime_handles"
+	existe, err := tablaExiste(db, tableName)
+	if err != nil || !existe {
+		return err
+	}
+	cols := []string{
+		"id", "agente", "proyecto_id", "sesion_id", "runtime_id", "transporte", "handle_kind",
+		"handle_ref", "estado", "lease_token", "capabilities_json", "metadata_json",
+		"last_seen_at", "created_at", "updated_at",
+	}
+	needsRebuild := false
+	for _, col := range cols {
+		ok, err := tablaTieneColumna(db, tableName, col)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			needsRebuild = true
+			break
+		}
+	}
+	if !needsRebuild {
+		return nil
+	}
+	return rebuildSQLiteTable(
+		db,
+		tableName,
+		[]string{"idx_runtime_handles_sesion", "idx_runtime_handles_agente_estado"},
+		`CREATE TABLE runtime_handles (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			agente TEXT NOT NULL REFERENCES agentes(nombre),
+			proyecto_id INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+			sesion_id INTEGER REFERENCES sesiones(id) ON DELETE SET NULL,
+			runtime_id INTEGER REFERENCES runtime_instances(id) ON DELETE SET NULL,
+			transporte TEXT NOT NULL DEFAULT 'cli',
+			handle_kind TEXT NOT NULL DEFAULT 'session',
+			handle_ref TEXT NOT NULL DEFAULT '',
+			estado TEXT NOT NULL DEFAULT 'activo' CHECK (estado IN ('activo','pausado','cerrado','fallido')),
+			lease_token TEXT NOT NULL DEFAULT '',
+			capabilities_json TEXT NOT NULL DEFAULT '{}',
+			metadata_json TEXT NOT NULL DEFAULT '{}',
+			last_seen_at DATETIME,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		[]string{
+			`CREATE UNIQUE INDEX idx_runtime_handles_sesion ON runtime_handles(sesion_id) WHERE sesion_id IS NOT NULL`,
+			`CREATE INDEX idx_runtime_handles_agente_estado ON runtime_handles(agente, estado, id DESC)`,
+		},
+		func(legacy string, legacyCols map[string]bool) (string, []any) {
+			insertCols := []string{
+				"id", "agente", "proyecto_id", "sesion_id", "runtime_id", "transporte", "handle_kind",
+				"handle_ref", "estado", "lease_token", "capabilities_json", "metadata_json",
+				"last_seen_at", "created_at", "updated_at",
+			}
+			selectExprs := []string{
+				runtimeLegacyExpr(legacyCols, "id", "NULL"),
+				runtimeLegacyExpr(legacyCols, "agente", "''"),
+				runtimeLegacyExpr(legacyCols, "proyecto_id", "NULL"),
+				runtimeLegacyExpr(legacyCols, "sesion_id", "NULL"),
+				runtimeLegacyExpr(legacyCols, "runtime_id", "NULL"),
+				runtimeLegacyExpr(legacyCols, "transporte", "'cli'"),
+				runtimeLegacyExpr(legacyCols, "handle_kind", "'session'"),
+				runtimeLegacyExpr(legacyCols, "handle_ref", "''"),
+				runtimeLegacyEstadoHandleExpr(legacyCols),
+				runtimeLegacyExpr(legacyCols, "lease_token", "''"),
+				runtimeLegacyExpr(legacyCols, "capabilities_json", "'{}'"),
+				runtimeLegacyExpr(legacyCols, "metadata_json", "'{}'"),
+				runtimeLegacyExpr(legacyCols, "last_seen_at", "CURRENT_TIMESTAMP"),
+				runtimeLegacyExpr(legacyCols, "created_at", "CURRENT_TIMESTAMP"),
+				runtimeLegacyExpr(legacyCols, "updated_at", runtimeLegacyExpr(legacyCols, "created_at", "CURRENT_TIMESTAMP")),
+			}
+			return `INSERT INTO runtime_handles (` + strings.Join(insertCols, ", ") + `)
+				SELECT ` + strings.Join(selectExprs, ", ") + ` FROM ` + legacy, nil
+		},
+	)
+}
+
+func reconstruirRuntimeOrdersLegacy(db *sql.DB) error {
+	const tableName = "runtime_orders"
+	existe, err := tablaExiste(db, tableName)
+	if err != nil || !existe {
+		return err
+	}
+	cols := []string{
+		"id", "agente", "proyecto_id", "runtime_id", "handle_id", "tipo", "payload_json",
+		"resultado_json", "error_text", "estado", "available_at", "created_at",
+		"started_at", "finished_at", "updated_at",
+	}
+	needsRebuild := false
+	for _, col := range cols {
+		ok, err := tablaTieneColumna(db, tableName, col)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			needsRebuild = true
+			break
+		}
+	}
+	if !needsRebuild {
+		sqlText, err := tablaSQL(db, tableName)
+		if err != nil {
+			return err
+		}
+		sqlNorm := strings.ToLower(sqlText)
+		if strings.TrimSpace(sqlNorm) != "" &&
+			(!strings.Contains(sqlNorm, "tomada") || !strings.Contains(sqlNorm, "ejecutando")) {
+			needsRebuild = true
+		}
+	}
+	if !needsRebuild {
+		return nil
+	}
+	return rebuildSQLiteTable(
+		db,
+		tableName,
+		[]string{"idx_runtime_orders_estado_created"},
+		`CREATE TABLE runtime_orders (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			agente TEXT NOT NULL REFERENCES agentes(nombre),
+			proyecto_id INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+			runtime_id INTEGER REFERENCES runtime_instances(id) ON DELETE SET NULL,
+			handle_id INTEGER REFERENCES runtime_handles(id) ON DELETE SET NULL,
+			tipo TEXT NOT NULL,
+			payload_json TEXT NOT NULL DEFAULT '{}',
+			resultado_json TEXT NOT NULL DEFAULT '{}',
+			error_text TEXT NOT NULL DEFAULT '',
+			estado TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente','tomada','ejecutando','completada','fallida','expirada','cancelada')),
+			available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			started_at DATETIME,
+			finished_at DATETIME,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		[]string{
+			`CREATE INDEX idx_runtime_orders_estado_created ON runtime_orders(estado, available_at, id)`,
+		},
+		func(legacy string, legacyCols map[string]bool) (string, []any) {
+			insertCols := []string{
+				"id", "agente", "proyecto_id", "runtime_id", "handle_id", "tipo", "payload_json",
+				"resultado_json", "error_text", "estado", "available_at", "created_at",
+				"started_at", "finished_at", "updated_at",
+			}
+			selectExprs := []string{
+				runtimeLegacyExpr(legacyCols, "id", "NULL"),
+				runtimeLegacyExpr(legacyCols, "agente", "''"),
+				runtimeLegacyExpr(legacyCols, "proyecto_id", "NULL"),
+				runtimeLegacyExpr(legacyCols, "runtime_id", "NULL"),
+				runtimeLegacyExpr(legacyCols, "handle_id", "NULL"),
+				runtimeLegacyExpr(legacyCols, "tipo", "'sync_status'"),
+				runtimeLegacyExpr(legacyCols, "payload_json", "'{}'"),
+				runtimeLegacyExpr(legacyCols, "resultado_json", "'{}'"),
+				runtimeLegacyExpr(legacyCols, "error_text", "''"),
+				runtimeLegacyEstadoOrderExpr(legacyCols),
+				runtimeLegacyExpr(legacyCols, "available_at", runtimeLegacyExpr(legacyCols, "created_at", "CURRENT_TIMESTAMP")),
+				runtimeLegacyExpr(legacyCols, "created_at", "CURRENT_TIMESTAMP"),
+				runtimeLegacyExpr(legacyCols, "started_at", "NULL"),
+				runtimeLegacyExpr(legacyCols, "finished_at", "NULL"),
+				runtimeLegacyExpr(legacyCols, "updated_at", runtimeLegacyExpr(legacyCols, "created_at", "CURRENT_TIMESTAMP")),
+			}
+			return `INSERT INTO runtime_orders (` + strings.Join(insertCols, ", ") + `)
+				SELECT ` + strings.Join(selectExprs, ", ") + ` FROM ` + legacy, nil
+		},
+	)
+}
+
+func rebuildSQLiteTable(
+	db *sql.DB,
+	tableName string,
+	indexes []string,
+	createTableSQL string,
+	createIndexes []string,
+	copyBuilder func(legacy string, legacyCols map[string]bool) (string, []any),
+) error {
+	hasRows, err := tablaTieneFilas(db, tableName)
+	if err != nil {
+		return err
+	}
+	legacyCols, err := columnasTabla(db, tableName)
+	if err != nil {
+		return err
+	}
+
+	if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	defer func() {
+		_, _ = db.Exec(`PRAGMA foreign_keys = ON`)
+	}()
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for _, idx := range indexes {
+		if _, err := tx.Exec(`DROP INDEX IF EXISTS ` + idx); err != nil {
+			return err
+		}
+	}
+
+	legacyName := tableName + `_legacy_rebuild`
+	if _, err := tx.Exec(`DROP TABLE IF EXISTS ` + legacyName); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`ALTER TABLE ` + tableName + ` RENAME TO ` + legacyName); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(createTableSQL); err != nil {
+		return err
+	}
+	for _, stmt := range createIndexes {
+		if _, err := tx.Exec(stmt); err != nil {
+			return err
+		}
+	}
+	if hasRows && copyBuilder != nil {
+		insertSQL, args := copyBuilder(legacyName, legacyCols)
+		if strings.TrimSpace(insertSQL) != "" {
+			if _, err := tx.Exec(insertSQL, args...); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err := tx.Exec(`DROP TABLE ` + legacyName); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func columnasTabla(db *sql.DB, tabla string) (map[string]bool, error) {
+	rows, err := db.Query(`PRAGMA table_info(` + tabla + `)`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var (
+			cid       int
+			name      string
+			typ       string
+			notNull   int
+			dfltValue sql.NullString
+			pk        int
+		)
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &dfltValue, &pk); err != nil {
+			return nil, err
+		}
+		out[strings.ToLower(strings.TrimSpace(name))] = true
+	}
+	return out, rows.Err()
+}
+
+func runtimeLegacyExpr(cols map[string]bool, col, fallback string) string {
+	if cols[strings.ToLower(strings.TrimSpace(col))] {
+		return col
+	}
+	return fallback
+}
+
+func runtimeLegacyEstadoHandleExpr(cols map[string]bool) string {
+	if !cols["estado"] {
+		return `'activo'`
+	}
+	return `CASE
+		WHEN estado IN ('activo','pausado','cerrado','fallido') THEN estado
+		ELSE 'activo'
+	END`
+}
+
+func runtimeLegacyEstadoOrderExpr(cols map[string]bool) string {
+	if !cols["estado"] {
+		return `'pendiente'`
+	}
+	return `CASE
+		WHEN estado IN ('pendiente','tomada','ejecutando','completada','fallida','expirada','cancelada') THEN estado
+		ELSE 'pendiente'
+	END`
 }
 
 // DetectarActividadSospechosa analiza una cadena en busca de patrones de ataque o bypass.
@@ -462,7 +918,7 @@ func Audit(agente, accion, entidad string, entidadID int64, detalle string) {
 		detalle = fmt.Sprintf("⚠️ ALERTA SEGURIDAD: %s | %s", motivo, detalle)
 		// Auto-bloqueo preventivo
 		reanimar := time.Now().Add(6 * time.Hour)
-		_, _ = DB.Exec(`UPDATE agentes SET estado_cuota = 'enfriamiento', reanimar_at = ?, motivo_pausa = ? WHERE nombre = ?`, 
+		_, _ = DB.Exec(`UPDATE agentes SET estado_cuota = 'enfriamiento', reanimar_at = ?, motivo_pausa = ? WHERE nombre = ?`,
 			reanimar, "Intento de bypass de seguridad detectado (audit-warden)", agente)
 	}
 

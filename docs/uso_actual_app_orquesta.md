@@ -63,6 +63,9 @@ Rutas JSON principales:
 
 - `/api/status`
 - `/api/agentes`
+- `/api/reglas`
+- `/api/skills`
+- `/api/workflows`
 - `/api/proyectos`
 - `/api/conectores`
 - `/api/asignaciones`
@@ -84,6 +87,13 @@ Por eso, mientras la interfaz gráfica no llegue a todo, la combinación correct
 - web para seguimiento rápido
 - CLI para operación diaria
 - API para integración futura con app de escritorio o automatizaciones
+
+Consultas de briefing de agentes ya cubiertas por API:
+
+- `GET /api/reglas?tipo_agente=programador`
+- `GET /api/skills?agente=Codex1`
+- `GET /api/workflows?tipo_agente=programador`
+- `GET /api/workflows?tipo_agente=programador&nombre=inicio-sesion`
 
 ## Flujo correcto para un agente manual
 

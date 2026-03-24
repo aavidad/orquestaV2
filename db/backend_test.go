@@ -6,6 +6,7 @@ import (
 )
 
 func TestResolveBackendPorDefectoSQLite(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "")
 	t.Setenv("ORQUESTA_DB_BACKEND", "")
 	t.Setenv("ORQUESTA_DB", filepath.Join(t.TempDir(), "orquesta.db"))
 
@@ -21,7 +22,22 @@ func TestResolveBackendPorDefectoSQLite(t *testing.T) {
 	}
 }
 
+func TestResolveBackendRespetaORQUESTADBDRIVER(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "sqlite3")
+	t.Setenv("ORQUESTA_DB_BACKEND", "mysql")
+	t.Setenv("ORQUESTA_DB", filepath.Join(t.TempDir(), "orquesta.db"))
+
+	backend, _, err := resolveBackend()
+	if err != nil {
+		t.Fatalf("resolveBackend: %v", err)
+	}
+	if backend.Name() != "sqlite" {
+		t.Fatalf("backend inesperado: %s", backend.Name())
+	}
+}
+
 func TestResolveBackendFallaConBackendNoSoportado(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "mysql")
 	t.Setenv("ORQUESTA_DB_BACKEND", "mysql")
 	t.Setenv("ORQUESTA_DB_DSN", "usuario:pass@tcp(localhost:3306)/orquesta")
 

@@ -22,7 +22,7 @@ import (
 	"orquesta/db"
 )
 
-const defaultOrquestaServerURL = "http://127.0.0.1:8080"
+const defaultOrquestaServerURL = "http://127.0.0.1:16543"
 
 type apiAgentesResponse struct {
 	Agentes []*db.Agente `json:"agentes"`
@@ -102,6 +102,40 @@ type apiRuntimeDetailResponse struct {
 	Samples []*db.RuntimeTelemetrySample `json:"samples"`
 }
 
+type apiRuntimeHandlesResponse struct {
+	Handles []*db.RuntimeHandle `json:"handles"`
+}
+
+type apiRuntimeOrdersResponse struct {
+	Orders []*db.RuntimeOrder `json:"orders"`
+}
+
+type apiRuntimeMailboxResponse struct {
+	Mailbox []*db.RuntimeMailboxMessage `json:"mailbox"`
+}
+
+type apiRuntimeCheckpointResponse struct {
+	Checkpoint *db.RuntimeCheckpoint `json:"checkpoint"`
+}
+
+type apiRuntimeCheckpointCreateResponse struct {
+	OK bool  `json:"ok"`
+	ID int64 `json:"id"`
+}
+
+type apiRuntimeOrderCreateResponse struct {
+	OK bool  `json:"ok"`
+	ID int64 `json:"id"`
+}
+
+type apiMemoriaEntidadesResponse struct {
+	Entidades []*db.EntidadMemoria `json:"entidades"`
+}
+
+type apiMemoriaEntidadResponse struct {
+	Entidad *db.EntidadMemoria `json:"entidad"`
+}
+
 var httpClientOrquesta = &http.Client{
 	Timeout: 350 * time.Millisecond,
 	Transport: &http.Transport{
@@ -112,11 +146,11 @@ var httpClientOrquesta = &http.Client{
 	},
 }
 
-func shouldPreferServerForCurrentCommand() bool {
+func shouldPreferAPIClient(args []string) bool {
 	if strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1" {
 		return false
 	}
-	if !commandSupportsServerMode(os.Args[1:]) {
+	if !commandSupportsServerMode(normalizedCommandArgs(args)) {
 		return false
 	}
 	return serverReachable()
@@ -161,6 +195,16 @@ func commandSupportsServerMode(args []string) bool {
 		default:
 			return false
 		}
+	case "memoria":
+		if len(tokens) <= 1 {
+			return false
+		}
+		switch tokens[1] {
+		case "listar", "ver", "guardar":
+			return true
+		default:
+			return false
+		}
 	case "exportar":
 		return len(tokens) > 1 && (tokens[1] == "estado" || tokens[1] == "audit" || tokens[1] == "diagnostico")
 	case "logs":
@@ -174,7 +218,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "listar", "ver":
+		case "listar", "ver", "handles", "ordenes", "orden-nueva", "nudge", "checkpoints", "checkpoint-nuevo", "mailbox", "mailbox-enviar", "mailbox-entregar", "mailbox-consumir":
 			return true
 		default:
 			return false
@@ -234,13 +278,13 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "listar", "crear", "cerrar":
+		case "listar", "resolver", "crear", "cerrar":
 			return true
 		default:
 			return false
 		}
 	case "agente":
-		return len(tokens) > 1 && (tokens[1] == "preparar" || tokens[1] == "tick")
+		return len(tokens) > 1 && (tokens[1] == "preparar" || tokens[1] == "tick" || tokens[1] == "pausar" || tokens[1] == "eliminar" || tokens[1] == "rehabilitar" || tokens[1] == "handoff" || tokens[1] == "reasignar-vivo")
 	case "sesion":
 		if len(tokens) <= 1 {
 			return false
@@ -343,7 +387,7 @@ func apiGetQuery(path string, query url.Values, dst any) (bool, error) {
 	if resp.StatusCode != http.StatusOK {
 		var apiErr apiErrorResponse
 		if err := json.NewDecoder(resp.Body).Decode(&apiErr); err == nil && strings.TrimSpace(apiErr.Error) != "" {
-			return true, fmt.Errorf(apiErr.Error)
+			return true, fmt.Errorf("%s", apiErr.Error)
 		}
 		return true, fmt.Errorf("respuesta HTTP inesperada: %d", resp.StatusCode)
 	}
@@ -400,7 +444,7 @@ func apiPost(path string, payload any, dst any) (bool, error) {
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		var apiErr apiErrorResponse
 		if err := json.NewDecoder(resp.Body).Decode(&apiErr); err == nil && strings.TrimSpace(apiErr.Error) != "" {
-			return true, fmt.Errorf(apiErr.Error)
+			return true, fmt.Errorf("%s", apiErr.Error)
 		}
 		return true, fmt.Errorf("respuesta HTTP inesperada: %d", resp.StatusCode)
 	}
