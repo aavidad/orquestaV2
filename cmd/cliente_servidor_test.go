@@ -26,6 +26,18 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "proyecto listar", args: []string{"proyecto", "listar"}, want: true},
 		{nombre: "proyecto ver", args: []string{"proyecto", "ver", "orquestador"}, want: true},
 		{nombre: "proyecto descubrir", args: []string{"proyecto", "descubrir", "."}, want: true},
+		{nombre: "pool listar", args: []string{"pool", "listar"}, want: true},
+		{nombre: "pool ver", args: []string{"pool", "ver", "codex"}, want: true},
+		{nombre: "politica modelo listar", args: []string{"politica-modelo", "listar"}, want: true},
+		{nombre: "modelo resolver", args: []string{"modelo", "resolver", "--perfil", "programador"}, want: true},
+		{nombre: "progreso ver", args: []string{"progreso", "ver", "orquestador"}, want: true},
+		{nombre: "progreso fase listar", args: []string{"progreso", "fase", "listar", "orquestador"}, want: true},
+		{nombre: "progreso fase registrar", args: []string{"progreso", "fase", "registrar", "orquestador"}, want: true},
+		{nombre: "progreso fase actualizar", args: []string{"progreso", "fase", "actualizar", "12"}, want: true},
+		{nombre: "progreso tarea registrar", args: []string{"progreso", "tarea", "registrar", "12"}, want: true},
+		{nombre: "reglas listar", args: []string{"reglas", "listar"}, want: true},
+		{nombre: "skills listar", args: []string{"skills", "listar"}, want: true},
+		{nombre: "workflows listar", args: []string{"workflows", "listar"}, want: true},
 		{nombre: "conector listar", args: []string{"conector", "listar"}, want: true},
 		{nombre: "conector ver", args: []string{"conector", "ver", "codex-cli"}, want: true},
 		{nombre: "conector registrar", args: []string{"conector", "registrar"}, want: true},
@@ -50,6 +62,7 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "runtime ordenes", args: []string{"runtime", "ordenes"}, want: true},
 		{nombre: "runtime orden nueva", args: []string{"runtime", "orden-nueva", "Codex1", "checkpoint"}, want: true},
 		{nombre: "runtime nudge", args: []string{"runtime", "nudge", "Codex1", "retoma", "el", "bloqueo"}, want: true},
+		{nombre: "runtime discordia", args: []string{"runtime", "discordia", "alberto", "Codex2", "hay", "desacuerdo"}, want: true},
 		{nombre: "runtime checkpoints", args: []string{"runtime", "checkpoints", "--agente", "Codex1"}, want: true},
 		{nombre: "runtime checkpoint nuevo", args: []string{"runtime", "checkpoint-nuevo", "Codex1"}, want: true},
 		{nombre: "runtime mailbox", args: []string{"runtime", "mailbox", "--to", "Codex1"}, want: true},
@@ -60,9 +73,12 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "sesion historial", args: []string{"sesion", "historial"}, want: true},
 		{nombre: "sesion ver", args: []string{"sesion", "ver", "12"}, want: true},
 		{nombre: "sesion nuevo-codex", args: []string{"sesion", "nuevo-codex"}, want: true},
+		{nombre: "sesion presupuesto ver", args: []string{"sesion", "presupuesto", "ver", "--agente", "Codex1"}, want: true},
+		{nombre: "sesion presupuesto registrar", args: []string{"sesion", "presupuesto", "registrar", "--agente", "Codex1"}, want: true},
 		{nombre: "memoria listar", args: []string{"memoria", "listar", "--proyecto", "orquestador"}, want: true},
 		{nombre: "memoria ver", args: []string{"memoria", "ver", "Core_API", "--proyecto", "orquestador"}, want: true},
 		{nombre: "memoria guardar", args: []string{"memoria", "guardar", "Core_API", "api", "--valor", "{}"}, want: true},
+		{nombre: "agente fusionar", args: []string{"agente", "fusionar", "codex1", "Codex1"}, want: true},
 		{nombre: "agente lanzar plan", args: []string{"agente", "lanzar-plan", "scripts/agentes.orquestador.plan"}, want: false},
 		{nombre: "exportar diagnostico", args: []string{"exportar", "diagnostico"}, want: true},
 		{nombre: "logs", args: []string{"logs"}, want: true},
@@ -70,6 +86,7 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "respaldo bd", args: []string{"respaldo", "bd"}, want: true},
 		{nombre: "tarea cancelar", args: []string{"tarea", "cancelar", "12", "Codex1"}, want: true},
 		{nombre: "tarea notas", args: []string{"tarea", "notas", "12"}, want: true},
+		{nombre: "propuesta actualizar", args: []string{"propuesta", "actualizar", "OP-116", "--titulo", "Nuevo"}, want: true},
 		{nombre: "runtime no soportado", args: []string{"runtime", "foo"}, want: false},
 		{nombre: "serve", args: []string{"serve"}, want: false},
 	}
@@ -127,6 +144,7 @@ func TestRequireServerForCurrentCommand(t *testing.T) {
 func TestAPIGetNoHaceFallbackCuandoServidorEsObligatorio(t *testing.T) {
 	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "1")()
 	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
 	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
 	defer cambiarArgs(t, []string{"orquesta", "runtime", "listar"})()
 

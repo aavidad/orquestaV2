@@ -25,6 +25,8 @@ func prepararDBTemporalCmd(t *testing.T) string {
 
 	anteriorDB := os.Getenv("ORQUESTA_DB")
 	anteriorRoot := os.Getenv("ORQUESTA_WORKSPACE_ROOT")
+	anteriorForceLocal, teniaForceLocal := os.LookupEnv("ORQUESTA_FORCE_LOCAL_DB")
+	anteriorDisableServer, teniaDisableServer := os.LookupEnv("ORQUESTA_DISABLE_SERVER_CLIENT")
 	t.Cleanup(func() {
 		db.Close()
 		db.DB = nil
@@ -38,6 +40,16 @@ func prepararDBTemporalCmd(t *testing.T) string {
 		} else {
 			_ = os.Setenv("ORQUESTA_WORKSPACE_ROOT", anteriorRoot)
 		}
+		if teniaForceLocal {
+			_ = os.Setenv("ORQUESTA_FORCE_LOCAL_DB", anteriorForceLocal)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_FORCE_LOCAL_DB")
+		}
+		if teniaDisableServer {
+			_ = os.Setenv("ORQUESTA_DISABLE_SERVER_CLIENT", anteriorDisableServer)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_DISABLE_SERVER_CLIENT")
+		}
 	})
 
 	db.Close()
@@ -50,6 +62,12 @@ func prepararDBTemporalCmd(t *testing.T) string {
 	}
 	if err := os.Setenv("ORQUESTA_WORKSPACE_ROOT", tmp); err != nil {
 		t.Fatalf("setenv ORQUESTA_WORKSPACE_ROOT: %v", err)
+	}
+	if err := os.Setenv("ORQUESTA_FORCE_LOCAL_DB", "1"); err != nil {
+		t.Fatalf("setenv ORQUESTA_FORCE_LOCAL_DB: %v", err)
+	}
+	if err := os.Setenv("ORQUESTA_DISABLE_SERVER_CLIENT", "1"); err != nil {
+		t.Fatalf("setenv ORQUESTA_DISABLE_SERVER_CLIENT: %v", err)
 	}
 	if err := db.Open(); err != nil {
 		t.Fatalf("open db temporal: %v", err)
