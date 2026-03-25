@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"orquesta/db"
 )
 
@@ -106,10 +107,29 @@ func initDB() {
 func executeLocalArgs(args []string, stdout, stderr io.Writer) error {
 	setCurrentExecArgs(args)
 	defer setCurrentExecArgs(nil)
+	resetCommandTreeFlags(rootCmd)
 	rootCmd.SetOut(stdout)
 	rootCmd.SetErr(stderr)
 	rootCmd.SetArgs(args)
 	return rootCmd.Execute()
+}
+
+func resetCommandTreeFlags(cmd *cobra.Command) {
+	resetFlagSet(cmd.Flags())
+	resetFlagSet(cmd.PersistentFlags())
+	for _, child := range cmd.Commands() {
+		resetCommandTreeFlags(child)
+	}
+}
+
+func resetFlagSet(flags *pflag.FlagSet) {
+	if flags == nil {
+		return
+	}
+	flags.VisitAll(func(f *pflag.Flag) {
+		_ = flags.Set(f.Name, f.DefValue)
+		f.Changed = false
+	})
 }
 
 func ensureRequireServerEnv() {
