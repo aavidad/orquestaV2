@@ -377,7 +377,7 @@ func commandSupportsServerMode(args []string) bool {
 	case "reglas":
 		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "crear" || tokens[1] == "editar" || tokens[1] == "activar" || tokens[1] == "desactivar" || tokens[1] == "versiones")
 	case "skills":
-		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "crear" || tokens[1] == "editar" || tokens[1] == "activar" || tokens[1] == "desactivar" || tokens[1] == "versiones" || tokens[1] == "detectar-carencia")
+		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "crear" || tokens[1] == "editar" || tokens[1] == "activar" || tokens[1] == "desactivar" || tokens[1] == "versiones" || tokens[1] == "detectar-carencia" || tokens[1] == "importar")
 	case "workflows":
 		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "crear" || tokens[1] == "ver" || tokens[1] == "editar" || tokens[1] == "activar" || tokens[1] == "desactivar" || tokens[1] == "versiones")
 	case "permisos":

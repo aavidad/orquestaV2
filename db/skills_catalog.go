@@ -116,6 +116,14 @@ func normalizarListaJSON(raw string) (string, error) {
 	return string(data), nil
 }
 
+func NormalizarListaJSONPublic(items []string) (string, error) {
+	data, err := json.Marshal(items)
+	if err != nil {
+		return "", err
+	}
+	return normalizarListaJSON(string(data))
+}
+
 func parseListaJSON(raw string) []string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
