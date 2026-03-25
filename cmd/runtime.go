@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,14 @@ import (
 	"github.com/spf13/cobra"
 	"orquesta/db"
 )
+
+func runtimeModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func runtimeErrorServerFirst() error {
+	return fmt.Errorf("este subcomando de runtime ya se sirve por Orquesta server; arranca el servidor o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
+}
 
 type runtimeRow struct {
 	ID           int64
@@ -83,6 +92,9 @@ var runtimeHandlesCmd = &cobra.Command{
 			}
 			return imprimirRuntimeHandles(handles)
 		}
+		if !runtimeModoRecuperacionLocalExplicito() {
+			return runtimeErrorServerFirst()
+		}
 
 		var filtro *string
 		if strings.TrimSpace(agente) != "" {
@@ -136,6 +148,9 @@ var runtimeOrdenesCmd = &cobra.Command{
 			}
 			return imprimirRuntimeOrders(orders)
 		}
+		if !runtimeModoRecuperacionLocalExplicito() {
+			return runtimeErrorServerFirst()
+		}
 		orders, err := db.ListarRuntimeOrders(filter)
 		if err != nil {
 			return err
@@ -176,6 +191,9 @@ var runtimeOrdenNuevaCmd = &cobra.Command{
 			}
 			fmt.Printf("✓ Orden runtime #%d encolada para %s (%s)\n", id, agente, tipo)
 			return nil
+		}
+		if !runtimeModoRecuperacionLocalExplicito() {
+			return runtimeErrorServerFirst()
 		}
 
 		var proyectoID *int64
@@ -268,6 +286,9 @@ func encolarRuntimeMensajeSimple(tipo, agenteDestino, proyectoRef string, payloa
 	if id, ok, err := crearRuntimeOrderDesdeAPI(agenteDestino, tipo, proyectoRef, string(payloadJSON)); ok {
 		return id, err
 	}
+	if !runtimeModoRecuperacionLocalExplicito() {
+		return 0, runtimeErrorServerFirst()
+	}
 
 	var proyectoID *int64
 	if strings.TrimSpace(proyectoRef) != "" {
@@ -313,6 +334,9 @@ var runtimeCheckpointsCmd = &cobra.Command{
 				return err
 			}
 			return imprimirRuntimeCheckpoint(cp)
+		}
+		if !runtimeModoRecuperacionLocalExplicito() {
+			return runtimeErrorServerFirst()
 		}
 
 		var proyectoID *int64
@@ -385,6 +409,9 @@ var runtimeCheckpointNuevoCmd = &cobra.Command{
 			fmt.Printf("✓ Checkpoint runtime #%d creado para %s (%s)\n", id, agente, checkpointKind)
 			return nil
 		}
+		if !runtimeModoRecuperacionLocalExplicito() {
+			return runtimeErrorServerFirst()
+		}
 
 		var proyectoID *int64
 		if strings.TrimSpace(proyectoRef) != "" {
@@ -438,6 +465,9 @@ var runtimeCheckpointVerCmd = &cobra.Command{
 			}
 			return imprimirRuntimeCheckpoint(cp)
 		}
+		if !runtimeModoRecuperacionLocalExplicito() {
+			return runtimeErrorServerFirst()
+		}
 		cp, err := db.GetRuntimeCheckpoint(id)
 		if err != nil {
 			return err
@@ -473,6 +503,9 @@ var runtimeMailboxCmd = &cobra.Command{
 				return err
 			}
 			return imprimirRuntimeMailbox(mailbox)
+		}
+		if !runtimeModoRecuperacionLocalExplicito() {
+			return runtimeErrorServerFirst()
 		}
 
 		filter := db.FiltroRuntimeMailbox{}
@@ -521,6 +554,9 @@ var runtimeMailboxEnviarCmd = &cobra.Command{
 			fmt.Printf("✓ Mensaje mailbox #%d enviado de %s a %s (%s)\n", id, fromAgente, toAgente, kind)
 			return nil
 		}
+		if !runtimeModoRecuperacionLocalExplicito() {
+			return runtimeErrorServerFirst()
+		}
 
 		var proyectoID *int64
 		if strings.TrimSpace(proyectoRef) != "" {
@@ -566,6 +602,9 @@ var runtimeMailboxEntregarCmd = &cobra.Command{
 			fmt.Printf("✓ Mensaje mailbox #%d marcado como entregado\n", id)
 			return nil
 		}
+		if !runtimeModoRecuperacionLocalExplicito() {
+			return runtimeErrorServerFirst()
+		}
 		if err := db.MarcarRuntimeMailboxEntregado(id); err != nil {
 			return err
 		}
@@ -589,6 +628,9 @@ var runtimeMailboxConsumirCmd = &cobra.Command{
 			}
 			fmt.Printf("✓ Mensaje mailbox #%d marcado como consumido\n", id)
 			return nil
+		}
+		if !runtimeModoRecuperacionLocalExplicito() {
+			return runtimeErrorServerFirst()
 		}
 		if err := db.MarcarRuntimeMailboxConsumido(id); err != nil {
 			return err
@@ -666,6 +708,9 @@ var runtimeListarCmd = &cobra.Command{
 			}
 			return imprimirArbolRuntimes(aplanarArbolAPI(tree), false)
 		}
+		if !runtimeModoRecuperacionLocalExplicito() {
+			return runtimeErrorServerFirst()
+		}
 
 		filter := db.FiltroRuntimes{}
 		if strings.TrimSpace(agente) != "" {
@@ -713,6 +758,9 @@ var runtimeVerCmd = &cobra.Command{
 				return err
 			}
 			return imprimirDetalleRuntime(detail.Runtime, detail.Samples)
+		}
+		if !runtimeModoRecuperacionLocalExplicito() {
+			return runtimeErrorServerFirst()
 		}
 
 		runtime, err := db.GetRuntime(id)

@@ -9,6 +9,8 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
@@ -19,6 +21,14 @@ var configCmd = &cobra.Command{
 	Short: "Gestión de configuración global",
 }
 
+func configModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func configErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
+}
+
 var configVerCmd = &cobra.Command{
 	Use:   "ver [clave]",
 	Short: "Muestra toda la configuración o el valor de una clave",
@@ -27,6 +37,9 @@ var configVerCmd = &cobra.Command{
 		if len(args) == 1 {
 			resp, ok, err := cargarConfigDesdeAPI(args[0])
 			if !ok {
+				if !configModoRecuperacionLocalExplicito() {
+					return configErrorServerFirst()
+				}
 				val, err := db.ConfigGet(args[0])
 				if err != nil {
 					return fmt.Errorf("clave '%s' no encontrada", args[0])
@@ -42,6 +55,9 @@ var configVerCmd = &cobra.Command{
 		}
 		resp, ok, err := cargarConfigDesdeAPI("")
 		if !ok {
+			if !configModoRecuperacionLocalExplicito() {
+				return configErrorServerFirst()
+			}
 			resp = &apiConfigResponse{}
 			resp.Config, err = db.ConfigAll()
 		}
@@ -64,8 +80,13 @@ var configSetCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-		} else if err := db.ConfigSet(args[0], args[1]); err != nil {
-			return err
+		} else {
+			if !configModoRecuperacionLocalExplicito() {
+				return configErrorServerFirst()
+			}
+			if err := db.ConfigSet(args[0], args[1]); err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ %s = %s\n", args[0], args[1])
 		return nil
@@ -81,8 +102,13 @@ var configAgenteNuevoCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-		} else if err := db.RegistrarAgente(args[0], args[1]); err != nil {
-			return err
+		} else {
+			if !configModoRecuperacionLocalExplicito() {
+				return configErrorServerFirst()
+			}
+			if err := db.RegistrarAgente(args[0], args[1]); err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ Agente '%s' [%s] registrado\n", args[0], args[1])
 		return nil
@@ -105,8 +131,13 @@ Sus contribuciones históricas se conservan.`,
 			if err != nil {
 				return err
 			}
-		} else if err := db.RetirarAgente(nombre); err != nil {
-			return err
+		} else {
+			if !configModoRecuperacionLocalExplicito() {
+				return configErrorServerFirst()
+			}
+			if err := db.RetirarAgente(nombre); err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ Agente '%s' retirado del equipo.\n", nombre)
 		fmt.Printf("  Sus votos pendientes en propuestas abiertas han sido eliminados.\n")
@@ -124,8 +155,13 @@ var configAgenteRehabilitarCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-		} else if err := db.RehabilitarAgente(args[0]); err != nil {
-			return err
+		} else {
+			if !configModoRecuperacionLocalExplicito() {
+				return configErrorServerFirst()
+			}
+			if err := db.RehabilitarAgente(args[0]); err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ Agente '%s' rehabilitado.\n", args[0])
 		fmt.Printf("  Debe iniciar sesión con: orquesta sesion inicio %s\n", args[0])

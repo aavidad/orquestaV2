@@ -99,3 +99,27 @@ func TestSesionGuardarContinuarFinYListarUsanAPI(t *testing.T) {
 		}
 	}
 }
+
+func TestSesionGuardarContinuarFinYListarExigenServidorSalvoRecuperacionLocal(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	resetCommandFlags(sesionGuardarCmd)
+	if err := sesionGuardarCmd.RunE(sesionGuardarCmd, []string{"Codex1"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("sesion guardar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(sesionContinuarCmd)
+	if err := sesionContinuarCmd.RunE(sesionContinuarCmd, []string{"Codex1"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("sesion continuar deberia exigir servidor, err=%v", err)
+	}
+
+	if err := sesionFinCmd.RunE(sesionFinCmd, []string{"Codex1"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("sesion fin deberia exigir servidor, err=%v", err)
+	}
+
+	if err := sesionListarCmd.RunE(sesionListarCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("sesion listar deberia exigir servidor, err=%v", err)
+	}
+}

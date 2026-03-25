@@ -107,6 +107,32 @@ func TestConfigUsaAPI(t *testing.T) {
 	}
 }
 
+func TestConfigExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	if err := configVerCmd.RunE(configVerCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("config ver deberia exigir servidor, err=%v", err)
+	}
+
+	if err := configSetCmd.RunE(configSetCmd, []string{"workspace_root", "/srv/workspace"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("config set deberia exigir servidor, err=%v", err)
+	}
+
+	if err := configAgenteNuevoCmd.RunE(configAgenteNuevoCmd, []string{"Codex9", "programador"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("config agente-nuevo deberia exigir servidor, err=%v", err)
+	}
+
+	if err := configAgenteRetirarCmd.RunE(configAgenteRetirarCmd, []string{"Codex9"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("config agente-retirar deberia exigir servidor, err=%v", err)
+	}
+
+	if err := configAgenteRehabilitarCmd.RunE(configAgenteRehabilitarCmd, []string{"Codex9"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("config agente-rehabilitar deberia exigir servidor, err=%v", err)
+	}
+}
+
 func TestConectorUsaAPI(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
@@ -177,6 +203,28 @@ func TestConectorUsaAPI(t *testing.T) {
 	})
 	if !strings.Contains(outRegistrar, "id: 12") {
 		t.Fatalf("salida conector registrar inesperada:\n%s", outRegistrar)
+	}
+}
+
+func TestConectorExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	if err := conectorListarCmd.RunE(conectorListarCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("conector listar deberia exigir servidor, err=%v", err)
+	}
+
+	if err := conectorVerCmd.RunE(conectorVerCmd, []string{"codex"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("conector ver deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(conectorRegistrarCmd)
+	_ = conectorRegistrarCmd.Flags().Set("slug", "codex")
+	_ = conectorRegistrarCmd.Flags().Set("nombre", "Codex CLI")
+	_ = conectorRegistrarCmd.Flags().Set("comando", "codex")
+	if err := conectorRegistrarCmd.RunE(conectorRegistrarCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("conector registrar deberia exigir servidor, err=%v", err)
 	}
 }
 
@@ -257,6 +305,24 @@ func TestProyectoUsaAPI(t *testing.T) {
 	}
 }
 
+func TestProyectoExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	if err := proyectoListarCmd.RunE(proyectoListarCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("proyecto listar deberia exigir servidor, err=%v", err)
+	}
+
+	if err := proyectoVerCmd.RunE(proyectoVerCmd, []string{"orquestador"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("proyecto ver deberia exigir servidor, err=%v", err)
+	}
+
+	if err := proyectoDescubrirCmd.RunE(proyectoDescubrirCmd, []string{"/tmp"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("proyecto descubrir deberia exigir servidor, err=%v", err)
+	}
+}
+
 func TestAsignacionUsaAPI(t *testing.T) {
 	asignacion := &db.Asignacion{
 		ID:           14,
@@ -309,5 +375,22 @@ func TestAsignacionUsaAPI(t *testing.T) {
 	})
 	if !strings.Contains(outActivar, "Codex1 asignado a orquestador") {
 		t.Fatalf("salida asignacion activar inesperada:\n%s", outActivar)
+	}
+}
+
+func TestAsignacionExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	resetCommandFlags(asignacionListarCmd)
+	if err := asignacionListarCmd.RunE(asignacionListarCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("asignacion listar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(asignacionActivarCmd)
+	_ = asignacionActivarCmd.Flags().Set("nota", "principal")
+	if err := asignacionActivarCmd.RunE(asignacionActivarCmd, []string{"Codex1", "orquestador"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("asignacion activar deberia exigir servidor, err=%v", err)
 	}
 }

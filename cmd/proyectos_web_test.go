@@ -106,3 +106,57 @@ func TestWebProyectoFabricarAppGeneraBacklog(t *testing.T) {
 		t.Fatalf("se esperaba backlog dependiente, tareas=%+v", tareas)
 	}
 }
+
+func TestWebProyectoDecisionYDocumentoMutanPorAPI(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	decisionForm := strings.NewReader("categoria=arquitectura&titulo=Puerto+de+almacenamiento&solucion=API&motivo=cliente+fino&estado=vigente")
+	req := httptest.NewRequest(http.MethodPost, "/proyectos/orquestador/decisiones", decisionForm)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	webRouterProyectos(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("decision status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if loc := rec.Header().Get("Location"); strings.Contains(loc, "?err=") {
+		t.Fatalf("redirect de error inesperado en decision: %s", loc)
+	}
+
+	overview, err := webCargarProyectoOverviewPorAPI("orquestador")
+	if err != nil {
+		t.Fatalf("overview tras decision: %v", err)
+	}
+	if len(overview.Decisiones) != 1 || overview.Decisiones[0].Titulo != "Puerto de almacenamiento" {
+		t.Fatalf("decisiones inesperadas: %+v", overview.Decisiones)
+	}
+
+	documentoForm := strings.NewReader("tipo_documento=markdown&titulo=ADR+001&ruta_ref=/tmp/adr-001.md&resumen=Resumen&estado=vigente&fuente=manual")
+	req = httptest.NewRequest(http.MethodPost, "/proyectos/orquestador/documentacion", documentoForm)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	webRouterProyectos(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("documento status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if loc := rec.Header().Get("Location"); strings.Contains(loc, "?err=") {
+		t.Fatalf("redirect de error inesperado en documento: %s", loc)
+	}
+
+	overview, err = webCargarProyectoOverviewPorAPI("orquestador")
+	if err != nil {
+		t.Fatalf("overview tras documento: %v", err)
+	}
+	if len(overview.Documentos) != 1 || overview.Documentos[0].Titulo != "ADR 001" {
+		t.Fatalf("documentos inesperados: %+v", overview.Documentos)
+	}
+}

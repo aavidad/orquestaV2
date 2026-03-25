@@ -163,3 +163,22 @@ func TestSesionPresupuestoRegistrarUsaAPI(t *testing.T) {
 		}
 	}
 }
+
+func TestSesionPresupuestoExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	resetCommandFlags(sesionPresupuestoVerCmd)
+	_ = sesionPresupuestoVerCmd.Flags().Set("agente", "Codex1")
+	if err := sesionPresupuestoVerCmd.RunE(sesionPresupuestoVerCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("sesion presupuesto ver deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(sesionPresupuestoRegistrarCmd)
+	_ = sesionPresupuestoRegistrarCmd.Flags().Set("agente", "Codex1")
+	_ = sesionPresupuestoRegistrarCmd.Flags().Set("budget-source", "api")
+	if err := sesionPresupuestoRegistrarCmd.RunE(sesionPresupuestoRegistrarCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("sesion presupuesto registrar deberia exigir servidor, err=%v", err)
+	}
+}

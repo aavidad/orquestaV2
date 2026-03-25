@@ -17,9 +17,12 @@ import (
 	"strings"
 	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/fabricaapp"
+	"orquesta/gitgobernanza"
+	"orquesta/memoriaproyecto"
 )
 
 type apiErrorResponse struct {
@@ -444,6 +447,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/propuestas/", apiRouterPropuestas)
 	mux.HandleFunc("/api/worktrees", apiHandlerWorktrees)
 	mux.HandleFunc("/api/worktrees/", apiRouterWorktrees)
+	mux.HandleFunc("/api/git/merges", apiHandlerGitMerges)
 	mux.HandleFunc("/api/runtimes", apiHandlerRuntimes)
 	mux.HandleFunc("/api/runtimes/tree", apiHandlerRuntimesTree)
 	mux.HandleFunc("/api/runtimes/", apiRouterRuntimes)
@@ -476,62 +480,12 @@ func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
 	}
-	agentes, err := db.ListarAgentes()
+	status, err := statusService.FetchStatus()
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
-	counts, err := db.ContarTareasPorEstado()
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	proyectos, err := db.ListarProyectos(db.FiltroProyectos{})
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	asignaciones, err := db.ContarAsignacionesActivasPorProyecto()
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	sesiones, err := db.ListarSesionesActivas()
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	sesionesPorProyecto := make(map[int64]int)
-	for _, sesion := range sesiones {
-		if sesion.ProyectoID != nil {
-			sesionesPorProyecto[*sesion.ProyectoID]++
-		}
-	}
-	estadoAb := db.PropuestaAbierta
-	abiertas, err := db.ListarPropuestas(&estadoAb, nil)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	for _, propuesta := range abiertas {
-		if propuesta == nil {
-			continue
-		}
-		votos, err := db.ResumenVotos(propuesta.ID)
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
-		}
-		propuesta.Votos = votos
-	}
-	apiWriteJSON(w, http.StatusOK, apiStatusResponse{
-		Agentes:             agentes,
-		ConteoTareas:        counts,
-		Proyectos:           proyectos,
-		AsignacionesActivas: asignaciones,
-		SesionesActivas:     sesionesPorProyecto,
-		PropuestasAbiertas:  abiertas,
-	})
+	apiWriteJSON(w, http.StatusOK, status)
 }
 
 func apiHandlerDiagnostico(w http.ResponseWriter, r *http.Request) {
@@ -558,6 +512,15 @@ func apiHandlerDiagnostico(w http.ResponseWriter, r *http.Request) {
 func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		if strings.TrimSpace(r.URL.Query().Get("vista")) == "panel" {
+			rows, err := agentesapp.NewService(agentesapp.Repository{}).BuildPanelRows()
+			if err != nil {
+				apiError(w, http.StatusInternalServerError, err)
+				return
+			}
+			apiWriteJSON(w, http.StatusOK, apiAgentesPanelResponse{Rows: rows})
+			return
+		}
 		agentes, err := db.ListarAgentes()
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
@@ -593,11 +556,28 @@ func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 }
 
 func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/agentes/"), "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method == http.MethodGet {
+		if len(parts) == 2 && parts[1] == "overview" {
+			detail, err := agentesapp.NewService(agentesapp.Repository{}).BuildDetail(parts[0])
+			if err != nil {
+				apiError(w, http.StatusNotFound, err)
+				return
+			}
+			apiWriteJSON(w, http.StatusOK, apiAgenteOverviewResponse{Detail: detail})
+			return
+		}
+		http.NotFound(w, r)
+		return
+	}
 	if !apiRequireMethod(w, r, http.MethodPost) {
 		return
 	}
-	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/agentes/"), "/"), "/")
-	if len(parts) != 2 || parts[0] == "" {
+	if len(parts) != 2 {
 		http.NotFound(w, r)
 		return
 	}
@@ -1262,7 +1242,12 @@ func apiHandlerProyectos(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
 	}
-	proyectos, err := db.ListarProyectos(db.FiltroProyectos{})
+	var activoPtr *bool
+	if activaRaw := strings.TrimSpace(r.URL.Query().Get("activa")); activaRaw != "" {
+		activa := activaRaw == "1" || strings.EqualFold(activaRaw, "true")
+		activoPtr = &activa
+	}
+	proyectos, err := db.ListarProyectos(db.FiltroProyectos{Activo: activoPtr})
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -1309,11 +1294,80 @@ func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		apiWriteJSON(w, http.StatusOK, map[string]any{"proyecto": proyecto})
+	case len(parts) == 2 && parts[1] == "overview" && r.Method == http.MethodGet:
+		apiHandlerProyectoOverview(w, r, ref)
+	case len(parts) == 2 && parts[1] == "decisiones" && r.Method == http.MethodPost:
+		apiHandlerProyectoDecisionNueva(w, r, ref)
+	case len(parts) == 2 && parts[1] == "documentacion" && r.Method == http.MethodPost:
+		apiHandlerProyectoDocumentoNuevo(w, r, ref)
 	case len(parts) == 2 && parts[1] == "fabricar-app" && r.Method == http.MethodPost:
 		apiHandlerProyectoFabricarApp(w, r, ref)
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func apiHandlerProyectoOverview(w http.ResponseWriter, r *http.Request, ref string) {
+	svc := memoriaproyecto.NewService(db.ProjectMemoryRepository{})
+	overview, err := svc.Overview(strings.TrimSpace(ref))
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiProyectoOverviewResponse{Overview: overview})
+}
+
+func apiHandlerProyectoDecisionNueva(w http.ResponseWriter, r *http.Request, ref string) {
+	var req apiProyectoDecisionCreateRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	svc := memoriaproyecto.NewService(db.ProjectMemoryRepository{})
+	id, err := svc.CreateDecision(memoriaproyecto.CreateDecisionInput{
+		ProyectoSlug: strings.TrimSpace(ref),
+		Categoria:    strings.TrimSpace(req.Categoria),
+		Titulo:       strings.TrimSpace(req.Titulo),
+		Solucion:     strings.TrimSpace(req.Solucion),
+		Motivo:       strings.TrimSpace(req.Motivo),
+		Alternativas: strings.TrimSpace(req.Alternativas),
+		Impacto:      strings.TrimSpace(req.Impacto),
+		Estado:       strings.TrimSpace(req.Estado),
+		PropuestaID:  req.PropuestaID,
+		TareaID:      req.TareaID,
+		MetadataJSON: strings.TrimSpace(req.MetadataJSON),
+	})
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusCreated, apiCatalogoMutationResponse{ID: id})
+}
+
+func apiHandlerProyectoDocumentoNuevo(w http.ResponseWriter, r *http.Request, ref string) {
+	var req apiProyectoDocumentoCreateRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	svc := memoriaproyecto.NewService(db.ProjectMemoryRepository{})
+	id, err := svc.CreateExternalDoc(memoriaproyecto.CreateExternalDocInput{
+		ProyectoSlug:  strings.TrimSpace(ref),
+		TipoDocumento: strings.TrimSpace(req.TipoDocumento),
+		Titulo:        strings.TrimSpace(req.Titulo),
+		RutaRef:       strings.TrimSpace(req.RutaRef),
+		Resumen:       strings.TrimSpace(req.Resumen),
+		Estado:        strings.TrimSpace(req.Estado),
+		Fuente:        strings.TrimSpace(req.Fuente),
+		PropuestaID:   req.PropuestaID,
+		TareaID:       req.TareaID,
+		MetadataJSON:  strings.TrimSpace(req.MetadataJSON),
+	})
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusCreated, apiCatalogoMutationResponse{ID: id})
 }
 
 func apiHandlerProyectoFabricarApp(w http.ResponseWriter, r *http.Request, ref string) {
@@ -1744,7 +1798,7 @@ func apiHandlerAsignacionActivar(w http.ResponseWriter, r *http.Request) {
 func apiHandlerLocks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		repo := db.SQLiteLockRepository{}
+		repo := db.CoordinationLockRepository()
 		filter := coordinacion.LockFilter{}
 		if agente := strings.TrimSpace(r.URL.Query().Get("agente")); agente != "" {
 			filter.Agent = &agente
@@ -1824,7 +1878,7 @@ func apiRouterLocks(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
 			return
 		}
-		lock, err := (db.SQLiteLockRepository{}).GetByID(id)
+		lock, err := db.CoordinationLockRepository().GetByID(id)
 		if err != nil {
 			apiError(w, http.StatusNotFound, err)
 			return
@@ -2151,7 +2205,7 @@ func apiHandlerPropuestas(w http.ResponseWriter, r *http.Request) {
 func apiHandlerWorktrees(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		repo := db.SQLiteWorktreeRepository{}
+		repo := db.CoordinationWorktreeRepository()
 		filter := coordinacion.WorktreeFilter{}
 		if agente := strings.TrimSpace(r.URL.Query().Get("agente")); agente != "" {
 			filter.Agent = &agente
@@ -2204,6 +2258,41 @@ func apiHandlerWorktrees(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true, "worktree": worktree})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func apiHandlerGitMerges(w http.ResponseWriter, r *http.Request) {
+	svc := gitgobernanza.NewService(gitgobernanza.Repository{})
+	switch r.Method {
+	case http.MethodGet:
+		merges, err := svc.ListRequests(
+			strings.TrimSpace(r.URL.Query().Get("proyecto")),
+			strings.TrimSpace(r.URL.Query().Get("estado")),
+		)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiGitMergesResponse{Merges: merges})
+	case http.MethodPost:
+		var req apiGitMergeSaveRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		id, err := svc.SaveRequest(req.intoInput())
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		merge, err := db.GetGitMerge(id)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusCreated, apiGitMergeSaveResponse{OK: true, ID: id, Merge: merge})
 	default:
 		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
@@ -2620,7 +2709,7 @@ func apiRouterWorktrees(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
 			return
 		}
-		worktree, err := (db.SQLiteWorktreeRepository{}).GetByID(id)
+		worktree, err := db.CoordinationWorktreeRepository().GetByID(id)
 		if err != nil {
 			apiError(w, http.StatusNotFound, err)
 			return

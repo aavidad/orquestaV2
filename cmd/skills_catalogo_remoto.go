@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -10,6 +11,14 @@ import (
 
 	"orquesta/db"
 )
+
+func skillsCatalogoModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func skillsCatalogoErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
+}
 
 var skillsRemotasCmd = &cobra.Command{
 	Use:   "remotas",
@@ -19,6 +28,9 @@ var skillsRemotasCmd = &cobra.Command{
 		limite, _ := cmd.Flags().GetInt("limit")
 		items, ok, err := listarSkillsRemotasPorAPI(filtro, limite)
 		if !ok {
+			if !skillsCatalogoModoRecuperacionLocalExplicito() {
+				return skillsCatalogoErrorServerFirst()
+			}
 			items, err = skillsCatalogoFetcher.Listar(context.Background(), filtro, limite)
 		}
 		if err != nil {
@@ -52,6 +64,9 @@ var skillsBorrarCmd = &cobra.Command{
 		if ok, err := borrarSkillPorAPI(id, actor); err != nil {
 			return err
 		} else if !ok {
+			if !skillsCatalogoModoRecuperacionLocalExplicito() {
+				return skillsCatalogoErrorServerFirst()
+			}
 			if err := db.EliminarSkill(strings.TrimSpace(actor), id); err != nil {
 				return err
 			}

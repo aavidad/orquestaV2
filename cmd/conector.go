@@ -9,6 +9,8 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
@@ -19,12 +21,23 @@ var conectorCmd = &cobra.Command{
 	Short: "Registro de conectores de agentes/modelos",
 }
 
+func conectorModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func conectorErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
+}
+
 var conectorListarCmd = &cobra.Command{
 	Use:   "listar",
 	Short: "Lista los conectores registrados",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		conectores, ok, err := cargarConectoresDesdeAPI()
 		if !ok {
+			if !conectorModoRecuperacionLocalExplicito() {
+				return conectorErrorServerFirst()
+			}
 			conectores, err = db.ListarConectores()
 		}
 		if err != nil {
@@ -54,6 +67,9 @@ var conectorVerCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c, ok, err := cargarConectorDesdeAPI(args[0])
 		if !ok {
+			if !conectorModoRecuperacionLocalExplicito() {
+				return conectorErrorServerFirst()
+			}
 			c, err = db.GetConector(args[0])
 		}
 		if err != nil {
@@ -95,6 +111,9 @@ var conectorRegistrarCmd = &cobra.Command{
 			Activo:       !inactivo,
 		})
 		if !ok {
+			if !conectorModoRecuperacionLocalExplicito() {
+				return conectorErrorServerFirst()
+			}
 			id, err = db.UpsertConector(&db.Conector{
 				Slug:         slug,
 				Nombre:       nombre,

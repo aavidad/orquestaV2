@@ -172,3 +172,36 @@ func TestProgresoTareaRegistrarUsaAPI(t *testing.T) {
 		t.Fatalf("salida inesperada:\n%s", out)
 	}
 }
+
+func TestProgresoExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	if err := progresoVerCmd.RunE(progresoVerCmd, []string{"orquestador"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("progreso ver deberia exigir servidor, err=%v", err)
+	}
+
+	if err := progresoFaseListarCmd.RunE(progresoFaseListarCmd, []string{"orquestador"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("progreso fase listar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(progresoFaseRegistrarCmd)
+	_ = progresoFaseRegistrarCmd.Flags().Set("nombre", "QA")
+	if err := progresoFaseRegistrarCmd.RunE(progresoFaseRegistrarCmd, []string{"orquestador"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("progreso fase registrar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(progresoFaseActualizarCmd)
+	_ = progresoFaseActualizarCmd.Flags().Set("nombre", "QA")
+	if err := progresoFaseActualizarCmd.RunE(progresoFaseActualizarCmd, []string{"12"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("progreso fase actualizar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(progresoTareaRegistrarCmd)
+	_ = progresoTareaRegistrarCmd.Flags().Set("proyecto", "orquestador")
+	_ = progresoTareaRegistrarCmd.Flags().Set("agente", "Codex1")
+	if err := progresoTareaRegistrarCmd.RunE(progresoTareaRegistrarCmd, []string{"42"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("progreso tarea registrar deberia exigir servidor, err=%v", err)
+	}
+}

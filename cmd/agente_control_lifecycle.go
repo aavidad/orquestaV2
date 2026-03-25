@@ -81,6 +81,9 @@ var agenteControlCmd = &cobra.Command{
 
 		orderID, accion, ok, err := encolarControlAgentePorAPI(req)
 		if !ok {
+			if !agenteModoRecuperacionLocalExplicito() {
+				return agenteErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}

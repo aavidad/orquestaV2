@@ -28,7 +28,10 @@ func schemaBackendSpecForDriver(driver string) (schemaBackendSpec, bool) {
 	case "mysql":
 		return schemaBackendSpec{
 			name:              "mysql",
-			supportsBootstrap: false,
+			supportsBootstrap: true,
+			renderDDL: func() string {
+				return schemaDDLForDriver("mysql")
+			},
 			renderSeedSQL: func() string {
 				return schemaSeedDataForDriver("mysql")
 			},

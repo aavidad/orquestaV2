@@ -110,11 +110,11 @@ func (Repository) ListLocks(estado, agente string) ([]*db.Lock, error) {
 }
 
 func (Repository) GetWorktree(id int64) (*coordinacion.Worktree, error) {
-	return (db.SQLiteWorktreeRepository{}).GetByID(id)
+	return db.CoordinationWorktreeRepository().GetByID(id)
 }
 
 func (Repository) GetLock(id int64) (*coordinacion.Lock, error) {
-	return (db.SQLiteLockRepository{}).GetByID(id)
+	return db.CoordinationLockRepository().GetByID(id)
 }
 
 func (Repository) ResolveProyectoIDBySlug(slug string) (*int64, error) {

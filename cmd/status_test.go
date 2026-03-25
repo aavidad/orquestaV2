@@ -229,6 +229,20 @@ func TestShouldBypassLocalDBMantieneFallbackLocalSinServidor(t *testing.T) {
 	}
 }
 
+func TestStatusExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	err := statusCmd.RunE(statusCmd, nil)
+	if err == nil {
+		t.Fatalf("status deberia exigir servidor o recuperacion local explicita")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
 func TestFetchServerInfoAndStatus(t *testing.T) {
 	prevClient := serverHTTPClient
 	serverHTTPClient = &http.Client{

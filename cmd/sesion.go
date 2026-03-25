@@ -10,6 +10,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -20,6 +21,14 @@ import (
 var sesionCmd = &cobra.Command{
 	Use:   "sesion",
 	Short: "Gestión de sesiones de agentes",
+}
+
+func sesionModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func sesionErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
 }
 
 // sesion inicio
@@ -82,6 +91,9 @@ func ejecutarInicioSesion(cmd *cobra.Command, args []string, forzarNuevoCodex bo
 	if ok, err := apiPost("/api/sesiones/inicio", req, &resp); err != nil {
 		return err
 	} else if !ok {
+		if !sesionModoRecuperacionLocalExplicito() {
+			return sesionErrorServerFirst()
+		}
 		if err := ensureLocalDB(); err != nil {
 			return err
 		}
@@ -223,6 +235,9 @@ var sesionGuardarCmd = &cobra.Command{
 		}, &apiSesionResponse{}); err != nil {
 			return err
 		} else if !ok {
+			if !sesionModoRecuperacionLocalExplicito() {
+				return sesionErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
@@ -293,6 +308,9 @@ var sesionContinuarCmd = &cobra.Command{
 		} else if ok {
 			s = resp.Sesion
 		} else {
+			if !sesionModoRecuperacionLocalExplicito() {
+				return sesionErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
@@ -396,6 +414,9 @@ var sesionFinCmd = &cobra.Command{
 		if ok, err := apiPost("/api/sesiones/fin", apiSesionFinRequest{Agente: agente}, &map[string]any{}); err != nil {
 			return err
 		} else if !ok {
+			if !sesionModoRecuperacionLocalExplicito() {
+				return sesionErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
@@ -441,6 +462,9 @@ var sesionListarCmd = &cobra.Command{
 		} else if ok {
 			agentes = resp.Agentes
 		} else {
+			if !sesionModoRecuperacionLocalExplicito() {
+				return sesionErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}

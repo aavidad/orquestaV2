@@ -10,6 +10,8 @@ package cmd
 import (
 	"fmt"
 	"net/url"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
@@ -46,8 +48,13 @@ var statusCmd = &cobra.Command{
 				return err
 			} else if ok {
 				tareas = tareasResp.Tareas
+			} else if !statusModoRecuperacionLocalExplicito() {
+				return statusErrorServerFirst()
 			}
 		} else {
+			if !statusModoRecuperacionLocalExplicito() {
+				return statusErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
@@ -178,6 +185,14 @@ var statusCmd = &cobra.Command{
 
 		return nil
 	},
+}
+
+func statusModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func statusErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
 }
 
 func truncar(s string, n int) string {

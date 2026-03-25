@@ -10,8 +10,6 @@ import (
 	"orquesta/db"
 )
 
-var agentesWebService = agentesapp.NewService(agentesapp.Repository{})
-
 type webAgenteRow = agentesapp.Row
 
 type webAgentesPanelData struct {
@@ -97,17 +95,16 @@ func webHandlerAgenteNuevo(w http.ResponseWriter, r *http.Request) {
 	if rol == "" {
 		rol = "programador"
 	}
-	if nombre == "" {
-		var err error
-		nombre, err = agentesWebService.RegisterAgentAuto(strings.TrimSpace(r.FormValue("proveedor")), rol)
-		if err != nil {
-			http.Redirect(w, r, "/agentes?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
-			return
-		}
-	} else if err := agentesWebService.RegisterAgent(nombre, rol); err != nil {
+	creado, err := webCrearAgentePorAPI(apiAgenteRequest{
+		Nombre:    nombre,
+		Proveedor: strings.TrimSpace(r.FormValue("proveedor")),
+		Rol:       rol,
+	})
+	if err != nil {
 		http.Redirect(w, r, "/agentes?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
+	nombre = creado
 	http.Redirect(w, r, "/agentes?ok="+url.QueryEscape(webTranslateRequestf(r, "agentes.flash.created", nombre)), http.StatusSeeOther)
 }
 
@@ -121,12 +118,16 @@ func webHandlerAgenteAsignacion(w http.ResponseWriter, r *http.Request, nombre s
 		http.Redirect(w, r, "/agentes/"+url.PathEscape(nombre)+"?err="+url.QueryEscape(webTranslateRequestf(r, "agentes.flash.project_required")), http.StatusSeeOther)
 		return
 	}
-	proyecto, err := db.GetProyecto(proyectoRef)
+	proyecto, err := webCargarProyectoPorAPI(proyectoRef)
 	if err != nil {
 		http.Redirect(w, r, "/agentes/"+url.PathEscape(nombre)+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	if err := db.ActivarAsignacion(strings.TrimSpace(nombre), proyecto.ID, strings.TrimSpace(r.FormValue("nota"))); err != nil {
+	if err := webActivarAsignacionPorAPI(apiAsignacionActivarRequest{
+		Agente:   strings.TrimSpace(nombre),
+		Proyecto: proyectoRef,
+		Nota:     strings.TrimSpace(r.FormValue("nota")),
+	}); err != nil {
 		http.Redirect(w, r, "/agentes/"+url.PathEscape(nombre)+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
@@ -160,7 +161,7 @@ func webHandlerAgenteControl(w http.ResponseWriter, r *http.Request, nombre stri
 		Motivo:       strings.TrimSpace(r.FormValue("motivo")),
 		Por:          "web",
 	}
-	orderID, accion, err := encolarControlAgenteLocal(req)
+	orderID, accion, err := webEncolarControlAgentePorAPI(req)
 	if err != nil {
 		http.Redirect(w, r, "/agentes/"+url.PathEscape(nombre)+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
@@ -175,7 +176,7 @@ func webHandlerAgenteEstado(w http.ResponseWriter, r *http.Request, nombre strin
 		return
 	}
 	accion := strings.TrimSpace(r.FormValue("accion"))
-	err := agentesWebService.ApplyStateAction(nombre, accion)
+	err := webAplicarAccionEstadoAgentePorAPI(nombre, accion)
 	if err != nil {
 		http.Redirect(w, r, "/agentes/"+url.PathEscape(nombre)+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
@@ -184,15 +185,24 @@ func webHandlerAgenteEstado(w http.ResponseWriter, r *http.Request, nombre strin
 }
 
 func construirWebAgenteRows() ([]webAgenteRow, error) {
-	return agentesWebService.BuildPanelRows()
+	var resp apiAgentesPanelResponse
+	if err := webInvocarAPIJSON(http.MethodGet, "/api/agentes?vista=panel", nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Rows, nil
 }
 
 func construirWebAgenteDetalleData(nombre string) (*webAgenteDetalleData, error) {
-	detail, err := agentesWebService.BuildDetail(nombre)
-	if err != nil {
+	var resp apiAgenteOverviewResponse
+	path := "/api/agentes/" + url.PathEscape(strings.TrimSpace(nombre)) + "/overview"
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
 		return nil, err
 	}
-	proyectos, err := db.ListarProyectosActivos()
+	detail := resp.Detail
+	if detail == nil {
+		return nil, fmt.Errorf("detalle de agente no disponible")
+	}
+	proyectos, err := webCargarProyectosActivosPorAPI()
 	if err != nil {
 		return nil, err
 	}
@@ -207,6 +217,65 @@ func construirWebAgenteDetalleData(nombre string) (*webAgenteDetalleData, error)
 		Mailbox:      limitarMailbox(detail.Mailbox, 20),
 		Checkpoints:  detail.Checkpoints,
 	}, nil
+}
+
+type apiAgenteCrearResponse struct {
+	OK     bool   `json:"ok"`
+	Nombre string `json:"nombre"`
+	Rol    string `json:"rol"`
+}
+
+func webCrearAgentePorAPI(req apiAgenteRequest) (string, error) {
+	var resp apiAgenteCrearResponse
+	if err := webInvocarAPIJSON(http.MethodPost, "/api/agentes", req, &resp); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(resp.Nombre), nil
+}
+
+func webCargarProyectoPorAPI(ref string) (*db.Proyecto, error) {
+	var resp apiProyectoResponse
+	path := "/api/proyectos/" + url.PathEscape(strings.TrimSpace(ref))
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Proyecto, nil
+}
+
+func webCargarProyectosActivosPorAPI() ([]*db.Proyecto, error) {
+	var resp apiProyectosResponse
+	if err := webInvocarAPIJSON(http.MethodGet, "/api/proyectos", nil, &resp); err != nil {
+		return nil, err
+	}
+	out := make([]*db.Proyecto, 0, len(resp.Proyectos))
+	for _, proyecto := range resp.Proyectos {
+		if proyecto != nil && proyecto.Activo {
+			out = append(out, proyecto)
+		}
+	}
+	return out, nil
+}
+
+func webActivarAsignacionPorAPI(req apiAsignacionActivarRequest) error {
+	return webInvocarAPIJSON(http.MethodPost, "/api/asignaciones/activar", req, nil)
+}
+
+func webEncolarControlAgentePorAPI(req apiAgenteControlRequest) (int64, string, error) {
+	var resp apiAgenteControlResponse
+	if err := webInvocarAPIJSON(http.MethodPost, "/api/agente/control", req, &resp); err != nil {
+		return 0, "", err
+	}
+	return resp.ID, strings.TrimSpace(resp.Accion), nil
+}
+
+func webAplicarAccionEstadoAgentePorAPI(nombre, accion string) error {
+	accion = strings.TrimSpace(accion)
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" || accion == "" {
+		return fmt.Errorf("agente y acción obligatorios")
+	}
+	path := "/api/agentes/" + url.PathEscape(nombre) + "/" + url.PathEscape(accion)
+	return webInvocarAPIJSON(http.MethodPost, path, map[string]any{}, nil)
 }
 
 func limitarSesiones(items []*db.Sesion, max int) []*db.Sesion {

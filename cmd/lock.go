@@ -9,6 +9,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"net/url"
 	"strconv"
 	"strings"
@@ -21,6 +22,14 @@ import (
 var lockCmd = &cobra.Command{
 	Use:   "lock",
 	Short: "Gestión de locks con lease y heartbeat",
+}
+
+func coordinacionModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func coordinacionErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
 }
 
 var lockListarCmd = &cobra.Command{
@@ -40,7 +49,10 @@ var lockListarCmd = &cobra.Command{
 
 		locks, ok, err := cargarLocksDesdeAPI(query)
 		if !ok {
-			repo := db.SQLiteLockRepository{}
+			if !coordinacionModoRecuperacionLocalExplicito() {
+				return coordinacionErrorServerFirst()
+			}
+			repo := db.CoordinationLockRepository()
 			filter := coordinacion.LockFilter{}
 			if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
 				filter.Agent = &agente
@@ -103,6 +115,9 @@ var lockTomarCmd = &cobra.Command{
 			fmt.Printf("  lease_token=%s\n", lock.LeaseToken)
 			fmt.Printf("  expira=%s\n", lock.ExpiresAt.Format("2006-01-02 15:04:05"))
 			return nil
+		}
+		if !coordinacionModoRecuperacionLocalExplicito() {
+			return coordinacionErrorServerFirst()
 		}
 
 		svc := newCoordinationService()
@@ -168,6 +183,9 @@ var lockRenovarCmd = &cobra.Command{
 			fmt.Printf("✓ Lock %d renovado hasta %s\n", lock.ID, lock.ExpiresAt.Format("2006-01-02 15:04:05"))
 			return nil
 		}
+		if !coordinacionModoRecuperacionLocalExplicito() {
+			return coordinacionErrorServerFirst()
+		}
 		svc := newCoordinationService()
 		lock, err := svc.RenewLock(coordinacion.RenewLockInput{
 			ID:           id,
@@ -203,6 +221,9 @@ var lockLiberarCmd = &cobra.Command{
 			}
 			fmt.Printf("✓ Lock %d liberado (%s:%s)\n", lock.ID, lock.ScopeType, lock.ScopeKey)
 			return nil
+		}
+		if !coordinacionModoRecuperacionLocalExplicito() {
+			return coordinacionErrorServerFirst()
 		}
 		svc := newCoordinationService()
 		lock, err := svc.ReleaseLock(coordinacion.ReleaseLockInput{

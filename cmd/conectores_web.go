@@ -12,11 +12,8 @@ import (
 	"net/url"
 	"strings"
 
-	"orquesta/conectoresapp"
 	"orquesta/db"
 )
-
-var conectoresService = conectoresapp.NewService(conectoresapp.Repository{})
 
 type webConectoresData struct {
 	Conectores []*db.Conector
@@ -47,7 +44,7 @@ func webRouterConectores(w http.ResponseWriter, r *http.Request) {
 }
 
 func webHandlerConectores(w http.ResponseWriter, r *http.Request) {
-	items, err := conectoresService.ListConnectors()
+	items, err := webCargarConectoresPorAPI()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -60,7 +57,7 @@ func webHandlerConectores(w http.ResponseWriter, r *http.Request) {
 }
 
 func webHandlerConectorDetalle(w http.ResponseWriter, r *http.Request, ref string) {
-	item, err := conectoresService.GetConnector(ref)
+	item, err := webCargarConectorPorAPI(ref)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -80,12 +77,12 @@ func webHandlerConectorGuardar(w http.ResponseWriter, r *http.Request, ref strin
 	}
 	slug := strings.TrimSpace(r.FormValue("slug"))
 	if target != "" && slug == "" {
-		actual, err := conectoresService.GetConnector(target)
+		actual, err := webCargarConectorPorAPI(target)
 		if err == nil && actual != nil {
 			slug = strings.TrimSpace(actual.Slug)
 		}
 	}
-	if _, err := conectoresService.SaveConnector(conectoresapp.SaveConnectorInput{
+	if _, err := webGuardarConectorPorAPI(apiConectorUpsertRequest{
 		Slug:         slug,
 		Nombre:       strings.TrimSpace(r.FormValue("nombre")),
 		Transporte:   strings.TrimSpace(r.FormValue("transporte")),
@@ -108,6 +105,30 @@ func webHandlerConectorGuardar(w http.ResponseWriter, r *http.Request, ref strin
 		return
 	}
 	http.Redirect(w, r, "/conectores?ok="+url.QueryEscape(msg), http.StatusSeeOther)
+}
+
+func webCargarConectoresPorAPI() ([]*db.Conector, error) {
+	var resp apiConectoresResponse
+	if err := webInvocarAPIJSON(http.MethodGet, "/api/conectores", nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Conectores, nil
+}
+
+func webCargarConectorPorAPI(ref string) (*db.Conector, error) {
+	var resp apiConectorResponse
+	if err := webInvocarAPIJSON(http.MethodGet, "/api/conectores/"+url.PathEscape(strings.TrimSpace(ref)), nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Conector, nil
+}
+
+func webGuardarConectorPorAPI(req apiConectorUpsertRequest) (*db.Conector, error) {
+	var resp apiConectorResponse
+	if err := webInvocarAPIJSON(http.MethodPost, "/api/conectores", req, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Conector, nil
 }
 
 const webTplConectores = `{{define "content"}}

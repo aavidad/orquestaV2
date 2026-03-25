@@ -81,6 +81,8 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 
 func TestAgentePurgarBloqueaTareasActivasEnModoLocal(t *testing.T) {
 	prepararDBTemporalCmd(t)
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "1")()
 
 	if err := db.RegistrarAgente("CodexLocal", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
@@ -107,5 +109,39 @@ func TestAgentePurgarBloqueaTareasActivasEnModoLocal(t *testing.T) {
 	}
 	if _, err := db.GetAgente("CodexLocal"); err != nil {
 		t.Fatalf("el agente no deberia haberse eliminado: %v", err)
+	}
+}
+
+func TestAgenteComandosExigenServidorSalvoRecuperacionLocal(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	agentePrepararCmd.Flags().Set("proyecto", "orquestador")
+	defer agentePrepararCmd.Flags().Set("proyecto", "")
+	if err := agentePrepararCmd.RunE(agentePrepararCmd, []string{"Codex1"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("agente preparar deberia exigir servidor, err=%v", err)
+	}
+
+	agenteTickCmd.Flags().Set("proyecto", "orquestador")
+	defer agenteTickCmd.Flags().Set("proyecto", "")
+	if err := agenteTickCmd.RunE(agenteTickCmd, []string{"Codex1"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("agente tick deberia exigir servidor, err=%v", err)
+	}
+
+	if err := agenteControlCmd.RunE(agenteControlCmd, []string{"arrancar", "Codex1"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("agente control deberia exigir servidor, err=%v", err)
+	}
+
+	if err := agentePausarCmd.RunE(agentePausarCmd, []string{"Codex1", "15", "rate", "limit"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("agente pausar deberia exigir servidor, err=%v", err)
+	}
+
+	if err := agenteHandoffCmd.RunE(agenteHandoffCmd, []string{"Codex1", "Codex2"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("agente handoff deberia exigir servidor, err=%v", err)
+	}
+
+	if err := agenteReasignarVivoCmd.RunE(agenteReasignarVivoCmd, []string{"1", "Codex1", "Codex2"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("agente reasignar-vivo deberia exigir servidor, err=%v", err)
 	}
 }

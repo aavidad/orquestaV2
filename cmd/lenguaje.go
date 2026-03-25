@@ -24,6 +24,14 @@ var lenguajeCmd = &cobra.Command{
 	Short: "Politica de lenguaje, matriz de seleccion y multilenguaje",
 }
 
+func lenguajeModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func lenguajeErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
+}
+
 var lenguajePoliticaCmd = &cobra.Command{
 	Use:   "politica",
 	Short: "Gestion de la politica global de lenguaje",
@@ -35,6 +43,9 @@ var lenguajePoliticaVerCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		p, ok, err := cargarPoliticaLenguajeDesdeAPI()
 		if !ok {
+			if !lenguajeModoRecuperacionLocalExplicito() {
+				return lenguajeErrorServerFirst()
+			}
 			p, err = db.GetLanguagePolicy()
 		}
 		if err != nil {
@@ -63,6 +74,9 @@ var lenguajePoliticaSetCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		p, ok, err := cargarPoliticaLenguajeDesdeAPI()
 		if !ok {
+			if !lenguajeModoRecuperacionLocalExplicito() {
+				return lenguajeErrorServerFirst()
+			}
 			p, err = db.GetLanguagePolicy()
 		}
 		if err != nil {
@@ -103,6 +117,9 @@ var lenguajePoliticaSetCmd = &cobra.Command{
 			fmt.Printf("✓ Politica de lenguaje actualizada (%s)\n", p.DefaultLanguage)
 			return nil
 		}
+		if !lenguajeModoRecuperacionLocalExplicito() {
+			return lenguajeErrorServerFirst()
+		}
 		if err := db.SetLanguagePolicy(p, por); err != nil {
 			return err
 		}
@@ -122,6 +139,9 @@ var lenguajeMatrizListarCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		lista, ok, err := cargarMatrizLenguajeDesdeAPI()
 		if !ok {
+			if !lenguajeModoRecuperacionLocalExplicito() {
+				return lenguajeErrorServerFirst()
+			}
 			lista, err = db.ListLanguageMatrixEntries()
 		}
 		if err != nil {
@@ -156,6 +176,9 @@ var lenguajeMatrizFijarCmd = &cobra.Command{
 			fmt.Printf("✓ Matriz fijada: %s/%s [%s] = %s\n", args[0], args[1], normalizeContextCmd(contexto), args[2])
 			return nil
 		}
+		if !lenguajeModoRecuperacionLocalExplicito() {
+			return lenguajeErrorServerFirst()
+		}
 		entry, err := db.SetLanguageMatrixEntry(args[0], args[1], contexto, args[2], razon, por)
 		if err != nil {
 			return err
@@ -176,6 +199,9 @@ var lenguajeMatrizBorrarCmd = &cobra.Command{
 		} else if ok {
 			fmt.Printf("✓ Matriz borrada: %s/%s [%s]\n", args[0], args[1], normalizeContextCmd(contexto))
 			return nil
+		}
+		if !lenguajeModoRecuperacionLocalExplicito() {
+			return lenguajeErrorServerFirst()
 		}
 		if err := db.DeleteLanguageMatrixEntry(args[0], args[1], contexto); err != nil {
 			return err
@@ -201,6 +227,9 @@ var lenguajeResolverCmd = &cobra.Command{
 		}
 		res, ok, err := resolverLenguajePorAPI(strings.TrimSpace(proyecto), tareaPtr, contexto)
 		if !ok {
+			if !lenguajeModoRecuperacionLocalExplicito() {
+				return lenguajeErrorServerFirst()
+			}
 			res, err = db.ResolveLanguage(strings.TrimSpace(proyecto), tareaPtr, contexto)
 		}
 		if err != nil {
@@ -237,6 +266,9 @@ var lenguajeEsqueletoCmd = &cobra.Command{
 
 		p, ok, err := cargarPoliticaLenguajeDesdeAPI()
 		if !ok {
+			if !lenguajeModoRecuperacionLocalExplicito() {
+				return lenguajeErrorServerFirst()
+			}
 			p, err = db.GetLanguagePolicy()
 		}
 		if err != nil {

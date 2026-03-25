@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"orquesta/db"
 )
 
 func buildExportStateMarkdown() (string, error) {
@@ -41,9 +43,14 @@ func buildExportStateMarkdown() (string, error) {
 }
 
 func buildExportAuditMarkdown(limit int) (string, error) {
-	entries, err := operacionesService.AuditLog(limit)
-	if err != nil {
+	var resp apiAuditResponse
+	path := fmt.Sprintf("/api/audit?limit=%d", limit)
+	if err := webInvocarAPIJSON("GET", path, nil, &resp); err != nil {
 		return "", err
+	}
+	entries := resp.Audit
+	if entries == nil {
+		entries = []db.AuditEntry{}
 	}
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("# Audit Log (últimas %d entradas)\n\n", limit))

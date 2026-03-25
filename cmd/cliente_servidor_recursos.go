@@ -13,9 +13,12 @@ import (
 	"strconv"
 	"strings"
 
+	"orquesta/agentesapp"
 	"orquesta/capacidadapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
+	"orquesta/gitgobernanza"
+	"orquesta/memoriaproyecto"
 )
 
 type apiProyectoResponse struct {
@@ -52,6 +55,52 @@ type apiWorktreesResponse struct {
 	Worktrees []*coordinacion.Worktree `json:"worktrees"`
 }
 
+type apiAgentesPanelResponse struct {
+	Rows []agentesapp.Row `json:"rows"`
+}
+
+type apiAgenteOverviewResponse struct {
+	Detail *agentesapp.Detail `json:"detail"`
+}
+
+type apiGitMergesResponse struct {
+	Merges []*db.GitMerge `json:"merges"`
+}
+
+type apiGitMergeSaveRequest struct {
+	ID           int64  `json:"id"`
+	ProyectoSlug string `json:"proyecto_slug"`
+	SourceBranch string `json:"source_branch"`
+	TargetBranch string `json:"target_branch"`
+	RequestedBy  string `json:"requested_by"`
+	Estado       string `json:"estado"`
+	CommitOrigen string `json:"commit_origen"`
+	CommitMerge  string `json:"commit_merge"`
+	Notas        string `json:"notas"`
+	MetadataJSON string `json:"metadata_json"`
+}
+
+type apiGitMergeSaveResponse struct {
+	OK    bool         `json:"ok"`
+	ID    int64        `json:"id"`
+	Merge *db.GitMerge `json:"merge,omitempty"`
+}
+
+func (req apiGitMergeSaveRequest) intoInput() gitgobernanza.SaveMergeRequestInput {
+	return gitgobernanza.SaveMergeRequestInput{
+		ID:           req.ID,
+		ProyectoSlug: strings.TrimSpace(req.ProyectoSlug),
+		SourceBranch: strings.TrimSpace(req.SourceBranch),
+		TargetBranch: strings.TrimSpace(req.TargetBranch),
+		RequestedBy:  strings.TrimSpace(req.RequestedBy),
+		Estado:       strings.TrimSpace(req.Estado),
+		CommitOrigen: strings.TrimSpace(req.CommitOrigen),
+		CommitMerge:  strings.TrimSpace(req.CommitMerge),
+		Notas:        req.Notas,
+		MetadataJSON: strings.TrimSpace(req.MetadataJSON),
+	}
+}
+
 type apiAgenteHandoffResponse struct {
 	ID      int64 `json:"id"`
 	OrderID int64 `json:"order_id"`
@@ -86,6 +135,35 @@ type apiProyectoFabricarAppResponse struct {
 	Tipo    string `json:"tipo"`
 	Created int    `json:"created"`
 	Backlog int    `json:"backlog"`
+}
+
+type apiProyectoOverviewResponse struct {
+	Overview *memoriaproyecto.ProjectOverview `json:"overview"`
+}
+
+type apiProyectoDecisionCreateRequest struct {
+	Categoria    string `json:"categoria"`
+	Titulo       string `json:"titulo"`
+	Solucion     string `json:"solucion"`
+	Motivo       string `json:"motivo"`
+	Alternativas string `json:"alternativas"`
+	Impacto      string `json:"impacto"`
+	Estado       string `json:"estado"`
+	PropuestaID  *int64 `json:"propuesta_id"`
+	TareaID      *int64 `json:"tarea_id"`
+	MetadataJSON string `json:"metadata_json"`
+}
+
+type apiProyectoDocumentoCreateRequest struct {
+	TipoDocumento string `json:"tipo_documento"`
+	Titulo        string `json:"titulo"`
+	RutaRef       string `json:"ruta_ref"`
+	Resumen       string `json:"resumen"`
+	Estado        string `json:"estado"`
+	Fuente        string `json:"fuente"`
+	PropuestaID   *int64 `json:"propuesta_id"`
+	TareaID       *int64 `json:"tarea_id"`
+	MetadataJSON  string `json:"metadata_json"`
 }
 
 type apiLenguajePoliticaResponse struct {

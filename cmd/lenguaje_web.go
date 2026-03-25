@@ -14,10 +14,7 @@ import (
 	"strings"
 
 	"orquesta/db"
-	"orquesta/lenguajeapp"
 )
-
-var lenguajeWebService = lenguajeapp.NewService(lenguajeapp.Repository{})
 
 type webLenguajeData struct {
 	Politica         *db.LanguagePolicy
@@ -59,12 +56,12 @@ func webRouterLenguaje(w http.ResponseWriter, r *http.Request) {
 }
 
 func webHandlerLenguaje(w http.ResponseWriter, r *http.Request) {
-	politica, err := lenguajeWebService.GetPolicy()
+	politica, err := webCargarPoliticaLenguajePorAPI()
 	if err != nil {
 		webRender(w, r, webTplLayout+webTplLenguaje, webLenguajeData{Err: err.Error()})
 		return
 	}
-	matriz, err := lenguajeWebService.ListMatrixEntries()
+	matriz, err := webCargarMatrizLenguajePorAPI()
 	if err != nil {
 		webRender(w, r, webTplLayout+webTplLenguaje, webLenguajeData{
 			Politica: politica,
@@ -96,11 +93,7 @@ func webHandlerLenguaje(w http.ResponseWriter, r *http.Request) {
 			}
 			tareaID = &value
 		}
-		resolucion, resolveErr := lenguajeWebService.Resolve(lenguajeapp.ResolveInput{
-			Proyecto: data.ResolverProyecto,
-			TareaID:  tareaID,
-			Contexto: data.ResolverContexto,
-		})
+		resolucion, resolveErr := webResolverLenguajePorAPI(data.ResolverProyecto, tareaID, data.ResolverContexto)
 		if resolveErr != nil {
 			data.Err = resolveErr.Error()
 		} else {
@@ -137,7 +130,7 @@ func webHandlerLenguajePolitica(w http.ResponseWriter, r *http.Request) {
 		AllowedLanguages:         splitLanguages(r.FormValue("allowed_languages")),
 		Notes:                    strings.TrimSpace(r.FormValue("notes")),
 	}
-	if err := lenguajeWebService.SetPolicy(politica, "web"); err != nil {
+	if err := webFijarPoliticaLenguajePorAPI(politica, "web"); err != nil {
 		http.Redirect(w, r, "/lenguaje?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
@@ -149,14 +142,14 @@ func webHandlerLenguajeMatriz(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/lenguaje?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	_, err := lenguajeWebService.SetMatrixEntry(lenguajeapp.SetMatrixEntryInput{
-		Scope:     strings.TrimSpace(r.FormValue("scope")),
-		Selector:  strings.TrimSpace(r.FormValue("selector")),
-		Contexto:  strings.TrimSpace(r.FormValue("context")),
-		Language:  strings.TrimSpace(r.FormValue("language")),
-		Reason:    strings.TrimSpace(r.FormValue("reason")),
-		UpdatedBy: "web",
-	})
+	err := webFijarEntradaMatrizLenguajePorAPI(
+		strings.TrimSpace(r.FormValue("scope")),
+		strings.TrimSpace(r.FormValue("selector")),
+		strings.TrimSpace(r.FormValue("context")),
+		strings.TrimSpace(r.FormValue("language")),
+		strings.TrimSpace(r.FormValue("reason")),
+		"web",
+	)
 	if err != nil {
 		http.Redirect(w, r, "/lenguaje?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
@@ -169,7 +162,7 @@ func webHandlerLenguajeMatrizBorrar(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/lenguaje?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	err := lenguajeWebService.DeleteMatrixEntry(
+	err := webBorrarEntradaMatrizLenguajePorAPI(
 		strings.TrimSpace(r.FormValue("scope")),
 		strings.TrimSpace(r.FormValue("selector")),
 		strings.TrimSpace(r.FormValue("context")),
@@ -179,6 +172,70 @@ func webHandlerLenguajeMatrizBorrar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/lenguaje?ok="+url.QueryEscape(webTranslateRequestf(r, "langweb.flash.matrix_deleted")), http.StatusSeeOther)
+}
+
+func webCargarPoliticaLenguajePorAPI() (*db.LanguagePolicy, error) {
+	var resp apiLenguajePoliticaResponse
+	if err := webInvocarAPIJSON(http.MethodGet, "/api/lenguaje/politica", nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Politica, nil
+}
+
+func webCargarMatrizLenguajePorAPI() ([]*db.LanguageMatrixEntry, error) {
+	var resp apiLenguajeMatrizResponse
+	if err := webInvocarAPIJSON(http.MethodGet, "/api/lenguaje/matriz", nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Matriz, nil
+}
+
+func webResolverLenguajePorAPI(proyecto string, tareaID *int64, contexto string) (*db.LanguageResolution, error) {
+	query := url.Values{}
+	if proyecto = strings.TrimSpace(proyecto); proyecto != "" {
+		query.Set("proyecto", proyecto)
+	}
+	if tareaID != nil && *tareaID > 0 {
+		query.Set("tarea", strconv.FormatInt(*tareaID, 10))
+	}
+	if contexto = strings.TrimSpace(contexto); contexto != "" {
+		query.Set("contexto", contexto)
+	}
+	path := "/api/lenguaje/resolver"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var resp apiLenguajeResolucionResponse
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Resolucion, nil
+}
+
+func webFijarPoliticaLenguajePorAPI(politica *db.LanguagePolicy, por string) error {
+	return webInvocarAPIJSON(http.MethodPost, "/api/lenguaje/politica", apiLenguajePoliticaSetRequest{
+		Politica: politica,
+		Por:      strings.TrimSpace(por),
+	}, nil)
+}
+
+func webFijarEntradaMatrizLenguajePorAPI(scope, selector, contexto, idioma, razon, por string) error {
+	return webInvocarAPIJSON(http.MethodPost, "/api/lenguaje/matriz", apiLenguajeMatrizSetRequest{
+		Scope:    strings.TrimSpace(scope),
+		Selector: strings.TrimSpace(selector),
+		Contexto: strings.TrimSpace(contexto),
+		Idioma:   strings.TrimSpace(idioma),
+		Razon:    strings.TrimSpace(razon),
+		Por:      strings.TrimSpace(por),
+	}, nil)
+}
+
+func webBorrarEntradaMatrizLenguajePorAPI(scope, selector, contexto string) error {
+	return webInvocarAPIJSON(http.MethodPost, "/api/lenguaje/matriz/borrar", apiLenguajeMatrizDeleteRequest{
+		Scope:    strings.TrimSpace(scope),
+		Selector: strings.TrimSpace(selector),
+		Contexto: strings.TrimSpace(contexto),
+	}, nil)
 }
 
 const webTplLenguaje = `{{define "content"}}

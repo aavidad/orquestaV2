@@ -10,6 +10,46 @@ import (
 	"orquesta/db"
 )
 
+func TestPropuestaListarExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	db.Close()
+	defer db.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	err := propuestaListarCmd.RunE(propuestaListarCmd, nil)
+	if err == nil {
+		t.Fatalf("propuesta listar deberia exigir servidor o recuperacion local explicita")
+	}
+	if !strings.Contains(err.Error(), "ORQUESTA_FORCE_LOCAL_DB=1") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
+func TestPropuestaCerrarExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	db.Close()
+	defer db.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	resetCommandFlags(propuestaCerrarCmd)
+	if err := propuestaCerrarCmd.Flags().Set("agente", "Codex1"); err != nil {
+		t.Fatalf("set agente propuesta cerrar: %v", err)
+	}
+	err := propuestaCerrarCmd.RunE(propuestaCerrarCmd, []string{"OP-200", "consenso"})
+	if err == nil {
+		t.Fatalf("propuesta cerrar deberia exigir servidor o recuperacion local explicita")
+	}
+	if !strings.Contains(err.Error(), "ORQUESTA_FORCE_LOCAL_DB=1") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
 func TestPropuestaUsaAPI(t *testing.T) {
 	createdAt := time.Date(2026, 3, 24, 18, 0, 0, 0, time.UTC)
 

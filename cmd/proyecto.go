@@ -9,7 +9,9 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
@@ -20,12 +22,23 @@ var proyectoCmd = &cobra.Command{
 	Short: "Gestión de proyectos del workspace",
 }
 
+func proyectoModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func proyectoErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
+}
+
 var proyectoListarCmd = &cobra.Command{
 	Use:   "listar",
 	Short: "Lista los proyectos registrados",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		proyectos, ok, err := cargarProyectosDesdeAPI()
 		if !ok {
+			if !proyectoModoRecuperacionLocalExplicito() {
+				return proyectoErrorServerFirst()
+			}
 			proyectos, err = db.ListarProyectos(db.FiltroProyectos{})
 		}
 		if err != nil {
@@ -59,6 +72,9 @@ var proyectoDescubrirCmd = &cobra.Command{
 		}
 		proyectos, ok, err := descubrirProyectosPorAPI(ruta)
 		if !ok {
+			if !proyectoModoRecuperacionLocalExplicito() {
+				return proyectoErrorServerFirst()
+			}
 			proyectos, err = db.DescubrirProyectos(ruta)
 			if err != nil {
 				return err
@@ -87,6 +103,9 @@ var proyectoVerCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		p, ok, err := cargarProyectoDesdeAPI(args[0])
 		if !ok {
+			if !proyectoModoRecuperacionLocalExplicito() {
+				return proyectoErrorServerFirst()
+			}
 			p, err = db.GetProyecto(args[0])
 		}
 		if err != nil {
@@ -100,8 +119,12 @@ var proyectoVerCmd = &cobra.Command{
 		if p.ParentID != nil {
 			if pad, ok, err := cargarProyectoDesdeAPI(fmt.Sprintf("%d", *p.ParentID)); ok && err == nil && pad != nil {
 				padre = fmt.Sprintf("%d (%s)", *p.ParentID, pad.Slug)
-			} else if pad, err := db.GetProyecto(fmt.Sprintf("%d", *p.ParentID)); err == nil {
-				padre = fmt.Sprintf("%d (%s)", *p.ParentID, pad.Slug)
+			} else if proyectoModoRecuperacionLocalExplicito() {
+				if pad, err := db.GetProyecto(fmt.Sprintf("%d", *p.ParentID)); err == nil {
+					padre = fmt.Sprintf("%d (%s)", *p.ParentID, pad.Slug)
+				} else {
+					padre = fmt.Sprintf("%d", *p.ParentID)
+				}
 			} else {
 				padre = fmt.Sprintf("%d", *p.ParentID)
 			}
