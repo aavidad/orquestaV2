@@ -95,6 +95,13 @@ Consultas de briefing de agentes ya cubiertas por API:
 - `GET /api/workflows?tipo_agente=programador`
 - `GET /api/workflows?tipo_agente=programador&nombre=inicio-sesion`
 
+Estado actual del catalogo de skills:
+
+- indice ordenado por `prioridad`, `escenario` y `nombre`
+- metadata minima ya expuesta para skills: `escenario`, `prioridad`, `aliases_json`, `herramientas_json`
+- mutaciones versionadas y auditadas
+- anti-duplicado funcional por equivalencia canonica, no solo por nombre exacto
+
 ## Flujo correcto para un agente manual
 
 Entrada recomendada:

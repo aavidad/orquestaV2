@@ -195,11 +195,18 @@ type apiReglaCrearRequest struct {
 }
 
 type apiSkillCrearRequest struct {
-	Actor       string `json:"actor"`
-	TipoAgente  string `json:"tipo_agente"`
-	Nombre      string `json:"nombre"`
-	Descripcion string `json:"descripcion"`
-	CuandoUsar  string `json:"cuando_usar"`
+	Actor              string `json:"actor"`
+	TipoAgente         string `json:"tipo_agente"`
+	Nombre             string `json:"nombre"`
+	Descripcion        string `json:"descripcion"`
+	CuandoUsar         string `json:"cuando_usar"`
+	Escenario          string `json:"escenario"`
+	Prioridad          int    `json:"prioridad"`
+	AliasesJSON        string `json:"aliases_json"`
+	HerramientasJSON   string `json:"herramientas_json"`
+	Origen             string `json:"origen"`
+	NivelRiesgo        string `json:"nivel_riesgo"`
+	RequiereAprobacion bool   `json:"requiere_aprobacion"`
 }
 
 type apiWorkflowCrearRequest struct {
@@ -236,12 +243,19 @@ type apiReglaActualizarRequest struct {
 }
 
 type apiSkillActualizarRequest struct {
-	Actor       string `json:"actor"`
-	TipoAgente  string `json:"tipo_agente"`
-	Nombre      string `json:"nombre"`
-	Descripcion string `json:"descripcion"`
-	CuandoUsar  string `json:"cuando_usar"`
-	Activa      bool   `json:"activa"`
+	Actor              string `json:"actor"`
+	TipoAgente         string `json:"tipo_agente"`
+	Nombre             string `json:"nombre"`
+	Descripcion        string `json:"descripcion"`
+	CuandoUsar         string `json:"cuando_usar"`
+	Escenario          string `json:"escenario"`
+	Prioridad          int    `json:"prioridad"`
+	AliasesJSON        string `json:"aliases_json"`
+	HerramientasJSON   string `json:"herramientas_json"`
+	Origen             string `json:"origen"`
+	NivelRiesgo        string `json:"nivel_riesgo"`
+	RequiereAprobacion bool   `json:"requiere_aprobacion"`
+	Activa             bool   `json:"activa"`
 }
 
 type apiWorkflowActualizarRequest struct {
@@ -843,10 +857,18 @@ func apiHandlerSkills(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		id, err := db.CrearSkill(strings.TrimSpace(req.Actor), &db.Skill{
-			TipoAgente:  strings.TrimSpace(req.TipoAgente),
-			Nombre:      strings.TrimSpace(req.Nombre),
-			Descripcion: strings.TrimSpace(req.Descripcion),
-			CuandoUsar:  strings.TrimSpace(req.CuandoUsar),
+			TipoAgente:         strings.TrimSpace(req.TipoAgente),
+			Nombre:             strings.TrimSpace(req.Nombre),
+			Descripcion:        strings.TrimSpace(req.Descripcion),
+			CuandoUsar:         strings.TrimSpace(req.CuandoUsar),
+			Escenario:          strings.TrimSpace(req.Escenario),
+			Prioridad:          req.Prioridad,
+			AliasesJSON:        strings.TrimSpace(req.AliasesJSON),
+			HerramientasJSON:   strings.TrimSpace(req.HerramientasJSON),
+			Origen:             strings.TrimSpace(req.Origen),
+			NivelRiesgo:        strings.TrimSpace(req.NivelRiesgo),
+			RequiereAprobacion: req.RequiereAprobacion,
+			Activa:             true,
 		})
 		if err != nil {
 			apiError(w, http.StatusBadRequest, err)
@@ -886,12 +908,19 @@ func apiRouterSkills(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if err := db.ActualizarSkill(strings.TrimSpace(req.Actor), &db.Skill{
-				ID:          id,
-				TipoAgente:  strings.TrimSpace(req.TipoAgente),
-				Nombre:      strings.TrimSpace(req.Nombre),
-				Descripcion: strings.TrimSpace(req.Descripcion),
-				CuandoUsar:  strings.TrimSpace(req.CuandoUsar),
-				Activa:      req.Activa,
+				ID:                 id,
+				TipoAgente:         strings.TrimSpace(req.TipoAgente),
+				Nombre:             strings.TrimSpace(req.Nombre),
+				Descripcion:        strings.TrimSpace(req.Descripcion),
+				CuandoUsar:         strings.TrimSpace(req.CuandoUsar),
+				Escenario:          strings.TrimSpace(req.Escenario),
+				Prioridad:          req.Prioridad,
+				AliasesJSON:        strings.TrimSpace(req.AliasesJSON),
+				HerramientasJSON:   strings.TrimSpace(req.HerramientasJSON),
+				Origen:             strings.TrimSpace(req.Origen),
+				NivelRiesgo:        strings.TrimSpace(req.NivelRiesgo),
+				RequiereAprobacion: req.RequiereAprobacion,
+				Activa:             req.Activa,
 			}); err != nil {
 				apiError(w, http.StatusBadRequest, err)
 				return

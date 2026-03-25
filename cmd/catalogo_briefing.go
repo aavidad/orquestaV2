@@ -206,9 +206,9 @@ var skillsListarCmd = &cobra.Command{
 			fmt.Println("No hay skills con ese filtro.")
 			return nil
 		}
-		fmt.Printf("%-5s %-15s %-8s %-24s %s\n", "ID", "ROL", "ACTIVO", "NOMBRE", "CUANDO USAR")
+		fmt.Printf("%-5s %-15s %-8s %-10s %-8s %-12s %-8s %-24s %s\n", "ID", "ROL", "ACTIVO", "ESCENARIO", "PRIO", "ORIGEN", "APROB", "NOMBRE", "CUANDO USAR")
 		for _, s := range skills {
-			fmt.Printf("%-5d %-15s %-8s %-24s %s\n", s.ID, s.TipoAgente, siNo(s.Activa), s.Nombre, truncarTexto(s.CuandoUsar, 48))
+			fmt.Printf("%-5d %-15s %-8s %-10s %-8d %-12s %-8s %-24s %s\n", s.ID, s.TipoAgente, siNo(s.Activa), truncarTexto(s.Escenario, 10), s.Prioridad, truncarTexto(s.Origen, 12), siNo(!s.RequiereAprobacion), s.Nombre, truncarTexto(s.CuandoUsar, 40))
 		}
 		return nil
 	},
@@ -226,13 +226,33 @@ var skillsCrearCmd = &cobra.Command{
 		nombre, _ := cmd.Flags().GetString("nombre")
 		descripcion, _ := cmd.Flags().GetString("descripcion")
 		cuandoUsar, _ := cmd.Flags().GetString("cuando-usar")
+		escenario, _ := cmd.Flags().GetString("escenario")
+		origen, _ := cmd.Flags().GetString("origen")
+		nivelRiesgo, _ := cmd.Flags().GetString("riesgo")
+		prioridad, _ := cmd.Flags().GetInt("prioridad")
+		requiereAprobacion, _ := cmd.Flags().GetBool("requiere-aprobacion")
+		aliasesJSON, _, err := listaJSONDesdeFlags(cmd, "alias", "")
+		if err != nil {
+			return err
+		}
+		herramientasJSON, _, err := listaJSONDesdeFlags(cmd, "herramienta", "")
+		if err != nil {
+			return err
+		}
 
 		if id, ok, err := crearSkillPorAPI(apiSkillCrearRequest{
-			Actor:       actor,
-			TipoAgente:  strings.TrimSpace(rol),
-			Nombre:      strings.TrimSpace(nombre),
-			Descripcion: strings.TrimSpace(descripcion),
-			CuandoUsar:  strings.TrimSpace(cuandoUsar),
+			Actor:            actor,
+			TipoAgente:       strings.TrimSpace(rol),
+			Nombre:           strings.TrimSpace(nombre),
+			Descripcion:      strings.TrimSpace(descripcion),
+			CuandoUsar:       strings.TrimSpace(cuandoUsar),
+			Escenario:        strings.TrimSpace(escenario),
+			Prioridad:        prioridad,
+			AliasesJSON:      aliasesJSON,
+			HerramientasJSON: herramientasJSON,
+			Origen:           strings.TrimSpace(origen),
+			NivelRiesgo:      strings.TrimSpace(nivelRiesgo),
+			RequiereAprobacion: requiereAprobacion,
 		}); err != nil {
 			return err
 		} else if ok {
@@ -241,10 +261,18 @@ var skillsCrearCmd = &cobra.Command{
 		}
 
 		id, err := db.CrearSkill(actor, &db.Skill{
-			TipoAgente:  strings.TrimSpace(rol),
-			Nombre:      strings.TrimSpace(nombre),
-			Descripcion: strings.TrimSpace(descripcion),
-			CuandoUsar:  strings.TrimSpace(cuandoUsar),
+			TipoAgente:       strings.TrimSpace(rol),
+			Nombre:           strings.TrimSpace(nombre),
+			Descripcion:      strings.TrimSpace(descripcion),
+			CuandoUsar:       strings.TrimSpace(cuandoUsar),
+			Escenario:        strings.TrimSpace(escenario),
+			Prioridad:        prioridad,
+			AliasesJSON:      aliasesJSON,
+			HerramientasJSON: herramientasJSON,
+			Origen:           strings.TrimSpace(origen),
+			NivelRiesgo:      strings.TrimSpace(nivelRiesgo),
+			RequiereAprobacion: requiereAprobacion,
+			Activa:           true,
 		})
 		if err != nil {
 			return err
@@ -290,13 +318,53 @@ var skillsEditarCmd = &cobra.Command{
 			cuandoUsar, _ := cmd.Flags().GetString("cuando-usar")
 			s.CuandoUsar = strings.TrimSpace(cuandoUsar)
 		}
+		if cmd.Flags().Changed("escenario") {
+			escenario, _ := cmd.Flags().GetString("escenario")
+			s.Escenario = strings.TrimSpace(escenario)
+		}
+		if cmd.Flags().Changed("prioridad") {
+			prioridad, _ := cmd.Flags().GetInt("prioridad")
+			s.Prioridad = prioridad
+		}
+		if cmd.Flags().Changed("origen") {
+			origen, _ := cmd.Flags().GetString("origen")
+			s.Origen = strings.TrimSpace(origen)
+		}
+		if cmd.Flags().Changed("riesgo") {
+			nivelRiesgo, _ := cmd.Flags().GetString("riesgo")
+			s.NivelRiesgo = strings.TrimSpace(nivelRiesgo)
+		}
+		if cmd.Flags().Changed("requiere-aprobacion") {
+			requiereAprobacion, _ := cmd.Flags().GetBool("requiere-aprobacion")
+			s.RequiereAprobacion = requiereAprobacion
+		}
+		if cmd.Flags().Changed("sin-aprobacion") {
+			s.RequiereAprobacion = false
+		}
+		if aliasesJSON, changed, err := listaJSONDesdeFlags(cmd, "alias", "vaciar-aliases"); err != nil {
+			return err
+		} else if changed {
+			s.AliasesJSON = aliasesJSON
+		}
+		if herramientasJSON, changed, err := listaJSONDesdeFlags(cmd, "herramienta", "vaciar-herramientas"); err != nil {
+			return err
+		} else if changed {
+			s.HerramientasJSON = herramientasJSON
+		}
 		if ok, err := actualizarSkillPorAPI(id, apiSkillActualizarRequest{
-			Actor:       actor,
-			TipoAgente:  s.TipoAgente,
-			Nombre:      s.Nombre,
-			Descripcion: s.Descripcion,
-			CuandoUsar:  s.CuandoUsar,
-			Activa:      s.Activa,
+			Actor:            actor,
+			TipoAgente:       s.TipoAgente,
+			Nombre:           s.Nombre,
+			Descripcion:      s.Descripcion,
+			CuandoUsar:       s.CuandoUsar,
+			Escenario:        s.Escenario,
+			Prioridad:        s.Prioridad,
+			AliasesJSON:      s.AliasesJSON,
+			HerramientasJSON: s.HerramientasJSON,
+			Origen:           s.Origen,
+			NivelRiesgo:      s.NivelRiesgo,
+			RequiereAprobacion: s.RequiereAprobacion,
+			Activa:           s.Activa,
 		}); err != nil {
 			return err
 		} else if !ok {
@@ -631,12 +699,29 @@ func init() {
 	skillsCrearCmd.Flags().String("nombre", "", "Nombre del skill")
 	skillsCrearCmd.Flags().String("descripcion", "", "Descripción del skill")
 	skillsCrearCmd.Flags().String("cuando-usar", "", "Cuándo usar el skill")
+	skillsCrearCmd.Flags().String("escenario", "", "Escenario de uso principal")
+	skillsCrearCmd.Flags().String("origen", "builtin", "Origen: builtin, local o third_party")
+	skillsCrearCmd.Flags().String("riesgo", "", "Nivel de riesgo: bajo, medio o alto")
+	skillsCrearCmd.Flags().Int("prioridad", 100, "Prioridad de descubrimiento (menor = antes)")
+	skillsCrearCmd.Flags().StringArray("alias", nil, "Alias funcional; repetir para varios")
+	skillsCrearCmd.Flags().StringArray("herramienta", nil, "Herramienta externa asociada; repetir para varias")
+	skillsCrearCmd.Flags().Bool("requiere-aprobacion", false, "Marca la skill como pendiente de aprobacion")
 	skillsCrearCmd.Flags().String("por", "alberto", "Actor que ejecuta la operación")
 	skillsCrearCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	skillsEditarCmd.Flags().String("rol", "", "Nuevo rol")
 	skillsEditarCmd.Flags().String("nombre", "", "Nuevo nombre")
 	skillsEditarCmd.Flags().String("descripcion", "", "Nueva descripción")
 	skillsEditarCmd.Flags().String("cuando-usar", "", "Nuevo texto de cuándo usar")
+	skillsEditarCmd.Flags().String("escenario", "", "Nuevo escenario de uso principal")
+	skillsEditarCmd.Flags().String("origen", "", "Nuevo origen: builtin, local o third_party")
+	skillsEditarCmd.Flags().String("riesgo", "", "Nuevo nivel de riesgo: bajo, medio o alto")
+	skillsEditarCmd.Flags().Int("prioridad", 0, "Nueva prioridad de descubrimiento")
+	skillsEditarCmd.Flags().StringArray("alias", nil, "Reemplaza aliases; repetir para varios")
+	skillsEditarCmd.Flags().Bool("vaciar-aliases", false, "Elimina todos los aliases")
+	skillsEditarCmd.Flags().StringArray("herramienta", nil, "Reemplaza herramientas asociadas; repetir para varias")
+	skillsEditarCmd.Flags().Bool("vaciar-herramientas", false, "Elimina todas las herramientas asociadas")
+	skillsEditarCmd.Flags().Bool("requiere-aprobacion", false, "Marca la skill como pendiente de aprobacion")
+	skillsEditarCmd.Flags().Bool("sin-aprobacion", false, "Marca la skill como aprobada")
 	skillsEditarCmd.Flags().String("por", "alberto", "Actor que ejecuta la operación")
 	skillsEditarCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	skillsActivarCmd.Flags().String("por", "alberto", "Actor que ejecuta la operación")
@@ -813,6 +898,26 @@ func pasosWorkflowDesdeFlags(cmd *cobra.Command) (string, bool, error) {
 		pasos[i] = strings.TrimSpace(paso)
 	}
 	raw, err := json.Marshal(pasos)
+	if err != nil {
+		return "", false, err
+	}
+	return string(raw), true, nil
+}
+
+func listaJSONDesdeFlags(cmd *cobra.Command, flagName, clearFlag string) (string, bool, error) {
+	if clearFlag != "" {
+		if vaciar, _ := cmd.Flags().GetBool(clearFlag); vaciar {
+			return "[]", true, nil
+		}
+	}
+	items, _ := cmd.Flags().GetStringArray(flagName)
+	if len(items) == 0 {
+		return "", false, nil
+	}
+	for i, item := range items {
+		items[i] = strings.TrimSpace(item)
+	}
+	raw, err := json.Marshal(items)
 	if err != nil {
 		return "", false, err
 	}

@@ -25,13 +25,20 @@ type Regla struct {
 
 // Skill representa una habilidad/comando disponible para un tipo de agente.
 type Skill struct {
-	ID          int64
-	TipoAgente  string
-	Nombre      string
-	Descripcion string
-	CuandoUsar  string
-	Activa      bool
-	CreatedAt   time.Time
+	ID               int64
+	TipoAgente       string
+	Nombre           string
+	Descripcion      string
+	CuandoUsar       string
+	Escenario        string
+	Prioridad        int
+	AliasesJSON      string
+	HerramientasJSON string
+	Origen             string
+	NivelRiesgo        string
+	RequiereAprobacion bool
+	Activa           bool
+	CreatedAt        time.Time
 }
 
 // Workflow representa un flujo de trabajo paso a paso para un tipo de agente.
@@ -70,9 +77,9 @@ func GetReglasAgente(tipoAgente string) ([]*Regla, error) {
 // GetSkillsAgente devuelve los skills activos para el rol de un agente.
 func GetSkillsAgente(tipoAgente string) ([]*Skill, error) {
 	rows, err := DB.Query(
-		`SELECT id, tipo_agente, nombre, descripcion, cuando_usar, activa, created_at
+		`SELECT id, tipo_agente, nombre, descripcion, cuando_usar, escenario, prioridad, aliases_json, herramientas_json, origen, nivel_riesgo, requiere_aprobacion, activa, created_at
 		 FROM skills WHERE tipo_agente = ? AND activa = 1
-		 ORDER BY nombre`, tipoAgente)
+		 ORDER BY prioridad ASC, escenario ASC, nombre ASC`, tipoAgente)
 	if err != nil {
 		return nil, err
 	}
@@ -80,10 +87,12 @@ func GetSkillsAgente(tipoAgente string) ([]*Skill, error) {
 	var list []*Skill
 	for rows.Next() {
 		s := &Skill{}
+		var requiereAprobacion int
 		if err := rows.Scan(&s.ID, &s.TipoAgente, &s.Nombre, &s.Descripcion,
-			&s.CuandoUsar, &s.Activa, &s.CreatedAt); err != nil {
+			&s.CuandoUsar, &s.Escenario, &s.Prioridad, &s.AliasesJSON, &s.HerramientasJSON, &s.Origen, &s.NivelRiesgo, &requiereAprobacion, &s.Activa, &s.CreatedAt); err != nil {
 			return nil, err
 		}
+		s.RequiereAprobacion = requiereAprobacion == 1
 		list = append(list, s)
 	}
 	return list, rows.Err()
@@ -143,18 +152,38 @@ func UpsertRegla(r *Regla) (int64, error) {
 
 // UpsertSkill crea o actualiza una habilidad por nombre y tipo de agente.
 func UpsertSkill(s *Skill) (int64, error) {
+	if err := aplicarPoliticaSeguridadSkill("telegram_admin", s, s.Activa); err != nil {
+		return 0, err
+	}
+	if existente, err := BuscarSkillEquivalente(s, s.ID); err != nil {
+		return 0, err
+	} else if existente != nil && !sameSkillNaturalKey(existente, s) {
+		return 0, &SkillEquivalenteError{Existente: existente}
+	}
 	res, err := DB.Exec(`
-		INSERT INTO skills (tipo_agente, nombre, descripcion, cuando_usar, activa)
-		VALUES (?,?,?,?,?)
+		INSERT INTO skills (tipo_agente, nombre, descripcion, cuando_usar, escenario, prioridad, aliases_json, herramientas_json, origen, nivel_riesgo, requiere_aprobacion, activa)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(tipo_agente, nombre) DO UPDATE SET
 			descripcion = excluded.descripcion,
 			cuando_usar = excluded.cuando_usar,
+			escenario = excluded.escenario,
+			prioridad = excluded.prioridad,
+			aliases_json = excluded.aliases_json,
+			herramientas_json = excluded.herramientas_json,
+			origen = excluded.origen,
+			nivel_riesgo = excluded.nivel_riesgo,
+			requiere_aprobacion = excluded.requiere_aprobacion,
 			activa = excluded.activa
-	`, s.TipoAgente, s.Nombre, s.Descripcion, s.CuandoUsar, s.Activa)
+	`, s.TipoAgente, s.Nombre, s.Descripcion, s.CuandoUsar, s.Escenario, s.Prioridad, s.AliasesJSON, s.HerramientasJSON, s.Origen, s.NivelRiesgo, boolToInt(s.RequiereAprobacion), s.Activa)
 	if err != nil {
 		return 0, err
 	}
 	id, _ := res.LastInsertId()
+	if id <= 0 {
+		if err := DB.QueryRow(`SELECT id FROM skills WHERE tipo_agente = ? AND nombre = ?`, s.TipoAgente, s.Nombre).Scan(&id); err != nil {
+			return 0, err
+		}
+	}
 	Audit("telegram_admin", "upsert_skill", "skill", id, fmt.Sprintf("%s: %s", s.TipoAgente, s.Nombre))
 	return id, nil
 }
@@ -278,7 +307,7 @@ func SetReglaActiva(actor string, id int64, activa bool) error {
 }
 
 func ListarSkills(tipoAgente string, activa any) ([]*Skill, error) {
-	q := `SELECT id, tipo_agente, nombre, descripcion, cuando_usar, activa, created_at FROM skills WHERE 1=1`
+	q := `SELECT id, tipo_agente, nombre, descripcion, cuando_usar, escenario, prioridad, aliases_json, herramientas_json, origen, nivel_riesgo, requiere_aprobacion, activa, created_at FROM skills WHERE 1=1`
 	var args []any
 	activaFiltro := resolverFiltroBool(activa)
 	if tipoAgente != "" {
@@ -289,7 +318,7 @@ func ListarSkills(tipoAgente string, activa any) ([]*Skill, error) {
 		q += ` AND activa = ?`
 		args = append(args, *activaFiltro)
 	}
-	q += ` ORDER BY nombre`
+	q += ` ORDER BY prioridad ASC, escenario ASC, nombre ASC`
 	rows, err := DB.Query(q, args...)
 	if err != nil {
 		return nil, err
@@ -298,44 +327,117 @@ func ListarSkills(tipoAgente string, activa any) ([]*Skill, error) {
 	var list []*Skill
 	for rows.Next() {
 		s := &Skill{}
-		if err := rows.Scan(&s.ID, &s.TipoAgente, &s.Nombre, &s.Descripcion, &s.CuandoUsar, &s.Activa, &s.CreatedAt); err != nil {
+		var requiereAprobacion int
+		if err := rows.Scan(&s.ID, &s.TipoAgente, &s.Nombre, &s.Descripcion, &s.CuandoUsar, &s.Escenario, &s.Prioridad, &s.AliasesJSON, &s.HerramientasJSON, &s.Origen, &s.NivelRiesgo, &requiereAprobacion, &s.Activa, &s.CreatedAt); err != nil {
 			return nil, err
 		}
+		s.RequiereAprobacion = requiereAprobacion == 1
 		list = append(list, s)
 	}
 	return list, rows.Err()
 }
 
 func CrearSkill(actor string, s *Skill) (int64, error) {
-	id, err := UpsertSkill(s)
-	if err == nil {
-		Audit(actor, "crear_skill", "skill", id, s.Nombre)
+	if err := aplicarPoliticaSeguridadSkill(actor, s, false); err != nil {
+		return 0, err
 	}
-	return id, err
+	if existente, err := BuscarSkillEquivalente(s, 0); err != nil {
+		return 0, err
+	} else if existente != nil && !sameSkillNaturalKey(existente, s) {
+		return 0, &SkillEquivalenteError{Existente: existente}
+	}
+	tx, err := DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`
+		INSERT INTO skills (tipo_agente, nombre, descripcion, cuando_usar, escenario, prioridad, aliases_json, herramientas_json, origen, nivel_riesgo, requiere_aprobacion, activa)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		s.TipoAgente, s.Nombre, s.Descripcion, s.CuandoUsar, s.Escenario, s.Prioridad, s.AliasesJSON, s.HerramientasJSON, s.Origen, s.NivelRiesgo, boolToInt(s.RequiereAprobacion), s.Activa,
+	)
+	if err != nil {
+		return 0, err
+	}
+	id, _ := res.LastInsertId()
+	s.ID = id
+	if err := registrarVersionSkillTx(tx, s, actor, "crear"); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	Audit(actor, "crear_skill", "skill", id, s.Nombre)
+	notificarRefreshSkillCatalogo(actor, s, "crear")
+	return id, nil
 }
 
 func GetSkill(id int64) (*Skill, error) {
 	s := &Skill{}
-	err := DB.QueryRow(`SELECT id, tipo_agente, nombre, descripcion, cuando_usar, activa, created_at FROM skills WHERE id = ?`, id).
-		Scan(&s.ID, &s.TipoAgente, &s.Nombre, &s.Descripcion, &s.CuandoUsar, &s.Activa, &s.CreatedAt)
+	var requiereAprobacion int
+	err := DB.QueryRow(`SELECT id, tipo_agente, nombre, descripcion, cuando_usar, escenario, prioridad, aliases_json, herramientas_json, origen, nivel_riesgo, requiere_aprobacion, activa, created_at FROM skills WHERE id = ?`, id).
+		Scan(&s.ID, &s.TipoAgente, &s.Nombre, &s.Descripcion, &s.CuandoUsar, &s.Escenario, &s.Prioridad, &s.AliasesJSON, &s.HerramientasJSON, &s.Origen, &s.NivelRiesgo, &requiereAprobacion, &s.Activa, &s.CreatedAt)
+	s.RequiereAprobacion = requiereAprobacion == 1
 	return s, err
 }
 
 func ActualizarSkill(actor string, s *Skill) error {
-	_, err := DB.Exec(`UPDATE skills SET tipo_agente=?, nombre=?, descripcion=?, cuando_usar=?, activa=? WHERE id=?`,
-		s.TipoAgente, s.Nombre, s.Descripcion, s.CuandoUsar, s.Activa, s.ID)
-	if err == nil {
-		Audit(actor, "actualizar_skill", "skill", s.ID, s.Nombre)
+	if err := aplicarPoliticaSeguridadSkill(actor, s, s.Activa); err != nil {
+		return err
 	}
-	return err
+	if existente, err := BuscarSkillEquivalente(s, s.ID); err != nil {
+		return err
+	} else if existente != nil && existente.ID != s.ID {
+		return &SkillEquivalenteError{Existente: existente}
+	}
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	_, err = tx.Exec(`UPDATE skills SET tipo_agente=?, nombre=?, descripcion=?, cuando_usar=?, escenario=?, prioridad=?, aliases_json=?, herramientas_json=?, origen=?, nivel_riesgo=?, requiere_aprobacion=?, activa=? WHERE id=?`,
+		s.TipoAgente, s.Nombre, s.Descripcion, s.CuandoUsar, s.Escenario, s.Prioridad, s.AliasesJSON, s.HerramientasJSON, s.Origen, s.NivelRiesgo, boolToInt(s.RequiereAprobacion), s.Activa, s.ID)
+	if err != nil {
+		return err
+	}
+	if err := registrarVersionSkillTx(tx, s, actor, "actualizar"); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	Audit(actor, "actualizar_skill", "skill", s.ID, s.Nombre)
+	notificarRefreshSkillCatalogo(actor, s, "actualizar")
+	return nil
 }
 
 func SetSkillActiva(actor string, id int64, activa bool) error {
-	_, err := DB.Exec(`UPDATE skills SET activa=? WHERE id=?`, activa, id)
-	if err == nil {
-		Audit(actor, "set_skill_activa", "skill", id, fmt.Sprintf("activa=%t", activa))
+	skill, err := GetSkill(id)
+	if err != nil {
+		return err
 	}
-	return err
+	skill.Activa = activa
+	if err := aplicarPoliticaSeguridadSkill(actor, skill, activa); err != nil {
+		return err
+	}
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	_, err = tx.Exec(`UPDATE skills SET activa=?, requiere_aprobacion=? WHERE id=?`, skill.Activa, boolToInt(skill.RequiereAprobacion), id)
+	if err != nil {
+		return err
+	}
+	if err := registrarVersionSkillTx(tx, skill, actor, "activar"); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	Audit(actor, "set_skill_activa", "skill", id, fmt.Sprintf("activa=%t", activa))
+	notificarRefreshSkillCatalogo(actor, skill, "activar")
+	return nil
 }
 
 func SetSkillActivo(actor string, id int64, activa bool) error {

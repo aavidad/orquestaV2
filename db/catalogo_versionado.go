@@ -42,17 +42,24 @@ type ReglaVersion struct {
 }
 
 type SkillVersion struct {
-	ID          int64
-	SkillID     int64
-	VersionNum  int64
-	TipoAgente  string
-	Nombre      string
-	Descripcion string
-	CuandoUsar  string
-	Activa      bool
-	Actor       string
-	Accion      string
-	CreatedAt   time.Time
+	ID               int64
+	SkillID          int64
+	VersionNum       int64
+	TipoAgente       string
+	Nombre           string
+	Descripcion      string
+	CuandoUsar       string
+	Escenario        string
+	Prioridad        int
+	AliasesJSON      string
+	HerramientasJSON string
+	Origen           string
+	NivelRiesgo      string
+	RequiereAprobacion bool
+	Activa           bool
+	Actor            string
+	Accion           string
+	CreatedAt        time.Time
 }
 
 type WorkflowVersion struct {
@@ -267,7 +274,7 @@ func ListarVersionesRegla(reglaID int64) ([]*ReglaVersion, error) {
 
 func ListarVersionesSkill(skillID int64) ([]*SkillVersion, error) {
 	rows, err := DB.Query(`
-		SELECT id, skill_id, version_num, tipo_agente, nombre, descripcion, cuando_usar, activa, actor, accion, created_at
+		SELECT id, skill_id, version_num, tipo_agente, nombre, descripcion, cuando_usar, escenario, prioridad, aliases_json, herramientas_json, origen, nivel_riesgo, requiere_aprobacion, activa, actor, accion, created_at
 		FROM skills_versiones
 		WHERE skill_id = ?
 		ORDER BY version_num`, skillID)
@@ -307,7 +314,12 @@ func ListarVersionesWorkflow(workflowID int64) ([]*WorkflowVersion, error) {
 	return list, rows.Err()
 }
 
-func registrarVersionReglaTx(tx *sql.Tx, r *Regla, actor, accion string) error {
+type txVersionador interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+func registrarVersionReglaTx(tx txVersionador, r *Regla, actor, accion string) error {
 	var version int64
 	if err := tx.QueryRow(`SELECT COALESCE(MAX(version_num),0)+1 FROM reglas_versiones WHERE regla_id = ?`, r.ID).Scan(&version); err != nil {
 		return err
@@ -320,20 +332,20 @@ func registrarVersionReglaTx(tx *sql.Tx, r *Regla, actor, accion string) error {
 	return err
 }
 
-func registrarVersionSkillTx(tx *sql.Tx, s *Skill, actor, accion string) error {
+func registrarVersionSkillTx(tx txVersionador, s *Skill, actor, accion string) error {
 	var version int64
 	if err := tx.QueryRow(`SELECT COALESCE(MAX(version_num),0)+1 FROM skills_versiones WHERE skill_id = ?`, s.ID).Scan(&version); err != nil {
 		return err
 	}
 	_, err := tx.Exec(`
-		INSERT INTO skills_versiones (skill_id, version_num, tipo_agente, nombre, descripcion, cuando_usar, activa, actor, accion)
-		VALUES (?,?,?,?,?,?,?,?,?)`,
-		s.ID, version, s.TipoAgente, s.Nombre, s.Descripcion, s.CuandoUsar, s.Activa, actor, accion,
+		INSERT INTO skills_versiones (skill_id, version_num, tipo_agente, nombre, descripcion, cuando_usar, escenario, prioridad, aliases_json, herramientas_json, origen, nivel_riesgo, requiere_aprobacion, activa, actor, accion)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		s.ID, version, s.TipoAgente, s.Nombre, s.Descripcion, s.CuandoUsar, s.Escenario, s.Prioridad, s.AliasesJSON, s.HerramientasJSON, s.Origen, s.NivelRiesgo, boolToInt(s.RequiereAprobacion), s.Activa, actor, accion,
 	)
 	return err
 }
 
-func registrarVersionWorkflowTx(tx *sql.Tx, w *Workflow, actor, accion string) error {
+func registrarVersionWorkflowTx(tx txVersionador, w *Workflow, actor, accion string) error {
 	var version int64
 	if err := tx.QueryRow(`SELECT COALESCE(MAX(version_num),0)+1 FROM workflows_versiones WHERE workflow_id = ?`, w.ID).Scan(&version); err != nil {
 		return err
@@ -371,10 +383,11 @@ func escanearReglaVersion(s scanner) (*ReglaVersion, error) {
 
 func escanearSkillVersion(s scanner) (*SkillVersion, error) {
 	v := &SkillVersion{}
-	var activa int
-	if err := s.Scan(&v.ID, &v.SkillID, &v.VersionNum, &v.TipoAgente, &v.Nombre, &v.Descripcion, &v.CuandoUsar, &activa, &v.Actor, &v.Accion, &v.CreatedAt); err != nil {
+	var requiereAprobacion, activa int
+	if err := s.Scan(&v.ID, &v.SkillID, &v.VersionNum, &v.TipoAgente, &v.Nombre, &v.Descripcion, &v.CuandoUsar, &v.Escenario, &v.Prioridad, &v.AliasesJSON, &v.HerramientasJSON, &v.Origen, &v.NivelRiesgo, &requiereAprobacion, &activa, &v.Actor, &v.Accion, &v.CreatedAt); err != nil {
 		return nil, err
 	}
+	v.RequiereAprobacion = requiereAprobacion == 1
 	v.Activa = activa == 1
 	return v, nil
 }
