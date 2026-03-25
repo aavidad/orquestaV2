@@ -36,13 +36,17 @@ var (
 func Execute() {
 	args := os.Args[1:]
 	if !forceLocalMode(args) && !skipRemoteDelegation(args) {
+		ensureRequireServerEnv()
 		handled, exitCode, err := executeViaLocalServer(args, os.Stdout, os.Stderr)
 		if err != nil {
+			msg := fmt.Sprintf("orquesta: servidor local no disponible (%v)", err)
 			if allowLocalFallback(args) {
-				fmt.Fprintf(os.Stderr, "orquesta: servidor local no disponible, ejecutando en modo local por politica explicita (%v)\n", err)
+				fmt.Fprintf(os.Stderr, "orquesta: servidor local no disponible, ejecutando en modo local por política explícita (%v)\n", err)
 			} else {
-				fmt.Fprintf(os.Stderr, "orquesta: servidor local no disponible (%v)\n", err)
-				fmt.Fprintln(os.Stderr, "usa --local o ORQUESTA_ALLOW_LOCAL_FALLBACK=1 para modo recuperacion")
+				fmt.Fprintln(os.Stderr, msg)
+			}
+			fmt.Fprintln(os.Stderr, "usa --local o ORQUESTA_FORCE_LOCAL=1 para ejecutar en local")
+			if !allowLocalFallback(args) {
 				os.Exit(1)
 			}
 		}
@@ -106,6 +110,13 @@ func executeLocalArgs(args []string, stdout, stderr io.Writer) error {
 	rootCmd.SetErr(stderr)
 	rootCmd.SetArgs(args)
 	return rootCmd.Execute()
+}
+
+func ensureRequireServerEnv() {
+	if strings.TrimSpace(os.Getenv("ORQUESTA_REQUIRE_SERVER")) != "" {
+		return
+	}
+	_ = os.Setenv("ORQUESTA_REQUIRE_SERVER", "1")
 }
 
 func forceLocalMode(args []string) bool {
