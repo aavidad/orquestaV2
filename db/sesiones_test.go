@@ -81,6 +81,45 @@ func TestRegistrarCodexUsaNombreCanonicoYRespetaExistentes(t *testing.T) {
 	}
 }
 
+func TestRegistrarAgenteAutoUsaPrefijoCanonicoSegunProveedor(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "orquesta.db")
+	prev := os.Getenv("ORQUESTA_DB")
+	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
+		t.Fatalf("setenv: %v", err)
+	}
+	defer func() {
+		_ = os.Setenv("ORQUESTA_DB", prev)
+		Close()
+	}()
+
+	if err := Open(); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := RegistrarAgente("Claude1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Claude1: %v", err)
+	}
+	if err := RegistrarAgente("gemini2", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente gemini2: %v", err)
+	}
+
+	nombreClaude, err := RegistrarAgenteAuto("anthropic", "documentador")
+	if err != nil {
+		t.Fatalf("RegistrarAgenteAuto anthropic: %v", err)
+	}
+	if nombreClaude != "Claude2" {
+		t.Fatalf("nombre Claude inesperado: %s", nombreClaude)
+	}
+
+	nombreGemini, err := RegistrarAgenteAuto("google", "programador")
+	if err != nil {
+		t.Fatalf("RegistrarAgenteAuto google: %v", err)
+	}
+	if nombreGemini != "Gemini3" {
+		t.Fatalf("nombre Gemini inesperado: %s", nombreGemini)
+	}
+}
+
 func TestEliminarAgenteBloqueaTareasActivas(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "orquesta.db")

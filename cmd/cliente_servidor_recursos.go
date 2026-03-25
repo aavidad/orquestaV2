@@ -101,6 +101,7 @@ type apiLenguajeMatrizDeleteRequest struct {
 type apiAgenteRequest struct {
 	Nombre string `json:"nombre"`
 	Rol    string `json:"rol"`
+	Proveedor string `json:"proveedor"`
 }
 
 type apiConfigSetRequest struct {

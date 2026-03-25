@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 )
 
 type Agente struct {
@@ -705,12 +706,18 @@ func RehabilitarAgente(nombre string) error {
 	return nil
 }
 
-// RegistrarCodex registra un agente Codex y devuelve el nombre asignado (codex1, codex2…).
-// Si el agente ya existe con ese nombre, lo devuelve tal cual.
-// El nombre se asigna por orden: el siguiente número libre tras los existentes.
-func RegistrarCodex() (string, error) {
-	// Buscar todos los agentes cuyo nombre empieza por "codex"
-	rows, err := DB.Query(`SELECT nombre FROM agentes WHERE nombre LIKE 'codex%' ORDER BY nombre`)
+// RegistrarAgenteAuto registra un agente con nombre canónico derivado del proveedor.
+// El nombre se asigna por orden usando el siguiente número libre tras los existentes.
+func RegistrarAgenteAuto(proveedor, rol string) (string, error) {
+	prefijo, err := prefijoCanonicoAgente(proveedor)
+	if err != nil {
+		return "", err
+	}
+	rol = strings.TrimSpace(rol)
+	if rol == "" {
+		rol = "programador"
+	}
+	rows, err := DB.Query(`SELECT nombre FROM agentes WHERE lower(nombre) LIKE ? ORDER BY lower(nombre)`, strings.ToLower(prefijo)+"%")
 	if err != nil {
 		return "", err
 	}
@@ -723,8 +730,7 @@ func RegistrarCodex() (string, error) {
 			return "", err
 		}
 		var n int
-		// codex1, codex2… extraemos el número
-		suffix := strings.TrimPrefix(strings.ToLower(nombre), "codex")
+		suffix := strings.TrimPrefix(strings.ToLower(nombre), strings.ToLower(prefijo))
 		if _, err := fmt.Sscanf(suffix, "%d", &n); err == nil && n > maxN {
 			maxN = n
 		}
@@ -733,11 +739,49 @@ func RegistrarCodex() (string, error) {
 		return "", err
 	}
 
-	nombre := fmt.Sprintf("Codex%d", maxN+1)
-	if err := RegistrarAgente(nombre, "programador"); err != nil {
+	nombre := fmt.Sprintf("%s%d", prefijo, maxN+1)
+	if err := RegistrarAgente(nombre, rol); err != nil {
 		return "", err
 	}
 	return nombre, nil
+}
+
+// RegistrarCodex registra un agente Codex y devuelve el nombre asignado (codex1, codex2…).
+func RegistrarCodex() (string, error) {
+	return RegistrarAgenteAuto("codex", "programador")
+}
+
+func prefijoCanonicoAgente(proveedor string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(proveedor)) {
+	case "", "codex", "openai":
+		return "Codex", nil
+	case "claude", "anthropic":
+		return "Claude", nil
+	case "gemini", "google":
+		return "Gemini", nil
+	}
+
+	var sb strings.Builder
+	for _, r := range strings.TrimSpace(proveedor) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			sb.WriteRune(r)
+		}
+	}
+	normalizado := sb.String()
+	if normalizado == "" {
+		return "", fmt.Errorf("proveedor de agente obligatorio")
+	}
+	lower := strings.ToLower(normalizado)
+	if lower == "codex" {
+		return "Codex", nil
+	}
+	if lower == "claude" {
+		return "Claude", nil
+	}
+	if lower == "gemini" {
+		return "Gemini", nil
+	}
+	return strings.ToUpper(normalizado[:1]) + strings.ToLower(normalizado[1:]), nil
 }
 
 // AuditEntry es una entrada del log de auditoría.

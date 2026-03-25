@@ -728,7 +728,11 @@ func init() {
 	skillsActivarCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
 	skillsDesactivarCmd.Flags().String("por", "alberto", "Actor que ejecuta la operación")
 	skillsDesactivarCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
-	skillsCmd.AddCommand(skillsListarCmd, skillsCrearCmd, skillsEditarCmd, skillsActivarCmd, skillsDesactivarCmd, skillsVersionesCmd)
+	skillsRemotasCmd.Flags().String("q", "", "Filtrar por texto libre")
+	skillsRemotasCmd.Flags().Int("limit", 24, "Número máximo de skills remotas")
+	skillsBorrarCmd.Flags().String("por", "alberto", "Actor que ejecuta la operación")
+	skillsBorrarCmd.Flags().String("agente", "", "Alias de --por para compatibilidad con el briefing")
+	skillsCmd.AddCommand(skillsListarCmd, skillsCrearCmd, skillsEditarCmd, skillsActivarCmd, skillsDesactivarCmd, skillsVersionesCmd, skillsRemotasCmd, skillsBorrarCmd)
 
 	workflowsListarCmd.Flags().String("rol", "", "Filtrar por rol")
 	workflowsListarCmd.Flags().Bool("todos", false, "Incluir workflows inactivos")

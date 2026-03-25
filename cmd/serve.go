@@ -258,6 +258,7 @@ var webFuncMap = template.FuncMap{
 		}
 		return fmt.Sprintf("reanima en %d min", int(rem.Minutes()))
 	},
+	"jsonLines": textoPlanoDesdeListaJSON,
 }
 
 var (
