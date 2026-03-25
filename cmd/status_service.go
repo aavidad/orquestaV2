@@ -1,8 +1,15 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package cmd
 
 import "orquesta/db"
 
-// StatusService encapsulates the data needed by /api/status.
+// StatusService encapsula los datos que necesita /api/status.
 type StatusService interface {
 	FetchStatus() (apiStatusResponse, error)
 }
