@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package cmd
 
 import (
@@ -11,6 +18,57 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
+
+func TestCatalogoListarExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	db.Close()
+	defer db.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	err := reglasListarCmd.RunE(reglasListarCmd, nil)
+	if err == nil {
+		t.Fatalf("reglas listar deberia exigir servidor o recuperacion local explicita")
+	}
+	if !strings.Contains(err.Error(), "ORQUESTA_FORCE_LOCAL_DB=1") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
+func TestCatalogoMutacionExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	db.Close()
+	defer db.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	resetFlags := func(cmd *cobra.Command) {
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			_ = cmd.Flags().Set(f.Name, f.DefValue)
+			f.Changed = false
+		})
+	}
+
+	resetFlags(skillsCrearCmd)
+	if err := skillsCrearCmd.Flags().Set("rol", "programador"); err != nil {
+		t.Fatalf("set rol skill: %v", err)
+	}
+	if err := skillsCrearCmd.Flags().Set("nombre", "rg"); err != nil {
+		t.Fatalf("set nombre skill: %v", err)
+	}
+
+	err := skillsCrearCmd.RunE(skillsCrearCmd, nil)
+	if err == nil {
+		t.Fatalf("skills crear deberia exigir servidor o recuperacion local explicita")
+	}
+	if !strings.Contains(err.Error(), "ORQUESTA_FORCE_LOCAL_DB=1") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
 
 func TestCatalogoMutacionesUsanAPI(t *testing.T) {
 	mux := http.NewServeMux()

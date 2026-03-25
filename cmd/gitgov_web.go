@@ -15,21 +15,36 @@ import (
 
 	"orquesta/coordinacion"
 	"orquesta/db"
-	"orquesta/gitgobernanza"
 )
-
-var gitGobernanzaService = gitgobernanza.NewService(gitgobernanza.Repository{})
 
 type webGitGovData struct {
 	Estado      string
 	Agente      string
 	Proyecto    string
 	MergeEstado string
-	Worktrees   []*db.Worktree
-	Locks       []*db.Lock
+	Worktrees   []webGitWorktreeRow
+	Locks       []webGitLockRow
 	Merges      []*db.GitMerge
 	Msg         string
 	Err         string
+}
+
+type webGitWorktreeRow struct {
+	ID           int64
+	ProyectoSlug string
+	Agente       string
+	Nombre       string
+	Branch       string
+	Estado       string
+}
+
+type webGitLockRow struct {
+	ID        int64
+	Agente    string
+	ScopeType string
+	ScopeKey  string
+	Branch    string
+	Estado    string
 }
 
 type webGitWorktreeDetalleData struct {
@@ -74,7 +89,7 @@ func webHandlerGitGov(w http.ResponseWriter, r *http.Request) {
 	proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto"))
 	mergeEstado := strings.TrimSpace(r.URL.Query().Get("merge_estado"))
 
-	worktrees, err := gitGobernanzaService.ListWorktrees(estado, agente)
+	worktrees, err := webCargarGitWorktreesPorAPI(estado, agente, proyecto)
 	if err != nil {
 		webRender(w, r, webTplLayout+webTplGitGov, webGitGovData{
 			Estado:      estado,
@@ -85,7 +100,7 @@ func webHandlerGitGov(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	locks, err := gitGobernanzaService.ListLocks(estado, agente)
+	locks, err := webCargarGitLocksPorAPI(estado, agente, proyecto)
 	if err != nil {
 		webRender(w, r, webTplLayout+webTplGitGov, webGitGovData{
 			Estado:      estado,
@@ -98,7 +113,7 @@ func webHandlerGitGov(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	merges, mergeErr := gitGobernanzaService.ListRequests(proyecto, mergeEstado)
+	merges, mergeErr := webCargarGitMergesPorAPI(proyecto, mergeEstado)
 	data := webGitGovData{
 		Estado:      estado,
 		Agente:      agente,
@@ -118,7 +133,7 @@ func webHandlerGitGov(w http.ResponseWriter, r *http.Request) {
 
 func webHandlerGitMergeNueva(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
-	id, err := gitGobernanzaService.SaveRequest(gitgobernanza.SaveMergeRequestInput{
+	id, err := webCrearGitMergePorAPI(apiGitMergeSaveRequest{
 		ProyectoSlug: strings.TrimSpace(r.FormValue("proyecto_slug")),
 		SourceBranch: strings.TrimSpace(r.FormValue("source_branch")),
 		TargetBranch: strings.TrimSpace(r.FormValue("target_branch")),
@@ -137,7 +152,7 @@ func webHandlerGitMergeNueva(w http.ResponseWriter, r *http.Request) {
 }
 
 func webHandlerGitWorktreeDetalle(w http.ResponseWriter, r *http.Request, id int64) {
-	worktree, err := gitGobernanzaService.GetWorktree(id)
+	worktree, err := webCargarGitWorktreeDetallePorAPI(id)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -146,12 +161,145 @@ func webHandlerGitWorktreeDetalle(w http.ResponseWriter, r *http.Request, id int
 }
 
 func webHandlerGitLockDetalle(w http.ResponseWriter, r *http.Request, id int64) {
-	lock, err := gitGobernanzaService.GetLock(id)
+	lock, err := webCargarGitLockDetallePorAPI(id)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 	webRender(w, r, webTplLayout+webTplGitLockDetalle, webGitLockDetalleData{Lock: lock})
+}
+
+func webCargarGitWorktreesPorAPI(estado, agente, proyecto string) ([]webGitWorktreeRow, error) {
+	query := url.Values{}
+	if estado = strings.TrimSpace(estado); estado != "" {
+		query.Set("estado", estado)
+	}
+	if agente = strings.TrimSpace(agente); agente != "" {
+		query.Set("agente", agente)
+	}
+	if proyecto = strings.TrimSpace(proyecto); proyecto != "" {
+		query.Set("proyecto", proyecto)
+	}
+	path := "/api/worktrees"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var resp apiWorktreesResponse
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	projectSlugByID, err := webProyectoSlugPorID()
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]webGitWorktreeRow, 0, len(resp.Worktrees))
+	for _, item := range resp.Worktrees {
+		if item == nil {
+			continue
+		}
+		rows = append(rows, webGitWorktreeRow{
+			ID:           item.ID,
+			ProyectoSlug: projectSlugByID[item.ProjectID],
+			Agente:       item.Agent,
+			Nombre:       item.Name,
+			Branch:       item.Branch,
+			Estado:       string(item.State),
+		})
+	}
+	return rows, nil
+}
+
+func webCargarGitLocksPorAPI(estado, agente, proyecto string) ([]webGitLockRow, error) {
+	query := url.Values{}
+	if estado = strings.TrimSpace(estado); estado != "" {
+		query.Set("estado", estado)
+	}
+	if agente = strings.TrimSpace(agente); agente != "" {
+		query.Set("agente", agente)
+	}
+	if proyecto = strings.TrimSpace(proyecto); proyecto != "" {
+		query.Set("proyecto", proyecto)
+	}
+	path := "/api/locks"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var resp apiLocksResponse
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	rows := make([]webGitLockRow, 0, len(resp.Locks))
+	for _, item := range resp.Locks {
+		if item == nil {
+			continue
+		}
+		rows = append(rows, webGitLockRow{
+			ID:        item.ID,
+			Agente:    item.Agent,
+			ScopeType: item.ScopeType,
+			ScopeKey:  item.ScopeKey,
+			Branch:    item.Branch,
+			Estado:    string(item.State),
+		})
+	}
+	return rows, nil
+}
+
+func webCargarGitWorktreeDetallePorAPI(id int64) (*coordinacion.Worktree, error) {
+	var resp apiWorktreeResponse
+	if err := webInvocarAPIJSON(http.MethodGet, "/api/worktrees/"+strconv.FormatInt(id, 10), nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Worktree, nil
+}
+
+func webCargarGitLockDetallePorAPI(id int64) (*coordinacion.Lock, error) {
+	var resp apiLockResponse
+	if err := webInvocarAPIJSON(http.MethodGet, "/api/locks/"+strconv.FormatInt(id, 10), nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Lock, nil
+}
+
+func webCargarGitMergesPorAPI(proyecto, estado string) ([]*db.GitMerge, error) {
+	query := url.Values{}
+	if proyecto = strings.TrimSpace(proyecto); proyecto != "" {
+		query.Set("proyecto", proyecto)
+	}
+	if estado = strings.TrimSpace(estado); estado != "" {
+		query.Set("estado", estado)
+	}
+	path := "/api/git/merges"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var resp apiGitMergesResponse
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Merges, nil
+}
+
+func webCrearGitMergePorAPI(req apiGitMergeSaveRequest) (int64, error) {
+	var resp apiGitMergeSaveResponse
+	if err := webInvocarAPIJSON(http.MethodPost, "/api/git/merges", req, &resp); err != nil {
+		return 0, err
+	}
+	return resp.ID, nil
+}
+
+func webProyectoSlugPorID() (map[int64]string, error) {
+	proyectos, err := webCargarProyectosPorAPI(nil)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int64]string, len(proyectos))
+	for _, proyecto := range proyectos {
+		if proyecto != nil {
+			out[proyecto.ID] = proyecto.Slug
+		}
+	}
+	return out, nil
 }
 
 const webTplGitGov = `{{define "content"}}
@@ -226,7 +374,7 @@ const webTplGitGov = `{{define "content"}}
     <h3>{{tr "gitgov.requests_title"}}</h3>
       {{if .Merges}}
       <table>
-        <thead><tr><th>ID</th><th>{{tr "Proyecto"}}</th><th>{{tr "gitgov.source"}}</th><th>{{tr "gitgov.target"}}</th><th>{{tr "Estado"}}</th><th>{{tr "gitgov.requested_by"}}</th></tr></thead>
+        <thead><tr><th>ID</th><th>{{tr "Proyecto"}}</th><th>{{tr "gitgov.source"}}</th><th>{{tr "gitgov.target"}}</th><th>{{tr "Estado"}}</th><th>{{tr "gitgov.requested_by"}}</th><th>{{tr "gitgov.commit_source"}}</th><th>{{tr "gitgov.commit_merge"}}</th><th>{{tr "Nota"}}</th></tr></thead>
         <tbody>
           {{range .Merges}}
           <tr>
@@ -236,6 +384,9 @@ const webTplGitGov = `{{define "content"}}
             <td><code>{{.TargetBranch}}</code></td>
             <td>{{.Estado}}</td>
             <td>{{.RequestedBy}}</td>
+            <td><code>{{orDash .CommitOrigen}}</code></td>
+            <td><code>{{orDash .CommitMerge}}</code></td>
+            <td>{{orDash .Notas}}</td>
           </tr>
           {{end}}
         </tbody>

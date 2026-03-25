@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package cmd
 
 import (
@@ -62,5 +69,36 @@ func TestWebSesionesFiltrosYDetalle(t *testing.T) {
 	body = rec.Body.String()
 	if !strings.Contains(body, "Read-only operational inspection detail.") || !strings.Contains(body, "continuidad de prueba") || !strings.Contains(body, "resume") {
 		t.Fatalf("detalle de sesión incompleto: %s", body)
+	}
+}
+
+func TestWebAsignacionesUsaListadoOperativo(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	var proyectoID int64
+	if err := db.DB.QueryRow(
+		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,
+		"orquestador", "Orquestador", "/tmp/orquestador", "repo",
+	).Scan(&proyectoID); err != nil {
+		t.Fatalf("insert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/asignaciones?estado=activa&agente=Codex1&lang=en", nil)
+	rec := httptest.NewRecorder()
+	webHandlerAsignaciones(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("asignaciones status=%d cuerpo=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, token := range []string{"Assignments", "Codex1", "orquestador", "frente principal"} {
+		if !strings.Contains(body, token) {
+			t.Fatalf("listado de asignaciones incompleto, falta %q:\n%s", token, body)
+		}
 	}
 }

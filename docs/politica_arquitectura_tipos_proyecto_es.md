@@ -41,3 +41,7 @@ No debe imponerse como ritual en:
 - scripts efímeros
 - utilidades de migración puntuales
 - pruebas de concepto de corto alcance
+
+## Modo servidor obligatorio para el CLI
+
+Las operaciones de `orquesta` delegan por defecto en el servicio `orquesta serve`. El CLI sólo actúa de forma local cuando se pasa explicitamente `--local`, `--allow-local-fallback` o se fija `ORQUESTA_FORCE_LOCAL=1`/`ORQUESTA_ALLOW_LOCAL_FALLBACK=1`. Si el servidor no responde, el comando falla con un mensaje que pide esos flags. El modo local queda reservado a escenarios de recuperación y no debe usarse como patrón diario ni para generar nueva lógica de negocio.

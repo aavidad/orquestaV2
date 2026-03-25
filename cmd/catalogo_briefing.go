@@ -10,12 +10,21 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
 )
+
+func catalogoModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func catalogoErrorServerFirst() error {
+	return fmt.Errorf("este subcomando de catalogo ya se sirve por Orquesta server; arranca el servidor o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
+}
 
 func ptrBool(v bool) *bool {
 	return &v
@@ -38,6 +47,9 @@ var reglasListarCmd = &cobra.Command{
 		}
 		reglas, ok, err := cargarReglasDesdeAPI(strings.TrimSpace(rol), activa)
 		if !ok {
+			if !catalogoModoRecuperacionLocalExplicito() {
+				return catalogoErrorServerFirst()
+			}
 			reglas, err = db.ListarReglas(strings.TrimSpace(rol), activa)
 		}
 		if err != nil {
@@ -80,6 +92,9 @@ var reglasCrearCmd = &cobra.Command{
 			fmt.Printf("✓ Regla #%d creada\n", id)
 			return nil
 		}
+		if !catalogoModoRecuperacionLocalExplicito() {
+			return catalogoErrorServerFirst()
+		}
 
 		id, err := db.CrearRegla(actor, &db.Regla{
 			TipoAgente:  strings.TrimSpace(rol),
@@ -110,6 +125,9 @@ var reglasEditarCmd = &cobra.Command{
 		}
 		r, ok, err := cargarReglaDesdeAPI(id)
 		if !ok {
+			if !catalogoModoRecuperacionLocalExplicito() {
+				return catalogoErrorServerFirst()
+			}
 			r, err = db.GetRegla(id)
 		}
 		if err != nil {
@@ -141,6 +159,9 @@ var reglasEditarCmd = &cobra.Command{
 		}); err != nil {
 			return err
 		} else if !ok {
+			if !catalogoModoRecuperacionLocalExplicito() {
+				return catalogoErrorServerFirst()
+			}
 			if err := db.ActualizarRegla(actor, r); err != nil {
 				return err
 			}
@@ -163,6 +184,9 @@ var reglasVersionesCmd = &cobra.Command{
 		}
 		versiones, ok, err := cargarVersionesReglaDesdeAPI(id)
 		if !ok {
+			if !catalogoModoRecuperacionLocalExplicito() {
+				return catalogoErrorServerFirst()
+			}
 			versiones, err = db.ListarVersionesRegla(id)
 		}
 		if err != nil {
@@ -197,6 +221,9 @@ var skillsListarCmd = &cobra.Command{
 		}
 		skills, ok, err := cargarSkillsDesdeAPI(strings.TrimSpace(rol), activa)
 		if !ok {
+			if !catalogoModoRecuperacionLocalExplicito() {
+				return catalogoErrorServerFirst()
+			}
 			skills, err = db.ListarSkills(strings.TrimSpace(rol), activa)
 		}
 		if err != nil {
@@ -259,6 +286,9 @@ var skillsCrearCmd = &cobra.Command{
 			fmt.Printf("✓ Skill #%d creado\n", id)
 			return nil
 		}
+		if !catalogoModoRecuperacionLocalExplicito() {
+			return catalogoErrorServerFirst()
+		}
 
 		id, err := db.CrearSkill(actor, &db.Skill{
 			TipoAgente:         strings.TrimSpace(rol),
@@ -297,6 +327,9 @@ var skillsEditarCmd = &cobra.Command{
 		}
 		s, ok, err := cargarSkillDesdeAPI(id)
 		if !ok {
+			if !catalogoModoRecuperacionLocalExplicito() {
+				return catalogoErrorServerFirst()
+			}
 			s, err = db.GetSkill(id)
 		}
 		if err != nil {
@@ -368,6 +401,9 @@ var skillsEditarCmd = &cobra.Command{
 		}); err != nil {
 			return err
 		} else if !ok {
+			if !catalogoModoRecuperacionLocalExplicito() {
+				return catalogoErrorServerFirst()
+			}
 			if err := db.ActualizarSkill(actor, s); err != nil {
 				return err
 			}
@@ -390,6 +426,9 @@ var skillsVersionesCmd = &cobra.Command{
 		}
 		versiones, ok, err := cargarVersionesSkillDesdeAPI(id)
 		if !ok {
+			if !catalogoModoRecuperacionLocalExplicito() {
+				return catalogoErrorServerFirst()
+			}
 			versiones, err = db.ListarVersionesSkill(id)
 		}
 		if err != nil {
@@ -424,6 +463,9 @@ var workflowsListarCmd = &cobra.Command{
 		}
 		workflows, ok, err := cargarWorkflowsDesdeAPI(strings.TrimSpace(rol), activo)
 		if !ok {
+			if !catalogoModoRecuperacionLocalExplicito() {
+				return catalogoErrorServerFirst()
+			}
 			workflows, err = db.ListarWorkflows(strings.TrimSpace(rol), activo)
 		}
 		if err != nil {
@@ -452,6 +494,9 @@ var workflowsVerCmd = &cobra.Command{
 		}
 		w, ok, err := cargarWorkflowDesdeAPI(id)
 		if !ok {
+			if !catalogoModoRecuperacionLocalExplicito() {
+				return catalogoErrorServerFirst()
+			}
 			w, err = db.GetWorkflowByID(id)
 		}
 		if err != nil {
@@ -499,6 +544,9 @@ var workflowsCrearCmd = &cobra.Command{
 			fmt.Printf("✓ Workflow #%d creado\n", id)
 			return nil
 		}
+		if !catalogoModoRecuperacionLocalExplicito() {
+			return catalogoErrorServerFirst()
+		}
 
 		id, err := db.CrearWorkflow(actor, &db.Workflow{
 			TipoAgente:  strings.TrimSpace(rol),
@@ -529,6 +577,9 @@ var workflowsEditarCmd = &cobra.Command{
 		}
 		w, ok, err := cargarWorkflowDesdeAPI(id)
 		if !ok {
+			if !catalogoModoRecuperacionLocalExplicito() {
+				return catalogoErrorServerFirst()
+			}
 			w, err = db.GetWorkflowByID(id)
 		}
 		if err != nil {
@@ -561,6 +612,9 @@ var workflowsEditarCmd = &cobra.Command{
 		}); err != nil {
 			return err
 		} else if !ok {
+			if !catalogoModoRecuperacionLocalExplicito() {
+				return catalogoErrorServerFirst()
+			}
 			if err := db.ActualizarWorkflow(actor, w); err != nil {
 				return err
 			}
@@ -583,6 +637,9 @@ var workflowsVersionesCmd = &cobra.Command{
 		}
 		versiones, ok, err := cargarVersionesWorkflowDesdeAPI(id)
 		if !ok {
+			if !catalogoModoRecuperacionLocalExplicito() {
+				return catalogoErrorServerFirst()
+			}
 			versiones, err = db.ListarVersionesWorkflow(id)
 		}
 		if err != nil {
@@ -612,6 +669,9 @@ var permisosListarCmd = &cobra.Command{
 		entidad, _ := cmd.Flags().GetString("entidad")
 		permisos, ok, err := cargarPermisosCatalogoDesdeAPI(strings.TrimSpace(entidad))
 		if !ok {
+			if !catalogoModoRecuperacionLocalExplicito() {
+				return catalogoErrorServerFirst()
+			}
 			permisos, err = db.ListarPermisosEdicionCatalogo(strings.TrimSpace(entidad))
 		}
 		if err != nil {
@@ -663,6 +723,9 @@ var permisosFijarCmd = &cobra.Command{
 		} else if ok {
 			fmt.Printf("✓ Permiso actualizado: %s/%s\n", permiso.Entidad, permiso.Rol)
 			return nil
+		}
+		if !catalogoModoRecuperacionLocalExplicito() {
+			return catalogoErrorServerFirst()
 		}
 		if err := db.GuardarPermisoEdicionCatalogo(actor, permiso); err != nil {
 			return err
@@ -792,6 +855,9 @@ func activarReglaCmd(activa bool) *cobra.Command {
 			if ok, err := setReglaActivaPorAPI(id, actor, activa); err != nil {
 				return err
 			} else if !ok {
+				if !catalogoModoRecuperacionLocalExplicito() {
+					return catalogoErrorServerFirst()
+				}
 				if err := db.SetReglaActiva(actor, id, activa); err != nil {
 					return err
 				}
@@ -825,6 +891,9 @@ func activarSkillCmd(activo bool) *cobra.Command {
 			if ok, err := setSkillActivoPorAPI(id, actor, activo); err != nil {
 				return err
 			} else if !ok {
+				if !catalogoModoRecuperacionLocalExplicito() {
+					return catalogoErrorServerFirst()
+				}
 				if err := db.SetSkillActivo(actor, id, activo); err != nil {
 					return err
 				}
@@ -858,6 +927,9 @@ func activarWorkflowCmd(activo bool) *cobra.Command {
 			if ok, err := setWorkflowActivoPorAPI(id, actor, activo); err != nil {
 				return err
 			} else if !ok {
+				if !catalogoModoRecuperacionLocalExplicito() {
+					return catalogoErrorServerFirst()
+				}
 				if err := db.SetWorkflowActivo(actor, id, activo); err != nil {
 					return err
 				}

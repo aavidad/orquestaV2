@@ -19,11 +19,8 @@ import (
 	"strings"
 
 	"orquesta/db"
-	"orquesta/gobernanzaapp"
 	"orquesta/skillsapp"
 )
-
-var gobernanzaService = gobernanzaapp.NewService(db.GovernanceRepository{})
 
 type webGobernanzaData struct {
 	TipoAgente        string
@@ -104,15 +101,30 @@ func webRouterGobernanza(w http.ResponseWriter, r *http.Request) {
 func webHandlerGobernanzaReglaNueva(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	tipoAgente := strings.TrimSpace(r.FormValue("tipo_agente"))
-	if _, err := gobernanzaService.SaveRule(gobernanzaapp.SaveRuleInput{
+	if _, err := webCrearReglaPorAPI(apiReglaCrearRequest{
+		Actor:       "web",
 		TipoAgente:  tipoAgente,
 		Categoria:   r.FormValue("categoria"),
 		Titulo:      r.FormValue("titulo"),
 		Descripcion: r.FormValue("descripcion"),
-		Activa:      parseBoolFormDefaultOn(r.FormValue("activa")),
 	}); err != nil {
 		http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
+	}
+	if !parseBoolFormDefaultOn(r.FormValue("activa")) {
+		itemsReglas, err := webCargarReglasPorAPI(tipoAgente, nil)
+		if err != nil {
+			http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+			return
+		}
+		for _, regla := range itemsReglas {
+			if regla == nil || regla.TipoAgente != tipoAgente || strings.TrimSpace(regla.Categoria) != strings.TrimSpace(r.FormValue("categoria")) || strings.TrimSpace(regla.Titulo) != strings.TrimSpace(r.FormValue("titulo")) {
+				continue
+			}
+			if err := webSetReglaActivaPorAPI(regla.ID, "web", false); err == nil {
+				break
+			}
+		}
 	}
 	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(webTranslateRequestf(r, "governance.flash.rule_saved")), http.StatusSeeOther)
 }
@@ -317,15 +329,35 @@ func webHandlerGobernanzaSkillDetectarCarencia(w http.ResponseWriter, r *http.Re
 func webHandlerGobernanzaWorkflowNuevo(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	tipoAgente := strings.TrimSpace(r.FormValue("tipo_agente"))
-	if _, err := gobernanzaService.SaveWorkflow(gobernanzaapp.SaveWorkflowInput{
+	pasosJSON, err := json.Marshal(splitPasos(r.FormValue("pasos")))
+	if err != nil {
+		http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	if _, err := webCrearWorkflowPorAPI(apiWorkflowCrearRequest{
+		Actor:       "web",
 		TipoAgente:  tipoAgente,
 		Nombre:      r.FormValue("nombre"),
 		Descripcion: r.FormValue("descripcion"),
-		Pasos:       splitPasos(r.FormValue("pasos")),
-		Activo:      parseBoolFormDefaultOn(r.FormValue("activo")),
+		PasosJSON:   string(pasosJSON),
 	}); err != nil {
 		http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
+	}
+	if !parseBoolFormDefaultOn(r.FormValue("activo")) {
+		itemsWorkflows, err := webCargarWorkflowsPorAPI(tipoAgente, nil)
+		if err != nil {
+			http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+			return
+		}
+		for _, workflow := range itemsWorkflows {
+			if workflow == nil || workflow.TipoAgente != tipoAgente || strings.TrimSpace(workflow.Nombre) != strings.TrimSpace(r.FormValue("nombre")) {
+				continue
+			}
+			if err := webSetWorkflowActivoPorAPI(workflow.ID, "web", false); err == nil {
+				break
+			}
+		}
 	}
 	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(webTranslateRequestf(r, "governance.flash.workflow_saved")), http.StatusSeeOther)
 }
@@ -417,7 +449,7 @@ func errString(err error) string {
 }
 
 func cargarDatosGobernanza(r *http.Request, tipoAgente string) (webGobernanzaData, error) {
-	itemsReglas, err := gobernanzaService.ListRules(tipoAgente, nil)
+	itemsReglas, err := webCargarReglasPorAPI(tipoAgente, nil)
 	if err != nil {
 		return webGobernanzaData{}, err
 	}
@@ -425,7 +457,7 @@ func cargarDatosGobernanza(r *http.Request, tipoAgente string) (webGobernanzaDat
 	if err != nil {
 		return webGobernanzaData{}, err
 	}
-	itemsWorkflows, err := gobernanzaService.ListWorkflows(tipoAgente, nil)
+	itemsWorkflows, err := webCargarWorkflowsPorAPI(tipoAgente, nil)
 	if err != nil {
 		return webGobernanzaData{}, err
 	}
@@ -443,6 +475,74 @@ func cargarDatosGobernanza(r *http.Request, tipoAgente string) (webGobernanzaDat
 		Err:               r.URL.Query().Get("err"),
 		ErrSkillsRemotas:  errString(errSkillsRemotas),
 	}, nil
+}
+
+func webCargarReglasPorAPI(rol string, activa *bool) ([]*db.Regla, error) {
+	query := url.Values{}
+	if rol = strings.TrimSpace(rol); rol != "" {
+		query.Set("tipo_agente", rol)
+	}
+	if activa != nil {
+		query.Set("activa", strconv.FormatBool(*activa))
+	}
+	path := "/api/reglas"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var resp apiReglasResponse
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Reglas, nil
+}
+
+func webCrearReglaPorAPI(req apiReglaCrearRequest) (int64, error) {
+	var resp apiCatalogoMutationResponse
+	if err := webInvocarAPIJSON(http.MethodPost, "/api/reglas", req, &resp); err != nil {
+		return 0, err
+	}
+	return resp.ID, nil
+}
+
+func webSetReglaActivaPorAPI(id int64, actor string, activa bool) error {
+	return webInvocarAPIJSON(http.MethodPost, fmt.Sprintf("/api/reglas/%d/activa", id), apiCatalogoActivacionRequest{
+		Actor:  actor,
+		Activa: activa,
+	}, nil)
+}
+
+func webCargarWorkflowsPorAPI(rol string, activo *bool) ([]*db.Workflow, error) {
+	query := url.Values{}
+	if rol = strings.TrimSpace(rol); rol != "" {
+		query.Set("tipo_agente", rol)
+	}
+	if activo != nil {
+		query.Set("activo", strconv.FormatBool(*activo))
+	}
+	path := "/api/workflows"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var resp apiWorkflowsResponse
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Workflows, nil
+}
+
+func webCrearWorkflowPorAPI(req apiWorkflowCrearRequest) (int64, error) {
+	var resp apiCatalogoMutationResponse
+	if err := webInvocarAPIJSON(http.MethodPost, "/api/workflows", req, &resp); err != nil {
+		return 0, err
+	}
+	return resp.ID, nil
+}
+
+func webSetWorkflowActivoPorAPI(id int64, actor string, activa bool) error {
+	return webInvocarAPIJSON(http.MethodPost, fmt.Sprintf("/api/workflows/%d/activa", id), apiCatalogoActivacionRequest{
+		Actor:  actor,
+		Activa: activa,
+	}, nil)
 }
 
 func webInvocarAPIJSON(method, path string, payload any, dst any) error {

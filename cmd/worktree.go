@@ -40,10 +40,13 @@ var worktreeListarCmd = &cobra.Command{
 
 		worktrees, ok, err := cargarWorktreesDesdeAPI(query)
 		if !ok {
+			if !coordinacionModoRecuperacionLocalExplicito() {
+				return coordinacionErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
-			repo := db.SQLiteWorktreeRepository{}
+			repo := db.CoordinationWorktreeRepository()
 			filter := coordinacion.WorktreeFilter{}
 			if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
 				filter.Agent = &agente
@@ -88,12 +91,15 @@ var worktreeResolverCmd = &cobra.Command{
 			"estado":   {string(coordinacion.WorktreeActive)},
 		}
 
-		repo := db.SQLiteWorktreeRepository{}
+		repo := db.CoordinationWorktreeRepository()
 		estado := coordinacion.WorktreeActive
 		filter := coordinacion.WorktreeFilter{Agent: &args[0], State: &estado}
 
 		worktrees, ok, err := cargarWorktreesDesdeAPI(query)
 		if !ok {
+			if !coordinacionModoRecuperacionLocalExplicito() {
+				return coordinacionErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
@@ -148,6 +154,9 @@ var worktreeCrearCmd = &cobra.Command{
 			fmt.Printf("  ruta=%s\n", worktree.Path)
 			return nil
 		}
+		if !coordinacionModoRecuperacionLocalExplicito() {
+			return coordinacionErrorServerFirst()
+		}
 		svc := newCoordinationService()
 		var taskID *int64
 		if tareaRaw > 0 {
@@ -197,6 +206,9 @@ var worktreeCerrarCmd = &cobra.Command{
 			}
 			fmt.Printf("✓ Worktree %d cerrado (%s)\n", worktree.ID, worktree.Path)
 			return nil
+		}
+		if !coordinacionModoRecuperacionLocalExplicito() {
+			return coordinacionErrorServerFirst()
 		}
 		svc := newCoordinationService()
 		worktree, err := svc.CloseWorktree(id, remove, reason)

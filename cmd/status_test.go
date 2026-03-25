@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package cmd
 
 import (
@@ -226,6 +233,20 @@ func TestShouldBypassLocalDBMantieneFallbackLocalSinServidor(t *testing.T) {
 	}
 	if got := activeServerURL(); got != "" {
 		t.Fatalf("no deberia descubrir servidor, obtuvo %s", got)
+	}
+}
+
+func TestStatusExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	err := statusCmd.RunE(statusCmd, nil)
+	if err == nil {
+		t.Fatalf("status deberia exigir servidor o recuperacion local explicita")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("error inesperado: %v", err)
 	}
 }
 

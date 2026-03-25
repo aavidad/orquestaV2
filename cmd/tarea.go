@@ -10,12 +10,21 @@ package cmd
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
 )
+
+func tareaModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func tareaErrorServerFirst() error {
+	return fmt.Errorf("este subcomando de tarea ya se sirve por Orquesta server; arranca el servidor o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
+}
 
 var tareaCmd = &cobra.Command{
 	Use:   "tarea",
@@ -38,6 +47,7 @@ var tareaListarCmd = &cobra.Command{
 		}
 
 		var tareas []*db.Tarea
+		viaAPI := false
 		projectSlugs := map[int64]string{}
 		params := url.Values{}
 		if estadoStr != "" {
@@ -60,8 +70,12 @@ var tareaListarCmd = &cobra.Command{
 			return err
 		} else if ok {
 			tareas = tareasResp.Tareas
+			viaAPI = true
 			projectSlugs, _, _ = apiProjectSlugMap()
 		} else {
+			if !tareaModoRecuperacionLocalExplicito() {
+				return tareaErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
@@ -116,8 +130,12 @@ var tareaListarCmd = &cobra.Command{
 				if t.ProyectoID != nil {
 					if slug := projectSlugs[*t.ProyectoID]; slug != "" {
 						proyecto = slug
-					} else if p, err := db.GetProyecto(strconv.FormatInt(*t.ProyectoID, 10)); err == nil {
-						proyecto = p.Slug
+					} else if !viaAPI {
+						if p, err := db.GetProyecto(strconv.FormatInt(*t.ProyectoID, 10)); err == nil {
+							proyecto = p.Slug
+						}
+					} else {
+						proyecto = "#" + strconv.FormatInt(*t.ProyectoID, 10)
 					}
 				}
 				titulo := strings.NewReplacer("\t", " ", "\n", " ", "\r", " ").Replace(t.Titulo)
@@ -139,8 +157,12 @@ var tareaListarCmd = &cobra.Command{
 			if t.ProyectoID != nil {
 				if slug := projectSlugs[*t.ProyectoID]; slug != "" {
 					proyecto = slug
-				} else if p, err := db.GetProyecto(strconv.FormatInt(*t.ProyectoID, 10)); err == nil {
-					proyecto = p.Slug
+				} else if !viaAPI {
+					if p, err := db.GetProyecto(strconv.FormatInt(*t.ProyectoID, 10)); err == nil {
+						proyecto = p.Slug
+					}
+				} else {
+					proyecto = "#" + strconv.FormatInt(*t.ProyectoID, 10)
 				}
 			}
 			fmt.Printf("%-5d %-10s %-10s %-12s %-12s %-8s %s\n",
@@ -160,14 +182,19 @@ var tareaVerCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		var t *db.Tarea
+		viaAPI := false
 		projectSlugs := map[int64]string{}
 		var tareaResp apiTareaResponse
 		if ok, err := apiGet("/api/tareas/"+args[0], &tareaResp); err != nil {
 			return err
 		} else if ok {
 			t = tareaResp.Tarea
+			viaAPI = true
 			projectSlugs, _, _ = apiProjectSlugMap()
 		} else {
+			if !tareaModoRecuperacionLocalExplicito() {
+				return tareaErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
@@ -186,8 +213,12 @@ var tareaVerCmd = &cobra.Command{
 		if t.ProyectoID != nil {
 			if slug := projectSlugs[*t.ProyectoID]; slug != "" {
 				fmt.Printf("  Proyecto:    %s\n", slug)
-			} else if p, err := db.GetProyecto(strconv.FormatInt(*t.ProyectoID, 10)); err == nil {
-				fmt.Printf("  Proyecto:    %s\n", p.Slug)
+			} else if !viaAPI {
+				if p, err := db.GetProyecto(strconv.FormatInt(*t.ProyectoID, 10)); err == nil {
+					fmt.Printf("  Proyecto:    %s\n", p.Slug)
+				}
+			} else {
+				fmt.Printf("  Proyecto:    #%d\n", *t.ProyectoID)
 			}
 		}
 		fmt.Printf("  Módulo:      %s\n", t.Modulo)
@@ -242,6 +273,9 @@ var tareaNuevaCmd = &cobra.Command{
 				fmt.Printf("  → Asignada a %s\n", agente)
 			}
 			return nil
+		}
+		if !tareaModoRecuperacionLocalExplicito() {
+			return tareaErrorServerFirst()
 		}
 
 		if err := ensureLocalDB(); err != nil {
@@ -306,6 +340,9 @@ var tareaTomar = &cobra.Command{
 			fmt.Printf("✓ Tarea #%d asignada a %s\n", id, args[1])
 			return nil
 		}
+		if !tareaModoRecuperacionLocalExplicito() {
+			return tareaErrorServerFirst()
+		}
 		if err := ensureLocalDB(); err != nil {
 			return err
 		}
@@ -334,6 +371,9 @@ var tareaIniciarCmd = &cobra.Command{
 		} else if ok {
 			fmt.Printf("✓ Tarea #%d en progreso (%s)\n", id, args[1])
 			return nil
+		}
+		if !tareaModoRecuperacionLocalExplicito() {
+			return tareaErrorServerFirst()
 		}
 		if err := ensureLocalDB(); err != nil {
 			return err
@@ -365,6 +405,9 @@ var tareaCompletarCmd = &cobra.Command{
 		} else if ok {
 			fmt.Printf("✓ Tarea #%d completada\n", id)
 			return nil
+		}
+		if !tareaModoRecuperacionLocalExplicito() {
+			return tareaErrorServerFirst()
 		}
 		if err := ensureLocalDB(); err != nil {
 			return err
@@ -400,6 +443,9 @@ var tareaBloquearCmd = &cobra.Command{
 			fmt.Printf("✓ Tarea #%d bloqueada: %s\n", id, motivo)
 			return nil
 		}
+		if !tareaModoRecuperacionLocalExplicito() {
+			return tareaErrorServerFirst()
+		}
 		if err := ensureLocalDB(); err != nil {
 			return err
 		}
@@ -431,6 +477,9 @@ var tareaNotaCmd = &cobra.Command{
 			fmt.Printf("✓ Nota añadida a tarea #%d\n", id)
 			return nil
 		}
+		if !tareaModoRecuperacionLocalExplicito() {
+			return tareaErrorServerFirst()
+		}
 		if err := ensureLocalDB(); err != nil {
 			return err
 		}
@@ -460,6 +509,9 @@ var tareaReasignarCmd = &cobra.Command{
 		} else if ok {
 			fmt.Printf("✓ Tarea #%d reasignada a %s\n", id, nuevoAgente)
 			return nil
+		}
+		if !tareaModoRecuperacionLocalExplicito() {
+			return tareaErrorServerFirst()
 		}
 		if err := ensureLocalDB(); err != nil {
 			return err
@@ -496,6 +548,9 @@ var tareaDesbloquearCmd = &cobra.Command{
 			fmt.Printf("✓ Tarea #%d desbloqueada: %s\n", id, resolucion)
 			return nil
 		}
+		if !tareaModoRecuperacionLocalExplicito() {
+			return tareaErrorServerFirst()
+		}
 		if err := ensureLocalDB(); err != nil {
 			return err
 		}
@@ -523,6 +578,9 @@ var tareaBacklogCmd = &cobra.Command{
 		} else if ok {
 			fmt.Printf("✓ Tarea #%d movida a backlog\n", id)
 			return nil
+		}
+		if !tareaModoRecuperacionLocalExplicito() {
+			return tareaErrorServerFirst()
 		}
 		if err := ensureLocalDB(); err != nil {
 			return err
@@ -571,6 +629,9 @@ un mensaje en tu buzón con el output de error para que corrijas y reintentes.`,
 			solicitud = resp.Solicitud
 		}
 		if solicitud == nil {
+			if !tareaModoRecuperacionLocalExplicito() {
+				return tareaErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
@@ -608,6 +669,9 @@ var tareaCancelarCmd = &cobra.Command{
 		}, &map[string]any{}); err != nil {
 			return err
 		} else if !ok {
+			if !tareaModoRecuperacionLocalExplicito() {
+				return tareaErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
@@ -671,6 +735,9 @@ var tareaNotasCmd = &cobra.Command{
 		} else if ok {
 			t = resp.Tarea
 		} else {
+			if !tareaModoRecuperacionLocalExplicito() {
+				return tareaErrorServerFirst()
+			}
 			t, err = db.GetTarea(id)
 			if err != nil {
 				return fmt.Errorf("tarea #%d no encontrada", id)
@@ -716,6 +783,9 @@ su predecesora tenga el contrato definido o esté completada.`,
 		} else if ok {
 			fmt.Printf("✓ Contrato definido para tarea #%d\n", id)
 			return nil
+		}
+		if !tareaModoRecuperacionLocalExplicito() {
+			return tareaErrorServerFirst()
 		}
 		if err := ensureLocalDB(); err != nil {
 			return err

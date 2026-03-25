@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package db
 
 import (
@@ -433,7 +440,7 @@ func TestSchemaBaseSectionRenderersMantieneContratoBase(t *testing.T) {
 func TestBootstrapPlanForDriver(t *testing.T) {
 	t.Parallel()
 
-	for _, driver := range []string{"sqlite", "sqlite3", "postgres", "postgresql"} {
+	for _, driver := range []string{"sqlite", "sqlite3", "postgres", "postgresql", "mysql"} {
 		plan, ok := bootstrapPlanForDriver(driver)
 		if !ok {
 			t.Fatalf("%s deberia tener bootstrap plan", driver)
@@ -444,9 +451,6 @@ func TestBootstrapPlanForDriver(t *testing.T) {
 		if strings.TrimSpace(plan.Seed) == "" {
 			t.Fatalf("%s deberia tener semillas", driver)
 		}
-	}
-	if _, ok := bootstrapPlanForDriver("mysql"); ok {
-		t.Fatalf("mysql no deberia tener bootstrap plan todavia")
 	}
 }
 

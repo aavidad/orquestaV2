@@ -15,11 +15,11 @@ import (
 
 func newCoordinationService() *coordinacion.Service {
 	return &coordinacion.Service{
-		Locks:     db.SQLiteLockRepository{},
-		Worktrees: db.SQLiteWorktreeRepository{},
-		Projects:  db.SQLiteProjectRepository{},
-		Sessions:  db.SQLiteSessionRepository{},
-		Config:    db.SQLiteConfigRepository{},
+		Locks:     db.CoordinationLockRepository(),
+		Worktrees: db.CoordinationWorktreeRepository(),
+		Projects:  db.CoordinationProjectRepository(),
+		Sessions:  db.CoordinationSessionRepository(),
+		Config:    db.CoordinationConfigRepository(),
 		Workspace: gitoperaciones.WorktreeManager{},
 	}
 }

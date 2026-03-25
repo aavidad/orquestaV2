@@ -75,15 +75,15 @@ Si varios agentes trabajan sobre el mismo proyecto:
 - `scripts/agente_console.sh`
 - `scripts/agentes.orquestador.plan`
 
-## Script recomendado de entrada
+## Script manual de compatibilidad
 
-Hasta que la web y la app de escritorio controlen el ciclo completo, el punto de entrada recomendado para un agente manual es:
+Mientras el control total del runtime vivo sigue cerrándose en el servicio, el punto de entrada manual de compatibilidad es:
 
 ```bash
 scripts/inicio_agente.sh <agente>
 ```
 
-Este script debe considerarse el **wrapper canónico y único de entrada manual**.
+Este script no debe considerarse la vía principal de operación de Orquesta. Su papel es de compatibilidad, recuperación y operación manual controlada.
 
 El resto de scripts del directorio `scripts/` cumplen funciones de:
 
@@ -122,10 +122,11 @@ agente|rol|ruta_proyecto|titulo_tarea|prioridad|modulo|nota_asignacion|conector|
 
 1. Registrar agente, proyecto, asignacion y tarea desde Orquesta.
 2. Crear worktree si hay concurrencia sobre el mismo proyecto.
-3. Abrir la consola con el wrapper del runtime.
-4. Iniciar sesion de Orquesta para ese agente.
-5. Ejecutar el runtime.
-6. Al salir, guardar continuidad y cerrar sesion.
+3. Arrancar o verificar primero el servicio de Orquesta.
+4. Abrir la consola con el wrapper del runtime solo si el flujo requiere intervención manual.
+5. Iniciar sesion de Orquesta para ese agente.
+6. Ejecutar el runtime.
+7. Al salir, guardar continuidad y cerrar sesion.
 
 ## Limitaciones conocidas
 

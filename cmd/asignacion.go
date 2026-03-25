@@ -10,6 +10,8 @@ package cmd
 import (
 	"fmt"
 	"net/url"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
@@ -18,6 +20,14 @@ import (
 var asignacionCmd = &cobra.Command{
 	Use:   "asignacion",
 	Short: "Asignación de agentes a proyectos",
+}
+
+func asignacionModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func asignacionErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
 }
 
 var asignacionListarCmd = &cobra.Command{
@@ -41,6 +51,9 @@ var asignacionListarCmd = &cobra.Command{
 
 		asignaciones, ok, err := cargarAsignacionesDesdeAPI(query)
 		if !ok {
+			if !asignacionModoRecuperacionLocalExplicito() {
+				return asignacionErrorServerFirst()
+			}
 			f := db.FiltroAsignaciones{}
 			if agente != "" {
 				f.Agente = &agente
@@ -90,6 +103,9 @@ var asignacionActivarCmd = &cobra.Command{
 			}
 			fmt.Printf("✓ %s asignado a %s\n", args[0], args[1])
 			return nil
+		}
+		if !asignacionModoRecuperacionLocalExplicito() {
+			return asignacionErrorServerFirst()
 		}
 		p, err := db.GetProyecto(args[1])
 		if err != nil {

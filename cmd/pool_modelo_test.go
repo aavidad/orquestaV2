@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package cmd
 
 import (
@@ -202,5 +209,66 @@ func TestCapacidadUsaAPI(t *testing.T) {
 		if !strings.Contains(outResolver, token) {
 			t.Fatalf("salida resolver sin %q:\n%s", token, outResolver)
 		}
+	}
+}
+
+func TestCapacidadExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	resetCommandFlags(poolListarCmd)
+	if err := poolListarCmd.RunE(poolListarCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("pool listar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(poolVerCmd)
+	if err := poolVerCmd.RunE(poolVerCmd, []string{"codex"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("pool ver deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(poolGuardarCmd)
+	if err := poolGuardarCmd.RunE(poolGuardarCmd, []string{"codex"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("pool guardar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(poolModeloListarCmd)
+	if err := poolModeloListarCmd.RunE(poolModeloListarCmd, []string{"codex"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("pool modelo listar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(poolModeloGuardarCmd)
+	if err := poolModeloGuardarCmd.RunE(poolModeloGuardarCmd, []string{"codex", "gpt-5.4"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("pool modelo guardar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(poolModeloSeedCmd)
+	if err := poolModeloSeedCmd.RunE(poolModeloSeedCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("pool modelo seed deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(poolSeedCmd)
+	if err := poolSeedCmd.RunE(poolSeedCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("pool seed deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(politicaModeloListarCmd)
+	if err := politicaModeloListarCmd.RunE(politicaModeloListarCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("politica modelo listar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(politicaModeloGuardarCmd)
+	if err := politicaModeloGuardarCmd.RunE(politicaModeloGuardarCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("politica modelo guardar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(politicaModeloSeedCmd)
+	if err := politicaModeloSeedCmd.RunE(politicaModeloSeedCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("politica modelo seed deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(modeloResolverCmd)
+	if err := modeloResolverCmd.RunE(modeloResolverCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("modelo resolver deberia exigir servidor, err=%v", err)
 	}
 }

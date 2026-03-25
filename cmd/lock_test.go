@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package cmd
 
 import (
@@ -106,5 +113,31 @@ func TestLockUsaAPI(t *testing.T) {
 	})
 	if !strings.Contains(outLiberar, "Lock 52 liberado") {
 		t.Fatalf("salida liberar inesperada:\n%s", outLiberar)
+	}
+}
+
+func TestLockExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	resetCommandFlags(lockListarCmd)
+	if err := lockListarCmd.RunE(lockListarCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("lock listar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(lockTomarCmd)
+	if err := lockTomarCmd.RunE(lockTomarCmd, []string{"Codex1", "worktree", "orq-codex1"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("lock tomar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(lockRenovarCmd)
+	if err := lockRenovarCmd.RunE(lockRenovarCmd, []string{"52", "Codex1", "lease-123"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("lock renovar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(lockLiberarCmd)
+	if err := lockLiberarCmd.RunE(lockLiberarCmd, []string{"52", "Codex1", "lease-123"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("lock liberar deberia exigir servidor, err=%v", err)
 	}
 }

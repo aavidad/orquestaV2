@@ -19,6 +19,8 @@ import (
 
 func TestRuntimeListarYVer(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "1")()
 
 	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
@@ -81,6 +83,8 @@ func TestRuntimeListarYVer(t *testing.T) {
 
 func TestRuntimeNudgeEncolaOrdenLocal(t *testing.T) {
 	prepararDBTemporalCmd(t)
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "1")()
 
 	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar Codex1: %v", err)
@@ -113,6 +117,8 @@ func TestRuntimeNudgeEncolaOrdenLocal(t *testing.T) {
 
 func TestRuntimeDiscordiaEncolaOrdenLocal(t *testing.T) {
 	prepararDBTemporalCmd(t)
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "1")()
 
 	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar Codex1: %v", err)
@@ -146,6 +152,42 @@ func TestRuntimeDiscordiaEncolaOrdenLocal(t *testing.T) {
 	}
 	if !strings.Contains(orders[0].PayloadJSON, "\"contra_agente\":\"Codex2\"") || !strings.Contains(orders[0].PayloadJSON, "\"motivo\":\"desacuerdo sobre la solucion\"") {
 		t.Fatalf("payload discordia inesperado: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestRuntimeListarExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	db.Close()
+	defer db.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	err := runtimeListarCmd.RunE(runtimeListarCmd, nil)
+	if err == nil {
+		t.Fatalf("runtime listar deberia exigir servidor o recuperacion local explicita")
+	}
+	if !strings.Contains(err.Error(), "ORQUESTA_FORCE_LOCAL_DB=1") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
+func TestRuntimeOrdenNuevaExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	db.Close()
+	defer db.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	err := runtimeOrdenNuevaCmd.RunE(runtimeOrdenNuevaCmd, []string{"Codex1", "checkpoint"})
+	if err == nil {
+		t.Fatalf("runtime orden-nueva deberia exigir servidor o recuperacion local explicita")
+	}
+	if !strings.Contains(err.Error(), "ORQUESTA_FORCE_LOCAL_DB=1") {
+		t.Fatalf("error inesperado: %v", err)
 	}
 }
 

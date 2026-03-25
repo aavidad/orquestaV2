@@ -18,7 +18,7 @@ import (
 var votarCmd = &cobra.Command{
 	Use:   "votar <codigo-op> <acuerdo|desacuerdo|abstencion> [comentario...]",
 	Short: "Vota una propuesta",
-Long: `Registra el voto de un agente en una propuesta OP-XXX.
+	Long: `Registra el voto de un agente en una propuesta OP-XXX.
 Reglas de consenso:
   - Solo hay consenso automático si todos los votantes habilitados votan acuerdo.
   - Además, se exigen al menos 2 votos de acuerdo y al menos 2 votos de acuerdo de agentes no autores.
@@ -91,6 +91,9 @@ Ejemplos:
 				fmt.Printf("   Usa: orquesta propuesta cerrar %s consenso --por alberto\n", codigo)
 			}
 			return nil
+		}
+		if !propuestaModoRecuperacionLocalExplicito() {
+			return propuestaErrorServerFirst()
 		}
 
 		if err := ensureLocalDB(); err != nil {

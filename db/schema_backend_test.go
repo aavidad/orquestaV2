@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package db
 
 import "testing"
@@ -14,7 +21,7 @@ func TestSchemaBackendSpecForDriver(t *testing.T) {
 	}{
 		{driver: "sqlite", wantName: "sqlite", wantBootstrap: true, wantDDL: true, wantSeed: true},
 		{driver: "sqlite3", wantName: "sqlite", wantBootstrap: true, wantDDL: true, wantSeed: true},
-		{driver: "mysql", wantName: "mysql", wantBootstrap: false, wantDDL: false, wantSeed: true},
+		{driver: "mysql", wantName: "mysql", wantBootstrap: true, wantDDL: true, wantSeed: true},
 		{driver: "postgres", wantName: "postgres", wantBootstrap: true, wantDDL: true, wantSeed: true},
 	}
 

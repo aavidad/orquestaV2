@@ -9,7 +9,9 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"orquesta/capacidadapp"
@@ -19,6 +21,14 @@ import (
 var poolCmd = &cobra.Command{
 	Use:   "pool",
 	Short: "Gestion de pools de capacidad y modelos",
+}
+
+func capacidadModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func capacidadErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
 }
 
 var capacidadService = capacidadapp.NewService(capacidadapp.Repository{})
@@ -41,6 +51,9 @@ var poolListarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
+			if !capacidadModoRecuperacionLocalExplicito() {
+				return capacidadErrorServerFirst()
+			}
 			pools, err = capacidadService.ListPoolsSummary(filtro)
 			if err != nil {
 				return err
@@ -73,6 +86,9 @@ var poolVerCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
+			if !capacidadModoRecuperacionLocalExplicito() {
+				return capacidadErrorServerFirst()
+			}
 			detail, err = capacidadService.GetPoolDetail(args[0])
 			if err != nil {
 				return err
@@ -142,6 +158,9 @@ var poolGuardarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
+			if !capacidadModoRecuperacionLocalExplicito() {
+				return capacidadErrorServerFirst()
+			}
 			id, err = capacidadService.SavePool(pool)
 			if err != nil {
 				return err
@@ -167,6 +186,9 @@ var poolModeloListarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
+			if !capacidadModoRecuperacionLocalExplicito() {
+				return capacidadErrorServerFirst()
+			}
 			modelos, err = capacidadService.ListPoolModels(args[0])
 			if err != nil {
 				return err
@@ -208,6 +230,9 @@ var poolModeloGuardarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
+			if !capacidadModoRecuperacionLocalExplicito() {
+				return capacidadErrorServerFirst()
+			}
 			id, err = capacidadService.SavePoolModel(args[0], modelo)
 			if err != nil {
 				return err
@@ -225,6 +250,9 @@ var poolModeloSeedCmd = &cobra.Command{
 		if ok, err := seedInicialModelosPoolPorAPI(); err != nil {
 			return err
 		} else if !ok {
+			if !capacidadModoRecuperacionLocalExplicito() {
+				return capacidadErrorServerFirst()
+			}
 			if err := capacidadService.SeedInitialModels(); err != nil {
 				return err
 			}
@@ -243,6 +271,9 @@ var poolSeedCmd = &cobra.Command{
 		} else if ok {
 			fmt.Println("✓ Pools iniciales cargados")
 			return nil
+		}
+		if !capacidadModoRecuperacionLocalExplicito() {
+			return capacidadErrorServerFirst()
 		}
 		seeds := []db.PoolCapacidad{
 			{

@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package db
 
 import (
@@ -36,10 +43,45 @@ func TestResolveBackendRespetaORQUESTADBDRIVER(t *testing.T) {
 	}
 }
 
-func TestResolveBackendFallaConBackendNoSoportado(t *testing.T) {
+func TestResolveBackendSoportaPostgres(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "postgres")
+	t.Setenv("ORQUESTA_DB_BACKEND", "")
+	t.Setenv("ORQUESTA_DB_DSN", "postgres://user:pass@localhost/orquesta?sslmode=disable")
+	t.Setenv("ORQUESTA_DB", "")
+
+	backend, cfg, err := resolveBackend()
+	if err != nil {
+		t.Fatalf("resolveBackend: %v", err)
+	}
+	if backend.Name() != "postgres" {
+		t.Fatalf("backend inesperado: %s", backend.Name())
+	}
+	if configTarget(cfg) == "" {
+		t.Fatalf("target vacío")
+	}
+}
+
+func TestResolveBackendSoportaMySQL(t *testing.T) {
 	t.Setenv("ORQUESTA_DB_DRIVER", "mysql")
 	t.Setenv("ORQUESTA_DB_BACKEND", "mysql")
 	t.Setenv("ORQUESTA_DB_DSN", "usuario:pass@tcp(localhost:3306)/orquesta")
+
+	backend, cfg, err := resolveBackend()
+	if err != nil {
+		t.Fatalf("resolveBackend: %v", err)
+	}
+	if backend.Name() != "mysql" {
+		t.Fatalf("backend inesperado: %s", backend.Name())
+	}
+	if configTarget(cfg) == "" {
+		t.Fatalf("target vacío")
+	}
+}
+
+func TestResolveBackendFallaConBackendNoSoportado(t *testing.T) {
+	t.Setenv("ORQUESTA_DB_DRIVER", "oracle")
+	t.Setenv("ORQUESTA_DB_BACKEND", "oracle")
+	t.Setenv("ORQUESTA_DB_DSN", "oracle://user:pass@localhost/orquesta")
 
 	_, _, err := resolveBackend()
 	if err == nil {
@@ -101,5 +143,25 @@ func TestCurrentStorageDisplayTargetRedactaDSN(t *testing.T) {
 
 	if got := CurrentStorageDisplayTarget(); got != "postgres://user:%2A%2A%2A@localhost/orquesta?sslmode=disable" {
 		t.Fatalf("target visible inesperado: %s", got)
+	}
+}
+
+func TestPostgresBackendBackupDevuelveErrorExplicito(t *testing.T) {
+	err := (postgresBackend{}).Backup(nil, "/tmp/orquesta.postgres.bak")
+	if err == nil {
+		t.Fatalf("se esperaba error explicito para backup postgres")
+	}
+	if got := err.Error(); got == "" || got == "la base de datos no está inicializada" {
+		t.Fatalf("mensaje de error poco especifico: %q", got)
+	}
+}
+
+func TestMySQLBackendBackupDevuelveErrorExplicito(t *testing.T) {
+	err := (mysqlBackend{}).Backup(nil, "/tmp/orquesta.mysql.bak")
+	if err == nil {
+		t.Fatalf("se esperaba error explicito para backup mysql")
+	}
+	if got := err.Error(); got == "" || got == "la base de datos no está inicializada" {
+		t.Fatalf("mensaje de error poco especifico: %q", got)
 	}
 }

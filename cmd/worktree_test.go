@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package cmd
 
 import (
@@ -106,6 +113,32 @@ func TestWorktreeUsaAPI(t *testing.T) {
 	})
 	if !strings.Contains(outCerrar, "Worktree 41 cerrado") {
 		t.Fatalf("salida cerrar inesperada:\n%s", outCerrar)
+	}
+}
+
+func TestWorktreeExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	resetCommandFlags(worktreeListarCmd)
+	if err := worktreeListarCmd.RunE(worktreeListarCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("worktree listar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(worktreeResolverCmd)
+	if err := worktreeResolverCmd.RunE(worktreeResolverCmd, []string{"Codex1", "orquestador"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("worktree resolver deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(worktreeCrearCmd)
+	if err := worktreeCrearCmd.RunE(worktreeCrearCmd, []string{"Codex1", "orquestador"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("worktree crear deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(worktreeCerrarCmd)
+	if err := worktreeCerrarCmd.RunE(worktreeCerrarCmd, []string{"41"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("worktree cerrar deberia exigir servidor, err=%v", err)
 	}
 }
 

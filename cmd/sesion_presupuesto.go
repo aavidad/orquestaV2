@@ -10,6 +10,7 @@ package cmd
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +22,14 @@ import (
 var sesionPresupuestoCmd = &cobra.Command{
 	Use:   "presupuesto",
 	Short: "Registro y consulta de presupuestos de sesión",
+}
+
+func sesionPresupuestoModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func sesionPresupuestoErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
 }
 
 var sesionPresupuestoRegistrarCmd = &cobra.Command{
@@ -84,6 +93,8 @@ var sesionPresupuestoRegistrarCmd = &cobra.Command{
 		} else if ok {
 			imprimirRegistroPresupuesto(resp.ID, resp.Presupuesto.SesionID, resp.Evaluacion)
 			return nil
+		} else if !sesionPresupuestoModoRecuperacionLocalExplicito() {
+			return sesionPresupuestoErrorServerFirst()
 		}
 		sesion, err := resolverSesionPresupuestoPorReferencia(sesionID, agente)
 		if err != nil {
@@ -135,6 +146,8 @@ var sesionPresupuestoVerCmd = &cobra.Command{
 		} else if ok {
 			imprimirDetallePresupuesto(resp.Presupuesto.SesionID, resp.Presupuesto, resp.Evaluacion)
 			return nil
+		} else if !sesionPresupuestoModoRecuperacionLocalExplicito() {
+			return sesionPresupuestoErrorServerFirst()
 		}
 		sesion, err := resolverSesionPresupuestoPorReferencia(sesionID, agente)
 		if err != nil {

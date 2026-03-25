@@ -91,3 +91,46 @@ func TestOpenBootstrapCreaTriggersEIndicesDesdeSchema(t *testing.T) {
 		}
 	}
 }
+
+func TestPostMigracionesLimpianCerradaAtEnPropuestasAbiertas(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "orquesta.db")
+	prev := os.Getenv("ORQUESTA_DB")
+	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
+		t.Fatalf("setenv: %v", err)
+	}
+	defer func() {
+		_ = os.Setenv("ORQUESTA_DB", prev)
+		Close()
+	}()
+
+	if err := Open(); err != nil {
+		t.Fatalf("Open inicial: %v", err)
+	}
+	if _, err := DB.Exec(`
+		INSERT INTO propuestas (codigo, titulo, descripcion, tipo, estado, propuesto_por, distribuidor, cerrada_at)
+		VALUES ('OP-996', 'Inconsistencia heredada', '', 'arquitectura', 'abierta', 'Codex1', 'Codex1', CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatalf("insert propuesta inconsistente: %v", err)
+	}
+
+	var antes int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM propuestas WHERE codigo='OP-996' AND cerrada_at IS NOT NULL`).Scan(&antes); err != nil {
+		t.Fatalf("count antes: %v", err)
+	}
+	if antes != 1 {
+		t.Fatalf("esperaba propuesta inconsistente antes de reabrir, got=%d", antes)
+	}
+
+	Close()
+	if err := Open(); err != nil {
+		t.Fatalf("Open segunda: %v", err)
+	}
+
+	var despues int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM propuestas WHERE codigo='OP-996' AND cerrada_at IS NULL`).Scan(&despues); err != nil {
+		t.Fatalf("count despues: %v", err)
+	}
+	if despues != 1 {
+		t.Fatalf("post-migraciones no limpiaron cerrada_at en propuesta abierta, got=%d", despues)
+	}
+}

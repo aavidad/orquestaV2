@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package db
 
 import (
@@ -9,13 +16,17 @@ import (
 	"orquesta/coordinacion"
 )
 
-type SQLiteLockRepository struct{}
+type CoordinationLockSQLRepository struct{}
 
-func ListarLocksCoord(filter coordinacion.LockFilter) ([]*coordinacion.Lock, error) {
-	return (SQLiteLockRepository{}).List(filter)
+type SQLiteLockRepository struct {
+	CoordinationLockSQLRepository
 }
 
-func (SQLiteLockRepository) ExpireActiveBefore(now time.Time) error {
+func ListarLocksCoord(filter coordinacion.LockFilter) ([]*coordinacion.Lock, error) {
+	return (CoordinationLockSQLRepository{}).List(filter)
+}
+
+func (CoordinationLockSQLRepository) ExpireActiveBefore(now time.Time) error {
 	_, err := DB.Exec(`
 		UPDATE locks
 		SET estado='expirada'
@@ -23,7 +34,7 @@ func (SQLiteLockRepository) ExpireActiveBefore(now time.Time) error {
 	return err
 }
 
-func (SQLiteLockRepository) FindActive(scopeType, scopeKey string) (*coordinacion.Lock, error) {
+func (CoordinationLockSQLRepository) FindActive(scopeType, scopeKey string) (*coordinacion.Lock, error) {
 	row := DB.QueryRow(`
 		SELECT id, proyecto_id, tarea_id, sesion_id, agente, scope_type, scope_key, ruta_abs, branch,
 		       motivo, token_lease, estado, heartbeat_at, expires_at, created_at, updated_at, liberada_at
@@ -37,7 +48,7 @@ func (SQLiteLockRepository) FindActive(scopeType, scopeKey string) (*coordinacio
 	return lock, err
 }
 
-func (SQLiteLockRepository) Create(lock *coordinacion.Lock) (*coordinacion.Lock, error) {
+func (CoordinationLockSQLRepository) Create(lock *coordinacion.Lock) (*coordinacion.Lock, error) {
 	if lock == nil {
 		return nil, fmt.Errorf("lock nil")
 	}
@@ -53,10 +64,10 @@ func (SQLiteLockRepository) Create(lock *coordinacion.Lock) (*coordinacion.Lock,
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
-	return (SQLiteLockRepository{}).GetByID(id)
+	return (CoordinationLockSQLRepository{}).GetByID(id)
 }
 
-func (SQLiteLockRepository) GetByID(id int64) (*coordinacion.Lock, error) {
+func (CoordinationLockSQLRepository) GetByID(id int64) (*coordinacion.Lock, error) {
 	row := DB.QueryRow(`
 		SELECT id, proyecto_id, tarea_id, sesion_id, agente, scope_type, scope_key, ruta_abs, branch,
 		       motivo, token_lease, estado, heartbeat_at, expires_at, created_at, updated_at, liberada_at
@@ -65,7 +76,7 @@ func (SQLiteLockRepository) GetByID(id int64) (*coordinacion.Lock, error) {
 	return scanCoordinationLock(row)
 }
 
-func (SQLiteLockRepository) Renew(id int64, expiresAt time.Time, agent, leaseToken string) (*coordinacion.Lock, error) {
+func (CoordinationLockSQLRepository) Renew(id int64, expiresAt time.Time, agent, leaseToken string) (*coordinacion.Lock, error) {
 	res, err := DB.Exec(`
 		UPDATE locks
 		SET heartbeat_at = CURRENT_TIMESTAMP, expires_at = ?
@@ -79,10 +90,10 @@ func (SQLiteLockRepository) Renew(id int64, expiresAt time.Time, agent, leaseTok
 	if n == 0 {
 		return nil, fmt.Errorf("lock no renovable o sin permiso")
 	}
-	return (SQLiteLockRepository{}).GetByID(id)
+	return (CoordinationLockSQLRepository{}).GetByID(id)
 }
 
-func (SQLiteLockRepository) Release(id int64, releasedAt time.Time, agent, leaseToken string) (*coordinacion.Lock, error) {
+func (CoordinationLockSQLRepository) Release(id int64, releasedAt time.Time, agent, leaseToken string) (*coordinacion.Lock, error) {
 	res, err := DB.Exec(`
 		UPDATE locks
 		SET estado = 'liberada', liberada_at = ?, heartbeat_at = CURRENT_TIMESTAMP
@@ -96,10 +107,10 @@ func (SQLiteLockRepository) Release(id int64, releasedAt time.Time, agent, lease
 	if n == 0 {
 		return nil, fmt.Errorf("lock no liberable o sin permiso")
 	}
-	return (SQLiteLockRepository{}).GetByID(id)
+	return (CoordinationLockSQLRepository{}).GetByID(id)
 }
 
-func (SQLiteLockRepository) List(filter coordinacion.LockFilter) ([]*coordinacion.Lock, error) {
+func (CoordinationLockSQLRepository) List(filter coordinacion.LockFilter) ([]*coordinacion.Lock, error) {
 	q := `
 		SELECT id, proyecto_id, tarea_id, sesion_id, agente, scope_type, scope_key, ruta_abs, branch,
 		       motivo, token_lease, estado, heartbeat_at, expires_at, created_at, updated_at, liberada_at

@@ -1,114 +1,126 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package cmd
 
 import (
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"orquesta/coordinacion"
 	"orquesta/db"
 )
 
-func TestWebGitPanelRenderizaWorktreesYLocks(t *testing.T) {
-	prepararDBTemporalCmd(t)
-
-	var proyectoID int64
-	if err := db.DB.QueryRow(
-		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,
-		"orquestador", "Orquestador", "/tmp/orquestador", "repo",
-	).Scan(&proyectoID); err != nil {
-		t.Fatalf("insert proyecto: %v", err)
-	}
-	if _, err := db.DB.Exec(`INSERT INTO tareas (titulo, descripcion, modulo, prioridad, creado_por) VALUES (?,?,?,?,?)`,
-		"git-panel", "", "orquestador", "media", "alberto"); err != nil {
-		t.Fatalf("insert tarea: %v", err)
-	}
-	var tareaID int64
-	if err := db.DB.QueryRow(`SELECT id FROM tareas WHERE titulo = ?`, "git-panel").Scan(&tareaID); err != nil {
-		t.Fatalf("query tarea: %v", err)
-	}
-	if _, err := db.DB.Exec(`
-		INSERT INTO worktrees (proyecto_id, tarea_id, agente, nombre, ruta_abs, branch, base_ref, estado, motivo)
-		VALUES (?,?,?,?,?,?,?,?,?)`,
-		proyectoID, tareaID, "codex2", "wt-panel", "/tmp/wt-panel", "feature/git-panel", "origin/main", "activa", "panel",
-	); err != nil {
-		t.Fatalf("insert worktree: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/git?estado=activa&agente=codex2&lang=en", nil)
-	rec := httptest.NewRecorder()
-	webHandlerGitGov(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("git panel status=%d cuerpo=%s", rec.Code, rec.Body.String())
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Git Governance") || !strings.Contains(body, "Worktrees") || !strings.Contains(body, "wt-panel") {
-		t.Fatalf("panel incompleto: %s", body)
-	}
-	if !strings.Contains(body, `<html lang="en">`) {
-		t.Fatalf("lang html inesperado: %s", body)
-	}
-	if got := rec.Header().Get("Content-Language"); got != "en" {
-		t.Fatalf("Content-Language=%q", got)
-	}
+func testMuxGitGovWeb() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", webHandlerDash)
+	mux.HandleFunc("/git", webHandlerGitGov)
+	mux.HandleFunc("/git/", webRouterGitGov)
+	registerAPIRoutes(mux)
+	return mux
 }
 
-func TestWebGitDetalleRenderizaWorktreeYLock(t *testing.T) {
-	prepararDBTemporalCmd(t)
+func TestWebGitGovUsaAPIParaWorktreesYLocks(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
 
-	var proyectoID int64
-	if err := db.DB.QueryRow(
-		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,
-		"orquestador", "Orquestador", "/tmp/orquestador", "repo",
-	).Scan(&proyectoID); err != nil {
-		t.Fatalf("insert proyecto: %v", err)
-	}
-	if _, err := db.DB.Exec(`INSERT INTO tareas (titulo, descripcion, modulo, prioridad, creado_por) VALUES (?,?,?,?,?)`,
-		"git-detalle", "", "orquestador", "media", "alberto"); err != nil {
-		t.Fatalf("insert tarea: %v", err)
-	}
-	var tareaID int64
-	if err := db.DB.QueryRow(`SELECT id FROM tareas WHERE titulo = ?`, "git-detalle").Scan(&tareaID); err != nil {
-		t.Fatalf("query tarea: %v", err)
-	}
-	res, err := db.DB.Exec(`
-		INSERT INTO locks (proyecto_id, tarea_id, agente, scope_type, scope_key, ruta_abs, branch, motivo, token_lease, estado, expires_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`,
-		proyectoID, tareaID, "codex2", "worktree", "wt-detalle", "/tmp/wt-detalle", "feature/detalle", "proteccion", "lease-1", "activa",
-	)
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
 	if err != nil {
-		t.Fatalf("insert lock: %v", err)
+		t.Fatalf("upsert proyecto: %v", err)
 	}
-	lockID, _ := res.LastInsertId()
-	res, err = db.DB.Exec(`
-		INSERT INTO worktrees (proyecto_id, tarea_id, lock_id, agente, nombre, ruta_abs, branch, base_ref, estado, motivo)
-		VALUES (?,?,?,?,?,?,?,?,?,?)`,
-		proyectoID, tareaID, lockID, "codex2", "wt-detalle", "/tmp/wt-detalle", "feature/detalle", "origin/main", "activa", "detalle",
-	)
-	if err != nil {
-		t.Fatalf("insert worktree: %v", err)
-	}
-	worktreeID, _ := res.LastInsertId()
 
-	req := httptest.NewRequest(http.MethodGet, "/git/worktrees/"+itoa(worktreeID)+"?lang=en", nil)
+	lock, err := db.CoordinationLockRepository().Create(&coordinacion.Lock{
+		ProjectID:   &proyectoID,
+		Agent:       "Codex1",
+		ScopeType:   "project",
+		ScopeKey:    "orquestador",
+		Path:        filepath.Join(tmp, "orquestador"),
+		Branch:      "main",
+		Reason:      "prueba web git",
+		LeaseToken:  "lease-1",
+		State:       coordinacion.LockActive,
+		HeartbeatAt: time.Now(),
+		ExpiresAt:   time.Now().Add(5 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("crear lock: %v", err)
+	}
+
+	worktree, err := db.CoordinationWorktreeRepository().Create(&coordinacion.Worktree{
+		ProjectID: proyectoID,
+		LockID:    &lock.ID,
+		Agent:     "Codex1",
+		Name:      "wt-codex1",
+		Path:      filepath.Join(tmp, "orquestador-wt"),
+		Branch:    "feature/server-first",
+		BaseRef:   "main",
+		State:     coordinacion.WorktreeActive,
+		Reason:    "prueba web git",
+	})
+	if err != nil {
+		t.Fatalf("crear worktree: %v", err)
+	}
+
+	form := strings.NewReader("proyecto_slug=orquestador&source_branch=feature/server-first&target_branch=main&requested_by=Codex1&estado=pendiente&commit_origen=abc123&commit_merge=def456&notas=merge+web")
+	req := httptest.NewRequest(http.MethodPost, "/git/merges", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
-	webRouterGitGov(rec, req)
+	testMuxGitGovWeb().ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("alta merge status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	merges, err := db.ListarGitMerges(&proyectoID, "pendiente")
+	if err != nil {
+		t.Fatalf("listar merges: %v", err)
+	}
+	if len(merges) != 1 {
+		t.Fatalf("merges esperados=1 got=%d", len(merges))
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/git?estado=activa&agente=Codex1&proyecto=orquestador&merge_estado=pendiente&lang=en", nil)
+	testMuxGitGovWeb().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("detalle worktree status=%d cuerpo=%s", rec.Code, rec.Body.String())
+		t.Fatalf("gitgov status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Worktree #") || !strings.Contains(body, "wt-detalle") || !strings.Contains(body, "feature/detalle") {
-		t.Fatalf("detalle worktree incompleto: %s", body)
+	for _, token := range []string{"orquestador", "Codex1", "wt-codex1", "feature/server-first", "abc123", "def456", "merge web"} {
+		if !strings.Contains(body, token) {
+			t.Fatalf("panel gitgov sin %q:\n%s", token, body)
+		}
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/git/locks/"+itoa(lockID)+"?lang=en", nil)
 	rec = httptest.NewRecorder()
-	webRouterGitGov(rec, req)
+	req = httptest.NewRequest(http.MethodGet, "/git/worktrees/"+itoa(worktree.ID), nil)
+	testMuxGitGovWeb().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("detalle lock status=%d cuerpo=%s", rec.Code, rec.Body.String())
+		t.Fatalf("detalle worktree status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	body = rec.Body.String()
-	if !strings.Contains(body, "Lock #") || !strings.Contains(body, "lease-1") || !strings.Contains(body, "wt-detalle") {
-		t.Fatalf("detalle lock incompleto: %s", body)
+	if !strings.Contains(rec.Body.String(), "feature/server-first") {
+		t.Fatalf("detalle worktree incompleto:\n%s", rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/git/locks/"+itoa(lock.ID), nil)
+	testMuxGitGovWeb().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detalle lock status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "lease-1") {
+		t.Fatalf("detalle lock incompleto:\n%s", rec.Body.String())
 	}
 }

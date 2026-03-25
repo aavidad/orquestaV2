@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package storage
 
 import "testing"
@@ -123,7 +130,7 @@ func TestSQLiteDSNAniadeParametrosSinRomperQueryExistente(t *testing.T) {
 
 func TestOpenFallaConDriverNoEnlazado(t *testing.T) {
 	_, err := Open(Config{
-		Driver: "mysql",
+		Driver: "oracle",
 		DSN:    "dsn://usuario:clave@localhost/orquesta",
 	})
 	if err == nil {

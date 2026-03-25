@@ -10,11 +10,20 @@ package cmd
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
 )
+
+func propuestaModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func propuestaErrorServerFirst() error {
+	return fmt.Errorf("este subcomando de propuesta ya se sirve por Orquesta server; arranca el servidor o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
+}
 
 var propuestaCmd = &cobra.Command{
 	Use:   "propuesta",
@@ -41,6 +50,9 @@ var propuestaListarCmd = &cobra.Command{
 		} else if ok {
 			propuestas = resp.Propuestas
 		} else {
+			if !propuestaModoRecuperacionLocalExplicito() {
+				return propuestaErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
@@ -88,6 +100,9 @@ var propuestaVerCmd = &cobra.Command{
 		} else if ok {
 			p = resp.Propuesta
 		} else {
+			if !propuestaModoRecuperacionLocalExplicito() {
+				return propuestaErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
@@ -170,6 +185,9 @@ var propuestaNuevaCmd = &cobra.Command{
 			fmt.Println("  Los agentes deben votar con: orquesta votar <codigo> <posicion>")
 			return nil
 		}
+		if !propuestaModoRecuperacionLocalExplicito() {
+			return propuestaErrorServerFirst()
+		}
 
 		if err := ensureLocalDB(); err != nil {
 			return err
@@ -248,6 +266,9 @@ var propuestaActualizarCmd = &cobra.Command{
 			fmt.Printf("✓ Propuesta %s actualizada\n", args[0])
 			return nil
 		}
+		if !propuestaModoRecuperacionLocalExplicito() {
+			return propuestaErrorServerFirst()
+		}
 
 		if err := ensureLocalDB(); err != nil {
 			return err
@@ -284,6 +305,9 @@ var propuestaCerrarCmd = &cobra.Command{
 			fmt.Printf("✓ Propuesta %s cerrada como '%s'\n", args[0], args[1])
 			return nil
 		}
+		if !propuestaModoRecuperacionLocalExplicito() {
+			return propuestaErrorServerFirst()
+		}
 		if err := ensureLocalDB(); err != nil {
 			return err
 		}
@@ -312,6 +336,9 @@ var propuestaReabrirCmd = &cobra.Command{
 		} else if ok {
 			fmt.Printf("✓ Propuesta %s reabierta\n", args[0])
 			return nil
+		}
+		if !propuestaModoRecuperacionLocalExplicito() {
+			return propuestaErrorServerFirst()
 		}
 		if err := ensureLocalDB(); err != nil {
 			return err
@@ -343,6 +370,9 @@ var propuestaRepararVotosCmd = &cobra.Command{
 		} else if ok {
 			fmt.Printf("✓ Votos pendientes reparados en %s\n", args[0])
 			return nil
+		}
+		if !propuestaModoRecuperacionLocalExplicito() {
+			return propuestaErrorServerFirst()
 		}
 		if err := ensureLocalDB(); err != nil {
 			return err
@@ -411,6 +441,9 @@ var propuestaVotosCmd = &cobra.Command{
 			p = resp.Propuesta
 			votos = p.Votos
 		} else {
+			if !propuestaModoRecuperacionLocalExplicito() {
+				return propuestaErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}

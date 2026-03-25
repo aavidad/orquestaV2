@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package cmd
 
 import (
@@ -241,5 +248,46 @@ func TestLenguajeEsqueletoUsaPoliticaYMaterializaEstructura(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
 			t.Fatalf("falta %s: %v", rel, err)
 		}
+	}
+}
+
+func TestLenguajeExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	resetCommandFlags(lenguajePoliticaVerCmd)
+	if err := lenguajePoliticaVerCmd.RunE(lenguajePoliticaVerCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("lenguaje politica ver deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(lenguajePoliticaSetCmd)
+	if err := lenguajePoliticaSetCmd.RunE(lenguajePoliticaSetCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("lenguaje politica fijar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(lenguajeMatrizListarCmd)
+	if err := lenguajeMatrizListarCmd.RunE(lenguajeMatrizListarCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("lenguaje matriz listar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(lenguajeMatrizFijarCmd)
+	if err := lenguajeMatrizFijarCmd.RunE(lenguajeMatrizFijarCmd, []string{"proyecto", "orquestador", "fr"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("lenguaje matriz fijar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(lenguajeMatrizBorrarCmd)
+	if err := lenguajeMatrizBorrarCmd.RunE(lenguajeMatrizBorrarCmd, []string{"proyecto", "orquestador"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("lenguaje matriz borrar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(lenguajeResolverCmd)
+	if err := lenguajeResolverCmd.RunE(lenguajeResolverCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("lenguaje resolver deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(lenguajeEsqueletoCmd)
+	if err := lenguajeEsqueletoCmd.RunE(lenguajeEsqueletoCmd, []string{filepath.Join(t.TempDir(), "demo")}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("lenguaje esqueleto deberia exigir servidor, err=%v", err)
 	}
 }

@@ -69,7 +69,7 @@ func webHandlerProyectos(w http.ResponseWriter, r *http.Request) {
 		value := raw == "1" || strings.EqualFold(raw, "true")
 		activaPtr = &value
 	}
-	items, err := memoriaProyectoService.ListProjects(activaPtr)
+	items, err := webCargarProyectosPorAPI(activaPtr)
 	if err != nil {
 		webRender(w, r, webTplLayout+webTplProyectos, webProyectosData{
 			Err: err.Error(),
@@ -94,7 +94,7 @@ func webHandlerProyectos(w http.ResponseWriter, r *http.Request) {
 }
 
 func webHandlerProyectoDetalle(w http.ResponseWriter, r *http.Request, slug string) {
-	overview, err := memoriaProyectoService.Overview(slug)
+	overview, err := webCargarProyectoOverviewPorAPI(slug)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -111,8 +111,7 @@ func webHandlerProyectoDetalle(w http.ResponseWriter, r *http.Request, slug stri
 
 func webHandlerProyectoDecisionNueva(w http.ResponseWriter, r *http.Request, slug string) {
 	_ = r.ParseForm()
-	_, err := memoriaProyectoService.CreateDecision(memoriaproyecto.CreateDecisionInput{
-		ProyectoSlug: slug,
+	if _, err := webCrearDecisionProyectoPorAPI(slug, apiProyectoDecisionCreateRequest{
 		Categoria:    r.FormValue("categoria"),
 		Titulo:       r.FormValue("titulo"),
 		Solucion:     r.FormValue("solucion"),
@@ -122,8 +121,7 @@ func webHandlerProyectoDecisionNueva(w http.ResponseWriter, r *http.Request, slu
 		Estado:       r.FormValue("estado"),
 		PropuestaID:  parseOptionalInt64(r.FormValue("propuesta_id")),
 		TareaID:      parseOptionalInt64(r.FormValue("tarea_id")),
-	})
-	if err != nil {
+	}); err != nil {
 		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
@@ -132,8 +130,7 @@ func webHandlerProyectoDecisionNueva(w http.ResponseWriter, r *http.Request, slu
 
 func webHandlerProyectoDocumentoNuevo(w http.ResponseWriter, r *http.Request, slug string) {
 	_ = r.ParseForm()
-	_, err := memoriaProyectoService.CreateExternalDoc(memoriaproyecto.CreateExternalDocInput{
-		ProyectoSlug:  slug,
+	if _, err := webCrearDocumentoProyectoPorAPI(slug, apiProyectoDocumentoCreateRequest{
 		TipoDocumento: r.FormValue("tipo_documento"),
 		Titulo:        r.FormValue("titulo"),
 		RutaRef:       r.FormValue("ruta_ref"),
@@ -142,8 +139,7 @@ func webHandlerProyectoDocumentoNuevo(w http.ResponseWriter, r *http.Request, sl
 		Fuente:        r.FormValue("fuente"),
 		PropuestaID:   parseOptionalInt64(r.FormValue("propuesta_id")),
 		TareaID:       parseOptionalInt64(r.FormValue("tarea_id")),
-	})
-	if err != nil {
+	}); err != nil {
 		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
@@ -152,11 +148,6 @@ func webHandlerProyectoDocumentoNuevo(w http.ResponseWriter, r *http.Request, sl
 
 func webHandlerProyectoFabricarApp(w http.ResponseWriter, r *http.Request, slug string) {
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
-		return
-	}
-	proyecto, err := db.GetProyecto(slug)
-	if err != nil {
 		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
@@ -172,20 +163,79 @@ func webHandlerProyectoFabricarApp(w http.ResponseWriter, r *http.Request, slug 
 		I18n:        webFormBool(r, "i18n"),
 		Idiomas:     splitCSV(strings.TrimSpace(r.FormValue("idiomas"))),
 	}
-	plan, err := newProjectAppFactory().Generate(spec)
-	if err != nil {
-		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
-		return
-	}
 	actor := strings.TrimSpace(r.FormValue("por"))
 	if actor == "" {
 		actor = "web"
 	}
-	if _, err := fabricaapp.Materialize(fabricaapp.DBStore{}, proyecto.ID, actor, plan); err != nil {
+	if _, err := webFabricarAppProyectoPorAPI(slug, apiProyectoFabricarAppRequest{
+		Nombre:      spec.Nombre,
+		Descripcion: spec.Descripcion,
+		Tipo:        spec.Tipo,
+		Frontend:    spec.Frontend,
+		API:         spec.API,
+		Auth:        spec.Auth,
+		Database:    spec.Database,
+		Docker:      spec.Docker,
+		I18n:        spec.I18n,
+		Idiomas:     spec.Idiomas,
+		Por:         actor,
+	}); err != nil {
 		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, "/proyectos/"+slug+"?ok="+url.QueryEscape(webTranslateRequestf(r, "projects.flash.factory_created")), http.StatusSeeOther)
+}
+
+func webFabricarAppProyectoPorAPI(ref string, req apiProyectoFabricarAppRequest) (*apiProyectoFabricarAppResponse, error) {
+	var resp apiProyectoFabricarAppResponse
+	path := "/api/proyectos/" + url.PathEscape(strings.TrimSpace(ref)) + "/fabricar-app"
+	if err := webInvocarAPIJSON(http.MethodPost, path, req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func webCargarProyectosPorAPI(activa *bool) ([]*db.Proyecto, error) {
+	query := url.Values{}
+	if activa != nil {
+		query.Set("activa", strconv.FormatBool(*activa))
+	}
+	path := "/api/proyectos"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var resp apiProyectosResponse
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Proyectos, nil
+}
+
+func webCargarProyectoOverviewPorAPI(ref string) (*memoriaproyecto.ProjectOverview, error) {
+	var resp apiProyectoOverviewResponse
+	path := "/api/proyectos/" + url.PathEscape(strings.TrimSpace(ref)) + "/overview"
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Overview, nil
+}
+
+func webCrearDecisionProyectoPorAPI(ref string, req apiProyectoDecisionCreateRequest) (int64, error) {
+	var resp apiCatalogoMutationResponse
+	path := "/api/proyectos/" + url.PathEscape(strings.TrimSpace(ref)) + "/decisiones"
+	if err := webInvocarAPIJSON(http.MethodPost, path, req, &resp); err != nil {
+		return 0, err
+	}
+	return resp.ID, nil
+}
+
+func webCrearDocumentoProyectoPorAPI(ref string, req apiProyectoDocumentoCreateRequest) (int64, error) {
+	var resp apiCatalogoMutationResponse
+	path := "/api/proyectos/" + url.PathEscape(strings.TrimSpace(ref)) + "/documentacion"
+	if err := webInvocarAPIJSON(http.MethodPost, path, req, &resp); err != nil {
+		return 0, err
+	}
+	return resp.ID, nil
 }
 
 func webFormBool(r *http.Request, key string) bool {

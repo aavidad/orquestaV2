@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package cmd
 
 import (
@@ -157,5 +164,27 @@ func TestMemoriaUsaAPICuandoHayServidor(t *testing.T) {
 	})
 	if !strings.Contains(outGuardar, "Entidad de memoria guardada: Core_API") {
 		t.Fatalf("salida guardar via api inesperada:\n%s", outGuardar)
+	}
+}
+
+func TestMemoriaExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	resetCommandFlags(memoriaListarCmd)
+	if err := memoriaListarCmd.RunE(memoriaListarCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("memoria listar deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(memoriaVerCmd)
+	if err := memoriaVerCmd.RunE(memoriaVerCmd, []string{"Core_API"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("memoria ver deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(memoriaGuardarCmd)
+	_ = memoriaGuardarCmd.Flags().Set("valor", `{"version":"v3"}`)
+	if err := memoriaGuardarCmd.RunE(memoriaGuardarCmd, []string{"Core_API", "api"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("memoria guardar deberia exigir servidor, err=%v", err)
 	}
 }

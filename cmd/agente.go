@@ -59,6 +59,14 @@ func registrarAutoPausaLocal(nombre string, minutos int, motivoPausa, detalle st
 	return nil
 }
 
+func agenteModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func agenteErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
+}
+
 type proyectoBundle struct {
 	ID      int64  `json:"id"`
 	Slug    string `json:"slug"`
@@ -369,6 +377,8 @@ var agentePrepararCmd = &cobra.Command{
 			return err
 		} else if ok {
 			return imprimirAgentePreparar(out, jsonOut)
+		} else if !agenteModoRecuperacionLocalExplicito() {
+			return agenteErrorServerFirst()
 		}
 
 		out, err := prepararAgenteLocal(agenteNombre, proyectoRef, conectorRef, modelo, razonamiento, perfilTarea)
@@ -423,6 +433,8 @@ var agenteTickCmd = &cobra.Command{
 			return err
 		} else if ok {
 			return imprimirAgenteTick(out, jsonOut)
+		} else if !agenteModoRecuperacionLocalExplicito() {
+			return agenteErrorServerFirst()
 		}
 
 		if err := ensureLocalDB(); err != nil {
@@ -483,6 +495,11 @@ func init() {
 	agentePrepararCmd.Flags().String("perfil", "", "Perfil de tarea: orquestacion, analisis, script, implementacion, revision, etc.")
 	agentePrepararCmd.Flags().Bool("json", false, "Salida JSON")
 
+	agenteTickCmd.Flags().String("proyecto", "", "Proyecto activo del agente")
+	agenteTickCmd.Flags().String("host", "", "Host que ejecuta el runtime")
+	agenteTickCmd.Flags().Int64("pid", 0, "PID del proceso vivo del agente")
+	agenteTickCmd.Flags().Int("cuota-pct", 0, "Porcentaje restante estimado de cuota")
+	agenteTickCmd.Flags().Bool("finalizado", false, "Marca el tick como final de sesion o ejecucion")
 	agenteTickCmd.Flags().String("motivo", "", "Motivo del estado actual")
 	agenteTickCmd.Flags().Bool("json", false, "Salida JSON")
 
@@ -545,7 +562,9 @@ var agenteEjecutarCmd = &cobra.Command{
 			if ok, err := apiGetQuery("/api/agente/preparar", params, &prep); err != nil {
 				return fmt.Errorf("error preparando agente: %w", err)
 			} else if !ok {
-				// Fallback local robusto (OP-086)
+				if !agenteModoRecuperacionLocalExplicito() {
+					return agenteErrorServerFirst()
+				}
 				prep, err = prepararAgenteLocal(agente, proyecto, conector, modelo, "", "")
 				if err != nil {
 					return fmt.Errorf("error preparando agente (local fallback): %w", err)
@@ -632,10 +651,16 @@ var agenteEjecutarCmd = &cobra.Command{
 							"sistema",
 							detalle,
 						); !ok {
-							_ = registrarAutoPausaLocal(agente, pausaFinal, motivoPausa, detalle)
+							if agenteModoRecuperacionLocalExplicito() {
+								_ = registrarAutoPausaLocal(agente, pausaFinal, motivoPausa, detalle)
+							}
 						} else if err != nil {
-							fmt.Fprintf(os.Stderr, "\n[Orquesta] aviso: no se pudo registrar la auto-pausa via API (%v); usando DB local\n", err)
-							_ = registrarAutoPausaLocal(agente, pausaFinal, motivoPausa, detalle)
+							if agenteModoRecuperacionLocalExplicito() {
+								fmt.Fprintf(os.Stderr, "\n[Orquesta] aviso: no se pudo registrar la auto-pausa via API (%v); usando DB local\n", err)
+								_ = registrarAutoPausaLocal(agente, pausaFinal, motivoPausa, detalle)
+							} else {
+								fmt.Fprintf(os.Stderr, "\n[Orquesta] aviso: no se pudo registrar la auto-pausa via API (%v)\n", err)
+							}
 						}
 						fmt.Printf("⏸ [Orquesta] Agente pausado por %d min.\n", pausaFinal)
 						_ = proc.Process.Kill()
@@ -677,6 +702,9 @@ var agenteHandoffCmd = &cobra.Command{
 			strings.TrimSpace(externalSessionID),
 		)
 		if !ok {
+			if !agenteModoRecuperacionLocalExplicito() {
+				return agenteErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
@@ -722,6 +750,9 @@ var agenteReasignarVivoCmd = &cobra.Command{
 			strings.TrimSpace(externalSessionID),
 		)
 		if !ok {
+			if !agenteModoRecuperacionLocalExplicito() {
+				return agenteErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
@@ -759,6 +790,9 @@ var agentePausarCmd = &cobra.Command{
 				return err
 			}
 		} else {
+			if !agenteModoRecuperacionLocalExplicito() {
+				return agenteErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
@@ -783,6 +817,9 @@ var agentePurgarCmd = &cobra.Command{
 				return err
 			}
 		} else {
+			if !agenteModoRecuperacionLocalExplicito() {
+				return agenteErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
@@ -804,6 +841,9 @@ var agenteRehabilitarCmd = &cobra.Command{
 		nombre := args[0]
 		ok, err := resetReanimacionAgentePorAPI(nombre)
 		if !ok {
+			if !agenteModoRecuperacionLocalExplicito() {
+				return agenteErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
@@ -843,6 +883,9 @@ var agenteFusionarCmd = &cobra.Command{
 			rutaRespaldo = resp.RutaRespaldo
 			resultado = resp.Resultado
 		} else {
+			if !agenteModoRecuperacionLocalExplicito() {
+				return agenteErrorServerFirst()
+			}
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}

@@ -29,10 +29,10 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 - `operacion_agentes_manuales.md`
   Operativa de sesiones manuales, worktrees y Terminator.
-  Incluye el wrapper `scripts/inicio_agente.sh` como entrada recomendada mientras la app no automatice el arranque completo.
+  Incluye el wrapper `scripts/inicio_agente.sh` como vía manual de compatibilidad y recuperación mientras el servicio termina de absorber el arranque completo.
 
 - `uso_actual_app_orquesta.md`
-  Resumen de cómo se usa hoy la web, la API y la CLI de Orquesta antes de que la app cubra el ciclo completo.
+  Resumen del uso actual con política servidor-primero: servicio/daemon como fuente de verdad y CLI/web como clientes.
 
 - `handoff_2026-03-22_codex1.md`
   Estado de relevo con decisiones, deuda abierta y siguiente bloque recomendado.

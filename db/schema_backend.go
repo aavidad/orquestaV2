@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package db
 
 type schemaBackendSpec struct {
@@ -28,7 +35,10 @@ func schemaBackendSpecForDriver(driver string) (schemaBackendSpec, bool) {
 	case "mysql":
 		return schemaBackendSpec{
 			name:              "mysql",
-			supportsBootstrap: false,
+			supportsBootstrap: true,
+			renderDDL: func() string {
+				return schemaDDLForDriver("mysql")
+			},
 			renderSeedSQL: func() string {
 				return schemaSeedDataForDriver("mysql")
 			},

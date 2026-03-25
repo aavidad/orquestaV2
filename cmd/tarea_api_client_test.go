@@ -16,6 +16,42 @@ import (
 	"orquesta/db"
 )
 
+func TestTareaListarExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	db.Close()
+	defer db.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	err := tareaListarCmd.RunE(tareaListarCmd, nil)
+	if err == nil {
+		t.Fatalf("tarea listar deberia exigir servidor o recuperacion local explicita")
+	}
+	if !strings.Contains(err.Error(), "ORQUESTA_FORCE_LOCAL_DB=1") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
+func TestTareaTomarExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	db.Close()
+	defer db.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	err := tareaTomar.RunE(tareaTomar, []string{"12", "Codex1"})
+	if err == nil {
+		t.Fatalf("tarea tomar deberia exigir servidor o recuperacion local explicita")
+	}
+	if !strings.Contains(err.Error(), "ORQUESTA_FORCE_LOCAL_DB=1") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
 func TestTareaNotasUsaAPI(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {

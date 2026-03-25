@@ -9,6 +9,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -19,6 +20,14 @@ import (
 var progresoCmd = &cobra.Command{
 	Use:   "progreso",
 	Short: "Fases y progreso real por proyecto y tarea",
+}
+
+func progresoModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func progresoErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
 }
 
 var progresoVerCmd = &cobra.Command{
@@ -32,6 +41,9 @@ var progresoVerCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
+			if !progresoModoRecuperacionLocalExplicito() {
+				return progresoErrorServerFirst()
+			}
 			resumen, err = db.CalcularResumenProgresoProyecto(proyecto)
 			if err != nil {
 				return err
@@ -73,6 +85,9 @@ var progresoFaseListarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
+			if !progresoModoRecuperacionLocalExplicito() {
+				return progresoErrorServerFirst()
+			}
 			fases, err = db.ListarFasesProyecto(proyecto)
 			if err != nil {
 				return err
@@ -114,6 +129,9 @@ var progresoFaseRegistrarCmd = &cobra.Command{
 		} else if ok {
 			fmt.Printf("✓ Fase #%d registrada\n", resp.ID)
 			return nil
+		}
+		if !progresoModoRecuperacionLocalExplicito() {
+			return progresoErrorServerFirst()
 		}
 		id, err := db.RegistrarFaseProyecto(&db.FaseProyecto{
 			Proyecto:    req.Proyecto,
@@ -174,6 +192,9 @@ var progresoFaseActualizarCmd = &cobra.Command{
 		} else if ok {
 			fmt.Printf("✓ Fase #%d actualizada\n", resp.ID)
 			return nil
+		}
+		if !progresoModoRecuperacionLocalExplicito() {
+			return progresoErrorServerFirst()
 		}
 		fase, err := db.GetFaseProyecto(id)
 		if err != nil {
@@ -238,6 +259,9 @@ var progresoTareaRegistrarCmd = &cobra.Command{
 		if ok, err := registrarAvanceProgresoPorAPI(tareaID, req); err != nil {
 			return err
 		} else if !ok {
+			if !progresoModoRecuperacionLocalExplicito() {
+				return progresoErrorServerFirst()
+			}
 			if err := db.RegistrarAvanceTarea(&db.AvanceTarea{
 				TareaID:        tareaID,
 				Proyecto:       req.Proyecto,

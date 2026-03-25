@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package cmd
 
 import (
@@ -32,6 +39,10 @@ func (f fakeSkillsCatalogoWeb) Listar(context.Context, string, int) ([]*skillsap
 	return f.items, f.err
 }
 
+func newGobernanzaServiceTest() *gobernanzaapp.Service {
+	return gobernanzaapp.NewService(db.GovernanceRepository{})
+}
+
 func TestWebGobernanzaRespetaIdiomaDelRequest(t *testing.T) {
 	prepararDBTemporalCmd(t)
 	prevCatalogo := skillsCatalogoFetcher
@@ -45,7 +56,7 @@ func TestWebGobernanzaRespetaIdiomaDelRequest(t *testing.T) {
 		}},
 	}
 	defer func() { skillsCatalogoFetcher = prevCatalogo }()
-	if _, err := gobernanzaService.SaveRule(gobernanzaapp.SaveRuleInput{
+	if _, err := newGobernanzaServiceTest().SaveRule(gobernanzaapp.SaveRuleInput{
 		TipoAgente:  "programador",
 		Categoria:   "arquitectura",
 		Titulo:      "Puerto",
@@ -54,7 +65,7 @@ func TestWebGobernanzaRespetaIdiomaDelRequest(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CreateRule: %v", err)
 	}
-	if _, err := gobernanzaService.SaveSkill(gobernanzaapp.SaveSkillInput{
+	if _, err := newGobernanzaServiceTest().SaveSkill(gobernanzaapp.SaveSkillInput{
 		TipoAgente:  "programador",
 		Nombre:      "rg",
 		Descripcion: "busqueda rapida",
@@ -63,7 +74,7 @@ func TestWebGobernanzaRespetaIdiomaDelRequest(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CreateSkill: %v", err)
 	}
-	if _, err := gobernanzaService.SaveWorkflow(gobernanzaapp.SaveWorkflowInput{
+	if _, err := newGobernanzaServiceTest().SaveWorkflow(gobernanzaapp.SaveWorkflowInput{
 		TipoAgente:  "programador",
 		Nombre:      "inicio",
 		Descripcion: "flujo base",
@@ -142,7 +153,7 @@ func TestWebGobernanzaImportaSkillDesdeFormulario(t *testing.T) {
 		t.Fatalf("redirect inesperado: %s", loc)
 	}
 
-	skills, err := gobernanzaService.ListSkills("programador", nil)
+	skills, err := newGobernanzaServiceTest().ListSkills("programador", nil)
 	if err != nil {
 		t.Fatalf("ListSkills: %v", err)
 	}
@@ -196,7 +207,7 @@ func TestWebGobernanzaCreaSkillConContratoCompleto(t *testing.T) {
 		t.Fatalf("crear status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
-	skills, err := gobernanzaService.ListSkills("programador", nil)
+	skills, err := newGobernanzaServiceTest().ListSkills("programador", nil)
 	if err != nil {
 		t.Fatalf("ListSkills: %v", err)
 	}

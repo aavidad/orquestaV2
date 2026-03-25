@@ -322,6 +322,8 @@ func commandSupportsServerMode(args []string) bool {
 		}
 	case "respaldo":
 		return len(tokens) > 1 && tokens[1] == "bd"
+	case "importar":
+		return len(tokens) > 1 && tokens[1] == "historial"
 	case "votar":
 		return true
 	case "runtime":
@@ -433,7 +435,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 	case "agente":
-		return len(tokens) > 1 && (tokens[1] == "preparar" || tokens[1] == "tick" || tokens[1] == "pausar" || tokens[1] == "control" || tokens[1] == "eliminar" || tokens[1] == "rehabilitar" || tokens[1] == "fusionar" || tokens[1] == "handoff" || tokens[1] == "reasignar-vivo")
+		return len(tokens) > 1 && (tokens[1] == "preparar" || tokens[1] == "tick" || tokens[1] == "pausar" || tokens[1] == "control" || tokens[1] == "eliminar" || tokens[1] == "rehabilitar" || tokens[1] == "fusionar" || tokens[1] == "handoff" || tokens[1] == "reasignar-vivo" || tokens[1] == "lanzar-plan")
 	case "sesion":
 		if len(tokens) <= 1 {
 			return false
