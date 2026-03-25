@@ -401,9 +401,12 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/reglas", apiHandlerReglas)
 	mux.HandleFunc("/api/reglas/", apiRouterReglas)
 	mux.HandleFunc("/api/skills", apiHandlerSkills)
+	mux.HandleFunc("/api/skills/remotas", apiHandlerSkillsRemotas)
 	mux.HandleFunc("/api/skills/importar", apiHandlerSkillsImportar)
 	mux.HandleFunc("/api/skills/detectar-carencia", apiHandlerSkillsDetectarCarencia)
 	mux.HandleFunc("/api/skills/", apiRouterSkills)
+	mux.HandleFunc("/api/deploy/docker-remoto/plan", apiHandlerDeployDockerRemotePlan)
+	mux.HandleFunc("/api/deploy/docker-remoto/ejecutar", apiHandlerDeployDockerRemoteExecute)
 	mux.HandleFunc("/api/workflows", apiHandlerWorkflows)
 	mux.HandleFunc("/api/workflows/", apiRouterWorkflows)
 	mux.HandleFunc("/api/permisos-catalogo", apiHandlerPermisosCatalogo)
@@ -509,6 +512,17 @@ func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
+	for _, propuesta := range abiertas {
+		if propuesta == nil {
+			continue
+		}
+		votos, err := db.ResumenVotos(propuesta.ID)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		propuesta.Votos = votos
+	}
 	apiWriteJSON(w, http.StatusOK, apiStatusResponse{
 		Agentes:             agentes,
 		ConteoTareas:        counts,
@@ -555,11 +569,23 @@ func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		if err := db.RegistrarAgente(strings.TrimSpace(req.Nombre), strings.TrimSpace(req.Rol)); err != nil {
+		nombre := strings.TrimSpace(req.Nombre)
+		rol := strings.TrimSpace(req.Rol)
+		if rol == "" {
+			rol = "programador"
+		}
+		if nombre == "" {
+			nombreAuto, err := db.RegistrarAgenteAuto(strings.TrimSpace(req.Proveedor), rol)
+			if err != nil {
+				apiError(w, http.StatusBadRequest, err)
+				return
+			}
+			nombre = nombreAuto
+		} else if err := db.RegistrarAgente(nombre, rol); err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true})
+		apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true, "nombre": nombre, "rol": rol})
 	default:
 		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
@@ -948,6 +974,20 @@ func apiRouterSkills(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := db.SetSkillActivo(strings.TrimSpace(req.Actor), id, req.Activa); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+	case "borrar":
+		if !apiRequireMethod(w, r, http.MethodPost) {
+			return
+		}
+		var req apiSkillBorrarRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		if err := db.EliminarSkill(strings.TrimSpace(req.Actor), id); err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
