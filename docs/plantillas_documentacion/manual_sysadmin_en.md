@@ -1,5 +1,7 @@
 # Operations / Sysadmin Manual - [Project Name]
 
+> Developed with Orquesta by Alberto Avidad Fernandez.
+
 ## 1. Goal and owners
 [Explain what this manual covers, who operates the system, and which responsibilities are out of scope.]
 

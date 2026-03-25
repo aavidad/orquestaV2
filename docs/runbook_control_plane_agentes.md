@@ -72,16 +72,17 @@ Paneles web útiles:
 Flujo recomendado:
 
 1. registrar o confirmar agente, proyecto y tarea
-2. preparar bundle con `orquesta agente preparar`
-3. arrancar la sesión manual o el runtime correspondiente
-4. mantener heartbeat con `orquesta agente tick`
-5. observar órdenes y checkpoints desde runtime/web
+2. dejar que el daemon procese `runtime_orders` y gestione el ciclo de vida
+3. usar `orquesta agente preparar` solo para inspección, compatibilidad o rescate
+4. observar órdenes, runtimes y checkpoints desde CLI/web/API
+5. recurrir a scripts manuales solo si el camino oficial daemon/API/control plane no está disponible
 
 Ejemplos:
 
 ```bash
+./orquesta status
+./orquesta runtime ordenes
 ./orquesta agente preparar Codex1 --proyecto orquestador --perfil implementacion --json
-./orquesta agente tick Codex1 --motivo "sesion activa"
 ./orquesta runtime listar
 ```
 

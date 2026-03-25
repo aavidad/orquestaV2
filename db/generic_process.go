@@ -101,10 +101,10 @@ func leerGenericProcessSnapshot(runtimeInst *RuntimeInstance) (*GenericProcessSn
 	if runtime.GOOS != "linux" {
 		return nil, fmt.Errorf("generic_process solo esta soportado en linux")
 	}
-	pid := int64(os.Getpid())
-	if runtimeInst != nil && runtimeInst.PID != nil && *runtimeInst.PID > 0 {
-		pid = *runtimeInst.PID
+	if runtimeInst == nil || runtimeInst.PID == nil || *runtimeInst.PID <= 0 {
+		return nil, fmt.Errorf("generic_process requiere un runtime con PID real")
 	}
+	pid := *runtimeInst.PID
 	statusPath := filepath.Join("/proc", strconv.FormatInt(pid, 10), "status")
 	data, err := os.ReadFile(statusPath)
 	if err != nil {
@@ -192,36 +192,15 @@ func contarFDsProceso(pid int64) (int, error) {
 }
 
 func contarHijosProceso(pid int64) (int, error) {
-	procDir, err := os.ReadDir("/proc")
+	childrenPath := filepath.Join("/proc", strconv.FormatInt(pid, 10), "task", strconv.FormatInt(pid, 10), "children")
+	data, err := os.ReadFile(childrenPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
 		return 0, err
 	}
-	total := 0
-	for _, entry := range procDir {
-		if !entry.IsDir() {
-			continue
-		}
-		childPID, err := strconv.ParseInt(entry.Name(), 10, 64)
-		if err != nil || childPID == pid {
-			continue
-		}
-		statusPath := filepath.Join("/proc", entry.Name(), "status")
-		data, err := os.ReadFile(statusPath)
-		if err != nil {
-			continue
-		}
-		for _, line := range strings.Split(string(data), "\n") {
-			if !strings.HasPrefix(line, "PPid:") {
-				continue
-			}
-			ppid, err := strconv.ParseInt(strings.TrimSpace(strings.TrimPrefix(line, "PPid:")), 10, 64)
-			if err == nil && ppid == pid {
-				total++
-			}
-			break
-		}
-	}
-	return total, nil
+	return len(strings.Fields(string(data))), nil
 }
 
 func logicalStateFromProcState(state string) string {

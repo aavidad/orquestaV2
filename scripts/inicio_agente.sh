@@ -9,10 +9,13 @@ usage() {
 Uso:
   scripts/inicio_agente.sh <agente> [--tarea <id>] [--proyecto <slug|ruta>] [--no-auto]
 
-Hace el arranque manual base de un agente:
+Hace el arranque manual base de un agente como compatibilidad/rescate:
   1. inicia sesión en Orquesta
   2. lista sus tareas
   3. arranca una tarea si se indica o si hay una única candidata clara
+
+No es la vía oficial del orquestador autónomo. La operación normal debe pasar
+por daemon + API + control plane.
 
 Opciones:
   --tarea <id>       inicia explícitamente esa tarea

@@ -10,11 +10,7 @@ package cmd
 import (
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
-
-	"orquesta/db"
 )
 
 func TestNormalizarAddrServidorLocal(t *testing.T) {
@@ -40,24 +36,12 @@ func TestNormalizarAddrServidorLocal(t *testing.T) {
 }
 
 func TestRegistrarRutasServeMontaSuperficieOperativa(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		db.Close()
-	}()
-	if err := db.Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporalCmd(t)
 
 	mux := http.NewServeMux()
 	registrarRutasServe(mux)
 
-	for _, path := range []string{"/asignaciones", "/sesiones", "/proyectos", "/git"} {
+	for _, path := range []string{"/asignaciones", "/sesiones", "/proyectos", "/gobernanza", "/git"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, req)

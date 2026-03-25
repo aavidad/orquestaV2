@@ -8,35 +8,12 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package db
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 )
 
 func abrirDBTemporalMemoria(t *testing.T) {
 	t.Helper()
-
-	if DB != nil {
-		Close()
-	}
-
-	prev := os.Getenv("ORQUESTA_DB")
-	ruta := filepath.Join(t.TempDir(), "orquesta.db")
-	if err := os.Setenv("ORQUESTA_DB", ruta); err != nil {
-		t.Fatalf("setenv ORQUESTA_DB: %v", err)
-	}
-	t.Cleanup(func() {
-		Close()
-		if prev == "" {
-			_ = os.Unsetenv("ORQUESTA_DB")
-			return
-		}
-		_ = os.Setenv("ORQUESTA_DB", prev)
-	})
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	_ = prepararDBTemporalConNombre(t, "orquesta-memoria-test.db")
 }
 
 func TestGuardarYLeerMemoriaProyecto(t *testing.T) {

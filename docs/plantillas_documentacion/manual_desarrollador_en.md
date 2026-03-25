@@ -1,5 +1,7 @@
 # Developer Manual - [Project Name]
 
+> Developed with Orquesta by Alberto Avidad Fernandez.
+
 ## 1. Technical scope
 [Describe what the project covers, its limits, and which external components are critical.]
 

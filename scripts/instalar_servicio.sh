@@ -48,6 +48,7 @@ sudo systemctl status "${UNIT_ORQUESTA}" --no-pager -l | head -20
 echo ""
 echo "✅ Orquesta instalada como servicio."
 echo "   Ver logs:   journalctl -u ${UNIT_ORQUESTA} -f"
-echo "   Vigilante:  sudo systemctl enable --now ${UNIT_VIGILANTE}"
+echo "   Health:     curl -fsS http://127.0.0.1:16543/api/status"
+echo "   Vigilante legacy/manual: sudo systemctl enable --now ${UNIT_VIGILANTE}"
 echo "   Detener:    sudo systemctl stop ${UNIT_ORQUESTA}"
 echo "   Deshabilitar: sudo systemctl disable ${UNIT_ORQUESTA}"

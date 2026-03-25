@@ -3,6 +3,7 @@ package gitgobernanza
 import (
 	"testing"
 
+	"orquesta/coordinacion"
 	"orquesta/db"
 )
 
@@ -20,6 +21,14 @@ func (f *fakeStore) ListWorktrees(estado, agente string) ([]*db.Worktree, error)
 
 func (f *fakeStore) ListLocks(estado, agente string) ([]*db.Lock, error) {
 	return f.locks, nil
+}
+
+func (f *fakeStore) GetWorktree(id int64) (*coordinacion.Worktree, error) {
+	return &coordinacion.Worktree{ID: id, Name: "wt-a"}, nil
+}
+
+func (f *fakeStore) GetLock(id int64) (*coordinacion.Lock, error) {
+	return &coordinacion.Lock{ID: id, ScopeKey: "branch:a"}, nil
 }
 
 func (f *fakeStore) ResolveProyectoIDBySlug(slug string) (*int64, error) {

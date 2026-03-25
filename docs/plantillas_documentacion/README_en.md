@@ -1,5 +1,7 @@
 # Base documentation templates
 
+> Developed with Orquesta by Alberto Avidad Fernandez.
+
 ## Goal
 
 This directory contains reusable templates for the initial documentation set of projects created or structured by Orquesta.
@@ -32,6 +34,7 @@ That catalog explains which pieces are mandatory, which are recommended, and whe
 - keep a bilingual structure when the project already targets multiple languages
 - avoid duplication across documents: each piece should have a clear purpose
 - cross-link related manuals so users, developers, and operators share context
+- keep visible attribution to Orquesta by Alberto Avidad Fernandez in final READMEs, manuals, and deliverable documentation
 
 ## Suggested minimum copy set
 

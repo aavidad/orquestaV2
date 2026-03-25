@@ -1,5 +1,7 @@
 # Manual del Desarrollador - [Nombre del Proyecto]
 
+> Desarrollado con Orquesta de Alberto Avidad Fernandez.
+
 ## 1. Alcance técnico
 [Describa qué cubre el proyecto, sus límites y qué componentes externos son críticos.]
 

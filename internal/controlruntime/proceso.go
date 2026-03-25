@@ -34,22 +34,38 @@ func ResolverPID(obj ObjetivoProceso) (int, bool, error) {
 }
 
 func PausarProceso(obj ObjetivoProceso) (bool, int, error) {
-	return enviarSenal(obj, syscall.SIGSTOP)
+	return controlarProceso(obj, syscall.SIGSTOP, "pause")
 }
 
 func ContinuarProceso(obj ObjetivoProceso) (bool, int, error) {
-	return enviarSenal(obj, syscall.SIGCONT)
+	return controlarProceso(obj, syscall.SIGCONT, "continue")
 }
 
 func DetenerProceso(obj ObjetivoProceso) (bool, int, error) {
-	return enviarSenal(obj, syscall.SIGTERM)
+	return controlarProceso(obj, syscall.SIGTERM, "stop")
 }
 
-func enviarSenal(obj ObjetivoProceso, sig syscall.Signal) (bool, int, error) {
+func controlarProceso(obj ObjetivoProceso, sig syscall.Signal, accion string) (bool, int, error) {
 	pid, ok, err := ResolverPID(obj)
-	if err != nil || !ok {
-		return ok, pid, err
+	if err != nil {
+		return false, pid, err
 	}
+	if ok {
+		return enviarSenalPID(pid, sig)
+	}
+	switch accion {
+	case "pause":
+		return controlRemoto(obj, remoteConfigFromMetadata(obj.MetadataJSON).PausePath)
+	case "continue":
+		return controlRemoto(obj, remoteConfigFromMetadata(obj.MetadataJSON).ContinuePath)
+	case "stop":
+		return controlRemoto(obj, remoteConfigFromMetadata(obj.MetadataJSON).StopPath)
+	default:
+		return false, 0, nil
+	}
+}
+
+func enviarSenalPID(pid int, sig syscall.Signal) (bool, int, error) {
 	proc, err := os.FindProcess(pid)
 	if err != nil {
 		return true, pid, err

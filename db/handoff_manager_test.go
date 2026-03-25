@@ -5,6 +5,19 @@ import (
 	"time"
 )
 
+func registrarPresupuestoCritico(t *testing.T, sesionID int64, remainingSeconds int64, checkedAt time.Time) {
+	t.Helper()
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:         sesionID,
+		WindowKind:       "5h",
+		RemainingSeconds: &remainingSeconds,
+		BudgetSource:     "manual",
+		CheckedAt:        checkedAt,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion: %v", err)
+	}
+}
+
 // setHeartbeatStale fuerza el heartbeat de una sesión a un tiempo muy antiguo
 // para que sea detectada como candidata a handoff.
 func setHeartbeatStale(t *testing.T, sesionID int64) {
@@ -65,6 +78,9 @@ func TestDetectarAgentesAgotadosDevuelveAgentesConHeartbeatAntiguo(t *testing.T)
 	if candidatos[0].SesionID == nil {
 		t.Fatalf("sesion_id nula en candidato")
 	}
+	if candidatos[0].Disparador != "watchdog" || !candidatos[0].RequiereSondeo {
+		t.Fatalf("candidato watchdog inesperado: %+v", candidatos[0])
+	}
 }
 
 func TestDetectarAgentesAgotadosIgnoraHeartbeatReciente(t *testing.T) {
@@ -108,6 +124,129 @@ func TestDetectarAgentesAgotadosExcluyeConHandoffPendiente(t *testing.T) {
 		if c.Agente == "Codex1" {
 			t.Fatalf("Codex1 no debería aparecer: ya tiene handoff pendiente")
 		}
+	}
+}
+
+func TestDetectarAgentesAgotadosIncluyePresupuestoCriticoConHeartbeatReciente(t *testing.T) {
+	prepararDBTemporal(t)
+
+	sesionID, _ := prepararAgenteConTareaEnProgreso(t, "Codex1")
+	registrarPresupuestoCritico(t, sesionID, 15, time.Now().UTC())
+
+	candidatos, err := DetectarAgentesAgotados()
+	if err != nil {
+		t.Fatalf("DetectarAgentesAgotados: %v", err)
+	}
+	if len(candidatos) != 1 {
+		t.Fatalf("esperaba 1 candidato por presupuesto, got=%d", len(candidatos))
+	}
+	if candidatos[0].Disparador != "presupuesto" || candidatos[0].RequiereSondeo {
+		t.Fatalf("candidato presupuesto inesperado: %+v", candidatos[0])
+	}
+}
+
+func TestDetectarAgentesAgotadosIgnoraPresupuestoObsoletoConHeartbeatReciente(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := ConfigSet("pool_budget_snapshot_max_age_seconds", "60"); err != nil {
+		t.Fatalf("ConfigSet freshness: %v", err)
+	}
+	sesionID, _ := prepararAgenteConTareaEnProgreso(t, "Codex1")
+	registrarPresupuestoCritico(t, sesionID, 15, time.Now().UTC().Add(-10*time.Minute))
+
+	candidatos, err := DetectarAgentesAgotados()
+	if err != nil {
+		t.Fatalf("DetectarAgentesAgotados: %v", err)
+	}
+	if len(candidatos) != 0 {
+		t.Fatalf("no esperaba candidato con presupuesto obsoleto y heartbeat reciente: %+v", candidatos)
+	}
+}
+
+func TestDetectarAgentesAgotadosPrefiereTareaDelProyectoActivo(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	proyectoA, err := UpsertProyecto(&Proyecto{
+		Slug:    "proyecto-a",
+		Nombre:  "Proyecto A",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto A: %v", err)
+	}
+	proyectoB, err := UpsertProyecto(&Proyecto{
+		Slug:    "proyecto-b",
+		Nombre:  "Proyecto B",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto B: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoA,
+		CWD:         t.TempDir(),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto: %v", err)
+	}
+
+	tareaB, err := CrearTarea(&Tarea{
+		Titulo:     "Tarea en progreso B",
+		Modulo:     "orquestador",
+		Prioridad:  PrioridadMedia,
+		CreadoPor:  "alberto",
+		ProyectoID: &proyectoB,
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea B: %v", err)
+	}
+	if err := TomarTarea(tareaB, "Codex1"); err != nil {
+		t.Fatalf("TomarTarea B: %v", err)
+	}
+	if err := IniciarTarea(tareaB, "Codex1"); err != nil {
+		t.Fatalf("IniciarTarea B: %v", err)
+	}
+
+	tareaA, err := CrearTarea(&Tarea{
+		Titulo:     "Tarea en progreso A",
+		Modulo:     "orquestador",
+		Prioridad:  PrioridadMedia,
+		CreadoPor:  "alberto",
+		ProyectoID: &proyectoA,
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea A: %v", err)
+	}
+	if err := TomarTarea(tareaA, "Codex1"); err != nil {
+		t.Fatalf("TomarTarea A: %v", err)
+	}
+	if err := IniciarTarea(tareaA, "Codex1"); err != nil {
+		t.Fatalf("IniciarTarea A: %v", err)
+	}
+
+	setHeartbeatStale(t, sesion.ID)
+
+	candidatos, err := DetectarAgentesAgotados()
+	if err != nil {
+		t.Fatalf("DetectarAgentesAgotados: %v", err)
+	}
+	if len(candidatos) != 1 {
+		t.Fatalf("esperaba 1 candidato, got=%d", len(candidatos))
+	}
+	if candidatos[0].TareaID == nil || *candidatos[0].TareaID != tareaA {
+		t.Fatalf("deberia elegir la tarea del proyecto activo de la sesion: %+v", candidatos[0])
+	}
+	if candidatos[0].ProyectoID == nil || *candidatos[0].ProyectoID != proyectoA {
+		t.Fatalf("proyecto candidato inesperado: %+v", candidatos[0])
 	}
 }
 
@@ -260,5 +399,56 @@ func TestProcesarHandoffsBatchEscalaDeSondeoAHandoff(t *testing.T) {
 	}
 	if len(orders) != 1 || orders[0].Tipo != "handoff" {
 		t.Fatalf("orden de handoff no encontrada para Codex2")
+	}
+}
+
+func TestProcesarHandoffsBatchPorPresupuestoNoRequiereSondeo(t *testing.T) {
+	prepararDBTemporal(t)
+
+	sesionID, tareaID := prepararAgenteConTareaEnProgreso(t, "Codex1")
+	registrarPresupuestoCritico(t, sesionID, 15, time.Now().UTC())
+
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+
+	n, err := ProcesarHandoffsBatch()
+	if err != nil {
+		t.Fatalf("ProcesarHandoffsBatch: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 handoff por presupuesto, got=%d", n)
+	}
+
+	agenteDestino := "Codex2"
+	estadoPendiente := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agenteDestino, Estado: &estadoPendiente})
+	if err != nil {
+		t.Fatalf("ListarRuntimeOrders destino: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "handoff" {
+		t.Fatalf("handoff presupuesto inesperado: %+v", orders)
+	}
+
+	agenteOrigen := "Codex1"
+	ordersOrigen, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agenteOrigen, Estado: &estadoPendiente})
+	if err != nil {
+		t.Fatalf("ListarRuntimeOrders origen: %v", err)
+	}
+	for _, order := range ordersOrigen {
+		if order == nil {
+			continue
+		}
+		if order.Tipo == "sync_status" || order.Tipo == "nudge" {
+			t.Fatalf("no deberia sondar watchdog en handoff por presupuesto: %+v", ordersOrigen)
+		}
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("GetTarea: %v", err)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "Codex2" || tarea.Estado != TareaAsignada {
+		t.Fatalf("tarea no reasignada por presupuesto: %+v", tarea)
 	}
 }

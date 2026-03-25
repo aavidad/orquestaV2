@@ -66,6 +66,28 @@ type apiProyectoDescubrirRequest struct {
 	Ruta string `json:"ruta"`
 }
 
+type apiProyectoFabricarAppRequest struct {
+	Nombre      string   `json:"nombre"`
+	Descripcion string   `json:"descripcion"`
+	Tipo        string   `json:"tipo"`
+	Frontend    bool     `json:"frontend"`
+	API         bool     `json:"api"`
+	Auth        bool     `json:"auth"`
+	Database    bool     `json:"db"`
+	Docker      bool     `json:"docker"`
+	I18n        bool     `json:"i18n"`
+	Idiomas     []string `json:"idiomas"`
+	Por         string   `json:"por"`
+}
+
+type apiProyectoFabricarAppResponse struct {
+	OK      bool   `json:"ok"`
+	Slug    string `json:"slug"`
+	Tipo    string `json:"tipo"`
+	Created int    `json:"created"`
+	Backlog int    `json:"backlog"`
+}
+
 type apiLenguajePoliticaResponse struct {
 	Politica *db.LanguagePolicy `json:"politica"`
 }
@@ -99,8 +121,8 @@ type apiLenguajeMatrizDeleteRequest struct {
 }
 
 type apiAgenteRequest struct {
-	Nombre string `json:"nombre"`
-	Rol    string `json:"rol"`
+	Nombre    string `json:"nombre"`
+	Rol       string `json:"rol"`
 	Proveedor string `json:"proveedor"`
 }
 
@@ -392,6 +414,15 @@ func cargarProyectoDesdeAPI(ref string) (*db.Proyecto, bool, error) {
 	return resp.Proyecto, true, nil
 }
 
+func fabricarAppProyectoPorAPI(ref string, req apiProyectoFabricarAppRequest) (*apiProyectoFabricarAppResponse, bool, error) {
+	var resp apiProyectoFabricarAppResponse
+	ok, err := apiPost(fmt.Sprintf("/api/proyectos/%s/fabricar-app", url.PathEscape(strings.TrimSpace(ref))), req, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
 func cargarReglasDesdeAPI(rol string, activa *bool) ([]*db.Regla, bool, error) {
 	var resp apiReglasResponse
 	query := url.Values{}
@@ -498,6 +529,15 @@ func cargarVersionesSkillDesdeAPI(id int64) ([]*db.SkillVersion, bool, error) {
 		return nil, ok, err
 	}
 	return resp.Versiones, true, nil
+}
+
+func detectarCarenciaSkillPorAPI(req apiSkillDeteccionRequest) (*apiSkillDeteccionResponse, bool, error) {
+	var resp apiSkillDeteccionResponse
+	ok, err := apiPost("/api/skills/detectar-carencia", req, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
 }
 
 func cargarWorkflowsDesdeAPI(rol string, activo *bool) ([]*db.Workflow, bool, error) {

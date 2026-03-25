@@ -15,6 +15,10 @@ import (
 func TestRegistrarYLeerPresupuestoSesion(t *testing.T) {
 	abrirDBTemporalMemoria(t)
 
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+
 	sesionID, err := IniciarSesion("codex1")
 	if err != nil {
 		t.Fatalf("IniciarSesion: %v", err)
@@ -56,6 +60,10 @@ func TestRegistrarYLeerPresupuestoSesion(t *testing.T) {
 
 func TestEvaluarPresupuestoSesionHandoffPreventivo(t *testing.T) {
 	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
 
 	sesionID, err := IniciarSesion("codex1")
 	if err != nil {

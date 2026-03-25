@@ -1,5 +1,7 @@
 # Manual de Usuario - [Nombre del Proyecto]
 
+> Desarrollado con Orquesta de Alberto Avidad Fernandez.
+
 ## 1. Objetivo del manual
 [Explique qué cubre este documento, para qué perfiles está pensado y qué queda fuera.]
 

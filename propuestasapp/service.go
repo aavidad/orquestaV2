@@ -12,6 +12,8 @@ type Store interface {
 	GetProposal(codigo string) (*db.Propuesta, error)
 	CreateProposal(p *db.Propuesta) (int64, error)
 	CloseProposal(codigo, estado, agente string) error
+	ReopenProposal(codigo, agente string) (int, error)
+	RepairPendingVotes(codigo, agente string) (int, error)
 	Vote(propuestaID int64, agente string, posicion db.PosicionVoto, comentario string) (bool, error)
 	CountVotes(propuestaID int64) (int, int, int, int, error)
 	ListVotes(propuestaID int64) ([]*db.Voto, error)
@@ -82,6 +84,14 @@ func (s *Service) Close(codigo, estado, agente string) error {
 	return s.store.CloseProposal(strings.TrimSpace(codigo), strings.TrimSpace(estado), strings.TrimSpace(agente))
 }
 
+func (s *Service) Reopen(codigo, agente string) (int, error) {
+	return s.store.ReopenProposal(strings.TrimSpace(codigo), strings.TrimSpace(agente))
+}
+
+func (s *Service) RepairPendingVotes(codigo, agente string) (int, error) {
+	return s.store.RepairPendingVotes(strings.TrimSpace(codigo), strings.TrimSpace(agente))
+}
+
 func (s *Service) Vote(codigo, agente string, posicion db.PosicionVoto, comentario string) error {
 	_, err := s.VoteDetail(codigo, agente, posicion, comentario)
 	return err
@@ -92,10 +102,40 @@ func (s *Service) VoteDetail(codigo, agente string, posicion db.PosicionVoto, co
 	if err != nil {
 		return nil, err
 	}
+	agenteNorm := strings.TrimSpace(agente)
 	if p.Estado != db.PropuestaAbierta {
-		return nil, fmt.Errorf("la propuesta %s ya está cerrada (%s)", p.Codigo, p.Estado)
+		// Permitir voto tardío solo si el agente aún tiene voto pendiente
+		votos, err := s.store.ListVotes(p.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, v := range votos {
+			if strings.EqualFold(v.Agente, agenteNorm) && v.Posicion != db.VotoPendiente {
+				return nil, fmt.Errorf("la propuesta %s ya está cerrada (%s)", p.Codigo, p.Estado)
+			}
+		}
+		// Registrar voto tardío sin re-evaluar consenso
+		if _, err := s.store.Vote(p.ID, agenteNorm, posicion, strings.TrimSpace(comentario)); err != nil {
+			return nil, err
+		}
+		acuerdo, desacuerdo, abstencion, pendiente, err := s.store.CountVotes(p.ID)
+		if err != nil {
+			return nil, err
+		}
+		propuestaActualizada, err := s.store.GetProposal(p.Codigo)
+		if err != nil {
+			return nil, err
+		}
+		return &VoteResult{
+			Proposal:   propuestaActualizada,
+			Consenso:   false,
+			Acuerdo:    acuerdo,
+			Desacuerdo: desacuerdo,
+			Abstencion: abstencion,
+			Pendiente:  pendiente,
+		}, nil
 	}
-	consenso, err := s.store.Vote(p.ID, strings.TrimSpace(agente), posicion, strings.TrimSpace(comentario))
+	consenso, err := s.store.Vote(p.ID, agenteNorm, posicion, strings.TrimSpace(comentario))
 	if err != nil {
 		return nil, err
 	}
@@ -137,6 +177,14 @@ func (Repository) CreateProposal(p *db.Propuesta) (int64, error) {
 
 func (Repository) CloseProposal(codigo, estado, agente string) error {
 	return db.CerrarPropuesta(codigo, estado, agente)
+}
+
+func (Repository) ReopenProposal(codigo, agente string) (int, error) {
+	return db.ReabrirPropuesta(codigo, agente)
+}
+
+func (Repository) RepairPendingVotes(codigo, agente string) (int, error) {
+	return db.RepararVotosPendientesPropuesta(codigo, agente)
 }
 
 func (Repository) Vote(propuestaID int64, agente string, posicion db.PosicionVoto, comentario string) (bool, error) {

@@ -7,6 +7,8 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # Plantilla de ayuda contextual - [Nombre del Proyecto]
 
+> Desarrollado con Orquesta de Alberto Avidad Fernandez.
+
 ## 1. Objetivo
 [Explique qué partes de la interfaz tienen ayuda integrada y con qué criterio se muestra.]
 

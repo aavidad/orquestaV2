@@ -7,6 +7,8 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # Installation guide - [Project Name]
 
+> Developed with Orquesta by Alberto Avidad Fernandez.
+
 ## 1. Goal
 [Explain which installation flow this document covers: local, preproduction, on-premise, or managed environment.]
 

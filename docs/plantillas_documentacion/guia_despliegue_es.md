@@ -7,6 +7,8 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # Guía de despliegue - [Nombre del Proyecto]
 
+> Desarrollado con Orquesta de Alberto Avidad Fernandez.
+
 ## 1. Objetivo
 [Explique qué entornos cubre este despliegue y cuál es la política de promoción entre ellos.]
 

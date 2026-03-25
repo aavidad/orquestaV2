@@ -149,16 +149,22 @@ func TestWebDashboardMuestraCheckpointsRecientes(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/?lang=en", nil)
 	webHandlerDash(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status inesperado dashboard: %d body=%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	for _, needle := range []string{"Checkpoints recientes", "preparar rollback seguro", "/time-travel/" + itoa(cpID)} {
+	for _, needle := range []string{"Project status", "Recent checkpoints", "preparar rollback seguro", "/time-travel/" + itoa(cpID)} {
 		if !strings.Contains(body, needle) {
 			t.Fatalf("dashboard sin %q: %s", needle, body)
 		}
+	}
+	if !strings.Contains(body, `<html lang="en">`) {
+		t.Fatalf("lang html inesperado: %s", body)
+	}
+	if got := rec.Header().Get("Content-Language"); got != "en" {
+		t.Fatalf("Content-Language=%q", got)
 	}
 }

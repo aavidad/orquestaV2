@@ -7,6 +7,8 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # Guía de instalación - [Nombre del Proyecto]
 
+> Desarrollado con Orquesta de Alberto Avidad Fernandez.
+
 ## 1. Objetivo
 [Explique qué instalación cubre este documento: local, preproducción, on-premise o entorno administrado.]
 

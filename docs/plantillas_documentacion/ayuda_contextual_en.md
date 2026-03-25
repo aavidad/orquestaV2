@@ -7,6 +7,8 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # Contextual help template - [Project Name]
 
+> Developed with Orquesta by Alberto Avidad Fernandez.
+
 ## 1. Goal
 [Explain which interface areas include embedded help and the criteria used to show it.]
 

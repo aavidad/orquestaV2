@@ -15,15 +15,116 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"orquesta/db"
 )
 
+var cmdTestDBMu sync.Mutex
+var cmdTestBootstrapOnce sync.Once
+var cmdTestBootstrapData []byte
+var cmdTestBootstrapErr error
+
+func cargarPlantillaDBCmdTest() ([]byte, error) {
+	cmdTestBootstrapOnce.Do(func() {
+		tmp, err := os.MkdirTemp("", "orquesta-cmd-db-template-*")
+		if err != nil {
+			cmdTestBootstrapErr = err
+			return
+		}
+		defer os.RemoveAll(tmp)
+
+		anteriorDB := os.Getenv("ORQUESTA_DB")
+		anteriorDSN, teniaDSN := os.LookupEnv("ORQUESTA_DB_DSN")
+		anteriorDriver, teniaDriver := os.LookupEnv("ORQUESTA_DB_DRIVER")
+		anteriorBackend, teniaBackend := os.LookupEnv("ORQUESTA_DB_BACKEND")
+		anteriorMaxOpenConns, teniaMaxOpenConns := os.LookupEnv("ORQUESTA_DB_MAX_OPEN_CONNS")
+		anteriorBootstrap, teniaBootstrap := os.LookupEnv("ORQUESTA_DB_BOOTSTRAP")
+		anteriorRoot := os.Getenv("ORQUESTA_WORKSPACE_ROOT")
+		anteriorForceLocal, teniaForceLocal := os.LookupEnv("ORQUESTA_FORCE_LOCAL_DB")
+		anteriorDisableServer, teniaDisableServer := os.LookupEnv("ORQUESTA_DISABLE_SERVER_CLIENT")
+		defer func() {
+			db.Close()
+			db.DB = nil
+			if anteriorDB == "" {
+				_ = os.Unsetenv("ORQUESTA_DB")
+			} else {
+				_ = os.Setenv("ORQUESTA_DB", anteriorDB)
+			}
+			if teniaDSN {
+				_ = os.Setenv("ORQUESTA_DB_DSN", anteriorDSN)
+			} else {
+				_ = os.Unsetenv("ORQUESTA_DB_DSN")
+			}
+			if teniaDriver {
+				_ = os.Setenv("ORQUESTA_DB_DRIVER", anteriorDriver)
+			} else {
+				_ = os.Unsetenv("ORQUESTA_DB_DRIVER")
+			}
+			if teniaBackend {
+				_ = os.Setenv("ORQUESTA_DB_BACKEND", anteriorBackend)
+			} else {
+				_ = os.Unsetenv("ORQUESTA_DB_BACKEND")
+			}
+			if teniaMaxOpenConns {
+				_ = os.Setenv("ORQUESTA_DB_MAX_OPEN_CONNS", anteriorMaxOpenConns)
+			} else {
+				_ = os.Unsetenv("ORQUESTA_DB_MAX_OPEN_CONNS")
+			}
+			if teniaBootstrap {
+				_ = os.Setenv("ORQUESTA_DB_BOOTSTRAP", anteriorBootstrap)
+			} else {
+				_ = os.Unsetenv("ORQUESTA_DB_BOOTSTRAP")
+			}
+			if anteriorRoot == "" {
+				_ = os.Unsetenv("ORQUESTA_WORKSPACE_ROOT")
+			} else {
+				_ = os.Setenv("ORQUESTA_WORKSPACE_ROOT", anteriorRoot)
+			}
+			if teniaForceLocal {
+				_ = os.Setenv("ORQUESTA_FORCE_LOCAL_DB", anteriorForceLocal)
+			} else {
+				_ = os.Unsetenv("ORQUESTA_FORCE_LOCAL_DB")
+			}
+			if teniaDisableServer {
+				_ = os.Setenv("ORQUESTA_DISABLE_SERVER_CLIENT", anteriorDisableServer)
+			} else {
+				_ = os.Unsetenv("ORQUESTA_DISABLE_SERVER_CLIENT")
+			}
+		}()
+
+		dbPath := filepath.Join(tmp, "orquesta-cmd-template.db")
+		_ = os.Setenv("ORQUESTA_DB", dbPath)
+		_ = os.Unsetenv("ORQUESTA_DB_DSN")
+		_ = os.Unsetenv("ORQUESTA_DB_DRIVER")
+		_ = os.Unsetenv("ORQUESTA_DB_BACKEND")
+		_ = os.Unsetenv("ORQUESTA_DB_MAX_OPEN_CONNS")
+		_ = os.Unsetenv("ORQUESTA_DB_BOOTSTRAP")
+		_ = os.Setenv("ORQUESTA_WORKSPACE_ROOT", tmp)
+		_ = os.Setenv("ORQUESTA_FORCE_LOCAL_DB", "1")
+		_ = os.Setenv("ORQUESTA_DISABLE_SERVER_CLIENT", "1")
+
+		if err := db.Open(); err != nil {
+			cmdTestBootstrapErr = err
+			return
+		}
+		db.Close()
+		cmdTestBootstrapData, cmdTestBootstrapErr = os.ReadFile(dbPath)
+	})
+	return cmdTestBootstrapData, cmdTestBootstrapErr
+}
+
 func prepararDBTemporalCmd(t *testing.T) string {
 	t.Helper()
+	cmdTestDBMu.Lock()
 
 	anteriorDB := os.Getenv("ORQUESTA_DB")
+	anteriorDSN, teniaDSN := os.LookupEnv("ORQUESTA_DB_DSN")
+	anteriorDriver, teniaDriver := os.LookupEnv("ORQUESTA_DB_DRIVER")
+	anteriorBackend, teniaBackend := os.LookupEnv("ORQUESTA_DB_BACKEND")
+	anteriorMaxOpenConns, teniaMaxOpenConns := os.LookupEnv("ORQUESTA_DB_MAX_OPEN_CONNS")
+	anteriorBootstrap, teniaBootstrap := os.LookupEnv("ORQUESTA_DB_BOOTSTRAP")
 	anteriorRoot := os.Getenv("ORQUESTA_WORKSPACE_ROOT")
 	anteriorForceLocal, teniaForceLocal := os.LookupEnv("ORQUESTA_FORCE_LOCAL_DB")
 	anteriorDisableServer, teniaDisableServer := os.LookupEnv("ORQUESTA_DISABLE_SERVER_CLIENT")
@@ -34,6 +135,31 @@ func prepararDBTemporalCmd(t *testing.T) string {
 			_ = os.Unsetenv("ORQUESTA_DB")
 		} else {
 			_ = os.Setenv("ORQUESTA_DB", anteriorDB)
+		}
+		if teniaDSN {
+			_ = os.Setenv("ORQUESTA_DB_DSN", anteriorDSN)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_DB_DSN")
+		}
+		if teniaDriver {
+			_ = os.Setenv("ORQUESTA_DB_DRIVER", anteriorDriver)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_DB_DRIVER")
+		}
+		if teniaBackend {
+			_ = os.Setenv("ORQUESTA_DB_BACKEND", anteriorBackend)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_DB_BACKEND")
+		}
+		if teniaMaxOpenConns {
+			_ = os.Setenv("ORQUESTA_DB_MAX_OPEN_CONNS", anteriorMaxOpenConns)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_DB_MAX_OPEN_CONNS")
+		}
+		if teniaBootstrap {
+			_ = os.Setenv("ORQUESTA_DB_BOOTSTRAP", anteriorBootstrap)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_DB_BOOTSTRAP")
 		}
 		if anteriorRoot == "" {
 			_ = os.Unsetenv("ORQUESTA_WORKSPACE_ROOT")
@@ -50,6 +176,7 @@ func prepararDBTemporalCmd(t *testing.T) string {
 		} else {
 			_ = os.Unsetenv("ORQUESTA_DISABLE_SERVER_CLIENT")
 		}
+		cmdTestDBMu.Unlock()
 	})
 
 	db.Close()
@@ -57,8 +184,30 @@ func prepararDBTemporalCmd(t *testing.T) string {
 
 	tmp := t.TempDir()
 	dbPath := filepath.Join(tmp, "orquesta-api-test.db")
+	plantilla, err := cargarPlantillaDBCmdTest()
+	if err != nil {
+		t.Fatalf("cargar plantilla db cmd test: %v", err)
+	}
+	if err := os.WriteFile(dbPath, plantilla, 0o600); err != nil {
+		t.Fatalf("write plantilla db cmd test: %v", err)
+	}
 	if err := os.Setenv("ORQUESTA_DB", dbPath); err != nil {
 		t.Fatalf("setenv ORQUESTA_DB: %v", err)
+	}
+	if err := os.Unsetenv("ORQUESTA_DB_DSN"); err != nil {
+		t.Fatalf("unsetenv ORQUESTA_DB_DSN: %v", err)
+	}
+	if err := os.Unsetenv("ORQUESTA_DB_DRIVER"); err != nil {
+		t.Fatalf("unsetenv ORQUESTA_DB_DRIVER: %v", err)
+	}
+	if err := os.Unsetenv("ORQUESTA_DB_BACKEND"); err != nil {
+		t.Fatalf("unsetenv ORQUESTA_DB_BACKEND: %v", err)
+	}
+	if err := os.Unsetenv("ORQUESTA_DB_MAX_OPEN_CONNS"); err != nil {
+		t.Fatalf("unsetenv ORQUESTA_DB_MAX_OPEN_CONNS: %v", err)
+	}
+	if err := os.Unsetenv("ORQUESTA_DB_BOOTSTRAP"); err != nil {
+		t.Fatalf("unsetenv ORQUESTA_DB_BOOTSTRAP: %v", err)
 	}
 	if err := os.Setenv("ORQUESTA_WORKSPACE_ROOT", tmp); err != nil {
 		t.Fatalf("setenv ORQUESTA_WORKSPACE_ROOT: %v", err)
@@ -510,6 +659,21 @@ func TestAPIProyectoDescubrirYGestionAgentes(t *testing.T) {
 		t.Fatalf("status alta agente inesperado: %d body=%s", recAlta.Code, recAlta.Body.String())
 	}
 
+	agenteAutoBody, _ := json.Marshal(apiAgenteRequest{Proveedor: "claude", Rol: "programador"})
+	recAltaAuto := httptest.NewRecorder()
+	reqAltaAuto := httptest.NewRequest(http.MethodPost, "/api/agentes", bytes.NewReader(agenteAutoBody))
+	mux.ServeHTTP(recAltaAuto, reqAltaAuto)
+	if recAltaAuto.Code != http.StatusCreated {
+		t.Fatalf("status alta agente auto inesperado: %d body=%s", recAltaAuto.Code, recAltaAuto.Body.String())
+	}
+	var altaAutoResp map[string]any
+	if err := json.Unmarshal(recAltaAuto.Body.Bytes(), &altaAutoResp); err != nil {
+		t.Fatalf("decode alta auto: %v", err)
+	}
+	if altaAutoResp["nombre"] != "Claude1" {
+		t.Fatalf("nombre auto inesperado: %+v", altaAutoResp)
+	}
+
 	recRetirar := httptest.NewRecorder()
 	reqRetirar := httptest.NewRequest(http.MethodPost, "/api/agentes/temporal/retirar", bytes.NewReader([]byte(`{}`)))
 	mux.ServeHTTP(recRetirar, reqRetirar)
@@ -522,6 +686,58 @@ func TestAPIProyectoDescubrirYGestionAgentes(t *testing.T) {
 	mux.ServeHTTP(recRehabilitar, reqRehabilitar)
 	if recRehabilitar.Code != http.StatusOK {
 		t.Fatalf("status rehabilitar inesperado: %d body=%s", recRehabilitar.Code, recRehabilitar.Body.String())
+	}
+}
+
+func TestAPIProyectoFabricarApp(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "demo-app",
+		Nombre:  "Demo App",
+		RutaAbs: filepath.Join(tmp, "demo-app"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	body, _ := json.Marshal(apiProyectoFabricarAppRequest{
+		Tipo:        "web_api",
+		Nombre:      "Demo App",
+		Descripcion: "Aplicacion demo",
+		Frontend:    true,
+		API:         true,
+		Docker:      true,
+		I18n:        true,
+		Idiomas:     []string{"es", "en"},
+		Por:         "Codex3",
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/proyectos/demo-app/fabricar-app", bytes.NewReader(body))
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status fabricar-app inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp apiProyectoFabricarAppResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode fabricar-app: %v", err)
+	}
+	if !resp.OK || resp.Slug != "demo-app" || resp.Created < 4 {
+		t.Fatalf("respuesta fabricar-app inesperada: %+v", resp)
+	}
+
+	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas: %v", err)
+	}
+	if len(tareas) != resp.Created {
+		t.Fatalf("tareas creadas=%d respuesta=%d", len(tareas), resp.Created)
 	}
 }
 

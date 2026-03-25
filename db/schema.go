@@ -849,6 +849,7 @@ INSERT INTO config (clave, valor) VALUES
     ('propuesta_min_non_author_votes','2'),
     ('pool_handoff_threshold_seconds','1800'),
     ('pool_handoff_threshold_ratio','0.10'),
+    ('pool_budget_snapshot_max_age_seconds','300'),
     ('pool_default_budget_source','manual'),
     ('model_policy_default_profile','implementacion'),
     ('model_policy_default_reasoning','high'),

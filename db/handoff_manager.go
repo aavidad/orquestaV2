@@ -25,6 +25,7 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package db
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -34,19 +35,21 @@ import (
 // HandoffCandidato describe un agente que cumple las condiciones para ser
 // relevado automáticamente.
 type HandoffCandidato struct {
-	Agente      string        // agente con la sesión inactiva
-	TareaID     *int64        // tarea en progreso que tiene asignada
-	SesionID    *int64        // sesión activa del agente
-	HandleID    *int64        // runtime handle activo (puede ser nil)
-	ProyectoID  *int64        // proyecto de la tarea/sesión
-	Inactividad time.Duration // tiempo desde el último heartbeat
-	Motivo      string        // descripción del motivo de detección
+	Agente         string        // agente con la sesión inactiva o en presupuesto crítico
+	TareaID        *int64        // tarea en progreso que tiene asignada
+	SesionID       *int64        // sesión activa del agente
+	HandleID       *int64        // runtime handle activo (puede ser nil)
+	ProyectoID     *int64        // proyecto de la tarea/sesión
+	Inactividad    time.Duration // tiempo desde el último heartbeat
+	Motivo         string        // descripción del motivo de detección
+	Disparador     string        // watchdog | presupuesto
+	RequiereSondeo bool          // true si debe emitirse sync_status/nudge antes del handoff
 }
 
 // DetectarAgentesAgotados devuelve la lista de agentes que tienen tareas
-// en_progreso y cuya sesión lleva inactiva más de pool_handoff_threshold_seconds.
-// Excluye agentes que ya tienen una runtime_order de handoff pendiente o ejecutando
-// para evitar handoffs duplicados.
+// en_progreso y cumplen condiciones de relevo automático por watchdog o
+// presupuesto. Excluye agentes que ya tienen una runtime_order de handoff
+// pendiente o ejecutando para evitar duplicados.
 func DetectarAgentesAgotados() ([]*HandoffCandidato, error) {
 	threshold := time.Duration(configIntOrDefault("pool_handoff_threshold_seconds", 1800)) * time.Second
 	if threshold <= 0 {
@@ -56,61 +59,165 @@ func DetectarAgentesAgotados() ([]*HandoffCandidato, error) {
 
 	rows, err := DB.Query(`
 		SELECT
-			t.agente,
-			t.id            AS tarea_id,
+			s.agente,
 			s.id            AS sesion_id,
 			s.proyecto_id,
-			s.heartbeat_at,
-			h.id            AS handle_id
-		FROM tareas t
-		JOIN sesiones s ON s.agente = t.agente AND s.activa = 1
-		LEFT JOIN runtime_handles h
-			ON h.agente = t.agente
-			AND h.estado IN ('activo','pausado')
-		WHERE t.estado = 'en_progreso'
-		  AND t.agente IS NOT NULL
-		  AND s.heartbeat_at IS NOT NULL
-		  AND s.heartbeat_at <= ?
-		  AND t.agente NOT IN (
+			s.heartbeat_at
+		FROM sesiones s
+		WHERE s.activa = 1
+		  AND EXISTS (
+			  SELECT 1
+			  FROM tareas t
+			  WHERE t.agente = s.agente
+			    AND t.estado = 'en_progreso'
+		  )
+		  AND s.agente NOT IN (
 			  SELECT DISTINCT agente
 			  FROM runtime_orders
 			  WHERE tipo = 'handoff'
 			    AND estado IN ('pendiente','tomada','ejecutando')
 		  )
-		GROUP BY t.agente
-		ORDER BY s.heartbeat_at`, cutoff)
+		ORDER BY s.heartbeat_at`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var candidatos []*HandoffCandidato
+	var detectados []*HandoffCandidato
 	for rows.Next() {
 		var (
 			c           HandoffCandidato
-			tareaID     int64
 			sesionID    int64
 			proyectoID  nullInt64
-			handleID    nullInt64
-			heartbeatAt time.Time
+			heartbeatAt sql.NullTime
 		)
-		if err := rows.Scan(&c.Agente, &tareaID, &sesionID, &proyectoID, &heartbeatAt, &handleID); err != nil {
+		if err := rows.Scan(&c.Agente, &sesionID, &proyectoID, &heartbeatAt); err != nil {
 			return nil, err
 		}
-		c.TareaID = &tareaID
 		c.SesionID = &sesionID
 		if proyectoID.Valid {
 			c.ProyectoID = &proyectoID.Int64
 		}
-		if handleID.Valid {
-			c.HandleID = &handleID.Int64
+		if heartbeatAt.Valid {
+			c.Inactividad = time.Since(heartbeatAt.Time)
 		}
-		c.Inactividad = time.Since(heartbeatAt)
+		detectados = append(detectados, &c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
+	candidatos := make([]*HandoffCandidato, 0, len(detectados))
+	for _, c := range detectados {
+		tarea, err := seleccionarTareaHandoffAgente(c.Agente, c.ProyectoID)
+		if err != nil {
+			return nil, err
+		}
+		if tarea == nil {
+			continue
+		}
+		c.TareaID = &tarea.ID
+		if tarea.ProyectoID != nil {
+			c.ProyectoID = tarea.ProyectoID
+		}
+		handle, err := GetRuntimeHandleActivoAgente(c.Agente)
+		if err != nil {
+			return nil, err
+		}
+		if handle != nil {
+			c.HandleID = &handle.ID
+			if c.ProyectoID == nil && handle.ProyectoID != nil {
+				c.ProyectoID = handle.ProyectoID
+			}
+		}
+		disparado, err := enriquecerCandidatoHandoff(c, cutoff, threshold)
+		if err != nil {
+			return nil, err
+		}
+		if !disparado {
+			continue
+		}
+		candidatos = append(candidatos, c)
+	}
+	return candidatos, nil
+}
+
+func seleccionarTareaHandoffAgente(agente string, proyectoID *int64) (*Tarea, error) {
+	q := `
+		SELECT id, titulo, descripcion, proyecto_id, modulo, estado, agente, propuesta_id, prioridad,
+		       dependencias, creado_por, commit_cierre, notas,
+		       created_at, updated_at, completada_at, contrato_definido
+		FROM tareas
+		WHERE agente = ?
+		  AND estado = 'en_progreso'`
+	args := []any{strings.TrimSpace(agente)}
+	if proyectoID != nil {
+		q += `
+		ORDER BY
+		  CASE WHEN proyecto_id = ? THEN 0 ELSE 1 END,
+		  updated_at DESC,
+		  id DESC
+		LIMIT 1`
+		args = append(args, *proyectoID)
+	} else {
+		q += `
+		ORDER BY updated_at DESC, id DESC
+		LIMIT 1`
+	}
+	tarea, err := escanearTarea(DB.QueryRow(q, args...))
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return tarea, err
+}
+
+func enriquecerCandidatoHandoff(c *HandoffCandidato, cutoff time.Time, threshold time.Duration) (bool, error) {
+	if c == nil {
+		return false, nil
+	}
+	if c.SesionID != nil {
+		presupuesto, err := UltimoPresupuestoSesion(*c.SesionID)
+		if err != nil && err != sql.ErrNoRows {
+			return false, err
+		}
+		if err == nil && presupuesto != nil && presupuestoSesionFresco(presupuesto) {
+			ev, err := EvaluarPresupuestoSesion(presupuesto)
+			if err != nil {
+				return false, err
+			}
+			if ev != nil && ev.DebeHandoff {
+				c.Disparador = "presupuesto"
+				c.RequiereSondeo = false
+				c.Motivo = strings.TrimSpace(ev.Motivo)
+				return true, nil
+			}
+		}
+	}
+	if c.Inactividad >= threshold || (c.Inactividad > 0 && time.Now().UTC().Add(-c.Inactividad).Before(cutoff)) {
+		c.Disparador = "watchdog"
+		c.RequiereSondeo = true
 		c.Motivo = fmt.Sprintf("heartbeat hace %.0f min (umbral: %.0f min)",
 			c.Inactividad.Minutes(), threshold.Minutes())
-		candidatos = append(candidatos, &c)
+		return true, nil
 	}
-	return candidatos, rows.Err()
+	return false, nil
+}
+
+func presupuestoSesionFresco(p *PresupuestoSesion) bool {
+	if p == nil {
+		return false
+	}
+	maxAge := time.Duration(configInt64Fallback("pool_budget_snapshot_max_age_seconds", 300)) * time.Second
+	if maxAge <= 0 {
+		maxAge = 5 * time.Minute
+	}
+	if p.CheckedAt.IsZero() {
+		return false
+	}
+	return time.Since(p.CheckedAt) <= maxAge
 }
 
 // SeleccionarAgenteReemplazo elige el mejor agente disponible para reemplazar
@@ -147,13 +254,17 @@ func GuardarCheckpointHandoff(c *HandoffCandidato, resumen string) (int64, error
 		return 0, fmt.Errorf("candidato sin sesión para checkpoint")
 	}
 	if strings.TrimSpace(resumen) == "" {
-		resumen = fmt.Sprintf("Checkpoint automático por handoff: agente %s inactivo %s",
-			c.Agente, c.Inactividad.Round(time.Second))
+		resumen = fmt.Sprintf("Checkpoint automático por handoff: agente %s (%s)",
+			c.Agente, descripcionMotivoHandoff(c))
 	}
 
 	payload := map[string]any{
-		"motivo":      "handoff_automatico",
-		"inactividad": c.Inactividad.String(),
+		"motivo":     "handoff_automatico",
+		"disparador": strings.TrimSpace(c.Disparador),
+		"detalle":    strings.TrimSpace(c.Motivo),
+	}
+	if c.Inactividad > 0 {
+		payload["inactividad"] = c.Inactividad.String()
 	}
 	if c.TareaID != nil {
 		payload["tarea_id"] = *c.TareaID
@@ -179,7 +290,7 @@ func GuardarCheckpointHandoff(c *HandoffCandidato, resumen string) (int64, error
 // describiendo el estado de la tarea que recoge.
 func construirResumenContinuidad(c *HandoffCandidato, checkpointID int64) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Estás relevando al agente %s por agotamiento/inactividad (%s).\n", c.Agente, c.Motivo))
+	sb.WriteString(fmt.Sprintf("Estás relevando al agente %s por %s.\n", c.Agente, descripcionMotivoHandoff(c)))
 	if c.TareaID != nil {
 		tarea, _ := GetTarea(*c.TareaID)
 		if tarea != nil {
@@ -191,6 +302,29 @@ func construirResumenContinuidad(c *HandoffCandidato, checkpointID int64) string
 	}
 	sb.WriteString(fmt.Sprintf("Checkpoint guardado: #%d. Revisa el worktree y continúa donde lo dejó el agente anterior.", checkpointID))
 	return sb.String()
+}
+
+func descripcionMotivoHandoff(c *HandoffCandidato) string {
+	if c == nil {
+		return "handoff automático"
+	}
+	switch strings.TrimSpace(c.Disparador) {
+	case "presupuesto":
+		if strings.TrimSpace(c.Motivo) != "" {
+			return "presupuesto crítico (" + strings.TrimSpace(c.Motivo) + ")"
+		}
+		return "presupuesto crítico"
+	case "watchdog":
+		if strings.TrimSpace(c.Motivo) != "" {
+			return "watchdog (" + strings.TrimSpace(c.Motivo) + ")"
+		}
+		return "watchdog"
+	default:
+		if strings.TrimSpace(c.Motivo) != "" {
+			return strings.TrimSpace(c.Motivo)
+		}
+		return "handoff automático"
+	}
 }
 
 // ProcesarHandoffsBatch detecta agentes agotados, selecciona reemplazos y
@@ -208,8 +342,8 @@ func ProcesarHandoffsBatch() (int, error) {
 	for _, c := range candidatos {
 		procede, err := asegurarSondeoPrevioHandoff(c)
 		if err != nil {
-			Audit("server", "handoff_watchdog_error", "agente", 0,
-				fmt.Sprintf("agente=%s error=%s", c.Agente, err.Error()))
+			Audit("server", "handoff_preflight_error", "agente", 0,
+				fmt.Sprintf("agente=%s disparador=%s error=%s", c.Agente, c.Disparador, err.Error()))
 			continue
 		}
 		if !procede {
@@ -219,14 +353,14 @@ func ProcesarHandoffsBatch() (int, error) {
 		if err != nil {
 			// Sin reemplazo disponible: no es error crítico, sólo lo auditamos
 			Audit("server", "handoff_sin_reemplazo", "agente", 0,
-				fmt.Sprintf("agente=%s motivo=%s", c.Agente, err.Error()))
+				fmt.Sprintf("agente=%s disparador=%s motivo=%s", c.Agente, c.Disparador, err.Error()))
 			continue
 		}
 
 		checkpointID, err := GuardarCheckpointHandoff(c, "")
 		if err != nil {
 			Audit("server", "handoff_checkpoint_error", "agente", 0,
-				fmt.Sprintf("agente=%s error=%s", c.Agente, err.Error()))
+				fmt.Sprintf("agente=%s disparador=%s error=%s", c.Agente, c.Disparador, err.Error()))
 			continue
 		}
 
@@ -234,7 +368,7 @@ func ProcesarHandoffsBatch() (int, error) {
 		_, err = CrearHandoffAgenteVivo(c.Agente, destino, c.TareaID, c.Motivo, resumen, "")
 		if err != nil {
 			Audit("server", "handoff_error", "agente", 0,
-				fmt.Sprintf("%s→%s error=%s", c.Agente, destino, err.Error()))
+				fmt.Sprintf("%s→%s disparador=%s error=%s", c.Agente, destino, c.Disparador, err.Error()))
 			continue
 		}
 
@@ -248,6 +382,9 @@ func ProcesarHandoffsBatch() (int, error) {
 func asegurarSondeoPrevioHandoff(c *HandoffCandidato) (bool, error) {
 	if c == nil {
 		return false, nil
+	}
+	if !c.RequiereSondeo {
+		return true, nil
 	}
 	reciente, err := existeSondeoWatchdogReciente(c.Agente, c.ProyectoID)
 	if err != nil {

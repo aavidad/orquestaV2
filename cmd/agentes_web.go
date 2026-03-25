@@ -4,27 +4,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
-	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/db"
 )
 
-type webAgenteRow struct {
-	Agente         *db.Agente
-	Asignacion     *db.Asignacion
-	Sesion         *db.Sesion
-	Runtime        *db.RuntimeInstance
-	Handle         *db.RuntimeHandle
-	OrdersOpen     int
-	OrdersFailed   int
-	MailboxPending int
-	MailboxTotal   int
-	Checkpoints    int
-	LastCheckpoint *db.RuntimeCheckpoint
-	OpenTasks      int
-}
+var agentesWebService = agentesapp.NewService(agentesapp.Repository{})
+
+type webAgenteRow = agentesapp.Row
 
 type webAgentesPanelData struct {
 	Rows        []webAgenteRow
@@ -38,6 +26,7 @@ type webAgentesPanelData struct {
 
 type webAgenteDetalleData struct {
 	Row          webAgenteRow
+	Proyectos    []*db.Proyecto
 	Asignaciones []*db.Asignacion
 	Sesiones     []*db.Sesion
 	Runtimes     []*db.RuntimeInstance
@@ -61,6 +50,8 @@ func webRouterAgentes(w http.ResponseWriter, r *http.Request) {
 		webHandlerAgenteNuevo(w, r)
 	case len(parts) == 2 && r.Method == http.MethodGet:
 		webHandlerAgenteDetalle(w, r, parts[1])
+	case len(parts) == 3 && parts[2] == "asignacion" && r.Method == http.MethodPost:
+		webHandlerAgenteAsignacion(w, r, parts[1])
 	case len(parts) == 3 && parts[2] == "control" && r.Method == http.MethodPost:
 		webHandlerAgenteControl(w, r, parts[1])
 	case len(parts) == 3 && parts[2] == "estado" && r.Method == http.MethodPost:
@@ -73,7 +64,7 @@ func webRouterAgentes(w http.ResponseWriter, r *http.Request) {
 func webHandlerAgentesPanel(w http.ResponseWriter, r *http.Request) {
 	rows, err := construirWebAgenteRows()
 	if err != nil {
-		webRender(w, webTplLayout+webTplAgentesPanel, webAgentesPanelData{
+		webRender(w, r, webTplLayout+webTplAgentesPanel, webAgentesPanelData{
 			Err: err.Error(),
 		})
 		return
@@ -93,7 +84,7 @@ func webHandlerAgentesPanel(w http.ResponseWriter, r *http.Request) {
 			data.Habilitados++
 		}
 	}
-	webRender(w, webTplLayout+webTplAgentesPanel, data)
+	webRender(w, r, webTplLayout+webTplAgentesPanel, data)
 }
 
 func webHandlerAgenteNuevo(w http.ResponseWriter, r *http.Request) {
@@ -103,11 +94,43 @@ func webHandlerAgenteNuevo(w http.ResponseWriter, r *http.Request) {
 	}
 	nombre := strings.TrimSpace(r.FormValue("nombre"))
 	rol := strings.TrimSpace(r.FormValue("rol"))
-	if err := db.RegistrarAgente(nombre, rol); err != nil {
+	if rol == "" {
+		rol = "programador"
+	}
+	if nombre == "" {
+		var err error
+		nombre, err = agentesWebService.RegisterAgentAuto(strings.TrimSpace(r.FormValue("proveedor")), rol)
+		if err != nil {
+			http.Redirect(w, r, "/agentes?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+			return
+		}
+	} else if err := agentesWebService.RegisterAgent(nombre, rol); err != nil {
 		http.Redirect(w, r, "/agentes?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/agentes?ok="+url.QueryEscape("Agente "+nombre+" registrado"), http.StatusSeeOther)
+	http.Redirect(w, r, "/agentes?ok="+url.QueryEscape(webTranslateRequestf(r, "agentes.flash.created", nombre)), http.StatusSeeOther)
+}
+
+func webHandlerAgenteAsignacion(w http.ResponseWriter, r *http.Request, nombre string) {
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/agentes/"+url.PathEscape(nombre)+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	proyectoRef := strings.TrimSpace(r.FormValue("proyecto"))
+	if proyectoRef == "" {
+		http.Redirect(w, r, "/agentes/"+url.PathEscape(nombre)+"?err="+url.QueryEscape(webTranslateRequestf(r, "agentes.flash.project_required")), http.StatusSeeOther)
+		return
+	}
+	proyecto, err := db.GetProyecto(proyectoRef)
+	if err != nil {
+		http.Redirect(w, r, "/agentes/"+url.PathEscape(nombre)+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	if err := db.ActivarAsignacion(strings.TrimSpace(nombre), proyecto.ID, strings.TrimSpace(r.FormValue("nota"))); err != nil {
+		http.Redirect(w, r, "/agentes/"+url.PathEscape(nombre)+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/agentes/"+url.PathEscape(nombre)+"?ok="+url.QueryEscape(webTranslateRequestf(r, "agentes.flash.assignment_saved", nombre, proyecto.Slug)), http.StatusSeeOther)
 }
 
 func webHandlerAgenteDetalle(w http.ResponseWriter, r *http.Request, nombre string) {
@@ -118,7 +141,7 @@ func webHandlerAgenteDetalle(w http.ResponseWriter, r *http.Request, nombre stri
 	}
 	data.Msg = r.URL.Query().Get("ok")
 	data.Err = r.URL.Query().Get("err")
-	webRender(w, webTplLayout+webTplAgenteDetalle, data)
+	webRender(w, r, webTplLayout+webTplAgenteDetalle, data)
 }
 
 func webHandlerAgenteControl(w http.ResponseWriter, r *http.Request, nombre string) {
@@ -152,17 +175,7 @@ func webHandlerAgenteEstado(w http.ResponseWriter, r *http.Request, nombre strin
 		return
 	}
 	accion := strings.TrimSpace(r.FormValue("accion"))
-	var err error
-	switch accion {
-	case "retirar":
-		err = db.RetirarAgente(nombre)
-	case "rehabilitar":
-		err = db.RehabilitarAgente(nombre)
-	case "reset-reanimacion":
-		err = db.ResetReanimacion(nombre)
-	default:
-		err = fmt.Errorf("acción de agente no soportada: %s", accion)
-	}
+	err := agentesWebService.ApplyStateAction(nombre, accion)
 	if err != nil {
 		http.Redirect(w, r, "/agentes/"+url.PathEscape(nombre)+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
@@ -171,297 +184,29 @@ func webHandlerAgenteEstado(w http.ResponseWriter, r *http.Request, nombre strin
 }
 
 func construirWebAgenteRows() ([]webAgenteRow, error) {
-	agentes, err := db.ListarAgentes()
-	if err != nil {
-		return nil, err
-	}
-	asignaciones, err := db.ListarAsignaciones(db.FiltroAsignaciones{})
-	if err != nil {
-		return nil, err
-	}
-	activa := true
-	sesiones, err := db.ListarSesionesInspeccion(db.FiltroSesionesInspeccion{Activa: &activa})
-	if err != nil {
-		return nil, err
-	}
-	runtimes, err := db.ListarRuntimes(db.FiltroRuntimes{})
-	if err != nil {
-		return nil, err
-	}
-	handles, err := db.ListarRuntimeHandles(nil)
-	if err != nil {
-		return nil, err
-	}
-	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{})
-	if err != nil {
-		return nil, err
-	}
-	mailbox, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{})
-	if err != nil {
-		return nil, err
-	}
-	checkpoints, err := db.ListarRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{})
-	if err != nil {
-		return nil, err
-	}
-	tareas, err := db.ListarTareas(db.FiltroTareas{})
-	if err != nil {
-		return nil, err
-	}
-
-	asignacionPorAgente := map[string]*db.Asignacion{}
-	for _, asignacion := range asignaciones {
-		if asignacion == nil || asignacion.Estado != db.AsignacionActiva {
-			continue
-		}
-		if _, ok := asignacionPorAgente[asignacion.Agente]; !ok {
-			asignacionPorAgente[asignacion.Agente] = asignacion
-		}
-	}
-
-	sesionPorAgente := map[string]*db.Sesion{}
-	for _, sesion := range sesiones {
-		if sesion == nil {
-			continue
-		}
-		if _, ok := sesionPorAgente[sesion.Agente]; !ok {
-			sesionPorAgente[sesion.Agente] = sesion
-		}
-	}
-
-	runtimePorAgente := map[string]*db.RuntimeInstance{}
-	for _, runtime := range runtimes {
-		if runtime == nil {
-			continue
-		}
-		actual := runtimePorAgente[runtime.Agente]
-		if actual == nil || runtimeMomento(runtime).After(runtimeMomento(actual)) {
-			runtimePorAgente[runtime.Agente] = runtime
-		}
-	}
-
-	handlePorAgente := map[string]*db.RuntimeHandle{}
-	for _, handle := range handles {
-		if handle == nil {
-			continue
-		}
-		actual := handlePorAgente[handle.Agente]
-		if actual == nil || runtimeHandleMomento(handle).After(runtimeHandleMomento(actual)) {
-			handlePorAgente[handle.Agente] = handle
-		}
-	}
-
-	type orderCounters struct {
-		Open   int
-		Failed int
-	}
-	ordersPorAgente := map[string]orderCounters{}
-	for _, order := range orders {
-		if order == nil {
-			continue
-		}
-		stats := ordersPorAgente[order.Agente]
-		switch strings.TrimSpace(order.Estado) {
-		case "pendiente", "tomada", "ejecutando":
-			stats.Open++
-		case "fallida":
-			stats.Failed++
-		}
-		if strings.TrimSpace(order.ErrorText) != "" {
-			stats.Failed++
-		}
-		ordersPorAgente[order.Agente] = stats
-	}
-
-	type mailboxCounters struct {
-		Pending int
-		Total   int
-	}
-	mailboxPorAgente := map[string]mailboxCounters{}
-	for _, msg := range mailbox {
-		if msg == nil {
-			continue
-		}
-		for _, agente := range []string{msg.ToAgente, msg.FromAgente} {
-			if strings.TrimSpace(agente) == "" {
-				continue
-			}
-			stats := mailboxPorAgente[agente]
-			stats.Total++
-			if strings.TrimSpace(msg.Estado) == "pendiente" {
-				stats.Pending++
-			}
-			mailboxPorAgente[agente] = stats
-		}
-	}
-
-	checkpointTotalPorAgente := map[string]int{}
-	lastCheckpointPorAgente := map[string]*db.RuntimeCheckpoint{}
-	for _, checkpoint := range checkpoints {
-		if checkpoint == nil {
-			continue
-		}
-		checkpointTotalPorAgente[checkpoint.Agente]++
-		if _, ok := lastCheckpointPorAgente[checkpoint.Agente]; !ok {
-			lastCheckpointPorAgente[checkpoint.Agente] = checkpoint
-		}
-	}
-
-	openTasksPorAgente := map[string]int{}
-	for _, tarea := range tareas {
-		if tarea == nil || tarea.Agente == nil {
-			continue
-		}
-		switch tarea.Estado {
-		case db.EstadoCompletada, db.EstadoCancelada:
-			continue
-		}
-		openTasksPorAgente[*tarea.Agente]++
-	}
-
-	rows := make([]webAgenteRow, 0, len(agentes))
-	for _, agente := range agentes {
-		if agente == nil {
-			continue
-		}
-		orderStats := ordersPorAgente[agente.Nombre]
-		mailboxStats := mailboxPorAgente[agente.Nombre]
-		rows = append(rows, webAgenteRow{
-			Agente:         agente,
-			Asignacion:     asignacionPorAgente[agente.Nombre],
-			Sesion:         sesionPorAgente[agente.Nombre],
-			Runtime:        runtimePorAgente[agente.Nombre],
-			Handle:         handlePorAgente[agente.Nombre],
-			OrdersOpen:     orderStats.Open,
-			OrdersFailed:   orderStats.Failed,
-			MailboxPending: mailboxStats.Pending,
-			MailboxTotal:   mailboxStats.Total,
-			Checkpoints:    checkpointTotalPorAgente[agente.Nombre],
-			LastCheckpoint: lastCheckpointPorAgente[agente.Nombre],
-			OpenTasks:      openTasksPorAgente[agente.Nombre],
-		})
-	}
-	sort.Slice(rows, func(i, j int) bool {
-		return strings.ToLower(rows[i].Agente.Nombre) < strings.ToLower(rows[j].Agente.Nombre)
-	})
-	return rows, nil
+	return agentesWebService.BuildPanelRows()
 }
 
 func construirWebAgenteDetalleData(nombre string) (*webAgenteDetalleData, error) {
-	agente, err := db.GetAgente(nombre)
+	detail, err := agentesWebService.BuildDetail(nombre)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := construirWebAgenteRows()
+	proyectos, err := db.ListarProyectosActivos()
 	if err != nil {
 		return nil, err
 	}
-	row := webAgenteRow{Agente: agente}
-	for _, item := range rows {
-		if item.Agente != nil && item.Agente.Nombre == nombre {
-			row = item
-			break
-		}
-	}
-
-	asignaciones, err := db.ListarAsignaciones(db.FiltroAsignaciones{Agente: &nombre})
-	if err != nil {
-		return nil, err
-	}
-	sesiones, err := db.ListarSesionesInspeccion(db.FiltroSesionesInspeccion{Agente: &nombre})
-	if err != nil {
-		return nil, err
-	}
-	runtimes, err := db.ListarRuntimes(db.FiltroRuntimes{Agente: &nombre})
-	if err != nil {
-		return nil, err
-	}
-	handles, err := db.ListarRuntimeHandles(&nombre)
-	if err != nil {
-		return nil, err
-	}
-	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &nombre})
-	if err != nil {
-		return nil, err
-	}
-	mailbox, err := listarMailboxAgente(nombre)
-	if err != nil {
-		return nil, err
-	}
-	checkpoints, err := db.ListarRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{Agente: &nombre, Limit: 20})
-	if err != nil {
-		return nil, err
-	}
-
 	return &webAgenteDetalleData{
-		Row:          row,
-		Asignaciones: asignaciones,
-		Sesiones:     limitarSesiones(sesiones, 12),
-		Runtimes:     limitarRuntimes(runtimes, 12),
-		Handles:      limitarHandles(handles, 12),
-		Orders:       limitarOrders(orders, 20),
-		Mailbox:      limitarMailbox(mailbox, 20),
-		Checkpoints:  checkpoints,
+		Row:          detail.Row,
+		Proyectos:    proyectos,
+		Asignaciones: detail.Asignaciones,
+		Sesiones:     limitarSesiones(detail.Sesiones, 12),
+		Runtimes:     limitarRuntimes(detail.Runtimes, 12),
+		Handles:      limitarHandles(detail.Handles, 12),
+		Orders:       limitarOrders(detail.Orders, 20),
+		Mailbox:      limitarMailbox(detail.Mailbox, 20),
+		Checkpoints:  detail.Checkpoints,
 	}, nil
-}
-
-func listarMailboxAgente(nombre string) ([]*db.RuntimeMailboxMessage, error) {
-	toAgente := nombre
-	inbox, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &toAgente})
-	if err != nil {
-		return nil, err
-	}
-	fromAgente := nombre
-	outbox, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{FromAgente: &fromAgente})
-	if err != nil {
-		return nil, err
-	}
-	merged := make([]*db.RuntimeMailboxMessage, 0, len(inbox)+len(outbox))
-	seen := map[int64]struct{}{}
-	for _, set := range [][]*db.RuntimeMailboxMessage{inbox, outbox} {
-		for _, msg := range set {
-			if msg == nil {
-				continue
-			}
-			if _, ok := seen[msg.ID]; ok {
-				continue
-			}
-			seen[msg.ID] = struct{}{}
-			merged = append(merged, msg)
-		}
-	}
-	sort.Slice(merged, func(i, j int) bool {
-		return merged[i].ID > merged[j].ID
-	})
-	return merged, nil
-}
-
-func runtimeMomento(runtime *db.RuntimeInstance) time.Time {
-	if runtime == nil {
-		return time.Time{}
-	}
-	for _, value := range []*time.Time{runtime.UltimaActividadAt, runtime.LastHeartbeatAt, runtime.LastEventAt} {
-		if value != nil && !value.IsZero() {
-			return *value
-		}
-	}
-	if !runtime.UpdatedAt.IsZero() {
-		return runtime.UpdatedAt
-	}
-	return runtime.CreatedAt
-}
-
-func runtimeHandleMomento(handle *db.RuntimeHandle) time.Time {
-	if handle == nil {
-		return time.Time{}
-	}
-	if handle.LastSeenAt != nil && !handle.LastSeenAt.IsZero() {
-		return *handle.LastSeenAt
-	}
-	if !handle.UpdatedAt.IsZero() {
-		return handle.UpdatedAt
-	}
-	return handle.CreatedAt
 }
 
 func limitarSesiones(items []*db.Sesion, max int) []*db.Sesion {
@@ -521,8 +266,9 @@ const webTplAgentesPanel = `{{define "content"}}
     </div>
     <details class="form-panel" style="margin:0;min-width:min(100%,30rem)">
       <summary>{{tr "agentes.create"}}</summary>
-      <form method="POST" action="/agentes/nuevo" style="display:grid;grid-template-columns:2fr 1fr auto;gap:.6rem;align-items:end;margin-top:.8rem">
-        <div><label>{{tr "Agente"}}</label><input type="text" name="nombre" required></div>
+      <form method="POST" action="/agentes/nuevo" style="display:grid;grid-template-columns:1.1fr 1.6fr 1fr auto;gap:.6rem;align-items:end;margin-top:.8rem">
+        <div><label>{{tr "agentes.create.provider"}}</label><select name="proveedor"><option value="codex">Codex</option><option value="claude">Claude</option><option value="gemini">Gemini</option></select></div>
+        <div><label>{{tr "agentes.create.name_optional"}}</label><input type="text" name="nombre" placeholder="{{tr "agentes.create.name_auto"}}"></div>
         <div><label>{{tr "Rol"}}</label><input type="text" name="rol" value="programador" required></div>
         <div><button type="submit" class="btn-sm">{{tr "agentes.create_button"}}</button></div>
       </form>
@@ -634,8 +380,8 @@ const webTplAgenteDetalle = `{{define "content"}}
       <article>
         <header><strong>{{tr "agentes.detail.summary"}}</strong></header>
         <p><strong>{{tr "Rol"}}:</strong> {{orDash .Row.Agente.Rol}}</p>
-        <p><strong>{{tr "agentes.enabled"}}:</strong> {{if .Row.Agente.Habilitado}}sí{{else}}no{{end}}</p>
-        <p><strong>{{tr "agentes.active_now"}}:</strong> {{if .Row.Agente.Activo}}sí{{else}}no{{end}}</p>
+        <p><strong>{{tr "agentes.enabled"}}:</strong> {{if .Row.Agente.Habilitado}}{{tr "common.yes"}}{{else}}{{tr "common.no"}}{{end}}</p>
+        <p><strong>{{tr "agentes.active_now"}}:</strong> {{if .Row.Agente.Activo}}{{tr "common.yes"}}{{else}}{{tr "common.no"}}{{end}}</p>
         <p><strong>{{tr "Última sesión"}}:</strong> {{ftime .Row.Agente.UltimaSesion}}</p>
         <p><strong>{{tr "Reanimación"}}:</strong> {{if .Row.Agente.ReanimarAt}}{{reanimacionEn .Row.Agente.ReanimarAt}}{{else}}—{{end}}</p>
         {{if .Row.Agente.MotivoPausa}}<p><strong>{{tr "Motivo"}}:</strong> {{.Row.Agente.MotivoPausa}}</p>{{end}}
@@ -668,6 +414,20 @@ const webTplAgenteDetalle = `{{define "content"}}
           <button type="submit" class="btn-sm" name="accion" value="reset-reanimacion">{{tr "agentes.reset_reanimation"}}</button>
         </form>
       </article>
+      <article>
+        <header><strong>{{tr "agentes.detail.assign_project"}}</strong></header>
+        <form method="POST" action="/agentes/{{.Row.Agente.Nombre}}/asignacion" style="display:grid;gap:.6rem">
+          <div>
+            <label>{{tr "agentes.assign.choose_project"}}</label>
+            <select name="proyecto" required>
+              <option value="">{{tr "agentes.assign.choose_project"}}</option>
+              {{range .Proyectos}}<option value="{{.Slug}}">{{.Nombre}} · {{.Slug}}</option>{{end}}
+            </select>
+          </div>
+          <div><label>{{tr "Nota"}}</label><input type="text" name="nota" placeholder="{{tr "agentes.assign.note_placeholder"}}"></div>
+          <div><button type="submit" class="btn-sm">{{tr "agentes.assign.submit"}}</button></div>
+        </form>
+      </article>
     </aside>
     <div>
       <article>
@@ -683,7 +443,7 @@ const webTplAgenteDetalle = `{{define "content"}}
         <header><strong>{{tr "agentes.detail.sessions"}}</strong></header>
         {{if .Sesiones}}
         <table>
-          <thead><tr><th>ID</th><th>{{tr "Proyecto"}}</th><th>{{tr "Estado"}}</th><th>{{tr "agentes.tool"}}</th><th>branch</th><th>host</th><th>heartbeat</th></tr></thead>
+          <thead><tr><th>ID</th><th>{{tr "Proyecto"}}</th><th>{{tr "Estado"}}</th><th>{{tr "agentes.tool"}}</th><th>{{tr "common.branch"}}</th><th>{{tr "common.host"}}</th><th>{{tr "common.heartbeat"}}</th></tr></thead>
           <tbody>{{range .Sesiones}}<tr><td>{{.ID}}</td><td>{{orDash .ProyectoSlug}}</td><td>{{orDash .Estado}}</td><td>{{orDash .Herramienta}}</td><td>{{orDash .Branch}}</td><td>{{orDash .Host}}</td><td>{{ftime .HeartbeatAt}}</td></tr>{{end}}</tbody>
         </table>
         {{else}}<p>—</p>{{end}}
@@ -692,7 +452,7 @@ const webTplAgenteDetalle = `{{define "content"}}
         <header><strong>{{tr "agentes.detail.runtimes"}}</strong></header>
         {{if .Runtimes}}
         <table>
-          <thead><tr><th>ID</th><th>{{tr "Proyecto"}}</th><th>{{tr "Estado"}}</th><th>{{tr "Connector"}}</th><th>{{tr "Modelo"}}</th><th>pid</th><th>{{tr "runtime.last_signal"}}</th></tr></thead>
+          <thead><tr><th>ID</th><th>{{tr "Proyecto"}}</th><th>{{tr "Estado"}}</th><th>{{tr "Connector"}}</th><th>{{tr "Modelo"}}</th><th>{{tr "common.pid"}}</th><th>{{tr "runtime.last_signal"}}</th></tr></thead>
           <tbody>{{range .Runtimes}}<tr><td><a href="/runtimes/{{.ID}}">{{.ID}}</a></td><td>{{orDash .ProyectoSlug}}</td><td>{{orDash .LogicalState}}</td><td>{{orDash .Connector}}</td><td>{{orDash .Model}}</td><td>{{pid .PID}}</td><td>{{ftime .UltimaActividadAt}}</td></tr>{{end}}</tbody>
         </table>
         {{else}}<p>—</p>{{end}}
@@ -701,7 +461,7 @@ const webTplAgenteDetalle = `{{define "content"}}
         <header><strong>{{tr "agentes.detail.handles"}}</strong></header>
         {{if .Handles}}
         <table>
-          <thead><tr><th>ID</th><th>{{tr "Estado"}}</th><th>{{tr "agentes.transport"}}</th><th>kind</th><th>ref</th><th>last_seen</th></tr></thead>
+          <thead><tr><th>ID</th><th>{{tr "Estado"}}</th><th>{{tr "agentes.transport"}}</th><th>{{tr "common.kind"}}</th><th>{{tr "common.ref"}}</th><th>{{tr "common.last_seen"}}</th></tr></thead>
           <tbody>{{range .Handles}}<tr><td>{{.ID}}</td><td>{{orDash .Estado}}</td><td>{{orDash .Transporte}}</td><td>{{orDash .HandleKind}}</td><td>{{orDash .HandleRef}}</td><td>{{ftime .LastSeenAt}}</td></tr>{{end}}</tbody>
         </table>
         {{else}}<p>—</p>{{end}}
@@ -719,7 +479,7 @@ const webTplAgenteDetalle = `{{define "content"}}
         <header><strong>{{tr "agentes.detail.mailbox"}}</strong></header>
         {{if .Mailbox}}
         <table>
-          <thead><tr><th>ID</th><th>from</th><th>to</th><th>kind</th><th>{{tr "Estado"}}</th><th>{{tr "Creado"}}</th></tr></thead>
+          <thead><tr><th>ID</th><th>{{tr "common.from"}}</th><th>{{tr "common.to"}}</th><th>{{tr "common.kind"}}</th><th>{{tr "Estado"}}</th><th>{{tr "Creado"}}</th></tr></thead>
           <tbody>{{range .Mailbox}}<tr><td>{{.ID}}</td><td>{{orDash .FromAgente}}</td><td>{{orDash .ToAgente}}</td><td>{{orDash .Kind}}</td><td>{{orDash .Estado}}</td><td>{{ftimev .CreatedAt}}</td></tr>{{end}}</tbody>
         </table>
         {{else}}<p>—</p>{{end}}
@@ -728,7 +488,7 @@ const webTplAgenteDetalle = `{{define "content"}}
         <header><strong>{{tr "agentes.detail.checkpoints"}}</strong></header>
         {{if .Checkpoints}}
         <table>
-          <thead><tr><th>ID</th><th>{{tr "Tipo"}}</th><th>branch</th><th>{{tr "time_travel.source"}}</th><th>{{tr "Creado"}}</th></tr></thead>
+          <thead><tr><th>ID</th><th>{{tr "Tipo"}}</th><th>{{tr "common.branch"}}</th><th>{{tr "time_travel.source"}}</th><th>{{tr "Creado"}}</th></tr></thead>
           <tbody>{{range .Checkpoints}}<tr><td><a href="/time-travel/{{.ID}}">{{.ID}}</a></td><td>{{orDash .CheckpointKind}}</td><td>{{orDash .Branch}}</td><td>{{orDash .Source}}</td><td>{{ftimev .CreatedAt}}</td></tr>{{end}}</tbody>
         </table>
         {{else}}<p>—</p>{{end}}

@@ -1,5 +1,7 @@
 # User Manual - [Project Name]
 
+> Developed with Orquesta by Alberto Avidad Fernandez.
+
 ## 1. Manual purpose
 [Explain what this document covers, which user profiles it targets, and what is out of scope.]
 

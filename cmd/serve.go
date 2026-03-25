@@ -25,6 +25,8 @@ import (
 	"orquesta/db"
 	"orquesta/i18n"
 	"orquesta/internal/a2ui"
+	"orquesta/propuestasapp"
+	"orquesta/tareasapp"
 )
 
 // ─── Structs de datos ────────────────────────────────────────────────────────
@@ -220,7 +222,6 @@ var webFuncMap = template.FuncMap{
 	},
 	"eqStr": func(a, b string) bool { return a == b },
 	"neStr": func(a, b string) bool { return a != b },
-	"tr":    webTranslate,
 	"ftime": func(t *time.Time) string {
 		if t == nil || t.IsZero() {
 			return "—"
@@ -266,6 +267,8 @@ var (
 	webI18nBundleOnce sync.Once
 )
 
+const webLangCookieName = "orquesta_lang"
+
 func resolveWebI18nDir() string {
 	if dir := strings.TrimSpace(i18n.ResolveDir()); dir != "" {
 		if info, err := os.Stat(dir); err == nil && info.IsDir() {
@@ -282,10 +285,118 @@ func resolveWebI18nDir() string {
 }
 
 func webTranslate(key string) string {
+	return webTranslateForLang(i18n.DefaultLang, key)
+}
+
+func webTranslateForLang(lang, key string) string {
 	webI18nBundleOnce.Do(func() {
 		_ = webI18nBundle.Reload()
 	})
-	return webI18nBundle.T(i18n.DefaultLang, key)
+	return webI18nBundle.T(lang, key)
+}
+
+func webTranslateRequestf(r *http.Request, key string, args ...any) string {
+	msg := webTranslateForLang(resolveWebRequestLang(r), key)
+	if len(args) == 0 {
+		return msg
+	}
+	return fmt.Sprintf(msg, args...)
+}
+
+func buildWebFuncMap(lang string) template.FuncMap {
+	funcs := make(template.FuncMap, len(webFuncMap)+2)
+	for key, value := range webFuncMap {
+		funcs[key] = value
+	}
+	funcs["tr"] = func(key string) string {
+		return webTranslateForLang(lang, key)
+	}
+	funcs["lang"] = func() string {
+		return lang
+	}
+	return funcs
+}
+
+func resolveWebRequestLang(r *http.Request) string {
+	webI18nBundleOnce.Do(func() {
+		_ = webI18nBundle.Reload()
+	})
+	if r != nil {
+		if lang, ok := resolveExplicitWebLang(r.URL.Query().Get("lang")); ok {
+			return lang
+		}
+		if cookie, err := r.Cookie(webLangCookieName); err == nil {
+			if lang, ok := resolveExplicitWebLang(cookie.Value); ok {
+				return lang
+			}
+		}
+		for _, cand := range parseAcceptLanguageHeader(r.Header.Get("Accept-Language")) {
+			if lang, ok := resolveExplicitWebLang(cand); ok {
+				return lang
+			}
+		}
+	}
+	return webI18nBundle.ResolveLang(i18n.DefaultLang)
+}
+
+func resolveExplicitWebLang(raw string) (string, bool) {
+	lang := i18n.NormalizeLang(raw)
+	if lang == "" || !webI18nBundle.HasLang(lang) {
+		return "", false
+	}
+	return webI18nBundle.ResolveLang(lang), true
+}
+
+func parseAcceptLanguageHeader(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if idx := strings.IndexByte(part, ';'); idx >= 0 {
+			part = strings.TrimSpace(part[:idx])
+		}
+		if part == "" {
+			continue
+		}
+		out = append(out, part)
+	}
+	return out
+}
+
+func persistWebLangCookie(w http.ResponseWriter, r *http.Request, resolved string) {
+	if r == nil {
+		return
+	}
+	explicit := strings.TrimSpace(r.URL.Query().Get("lang"))
+	if explicit == "" {
+		return
+	}
+	if lang, ok := resolveExplicitWebLang(explicit); ok {
+		http.SetCookie(w, &http.Cookie{
+			Name:     webLangCookieName,
+			Value:    lang,
+			Path:     "/",
+			HttpOnly: false,
+			SameSite: http.SameSiteLaxMode,
+		})
+		return
+	}
+	if resolved != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     webLangCookieName,
+			Value:    resolved,
+			Path:     "/",
+			HttpOnly: false,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
 }
 
 // ─── Router principal ─────────────────────────────────────────────────────────
@@ -374,7 +485,7 @@ func webHandlerRuntimes(w http.ResponseWriter, r *http.Request) {
 		filter.Agente = &agenteFiltro
 	}
 	if proyectoFiltro != "" {
-		proyecto, err := db.GetProyecto(proyectoFiltro)
+		proyecto, err := runtimesService.GetProject(proyectoFiltro)
 		if err == nil {
 			filter.ProyectoID = &proyecto.ID
 		}
@@ -390,10 +501,10 @@ func webHandlerRuntimes(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tree, _ := db.ConstruirArbolRuntimes(filter)
+	tree, _ := runtimesService.BuildRuntimeTree(filter)
 	rows := make([]webRuntimeRow, 0)
 	aplanarRuntimes(tree, 0, &rows)
-	webRender(w, webTplLayout+webTplRuntimes, webRuntimesData{
+	webRender(w, r, webTplLayout+webTplRuntimes, webRuntimesData{
 		Runtimes: rows,
 		Filtro:   filtro,
 		Msg:      r.URL.Query().Get("ok"),
@@ -432,12 +543,12 @@ func webHandlerRuntimeDetalle(w http.ResponseWriter, r *http.Request, idStr stri
 		http.NotFound(w, r)
 		return
 	}
-	runtime, err := db.GetRuntime(id)
+	runtime, err := runtimesService.GetRuntime(id)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	samples, _ := db.ListarMuestrasRuntime(id, 20)
+	samples, _ := runtimesService.ListRuntimeSamples(id, 20)
 
 	row := runtimeRowToWeb(runtimeRowDesdeModelo(runtime, 0, runtime.ChildCount))
 	data := webRuntimeDetalleData{
@@ -446,7 +557,7 @@ func webHandlerRuntimeDetalle(w http.ResponseWriter, r *http.Request, idStr stri
 		A2UI:     runtimeA2UIToWeb(runtime, 8),
 		Timeline: runtimeTimelineToWeb(runtime, 24),
 	}
-	webRender(w, webTplLayout+webTplRuntimeDetalle, data)
+	webRender(w, r, webTplLayout+webTplRuntimeDetalle, data)
 }
 
 func webHandlerTimeTravel(w http.ResponseWriter, r *http.Request) {
@@ -459,7 +570,7 @@ func webHandlerTimeTravel(w http.ResponseWriter, r *http.Request) {
 		filter.Agente = &agenteFiltro
 	}
 	if proyectoFiltro != "" {
-		if proyecto, err := db.GetProyecto(proyectoFiltro); err == nil {
+		if proyecto, err := runtimesService.GetProject(proyectoFiltro); err == nil {
 			filter.ProyectoID = &proyecto.ID
 		}
 	}
@@ -467,7 +578,7 @@ func webHandlerTimeTravel(w http.ResponseWriter, r *http.Request) {
 		filter.CheckpointKind = &kindFiltro
 	}
 
-	checkpoints, _ := db.ListarRuntimeCheckpoints(filter)
+	checkpoints, _ := runtimesService.ListRuntimeCheckpoints(filter)
 	rows := make([]webTimeTravelCheckpointRow, 0, len(checkpoints))
 	for _, cp := range checkpoints {
 		if cp == nil {
@@ -476,7 +587,7 @@ func webHandlerTimeTravel(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, runtimeCheckpointToWeb(cp))
 	}
 
-	webRender(w, webTplLayout+webTplTimeTravel, webTimeTravelData{
+	webRender(w, r, webTplLayout+webTplTimeTravel, webTimeTravelData{
 		Checkpoints:    rows,
 		FiltroAgente:   agenteFiltro,
 		FiltroProyecto: proyectoFiltro,
@@ -490,7 +601,7 @@ func webHandlerTimeTravelDetalle(w http.ResponseWriter, r *http.Request, idStr s
 		http.NotFound(w, r)
 		return
 	}
-	checkpoint, err := db.GetRuntimeCheckpoint(id)
+	checkpoint, err := runtimesService.GetRuntimeCheckpoint(id)
 	if err != nil || checkpoint == nil {
 		http.NotFound(w, r)
 		return
@@ -498,14 +609,14 @@ func webHandlerTimeTravelDetalle(w http.ResponseWriter, r *http.Request, idStr s
 
 	var memoria []*db.EntidadMemoria
 	if checkpoint.ProyectoID != nil {
-		memoria, _ = db.ListarEntidadesMemoria(db.FiltroEntidadesMemoria{ProyectoID: checkpoint.ProyectoID})
+		memoria, _ = runtimesService.ListMemoryEntities(db.FiltroEntidadesMemoria{ProyectoID: checkpoint.ProyectoID})
 	}
 	payload := strings.TrimSpace(checkpoint.PayloadJSON)
 	if payload == "" {
 		payload = "{}"
 	}
 
-	webRender(w, webTplLayout+webTplTimeTravelDetalle, webTimeTravelDetalleData{
+	webRender(w, r, webTplLayout+webTplTimeTravelDetalle, webTimeTravelDetalleData{
 		Checkpoint: runtimeCheckpointToWeb(checkpoint),
 		Payload:    payload,
 		Memoria:    memoria,
@@ -519,40 +630,42 @@ func webHandlerDash(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	agentes, _ := db.ListarAgentes()
-	counts, _ := db.ContarTareasPorEstado()
-	total, completadas := 0, 0
-	for est, n := range counts {
-		total += n
-		if est == "completada" {
-			completadas = n
+	summary, _ := panelService.BuildSummary()
+	var (
+		agentes     []*db.Agente
+		counts      map[string]int
+		total       int
+		completadas int
+		pct         int
+		resAbiertas []webPropResumen
+		ep          []webTareaRow
+	)
+	if summary != nil {
+		agentes = summary.Agents
+		counts = summary.TaskCounts
+		total = summary.TotalTasks
+		completadas = summary.DoneTasks
+		pct = summary.PercentDone
+		resAbiertas = make([]webPropResumen, 0, len(summary.OpenProps))
+		for _, item := range summary.OpenProps {
+			resAbiertas = append(resAbiertas, webPropResumen{
+				Codigo:     item.Codigo,
+				Titulo:     item.Titulo,
+				Acuerdo:    item.Acuerdo,
+				Desacuerdo: item.Desacuerdo,
+				Pendiente:  item.Pendiente,
+			})
+		}
+		ep = make([]webTareaRow, 0, len(summary.ActiveTasks))
+		for _, t := range summary.ActiveTasks {
+			ep = append(ep, toWebTarea(t))
 		}
 	}
-	pct := 0
-	if total > 0 {
-		pct = completadas * 100 / total
-	}
-	estadoAb := db.PropuestaAbierta
-	abiertas, _ := db.ListarPropuestas(&estadoAb, nil)
-	var resAbiertas []webPropResumen
-	for _, p := range abiertas {
-		ac, des, _, pend, _ := db.ContarVotos(p.ID)
-		resAbiertas = append(resAbiertas, webPropResumen{
-			Codigo: p.Codigo, Titulo: p.Titulo,
-			Acuerdo: ac, Desacuerdo: des, Pendiente: pend,
-		})
-	}
-	estadoEP := db.EstadoEnProgreso
-	tareas, _ := db.ListarTareas(db.FiltroTareas{Estado: &estadoEP})
-	var ep []webTareaRow
-	for _, t := range tareas {
-		ep = append(ep, toWebTarea(t))
-	}
 	activos := true
-	runtimeTree, _ := db.ConstruirArbolRuntimes(db.FiltroRuntimes{Activos: &activos})
+	runtimeTree, _ := runtimesService.BuildRuntimeTree(db.FiltroRuntimes{Activos: &activos})
 	var runtimes []webRuntimeRow
 	aplanarRuntimes(runtimeTree, 0, &runtimes)
-	checkpoints, _ := db.ListarRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{Limit: 5})
+	checkpoints, _ := runtimesService.ListRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{Limit: 5})
 	var recentCheckpoints []webTimeTravelCheckpointRow
 	for _, cp := range checkpoints {
 		if cp == nil {
@@ -560,7 +673,7 @@ func webHandlerDash(w http.ResponseWriter, r *http.Request) {
 		}
 		recentCheckpoints = append(recentCheckpoints, runtimeCheckpointToWeb(cp))
 	}
-	webRender(w, webTplLayout+webTplDash, webDashData{
+	webRender(w, r, webTplLayout+webTplDash, webDashData{
 		Agentes: agentes, Counts: counts, Total: total,
 		Completadas: completadas, Pct: pct,
 		Abiertas: resAbiertas, EnProgreso: ep, Runtimes: runtimes, Checkpoints: recentCheckpoints,
@@ -580,13 +693,13 @@ func webHandlerTareas(w http.ResponseWriter, r *http.Request) {
 		e := db.EstadoTarea(filtro)
 		f.Estado = &e
 	}
-	tareas, _ := db.ListarTareas(f)
+	tareas, _ := tareasService.List(f)
 	var wt []webTareaRow
 	for _, t := range tareas {
 		wt = append(wt, toWebTarea(t))
 	}
-	agentes, _ := db.ListarAgentes()
-	webRender(w, webTplLayout+webTplTareas, webTareasData{
+	agentes, _ := tareasService.ListAgents()
+	webRender(w, r, webTplLayout+webTplTareas, webTareasData{
 		Tareas: wt, Filtro: filtro, Agentes: agentes,
 		Msg: msg, Err: errMsg,
 	})
@@ -598,31 +711,23 @@ func webHandlerTareaNueva(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	titulo := strings.TrimSpace(r.FormValue("titulo"))
 	if titulo == "" {
-		http.Redirect(w, r, "/tareas?err="+url.QueryEscape("El título es obligatorio"), http.StatusSeeOther)
+		http.Redirect(w, r, "/tareas?err="+url.QueryEscape(webTranslateRequestf(r, "tasks.flash.title_required")), http.StatusSeeOther)
 		return
 	}
-	t := &db.Tarea{
-		Titulo:      titulo,
-		Descripcion: r.FormValue("descripcion"),
-		Modulo:      r.FormValue("modulo"),
-		Prioridad:   db.PrioridadTarea(r.FormValue("prioridad")),
-		CreadoPor:   "alberto",
-	}
-	if p := strings.TrimSpace(r.FormValue("propuesta")); p != "" {
-		prop, err := db.GetPropuesta(p)
-		if err == nil {
-			t.PropuestaID = &prop.ID
-		}
-	}
-	id, err := db.CrearTarea(t)
+	id, err := tareasService.Create(tareasapp.CreateTaskInput{
+		Titulo:          titulo,
+		Descripcion:     r.FormValue("descripcion"),
+		Modulo:          r.FormValue("modulo"),
+		Prioridad:       db.PrioridadTarea(r.FormValue("prioridad")),
+		CreadoPor:       "alberto",
+		Agente:          strings.TrimSpace(r.FormValue("agente")),
+		PropuestaCodigo: strings.TrimSpace(r.FormValue("propuesta")),
+	})
 	if err != nil {
 		http.Redirect(w, r, "/tareas?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	if agente := strings.TrimSpace(r.FormValue("agente")); agente != "" {
-		_ = db.TomarTarea(id, agente)
-	}
-	http.Redirect(w, r, "/tareas?ok="+url.QueryEscape(fmt.Sprintf("Tarea #%d creada", id)), http.StatusSeeOther)
+	http.Redirect(w, r, "/tareas?ok="+url.QueryEscape(webTranslateRequestf(r, "tasks.flash.created", id)), http.StatusSeeOther)
 }
 
 // ─── Tareas: detalle ──────────────────────────────────────────────────────────
@@ -633,13 +738,13 @@ func webHandlerTareaDetalle(w http.ResponseWriter, r *http.Request, idStr string
 		http.NotFound(w, r)
 		return
 	}
-	t, err := db.GetTarea(id)
+	t, err := tareasService.Get(id)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	agentes, _ := db.ListarAgentes()
-	webRender(w, webTplLayout+webTplTareaDetalle, webTareaDetalleData{
+	agentes, _ := tareasService.ListAgents()
+	webRender(w, r, webTplLayout+webTplTareaDetalle, webTareaDetalleData{
 		T:       toWebTarea(t),
 		Agentes: agentes,
 		Msg:     r.URL.Query().Get("ok"),
@@ -652,7 +757,7 @@ func webHandlerTareaDetalle(w http.ResponseWriter, r *http.Request, idStr string
 func webHandlerTareaAccion(w http.ResponseWriter, r *http.Request, idStr string) {
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Redirect(w, r, "/tareas?err=ID+inválido", http.StatusSeeOther)
+		http.Redirect(w, r, "/tareas?err="+url.QueryEscape(webTranslateRequestf(r, "tasks.flash.invalid_id")), http.StatusSeeOther)
 		return
 	}
 	_ = r.ParseForm()
@@ -662,30 +767,24 @@ func webHandlerTareaAccion(w http.ResponseWriter, r *http.Request, idStr string)
 
 	switch accion {
 	case "tomar":
-		err = db.TomarTarea(id, agente)
+		err = tareasService.Take(id, agente)
 	case "iniciar":
-		err = db.IniciarTarea(id, agente)
+		err = tareasService.Start(id, agente)
 	case "completar":
-		err = db.CompletarTarea(id, agente, r.FormValue("commit"))
+		err = tareasService.Complete(id, agente, r.FormValue("commit"))
 	case "bloquear":
-		err = db.BloquearTarea(id, agente, r.FormValue("motivo"))
+		err = tareasService.Block(id, agente, r.FormValue("motivo"))
 	case "desbloquear":
-		err = db.DesbloquearTarea(id, agente, r.FormValue("resolucion"))
+		err = tareasService.Unblock(id, agente, r.FormValue("resolucion"))
 	case "nota":
-		err = db.AnotarTarea(id, agente, r.FormValue("nota"))
+		err = tareasService.Note(id, agente, r.FormValue("nota"))
 	case "backlog":
-		err = db.MoverTareaABacklog(id)
-		if err == nil {
-			db.Audit("alberto", "backlog_tarea", "tarea", id, "")
-		}
+		err = tareasService.MoveToBacklog(id)
 	case "reasignar":
 		nuevoAgente := strings.TrimSpace(r.FormValue("nuevo_agente"))
-		err = db.ReasignarTarea(id, nuevoAgente)
-		if err == nil {
-			db.Audit("alberto", "reasignar_tarea", "tarea", id, nuevoAgente)
-		}
+		err = tareasService.Reassign(id, nuevoAgente)
 	default:
-		http.Redirect(w, r, back+"?err=Acción+desconocida", http.StatusSeeOther)
+		http.Redirect(w, r, back+"?err="+url.QueryEscape(webTranslateRequestf(r, "tasks.flash.unknown_action")), http.StatusSeeOther)
 		return
 	}
 
@@ -693,7 +792,7 @@ func webHandlerTareaAccion(w http.ResponseWriter, r *http.Request, idStr string)
 		http.Redirect(w, r, back+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, back+"?ok="+url.QueryEscape("Acción '"+accion+"' aplicada"), http.StatusSeeOther)
+	http.Redirect(w, r, back+"?ok="+url.QueryEscape(webTranslateRequestf(r, "tasks.flash.action_applied", accion)), http.StatusSeeOther)
 }
 
 // ─── Propuestas: lista ────────────────────────────────────────────────────────
@@ -708,10 +807,13 @@ func webHandlerPropuestas(w http.ResponseWriter, r *http.Request) {
 		e := db.EstadoPropuesta(filtro)
 		estadoPtr = &e
 	}
-	props, _ := db.ListarPropuestas(estadoPtr, nil)
+	props, _ := propuestasService.List(estadoPtr)
 	var detalles []webPropDetalle
 	for _, p := range props {
-		votos, _ := db.VotosDePropuesta(p.ID)
+		detail, err := propuestasService.GetDetail(p.Codigo)
+		if err != nil {
+			continue
+		}
 		cerrada := ""
 		if p.CerradaAt != nil {
 			cerrada = p.CerradaAt.Format("2006-01-02")
@@ -720,10 +822,10 @@ func webHandlerPropuestas(w http.ResponseWriter, r *http.Request) {
 			Codigo: p.Codigo, Titulo: p.Titulo, Descripcion: p.Descripcion,
 			Tipo: p.Tipo, Estado: string(p.Estado), PropuestoPor: p.PropuestoPor,
 			Fecha: p.CreatedAt.Format("2006-01-02"), CerradaFecha: cerrada,
-			Votos: votos,
+			Votos: detail.Votes,
 		})
 	}
-	webRender(w, webTplLayout+webTplPropuestas, webPropData{
+	webRender(w, r, webTplLayout+webTplPropuestas, webPropData{
 		Propuestas: detalles, Filtro: filtro, Msg: msg, Err: errMsg,
 	})
 }
@@ -734,45 +836,44 @@ func webHandlerPropuestaNueva(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	titulo := strings.TrimSpace(r.FormValue("titulo"))
 	if titulo == "" {
-		http.Redirect(w, r, "/propuestas?err="+url.QueryEscape("El título es obligatorio"), http.StatusSeeOther)
+		http.Redirect(w, r, "/propuestas?err="+url.QueryEscape(webTranslateRequestf(r, "proposals.flash.title_required")), http.StatusSeeOther)
 		return
 	}
-	p := &db.Propuesta{
+	_, p, err := propuestasService.Create(propuestasapp.CreateProposalInput{
 		Codigo:       strings.TrimSpace(r.FormValue("codigo")),
 		Titulo:       titulo,
 		Descripcion:  r.FormValue("descripcion"),
 		Tipo:         r.FormValue("tipo"),
 		PropuestoPor: "alberto",
 		Distribuidor: "alberto",
-	}
-	_, err := db.CrearPropuesta(p)
+	})
 	if err != nil {
 		http.Redirect(w, r, "/propuestas?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/propuestas/"+p.Codigo+"?ok="+url.QueryEscape("Propuesta "+p.Codigo+" creada"), http.StatusSeeOther)
+	http.Redirect(w, r, "/propuestas/"+p.Codigo+"?ok="+url.QueryEscape(webTranslateRequestf(r, "proposals.flash.created", p.Codigo)), http.StatusSeeOther)
 }
 
 // ─── Propuestas: detalle ──────────────────────────────────────────────────────
 
 func webHandlerPropuestaDetalle(w http.ResponseWriter, r *http.Request, codigo string) {
-	p, err := db.GetPropuesta(codigo)
+	detail, err := propuestasService.GetDetail(codigo)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	votos, _ := db.VotosDePropuesta(p.ID)
+	p := detail.Proposal
 	cerrada := ""
 	if p.CerradaAt != nil {
 		cerrada = p.CerradaAt.Format("2006-01-02")
 	}
-	agentes, _ := db.ListarAgentes()
-	webRender(w, webTplLayout+webTplPropuestaDetalle, webPropDetalleData{
+	agentes, _ := propuestasService.ListAgents()
+	webRender(w, r, webTplLayout+webTplPropuestaDetalle, webPropDetalleData{
 		P: webPropDetalle{
 			Codigo: p.Codigo, Titulo: p.Titulo, Descripcion: p.Descripcion,
 			Tipo: p.Tipo, Estado: string(p.Estado), PropuestoPor: p.PropuestoPor,
 			Fecha: p.CreatedAt.Format("2006-01-02"), CerradaFecha: cerrada,
-			Votos: votos,
+			Votos: detail.Votes,
 		},
 		Agentes: agentes,
 		Msg:     r.URL.Query().Get("ok"),
@@ -787,27 +888,26 @@ func webHandlerPropuestaAccion(w http.ResponseWriter, r *http.Request, codigo st
 	accion := r.FormValue("accion")
 	back := "/propuestas/" + codigo
 
-	p, err := db.GetPropuesta(codigo)
-	if err != nil {
-		http.Redirect(w, r, "/propuestas?err=Propuesta+no+encontrada", http.StatusSeeOther)
+	if _, err := propuestasService.GetDetail(codigo); err != nil {
+		http.Redirect(w, r, "/propuestas?err="+url.QueryEscape(webTranslateRequestf(r, "proposals.flash.not_found")), http.StatusSeeOther)
 		return
 	}
-
+	var err error
 	switch accion {
 	case "votar":
 		agente := strings.TrimSpace(r.FormValue("agente"))
 		posicion := db.PosicionVoto(r.FormValue("posicion"))
 		comentario := r.FormValue("comentario")
-		_, err = db.Votar(p.ID, agente, posicion, comentario)
+		err = propuestasService.Vote(codigo, agente, posicion, comentario)
 	case "cerrar":
 		nuevoEstado := r.FormValue("estado_cierre")
-		err = db.CerrarPropuesta(codigo, nuevoEstado, "alberto")
+		err = propuestasService.Close(codigo, nuevoEstado, "alberto")
 	case "reabrir":
-		_, err = db.ReabrirPropuesta(codigo, "alberto")
+		_, err = propuestasService.Reopen(codigo, "alberto")
 	case "reparar-votos":
-		_, err = db.RepararVotosPendientesPropuesta(codigo, "alberto")
+		_, err = propuestasService.RepairPendingVotes(codigo, "alberto")
 	default:
-		http.Redirect(w, r, back+"?err=Acción+desconocida", http.StatusSeeOther)
+		http.Redirect(w, r, back+"?err="+url.QueryEscape(webTranslateRequestf(r, "proposals.flash.unknown_action")), http.StatusSeeOther)
 		return
 	}
 
@@ -815,7 +915,7 @@ func webHandlerPropuestaAccion(w http.ResponseWriter, r *http.Request, codigo st
 		http.Redirect(w, r, back+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, back+"?ok="+url.QueryEscape("Acción '"+accion+"' aplicada"), http.StatusSeeOther)
+	http.Redirect(w, r, back+"?ok="+url.QueryEscape(webTranslateRequestf(r, "proposals.flash.action_applied", accion)), http.StatusSeeOther)
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -919,7 +1019,7 @@ func runtimeRowToWeb(row runtimeRow) webRuntimeRow {
 func runtimeCheckpointToWeb(cp *db.RuntimeCheckpoint) webTimeTravelCheckpointRow {
 	proyecto := "—"
 	if cp.ProyectoID != nil {
-		if p, err := db.GetProyecto(strconv.FormatInt(*cp.ProyectoID, 10)); err == nil && p != nil {
+		if p, err := runtimesService.GetProject(strconv.FormatInt(*cp.ProyectoID, 10)); err == nil && p != nil {
 			proyecto = p.Slug
 		} else {
 			proyecto = strconv.FormatInt(*cp.ProyectoID, 10)
@@ -950,7 +1050,7 @@ func runtimeA2UIToWeb(runtime *db.RuntimeInstance, limit int) []webRuntimeA2UIRo
 	if limit <= 0 {
 		limit = 8
 	}
-	messages, _ := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+	messages, _ := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
 		ToAgente:   &agente,
 		ProyectoID: runtime.ProyectoID,
 	})
@@ -1043,19 +1143,19 @@ func runtimeTimelineToWeb(runtime *db.RuntimeInstance, limit int) []webRuntimeTi
 	if runtime.ProyectoID != nil {
 		orderFilter.ProyectoID = runtime.ProyectoID
 	}
-	orders, _ := db.ListarRuntimeOrders(orderFilter)
+	orders, _ := runtimesService.ListRuntimeOrders(orderFilter)
 
 	toAgente := agente
-	mailboxTo, _ := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+	mailboxTo, _ := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
 		ToAgente:   &toAgente,
 		ProyectoID: runtime.ProyectoID,
 	})
 	fromAgente := agente
-	mailboxFrom, _ := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+	mailboxFrom, _ := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
 		FromAgente: &fromAgente,
 		ProyectoID: runtime.ProyectoID,
 	})
-	checkpoints, _ := db.ListarRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{
+	checkpoints, _ := runtimesService.ListRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{
 		Agente:     &agente,
 		ProyectoID: runtime.ProyectoID,
 		Limit:      limit,
@@ -1173,13 +1273,42 @@ func runtimeTimelineToWeb(runtime *db.RuntimeInstance, limit int) []webRuntimeTi
 	return rows
 }
 
-func webRender(w http.ResponseWriter, tplStr string, data any) {
-	tmpl, err := template.New("layout").Funcs(webFuncMap).Parse(tplStr)
+func webRender(w http.ResponseWriter, args ...any) {
+	var (
+		r      *http.Request
+		tplStr string
+		data   any
+		ok     bool
+	)
+	switch len(args) {
+	case 2:
+		tplStr, ok = args[0].(string)
+		if !ok {
+			http.Error(w, "Error de plantilla: argumento inválido", 500)
+			return
+		}
+		data = args[1]
+	case 3:
+		r, _ = args[0].(*http.Request)
+		tplStr, ok = args[1].(string)
+		if !ok {
+			http.Error(w, "Error de plantilla: argumento inválido", 500)
+			return
+		}
+		data = args[2]
+	default:
+		http.Error(w, "Error de plantilla: argumentos inválidos", 500)
+		return
+	}
+	lang := resolveWebRequestLang(r)
+	persistWebLangCookie(w, r, lang)
+	tmpl, err := template.New("layout").Funcs(buildWebFuncMap(lang)).Parse(tplStr)
 	if err != nil {
 		http.Error(w, "Error de plantilla: "+err.Error(), 500)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Language", lang)
 	_ = tmpl.Execute(w, data)
 }
 
@@ -1191,12 +1320,15 @@ var serveCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		puerto, _ := cmd.Flags().GetInt("puerto")
 		addr := fmt.Sprintf(":%d", puerto)
-		return arrancarServidorUnificado(addr, "serve", true)
+		return arrancarServidorUnificado(addr, "serve", true, resolveServerDebugOptions(cmd))
 	},
 }
 
 func init() {
 	serveCmd.Flags().Int("puerto", defaultServePort, "Puerto HTTP")
+	serveCmd.Flags().Bool("debug", false, "Activa logging de depuración del servidor")
+	serveCmd.Flags().Bool("debug-http", false, "Log HTTP detallado por request")
+	serveCmd.Flags().Bool("debug-control-plane", false, "Log detallado del ciclo del control plane")
 	rootCmd.AddCommand(serveCmd)
 }
 
@@ -1205,7 +1337,7 @@ func init() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const webTplLayout = `<!doctype html>
-<html lang="es">
+<html lang="{{lang}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1275,6 +1407,7 @@ const webTplLayout = `<!doctype html>
       <a href="/tareas">{{tr "Tareas"}}</a>
       <a href="/propuestas">{{tr "Propuestas"}}</a>
       <a href="/agentes">{{tr "Agentes"}}</a>
+      <a href="/gobernanza">{{tr "governance.title"}}</a>
       <a href="/runtimes">{{tr "Runtimes"}}</a>
       <a href="/time-travel">{{tr "Time Travel"}}</a>
     </div>
@@ -1291,24 +1424,24 @@ const webTplLayout = `<!doctype html>
 
 const webTplDash = `{{define "content"}}
 <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1.2rem">
-  <h2 style="margin:0">Estado del Proyecto</h2>
-  <small style="color:#94a3b8">{{.Generado}} · auto-refresca cada 10 s</small>
+  <h2 style="margin:0">{{tr "dashboard.title"}}</h2>
+  <small style="color:#94a3b8">{{.Generado}} · {{tr "dashboard.auto_refresh"}}</small>
 </div>
 <meta http-equiv="refresh" content="10">
 <div class="stats">
-  <div class="stat"><a href="/tareas"><div class="n">{{.Total}}</div><div class="l">tareas totales</div></a></div>
-  <div class="stat"><a href="/tareas?estado=completada"><div class="n" style="color:#16a34a">{{.Completadas}}</div><div class="l">completadas</div></a></div>
-  <div class="stat"><a href="/tareas?estado=en_progreso"><div class="n" style="color:#7c3aed">{{index .Counts "en_progreso"}}</div><div class="l">en progreso</div></a></div>
-  <div class="stat"><a href="/tareas?estado=asignada"><div class="n" style="color:#2563eb">{{index .Counts "asignada"}}</div><div class="l">asignadas</div></a></div>
-  <div class="stat"><a href="/tareas?estado=bloqueada"><div class="n" style="color:#dc2626">{{index .Counts "bloqueada"}}</div><div class="l">bloqueadas</div></a></div>
-  <div class="stat"><a href="/propuestas"><div class="n">{{len .Abiertas}}</div><div class="l">props. abiertas</div></a></div>
+  <div class="stat"><a href="/tareas"><div class="n">{{.Total}}</div><div class="l">{{tr "tareas totales"}}</div></a></div>
+  <div class="stat"><a href="/tareas?estado=completada"><div class="n" style="color:#16a34a">{{.Completadas}}</div><div class="l">{{tr "completadas"}}</div></a></div>
+  <div class="stat"><a href="/tareas?estado=en_progreso"><div class="n" style="color:#7c3aed">{{index .Counts "en_progreso"}}</div><div class="l">{{tr "en_progreso"}}</div></a></div>
+  <div class="stat"><a href="/tareas?estado=asignada"><div class="n" style="color:#2563eb">{{index .Counts "asignada"}}</div><div class="l">{{tr "asignadas"}}</div></a></div>
+  <div class="stat"><a href="/tareas?estado=bloqueada"><div class="n" style="color:#dc2626">{{index .Counts "bloqueada"}}</div><div class="l">{{tr "bloqueadas"}}</div></a></div>
+  <div class="stat"><a href="/propuestas"><div class="n">{{len .Abiertas}}</div><div class="l">{{tr "props. abiertas"}}</div></a></div>
 </div>
 <div class="pgbar">
   <div class="pgfill" style="width:{{if gt .Pct 0}}{{.Pct}}%{{else}}2.5rem{{end}}">{{.Pct}}%</div>
 </div>
 <div style="display:grid;grid-template-columns:220px 1fr;gap:1.5rem;align-items:start">
   <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.5rem;padding:.8rem 1rem">
-    <h4 style="margin:0 0 .7rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Agentes</h4>
+    <h4 style="margin:0 0 .7rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">{{tr "Agentes"}}</h4>
     <table style="width:100%"><tbody>
     {{range .Agentes}}{{if .Habilitado}}
       <tr style="border-bottom:1px solid #f1f5f9">
@@ -1324,12 +1457,12 @@ const webTplDash = `{{define "content"}}
         <td style="padding:.3rem .3rem">
           <div style="font-weight:600;font-size:.85rem">{{.Nombre}}</div>
           {{if eq .EstadoCuota "enfriamiento"}}
-            <div style="font-size:.7rem;color:#f59e0b;font-style:italic">Dormido: {{.MotivoPausa}}</div>
+            <div style="font-size:.7rem;color:#f59e0b;font-style:italic">{{tr "dashboard.sleeping"}}: {{.MotivoPausa}}</div>
             <div style="font-size:.65rem;color:#94a3b8">{{reanimacionEn .ReanimarAt}}</div>
           {{else if eq .EstadoCuota "agotado"}}
-            <div style="font-size:.7rem;color:#dc2626">Agotado semanal</div>
+            <div style="font-size:.7rem;color:#dc2626">{{tr "dashboard.weekly_exhausted"}}</div>
           {{else}}
-            <div style="font-size:.72rem;color:#94a3b8">{{.Rol}}</div>
+            <div style="font-size:.72rem;color:#94a3b8">{{tr .Rol}}</div>
           {{end}}
         </td>
         <td style="text-align:right;padding:.3rem 0">
@@ -1341,8 +1474,8 @@ const webTplDash = `{{define "content"}}
   </div>
   <div>
     {{if .EnProgreso}}
-    <h4 style="margin:0 0 .5rem 0">En progreso</h4>
-    <table style="width:100%;margin-bottom:1.2rem"><thead><tr><th>#</th><th>Módulo</th><th>Agente</th><th>Título</th></tr></thead><tbody>
+    <h4 style="margin:0 0 .5rem 0">{{tr "En progreso"}}</h4>
+    <table style="width:100%;margin-bottom:1.2rem"><thead><tr><th>#</th><th>{{tr "dashboard.module"}}</th><th>{{tr "Agente"}}</th><th>{{tr "projects.title_label"}}</th></tr></thead><tbody>
     {{range .EnProgreso}}
       <tr>
         <td><a href="/tareas/{{.ID}}">{{.ID}}</a></td>
@@ -1355,7 +1488,7 @@ const webTplDash = `{{define "content"}}
     {{end}}
     <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:start">
       <div>
-        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Por estado <a href="/tareas" style="font-size:.9em;font-weight:normal;text-transform:none">ver todas →</a></h4>
+        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">{{tr "dashboard.by_state"}} <a href="/tareas" style="font-size:.9em;font-weight:normal;text-transform:none">{{tr "dashboard.view_all"}} →</a></h4>
         <table><tbody>
         {{range $est,$n := .Counts}}{{if gt $n 0}}
           <tr><td style="padding:.2rem .4rem"><a href="/tareas?estado={{$est}}"><span class="tag t-{{$est}}">{{$est}}</span></a></td><td style="padding:.2rem .6rem"><a href="/tareas?estado={{$est}}"><strong>{{$n}}</strong></a></td></tr>
@@ -1364,8 +1497,8 @@ const webTplDash = `{{define "content"}}
       </div>
       {{if .Abiertas}}
       <div>
-        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Propuestas abiertas</h4>
-        <table><thead><tr><th>Código</th><th>✓</th><th>✗</th><th>⏳</th></tr></thead><tbody>
+        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">{{tr "Propuestas abiertas"}}</h4>
+        <table><thead><tr><th>{{tr "dashboard.code"}}</th><th>✓</th><th>✗</th><th>⏳</th></tr></thead><tbody>
         {{range .Abiertas}}
           <tr>
             <td><a href="/propuestas/{{.Codigo}}"><strong>{{.Codigo}}</strong></a><br><small>{{trunc .Titulo 28}}</small></td>
@@ -1379,8 +1512,8 @@ const webTplDash = `{{define "content"}}
       {{end}}
       {{if .Runtimes}}
       <div>
-        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Runtimes activos <a href="/runtimes" style="font-size:.9em;font-weight:normal;text-transform:none">ver todos →</a></h4>
-        <table><thead><tr><th>Agente</th><th>Estado</th><th>PID</th><th>Hijos</th></tr></thead><tbody>
+        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">{{tr "dashboard.active_runtimes"}} <a href="/runtimes" style="font-size:.9em;font-weight:normal;text-transform:none">{{tr "dashboard.view_all"}} →</a></h4>
+        <table><thead><tr><th>{{tr "Agente"}}</th><th>{{tr "Estado"}}</th><th>{{tr "common.pid"}}</th><th>{{tr "runtime.children"}}</th></tr></thead><tbody>
         {{range .Runtimes}}
           <tr>
             <td style="padding-left:{{.Nivel}}rem"><a href="/runtimes/{{.ID}}">{{if gt .Nivel 0}}↳ {{end}}{{.Agente}}</a></td>
@@ -1394,8 +1527,8 @@ const webTplDash = `{{define "content"}}
       {{end}}
       {{if .Checkpoints}}
       <div>
-        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">Checkpoints recientes <a href="/time-travel" style="font-size:.9em;font-weight:normal;text-transform:none">ver todos →</a></h4>
-        <table><thead><tr><th>Agente</th><th>Tipo</th><th>Resumen</th></tr></thead><tbody>
+        <h4 style="margin:0 0 .5rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">{{tr "dashboard.recent_checkpoints"}} <a href="/time-travel" style="font-size:.9em;font-weight:normal;text-transform:none">{{tr "dashboard.view_all"}} →</a></h4>
+        <table><thead><tr><th>{{tr "Agente"}}</th><th>{{tr "Tipo"}}</th><th>{{tr "time_travel.summary"}}</th></tr></thead><tbody>
         {{range .Checkpoints}}
           <tr>
             <td><a href="/time-travel/{{.ID}}">{{.Agente}}</a></td>
@@ -1416,70 +1549,70 @@ const webTplDash = `{{define "content"}}
 
 const webTplTareas = `{{define "content"}}
 <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
-  <h2 style="margin:0">Tareas <small style="font-size:.5em;color:#94a3b8">{{len .Tareas}}</small></h2>
+  <h2 style="margin:0">{{tr "Tareas"}} <small style="font-size:.5em;color:#94a3b8">{{len .Tareas}}</small></h2>
 </div>
 {{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert-err">✗ {{.Err}}</div>{{end}}
 
 <details class="form-panel">
-  <summary>＋ Nueva tarea</summary>
+  <summary>＋ {{tr "tasks.new"}}</summary>
   <form method="POST" action="/tareas/nueva" style="margin-top:.8rem">
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem">
-      <div><label>Título *</label><input type="text" name="titulo" required placeholder="Título de la tarea"></div>
-      <div><label>Módulo</label><input type="text" name="modulo" placeholder="M25, transversal…"></div>
-      <div><label>Propuesta vinculada</label><input type="text" name="propuesta" placeholder="OP-030"></div>
+      <div><label>{{tr "projects.title_label"}} *</label><input type="text" name="titulo" required placeholder="{{tr "tasks.title_placeholder"}}"></div>
+      <div><label>{{tr "tasks.module"}}</label><input type="text" name="modulo" placeholder="{{tr "tasks.module_placeholder"}}"></div>
+      <div><label>{{tr "tasks.linked_proposal"}}</label><input type="text" name="propuesta" placeholder="OP-030"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin-top:.4rem">
-      <div><label>Prioridad</label>
+      <div><label>{{tr "Prioridad"}}</label>
         <select name="prioridad">
-          <option value="alta">Alta</option>
-          <option value="media" selected>Media</option>
-          <option value="baja">Baja</option>
+          <option value="alta">{{tr "alta"}}</option>
+          <option value="media" selected>{{tr "media"}}</option>
+          <option value="baja">{{tr "baja"}}</option>
         </select>
       </div>
-      <div><label>Asignar a agente</label>
+      <div><label>{{tr "tasks.assign_agent"}}</label>
         <select name="agente">
-          <option value="">— sin asignar —</option>
+          <option value="">{{tr "tasks.unassigned"}}</option>
           {{range .Agentes}}{{if ne .Rol "admin"}}<option value="{{.Nombre}}">{{.Nombre}}</option>{{end}}{{end}}
         </select>
       </div>
-      <div><label>Descripción</label><input type="text" name="descripcion" placeholder="Descripción breve"></div>
+      <div><label>{{tr "common.description"}}</label><input type="text" name="descripcion" placeholder="{{tr "tasks.description_placeholder"}}"></div>
     </div>
-    <button type="submit" class="btn-sm" style="margin-top:.6rem">Crear tarea</button>
+    <button type="submit" class="btn-sm" style="margin-top:.6rem">{{tr "tasks.create"}}</button>
   </form>
 </details>
 
 <div class="filtros">
-  <a href="/tareas"{{if eqStr .Filtro ""}} class="sel"{{end}}>Todas</a>
-  <a href="/tareas?estado=en_progreso"{{if eqStr .Filtro "en_progreso"}} class="sel"{{end}}>En progreso</a>
-  <a href="/tareas?estado=asignada"{{if eqStr .Filtro "asignada"}} class="sel"{{end}}>Asignadas</a>
-  <a href="/tareas?estado=libre"{{if eqStr .Filtro "libre"}} class="sel"{{end}}>Libres</a>
-  <a href="/tareas?estado=bloqueada"{{if eqStr .Filtro "bloqueada"}} class="sel"{{end}}>Bloqueadas</a>
-  <a href="/tareas?estado=backlog"{{if eqStr .Filtro "backlog"}} class="sel"{{end}}>Backlog</a>
-  <a href="/tareas?estado=completada"{{if eqStr .Filtro "completada"}} class="sel"{{end}}>Completadas</a>
+  <a href="/tareas"{{if eqStr .Filtro ""}} class="sel"{{end}}>{{tr "Todas"}}</a>
+  <a href="/tareas?estado=en_progreso"{{if eqStr .Filtro "en_progreso"}} class="sel"{{end}}>{{tr "En progreso"}}</a>
+  <a href="/tareas?estado=asignada"{{if eqStr .Filtro "asignada"}} class="sel"{{end}}>{{tr "Asignadas"}}</a>
+  <a href="/tareas?estado=libre"{{if eqStr .Filtro "libre"}} class="sel"{{end}}>{{tr "Libres"}}</a>
+  <a href="/tareas?estado=bloqueada"{{if eqStr .Filtro "bloqueada"}} class="sel"{{end}}>{{tr "Bloqueadas"}}</a>
+  <a href="/tareas?estado=backlog"{{if eqStr .Filtro "backlog"}} class="sel"{{end}}>{{tr "backlog"}}</a>
+  <a href="/tareas?estado=completada"{{if eqStr .Filtro "completada"}} class="sel"{{end}}>{{tr "Completadas"}}</a>
 </div>
 
 {{if .Tareas}}
 <div style="overflow-x:auto">
 <table>
-  <thead><tr><th>#</th><th>Estado</th><th>Prioridad</th><th>Módulo</th><th>Agente</th><th>Título</th><th></th></tr></thead>
+  <thead><tr><th>#</th><th>{{tr "Estado"}}</th><th>{{tr "Prioridad"}}</th><th>{{tr "tasks.module"}}</th><th>{{tr "Agente"}}</th><th>{{tr "projects.title_label"}}</th><th></th></tr></thead>
   <tbody>
   {{range .Tareas}}
     <tr>
       <td style="color:#94a3b8">{{.ID}}</td>
-      <td><span class="tag t-{{.Estado}}">{{.Estado}}</span></td>
-      <td><span class="tag t-{{.Prioridad}}">{{.Prioridad}}</span></td>
+      <td><span class="tag t-{{.Estado}}">{{tr .Estado}}</span></td>
+      <td><span class="tag t-{{.Prioridad}}">{{tr .Prioridad}}</span></td>
       <td><code style="font-size:.8em">{{.Modulo}}</code></td>
       <td>{{.Agente}}</td>
       <td>{{.Titulo}}</td>
-      <td><a href="/tareas/{{.ID}}" class="btn-sm">Gestionar →</a></td>
+      <td><a href="/tareas/{{.ID}}" class="btn-sm">{{tr "tasks.manage"}} →</a></td>
     </tr>
   {{end}}
   </tbody>
 </table>
 </div>
 {{else}}
-<p style="color:#94a3b8">No hay tareas con este filtro.</p>
+<p style="color:#94a3b8">{{tr "tasks.none_visible"}}</p>
 {{end}}
 {{end}}
 `
@@ -1487,12 +1620,12 @@ const webTplTareas = `{{define "content"}}
 // ─── Tarea: detalle + acciones ────────────────────────────────────────────────
 
 const webTplTareaDetalle = `{{define "content"}}
-<a href="/tareas" style="font-size:.85rem;color:#64748b">← volver a tareas</a>
+<a href="/tareas" style="font-size:.85rem;color:#64748b">← {{tr "tasks.back"}}</a>
 <h2 style="margin:.5rem 0">#{{.T.ID}} — {{.T.Titulo}}</h2>
 <p>
-  <span class="tag t-{{.T.Estado}}">{{.T.Estado}}</span>
-  <span class="tag t-{{.T.Prioridad}}">{{.T.Prioridad}}</span>
-  <span style="color:#64748b;font-size:.85rem;margin-left:.5rem">Módulo: {{.T.Modulo}} · Agente: {{.T.Agente}}</span>
+  <span class="tag t-{{.T.Estado}}">{{tr .T.Estado}}</span>
+  <span class="tag t-{{.T.Prioridad}}">{{tr .T.Prioridad}}</span>
+  <span style="color:#64748b;font-size:.85rem;margin-left:.5rem">{{tr "tasks.module"}}: {{.T.Modulo}} · {{tr "Agente"}}: {{.T.Agente}}</span>
 </p>
 
 {{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
@@ -1504,115 +1637,115 @@ const webTplTareaDetalle = `{{define "content"}}
 
 {{if or (eqStr $estado "libre") (eqStr $estado "backlog")}}
 <div class="action-box">
-  <h4>Asignar a agente</h4>
+  <h4>{{tr "tasks.assign_title"}}</h4>
   <form method="POST" action="/tareas/{{$id}}/accion" style="display:flex;gap:.5rem;align-items:flex-end">
     <input type="hidden" name="accion" value="tomar">
-    <div><label>Agente</label>
+    <div><label>{{tr "Agente"}}</label>
       <select name="agente">
         {{range $agentes}}{{if ne .Rol "admin"}}<option value="{{.Nombre}}">{{.Nombre}}</option>{{end}}{{end}}
       </select>
     </div>
-    <button type="submit" class="btn-sm">Asignar</button>
+    <button type="submit" class="btn-sm">{{tr "tasks.assign_submit"}}</button>
   </form>
 </div>
 {{end}}
 
 {{if eqStr $estado "asignada"}}
 <div class="action-box">
-  <h4>Iniciar trabajo</h4>
+  <h4>{{tr "tasks.start_title"}}</h4>
   <form method="POST" action="/tareas/{{$id}}/accion" style="display:flex;gap:.5rem;align-items:flex-end">
     <input type="hidden" name="accion" value="iniciar">
-    <div><label>Agente</label>
+    <div><label>{{tr "Agente"}}</label>
       <select name="agente">
         {{range $agentes}}{{if ne .Rol "admin"}}<option value="{{.Nombre}}"{{if eqStr .Nombre $.T.Agente}} selected{{end}}>{{.Nombre}}</option>{{end}}{{end}}
       </select>
     </div>
-    <button type="submit" class="btn-sm">Iniciar</button>
+    <button type="submit" class="btn-sm">{{tr "tasks.start_submit"}}</button>
   </form>
 </div>
 {{end}}
 
 {{if or (eqStr $estado "asignada") (eqStr $estado "en_progreso")}}
 <div class="action-box">
-  <h4>Completar tarea</h4>
+  <h4>{{tr "tasks.complete_title"}}</h4>
   <form method="POST" action="/tareas/{{$id}}/accion" style="display:flex;gap:.5rem;align-items:flex-end">
     <input type="hidden" name="accion" value="completar">
-    <div><label>Agente</label>
+    <div><label>{{tr "Agente"}}</label>
       <select name="agente">
         {{range $agentes}}{{if ne .Rol "admin"}}<option value="{{.Nombre}}"{{if eqStr .Nombre $.T.Agente}} selected{{end}}>{{.Nombre}}</option>{{end}}{{end}}
       </select>
     </div>
-    <div><label>Commit (opcional)</label><input type="text" name="commit" placeholder="abc1234" style="width:140px"></div>
-    <button type="submit" class="btn-sm" style="background:#16a34a;border-color:#16a34a;color:#fff">Completar</button>
+    <div><label>{{tr "tasks.commit_optional"}}</label><input type="text" name="commit" placeholder="abc1234" style="width:140px"></div>
+    <button type="submit" class="btn-sm" style="background:#16a34a;border-color:#16a34a;color:#fff">{{tr "tasks.complete_submit"}}</button>
   </form>
 </div>
 {{end}}
 
 {{if eqStr $estado "en_progreso"}}
 <div class="action-box">
-  <h4>Bloquear tarea</h4>
+  <h4>{{tr "tasks.block_title"}}</h4>
   <form method="POST" action="/tareas/{{$id}}/accion" style="display:flex;gap:.5rem;align-items:flex-end">
     <input type="hidden" name="accion" value="bloquear">
-    <div><label>Agente</label>
+    <div><label>{{tr "Agente"}}</label>
       <select name="agente">
         {{range $agentes}}{{if ne .Rol "admin"}}<option value="{{.Nombre}}"{{if eqStr .Nombre $.T.Agente}} selected{{end}}>{{.Nombre}}</option>{{end}}{{end}}
       </select>
     </div>
-    <div style="flex:1"><label>Motivo del bloqueo</label><input type="text" name="motivo" required placeholder="Describe el bloqueo" style="width:100%"></div>
-    <button type="submit" class="btn-sm" style="background:#dc2626;border-color:#dc2626;color:#fff">Bloquear</button>
+    <div style="flex:1"><label>{{tr "tasks.block_reason"}}</label><input type="text" name="motivo" required placeholder="{{tr "tasks.block_reason_placeholder"}}" style="width:100%"></div>
+    <button type="submit" class="btn-sm" style="background:#dc2626;border-color:#dc2626;color:#fff">{{tr "tasks.block_submit"}}</button>
   </form>
 </div>
 {{end}}
 
 {{if eqStr $estado "bloqueada"}}
 <div class="action-box">
-  <h4>Desbloquear tarea</h4>
+  <h4>{{tr "tasks.unblock_title"}}</h4>
   <form method="POST" action="/tareas/{{$id}}/accion" style="display:flex;gap:.5rem;align-items:flex-end">
     <input type="hidden" name="accion" value="desbloquear">
-    <div><label>Agente</label>
+    <div><label>{{tr "Agente"}}</label>
       <select name="agente">
         {{range $agentes}}{{if ne .Rol "admin"}}<option value="{{.Nombre}}">{{.Nombre}}</option>{{end}}{{end}}
       </select>
     </div>
-    <div style="flex:1"><label>Resolución</label><input type="text" name="resolucion" required placeholder="Cómo se resolvió" style="width:100%"></div>
-    <button type="submit" class="btn-sm">Desbloquear</button>
+    <div style="flex:1"><label>{{tr "tasks.resolution"}}</label><input type="text" name="resolucion" required placeholder="{{tr "tasks.resolution_placeholder"}}" style="width:100%"></div>
+    <button type="submit" class="btn-sm">{{tr "tasks.unblock_submit"}}</button>
   </form>
 </div>
 {{end}}
 
 <div class="action-box">
-  <h4>Reasignar a otro agente</h4>
+  <h4>{{tr "tasks.reassign_title"}}</h4>
   <form method="POST" action="/tareas/{{$id}}/accion" style="display:flex;gap:.5rem;align-items:flex-end">
     <input type="hidden" name="accion" value="reasignar">
-    <div><label>Nuevo agente</label>
+    <div><label>{{tr "tasks.new_agent"}}</label>
       <select name="nuevo_agente">
         {{range $agentes}}{{if ne .Rol "admin"}}<option value="{{.Nombre}}">{{.Nombre}}</option>{{end}}{{end}}
       </select>
     </div>
-    <button type="submit" class="btn-sm">Reasignar</button>
+    <button type="submit" class="btn-sm">{{tr "tasks.reassign_submit"}}</button>
   </form>
 </div>
 
 <div class="action-box">
-  <h4>Añadir nota</h4>
+  <h4>{{tr "tasks.add_note_title"}}</h4>
   <form method="POST" action="/tareas/{{$id}}/accion" style="display:flex;gap:.5rem;align-items:flex-end">
     <input type="hidden" name="accion" value="nota">
-    <div><label>Agente</label>
+    <div><label>{{tr "Agente"}}</label>
       <select name="agente">
         {{range $agentes}}<option value="{{.Nombre}}">{{.Nombre}}</option>{{end}}
       </select>
     </div>
-    <div style="flex:1"><label>Nota</label><input type="text" name="nota" required placeholder="Texto de la nota" style="width:100%"></div>
-    <button type="submit" class="btn-sm">Añadir</button>
+    <div style="flex:1"><label>{{tr "common.note"}}</label><input type="text" name="nota" required placeholder="{{tr "tasks.note_placeholder"}}" style="width:100%"></div>
+    <button type="submit" class="btn-sm">{{tr "tasks.add_note_submit"}}</button>
   </form>
 </div>
 
 {{if not (eqStr $estado "backlog")}}
 <div class="action-box">
-  <h4>Mover a backlog</h4>
+  <h4>{{tr "tasks.move_backlog_title"}}</h4>
   <form method="POST" action="/tareas/{{$id}}/accion">
     <input type="hidden" name="accion" value="backlog">
-    <button type="submit" class="btn-sm">Mover a backlog</button>
+    <button type="submit" class="btn-sm">{{tr "tasks.move_backlog_submit"}}</button>
   </form>
 </div>
 {{end}}
@@ -1623,58 +1756,58 @@ const webTplTareaDetalle = `{{define "content"}}
 
 const webTplPropuestas = `{{define "content"}}
 <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
-  <h2 style="margin:0">Propuestas (OPs) <small style="font-size:.5em;color:#94a3b8">{{len .Propuestas}}</small></h2>
+  <h2 style="margin:0">{{tr "Propuestas (OPs)"}} <small style="font-size:.5em;color:#94a3b8">{{len .Propuestas}}</small></h2>
 </div>
 {{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
 {{if .Err}}<div class="alert-err">✗ {{.Err}}</div>{{end}}
 
 <details class="form-panel">
-  <summary>＋ Nueva propuesta</summary>
+  <summary>＋ {{tr "proposals.new"}}</summary>
   <form method="POST" action="/propuestas/nueva" style="margin-top:.8rem">
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem">
-      <div><label>Título *</label><input type="text" name="titulo" required placeholder="Título de la propuesta"></div>
-      <div><label>Tipo</label>
+      <div><label>{{tr "projects.title_label"}} *</label><input type="text" name="titulo" required placeholder="{{tr "proposals.title_placeholder"}}"></div>
+      <div><label>{{tr "Tipo"}}</label>
         <select name="tipo">
-          <option value="implementacion">Implementación</option>
-          <option value="arquitectura">Arquitectura</option>
-          <option value="seguridad">Seguridad</option>
-          <option value="backlog">Backlog</option>
-          <option value="otro">Otro</option>
+          <option value="implementacion">{{tr "implementacion"}}</option>
+          <option value="arquitectura">{{tr "arquitectura"}}</option>
+          <option value="seguridad">{{tr "seguridad"}}</option>
+          <option value="backlog">{{tr "backlog"}}</option>
+          <option value="otro">{{tr "otro"}}</option>
         </select>
       </div>
-      <div><label>Código (opcional)</label><input type="text" name="codigo" placeholder="OP-030 (auto si vacío)"></div>
+      <div><label>{{tr "proposals.code_optional"}}</label><input type="text" name="codigo" placeholder="{{tr "proposals.code_placeholder"}}"></div>
     </div>
-    <div style="margin-top:.4rem"><label>Descripción</label>
-      <textarea name="descripcion" rows="2" placeholder="Descripción detallada de la propuesta" style="width:100%"></textarea>
+    <div style="margin-top:.4rem"><label>{{tr "common.description"}}</label>
+      <textarea name="descripcion" rows="2" placeholder="{{tr "proposals.description_placeholder"}}" style="width:100%"></textarea>
     </div>
-    <button type="submit" class="btn-sm" style="margin-top:.4rem">Crear propuesta</button>
+    <button type="submit" class="btn-sm" style="margin-top:.4rem">{{tr "proposals.create"}}</button>
   </form>
 </details>
 
 <div class="filtros">
-  <a href="/propuestas"{{if eqStr .Filtro ""}} class="sel"{{end}}>Todas</a>
-  <a href="/propuestas?estado=abierta"{{if eqStr .Filtro "abierta"}} class="sel"{{end}}>Abiertas</a>
-  <a href="/propuestas?estado=consenso"{{if eqStr .Filtro "consenso"}} class="sel"{{end}}>Consenso</a>
-  <a href="/propuestas?estado=backlog"{{if eqStr .Filtro "backlog"}} class="sel"{{end}}>Backlog</a>
-  <a href="/propuestas?estado=rechazada"{{if eqStr .Filtro "rechazada"}} class="sel"{{end}}>Rechazadas</a>
+  <a href="/propuestas"{{if eqStr .Filtro ""}} class="sel"{{end}}>{{tr "Todas"}}</a>
+  <a href="/propuestas?estado=abierta"{{if eqStr .Filtro "abierta"}} class="sel"{{end}}>{{tr "proposals.open"}}</a>
+  <a href="/propuestas?estado=consenso"{{if eqStr .Filtro "consenso"}} class="sel"{{end}}>{{tr "proposals.consensus"}}</a>
+  <a href="/propuestas?estado=backlog"{{if eqStr .Filtro "backlog"}} class="sel"{{end}}>{{tr "backlog"}}</a>
+  <a href="/propuestas?estado=rechazada"{{if eqStr .Filtro "rechazada"}} class="sel"{{end}}>{{tr "proposals.rejected"}}</a>
 </div>
 
 {{range .Propuestas}}
 <details class="card">
   <summary>
     <span style="color:#94a3b8;margin-right:.4rem">{{.Codigo}}</span>
-    <span class="tag t-{{.Estado}}">{{.Estado}}</span>
+    <span class="tag t-{{.Estado}}">{{tr .Estado}}</span>
     &nbsp;<strong>{{trunc .Titulo 65}}</strong>
     <span style="color:#94a3b8;font-weight:normal;font-size:.82em;margin-left:.5rem">· {{.PropuestoPor}} · {{.Fecha}}</span>
-    <a href="/propuestas/{{.Codigo}}" style="float:right;font-size:.8em;font-weight:normal;color:#2563eb" onclick="event.stopPropagation()">Gestionar →</a>
+    <a href="/propuestas/{{.Codigo}}" style="float:right;font-size:.8em;font-weight:normal;color:#2563eb" onclick="event.stopPropagation()">{{tr "proposals.manage"}} →</a>
   </summary>
   {{if .Descripcion}}<p style="color:#475569;font-size:.88em;margin:.6rem 0">{{.Descripcion}}</p>{{end}}
   {{if .Votos}}
-  <table style="font-size:.82em"><thead><tr><th>Agente</th><th>Posición</th><th>Comentario</th></tr></thead><tbody>
+  <table style="font-size:.82em"><thead><tr><th>{{tr "Agente"}}</th><th>{{tr "projects.position"}}</th><th>{{tr "projects.comment"}}</th></tr></thead><tbody>
   {{range .Votos}}
     <tr>
       <td><strong>{{.Agente}}</strong></td>
-      <td><span class="tag t-{{.Posicion}}">{{.Posicion}}</span></td>
+      <td><span class="tag t-{{.Posicion}}">{{tr .Posicion}}</span></td>
       <td style="color:#64748b">{{.Comentario}}</td>
     </tr>
   {{end}}
@@ -1727,7 +1860,7 @@ const webTplRuntimes = `{{define "content"}}
 {{if .Runtimes}}
 <div style="overflow-x:auto">
 <table>
-  <thead><tr><th>ID</th><th>{{tr "Estado"}}</th><th>{{tr "Agente"}}</th><th>{{tr "Proyecto"}}</th><th>{{tr "Provider"}}</th><th>{{tr "Connector"}}</th><th>PID</th><th>{{tr "runtime.children"}}</th><th>{{tr "branch"}}</th><th>{{tr "runtime.last_signal"}}</th></tr></thead>
+  <thead><tr><th>ID</th><th>{{tr "Estado"}}</th><th>{{tr "Agente"}}</th><th>{{tr "Proyecto"}}</th><th>{{tr "Provider"}}</th><th>{{tr "Connector"}}</th><th>{{tr "common.pid"}}</th><th>{{tr "runtime.children"}}</th><th>{{tr "branch"}}</th><th>{{tr "runtime.last_signal"}}</th></tr></thead>
   <tbody>
   {{range .Runtimes}}
     <tr>
@@ -1764,7 +1897,7 @@ const webTplRuntimeDetalle = `{{define "content"}}
 </p>
 
 <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr));margin-bottom:1rem">
-  <div class="stat"><div class="n" style="font-size:1.2rem">{{.Runtime.PID}}</div><div class="l">PID</div></div>
+  <div class="stat"><div class="n" style="font-size:1.2rem">{{.Runtime.PID}}</div><div class="l">{{tr "common.pid"}}</div></div>
   <div class="stat"><div class="n" style="font-size:1.2rem">{{.Runtime.Hijos}}</div><div class="l">{{tr "runtime.children"}}</div></div>
   <div class="stat"><div class="n" style="font-size:1rem">{{.Runtime.Branch}}</div><div class="l">{{tr "branch"}}</div></div>
   <div class="stat"><div class="n" style="font-size:1rem">{{.Runtime.Modelo}}</div><div class="l">{{tr "runtime.model"}}</div></div>
@@ -1776,7 +1909,7 @@ const webTplRuntimeDetalle = `{{define "content"}}
 {{if .Muestras}}
 <div style="overflow-x:auto">
 <table>
-  <thead><tr><th>{{tr "runtime.created_feminine"}}</th><th>{{tr "Estado"}}</th><th>CPU%</th><th>MEM</th><th>RSS</th><th>FDs</th><th>{{tr "runtime.children"}}</th><th>{{tr "runtime.threads"}}</th><th>{{tr "runtime.source"}}</th></tr></thead>
+  <thead><tr><th>{{tr "runtime.created_feminine"}}</th><th>{{tr "Estado"}}</th><th>{{tr "runtime.cpu_pct"}}</th><th>{{tr "runtime.mem"}}</th><th>{{tr "runtime.rss"}}</th><th>{{tr "runtime.fds"}}</th><th>{{tr "runtime.children"}}</th><th>{{tr "runtime.threads"}}</th><th>{{tr "runtime.source"}}</th></tr></thead>
   <tbody>
   {{range .Muestras}}
     <tr>
@@ -1982,13 +2115,13 @@ const webTplTimeTravelDetalle = `{{define "content"}}
 // ─── Propuesta: detalle + acciones ───────────────────────────────────────────
 
 const webTplPropuestaDetalle = `{{define "content"}}
-<a href="/propuestas" style="font-size:.85rem;color:#64748b">← volver a propuestas</a>
+<a href="/propuestas" style="font-size:.85rem;color:#64748b">← {{tr "proposals.back"}}</a>
 <h2 style="margin:.5rem 0">{{.P.Codigo}} — {{.P.Titulo}}</h2>
 <p>
-  <span class="tag t-{{.P.Estado}}">{{.P.Estado}}</span>
-  <span class="tag" style="background:#e2e8f0;color:#475569">{{.P.Tipo}}</span>
-  <span style="color:#64748b;font-size:.85rem;margin-left:.5rem">Propuesto por {{.P.PropuestoPor}} · {{.P.Fecha}}</span>
-  {{if .P.CerradaFecha}}<span style="color:#94a3b8;font-size:.82rem;margin-left:.5rem">(cerrada {{.P.CerradaFecha}})</span>{{end}}
+  <span class="tag t-{{.P.Estado}}">{{tr .P.Estado}}</span>
+  <span class="tag" style="background:#e2e8f0;color:#475569">{{tr .P.Tipo}}</span>
+  <span style="color:#64748b;font-size:.85rem;margin-left:.5rem">{{tr "proposals.proposed_by"}} {{.P.PropuestoPor}} · {{.P.Fecha}}</span>
+  {{if .P.CerradaFecha}}<span style="color:#94a3b8;font-size:.82rem;margin-left:.5rem">({{tr "proposals.closed_on"}} {{.P.CerradaFecha}})</span>{{end}}
 </p>
 {{if .P.Descripcion}}<p style="color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:.4rem;padding:.8rem 1rem;font-size:.9rem">{{.P.Descripcion}}</p>{{end}}
 
@@ -2002,41 +2135,41 @@ const webTplPropuestaDetalle = `{{define "content"}}
 {{if eqStr $estado "abierta"}}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
   <div class="action-box">
-    <h4>Votar</h4>
+    <h4>{{tr "proposals.vote_title"}}</h4>
     <form method="POST" action="/propuestas/{{$codigo}}/accion">
       <input type="hidden" name="accion" value="votar">
       <div style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap">
-        <div><label>Agente</label>
+        <div><label>{{tr "Agente"}}</label>
           <select name="agente">
             {{range $agentes}}{{if ne .Rol "admin"}}<option value="{{.Nombre}}">{{.Nombre}}</option>{{end}}{{end}}
           </select>
         </div>
-        <div><label>Posición</label>
+        <div><label>{{tr "projects.position"}}</label>
           <select name="posicion">
-            <option value="acuerdo">Acuerdo</option>
-            <option value="desacuerdo">Desacuerdo</option>
-            <option value="abstencion">Abstención</option>
+            <option value="acuerdo">{{tr "acuerdo"}}</option>
+            <option value="desacuerdo">{{tr "desacuerdo"}}</option>
+            <option value="abstencion">{{tr "abstencion"}}</option>
           </select>
         </div>
       </div>
-      <div style="margin-top:.4rem"><label>Comentario (opcional)</label>
-        <input type="text" name="comentario" placeholder="Justificación del voto" style="width:100%">
+      <div style="margin-top:.4rem"><label>{{tr "proposals.comment_optional"}}</label>
+        <input type="text" name="comentario" placeholder="{{tr "proposals.vote_placeholder"}}" style="width:100%">
       </div>
-      <button type="submit" class="btn-sm" style="margin-top:.5rem">Registrar voto</button>
+      <button type="submit" class="btn-sm" style="margin-top:.5rem">{{tr "proposals.vote_submit"}}</button>
     </form>
   </div>
   <div class="action-box">
-    <h4>Cerrar propuesta (Alberto)</h4>
+    <h4>{{tr "proposals.close_title"}}</h4>
     <form method="POST" action="/propuestas/{{$codigo}}/accion">
       <input type="hidden" name="accion" value="cerrar">
-      <div><label>Estado de cierre</label>
+      <div><label>{{tr "proposals.close_state"}}</label>
         <select name="estado_cierre">
-          <option value="consenso">Consenso ✓</option>
-          <option value="rechazada">Rechazada ✗</option>
-          <option value="backlog">Backlog (aplazar)</option>
+          <option value="consenso">{{tr "proposals.close_consensus"}}</option>
+          <option value="rechazada">{{tr "proposals.close_rejected"}}</option>
+          <option value="backlog">{{tr "proposals.close_backlog"}}</option>
         </select>
       </div>
-      <button type="submit" class="btn-sm" style="margin-top:.5rem">Cerrar propuesta</button>
+      <button type="submit" class="btn-sm" style="margin-top:.5rem">{{tr "proposals.close_submit"}}</button>
     </form>
   </div>
 </div>
@@ -2045,41 +2178,41 @@ const webTplPropuestaDetalle = `{{define "content"}}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
   {{if neStr $estado "abierta"}}
   <div class="action-box">
-    <h4>Reabrir propuesta (Alberto)</h4>
+    <h4>{{tr "proposals.reopen_title"}}</h4>
     <form method="POST" action="/propuestas/{{$codigo}}/accion">
       <input type="hidden" name="accion" value="reabrir">
       <p style="margin:.2rem 0 .6rem 0;color:#64748b;font-size:.9rem">
-        Vuelve a estado abierto y reconstruye votos pendientes faltantes.
+        {{tr "proposals.reopen_help"}}
       </p>
-      <button type="submit" class="btn-sm">Reabrir propuesta</button>
+      <button type="submit" class="btn-sm">{{tr "proposals.reopen_submit"}}</button>
     </form>
   </div>
   {{end}}
   <div class="action-box">
-    <h4>Reparar votos pendientes (Alberto)</h4>
+    <h4>{{tr "proposals.repair_title"}}</h4>
     <form method="POST" action="/propuestas/{{$codigo}}/accion">
       <input type="hidden" name="accion" value="reparar-votos">
       <p style="margin:.2rem 0 .6rem 0;color:#64748b;font-size:.9rem">
-        Reconstruye filas de voto pendiente faltantes para agentes habilitados.
+        {{tr "proposals.repair_help"}}
       </p>
-      <button type="submit" class="btn-sm">Reparar votos</button>
+      <button type="submit" class="btn-sm">{{tr "proposals.repair_submit"}}</button>
     </form>
   </div>
 </div>
 
-<h4>Votos registrados</h4>
+<h4>{{tr "proposals.recorded_votes"}}</h4>
 {{if .P.Votos}}
-<table><thead><tr><th>Agente</th><th>Posición</th><th>Comentario</th></tr></thead><tbody>
+<table><thead><tr><th>{{tr "Agente"}}</th><th>{{tr "projects.position"}}</th><th>{{tr "projects.comment"}}</th></tr></thead><tbody>
 {{range .P.Votos}}
   <tr>
     <td><strong>{{.Agente}}</strong></td>
-    <td><span class="tag t-{{.Posicion}}">{{.Posicion}}</span></td>
+    <td><span class="tag t-{{.Posicion}}">{{tr .Posicion}}</span></td>
     <td style="color:#64748b">{{.Comentario}}</td>
   </tr>
 {{end}}
 </tbody></table>
 {{else}}
-<p style="color:#94a3b8">No hay votos registrados aún.</p>
+<p style="color:#94a3b8">{{tr "proposals.no_votes"}}</p>
 {{end}}
 {{end}}
 `

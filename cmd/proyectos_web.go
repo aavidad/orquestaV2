@@ -8,13 +8,13 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 
 	"orquesta/db"
+	"orquesta/fabricaapp"
 	"orquesta/memoriaproyecto"
 )
 
@@ -52,36 +52,12 @@ func webRouterProyectos(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case len(parts) == 2 && r.Method == http.MethodGet:
 		webHandlerProyectoDetalle(w, r, parts[1])
+	case len(parts) == 3 && parts[2] == "fabricar-app" && r.Method == http.MethodPost:
+		webHandlerProyectoFabricarApp(w, r, parts[1])
 	case len(parts) == 3 && parts[2] == "decisiones" && r.Method == http.MethodPost:
 		webHandlerProyectoDecisionNueva(w, r, parts[1])
 	case len(parts) == 3 && parts[2] == "documentacion" && r.Method == http.MethodPost:
 		webHandlerProyectoDocumentoNuevo(w, r, parts[1])
-	default:
-		http.NotFound(w, r)
-	}
-}
-
-func webRouterAPIProyectos(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) < 2 || parts[0] != "api" || parts[1] != "proyectos" {
-		http.NotFound(w, r)
-		return
-	}
-	switch {
-	case len(parts) == 2 && r.Method == http.MethodGet:
-		webHandlerAPIProyectos(w, r)
-	case len(parts) == 3 && r.Method == http.MethodGet:
-		webHandlerAPIProyectoDetalle(w, r, parts[2])
-	case len(parts) == 4 && parts[3] == "votaciones" && r.Method == http.MethodGet:
-		webHandlerAPIProyectoVotaciones(w, r, parts[2])
-	case len(parts) == 4 && parts[3] == "decisiones" && r.Method == http.MethodGet:
-		webHandlerAPIProyectoDecisiones(w, r, parts[2])
-	case len(parts) == 4 && parts[3] == "decisiones" && r.Method == http.MethodPost:
-		webHandlerAPIProyectoDecisionCrear(w, r, parts[2])
-	case len(parts) == 4 && parts[3] == "documentacion" && r.Method == http.MethodGet:
-		webHandlerAPIProyectoDocumentacion(w, r, parts[2])
-	case len(parts) == 4 && parts[3] == "documentacion" && r.Method == http.MethodPost:
-		webHandlerAPIProyectoDocumentoCrear(w, r, parts[2])
 	default:
 		http.NotFound(w, r)
 	}
@@ -95,7 +71,7 @@ func webHandlerProyectos(w http.ResponseWriter, r *http.Request) {
 	}
 	items, err := memoriaProyectoService.ListProjects(activaPtr)
 	if err != nil {
-		webRender(w, webTplLayout+webTplProyectos, webProyectosData{
+		webRender(w, r, webTplLayout+webTplProyectos, webProyectosData{
 			Err: err.Error(),
 		})
 		return
@@ -110,7 +86,7 @@ func webHandlerProyectos(w http.ResponseWriter, r *http.Request) {
 			Activo:  item.Activo,
 		})
 	}
-	webRender(w, webTplLayout+webTplProyectos, webProyectosData{
+	webRender(w, r, webTplLayout+webTplProyectos, webProyectosData{
 		Proyectos: proyectos,
 		Msg:       r.URL.Query().Get("ok"),
 		Err:       r.URL.Query().Get("err"),
@@ -123,7 +99,7 @@ func webHandlerProyectoDetalle(w http.ResponseWriter, r *http.Request, slug stri
 		http.NotFound(w, r)
 		return
 	}
-	webRender(w, webTplLayout+webTplProyectoDetalle, webProyectoDetalleData{
+	webRender(w, r, webTplLayout+webTplProyectoDetalle, webProyectoDetalleData{
 		Proyecto:   overview.Proyecto,
 		Votaciones: overview.Votaciones,
 		Decisiones: overview.Decisiones,
@@ -151,7 +127,7 @@ func webHandlerProyectoDecisionNueva(w http.ResponseWriter, r *http.Request, slu
 		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/proyectos/"+slug+"?ok="+url.QueryEscape("Decisión guardada"), http.StatusSeeOther)
+	http.Redirect(w, r, "/proyectos/"+slug+"?ok="+url.QueryEscape(webTranslateRequestf(r, "projects.flash.decision_saved")), http.StatusSeeOther)
 }
 
 func webHandlerProyectoDocumentoNuevo(w http.ResponseWriter, r *http.Request, slug string) {
@@ -171,129 +147,50 @@ func webHandlerProyectoDocumentoNuevo(w http.ResponseWriter, r *http.Request, sl
 		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/proyectos/"+slug+"?ok="+url.QueryEscape("Documento guardado"), http.StatusSeeOther)
+	http.Redirect(w, r, "/proyectos/"+slug+"?ok="+url.QueryEscape(webTranslateRequestf(r, "projects.flash.document_saved")), http.StatusSeeOther)
 }
 
-func webHandlerAPIProyectos(w http.ResponseWriter, r *http.Request) {
-	var activaPtr *bool
-	if raw := strings.TrimSpace(r.URL.Query().Get("activa")); raw != "" {
-		value := raw == "1" || strings.EqualFold(raw, "true")
-		activaPtr = &value
-	}
-	items, err := memoriaProyectoService.ListProjects(activaPtr)
-	if err != nil {
-		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+func webHandlerProyectoFabricarApp(w http.ResponseWriter, r *http.Request, slug string) {
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
+	proyecto, err := db.GetProyecto(slug)
+	if err != nil {
+		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	spec := fabricaapp.AppSpec{
+		Nombre:      strings.TrimSpace(r.FormValue("nombre")),
+		Descripcion: strings.TrimSpace(r.FormValue("descripcion")),
+		Tipo:        strings.TrimSpace(r.FormValue("tipo")),
+		Frontend:    webFormBool(r, "frontend"),
+		API:         webFormBool(r, "api"),
+		Auth:        webFormBool(r, "auth"),
+		Database:    webFormBool(r, "db"),
+		Docker:      webFormBool(r, "docker"),
+		I18n:        webFormBool(r, "i18n"),
+		Idiomas:     splitCSV(strings.TrimSpace(r.FormValue("idiomas"))),
+	}
+	plan, err := newProjectAppFactory().Generate(spec)
+	if err != nil {
+		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	actor := strings.TrimSpace(r.FormValue("por"))
+	if actor == "" {
+		actor = "web"
+	}
+	if _, err := fabricaapp.Materialize(fabricaapp.DBStore{}, proyecto.ID, actor, plan); err != nil {
+		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/proyectos/"+slug+"?ok="+url.QueryEscape(webTranslateRequestf(r, "projects.flash.factory_created")), http.StatusSeeOther)
 }
 
-func webHandlerAPIProyectoDetalle(w http.ResponseWriter, r *http.Request, slug string) {
-	overview, err := memoriaProyectoService.Overview(slug)
-	if err != nil {
-		webWriteJSON(w, http.StatusNotFound, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, overview)
-}
-
-func webHandlerAPIProyectoVotaciones(w http.ResponseWriter, r *http.Request, slug string) {
-	items, err := memoriaProyectoService.ListVoteHistory(slug)
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-func webHandlerAPIProyectoDecisiones(w http.ResponseWriter, r *http.Request, slug string) {
-	items, err := memoriaProyectoService.ListDecisions(slug)
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-func webHandlerAPIProyectoDecisionCrear(w http.ResponseWriter, r *http.Request, slug string) {
-	var payload struct {
-		Categoria    string `json:"categoria"`
-		Titulo       string `json:"titulo"`
-		Solucion     string `json:"solucion"`
-		Motivo       string `json:"motivo"`
-		Alternativas string `json:"alternativas"`
-		Impacto      string `json:"impacto"`
-		Estado       string `json:"estado"`
-		PropuestaID  *int64 `json:"propuesta_id"`
-		TareaID      *int64 `json:"tarea_id"`
-		MetadataJSON string `json:"metadata_json"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
-		return
-	}
-	id, err := memoriaProyectoService.CreateDecision(memoriaproyecto.CreateDecisionInput{
-		ProyectoSlug: slug,
-		Categoria:    payload.Categoria,
-		Titulo:       payload.Titulo,
-		Solucion:     payload.Solucion,
-		Motivo:       payload.Motivo,
-		Alternativas: payload.Alternativas,
-		Impacto:      payload.Impacto,
-		Estado:       payload.Estado,
-		PropuestaID:  payload.PropuestaID,
-		TareaID:      payload.TareaID,
-		MetadataJSON: payload.MetadataJSON,
-	})
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusCreated, map[string]any{"id": id})
-}
-
-func webHandlerAPIProyectoDocumentacion(w http.ResponseWriter, r *http.Request, slug string) {
-	items, err := memoriaProyectoService.ListExternalDocs(slug)
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-func webHandlerAPIProyectoDocumentoCrear(w http.ResponseWriter, r *http.Request, slug string) {
-	var payload struct {
-		TipoDocumento string `json:"tipo_documento"`
-		Titulo        string `json:"titulo"`
-		RutaRef       string `json:"ruta_ref"`
-		Resumen       string `json:"resumen"`
-		Estado        string `json:"estado"`
-		Fuente        string `json:"fuente"`
-		PropuestaID   *int64 `json:"propuesta_id"`
-		TareaID       *int64 `json:"tarea_id"`
-		MetadataJSON  string `json:"metadata_json"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
-		return
-	}
-	id, err := memoriaProyectoService.CreateExternalDoc(memoriaproyecto.CreateExternalDocInput{
-		ProyectoSlug:  slug,
-		TipoDocumento: payload.TipoDocumento,
-		Titulo:        payload.Titulo,
-		RutaRef:       payload.RutaRef,
-		Resumen:       payload.Resumen,
-		Estado:        payload.Estado,
-		Fuente:        payload.Fuente,
-		PropuestaID:   payload.PropuestaID,
-		TareaID:       payload.TareaID,
-		MetadataJSON:  payload.MetadataJSON,
-	})
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusCreated, map[string]any{"id": id})
+func webFormBool(r *http.Request, key string) bool {
+	raw := strings.TrimSpace(r.FormValue(key))
+	return raw == "1" || raw == "on" || strings.EqualFold(raw, "true")
 }
 
 func parseOptionalInt64(raw string) *int64 {
@@ -310,131 +207,158 @@ func parseOptionalInt64(raw string) *int64 {
 
 const webTplProyectos = `{{define "content"}}
 <section class="container">
-  <h2 style="margin:0">Proyectos <small style="font-size:.5em;color:#94a3b8">{{len .Proyectos}}</small></h2>
-  <p style="color:#64748b">Vista de memoria y trazabilidad por proyecto.</p>
+  <h2 style="margin:0">{{tr "projects.title"}} <small style="font-size:.5em;color:#94a3b8">{{len .Proyectos}}</small></h2>
+  <p style="color:#64748b">{{tr "projects.subtitle"}}</p>
   {{if .Msg}}<article style="background:#ecfccb;border:1px solid #84cc16;padding:.75rem">{{.Msg}}</article>{{end}}
   {{if .Err}}<article style="background:#fee2e2;border:1px solid #ef4444;padding:.75rem">{{.Err}}</article>{{end}}
   {{if .Proyectos}}
   <table>
-    <thead><tr><th>Proyecto</th><th>Tipo</th><th>Ruta</th><th>Estado</th></tr></thead>
+    <thead><tr><th>{{tr "Proyecto"}}</th><th>{{tr "Tipo"}}</th><th>{{tr "projects.path"}}</th><th>{{tr "Estado"}}</th></tr></thead>
     <tbody>
       {{range .Proyectos}}
       <tr>
         <td><a href="/proyectos/{{.Slug}}"><strong>{{.Nombre}}</strong></a><br><small>{{.Slug}}</small></td>
         <td>{{.Tipo}}</td>
         <td><code>{{.RutaAbs}}</code></td>
-        <td>{{if .Activo}}activo{{else}}inactivo{{end}}</td>
+        <td>{{if .Activo}}{{tr "projects.active"}}{{else}}{{tr "projects.inactive"}}{{end}}</td>
       </tr>
       {{end}}
     </tbody>
   </table>
   {{else}}
-  <article>No hay proyectos registrados.</article>
+  <article>{{tr "projects.none_visible"}}</article>
   {{end}}
 </section>
 {{end}}`
 
 const webTplProyectoDetalle = `{{define "content"}}
 <section class="container">
-  <p style="margin:0 0 .35rem 0"><a href="/proyectos">← Volver a proyectos</a></p>
+  <p style="margin:0 0 .35rem 0"><a href="/proyectos">← {{tr "projects.back"}}</a></p>
   <h2 style="margin:0">{{.Proyecto.Nombre}} <small style="font-size:.5em;color:#94a3b8">{{.Proyecto.Slug}}</small></h2>
-  <p style="color:#64748b"><code>{{.Proyecto.RutaAbs}}</code> · tipo {{.Proyecto.Tipo}}</p>
+  <p style="color:#64748b"><code>{{.Proyecto.RutaAbs}}</code> · {{tr "projects.type_label"}} {{.Proyecto.Tipo}}</p>
   {{if .Msg}}<article style="background:#ecfccb;border:1px solid #84cc16;padding:.75rem">{{.Msg}}</article>{{end}}
   {{if .Err}}<article style="background:#fee2e2;border:1px solid #ef4444;padding:.75rem">{{.Err}}</article>{{end}}
 </section>
 
 <section class="container grid">
   <article>
-    <h3>Decisiones</h3>
-    {{if .Decisiones}}
-      {{range .Decisiones}}
-      <details open style="margin-bottom:.75rem">
-        <summary><strong>{{.Titulo}}</strong> · {{.Estado}}</summary>
-        <p><strong>Categoría:</strong> {{.Categoria}}</p>
-        <p><strong>Solución:</strong> {{.Solucion}}</p>
-        {{if .Motivo}}<p><strong>Motivo:</strong> {{.Motivo}}</p>{{end}}
-        {{if .Alternativas}}<p><strong>Alternativas:</strong> {{.Alternativas}}</p>{{end}}
-        {{if .Impacto}}<p><strong>Impacto:</strong> {{.Impacto}}</p>{{end}}
-      </details>
-      {{end}}
-    {{else}}
-      <p>No hay decisiones registradas.</p>
-    {{end}}
-    <form method="post" action="/proyectos/{{.Proyecto.Slug}}/decisiones">
-      <label>Título <input name="titulo" required></label>
-      <label>Categoría <input name="categoria" value="general"></label>
-      <label>Solución <textarea name="solucion" required></textarea></label>
-      <label>Motivo <textarea name="motivo"></textarea></label>
-      <label>Alternativas <textarea name="alternativas"></textarea></label>
-      <label>Impacto <textarea name="impacto"></textarea></label>
-      <label>Estado
-        <select name="estado">
-          <option value="vigente">vigente</option>
-          <option value="experimental">experimental</option>
-          <option value="reemplazada">reemplazada</option>
-          <option value="descartada">descartada</option>
-          <option value="archivada">archivada</option>
+    <h3>{{tr "projects.factory.title"}}</h3>
+    <form method="post" action="/proyectos/{{.Proyecto.Slug}}/fabricar-app">
+      <label>{{tr "projects.factory.type"}}
+        <select name="tipo" required>
+          <option value="web_api">web_api</option>
+          <option value="web">web</option>
+          <option value="api">api</option>
+          <option value="cli">cli</option>
         </select>
       </label>
-      <label>Propuesta relacionada <input name="propuesta_id" inputmode="numeric"></label>
-      <label>Tarea relacionada <input name="tarea_id" inputmode="numeric"></label>
-      <button type="submit">Guardar decisión</button>
+      <label>{{tr "projects.factory.name"}} <input name="nombre" value="{{.Proyecto.Nombre}}" required></label>
+      <label>{{tr "projects.factory.description"}} <textarea name="descripcion"></textarea></label>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem">
+        <label><input type="checkbox" name="frontend" value="1" checked> {{tr "projects.factory.frontend"}}</label>
+        <label><input type="checkbox" name="api" value="1" checked> {{tr "projects.factory.api"}}</label>
+        <label><input type="checkbox" name="auth" value="1"> {{tr "projects.factory.auth"}}</label>
+        <label><input type="checkbox" name="db" value="1"> {{tr "projects.factory.db"}}</label>
+        <label><input type="checkbox" name="docker" value="1" checked> {{tr "projects.factory.docker"}}</label>
+        <label><input type="checkbox" name="i18n" value="1" checked> {{tr "projects.factory.i18n"}}</label>
+      </div>
+      <label>{{tr "projects.factory.languages"}} <input name="idiomas" value="es,en"></label>
+      <label>{{tr "projects.factory.actor"}} <input name="por" value="web"></label>
+      <button type="submit">{{tr "projects.factory.submit"}}</button>
     </form>
   </article>
 
   <article>
-    <h3>Documentación externa</h3>
+    <h3>{{tr "projects.decisions.title"}}</h3>
+    {{if .Decisiones}}
+      {{range .Decisiones}}
+      <details open style="margin-bottom:.75rem">
+        <summary><strong>{{.Titulo}}</strong> · {{.Estado}}</summary>
+        <p><strong>{{tr "projects.category"}}:</strong> {{.Categoria}}</p>
+        <p><strong>{{tr "projects.solution"}}:</strong> {{.Solucion}}</p>
+        {{if .Motivo}}<p><strong>{{tr "Motivo"}}:</strong> {{.Motivo}}</p>{{end}}
+        {{if .Alternativas}}<p><strong>{{tr "projects.alternatives"}}:</strong> {{.Alternativas}}</p>{{end}}
+        {{if .Impacto}}<p><strong>{{tr "projects.impact"}}:</strong> {{.Impacto}}</p>{{end}}
+      </details>
+      {{end}}
+    {{else}}
+      <p>{{tr "projects.decisions.none"}}</p>
+    {{end}}
+    <form method="post" action="/proyectos/{{.Proyecto.Slug}}/decisiones">
+      <label>{{tr "projects.title_label"}} <input name="titulo" required></label>
+      <label>{{tr "projects.category"}} <input name="categoria" value="general"></label>
+      <label>{{tr "projects.solution"}} <textarea name="solucion" required></textarea></label>
+      <label>{{tr "Motivo"}} <textarea name="motivo"></textarea></label>
+      <label>{{tr "projects.alternatives"}} <textarea name="alternativas"></textarea></label>
+      <label>{{tr "projects.impact"}} <textarea name="impacto"></textarea></label>
+      <label>{{tr "Estado"}}
+        <select name="estado">
+          <option value="vigente">{{tr "vigente"}}</option>
+          <option value="experimental">{{tr "experimental"}}</option>
+          <option value="reemplazada">{{tr "reemplazada"}}</option>
+          <option value="descartada">{{tr "descartada"}}</option>
+          <option value="archivada">{{tr "archivada"}}</option>
+        </select>
+      </label>
+      <label>{{tr "projects.related_proposal"}} <input name="propuesta_id" inputmode="numeric"></label>
+      <label>{{tr "projects.related_task"}} <input name="tarea_id" inputmode="numeric"></label>
+      <button type="submit">{{tr "projects.save_decision"}}</button>
+    </form>
+  </article>
+
+  <article>
+    <h3>{{tr "projects.docs.title"}}</h3>
     {{if .Documentos}}
       {{range .Documentos}}
       <details open style="margin-bottom:.75rem">
         <summary><strong>{{.Titulo}}</strong> · {{.TipoDocumento}}</summary>
-        <p><strong>Ruta:</strong> <code>{{.RutaRef}}</code></p>
-        <p><strong>Resumen:</strong> {{.Resumen}}</p>
-        <p><strong>Estado:</strong> {{.Estado}} · <strong>Fuente:</strong> {{.Fuente}}</p>
+        <p><strong>{{tr "projects.path"}}:</strong> <code>{{.RutaRef}}</code></p>
+        <p><strong>{{tr "projects.summary"}}:</strong> {{.Resumen}}</p>
+        <p><strong>{{tr "Estado"}}:</strong> {{.Estado}} · <strong>{{tr "projects.source"}}:</strong> {{.Fuente}}</p>
       </details>
       {{end}}
     {{else}}
-      <p>No hay documentación externa registrada.</p>
+      <p>{{tr "projects.docs.none"}}</p>
     {{end}}
     <form method="post" action="/proyectos/{{.Proyecto.Slug}}/documentacion">
-      <label>Título <input name="titulo" required></label>
-      <label>Tipo de documento <input name="tipo_documento" value="markdown"></label>
-      <label>Ruta o referencia <input name="ruta_ref" required></label>
-      <label>Resumen <textarea name="resumen" required></textarea></label>
-      <label>Estado
+      <label>{{tr "projects.title_label"}} <input name="titulo" required></label>
+      <label>{{tr "projects.doc_type"}} <input name="tipo_documento" value="markdown"></label>
+      <label>{{tr "projects.path_or_ref"}} <input name="ruta_ref" required></label>
+      <label>{{tr "projects.summary"}} <textarea name="resumen" required></textarea></label>
+      <label>{{tr "Estado"}}
         <select name="estado">
-          <option value="vigente">vigente</option>
-          <option value="borrador">borrador</option>
-          <option value="archivado">archivado</option>
+          <option value="vigente">{{tr "vigente"}}</option>
+          <option value="borrador">{{tr "borrador"}}</option>
+          <option value="archivado">{{tr "archivado"}}</option>
         </select>
       </label>
-      <label>Fuente
+      <label>{{tr "projects.source"}}
         <select name="fuente">
-          <option value="manual">manual</option>
-          <option value="propuesta">propuesta</option>
-          <option value="tarea">tarea</option>
-          <option value="externo">externo</option>
+          <option value="manual">{{tr "manual"}}</option>
+          <option value="propuesta">{{tr "propuesta"}}</option>
+          <option value="tarea">{{tr "tarea"}}</option>
+          <option value="externo">{{tr "externo"}}</option>
         </select>
       </label>
-      <label>Propuesta relacionada <input name="propuesta_id" inputmode="numeric"></label>
-      <label>Tarea relacionada <input name="tarea_id" inputmode="numeric"></label>
-      <button type="submit">Guardar documento</button>
+      <label>{{tr "projects.related_proposal"}} <input name="propuesta_id" inputmode="numeric"></label>
+      <label>{{tr "projects.related_task"}} <input name="tarea_id" inputmode="numeric"></label>
+      <button type="submit">{{tr "projects.save_document"}}</button>
     </form>
   </article>
 </section>
 
 <section class="container">
   <article>
-    <h3>Historial de votaciones</h3>
+    <h3>{{tr "projects.vote_history.title"}}</h3>
     {{if .Votaciones}}
       {{range .Votaciones}}
       <details style="margin-bottom:.75rem">
         <summary><strong>{{.Codigo}}</strong> · {{.Titulo}} · {{.Estado}}</summary>
-        <p>{{.Tipo}} · propuesta por {{.PropuestoPor}}</p>
-        <p>✓ {{.Acuerdo}} · ✗ {{.Desacuerdo}} · ～ {{.Abstencion}} · ⏳ {{.Pendiente}}</p>
+        <p>{{.Tipo}} · {{tr "projects.proposed_by"}} {{.PropuestoPor}}</p>
+        <p>{{tr "projects.votes_summary"}}: ✓ {{.Acuerdo}} · ✗ {{.Desacuerdo}} · ～ {{.Abstencion}} · ⏳ {{.Pendiente}}</p>
         {{if .Votos}}
         <table>
-          <thead><tr><th>Agente</th><th>Posición</th><th>Comentario</th></tr></thead>
+          <thead><tr><th>{{tr "Agente"}}</th><th>{{tr "projects.position"}}</th><th>{{tr "projects.comment"}}</th></tr></thead>
           <tbody>
             {{range .Votos}}
             <tr><td>{{.Agente}}</td><td>{{.Posicion}}</td><td>{{.Comentario}}</td></tr>
@@ -445,7 +369,7 @@ const webTplProyectoDetalle = `{{define "content"}}
       </details>
       {{end}}
     {{else}}
-      <p>No hay propuestas asociadas a este proyecto.</p>
+      <p>{{tr "projects.vote_history.none"}}</p>
     {{end}}
   </article>
 </section>

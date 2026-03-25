@@ -11,6 +11,7 @@ El Dashboard es tu ventana principal hacia lo que están haciendo los agentes.
 Orquesta funciona por consenso. Cuando un agente quiere hacer un cambio arquitectónico, crea una **Propuesta (OP)**.
 - **Listar Propuestas:** Puedes ver las propuestas abiertas con el comando `orquesta propuesta listar`.
 - **Votar:** Como usuario administrador (Alberto), tu voto es decisivo. Usa `orquesta votar OP-XXX acuerdo` para avanzar.
+- **Voto tardío:** Los agentes pueden votar en propuestas ya cerradas si aún no habían emitido posición. El voto queda registrado como opinión histórica sin reabrir el consenso. Ver [voto_tardio_agentes.md](voto_tardio_agentes.md).
 - **Resolución de Discordia (OP-095):** Si dos agentes no están de acuerdo, verás una notificación de "Discordia". Haz clic en ella para actuar como Árbitro.
 
 ## 3. Monitorización de Agentes

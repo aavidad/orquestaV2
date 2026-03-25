@@ -101,7 +101,22 @@ Ejemplos:
 			return fmt.Errorf("propuesta '%s' no encontrada", codigo)
 		}
 		if p.Estado != db.PropuestaAbierta {
-			return fmt.Errorf("la propuesta %s ya está cerrada (%s)", codigo, p.Estado)
+			// Permitir voto tardío si el agente no ha emitido posición definitiva
+			votos, err := db.VotosDePropuesta(p.ID)
+			if err != nil {
+				return err
+			}
+			sinVoto := true
+			for _, v := range votos {
+				if strings.EqualFold(v.Agente, strings.TrimSpace(agente)) {
+					if v.Posicion != db.VotoPendiente {
+						return fmt.Errorf("la propuesta %s ya está cerrada (%s)", codigo, p.Estado)
+					}
+					sinVoto = false
+					break
+				}
+			}
+			_ = sinVoto // permitido: sin entrada o con pendiente
 		}
 
 		consenso, err := db.Votar(p.ID, agente, db.PosicionVoto(posicion), strings.TrimSpace(comentario))

@@ -8,6 +8,7 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package runtimeagente
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -97,5 +98,71 @@ func TestPrepareCLIPropagaModeloYRazonamiento(t *testing.T) {
 	rendered := RenderCommand(plan)
 	if !strings.Contains(rendered, "--model gpt-5.4") || !strings.Contains(rendered, "--reasoning-effort xhigh") {
 		t.Fatalf("comando inesperado: %s", rendered)
+	}
+}
+
+func TestPrepareRemoteGeneraContratoMinimoDeAdaptador(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Codex1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:         "codex-remote",
+			Transporte:   "api",
+			Comando:      "https://runtime.example.test",
+			MetadataJSON: `{"resume_path":"/sessions/resume","status_path":"/sessions/status","input_path":"/sessions/input","auth_header":"Authorization","auth_token_env":"ORQUESTA_REMOTE_TOKEN","auth_mode":"oauth","preserve_external_session_on_stop":true,"requires_human_reauth":true,"timeout_ms":2500,"control_retry_count":4,"control_retry_backoff_ms":150,"control_retry_statuses":[408,429,503]}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if strings.TrimSpace(plan.RemoteConfigJSON) == "" {
+		t.Fatalf("faltaba remote_config_json: %+v", plan)
+	}
+	cfg := map[string]any{}
+	if err := json.Unmarshal([]byte(plan.RemoteConfigJSON), &cfg); err != nil {
+		t.Fatalf("parse remote config: %v", err)
+	}
+	if cfg["endpoint"] != "https://runtime.example.test" {
+		t.Fatalf("endpoint inesperado: %+v", cfg)
+	}
+	if cfg["resume_path"] != "/sessions/resume" || cfg["status_path"] != "/sessions/status" || cfg["input_path"] != "/sessions/input" {
+		t.Fatalf("paths inesperados: %+v", cfg)
+	}
+	if cfg["auth_mode"] != "oauth" || cfg["preserve_external_session_on_stop"] != true || cfg["requires_human_reauth"] != true {
+		t.Fatalf("auth/persistencia inesperadas: %+v", cfg)
+	}
+	if cfg["timeout_ms"] != float64(2500) {
+		t.Fatalf("timeout inesperado: %+v", cfg)
+	}
+	if cfg["control_retry_count"] != float64(4) || cfg["control_retry_backoff_ms"] != float64(150) {
+		t.Fatalf("retries inesperados: %+v", cfg)
+	}
+}
+
+func TestPrepareRemotePermiteDesactivarCapacidadesPorMetadata(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Codex1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:         "codex-remote",
+			Transporte:   "api",
+			Comando:      "https://runtime.example.test",
+			MetadataJSON: `{"pause_path":"","input_path":"","can_pause":false,"can_send_input":false,"can_stop":false}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	cfg := map[string]any{}
+	if err := json.Unmarshal([]byte(plan.RemoteConfigJSON), &cfg); err != nil {
+		t.Fatalf("parse remote config: %v", err)
+	}
+	if cfg["pause_path"] != "" || cfg["input_path"] != "" {
+		t.Fatalf("paths remotos inesperados: %+v", cfg)
+	}
+	if cfg["can_pause"] != false || cfg["can_send_input"] != false || cfg["can_stop"] != false {
+		t.Fatalf("capacidades remotas inesperadas: %+v", cfg)
 	}
 }

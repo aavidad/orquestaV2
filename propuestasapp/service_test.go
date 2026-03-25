@@ -40,6 +40,14 @@ func (f *fakeStore) CloseProposal(codigo, estado, agente string) error {
 	return nil
 }
 
+func (f *fakeStore) ReopenProposal(codigo, agente string) (int, error) {
+	return 0, nil
+}
+
+func (f *fakeStore) RepairPendingVotes(codigo, agente string) (int, error) {
+	return 0, nil
+}
+
 func (f *fakeStore) Vote(propuestaID int64, agente string, posicion db.PosicionVoto, comentario string) (bool, error) {
 	f.voted.id = propuestaID
 	f.voted.agente = agente

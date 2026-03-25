@@ -3,7 +3,6 @@ package db
 import (
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 func TestRuntimesSeSincronizanDesdeSesiones(t *testing.T) {
@@ -255,8 +254,9 @@ func TestUltimaActividadPrefiereMuestraMasRecienteQueEvento(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("registrar evento: %v", err)
 	}
-
-	time.Sleep(1100 * time.Millisecond)
+	if _, err := DB.Exec(`UPDATE runtime_instances SET last_event_at = datetime('now', '-2 seconds') WHERE id = ?`, runtime.ID); err != nil {
+		t.Fatalf("ajustar last_event_at: %v", err)
+	}
 
 	sampleID, err := RegistrarRuntimeTelemetrySample(&RuntimeTelemetrySample{
 		RuntimeID:    runtime.ID,

@@ -8,10 +8,12 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"strings"
@@ -63,10 +65,10 @@ func webHandlerGobernanza(w http.ResponseWriter, r *http.Request) {
 	}
 	data, err := cargarDatosGobernanza(r, tipoAgente)
 	if err != nil {
-		webRender(w, webTplLayout+webTplGobernanza, webGobernanzaData{Err: err.Error(), TipoAgente: tipoAgente})
+		webRender(w, r, webTplLayout+webTplGobernanza, webGobernanzaData{Err: err.Error(), TipoAgente: tipoAgente})
 		return
 	}
-	webRender(w, webTplLayout+webTplGobernanza, data)
+	webRender(w, r, webTplLayout+webTplGobernanza, data)
 }
 
 func webRouterGobernanza(w http.ResponseWriter, r *http.Request) {
@@ -99,30 +101,6 @@ func webRouterGobernanza(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func webRouterAPIGobernanza(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) < 3 || parts[0] != "api" || parts[1] != "gobernanza" {
-		http.NotFound(w, r)
-		return
-	}
-	switch {
-	case len(parts) == 3 && parts[2] == "reglas" && r.Method == http.MethodGet:
-		webHandlerAPIGobernanzaReglas(w, r)
-	case len(parts) == 3 && parts[2] == "reglas" && r.Method == http.MethodPost:
-		webHandlerAPIGobernanzaReglaCrear(w, r)
-	case len(parts) == 3 && parts[2] == "skills" && r.Method == http.MethodGet:
-		webHandlerAPIGobernanzaSkills(w, r)
-	case len(parts) == 3 && parts[2] == "skills" && r.Method == http.MethodPost:
-		webHandlerAPIGobernanzaSkillCrear(w, r)
-	case len(parts) == 3 && parts[2] == "workflows" && r.Method == http.MethodGet:
-		webHandlerAPIGobernanzaWorkflows(w, r)
-	case len(parts) == 3 && parts[2] == "workflows" && r.Method == http.MethodPost:
-		webHandlerAPIGobernanzaWorkflowCrear(w, r)
-	default:
-		http.NotFound(w, r)
-	}
-}
-
 func webHandlerGobernanzaReglaNueva(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	tipoAgente := strings.TrimSpace(r.FormValue("tipo_agente"))
@@ -136,23 +114,45 @@ func webHandlerGobernanzaReglaNueva(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(webTranslatef("governance.flash.rule_saved")), http.StatusSeeOther)
+	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(webTranslateRequestf(r, "governance.flash.rule_saved")), http.StatusSeeOther)
 }
 
 func webHandlerGobernanzaSkillNueva(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	tipoAgente := strings.TrimSpace(r.FormValue("tipo_agente"))
-	if _, err := gobernanzaService.SaveSkill(gobernanzaapp.SaveSkillInput{
-		TipoAgente:  tipoAgente,
-		Nombre:      r.FormValue("nombre"),
-		Descripcion: r.FormValue("descripcion"),
-		CuandoUsar:  r.FormValue("cuando_usar"),
-		Activa:      parseBoolFormDefaultOn(r.FormValue("activa")),
+	aliasesJSON, err := listaJSONDesdeTextoPlano(r.FormValue("aliases"))
+	if err != nil {
+		http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	herramientasJSON, err := listaJSONDesdeTextoPlano(r.FormValue("herramientas"))
+	if err != nil {
+		http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	prioridad, err := parseOptionalInt(r.FormValue("prioridad"), 100)
+	if err != nil {
+		http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	if _, err := webCrearSkillPorAPI(apiSkillCrearRequest{
+		Actor:              "alberto",
+		TipoAgente:         tipoAgente,
+		Nombre:             r.FormValue("nombre"),
+		Descripcion:        r.FormValue("descripcion"),
+		CuandoUsar:         r.FormValue("cuando_usar"),
+		Escenario:          r.FormValue("escenario"),
+		Prioridad:          prioridad,
+		AliasesJSON:        aliasesJSON,
+		HerramientasJSON:   herramientasJSON,
+		Origen:             r.FormValue("origen"),
+		NivelRiesgo:        r.FormValue("nivel_riesgo"),
+		RequiereAprobacion: strings.TrimSpace(r.FormValue("requiere_aprobacion")) != "",
 	}); err != nil {
 		http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(webTranslatef("governance.flash.skill_saved")), http.StatusSeeOther)
+	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(webTranslateRequestf(r, "governance.flash.skill_saved")), http.StatusSeeOther)
 }
 
 func webHandlerGobernanzaSkillImportar(w http.ResponseWriter, r *http.Request) {
@@ -161,7 +161,7 @@ func webHandlerGobernanzaSkillImportar(w http.ResponseWriter, r *http.Request) {
 	sourceURL := strings.TrimSpace(r.FormValue("url"))
 	repo := strings.TrimSpace(r.FormValue("repo"))
 	skill := strings.TrimSpace(r.FormValue("skill"))
-	result, err := skillsImportService.ImportFromWeb(context.Background(), skillsapp.ImportInput{
+	result, err := webImportarSkillPorAPI(apiSkillImportarRequest{
 		Actor:      "alberto",
 		TipoAgente: tipoAgente,
 		URL:        sourceURL,
@@ -172,11 +172,11 @@ func webHandlerGobernanzaSkillImportar(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	msg := webTranslatef("governance.flash.skill_imported", result.Skill.Nombre)
+	msgKey := "governance.flash.skill_imported"
 	if result.Existente {
-		msg = webTranslatef("governance.flash.skill_import_exists", result.Skill.Nombre)
+		msgKey = "governance.flash.skill_import_exists"
 	}
-	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(msg), http.StatusSeeOther)
+	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(webTranslateRequestf(r, msgKey, result.Skill.Nombre)), http.StatusSeeOther)
 }
 
 func webHandlerGobernanzaSkillActivar(w http.ResponseWriter, r *http.Request, rawID string, activa bool) {
@@ -186,7 +186,7 @@ func webHandlerGobernanzaSkillActivar(w http.ResponseWriter, r *http.Request, ra
 		return
 	}
 	tipoAgente := strings.TrimSpace(r.FormValue("tipo_agente"))
-	if err := db.SetSkillActivo("alberto", id, activa); err != nil {
+	if err := webSetSkillActivaPorAPI(id, "alberto", activa); err != nil {
 		http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
@@ -194,7 +194,7 @@ func webHandlerGobernanzaSkillActivar(w http.ResponseWriter, r *http.Request, ra
 	if activa {
 		msgKey = "governance.flash.skill_activated"
 	}
-	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(webTranslatef(msgKey, id)), http.StatusSeeOther)
+	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(webTranslateRequestf(r, msgKey, id)), http.StatusSeeOther)
 }
 
 func webHandlerGobernanzaSkillBorrar(w http.ResponseWriter, r *http.Request, rawID string) {
@@ -204,11 +204,11 @@ func webHandlerGobernanzaSkillBorrar(w http.ResponseWriter, r *http.Request, raw
 		return
 	}
 	tipoAgente := strings.TrimSpace(r.FormValue("tipo_agente"))
-	if err := db.EliminarSkill("alberto", id); err != nil {
+	if err := webBorrarSkillPorAPI(id, "alberto"); err != nil {
 		http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(webTranslatef("governance.flash.skill_deleted", id)), http.StatusSeeOther)
+	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(webTranslateRequestf(r, "governance.flash.skill_deleted", id)), http.StatusSeeOther)
 }
 
 func webHandlerGobernanzaSkillEditar(w http.ResponseWriter, r *http.Request, rawID string) {
@@ -218,7 +218,7 @@ func webHandlerGobernanzaSkillEditar(w http.ResponseWriter, r *http.Request, raw
 		return
 	}
 	tipoAgente := strings.TrimSpace(r.FormValue("tipo_agente"))
-	skill, err := db.GetSkill(id)
+	skill, err := webCargarSkillPorAPI(id)
 	if err != nil {
 		http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
@@ -249,11 +249,25 @@ func webHandlerGobernanzaSkillEditar(w http.ResponseWriter, r *http.Request, raw
 	skill.AliasesJSON = aliasesJSON
 	skill.HerramientasJSON = herramientasJSON
 	skill.RequiereAprobacion = strings.TrimSpace(r.FormValue("requiere_aprobacion")) != ""
-	if err := db.ActualizarSkill("alberto", skill); err != nil {
+	if err := webActualizarSkillPorAPI(id, apiSkillActualizarRequest{
+		Actor:              "alberto",
+		TipoAgente:         skill.TipoAgente,
+		Nombre:             skill.Nombre,
+		Descripcion:        skill.Descripcion,
+		CuandoUsar:         skill.CuandoUsar,
+		Escenario:          skill.Escenario,
+		Prioridad:          skill.Prioridad,
+		AliasesJSON:        skill.AliasesJSON,
+		HerramientasJSON:   skill.HerramientasJSON,
+		Origen:             skill.Origen,
+		NivelRiesgo:        skill.NivelRiesgo,
+		RequiereAprobacion: skill.RequiereAprobacion,
+		Activa:             skill.Activa,
+	}); err != nil {
 		http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(webTranslatef("governance.flash.skill_updated", id)), http.StatusSeeOther)
+	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(webTranslateRequestf(r, "governance.flash.skill_updated", id)), http.StatusSeeOther)
 }
 
 func webHandlerGobernanzaSkillDetectarCarencia(w http.ResponseWriter, r *http.Request) {
@@ -277,7 +291,7 @@ func webHandlerGobernanzaSkillDetectarCarencia(w http.ResponseWriter, r *http.Re
 		http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	resultado, err := db.DetectarCarenciaSkill(&db.SolicitudDeteccionSkill{
+	resultado, err := webDetectarCarenciaSkillPorAPI(apiSkillDeteccionRequest{
 		TipoAgente:       tipoAgente,
 		Nombre:           solicitud.Nombre,
 		Descripcion:      solicitud.Descripcion,
@@ -292,12 +306,12 @@ func webHandlerGobernanzaSkillDetectarCarencia(w http.ResponseWriter, r *http.Re
 	}
 	data, err := cargarDatosGobernanza(r, tipoAgente)
 	if err != nil {
-		webRender(w, webTplLayout+webTplGobernanza, webGobernanzaData{Err: err.Error(), TipoAgente: tipoAgente})
+		webRender(w, r, webTplLayout+webTplGobernanza, webGobernanzaData{Err: err.Error(), TipoAgente: tipoAgente})
 		return
 	}
 	data.DeteccionSkill = resultado
 	data.SolicitudSkill = solicitud
-	webRender(w, webTplLayout+webTplGobernanza, data)
+	webRender(w, r, webTplLayout+webTplGobernanza, data)
 }
 
 func webHandlerGobernanzaWorkflowNuevo(w http.ResponseWriter, r *http.Request) {
@@ -313,97 +327,7 @@ func webHandlerGobernanzaWorkflowNuevo(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(webTranslatef("governance.flash.workflow_saved")), http.StatusSeeOther)
-}
-
-func webHandlerAPIGobernanzaReglas(w http.ResponseWriter, r *http.Request) {
-	tipoAgente := strings.TrimSpace(r.URL.Query().Get("tipo_agente"))
-	items, err := gobernanzaService.ListRules(tipoAgente, parseOptionalBool(r.URL.Query().Get("activa")))
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-func webHandlerAPIGobernanzaReglaCrear(w http.ResponseWriter, r *http.Request) {
-	var payload struct {
-		TipoAgente  string `json:"tipo_agente"`
-		Categoria   string `json:"categoria"`
-		Titulo      string `json:"titulo"`
-		Descripcion string `json:"descripcion"`
-		Activa      bool   `json:"activa"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
-		return
-	}
-	id, err := gobernanzaService.SaveRule(gobernanzaapp.SaveRuleInput(payload))
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusCreated, map[string]any{"id": id})
-}
-
-func webHandlerAPIGobernanzaSkills(w http.ResponseWriter, r *http.Request) {
-	tipoAgente := strings.TrimSpace(r.URL.Query().Get("tipo_agente"))
-	items, err := gobernanzaService.ListSkills(tipoAgente, parseOptionalBool(r.URL.Query().Get("activa")))
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-func webHandlerAPIGobernanzaSkillCrear(w http.ResponseWriter, r *http.Request) {
-	var payload struct {
-		TipoAgente  string `json:"tipo_agente"`
-		Nombre      string `json:"nombre"`
-		Descripcion string `json:"descripcion"`
-		CuandoUsar  string `json:"cuando_usar"`
-		Activa      bool   `json:"activa"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
-		return
-	}
-	id, err := gobernanzaService.SaveSkill(gobernanzaapp.SaveSkillInput(payload))
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusCreated, map[string]any{"id": id})
-}
-
-func webHandlerAPIGobernanzaWorkflows(w http.ResponseWriter, r *http.Request) {
-	tipoAgente := strings.TrimSpace(r.URL.Query().Get("tipo_agente"))
-	items, err := gobernanzaService.ListWorkflows(tipoAgente, parseOptionalBool(r.URL.Query().Get("activo")))
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-func webHandlerAPIGobernanzaWorkflowCrear(w http.ResponseWriter, r *http.Request) {
-	var payload struct {
-		TipoAgente  string   `json:"tipo_agente"`
-		Nombre      string   `json:"nombre"`
-		Descripcion string   `json:"descripcion"`
-		Pasos       []string `json:"pasos"`
-		Activo      bool     `json:"activo"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
-		return
-	}
-	id, err := gobernanzaService.SaveWorkflow(gobernanzaapp.SaveWorkflowInput(payload))
-	if err != nil {
-		webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusCreated, map[string]any{"id": id})
+	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(webTranslateRequestf(r, "governance.flash.workflow_saved")), http.StatusSeeOther)
 }
 
 func parseBoolFormDefaultOn(raw string) bool {
@@ -492,20 +416,12 @@ func errString(err error) string {
 	return err.Error()
 }
 
-func webTranslatef(key string, args ...any) string {
-	msg := webTranslate(key)
-	if len(args) == 0 {
-		return msg
-	}
-	return fmt.Sprintf(msg, args...)
-}
-
 func cargarDatosGobernanza(r *http.Request, tipoAgente string) (webGobernanzaData, error) {
 	itemsReglas, err := gobernanzaService.ListRules(tipoAgente, nil)
 	if err != nil {
 		return webGobernanzaData{}, err
 	}
-	itemsSkills, err := gobernanzaService.ListSkills(tipoAgente, nil)
+	itemsSkills, err := webCargarSkillsPorAPI(tipoAgente, nil)
 	if err != nil {
 		return webGobernanzaData{}, err
 	}
@@ -514,7 +430,7 @@ func cargarDatosGobernanza(r *http.Request, tipoAgente string) (webGobernanzaDat
 		return webGobernanzaData{}, err
 	}
 	filtroSkillRemota := strings.TrimSpace(r.URL.Query().Get("skill_q"))
-	skillsRemotas, errSkillsRemotas := skillsCatalogoFetcher.Listar(context.Background(), filtroSkillRemota, 24)
+	skillsRemotas, errSkillsRemotas := webListarSkillsRemotasPorAPI(filtroSkillRemota, 24)
 	return webGobernanzaData{
 		TipoAgente:        tipoAgente,
 		Reglas:            itemsReglas,
@@ -522,11 +438,139 @@ func cargarDatosGobernanza(r *http.Request, tipoAgente string) (webGobernanzaDat
 		VersionesSkill:    versionarSkills(itemsSkills),
 		SkillsRemotas:     skillsRemotas,
 		FiltroSkillRemota: filtroSkillRemota,
-		ErrSkillsRemotas:  errString(errSkillsRemotas),
 		Workflows:         workflowsToView(itemsWorkflows),
 		Msg:               r.URL.Query().Get("ok"),
 		Err:               r.URL.Query().Get("err"),
+		ErrSkillsRemotas:  errString(errSkillsRemotas),
 	}, nil
+}
+
+func webInvocarAPIJSON(method, path string, payload any, dst any) error {
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	var body *bytes.Reader
+	if payload == nil {
+		body = bytes.NewReader(nil)
+	} else {
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		body = bytes.NewReader(raw)
+	}
+	req := httptest.NewRequest(method, path, body)
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code >= http.StatusBadRequest {
+		var apiErr apiErrorResponse
+		if err := json.NewDecoder(rec.Body).Decode(&apiErr); err == nil && strings.TrimSpace(apiErr.Error) != "" {
+			return errors.New(apiErr.Error)
+		}
+		return fmt.Errorf("error API %s %s: status %d", method, path, rec.Code)
+	}
+	if dst == nil {
+		return nil
+	}
+	return json.NewDecoder(rec.Body).Decode(dst)
+}
+
+func webCargarSkillsPorAPI(rol string, activa *bool) ([]*db.Skill, error) {
+	query := url.Values{}
+	if rol = strings.TrimSpace(rol); rol != "" {
+		query.Set("tipo_agente", rol)
+	}
+	if activa != nil {
+		query.Set("activa", strconv.FormatBool(*activa))
+	}
+	path := "/api/skills"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var resp apiSkillsResponse
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Skills, nil
+}
+
+func webCrearSkillPorAPI(req apiSkillCrearRequest) (int64, error) {
+	var resp apiCatalogoMutationResponse
+	if err := webInvocarAPIJSON(http.MethodPost, "/api/skills", req, &resp); err != nil {
+		return 0, err
+	}
+	return resp.ID, nil
+}
+
+func webCargarSkillPorAPI(id int64) (*db.Skill, error) {
+	var resp apiSkillResponse
+	if err := webInvocarAPIJSON(http.MethodGet, fmt.Sprintf("/api/skills/%d", id), nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Skill, nil
+}
+
+func webActualizarSkillPorAPI(id int64, req apiSkillActualizarRequest) error {
+	return webInvocarAPIJSON(http.MethodPost, fmt.Sprintf("/api/skills/%d", id), req, nil)
+}
+
+func webSetSkillActivaPorAPI(id int64, actor string, activa bool) error {
+	return webInvocarAPIJSON(http.MethodPost, fmt.Sprintf("/api/skills/%d/activa", id), apiCatalogoActivacionRequest{
+		Actor:  actor,
+		Activa: activa,
+	}, nil)
+}
+
+func webBorrarSkillPorAPI(id int64, actor string) error {
+	return webInvocarAPIJSON(http.MethodPost, fmt.Sprintf("/api/skills/%d/borrar", id), apiSkillBorrarRequest{
+		Actor: actor,
+	}, nil)
+}
+
+func webCargarVersionesSkillPorAPI(id int64) ([]*db.SkillVersion, error) {
+	var resp apiSkillVersionesResponse
+	if err := webInvocarAPIJSON(http.MethodGet, fmt.Sprintf("/api/skills/%d/versiones", id), nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Versiones, nil
+}
+
+func webListarSkillsRemotasPorAPI(filtro string, limite int) ([]*skillsapp.SkillRemota, error) {
+	query := url.Values{}
+	if filtro = strings.TrimSpace(filtro); filtro != "" {
+		query.Set("q", filtro)
+	}
+	if limite > 0 {
+		query.Set("limit", strconv.Itoa(limite))
+	}
+	path := "/api/skills/remotas"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var resp apiSkillsRemotasResponse
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Items, nil
+}
+
+func webImportarSkillPorAPI(req apiSkillImportarRequest) (*apiSkillImportarResponse, error) {
+	var resp apiSkillImportarResponse
+	if err := webInvocarAPIJSON(http.MethodPost, "/api/skills/importar", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func webDetectarCarenciaSkillPorAPI(req apiSkillDeteccionRequest) (*db.ResultadoDeteccionSkill, error) {
+	var resp apiSkillDeteccionResponse
+	if err := webInvocarAPIJSON(http.MethodPost, "/api/skills/detectar-carencia", req, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Resultado, nil
 }
 
 func versionarSkills(items []*db.Skill) map[int64][]*db.SkillVersion {
@@ -538,7 +582,7 @@ func versionarSkills(items []*db.Skill) map[int64][]*db.SkillVersion {
 		if item == nil || item.ID <= 0 {
 			continue
 		}
-		versiones, err := db.ListarVersionesSkill(item.ID)
+		versiones, err := webCargarVersionesSkillPorAPI(item.ID)
 		if err != nil || len(versiones) == 0 {
 			continue
 		}
@@ -569,40 +613,40 @@ func workflowsToView(items []*db.Workflow) []webWorkflowView {
 
 const webTplGobernanza = `{{define "content"}}
 <section class="container">
-  <h2 style="margin:0">Gobernanza operativa</h2>
-  <p style="color:#64748b">Gestión de reglas, skills y workflows desde la app.</p>
+  <h2 style="margin:0">{{tr "governance.title"}}</h2>
+  <p style="color:#64748b">{{tr "governance.subtitle"}}</p>
   {{if .Msg}}<article style="background:#ecfccb;border:1px solid #84cc16;padding:.75rem">{{.Msg}}</article>{{end}}
   {{if .Err}}<article style="background:#fee2e2;border:1px solid #ef4444;padding:.75rem">{{.Err}}</article>{{end}}
   <form method="get" action="/gobernanza">
-    <label>Tipo de agente
+    <label>{{tr "governance.agent_type"}}
       <select name="tipo_agente">
-        <option value="programador" {{if eqStr .TipoAgente "programador"}}selected{{end}}>programador</option>
-        <option value="documentador" {{if eqStr .TipoAgente "documentador"}}selected{{end}}>documentador</option>
-        <option value="admin" {{if eqStr .TipoAgente "admin"}}selected{{end}}>admin</option>
+        <option value="programador" {{if eqStr .TipoAgente "programador"}}selected{{end}}>{{tr "programador"}}</option>
+        <option value="documentador" {{if eqStr .TipoAgente "documentador"}}selected{{end}}>{{tr "documentador"}}</option>
+        <option value="admin" {{if eqStr .TipoAgente "admin"}}selected{{end}}>{{tr "admin"}}</option>
       </select>
     </label>
-    <button type="submit" class="btn-sm">Filtrar</button>
+    <button type="submit" class="btn-sm">{{tr "common.filter"}}</button>
   </form>
 </section>
 
 <section class="container grid">
   <article>
-    <h3>Reglas</h3>
+    <h3>{{tr "governance.rules.title"}}</h3>
     {{range .Reglas}}
       <details style="margin-bottom:.6rem">
         <summary><strong>{{.Titulo}}</strong> · {{.Categoria}}</summary>
         <p>{{.Descripcion}}</p>
       </details>
     {{else}}
-      <p>No hay reglas.</p>
+      <p>{{tr "governance.rules.none"}}</p>
     {{end}}
     <form method="post" action="/gobernanza/reglas">
       <input type="hidden" name="tipo_agente" value="{{.TipoAgente}}">
-      <label>Categoría <input name="categoria" required></label>
-      <label>Título <input name="titulo" required></label>
-      <label>Descripción <textarea name="descripcion" required></textarea></label>
-      <label><input type="checkbox" name="activa" checked> Activa</label>
-      <button type="submit">Guardar regla</button>
+      <label>{{tr "projects.category"}} <input name="categoria" required></label>
+      <label>{{tr "projects.title_label"}} <input name="titulo" required></label>
+      <label>{{tr "governance.description"}} <textarea name="descripcion" required></textarea></label>
+      <label><input type="checkbox" name="activa" checked> {{tr "governance.active_feminine"}}</label>
+      <button type="submit">{{tr "governance.rules.save"}}</button>
     </form>
   </article>
 
@@ -614,8 +658,8 @@ const webTplGobernanza = `{{define "content"}}
         <p>{{.Descripcion}}</p>
         {{if .CuandoUsar}}<p><strong>{{tr "governance.skills.when_to_use"}}:</strong> {{.CuandoUsar}}</p>{{end}}
         <p style="display:flex;gap:.5rem;flex-wrap:wrap">
-          <span style="display:inline-block;padding:.2rem .45rem;border:1px solid #cbd5e1;border-radius:999px">{{tr "governance.skills.source"}}: {{.Origen}}</span>
-          <span style="display:inline-block;padding:.2rem .45rem;border:1px solid #cbd5e1;border-radius:999px">{{tr "governance.skills.risk"}}: {{.NivelRiesgo}}</span>
+          <span style="display:inline-block;padding:.2rem .45rem;border:1px solid #cbd5e1;border-radius:999px">{{tr "governance.skills.source"}}: {{tr .Origen}}</span>
+          <span style="display:inline-block;padding:.2rem .45rem;border:1px solid #cbd5e1;border-radius:999px">{{tr "governance.skills.risk"}}: {{tr .NivelRiesgo}}</span>
           <span style="display:inline-block;padding:.2rem .45rem;border:1px solid #cbd5e1;border-radius:999px">
             {{tr "governance.skills.state"}}:
             {{if .Activa}}{{tr "common.active"}}{{else}}{{tr "governance.skills.inactive"}}{{end}}
@@ -645,16 +689,28 @@ const webTplGobernanza = `{{define "content"}}
           <form method="post" action="/gobernanza/skills/{{.ID}}/editar" style="border:1px solid #e2e8f0;padding:.75rem;border-radius:.5rem">
             <input type="hidden" name="tipo_agente" value="{{$.TipoAgente}}">
             <h4 style="margin:.2rem 0">{{tr "governance.skills.edit_title"}}</h4>
-            <label>Nombre <input name="nombre" value="{{.Nombre}}" required></label>
-            <label>Descripción <textarea name="descripcion" required>{{.Descripcion}}</textarea></label>
+            <label>{{tr "common.name"}} <input name="nombre" value="{{.Nombre}}" required></label>
+            <label>{{tr "governance.description"}} <textarea name="descripcion" required>{{.Descripcion}}</textarea></label>
             <label>{{tr "governance.skills.when_to_use"}} <textarea name="cuando_usar">{{.CuandoUsar}}</textarea></label>
             <label>{{tr "governance.skills.scenario"}} <input name="escenario" value="{{.Escenario}}"></label>
             <label>{{tr "governance.skills.priority"}} <input type="number" name="prioridad" value="{{.Prioridad}}"></label>
-            <label>{{tr "governance.skills.source"}} <input name="origen" value="{{.Origen}}"></label>
-            <label>{{tr "governance.skills.risk"}} <input name="nivel_riesgo" value="{{.NivelRiesgo}}"></label>
+            <label>{{tr "governance.skills.source"}}
+              <select name="origen">
+                <option value="builtin" {{if eqStr .Origen "builtin"}}selected{{end}}>{{tr "builtin"}}</option>
+                <option value="local" {{if eqStr .Origen "local"}}selected{{end}}>{{tr "local"}}</option>
+                <option value="third_party" {{if eqStr .Origen "third_party"}}selected{{end}}>{{tr "third_party"}}</option>
+              </select>
+            </label>
+            <label>{{tr "governance.skills.risk"}}
+              <select name="nivel_riesgo">
+                <option value="bajo" {{if eqStr .NivelRiesgo "bajo"}}selected{{end}}>{{tr "bajo"}}</option>
+                <option value="medio" {{if eqStr .NivelRiesgo "medio"}}selected{{end}}>{{tr "medio"}}</option>
+                <option value="alto" {{if eqStr .NivelRiesgo "alto"}}selected{{end}}>{{tr "alto"}}</option>
+              </select>
+            </label>
             <label>{{tr "governance.skills.aliases"}} <textarea name="aliases">{{jsonLines .AliasesJSON}}</textarea></label>
             <label>{{tr "governance.skills.tools"}} <textarea name="herramientas">{{jsonLines .HerramientasJSON}}</textarea></label>
-            <label><input type="checkbox" name="requiere_aprobacion" {{if .RequiereAprobacion}}checked{{end}}> {{tr "governance.skills.pending_approval"}}</label>
+            <label><input type="checkbox" name="requiere_aprobacion" {{if .RequiereAprobacion}}checked{{end}}> {{tr "governance.skills.requires_approval"}}</label>
             <button type="submit" class="btn-sm">{{tr "governance.skills.save_changes"}}</button>
           </form>
           <div style="border:1px solid #e2e8f0;padding:.75rem;border-radius:.5rem">
@@ -676,10 +732,29 @@ const webTplGobernanza = `{{define "content"}}
     {{end}}
     <form method="post" action="/gobernanza/skills">
       <input type="hidden" name="tipo_agente" value="{{.TipoAgente}}">
-      <label>Nombre <input name="nombre" required></label>
-      <label>Descripción <textarea name="descripcion" required></textarea></label>
+      <label>{{tr "common.name"}} <input name="nombre" required></label>
+      <label>{{tr "governance.description"}} <textarea name="descripcion" required></textarea></label>
       <label>{{tr "governance.skills.when_to_use"}} <textarea name="cuando_usar"></textarea></label>
-      <label><input type="checkbox" name="activa" checked> Activa</label>
+      <label>{{tr "governance.skills.scenario"}} <input name="escenario"></label>
+      <label>{{tr "governance.skills.priority"}} <input type="number" name="prioridad" value="100"></label>
+      <label>{{tr "governance.skills.source"}}
+        <select name="origen">
+          <option value="builtin" selected>{{tr "builtin"}}</option>
+          <option value="local">{{tr "local"}}</option>
+          <option value="third_party">{{tr "third_party"}}</option>
+        </select>
+      </label>
+      <label>{{tr "governance.skills.risk"}}
+        <select name="nivel_riesgo">
+          <option value="bajo" selected>{{tr "bajo"}}</option>
+          <option value="medio">{{tr "medio"}}</option>
+          <option value="alto">{{tr "alto"}}</option>
+        </select>
+      </label>
+      <label>{{tr "governance.skills.aliases"}} <textarea name="aliases"></textarea></label>
+      <label>{{tr "governance.skills.tools"}} <textarea name="herramientas"></textarea></label>
+      <label><input type="checkbox" name="requiere_aprobacion"> {{tr "governance.skills.requires_approval"}}</label>
+      <label><input type="checkbox" name="activa" checked> {{tr "governance.active_feminine"}}</label>
       <button type="submit">{{tr "governance.skills.save"}}</button>
     </form>
     <form method="post" action="/gobernanza/skills/importar" style="margin-top:1rem;border-top:1px solid #e2e8f0;padding-top:1rem">
@@ -694,8 +769,8 @@ const webTplGobernanza = `{{define "content"}}
     <form method="post" action="/gobernanza/skills/detectar-carencia" style="margin-top:1rem;border-top:1px solid #e2e8f0;padding-top:1rem">
       <input type="hidden" name="tipo_agente" value="{{.TipoAgente}}">
       <h4 style="margin:.2rem 0">{{tr "governance.skills.detect.title"}}</h4>
-      <label>Nombre <input name="nombre" value="{{.SolicitudSkill.Nombre}}"></label>
-      <label>Descripción <textarea name="descripcion">{{.SolicitudSkill.Descripcion}}</textarea></label>
+      <label>{{tr "common.name"}} <input name="nombre" value="{{.SolicitudSkill.Nombre}}"></label>
+      <label>{{tr "governance.description"}} <textarea name="descripcion">{{.SolicitudSkill.Descripcion}}</textarea></label>
       <label>{{tr "governance.skills.when_to_use"}} <textarea name="cuando_usar">{{.SolicitudSkill.CuandoUsar}}</textarea></label>
       <label>{{tr "governance.skills.scenario"}} <input name="escenario" value="{{.SolicitudSkill.Escenario}}"></label>
       <label>{{tr "governance.skills.aliases"}} <textarea name="aliases">{{.SolicitudSkill.Aliases}}</textarea></label>
@@ -705,7 +780,7 @@ const webTplGobernanza = `{{define "content"}}
     {{with .DeteccionSkill}}
     <section style="margin-top:1rem;border:1px solid #e2e8f0;padding:.75rem;border-radius:.5rem">
       <h4 style="margin:.2rem 0">{{tr "governance.skills.detect.result_title"}}</h4>
-      <p><strong>Motivo:</strong> {{.Motivo}}</p>
+      <p><strong>{{tr "common.reason"}}:</strong> {{.Motivo}}</p>
       {{if .Equivalente}}
       <p><strong>{{tr "governance.skills.detect.equivalent"}}:</strong> {{.Equivalente.Nombre}}</p>
       {{end}}
@@ -728,7 +803,7 @@ const webTplGobernanza = `{{define "content"}}
       <form method="get" action="/gobernanza">
         <input type="hidden" name="tipo_agente" value="{{.TipoAgente}}">
         <label>{{tr "governance.skills.remote.search"}} <input name="skill_q" value="{{.FiltroSkillRemota}}"></label>
-        <button type="submit" class="btn-sm">Filtrar</button>
+        <button type="submit" class="btn-sm">{{tr "common.filter"}}</button>
       </form>
       {{if .ErrSkillsRemotas}}
       <p style="color:#b91c1c">{{.ErrSkillsRemotas}}</p>
@@ -754,7 +829,7 @@ const webTplGobernanza = `{{define "content"}}
 
 <section class="container">
   <article>
-    <h3>Workflows</h3>
+    <h3>{{tr "governance.workflows.title"}}</h3>
     {{range .Workflows}}
       <details style="margin-bottom:.6rem">
         <summary><strong>{{.Nombre}}</strong></summary>
@@ -766,15 +841,15 @@ const webTplGobernanza = `{{define "content"}}
         {{end}}
       </details>
     {{else}}
-      <p>No hay workflows.</p>
+      <p>{{tr "governance.workflows.none"}}</p>
     {{end}}
     <form method="post" action="/gobernanza/workflows">
       <input type="hidden" name="tipo_agente" value="{{.TipoAgente}}">
-      <label>Nombre <input name="nombre" required></label>
-      <label>Descripción <textarea name="descripcion" required></textarea></label>
-      <label>Pasos (uno por línea) <textarea name="pasos" required></textarea></label>
-      <label><input type="checkbox" name="activo" checked> Activo</label>
-      <button type="submit">Guardar workflow</button>
+      <label>{{tr "common.name"}} <input name="nombre" required></label>
+      <label>{{tr "governance.description"}} <textarea name="descripcion" required></textarea></label>
+      <label>{{tr "governance.workflows.steps"}} <textarea name="pasos" required></textarea></label>
+      <label><input type="checkbox" name="activo" checked> {{tr "common.active"}}</label>
+      <button type="submit">{{tr "governance.workflows.save"}}</button>
     </form>
   </article>
 </section>

@@ -7,6 +7,8 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # Catálogo inicial de plantillas por tipo de proyecto
 
+> Desarrollado con Orquesta de Alberto Avidad Fernandez.
+
 ## Objetivo
 
 Definir el conjunto documental mínimo que Orquesta debería preparar desde la fase inicial según el tipo de proyecto.

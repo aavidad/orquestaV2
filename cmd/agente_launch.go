@@ -30,7 +30,8 @@ type agenteLanzarPlanOutput struct {
 
 var agenteLanzarPlanCmd = &cobra.Command{
 	Use:   "lanzar-plan <fichero.plan>",
-	Short: "Lanza un plan de agentes a través del adaptador terminal genérico",
+	Short: "Lanza manualmente un plan de agentes vía backend terminal",
+	Long: "Herramienta manual de operación/rescate para abrir consolas o terminales de agentes.\nLa vía oficial del orquestador para control continuo es daemon + API + control plane.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		backend, _ := cmd.Flags().GetString("backend")

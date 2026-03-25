@@ -19,6 +19,7 @@ import (
 
 	"orquesta/coordinacion"
 	"orquesta/db"
+	"orquesta/fabricaapp"
 )
 
 type apiErrorResponse struct {
@@ -1293,20 +1294,83 @@ func apiHandlerProyectoDescubrir(w http.ResponseWriter, r *http.Request) {
 }
 
 func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {
-	if !apiRequireMethod(w, r, http.MethodGet) {
-		return
-	}
-	ref := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/proyectos/"), "/")
-	if ref == "" {
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/proyectos/"), "/")
+	if path == "" {
 		http.NotFound(w, r)
 		return
 	}
-	proyecto, err := db.GetProyecto(ref)
+	parts := strings.Split(path, "/")
+	ref := strings.TrimSpace(parts[0])
+	switch {
+	case len(parts) == 1 && r.Method == http.MethodGet:
+		proyecto, err := db.GetProyecto(ref)
+		if err != nil {
+			apiError(w, http.StatusNotFound, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"proyecto": proyecto})
+	case len(parts) == 2 && parts[1] == "fabricar-app" && r.Method == http.MethodPost:
+		apiHandlerProyectoFabricarApp(w, r, ref)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func apiHandlerProyectoFabricarApp(w http.ResponseWriter, r *http.Request, ref string) {
+	proyecto, err := db.GetProyecto(strings.TrimSpace(ref))
 	if err != nil {
 		apiError(w, http.StatusNotFound, err)
 		return
 	}
-	apiWriteJSON(w, http.StatusOK, map[string]any{"proyecto": proyecto})
+	var req apiProyectoFabricarAppRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	if strings.TrimSpace(req.Tipo) == "" {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("--tipo es obligatorio"))
+		return
+	}
+	nombre := strings.TrimSpace(req.Nombre)
+	if nombre == "" {
+		nombre = strings.TrimSpace(proyecto.Nombre)
+	}
+	descripcion := strings.TrimSpace(req.Descripcion)
+	if descripcion == "" {
+		descripcion = "Backlog inicial de " + nombre + " generado por la fabrica de apps de Orquesta."
+	}
+	actor := strings.TrimSpace(req.Por)
+	if actor == "" {
+		actor = "alberto"
+	}
+	plan, err := newProjectAppFactory().Generate(fabricaapp.AppSpec{
+		Nombre:      nombre,
+		Descripcion: descripcion,
+		Tipo:        strings.TrimSpace(req.Tipo),
+		Frontend:    req.Frontend,
+		API:         req.API,
+		Auth:        req.Auth,
+		Database:    req.Database,
+		Docker:      req.Docker,
+		I18n:        req.I18n,
+		Idiomas:     req.Idiomas,
+	})
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	result, err := fabricaapp.Materialize(fabricaapp.DBStore{}, proyecto.ID, actor, plan)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusCreated, apiProyectoFabricarAppResponse{
+		OK:      true,
+		Slug:    proyecto.Slug,
+		Tipo:    strings.TrimSpace(req.Tipo),
+		Created: result.Created,
+		Backlog: result.Backlog,
+	})
 }
 
 func apiHandlerPools(w http.ResponseWriter, r *http.Request) {

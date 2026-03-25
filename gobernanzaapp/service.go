@@ -34,11 +34,18 @@ type SaveRuleInput struct {
 }
 
 type SaveSkillInput struct {
-	TipoAgente  string
-	Nombre      string
-	Descripcion string
-	CuandoUsar  string
-	Activa      bool
+	TipoAgente         string
+	Nombre             string
+	Descripcion        string
+	CuandoUsar         string
+	Escenario          string
+	Prioridad          int
+	AliasesJSON        string
+	HerramientasJSON   string
+	Origen             string
+	NivelRiesgo        string
+	RequiereAprobacion bool
+	Activa             bool
 }
 
 type SaveWorkflowInput struct {
@@ -69,11 +76,18 @@ func (s *Service) ListSkills(tipoAgente string, activa *bool) ([]*db.Skill, erro
 
 func (s *Service) SaveSkill(input SaveSkillInput) (int64, error) {
 	return s.store.SaveSkill(&db.Skill{
-		TipoAgente:  strings.TrimSpace(input.TipoAgente),
-		Nombre:      strings.TrimSpace(input.Nombre),
-		Descripcion: strings.TrimSpace(input.Descripcion),
-		CuandoUsar:  strings.TrimSpace(input.CuandoUsar),
-		Activa:      input.Activa,
+		TipoAgente:         strings.TrimSpace(input.TipoAgente),
+		Nombre:             strings.TrimSpace(input.Nombre),
+		Descripcion:        strings.TrimSpace(input.Descripcion),
+		CuandoUsar:         strings.TrimSpace(input.CuandoUsar),
+		Escenario:          strings.TrimSpace(input.Escenario),
+		Prioridad:          input.Prioridad,
+		AliasesJSON:        strings.TrimSpace(input.AliasesJSON),
+		HerramientasJSON:   strings.TrimSpace(input.HerramientasJSON),
+		Origen:             strings.TrimSpace(input.Origen),
+		NivelRiesgo:        strings.TrimSpace(input.NivelRiesgo),
+		RequiereAprobacion: input.RequiereAprobacion,
+		Activa:             input.Activa,
 	})
 }
 

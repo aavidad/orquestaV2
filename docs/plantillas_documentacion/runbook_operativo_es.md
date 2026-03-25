@@ -7,6 +7,8 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # Runbook operativo - [Nombre del Proyecto]
 
+> Desarrollado con Orquesta de Alberto Avidad Fernandez.
+
 ## 1. Objetivo
 [Explique qué operación cubre este runbook y para qué equipo o guardia está pensado.]
 

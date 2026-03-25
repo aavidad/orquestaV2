@@ -1,7 +1,10 @@
 package db
 
 import (
+	"database/sql"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -220,6 +223,60 @@ func TestRuntimeOrdersMailboxYCheckpoint(t *testing.T) {
 	}
 	if len(lista) != 1 || lista[0].ID != cpID {
 		t.Fatalf("listado de checkpoints inesperado: %+v", lista)
+	}
+}
+
+func TestControlarProcesoRuntimeSoportaHandleLegacySinKind(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	pid := int64(4242)
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		PID:         &pid,
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_handles SET handle_kind = '' WHERE id = ?`, handle.ID); err != nil {
+		t.Fatalf("vaciar handle_kind: %v", err)
+	}
+
+	order := &RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		HandleID:   &handle.ID,
+	}
+	var got controlruntime.ObjetivoProceso
+	aplicado, _, err := controlarProcesoRuntime(order, func(obj controlruntime.ObjetivoProceso) (bool, int, error) {
+		got = obj
+		return true, 0, nil
+	})
+	if err != nil || !aplicado {
+		t.Fatalf("controlar proceso legacy: aplicado=%t err=%v", aplicado, err)
+	}
+	if got.PID == nil || *got.PID != pid {
+		t.Fatalf("pid legacy inesperado: %+v", got)
 	}
 }
 
@@ -699,8 +756,8 @@ func TestReconciliarRuntimeOrdersStaleReencolaBasicasYExpiraNoSoportadas(t *test
 	if err != nil {
 		t.Fatalf("get handoff order: %v", err)
 	}
-	if otherOrder.Estado != "expirada" || otherOrder.FinishedAt == nil {
-		t.Fatalf("handoff order no expirada: %+v", otherOrder)
+	if otherOrder.Estado != "pendiente" || otherOrder.StartedAt != nil {
+		t.Fatalf("handoff order no reencolada: %+v", otherOrder)
 	}
 }
 
@@ -763,7 +820,7 @@ func TestProcesarRuntimeOrdersBatchIgnoraTiposNoSoportadosYResuelveProyectoDeLaO
 	unsupportedID, err := EncolarRuntimeOrder(&RuntimeOrder{
 		Agente:      "Codex1",
 		ProyectoID:  &proyectoA,
-		Tipo:        "handoff",
+		Tipo:        "tipo_no_soportado",
 		PayloadJSON: `{}`,
 	})
 	if err != nil {
@@ -1012,13 +1069,921 @@ func TestRuntimeOrderStartYSendInstructionGobiernanProcesoReal(t *testing.T) {
 		t.Fatalf("send_instruction no completada: %+v", sendOrder)
 	}
 
-	time.Sleep(250 * time.Millisecond)
-	logData, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("leer log: %v", err)
+	deadline := time.Now().Add(2 * time.Second)
+	var logData []byte
+	for {
+		logData, err = os.ReadFile(logPath)
+		if err == nil && strings.Contains(string(logData), "hola runtime") {
+			break
+		}
+		if time.Now().After(deadline) {
+			if err != nil {
+				t.Fatalf("leer log: %v", err)
+			}
+			t.Fatalf("el proceso no recibio la instruccion: %s", string(logData))
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	if !strings.Contains(string(logData), "hola runtime") {
-		t.Fatalf("el proceso no recibio la instruccion: %s", string(logData))
+
+	stopID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "stop",
+		PayloadJSON: `{"motivo":"cierre local"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar stop: %v", err)
+	}
+	stopOrder, err := GetRuntimeOrder(stopID)
+	if err != nil {
+		t.Fatalf("get stop order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStop(stopOrder); err != nil {
+		t.Fatalf("ejecutar stop: %v", err)
+	}
+	stopOrder, err = GetRuntimeOrder(stopID)
+	if err != nil {
+		t.Fatalf("get stop order final: %v", err)
+	}
+	if stopOrder.Estado != "completada" {
+		t.Fatalf("stop no completada: %+v", stopOrder)
+	}
+	sesionActiva, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil && err != sql.ErrNoRows {
+		t.Fatalf("get sesion activa tras stop: %v", err)
+	}
+	if sesionActiva != nil {
+		t.Fatalf("la sesion debia quedar cerrada tras stop: %+v", sesionActiva)
+	}
+	sesion, err = GetSesionByID(sesion.ID)
+	if err != nil || sesion == nil {
+		t.Fatalf("get sesion final: %+v err=%v", sesion, err)
+	}
+	if sesion.Activa || sesion.Fin == nil {
+		t.Fatalf("la sesion no quedó cerrada: %+v", sesion)
+	}
+}
+
+func TestRuntimeOrderStartRemotoPersisteSesionYHandleSinPID(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	calls := make([]string, 0, 2)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.URL.Path)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"external_session_id": "sess-remote-42",
+			"handle_ref":          "remote-handle-42",
+			"capabilities": map[string]any{
+				"can_send_input": true,
+				"can_pause":      true,
+				"can_stop":       true,
+			},
+		})
+	}))
+	defer srv.Close()
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "codex-remote",
+		Nombre:     "Codex Remote",
+		Transporte: "api",
+		Comando:    srv.URL,
+		MetadataJSON: `{
+			"launch_path": "/launch",
+			"pause_path": "/pause",
+			"continue_path": "/continue",
+			"stop_path": "/stop",
+			"input_path": "/input"
+		}`,
+		Activo: true,
+	}); err != nil {
+		t.Fatalf("upsert conector remoto: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"codex-remote"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start remoto: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start remoto: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStart(startOrder); err != nil {
+		t.Fatalf("ejecutar start remoto: %v", err)
+	}
+
+	sesion, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion remota: %+v err=%v", sesion, err)
+	}
+	if sesion.PID != nil {
+		t.Fatalf("la sesion remota no debe tener PID: %+v", sesion)
+	}
+	if sesion.ExternalSessionID != "sess-remote-42" {
+		t.Fatalf("external_session_id inesperado: %+v", sesion)
+	}
+
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle remoto: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime remoto: %+v err=%v", runtime, err)
+	}
+	if runtime.PID != nil {
+		t.Fatalf("el runtime remoto no debe exponer PID: %+v", runtime)
+	}
+	if handle.HandleKind != "session" || handle.HandleRef != "remote-handle-42" {
+		t.Fatalf("handle remoto inesperado: %+v", handle)
+	}
+	if !strings.Contains(handle.MetadataJSON, `"endpoint":"`+srv.URL+`"`) {
+		t.Fatalf("metadata remota inesperada: %s", handle.MetadataJSON)
+	}
+	if aplicado, _, err := controlruntime.EnviarInstruccionProceso(controlruntime.ObjetivoProceso{
+		HandleKind:   handle.HandleKind,
+		HandleRef:    handle.HandleRef,
+		MetadataJSON: handle.MetadataJSON,
+	}, "hola remoto directo"); err != nil || !aplicado {
+		t.Fatalf("controlruntime directo no aplicó input remoto: aplicado=%t err=%v metadata=%s", aplicado, err, handle.MetadataJSON)
+	}
+	calls = calls[:0]
+
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   handle.RuntimeID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: `{"to_agente":"Codex1","texto":"hola remoto"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar send remoto: %v", err)
+	}
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send remoto: %v", err)
+	}
+	handleDesdeOrden, err := GetRuntimeHandle(*sendOrder.HandleID)
+	if err != nil || handleDesdeOrden == nil {
+		t.Fatalf("handle desde orden: %+v err=%v", handleDesdeOrden, err)
+	}
+	if aplicado, _, err := controlruntime.EnviarInstruccionProceso(controlruntime.ObjetivoProceso{
+		HandleKind:   handleDesdeOrden.HandleKind,
+		HandleRef:    handleDesdeOrden.HandleRef,
+		MetadataJSON: handleDesdeOrden.MetadataJSON,
+	}, "hola remoto desde orden"); err != nil || !aplicado {
+		t.Fatalf("controlruntime desde orden no aplicó input remoto: aplicado=%t err=%v handle=%+v", aplicado, err, handleDesdeOrden)
+	}
+	handleResuelto, err := resolverHandleParaOrden(sendOrder)
+	if err != nil || handleResuelto == nil {
+		t.Fatalf("resolverHandleParaOrden: %+v err=%v", handleResuelto, err)
+	}
+	if handleResuelto.HandleKind != handleDesdeOrden.HandleKind || handleResuelto.HandleRef != handleDesdeOrden.HandleRef || handleResuelto.MetadataJSON != handleDesdeOrden.MetadataJSON {
+		t.Fatalf("handle resuelto distinto al directo: resuelto=%+v directo=%+v", handleResuelto, handleDesdeOrden)
+	}
+	if aplicado, _, err := controlarProcesoRuntime(sendOrder, func(obj controlruntime.ObjetivoProceso) (bool, int, error) {
+		return controlruntime.EnviarInstruccionProceso(obj, "hola remoto via controlarProcesoRuntime")
+	}); err != nil || !aplicado {
+		t.Fatalf("controlarProcesoRuntime no aplicó input remoto: aplicado=%t err=%v order=%+v", aplicado, err, sendOrder)
+	}
+	calls = calls[:0]
+	if err := ejecutarRuntimeOrderSendInstruction(sendOrder); err != nil {
+		t.Fatalf("send remoto: %v", err)
+	}
+	sendOrder, err = GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send remoto final: %v", err)
+	}
+	if sendOrder.Estado != "completada" || !strings.Contains(sendOrder.ResultadoJSON, `"control_real":true`) {
+		t.Fatalf("resultado send remoto inesperado: %+v", sendOrder)
+	}
+	if got := strings.Join(calls, ","); strings.Contains(got, "/launch") || !strings.Contains(got, "/input") {
+		t.Fatalf("llamadas remotas inesperadas: %s", got)
+	}
+
+	for _, tc := range []struct {
+		nombre      string
+		tipo        string
+		wantPath    string
+		wantLogical string
+		wantEstado  string
+	}{
+		{nombre: "pause", tipo: "pause", wantPath: "/pause", wantLogical: "pausado", wantEstado: "pausado"},
+		{nombre: "resume", tipo: "resume", wantPath: "/continue", wantLogical: "activo", wantEstado: "activo"},
+		{nombre: "stop", tipo: "stop", wantPath: "/stop", wantLogical: "cerrado", wantEstado: "cerrado"},
+	} {
+		calls = calls[:0]
+		orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+			Agente:      "Codex1",
+			ProyectoID:  &proyectoID,
+			RuntimeID:   handle.RuntimeID,
+			HandleID:    &handle.ID,
+			Tipo:        tc.tipo,
+			PayloadJSON: `{"motivo":"test remoto"}`,
+		})
+		if err != nil {
+			t.Fatalf("encolar %s remoto: %v", tc.nombre, err)
+		}
+		order, err := GetRuntimeOrder(orderID)
+		if err != nil {
+			t.Fatalf("get %s remoto: %v", tc.nombre, err)
+		}
+		switch tc.tipo {
+		case "pause":
+			err = ejecutarRuntimeOrderPause(order)
+		case "resume":
+			err = ejecutarRuntimeOrderResume(order)
+		case "stop":
+			err = ejecutarRuntimeOrderStop(order)
+		}
+		if err != nil {
+			t.Fatalf("%s remoto: %v", tc.nombre, err)
+		}
+		order, err = GetRuntimeOrder(orderID)
+		if err != nil {
+			t.Fatalf("get %s remoto final: %v", tc.nombre, err)
+		}
+		if order.Estado != "completada" || !strings.Contains(order.ResultadoJSON, `"control_real":true`) {
+			t.Fatalf("resultado %s remoto inesperado: %+v", tc.nombre, order)
+		}
+		runtime, err = GetRuntime(*handle.RuntimeID)
+		if err != nil || runtime == nil {
+			t.Fatalf("runtime tras %s remoto: %+v err=%v", tc.nombre, runtime, err)
+		}
+		if runtime.LogicalState != tc.wantLogical {
+			t.Fatalf("logical_state tras %s remoto inesperado: %+v", tc.nombre, runtime)
+		}
+		handle, err = GetRuntimeHandle(handle.ID)
+		if err != nil || handle == nil {
+			t.Fatalf("handle tras %s remoto: %+v err=%v", tc.nombre, handle, err)
+		}
+		if handle.Estado != tc.wantEstado {
+			t.Fatalf("estado handle tras %s remoto inesperado: %+v", tc.nombre, handle)
+		}
+		if got := strings.Join(calls, ","); !strings.Contains(got, tc.wantPath) {
+			t.Fatalf("llamadas %s remoto inesperadas: %s", tc.nombre, got)
+		}
+		if tc.tipo == "stop" {
+			sesionActiva, err := GetSesionActiva("Codex1", &proyectoID)
+			if err != nil && err != sql.ErrNoRows {
+				t.Fatalf("sesion activa tras stop remoto: %v", err)
+			}
+			if sesionActiva != nil {
+				t.Fatalf("la sesion remota debia quedar cerrada tras stop: %+v", sesionActiva)
+			}
+			sesion, err = GetSesionByID(sesion.ID)
+			if err != nil || sesion == nil {
+				t.Fatalf("get sesion remota final: %+v err=%v", sesion, err)
+			}
+			if sesion.Activa || sesion.Fin == nil {
+				t.Fatalf("la sesion remota no quedó cerrada: %+v", sesion)
+			}
+		}
+	}
+}
+
+func TestProcesarRuntimeOrdersBatchDespachaCicloDeVidaRemoto(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	calls := make([]string, 0, 8)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.URL.Path)
+		switch r.URL.Path {
+		case "/launch":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"external_session_id": "sess-remote-batch",
+				"handle_ref":          "remote-handle-batch",
+				"capabilities": map[string]any{
+					"can_send_input": true,
+					"can_pause":      true,
+					"can_stop":       true,
+				},
+			})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		}
+	}))
+	defer srv.Close()
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "codex-remote-batch",
+		Nombre:     "Codex Remote Batch",
+		Transporte: "api",
+		Comando:    srv.URL,
+		MetadataJSON: `{
+			"launch_path": "/launch",
+			"pause_path": "/pause",
+			"continue_path": "/continue",
+			"stop_path": "/stop",
+			"input_path": "/input"
+		}`,
+		Activo: true,
+	}); err != nil {
+		t.Fatalf("upsert conector remoto: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"codex-remote-batch"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start remoto batch: %v", err)
+	}
+	processed, err := ProcesarRuntimeOrdersBatch()
+	if err != nil {
+		t.Fatalf("ProcesarRuntimeOrdersBatch start: %v", err)
+	}
+	if processed != 1 {
+		t.Fatalf("processed start=%d", processed)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil || startOrder == nil {
+		t.Fatalf("get start order: %+v err=%v", startOrder, err)
+	}
+	if startOrder.Estado != "completada" {
+		t.Fatalf("start batch no completada: %+v", startOrder)
+	}
+	if got := strings.Join(calls, ","); !strings.Contains(got, "/launch") {
+		t.Fatalf("batch start sin launch remoto: %s", got)
+	}
+
+	sesion, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion remota batch: %+v err=%v", sesion, err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle remoto batch: %+v err=%v", handle, err)
+	}
+
+	for _, tc := range []struct {
+		nombre   string
+		tipo     string
+		payload  string
+		wantPath string
+	}{
+		{nombre: "send", tipo: "send_instruction", payload: `{"to_agente":"Codex1","texto":"hola batch"}`, wantPath: "/input"},
+		{nombre: "pause", tipo: "pause", payload: `{"motivo":"pause batch"}`, wantPath: "/pause"},
+		{nombre: "resume", tipo: "resume", payload: `{"motivo":"resume batch"}`, wantPath: "/continue"},
+		{nombre: "stop", tipo: "stop", payload: `{"motivo":"stop batch"}`, wantPath: "/stop"},
+	} {
+		calls = calls[:0]
+		orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+			Agente:      "Codex1",
+			ProyectoID:  &proyectoID,
+			RuntimeID:   handle.RuntimeID,
+			HandleID:    &handle.ID,
+			Tipo:        tc.tipo,
+			PayloadJSON: tc.payload,
+		})
+		if err != nil {
+			t.Fatalf("encolar %s batch: %v", tc.nombre, err)
+		}
+		processed, err := ProcesarRuntimeOrdersBatch()
+		if err != nil {
+			t.Fatalf("ProcesarRuntimeOrdersBatch %s: %v", tc.nombre, err)
+		}
+		if processed != 1 {
+			t.Fatalf("processed %s=%d", tc.nombre, processed)
+		}
+		order, err := GetRuntimeOrder(orderID)
+		if err != nil || order == nil {
+			t.Fatalf("get %s order: %+v err=%v", tc.nombre, order, err)
+		}
+		if order.Estado != "completada" {
+			t.Fatalf("%s batch no completada: %+v", tc.nombre, order)
+		}
+		if got := strings.Join(calls, ","); !strings.Contains(got, tc.wantPath) {
+			t.Fatalf("llamadas %s batch inesperadas: %s", tc.nombre, got)
+		}
+	}
+
+	sesionActiva, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil && err != sql.ErrNoRows {
+		t.Fatalf("sesion activa tras stop batch: %v", err)
+	}
+	if sesionActiva != nil {
+		t.Fatalf("la sesion batch debia quedar cerrada: %+v", sesionActiva)
+	}
+}
+
+func TestRuntimeOrderPauseCheckpointeaYSesionQuedaPausada(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	calls := make([]string, 0, 8)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.URL.Path)
+		switch r.URL.Path {
+		case "/launch":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"external_session_id": "sess-remote-pause",
+				"handle_ref":          "remote-handle-pause",
+				"capabilities": map[string]any{
+					"can_send_input": true,
+					"can_pause":      true,
+					"can_stop":       true,
+				},
+			})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		}
+	}))
+	defer srv.Close()
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "codex-remote-pause",
+		Nombre:     "Codex Remote Pause",
+		Transporte: "api",
+		Comando:    srv.URL,
+		MetadataJSON: `{
+			"launch_path": "/launch",
+			"pause_path": "/pause",
+			"continue_path": "/continue",
+			"stop_path": "/stop",
+			"input_path": "/input"
+		}`,
+		Activo: true,
+	}); err != nil {
+		t.Fatalf("upsert conector remoto: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"codex-remote-pause"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start remoto: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStart(startOrder); err != nil {
+		t.Fatalf("ejecutar start: %v", err)
+	}
+
+	sesion, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion activa: %+v err=%v", sesion, err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle remoto: %+v err=%v", handle, err)
+	}
+
+	pauseID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   handle.RuntimeID,
+		HandleID:    &handle.ID,
+		Tipo:        "pause",
+		PayloadJSON: `{"motivo":"esperando humano"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar pause: %v", err)
+	}
+	pauseOrder, err := GetRuntimeOrder(pauseID)
+	if err != nil {
+		t.Fatalf("get pause order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderPause(pauseOrder); err != nil {
+		t.Fatalf("ejecutar pause: %v", err)
+	}
+	cp, err := GetRuntimeCheckpointBySource("runtime_order:" + jsonNumber(pauseID) + ":pause")
+	if err != nil || cp == nil {
+		t.Fatalf("checkpoint pause: %+v err=%v", cp, err)
+	}
+	sesion, err = GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion tras pause: %+v err=%v", sesion, err)
+	}
+	if sesion.Estado != "pausada" {
+		t.Fatalf("estado de sesion tras pause inesperado: %+v", sesion)
+	}
+
+	resumeID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   handle.RuntimeID,
+		HandleID:    &handle.ID,
+		Tipo:        "resume",
+		PayloadJSON: `{"motivo":"desbloqueado"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar resume: %v", err)
+	}
+	resumeOrder, err := GetRuntimeOrder(resumeID)
+	if err != nil {
+		t.Fatalf("get resume order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderResume(resumeOrder); err != nil {
+		t.Fatalf("ejecutar resume: %v", err)
+	}
+	sesion, err = GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion tras resume: %+v err=%v", sesion, err)
+	}
+	if sesion.Estado != "activa" {
+		t.Fatalf("estado de sesion tras resume inesperado: %+v", sesion)
+	}
+	if got := strings.Join(calls, ","); !strings.Contains(got, "/pause") || !strings.Contains(got, "/continue") {
+		t.Fatalf("llamadas pause/resume inesperadas: %s", got)
+	}
+}
+
+func TestRuntimeOrderStopPreservaSesionOAuthSinCerrarla(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	calls := make([]string, 0, 8)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.URL.Path)
+		switch r.URL.Path {
+		case "/launch":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"external_session_id": "sess-remote-oauth",
+				"handle_ref":          "remote-handle-oauth",
+				"capabilities": map[string]any{
+					"can_send_input":          true,
+					"can_pause":               true,
+					"can_stop":                true,
+					"can_stop_without_reauth": false,
+				},
+			})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		}
+	}))
+	defer srv.Close()
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "codex-remote-oauth",
+		Nombre:     "Codex Remote OAuth",
+		Transporte: "api",
+		Comando:    srv.URL,
+		MetadataJSON: `{
+			"launch_path": "/launch",
+			"pause_path": "/pause",
+			"continue_path": "/continue",
+			"stop_path": "/stop",
+			"input_path": "/input",
+			"auth_mode": "oauth",
+			"preserve_external_session_on_stop": true
+		}`,
+		Activo: true,
+	}); err != nil {
+		t.Fatalf("upsert conector oauth: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"codex-remote-oauth"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start remoto: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStart(startOrder); err != nil {
+		t.Fatalf("ejecutar start: %v", err)
+	}
+
+	sesion, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion activa: %+v err=%v", sesion, err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle remoto: %+v err=%v", handle, err)
+	}
+
+	stopID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   handle.RuntimeID,
+		HandleID:    &handle.ID,
+		Tipo:        "stop",
+		PayloadJSON: `{"motivo":"reubicar temporalmente"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar stop: %v", err)
+	}
+	stopOrder, err := GetRuntimeOrder(stopID)
+	if err != nil {
+		t.Fatalf("get stop order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStop(stopOrder); err != nil {
+		t.Fatalf("ejecutar stop preservado: %v", err)
+	}
+
+	cp, err := GetRuntimeCheckpointBySource("runtime_order:" + jsonNumber(stopID) + ":stop")
+	if err != nil || cp == nil {
+		t.Fatalf("checkpoint stop preservado: %+v err=%v", cp, err)
+	}
+	sesionActiva, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil && err != sql.ErrNoRows {
+		t.Fatalf("sesion activa tras stop preservado: %v", err)
+	}
+	if sesionActiva != nil {
+		t.Fatalf("no debía quedar sesión activa tras aparcar: %+v", sesionActiva)
+	}
+	sesion, err = GetSesionByID(sesion.ID)
+	if err != nil || sesion == nil {
+		t.Fatalf("get sesion preservada: %+v err=%v", sesion, err)
+	}
+	if sesion.Activa || sesion.Fin != nil || sesion.Estado != "pausada" {
+		t.Fatalf("sesion preservada inesperada: %+v", sesion)
+	}
+	runtime, err := GetRuntime(*handle.RuntimeID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime preservado: %+v err=%v", runtime, err)
+	}
+	if runtime.LogicalState != "pausado" {
+		t.Fatalf("logical_state preservado inesperado: %+v", runtime)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle preservado: %+v err=%v", handle, err)
+	}
+	if handle.Estado != "pausado" {
+		t.Fatalf("estado handle preservado inesperado: %+v", handle)
+	}
+	if got := strings.Join(calls, ","); !strings.Contains(got, "/pause") || strings.Contains(got, "/stop") {
+		t.Fatalf("llamadas stop preservado inesperadas: %s", got)
+	}
+}
+
+func TestProcesarRuntimeOrdersBatchSyncStatusObservaEstadoRemoto(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	calls := make([]string, 0, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.URL.Path)
+		switch r.URL.Path {
+		case "/launch":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"external_session_id": "sess-remote-sync",
+				"handle_ref":          "remote-handle-sync",
+				"capabilities": map[string]any{
+					"can_send_input": true,
+					"can_pause":      true,
+					"can_stop":       true,
+				},
+			})
+		case "/status":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"handle": map[string]any{
+					"estado": "degradado",
+					"metadata": map[string]any{
+						"remote_version": "1.2.3",
+					},
+					"capabilities": map[string]any{
+						"can_send_input": true,
+						"can_pause":      false,
+					},
+				},
+				"runtime": map[string]any{
+					"logical_state": "esperando",
+					"process_state": "idle",
+				},
+			})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		}
+	}))
+	defer srv.Close()
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "codex-remote-sync",
+		Nombre:     "Codex Remote Sync",
+		Transporte: "api",
+		Comando:    srv.URL,
+		MetadataJSON: `{
+			"launch_path": "/launch",
+			"status_path": "/status"
+		}`,
+		Activo: true,
+	}); err != nil {
+		t.Fatalf("upsert conector remoto: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"codex-remote-sync"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start remoto sync: %v", err)
+	}
+	if _, err := ProcesarRuntimeOrdersBatch(); err != nil {
+		t.Fatalf("procesar batch start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil || startOrder == nil || startOrder.Estado != "completada" {
+		t.Fatalf("start remoto sync inesperado: %+v err=%v", startOrder, err)
+	}
+	sesion, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion remota sync: %+v err=%v", sesion, err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle remoto sync: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime remoto sync: %+v err=%v", runtime, err)
+	}
+
+	syncID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   handle.RuntimeID,
+		HandleID:    &handle.ID,
+		Tipo:        "sync_status",
+		PayloadJSON: `{}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar sync remoto: %v", err)
+	}
+	if _, err := ProcesarRuntimeOrdersBatch(); err != nil {
+		t.Fatalf("procesar batch sync: %v", err)
+	}
+	syncOrder, err := GetRuntimeOrder(syncID)
+	if err != nil || syncOrder == nil {
+		t.Fatalf("get sync remoto: %+v err=%v", syncOrder, err)
+	}
+	if syncOrder.Estado != "completada" || !strings.Contains(syncOrder.ResultadoJSON, `"observed_remote":true`) {
+		t.Fatalf("sync remoto no observado: %+v", syncOrder)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle remoto sync: %+v err=%v", handle, err)
+	}
+	if handle.Estado != "activo" ||
+		!strings.Contains(handle.MetadataJSON, `"remote_version":"1.2.3"`) ||
+		!strings.Contains(handle.MetadataJSON, `"remote_handle_state":"degradado"`) {
+		t.Fatalf("handle remoto sync inesperado: %+v", handle)
+	}
+	runtime, err = GetRuntime(runtime.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("get runtime remoto sync: %+v err=%v", runtime, err)
+	}
+	if runtime.LogicalState != "esperando" || runtime.ProcessState != "idle" {
+		t.Fatalf("runtime remoto sync inesperado: %+v", runtime)
+	}
+	if got := strings.Join(calls, ","); !strings.Contains(got, "/status") {
+		t.Fatalf("sync remoto sin llamada status: %s", got)
+	}
+}
+
+func TestRuntimeOrderStartLimpiaSesionRemotaSiFallaAltaLocal(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	calls := make([]string, 0, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.URL.Path)
+		switch r.URL.Path {
+		case "/launch":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"external_session_id": "sess-remote-cleanup",
+				"handle_ref":          "remote-handle-cleanup",
+			})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		}
+	}))
+	defer srv.Close()
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "codex-remote-cleanup",
+		Nombre:     "Codex Remote Cleanup",
+		Transporte: "api",
+		Comando:    srv.URL,
+		MetadataJSON: `{
+			"launch_path": "/launch",
+			"stop_path": "/stop"
+		}`,
+		Activo: true,
+	}); err != nil {
+		t.Fatalf("upsert conector remoto: %v", err)
+	}
+	if _, err := DB.Exec(`
+		CREATE TRIGGER fail_runtime_insert
+		BEFORE INSERT ON runtime_instances
+		BEGIN
+			SELECT RAISE(FAIL, 'runtime insert forced failure');
+		END;
+	`); err != nil {
+		t.Fatalf("crear trigger: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"codex-remote-cleanup"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start remoto cleanup: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil || startOrder == nil {
+		t.Fatalf("get start order: %+v err=%v", startOrder, err)
+	}
+	if err := ejecutarRuntimeOrderStart(startOrder); err == nil || !strings.Contains(err.Error(), "runtime insert forced failure") {
+		t.Fatalf("esperaba error de alta local, got=%v", err)
+	}
+	got := strings.Join(calls, ",")
+	if !strings.Contains(got, "/launch") || !strings.Contains(got, "/stop") {
+		t.Fatalf("cleanup remoto inesperado: %s", got)
 	}
 }
 

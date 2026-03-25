@@ -241,17 +241,17 @@ var skillsCrearCmd = &cobra.Command{
 		}
 
 		if id, ok, err := crearSkillPorAPI(apiSkillCrearRequest{
-			Actor:            actor,
-			TipoAgente:       strings.TrimSpace(rol),
-			Nombre:           strings.TrimSpace(nombre),
-			Descripcion:      strings.TrimSpace(descripcion),
-			CuandoUsar:       strings.TrimSpace(cuandoUsar),
-			Escenario:        strings.TrimSpace(escenario),
-			Prioridad:        prioridad,
-			AliasesJSON:      aliasesJSON,
-			HerramientasJSON: herramientasJSON,
-			Origen:           strings.TrimSpace(origen),
-			NivelRiesgo:      strings.TrimSpace(nivelRiesgo),
+			Actor:              actor,
+			TipoAgente:         strings.TrimSpace(rol),
+			Nombre:             strings.TrimSpace(nombre),
+			Descripcion:        strings.TrimSpace(descripcion),
+			CuandoUsar:         strings.TrimSpace(cuandoUsar),
+			Escenario:          strings.TrimSpace(escenario),
+			Prioridad:          prioridad,
+			AliasesJSON:        aliasesJSON,
+			HerramientasJSON:   herramientasJSON,
+			Origen:             strings.TrimSpace(origen),
+			NivelRiesgo:        strings.TrimSpace(nivelRiesgo),
 			RequiereAprobacion: requiereAprobacion,
 		}); err != nil {
 			return err
@@ -261,18 +261,18 @@ var skillsCrearCmd = &cobra.Command{
 		}
 
 		id, err := db.CrearSkill(actor, &db.Skill{
-			TipoAgente:       strings.TrimSpace(rol),
-			Nombre:           strings.TrimSpace(nombre),
-			Descripcion:      strings.TrimSpace(descripcion),
-			CuandoUsar:       strings.TrimSpace(cuandoUsar),
-			Escenario:        strings.TrimSpace(escenario),
-			Prioridad:        prioridad,
-			AliasesJSON:      aliasesJSON,
-			HerramientasJSON: herramientasJSON,
-			Origen:           strings.TrimSpace(origen),
-			NivelRiesgo:      strings.TrimSpace(nivelRiesgo),
+			TipoAgente:         strings.TrimSpace(rol),
+			Nombre:             strings.TrimSpace(nombre),
+			Descripcion:        strings.TrimSpace(descripcion),
+			CuandoUsar:         strings.TrimSpace(cuandoUsar),
+			Escenario:          strings.TrimSpace(escenario),
+			Prioridad:          prioridad,
+			AliasesJSON:        aliasesJSON,
+			HerramientasJSON:   herramientasJSON,
+			Origen:             strings.TrimSpace(origen),
+			NivelRiesgo:        strings.TrimSpace(nivelRiesgo),
 			RequiereAprobacion: requiereAprobacion,
-			Activa:           true,
+			Activa:             true,
 		})
 		if err != nil {
 			return err
@@ -352,19 +352,19 @@ var skillsEditarCmd = &cobra.Command{
 			s.HerramientasJSON = herramientasJSON
 		}
 		if ok, err := actualizarSkillPorAPI(id, apiSkillActualizarRequest{
-			Actor:            actor,
-			TipoAgente:       s.TipoAgente,
-			Nombre:           s.Nombre,
-			Descripcion:      s.Descripcion,
-			CuandoUsar:       s.CuandoUsar,
-			Escenario:        s.Escenario,
-			Prioridad:        s.Prioridad,
-			AliasesJSON:      s.AliasesJSON,
-			HerramientasJSON: s.HerramientasJSON,
-			Origen:           s.Origen,
-			NivelRiesgo:      s.NivelRiesgo,
+			Actor:              actor,
+			TipoAgente:         s.TipoAgente,
+			Nombre:             s.Nombre,
+			Descripcion:        s.Descripcion,
+			CuandoUsar:         s.CuandoUsar,
+			Escenario:          s.Escenario,
+			Prioridad:          s.Prioridad,
+			AliasesJSON:        s.AliasesJSON,
+			HerramientasJSON:   s.HerramientasJSON,
+			Origen:             s.Origen,
+			NivelRiesgo:        s.NivelRiesgo,
 			RequiereAprobacion: s.RequiereAprobacion,
-			Activa:           s.Activa,
+			Activa:             s.Activa,
 		}); err != nil {
 			return err
 		} else if !ok {

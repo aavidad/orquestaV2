@@ -11,8 +11,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"orquesta/db"
 )
 
 func buildExportStateMarkdown() (string, error) {
@@ -43,7 +41,7 @@ func buildExportStateMarkdown() (string, error) {
 }
 
 func buildExportAuditMarkdown(limit int) (string, error) {
-	entries, err := db.AuditLog(limit)
+	entries, err := operacionesService.AuditLog(limit)
 	if err != nil {
 		return "", err
 	}

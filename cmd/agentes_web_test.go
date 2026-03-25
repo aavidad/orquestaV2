@@ -114,25 +114,31 @@ func TestWebAgentesPanelMuestraEstadoVivo(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/agentes", nil)
+	req := httptest.NewRequest(http.MethodGet, "/agentes?lang=en", nil)
 	testMuxAgentesWeb().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
 	for _, token := range []string{
-		"panel vivo de agentes",
+		"live agents panel",
 		"Codex1",
 		"orquestador",
 		"codex-cli",
 		"sess-agentes-001",
-		"mailbox pendiente",
-		"auto-refresca cada 5 s",
+		"pending mailbox",
+		"auto-refresh every 5 s",
 		"/agentes/Codex1",
 	} {
 		if !strings.Contains(body, token) {
 			t.Fatalf("panel agentes sin %q:\n%s", token, body)
 		}
+	}
+	if !strings.Contains(body, `<html lang="en">`) {
+		t.Fatalf("lang html inesperado: %s", body)
+	}
+	if got := rec.Header().Get("Content-Language"); got != "en" {
+		t.Fatalf("Content-Language=%q", got)
 	}
 }
 
@@ -209,7 +215,7 @@ func TestWebAgenteDetalleMuestraControlPlaneYDetalleOperativo(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/agentes/Codex1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/agentes/Codex1?lang=en", nil)
 	testMuxAgentesWeb().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
@@ -217,18 +223,68 @@ func TestWebAgenteDetalleMuestraControlPlaneYDetalleOperativo(t *testing.T) {
 	body := rec.Body.String()
 	for _, token := range []string{
 		"Control",
-		"Administración",
+		"Admin",
 		"feature/agentes",
 		"codex-cli",
 		"#" + itoa(orderID),
 		"discordia",
 		"/time-travel/" + itoa(cpID),
 		"detalle-test",
-		"reset-reanimacion",
+		"Reset reanimation",
 	} {
 		if !strings.Contains(body, token) {
 			t.Fatalf("detalle agente sin %q:\n%s", token, body)
 		}
+	}
+}
+
+func TestWebAgenteNuevoAutoNombrePorProveedor(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	form := strings.NewReader("proveedor=claude&rol=programador")
+	req := httptest.NewRequest(http.MethodPost, "/agentes/nuevo", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	testMuxAgentesWeb().ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	if agente, err := db.GetAgente("Claude1"); err != nil || agente == nil {
+		t.Fatalf("agente auto no creado: %+v err=%v", agente, err)
+	}
+}
+
+func TestWebAgenteAsignacionActivaProyecto(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	form := strings.NewReader("proyecto=orquestador&nota=frente+principal")
+	req := httptest.NewRequest(http.MethodPost, "/agentes/Codex1/asignacion", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	testMuxAgentesWeb().ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	agente := "Codex1"
+	asignaciones, err := db.ListarAsignaciones(db.FiltroAsignaciones{Agente: &agente})
+	if err != nil {
+		t.Fatalf("listar asignaciones: %v", err)
+	}
+	if len(asignaciones) != 1 || asignaciones[0].ProyectoSlug != "orquestador" || asignaciones[0].Estado != db.AsignacionActiva {
+		t.Fatalf("asignaciones inesperadas: %+v", asignaciones)
 	}
 }
 

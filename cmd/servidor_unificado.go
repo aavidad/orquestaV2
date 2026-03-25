@@ -10,11 +10,12 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
-	"orquesta/db"
 	"orquesta/internal/rpclocal"
 )
 
@@ -29,6 +30,8 @@ func registrarRutasServe(mux *http.ServeMux) {
 	mux.HandleFunc("/sesiones/", webRouterSesiones)
 	mux.HandleFunc("/proyectos", webHandlerProyectos)
 	mux.HandleFunc("/proyectos/", webRouterProyectos)
+	mux.HandleFunc("/gobernanza", webHandlerGobernanza)
+	mux.HandleFunc("/gobernanza/", webRouterGobernanza)
 	mux.HandleFunc("/git", webHandlerGitGov)
 	mux.HandleFunc("/git/", webRouterGitGov)
 	mux.HandleFunc("/agentes", webHandlerAgentes)
@@ -61,11 +64,9 @@ func montarRPCLocalEnMux(mux *http.ServeMux, kind, listenAddr string) (func(), e
 	}, nil
 }
 
-func arrancarServidorUnificado(listenAddr, kind string, anunciar bool) error {
-	if !db.IsOpen() {
-		if err := db.Open(); err != nil {
-			return err
-		}
+func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug serverDebugOptions) error {
+	if err := ensureServerDBOpen(); err != nil {
+		return err
 	}
 
 	mux := http.NewServeMux()
@@ -83,11 +84,17 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool) error {
 		fmt.Printf("Servidor local de Orquesta en %s\n", rpclocal.BaseURL(normalizarAddrServidorLocal(listenAddr)))
 	}
 
+	var debugLogger *log.Logger
+	if debug.Enabled {
+		debugLogger = newServerDebugLogger(kind)
+		debugLogger.Printf("startup addr=%s rpc=%s %s", listenAddr, rpclocal.BaseURL(normalizarAddrServidorLocal(listenAddr)), debugDurationsSummary(time.Minute, time.Minute, 30*time.Second, 15*time.Second))
+	}
+
 	controlCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	newControlPlaneRunner().Start(controlCtx)
+	newControlPlaneRunner(debugLogger, debug.ControlPlane).Start(controlCtx)
 
-	return http.ListenAndServe(listenAddr, mux)
+	return http.ListenAndServe(listenAddr, wrapServeMuxWithDebug(mux, debug, debugLogger))
 }
 
 func normalizarAddrServidorLocal(listenAddr string) string {

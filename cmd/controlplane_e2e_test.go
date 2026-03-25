@@ -193,8 +193,8 @@ func TestAPIControlPlaneOrquestacionEndToEnd(t *testing.T) {
 		}
 	}
 
-	if _, err := db.ProcesarRuntimeOrdersBatch(); err != nil {
-		t.Fatalf("procesar runtime orders batch: %v", err)
+	if _, err := db.ProcesarRuntimeOrdersBasicasBatch(); err != nil {
+		t.Fatalf("procesar runtime orders basicas batch: %v", err)
 	}
 
 	checkpointOrder, err := db.GetRuntimeOrder(checkpointOrderID)
@@ -405,8 +405,8 @@ func TestControlPlaneRunnerRecuperaRuntimeOrderStaleYLaProcesaEndToEnd(t *testin
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	runner := newControlPlaneRunner()
+	t.Cleanup(cancel)
+	runner := newControlPlaneRunner(nil, false)
 	runner.NotificationFeed = nil
 	runner.InitNotifications = nil
 	runner.Notifier = nil
@@ -417,12 +417,27 @@ func TestControlPlaneRunnerRecuperaRuntimeOrderStaleYLaProcesaEndToEnd(t *testin
 	runner.Start(ctx)
 
 	deadline := time.Now().Add(2 * time.Second)
+	var sawStale, sawBatch bool
 	for time.Now().Before(deadline) {
 		order, err := db.GetRuntimeOrder(orderID)
 		if err != nil {
 			t.Fatalf("get runtime order: %v", err)
 		}
-		if order != nil && order.Estado == "completada" {
+		logs, err := db.ListarAuditoria(db.FiltroAuditoria{Limite: 20})
+		if err != nil {
+			t.Fatalf("listar auditoria: %v", err)
+		}
+		sawStale = false
+		sawBatch = false
+		for _, item := range logs {
+			switch item.Accion {
+			case "runtime_orders_stale":
+				sawStale = true
+			case "runtime_orders_batch":
+				sawBatch = true
+			}
+		}
+		if order != nil && order.Estado == "completada" && sawStale && sawBatch {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -447,20 +462,13 @@ func TestControlPlaneRunnerRecuperaRuntimeOrderStaleYLaProcesaEndToEnd(t *testin
 		t.Fatalf("checkpoint stale e2e inesperado: %+v", cp)
 	}
 
-	logs, err := db.ListarAuditoria(db.FiltroAuditoria{Limite: 20})
-	if err != nil {
-		t.Fatalf("listar auditoria: %v", err)
-	}
-	var sawStale, sawBatch bool
-	for _, item := range logs {
-		switch item.Accion {
-		case "runtime_orders_stale":
-			sawStale = true
-		case "runtime_orders_batch":
-			sawBatch = true
-		}
-	}
 	if !sawStale || !sawBatch {
+		logs, err := db.ListarAuditoria(db.FiltroAuditoria{Limite: 20})
+		if err != nil {
+			t.Fatalf("listar auditoria final: %v", err)
+		}
 		t.Fatalf("auditoria control plane incompleta: stale=%v batch=%v logs=%+v", sawStale, sawBatch, logs)
 	}
+	cancel()
+	time.Sleep(60 * time.Millisecond)
 }

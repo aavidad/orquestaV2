@@ -92,7 +92,7 @@ func aplicarRetencionRespaldo(destino string, retener int) error {
 		return nil
 	}
 
-	patron := filepath.Join(destino, "*_orquesta.db.bak")
+	patron := filepath.Join(destino, db.BackupFilenameGlob())
 	ficheros, err := filepath.Glob(patron)
 	if err != nil {
 		return fmt.Errorf("listar respaldos: %w", err)
@@ -116,7 +116,7 @@ func nombreRespaldoFechable(ts time.Time, etiqueta string) string {
 	if limpio := limpiarEtiquetaRespaldo(etiqueta); limpio != "" {
 		base = base + "_" + limpio
 	}
-	return base + "_orquesta.db.bak"
+	return base + db.BackupFilenameSuffix()
 }
 
 func limpiarEtiquetaRespaldo(etiqueta string) string {

@@ -25,6 +25,9 @@ func (dbAutomationServiceTest) GarantizarSaludAgentes() error { return db.Garant
 func (dbAutomationServiceTest) PlanificarTareasAutomaticamente() error {
 	return db.PlanificarTareasAutomaticamente()
 }
+func (dbAutomationServiceTest) ProcesarAutonomiaAgentesBatch() (int, error) {
+	return 0, nil
+}
 func (dbAutomationServiceTest) ReconciliarRuntimeHandlesStale() (int, error) {
 	return db.ReconciliarRuntimeHandlesStale()
 }
@@ -293,5 +296,133 @@ func TestRunnerWatchdogYHandoffConProcesoVivo(t *testing.T) {
 	}
 	if !sawWatchdog || !sawHandoffBatch {
 		t.Fatalf("auditoria watchdog/handoff incompleta: watchdog=%v handoff=%v", sawWatchdog, sawHandoffBatch)
+	}
+}
+
+func TestRunnerHandoffPreventivoPorPresupuesto(t *testing.T) {
+	tmp := prepararDBTemporalRunner(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex1",
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador", "sesion-codex1-budget"),
+		Herramienta:        "codex-cli",
+		ExternalSessionID:  "sess-codex1-budget",
+		ResumenContinuidad: "sesion viva para handoff preventivo por presupuesto",
+		Branch:             "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion viva: %v", err)
+	}
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Handoff preventivo por presupuesto",
+		Descripcion: "Cobertura e2e presupuesto/handoff",
+		Modulo:      "runtime",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "tester",
+		ProyectoID:  &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	if _, err := db.DB.Exec(`UPDATE config SET valor = '1800' WHERE clave = 'pool_handoff_threshold_seconds'`); err != nil {
+		t.Fatalf("config threshold handoff: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE config SET valor = '300' WHERE clave = 'pool_budget_snapshot_max_age_seconds'`); err != nil {
+		t.Fatalf("config freshness presupuesto: %v", err)
+	}
+	remaining := int64(15)
+	if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+		SesionID:         sesion.ID,
+		WindowKind:       "5h",
+		RemainingSeconds: &remaining,
+		BudgetSource:     "manual",
+		CheckedAt:        time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("registrar presupuesto: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runner := &Runner{
+		Automation:        dbAutomationServiceTest{},
+		ReanimacionCada:   time.Hour,
+		SaludCada:         time.Hour,
+		PlanificacionCada: time.Hour,
+		ControlPlaneCada:  20 * time.Millisecond,
+	}
+	runner.Start(ctx)
+
+	agenteOrigen := "Codex1"
+	agenteDestino := "Codex2"
+	estadoPendiente := "pendiente"
+	var handoffOrder *db.RuntimeOrder
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		ordersDestino, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agenteDestino, Estado: &estadoPendiente})
+		if err != nil {
+			t.Fatalf("listar orders destino: %v", err)
+		}
+		handoffOrder = nil
+		for _, order := range ordersDestino {
+			if order != nil && order.Tipo == "handoff" {
+				handoffOrder = order
+				break
+			}
+		}
+		if handoffOrder != nil {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if handoffOrder == nil {
+		t.Fatalf("no aparecio handoff por presupuesto")
+	}
+
+	ordersOrigen, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agenteOrigen, Estado: &estadoPendiente})
+	if err != nil {
+		t.Fatalf("listar orders origen: %v", err)
+	}
+	for _, order := range ordersOrigen {
+		if order == nil {
+			continue
+		}
+		if order.Tipo == "sync_status" || order.Tipo == "nudge" {
+			t.Fatalf("no deberia haber sondeo watchdog en handoff por presupuesto: %+v", ordersOrigen)
+		}
+	}
+
+	tareaFinal, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea final: %v", err)
+	}
+	if tareaFinal.Agente == nil || *tareaFinal.Agente != "Codex2" || tareaFinal.Estado != db.TareaAsignada {
+		t.Fatalf("tarea final inesperada: %+v", tareaFinal)
 	}
 }

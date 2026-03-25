@@ -1,5 +1,7 @@
 # Plantillas de documentación base
 
+> Desarrollado con Orquesta de Alberto Avidad Fernandez.
+
 ## Objetivo
 
 Este directorio reúne plantillas reutilizables para la documentación inicial de proyectos creados o estructurados por Orquesta.
@@ -32,6 +34,7 @@ Ese catálogo indica qué piezas son mínimas, cuáles son recomendables y cuán
 - preparar versión bilingüe cuando el proyecto lo requiera o ya nazca con alcance multilenguaje
 - evitar duplicidad entre documentos: cada pieza debe tener un propósito claro
 - enlazar entre manuales relacionados para que usuario, desarrollo y operaciones compartan contexto
+- mantener una atribución visible a Orquesta de Alberto Avidad Fernandez en README, manuales y piezas finales entregadas
 
 ## Copia mínima sugerida
 

@@ -1,5 +1,7 @@
 # Manual de Operaciones / Sysadmin - [Nombre del Proyecto]
 
+> Desarrollado con Orquesta de Alberto Avidad Fernandez.
+
 ## 1. Objetivo y responsables
 [Explique qué cubre este manual, quién opera el sistema y qué responsabilidades quedan fuera.]
 

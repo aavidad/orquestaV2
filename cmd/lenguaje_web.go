@@ -14,7 +14,10 @@ import (
 	"strings"
 
 	"orquesta/db"
+	"orquesta/lenguajeapp"
 )
+
+var lenguajeWebService = lenguajeapp.NewService(lenguajeapp.Repository{})
 
 type webLenguajeData struct {
 	Politica         *db.LanguagePolicy
@@ -56,14 +59,14 @@ func webRouterLenguaje(w http.ResponseWriter, r *http.Request) {
 }
 
 func webHandlerLenguaje(w http.ResponseWriter, r *http.Request) {
-	politica, err := db.GetLanguagePolicy()
+	politica, err := lenguajeWebService.GetPolicy()
 	if err != nil {
-		webRender(w, webTplLayout+webTplLenguaje, webLenguajeData{Err: err.Error()})
+		webRender(w, r, webTplLayout+webTplLenguaje, webLenguajeData{Err: err.Error()})
 		return
 	}
-	matriz, err := db.ListLanguageMatrixEntries()
+	matriz, err := lenguajeWebService.ListMatrixEntries()
 	if err != nil {
-		webRender(w, webTplLayout+webTplLenguaje, webLenguajeData{
+		webRender(w, r, webTplLayout+webTplLenguaje, webLenguajeData{
 			Politica: politica,
 			Err:      err.Error(),
 		})
@@ -87,13 +90,17 @@ func webHandlerLenguaje(w http.ResponseWriter, r *http.Request) {
 		if raw := strings.TrimSpace(data.ResolverTarea); raw != "" {
 			value, convErr := strconv.ParseInt(raw, 10, 64)
 			if convErr != nil || value <= 0 {
-				data.Err = "tarea inválida"
-				webRender(w, webTplLayout+webTplLenguaje, data)
+				data.Err = webTranslateRequestf(r, "langweb.flash.invalid_task")
+				webRender(w, r, webTplLayout+webTplLenguaje, data)
 				return
 			}
 			tareaID = &value
 		}
-		resolucion, resolveErr := db.ResolveLanguage(data.ResolverProyecto, tareaID, data.ResolverContexto)
+		resolucion, resolveErr := lenguajeWebService.Resolve(lenguajeapp.ResolveInput{
+			Proyecto: data.ResolverProyecto,
+			TareaID:  tareaID,
+			Contexto: data.ResolverContexto,
+		})
 		if resolveErr != nil {
 			data.Err = resolveErr.Error()
 		} else {
@@ -113,7 +120,7 @@ func webHandlerLenguaje(w http.ResponseWriter, r *http.Request) {
 			UpdatedAt: formatTime(entry.UpdatedAt),
 		})
 	}
-	webRender(w, webTplLayout+webTplLenguaje, data)
+	webRender(w, r, webTplLayout+webTplLenguaje, data)
 }
 
 func webHandlerLenguajePolitica(w http.ResponseWriter, r *http.Request) {
@@ -130,11 +137,11 @@ func webHandlerLenguajePolitica(w http.ResponseWriter, r *http.Request) {
 		AllowedLanguages:         splitLanguages(r.FormValue("allowed_languages")),
 		Notes:                    strings.TrimSpace(r.FormValue("notes")),
 	}
-	if err := db.SetLanguagePolicy(politica, "web"); err != nil {
+	if err := lenguajeWebService.SetPolicy(politica, "web"); err != nil {
 		http.Redirect(w, r, "/lenguaje?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/lenguaje?ok="+url.QueryEscape("Política de lenguaje actualizada"), http.StatusSeeOther)
+	http.Redirect(w, r, "/lenguaje?ok="+url.QueryEscape(webTranslateRequestf(r, "langweb.flash.policy_updated")), http.StatusSeeOther)
 }
 
 func webHandlerLenguajeMatriz(w http.ResponseWriter, r *http.Request) {
@@ -142,19 +149,19 @@ func webHandlerLenguajeMatriz(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/lenguaje?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	_, err := db.SetLanguageMatrixEntry(
-		strings.TrimSpace(r.FormValue("scope")),
-		strings.TrimSpace(r.FormValue("selector")),
-		strings.TrimSpace(r.FormValue("context")),
-		strings.TrimSpace(r.FormValue("language")),
-		strings.TrimSpace(r.FormValue("reason")),
-		"web",
-	)
+	_, err := lenguajeWebService.SetMatrixEntry(lenguajeapp.SetMatrixEntryInput{
+		Scope:     strings.TrimSpace(r.FormValue("scope")),
+		Selector:  strings.TrimSpace(r.FormValue("selector")),
+		Contexto:  strings.TrimSpace(r.FormValue("context")),
+		Language:  strings.TrimSpace(r.FormValue("language")),
+		Reason:    strings.TrimSpace(r.FormValue("reason")),
+		UpdatedBy: "web",
+	})
 	if err != nil {
 		http.Redirect(w, r, "/lenguaje?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/lenguaje?ok="+url.QueryEscape("Entrada de matriz guardada"), http.StatusSeeOther)
+	http.Redirect(w, r, "/lenguaje?ok="+url.QueryEscape(webTranslateRequestf(r, "langweb.flash.matrix_saved")), http.StatusSeeOther)
 }
 
 func webHandlerLenguajeMatrizBorrar(w http.ResponseWriter, r *http.Request) {
@@ -162,7 +169,7 @@ func webHandlerLenguajeMatrizBorrar(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/lenguaje?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	err := db.DeleteLanguageMatrixEntry(
+	err := lenguajeWebService.DeleteMatrixEntry(
 		strings.TrimSpace(r.FormValue("scope")),
 		strings.TrimSpace(r.FormValue("selector")),
 		strings.TrimSpace(r.FormValue("context")),
@@ -171,7 +178,7 @@ func webHandlerLenguajeMatrizBorrar(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/lenguaje?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/lenguaje?ok="+url.QueryEscape("Entrada de matriz borrada"), http.StatusSeeOther)
+	http.Redirect(w, r, "/lenguaje?ok="+url.QueryEscape(webTranslateRequestf(r, "langweb.flash.matrix_deleted")), http.StatusSeeOther)
 }
 
 const webTplLenguaje = `{{define "content"}}

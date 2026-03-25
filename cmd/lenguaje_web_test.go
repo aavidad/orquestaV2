@@ -56,6 +56,39 @@ func TestWebLenguajePaginaMuestraPoliticaMatrizYResolucion(t *testing.T) {
 	}
 }
 
+func TestWebLenguajePaginaRespetaIdiomaDelRequest(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.SetLanguagePolicy(&db.LanguagePolicy{
+		DefaultLanguage:          "es",
+		DocumentationMultilang:   true,
+		AppsMultilang:            true,
+		DocumentationDefaultLang: "es",
+		AppsDefaultLang:          "en",
+		AllowedLanguages:         []string{"es", "en"},
+		Notes:                    "policy",
+	}, "Codex3"); err != nil {
+		t.Fatalf("SetLanguagePolicy: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/lenguaje?lang=en", nil)
+	testMuxLenguajeWeb().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Language and i18n") {
+		t.Fatalf("pagina de lenguaje no traducida al ingles:\n%s", body)
+	}
+	if !strings.Contains(body, "<html lang=\"en\">") {
+		t.Fatalf("html lang inesperado:\n%s", body)
+	}
+	if got := rec.Header().Get("Content-Language"); got != "en" {
+		t.Fatalf("Content-Language=%q, want en", got)
+	}
+}
+
 func TestWebLenguajePoliticaYMatrizMutanEstado(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

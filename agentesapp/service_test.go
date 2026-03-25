@@ -21,9 +21,12 @@ type fakeStore struct {
 }
 
 func (f *fakeStore) RegisterAgent(nombre, rol string) error { return nil }
-func (f *fakeStore) RetireAgent(nombre string) error        { return nil }
-func (f *fakeStore) RehabilitateAgent(nombre string) error  { return nil }
-func (f *fakeStore) ResetReanimation(nombre string) error   { return nil }
+func (f *fakeStore) RegisterAgentAuto(proveedor, rol string) (string, error) {
+	return "Codex1", nil
+}
+func (f *fakeStore) RetireAgent(nombre string) error       { return nil }
+func (f *fakeStore) RehabilitateAgent(nombre string) error { return nil }
+func (f *fakeStore) ResetReanimation(nombre string) error  { return nil }
 
 func (f *fakeStore) GetAgent(nombre string) (*db.Agente, error) {
 	for _, item := range f.agents {

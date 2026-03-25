@@ -8,7 +8,6 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -77,7 +76,7 @@ func webHandlerGitGov(w http.ResponseWriter, r *http.Request) {
 
 	worktrees, err := gitGobernanzaService.ListWorktrees(estado, agente)
 	if err != nil {
-		webRender(w, webTplLayout+webTplGitGov, webGitGovData{
+		webRender(w, r, webTplLayout+webTplGitGov, webGitGovData{
 			Estado:      estado,
 			Agente:      agente,
 			Proyecto:    proyecto,
@@ -88,7 +87,7 @@ func webHandlerGitGov(w http.ResponseWriter, r *http.Request) {
 	}
 	locks, err := gitGobernanzaService.ListLocks(estado, agente)
 	if err != nil {
-		webRender(w, webTplLayout+webTplGitGov, webGitGovData{
+		webRender(w, r, webTplLayout+webTplGitGov, webGitGovData{
 			Estado:      estado,
 			Agente:      agente,
 			Proyecto:    proyecto,
@@ -99,7 +98,7 @@ func webHandlerGitGov(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	merges, mergeErr := listGitMerges(proyecto, mergeEstado)
+	merges, mergeErr := gitGobernanzaService.ListRequests(proyecto, mergeEstado)
 	data := webGitGovData{
 		Estado:      estado,
 		Agente:      agente,
@@ -114,7 +113,7 @@ func webHandlerGitGov(w http.ResponseWriter, r *http.Request) {
 	if mergeErr != nil {
 		data.Err = mergeErr.Error()
 	}
-	webRender(w, webTplLayout+webTplGitGov, data)
+	webRender(w, r, webTplLayout+webTplGitGov, data)
 }
 
 func webHandlerGitMergeNueva(w http.ResponseWriter, r *http.Request) {
@@ -134,134 +133,52 @@ func webHandlerGitMergeNueva(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/git?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/git?ok="+url.QueryEscape("Solicitud de merge guardada #"+strconv.FormatInt(id, 10)), http.StatusSeeOther)
+	http.Redirect(w, r, "/git?ok="+url.QueryEscape(webTranslateRequestf(r, "gitgov.flash.request_saved", id)), http.StatusSeeOther)
 }
 
 func webHandlerGitWorktreeDetalle(w http.ResponseWriter, r *http.Request, id int64) {
-	worktree, err := (db.SQLiteWorktreeRepository{}).GetByID(id)
+	worktree, err := gitGobernanzaService.GetWorktree(id)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	webRender(w, webTplLayout+webTplGitWorktreeDetalle, webGitWorktreeDetalleData{Worktree: worktree})
+	webRender(w, r, webTplLayout+webTplGitWorktreeDetalle, webGitWorktreeDetalleData{Worktree: worktree})
 }
 
 func webHandlerGitLockDetalle(w http.ResponseWriter, r *http.Request, id int64) {
-	lock, err := (db.SQLiteLockRepository{}).GetByID(id)
+	lock, err := gitGobernanzaService.GetLock(id)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	webRender(w, webTplLayout+webTplGitLockDetalle, webGitLockDetalleData{Lock: lock})
-}
-
-func webHandlerAPIWorktrees(w http.ResponseWriter, r *http.Request) {
-	items, err := gitGobernanzaService.ListWorktrees(
-		strings.TrimSpace(r.URL.Query().Get("estado")),
-		strings.TrimSpace(r.URL.Query().Get("agente")),
-	)
-	if err != nil {
-		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-func webHandlerAPILocks(w http.ResponseWriter, r *http.Request) {
-	items, err := gitGobernanzaService.ListLocks(
-		strings.TrimSpace(r.URL.Query().Get("estado")),
-		strings.TrimSpace(r.URL.Query().Get("agente")),
-	)
-	if err != nil {
-		webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		return
-	}
-	webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-func webHandlerAPIMerges(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		items, err := listGitMerges(
-			strings.TrimSpace(r.URL.Query().Get("proyecto")),
-			strings.TrimSpace(r.URL.Query().Get("estado")),
-		)
-		if err != nil {
-			webWriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-			return
-		}
-		webWriteJSON(w, http.StatusOK, map[string]any{"items": items})
-	case http.MethodPost:
-		var payload struct {
-			ProyectoSlug string `json:"proyecto_slug"`
-			SourceBranch string `json:"source_branch"`
-			TargetBranch string `json:"target_branch"`
-			RequestedBy  string `json:"requested_by"`
-			Estado       string `json:"estado"`
-			CommitOrigen string `json:"commit_origen"`
-			CommitMerge  string `json:"commit_merge"`
-			Notas        string `json:"notas"`
-			MetadataJSON string `json:"metadata_json"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": "json invalido"})
-			return
-		}
-		id, err := gitGobernanzaService.SaveRequest(gitgobernanza.SaveMergeRequestInput{
-			ProyectoSlug: payload.ProyectoSlug,
-			SourceBranch: payload.SourceBranch,
-			TargetBranch: payload.TargetBranch,
-			RequestedBy:  payload.RequestedBy,
-			Estado:       payload.Estado,
-			CommitOrigen: payload.CommitOrigen,
-			CommitMerge:  payload.CommitMerge,
-			Notas:        payload.Notas,
-			MetadataJSON: payload.MetadataJSON,
-		})
-		if err != nil {
-			webWriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
-			return
-		}
-		webWriteJSON(w, http.StatusCreated, map[string]any{"id": id})
-	default:
-		w.Header().Set("Allow", http.MethodGet+", "+http.MethodPost)
-		http.NotFound(w, r)
-	}
-}
-
-func listGitMerges(proyecto, estado string) ([]*db.GitMerge, error) {
-	return gitGobernanzaService.ListRequests(proyecto, estado)
-}
-
-func webWriteJSON(w http.ResponseWriter, status int, data any) {
-	apiWriteJSON(w, status, data)
+	webRender(w, r, webTplLayout+webTplGitLockDetalle, webGitLockDetalleData{Lock: lock})
 }
 
 const webTplGitGov = `{{define "content"}}
 <section class="container">
-  <h2 style="margin:0">Gobierno Git</h2>
-  <p style="color:#64748b">Visión operativa de worktrees, locks y solicitudes de merge orquestado.</p>
+  <h2 style="margin:0">{{tr "gitgov.title"}}</h2>
+  <p style="color:#64748b">{{tr "gitgov.subtitle"}}</p>
   {{if .Msg}}<article style="background:#ecfccb;border:1px solid #84cc16;padding:.75rem">{{.Msg}}</article>{{end}}
   {{if .Err}}<article style="background:#fee2e2;border:1px solid #ef4444;padding:.75rem">{{.Err}}</article>{{end}}
   <form method="get" action="/git">
     <div class="grid2">
-      <label>Estado operativo <input name="estado" value="{{.Estado}}" placeholder="activa"></label>
-      <label>Agente <input name="agente" value="{{.Agente}}" placeholder="codex2"></label>
+      <label>{{tr "gitgov.operational_state"}} <input name="estado" value="{{.Estado}}" placeholder="activa"></label>
+      <label>{{tr "Agente"}} <input name="agente" value="{{.Agente}}" placeholder="codex2"></label>
     </div>
     <div class="grid2">
-      <label>Proyecto merge <input name="proyecto" value="{{.Proyecto}}" placeholder="orquestador"></label>
-      <label>Estado merge <input name="merge_estado" value="{{.MergeEstado}}" placeholder="pendiente"></label>
+      <label>{{tr "gitgov.merge_project"}} <input name="proyecto" value="{{.Proyecto}}" placeholder="orquestador"></label>
+      <label>{{tr "gitgov.merge_state"}} <input name="merge_estado" value="{{.MergeEstado}}" placeholder="pendiente"></label>
     </div>
-    <button type="submit" class="btn-sm">Filtrar</button>
+    <button type="submit" class="btn-sm">{{tr "common.filter"}}</button>
   </form>
 </section>
 
 <section class="container grid">
   <article>
-    <h3>Worktrees <small style="color:#94a3b8">{{len .Worktrees}}</small></h3>
+    <h3>{{tr "gitgov.worktrees_title"}} <small style="color:#94a3b8">{{len .Worktrees}}</small></h3>
     {{if .Worktrees}}
     <table>
-      <thead><tr><th>ID</th><th>Proyecto</th><th>Agente</th><th>Nombre</th><th>Branch</th><th>Estado</th></tr></thead>
+      <thead><tr><th>ID</th><th>{{tr "Proyecto"}}</th><th>{{tr "Agente"}}</th><th>{{tr "common.name"}}</th><th>{{tr "common.branch"}}</th><th>{{tr "Estado"}}</th></tr></thead>
       <tbody>
         {{range .Worktrees}}
         <tr>
@@ -276,15 +193,15 @@ const webTplGitGov = `{{define "content"}}
       </tbody>
     </table>
     {{else}}
-    <p>No hay worktrees para el filtro actual.</p>
+    <p>{{tr "gitgov.no_worktrees"}}</p>
     {{end}}
   </article>
 
   <article>
-    <h3>Locks <small style="color:#94a3b8">{{len .Locks}}</small></h3>
+    <h3>{{tr "common.locks"}} <small style="color:#94a3b8">{{len .Locks}}</small></h3>
     {{if .Locks}}
     <table>
-      <thead><tr><th>ID</th><th>Agente</th><th>Scope</th><th>Key</th><th>Branch</th><th>Estado</th></tr></thead>
+      <thead><tr><th>ID</th><th>{{tr "Agente"}}</th><th>{{tr "gitgov.scope"}}</th><th>{{tr "gitgov.key"}}</th><th>{{tr "common.branch"}}</th><th>{{tr "Estado"}}</th></tr></thead>
       <tbody>
         {{range .Locks}}
         <tr>
@@ -299,17 +216,17 @@ const webTplGitGov = `{{define "content"}}
       </tbody>
     </table>
     {{else}}
-    <p>No hay locks para el filtro actual.</p>
+    <p>{{tr "gitgov.no_locks"}}</p>
     {{end}}
   </article>
 </section>
 
 <section class="container">
   <article>
-    <h3>Solicitudes de merge orquestado</h3>
+    <h3>{{tr "gitgov.requests_title"}}</h3>
       {{if .Merges}}
       <table>
-        <thead><tr><th>ID</th><th>Proyecto</th><th>Origen</th><th>Destino</th><th>Estado</th><th>Solicitado por</th></tr></thead>
+        <thead><tr><th>ID</th><th>{{tr "Proyecto"}}</th><th>{{tr "gitgov.source"}}</th><th>{{tr "gitgov.target"}}</th><th>{{tr "Estado"}}</th><th>{{tr "gitgov.requested_by"}}</th></tr></thead>
         <tbody>
           {{range .Merges}}
           <tr>
@@ -324,36 +241,36 @@ const webTplGitGov = `{{define "content"}}
         </tbody>
       </table>
       {{else}}
-      <p>No hay solicitudes de merge para el filtro actual.</p>
+      <p>{{tr "gitgov.no_merges"}}</p>
       {{end}}
       <form method="post" action="/git/merges">
         <div class="grid2">
-          <label>Proyecto <input name="proyecto_slug" value="{{.Proyecto}}" required></label>
-          <label>Solicitado por <input name="requested_by" value="alberto" required></label>
+          <label>{{tr "Proyecto"}} <input name="proyecto_slug" value="{{.Proyecto}}" required></label>
+          <label>{{tr "gitgov.requested_by" }} <input name="requested_by" value="alberto" required></label>
         </div>
         <div class="grid2">
-          <label>Branch origen <input name="source_branch" required></label>
-          <label>Branch destino <input name="target_branch" value="main" required></label>
+          <label>{{tr "gitgov.source_branch" }} <input name="source_branch" required></label>
+          <label>{{tr "gitgov.target_branch" }} <input name="target_branch" value="main" required></label>
         </div>
         <div class="grid2">
-          <label>Estado
+          <label>{{tr "Estado"}}
             <select name="estado">
-              <option value="pendiente">pendiente</option>
-              <option value="validando">validando</option>
-              <option value="aprobado">aprobado</option>
-              <option value="rechazado">rechazado</option>
-              <option value="ejecutando">ejecutando</option>
-              <option value="fusionado">fusionado</option>
-              <option value="fallido">fallido</option>
-              <option value="cancelado">cancelado</option>
+              <option value="pendiente">{{tr "pendiente"}}</option>
+              <option value="validando">{{tr "validando"}}</option>
+              <option value="aprobado">{{tr "aprobado"}}</option>
+              <option value="rechazado">{{tr "rechazado"}}</option>
+              <option value="ejecutando">{{tr "ejecutando"}}</option>
+              <option value="fusionado">{{tr "fusionado"}}</option>
+              <option value="fallido">{{tr "fallido"}}</option>
+              <option value="cancelado">{{tr "cancelado"}}</option>
             </select>
           </label>
-          <label>Commit origen <input name="commit_origen"></label>
+          <label>{{tr "gitgov.commit_source" }} <input name="commit_origen"></label>
         </div>
-        <label>Commit merge <input name="commit_merge"></label>
-        <label>Notas <textarea name="notas"></textarea></label>
-        <label>Metadata JSON <textarea name="metadata_json" placeholder='{"riesgo":"medio"}'></textarea></label>
-        <button type="submit">Guardar solicitud</button>
+        <label>{{tr "gitgov.commit_merge" }} <input name="commit_merge"></label>
+        <label>{{tr "gitgov.notes" }} <textarea name="notas"></textarea></label>
+        <label>{{tr "gitgov.metadata_json" }} <textarea name="metadata_json" placeholder='{"riesgo":"medio"}'></textarea></label>
+        <button type="submit">{{tr "gitgov.save_request"}}</button>
       </form>
   </article>
 </section>
@@ -361,23 +278,23 @@ const webTplGitGov = `{{define "content"}}
 
 const webTplGitWorktreeDetalle = `{{define "content"}}
 <section class="container">
-  <p style="margin:0 0 .35rem 0"><a href="/git">← Volver a GitGov</a></p>
-  <h2 style="margin:0">Worktree #{{.Worktree.ID}}</h2>
+  <p style="margin:0 0 .35rem 0"><a href="/git">← {{tr "gitgov.back"}}</a></p>
+  <h2 style="margin:0">{{tr "gitgov.worktree_detail_title"}} #{{.Worktree.ID}}</h2>
   <table>
     <tbody>
-      <tr><th>Proyecto</th><td>{{.Worktree.ProjectID}}</td></tr>
-      <tr><th>Tarea</th><td>{{pid .Worktree.TaskID}}</td></tr>
-      <tr><th>Lock</th><td>{{pid .Worktree.LockID}}</td></tr>
-      <tr><th>Agente</th><td>{{.Worktree.Agent}}</td></tr>
-      <tr><th>Nombre</th><td>{{.Worktree.Name}}</td></tr>
-      <tr><th>Ruta</th><td><code>{{.Worktree.Path}}</code></td></tr>
-      <tr><th>Branch</th><td><code>{{.Worktree.Branch}}</code></td></tr>
-      <tr><th>Base ref</th><td><code>{{.Worktree.BaseRef}}</code></td></tr>
-      <tr><th>Estado</th><td>{{.Worktree.State}}</td></tr>
-      <tr><th>Motivo</th><td>{{.Worktree.Reason}}</td></tr>
-      <tr><th>Creado</th><td>{{.Worktree.CreatedAt.Format "2006-01-02 15:04:05"}}</td></tr>
-      <tr><th>Actualizado</th><td>{{.Worktree.UpdatedAt.Format "2006-01-02 15:04:05"}}</td></tr>
-      <tr><th>Cerrado</th><td>{{if .Worktree.ClosedAt}}{{.Worktree.ClosedAt.Format "2006-01-02 15:04:05"}}{{end}}</td></tr>
+      <tr><th>{{tr "Proyecto"}}</th><td>{{.Worktree.ProjectID}}</td></tr>
+      <tr><th>{{tr "common.task"}}</th><td>{{pid .Worktree.TaskID}}</td></tr>
+      <tr><th>{{tr "common.lock"}}</th><td>{{pid .Worktree.LockID}}</td></tr>
+      <tr><th>{{tr "Agente"}}</th><td>{{.Worktree.Agent}}</td></tr>
+      <tr><th>{{tr "common.name"}}</th><td>{{.Worktree.Name}}</td></tr>
+      <tr><th>{{tr "gitgov.path"}}</th><td><code>{{.Worktree.Path}}</code></td></tr>
+      <tr><th>{{tr "common.branch"}}</th><td><code>{{.Worktree.Branch}}</code></td></tr>
+      <tr><th>{{tr "gitgov.base_ref"}}</th><td><code>{{.Worktree.BaseRef}}</code></td></tr>
+      <tr><th>{{tr "Estado"}}</th><td>{{.Worktree.State}}</td></tr>
+      <tr><th>{{tr "common.reason"}}</th><td>{{.Worktree.Reason}}</td></tr>
+      <tr><th>{{tr "common.created_at"}}</th><td>{{.Worktree.CreatedAt.Format "2006-01-02 15:04:05"}}</td></tr>
+      <tr><th>{{tr "common.updated_at"}}</th><td>{{.Worktree.UpdatedAt.Format "2006-01-02 15:04:05"}}</td></tr>
+      <tr><th>{{tr "common.closed_at"}}</th><td>{{if .Worktree.ClosedAt}}{{.Worktree.ClosedAt.Format "2006-01-02 15:04:05"}}{{end}}</td></tr>
     </tbody>
   </table>
 </section>
@@ -385,26 +302,26 @@ const webTplGitWorktreeDetalle = `{{define "content"}}
 
 const webTplGitLockDetalle = `{{define "content"}}
 <section class="container">
-  <p style="margin:0 0 .35rem 0"><a href="/git">← Volver a GitGov</a></p>
-  <h2 style="margin:0">Lock #{{.Lock.ID}}</h2>
+  <p style="margin:0 0 .35rem 0"><a href="/git">← {{tr "gitgov.back"}}</a></p>
+  <h2 style="margin:0">{{tr "gitgov.lock_detail_title"}} #{{.Lock.ID}}</h2>
   <table>
     <tbody>
-      <tr><th>Proyecto</th><td>{{pid .Lock.ProjectID}}</td></tr>
-      <tr><th>Tarea</th><td>{{pid .Lock.TaskID}}</td></tr>
-      <tr><th>Sesión</th><td>{{pid .Lock.SessionID}}</td></tr>
-      <tr><th>Agente</th><td>{{.Lock.Agent}}</td></tr>
-      <tr><th>Scope</th><td>{{.Lock.ScopeType}}</td></tr>
-      <tr><th>Key</th><td>{{.Lock.ScopeKey}}</td></tr>
-      <tr><th>Ruta</th><td><code>{{.Lock.Path}}</code></td></tr>
-      <tr><th>Branch</th><td><code>{{.Lock.Branch}}</code></td></tr>
-      <tr><th>Motivo</th><td>{{.Lock.Reason}}</td></tr>
-      <tr><th>Lease token</th><td><code>{{.Lock.LeaseToken}}</code></td></tr>
-      <tr><th>Estado</th><td>{{.Lock.State}}</td></tr>
-      <tr><th>Heartbeat</th><td>{{if .Lock.HeartbeatAt}}{{.Lock.HeartbeatAt.Format "2006-01-02 15:04:05"}}{{end}}</td></tr>
-      <tr><th>Expira</th><td>{{.Lock.ExpiresAt.Format "2006-01-02 15:04:05"}}</td></tr>
-      <tr><th>Creado</th><td>{{.Lock.CreatedAt.Format "2006-01-02 15:04:05"}}</td></tr>
-      <tr><th>Actualizado</th><td>{{.Lock.UpdatedAt.Format "2006-01-02 15:04:05"}}</td></tr>
-      <tr><th>Liberado</th><td>{{if .Lock.ReleasedAt}}{{.Lock.ReleasedAt.Format "2006-01-02 15:04:05"}}{{end}}</td></tr>
+      <tr><th>{{tr "Proyecto"}}</th><td>{{pid .Lock.ProjectID}}</td></tr>
+      <tr><th>{{tr "common.task"}}</th><td>{{pid .Lock.TaskID}}</td></tr>
+      <tr><th>{{tr "Sesión"}}</th><td>{{pid .Lock.SessionID}}</td></tr>
+      <tr><th>{{tr "Agente"}}</th><td>{{.Lock.Agent}}</td></tr>
+      <tr><th>{{tr "gitgov.scope"}}</th><td>{{.Lock.ScopeType}}</td></tr>
+      <tr><th>{{tr "gitgov.key"}}</th><td>{{.Lock.ScopeKey}}</td></tr>
+      <tr><th>{{tr "gitgov.path"}}</th><td><code>{{.Lock.Path}}</code></td></tr>
+      <tr><th>{{tr "common.branch"}}</th><td><code>{{.Lock.Branch}}</code></td></tr>
+      <tr><th>{{tr "common.reason"}}</th><td>{{.Lock.Reason}}</td></tr>
+      <tr><th>{{tr "gitgov.lease_token"}}</th><td><code>{{.Lock.LeaseToken}}</code></td></tr>
+      <tr><th>{{tr "Estado"}}</th><td>{{.Lock.State}}</td></tr>
+      <tr><th>{{tr "common.heartbeat"}}</th><td>{{if .Lock.HeartbeatAt}}{{.Lock.HeartbeatAt.Format "2006-01-02 15:04:05"}}{{end}}</td></tr>
+      <tr><th>{{tr "gitgov.expires_at"}}</th><td>{{.Lock.ExpiresAt.Format "2006-01-02 15:04:05"}}</td></tr>
+      <tr><th>{{tr "common.created_at"}}</th><td>{{.Lock.CreatedAt.Format "2006-01-02 15:04:05"}}</td></tr>
+      <tr><th>{{tr "common.updated_at"}}</th><td>{{.Lock.UpdatedAt.Format "2006-01-02 15:04:05"}}</td></tr>
+      <tr><th>{{tr "gitgov.released_at"}}</th><td>{{if .Lock.ReleasedAt}}{{.Lock.ReleasedAt.Format "2006-01-02 15:04:05"}}{{end}}</td></tr>
     </tbody>
   </table>
 </section>

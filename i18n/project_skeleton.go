@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"orquesta/autoria"
 )
 
 const (
@@ -188,6 +190,8 @@ func projectSkeletonReadme(spec ProjectSkeletonSpec) string {
 	return strings.TrimSpace(fmt.Sprintf(`
 # i18n
 
+%s
+
 Contrato base de internacionalizacion del proyecto.
 
 Reglas:
@@ -203,7 +207,7 @@ Patron esperado:
 
 Dominios semilla:
 - %s
-`, spec.DefaultLanguage, spec.FallbackLanguage, strings.Join(spec.Domains, ", "))) + "\n"
+`, autoria.MarkdownNotice("es"), spec.DefaultLanguage, spec.FallbackLanguage, strings.Join(spec.Domains, ", "))) + "\n"
 }
 
 func seedDomainDictionary(lang, defaultLang, domain string) map[string]string {

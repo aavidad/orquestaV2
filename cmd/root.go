@@ -35,7 +35,7 @@ var (
 // Execute es el punto de entrada principal.
 func Execute() {
 	args := os.Args[1:]
-	if localRPCEnabled(args) && !forceLocalMode(args) && !skipRemoteDelegation(args) {
+	if !forceLocalMode(args) && !skipRemoteDelegation(args) {
 		handled, exitCode, err := executeViaLocalServer(args, os.Stdout, os.Stderr)
 		if err != nil {
 			if allowLocalFallback(args) {

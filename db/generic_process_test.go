@@ -57,6 +57,7 @@ func TestRegistrarMuestraGenericProcessPersisteYActualizaRuntime(t *testing.T) {
 		ExternalSessionID:  "sess-generic-process",
 		ResumenContinuidad: "generic process",
 		Branch:             "main",
+		PID:                int64Ptr(t, int64(os.Getpid())),
 	})
 	if err != nil {
 		t.Fatalf("iniciar sesion: %v", err)
@@ -112,6 +113,12 @@ func TestRegistrarMuestraGenericProcessPersisteYActualizaRuntime(t *testing.T) {
 	}
 	if _, ok := payload["pid"]; !ok {
 		t.Fatalf("json sin pid: %v", payload)
+	}
+}
+
+func TestTomarMuestraGenericProcessSinPIDFalla(t *testing.T) {
+	if _, err := TomarMuestraGenericProcess(&RuntimeInstance{}); err == nil {
+		t.Fatalf("esperaba error sin PID real")
 	}
 }
 

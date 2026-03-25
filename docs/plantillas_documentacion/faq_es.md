@@ -7,6 +7,8 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # FAQ - [Nombre del Proyecto]
 
+> Desarrollado con Orquesta de Alberto Avidad Fernandez.
+
 ## 1. Uso de esta plantilla
 
 [Recoja aquí preguntas cortas con respuestas directas. Si una respuesta deja de ser breve, enlácela a un manual más amplio.]

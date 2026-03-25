@@ -11,6 +11,7 @@ import (
 
 type Store interface {
 	RegisterAgent(nombre, rol string) error
+	RegisterAgentAuto(proveedor, rol string) (string, error)
 	RetireAgent(nombre string) error
 	RehabilitateAgent(nombre string) error
 	ResetReanimation(nombre string) error
@@ -62,6 +63,10 @@ type Detail struct {
 
 func (s *Service) RegisterAgent(nombre, rol string) error {
 	return s.store.RegisterAgent(strings.TrimSpace(nombre), strings.TrimSpace(rol))
+}
+
+func (s *Service) RegisterAgentAuto(proveedor, rol string) (string, error) {
+	return s.store.RegisterAgentAuto(strings.TrimSpace(proveedor), strings.TrimSpace(rol))
 }
 
 func (s *Service) ApplyStateAction(nombre, accion string) error {
@@ -377,6 +382,10 @@ type Repository struct{}
 
 func (Repository) RegisterAgent(nombre, rol string) error {
 	return db.RegistrarAgente(nombre, rol)
+}
+
+func (Repository) RegisterAgentAuto(proveedor, rol string) (string, error) {
+	return db.RegistrarAgenteAuto(proveedor, rol)
 }
 
 func (Repository) RetireAgent(nombre string) error {

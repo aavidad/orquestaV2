@@ -57,6 +57,7 @@ type LaunchPlan struct {
 	PerfilTarea      string            `json:"perfil_tarea,omitempty"`
 	NativeResume     bool              `json:"native_resume"`
 	ContinuityPrompt string            `json:"continuity_prompt,omitempty"`
+	RemoteConfigJSON string            `json:"remote_config_json,omitempty"`
 	Notas            []string          `json:"notas,omitempty"`
 }
 
@@ -194,6 +195,7 @@ func (d remoteDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 		},
 	}
 	applyExecutionProfile(plan, metadata)
+	plan.RemoteConfigJSON = buildRemoteConfigJSON(req, metadata)
 
 	if endpoint := stringMetadata(metadata, "endpoint"); endpoint != "" {
 		plan.Notas = append(plan.Notas, "Endpoint: "+endpoint)
@@ -203,6 +205,142 @@ func (d remoteDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 		plan.ContinuityPrompt = construirPromptContinuidad(req)
 	}
 	return plan, nil
+}
+
+func buildRemoteConfigJSON(req LaunchRequest, metadata map[string]any) string {
+	cfg := map[string]any{}
+	endpoint := stringMetadata(metadata, "endpoint")
+	if endpoint == "" {
+		endpoint = endpointFromCommand(req.Conector.Comando)
+	}
+	if endpoint != "" {
+		cfg["endpoint"] = endpoint
+	}
+	if authHeader := stringMetadata(metadata, "auth_header"); authHeader != "" {
+		cfg["auth_header"] = authHeader
+	}
+	if authTokenEnv := stringMetadata(metadata, "auth_token_env"); authTokenEnv != "" {
+		cfg["auth_token_env"] = authTokenEnv
+	}
+	if authMode := stringMetadata(metadata, "auth_mode"); authMode != "" {
+		cfg["auth_mode"] = authMode
+	}
+	if preserve := boolMetadata(metadata, "preserve_external_session_on_stop"); preserve {
+		cfg["preserve_external_session_on_stop"] = true
+	}
+	if requiresHuman := boolMetadata(metadata, "requires_human_reauth"); requiresHuman {
+		cfg["requires_human_reauth"] = true
+	}
+	if timeoutMS := intMetadata(metadata, "timeout_ms"); timeoutMS > 0 {
+		cfg["timeout_ms"] = timeoutMS
+	}
+	cfg["launch_path"] = metadataStringOrDefault(metadata, "launch_path", "/launch")
+	cfg["resume_path"] = metadataStringOrDefault(metadata, "resume_path", "/resume")
+	if statusPath, ok := metadataString(metadata, "status_path"); ok && strings.TrimSpace(statusPath) != "" {
+		cfg["status_path"] = statusPath
+	}
+	cfg["pause_path"] = metadataStringOrDefault(metadata, "pause_path", "/pause")
+	cfg["continue_path"] = metadataStringOrDefault(metadata, "continue_path", "/continue")
+	cfg["stop_path"] = metadataStringOrDefault(metadata, "stop_path", "/stop")
+	cfg["input_path"] = metadataStringOrDefault(metadata, "input_path", "/input")
+	cfg["session_id_field"] = metadataStringOrDefault(metadata, "session_id_field", "external_session_id")
+	cfg["handle_ref_field"] = metadataStringOrDefault(metadata, "handle_ref_field", "handle_ref")
+	if hasMetadataKey(metadata, "can_send_input") {
+		cfg["can_send_input"] = boolMetadata(metadata, "can_send_input")
+	}
+	if hasMetadataKey(metadata, "can_pause") {
+		cfg["can_pause"] = boolMetadata(metadata, "can_pause")
+	}
+	if hasMetadataKey(metadata, "can_stop") {
+		cfg["can_stop"] = boolMetadata(metadata, "can_stop")
+	}
+	if retryCount := intMetadata(metadata, "control_retry_count"); retryCount > 0 {
+		cfg["control_retry_count"] = retryCount
+	}
+	if retryBackoff := intMetadata(metadata, "control_retry_backoff_ms"); retryBackoff > 0 {
+		cfg["control_retry_backoff_ms"] = retryBackoff
+	}
+	if retryStatuses, ok := metadata["control_retry_statuses"].([]any); ok && len(retryStatuses) > 0 {
+		vals := make([]int, 0, len(retryStatuses))
+		for _, raw := range retryStatuses {
+			switch v := raw.(type) {
+			case float64:
+				vals = append(vals, int(v))
+			case int:
+				vals = append(vals, v)
+			}
+		}
+		if len(vals) > 0 {
+			cfg["control_retry_statuses"] = vals
+		}
+	}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+func boolMetadata(metadata map[string]any, key string) bool {
+	if metadata == nil {
+		return false
+	}
+	switch v := metadata[key].(type) {
+	case bool:
+		return v
+	case string:
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "1", "true", "yes", "si", "sí", "on":
+			return true
+		}
+	}
+	return false
+}
+
+func hasMetadataKey(metadata map[string]any, key string) bool {
+	if metadata == nil {
+		return false
+	}
+	_, ok := metadata[key]
+	return ok
+}
+
+func metadataString(metadata map[string]any, key string) (string, bool) {
+	if metadata == nil {
+		return "", false
+	}
+	raw, ok := metadata[key]
+	if !ok {
+		return "", false
+	}
+	switch v := raw.(type) {
+	case string:
+		return strings.TrimSpace(v), true
+	default:
+		return "", true
+	}
+}
+
+func metadataStringOrDefault(metadata map[string]any, key string, fallback string) string {
+	if value, ok := metadataString(metadata, key); ok {
+		return value
+	}
+	return fallback
+}
+
+func endpointFromCommand(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		return raw
+	}
+	return ""
+}
+
+func defaultString(v, fallback string) string {
+	if strings.TrimSpace(v) == "" {
+		return fallback
+	}
+	return strings.TrimSpace(v)
 }
 
 func RenderCommand(plan *LaunchPlan) string {
@@ -363,4 +501,19 @@ func stringMetadata(metadata map[string]any, key string) string {
 		return ""
 	}
 	return strings.TrimSpace(s)
+}
+
+func intMetadata(metadata map[string]any, key string) int {
+	v, ok := metadata[key]
+	if !ok || v == nil {
+		return 0
+	}
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	default:
+		return 0
+	}
 }

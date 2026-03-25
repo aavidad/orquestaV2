@@ -1,12 +1,14 @@
 package planocontrol
 
 import (
+	"strings"
 	"testing"
 
 	"orquesta/db"
 )
 
 type stubAutomationService struct {
+	autonomyCount    int
 	staleCount       int
 	staleOrdersCount int
 	processedCount   int
@@ -17,6 +19,7 @@ type stubAutomationService struct {
 	processedErr     error
 	refinedErr       error
 	handoffErr       error
+	autonomyErr      error
 	audits           []string
 }
 
@@ -24,6 +27,9 @@ func (s *stubAutomationService) CheckReanimaciones() ([]*db.Agente, error) { ret
 func (s *stubAutomationService) ResetReanimacion(nombre string) error      { return nil }
 func (s *stubAutomationService) GarantizarSaludAgentes() error             { return nil }
 func (s *stubAutomationService) PlanificarTareasAutomaticamente() error    { return nil }
+func (s *stubAutomationService) ProcesarAutonomiaAgentesBatch() (int, error) {
+	return s.autonomyCount, s.autonomyErr
+}
 func (s *stubAutomationService) ReconciliarRuntimeHandlesStale() (int, error) {
 	return s.staleCount, s.staleErr
 }
@@ -45,6 +51,7 @@ func (s *stubAutomationService) Audit(agente, accion, entidad string, entidadID 
 
 func TestRunnerRunControlPlaneAuditaTrabajoProcesado(t *testing.T) {
 	service := &stubAutomationService{
+		autonomyCount:    1,
 		staleCount:       2,
 		staleOrdersCount: 1,
 		processedCount:   3,
@@ -54,8 +61,8 @@ func TestRunnerRunControlPlaneAuditaTrabajoProcesado(t *testing.T) {
 	r := &Runner{Automation: service}
 	r.runControlPlane()
 
-	if len(service.audits) != 5 {
-		t.Fatalf("esperaba 5 auditorias, got=%d", len(service.audits))
+	if len(service.audits) != 6 {
+		t.Fatalf("esperaba 6 auditorias, got=%d", len(service.audits))
 	}
 }
 
@@ -71,6 +78,7 @@ func TestRunnerRunControlPlaneSinTrabajoNoAudita(t *testing.T) {
 
 func TestRunnerRunControlPlaneAuditaErrores(t *testing.T) {
 	service := &stubAutomationService{
+		autonomyErr:    assertErr("fallo autonomia"),
 		staleErr:       assertErr("fallo handles"),
 		staleOrdersErr: assertErr("fallo stale orders"),
 		processedErr:   assertErr("fallo batch"),
@@ -80,8 +88,34 @@ func TestRunnerRunControlPlaneAuditaErrores(t *testing.T) {
 	r := &Runner{Automation: service}
 	r.runControlPlane()
 
-	if len(service.audits) != 5 {
-		t.Fatalf("esperaba 5 auditorias de error, got=%d", len(service.audits))
+	if len(service.audits) != 6 {
+		t.Fatalf("esperaba 6 auditorias de error, got=%d", len(service.audits))
+	}
+}
+
+func TestRunnerRunControlPlaneEmiteDebug(t *testing.T) {
+	service := &stubAutomationService{
+		autonomyCount:    1,
+		staleCount:       2,
+		staleOrdersCount: 3,
+		processedCount:   4,
+		refinedCount:     5,
+		handoffCount:     6,
+	}
+	var traces []string
+	r := &Runner{
+		Automation: service,
+		Debugf: func(format string, args ...any) {
+			traces = append(traces, format)
+		},
+	}
+	r.runControlPlane()
+
+	if len(traces) == 0 {
+		t.Fatalf("esperaba trazas de debug")
+	}
+	if !strings.Contains(traces[len(traces)-1], "control_plane autonomia=%d handles_stale=%d orders_stale=%d runtime_orders=%d refineria=%d handoffs=%d") {
+		t.Fatalf("traza final inesperada: %+v", traces)
 	}
 }
 

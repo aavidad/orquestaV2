@@ -10,12 +10,15 @@ package gitgobernanza
 import (
 	"strings"
 
+	"orquesta/coordinacion"
 	"orquesta/db"
 )
 
 type Store interface {
 	ListWorktrees(estado, agente string) ([]*db.Worktree, error)
 	ListLocks(estado, agente string) ([]*db.Lock, error)
+	GetWorktree(id int64) (*coordinacion.Worktree, error)
+	GetLock(id int64) (*coordinacion.Lock, error)
 	ResolveProyectoIDBySlug(slug string) (*int64, error)
 	SaveGitMerge(m *db.GitMerge) (int64, error)
 	ListGitMerges(proyectoID *int64, estado string) ([]*db.GitMerge, error)
@@ -48,6 +51,14 @@ func (s *Service) ListWorktrees(estado, agente string) ([]*db.Worktree, error) {
 
 func (s *Service) ListLocks(estado, agente string) ([]*db.Lock, error) {
 	return s.store.ListLocks(strings.TrimSpace(estado), strings.TrimSpace(agente))
+}
+
+func (s *Service) GetWorktree(id int64) (*coordinacion.Worktree, error) {
+	return s.store.GetWorktree(id)
+}
+
+func (s *Service) GetLock(id int64) (*coordinacion.Lock, error) {
+	return s.store.GetLock(id)
 }
 
 func (s *Service) SaveRequest(input SaveMergeRequestInput) (int64, error) {
@@ -96,6 +107,14 @@ func (Repository) ListWorktrees(estado, agente string) ([]*db.Worktree, error) {
 
 func (Repository) ListLocks(estado, agente string) ([]*db.Lock, error) {
 	return db.ListarLocks(estado, agente)
+}
+
+func (Repository) GetWorktree(id int64) (*coordinacion.Worktree, error) {
+	return (db.SQLiteWorktreeRepository{}).GetByID(id)
+}
+
+func (Repository) GetLock(id int64) (*coordinacion.Lock, error) {
+	return (db.SQLiteLockRepository{}).GetByID(id)
 }
 
 func (Repository) ResolveProyectoIDBySlug(slug string) (*int64, error) {

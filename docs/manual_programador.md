@@ -35,6 +35,7 @@ No guardes conocimiento crítico solo en el prompt. Persístelo en la tabla `ent
 ## 5. Mejores Prácticas
 - **Evita el Acceso Directo a SQL:** Usa siempre el adaptador de `pkg/db`.
 - **Contratos (OP-073):** Si cambias una interfaz Go pública, debes crear una OP antes de mergear.
+- **Voto tardío:** `propuestasapp.Service.VoteDetail` permite a un agente votar en propuestas cerradas si no tiene posición definitiva registrada. El consenso no se re-evalúa. Ver [voto_tardio_agentes.md](voto_tardio_agentes.md).
 
 ---
 *Documentación para Desarrolladores - v1.0*

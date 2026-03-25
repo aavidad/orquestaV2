@@ -40,7 +40,7 @@ var serverRunCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		addr, _ := cmd.Flags().GetString("addr")
 		listenAddr := strings.TrimPrefix(rpclocal.BaseURL(addr), "http://")
-		return arrancarServidorUnificado(listenAddr, "server", false)
+		return arrancarServidorUnificado(listenAddr, "server", false, resolveServerDebugOptions(cmd))
 	},
 }
 
@@ -59,15 +59,18 @@ var serverStatusCmd = &cobra.Command{
 		if err != nil {
 			if infoErr == nil {
 				fmt.Printf("Servidor no disponible en %s (pid=%d)\n", info.Addr, info.PID)
+				fmt.Printf("Log: %s\n", localServerLogPath())
 				return err
 			}
 			return err
 		}
 		if infoErr == nil {
 			fmt.Printf("Servidor activo en %s (pid=%d)\n", info.Addr, info.PID)
+			fmt.Printf("Log: %s\n", localServerLogPath())
 			return nil
 		}
 		fmt.Printf("Servidor activo en %s\n", addr)
+		fmt.Printf("Log: %s\n", localServerLogPath())
 		return nil
 	},
 }
@@ -165,8 +168,18 @@ var serverDoctorCmd = &cobra.Command{
 
 func init() {
 	serverRunCmd.Flags().String("addr", strings.TrimPrefix(rpclocal.DefaultAddr(), "http://"), "Dirección HTTP local del servidor")
+	serverRunCmd.Flags().Bool("debug", false, "Activa logging de depuración del servidor")
+	serverRunCmd.Flags().Bool("debug-http", false, "Log HTTP detallado por request")
+	serverRunCmd.Flags().Bool("debug-control-plane", false, "Log detallado del ciclo del control plane")
 	serverCmd.AddCommand(serverRunCmd, serverStatusCmd, serverStopCmd, serverDoctorCmd)
 	rootCmd.AddCommand(serverCmd)
+}
+
+func ensureServerDBOpen() error {
+	if db.IsOpen() {
+		return nil
+	}
+	return db.Open()
 }
 
 func shouldDelegateToLocalServer(args []string) bool {

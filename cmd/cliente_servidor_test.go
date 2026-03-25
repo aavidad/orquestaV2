@@ -41,6 +41,8 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "skills crear", args: []string{"skills", "crear"}, want: true},
 		{nombre: "skills detectar carencia", args: []string{"skills", "detectar-carencia", "--rol", "programador"}, want: true},
 		{nombre: "skills importar", args: []string{"skills", "importar", "--rol", "programador", "--repo", "openai/skills", "--skill", "openai-docs"}, want: true},
+		{nombre: "skills remotas", args: []string{"skills", "remotas", "--q", "openai"}, want: true},
+		{nombre: "skills borrar", args: []string{"skills", "borrar", "12"}, want: true},
 		{nombre: "workflows listar", args: []string{"workflows", "listar"}, want: true},
 		{nombre: "workflows crear", args: []string{"workflows", "crear"}, want: true},
 		{nombre: "permisos fijar", args: []string{"permisos", "fijar"}, want: true},

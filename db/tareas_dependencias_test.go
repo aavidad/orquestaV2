@@ -8,47 +8,13 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package db
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func prepararDBTemporalTareasDependencias(t *testing.T) string {
 	t.Helper()
-
-	anteriorDB := os.Getenv("ORQUESTA_DB")
-	anteriorRoot := os.Getenv("ORQUESTA_WORKSPACE_ROOT")
-	t.Cleanup(func() {
-		Close()
-		DB = nil
-		if anteriorDB == "" {
-			_ = os.Unsetenv("ORQUESTA_DB")
-		} else {
-			_ = os.Setenv("ORQUESTA_DB", anteriorDB)
-		}
-		if anteriorRoot == "" {
-			_ = os.Unsetenv("ORQUESTA_WORKSPACE_ROOT")
-		} else {
-			_ = os.Setenv("ORQUESTA_WORKSPACE_ROOT", anteriorRoot)
-		}
-	})
-
-	Close()
-	DB = nil
-
-	tmp := t.TempDir()
-	dbPath := filepath.Join(tmp, "orquesta-tareas-dependencias-test.db")
-	if err := os.Setenv("ORQUESTA_DB", dbPath); err != nil {
-		t.Fatalf("setenv ORQUESTA_DB: %v", err)
-	}
-	if err := os.Setenv("ORQUESTA_WORKSPACE_ROOT", tmp); err != nil {
-		t.Fatalf("setenv ORQUESTA_WORKSPACE_ROOT: %v", err)
-	}
-	if err := Open(); err != nil {
-		t.Fatalf("open db temporal: %v", err)
-	}
-	return tmp
+	return prepararDBTemporalConNombre(t, "orquesta-tareas-dependencias-test.db")
 }
 
 func crearTareaPrueba(t *testing.T, titulo string, deps []int64) int64 {

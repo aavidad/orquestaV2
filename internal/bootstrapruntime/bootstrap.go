@@ -29,8 +29,7 @@ func Preparar(agente string, proyecto *db.Proyecto, ultima *db.Sesion) (runtimea
 	if proyecto == nil {
 		return resume, nil, nil
 	}
-
-	if _, err := db.ProcesarRuntimeOrdersBatch(); err != nil {
+	if _, err := db.ProcesarRuntimeOrdersBasicasBatch(); err != nil {
 		return resume, nil, err
 	}
 

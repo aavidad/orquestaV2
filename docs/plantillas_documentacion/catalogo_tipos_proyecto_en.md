@@ -7,6 +7,8 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # Initial template catalog by project type
 
+> Developed with Orquesta by Alberto Avidad Fernandez.
+
 ## Goal
 
 Define the minimum documentation set that Orquesta should prepare from the initial project-definition phase depending on the project type.

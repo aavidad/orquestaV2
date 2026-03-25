@@ -17,6 +17,9 @@ al salir, guarda automáticamente en Orquesta:
   - cwd
   - branch
 
+Este script es una herramienta manual de operación/rescate. La vía oficial del
+orquestador para controlar runtimes es daemon + API + runtime_orders.
+
 La detección de external_session_id depende del estado ya guardado en Orquesta
 o del hook ORQUESTA_RUNTIME_CONNECTOR_SCRIPT. El script ya no inspecciona
 almacenamientos locales del runtime por su cuenta.

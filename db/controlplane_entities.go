@@ -854,7 +854,7 @@ func ReconciliarRuntimeOrdersStale() (int, error) {
 
 	recovered := 0
 	for _, item := range orders {
-		if runtimeOrderTipoBasico(item.Tipo) {
+		if runtimeOrderTipoDespachable(item.Tipo) {
 			if _, err := DB.Exec(`
 				UPDATE runtime_orders
 				SET estado = 'pendiente',
@@ -887,11 +887,18 @@ func ReconciliarRuntimeOrdersStale() (int, error) {
 }
 
 func ProcesarRuntimeOrdersBatch() (int, error) {
+	return procesarRuntimeOrdersBatchTipos(runtimeOrderTiposDespachables())
+}
+
+func ProcesarRuntimeOrdersBasicasBatch() (int, error) {
+	return procesarRuntimeOrdersBatchTipos(runtimeOrderTiposBasicos())
+}
+
+func procesarRuntimeOrdersBatchTipos(tipos []string) (int, error) {
 	limit := configIntOrDefault("runtime_order_batch_size", 10)
 	if limit <= 0 {
 		limit = 10
 	}
-	tipos := runtimeOrderTiposBasicos()
 	placeholders, args := runtimeOrderPlaceholders(tipos)
 	args = append(args, limit)
 	rows, err := DB.Query(`
@@ -1008,13 +1015,45 @@ func ejecutarRuntimeOrderSyncStatus(order *RuntimeOrder) error {
 		return err
 	}
 	result := map[string]any{
-		"ok":          true,
-		"handle_id":   nil,
-		"runtime_id":  nil,
-		"handle":      nil,
-		"runtime":     nil,
-		"sin_handle":  handle == nil,
-		"sin_runtime": runtime == nil,
+		"ok":              true,
+		"handle_id":       nil,
+		"runtime_id":      nil,
+		"handle":          nil,
+		"runtime":         nil,
+		"sin_handle":      handle == nil,
+		"sin_runtime":     runtime == nil,
+		"observed_remote": false,
+	}
+	if handle != nil {
+		estadoRemoto, observed, err := controlruntime.ConsultarEstadoRemoto(controlruntime.ObjetivoProceso{
+			HandleKind:   handle.HandleKind,
+			HandleRef:    handle.HandleRef,
+			MetadataJSON: handle.MetadataJSON,
+		})
+		if err != nil {
+			return err
+		}
+		if observed && estadoRemoto != nil {
+			if err := aplicarEstadoRemotoObservado(handle, runtime, estadoRemoto); err != nil {
+				return err
+			}
+			result["observed_remote"] = true
+			if handle.ID > 0 {
+				handle, err = GetRuntimeHandle(handle.ID)
+				if err != nil {
+					return err
+				}
+			}
+			if runtime != nil && runtime.ID > 0 {
+				runtime, err = GetRuntime(runtime.ID)
+				if err != nil {
+					return err
+				}
+			}
+			if strings.TrimSpace(estadoRemoto.RawJSON) != "" {
+				result["remote_status"] = json.RawMessage(estadoRemoto.RawJSON)
+			}
+		}
 	}
 	if handle != nil {
 		result["handle_id"] = handle.ID
@@ -1036,6 +1075,80 @@ func ejecutarRuntimeOrderSyncStatus(order *RuntimeOrder) error {
 	}
 	data, _ := json.Marshal(result)
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+}
+
+func aplicarEstadoRemotoObservado(handle *RuntimeHandle, runtime *RuntimeInstance, estado *controlruntime.EstadoRemoto) error {
+	if estado == nil {
+		return nil
+	}
+	if handle != nil {
+		meta := mapFromJSON(handle.MetadataJSON)
+		if rawEstado := strings.TrimSpace(estado.HandleEstado); rawEstado != "" {
+			meta["remote_handle_state"] = rawEstado
+		}
+		for k, v := range mapFromJSON(estado.MetadataJSON) {
+			meta[k] = v
+		}
+		metaJSON, _ := json.Marshal(meta)
+		caps := handle.CapabilitiesJSON
+		if strings.TrimSpace(estado.CapabilitiesJSON) != "" {
+			caps = strings.TrimSpace(estado.CapabilitiesJSON)
+		}
+		estadoHandle := strings.TrimSpace(handle.Estado)
+		if rawEstado := strings.TrimSpace(estado.HandleEstado); rawEstado != "" {
+			estadoHandle = normalizarEstadoHandleObservado(rawEstado, estadoHandle)
+		}
+		if _, err := DB.Exec(`
+			UPDATE runtime_handles
+			SET estado = ?,
+			    metadata_json = ?,
+			    capabilities_json = ?,
+			    last_seen_at = CURRENT_TIMESTAMP
+			WHERE id = ?`,
+			estadoHandle, string(metaJSON), caps, handle.ID,
+		); err != nil {
+			return err
+		}
+	}
+	if runtime != nil {
+		logical := strings.TrimSpace(runtime.LogicalState)
+		if strings.TrimSpace(estado.LogicalState) != "" {
+			logical = strings.TrimSpace(estado.LogicalState)
+		}
+		process := strings.TrimSpace(runtime.ProcessState)
+		if strings.TrimSpace(estado.ProcessState) != "" {
+			process = strings.TrimSpace(estado.ProcessState)
+		}
+		if _, err := DB.Exec(`
+			UPDATE runtime_instances
+			SET logical_state = ?,
+			    process_state = ?,
+			    last_event_at = CURRENT_TIMESTAMP
+			WHERE id = ?`,
+			logical, process, runtime.ID,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func normalizarEstadoHandleObservado(observado, actual string) string {
+	switch strings.ToLower(strings.TrimSpace(observado)) {
+	case "activo", "active", "running", "online", "ready", "idle", "esperando", "degradado", "warning":
+		return "activo"
+	case "pausado", "paused", "suspended":
+		return "pausado"
+	case "cerrado", "closed", "stopped", "finished", "finalizado":
+		return "cerrado"
+	case "fallido", "failed", "error", "crashed":
+		return "fallido"
+	}
+	actual = strings.TrimSpace(actual)
+	if actual == "" {
+		return "activo"
+	}
+	return actual
 }
 
 func ejecutarRuntimeOrderCheckpoint(order *RuntimeOrder) error {
@@ -1195,13 +1308,13 @@ func controlarProcesoRuntime(order *RuntimeOrder, signaler func(controlruntime.O
 		return false, 0, err
 	}
 	obj := controlruntime.ObjetivoProceso{}
-	if runtime != nil {
-		obj.PID = runtime.PID
-	}
 	if handle != nil {
 		obj.HandleKind = handle.HandleKind
 		obj.HandleRef = handle.HandleRef
 		obj.MetadataJSON = handle.MetadataJSON
+	}
+	if runtime != nil && (handle == nil || strings.TrimSpace(handle.HandleKind) == "" || strings.TrimSpace(handle.HandleKind) == "process") {
+		obj.PID = runtime.PID
 	}
 	return signaler(obj)
 }
@@ -1239,23 +1352,36 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) error {
 		return err
 	}
 
-	pid64 := int64(arranque.PID)
+	var pid64 *int64
+	if arranque.PID > 0 {
+		pid := int64(arranque.PID)
+		pid64 = &pid
+	}
 	host, _ := os.Hostname()
+	externalSessionID := strings.TrimSpace(arranque.ExternalSessionID)
+	if externalSessionID == "" {
+		externalSessionID = strings.TrimSpace(resume.ExternalSessionID)
+	}
 	sesion, err := IniciarSesionContexto(SesionInicio{
 		Agente:             order.Agente,
 		ConectorID:         &conector.ID,
 		ProyectoID:         &proyecto.ID,
 		CWD:                plan.WorkingDir,
 		Herramienta:        conector.Slug,
-		ExternalSessionID:  strings.TrimSpace(resume.ExternalSessionID),
+		ExternalSessionID:  externalSessionID,
 		Host:               strings.TrimSpace(host),
-		PID:                &pid64,
+		PID:                pid64,
 		ResumePayloadJSON:  payloadJSONDesdePlanYResume(plan, resume),
 		ResumenContinuidad: resumenContinuidadDesdeResume(ultima, resume),
 		Branch:             branchDesdeResume(ultima, resume),
 	})
 	if err != nil {
-		_, _, _ = controlruntime.DetenerProceso(controlruntime.ObjetivoProceso{PID: &pid64})
+		_, _, _ = controlruntime.DetenerProceso(controlruntime.ObjetivoProceso{
+			PID:          pid64,
+			HandleKind:   strings.TrimSpace(arranque.HandleKind),
+			HandleRef:    strings.TrimSpace(arranque.HandleRef),
+			MetadataJSON: arranque.MetadataJSON,
+		})
 		return err
 	}
 	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
@@ -1263,7 +1389,7 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) error {
 		return err
 	}
 	if handle != nil {
-		if err := actualizarHandleRuntimeProceso(handle.ID, arranque, conector, plan, resume); err != nil {
+		if err := actualizarHandleRuntimeArranque(handle.ID, arranque, conector, plan, resume); err != nil {
 			return err
 		}
 	}
@@ -1285,9 +1411,20 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) error {
 		"runtime_id":    runtime.ID,
 		"logical_state": runtime.LogicalState,
 		"process_state": runtime.ProcessState,
-		"pid":           arranque.PID,
 		"control_real":  true,
 		"bootstrap":     bootstrapResumenJSON(bootstrap),
+	}
+	if arranque.PID > 0 {
+		result["pid"] = arranque.PID
+	}
+	if externalSessionID != "" {
+		result["external_session_id"] = externalSessionID
+	}
+	if strings.TrimSpace(arranque.HandleKind) != "" {
+		result["handle_kind"] = strings.TrimSpace(arranque.HandleKind)
+	}
+	if strings.TrimSpace(arranque.HandleRef) != "" {
+		result["handle_ref"] = strings.TrimSpace(arranque.HandleRef)
 	}
 	data, _ := json.Marshal(result)
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
@@ -1298,6 +1435,9 @@ func ejecutarRuntimeOrderPause(order *RuntimeOrder) error {
 	if err != nil {
 		return err
 	}
+	if !aplicado {
+		return fmt.Errorf("pause sin control real para %s", order.Agente)
+	}
 	runtime, err := actualizarEstadoRuntime(order, "pausado", "")
 	if err != nil {
 		return err
@@ -1307,12 +1447,22 @@ func ejecutarRuntimeOrderPause(order *RuntimeOrder) error {
 		WHERE agente=? AND estado='activo'`, order.Agente); err != nil {
 		return err
 	}
+	checkpointID, err := asegurarCheckpointCambioContexto(order, "pause", "Checkpoint automático antes de pausa")
+	if err != nil {
+		return err
+	}
+	if err := actualizarEstadoSesionParaOrden(order, "pausada"); err != nil {
+		return err
+	}
 	result := map[string]any{
 		"ok":            true,
 		"runtime_id":    runtime.ID,
 		"logical_state": runtime.LogicalState,
 		"control_real":  aplicado,
 		"pid":           pid,
+	}
+	if checkpointID > 0 {
+		result["checkpoint_id"] = checkpointID
 	}
 	data, _ := json.Marshal(result)
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
@@ -1323,6 +1473,9 @@ func ejecutarRuntimeOrderResume(order *RuntimeOrder) error {
 	if err != nil {
 		return err
 	}
+	if !aplicado {
+		return fmt.Errorf("resume sin control real para %s", order.Agente)
+	}
 	runtime, err := actualizarEstadoRuntime(order, "activo", "corriendo")
 	if err != nil {
 		return err
@@ -1330,6 +1483,9 @@ func ejecutarRuntimeOrderResume(order *RuntimeOrder) error {
 	if _, err := DB.Exec(`
 		UPDATE runtime_handles SET estado='activo', last_seen_at=CURRENT_TIMESTAMP
 		WHERE agente=? AND estado='pausado'`, order.Agente); err != nil {
+		return err
+	}
+	if err := actualizarEstadoSesionParaOrden(order, "activa"); err != nil {
 		return err
 	}
 	result := map[string]any{
@@ -1345,18 +1501,57 @@ func ejecutarRuntimeOrderResume(order *RuntimeOrder) error {
 }
 
 func ejecutarRuntimeOrderStop(order *RuntimeOrder) error {
-	aplicado, pid, err := controlarProcesoRuntime(order, controlruntime.DetenerProceso)
+	handle, err := resolverHandleParaOrden(order)
 	if err != nil {
 		return err
 	}
-	runtime, err := actualizarEstadoRuntime(order, "cerrado", "finalizado")
+	preserveExternalSession := runtimeHandlePreservesExternalSession(handle)
+	signaler := controlruntime.DetenerProceso
+	if preserveExternalSession {
+		signaler = controlruntime.PausarProceso
+	}
+	aplicado, pid, err := controlarProcesoRuntime(order, signaler)
+	if err != nil {
+		return err
+	}
+	if !aplicado {
+		return fmt.Errorf("stop sin control real para %s", order.Agente)
+	}
+	checkpointID, err := asegurarCheckpointCambioContexto(order, "stop", "Checkpoint automático antes de detener")
+	if err != nil {
+		return err
+	}
+	logicalState := "cerrado"
+	processState := "finalizado"
+	handleState := "cerrado"
+	if preserveExternalSession {
+		logicalState = "pausado"
+		processState = ""
+		handleState = "pausado"
+	}
+	runtime, err := actualizarEstadoRuntime(order, logicalState, processState)
 	if err != nil {
 		return err
 	}
 	if _, err := DB.Exec(`
-		UPDATE runtime_handles SET estado='cerrado', last_seen_at=CURRENT_TIMESTAMP
-		WHERE agente=? AND estado IN ('activo','pausado')`, order.Agente); err != nil {
+		UPDATE runtime_handles SET estado=?, last_seen_at=CURRENT_TIMESTAMP
+		WHERE agente=? AND estado IN ('activo','pausado')`, handleState, order.Agente); err != nil {
 		return err
+	}
+	sesion, err := GetSesionActiva(order.Agente, order.ProyectoID)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	if sesion != nil {
+		if preserveExternalSession {
+			if err := aparcarSesionActiva(order.Agente, order.ProyectoID); err != nil {
+				return err
+			}
+		} else {
+			if err := FinSesion(order.Agente); err != nil && !strings.Contains(err.Error(), "no tenía sesión activa") {
+				return err
+			}
+		}
 	}
 	result := map[string]any{
 		"ok":            true,
@@ -1365,6 +1560,12 @@ func ejecutarRuntimeOrderStop(order *RuntimeOrder) error {
 		"process_state": runtime.ProcessState,
 		"control_real":  aplicado,
 		"pid":           pid,
+	}
+	if checkpointID > 0 {
+		result["checkpoint_id"] = checkpointID
+	}
+	if preserveExternalSession {
+		result["preserved_external_session"] = true
 	}
 	data, _ := json.Marshal(result)
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
@@ -1509,17 +1710,28 @@ func resumenContinuidadDesdeResume(ultima *Sesion, resume runtimeagente.ResumeCo
 	return strings.TrimSpace(ultima.ResumenContinuidad)
 }
 
-func actualizarHandleRuntimeProceso(handleID int64, arranque *controlruntime.ProcesoArrancado, conector *Conector, plan *runtimeagente.LaunchPlan, resume runtimeagente.ResumeContext) error {
+func actualizarHandleRuntimeArranque(handleID int64, arranque *controlruntime.ProcesoArrancado, conector *Conector, plan *runtimeagente.LaunchPlan, resume runtimeagente.ResumeContext) error {
 	if handleID == 0 || arranque == nil {
 		return nil
 	}
-	meta := map[string]any{
-		"stdin_path":       arranque.StdinPath,
-		"log_path":         arranque.LogPath,
-		"working_dir":      arranque.WorkingDir,
-		"wrapped_command":  arranque.WrappedCommand,
-		"rendered_command": arranque.RenderedCommand,
-		"driver":           "process_pty_cli",
+	meta := mapFromJSON(arranque.MetadataJSON)
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	if strings.TrimSpace(arranque.StdinPath) != "" {
+		meta["stdin_path"] = strings.TrimSpace(arranque.StdinPath)
+	}
+	if strings.TrimSpace(arranque.LogPath) != "" {
+		meta["log_path"] = strings.TrimSpace(arranque.LogPath)
+	}
+	if strings.TrimSpace(arranque.WorkingDir) != "" {
+		meta["working_dir"] = strings.TrimSpace(arranque.WorkingDir)
+	}
+	if strings.TrimSpace(arranque.WrappedCommand) != "" {
+		meta["wrapped_command"] = strings.TrimSpace(arranque.WrappedCommand)
+	}
+	if strings.TrimSpace(arranque.RenderedCommand) != "" {
+		meta["rendered_command"] = strings.TrimSpace(arranque.RenderedCommand)
 	}
 	if conector != nil {
 		meta["conector"] = strings.TrimSpace(conector.Slug)
@@ -1532,21 +1744,46 @@ func actualizarHandleRuntimeProceso(handleID int64, arranque *controlruntime.Pro
 		meta["resumen_continuidad"] = strings.TrimSpace(resume.ResumenContinuidad)
 	}
 	metaJSON, _ := json.Marshal(meta)
-	capsJSON, _ := json.Marshal(map[string]any{
-		"can_send_input":       true,
-		"can_checkpoint":       true,
-		"can_resume":           true,
-		"can_capture_pid":      true,
-		"can_track_continuity": true,
-		"can_pause":            true,
-		"can_stop":             true,
-	})
+	caps := mapFromJSON(arranque.CapabilitiesJSON)
+	if caps == nil {
+		caps = map[string]any{}
+	}
+	if len(caps) == 0 {
+		caps = map[string]any{
+			"can_send_input":       true,
+			"can_checkpoint":       true,
+			"can_resume":           true,
+			"can_capture_pid":      arranque.PID > 0,
+			"can_track_continuity": true,
+			"can_pause":            arranque.PID > 0,
+			"can_stop":             true,
+		}
+	}
+	capsJSON, _ := json.Marshal(caps)
+	handleKind := strings.TrimSpace(arranque.HandleKind)
+	if handleKind == "" {
+		if arranque.PID > 0 {
+			handleKind = "process"
+		} else {
+			handleKind = "session"
+		}
+	}
+	handleRef := strings.TrimSpace(arranque.HandleRef)
+	if handleRef == "" {
+		if arranque.PID > 0 {
+			handleRef = jsonNumber(int64(arranque.PID))
+		} else if strings.TrimSpace(arranque.ExternalSessionID) != "" {
+			handleRef = strings.TrimSpace(arranque.ExternalSessionID)
+		}
+	}
 	_, err := DB.Exec(`
 		UPDATE runtime_handles
-		SET metadata_json = ?,
+		SET handle_kind = ?,
+		    handle_ref = ?,
+		    metadata_json = ?,
 		    capabilities_json = ?,
 		    last_seen_at = CURRENT_TIMESTAMP
-		WHERE id = ?`, string(metaJSON), string(capsJSON), handleID)
+		WHERE id = ?`, handleKind, handleRef, string(metaJSON), string(capsJSON), handleID)
 	return err
 }
 
@@ -2150,13 +2387,29 @@ func runtimeOrderTiposBasicos() []string {
 	return []string{"sync_status", "checkpoint", "nudge", "discordia"}
 }
 
+func runtimeOrderTiposDespachables() []string {
+	return []string{
+		"sync_status",
+		"checkpoint",
+		"nudge",
+		"discordia",
+		"start",
+		"pause",
+		"resume",
+		"stop",
+		"restart",
+		"send_instruction",
+		"handoff",
+	}
+}
+
 func runtimeOrderTiposBootstrap() []string {
 	return []string{"handoff", "resume", "start"}
 }
 
-func runtimeOrderTipoBasico(tipo string) bool {
+func runtimeOrderTipoDespachable(tipo string) bool {
 	switch strings.TrimSpace(tipo) {
-	case "sync_status", "checkpoint", "nudge", "discordia":
+	case "sync_status", "checkpoint", "nudge", "discordia", "start", "pause", "resume", "stop", "restart", "send_instruction", "handoff":
 		return true
 	default:
 		return false
@@ -2390,6 +2643,38 @@ func defaultMailboxEstado(v string) string {
 	}
 }
 
+func mapFromJSON(raw string) map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return map[string]any{}
+	}
+	out := map[string]any{}
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return map[string]any{}
+	}
+	return out
+}
+
+func boolFromMap(m map[string]any, key string) bool {
+	if m == nil {
+		return false
+	}
+	switch v := m[key].(type) {
+	case bool:
+		return v
+	case string:
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "1", "true", "yes", "si", "sí", "on":
+			return true
+		}
+	case float64:
+		return v != 0
+	case int:
+		return v != 0
+	}
+	return false
+}
+
 func stringFromMap(m map[string]any, key, fallback string) string {
 	if m == nil {
 		return fallback
@@ -2403,6 +2688,105 @@ func stringFromMap(m map[string]any, key, fallback string) string {
 		return fallback
 	}
 	return strings.TrimSpace(v)
+}
+
+func runtimeHandlePreservesExternalSession(handle *RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if boolFromMap(meta, "preserve_external_session_on_stop") || boolFromMap(meta, "requires_human_reauth") {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "auth_mode", "")), "oauth") {
+		return true
+	}
+	caps := mapFromJSON(handle.CapabilitiesJSON)
+	if _, ok := caps["can_stop_without_reauth"]; ok && !boolFromMap(caps, "can_stop_without_reauth") {
+		return true
+	}
+	return false
+}
+
+func asegurarCheckpointCambioContexto(order *RuntimeOrder, suffix, fallbackSummary string) (int64, error) {
+	sesion, err := resolverSesionParaOrden(order)
+	if err != nil {
+		return 0, err
+	}
+	if sesion == nil {
+		return 0, nil
+	}
+	runtime, err := resolverRuntimeParaOrden(order)
+	if err != nil {
+		return 0, err
+	}
+	payload := map[string]any{}
+	_ = json.Unmarshal([]byte(order.PayloadJSON), &payload)
+	source := fmt.Sprintf("runtime_order:%d:%s", order.ID, strings.TrimSpace(suffix))
+	existente, err := GetRuntimeCheckpointBySource(source)
+	if err != nil {
+		return 0, err
+	}
+	if existente != nil {
+		return existente.ID, nil
+	}
+	resumen := stringFromMap(payload, "resumen", "")
+	if strings.TrimSpace(resumen) == "" {
+		resumen = stringFromMap(payload, "motivo", "")
+	}
+	if strings.TrimSpace(resumen) == "" {
+		resumen = strings.TrimSpace(sesion.ResumenContinuidad)
+	}
+	if strings.TrimSpace(resumen) == "" {
+		resumen = fallbackSummary
+	}
+	cp := &RuntimeCheckpoint{
+		Agente:         order.Agente,
+		ProyectoID:     order.ProyectoID,
+		SesionID:       &sesion.ID,
+		CheckpointKind: suffix,
+		Resumen:        resumen,
+		Branch:         sesion.Branch,
+		CWD:            sesion.CWD,
+		PayloadJSON:    order.PayloadJSON,
+		ResumeStrategy: "resumen_y_payload",
+		Source:         source,
+	}
+	if runtime != nil {
+		cp.RuntimeID = &runtime.ID
+	}
+	return CrearRuntimeCheckpoint(cp)
+}
+
+func aparcarSesionActiva(agente string, proyectoID *int64) error {
+	q := `UPDATE sesiones SET activa=0, estado='pausada', heartbeat_at=CURRENT_TIMESTAMP WHERE agente=? AND activa=1`
+	args := []any{agente}
+	if proyectoID != nil {
+		q += ` AND proyecto_id = ?`
+		args = append(args, *proyectoID)
+	}
+	if _, err := DB.Exec(q, args...); err != nil {
+		return err
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET activo=0, estado_sesion='disponible' WHERE nombre=?`, agente); err != nil {
+		return err
+	}
+	Audit(agente, "aparcar_sesion", "sesion", 0, "")
+	return nil
+}
+
+func actualizarEstadoSesionParaOrden(order *RuntimeOrder, estado string) error {
+	sesion, err := resolverSesionParaOrden(order)
+	if err != nil {
+		return err
+	}
+	if sesion == nil || sesion.ID == 0 {
+		return nil
+	}
+	if _, err := DB.Exec(`UPDATE sesiones SET estado=? WHERE id=?`, strings.TrimSpace(estado), sesion.ID); err != nil {
+		return err
+	}
+	return nil
 }
 
 func preferTime(values ...*time.Time) *time.Time {

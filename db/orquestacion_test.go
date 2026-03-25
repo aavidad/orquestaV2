@@ -10,13 +10,100 @@ package db
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
-func prepararDBTemporal(t *testing.T) string {
+var dbTestDBMu sync.Mutex
+var dbTestBootstrapOnce sync.Once
+var dbTestBootstrapData []byte
+var dbTestBootstrapErr error
+
+func cargarPlantillaDBTest() ([]byte, error) {
+	dbTestBootstrapOnce.Do(func() {
+		tmp, err := os.MkdirTemp("", "orquesta-db-template-*")
+		if err != nil {
+			dbTestBootstrapErr = err
+			return
+		}
+		defer os.RemoveAll(tmp)
+
+		prevDB := os.Getenv("ORQUESTA_DB")
+		prevDSN, hadDSN := os.LookupEnv("ORQUESTA_DB_DSN")
+		prevDriver, hadDriver := os.LookupEnv("ORQUESTA_DB_DRIVER")
+		prevBackend, hadBackend := os.LookupEnv("ORQUESTA_DB_BACKEND")
+		prevMaxOpen, hadMaxOpen := os.LookupEnv("ORQUESTA_DB_MAX_OPEN_CONNS")
+		prevBootstrap, hadBootstrap := os.LookupEnv("ORQUESTA_DB_BOOTSTRAP")
+		prevRoot := os.Getenv("ORQUESTA_WORKSPACE_ROOT")
+		defer func() {
+			Close()
+			DB = nil
+			if prevDB == "" {
+				_ = os.Unsetenv("ORQUESTA_DB")
+			} else {
+				_ = os.Setenv("ORQUESTA_DB", prevDB)
+			}
+			if hadDSN {
+				_ = os.Setenv("ORQUESTA_DB_DSN", prevDSN)
+			} else {
+				_ = os.Unsetenv("ORQUESTA_DB_DSN")
+			}
+			if hadDriver {
+				_ = os.Setenv("ORQUESTA_DB_DRIVER", prevDriver)
+			} else {
+				_ = os.Unsetenv("ORQUESTA_DB_DRIVER")
+			}
+			if hadBackend {
+				_ = os.Setenv("ORQUESTA_DB_BACKEND", prevBackend)
+			} else {
+				_ = os.Unsetenv("ORQUESTA_DB_BACKEND")
+			}
+			if hadMaxOpen {
+				_ = os.Setenv("ORQUESTA_DB_MAX_OPEN_CONNS", prevMaxOpen)
+			} else {
+				_ = os.Unsetenv("ORQUESTA_DB_MAX_OPEN_CONNS")
+			}
+			if hadBootstrap {
+				_ = os.Setenv("ORQUESTA_DB_BOOTSTRAP", prevBootstrap)
+			} else {
+				_ = os.Unsetenv("ORQUESTA_DB_BOOTSTRAP")
+			}
+			if prevRoot == "" {
+				_ = os.Unsetenv("ORQUESTA_WORKSPACE_ROOT")
+			} else {
+				_ = os.Setenv("ORQUESTA_WORKSPACE_ROOT", prevRoot)
+			}
+		}()
+
+		templatePath := filepath.Join(tmp, "orquesta-template.db")
+		_ = os.Setenv("ORQUESTA_DB", templatePath)
+		_ = os.Unsetenv("ORQUESTA_DB_DSN")
+		_ = os.Unsetenv("ORQUESTA_DB_DRIVER")
+		_ = os.Unsetenv("ORQUESTA_DB_BACKEND")
+		_ = os.Unsetenv("ORQUESTA_DB_MAX_OPEN_CONNS")
+		_ = os.Unsetenv("ORQUESTA_DB_BOOTSTRAP")
+		_ = os.Setenv("ORQUESTA_WORKSPACE_ROOT", tmp)
+
+		if err := Open(); err != nil {
+			dbTestBootstrapErr = err
+			return
+		}
+		Close()
+		dbTestBootstrapData, dbTestBootstrapErr = os.ReadFile(templatePath)
+	})
+	return dbTestBootstrapData, dbTestBootstrapErr
+}
+
+func prepararDBTemporalConNombre(t *testing.T, nombre string) string {
 	t.Helper()
+	dbTestDBMu.Lock()
 
 	anteriorDB := os.Getenv("ORQUESTA_DB")
+	anteriorDSN, teniaDSN := os.LookupEnv("ORQUESTA_DB_DSN")
+	anteriorDriver, teniaDriver := os.LookupEnv("ORQUESTA_DB_DRIVER")
+	anteriorBackend, teniaBackend := os.LookupEnv("ORQUESTA_DB_BACKEND")
+	anteriorMaxOpenConns, teniaMaxOpenConns := os.LookupEnv("ORQUESTA_DB_MAX_OPEN_CONNS")
+	anteriorBootstrap, teniaBootstrap := os.LookupEnv("ORQUESTA_DB_BOOTSTRAP")
 	anteriorRoot := os.Getenv("ORQUESTA_WORKSPACE_ROOT")
 	t.Cleanup(func() {
 		Close()
@@ -26,20 +113,68 @@ func prepararDBTemporal(t *testing.T) string {
 		} else {
 			_ = os.Setenv("ORQUESTA_DB", anteriorDB)
 		}
+		if teniaDSN {
+			_ = os.Setenv("ORQUESTA_DB_DSN", anteriorDSN)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_DB_DSN")
+		}
+		if teniaDriver {
+			_ = os.Setenv("ORQUESTA_DB_DRIVER", anteriorDriver)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_DB_DRIVER")
+		}
+		if teniaBackend {
+			_ = os.Setenv("ORQUESTA_DB_BACKEND", anteriorBackend)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_DB_BACKEND")
+		}
+		if teniaMaxOpenConns {
+			_ = os.Setenv("ORQUESTA_DB_MAX_OPEN_CONNS", anteriorMaxOpenConns)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_DB_MAX_OPEN_CONNS")
+		}
+		if teniaBootstrap {
+			_ = os.Setenv("ORQUESTA_DB_BOOTSTRAP", anteriorBootstrap)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_DB_BOOTSTRAP")
+		}
 		if anteriorRoot == "" {
 			_ = os.Unsetenv("ORQUESTA_WORKSPACE_ROOT")
 		} else {
 			_ = os.Setenv("ORQUESTA_WORKSPACE_ROOT", anteriorRoot)
 		}
+		dbTestDBMu.Unlock()
 	})
 
 	Close()
 	DB = nil
 
 	tmp := t.TempDir()
-	dbPath := filepath.Join(tmp, "orquesta-test.db")
+	dbPath := filepath.Join(tmp, nombre)
+	template, err := cargarPlantillaDBTest()
+	if err != nil {
+		t.Fatalf("cargar plantilla db test: %v", err)
+	}
+	if err := os.WriteFile(dbPath, template, 0o600); err != nil {
+		t.Fatalf("write plantilla db test: %v", err)
+	}
 	if err := os.Setenv("ORQUESTA_DB", dbPath); err != nil {
 		t.Fatalf("setenv ORQUESTA_DB: %v", err)
+	}
+	if err := os.Unsetenv("ORQUESTA_DB_DSN"); err != nil {
+		t.Fatalf("unsetenv ORQUESTA_DB_DSN: %v", err)
+	}
+	if err := os.Unsetenv("ORQUESTA_DB_DRIVER"); err != nil {
+		t.Fatalf("unsetenv ORQUESTA_DB_DRIVER: %v", err)
+	}
+	if err := os.Unsetenv("ORQUESTA_DB_BACKEND"); err != nil {
+		t.Fatalf("unsetenv ORQUESTA_DB_BACKEND: %v", err)
+	}
+	if err := os.Unsetenv("ORQUESTA_DB_MAX_OPEN_CONNS"); err != nil {
+		t.Fatalf("unsetenv ORQUESTA_DB_MAX_OPEN_CONNS: %v", err)
+	}
+	if err := os.Unsetenv("ORQUESTA_DB_BOOTSTRAP"); err != nil {
+		t.Fatalf("unsetenv ORQUESTA_DB_BOOTSTRAP: %v", err)
 	}
 	if err := os.Setenv("ORQUESTA_WORKSPACE_ROOT", tmp); err != nil {
 		t.Fatalf("setenv ORQUESTA_WORKSPACE_ROOT: %v", err)
@@ -50,8 +185,17 @@ func prepararDBTemporal(t *testing.T) string {
 	return tmp
 }
 
+func prepararDBTemporal(t *testing.T) string {
+	t.Helper()
+	return prepararDBTemporalConNombre(t, "orquesta-test.db")
+}
+
 func TestSesionReanudableConProyectoYConector(t *testing.T) {
 	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
 
 	proyectoID, err := UpsertProyecto(&Proyecto{
 		Slug:    "autofirmav2",
@@ -129,6 +273,10 @@ func TestSesionReanudableConProyectoYConector(t *testing.T) {
 
 func TestObtenerUltimaSesionConFiltroPorCWD(t *testing.T) {
 	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
 
 	proyectoID, err := UpsertProyecto(&Proyecto{
 		Slug:    "orquestador",

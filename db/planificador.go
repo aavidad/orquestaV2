@@ -2,11 +2,13 @@ package db
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // PlanificarTareasAutomaticamente es el motor de autonomía de Orquesta.
-// Busca agentes disponibles y les asigna tareas libres de sus proyectos activos,
+// Busca agentes planificables y les asigna tareas libres de sus proyectos activos,
 // además de liberar tareas del backlog cuyas dependencias ya se han cumplido.
 func PlanificarTareasAutomaticamente() error {
 	// 1. Liberar tareas del backlog que ya no tienen dependencias pendientes
@@ -14,35 +16,150 @@ func PlanificarTareasAutomaticamente() error {
 		return err
 	}
 
-	// 2. Buscar agentes disponibles (habilitados y en estado 'disponible')
-	agentes, err := ListarAgentesDisponibles()
+	// 2. Buscar agentes planificables: agentes disponibles de verdad y agentes
+	// recién incorporados que aún no han abierto su primera sesión manual.
+	agentes, err := ListarAgentesPlanificables()
 	if err != nil {
 		return err
 	}
 
 	for _, ag := range agentes {
-		// Buscar el proyecto asignado a este agente
-		proyectoID, err := ObtenerProyectoActivoAgente(ag.Nombre)
-		if err != nil || proyectoID == 0 {
-			continue // El agente no tiene un proyecto asignado ahora mismo
-		}
-
-		// Buscar la siguiente tarea libre para ese proyecto
-		tarea, err := buscarSiguienteTareaLibre(proyectoID)
-		if err != nil || tarea == nil {
-			continue // No hay tareas listas para este proyecto
-		}
-
-		// Asignar automáticamente
-		if err := TomarTarea(tarea.ID, ag.Nombre); err == nil {
-			Audit("sistema", "auto_asignacion", "tarea", tarea.ID, 
-				fmt.Sprintf("Asignada automáticamente a %s (Autonomía Total)", ag.Nombre))
-			fmt.Printf("✓ [Planificador] Tarea #%d ('%s') asignada automáticamente a %s\n", 
-				tarea.ID, tarea.Titulo, ag.Nombre)
+		if err := planificarAgenteAutomaticamente(ag); err != nil {
+			Audit("sistema", "auto_planificacion_error", "agente", 0,
+				fmt.Sprintf("agente=%s error=%s", ag.Nombre, err.Error()))
 		}
 	}
 
 	return nil
+}
+
+func planificarAgenteAutomaticamente(ag *Agente) error {
+	if ag == nil {
+		return nil
+	}
+	// Buscar el proyecto asignado a este agente
+	proyectoID, err := ObtenerProyectoActivoAgente(ag.Nombre)
+	if err != nil || proyectoID == 0 {
+		return err // El agente no tiene un proyecto asignado ahora mismo
+	}
+	proyecto, err := GetProyecto(jsonNumber(proyectoID))
+	if err != nil {
+		return err
+	}
+
+	tieneTrabajo, err := agenteTieneTrabajoArrancable(ag.Nombre, proyectoID)
+	if err != nil {
+		return err
+	}
+	if tieneTrabajo {
+		return encolarStartAutomaticoSiHaceFalta(ag.Nombre, proyecto, "trabajo_asignado")
+	}
+
+	// Buscar la siguiente tarea libre para ese proyecto
+	tarea, err := buscarSiguienteTareaLibre(proyectoID)
+	if err != nil || tarea == nil {
+		return err
+	}
+
+	// Asignar automáticamente
+	if err := TomarTarea(tarea.ID, ag.Nombre); err != nil {
+		return nil
+	}
+	Audit("sistema", "auto_asignacion", "tarea", tarea.ID,
+		fmt.Sprintf("Asignada automáticamente a %s (Autonomía Total)", ag.Nombre))
+	fmt.Printf("✓ [Planificador] Tarea #%d ('%s') asignada automáticamente a %s\n",
+		tarea.ID, tarea.Titulo, ag.Nombre)
+	return encolarStartAutomaticoSiHaceFalta(ag.Nombre, proyecto, fmt.Sprintf("tarea_autoasignada:%d", tarea.ID))
+}
+
+func agenteTieneTrabajoArrancable(agente string, proyectoID int64) (bool, error) {
+	filtro := FiltroTareas{
+		Agente:     &agente,
+		ProyectoID: &proyectoID,
+	}
+	tareas, err := ListarTareas(filtro)
+	if err != nil {
+		return false, err
+	}
+	for _, tarea := range tareas {
+		switch tarea.Estado {
+		case TareaAsignada, TareaEnProgreso:
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func encolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo string) error {
+	if proyecto == nil {
+		return nil
+	}
+	sesionActiva, err := GetSesionActiva(agente, nil)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	if sesionActiva != nil {
+		return nil
+	}
+	handle, err := GetRuntimeHandleActivoAgente(agente)
+	if err != nil {
+		return err
+	}
+	if handle != nil {
+		return nil
+	}
+	pendiente, err := existeRuntimeOrderAbierta(agente, nil, "start", "resume", "handoff")
+	if err != nil {
+		return err
+	}
+	if pendiente {
+		return nil
+	}
+
+	payloadJSON, err := json.Marshal(map[string]any{
+		"accion":   "start",
+		"proyecto": proyecto.Slug,
+		"motivo":   motivo,
+		"por":      "sistema",
+	})
+	if err != nil {
+		return err
+	}
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      agente,
+		ProyectoID:  &proyecto.ID,
+		Tipo:        "start",
+		PayloadJSON: string(payloadJSON),
+	})
+	if err != nil {
+		return err
+	}
+	Audit("sistema", "auto_start_runtime", "runtime_order", orderID,
+		fmt.Sprintf("agente=%s proyecto=%s motivo=%s", agente, proyecto.Slug, motivo))
+	return nil
+}
+
+func existeRuntimeOrderAbierta(agente string, proyectoID *int64, tipos ...string) (bool, error) {
+	if len(tipos) == 0 {
+		return false, nil
+	}
+	placeholders, tipoArgs := runtimeOrderPlaceholders(tipos)
+	args := make([]any, 0, len(tipoArgs)+4)
+	args = append(args, strings.TrimSpace(agente))
+	args = append(args, tipoArgs...)
+	q := `
+		SELECT COUNT(*)
+		FROM runtime_orders
+		WHERE agente = ?
+		  AND tipo IN (` + placeholders + `)
+		  AND estado IN ('pendiente','tomada','ejecutando')`
+	if proyectoID != nil {
+		q += ` AND proyecto_id = ?`
+		args = append(args, *proyectoID)
+	}
+	var count int
+	err := DB.QueryRow(q, args...).Scan(&count)
+	return count > 0, err
 }
 
 func liberarBacklog() error {
@@ -76,11 +193,13 @@ func liberarBacklog() error {
 	return nil
 }
 
-func ListarAgentesDisponibles() ([]*Agente, error) {
+func ListarAgentesPlanificables() ([]*Agente, error) {
 	rows, err := DB.Query(`
 		SELECT nombre, rol 
 		FROM agentes 
-		WHERE habilitado = 1 AND estado_sesion = 'disponible'`)
+		WHERE habilitado = 1
+		  AND COALESCE(estado_cuota, 'activo') = 'activo'
+		  AND COALESCE(estado_sesion, '') IN ('', 'disponible', 'esperando')`)
 	if err != nil {
 		return nil, err
 	}
@@ -94,6 +213,12 @@ func ListarAgentesDisponibles() ([]*Agente, error) {
 		}
 	}
 	return list, nil
+}
+
+// ListarAgentesDisponibles se mantiene por compatibilidad semántica con código
+// anterior; ahora delega en la selección planificable oficial.
+func ListarAgentesDisponibles() ([]*Agente, error) {
+	return ListarAgentesPlanificables()
 }
 
 func ObtenerProyectoActivoAgente(agente string) (int64, error) {

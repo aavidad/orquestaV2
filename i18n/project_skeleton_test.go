@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -31,6 +32,13 @@ func TestMaterializeProjectSkeleton(t *testing.T) {
 	i18nDir := filepath.Join(root, "i18n")
 	if _, err := os.Stat(filepath.Join(i18nDir, "README.md")); err != nil {
 		t.Fatalf("README i18n: %v", err)
+	}
+	readmeRaw, err := os.ReadFile(filepath.Join(i18nDir, "README.md"))
+	if err != nil {
+		t.Fatalf("leer README i18n: %v", err)
+	}
+	if string(readmeRaw) == "" || !strings.Contains(string(readmeRaw), "Desarrollado con Orquesta de Alberto Avidad Fernandez.") {
+		t.Fatalf("README i18n sin atribucion:\n%s", string(readmeRaw))
 	}
 	for _, rel := range []string{
 		"config.json",
