@@ -8,6 +8,7 @@ import (
 
 type fakeStore struct {
 	proposal *db.Propuesta
+	project  *db.Proyecto
 	consenso bool
 	counts   struct {
 		acuerdo    int
@@ -27,8 +28,16 @@ func (f *fakeStore) ListProposals(estado *db.EstadoPropuesta) ([]*db.Propuesta, 
 	return []*db.Propuesta{f.proposal}, nil
 }
 
+func (f *fakeStore) ListProposalsByProject(estado *db.EstadoPropuesta, proyectoID *int64) ([]*db.Propuesta, error) {
+	return []*db.Propuesta{f.proposal}, nil
+}
+
 func (f *fakeStore) GetProposal(codigo string) (*db.Propuesta, error) {
 	return f.proposal, nil
+}
+
+func (f *fakeStore) GetProject(ref string) (*db.Proyecto, error) {
+	return f.project, nil
 }
 
 func (f *fakeStore) CreateProposal(p *db.Propuesta) (int64, error) {
@@ -71,13 +80,14 @@ func (f *fakeStore) ListAgents() ([]*db.Agente, error) {
 func TestCreateProposal(t *testing.T) {
 	t.Parallel()
 
-	store := &fakeStore{}
+	store := &fakeStore{project: &db.Proyecto{ID: 21, Slug: "orquestador"}}
 	svc := NewService(store)
 	id, p, err := svc.Create(CreateProposalInput{
 		Codigo:       "OP-999",
 		Titulo:       "Nueva",
 		Descripcion:  "Desc",
 		Tipo:         "arquitectura",
+		Proyecto:     "orquestador",
 		PropuestoPor: "codex2",
 		Distribuidor: "claude",
 	})
@@ -86,6 +96,9 @@ func TestCreateProposal(t *testing.T) {
 	}
 	if id != 22 || p.Codigo != "OP-999" {
 		t.Fatalf("resultado inesperado: id=%d proposal=%+v", id, p)
+	}
+	if p.ProyectoID == nil || *p.ProyectoID != 21 {
+		t.Fatalf("proyecto no resuelto: %+v", p)
 	}
 }
 

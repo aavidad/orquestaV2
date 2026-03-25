@@ -9,10 +9,13 @@ package cmd
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -64,21 +67,25 @@ func montarRPCLocalEnMux(mux *http.ServeMux, kind, listenAddr string) (func(), e
 	}, nil
 }
 
-func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug serverDebugOptions) error {
+func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug serverDebugOptions, security serverSecurityOptions) error {
 	if err := ensureServerDBOpen(); err != nil {
 		return err
 	}
 
 	mux := http.NewServeMux()
 	registrarRutasServe(mux)
-	cleanupRPC, err := montarRPCLocalEnMux(mux, kind, listenAddr)
-	if err != nil {
-		return err
+	cleanupRPC := func() {}
+	if shouldExposeLocalRPC(kind, listenAddr, security) {
+		var err error
+		cleanupRPC, err = montarRPCLocalEnMux(mux, kind, listenAddr)
+		if err != nil {
+			return err
+		}
 	}
 	defer cleanupRPC()
 
 	if anunciar {
-		fmt.Printf("✓ Panel web en http://localhost%s\n", listenAddr)
+		fmt.Printf("✓ Panel web en %s\n", publicServerURL(listenAddr, security))
 		fmt.Println("  Ctrl+C para detener.")
 	} else {
 		fmt.Printf("Servidor local de Orquesta en %s\n", rpclocal.BaseURL(normalizarAddrServidorLocal(listenAddr)))
@@ -94,7 +101,20 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 	defer cancel()
 	newControlPlaneRunner(debugLogger, debug.ControlPlane).Start(controlCtx)
 
-	return http.ListenAndServe(listenAddr, wrapServeMuxWithDebug(mux, debug, debugLogger))
+	server := &http.Server{
+		Addr:    listenAddr,
+		Handler: wrapServeMuxWithDebug(mux, debug, debugLogger),
+	}
+	if strings.TrimSpace(security.TLSCert) == "" || strings.TrimSpace(security.TLSKey) == "" {
+		return server.ListenAndServe()
+	}
+
+	tlsConfig, err := buildServerTLSConfig(security)
+	if err != nil {
+		return err
+	}
+	server.TLSConfig = tlsConfig
+	return server.ListenAndServeTLS(security.TLSCert, security.TLSKey)
 }
 
 func normalizarAddrServidorLocal(listenAddr string) string {
@@ -111,4 +131,59 @@ func normalizarAddrServidorLocal(listenAddr string) string {
 		host = rpclocal.DefaultHost
 	}
 	return net.JoinHostPort(host, port)
+}
+
+func buildServerTLSConfig(security serverSecurityOptions) (*tls.Config, error) {
+	cfg := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+	if strings.TrimSpace(security.TLSClientCA) == "" {
+		return cfg, nil
+	}
+
+	raw, err := os.ReadFile(security.TLSClientCA)
+	if err != nil {
+		return nil, fmt.Errorf("leyendo tls-client-ca: %w", err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(raw) {
+		return nil, fmt.Errorf("tls-client-ca inválida: %s", security.TLSClientCA)
+	}
+	cfg.ClientCAs = pool
+	cfg.ClientAuth = tls.RequireAndVerifyClientCert
+	return cfg, nil
+}
+
+func publicServerURL(listenAddr string, security serverSecurityOptions) string {
+	scheme := "http"
+	if strings.TrimSpace(security.TLSCert) != "" && strings.TrimSpace(security.TLSKey) != "" {
+		scheme = "https"
+	}
+	return scheme + "://" + normalizarAddrServidorLocal(listenAddr)
+}
+
+func shouldExposeLocalRPC(kind, listenAddr string, security serverSecurityOptions) bool {
+	if strings.TrimSpace(kind) == "server" {
+		return true
+	}
+	if strings.TrimSpace(security.TLSCert) != "" || strings.TrimSpace(security.TLSKey) != "" || strings.TrimSpace(security.TLSClientCA) != "" {
+		return false
+	}
+	addr := strings.TrimSpace(strings.TrimPrefix(rpclocal.BaseURL(listenAddr), "http://"))
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		if strings.HasPrefix(addr, ":") {
+			host = ""
+		} else {
+			host = addr
+		}
+	}
+	switch strings.TrimSpace(strings.ToLower(host)) {
+	case "", "127.0.0.1", "localhost", "::1":
+		return true
+	case "0.0.0.0", "::":
+		return false
+	default:
+		return false
+	}
 }

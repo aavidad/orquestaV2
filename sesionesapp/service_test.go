@@ -9,6 +9,15 @@ import (
 type stubStore struct {
 	startedAgente  string
 	finishedAgente string
+	project        *db.Proyecto
+	inspection     []*db.Sesion
+	active         *db.Sesion
+	last           *db.Sesion
+	saved          struct {
+		agente     string
+		proyectoID *int64
+		upd        db.SesionUpdate
+	}
 }
 
 func (s *stubStore) RegisterCodex() (string, error) { return "codex9", nil }
@@ -19,6 +28,25 @@ func (s *stubStore) StartSession(agente string) (int64, error) {
 func (s *stubStore) FinishSession(agente string) error {
 	s.finishedAgente = agente
 	return nil
+}
+func (s *stubStore) GetProject(ref string) (*db.Proyecto, error) { return s.project, nil }
+func (s *stubStore) ListInspectionSessions(filtro db.FiltroSesionesInspeccion) ([]*db.Sesion, error) {
+	return s.inspection, nil
+}
+func (s *stubStore) GetInspectionSessionByID(id int64) (*db.Sesion, error) {
+	return &db.Sesion{ID: id, Agente: "Codex2"}, nil
+}
+func (s *stubStore) SaveActiveSession(agente string, proyectoID *int64, upd db.SesionUpdate) error {
+	s.saved.agente = agente
+	s.saved.proyectoID = proyectoID
+	s.saved.upd = upd
+	return nil
+}
+func (s *stubStore) GetActiveSession(agente string, proyectoID *int64) (*db.Sesion, error) {
+	return s.active, nil
+}
+func (s *stubStore) GetLastSessionWithFilter(agente string, proyectoID *int64, cwd string) (*db.Sesion, error) {
+	return s.last, nil
 }
 func (s *stubStore) ListAgents() ([]*db.Agente, error) {
 	return []*db.Agente{{Nombre: "codex9", Rol: "programador"}, {Nombre: "Codex2", Rol: "programador"}}, nil
@@ -81,5 +109,34 @@ func TestBuildBriefing(t *testing.T) {
 	}
 	if len(result.PropuestasPendientes) != 1 || len(result.Reglas) != 1 || len(result.Skills) != 1 || len(result.Workflows) != 2 {
 		t.Fatalf("briefing inesperado: %+v", result)
+	}
+}
+
+func TestSaveAndContinueSession(t *testing.T) {
+	projectID := int64(31)
+	store := &stubStore{
+		project: &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		active:  &db.Sesion{ID: 41, Agente: "Codex2"},
+		last:    &db.Sesion{ID: 42, Agente: "Codex2"},
+	}
+	service := NewService(store)
+
+	saved, err := service.SaveActiveSession("Codex2", "orquestador", db.SesionUpdate{Heartbeat: true})
+	if err != nil {
+		t.Fatalf("SaveActiveSession: %v", err)
+	}
+	if saved == nil || saved.ID != 41 {
+		t.Fatalf("sesion guardada inesperada: %+v", saved)
+	}
+	if store.saved.agente != "Codex2" || store.saved.proyectoID == nil || *store.saved.proyectoID != projectID || !store.saved.upd.Heartbeat {
+		t.Fatalf("save inesperado: %+v", store.saved)
+	}
+
+	continued, err := service.Continue("Codex2", "orquestador", "/tmp/x")
+	if err != nil {
+		t.Fatalf("Continue: %v", err)
+	}
+	if continued == nil || continued.ID != 42 {
+		t.Fatalf("sesion continuada inesperada: %+v", continued)
 	}
 }

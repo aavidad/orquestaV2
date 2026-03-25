@@ -117,7 +117,7 @@ func procesarAutonomiaSesionActiva(sesion *db.Sesion) (int, error) {
 	if sesion == nil || sesion.ProyectoID == nil {
 		return 0, nil
 	}
-	proyecto, err := db.GetProyecto(strconv.FormatInt(*sesion.ProyectoID, 10))
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
 	if err != nil {
 		return 0, err
 	}
@@ -176,7 +176,7 @@ func reactivarAgenteTrasReanimacion(agente string) error {
 	if err != nil || proyectoID == 0 {
 		return err
 	}
-	proyecto, err := db.GetProyecto(strconv.FormatInt(proyectoID, 10))
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
 	if err != nil {
 		return err
 	}
@@ -218,7 +218,7 @@ func reactivarAgenteTrasReanimacion(agente string) error {
 
 func existeRuntimeOrderAutonomiaPendiente(agente string, proyectoID *int64, tipo string, accion string) (bool, error) {
 	estado := "pendiente"
-	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{
+	orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
 		Agente:     &agente,
 		ProyectoID: proyectoID,
 		Estado:     &estado,
@@ -248,7 +248,7 @@ func existeRuntimeOrderAbiertaAutonomia(agente string, proyectoID *int64, tipos 
 	estados := []string{"pendiente", "tomada", "ejecutando"}
 	for _, estado := range estados {
 		estado := estado
-		orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{
+		orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
 			Agente:     &agente,
 			ProyectoID: proyectoID,
 			Estado:     &estado,
@@ -317,7 +317,7 @@ func encolarNudgeAutonomia(agente string, proyecto *db.Proyecto, accion, motivo 
 	if err != nil {
 		return err
 	}
-	orderID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+	orderID, err := runtimesService.CreateRuntimeOrder(&db.RuntimeOrder{
 		Agente:      strings.TrimSpace(agente),
 		ProyectoID:  &proyecto.ID,
 		RuntimeID:   runtimeID,

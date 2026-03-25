@@ -9,6 +9,7 @@ import (
 
 type stubStore struct {
 	proposal *db.Propuesta
+	project  *db.Proyecto
 	created  *db.Tarea
 	taken    struct {
 		id     int64
@@ -43,6 +44,12 @@ func (s *stubStore) AnnotateTask(id int64, agente, nota string) error      { ret
 func (s *stubStore) MoveTaskToBacklog(id int64) error                      { return nil }
 func (s *stubStore) ReassignTask(id int64, nuevoAgente string) error       { return nil }
 func (s *stubStore) ListAgents() ([]*db.Agente, error)                     { return nil, nil }
+func (s *stubStore) GetProject(ref string) (*db.Proyecto, error) {
+	if s.project == nil {
+		return nil, errors.New("not found")
+	}
+	return s.project, nil
+}
 func (s *stubStore) GetProposal(codigo string) (*db.Propuesta, error) {
 	if s.proposal == nil {
 		return nil, errors.New("not found")
@@ -51,7 +58,10 @@ func (s *stubStore) GetProposal(codigo string) (*db.Propuesta, error) {
 }
 
 func TestCreateResolvesProposalAndAssignsTask(t *testing.T) {
-	store := &stubStore{proposal: &db.Propuesta{ID: 12, Codigo: "OP-080"}}
+	store := &stubStore{
+		proposal: &db.Propuesta{ID: 12, Codigo: "OP-080"},
+		project:  &db.Proyecto{ID: 21, Slug: "orquestador"},
+	}
 	service := NewService(store)
 
 	id, err := service.Create(CreateTaskInput{
@@ -59,7 +69,9 @@ func TestCreateResolvesProposalAndAssignsTask(t *testing.T) {
 		Prioridad:       db.PrioridadAlta,
 		CreadoPor:       "",
 		Agente:          "Codex2",
+		Proyecto:        "orquestador",
 		PropuestaCodigo: "OP-080",
+		Notas:           "nota inicial",
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -69,6 +81,12 @@ func TestCreateResolvesProposalAndAssignsTask(t *testing.T) {
 	}
 	if store.created == nil || store.created.PropuestaID == nil || *store.created.PropuestaID != 12 {
 		t.Fatalf("propuesta no resuelta en tarea creada: %+v", store.created)
+	}
+	if store.created.ProyectoID == nil || *store.created.ProyectoID != 21 {
+		t.Fatalf("proyecto no resuelto en tarea creada: %+v", store.created)
+	}
+	if store.created.Notas != "nota inicial" {
+		t.Fatalf("notas inesperadas: %+v", store.created)
 	}
 	if store.created.CreadoPor != "alberto" {
 		t.Fatalf("creadoPor inesperado: %+v", store.created)

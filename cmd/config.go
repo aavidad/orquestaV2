@@ -27,6 +27,9 @@ var configVerCmd = &cobra.Command{
 		if len(args) == 1 {
 			resp, ok, err := cargarConfigDesdeAPI(args[0])
 			if !ok {
+				if err := ensureLocalDB(); err != nil {
+					return err
+				}
 				val, err := db.ConfigGet(args[0])
 				if err != nil {
 					return fmt.Errorf("clave '%s' no encontrada", args[0])
@@ -42,6 +45,9 @@ var configVerCmd = &cobra.Command{
 		}
 		resp, ok, err := cargarConfigDesdeAPI("")
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			resp = &apiConfigResponse{}
 			resp.Config, err = db.ConfigAll()
 		}
@@ -64,8 +70,13 @@ var configSetCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-		} else if err := db.ConfigSet(args[0], args[1]); err != nil {
-			return err
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			if err := db.ConfigSet(args[0], args[1]); err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ %s = %s\n", args[0], args[1])
 		return nil
@@ -81,8 +92,13 @@ var configAgenteNuevoCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-		} else if err := db.RegistrarAgente(args[0], args[1]); err != nil {
-			return err
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			if err := db.RegistrarAgente(args[0], args[1]); err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ Agente '%s' [%s] registrado\n", args[0], args[1])
 		return nil
@@ -105,8 +121,13 @@ Sus contribuciones históricas se conservan.`,
 			if err != nil {
 				return err
 			}
-		} else if err := db.RetirarAgente(nombre); err != nil {
-			return err
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			if err := db.RetirarAgente(nombre); err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ Agente '%s' retirado del equipo.\n", nombre)
 		fmt.Printf("  Sus votos pendientes en propuestas abiertas han sido eliminados.\n")
@@ -124,8 +145,13 @@ var configAgenteRehabilitarCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-		} else if err := db.RehabilitarAgente(args[0]); err != nil {
-			return err
+		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			if err := db.RehabilitarAgente(args[0]); err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✓ Agente '%s' rehabilitado.\n", args[0])
 		fmt.Printf("  Debe iniciar sesión con: orquesta sesion inicio %s\n", args[0])

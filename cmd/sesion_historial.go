@@ -59,6 +59,9 @@ var sesionHistorialCmd = &cobra.Command{
 		} else if ok {
 			sesiones = resp.Sesiones
 		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			if strings.TrimSpace(proyectoRef) != "" {
 				proyecto, err := db.GetProyecto(proyectoRef)
 				if err != nil {
@@ -114,6 +117,9 @@ var sesionVerCmd = &cobra.Command{
 		} else if ok {
 			s = resp.Sesion
 		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			s, err = db.GetSesionInspeccionByID(id)
 			if err != nil {
 				return err

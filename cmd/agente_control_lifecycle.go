@@ -160,7 +160,7 @@ func encolarControlAgenteLocal(req apiAgenteControlRequest) (int64, string, erro
 		return 0, "", fmt.Errorf("debes indicar proyecto para arrancar el agente")
 	}
 	if proyectoRef != "" {
-		proyecto, err := db.GetProyecto(proyectoRef)
+		proyecto, err := runtimesService.GetProject(proyectoRef)
 		if err != nil {
 			return 0, "", err
 		}
@@ -195,7 +195,7 @@ func encolarControlAgenteLocal(req apiAgenteControlRequest) (int64, string, erro
 		return 0, "", err
 	}
 
-	orderID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+	orderID, err := runtimesService.CreateRuntimeOrder(&db.RuntimeOrder{
 		Agente:      agente,
 		ProyectoID:  proyectoID,
 		RuntimeID:   runtimeID,
@@ -224,7 +224,7 @@ func validarAgenteControlExiste(agente string) error {
 
 func resolverHandleControlAgente(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
 	if proyectoID != nil {
-		handle, err := db.GetRuntimeHandleActivoAgenteProyecto(agente, proyectoID)
+		handle, err := runtimesService.GetActiveRuntimeHandleForProject(agente, proyectoID)
 		if err != nil {
 			return nil, err
 		}
@@ -232,7 +232,7 @@ func resolverHandleControlAgente(agente string, proyectoID *int64) (*db.RuntimeH
 			return handle, nil
 		}
 	}
-	return db.GetRuntimeHandleActivoAgente(agente)
+	return runtimesService.GetActiveRuntimeHandle(agente)
 }
 
 func normalizarAccionControlAgente(v string) (string, error) {

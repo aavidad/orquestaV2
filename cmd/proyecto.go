@@ -26,6 +26,9 @@ var proyectoListarCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		proyectos, ok, err := cargarProyectosDesdeAPI()
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			proyectos, err = db.ListarProyectos(db.FiltroProyectos{})
 		}
 		if err != nil {
@@ -59,6 +62,9 @@ var proyectoDescubrirCmd = &cobra.Command{
 		}
 		proyectos, ok, err := descubrirProyectosPorAPI(ruta)
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			proyectos, err = db.DescubrirProyectos(ruta)
 			if err != nil {
 				return err
@@ -87,6 +93,9 @@ var proyectoVerCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		p, ok, err := cargarProyectoDesdeAPI(args[0])
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			p, err = db.GetProyecto(args[0])
 		}
 		if err != nil {
@@ -98,8 +107,12 @@ var proyectoVerCmd = &cobra.Command{
 		fmt.Printf("  Ruta ABS:  %s\n", p.RutaAbs)
 		padre := "—"
 		if p.ParentID != nil {
-			if pad, ok, err := cargarProyectoDesdeAPI(fmt.Sprintf("%d", *p.ParentID)); ok && err == nil && pad != nil {
-				padre = fmt.Sprintf("%d (%s)", *p.ParentID, pad.Slug)
+			if ok {
+				if pad, ok, err := cargarProyectoDesdeAPI(fmt.Sprintf("%d", *p.ParentID)); ok && err == nil && pad != nil {
+					padre = fmt.Sprintf("%d (%s)", *p.ParentID, pad.Slug)
+				} else {
+					padre = fmt.Sprintf("%d", *p.ParentID)
+				}
 			} else if pad, err := db.GetProyecto(fmt.Sprintf("%d", *p.ParentID)); err == nil {
 				padre = fmt.Sprintf("%d (%s)", *p.ParentID, pad.Slug)
 			} else {

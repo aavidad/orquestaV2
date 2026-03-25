@@ -52,6 +52,9 @@ var skillsBorrarCmd = &cobra.Command{
 		if ok, err := borrarSkillPorAPI(id, actor); err != nil {
 			return err
 		} else if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			if err := db.EliminarSkill(strings.TrimSpace(actor), id); err != nil {
 				return err
 			}

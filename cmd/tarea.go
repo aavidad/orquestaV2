@@ -95,6 +95,7 @@ var tareaListarCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
+			projectSlugs, _ = loadLocalProjectSlugMap()
 		}
 		if len(tareas) == 0 {
 			if jsonOut {
@@ -112,14 +113,7 @@ var tareaListarCmd = &cobra.Command{
 				if t.Agente != nil {
 					agente = *t.Agente
 				}
-				proyecto := ""
-				if t.ProyectoID != nil {
-					if slug := projectSlugs[*t.ProyectoID]; slug != "" {
-						proyecto = slug
-					} else if p, err := db.GetProyecto(strconv.FormatInt(*t.ProyectoID, 10)); err == nil {
-						proyecto = p.Slug
-					}
-				}
+				proyecto := projectLabel(projectSlugs, t.ProyectoID, "")
 				titulo := strings.NewReplacer("\t", " ", "\n", " ", "\r", " ").Replace(t.Titulo)
 				fmt.Printf("%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
 					t.ID, t.Estado, t.Prioridad, agente, proyecto, t.Modulo, titulo)
@@ -135,14 +129,7 @@ var tareaListarCmd = &cobra.Command{
 			if t.Agente != nil {
 				agente = *t.Agente
 			}
-			proyecto := "—"
-			if t.ProyectoID != nil {
-				if slug := projectSlugs[*t.ProyectoID]; slug != "" {
-					proyecto = slug
-				} else if p, err := db.GetProyecto(strconv.FormatInt(*t.ProyectoID, 10)); err == nil {
-					proyecto = p.Slug
-				}
-			}
+			proyecto := projectLabel(projectSlugs, t.ProyectoID, "—")
 			fmt.Printf("%-5d %-10s %-10s %-12s %-12s %-8s %s\n",
 				t.ID, t.Estado, t.Prioridad, agente, proyecto, t.Modulo, t.Titulo)
 		}
@@ -175,6 +162,7 @@ var tareaVerCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
+			projectSlugs, _ = loadLocalProjectSlugMap()
 		}
 		agente := "—"
 		if t.Agente != nil {
@@ -184,11 +172,7 @@ var tareaVerCmd = &cobra.Command{
 		fmt.Printf("  Estado:      %s\n", t.Estado)
 		fmt.Printf("  Prioridad:   %s\n", t.Prioridad)
 		if t.ProyectoID != nil {
-			if slug := projectSlugs[*t.ProyectoID]; slug != "" {
-				fmt.Printf("  Proyecto:    %s\n", slug)
-			} else if p, err := db.GetProyecto(strconv.FormatInt(*t.ProyectoID, 10)); err == nil {
-				fmt.Printf("  Proyecto:    %s\n", p.Slug)
-			}
+			fmt.Printf("  Proyecto:    %s\n", projectLabel(projectSlugs, t.ProyectoID, strconv.FormatInt(*t.ProyectoID, 10)))
 		}
 		fmt.Printf("  Módulo:      %s\n", t.Modulo)
 		fmt.Printf("  Agente:      %s\n", agente)
@@ -654,6 +638,28 @@ func init() {
 	)
 }
 
+func loadLocalProjectSlugMap() (map[int64]string, error) {
+	proyectos, err := db.ListarProyectos(db.FiltroProyectos{})
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int64]string, len(proyectos))
+	for _, proyecto := range proyectos {
+		out[proyecto.ID] = proyecto.Slug
+	}
+	return out, nil
+}
+
+func projectLabel(projectSlugs map[int64]string, projectID *int64, empty string) string {
+	if projectID == nil {
+		return empty
+	}
+	if slug := strings.TrimSpace(projectSlugs[*projectID]); slug != "" {
+		return slug
+	}
+	return strconv.FormatInt(*projectID, 10)
+}
+
 // tareaNotasCmd muestra las notas de una tarea (solo lectura, sin ver todo el detalle).
 var tareaNotasCmd = &cobra.Command{
 	Use:   "notas <id>",
@@ -671,6 +677,9 @@ var tareaNotasCmd = &cobra.Command{
 		} else if ok {
 			t = resp.Tarea
 		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			t, err = db.GetTarea(id)
 			if err != nil {
 				return fmt.Errorf("tarea #%d no encontrada", id)

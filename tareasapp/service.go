@@ -19,6 +19,7 @@ type Store interface {
 	AnnotateTask(id int64, agente, nota string) error
 	MoveTaskToBacklog(id int64) error
 	ReassignTask(id int64, nuevoAgente string) error
+	GetProject(ref string) (*db.Proyecto, error)
 	GetProposal(codigo string) (*db.Propuesta, error)
 	ListAgents() ([]*db.Agente, error)
 }
@@ -34,7 +35,9 @@ type CreateTaskInput struct {
 	Prioridad       db.PrioridadTarea
 	CreadoPor       string
 	Agente          string
+	Proyecto        string
 	PropuestaCodigo string
+	Notas           string
 }
 
 func NewService(store Store) *Service {
@@ -65,6 +68,18 @@ func (s *Service) ResolveProposalID(codigo string) (*int64, error) {
 	return &propuesta.ID, nil
 }
 
+func (s *Service) ResolveProjectID(ref string) (*int64, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, nil
+	}
+	proyecto, err := s.store.GetProject(ref)
+	if err != nil {
+		return nil, err
+	}
+	return &proyecto.ID, nil
+}
+
 func (s *Service) Create(input CreateTaskInput) (int64, error) {
 	tarea := &db.Tarea{
 		Titulo:      strings.TrimSpace(input.Titulo),
@@ -72,6 +87,7 @@ func (s *Service) Create(input CreateTaskInput) (int64, error) {
 		Modulo:      strings.TrimSpace(input.Modulo),
 		Prioridad:   input.Prioridad,
 		CreadoPor:   strings.TrimSpace(input.CreadoPor),
+		Notas:       input.Notas,
 	}
 	if tarea.CreadoPor == "" {
 		tarea.CreadoPor = "alberto"
@@ -83,6 +99,11 @@ func (s *Service) Create(input CreateTaskInput) (int64, error) {
 		return 0, err
 	} else {
 		tarea.PropuestaID = propuestaID
+	}
+	if proyectoID, err := s.ResolveProjectID(input.Proyecto); err != nil {
+		return 0, err
+	} else {
+		tarea.ProyectoID = proyectoID
 	}
 	id, err := s.store.CreateTask(tarea)
 	if err != nil {
@@ -172,6 +193,10 @@ func (Repository) MoveTaskToBacklog(id int64) error {
 
 func (Repository) ReassignTask(id int64, nuevoAgente string) error {
 	return db.ReasignarTarea(id, nuevoAgente)
+}
+
+func (Repository) GetProject(ref string) (*db.Proyecto, error) {
+	return db.GetProyecto(ref)
 }
 
 func (Repository) GetProposal(codigo string) (*db.Propuesta, error) {

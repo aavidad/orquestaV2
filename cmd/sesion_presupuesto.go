@@ -196,6 +196,9 @@ func referenciaSesionPresupuesto(cmd *cobra.Command) (int64, string, error) {
 }
 
 func resolverSesionPresupuestoPorReferencia(sesionID int64, agente string) (*db.Sesion, error) {
+	if err := ensureLocalDB(); err != nil {
+		return nil, err
+	}
 	if sesionID > 0 {
 		return db.GetSesionByID(sesionID)
 	}

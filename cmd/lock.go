@@ -40,7 +40,10 @@ var lockListarCmd = &cobra.Command{
 
 		locks, ok, err := cargarLocksDesdeAPI(query)
 		if !ok {
-			repo := db.SQLiteLockRepository{}
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
+			repo := db.CoordinationLockRepository()
 			filter := coordinacion.LockFilter{}
 			if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
 				filter.Agent = &agente
@@ -105,6 +108,9 @@ var lockTomarCmd = &cobra.Command{
 			return nil
 		}
 
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
 		svc := newCoordinationService()
 		var projectID *int64
 		if strings.TrimSpace(projectRef) != "" {
@@ -168,6 +174,9 @@ var lockRenovarCmd = &cobra.Command{
 			fmt.Printf("✓ Lock %d renovado hasta %s\n", lock.ID, lock.ExpiresAt.Format("2006-01-02 15:04:05"))
 			return nil
 		}
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
 		svc := newCoordinationService()
 		lock, err := svc.RenewLock(coordinacion.RenewLockInput{
 			ID:           id,
@@ -203,6 +212,9 @@ var lockLiberarCmd = &cobra.Command{
 			}
 			fmt.Printf("✓ Lock %d liberado (%s:%s)\n", lock.ID, lock.ScopeType, lock.ScopeKey)
 			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
+			return err
 		}
 		svc := newCoordinationService()
 		lock, err := svc.ReleaseLock(coordinacion.ReleaseLockInput{

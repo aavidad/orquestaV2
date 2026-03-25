@@ -40,6 +40,9 @@ var skillsDetectarCarenciaCmd = &cobra.Command{
 		} else if ok {
 			return emitirDeteccionSkill(cmd, resp.Resultado)
 		}
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
 		resultado, err := db.DetectarCarenciaSkill(&db.SolicitudDeteccionSkill{
 			TipoAgente:       req.TipoAgente,
 			Nombre:           req.Nombre,

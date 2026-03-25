@@ -257,6 +257,50 @@ func TestProyectoUsaAPI(t *testing.T) {
 	}
 }
 
+func TestProyectoVerViaAPINoDependeDeDBParaElPadre(t *testing.T) {
+	padreID := int64(2)
+	proyecto := &db.Proyecto{
+		ID:        7,
+		Slug:      "orquestador",
+		Nombre:    "Orquestador",
+		RutaAbs:   "/tmp/orquestador",
+		Tipo:      db.ProyectoRepo,
+		ParentID:  &padreID,
+		Activo:    true,
+		CreatedAt: time.Date(2026, 3, 24, 18, 0, 0, 0, time.UTC),
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/proyectos/orquestador", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiProyectoResponse{Proyecto: proyecto})
+	})
+	mux.HandleFunc("/api/proyectos/2", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":"no encontrado"}`, http.StatusNotFound)
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	out := capturarStdout(t, func() {
+		if err := proyectoVerCmd.RunE(proyectoVerCmd, []string{"orquestador"}); err != nil {
+			t.Fatalf("proyecto ver via api sin padre expandido: %v", err)
+		}
+	})
+	if !strings.Contains(out, "Padre:     2") {
+		t.Fatalf("salida proyecto ver sin fallback de id del padre:\n%s", out)
+	}
+	if strings.Contains(out, "grupo-pm") {
+		t.Fatalf("no deberia depender de db local para resolver el padre cuando falla la API:\n%s", out)
+	}
+}
+
 func TestAsignacionUsaAPI(t *testing.T) {
 	asignacion := &db.Asignacion{
 		ID:           14,

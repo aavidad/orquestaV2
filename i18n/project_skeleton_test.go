@@ -63,6 +63,20 @@ func TestMaterializeProjectSkeleton(t *testing.T) {
 	if dict["action.save"] != "Save" {
 		t.Fatalf("seed ingles inesperada: %+v", dict)
 	}
+
+	commonRaw, err := os.ReadFile(filepath.Join(i18nDir, "en", "common.json"))
+	if err != nil {
+		t.Fatalf("read common.json: %v", err)
+	}
+	var common map[string]string
+	if err := json.Unmarshal(commonRaw, &common); err != nil {
+		t.Fatalf("unmarshal common.json: %v", err)
+	}
+	for _, key := range []string{"lang.es", "lang.en", "lang.de", "lang.fr", "lang.it", "lang.zh", "lang.gl", "lang.eu", "lang.ca", "lang.val"} {
+		if strings.TrimSpace(common[key]) == "" {
+			t.Fatalf("common.json sin %s: %+v", key, common)
+		}
+	}
 }
 
 func TestNormalizeProjectSkeletonSpecUsaPackInicialPorDefecto(t *testing.T) {

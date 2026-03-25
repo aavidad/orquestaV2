@@ -25,6 +25,9 @@ var conectorListarCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		conectores, ok, err := cargarConectoresDesdeAPI()
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			conectores, err = db.ListarConectores()
 		}
 		if err != nil {
@@ -54,6 +57,9 @@ var conectorVerCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c, ok, err := cargarConectorDesdeAPI(args[0])
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			c, err = db.GetConector(args[0])
 		}
 		if err != nil {
@@ -95,6 +101,9 @@ var conectorRegistrarCmd = &cobra.Command{
 			Activo:       !inactivo,
 		})
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			id, err = db.UpsertConector(&db.Conector{
 				Slug:         slug,
 				Nombre:       nombre,

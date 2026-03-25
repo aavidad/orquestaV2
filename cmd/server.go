@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"strings"
@@ -40,7 +41,14 @@ var serverRunCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		addr, _ := cmd.Flags().GetString("addr")
 		listenAddr := strings.TrimPrefix(rpclocal.BaseURL(addr), "http://")
-		return arrancarServidorUnificado(listenAddr, "server", false, resolveServerDebugOptions(cmd))
+		security, err := resolveServerSecurityOptions(cmd)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(security.TLSCert) != "" || strings.TrimSpace(security.TLSKey) != "" || strings.TrimSpace(security.TLSClientCA) != "" {
+			return fmt.Errorf("server run no soporta TLS; usa 'orquesta serve' para exposición HTTPS/mTLS")
+		}
+		return arrancarServidorUnificado(listenAddr, "server", false, resolveServerDebugOptions(cmd), security)
 	},
 }
 
@@ -168,6 +176,9 @@ var serverDoctorCmd = &cobra.Command{
 
 func init() {
 	serverRunCmd.Flags().String("addr", strings.TrimPrefix(rpclocal.DefaultAddr(), "http://"), "Dirección HTTP local del servidor")
+	serverRunCmd.Flags().String("tls-cert", "", "Certificado PEM del servidor")
+	serverRunCmd.Flags().String("tls-key", "", "Clave privada PEM del servidor")
+	serverRunCmd.Flags().String("tls-client-ca", "", "CA PEM para exigir certificados cliente (mTLS)")
 	serverRunCmd.Flags().Bool("debug", false, "Activa logging de depuración del servidor")
 	serverRunCmd.Flags().Bool("debug-http", false, "Log HTTP detallado por request")
 	serverRunCmd.Flags().Bool("debug-control-plane", false, "Log detallado del ciclo del control plane")
@@ -180,6 +191,34 @@ func ensureServerDBOpen() error {
 		return nil
 	}
 	return db.Open()
+}
+
+func resolveServerSecurityOptions(cmd *cobra.Command) (serverSecurityOptions, error) {
+	tlsCert, _ := cmd.Flags().GetString("tls-cert")
+	tlsKey, _ := cmd.Flags().GetString("tls-key")
+	tlsClientCA, _ := cmd.Flags().GetString("tls-client-ca")
+
+	host := ""
+	if value := cmd.Flag("host"); value != nil {
+		host = strings.TrimSpace(value.Value.String())
+	} else if value := cmd.Flag("addr"); value != nil {
+		host = strings.TrimSpace(value.Value.String())
+		host = strings.TrimPrefix(strings.TrimPrefix(host, "http://"), "https://")
+		if parsedHost, _, err := net.SplitHostPort(host); err == nil {
+			host = parsedHost
+		} else if strings.HasPrefix(host, ":") {
+			host = ""
+		}
+	}
+
+	if err := validateServeSecurity(host, tlsCert, tlsKey, tlsClientCA); err != nil {
+		return serverSecurityOptions{}, err
+	}
+	return serverSecurityOptions{
+		TLSCert:     strings.TrimSpace(tlsCert),
+		TLSKey:      strings.TrimSpace(tlsKey),
+		TLSClientCA: strings.TrimSpace(tlsClientCA),
+	}, nil
 }
 
 func shouldDelegateToLocalServer(args []string) bool {

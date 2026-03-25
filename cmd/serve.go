@@ -10,6 +10,7 @@ package cmd
 import (
 	"fmt"
 	"html/template"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -1318,14 +1319,23 @@ var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Arranca el panel web (por defecto: http://localhost:16543)",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		host, _ := cmd.Flags().GetString("host")
 		puerto, _ := cmd.Flags().GetInt("puerto")
-		addr := fmt.Sprintf(":%d", puerto)
-		return arrancarServidorUnificado(addr, "serve", true, resolveServerDebugOptions(cmd))
+		security, err := resolveServerSecurityOptions(cmd)
+		if err != nil {
+			return err
+		}
+		addr := net.JoinHostPort(host, fmt.Sprintf("%d", puerto))
+		return arrancarServidorUnificado(addr, "serve", true, resolveServerDebugOptions(cmd), security)
 	},
 }
 
 func init() {
+	serveCmd.Flags().String("host", "127.0.0.1", "Host de escucha HTTP/HTTPS")
 	serveCmd.Flags().Int("puerto", defaultServePort, "Puerto HTTP")
+	serveCmd.Flags().String("tls-cert", "", "Certificado PEM del servidor")
+	serveCmd.Flags().String("tls-key", "", "Clave privada PEM del servidor")
+	serveCmd.Flags().String("tls-client-ca", "", "CA PEM para exigir certificados cliente (mTLS)")
 	serveCmd.Flags().Bool("debug", false, "Activa logging de depuración del servidor")
 	serveCmd.Flags().Bool("debug-http", false, "Log HTTP detallado por request")
 	serveCmd.Flags().Bool("debug-control-plane", false, "Log detallado del ciclo del control plane")

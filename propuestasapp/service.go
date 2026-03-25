@@ -9,8 +9,10 @@ import (
 
 type Store interface {
 	ListProposals(estado *db.EstadoPropuesta) ([]*db.Propuesta, error)
+	ListProposalsByProject(estado *db.EstadoPropuesta, proyectoID *int64) ([]*db.Propuesta, error)
 	GetProposal(codigo string) (*db.Propuesta, error)
 	CreateProposal(p *db.Propuesta) (int64, error)
+	GetProject(ref string) (*db.Proyecto, error)
 	CloseProposal(codigo, estado, agente string) error
 	ReopenProposal(codigo, agente string) (int, error)
 	RepairPendingVotes(codigo, agente string) (int, error)
@@ -47,12 +49,21 @@ type CreateProposalInput struct {
 	Titulo       string
 	Descripcion  string
 	Tipo         string
+	Proyecto     string
 	PropuestoPor string
 	Distribuidor string
 }
 
 func (s *Service) List(estado *db.EstadoPropuesta) ([]*db.Propuesta, error) {
 	return s.store.ListProposals(estado)
+}
+
+func (s *Service) ListByProject(estado *db.EstadoPropuesta, proyectoRef string) ([]*db.Propuesta, error) {
+	proyectoID, err := s.ResolveProjectID(proyectoRef)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.ListProposalsByProject(estado, proyectoID)
 }
 
 func (s *Service) GetDetail(codigo string) (*ProposalDetail, error) {
@@ -76,8 +87,25 @@ func (s *Service) Create(input CreateProposalInput) (int64, *db.Propuesta, error
 		PropuestoPor: strings.TrimSpace(input.PropuestoPor),
 		Distribuidor: strings.TrimSpace(input.Distribuidor),
 	}
+	if proyectoID, err := s.ResolveProjectID(input.Proyecto); err != nil {
+		return 0, nil, err
+	} else {
+		p.ProyectoID = proyectoID
+	}
 	id, err := s.store.CreateProposal(p)
 	return id, p, err
+}
+
+func (s *Service) ResolveProjectID(ref string) (*int64, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, nil
+	}
+	proyecto, err := s.store.GetProject(ref)
+	if err != nil {
+		return nil, err
+	}
+	return &proyecto.ID, nil
 }
 
 func (s *Service) Close(codigo, estado, agente string) error {
@@ -167,12 +195,20 @@ func (Repository) ListProposals(estado *db.EstadoPropuesta) ([]*db.Propuesta, er
 	return db.ListarPropuestas(estado, nil)
 }
 
+func (Repository) ListProposalsByProject(estado *db.EstadoPropuesta, proyectoID *int64) ([]*db.Propuesta, error) {
+	return db.ListarPropuestas(estado, proyectoID)
+}
+
 func (Repository) GetProposal(codigo string) (*db.Propuesta, error) {
 	return db.GetPropuesta(codigo)
 }
 
 func (Repository) CreateProposal(p *db.Propuesta) (int64, error) {
 	return db.CrearPropuesta(p)
+}
+
+func (Repository) GetProject(ref string) (*db.Proyecto, error) {
+	return db.GetProyecto(ref)
 }
 
 func (Repository) CloseProposal(codigo, estado, agente string) error {

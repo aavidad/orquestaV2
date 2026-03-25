@@ -38,6 +38,9 @@ var reglasListarCmd = &cobra.Command{
 		}
 		reglas, ok, err := cargarReglasDesdeAPI(strings.TrimSpace(rol), activa)
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			reglas, err = db.ListarReglas(strings.TrimSpace(rol), activa)
 		}
 		if err != nil {
@@ -81,6 +84,9 @@ var reglasCrearCmd = &cobra.Command{
 			return nil
 		}
 
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
 		id, err := db.CrearRegla(actor, &db.Regla{
 			TipoAgente:  strings.TrimSpace(rol),
 			Categoria:   strings.TrimSpace(categoria),
@@ -110,6 +116,9 @@ var reglasEditarCmd = &cobra.Command{
 		}
 		r, ok, err := cargarReglaDesdeAPI(id)
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			r, err = db.GetRegla(id)
 		}
 		if err != nil {
@@ -141,6 +150,9 @@ var reglasEditarCmd = &cobra.Command{
 		}); err != nil {
 			return err
 		} else if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			if err := db.ActualizarRegla(actor, r); err != nil {
 				return err
 			}
@@ -163,6 +175,9 @@ var reglasVersionesCmd = &cobra.Command{
 		}
 		versiones, ok, err := cargarVersionesReglaDesdeAPI(id)
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			versiones, err = db.ListarVersionesRegla(id)
 		}
 		if err != nil {
@@ -197,6 +212,9 @@ var skillsListarCmd = &cobra.Command{
 		}
 		skills, ok, err := cargarSkillsDesdeAPI(strings.TrimSpace(rol), activa)
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			skills, err = db.ListarSkills(strings.TrimSpace(rol), activa)
 		}
 		if err != nil {
@@ -260,6 +278,9 @@ var skillsCrearCmd = &cobra.Command{
 			return nil
 		}
 
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
 		id, err := db.CrearSkill(actor, &db.Skill{
 			TipoAgente:         strings.TrimSpace(rol),
 			Nombre:             strings.TrimSpace(nombre),
@@ -297,6 +318,9 @@ var skillsEditarCmd = &cobra.Command{
 		}
 		s, ok, err := cargarSkillDesdeAPI(id)
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			s, err = db.GetSkill(id)
 		}
 		if err != nil {
@@ -368,6 +392,9 @@ var skillsEditarCmd = &cobra.Command{
 		}); err != nil {
 			return err
 		} else if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			if err := db.ActualizarSkill(actor, s); err != nil {
 				return err
 			}
@@ -390,6 +417,9 @@ var skillsVersionesCmd = &cobra.Command{
 		}
 		versiones, ok, err := cargarVersionesSkillDesdeAPI(id)
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			versiones, err = db.ListarVersionesSkill(id)
 		}
 		if err != nil {
@@ -424,6 +454,9 @@ var workflowsListarCmd = &cobra.Command{
 		}
 		workflows, ok, err := cargarWorkflowsDesdeAPI(strings.TrimSpace(rol), activo)
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			workflows, err = db.ListarWorkflows(strings.TrimSpace(rol), activo)
 		}
 		if err != nil {
@@ -452,6 +485,9 @@ var workflowsVerCmd = &cobra.Command{
 		}
 		w, ok, err := cargarWorkflowDesdeAPI(id)
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			w, err = db.GetWorkflowByID(id)
 		}
 		if err != nil {
@@ -500,6 +536,9 @@ var workflowsCrearCmd = &cobra.Command{
 			return nil
 		}
 
+		if err := ensureLocalDB(); err != nil {
+			return err
+		}
 		id, err := db.CrearWorkflow(actor, &db.Workflow{
 			TipoAgente:  strings.TrimSpace(rol),
 			Nombre:      strings.TrimSpace(nombre),
@@ -529,6 +568,9 @@ var workflowsEditarCmd = &cobra.Command{
 		}
 		w, ok, err := cargarWorkflowDesdeAPI(id)
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			w, err = db.GetWorkflowByID(id)
 		}
 		if err != nil {
@@ -561,6 +603,9 @@ var workflowsEditarCmd = &cobra.Command{
 		}); err != nil {
 			return err
 		} else if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			if err := db.ActualizarWorkflow(actor, w); err != nil {
 				return err
 			}
@@ -583,6 +628,9 @@ var workflowsVersionesCmd = &cobra.Command{
 		}
 		versiones, ok, err := cargarVersionesWorkflowDesdeAPI(id)
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			versiones, err = db.ListarVersionesWorkflow(id)
 		}
 		if err != nil {
@@ -612,6 +660,9 @@ var permisosListarCmd = &cobra.Command{
 		entidad, _ := cmd.Flags().GetString("entidad")
 		permisos, ok, err := cargarPermisosCatalogoDesdeAPI(strings.TrimSpace(entidad))
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			permisos, err = db.ListarPermisosEdicionCatalogo(strings.TrimSpace(entidad))
 		}
 		if err != nil {
@@ -663,6 +714,9 @@ var permisosFijarCmd = &cobra.Command{
 		} else if ok {
 			fmt.Printf("✓ Permiso actualizado: %s/%s\n", permiso.Entidad, permiso.Rol)
 			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
+			return err
 		}
 		if err := db.GuardarPermisoEdicionCatalogo(actor, permiso); err != nil {
 			return err
@@ -792,6 +846,9 @@ func activarReglaCmd(activa bool) *cobra.Command {
 			if ok, err := setReglaActivaPorAPI(id, actor, activa); err != nil {
 				return err
 			} else if !ok {
+				if err := ensureLocalDB(); err != nil {
+					return err
+				}
 				if err := db.SetReglaActiva(actor, id, activa); err != nil {
 					return err
 				}
@@ -825,6 +882,9 @@ func activarSkillCmd(activo bool) *cobra.Command {
 			if ok, err := setSkillActivoPorAPI(id, actor, activo); err != nil {
 				return err
 			} else if !ok {
+				if err := ensureLocalDB(); err != nil {
+					return err
+				}
 				if err := db.SetSkillActivo(actor, id, activo); err != nil {
 					return err
 				}
@@ -858,6 +918,9 @@ func activarWorkflowCmd(activo bool) *cobra.Command {
 			if ok, err := setWorkflowActivoPorAPI(id, actor, activo); err != nil {
 				return err
 			} else if !ok {
+				if err := ensureLocalDB(); err != nil {
+					return err
+				}
 				if err := db.SetWorkflowActivo(actor, id, activo); err != nil {
 					return err
 				}

@@ -36,6 +36,9 @@ var politicaModeloListarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			items, err = capacidadService.ListModelPolicies(scopeTipo, scopeRef, activaPtr)
 			if err != nil {
 				return err
@@ -88,6 +91,9 @@ var politicaModeloGuardarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			id, err = capacidadService.SaveModelPolicy(politica)
 			if err != nil {
 				return err
@@ -105,6 +111,9 @@ var politicaModeloSeedCmd = &cobra.Command{
 		if ok, err := seedInicialPoliticasModeloPorAPI(); err != nil {
 			return err
 		} else if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			if err := capacidadService.SeedInitialModelPolicies(); err != nil {
 				return err
 			}
@@ -143,6 +152,9 @@ var modeloResolverCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			res, err = capacidadService.ResolveModelPolicy(input)
 			if err != nil {
 				return err

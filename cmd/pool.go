@@ -41,6 +41,9 @@ var poolListarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			pools, err = capacidadService.ListPoolsSummary(filtro)
 			if err != nil {
 				return err
@@ -73,6 +76,9 @@ var poolVerCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			detail, err = capacidadService.GetPoolDetail(args[0])
 			if err != nil {
 				return err
@@ -142,6 +148,9 @@ var poolGuardarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			id, err = capacidadService.SavePool(pool)
 			if err != nil {
 				return err
@@ -167,6 +176,9 @@ var poolModeloListarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			modelos, err = capacidadService.ListPoolModels(args[0])
 			if err != nil {
 				return err
@@ -208,6 +220,9 @@ var poolModeloGuardarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			id, err = capacidadService.SavePoolModel(args[0], modelo)
 			if err != nil {
 				return err
@@ -225,6 +240,9 @@ var poolModeloSeedCmd = &cobra.Command{
 		if ok, err := seedInicialModelosPoolPorAPI(); err != nil {
 			return err
 		} else if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			if err := capacidadService.SeedInitialModels(); err != nil {
 				return err
 			}
@@ -243,6 +261,9 @@ var poolSeedCmd = &cobra.Command{
 		} else if ok {
 			fmt.Println("✓ Pools iniciales cargados")
 			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
+			return err
 		}
 		seeds := []db.PoolCapacidad{
 			{

@@ -32,6 +32,9 @@ var progresoVerCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			resumen, err = db.CalcularResumenProgresoProyecto(proyecto)
 			if err != nil {
 				return err
@@ -73,6 +76,9 @@ var progresoFaseListarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			fases, err = db.ListarFasesProyecto(proyecto)
 			if err != nil {
 				return err
@@ -114,6 +120,9 @@ var progresoFaseRegistrarCmd = &cobra.Command{
 		} else if ok {
 			fmt.Printf("✓ Fase #%d registrada\n", resp.ID)
 			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
+			return err
 		}
 		id, err := db.RegistrarFaseProyecto(&db.FaseProyecto{
 			Proyecto:    req.Proyecto,
@@ -174,6 +183,9 @@ var progresoFaseActualizarCmd = &cobra.Command{
 		} else if ok {
 			fmt.Printf("✓ Fase #%d actualizada\n", resp.ID)
 			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
+			return err
 		}
 		fase, err := db.GetFaseProyecto(id)
 		if err != nil {
@@ -238,6 +250,9 @@ var progresoTareaRegistrarCmd = &cobra.Command{
 		if ok, err := registrarAvanceProgresoPorAPI(tareaID, req); err != nil {
 			return err
 		} else if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			if err := db.RegistrarAvanceTarea(&db.AvanceTarea{
 				TareaID:        tareaID,
 				Proyecto:       req.Proyecto,

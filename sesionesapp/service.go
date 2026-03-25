@@ -12,6 +12,12 @@ type Store interface {
 	RegisterCodex() (string, error)
 	StartSession(agente string) (int64, error)
 	FinishSession(agente string) error
+	GetProject(ref string) (*db.Proyecto, error)
+	ListInspectionSessions(filtro db.FiltroSesionesInspeccion) ([]*db.Sesion, error)
+	GetInspectionSessionByID(id int64) (*db.Sesion, error)
+	SaveActiveSession(agente string, proyectoID *int64, upd db.SesionUpdate) error
+	GetActiveSession(agente string, proyectoID *int64) (*db.Sesion, error)
+	GetLastSessionWithFilter(agente string, proyectoID *int64, cwd string) (*db.Sesion, error)
 	ListAgents() ([]*db.Agente, error)
 	ListPendingProposals(agente string) ([]*db.Propuesta, error)
 	ListRules(rol string) ([]*db.Regla, error)
@@ -123,6 +129,45 @@ func (s *Service) ListAgents() ([]*db.Agente, error) {
 	return s.store.ListAgents()
 }
 
+func (s *Service) ResolveProjectID(ref string) (*int64, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, nil
+	}
+	proyecto, err := s.store.GetProject(ref)
+	if err != nil {
+		return nil, err
+	}
+	return &proyecto.ID, nil
+}
+
+func (s *Service) ListInspectionSessions(filtro db.FiltroSesionesInspeccion) ([]*db.Sesion, error) {
+	return s.store.ListInspectionSessions(filtro)
+}
+
+func (s *Service) GetInspectionSession(id int64) (*db.Sesion, error) {
+	return s.store.GetInspectionSessionByID(id)
+}
+
+func (s *Service) SaveActiveSession(agente, proyectoRef string, upd db.SesionUpdate) (*db.Sesion, error) {
+	proyectoID, err := s.ResolveProjectID(proyectoRef)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.store.SaveActiveSession(strings.TrimSpace(agente), proyectoID, upd); err != nil {
+		return nil, err
+	}
+	return s.store.GetActiveSession(strings.TrimSpace(agente), proyectoID)
+}
+
+func (s *Service) Continue(agente, proyectoRef, cwd string) (*db.Sesion, error) {
+	proyectoID, err := s.ResolveProjectID(proyectoRef)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.GetLastSessionWithFilter(strings.TrimSpace(agente), proyectoID, strings.TrimSpace(cwd))
+}
+
 func (s *Service) BuildBriefing(agente string) (*BriefingResult, error) {
 	agente = strings.TrimSpace(agente)
 	agentes, err := s.store.ListAgents()
@@ -178,6 +223,30 @@ func (Repository) StartSession(agente string) (int64, error) {
 
 func (Repository) FinishSession(agente string) error {
 	return db.FinSesion(agente)
+}
+
+func (Repository) GetProject(ref string) (*db.Proyecto, error) {
+	return db.GetProyecto(ref)
+}
+
+func (Repository) ListInspectionSessions(filtro db.FiltroSesionesInspeccion) ([]*db.Sesion, error) {
+	return db.ListarSesionesInspeccion(filtro)
+}
+
+func (Repository) GetInspectionSessionByID(id int64) (*db.Sesion, error) {
+	return db.GetSesionInspeccionByID(id)
+}
+
+func (Repository) SaveActiveSession(agente string, proyectoID *int64, upd db.SesionUpdate) error {
+	return db.GuardarSesionActiva(agente, proyectoID, upd)
+}
+
+func (Repository) GetActiveSession(agente string, proyectoID *int64) (*db.Sesion, error) {
+	return db.GetSesionActiva(agente, proyectoID)
+}
+
+func (Repository) GetLastSessionWithFilter(agente string, proyectoID *int64, cwd string) (*db.Sesion, error) {
+	return db.ObtenerUltimaSesionConFiltro(agente, proyectoID, cwd)
 }
 
 func (Repository) ListAgents() ([]*db.Agente, error) {

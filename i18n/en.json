@@ -515,5 +515,13 @@
   "third_party": "third-party",
   "bajo": "low",
   "medio": "medium",
-  "alto": "high"
+  "alto": "high",
+  "lang.de": "DE",
+  "lang.fr": "FR",
+  "lang.it": "IT",
+  "lang.zh": "ZH",
+  "lang.gl": "GL",
+  "lang.eu": "EU",
+  "lang.ca": "CA",
+  "lang.val": "VAL"
 }

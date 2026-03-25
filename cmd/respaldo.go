@@ -44,6 +44,9 @@ var respaldoBDCmd = &cobra.Command{
 		} else if ok {
 			ruta = resp.Ruta
 		} else {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			var err error
 			ruta, err = ejecutarRespaldoBD(destino, etiqueta, retener)
 			if err != nil {

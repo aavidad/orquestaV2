@@ -20,6 +20,8 @@ import (
 	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/fabricaapp"
+	"orquesta/propuestasapp"
+	"orquesta/tareasapp"
 )
 
 type apiErrorResponse struct {
@@ -40,6 +42,26 @@ type apiConteoVotosResponse struct {
 	Desacuerdo int `json:"desacuerdo"`
 	Abstencion int `json:"abstencion"`
 	Pendiente  int `json:"pendiente"`
+}
+
+func conteoVotosDesdeLista(votos []*db.Voto) apiConteoVotosResponse {
+	var out apiConteoVotosResponse
+	for _, voto := range votos {
+		if voto == nil {
+			continue
+		}
+		switch voto.Posicion {
+		case db.VotoAcuerdo:
+			out.Acuerdo++
+		case db.VotoDesacuerdo:
+			out.Desacuerdo++
+		case db.VotoAbstencion:
+			out.Abstencion++
+		default:
+			out.Pendiente++
+		}
+	}
+	return out
 }
 
 type apiAsignacionActivarRequest struct {
@@ -476,62 +498,12 @@ func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
 	}
-	agentes, err := db.ListarAgentes()
+	status, err := statusService.FetchStatus()
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
-	counts, err := db.ContarTareasPorEstado()
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	proyectos, err := db.ListarProyectos(db.FiltroProyectos{})
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	asignaciones, err := db.ContarAsignacionesActivasPorProyecto()
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	sesiones, err := db.ListarSesionesActivas()
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	sesionesPorProyecto := make(map[int64]int)
-	for _, sesion := range sesiones {
-		if sesion.ProyectoID != nil {
-			sesionesPorProyecto[*sesion.ProyectoID]++
-		}
-	}
-	estadoAb := db.PropuestaAbierta
-	abiertas, err := db.ListarPropuestas(&estadoAb, nil)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	for _, propuesta := range abiertas {
-		if propuesta == nil {
-			continue
-		}
-		votos, err := db.ResumenVotos(propuesta.ID)
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
-		}
-		propuesta.Votos = votos
-	}
-	apiWriteJSON(w, http.StatusOK, apiStatusResponse{
-		Agentes:             agentes,
-		ConteoTareas:        counts,
-		Proyectos:           proyectos,
-		AsignacionesActivas: asignaciones,
-		SesionesActivas:     sesionesPorProyecto,
-		PropuestasAbiertas:  abiertas,
-	})
+	apiWriteJSON(w, http.StatusOK, status)
 }
 
 func apiHandlerDiagnostico(w http.ResponseWriter, r *http.Request) {
@@ -1744,7 +1716,7 @@ func apiHandlerAsignacionActivar(w http.ResponseWriter, r *http.Request) {
 func apiHandlerLocks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		repo := db.SQLiteLockRepository{}
+		repo := db.CoordinationLockRepository()
 		filter := coordinacion.LockFilter{}
 		if agente := strings.TrimSpace(r.URL.Query().Get("agente")); agente != "" {
 			filter.Agent = &agente
@@ -1824,7 +1796,7 @@ func apiRouterLocks(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
 			return
 		}
-		lock, err := (db.SQLiteLockRepository{}).GetByID(id)
+		lock, err := db.CoordinationLockRepository().GetByID(id)
 		if err != nil {
 			apiError(w, http.StatusNotFound, err)
 			return
@@ -1901,22 +1873,22 @@ func apiHandlerTareasListar(w http.ResponseWriter, r *http.Request) {
 		filtro.Estado = &estado
 	}
 	if proyectoRef := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyectoRef != "" {
-		proyecto, err := db.GetProyecto(proyectoRef)
+		proyectoID, err := tareasService.ResolveProjectID(proyectoRef)
 		if err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		filtro.ProyectoID = &proyecto.ID
+		filtro.ProyectoID = proyectoID
 	}
 	if propuestaCodigo := strings.TrimSpace(r.URL.Query().Get("propuesta")); propuestaCodigo != "" {
-		propuesta, err := db.GetPropuesta(propuestaCodigo)
+		propuestaID, err := tareasService.ResolveProposalID(propuestaCodigo)
 		if err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		filtro.PropuestaID = &propuesta.ID
+		filtro.PropuestaID = propuestaID
 	}
-	tareas, err := db.ListarTareas(filtro)
+	tareas, err := tareasService.List(filtro)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -1930,46 +1902,26 @@ func apiHandlerTareasCrear(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	t := &db.Tarea{
-		Titulo:      strings.TrimSpace(req.Titulo),
-		Descripcion: req.Descripcion,
-		Modulo:      req.Modulo,
-		Prioridad:   db.PrioridadTarea(req.Prioridad),
-		CreadoPor:   valorConFallback(req.CreadoPor, "alberto"),
-		Notas:       req.Notas,
-	}
-	if t.Titulo == "" {
+	if strings.TrimSpace(req.Titulo) == "" {
 		apiError(w, http.StatusBadRequest, fmt.Errorf("el título es obligatorio"))
 		return
 	}
-	if proyectoRef := strings.TrimSpace(req.Proyecto); proyectoRef != "" {
-		proyecto, err := db.GetProyecto(proyectoRef)
-		if err != nil {
-			apiError(w, http.StatusBadRequest, err)
-			return
-		}
-		t.ProyectoID = &proyecto.ID
-	}
-	if propuestaRef := strings.TrimSpace(req.Propuesta); propuestaRef != "" {
-		propuesta, err := db.GetPropuesta(propuestaRef)
-		if err != nil {
-			apiError(w, http.StatusBadRequest, err)
-			return
-		}
-		t.PropuestaID = &propuesta.ID
-	}
-	id, err := db.CrearTarea(t)
+	id, err := tareasService.Create(tareasapp.CreateTaskInput{
+		Titulo:          req.Titulo,
+		Descripcion:     req.Descripcion,
+		Modulo:          req.Modulo,
+		Prioridad:       db.PrioridadTarea(req.Prioridad),
+		CreadoPor:       valorConFallback(req.CreadoPor, "alberto"),
+		Agente:          req.Agente,
+		Proyecto:        req.Proyecto,
+		PropuestaCodigo: req.Propuesta,
+		Notas:           req.Notas,
+	})
 	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
+		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	if agente := strings.TrimSpace(req.Agente); agente != "" {
-		if err := db.TomarTarea(id, agente); err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
-		}
-	}
-	tarea, err := db.GetTarea(id)
+	tarea, err := tareasService.Get(id)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -1989,7 +1941,7 @@ func apiRouterTareas(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
 			return
 		}
-		tarea, err := db.GetTarea(id)
+		tarea, err := tareasService.Get(id)
 		if err != nil {
 			apiError(w, http.StatusNotFound, err)
 			return
@@ -2096,28 +2048,28 @@ func apiHandlerTareaAccion(w http.ResponseWriter, r *http.Request, idStr string)
 	}
 	switch req.Accion {
 	case "tomar":
-		err = db.TomarTarea(id, req.Agente)
+		err = tareasService.Take(id, req.Agente)
 	case "iniciar":
-		err = db.IniciarTarea(id, req.Agente)
+		err = tareasService.Start(id, req.Agente)
 	case "completar":
-		err = db.CompletarTarea(id, req.Agente, req.Commit)
+		err = tareasService.Complete(id, req.Agente, req.Commit)
 	case "bloquear":
-		err = db.BloquearTarea(id, req.Agente, req.Motivo)
+		err = tareasService.Block(id, req.Agente, req.Motivo)
 	case "desbloquear":
-		err = db.DesbloquearTarea(id, req.Agente, req.Resolucion)
+		err = tareasService.Unblock(id, req.Agente, req.Resolucion)
 	case "nota":
-		err = db.AnotarTarea(id, req.Agente, req.Nota)
+		err = tareasService.Note(id, req.Agente, req.Nota)
 	case "contrato":
 		err = db.DefinirContrato(id, req.Agente)
 	case "backlog":
-		err = db.MoverTareaABacklog(id)
+		err = tareasService.MoveToBacklog(id)
 		if err == nil {
 			db.Audit("alberto", "backlog_tarea", "tarea", id, "")
 		}
 	case "cancelar":
 		err = db.CancelarTarea(id, req.Agente, valorConFallback(req.Motivo, "duplicado o error"))
 	case "reasignar":
-		err = db.ReasignarTarea(id, req.NuevoAgente)
+		err = tareasService.Reassign(id, req.NuevoAgente)
 		if err == nil {
 			db.Audit("alberto", "reasignar_tarea", "tarea", id, req.NuevoAgente)
 		}
@@ -2129,7 +2081,7 @@ func apiHandlerTareaAccion(w http.ResponseWriter, r *http.Request, idStr string)
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
-	tarea, err := db.GetTarea(id)
+	tarea, err := tareasService.Get(id)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -2151,7 +2103,7 @@ func apiHandlerPropuestas(w http.ResponseWriter, r *http.Request) {
 func apiHandlerWorktrees(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		repo := db.SQLiteWorktreeRepository{}
+		repo := db.CoordinationWorktreeRepository()
 		filter := coordinacion.WorktreeFilter{}
 		if agente := strings.TrimSpace(r.URL.Query().Get("agente")); agente != "" {
 			filter.Agent = &agente
@@ -2218,7 +2170,7 @@ func apiHandlerRuntimes(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	runtimes, err := db.ListarRuntimes(filter)
+	runtimes, err := runtimesService.ListRuntimes(filter)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -2235,7 +2187,7 @@ func apiHandlerRuntimesTree(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	tree, err := db.ConstruirArbolRuntimes(filter)
+	tree, err := runtimesService.BuildRuntimeTree(filter)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -2257,12 +2209,12 @@ func apiRouterRuntimes(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
 		return
 	}
-	runtime, err := db.GetRuntime(id)
+	runtime, err := runtimesService.GetRuntime(id)
 	if err != nil {
 		apiError(w, http.StatusNotFound, err)
 		return
 	}
-	samples, err := db.ListarMuestrasRuntime(id, 20)
+	samples, err := runtimesService.ListRuntimeSamples(id, 20)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -2279,7 +2231,7 @@ func apiHandlerRuntimeHandles(w http.ResponseWriter, r *http.Request) {
 	if agente != "" {
 		filtro = &agente
 	}
-	handles, err := db.ListarRuntimeHandles(filtro)
+	handles, err := runtimesService.ListRuntimeHandles(filtro)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -2298,14 +2250,14 @@ func apiHandlerRuntimeOrders(w http.ResponseWriter, r *http.Request) {
 			filter.Estado = &estado
 		}
 		if proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyecto != "" {
-			p, err := db.GetProyecto(proyecto)
+			p, err := runtimesService.GetProject(proyecto)
 			if err != nil {
 				apiError(w, http.StatusBadRequest, err)
 				return
 			}
 			filter.ProyectoID = &p.ID
 		}
-		orders, err := db.ListarRuntimeOrders(filter)
+		orders, err := runtimesService.ListRuntimeOrders(filter)
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
@@ -2323,14 +2275,14 @@ func apiHandlerRuntimeOrders(w http.ResponseWriter, r *http.Request) {
 		}
 		var proyectoID *int64
 		if proyecto := strings.TrimSpace(req.Proyecto); proyecto != "" {
-			p, err := db.GetProyecto(proyecto)
+			p, err := runtimesService.GetProject(proyecto)
 			if err != nil {
 				apiError(w, http.StatusBadRequest, err)
 				return
 			}
 			proyectoID = &p.ID
 		}
-		id, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		id, err := runtimesService.CreateRuntimeOrder(&db.RuntimeOrder{
 			Agente:      strings.TrimSpace(req.Agente),
 			ProyectoID:  proyectoID,
 			Tipo:        strings.TrimSpace(req.Tipo),
@@ -2360,14 +2312,14 @@ func apiHandlerRuntimeMailbox(w http.ResponseWriter, r *http.Request) {
 			filter.Estado = &estado
 		}
 		if proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyecto != "" {
-			p, err := db.GetProyecto(proyecto)
+			p, err := runtimesService.GetProject(proyecto)
 			if err != nil {
 				apiError(w, http.StatusBadRequest, err)
 				return
 			}
 			filter.ProyectoID = &p.ID
 		}
-		mailbox, err := db.ListarRuntimeMailbox(filter)
+		mailbox, err := runtimesService.ListRuntimeMailbox(filter)
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
@@ -2385,7 +2337,7 @@ func apiHandlerRuntimeMailbox(w http.ResponseWriter, r *http.Request) {
 		}
 		var proyectoID *int64
 		if proyecto := strings.TrimSpace(req.Proyecto); proyecto != "" {
-			p, err := db.GetProyecto(proyecto)
+			p, err := runtimesService.GetProject(proyecto)
 			if err != nil {
 				apiError(w, http.StatusBadRequest, err)
 				return
@@ -2396,7 +2348,7 @@ func apiHandlerRuntimeMailbox(w http.ResponseWriter, r *http.Request) {
 		if req.RuntimeOrderID > 0 {
 			runtimeOrderID = &req.RuntimeOrderID
 		}
-		id, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		id, err := runtimesService.CreateRuntimeMailbox(&db.RuntimeMailboxMessage{
 			FromAgente:     strings.TrimSpace(req.FromAgente),
 			ToAgente:       strings.TrimSpace(req.ToAgente),
 			ProyectoID:     proyectoID,
@@ -2431,12 +2383,12 @@ func apiRouterRuntimeMailbox(w http.ResponseWriter, r *http.Request) {
 	}
 	switch parts[1] {
 	case "entregar":
-		if err := db.MarcarRuntimeMailboxEntregado(id); err != nil {
+		if err := runtimesService.MarkRuntimeMailboxDelivered(id); err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
 		}
 	case "consumir":
-		if err := db.MarcarRuntimeMailboxConsumido(id); err != nil {
+		if err := runtimesService.MarkRuntimeMailboxConsumed(id); err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -2468,7 +2420,7 @@ func apiHandlerRuntimeCheckpoints(w http.ResponseWriter, r *http.Request) {
 	}
 	var proyectoID *int64
 	if proyecto := strings.TrimSpace(req.Proyecto); proyecto != "" {
-		p, err := db.GetProyecto(proyecto)
+		p, err := runtimesService.GetProject(proyecto)
 		if err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
@@ -2483,7 +2435,7 @@ func apiHandlerRuntimeCheckpoints(w http.ResponseWriter, r *http.Request) {
 	if req.RuntimeID > 0 {
 		runtimeID = &req.RuntimeID
 	}
-	id, err := db.CrearRuntimeCheckpoint(&db.RuntimeCheckpoint{
+	id, err := runtimesService.CreateRuntimeCheckpoint(&db.RuntimeCheckpoint{
 		Agente:         strings.TrimSpace(req.Agente),
 		ProyectoID:     proyectoID,
 		SesionID:       sesionID,
@@ -2511,7 +2463,7 @@ func apiHandlerRuntimeCheckpointsListar(w http.ResponseWriter, r *http.Request) 
 	}
 	filter := db.FiltroRuntimeCheckpoints{Agente: &agente}
 	if proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyecto != "" {
-		p, err := db.GetProyecto(proyecto)
+		p, err := runtimesService.GetProject(proyecto)
 		if err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
@@ -2532,7 +2484,7 @@ func apiHandlerRuntimeCheckpointsListar(w http.ResponseWriter, r *http.Request) 
 		}
 		filter.Limit = limit
 	}
-	checkpoints, err := db.ListarRuntimeCheckpoints(filter)
+	checkpoints, err := runtimesService.ListRuntimeCheckpoints(filter)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -2550,7 +2502,7 @@ func apiRouterRuntimeCheckpoints(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
 		return
 	}
-	checkpoint, err := db.GetRuntimeCheckpoint(id)
+	checkpoint, err := runtimesService.GetRuntimeCheckpoint(id)
 	if err != nil {
 		apiError(w, http.StatusNotFound, err)
 		return
@@ -2569,14 +2521,14 @@ func apiHandlerRuntimeCheckpointLatest(w http.ResponseWriter, r *http.Request) {
 	}
 	var proyectoID *int64
 	if proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyecto != "" {
-		p, err := db.GetProyecto(proyecto)
+		p, err := runtimesService.GetProject(proyecto)
 		if err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
 		proyectoID = &p.ID
 	}
-	checkpoint, err := db.UltimoRuntimeCheckpoint(agente, proyectoID)
+	checkpoint, err := runtimesService.LatestRuntimeCheckpoint(agente, proyectoID)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -2620,7 +2572,7 @@ func apiRouterWorktrees(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
 			return
 		}
-		worktree, err := (db.SQLiteWorktreeRepository{}).GetByID(id)
+		worktree, err := db.CoordinationWorktreeRepository().GetByID(id)
 		if err != nil {
 			apiError(w, http.StatusNotFound, err)
 			return
@@ -2660,16 +2612,7 @@ func apiHandlerPropuestasListar(w http.ResponseWriter, r *http.Request) {
 		estado := db.EstadoPropuesta(estadoStr)
 		estadoPtr = &estado
 	}
-	var proyectoID *int64
-	if proyectoRef := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyectoRef != "" {
-		proyecto, err := db.GetProyecto(proyectoRef)
-		if err != nil {
-			apiError(w, http.StatusBadRequest, err)
-			return
-		}
-		proyectoID = &proyecto.ID
-	}
-	propuestas, err := db.ListarPropuestas(estadoPtr, proyectoID)
+	propuestas, err := propuestasService.ListByProject(estadoPtr, strings.TrimSpace(r.URL.Query().Get("proyecto")))
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -2777,7 +2720,7 @@ func apiFiltroRuntimesDesdeRequest(r *http.Request) (db.FiltroRuntimes, error) {
 		filter.Agente = &agente
 	}
 	if proyectoRef := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyectoRef != "" {
-		proyecto, err := db.GetProyecto(proyectoRef)
+		proyecto, err := runtimesService.GetProject(proyectoRef)
 		if err != nil {
 			return filter, err
 		}
@@ -2804,37 +2747,30 @@ func apiHandlerPropuestasCrear(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	p := &db.Propuesta{
-		Codigo:       strings.TrimSpace(req.Codigo),
-		Titulo:       strings.TrimSpace(req.Titulo),
-		Descripcion:  req.Descripcion,
-		Tipo:         valorConFallback(req.Tipo, "implementacion"),
-		PropuestoPor: valorConFallback(req.PropuestoPor, "alberto"),
-		Distribuidor: valorConFallback(req.Distribuidor, "alberto"),
-	}
-	if p.Titulo == "" {
+	if strings.TrimSpace(req.Titulo) == "" {
 		apiError(w, http.StatusBadRequest, fmt.Errorf("el título es obligatorio"))
 		return
 	}
-	if proyectoRef := strings.TrimSpace(req.Proyecto); proyectoRef != "" {
-		proyecto, err := db.GetProyecto(proyectoRef)
-		if err != nil {
-			apiError(w, http.StatusBadRequest, err)
-			return
-		}
-		p.ProyectoID = &proyecto.ID
+	id, _, err := propuestasService.Create(propuestasapp.CreateProposalInput{
+		Codigo:       req.Codigo,
+		Titulo:       req.Titulo,
+		Descripcion:  req.Descripcion,
+		Tipo:         valorConFallback(req.Tipo, "implementacion"),
+		Proyecto:     req.Proyecto,
+		PropuestoPor: valorConFallback(req.PropuestoPor, "alberto"),
+		Distribuidor: valorConFallback(req.Distribuidor, "alberto"),
+	})
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
 	}
-	id, err := db.CrearPropuesta(p)
+	detail, err := propuestasService.GetDetail(strings.TrimSpace(req.Codigo))
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
-	propuesta, err := db.GetPropuesta(p.Codigo)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true, "id": id, "propuesta": propuesta})
+	detail.Proposal.Votos = detail.Votes
+	apiWriteJSON(w, http.StatusCreated, map[string]any{"ok": true, "id": id, "propuesta": detail.Proposal})
 }
 
 func apiHandlerMemoria(w http.ResponseWriter, r *http.Request) {
@@ -2842,7 +2778,7 @@ func apiHandlerMemoria(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		filter := db.FiltroEntidadesMemoria{}
 		if proyectoRef := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyectoRef != "" {
-			proyecto, err := db.GetProyecto(proyectoRef)
+			proyecto, err := runtimesService.GetProject(proyectoRef)
 			if err != nil {
 				apiError(w, http.StatusBadRequest, err)
 				return
@@ -2852,7 +2788,7 @@ func apiHandlerMemoria(w http.ResponseWriter, r *http.Request) {
 		if tipo := strings.TrimSpace(r.URL.Query().Get("tipo")); tipo != "" {
 			filter.Tipo = &tipo
 		}
-		entidades, err := db.ListarEntidadesMemoria(filter)
+		entidades, err := runtimesService.ListMemoryEntities(filter)
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
@@ -2866,14 +2802,14 @@ func apiHandlerMemoria(w http.ResponseWriter, r *http.Request) {
 		}
 		var proyectoID *int64
 		if proyectoRef := strings.TrimSpace(req.Proyecto); proyectoRef != "" {
-			proyecto, err := db.GetProyecto(proyectoRef)
+			proyecto, err := runtimesService.GetProject(proyectoRef)
 			if err != nil {
 				apiError(w, http.StatusBadRequest, err)
 				return
 			}
 			proyectoID = &proyecto.ID
 		}
-		id, err := db.UpsertEntidadMemoria(&db.EntidadMemoria{
+		id, err := runtimesService.UpsertMemoryEntity(&db.EntidadMemoria{
 			Nombre:        strings.TrimSpace(req.Nombre),
 			Tipo:          strings.TrimSpace(req.Tipo),
 			ValorJSON:     strings.TrimSpace(req.Valor),
@@ -2885,7 +2821,7 @@ func apiHandlerMemoria(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		entidad, err := db.GetEntidadMemoria(strings.TrimSpace(req.Nombre), proyectoID)
+		entidad, err := runtimesService.GetMemoryEntity(strings.TrimSpace(req.Nombre), proyectoID)
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
@@ -2904,14 +2840,14 @@ func apiRouterMemoria(w http.ResponseWriter, r *http.Request) {
 	}
 	var proyectoID *int64
 	if proyectoRef := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyectoRef != "" {
-		proyecto, err := db.GetProyecto(proyectoRef)
+		proyecto, err := runtimesService.GetProject(proyectoRef)
 		if err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
 		proyectoID = &proyecto.ID
 	}
-	entidad, err := db.GetEntidadMemoria(parts[0], proyectoID)
+	entidad, err := runtimesService.GetMemoryEntity(parts[0], proyectoID)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -2930,27 +2866,16 @@ func apiRouterPropuestas(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 1 && r.Method == http.MethodGet {
-		propuesta, err := db.GetPropuesta(parts[0])
+		detail, err := propuestasService.GetDetail(parts[0])
 		if err != nil {
 			apiError(w, http.StatusNotFound, err)
 			return
 		}
-		votos, err := db.ResumenVotos(propuesta.ID)
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
-		}
-		propuesta.Votos = votos
-		acuerdo, desacuerdo, abstencion, pendiente, err := db.ContarVotos(propuesta.ID)
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
-		}
+		detail.Proposal.Votos = detail.Votes
+		conteo := conteoVotosDesdeLista(detail.Votes)
 		apiWriteJSON(w, http.StatusOK, map[string]any{
-			"propuesta": propuesta,
-			"conteo_votos": apiConteoVotosResponse{
-				Acuerdo: acuerdo, Desacuerdo: desacuerdo, Abstencion: abstencion, Pendiente: pendiente,
-			},
+			"propuesta":    detail.Proposal,
+			"conteo_votos": conteo,
 		})
 		return
 	}
@@ -2980,12 +2905,12 @@ func apiHandlerSesiones(w http.ResponseWriter, r *http.Request) {
 		filtro.Agente = &agenteFiltro
 	}
 	if proyectoFiltro := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyectoFiltro != "" {
-		proyecto, err := db.GetProyecto(proyectoFiltro)
+		proyectoID, err := sesionesAPIService.ResolveProjectID(proyectoFiltro)
 		if err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		filtro.ProyectoID = &proyecto.ID
+		filtro.ProyectoID = proyectoID
 	}
 	if activaStr := strings.TrimSpace(r.URL.Query().Get("activa")); activaStr != "" {
 		switch activaStr {
@@ -3003,7 +2928,7 @@ func apiHandlerSesiones(w http.ResponseWriter, r *http.Request) {
 	if estado := strings.TrimSpace(r.URL.Query().Get("estado")); estado != "" {
 		filtro.Estado = &estado
 	}
-	sesiones, err := db.ListarSesionesInspeccion(filtro)
+	sesiones, err := sesionesAPIService.ListInspectionSessions(filtro)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -3158,7 +3083,7 @@ func apiRouterSesiones(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
 		return
 	}
-	sesion, err := db.GetSesionInspeccionByID(id)
+	sesion, err := sesionesAPIService.GetInspectionSession(id)
 	if err != nil {
 		apiError(w, http.StatusNotFound, err)
 		return
@@ -3167,19 +3092,27 @@ func apiRouterSesiones(w http.ResponseWriter, r *http.Request) {
 }
 
 func apiHandlerPropuestaAccion(w http.ResponseWriter, r *http.Request, codigo string) {
-	propuesta, err := db.GetPropuesta(codigo)
-	if err != nil {
-		apiError(w, http.StatusNotFound, err)
-		return
-	}
 	var req apiPropuestaAccionRequest
 	if err := apiDecodeJSON(r, &req); err != nil {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
+	var err error
 	switch req.Accion {
 	case "votar":
-		_, err = db.Votar(propuesta.ID, req.Agente, db.PosicionVoto(req.Posicion), req.Comentario)
+		result, err := propuestasService.VoteDetail(codigo, req.Agente, db.PosicionVoto(req.Posicion), req.Comentario)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{
+			"ok":        true,
+			"propuesta": result.Proposal,
+			"conteo_votos": apiConteoVotosResponse{
+				Acuerdo: result.Acuerdo, Desacuerdo: result.Desacuerdo, Abstencion: result.Abstencion, Pendiente: result.Pendiente,
+			},
+		})
+		return
 	case "actualizar":
 		err = db.ActualizarPropuesta(codigo, db.PropuestaPatch{
 			Titulo:            req.Titulo,
@@ -3188,11 +3121,11 @@ func apiHandlerPropuestaAccion(w http.ResponseWriter, r *http.Request, codigo st
 			Tipo:              req.Tipo,
 		}, valorConFallback(req.Agente, "alberto"))
 	case "cerrar":
-		err = db.CerrarPropuesta(codigo, req.EstadoCierre, valorConFallback(req.Agente, "alberto"))
+		err = propuestasService.Close(codigo, req.EstadoCierre, valorConFallback(req.Agente, "alberto"))
 	case "reabrir":
-		_, err = db.ReabrirPropuesta(codigo, valorConFallback(req.Agente, "alberto"))
+		_, err = propuestasService.Reopen(codigo, valorConFallback(req.Agente, "alberto"))
 	case "reparar_votos", "reparar-votos":
-		_, err = db.RepararVotosPendientesPropuesta(codigo, valorConFallback(req.Agente, "alberto"))
+		_, err = propuestasService.RepairPendingVotes(codigo, valorConFallback(req.Agente, "alberto"))
 	default:
 		apiError(w, http.StatusBadRequest, fmt.Errorf("acción desconocida"))
 		return
@@ -3201,12 +3134,13 @@ func apiHandlerPropuestaAccion(w http.ResponseWriter, r *http.Request, codigo st
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
-	propuesta, err = db.GetPropuesta(codigo)
+	detail, err := propuestasService.GetDetail(codigo)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
-	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "propuesta": propuesta})
+	detail.Proposal.Votos = detail.Votes
+	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "propuesta": detail.Proposal, "conteo_votos": conteoVotosDesdeLista(detail.Votes)})
 }
 
 func apiHandlerSesionInicio(w http.ResponseWriter, r *http.Request) {
@@ -3234,15 +3168,6 @@ func apiHandlerSesionGuardar(w http.ResponseWriter, r *http.Request) {
 	if err := apiDecodeJSON(r, &req); err != nil {
 		apiError(w, http.StatusBadRequest, err)
 		return
-	}
-	var proyectoID *int64
-	if strings.TrimSpace(req.Proyecto) != "" {
-		proyecto, err := db.GetProyecto(req.Proyecto)
-		if err != nil {
-			apiError(w, http.StatusBadRequest, err)
-			return
-		}
-		proyectoID = &proyecto.ID
 	}
 	upd := db.SesionUpdate{Heartbeat: true}
 	if req.CWD != "" {
@@ -3272,11 +3197,7 @@ func apiHandlerSesionGuardar(w http.ResponseWriter, r *http.Request) {
 	if req.PID > 0 {
 		upd.PID = &req.PID
 	}
-	if err := db.GuardarSesionActiva(req.Agente, proyectoID, upd); err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	sesion, err := db.GetSesionActiva(req.Agente, proyectoID)
+	sesion, err := sesionesAPIService.SaveActiveSession(req.Agente, req.Proyecto, upd)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -3293,7 +3214,7 @@ func apiHandlerSesionFin(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := db.FinSesion(req.Agente); err != nil {
+	if _, err := sesionesAPIService.Finish(req.Agente); err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -3309,17 +3230,8 @@ func apiHandlerSesionContinuar(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, fmt.Errorf("debes indicar agente"))
 		return
 	}
-	var proyectoID *int64
 	cwd := strings.TrimSpace(r.URL.Query().Get("cwd"))
-	if proyectoRef := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyectoRef != "" {
-		proyecto, err := db.GetProyecto(proyectoRef)
-		if err != nil {
-			apiError(w, http.StatusBadRequest, err)
-			return
-		}
-		proyectoID = &proyecto.ID
-	}
-	sesion, err := db.ObtenerUltimaSesionConFiltro(agente, proyectoID, cwd)
+	sesion, err := sesionesAPIService.Continue(agente, strings.TrimSpace(r.URL.Query().Get("proyecto")), cwd)
 	if err != nil {
 		apiError(w, http.StatusNotFound, err)
 		return

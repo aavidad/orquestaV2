@@ -41,6 +41,9 @@ var asignacionListarCmd = &cobra.Command{
 
 		asignaciones, ok, err := cargarAsignacionesDesdeAPI(query)
 		if !ok {
+			if err := ensureLocalDB(); err != nil {
+				return err
+			}
 			f := db.FiltroAsignaciones{}
 			if agente != "" {
 				f.Agente = &agente
@@ -90,6 +93,9 @@ var asignacionActivarCmd = &cobra.Command{
 			}
 			fmt.Printf("✓ %s asignado a %s\n", args[0], args[1])
 			return nil
+		}
+		if err := ensureLocalDB(); err != nil {
+			return err
 		}
 		p, err := db.GetProyecto(args[1])
 		if err != nil {
