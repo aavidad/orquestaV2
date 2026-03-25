@@ -8,6 +8,7 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -15,6 +16,7 @@ import (
 
 	"orquesta/db"
 	"orquesta/gobernanzaapp"
+	"orquesta/skillsapp"
 )
 
 var gobernanzaService = gobernanzaapp.NewService(db.GovernanceRepository{})
@@ -78,6 +80,8 @@ func webRouterGobernanza(w http.ResponseWriter, r *http.Request) {
 		webHandlerGobernanzaReglaNueva(w, r)
 	case len(parts) == 2 && parts[1] == "skills" && r.Method == http.MethodPost:
 		webHandlerGobernanzaSkillNueva(w, r)
+	case len(parts) == 3 && parts[1] == "skills" && parts[2] == "importar" && r.Method == http.MethodPost:
+		webHandlerGobernanzaSkillImportar(w, r)
 	case len(parts) == 2 && parts[1] == "workflows" && r.Method == http.MethodPost:
 		webHandlerGobernanzaWorkflowNuevo(w, r)
 	default:
@@ -139,6 +143,30 @@ func webHandlerGobernanzaSkillNueva(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape("Skill guardada"), http.StatusSeeOther)
+}
+
+func webHandlerGobernanzaSkillImportar(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	tipoAgente := strings.TrimSpace(r.FormValue("tipo_agente"))
+	sourceURL := strings.TrimSpace(r.FormValue("url"))
+	repo := strings.TrimSpace(r.FormValue("repo"))
+	skill := strings.TrimSpace(r.FormValue("skill"))
+	result, err := skillsImportService.ImportFromWeb(context.Background(), skillsapp.ImportInput{
+		Actor:      "alberto",
+		TipoAgente: tipoAgente,
+		URL:        sourceURL,
+		Repo:       repo,
+		Skill:      skill,
+	})
+	if err != nil {
+		http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	msg := "Skill importada"
+	if result.Existente {
+		msg = "Skill ya existía en el catálogo"
+	}
+	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(msg), http.StatusSeeOther)
 }
 
 func webHandlerGobernanzaWorkflowNuevo(w http.ResponseWriter, r *http.Request) {
@@ -337,6 +365,17 @@ const webTplGobernanza = `{{define "content"}}
         <summary><strong>{{.Nombre}}</strong></summary>
         <p>{{.Descripcion}}</p>
         {{if .CuandoUsar}}<p><strong>Cuándo usar:</strong> {{.CuandoUsar}}</p>{{end}}
+        <p style="display:flex;gap:.5rem;flex-wrap:wrap">
+          <span style="display:inline-block;padding:.2rem .45rem;border:1px solid #cbd5e1;border-radius:999px">{{tr "governance.skills.source"}}: {{.Origen}}</span>
+          <span style="display:inline-block;padding:.2rem .45rem;border:1px solid #cbd5e1;border-radius:999px">{{tr "governance.skills.risk"}}: {{.NivelRiesgo}}</span>
+          <span style="display:inline-block;padding:.2rem .45rem;border:1px solid #cbd5e1;border-radius:999px">
+            {{tr "governance.skills.state"}}:
+            {{if .Activa}}{{tr "common.active"}}{{else}}{{tr "governance.skills.inactive"}}{{end}}
+          </span>
+          {{if .RequiereAprobacion}}
+          <span style="display:inline-block;padding:.2rem .45rem;border:1px solid #f59e0b;border-radius:999px;background:#fffbeb;color:#92400e">{{tr "governance.skills.pending_approval"}}</span>
+          {{end}}
+        </p>
       </details>
     {{else}}
       <p>No hay skills.</p>
@@ -348,6 +387,15 @@ const webTplGobernanza = `{{define "content"}}
       <label>Cuándo usar <textarea name="cuando_usar"></textarea></label>
       <label><input type="checkbox" name="activa" checked> Activa</label>
       <button type="submit">Guardar skill</button>
+    </form>
+    <form method="post" action="/gobernanza/skills/importar" style="margin-top:1rem;border-top:1px solid #e2e8f0;padding-top:1rem">
+      <input type="hidden" name="tipo_agente" value="{{.TipoAgente}}">
+      <h4 style="margin:.2rem 0">{{tr "governance.skills.import.title"}}</h4>
+      <p style="color:#64748b">{{tr "governance.skills.import.help"}}</p>
+      <label>{{tr "governance.skills.import.url"}} <input name="url" placeholder="https://skills.sh/openai/skills/openai-docs"></label>
+      <label>{{tr "governance.skills.import.repo"}} <input name="repo" placeholder="openai/skills"></label>
+      <label>{{tr "governance.skills.import.skill"}} <input name="skill" placeholder="openai-docs"></label>
+      <button type="submit">{{tr "governance.skills.import.button"}}</button>
     </form>
   </article>
 </section>
