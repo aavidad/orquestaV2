@@ -444,5 +444,15 @@ func escanearPropuesta(s scanner) (*Propuesta, error) {
 	if proyectoID.Valid {
 		p.ProyectoID = &proyectoID.Int64
 	}
+	normalizarIntegridadPropuesta(&p)
 	return &p, nil
+}
+
+func normalizarIntegridadPropuesta(p *Propuesta) {
+	if p == nil {
+		return
+	}
+	if p.Estado == PropuestaAbierta {
+		p.CerradaAt = nil
+	}
 }
