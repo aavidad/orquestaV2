@@ -9,8 +9,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -94,6 +92,9 @@ func TestMCPPromptBriefingIncluyeReglasYPropuestasPendientes(t *testing.T) {
 		}
 		if !strings.Contains(text, "Reglas activas") {
 			t.Fatalf("faltan reglas activas en el briefing: %s", text)
+		}
+		if !strings.Contains(text, "orquesta.skills.detectar-carencia") {
+			t.Fatalf("falta el preflight de skills en el briefing: %s", text)
 		}
 	})
 }
@@ -286,6 +287,44 @@ func TestMCPToolResuelveModeloPorPolitica(t *testing.T) {
 	})
 }
 
+func TestMCPToolDetectaCarenciaSkillPorAgente(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+			t.Fatalf("registrando agente: %v", err)
+		}
+		if _, err := db.CrearSkill("Codex1", &db.Skill{
+			TipoAgente:       "programador",
+			Nombre:           "gofmt",
+			Descripcion:      "formateo go",
+			CuandoUsar:       "formatear codigo go",
+			Escenario:        "codigo",
+			HerramientasJSON: `["gofmt"]`,
+			Activa:           true,
+		}); err != nil {
+			t.Fatalf("CrearSkill: %v", err)
+		}
+
+		result, err := callMCPTool("orquesta.skills.detectar-carencia", map[string]any{
+			"agente":            "Codex2",
+			"nombre":            "goimports",
+			"descripcion":       "ordenar imports y formatear go",
+			"cuando_usar":       "corregir imports y formato en codigo go",
+			"escenario":         "codigo",
+			"herramientas_json": `["goimports"]`,
+		})
+		if err != nil {
+			t.Fatalf("callMCPTool skills.detectar-carencia: %v", err)
+		}
+		text := result["content"].([]map[string]any)[0]["text"].(string)
+		if !strings.Contains(text, `"falta": true`) {
+			t.Fatalf("no marca skill faltante: %s", text)
+		}
+		if !strings.Contains(text, "$skill-creator") {
+			t.Fatalf("no propone skill creator: %s", text)
+		}
+	})
+}
+
 func TestMCPResourceReadPoliticasModelo(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		insertTestPool(t, "codex", "OpenAI", "codex", 4, 0)
@@ -315,21 +354,7 @@ func TestMCPResourceReadPoliticasModelo(t *testing.T) {
 
 func withTempOrquestaDB(t *testing.T, fn func()) {
 	t.Helper()
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	previous := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv ORQUESTA_DB: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = os.Setenv("ORQUESTA_DB", previous)
-		db.Close()
-	})
-
-	if err := db.Open(); err != nil {
-		t.Fatalf("db.Open: %v", err)
-	}
+	prepararDBTemporalCmd(t)
 	fn()
 }
 

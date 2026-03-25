@@ -168,6 +168,9 @@ func TestShouldBypassLocalDBConServidorLocalDescubierto(t *testing.T) {
 	if !shouldBypassLocalDB([]string{"skills", "listar"}) {
 		t.Fatalf("skills listar deberia saltarse la BD local con servidor local descubierto")
 	}
+	if !shouldBypassLocalDB([]string{"skills", "detectar-carencia", "--rol", "programador"}) {
+		t.Fatalf("skills detectar-carencia deberia saltarse la BD local con servidor local descubierto")
+	}
 	if !shouldBypassLocalDB([]string{"workflows", "listar"}) {
 		t.Fatalf("workflows listar deberia saltarse la BD local con servidor local descubierto")
 	}

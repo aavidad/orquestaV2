@@ -401,6 +401,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/reglas", apiHandlerReglas)
 	mux.HandleFunc("/api/reglas/", apiRouterReglas)
 	mux.HandleFunc("/api/skills", apiHandlerSkills)
+	mux.HandleFunc("/api/skills/detectar-carencia", apiHandlerSkillsDetectarCarencia)
 	mux.HandleFunc("/api/skills/", apiRouterSkills)
 	mux.HandleFunc("/api/workflows", apiHandlerWorkflows)
 	mux.HandleFunc("/api/workflows/", apiRouterWorkflows)

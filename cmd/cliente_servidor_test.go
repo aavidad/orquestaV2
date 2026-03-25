@@ -39,6 +39,7 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "reglas crear", args: []string{"reglas", "crear"}, want: true},
 		{nombre: "skills listar", args: []string{"skills", "listar"}, want: true},
 		{nombre: "skills crear", args: []string{"skills", "crear"}, want: true},
+		{nombre: "skills detectar carencia", args: []string{"skills", "detectar-carencia", "--rol", "programador"}, want: true},
 		{nombre: "workflows listar", args: []string{"workflows", "listar"}, want: true},
 		{nombre: "workflows crear", args: []string{"workflows", "crear"}, want: true},
 		{nombre: "permisos fijar", args: []string{"permisos", "fijar"}, want: true},

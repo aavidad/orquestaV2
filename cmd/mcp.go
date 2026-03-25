@@ -23,6 +23,7 @@ import (
 	"orquesta/db"
 	"orquesta/panelapp"
 	"orquesta/propuestasapp"
+	"orquesta/runtimesapp"
 	"orquesta/sesionesapp"
 	"orquesta/tareasapp"
 )
@@ -42,6 +43,7 @@ var mcpSupportedProtocols = []string{
 
 var panelService = panelapp.NewService(panelapp.Repository{})
 var propuestasService = propuestasapp.NewService(propuestasapp.Repository{})
+var runtimesService = runtimesapp.NewService(runtimesapp.Repository{})
 var sesionesAPIService = sesionesapp.NewService(sesionesapp.Repository{})
 var tareasService = tareasapp.NewService(tareasapp.Repository{})
 
@@ -957,6 +959,25 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.skills.detectar-carencia",
+			Title:       "Detectar skill faltante",
+			Description: "Consulta el catalogo de skills, detecta carencias y prepara un borrador revisable con invocacion controlada a $skill-creator",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":            map[string]any{"type": "string"},
+					"tipo_agente":       map[string]any{"type": "string"},
+					"nombre":            map[string]any{"type": "string"},
+					"descripcion":       map[string]any{"type": "string"},
+					"cuando_usar":       map[string]any{"type": "string"},
+					"escenario":         map[string]any{"type": "string"},
+					"aliases_json":      map[string]any{"type": "string"},
+					"herramientas_json": map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.modelos.resolver",
 			Title:       "Resolver modelo",
 			Description: "Resuelve pool, modelo y reasoning segun politicas y fallback",
@@ -1119,6 +1140,17 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return nil, err
 		}
 		return toolResult(prettyJSON(politicas), politicas, false), nil
+
+	case "orquesta.skills.detectar-carencia":
+		req, err := buildSolicitudDeteccionSkillMCP(args)
+		if err != nil {
+			return nil, err
+		}
+		resultado, err := db.DetectarCarenciaSkill(req)
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(resultado), resultado, false), nil
 
 	case "orquesta.modelos.resolver":
 		var tareaIDPtr *int64
@@ -1409,6 +1441,9 @@ func buildAgentBriefing(agente string) (string, error) {
 		}
 		b.WriteString("\n")
 	}
+	b.WriteString("## Preflight de skills\n")
+	b.WriteString("- Antes de crear una skill nueva, consulta el catalogo existente.\n")
+	b.WriteString("- Si ninguna skill cubre la necesidad actual, usa la tool MCP `orquesta.skills.detectar-carencia` para preparar un borrador revisable.\n\n")
 
 	if len(briefing.Workflows) > 0 {
 		b.WriteString("## Workflows\n")
@@ -1536,6 +1571,31 @@ func buildFiltroTareas(args map[string]any) (db.FiltroTareas, error) {
 		filtro.Libre = libre
 	}
 	return filtro, nil
+}
+
+func buildSolicitudDeteccionSkillMCP(args map[string]any) (*db.SolicitudDeteccionSkill, error) {
+	tipoAgente := optionalStringArg(args, "tipo_agente")
+	if strings.TrimSpace(tipoAgente) == "" {
+		if agente := optionalStringArg(args, "agente"); strings.TrimSpace(agente) != "" {
+			item, err := db.GetAgente(strings.TrimSpace(agente))
+			if err != nil {
+				return nil, err
+			}
+			tipoAgente = item.Rol
+		}
+	}
+	if strings.TrimSpace(tipoAgente) == "" {
+		return nil, fmt.Errorf("tipo_agente o agente obligatorio")
+	}
+	return &db.SolicitudDeteccionSkill{
+		TipoAgente:       tipoAgente,
+		Nombre:           optionalStringArg(args, "nombre"),
+		Descripcion:      optionalStringArg(args, "descripcion"),
+		CuandoUsar:       optionalStringArg(args, "cuando_usar"),
+		Escenario:        optionalStringArg(args, "escenario"),
+		AliasesJSON:      optionalStringArg(args, "aliases_json"),
+		HerramientasJSON: optionalStringArg(args, "herramientas_json"),
+	}, nil
 }
 
 func listarConectores() ([]map[string]any, error) {
