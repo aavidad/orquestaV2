@@ -170,9 +170,6 @@ func init() {
 }
 
 func shouldDelegateToLocalServer(args []string) bool {
-	if !localRPCEnabled(args) {
-		return false
-	}
 	if len(args) == 0 {
 		return false
 	}
@@ -185,7 +182,7 @@ func shouldDelegateToLocalServer(args []string) bool {
 	case "help", "completion", "serve", "server":
 		return false
 	default:
-		return true
+		return commandSupportsServerMode(normalizedCommandArgs(args))
 	}
 }
 

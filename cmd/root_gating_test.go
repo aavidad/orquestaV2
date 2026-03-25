@@ -21,11 +21,11 @@ func TestShouldDelegateToLocalServer(t *testing.T) {
 		{name: "server doctor", args: []string{"server", "doctor"}, want: false},
 		{name: "server run", args: []string{"server", "run"}, want: false},
 		{name: "serve", args: []string{"serve"}, want: false},
-		{name: "status sin opt-in", args: []string{"status"}, want: false},
-		{name: "tarea listar sin opt-in", args: []string{"tarea", "listar"}, want: false},
+		{name: "status sin opt-in", args: []string{"status"}, want: true},
+		{name: "tarea listar sin opt-in", args: []string{"tarea", "listar"}, want: true},
 		{name: "status con flag", args: []string{"--use-localrpc", "status"}, want: true},
 		{name: "flag local", args: []string{"--local", "status"}, want: false},
-		{name: "flag fallback sin opt-in", args: []string{"--allow-local-fallback", "status"}, want: false},
+		{name: "flag fallback sin opt-in", args: []string{"--allow-local-fallback", "status"}, want: true},
 		{name: "ayuda corta", args: []string{"status", "-h"}, want: false},
 	}
 
@@ -37,6 +37,20 @@ func TestShouldDelegateToLocalServer(t *testing.T) {
 				t.Fatalf("shouldDelegateToLocalServer(%v)=%v, want %v", tc.args, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestShouldDelegateToLocalServerExcluyeComandosDeRecuperacion(t *testing.T) {
+	t.Parallel()
+
+	if !shouldDelegateToLocalServer([]string{"status"}) {
+		t.Fatalf("deberia delegar los comandos con cobertura server-first")
+	}
+	if shouldDelegateToLocalServer([]string{"serve"}) {
+		t.Fatalf("serve no deberia delegar aunque exista daemon")
+	}
+	if shouldDelegateToLocalServer([]string{"persistencia", "info"}) {
+		t.Fatalf("persistencia info no deberia delegar porque es ruta de diagnostico local")
 	}
 }
 
