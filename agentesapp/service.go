@@ -117,6 +117,22 @@ func (s *Service) MergeAgents(origen, destino string) (*db.FusionAgentesResultad
 	return s.store.MergeAgents(strings.TrimSpace(origen), strings.TrimSpace(destino))
 }
 
+func (s *Service) PauseTemporarily(nombre string, minutos int, motivo, accion, entidad, detalle string) error {
+	nombre = strings.TrimSpace(nombre)
+	motivo = strings.TrimSpace(motivo)
+	if nombre == "" || minutos <= 0 || motivo == "" {
+		return fmt.Errorf("debes indicar agente, minutos positivos y motivo")
+	}
+	if err := s.store.PauseAgent(nombre, minutos, motivo); err != nil {
+		return err
+	}
+	if strings.TrimSpace(detalle) == "" {
+		detalle = fmt.Sprintf("Bloqueado %d min por: %s", minutos, motivo)
+	}
+	s.store.Audit(nombre, valueOrFallback(strings.TrimSpace(accion), "pausa_externa"), valueOrFallback(strings.TrimSpace(entidad), "agente"), 0, strings.TrimSpace(detalle))
+	return nil
+}
+
 func (s *Service) BuildPanelRows() ([]Row, error) {
 	agentes, err := s.ListAgents()
 	if err != nil {
@@ -410,6 +426,14 @@ func runtimeHandleMoment(handle *db.RuntimeHandle) time.Time {
 		return handle.UpdatedAt
 	}
 	return handle.CreatedAt
+}
+
+func valueOrFallback(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 type Repository struct{}

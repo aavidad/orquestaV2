@@ -3434,21 +3434,10 @@ func apiHandlerAgentePausar(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Agente = strings.TrimSpace(req.Agente)
 	req.Motivo = strings.TrimSpace(req.Motivo)
-	if req.Agente == "" || req.Minutos <= 0 || req.Motivo == "" {
-		apiError(w, http.StatusBadRequest, fmt.Errorf("debes indicar agente, minutos positivos y motivo"))
-		return
-	}
-	if err := db.PausarAgente(req.Agente, req.Minutos, req.Motivo); err != nil {
+	if err := agentesService.PauseTemporarily(req.Agente, req.Minutos, req.Motivo, req.Accion, req.Entidad, req.Detalle); err != nil {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	accion := valorConFallback(strings.TrimSpace(req.Accion), "pausa_externa")
-	entidad := valorConFallback(strings.TrimSpace(req.Entidad), "agente")
-	detalle := strings.TrimSpace(req.Detalle)
-	if detalle == "" {
-		detalle = fmt.Sprintf("Bloqueado %d min por: %s", req.Minutos, req.Motivo)
-	}
-	db.Audit(req.Agente, accion, entidad, 0, detalle)
 	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "agente": req.Agente})
 }
 
