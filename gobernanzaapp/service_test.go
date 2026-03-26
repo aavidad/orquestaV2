@@ -12,6 +12,26 @@ type fakeStore struct {
 	workflow *db.Workflow
 }
 
+func (f *fakeStore) ListOverrides(scopeTipo, scopeRef, tipoAgente, entidad string) ([]*db.GovernanceOverride, error) {
+	return nil, nil
+}
+
+func (f *fakeStore) SaveOverride(actor string, item *db.GovernanceOverride) (int64, error) {
+	return 40, nil
+}
+
+func (f *fakeStore) ResolveCatalogForContext(tipoAgente string, proyectoID *int64, agente string) (*db.GovernanceCatalog, error) {
+	return &db.GovernanceCatalog{TipoAgente: tipoAgente}, nil
+}
+
+func (f *fakeStore) GetProject(ref string) (*db.Proyecto, error) {
+	return &db.Proyecto{ID: 1, Slug: ref, Nombre: ref}, nil
+}
+
+func (f *fakeStore) GetAgent(nombre string) (*db.Agente, error) {
+	return &db.Agente{Nombre: nombre, Rol: "programador"}, nil
+}
+
 func (f *fakeStore) ListRules(tipoAgente string, activa *bool) ([]*db.Regla, error) {
 	return []*db.Regla{{TipoAgente: tipoAgente}}, nil
 }

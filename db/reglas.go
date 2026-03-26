@@ -67,32 +67,10 @@ type GovernanceCatalog struct {
 }
 
 // ResolveGovernanceCatalog devuelve el catálogo efectivo actual para un rol y
-// proyecto. Hoy la resolución real es por rol; el proyecto queda en la firma
-// para mantener estable el punto de integración cuando entren overrides.
+// proyecto. La resolución actual parte del catálogo por rol y puede aplicar
+// overrides posteriores por proyecto.
 func ResolveGovernanceCatalog(tipoAgente string, proyectoID *int64) (*GovernanceCatalog, error) {
-	tipoAgente = strings.TrimSpace(tipoAgente)
-	reglas, err := GetReglasAgente(tipoAgente)
-	if err != nil {
-		return nil, err
-	}
-	skills, err := GetSkillsAgente(tipoAgente)
-	if err != nil {
-		return nil, err
-	}
-	workflows, err := GetWorkflowsAgente(tipoAgente)
-	if err != nil {
-		return nil, err
-	}
-	catalogo := &GovernanceCatalog{
-		TipoAgente:       tipoAgente,
-		ProyectoID:       proyectoID,
-		ResolucionActual: "rol",
-		Reglas:           reglas,
-		Skills:           skills,
-		Workflows:        workflows,
-	}
-	catalogo.Hash = governanceCatalogHash(catalogo)
-	return catalogo, nil
+	return ResolveGovernanceCatalogForContext(tipoAgente, proyectoID, "")
 }
 
 func governanceCatalogHash(catalogo *GovernanceCatalog) string {
@@ -102,16 +80,12 @@ func governanceCatalogHash(catalogo *GovernanceCatalog) string {
 	input := struct {
 		TipoAgente       string   `json:"tipo_agente"`
 		ResolucionActual string   `json:"resolucion_actual"`
-		ProyectoID       int64    `json:"proyecto_id"`
 		Reglas           []string `json:"reglas"`
 		Skills           []string `json:"skills"`
 		Workflows        []string `json:"workflows"`
 	}{
 		TipoAgente:       catalogo.TipoAgente,
 		ResolucionActual: strings.TrimSpace(catalogo.ResolucionActual),
-	}
-	if strings.TrimSpace(catalogo.ResolucionActual) != "rol" && catalogo.ProyectoID != nil {
-		input.ProyectoID = *catalogo.ProyectoID
 	}
 	for _, regla := range catalogo.Reglas {
 		if regla == nil {
@@ -137,7 +111,11 @@ func governanceCatalogHash(catalogo *GovernanceCatalog) string {
 }
 
 func BuildGovernanceContextSummary(tipoAgente string, proyectoID *int64) (map[string]any, string) {
-	catalogo, err := ResolveGovernanceCatalog(tipoAgente, proyectoID)
+	return BuildGovernanceContextSummaryForContext(tipoAgente, proyectoID, "")
+}
+
+func BuildGovernanceContextSummaryForContext(tipoAgente string, proyectoID *int64, agente string) (map[string]any, string) {
+	catalogo, err := ResolveGovernanceCatalogForContext(tipoAgente, proyectoID, agente)
 	if err != nil || catalogo == nil {
 		return nil, ""
 	}

@@ -669,6 +669,59 @@ func cargarPermisosCatalogoDesdeAPI(entidad string) ([]*db.PermisoEdicionCatalog
 	return resp.Permisos, true, nil
 }
 
+func cargarGobernanzaCatalogoDesdeAPI(tipoAgente, proyecto, agente string) (*db.GovernanceCatalog, bool, error) {
+	var resp apiGovernanceCatalogResponse
+	query := url.Values{}
+	if strings.TrimSpace(tipoAgente) != "" {
+		query.Set("tipo_agente", strings.TrimSpace(tipoAgente))
+	}
+	if strings.TrimSpace(proyecto) != "" {
+		query.Set("proyecto", strings.TrimSpace(proyecto))
+	}
+	if strings.TrimSpace(agente) != "" {
+		query.Set("agente", strings.TrimSpace(agente))
+	}
+	ok, err := apiGetQuery("/api/gobernanza/catalogo", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Catalogo, true, nil
+}
+
+func cargarGovernanceOverridesDesdeAPI(scopeTipo, scopeRef, tipoAgente, agente, entidad string) ([]*db.GovernanceOverride, bool, error) {
+	var resp apiGovernanceOverridesResponse
+	query := url.Values{}
+	if strings.TrimSpace(scopeTipo) != "" {
+		query.Set("scope_tipo", strings.TrimSpace(scopeTipo))
+	}
+	if strings.TrimSpace(scopeRef) != "" {
+		query.Set("scope_ref", strings.TrimSpace(scopeRef))
+	}
+	if strings.TrimSpace(tipoAgente) != "" {
+		query.Set("tipo_agente", strings.TrimSpace(tipoAgente))
+	}
+	if strings.TrimSpace(agente) != "" {
+		query.Set("agente", strings.TrimSpace(agente))
+	}
+	if strings.TrimSpace(entidad) != "" {
+		query.Set("entidad", strings.TrimSpace(entidad))
+	}
+	ok, err := apiGetQuery("/api/gobernanza/overrides", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Overrides, true, nil
+}
+
+func guardarGovernanceOverridePorAPI(req apiGovernanceOverrideSaveRequest) (int64, bool, error) {
+	var resp apiCatalogoMutationResponse
+	ok, err := apiPost("/api/gobernanza/overrides", req, &resp)
+	if !ok || err != nil {
+		return 0, ok, err
+	}
+	return resp.ID, true, nil
+}
+
 func guardarPermisoCatalogoPorAPI(req apiPermisoCatalogoSetRequest) (bool, error) {
 	return apiPost("/api/permisos-catalogo", req, nil)
 }

@@ -206,6 +206,10 @@ func (f *fakeStore) ResolveGovernanceCatalog(rol string, proyectoID *int64) (*db
 	}, nil
 }
 
+func (f *fakeStore) ResolveGovernanceCatalogForContext(rol string, proyectoID *int64, agente string) (*db.GovernanceCatalog, error) {
+	return f.ResolveGovernanceCatalog(rol, proyectoID)
+}
+
 func (f *fakeStore) ListRules(rol string) ([]*db.Regla, error) { return f.rules, nil }
 
 func (f *fakeStore) ListSkills(rol string) ([]*db.Skill, error) { return f.skills, nil }

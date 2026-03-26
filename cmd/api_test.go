@@ -456,6 +456,107 @@ func TestAPIPropuestaReabrirYRepararVotos(t *testing.T) {
 	}
 }
 
+func TestAPIGobernanzaCatalogoEOverrides(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "ctx-proyecto",
+		Nombre:  "ctx-proyecto",
+		RutaAbs: filepath.Join(t.TempDir(), "ctx-proyecto"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertRegla(&db.Regla{
+		TipoAgente:  "programador",
+		Categoria:   "arquitectura",
+		Titulo:      "server-first",
+		Descripcion: "usar API",
+		Activa:      true,
+	}); err != nil {
+		t.Fatalf("upsert regla: %v", err)
+	}
+	skillID, err := db.UpsertSkill(&db.Skill{
+		TipoAgente:  "programador",
+		Nombre:      "docker-build",
+		Descripcion: "build",
+		CuandoUsar:  "siempre",
+		Prioridad:   10,
+		Activa:      false,
+	})
+	if err != nil {
+		t.Fatalf("upsert skill: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	overrideBody, _ := json.Marshal(apiGovernanceOverrideSaveRequest{
+		Actor:      "alberto",
+		TipoAgente: "programador",
+		ScopeTipo:  db.GovernanceScopeProyecto,
+		ScopeRef:   "ctx-proyecto",
+		Entidad:    db.GovernanceEntitySkill,
+		EntidadID:  skillID,
+		Accion:     db.GovernanceActionEnable,
+	})
+	recOverride := httptest.NewRecorder()
+	reqOverride := httptest.NewRequest(http.MethodPost, "/api/gobernanza/overrides", bytes.NewReader(overrideBody))
+	mux.ServeHTTP(recOverride, reqOverride)
+	if recOverride.Code != http.StatusCreated {
+		t.Fatalf("status override inesperado: %d body=%s", recOverride.Code, recOverride.Body.String())
+	}
+
+	recList := httptest.NewRecorder()
+	reqList := httptest.NewRequest(http.MethodGet, "/api/gobernanza/overrides?scope_tipo=proyecto&scope_ref=ctx-proyecto&tipo_agente=programador", nil)
+	mux.ServeHTTP(recList, reqList)
+	if recList.Code != http.StatusOK {
+		t.Fatalf("status listar overrides inesperado: %d body=%s", recList.Code, recList.Body.String())
+	}
+	var overridesResp apiGovernanceOverridesResponse
+	if err := json.Unmarshal(recList.Body.Bytes(), &overridesResp); err != nil {
+		t.Fatalf("decode overrides: %v", err)
+	}
+	if len(overridesResp.Overrides) != 1 || overridesResp.Overrides[0].EntidadID != skillID {
+		t.Fatalf("overrides inesperados: %+v", overridesResp.Overrides)
+	}
+
+	recCatalogo := httptest.NewRecorder()
+	reqCatalogo := httptest.NewRequest(http.MethodGet, "/api/gobernanza/catalogo?agente=Codex1&proyecto=ctx-proyecto", nil)
+	mux.ServeHTTP(recCatalogo, reqCatalogo)
+	if recCatalogo.Code != http.StatusOK {
+		t.Fatalf("status catalogo inesperado: %d body=%s", recCatalogo.Code, recCatalogo.Body.String())
+	}
+	var catalogoResp apiGovernanceCatalogResponse
+	if err := json.Unmarshal(recCatalogo.Body.Bytes(), &catalogoResp); err != nil {
+		t.Fatalf("decode catalogo: %v", err)
+	}
+	if catalogoResp.Catalogo == nil {
+		t.Fatalf("catalogo nil")
+	}
+	if catalogoResp.Catalogo.ProyectoID == nil || *catalogoResp.Catalogo.ProyectoID != proyectoID {
+		t.Fatalf("proyecto_id inesperado en catalogo: %+v", catalogoResp.Catalogo)
+	}
+	if catalogoResp.Catalogo.ResolucionActual != "rol+proyecto" {
+		t.Fatalf("resolucion inesperada: %q", catalogoResp.Catalogo.ResolucionActual)
+	}
+	foundSkill := false
+	for _, skill := range catalogoResp.Catalogo.Skills {
+		if skill != nil && skill.ID == skillID {
+			foundSkill = true
+			break
+		}
+	}
+	if !foundSkill {
+		t.Fatalf("el catalogo efectivo deberia incluir la skill habilitada por override: %+v", catalogoResp.Catalogo.Skills)
+	}
+}
+
 func TestAPIStatusIncluyeVotosDePropuestasAbiertas(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

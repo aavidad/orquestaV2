@@ -140,7 +140,7 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 	if err != nil {
 		return nil, err
 	}
-	catalogo, err := s.store.ResolveGovernanceCatalog(agente.Rol, &proyecto.ID)
+	catalogo, err := s.store.ResolveGovernanceCatalogForContext(agente.Rol, &proyecto.ID, agente.Nombre)
 	if err != nil {
 		return nil, err
 	}

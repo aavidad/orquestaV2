@@ -14,6 +14,10 @@ import (
 const agenteRuntimeRefreshPollInterval = 5 * time.Second
 
 func construirInstruccionRefreshRuntime(msg *db.RuntimeMailboxMessage) (string, bool) {
+	return construirInstruccionRefreshRuntimeConCatalogo(msg, nil)
+}
+
+func construirInstruccionRefreshRuntimeConCatalogo(msg *db.RuntimeMailboxMessage, catalogo *db.GovernanceCatalog) (string, bool) {
 	if msg == nil {
 		return "", false
 	}
@@ -31,6 +35,8 @@ func construirInstruccionRefreshRuntime(msg *db.RuntimeMailboxMessage) (string, 
 		reglas := intMapValue(payload, "reglas")
 		skills := intMapValue(payload, "skills")
 		workflows := intMapValue(payload, "workflows")
+		scopeTipo := stringMapValue(payload, "scope_tipo")
+		scopeRef := stringMapValue(payload, "scope_ref")
 		parts := []string{
 			"Actualiza en caliente tu gobernanza efectiva antes de continuar.",
 		}
@@ -46,7 +52,18 @@ func construirInstruccionRefreshRuntime(msg *db.RuntimeMailboxMessage) (string, 
 		if reglas > 0 || skills > 0 || workflows > 0 {
 			parts = append(parts, fmt.Sprintf("Catálogo efectivo: reglas=%d skills=%d workflows=%d.", reglas, skills, workflows))
 		}
-		parts = append(parts, "Relee reglas, skills y workflows del proyecto actual y ajusta el trabajo en curso sin reiniciar la sesión.")
+		if scopeTipo != "" || scopeRef != "" {
+			parts = append(parts, fmt.Sprintf("Ámbito del cambio: %s %s.", strings.TrimSpace(scopeTipo), strings.TrimSpace(scopeRef)))
+		}
+		if catalogo != nil {
+			if resolucion := strings.TrimSpace(catalogo.ResolucionActual); resolucion != "" {
+				parts = append(parts, fmt.Sprintf("Resolución efectiva: %s.", resolucion))
+			}
+			if resumen := resumirCatalogoGobernanza(catalogo); resumen != "" {
+				parts = append(parts, resumen)
+			}
+		}
+		parts = append(parts, "Ajusta el trabajo en curso sin reiniciar la sesión usando este catálogo efectivo.")
 		return strings.Join(parts, " "), true
 	case db.MailboxKindSkillsRefresh:
 		nombre := stringMapValue(payload, "nombre")
@@ -69,6 +86,65 @@ func construirInstruccionRefreshRuntime(msg *db.RuntimeMailboxMessage) (string, 
 	default:
 		return "", false
 	}
+}
+
+func resumirCatalogoGobernanza(catalogo *db.GovernanceCatalog) string {
+	if catalogo == nil {
+		return ""
+	}
+	parts := []string{}
+	if reglas := resumirTitulosReglas(catalogo.Reglas, 4); reglas != "" {
+		parts = append(parts, "Reglas clave: "+reglas+".")
+	}
+	if skills := resumirNombresSkills(catalogo.Skills, 4); skills != "" {
+		parts = append(parts, "Skills clave: "+skills+".")
+	}
+	if workflows := resumirNombresWorkflows(catalogo.Workflows, 3); workflows != "" {
+		parts = append(parts, "Workflows: "+workflows+".")
+	}
+	return strings.Join(parts, " ")
+}
+
+func resumirTitulosReglas(reglas []*db.Regla, max int) string {
+	nombres := make([]string, 0, max)
+	for _, item := range reglas {
+		if item == nil || strings.TrimSpace(item.Titulo) == "" {
+			continue
+		}
+		nombres = append(nombres, strings.TrimSpace(item.Titulo))
+		if len(nombres) >= max {
+			break
+		}
+	}
+	return strings.Join(nombres, ", ")
+}
+
+func resumirNombresSkills(skills []*db.Skill, max int) string {
+	nombres := make([]string, 0, max)
+	for _, item := range skills {
+		if item == nil || strings.TrimSpace(item.Nombre) == "" {
+			continue
+		}
+		nombres = append(nombres, strings.TrimSpace(item.Nombre))
+		if len(nombres) >= max {
+			break
+		}
+	}
+	return strings.Join(nombres, ", ")
+}
+
+func resumirNombresWorkflows(workflows []*db.Workflow, max int) string {
+	nombres := make([]string, 0, max)
+	for _, item := range workflows {
+		if item == nil || strings.TrimSpace(item.Nombre) == "" {
+			continue
+		}
+		nombres = append(nombres, strings.TrimSpace(item.Nombre))
+		if len(nombres) >= max {
+			break
+		}
+	}
+	return strings.Join(nombres, ", ")
 }
 
 func stringMapValue(payload map[string]any, key string) string {
@@ -109,10 +185,22 @@ func intMapValue(payload map[string]any, key string) int {
 	}
 }
 
-func encolarInstruccionRefreshRuntime(msg *db.RuntimeMailboxMessage) (int64, error) {
+func encolarInstruccionRefreshRuntime(msg *db.RuntimeMailboxMessage, proyecto string) (int64, error) {
 	texto, ok := construirInstruccionRefreshRuntime(msg)
 	if !ok {
 		return 0, nil
+	}
+	if strings.TrimSpace(msg.Kind) == db.MailboxKindGovernanceRefresh {
+		payload := map[string]any{}
+		if strings.TrimSpace(msg.PayloadJSON) != "" {
+			_ = json.Unmarshal([]byte(msg.PayloadJSON), &payload)
+		}
+		tipoAgente := stringMapValue(payload, "tipo_agente")
+		if catalogo, okAPI, err := cargarGobernanzaCatalogoDesdeAPI(tipoAgente, proyecto, strings.TrimSpace(msg.ToAgente)); okAPI && err == nil && catalogo != nil {
+			if enriched, ok := construirInstruccionRefreshRuntimeConCatalogo(msg, catalogo); ok {
+				texto = enriched
+			}
+		}
 	}
 	payload := map[string]any{
 		"to_agente":    strings.TrimSpace(msg.ToAgente),
@@ -168,7 +256,7 @@ func procesarRefreshRuntimeMailbox(agente, proyecto string) (int, error) {
 		if _, ok := construirInstruccionRefreshRuntime(msg); !ok {
 			continue
 		}
-		if _, err := encolarInstruccionRefreshRuntime(msg); err != nil {
+		if _, err := encolarInstruccionRefreshRuntime(msg, proyecto); err != nil {
 			return processed, err
 		}
 		processed++

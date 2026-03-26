@@ -36,6 +36,41 @@ func TestConstruirInstruccionRefreshRuntime(t *testing.T) {
 		}
 	})
 
+	t.Run("gobernanza_con_catalogo_efectivo", func(t *testing.T) {
+		msg := &db.RuntimeMailboxMessage{
+			ID:         9,
+			FromAgente: "server",
+			ToAgente:   "Codex1",
+			Kind:       db.MailboxKindGovernanceRefresh,
+			PayloadJSON: `{
+				"tipo_agente":"programador",
+				"motivo":"override_proyecto",
+				"hash":"ctx123",
+				"reglas":2,
+				"skills":1,
+				"workflows":1,
+				"scope_tipo":"proyecto",
+				"scope_ref":"orquestador"
+			}`,
+		}
+		catalogo := &db.GovernanceCatalog{
+			TipoAgente:       "programador",
+			ResolucionActual: "rol+proyecto+agente",
+			Reglas:           []*db.Regla{{Titulo: "server-first"}},
+			Skills:           []*db.Skill{{Nombre: "docker-build"}},
+			Workflows:        []*db.Workflow{{Nombre: "inicio-sesion"}},
+		}
+		texto, ok := construirInstruccionRefreshRuntimeConCatalogo(msg, catalogo)
+		if !ok {
+			t.Fatalf("deberia reconocer governance_refresh")
+		}
+		for _, token := range []string{"rol+proyecto+agente", "server-first", "docker-build", "inicio-sesion", "Ámbito del cambio: proyecto orquestador."} {
+			if !strings.Contains(texto, token) {
+				t.Fatalf("texto sin %q: %s", token, texto)
+			}
+		}
+	})
+
 	t.Run("skills", func(t *testing.T) {
 		msg := &db.RuntimeMailboxMessage{
 			ID:         8,
@@ -94,7 +129,7 @@ func TestProcesarRefreshRuntimeMailboxEncolaSendInstructionYConsumeMensajes(t *t
 						"from_agente":  "server",
 						"to_agente":    "Codex1",
 						"kind":         db.MailboxKindGovernanceRefresh,
-						"payload_json": `{"tipo_agente":"programador","motivo":"regla_actualizada","hash":"h1","reglas":3,"skills":2,"workflows":1}`,
+						"payload_json": `{"tipo_agente":"programador","motivo":"regla_actualizada","hash":"h1","reglas":3,"skills":2,"workflows":1,"scope_tipo":"proyecto","scope_ref":"orquestador"}`,
 						"estado":       "pendiente",
 						"created_at":   "2026-03-26T10:00:00Z",
 					},
@@ -115,6 +150,32 @@ func TestProcesarRefreshRuntimeMailboxEncolaSendInstructionYConsumeMensajes(t *t
 						"payload_json": `{"ok":true}`,
 						"estado":       "pendiente",
 						"created_at":   "2026-03-26T10:00:02Z",
+					},
+				},
+			})
+		case r.URL.Path == "/api/gobernanza/catalogo" && r.Method == http.MethodGet:
+			if got := r.URL.Query().Get("tipo_agente"); got != "programador" {
+				t.Fatalf("tipo_agente inesperado: %s", got)
+			}
+			if got := r.URL.Query().Get("proyecto"); got != "orquestador" {
+				t.Fatalf("proyecto catalogo inesperado: %s", got)
+			}
+			if got := r.URL.Query().Get("agente"); got != "Codex1" {
+				t.Fatalf("agente catalogo inesperado: %s", got)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"catalogo": map[string]any{
+					"tipo_agente":       "programador",
+					"resolucion_actual": "rol+proyecto",
+					"hash":              "h1",
+					"reglas": []map[string]any{
+						{"id": 1, "titulo": "server-first"},
+					},
+					"skills": []map[string]any{
+						{"id": 2, "nombre": "docker-build"},
+					},
+					"workflows": []map[string]any{
+						{"id": 3, "nombre": "inicio-sesion"},
 					},
 				},
 			})
@@ -179,5 +240,8 @@ func TestProcesarRefreshRuntimeMailboxEncolaSendInstructionYConsumeMensajes(t *t
 		if texto, _ := payload["texto"].(string); strings.TrimSpace(texto) == "" {
 			t.Fatalf("payload sin texto: %#v", payload)
 		}
+	}
+	if texto, _ := orderPayloads[0]["texto"].(string); !strings.Contains(texto, "server-first") || !strings.Contains(texto, "rol+proyecto") {
+		t.Fatalf("texto governance no enriquecido con catálogo efectivo: %s", texto)
 	}
 }

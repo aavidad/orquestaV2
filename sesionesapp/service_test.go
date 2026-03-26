@@ -105,6 +105,12 @@ func (s *stubStore) ResolveGovernanceCatalog(rol string, proyectoID *int64) (*db
 		Hash:       "stub",
 	}, nil
 }
+func (s *stubStore) ResolveGovernanceCatalogForContext(rol string, proyectoID *int64, agente string) (*db.GovernanceCatalog, error) {
+	return s.ResolveGovernanceCatalog(rol, proyectoID)
+}
+func (s *stubStore) ResolveGovernanceWorkflowForContext(rol string, proyectoID *int64, agente, nombre string) (*db.Workflow, error) {
+	return s.GetWorkflow(rol, nombre)
+}
 func (s *stubStore) ListRules(rol string) ([]*db.Regla, error) {
 	return []*db.Regla{{Categoria: "calidad", Titulo: "No romper tests"}}, nil
 }

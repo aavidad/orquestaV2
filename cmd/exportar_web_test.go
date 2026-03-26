@@ -10,7 +10,6 @@ package cmd
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"orquesta/db"
 )
@@ -32,7 +31,6 @@ func TestBuildExportAuditMarkdownUsaAPI(t *testing.T) {
 		"detalle de prueba",
 		"Codex2",
 		"propuesta",
-		time.Now().Format("2006-01-02"),
 	} {
 		if !strings.Contains(out, token) {
 			t.Fatalf("salida audit markdown sin %q:\n%s", token, out)

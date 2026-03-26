@@ -38,8 +38,10 @@ Estado real actual:
 - sí existe estado operativo explícito de proyecto (`activo`, `esperando_humano`, `bloqueado_externo`, `cerrado`) y auto-reactivación al detectarse desbloqueo
 - sí existe retirada segura de agentes con liberación automática del trabajo y sustitución replanificable por otro agente disponible
 - sí existe resolución efectiva unificada del catálogo de gobernanza (reglas, skills, workflows) y conservación de su identidad en continuidad/resume
+- sí existen overrides de gobernanza por proyecto y por agente, con precedencia `rol -> proyecto -> agente`
 - sí existe notificación `governance_refresh` por mailbox cuando cambian reglas o workflows del rol
 - sí existe consumo en caliente de `governance_refresh` y `skills_refresh` en agentes vivos, reenviándolo como `send_instruction` sin reinicio de sesión
+- sí existe API `server-first` para consultar el catálogo efectivo de gobernanza y los overrides aplicados por contexto
 - sí existe reparto automático por proyecto con cupos deseados reales derivados de `objetivo_pct`, `min_agentes`, `max_agentes` y `prioridad`
 - `stop` ya cierra también la sesión viva, no solo runtime y handle
 - el adaptador remoto ya tiene política configurable de reintentos para acciones de control seguras, sin reintentar `start` ni `send_instruction`
@@ -151,10 +153,13 @@ El agente puede arrancar con continuidad real:
 Además, la gobernanza efectiva ya no se resuelve por duplicado en varias capas:
 
 - `db/reglas.go` expone `ResolveGovernanceCatalog(...)` como resolución única actual del catálogo efectivo
+- `db/governance_overrides.go` añade la resolución contextual completa y persistencia de overrides por `proyecto` y `agente`
 - `sesionesapp/service.go` y `agentesapp/runtime_service.go` reutilizan esa resolución para briefing, start-context y prepare
 - `db/controlplane_entities.go` añade el `hash` del catálogo efectivo al `resume payload` cuando existe continuidad, de forma que `start/resume/handoff` conservan también identidad de gobernanza y no solo contexto operativo
+- `db/controlplane_entities.go` ya recompone ese contexto de continuidad también con alcance por agente, no solo por rol/proyecto
 - `db/governance_runtime_refresh.go` notifica por `runtime_mailbox` a los agentes activos del rol cuando cambia una regla o un workflow, reusando el patrón ya existente de `skills_refresh`
 - `cmd/agente_runtime_refresh.go` consume esos mensajes mientras el runtime está vivo y los transforma en `send_instruction`, marcando el mailbox como entregado y consumido sin reiniciar la sesión
+- `cmd/api.go` y `gobernanzaapp/service.go` ya exponen el catálogo efectivo y los overrides por API para que el camino oficial `serve` pueda usarlos sin tocar BD local
 
 ### 4. Watchdog e handoff por inactividad
 

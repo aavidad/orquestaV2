@@ -22,6 +22,7 @@ import (
 	"orquesta/db"
 	"orquesta/fabricaapp"
 	"orquesta/gitgobernanza"
+	"orquesta/gobernanzaapp"
 	"orquesta/lenguajeapp"
 	"orquesta/memoriaproyecto"
 	"orquesta/progresoapp"
@@ -325,6 +326,24 @@ type apiWorkflowActualizarRequest struct {
 	Activo      bool   `json:"activo"`
 }
 
+type apiGovernanceOverrideSaveRequest struct {
+	Actor      string `json:"actor"`
+	TipoAgente string `json:"tipo_agente"`
+	ScopeTipo  string `json:"scope_tipo"`
+	ScopeRef   string `json:"scope_ref"`
+	Entidad    string `json:"entidad"`
+	EntidadID  int64  `json:"entidad_id"`
+	Accion     string `json:"accion"`
+}
+
+type apiGovernanceCatalogResponse struct {
+	Catalogo *db.GovernanceCatalog `json:"catalogo"`
+}
+
+type apiGovernanceOverridesResponse struct {
+	Overrides []*db.GovernanceOverride `json:"overrides"`
+}
+
 type apiPropuestaCrearRequest struct {
 	Codigo       string `json:"codigo"`
 	Titulo       string `json:"titulo"`
@@ -468,6 +487,8 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/workflows", apiHandlerWorkflows)
 	mux.HandleFunc("/api/workflows/", apiRouterWorkflows)
 	mux.HandleFunc("/api/permisos-catalogo", apiHandlerPermisosCatalogo)
+	mux.HandleFunc("/api/gobernanza/catalogo", apiHandlerGobernanzaCatalogo)
+	mux.HandleFunc("/api/gobernanza/overrides", apiHandlerGobernanzaOverrides)
 	mux.HandleFunc("/api/lenguaje/politica", apiHandlerLenguajePolitica)
 	mux.HandleFunc("/api/lenguaje/matriz", apiHandlerLenguajeMatriz)
 	mux.HandleFunc("/api/lenguaje/matriz/borrar", apiHandlerLenguajeMatrizBorrar)
@@ -776,6 +797,69 @@ func apiBoolOpcional(r *http.Request, key string) (*bool, error) {
 		return &b, nil
 	default:
 		return nil, fmt.Errorf("%s inválida", key)
+	}
+}
+
+func apiHandlerGobernanzaCatalogo(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	tipoAgente := strings.TrimSpace(r.URL.Query().Get("tipo_agente"))
+	if tipoAgente == "" {
+		tipoAgente = strings.TrimSpace(r.URL.Query().Get("rol"))
+	}
+	proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto"))
+	agente := strings.TrimSpace(r.URL.Query().Get("agente"))
+	catalogo, err := gobernanzaService.ResolveCatalogForContext(tipoAgente, proyecto, agente)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiGovernanceCatalogResponse{Catalogo: catalogo})
+}
+
+func apiHandlerGobernanzaOverrides(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		tipoAgente := strings.TrimSpace(r.URL.Query().Get("tipo_agente"))
+		if tipoAgente == "" {
+			tipoAgente = strings.TrimSpace(r.URL.Query().Get("rol"))
+		}
+		agente := strings.TrimSpace(r.URL.Query().Get("agente"))
+		overrides, err := gobernanzaService.ListOverrides(
+			strings.TrimSpace(r.URL.Query().Get("scope_tipo")),
+			strings.TrimSpace(r.URL.Query().Get("scope_ref")),
+			tipoAgente,
+			agente,
+			strings.TrimSpace(r.URL.Query().Get("entidad")),
+		)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiGovernanceOverridesResponse{Overrides: overrides})
+	case http.MethodPost:
+		var req apiGovernanceOverrideSaveRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		id, err := gobernanzaService.SaveOverride(gobernanzaapp.SaveOverrideInput{
+			Actor:      strings.TrimSpace(req.Actor),
+			TipoAgente: strings.TrimSpace(req.TipoAgente),
+			ScopeTipo:  strings.TrimSpace(req.ScopeTipo),
+			ScopeRef:   strings.TrimSpace(req.ScopeRef),
+			Entidad:    strings.TrimSpace(req.Entidad),
+			EntidadID:  req.EntidadID,
+			Accion:     strings.TrimSpace(req.Accion),
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusCreated, apiCatalogoMutationResponse{ID: id})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
 }
 

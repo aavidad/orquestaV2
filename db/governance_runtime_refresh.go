@@ -28,7 +28,7 @@ func notificarRefreshGobernanza(actor, tipoAgente, motivo string, extra map[stri
 		}
 		seen[sesion.Agente] = struct{}{}
 
-		catalogo, err := ResolveGovernanceCatalog(tipoAgente, sesion.ProyectoID)
+		catalogo, err := ResolveGovernanceCatalogForContext(tipoAgente, sesion.ProyectoID, sesion.Agente)
 		if err != nil || catalogo == nil {
 			if err != nil {
 				Audit(actor, "governance_refresh_error", "regla", 0, err.Error())

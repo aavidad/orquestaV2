@@ -40,7 +40,7 @@ func (f fakeSkillsCatalogoWeb) Listar(context.Context, string, int) ([]*skillsap
 }
 
 func newGobernanzaServiceTest() *gobernanzaapp.Service {
-	return gobernanzaapp.NewService(db.GovernanceRepository{})
+	return gobernanzaapp.NewService(gobernanzaapp.Repository{})
 }
 
 func TestWebGobernanzaRespetaIdiomaDelRequest(t *testing.T) {

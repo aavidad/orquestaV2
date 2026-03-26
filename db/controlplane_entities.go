@@ -1862,7 +1862,7 @@ func resolverConectorRuntimeOrder(conectorRef string, ultima *Sesion) (*Conector
 	return GetConector(ref)
 }
 
-func enriquecerResumeConGobernanzaDB(resume *runtimeagente.ResumeContext, rol string, proyecto *Proyecto) {
+func enriquecerResumeConGobernanzaDB(resume *runtimeagente.ResumeContext, rol, agente string, proyecto *Proyecto) {
 	if resume == nil || strings.TrimSpace(rol) == "" {
 		return
 	}
@@ -1875,7 +1875,7 @@ func enriquecerResumeConGobernanzaDB(resume *runtimeagente.ResumeContext, rol st
 	if proyecto != nil {
 		proyectoID = &proyecto.ID
 	}
-	contexto, resumen := BuildGovernanceContextSummary(strings.TrimSpace(rol), proyectoID)
+	contexto, resumen := BuildGovernanceContextSummaryForContext(strings.TrimSpace(rol), proyectoID, strings.TrimSpace(agente))
 	if len(contexto) == 0 {
 		return
 	}
@@ -1948,7 +1948,7 @@ func prepararResumeBootstrapRuntime(agente string, proyecto *Proyecto, resume ru
 	}
 	enriquecerResumeConContextoProyectoDB(&resume, strings.TrimSpace(agente), proyecto)
 	if infoAgente, err := GetAgente(strings.TrimSpace(agente)); err == nil && infoAgente != nil {
-		enriquecerResumeConGobernanzaDB(&resume, strings.TrimSpace(infoAgente.Rol), proyecto)
+		enriquecerResumeConGobernanzaDB(&resume, strings.TrimSpace(infoAgente.Rol), strings.TrimSpace(agente), proyecto)
 	}
 	for _, msg := range mailbox {
 		if msg == nil || msg.ID == 0 {
