@@ -100,8 +100,16 @@ func (s *Service) GetActiveRuntimeHandle(agente string) (*db.RuntimeHandle, erro
 	return s.store.GetActiveRuntimeHandle(agente)
 }
 
+func (s *Service) GetActiveRuntimeHandleAgent(agente string) (*db.RuntimeHandle, error) {
+	return s.GetActiveRuntimeHandle(agente)
+}
+
 func (s *Service) GetActiveRuntimeHandleForProject(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
 	return s.store.GetActiveRuntimeHandleForProject(agente, proyectoID)
+}
+
+func (s *Service) GetActiveRuntimeHandleAgentProject(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
+	return s.GetActiveRuntimeHandleForProject(agente, proyectoID)
 }
 
 func (s *Service) ListRuntimeSamples(runtimeID int64, limit int) ([]*db.RuntimeTelemetrySample, error) {
@@ -112,12 +120,20 @@ func (s *Service) CreateRuntimeOrder(order *db.RuntimeOrder) (int64, error) {
 	return s.store.CreateRuntimeOrder(order)
 }
 
+func (s *Service) EnqueueRuntimeOrder(order *db.RuntimeOrder) (int64, error) {
+	return s.CreateRuntimeOrder(order)
+}
+
 func (s *Service) ListRuntimeOrders(filtro db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error) {
 	return s.store.ListRuntimeOrders(filtro)
 }
 
 func (s *Service) CreateRuntimeMailbox(msg *db.RuntimeMailboxMessage) (int64, error) {
 	return s.store.CreateRuntimeMailbox(msg)
+}
+
+func (s *Service) SendRuntimeMailbox(msg *db.RuntimeMailboxMessage) (int64, error) {
+	return s.CreateRuntimeMailbox(msg)
 }
 
 func (s *Service) ListRuntimeMailbox(filtro db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error) {
@@ -218,7 +234,7 @@ func (s *Service) EnqueueAgentControl(req AgentControlRequest) (int64, string, e
 		return 0, "", err
 	}
 
-	orderID, err := s.store.CreateRuntimeOrder(&db.RuntimeOrder{
+	orderID, err := s.EnqueueRuntimeOrder(&db.RuntimeOrder{
 		Agente:      agente,
 		ProyectoID:  proyectoID,
 		RuntimeID:   runtimeID,

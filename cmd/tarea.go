@@ -10,21 +10,12 @@ package cmd
 import (
 	"fmt"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
 )
-
-func tareaModoRecuperacionLocalExplicito() bool {
-	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
-}
-
-func tareaErrorServerFirst() error {
-	return fmt.Errorf("este subcomando de tarea ya se sirve por Orquesta server; arranca el servidor o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
-}
 
 var tareaCmd = &cobra.Command{
 	Use:   "tarea",
@@ -195,10 +186,6 @@ var tareaNuevaCmd = &cobra.Command{
 			}
 			return nil
 		}
-		if !tareaModoRecuperacionLocalExplicito() {
-			return tareaErrorServerFirst()
-		}
-
 		return serverFirstCommandError("tarea nueva")
 	},
 }

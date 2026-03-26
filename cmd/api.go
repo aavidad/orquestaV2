@@ -2505,7 +2505,7 @@ func apiHandlerRuntimeOrders(w http.ResponseWriter, r *http.Request) {
 			}
 			proyectoID = &p.ID
 		}
-		id, err := runtimesService.CreateRuntimeOrder(&db.RuntimeOrder{
+		id, err := runtimesService.EnqueueRuntimeOrder(&db.RuntimeOrder{
 			Agente:      strings.TrimSpace(req.Agente),
 			ProyectoID:  proyectoID,
 			Tipo:        strings.TrimSpace(req.Tipo),
@@ -2571,7 +2571,7 @@ func apiHandlerRuntimeMailbox(w http.ResponseWriter, r *http.Request) {
 		if req.RuntimeOrderID > 0 {
 			runtimeOrderID = &req.RuntimeOrderID
 		}
-		id, err := runtimesService.CreateRuntimeMailbox(&db.RuntimeMailboxMessage{
+		id, err := runtimesService.SendRuntimeMailbox(&db.RuntimeMailboxMessage{
 			FromAgente:     strings.TrimSpace(req.FromAgente),
 			ToAgente:       strings.TrimSpace(req.ToAgente),
 			ProyectoID:     proyectoID,

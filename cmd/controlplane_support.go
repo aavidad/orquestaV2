@@ -377,7 +377,7 @@ func encolarNudgeAutonomia(agente string, proyecto *db.Proyecto, accion, motivo 
 	if err != nil {
 		return err
 	}
-	orderID, err := runtimesService.CreateRuntimeOrder(&db.RuntimeOrder{
+	orderID, err := runtimesService.EnqueueRuntimeOrder(&db.RuntimeOrder{
 		Agente:      strings.TrimSpace(agente),
 		ProyectoID:  &proyecto.ID,
 		RuntimeID:   runtimeID,

@@ -9,8 +9,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -18,14 +16,6 @@ import (
 var conectorCmd = &cobra.Command{
 	Use:   "conector",
 	Short: "Registro de conectores de agentes/modelos",
-}
-
-func conectorModoRecuperacionLocalExplicito() bool {
-	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
-}
-
-func conectorErrorServerFirst() error {
-	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
 }
 
 var conectorListarCmd = &cobra.Command{

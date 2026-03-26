@@ -269,63 +269,6 @@ func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesio
 	return out, nil
 }
 
-func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Proyecto, conector *db.Conector, ultima *db.Sesion, modelo, razonamiento, perfilTarea string) (agentePrepararOutput, error) {
-	var out agentePrepararOutput
-	if agente == nil || proyecto == nil || conector == nil {
-		return out, fmt.Errorf("agente, proyecto y conector son obligatorios")
-	}
-
-	briefing, err := sesionesAPIService.BuildBriefing(agente.Nombre)
-	if err != nil {
-		return out, err
-	}
-	memoria, err := runtimesService.ListMemoryEntities(db.FiltroEntidadesMemoria{ProyectoID: &proyecto.ID})
-	if err != nil {
-		return out, err
-	}
-
-	prep, err := lanzamientoruntime.PrepararDesdeDatos(agente, proyecto, conector, ultima, modelo, razonamiento, perfilTarea)
-	if err != nil {
-		return out, err
-	}
-
-	out = agentePrepararOutput{
-		Agente: agente.Nombre,
-		Rol:    agente.Rol,
-		Proyecto: proyectoBundle{
-			ID:      proyecto.ID,
-			Slug:    proyecto.Slug,
-			Nombre:  proyecto.Nombre,
-			RutaAbs: proyecto.RutaAbs,
-		},
-		Conector: conectorBundle{
-			ID:         conector.ID,
-			Slug:       conector.Slug,
-			Nombre:     conector.Nombre,
-			Transporte: conector.Transporte,
-			Comando:    conector.Comando,
-		},
-		Politica:    cargarPoliticaAgente(),
-		Plan:        prep.Plan,
-		Reglas:      briefing.Reglas,
-		Skills:      briefing.Skills,
-		Workflows:   briefing.Workflows,
-		Memoria:     memoria,
-		Bootstrap:   prep.Bootstrap,
-		ReanimarAt:  agente.ReanimarAt,
-		MotivoPausa: agente.MotivoPausa,
-		EstadoCuota: agente.EstadoCuota,
-	}
-	out.Politica.Modelo = prep.Plan.Modelo
-	out.Politica.Razonamiento = prep.Plan.Razonamiento
-	out.Politica.PerfilTarea = prep.Plan.PerfilTarea
-	if ultima != nil {
-		out.UltimaSesion = resumirSesion(ultima)
-	}
-
-	return out, nil
-}
-
 func resumeContextNoVacio(resume runtimeagente.ResumeContext) bool {
 	return lanzamientoruntime.ResumeContextNoVacio(resume)
 }

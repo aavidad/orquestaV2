@@ -9,8 +9,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -18,14 +16,6 @@ import (
 var proyectoCmd = &cobra.Command{
 	Use:   "proyecto",
 	Short: "Gestión de proyectos del workspace",
-}
-
-func proyectoModoRecuperacionLocalExplicito() bool {
-	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
-}
-
-func proyectoErrorServerFirst() error {
-	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
 }
 
 var proyectoListarCmd = &cobra.Command{

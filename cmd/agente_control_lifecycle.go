@@ -139,7 +139,7 @@ func encolarControlAgenteLocal(req apiAgenteControlRequest) (int64, string, erro
 
 func resolverHandleControlAgente(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
 	if proyectoID != nil {
-		handle, err := runtimesService.GetActiveRuntimeHandleForProject(agente, proyectoID)
+		handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(agente, proyectoID)
 		if err != nil {
 			return nil, err
 		}
@@ -147,5 +147,5 @@ func resolverHandleControlAgente(agente string, proyectoID *int64) (*db.RuntimeH
 			return handle, nil
 		}
 	}
-	return runtimesService.GetActiveRuntimeHandle(agente)
+	return runtimesService.GetActiveRuntimeHandleAgent(agente)
 }
