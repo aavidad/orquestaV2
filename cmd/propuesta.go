@@ -41,27 +41,7 @@ var propuestaListarCmd = &cobra.Command{
 		} else if ok {
 			propuestas = resp.Propuestas
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			var f *db.EstadoPropuesta
-			var proyectoID *int64
-			if estadoStr != "" {
-				e := db.EstadoPropuesta(estadoStr)
-				f = &e
-			}
-			if proyectoRef != "" {
-				p, err := db.GetProyecto(proyectoRef)
-				if err != nil {
-					return err
-				}
-				proyectoID = &p.ID
-			}
-			var err error
-			propuestas, err = db.ListarPropuestas(f, proyectoID)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("propuesta listar")
 		}
 		if len(propuestas) == 0 {
 			fmt.Println("No hay propuestas.")
@@ -88,15 +68,7 @@ var propuestaVerCmd = &cobra.Command{
 		} else if ok {
 			p = resp.Propuesta
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			var err error
-			p, err = db.GetPropuesta(args[0])
-			if err != nil {
-				return fmt.Errorf("propuesta '%s' no encontrada", args[0])
-			}
-			p.Votos, _ = db.ResumenVotos(p.ID)
+			return serverFirstCommandError("propuesta ver")
 		}
 
 		fmt.Printf("╔══════════════════════════════════════════════╗\n")
@@ -170,32 +142,7 @@ var propuestaNuevaCmd = &cobra.Command{
 			fmt.Println("  Los agentes deben votar con: orquesta votar <codigo> <posicion>")
 			return nil
 		}
-
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		p := &db.Propuesta{
-			Codigo:       codigo,
-			Titulo:       titulo,
-			Descripcion:  desc,
-			Tipo:         tipo,
-			PropuestoPor: por,
-			Distribuidor: "claude",
-		}
-		if proyectoRef != "" {
-			proyecto, err := db.GetProyecto(proyectoRef)
-			if err != nil {
-				return err
-			}
-			p.ProyectoID = &proyecto.ID
-		}
-		id, err := db.CrearPropuesta(p)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("✓ Propuesta %s creada (id: %d)\n", p.Codigo, id)
-		fmt.Println("  Los agentes deben votar con: orquesta votar <codigo> <posicion>")
-		return nil
+		return serverFirstCommandError("propuesta nueva")
 	},
 }
 
@@ -248,20 +195,7 @@ var propuestaActualizarCmd = &cobra.Command{
 			fmt.Printf("✓ Propuesta %s actualizada\n", args[0])
 			return nil
 		}
-
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		if err := db.ActualizarPropuesta(args[0], db.PropuestaPatch{
-			Titulo:            titulo,
-			Descripcion:       desc,
-			AnexarDescripcion: appendDesc,
-			Tipo:              tipo,
-		}, agente); err != nil {
-			return err
-		}
-		fmt.Printf("✓ Propuesta %s actualizada\n", args[0])
-		return nil
+		return serverFirstCommandError("propuesta actualizar")
 	},
 }
 
@@ -284,14 +218,7 @@ var propuestaCerrarCmd = &cobra.Command{
 			fmt.Printf("✓ Propuesta %s cerrada como '%s'\n", args[0], args[1])
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		if err := db.CerrarPropuesta(args[0], args[1], agente); err != nil {
-			return err
-		}
-		fmt.Printf("✓ Propuesta %s cerrada como '%s'\n", args[0], args[1])
-		return nil
+		return serverFirstCommandError("propuesta cerrar")
 	},
 }
 
@@ -313,16 +240,7 @@ var propuestaReabrirCmd = &cobra.Command{
 			fmt.Printf("✓ Propuesta %s reabierta\n", args[0])
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		insertados, err := db.ReabrirPropuesta(args[0], agente)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("✓ Propuesta %s reabierta\n", args[0])
-		fmt.Printf("  Votos pendientes reconstruidos: %d\n", insertados)
-		return nil
+		return serverFirstCommandError("propuesta reabrir")
 	},
 }
 
@@ -344,16 +262,7 @@ var propuestaRepararVotosCmd = &cobra.Command{
 			fmt.Printf("✓ Votos pendientes reparados en %s\n", args[0])
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		insertados, err := db.RepararVotosPendientesPropuesta(args[0], agente)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("✓ Votos pendientes reparados en %s\n", args[0])
-		fmt.Printf("  Filas insertadas: %d\n", insertados)
-		return nil
+		return serverFirstCommandError("propuesta reparar-votos")
 	},
 }
 
@@ -411,18 +320,7 @@ var propuestaVotosCmd = &cobra.Command{
 			p = resp.Propuesta
 			votos = p.Votos
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			var err error
-			p, err = db.GetPropuesta(args[0])
-			if err != nil {
-				return fmt.Errorf("propuesta '%s' no encontrada", args[0])
-			}
-			votos, err = db.VotosDePropuesta(p.ID)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("propuesta votos")
 		}
 		votos = filtrarVotosPorAgente(votos, agenteFiltro)
 		fmt.Printf("Votos de %s — %s\n", p.Codigo, p.Titulo)

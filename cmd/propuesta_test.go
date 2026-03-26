@@ -8,6 +8,8 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"encoding/json"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -15,18 +17,26 @@ import (
 )
 
 func TestPropuestaActualizarCLIAnexaDescripcionYSoportaAliasAgente(t *testing.T) {
-	prepararDBTemporalCmd(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/propuestas/OP-920/accion", func(w http.ResponseWriter, r *http.Request) {
+		var req apiPropuestaAccionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode accion propuesta: %v", err)
+		}
+		if req.Accion != "actualizar" || req.AnexarDesc == nil || *req.AnexarDesc != " + detalle operativo" || req.Agente != "Codex4" {
+			t.Fatalf("payload inesperado: %+v", req)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
 
-	if _, err := db.CrearPropuesta(&db.Propuesta{
-		Codigo:       "OP-920",
-		Titulo:       "Base",
-		Descripcion:  "Inicio",
-		Tipo:         "implementacion",
-		PropuestoPor: "alberto",
-		Distribuidor: "claude",
-	}); err != nil {
-		t.Fatalf("crear propuesta: %v", err)
-	}
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
 
 	if err := propuestaActualizarCmd.Flags().Set("agente", "Codex4"); err != nil {
 		t.Fatalf("set agente: %v", err)
@@ -47,37 +57,32 @@ func TestPropuestaActualizarCLIAnexaDescripcionYSoportaAliasAgente(t *testing.T)
 	if !strings.Contains(out, "Propuesta OP-920 actualizada") {
 		t.Fatalf("salida inesperada:\n%s", out)
 	}
-
-	propuesta, err := db.GetPropuesta("OP-920")
-	if err != nil {
-		t.Fatalf("get propuesta: %v", err)
-	}
-	if propuesta.Descripcion != "Inicio + detalle operativo" {
-		t.Fatalf("descripcion inesperada: %q", propuesta.Descripcion)
-	}
 }
 
 func TestPropuestaVotosCLIFiltraPorAgenteSinImportarMayusculas(t *testing.T) {
-	prepararDBTemporalCmd(t)
-
-	propuestaID, err := db.CrearPropuesta(&db.Propuesta{
-		Codigo:       "OP-921",
-		Titulo:       "Filtro de votos",
-		Descripcion:  "Comprobar filtro por agente",
-		Tipo:         "implementacion",
-		PropuestoPor: "alberto",
-		Distribuidor: "claude",
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
-	if err != nil {
-		t.Fatalf("crear propuesta: %v", err)
-	}
+	mux.HandleFunc("/api/propuestas/OP-921", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiPropuestaDetalleResponse{
+			Propuesta: &db.Propuesta{
+				Codigo: "OP-921",
+				Titulo: "Filtro de votos",
+				Estado: db.PropuestaAbierta,
+				Votos: []*db.Voto{
+					{Agente: "Codex2", Posicion: db.VotoAcuerdo, Comentario: "ok"},
+					{Agente: "Claude1", Posicion: db.VotoDesacuerdo, Comentario: "no"},
+				},
+			},
+		})
+	})
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
 
-	if _, err := db.Votar(propuestaID, "Codex2", db.VotoAcuerdo, "ok"); err != nil {
-		t.Fatalf("votar codex2: %v", err)
-	}
-	if _, err := db.Votar(propuestaID, "Claude1", db.VotoDesacuerdo, "no"); err != nil {
-		t.Fatalf("votar claude1: %v", err)
-	}
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
 
 	if err := propuestaVotosCmd.Flags().Set("agente", "codex2"); err != nil {
 		t.Fatalf("set agente: %v", err)
