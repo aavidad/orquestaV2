@@ -1,6 +1,7 @@
 package agentesapp
 
 import (
+	"database/sql"
 	"testing"
 	"time"
 
@@ -9,6 +10,8 @@ import (
 
 type fakeStore struct {
 	agents            []*db.Agente
+	project           *db.Proyecto
+	connector         *db.Conector
 	assignments       []*db.Asignacion
 	sessions          []*db.Sesion
 	runtimes          []*db.RuntimeInstance
@@ -17,7 +20,16 @@ type fakeStore struct {
 	mailbox           []*db.RuntimeMailboxMessage
 	checkpoints       []*db.RuntimeCheckpoint
 	tasks             []*db.Tarea
+	proposals         []*db.Propuesta
+	rules             []*db.Regla
+	skills            []*db.Skill
+	workflows         []*db.Workflow
+	memory            []*db.EntidadMemoria
+	config            map[string]string
 	lastMailboxFilter []db.FiltroRuntimeMailbox
+	pausedAgent       string
+	pausedMinutes     int
+	pausedReason      string
 }
 
 func (f *fakeStore) RegisterAgent(nombre, rol string) error { return nil }
@@ -41,6 +53,10 @@ func (f *fakeStore) GetAgent(nombre string) (*db.Agente, error) {
 	}
 	return nil, nil
 }
+
+func (f *fakeStore) GetProject(ref string) (*db.Proyecto, error) { return f.project, nil }
+
+func (f *fakeStore) GetConnector(ref string) (*db.Conector, error) { return f.connector, nil }
 
 func (f *fakeStore) ListAgents() ([]*db.Agente, error) { return f.agents, nil }
 
@@ -68,6 +84,24 @@ func (f *fakeStore) ListInspectionSessions(filter db.FiltroSesionesInspeccion) (
 		}
 	}
 	return out, nil
+}
+
+func (f *fakeStore) GetLastSession(agente string, proyectoID *int64) (*db.Sesion, error) {
+	if len(f.sessions) == 0 {
+		return nil, sql.ErrNoRows
+	}
+	return f.sessions[0], nil
+}
+
+func (f *fakeStore) GetActiveSession(agente string, proyectoID *int64) (*db.Sesion, error) {
+	if len(f.sessions) == 0 {
+		return nil, sql.ErrNoRows
+	}
+	return f.sessions[0], nil
+}
+
+func (f *fakeStore) SaveActiveSession(agente string, proyectoID *int64, upd db.SesionUpdate) error {
+	return nil
 }
 
 func (f *fakeStore) ListRuntimes(filter db.FiltroRuntimes) ([]*db.RuntimeInstance, error) {
@@ -141,6 +175,38 @@ func (f *fakeStore) ListRuntimeCheckpoints(filter db.FiltroRuntimeCheckpoints) (
 }
 
 func (f *fakeStore) ListTasks(filter db.FiltroTareas) ([]*db.Tarea, error) { return f.tasks, nil }
+
+func (f *fakeStore) ListProjectPendingVotes(agente string, proyectoID int64) ([]*db.Propuesta, error) {
+	return f.proposals, nil
+}
+
+func (f *fakeStore) ListProjectOpenProposals(proyectoID int64) ([]*db.Propuesta, error) {
+	return f.proposals, nil
+}
+
+func (f *fakeStore) ListRules(rol string) ([]*db.Regla, error) { return f.rules, nil }
+
+func (f *fakeStore) ListSkills(rol string) ([]*db.Skill, error) { return f.skills, nil }
+
+func (f *fakeStore) ListWorkflows(rol string) ([]*db.Workflow, error) { return f.workflows, nil }
+
+func (f *fakeStore) ListMemoryEntities(filtro db.FiltroEntidadesMemoria) ([]*db.EntidadMemoria, error) {
+	return f.memory, nil
+}
+
+func (f *fakeStore) ConfigGet(clave string) (string, error) {
+	if f.config == nil {
+		return "", nil
+	}
+	return f.config[clave], nil
+}
+
+func (f *fakeStore) PauseAgent(nombre string, minutos int, motivo string) error {
+	f.pausedAgent = nombre
+	f.pausedMinutes = minutos
+	f.pausedReason = motivo
+	return nil
+}
 
 func TestBuildPanelRowsAggregatesOperationalState(t *testing.T) {
 	now := time.Now().UTC()

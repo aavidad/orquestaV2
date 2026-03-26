@@ -19,15 +19,28 @@ type Store interface {
 	MergeAgents(origen, destino string) (*db.FusionAgentesResultado, error)
 	Audit(agente, accion, entidad string, entidadID int64, detalle string)
 	GetAgent(nombre string) (*db.Agente, error)
+	GetProject(ref string) (*db.Proyecto, error)
+	GetConnector(ref string) (*db.Conector, error)
 	ListAgents() ([]*db.Agente, error)
 	ListAssignments(filtro db.FiltroAsignaciones) ([]*db.Asignacion, error)
 	ListInspectionSessions(filtro db.FiltroSesionesInspeccion) ([]*db.Sesion, error)
+	GetLastSession(agente string, proyectoID *int64) (*db.Sesion, error)
+	GetActiveSession(agente string, proyectoID *int64) (*db.Sesion, error)
+	SaveActiveSession(agente string, proyectoID *int64, upd db.SesionUpdate) error
 	ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance, error)
 	ListRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error)
 	ListRuntimeOrders(filtro db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error)
 	ListRuntimeMailbox(filtro db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error)
 	ListRuntimeCheckpoints(filtro db.FiltroRuntimeCheckpoints) ([]*db.RuntimeCheckpoint, error)
 	ListTasks(filtro db.FiltroTareas) ([]*db.Tarea, error)
+	ListProjectPendingVotes(agente string, proyectoID int64) ([]*db.Propuesta, error)
+	ListProjectOpenProposals(proyectoID int64) ([]*db.Propuesta, error)
+	ListRules(rol string) ([]*db.Regla, error)
+	ListSkills(rol string) ([]*db.Skill, error)
+	ListWorkflows(rol string) ([]*db.Workflow, error)
+	ListMemoryEntities(filtro db.FiltroEntidadesMemoria) ([]*db.EntidadMemoria, error)
+	ConfigGet(clave string) (string, error)
+	PauseAgent(nombre string, minutos int, motivo string) error
 }
 
 type Service struct {
@@ -437,6 +450,14 @@ func (Repository) GetAgent(nombre string) (*db.Agente, error) {
 	return db.GetAgente(nombre)
 }
 
+func (Repository) GetProject(ref string) (*db.Proyecto, error) {
+	return db.GetProyecto(ref)
+}
+
+func (Repository) GetConnector(ref string) (*db.Conector, error) {
+	return db.GetConector(ref)
+}
+
 func (Repository) ListAgents() ([]*db.Agente, error) {
 	return db.ListarAgentes()
 }
@@ -447,6 +468,18 @@ func (Repository) ListAssignments(filtro db.FiltroAsignaciones) ([]*db.Asignacio
 
 func (Repository) ListInspectionSessions(filtro db.FiltroSesionesInspeccion) ([]*db.Sesion, error) {
 	return db.ListarSesionesInspeccion(filtro)
+}
+
+func (Repository) GetLastSession(agente string, proyectoID *int64) (*db.Sesion, error) {
+	return db.ObtenerUltimaSesion(agente, proyectoID)
+}
+
+func (Repository) GetActiveSession(agente string, proyectoID *int64) (*db.Sesion, error) {
+	return db.GetSesionActiva(agente, proyectoID)
+}
+
+func (Repository) SaveActiveSession(agente string, proyectoID *int64, upd db.SesionUpdate) error {
+	return db.GuardarSesionActiva(agente, proyectoID, upd)
 }
 
 func (Repository) ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance, error) {
@@ -471,4 +504,37 @@ func (Repository) ListRuntimeCheckpoints(filtro db.FiltroRuntimeCheckpoints) ([]
 
 func (Repository) ListTasks(filtro db.FiltroTareas) ([]*db.Tarea, error) {
 	return db.ListarTareas(filtro)
+}
+
+func (Repository) ListProjectPendingVotes(agente string, proyectoID int64) ([]*db.Propuesta, error) {
+	return db.PropuestasPendientesVotoProyecto(agente, &proyectoID)
+}
+
+func (Repository) ListProjectOpenProposals(proyectoID int64) ([]*db.Propuesta, error) {
+	estado := db.PropuestaAbierta
+	return db.ListarPropuestas(&estado, &proyectoID)
+}
+
+func (Repository) ListRules(rol string) ([]*db.Regla, error) {
+	return db.GetReglasAgente(rol)
+}
+
+func (Repository) ListSkills(rol string) ([]*db.Skill, error) {
+	return db.GetSkillsAgente(rol)
+}
+
+func (Repository) ListWorkflows(rol string) ([]*db.Workflow, error) {
+	return db.GetWorkflowsAgente(rol)
+}
+
+func (Repository) ListMemoryEntities(filtro db.FiltroEntidadesMemoria) ([]*db.EntidadMemoria, error) {
+	return db.ListarEntidadesMemoria(filtro)
+}
+
+func (Repository) ConfigGet(clave string) (string, error) {
+	return db.ConfigGet(clave)
+}
+
+func (Repository) PauseAgent(nombre string, minutos int, motivo string) error {
+	return db.PausarAgente(nombre, minutos, motivo)
 }

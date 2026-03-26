@@ -8,7 +8,6 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/conectoresapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
@@ -3371,22 +3371,14 @@ func apiHandlerAgentePreparar(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusNotFound, err)
 		return
 	}
-	proyecto, err := sesionesAPIService.GetProject(proyectoRef)
-	if err != nil {
-		apiError(w, http.StatusBadRequest, err)
-		return
-	}
-	ultima, err := sesionesAPIService.GetLastSession(agenteNombre, proyectoRef)
-	if err != nil && err != sql.ErrNoRows {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	conector, err := resolverConectorPreparacion(agenteNombre, conectorRef, ultima)
-	if err != nil {
-		apiError(w, http.StatusBadRequest, err)
-		return
-	}
-	out, err := construirAgentePrepararOutputDesdeDatos(agente, proyecto, conector, ultima, modelo, razonamiento, perfilTarea)
+	out, err := agentesService.BuildPrepare(agentesapp.PrepareInput{
+		Agente:       agente.Nombre,
+		Proyecto:     proyectoRef,
+		Conector:     conectorRef,
+		Modelo:       modelo,
+		Razonamiento: razonamiento,
+		Perfil:       perfilTarea,
+	})
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -3415,47 +3407,15 @@ func apiHandlerAgenteTick(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, fmt.Errorf("debes indicar agente y proyecto"))
 		return
 	}
-	proyecto, err := sesionesAPIService.GetProject(req.Proyecto)
-	if err != nil {
-		apiError(w, http.StatusBadRequest, err)
-		return
-	}
-	sesionActiva, err := sesionesAPIService.GetActiveSession(req.Agente, req.Proyecto)
-	if err != nil && err != sql.ErrNoRows {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	if sesionActiva != nil {
-		upd := db.SesionUpdate{Heartbeat: true}
-		if req.Host != "" {
-			upd.Host = &req.Host
-		}
-		if req.PID > 0 {
-			upd.PID = &req.PID
-		}
-		if err := db.GuardarSesionActiva(req.Agente, &proyecto.ID, upd); err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
-		}
-		// Si el agente informa que termina por cuota, lo pausamos automáticamente (OP-084)
-		if req.Finalizado && debeAutoPausarPorAgotamiento(req.CuotaPct, req.Motivo) {
-			if err := registrarAutoPausaLocal(
-				req.Agente,
-				60,
-				"Auto-pausa por agotamiento: "+req.Motivo,
-				"Detección de agotamiento en tick final: "+req.Motivo,
-			); err != nil {
-				apiError(w, http.StatusInternalServerError, err)
-				return
-			}
-		}
-		sesionActiva, err = sesionesAPIService.GetActiveSession(req.Agente, req.Proyecto)
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
-		}
-	}
-	out, err := construirAgenteTickOutput(req.Agente, proyecto, sesionActiva, req.CuotaPct)
+	out, err := agentesService.ProcessTick(agentesapp.TickInput{
+		Agente:     req.Agente,
+		Proyecto:   req.Proyecto,
+		Host:       req.Host,
+		PID:        req.PID,
+		CuotaPct:   req.CuotaPct,
+		Finalizado: req.Finalizado,
+		Motivo:     req.Motivo,
+	})
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
