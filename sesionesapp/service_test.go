@@ -92,6 +92,19 @@ func (s *stubStore) ListAgents() ([]*db.Agente, error) {
 func (s *stubStore) ListPendingProposals(agente string) ([]*db.Propuesta, error) {
 	return []*db.Propuesta{{Codigo: "OP-080", Titulo: "Servidor unico"}}, nil
 }
+func (s *stubStore) ResolveGovernanceCatalog(rol string, proyectoID *int64) (*db.GovernanceCatalog, error) {
+	reglas, _ := s.ListRules(rol)
+	skills, _ := s.ListSkills(rol)
+	workflows, _ := s.ListWorkflows(rol)
+	return &db.GovernanceCatalog{
+		TipoAgente: rol,
+		ProyectoID: proyectoID,
+		Reglas:     reglas,
+		Skills:     skills,
+		Workflows:  workflows,
+		Hash:       "stub",
+	}, nil
+}
 func (s *stubStore) ListRules(rol string) ([]*db.Regla, error) {
 	return []*db.Regla{{Categoria: "calidad", Titulo: "No romper tests"}}, nil
 }

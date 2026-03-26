@@ -8,7 +8,11 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package db
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -25,20 +29,20 @@ type Regla struct {
 
 // Skill representa una habilidad/comando disponible para un tipo de agente.
 type Skill struct {
-	ID               int64
-	TipoAgente       string
-	Nombre           string
-	Descripcion      string
-	CuandoUsar       string
-	Escenario        string
-	Prioridad        int
-	AliasesJSON      string
-	HerramientasJSON string
+	ID                 int64
+	TipoAgente         string
+	Nombre             string
+	Descripcion        string
+	CuandoUsar         string
+	Escenario          string
+	Prioridad          int
+	AliasesJSON        string
+	HerramientasJSON   string
 	Origen             string
 	NivelRiesgo        string
 	RequiereAprobacion bool
-	Activa           bool
-	CreatedAt        time.Time
+	Activa             bool
+	CreatedAt          time.Time
 }
 
 // Workflow representa un flujo de trabajo paso a paso para un tipo de agente.
@@ -50,6 +54,136 @@ type Workflow struct {
 	Pasos       string // JSON array de strings
 	Activo      bool
 	CreatedAt   time.Time
+}
+
+type GovernanceCatalog struct {
+	TipoAgente string      `json:"tipo_agente"`
+	ProyectoID *int64      `json:"proyecto_id,omitempty"`
+	Reglas     []*Regla    `json:"reglas"`
+	Skills     []*Skill    `json:"skills"`
+	Workflows  []*Workflow `json:"workflows"`
+	Hash       string      `json:"hash"`
+}
+
+// ResolveGovernanceCatalog devuelve el catálogo efectivo actual para un rol y
+// proyecto. Hoy la resolución real es por rol; el proyecto queda en la firma
+// para mantener estable el punto de integración cuando entren overrides.
+func ResolveGovernanceCatalog(tipoAgente string, proyectoID *int64) (*GovernanceCatalog, error) {
+	tipoAgente = strings.TrimSpace(tipoAgente)
+	reglas, err := GetReglasAgente(tipoAgente)
+	if err != nil {
+		return nil, err
+	}
+	skills, err := GetSkillsAgente(tipoAgente)
+	if err != nil {
+		return nil, err
+	}
+	workflows, err := GetWorkflowsAgente(tipoAgente)
+	if err != nil {
+		return nil, err
+	}
+	catalogo := &GovernanceCatalog{
+		TipoAgente: tipoAgente,
+		ProyectoID: proyectoID,
+		Reglas:     reglas,
+		Skills:     skills,
+		Workflows:  workflows,
+	}
+	catalogo.Hash = governanceCatalogHash(catalogo)
+	return catalogo, nil
+}
+
+func governanceCatalogHash(catalogo *GovernanceCatalog) string {
+	if catalogo == nil {
+		return ""
+	}
+	input := struct {
+		TipoAgente string   `json:"tipo_agente"`
+		ProyectoID int64    `json:"proyecto_id"`
+		Reglas     []string `json:"reglas"`
+		Skills     []string `json:"skills"`
+		Workflows  []string `json:"workflows"`
+	}{
+		TipoAgente: catalogo.TipoAgente,
+	}
+	if catalogo.ProyectoID != nil {
+		input.ProyectoID = *catalogo.ProyectoID
+	}
+	for _, regla := range catalogo.Reglas {
+		if regla == nil {
+			continue
+		}
+		input.Reglas = append(input.Reglas, fmt.Sprintf("%d|%s|%s|%s", regla.ID, regla.Categoria, regla.Titulo, regla.Descripcion))
+	}
+	for _, skill := range catalogo.Skills {
+		if skill == nil {
+			continue
+		}
+		input.Skills = append(input.Skills, fmt.Sprintf("%d|%s|%s|%s|%d", skill.ID, skill.Nombre, skill.Descripcion, skill.CuandoUsar, skill.Prioridad))
+	}
+	for _, workflow := range catalogo.Workflows {
+		if workflow == nil {
+			continue
+		}
+		input.Workflows = append(input.Workflows, fmt.Sprintf("%d|%s|%s|%s", workflow.ID, workflow.Nombre, workflow.Descripcion, workflow.Pasos))
+	}
+	data, _ := json.Marshal(input)
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:12])
+}
+
+func BuildGovernanceContextSummary(tipoAgente string, proyectoID *int64) (map[string]any, string) {
+	catalogo, err := ResolveGovernanceCatalog(tipoAgente, proyectoID)
+	if err != nil || catalogo == nil {
+		return nil, ""
+	}
+	contexto := map[string]any{
+		"tipo_agente":       strings.TrimSpace(catalogo.TipoAgente),
+		"hash":              strings.TrimSpace(catalogo.Hash),
+		"reglas":            len(catalogo.Reglas),
+		"skills":            len(catalogo.Skills),
+		"workflows":         len(catalogo.Workflows),
+		"resolucion_actual": "rol",
+	}
+	if proyectoID != nil {
+		contexto["proyecto_id"] = *proyectoID
+	}
+	resumen := fmt.Sprintf(
+		"Catálogo efectivo %s (%d reglas, %d skills, %d workflows)",
+		strings.TrimSpace(catalogo.Hash),
+		len(catalogo.Reglas),
+		len(catalogo.Skills),
+		len(catalogo.Workflows),
+	)
+	return contexto, resumen
+}
+
+func AppendGovernanceCatalogPayload(prev string, contexto map[string]any) string {
+	prev = strings.TrimSpace(prev)
+	if len(contexto) == 0 {
+		return prev
+	}
+	envelope := map[string]any{}
+	if prev != "" {
+		var parsed any
+		if err := json.Unmarshal([]byte(prev), &parsed); err == nil {
+			if obj, ok := parsed.(map[string]any); ok {
+				for key, value := range obj {
+					envelope[key] = value
+				}
+			} else {
+				envelope["resume_previo"] = parsed
+			}
+		} else {
+			envelope["resume_previo_raw"] = prev
+		}
+	}
+	envelope["governance_catalog"] = contexto
+	data, err := json.Marshal(envelope)
+	if err != nil {
+		return prev
+	}
+	return string(data)
 }
 
 // GetReglasAgente devuelve las reglas activas para el rol de un agente.

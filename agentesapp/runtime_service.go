@@ -140,15 +140,7 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 	if err != nil {
 		return nil, err
 	}
-	reglas, err := s.store.ListRules(agente.Rol)
-	if err != nil {
-		return nil, err
-	}
-	skills, err := s.store.ListSkills(agente.Rol)
-	if err != nil {
-		return nil, err
-	}
-	workflows, err := s.store.ListWorkflows(agente.Rol)
+	catalogo, err := s.store.ResolveGovernanceCatalog(agente.Rol, &proyecto.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -179,9 +171,9 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 		},
 		Politica:    s.loadPolicy(),
 		Plan:        prep.Plan,
-		Reglas:      reglas,
-		Skills:      skills,
-		Workflows:   workflows,
+		Reglas:      catalogo.Reglas,
+		Skills:      catalogo.Skills,
+		Workflows:   catalogo.Workflows,
 		Memoria:     memoria,
 		Bootstrap:   prep.Bootstrap,
 		ReanimarAt:  agente.ReanimarAt,

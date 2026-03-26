@@ -29,6 +29,7 @@ type Store interface {
 	EvaluateSessionBudget(p *db.PresupuestoSesion) (*db.EvaluacionPresupuesto, error)
 	ListAgents() ([]*db.Agente, error)
 	ListPendingProposals(agente string) ([]*db.Propuesta, error)
+	ResolveGovernanceCatalog(rol string, proyectoID *int64) (*db.GovernanceCatalog, error)
 	ListRules(rol string) ([]*db.Regla, error)
 	ListSkills(rol string) ([]*db.Skill, error)
 	GetWorkflow(rol, nombre string) (*db.Workflow, error)
@@ -130,11 +131,9 @@ func (s *Service) Start(agente string, nuevoCodex bool) (*StartResult, error) {
 	if pendientes, err := s.store.ListPendingProposals(agente); err == nil {
 		result.PropuestasPendientes = pendientes
 	}
-	if reglas, err := s.store.ListRules(result.Rol); err == nil {
-		result.Reglas = reglas
-	}
-	if skills, err := s.store.ListSkills(result.Rol); err == nil {
-		result.Skills = skills
+	if catalogo, err := s.store.ResolveGovernanceCatalog(result.Rol, nil); err == nil && catalogo != nil {
+		result.Reglas = catalogo.Reglas
+		result.Skills = catalogo.Skills
 	}
 	if workflow, err := s.store.GetWorkflow(result.Rol, "inicio-sesion"); err == nil {
 		result.WorkflowPasos = parseWorkflowSteps(workflow.Pasos)
@@ -335,14 +334,10 @@ func (s *Service) BuildBriefing(agente string) (*BriefingResult, error) {
 	if pendientes, err := s.store.ListPendingProposals(actual.Nombre); err == nil {
 		result.PropuestasPendientes = pendientes
 	}
-	if reglas, err := s.store.ListRules(actual.Rol); err == nil {
-		result.Reglas = reglas
-	}
-	if skills, err := s.store.ListSkills(actual.Rol); err == nil {
-		result.Skills = skills
-	}
-	if workflows, err := s.store.ListWorkflows(actual.Rol); err == nil {
-		result.Workflows = workflows
+	if catalogo, err := s.store.ResolveGovernanceCatalog(actual.Rol, nil); err == nil && catalogo != nil {
+		result.Reglas = catalogo.Reglas
+		result.Skills = catalogo.Skills
+		result.Workflows = catalogo.Workflows
 	}
 	return result, nil
 }
@@ -435,12 +430,12 @@ func (s *Service) StartContext(input StartContextInput) (*StartContextResult, er
 	if result.PropuestasPendientes, err = s.store.ListPendingProposals(sesion.Agente); err != nil {
 		return nil, err
 	}
-	if result.Reglas, err = s.store.ListRules(result.Rol); err != nil {
+	catalogo, err := s.store.ResolveGovernanceCatalog(result.Rol, proyectoID)
+	if err != nil {
 		return nil, err
 	}
-	if result.Skills, err = s.store.ListSkills(result.Rol); err != nil {
-		return nil, err
-	}
+	result.Reglas = catalogo.Reglas
+	result.Skills = catalogo.Skills
 	workflow, err := s.store.GetWorkflow(result.Rol, "inicio-sesion")
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
@@ -533,6 +528,10 @@ func (Repository) ListAgents() ([]*db.Agente, error) {
 
 func (Repository) ListPendingProposals(agente string) ([]*db.Propuesta, error) {
 	return db.PropuestasPendientesVoto(agente)
+}
+
+func (Repository) ResolveGovernanceCatalog(rol string, proyectoID *int64) (*db.GovernanceCatalog, error) {
+	return db.ResolveGovernanceCatalog(rol, proyectoID)
 }
 
 func (Repository) ListRules(rol string) ([]*db.Regla, error) {

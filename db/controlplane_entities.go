@@ -1862,6 +1862,35 @@ func resolverConectorRuntimeOrder(conectorRef string, ultima *Sesion) (*Conector
 	return GetConector(ref)
 }
 
+func enriquecerResumeConGobernanzaDB(resume *runtimeagente.ResumeContext, rol string, proyecto *Proyecto) {
+	if resume == nil || strings.TrimSpace(rol) == "" {
+		return
+	}
+	if strings.TrimSpace(resume.ExternalSessionID) == "" &&
+		strings.TrimSpace(resume.ResumePayloadJSON) == "" &&
+		strings.TrimSpace(resume.ResumenContinuidad) == "" {
+		return
+	}
+	var proyectoID *int64
+	if proyecto != nil {
+		proyectoID = &proyecto.ID
+	}
+	contexto, resumen := BuildGovernanceContextSummary(strings.TrimSpace(rol), proyectoID)
+	if len(contexto) == 0 {
+		return
+	}
+	if payload := AppendGovernanceCatalogPayload(resume.ResumePayloadJSON, contexto); payload != "" {
+		resume.ResumePayloadJSON = payload
+	}
+	if resumen != "" && !strings.Contains(resume.ResumenContinuidad, resumen) {
+		if strings.TrimSpace(resume.ResumenContinuidad) == "" {
+			resume.ResumenContinuidad = resumen
+		} else {
+			resume.ResumenContinuidad += ". " + resumen
+		}
+	}
+}
+
 func prepararResumeBootstrapRuntime(agente string, proyecto *Proyecto, resume runtimeagente.ResumeContext, excludeOrderID int64) (runtimeagente.ResumeContext, *bootstrapRuntimeData, error) {
 	if proyecto == nil {
 		return resume, nil, nil
@@ -1918,6 +1947,9 @@ func prepararResumeBootstrapRuntime(agente string, proyecto *Proyecto, resume ru
 		resume.ResumenContinuidad = resumen
 	}
 	enriquecerResumeConContextoProyectoDB(&resume, strings.TrimSpace(agente), proyecto)
+	if infoAgente, err := GetAgente(strings.TrimSpace(agente)); err == nil && infoAgente != nil {
+		enriquecerResumeConGobernanzaDB(&resume, strings.TrimSpace(infoAgente.Rol), proyecto)
+	}
 	for _, msg := range mailbox {
 		if msg == nil || msg.ID == 0 {
 			continue

@@ -195,6 +195,17 @@ func (f *fakeStore) ListProjectOpenProposals(proyectoID int64) ([]*db.Propuesta,
 	return f.proposals, nil
 }
 
+func (f *fakeStore) ResolveGovernanceCatalog(rol string, proyectoID *int64) (*db.GovernanceCatalog, error) {
+	return &db.GovernanceCatalog{
+		TipoAgente: rol,
+		ProyectoID: proyectoID,
+		Reglas:     f.rules,
+		Skills:     f.skills,
+		Workflows:  f.workflows,
+		Hash:       "fake",
+	}, nil
+}
+
 func (f *fakeStore) ListRules(rol string) ([]*db.Regla, error) { return f.rules, nil }
 
 func (f *fakeStore) ListSkills(rol string) ([]*db.Skill, error) { return f.skills, nil }
