@@ -833,12 +833,56 @@ func TestResolverProyectoPlanificableAgentePausaFrenteActivoSinTrabajoAlRebalanc
 		if asignacion.ProyectoID == proyectoA && asignacion.Estado == AsignacionActiva {
 			activaA = true
 		}
-		if asignacion.ProyectoID == proyectoB && asignacion.Estado == AsignacionPausada && asignacion.Nota == "sin_trabajo_rebalanceo_automatico" {
+		if asignacion.ProyectoID == proyectoB && asignacion.Estado == AsignacionPausada && asignacion.Nota == "sin_trabajo_espera_automatica" {
 			pausadaB = true
 		}
 	}
 	if !activaA || !pausadaB {
 		t.Fatalf("el rebalanceo debe mantener afinidad pausando el frente viejo: %+v", asignaciones)
+	}
+}
+
+func TestResolverProyectoPlanificableAgenteLiberaAgenteSiSuFrenteActivoNoTieneTrabajo(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexLibre")
+
+	if err := RegistrarAgente("CodexLibre", "programador"); err != nil {
+		t.Fatalf("registrar agente libre: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre='CodexLibre'`); err != nil {
+		t.Fatalf("marcar agente disponible: %v", err)
+	}
+
+	proyectoA, err := UpsertProyecto(&Proyecto{
+		Slug:    "proyecto-a",
+		Nombre:  "Proyecto A",
+		RutaAbs: filepath.Join(tmp, "proyecto-a"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto A: %v", err)
+	}
+	if err := ActivarAsignacion("CodexLibre", proyectoA, "frente sin trabajo"); err != nil {
+		t.Fatalf("activar asignacion A libre: %v", err)
+	}
+
+	proyectoPlanificable, err := ResolverProyectoPlanificableAgente("CodexLibre")
+	if err != nil {
+		t.Fatalf("resolver proyecto planificable: %v", err)
+	}
+	if proyectoPlanificable != 0 {
+		t.Fatalf("sin trabajo en el frente activo deberia liberar al agente, got=%d", proyectoPlanificable)
+	}
+
+	agente := "CodexLibre"
+	estado := AsignacionPausada
+	asignaciones, err := ListarAsignaciones(FiltroAsignaciones{Agente: &agente, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar asignaciones pausadas: %v", err)
+	}
+	if len(asignaciones) != 1 || asignaciones[0].ProyectoID != proyectoA || asignaciones[0].Nota != "sin_trabajo_espera_automatica" {
+		t.Fatalf("la asignacion deberia quedar pausada para preservar afinidad: %+v", asignaciones)
 	}
 }
 

@@ -137,6 +137,11 @@ func ResolverProyectoPlanificableAgente(agente string) (int64, error) {
 				return 0, err
 			}
 			proyectoActivoID = 0
+		} else {
+			if err := PausarAsignacion(agente, proyectoActivoID, "sin_trabajo_espera_automatica"); err != nil {
+				return 0, err
+			}
+			proyectoActivoID = 0
 		}
 	}
 
