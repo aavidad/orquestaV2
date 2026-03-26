@@ -740,6 +740,108 @@ func TestResolverProyectoPlanificableAgenteAsignaSegunPoliticaOperativaProyecto(
 	}
 }
 
+func TestResolverProyectoPlanificableAgentePausaFrenteActivoSinTrabajoAlRebalancear(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexLibre", "CodexOcupado")
+
+	if err := RegistrarAgente("CodexLibre", "programador"); err != nil {
+		t.Fatalf("registrar agente libre: %v", err)
+	}
+	if err := RegistrarAgente("CodexOcupado", "programador"); err != nil {
+		t.Fatalf("registrar agente ocupado: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre IN ('CodexLibre','CodexOcupado')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+
+	proyectoA, err := UpsertProyecto(&Proyecto{
+		Slug:    "proyecto-a",
+		Nombre:  "Proyecto A",
+		RutaAbs: filepath.Join(tmp, "proyecto-a"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto A: %v", err)
+	}
+	proyectoB, err := UpsertProyecto(&Proyecto{
+		Slug:    "proyecto-b",
+		Nombre:  "Proyecto B",
+		RutaAbs: filepath.Join(tmp, "proyecto-b"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto B: %v", err)
+	}
+	if err := UpsertProyectoOperacion(&ProyectoOperacion{
+		ProyectoID:       proyectoA,
+		EstadoOperativo:  ProyectoOperativoActivo,
+		ObjetivoPct:      80,
+		Prioridad:        200,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion A: %v", err)
+	}
+	if err := UpsertProyectoOperacion(&ProyectoOperacion{
+		ProyectoID:       proyectoB,
+		EstadoOperativo:  ProyectoOperativoActivo,
+		ObjetivoPct:      20,
+		Prioridad:        100,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion B: %v", err)
+	}
+	if err := ActivarAsignacion("CodexLibre", proyectoB, "frente sin trabajo"); err != nil {
+		t.Fatalf("activar asignacion B libre: %v", err)
+	}
+	if err := ActivarAsignacion("CodexOcupado", proyectoB, "ocupado en B"); err != nil {
+		t.Fatalf("activar asignacion B ocupado: %v", err)
+	}
+	if _, err := CrearTarea(&Tarea{
+		Titulo:      "Trabajo A",
+		Descripcion: "Proyecto priorizado",
+		ProyectoID:  &proyectoA,
+		Modulo:      "core",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	}); err != nil {
+		t.Fatalf("crear tarea A: %v", err)
+	}
+
+	proyectoPlanificable, err := ResolverProyectoPlanificableAgente("CodexLibre")
+	if err != nil {
+		t.Fatalf("resolver proyecto planificable: %v", err)
+	}
+	if proyectoPlanificable != proyectoA {
+		t.Fatalf("deberia reequilibrar hacia el proyecto A, got=%d want=%d", proyectoPlanificable, proyectoA)
+	}
+
+	agente := "CodexLibre"
+	asignaciones, err := ListarAsignaciones(FiltroAsignaciones{Agente: &agente})
+	if err != nil {
+		t.Fatalf("listar asignaciones: %v", err)
+	}
+	if len(asignaciones) < 2 {
+		t.Fatalf("asignaciones insuficientes tras rebalanceo: %+v", asignaciones)
+	}
+	var activaA, pausadaB bool
+	for _, asignacion := range asignaciones {
+		if asignacion == nil {
+			continue
+		}
+		if asignacion.ProyectoID == proyectoA && asignacion.Estado == AsignacionActiva {
+			activaA = true
+		}
+		if asignacion.ProyectoID == proyectoB && asignacion.Estado == AsignacionPausada && asignacion.Nota == "sin_trabajo_rebalanceo_automatico" {
+			pausadaB = true
+		}
+	}
+	if !activaA || !pausadaB {
+		t.Fatalf("el rebalanceo debe mantener afinidad pausando el frente viejo: %+v", asignaciones)
+	}
+}
+
 func TestResolverProyectoPlanificableAgenteNoReactivaProyectoSinResumeAutomatico(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	restringirPlanificadorATestAgentes(t, "Codex1")

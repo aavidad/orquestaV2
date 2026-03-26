@@ -163,6 +163,11 @@ func ResolverProyectoPlanificableAgente(agente string) (int64, error) {
 	if proyectoAutomaticoID == 0 {
 		return proyectoActivoID, nil
 	}
+	if proyectoActivoID != 0 && proyectoActivoID != proyectoAutomaticoID {
+		if err := PausarAsignacion(agente, proyectoActivoID, "sin_trabajo_rebalanceo_automatico"); err != nil {
+			return 0, err
+		}
+	}
 	if err := ActivarAsignacion(agente, proyectoAutomaticoID, "asignacion_automatica_por_politica"); err != nil {
 		return 0, err
 	}
