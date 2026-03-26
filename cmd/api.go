@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"orquesta/conectoresapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/fabricaapp"
@@ -1668,10 +1669,10 @@ func apiHandlerConectores(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		id, err := db.UpsertConector(&db.Conector{
-			Slug:         strings.TrimSpace(req.Slug),
-			Nombre:       strings.TrimSpace(req.Nombre),
-			Transporte:   strings.TrimSpace(req.Transporte),
+		id, err := conectoresService.SaveConnector(conectoresapp.SaveConnectorInput{
+			Slug:         req.Slug,
+			Nombre:       req.Nombre,
+			Transporte:   req.Transporte,
 			Comando:      req.Comando,
 			ArgsJSON:     req.ArgsJSON,
 			EnvJSON:      req.EnvJSON,
@@ -1682,7 +1683,7 @@ func apiHandlerConectores(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		conector, err := db.GetConector(strconv.FormatInt(id, 10))
+		conector, err := conectoresService.GetConnector(strconv.FormatInt(id, 10))
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
@@ -1702,7 +1703,7 @@ func apiRouterConectores(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	conector, err := db.GetConector(ref)
+	conector, err := conectoresService.GetConnector(ref)
 	if err != nil {
 		apiError(w, http.StatusNotFound, err)
 		return
@@ -1747,12 +1748,8 @@ func apiHandlerAsignacionActivar(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	proyecto, err := db.GetProyecto(req.Proyecto)
+	proyecto, err := sesionesAPIService.ActivateAssignment(req.Agente, req.Proyecto, req.Nota)
 	if err != nil {
-		apiError(w, http.StatusBadRequest, err)
-		return
-	}
-	if err := db.ActivarAsignacion(req.Agente, proyecto.ID, req.Nota); err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -1811,7 +1808,7 @@ func apiHandlerLocks(w http.ResponseWriter, r *http.Request) {
 		}
 		var sessionID *int64
 		if projectID != nil {
-			sesion, err := db.GetSesionActiva(req.Agente, projectID)
+			sesion, err := sesionesAPIService.GetActiveSession(req.Agente, req.Proyecto)
 			if err == nil && sesion != nil {
 				sessionID = &sesion.ID
 			}
@@ -3374,12 +3371,12 @@ func apiHandlerAgentePreparar(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusNotFound, err)
 		return
 	}
-	proyecto, err := db.GetProyecto(proyectoRef)
+	proyecto, err := sesionesAPIService.GetProject(proyectoRef)
 	if err != nil {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	ultima, err := db.ObtenerUltimaSesion(agenteNombre, &proyecto.ID)
+	ultima, err := sesionesAPIService.GetLastSession(agenteNombre, proyectoRef)
 	if err != nil && err != sql.ErrNoRows {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -3418,12 +3415,12 @@ func apiHandlerAgenteTick(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, fmt.Errorf("debes indicar agente y proyecto"))
 		return
 	}
-	proyecto, err := db.GetProyecto(req.Proyecto)
+	proyecto, err := sesionesAPIService.GetProject(req.Proyecto)
 	if err != nil {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	sesionActiva, err := db.GetSesionActiva(req.Agente, &proyecto.ID)
+	sesionActiva, err := sesionesAPIService.GetActiveSession(req.Agente, req.Proyecto)
 	if err != nil && err != sql.ErrNoRows {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -3452,7 +3449,7 @@ func apiHandlerAgenteTick(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		sesionActiva, err = db.GetSesionActiva(req.Agente, &proyecto.ID)
+		sesionActiva, err = sesionesAPIService.GetActiveSession(req.Agente, req.Proyecto)
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return

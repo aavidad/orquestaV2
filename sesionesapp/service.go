@@ -182,6 +182,29 @@ func (s *Service) ResolveProjectID(ref string) (*int64, error) {
 	return &proyecto.ID, nil
 }
 
+func (s *Service) GetProject(ref string) (*db.Proyecto, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, fmt.Errorf("proyecto obligatorio")
+	}
+	return s.store.GetProject(ref)
+}
+
+func (s *Service) ActivateAssignment(agente, proyectoRef, nota string) (*db.Proyecto, error) {
+	proyectoRef = strings.TrimSpace(proyectoRef)
+	if proyectoRef == "" {
+		return nil, fmt.Errorf("proyecto obligatorio")
+	}
+	proyecto, err := s.store.GetProject(proyectoRef)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.store.ActivateAssignment(strings.TrimSpace(agente), proyecto.ID, strings.TrimSpace(nota)); err != nil {
+		return nil, err
+	}
+	return proyecto, nil
+}
+
 func (s *Service) ListInspectionSessions(filtro db.FiltroSesionesInspeccion) ([]*db.Sesion, error) {
 	return s.store.ListInspectionSessions(filtro)
 }
@@ -207,6 +230,22 @@ func (s *Service) Continue(agente, proyectoRef, cwd string) (*db.Sesion, error) 
 		return nil, err
 	}
 	return s.store.GetLastSessionWithFilter(strings.TrimSpace(agente), proyectoID, strings.TrimSpace(cwd))
+}
+
+func (s *Service) GetLastSession(agente, proyectoRef string) (*db.Sesion, error) {
+	proyectoID, err := s.ResolveProjectID(proyectoRef)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.GetLastSession(strings.TrimSpace(agente), proyectoID)
+}
+
+func (s *Service) GetActiveSession(agente, proyectoRef string) (*db.Sesion, error) {
+	proyectoID, err := s.ResolveProjectID(proyectoRef)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.GetActiveSession(strings.TrimSpace(agente), proyectoID)
 }
 
 func (s *Service) ResolveBudgetSession(sesionID int64, agente string) (*db.Sesion, error) {
