@@ -467,6 +467,9 @@ var agenteEjecutarCmd = &cobra.Command{
 				return fmt.Errorf("error arrancando proceso: %w", err)
 			}
 
+			stopRefresh := make(chan struct{})
+			refreshDone := vigilarRefreshRuntimeMailbox(stopRefresh, agente, proyecto)
+
 			// Goroutine Silenciosa: Vigilancia de cuota y resets
 			done := make(chan bool)
 			go func() {
@@ -527,8 +530,10 @@ var agenteEjecutarCmd = &cobra.Command{
 			}()
 
 			_ = proc.Wait()
+			close(stopRefresh)
 			pw.Close()
 			<-done
+			<-refreshDone
 
 			fmt.Println("\n🏁 [Orquesta] Proceso finalizado. Reiniciando bucle de vigilancia...")
 			time.Sleep(5 * time.Second)
