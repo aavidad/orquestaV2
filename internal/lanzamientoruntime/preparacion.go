@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"orquesta/coordinacion"
 	"orquesta/db"
+	"orquesta/gitoperaciones"
 	"orquesta/internal/bootstrapruntime"
 	"orquesta/runtimeagente"
 )
@@ -40,13 +42,29 @@ func PrepararDesdeRefs(agenteRef, proyectoRef, conectorRef, modelo, razonamiento
 }
 
 func PrepararDesdeDatos(agente *db.Agente, proyecto *db.Proyecto, conector *db.Conector, ultima *db.Sesion, modelo, razonamiento, perfilTarea string) (*Preparacion, error) {
+	return prepararDesdeDatosConWorkspace(agente, proyecto, conector, ultima, modelo, razonamiento, perfilTarea, gitoperaciones.WorktreeManager{})
+}
+
+func prepararDesdeDatosConWorkspace(agente *db.Agente, proyecto *db.Proyecto, conector *db.Conector, ultima *db.Sesion, modelo, razonamiento, perfilTarea string, workspace coordinacion.WorkspaceManager) (*Preparacion, error) {
 	if agente == nil || proyecto == nil || conector == nil {
 		return nil, fmt.Errorf("agente, proyecto y conector son obligatorios")
 	}
 
+	worktree, err := asegurarWorktreeOperativa(strings.TrimSpace(agente.Nombre), proyecto, workspace)
+	if err != nil {
+		return nil, err
+	}
 	resume, bootstrap, err := bootstrapruntime.Preparar(agente.Nombre, proyecto, ultima)
 	if err != nil {
 		return nil, err
+	}
+	if worktree != nil {
+		if strings.TrimSpace(resume.CWD) == "" {
+			resume.CWD = strings.TrimSpace(worktree.Path)
+		}
+		if strings.TrimSpace(resume.Branch) == "" {
+			resume.Branch = strings.TrimSpace(worktree.Branch)
+		}
 	}
 	req := runtimeagente.LaunchRequest{
 		Agente:       strings.TrimSpace(agente.Nombre),
@@ -81,6 +99,80 @@ func PrepararDesdeDatos(agente *db.Agente, proyecto *db.Proyecto, conector *db.C
 		Bootstrap: bootstrap,
 		Plan:      plan,
 	}, nil
+}
+
+func asegurarWorktreeOperativa(agente string, proyecto *db.Proyecto, workspace coordinacion.WorkspaceManager) (*coordinacion.Worktree, error) {
+	if proyecto == nil || proyecto.ID == 0 || strings.TrimSpace(agente) == "" {
+		return nil, nil
+	}
+	if proyecto.Tipo != db.ProyectoRepo {
+		return nil, nil
+	}
+	state := coordinacion.WorktreeActive
+	filter := coordinacion.WorktreeFilter{
+		ProjectID: &proyecto.ID,
+		Agent:     strPtr(strings.TrimSpace(agente)),
+		State:     &state,
+	}
+	repo := db.CoordinationWorktreeRepository()
+	activa, err := repo.List(filter)
+	if err != nil {
+		return nil, err
+	}
+	if len(activa) > 0 {
+		return activa[0], nil
+	}
+	tarea, err := resolverTareaActivaAgenteProyecto(strings.TrimSpace(agente), proyecto.ID)
+	if err != nil || tarea == nil {
+		return nil, err
+	}
+	svc := &coordinacion.Service{
+		Locks:     db.CoordinationLockRepository(),
+		Worktrees: repo,
+		Projects:  db.CoordinationProjectRepository(),
+		Sessions:  db.CoordinationSessionRepository(),
+		Config:    db.CoordinationConfigRepository(),
+		Workspace: workspace,
+	}
+	return svc.PrepareWorktree(coordinacion.PrepareWorktreeInput{
+		ProjectRef: strings.TrimSpace(proyecto.Slug),
+		Agent:      strings.TrimSpace(agente),
+		TaskID:     &tarea.ID,
+		Reason:     "autonomia_runtime",
+	})
+}
+
+func resolverTareaActivaAgenteProyecto(agente string, proyectoID int64) (*db.Tarea, error) {
+	tareas, err := db.ListarTareas(db.FiltroTareas{
+		Agente:     strPtr(strings.TrimSpace(agente)),
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var asignada *db.Tarea
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaEnProgreso:
+			return tarea, nil
+		case db.TareaAsignada:
+			if asignada == nil {
+				asignada = tarea
+			}
+		}
+	}
+	return asignada, nil
+}
+
+func strPtr(v string) *string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return nil
+	}
+	return &v
 }
 
 func ResolverConector(agente, conectorRef string, ultima *db.Sesion) (*db.Conector, error) {

@@ -151,17 +151,6 @@ func TestRequireServerForCurrentCommand(t *testing.T) {
 	}
 }
 
-func TestRequireServerForCurrentCommandRespetaFallbackExplicito(t *testing.T) {
-	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "1")()
-	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
-	defer setCurrentExecArgs(nil)
-	setCurrentExecArgs([]string{"--allow-local-fallback", "runtime", "listar"})
-
-	if requireServerForCurrentCommand() {
-		t.Fatalf("no deberia exigir servidor con fallback local explicito")
-	}
-}
-
 func TestAPIGetNoHaceFallbackCuandoServidorEsObligatorio(t *testing.T) {
 	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "1")()
 	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
@@ -176,24 +165,6 @@ func TestAPIGetNoHaceFallbackCuandoServidorEsObligatorio(t *testing.T) {
 	}
 	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "requiere el servidor") {
 		t.Fatalf("error inesperado: %v", err)
-	}
-}
-
-func TestAPIGetPermiteFallbackCuandoLaPoliticaLoAutoriza(t *testing.T) {
-	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "1")()
-	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
-	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
-	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
-	defer setCurrentExecArgs(nil)
-	setCurrentExecArgs([]string{"--allow-local-fallback", "runtime", "listar"})
-
-	var resp apiRuntimesResponse
-	ok, err := apiGet("/api/runtimes", &resp)
-	if ok {
-		t.Fatalf("no deberia forzar manejo HTTP cuando se permite fallback local")
-	}
-	if err != nil {
-		t.Fatalf("no deberia bloquear el fallback local: %v", err)
 	}
 }
 

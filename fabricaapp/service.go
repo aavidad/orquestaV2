@@ -26,6 +26,10 @@ type BlueprintTask struct {
 	Titulo           string
 	Descripcion      string
 	Modulo           string
+	RolSugerido      string
+	Fase             string
+	Entregable       string
+	CriteriosCierre  []string
 	Prioridad        db.PrioridadTarea
 	Dependencias     []string
 	ContratoDefinido bool
@@ -48,23 +52,23 @@ func (s *Service) Generate(spec AppSpec) (GenerationResult, error) {
 	}
 
 	builder := blueprintBuilder{spec: normalized}
-	builder.add(BlueprintTask{
+	builder.add(withSOP(BlueprintTask{
 		Key:              "briefing",
 		Titulo:           fmt.Sprintf("Definir briefing funcional de %s", normalized.Nombre),
 		Descripcion:      composeBriefingDescription(normalized),
 		Modulo:           "producto",
 		Prioridad:        db.PrioridadAlta,
 		ContratoDefinido: true,
-	})
-	builder.add(BlueprintTask{
+	}, "product_manager", "descubrimiento", "Brief funcional validado", "Objetivo de producto claro", "Alcance y restricciones iniciales documentados", "Criterios de exito entendibles por el resto del equipo"))
+	builder.add(withSOP(BlueprintTask{
 		Key:              "investigacion",
 		Titulo:           fmt.Sprintf("Revisar catalogo y referencias de %s", normalized.Nombre),
 		Descripcion:      composeResearchDescription(normalized),
 		Modulo:           "analisis",
 		Prioridad:        db.PrioridadAlta,
 		ContratoDefinido: true,
-	})
-	builder.add(BlueprintTask{
+	}, "analista", "descubrimiento", "Informe de referencias y restricciones", "Catalogo compartido revisado", "Referencias externas resumidas", "Riesgos tempranos identificados"))
+	builder.add(withSOP(BlueprintTask{
 		Key:              "arquitectura",
 		Titulo:           fmt.Sprintf("Cerrar arquitectura base de %s", normalized.Nombre),
 		Descripcion:      composeArchitectureDescription(normalized),
@@ -72,7 +76,7 @@ func (s *Service) Generate(spec AppSpec) (GenerationResult, error) {
 		Prioridad:        db.PrioridadAlta,
 		Dependencias:     []string{"briefing", "investigacion"},
 		ContratoDefinido: true,
-	})
+	}, "arquitecto", "arquitectura", "Diseño base aprobado", "Capas y contratos definidos", "Estrategia de reparto entre agentes asentada", "Riesgos arquitectonicos con mitigacion"))
 
 	switch normalized.Tipo {
 	case "web":
@@ -87,7 +91,7 @@ func (s *Service) Generate(spec AppSpec) (GenerationResult, error) {
 	}
 
 	if normalized.Database {
-		builder.add(BlueprintTask{
+		builder.add(withSOP(BlueprintTask{
 			Key:              "persistencia",
 			Titulo:           fmt.Sprintf("Implementar persistencia principal de %s", normalized.Nombre),
 			Descripcion:      "Definir esquema, acceso a datos, migraciones y contratos de almacenamiento necesarios para la app.",
@@ -95,7 +99,7 @@ func (s *Service) Generate(spec AppSpec) (GenerationResult, error) {
 			Prioridad:        db.PrioridadAlta,
 			Dependencias:     []string{"arquitectura"},
 			ContratoDefinido: true,
-		})
+		}, "backend", "implementacion", "Persistencia funcional y versionada", "Esquema y migraciones reproducibles", "Acceso a datos con contratos claros", "Cobertura minima de persistencia"))
 	}
 	if normalized.Auth {
 		deps := []string{"arquitectura"}
@@ -108,7 +112,7 @@ func (s *Service) Generate(spec AppSpec) (GenerationResult, error) {
 		if normalized.Tipo == "cli" {
 			deps = append(deps, "cli_base")
 		}
-		builder.add(BlueprintTask{
+		builder.add(withSOP(BlueprintTask{
 			Key:              "auth",
 			Titulo:           fmt.Sprintf("Cerrar autenticacion y autorizacion de %s", normalized.Nombre),
 			Descripcion:      "Implementar login, roles, validacion de acceso y puntos de integracion de seguridad requeridos por la app.",
@@ -116,10 +120,10 @@ func (s *Service) Generate(spec AppSpec) (GenerationResult, error) {
 			Prioridad:        db.PrioridadAlta,
 			Dependencias:     uniqueKeys(deps...),
 			ContratoDefinido: true,
-		})
+		}, "seguridad", "implementacion", "Flujo de autenticacion y autorizacion operativo", "Casos de login y permiso definidos", "Protecciones aplicadas en puntos sensibles", "Cobertura minima de errores y permisos"))
 	}
 	if normalized.I18n {
-		builder.add(BlueprintTask{
+		builder.add(withSOP(BlueprintTask{
 			Key:              "i18n",
 			Titulo:           fmt.Sprintf("Aplicar i18n base en %s", normalized.Nombre),
 			Descripcion:      composeI18nDescription(normalized),
@@ -127,54 +131,54 @@ func (s *Service) Generate(spec AppSpec) (GenerationResult, error) {
 			Prioridad:        db.PrioridadAlta,
 			Dependencias:     []string{"arquitectura"},
 			ContratoDefinido: true,
-		})
+		}, "i18n", "implementacion", "Superficie inicial multilenguaje", "Bundles iniciales cargados", "Idiomas base operativos", "Sin literales nuevos en el flujo principal"))
 	}
 
 	builder.add(integrationTask(normalized, builder.featureDependencyKeys()))
 
 	if normalized.Docker {
-		builder.add(BlueprintTask{
+		builder.add(withSOP(BlueprintTask{
 			Key:          "docker",
 			Titulo:       fmt.Sprintf("Preparar despliegue Docker de %s", normalized.Nombre),
 			Descripcion:  "Crear imagen, compose/manifiestos, variables de entorno y healthchecks para la entrega operativa.",
 			Modulo:       "deploy",
 			Prioridad:    db.PrioridadMedia,
 			Dependencias: []string{"integracion"},
-		})
+		}, "devops", "despliegue", "Artefactos de despliegue reproducibles", "Imagen o manifiestos ejecutables", "Variables y healthchecks definidos", "Arranque verificado"))
 	}
 
 	qaDeps := []string{"integracion"}
 	if normalized.Docker {
 		qaDeps = append(qaDeps, "docker")
 	}
-	builder.add(BlueprintTask{
+	builder.add(withSOP(BlueprintTask{
 		Key:          "qa_smoke",
 		Titulo:       fmt.Sprintf("Validar smoke tests y QA de %s", normalized.Nombre),
 		Descripcion:  "Ejecutar pruebas criticas, revisar regresiones y dejar evidencia de que la app esta lista para entrega tecnica.",
 		Modulo:       "qa",
 		Prioridad:    db.PrioridadAlta,
 		Dependencias: qaDeps,
-	})
-	builder.add(BlueprintTask{
+	}, "qa", "validacion", "Evidencia minima de calidad", "Smoke tests ejecutados", "Regresiones criticas revisadas", "Riesgos residuales anotados"))
+	builder.add(withSOP(BlueprintTask{
 		Key:          "documentacion",
 		Titulo:       fmt.Sprintf("Cerrar documentacion operativa de %s", normalized.Nombre),
 		Descripcion:  "Documentar arquitectura, uso, despliegue, i18n y operacion para que el proyecto pueda mantenerse y entregarse. Incluir atribucion visible a Orquesta de Alberto Avidad Fernandez en README, manuales y piezas documentales generadas.",
 		Modulo:       "docs",
 		Prioridad:    db.PrioridadMedia,
 		Dependencias: []string{"qa_smoke"},
-	})
+	}, "documentador", "documentacion", "Documentacion operativa y tecnica", "README y manuales actualizados", "Operacion y despliegue explicados", "Atribucion visible a Orquesta"))
 	finalDeps := []string{"qa_smoke", "documentacion"}
 	if normalized.Docker {
 		finalDeps = append(finalDeps, "docker")
 	}
-	builder.add(BlueprintTask{
+	builder.add(withSOP(BlueprintTask{
 		Key:          "entrega_final",
 		Titulo:       fmt.Sprintf("Cerrar entrega final de %s", normalized.Nombre),
 		Descripcion:  "Verificar que no quedan flecos abiertos y que la app completa puede darse por terminada y entregable. Confirmar metadatos y atribucion a Orquesta de Alberto Avidad Fernandez en artefactos y documentacion final.",
 		Modulo:       "release",
 		Prioridad:    db.PrioridadAlta,
 		Dependencias: uniqueKeys(finalDeps...),
-	})
+	}, "release_manager", "cierre", "Release candidata a entrega", "No quedan flecos criticos abiertos", "Artefactos finales validados", "Criterio de completitud explicitado"))
 
 	return GenerationResult{Tasks: builder.tasks}, nil
 }
@@ -189,7 +193,11 @@ func (b *blueprintBuilder) add(task BlueprintTask) {
 	task.Titulo = strings.TrimSpace(task.Titulo)
 	task.Descripcion = strings.TrimSpace(task.Descripcion)
 	task.Modulo = strings.TrimSpace(task.Modulo)
+	task.RolSugerido = strings.TrimSpace(task.RolSugerido)
+	task.Fase = strings.TrimSpace(task.Fase)
+	task.Entregable = strings.TrimSpace(task.Entregable)
 	task.Dependencias = uniqueKeys(task.Dependencias...)
+	task.CriteriosCierre = uniqueKeys(task.CriteriosCierre...)
 	b.tasks = append(b.tasks, task)
 }
 
@@ -258,6 +266,14 @@ func uniqueKeys(keys ...string) []string {
 	return out
 }
 
+func withSOP(task BlueprintTask, rol, fase, entregable string, criterios ...string) BlueprintTask {
+	task.RolSugerido = strings.TrimSpace(rol)
+	task.Fase = strings.TrimSpace(fase)
+	task.Entregable = strings.TrimSpace(entregable)
+	task.CriteriosCierre = uniqueKeys(criterios...)
+	return task
+}
+
 func composeBriefingDescription(spec AppSpec) string {
 	desc := []string{
 		fmt.Sprintf("Alinear alcance, personas usuarias, flujos principales y criterios de entrega de la app %s.", spec.Nombre),
@@ -304,7 +320,7 @@ func composeI18nDescription(spec AppSpec) string {
 }
 
 func frontendTask(spec AppSpec, deps []string) BlueprintTask {
-	return BlueprintTask{
+	return withSOP(BlueprintTask{
 		Key:              "frontend_base",
 		Titulo:           fmt.Sprintf("Implementar frontend base de %s", spec.Nombre),
 		Descripcion:      "Crear shell visual, navegacion principal, estados base y estructura inicial de interfaz para la app.",
@@ -312,11 +328,11 @@ func frontendTask(spec AppSpec, deps []string) BlueprintTask {
 		Prioridad:        db.PrioridadAlta,
 		Dependencias:     uniqueKeys(deps...),
 		ContratoDefinido: true,
-	}
+	}, "frontend", "implementacion", "UI principal funcional", "Shell visual y navegacion base cerrados", "Flujo principal navegable", "Integracion base preparada")
 }
 
 func apiTask(spec AppSpec, deps []string) BlueprintTask {
-	return BlueprintTask{
+	return withSOP(BlueprintTask{
 		Key:              "api_base",
 		Titulo:           fmt.Sprintf("Implementar API base de %s", spec.Nombre),
 		Descripcion:      "Definir endpoints, contratos de entrada/salida, validacion y capa de aplicacion necesarias para la app.",
@@ -324,11 +340,11 @@ func apiTask(spec AppSpec, deps []string) BlueprintTask {
 		Prioridad:        db.PrioridadAlta,
 		Dependencias:     uniqueKeys(deps...),
 		ContratoDefinido: true,
-	}
+	}, "backend", "implementacion", "API principal operativa", "Endpoints base cerrados", "Contratos de entrada/salida definidos", "Validacion y errores principales cubiertos")
 }
 
 func cliTask(spec AppSpec, deps []string) BlueprintTask {
-	return BlueprintTask{
+	return withSOP(BlueprintTask{
 		Key:              "cli_base",
 		Titulo:           fmt.Sprintf("Implementar CLI base de %s", spec.Nombre),
 		Descripcion:      "Crear comandos principales, contratos de salida y flujo operativo inicial de la aplicacion CLI.",
@@ -336,7 +352,7 @@ func cliTask(spec AppSpec, deps []string) BlueprintTask {
 		Prioridad:        db.PrioridadAlta,
 		Dependencias:     uniqueKeys(deps...),
 		ContratoDefinido: true,
-	}
+	}, "backend", "implementacion", "CLI principal operativa", "Comandos base disponibles", "Ayuda y salida principal coherentes", "Flujo principal probado")
 }
 
 func integrationTask(spec AppSpec, deps []string) BlueprintTask {
@@ -351,12 +367,12 @@ func integrationTask(spec AppSpec, deps []string) BlueprintTask {
 	case "cli":
 		description = "Integrar comandos, persistencia y flujos operativos completos de la CLI."
 	}
-	return BlueprintTask{
+	return withSOP(BlueprintTask{
 		Key:          "integracion",
 		Titulo:       fmt.Sprintf("Integrar flujo principal de %s", spec.Nombre),
 		Descripcion:  description,
 		Modulo:       "integracion",
 		Prioridad:    db.PrioridadAlta,
 		Dependencias: uniqueKeys(deps...),
-	}
+	}, "integrador", "integracion", "Sistema integrado demostrable", "Las piezas principales conversan entre si", "Flujo end-to-end verificable", "Incidencias de integracion acotadas")
 }

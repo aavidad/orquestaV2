@@ -741,6 +741,60 @@ func TestAPIProyectoFabricarApp(t *testing.T) {
 	}
 }
 
+func TestAPIProyectoOperacionGetYPost(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "demo-app",
+		Nombre:  "Demo App",
+		RutaAbs: filepath.Join(tmp, "demo-app"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recGet := httptest.NewRecorder()
+	reqGet := httptest.NewRequest(http.MethodGet, "/api/proyectos/demo-app/operacion", nil)
+	mux.ServeHTTP(recGet, reqGet)
+	if recGet.Code != http.StatusOK {
+		t.Fatalf("status get operacion inesperado: %d body=%s", recGet.Code, recGet.Body.String())
+	}
+	var getResp apiProyectoOperacionResponse
+	if err := json.Unmarshal(recGet.Body.Bytes(), &getResp); err != nil {
+		t.Fatalf("decode get operacion: %v", err)
+	}
+	if getResp.Operacion == nil || getResp.Operacion.EstadoOperativo != db.ProyectoOperativoActivo {
+		t.Fatalf("operacion inicial inesperada: %+v", getResp.Operacion)
+	}
+
+	body, _ := json.Marshal(apiProyectoOperacionSetRequest{
+		EstadoOperativo:  string(db.ProyectoOperativoEsperandoHumano),
+		Motivo:           "esperando aprobacion",
+		ObjetivoPct:      60,
+		MinAgentes:       1,
+		MaxAgentes:       3,
+		Prioridad:        250,
+		ResumeAutomatico: true,
+	})
+	recPost := httptest.NewRecorder()
+	reqPost := httptest.NewRequest(http.MethodPost, "/api/proyectos/demo-app/operacion", bytes.NewReader(body))
+	mux.ServeHTTP(recPost, reqPost)
+	if recPost.Code != http.StatusOK {
+		t.Fatalf("status post operacion inesperado: %d body=%s", recPost.Code, recPost.Body.String())
+	}
+	var postResp apiProyectoOperacionResponse
+	if err := json.Unmarshal(recPost.Body.Bytes(), &postResp); err != nil {
+		t.Fatalf("decode post operacion: %v", err)
+	}
+	if postResp.Operacion == nil || postResp.Operacion.EstadoOperativo != db.ProyectoOperativoEsperandoHumano || postResp.Operacion.ObjetivoPct != 60 {
+		t.Fatalf("operacion guardada inesperada: %+v", postResp.Operacion)
+	}
+}
+
 func TestAPIAgenteControlPlaneAcciones(t *testing.T) {
 	prepararDBTemporalCmd(t)
 
@@ -1128,6 +1182,31 @@ func TestAPIAgentePrepararIntegraBootstrapRuntime(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("crear checkpoint: %v", err)
 	}
+	if _, err := db.DB.Exec(`
+		INSERT INTO worktrees (proyecto_id, agente, nombre, ruta_abs, branch, base_ref, estado, motivo)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		proyecto.ID,
+		"Codex1",
+		"wt-codex1",
+		filepath.Join(tmp, "orquestador", ".orquesta-worktrees", "wt-codex1"),
+		"feature/wt-codex1",
+		"HEAD",
+		"activa",
+		"continuidad",
+	); err != nil {
+		t.Fatalf("crear worktree: %v", err)
+	}
+	if _, err := db.CrearPropuesta(&db.Propuesta{
+		Codigo:       "OP-901",
+		Titulo:       "Revisar autenticacion",
+		Descripcion:  "Pendiente de votacion",
+		ProyectoID:   &proyecto.ID,
+		Tipo:         "arquitectura",
+		PropuestoPor: "alberto",
+		Distribuidor: "orquesta",
+	}); err != nil {
+		t.Fatalf("crear propuesta: %v", err)
+	}
 
 	mux := http.NewServeMux()
 	registerAPIRoutes(mux)
@@ -1166,6 +1245,9 @@ func TestAPIAgentePrepararIntegraBootstrapRuntime(t *testing.T) {
 	}
 	if !strings.Contains(out.Plan.ContinuityPrompt, `"mailbox"`) || !strings.Contains(out.Plan.ContinuityPrompt, `"checkpoint"`) {
 		t.Fatalf("continuity prompt sin payload bootstrap: %s", out.Plan.ContinuityPrompt)
+	}
+	if !strings.Contains(out.Plan.ContinuityPrompt, `"project_context"`) || !strings.Contains(out.Plan.ContinuityPrompt, "feature/wt-codex1") || !strings.Contains(out.Plan.ContinuityPrompt, "OP-901") {
+		t.Fatalf("continuity prompt sin mapa operativo: %s", out.Plan.ContinuityPrompt)
 	}
 
 	order, err := db.GetRuntimeOrder(orderID)

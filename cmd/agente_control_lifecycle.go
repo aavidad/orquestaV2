@@ -80,14 +80,11 @@ var agenteControlCmd = &cobra.Command{
 		}
 
 		orderID, accion, ok, err := encolarControlAgentePorAPI(req)
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			orderID, accion, err = encolarControlAgenteLocal(req)
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("agente control")
 		}
 
 		fmt.Printf("✓ Orden %s #%d encolada para %s\n", accion, orderID, req.Agente)

@@ -37,10 +37,16 @@ func planificarAgenteAutomaticamente(ag *Agente) error {
 	if ag == nil {
 		return nil
 	}
-	// Buscar el proyecto asignado a este agente
-	proyectoID, err := ObtenerProyectoActivoAgente(ag.Nombre)
+	proyectoID, err := ResolverProyectoPlanificableAgente(ag.Nombre)
 	if err != nil || proyectoID == 0 {
 		return err // El agente no tiene un proyecto asignado ahora mismo
+	}
+	disponible, err := ProyectoDisponibleParaAutonomia(proyectoID)
+	if err != nil {
+		return err
+	}
+	if !disponible {
+		return nil
 	}
 	proyecto, err := GetProyecto(jsonNumber(proyectoID))
 	if err != nil {
@@ -88,6 +94,196 @@ func agenteTieneTrabajoArrancable(agente string, proyectoID int64) (bool, error)
 		}
 	}
 	return false, nil
+}
+
+func proyectoTieneTrabajoPlanificableParaAgente(agente string, proyectoID int64) (bool, error) {
+	tieneTrabajo, err := agenteTieneTrabajoArrancable(agente, proyectoID)
+	if err != nil || tieneTrabajo {
+		return tieneTrabajo, err
+	}
+	tarea, err := buscarSiguienteTareaLibre(proyectoID)
+	if err != nil {
+		return false, err
+	}
+	return tarea != nil, nil
+}
+
+func ResolverProyectoPlanificableAgente(agente string) (int64, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return 0, nil
+	}
+	proyectoActivoID, err := ObtenerProyectoActivoAgente(agente)
+	if err != nil {
+		return 0, err
+	}
+	if proyectoActivoID != 0 {
+		disponible, err := ProyectoDisponibleParaAutonomia(proyectoActivoID)
+		if err != nil {
+			return 0, err
+		}
+		tieneTrabajo := false
+		if disponible {
+			tieneTrabajo, err = proyectoTieneTrabajoPlanificableParaAgente(agente, proyectoActivoID)
+		}
+		if err != nil {
+			return 0, err
+		}
+		if tieneTrabajo {
+			return proyectoActivoID, nil
+		}
+		if !disponible {
+			if err := PausarAsignacion(agente, proyectoActivoID, "proyecto_no_disponible"); err != nil {
+				return 0, err
+			}
+			proyectoActivoID = 0
+		}
+	}
+
+	asignacion, err := buscarAsignacionPausadaConTrabajo(agente)
+	if err != nil {
+		return 0, err
+	}
+	if asignacion != nil {
+		if proyectoActivoID != 0 && proyectoActivoID != asignacion.ProyectoID {
+			if err := PausarAsignacion(agente, proyectoActivoID, "sin_trabajo_reactivacion_automatica"); err != nil {
+				return 0, err
+			}
+		}
+		if err := ActivarAsignacion(agente, asignacion.ProyectoID, "reactivacion_automatica"); err != nil {
+			return 0, err
+		}
+		return asignacion.ProyectoID, nil
+	}
+
+	proyectoAutomaticoID, err := seleccionarProyectoAutomaticoDisponible(agente)
+	if err != nil {
+		return 0, err
+	}
+	if proyectoAutomaticoID == 0 {
+		return proyectoActivoID, nil
+	}
+	if err := ActivarAsignacion(agente, proyectoAutomaticoID, "asignacion_automatica_por_politica"); err != nil {
+		return 0, err
+	}
+	return proyectoAutomaticoID, nil
+}
+
+func buscarAsignacionPausadaConTrabajo(agente string) (*Asignacion, error) {
+	estado := AsignacionPausada
+	asignaciones, err := ListarAsignaciones(FiltroAsignaciones{
+		Agente: &agente,
+		Estado: &estado,
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, asignacion := range asignaciones {
+		if asignacion == nil {
+			continue
+		}
+		disponible, err := ProyectoDisponibleParaAutonomia(asignacion.ProyectoID)
+		if err != nil {
+			return nil, err
+		}
+		if !disponible {
+			continue
+		}
+		tieneTrabajo, err := proyectoTieneTrabajoPlanificableParaAgente(agente, asignacion.ProyectoID)
+		if err != nil {
+			return nil, err
+		}
+		if tieneTrabajo {
+			return asignacion, nil
+		}
+	}
+	return nil, nil
+}
+
+type candidatoProyectoAutomatico struct {
+	Proyecto   *Proyecto
+	Operacion  *ProyectoOperacion
+	Activos    int
+	TieneMin   bool
+	CargaRatio int
+}
+
+func seleccionarProyectoAutomaticoDisponible(agente string) (int64, error) {
+	_ = strings.TrimSpace(agente)
+	activo := true
+	proyectos, err := ListarProyectos(FiltroProyectos{Activo: &activo})
+	if err != nil {
+		return 0, err
+	}
+	activosPorProyecto, err := ContarAsignacionesActivasPorProyecto()
+	if err != nil {
+		return 0, err
+	}
+	var mejor *candidatoProyectoAutomatico
+	for _, proyecto := range proyectos {
+		if proyecto == nil || proyecto.ID == 0 {
+			continue
+		}
+		disponible, err := ProyectoDisponibleParaAutonomia(proyecto.ID)
+		if err != nil {
+			return 0, err
+		}
+		if !disponible {
+			continue
+		}
+		tarea, err := buscarSiguienteTareaLibre(proyecto.ID)
+		if err != nil {
+			return 0, err
+		}
+		if tarea == nil {
+			continue
+		}
+		op, err := GetProyectoOperacion(proyecto.ID)
+		if err != nil {
+			return 0, err
+		}
+		activos := activosPorProyecto[proyecto.ID]
+		if op.MaxAgentes > 0 && activos >= op.MaxAgentes {
+			continue
+		}
+		objetivo := op.ObjetivoPct
+		if objetivo <= 0 {
+			objetivo = 100
+		}
+		candidato := &candidatoProyectoAutomatico{
+			Proyecto:   proyecto,
+			Operacion:  op,
+			Activos:    activos,
+			TieneMin:   activos < op.MinAgentes,
+			CargaRatio: (activos * 10000) / objetivo,
+		}
+		if mejorProyectoAutomatico(candidato, mejor) {
+			mejor = candidato
+		}
+	}
+	if mejor == nil || mejor.Proyecto == nil {
+		return 0, nil
+	}
+	return mejor.Proyecto.ID, nil
+}
+
+func mejorProyectoAutomatico(candidato *candidatoProyectoAutomatico, actual *candidatoProyectoAutomatico) bool {
+	if candidato == nil || candidato.Proyecto == nil {
+		return false
+	}
+	if actual == nil || actual.Proyecto == nil {
+		return true
+	}
+	if candidato.TieneMin != actual.TieneMin {
+		return candidato.TieneMin
+	}
+	if candidato.CargaRatio != actual.CargaRatio {
+		return candidato.CargaRatio < actual.CargaRatio
+	}
+	if candidato.Operacion != nil && actual.Operacion != nil && candidato.Operacion.Prioridad != actual.Operacion.Prioridad {
+		return candidato.Operacion.Prioridad > actual.Operacion.Prioridad
+	}
+	return candidato.Proyecto.ID < actual.Proyecto.ID
 }
 
 func encolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo string) error {
@@ -198,6 +394,7 @@ func ListarAgentesPlanificables() ([]*Agente, error) {
 		SELECT nombre, rol 
 		FROM agentes 
 		WHERE habilitado = 1
+		  AND rol = 'programador'
 		  AND COALESCE(estado_cuota, 'activo') = 'activo'
 		  AND COALESCE(estado_sesion, '') IN ('', 'disponible', 'esperando')`)
 	if err != nil {

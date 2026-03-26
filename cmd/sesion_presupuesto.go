@@ -8,7 +8,6 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
-	"database/sql"
 	"fmt"
 	"strconv"
 	"strings"
@@ -85,40 +84,7 @@ var sesionPresupuestoRegistrarCmd = &cobra.Command{
 			imprimirRegistroPresupuesto(resp.ID, resp.Presupuesto.SesionID, resp.Evaluacion)
 			return nil
 		}
-		sesion, err := resolverSesionPresupuestoPorReferencia(sesionID, agente)
-		if err != nil {
-			return err
-		}
-		req.SesionID = sesion.ID
-
-		id, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
-			SesionID:          req.SesionID,
-			PoolID:            req.PoolID,
-			ModelSlug:         req.ModelSlug,
-			WindowKind:        req.WindowKind,
-			WindowStartedAt:   req.WindowStartedAt,
-			ResetAt:           req.ResetAt,
-			RemainingSeconds:  req.RemainingSeconds,
-			RemainingMessages: req.RemainingMessages,
-			RemainingTokens:   req.RemainingTokens,
-			RemainingCredits:  req.RemainingCredits,
-			BudgetSource:      req.BudgetSource,
-			RawSnapshotJSON:   req.RawSnapshotJSON,
-		})
-		if err != nil {
-			return err
-		}
-
-		p, err := db.UltimoPresupuestoSesion(sesionID)
-		if err != nil {
-			return err
-		}
-		ev, err := db.EvaluarPresupuestoSesion(p)
-		if err != nil {
-			return err
-		}
-		imprimirRegistroPresupuesto(id, req.SesionID, ev)
-		return nil
+		return serverFirstCommandError("sesion presupuesto registrar")
 	},
 }
 
@@ -136,24 +102,7 @@ var sesionPresupuestoVerCmd = &cobra.Command{
 			imprimirDetallePresupuesto(resp.Presupuesto.SesionID, resp.Presupuesto, resp.Evaluacion)
 			return nil
 		}
-		sesion, err := resolverSesionPresupuestoPorReferencia(sesionID, agente)
-		if err != nil {
-			return err
-		}
-		sesionID = sesion.ID
-		p, err := db.UltimoPresupuestoSesion(sesionID)
-		if err == sql.ErrNoRows {
-			return fmt.Errorf("la sesión #%d no tiene presupuestos registrados", sesionID)
-		}
-		if err != nil {
-			return err
-		}
-		ev, err := db.EvaluarPresupuestoSesion(p)
-		if err != nil {
-			return err
-		}
-		imprimirDetallePresupuesto(sesionID, p, ev)
-		return nil
+		return serverFirstCommandError("sesion presupuesto ver")
 	},
 }
 
@@ -193,27 +142,6 @@ func referenciaSesionPresupuesto(cmd *cobra.Command) (int64, string, error) {
 		return 0, "", fmt.Errorf("debe indicar --sesion o --agente")
 	}
 	return sesionID, agente, nil
-}
-
-func resolverSesionPresupuestoPorReferencia(sesionID int64, agente string) (*db.Sesion, error) {
-	if err := ensureLocalDB(); err != nil {
-		return nil, err
-	}
-	if sesionID > 0 {
-		return db.GetSesionByID(sesionID)
-	}
-	agente = strings.TrimSpace(agente)
-	if agente == "" {
-		return nil, fmt.Errorf("debe indicar --sesion o --agente")
-	}
-	sesion, err := db.GetSesionActiva(agente, nil)
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("el agente %s no tiene sesión activa", agente)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return sesion, nil
 }
 
 func imprimirRegistroPresupuesto(id, sesionID int64, ev *db.EvaluacionPresupuesto) {

@@ -6,8 +6,26 @@ import (
 	"testing"
 )
 
+func restringirPlanificadorATestAgentes(t *testing.T, permitidos ...string) {
+	t.Helper()
+	args := make([]any, 0, len(permitidos))
+	placeholders := make([]string, 0, len(permitidos))
+	for _, nombre := range permitidos {
+		placeholders = append(placeholders, "?")
+		args = append(args, nombre)
+	}
+	query := `UPDATE agentes SET habilitado=0 WHERE rol='programador'`
+	if len(placeholders) > 0 {
+		query += ` AND nombre NOT IN (` + strings.Join(placeholders, ",") + `)`
+	}
+	if _, err := DB.Exec(query, args...); err != nil {
+		t.Fatalf("restringir agentes planificables: %v", err)
+	}
+}
+
 func TestPlanificarTareasAutomaticamenteAutoasignaYEncolaStart(t *testing.T) {
 	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "Codex1")
 
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
@@ -68,6 +86,7 @@ func TestPlanificarTareasAutomaticamenteAutoasignaYEncolaStart(t *testing.T) {
 
 func TestPlanificarTareasAutomaticamenteEncolaStartParaTrabajoYaAsignado(t *testing.T) {
 	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "Codex1")
 
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
@@ -120,6 +139,7 @@ func TestPlanificarTareasAutomaticamenteEncolaStartParaTrabajoYaAsignado(t *test
 
 func TestPlanificarTareasAutomaticamenteNoDuplicaStartNiHandleActivo(t *testing.T) {
 	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "Codex1")
 
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
@@ -211,6 +231,7 @@ func TestPlanificarTareasAutomaticamenteNoDuplicaStartNiHandleActivo(t *testing.
 
 func TestPlanificarTareasAutomaticamenteNoDuplicaSiHayBootstrapPendiente(t *testing.T) {
 	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "Codex1")
 
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
@@ -269,8 +290,94 @@ func TestPlanificarTareasAutomaticamenteNoDuplicaSiHayBootstrapPendiente(t *test
 	}
 }
 
+func TestPlanificarTareasAutomaticamenteReactivaAsignacionPausadaConTrabajo(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "Codex1")
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("marcar agente disponible: %v", err)
+	}
+	proyectoA, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador-a",
+		Nombre:  "Orquestador A",
+		RutaAbs: filepath.Join(tmp, "orquestador-a"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto A: %v", err)
+	}
+	proyectoB, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador-b",
+		Nombre:  "Orquestador B",
+		RutaAbs: filepath.Join(tmp, "orquestador-b"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto B: %v", err)
+	}
+	if err := ActivarAsignacion("Codex1", proyectoA, "frente original"); err != nil {
+		t.Fatalf("activar asignacion A: %v", err)
+	}
+	if err := PausarAsignacion("Codex1", proyectoA, "esperando humano"); err != nil {
+		t.Fatalf("pausar asignacion A: %v", err)
+	}
+	if err := ActivarAsignacion("Codex1", proyectoB, "frente temporal"); err != nil {
+		t.Fatalf("activar asignacion B: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Retomar frente pausado",
+		Descripcion: "El proyecto A vuelve a tener trabajo",
+		ProyectoID:  &proyectoA,
+		Modulo:      "core",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+
+	if err := PlanificarTareasAutomaticamente(); err != nil {
+		t.Fatalf("planificar: %v", err)
+	}
+
+	proyectoActivoID, err := ObtenerProyectoActivoAgente("Codex1")
+	if err != nil {
+		t.Fatalf("obtener proyecto activo: %v", err)
+	}
+	if proyectoActivoID != proyectoA {
+		t.Fatalf("deberia haber reactivado el proyecto A, got=%d want=%d", proyectoActivoID, proyectoA)
+	}
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "Codex1" || tarea.Estado != TareaAsignada {
+		t.Fatalf("tarea no reasignada al frente reactivado: %+v", tarea)
+	}
+	agente := "Codex1"
+	asignaciones, err := ListarAsignaciones(FiltroAsignaciones{Agente: &agente})
+	if err != nil {
+		t.Fatalf("listar asignaciones: %v", err)
+	}
+	if len(asignaciones) < 2 {
+		t.Fatalf("asignaciones insuficientes: %+v", asignaciones)
+	}
+	if asignaciones[0].ProyectoID != proyectoA || asignaciones[0].Estado != AsignacionActiva {
+		t.Fatalf("asignacion A no reactivada: %+v", asignaciones)
+	}
+	if asignaciones[1].ProyectoID != proyectoB || asignaciones[1].Estado != AsignacionPausada {
+		t.Fatalf("asignacion B no pausada tras retorno: %+v", asignaciones)
+	}
+}
+
 func TestPlanificarTareasAutomaticamenteNoArrancaSiHaySesionActivaEnOtroProyecto(t *testing.T) {
 	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "Codex1")
 
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
@@ -341,6 +448,7 @@ func TestPlanificarTareasAutomaticamenteNoArrancaSiHaySesionActivaEnOtroProyecto
 
 func TestPlanificarTareasAutomaticamenteIncluyeAgenteRecienRegistradoSinSesion(t *testing.T) {
 	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexNuevo")
 
 	if err := RegistrarAgente("CodexNuevo", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
@@ -395,6 +503,7 @@ func TestPlanificarTareasAutomaticamenteIncluyeAgenteRecienRegistradoSinSesion(t
 
 func TestPlanificarTareasAutomaticamenteNoSeleccionaAgenteEnEnfriamiento(t *testing.T) {
 	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexPausado")
 
 	if err := RegistrarAgente("CodexPausado", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
@@ -446,5 +555,294 @@ func TestPlanificarTareasAutomaticamenteNoSeleccionaAgenteEnEnfriamiento(t *test
 	}
 	if len(orders) != 0 {
 		t.Fatalf("no deberia crear runtime orders para agente en enfriamiento: %+v", orders)
+	}
+}
+
+func TestResolverProyectoPlanificableAgenteReactivaProyectoTrasDesbloqueoHumano(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "Codex1")
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("marcar agente disponible: %v", err)
+	}
+	proyectoA, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador-a",
+		Nombre:  "Orquestador A",
+		RutaAbs: filepath.Join(tmp, "orquestador-a"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto A: %v", err)
+	}
+	proyectoB, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador-b",
+		Nombre:  "Orquestador B",
+		RutaAbs: filepath.Join(tmp, "orquestador-b"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto B: %v", err)
+	}
+	if err := ActivarAsignacion("Codex1", proyectoA, "frente original"); err != nil {
+		t.Fatalf("activar asignacion A: %v", err)
+	}
+	tareaA, err := CrearTarea(&Tarea{
+		Titulo:      "Esperando desbloqueo humano",
+		Descripcion: "Bloqueo del frente A",
+		ProyectoID:  &proyectoA,
+		Modulo:      "core",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea A: %v", err)
+	}
+	if err := TomarTarea(tareaA, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea A: %v", err)
+	}
+	if err := IniciarTarea(tareaA, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea A: %v", err)
+	}
+	if err := BloquearTarea(tareaA, "Codex1", "esperando respuesta humana"); err != nil {
+		t.Fatalf("bloquear tarea A: %v", err)
+	}
+	if err := MarcarProyectoEsperandoHumano(proyectoA, "esperando respuesta humana"); err != nil {
+		t.Fatalf("marcar proyecto esperando humano: %v", err)
+	}
+	if err := PausarAsignacion("Codex1", proyectoA, "bloqueo_humano"); err != nil {
+		t.Fatalf("pausar asignacion A: %v", err)
+	}
+	if err := ActivarAsignacion("Codex1", proyectoB, "frente temporal"); err != nil {
+		t.Fatalf("activar asignacion B: %v", err)
+	}
+	if err := DesbloquearTarea(tareaA, "alberto", "respuesta recibida"); err != nil {
+		t.Fatalf("desbloquear tarea A: %v", err)
+	}
+
+	proyectoPlanificable, err := ResolverProyectoPlanificableAgente("Codex1")
+	if err != nil {
+		t.Fatalf("resolver proyecto planificable: %v", err)
+	}
+	if proyectoPlanificable != proyectoA {
+		t.Fatalf("deberia volver al proyecto A tras desbloqueo, got=%d want=%d", proyectoPlanificable, proyectoA)
+	}
+
+	asignacionActiva, err := GetAsignacionActivaAgente("Codex1")
+	if err != nil {
+		t.Fatalf("get asignacion activa: %v", err)
+	}
+	if asignacionActiva == nil || asignacionActiva.ProyectoID != proyectoA {
+		t.Fatalf("asignacion activa inesperada: %+v", asignacionActiva)
+	}
+	op, err := GetProyectoOperacion(proyectoA)
+	if err != nil {
+		t.Fatalf("get proyecto operacion: %v", err)
+	}
+	if op.EstadoOperativo != ProyectoOperativoActivo {
+		t.Fatalf("el proyecto A deberia quedar reactivado automaticamente: %+v", op)
+	}
+}
+
+func TestResolverProyectoPlanificableAgenteAsignaSegunPoliticaOperativaProyecto(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexLibre", "CodexOcupado")
+
+	if err := RegistrarAgente("CodexLibre", "programador"); err != nil {
+		t.Fatalf("registrar agente libre: %v", err)
+	}
+	if err := RegistrarAgente("CodexOcupado", "programador"); err != nil {
+		t.Fatalf("registrar agente ocupado: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre IN ('CodexLibre','CodexOcupado')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+
+	proyectoA, err := UpsertProyecto(&Proyecto{
+		Slug:    "proyecto-a",
+		Nombre:  "Proyecto A",
+		RutaAbs: filepath.Join(tmp, "proyecto-a"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto A: %v", err)
+	}
+	proyectoB, err := UpsertProyecto(&Proyecto{
+		Slug:    "proyecto-b",
+		Nombre:  "Proyecto B",
+		RutaAbs: filepath.Join(tmp, "proyecto-b"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto B: %v", err)
+	}
+	if err := UpsertProyectoOperacion(&ProyectoOperacion{
+		ProyectoID:       proyectoA,
+		EstadoOperativo:  ProyectoOperativoActivo,
+		ObjetivoPct:      80,
+		Prioridad:        200,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion A: %v", err)
+	}
+	if err := UpsertProyectoOperacion(&ProyectoOperacion{
+		ProyectoID:       proyectoB,
+		EstadoOperativo:  ProyectoOperativoActivo,
+		ObjetivoPct:      20,
+		Prioridad:        100,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion B: %v", err)
+	}
+	if err := ActivarAsignacion("CodexOcupado", proyectoB, "ocupado en B"); err != nil {
+		t.Fatalf("activar asignacion B: %v", err)
+	}
+	if _, err := CrearTarea(&Tarea{
+		Titulo:      "Trabajo A",
+		Descripcion: "Proyecto priorizado",
+		ProyectoID:  &proyectoA,
+		Modulo:      "core",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	}); err != nil {
+		t.Fatalf("crear tarea A: %v", err)
+	}
+	if _, err := CrearTarea(&Tarea{
+		Titulo:      "Trabajo B",
+		Descripcion: "Proyecto menos prioritario",
+		ProyectoID:  &proyectoB,
+		Modulo:      "core",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	}); err != nil {
+		t.Fatalf("crear tarea B: %v", err)
+	}
+
+	proyectoPlanificable, err := ResolverProyectoPlanificableAgente("CodexLibre")
+	if err != nil {
+		t.Fatalf("resolver proyecto planificable: %v", err)
+	}
+	if proyectoPlanificable != proyectoA {
+		t.Fatalf("deberia elegir el proyecto A por politica operativa, got=%d want=%d", proyectoPlanificable, proyectoA)
+	}
+	asignacionActiva, err := GetAsignacionActivaAgente("CodexLibre")
+	if err != nil {
+		t.Fatalf("get asignacion activa libre: %v", err)
+	}
+	if asignacionActiva == nil || asignacionActiva.ProyectoID != proyectoA {
+		t.Fatalf("asignacion activa inesperada tras politicas: %+v", asignacionActiva)
+	}
+}
+
+func TestResolverProyectoPlanificableAgenteNoReactivaProyectoSinResumeAutomatico(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "Codex1")
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("marcar agente disponible: %v", err)
+	}
+	proyectoA, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador-a",
+		Nombre:  "Orquestador A",
+		RutaAbs: filepath.Join(tmp, "orquestador-a"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto A: %v", err)
+	}
+	proyectoB, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador-b",
+		Nombre:  "Orquestador B",
+		RutaAbs: filepath.Join(tmp, "orquestador-b"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto B: %v", err)
+	}
+	if err := UpsertProyectoOperacion(&ProyectoOperacion{
+		ProyectoID:       proyectoA,
+		EstadoOperativo:  ProyectoOperativoEsperandoHumano,
+		Motivo:           "esperando respuesta humana",
+		ObjetivoPct:      100,
+		Prioridad:        300,
+		ResumeAutomatico: false,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion A: %v", err)
+	}
+	if err := ActivarAsignacion("Codex1", proyectoA, "frente original"); err != nil {
+		t.Fatalf("activar asignacion A: %v", err)
+	}
+	tareaA, err := CrearTarea(&Tarea{
+		Titulo:      "Esperando desbloqueo humano",
+		Descripcion: "Bloqueo del frente A",
+		ProyectoID:  &proyectoA,
+		Modulo:      "core",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea A: %v", err)
+	}
+	if err := TomarTarea(tareaA, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea A: %v", err)
+	}
+	if err := IniciarTarea(tareaA, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea A: %v", err)
+	}
+	if err := BloquearTarea(tareaA, "Codex1", "esperando respuesta humana"); err != nil {
+		t.Fatalf("bloquear tarea A: %v", err)
+	}
+	if err := PausarAsignacion("Codex1", proyectoA, "bloqueo_humano"); err != nil {
+		t.Fatalf("pausar asignacion A: %v", err)
+	}
+	if err := ActivarAsignacion("Codex1", proyectoB, "frente temporal"); err != nil {
+		t.Fatalf("activar asignacion B: %v", err)
+	}
+	if _, err := CrearTarea(&Tarea{
+		Titulo:      "Trabajo B",
+		Descripcion: "frente temporal",
+		ProyectoID:  &proyectoB,
+		Modulo:      "core",
+		Prioridad:   PrioridadMedia,
+		CreadoPor:   "alberto",
+	}); err != nil {
+		t.Fatalf("crear tarea B: %v", err)
+	}
+	if err := DesbloquearTarea(tareaA, "alberto", "respuesta recibida"); err != nil {
+		t.Fatalf("desbloquear tarea A: %v", err)
+	}
+
+	proyectoPlanificable, err := ResolverProyectoPlanificableAgente("Codex1")
+	if err != nil {
+		t.Fatalf("resolver proyecto planificable: %v", err)
+	}
+	if proyectoPlanificable != proyectoB {
+		t.Fatalf("no deberia reactivar automaticamente el proyecto A, got=%d want=%d", proyectoPlanificable, proyectoB)
+	}
+
+	asignacionActiva, err := GetAsignacionActivaAgente("Codex1")
+	if err != nil {
+		t.Fatalf("get asignacion activa: %v", err)
+	}
+	if asignacionActiva == nil || asignacionActiva.ProyectoID != proyectoB {
+		t.Fatalf("asignacion activa inesperada: %+v", asignacionActiva)
+	}
+	op, err := GetProyectoOperacion(proyectoA)
+	if err != nil {
+		t.Fatalf("get proyecto operacion: %v", err)
+	}
+	if op.EstadoOperativo != ProyectoOperativoEsperandoHumano {
+		t.Fatalf("el proyecto A no deberia reactivarse automaticamente: %+v", op)
 	}
 }

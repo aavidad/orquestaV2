@@ -169,6 +169,79 @@ func TestWebGobernanzaImportaSkillDesdeFormulario(t *testing.T) {
 	}
 }
 
+func TestWebGobernanzaListaYGuardaPermisosPorAPI(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	if err := db.RegistrarAgente("alberto", "admin"); err != nil {
+		t.Fatalf("registrar admin: %v", err)
+	}
+	if err := db.GuardarPermisoEdicionCatalogo("alberto", &db.PermisoEdicionCatalogo{
+		Entidad:        "reglas",
+		Rol:            "programador",
+		Alcance:        "mismo_rol",
+		PuedeCrear:     true,
+		PuedeEditar:    true,
+		PuedeActivar:   false,
+		PuedeVersionar: true,
+	}); err != nil {
+		t.Fatalf("guardar permiso inicial: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/gobernanza", webHandlerGobernanza)
+	mux.HandleFunc("/gobernanza/", webRouterGobernanza)
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/gobernanza?tipo_agente=programador&lang=en", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("gobernanza permisos status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, token := range []string{"Catalog permissions", "reglas", "programador"} {
+		if !strings.Contains(body, token) {
+			t.Fatalf("faltan permisos en la vista: %q\n%s", token, body)
+		}
+	}
+
+	form := url.Values{
+		"tipo_agente":     {"programador"},
+		"entidad":         {"skills"},
+		"rol":             {"documentador"},
+		"alcance":         {"todos"},
+		"puede_crear":     {"on"},
+		"puede_editar":    {"on"},
+		"puede_versionar": {"on"},
+	}
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/gobernanza/permisos", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("guardar permiso web status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	location := rec.Header().Get("Location")
+	permisos, err := db.ListarPermisosEdicionCatalogo("skills")
+	if err != nil {
+		t.Fatalf("listar permisos: %v", err)
+	}
+	if len(permisos) == 0 {
+		t.Fatalf("no se guardó el permiso nuevo; redirect=%q", location)
+	}
+	encontrado := false
+	for _, permiso := range permisos {
+		if permiso.Entidad == "skills" && permiso.Rol == "documentador" {
+			encontrado = true
+			if !permiso.PuedeCrear || !permiso.PuedeEditar || !permiso.PuedeVersionar || permiso.Alcance != "todos" {
+				t.Fatalf("permiso inesperado: %+v", permiso)
+			}
+		}
+	}
+	if !encontrado {
+		t.Fatalf("no se encontró el permiso guardado en %+v; redirect=%q", permisos, location)
+	}
+}
+
 func TestWebGobernanzaCreaSkillConContratoCompleto(t *testing.T) {
 	prepararDBTemporalCmd(t)
 	prevCatalogo := skillsCatalogoFetcher

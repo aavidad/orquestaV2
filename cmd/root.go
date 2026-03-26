@@ -40,15 +40,9 @@ func Execute() {
 		handled, exitCode, err := executeViaLocalServer(args, os.Stdout, os.Stderr)
 		if err != nil {
 			msg := fmt.Sprintf("orquesta: servidor local no disponible (%v)", err)
-			if allowLocalFallback(args) {
-				fmt.Fprintf(os.Stderr, "orquesta: servidor local no disponible, ejecutando en modo local por política explícita (%v)\n", err)
-			} else {
-				fmt.Fprintln(os.Stderr, msg)
-			}
-			fmt.Fprintln(os.Stderr, "usa --local o ORQUESTA_FORCE_LOCAL=1 para ejecutar en local")
-			if !allowLocalFallback(args) {
-				os.Exit(1)
-			}
+			fmt.Fprintln(os.Stderr, msg)
+			fmt.Fprintln(os.Stderr, "usa --local o ORQUESTA_FORCE_LOCAL=1 solo para recuperacion consciente")
+			os.Exit(1)
 		}
 		if handled {
 			os.Exit(exitCode)
@@ -64,7 +58,6 @@ func init() {
 	cobra.OnInitialize(initDB)
 	rootCmd.PersistentFlags().Bool("local", false, "Fuerza ejecución local sin delegar al servidor")
 	_ = rootCmd.PersistentFlags().MarkHidden("local")
-	rootCmd.PersistentFlags().Bool("allow-local-fallback", false, "Permite volver a modo local si el servidor no está disponible")
 	rootCmd.PersistentFlags().Bool("use-localrpc", false, "Activa delegación experimental al servidor local RPC")
 	_ = rootCmd.PersistentFlags().MarkHidden("use-localrpc")
 
@@ -131,18 +124,6 @@ func forceLocalMode(args []string) bool {
 	return false
 }
 
-func allowLocalFallback(args []string) bool {
-	if strings.TrimSpace(os.Getenv("ORQUESTA_ALLOW_LOCAL_FALLBACK")) == "1" {
-		return true
-	}
-	for _, arg := range args {
-		if arg == "--allow-local-fallback" {
-			return true
-		}
-	}
-	return false
-}
-
 func commandNeedsDB(args []string) bool {
 	args = normalizedCommandArgs(args)
 	if len(args) == 0 {
@@ -183,7 +164,7 @@ func commandNeedsDB(args []string) bool {
 func normalizedCommandArgs(args []string) []string {
 	out := make([]string, 0, len(args))
 	for _, arg := range args {
-		if arg == "--local" || arg == "--allow-local-fallback" || arg == "--use-localrpc" {
+		if arg == "--local" || arg == "--use-localrpc" {
 			continue
 		}
 		out = append(out, arg)

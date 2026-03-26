@@ -55,6 +55,14 @@ func TestGenerateWebAPIBacklog(t *testing.T) {
 	if got := mustTask(t, result, "entrega_final").Descripcion; !strings.Contains(got, "Orquesta de Alberto Avidad Fernandez") {
 		t.Fatalf("descripcion entrega sin atribucion: %s", got)
 	}
+	arquitectura = mustTask(t, result, "arquitectura")
+	if arquitectura.RolSugerido != "arquitecto" || arquitectura.Fase != "arquitectura" || arquitectura.Entregable == "" || len(arquitectura.CriteriosCierre) < 3 {
+		t.Fatalf("SOP de arquitectura incompleto: %+v", arquitectura)
+	}
+	frontend := mustTask(t, result, "frontend_base")
+	if frontend.RolSugerido != "frontend" || frontend.Entregable == "" {
+		t.Fatalf("SOP de frontend incompleto: %+v", frontend)
+	}
 }
 
 func TestGenerateCLIBacklogIsMinimal(t *testing.T) {

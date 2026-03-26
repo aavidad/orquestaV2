@@ -106,3 +106,68 @@ func TestWebProyectoFabricarAppGeneraBacklog(t *testing.T) {
 		t.Fatalf("se esperaba backlog dependiente, tareas=%+v", tareas)
 	}
 }
+
+func TestWebProyectoOperacionRenderizaYGuardaPorAPI(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.UpsertProyectoOperacion(&db.ProyectoOperacion{
+		ProyectoID:       proyectoID,
+		EstadoOperativo:  db.ProyectoOperativoActivo,
+		Motivo:           "flujo normal",
+		ObjetivoPct:      100,
+		Prioridad:        80,
+		MinAgentes:       1,
+		MaxAgentes:       3,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/proyectos/orquestador?lang=en", nil)
+	rec := httptest.NewRecorder()
+	webHandlerProyectoDetalle(rec, req, "orquestador")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detalle status=%d cuerpo=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Operational policy") || !strings.Contains(body, "Waiting for human") || !strings.Contains(body, "Auto resume") {
+		t.Fatalf("detalle de operacion sin i18n esperada: %s", body)
+	}
+
+	form := strings.NewReader("estado_operativo=esperando_humano&motivo=pendiente+de+validacion&objetivo_pct=60&prioridad=250&min_agentes=1&max_agentes=2&resume_automatico=1")
+	req = httptest.NewRequest(http.MethodPost, "/proyectos/orquestador/operacion?lang=en", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	webRouterProyectos(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("guardar operacion status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	location := rec.Header().Get("Location")
+	if !strings.Contains(location, "Operation+policy+saved") {
+		t.Fatalf("redirect inesperado: %s", location)
+	}
+
+	operacion, err := db.GetProyectoOperacion(proyectoID)
+	if err != nil {
+		t.Fatalf("get proyecto operacion: %v", err)
+	}
+	if operacion.EstadoOperativo != db.ProyectoOperativoEsperandoHumano ||
+		operacion.Motivo != "pendiente de validacion" ||
+		operacion.ObjetivoPct != 60 ||
+		operacion.Prioridad != 250 ||
+		operacion.MinAgentes != 1 ||
+		operacion.MaxAgentes != 2 ||
+		!operacion.ResumeAutomatico {
+		t.Fatalf("operacion guardada inesperada: %+v", operacion)
+	}
+}

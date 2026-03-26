@@ -62,14 +62,7 @@ var auditListarCmd = &cobra.Command{
 				})
 			}
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			localLogs, err := db.ListarAuditoria(f)
-			if err != nil {
-				return err
-			}
-			logs = localLogs
+			return serverFirstCommandError("auditoria listar")
 		}
 
 		if len(logs) == 0 {

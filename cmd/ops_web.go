@@ -35,7 +35,9 @@ type webSesionesData struct {
 }
 
 type webSesionDetalleData struct {
-	Sesion *db.Sesion
+	Sesion      *db.Sesion
+	Presupuesto *db.PresupuestoSesion
+	Evaluacion  *db.EvaluacionPresupuesto
 }
 
 func webHandlerAgentes(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +114,12 @@ func webHandlerSesionDetalle(w http.ResponseWriter, r *http.Request, id int64) {
 		http.NotFound(w, r)
 		return
 	}
-	webRender(w, r, webTplLayout+webTplSesionDetalle, webSesionDetalleData{Sesion: sesion})
+	presupuesto, evaluacion, _ := webCargarPresupuestoSesionPorAPI(id)
+	webRender(w, r, webTplLayout+webTplSesionDetalle, webSesionDetalleData{
+		Sesion:      sesion,
+		Presupuesto: presupuesto,
+		Evaluacion:  evaluacion,
+	})
 }
 
 func webCargarAsignacionesOpsPorAPI(estado, agente string) ([]*db.Asignacion, error) {
@@ -165,6 +172,14 @@ func webCargarSesionInspeccionPorAPI(id int64) (*db.Sesion, error) {
 		return nil, err
 	}
 	return resp.Sesion, nil
+}
+
+func webCargarPresupuestoSesionPorAPI(sesionID int64) (*db.PresupuestoSesion, *db.EvaluacionPresupuesto, error) {
+	var resp apiSesionPresupuestoResponse
+	if err := webInvocarAPIJSON(http.MethodGet, "/api/sesiones/presupuesto?sesion="+strconv.FormatInt(sesionID, 10), nil, &resp); err != nil {
+		return nil, nil, err
+	}
+	return resp.Presupuesto, resp.Evaluacion, nil
 }
 
 func parseBoolFiltro(raw string) (bool, error) {
@@ -264,6 +279,15 @@ const webTplSesionDetalle = `{{define "content"}}
       <tr><th>{{tr "common.heartbeat"}}</th><td>{{if .Sesion.HeartbeatAt}}{{.Sesion.HeartbeatAt.Format "2006-01-02 15:04:05"}}{{end}}</td></tr>
       <tr><th>{{tr "common.finished_at"}}</th><td>{{if .Sesion.Fin}}{{.Sesion.Fin.Format "2006-01-02 15:04:05"}}{{end}}</td></tr>
       <tr><th>{{tr "ops.sessions.resume_payload"}}</th><td><pre style="white-space:pre-wrap;margin:0">{{.Sesion.ResumePayloadJSON}}</pre></td></tr>
+      {{if .Presupuesto}}
+      <tr><th>{{tr "ops.sessions.budget_state"}}</th><td>{{if .Evaluacion}}{{.Evaluacion.Estado}}{{end}}</td></tr>
+      <tr><th>{{tr "ops.sessions.budget_source"}}</th><td>{{.Presupuesto.BudgetSource}}</td></tr>
+      <tr><th>{{tr "ops.sessions.budget_window"}}</th><td>{{.Presupuesto.WindowKind}}</td></tr>
+      <tr><th>{{tr "ops.sessions.budget_model"}}</th><td>{{.Presupuesto.ModelSlug}}</td></tr>
+      <tr><th>{{tr "ops.sessions.budget_remaining_tokens"}}</th><td>{{if .Presupuesto.RemainingTokens}}{{.Presupuesto.RemainingTokens}}{{end}}</td></tr>
+      <tr><th>{{tr "ops.sessions.budget_remaining_messages"}}</th><td>{{if .Presupuesto.RemainingMessages}}{{.Presupuesto.RemainingMessages}}{{end}}</td></tr>
+      <tr><th>{{tr "ops.sessions.budget_reason"}}</th><td>{{if .Evaluacion}}{{.Evaluacion.Motivo}}{{end}}</td></tr>
+      {{end}}
     </tbody>
   </table>
 </section>

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"orquesta/db"
 )
 
 var skillsDetectarCarenciaCmd = &cobra.Command{
@@ -40,26 +39,11 @@ var skillsDetectarCarenciaCmd = &cobra.Command{
 		} else if ok {
 			return emitirDeteccionSkill(cmd, resp.Resultado)
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		resultado, err := db.DetectarCarenciaSkill(&db.SolicitudDeteccionSkill{
-			TipoAgente:       req.TipoAgente,
-			Nombre:           req.Nombre,
-			Descripcion:      req.Descripcion,
-			CuandoUsar:       req.CuandoUsar,
-			Escenario:        req.Escenario,
-			AliasesJSON:      req.AliasesJSON,
-			HerramientasJSON: req.HerramientasJSON,
-		})
-		if err != nil {
-			return err
-		}
-		return emitirDeteccionSkill(cmd, resultado)
+		return serverFirstCommandError("skills detectar-carencia")
 	},
 }
 
-func emitirDeteccionSkill(cmd *cobra.Command, resultado *db.ResultadoDeteccionSkill) error {
+func emitirDeteccionSkill(cmd *cobra.Command, resultado any) error {
 	if resultado == nil {
 		return fmt.Errorf("resultado de deteccion vacio")
 	}

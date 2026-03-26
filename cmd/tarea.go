@@ -62,40 +62,7 @@ var tareaListarCmd = &cobra.Command{
 			tareas = tareasResp.Tareas
 			projectSlugs, _, _ = apiProjectSlugMap()
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			f := db.FiltroTareas{Agente: &agente, Modulo: &modulo}
-			if estadoStr != "" {
-				e := db.EstadoTarea(estadoStr)
-				f.Estado = &e
-			}
-			if agente == "" {
-				f.Agente = nil
-			}
-			if proyectoRef != "" {
-				p, err := db.GetProyecto(proyectoRef)
-				if err != nil {
-					return err
-				}
-				f.ProyectoID = &p.ID
-			}
-			if modulo == "" {
-				f.Modulo = nil
-			}
-			if propuestaCodigo != "" {
-				p, err := db.GetPropuesta(propuestaCodigo)
-				if err != nil {
-					return fmt.Errorf("propuesta '%s' no encontrada", propuestaCodigo)
-				}
-				f.PropuestaID = &p.ID
-			}
-			var err error
-			tareas, err = db.ListarTareas(f)
-			if err != nil {
-				return err
-			}
-			projectSlugs, _ = loadLocalProjectSlugMap()
+			return serverFirstCommandError("tarea listar")
 		}
 		if len(tareas) == 0 {
 			if jsonOut {
@@ -142,8 +109,7 @@ var tareaVerCmd = &cobra.Command{
 	Short: "Muestra detalle de una tarea",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := strconv.ParseInt(args[0], 10, 64)
-		if err != nil {
+		if _, err := strconv.ParseInt(args[0], 10, 64); err != nil {
 			return fmt.Errorf("id inválido")
 		}
 		var t *db.Tarea
@@ -155,14 +121,7 @@ var tareaVerCmd = &cobra.Command{
 			t = tareaResp.Tarea
 			projectSlugs, _, _ = apiProjectSlugMap()
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			t, err = db.GetTarea(id)
-			if err != nil {
-				return err
-			}
-			projectSlugs, _ = loadLocalProjectSlugMap()
+			return serverFirstCommandError("tarea ver")
 		}
 		agente := "—"
 		if t.Agente != nil {
@@ -228,47 +187,7 @@ var tareaNuevaCmd = &cobra.Command{
 			return nil
 		}
 
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		t := &db.Tarea{
-			Titulo:      titulo,
-			Descripcion: desc,
-			Modulo:      modulo,
-			Prioridad:   db.PrioridadTarea(prioridad),
-			CreadoPor:   creadorPor,
-		}
-		if proyectoRef != "" {
-			p, err := db.GetProyecto(proyectoRef)
-			if err != nil {
-				return err
-			}
-			t.ProyectoID = &p.ID
-		}
-
-		// Vincular a propuesta si se indicó
-		if propuestaCodigo != "" {
-			p, err := db.GetPropuesta(propuestaCodigo)
-			if err != nil {
-				return fmt.Errorf("propuesta '%s' no encontrada", propuestaCodigo)
-			}
-			t.PropuestaID = &p.ID
-		}
-		id, err := db.CrearTarea(t)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("✓ Tarea #%d creada: %s\n", id, titulo)
-
-		// Si se especificó agente, asignar directamente
-		if agente != "" {
-			if err := db.TomarTarea(id, agente); err != nil {
-				fmt.Printf("  ⚠ No se pudo asignar a %s: %v\n", agente, err)
-			} else {
-				fmt.Printf("  → Asignada a %s\n", agente)
-			}
-		}
-		return nil
+		return serverFirstCommandError("tarea nueva")
 	},
 }
 
@@ -290,14 +209,7 @@ var tareaTomar = &cobra.Command{
 			fmt.Printf("✓ Tarea #%d asignada a %s\n", id, args[1])
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		if err := db.TomarTarea(id, args[1]); err != nil {
-			return err
-		}
-		fmt.Printf("✓ Tarea #%d asignada a %s\n", id, args[1])
-		return nil
+		return serverFirstCommandError("tarea tomar")
 	},
 }
 
@@ -319,14 +231,7 @@ var tareaIniciarCmd = &cobra.Command{
 			fmt.Printf("✓ Tarea #%d en progreso (%s)\n", id, args[1])
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		if err := db.IniciarTarea(id, args[1]); err != nil {
-			return err
-		}
-		fmt.Printf("✓ Tarea #%d en progreso (%s)\n", id, args[1])
-		return nil
+		return serverFirstCommandError("tarea iniciar")
 	},
 }
 
@@ -350,14 +255,7 @@ var tareaCompletarCmd = &cobra.Command{
 			fmt.Printf("✓ Tarea #%d completada\n", id)
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		if err := db.CompletarTarea(id, args[1], commit); err != nil {
-			return err
-		}
-		fmt.Printf("✓ Tarea #%d completada\n", id)
-		return nil
+		return serverFirstCommandError("tarea completar")
 	},
 }
 
@@ -384,14 +282,7 @@ var tareaBloquearCmd = &cobra.Command{
 			fmt.Printf("✓ Tarea #%d bloqueada: %s\n", id, motivo)
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		if err := db.BloquearTarea(id, args[1], motivo); err != nil {
-			return err
-		}
-		fmt.Printf("✓ Tarea #%d bloqueada: %s\n", id, motivo)
-		return nil
+		return serverFirstCommandError("tarea bloquear")
 	},
 }
 
@@ -415,14 +306,7 @@ var tareaNotaCmd = &cobra.Command{
 			fmt.Printf("✓ Nota añadida a tarea #%d\n", id)
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		if err := db.AnotarTarea(id, args[1], nota); err != nil {
-			return err
-		}
-		fmt.Printf("✓ Nota añadida a tarea #%d\n", id)
-		return nil
+		return serverFirstCommandError("tarea nota")
 	},
 }
 
@@ -445,15 +329,7 @@ var tareaReasignarCmd = &cobra.Command{
 			fmt.Printf("✓ Tarea #%d reasignada a %s\n", id, nuevoAgente)
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		if err := db.ReasignarTarea(id, nuevoAgente); err != nil {
-			return err
-		}
-		db.Audit("alberto", "reasignar_tarea", "tarea", id, nuevoAgente)
-		fmt.Printf("✓ Tarea #%d reasignada a %s\n", id, nuevoAgente)
-		return nil
+		return serverFirstCommandError("tarea reasignar")
 	},
 }
 
@@ -480,14 +356,7 @@ var tareaDesbloquearCmd = &cobra.Command{
 			fmt.Printf("✓ Tarea #%d desbloqueada: %s\n", id, resolucion)
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		if err := db.DesbloquearTarea(id, args[1], resolucion); err != nil {
-			return err
-		}
-		fmt.Printf("✓ Tarea #%d desbloqueada: %s\n", id, resolucion)
-		return nil
+		return serverFirstCommandError("tarea desbloquear")
 	},
 }
 
@@ -508,15 +377,7 @@ var tareaBacklogCmd = &cobra.Command{
 			fmt.Printf("✓ Tarea #%d movida a backlog\n", id)
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		if err := db.MoverTareaABacklog(id); err != nil {
-			return err
-		}
-		db.Audit("alberto", "backlog_tarea", "tarea", id, "")
-		fmt.Printf("✓ Tarea #%d movida a backlog\n", id)
-		return nil
+		return serverFirstCommandError("tarea backlog")
 	},
 }
 
@@ -555,14 +416,7 @@ un mensaje en tu buzón con el output de error para que corrijas y reintentes.`,
 			solicitud = resp.Solicitud
 		}
 		if solicitud == nil {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			s, err := db.SolicitarRefineria(id, agente, rama, dir, cmdTest)
-			if err != nil {
-				return err
-			}
-			solicitud = s
+			return serverFirstCommandError("tarea refineria")
 		}
 		fmt.Printf("✓ Tarea #%d enviada a Refinería (solicitud #%d)\n", id, solicitud.ID)
 		fmt.Printf("  rama=%s  dir=%s  cmd=%s\n", solicitud.Rama, solicitud.DirTrabajo, solicitud.CmdTest)
@@ -592,12 +446,7 @@ var tareaCancelarCmd = &cobra.Command{
 		}, &map[string]any{}); err != nil {
 			return err
 		} else if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			if err := db.CancelarTarea(id, args[1], motivo); err != nil {
-				return err
-			}
+			return serverFirstCommandError("tarea cancelar")
 		}
 		fmt.Printf("✓ Tarea #%d cancelada: %s\n", id, motivo)
 		return nil
@@ -638,18 +487,6 @@ func init() {
 	)
 }
 
-func loadLocalProjectSlugMap() (map[int64]string, error) {
-	proyectos, err := db.ListarProyectos(db.FiltroProyectos{})
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[int64]string, len(proyectos))
-	for _, proyecto := range proyectos {
-		out[proyecto.ID] = proyecto.Slug
-	}
-	return out, nil
-}
-
 func projectLabel(projectSlugs map[int64]string, projectID *int64, empty string) string {
 	if projectID == nil {
 		return empty
@@ -666,8 +503,7 @@ var tareaNotasCmd = &cobra.Command{
 	Short: "Muestra las notas registradas en una tarea",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := strconv.ParseInt(args[0], 10, 64)
-		if err != nil {
+		if _, err := strconv.ParseInt(args[0], 10, 64); err != nil {
 			return fmt.Errorf("id inválido: %s", args[0])
 		}
 		var t *db.Tarea
@@ -677,13 +513,7 @@ var tareaNotasCmd = &cobra.Command{
 		} else if ok {
 			t = resp.Tarea
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			t, err = db.GetTarea(id)
-			if err != nil {
-				return fmt.Errorf("tarea #%d no encontrada", id)
-			}
+			return serverFirstCommandError("tarea notas")
 		}
 		fmt.Printf("Notas de la tarea #%d — %s\n", t.ID, t.Titulo)
 		fmt.Println("─────────────────────────────────────────")
@@ -726,13 +556,6 @@ su predecesora tenga el contrato definido o esté completada.`,
 			fmt.Printf("✓ Contrato definido para tarea #%d\n", id)
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		if err := db.DefinirContrato(id, args[1]); err != nil {
-			return err
-		}
-		fmt.Printf("✓ Contrato definido para tarea #%d\n", id)
-		return nil
+		return serverFirstCommandError("tarea contrato")
 	},
 }

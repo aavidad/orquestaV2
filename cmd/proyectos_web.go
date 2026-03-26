@@ -36,6 +36,7 @@ type webProyectosData struct {
 
 type webProyectoDetalleData struct {
 	Proyecto   *db.Proyecto
+	Operacion  *db.ProyectoOperacion
 	Votaciones []*db.HistorialVotacionProyecto
 	Decisiones []*db.DecisionProyecto
 	Documentos []*db.DocumentoExterno
@@ -52,6 +53,8 @@ func webRouterProyectos(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case len(parts) == 2 && r.Method == http.MethodGet:
 		webHandlerProyectoDetalle(w, r, parts[1])
+	case len(parts) == 3 && parts[2] == "operacion" && r.Method == http.MethodPost:
+		webHandlerProyectoOperacionGuardar(w, r, parts[1])
 	case len(parts) == 3 && parts[2] == "fabricar-app" && r.Method == http.MethodPost:
 		webHandlerProyectoFabricarApp(w, r, parts[1])
 	case len(parts) == 3 && parts[2] == "decisiones" && r.Method == http.MethodPost:
@@ -99,14 +102,47 @@ func webHandlerProyectoDetalle(w http.ResponseWriter, r *http.Request, slug stri
 		http.NotFound(w, r)
 		return
 	}
+	operacion, err := webCargarProyectoOperacionPorAPI(slug)
+	if err != nil {
+		webRender(w, r, webTplLayout+webTplProyectoDetalle, webProyectoDetalleData{
+			Proyecto:   overview.Proyecto,
+			Votaciones: overview.Votaciones,
+			Decisiones: overview.Decisiones,
+			Documentos: overview.Documentos,
+			Err:        err.Error(),
+		})
+		return
+	}
 	webRender(w, r, webTplLayout+webTplProyectoDetalle, webProyectoDetalleData{
 		Proyecto:   overview.Proyecto,
+		Operacion:  operacion,
 		Votaciones: overview.Votaciones,
 		Decisiones: overview.Decisiones,
 		Documentos: overview.Documentos,
 		Msg:        r.URL.Query().Get("ok"),
 		Err:        r.URL.Query().Get("err"),
 	})
+}
+
+func webHandlerProyectoOperacionGuardar(w http.ResponseWriter, r *http.Request, slug string) {
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	req := apiProyectoOperacionSetRequest{
+		EstadoOperativo:  strings.TrimSpace(r.FormValue("estado_operativo")),
+		Motivo:           strings.TrimSpace(r.FormValue("motivo")),
+		ObjetivoPct:      parseIntForm(r.FormValue("objetivo_pct"), 100),
+		MinAgentes:       parseIntForm(r.FormValue("min_agentes"), 0),
+		MaxAgentes:       parseIntForm(r.FormValue("max_agentes"), 0),
+		Prioridad:        parseIntForm(r.FormValue("prioridad"), 100),
+		ResumeAutomatico: webFormBool(r, "resume_automatico"),
+	}
+	if _, err := webGuardarProyectoOperacionPorAPI(slug, req); err != nil {
+		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/proyectos/"+slug+"?ok="+url.QueryEscape(webTranslateRequestf(r, "projects.flash.operation_saved")), http.StatusSeeOther)
 }
 
 func webHandlerProyectoDecisionNueva(w http.ResponseWriter, r *http.Request, slug string) {
@@ -199,6 +235,24 @@ func webFabricarAppProyectoPorAPI(ref string, req apiProyectoFabricarAppRequest)
 	return &resp, nil
 }
 
+func webCargarProyectoOperacionPorAPI(ref string) (*db.ProyectoOperacion, error) {
+	var resp apiProyectoOperacionResponse
+	path := "/api/proyectos/" + url.PathEscape(strings.TrimSpace(ref)) + "/operacion"
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Operacion, nil
+}
+
+func webGuardarProyectoOperacionPorAPI(ref string, req apiProyectoOperacionSetRequest) (*db.ProyectoOperacion, error) {
+	var resp apiProyectoOperacionResponse
+	path := "/api/proyectos/" + url.PathEscape(strings.TrimSpace(ref)) + "/operacion"
+	if err := webInvocarAPIJSON(http.MethodPost, path, req, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Operacion, nil
+}
+
 func webFormBool(r *http.Request, key string) bool {
 	raw := strings.TrimSpace(r.FormValue(key))
 	return raw == "1" || raw == "on" || strings.EqualFold(raw, "true")
@@ -214,6 +268,18 @@ func parseOptionalInt64(raw string) *int64 {
 		return nil
 	}
 	return &value
+}
+
+func parseIntForm(raw string, fallback int) int {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback
+	}
+	return value
 }
 
 const webTplProyectos = `{{define "content"}}
@@ -252,6 +318,29 @@ const webTplProyectoDetalle = `{{define "content"}}
 </section>
 
 <section class="container grid">
+  <article>
+    <h3>{{tr "projects.operation.title"}}</h3>
+    <form method="post" action="/proyectos/{{.Proyecto.Slug}}/operacion">
+      <label>{{tr "projects.operation.state"}}
+        <select name="estado_operativo">
+          <option value="activo" {{if or (not .Operacion) (eq .Operacion.EstadoOperativo "activo")}}selected{{end}}>{{tr "projects.operation.active"}}</option>
+          <option value="esperando_humano" {{if and .Operacion (eq .Operacion.EstadoOperativo "esperando_humano")}}selected{{end}}>{{tr "projects.operation.waiting_human"}}</option>
+          <option value="bloqueado_externo" {{if and .Operacion (eq .Operacion.EstadoOperativo "bloqueado_externo")}}selected{{end}}>{{tr "projects.operation.blocked_external"}}</option>
+          <option value="cerrado" {{if and .Operacion (eq .Operacion.EstadoOperativo "cerrado")}}selected{{end}}>{{tr "projects.operation.closed"}}</option>
+        </select>
+      </label>
+      <label>{{tr "Motivo"}} <textarea name="motivo">{{if .Operacion}}{{.Operacion.Motivo}}{{end}}</textarea></label>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem">
+        <label>{{tr "projects.operation.target_pct"}} <input name="objetivo_pct" inputmode="numeric" value="{{if .Operacion}}{{.Operacion.ObjetivoPct}}{{else}}100{{end}}"></label>
+        <label>{{tr "projects.operation.priority"}} <input name="prioridad" inputmode="numeric" value="{{if .Operacion}}{{.Operacion.Prioridad}}{{else}}100{{end}}"></label>
+        <label>{{tr "projects.operation.min_agents"}} <input name="min_agentes" inputmode="numeric" value="{{if .Operacion}}{{.Operacion.MinAgentes}}{{else}}0{{end}}"></label>
+        <label>{{tr "projects.operation.max_agents"}} <input name="max_agentes" inputmode="numeric" value="{{if .Operacion}}{{.Operacion.MaxAgentes}}{{else}}0{{end}}"></label>
+      </div>
+      <label><input type="checkbox" name="resume_automatico" value="1" {{if or (not .Operacion) .Operacion.ResumeAutomatico}}checked{{end}}> {{tr "projects.operation.auto_resume"}}</label>
+      <button type="submit">{{tr "projects.operation.save"}}</button>
+    </form>
+  </article>
+
   <article>
     <h3>{{tr "projects.factory.title"}}</h3>
     <form method="post" action="/proyectos/{{.Proyecto.Slug}}/fabricar-app">

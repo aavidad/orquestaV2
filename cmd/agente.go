@@ -9,7 +9,6 @@ package cmd
 
 import (
 	"bufio"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -370,26 +369,8 @@ var agentePrepararCmd = &cobra.Command{
 		} else if ok {
 			return imprimirAgentePreparar(out, jsonOut)
 		}
-
-		out, err := prepararAgenteLocal(agenteNombre, proyectoRef, conectorRef, modelo, razonamiento, perfilTarea)
-		if err != nil {
-			return err
-		}
-		return imprimirAgentePreparar(out, jsonOut)
+		return serverFirstCommandError("agente preparar")
 	},
-}
-
-func prepararAgenteLocal(agenteNombre, proyectoRef, conectorRef, modelo, razonamiento, perfilTarea string) (agentePrepararOutput, error) {
-	var out agentePrepararOutput
-	if err := ensureLocalDB(); err != nil {
-		return out, err
-	}
-
-	prep, err := lanzamientoruntime.PrepararDesdeRefs(agenteNombre, proyectoRef, conectorRef, modelo, razonamiento, perfilTarea)
-	if err != nil {
-		return out, err
-	}
-	return construirAgentePrepararOutputDesdeDatos(prep.Agente, prep.Proyecto, prep.Conector, prep.Ultima, modelo, razonamiento, perfilTarea)
 }
 
 var agenteTickCmd = &cobra.Command{
@@ -424,54 +405,7 @@ var agenteTickCmd = &cobra.Command{
 		} else if ok {
 			return imprimirAgenteTick(out, jsonOut)
 		}
-
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-
-		proyecto, err := db.GetProyecto(proyectoRef)
-		if err != nil {
-			return err
-		}
-
-		sesionActiva, err := db.GetSesionActiva(agenteNombre, &proyecto.ID)
-		if err != nil && err != sql.ErrNoRows {
-			return err
-		}
-		if sesionActiva != nil {
-			upd := db.SesionUpdate{Heartbeat: true}
-			if host != "" {
-				upd.Host = &host
-			}
-			if pidRaw > 0 {
-				upd.PID = &pidRaw
-			}
-			if err := db.GuardarSesionActiva(agenteNombre, &proyecto.ID, upd); err != nil {
-				return err
-			}
-			sesionActiva, err = db.GetSesionActiva(agenteNombre, &proyecto.ID)
-			if err != nil {
-				return err
-			}
-			// Si termina por cuota, pausamos (OP-084)
-			if finalizado && debeAutoPausarPorAgotamiento(cuotaPct, motivo) {
-				if err := registrarAutoPausaLocal(
-					agenteNombre,
-					60,
-					"Auto-pausa por agotamiento: "+motivo,
-					"Detección de agotamiento en tick final: "+motivo,
-				); err != nil {
-					return err
-				}
-			}
-		}
-
-		out, err = construirAgenteTickOutput(agenteNombre, proyecto, sesionActiva, cuotaPct)
-		if err != nil {
-			return err
-		}
-
-		return imprimirAgenteTick(out, jsonOut)
+		return serverFirstCommandError("agente tick")
 	},
 }
 
@@ -483,6 +417,11 @@ func init() {
 	agentePrepararCmd.Flags().String("perfil", "", "Perfil de tarea: orquestacion, analisis, script, implementacion, revision, etc.")
 	agentePrepararCmd.Flags().Bool("json", false, "Salida JSON")
 
+	agenteTickCmd.Flags().String("proyecto", "", "Proyecto en el que reporta el agente")
+	agenteTickCmd.Flags().String("host", "", "Host del proceso o runtime actual")
+	agenteTickCmd.Flags().Int64("pid", 0, "PID del proceso local si aplica")
+	agenteTickCmd.Flags().Int("cuota-pct", 0, "Consumo de cuota estimado en porcentaje")
+	agenteTickCmd.Flags().Bool("finalizado", false, "Marca que el turno actual del agente ha finalizado")
 	agenteTickCmd.Flags().String("motivo", "", "Motivo del estado actual")
 	agenteTickCmd.Flags().Bool("json", false, "Salida JSON")
 
@@ -545,11 +484,7 @@ var agenteEjecutarCmd = &cobra.Command{
 			if ok, err := apiGetQuery("/api/agente/preparar", params, &prep); err != nil {
 				return fmt.Errorf("error preparando agente: %w", err)
 			} else if !ok {
-				// Fallback local robusto (OP-086)
-				prep, err = prepararAgenteLocal(agente, proyecto, conector, modelo, "", "")
-				if err != nil {
-					return fmt.Errorf("error preparando agente (local fallback): %w", err)
-				}
+				return serverFirstCommandError("agente ejecutar")
 			}
 
 			if prep.EstadoCuota == "enfriamiento" || prep.EstadoCuota == "agotado" {
@@ -632,10 +567,9 @@ var agenteEjecutarCmd = &cobra.Command{
 							"sistema",
 							detalle,
 						); !ok {
-							_ = registrarAutoPausaLocal(agente, pausaFinal, motivoPausa, detalle)
+							fmt.Fprintf(os.Stderr, "\n[Orquesta] aviso: no se pudo registrar la auto-pausa porque el servidor no esta disponible\n")
 						} else if err != nil {
-							fmt.Fprintf(os.Stderr, "\n[Orquesta] aviso: no se pudo registrar la auto-pausa via API (%v); usando DB local\n", err)
-							_ = registrarAutoPausaLocal(agente, pausaFinal, motivoPausa, detalle)
+							fmt.Fprintf(os.Stderr, "\n[Orquesta] aviso: no se pudo registrar la auto-pausa via API (%v)\n", err)
 						}
 						fmt.Printf("⏸ [Orquesta] Agente pausado por %d min.\n", pausaFinal)
 						_ = proc.Process.Kill()
@@ -677,17 +611,7 @@ var agenteHandoffCmd = &cobra.Command{
 			strings.TrimSpace(externalSessionID),
 		)
 		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			orderID, err = db.CrearHandoffAgenteVivo(
-				strings.TrimSpace(args[0]),
-				strings.TrimSpace(args[1]),
-				tareaID,
-				strings.TrimSpace(motivo),
-				strings.TrimSpace(resumen),
-				strings.TrimSpace(externalSessionID),
-			)
+			return serverFirstCommandError("agente handoff")
 		}
 		if err != nil {
 			return err
@@ -722,17 +646,7 @@ var agenteReasignarVivoCmd = &cobra.Command{
 			strings.TrimSpace(externalSessionID),
 		)
 		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			orderID, err = db.CrearHandoffAgenteVivo(
-				strings.TrimSpace(args[1]),
-				strings.TrimSpace(args[2]),
-				&tareaID,
-				strings.TrimSpace(motivo),
-				strings.TrimSpace(resumen),
-				strings.TrimSpace(externalSessionID),
-			)
+			return serverFirstCommandError("agente reasignar-vivo")
 		}
 		if err != nil {
 			return err
@@ -759,13 +673,7 @@ var agentePausarCmd = &cobra.Command{
 				return err
 			}
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			if err := db.PausarAgente(nombre, minutos, motivo); err != nil {
-				return err
-			}
-			db.Audit(nombre, "pausa_externa", "agente", 0, fmt.Sprintf("Bloqueado %d min por: %s", minutos, motivo))
+			return serverFirstCommandError("agente pausar")
 		}
 		fmt.Printf("✓ Agente %s pausado por %d minutos. Orquesta lo reanimará automáticamente.\n", nombre, minutos)
 		return nil
@@ -783,13 +691,7 @@ var agentePurgarCmd = &cobra.Command{
 				return err
 			}
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			if err := db.EliminarAgente(nombre); err != nil {
-				return err
-			}
-			db.Audit("alberto", "purgar_agente", "agente", 0, nombre)
+			return serverFirstCommandError("agente eliminar")
 		}
 		fmt.Printf("✓ Agente %s eliminado correctamente\n", nombre)
 		return nil
@@ -804,10 +706,7 @@ var agenteRehabilitarCmd = &cobra.Command{
 		nombre := args[0]
 		ok, err := resetReanimacionAgentePorAPI(nombre)
 		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			err = db.ResetReanimacion(nombre)
+			return serverFirstCommandError("agente rehabilitar")
 		}
 		if err != nil {
 			return fmt.Errorf("error rehabilitando agente: %w", err)
@@ -834,7 +733,6 @@ var agenteFusionarCmd = &cobra.Command{
 		var (
 			rutaRespaldo string
 			resultado    *db.FusionAgentesResultado
-			err          error
 		)
 		if resp, ok, apiErr := fusionarAgentePorAPI(origen, destino, destinoRespaldo, etiqueta, retener); ok {
 			if apiErr != nil {
@@ -843,17 +741,7 @@ var agenteFusionarCmd = &cobra.Command{
 			rutaRespaldo = resp.RutaRespaldo
 			resultado = resp.Resultado
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			rutaRespaldo, err = ejecutarRespaldoBD(destinoRespaldo, etiqueta, retener)
-			if err != nil {
-				return err
-			}
-			resultado, err = db.FusionarAgentes(origen, destino)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("agente fusionar")
 		}
 
 		fmt.Printf("✓ Agente %s fusionado sobre %s\n", origen, destino)

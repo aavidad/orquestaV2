@@ -47,6 +47,7 @@ func Materialize(store MaterializeStore, projectID int64, actor string, plan Gen
 			Prioridad:    item.Prioridad,
 			Dependencias: deps,
 			CreadoPor:    actor,
+			Notas:        buildSOPNotes(item),
 		})
 		if err != nil {
 			return MaterializeResult{}, err
@@ -78,6 +79,26 @@ func resolveBlueprintDependencyIDs(ids map[string]int64, keys []string) ([]int64
 		out = append(out, id)
 	}
 	return out, nil
+}
+
+func buildSOPNotes(task BlueprintTask) string {
+	partes := make([]string, 0, 6)
+	if task.RolSugerido != "" {
+		partes = append(partes, "SOP rol sugerido: "+task.RolSugerido)
+	}
+	if task.Fase != "" {
+		partes = append(partes, "SOP fase: "+task.Fase)
+	}
+	if task.Entregable != "" {
+		partes = append(partes, "SOP entregable: "+task.Entregable)
+	}
+	if len(task.CriteriosCierre) > 0 {
+		partes = append(partes, "SOP criterios de salida:")
+		for idx, criterio := range task.CriteriosCierre {
+			partes = append(partes, fmt.Sprintf("%d. %s", idx+1, strings.TrimSpace(criterio)))
+		}
+	}
+	return strings.Join(partes, "\n")
 }
 
 type DBStore struct{}

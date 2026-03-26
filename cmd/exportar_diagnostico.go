@@ -32,14 +32,7 @@ var exportarDiagnosticoCmd = &cobra.Command{
 		} else if ok {
 			snapshot = &resp.Diagnostico
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			var err error
-			snapshot, err = db.ConstruirSnapshotDiagnostico(limitAudit)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("exportar diagnostico")
 		}
 
 		if asJSON {

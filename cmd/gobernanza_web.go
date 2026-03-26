@@ -30,6 +30,7 @@ type webGobernanzaData struct {
 	Reglas            []*db.Regla
 	Skills            []*db.Skill
 	VersionesSkill    map[int64][]*db.SkillVersion
+	Permisos          []*db.PermisoEdicionCatalogo
 	SkillsRemotas     []*skillsapp.SkillRemota
 	FiltroSkillRemota string
 	ErrSkillsRemotas  string
@@ -94,6 +95,8 @@ func webRouterGobernanza(w http.ResponseWriter, r *http.Request) {
 		webHandlerGobernanzaSkillBorrar(w, r, parts[2])
 	case len(parts) == 4 && parts[1] == "skills" && parts[3] == "editar" && r.Method == http.MethodPost:
 		webHandlerGobernanzaSkillEditar(w, r, parts[2])
+	case len(parts) == 2 && parts[1] == "permisos" && r.Method == http.MethodPost:
+		webHandlerGobernanzaPermisoGuardar(w, r)
 	case len(parts) == 2 && parts[1] == "workflows" && r.Method == http.MethodPost:
 		webHandlerGobernanzaWorkflowNuevo(w, r)
 	default:
@@ -365,6 +368,33 @@ func webHandlerGobernanzaWorkflowNuevo(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(webTranslateRequestf(r, "governance.flash.workflow_saved")), http.StatusSeeOther)
 }
 
+func webHandlerGobernanzaPermisoGuardar(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	tipoAgente := strings.TrimSpace(r.FormValue("tipo_agente"))
+	actor := strings.TrimSpace(r.FormValue("actor"))
+	if actor == "" {
+		actor = "alberto"
+	}
+	req := apiPermisoCatalogoSetRequest{
+		Actor:          actor,
+		Entidad:        strings.TrimSpace(r.FormValue("entidad")),
+		Rol:            strings.TrimSpace(r.FormValue("rol")),
+		Alcance:        strings.TrimSpace(r.FormValue("alcance")),
+		PuedeCrear:     strings.TrimSpace(r.FormValue("puede_crear")) != "",
+		PuedeEditar:    strings.TrimSpace(r.FormValue("puede_editar")) != "",
+		PuedeActivar:   strings.TrimSpace(r.FormValue("puede_activar")) != "",
+		PuedeVersionar: strings.TrimSpace(r.FormValue("puede_versionar")) != "",
+	}
+	if req.Alcance == "" {
+		req.Alcance = "mismo_rol"
+	}
+	if err := webGuardarPermisoCatalogoPorAPI(req); err != nil {
+		http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/gobernanza?tipo_agente="+url.QueryEscape(tipoAgente)+"&ok="+url.QueryEscape(webTranslateRequestf(r, "governance.permissions.flash.saved")), http.StatusSeeOther)
+}
+
 func parseBoolFormDefaultOn(raw string) bool {
 	raw = strings.TrimSpace(raw)
 	return raw == "" || raw == "on" || raw == "1" || strings.EqualFold(raw, "true")
@@ -464,6 +494,10 @@ func cargarDatosGobernanza(r *http.Request, tipoAgente string) (webGobernanzaDat
 	if err != nil {
 		return webGobernanzaData{}, err
 	}
+	itemsPermisos, err := webCargarPermisosCatalogoPorAPI("")
+	if err != nil {
+		return webGobernanzaData{}, err
+	}
 	filtroSkillRemota := strings.TrimSpace(r.URL.Query().Get("skill_q"))
 	skillsRemotas, errSkillsRemotas := webListarSkillsRemotasPorAPI(filtroSkillRemota, 24)
 	return webGobernanzaData{
@@ -471,6 +505,7 @@ func cargarDatosGobernanza(r *http.Request, tipoAgente string) (webGobernanzaDat
 		Reglas:            itemsReglas,
 		Skills:            itemsSkills,
 		VersionesSkill:    versionarSkills(itemsSkills),
+		Permisos:          itemsPermisos,
 		SkillsRemotas:     skillsRemotas,
 		FiltroSkillRemota: filtroSkillRemota,
 		Workflows:         workflowsToView(itemsWorkflows),
@@ -512,6 +547,26 @@ func webSetReglaActivaPorAPI(id int64, actor string, activa bool) error {
 		Actor:  actor,
 		Activa: activa,
 	}, nil)
+}
+
+func webCargarPermisosCatalogoPorAPI(entidad string) ([]*db.PermisoEdicionCatalogo, error) {
+	query := url.Values{}
+	if entidad = strings.TrimSpace(entidad); entidad != "" {
+		query.Set("entidad", entidad)
+	}
+	path := "/api/permisos-catalogo"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var resp apiPermisosCatalogoResponse
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Permisos, nil
+}
+
+func webGuardarPermisoCatalogoPorAPI(req apiPermisoCatalogoSetRequest) error {
+	return webInvocarAPIJSON(http.MethodPost, "/api/permisos-catalogo", req, nil)
 }
 
 func webCargarWorkflowsPorAPI(rol string, activo *bool) ([]*db.Workflow, error) {
@@ -953,6 +1008,75 @@ const webTplGobernanza = `{{define "content"}}
       <label>{{tr "governance.workflows.steps"}} <textarea name="pasos" required></textarea></label>
       <label><input type="checkbox" name="activo" checked> {{tr "common.active"}}</label>
       <button type="submit">{{tr "governance.workflows.save"}}</button>
+    </form>
+  </article>
+</section>
+
+<section class="container">
+  <article>
+    <h3>{{tr "governance.permissions.title"}}</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>{{tr "governance.permissions.entity"}}</th>
+          <th>{{tr "governance.permissions.role"}}</th>
+          <th>{{tr "governance.permissions.scope"}}</th>
+          <th>{{tr "governance.permissions.create"}}</th>
+          <th>{{tr "governance.permissions.edit"}}</th>
+          <th>{{tr "governance.permissions.activate"}}</th>
+          <th>{{tr "governance.permissions.version"}}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Permisos}}
+        <tr>
+          <td>{{.Entidad}}</td>
+          <td>{{.Rol}}</td>
+          <td>{{.Alcance}}</td>
+          <td>{{if .PuedeCrear}}✓{{else}}-{{end}}</td>
+          <td>{{if .PuedeEditar}}✓{{else}}-{{end}}</td>
+          <td>{{if .PuedeActivar}}✓{{else}}-{{end}}</td>
+          <td>{{if .PuedeVersionar}}✓{{else}}-{{end}}</td>
+        </tr>
+        {{else}}
+        <tr><td colspan="7">{{tr "governance.permissions.none"}}</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+    <form method="post" action="/gobernanza/permisos" style="margin-top:1rem">
+      <input type="hidden" name="tipo_agente" value="{{.TipoAgente}}">
+      <input type="hidden" name="actor" value="alberto">
+      <div class="grid2">
+        <label>{{tr "governance.permissions.entity"}}
+          <select name="entidad">
+            <option value="reglas">reglas</option>
+            <option value="skills">skills</option>
+            <option value="workflows">workflows</option>
+          </select>
+        </label>
+        <label>{{tr "governance.permissions.role"}}
+          <select name="rol">
+            <option value="programador">programador</option>
+            <option value="documentador">documentador</option>
+            <option value="admin">admin</option>
+          </select>
+        </label>
+      </div>
+      <div class="grid2">
+        <label>{{tr "governance.permissions.scope"}}
+          <select name="alcance">
+            <option value="mismo_rol">mismo_rol</option>
+            <option value="todos">todos</option>
+          </select>
+        </label>
+      </div>
+      <div style="display:flex;gap:1rem;flex-wrap:wrap">
+        <label><input type="checkbox" name="puede_crear"> {{tr "governance.permissions.create"}}</label>
+        <label><input type="checkbox" name="puede_editar"> {{tr "governance.permissions.edit"}}</label>
+        <label><input type="checkbox" name="puede_activar"> {{tr "governance.permissions.activate"}}</label>
+        <label><input type="checkbox" name="puede_versionar"> {{tr "governance.permissions.version"}}</label>
+      </div>
+      <button type="submit">{{tr "governance.permissions.save"}}</button>
     </form>
   </article>
 </section>

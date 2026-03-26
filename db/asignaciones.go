@@ -43,7 +43,7 @@ func ActivarAsignacion(agente string, proyectoID int64, nota string) error {
 	if _, err = tx.Exec(`
 		UPDATE asignaciones
 		SET estado='cerrada', cerrada_at=CURRENT_TIMESTAMP
-		WHERE agente=? AND estado IN ('planificada','activa','pausada') AND proyecto_id <> ?`,
+		WHERE agente=? AND estado IN ('planificada','activa') AND proyecto_id <> ?`,
 		agente, proyectoID,
 	); err != nil {
 		return err
@@ -76,6 +76,36 @@ func ActivarAsignacion(agente string, proyectoID int64, nota string) error {
 		return err
 	}
 	Audit(agente, "activar_asignacion", "proyecto", proyectoID, nota)
+	return nil
+}
+
+func PausarAsignacion(agente string, proyectoID int64, nota string) error {
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec(`
+		UPDATE asignaciones
+		SET estado='pausada', nota=?, cerrada_at=NULL
+		WHERE agente=? AND proyecto_id=? AND estado='activa'`,
+		nota, agente, proyectoID,
+	)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return nil
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	Audit(agente, "pausar_asignacion", "proyecto", proyectoID, nota)
 	return nil
 }
 
@@ -115,6 +145,18 @@ func ListarAsignaciones(f FiltroAsignaciones) ([]*Asignacion, error) {
 		list = append(list, a)
 	}
 	return list, rows.Err()
+}
+
+func GetAsignacionActivaAgente(agente string) (*Asignacion, error) {
+	estado := AsignacionActiva
+	list, err := ListarAsignaciones(FiltroAsignaciones{Agente: &agente, Estado: &estado})
+	if err != nil {
+		return nil, err
+	}
+	if len(list) == 0 {
+		return nil, sql.ErrNoRows
+	}
+	return list[0], nil
 }
 
 func ContarAsignacionesActivasPorProyecto() (map[int64]int, error) {

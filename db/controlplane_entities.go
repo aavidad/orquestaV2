@@ -1488,6 +1488,9 @@ func ejecutarRuntimeOrderResume(order *RuntimeOrder) error {
 	if err := actualizarEstadoSesionParaOrden(order, "activa"); err != nil {
 		return err
 	}
+	if order.ProyectoID != nil {
+		EmitirHookCicloVida(order.Agente, HookSessionResume, *order.ProyectoID, "runtime_order", order.ID, order.Agente, "resume")
+	}
 	result := map[string]any{
 		"ok":            true,
 		"runtime_id":    runtime.ID,
@@ -1914,6 +1917,7 @@ func prepararResumeBootstrapRuntime(agente string, proyecto *Proyecto, resume ru
 	if resumen := construirResumenBootstrapDB(resume.ResumenContinuidad, order, mailbox, checkpoint); resumen != "" {
 		resume.ResumenContinuidad = resumen
 	}
+	enriquecerResumeConContextoProyectoDB(&resume, strings.TrimSpace(agente), proyecto)
 	for _, msg := range mailbox {
 		if msg == nil || msg.ID == 0 {
 			continue
@@ -1940,6 +1944,31 @@ func prepararResumeBootstrapRuntime(agente string, proyecto *Proyecto, resume ru
 		}
 	}
 	return resume, bootstrap, nil
+}
+
+func enriquecerResumeConContextoProyectoDB(resume *runtimeagente.ResumeContext, agente string, proyecto *Proyecto) {
+	if resume == nil || proyecto == nil {
+		return
+	}
+	if strings.TrimSpace(resume.ExternalSessionID) == "" &&
+		strings.TrimSpace(resume.ResumePayloadJSON) == "" &&
+		strings.TrimSpace(resume.ResumenContinuidad) == "" {
+		return
+	}
+	contexto, resumen := BuildProjectContextSummary(agente, proyecto)
+	if len(contexto) == 0 {
+		return
+	}
+	if payload := AppendProjectContextPayload(resume.ResumePayloadJSON, contexto); payload != "" {
+		resume.ResumePayloadJSON = payload
+	}
+	if resumen != "" && !strings.Contains(resume.ResumenContinuidad, resumen) {
+		if strings.TrimSpace(resume.ResumenContinuidad) == "" {
+			resume.ResumenContinuidad = resumen
+		} else {
+			resume.ResumenContinuidad += ". " + resumen
+		}
+	}
 }
 
 func claimBootstrapRuntimeOrderParaStart(agente string, proyectoID *int64, excludeOrderID int64) (*RuntimeOrder, error) {
@@ -2772,7 +2801,17 @@ func aparcarSesionActiva(agente string, proyectoID *int64) error {
 		return err
 	}
 	Audit(agente, "aparcar_sesion", "sesion", 0, "")
+	if proyectoID != nil {
+		EmitirHookCicloVida(agente, HookSessionPark, *proyectoID, "sesion", 0, agente, "aparcar_sesion")
+	}
 	return nil
+}
+
+func AparcarSesionActiva(agente string, proyectoID *int64) error {
+	if err := aparcarSesionActiva(agente, proyectoID); err != nil {
+		return err
+	}
+	return MarcarRuntimeHandlesCerradosPorAgente(strings.TrimSpace(agente))
 }
 
 func actualizarEstadoSesionParaOrden(order *RuntimeOrder, estado string) error {

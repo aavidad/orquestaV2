@@ -13,7 +13,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -46,32 +45,32 @@ func capturarStdout(t *testing.T, fn func()) string {
 }
 
 func TestExportarDiagnosticoMarkdown(t *testing.T) {
-	tmp := prepararDBTemporalCmd(t)
-
-	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
-		Slug:    "orquestador",
-		Nombre:  "Orquestador",
-		RutaAbs: filepath.Join(tmp, "orquestador"),
-		Tipo:    db.ProyectoRepo,
-		Activo:  true,
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
-	if err != nil {
-		t.Fatalf("upsert proyecto: %v", err)
-	}
-	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
-		t.Fatalf("registrar agente: %v", err)
-	}
-	if _, err := db.IniciarSesionContexto(db.SesionInicio{
-		Agente:             "Codex1",
-		ProyectoID:         &proyectoID,
-		CWD:                filepath.Join(tmp, "orquestador"),
-		Herramienta:        "codex-cli",
-		ExternalSessionID:  "sess-diag",
-		ResumenContinuidad: "diagnostico",
-	}); err != nil {
-		t.Fatalf("iniciar sesion: %v", err)
-	}
+	mux.HandleFunc("/api/diagnostico", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiDiagnosticoResponse{
+			Diagnostico: db.SnapshotDiagnostico{
+				GeneradoEn:         time.Date(2026, 3, 22, 21, 0, 0, 0, time.UTC),
+				Agentes:            []*db.Agente{{Nombre: "Codex1", Activo: true}},
+				ConteoTareas:       map[string]int{"en_progreso": 1},
+				SesionesActivas:    []*db.Sesion{{ID: 1, Agente: "Codex1", Estado: "activa"}},
+				PropuestasAbiertas: []db.PropuestaDiagnostico{},
+				Config:             map[string]string{"agent_tick_seconds": "30"},
+				AuditoriaReciente:  []db.AuditEntry{{Agente: "Codex1", Accion: "test", Entidad: "runtime", EntidadID: 1, CreatedAt: time.Date(2026, 3, 22, 21, 0, 0, 0, time.UTC)}},
+			},
+		})
+	})
 
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	resetCommandFlags(exportarDiagnosticoCmd)
 	if err := exportarDiagnosticoCmd.Flags().Set("json", "false"); err != nil {
 		t.Fatalf("set flag json: %v", err)
 	}
@@ -93,8 +92,29 @@ func TestExportarDiagnosticoMarkdown(t *testing.T) {
 }
 
 func TestExportarDiagnosticoJSON(t *testing.T) {
-	prepararDBTemporalCmd(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/diagnostico", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiDiagnosticoResponse{
+			Diagnostico: db.SnapshotDiagnostico{
+				GeneradoEn:   time.Date(2026, 3, 22, 21, 0, 0, 0, time.UTC),
+				Agentes:      []*db.Agente{{Nombre: "Codex1", Activo: true}},
+				ConteoTareas: map[string]int{"en_progreso": 1},
+				Config:       map[string]string{"agent_tick_seconds": "30"},
+			},
+		})
+	})
 
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	resetCommandFlags(exportarDiagnosticoCmd)
 	if err := exportarDiagnosticoCmd.Flags().Set("json", "true"); err != nil {
 		t.Fatalf("set flag json: %v", err)
 	}
@@ -141,6 +161,7 @@ func TestExportarDiagnosticoUsaAPI(t *testing.T) {
 	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
 	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
 
+	resetCommandFlags(exportarDiagnosticoCmd)
 	if err := exportarDiagnosticoCmd.Flags().Set("json", "false"); err != nil {
 		t.Fatalf("set flag json: %v", err)
 	}

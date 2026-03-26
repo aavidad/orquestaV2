@@ -38,12 +38,10 @@ var exportarEstadoCmd = &cobra.Command{
 		var agentes []*db.Agente
 		var propuestas []*db.Propuesta
 		var tareas []*db.Tarea
-		usaAPI := false
 		var agentesResp apiAgentesResponse
 		if ok, err := apiGet("/api/agentes", &agentesResp); err != nil {
 			return err
 		} else if ok {
-			usaAPI = true
 			agentes = agentesResp.Agentes
 			var propuestasResp apiPropuestasResponse
 			if _, err := apiGet("/api/propuestas", &propuestasResp); err != nil {
@@ -56,12 +54,7 @@ var exportarEstadoCmd = &cobra.Command{
 			}
 			tareas = tareasResp.Tareas
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			agentes, _ = db.ListarAgentes()
-			propuestas, _ = db.ListarPropuestas(nil, nil)
-			tareas, _ = db.ListarTareas(db.FiltroTareas{})
+			return serverFirstCommandError("exportar estado")
 		}
 		for _, a := range agentes {
 			activo := "no"
@@ -83,8 +76,6 @@ var exportarEstadoCmd = &cobra.Command{
 				var resp apiPropuestaDetalleResponse
 				if ok, err := apiGet("/api/propuestas/"+p.Codigo, &resp); err == nil && ok && resp.Propuesta != nil {
 					p = resp.Propuesta
-				} else if !usaAPI && db.DB != nil {
-					p.Votos, _ = db.ResumenVotos(p.ID)
 				}
 			}
 			cerrada := ""
@@ -157,14 +148,7 @@ var exportarAuditCmd = &cobra.Command{
 		} else if ok {
 			entries = auditResp.Audit
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			var err error
-			entries, err = db.AuditLog(limit)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("exportar audit")
 		}
 		fmt.Printf("# Audit Log (últimas %d entradas)\n\n", limit)
 		fmt.Printf("| Fecha | Agente | Acción | Entidad | ID | Detalle |\n")

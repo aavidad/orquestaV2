@@ -37,14 +37,11 @@ var reglasListarCmd = &cobra.Command{
 			activa = ptrBool(true)
 		}
 		reglas, ok, err := cargarReglasDesdeAPI(strings.TrimSpace(rol), activa)
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			reglas, err = db.ListarReglas(strings.TrimSpace(rol), activa)
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("reglas listar")
 		}
 		if len(reglas) == 0 {
 			fmt.Println("No hay reglas con ese filtro.")
@@ -83,21 +80,7 @@ var reglasCrearCmd = &cobra.Command{
 			fmt.Printf("✓ Regla #%d creada\n", id)
 			return nil
 		}
-
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		id, err := db.CrearRegla(actor, &db.Regla{
-			TipoAgente:  strings.TrimSpace(rol),
-			Categoria:   strings.TrimSpace(categoria),
-			Titulo:      strings.TrimSpace(titulo),
-			Descripcion: strings.TrimSpace(descripcion),
-		})
-		if err != nil {
-			return err
-		}
-		fmt.Printf("✓ Regla #%d creada\n", id)
-		return nil
+		return serverFirstCommandError("reglas crear")
 	},
 }
 
@@ -115,14 +98,11 @@ var reglasEditarCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		r, ok, err := cargarReglaDesdeAPI(id)
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			r, err = db.GetRegla(id)
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("reglas editar")
 		}
 		if cmd.Flags().Changed("rol") {
 			rol, _ := cmd.Flags().GetString("rol")
@@ -150,12 +130,7 @@ var reglasEditarCmd = &cobra.Command{
 		}); err != nil {
 			return err
 		} else if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			if err := db.ActualizarRegla(actor, r); err != nil {
-				return err
-			}
+			return serverFirstCommandError("reglas editar")
 		}
 		fmt.Printf("✓ Regla #%d actualizada\n", id)
 		return nil
@@ -174,14 +149,11 @@ var reglasVersionesCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		versiones, ok, err := cargarVersionesReglaDesdeAPI(id)
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			versiones, err = db.ListarVersionesRegla(id)
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("reglas versiones")
 		}
 		if len(versiones) == 0 {
 			fmt.Println("No hay versiones registradas para esa regla.")
@@ -211,14 +183,11 @@ var skillsListarCmd = &cobra.Command{
 			activa = ptrBool(true)
 		}
 		skills, ok, err := cargarSkillsDesdeAPI(strings.TrimSpace(rol), activa)
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			skills, err = db.ListarSkills(strings.TrimSpace(rol), activa)
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("skills listar")
 		}
 		if len(skills) == 0 {
 			fmt.Println("No hay skills con ese filtro.")
@@ -277,29 +246,7 @@ var skillsCrearCmd = &cobra.Command{
 			fmt.Printf("✓ Skill #%d creado\n", id)
 			return nil
 		}
-
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		id, err := db.CrearSkill(actor, &db.Skill{
-			TipoAgente:         strings.TrimSpace(rol),
-			Nombre:             strings.TrimSpace(nombre),
-			Descripcion:        strings.TrimSpace(descripcion),
-			CuandoUsar:         strings.TrimSpace(cuandoUsar),
-			Escenario:          strings.TrimSpace(escenario),
-			Prioridad:          prioridad,
-			AliasesJSON:        aliasesJSON,
-			HerramientasJSON:   herramientasJSON,
-			Origen:             strings.TrimSpace(origen),
-			NivelRiesgo:        strings.TrimSpace(nivelRiesgo),
-			RequiereAprobacion: requiereAprobacion,
-			Activa:             true,
-		})
-		if err != nil {
-			return err
-		}
-		fmt.Printf("✓ Skill #%d creado\n", id)
-		return nil
+		return serverFirstCommandError("skills crear")
 	},
 }
 
@@ -317,14 +264,11 @@ var skillsEditarCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		s, ok, err := cargarSkillDesdeAPI(id)
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			s, err = db.GetSkill(id)
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("skills editar")
 		}
 		if cmd.Flags().Changed("rol") {
 			rol, _ := cmd.Flags().GetString("rol")
@@ -392,12 +336,7 @@ var skillsEditarCmd = &cobra.Command{
 		}); err != nil {
 			return err
 		} else if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			if err := db.ActualizarSkill(actor, s); err != nil {
-				return err
-			}
+			return serverFirstCommandError("skills editar")
 		}
 		fmt.Printf("✓ Skill #%d actualizado\n", id)
 		return nil
@@ -416,14 +355,11 @@ var skillsVersionesCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		versiones, ok, err := cargarVersionesSkillDesdeAPI(id)
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			versiones, err = db.ListarVersionesSkill(id)
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("skills versiones")
 		}
 		if len(versiones) == 0 {
 			fmt.Println("No hay versiones registradas para ese skill.")
@@ -453,14 +389,11 @@ var workflowsListarCmd = &cobra.Command{
 			activo = ptrBool(true)
 		}
 		workflows, ok, err := cargarWorkflowsDesdeAPI(strings.TrimSpace(rol), activo)
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			workflows, err = db.ListarWorkflows(strings.TrimSpace(rol), activo)
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("workflows listar")
 		}
 		if len(workflows) == 0 {
 			fmt.Println("No hay workflows con ese filtro.")
@@ -484,14 +417,11 @@ var workflowsVerCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		w, ok, err := cargarWorkflowDesdeAPI(id)
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			w, err = db.GetWorkflowByID(id)
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("workflows ver")
 		}
 		fmt.Printf("Workflow #%d — %s\n", w.ID, w.Nombre)
 		fmt.Printf("  Rol:         %s\n", w.TipoAgente)
@@ -535,21 +465,7 @@ var workflowsCrearCmd = &cobra.Command{
 			fmt.Printf("✓ Workflow #%d creado\n", id)
 			return nil
 		}
-
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		id, err := db.CrearWorkflow(actor, &db.Workflow{
-			TipoAgente:  strings.TrimSpace(rol),
-			Nombre:      strings.TrimSpace(nombre),
-			Descripcion: strings.TrimSpace(descripcion),
-			Pasos:       pasosJSON,
-		})
-		if err != nil {
-			return err
-		}
-		fmt.Printf("✓ Workflow #%d creado\n", id)
-		return nil
+		return serverFirstCommandError("workflows crear")
 	},
 }
 
@@ -567,14 +483,11 @@ var workflowsEditarCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		w, ok, err := cargarWorkflowDesdeAPI(id)
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			w, err = db.GetWorkflowByID(id)
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("workflows editar")
 		}
 		if cmd.Flags().Changed("rol") {
 			rol, _ := cmd.Flags().GetString("rol")
@@ -603,12 +516,7 @@ var workflowsEditarCmd = &cobra.Command{
 		}); err != nil {
 			return err
 		} else if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			if err := db.ActualizarWorkflow(actor, w); err != nil {
-				return err
-			}
+			return serverFirstCommandError("workflows editar")
 		}
 		fmt.Printf("✓ Workflow #%d actualizado\n", id)
 		return nil
@@ -627,14 +535,11 @@ var workflowsVersionesCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		versiones, ok, err := cargarVersionesWorkflowDesdeAPI(id)
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			versiones, err = db.ListarVersionesWorkflow(id)
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("workflows versiones")
 		}
 		if len(versiones) == 0 {
 			fmt.Println("No hay versiones registradas para ese workflow.")
@@ -659,14 +564,11 @@ var permisosListarCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		entidad, _ := cmd.Flags().GetString("entidad")
 		permisos, ok, err := cargarPermisosCatalogoDesdeAPI(strings.TrimSpace(entidad))
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			permisos, err = db.ListarPermisosEdicionCatalogo(strings.TrimSpace(entidad))
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("permisos listar")
 		}
 		if len(permisos) == 0 {
 			fmt.Println("No hay permisos de edición registrados.")
@@ -715,14 +617,7 @@ var permisosFijarCmd = &cobra.Command{
 			fmt.Printf("✓ Permiso actualizado: %s/%s\n", permiso.Entidad, permiso.Rol)
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		if err := db.GuardarPermisoEdicionCatalogo(actor, permiso); err != nil {
-			return err
-		}
-		fmt.Printf("✓ Permiso actualizado: %s/%s\n", permiso.Entidad, permiso.Rol)
-		return nil
+		return serverFirstCommandError("permisos fijar")
 	},
 }
 
@@ -846,12 +741,7 @@ func activarReglaCmd(activa bool) *cobra.Command {
 			if ok, err := setReglaActivaPorAPI(id, actor, activa); err != nil {
 				return err
 			} else if !ok {
-				if err := ensureLocalDB(); err != nil {
-					return err
-				}
-				if err := db.SetReglaActiva(actor, id, activa); err != nil {
-					return err
-				}
+				return serverFirstCommandError("reglas " + uso)
 			}
 			fmt.Printf("✓ Regla #%d %s\n", id, estadoVerbo(activa))
 			return nil
@@ -882,12 +772,7 @@ func activarSkillCmd(activo bool) *cobra.Command {
 			if ok, err := setSkillActivoPorAPI(id, actor, activo); err != nil {
 				return err
 			} else if !ok {
-				if err := ensureLocalDB(); err != nil {
-					return err
-				}
-				if err := db.SetSkillActivo(actor, id, activo); err != nil {
-					return err
-				}
+				return serverFirstCommandError("skills " + uso)
 			}
 			fmt.Printf("✓ Skill #%d %s\n", id, estadoVerbo(activo))
 			return nil
@@ -918,12 +803,7 @@ func activarWorkflowCmd(activo bool) *cobra.Command {
 			if ok, err := setWorkflowActivoPorAPI(id, actor, activo); err != nil {
 				return err
 			} else if !ok {
-				if err := ensureLocalDB(); err != nil {
-					return err
-				}
-				if err := db.SetWorkflowActivo(actor, id, activo); err != nil {
-					return err
-				}
+				return serverFirstCommandError("workflows " + uso)
 			}
 			fmt.Printf("✓ Workflow #%d %s\n", id, estadoVerbo(activo))
 			return nil

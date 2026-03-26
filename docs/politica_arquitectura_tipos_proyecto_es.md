@@ -42,6 +42,16 @@ No debe imponerse como ritual en:
 - utilidades de migración puntuales
 - pruebas de concepto de corto alcance
 
-## Modo servidor obligatorio para el CLI
+## Modo servidor obligatorio para toda la app
 
-Las operaciones de `orquesta` delegan por defecto en el servicio `orquesta serve`. El CLI sólo actúa de forma local cuando se pasa explicitamente `--local`, `--allow-local-fallback` o se fija `ORQUESTA_FORCE_LOCAL=1`/`ORQUESTA_ALLOW_LOCAL_FALLBACK=1`. Si el servidor no responde, el comando falla con un mensaje que pide esos flags. El modo local queda reservado a escenarios de recuperación y no debe usarse como patrón diario ni para generar nueva lógica de negocio.
+La aplicacion Orquesta, incluida su CLI, la web, los scripts auxiliares y cualquier cliente futuro, debe operar contra `orquesta serve` y su API como camino normal y oficial.
+
+Reglas vinculantes:
+
+1. No se debe usar la base de datos local como backend operativo normal desde clientes, scripts, paneles o comandos de negocio.
+2. No se debe introducir nueva logica de producto que funcione solo en modo local o que requiera abrir `orquesta.db` sin pasar por API/servicios expuestos.
+3. El acceso local queda reservado exclusivamente a recuperacion explicita, diagnostico excepcional o mantenimiento tecnico temporal mientras exista una brecha real de API.
+4. Cuando una capacidad exista por API, el flujo local equivalente debe dejar de usarse y debe retirarse progresivamente.
+5. La meta del proyecto es `cero operacion normal sin API`.
+
+En consecuencia, cualquier nueva funcionalidad de la app debe nacer `server-first`, y cualquier flujo heredado que siga dependiendo de BD local se considera deuda tecnica a eliminar.

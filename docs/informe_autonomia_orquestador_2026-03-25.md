@@ -35,6 +35,7 @@ Estado real actual:
 - sí existe handoff preventivo por presupuesto de sesión con validación de frescura del snapshot
 - sí existe bootstrap de continuidad al arrancar o retomar
 - sí existe consumo periódico en el daemon para todas las `runtime_orders` despachables, no solo para órdenes básicas
+- sí existe estado operativo explícito de proyecto (`activo`, `esperando_humano`, `bloqueado_externo`, `cerrado`) y auto-reactivación al detectarse desbloqueo
 - `stop` ya cierra también la sesión viva, no solo runtime y handle
 - el adaptador remoto ya tiene política configurable de reintentos para acciones de control seguras, sin reintentar `start` ni `send_instruction`
 - `sync_status` ya puede observar estado remoto real por `status_path`, normalizarlo a estado canónico del handle y conservar el estado remoto crudo en metadata
@@ -87,6 +88,21 @@ La ejecución de órdenes vive en `db/controlplane_entities.go` y cubre:
 - `handoff`
 
 Además, el batch periódico del daemon ya despacha esas órdenes compatibles desde `ProcesarRuntimeOrdersBatch()`; ya no queda limitado a `sync_status`, `checkpoint`, `nudge` y `discordia`.
+
+### 2.b Estado operativo de proyecto y retorno automático
+
+Ya existe una capa explícita de operación por proyecto:
+
+- `db/proyectos_operacion.go` persiste el estado operativo del proyecto y su política básica
+- `cmd/controlplane_support.go` marca `esperando_humano` cuando el agente queda bloqueado y necesita intervención
+- `db/planificador.go` ya no replanifica proyectos no operables y reactiva automáticamente un proyecto pausado cuando detecta que el bloqueo ha sido resuelto
+
+Con esto el flujo deja de ser solo local al agente:
+
+1. tarea bloqueada sin trabajo real restante
+2. proyecto pasa a `esperando_humano`
+3. sesión/asignación se aparcan
+4. al desbloquear la tarea, el planificador reactiva el proyecto y devuelve al agente al frente pausado
 
 ### 3. Bootstrap y continuidad
 
@@ -292,7 +308,7 @@ No es el hueco más conceptual, pero sí afecta a la autonomía en entorno real.
 Existen rutas de fallback/local opt-in en CLI:
 
 - `--local`
-- `--allow-local-fallback`
+- `--local`
 - variables de entorno equivalentes
 
 Esto es razonable para recuperación, pero para operación autónoma final conviene:

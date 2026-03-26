@@ -9,10 +9,8 @@ package cmd
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"orquesta/db"
 )
 
 var proyectoCmd = &cobra.Command{
@@ -25,14 +23,11 @@ var proyectoListarCmd = &cobra.Command{
 	Short: "Lista los proyectos registrados",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		proyectos, ok, err := cargarProyectosDesdeAPI()
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			proyectos, err = db.ListarProyectos(db.FiltroProyectos{})
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("proyecto listar")
 		}
 		if len(proyectos) == 0 {
 			fmt.Println("No hay proyectos registrados.")
@@ -61,22 +56,11 @@ var proyectoDescubrirCmd = &cobra.Command{
 			ruta = args[0]
 		}
 		proyectos, ok, err := descubrirProyectosPorAPI(ruta)
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			proyectos, err = db.DescubrirProyectos(ruta)
-			if err != nil {
-				return err
-			}
-			if ruta != "" {
-				abs, err := filepath.Abs(ruta)
-				if err == nil {
-					_ = db.ConfigSet("workspace_root", abs)
-				}
-			}
-		} else if err != nil {
+		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("proyecto descubrir")
 		}
 		fmt.Printf("✓ %d proyectos registrados/actualizados\n", len(proyectos))
 		for _, p := range proyectos {
@@ -92,14 +76,11 @@ var proyectoVerCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		p, ok, err := cargarProyectoDesdeAPI(args[0])
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			p, err = db.GetProyecto(args[0])
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("proyecto ver")
 		}
 		fmt.Printf("Proyecto #%d — %s\n", p.ID, p.Nombre)
 		fmt.Printf("  Slug:      %s\n", p.Slug)
@@ -113,10 +94,6 @@ var proyectoVerCmd = &cobra.Command{
 				} else {
 					padre = fmt.Sprintf("%d", *p.ParentID)
 				}
-			} else if pad, err := db.GetProyecto(fmt.Sprintf("%d", *p.ParentID)); err == nil {
-				padre = fmt.Sprintf("%d (%s)", *p.ParentID, pad.Slug)
-			} else {
-				padre = fmt.Sprintf("%d", *p.ParentID)
 			}
 		}
 		fmt.Printf("  Padre:     %s\n", padre)

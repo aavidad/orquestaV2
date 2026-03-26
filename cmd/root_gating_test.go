@@ -25,7 +25,6 @@ func TestShouldDelegateToLocalServer(t *testing.T) {
 		{name: "tarea listar sin opt-in", args: []string{"tarea", "listar"}, want: true},
 		{name: "status con flag", args: []string{"--use-localrpc", "status"}, want: true},
 		{name: "flag local", args: []string{"--local", "status"}, want: false},
-		{name: "flag fallback sin opt-in", args: []string{"--allow-local-fallback", "status"}, want: true},
 		{name: "ayuda corta", args: []string{"status", "-h"}, want: false},
 	}
 
@@ -74,7 +73,6 @@ func TestCommandNeedsDBWithDelegationCoverage(t *testing.T) {
 		{name: "tarea listar", args: []string{"tarea", "listar"}, want: true},
 		{name: "flag local server stop", args: []string{"--local", "server", "stop"}, want: false},
 		{name: "flag local status", args: []string{"--local", "status"}, want: true},
-		{name: "flag fallback status", args: []string{"--allow-local-fallback", "status"}, want: true},
 		{name: "help corto", args: []string{"status", "-h"}, want: false},
 	}
 
@@ -86,32 +84,6 @@ func TestCommandNeedsDBWithDelegationCoverage(t *testing.T) {
 				t.Fatalf("commandNeedsDB(%v)=%v, want %v", tc.args, got, tc.want)
 			}
 		})
-	}
-}
-
-func TestAllowLocalFallback(t *testing.T) {
-	t.Parallel()
-
-	prev := os.Getenv("ORQUESTA_ALLOW_LOCAL_FALLBACK")
-	t.Cleanup(func() {
-		if prev == "" {
-			_ = os.Unsetenv("ORQUESTA_ALLOW_LOCAL_FALLBACK")
-			return
-		}
-		_ = os.Setenv("ORQUESTA_ALLOW_LOCAL_FALLBACK", prev)
-	})
-
-	if allowLocalFallback([]string{"status"}) {
-		t.Fatalf("no deberia permitir fallback por defecto")
-	}
-	if !allowLocalFallback([]string{"--allow-local-fallback", "status"}) {
-		t.Fatalf("deberia permitir fallback por flag")
-	}
-	if err := os.Setenv("ORQUESTA_ALLOW_LOCAL_FALLBACK", "1"); err != nil {
-		t.Fatalf("Setenv: %v", err)
-	}
-	if !allowLocalFallback([]string{"status"}) {
-		t.Fatalf("deberia permitir fallback por env")
 	}
 }
 

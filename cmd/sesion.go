@@ -82,14 +82,7 @@ func ejecutarInicioSesion(cmd *cobra.Command, args []string, forzarNuevoCodex bo
 	if ok, err := apiPost("/api/sesiones/inicio", req, &resp); err != nil {
 		return err
 	} else if !ok {
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		localResp, err := construirSesionInicioResponse(req)
-		if err != nil {
-			return fmt.Errorf("iniciando sesión: %w", err)
-		}
-		resp = *localResp
+		return serverFirstCommandError("sesion inicio")
 	}
 
 	imprimirInicioSesion(&resp, nuevoCodex)
@@ -223,48 +216,7 @@ var sesionGuardarCmd = &cobra.Command{
 		}, &apiSesionResponse{}); err != nil {
 			return err
 		} else if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			var proyectoID *int64
-			if strings.TrimSpace(proyectoRef) != "" {
-				p, err := db.GetProyecto(proyectoRef)
-				if err != nil {
-					return err
-				}
-				proyectoID = &p.ID
-			}
-			upd := db.SesionUpdate{Heartbeat: true}
-			if cwd != "" {
-				upd.CWD = &cwd
-			}
-			if herramienta != "" {
-				upd.Herramienta = &herramienta
-			}
-			if branch != "" {
-				upd.Branch = &branch
-			}
-			if externalSessionID != "" {
-				upd.ExternalSessionID = &externalSessionID
-			}
-			if resumePayload != "" {
-				upd.ResumePayloadJSON = &resumePayload
-			}
-			if resumen != "" {
-				upd.ResumenContinuidad = &resumen
-			}
-			if host != "" {
-				upd.Host = &host
-			}
-			if estado != "" {
-				upd.Estado = &estado
-			}
-			if pidRaw > 0 {
-				upd.PID = &pidRaw
-			}
-			if err := db.GuardarSesionActiva(agente, proyectoID, upd); err != nil {
-				return err
-			}
+			return serverFirstCommandError("sesion guardar")
 		}
 		fmt.Printf("✓ Contexto de sesión guardado para %s\n", agente)
 		return nil
@@ -293,22 +245,7 @@ var sesionContinuarCmd = &cobra.Command{
 		} else if ok {
 			s = resp.Sesion
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			var proyectoID *int64
-			if strings.TrimSpace(proyectoRef) != "" {
-				p, err := db.GetProyecto(proyectoRef)
-				if err != nil {
-					return err
-				}
-				proyectoID = &p.ID
-			}
-			var err error
-			s, err = db.ObtenerUltimaSesionConFiltro(agente, proyectoID, cwd)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("sesion continuar")
 		}
 		if jsonOut {
 			return imprimirJSON(s)
@@ -396,33 +333,7 @@ var sesionFinCmd = &cobra.Command{
 		if ok, err := apiPost("/api/sesiones/fin", apiSesionFinRequest{Agente: agente}, &map[string]any{}); err != nil {
 			return err
 		} else if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			agentes, _ := db.ListarAgentes()
-			var rol string
-			for _, a := range agentes {
-				if a.Nombre == agente {
-					rol = a.Rol
-					break
-				}
-			}
-			if rol != "" && rol != "admin" {
-				wf, err := db.GetWorkflow(rol, "fin-sesion")
-				if err == nil {
-					var pasos []string
-					if err2 := json.Unmarshal([]byte(wf.Pasos), &pasos); err2 == nil {
-						fmt.Printf("📌 CHECKLIST DE CIERRE:\n")
-						for _, paso := range pasos {
-							fmt.Printf("  %s\n", paso)
-						}
-						fmt.Println()
-					}
-				}
-			}
-			if err := db.FinSesion(agente); err != nil {
-				return err
-			}
+			return serverFirstCommandError("sesion fin")
 		}
 		fmt.Printf("✓ Sesión cerrada — agente: %s\n", agente)
 		return nil
@@ -441,14 +352,7 @@ var sesionListarCmd = &cobra.Command{
 		} else if ok {
 			agentes = resp.Agentes
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			var err error
-			agentes, err = db.ListarAgentes()
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("sesion listar")
 		}
 		fmt.Printf("%-15s %-15s %-8s %s\n", "AGENTE", "ROL", "ACTIVO", "ÚLTIMA SESIÓN")
 		fmt.Printf("%-15s %-15s %-8s %s\n",

@@ -12,6 +12,13 @@ import (
 	"github.com/spf13/pflag"
 )
 
+func resetCatalogoFlags(cmd *cobra.Command) {
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		_ = cmd.Flags().Set(f.Name, f.DefValue)
+		f.Changed = false
+	})
+}
+
 func TestCatalogoMutacionesUsanAPI(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
@@ -137,14 +144,7 @@ func TestCatalogoMutacionesUsanAPI(t *testing.T) {
 	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
 	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
 
-	resetFlags := func(cmd *cobra.Command) {
-		cmd.Flags().VisitAll(func(f *pflag.Flag) {
-			_ = cmd.Flags().Set(f.Name, f.DefValue)
-			f.Changed = false
-		})
-	}
-
-	resetFlags(reglasCrearCmd)
+	resetCatalogoFlags(reglasCrearCmd)
 	if err := reglasCrearCmd.Flags().Set("rol", "programador"); err != nil {
 		t.Fatalf("set rol regla: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestCatalogoMutacionesUsanAPI(t *testing.T) {
 		t.Fatalf("salida regla crear sin id remoto:\n%s", outRegla)
 	}
 
-	resetFlags(reglasEditarCmd)
+	resetCatalogoFlags(reglasEditarCmd)
 	if err := reglasEditarCmd.Flags().Set("titulo", "No romper nunca"); err != nil {
 		t.Fatalf("set titulo regla editar: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestCatalogoMutacionesUsanAPI(t *testing.T) {
 		t.Fatalf("salida regla editar sin id remoto:\n%s", outReglaEditar)
 	}
 
-	resetFlags(reglasActivarCmd)
+	resetCatalogoFlags(reglasActivarCmd)
 	outReglaActivar := capturarStdout(t, func() {
 		if err := reglasActivarCmd.RunE(reglasActivarCmd, []string{"31"}); err != nil {
 			t.Fatalf("reglas activar via api: %v", err)
@@ -195,7 +195,7 @@ func TestCatalogoMutacionesUsanAPI(t *testing.T) {
 		t.Fatalf("salida regla versiones inesperada:\n%s", outReglaVersiones)
 	}
 
-	resetFlags(skillsCrearCmd)
+	resetCatalogoFlags(skillsCrearCmd)
 	if err := skillsCrearCmd.Flags().Set("rol", "programador"); err != nil {
 		t.Fatalf("set rol skill: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestCatalogoMutacionesUsanAPI(t *testing.T) {
 		t.Fatalf("salida skill crear sin id remoto:\n%s", outSkill)
 	}
 
-	resetFlags(skillsEditarCmd)
+	resetCatalogoFlags(skillsEditarCmd)
 	if err := skillsEditarCmd.Flags().Set("descripcion", "buscar rapido"); err != nil {
 		t.Fatalf("set descripcion skill editar: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestCatalogoMutacionesUsanAPI(t *testing.T) {
 		t.Fatalf("salida skill editar sin id remoto:\n%s", outSkillEditar)
 	}
 
-	resetFlags(skillsActivarCmd)
+	resetCatalogoFlags(skillsActivarCmd)
 	outSkillActivar := capturarStdout(t, func() {
 		if err := skillsActivarCmd.RunE(skillsActivarCmd, []string{"32"}); err != nil {
 			t.Fatalf("skills activar via api: %v", err)
@@ -243,7 +243,7 @@ func TestCatalogoMutacionesUsanAPI(t *testing.T) {
 		t.Fatalf("salida skill versiones inesperada:\n%s", outSkillVersiones)
 	}
 
-	resetFlags(workflowsCrearCmd)
+	resetCatalogoFlags(workflowsCrearCmd)
 	if err := workflowsCrearCmd.Flags().Set("rol", "programador"); err != nil {
 		t.Fatalf("set rol workflow: %v", err)
 	}
@@ -271,7 +271,7 @@ func TestCatalogoMutacionesUsanAPI(t *testing.T) {
 		t.Fatalf("salida workflow ver inesperada:\n%s", outWorkflowVer)
 	}
 
-	resetFlags(workflowsEditarCmd)
+	resetCatalogoFlags(workflowsEditarCmd)
 	if err := workflowsEditarCmd.Flags().Set("descripcion", "flujo refinado"); err != nil {
 		t.Fatalf("set descripcion workflow editar: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestCatalogoMutacionesUsanAPI(t *testing.T) {
 		t.Fatalf("salida workflow editar sin id remoto:\n%s", outWorkflowEditar)
 	}
 
-	resetFlags(workflowsActivarCmd)
+	resetCatalogoFlags(workflowsActivarCmd)
 	outWorkflowActivar := capturarStdout(t, func() {
 		if err := workflowsActivarCmd.RunE(workflowsActivarCmd, []string{"33"}); err != nil {
 			t.Fatalf("workflows activar via api: %v", err)
@@ -303,7 +303,7 @@ func TestCatalogoMutacionesUsanAPI(t *testing.T) {
 		t.Fatalf("salida workflow versiones inesperada:\n%s", outWorkflowVersiones)
 	}
 
-	resetFlags(permisosFijarCmd)
+	resetCatalogoFlags(permisosFijarCmd)
 	if err := permisosFijarCmd.Flags().Set("entidad", "reglas"); err != nil {
 		t.Fatalf("set entidad permiso: %v", err)
 	}
@@ -320,5 +320,66 @@ func TestCatalogoMutacionesUsanAPI(t *testing.T) {
 	})
 	if !strings.Contains(outPermiso, "reglas/programador") {
 		t.Fatalf("salida permiso fijar inesperada:\n%s", outPermiso)
+	}
+}
+
+func TestCatalogoRequiereServidor(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	cases := []struct {
+		nombre string
+		cmd    *cobra.Command
+		args   []string
+		setup  func(t *testing.T)
+	}{
+		{nombre: "reglas listar", cmd: reglasListarCmd},
+		{nombre: "reglas crear", cmd: reglasCrearCmd},
+		{nombre: "reglas editar", cmd: reglasEditarCmd, args: []string{"1"}},
+		{nombre: "reglas activar", cmd: reglasActivarCmd, args: []string{"1"}},
+		{nombre: "reglas versiones", cmd: reglasVersionesCmd, args: []string{"1"}},
+		{nombre: "skills listar", cmd: skillsListarCmd},
+		{nombre: "skills crear", cmd: skillsCrearCmd},
+		{nombre: "skills editar", cmd: skillsEditarCmd, args: []string{"1"}},
+		{nombre: "skills activar", cmd: skillsActivarCmd, args: []string{"1"}},
+		{nombre: "skills versiones", cmd: skillsVersionesCmd, args: []string{"1"}},
+		{nombre: "workflows listar", cmd: workflowsListarCmd},
+		{nombre: "workflows ver", cmd: workflowsVerCmd, args: []string{"1"}},
+		{nombre: "workflows crear", cmd: workflowsCrearCmd},
+		{nombre: "workflows editar", cmd: workflowsEditarCmd, args: []string{"1"}},
+		{nombre: "workflows activar", cmd: workflowsActivarCmd, args: []string{"1"}},
+		{nombre: "workflows versiones", cmd: workflowsVersionesCmd, args: []string{"1"}},
+		{nombre: "permisos listar", cmd: permisosListarCmd},
+		{
+			nombre: "permisos fijar",
+			cmd:    permisosFijarCmd,
+			setup: func(t *testing.T) {
+				resetCatalogoFlags(permisosFijarCmd)
+				if err := permisosFijarCmd.Flags().Set("entidad", "reglas"); err != nil {
+					t.Fatalf("set entidad: %v", err)
+				}
+				if err := permisosFijarCmd.Flags().Set("rol", "programador"); err != nil {
+					t.Fatalf("set rol: %v", err)
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.nombre, func(t *testing.T) {
+			resetCatalogoFlags(tc.cmd)
+			if tc.setup != nil {
+				tc.setup(t)
+			}
+			err := tc.cmd.RunE(tc.cmd, tc.args)
+			if err == nil {
+				t.Fatalf("se esperaba error sin servidor")
+			}
+			if !strings.Contains(err.Error(), "requiere el servidor de Orquesta activo") {
+				t.Fatalf("error inesperado: %v", err)
+			}
+		})
 	}
 }

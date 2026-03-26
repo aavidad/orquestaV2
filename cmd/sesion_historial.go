@@ -21,13 +21,11 @@ var sesionHistorialCmd = &cobra.Command{
 	Use:   "historial",
 	Short: "Lista sesiones con filtros de inspección",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		filtro := db.FiltroSesionesInspeccion{}
 		params := url.Values{}
 		proyectoRef, _ := cmd.Flags().GetString("proyecto")
 
 		if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
 			agente = strings.TrimSpace(agente)
-			filtro.Agente = &agente
 			params.Set("agente", agente)
 		}
 		if strings.TrimSpace(proyectoRef) != "" {
@@ -37,18 +35,13 @@ var sesionHistorialCmd = &cobra.Command{
 			params.Set("activa", strings.TrimSpace(activaStr))
 			switch activaStr {
 			case "true":
-				v := true
-				filtro.Activa = &v
 			case "false":
-				v := false
-				filtro.Activa = &v
 			default:
 				return fmt.Errorf("activa debe ser true o false")
 			}
 		}
 		if estado, _ := cmd.Flags().GetString("estado"); strings.TrimSpace(estado) != "" {
 			estado = strings.TrimSpace(estado)
-			filtro.Estado = &estado
 			params.Set("estado", estado)
 		}
 
@@ -59,20 +52,7 @@ var sesionHistorialCmd = &cobra.Command{
 		} else if ok {
 			sesiones = resp.Sesiones
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			if strings.TrimSpace(proyectoRef) != "" {
-				proyecto, err := db.GetProyecto(proyectoRef)
-				if err != nil {
-					return err
-				}
-				filtro.ProyectoID = &proyecto.ID
-			}
-			sesiones, err = db.ListarSesionesInspeccion(filtro)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("sesion historial")
 		}
 
 		fmt.Printf("%-5s %-12s %-14s %-8s %-12s %-14s %s\n", "ID", "AGENTE", "PROYECTO", "ACTIVA", "ESTADO", "HERRAMIENTA", "EXTERNAL_ID")
@@ -117,13 +97,7 @@ var sesionVerCmd = &cobra.Command{
 		} else if ok {
 			s = resp.Sesion
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			s, err = db.GetSesionInspeccionByID(id)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("sesion ver")
 		}
 		fmt.Printf("Sesión %d\n", s.ID)
 		fmt.Printf("  Agente:      %s\n", s.Agente)

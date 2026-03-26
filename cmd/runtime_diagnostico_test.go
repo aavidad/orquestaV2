@@ -3,114 +3,12 @@ package cmd
 import (
 	"encoding/json"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"orquesta/db"
 )
-
-func TestRuntimeDiagnosticoLocal(t *testing.T) {
-	tmp := prepararDBTemporalCmd(t)
-
-	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
-		t.Fatalf("registrar agente: %v", err)
-	}
-	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
-		Slug:    "orquestador",
-		Nombre:  "Orquestador",
-		RutaAbs: filepath.Join(tmp, "orquestador"),
-		Tipo:    db.ProyectoRepo,
-		Activo:  true,
-	})
-	if err != nil {
-		t.Fatalf("upsert proyecto: %v", err)
-	}
-	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
-		Agente:             "Codex1",
-		ProyectoID:         &proyectoID,
-		CWD:                filepath.Join(tmp, "orquestador"),
-		Herramienta:        "codex-cli",
-		ExternalSessionID:  "sess-runtime-diag",
-		ResumenContinuidad: "runtime diagnostico",
-		Branch:             "main",
-	})
-	if err != nil {
-		t.Fatalf("iniciar sesion: %v", err)
-	}
-	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
-		t.Fatalf("upsert runtime handle: %v", err)
-	}
-	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
-		Agente:      "Codex1",
-		ProyectoID:  &proyectoID,
-		Tipo:        "checkpoint",
-		PayloadJSON: `{"motivo":"diag"}`,
-	}); err != nil {
-		t.Fatalf("encolar order: %v", err)
-	}
-	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
-		FromAgente:  "Supervisor",
-		ToAgente:    "Codex1",
-		ProyectoID:  &proyectoID,
-		Kind:        "nudge",
-		PayloadJSON: `{"texto":"sigue"}`,
-	}); err != nil {
-		t.Fatalf("crear mailbox: %v", err)
-	}
-	if _, err := db.CrearRuntimeCheckpoint(&db.RuntimeCheckpoint{
-		Agente:         "Codex1",
-		ProyectoID:     &proyectoID,
-		SesionID:       &sesion.ID,
-		CheckpointKind: "manual",
-		Resumen:        "checkpoint local",
-		Branch:         "main",
-		CWD:            filepath.Join(tmp, "orquestador"),
-		PayloadJSON:    `{"ok":true}`,
-		ResumeStrategy: "resumen_y_payload",
-		Source:         "runtime-diag-test",
-	}); err != nil {
-		t.Fatalf("crear checkpoint: %v", err)
-	}
-
-	if err := runtimeDiagnosticoCmd.Flags().Set("agente", "Codex1"); err != nil {
-		t.Fatalf("set agente: %v", err)
-	}
-	if err := runtimeDiagnosticoCmd.Flags().Set("proyecto", "orquestador"); err != nil {
-		t.Fatalf("set proyecto: %v", err)
-	}
-	if err := runtimeDiagnosticoCmd.Flags().Set("limit", "3"); err != nil {
-		t.Fatalf("set limit: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = runtimeDiagnosticoCmd.Flags().Set("agente", "")
-		_ = runtimeDiagnosticoCmd.Flags().Set("proyecto", "")
-		_ = runtimeDiagnosticoCmd.Flags().Set("limit", "5")
-	})
-
-	out := capturarStdout(t, func() {
-		if err := runtimeDiagnosticoCmd.RunE(runtimeDiagnosticoCmd, nil); err != nil {
-			t.Fatalf("run runtime diagnostico local: %v", err)
-		}
-	})
-
-	for _, token := range []string{
-		"DIAGNÓSTICO RUNTIME",
-		"Agente:     Codex1",
-		"Fuente:     local",
-		"Runtimes",
-		"Handles",
-		"Órdenes relevantes",
-		"Mailbox pendiente",
-		"Checkpoints recientes",
-		"checkpoint local",
-	} {
-		if !strings.Contains(out, token) {
-			t.Fatalf("salida diagnostico local sin %q:\n%s", token, out)
-		}
-	}
-}
 
 func TestRuntimeDiagnosticoUsaAPI(t *testing.T) {
 	now := time.Date(2026, 3, 24, 20, 0, 0, 0, time.UTC)
@@ -219,5 +117,22 @@ func TestRuntimeDiagnosticoUsaAPI(t *testing.T) {
 		if !strings.Contains(out, token) {
 			t.Fatalf("salida diagnostico api sin %q:\n%s", token, out)
 		}
+	}
+}
+
+func TestRuntimeDiagnosticoRequiereServidor(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	resetCommandFlags(runtimeDiagnosticoCmd)
+	_ = runtimeDiagnosticoCmd.Flags().Set("agente", "Codex1")
+	err := runtimeDiagnosticoCmd.RunE(runtimeDiagnosticoCmd, nil)
+	if err == nil {
+		t.Fatalf("se esperaba error sin servidor")
+	}
+	if !strings.Contains(err.Error(), "requiere el servidor de Orquesta activo") {
+		t.Fatalf("error inesperado: %v", err)
 	}
 }

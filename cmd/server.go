@@ -165,11 +165,11 @@ var serverDoctorCmd = &cobra.Command{
 		defer cancel()
 		if err := rpclocal.Ping(ctx, addr); err != nil {
 			fmt.Printf("Health RPC: KO (%v)\n", err)
-			fmt.Println("Fallback local: solo con --local o ORQUESTA_ALLOW_LOCAL_FALLBACK=1")
+			fmt.Println("Modo local: solo con --local o ORQUESTA_FORCE_LOCAL=1 y solo para recuperación")
 			return nil
 		}
 		fmt.Printf("Health RPC: OK\n")
-		fmt.Printf("Fallback local: solo por politica explicita (--local / ORQUESTA_ALLOW_LOCAL_FALLBACK=1)\n")
+		fmt.Printf("Modo local: solo por recuperación explícita (--local / ORQUESTA_FORCE_LOCAL=1)\n")
 		return nil
 	},
 }

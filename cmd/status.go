@@ -48,46 +48,7 @@ var statusCmd = &cobra.Command{
 				tareas = tareasResp.Tareas
 			}
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			var err error
-			agentes, err = db.ListarAgentes()
-			if err != nil {
-				return err
-			}
-			counts, err = db.ContarTareasPorEstado()
-			if err != nil {
-				return err
-			}
-			proyectos, err = db.ListarProyectos(db.FiltroProyectos{})
-			if err != nil {
-				return err
-			}
-			asignacionesActivas, err = db.ContarAsignacionesActivasPorProyecto()
-			if err != nil {
-				return err
-			}
-			sesionesActivas, err := db.ListarSesionesActivas()
-			if err != nil {
-				return err
-			}
-			sesionesPorProyecto = make(map[int64]int)
-			for _, s := range sesionesActivas {
-				if s.ProyectoID != nil {
-					sesionesPorProyecto[*s.ProyectoID]++
-				}
-			}
-			estado := db.PropuestaAbierta
-			abiertas, err = db.ListarPropuestas(&estado, nil)
-			if err != nil {
-				return err
-			}
-			enProgreso := db.EstadoEnProgreso
-			tareas, err = db.ListarTareas(db.FiltroTareas{Estado: &enProgreso})
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("status")
 		}
 
 		fmt.Printf("╔═══════════════════════════════════════════════════════════╗\n")

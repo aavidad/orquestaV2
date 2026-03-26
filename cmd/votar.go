@@ -18,7 +18,7 @@ import (
 var votarCmd = &cobra.Command{
 	Use:   "votar <codigo-op> <acuerdo|desacuerdo|abstencion> [comentario...]",
 	Short: "Vota una propuesta",
-Long: `Registra el voto de un agente en una propuesta OP-XXX.
+	Long: `Registra el voto de un agente en una propuesta OP-XXX.
 Reglas de consenso:
   - Solo hay consenso automático si todos los votantes habilitados votan acuerdo.
   - Además, se exigen al menos 2 votos de acuerdo y al menos 2 votos de acuerdo de agentes no autores.
@@ -92,50 +92,7 @@ Ejemplos:
 			}
 			return nil
 		}
-
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		p, err := db.GetPropuesta(codigo)
-		if err != nil {
-			return fmt.Errorf("propuesta '%s' no encontrada", codigo)
-		}
-		if p.Estado != db.PropuestaAbierta {
-			// Permitir voto tardío si el agente no ha emitido posición definitiva
-			votos, err := db.VotosDePropuesta(p.ID)
-			if err != nil {
-				return err
-			}
-			sinVoto := true
-			for _, v := range votos {
-				if strings.EqualFold(v.Agente, strings.TrimSpace(agente)) {
-					if v.Posicion != db.VotoPendiente {
-						return fmt.Errorf("la propuesta %s ya está cerrada (%s)", codigo, p.Estado)
-					}
-					sinVoto = false
-					break
-				}
-			}
-			_ = sinVoto // permitido: sin entrada o con pendiente
-		}
-
-		consenso, err := db.Votar(p.ID, agente, db.PosicionVoto(posicion), strings.TrimSpace(comentario))
-		if err != nil {
-			return err
-		}
-
-		fmt.Printf("✓ Voto registrado: %s → %s [%s]\n", agente, codigo, posicion)
-		if consenso {
-			fmt.Printf("🎉 ¡CONSENSO VÁLIDO! La propuesta %s ha sido aprobada automáticamente.\n", codigo)
-		} else {
-			ac, des, abs, pend, _ := db.ContarVotos(p.ID)
-			fmt.Printf("Estado votos: ✓%d  ✗%d  ～%d  ⏳%d\n", ac, des, abs, pend)
-			if des > 0 {
-				fmt.Printf("⚠️  Hay %d voto(s) en desacuerdo — Alberto debe resolver antes de continuar.\n", des)
-				fmt.Printf("   Usa: orquesta propuesta cerrar %s consenso --por alberto\n", codigo)
-			}
-		}
-		return nil
+		return serverFirstCommandError("votar")
 	},
 }
 

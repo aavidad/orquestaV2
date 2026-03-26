@@ -236,6 +236,9 @@ func IniciarTarea(id int64, agente string) error {
 	if err == nil {
 		Audit(agente, "iniciar_tarea", "tarea", id, t.Titulo)
 		SetEstadoSesion(agente, "programando")
+		if t.ProyectoID != nil {
+			EmitirHookCicloVida(agente, HookTaskStart, *t.ProyectoID, "tarea", id, agente, t.Titulo)
+		}
 	}
 	return err
 }
@@ -256,6 +259,9 @@ func CompletarTarea(id int64, agente, commit string) error {
 	if err == nil {
 		Audit(agente, "completar_tarea", "tarea", id, t.Titulo+" commit="+commit)
 		SetEstadoSesion(agente, "disponible")
+		if t.ProyectoID != nil {
+			EmitirHookCicloVida(agente, HookTaskFinish, *t.ProyectoID, "tarea", id, agente, t.Titulo)
+		}
 
 		// Detección de fin de proyecto (Autonomía Total)
 		if t.ProyectoID != nil {
@@ -317,6 +323,12 @@ func BloquearTarea(id int64, agente, motivo string) error {
 	if err = tx.Commit(); err != nil {
 		return err
 	}
+	if t.ProyectoID != nil {
+		if err := MarcarProyectoEsperandoHumano(*t.ProyectoID, motivo); err != nil {
+			return err
+		}
+		EmitirHookCicloVida(agente, HookProjectBlocked, *t.ProyectoID, "tarea", id, agente, motivo)
+	}
 	Audit(agente, "bloquear_tarea", "tarea", id, t.Titulo+": "+motivo)
 	SetEstadoSesion(agente, "esperando")
 
@@ -331,6 +343,10 @@ func BloquearTarea(id int64, agente, motivo string) error {
 
 // DesbloquearTarea resuelve el bloqueo y libera la tarea.
 func DesbloquearTarea(id int64, agente, resolucion string) error {
+	t, err := GetTarea(id)
+	if err != nil {
+		return fmt.Errorf("tarea #%d no encontrada", id)
+	}
 	tx, err := DB.Begin()
 	if err != nil {
 		return err
@@ -346,6 +362,18 @@ func DesbloquearTarea(id int64, agente, resolucion string) error {
 	}
 	if err = tx.Commit(); err != nil {
 		return err
+	}
+	if t.ProyectoID != nil {
+		op, err := GetProyectoOperacion(*t.ProyectoID)
+		if err != nil {
+			return err
+		}
+		if op.ResumeAutomatico {
+			if err := MarcarProyectoActivo(*t.ProyectoID, ""); err != nil {
+				return err
+			}
+		}
+		EmitirHookCicloVida(agente, HookProjectUnblocked, *t.ProyectoID, "tarea", id, agente, resolucion)
 	}
 	Audit(agente, "desbloquear_tarea", "tarea", id, resolucion)
 	SetEstadoSesion(agente, "disponible")

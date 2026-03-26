@@ -1,7 +1,8 @@
 package cmd
 
 import (
-	"path/filepath"
+	"encoding/json"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -9,35 +10,36 @@ import (
 )
 
 func TestTareaListarTSVParaScripts(t *testing.T) {
-	tmp := prepararDBTemporalCmd(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/tareas", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiTareasResponse{
+			Tareas: []*db.Tarea{{
+				ID:          17,
+				Titulo:      "Revisar conector hexagonal",
+				Descripcion: "Sin acceso directo a SQLite",
+				ProyectoID:  ptrInt64(7),
+				Modulo:      "controlplane",
+				Prioridad:   db.PrioridadAlta,
+				Estado:      db.EstadoAsignada,
+				Agente:      ptrString("Codex1"),
+			}},
+		})
+	})
+	mux.HandleFunc("/api/proyectos", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiProyectosResponse{
+			Proyectos: []*db.Proyecto{{ID: 7, Slug: "orquestador"}},
+		})
+	})
 
-	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
-		t.Fatalf("registrar agente: %v", err)
-	}
-	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
-		Slug:    "orquestador",
-		Nombre:  "Orquestador",
-		RutaAbs: filepath.Join(tmp, "orquestador"),
-		Tipo:    db.ProyectoRepo,
-		Activo:  true,
-	})
-	if err != nil {
-		t.Fatalf("upsert proyecto: %v", err)
-	}
-	tareaID, err := db.CrearTarea(&db.Tarea{
-		Titulo:      "Revisar conector hexagonal",
-		Descripcion: "Sin acceso directo a SQLite",
-		ProyectoID:  &proyectoID,
-		Modulo:      "controlplane",
-		Prioridad:   db.PrioridadAlta,
-		CreadoPor:   "alberto",
-	})
-	if err != nil {
-		t.Fatalf("crear tarea: %v", err)
-	}
-	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
-		t.Fatalf("tomar tarea: %v", err)
-	}
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
 
 	for _, item := range []struct {
 		name  string
@@ -72,3 +74,6 @@ func TestTareaListarTSVParaScripts(t *testing.T) {
 		t.Fatalf("salida TSV sin columnas esperadas:\n%s", out)
 	}
 }
+
+func ptrInt64(v int64) *int64    { return &v }
+func ptrString(v string) *string { return &v }

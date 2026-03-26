@@ -83,19 +83,7 @@ var runtimeHandlesCmd = &cobra.Command{
 			}
 			return imprimirRuntimeHandles(handles)
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-
-		var filtro *string
-		if strings.TrimSpace(agente) != "" {
-			filtro = &agente
-		}
-		handles, err := runtimesService.ListRuntimeHandles(filtro)
-		if err != nil {
-			return err
-		}
-		return imprimirRuntimeHandles(handles)
+		return serverFirstCommandError("runtime handles")
 	},
 }
 
@@ -139,14 +127,7 @@ var runtimeOrdenesCmd = &cobra.Command{
 			}
 			return imprimirRuntimeOrders(orders)
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		orders, err := runtimesService.ListRuntimeOrders(filter)
-		if err != nil {
-			return err
-		}
-		return imprimirRuntimeOrders(orders)
+		return serverFirstCommandError("runtime ordenes")
 	},
 }
 
@@ -183,25 +164,7 @@ var runtimeOrdenNuevaCmd = &cobra.Command{
 			fmt.Printf("✓ Orden runtime #%d encolada para %s (%s)\n", id, agente, tipo)
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-
-		proyectoID, err := resolverProyectoRuntimeID(proyectoRef)
-		if err != nil {
-			return err
-		}
-		id, err := runtimesService.CreateRuntimeOrder(&db.RuntimeOrder{
-			Agente:      agente,
-			ProyectoID:  proyectoID,
-			Tipo:        tipo,
-			PayloadJSON: payload,
-		})
-		if err != nil {
-			return err
-		}
-		fmt.Printf("✓ Orden runtime #%d encolada para %s (%s)\n", id, agente, tipo)
-		return nil
+		return serverFirstCommandError("runtime orden-nueva")
 	},
 }
 
@@ -273,20 +236,7 @@ func encolarRuntimeMensajeSimple(tipo, agenteDestino, proyectoRef string, payloa
 	if id, ok, err := crearRuntimeOrderDesdeAPI(agenteDestino, tipo, proyectoRef, string(payloadJSON)); ok {
 		return id, err
 	}
-	if err := ensureLocalDB(); err != nil {
-		return 0, err
-	}
-
-	proyectoID, err := resolverProyectoRuntimeID(proyectoRef)
-	if err != nil {
-		return 0, err
-	}
-	return runtimesService.CreateRuntimeOrder(&db.RuntimeOrder{
-		Agente:      agenteDestino,
-		ProyectoID:  proyectoID,
-		Tipo:        tipo,
-		PayloadJSON: string(payloadJSON),
-	})
+	return 0, serverFirstCommandError("runtime control")
 }
 
 var runtimeCheckpointsCmd = &cobra.Command{
@@ -318,37 +268,7 @@ var runtimeCheckpointsCmd = &cobra.Command{
 			}
 			return imprimirRuntimeCheckpoint(cp)
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-
-		proyectoID, err := resolverProyectoRuntimeID(proyectoRef)
-		if err != nil {
-			return err
-		}
-		if usarHistorialLocal {
-			filter := db.FiltroRuntimeCheckpoints{
-				Agente:     &agente,
-				ProyectoID: proyectoID,
-				Limit:      limit,
-			}
-			if strings.TrimSpace(checkpointKind) != "" {
-				filter.CheckpointKind = &checkpointKind
-			}
-			if strings.TrimSpace(source) != "" {
-				filter.Source = &source
-			}
-			checkpoints, err := runtimesService.ListRuntimeCheckpoints(filter)
-			if err != nil {
-				return err
-			}
-			return imprimirRuntimeCheckpointLista(checkpoints)
-		}
-		cp, err := runtimesService.LatestRuntimeCheckpoint(agente, proyectoID)
-		if err != nil {
-			return err
-		}
-		return imprimirRuntimeCheckpoint(cp)
+		return serverFirstCommandError("runtime checkpoints")
 	},
 }
 
@@ -388,40 +308,7 @@ var runtimeCheckpointNuevoCmd = &cobra.Command{
 			fmt.Printf("✓ Checkpoint runtime #%d creado para %s (%s)\n", id, agente, checkpointKind)
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-
-		proyectoID, err := resolverProyectoRuntimeID(proyectoRef)
-		if err != nil {
-			return err
-		}
-		var sesionIDPtr *int64
-		if sesionID > 0 {
-			sesionIDPtr = &sesionID
-		}
-		var runtimeIDPtr *int64
-		if runtimeID > 0 {
-			runtimeIDPtr = &runtimeID
-		}
-		id, err := runtimesService.CreateRuntimeCheckpoint(&db.RuntimeCheckpoint{
-			Agente:         agente,
-			ProyectoID:     proyectoID,
-			SesionID:       sesionIDPtr,
-			RuntimeID:      runtimeIDPtr,
-			CheckpointKind: checkpointKind,
-			Resumen:        strings.TrimSpace(resumen),
-			Branch:         strings.TrimSpace(branch),
-			CWD:            strings.TrimSpace(cwd),
-			PayloadJSON:    payload,
-			ResumeStrategy: strings.TrimSpace(resumeStrategy),
-			Source:         strings.TrimSpace(source),
-		})
-		if err != nil {
-			return err
-		}
-		fmt.Printf("✓ Checkpoint runtime #%d creado para %s (%s)\n", id, agente, checkpointKind)
-		return nil
+		return serverFirstCommandError("runtime checkpoint-nuevo")
 	},
 }
 
@@ -440,14 +327,7 @@ var runtimeCheckpointVerCmd = &cobra.Command{
 			}
 			return imprimirRuntimeCheckpoint(cp)
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		cp, err := runtimesService.GetRuntimeCheckpoint(id)
-		if err != nil {
-			return err
-		}
-		return imprimirRuntimeCheckpoint(cp)
+		return serverFirstCommandError("runtime checkpoint-ver")
 	},
 }
 
@@ -479,32 +359,7 @@ var runtimeMailboxCmd = &cobra.Command{
 			}
 			return imprimirRuntimeMailbox(mailbox)
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-
-		filter := db.FiltroRuntimeMailbox{}
-		if strings.TrimSpace(toAgente) != "" {
-			filter.ToAgente = &toAgente
-		}
-		if strings.TrimSpace(fromAgente) != "" {
-			filter.FromAgente = &fromAgente
-		}
-		if strings.TrimSpace(estado) != "" {
-			filter.Estado = &estado
-		}
-		proyectoID, err := resolverProyectoRuntimeID(proyectoRef)
-		if err != nil {
-			return err
-		}
-		if proyectoID != nil {
-			filter.ProyectoID = proyectoID
-		}
-		mailbox, err := runtimesService.ListRuntimeMailbox(filter)
-		if err != nil {
-			return err
-		}
-		return imprimirRuntimeMailbox(mailbox)
+		return serverFirstCommandError("runtime mailbox")
 	},
 }
 
@@ -529,31 +384,7 @@ var runtimeMailboxEnviarCmd = &cobra.Command{
 			fmt.Printf("✓ Mensaje mailbox #%d enviado de %s a %s (%s)\n", id, fromAgente, toAgente, kind)
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-
-		proyectoID, err := resolverProyectoRuntimeID(proyectoRef)
-		if err != nil {
-			return err
-		}
-		var runtimeOrderIDPtr *int64
-		if runtimeOrderID > 0 {
-			runtimeOrderIDPtr = &runtimeOrderID
-		}
-		id, err := runtimesService.CreateRuntimeMailbox(&db.RuntimeMailboxMessage{
-			FromAgente:     fromAgente,
-			ToAgente:       toAgente,
-			ProyectoID:     proyectoID,
-			RuntimeOrderID: runtimeOrderIDPtr,
-			Kind:           kind,
-			PayloadJSON:    payload,
-		})
-		if err != nil {
-			return err
-		}
-		fmt.Printf("✓ Mensaje mailbox #%d enviado de %s a %s (%s)\n", id, fromAgente, toAgente, kind)
-		return nil
+		return serverFirstCommandError("runtime mailbox-enviar")
 	},
 }
 
@@ -573,14 +404,7 @@ var runtimeMailboxEntregarCmd = &cobra.Command{
 			fmt.Printf("✓ Mensaje mailbox #%d marcado como entregado\n", id)
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		if err := runtimesService.MarkRuntimeMailboxDelivered(id); err != nil {
-			return err
-		}
-		fmt.Printf("✓ Mensaje mailbox #%d marcado como entregado\n", id)
-		return nil
+		return serverFirstCommandError("runtime mailbox-entregar")
 	},
 }
 
@@ -600,14 +424,7 @@ var runtimeMailboxConsumirCmd = &cobra.Command{
 			fmt.Printf("✓ Mensaje mailbox #%d marcado como consumido\n", id)
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		if err := runtimesService.MarkRuntimeMailboxConsumed(id); err != nil {
-			return err
-		}
-		fmt.Printf("✓ Mensaje mailbox #%d marcado como consumido\n", id)
-		return nil
+		return serverFirstCommandError("runtime mailbox-consumir")
 	},
 }
 
@@ -679,38 +496,7 @@ var runtimeListarCmd = &cobra.Command{
 			}
 			return imprimirArbolRuntimes(aplanarArbolAPI(tree), false)
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-
-		filter := db.FiltroRuntimes{}
-		if strings.TrimSpace(agente) != "" {
-			filter.Agente = &agente
-		}
-		proyectoID, err := resolverProyectoRuntimeID(proyecto)
-		if err != nil {
-			return err
-		}
-		if proyectoID != nil {
-			filter.ProyectoID = proyectoID
-		}
-		if strings.TrimSpace(activos) != "" {
-			switch activos {
-			case "true":
-				v := true
-				filter.Activos = &v
-			case "false":
-				v := false
-				filter.Activos = &v
-			default:
-				return fmt.Errorf("activos inválido")
-			}
-		}
-		treeLocal, err := runtimesService.BuildRuntimeTree(filter)
-		if err != nil {
-			return err
-		}
-		return imprimirArbolRuntimes(aplanarArbolLocal(treeLocal), false)
+		return serverFirstCommandError("runtime listar")
 	},
 }
 
@@ -730,31 +516,8 @@ var runtimeVerCmd = &cobra.Command{
 			}
 			return imprimirDetalleRuntime(detail.Runtime, detail.Samples)
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-
-		runtime, err := runtimesService.GetRuntime(id)
-		if err != nil {
-			return err
-		}
-		samples, err := runtimesService.ListRuntimeSamples(id, 20)
-		if err != nil {
-			return err
-		}
-		return imprimirDetalleRuntime(runtime, samples)
+		return serverFirstCommandError("runtime ver")
 	},
-}
-
-func resolverProyectoRuntimeID(proyectoRef string) (*int64, error) {
-	if strings.TrimSpace(proyectoRef) == "" {
-		return nil, nil
-	}
-	proyecto, err := runtimesService.GetProject(proyectoRef)
-	if err != nil {
-		return nil, err
-	}
-	return &proyecto.ID, nil
 }
 
 func cargarArbolRuntimesDesdeAPI(query url.Values) ([]*apiRuntimeTreeNode, bool, error) {

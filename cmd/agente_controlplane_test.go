@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"orquesta/db"
+	"github.com/spf13/cobra"
 )
 
 func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
@@ -79,33 +79,61 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	}
 }
 
-func TestAgentePurgarBloqueaTareasActivasEnModoLocal(t *testing.T) {
-	prepararDBTemporalCmd(t)
+func TestAgenteControlRequiereServidor(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
 
-	if err := db.RegistrarAgente("CodexLocal", "programador"); err != nil {
-		t.Fatalf("registrar agente: %v", err)
-	}
-	tareaID, err := db.CrearTarea(&db.Tarea{
-		Titulo:    "No borrar agente con trabajo vivo",
-		Modulo:    "controlplane",
-		Prioridad: db.PrioridadAlta,
-		CreadoPor: "alberto",
-	})
-	if err != nil {
-		t.Fatalf("crear tarea: %v", err)
-	}
-	if err := db.TomarTarea(tareaID, "CodexLocal"); err != nil {
-		t.Fatalf("tomar tarea: %v", err)
+	casos := []struct {
+		nombre string
+		cmd    func() *cobra.Command
+		args   []string
+		setup  func(t *testing.T, cmd *cobra.Command)
+	}{
+		{nombre: "control", cmd: func() *cobra.Command { return agenteControlCmd }, args: []string{"arrancar", "Codex1"}},
+		{
+			nombre: "preparar",
+			cmd:    func() *cobra.Command { return agentePrepararCmd },
+			args:   []string{"Codex1"},
+			setup: func(t *testing.T, cmd *cobra.Command) {
+				if err := cmd.Flags().Set("proyecto", "demo"); err != nil {
+					t.Fatalf("set proyecto preparar: %v", err)
+				}
+			},
+		},
+		{
+			nombre: "tick",
+			cmd:    func() *cobra.Command { return agenteTickCmd },
+			args:   []string{"Codex1"},
+			setup: func(t *testing.T, cmd *cobra.Command) {
+				if err := cmd.Flags().Set("proyecto", "demo"); err != nil {
+					t.Fatalf("set proyecto tick: %v", err)
+				}
+			},
+		},
+		{nombre: "handoff", cmd: func() *cobra.Command { return agenteHandoffCmd }, args: []string{"Codex1", "Codex2"}},
+		{nombre: "reasignar-vivo", cmd: func() *cobra.Command { return agenteReasignarVivoCmd }, args: []string{"1", "Codex1", "Codex2"}},
+		{nombre: "pausar", cmd: func() *cobra.Command { return agentePausarCmd }, args: []string{"Codex1", "15", "rate", "limit"}},
+		{nombre: "eliminar", cmd: func() *cobra.Command { return agentePurgarCmd }, args: []string{"Codex1"}},
+		{nombre: "rehabilitar", cmd: func() *cobra.Command { return agenteRehabilitarCmd }, args: []string{"Codex1"}},
+		{nombre: "fusionar", cmd: func() *cobra.Command { return agenteFusionarCmd }, args: []string{"Codex1", "Codex2"}},
 	}
 
-	err = agentePurgarCmd.RunE(agentePurgarCmd, []string{"CodexLocal"})
-	if err == nil {
-		t.Fatalf("esperaba bloqueo al eliminar agente con tareas activas")
-	}
-	if !strings.Contains(strings.ToLower(err.Error()), "tarea") {
-		t.Fatalf("error inesperado: %v", err)
-	}
-	if _, err := db.GetAgente("CodexLocal"); err != nil {
-		t.Fatalf("el agente no deberia haberse eliminado: %v", err)
+	for _, tc := range casos {
+		t.Run(tc.nombre, func(t *testing.T) {
+			cmd := tc.cmd()
+			resetCommandFlags(cmd)
+			if tc.setup != nil {
+				tc.setup(t, cmd)
+			}
+			err := cmd.RunE(cmd, tc.args)
+			if err == nil {
+				t.Fatalf("se esperaba error sin servidor")
+			}
+			if !strings.Contains(err.Error(), "requiere el servidor de Orquesta activo") {
+				t.Fatalf("error inesperado: %v", err)
+			}
+		})
 	}
 }

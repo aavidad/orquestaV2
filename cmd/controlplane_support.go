@@ -117,6 +117,9 @@ func procesarAutonomiaSesionActiva(sesion *db.Sesion) (int, error) {
 	if sesion == nil || sesion.ProyectoID == nil {
 		return 0, nil
 	}
+	if n, err := procesarAparcadoAutonomoSesion(sesion); err != nil || n > 0 {
+		return n, err
+	}
 	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
 	if err != nil {
 		return 0, err
@@ -165,6 +168,63 @@ func procesarAutonomiaSesionActiva(sesion *db.Sesion) (int, error) {
 	default:
 		return 0, nil
 	}
+}
+
+func procesarAparcadoAutonomoSesion(sesion *db.Sesion) (int, error) {
+	if sesion == nil || sesion.ProyectoID == nil {
+		return 0, nil
+	}
+	op, err := db.GetProyectoOperacion(*sesion.ProyectoID)
+	if err != nil {
+		return 0, err
+	}
+	motivo := strings.TrimSpace(op.Motivo)
+	switch op.EstadoOperativo {
+	case db.ProyectoOperativoActivo:
+		bloqueado, motivoDetectado, err := db.ResolverBloqueoProyecto(*sesion.ProyectoID)
+		if err != nil || !bloqueado {
+			return 0, err
+		}
+		motivo = strings.TrimSpace(motivoDetectado)
+		if err := db.MarcarProyectoEsperandoHumano(*sesion.ProyectoID, motivo); err != nil {
+			return 0, err
+		}
+	case db.ProyectoOperativoEsperandoHumano, db.ProyectoOperativoBloqueadoExterno:
+		if strings.TrimSpace(motivo) == "" {
+			motivo = "esperando_desbloqueo_humano"
+		}
+	default:
+		return 0, nil
+	}
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	if err != nil {
+		return 0, err
+	}
+	estadoSesion := strings.ToLower(strings.TrimSpace(sesion.Estado))
+	if estadoSesion == "pausada" {
+		if err := db.AparcarSesionActiva(sesion.Agente, sesion.ProyectoID); err != nil {
+			return 0, err
+		}
+		if err := db.PausarAsignacion(sesion.Agente, *sesion.ProyectoID, "bloqueo_humano:"+motivo); err != nil {
+			return 0, err
+		}
+		return 1, nil
+	}
+	if pendiente, err := existeRuntimeOrderAutonomiaPendiente(sesion.Agente, sesion.ProyectoID, "pause", ""); err != nil {
+		return 0, err
+	} else if pendiente {
+		return 0, nil
+	}
+	if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
+		Agente:   sesion.Agente,
+		Proyecto: proyecto.Slug,
+		Accion:   agenteControlAccionPause,
+		Motivo:   "bloqueo_humano:" + motivo,
+		Por:      "orquesta",
+	}); err != nil {
+		return 0, err
+	}
+	return 1, nil
 }
 
 func reactivarAgenteTrasReanimacion(agente string) error {

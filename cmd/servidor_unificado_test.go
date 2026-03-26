@@ -41,7 +41,7 @@ func TestRegistrarRutasServeMontaSuperficieOperativa(t *testing.T) {
 	mux := http.NewServeMux()
 	registrarRutasServe(mux)
 
-	for _, path := range []string{"/asignaciones", "/sesiones", "/proyectos", "/gobernanza", "/git"} {
+	for _, path := range []string{"/asignaciones", "/sesiones", "/proyectos", "/progreso", "/pools", "/modelo", "/memoria", "/deploy", "/config", "/conectores", "/diagnostico", "/auditoria", "/refineria", "/respaldo", "/gobernanza", "/git"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, req)

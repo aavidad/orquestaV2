@@ -33,6 +33,35 @@ func registrarRutasServe(mux *http.ServeMux) {
 	mux.HandleFunc("/sesiones/", webRouterSesiones)
 	mux.HandleFunc("/proyectos", webHandlerProyectos)
 	mux.HandleFunc("/proyectos/", webRouterProyectos)
+	mux.HandleFunc("/progreso", webHandlerProgreso)
+	mux.HandleFunc("/progreso/", webRouterProgreso)
+	mux.HandleFunc("/pools", webHandlerPools)
+	mux.HandleFunc("/pools/", webRouterPools)
+	mux.HandleFunc("/modelo", webHandlerModelo)
+	mux.HandleFunc("/modelo/politicas/guardar", webHandlerModeloPoliticaGuardar)
+	mux.HandleFunc("/memoria", webHandlerMemoria)
+	mux.HandleFunc("/memoria/", webRouterMemoria)
+	mux.HandleFunc("/deploy", webHandlerDeploy)
+	mux.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			webHandlerConfigGuardar(w, r)
+			return
+		}
+		webHandlerConfig(w, r)
+	})
+	mux.HandleFunc("/conectores", webHandlerConectores)
+	mux.HandleFunc("/conectores/", webRouterConectores)
+	mux.HandleFunc("/diagnostico", webHandlerDiagnostico)
+	mux.HandleFunc("/auditoria", webHandlerAuditoria)
+	mux.HandleFunc("/refineria", webHandlerRefineria)
+	mux.HandleFunc("/refineria/", webRouterRefineria)
+	mux.HandleFunc("/respaldo", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			webHandlerRespaldoCrear(w, r)
+			return
+		}
+		webHandlerRespaldo(w, r)
+	})
 	mux.HandleFunc("/gobernanza", webHandlerGobernanza)
 	mux.HandleFunc("/gobernanza/", webRouterGobernanza)
 	mux.HandleFunc("/git", webHandlerGitGov)

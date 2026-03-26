@@ -68,6 +68,7 @@ func Preparar(agente string, proyecto *db.Proyecto, ultima *db.Sesion) (runtimea
 	if resumen := construirResumenBootstrap(resume.ResumenContinuidad, state); resumen != "" {
 		resume.ResumenContinuidad = resumen
 	}
+	enriquecerResumeConContextoProyecto(&resume, strings.TrimSpace(agente), proyecto)
 
 	for _, msg := range state.Mailbox {
 		if msg == nil || msg.ID == 0 {
@@ -213,6 +214,32 @@ func construirResumenBootstrap(prev string, state *State) string {
 		partes = append(partes, fmt.Sprintf("Mailbox: %d mensaje(s) inyectados", len(state.Mailbox)))
 	}
 	return strings.Join(partes, ". ")
+}
+
+func enriquecerResumeConContextoProyecto(resume *runtimeagente.ResumeContext, agente string, proyecto *db.Proyecto) {
+	if resume == nil || proyecto == nil || !resumeTieneContexto(*resume) {
+		return
+	}
+	contexto, resumen := db.BuildProjectContextSummary(agente, proyecto)
+	if len(contexto) == 0 {
+		return
+	}
+	if payload := db.AppendProjectContextPayload(resume.ResumePayloadJSON, contexto); payload != "" {
+		resume.ResumePayloadJSON = payload
+	}
+	if resumen != "" && !strings.Contains(resume.ResumenContinuidad, resumen) {
+		if strings.TrimSpace(resume.ResumenContinuidad) == "" {
+			resume.ResumenContinuidad = resumen
+		} else {
+			resume.ResumenContinuidad += ". " + resumen
+		}
+	}
+}
+
+func resumeTieneContexto(resume runtimeagente.ResumeContext) bool {
+	return strings.TrimSpace(resume.ExternalSessionID) != "" ||
+		strings.TrimSpace(resume.ResumePayloadJSON) != "" ||
+		strings.TrimSpace(resume.ResumenContinuidad) != ""
 }
 
 func checkpointIDOrZero(cp *db.RuntimeCheckpoint) int64 {

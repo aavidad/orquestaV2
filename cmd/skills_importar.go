@@ -1,12 +1,10 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
-	"orquesta/skillsapp"
 )
 
 var skillsImportarCmd = &cobra.Command{
@@ -40,22 +38,7 @@ var skillsImportarCmd = &cobra.Command{
 			return nil
 		}
 
-		result, err := skillsImportService.ImportFromWeb(context.Background(), skillsapp.ImportInput{
-			Actor:      req.Actor,
-			TipoAgente: req.TipoAgente,
-			URL:        req.URL,
-			Repo:       req.Repo,
-			Skill:      req.Skill,
-		})
-		if err != nil {
-			return err
-		}
-		if result.Existente {
-			fmt.Printf("✓ Skill #%d ya existia en el catalogo\n", result.ID)
-		} else {
-			fmt.Printf("✓ Skill #%d importado\n", result.ID)
-		}
-		return nil
+		return serverFirstCommandError("skills importar")
 	},
 }
 

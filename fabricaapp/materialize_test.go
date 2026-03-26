@@ -35,7 +35,17 @@ func TestMaterializeResolvesDependenciesAndBacklog(t *testing.T) {
 	store := &fakeMaterializeStore{}
 	plan := GenerationResult{
 		Tasks: []BlueprintTask{
-			{Key: "a", Titulo: "Arquitectura", Modulo: "arquitectura", Prioridad: db.PrioridadAlta, ContratoDefinido: true},
+			{
+				Key:              "a",
+				Titulo:           "Arquitectura",
+				Modulo:           "arquitectura",
+				RolSugerido:      "arquitecto",
+				Fase:             "arquitectura",
+				Entregable:       "Diseño base aprobado",
+				CriteriosCierre:  []string{"Capas definidas"},
+				Prioridad:        db.PrioridadAlta,
+				ContratoDefinido: true,
+			},
 			{Key: "b", Titulo: "Frontend", Modulo: "frontend", Prioridad: db.PrioridadAlta, Dependencias: []string{"a"}},
 		},
 	}
@@ -49,6 +59,9 @@ func TestMaterializeResolvesDependenciesAndBacklog(t *testing.T) {
 	}
 	if len(store.created) != 2 {
 		t.Fatalf("creadas inesperadas: %+v", store.created)
+	}
+	if !strings.Contains(store.created[0].Notas, "SOP rol sugerido: arquitecto") || !strings.Contains(store.created[0].Notas, "SOP entregable: Diseño base aprobado") {
+		t.Fatalf("notas SOP inesperadas: %s", store.created[0].Notas)
 	}
 	if got := store.created[1].Dependencias; len(got) != 1 || got[0] != 1 {
 		t.Fatalf("dependencias no resueltas: %+v", got)

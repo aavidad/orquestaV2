@@ -14,6 +14,7 @@ func TestCmdNoUsaSQLDirectoNiAperturasFueraDeExcepcionesControladas(t *testing.T
 	root := "."
 	patronApertura := regexp.MustCompile(`db\.(Open|Close|IsOpen|CurrentDBPath)\(`)
 	patronSQLDirecto := regexp.MustCompile(`db\.DB\.(Exec|Query|QueryRow|QueryContext|QueryRowContext|ExecContext)\(`)
+	patronEnsureLocal := regexp.MustCompile(`ensureLocalDB\(`)
 	permitidosPorFichero := map[string]map[string]bool{
 		"root.go": {
 			"Open":   true,
@@ -37,6 +38,9 @@ func TestCmdNoUsaSQLDirectoNiAperturasFueraDeExcepcionesControladas(t *testing.T
 		if err != nil {
 			return err
 		}
+		permitidosEnsureLocal := map[string]bool{
+			"cliente_servidor.go": true,
+		}
 		if d.IsDir() {
 			return nil
 		}
@@ -58,6 +62,9 @@ func TestCmdNoUsaSQLDirectoNiAperturasFueraDeExcepcionesControladas(t *testing.T
 		}
 		for _, match := range patronSQLDirecto.FindAllStringSubmatch(texto, -1) {
 			t.Errorf("%s usa db.DB.%s() con SQL directo", base, match[1])
+		}
+		if patronEnsureLocal.MatchString(texto) && !permitidosEnsureLocal[base] {
+			t.Errorf("%s usa ensureLocalDB() fuera de la transicion controlada server-first", base)
 		}
 		return nil
 	})

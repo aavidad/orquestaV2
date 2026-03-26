@@ -1,7 +1,8 @@
 package cmd
 
 import (
-	"path/filepath"
+	"encoding/json"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -9,35 +10,36 @@ import (
 )
 
 func TestTareaListarTSVEsEstableParaScripts(t *testing.T) {
-	tmp := prepararDBTemporalCmd(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/tareas", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiTareasResponse{
+			Tareas: []*db.Tarea{{
+				ID:          33,
+				Titulo:      "Refactor\tPTY\nconnector",
+				ProyectoID:  ptrInt64(7),
+				Modulo:      "controlplane",
+				Prioridad:   db.PrioridadAlta,
+				Estado:      db.EstadoAsignada,
+				Agente:      ptrString("Codex1"),
+				Descripcion: "salida estable para scripts",
+			}},
+		})
+	})
+	mux.HandleFunc("/api/proyectos", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiProyectosResponse{
+			Proyectos: []*db.Proyecto{{ID: 7, Slug: "orquestador"}},
+		})
+	})
 
-	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
-		t.Fatalf("registrar agente: %v", err)
-	}
-	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
-		Slug:    "orquestador",
-		Nombre:  "Orquestador",
-		RutaAbs: filepath.Join(tmp, "orquestador"),
-		Tipo:    db.ProyectoRepo,
-		Activo:  true,
-	})
-	if err != nil {
-		t.Fatalf("upsert proyecto: %v", err)
-	}
-	taskID, err := db.CrearTarea(&db.Tarea{
-		Titulo:      "Refactor\tPTY\nconnector",
-		ProyectoID:  &proyectoID,
-		Modulo:      "controlplane",
-		Prioridad:   db.PrioridadAlta,
-		CreadoPor:   "alberto",
-		Descripcion: "salida estable para scripts",
-	})
-	if err != nil {
-		t.Fatalf("crear tarea: %v", err)
-	}
-	if err := db.TomarTarea(taskID, "Codex1"); err != nil {
-		t.Fatalf("tomar tarea: %v", err)
-	}
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
 
 	if err := tareaListarCmd.Flags().Set("agente", "Codex1"); err != nil {
 		t.Fatalf("set agente: %v", err)
@@ -65,7 +67,7 @@ func TestTareaListarTSVEsEstableParaScripts(t *testing.T) {
 	if len(fields) != 7 {
 		t.Fatalf("esperaba 7 columnas TSV, got=%d line=%q", len(fields), line)
 	}
-	if fields[0] != itoa(taskID) || fields[1] != "asignada" || fields[2] != string(db.PrioridadAlta) {
+	if fields[0] != "33" || fields[1] != "asignada" || fields[2] != string(db.PrioridadAlta) {
 		t.Fatalf("cabecera TSV inesperada: %v", fields[:3])
 	}
 	if fields[3] != "Codex1" || fields[4] != "orquestador" || fields[5] != "controlplane" {

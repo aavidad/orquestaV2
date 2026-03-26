@@ -9,7 +9,6 @@ package cmd
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/spf13/cobra"
 	"orquesta/capacidadapp"
@@ -41,13 +40,7 @@ var poolListarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			pools, err = capacidadService.ListPoolsSummary(filtro)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("pool listar")
 		}
 		if len(pools) == 0 {
 			fmt.Println("No hay pools.")
@@ -76,13 +69,7 @@ var poolVerCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			detail, err = capacidadService.GetPoolDetail(args[0])
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("pool ver")
 		}
 		pool := detail.Pool
 		fmt.Printf("Pool %s\n", pool.Slug)
@@ -148,13 +135,7 @@ var poolGuardarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			id, err = capacidadService.SavePool(pool)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("pool guardar")
 		}
 		fmt.Printf("✓ Pool %s guardado (id: %d)\n", args[0], id)
 		return nil
@@ -176,13 +157,7 @@ var poolModeloListarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			modelos, err = capacidadService.ListPoolModels(args[0])
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("pool modelo listar")
 		}
 		if len(modelos) == 0 {
 			fmt.Println("No hay modelos para ese pool.")
@@ -220,13 +195,7 @@ var poolModeloGuardarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			id, err = capacidadService.SavePoolModel(args[0], modelo)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("pool modelo guardar")
 		}
 		fmt.Printf("✓ Modelo %s guardado en pool %s (id: %d)\n", args[1], args[0], id)
 		return nil
@@ -240,12 +209,7 @@ var poolModeloSeedCmd = &cobra.Command{
 		if ok, err := seedInicialModelosPoolPorAPI(); err != nil {
 			return err
 		} else if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			if err := capacidadService.SeedInitialModels(); err != nil {
-				return err
-			}
+			return serverFirstCommandError("pool modelo seed-inicial")
 		}
 		fmt.Println("✓ Modelos iniciales cargados")
 		return nil
@@ -262,66 +226,7 @@ var poolSeedCmd = &cobra.Command{
 			fmt.Println("✓ Pools iniciales cargados")
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		seeds := []db.PoolCapacidad{
-			{
-				Slug:                "codex",
-				Proveedor:           "OpenAI",
-				Runtime:             "codex",
-				Plan:                "default",
-				EsDePago:            true,
-				CapacidadTotal:      4,
-				CapacidadReservada:  0,
-				PermiteHijos:        true,
-				PermiteModelosMulti: true,
-				PermiteSobrecoste:   false,
-				PoliticaHandoff:     "preventivo",
-				FuenteTelemetria:    "manual",
-				MetadataJSON:        "{}",
-				Activo:              true,
-			},
-			{
-				Slug:                "claude",
-				Proveedor:           "Anthropic",
-				Runtime:             "claude",
-				Plan:                "default",
-				EsDePago:            true,
-				CapacidadTotal:      1,
-				CapacidadReservada:  0,
-				PermiteHijos:        true,
-				PermiteModelosMulti: true,
-				PermiteSobrecoste:   false,
-				PoliticaHandoff:     "preventivo",
-				FuenteTelemetria:    "manual",
-				MetadataJSON:        "{}",
-				Activo:              true,
-			},
-			{
-				Slug:                "android",
-				Proveedor:           "Android",
-				Runtime:             "android",
-				Plan:                "default",
-				EsDePago:            false,
-				CapacidadTotal:      1,
-				CapacidadReservada:  0,
-				PermiteHijos:        false,
-				PermiteModelosMulti: false,
-				PermiteSobrecoste:   false,
-				PoliticaHandoff:     "preventivo",
-				FuenteTelemetria:    "manual",
-				MetadataJSON:        "{}",
-				Activo:              true,
-			},
-		}
-		for _, seed := range seeds {
-			if _, err := capacidadService.SavePool(&seed); err != nil {
-				return err
-			}
-		}
-		fmt.Printf("✓ Pools iniciales cargados: %s\n", strconv.Itoa(len(seeds)))
-		return nil
+		return serverFirstCommandError("pool seed-inicial")
 	},
 }
 

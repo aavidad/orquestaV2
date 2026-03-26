@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"orquesta/db"
 )
@@ -35,6 +36,22 @@ func TestWebSesionesFiltrosYDetalle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("iniciar sesion: %v", err)
 	}
+	remainingTokens := int64(2048)
+	remainingMessages := int64(12)
+	now := time.Now().UTC()
+	if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+		SesionID:          sesion.ID,
+		ModelSlug:         "gpt-5.4",
+		WindowKind:        "rolling",
+		WindowStartedAt:   &now,
+		ResetAt:           &now,
+		RemainingTokens:   &remainingTokens,
+		RemainingMessages: &remainingMessages,
+		BudgetSource:      "runtime",
+		RawSnapshotJSON:   "{}",
+	}); err != nil {
+		t.Fatalf("registrar presupuesto: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/sesiones?agente=Codex1&proyecto=orquestador&activa=true&lang=en", nil)
 	rec := httptest.NewRecorder()
@@ -60,7 +77,7 @@ func TestWebSesionesFiltrosYDetalle(t *testing.T) {
 		t.Fatalf("detalle sesion status=%d cuerpo=%s", rec.Code, rec.Body.String())
 	}
 	body = rec.Body.String()
-	if !strings.Contains(body, "Read-only operational inspection detail.") || !strings.Contains(body, "continuidad de prueba") || !strings.Contains(body, "resume") {
+	if !strings.Contains(body, "Read-only operational inspection detail.") || !strings.Contains(body, "continuidad de prueba") || !strings.Contains(body, "resume") || !strings.Contains(body, "gpt-5.4") || !strings.Contains(body, "runtime") {
 		t.Fatalf("detalle de sesión incompleto: %s", body)
 	}
 }

@@ -263,10 +263,11 @@ func requireServerForCurrentCommand() bool {
 	if len(args) == 0 && len(os.Args) > 1 {
 		args = os.Args[1:]
 	}
-	if len(args) == 0 {
+	if forceLocalMode(args) {
 		return false
 	}
-	if forceLocalMode(args) || allowLocalFallback(args) {
+	args = normalizedCommandArgs(args)
+	if len(args) == 0 {
 		return false
 	}
 	return commandSupportsServerMode(args)
@@ -524,13 +525,13 @@ func apiGetQuery(path string, query url.Values, dst any) (bool, error) {
 	base := serverBaseURL()
 	if base == "" {
 		if requireServerForCurrentCommand() {
-			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o desactiva ORQUESTA_REQUIRE_SERVER")
+			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa --local solo para recuperacion")
 		}
 		return false, nil
 	}
 	if !serverReachable() {
 		if requireServerForCurrentCommand() {
-			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
+			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa --local solo para recuperacion")
 		}
 		return false, nil
 	}
@@ -583,13 +584,13 @@ func apiPost(path string, payload any, dst any) (bool, error) {
 	base := serverBaseURL()
 	if base == "" {
 		if requireServerForCurrentCommand() {
-			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o desactiva ORQUESTA_REQUIRE_SERVER")
+			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa --local solo para recuperacion")
 		}
 		return false, nil
 	}
 	if !serverReachable() {
 		if requireServerForCurrentCommand() {
-			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
+			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa --local solo para recuperacion")
 		}
 		return false, nil
 	}

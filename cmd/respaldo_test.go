@@ -58,23 +58,12 @@ func TestRespaldoBDCreaFicheroYAplicaRetencion(t *testing.T) {
 	})
 
 	for i := 0; i < 3; i++ {
-		if err := respaldoBDCmd.Flags().Set("destino", destino); err != nil {
-			t.Fatalf("set destino: %v", err)
+		ruta, err := ejecutarRespaldoBD(destino, "Manual Final", 2)
+		if err != nil {
+			t.Fatalf("ejecutar respaldo helper: %v", err)
 		}
-		if err := respaldoBDCmd.Flags().Set("etiqueta", "Manual Final"); err != nil {
-			t.Fatalf("set etiqueta: %v", err)
-		}
-		if err := respaldoBDCmd.Flags().Set("retener", "2"); err != nil {
-			t.Fatalf("set retener: %v", err)
-		}
-
-		out := capturarStdout(t, func() {
-			if err := respaldoBDCmd.RunE(respaldoBDCmd, nil); err != nil {
-				t.Fatalf("run respaldo: %v", err)
-			}
-		})
-		if !strings.Contains(out, "Respaldo creado:") {
-			t.Fatalf("salida inesperada: %s", out)
+		if !strings.Contains(ruta, destino) {
+			t.Fatalf("ruta inesperada: %s", ruta)
 		}
 	}
 

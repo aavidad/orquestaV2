@@ -42,26 +42,7 @@ var memoriaListarCmd = &cobra.Command{
 		} else if ok {
 			entidades = resp.Entidades
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			filter := db.FiltroEntidadesMemoria{}
-			if strings.TrimSpace(proyectoRef) != "" {
-				proyecto, err := db.GetProyecto(proyectoRef)
-				if err != nil {
-					return err
-				}
-				filter.ProyectoID = &proyecto.ID
-			}
-			if strings.TrimSpace(tipo) != "" {
-				filter.Tipo = &tipo
-			}
-
-			var err error
-			entidades, err = db.ListarEntidadesMemoria(filter)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("memoria listar")
 		}
 		if len(entidades) == 0 {
 			fmt.Println("No hay entidades de memoria con ese filtro.")
@@ -99,26 +80,7 @@ var memoriaVerCmd = &cobra.Command{
 		} else if ok {
 			entidad = resp.Entidad
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			var proyectoID *int64
-			if strings.TrimSpace(proyectoRef) != "" {
-				proyecto, err := db.GetProyecto(proyectoRef)
-				if err != nil {
-					return err
-				}
-				proyectoID = &proyecto.ID
-			}
-
-			var err error
-			entidad, err = db.GetEntidadMemoria(args[0], proyectoID)
-			if err != nil {
-				return err
-			}
-			if entidad == nil {
-				return fmt.Errorf("entidad '%s' no encontrada", args[0])
-			}
+			return serverFirstCommandError("memoria ver")
 		}
 
 		fmt.Printf("Entidad:      %s\n", entidad.Nombre)
@@ -159,31 +121,7 @@ var memoriaGuardarCmd = &cobra.Command{
 			fmt.Printf("✓ Entidad de memoria guardada: %s\n", nombre)
 			return nil
 		}
-
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		var proyectoID *int64
-		if strings.TrimSpace(proyectoRef) != "" {
-			proyecto, err := db.GetProyecto(proyectoRef)
-			if err != nil {
-				return err
-			}
-			proyectoID = &proyecto.ID
-		}
-		id, err := db.UpsertEntidadMemoria(&db.EntidadMemoria{
-			Nombre:        nombre,
-			Tipo:          tipo,
-			ValorJSON:     valor,
-			MetadataJSON:  metadata,
-			VerificadoPor: verificadoPor,
-			ProyectoID:    proyectoID,
-		})
-		if err != nil {
-			return err
-		}
-		fmt.Printf("✓ Entidad de memoria #%d guardada: %s\n", id, nombre)
-		return nil
+		return serverFirstCommandError("memoria guardar")
 	},
 }
 

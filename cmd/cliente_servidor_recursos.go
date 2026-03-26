@@ -88,6 +88,20 @@ type apiProyectoFabricarAppResponse struct {
 	Backlog int    `json:"backlog"`
 }
 
+type apiProyectoOperacionResponse struct {
+	Operacion *db.ProyectoOperacion `json:"operacion"`
+}
+
+type apiProyectoOperacionSetRequest struct {
+	EstadoOperativo  string `json:"estado_operativo"`
+	Motivo           string `json:"motivo"`
+	ObjetivoPct      int    `json:"objetivo_pct"`
+	MinAgentes       int    `json:"min_agentes"`
+	MaxAgentes       int    `json:"max_agentes"`
+	Prioridad        int    `json:"prioridad"`
+	ResumeAutomatico bool   `json:"resume_automatico"`
+}
+
 type apiLenguajePoliticaResponse struct {
 	Politica *db.LanguagePolicy `json:"politica"`
 }

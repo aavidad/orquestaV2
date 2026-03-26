@@ -1281,6 +1281,10 @@ func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		apiWriteJSON(w, http.StatusOK, map[string]any{"proyecto": proyecto})
+	case len(parts) == 2 && parts[1] == "operacion" && r.Method == http.MethodGet:
+		apiHandlerProyectoOperacion(w, r, ref)
+	case len(parts) == 2 && parts[1] == "operacion" && r.Method == http.MethodPost:
+		apiHandlerProyectoOperacionGuardar(w, r, ref)
 	case len(parts) == 2 && parts[1] == "fabricar-app" && r.Method == http.MethodPost:
 		apiHandlerProyectoFabricarApp(w, r, ref)
 	default:
@@ -1343,6 +1347,50 @@ func apiHandlerProyectoFabricarApp(w http.ResponseWriter, r *http.Request, ref s
 		Created: result.Created,
 		Backlog: result.Backlog,
 	})
+}
+
+func apiHandlerProyectoOperacion(w http.ResponseWriter, r *http.Request, ref string) {
+	proyecto, err := db.GetProyecto(strings.TrimSpace(ref))
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	operacion, err := db.GetProyectoOperacion(proyecto.ID)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiProyectoOperacionResponse{Operacion: operacion})
+}
+
+func apiHandlerProyectoOperacionGuardar(w http.ResponseWriter, r *http.Request, ref string) {
+	proyecto, err := db.GetProyecto(strings.TrimSpace(ref))
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	var req apiProyectoOperacionSetRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	op, err := db.GetProyectoOperacion(proyecto.ID)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	op.EstadoOperativo = db.EstadoOperativoProyecto(strings.TrimSpace(req.EstadoOperativo))
+	op.Motivo = strings.TrimSpace(req.Motivo)
+	op.ObjetivoPct = req.ObjetivoPct
+	op.MinAgentes = req.MinAgentes
+	op.MaxAgentes = req.MaxAgentes
+	op.Prioridad = req.Prioridad
+	op.ResumeAutomatico = req.ResumeAutomatico
+	if err := db.UpsertProyectoOperacion(op); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiProyectoOperacionResponse{Operacion: op})
 }
 
 func apiHandlerPools(w http.ResponseWriter, r *http.Request) {
@@ -3336,6 +3384,24 @@ func resolverSesionPresupuestoAPI(sesionRaw, agente string) (int64, *db.Sesion, 
 		return 0, nil, err
 	}
 	return sesion.ID, sesion, nil
+}
+
+func resolverSesionPresupuestoPorReferencia(sesionID int64, agente string) (*db.Sesion, error) {
+	if sesionID > 0 {
+		return db.GetSesionByID(sesionID)
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil, fmt.Errorf("debe indicar --sesion o --agente")
+	}
+	sesion, err := db.GetSesionActiva(agente, nil)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("el agente %s no tiene sesión activa", agente)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return sesion, nil
 }
 
 func apiHandlerAgentePreparar(w http.ResponseWriter, r *http.Request) {

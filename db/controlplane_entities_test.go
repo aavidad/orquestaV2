@@ -2085,6 +2085,31 @@ func TestRuntimeOrderStartIntegraBootstrapDeHandoffMailboxYCheckpoint(t *testing
 	}); err != nil {
 		t.Fatalf("checkpoint: %v", err)
 	}
+	if _, err := DB.Exec(`
+		INSERT INTO worktrees (proyecto_id, agente, nombre, ruta_abs, branch, base_ref, estado, motivo)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		proyectoID,
+		"Codex1",
+		"wt-codex1",
+		filepath.Join(tmp, "orquestador", ".orquesta-worktrees", "wt-codex1"),
+		"feature/wt-codex1",
+		"HEAD",
+		"activa",
+		"continuidad",
+	); err != nil {
+		t.Fatalf("crear worktree: %v", err)
+	}
+	if _, err := CrearPropuesta(&Propuesta{
+		Codigo:       "OP-902",
+		Titulo:       "Definir integracion",
+		Descripcion:  "Pendiente de cierre",
+		ProyectoID:   &proyectoID,
+		Tipo:         "arquitectura",
+		PropuestoPor: "alberto",
+		Distribuidor: "orquesta",
+	}); err != nil {
+		t.Fatalf("crear propuesta: %v", err)
+	}
 
 	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
 		Agente:      "Codex1",
@@ -2113,8 +2138,14 @@ func TestRuntimeOrderStartIntegraBootstrapDeHandoffMailboxYCheckpoint(t *testing
 	if !strings.Contains(sesion.ResumePayloadJSON, `"mailbox"`) || !strings.Contains(sesion.ResumePayloadJSON, `"checkpoint"`) {
 		t.Fatalf("resume payload sin bootstrap: %s", sesion.ResumePayloadJSON)
 	}
+	if !strings.Contains(sesion.ResumePayloadJSON, `"project_context"`) || !strings.Contains(sesion.ResumePayloadJSON, "feature/wt-codex1") || !strings.Contains(sesion.ResumePayloadJSON, "OP-902") {
+		t.Fatalf("resume payload sin mapa operativo: %s", sesion.ResumePayloadJSON)
+	}
 	if !strings.Contains(sesion.ResumenContinuidad, "handoff listo") || !strings.Contains(sesion.ResumenContinuidad, "Mailbox: 1 mensaje(s) inyectados") {
 		t.Fatalf("resumen continuidad inesperado: %s", sesion.ResumenContinuidad)
+	}
+	if !strings.Contains(sesion.ResumenContinuidad, "Worktree activa en feature/wt-codex1") || !strings.Contains(sesion.ResumenContinuidad, "1 propuesta(s) abiertas") {
+		t.Fatalf("resumen continuidad sin mapa operativo: %s", sesion.ResumenContinuidad)
 	}
 	if sesion.Branch != "feature/bootstrap" {
 		t.Fatalf("branch inesperada: %s", sesion.Branch)

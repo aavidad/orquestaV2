@@ -60,7 +60,7 @@ func renderPersistenciaInfo(w io.Writer, infoPath, dbPath, addr string, info *rp
 
 	if pingErr != nil {
 		fmt.Fprintf(w, "Health RPC:    KO (%v)\n", pingErr)
-		fmt.Fprintf(w, "Ruta activa:   sin servidor; local solo con --local o ORQUESTA_ALLOW_LOCAL_FALLBACK=1\n")
+		fmt.Fprintf(w, "Ruta activa:   sin servidor; local solo con --local o ORQUESTA_FORCE_LOCAL=1 y solo para recuperación\n")
 		return
 	}
 

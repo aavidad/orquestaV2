@@ -39,6 +39,20 @@ CREATE TABLE IF NOT EXISTS proyectos (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS proyectos_operacion (
+    proyecto_id       INTEGER PRIMARY KEY REFERENCES proyectos(id) ON DELETE CASCADE,
+    estado_operativo  TEXT    NOT NULL DEFAULT 'activo'
+                             CHECK (estado_operativo IN ('activo','esperando_humano','bloqueado_externo','cerrado')),
+    motivo            TEXT    NOT NULL DEFAULT '',
+    objetivo_pct      INTEGER NOT NULL DEFAULT 100,
+    min_agentes       INTEGER NOT NULL DEFAULT 0,
+    max_agentes       INTEGER NOT NULL DEFAULT 0,
+    prioridad         INTEGER NOT NULL DEFAULT 100,
+    resume_automatico INTEGER NOT NULL DEFAULT 1,
+    created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ─── Agentes registrados ───────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS agentes (
     nombre       TEXT PRIMARY KEY,

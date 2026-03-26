@@ -36,13 +36,7 @@ var politicaModeloListarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			items, err = capacidadService.ListModelPolicies(scopeTipo, scopeRef, activaPtr)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("politica-modelo listar")
 		}
 		if len(items) == 0 {
 			fmt.Println("No hay politicas de modelo.")
@@ -91,13 +85,7 @@ var politicaModeloGuardarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			id, err = capacidadService.SaveModelPolicy(politica)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("politica-modelo guardar")
 		}
 		fmt.Printf("✓ Politica de modelo guardada (id: %d)\n", id)
 		return nil
@@ -111,12 +99,7 @@ var politicaModeloSeedCmd = &cobra.Command{
 		if ok, err := seedInicialPoliticasModeloPorAPI(); err != nil {
 			return err
 		} else if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			if err := capacidadService.SeedInitialModelPolicies(); err != nil {
-				return err
-			}
+			return serverFirstCommandError("politica-modelo seed-inicial")
 		}
 		fmt.Println("✓ Politicas iniciales de modelo cargadas")
 		return nil
@@ -152,13 +135,7 @@ var modeloResolverCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			res, err = capacidadService.ResolveModelPolicy(input)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("modelo resolver")
 		}
 
 		fmt.Printf("Perfil:      %s\n", res.PerfilTarea)

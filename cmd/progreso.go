@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"orquesta/db"
 )
 
 var progresoCmd = &cobra.Command{
@@ -32,13 +31,7 @@ var progresoVerCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			resumen, err = db.CalcularResumenProgresoProyecto(proyecto)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("progreso ver")
 		}
 		fmt.Printf("Proyecto: %s\n", resumen.Proyecto)
 		fmt.Printf("Progreso: %.1f%%\n", resumen.ProgresoPct)
@@ -76,13 +69,7 @@ var progresoFaseListarCmd = &cobra.Command{
 			return err
 		}
 		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			fases, err = db.ListarFasesProyecto(proyecto)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("progreso fase listar")
 		}
 		if len(fases) == 0 {
 			fmt.Println("No hay fases para ese proyecto.")
@@ -121,22 +108,7 @@ var progresoFaseRegistrarCmd = &cobra.Command{
 			fmt.Printf("✓ Fase #%d registrada\n", resp.ID)
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		id, err := db.RegistrarFaseProyecto(&db.FaseProyecto{
-			Proyecto:    req.Proyecto,
-			Nombre:      req.Nombre,
-			Descripcion: req.Descripcion,
-			Orden:       req.Orden,
-			Peso:        req.Peso,
-			Estado:      req.Estado,
-		})
-		if err != nil {
-			return err
-		}
-		fmt.Printf("✓ Fase #%d registrada\n", id)
-		return nil
+		return serverFirstCommandError("progreso fase registrar")
 	},
 }
 
@@ -184,36 +156,7 @@ var progresoFaseActualizarCmd = &cobra.Command{
 			fmt.Printf("✓ Fase #%d actualizada\n", resp.ID)
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		fase, err := db.GetFaseProyecto(id)
-		if err != nil {
-			return err
-		}
-		if req.Proyecto != nil {
-			fase.Proyecto = *req.Proyecto
-		}
-		if req.Nombre != nil {
-			fase.Nombre = *req.Nombre
-		}
-		if req.Descripcion != nil {
-			fase.Descripcion = *req.Descripcion
-		}
-		if req.Orden != nil {
-			fase.Orden = *req.Orden
-		}
-		if req.Peso != nil {
-			fase.Peso = *req.Peso
-		}
-		if req.Estado != nil {
-			fase.Estado = *req.Estado
-		}
-		if err := db.ActualizarFaseProyecto(fase); err != nil {
-			return err
-		}
-		fmt.Printf("✓ Fase #%d actualizada\n", id)
-		return nil
+		return serverFirstCommandError("progreso fase actualizar")
 	},
 }
 
@@ -250,18 +193,7 @@ var progresoTareaRegistrarCmd = &cobra.Command{
 		if ok, err := registrarAvanceProgresoPorAPI(tareaID, req); err != nil {
 			return err
 		} else if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			if err := db.RegistrarAvanceTarea(&db.AvanceTarea{
-				TareaID:        tareaID,
-				Proyecto:       req.Proyecto,
-				FaseID:         req.FaseID,
-				ProgresoPct:    req.ProgresoPct,
-				ActualizadoPor: req.ActualizadoPor,
-			}); err != nil {
-				return err
-			}
+			return serverFirstCommandError("progreso tarea registrar")
 		}
 		fmt.Printf("✓ Avance registrado para tarea #%d\n", tareaID)
 		return nil

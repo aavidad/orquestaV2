@@ -10,262 +10,9 @@ package cmd
 import (
 	"encoding/json"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
-
-	"orquesta/db"
 )
-
-func TestRuntimeListarYVer(t *testing.T) {
-	tmp := prepararDBTemporalCmd(t)
-
-	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
-		t.Fatalf("registrar agente: %v", err)
-	}
-	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
-		Slug:    "orquestador",
-		Nombre:  "Orquestador",
-		RutaAbs: filepath.Join(tmp, "orquestador"),
-		Tipo:    db.ProyectoRepo,
-		Activo:  true,
-	})
-	if err != nil {
-		t.Fatalf("upsert proyecto: %v", err)
-	}
-	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
-		Agente:             "Codex1",
-		ProyectoID:         &proyectoID,
-		CWD:                filepath.Join(tmp, "orquestador"),
-		Herramienta:        "codex-cli",
-		ExternalSessionID:  "sess-runtime-cli",
-		ResumenContinuidad: "runtime cli",
-		Branch:             "main",
-	})
-	if err != nil {
-		t.Fatalf("iniciar sesion: %v", err)
-	}
-
-	if err := runtimeListarCmd.Flags().Set("proyecto", "orquestador"); err != nil {
-		t.Fatalf("set proyecto: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = runtimeListarCmd.Flags().Set("proyecto", "")
-	})
-
-	outListar := capturarStdout(t, func() {
-		if err := runtimeListarCmd.RunE(runtimeListarCmd, nil); err != nil {
-			t.Fatalf("run listar: %v", err)
-		}
-	})
-	for _, token := range []string{"ID", "Codex1", "orquestador", "codex-cli"} {
-		if !strings.Contains(outListar, token) {
-			t.Fatalf("salida listar sin %q:\n%s", token, outListar)
-		}
-	}
-
-	outVer := capturarStdout(t, func() {
-		if err := runtimeVerCmd.RunE(runtimeVerCmd, []string{itoa(sesion.ID)}); err != nil {
-			t.Fatalf("run ver: %v", err)
-		}
-	})
-	for _, token := range []string{"Runtime #", "Codex1", "codex-cli", "Muestras recientes"} {
-		if !strings.Contains(outVer, token) {
-			t.Fatalf("salida ver sin %q:\n%s", token, outVer)
-		}
-	}
-	if !strings.Contains(outVer, "Estado:") {
-		t.Fatalf("salida ver sin bloque de estado:\n%s", outVer)
-	}
-}
-
-func TestRuntimeNudgeEncolaOrdenLocal(t *testing.T) {
-	prepararDBTemporalCmd(t)
-
-	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
-		t.Fatalf("registrar Codex1: %v", err)
-	}
-	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
-		t.Fatalf("registrar Codex2: %v", err)
-	}
-
-	out := capturarStdout(t, func() {
-		if err := runtimeNudgeCmd.RunE(runtimeNudgeCmd, []string{"Codex2", "retoma", "el", "bloqueo"}); err != nil {
-			t.Fatalf("runtime nudge local: %v", err)
-		}
-	})
-	if !strings.Contains(out, "Nudge runtime #") {
-		t.Fatalf("salida runtime nudge inesperada:\n%s", out)
-	}
-
-	agente := "Codex2"
-	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente})
-	if err != nil {
-		t.Fatalf("listar runtime orders: %v", err)
-	}
-	if len(orders) != 1 || orders[0].Tipo != "nudge" {
-		t.Fatalf("orden nudge inesperada: %+v", orders)
-	}
-	if !strings.Contains(orders[0].PayloadJSON, "\"texto\":\"retoma el bloqueo\"") {
-		t.Fatalf("payload nudge inesperado: %s", orders[0].PayloadJSON)
-	}
-}
-
-func TestRuntimeDiscordiaEncolaOrdenLocal(t *testing.T) {
-	prepararDBTemporalCmd(t)
-
-	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
-		t.Fatalf("registrar Codex1: %v", err)
-	}
-	if err := db.RegistrarAgente("alberto", "admin"); err != nil {
-		t.Fatalf("registrar alberto: %v", err)
-	}
-	if err := runtimeDiscordiaCmd.Flags().Set("from", "Codex1"); err != nil {
-		t.Fatalf("set from discordia: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = runtimeDiscordiaCmd.Flags().Set("from", "server")
-	})
-
-	out := capturarStdout(t, func() {
-		if err := runtimeDiscordiaCmd.RunE(runtimeDiscordiaCmd, []string{"alberto", "Codex2", "desacuerdo", "sobre", "la", "solucion"}); err != nil {
-			t.Fatalf("runtime discordia local: %v", err)
-		}
-	})
-	if !strings.Contains(out, "Discordia runtime #") {
-		t.Fatalf("salida runtime discordia inesperada:\n%s", out)
-	}
-
-	agente := "alberto"
-	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente})
-	if err != nil {
-		t.Fatalf("listar runtime orders: %v", err)
-	}
-	if len(orders) != 1 || orders[0].Tipo != "discordia" {
-		t.Fatalf("orden discordia inesperada: %+v", orders)
-	}
-	if !strings.Contains(orders[0].PayloadJSON, "\"contra_agente\":\"Codex2\"") || !strings.Contains(orders[0].PayloadJSON, "\"motivo\":\"desacuerdo sobre la solucion\"") {
-		t.Fatalf("payload discordia inesperado: %s", orders[0].PayloadJSON)
-	}
-}
-
-func TestRuntimeCheckpointsHistorialLocal(t *testing.T) {
-	tmp := prepararDBTemporalCmd(t)
-
-	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
-		t.Fatalf("registrar agente: %v", err)
-	}
-	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
-		Slug:    "orquestador",
-		Nombre:  "Orquestador",
-		RutaAbs: filepath.Join(tmp, "orquestador"),
-		Tipo:    db.ProyectoRepo,
-		Activo:  true,
-	})
-	if err != nil {
-		t.Fatalf("upsert proyecto: %v", err)
-	}
-	if _, err := db.CrearRuntimeCheckpoint(&db.RuntimeCheckpoint{
-		Agente:         "Codex1",
-		ProyectoID:     &proyectoID,
-		CheckpointKind: "manual",
-		Resumen:        "checkpoint uno",
-		Branch:         "main",
-		CWD:            filepath.Join(tmp, "orquestador"),
-		PayloadJSON:    `{"n":1}`,
-		ResumeStrategy: "resumen_y_payload",
-		Source:         "manual-1",
-	}); err != nil {
-		t.Fatalf("crear checkpoint 1: %v", err)
-	}
-	if _, err := db.CrearRuntimeCheckpoint(&db.RuntimeCheckpoint{
-		Agente:         "Codex1",
-		ProyectoID:     &proyectoID,
-		CheckpointKind: "manual",
-		Resumen:        "checkpoint dos",
-		Branch:         "feature/controlplane",
-		CWD:            filepath.Join(tmp, "orquestador"),
-		PayloadJSON:    `{"n":2}`,
-		ResumeStrategy: "resumen_y_payload",
-		Source:         "manual-2",
-	}); err != nil {
-		t.Fatalf("crear checkpoint 2: %v", err)
-	}
-
-	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
-	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "1")()
-	if err := runtimeCheckpointsCmd.Flags().Set("agente", "Codex1"); err != nil {
-		t.Fatalf("set agente: %v", err)
-	}
-	if err := runtimeCheckpointsCmd.Flags().Set("proyecto", "orquestador"); err != nil {
-		t.Fatalf("set proyecto: %v", err)
-	}
-	if err := runtimeCheckpointsCmd.Flags().Set("limit", "2"); err != nil {
-		t.Fatalf("set limit: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = runtimeCheckpointsCmd.Flags().Set("agente", "")
-		_ = runtimeCheckpointsCmd.Flags().Set("proyecto", "")
-		_ = runtimeCheckpointsCmd.Flags().Set("limit", "1")
-	})
-
-	out := capturarStdout(t, func() {
-		if err := runtimeCheckpointsCmd.RunE(runtimeCheckpointsCmd, nil); err != nil {
-			t.Fatalf("runtime checkpoints historial local: %v", err)
-		}
-	})
-	for _, token := range []string{"AGENTE", "manual-1", "manual-2", "feature/control"} {
-		if !strings.Contains(out, token) {
-			t.Fatalf("salida checkpoints historial sin %q:\n%s", token, out)
-		}
-	}
-}
-
-func TestRuntimeCheckpointVerLocal(t *testing.T) {
-	tmp := prepararDBTemporalCmd(t)
-
-	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
-		t.Fatalf("registrar agente: %v", err)
-	}
-	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
-		Slug:    "orquestador",
-		Nombre:  "Orquestador",
-		RutaAbs: filepath.Join(tmp, "orquestador"),
-		Tipo:    db.ProyectoRepo,
-		Activo:  true,
-	})
-	if err != nil {
-		t.Fatalf("upsert proyecto: %v", err)
-	}
-	checkpointID, err := db.CrearRuntimeCheckpoint(&db.RuntimeCheckpoint{
-		Agente:         "Codex1",
-		ProyectoID:     &proyectoID,
-		CheckpointKind: "manual",
-		Resumen:        "checkpoint inspeccionable",
-		Branch:         "main",
-		CWD:            filepath.Join(tmp, "orquestador"),
-		PayloadJSON:    `{"paso":"revisar"}`,
-		ResumeStrategy: "resumen_y_payload",
-		Source:         "manual-ver",
-	})
-	if err != nil {
-		t.Fatalf("crear checkpoint: %v", err)
-	}
-
-	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
-	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "1")()
-
-	out := capturarStdout(t, func() {
-		if err := runtimeCheckpointVerCmd.RunE(runtimeCheckpointVerCmd, []string{itoa(checkpointID)}); err != nil {
-			t.Fatalf("runtime checkpoint-ver local: %v", err)
-		}
-	})
-	for _, token := range []string{"Checkpoint #", "Codex1", "checkpoint inspeccionable", "manual-ver"} {
-		if !strings.Contains(out, token) {
-			t.Fatalf("salida checkpoint-ver sin %q:\n%s", token, out)
-		}
-	}
-}
 
 func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -531,5 +278,21 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	})
 	if !strings.Contains(outMailboxConsumir, "consumido") {
 		t.Fatalf("salida mailbox-consumir inesperada:\n%s", outMailboxConsumir)
+	}
+}
+
+func TestRuntimeRequiereServidor(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	resetCommandFlags(runtimeListarCmd)
+	err := runtimeListarCmd.RunE(runtimeListarCmd, nil)
+	if err == nil {
+		t.Fatalf("se esperaba error sin servidor")
+	}
+	if !strings.Contains(err.Error(), "requiere el servidor de Orquesta activo") {
+		t.Fatalf("error inesperado: %v", err)
 	}
 }

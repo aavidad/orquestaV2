@@ -44,14 +44,7 @@ var respaldoBDCmd = &cobra.Command{
 		} else if ok {
 			ruta = resp.Ruta
 		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			var err error
-			ruta, err = ejecutarRespaldoBD(destino, etiqueta, retener)
-			if err != nil {
-				return err
-			}
+			return serverFirstCommandError("respaldo bd")
 		}
 		fmt.Printf("✓ Respaldo creado: %s\n", ruta)
 		return nil

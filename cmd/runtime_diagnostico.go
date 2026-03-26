@@ -56,7 +56,7 @@ func cargarRuntimeDiagnostico(agente, proyecto string, limit int) (*runtimeDiagn
 		}
 		return data, nil
 	}
-	return cargarRuntimeDiagnosticoLocal(agente, proyecto, limit)
+	return nil, serverFirstCommandError("runtime diagnostico")
 }
 
 func cargarRuntimeDiagnosticoDesdeAPI(agente, proyecto string, limit int) (*runtimeDiagnosticoData, bool, error) {
@@ -103,63 +103,6 @@ func cargarRuntimeDiagnosticoDesdeAPI(agente, proyecto string, limit int) (*runt
 		MailboxPendiente: mailbox,
 		Checkpoints:      checkpoints,
 	}, true, nil
-}
-
-func cargarRuntimeDiagnosticoLocal(agente, proyecto string, limit int) (*runtimeDiagnosticoData, error) {
-	if err := ensureLocalDB(); err != nil {
-		return nil, err
-	}
-
-	var proyectoID *int64
-	if strings.TrimSpace(proyecto) != "" {
-		p, err := db.GetProyecto(proyecto)
-		if err != nil {
-			return nil, err
-		}
-		proyectoID = &p.ID
-	}
-
-	filterRuntimes := db.FiltroRuntimes{Agente: &agente, ProyectoID: proyectoID}
-	tree, err := db.ConstruirArbolRuntimes(filterRuntimes)
-	if err != nil {
-		return nil, err
-	}
-	handles, err := db.ListarRuntimeHandles(&agente)
-	if err != nil {
-		return nil, err
-	}
-	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: proyectoID})
-	if err != nil {
-		return nil, err
-	}
-	estadoPendiente := "pendiente"
-	mailbox, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
-		ToAgente:   &agente,
-		ProyectoID: proyectoID,
-		Estado:     &estadoPendiente,
-	})
-	if err != nil {
-		return nil, err
-	}
-	checkpoints, err := db.ListarRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{
-		Agente:     &agente,
-		ProyectoID: proyectoID,
-		Limit:      limit,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &runtimeDiagnosticoData{
-		Agente:           agente,
-		Proyecto:         proyecto,
-		Fuente:           "local",
-		Runtimes:         aplanarArbolLocal(tree),
-		Handles:          handles,
-		Orders:           orders,
-		MailboxPendiente: mailbox,
-		Checkpoints:      checkpoints,
-	}, nil
 }
 
 func renderRuntimeDiagnostico(data *runtimeDiagnosticoData, limit int) {
