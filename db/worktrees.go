@@ -9,13 +9,17 @@ import (
 	"orquesta/coordinacion"
 )
 
-type SQLiteWorktreeRepository struct{}
+type CoordinationWorktreeSQLRepository struct{}
 
-func ListarWorktreesCoord(filter coordinacion.WorktreeFilter) ([]*coordinacion.Worktree, error) {
-	return (SQLiteWorktreeRepository{}).List(filter)
+type SQLiteWorktreeRepository struct {
+	CoordinationWorktreeSQLRepository
 }
 
-func (SQLiteWorktreeRepository) Create(worktree *coordinacion.Worktree) (*coordinacion.Worktree, error) {
+func ListarWorktreesCoord(filter coordinacion.WorktreeFilter) ([]*coordinacion.Worktree, error) {
+	return (CoordinationWorktreeSQLRepository{}).List(filter)
+}
+
+func (CoordinationWorktreeSQLRepository) Create(worktree *coordinacion.Worktree) (*coordinacion.Worktree, error) {
 	if worktree == nil {
 		return nil, fmt.Errorf("worktree nil")
 	}
@@ -29,10 +33,10 @@ func (SQLiteWorktreeRepository) Create(worktree *coordinacion.Worktree) (*coordi
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
-	return (SQLiteWorktreeRepository{}).GetByID(id)
+	return (CoordinationWorktreeSQLRepository{}).GetByID(id)
 }
 
-func (SQLiteWorktreeRepository) GetByID(id int64) (*coordinacion.Worktree, error) {
+func (CoordinationWorktreeSQLRepository) GetByID(id int64) (*coordinacion.Worktree, error) {
 	row := DB.QueryRow(`
 		SELECT id, proyecto_id, tarea_id, lock_id, agente, nombre, ruta_abs, branch, base_ref, estado,
 		       motivo, created_at, updated_at, cerrada_at
@@ -41,7 +45,7 @@ func (SQLiteWorktreeRepository) GetByID(id int64) (*coordinacion.Worktree, error
 	return scanCoordinationWorktree(row)
 }
 
-func (SQLiteWorktreeRepository) GetActiveByPath(path string) (*coordinacion.Worktree, error) {
+func (CoordinationWorktreeSQLRepository) GetActiveByPath(path string) (*coordinacion.Worktree, error) {
 	row := DB.QueryRow(`
 		SELECT id, proyecto_id, tarea_id, lock_id, agente, nombre, ruta_abs, branch, base_ref, estado,
 		       motivo, created_at, updated_at, cerrada_at
@@ -55,7 +59,7 @@ func (SQLiteWorktreeRepository) GetActiveByPath(path string) (*coordinacion.Work
 	return worktree, err
 }
 
-func (SQLiteWorktreeRepository) List(filter coordinacion.WorktreeFilter) ([]*coordinacion.Worktree, error) {
+func (CoordinationWorktreeSQLRepository) List(filter coordinacion.WorktreeFilter) ([]*coordinacion.Worktree, error) {
 	q := `
 		SELECT id, proyecto_id, tarea_id, lock_id, agente, nombre, ruta_abs, branch, base_ref, estado,
 		       motivo, created_at, updated_at, cerrada_at
@@ -91,7 +95,7 @@ func (SQLiteWorktreeRepository) List(filter coordinacion.WorktreeFilter) ([]*coo
 	return out, rows.Err()
 }
 
-func (SQLiteWorktreeRepository) Close(id int64, closedAt time.Time, reason string) (*coordinacion.Worktree, error) {
+func (CoordinationWorktreeSQLRepository) Close(id int64, closedAt time.Time, reason string) (*coordinacion.Worktree, error) {
 	res, err := DB.Exec(`
 		UPDATE worktrees
 		SET estado='cerrada', motivo=?, cerrada_at=?
@@ -105,12 +109,16 @@ func (SQLiteWorktreeRepository) Close(id int64, closedAt time.Time, reason strin
 	if n == 0 {
 		return nil, fmt.Errorf("worktree no cerrable")
 	}
-	return (SQLiteWorktreeRepository{}).GetByID(id)
+	return (CoordinationWorktreeSQLRepository{}).GetByID(id)
 }
 
-type SQLiteProjectRepository struct{}
+type CoordinationProjectSQLRepository struct{}
 
-func (SQLiteProjectRepository) GetByRef(ref string) (*coordinacion.Project, error) {
+type SQLiteProjectRepository struct {
+	CoordinationProjectSQLRepository
+}
+
+func (CoordinationProjectSQLRepository) GetByRef(ref string) (*coordinacion.Project, error) {
 	project, err := GetProyecto(ref)
 	if err != nil {
 		return nil, err
@@ -123,9 +131,13 @@ func (SQLiteProjectRepository) GetByRef(ref string) (*coordinacion.Project, erro
 	}, nil
 }
 
-type SQLiteSessionRepository struct{}
+type CoordinationSessionSQLRepository struct{}
 
-func (SQLiteSessionRepository) GetActive(agent string, projectID *int64) (*coordinacion.Session, error) {
+type SQLiteSessionRepository struct {
+	CoordinationSessionSQLRepository
+}
+
+func (CoordinationSessionSQLRepository) GetActive(agent string, projectID *int64) (*coordinacion.Session, error) {
 	session, err := GetSesionActiva(agent, projectID)
 	if err != nil {
 		return nil, err
@@ -139,9 +151,13 @@ func (SQLiteSessionRepository) GetActive(agent string, projectID *int64) (*coord
 	}, nil
 }
 
-type SQLiteConfigRepository struct{}
+type CoordinationConfigSQLRepository struct{}
 
-func (SQLiteConfigRepository) Get(key string) (string, error) {
+type SQLiteConfigRepository struct {
+	CoordinationConfigSQLRepository
+}
+
+func (CoordinationConfigSQLRepository) Get(key string) (string, error) {
 	return ConfigGet(key)
 }
 

@@ -43,7 +43,7 @@ var worktreeListarCmd = &cobra.Command{
 			if err := ensureLocalDB(); err != nil {
 				return err
 			}
-			repo := db.SQLiteWorktreeRepository{}
+			repo := db.CoordinationWorktreeRepository()
 			filter := coordinacion.WorktreeFilter{}
 			if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
 				filter.Agent = &agente
@@ -88,7 +88,7 @@ var worktreeResolverCmd = &cobra.Command{
 			"estado":   {string(coordinacion.WorktreeActive)},
 		}
 
-		repo := db.SQLiteWorktreeRepository{}
+		repo := db.CoordinationWorktreeRepository()
 		estado := coordinacion.WorktreeActive
 		filter := coordinacion.WorktreeFilter{Agent: &args[0], State: &estado}
 

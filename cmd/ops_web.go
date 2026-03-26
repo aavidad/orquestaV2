@@ -10,6 +10,7 @@ package cmd
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -58,7 +59,7 @@ func webRouterSesiones(w http.ResponseWriter, r *http.Request) {
 func webHandlerAsignaciones(w http.ResponseWriter, r *http.Request) {
 	estado := strings.TrimSpace(r.URL.Query().Get("estado"))
 	agente := strings.TrimSpace(r.URL.Query().Get("agente"))
-	items, err := operacionesService.ListAssignments(estado, agente)
+	items, err := webCargarAsignacionesOpsPorAPI(estado, agente)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -86,7 +87,7 @@ func webHandlerSesiones(w http.ResponseWriter, r *http.Request) {
 		activa = &value
 	}
 
-	items, err := operacionesService.ListInspectionSessions(operacionesapp.ListInspectionSessionsInput{
+	items, err := webCargarSesionesInspeccionPorAPI(operacionesapp.ListInspectionSessionsInput{
 		Agente:      agente,
 		ProyectoRef: proyectoRef,
 		Estado:      estado,
@@ -106,12 +107,64 @@ func webHandlerSesiones(w http.ResponseWriter, r *http.Request) {
 }
 
 func webHandlerSesionDetalle(w http.ResponseWriter, r *http.Request, id int64) {
-	sesion, err := operacionesService.GetInspectionSession(id)
+	sesion, err := webCargarSesionInspeccionPorAPI(id)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 	webRender(w, r, webTplLayout+webTplSesionDetalle, webSesionDetalleData{Sesion: sesion})
+}
+
+func webCargarAsignacionesOpsPorAPI(estado, agente string) ([]*db.Asignacion, error) {
+	query := url.Values{}
+	if estado = strings.TrimSpace(estado); estado != "" {
+		query.Set("estado", estado)
+	}
+	if agente = strings.TrimSpace(agente); agente != "" {
+		query.Set("agente", agente)
+	}
+	path := "/api/asignaciones"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var resp apiAsignacionesResponse
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Asignaciones, nil
+}
+
+func webCargarSesionesInspeccionPorAPI(input operacionesapp.ListInspectionSessionsInput) ([]*db.Sesion, error) {
+	query := url.Values{}
+	if agente := strings.TrimSpace(input.Agente); agente != "" {
+		query.Set("agente", agente)
+	}
+	if proyecto := strings.TrimSpace(input.ProyectoRef); proyecto != "" {
+		query.Set("proyecto", proyecto)
+	}
+	if estado := strings.TrimSpace(input.Estado); estado != "" {
+		query.Set("estado", estado)
+	}
+	if input.Activa != nil {
+		query.Set("activa", strconv.FormatBool(*input.Activa))
+	}
+	path := "/api/sesiones"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var resp apiSesionesInspeccionResponse
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Sesiones, nil
+}
+
+func webCargarSesionInspeccionPorAPI(id int64) (*db.Sesion, error) {
+	var resp apiSesionResponse
+	if err := webInvocarAPIJSON(http.MethodGet, "/api/sesiones/"+strconv.FormatInt(id, 10), nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Sesion, nil
 }
 
 func parseBoolFiltro(raw string) (bool, error) {

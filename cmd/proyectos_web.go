@@ -155,11 +155,6 @@ func webHandlerProyectoFabricarApp(w http.ResponseWriter, r *http.Request, slug 
 		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	proyecto, err := db.GetProyecto(slug)
-	if err != nil {
-		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
-		return
-	}
 	spec := fabricaapp.AppSpec{
 		Nombre:      strings.TrimSpace(r.FormValue("nombre")),
 		Descripcion: strings.TrimSpace(r.FormValue("descripcion")),
@@ -172,20 +167,36 @@ func webHandlerProyectoFabricarApp(w http.ResponseWriter, r *http.Request, slug 
 		I18n:        webFormBool(r, "i18n"),
 		Idiomas:     splitCSV(strings.TrimSpace(r.FormValue("idiomas"))),
 	}
-	plan, err := newProjectAppFactory().Generate(spec)
-	if err != nil {
-		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
-		return
-	}
 	actor := strings.TrimSpace(r.FormValue("por"))
 	if actor == "" {
 		actor = "web"
 	}
-	if _, err := fabricaapp.Materialize(fabricaapp.DBStore{}, proyecto.ID, actor, plan); err != nil {
+	if _, err := webFabricarAppProyectoPorAPI(slug, apiProyectoFabricarAppRequest{
+		Nombre:      spec.Nombre,
+		Descripcion: spec.Descripcion,
+		Tipo:        spec.Tipo,
+		Frontend:    spec.Frontend,
+		API:         spec.API,
+		Auth:        spec.Auth,
+		Database:    spec.Database,
+		Docker:      spec.Docker,
+		I18n:        spec.I18n,
+		Idiomas:     spec.Idiomas,
+		Por:         actor,
+	}); err != nil {
 		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, "/proyectos/"+slug+"?ok="+url.QueryEscape(webTranslateRequestf(r, "projects.flash.factory_created")), http.StatusSeeOther)
+}
+
+func webFabricarAppProyectoPorAPI(ref string, req apiProyectoFabricarAppRequest) (*apiProyectoFabricarAppResponse, error) {
+	var resp apiProyectoFabricarAppResponse
+	path := "/api/proyectos/" + url.PathEscape(strings.TrimSpace(ref)) + "/fabricar-app"
+	if err := webInvocarAPIJSON(http.MethodPost, path, req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
 }
 
 func webFormBool(r *http.Request, key string) bool {

@@ -27,6 +27,45 @@ type Service struct {
 	Workspace WorkspaceManager
 }
 
+func (s *Service) ResolveProjectID(ref string) (*int64, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, nil
+	}
+	project, err := s.Projects.GetByRef(ref)
+	if err != nil {
+		return nil, err
+	}
+	return &project.ID, nil
+}
+
+func (s *Service) ResolveActiveSessionID(agent string, projectID *int64) (*int64, error) {
+	if s.Sessions == nil || strings.TrimSpace(agent) == "" {
+		return nil, nil
+	}
+	session, err := s.Sessions.GetActive(strings.TrimSpace(agent), projectID)
+	if err != nil || session == nil {
+		return nil, err
+	}
+	return &session.ID, nil
+}
+
+func (s *Service) ListLocks(filter LockFilter) ([]*Lock, error) {
+	return s.Locks.List(filter)
+}
+
+func (s *Service) GetLock(id int64) (*Lock, error) {
+	return s.Locks.GetByID(id)
+}
+
+func (s *Service) ListWorktrees(filter WorktreeFilter) ([]*Worktree, error) {
+	return s.Worktrees.List(filter)
+}
+
+func (s *Service) GetWorktree(id int64) (*Worktree, error) {
+	return s.Worktrees.GetByID(id)
+}
+
 func (s *Service) AcquireLock(in AcquireLockInput) (*Lock, error) {
 	if strings.TrimSpace(in.Agent) == "" {
 		return nil, fmt.Errorf("agente obligatorio")
