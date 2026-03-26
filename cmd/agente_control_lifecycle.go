@@ -8,13 +8,13 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
+	"orquesta/runtimesapp"
 )
 
 const (
@@ -41,17 +41,6 @@ type apiAgenteControlResponse struct {
 	ID     int64  `json:"id"`
 	Agente string `json:"agente"`
 	Accion string `json:"accion"`
-}
-
-type agenteControlPayload struct {
-	Accion       string `json:"accion"`
-	Proyecto     string `json:"proyecto,omitempty"`
-	Conector     string `json:"conector,omitempty"`
-	Modelo       string `json:"modelo,omitempty"`
-	Razonamiento string `json:"razonamiento,omitempty"`
-	Perfil       string `json:"perfil,omitempty"`
-	Motivo       string `json:"motivo,omitempty"`
-	Por          string `json:"por,omitempty"`
 }
 
 var agenteControlCmd = &cobra.Command{
@@ -135,88 +124,17 @@ func encolarControlAgentePorAPI(req apiAgenteControlRequest) (int64, string, boo
 }
 
 func encolarControlAgenteLocal(req apiAgenteControlRequest) (int64, string, error) {
-	agente := strings.TrimSpace(req.Agente)
-	if agente == "" {
-		return 0, "", fmt.Errorf("agente obligatorio")
-	}
-	accion, err := normalizarAccionControlAgente(req.Accion)
-	if err != nil {
-		return 0, "", err
-	}
-	if err := validarAgenteControlExiste(agente); err != nil {
-		return 0, "", err
-	}
-
-	var (
-		proyectoID *int64
-		handleID   *int64
-		runtimeID  *int64
-	)
-	proyectoRef := strings.TrimSpace(req.Proyecto)
-	if accion == agenteControlAccionStart && proyectoRef == "" {
-		return 0, "", fmt.Errorf("debes indicar proyecto para arrancar el agente")
-	}
-	if proyectoRef != "" {
-		proyecto, err := runtimesService.GetProject(proyectoRef)
-		if err != nil {
-			return 0, "", err
-		}
-		proyectoID = &proyecto.ID
-	}
-
-	handle, err := resolverHandleControlAgente(agente, proyectoID)
-	if err != nil {
-		return 0, "", err
-	}
-	if accion == agenteControlAccionStart && handle != nil {
-		return 0, "", fmt.Errorf("el agente %s ya tiene un runtime handle activo", agente)
-	}
-	if handle != nil {
-		handleID = &handle.ID
-		if handle.RuntimeID != nil {
-			runtimeID = handle.RuntimeID
-		}
-	}
-
-	payloadJSON, err := json.Marshal(agenteControlPayload{
-		Accion:       accion,
-		Proyecto:     proyectoRef,
+	return runtimesService.EnqueueAgentControl(runtimesapp.AgentControlRequest{
+		Agente:       strings.TrimSpace(req.Agente),
+		Proyecto:     strings.TrimSpace(req.Proyecto),
+		Accion:       strings.TrimSpace(req.Accion),
 		Conector:     strings.TrimSpace(req.Conector),
 		Modelo:       strings.TrimSpace(req.Modelo),
 		Razonamiento: strings.TrimSpace(req.Razonamiento),
 		Perfil:       strings.TrimSpace(req.Perfil),
 		Motivo:       strings.TrimSpace(req.Motivo),
-		Por:          valorConFallback(strings.TrimSpace(req.Por), "orquesta"),
+		Por:          strings.TrimSpace(req.Por),
 	})
-	if err != nil {
-		return 0, "", err
-	}
-
-	orderID, err := runtimesService.CreateRuntimeOrder(&db.RuntimeOrder{
-		Agente:      agente,
-		ProyectoID:  proyectoID,
-		RuntimeID:   runtimeID,
-		HandleID:    handleID,
-		Tipo:        accion,
-		PayloadJSON: string(payloadJSON),
-	})
-	if err != nil {
-		return 0, "", err
-	}
-
-	detalle := fmt.Sprintf("%s agente=%s proyecto=%s", accion, agente, valorConFallback(proyectoRef, ""))
-	if motivo := strings.TrimSpace(req.Motivo); motivo != "" {
-		detalle += " motivo=" + motivo
-	}
-	db.Audit(valorConFallback(strings.TrimSpace(req.Por), "orquesta"), "control_agente_"+accion, "runtime_order", orderID, detalle)
-	return orderID, accion, nil
-}
-
-func validarAgenteControlExiste(agente string) error {
-	if _, err := db.GetAgente(strings.TrimSpace(agente)); err != nil {
-		return err
-	}
-	return nil
 }
 
 func resolverHandleControlAgente(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
@@ -230,19 +148,4 @@ func resolverHandleControlAgente(agente string, proyectoID *int64) (*db.RuntimeH
 		}
 	}
 	return runtimesService.GetActiveRuntimeHandle(agente)
-}
-
-func normalizarAccionControlAgente(v string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "start", "arrancar", "arranque", "iniciar":
-		return agenteControlAccionStart, nil
-	case "pause", "pausar", "pausa":
-		return agenteControlAccionPause, nil
-	case "resume", "continuar", "reanudar":
-		return agenteControlAccionResume, nil
-	case "stop", "detener", "parar":
-		return agenteControlAccionStop, nil
-	default:
-		return "", fmt.Errorf("acción de control no soportada: %s", strings.TrimSpace(v))
-	}
 }

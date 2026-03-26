@@ -15,6 +15,9 @@ type Store interface {
 	RetireAgent(nombre string) error
 	RehabilitateAgent(nombre string) error
 	ResetReanimation(nombre string) error
+	DeleteAgent(nombre string) error
+	MergeAgents(origen, destino string) (*db.FusionAgentesResultado, error)
+	Audit(agente, accion, entidad string, entidadID int64, detalle string)
 	GetAgent(nombre string) (*db.Agente, error)
 	ListAgents() ([]*db.Agente, error)
 	ListAssignments(filtro db.FiltroAsignaciones) ([]*db.Asignacion, error)
@@ -69,6 +72,14 @@ func (s *Service) RegisterAgentAuto(proveedor, rol string) (string, error) {
 	return s.store.RegisterAgentAuto(strings.TrimSpace(proveedor), strings.TrimSpace(rol))
 }
 
+func (s *Service) GetAgent(nombre string) (*db.Agente, error) {
+	return s.store.GetAgent(strings.TrimSpace(nombre))
+}
+
+func (s *Service) ListAgents() ([]*db.Agente, error) {
+	return s.store.ListAgents()
+}
+
 func (s *Service) ApplyStateAction(nombre, accion string) error {
 	nombre = strings.TrimSpace(nombre)
 	switch strings.TrimSpace(accion) {
@@ -78,13 +89,23 @@ func (s *Service) ApplyStateAction(nombre, accion string) error {
 		return s.store.RehabilitateAgent(nombre)
 	case "reset-reanimacion":
 		return s.store.ResetReanimation(nombre)
+	case "eliminar":
+		if err := s.store.DeleteAgent(nombre); err != nil {
+			return err
+		}
+		s.store.Audit("alberto", "purgar_agente", "agente", 0, nombre)
+		return nil
 	default:
 		return fmt.Errorf("acción de agente no soportada: %s", accion)
 	}
 }
 
+func (s *Service) MergeAgents(origen, destino string) (*db.FusionAgentesResultado, error) {
+	return s.store.MergeAgents(strings.TrimSpace(origen), strings.TrimSpace(destino))
+}
+
 func (s *Service) BuildPanelRows() ([]Row, error) {
-	agentes, err := s.store.ListAgents()
+	agentes, err := s.ListAgents()
 	if err != nil {
 		return nil, err
 	}
@@ -398,6 +419,18 @@ func (Repository) RehabilitateAgent(nombre string) error {
 
 func (Repository) ResetReanimation(nombre string) error {
 	return db.ResetReanimacion(nombre)
+}
+
+func (Repository) DeleteAgent(nombre string) error {
+	return db.EliminarAgente(nombre)
+}
+
+func (Repository) MergeAgents(origen, destino string) (*db.FusionAgentesResultado, error) {
+	return db.FusionarAgentes(origen, destino)
+}
+
+func (Repository) Audit(agente, accion, entidad string, entidadID int64, detalle string) {
+	db.Audit(agente, accion, entidad, entidadID, detalle)
 }
 
 func (Repository) GetAgent(nombre string) (*db.Agente, error) {

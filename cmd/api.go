@@ -20,6 +20,7 @@ import (
 	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/fabricaapp"
+	"orquesta/lenguajeapp"
 	"orquesta/propuestasapp"
 	"orquesta/tareasapp"
 )
@@ -530,7 +531,7 @@ func apiHandlerDiagnostico(w http.ResponseWriter, r *http.Request) {
 func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		agentes, err := db.ListarAgentes()
+		agentes, err := agentesService.ListAgents()
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
@@ -548,13 +549,13 @@ func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 			rol = "programador"
 		}
 		if nombre == "" {
-			nombreAuto, err := db.RegistrarAgenteAuto(strings.TrimSpace(req.Proveedor), rol)
+			nombreAuto, err := agentesService.RegisterAgentAuto(strings.TrimSpace(req.Proveedor), rol)
 			if err != nil {
 				apiError(w, http.StatusBadRequest, err)
 				return
 			}
 			nombre = nombreAuto
-		} else if err := db.RegistrarAgente(nombre, rol); err != nil {
+		} else if err := agentesService.RegisterAgent(nombre, rol); err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
@@ -576,21 +577,20 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 	nombre := parts[0]
 	switch parts[1] {
 	case "retirar":
-		if err := db.RetirarAgente(nombre); err != nil {
+		if err := agentesService.ApplyStateAction(nombre, "retirar"); err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
 	case "rehabilitar":
-		if err := db.RehabilitarAgente(nombre); err != nil {
+		if err := agentesService.ApplyStateAction(nombre, "rehabilitar"); err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
 	case "eliminar":
-		if err := db.EliminarAgente(nombre); err != nil {
+		if err := agentesService.ApplyStateAction(nombre, "eliminar"); err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		db.Audit("alberto", "purgar_agente", "agente", 0, nombre)
 	case "fusionar":
 		var req apiAgenteFusionRequest
 		if err := apiDecodeJSON(r, &req); err != nil {
@@ -611,7 +611,7 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusInternalServerError, err)
 			return
 		}
-		resultado, err := db.FusionarAgentes(nombre, req.Destino)
+		resultado, err := agentesService.MergeAgents(nombre, req.Destino)
 		if err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
@@ -625,7 +625,7 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	case "reset-reanimacion":
-		if err := db.ResetReanimacion(nombre); err != nil {
+		if err := agentesService.ApplyStateAction(nombre, "reset-reanimacion"); err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
@@ -640,7 +640,7 @@ func apiHandlerConfig(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		if clave := strings.TrimSpace(r.URL.Query().Get("clave")); clave != "" {
-			valor, err := db.ConfigGet(clave)
+			valor, err := configService.Get(clave)
 			if err != nil {
 				apiError(w, http.StatusNotFound, err)
 				return
@@ -648,7 +648,7 @@ func apiHandlerConfig(w http.ResponseWriter, r *http.Request) {
 			apiWriteJSON(w, http.StatusOK, map[string]any{"clave": clave, "valor": valor})
 			return
 		}
-		config, err := db.ConfigAll()
+		config, err := configService.All()
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
@@ -665,7 +665,7 @@ func apiHandlerConfig(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, fmt.Errorf("clave obligatoria"))
 			return
 		}
-		if err := db.ConfigSet(req.Clave, req.Valor); err != nil {
+		if err := configService.Set(req.Clave, req.Valor); err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -683,7 +683,7 @@ func apiResolverTipoAgente(r *http.Request) (string, error) {
 		return tipo, nil
 	}
 	if nombre := strings.TrimSpace(r.URL.Query().Get("agente")); nombre != "" {
-		agente, err := db.GetAgente(nombre)
+		agente, err := agentesService.GetAgent(nombre)
 		if err != nil {
 			return "", fmt.Errorf("agente '%s' no encontrado", nombre)
 		}
@@ -1259,7 +1259,7 @@ func apiHandlerProyectoDescubrir(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(req.Ruta) != "" {
 		abs, err := filepath.Abs(req.Ruta)
 		if err == nil {
-			_ = db.ConfigSet("workspace_root", abs)
+			_ = configService.Set("workspace_root", abs)
 		}
 	}
 	apiWriteJSON(w, http.StatusCreated, map[string]any{"proyectos": proyectos})
@@ -2671,7 +2671,7 @@ func apiHandlerPropuestasListar(w http.ResponseWriter, r *http.Request) {
 func apiHandlerLenguajePolitica(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		policy, err := db.GetLanguagePolicy()
+		policy, err := lenguajeService.GetPolicy()
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
@@ -2687,7 +2687,7 @@ func apiHandlerLenguajePolitica(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, fmt.Errorf("politica requerida"))
 			return
 		}
-		if err := db.SetLanguagePolicy(req.Politica, strings.TrimSpace(req.Por)); err != nil {
+		if err := lenguajeService.SetPolicy(req.Politica, strings.TrimSpace(req.Por)); err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -2700,7 +2700,7 @@ func apiHandlerLenguajePolitica(w http.ResponseWriter, r *http.Request) {
 func apiHandlerLenguajeMatriz(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		entries, err := db.ListLanguageMatrixEntries()
+		entries, err := lenguajeService.ListMatrixEntries()
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
@@ -2712,7 +2712,14 @@ func apiHandlerLenguajeMatriz(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		entry, err := db.SetLanguageMatrixEntry(req.Scope, req.Selector, req.Contexto, req.Idioma, req.Razon, req.Por)
+		entry, err := lenguajeService.SetMatrixEntry(lenguajeapp.SetMatrixEntryInput{
+			Scope:     req.Scope,
+			Selector:  req.Selector,
+			Contexto:  req.Contexto,
+			Language:  req.Idioma,
+			Reason:    req.Razon,
+			UpdatedBy: req.Por,
+		})
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
@@ -2732,7 +2739,7 @@ func apiHandlerLenguajeMatrizBorrar(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := db.DeleteLanguageMatrixEntry(req.Scope, req.Selector, req.Contexto); err != nil {
+	if err := lenguajeService.DeleteMatrixEntry(req.Scope, req.Selector, req.Contexto); err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -2754,7 +2761,11 @@ func apiHandlerLenguajeResolver(w http.ResponseWriter, r *http.Request) {
 		}
 		tareaPtr = &tareaID
 	}
-	res, err := db.ResolveLanguage(project, tareaPtr, contexto)
+	res, err := lenguajeService.Resolve(lenguajeapp.ResolveInput{
+		Proyecto: project,
+		TareaID:  tareaPtr,
+		Contexto: contexto,
+	})
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -3419,7 +3430,7 @@ func apiHandlerAgentePreparar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agente, err := db.GetAgente(agenteNombre)
+	agente, err := agentesService.GetAgent(agenteNombre)
 	if err != nil {
 		apiError(w, http.StatusNotFound, err)
 		return

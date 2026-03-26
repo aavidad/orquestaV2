@@ -27,6 +27,11 @@ func (f *fakeStore) RegisterAgentAuto(proveedor, rol string) (string, error) {
 func (f *fakeStore) RetireAgent(nombre string) error       { return nil }
 func (f *fakeStore) RehabilitateAgent(nombre string) error { return nil }
 func (f *fakeStore) ResetReanimation(nombre string) error  { return nil }
+func (f *fakeStore) DeleteAgent(nombre string) error       { return nil }
+func (f *fakeStore) MergeAgents(origen, destino string) (*db.FusionAgentesResultado, error) {
+	return &db.FusionAgentesResultado{Origen: origen, Destino: destino, Actualizadas: map[string]int64{}}, nil
+}
+func (f *fakeStore) Audit(agente, accion, entidad string, entidadID int64, detalle string) {}
 
 func (f *fakeStore) GetAgent(nombre string) (*db.Agente, error) {
 	for _, item := range f.agents {

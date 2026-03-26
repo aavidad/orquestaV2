@@ -15,6 +15,10 @@ func TestCmdNoUsaSQLDirectoNiAperturasFueraDeExcepcionesControladas(t *testing.T
 	patronApertura := regexp.MustCompile(`db\.(Open|Close|IsOpen|CurrentDBPath)\(`)
 	patronSQLDirecto := regexp.MustCompile(`db\.DB\.(Exec|Query|QueryRow|QueryContext|QueryRowContext|ExecContext)\(`)
 	patronEnsureLocal := regexp.MustCompile(`ensureLocalDB\(`)
+	patronesHexagonalesCmd := map[string]*regexp.Regexp{
+		"api.go":                      regexp.MustCompile(`db\.(RegistrarAgente(Auto)?|RetirarAgente|RehabilitarAgente|EliminarAgente|FusionarAgentes|ResetReanimacion|Config(Get|Set|All)|GetLanguagePolicy|SetLanguagePolicy|ListLanguageMatrixEntries|SetLanguageMatrixEntry|DeleteLanguageMatrixEntry|ResolveLanguage|GetAgente)\(`),
+		"agente_control_lifecycle.go": regexp.MustCompile(`db\.(GetAgente|Audit)\(`),
+	}
 	permitidosPorFichero := map[string]map[string]bool{
 		"root.go": {
 			"Open":   true,
@@ -65,6 +69,9 @@ func TestCmdNoUsaSQLDirectoNiAperturasFueraDeExcepcionesControladas(t *testing.T
 		}
 		if patronEnsureLocal.MatchString(texto) && !permitidosEnsureLocal[base] {
 			t.Errorf("%s usa ensureLocalDB() fuera de la transicion controlada server-first", base)
+		}
+		if patron, ok := patronesHexagonalesCmd[base]; ok && patron.MatchString(texto) {
+			t.Errorf("%s mantiene llamadas a db que deberian pasar por servicio hexagonal", base)
 		}
 		return nil
 	})

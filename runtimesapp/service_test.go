@@ -9,6 +9,8 @@ import (
 type fakeStore struct {
 	projectRef       string
 	projectResponse  *db.Proyecto
+	agentName        string
+	agentResponse    *db.Agente
 	runtimesFilter   db.FiltroRuntimes
 	runtimesResponse []*db.RuntimeInstance
 	treeFilter       db.FiltroRuntimes
@@ -51,11 +53,20 @@ type fakeStore struct {
 	memoryName       string
 	memoryProjectID  *int64
 	memoryEntityResp *db.EntidadMemoria
+	auditAgent       string
+	auditAction      string
+	auditEntity      string
+	auditEntityID    int64
+	auditDetail      string
 }
 
 func (f *fakeStore) GetProject(ref string) (*db.Proyecto, error) {
 	f.projectRef = ref
 	return f.projectResponse, nil
+}
+func (f *fakeStore) GetAgent(nombre string) (*db.Agente, error) {
+	f.agentName = nombre
+	return f.agentResponse, nil
 }
 func (f *fakeStore) ListRuntimes(filter db.FiltroRuntimes) ([]*db.RuntimeInstance, error) {
 	f.runtimesFilter = filter
@@ -141,12 +152,20 @@ func (f *fakeStore) GetMemoryEntity(nombre string, proyectoID *int64) (*db.Entid
 	f.memoryProjectID = proyectoID
 	return f.memoryEntityResp, nil
 }
+func (f *fakeStore) Audit(agente, accion, entidad string, entidadID int64, detalle string) {
+	f.auditAgent = agente
+	f.auditAction = accion
+	f.auditEntity = entidad
+	f.auditEntityID = entidadID
+	f.auditDetail = detalle
+}
 
 func TestServiceDelegatesRuntimeQueries(t *testing.T) {
 	agent := "Codex2"
 	projectID := int64(7)
 	store := &fakeStore{
 		projectResponse:  &db.Proyecto{Slug: "orquestador"},
+		agentResponse:    &db.Agente{Nombre: "Codex2", Rol: "programador"},
 		runtimesResponse: []*db.RuntimeInstance{{ID: 5}},
 		treeResponse:     []*db.RuntimeTreeNode{{Runtime: &db.RuntimeInstance{ID: 10}}},
 		runtimeResponse:  &db.RuntimeInstance{ID: 10},
@@ -293,5 +312,50 @@ func TestServiceDelegatesRuntimeQueries(t *testing.T) {
 	}
 	if store.memoryName != "decision" || store.memoryProjectID == nil || *store.memoryProjectID != 7 {
 		t.Fatalf("memory entity name=%q project=%v", store.memoryName, store.memoryProjectID)
+	}
+}
+
+func TestEnqueueAgentControlCreatesRuntimeOrder(t *testing.T) {
+	projectID := int64(9)
+	runtimeID := int64(12)
+	store := &fakeStore{
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		agentResponse:   &db.Agente{Nombre: "Codex2", Rol: "programador"},
+		handleProjResp:  &db.RuntimeHandle{ID: 10, RuntimeID: &runtimeID},
+		createOrderID:   77,
+	}
+	service := NewService(store)
+
+	orderID, accion, err := service.EnqueueAgentControl(AgentControlRequest{
+		Agente:       "Codex2",
+		Proyecto:     "orquestador",
+		Accion:       "reanudar",
+		Conector:     "codex-cli",
+		Modelo:       "gpt-5.4",
+		Razonamiento: "high",
+		Perfil:       "implementacion",
+		Motivo:       "prueba",
+		Por:          "test",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAgentControl: %v", err)
+	}
+	if orderID != 77 || accion != "resume" {
+		t.Fatalf("orderID=%d accion=%s", orderID, accion)
+	}
+	if store.agentName != "Codex2" {
+		t.Fatalf("agentName=%q", store.agentName)
+	}
+	if store.createOrder == nil {
+		t.Fatalf("createOrder nil")
+	}
+	if store.createOrder.Tipo != "resume" || store.createOrder.HandleID == nil || *store.createOrder.HandleID != 10 {
+		t.Fatalf("createOrder=%+v", store.createOrder)
+	}
+	if store.createOrder.RuntimeID == nil || *store.createOrder.RuntimeID != runtimeID {
+		t.Fatalf("runtimeID=%+v", store.createOrder.RuntimeID)
+	}
+	if store.auditAction != "control_agente_resume" || store.auditEntity != "runtime_order" || store.auditEntityID != 77 {
+		t.Fatalf("audit=%s %s %d", store.auditAction, store.auditEntity, store.auditEntityID)
 	}
 }

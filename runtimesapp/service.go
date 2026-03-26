@@ -1,9 +1,16 @@
 package runtimesapp
 
-import "orquesta/db"
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"orquesta/db"
+)
 
 type Store interface {
 	GetProject(ref string) (*db.Proyecto, error)
+	GetAgent(nombre string) (*db.Agente, error)
 	ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance, error)
 	BuildRuntimeTree(filtro db.FiltroRuntimes) ([]*db.RuntimeTreeNode, error)
 	GetRuntime(id int64) (*db.RuntimeInstance, error)
@@ -24,6 +31,7 @@ type Store interface {
 	ListMemoryEntities(filtro db.FiltroEntidadesMemoria) ([]*db.EntidadMemoria, error)
 	UpsertMemoryEntity(entidad *db.EntidadMemoria) (int64, error)
 	GetMemoryEntity(nombre string, proyectoID *int64) (*db.EntidadMemoria, error)
+	Audit(agente, accion, entidad string, entidadID int64, detalle string)
 }
 
 type Service struct {
@@ -34,8 +42,35 @@ func NewService(store Store) *Service {
 	return &Service{store: store}
 }
 
+type AgentControlRequest struct {
+	Agente       string
+	Proyecto     string
+	Accion       string
+	Conector     string
+	Modelo       string
+	Razonamiento string
+	Perfil       string
+	Motivo       string
+	Por          string
+}
+
+type AgentControlPayload struct {
+	Accion       string `json:"accion"`
+	Proyecto     string `json:"proyecto,omitempty"`
+	Conector     string `json:"conector,omitempty"`
+	Modelo       string `json:"modelo,omitempty"`
+	Razonamiento string `json:"razonamiento,omitempty"`
+	Perfil       string `json:"perfil,omitempty"`
+	Motivo       string `json:"motivo,omitempty"`
+	Por          string `json:"por,omitempty"`
+}
+
 func (s *Service) GetProject(ref string) (*db.Proyecto, error) {
 	return s.store.GetProject(ref)
+}
+
+func (s *Service) GetAgent(nombre string) (*db.Agente, error) {
+	return s.store.GetAgent(nombre)
 }
 
 func (s *Service) ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance, error) {
@@ -118,10 +153,92 @@ func (s *Service) GetMemoryEntity(nombre string, proyectoID *int64) (*db.Entidad
 	return s.store.GetMemoryEntity(nombre, proyectoID)
 }
 
+func (s *Service) EnqueueAgentControl(req AgentControlRequest) (int64, string, error) {
+	agente := strings.TrimSpace(req.Agente)
+	if agente == "" {
+		return 0, "", fmt.Errorf("agente obligatorio")
+	}
+	accion, err := normalizeAgentControlAction(req.Accion)
+	if err != nil {
+		return 0, "", err
+	}
+	if _, err := s.store.GetAgent(agente); err != nil {
+		return 0, "", err
+	}
+
+	var (
+		proyectoID *int64
+		handleID   *int64
+		runtimeID  *int64
+	)
+	proyectoRef := strings.TrimSpace(req.Proyecto)
+	if accion == "start" && proyectoRef == "" {
+		return 0, "", fmt.Errorf("debes indicar proyecto para arrancar el agente")
+	}
+	if proyectoRef != "" {
+		proyecto, err := s.store.GetProject(proyectoRef)
+		if err != nil {
+			return 0, "", err
+		}
+		proyectoID = &proyecto.ID
+	}
+
+	handle, err := s.resolveAgentControlHandle(agente, proyectoID)
+	if err != nil {
+		return 0, "", err
+	}
+	if accion == "start" && handle != nil {
+		return 0, "", fmt.Errorf("el agente %s ya tiene un runtime handle activo", agente)
+	}
+	if handle != nil {
+		handleID = &handle.ID
+		if handle.RuntimeID != nil {
+			runtimeID = handle.RuntimeID
+		}
+	}
+
+	payloadJSON, err := json.Marshal(AgentControlPayload{
+		Accion:       accion,
+		Proyecto:     proyectoRef,
+		Conector:     strings.TrimSpace(req.Conector),
+		Modelo:       strings.TrimSpace(req.Modelo),
+		Razonamiento: strings.TrimSpace(req.Razonamiento),
+		Perfil:       strings.TrimSpace(req.Perfil),
+		Motivo:       strings.TrimSpace(req.Motivo),
+		Por:          valueOrFallback(strings.TrimSpace(req.Por), "orquesta"),
+	})
+	if err != nil {
+		return 0, "", err
+	}
+
+	orderID, err := s.store.CreateRuntimeOrder(&db.RuntimeOrder{
+		Agente:      agente,
+		ProyectoID:  proyectoID,
+		RuntimeID:   runtimeID,
+		HandleID:    handleID,
+		Tipo:        accion,
+		PayloadJSON: string(payloadJSON),
+	})
+	if err != nil {
+		return 0, "", err
+	}
+
+	detalle := fmt.Sprintf("%s agente=%s proyecto=%s", accion, agente, valueOrFallback(proyectoRef, ""))
+	if motivo := strings.TrimSpace(req.Motivo); motivo != "" {
+		detalle += " motivo=" + motivo
+	}
+	s.store.Audit(valueOrFallback(strings.TrimSpace(req.Por), "orquesta"), "control_agente_"+accion, "runtime_order", orderID, detalle)
+	return orderID, accion, nil
+}
+
 type Repository struct{}
 
 func (Repository) GetProject(ref string) (*db.Proyecto, error) {
 	return db.GetProyecto(ref)
+}
+
+func (Repository) GetAgent(nombre string) (*db.Agente, error) {
+	return db.GetAgente(nombre)
 }
 
 func (Repository) ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance, error) {
@@ -202,4 +319,43 @@ func (Repository) UpsertMemoryEntity(entidad *db.EntidadMemoria) (int64, error) 
 
 func (Repository) GetMemoryEntity(nombre string, proyectoID *int64) (*db.EntidadMemoria, error) {
 	return db.GetEntidadMemoria(nombre, proyectoID)
+}
+
+func (Repository) Audit(agente, accion, entidad string, entidadID int64, detalle string) {
+	db.Audit(agente, accion, entidad, entidadID, detalle)
+}
+
+func (s *Service) resolveAgentControlHandle(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
+	if proyectoID != nil {
+		handle, err := s.store.GetActiveRuntimeHandleForProject(agente, proyectoID)
+		if err != nil {
+			return nil, err
+		}
+		if handle != nil {
+			return handle, nil
+		}
+	}
+	return s.store.GetActiveRuntimeHandle(agente)
+}
+
+func normalizeAgentControlAction(v string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "start", "arrancar", "arranque", "iniciar":
+		return "start", nil
+	case "pause", "pausar", "pausa":
+		return "pause", nil
+	case "resume", "continuar", "reanudar":
+		return "resume", nil
+	case "stop", "detener", "parar":
+		return "stop", nil
+	default:
+		return "", fmt.Errorf("acción de control no soportada: %s", strings.TrimSpace(v))
+	}
+}
+
+func valueOrFallback(v, fallback string) string {
+	if strings.TrimSpace(v) == "" {
+		return fallback
+	}
+	return strings.TrimSpace(v)
 }
