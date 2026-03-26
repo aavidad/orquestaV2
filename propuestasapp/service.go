@@ -10,6 +10,7 @@ import (
 type Store interface {
 	ListProposals(estado *db.EstadoPropuesta) ([]*db.Propuesta, error)
 	ListProposalsByProject(estado *db.EstadoPropuesta, proyectoID *int64) ([]*db.Propuesta, error)
+	ListPendingProjectVotes(agente string, proyectoID *int64) ([]*db.Propuesta, error)
 	GetProposal(codigo string) (*db.Propuesta, error)
 	CreateProposal(p *db.Propuesta) (int64, error)
 	GetProject(ref string) (*db.Proyecto, error)
@@ -64,6 +65,14 @@ func (s *Service) ListByProject(estado *db.EstadoPropuesta, proyectoRef string) 
 		return nil, err
 	}
 	return s.store.ListProposalsByProject(estado, proyectoID)
+}
+
+func (s *Service) ListPendingProjectVotes(agente, proyectoRef string) ([]*db.Propuesta, error) {
+	proyectoID, err := s.ResolveProjectID(proyectoRef)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.ListPendingProjectVotes(strings.TrimSpace(agente), proyectoID)
 }
 
 func (s *Service) GetDetail(codigo string) (*ProposalDetail, error) {
@@ -197,6 +206,10 @@ func (Repository) ListProposals(estado *db.EstadoPropuesta) ([]*db.Propuesta, er
 
 func (Repository) ListProposalsByProject(estado *db.EstadoPropuesta, proyectoID *int64) ([]*db.Propuesta, error) {
 	return db.ListarPropuestas(estado, proyectoID)
+}
+
+func (Repository) ListPendingProjectVotes(agente string, proyectoID *int64) ([]*db.Propuesta, error) {
+	return db.PropuestasPendientesVotoProyecto(agente, proyectoID)
 }
 
 func (Repository) GetProposal(codigo string) (*db.Propuesta, error) {

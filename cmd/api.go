@@ -617,7 +617,7 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == http.MethodGet {
 		if len(parts) == 2 && parts[1] == "overview" {
-			detail, err := agentesapp.NewService(agentesapp.Repository{}).BuildDetail(parts[0])
+			detail, err := agentesService.BuildDetail(parts[0])
 			if err != nil {
 				apiError(w, http.StatusNotFound, err)
 				return
@@ -648,7 +648,16 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case "eliminar":
-		if err := agentesService.ApplyStateAction(nombre, "eliminar"); err != nil {
+		var req struct {
+			Actor string `json:"actor"`
+		}
+		if r.ContentLength > 0 {
+			if err := apiDecodeJSON(r, &req); err != nil {
+				apiError(w, http.StatusBadRequest, err)
+				return
+			}
+		}
+		if err := agentesService.DeleteAgent(nombre, req.Actor); err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}

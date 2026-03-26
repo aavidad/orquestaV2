@@ -160,7 +160,7 @@ func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesio
 		return out, err
 	}
 
-	tareas, err := db.ListarTareas(db.FiltroTareas{Agente: &agenteNombre, ProyectoID: &proyecto.ID})
+	tareas, err := tareasService.List(db.FiltroTareas{Agente: &agenteNombre, ProyectoID: &proyecto.ID})
 	if err != nil {
 		return out, err
 	}
@@ -184,7 +184,7 @@ func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesio
 		}
 	}
 
-	pendientes, err := db.PropuestasPendientesVotoProyecto(agenteNombre, &proyecto.ID)
+	pendientes, err := propuestasService.ListPendingProjectVotes(agenteNombre, proyecto.Slug)
 	if err != nil {
 		return out, err
 	}
@@ -199,7 +199,7 @@ func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesio
 	}
 
 	estadoAbierta := db.PropuestaAbierta
-	abiertas, err := db.ListarPropuestas(&estadoAbierta, &proyecto.ID)
+	abiertas, err := propuestasService.ListByProject(&estadoAbierta, proyecto.Slug)
 	if err != nil {
 		return out, err
 	}
@@ -213,7 +213,7 @@ func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesio
 		})
 	}
 
-	agente, err := db.GetAgente(agenteNombre)
+	agente, err := runtimesService.GetAgent(agenteNombre)
 	if err != nil {
 		return out, err
 	}
@@ -275,19 +275,11 @@ func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Pro
 		return out, fmt.Errorf("agente, proyecto y conector son obligatorios")
 	}
 
-	reglas, err := db.GetReglasAgente(agente.Rol)
+	briefing, err := sesionesAPIService.BuildBriefing(agente.Nombre)
 	if err != nil {
 		return out, err
 	}
-	skills, err := db.GetSkillsAgente(agente.Rol)
-	if err != nil {
-		return out, err
-	}
-	workflows, err := db.GetWorkflowsAgente(agente.Rol)
-	if err != nil {
-		return out, err
-	}
-	memoria, err := db.ListarEntidadesMemoria(db.FiltroEntidadesMemoria{ProyectoID: &proyecto.ID})
+	memoria, err := runtimesService.ListMemoryEntities(db.FiltroEntidadesMemoria{ProyectoID: &proyecto.ID})
 	if err != nil {
 		return out, err
 	}
@@ -315,9 +307,9 @@ func construirAgentePrepararOutputDesdeDatos(agente *db.Agente, proyecto *db.Pro
 		},
 		Politica:    cargarPoliticaAgente(),
 		Plan:        prep.Plan,
-		Reglas:      reglas,
-		Skills:      skills,
-		Workflows:   workflows,
+		Reglas:      briefing.Reglas,
+		Skills:      briefing.Skills,
+		Workflows:   briefing.Workflows,
 		Memoria:     memoria,
 		Bootstrap:   prep.Bootstrap,
 		ReanimarAt:  agente.ReanimarAt,

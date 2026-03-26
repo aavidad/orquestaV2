@@ -85,7 +85,7 @@ func newControlPlaneRunner(debugLogger *log.Logger, debugControlPlane bool) *pla
 
 func procesarAutonomiaAgentesBatch() (int, error) {
 	activa := true
-	sesiones, err := db.ListarSesionesInspeccion(db.FiltroSesionesInspeccion{Activa: &activa})
+	sesiones, err := sesionesAPIService.ListInspectionSessions(db.FiltroSesionesInspeccion{Activa: &activa})
 	if err != nil {
 		return 0, err
 	}
@@ -335,7 +335,7 @@ func dbAgenteTieneTrabajoArrancable(agente string, proyectoID int64) (bool, erro
 		Agente:     &agente,
 		ProyectoID: &proyectoID,
 	}
-	tareas, err := db.ListarTareas(filtro)
+	tareas, err := tareasService.List(filtro)
 	if err != nil {
 		return false, err
 	}

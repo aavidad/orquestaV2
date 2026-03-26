@@ -102,15 +102,22 @@ func (s *Service) ApplyStateAction(nombre, accion string) error {
 		return s.store.RehabilitateAgent(nombre)
 	case "reset-reanimacion":
 		return s.store.ResetReanimation(nombre)
-	case "eliminar":
-		if err := s.store.DeleteAgent(nombre); err != nil {
-			return err
-		}
-		s.store.Audit("alberto", "purgar_agente", "agente", 0, nombre)
-		return nil
 	default:
 		return fmt.Errorf("acción de agente no soportada: %s", accion)
 	}
+}
+
+func (s *Service) DeleteAgent(nombre, actor string) error {
+	nombre = strings.TrimSpace(nombre)
+	actor = strings.TrimSpace(actor)
+	if actor == "" {
+		actor = "orquesta"
+	}
+	if err := s.store.DeleteAgent(nombre); err != nil {
+		return err
+	}
+	s.store.Audit(actor, "purgar_agente", "agente", 0, nombre)
+	return nil
 }
 
 func (s *Service) MergeAgents(origen, destino string) (*db.FusionAgentesResultado, error) {

@@ -32,6 +32,10 @@ func (f *fakeStore) ListProposalsByProject(estado *db.EstadoPropuesta, proyectoI
 	return []*db.Propuesta{f.proposal}, nil
 }
 
+func (f *fakeStore) ListPendingProjectVotes(agente string, proyectoID *int64) ([]*db.Propuesta, error) {
+	return []*db.Propuesta{f.proposal}, nil
+}
+
 func (f *fakeStore) GetProposal(codigo string) (*db.Propuesta, error) {
 	return f.proposal, nil
 }
