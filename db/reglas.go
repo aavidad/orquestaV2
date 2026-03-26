@@ -412,6 +412,10 @@ func CrearRegla(actor string, r *Regla) (int64, error) {
 	id, err := UpsertRegla(r)
 	if err == nil {
 		Audit(actor, "crear_regla", "regla", id, r.Titulo)
+		notificarRefreshGobernanza(actor, r.TipoAgente, "crear_regla", map[string]any{
+			"regla_id": id,
+			"titulo":   r.Titulo,
+		})
 	}
 	return id, err
 }
@@ -428,14 +432,27 @@ func ActualizarRegla(actor string, r *Regla) error {
 		r.TipoAgente, r.Categoria, r.Titulo, r.Descripcion, r.Activa, r.ID)
 	if err == nil {
 		Audit(actor, "actualizar_regla", "regla", r.ID, r.Titulo)
+		notificarRefreshGobernanza(actor, r.TipoAgente, "actualizar_regla", map[string]any{
+			"regla_id": r.ID,
+			"titulo":   r.Titulo,
+		})
 	}
 	return err
 }
 
 func SetReglaActiva(actor string, id int64, activa bool) error {
-	_, err := DB.Exec(`UPDATE reglas SET activa=? WHERE id=?`, activa, id)
+	regla, err := GetRegla(id)
+	if err != nil {
+		return err
+	}
+	_, err = DB.Exec(`UPDATE reglas SET activa=? WHERE id=?`, activa, id)
 	if err == nil {
 		Audit(actor, "set_regla_activa", "regla", id, fmt.Sprintf("activa=%t", activa))
+		notificarRefreshGobernanza(actor, regla.TipoAgente, "set_regla_activa", map[string]any{
+			"regla_id": id,
+			"activa":   activa,
+			"titulo":   regla.Titulo,
+		})
 	}
 	return err
 }
@@ -611,6 +628,10 @@ func CrearWorkflow(actor string, w *Workflow) (int64, error) {
 	id, err := UpsertWorkflow(w)
 	if err == nil {
 		Audit(actor, "crear_workflow", "workflow", id, w.Nombre)
+		notificarRefreshGobernanza(actor, w.TipoAgente, "crear_workflow", map[string]any{
+			"workflow_id": id,
+			"nombre":      w.Nombre,
+		})
 	}
 	return id, err
 }
@@ -631,14 +652,27 @@ func ActualizarWorkflow(actor string, w *Workflow) error {
 		w.TipoAgente, w.Nombre, w.Descripcion, w.Pasos, w.Activo, w.ID)
 	if err == nil {
 		Audit(actor, "actualizar_workflow", "workflow", w.ID, w.Nombre)
+		notificarRefreshGobernanza(actor, w.TipoAgente, "actualizar_workflow", map[string]any{
+			"workflow_id": w.ID,
+			"nombre":      w.Nombre,
+		})
 	}
 	return err
 }
 
 func SetWorkflowActivo(actor string, id int64, activo bool) error {
-	_, err := DB.Exec(`UPDATE workflows SET activo=? WHERE id=?`, activo, id)
+	workflow, err := GetWorkflowPorID(id)
+	if err != nil {
+		return err
+	}
+	_, err = DB.Exec(`UPDATE workflows SET activo=? WHERE id=?`, activo, id)
 	if err == nil {
 		Audit(actor, "set_workflow_activo", "workflow", id, fmt.Sprintf("activo=%t", activo))
+		notificarRefreshGobernanza(actor, workflow.TipoAgente, "set_workflow_activo", map[string]any{
+			"workflow_id": id,
+			"activo":      activo,
+			"nombre":      workflow.Nombre,
+		})
 	}
 	return err
 }

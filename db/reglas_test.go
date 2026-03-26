@@ -345,6 +345,71 @@ func TestCrearSkillNotificaRefreshAMailboxDeAgentesActivosDelRol(t *testing.T) {
 	}
 }
 
+func TestCrearReglaNotificaGovernanceRefreshAMailboxDeAgentesActivosDelRol(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "orquesta.db")
+	prev := os.Getenv("ORQUESTA_DB")
+	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
+		t.Fatalf("setenv: %v", err)
+	}
+	defer func() {
+		_ = os.Setenv("ORQUESTA_DB", prev)
+		Close()
+	}()
+	if err := Open(); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if _, err := IniciarSesion("Codex1"); err != nil {
+		t.Fatalf("IniciarSesion Codex1: %v", err)
+	}
+	if _, err := IniciarSesion("antigravity"); err != nil {
+		t.Fatalf("IniciarSesion antigravity: %v", err)
+	}
+
+	id, err := CrearRegla("Codex2", &Regla{
+		TipoAgente:  "programador",
+		Categoria:   "arquitectura",
+		Titulo:      "API first mailbox",
+		Descripcion: "Toda operacion normal usa API",
+		Activa:      true,
+	})
+	if err != nil {
+		t.Fatalf("CrearRegla: %v", err)
+	}
+
+	toCodex1 := "Codex1"
+	mailboxCodex1, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{ToAgente: &toCodex1})
+	if err != nil {
+		t.Fatalf("ListarRuntimeMailbox Codex1: %v", err)
+	}
+	if len(mailboxCodex1) == 0 {
+		t.Fatalf("se esperaba governance refresh en mailbox de Codex1")
+	}
+	msg := mailboxCodex1[0]
+	if msg.Kind != MailboxKindGovernanceRefresh {
+		t.Fatalf("kind inesperado: %+v", msg)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(msg.PayloadJSON), &payload); err != nil {
+		t.Fatalf("payload governance refresh invalido: %v", err)
+	}
+	if int64(payload["regla_id"].(float64)) != id || payload["motivo"] != "crear_regla" {
+		t.Fatalf("payload governance refresh inesperado: %+v", payload)
+	}
+	if payload["tipo_agente"] != "programador" || payload["hash"] == "" {
+		t.Fatalf("payload governance refresh incompleto: %+v", payload)
+	}
+
+	toDocs := "antigravity"
+	mailboxDocs, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{ToAgente: &toDocs})
+	if err != nil {
+		t.Fatalf("ListarRuntimeMailbox antigravity: %v", err)
+	}
+	if len(mailboxDocs) != 0 {
+		t.Fatalf("no deberia haber governance refresh programador para antigravity: %+v", mailboxDocs)
+	}
+}
+
 func TestGuardarYListarWorkflows(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "orquesta.db")

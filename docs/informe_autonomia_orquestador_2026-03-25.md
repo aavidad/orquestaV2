@@ -38,6 +38,7 @@ Estado real actual:
 - sí existe estado operativo explícito de proyecto (`activo`, `esperando_humano`, `bloqueado_externo`, `cerrado`) y auto-reactivación al detectarse desbloqueo
 - sí existe retirada segura de agentes con liberación automática del trabajo y sustitución replanificable por otro agente disponible
 - sí existe resolución efectiva unificada del catálogo de gobernanza (reglas, skills, workflows) y conservación de su identidad en continuidad/resume
+- sí existe notificación `governance_refresh` por mailbox cuando cambian reglas o workflows del rol
 - `stop` ya cierra también la sesión viva, no solo runtime y handle
 - el adaptador remoto ya tiene política configurable de reintentos para acciones de control seguras, sin reintentar `start` ni `send_instruction`
 - `sync_status` ya puede observar estado remoto real por `status_path`, normalizarlo a estado canónico del handle y conservar el estado remoto crudo en metadata
@@ -134,6 +135,7 @@ Además, la gobernanza efectiva ya no se resuelve por duplicado en varias capas:
 - `db/reglas.go` expone `ResolveGovernanceCatalog(...)` como resolución única actual del catálogo efectivo
 - `sesionesapp/service.go` y `agentesapp/runtime_service.go` reutilizan esa resolución para briefing, start-context y prepare
 - `db/controlplane_entities.go` añade el `hash` del catálogo efectivo al `resume payload` cuando existe continuidad, de forma que `start/resume/handoff` conservan también identidad de gobernanza y no solo contexto operativo
+- `db/governance_runtime_refresh.go` notifica por `runtime_mailbox` a los agentes activos del rol cuando cambia una regla o un workflow, reusando el patrón ya existente de `skills_refresh`
 
 ### 4. Watchdog e handoff por inactividad
 
