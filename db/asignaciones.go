@@ -40,35 +40,7 @@ func ActivarAsignacion(agente string, proyectoID int64, nota string) error {
 	}
 	defer tx.Rollback()
 
-	if _, err = tx.Exec(`
-		UPDATE asignaciones
-		SET estado='cerrada', cerrada_at=CURRENT_TIMESTAMP
-		WHERE agente=? AND estado IN ('planificada','activa') AND proyecto_id <> ?`,
-		agente, proyectoID,
-	); err != nil {
-		return err
-	}
-
-	var existenteID int64
-	err = tx.QueryRow(`
-		SELECT id FROM asignaciones
-		WHERE agente=? AND proyecto_id=? AND estado IN ('planificada','activa','pausada')
-		ORDER BY id DESC LIMIT 1`,
-		agente, proyectoID,
-	).Scan(&existenteID)
-	switch err {
-	case nil:
-		_, err = tx.Exec(`UPDATE asignaciones SET estado='activa', nota=?, cerrada_at=NULL WHERE id=?`, nota, existenteID)
-	case sql.ErrNoRows:
-		_, err = tx.Exec(`
-			INSERT INTO asignaciones (agente, proyecto_id, estado, nota)
-			VALUES (?,?,'activa',?)`,
-			agente, proyectoID, nota,
-		)
-	default:
-		return err
-	}
-	if err != nil {
+	if err = activarAsignacionTx(tx, agente, proyectoID, nota); err != nil {
 		return err
 	}
 
@@ -86,20 +58,11 @@ func PausarAsignacion(agente string, proyectoID int64, nota string) error {
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(`
-		UPDATE asignaciones
-		SET estado='pausada', nota=?, cerrada_at=NULL
-		WHERE agente=? AND proyecto_id=? AND estado='activa'`,
-		nota, agente, proyectoID,
-	)
+	changed, err := pausarAsignacionTx(tx, agente, proyectoID, nota)
 	if err != nil {
 		return err
 	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if affected == 0 {
+	if !changed {
 		return nil
 	}
 	if err = tx.Commit(); err != nil {
@@ -107,6 +70,55 @@ func PausarAsignacion(agente string, proyectoID int64, nota string) error {
 	}
 	Audit(agente, "pausar_asignacion", "proyecto", proyectoID, nota)
 	return nil
+}
+
+func activarAsignacionTx(tx *Tx, agente string, proyectoID int64, nota string) error {
+	if _, err := tx.Exec(`
+		UPDATE asignaciones
+		SET estado='cerrada', cerrada_at=CURRENT_TIMESTAMP
+		WHERE agente=? AND estado IN ('planificada','activa') AND proyecto_id <> ?`,
+		agente, proyectoID,
+	); err != nil {
+		return err
+	}
+
+	var existenteID int64
+	err := tx.QueryRow(`
+		SELECT id FROM asignaciones
+		WHERE agente=? AND proyecto_id=? AND estado IN ('planificada','activa','pausada')
+		ORDER BY id DESC LIMIT 1`,
+		agente, proyectoID,
+	).Scan(&existenteID)
+	switch err {
+	case nil:
+		_, err = tx.Exec(`UPDATE asignaciones SET estado='activa', nota=?, cerrada_at=NULL WHERE id=?`, nota, existenteID)
+	case sql.ErrNoRows:
+		_, err = tx.Exec(`
+			INSERT INTO asignaciones (agente, proyecto_id, estado, nota)
+			VALUES (?,?,'activa',?)`,
+			agente, proyectoID, nota,
+		)
+	default:
+		return err
+	}
+	return err
+}
+
+func pausarAsignacionTx(tx *Tx, agente string, proyectoID int64, nota string) (bool, error) {
+	res, err := tx.Exec(`
+		UPDATE asignaciones
+		SET estado='pausada', nota=?, cerrada_at=NULL
+		WHERE agente=? AND proyecto_id=? AND estado='activa'`,
+		nota, agente, proyectoID,
+	)
+	if err != nil {
+		return false, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
 }
 
 func ListarAsignaciones(f FiltroAsignaciones) ([]*Asignacion, error) {

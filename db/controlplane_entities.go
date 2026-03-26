@@ -373,6 +373,9 @@ func CrearHandoffAgenteVivo(origen, destino string, tareaID *int64, motivo, resu
 			proyectoID = t.ProyectoID
 		}
 	}
+	if err := ValidarCompatibilidadGobernanzaHandoff(origen, destino, proyectoID); err != nil {
+		return 0, err
+	}
 
 	payload := HandoffPayload{
 		AgenteOrigen:       origen,
@@ -405,6 +408,23 @@ func CrearHandoffAgenteVivo(origen, destino string, tareaID *int64, motivo, resu
 			`UPDATE tareas SET notas = notas || char(10) || ? || ' [' || datetime('now') || ' orquesta]' WHERE id=?`,
 			nota, *tareaID,
 		); err != nil {
+			return 0, err
+		}
+	}
+	if proyectoID != nil && *proyectoID > 0 {
+		notaOrigen := fmt.Sprintf("handoff_cedido_a_%s", destino)
+		if payload.Motivo != "" {
+			notaOrigen += ": " + payload.Motivo
+		}
+		if _, err := pausarAsignacionTx(tx, origen, *proyectoID, notaOrigen); err != nil {
+			return 0, err
+		}
+
+		notaDestino := fmt.Sprintf("handoff_recibido_desde_%s", origen)
+		if payload.Motivo != "" {
+			notaDestino += ": " + payload.Motivo
+		}
+		if err := activarAsignacionTx(tx, destino, *proyectoID, notaDestino); err != nil {
 			return 0, err
 		}
 	}

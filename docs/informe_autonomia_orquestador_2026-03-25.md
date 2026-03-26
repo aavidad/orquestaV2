@@ -39,6 +39,8 @@ Estado real actual:
 - sí existe retirada segura de agentes con liberación automática del trabajo y sustitución replanificable por otro agente disponible
 - sí existe resolución efectiva unificada del catálogo de gobernanza (reglas, skills, workflows) y conservación de su identidad en continuidad/resume
 - sí existen overrides de gobernanza por proyecto y por agente, con precedencia `rol -> proyecto -> agente`
+- sí existe validación de compatibilidad de gobernanza en handoff, tanto automático como manual
+- sí existe sincronización de asignaciones durante el handoff, de forma que el destino hereda la afinidad del proyecto y el origen queda pausado
 - sí existe notificación `governance_refresh` por mailbox cuando cambian reglas o workflows del rol
 - sí existe consumo en caliente de `governance_refresh` y `skills_refresh` en agentes vivos, reenviándolo como `send_instruction` sin reinicio de sesión
 - sí existe API `server-first` para consultar el catálogo efectivo de gobernanza y los overrides aplicados por contexto
@@ -141,6 +143,19 @@ Con esto el flujo ya soporta:
 2. aparcar su runtime vivo cuando existe control real
 3. dejar su frente en estado replanificable
 4. reasignar el trabajo automáticamente a otro agente del pool
+
+### 2.e Handoff compatible con gobernanza y afinidad persistida
+
+El relevo entre agentes ya no es solo operativo:
+
+- `db/handoff_manager.go` elige reemplazo compatible con la gobernanza efectiva del proyecto, no solo por disponibilidad
+- `db/controlplane_entities.go` valida esa misma compatibilidad también en handoffs manuales o lanzados por API/CLI
+- `db/controlplane_entities.go` sincroniza `asignaciones` dentro de la misma transacción del handoff: el origen queda pausado en el proyecto cedido y el destino pasa a ser el frente activo
+
+Con esto el orquestador evita dos derivas frecuentes:
+
+1. relevar una tarea a un agente cuyo catálogo efectivo no coincide con el del origen
+2. perder la afinidad futura del destino con el proyecto tras el handoff
 
 ### 3. Bootstrap y continuidad
 

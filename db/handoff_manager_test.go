@@ -309,6 +309,58 @@ func TestSeleccionarAgenteReemplazoExcluyeAgentesOcupados(t *testing.T) {
 	}
 }
 
+func TestSeleccionarAgenteReemplazoParaProyectoExigeCompatibilidadGobernanza(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	if err := RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar Codex3: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "handoff-gobernanza",
+		Nombre:  "handoff-gobernanza",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+	reglaID, err := UpsertRegla(&Regla{
+		TipoAgente:  "programador",
+		Categoria:   "arquitectura",
+		Titulo:      "server-first-handoff",
+		Descripcion: "usar API",
+		Activa:      true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertRegla: %v", err)
+	}
+	if _, err := GuardarGovernanceOverride("test", &GovernanceOverride{
+		ScopeTipo:  GovernanceScopeAgente,
+		ScopeRef:   "Codex2",
+		Entidad:    GovernanceEntityRegla,
+		EntidadID:  reglaID,
+		Accion:     GovernanceActionDisable,
+		TipoAgente: "programador",
+	}); err != nil {
+		t.Fatalf("GuardarGovernanceOverride: %v", err)
+	}
+
+	nombre, err := SeleccionarAgenteReemplazoParaProyecto("Codex1", &proyectoID, nil)
+	if err != nil {
+		t.Fatalf("SeleccionarAgenteReemplazoParaProyecto: %v", err)
+	}
+	if nombre != "Codex3" {
+		t.Fatalf("deberia saltar Codex2 por gobernanza incompatible, got=%s", nombre)
+	}
+}
+
 func TestGuardarCheckpointHandoffCreaRegistro(t *testing.T) {
 	prepararDBTemporal(t)
 

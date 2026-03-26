@@ -222,29 +222,110 @@ func presupuestoSesionFresco(p *PresupuestoSesion) bool {
 
 // SeleccionarAgenteReemplazo elige el mejor agente disponible para reemplazar
 // a "origen". Devuelve el nombre del agente o error si no hay ninguno libre.
-// Prioriza: programadores habilitados sin sesión activa, por nombre alfabético.
+// Prioriza agentes del mismo rol, habilitados y sin sesión activa.
 func SeleccionarAgenteReemplazo(origen string, excluir []string) (string, error) {
+	return SeleccionarAgenteReemplazoParaProyecto(origen, nil, excluir)
+}
+
+// SeleccionarAgenteReemplazoParaProyecto aplica la misma política básica de
+// reemplazo, pero si conoce el proyecto exige compatibilidad de gobernanza
+// efectiva entre origen y destino para evitar handoffs entre agentes no equivalentes.
+func SeleccionarAgenteReemplazoParaProyecto(origen string, proyectoID *int64, excluir []string) (string, error) {
 	excluidos := append([]string{origen}, excluir...)
 	placeholders := strings.Repeat(",?", len(excluidos))[1:] // ",?,?" → "?,?"
-	args := make([]any, len(excluidos))
-	for i, e := range excluidos {
-		args[i] = e
+	rol, hashEsperado, err := resolverRolYHashGobernanzaHandoff(strings.TrimSpace(origen), proyectoID)
+	if err != nil {
+		return "", err
 	}
 
-	var nombre string
-	err := DB.QueryRow(`
+	args := make([]any, 0, len(excluidos)+1)
+	args = append(args, rol)
+	for i, e := range excluidos {
+		_ = i
+		args = append(args, e)
+	}
+
+	rows, err := DB.Query(`
 		SELECT a.nombre
 		FROM agentes a
-		WHERE a.rol = 'programador'
+		WHERE a.rol = ?
 		  AND a.habilitado = 1
 		  AND a.activo = 0
 		  AND a.nombre NOT IN (`+placeholders+`)
 		ORDER BY a.nombre
-		LIMIT 1`, args...).Scan(&nombre)
+	`, args...)
 	if err != nil {
-		return "", fmt.Errorf("no hay agente disponible para reemplazar a %s: %w", origen, err)
+		return "", err
 	}
-	return nombre, nil
+	candidatos := make([]string, 0, 8)
+	for rows.Next() {
+		var nombre string
+		if err := rows.Scan(&nombre); err != nil {
+			rows.Close()
+			return "", err
+		}
+		candidatos = append(candidatos, nombre)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return "", err
+	}
+	rows.Close()
+
+	for _, nombre := range candidatos {
+		if hashEsperado != "" {
+			_, hashDestino, err := resolverRolYHashGobernanzaHandoff(strings.TrimSpace(nombre), proyectoID)
+			if err != nil {
+				return "", err
+			}
+			if strings.TrimSpace(hashDestino) != hashEsperado {
+				continue
+			}
+		}
+		return nombre, nil
+	}
+	if hashEsperado != "" {
+		return "", fmt.Errorf("no hay agente disponible compatible con la gobernanza efectiva de %s", origen)
+	}
+	return "", fmt.Errorf("no hay agente disponible para reemplazar a %s", origen)
+}
+
+func ValidarCompatibilidadGobernanzaHandoff(origen, destino string, proyectoID *int64) error {
+	rolOrigen, hashOrigen, err := resolverRolYHashGobernanzaHandoff(strings.TrimSpace(origen), proyectoID)
+	if err != nil {
+		return err
+	}
+	rolDestino, hashDestino, err := resolverRolYHashGobernanzaHandoff(strings.TrimSpace(destino), proyectoID)
+	if err != nil {
+		return err
+	}
+	if rolOrigen != rolDestino {
+		return fmt.Errorf("el destino %s no comparte rol con %s", destino, origen)
+	}
+	if hashOrigen != "" && hashDestino != "" && hashOrigen != hashDestino {
+		return fmt.Errorf("el destino %s no es compatible con la gobernanza efectiva de %s", destino, origen)
+	}
+	return nil
+}
+
+func resolverRolYHashGobernanzaHandoff(agente string, proyectoID *int64) (string, string, error) {
+	item, err := GetAgente(strings.TrimSpace(agente))
+	if err != nil {
+		return "", "", fmt.Errorf("no se pudo resolver el agente %s: %w", agente, err)
+	}
+	rol := "programador"
+	if item != nil && strings.TrimSpace(item.Rol) != "" {
+		rol = strings.TrimSpace(item.Rol)
+	}
+	catalogo, err := ResolveGovernanceCatalogForContext(rol, proyectoID, strings.TrimSpace(agente))
+	if err != nil {
+		return "", "", fmt.Errorf("no se pudo resolver la gobernanza del agente %s: %w", agente, err)
+	}
+	hash := ""
+	if catalogo != nil {
+		hash = strings.TrimSpace(catalogo.Hash)
+	}
+	return rol, hash, nil
 }
 
 // GuardarCheckpointHandoff crea un checkpoint automático para el agente saliente
@@ -349,7 +430,7 @@ func ProcesarHandoffsBatch() (int, error) {
 		if !procede {
 			continue
 		}
-		destino, err := SeleccionarAgenteReemplazo(c.Agente, excluidos)
+		destino, err := SeleccionarAgenteReemplazoParaProyecto(c.Agente, c.ProyectoID, excluidos)
 		if err != nil {
 			// Sin reemplazo disponible: no es error crítico, sólo lo auditamos
 			Audit("server", "handoff_sin_reemplazo", "agente", 0,
