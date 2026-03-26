@@ -2,6 +2,7 @@ package agentesapp
 
 import (
 	"database/sql"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,13 +31,18 @@ type fakeStore struct {
 	pausedAgent       string
 	pausedMinutes     int
 	pausedReason      string
+	retiredAgent      string
+	enqueuedOrders    []*db.RuntimeOrder
 }
 
 func (f *fakeStore) RegisterAgent(nombre, rol string) error { return nil }
 func (f *fakeStore) RegisterAgentAuto(proveedor, rol string) (string, error) {
 	return "Codex1", nil
 }
-func (f *fakeStore) RetireAgent(nombre string) error       { return nil }
+func (f *fakeStore) RetireAgent(nombre string) error {
+	f.retiredAgent = nombre
+	return nil
+}
 func (f *fakeStore) RehabilitateAgent(nombre string) error { return nil }
 func (f *fakeStore) ResetReanimation(nombre string) error  { return nil }
 func (f *fakeStore) DeleteAgent(nombre string) error       { return nil }
@@ -143,6 +149,11 @@ func (f *fakeStore) ListRuntimeOrders(filter db.FiltroRuntimeOrders) ([]*db.Runt
 	return out, nil
 }
 
+func (f *fakeStore) EnqueueRuntimeOrder(order *db.RuntimeOrder) (int64, error) {
+	f.enqueuedOrders = append(f.enqueuedOrders, order)
+	return int64(len(f.enqueuedOrders)), nil
+}
+
 func (f *fakeStore) ListRuntimeMailbox(filter db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error) {
 	f.lastMailboxFilter = append(f.lastMailboxFilter, filter)
 	var out []*db.RuntimeMailboxMessage
@@ -206,6 +217,60 @@ func (f *fakeStore) PauseAgent(nombre string, minutos int, motivo string) error 
 	f.pausedMinutes = minutos
 	f.pausedReason = motivo
 	return nil
+}
+
+func TestApplyStateActionRetirarEncolaPauseSiHayHandleActivo(t *testing.T) {
+	proyectoID := int64(42)
+	store := &fakeStore{
+		handles: []*db.RuntimeHandle{
+			{Agente: "Codex1", ProyectoID: &proyectoID, Estado: "activo"},
+		},
+	}
+
+	svc := NewService(store)
+	if err := svc.ApplyStateAction("Codex1", "retirar"); err != nil {
+		t.Fatalf("ApplyStateAction retirar: %v", err)
+	}
+
+	if store.retiredAgent != "Codex1" {
+		t.Fatalf("agente retirado inesperado: %s", store.retiredAgent)
+	}
+	if len(store.enqueuedOrders) != 1 {
+		t.Fatalf("esperaba una orden de pause, got=%d", len(store.enqueuedOrders))
+	}
+	order := store.enqueuedOrders[0]
+	if order.Tipo != "pause" || order.Agente != "Codex1" {
+		t.Fatalf("orden encolada inesperada: %+v", order)
+	}
+	if order.ProyectoID == nil || *order.ProyectoID != proyectoID {
+		t.Fatalf("proyecto de pause inesperado: %+v", order)
+	}
+	if !strings.Contains(order.PayloadJSON, `"motivo":"retiro_agente"`) {
+		t.Fatalf("payload de pause inesperado: %s", order.PayloadJSON)
+	}
+}
+
+func TestApplyStateActionRetirarNoDuplicaPauseSiYaExisteOrdenAbierta(t *testing.T) {
+	store := &fakeStore{
+		handles: []*db.RuntimeHandle{
+			{Agente: "Codex1", Estado: "activo"},
+		},
+		orders: []*db.RuntimeOrder{
+			{Agente: "Codex1", Tipo: "pause", Estado: "pendiente"},
+		},
+	}
+
+	svc := NewService(store)
+	if err := svc.ApplyStateAction("Codex1", "retirar"); err != nil {
+		t.Fatalf("ApplyStateAction retirar: %v", err)
+	}
+
+	if store.retiredAgent != "Codex1" {
+		t.Fatalf("agente retirado inesperado: %s", store.retiredAgent)
+	}
+	if len(store.enqueuedOrders) != 0 {
+		t.Fatalf("no deberia duplicar pause: %+v", store.enqueuedOrders)
+	}
 }
 
 func TestBuildPanelRowsAggregatesOperationalState(t *testing.T) {

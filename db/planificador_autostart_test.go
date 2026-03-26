@@ -886,6 +886,96 @@ func TestResolverProyectoPlanificableAgenteLiberaAgenteSiSuFrenteActivoNoTieneTr
 	}
 }
 
+func TestPlanificarTareasAutomaticamenteReubicaTrabajoTrasRetirarAgente(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexRetirado", "CodexRelevo")
+
+	if err := RegistrarAgente("CodexRetirado", "programador"); err != nil {
+		t.Fatalf("registrar agente retirado: %v", err)
+	}
+	if err := RegistrarAgente("CodexRelevo", "programador"); err != nil {
+		t.Fatalf("registrar agente relevo: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre='CodexRelevo'`); err != nil {
+		t.Fatalf("marcar relevo disponible: %v", err)
+	}
+
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "proyecto-relevo",
+		Nombre:  "Proyecto Relevo",
+		RutaAbs: filepath.Join(tmp, "proyecto-relevo"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := ActivarAsignacion("CodexRetirado", proyectoID, "frente original"); err != nil {
+		t.Fatalf("activar asignacion original: %v", err)
+	}
+
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Tarea que debe sobrevivir al relevo",
+		Descripcion: "el orquestador debe recolocarla solo",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "CodexRetirado"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "CodexRetirado"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	if err := RetirarAgente("CodexRetirado"); err != nil {
+		t.Fatalf("retirar agente: %v", err)
+	}
+	if err := PlanificarTareasAutomaticamente(); err != nil {
+		t.Fatalf("planificar tras retirada: %v", err)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != TareaAsignada || tarea.Agente == nil || *tarea.Agente != "CodexRelevo" {
+		t.Fatalf("la tarea deberia reubicarse automaticamente: %+v", tarea)
+	}
+
+	asignacionActiva, err := GetAsignacionActivaAgente("CodexRelevo")
+	if err != nil {
+		t.Fatalf("get asignacion activa relevo: %v", err)
+	}
+	if asignacionActiva == nil || asignacionActiva.ProyectoID != proyectoID {
+		t.Fatalf("asignacion activa del relevo inesperada: %+v", asignacionActiva)
+	}
+
+	agenteRetirado := "CodexRetirado"
+	estadoPausada := AsignacionPausada
+	pausadas, err := ListarAsignaciones(FiltroAsignaciones{Agente: &agenteRetirado, Estado: &estadoPausada})
+	if err != nil {
+		t.Fatalf("listar asignaciones pausadas del retirado: %v", err)
+	}
+	if len(pausadas) != 1 || pausadas[0].ProyectoID != proyectoID || !strings.Contains(pausadas[0].Nota, "agente_retirado") {
+		t.Fatalf("la afinidad del retirado deberia quedar aparcada: %+v", pausadas)
+	}
+
+	agenteRelevo := "CodexRelevo"
+	estadoPendiente := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agenteRelevo, ProyectoID: &proyectoID, Estado: &estadoPendiente})
+	if err != nil {
+		t.Fatalf("listar runtime orders del relevo: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "start" {
+		t.Fatalf("runtime orders del relevo inesperadas: %+v", orders)
+	}
+}
+
 func TestResolverProyectoPlanificableAgenteNoReactivaProyectoSinResumeAutomatico(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	restringirPlanificadorATestAgentes(t, "Codex1")

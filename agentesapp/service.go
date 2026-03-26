@@ -1,6 +1,7 @@
 package agentesapp
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -30,6 +31,7 @@ type Store interface {
 	ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance, error)
 	ListRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error)
 	ListRuntimeOrders(filtro db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error)
+	EnqueueRuntimeOrder(order *db.RuntimeOrder) (int64, error)
 	ListRuntimeMailbox(filtro db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error)
 	ListRuntimeCheckpoints(filtro db.FiltroRuntimeCheckpoints) ([]*db.RuntimeCheckpoint, error)
 	ListTasks(filtro db.FiltroTareas) ([]*db.Tarea, error)
@@ -97,7 +99,7 @@ func (s *Service) ApplyStateAction(nombre, accion string) error {
 	nombre = strings.TrimSpace(nombre)
 	switch strings.TrimSpace(accion) {
 	case "retirar":
-		return s.store.RetireAgent(nombre)
+		return s.retireAgent(nombre)
 	case "rehabilitar":
 		return s.store.RehabilitateAgent(nombre)
 	case "reset-reanimacion":
@@ -105,6 +107,74 @@ func (s *Service) ApplyStateAction(nombre, accion string) error {
 	default:
 		return fmt.Errorf("acción de agente no soportada: %s", accion)
 	}
+}
+
+func (s *Service) retireAgent(nombre string) error {
+	if err := s.enqueueRetirementPauseIfNeeded(nombre); err != nil {
+		return err
+	}
+	return s.store.RetireAgent(nombre)
+}
+
+func (s *Service) enqueueRetirementPauseIfNeeded(nombre string) error {
+	handles, err := s.store.ListRuntimeHandles(&nombre)
+	if err != nil {
+		return err
+	}
+
+	var (
+		needsPause bool
+		proyectoID *int64
+	)
+	for _, handle := range handles {
+		if handle == nil {
+			continue
+		}
+		if strings.TrimSpace(handle.Estado) != "activo" {
+			continue
+		}
+		needsPause = true
+		if proyectoID == nil && handle.ProyectoID != nil {
+			id := *handle.ProyectoID
+			proyectoID = &id
+		}
+	}
+	if !needsPause {
+		return nil
+	}
+
+	orders, err := s.store.ListRuntimeOrders(db.FiltroRuntimeOrders{Agente: &nombre})
+	if err != nil {
+		return err
+	}
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		if order.Tipo != "pause" && order.Tipo != "stop" {
+			continue
+		}
+		switch strings.TrimSpace(order.Estado) {
+		case "pendiente", "tomada", "ejecutando":
+			return nil
+		}
+	}
+
+	payloadJSON, err := json.Marshal(map[string]any{
+		"accion": "pause",
+		"motivo": "retiro_agente",
+		"por":    "server",
+	})
+	if err != nil {
+		return err
+	}
+	_, err = s.store.EnqueueRuntimeOrder(&db.RuntimeOrder{
+		Agente:      nombre,
+		ProyectoID:  proyectoID,
+		Tipo:        "pause",
+		PayloadJSON: string(payloadJSON),
+	})
+	return err
 }
 
 func (s *Service) DeleteAgent(nombre, actor string) error {
@@ -523,6 +593,10 @@ func (Repository) ListRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error
 
 func (Repository) ListRuntimeOrders(filtro db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error) {
 	return db.ListarRuntimeOrders(filtro)
+}
+
+func (Repository) EnqueueRuntimeOrder(order *db.RuntimeOrder) (int64, error) {
+	return db.EncolarRuntimeOrder(order)
 }
 
 func (Repository) ListRuntimeMailbox(filtro db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error) {

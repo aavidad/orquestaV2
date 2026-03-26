@@ -660,8 +660,11 @@ func escanearSesion(s scanner) (*Sesion, error) {
 	return &sesion, nil
 }
 
-// RetirarAgente deshabilita a un agente: no puede votar ni trabajar.
-// Sus votos pendientes en propuestas abiertas se eliminan para que no bloqueen el consenso.
+// RetirarAgente deshabilita a un agente y libera su trabajo operativo.
+// Pausa sus asignaciones activas/planificadas, devuelve al pool las tareas asignadas
+// o en progreso y elimina votos pendientes en propuestas abiertas para no bloquear
+// el consenso. La continuidad fina del runtime se gestiona en el control plane;
+// aquí solo se deja el estado de BD en una situación replanificable.
 func RetirarAgente(nombre string) error {
 	tx, err := DB.Begin()
 	if err != nil {
@@ -669,13 +672,40 @@ func RetirarAgente(nombre string) error {
 	}
 	defer tx.Rollback()
 
+	notaAsignacion := "agente_retirado"
+	if _, err = tx.Exec(`
+		UPDATE asignaciones
+		SET estado='pausada',
+		    nota=CASE
+		    	WHEN trim(COALESCE(nota,''))='' THEN ?
+		    	ELSE nota || char(10) || ?
+		    END,
+		    cerrada_at=NULL
+		WHERE agente=? AND estado IN ('planificada','activa')`,
+		notaAsignacion, notaAsignacion, nombre,
+	); err != nil {
+		return err
+	}
+
+	anotacionRetiro := formatearAnotacionTarea("server", "agente retirado automáticamente: "+nombre, time.Now().UTC())
+	if _, err = tx.Exec(`
+		UPDATE tareas
+		SET estado='libre',
+		    agente=NULL,
+		    notas=COALESCE(notas,'') || ?
+		WHERE agente=? AND estado IN ('asignada','en_progreso')`,
+		anotacionRetiro, nombre,
+	); err != nil {
+		return err
+	}
+
 	// Deshabilitar + cerrar sesión activa
 	if _, err = tx.Exec(
-		`UPDATE agentes SET habilitado=0, activo=0 WHERE nombre=?`, nombre); err != nil {
+		`UPDATE agentes SET habilitado=0, activo=0, estado_sesion='' WHERE nombre=?`, nombre); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(
-		`UPDATE sesiones SET activa=0, fin=CURRENT_TIMESTAMP WHERE agente=? AND activa=1`, nombre); err != nil {
+		`UPDATE sesiones SET activa=0, fin=CURRENT_TIMESTAMP, estado='cerrada' WHERE agente=? AND activa=1`, nombre); err != nil {
 		return err
 	}
 	// Eliminar votos pendientes en propuestas abiertas (para no bloquear consenso)
@@ -688,7 +718,7 @@ func RetirarAgente(nombre string) error {
 	if err = tx.Commit(); err != nil {
 		return err
 	}
-	Audit("alberto", "retirar_agente", "agente", 0, nombre)
+	Audit("server", "retirar_agente", "agente", 0, nombre)
 	return nil
 }
 
@@ -702,7 +732,7 @@ func RehabilitarAgente(nombre string) error {
 	if n == 0 {
 		return fmt.Errorf("agente '%s' no encontrado", nombre)
 	}
-	Audit("alberto", "rehabilitar_agente", "agente", 0, nombre)
+	Audit("server", "rehabilitar_agente", "agente", 0, nombre)
 	return nil
 }
 

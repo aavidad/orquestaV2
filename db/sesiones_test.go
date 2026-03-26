@@ -165,6 +165,123 @@ func TestEliminarAgenteBloqueaTareasActivas(t *testing.T) {
 	}
 }
 
+func TestRetirarAgentePausaAsignacionesYLiberaTrabajo(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "orquesta.db")
+	prev := os.Getenv("ORQUESTA_DB")
+	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
+		t.Fatalf("setenv: %v", err)
+	}
+	defer func() {
+		_ = os.Setenv("ORQUESTA_DB", prev)
+		Close()
+	}()
+
+	if err := Open(); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := RegistrarAgente("CodexRetiro", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "demo-retiro",
+		Nombre:  "Demo Retiro",
+		RutaAbs: filepath.Join(dir, "demo-retiro"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+	if err := ActivarAsignacion("CodexRetiro", proyectoID, "frente_activo"); err != nil {
+		t.Fatalf("ActivarAsignacion: %v", err)
+	}
+	if _, err := IniciarSesion("CodexRetiro"); err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+
+	tareaAsignada, err := CrearTarea(&Tarea{
+		Titulo:      "Tarea asignada",
+		Descripcion: "debe volver al pool",
+		ProyectoID:  &proyectoID,
+		Modulo:      "backend",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea asignada: %v", err)
+	}
+	if err := TomarTarea(tareaAsignada, "CodexRetiro"); err != nil {
+		t.Fatalf("TomarTarea asignada: %v", err)
+	}
+
+	tareaViva, err := CrearTarea(&Tarea{
+		Titulo:      "Tarea viva",
+		Descripcion: "debe volver al pool conservando nota",
+		ProyectoID:  &proyectoID,
+		Modulo:      "frontend",
+		Prioridad:   PrioridadMedia,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea viva: %v", err)
+	}
+	if err := TomarTarea(tareaViva, "CodexRetiro"); err != nil {
+		t.Fatalf("TomarTarea viva: %v", err)
+	}
+	if err := IniciarTarea(tareaViva, "CodexRetiro"); err != nil {
+		t.Fatalf("IniciarTarea viva: %v", err)
+	}
+
+	if err := RetirarAgente("CodexRetiro"); err != nil {
+		t.Fatalf("RetirarAgente: %v", err)
+	}
+
+	agente, err := GetAgente("CodexRetiro")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.Habilitado || agente.Activo {
+		t.Fatalf("estado de agente inesperado: %+v", agente)
+	}
+
+	agenteNombre := "CodexRetiro"
+	asignaciones, err := ListarAsignaciones(FiltroAsignaciones{Agente: &agenteNombre})
+	if err != nil {
+		t.Fatalf("ListarAsignaciones: %v", err)
+	}
+	if len(asignaciones) == 0 || asignaciones[0].Estado != AsignacionPausada {
+		t.Fatalf("asignacion no pausada: %+v", asignaciones)
+	}
+	if !strings.Contains(asignaciones[0].Nota, "agente_retirado") {
+		t.Fatalf("nota de asignacion inesperada: %+v", asignaciones[0])
+	}
+
+	for _, id := range []int64{tareaAsignada, tareaViva} {
+		tarea, err := GetTarea(id)
+		if err != nil {
+			t.Fatalf("GetTarea %d: %v", id, err)
+		}
+		if tarea.Estado != TareaLibre {
+			t.Fatalf("tarea %d no liberada: %+v", id, tarea)
+		}
+		if tarea.Agente != nil {
+			t.Fatalf("tarea %d mantiene agente: %+v", id, tarea)
+		}
+		if !strings.Contains(strings.ToLower(tarea.Notas), "agente retirado automáticamente") {
+			t.Fatalf("tarea %d sin anotacion de retiro: %+v", id, tarea)
+		}
+	}
+
+	var activas int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM sesiones WHERE agente=? AND activa=1`, "CodexRetiro").Scan(&activas); err != nil {
+		t.Fatalf("count sesiones activas: %v", err)
+	}
+	if activas != 0 {
+		t.Fatalf("esperaba 0 sesiones activas, got=%d", activas)
+	}
+}
+
 func TestListarAgentesAlineaEstadoVisibleConSesiones(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "orquesta.db")

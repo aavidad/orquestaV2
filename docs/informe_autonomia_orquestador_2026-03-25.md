@@ -36,6 +36,7 @@ Estado real actual:
 - sí existe bootstrap de continuidad al arrancar o retomar
 - sí existe consumo periódico en el daemon para todas las `runtime_orders` despachables, no solo para órdenes básicas
 - sí existe estado operativo explícito de proyecto (`activo`, `esperando_humano`, `bloqueado_externo`, `cerrado`) y auto-reactivación al detectarse desbloqueo
+- sí existe retirada segura de agentes con liberación automática del trabajo y sustitución replanificable por otro agente disponible
 - `stop` ya cierra también la sesión viva, no solo runtime y handle
 - el adaptador remoto ya tiene política configurable de reintentos para acciones de control seguras, sin reintentar `start` ni `send_instruction`
 - `sync_status` ya puede observar estado remoto real por `status_path`, normalizarlo a estado canónico del handle y conservar el estado remoto crudo en metadata
@@ -103,6 +104,21 @@ Con esto el flujo deja de ser solo local al agente:
 2. proyecto pasa a `esperando_humano`
 3. sesión/asignación se aparcan
 4. al desbloquear la tarea, el planificador reactiva el proyecto y devuelve al agente al frente pausado
+
+### 2.c Retirada segura y sustitución automática de agentes
+
+La retirada de un agente ya no deja estados muertos:
+
+- `db/sesiones.go` pausa sus asignaciones activas/planificadas, libera tareas `asignada` o `en_progreso` y cierra la sesión sin bloquear el scheduler
+- `agentesapp/service.go` encola una `pause` al control plane si detecta un `runtime_handle` activo antes de retirar al agente
+- `db/planificador.go` puede recolocar automáticamente ese trabajo en otro agente disponible porque la tarea vuelve al pool y la afinidad previa queda aparcada
+
+Con esto el flujo ya soporta:
+
+1. retirar o deshabilitar un agente
+2. aparcar su runtime vivo cuando existe control real
+3. dejar su frente en estado replanificable
+4. reasignar el trabajo automáticamente a otro agente del pool
 
 ### 3. Bootstrap y continuidad
 
