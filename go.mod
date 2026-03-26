@@ -3,6 +3,7 @@ module orquesta
 go 1.25.0
 
 require (
+	github.com/go-sql-driver/mysql v1.7.0
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/spf13/cobra v1.8.0
 	modernc.org/sqlite v1.29.6

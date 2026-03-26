@@ -70,7 +70,7 @@ func postMigrationStatements() []string {
 
 func postMigrationStatementsForDriver(driver string) []string {
 	driver = strings.ToLower(strings.TrimSpace(driver))
-	if driver == "postgres" || driver == "postgresql" {
+	if driver == "postgres" || driver == "postgresql" || driver == "mysql" {
 		return nil
 	}
 	return postMigrationStatements()

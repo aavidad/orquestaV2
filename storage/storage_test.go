@@ -123,7 +123,7 @@ func TestSQLiteDSNAniadeParametrosSinRomperQueryExistente(t *testing.T) {
 
 func TestOpenFallaConDriverNoEnlazado(t *testing.T) {
 	_, err := Open(Config{
-		Driver: "mysql",
+		Driver: "oracle",
 		DSN:    "dsn://usuario:clave@localhost/orquesta",
 	})
 	if err == nil {
