@@ -21,7 +21,9 @@ import (
 	"orquesta/db"
 	"orquesta/fabricaapp"
 	"orquesta/lenguajeapp"
+	"orquesta/progresoapp"
 	"orquesta/propuestasapp"
+	"orquesta/sesionesapp"
 	"orquesta/tareasapp"
 )
 
@@ -3007,7 +3009,7 @@ func apiHandlerProgreso(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, fmt.Errorf("proyecto obligatorio"))
 		return
 	}
-	resumen, err := db.CalcularResumenProgresoProyecto(proyecto)
+	resumen, err := progresoService.GetSummary(proyecto)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -3023,7 +3025,7 @@ func apiHandlerProgresoFases(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, fmt.Errorf("proyecto obligatorio"))
 			return
 		}
-		fases, err := db.ListarFasesProyecto(proyecto)
+		fases, err := progresoService.ListPhases(proyecto)
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
@@ -3035,21 +3037,16 @@ func apiHandlerProgresoFases(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		id, err := db.RegistrarFaseProyecto(&db.FaseProyecto{
-			Proyecto:    strings.TrimSpace(req.Proyecto),
-			Nombre:      strings.TrimSpace(req.Nombre),
-			Descripcion: strings.TrimSpace(req.Descripcion),
+		id, fase, err := progresoService.RegisterPhase(progresoapp.RegisterPhaseInput{
+			Proyecto:    req.Proyecto,
+			Nombre:      req.Nombre,
+			Descripcion: req.Descripcion,
 			Orden:       req.Orden,
 			Peso:        req.Peso,
-			Estado:      strings.TrimSpace(req.Estado),
+			Estado:      req.Estado,
 		})
 		if err != nil {
 			apiError(w, http.StatusBadRequest, err)
-			return
-		}
-		fase, err := db.GetFaseProyecto(id)
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
 			return
 		}
 		apiWriteJSON(w, http.StatusCreated, apiProgresoFaseResponse{ID: id, Fase: fase})
@@ -3068,35 +3065,21 @@ func apiRouterProgresoFases(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
 		return
 	}
-	fase, err := db.GetFaseProyecto(id)
-	if err != nil {
-		apiError(w, http.StatusNotFound, err)
-		return
-	}
 	var req apiProgresoFaseActualizarRequest
 	if err := apiDecodeJSON(r, &req); err != nil {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	if req.Proyecto != nil {
-		fase.Proyecto = strings.TrimSpace(*req.Proyecto)
-	}
-	if req.Nombre != nil {
-		fase.Nombre = strings.TrimSpace(*req.Nombre)
-	}
-	if req.Descripcion != nil {
-		fase.Descripcion = strings.TrimSpace(*req.Descripcion)
-	}
-	if req.Orden != nil {
-		fase.Orden = *req.Orden
-	}
-	if req.Peso != nil {
-		fase.Peso = *req.Peso
-	}
-	if req.Estado != nil {
-		fase.Estado = strings.TrimSpace(*req.Estado)
-	}
-	if err := db.ActualizarFaseProyecto(fase); err != nil {
+	fase, err := progresoService.UpdatePhase(progresoapp.UpdatePhaseInput{
+		ID:          id,
+		Proyecto:    req.Proyecto,
+		Nombre:      req.Nombre,
+		Descripcion: req.Descripcion,
+		Orden:       req.Orden,
+		Peso:        req.Peso,
+		Estado:      req.Estado,
+	})
+	if err != nil {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -3118,12 +3101,12 @@ func apiRouterProgresoTareas(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := db.RegistrarAvanceTarea(&db.AvanceTarea{
+	if err := progresoService.RegisterTaskProgress(progresoapp.RegisterTaskProgressInput{
 		TareaID:        tareaID,
-		Proyecto:       strings.TrimSpace(req.Proyecto),
+		Proyecto:       req.Proyecto,
 		FaseID:         req.FaseID,
 		ProgresoPct:    req.ProgresoPct,
-		ActualizadoPor: strings.TrimSpace(req.ActualizadoPor),
+		ActualizadoPor: req.ActualizadoPor,
 	}); err != nil {
 		apiError(w, http.StatusBadRequest, err)
 		return
@@ -3211,12 +3194,33 @@ func apiHandlerSesionInicio(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	resp, err := construirSesionInicioResponse(req)
+	result, err := sesionesAPIService.StartContext(sesionesapp.StartContextInput{
+		Agente:            req.Agente,
+		NuevoCodex:        req.NuevoCodex,
+		Proyecto:          req.Proyecto,
+		Conector:          req.Conector,
+		CWD:               req.CWD,
+		Herramienta:       req.Herramienta,
+		ExternalSessionID: req.ExternalSessionID,
+		ResumePayload:     req.ResumePayload,
+		Resumen:           req.Resumen,
+		Branch:            req.Branch,
+		Host:              req.Host,
+		PID:               req.PID,
+	})
 	if err != nil {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	apiWriteJSON(w, http.StatusCreated, resp)
+	apiWriteJSON(w, http.StatusCreated, &apiSesionInicioResponse{
+		Sesion:               result.Sesion,
+		SesionPrevia:         result.SesionPrevia,
+		Rol:                  result.Rol,
+		PropuestasPendientes: result.PropuestasPendientes,
+		Reglas:               result.Reglas,
+		Skills:               result.Skills,
+		Workflow:             result.Workflow,
+	})
 }
 
 func apiHandlerSesionGuardar(w http.ResponseWriter, r *http.Request) {
@@ -3301,32 +3305,20 @@ func apiHandlerSesionContinuar(w http.ResponseWriter, r *http.Request) {
 func apiHandlerSesionPresupuesto(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		sesionID, sesion, err := resolverSesionPresupuestoAPI(
-			strings.TrimSpace(r.URL.Query().Get("sesion")),
-			strings.TrimSpace(r.URL.Query().Get("agente")),
-		)
+		sesionID, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("sesion")), 10, 64)
+		if strings.TrimSpace(r.URL.Query().Get("sesion")) != "" && (err != nil || sesionID <= 0) {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("sesion inválida"))
+			return
+		}
+		result, err := sesionesAPIService.GetBudget(sesionID, strings.TrimSpace(r.URL.Query().Get("agente")))
 		if err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		p, err := db.UltimoPresupuestoSesion(sesionID)
-		if err == sql.ErrNoRows {
-			apiError(w, http.StatusNotFound, fmt.Errorf("la sesión #%d no tiene presupuestos registrados", sesionID))
-			return
-		}
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
-		}
-		ev, err := db.EvaluarPresupuestoSesion(p)
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
-		}
 		apiWriteJSON(w, http.StatusOK, apiSesionPresupuestoResponse{
-			Sesion:      sesion,
-			Presupuesto: p,
-			Evaluacion:  ev,
+			Sesion:      result.Sesion,
+			Presupuesto: result.Presupuesto,
+			Evaluacion:  result.Evaluacion,
 		})
 	case http.MethodPost:
 		var req apiSesionPresupuestoRequest
@@ -3334,13 +3326,7 @@ func apiHandlerSesionPresupuesto(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		sesion, err := resolverSesionPresupuestoPorReferencia(req.SesionID, req.Agente)
-		if err != nil {
-			apiError(w, http.StatusBadRequest, err)
-			return
-		}
-		id, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
-			SesionID:          sesion.ID,
+		result, err := sesionesAPIService.RegisterBudget(req.SesionID, req.Agente, &db.PresupuestoSesion{
 			PoolID:            req.PoolID,
 			ModelSlug:         strings.TrimSpace(req.ModelSlug),
 			WindowKind:        strings.TrimSpace(req.WindowKind),
@@ -3357,62 +3343,15 @@ func apiHandlerSesionPresupuesto(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		p, err := db.UltimoPresupuestoSesion(sesion.ID)
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
-		}
-		ev, err := db.EvaluarPresupuestoSesion(p)
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
-		}
 		apiWriteJSON(w, http.StatusCreated, apiSesionPresupuestoResponse{
-			ID:          id,
-			Sesion:      sesion,
-			Presupuesto: p,
-			Evaluacion:  ev,
+			ID:          result.ID,
+			Sesion:      result.Sesion,
+			Presupuesto: result.Presupuesto,
+			Evaluacion:  result.Evaluacion,
 		})
 	default:
 		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
-}
-
-func resolverSesionPresupuestoAPI(sesionRaw, agente string) (int64, *db.Sesion, error) {
-	if strings.TrimSpace(sesionRaw) != "" {
-		sesionID, err := strconv.ParseInt(strings.TrimSpace(sesionRaw), 10, 64)
-		if err != nil || sesionID <= 0 {
-			return 0, nil, fmt.Errorf("sesion inválida")
-		}
-		sesion, err := resolverSesionPresupuestoPorReferencia(sesionID, "")
-		if err != nil {
-			return 0, nil, err
-		}
-		return sesion.ID, sesion, nil
-	}
-	sesion, err := resolverSesionPresupuestoPorReferencia(0, agente)
-	if err != nil {
-		return 0, nil, err
-	}
-	return sesion.ID, sesion, nil
-}
-
-func resolverSesionPresupuestoPorReferencia(sesionID int64, agente string) (*db.Sesion, error) {
-	if sesionID > 0 {
-		return db.GetSesionByID(sesionID)
-	}
-	agente = strings.TrimSpace(agente)
-	if agente == "" {
-		return nil, fmt.Errorf("debe indicar --sesion o --agente")
-	}
-	sesion, err := db.GetSesionActiva(agente, nil)
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("el agente %s no tiene sesión activa", agente)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return sesion, nil
 }
 
 func apiHandlerAgentePreparar(w http.ResponseWriter, r *http.Request) {
@@ -3554,127 +3493,6 @@ func apiHandlerAgentePausar(w http.ResponseWriter, r *http.Request) {
 	}
 	db.Audit(req.Agente, accion, entidad, 0, detalle)
 	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "agente": req.Agente})
-}
-
-func iniciarSesionDesdeRequest(req apiSesionInicioRequest) (*db.Sesion, error) {
-	var proyectoID *int64
-	if strings.TrimSpace(req.Proyecto) != "" {
-		proyecto, err := db.GetProyecto(req.Proyecto)
-		if err != nil {
-			return nil, err
-		}
-		proyectoID = &proyecto.ID
-		if strings.TrimSpace(req.CWD) == "" {
-			req.CWD = proyecto.RutaAbs
-		}
-		if err := db.ActivarAsignacion(req.Agente, proyecto.ID, "asignación automática al iniciar sesión"); err != nil {
-			return nil, err
-		}
-	}
-	var conectorID *int64
-	if strings.TrimSpace(req.Conector) != "" {
-		conector, err := db.GetConector(req.Conector)
-		if err != nil {
-			return nil, err
-		}
-		conectorID = &conector.ID
-		if strings.TrimSpace(req.Herramienta) == "" {
-			req.Herramienta = conector.Slug
-		}
-	}
-	var pid *int64
-	if req.PID > 0 {
-		pid = &req.PID
-	}
-	return db.IniciarSesionContexto(db.SesionInicio{
-		Agente:             req.Agente,
-		ConectorID:         conectorID,
-		ProyectoID:         proyectoID,
-		CWD:                req.CWD,
-		Herramienta:        req.Herramienta,
-		ExternalSessionID:  req.ExternalSessionID,
-		ResumePayloadJSON:  req.ResumePayload,
-		ResumenContinuidad: req.Resumen,
-		Branch:             req.Branch,
-		Host:               req.Host,
-		PID:                pid,
-	})
-}
-
-func construirSesionInicioResponse(req apiSesionInicioRequest) (*apiSesionInicioResponse, error) {
-	if req.NuevoCodex {
-		nombre, err := db.RegistrarCodex()
-		if err != nil {
-			return nil, fmt.Errorf("registrando codex: %w", err)
-		}
-		req.Agente = nombre
-	}
-	if strings.TrimSpace(req.Agente) == "" {
-		return nil, fmt.Errorf("indica el nombre del agente o usa --nuevo-codex")
-	}
-
-	var previo *db.Sesion
-	if strings.TrimSpace(req.Proyecto) != "" {
-		proyecto, err := db.GetProyecto(req.Proyecto)
-		if err != nil {
-			return nil, err
-		}
-		previo, err = db.ObtenerUltimaSesion(req.Agente, &proyecto.ID)
-		if err != nil && err != sql.ErrNoRows {
-			return nil, err
-		}
-	}
-
-	sesion, err := iniciarSesionDesdeRequest(req)
-	if err != nil {
-		return nil, err
-	}
-
-	agentes, err := db.ListarAgentes()
-	if err != nil {
-		return nil, err
-	}
-	rol := ""
-	for _, agente := range agentes {
-		if agente.Nombre == sesion.Agente {
-			rol = agente.Rol
-			break
-		}
-	}
-
-	resp := &apiSesionInicioResponse{
-		Sesion:       sesion,
-		SesionPrevia: previo,
-		Rol:          rol,
-	}
-	if rol == "" || rol == "admin" {
-		return resp, nil
-	}
-
-	pendientes, err := db.PropuestasPendientesVoto(sesion.Agente)
-	if err != nil {
-		return nil, err
-	}
-	resp.PropuestasPendientes = pendientes
-
-	reglas, err := db.GetReglasAgente(rol)
-	if err != nil {
-		return nil, err
-	}
-	resp.Reglas = reglas
-
-	skills, err := db.GetSkillsAgente(rol)
-	if err != nil {
-		return nil, err
-	}
-	resp.Skills = skills
-
-	workflow, err := db.GetWorkflow(rol, "inicio-sesion")
-	if err != nil && err != sql.ErrNoRows {
-		return nil, err
-	}
-	resp.Workflow = workflow
-	return resp, nil
 }
 
 func apiDecodeJSON(r *http.Request, dst any) error {

@@ -10,9 +10,17 @@ type stubStore struct {
 	startedAgente  string
 	finishedAgente string
 	project        *db.Proyecto
+	connector      *db.Conector
 	inspection     []*db.Sesion
 	active         *db.Sesion
 	last           *db.Sesion
+	byID           *db.Sesion
+	lastBudgetID   int64
+	lastBudget     *db.PresupuestoSesion
+	evalBudget     *db.EvaluacionPresupuesto
+	registered     *db.PresupuestoSesion
+	registeredID   int64
+	startedContext *db.SesionInicio
 	saved          struct {
 		agente     string
 		proyectoID *int64
@@ -30,6 +38,25 @@ func (s *stubStore) FinishSession(agente string) error {
 	return nil
 }
 func (s *stubStore) GetProject(ref string) (*db.Proyecto, error) { return s.project, nil }
+func (s *stubStore) GetConnector(ref string) (*db.Conector, error) {
+	return s.connector, nil
+}
+func (s *stubStore) ActivateAssignment(agente string, proyectoID int64, nota string) error {
+	return nil
+}
+func (s *stubStore) StartSessionContext(in db.SesionInicio) (*db.Sesion, error) {
+	s.startedContext = &in
+	return &db.Sesion{ID: 77, Agente: in.Agente, ProyectoID: in.ProyectoID, Herramienta: in.Herramienta, CWD: in.CWD}, nil
+}
+func (s *stubStore) GetLastSession(agente string, proyectoID *int64) (*db.Sesion, error) {
+	return s.last, nil
+}
+func (s *stubStore) GetSessionByID(id int64) (*db.Sesion, error) {
+	if s.byID != nil {
+		return s.byID, nil
+	}
+	return &db.Sesion{ID: id, Agente: "Codex2"}, nil
+}
 func (s *stubStore) ListInspectionSessions(filtro db.FiltroSesionesInspeccion) ([]*db.Sesion, error) {
 	return s.inspection, nil
 }
@@ -47,6 +74,17 @@ func (s *stubStore) GetActiveSession(agente string, proyectoID *int64) (*db.Sesi
 }
 func (s *stubStore) GetLastSessionWithFilter(agente string, proyectoID *int64, cwd string) (*db.Sesion, error) {
 	return s.last, nil
+}
+func (s *stubStore) RegisterSessionBudget(p *db.PresupuestoSesion) (int64, error) {
+	s.registered = p
+	return s.registeredID, nil
+}
+func (s *stubStore) GetLatestSessionBudget(sesionID int64) (*db.PresupuestoSesion, error) {
+	s.lastBudgetID = sesionID
+	return s.lastBudget, nil
+}
+func (s *stubStore) EvaluateSessionBudget(p *db.PresupuestoSesion) (*db.EvaluacionPresupuesto, error) {
+	return s.evalBudget, nil
 }
 func (s *stubStore) ListAgents() ([]*db.Agente, error) {
 	return []*db.Agente{{Nombre: "codex9", Rol: "programador"}, {Nombre: "Codex2", Rol: "programador"}}, nil
@@ -138,5 +176,75 @@ func TestSaveAndContinueSession(t *testing.T) {
 	}
 	if continued == nil || continued.ID != 42 {
 		t.Fatalf("sesion continuada inesperada: %+v", continued)
+	}
+}
+
+func TestGetAndRegisterBudget(t *testing.T) {
+	store := &stubStore{
+		active:       &db.Sesion{ID: 41, Agente: "Codex2"},
+		byID:         &db.Sesion{ID: 52, Agente: "Codex2"},
+		lastBudget:   &db.PresupuestoSesion{ID: 91, SesionID: 41, ModelSlug: "gpt-5.4"},
+		evalBudget:   &db.EvaluacionPresupuesto{Estado: "ok"},
+		registeredID: 88,
+	}
+	service := NewService(store)
+
+	got, err := service.GetBudget(0, "Codex2")
+	if err != nil {
+		t.Fatalf("GetBudget: %v", err)
+	}
+	if got == nil || got.Sesion == nil || got.Sesion.ID != 41 || got.Presupuesto == nil || got.Presupuesto.ID != 91 {
+		t.Fatalf("budget inesperado: %+v", got)
+	}
+	if store.lastBudgetID != 41 {
+		t.Fatalf("lastBudgetID=%d", store.lastBudgetID)
+	}
+
+	store.lastBudget = &db.PresupuestoSesion{ID: 88, SesionID: 52, ModelSlug: "gpt-5.4"}
+	res, err := service.RegisterBudget(52, "", &db.PresupuestoSesion{ModelSlug: "gpt-5.4"})
+	if err != nil {
+		t.Fatalf("RegisterBudget: %v", err)
+	}
+	if res.ID != 88 || res.Sesion == nil || res.Sesion.ID != 52 {
+		t.Fatalf("register budget inesperado: %+v", res)
+	}
+	if store.registered == nil || store.registered.SesionID != 52 {
+		t.Fatalf("registered=%+v", store.registered)
+	}
+}
+
+func TestStartContextBuildsFullResponse(t *testing.T) {
+	projectID := int64(31)
+	store := &stubStore{
+		project:   &db.Proyecto{ID: projectID, Slug: "orquestador", RutaAbs: "/tmp/orquestador"},
+		connector: &db.Conector{ID: 12, Slug: "codex-cli"},
+		last:      &db.Sesion{ID: 41, Agente: "codex9"},
+	}
+	service := NewService(store)
+
+	result, err := service.StartContext(StartContextInput{
+		NuevoCodex: true,
+		Proyecto:   "orquestador",
+		Conector:   "codex-cli",
+		Host:       "host1",
+		PID:        99,
+	})
+	if err != nil {
+		t.Fatalf("StartContext: %v", err)
+	}
+	if result == nil || result.Sesion == nil || result.Sesion.ID != 77 || result.Rol != "programador" {
+		t.Fatalf("resultado inesperado: %+v", result)
+	}
+	if result.SesionPrevia == nil || result.SesionPrevia.ID != 41 {
+		t.Fatalf("sesion previa inesperada: %+v", result.SesionPrevia)
+	}
+	if len(result.PropuestasPendientes) != 1 || len(result.Reglas) != 1 || len(result.Skills) != 1 || result.Workflow == nil {
+		t.Fatalf("briefing incompleto: %+v", result)
+	}
+	if store.startedContext == nil || store.startedContext.Agente != "codex9" || store.startedContext.ProyectoID == nil || *store.startedContext.ProyectoID != projectID {
+		t.Fatalf("startedContext=%+v", store.startedContext)
+	}
+	if store.startedContext.CWD != "/tmp/orquestador" || store.startedContext.Herramienta != "codex-cli" {
+		t.Fatalf("contexto inesperado: %+v", store.startedContext)
 	}
 }
