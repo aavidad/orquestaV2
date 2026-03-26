@@ -10,5 +10,5 @@ package cmd
 import "fmt"
 
 func serverFirstCommandError(nombre string) error {
-	return fmt.Errorf("%s requiere el servidor de Orquesta activo; arranca 'orquesta serve'. El modo local queda solo para recuperación puntual", nombre)
+	return fmt.Errorf("%s requiere el servidor de Orquesta activo; arranca 'orquesta serve'. Usa ORQUESTA_FORCE_LOCAL_DB=1 solo en recuperación explícita", nombre)
 }

@@ -47,7 +47,6 @@ var tareaListarCmd = &cobra.Command{
 		}
 
 		var tareas []*db.Tarea
-		viaAPI := false
 		projectSlugs := map[int64]string{}
 		params := url.Values{}
 		if estadoStr != "" {
@@ -70,7 +69,6 @@ var tareaListarCmd = &cobra.Command{
 			return err
 		} else if ok {
 			tareas = tareasResp.Tareas
-			viaAPI = true
 			projectSlugs, _, _ = apiProjectSlugMap()
 		} else {
 			return serverFirstCommandError("tarea listar")
@@ -124,14 +122,12 @@ var tareaVerCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		var t *db.Tarea
-		viaAPI := false
 		projectSlugs := map[int64]string{}
 		var tareaResp apiTareaResponse
 		if ok, err := apiGet("/api/tareas/"+args[0], &tareaResp); err != nil {
 			return err
 		} else if ok {
 			t = tareaResp.Tarea
-			viaAPI = true
 			projectSlugs, _, _ = apiProjectSlugMap()
 		} else {
 			return serverFirstCommandError("tarea ver")

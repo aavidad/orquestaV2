@@ -18,7 +18,6 @@ import (
 	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/gitgobernanza"
-	"orquesta/memoriaproyecto"
 )
 
 type apiProyectoResponse struct {

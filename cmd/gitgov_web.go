@@ -289,7 +289,7 @@ func webCrearGitMergePorAPI(req apiGitMergeSaveRequest) (int64, error) {
 }
 
 func webProyectoSlugPorID() (map[int64]string, error) {
-	proyectos, err := webCargarProyectosPorAPI(nil)
+	proyectos, err := webCargarProyectosPorAPI()
 	if err != nil {
 		return nil, err
 	}

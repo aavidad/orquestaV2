@@ -63,7 +63,7 @@ func agenteModoRecuperacionLocalExplicito() bool {
 }
 
 func agenteErrorServerFirst() error {
-	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
+	return serverFirstCommandError("agente")
 }
 
 type proyectoBundle struct {

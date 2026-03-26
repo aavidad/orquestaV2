@@ -231,6 +231,33 @@ func webFabricarAppProyectoPorAPI(ref string, req apiProyectoFabricarAppRequest)
 	return &resp, nil
 }
 
+func webCargarProyectoOverviewPorAPI(ref string) (*memoriaproyecto.ProjectOverview, error) {
+	var resp apiProyectoOverviewResponse
+	path := "/api/proyectos/" + url.PathEscape(strings.TrimSpace(ref)) + "/overview"
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Overview, nil
+}
+
+func webCrearDecisionProyectoPorAPI(ref string, req apiProyectoDecisionCreateRequest) (int64, error) {
+	var resp apiCatalogoMutationResponse
+	path := "/api/proyectos/" + url.PathEscape(strings.TrimSpace(ref)) + "/decisiones"
+	if err := webInvocarAPIJSON(http.MethodPost, path, req, &resp); err != nil {
+		return 0, err
+	}
+	return resp.ID, nil
+}
+
+func webCrearDocumentoProyectoPorAPI(ref string, req apiProyectoDocumentoCreateRequest) (int64, error) {
+	var resp apiCatalogoMutationResponse
+	path := "/api/proyectos/" + url.PathEscape(strings.TrimSpace(ref)) + "/documentacion"
+	if err := webInvocarAPIJSON(http.MethodPost, path, req, &resp); err != nil {
+		return 0, err
+	}
+	return resp.ID, nil
+}
+
 func webCargarProyectoOperacionPorAPI(ref string) (*db.ProyectoOperacion, error) {
 	var resp apiProyectoOperacionResponse
 	path := "/api/proyectos/" + url.PathEscape(strings.TrimSpace(ref)) + "/operacion"

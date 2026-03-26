@@ -8,7 +8,8 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
-	"path/filepath"
+	"encoding/json"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -16,27 +17,22 @@ import (
 )
 
 func TestExecuteLocalArgsReseteaFlagsEntreEjecuciones(t *testing.T) {
-	tmp := prepararDBTemporalCmd(t)
-
-	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
-		Slug:    "orquestador",
-		Nombre:  "Orquestador",
-		RutaAbs: filepath.Join(tmp, "orquestador"),
-		Tipo:    db.ProyectoRepo,
-		Activo:  true,
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
-	if err != nil {
-		t.Fatalf("upsert proyecto: %v", err)
-	}
-	if _, err := db.CrearTarea(&db.Tarea{
-		Titulo:     "Cerrar bug de flags",
-		ProyectoID: &proyectoID,
-		Modulo:     "cli",
-		Prioridad:  db.PrioridadAlta,
-		CreadoPor:  "Codex1",
-	}); err != nil {
-		t.Fatalf("crear tarea: %v", err)
-	}
+	mux.HandleFunc("/api/tareas", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiTareasResponse{
+			Tareas: []*db.Tarea{
+				{ID: 1, Titulo: "Cerrar bug de flags", Modulo: "cli", Prioridad: db.PrioridadAlta},
+			},
+		})
+	})
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
 
 	outJSON, errJSON, exitJSON := executeLocalCommandCaptured([]string{"tarea", "listar", "--json"})
 	if exitJSON != 0 {

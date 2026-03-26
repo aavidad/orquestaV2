@@ -153,9 +153,13 @@ func webRedirectProgreso(w http.ResponseWriter, r *http.Request, proyecto, okMsg
 	http.Redirect(w, r, "/progreso?"+query.Encode(), http.StatusSeeOther)
 }
 
-func webCargarProyectosPorAPI() ([]*db.Proyecto, error) {
+func webCargarProyectosPorAPI(activa ...*bool) ([]*db.Proyecto, error) {
+	path := "/api/proyectos"
+	if len(activa) > 0 && activa[0] != nil {
+		path += "?activa=" + strconv.FormatBool(*activa[0])
+	}
 	var resp apiProyectosResponse
-	if err := webInvocarAPIJSON(http.MethodGet, "/api/proyectos", nil, &resp); err != nil {
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Proyectos, nil

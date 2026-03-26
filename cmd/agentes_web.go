@@ -209,6 +209,10 @@ func construirWebAgenteDetalleData(nombre string) (*webAgenteDetalleData, error)
 	if err != nil {
 		return nil, err
 	}
+	detail := resp.Detail
+	if detail == nil {
+		return nil, fmt.Errorf("detalle de agente vacío")
+	}
 	return &webAgenteDetalleData{
 		Row:          detail.Row,
 		Proyectos:    proyectos,

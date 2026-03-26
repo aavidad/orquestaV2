@@ -21,7 +21,9 @@ import (
 	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/fabricaapp"
+	"orquesta/gitgobernanza"
 	"orquesta/lenguajeapp"
+	"orquesta/memoriaproyecto"
 	"orquesta/progresoapp"
 	"orquesta/propuestasapp"
 	"orquesta/sesionesapp"
@@ -39,6 +41,35 @@ type apiStatusResponse struct {
 	AsignacionesActivas map[int64]int   `json:"asignaciones_activas"`
 	SesionesActivas     map[int64]int   `json:"sesiones_activas"`
 	PropuestasAbiertas  []*db.Propuesta `json:"propuestas_abiertas"`
+}
+
+type apiProyectoOverviewResponse struct {
+	Overview *memoriaproyecto.ProjectOverview `json:"overview"`
+}
+
+type apiProyectoDecisionCreateRequest struct {
+	Categoria    string `json:"categoria"`
+	Titulo       string `json:"titulo"`
+	Solucion     string `json:"solucion"`
+	Motivo       string `json:"motivo"`
+	Alternativas string `json:"alternativas"`
+	Impacto      string `json:"impacto"`
+	Estado       string `json:"estado"`
+	PropuestaID  *int64 `json:"propuesta_id"`
+	TareaID      *int64 `json:"tarea_id"`
+	MetadataJSON string `json:"metadata_json"`
+}
+
+type apiProyectoDocumentoCreateRequest struct {
+	TipoDocumento string `json:"tipo_documento"`
+	Titulo        string `json:"titulo"`
+	RutaRef       string `json:"ruta_ref"`
+	Resumen       string `json:"resumen"`
+	Estado        string `json:"estado"`
+	Fuente        string `json:"fuente"`
+	PropuestaID   *int64 `json:"propuesta_id"`
+	TareaID       *int64 `json:"tarea_id"`
+	MetadataJSON  string `json:"metadata_json"`
 }
 
 type apiConteoVotosResponse struct {
@@ -535,6 +566,15 @@ func apiHandlerDiagnostico(w http.ResponseWriter, r *http.Request) {
 func apiHandlerAgentes(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		if strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("vista")), "panel") {
+			rows, err := agentesService.BuildPanelRows()
+			if err != nil {
+				apiError(w, http.StatusInternalServerError, err)
+				return
+			}
+			apiWriteJSON(w, http.StatusOK, apiAgentesPanelResponse{Rows: rows})
+			return
+		}
 		agentes, err := agentesService.ListAgents()
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
@@ -1307,6 +1347,12 @@ func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		apiWriteJSON(w, http.StatusOK, map[string]any{"proyecto": proyecto})
+	case len(parts) == 2 && parts[1] == "overview" && r.Method == http.MethodGet:
+		apiHandlerProyectoOverview(w, r, ref)
+	case len(parts) == 2 && parts[1] == "decisiones" && r.Method == http.MethodPost:
+		apiHandlerProyectoDecisionNueva(w, r, ref)
+	case len(parts) == 2 && parts[1] == "documentacion" && r.Method == http.MethodPost:
+		apiHandlerProyectoDocumentoNuevo(w, r, ref)
 	case len(parts) == 2 && parts[1] == "operacion" && r.Method == http.MethodGet:
 		apiHandlerProyectoOperacion(w, r, ref)
 	case len(parts) == 2 && parts[1] == "operacion" && r.Method == http.MethodPost:
