@@ -1,11 +1,27 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package cmd
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 
 	"github.com/spf13/cobra"
 )
+
+func skillsCatalogoModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func skillsCatalogoErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
+}
 
 var skillsRemotasCmd = &cobra.Command{
 	Use:   "remotas",

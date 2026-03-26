@@ -9,6 +9,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -18,6 +19,14 @@ import (
 var progresoCmd = &cobra.Command{
 	Use:   "progreso",
 	Short: "Fases y progreso real por proyecto y tarea",
+}
+
+func progresoModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func progresoErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
 }
 
 var progresoVerCmd = &cobra.Command{

@@ -72,7 +72,7 @@ func webHandlerProyectos(w http.ResponseWriter, r *http.Request) {
 		value := raw == "1" || strings.EqualFold(raw, "true")
 		activaPtr = &value
 	}
-	items, err := memoriaProyectoService.ListProjects(activaPtr)
+	items, err := webCargarProyectosPorAPI(activaPtr)
 	if err != nil {
 		webRender(w, r, webTplLayout+webTplProyectos, webProyectosData{
 			Err: err.Error(),
@@ -97,7 +97,7 @@ func webHandlerProyectos(w http.ResponseWriter, r *http.Request) {
 }
 
 func webHandlerProyectoDetalle(w http.ResponseWriter, r *http.Request, slug string) {
-	overview, err := memoriaProyectoService.Overview(slug)
+	overview, err := webCargarProyectoOverviewPorAPI(slug)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -147,8 +147,7 @@ func webHandlerProyectoOperacionGuardar(w http.ResponseWriter, r *http.Request, 
 
 func webHandlerProyectoDecisionNueva(w http.ResponseWriter, r *http.Request, slug string) {
 	_ = r.ParseForm()
-	_, err := memoriaProyectoService.CreateDecision(memoriaproyecto.CreateDecisionInput{
-		ProyectoSlug: slug,
+	if _, err := webCrearDecisionProyectoPorAPI(slug, apiProyectoDecisionCreateRequest{
 		Categoria:    r.FormValue("categoria"),
 		Titulo:       r.FormValue("titulo"),
 		Solucion:     r.FormValue("solucion"),
@@ -158,8 +157,7 @@ func webHandlerProyectoDecisionNueva(w http.ResponseWriter, r *http.Request, slu
 		Estado:       r.FormValue("estado"),
 		PropuestaID:  parseOptionalInt64(r.FormValue("propuesta_id")),
 		TareaID:      parseOptionalInt64(r.FormValue("tarea_id")),
-	})
-	if err != nil {
+	}); err != nil {
 		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
@@ -168,8 +166,7 @@ func webHandlerProyectoDecisionNueva(w http.ResponseWriter, r *http.Request, slu
 
 func webHandlerProyectoDocumentoNuevo(w http.ResponseWriter, r *http.Request, slug string) {
 	_ = r.ParseForm()
-	_, err := memoriaProyectoService.CreateExternalDoc(memoriaproyecto.CreateExternalDocInput{
-		ProyectoSlug:  slug,
+	if _, err := webCrearDocumentoProyectoPorAPI(slug, apiProyectoDocumentoCreateRequest{
 		TipoDocumento: r.FormValue("tipo_documento"),
 		Titulo:        r.FormValue("titulo"),
 		RutaRef:       r.FormValue("ruta_ref"),
@@ -178,8 +175,7 @@ func webHandlerProyectoDocumentoNuevo(w http.ResponseWriter, r *http.Request, sl
 		Fuente:        r.FormValue("fuente"),
 		PropuestaID:   parseOptionalInt64(r.FormValue("propuesta_id")),
 		TareaID:       parseOptionalInt64(r.FormValue("tarea_id")),
-	})
-	if err != nil {
+	}); err != nil {
 		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}

@@ -9,6 +9,8 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -16,6 +18,14 @@ import (
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Gestión de configuración global",
+}
+
+func configModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func configErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
 }
 
 var configVerCmd = &cobra.Command{

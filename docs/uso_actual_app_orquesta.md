@@ -13,16 +13,16 @@ Explicar cómo se usa hoy Orquesta mientras la app completa todavía no controla
 
 ## Capas actuales
 
-Orquesta se usa hoy por tres vías complementarias:
+Orquesta se usa hoy por tres vías complementarias, pero con un único plano operativo válido:
 
-1. CLI
-   Es la fuente de verdad operativa para sesiones, tareas, propuestas y votos.
+1. Servicio/daemon
+   Es la fuente de verdad operativa para sesiones, tareas, propuestas, votos y control de agentes.
 
 2. Web
-   Es un panel HTTP que muestra dashboard y permite gestionar tareas y propuestas.
+   Es un cliente HTTP sobre el servicio, con dashboard y acciones de gestión.
 
-3. API HTTP/JSON
-   Expone estado, tareas, propuestas, sesiones, asignaciones, locks, worktrees y endpoints de agente.
+3. CLI y API HTTP/JSON
+   Actúan como clientes del servicio. El modo local queda solo para recuperación explícita.
 
 ## Arranque del panel web
 
@@ -34,7 +34,7 @@ cd ~/Trabajo/PlataformaMunicipal/orquestador
 Por defecto queda en:
 
 ```text
-http://localhost:8080
+http://127.0.0.1:16543
 ```
 
 ## Qué ofrece hoy la web
@@ -84,9 +84,9 @@ Rutas JSON principales:
 La API ya cubre más superficie que la web.
 Por eso, mientras la interfaz gráfica no llegue a todo, la combinación correcta es:
 
-- web para seguimiento rápido
-- CLI para operación diaria
-- API para integración futura con app de escritorio o automatizaciones
+- servicio/daemon como fuente de verdad
+- web y CLI como clientes del servicio
+- API para integración con escritorio, automatizaciones y control plane
 
 Consultas de briefing de agentes ya cubiertas por API:
 
@@ -104,7 +104,7 @@ Estado actual del catalogo de skills:
 
 ## Flujo correcto para un agente manual
 
-Entrada recomendada:
+Entrada manual de compatibilidad o recuperación:
 
 ```bash
 scripts/inicio_agente.sh <agente>
@@ -154,3 +154,4 @@ La dirección de producto es:
 - política de acceso a la persistencia (AP-077) integrada en la operativa
 - menos pasos manuales
 - documentación completa ES/EN en ficheros separados para todos los proyectos gobernados por Orquesta
+Este script ya no es la vía operativa principal de Orquesta. Se conserva para recuperación, compatibilidad y operación manual controlada mientras el servicio completa el gobierno extremo a extremo de runtimes vivos.

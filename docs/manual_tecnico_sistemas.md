@@ -58,7 +58,7 @@ El agente `Refinery` requiere acceso de lectura/escritura al socket de Docker y 
 
 ## 5. Troubleshooting (Solución de Problemas)
 - **Base de Datos Bloqueada:** Si recibes un error `database is locked`, comprueba que no haya procesos `go run` colgados. Usa `pkill -9 orquesta`.
-- **Timeout de API:** Si la CLI tarda en responder, es probable que esté intentando conectar con un servidor API configurado incorrectamente antes de caer al modo local de DB.
+- **Timeout de API:** Si la CLI tarda en responder, revisa la URL del servicio y el estado del daemon. El modo local solo debe usarse de forma explícita con `--local`, `--allow-local-fallback` o las variables de recuperación previstas.
 - **Workspace no visible en contenedor:** verifica `docker compose config` y que `ORQUESTA_WORKSPACE_DIR` apunta al directorio host donde viven los proyectos gestionados por Orquesta.
 
 ---

@@ -21,6 +21,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
+	"orquesta/gitgobernanza"
 	"orquesta/panelapp"
 	"orquesta/propuestasapp"
 	"orquesta/runtimesapp"
@@ -1689,7 +1690,7 @@ func listarWorktrees(estado string) ([]map[string]any, error) {
 }
 
 func listarWorktreesFiltradas(estado, agente string) ([]map[string]any, error) {
-	rows, err := gitGobernanzaService.ListWorktrees(estado, agente)
+	rows, err := gitgobernanza.NewService(gitgobernanza.Repository{}).ListWorktrees(estado, agente)
 	if err != nil {
 		return nil, err
 	}
@@ -1732,7 +1733,7 @@ func listarLocks(estado string) ([]map[string]any, error) {
 }
 
 func listarLocksFiltrados(estado, agente string) ([]map[string]any, error) {
-	rows, err := gitGobernanzaService.ListLocks(estado, agente)
+	rows, err := gitgobernanza.NewService(gitgobernanza.Repository{}).ListLocks(estado, agente)
 	if err != nil {
 		return nil, err
 	}

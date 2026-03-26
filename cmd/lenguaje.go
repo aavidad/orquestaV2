@@ -23,6 +23,14 @@ var lenguajeCmd = &cobra.Command{
 	Short: "Politica de lenguaje, matriz de seleccion y multilenguaje",
 }
 
+func lenguajeModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func lenguajeErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
+}
+
 var lenguajePoliticaCmd = &cobra.Command{
 	Use:   "politica",
 	Short: "Gestion de la politica global de lenguaje",

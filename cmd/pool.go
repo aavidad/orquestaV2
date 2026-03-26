@@ -20,6 +20,14 @@ var poolCmd = &cobra.Command{
 	Short: "Gestion de pools de capacidad y modelos",
 }
 
+func capacidadModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func capacidadErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
+}
+
 var capacidadService = capacidadapp.NewService(capacidadapp.Repository{})
 
 var poolListarCmd = &cobra.Command{

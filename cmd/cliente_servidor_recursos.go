@@ -13,9 +13,12 @@ import (
 	"strconv"
 	"strings"
 
+	"orquesta/agentesapp"
 	"orquesta/capacidadapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
+	"orquesta/gitgobernanza"
+	"orquesta/memoriaproyecto"
 )
 
 type apiProyectoResponse struct {
@@ -50,6 +53,52 @@ type apiWorktreeResponse struct {
 
 type apiWorktreesResponse struct {
 	Worktrees []*coordinacion.Worktree `json:"worktrees"`
+}
+
+type apiAgentesPanelResponse struct {
+	Rows []agentesapp.Row `json:"rows"`
+}
+
+type apiAgenteOverviewResponse struct {
+	Detail *agentesapp.Detail `json:"detail"`
+}
+
+type apiGitMergesResponse struct {
+	Merges []*db.GitMerge `json:"merges"`
+}
+
+type apiGitMergeSaveRequest struct {
+	ID           int64  `json:"id"`
+	ProyectoSlug string `json:"proyecto_slug"`
+	SourceBranch string `json:"source_branch"`
+	TargetBranch string `json:"target_branch"`
+	RequestedBy  string `json:"requested_by"`
+	Estado       string `json:"estado"`
+	CommitOrigen string `json:"commit_origen"`
+	CommitMerge  string `json:"commit_merge"`
+	Notas        string `json:"notas"`
+	MetadataJSON string `json:"metadata_json"`
+}
+
+type apiGitMergeSaveResponse struct {
+	OK    bool         `json:"ok"`
+	ID    int64        `json:"id"`
+	Merge *db.GitMerge `json:"merge,omitempty"`
+}
+
+func (req apiGitMergeSaveRequest) intoInput() gitgobernanza.SaveMergeRequestInput {
+	return gitgobernanza.SaveMergeRequestInput{
+		ID:           req.ID,
+		ProyectoSlug: strings.TrimSpace(req.ProyectoSlug),
+		SourceBranch: strings.TrimSpace(req.SourceBranch),
+		TargetBranch: strings.TrimSpace(req.TargetBranch),
+		RequestedBy:  strings.TrimSpace(req.RequestedBy),
+		Estado:       strings.TrimSpace(req.Estado),
+		CommitOrigen: strings.TrimSpace(req.CommitOrigen),
+		CommitMerge:  strings.TrimSpace(req.CommitMerge),
+		Notas:        req.Notas,
+		MetadataJSON: strings.TrimSpace(req.MetadataJSON),
+	}
 }
 
 type apiAgenteHandoffResponse struct {

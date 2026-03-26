@@ -19,11 +19,8 @@ import (
 	"strings"
 
 	"orquesta/db"
-	"orquesta/gobernanzaapp"
 	"orquesta/skillsapp"
 )
-
-var gobernanzaService = gobernanzaapp.NewService(db.GovernanceRepository{})
 
 type webGobernanzaData struct {
 	TipoAgente        string

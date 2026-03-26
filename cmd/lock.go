@@ -9,6 +9,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"net/url"
 	"strconv"
 	"strings"
@@ -19,6 +20,14 @@ import (
 var lockCmd = &cobra.Command{
 	Use:   "lock",
 	Short: "Gestión de locks con lease y heartbeat",
+}
+
+func coordinacionModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func coordinacionErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
 }
 
 var lockListarCmd = &cobra.Command{

@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package cmd
 
 import (
@@ -8,6 +15,27 @@ import (
 
 	"orquesta/db"
 )
+
+func TestVotarExigeServidorSalvoRecuperacionLocal(t *testing.T) {
+	db.Close()
+	defer db.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	_ = votarCmd.Flags().Set("agente", "Codex1")
+	defer votarCmd.Flags().Set("agente", "")
+
+	err := votarCmd.RunE(votarCmd, []string{"OP-200", "acuerdo"})
+	if err == nil {
+		t.Fatalf("votar deberia exigir servidor o recuperacion local explicita")
+	}
+	if !strings.Contains(err.Error(), "ORQUESTA_FORCE_LOCAL_DB=1") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
 
 func TestVotarUsaAPI(t *testing.T) {
 	mux := http.NewServeMux()

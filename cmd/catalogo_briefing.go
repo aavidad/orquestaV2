@@ -10,12 +10,21 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
 )
+
+func catalogoModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func catalogoErrorServerFirst() error {
+	return fmt.Errorf("este subcomando de catalogo ya se sirve por Orquesta server; arranca el servidor o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
+}
 
 func ptrBool(v bool) *bool {
 	return &v

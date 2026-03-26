@@ -10,6 +10,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -20,6 +21,14 @@ import (
 var sesionCmd = &cobra.Command{
 	Use:   "sesion",
 	Short: "Gestión de sesiones de agentes",
+}
+
+func sesionModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func sesionErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
 }
 
 // sesion inicio

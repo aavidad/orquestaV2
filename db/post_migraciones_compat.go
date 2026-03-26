@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package db
 
 import "strings"
@@ -44,6 +51,9 @@ func postMigrationStatements() []string {
 		`ALTER TABLE skills_versiones ADD COLUMN origen TEXT NOT NULL DEFAULT 'builtin'`,
 		`ALTER TABLE skills_versiones ADD COLUMN nivel_riesgo TEXT NOT NULL DEFAULT 'bajo'`,
 		`ALTER TABLE skills_versiones ADD COLUMN requiere_aprobacion INTEGER NOT NULL DEFAULT 0`,
+		`UPDATE propuestas
+		 SET cerrada_at = NULL
+		 WHERE estado = 'abierta' AND cerrada_at IS NOT NULL`,
 		`UPDATE reglas
 		 SET descripcion='No escribir código sin propuesta OP-XXX aprobada en la app de orquestación.'
 		 WHERE tipo_agente='programador' AND categoria='calidad' AND titulo='Propuesta antes de código'`,

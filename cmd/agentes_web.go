@@ -1,3 +1,10 @@
+/*
+Software libre bajo licencia GNU GPL v3
+Proyecto: PlataformaMunicipal — Orquesta
+Autor: Alberto Avidad Fernandez
+Oficina de Software Libre (OSL) - Diputacion de Granada
+*/
+
 package cmd
 
 import (
@@ -9,8 +16,6 @@ import (
 	"orquesta/agentesapp"
 	"orquesta/db"
 )
-
-var agentesWebService = agentesapp.NewService(agentesapp.Repository{})
 
 type webAgenteRow = agentesapp.Row
 
@@ -187,12 +192,17 @@ func webHandlerAgenteEstado(w http.ResponseWriter, r *http.Request, nombre strin
 }
 
 func construirWebAgenteRows() ([]webAgenteRow, error) {
-	return agentesWebService.BuildPanelRows()
+	var resp apiAgentesPanelResponse
+	if err := webInvocarAPIJSON(http.MethodGet, "/api/agentes?vista=panel", nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Rows, nil
 }
 
 func construirWebAgenteDetalleData(nombre string) (*webAgenteDetalleData, error) {
-	detail, err := agentesWebService.BuildDetail(nombre)
-	if err != nil {
+	var resp apiAgenteOverviewResponse
+	path := "/api/agentes/" + url.PathEscape(strings.TrimSpace(nombre)) + "/overview"
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
 		return nil, err
 	}
 	proyectos, err := webCargarProyectosActivosPorAPI()

@@ -10,6 +10,7 @@ package cmd
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -19,6 +20,14 @@ import (
 var memoriaCmd = &cobra.Command{
 	Use:   "memoria",
 	Short: "Gestión de memoria persistente de entidades",
+}
+
+func memoriaModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func memoriaErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
 }
 
 var memoriaListarCmd = &cobra.Command{

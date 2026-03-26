@@ -58,6 +58,14 @@ func registrarAutoPausaLocal(nombre string, minutos int, motivoPausa, detalle st
 	return nil
 }
 
+func agenteModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func agenteErrorServerFirst() error {
+	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
+}
+
 type proyectoBundle struct {
 	ID      int64  `json:"id"`
 	Slug    string `json:"slug"`
@@ -368,6 +376,8 @@ var agentePrepararCmd = &cobra.Command{
 			return err
 		} else if ok {
 			return imprimirAgentePreparar(out, jsonOut)
+		} else if !agenteModoRecuperacionLocalExplicito() {
+			return agenteErrorServerFirst()
 		}
 		return serverFirstCommandError("agente preparar")
 	},
@@ -404,6 +414,8 @@ var agenteTickCmd = &cobra.Command{
 			return err
 		} else if ok {
 			return imprimirAgenteTick(out, jsonOut)
+		} else if !agenteModoRecuperacionLocalExplicito() {
+			return agenteErrorServerFirst()
 		}
 		return serverFirstCommandError("agente tick")
 	},

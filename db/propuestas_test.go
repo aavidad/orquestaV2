@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestCrearPropuestaCreaVotosPendientesSinBloquear(t *testing.T) {
@@ -138,5 +139,39 @@ func TestActualizarPropuestaPermiteAnexarDescripcion(t *testing.T) {
 	}
 	if p.Descripcion != "Inicio + detalle" {
 		t.Fatalf("descripcion inesperada: %q", p.Descripcion)
+	}
+}
+
+func TestGetPropuestaNormalizaCerradaAtEnPropuestaAbierta(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "orquesta.db")
+	prev := os.Getenv("ORQUESTA_DB")
+	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
+		t.Fatalf("setenv: %v", err)
+	}
+	defer func() {
+		_ = os.Setenv("ORQUESTA_DB", prev)
+		Close()
+	}()
+
+	if err := Open(); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	cerradaAt := time.Date(2026, 3, 25, 17, 0, 0, 0, time.UTC)
+	if _, err := DB.Exec(`
+		INSERT INTO propuestas (codigo, titulo, descripcion, tipo, estado, propuesto_por, distribuidor, cerrada_at)
+		VALUES ('OP-995', 'Inconsistente', '', 'arquitectura', 'abierta', 'Codex1', 'Codex1', ?)`,
+		cerradaAt,
+	); err != nil {
+		t.Fatalf("insert propuesta inconsistente: %v", err)
+	}
+
+	propuesta, err := GetPropuesta("OP-995")
+	if err != nil {
+		t.Fatalf("GetPropuesta: %v", err)
+	}
+	if propuesta.CerradaAt != nil {
+		t.Fatalf("la propuesta abierta no deberia exponer cerrada_at: %+v", propuesta.CerradaAt)
 	}
 }

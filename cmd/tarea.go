@@ -10,12 +10,21 @@ package cmd
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
 )
+
+func tareaModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func tareaErrorServerFirst() error {
+	return fmt.Errorf("este subcomando de tarea ya se sirve por Orquesta server; arranca el servidor o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
+}
 
 var tareaCmd = &cobra.Command{
 	Use:   "tarea",
@@ -38,6 +47,7 @@ var tareaListarCmd = &cobra.Command{
 		}
 
 		var tareas []*db.Tarea
+		viaAPI := false
 		projectSlugs := map[int64]string{}
 		params := url.Values{}
 		if estadoStr != "" {
@@ -60,6 +70,7 @@ var tareaListarCmd = &cobra.Command{
 			return err
 		} else if ok {
 			tareas = tareasResp.Tareas
+			viaAPI = true
 			projectSlugs, _, _ = apiProjectSlugMap()
 		} else {
 			return serverFirstCommandError("tarea listar")
@@ -113,12 +124,14 @@ var tareaVerCmd = &cobra.Command{
 			return fmt.Errorf("id inválido")
 		}
 		var t *db.Tarea
+		viaAPI := false
 		projectSlugs := map[int64]string{}
 		var tareaResp apiTareaResponse
 		if ok, err := apiGet("/api/tareas/"+args[0], &tareaResp); err != nil {
 			return err
 		} else if ok {
 			t = tareaResp.Tarea
+			viaAPI = true
 			projectSlugs, _, _ = apiProjectSlugMap()
 		} else {
 			return serverFirstCommandError("tarea ver")
@@ -185,6 +198,9 @@ var tareaNuevaCmd = &cobra.Command{
 				fmt.Printf("  → Asignada a %s\n", agente)
 			}
 			return nil
+		}
+		if !tareaModoRecuperacionLocalExplicito() {
+			return tareaErrorServerFirst()
 		}
 
 		return serverFirstCommandError("tarea nueva")

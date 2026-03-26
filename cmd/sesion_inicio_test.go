@@ -136,3 +136,19 @@ func TestSesionNuevoCodexUsaAPIBriefing(t *testing.T) {
 		}
 	}
 }
+
+func TestSesionInicioYNuevoCodexExigenServidorSalvoRecuperacionLocal(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	resetCommandFlags(sesionInicioCmd)
+	if err := sesionInicioCmd.RunE(sesionInicioCmd, []string{"Codex1"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("sesion inicio deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(sesionNuevoCodexCmd)
+	if err := sesionNuevoCodexCmd.RunE(sesionNuevoCodexCmd, nil); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("sesion nuevo-codex deberia exigir servidor, err=%v", err)
+	}
+}

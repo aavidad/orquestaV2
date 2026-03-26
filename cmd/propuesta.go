@@ -10,11 +10,20 @@ package cmd
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
 )
+
+func propuestaModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func propuestaErrorServerFirst() error {
+	return fmt.Errorf("este subcomando de propuesta ya se sirve por Orquesta server; arranca el servidor o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
+}
 
 var propuestaCmd = &cobra.Command{
 	Use:   "propuesta",

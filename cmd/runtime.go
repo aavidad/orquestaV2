@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,14 @@ import (
 	"github.com/spf13/cobra"
 	"orquesta/db"
 )
+
+func runtimeModoRecuperacionLocalExplicito() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
+}
+
+func runtimeErrorServerFirst() error {
+	return fmt.Errorf("este subcomando de runtime ya se sirve por Orquesta server; arranca el servidor o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
+}
 
 type runtimeRow struct {
 	ID           int64
