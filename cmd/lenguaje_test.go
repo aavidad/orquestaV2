@@ -243,3 +243,24 @@ func TestLenguajeEsqueletoUsaPoliticaYMaterializaEstructura(t *testing.T) {
 		}
 	}
 }
+
+func TestLenguajeRequiereServidorParaPoliticaYMatriz(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	if err := lenguajePoliticaVerCmd.RunE(lenguajePoliticaVerCmd, nil); err == nil {
+		t.Fatalf("se esperaba error sin servidor en politica ver")
+	}
+
+	resetCommandFlags(lenguajeResolverCmd)
+	_ = lenguajeResolverCmd.Flags().Set("proyecto", "orquestador")
+	err := lenguajeResolverCmd.RunE(lenguajeResolverCmd, nil)
+	if err == nil {
+		t.Fatalf("se esperaba error sin servidor en resolver")
+	}
+	if !strings.Contains(err.Error(), "requiere el servidor de Orquesta activo") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}

@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"orquesta/db"
 	"orquesta/i18n"
 )
 
@@ -34,14 +33,11 @@ var lenguajePoliticaVerCmd = &cobra.Command{
 	Short: "Muestra la politica global actual",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		p, ok, err := cargarPoliticaLenguajeDesdeAPI()
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			p, err = db.GetLanguagePolicy()
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("lenguaje politica ver")
 		}
 		fmt.Println("POLITICA GLOBAL DE LENGUAJE")
 		fmt.Printf("  Idioma por defecto:              %s\n", p.DefaultLanguage)
@@ -65,14 +61,11 @@ var lenguajePoliticaSetCmd = &cobra.Command{
 	Short: "Actualiza la politica global de lenguaje",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		p, ok, err := cargarPoliticaLenguajeDesdeAPI()
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			p, err = db.GetLanguagePolicy()
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("lenguaje politica fijar")
 		}
 		if cmd.Flags().Changed("default") {
 			v, _ := cmd.Flags().GetString("default")
@@ -109,14 +102,7 @@ var lenguajePoliticaSetCmd = &cobra.Command{
 			fmt.Printf("✓ Politica de lenguaje actualizada (%s)\n", p.DefaultLanguage)
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		if err := db.SetLanguagePolicy(p, por); err != nil {
-			return err
-		}
-		fmt.Printf("✓ Politica de lenguaje actualizada (%s)\n", p.DefaultLanguage)
-		return nil
+		return serverFirstCommandError("lenguaje politica fijar")
 	},
 }
 
@@ -130,14 +116,11 @@ var lenguajeMatrizListarCmd = &cobra.Command{
 	Short: "Lista la matriz de lenguaje",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		lista, ok, err := cargarMatrizLenguajeDesdeAPI()
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			lista, err = db.ListLanguageMatrixEntries()
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("lenguaje matriz listar")
 		}
 		if len(lista) == 0 {
 			fmt.Println("No hay entradas en la matriz de lenguaje.")
@@ -168,15 +151,7 @@ var lenguajeMatrizFijarCmd = &cobra.Command{
 			fmt.Printf("✓ Matriz fijada: %s/%s [%s] = %s\n", args[0], args[1], normalizeContextCmd(contexto), args[2])
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		entry, err := db.SetLanguageMatrixEntry(args[0], args[1], contexto, args[2], razon, por)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("✓ Matriz fijada: %s/%s [%s] = %s\n", entry.Scope, entry.Selector, entry.Context, entry.Language)
-		return nil
+		return serverFirstCommandError("lenguaje matriz fijar")
 	},
 }
 
@@ -192,14 +167,7 @@ var lenguajeMatrizBorrarCmd = &cobra.Command{
 			fmt.Printf("✓ Matriz borrada: %s/%s [%s]\n", args[0], args[1], normalizeContextCmd(contexto))
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		if err := db.DeleteLanguageMatrixEntry(args[0], args[1], contexto); err != nil {
-			return err
-		}
-		fmt.Printf("✓ Matriz borrada: %s/%s [%s]\n", args[0], args[1], normalizeContextCmd(contexto))
-		return nil
+		return serverFirstCommandError("lenguaje matriz borrar")
 	},
 }
 
@@ -218,14 +186,11 @@ var lenguajeResolverCmd = &cobra.Command{
 			tareaPtr = tareaID
 		}
 		res, ok, err := resolverLenguajePorAPI(strings.TrimSpace(proyecto), tareaPtr, contexto)
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			res, err = db.ResolveLanguage(strings.TrimSpace(proyecto), tareaPtr, contexto)
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("lenguaje resolver")
 		}
 		fmt.Printf("Idioma:   %s\n", res.Idioma)
 		fmt.Printf("Contexto: %s\n", res.Contexto)
@@ -257,14 +222,11 @@ var lenguajeEsqueletoCmd = &cobra.Command{
 		}
 
 		p, ok, err := cargarPoliticaLenguajeDesdeAPI()
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			p, err = db.GetLanguagePolicy()
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("lenguaje esqueleto")
 		}
 
 		defaultLang, _ := cmd.Flags().GetString("default")

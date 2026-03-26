@@ -107,6 +107,21 @@ func TestConfigUsaAPI(t *testing.T) {
 	}
 }
 
+func TestConfigRequiereServidor(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	err := configVerCmd.RunE(configVerCmd, []string{"workspace_root"})
+	if err == nil {
+		t.Fatalf("se esperaba error sin servidor")
+	}
+	if !strings.Contains(err.Error(), "requiere el servidor de Orquesta activo") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
 func TestConectorUsaAPI(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
@@ -270,6 +285,21 @@ func TestProyectoUsaAPI(t *testing.T) {
 	})
 	if !strings.Contains(outDescubrir, "1 proyectos") {
 		t.Fatalf("salida proyecto descubrir inesperada:\n%s", outDescubrir)
+	}
+}
+
+func TestAsignacionRequiereServidor(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	err := asignacionListarCmd.RunE(asignacionListarCmd, nil)
+	if err == nil {
+		t.Fatalf("se esperaba error sin servidor")
+	}
+	if !strings.Contains(err.Error(), "requiere el servidor de Orquesta activo") {
+		t.Fatalf("error inesperado: %v", err)
 	}
 }
 

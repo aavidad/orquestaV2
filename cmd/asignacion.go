@@ -12,7 +12,6 @@ import (
 	"net/url"
 
 	"github.com/spf13/cobra"
-	"orquesta/db"
 )
 
 var asignacionCmd = &cobra.Command{
@@ -40,29 +39,11 @@ var asignacionListarCmd = &cobra.Command{
 		}
 
 		asignaciones, ok, err := cargarAsignacionesDesdeAPI(query)
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			f := db.FiltroAsignaciones{}
-			if agente != "" {
-				f.Agente = &agente
-			}
-			if proyectoRef != "" {
-				p, err := db.GetProyecto(proyectoRef)
-				if err != nil {
-					return err
-				}
-				f.ProyectoID = &p.ID
-			}
-			if estadoStr != "" {
-				estado := db.EstadoAsignacion(estadoStr)
-				f.Estado = &estado
-			}
-			asignaciones, err = db.ListarAsignaciones(f)
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("asignacion listar")
 		}
 		if len(asignaciones) == 0 {
 			fmt.Println("No hay asignaciones con ese filtro.")
@@ -83,29 +64,19 @@ var asignacionActivarCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		nota, _ := cmd.Flags().GetString("nota")
-		if ok, err := activarAsignacionPorAPI(apiAsignacionActivarRequest{
+		ok, err := activarAsignacionPorAPI(apiAsignacionActivarRequest{
 			Agente:   args[0],
 			Proyecto: args[1],
 			Nota:     nota,
-		}); ok {
-			if err != nil {
-				return err
-			}
-			fmt.Printf("✓ %s asignado a %s\n", args[0], args[1])
-			return nil
-		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		p, err := db.GetProyecto(args[1])
+		})
 		if err != nil {
 			return err
 		}
-		if err := db.ActivarAsignacion(args[0], p.ID, nota); err != nil {
-			return err
+		if ok {
+			fmt.Printf("✓ %s asignado a %s\n", args[0], args[1])
+			return nil
 		}
-		fmt.Printf("✓ %s asignado a %s\n", args[0], p.Slug)
-		return nil
+		return serverFirstCommandError("asignacion activar")
 	},
 }
 

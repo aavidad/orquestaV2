@@ -11,7 +11,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"orquesta/db"
 )
 
 var configCmd = &cobra.Command{
@@ -26,33 +25,21 @@ var configVerCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 1 {
 			resp, ok, err := cargarConfigDesdeAPI(args[0])
-			if !ok {
-				if err := ensureLocalDB(); err != nil {
-					return err
-				}
-				val, err := db.ConfigGet(args[0])
-				if err != nil {
-					return fmt.Errorf("clave '%s' no encontrada", args[0])
-				}
-				fmt.Printf("%s = %s\n", args[0], val)
-				return nil
-			}
 			if err != nil {
 				return fmt.Errorf("clave '%s' no encontrada", args[0])
+			}
+			if !ok {
+				return serverFirstCommandError("config ver")
 			}
 			fmt.Printf("%s = %s\n", args[0], resp.Valor)
 			return nil
 		}
 		resp, ok, err := cargarConfigDesdeAPI("")
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			resp = &apiConfigResponse{}
-			resp.Config, err = db.ConfigAll()
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("config ver")
 		}
 		for k, v := range resp.Config {
 			fmt.Printf("%-30s = %s\n", k, v)
@@ -66,17 +53,12 @@ var configSetCmd = &cobra.Command{
 	Short: "Establece el valor de una clave de configuración",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if ok, err := configurarValorPorAPI(args[0], args[1]); ok {
-			if err != nil {
-				return err
-			}
-		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			if err := db.ConfigSet(args[0], args[1]); err != nil {
-				return err
-			}
+		ok, err := configurarValorPorAPI(args[0], args[1])
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return serverFirstCommandError("config set")
 		}
 		fmt.Printf("✓ %s = %s\n", args[0], args[1])
 		return nil
@@ -88,17 +70,12 @@ var configAgenteNuevoCmd = &cobra.Command{
 	Short: "Registra un nuevo agente (rol: programador, documentador, admin)",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if ok, err := registrarAgentePorAPI(args[0], args[1]); ok {
-			if err != nil {
-				return err
-			}
-		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			if err := db.RegistrarAgente(args[0], args[1]); err != nil {
-				return err
-			}
+		ok, err := registrarAgentePorAPI(args[0], args[1])
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return serverFirstCommandError("config agente-nuevo")
 		}
 		fmt.Printf("✓ Agente '%s' [%s] registrado\n", args[0], args[1])
 		return nil
@@ -117,17 +94,12 @@ Sus contribuciones históricas se conservan.`,
 		if nombre == "alberto" {
 			return fmt.Errorf("no puedes retirar al administrador")
 		}
-		if ok, err := retirarAgentePorAPI(nombre); ok {
-			if err != nil {
-				return err
-			}
-		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			if err := db.RetirarAgente(nombre); err != nil {
-				return err
-			}
+		ok, err := retirarAgentePorAPI(nombre)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return serverFirstCommandError("config agente-retirar")
 		}
 		fmt.Printf("✓ Agente '%s' retirado del equipo.\n", nombre)
 		fmt.Printf("  Sus votos pendientes en propuestas abiertas han sido eliminados.\n")
@@ -141,17 +113,12 @@ var configAgenteRehabilitarCmd = &cobra.Command{
 	Short: "Reactiva a un agente retirado",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if ok, err := rehabilitarAgentePorAPI(args[0]); ok {
-			if err != nil {
-				return err
-			}
-		} else {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			if err := db.RehabilitarAgente(args[0]); err != nil {
-				return err
-			}
+		ok, err := rehabilitarAgentePorAPI(args[0])
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return serverFirstCommandError("config agente-rehabilitar")
 		}
 		fmt.Printf("✓ Agente '%s' rehabilitado.\n", args[0])
 		fmt.Printf("  Debe iniciar sesión con: orquesta sesion inicio %s\n", args[0])
