@@ -5,8 +5,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-
-	"orquesta/db"
 	"orquesta/fabricaapp"
 )
 
@@ -59,56 +57,7 @@ var proyectoFabricarAppCmd = &cobra.Command{
 			fmt.Printf("  Primeras libres: %d\n", resp.Created-resp.Backlog)
 			return nil
 		}
-
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-
-		proyecto, err := db.GetProyecto(args[0])
-		if err != nil {
-			return err
-		}
-
-		if strings.TrimSpace(nombre) == "" {
-			nombre = strings.TrimSpace(proyecto.Nombre)
-		}
-		if strings.TrimSpace(descripcion) == "" {
-			descripcion = "Backlog inicial de " + nombre + " generado por la fabrica de apps de Orquesta."
-		}
-		if strings.TrimSpace(actor) == "" {
-			actor = "alberto"
-		}
-
-		svc := newProjectAppFactory()
-		plan, err := svc.Generate(fabricaapp.AppSpec{
-			Nombre:      nombre,
-			Descripcion: descripcion,
-			Tipo:        tipo,
-			Frontend:    frontend,
-			API:         apiEnabled,
-			Auth:        auth,
-			Database:    database,
-			Docker:      docker,
-			I18n:        i18nEnabled,
-			Idiomas:     splitCSV(idiomasRaw),
-		})
-		if err != nil {
-			return err
-		}
-
-		materialized, err := fabricaapp.Materialize(fabricaapp.DBStore{}, proyecto.ID, actor, plan)
-		if err != nil {
-			return err
-		}
-
-		fmt.Printf("✓ Backlog de app generado para %s (%s)\n", proyecto.Slug, tipo)
-		fmt.Printf("  Tareas creadas: %d\n", materialized.Created)
-		fmt.Printf("  En backlog:     %d\n", materialized.Backlog)
-		fmt.Printf("  Primeras libres: %d\n", materialized.Created-materialized.Backlog)
-		for _, item := range plan.Tasks {
-			fmt.Printf("  [%s] %s\n", item.Key, item.Titulo)
-		}
-		return nil
+		return serverFirstCommandError("proyecto fabricar-app")
 	},
 }
 

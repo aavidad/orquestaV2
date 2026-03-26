@@ -180,6 +180,22 @@ func TestConectorUsaAPI(t *testing.T) {
 	}
 }
 
+func TestConectorRequiereServidor(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	resetCommandFlags(conectorListarCmd)
+	err := conectorListarCmd.RunE(conectorListarCmd, nil)
+	if err == nil {
+		t.Fatalf("se esperaba error sin servidor")
+	}
+	if !strings.Contains(err.Error(), "requiere el servidor de Orquesta activo") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
 func TestProyectoUsaAPI(t *testing.T) {
 	padreID := int64(2)
 	proyecto := &db.Proyecto{

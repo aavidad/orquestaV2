@@ -108,3 +108,19 @@ func TestLockUsaAPI(t *testing.T) {
 		t.Fatalf("salida liberar inesperada:\n%s", outLiberar)
 	}
 }
+
+func TestLockRequiereServidor(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	resetCommandFlags(lockListarCmd)
+	err := lockListarCmd.RunE(lockListarCmd, nil)
+	if err == nil {
+		t.Fatalf("se esperaba error sin servidor")
+	}
+	if !strings.Contains(err.Error(), "requiere el servidor de Orquesta activo") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}

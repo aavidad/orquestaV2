@@ -15,7 +15,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"orquesta/coordinacion"
-	"orquesta/db"
 )
 
 var worktreeCmd = &cobra.Command{
@@ -39,30 +38,11 @@ var worktreeListarCmd = &cobra.Command{
 		}
 
 		worktrees, ok, err := cargarWorktreesDesdeAPI(query)
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			repo := db.CoordinationWorktreeRepository()
-			filter := coordinacion.WorktreeFilter{}
-			if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
-				filter.Agent = &agente
-			}
-			if proyectoRef, _ := cmd.Flags().GetString("proyecto"); strings.TrimSpace(proyectoRef) != "" {
-				proyecto, err := db.GetProyecto(proyectoRef)
-				if err != nil {
-					return err
-				}
-				filter.ProjectID = &proyecto.ID
-			}
-			if estadoStr, _ := cmd.Flags().GetString("estado"); strings.TrimSpace(estadoStr) != "" {
-				estado := coordinacion.WorktreeState(estadoStr)
-				filter.State = &estado
-			}
-			worktrees, err = repo.List(filter)
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("worktree listar")
 		}
 		if len(worktrees) == 0 {
 			fmt.Println("No hay worktrees con ese filtro.")
@@ -88,24 +68,12 @@ var worktreeResolverCmd = &cobra.Command{
 			"estado":   {string(coordinacion.WorktreeActive)},
 		}
 
-		repo := db.CoordinationWorktreeRepository()
-		estado := coordinacion.WorktreeActive
-		filter := coordinacion.WorktreeFilter{Agent: &args[0], State: &estado}
-
 		worktrees, ok, err := cargarWorktreesDesdeAPI(query)
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			proyecto, err := db.GetProyecto(args[1])
-			if err != nil {
-				return err
-			}
-			filter.ProjectID = &proyecto.ID
-			worktrees, err = repo.List(filter)
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("worktree resolver")
 		}
 		if len(worktrees) == 0 {
 			return fmt.Errorf("no hay worktree activo para %s en %s", args[0], args[1])
@@ -130,7 +98,7 @@ var worktreeCrearCmd = &cobra.Command{
 		branch, _ := cmd.Flags().GetString("branch")
 		baseRef, _ := cmd.Flags().GetString("base-ref")
 		reason, _ := cmd.Flags().GetString("motivo")
-		if worktree, ok, err := crearWorktreePorAPI(apiWorktreeRequest{
+		worktree, ok, err := crearWorktreePorAPI(apiWorktreeRequest{
 			Agente:   args[0],
 			Proyecto: args[1],
 			TareaID:  tareaRaw,
@@ -139,7 +107,8 @@ var worktreeCrearCmd = &cobra.Command{
 			Branch:   branch,
 			BaseRef:  baseRef,
 			Motivo:   reason,
-		}); ok {
+		})
+		if ok {
 			if err != nil {
 				return err
 			}
@@ -148,32 +117,10 @@ var worktreeCrearCmd = &cobra.Command{
 			fmt.Printf("  ruta=%s\n", worktree.Path)
 			return nil
 		}
-		svc := newCoordinationService()
-		var taskID *int64
-		if tareaRaw > 0 {
-			taskID = &tareaRaw
-		}
-		var lockID *int64
-		if lockRaw > 0 {
-			lockID = &lockRaw
-		}
-		worktree, err := svc.PrepareWorktree(coordinacion.PrepareWorktreeInput{
-			ProjectRef: args[1],
-			Agent:      args[0],
-			TaskID:     taskID,
-			LockID:     lockID,
-			Name:       name,
-			Branch:     branch,
-			BaseRef:    baseRef,
-			Reason:     reason,
-		})
 		if err != nil {
 			return err
 		}
-		fmt.Printf("✓ Worktree %d creado para %s\n", worktree.ID, worktree.Agent)
-		fmt.Printf("  branch=%s\n", worktree.Branch)
-		fmt.Printf("  ruta=%s\n", worktree.Path)
-		return nil
+		return serverFirstCommandError("worktree crear")
 	},
 }
 
@@ -188,23 +135,21 @@ var worktreeCerrarCmd = &cobra.Command{
 		}
 		remove, _ := cmd.Flags().GetBool("eliminar")
 		reason, _ := cmd.Flags().GetString("motivo")
-		if worktree, ok, err := cerrarWorktreePorAPI(id, apiWorktreeRequest{
+		worktree, ok, err := cerrarWorktreePorAPI(id, apiWorktreeRequest{
 			Eliminar: remove,
 			Motivo:   reason,
-		}); ok {
+		})
+		if ok {
 			if err != nil {
 				return err
 			}
 			fmt.Printf("✓ Worktree %d cerrado (%s)\n", worktree.ID, worktree.Path)
 			return nil
 		}
-		svc := newCoordinationService()
-		worktree, err := svc.CloseWorktree(id, remove, reason)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("✓ Worktree %d cerrado (%s)\n", worktree.ID, worktree.Path)
-		return nil
+		return serverFirstCommandError("worktree cerrar")
 	},
 }
 

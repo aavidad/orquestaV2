@@ -14,8 +14,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"orquesta/coordinacion"
-	"orquesta/db"
 )
 
 var lockCmd = &cobra.Command{
@@ -39,30 +37,11 @@ var lockListarCmd = &cobra.Command{
 		}
 
 		locks, ok, err := cargarLocksDesdeAPI(query)
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			repo := db.CoordinationLockRepository()
-			filter := coordinacion.LockFilter{}
-			if agente, _ := cmd.Flags().GetString("agente"); strings.TrimSpace(agente) != "" {
-				filter.Agent = &agente
-			}
-			if proyectoRef, _ := cmd.Flags().GetString("proyecto"); strings.TrimSpace(proyectoRef) != "" {
-				proyecto, err := db.GetProyecto(proyectoRef)
-				if err != nil {
-					return err
-				}
-				filter.ProjectID = &proyecto.ID
-			}
-			if estadoStr, _ := cmd.Flags().GetString("estado"); strings.TrimSpace(estadoStr) != "" {
-				estado := coordinacion.LockState(estadoStr)
-				filter.State = &estado
-			}
-			locks, err = repo.List(filter)
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("lock listar")
 		}
 		if len(locks) == 0 {
 			fmt.Println("No hay locks con ese filtro.")
@@ -88,7 +67,7 @@ var lockTomarCmd = &cobra.Command{
 		branch, _ := cmd.Flags().GetString("branch")
 		reason, _ := cmd.Flags().GetString("motivo")
 		leaseSeconds, _ := cmd.Flags().GetInt("lease-seconds")
-		if lock, ok, err := tomarLockPorAPI(apiLockRequest{
+		lock, ok, err := tomarLockPorAPI(apiLockRequest{
 			Agente:       args[0],
 			Proyecto:     projectRef,
 			TareaID:      taskRaw,
@@ -98,7 +77,8 @@ var lockTomarCmd = &cobra.Command{
 			Branch:       branch,
 			Motivo:       reason,
 			LeaseSeconds: leaseSeconds,
-		}); ok {
+		})
+		if ok {
 			if err != nil {
 				return err
 			}
@@ -107,49 +87,10 @@ var lockTomarCmd = &cobra.Command{
 			fmt.Printf("  expira=%s\n", lock.ExpiresAt.Format("2006-01-02 15:04:05"))
 			return nil
 		}
-
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		svc := newCoordinationService()
-		var projectID *int64
-		if strings.TrimSpace(projectRef) != "" {
-			proyecto, err := db.GetProyecto(projectRef)
-			if err != nil {
-				return err
-			}
-			projectID = &proyecto.ID
-		}
-		var taskID *int64
-		if taskRaw > 0 {
-			taskID = &taskRaw
-		}
-		var sessionID *int64
-		if projectID != nil {
-			sesion, err := db.GetSesionActiva(args[0], projectID)
-			if err == nil && sesion != nil {
-				sessionID = &sesion.ID
-			}
-		}
-		lock, err := svc.AcquireLock(coordinacion.AcquireLockInput{
-			ProjectID:    projectID,
-			TaskID:       taskID,
-			SessionID:    sessionID,
-			Agent:        args[0],
-			ScopeType:    args[1],
-			ScopeKey:     args[2],
-			Path:         path,
-			Branch:       branch,
-			Reason:       reason,
-			LeaseSeconds: leaseSeconds,
-		})
 		if err != nil {
 			return err
 		}
-		fmt.Printf("✓ Lock %d tomado por %s (%s:%s)\n", lock.ID, lock.Agent, lock.ScopeType, lock.ScopeKey)
-		fmt.Printf("  lease_token=%s\n", lock.LeaseToken)
-		fmt.Printf("  expira=%s\n", lock.ExpiresAt.Format("2006-01-02 15:04:05"))
-		return nil
+		return serverFirstCommandError("lock tomar")
 	},
 }
 
@@ -163,32 +104,22 @@ var lockRenovarCmd = &cobra.Command{
 			return err
 		}
 		leaseSeconds, _ := cmd.Flags().GetInt("lease-seconds")
-		if lock, ok, err := renovarLockPorAPI(id, apiLockRequest{
+		lock, ok, err := renovarLockPorAPI(id, apiLockRequest{
 			Agente:       args[1],
 			LeaseToken:   args[2],
 			LeaseSeconds: leaseSeconds,
-		}); ok {
+		})
+		if ok {
 			if err != nil {
 				return err
 			}
 			fmt.Printf("✓ Lock %d renovado hasta %s\n", lock.ID, lock.ExpiresAt.Format("2006-01-02 15:04:05"))
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		svc := newCoordinationService()
-		lock, err := svc.RenewLock(coordinacion.RenewLockInput{
-			ID:           id,
-			Agent:        args[1],
-			LeaseToken:   args[2],
-			LeaseSeconds: leaseSeconds,
-		})
 		if err != nil {
 			return err
 		}
-		fmt.Printf("✓ Lock %d renovado hasta %s\n", lock.ID, lock.ExpiresAt.Format("2006-01-02 15:04:05"))
-		return nil
+		return serverFirstCommandError("lock renovar")
 	},
 }
 
@@ -202,32 +133,22 @@ var lockLiberarCmd = &cobra.Command{
 			return err
 		}
 		reason, _ := cmd.Flags().GetString("motivo")
-		if lock, ok, err := liberarLockPorAPI(id, apiLockRequest{
+		lock, ok, err := liberarLockPorAPI(id, apiLockRequest{
 			Agente:     args[1],
 			LeaseToken: args[2],
 			Motivo:     reason,
-		}); ok {
+		})
+		if ok {
 			if err != nil {
 				return err
 			}
 			fmt.Printf("✓ Lock %d liberado (%s:%s)\n", lock.ID, lock.ScopeType, lock.ScopeKey)
 			return nil
 		}
-		if err := ensureLocalDB(); err != nil {
-			return err
-		}
-		svc := newCoordinationService()
-		lock, err := svc.ReleaseLock(coordinacion.ReleaseLockInput{
-			ID:         id,
-			Agent:      args[1],
-			LeaseToken: args[2],
-			Reason:     reason,
-		})
 		if err != nil {
 			return err
 		}
-		fmt.Printf("✓ Lock %d liberado (%s:%s)\n", lock.ID, lock.ScopeType, lock.ScopeKey)
-		return nil
+		return serverFirstCommandError("lock liberar")
 	},
 }
 

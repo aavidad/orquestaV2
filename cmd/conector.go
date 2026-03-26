@@ -11,7 +11,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"orquesta/db"
 )
 
 var conectorCmd = &cobra.Command{
@@ -24,14 +23,11 @@ var conectorListarCmd = &cobra.Command{
 	Short: "Lista los conectores registrados",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		conectores, ok, err := cargarConectoresDesdeAPI()
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			conectores, err = db.ListarConectores()
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("conector listar")
 		}
 		if len(conectores) == 0 {
 			fmt.Println("No hay conectores registrados.")
@@ -56,14 +52,11 @@ var conectorVerCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c, ok, err := cargarConectorDesdeAPI(args[0])
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			c, err = db.GetConector(args[0])
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("conector ver")
 		}
 		fmt.Printf("Conector #%d — %s\n", c.ID, c.Nombre)
 		fmt.Printf("  Slug:       %s\n", c.Slug)
@@ -100,23 +93,11 @@ var conectorRegistrarCmd = &cobra.Command{
 			MetadataJSON: metadataJSON,
 			Activo:       !inactivo,
 		})
-		if !ok {
-			if err := ensureLocalDB(); err != nil {
-				return err
-			}
-			id, err = db.UpsertConector(&db.Conector{
-				Slug:         slug,
-				Nombre:       nombre,
-				Transporte:   transporte,
-				Comando:      comando,
-				ArgsJSON:     argsJSON,
-				EnvJSON:      envJSON,
-				MetadataJSON: metadataJSON,
-				Activo:       !inactivo,
-			})
-		}
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return serverFirstCommandError("conector registrar")
 		}
 		fmt.Printf("✓ Conector registrado/actualizado (id: %d)\n", id)
 		return nil
