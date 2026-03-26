@@ -214,6 +214,8 @@ type candidatoProyectoAutomatico struct {
 	Proyecto   *Proyecto
 	Operacion  *ProyectoOperacion
 	Activos    int
+	Deseados   int
+	Deficit    int
 	TieneMin   bool
 	CargaRatio int
 }
@@ -222,6 +224,10 @@ func seleccionarProyectoAutomaticoDisponible(agente string) (int64, error) {
 	_ = strings.TrimSpace(agente)
 	activo := true
 	proyectos, err := ListarProyectos(FiltroProyectos{Activo: &activo})
+	if err != nil {
+		return 0, err
+	}
+	totalPlanificables, err := contarAgentesPlanificables()
 	if err != nil {
 		return 0, err
 	}
@@ -256,16 +262,15 @@ func seleccionarProyectoAutomaticoDisponible(agente string) (int64, error) {
 		if op.MaxAgentes > 0 && activos >= op.MaxAgentes {
 			continue
 		}
-		objetivo := op.ObjetivoPct
-		if objetivo <= 0 {
-			objetivo = 100
-		}
+		deseados := cupoDeseadoProyecto(op, totalPlanificables)
 		candidato := &candidatoProyectoAutomatico{
 			Proyecto:   proyecto,
 			Operacion:  op,
 			Activos:    activos,
+			Deseados:   deseados,
+			Deficit:    deseados - activos,
 			TieneMin:   activos < op.MinAgentes,
-			CargaRatio: (activos * 10000) / objetivo,
+			CargaRatio: cargaProyecto(activos, deseados),
 		}
 		if mejorProyectoAutomatico(candidato, mejor) {
 			mejor = candidato
@@ -287,6 +292,11 @@ func mejorProyectoAutomatico(candidato *candidatoProyectoAutomatico, actual *can
 	if candidato.TieneMin != actual.TieneMin {
 		return candidato.TieneMin
 	}
+	if candidato.Deficit > 0 || actual.Deficit > 0 {
+		if candidato.Deficit != actual.Deficit {
+			return candidato.Deficit > actual.Deficit
+		}
+	}
 	if candidato.CargaRatio != actual.CargaRatio {
 		return candidato.CargaRatio < actual.CargaRatio
 	}
@@ -294,6 +304,51 @@ func mejorProyectoAutomatico(candidato *candidatoProyectoAutomatico, actual *can
 		return candidato.Operacion.Prioridad > actual.Operacion.Prioridad
 	}
 	return candidato.Proyecto.ID < actual.Proyecto.ID
+}
+
+func contarAgentesPlanificables() (int, error) {
+	agentes, err := ListarAgentesPlanificables()
+	if err != nil {
+		return 0, err
+	}
+	if len(agentes) == 0 {
+		return 1, nil
+	}
+	return len(agentes), nil
+}
+
+func cupoDeseadoProyecto(op *ProyectoOperacion, totalAgentes int) int {
+	if totalAgentes <= 0 {
+		totalAgentes = 1
+	}
+	if op == nil {
+		return 1
+	}
+	objetivo := op.ObjetivoPct
+	if objetivo <= 0 {
+		objetivo = 100
+	}
+	deseados := (totalAgentes*objetivo + 99) / 100
+	if deseados <= 0 {
+		deseados = 1
+	}
+	if op.MinAgentes > deseados {
+		deseados = op.MinAgentes
+	}
+	if op.MaxAgentes > 0 && deseados > op.MaxAgentes {
+		deseados = op.MaxAgentes
+	}
+	if deseados <= 0 {
+		return 1
+	}
+	return deseados
+}
+
+func cargaProyecto(activos, deseados int) int {
+	if deseados <= 0 {
+		deseados = 1
+	}
+	return (activos * 10000) / deseados
 }
 
 func encolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo string) error {

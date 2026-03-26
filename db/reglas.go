@@ -57,12 +57,13 @@ type Workflow struct {
 }
 
 type GovernanceCatalog struct {
-	TipoAgente string      `json:"tipo_agente"`
-	ProyectoID *int64      `json:"proyecto_id,omitempty"`
-	Reglas     []*Regla    `json:"reglas"`
-	Skills     []*Skill    `json:"skills"`
-	Workflows  []*Workflow `json:"workflows"`
-	Hash       string      `json:"hash"`
+	TipoAgente       string      `json:"tipo_agente"`
+	ProyectoID       *int64      `json:"proyecto_id,omitempty"`
+	ResolucionActual string      `json:"resolucion_actual"`
+	Reglas           []*Regla    `json:"reglas"`
+	Skills           []*Skill    `json:"skills"`
+	Workflows        []*Workflow `json:"workflows"`
+	Hash             string      `json:"hash"`
 }
 
 // ResolveGovernanceCatalog devuelve el catálogo efectivo actual para un rol y
@@ -83,11 +84,12 @@ func ResolveGovernanceCatalog(tipoAgente string, proyectoID *int64) (*Governance
 		return nil, err
 	}
 	catalogo := &GovernanceCatalog{
-		TipoAgente: tipoAgente,
-		ProyectoID: proyectoID,
-		Reglas:     reglas,
-		Skills:     skills,
-		Workflows:  workflows,
+		TipoAgente:       tipoAgente,
+		ProyectoID:       proyectoID,
+		ResolucionActual: "rol",
+		Reglas:           reglas,
+		Skills:           skills,
+		Workflows:        workflows,
 	}
 	catalogo.Hash = governanceCatalogHash(catalogo)
 	return catalogo, nil
@@ -98,15 +100,17 @@ func governanceCatalogHash(catalogo *GovernanceCatalog) string {
 		return ""
 	}
 	input := struct {
-		TipoAgente string   `json:"tipo_agente"`
-		ProyectoID int64    `json:"proyecto_id"`
-		Reglas     []string `json:"reglas"`
-		Skills     []string `json:"skills"`
-		Workflows  []string `json:"workflows"`
+		TipoAgente       string   `json:"tipo_agente"`
+		ResolucionActual string   `json:"resolucion_actual"`
+		ProyectoID       int64    `json:"proyecto_id"`
+		Reglas           []string `json:"reglas"`
+		Skills           []string `json:"skills"`
+		Workflows        []string `json:"workflows"`
 	}{
-		TipoAgente: catalogo.TipoAgente,
+		TipoAgente:       catalogo.TipoAgente,
+		ResolucionActual: strings.TrimSpace(catalogo.ResolucionActual),
 	}
-	if catalogo.ProyectoID != nil {
+	if strings.TrimSpace(catalogo.ResolucionActual) != "rol" && catalogo.ProyectoID != nil {
 		input.ProyectoID = *catalogo.ProyectoID
 	}
 	for _, regla := range catalogo.Reglas {
@@ -143,7 +147,7 @@ func BuildGovernanceContextSummary(tipoAgente string, proyectoID *int64) (map[st
 		"reglas":            len(catalogo.Reglas),
 		"skills":            len(catalogo.Skills),
 		"workflows":         len(catalogo.Workflows),
-		"resolucion_actual": "rol",
+		"resolucion_actual": strings.TrimSpace(catalogo.ResolucionActual),
 	}
 	if proyectoID != nil {
 		contexto["proyecto_id"] = *proyectoID

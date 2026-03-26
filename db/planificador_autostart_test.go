@@ -6,6 +6,51 @@ import (
 	"testing"
 )
 
+func TestCupoDeseadoProyectoRespetaObjetivoMinYMax(t *testing.T) {
+	t.Run("objetivo_pct", func(t *testing.T) {
+		op := &ProyectoOperacion{ObjetivoPct: 40}
+		if got := cupoDeseadoProyecto(op, 5); got != 2 {
+			t.Fatalf("cupo deseado=%d, want 2", got)
+		}
+	})
+
+	t.Run("min_agentes", func(t *testing.T) {
+		op := &ProyectoOperacion{ObjetivoPct: 10, MinAgentes: 2}
+		if got := cupoDeseadoProyecto(op, 3); got != 2 {
+			t.Fatalf("cupo deseado=%d, want 2", got)
+		}
+	})
+
+	t.Run("max_agentes", func(t *testing.T) {
+		op := &ProyectoOperacion{ObjetivoPct: 100, MaxAgentes: 1}
+		if got := cupoDeseadoProyecto(op, 4); got != 1 {
+			t.Fatalf("cupo deseado=%d, want 1", got)
+		}
+	})
+}
+
+func TestMejorProyectoAutomaticoPriorizaDeficitRealAntesQueCargaBruta(t *testing.T) {
+	candidatoA := &candidatoProyectoAutomatico{
+		Proyecto:   &Proyecto{ID: 1},
+		Operacion:  &ProyectoOperacion{Prioridad: 100},
+		Activos:    2,
+		Deseados:   4,
+		Deficit:    2,
+		CargaRatio: cargaProyecto(2, 4),
+	}
+	candidatoB := &candidatoProyectoAutomatico{
+		Proyecto:   &Proyecto{ID: 2},
+		Operacion:  &ProyectoOperacion{Prioridad: 200},
+		Activos:    1,
+		Deseados:   2,
+		Deficit:    1,
+		CargaRatio: cargaProyecto(1, 2),
+	}
+	if !mejorProyectoAutomatico(candidatoA, candidatoB) {
+		t.Fatalf("deberia priorizar mayor deficit real frente a prioridad/carga")
+	}
+}
+
 func restringirPlanificadorATestAgentes(t *testing.T, permitidos ...string) {
 	t.Helper()
 	args := make([]any, 0, len(permitidos))

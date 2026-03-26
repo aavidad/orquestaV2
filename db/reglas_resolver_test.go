@@ -65,6 +65,14 @@ func TestResolveGovernanceCatalogYHash(t *testing.T) {
 	if catalogo1.Hash != catalogo2.Hash {
 		t.Fatalf("hash inestable: %s vs %s", catalogo1.Hash, catalogo2.Hash)
 	}
+	proyectoID2 := int64(8)
+	catalogoMismoRolOtroProyecto, err := ResolveGovernanceCatalog(rol, &proyectoID2)
+	if err != nil {
+		t.Fatalf("ResolveGovernanceCatalog otro proyecto: %v", err)
+	}
+	if catalogo1.Hash != catalogoMismoRolOtroProyecto.Hash {
+		t.Fatalf("el hash no deberia variar por proyecto mientras la resolucion siga siendo por rol: %s vs %s", catalogo1.Hash, catalogoMismoRolOtroProyecto.Hash)
+	}
 
 	if _, err := UpsertRegla(&Regla{
 		TipoAgente:  rol,

@@ -40,6 +40,7 @@ Estado real actual:
 - sí existe resolución efectiva unificada del catálogo de gobernanza (reglas, skills, workflows) y conservación de su identidad en continuidad/resume
 - sí existe notificación `governance_refresh` por mailbox cuando cambian reglas o workflows del rol
 - sí existe consumo en caliente de `governance_refresh` y `skills_refresh` en agentes vivos, reenviándolo como `send_instruction` sin reinicio de sesión
+- sí existe reparto automático por proyecto con cupos deseados reales derivados de `objetivo_pct`, `min_agentes`, `max_agentes` y `prioridad`
 - `stop` ya cierra también la sesión viva, no solo runtime y handle
 - el adaptador remoto ya tiene política configurable de reintentos para acciones de control seguras, sin reintentar `start` ni `send_instruction`
 - `sync_status` ya puede observar estado remoto real por `status_path`, normalizarlo a estado canónico del handle y conservar el estado remoto crudo en metadata
@@ -107,6 +108,22 @@ Con esto el flujo deja de ser solo local al agente:
 2. proyecto pasa a `esperando_humano`
 3. sesión/asignación se aparcan
 4. al desbloquear la tarea, el planificador reactiva el proyecto y devuelve al agente al frente pausado
+
+### 2.d Reparto automático del pool por cupos deseados
+
+El scheduler ya no trata `objetivo_pct` como un divisor indirecto de carga:
+
+- `db/planificador.go` calcula un cupo deseado por proyecto a partir del total de agentes planificables
+- ese cupo respeta `min_agentes` y `max_agentes`
+- la comparación entre proyectos prioriza el déficit real frente al cupo deseado, y usa `prioridad` como desempate posterior
+
+Con esto la política operativa del proyecto pasa a ser más explícita:
+
+1. el proyecto declara su objetivo relativo
+2. el scheduler lo traduce a cupos reales del pool disponible
+3. los agentes libres se asignan primero a los frentes con mayor déficit efectivo
+
+Además, el hash del catálogo de gobernanza ya no deriva artificialmente del `ProyectoID` mientras la resolución siga siendo solo por rol; así se evita provocar refreshes espurios entre proyectos con el mismo catálogo efectivo.
 
 ### 2.c Retirada segura y sustitución automática de agentes
 
