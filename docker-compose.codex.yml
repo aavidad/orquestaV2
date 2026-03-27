@@ -5,7 +5,6 @@ services:
       dockerfile: Dockerfile.codex-sandbox
     image: orquesta-codex-sandbox:local
     container_name: codex-orquesta-sandbox
-    init: true
     stdin_open: true
     tty: true
     working_dir: /workspace
@@ -15,7 +14,7 @@ services:
       CODEX_HOME: /home/codex/.codex
       TERM: xterm-256color
     volumes:
-      - .:/workspace:rw
+      - ./.codex-sandbox-workspace:/workspace:rw
       - ./.codex-docker-home:/home/codex/.codex:rw
     cap_drop:
       - ALL

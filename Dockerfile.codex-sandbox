@@ -2,6 +2,7 @@ FROM golang:1.25-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
+    bubblewrap \
     ca-certificates \
     curl \
     file \
@@ -28,5 +29,5 @@ ENV HOME=/home/codex
 ENV CODEX_HOME=/home/codex/.codex
 ENV TERM=xterm-256color
 
-ENTRYPOINT ["/usr/bin/tini", "--"]
+ENTRYPOINT ["/usr/bin/tini", "-s", "--"]
 CMD ["bash"]

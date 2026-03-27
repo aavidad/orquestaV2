@@ -9,3 +9,4 @@ certs/
 *.bk
 .ssl-key.log
 .codex-docker-home/
+.codex-sandbox-workspace/
