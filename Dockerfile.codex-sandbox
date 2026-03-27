@@ -1,0 +1,32 @@
+FROM golang:1.25-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    curl \
+    file \
+    git \
+    jq \
+    less \
+    nodejs \
+    npm \
+    openssh-client \
+    procps \
+    ripgrep \
+    sqlite3 \
+    tini \
+    && npm install -g @openai/codex@0.117.0 \
+    && npm cache clean --force \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /workspace /home/codex/.codex /tmp \
+    && chmod 0777 /workspace /home/codex /tmp
+
+WORKDIR /workspace
+
+ENV HOME=/home/codex
+ENV CODEX_HOME=/home/codex/.codex
+ENV TERM=xterm-256color
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["bash"]
