@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS proyectos_autonomia (
 CREATE TABLE IF NOT EXISTS autonomia_ciclos (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     proyecto_id   INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
-    kind          TEXT    NOT NULL CHECK (kind IN ('supervision','review','closure')),
+    kind          TEXT    NOT NULL CHECK (kind IN ('supervision','review','review_feedback','closure')),
     agente        TEXT    NOT NULL DEFAULT '',
     sesion_id     INTEGER REFERENCES sesiones(id) ON DELETE SET NULL,
     runtime_id    INTEGER REFERENCES runtime_instances(id) ON DELETE SET NULL,

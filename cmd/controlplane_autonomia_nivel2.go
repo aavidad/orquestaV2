@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -44,7 +45,16 @@ func procesarSupervisionAutonomaBatch() (int, error) {
 		if !disponible {
 			continue
 		}
-		agente, err := seleccionarAgenteActivoProyectoPreferido(proyecto.ID, strings.TrimSpace(policy.SupervisorAgente), []string{"supervisor", "orquestador", "revisor", "reviewer", "admin", "programador"}, "")
+		agente, activado, err := prepararAgentePreferidoAutonomia(proyecto.ID, strings.TrimSpace(policy.SupervisorAgente), "supervision_automatica")
+		if err != nil {
+			return total, err
+		}
+		if activado {
+			continue
+		}
+		if agente == nil {
+			agente, err = seleccionarAgenteActivoProyectoPreferido(proyecto.ID, strings.TrimSpace(policy.SupervisorAgente), []string{"supervisor", "orquestador", "revisor", "reviewer", "admin", "programador"}, "")
+		}
 		if err != nil {
 			return total, err
 		}
@@ -136,7 +146,85 @@ func procesarReviewGatesBatch() (int, error) {
 			}
 			continue
 		}
-		reviewer, err := seleccionarAgenteActivoProyectoPreferido(proyecto.ID, strings.TrimSpace(policy.ReviewerAgente), []string{"revisor", "reviewer", "supervisor", "orquestador", "admin", "programador"}, "")
+		if gate := firstOpenGate(gates); gate != nil {
+			switch strings.TrimSpace(gate.Estado) {
+			case reviewapp.GateStateChangesAsked:
+				if err := persistirEstadoProyectoAutonomia(policy, db.AutonomiaProyectoActiva); err != nil {
+					return total, err
+				}
+				due, err := autonomiaCycleDue(proyecto.Slug, "review_feedback", now, interval)
+				if err != nil {
+					return total, err
+				}
+				if !due {
+					continue
+				}
+				corrector, err := seleccionarAgenteCorreccionReview(proyecto.ID, policy, strings.TrimSpace(gate.ReviewerAgente))
+				if err != nil {
+					return total, err
+				}
+				if corrector == nil {
+					continue
+				}
+				if pendiente, err := existeRuntimeOrderAutonomiaPendiente(corrector.Nombre, &proyecto.ID, "nudge", "resolver_review_feedback"); err != nil {
+					return total, err
+				} else if pendiente {
+					continue
+				}
+				reopened, err := reviewService.Update(reviewapp.UpdateGateInput{
+					ID:     gate.ID,
+					Estado: reviewapp.GateStateInReview,
+				})
+				if err != nil {
+					return total, err
+				}
+				gate = reopened
+				contexto, resumenCtx := db.BuildProjectContextSummary(corrector.Nombre, proyecto)
+				inputJSON, decisionJSON := construirPayloadCicloAutonomia(policy, proyecto, corrector, contexto, "review_feedback", map[string]any{
+					"accion":   "resolver_review_feedback",
+					"gate_id":  gate.ID,
+					"reviewer": strings.TrimSpace(gate.ReviewerAgente),
+					"motivo":   "review solicitó cambios",
+				})
+				instruction := construirInstruccionCorreccionReview(policy, proyecto, corrector.Nombre, gate)
+				if err := encolarNudgeAutonomiaDetallado(corrector.Nombre, proyecto, "resolver_review_feedback", fmt.Sprintf("gate=%d; review solicitó cambios", gate.ID), instruction, map[string]any{
+					"gate_id":            gate.ID,
+					"reviewer_agente":    strings.TrimSpace(gate.ReviewerAgente),
+					"objetivo_general":   strings.TrimSpace(policy.ObjetivoGeneral),
+					"definition_of_done": strings.TrimSpace(policy.DefinitionOfDoneJSON),
+					"review_findings":    strings.TrimSpace(gate.FindingsJSON),
+				}); err != nil {
+					return total, err
+				}
+				if _, err := supervisionService.RegisterCycle(proyecto.Slug, supervisionapp.CycleInput{
+					Kind:         "review_feedback",
+					Agente:       corrector.Nombre,
+					InputJSON:    inputJSON,
+					DecisionJSON: decisionJSON,
+					Resultado:    "encolado",
+				}); err != nil {
+					return total, err
+				}
+				_ = resumenCtx
+				total++
+				continue
+			case reviewapp.GateStateBlocked:
+				if err := persistirEstadoProyectoAutonomia(policy, db.AutonomiaProyectoEsperandoHumano); err != nil {
+					return total, err
+				}
+				continue
+			}
+		}
+		reviewer, activado, err := prepararAgentePreferidoAutonomia(proyecto.ID, strings.TrimSpace(policy.ReviewerAgente), "review_automatica")
+		if err != nil {
+			return total, err
+		}
+		if activado {
+			continue
+		}
+		if reviewer == nil {
+			reviewer, err = seleccionarAgenteActivoProyectoPreferido(proyecto.ID, strings.TrimSpace(policy.ReviewerAgente), []string{"revisor", "reviewer", "supervisor", "orquestador", "admin", "programador"}, "")
+		}
 		if err != nil {
 			return total, err
 		}
@@ -253,6 +341,54 @@ func seleccionarAgenteActivoProyecto(proyectoID int64, preferredRoles []string, 
 	return seleccionarAgenteActivoProyectoPreferido(proyectoID, "", preferredRoles, exclude)
 }
 
+func prepararAgentePreferidoAutonomia(proyectoID int64, preferredAgent, activationReason string) (*db.Agente, bool, error) {
+	preferredAgent = strings.TrimSpace(preferredAgent)
+	if preferredAgent == "" || proyectoID <= 0 {
+		return nil, false, nil
+	}
+	agente, err := db.GetAgente(preferredAgent)
+	if err != nil {
+		return nil, false, err
+	}
+	if agente == nil || !agente.Habilitado {
+		return nil, false, nil
+	}
+	if strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "enfriamiento") {
+		return nil, false, nil
+	}
+	proyectoActivoID, err := db.ObtenerProyectoActivoAgente(preferredAgent)
+	if err != nil {
+		return nil, false, err
+	}
+	if proyectoActivoID != 0 && proyectoActivoID != proyectoID {
+		return nil, false, nil
+	}
+	if sesion, err := db.GetSesionActiva(preferredAgent, &proyectoID); err != nil && err != sql.ErrNoRows {
+		return nil, false, err
+	} else if sesion != nil {
+		return agente, false, nil
+	}
+	if handle, err := db.GetRuntimeHandleActivoAgenteProyecto(preferredAgent, &proyectoID); err != nil {
+		return nil, false, err
+	} else if handle != nil {
+		return agente, false, nil
+	}
+	if err := db.ActivarAsignacion(preferredAgent, proyectoID, activationReason); err != nil {
+		return nil, false, err
+	}
+	proyecto, err := db.GetProyecto(strconv.FormatInt(proyectoID, 10))
+	if err != nil {
+		return nil, false, err
+	}
+	if proyecto == nil {
+		return nil, false, nil
+	}
+	if err := db.EncolarStartAutomaticoSiHaceFalta(preferredAgent, proyecto, activationReason); err != nil {
+		return nil, false, err
+	}
+	return nil, true, nil
+}
+
 func seleccionarAgenteActivoProyectoPreferido(proyectoID int64, preferredAgent string, preferredRoles []string, exclude string) (*db.Agente, error) {
 	sesiones, err := db.ListarSesionesActivas()
 	if err != nil {
@@ -354,6 +490,25 @@ func latestApprovedGate(gates []*reviewapp.Gate) *reviewapp.Gate {
 		return nil
 	}
 	return approved[0]
+}
+
+func seleccionarAgenteCorreccionReview(proyectoID int64, policy *db.ProyectoAutonomia, reviewer string) (*db.Agente, error) {
+	preferredSupervisor := ""
+	if policy != nil {
+		preferredSupervisor = strings.TrimSpace(policy.SupervisorAgente)
+	}
+	preferredRoles := []string{"supervisor", "orquestador", "programador", "admin", "revisor", "reviewer"}
+	agente, err := seleccionarAgenteActivoProyectoPreferido(proyectoID, preferredSupervisor, preferredRoles, reviewer)
+	if err != nil {
+		return nil, err
+	}
+	if agente != nil {
+		return agente, nil
+	}
+	if strings.TrimSpace(reviewer) == "" {
+		return nil, nil
+	}
+	return seleccionarAgenteActivoProyectoPreferido(proyectoID, preferredSupervisor, preferredRoles, "")
 }
 
 func proyectoSinTrabajoPendiente(proyecto *db.Proyecto) (bool, string, error) {
@@ -477,6 +632,36 @@ func construirInstruccionReview(policy *db.ProyectoAutonomia, proyecto *db.Proye
 		parts = append(parts, "Contexto actual: "+strings.TrimSpace(resumen)+".")
 	}
 	parts = append(parts, "Si detectas defectos reales, pide cambios concretos; si está correcto, aprueba y deja trazabilidad.")
+	return strings.Join(parts, " ")
+}
+
+func construirInstruccionCorreccionReview(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, agente string, gate *reviewapp.Gate) string {
+	parts := []string{
+		"Orquesta: aplica de forma autónoma los cambios pedidos en la revisión y deja el proyecto listo para re-review sin esperar a un humano.",
+		"Corrige los findings reales, crea o reajusta tareas si hacen falta, ejecuta los tests pertinentes y preserva la arquitectura y la gobernanza efectiva.",
+	}
+	if proyecto != nil {
+		parts = append(parts, fmt.Sprintf("Proyecto: %s.", strings.TrimSpace(proyecto.Slug)))
+	}
+	if strings.TrimSpace(agente) != "" {
+		parts = append(parts, "Agente responsable: "+strings.TrimSpace(agente)+".")
+	}
+	if gate != nil {
+		parts = append(parts, fmt.Sprintf("Review gate: #%d.", gate.ID))
+		if strings.TrimSpace(gate.ReviewerAgente) != "" {
+			parts = append(parts, "Revisor origen: "+strings.TrimSpace(gate.ReviewerAgente)+".")
+		}
+		if strings.TrimSpace(gate.FindingsJSON) != "" {
+			parts = append(parts, "Findings actuales: "+strings.TrimSpace(gate.FindingsJSON)+".")
+		}
+	}
+	if policy != nil && strings.TrimSpace(policy.ObjetivoGeneral) != "" {
+		parts = append(parts, "Objetivo general: "+strings.TrimSpace(policy.ObjetivoGeneral)+".")
+	}
+	if policy != nil && strings.TrimSpace(policy.DefinitionOfDoneJSON) != "" && strings.TrimSpace(policy.DefinitionOfDoneJSON) != "{}" {
+		parts = append(parts, "Definition of done JSON: "+strings.TrimSpace(policy.DefinitionOfDoneJSON)+".")
+	}
+	parts = append(parts, "Cuando cierres este frente, deja el estado listo para que el reviewer pueda retomar la verificación final.")
 	return strings.Join(parts, " ")
 }
 

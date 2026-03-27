@@ -100,6 +100,65 @@ func TestProcesarSupervisionAutonomaBatchEncolaSupervisionYRegistraCiclo(t *test
 	}
 }
 
+func TestProcesarSupervisionAutonomaBatchArrancaSupervisorPreferidoSinSesion(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		ReviewRequired:       true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+
+	n, err := procesarSupervisionAutonomaBatch()
+	if err != nil {
+		t.Fatalf("procesar supervision: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no debería contar supervisión hasta que el agente arranque, got=%d", n)
+	}
+
+	asignacion, err := db.GetAsignacionActivaAgente("CodexSupervisor")
+	if err != nil {
+		agente := "CodexSupervisor"
+		estado := "pendiente"
+		orders, _ := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+		t.Fatalf("get asignacion activa: %v; orders=%+v", err, orders)
+	}
+	if asignacion.ProyectoID != proyectoID {
+		t.Fatalf("asignacion activa inesperada: %+v", asignacion)
+	}
+
+	agente := "CodexSupervisor"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "start" {
+		t.Fatalf("debería encolar start para supervisor preferido: %+v", orders)
+	}
+}
+
 func TestProcesarReviewGatesBatchCreaGateYEncolaRevision(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -205,6 +264,340 @@ func TestProcesarReviewGatesBatchCreaGateYEncolaRevision(t *testing.T) {
 	}
 	if policy.EstadoAutonomia != db.AutonomiaProyectoEsperandoReview {
 		t.Fatalf("estado autonomia inesperado: %s", policy.EstadoAutonomia)
+	}
+}
+
+func TestProcesarReviewGatesBatchArrancaReviewerPreferidoSinSesion(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexReviewer", "admin"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		ReviewerAgente:       "CodexReviewer",
+		ReviewRequired:       true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Cerrar autonomia",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.CompletarTarea(tareaID, "CodexReviewer", "abc123"); err != nil {
+		t.Fatalf("completar tarea: %v", err)
+	}
+
+	n, err := procesarReviewGatesBatch()
+	if err != nil {
+		t.Fatalf("procesar review gates: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no debería contar review hasta que el reviewer arranque, got=%d", n)
+	}
+
+	asignacion, err := db.GetAsignacionActivaAgente("CodexReviewer")
+	if err != nil {
+		agente := "CodexReviewer"
+		estado := "pendiente"
+		orders, _ := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+		t.Fatalf("get asignacion activa: %v; orders=%+v", err, orders)
+	}
+	if asignacion.ProyectoID != proyectoID {
+		t.Fatalf("asignacion activa inesperada: %+v", asignacion)
+	}
+
+	agente := "CodexReviewer"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "start" {
+		t.Fatalf("debería encolar start para reviewer preferido: %+v", orders)
+	}
+}
+
+func TestProcesarReviewGatesBatchReabreCorreccionTrasCambiosPedidos(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexReviewer", "admin"); err != nil {
+		t.Fatalf("registrar reviewer: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		ReviewerAgente:       "CodexReviewer",
+		ReviewRequired:       true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoEsperandoReview,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexReviewer", proyectoID, "review"); err != nil {
+		t.Fatalf("activar asignacion reviewer: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSupervisor",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion supervisor: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexReviewer",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion reviewer: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Ultimo frente",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.CompletarTarea(tareaID, "CodexReviewer", "abc123"); err != nil {
+		t.Fatalf("completar tarea: %v", err)
+	}
+	gateID, err := db.CrearReviewGate(&db.ReviewGate{
+		ProyectoID:     &proyectoID,
+		RequestedBy:    "CodexReviewer",
+		ReviewerAgente: "CodexReviewer",
+		Estado:         db.ReviewGateCambiosPed,
+		SeverityMax:    "high",
+		FindingsJSON:   `{"findings":["faltan tests","ajustar arquitectura"]}`,
+	})
+	if err != nil {
+		t.Fatalf("crear review gate: %v", err)
+	}
+
+	n, err := procesarReviewGatesBatch()
+	if err != nil {
+		t.Fatalf("procesar review gates: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 acción de corrección, got=%d", n)
+	}
+
+	agente := "CodexSupervisor"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "nudge" || !strings.Contains(orders[0].PayloadJSON, `"accion":"resolver_review_feedback"`) {
+		todas, _ := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{ProyectoID: &proyectoID, Estado: &estado})
+		t.Fatalf("nudge de corrección inesperado: agente=%+v todas=%+v", orders, todas)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"gate_id":`) || !strings.Contains(orders[0].PayloadJSON, `"review_findings":"`) {
+		t.Fatalf("payload de corrección incompleto: %s", orders[0].PayloadJSON)
+	}
+	gate, err := db.GetReviewGate(gateID)
+	if err != nil {
+		t.Fatalf("get review gate: %v", err)
+	}
+	if gate == nil || gate.Estado != db.ReviewGateEnRevision {
+		t.Fatalf("gate debería reabrirse a en_revision: %+v", gate)
+	}
+	policy, err := db.GetProyectoAutonomia(proyectoID)
+	if err != nil {
+		t.Fatalf("get proyecto autonomia: %v", err)
+	}
+	if policy.EstadoAutonomia != db.AutonomiaProyectoActiva {
+		t.Fatalf("estado autonomia debería volver a activo, got=%s", policy.EstadoAutonomia)
+	}
+	kind := "review_feedback"
+	cycles, err := supervisionService.ListCycles("orquestador", &kind, 5)
+	if err != nil {
+		t.Fatalf("listar ciclos review_feedback: %v", err)
+	}
+	if len(cycles) != 1 || cycles[0] == nil || cycles[0].Agente != "CodexSupervisor" {
+		t.Fatalf("ciclo review_feedback inesperado: %+v", cycles)
+	}
+}
+
+func TestProcesarReviewGatesBatchEncolaCorreccionTrasCambiosPedidos(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexReviewer", "admin"); err != nil {
+		t.Fatalf("registrar reviewer: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		ReviewerAgente:       "CodexReviewer",
+		ReviewRequired:       true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoEsperandoReview,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexReviewer", proyectoID, "review"); err != nil {
+		t.Fatalf("activar asignacion reviewer: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "correccion"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexReviewer",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion reviewer: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSupervisor",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion supervisor: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Ultimo frente",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.CompletarTarea(tareaID, "CodexReviewer", "abc123"); err != nil {
+		t.Fatalf("completar tarea: %v", err)
+	}
+	if _, err := db.CrearReviewGate(&db.ReviewGate{
+		ProyectoID:     &proyectoID,
+		RequestedBy:    "orquesta",
+		ReviewerAgente: "CodexReviewer",
+		Estado:         db.ReviewGateCambiosPed,
+		SeverityMax:    "high",
+		FindingsJSON:   `{"findings":["falta cerrar el refactor server-first"]}`,
+	}); err != nil {
+		t.Fatalf("crear review gate cambios_pedidos: %v", err)
+	}
+
+	n, err := procesarReviewGatesBatch()
+	if err != nil {
+		t.Fatalf("procesar review gates: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 nudge de correccion, got=%d", n)
+	}
+
+	agente := "CodexSupervisor"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "nudge" || !strings.Contains(orders[0].PayloadJSON, `"accion":"resolver_review_feedback"`) {
+		todas, _ := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{ProyectoID: &proyectoID, Estado: &estado})
+		t.Fatalf("nudge de correccion inesperado: agente=%+v todas=%+v", orders, todas)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"gate_id":1`) {
+		t.Fatalf("payload de correccion sin gate_id: %s", orders[0].PayloadJSON)
+	}
+	kind := "review_feedback"
+	cycles, err := db.ListarAutonomiaCiclos(db.FiltroAutonomiaCiclos{ProyectoID: &proyectoID, Kind: &kind, Limit: 10})
+	if err != nil {
+		t.Fatalf("listar ciclos review_feedback: %v", err)
+	}
+	if len(cycles) != 1 || cycles[0].Agente != "CodexSupervisor" {
+		t.Fatalf("ciclo review_feedback inesperado: %+v", cycles)
+	}
+	gates, err := db.ListarReviewGates(db.FiltroReviewGates{ProyectoID: &proyectoID, Limit: 10})
+	if err != nil {
+		t.Fatalf("listar gates: %v", err)
+	}
+	if len(gates) != 1 || gates[0].Estado != db.ReviewGateEnRevision {
+		t.Fatalf("gate deberia reabrirse en_revision: %+v", gates)
+	}
+	policy, err := db.GetProyectoAutonomia(proyectoID)
+	if err != nil {
+		t.Fatalf("get proyecto autonomia: %v", err)
+	}
+	if policy.EstadoAutonomia != db.AutonomiaProyectoActiva {
+		t.Fatalf("el proyecto deberia reactivarse para corregir, got=%s", policy.EstadoAutonomia)
 	}
 }
 

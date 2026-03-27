@@ -58,7 +58,21 @@ func planificarAgenteAutomaticamente(ag *Agente) error {
 		return err
 	}
 	if tieneTrabajo {
-		return encolarStartAutomaticoSiHaceFalta(ag.Nombre, proyecto, "trabajo_asignado")
+		return EncolarStartAutomaticoSiHaceFalta(ag.Nombre, proyecto, "trabajo_asignado")
+	}
+	reservado, _, err := agenteReservadoAutonomiaProyecto(ag.Nombre, proyectoID)
+	if err != nil {
+		return err
+	}
+	if reservado {
+		return nil
+	}
+	admiteWorker, err := proyectoAdmiteWorkerAutonomiaParaAgente(proyectoID, ag.Nombre)
+	if err != nil {
+		return err
+	}
+	if !admiteWorker {
+		return nil
 	}
 
 	// Buscar la siguiente tarea libre para ese proyecto
@@ -75,7 +89,7 @@ func planificarAgenteAutomaticamente(ag *Agente) error {
 		fmt.Sprintf("Asignada automáticamente a %s (Autonomía Total)", ag.Nombre))
 	fmt.Printf("✓ [Planificador] Tarea #%d ('%s') asignada automáticamente a %s\n",
 		tarea.ID, tarea.Titulo, ag.Nombre)
-	return encolarStartAutomaticoSiHaceFalta(ag.Nombre, proyecto, fmt.Sprintf("tarea_autoasignada:%d", tarea.ID))
+	return EncolarStartAutomaticoSiHaceFalta(ag.Nombre, proyecto, fmt.Sprintf("tarea_autoasignada:%d", tarea.ID))
 }
 
 func agenteTieneTrabajoArrancable(agente string, proyectoID int64) (bool, error) {
@@ -214,6 +228,7 @@ type candidatoProyectoAutomatico struct {
 	Proyecto   *Proyecto
 	Operacion  *ProyectoOperacion
 	Activos    int
+	Workers    int
 	Deseados   int
 	Deficit    int
 	TieneMin   bool
@@ -221,7 +236,7 @@ type candidatoProyectoAutomatico struct {
 }
 
 func seleccionarProyectoAutomaticoDisponible(agente string) (int64, error) {
-	_ = strings.TrimSpace(agente)
+	agente = strings.TrimSpace(agente)
 	activo := true
 	proyectos, err := ListarProyectos(FiltroProyectos{Activo: &activo})
 	if err != nil {
@@ -238,6 +253,13 @@ func seleccionarProyectoAutomaticoDisponible(agente string) (int64, error) {
 	var mejor *candidatoProyectoAutomatico
 	for _, proyecto := range proyectos {
 		if proyecto == nil || proyecto.ID == 0 {
+			continue
+		}
+		reservado, _, err := agenteReservadoAutonomiaProyecto(agente, proyecto.ID)
+		if err != nil {
+			return 0, err
+		}
+		if reservado {
 			continue
 		}
 		disponible, err := ProyectoDisponibleParaAutonomia(proyecto.ID)
@@ -259,7 +281,18 @@ func seleccionarProyectoAutomaticoDisponible(agente string) (int64, error) {
 			return 0, err
 		}
 		activos := activosPorProyecto[proyecto.ID]
+		workers, err := contarWorkersActivosProyecto(proyecto.ID)
+		if err != nil {
+			return 0, err
+		}
 		if op.MaxAgentes > 0 && activos >= op.MaxAgentes {
+			continue
+		}
+		admiteWorker, err := proyectoAdmiteWorkerAutonomia(proyecto.ID)
+		if err != nil {
+			return 0, err
+		}
+		if !admiteWorker {
 			continue
 		}
 		deseados := cupoDeseadoProyecto(op, totalPlanificables)
@@ -267,10 +300,11 @@ func seleccionarProyectoAutomaticoDisponible(agente string) (int64, error) {
 			Proyecto:   proyecto,
 			Operacion:  op,
 			Activos:    activos,
+			Workers:    workers,
 			Deseados:   deseados,
-			Deficit:    deseados - activos,
-			TieneMin:   activos < op.MinAgentes,
-			CargaRatio: cargaProyecto(activos, deseados),
+			Deficit:    deseados - workers,
+			TieneMin:   workers < op.MinAgentes,
+			CargaRatio: cargaProyecto(workers, deseados),
 		}
 		if mejorProyectoAutomatico(candidato, mejor) {
 			mejor = candidato
@@ -351,7 +385,91 @@ func cargaProyecto(activos, deseados int) int {
 	return (activos * 10000) / deseados
 }
 
-func encolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo string) error {
+func agenteReservadoAutonomiaProyecto(agente string, proyectoID int64) (bool, string, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || proyectoID <= 0 {
+		return false, "", nil
+	}
+	policy, err := GetProyectoAutonomia(proyectoID)
+	if err != nil || policy == nil || !policy.Enabled {
+		return false, "", err
+	}
+	if policy.ReserveSupervisor && strings.EqualFold(agente, strings.TrimSpace(policy.SupervisorAgente)) {
+		return true, "supervisor", nil
+	}
+	if policy.ReserveReviewer && strings.EqualFold(agente, strings.TrimSpace(policy.ReviewerAgente)) {
+		return true, "reviewer", nil
+	}
+	return false, "", nil
+}
+
+func contarWorkersActivosProyecto(proyectoID int64) (int, error) {
+	estado := AsignacionActiva
+	asignaciones, err := ListarAsignaciones(FiltroAsignaciones{
+		ProyectoID: &proyectoID,
+		Estado:     &estado,
+	})
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, asignacion := range asignaciones {
+		if asignacion == nil {
+			continue
+		}
+		reservado, _, err := agenteReservadoAutonomiaProyecto(asignacion.Agente, proyectoID)
+		if err != nil {
+			return 0, err
+		}
+		if reservado {
+			continue
+		}
+		total++
+	}
+	return total, nil
+}
+
+func proyectoAdmiteWorkerAutonomia(proyectoID int64) (bool, error) {
+	return proyectoAdmiteWorkerAutonomiaParaAgente(proyectoID, "")
+}
+
+func proyectoAdmiteWorkerAutonomiaParaAgente(proyectoID int64, agente string) (bool, error) {
+	if proyectoID <= 0 {
+		return true, nil
+	}
+	policy, err := GetProyectoAutonomia(proyectoID)
+	if err != nil || policy == nil || !policy.Enabled || policy.MaxWorkers <= 0 {
+		return true, err
+	}
+	workers, err := contarWorkersActivosProyecto(proyectoID)
+	if err != nil {
+		return false, err
+	}
+	agente = strings.TrimSpace(agente)
+	if agente != "" {
+		estado := AsignacionActiva
+		asignaciones, err := ListarAsignaciones(FiltroAsignaciones{
+			Agente:     &agente,
+			ProyectoID: &proyectoID,
+			Estado:     &estado,
+		})
+		if err != nil {
+			return false, err
+		}
+		if len(asignaciones) > 0 {
+			reservado, _, err := agenteReservadoAutonomiaProyecto(agente, proyectoID)
+			if err != nil {
+				return false, err
+			}
+			if !reservado && workers > 0 {
+				workers--
+			}
+		}
+	}
+	return workers < policy.MaxWorkers, nil
+}
+
+func EncolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo string) error {
 	if proyecto == nil {
 		return nil
 	}

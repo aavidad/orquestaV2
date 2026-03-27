@@ -202,6 +202,9 @@ func prepararSchemaLegacy(db *sql.DB) error {
 	if err := reconstruirRuntimeOrdersLegacy(db); err != nil {
 		return err
 	}
+	if err := reconstruirAutonomiaCiclosLegacy(db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -416,6 +419,62 @@ func reconstruirRuntimeOrdersLegacy(db *sql.DB) error {
 				runtimeLegacyExpr(legacyCols, "updated_at", runtimeLegacyExpr(legacyCols, "created_at", "CURRENT_TIMESTAMP")),
 			}
 			return `INSERT INTO runtime_orders (` + strings.Join(insertCols, ", ") + `)
+				SELECT ` + strings.Join(selectExprs, ", ") + ` FROM ` + legacy, nil
+		},
+	)
+}
+
+func reconstruirAutonomiaCiclosLegacy(db *sql.DB) error {
+	const tableName = "autonomia_ciclos"
+	existe, err := tablaExiste(db, tableName)
+	if err != nil || !existe {
+		return err
+	}
+	sqlText, err := tablaSQL(db, tableName)
+	if err != nil {
+		return err
+	}
+	sqlNorm := strings.ToLower(sqlText)
+	if strings.TrimSpace(sqlNorm) != "" && strings.Contains(sqlNorm, "review_feedback") {
+		return nil
+	}
+	return rebuildSQLiteTable(
+		db,
+		tableName,
+		[]string{"idx_autonomia_ciclos_proyecto_kind"},
+		`CREATE TABLE autonomia_ciclos (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			proyecto_id INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
+			kind TEXT NOT NULL CHECK (kind IN ('supervision','review','review_feedback','closure')),
+			agente TEXT NOT NULL DEFAULT '',
+			sesion_id INTEGER REFERENCES sesiones(id) ON DELETE SET NULL,
+			runtime_id INTEGER REFERENCES runtime_instances(id) ON DELETE SET NULL,
+			input_json TEXT NOT NULL DEFAULT '{}',
+			decision_json TEXT NOT NULL DEFAULT '{}',
+			resultado TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		[]string{
+			`CREATE INDEX idx_autonomia_ciclos_proyecto_kind ON autonomia_ciclos(proyecto_id, kind, id DESC)`,
+		},
+		func(legacy string, legacyCols map[string]bool) (string, []any) {
+			insertCols := []string{
+				"id", "proyecto_id", "kind", "agente", "sesion_id", "runtime_id",
+				"input_json", "decision_json", "resultado", "created_at",
+			}
+			selectExprs := []string{
+				runtimeLegacyExpr(legacyCols, "id", "NULL"),
+				runtimeLegacyExpr(legacyCols, "proyecto_id", "NULL"),
+				runtimeLegacyExpr(legacyCols, "kind", "'supervision'"),
+				runtimeLegacyExpr(legacyCols, "agente", "''"),
+				runtimeLegacyExpr(legacyCols, "sesion_id", "NULL"),
+				runtimeLegacyExpr(legacyCols, "runtime_id", "NULL"),
+				runtimeLegacyExpr(legacyCols, "input_json", "'{}'"),
+				runtimeLegacyExpr(legacyCols, "decision_json", "'{}'"),
+				runtimeLegacyExpr(legacyCols, "resultado", "''"),
+				runtimeLegacyExpr(legacyCols, "created_at", "CURRENT_TIMESTAMP"),
+			}
+			return `INSERT INTO autonomia_ciclos (` + strings.Join(insertCols, ", ") + `)
 				SELECT ` + strings.Join(selectExprs, ", ") + ` FROM ` + legacy, nil
 		},
 	)

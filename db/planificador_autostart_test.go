@@ -182,6 +182,216 @@ func TestPlanificarTareasAutomaticamenteEncolaStartParaTrabajoYaAsignado(t *test
 	}
 }
 
+func TestPlanificarTareasAutomaticamenteNoAutoasignaTrabajoASupervisorReservado(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexSupervisor")
+
+	if err := RegistrarAgente("CodexSupervisor", "programador"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre='CodexSupervisor'`); err != nil {
+		t.Fatalf("marcar supervisor disponible: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertProyectoAutonomia(&ProyectoAutonomia{
+		ProyectoID:        proyectoID,
+		Enabled:           true,
+		MaxWorkers:        1,
+		SupervisorAgente:  "CodexSupervisor",
+		ReserveSupervisor: true,
+		EstadoAutonomia:   AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "No tocar supervisor",
+		Descripcion: "Debe quedar libre para otro worker",
+		ProyectoID:  &proyectoID,
+		Modulo:      "orquestador",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+
+	if err := PlanificarTareasAutomaticamente(); err != nil {
+		t.Fatalf("planificar: %v", err)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != TareaLibre || tarea.Agente != nil {
+		t.Fatalf("el supervisor reservado no deberia autoasignarse trabajo: %+v", tarea)
+	}
+	agente := "CodexSupervisor"
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders supervisor: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("supervisor reservado no deberia recibir start por trabajo libre: %+v", orders)
+	}
+}
+
+func TestPlanificarTareasAutomaticamenteNoCuentaSupervisorReservadoComoWorker(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexSupervisor", "CodexWorker")
+
+	if err := RegistrarAgente("CodexSupervisor", "programador"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	if err := RegistrarAgente("CodexWorker", "programador"); err != nil {
+		t.Fatalf("registrar worker: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre IN ('CodexSupervisor','CodexWorker')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertProyectoAutonomia(&ProyectoAutonomia{
+		ProyectoID:        proyectoID,
+		Enabled:           true,
+		MaxWorkers:        1,
+		SupervisorAgente:  "CodexSupervisor",
+		ReserveSupervisor: true,
+		EstadoAutonomia:   AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Worker libre",
+		Descripcion: "El supervisor reservado no debe consumir el cupo de worker",
+		ProyectoID:  &proyectoID,
+		Modulo:      "orquestador",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+
+	if err := PlanificarTareasAutomaticamente(); err != nil {
+		t.Fatalf("planificar: %v", err)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "CodexWorker" || tarea.Estado != TareaAsignada {
+		t.Fatalf("el worker deberia tomar la tarea y no el supervisor reservado: %+v", tarea)
+	}
+}
+
+func TestPlanificarTareasAutomaticamenteRespetaMaxWorkersAutonomia(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexBusy", "CodexWorker")
+
+	if err := RegistrarAgente("CodexBusy", "programador"); err != nil {
+		t.Fatalf("registrar worker ocupado: %v", err)
+	}
+	if err := RegistrarAgente("CodexWorker", "programador"); err != nil {
+		t.Fatalf("registrar worker libre: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre IN ('CodexBusy','CodexWorker')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertProyectoAutonomia(&ProyectoAutonomia{
+		ProyectoID:      proyectoID,
+		Enabled:         true,
+		MaxWorkers:      1,
+		EstadoAutonomia: AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := ActivarAsignacion("CodexBusy", proyectoID, "worker ocupado"); err != nil {
+		t.Fatalf("activar asignacion ocupada: %v", err)
+	}
+	tareaBusyID, err := CrearTarea(&Tarea{
+		Titulo:      "Trabajo ya ocupado",
+		Descripcion: "Mantiene el cupo lleno",
+		ProyectoID:  &proyectoID,
+		Modulo:      "orquestador",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea busy: %v", err)
+	}
+	if err := TomarTarea(tareaBusyID, "CodexBusy"); err != nil {
+		t.Fatalf("tomar tarea busy: %v", err)
+	}
+	tareaLibreID, err := CrearTarea(&Tarea{
+		Titulo:      "No debe entrar otro worker",
+		Descripcion: "Max workers = 1",
+		ProyectoID:  &proyectoID,
+		Modulo:      "orquestador",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea libre: %v", err)
+	}
+
+	if err := PlanificarTareasAutomaticamente(); err != nil {
+		t.Fatalf("planificar: %v", err)
+	}
+
+	tareaLibre, err := GetTarea(tareaLibreID)
+	if err != nil {
+		t.Fatalf("get tarea libre: %v", err)
+	}
+	if tareaLibre.Estado != TareaLibre || tareaLibre.Agente != nil {
+		t.Fatalf("max_workers deberia impedir un segundo worker: %+v", tareaLibre)
+	}
+	agente := "CodexWorker"
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders worker: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("max_workers no deberia encolar trabajo para un segundo worker: %+v", orders)
+	}
+}
+
 func TestPlanificarTareasAutomaticamenteNoDuplicaStartNiHandleActivo(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	restringirPlanificadorATestAgentes(t, "Codex1")
