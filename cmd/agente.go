@@ -376,6 +376,15 @@ func init() {
 	agenteEjecutarCmd.Flags().StringP("conector", "c", "", "Conector a usar")
 	agenteEjecutarCmd.Flags().String("modelo", "", "Modelo a usar")
 	agenteEjecutarCmd.Flags().Int("pausa-minutos", 60, "Minutos de espera si se detecta bloqueo")
+	agenteAdoptarContextoCmd.Flags().StringP("proyecto", "p", "", "Proyecto cuyo contexto actual se entrega al orquestador")
+	agenteAdoptarContextoCmd.Flags().StringP("conector", "c", "", "Conector preferido para continuar el frente")
+	agenteAdoptarContextoCmd.Flags().String("cwd", "", "Directorio de trabajo actual; por defecto el cwd del proceso")
+	agenteAdoptarContextoCmd.Flags().String("branch", "", "Rama actual; por defecto se intenta detectar con git")
+	agenteAdoptarContextoCmd.Flags().String("herramienta", "", "Herramienta de origen de la sesión (por defecto codex-cli)")
+	agenteAdoptarContextoCmd.Flags().String("external-session-id", "", "Identificador externo de la sesión si existe")
+	agenteAdoptarContextoCmd.Flags().String("resume-payload", "", "Payload JSON adicional para la continuidad")
+	agenteAdoptarContextoCmd.Flags().String("resumen", "", "Resumen corto del estado actual a conservar")
+	agenteAdoptarContextoCmd.Flags().String("nota", "", "Nota operativa adicional para el takeover")
 	agenteHandoffCmd.Flags().Int64("tarea", 0, "Tarea viva a reasignar durante el handoff")
 	agenteHandoffCmd.Flags().String("motivo", "", "Motivo del handoff")
 	agenteHandoffCmd.Flags().String("resumen", "", "Resumen de continuidad para el agente destino")
@@ -390,6 +399,7 @@ func init() {
 	agenteCmd.AddCommand(
 		agentePrepararCmd,
 		agenteTickCmd,
+		agenteAdoptarContextoCmd,
 		agentePurgarCmd,
 		agentePausarCmd,
 		agenteRehabilitarCmd,

@@ -54,6 +54,26 @@ func TestPrepararBootstrapRuntimeAgenteInyectaHandoffYMailbox(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("encolar nudge: %v", err)
 	}
+	reglaID, err := db.UpsertRegla(&db.Regla{
+		TipoAgente:  "programador",
+		Categoria:   "arquitectura",
+		Titulo:      "regla-bootstrap-governance",
+		Descripcion: "forzar contexto gobernanza en bootstrap",
+		Activa:      true,
+	})
+	if err != nil {
+		t.Fatalf("upsert regla: %v", err)
+	}
+	if _, err := db.GuardarGovernanceOverride("tester", &db.GovernanceOverride{
+		TipoAgente: "programador",
+		ScopeTipo:  db.GovernanceScopeProyecto,
+		ScopeRef:   "orquestador",
+		Entidad:    db.GovernanceEntityRegla,
+		EntidadID:  reglaID,
+		Accion:     db.GovernanceActionDisable,
+	}); err != nil {
+		t.Fatalf("guardar override gobernanza: %v", err)
+	}
 
 	resume, state, err := prepararBootstrapRuntimeAgente("Codex1", proyecto, nil)
 	if err != nil {
@@ -70,6 +90,9 @@ func TestPrepararBootstrapRuntimeAgenteInyectaHandoffYMailbox(t *testing.T) {
 	}
 	if !strings.Contains(resume.ResumePayloadJSON, `"runtime_order"`) {
 		t.Fatalf("resume payload sin runtime_order: %s", resume.ResumePayloadJSON)
+	}
+	if !strings.Contains(resume.ResumePayloadJSON, `"governance_catalog"`) || !strings.Contains(resume.ResumePayloadJSON, `"resolucion_actual":"rol+proyecto"`) {
+		t.Fatalf("resume payload sin gobernanza efectiva: %s", resume.ResumePayloadJSON)
 	}
 
 	order, err := db.GetRuntimeOrder(state.Order.ID)

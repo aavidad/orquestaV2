@@ -899,6 +899,15 @@ func crearHandoffAgentePorAPI(origen, destino string, tareaID *int64, motivo, re
 	return resp.OrderID, true, nil
 }
 
+func adoptarContextoAgentePorAPI(req apiAgenteAdoptarContextoRequest) (*apiAgenteAdoptarContextoResponse, bool, error) {
+	var resp apiAgenteAdoptarContextoResponse
+	ok, err := apiPost("/api/agente/adoptar-contexto", req, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
 func cargarRuntimeMailboxDesdeAPI(query url.Values) ([]*db.RuntimeMailboxMessage, bool, error) {
 	var resp apiRuntimeMailboxResponse
 	ok, err := apiGetQuery("/api/runtime-mailbox", query, &resp)

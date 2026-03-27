@@ -25,6 +25,19 @@ CREATE TABLE IF NOT EXISTS conectores (
     updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS conectores_operacion (
+    conector_id          INTEGER PRIMARY KEY REFERENCES conectores(id) ON DELETE CASCADE,
+    estado_operativo     TEXT    NOT NULL DEFAULT 'activo'
+                                 CHECK (estado_operativo IN ('activo','circuito_abierto')),
+    motivo               TEXT    NOT NULL DEFAULT '',
+    fallos_consecutivos  INTEGER NOT NULL DEFAULT 0,
+    cooldown_until       DATETIME,
+    circuito_abierto_at  DATETIME,
+    ultimo_error         TEXT    NOT NULL DEFAULT '',
+    created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ─── Proyectos del workspace ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS proyectos (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -865,6 +878,8 @@ INSERT INTO config (clave, valor) VALUES
     ('pool_handoff_threshold_ratio','0.10'),
     ('pool_budget_snapshot_max_age_seconds','300'),
     ('pool_default_budget_source','manual'),
+    ('connector_circuit_breaker_threshold','3'),
+    ('connector_circuit_breaker_cooldown_seconds','300'),
     ('model_policy_default_profile','implementacion'),
     ('model_policy_default_reasoning','high'),
     ('runtime_handle_stale_seconds','120'),

@@ -379,6 +379,181 @@ func TestAPIAsignacionActivarYSesionInicio(t *testing.T) {
 	}
 }
 
+func TestAPIAgenteAdoptarContextoPersisteContinuidadYGobernanza(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := db.UpsertConector(&db.Conector{
+		Slug:       "codex-cli",
+		Nombre:     "Codex CLI",
+		Transporte: "cli",
+		Comando:    "codex",
+		Activo:     true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "autofirmav2",
+		Nombre:  "AutofirmaV2",
+		RutaAbs: filepath.Join(tmp, "AutofirmaV2"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Completar proyecto",
+		Descripcion: "Trabajo pendiente",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	}); err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	body, _ := json.Marshal(apiAgenteAdoptarContextoRequest{
+		Agente:            "Codex1",
+		Proyecto:          "autofirmav2",
+		Conector:          "codex-cli",
+		CWD:               filepath.Join(tmp, "AutofirmaV2"),
+		Branch:            "feature/adopcion",
+		ExternalSessionID: "sess-codex-actual",
+		Resumen:           "seguir este mismo proyecto hasta terminarlo",
+		Nota:              "adopcion de la sesion actual",
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/agente/adoptar-contexto", bytes.NewReader(body))
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status adoptar contexto inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp apiAgenteAdoptarContextoResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode adoptar contexto: %v", err)
+	}
+	if resp.Sesion == nil || resp.Sesion.Agente != "Codex1" {
+		t.Fatalf("sesion adoptada inesperada: %+v", resp.Sesion)
+	}
+	if resp.Sesion.Activa || resp.Sesion.Estado != "pausada" {
+		t.Fatalf("la sesion adoptada deberia quedar aparcada hasta el takeover: %+v", resp.Sesion)
+	}
+	if resp.Checkpoint == nil || resp.Checkpoint.CheckpointKind != "contexto_adoptado" {
+		t.Fatalf("checkpoint adoptado inesperado: %+v", resp.Checkpoint)
+	}
+	if resp.RuntimeOrderID == nil || *resp.RuntimeOrderID <= 0 {
+		t.Fatalf("se esperaba runtime_order start para la adopcion: %+v", resp)
+	}
+	if resp.Gobernanza == nil || strings.TrimSpace(resp.Gobernanza.ResolucionActual) == "" {
+		t.Fatalf("catalogo de gobernanza ausente: %+v", resp.Gobernanza)
+	}
+
+	sesion, err := db.ObtenerUltimaSesion("Codex1", &proyectoID)
+	if err != nil {
+		t.Fatalf("get ultima sesion: %v", err)
+	}
+	if !strings.Contains(sesion.ResumePayloadJSON, `"governance_catalog"`) || !strings.Contains(sesion.ResumePayloadJSON, `"project_context"`) {
+		t.Fatalf("resume payload adoptado incompleto: %s", sesion.ResumePayloadJSON)
+	}
+	if !strings.Contains(sesion.ResumenContinuidad, "Contexto adoptado por Orquesta") {
+		t.Fatalf("resumen continuidad no adoptado: %s", sesion.ResumenContinuidad)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "start" || !strings.Contains(orders[0].PayloadJSON, `"motivo":"adopt_context"`) {
+		t.Fatalf("runtime orders inesperadas tras adopcion: %+v", orders)
+	}
+}
+
+func TestAPIAgenteAdoptarContextoNoDuplicaRuntimeExternoActivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	conectorID, err := db.UpsertConector(&db.Conector{
+		Slug:       "codex-remote",
+		Nombre:     "Codex Remote",
+		Transporte: "api",
+		Comando:    "http://localhost:9999",
+		Activo:     true,
+	})
+	if err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "autofirmav2",
+		Nombre:  "AutofirmaV2",
+		RutaAbs: filepath.Join(tmp, "AutofirmaV2"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex1",
+		ConectorID:         &conectorID,
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "AutofirmaV2"),
+		Herramienta:        "codex-remote",
+		ExternalSessionID:  "sess-live",
+		ResumenContinuidad: "sesion externa viva",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	body, _ := json.Marshal(apiAgenteAdoptarContextoRequest{
+		Agente:            "Codex1",
+		Proyecto:          "autofirmav2",
+		Conector:          "codex-remote",
+		CWD:               filepath.Join(tmp, "AutofirmaV2"),
+		ExternalSessionID: "sess-live",
+		Resumen:           "seguir este mismo proyecto",
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/agente/adoptar-contexto", bytes.NewReader(body))
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status adoptar contexto inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp apiAgenteAdoptarContextoResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode adoptar contexto: %v", err)
+	}
+	if resp.RuntimeOrderID != nil {
+		t.Fatalf("no deberia encolar start sobre runtime externo vivo: %+v", resp)
+	}
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia haber runtime orders nuevas: %+v", orders)
+	}
+}
+
 func TestAPIPropuestaReabrirYRepararVotos(t *testing.T) {
 	prepararDBTemporalCmd(t)
 
@@ -1308,6 +1483,26 @@ func TestAPIAgentePrepararIntegraBootstrapRuntime(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("crear propuesta: %v", err)
 	}
+	reglaID, err := db.UpsertRegla(&db.Regla{
+		TipoAgente:  "programador",
+		Categoria:   "arquitectura",
+		Titulo:      "regla-api-prepare-governance",
+		Descripcion: "forzar reconcile de governance en prepare",
+		Activa:      true,
+	})
+	if err != nil {
+		t.Fatalf("upsert regla: %v", err)
+	}
+	if _, err := db.GuardarGovernanceOverride("tester", &db.GovernanceOverride{
+		TipoAgente: "programador",
+		ScopeTipo:  db.GovernanceScopeProyecto,
+		ScopeRef:   "orquestador",
+		Entidad:    db.GovernanceEntityRegla,
+		EntidadID:  reglaID,
+		Accion:     db.GovernanceActionDisable,
+	}); err != nil {
+		t.Fatalf("guardar override gobernanza: %v", err)
+	}
 
 	mux := http.NewServeMux()
 	registerAPIRoutes(mux)
@@ -1329,8 +1524,27 @@ func TestAPIAgentePrepararIntegraBootstrapRuntime(t *testing.T) {
 	if out.Bootstrap.Order == nil || out.Bootstrap.Order.Tipo != "handoff" {
 		t.Fatalf("order bootstrap inesperada: %+v", out.Bootstrap.Order)
 	}
-	if len(out.Bootstrap.Mailbox) != 1 || out.Bootstrap.Mailbox[0].Kind != "handoff_note" {
-		t.Fatalf("mailbox bootstrap inesperado: %+v", out.Bootstrap.Mailbox)
+	if len(out.Bootstrap.Mailbox) == 0 {
+		t.Fatalf("mailbox bootstrap vacio: %+v", out.Bootstrap.Mailbox)
+	}
+	hasHandoffNote := false
+	hasGovernanceRefresh := false
+	for _, msg := range out.Bootstrap.Mailbox {
+		if msg == nil {
+			continue
+		}
+		switch msg.Kind {
+		case "handoff_note":
+			hasHandoffNote = true
+		case db.MailboxKindGovernanceRefresh:
+			hasGovernanceRefresh = true
+		}
+	}
+	if !hasHandoffNote {
+		t.Fatalf("mailbox bootstrap sin handoff_note: %+v", out.Bootstrap.Mailbox)
+	}
+	if !hasGovernanceRefresh {
+		t.Fatalf("mailbox bootstrap sin governance_refresh: %+v", out.Bootstrap.Mailbox)
 	}
 	if out.Bootstrap.Checkpoint == nil || out.Bootstrap.Checkpoint.Branch != "feature/bootstrap" {
 		t.Fatalf("checkpoint bootstrap inesperado: %+v", out.Bootstrap.Checkpoint)
@@ -1349,6 +1563,9 @@ func TestAPIAgentePrepararIntegraBootstrapRuntime(t *testing.T) {
 	}
 	if !strings.Contains(out.Plan.ContinuityPrompt, `"project_context"`) || !strings.Contains(out.Plan.ContinuityPrompt, "feature/wt-codex1") || !strings.Contains(out.Plan.ContinuityPrompt, "OP-901") {
 		t.Fatalf("continuity prompt sin mapa operativo: %s", out.Plan.ContinuityPrompt)
+	}
+	if !strings.Contains(out.Plan.ContinuityPrompt, `"governance_catalog"`) || !strings.Contains(out.Plan.ContinuityPrompt, `"resolucion_actual":"rol+proyecto"`) {
+		t.Fatalf("continuity prompt sin gobernanza efectiva: %s", out.Plan.ContinuityPrompt)
 	}
 
 	order, err := db.GetRuntimeOrder(orderID)
@@ -1369,7 +1586,7 @@ func TestAPIAgentePrepararIntegraBootstrapRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listar mailbox consumido: %v", err)
 	}
-	if len(mailbox) != 1 {
-		t.Fatalf("mailbox consumido inesperado: %+v", mailbox)
+	if len(mailbox) != len(out.Bootstrap.Mailbox) {
+		t.Fatalf("mailbox consumido inesperado: got=%d want=%d %+v", len(mailbox), len(out.Bootstrap.Mailbox), mailbox)
 	}
 }

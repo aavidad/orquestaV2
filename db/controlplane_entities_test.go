@@ -1292,6 +1292,11 @@ func TestRuntimeOrderStartRemotoPersisteSesionYHandleSinPID(t *testing.T) {
 		{nombre: "stop", tipo: "stop", wantPath: "/stop", wantLogical: "cerrado", wantEstado: "cerrado"},
 	} {
 		calls = calls[:0]
+		if tc.tipo == "resume" {
+			if _, err := DB.Exec(`UPDATE runtime_handles SET estado='fallido' WHERE id = ?`, handle.ID); err != nil {
+				t.Fatalf("marcar handle fallido antes de resume: %v", err)
+			}
+		}
 		orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
 			Agente:      "Codex1",
 			ProyectoID:  &proyectoID,
@@ -1607,6 +1612,33 @@ func TestRuntimeOrderPauseCheckpointeaYSesionQuedaPausada(t *testing.T) {
 	if sesion.Estado != "pausada" {
 		t.Fatalf("estado de sesion tras pause inesperado: %+v", sesion)
 	}
+	reglaID, err := UpsertRegla(&Regla{
+		TipoAgente:  "programador",
+		Categoria:   "arquitectura",
+		Titulo:      "regla-resume-reconcile",
+		Descripcion: "regla para comprobar refresh en resume",
+		Activa:      true,
+	})
+	if err != nil {
+		t.Fatalf("upsert regla: %v", err)
+	}
+	if _, err := GuardarGovernanceOverride("tester", &GovernanceOverride{
+		TipoAgente: "programador",
+		ScopeTipo:  GovernanceScopeProyecto,
+		ScopeRef:   "orquestador",
+		Entidad:    GovernanceEntityRegla,
+		EntidadID:  reglaID,
+		Accion:     GovernanceActionDisable,
+	}); err != nil {
+		t.Fatalf("guardar override: %v", err)
+	}
+	mailboxAntes, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{
+		ToAgente:   stringPtr("Codex1"),
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("mailbox antes de resume: %v", err)
+	}
 
 	resumeID, err := EncolarRuntimeOrder(&RuntimeOrder{
 		Agente:      "Codex1",
@@ -1632,6 +1664,50 @@ func TestRuntimeOrderPauseCheckpointeaYSesionQuedaPausada(t *testing.T) {
 	}
 	if sesion.Estado != "activa" {
 		t.Fatalf("estado de sesion tras resume inesperado: %+v", sesion)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(sesion.ResumePayloadJSON), &envelope); err != nil {
+		t.Fatalf("resume payload invalido: %v (%s)", err, sesion.ResumePayloadJSON)
+	}
+	governanceCatalog, ok := envelope["governance_catalog"].(map[string]any)
+	if !ok {
+		t.Fatalf("resume payload sin governance_catalog: %+v", envelope)
+	}
+	if got := governanceCatalog["resolucion_actual"]; got != "rol+proyecto" {
+		t.Fatalf("resolucion_actual inesperada tras resume: %#v", got)
+	}
+	if !strings.Contains(sesion.ResumenContinuidad, "Catálogo efectivo") {
+		t.Fatalf("resumen continuidad no reconciliado: %s", sesion.ResumenContinuidad)
+	}
+	mailboxDespues, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{
+		ToAgente:   stringPtr("Codex1"),
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("mailbox despues de resume: %v", err)
+	}
+	if len(mailboxDespues) <= len(mailboxAntes) {
+		t.Fatalf("resume deberia haber emitido governance_refresh propio: antes=%d despues=%d", len(mailboxAntes), len(mailboxDespues))
+	}
+	foundResumeReconcile := false
+	for _, msg := range mailboxDespues {
+		if msg == nil || msg.Kind != MailboxKindGovernanceRefresh {
+			continue
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(msg.PayloadJSON), &payload); err != nil {
+			t.Fatalf("payload mailbox invalido: %v (%s)", err, msg.PayloadJSON)
+		}
+		if payload["motivo"] != "resume_reconcile" {
+			continue
+		}
+		foundResumeReconcile = true
+		if payload["hash"] != governanceCatalog["hash"] {
+			t.Fatalf("hash de refresh inesperado: got=%#v want=%#v", payload["hash"], governanceCatalog["hash"])
+		}
+	}
+	if !foundResumeReconcile {
+		t.Fatalf("no se emitio governance_refresh resume_reconcile: %+v", mailboxDespues)
 	}
 	if got := strings.Join(calls, ","); !strings.Contains(got, "/pause") || !strings.Contains(got, "/continue") {
 		t.Fatalf("llamadas pause/resume inesperadas: %s", got)
@@ -1909,6 +1985,193 @@ func TestProcesarRuntimeOrdersBatchSyncStatusObservaEstadoRemoto(t *testing.T) {
 	}
 	if got := strings.Join(calls, ","); !strings.Contains(got, "/status") {
 		t.Fatalf("sync remoto sin llamada status: %s", got)
+	}
+}
+
+func TestProcesarRuntimeOrdersBatchSyncStatusDegradaRuntimeTrasFallosRemotos(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	calls := make([]string, 0, 8)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.URL.Path)
+		switch r.URL.Path {
+		case "/launch":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"external_session_id": "sess-remote-sync-fail",
+				"handle_ref":          "remote-sync-fail",
+			})
+		case "/status":
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"error":"adapter down"}`))
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		}
+	}))
+	defer srv.Close()
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := ConfigSet("runtime_remote_sync_failure_threshold", "2"); err != nil {
+		t.Fatalf("config threshold: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "codex-remote-sync-fail",
+		Nombre:     "Codex Remote Sync Fail",
+		Transporte: "api",
+		Comando:    srv.URL,
+		MetadataJSON: `{
+			"launch_path": "/launch",
+			"status_path": "/status"
+		}`,
+		Activo: true,
+	}); err != nil {
+		t.Fatalf("upsert conector remoto: %v", err)
+	}
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"codex-remote-sync-fail"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start remoto: %v", err)
+	}
+	if _, err := ProcesarRuntimeOrdersBatch(); err != nil {
+		t.Fatalf("procesar batch start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil || startOrder == nil || startOrder.Estado != "completada" {
+		t.Fatalf("start remoto inesperado: %+v err=%v", startOrder, err)
+	}
+	sesion, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion remota: %+v err=%v", sesion, err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle remoto: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime remoto: %+v err=%v", runtime, err)
+	}
+
+	for intento := 1; intento <= 2; intento++ {
+		syncID, err := EncolarRuntimeOrder(&RuntimeOrder{
+			Agente:      "Codex1",
+			ProyectoID:  &proyectoID,
+			RuntimeID:   handle.RuntimeID,
+			HandleID:    &handle.ID,
+			Tipo:        "sync_status",
+			PayloadJSON: `{}`,
+		})
+		if err != nil {
+			t.Fatalf("encolar sync remoto intento %d: %v", intento, err)
+		}
+		if _, err := ProcesarRuntimeOrdersBatch(); err != nil {
+			t.Fatalf("procesar batch sync intento %d: %v", intento, err)
+		}
+		syncOrder, err := GetRuntimeOrder(syncID)
+		if err != nil || syncOrder == nil {
+			t.Fatalf("get sync remoto intento %d: %+v err=%v", intento, syncOrder, err)
+		}
+		if syncOrder.Estado != "completada" || !strings.Contains(syncOrder.ResultadoJSON, `"observed_remote_error":true`) {
+			t.Fatalf("sync remoto intento %d deberia completar con error observado: %+v", intento, syncOrder)
+		}
+		handle, err = GetRuntimeHandle(handle.ID)
+		if err != nil || handle == nil {
+			t.Fatalf("get handle intento %d: %+v err=%v", intento, handle, err)
+		}
+		if !strings.Contains(handle.MetadataJSON, `"remote_sync_failures":`) {
+			t.Fatalf("handle sin contador de fallos remoto tras intento %d: %+v", intento, handle)
+		}
+	}
+
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle final: %+v err=%v", handle, err)
+	}
+	if handle.Estado != "fallido" || !strings.Contains(handle.MetadataJSON, `"remote_sync_failures":2`) || !strings.Contains(handle.MetadataJSON, `"remote_last_error":"adaptador remoto devolvió 503`) {
+		t.Fatalf("handle remoto degradado inesperado: %+v", handle)
+	}
+	runtime, err = GetRuntime(runtime.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("get runtime final: %+v err=%v", runtime, err)
+	}
+	if runtime.LogicalState != "degradado" || runtime.ProcessState != "remote_status_error" {
+		t.Fatalf("runtime remoto degradado inesperado: %+v", runtime)
+	}
+	if got := strings.Join(calls, ","); strings.Count(got, "/status") < 2 {
+		t.Fatalf("esperaba al menos dos status remotos, got=%s", got)
+	}
+}
+
+func TestRuntimeOrderStartRechazaConectorConCircuitoAbierto(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	conectorID, err := UpsertConector(&Conector{
+		Slug:       "codex-remote-open",
+		Nombre:     "Codex Remote Open",
+		Transporte: "api",
+		Comando:    "http://127.0.0.1:65535",
+		Activo:     true,
+	})
+	if err != nil {
+		t.Fatalf("upsert conector remoto: %v", err)
+	}
+	cooldown := time.Now().UTC().Add(time.Minute)
+	if err := UpsertConectorOperacion(&ConectorOperacion{
+		ConectorID:         conectorID,
+		EstadoOperativo:    ConectorOperativoCircuitoAbierto,
+		Motivo:             "remote_connector_unavailable",
+		FallosConsecutivos: 3,
+		CooldownUntil:      &cooldown,
+	}); err != nil {
+		t.Fatalf("upsert conector operacion: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"codex-remote-open"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start remoto: %v", err)
+	}
+	if _, err := ProcesarRuntimeOrdersBatch(); err != nil {
+		t.Fatalf("procesar batch start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil || startOrder == nil {
+		t.Fatalf("get start order: %+v err=%v", startOrder, err)
+	}
+	if startOrder.Estado != "fallida" || !strings.Contains(startOrder.ErrorText, "circuito abierto del conector") {
+		t.Fatalf("start con circuito abierto deberia fallar de forma explicita: %+v", startOrder)
 	}
 }
 

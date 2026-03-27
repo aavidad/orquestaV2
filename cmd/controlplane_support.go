@@ -117,7 +117,13 @@ func procesarAutonomiaSesionActiva(sesion *db.Sesion) (int, error) {
 	if sesion == nil || sesion.ProyectoID == nil {
 		return 0, nil
 	}
+	if n, err := procesarCierreProyectoSesion(sesion); err != nil || n > 0 {
+		return n, err
+	}
 	if n, err := procesarAparcadoAutonomoSesion(sesion); err != nil || n > 0 {
+		return n, err
+	}
+	if n, err := procesarRecuperacionRuntimeDegradadoSesion(sesion); err != nil || n > 0 {
 		return n, err
 	}
 	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
@@ -168,6 +174,86 @@ func procesarAutonomiaSesionActiva(sesion *db.Sesion) (int, error) {
 	default:
 		return 0, nil
 	}
+}
+
+func procesarCierreProyectoSesion(sesion *db.Sesion) (int, error) {
+	if sesion == nil || sesion.ProyectoID == nil {
+		return 0, nil
+	}
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	if err != nil {
+		return 0, err
+	}
+	terminado, motivo, err := proyectoTerminadoAutonomamente(proyecto)
+	if err != nil || !terminado {
+		return 0, err
+	}
+	if err := db.MarcarProyectoCerrado(proyecto.ID, motivo); err != nil {
+		return 0, err
+	}
+	estadoSesion := strings.ToLower(strings.TrimSpace(sesion.Estado))
+	if estadoSesion == "pausada" {
+		if err := db.AparcarSesionActiva(sesion.Agente, sesion.ProyectoID); err != nil {
+			return 0, err
+		}
+		if err := db.PausarAsignacion(sesion.Agente, proyecto.ID, "proyecto_terminado:"+motivo); err != nil {
+			return 0, err
+		}
+		return 1, nil
+	}
+	if pendiente, err := existeRuntimeOrderAutonomiaPendiente(sesion.Agente, &proyecto.ID, "pause", ""); err != nil {
+		return 0, err
+	} else if pendiente {
+		return 0, nil
+	}
+	if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
+		Agente:   sesion.Agente,
+		Proyecto: proyecto.Slug,
+		Accion:   agenteControlAccionPause,
+		Motivo:   "proyecto_terminado:" + motivo,
+		Por:      "orquesta",
+	}); err != nil {
+		return 0, err
+	}
+	return 1, nil
+}
+
+func proyectoTerminadoAutonomamente(proyecto *db.Proyecto) (bool, string, error) {
+	if proyecto == nil {
+		return false, "", nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyecto.ID})
+	if err != nil {
+		return false, "", err
+	}
+	total := 0
+	abiertas := 0
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaCancelada:
+			total++
+		case db.TareaCompletada:
+			total++
+		default:
+			total++
+			abiertas++
+		}
+	}
+	if total == 0 || abiertas > 0 {
+		return false, "", nil
+	}
+	estadoAbierta := db.PropuestaAbierta
+	propuestas, err := propuestasService.ListByProject(&estadoAbierta, proyecto.Slug)
+	if err != nil {
+		return false, "", err
+	}
+	if len(propuestas) > 0 {
+		return false, "", nil
+	}
+	return true, fmt.Sprintf("sin trabajo pendiente (%d tarea(s) terminales, 0 propuestas abiertas)", total), nil
 }
 
 func procesarAparcadoAutonomoSesion(sesion *db.Sesion) (int, error) {
@@ -225,6 +311,174 @@ func procesarAparcadoAutonomoSesion(sesion *db.Sesion) (int, error) {
 		return 0, err
 	}
 	return 1, nil
+}
+
+func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) {
+	if sesion == nil || sesion.ProyectoID == nil {
+		return 0, nil
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil {
+		return 0, err
+	}
+	if handle == nil || !esTransporteRemotoAutonomia(handle.Transporte) {
+		return 0, nil
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil {
+		return 0, err
+	}
+	if !runtimeRemotoDegradado(handle, runtime) {
+		return 0, nil
+	}
+	conector, err := resolverConectorSesionAutonomia(sesion, runtime, handle)
+	if err != nil {
+		return 0, err
+	}
+	if conector != nil {
+		disponible, _, err := db.ConectorDisponibleParaArranque(conector.ID)
+		if err != nil {
+			return 0, err
+		}
+		if !disponible {
+			motivo := "conector:" + strings.TrimSpace(conector.Slug) + ":circuito_abierto"
+			if err := db.MarcarProyectoBloqueadoExterno(*sesion.ProyectoID, motivo); err != nil {
+				return 0, err
+			}
+			proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+			if err != nil {
+				return 0, err
+			}
+			if pendiente, err := existeRuntimeOrderAutonomiaPendiente(sesion.Agente, sesion.ProyectoID, "pause", ""); err != nil {
+				return 0, err
+			} else if pendiente {
+				return 1, nil
+			}
+			if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
+				Agente:   strings.TrimSpace(sesion.Agente),
+				Proyecto: proyecto.Slug,
+				Accion:   agenteControlAccionPause,
+				Motivo:   motivo,
+				Por:      "orquesta",
+			}); err != nil {
+				return 0, err
+			}
+			return 1, nil
+		}
+	}
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(sesion.Agente, sesion.ProyectoID, "checkpoint", "start", "resume", "handoff"); err != nil {
+		return 0, err
+	} else if pendiente {
+		return 0, nil
+	}
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	if err != nil {
+		return 0, err
+	}
+	checkpointPayload, err := json.Marshal(map[string]any{
+		"checkpoint_kind": "remote_recovery",
+		"resumen":         "Checkpoint automático antes de recuperación de runtime remoto degradado",
+		"motivo":          "remote_runtime_degraded",
+	})
+	if err != nil {
+		return 0, err
+	}
+	if _, err := runtimesService.EnqueueRuntimeOrder(&db.RuntimeOrder{
+		Agente:      strings.TrimSpace(sesion.Agente),
+		ProyectoID:  sesion.ProyectoID,
+		RuntimeID:   handle.RuntimeID,
+		HandleID:    &handle.ID,
+		Tipo:        "checkpoint",
+		PayloadJSON: string(checkpointPayload),
+	}); err != nil {
+		return 0, err
+	}
+	accion := agenteControlAccionStart
+	if runtimeRemotoReanudable(sesion, handle) {
+		accion = agenteControlAccionResume
+	}
+	if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
+		Agente:   strings.TrimSpace(sesion.Agente),
+		Proyecto: proyecto.Slug,
+		Accion:   accion,
+		Motivo:   "remote_runtime_degraded",
+		Por:      "orquesta",
+	}); err != nil {
+		return 0, err
+	}
+	return 2, nil
+}
+
+func resolverConectorSesionAutonomia(sesion *db.Sesion, runtime *db.RuntimeInstance, handle *db.RuntimeHandle) (*db.Conector, error) {
+	if sesion != nil && strings.TrimSpace(sesion.ConectorSlug) != "" {
+		return db.GetConector(strings.TrimSpace(sesion.ConectorSlug))
+	}
+	if runtime != nil && strings.TrimSpace(runtime.Connector) != "" {
+		return db.GetConector(strings.TrimSpace(runtime.Connector))
+	}
+	if handle != nil {
+		slug := strings.TrimSpace(stringFromMetadataJSON(handle.MetadataJSON, "conector"))
+		if slug != "" {
+			return db.GetConector(slug)
+		}
+	}
+	return nil, nil
+}
+
+func stringFromMetadataJSON(raw string, key string) string {
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &parsed); err != nil || parsed == nil {
+		return ""
+	}
+	value, ok := parsed[key].(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
+func esTransporteRemotoAutonomia(transport string) bool {
+	switch strings.TrimSpace(transport) {
+	case "api", "mcp_http", "otro":
+		return true
+	default:
+		return false
+	}
+}
+
+func runtimeRemotoDegradado(handle *db.RuntimeHandle, runtime *db.RuntimeInstance) bool {
+	if handle != nil && strings.EqualFold(strings.TrimSpace(handle.Estado), "fallido") {
+		return true
+	}
+	if runtime == nil {
+		return false
+	}
+	logical := strings.ToLower(strings.TrimSpace(runtime.LogicalState))
+	process := strings.ToLower(strings.TrimSpace(runtime.ProcessState))
+	return logical == "degradado" || process == "remote_status_error"
+}
+
+func runtimeRemotoReanudable(sesion *db.Sesion, handle *db.RuntimeHandle) bool {
+	if sesion == nil || handle == nil {
+		return false
+	}
+	if !esTransporteRemotoAutonomia(handle.Transporte) {
+		return false
+	}
+	if strings.TrimSpace(handle.HandleKind) == "process" {
+		return false
+	}
+	if ext := strings.TrimSpace(sesion.ExternalSessionID); ext != "" {
+		return true
+	}
+	if ext := strings.TrimSpace(stringFromMetadataJSON(handle.MetadataJSON, "external_session_id")); ext != "" {
+		return true
+	}
+	ref := strings.TrimSpace(handle.HandleRef)
+	if ref == "" {
+		return false
+	}
+	return ref != strconv.FormatInt(sesion.ID, 10)
 }
 
 func reactivarAgenteTrasReanimacion(agente string) error {

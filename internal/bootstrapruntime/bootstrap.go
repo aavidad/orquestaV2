@@ -69,6 +69,7 @@ func Preparar(agente string, proyecto *db.Proyecto, ultima *db.Sesion) (runtimea
 		resume.ResumenContinuidad = resumen
 	}
 	enriquecerResumeConContextoProyecto(&resume, strings.TrimSpace(agente), proyecto)
+	enriquecerResumeConGobernanza(&resume, strings.TrimSpace(agente), &proyecto.ID)
 
 	for _, msg := range state.Mailbox {
 		if msg == nil || msg.ID == 0 {
@@ -225,6 +226,30 @@ func enriquecerResumeConContextoProyecto(resume *runtimeagente.ResumeContext, ag
 		return
 	}
 	if payload := db.AppendProjectContextPayload(resume.ResumePayloadJSON, contexto); payload != "" {
+		resume.ResumePayloadJSON = payload
+	}
+	if resumen != "" && !strings.Contains(resume.ResumenContinuidad, resumen) {
+		if strings.TrimSpace(resume.ResumenContinuidad) == "" {
+			resume.ResumenContinuidad = resumen
+		} else {
+			resume.ResumenContinuidad += ". " + resumen
+		}
+	}
+}
+
+func enriquecerResumeConGobernanza(resume *runtimeagente.ResumeContext, agente string, proyectoID *int64) {
+	if resume == nil || !resumeTieneContexto(*resume) {
+		return
+	}
+	info, err := db.GetAgente(strings.TrimSpace(agente))
+	if err != nil || info == nil {
+		return
+	}
+	contexto, resumen := db.BuildGovernanceContextSummaryForContext(strings.TrimSpace(info.Rol), proyectoID, strings.TrimSpace(agente))
+	if len(contexto) == 0 {
+		return
+	}
+	if payload := db.AppendGovernanceCatalogPayload(resume.ResumePayloadJSON, contexto); payload != "" {
 		resume.ResumePayloadJSON = payload
 	}
 	if resumen != "" && !strings.Contains(resume.ResumenContinuidad, resumen) {

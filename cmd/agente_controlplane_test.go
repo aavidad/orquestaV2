@@ -27,6 +27,14 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agente": "Codex1"})
 		case r.URL.Path == "/api/agente/handoff" && r.Method == http.MethodPost:
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "order_id": 33})
+		case r.URL.Path == "/api/agente/adoptar-contexto" && r.Method == http.MethodPost:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"sesion":             map[string]any{"id": 44, "agente": "Codex1"},
+				"checkpoint":         map[string]any{"id": 55, "checkpoint_kind": "contexto_adoptado"},
+				"runtime_order_id":   66,
+				"rol":                "programador",
+				"governance_catalog": map[string]any{"resolucion_actual": "rol+proyecto"},
+			})
 		case r.URL.Path == "/api/agentes/Codex1/reset-reanimacion" && r.Method == http.MethodPost:
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agente": "Codex1"})
 		case r.URL.Path == "/api/agentes/Codex1/eliminar" && r.Method == http.MethodPost:
@@ -56,6 +64,25 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	})
 	if !strings.Contains(outHandoff, "runtime_order: 33") {
 		t.Fatalf("salida handoff inesperada:\n%s", outHandoff)
+	}
+
+	resetCommandFlags(agenteAdoptarContextoCmd)
+	if err := agenteAdoptarContextoCmd.Flags().Set("proyecto", "demo"); err != nil {
+		t.Fatalf("set proyecto adoptar-contexto: %v", err)
+	}
+	if err := agenteAdoptarContextoCmd.Flags().Set("cwd", "/tmp/demo"); err != nil {
+		t.Fatalf("set cwd adoptar-contexto: %v", err)
+	}
+	if err := agenteAdoptarContextoCmd.Flags().Set("branch", "feature/demo"); err != nil {
+		t.Fatalf("set branch adoptar-contexto: %v", err)
+	}
+	outAdoptar := capturarStdout(t, func() {
+		if err := agenteAdoptarContextoCmd.RunE(agenteAdoptarContextoCmd, []string{"Codex1"}); err != nil {
+			t.Fatalf("agente adoptar-contexto via api: %v", err)
+		}
+	})
+	if !strings.Contains(outAdoptar, "Contexto adoptado para Codex1 en demo") || !strings.Contains(outAdoptar, "Runtime order: 66") {
+		t.Fatalf("salida adoptar-contexto inesperada:\n%s", outAdoptar)
 	}
 
 	outReset := capturarStdout(t, func() {
@@ -119,6 +146,22 @@ func TestAgenteControlRequiereServidor(t *testing.T) {
 				}
 			},
 		},
+		{
+			nombre: "adoptar-contexto",
+			cmd:    func() *cobra.Command { return agenteAdoptarContextoCmd },
+			args:   []string{"Codex1"},
+			setup: func(t *testing.T, cmd *cobra.Command) {
+				if err := cmd.Flags().Set("proyecto", "demo"); err != nil {
+					t.Fatalf("set proyecto adoptar-contexto: %v", err)
+				}
+				if err := cmd.Flags().Set("cwd", "/tmp/demo"); err != nil {
+					t.Fatalf("set cwd adoptar-contexto: %v", err)
+				}
+				if err := cmd.Flags().Set("branch", "feature/demo"); err != nil {
+					t.Fatalf("set branch adoptar-contexto: %v", err)
+				}
+			},
+		},
 		{nombre: "handoff", cmd: func() *cobra.Command { return agenteHandoffCmd }, args: []string{"Codex1", "Codex2"}},
 		{nombre: "reasignar-vivo", cmd: func() *cobra.Command { return agenteReasignarVivoCmd }, args: []string{"1", "Codex1", "Codex2"}},
 		{nombre: "pausar", cmd: func() *cobra.Command { return agentePausarCmd }, args: []string{"Codex1", "15", "rate", "limit"}},
@@ -160,6 +203,17 @@ func TestAgenteComandosExigenServidorSalvoRecuperacionLocal(t *testing.T) {
 	defer agenteTickCmd.Flags().Set("proyecto", "")
 	if err := agenteTickCmd.RunE(agenteTickCmd, []string{"Codex1"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
 		t.Fatalf("agente tick deberia exigir servidor, err=%v", err)
+	}
+
+	resetCommandFlags(agenteAdoptarContextoCmd)
+	agenteAdoptarContextoCmd.Flags().Set("proyecto", "orquestador")
+	agenteAdoptarContextoCmd.Flags().Set("cwd", "/tmp/orquestador")
+	agenteAdoptarContextoCmd.Flags().Set("branch", "main")
+	defer agenteAdoptarContextoCmd.Flags().Set("proyecto", "")
+	defer agenteAdoptarContextoCmd.Flags().Set("cwd", "")
+	defer agenteAdoptarContextoCmd.Flags().Set("branch", "")
+	if err := agenteAdoptarContextoCmd.RunE(agenteAdoptarContextoCmd, []string{"Codex1"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("agente adoptar-contexto deberia exigir servidor, err=%v", err)
 	}
 
 	if err := agenteControlCmd.RunE(agenteControlCmd, []string{"arrancar", "Codex1"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {

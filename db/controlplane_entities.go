@@ -7,6 +7,7 @@ import (
 	"orquesta/internal/controlruntime"
 	"orquesta/runtimeagente"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -1051,7 +1052,29 @@ func ejecutarRuntimeOrderSyncStatus(order *RuntimeOrder) error {
 			MetadataJSON: handle.MetadataJSON,
 		})
 		if err != nil {
-			return err
+			failures, degraded, obsErr := registrarFalloObservacionRemota(handle, runtime, err)
+			if obsErr != nil {
+				return obsErr
+			}
+			result["ok"] = false
+			result["observed_remote_error"] = true
+			result["remote_sync_failures"] = failures
+			result["remote_degraded"] = degraded
+			result["remote_error"] = strings.TrimSpace(err.Error())
+			if handle.ID > 0 {
+				handle, err = GetRuntimeHandle(handle.ID)
+				if err != nil {
+					return err
+				}
+			}
+			if runtime != nil && runtime.ID > 0 {
+				runtime, err = GetRuntime(runtime.ID)
+				if err != nil {
+					return err
+				}
+			}
+			data, _ := json.Marshal(result)
+			return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
 		}
 		if observed && estadoRemoto != nil {
 			if err := aplicarEstadoRemotoObservado(handle, runtime, estadoRemoto); err != nil {
@@ -1101,8 +1124,17 @@ func aplicarEstadoRemotoObservado(handle *RuntimeHandle, runtime *RuntimeInstanc
 	if estado == nil {
 		return nil
 	}
+	observedAt := time.Now().UTC().Format(time.RFC3339)
+	conector, err := resolverConectorRuntime(handle, runtime)
+	if err != nil {
+		return err
+	}
 	if handle != nil {
 		meta := mapFromJSON(handle.MetadataJSON)
+		meta["remote_last_status_at"] = observedAt
+		meta["remote_sync_failures"] = 0
+		delete(meta, "remote_last_error")
+		delete(meta, "remote_last_error_at")
 		if rawEstado := strings.TrimSpace(estado.HandleEstado); rawEstado != "" {
 			meta["remote_handle_state"] = rawEstado
 		}
@@ -1150,7 +1182,91 @@ func aplicarEstadoRemotoObservado(handle *RuntimeHandle, runtime *RuntimeInstanc
 			return err
 		}
 	}
+	if conector != nil {
+		if err := RegistrarExitoConector(conector.ID); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func registrarFalloObservacionRemota(handle *RuntimeHandle, runtime *RuntimeInstance, remoteErr error) (int, bool, error) {
+	if handle == nil {
+		return 0, false, nil
+	}
+	conector, err := resolverConectorRuntime(handle, runtime)
+	if err != nil {
+		return 0, false, err
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	failures := intFromMap(meta, "remote_sync_failures") + 1
+	meta["remote_sync_failures"] = failures
+	meta["remote_last_error"] = strings.TrimSpace(remoteErr.Error())
+	meta["remote_last_error_at"] = time.Now().UTC().Format(time.RFC3339)
+	threshold := configIntOrDefault("runtime_remote_sync_failure_threshold", 3)
+	if threshold <= 0 {
+		threshold = 3
+	}
+	degraded := failures >= threshold
+	handleState := strings.TrimSpace(handle.Estado)
+	if degraded {
+		handleState = "fallido"
+	}
+	metaJSON, _ := json.Marshal(meta)
+	if _, err := DB.Exec(`
+		UPDATE runtime_handles
+		SET estado = ?,
+		    metadata_json = ?
+		WHERE id = ?`,
+		handleState, string(metaJSON), handle.ID,
+	); err != nil {
+		return failures, degraded, err
+	}
+	if runtime != nil && degraded {
+		if _, err := DB.Exec(`
+			UPDATE runtime_instances
+			SET logical_state = ?,
+			    process_state = ?,
+			    last_event_at = CURRENT_TIMESTAMP
+			WHERE id = ?`,
+			"degradado", "remote_status_error", runtime.ID,
+		); err != nil {
+			return failures, degraded, err
+		}
+	}
+	if conector != nil {
+		if _, err := RegistrarFalloConector(conector.ID, remoteErr.Error()); err != nil {
+			return failures, degraded, err
+		}
+	}
+	return failures, degraded, nil
+}
+
+func resolverConectorRuntime(handle *RuntimeHandle, runtime *RuntimeInstance) (*Conector, error) {
+	slug := ""
+	if runtime != nil {
+		slug = strings.TrimSpace(runtime.Connector)
+	}
+	if slug == "" && handle != nil {
+		slug = stringFromMap(mapFromJSON(handle.MetadataJSON), "conector", "")
+	}
+	if slug == "" && handle != nil && handle.SesionID != nil {
+		sesion, err := GetSesionByID(*handle.SesionID)
+		if err != nil && err != sql.ErrNoRows {
+			return nil, err
+		}
+		if sesion != nil {
+			slug = strings.TrimSpace(sesion.ConectorSlug)
+		}
+	}
+	if slug == "" {
+		return nil, nil
+	}
+	conector, err := GetConector(slug)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return conector, err
 }
 
 func normalizarEstadoHandleObservado(observado, actual string) string {
@@ -1363,6 +1479,15 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) error {
 	if err != nil {
 		return err
 	}
+	if disponible, op, err := ConectorDisponibleParaArranque(conector.ID); err != nil {
+		return err
+	} else if !disponible {
+		detalle := "circuito abierto del conector"
+		if op != nil && op.CooldownUntil != nil {
+			detalle = fmt.Sprintf("%s hasta %s", detalle, op.CooldownUntil.UTC().Format(time.RFC3339))
+		}
+		return fmt.Errorf("%s %s (%s)", detalle, conector.Slug, strings.TrimSpace(op.Motivo))
+	}
 	arranque, err := controlruntime.ArrancarPlan(controlruntime.SolicitudArranque{
 		Agente:   order.Agente,
 		Proyecto: proyecto.Slug,
@@ -1502,10 +1627,13 @@ func ejecutarRuntimeOrderResume(order *RuntimeOrder) error {
 	}
 	if _, err := DB.Exec(`
 		UPDATE runtime_handles SET estado='activo', last_seen_at=CURRENT_TIMESTAMP
-		WHERE agente=? AND estado='pausado'`, order.Agente); err != nil {
+		WHERE agente=? AND estado IN ('pausado','fallido')`, order.Agente); err != nil {
 		return err
 	}
 	if err := actualizarEstadoSesionParaOrden(order, "activa"); err != nil {
+		return err
+	}
+	if err := reconciliarGobernanzaSesionParaOrden(order); err != nil {
 		return err
 	}
 	if order.ProyectoID != nil {
@@ -1521,6 +1649,47 @@ func ejecutarRuntimeOrderResume(order *RuntimeOrder) error {
 	}
 	data, _ := json.Marshal(result)
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+}
+
+func reconciliarGobernanzaSesionParaOrden(order *RuntimeOrder) error {
+	sesion, err := resolverSesionParaOrden(order)
+	if err != nil || sesion == nil {
+		return err
+	}
+	agente, err := GetAgente(strings.TrimSpace(sesion.Agente))
+	if err != nil || agente == nil {
+		return err
+	}
+	proyectoID := sesion.ProyectoID
+	if proyectoID == nil {
+		proyectoID = order.ProyectoID
+	}
+	contexto, resumen := BuildGovernanceContextSummaryForContext(strings.TrimSpace(agente.Rol), proyectoID, strings.TrimSpace(sesion.Agente))
+	if len(contexto) == 0 {
+		return nil
+	}
+	resumePayload := AppendGovernanceCatalogPayload(strings.TrimSpace(sesion.ResumePayloadJSON), contexto)
+	resumenContinuidad := strings.TrimSpace(sesion.ResumenContinuidad)
+	if resumen != "" && !strings.Contains(resumenContinuidad, resumen) {
+		if resumenContinuidad != "" {
+			resumenContinuidad += "\n"
+		}
+		resumenContinuidad += resumen
+	}
+	if _, err := DB.Exec(`
+		UPDATE sesiones
+		SET resume_payload_json = ?, resumen_continuidad = ?
+		WHERE id = ?`,
+		resumePayload,
+		resumenContinuidad,
+		sesion.ID,
+	); err != nil {
+		return err
+	}
+	_ = enviarRefreshGobernanzaAgente("server", strings.TrimSpace(agente.Rol), strings.TrimSpace(sesion.Agente), proyectoID, "resume_reconcile", map[string]any{
+		"runtime_order_id": order.ID,
+	})
+	return nil
 }
 
 func ejecutarRuntimeOrderStop(order *RuntimeOrder) error {
@@ -2754,6 +2923,32 @@ func boolFromMap(m map[string]any, key string) bool {
 		return v != 0
 	}
 	return false
+}
+
+func intFromMap(m map[string]any, key string) int {
+	if m == nil {
+		return 0
+	}
+	switch v := m[key].(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case json.Number:
+		n, _ := v.Int64()
+		return int(n)
+	case string:
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return 0
+		}
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return 0
 }
 
 func stringFromMap(m map[string]any, key, fallback string) string {

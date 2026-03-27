@@ -111,6 +111,26 @@ func MarcarProyectoActivo(proyectoID int64, motivo string) error {
 	return UpsertProyectoOperacion(op)
 }
 
+func MarcarProyectoBloqueadoExterno(proyectoID int64, motivo string) error {
+	op, err := GetProyectoOperacion(proyectoID)
+	if err != nil {
+		return err
+	}
+	op.EstadoOperativo = ProyectoOperativoBloqueadoExterno
+	op.Motivo = strings.TrimSpace(motivo)
+	return UpsertProyectoOperacion(op)
+}
+
+func MarcarProyectoCerrado(proyectoID int64, motivo string) error {
+	op, err := GetProyectoOperacion(proyectoID)
+	if err != nil {
+		return err
+	}
+	op.EstadoOperativo = ProyectoOperativoCerrado
+	op.Motivo = strings.TrimSpace(motivo)
+	return UpsertProyectoOperacion(op)
+}
+
 func ensureProyectoOperacionSchema() error {
 	_, err := DB.Exec(`
 		CREATE TABLE IF NOT EXISTS proyectos_operacion (
@@ -138,6 +158,25 @@ func ProyectoDisponibleParaAutonomia(proyectoID int64) (bool, error) {
 	case ProyectoOperativoActivo:
 		return true, nil
 	case ProyectoOperativoEsperandoHumano, ProyectoOperativoBloqueadoExterno:
+		if op.EstadoOperativo == ProyectoOperativoBloqueadoExterno && strings.HasPrefix(strings.TrimSpace(op.Motivo), "conector:") {
+			disponible, err := bloqueoExternoConectorResuelto(strings.TrimSpace(op.Motivo))
+			if err != nil {
+				return false, err
+			}
+			if !disponible {
+				return false, nil
+			}
+			if !op.ResumeAutomatico {
+				return false, nil
+			}
+			op.EstadoOperativo = ProyectoOperativoActivo
+			op.Motivo = ""
+			if err := UpsertProyectoOperacion(op); err != nil {
+				return false, err
+			}
+			Audit("orquesta", "proyecto_reactivado_automaticamente", "proyecto", proyectoID, "conector operativo de nuevo")
+			return true, nil
+		}
 		bloqueado, motivo, err := ResolverBloqueoProyecto(proyectoID)
 		if err != nil {
 			return false, err
@@ -236,4 +275,24 @@ func normalizarProyectoOperacion(op *ProyectoOperacion) {
 	if op.MaxAgentes < 0 {
 		op.MaxAgentes = 0
 	}
+}
+
+func bloqueoExternoConectorResuelto(motivo string) (bool, error) {
+	motivo = strings.TrimSpace(motivo)
+	if !strings.HasPrefix(motivo, "conector:") {
+		return false, nil
+	}
+	parts := strings.Split(motivo, ":")
+	if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
+		return false, nil
+	}
+	conector, err := GetConector(strings.TrimSpace(parts[1]))
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	disponible, _, err := ConectorDisponibleParaArranque(conector.ID)
+	return disponible, err
 }

@@ -43,11 +43,15 @@ Estado real actual:
 - sí existe sincronización de asignaciones durante el handoff, de forma que el destino hereda la afinidad del proyecto y el origen queda pausado
 - sí existe notificación `governance_refresh` por mailbox cuando cambian reglas o workflows del rol
 - sí existe consumo en caliente de `governance_refresh` y `skills_refresh` en agentes vivos, reenviándolo como `send_instruction` sin reinicio de sesión
+- sí existe reconciliación de gobernanza al reanudar un runtime pausado: `resume` actualiza `resume_payload_json`, `resumen_continuidad` y emite `governance_refresh` dirigido al agente/proyecto reanudado
+- sí existe reconciliación de gobernanza en `prepare/bootstrap` para sesiones aparcadas, de modo que el `ContinuityPrompt` vuelve con el catálogo efectivo vigente y no con el contexto antiguo
 - sí existe API `server-first` para consultar el catálogo efectivo de gobernanza y los overrides aplicados por contexto
 - sí existe reparto automático por proyecto con cupos deseados reales derivados de `objetivo_pct`, `min_agentes`, `max_agentes` y `prioridad`
 - `stop` ya cierra también la sesión viva, no solo runtime y handle
 - el adaptador remoto ya tiene política configurable de reintentos para acciones de control seguras, sin reintentar `start` ni `send_instruction`
 - `sync_status` ya puede observar estado remoto real por `status_path`, normalizarlo a estado canónico del handle y conservar el estado remoto crudo en metadata
+- `sync_status` ya degrada el runtime remoto tras fallos repetidos de observación, persistiendo contador y último error sin romper el batch del control plane
+- el daemon ya reacciona a ese runtime remoto degradado: checkpointa continuidad y encola un `start` limpio para el mismo frente en el siguiente ciclo autónomo
 - la unidad `systemd` oficial del daemon ya incorpora endurecimiento base de servicio
 
 Lo que todavía falta para hablar de autonomía completa:
@@ -174,6 +178,8 @@ Además, la gobernanza efectiva ya no se resuelve por duplicado en varias capas:
 - `db/controlplane_entities.go` ya recompone ese contexto de continuidad también con alcance por agente, no solo por rol/proyecto
 - `db/governance_runtime_refresh.go` notifica por `runtime_mailbox` a los agentes activos del rol cuando cambia una regla o un workflow, reusando el patrón ya existente de `skills_refresh`
 - `cmd/agente_runtime_refresh.go` consume esos mensajes mientras el runtime está vivo y los transforma en `send_instruction`, marcando el mailbox como entregado y consumido sin reiniciar la sesión
+- `db/controlplane_entities.go` ahora vuelve a persistir ese catálogo efectivo al ejecutar `resume` sobre un runtime pausado, de forma que la sesión reactivada no revive con gobernanza obsoleta
+- `internal/bootstrapruntime/bootstrap.go` recompone también `governance_catalog` durante `prepare/start` para sesiones aparcadas, alineando el camino moderno `server-first` con el contexto que ya se mantenía en el control plane
 - `cmd/api.go` y `gobernanzaapp/service.go` ya exponen el catálogo efectivo y los overrides por API para que el camino oficial `serve` pueda usarlos sin tocar BD local
 
 ### 4. Watchdog e handoff por inactividad
@@ -207,7 +213,12 @@ Límite actual:
 - ya soporta autenticación por cabecera/token de entorno, timeout configurable y reintentos seguros para `pause`/`resume`/`stop`
 - `start` y `send_instruction` siguen sin reintento automático por seguridad frente a duplicados
 - ya existe observabilidad remota básica por conector vía `status_path`
-- faltan todavía polling/health más ricos, políticas de recuperación y métricas específicas por conector
+- ya existe degradación controlada del runtime remoto cuando `sync_status` falla repetidamente
+- ya existe circuit breaker persistente por conector con cooldown configurable, bloqueo automático del proyecto afectado y supresión de `start` mientras el circuito siga abierto
+- ya existe recuperación autónoma mínima del frente remoto degradado mediante `checkpoint + start`
+- ya existe adopción explícita del contexto actual de un agente: Orquesta persiste sesión, checkpoint, catálogo efectivo y orden de `start` para continuar el frente aunque se cierre la terminal de origen
+- el lazo autónomo ya detecta proyectos realmente terminados y los cierra, pausando el frente para liberar al agente y evitar iteraciones vacías
+- faltan todavía polling/health más ricos, políticas de recuperación más finas tras circuit breaker y métricas específicas por conector
 
 ## Contraste con referencias externas
 

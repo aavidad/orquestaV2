@@ -547,6 +547,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/agente/handoff", apiHandlerAgenteHandoff)
 	mux.HandleFunc("/api/agente/control", apiHandlerAgenteControl)
 	mux.HandleFunc("/api/agente/preparar", apiHandlerAgentePreparar)
+	mux.HandleFunc("/api/agente/adoptar-contexto", apiHandlerAgenteAdoptarContexto)
 	mux.HandleFunc("/api/agente/tick", apiHandlerAgenteTick)
 	mux.HandleFunc("/api/agente/pausar", apiHandlerAgentePausar)
 }
