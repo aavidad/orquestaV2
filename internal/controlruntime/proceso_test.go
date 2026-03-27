@@ -3,6 +3,8 @@ package controlruntime
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -68,5 +70,32 @@ func TestProcesoVivoDetectaPIDActualEInexistente(t *testing.T) {
 	}
 	if vivo {
 		t.Fatalf("un PID inexistente no debería aparecer vivo: pid=%d", gotPID)
+	}
+}
+
+func TestEnviarInstruccionProcesoSinLectorNoBloquea(t *testing.T) {
+	tmp := t.TempDir()
+	stdinPath := filepath.Join(tmp, "agent.stdin")
+	if err := syscall.Mkfifo(stdinPath, 0o600); err != nil {
+		t.Fatalf("mkfifo: %v", err)
+	}
+
+	pid := int64(os.Getpid())
+	start := time.Now()
+	ok, gotPID, err := EnviarInstruccionProceso(ObjetivoProceso{
+		PID:          &pid,
+		MetadataJSON: `{"stdin_path":"` + stdinPath + `"}`,
+	}, "continua")
+	if err != nil {
+		t.Fatalf("enviar instruccion sin lector: %v", err)
+	}
+	if ok {
+		t.Fatalf("sin lector no debería aplicar control real: pid=%d", gotPID)
+	}
+	if gotPID != os.Getpid() {
+		t.Fatalf("pid inesperado: %d", gotPID)
+	}
+	if time.Since(start) > time.Second {
+		t.Fatal("la llamada no debería bloquearse")
 	}
 }

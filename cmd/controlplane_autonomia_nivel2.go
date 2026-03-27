@@ -12,6 +12,7 @@ import (
 	"orquesta/db"
 	"orquesta/reviewapp"
 	"orquesta/supervisionapp"
+	"orquesta/tareasapp"
 )
 
 func (dbAutomationService) ProcesarSupervisionAutonomaBatch() (int, error) {
@@ -61,22 +62,38 @@ func procesarSupervisionAutonomaBatch() (int, error) {
 		if agente == nil {
 			continue
 		}
+		taskCreated := false
+		taskID := int64(0)
+		if id, created, err := asegurarTareaSemillaAutonomia(policy, proyecto, agente); err != nil {
+			return total, err
+		} else if created {
+			taskCreated = true
+			taskID = id
+		}
 		if pendiente, err := existeRuntimeOrderAutonomiaPendiente(agente.Nombre, &proyecto.ID, "nudge", "supervisar_proyecto"); err != nil {
 			return total, err
 		} else if pendiente {
 			continue
 		}
 		contexto, resumen := db.BuildProjectContextSummary(strings.TrimSpace(agente.Nombre), proyecto)
-		inputJSON, decisionJSON := construirPayloadCicloAutonomia(policy, proyecto, agente, contexto, "supervision", map[string]any{
+		decision := map[string]any{
 			"accion": "supervisar_proyecto",
 			"motivo": resumen,
-		})
+		}
+		if taskCreated {
+			decision["auto_created_task"] = true
+			decision["auto_created_task_id"] = taskID
+		}
+		inputJSON, decisionJSON := construirPayloadCicloAutonomia(policy, proyecto, agente, contexto, "supervision", decision)
 		instruction := construirInstruccionSupervision(policy, proyecto, agente, resumen)
 		if err := encolarNudgeAutonomiaDetallado(agente.Nombre, proyecto, "supervisar_proyecto", resumen, instruction, map[string]any{
 			"objetivo_general":       strings.TrimSpace(policy.ObjetivoGeneral),
 			"definition_of_done":     strings.TrimSpace(policy.DefinitionOfDoneJSON),
 			"estado_autonomia":       strings.TrimSpace(string(policy.EstadoAutonomia)),
 			"supervision_cycle_kind": "supervision",
+			"auto_create_tasks":      policy.AutoCreateTasks,
+			"auto_created_task":      taskCreated,
+			"auto_created_task_id":   taskID,
 		}); err != nil {
 			return total, err
 		}
@@ -95,6 +112,81 @@ func procesarSupervisionAutonomaBatch() (int, error) {
 		total++
 	}
 	return total, nil
+}
+
+func asegurarTareaSemillaAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, agente *db.Agente) (int64, bool, error) {
+	if policy == nil || !policy.Enabled || !policy.AutoCreateTasks || proyecto == nil || agente == nil {
+		return 0, false, nil
+	}
+	terminado, _, err := proyectoTerminadoAutonomamente(proyecto)
+	if err != nil || terminado {
+		return 0, false, err
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyecto.ID})
+	if err != nil {
+		return 0, false, err
+	}
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaCancelada, db.TareaCompletada:
+			continue
+		default:
+			return 0, false, nil
+		}
+	}
+	estadoAbierta := db.PropuestaAbierta
+	propuestas, err := propuestasService.ListByProject(&estadoAbierta, proyecto.Slug)
+	if err != nil {
+		return 0, false, err
+	}
+	if len(propuestas) > 0 {
+		return 0, false, nil
+	}
+	gates, err := reviewService.List(reviewapp.ListInput{ProyectoRef: proyecto.Slug, Limit: 20})
+	if err != nil {
+		return 0, false, err
+	}
+	if firstOpenGate(gates) != nil {
+		return 0, false, nil
+	}
+	id, err := tareasService.Create(tareasapp.CreateTaskInput{
+		Titulo:      "Autonomía: revisar backlog y abrir siguiente frente útil",
+		Descripcion: construirDescripcionTareaSemillaAutonomia(policy, proyecto),
+		Modulo:      "autonomia",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Agente:      strings.TrimSpace(agente.Nombre),
+		Proyecto:    proyecto.Slug,
+		Notas:       "autonomia:auto_create_tasks",
+	})
+	if err != nil {
+		return 0, false, err
+	}
+	if err := tareasService.Start(id, strings.TrimSpace(agente.Nombre)); err != nil {
+		return 0, false, err
+	}
+	return id, true, nil
+}
+
+func construirDescripcionTareaSemillaAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto) string {
+	partes := []string{
+		"Tarea semilla creada automáticamente por Orquesta porque el proyecto autónomo no tenía ningún frente abierto.",
+		"Objetivo: revisar backlog, contexto, transcript, propuestas y estado real del proyecto para abrir el siguiente frente útil sin intervención humana.",
+	}
+	if proyecto != nil && strings.TrimSpace(proyecto.Slug) != "" {
+		partes = append(partes, "Proyecto: "+strings.TrimSpace(proyecto.Slug)+".")
+	}
+	if policy != nil && strings.TrimSpace(policy.ObjetivoGeneral) != "" {
+		partes = append(partes, "Objetivo general: "+strings.TrimSpace(policy.ObjetivoGeneral)+".")
+	}
+	if policy != nil && strings.TrimSpace(policy.DefinitionOfDoneJSON) != "" && strings.TrimSpace(policy.DefinitionOfDoneJSON) != "{}" {
+		partes = append(partes, "Definition of done: "+strings.TrimSpace(policy.DefinitionOfDoneJSON)+".")
+	}
+	partes = append(partes, "Si el proyecto está realmente terminado, no abras trabajo artificial: deja trazabilidad y permite el cierre autónomo.")
+	return strings.Join(partes, " ")
 }
 
 func procesarReviewGatesBatch() (int, error) {
@@ -590,7 +682,7 @@ func construirPayloadCicloAutonomia(policy *db.ProyectoAutonomia, proyecto *db.P
 func construirInstruccionSupervision(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, agente *db.Agente, resumen string) string {
 	parts := []string{
 		"Orquesta: actúa como supervisor autónomo del proyecto y mantén el trabajo alineado con la planificación aprobada.",
-		"Revisa el estado real del proyecto, detecta huecos, crea o reajusta tareas si falta trabajo y empuja el siguiente frente útil sin detenerte.",
+		"Revisa el estado real del proyecto y empuja el siguiente frente útil sin detenerte.",
 	}
 	if proyecto != nil {
 		parts = append(parts, fmt.Sprintf("Proyecto: %s.", strings.TrimSpace(proyecto.Slug)))
@@ -603,6 +695,11 @@ func construirInstruccionSupervision(policy *db.ProyectoAutonomia, proyecto *db.
 	}
 	if strings.TrimSpace(resumen) != "" {
 		parts = append(parts, "Contexto actual: "+strings.TrimSpace(resumen)+".")
+	}
+	if policy != nil && policy.AutoCreateTasks {
+		parts = append(parts, "Si falta trabajo, crea o reajusta tareas de forma autónoma para que el proyecto no se quede sin backlog útil.")
+	} else {
+		parts = append(parts, "Si detectas huecos de backlog, documenta el frente faltante y replanifica sin crear tareas nuevas automáticamente.")
 	}
 	parts = append(parts, "Respeta gobernanza efectiva, tests y arquitectura. Si el cambio es delicado, crea checkpoint y sigue.")
 	return strings.Join(parts, " ")

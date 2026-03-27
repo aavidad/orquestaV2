@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // PlanificarTareasAutomaticamente es el motor de autonomía de Orquesta.
@@ -13,6 +14,12 @@ import (
 func PlanificarTareasAutomaticamente() error {
 	// 1. Liberar tareas del backlog que ya no tienen dependencias pendientes
 	if err := liberarBacklog(); err != nil {
+		return err
+	}
+
+	// 1.b Recuperar tareas huérfanas que siguen asignadas a agentes sin
+	// continuidad viva ni runtime activo para ese proyecto.
+	if err := reconciliarTareasHuerfanas(); err != nil {
 		return err
 	}
 
@@ -31,6 +38,106 @@ func PlanificarTareasAutomaticamente() error {
 	}
 
 	return nil
+}
+
+func reconciliarTareasHuerfanas() error {
+	rows, err := DB.Query(`
+		SELECT id, proyecto_id, agente, estado
+		FROM tareas
+		WHERE proyecto_id IS NOT NULL
+		  AND agente IS NOT NULL
+		  AND trim(agente) <> ''
+		  AND estado IN ('asignada','en_progreso')`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	type tareaHuerfana struct {
+		id         int64
+		proyectoID int64
+		agente     string
+		estado     string
+	}
+	var candidatas []tareaHuerfana
+	for rows.Next() {
+		var item tareaHuerfana
+		if err := rows.Scan(&item.id, &item.proyectoID, &item.agente, &item.estado); err != nil {
+			return err
+		}
+		candidatas = append(candidatas, item)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, item := range candidatas {
+		recuperable, err := tareaHuerfanaRecuperable(strings.TrimSpace(item.agente), item.proyectoID)
+		if err != nil {
+			return err
+		}
+		if !recuperable {
+			continue
+		}
+		anotacion := formatearAnotacionTarea("server", "tarea recuperada automáticamente por continuidad huérfana de "+strings.TrimSpace(item.agente), time.Now().UTC())
+		if _, err := DB.Exec(`
+			UPDATE tareas
+			SET estado='libre',
+			    agente=NULL,
+			    notas=COALESCE(notas,'') || ?
+			WHERE id=?`,
+			anotacion, item.id,
+		); err != nil {
+			return err
+		}
+		if err := PausarAsignacion(strings.TrimSpace(item.agente), item.proyectoID, "tarea_huerfana_recuperada"); err != nil {
+			return err
+		}
+		Audit("sistema", "recuperar_tarea_huerfana", "tarea", item.id,
+			fmt.Sprintf("agente=%s proyecto_id=%d estado_previo=%s", strings.TrimSpace(item.agente), item.proyectoID, strings.TrimSpace(item.estado)))
+	}
+
+	return nil
+}
+
+func tareaHuerfanaRecuperable(agente string, proyectoID int64) (bool, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || proyectoID <= 0 {
+		return false, nil
+	}
+	if sesion, err := GetSesionActiva(agente, &proyectoID); err != nil && err != sql.ErrNoRows {
+		return false, err
+	} else if sesion != nil {
+		return false, nil
+	}
+	if handle, err := GetRuntimeHandleActivoAgenteProyecto(agente, &proyectoID); err != nil {
+		return false, err
+	} else if handle != nil {
+		return false, nil
+	}
+	var protegida int
+	if err := DB.QueryRow(`
+		SELECT COUNT(*)
+		FROM sesiones
+		WHERE agente=?
+		  AND proyecto_id=?
+		  AND estado='pausada'
+		  AND fin IS NULL`,
+		agente, proyectoID,
+	).Scan(&protegida); err != nil {
+		return false, err
+	}
+	if protegida > 0 {
+		return false, nil
+	}
+	pendiente, err := existeRuntimeOrderAbierta(agente, &proyectoID, "start", "resume", "handoff", "pause")
+	if err != nil {
+		return false, err
+	}
+	if pendiente {
+		return false, nil
+	}
+	return true, nil
 }
 
 func planificarAgenteAutomaticamente(ag *Agente) error {
@@ -477,14 +584,7 @@ func EncolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo
 	if err != nil && err != sql.ErrNoRows {
 		return err
 	}
-	if sesionActiva != nil {
-		return nil
-	}
-	handle, err := GetRuntimeHandleActivoAgente(agente)
-	if err != nil {
-		return err
-	}
-	if handle != nil {
+	if sesionActiva != nil && strings.TrimSpace(sesionActiva.Estado) != "pausada" {
 		return nil
 	}
 	pendiente, err := existeRuntimeOrderAbierta(agente, nil, "start", "resume", "handoff")
@@ -492,6 +592,44 @@ func EncolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo
 		return err
 	}
 	if pendiente {
+		return nil
+	}
+	handleProyecto, err := GetRuntimeHandleActivoAgenteProyecto(agente, &proyecto.ID)
+	if err != nil {
+		return err
+	}
+	if handleProyecto != nil {
+		if strings.TrimSpace(handleProyecto.Estado) == "pausado" {
+			payloadJSON, err := json.Marshal(map[string]any{
+				"accion":   "resume",
+				"proyecto": proyecto.Slug,
+				"motivo":   motivo,
+				"por":      "sistema",
+			})
+			if err != nil {
+				return err
+			}
+			orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+				Agente:      agente,
+				ProyectoID:  &proyecto.ID,
+				RuntimeID:   handleProyecto.RuntimeID,
+				HandleID:    &handleProyecto.ID,
+				Tipo:        "resume",
+				PayloadJSON: string(payloadJSON),
+			})
+			if err != nil {
+				return err
+			}
+			Audit("sistema", "auto_resume_runtime", "runtime_order", orderID,
+				fmt.Sprintf("agente=%s proyecto=%s motivo=%s", agente, proyecto.Slug, motivo))
+		}
+		return nil
+	}
+	handle, err := GetRuntimeHandleActivoAgente(agente)
+	if err != nil {
+		return err
+	}
+	if handle != nil {
 		return nil
 	}
 
@@ -585,12 +723,33 @@ func ListarAgentesPlanificables() ([]*Agente, error) {
 	}
 	defer rows.Close()
 
-	var list []*Agente
+	var candidatos []*Agente
 	for rows.Next() {
 		var a Agente
 		if err := rows.Scan(&a.Nombre, &a.Rol); err == nil {
-			list = append(list, &a)
+			copia := a
+			candidatos = append(candidatos, &copia)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	var list []*Agente
+	for _, a := range candidatos {
+		if a == nil {
+			continue
+		}
+		if sesionActiva, err := GetSesionActiva(a.Nombre, nil); err != nil && err != sql.ErrNoRows {
+			return nil, err
+		} else if sesionActiva != nil && strings.TrimSpace(sesionActiva.Estado) != "pausada" {
+			continue
+		}
+		if handle, err := GetRuntimeHandleActivoAgente(a.Nombre); err != nil {
+			return nil, err
+		} else if handle != nil && strings.TrimSpace(handle.Estado) != "pausado" {
+			continue
+		}
+		list = append(list, a)
 	}
 	return list, nil
 }

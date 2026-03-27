@@ -182,6 +182,231 @@ func TestPlanificarTareasAutomaticamenteEncolaStartParaTrabajoYaAsignado(t *test
 	}
 }
 
+func TestPlanificarTareasAutomaticamenteRecuperaTareaHuerfanaYLaReasigna(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexStale", "CodexNuevo")
+
+	if err := RegistrarAgente("CodexStale", "programador"); err != nil {
+		t.Fatalf("registrar agente stale: %v", err)
+	}
+	if err := RegistrarAgente("CodexNuevo", "programador"); err != nil {
+		t.Fatalf("registrar agente nuevo: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre IN ('CodexStale','CodexNuevo')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := ActivarAsignacion("CodexNuevo", proyectoID, "frente libre"); err != nil {
+		t.Fatalf("activar asignacion nueva: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "CodexStale",
+		CWD:         filepath.Join(tmp, "stale"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion stale: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Recuperar frente huérfano",
+		Descripcion: "Debe volver al pool y reasignarse",
+		ProyectoID:  &proyectoID,
+		Modulo:      "orquestador",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "CodexStale"); err != nil {
+		t.Fatalf("tomar tarea stale: %v", err)
+	}
+
+	if err := PlanificarTareasAutomaticamente(); err != nil {
+		t.Fatalf("planificar: %v", err)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "CodexNuevo" || tarea.Estado != TareaAsignada {
+		t.Fatalf("la tarea huérfana debería reasignarse al nuevo agente: %+v", tarea)
+	}
+	agente := "CodexNuevo"
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "start" {
+		t.Fatalf("debería encolar start para el nuevo agente: %+v", orders)
+	}
+}
+
+func TestPlanificarTareasAutomaticamenteNoRecuperaTareaConSesionPausada(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexStale", "CodexNuevo")
+
+	if err := RegistrarAgente("CodexStale", "programador"); err != nil {
+		t.Fatalf("registrar agente stale: %v", err)
+	}
+	if err := RegistrarAgente("CodexNuevo", "programador"); err != nil {
+		t.Fatalf("registrar agente nuevo: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre IN ('CodexStale','CodexNuevo')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := ActivarAsignacion("CodexNuevo", proyectoID, "frente libre"); err != nil {
+		t.Fatalf("activar asignacion nueva: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Mantener continuidad pausada",
+		Descripcion: "No debe reasignarse si hay sesión pausada viva",
+		ProyectoID:  &proyectoID,
+		Modulo:      "orquestador",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "CodexStale"); err != nil {
+		t.Fatalf("tomar tarea stale: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "CodexStale",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion stale: %v", err)
+	}
+	if err := AparcarSesionActiva("CodexStale", &proyectoID); err != nil {
+		t.Fatalf("aparcar sesion stale: %v", err)
+	}
+
+	if err := PlanificarTareasAutomaticamente(); err != nil {
+		t.Fatalf("planificar: %v", err)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "CodexStale" || tarea.Estado != TareaAsignada {
+		t.Fatalf("la tarea no debería reasignarse mientras exista sesión pausada: %+v", tarea)
+	}
+	agente := "CodexNuevo"
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no debería arrancar el nuevo agente si la tarea sigue protegida: %+v", orders)
+	}
+}
+
+func TestPlanificarTareasAutomaticamenteEncolaResumeParaHandlePausado(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexResume")
+
+	if err := RegistrarAgente("CodexResume", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre='CodexResume'`); err != nil {
+		t.Fatalf("marcar agente disponible: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquesta",
+		Nombre:  "orquesta",
+		RutaAbs: filepath.Join(tmp, "orquesta"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := ActivarAsignacion("CodexResume", proyectoID, "frente actual"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Retomar frente pausado",
+		Descripcion: "El planificador debe encolar resume",
+		ProyectoID:  &proyectoID,
+		Modulo:      "orquestador",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "CodexResume"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "CodexResume"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "CodexResume",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquesta"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if err := UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("upsert runtime handle: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("obtener handle: handle=%+v err=%v", handle, err)
+	}
+	if _, err := DB.Exec(`UPDATE sesiones SET estado='pausada' WHERE id=?`, sesion.ID); err != nil {
+		t.Fatalf("pausar sesion: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='pausado' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("pausar handle: %v", err)
+	}
+
+	if err := PlanificarTareasAutomaticamente(); err != nil {
+		t.Fatalf("planificar: %v", err)
+	}
+
+	agente := "CodexResume"
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "resume" {
+		t.Fatalf("debería encolar resume para el handle pausado: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"accion":"resume"`) {
+		t.Fatalf("payload resume inesperado: %s", orders[0].PayloadJSON)
+	}
+}
+
 func TestPlanificarTareasAutomaticamenteNoAutoasignaTrabajoASupervisorReservado(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	restringirPlanificadorATestAgentes(t, "CodexSupervisor")

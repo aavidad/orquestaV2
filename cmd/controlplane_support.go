@@ -320,7 +320,11 @@ func construirInstruccionSupervisionSignalTranscript(policy *db.ProyectoAutonomi
 	if policy != nil && strings.TrimSpace(policy.ObjetivoGeneral) != "" {
 		parts = append(parts, "Objetivo general: "+strings.TrimSpace(policy.ObjetivoGeneral)+".")
 	}
-	parts = append(parts, "Si basta con una instrucción, emítela; si hace falta, crea o reajusta tareas, propuestas o handoff para que el proyecto no se quede parado.")
+	if policy != nil && policy.AutoCreateTasks {
+		parts = append(parts, "Si basta con una instrucción, emítela; si hace falta, crea o reajusta tareas, propuestas o handoff para que el proyecto no se quede parado.")
+	} else {
+		parts = append(parts, "Si basta con una instrucción, emítela; si hacen falta cambios estructurales, deja el siguiente frente claro sin crear tareas nuevas automáticamente.")
+	}
 	return strings.Join(parts, " ")
 }
 
@@ -576,6 +580,11 @@ func procesarCierreProyectoSesion(sesion *db.Sesion) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	if policy, err := supervisionService.GetProjectPolicy(proyecto.Slug); err != nil {
+		return 0, err
+	} else if policy == nil || !policy.Enabled || !policy.AutoCloseProject {
+		return 0, nil
+	}
 	terminado, motivo, err := proyectoTerminadoAutonomamente(proyecto)
 	if err != nil || !terminado {
 		return 0, err
@@ -611,6 +620,16 @@ func procesarCierreProyectoSesion(sesion *db.Sesion) (int, error) {
 }
 
 func proyectoTerminadoAutonomamente(proyecto *db.Proyecto) (bool, string, error) {
+	if proyecto == nil {
+		return false, "", nil
+	}
+	policy, err := supervisionService.GetProjectPolicy(proyecto.Slug)
+	if err != nil {
+		return false, "", err
+	}
+	if policy == nil || !policy.Enabled || !policy.AutoCloseProject {
+		return false, "", nil
+	}
 	listo, motivo, err := proyectoSinTrabajoPendiente(proyecto)
 	if err != nil || !listo {
 		return listo, motivo, err

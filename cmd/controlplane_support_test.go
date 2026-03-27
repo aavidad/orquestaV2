@@ -159,6 +159,226 @@ func TestProcesarSupervisionAutonomaBatchArrancaSupervisorPreferidoSinSesion(t *
 	}
 }
 
+func TestProcesarSupervisionAutonomaBatchCreaTareaSemillaSiAutoCreateTasks(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		ReviewRequired:       true,
+		AutoCreateTasks:      true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSupervisor",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	n, err := procesarSupervisionAutonomaBatch()
+	if err != nil {
+		t.Fatalf("procesar supervision: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 supervision, got=%d", n)
+	}
+
+	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas: %v", err)
+	}
+	if len(tareas) != 1 {
+		t.Fatalf("debería crear una tarea semilla, tareas=%+v", tareas)
+	}
+	if tareas[0].Titulo != "Autonomía: revisar backlog y abrir siguiente frente útil" {
+		t.Fatalf("tarea semilla inesperada: %+v", tareas[0])
+	}
+	if tareas[0].Estado != db.TareaEnProgreso {
+		t.Fatalf("la tarea semilla debería arrancarse, got=%s", tareas[0].Estado)
+	}
+	if tareas[0].Agente == nil || *tareas[0].Agente != "CodexSupervisor" {
+		t.Fatalf("la tarea semilla debería quedar en el supervisor, tarea=%+v", tareas[0])
+	}
+
+	kind := "supervision"
+	cycles, err := db.ListarAutonomiaCiclos(db.FiltroAutonomiaCiclos{ProyectoID: &proyectoID, Kind: &kind, Limit: 10})
+	if err != nil {
+		t.Fatalf("listar ciclos: %v", err)
+	}
+	if len(cycles) != 1 || !strings.Contains(cycles[0].DecisionJSON, `"auto_created_task":true`) {
+		t.Fatalf("ciclo supervision sin traza de auto_create_tasks: %+v", cycles)
+	}
+}
+
+func TestProcesarSupervisionAutonomaBatchReabreFrenteSiSoloHayHistoricoCerrado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		ReviewRequired:       true,
+		AutoCreateTasks:      true,
+		AutoCloseProject:     false,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente anterior",
+		Descripcion: "Ya completado",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea historica: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexSupervisor"); err != nil {
+		t.Fatalf("tomar tarea historica: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexSupervisor"); err != nil {
+		t.Fatalf("iniciar tarea historica: %v", err)
+	}
+	if err := db.CompletarTarea(tareaID, "CodexSupervisor", "hecho"); err != nil {
+		t.Fatalf("completar tarea historica: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSupervisor",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	n, err := procesarSupervisionAutonomaBatch()
+	if err != nil {
+		t.Fatalf("procesar supervision: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 supervision con reapertura de frente, got=%d", n)
+	}
+
+	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas: %v", err)
+	}
+	if len(tareas) != 2 {
+		t.Fatalf("debería conservar histórico y abrir un frente nuevo, tareas=%+v", tareas)
+	}
+	var abiertas int
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		if tarea.Estado == db.TareaEnProgreso && tarea.Titulo == "Autonomía: revisar backlog y abrir siguiente frente útil" {
+			abiertas++
+		}
+	}
+	if abiertas != 1 {
+		t.Fatalf("debería abrir exactamente una nueva tarea semilla en progreso, tareas=%+v", tareas)
+	}
+}
+
+func TestProcesarSupervisionAutonomaBatchNoCreaTareaSemillaSiAutoCreateTasksDesactivado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		ReviewRequired:       true,
+		AutoCreateTasks:      false,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSupervisor",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	if _, err := procesarSupervisionAutonomaBatch(); err != nil {
+		t.Fatalf("procesar supervision: %v", err)
+	}
+
+	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas: %v", err)
+	}
+	if len(tareas) != 0 {
+		t.Fatalf("no debería crear tarea semilla con auto_create_tasks desactivado: %+v", tareas)
+	}
+}
+
 func TestProcesarReviewGatesBatchCreaGateYEncolaRevision(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -679,6 +899,159 @@ func TestProyectoTerminadoAutonomamenteEsperaReviewAprobada(t *testing.T) {
 	}
 }
 
+func TestProyectoTerminadoAutonomamenteRespetaAutoCloseProjectFalse(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		ReviewRequired:       false,
+		AutoCloseProject:     false,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Ultimo frente",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.CompletarTarea(tareaID, "Codex1", "abc123"); err != nil {
+		t.Fatalf("completar tarea: %v", err)
+	}
+
+	proyecto, err := db.GetProyecto(strconv.FormatInt(proyectoID, 10))
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	terminado, _, err := proyectoTerminadoAutonomamente(proyecto)
+	if err != nil {
+		t.Fatalf("proyectoTerminadoAutonomamente auto_close=false: %v", err)
+	}
+	if terminado {
+		t.Fatal("no debería considerar terminado un proyecto con auto_close_project=false")
+	}
+}
+
+func TestProyectoTerminadoAutonomamenteRespetaAutoCloseProject(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		ReviewRequired:       true,
+		AutoCloseProject:     false,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Ultimo frente",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.CompletarTarea(tareaID, "Codex1", "abc123"); err != nil {
+		t.Fatalf("completar tarea: %v", err)
+	}
+	now := time.Now().UTC()
+	if _, err := db.CrearReviewGate(&db.ReviewGate{
+		ProyectoID:  &proyectoID,
+		RequestedBy: "orquesta",
+		Estado:      db.ReviewGateAprobado,
+		ResolvedAt:  &now,
+	}); err != nil {
+		t.Fatalf("crear review gate aprobado: %v", err)
+	}
+
+	proyecto, err := db.GetProyecto(strconv.FormatInt(proyectoID, 10))
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	terminado, motivo, err := proyectoTerminadoAutonomamente(proyecto)
+	if err != nil {
+		t.Fatalf("proyectoTerminadoAutonomamente: %v", err)
+	}
+	if terminado {
+		t.Fatalf("no debería cerrar con auto_close_project desactivado, motivo=%s", motivo)
+	}
+}
+
+func TestConstruirInstruccionSupervisionRespetaAutoCreateTasks(t *testing.T) {
+	proyecto := &db.Proyecto{ID: 1, Slug: "orquestador"}
+	supervisor := &db.Agente{Nombre: "CodexSupervisor", Rol: "admin"}
+
+	conBacklog := construirInstruccionSupervision(&db.ProyectoAutonomia{
+		Enabled:         true,
+		ObjetivoGeneral: "Terminar la app",
+		AutoCreateTasks: true,
+	}, proyecto, supervisor, "faltan frentes")
+	if !strings.Contains(conBacklog, "crea o reajusta tareas") {
+		t.Fatalf("la instrucción debería permitir crear backlog automáticamente: %s", conBacklog)
+	}
+
+	sinBacklog := construirInstruccionSupervision(&db.ProyectoAutonomia{
+		Enabled:         true,
+		ObjetivoGeneral: "Terminar la app",
+		AutoCreateTasks: false,
+	}, proyecto, supervisor, "faltan frentes")
+	if strings.Contains(sinBacklog, "crea o reajusta tareas") {
+		t.Fatalf("la instrucción no debería permitir crear backlog automáticamente: %s", sinBacklog)
+	}
+	if !strings.Contains(sinBacklog, "sin crear tareas nuevas automáticamente") {
+		t.Fatalf("la instrucción debería reflejar el modo sin auto_create_tasks: %s", sinBacklog)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchEncolaPausePorReasignacion(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -736,6 +1109,89 @@ func TestProcesarAutonomiaAgentesBatchEncolaPausePorReasignacion(t *testing.T) {
 	}
 	if !strings.Contains(orders[0].PayloadJSON, `"accion":"pause"`) {
 		t.Fatalf("payload pause inesperado: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestProcesarCierreProyectoSesionRespetaAutoCloseProject(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		ReviewRequired:       true,
+		AutoCloseProject:     false,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Ultimo frente",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.CompletarTarea(tareaID, "Codex1", "abc123"); err != nil {
+		t.Fatalf("completar tarea: %v", err)
+	}
+	now := time.Now().UTC()
+	if _, err := db.CrearReviewGate(&db.ReviewGate{
+		ProyectoID:  &proyectoID,
+		RequestedBy: "orquesta",
+		Estado:      db.ReviewGateAprobado,
+		ResolvedAt:  &now,
+	}); err != nil {
+		t.Fatalf("crear review gate aprobado: %v", err)
+	}
+
+	n, err := procesarCierreProyectoSesion(sesion)
+	if err != nil {
+		t.Fatalf("procesar cierre proyecto: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no debería cerrar con auto_close_project desactivado, got=%d", n)
+	}
+	op, err := db.GetProyectoOperacion(proyectoID)
+	if err != nil {
+		t.Fatalf("get proyecto operacion: %v", err)
+	}
+	if op.EstadoOperativo == db.ProyectoOperativoCerrado {
+		t.Fatalf("el proyecto no debería quedar cerrado: %+v", op)
 	}
 }
 
@@ -1316,6 +1772,15 @@ func TestProcesarAutonomiaAgentesBatchCierraProyectoTerminado(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:       proyectoID,
+		Enabled:          true,
+		ObjetivoGeneral:  "Terminar la app",
+		AutoCloseProject: true,
+		EstadoAutonomia:  db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
 	}
 	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
 		t.Fatalf("activar asignacion: %v", err)

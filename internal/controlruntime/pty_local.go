@@ -111,18 +111,36 @@ func EnviarInstruccionProceso(obj ObjetivoProceso, instruccion string) (bool, in
 		return false, pid, err
 	}
 	if ok {
+		vivo, _, err := ProcesoVivo(obj)
+		if err != nil {
+			return false, pid, err
+		}
+		if !vivo {
+			return false, pid, nil
+		}
 		stdinPath := stdinPathFromMetadata(obj.MetadataJSON)
 		if stdinPath == "" {
 			return false, pid, nil
 		}
-		f, err := os.OpenFile(stdinPath, os.O_WRONLY, 0)
+		fd, err := syscall.Open(stdinPath, syscall.O_WRONLY|syscall.O_NONBLOCK, 0)
 		if err != nil {
+			if err == syscall.ENXIO || err == syscall.ENOENT {
+				return false, pid, nil
+			}
 			return true, pid, err
+		}
+		f := os.NewFile(uintptr(fd), stdinPath)
+		if f == nil {
+			_ = syscall.Close(fd)
+			return false, pid, nil
 		}
 		defer f.Close()
 
 		texto := strings.TrimRight(instruccion, "\n")
 		if _, err := fmt.Fprintln(f, texto); err != nil {
+			if err == syscall.EPIPE {
+				return false, pid, nil
+			}
 			return true, pid, err
 		}
 		return true, pid, nil
