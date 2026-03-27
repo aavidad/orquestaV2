@@ -18,6 +18,9 @@ func TestProcesarSupervisionAutonomaBatchEncolaSupervisionYRegistraCiclo(t *test
 	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
 	}
+	if err := db.RegistrarAgente("CodexA", "admin"); err != nil {
+		t.Fatalf("registrar agente alternativo: %v", err)
+	}
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
 		Slug:    "orquestador",
 		Nombre:  "Orquestador",
@@ -33,6 +36,7 @@ func TestProcesarSupervisionAutonomaBatchEncolaSupervisionYRegistraCiclo(t *test
 		Enabled:              true,
 		ObjetivoGeneral:      "Terminar la app",
 		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
 		ReviewRequired:       true,
 		AutoCloseProject:     true,
 		EstadoAutonomia:      db.AutonomiaProyectoActiva,
@@ -42,6 +46,9 @@ func TestProcesarSupervisionAutonomaBatchEncolaSupervisionYRegistraCiclo(t *test
 	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
 		t.Fatalf("activar asignacion: %v", err)
 	}
+	if err := db.ActivarAsignacion("CodexA", proyectoID, "supervision alterna"); err != nil {
+		t.Fatalf("activar asignacion alterna: %v", err)
+	}
 	if _, err := db.IniciarSesionContexto(db.SesionInicio{
 		Agente:      "CodexSupervisor",
 		ProyectoID:  &proyectoID,
@@ -49,6 +56,14 @@ func TestProcesarSupervisionAutonomaBatchEncolaSupervisionYRegistraCiclo(t *test
 		Herramienta: "codex-cli",
 	}); err != nil {
 		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexA",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion alterna: %v", err)
 	}
 
 	n, err := procesarSupervisionAutonomaBatch()
@@ -91,6 +106,9 @@ func TestProcesarReviewGatesBatchCreaGateYEncolaRevision(t *testing.T) {
 	if err := db.RegistrarAgente("CodexReviewer", "admin"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
 	}
+	if err := db.RegistrarAgente("CodexA", "admin"); err != nil {
+		t.Fatalf("registrar agente alternativo: %v", err)
+	}
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
 		Slug:    "orquestador",
 		Nombre:  "Orquestador",
@@ -106,6 +124,7 @@ func TestProcesarReviewGatesBatchCreaGateYEncolaRevision(t *testing.T) {
 		Enabled:              true,
 		ObjetivoGeneral:      "Terminar la app",
 		DefinitionOfDoneJSON: `{"done":true}`,
+		ReviewerAgente:       "CodexReviewer",
 		ReviewRequired:       true,
 		AutoCloseProject:     true,
 		EstadoAutonomia:      db.AutonomiaProyectoActiva,
@@ -115,6 +134,9 @@ func TestProcesarReviewGatesBatchCreaGateYEncolaRevision(t *testing.T) {
 	if err := db.ActivarAsignacion("CodexReviewer", proyectoID, "review"); err != nil {
 		t.Fatalf("activar asignacion: %v", err)
 	}
+	if err := db.ActivarAsignacion("CodexA", proyectoID, "review alterna"); err != nil {
+		t.Fatalf("activar asignacion alterna: %v", err)
+	}
 	if _, err := db.IniciarSesionContexto(db.SesionInicio{
 		Agente:      "CodexReviewer",
 		ProyectoID:  &proyectoID,
@@ -122,6 +144,14 @@ func TestProcesarReviewGatesBatchCreaGateYEncolaRevision(t *testing.T) {
 		Herramienta: "codex-cli",
 	}); err != nil {
 		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexA",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion alterna: %v", err)
 	}
 	tareaID, err := db.CrearTarea(&db.Tarea{
 		Titulo:     "Cerrar autonomia",

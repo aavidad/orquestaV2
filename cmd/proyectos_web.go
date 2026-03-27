@@ -181,6 +181,8 @@ func webHandlerProyectoAutonomiaGuardar(w http.ResponseWriter, r *http.Request, 
 		ObjetivoGeneral:      strings.TrimSpace(r.FormValue("objetivo_general")),
 		DefinitionOfDoneJSON: strings.TrimSpace(r.FormValue("definition_of_done_json")),
 		MaxWorkers:           parseIntForm(r.FormValue("max_workers"), 0),
+		SupervisorAgente:     strings.TrimSpace(r.FormValue("supervisor_agente")),
+		ReviewerAgente:       strings.TrimSpace(r.FormValue("reviewer_agente")),
 		ReserveReviewer:      webFormBool(r, "reserve_reviewer"),
 		ReserveSupervisor:    webFormBool(r, "reserve_supervisor"),
 		ReviewRequired:       webFormBool(r, "review_required"),
@@ -505,6 +507,8 @@ const webTplProyectoDetalle = `{{define "content"}}
       <label>{{tr "projects.autonomy.goal"}} <textarea name="objetivo_general">{{if .Autonomia}}{{.Autonomia.ObjetivoGeneral}}{{end}}</textarea></label>
       <label>{{tr "projects.autonomy.dod"}} <textarea name="definition_of_done_json">{{if .Autonomia}}{{.Autonomia.DefinitionOfDoneJSON}}{{else}}{}{{end}}</textarea></label>
       <label>{{tr "projects.autonomy.max_workers"}} <input name="max_workers" inputmode="numeric" value="{{if .Autonomia}}{{.Autonomia.MaxWorkers}}{{else}}0{{end}}"></label>
+      <label>{{tr "projects.autonomy.supervisor_agent"}} <input name="supervisor_agente" value="{{if .Autonomia}}{{.Autonomia.SupervisorAgente}}{{end}}"></label>
+      <label>{{tr "projects.autonomy.reviewer_agent"}} <input name="reviewer_agente" value="{{if .Autonomia}}{{.Autonomia.ReviewerAgente}}{{end}}"></label>
       <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem">
         <label><input type="checkbox" name="reserve_reviewer" value="1" {{if and .Autonomia .Autonomia.ReserveReviewer}}checked{{end}}> {{tr "projects.autonomy.reserve_reviewer"}}</label>
         <label><input type="checkbox" name="reserve_supervisor" value="1" {{if and .Autonomia .Autonomia.ReserveSupervisor}}checked{{end}}> {{tr "projects.autonomy.reserve_supervisor"}}</label>

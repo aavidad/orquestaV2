@@ -24,6 +24,8 @@ type ProyectoAutonomia struct {
 	ObjetivoGeneral      string                  `json:"objetivo_general"`
 	DefinitionOfDoneJSON string                  `json:"definition_of_done_json"`
 	MaxWorkers           int                     `json:"max_workers"`
+	SupervisorAgente     string                  `json:"supervisor_agente"`
+	ReviewerAgente       string                  `json:"reviewer_agente"`
 	ReserveReviewer      bool                    `json:"reserve_reviewer"`
 	ReserveSupervisor    bool                    `json:"reserve_supervisor"`
 	ReviewRequired       bool                    `json:"review_required"`
@@ -63,10 +65,11 @@ func GetProyectoAutonomia(proyectoID int64) (*ProyectoAutonomia, error) {
 	}
 	row := DB.QueryRow(`
 		SELECT pa.proyecto_id, COALESCE(p.slug, ''), pa.enabled, pa.objetivo_general,
-		       pa.definition_of_done_json, pa.max_workers, pa.reserve_reviewer,
-		       pa.reserve_supervisor, pa.review_required, pa.auto_create_tasks,
-		       pa.auto_close_project, pa.estado_autonomia, pa.last_supervision_at,
-		       pa.last_review_at, pa.created_at, pa.updated_at
+		       pa.definition_of_done_json, pa.max_workers, pa.supervisor_agente,
+		       pa.reviewer_agente, pa.reserve_reviewer, pa.reserve_supervisor,
+		       pa.review_required, pa.auto_create_tasks, pa.auto_close_project,
+		       pa.estado_autonomia, pa.last_supervision_at, pa.last_review_at,
+		       pa.created_at, pa.updated_at
 		  FROM proyectos_autonomia pa
 		  LEFT JOIN proyectos p ON p.id = pa.proyecto_id
 		 WHERE pa.proyecto_id = ?`, proyectoID)
@@ -80,10 +83,11 @@ func GetProyectoAutonomia(proyectoID int64) (*ProyectoAutonomia, error) {
 func ListarProyectosAutonomia(soloEnabled *bool) ([]*ProyectoAutonomia, error) {
 	q := `
 		SELECT pa.proyecto_id, COALESCE(p.slug, ''), pa.enabled, pa.objetivo_general,
-		       pa.definition_of_done_json, pa.max_workers, pa.reserve_reviewer,
-		       pa.reserve_supervisor, pa.review_required, pa.auto_create_tasks,
-		       pa.auto_close_project, pa.estado_autonomia, pa.last_supervision_at,
-		       pa.last_review_at, pa.created_at, pa.updated_at
+		       pa.definition_of_done_json, pa.max_workers, pa.supervisor_agente,
+		       pa.reviewer_agente, pa.reserve_reviewer, pa.reserve_supervisor,
+		       pa.review_required, pa.auto_create_tasks, pa.auto_close_project,
+		       pa.estado_autonomia, pa.last_supervision_at, pa.last_review_at,
+		       pa.created_at, pa.updated_at
 		  FROM proyectos_autonomia pa
 		  LEFT JOIN proyectos p ON p.id = pa.proyecto_id
 		 WHERE 1=1`
@@ -114,6 +118,8 @@ func UpsertProyectoAutonomia(item *ProyectoAutonomia) (int64, error) {
 		return 0, fmt.Errorf("proyecto_autonomia inválido")
 	}
 	item.ObjetivoGeneral = strings.TrimSpace(item.ObjetivoGeneral)
+	item.SupervisorAgente = strings.TrimSpace(item.SupervisorAgente)
+	item.ReviewerAgente = strings.TrimSpace(item.ReviewerAgente)
 	if strings.TrimSpace(item.DefinitionOfDoneJSON) == "" {
 		item.DefinitionOfDoneJSON = "{}"
 	}
@@ -123,15 +129,18 @@ func UpsertProyectoAutonomia(item *ProyectoAutonomia) (int64, error) {
 	if _, err := DB.Exec(`
 		INSERT INTO proyectos_autonomia (
 			proyecto_id, enabled, objetivo_general, definition_of_done_json,
-			max_workers, reserve_reviewer, reserve_supervisor, review_required,
-			auto_create_tasks, auto_close_project, estado_autonomia,
-			last_supervision_at, last_review_at
-		) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+			max_workers, supervisor_agente, reviewer_agente, reserve_reviewer,
+			reserve_supervisor, review_required, auto_create_tasks,
+			auto_close_project, estado_autonomia, last_supervision_at,
+			last_review_at
+		) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(proyecto_id) DO UPDATE SET
 			enabled = excluded.enabled,
 			objetivo_general = excluded.objetivo_general,
 			definition_of_done_json = excluded.definition_of_done_json,
 			max_workers = excluded.max_workers,
+			supervisor_agente = excluded.supervisor_agente,
+			reviewer_agente = excluded.reviewer_agente,
 			reserve_reviewer = excluded.reserve_reviewer,
 			reserve_supervisor = excluded.reserve_supervisor,
 			review_required = excluded.review_required,
@@ -142,8 +151,9 @@ func UpsertProyectoAutonomia(item *ProyectoAutonomia) (int64, error) {
 			last_review_at = excluded.last_review_at,
 			updated_at = CURRENT_TIMESTAMP`,
 		item.ProyectoID, boolToIntAutonomia(item.Enabled), item.ObjetivoGeneral, item.DefinitionOfDoneJSON,
-		item.MaxWorkers, boolToIntAutonomia(item.ReserveReviewer), boolToIntAutonomia(item.ReserveSupervisor),
-		boolToIntAutonomia(item.ReviewRequired), boolToIntAutonomia(item.AutoCreateTasks), boolToIntAutonomia(item.AutoCloseProject),
+		item.MaxWorkers, item.SupervisorAgente, item.ReviewerAgente, boolToIntAutonomia(item.ReserveReviewer),
+		boolToIntAutonomia(item.ReserveSupervisor), boolToIntAutonomia(item.ReviewRequired),
+		boolToIntAutonomia(item.AutoCreateTasks), boolToIntAutonomia(item.AutoCloseProject),
 		string(item.EstadoAutonomia), nullableTimeAutonomia(item.LastSupervisionAt), nullableTimeAutonomia(item.LastReviewAt),
 	); err != nil {
 		return 0, err
@@ -273,13 +283,16 @@ func scanProyectoAutonomia(scanner interface{ Scan(dest ...any) error }) (*Proye
 	)
 	if err := scanner.Scan(
 		&item.ProyectoID, &item.ProyectoSlug, &enabled, &item.ObjetivoGeneral,
-		&item.DefinitionOfDoneJSON, &item.MaxWorkers, &reserveReviewer,
-		&reserveSupervisor, &reviewRequired, &autoCreateTasks,
-		&autoCloseProject, &item.EstadoAutonomia, &lastSupervision,
-		&lastReview, &item.CreatedAt, &item.UpdatedAt,
+		&item.DefinitionOfDoneJSON, &item.MaxWorkers, &item.SupervisorAgente,
+		&item.ReviewerAgente, &reserveReviewer, &reserveSupervisor,
+		&reviewRequired, &autoCreateTasks, &autoCloseProject,
+		&item.EstadoAutonomia, &lastSupervision, &lastReview,
+		&item.CreatedAt, &item.UpdatedAt,
 	); err != nil {
 		return nil, err
 	}
+	item.SupervisorAgente = strings.TrimSpace(item.SupervisorAgente)
+	item.ReviewerAgente = strings.TrimSpace(item.ReviewerAgente)
 	item.Enabled = enabled == 1
 	item.ReserveReviewer = reserveReviewer == 1
 	item.ReserveSupervisor = reserveSupervisor == 1

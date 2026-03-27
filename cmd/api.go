@@ -80,6 +80,8 @@ type apiProyectoAutonomiaSaveRequest struct {
 	ObjetivoGeneral      string `json:"objetivo_general"`
 	DefinitionOfDoneJSON string `json:"definition_of_done_json"`
 	MaxWorkers           int    `json:"max_workers"`
+	SupervisorAgente     string `json:"supervisor_agente"`
+	ReviewerAgente       string `json:"reviewer_agente"`
 	ReserveReviewer      bool   `json:"reserve_reviewer"`
 	ReserveSupervisor    bool   `json:"reserve_supervisor"`
 	ReviewRequired       bool   `json:"review_required"`
@@ -1705,6 +1707,8 @@ func apiHandlerProyectoAutonomiaGuardar(w http.ResponseWriter, r *http.Request, 
 		ObjetivoGeneral:      strings.TrimSpace(req.ObjetivoGeneral),
 		DefinitionOfDoneJSON: strings.TrimSpace(req.DefinitionOfDoneJSON),
 		MaxWorkers:           req.MaxWorkers,
+		SupervisorAgente:     strings.TrimSpace(req.SupervisorAgente),
+		ReviewerAgente:       strings.TrimSpace(req.ReviewerAgente),
 		ReserveReviewer:      req.ReserveReviewer,
 		ReserveSupervisor:    req.ReserveSupervisor,
 		ReviewRequired:       req.ReviewRequired,

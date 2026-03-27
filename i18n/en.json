@@ -456,6 +456,8 @@
   "projects.autonomy.goal": "Overall goal",
   "projects.autonomy.dod": "Definition of done (JSON)",
   "projects.autonomy.max_workers": "Maximum autonomous workers",
+  "projects.autonomy.supervisor_agent": "Preferred supervisor agent",
+  "projects.autonomy.reviewer_agent": "Preferred reviewer agent",
   "projects.autonomy.reserve_reviewer": "Reserve reviewer",
   "projects.autonomy.reserve_supervisor": "Reserve supervisor",
   "projects.autonomy.review_required": "Review required",

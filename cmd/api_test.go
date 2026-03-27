@@ -1109,6 +1109,8 @@ func TestAPIProyectoAutonomiaGetPostYCiclos(t *testing.T) {
 		ObjetivoGeneral:      "terminar el proyecto sin intervención humana",
 		DefinitionOfDoneJSON: `{"tests":"green"}`,
 		MaxWorkers:           3,
+		SupervisorAgente:     "CodexSupervisor",
+		ReviewerAgente:       "CodexReview",
 		ReserveReviewer:      true,
 		ReserveSupervisor:    true,
 		ReviewRequired:       true,
@@ -1128,6 +1130,9 @@ func TestAPIProyectoAutonomiaGetPostYCiclos(t *testing.T) {
 	}
 	if postResp.Policy == nil || !postResp.Policy.Enabled || postResp.Policy.MaxWorkers != 3 {
 		t.Fatalf("autonomia guardada inesperada: %+v", postResp.Policy)
+	}
+	if postResp.Policy.SupervisorAgente != "CodexSupervisor" || postResp.Policy.ReviewerAgente != "CodexReview" {
+		t.Fatalf("agentes preferidos de autonomia inesperados: %+v", postResp.Policy)
 	}
 
 	if _, err := supervisionService.RegisterCycle("demo-app", supervisionapp.CycleInput{

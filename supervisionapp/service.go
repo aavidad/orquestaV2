@@ -100,6 +100,8 @@ type PolicyInput struct {
 	ObjetivoGeneral      string
 	DefinitionOfDoneJSON string
 	MaxWorkers           int
+	SupervisorAgente     string
+	ReviewerAgente       string
 	ReserveReviewer      bool
 	ReserveSupervisor    bool
 	ReviewRequired       bool
@@ -142,6 +144,8 @@ func (s *Service) UpsertProjectPolicy(projectRef string, in PolicyInput) (*db.Pr
 		ObjetivoGeneral:      strings.TrimSpace(in.ObjetivoGeneral),
 		DefinitionOfDoneJSON: strings.TrimSpace(in.DefinitionOfDoneJSON),
 		MaxWorkers:           in.MaxWorkers,
+		SupervisorAgente:     strings.TrimSpace(in.SupervisorAgente),
+		ReviewerAgente:       strings.TrimSpace(in.ReviewerAgente),
 		ReserveReviewer:      in.ReserveReviewer,
 		ReserveSupervisor:    in.ReserveSupervisor,
 		ReviewRequired:       in.ReviewRequired,

@@ -72,6 +72,8 @@ CREATE TABLE IF NOT EXISTS proyectos_autonomia (
     objetivo_general        TEXT    NOT NULL DEFAULT '',
     definition_of_done_json TEXT    NOT NULL DEFAULT '{}',
     max_workers             INTEGER NOT NULL DEFAULT 0,
+    supervisor_agente       TEXT    NOT NULL DEFAULT '',
+    reviewer_agente         TEXT    NOT NULL DEFAULT '',
     reserve_reviewer        INTEGER NOT NULL DEFAULT 1,
     reserve_supervisor      INTEGER NOT NULL DEFAULT 1,
     review_required         INTEGER NOT NULL DEFAULT 1,

@@ -32,6 +32,8 @@ func TestProyectoAutonomiaUpsertYListarActivos(t *testing.T) {
 	item.ObjetivoGeneral = "Terminar la app sin intervención humana normal"
 	item.DefinitionOfDoneJSON = `{"tests":"green","api":"server-first"}`
 	item.MaxWorkers = 4
+	item.SupervisorAgente = "CodexSupervisor"
+	item.ReviewerAgente = "CodexReviewer"
 	item.ReserveReviewer = true
 	item.ReserveSupervisor = true
 	item.LastSupervisionAt = &now
@@ -45,6 +47,9 @@ func TestProyectoAutonomiaUpsertYListarActivos(t *testing.T) {
 	}
 	if got == nil || !got.Enabled || got.MaxWorkers != 4 || got.ObjetivoGeneral == "" {
 		t.Fatalf("autonomia persistida inesperada: %+v", got)
+	}
+	if got.SupervisorAgente != "CodexSupervisor" || got.ReviewerAgente != "CodexReviewer" {
+		t.Fatalf("agentes preferidos inesperados: %+v", got)
 	}
 
 	enabled := true

@@ -239,7 +239,7 @@ func TestWebProyectoAutonomiaYReviewGatesPorAPI(t *testing.T) {
 		t.Fatalf("detalle sin secciones de autonomia/review: %s", body)
 	}
 
-	form := strings.NewReader("enabled=1&estado_autonomia=activo&objetivo_general=seguir+autonomamente&definition_of_done_json=%7B%22tests%22%3A%22green%22%7D&max_workers=4&reserve_reviewer=1&reserve_supervisor=1&review_required=1&auto_create_tasks=1&auto_close_project=1")
+	form := strings.NewReader("enabled=1&estado_autonomia=activo&objetivo_general=seguir+autonomamente&definition_of_done_json=%7B%22tests%22%3A%22green%22%7D&max_workers=4&supervisor_agente=CodexSupervisor&reviewer_agente=CodexReview&reserve_reviewer=1&reserve_supervisor=1&review_required=1&auto_create_tasks=1&auto_close_project=1")
 	req = httptest.NewRequest(http.MethodPost, "/proyectos/orquestador/autonomia?lang=en", form)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec = httptest.NewRecorder()
@@ -258,5 +258,8 @@ func TestWebProyectoAutonomiaYReviewGatesPorAPI(t *testing.T) {
 	}
 	if policy.MaxWorkers != 4 || strings.TrimSpace(policy.ObjetivoGeneral) != "seguir autonomamente" {
 		t.Fatalf("autonomia guardada inesperada: %+v", policy)
+	}
+	if policy.SupervisorAgente != "CodexSupervisor" || policy.ReviewerAgente != "CodexReview" {
+		t.Fatalf("agentes preferidos en web inesperados: %+v", policy)
 	}
 }

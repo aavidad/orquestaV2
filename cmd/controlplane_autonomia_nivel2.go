@@ -44,7 +44,7 @@ func procesarSupervisionAutonomaBatch() (int, error) {
 		if !disponible {
 			continue
 		}
-		agente, err := seleccionarAgenteActivoProyecto(proyecto.ID, []string{"supervisor", "orquestador", "revisor", "reviewer", "admin", "programador"}, "")
+		agente, err := seleccionarAgenteActivoProyectoPreferido(proyecto.ID, strings.TrimSpace(policy.SupervisorAgente), []string{"supervisor", "orquestador", "revisor", "reviewer", "admin", "programador"}, "")
 		if err != nil {
 			return total, err
 		}
@@ -136,7 +136,7 @@ func procesarReviewGatesBatch() (int, error) {
 			}
 			continue
 		}
-		reviewer, err := seleccionarAgenteActivoProyecto(proyecto.ID, []string{"revisor", "reviewer", "supervisor", "orquestador", "admin", "programador"}, "")
+		reviewer, err := seleccionarAgenteActivoProyectoPreferido(proyecto.ID, strings.TrimSpace(policy.ReviewerAgente), []string{"revisor", "reviewer", "supervisor", "orquestador", "admin", "programador"}, "")
 		if err != nil {
 			return total, err
 		}
@@ -250,6 +250,10 @@ func persistirEstadoProyectoAutonomia(policy *db.ProyectoAutonomia, estado db.Es
 }
 
 func seleccionarAgenteActivoProyecto(proyectoID int64, preferredRoles []string, exclude string) (*db.Agente, error) {
+	return seleccionarAgenteActivoProyectoPreferido(proyectoID, "", preferredRoles, exclude)
+}
+
+func seleccionarAgenteActivoProyectoPreferido(proyectoID int64, preferredAgent string, preferredRoles []string, exclude string) (*db.Agente, error) {
 	sesiones, err := db.ListarSesionesActivas()
 	if err != nil {
 		return nil, err
@@ -261,6 +265,7 @@ func seleccionarAgenteActivoProyecto(proyectoID int64, preferredRoles []string, 
 	var candidatos []candidato
 	seen := map[string]struct{}{}
 	exclude = strings.TrimSpace(exclude)
+	preferredAgent = strings.TrimSpace(preferredAgent)
 	for _, sesion := range sesiones {
 		if sesion == nil || sesion.ProyectoID == nil || *sesion.ProyectoID != proyectoID {
 			continue
@@ -279,6 +284,9 @@ func seleccionarAgenteActivoProyecto(proyectoID int64, preferredRoles []string, 
 		}
 		if agente == nil || !agente.Habilitado {
 			continue
+		}
+		if preferredAgent != "" && strings.EqualFold(nombre, preferredAgent) {
+			return agente, nil
 		}
 		candidatos = append(candidatos, candidato{agente: agente, score: roleScore(agente.Rol, preferredRoles)})
 	}

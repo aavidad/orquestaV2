@@ -27,6 +27,8 @@ func postMigrationStatements() []string {
 		`ALTER TABLE sesiones ADD COLUMN heartbeat_at DATETIME`,
 		`ALTER TABLE sesiones ADD COLUMN host TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE sesiones ADD COLUMN pid INTEGER`,
+		`ALTER TABLE proyectos_autonomia ADD COLUMN supervisor_agente TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE proyectos_autonomia ADD COLUMN reviewer_agente TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE tareas ADD COLUMN contrato_definido INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE runtime_orders ADD COLUMN available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`,
 		`ALTER TABLE agentes ADD COLUMN consumo_dia_segundos INTEGER NOT NULL DEFAULT 0`,
