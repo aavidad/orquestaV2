@@ -145,3 +145,20 @@ func TestRegistrarRuntimeTranscriptInputPersisteLinea(t *testing.T) {
 		t.Fatalf("entrada transcript inesperada: %+v", items)
 	}
 }
+
+func TestClasificarTextoTranscriptReconoceReviewYReplan(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want string
+	}{
+		{raw: "Está listo para revisión final", want: "ready_for_review"},
+		{raw: "ready for review after the last fix", want: "ready_for_review"},
+		{raw: "¿Qué hago ahora? no tengo claro el siguiente paso", want: "needs_replan"},
+		{raw: "what should i do next after this task?", want: "needs_replan"},
+	}
+	for _, tc := range cases {
+		if got := clasificarTextoTranscript(normalizarTextoTranscript(tc.raw)); got != tc.want {
+			t.Fatalf("clasificacion inesperada para %q: got=%q want=%q", tc.raw, got, tc.want)
+		}
+	}
+}

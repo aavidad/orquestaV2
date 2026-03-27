@@ -484,6 +484,40 @@ func clasificarTextoTranscript(normalized string) string {
 	if normalized == "" {
 		return ""
 	}
+	reviewReadyPhrases := []string{
+		"listo para review",
+		"lista para review",
+		"listo para revisión",
+		"lista para revisión",
+		"ready for review",
+		"ready to review",
+		"puedes revisar",
+		"ya puede revisarse",
+		"he terminado y está listo para review",
+		"he terminado y esta listo para review",
+	}
+	for _, phrase := range reviewReadyPhrases {
+		if strings.Contains(normalized, phrase) {
+			return "ready_for_review"
+		}
+	}
+	replanPhrases := []string{
+		"qué hago ahora",
+		"que hago ahora",
+		"cuál es el siguiente paso",
+		"cual es el siguiente paso",
+		"no tengo siguiente paso",
+		"no tengo claro el siguiente paso",
+		"no veo el siguiente frente",
+		"no encuentro el siguiente frente",
+		"what should i do next",
+		"what next",
+	}
+	for _, phrase := range replanPhrases {
+		if strings.Contains(normalized, phrase) {
+			return "needs_replan"
+		}
+	}
 	approvalPhrases := []string{
 		"si me dejas",
 		"me dejas",

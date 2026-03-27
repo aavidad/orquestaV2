@@ -179,7 +179,13 @@ func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 		Message:     fmt.Sprintf("Orquesta respondió a la señal %s", strings.TrimSpace(item.Classification)),
 		PayloadJSON: string(payloadEvent),
 	})
-	return fmt.Sprintf("auto_guidance_order:%d", orderID), nil
+	notes := []string{fmt.Sprintf("auto_guidance_order:%d", orderID)}
+	if supervisorNote, err := notificarSupervisorSignalTranscript(item); err != nil {
+		return "", err
+	} else if strings.TrimSpace(supervisorNote) != "" {
+		notes = append(notes, strings.TrimSpace(supervisorNote))
+	}
+	return strings.Join(notes, ";"), nil
 }
 
 func construirRespuestaSignalTranscript(item *db.RuntimeTranscriptEntry) string {
@@ -189,11 +195,159 @@ func construirRespuestaSignalTranscript(item *db.RuntimeTranscriptEntry) string 
 		return base + " Si dudas entre varias opciones seguras, elige la más alineada con el proyecto y continúa sin detenerte."
 	case "waiting_human":
 		return base + " No te quedes esperando respuesta: formula el siguiente paso razonable, ejecuta y documenta los supuestos."
+	case "ready_for_review":
+		return base + " Deja un resumen breve, asegúrate de que el frente queda verificable y sigue disponible para que Orquesta relance review si procede."
+	case "needs_replan":
+		return base + " Si no ves el siguiente paso, revisa backlog, tareas, propuestas y último checkpoint, y continúa por el frente más útil disponible."
 	case "blocked":
 		return base + " Si el bloqueo es de contexto, reevalúa tareas, propuestas y estado del proyecto y avanza por el mejor siguiente paso disponible."
 	default:
 		return base
 	}
+}
+
+func notificarSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
+	if item == nil || item.ProyectoID == nil || *item.ProyectoID <= 0 {
+		return "", nil
+	}
+	policy, err := db.GetProyectoAutonomia(*item.ProyectoID)
+	if err != nil || policy == nil || !policy.Enabled {
+		return "", err
+	}
+	proyecto, err := db.GetProyecto(strconv.FormatInt(*item.ProyectoID, 10))
+	if err != nil || proyecto == nil {
+		return "", err
+	}
+	if strings.TrimSpace(item.Classification) == "ready_for_review" {
+		if note, err := notificarReviewerSignalTranscript(item, policy, proyecto); err != nil {
+			return "", err
+		} else if strings.TrimSpace(note) != "" {
+			return note, nil
+		}
+	}
+	supervisor, activado, err := prepararAgentePreferidoAutonomia(proyecto.ID, strings.TrimSpace(policy.SupervisorAgente), "supervision_transcript_signal")
+	if err != nil {
+		return "", err
+	}
+	if activado {
+		return "supervisor_start", nil
+	}
+	if supervisor == nil {
+		supervisor, err = seleccionarAgenteActivoProyectoPreferido(proyecto.ID, strings.TrimSpace(policy.SupervisorAgente), []string{"supervisor", "orquestador", "revisor", "reviewer", "admin", "programador"}, strings.TrimSpace(item.Agente))
+		if err != nil {
+			return "", err
+		}
+	}
+	if supervisor == nil || strings.EqualFold(strings.TrimSpace(supervisor.Nombre), strings.TrimSpace(item.Agente)) {
+		return "", nil
+	}
+	if pendiente, err := existeRuntimeOrderAutonomiaPendiente(supervisor.Nombre, &proyecto.ID, "nudge", "inspeccionar_transcript_signal"); err != nil {
+		return "", err
+	} else if pendiente {
+		return "supervisor_nudge_pendiente", nil
+	}
+	resumen := fmt.Sprintf("agente=%s signal=%s transcript=%d", strings.TrimSpace(item.Agente), strings.TrimSpace(item.Classification), item.ID)
+	if err := encolarNudgeAutonomiaDetallado(supervisor.Nombre, proyecto, "inspeccionar_transcript_signal", resumen, construirInstruccionSupervisionSignalTranscript(policy, proyecto, supervisor.Nombre, item), map[string]any{
+		"signal_classification": strings.TrimSpace(item.Classification),
+		"signal_transcript_id":  item.ID,
+		"signal_agente":         strings.TrimSpace(item.Agente),
+		"signal_text":           strings.TrimSpace(item.Text),
+	}); err != nil {
+		return "", err
+	}
+	return "supervisor_nudged", nil
+}
+
+func notificarReviewerSignalTranscript(item *db.RuntimeTranscriptEntry, policy *db.ProyectoAutonomia, proyecto *db.Proyecto) (string, error) {
+	if item == nil || proyecto == nil || policy == nil || !policy.Enabled {
+		return "", nil
+	}
+	reviewer, activado, err := prepararAgentePreferidoAutonomia(proyecto.ID, strings.TrimSpace(policy.ReviewerAgente), "review_transcript_signal")
+	if err != nil {
+		return "", err
+	}
+	if activado {
+		return "reviewer_start", nil
+	}
+	if reviewer == nil {
+		reviewer, err = seleccionarAgenteActivoProyectoPreferido(proyecto.ID, strings.TrimSpace(policy.ReviewerAgente), []string{"revisor", "reviewer", "supervisor", "orquestador", "admin", "programador"}, strings.TrimSpace(item.Agente))
+		if err != nil {
+			return "", err
+		}
+	}
+	if reviewer == nil || strings.EqualFold(strings.TrimSpace(reviewer.Nombre), strings.TrimSpace(item.Agente)) {
+		return "", nil
+	}
+	if pendiente, err := existeRuntimeOrderAutonomiaPendiente(reviewer.Nombre, &proyecto.ID, "nudge", "inspeccionar_ready_for_review"); err != nil {
+		return "", err
+	} else if pendiente {
+		return "reviewer_nudge_pendiente", nil
+	}
+	resumen := fmt.Sprintf("agente=%s signal=%s transcript=%d", strings.TrimSpace(item.Agente), strings.TrimSpace(item.Classification), item.ID)
+	if err := encolarNudgeAutonomiaDetallado(reviewer.Nombre, proyecto, "inspeccionar_ready_for_review", resumen, construirInstruccionReviewSignalTranscript(policy, proyecto, reviewer.Nombre, item), map[string]any{
+		"signal_classification": strings.TrimSpace(item.Classification),
+		"signal_transcript_id":  item.ID,
+		"signal_agente":         strings.TrimSpace(item.Agente),
+		"signal_text":           strings.TrimSpace(item.Text),
+	}); err != nil {
+		return "", err
+	}
+	return "reviewer_nudged", nil
+}
+
+func construirInstruccionSupervisionSignalTranscript(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, supervisor string, item *db.RuntimeTranscriptEntry) string {
+	parts := []string{
+		"Orquesta: un agente del proyecto ha emitido una señal de duda, espera o bloqueo en su transcript.",
+		"Supervisa el frente ahora mismo: revisa el transcript, el contexto del proyecto, las tareas y propuestas activas, y decide el siguiente paso sin escalar a humano salvo que falten credenciales, secretos o un recurso externo real.",
+	}
+	if proyecto != nil {
+		parts = append(parts, fmt.Sprintf("Proyecto: %s.", strings.TrimSpace(proyecto.Slug)))
+	}
+	if strings.TrimSpace(supervisor) != "" {
+		parts = append(parts, "Supervisor responsable: "+strings.TrimSpace(supervisor)+".")
+	}
+	if item != nil {
+		if strings.TrimSpace(item.Agente) != "" {
+			parts = append(parts, "Agente origen: "+strings.TrimSpace(item.Agente)+".")
+		}
+		if strings.TrimSpace(item.Classification) != "" {
+			parts = append(parts, "Clasificación: "+strings.TrimSpace(item.Classification)+".")
+		}
+		if strings.TrimSpace(item.Text) != "" {
+			parts = append(parts, "Fragmento detectado: "+strings.TrimSpace(item.Text)+".")
+		}
+	}
+	if policy != nil && strings.TrimSpace(policy.ObjetivoGeneral) != "" {
+		parts = append(parts, "Objetivo general: "+strings.TrimSpace(policy.ObjetivoGeneral)+".")
+	}
+	parts = append(parts, "Si basta con una instrucción, emítela; si hace falta, crea o reajusta tareas, propuestas o handoff para que el proyecto no se quede parado.")
+	return strings.Join(parts, " ")
+}
+
+func construirInstruccionReviewSignalTranscript(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, reviewer string, item *db.RuntimeTranscriptEntry) string {
+	parts := []string{
+		"Orquesta: un agente del proyecto ha indicado en su transcript que el frente está listo para revisión.",
+		"Valida el estado real del código, la definición de terminado, tests, arquitectura e i18n; si el frente está maduro, impulsa o ejecuta la revisión, y si no, pide cambios concretos sin bloquear el proyecto más de lo necesario.",
+	}
+	if proyecto != nil {
+		parts = append(parts, fmt.Sprintf("Proyecto: %s.", strings.TrimSpace(proyecto.Slug)))
+	}
+	if strings.TrimSpace(reviewer) != "" {
+		parts = append(parts, "Reviewer responsable: "+strings.TrimSpace(reviewer)+".")
+	}
+	if item != nil {
+		if strings.TrimSpace(item.Agente) != "" {
+			parts = append(parts, "Agente origen: "+strings.TrimSpace(item.Agente)+".")
+		}
+		if strings.TrimSpace(item.Text) != "" {
+			parts = append(parts, "Fragmento detectado: "+strings.TrimSpace(item.Text)+".")
+		}
+	}
+	if policy != nil && strings.TrimSpace(policy.ObjetivoGeneral) != "" {
+		parts = append(parts, "Objetivo general: "+strings.TrimSpace(policy.ObjetivoGeneral)+".")
+	}
+	parts = append(parts, "Si aún falta trabajo, conviértelo en feedback accionable; si está listo, deja trazabilidad de revisión sin pedir intervención humana por defecto.")
+	return strings.Join(parts, " ")
 }
 
 func controlPlaneConfigBoolOrDefault(clave string, fallback bool) bool {
