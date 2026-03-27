@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -97,5 +98,25 @@ func TestEnviarInstruccionProcesoSinLectorNoBloquea(t *testing.T) {
 	}
 	if time.Since(start) > time.Second {
 		t.Fatal("la llamada no debería bloquearse")
+	}
+}
+
+func TestNormalizarInstruccionProcesoHaceASCIIYCorta(t *testing.T) {
+	pid := int64(os.Getpid())
+	texto := "Orquesta: continúa de forma autónoma dentro de la gobernanza efectiva del proyecto. No necesitas aprobación humana salvo que falten credenciales, secretos o un recurso externo real. Sigue con el trabajo en curso y cierra el siguiente frente útil."
+	got := NormalizarInstruccionProceso(ObjetivoProceso{PID: &pid}, texto)
+	if got == "" {
+		t.Fatal("la instruccion no deberia quedar vacia")
+	}
+	if len(got) > 100 {
+		t.Fatalf("la instruccion deberia quedar acotada, got len=%d text=%q", len(got), got)
+	}
+	for _, r := range got {
+		if r < 32 || r > 126 {
+			t.Fatalf("la instruccion deberia quedar en ASCII seguro, got=%q", got)
+		}
+	}
+	if strings.Contains(got, "continúa") || strings.Contains(got, "autónoma") {
+		t.Fatalf("la instruccion no deberia conservar acentos en PTY: %q", got)
 	}
 }

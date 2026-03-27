@@ -86,7 +86,7 @@ func procesarSupervisionAutonomaBatch() (int, error) {
 		}
 		inputJSON, decisionJSON := construirPayloadCicloAutonomia(policy, proyecto, agente, contexto, "supervision", decision)
 		instruction := construirInstruccionSupervision(policy, proyecto, agente, resumen)
-		if err := encolarNudgeAutonomiaDetallado(agente.Nombre, proyecto, "supervisar_proyecto", resumen, instruction, map[string]any{
+		if encolada, err := encolarNudgeAutonomiaDetallado(agente.Nombre, proyecto, "supervisar_proyecto", resumen, instruction, map[string]any{
 			"objetivo_general":       strings.TrimSpace(policy.ObjetivoGeneral),
 			"definition_of_done":     strings.TrimSpace(policy.DefinitionOfDoneJSON),
 			"estado_autonomia":       strings.TrimSpace(string(policy.EstadoAutonomia)),
@@ -96,6 +96,8 @@ func procesarSupervisionAutonomaBatch() (int, error) {
 			"auto_created_task_id":   taskID,
 		}); err != nil {
 			return total, err
+		} else if !encolada {
+			continue
 		}
 		if _, err := supervisionService.RegisterCycle(proyecto.Slug, supervisionapp.CycleInput{
 			Kind:         "supervision",
@@ -279,7 +281,7 @@ func procesarReviewGatesBatch() (int, error) {
 					"motivo":   "review solicitó cambios",
 				})
 				instruction := construirInstruccionCorreccionReview(policy, proyecto, corrector.Nombre, gate)
-				if err := encolarNudgeAutonomiaDetallado(corrector.Nombre, proyecto, "resolver_review_feedback", fmt.Sprintf("gate=%d; review solicitó cambios", gate.ID), instruction, map[string]any{
+				if encolada, err := encolarNudgeAutonomiaDetallado(corrector.Nombre, proyecto, "resolver_review_feedback", fmt.Sprintf("gate=%d; review solicitó cambios", gate.ID), instruction, map[string]any{
 					"gate_id":            gate.ID,
 					"reviewer_agente":    strings.TrimSpace(gate.ReviewerAgente),
 					"objetivo_general":   strings.TrimSpace(policy.ObjetivoGeneral),
@@ -287,6 +289,8 @@ func procesarReviewGatesBatch() (int, error) {
 					"review_findings":    strings.TrimSpace(gate.FindingsJSON),
 				}); err != nil {
 					return total, err
+				} else if !encolada {
+					continue
 				}
 				if _, err := supervisionService.RegisterCycle(proyecto.Slug, supervisionapp.CycleInput{
 					Kind:         "review_feedback",
@@ -371,13 +375,15 @@ func procesarReviewGatesBatch() (int, error) {
 			"motivo":  resumenReady,
 		})
 		instruction := construirInstruccionReview(policy, proyecto, reviewerNombre, gate, resumenReady)
-		if err := encolarNudgeAutonomiaDetallado(reviewerNombre, proyecto, "ejecutar_review_gate", fmt.Sprintf("gate=%d; %s", gate.ID, resumenReady), instruction, map[string]any{
+		if encolada, err := encolarNudgeAutonomiaDetallado(reviewerNombre, proyecto, "ejecutar_review_gate", fmt.Sprintf("gate=%d; %s", gate.ID, resumenReady), instruction, map[string]any{
 			"gate_id":            gate.ID,
 			"objetivo_general":   strings.TrimSpace(policy.ObjetivoGeneral),
 			"definition_of_done": strings.TrimSpace(policy.DefinitionOfDoneJSON),
 			"estado_autonomia":   strings.TrimSpace(string(policy.EstadoAutonomia)),
 		}); err != nil {
 			return total, err
+		} else if !encolada {
+			continue
 		}
 		if gate.Estado == reviewapp.GateStatePending {
 			estado := reviewapp.GateStateInReview

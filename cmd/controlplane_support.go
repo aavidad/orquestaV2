@@ -13,6 +13,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"orquesta/db"
 	"orquesta/notificaciones"
@@ -247,13 +248,15 @@ func notificarSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry) (strin
 		return "supervisor_nudge_pendiente", nil
 	}
 	resumen := fmt.Sprintf("agente=%s signal=%s transcript=%d", strings.TrimSpace(item.Agente), strings.TrimSpace(item.Classification), item.ID)
-	if err := encolarNudgeAutonomiaDetallado(supervisor.Nombre, proyecto, "inspeccionar_transcript_signal", resumen, construirInstruccionSupervisionSignalTranscript(policy, proyecto, supervisor.Nombre, item), map[string]any{
+	if encolada, err := encolarNudgeAutonomiaDetallado(supervisor.Nombre, proyecto, "inspeccionar_transcript_signal", resumen, construirInstruccionSupervisionSignalTranscript(policy, proyecto, supervisor.Nombre, item), map[string]any{
 		"signal_classification": strings.TrimSpace(item.Classification),
 		"signal_transcript_id":  item.ID,
 		"signal_agente":         strings.TrimSpace(item.Agente),
 		"signal_text":           strings.TrimSpace(item.Text),
 	}); err != nil {
 		return "", err
+	} else if !encolada {
+		return "supervisor_nudge_omitido", nil
 	}
 	return "supervisor_nudged", nil
 }
@@ -284,13 +287,15 @@ func notificarReviewerSignalTranscript(item *db.RuntimeTranscriptEntry, policy *
 		return "reviewer_nudge_pendiente", nil
 	}
 	resumen := fmt.Sprintf("agente=%s signal=%s transcript=%d", strings.TrimSpace(item.Agente), strings.TrimSpace(item.Classification), item.ID)
-	if err := encolarNudgeAutonomiaDetallado(reviewer.Nombre, proyecto, "inspeccionar_ready_for_review", resumen, construirInstruccionReviewSignalTranscript(policy, proyecto, reviewer.Nombre, item), map[string]any{
+	if encolada, err := encolarNudgeAutonomiaDetallado(reviewer.Nombre, proyecto, "inspeccionar_ready_for_review", resumen, construirInstruccionReviewSignalTranscript(policy, proyecto, reviewer.Nombre, item), map[string]any{
 		"signal_classification": strings.TrimSpace(item.Classification),
 		"signal_transcript_id":  item.ID,
 		"signal_agente":         strings.TrimSpace(item.Agente),
 		"signal_text":           strings.TrimSpace(item.Text),
 	}); err != nil {
 		return "", err
+	} else if !encolada {
+		return "reviewer_nudge_omitido", nil
 	}
 	return "reviewer_nudged", nil
 }
@@ -553,8 +558,10 @@ func procesarAutonomiaSesionActiva(sesion *db.Sesion) (int, error) {
 		} else if pendiente {
 			return 0, nil
 		}
-		if err := encolarNudgeAutonomia(sesion.Agente, proyecto, out.AccionRecomendada, out.Motivo); err != nil {
+		if encolada, err := encolarNudgeAutonomia(sesion.Agente, proyecto, out.AccionRecomendada, out.Motivo); err != nil {
 			return 0, err
+		} else if !encolada {
+			return 0, nil
 		}
 		return 1, nil
 	case "continuar_trabajo", "esperar_o_pedir_tarea":
@@ -563,8 +570,10 @@ func procesarAutonomiaSesionActiva(sesion *db.Sesion) (int, error) {
 		} else if pendiente {
 			return 0, nil
 		}
-		if err := encolarNudgeAutonomia(sesion.Agente, proyecto, out.AccionRecomendada, out.Motivo); err != nil {
+		if encolada, err := encolarNudgeAutonomia(sesion.Agente, proyecto, out.AccionRecomendada, out.Motivo); err != nil {
 			return 0, err
+		} else if !encolada {
+			return 0, nil
 		}
 		return 1, nil
 	default:
@@ -709,12 +718,36 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 	if err != nil {
 		return 0, err
 	}
-	if handle == nil || !esTransporteRemotoAutonomia(handle.Transporte) {
+	if handle == nil {
 		return 0, nil
 	}
 	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
 	if err != nil {
 		return 0, err
+	}
+	if !esTransporteRemotoAutonomia(handle.Transporte) {
+		if !runtimeLocalFallido(handle, runtime) {
+			return 0, nil
+		}
+		if pendiente, err := existeRuntimeOrderAbiertaAutonomia(sesion.Agente, sesion.ProyectoID, "start", "resume", "handoff"); err != nil {
+			return 0, err
+		} else if pendiente {
+			return 0, nil
+		}
+		proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+		if err != nil {
+			return 0, err
+		}
+		if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
+			Agente:   strings.TrimSpace(sesion.Agente),
+			Proyecto: proyecto.Slug,
+			Accion:   agenteControlAccionStart,
+			Motivo:   "local_runtime_failed",
+			Por:      "orquesta",
+		}); err != nil {
+			return 0, err
+		}
+		return 1, nil
 	}
 	if !runtimeRemotoDegradado(handle, runtime) {
 		return 0, nil
@@ -795,6 +828,21 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 		return 0, err
 	}
 	return 2, nil
+}
+
+func runtimeLocalFallido(handle *db.RuntimeHandle, runtime *db.RuntimeInstance) bool {
+	if handle == nil || esTransporteRemotoAutonomia(handle.Transporte) {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(handle.Estado), "fallido") {
+		return true
+	}
+	if runtime == nil {
+		return false
+	}
+	logical := strings.ToLower(strings.TrimSpace(runtime.LogicalState))
+	process := strings.ToLower(strings.TrimSpace(runtime.ProcessState))
+	return logical == "fallido" || process == "fallido" || process == "crashed" || process == "exited"
 }
 
 func resolverConectorSesionAutonomia(sesion *db.Sesion, runtime *db.RuntimeInstance, handle *db.RuntimeHandle) (*db.Conector, error) {
@@ -943,6 +991,60 @@ func existeRuntimeOrderAutonomiaPendiente(agente string, proyectoID *int64, tipo
 	return false, nil
 }
 
+func existeRuntimeOrderAutonomiaReciente(agente string, proyectoID *int64, tipo string, accion string, within time.Duration) (bool, error) {
+	if within <= 0 {
+		return false, nil
+	}
+	orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
+		Agente:     &agente,
+		ProyectoID: proyectoID,
+	})
+	if err != nil {
+		return false, err
+	}
+	cutoff := time.Now().UTC().Add(-within)
+	for _, order := range orders {
+		if order == nil || strings.TrimSpace(order.Tipo) != strings.TrimSpace(tipo) {
+			continue
+		}
+		if accion != "" && !runtimeOrderAutonomiaTieneAccion(order, accion) {
+			continue
+		}
+		if runtimeOrderTimestamp(order).Before(cutoff) {
+			continue
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+func runtimeOrderAutonomiaTieneAccion(order *db.RuntimeOrder, accion string) bool {
+	if order == nil {
+		return false
+	}
+	if strings.Contains(strings.ToLower(order.PayloadJSON), `"kind":"autonomia"`) &&
+		strings.Contains(strings.ToLower(order.PayloadJSON), fmt.Sprintf(`"accion":"%s"`, strings.ToLower(strings.TrimSpace(accion)))) {
+		return true
+	}
+	return false
+}
+
+func runtimeOrderTimestamp(order *db.RuntimeOrder) time.Time {
+	if order == nil {
+		return time.Time{}
+	}
+	if order.FinishedAt != nil && !order.FinishedAt.IsZero() {
+		return order.FinishedAt.UTC()
+	}
+	if order.StartedAt != nil && !order.StartedAt.IsZero() {
+		return order.StartedAt.UTC()
+	}
+	if !order.UpdatedAt.IsZero() {
+		return order.UpdatedAt.UTC()
+	}
+	return order.CreatedAt.UTC()
+}
+
 func existeRuntimeOrderAbiertaAutonomia(agente string, proyectoID *int64, tipos ...string) (bool, error) {
 	if len(tipos) == 0 {
 		return false, nil
@@ -993,19 +1095,30 @@ func dbAgenteTieneTrabajoArrancable(agente string, proyectoID int64) (bool, erro
 	return false, nil
 }
 
-func encolarNudgeAutonomia(agente string, proyecto *db.Proyecto, accion, motivo string) error {
+func encolarNudgeAutonomia(agente string, proyecto *db.Proyecto, accion, motivo string) (bool, error) {
 	return encolarNudgeAutonomiaDetallado(agente, proyecto, accion, motivo, "", nil)
 }
 
-func encolarNudgeAutonomiaDetallado(agente string, proyecto *db.Proyecto, accion, motivo, instruction string, extras map[string]any) error {
+func encolarNudgeAutonomiaDetallado(agente string, proyecto *db.Proyecto, accion, motivo, instruction string, extras map[string]any) (bool, error) {
 	if proyecto == nil {
-		return nil
+		return false, nil
+	}
+	if abierta, err := existeRuntimeOrderAbiertaAutonomia(strings.TrimSpace(agente), &proyecto.ID, "send_instruction"); err != nil {
+		return false, err
+	} else if abierta {
+		return false, nil
+	}
+	cooldown := time.Duration(controlPlaneConfigIntOrDefault("autonomia_nudge_cooldown_seconds", 60)) * time.Second
+	if reciente, err := existeRuntimeOrderAutonomiaReciente(strings.TrimSpace(agente), &proyecto.ID, "nudge", "", cooldown); err != nil {
+		return false, err
+	} else if reciente {
+		return false, nil
 	}
 	var runtimeID *int64
 	var handleID *int64
 	handle, err := resolverHandleControlAgente(strings.TrimSpace(agente), &proyecto.ID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if handle != nil {
 		handleID = &handle.ID
@@ -1028,7 +1141,7 @@ func encolarNudgeAutonomiaDetallado(agente string, proyecto *db.Proyecto, accion
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return false, err
 	}
 	orderID, err := runtimesService.EnqueueRuntimeOrder(&db.RuntimeOrder{
 		Agente:      strings.TrimSpace(agente),
@@ -1039,9 +1152,9 @@ func encolarNudgeAutonomiaDetallado(agente string, proyecto *db.Proyecto, accion
 		PayloadJSON: string(payloadJSON),
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 	db.Audit("orquesta", "autonomia_nudge", "runtime_order", orderID,
 		fmt.Sprintf("agente=%s proyecto=%s accion=%s", strings.TrimSpace(agente), proyecto.Slug, strings.TrimSpace(accion)))
-	return nil
+	return true, nil
 }

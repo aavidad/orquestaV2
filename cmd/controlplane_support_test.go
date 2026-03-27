@@ -1384,6 +1384,103 @@ func TestProcesarAutonomiaAgentesBatchEncolaNudgePorEsperarOPedirTarea(t *testin
 	}
 }
 
+func TestProcesarAutonomiaAgentesBatchNoRepiteNudgeRecienteMaterializado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Seguir implementando",
+		Descripcion: "Trabajo activo",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+
+	n, err := procesarAutonomiaAgentesBatch()
+	if err != nil {
+		t.Fatalf("procesar autonomia inicial: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 decision autonoma inicial, got=%d", n)
+	}
+	if _, err := db.ProcesarRuntimeOrdersBatch(); err != nil {
+		t.Fatalf("procesar runtime orders: %v", err)
+	}
+	if _, err := procesarRuntimeTranscriptBatch(); err != nil {
+		t.Fatalf("procesar runtime transcript: %v", err)
+	}
+
+	n, err = procesarAutonomiaAgentesBatch()
+	if err != nil {
+		t.Fatalf("procesar autonomia repetida: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia repetir el nudge reciente, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var nudges, sendInstructions int
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch order.Tipo {
+		case "nudge":
+			nudges++
+		case "send_instruction":
+			sendInstructions++
+			if order.HandleID == nil || *order.HandleID != handle.ID {
+				t.Fatalf("send_instruction sin handle esperado: %+v", order)
+			}
+		}
+	}
+	if nudges != 1 || sendInstructions != 1 {
+		t.Fatalf("ordenes de autonomia duplicadas: nudges=%d send_instruction=%d orders=%+v", nudges, sendInstructions, orders)
+	}
+}
+
 func TestResetReanimacionEncolaResumeCuandoHayHandlePausado(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -2059,6 +2156,90 @@ func TestProcesarAutonomiaAgentesBatchRecuperaRuntimeRemotoDegradadoSinSesionExt
 	}
 	if !checkpointFound || !startFound {
 		t.Fatalf("recuperacion autonoma remota por start incompleta: %+v", orders)
+	}
+}
+
+func TestProcesarAutonomiaAgentesBatchRecuperaRuntimeLocalFallidoRelanzaStart(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	conector, err := db.GetConector("codex-cli")
+	if err != nil || conector == nil {
+		t.Fatalf("get conector codex-cli: %+v err=%v", conector, err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex1",
+		ConectorID:         &conector.ID,
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador"),
+		Herramienta:        "codex-cli",
+		ResumenContinuidad: "continuidad activa",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`
+		UPDATE runtime_handles
+		SET transporte='cli',
+		    handle_kind='process',
+		    handle_ref='999999',
+		    estado='fallido'
+		WHERE id = ?`, handle.ID); err != nil {
+		t.Fatalf("degradar handle local: %v", err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("get runtime: %+v err=%v", runtime, err)
+	}
+	if _, err := db.DB.Exec(`
+		UPDATE runtime_instances
+		SET logical_state='fallido', process_state='fallido'
+		WHERE id = ?`, runtime.ID); err != nil {
+		t.Fatalf("degradar runtime local: %v", err)
+	}
+
+	sesionActual, err := db.GetSesionByID(sesion.ID)
+	if err != nil || sesionActual == nil {
+		t.Fatalf("get sesion actual: %+v err=%v", sesionActual, err)
+	}
+	n, err := procesarRecuperacionRuntimeDegradadoSesion(sesionActual)
+	if err != nil {
+		t.Fatalf("procesar recuperacion local fallida: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 decision autonoma (start), got=%d", n)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "start" {
+		t.Fatalf("recuperacion autonoma local inesperada: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"motivo":"local_runtime_failed"`) {
+		t.Fatalf("start de recuperacion local sin motivo esperado: %s", orders[0].PayloadJSON)
 	}
 }
 

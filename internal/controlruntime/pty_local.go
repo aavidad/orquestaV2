@@ -13,6 +13,28 @@ import (
 	"orquesta/runtimeagente"
 )
 
+var ttyInstructionASCIIReplacer = strings.NewReplacer(
+	"á", "a", "à", "a", "ä", "a", "â", "a",
+	"é", "e", "è", "e", "ë", "e", "ê", "e",
+	"í", "i", "ì", "i", "ï", "i", "î", "i",
+	"ó", "o", "ò", "o", "ö", "o", "ô", "o",
+	"ú", "u", "ù", "u", "ü", "u", "û", "u",
+	"ñ", "n", "ç", "c",
+	"Á", "A", "À", "A", "Ä", "A", "Â", "A",
+	"É", "E", "È", "E", "Ë", "E", "Ê", "E",
+	"Í", "I", "Ì", "I", "Ï", "I", "Î", "I",
+	"Ó", "O", "Ò", "O", "Ö", "O", "Ô", "O",
+	"Ú", "U", "Ù", "U", "Ü", "U", "Û", "U",
+	"Ñ", "N", "Ç", "C",
+	"¿", "",
+	"¡", "",
+	"“", "\"",
+	"”", "\"",
+	"’", "'",
+	"—", "-",
+	"–", "-",
+)
+
 func arrancarPlanLocalPTY(req SolicitudArranque) (*ProcesoArrancado, error) {
 	baseDir := filepath.Join(os.TempDir(), "orquesta-runtime", sanitizePathFragment(req.Agente))
 	if err := os.MkdirAll(baseDir, 0o700); err != nil {
@@ -105,6 +127,62 @@ func arrancarPlanLocalPTY(req SolicitudArranque) (*ProcesoArrancado, error) {
 	}, nil
 }
 
+func NormalizarInstruccionProceso(obj ObjetivoProceso, instruccion string) string {
+	texto := strings.TrimSpace(instruccion)
+	if texto == "" {
+		return ""
+	}
+	if _, ok, _ := ResolverPID(obj); ok {
+		return sanitizarInstruccionTTY(texto)
+	}
+	return texto
+}
+
+func sanitizarInstruccionTTY(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	raw = strings.ReplaceAll(raw, "\r\n", "\n")
+	raw = strings.ReplaceAll(raw, "\r", "\n")
+	raw = ttyInstructionASCIIReplacer.Replace(raw)
+
+	lines := strings.Split(raw, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.Map(func(r rune) rune {
+			switch {
+			case r == '\t' || r == ' ':
+				return ' '
+			case r >= 32 && r <= 126:
+				return r
+			default:
+				return ' '
+			}
+		}, line)
+		line = strings.Join(strings.Fields(line), " ")
+		if line != "" {
+			out = append(out, line)
+		}
+	}
+	texto := strings.TrimSpace(strings.Join(out, "\n"))
+	if texto == "" {
+		return ""
+	}
+	const maxChars = 96
+	if len(texto) <= maxChars {
+		return texto
+	}
+	truncado := strings.TrimSpace(texto[:maxChars])
+	if idx := strings.LastIndex(truncado, " "); idx > maxChars/2 {
+		truncado = strings.TrimSpace(truncado[:idx])
+	}
+	if truncado == "" {
+		truncado = strings.TrimSpace(texto[:maxChars])
+	}
+	return truncado + " ..."
+}
+
 func EnviarInstruccionProceso(obj ObjetivoProceso, instruccion string) (bool, int, error) {
 	pid, ok, err := ResolverPID(obj)
 	if err != nil {
@@ -136,7 +214,10 @@ func EnviarInstruccionProceso(obj ObjetivoProceso, instruccion string) (bool, in
 		}
 		defer f.Close()
 
-		texto := strings.TrimRight(instruccion, "\n")
+		texto := strings.TrimRight(NormalizarInstruccionProceso(obj, instruccion), "\n")
+		if texto == "" {
+			return false, pid, nil
+		}
 		if _, err := fmt.Fprintln(f, texto); err != nil {
 			if err == syscall.EPIPE {
 				return false, pid, nil

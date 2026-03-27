@@ -18,6 +18,7 @@ func defaultConfigEntries() []configDefaultEntry {
 		{Clave: "runtime_remote_sync_failure_threshold", Valor: "3"},
 		{Clave: "runtime_transcript_ingest_max_bytes", Valor: "65536"},
 		{Clave: "runtime_transcript_auto_guidance_enabled", Valor: "true"},
+		{Clave: "autonomia_nudge_cooldown_seconds", Valor: "60"},
 		{Clave: "autonomia_supervision_interval_seconds", Valor: "300"},
 		{Clave: "autonomia_review_interval_seconds", Valor: "300"},
 		{Clave: "model_policy_default_profile", Valor: "implementacion"},

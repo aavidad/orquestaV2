@@ -1700,10 +1700,6 @@ func inyectarContinuidadArranque(handle *RuntimeHandle, runtime *RuntimeInstance
 	if handle == nil || runtime == nil || plan == nil {
 		return nil
 	}
-	texto := strings.TrimSpace(plan.ContinuityPrompt)
-	if texto == "" {
-		return nil
-	}
 	obj := controlruntime.ObjetivoProceso{
 		HandleKind:   handle.HandleKind,
 		HandleRef:    handle.HandleRef,
@@ -1711,6 +1707,10 @@ func inyectarContinuidadArranque(handle *RuntimeHandle, runtime *RuntimeInstance
 	}
 	if runtime.PID != nil && *runtime.PID > 0 {
 		obj.PID = runtime.PID
+	}
+	texto := controlruntime.NormalizarInstruccionProceso(obj, strings.TrimSpace(plan.ContinuityPrompt))
+	if texto == "" {
+		return nil
 	}
 	aplicado, _, err := controlruntime.EnviarInstruccionProceso(obj, texto)
 	if err != nil {
@@ -1955,6 +1955,15 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 	}
 	texto := stringFromMap(payload, "texto", stringFromMap(payload, "instruction", ""))
 
+	obj, err := objetivoProcesoParaOrden(order)
+	if err != nil {
+		return err
+	}
+	texto = controlruntime.NormalizarInstruccionProceso(obj, texto)
+	if strings.TrimSpace(texto) == "" {
+		return fmt.Errorf("send_instruction sin texto aplicable")
+	}
+
 	aplicado, pid, err := controlarProcesoRuntime(order, func(obj controlruntime.ObjetivoProceso) (bool, int, error) {
 		return controlruntime.EnviarInstruccionProceso(obj, texto)
 	})
@@ -2015,6 +2024,27 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 	}
 	data, _ := json.Marshal(result)
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+}
+
+func objetivoProcesoParaOrden(order *RuntimeOrder) (controlruntime.ObjetivoProceso, error) {
+	runtime, err := resolverRuntimeParaOrden(order)
+	if err != nil {
+		return controlruntime.ObjetivoProceso{}, err
+	}
+	handle, err := resolverHandleParaOrden(order)
+	if err != nil {
+		return controlruntime.ObjetivoProceso{}, err
+	}
+	obj := controlruntime.ObjetivoProceso{}
+	if handle != nil {
+		obj.HandleKind = handle.HandleKind
+		obj.HandleRef = handle.HandleRef
+		obj.MetadataJSON = handle.MetadataJSON
+	}
+	if runtime != nil && (handle == nil || strings.TrimSpace(handle.HandleKind) == "" || strings.TrimSpace(handle.HandleKind) == "process") {
+		obj.PID = runtime.PID
+	}
+	return obj, nil
 }
 
 func runtimeHandleID(handle *RuntimeHandle) any {

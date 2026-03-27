@@ -1320,7 +1320,15 @@ func TestRuntimeOrderStartInyectaContinuidadAlProcesoReal(t *testing.T) {
 		if item == nil || item.Stream != "stdin" {
 			continue
 		}
-		if strings.Contains(item.Text, "seguir con la firma final") && strings.Contains(item.Text, `"foo":"bar"`) {
+		if strings.Contains(item.Text, "Retoma el trabajo del agente Codex1") {
+			if len(item.Text) > 100 {
+				t.Fatalf("el continuity prompt saneado deberia quedar acotado para PTY: %q", item.Text)
+			}
+			for _, r := range item.Text {
+				if r < 32 || r > 126 {
+					t.Fatalf("el continuity prompt saneado deberia quedar en ASCII seguro: %q", item.Text)
+				}
+			}
 			found = true
 			break
 		}
