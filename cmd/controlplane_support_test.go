@@ -2608,6 +2608,103 @@ func TestProcesarRuntimeTranscriptBatchDespiertaReviewerPorReadyForReview(t *tes
 	}
 }
 
+func TestProcesarRuntimeTranscriptBatchNoGuiaAlWorkerEnRuntimePanic(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar worker: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:       proyectoID,
+		Enabled:          true,
+		ObjetivoGeneral:  "Terminar la app",
+		SupervisorAgente: "CodexSupervisor",
+		EstadoAutonomia:  db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSupervisor",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	}); err != nil {
+		t.Fatalf("iniciar sesion supervisor: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion worker: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle worker: %+v err=%v", handle, err)
+	}
+	logPath := filepath.Join(tmp, "codex-transcript-panic.log")
+	if err := os.WriteFile(logPath, []byte("thread 'main' panicked at src/ui.rs:1:1\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	n, err := procesarRuntimeTranscriptBatch()
+	if err != nil {
+		t.Fatalf("procesar transcript batch: %v", err)
+	}
+	if n < 2 {
+		t.Fatalf("esperaba ingestión + señal procesada, got=%d", n)
+	}
+
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	var workerGuide *db.RuntimeOrder
+	var supervisorNudge *db.RuntimeOrder
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch {
+		case order.Agente == "Codex1" && order.Tipo == "send_instruction":
+			workerGuide = order
+		case order.Agente == "CodexSupervisor" && order.Tipo == "nudge":
+			supervisorNudge = order
+		}
+	}
+	if workerGuide != nil {
+		t.Fatalf("no debería guiar al worker tras runtime_panic: %+v", workerGuide)
+	}
+	if supervisorNudge == nil || !strings.Contains(supervisorNudge.PayloadJSON, `"accion":"inspeccionar_transcript_signal"`) {
+		t.Fatalf("nudge al supervisor inesperado: %+v", supervisorNudge)
+	}
+}
+
 func TestProcesarRuntimeTranscriptBatchMaterializaAutonomiaMailbox(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

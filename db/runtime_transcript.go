@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 type RuntimeTranscriptEntry struct {
@@ -372,6 +373,11 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 		if esLineaSistemaTranscript(texto) {
 			stream = "system"
 		}
+		normalized := normalizarTextoTranscript(texto)
+		classification := clasificarTextoTranscript(normalized)
+		if descartarRuidoTranscript(stream, texto, normalized, classification) {
+			continue
+		}
 		var byteOffset *int64
 		id, err := RegistrarRuntimeTranscript(&RuntimeTranscriptEntry{
 			RuntimeID:      runtime.ID,
@@ -381,8 +387,8 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 			Stream:         stream,
 			ByteOffset:     byteOffset,
 			Text:           texto,
-			NormalizedText: normalizarTextoTranscript(texto),
-			Classification: clasificarTextoTranscript(normalizarTextoTranscript(texto)),
+			NormalizedText: normalized,
+			Classification: classification,
 		})
 		if err != nil {
 			return total, err
@@ -416,6 +422,9 @@ func registrarEventoDerivadoTranscript(transcriptID int64, handle *RuntimeHandle
 		return nil
 	}
 	level := "warn"
+	if classification == "runtime_panic" || classification == "runtime_crash" {
+		level = "critical"
+	}
 	payload, _ := json.Marshal(map[string]any{
 		"transcript_id":  transcriptID,
 		"handle_id":      handle.ID,
@@ -480,9 +489,90 @@ func normalizarTextoTranscript(raw string) string {
 	return strings.Join(strings.Fields(raw), " ")
 }
 
+func descartarRuidoTranscript(stream, texto, normalized, classification string) bool {
+	if strings.TrimSpace(stream) != "pty_out" {
+		return false
+	}
+	if strings.TrimSpace(classification) != "" {
+		return false
+	}
+	texto = strings.TrimSpace(texto)
+	normalized = strings.TrimSpace(normalized)
+	if normalized == "" {
+		return true
+	}
+	alnum := contarRunasSemanticas(normalized)
+	if alnum == 0 {
+		return true
+	}
+	if alnum < 3 && len(strings.Fields(normalized)) <= 1 {
+		return true
+	}
+	total := contarRunasVisibles(texto)
+	if total == 0 {
+		return true
+	}
+	if float64(alnum)/float64(total) < 0.25 {
+		return true
+	}
+	return false
+}
+
+func contarRunasSemanticas(raw string) int {
+	count := 0
+	for _, r := range raw {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			count++
+		}
+	}
+	return count
+}
+
+func contarRunasVisibles(raw string) int {
+	count := 0
+	for _, r := range raw {
+		if !unicode.IsSpace(r) {
+			count++
+		}
+	}
+	return count
+}
+
 func clasificarTextoTranscript(normalized string) string {
 	if normalized == "" {
 		return ""
+	}
+	panicPhrases := []string{
+		"panic:",
+		"fatal error:",
+		"the application panicked",
+		"thread 'main' panicked",
+		"stack backtrace:",
+		"segmentation fault",
+		"sigsegv",
+		"traceback (most recent call last):",
+		"uncaught exception",
+	}
+	for _, phrase := range panicPhrases {
+		if strings.Contains(normalized, phrase) {
+			return "runtime_panic"
+		}
+	}
+	crashPhrases := []string{
+		"aborted",
+		"core dumped",
+		"broken pipe",
+		"unexpected eof",
+		"connection reset by peer",
+		"process exited",
+	}
+	for _, phrase := range crashPhrases {
+		if strings.Contains(normalized, phrase) {
+			return "runtime_crash"
+		}
+	}
+	if strings.Contains(normalized, "goroutine ") && strings.Contains(normalized, "[") {
+		return "runtime_panic"
 	}
 	reviewReadyPhrases := []string{
 		"listo para review",
@@ -525,19 +615,18 @@ func clasificarTextoTranscript(normalized string) string {
 		"me permites",
 		"quieres que",
 		"te parece bien si",
-		"puedo ",
 		"puedo hacerlo",
 		"puedo seguir",
 		"me autorizas",
-		"should i",
 		"do you want me to",
-		"can i ",
-		"may i ",
 	}
 	for _, phrase := range approvalPhrases {
 		if strings.Contains(normalized, phrase) {
 			return "approval_request"
 		}
+	}
+	if parecePreguntaAprobacion(normalized) {
+		return "approval_request"
 	}
 	waitingPhrases := []string{
 		"espero tu respuesta",
@@ -572,6 +661,29 @@ func clasificarTextoTranscript(normalized string) string {
 		}
 	}
 	return ""
+}
+
+func parecePreguntaAprobacion(normalized string) bool {
+	if normalized == "" {
+		return false
+	}
+	if !strings.ContainsAny(normalized, "?¿") {
+		return false
+	}
+	questionPhrases := []string{
+		"puedo ",
+		"can i ",
+		"may i ",
+		"should i",
+		"quieres que",
+		"te parece bien si",
+	}
+	for _, phrase := range questionPhrases {
+		if strings.Contains(normalized, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 func esLineaSistemaTranscript(texto string) bool {

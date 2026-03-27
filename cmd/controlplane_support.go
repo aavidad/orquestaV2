@@ -140,6 +140,14 @@ func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 	} else if handle == nil {
 		return "sin_runtime_activo", nil
 	}
+	if esSignalFalloRuntime(item) {
+		if supervisorNote, err := notificarSupervisorSignalTranscript(item); err != nil {
+			return "", err
+		} else if strings.TrimSpace(supervisorNote) != "" {
+			return supervisorNote + ";runtime_failure_signal", nil
+		}
+		return "runtime_failure_signal", nil
+	}
 	payload := map[string]any{
 		"to_agente":      agente,
 		"from_agente":    "orquesta",
@@ -187,6 +195,18 @@ func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 		notes = append(notes, strings.TrimSpace(supervisorNote))
 	}
 	return strings.Join(notes, ";"), nil
+}
+
+func esSignalFalloRuntime(item *db.RuntimeTranscriptEntry) bool {
+	if item == nil {
+		return false
+	}
+	switch strings.TrimSpace(item.Classification) {
+	case "runtime_panic", "runtime_crash":
+		return true
+	default:
+		return false
+	}
 }
 
 func construirRespuestaSignalTranscript(item *db.RuntimeTranscriptEntry) string {

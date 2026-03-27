@@ -155,10 +155,83 @@ func TestClasificarTextoTranscriptReconoceReviewYReplan(t *testing.T) {
 		{raw: "ready for review after the last fix", want: "ready_for_review"},
 		{raw: "¿Qué hago ahora? no tengo claro el siguiente paso", want: "needs_replan"},
 		{raw: "what should i do next after this task?", want: "needs_replan"},
+		{raw: "thread 'main' panicked at src/ui.rs:1:1", want: "runtime_panic"},
+		{raw: "connection reset by peer", want: "runtime_crash"},
+		{raw: "can i continue refactoring without waiting?", want: "approval_request"},
+		{raw: "can i continue refactoring without waiting", want: ""},
 	}
 	for _, tc := range cases {
 		if got := clasificarTextoTranscript(normalizarTextoTranscript(tc.raw)); got != tc.want {
 			t.Fatalf("clasificacion inesperada para %q: got=%q want=%q", tc.raw, got, tc.want)
 		}
+	}
+}
+
+func TestIngestarRuntimeTranscriptHandleFiltraRuidoYClasificaPanic(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, _ := GetRuntimeBySesionID(sesion.ID)
+	handle, _ := GetRuntimeHandleBySesionID(sesion.ID)
+
+	logPath := filepath.Join(t.TempDir(), "panic.log")
+	logData := strings.Join([]string{
+		"│",
+		"⠋",
+		"thread 'main' panicked at src/ui.rs:1:1",
+		"",
+	}, "\n")
+	if err := os.WriteFile(logPath, []byte(logData), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	n, err := IngestarRuntimeTranscriptHandle(handle.ID)
+	if err != nil {
+		t.Fatalf("ingestar transcript: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("debería ingerir solo la línea semántica, got=%d", n)
+	}
+
+	agente := "Codex1"
+	items, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: &agente, Limit: 10})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	if len(items) != 1 || items[0].Classification != "runtime_panic" {
+		t.Fatalf("clasificación inesperada: %+v", items)
+	}
+	var level string
+	if err := DB.QueryRow(`SELECT level FROM runtime_events WHERE runtime_id=? AND kind='runtime_panic' ORDER BY id DESC LIMIT 1`, runtime.ID).Scan(&level); err != nil {
+		t.Fatalf("runtime_event panic: %v", err)
+	}
+	if level != "critical" {
+		t.Fatalf("level inesperado para runtime_panic: %s", level)
 	}
 }
