@@ -22,8 +22,11 @@ type AutomationService interface {
 	GarantizarSaludAgentes() error
 	PlanificarTareasAutomaticamente() error
 	ProcesarAutonomiaAgentesBatch() (int, error)
+	ProcesarSupervisionAutonomaBatch() (int, error)
+	ProcesarReviewGatesBatch() (int, error)
 	ReconciliarRuntimeHandlesStale() (int, error)
 	ReconciliarRuntimeOrdersStale() (int, error)
+	ProcesarRuntimeTranscriptBatch() (int, error)
 	ProcesarRuntimeOrdersBatch() (int, error)
 	ProcesarRefineriaBatch() (int, error)
 	ProcesarHandoffsBatch() (int, error)
@@ -139,6 +142,20 @@ func (r *Runner) runControlPlane() {
 	} else if autonomia > 0 {
 		r.Automation.Audit("server", "autonomia_agentes_batch", "agente", 0, fmt.Sprintf("Decisiones autónomas procesadas: %d", autonomia))
 	}
+	supervision, err := r.Automation.ProcesarSupervisionAutonomaBatch()
+	if err != nil {
+		r.Automation.Audit("server", "supervision_autonoma_error", "proyecto", 0, err.Error())
+		r.debugf("control_plane supervision error=%v", err)
+	} else if supervision > 0 {
+		r.Automation.Audit("server", "supervision_autonoma_batch", "proyecto", 0, fmt.Sprintf("Supervisiones autónomas procesadas: %d", supervision))
+	}
+	review, err := r.Automation.ProcesarReviewGatesBatch()
+	if err != nil {
+		r.Automation.Audit("server", "review_gates_error", "review_gate", 0, err.Error())
+		r.debugf("control_plane review error=%v", err)
+	} else if review > 0 {
+		r.Automation.Audit("server", "review_gates_batch", "review_gate", 0, fmt.Sprintf("Review gates procesados: %d", review))
+	}
 	stale, err := r.Automation.ReconciliarRuntimeHandlesStale()
 	if err != nil {
 		r.Automation.Audit("server", "runtime_handles_error", "runtime_handle", 0, err.Error())
@@ -152,6 +169,13 @@ func (r *Runner) runControlPlane() {
 		r.debugf("control_plane runtime_orders_stale error=%v", err)
 	} else if recovered > 0 {
 		r.Automation.Audit("server", "runtime_orders_stale", "runtime_order", 0, fmt.Sprintf("Órdenes recuperadas por stale: %d", recovered))
+	}
+	transcript, err := r.Automation.ProcesarRuntimeTranscriptBatch()
+	if err != nil {
+		r.Automation.Audit("server", "runtime_transcript_batch_error", "runtime_transcript", 0, err.Error())
+		r.debugf("control_plane runtime_transcript error=%v", err)
+	} else if transcript > 0 {
+		r.Automation.Audit("server", "runtime_transcript_batch", "runtime_transcript", 0, fmt.Sprintf("Conversación/runtime transcript procesado: %d", transcript))
 	}
 	processed, err := r.Automation.ProcesarRuntimeOrdersBatch()
 	if err != nil {
@@ -174,8 +198,8 @@ func (r *Runner) runControlPlane() {
 	} else if handoffs > 0 {
 		r.Automation.Audit("server", "handoff_batch", "agente", 0, fmt.Sprintf("Handoffs automáticos procesados: %d", handoffs))
 	}
-	r.debugf("control_plane autonomia=%d handles_stale=%d orders_stale=%d runtime_orders=%d refineria=%d handoffs=%d",
-		autonomia, stale, recovered, processed, refined, handoffs)
+	r.debugf("control_plane autonomia=%d supervision=%d review=%d handles_stale=%d orders_stale=%d transcript=%d runtime_orders=%d refineria=%d handoffs=%d",
+		autonomia, supervision, review, stale, recovered, transcript, processed, refined, handoffs)
 }
 
 func (r *Runner) notifier() notificaciones.Notificador {

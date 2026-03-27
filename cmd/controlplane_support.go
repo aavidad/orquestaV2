@@ -52,6 +52,10 @@ func (dbAutomationService) ReconciliarRuntimeOrdersStale() (int, error) {
 	return db.ReconciliarRuntimeOrdersStale()
 }
 
+func (dbAutomationService) ProcesarRuntimeTranscriptBatch() (int, error) {
+	return procesarRuntimeTranscriptBatch()
+}
+
 func (dbAutomationService) ProcesarRuntimeOrdersBatch() (int, error) {
 	return db.ProcesarRuntimeOrdersBatch()
 }
@@ -81,6 +85,240 @@ func newControlPlaneRunner(debugLogger *log.Logger, debugControlPlane bool) *pla
 		runner.Debugf = debugLogger.Printf
 	}
 	return runner
+}
+
+func procesarRuntimeTranscriptBatch() (int, error) {
+	mailbox, err := procesarRuntimeMailboxInteractivoBatch()
+	if err != nil {
+		return mailbox, err
+	}
+	ingested, err := db.IngestarRuntimeTranscriptActivos()
+	if err != nil {
+		return mailbox + ingested, err
+	}
+	if !controlPlaneConfigBoolOrDefault("runtime_transcript_auto_guidance_enabled", true) {
+		return mailbox + ingested, nil
+	}
+	signals, err := db.ListarRuntimeTranscript(db.FiltroRuntimeTranscript{
+		SoloSenalesPend: true,
+		Limit:           50,
+	})
+	if err != nil {
+		return mailbox + ingested, err
+	}
+	processedSignals := 0
+	for i := len(signals) - 1; i >= 0; i-- {
+		item := signals[i]
+		if item == nil || strings.TrimSpace(item.Classification) == "" {
+			continue
+		}
+		note, err := procesarSignalTranscript(item)
+		if err != nil {
+			return ingested + processedSignals, err
+		}
+		if strings.TrimSpace(note) != "" {
+			if err := db.MarcarRuntimeTranscriptManejado(item.ID, note); err != nil {
+				return mailbox + ingested + processedSignals, err
+			}
+		}
+		processedSignals++
+	}
+	return mailbox + ingested + processedSignals, nil
+}
+
+func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
+	if item == nil {
+		return "", nil
+	}
+	agente := strings.TrimSpace(item.Agente)
+	if agente == "" {
+		return "signal_sin_agente", nil
+	}
+	if handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(agente, item.ProyectoID); err != nil {
+		return "", err
+	} else if handle == nil {
+		return "sin_runtime_activo", nil
+	}
+	payload := map[string]any{
+		"to_agente":      agente,
+		"from_agente":    "orquesta",
+		"texto":          construirRespuestaSignalTranscript(item),
+		"classification": strings.TrimSpace(item.Classification),
+		"transcript_id":  item.ID,
+		"kind":           "instruction",
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	order := &db.RuntimeOrder{
+		Agente:      agente,
+		ProyectoID:  item.ProyectoID,
+		RuntimeID:   &item.RuntimeID,
+		Tipo:        "send_instruction",
+		PayloadJSON: string(raw),
+	}
+	if item.HandleID != nil && *item.HandleID > 0 {
+		order.HandleID = item.HandleID
+	}
+	orderID, err := db.EncolarRuntimeOrder(order)
+	if err != nil {
+		return "", err
+	}
+	detail := fmt.Sprintf("transcript_id=%d agente=%s signal=%s", item.ID, agente, strings.TrimSpace(item.Classification))
+	db.Audit("orquesta", "runtime_transcript_signal", "runtime_order", orderID, detail)
+	payloadEvent, _ := json.Marshal(map[string]any{
+		"transcript_id":    item.ID,
+		"runtime_order_id": orderID,
+		"classification":   strings.TrimSpace(item.Classification),
+	})
+	_, _ = db.RegistrarRuntimeEvent(&db.RuntimeEvent{
+		RuntimeID:   item.RuntimeID,
+		Kind:        "auto_guidance_sent",
+		Level:       "info",
+		Message:     fmt.Sprintf("Orquesta respondió a la señal %s", strings.TrimSpace(item.Classification)),
+		PayloadJSON: string(payloadEvent),
+	})
+	return fmt.Sprintf("auto_guidance_order:%d", orderID), nil
+}
+
+func construirRespuestaSignalTranscript(item *db.RuntimeTranscriptEntry) string {
+	base := "Orquesta: continúa de forma autónoma dentro de la gobernanza efectiva del proyecto. No necesitas aprobación humana salvo que falten credenciales, secretos o un recurso externo real. Si el cambio es delicado, crea checkpoint y sigue."
+	switch strings.TrimSpace(item.Classification) {
+	case "approval_request":
+		return base + " Si dudas entre varias opciones seguras, elige la más alineada con el proyecto y continúa sin detenerte."
+	case "waiting_human":
+		return base + " No te quedes esperando respuesta: formula el siguiente paso razonable, ejecuta y documenta los supuestos."
+	case "blocked":
+		return base + " Si el bloqueo es de contexto, reevalúa tareas, propuestas y estado del proyecto y avanza por el mejor siguiente paso disponible."
+	default:
+		return base
+	}
+}
+
+func controlPlaneConfigBoolOrDefault(clave string, fallback bool) bool {
+	v, err := db.ConfigGet(clave)
+	if err != nil {
+		return fallback
+	}
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "si", "sí", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
+}
+
+func procesarRuntimeMailboxInteractivoBatch() (int, error) {
+	estado := "pendiente"
+	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &estado})
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, msg := range mailbox {
+		if msg == nil {
+			continue
+		}
+		texto, ok := construirInstruccionMailboxInteractivo(msg)
+		if !ok {
+			continue
+		}
+		handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+		if err != nil {
+			return total, err
+		}
+		if handle == nil {
+			continue
+		}
+		payload := map[string]any{
+			"to_agente":    strings.TrimSpace(msg.ToAgente),
+			"from_agente":  strings.TrimSpace(msg.FromAgente),
+			"texto":        texto,
+			"mailbox_id":   msg.ID,
+			"mailbox_kind": strings.TrimSpace(msg.Kind),
+		}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return total, err
+		}
+		order := &db.RuntimeOrder{
+			Agente:      strings.TrimSpace(msg.ToAgente),
+			ProyectoID:  msg.ProyectoID,
+			Tipo:        "send_instruction",
+			PayloadJSON: string(raw),
+		}
+		if handle.RuntimeID != nil {
+			order.RuntimeID = handle.RuntimeID
+		}
+		order.HandleID = &handle.ID
+		orderID, err := db.EncolarRuntimeOrder(order)
+		if err != nil {
+			return total, err
+		}
+		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+			return total, err
+		}
+		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return total, err
+		}
+		db.Audit("orquesta", "runtime_mailbox_interactivo", "runtime_order", orderID,
+			fmt.Sprintf("mailbox_id=%d agente=%s kind=%s", msg.ID, strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
+		total++
+	}
+	return total, nil
+}
+
+func construirInstruccionMailboxInteractivo(msg *db.RuntimeMailboxMessage) (string, bool) {
+	if msg == nil {
+		return "", false
+	}
+	payload := map[string]any{}
+	if strings.TrimSpace(msg.PayloadJSON) != "" {
+		_ = json.Unmarshal([]byte(msg.PayloadJSON), &payload)
+	}
+	switch strings.TrimSpace(msg.Kind) {
+	case "instruction":
+		texto := stringMapValue(payload, "texto")
+		if texto == "" {
+			texto = stringMapValue(payload, "instruction")
+		}
+		return texto, strings.TrimSpace(texto) != ""
+	case "autonomia":
+		if instruction := stringMapValue(payload, "instruction"); strings.TrimSpace(instruction) != "" {
+			return strings.TrimSpace(instruction), true
+		}
+		accion := stringMapValue(payload, "accion")
+		motivo := stringMapValue(payload, "motivo")
+		base := "Orquesta: continúa de forma autónoma dentro de la gobernanza efectiva del proyecto. No necesitas aprobación humana salvo que falten credenciales, secretos o un recurso externo real."
+		switch strings.TrimSpace(accion) {
+		case "supervisar_proyecto":
+			base += " Actúa como supervisor del proyecto: revisa el estado real, comprueba cumplimiento de reglas, detecta flecos, crea o ajusta tareas si falta trabajo y deja el siguiente frente útil encaminado."
+		case "ejecutar_review_gate":
+			base += " Actúa como revisor del proyecto: inspecciona el código, valida arquitectura, tests y definición de terminado, documenta findings y aprueba o pide cambios sin detener el proyecto."
+		case "continuar_trabajo":
+			base += " Sigue con el trabajo en curso y cierra el siguiente frente útil."
+		case "esperar_o_pedir_tarea":
+			base += " No te quedes esperando: revisa backlog, asignación y siguiente paso útil, y continúa."
+		case "votar_propuestas_pendientes":
+			base += " Revisa y resuelve las propuestas pendientes del proyecto antes de continuar."
+		case "pedir_intervencion":
+			base += " No escales a humano por defecto: decide el mejor siguiente paso permitido y ejecuta."
+		default:
+			base += " Evalúa el mejor siguiente paso y ejecútalo."
+		}
+		if strings.TrimSpace(motivo) != "" {
+			base += " Contexto: " + strings.TrimSpace(motivo) + "."
+		}
+		base += " Si el cambio es delicado, crea checkpoint y sigue."
+		return base, true
+	case db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
+		return construirInstruccionRefreshRuntime(msg)
+	default:
+		return "", false
+	}
 }
 
 func procesarAutonomiaAgentesBatch() (int, error) {
@@ -219,41 +457,18 @@ func procesarCierreProyectoSesion(sesion *db.Sesion) (int, error) {
 }
 
 func proyectoTerminadoAutonomamente(proyecto *db.Proyecto) (bool, string, error) {
-	if proyecto == nil {
-		return false, "", nil
+	listo, motivo, err := proyectoSinTrabajoPendiente(proyecto)
+	if err != nil || !listo {
+		return listo, motivo, err
 	}
-	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyecto.ID})
-	if err != nil {
-		return false, "", err
+	reviewOK, reviewMotivo, err := proyectoReviewAutonomoCompletado(proyecto)
+	if err != nil || !reviewOK {
+		return false, reviewMotivo, err
 	}
-	total := 0
-	abiertas := 0
-	for _, tarea := range tareas {
-		if tarea == nil {
-			continue
-		}
-		switch tarea.Estado {
-		case db.TareaCancelada:
-			total++
-		case db.TareaCompletada:
-			total++
-		default:
-			total++
-			abiertas++
-		}
+	if strings.TrimSpace(reviewMotivo) != "" {
+		motivo += "; " + strings.TrimSpace(reviewMotivo)
 	}
-	if total == 0 || abiertas > 0 {
-		return false, "", nil
-	}
-	estadoAbierta := db.PropuestaAbierta
-	propuestas, err := propuestasService.ListByProject(&estadoAbierta, proyecto.Slug)
-	if err != nil {
-		return false, "", err
-	}
-	if len(propuestas) > 0 {
-		return false, "", nil
-	}
-	return true, fmt.Sprintf("sin trabajo pendiente (%d tarea(s) terminales, 0 propuestas abiertas)", total), nil
+	return true, motivo, nil
 }
 
 func procesarAparcadoAutonomoSesion(sesion *db.Sesion) (int, error) {
@@ -606,6 +821,10 @@ func dbAgenteTieneTrabajoArrancable(agente string, proyectoID int64) (bool, erro
 }
 
 func encolarNudgeAutonomia(agente string, proyecto *db.Proyecto, accion, motivo string) error {
+	return encolarNudgeAutonomiaDetallado(agente, proyecto, accion, motivo, "", nil)
+}
+
+func encolarNudgeAutonomiaDetallado(agente string, proyecto *db.Proyecto, accion, motivo, instruction string, extras map[string]any) error {
 	if proyecto == nil {
 		return nil
 	}
@@ -621,13 +840,20 @@ func encolarNudgeAutonomia(agente string, proyecto *db.Proyecto, accion, motivo 
 			runtimeID = handle.RuntimeID
 		}
 	}
-	payloadJSON, err := json.Marshal(map[string]any{
+	payload := map[string]any{
 		"from_agente": "server",
 		"to_agente":   strings.TrimSpace(agente),
 		"kind":        "autonomia",
 		"accion":      strings.TrimSpace(accion),
 		"texto":       strings.TrimSpace(motivo),
-	})
+	}
+	if strings.TrimSpace(instruction) != "" {
+		payload["instruction"] = strings.TrimSpace(instruction)
+	}
+	for key, value := range extras {
+		payload[key] = value
+	}
+	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}

@@ -1,26 +1,11 @@
 package db
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 )
 
 func TestHistorialVotacionesProyecto(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 
 	var proyectoID int64
 	if err := DB.QueryRow(
@@ -69,20 +54,7 @@ func TestHistorialVotacionesProyecto(t *testing.T) {
 }
 
 func TestGuardarYListarDecisionesProyecto(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 	var proyectoID int64
 	if err := DB.QueryRow(
 		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,
@@ -120,20 +92,7 @@ func TestGuardarYListarDecisionesProyecto(t *testing.T) {
 }
 
 func TestGuardarYListarDocumentosExternosProyecto(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 	var proyectoID int64
 	if err := DB.QueryRow(
 		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,

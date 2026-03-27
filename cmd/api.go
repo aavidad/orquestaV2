@@ -27,7 +27,9 @@ import (
 	"orquesta/memoriaproyecto"
 	"orquesta/progresoapp"
 	"orquesta/propuestasapp"
+	"orquesta/reviewapp"
 	"orquesta/sesionesapp"
+	"orquesta/supervisionapp"
 	"orquesta/tareasapp"
 )
 
@@ -71,6 +73,47 @@ type apiProyectoDocumentoCreateRequest struct {
 	PropuestaID   *int64 `json:"propuesta_id"`
 	TareaID       *int64 `json:"tarea_id"`
 	MetadataJSON  string `json:"metadata_json"`
+}
+
+type apiProyectoAutonomiaSaveRequest struct {
+	Enabled              bool   `json:"enabled"`
+	ObjetivoGeneral      string `json:"objetivo_general"`
+	DefinitionOfDoneJSON string `json:"definition_of_done_json"`
+	MaxWorkers           int    `json:"max_workers"`
+	ReserveReviewer      bool   `json:"reserve_reviewer"`
+	ReserveSupervisor    bool   `json:"reserve_supervisor"`
+	ReviewRequired       bool   `json:"review_required"`
+	AutoCreateTasks      bool   `json:"auto_create_tasks"`
+	AutoCloseProject     bool   `json:"auto_close_project"`
+	EstadoAutonomia      string `json:"estado_autonomia"`
+}
+
+type apiProyectoAutonomiaResponse struct {
+	Policy *db.ProyectoAutonomia `json:"policy"`
+	Cycles []*db.AutonomiaCiclo  `json:"cycles,omitempty"`
+}
+
+type apiReviewGateCreateRequest struct {
+	Proyecto       string `json:"proyecto"`
+	TareaID        *int64 `json:"tarea_id"`
+	WorktreeID     *int64 `json:"worktree_id"`
+	RequestedBy    string `json:"requested_by"`
+	ReviewerAgente string `json:"reviewer_agente"`
+	SeverityMax    string `json:"severity_max"`
+	FindingsJSON   string `json:"findings_json"`
+}
+
+type apiReviewGateUpdateRequest struct {
+	Estado         string  `json:"estado"`
+	ReviewerAgente *string `json:"reviewer_agente"`
+	SeverityMax    *string `json:"severity_max"`
+	FindingsJSON   *string `json:"findings_json"`
+}
+
+type apiReviewGateResolveRequest struct {
+	Estado         string `json:"estado"`
+	ReviewerAgente string `json:"reviewer_agente"`
+	FindingsJSON   string `json:"findings_json"`
 }
 
 type apiConteoVotosResponse struct {
@@ -499,6 +542,8 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/proyectos", apiHandlerProyectos)
 	mux.HandleFunc("/api/proyectos/descubrir", apiHandlerProyectoDescubrir)
 	mux.HandleFunc("/api/proyectos/", apiRouterProyectos)
+	mux.HandleFunc("/api/review-gates", apiHandlerReviewGates)
+	mux.HandleFunc("/api/review-gates/", apiRouterReviewGates)
 	mux.HandleFunc("/api/pools", apiHandlerPools)
 	mux.HandleFunc("/api/pools/seed-inicial", apiHandlerPoolsSeedInicial)
 	mux.HandleFunc("/api/pools/modelos/seed-inicial", apiHandlerPoolsModelosSeedInicial)
@@ -527,6 +572,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtimes/tree", apiHandlerRuntimesTree)
 	mux.HandleFunc("/api/runtimes/", apiRouterRuntimes)
 	mux.HandleFunc("/api/runtime-handles", apiHandlerRuntimeHandles)
+	mux.HandleFunc("/api/runtime-transcript", apiHandlerRuntimeTranscript)
 	mux.HandleFunc("/api/runtime-orders", apiHandlerRuntimeOrders)
 	mux.HandleFunc("/api/runtime-mailbox", apiHandlerRuntimeMailbox)
 	mux.HandleFunc("/api/runtime-mailbox/", apiRouterRuntimeMailbox)
@@ -1451,6 +1497,12 @@ func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {
 		apiHandlerProyectoOperacion(w, r, ref)
 	case len(parts) == 2 && parts[1] == "operacion" && r.Method == http.MethodPost:
 		apiHandlerProyectoOperacionGuardar(w, r, ref)
+	case len(parts) == 2 && parts[1] == "autonomia" && r.Method == http.MethodGet:
+		apiHandlerProyectoAutonomia(w, r, ref)
+	case len(parts) == 2 && parts[1] == "autonomia" && r.Method == http.MethodPost:
+		apiHandlerProyectoAutonomiaGuardar(w, r, ref)
+	case len(parts) == 3 && parts[1] == "autonomia" && parts[2] == "ciclos" && r.Method == http.MethodGet:
+		apiHandlerProyectoAutonomiaCiclos(w, r, ref)
 	case len(parts) == 2 && parts[1] == "fabricar-app" && r.Method == http.MethodPost:
 		apiHandlerProyectoFabricarApp(w, r, ref)
 	default:
@@ -1620,6 +1672,168 @@ func apiHandlerProyectoOperacionGuardar(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, apiProyectoOperacionResponse{Operacion: op})
+}
+
+func apiHandlerProyectoAutonomia(w http.ResponseWriter, r *http.Request, ref string) {
+	policy, err := supervisionService.GetProjectPolicy(strings.TrimSpace(ref))
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	limit := 10
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	cycles, err := supervisionService.ListCycles(strings.TrimSpace(ref), nil, limit)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiProyectoAutonomiaResponse{Policy: policy, Cycles: cycles})
+}
+
+func apiHandlerProyectoAutonomiaGuardar(w http.ResponseWriter, r *http.Request, ref string) {
+	var req apiProyectoAutonomiaSaveRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	policy, err := supervisionService.UpsertProjectPolicy(strings.TrimSpace(ref), supervisionapp.PolicyInput{
+		Enabled:              req.Enabled,
+		ObjetivoGeneral:      strings.TrimSpace(req.ObjetivoGeneral),
+		DefinitionOfDoneJSON: strings.TrimSpace(req.DefinitionOfDoneJSON),
+		MaxWorkers:           req.MaxWorkers,
+		ReserveReviewer:      req.ReserveReviewer,
+		ReserveSupervisor:    req.ReserveSupervisor,
+		ReviewRequired:       req.ReviewRequired,
+		AutoCreateTasks:      req.AutoCreateTasks,
+		AutoCloseProject:     req.AutoCloseProject,
+		EstadoAutonomia:      db.EstadoAutonomiaProyecto(strings.TrimSpace(req.EstadoAutonomia)),
+	})
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiProyectoAutonomiaResponse{Policy: policy})
+}
+
+func apiHandlerProyectoAutonomiaCiclos(w http.ResponseWriter, r *http.Request, ref string) {
+	limit := 20
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	var kindPtr *string
+	if kind := strings.TrimSpace(r.URL.Query().Get("kind")); kind != "" {
+		kindPtr = &kind
+	}
+	cycles, err := supervisionService.ListCycles(strings.TrimSpace(ref), kindPtr, limit)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"cycles": cycles})
+}
+
+func apiHandlerReviewGates(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		limit := 50
+		if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+				limit = n
+			}
+		}
+		gates, err := reviewService.List(reviewapp.ListInput{
+			ProyectoRef:    strings.TrimSpace(r.URL.Query().Get("proyecto")),
+			Estado:         strings.TrimSpace(r.URL.Query().Get("estado")),
+			ReviewerAgente: strings.TrimSpace(r.URL.Query().Get("reviewer_agente")),
+			Limit:          limit,
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"gates": gates})
+	case http.MethodPost:
+		var req apiReviewGateCreateRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		gate, err := reviewService.Create(reviewapp.CreateGateInput{
+			ProyectoRef:     strings.TrimSpace(req.Proyecto),
+			TareaID:         req.TareaID,
+			WorktreeID:      req.WorktreeID,
+			RequestedBy:     strings.TrimSpace(req.RequestedBy),
+			ReviewerAgente:  strings.TrimSpace(req.ReviewerAgente),
+			SeverityMax:     strings.TrimSpace(req.SeverityMax),
+			InitialFindings: strings.TrimSpace(req.FindingsJSON),
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusCreated, map[string]any{"gate": gate})
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func apiRouterReviewGates(w http.ResponseWriter, r *http.Request) {
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/review-gates/"), "/")
+	if path == "" {
+		http.NotFound(w, r)
+		return
+	}
+	parts := strings.Split(path, "/")
+	id, err := strconv.ParseInt(strings.TrimSpace(parts[0]), 10, 64)
+	if err != nil || id <= 0 {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("id de gate inválido"))
+		return
+	}
+	switch {
+	case len(parts) == 1 && r.Method == http.MethodPost:
+		var req apiReviewGateUpdateRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		gate, err := reviewService.Update(reviewapp.UpdateGateInput{
+			ID:             id,
+			Estado:         strings.TrimSpace(req.Estado),
+			ReviewerAgente: req.ReviewerAgente,
+			SeverityMax:    req.SeverityMax,
+			FindingsJSON:   req.FindingsJSON,
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"gate": gate})
+	case len(parts) == 2 && parts[1] == "resolver" && r.Method == http.MethodPost:
+		var req apiReviewGateResolveRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		gate, err := reviewService.Resolve(reviewapp.ResolveGateInput{
+			ID:             id,
+			Estado:         strings.TrimSpace(req.Estado),
+			ReviewerAgente: strings.TrimSpace(req.ReviewerAgente),
+			FindingsJSON:   strings.TrimSpace(req.FindingsJSON),
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"gate": gate})
+	default:
+		http.NotFound(w, r)
+	}
 }
 
 func apiHandlerPools(w http.ResponseWriter, r *http.Request) {
@@ -2545,6 +2759,66 @@ func apiHandlerRuntimeHandles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{"handles": handles})
+}
+
+func apiHandlerRuntimeTranscript(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	filter := db.FiltroRuntimeTranscript{}
+	if agente := strings.TrimSpace(r.URL.Query().Get("agente")); agente != "" {
+		filter.Agente = &agente
+	}
+	if stream := strings.TrimSpace(r.URL.Query().Get("stream")); stream != "" {
+		filter.Stream = &stream
+	}
+	if class := strings.TrimSpace(r.URL.Query().Get("classification")); class != "" {
+		filter.Classification = &class
+	}
+	if proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyecto != "" {
+		p, err := runtimesService.GetProject(proyecto)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		filter.ProyectoID = &p.ID
+	}
+	if runtimeID := strings.TrimSpace(r.URL.Query().Get("runtime_id")); runtimeID != "" {
+		id, err := strconv.ParseInt(runtimeID, 10, 64)
+		if err != nil || id <= 0 {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("runtime_id inválido"))
+			return
+		}
+		filter.RuntimeID = &id
+	}
+	if handleID := strings.TrimSpace(r.URL.Query().Get("handle_id")); handleID != "" {
+		id, err := strconv.ParseInt(handleID, 10, 64)
+		if err != nil || id <= 0 {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("handle_id inválido"))
+			return
+		}
+		filter.HandleID = &id
+	}
+	if pending := strings.TrimSpace(r.URL.Query().Get("signals_pending")); pending != "" {
+		switch strings.ToLower(pending) {
+		case "1", "true", "yes", "si", "sí", "on":
+			filter.SoloSenalesPend = true
+		}
+	}
+	if limitStr := strings.TrimSpace(r.URL.Query().Get("limit")); limitStr != "" {
+		limit, err := strconv.Atoi(limitStr)
+		if err != nil || limit <= 0 {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("limit inválido"))
+			return
+		}
+		filter.Limit = limit
+	}
+	items, err := runtimesService.ListRuntimeTranscript(filter)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"transcript": items})
 }
 
 func apiHandlerRuntimeOrders(w http.ResponseWriter, r *http.Request) {

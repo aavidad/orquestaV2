@@ -1,6 +1,7 @@
 package controlruntime
 
 import (
+	"os"
 	"os/exec"
 	"testing"
 	"time"
@@ -50,5 +51,22 @@ func TestControlProcesoPausaContinuaYDetiene(t *testing.T) {
 		if _, ok := err.(*exec.ExitError); !ok {
 			t.Fatalf("wait inesperado: %v", err)
 		}
+	}
+}
+
+func TestProcesoVivoDetectaPIDActualEInexistente(t *testing.T) {
+	pid := int64(os.Getpid())
+	vivo, gotPID, err := ProcesoVivo(ObjetivoProceso{PID: &pid})
+	if err != nil || !vivo || gotPID != os.Getpid() {
+		t.Fatalf("proceso actual no detectado: vivo=%v pid=%d err=%v", vivo, gotPID, err)
+	}
+
+	muertoPID := int64(999999)
+	vivo, gotPID, err = ProcesoVivo(ObjetivoProceso{PID: &muertoPID})
+	if err != nil {
+		t.Fatalf("proceso inexistente devolvió error: %v", err)
+	}
+	if vivo {
+		t.Fatalf("un PID inexistente no debería aparecer vivo: pid=%d", gotPID)
 	}
 }

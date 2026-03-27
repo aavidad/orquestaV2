@@ -1,8 +1,6 @@
 package db
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -110,20 +108,7 @@ func TestGuardarPoolModeloYListar(t *testing.T) {
 
 func withTempDBPools(t *testing.T, fn func()) {
 	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 	if err := RegistrarAgente("codex1", "programador"); err != nil {
 		t.Fatalf("RegistrarAgente: %v", err)
 	}

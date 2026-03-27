@@ -1,26 +1,12 @@
 package db
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestDetectarCarenciaSkillEncuentraEquivalente(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 	if _, err := CrearSkill("Codex1", &Skill{
 		TipoAgente:       "programador",
 		Nombre:           "rg",
@@ -58,19 +44,7 @@ func TestDetectarCarenciaSkillEncuentraEquivalente(t *testing.T) {
 }
 
 func TestDetectarCarenciaSkillProponeBorradorYCandidatas(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 	if _, err := CrearSkill("Codex1", &Skill{
 		TipoAgente:       "programador",
 		Nombre:           "gofmt",

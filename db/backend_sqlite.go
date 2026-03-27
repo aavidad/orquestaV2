@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 
 	"orquesta/storage"
@@ -35,6 +36,10 @@ func (sqliteBackend) Prepare(db *sql.DB, cfg storage.Config) error {
 		if err := aplicarSchemaPorDriver(db, "sqlite"); err != nil {
 			return fmt.Errorf("aplicando schema sqlite: %w", err)
 		}
+	}
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("ORQUESTA_DB_SKIP_POST_MIGRATIONS")), "1") ||
+		strings.EqualFold(strings.TrimSpace(os.Getenv("ORQUESTA_DB_SKIP_POST_MIGRATIONS")), "true") {
+		return nil
 	}
 	if err := postMigracionesPorDriver(db, "sqlite"); err != nil {
 		return fmt.Errorf("post-migraciones sqlite: %w", err)

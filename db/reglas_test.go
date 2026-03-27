@@ -3,25 +3,11 @@ package db
 import (
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 )
 
 func TestGuardarYListarReglas(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 
 	id, err := GuardarRegla(&Regla{
 		TipoAgente:  "programador",
@@ -45,20 +31,44 @@ func TestGuardarYListarReglas(t *testing.T) {
 	}
 }
 
+func TestCatalogoBuiltinIncluyeGobernanzaDeTestsDB(t *testing.T) {
+	prepararDBTemporal(t)
+
+	reglas, err := ListarReglas("programador", nil)
+	if err != nil {
+		t.Fatalf("ListarReglas: %v", err)
+	}
+	skills, err := ListarSkills("programador", nil)
+	if err != nil {
+		t.Fatalf("ListarSkills: %v", err)
+	}
+
+	var reglaHarness, reglaCoherencia, skillHarness bool
+	for _, item := range reglas {
+		if item == nil {
+			continue
+		}
+		switch item.Titulo {
+		case "Tests DB orquestados":
+			reglaHarness = true
+		case "Tests coherentes, rápidos y mantenibles":
+			reglaCoherencia = true
+		}
+	}
+	for _, item := range skills {
+		if item != nil && item.Nombre == "db-test-harness" {
+			skillHarness = true
+			break
+		}
+	}
+
+	if !reglaHarness || !reglaCoherencia || !skillHarness {
+		t.Fatalf("catalogo builtin incompleto: reglaHarness=%t reglaCoherencia=%t skillHarness=%t", reglaHarness, reglaCoherencia, skillHarness)
+	}
+}
+
 func TestGuardarYListarSkills(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 
 	id, err := GuardarSkill(&Skill{
 		TipoAgente:  "programador",
@@ -83,19 +93,7 @@ func TestGuardarYListarSkills(t *testing.T) {
 }
 
 func TestSkillsOrdenadasPorPrioridadYEscenarioYConVersionado(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 
 	idBusq, err := CrearSkill("Codex2", &Skill{
 		TipoAgente:       "programador",
@@ -174,19 +172,7 @@ func TestSkillsOrdenadasPorPrioridadYEscenarioYConVersionado(t *testing.T) {
 }
 
 func TestCrearSkillRechazaDuplicadoEquivalente(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 
 	if _, err := CrearSkill("Codex2", &Skill{
 		TipoAgente:       "programador",
@@ -222,19 +208,7 @@ func TestCrearSkillRechazaDuplicadoEquivalente(t *testing.T) {
 }
 
 func TestSkillExternaQuedaPendienteYSoloAdminLaActiva(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 
 	id, err := CrearSkill("Codex2", &Skill{
 		TipoAgente:       "programador",
@@ -282,19 +256,7 @@ func TestSkillExternaQuedaPendienteYSoloAdminLaActiva(t *testing.T) {
 }
 
 func TestCrearSkillNotificaRefreshAMailboxDeAgentesActivosDelRol(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 	if _, err := IniciarSesion("Codex1"); err != nil {
 		t.Fatalf("IniciarSesion Codex1: %v", err)
 	}
@@ -346,19 +308,7 @@ func TestCrearSkillNotificaRefreshAMailboxDeAgentesActivosDelRol(t *testing.T) {
 }
 
 func TestCrearReglaNotificaGovernanceRefreshAMailboxDeAgentesActivosDelRol(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 	if _, err := IniciarSesion("Codex1"); err != nil {
 		t.Fatalf("IniciarSesion Codex1: %v", err)
 	}
@@ -411,19 +361,7 @@ func TestCrearReglaNotificaGovernanceRefreshAMailboxDeAgentesActivosDelRol(t *te
 }
 
 func TestGuardarYListarWorkflows(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 
 	id, err := GuardarWorkflow(&Workflow{
 		TipoAgente:  "programador",

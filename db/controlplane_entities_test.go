@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -484,6 +485,100 @@ func TestReconciliarRuntimeHandlesStaleMarcaHandleFallido(t *testing.T) {
 	}
 }
 
+func TestReconciliarRuntimeHandlesStaleMantieneHandleVivo(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	runtimeID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "Codex1",
+		ProyectoID:   &proyectoID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          int64PtrTest(int64(os.Getpid())),
+	})
+	if err != nil {
+		t.Fatalf("crear runtime: %v", err)
+	}
+	if _, err := DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo',?)`,
+		"Codex1", proyectoID, runtimeID, "cli", "process", strconv.Itoa(os.Getpid()), time.Now().UTC().Add(-10*time.Minute)); err != nil {
+		t.Fatalf("insert handle vivo: %v", err)
+	}
+
+	n, err := ReconciliarRuntimeHandlesStale()
+	if err != nil {
+		t.Fatalf("reconciliar handles stale: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no esperaba handles marcados fallidos si el proceso sigue vivo, got=%d", n)
+	}
+
+	handle, err := GetRuntimeHandleActivoAgenteProyecto("Codex1", &proyectoID)
+	if err != nil {
+		t.Fatalf("get handle activo: %v", err)
+	}
+	if handle == nil || handle.Estado != "activo" {
+		t.Fatalf("handle vivo no recuperado como activo: %+v", handle)
+	}
+}
+
+func TestGetRuntimeHandleActivoAgenteProyectoRecuperaHandleFallidoVivo(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	runtimeID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "Codex1",
+		ProyectoID:   &proyectoID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          int64PtrTest(int64(os.Getpid())),
+	})
+	if err != nil {
+		t.Fatalf("crear runtime: %v", err)
+	}
+	res, err := DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'fallido', ?)`,
+		"Codex1", proyectoID, runtimeID, "cli", "process", strconv.Itoa(os.Getpid()), time.Now().UTC().Add(-10*time.Minute))
+	if err != nil {
+		t.Fatalf("insert handle fallido vivo: %v", err)
+	}
+	handleID, _ := res.LastInsertId()
+
+	handle, err := GetRuntimeHandleActivoAgenteProyecto("Codex1", &proyectoID)
+	if err != nil {
+		t.Fatalf("get handle activo con fallback: %v", err)
+	}
+	if handle == nil || handle.ID != handleID || handle.Estado != "activo" {
+		t.Fatalf("handle fallido vivo no recuperado: %+v", handle)
+	}
+}
+
 func TestReconciliarRuntimeHandlesStaleMarcaHandleConSesionActivaPeroSinHeartbeat(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
@@ -531,6 +626,10 @@ func TestReconciliarRuntimeHandlesStaleMarcaHandleConSesionActivaPeroSinHeartbea
 	if handle == nil || handle.Estado != "fallido" {
 		t.Fatalf("handle no marcado como fallido: %+v", handle)
 	}
+}
+
+func int64PtrTest(v int64) *int64 {
+	return &v
 }
 
 func TestProcesarRuntimeOrdersBatchCompletaSyncStatusYCheckpoint(t *testing.T) {
@@ -1084,6 +1183,21 @@ func TestRuntimeOrderStartYSendInstructionGobiernanProcesoReal(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	agente := "Codex1"
+	transcript, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: &agente, Limit: 10})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	foundInput := false
+	for _, item := range transcript {
+		if item != nil && item.Stream == "stdin" && strings.Contains(item.Text, "hola runtime") {
+			foundInput = true
+			break
+		}
+	}
+	if !foundInput {
+		t.Fatalf("send_instruction deberia quedar registrada en transcript: %+v", transcript)
+	}
 
 	stopID, err := EncolarRuntimeOrder(&RuntimeOrder{
 		Agente:      "Codex1",
@@ -1123,6 +1237,96 @@ func TestRuntimeOrderStartYSendInstructionGobiernanProcesoReal(t *testing.T) {
 	}
 	if sesion.Activa || sesion.Fin == nil {
 		t.Fatalf("la sesion no quedó cerrada: %+v", sesion)
+	}
+}
+
+func TestRuntimeOrderStartInyectaContinuidadAlProcesoReal(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "cat-cli",
+		Nombre:     "Cat CLI",
+		Transporte: "cli",
+		Comando:    "cat",
+		Activo:     true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:             "Codex1",
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador"),
+		Herramienta:        "codex-cli",
+		ResumenContinuidad: "seguir con la firma final",
+		ResumePayloadJSON:  `{"foo":"bar"}`,
+		Branch:             "main",
+	}); err != nil {
+		t.Fatalf("iniciar sesion previa: %v", err)
+	}
+	if err := AparcarSesionActiva("Codex1", &proyectoID); err != nil {
+		t.Fatalf("aparcar sesion previa: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"cat-cli"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStart(startOrder); err != nil {
+		t.Fatalf("ejecutar start: %v", err)
+	}
+
+	sesion, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion activa: %+v err=%v", sesion, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil || runtime.PID == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	t.Cleanup(func() {
+		_, _, _ = controlruntime.DetenerProceso(controlruntime.ObjetivoProceso{PID: runtime.PID})
+	})
+
+	agente := "Codex1"
+	entries, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: &agente, Limit: 20})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	found := false
+	for _, item := range entries {
+		if item == nil || item.Stream != "stdin" {
+			continue
+		}
+		if strings.Contains(item.Text, "seguir con la firma final") && strings.Contains(item.Text, `"foo":"bar"`) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("no se inyectó el continuity prompt en el transcript stdin: %+v", entries)
 	}
 }
 

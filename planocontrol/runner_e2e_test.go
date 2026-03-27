@@ -28,11 +28,20 @@ func (dbAutomationServiceTest) PlanificarTareasAutomaticamente() error {
 func (dbAutomationServiceTest) ProcesarAutonomiaAgentesBatch() (int, error) {
 	return 0, nil
 }
+func (dbAutomationServiceTest) ProcesarSupervisionAutonomaBatch() (int, error) {
+	return 0, nil
+}
+func (dbAutomationServiceTest) ProcesarReviewGatesBatch() (int, error) {
+	return 0, nil
+}
 func (dbAutomationServiceTest) ReconciliarRuntimeHandlesStale() (int, error) {
 	return db.ReconciliarRuntimeHandlesStale()
 }
 func (dbAutomationServiceTest) ReconciliarRuntimeOrdersStale() (int, error) {
 	return db.ReconciliarRuntimeOrdersStale()
+}
+func (dbAutomationServiceTest) ProcesarRuntimeTranscriptBatch() (int, error) {
+	return db.IngestarRuntimeTranscriptActivos()
 }
 func (dbAutomationServiceTest) ProcesarRuntimeOrdersBatch() (int, error) {
 	return db.ProcesarRuntimeOrdersBatch()

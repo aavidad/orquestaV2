@@ -1,6 +1,7 @@
 package controlruntime
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -31,6 +32,27 @@ func ResolverPID(obj ObjetivoProceso) (int, bool, error) {
 		return 0, false, fmt.Errorf("handle_ref de proceso invalido: %s", ref)
 	}
 	return pid, true, nil
+}
+
+func ProcesoVivo(obj ObjetivoProceso) (bool, int, error) {
+	pid, ok, err := ResolverPID(obj)
+	if err != nil {
+		return false, pid, err
+	}
+	if ok {
+		err := syscall.Kill(pid, 0)
+		switch {
+		case err == nil:
+			return true, pid, nil
+		case errors.Is(err, syscall.EPERM):
+			return true, pid, nil
+		case errors.Is(err, syscall.ESRCH):
+			return false, pid, nil
+		default:
+			return false, pid, err
+		}
+	}
+	return false, 0, nil
 }
 
 func PausarProceso(obj ObjetivoProceso) (bool, int, error) {

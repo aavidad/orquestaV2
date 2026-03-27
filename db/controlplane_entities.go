@@ -226,7 +226,7 @@ func GetRuntimeHandleActivoAgente(agente string) (*RuntimeHandle, error) {
 		LIMIT 1`, strings.TrimSpace(agente))
 	h, err := scanRuntimeHandle(row)
 	if err == sql.ErrNoRows {
-		return nil, nil
+		return recuperarRuntimeHandleVivoAgenteProyecto(strings.TrimSpace(agente), nil)
 	}
 	return h, err
 }
@@ -242,9 +242,105 @@ func GetRuntimeHandleActivoAgenteProyecto(agente string, proyectoID *int64) (*Ru
 	q += ` ORDER BY COALESCE(last_seen_at, updated_at, created_at) DESC, id DESC LIMIT 1`
 	h, err := scanRuntimeHandle(DB.QueryRow(q, args...))
 	if err == sql.ErrNoRows {
-		return nil, nil
+		return recuperarRuntimeHandleVivoAgenteProyecto(strings.TrimSpace(agente), proyectoID)
 	}
 	return h, err
+}
+
+func recuperarRuntimeHandleVivoAgenteProyecto(agente string, proyectoID *int64) (*RuntimeHandle, error) {
+	q := runtimeHandleSelectBase() + `
+		WHERE agente = ? AND estado = 'fallido'`
+	args := []any{strings.TrimSpace(agente)}
+	if proyectoID != nil {
+		q += ` AND proyecto_id = ?`
+		args = append(args, *proyectoID)
+	}
+	q += ` ORDER BY COALESCE(last_seen_at, updated_at, created_at) DESC, id DESC LIMIT 1`
+	handle, err := scanRuntimeHandle(DB.QueryRow(q, args...))
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return refrescarRuntimeHandleSiSigueVivo(handle)
+}
+
+func refrescarRuntimeHandleSiSigueVivo(handle *RuntimeHandle) (*RuntimeHandle, error) {
+	if handle == nil {
+		return nil, nil
+	}
+	obj := controlruntime.ObjetivoProceso{
+		HandleKind:   handle.HandleKind,
+		HandleRef:    handle.HandleRef,
+		MetadataJSON: handle.MetadataJSON,
+	}
+	if runtime, err := runtimeHandleRuntime(handle); err == nil && runtime != nil && runtime.PID != nil && *runtime.PID > 0 {
+		obj.PID = runtime.PID
+	}
+	vivo, _, err := controlruntime.ProcesoVivo(obj)
+	if err != nil || !vivo {
+		return nil, nil
+	}
+	estado := estadoReviveRuntimeHandle(handle)
+	if _, err := DB.Exec(`
+		UPDATE runtime_handles
+		SET estado = ?,
+		    last_seen_at = CURRENT_TIMESTAMP
+		WHERE id = ?`, estado, handle.ID); err != nil {
+		return nil, err
+	}
+	if runtime, err := runtimeHandleRuntime(handle); err == nil && runtime != nil {
+		processState := runtime.ProcessState
+		if strings.TrimSpace(processState) == "" || strings.EqualFold(strings.TrimSpace(processState), "fallido") {
+			processState = "running"
+		}
+		logicalState := runtime.LogicalState
+		if strings.TrimSpace(logicalState) == "" || strings.EqualFold(strings.TrimSpace(logicalState), "fallido") {
+			logicalState = "esperando_io"
+		}
+		if estado == "pausado" {
+			processState = "stopped"
+			logicalState = "pausado"
+		}
+		if _, err := DB.Exec(`
+			UPDATE runtime_instances
+			SET pid = COALESCE(pid, ?),
+			    logical_state = ?,
+			    process_state = ?,
+			    last_event_at = CURRENT_TIMESTAMP,
+			    last_heartbeat_at = CURRENT_TIMESTAMP
+			WHERE id = ?`,
+			obj.PID, logicalState, processState, runtime.ID,
+		); err != nil {
+			return nil, err
+		}
+	}
+	return GetRuntimeHandle(handle.ID)
+}
+
+func estadoReviveRuntimeHandle(handle *RuntimeHandle) string {
+	if handle == nil {
+		return "activo"
+	}
+	if handle.SesionID != nil {
+		if sesion, err := GetSesionByID(*handle.SesionID); err == nil && sesion != nil {
+			switch strings.TrimSpace(sesion.Estado) {
+			case "pausada":
+				return "pausado"
+			case "activa":
+				return "activo"
+			}
+		}
+	}
+	return "activo"
+}
+
+func runtimeHandleRuntime(handle *RuntimeHandle) (*RuntimeInstance, error) {
+	if handle == nil || handle.RuntimeID == nil || *handle.RuntimeID <= 0 {
+		return nil, nil
+	}
+	return GetRuntime(*handle.RuntimeID)
 }
 
 func ListarRuntimeHandles(agente *string) ([]*RuntimeHandle, error) {
@@ -829,15 +925,26 @@ func ReconciliarRuntimeHandlesStale() (int, error) {
 	if err := rows.Err(); err != nil {
 		return 0, err
 	}
+	reconciled := 0
 	for _, id := range ids {
+		handle, err := GetRuntimeHandle(id)
+		if err != nil {
+			return 0, err
+		}
+		if revived, err := refrescarRuntimeHandleSiSigueVivo(handle); err != nil {
+			return 0, err
+		} else if revived != nil {
+			continue
+		}
 		if _, err := DB.Exec(`
 			UPDATE runtime_handles
 			SET estado='fallido', last_seen_at=CURRENT_TIMESTAMP
 			WHERE id = ?`, id); err != nil {
 			return 0, err
 		}
+		reconciled++
 	}
-	return len(ids), nil
+	return reconciled, nil
 }
 
 func ReconciliarRuntimeOrdersStale() (int, error) {
@@ -1537,6 +1644,10 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) error {
 		if err := actualizarHandleRuntimeArranque(handle.ID, arranque, conector, plan, resume); err != nil {
 			return err
 		}
+		handle, err = GetRuntimeHandle(handle.ID)
+		if err != nil {
+			return err
+		}
 	}
 	runtime, err := GetRuntimeBySesionID(sesion.ID)
 	if err != nil {
@@ -1544,6 +1655,16 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) error {
 	}
 	if runtime == nil {
 		return fmt.Errorf("no se pudo registrar runtime para la sesion %d", sesion.ID)
+	}
+	if handle != nil {
+		if texto := construirTranscriptArranque(plan, resume, bootstrap); strings.TrimSpace(texto) != "" {
+			if err := RegistrarRuntimeTranscriptSistema(handle, runtime, texto); err != nil {
+				return err
+			}
+		}
+		if err := inyectarContinuidadArranque(handle, runtime, plan, order); err != nil {
+			return err
+		}
 	}
 	if err := registrarEvidenciaHandoffReanudado(order.Agente, sesion.ID, bootstrap); err != nil {
 		return err
@@ -1573,6 +1694,45 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) error {
 	}
 	data, _ := json.Marshal(result)
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+}
+
+func inyectarContinuidadArranque(handle *RuntimeHandle, runtime *RuntimeInstance, plan *runtimeagente.LaunchPlan, order *RuntimeOrder) error {
+	if handle == nil || runtime == nil || plan == nil {
+		return nil
+	}
+	texto := strings.TrimSpace(plan.ContinuityPrompt)
+	if texto == "" {
+		return nil
+	}
+	obj := controlruntime.ObjetivoProceso{
+		HandleKind:   handle.HandleKind,
+		HandleRef:    handle.HandleRef,
+		MetadataJSON: handle.MetadataJSON,
+	}
+	if runtime.PID != nil && *runtime.PID > 0 {
+		obj.PID = runtime.PID
+	}
+	aplicado, _, err := controlruntime.EnviarInstruccionProceso(obj, texto)
+	if err != nil {
+		return err
+	}
+	if aplicado {
+		return RegistrarRuntimeTranscriptInput(handle, runtime, texto)
+	}
+	payloadJSON, _ := json.Marshal(map[string]any{
+		"texto":       texto,
+		"kind":        "instruction",
+		"from_agente": "orquesta",
+		"motivo":      "continuity_prompt_start",
+	})
+	_, err = EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "orquesta",
+		ToAgente:    strings.TrimSpace(order.Agente),
+		ProyectoID:  order.ProyectoID,
+		Kind:        "instruction",
+		PayloadJSON: string(payloadJSON),
+	})
+	return err
 }
 
 func ejecutarRuntimeOrderPause(order *RuntimeOrder) error {
@@ -1802,6 +1962,11 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 		return err
 	}
 	if aplicado {
+		handle, _ := resolverHandleParaOrden(order)
+		runtime, _ := resolverRuntimeParaOrden(order)
+		if err := RegistrarRuntimeTranscriptInput(handle, runtime, texto); err != nil {
+			return err
+		}
 		result := map[string]any{
 			"ok":           true,
 			"to_agente":    toAgente,
@@ -1880,6 +2045,28 @@ func payloadJSONDesdePlanYResume(plan *runtimeagente.LaunchPlan, resume runtimea
 		return strings.TrimSpace(resume.ResumePayloadJSON)
 	}
 	return base
+}
+
+func construirTranscriptArranque(plan *runtimeagente.LaunchPlan, resume runtimeagente.ResumeContext, bootstrap *bootstrapRuntimeData) string {
+	parts := []string{"Orquesta ha arrancado o reanudado este agente bajo control plane."}
+	if plan != nil {
+		if strings.TrimSpace(plan.Modo) != "" {
+			parts = append(parts, fmt.Sprintf("Modo: %s.", strings.TrimSpace(plan.Modo)))
+		}
+		if strings.TrimSpace(plan.WorkingDir) != "" {
+			parts = append(parts, fmt.Sprintf("Directorio: %s.", strings.TrimSpace(plan.WorkingDir)))
+		}
+		if strings.TrimSpace(plan.ContinuityPrompt) != "" {
+			parts = append(parts, "Prompt de continuidad: "+strings.TrimSpace(plan.ContinuityPrompt))
+		}
+	}
+	if strings.TrimSpace(resume.ResumenContinuidad) != "" {
+		parts = append(parts, "Resumen de continuidad: "+strings.TrimSpace(resume.ResumenContinuidad))
+	}
+	if bootstrap != nil && bootstrap.Checkpoint != nil && bootstrap.Checkpoint.ID > 0 {
+		parts = append(parts, fmt.Sprintf("Checkpoint de referencia: #%d.", bootstrap.Checkpoint.ID))
+	}
+	return strings.Join(parts, " ")
 }
 
 func branchDesdeResume(ultima *Sesion, resume runtimeagente.ResumeContext) string {

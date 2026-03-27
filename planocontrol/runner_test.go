@@ -9,17 +9,23 @@ import (
 
 type stubAutomationService struct {
 	autonomyCount    int
+	supervisionCount int
+	reviewCount      int
 	staleCount       int
 	staleOrdersCount int
+	transcriptCount  int
 	processedCount   int
 	refinedCount     int
 	handoffCount     int
 	staleErr         error
 	staleOrdersErr   error
+	transcriptErr    error
 	processedErr     error
 	refinedErr       error
 	handoffErr       error
 	autonomyErr      error
+	supervisionErr   error
+	reviewErr        error
 	audits           []string
 }
 
@@ -30,11 +36,20 @@ func (s *stubAutomationService) PlanificarTareasAutomaticamente() error    { ret
 func (s *stubAutomationService) ProcesarAutonomiaAgentesBatch() (int, error) {
 	return s.autonomyCount, s.autonomyErr
 }
+func (s *stubAutomationService) ProcesarSupervisionAutonomaBatch() (int, error) {
+	return s.supervisionCount, s.supervisionErr
+}
+func (s *stubAutomationService) ProcesarReviewGatesBatch() (int, error) {
+	return s.reviewCount, s.reviewErr
+}
 func (s *stubAutomationService) ReconciliarRuntimeHandlesStale() (int, error) {
 	return s.staleCount, s.staleErr
 }
 func (s *stubAutomationService) ReconciliarRuntimeOrdersStale() (int, error) {
 	return s.staleOrdersCount, s.staleOrdersErr
+}
+func (s *stubAutomationService) ProcesarRuntimeTranscriptBatch() (int, error) {
+	return s.transcriptCount, s.transcriptErr
 }
 func (s *stubAutomationService) ProcesarRuntimeOrdersBatch() (int, error) {
 	return s.processedCount, s.processedErr
@@ -52,8 +67,11 @@ func (s *stubAutomationService) Audit(agente, accion, entidad string, entidadID 
 func TestRunnerRunControlPlaneAuditaTrabajoProcesado(t *testing.T) {
 	service := &stubAutomationService{
 		autonomyCount:    1,
+		supervisionCount: 1,
+		reviewCount:      1,
 		staleCount:       2,
 		staleOrdersCount: 1,
+		transcriptCount:  1,
 		processedCount:   3,
 		refinedCount:     1,
 		handoffCount:     1,
@@ -61,8 +79,8 @@ func TestRunnerRunControlPlaneAuditaTrabajoProcesado(t *testing.T) {
 	r := &Runner{Automation: service}
 	r.runControlPlane()
 
-	if len(service.audits) != 6 {
-		t.Fatalf("esperaba 6 auditorias, got=%d", len(service.audits))
+	if len(service.audits) != 9 {
+		t.Fatalf("esperaba 9 auditorias, got=%d", len(service.audits))
 	}
 }
 
@@ -79,8 +97,11 @@ func TestRunnerRunControlPlaneSinTrabajoNoAudita(t *testing.T) {
 func TestRunnerRunControlPlaneAuditaErrores(t *testing.T) {
 	service := &stubAutomationService{
 		autonomyErr:    assertErr("fallo autonomia"),
+		supervisionErr: assertErr("fallo supervision"),
+		reviewErr:      assertErr("fallo review"),
 		staleErr:       assertErr("fallo handles"),
 		staleOrdersErr: assertErr("fallo stale orders"),
+		transcriptErr:  assertErr("fallo transcript"),
 		processedErr:   assertErr("fallo batch"),
 		refinedErr:     assertErr("fallo refineria"),
 		handoffErr:     assertErr("fallo handoffs"),
@@ -88,19 +109,22 @@ func TestRunnerRunControlPlaneAuditaErrores(t *testing.T) {
 	r := &Runner{Automation: service}
 	r.runControlPlane()
 
-	if len(service.audits) != 6 {
-		t.Fatalf("esperaba 6 auditorias de error, got=%d", len(service.audits))
+	if len(service.audits) != 9 {
+		t.Fatalf("esperaba 9 auditorias de error, got=%d", len(service.audits))
 	}
 }
 
 func TestRunnerRunControlPlaneEmiteDebug(t *testing.T) {
 	service := &stubAutomationService{
 		autonomyCount:    1,
+		supervisionCount: 2,
+		reviewCount:      3,
 		staleCount:       2,
-		staleOrdersCount: 3,
-		processedCount:   4,
-		refinedCount:     5,
-		handoffCount:     6,
+		staleOrdersCount: 4,
+		transcriptCount:  4,
+		processedCount:   5,
+		refinedCount:     6,
+		handoffCount:     7,
 	}
 	var traces []string
 	r := &Runner{
@@ -114,7 +138,7 @@ func TestRunnerRunControlPlaneEmiteDebug(t *testing.T) {
 	if len(traces) == 0 {
 		t.Fatalf("esperaba trazas de debug")
 	}
-	if !strings.Contains(traces[len(traces)-1], "control_plane autonomia=%d handles_stale=%d orders_stale=%d runtime_orders=%d refineria=%d handoffs=%d") {
+	if !strings.Contains(traces[len(traces)-1], "control_plane autonomia=%d supervision=%d review=%d handles_stale=%d orders_stale=%d transcript=%d runtime_orders=%d refineria=%d handoffs=%d") {
 		t.Fatalf("traza final inesperada: %+v", traces)
 	}
 }

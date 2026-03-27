@@ -66,6 +66,44 @@ CREATE TABLE IF NOT EXISTS proyectos_operacion (
     updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS proyectos_autonomia (
+    proyecto_id             INTEGER PRIMARY KEY REFERENCES proyectos(id) ON DELETE CASCADE,
+    enabled                 INTEGER NOT NULL DEFAULT 0,
+    objetivo_general        TEXT    NOT NULL DEFAULT '',
+    definition_of_done_json TEXT    NOT NULL DEFAULT '{}',
+    max_workers             INTEGER NOT NULL DEFAULT 0,
+    reserve_reviewer        INTEGER NOT NULL DEFAULT 1,
+    reserve_supervisor      INTEGER NOT NULL DEFAULT 1,
+    review_required         INTEGER NOT NULL DEFAULT 1,
+    auto_create_tasks       INTEGER NOT NULL DEFAULT 1,
+    auto_close_project      INTEGER NOT NULL DEFAULT 1,
+    estado_autonomia        TEXT    NOT NULL DEFAULT 'activo'
+                                     CHECK (estado_autonomia IN ('activo','esperando_review','esperando_humano','cerrando','cerrado')),
+    last_supervision_at     DATETIME,
+    last_review_at          DATETIME,
+    created_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS autonomia_ciclos (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    proyecto_id   INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
+    kind          TEXT    NOT NULL CHECK (kind IN ('supervision','review','closure')),
+    agente        TEXT    NOT NULL DEFAULT '',
+    sesion_id     INTEGER REFERENCES sesiones(id) ON DELETE SET NULL,
+    runtime_id    INTEGER REFERENCES runtime_instances(id) ON DELETE SET NULL,
+    input_json    TEXT    NOT NULL DEFAULT '{}',
+    decision_json TEXT    NOT NULL DEFAULT '{}',
+    resultado     TEXT    NOT NULL DEFAULT '',
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_autonomia_ciclos_proyecto_kind
+ON autonomia_ciclos(proyecto_id, kind, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_proyectos_autonomia_enabled
+ON proyectos_autonomia(enabled, estado_autonomia, proyecto_id);
+
 -- ─── Agentes registrados ───────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS agentes (
     nombre       TEXT PRIMARY KEY,
@@ -223,6 +261,25 @@ CREATE TABLE IF NOT EXISTS worktrees (
     cerrada_at        DATETIME
 );
 
+CREATE TABLE IF NOT EXISTS review_gates (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    proyecto_id     INTEGER REFERENCES proyectos(id) ON DELETE CASCADE,
+    tarea_id        INTEGER REFERENCES tareas(id) ON DELETE CASCADE,
+    worktree_id     INTEGER REFERENCES worktrees(id) ON DELETE SET NULL,
+    requested_by    TEXT    NOT NULL DEFAULT '',
+    reviewer_agente TEXT    NOT NULL DEFAULT '',
+    estado          TEXT    NOT NULL DEFAULT 'pendiente'
+                              CHECK (estado IN ('pendiente','en_revision','cambios_pedidos','aprobado','bloqueado')),
+    severity_max    TEXT    NOT NULL DEFAULT '',
+    findings_json   TEXT    NOT NULL DEFAULT '[]',
+    resolved_at     DATETIME,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_review_gates_proyecto_estado
+ON review_gates(proyecto_id, estado, id DESC);
+
 -- ─── Runtimes observables ──────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS runtime_instances (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -278,6 +335,32 @@ CREATE TABLE IF NOT EXISTS runtime_events (
     payload_json        TEXT    NOT NULL DEFAULT '{}',
     created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS runtime_transcript (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    runtime_id          INTEGER NOT NULL REFERENCES runtime_instances(id) ON DELETE CASCADE,
+    handle_id           INTEGER REFERENCES runtime_handles(id) ON DELETE SET NULL,
+    agente              TEXT    NOT NULL REFERENCES agentes(nombre),
+    proyecto_id         INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+    stream              TEXT    NOT NULL DEFAULT 'pty_out'
+                               CHECK (stream IN ('stdin','pty_out','system')),
+    byte_offset         INTEGER,
+    text                TEXT    NOT NULL DEFAULT '',
+    normalized_text     TEXT    NOT NULL DEFAULT '',
+    classification      TEXT    NOT NULL DEFAULT '',
+    handling_note       TEXT    NOT NULL DEFAULT '',
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    handled_at          DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_runtime_transcript_runtime
+ON runtime_transcript(runtime_id, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_runtime_transcript_agente
+ON runtime_transcript(agente, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_runtime_transcript_pending_signal
+ON runtime_transcript(classification, handled_at, id DESC);
 
 CREATE TABLE IF NOT EXISTS runtime_handles (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -931,6 +1014,10 @@ INSERT INTO reglas (tipo_agente, categoria, titulo, descripcion) VALUES
  'Antes de cada commit: go test ./internal/... debe pasar.'),
 ('programador','calidad','Gate de cierre de módulo',
  'Al cerrar módulo: go build ./..., go vet ./..., go test ./... deben pasar.'),
+('programador','calidad','Tests DB orquestados',
+ 'Los tests que toquen BD deben usar los helpers comunes del proyecto y la plantilla compartida. No abrir Open() directo ni bootstraps manuales salvo cuando el propio test valide bootstrap, migraciones o compatibilidad legacy.'),
+('programador','calidad','Tests coherentes, rápidos y mantenibles',
+ 'Los tests deben reutilizar fixtures y helpers comunes, evitar sleeps y aperturas redundantes de BD, conservar coherencia con el resto de la suite y paralelizarse solo cuando el estado compartido esté controlado.'),
 ('programador','calidad','Propuesta antes de código',
  'No escribir código sin propuesta OP-XXX aprobada en la app de orquestación.'),
 ('programador','calidad','Idioma castellano',
@@ -992,6 +1079,9 @@ INSERT INTO skills (tipo_agente, nombre, descripcion, cuando_usar) VALUES
 ('programador','security-review',
  'Auditar seguridad de un módulo: RBAC, cifrado, auditoría, inyección SQL, OWASP Top 10.',
  'Al cerrar un módulo o cuando se detecta deuda técnica de seguridad (ej: OP-022).'),
+('programador','db-test-harness',
+ 'Revisar y normalizar tests que usan BD: helpers compartidos, fixtures coherentes, aperturas mínimas y tiempos razonables.',
+ 'Cuando se crean o refactorizan tests con persistencia, migraciones o control plane.'),
 ('programador','autofirma-integration',
  'Integrar firma digital AutoFirma según estándar @firma de la AEAT.',
  'Cuando se implementa firma electrónica en flujos administrativos. Ver OP-027 (📋 BACKLOG).'),

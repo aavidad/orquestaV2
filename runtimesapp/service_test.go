@@ -24,6 +24,8 @@ type fakeStore struct {
 	handleProjAgent  string
 	handleProjID     *int64
 	handleProjResp   *db.RuntimeHandle
+	transcriptFilter db.FiltroRuntimeTranscript
+	transcriptResp   []*db.RuntimeTranscriptEntry
 	samplesID        int64
 	samplesLimit     int
 	samplesResponse  []*db.RuntimeTelemetrySample
@@ -92,6 +94,10 @@ func (f *fakeStore) GetActiveRuntimeHandleForProject(agente string, proyectoID *
 	f.handleProjAgent = agente
 	f.handleProjID = proyectoID
 	return f.handleProjResp, nil
+}
+func (f *fakeStore) ListRuntimeTranscript(filter db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error) {
+	f.transcriptFilter = filter
+	return f.transcriptResp, nil
 }
 func (f *fakeStore) ListRuntimeSamples(runtimeID int64, limit int) ([]*db.RuntimeTelemetrySample, error) {
 	f.samplesID = runtimeID
@@ -172,6 +178,7 @@ func TestServiceDelegatesRuntimeQueries(t *testing.T) {
 		handlesResponse:  []*db.RuntimeHandle{{ID: 15}},
 		handleResponse:   &db.RuntimeHandle{ID: 16},
 		handleProjResp:   &db.RuntimeHandle{ID: 17},
+		transcriptResp:   []*db.RuntimeTranscriptEntry{{ID: 18}},
 		samplesResponse:  []*db.RuntimeTelemetrySample{{ID: 20}},
 		createOrderID:    25,
 		ordersResponse:   []*db.RuntimeOrder{{ID: 30}},
@@ -228,6 +235,12 @@ func TestServiceDelegatesRuntimeQueries(t *testing.T) {
 	}
 	if store.handleProjAgent != "Codex2" || store.handleProjID == nil || *store.handleProjID != 7 {
 		t.Fatalf("handleProj agent=%q project=%v", store.handleProjAgent, store.handleProjID)
+	}
+	if _, err := service.ListRuntimeTranscript(db.FiltroRuntimeTranscript{Agente: &agent, Limit: 10}); err != nil {
+		t.Fatalf("ListRuntimeTranscript: %v", err)
+	}
+	if store.transcriptFilter.Agente == nil || *store.transcriptFilter.Agente != "Codex2" {
+		t.Fatalf("transcriptFilter=%+v", store.transcriptFilter)
 	}
 	if _, err := service.ListRuntimeSamples(10, 25); err != nil {
 		t.Fatalf("ListRuntimeSamples: %v", err)

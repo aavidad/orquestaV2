@@ -213,6 +213,17 @@ func TestWebAgenteDetalleMuestraControlPlaneYDetalleOperativo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("crear checkpoint: %v", err)
 	}
+	if _, err := db.RegistrarRuntimeTranscript(&db.RuntimeTranscriptEntry{
+		RuntimeID:      runtimeInst.ID,
+		Agente:         "Codex1",
+		ProyectoID:     &proyectoID,
+		Stream:         "pty_out",
+		Text:           "¿me dejas seguir con el refactor?",
+		NormalizedText: "me dejas seguir con el refactor",
+		Classification: "approval_request",
+	}); err != nil {
+		t.Fatalf("crear transcript: %v", err)
+	}
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/agentes/Codex1?lang=en", nil)
@@ -230,6 +241,9 @@ func TestWebAgenteDetalleMuestraControlPlaneYDetalleOperativo(t *testing.T) {
 		"discordia",
 		"/time-travel/" + itoa(cpID),
 		"detalle-test",
+		"Conversation",
+		"approval_request",
+		"¿me dejas seguir con el refactor?",
 		"Reset reanimation",
 	} {
 		if !strings.Contains(body, token) {

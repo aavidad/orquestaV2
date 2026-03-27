@@ -34,6 +34,7 @@ func cargarPlantillaDBTest() ([]byte, error) {
 		prevBackend, hadBackend := os.LookupEnv("ORQUESTA_DB_BACKEND")
 		prevMaxOpen, hadMaxOpen := os.LookupEnv("ORQUESTA_DB_MAX_OPEN_CONNS")
 		prevBootstrap, hadBootstrap := os.LookupEnv("ORQUESTA_DB_BOOTSTRAP")
+		prevSkipPost, hadSkipPost := os.LookupEnv("ORQUESTA_DB_SKIP_POST_MIGRATIONS")
 		prevRoot := os.Getenv("ORQUESTA_WORKSPACE_ROOT")
 		defer func() {
 			Close()
@@ -68,6 +69,11 @@ func cargarPlantillaDBTest() ([]byte, error) {
 			} else {
 				_ = os.Unsetenv("ORQUESTA_DB_BOOTSTRAP")
 			}
+			if hadSkipPost {
+				_ = os.Setenv("ORQUESTA_DB_SKIP_POST_MIGRATIONS", prevSkipPost)
+			} else {
+				_ = os.Unsetenv("ORQUESTA_DB_SKIP_POST_MIGRATIONS")
+			}
 			if prevRoot == "" {
 				_ = os.Unsetenv("ORQUESTA_WORKSPACE_ROOT")
 			} else {
@@ -82,6 +88,7 @@ func cargarPlantillaDBTest() ([]byte, error) {
 		_ = os.Unsetenv("ORQUESTA_DB_BACKEND")
 		_ = os.Unsetenv("ORQUESTA_DB_MAX_OPEN_CONNS")
 		_ = os.Unsetenv("ORQUESTA_DB_BOOTSTRAP")
+		_ = os.Unsetenv("ORQUESTA_DB_SKIP_POST_MIGRATIONS")
 		_ = os.Setenv("ORQUESTA_WORKSPACE_ROOT", tmp)
 
 		if err := Open(); err != nil {
@@ -104,6 +111,7 @@ func prepararDBTemporalConNombre(t *testing.T, nombre string) string {
 	anteriorBackend, teniaBackend := os.LookupEnv("ORQUESTA_DB_BACKEND")
 	anteriorMaxOpenConns, teniaMaxOpenConns := os.LookupEnv("ORQUESTA_DB_MAX_OPEN_CONNS")
 	anteriorBootstrap, teniaBootstrap := os.LookupEnv("ORQUESTA_DB_BOOTSTRAP")
+	anteriorSkipPost, teniaSkipPost := os.LookupEnv("ORQUESTA_DB_SKIP_POST_MIGRATIONS")
 	anteriorRoot := os.Getenv("ORQUESTA_WORKSPACE_ROOT")
 	t.Cleanup(func() {
 		Close()
@@ -137,6 +145,11 @@ func prepararDBTemporalConNombre(t *testing.T, nombre string) string {
 			_ = os.Setenv("ORQUESTA_DB_BOOTSTRAP", anteriorBootstrap)
 		} else {
 			_ = os.Unsetenv("ORQUESTA_DB_BOOTSTRAP")
+		}
+		if teniaSkipPost {
+			_ = os.Setenv("ORQUESTA_DB_SKIP_POST_MIGRATIONS", anteriorSkipPost)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_DB_SKIP_POST_MIGRATIONS")
 		}
 		if anteriorRoot == "" {
 			_ = os.Unsetenv("ORQUESTA_WORKSPACE_ROOT")
@@ -175,6 +188,9 @@ func prepararDBTemporalConNombre(t *testing.T, nombre string) string {
 	}
 	if err := os.Unsetenv("ORQUESTA_DB_BOOTSTRAP"); err != nil {
 		t.Fatalf("unsetenv ORQUESTA_DB_BOOTSTRAP: %v", err)
+	}
+	if err := os.Setenv("ORQUESTA_DB_SKIP_POST_MIGRATIONS", "1"); err != nil {
+		t.Fatalf("setenv ORQUESTA_DB_SKIP_POST_MIGRATIONS: %v", err)
 	}
 	if err := os.Setenv("ORQUESTA_WORKSPACE_ROOT", tmp); err != nil {
 		t.Fatalf("setenv ORQUESTA_WORKSPACE_ROOT: %v", err)

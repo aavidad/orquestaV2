@@ -10,6 +10,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,6 +20,8 @@ import (
 	"testing"
 
 	"orquesta/db"
+	"orquesta/reviewapp"
+	"orquesta/supervisionapp"
 )
 
 var cmdTestDBMu sync.Mutex
@@ -1068,6 +1071,166 @@ func TestAPIProyectoOperacionGetYPost(t *testing.T) {
 	}
 	if postResp.Operacion == nil || postResp.Operacion.EstadoOperativo != db.ProyectoOperativoEsperandoHumano || postResp.Operacion.ObjetivoPct != 60 {
 		t.Fatalf("operacion guardada inesperada: %+v", postResp.Operacion)
+	}
+}
+
+func TestAPIProyectoAutonomiaGetPostYCiclos(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "demo-app",
+		Nombre:  "Demo App",
+		RutaAbs: filepath.Join(tmp, "demo-app"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recGet := httptest.NewRecorder()
+	reqGet := httptest.NewRequest(http.MethodGet, "/api/proyectos/demo-app/autonomia", nil)
+	mux.ServeHTTP(recGet, reqGet)
+	if recGet.Code != http.StatusOK {
+		t.Fatalf("status get autonomia inesperado: %d body=%s", recGet.Code, recGet.Body.String())
+	}
+	var getResp apiProyectoAutonomiaResponse
+	if err := json.Unmarshal(recGet.Body.Bytes(), &getResp); err != nil {
+		t.Fatalf("decode get autonomia: %v", err)
+	}
+	if getResp.Policy == nil || getResp.Policy.EstadoAutonomia != db.AutonomiaProyectoActiva || getResp.Policy.Enabled {
+		t.Fatalf("autonomia inicial inesperada: %+v", getResp.Policy)
+	}
+
+	body, _ := json.Marshal(apiProyectoAutonomiaSaveRequest{
+		Enabled:              true,
+		ObjetivoGeneral:      "terminar el proyecto sin intervención humana",
+		DefinitionOfDoneJSON: `{"tests":"green"}`,
+		MaxWorkers:           3,
+		ReserveReviewer:      true,
+		ReserveSupervisor:    true,
+		ReviewRequired:       true,
+		AutoCreateTasks:      true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      string(db.AutonomiaProyectoActiva),
+	})
+	recPost := httptest.NewRecorder()
+	reqPost := httptest.NewRequest(http.MethodPost, "/api/proyectos/demo-app/autonomia", bytes.NewReader(body))
+	mux.ServeHTTP(recPost, reqPost)
+	if recPost.Code != http.StatusOK {
+		t.Fatalf("status post autonomia inesperado: %d body=%s", recPost.Code, recPost.Body.String())
+	}
+	var postResp apiProyectoAutonomiaResponse
+	if err := json.Unmarshal(recPost.Body.Bytes(), &postResp); err != nil {
+		t.Fatalf("decode post autonomia: %v", err)
+	}
+	if postResp.Policy == nil || !postResp.Policy.Enabled || postResp.Policy.MaxWorkers != 3 {
+		t.Fatalf("autonomia guardada inesperada: %+v", postResp.Policy)
+	}
+
+	if _, err := supervisionService.RegisterCycle("demo-app", supervisionapp.CycleInput{
+		Kind:         "supervision",
+		Agente:       "Codex3",
+		InputJSON:    `{"reason":"periodic"}`,
+		DecisionJSON: `{"decision":"seguir"}`,
+		Resultado:    "ok",
+	}); err != nil {
+		t.Fatalf("RegisterCycle: %v", err)
+	}
+
+	recCycles := httptest.NewRecorder()
+	reqCycles := httptest.NewRequest(http.MethodGet, "/api/proyectos/demo-app/autonomia/ciclos?kind=supervision&limit=5", nil)
+	mux.ServeHTTP(recCycles, reqCycles)
+	if recCycles.Code != http.StatusOK {
+		t.Fatalf("status ciclos inesperado: %d body=%s", recCycles.Code, recCycles.Body.String())
+	}
+	var cyclesResp struct {
+		Cycles []*db.AutonomiaCiclo `json:"cycles"`
+	}
+	if err := json.Unmarshal(recCycles.Body.Bytes(), &cyclesResp); err != nil {
+		t.Fatalf("decode ciclos: %v", err)
+	}
+	if len(cyclesResp.Cycles) != 1 || cyclesResp.Cycles[0].Kind != "supervision" {
+		t.Fatalf("ciclos inesperados: %+v", cyclesResp.Cycles)
+	}
+}
+
+func TestAPIReviewGatesCrearListarYResolver(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "demo-app",
+		Nombre:  "Demo App",
+		RutaAbs: filepath.Join(tmp, "demo-app"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	createBody, _ := json.Marshal(apiReviewGateCreateRequest{
+		Proyecto:       "demo-app",
+		RequestedBy:    "orquesta",
+		ReviewerAgente: "CodexReview",
+		SeverityMax:    "medium",
+		FindingsJSON:   `[{"kind":"coverage","detail":"falta regression"}]`,
+	})
+	recCreate := httptest.NewRecorder()
+	reqCreate := httptest.NewRequest(http.MethodPost, "/api/review-gates", bytes.NewReader(createBody))
+	mux.ServeHTTP(recCreate, reqCreate)
+	if recCreate.Code != http.StatusCreated {
+		t.Fatalf("status create gate inesperado: %d body=%s", recCreate.Code, recCreate.Body.String())
+	}
+	var createResp struct {
+		Gate *reviewapp.Gate `json:"gate"`
+	}
+	if err := json.Unmarshal(recCreate.Body.Bytes(), &createResp); err != nil {
+		t.Fatalf("decode create gate: %v", err)
+	}
+	if createResp.Gate == nil || createResp.Gate.ID == 0 || createResp.Gate.Estado != reviewapp.GateStatePending {
+		t.Fatalf("gate creada inesperada: %+v", createResp.Gate)
+	}
+
+	recList := httptest.NewRecorder()
+	reqList := httptest.NewRequest(http.MethodGet, "/api/review-gates?proyecto=demo-app&estado=pendiente&limit=5", nil)
+	mux.ServeHTTP(recList, reqList)
+	if recList.Code != http.StatusOK {
+		t.Fatalf("status list gates inesperado: %d body=%s", recList.Code, recList.Body.String())
+	}
+	var listResp struct {
+		Gates []*reviewapp.Gate `json:"gates"`
+	}
+	if err := json.Unmarshal(recList.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("decode list gates: %v", err)
+	}
+	if len(listResp.Gates) != 1 || listResp.Gates[0].ID != createResp.Gate.ID {
+		t.Fatalf("listado de gates inesperado: %+v", listResp.Gates)
+	}
+
+	resolveBody, _ := json.Marshal(apiReviewGateResolveRequest{
+		Estado:         reviewapp.GateStateApproved,
+		ReviewerAgente: "CodexReview",
+		FindingsJSON:   `[]`,
+	})
+	recResolve := httptest.NewRecorder()
+	reqResolve := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/review-gates/%d/resolver", createResp.Gate.ID), bytes.NewReader(resolveBody))
+	mux.ServeHTTP(recResolve, reqResolve)
+	if recResolve.Code != http.StatusOK {
+		t.Fatalf("status resolve gate inesperado: %d body=%s", recResolve.Code, recResolve.Body.String())
+	}
+	var resolveResp struct {
+		Gate *reviewapp.Gate `json:"gate"`
+	}
+	if err := json.Unmarshal(recResolve.Body.Bytes(), &resolveResp); err != nil {
+		t.Fatalf("decode resolve gate: %v", err)
+	}
+	if resolveResp.Gate == nil || resolveResp.Gate.Estado != reviewapp.GateStateApproved || resolveResp.Gate.ResolvedAt == nil {
+		t.Fatalf("gate resuelta inesperada: %+v", resolveResp.Gate)
 	}
 }
 

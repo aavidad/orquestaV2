@@ -1,0 +1,332 @@
+package db
+
+import (
+	"database/sql"
+	"fmt"
+	"strings"
+	"time"
+)
+
+type EstadoAutonomiaProyecto string
+
+const (
+	AutonomiaProyectoActiva          EstadoAutonomiaProyecto = "activo"
+	AutonomiaProyectoEsperandoReview EstadoAutonomiaProyecto = "esperando_review"
+	AutonomiaProyectoEsperandoHumano EstadoAutonomiaProyecto = "esperando_humano"
+	AutonomiaProyectoCerrando        EstadoAutonomiaProyecto = "cerrando"
+	AutonomiaProyectoCerrado         EstadoAutonomiaProyecto = "cerrado"
+)
+
+type ProyectoAutonomia struct {
+	ProyectoID           int64                   `json:"proyecto_id"`
+	ProyectoSlug         string                  `json:"proyecto_slug,omitempty"`
+	Enabled              bool                    `json:"enabled"`
+	ObjetivoGeneral      string                  `json:"objetivo_general"`
+	DefinitionOfDoneJSON string                  `json:"definition_of_done_json"`
+	MaxWorkers           int                     `json:"max_workers"`
+	ReserveReviewer      bool                    `json:"reserve_reviewer"`
+	ReserveSupervisor    bool                    `json:"reserve_supervisor"`
+	ReviewRequired       bool                    `json:"review_required"`
+	AutoCreateTasks      bool                    `json:"auto_create_tasks"`
+	AutoCloseProject     bool                    `json:"auto_close_project"`
+	EstadoAutonomia      EstadoAutonomiaProyecto `json:"estado_autonomia"`
+	LastSupervisionAt    *time.Time              `json:"last_supervision_at,omitempty"`
+	LastReviewAt         *time.Time              `json:"last_review_at,omitempty"`
+	CreatedAt            time.Time               `json:"created_at"`
+	UpdatedAt            time.Time               `json:"updated_at"`
+}
+
+type FiltroAutonomiaCiclos struct {
+	ProyectoID *int64
+	Kind       *string
+	Agente     *string
+	Limit      int
+}
+
+type AutonomiaCiclo struct {
+	ID           int64     `json:"id"`
+	ProyectoID   int64     `json:"proyecto_id"`
+	ProyectoSlug string    `json:"proyecto_slug,omitempty"`
+	Kind         string    `json:"kind"`
+	Agente       string    `json:"agente"`
+	SesionID     *int64    `json:"sesion_id,omitempty"`
+	RuntimeID    *int64    `json:"runtime_id,omitempty"`
+	InputJSON    string    `json:"input_json"`
+	DecisionJSON string    `json:"decision_json"`
+	Resultado    string    `json:"resultado"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+func GetProyectoAutonomia(proyectoID int64) (*ProyectoAutonomia, error) {
+	if proyectoID <= 0 {
+		return nil, fmt.Errorf("proyecto_id inválido")
+	}
+	row := DB.QueryRow(`
+		SELECT pa.proyecto_id, COALESCE(p.slug, ''), pa.enabled, pa.objetivo_general,
+		       pa.definition_of_done_json, pa.max_workers, pa.reserve_reviewer,
+		       pa.reserve_supervisor, pa.review_required, pa.auto_create_tasks,
+		       pa.auto_close_project, pa.estado_autonomia, pa.last_supervision_at,
+		       pa.last_review_at, pa.created_at, pa.updated_at
+		  FROM proyectos_autonomia pa
+		  LEFT JOIN proyectos p ON p.id = pa.proyecto_id
+		 WHERE pa.proyecto_id = ?`, proyectoID)
+	item, err := scanProyectoAutonomia(row)
+	if err == sql.ErrNoRows {
+		return proyectoAutonomiaDefault(proyectoID), nil
+	}
+	return item, err
+}
+
+func ListarProyectosAutonomia(soloEnabled *bool) ([]*ProyectoAutonomia, error) {
+	q := `
+		SELECT pa.proyecto_id, COALESCE(p.slug, ''), pa.enabled, pa.objetivo_general,
+		       pa.definition_of_done_json, pa.max_workers, pa.reserve_reviewer,
+		       pa.reserve_supervisor, pa.review_required, pa.auto_create_tasks,
+		       pa.auto_close_project, pa.estado_autonomia, pa.last_supervision_at,
+		       pa.last_review_at, pa.created_at, pa.updated_at
+		  FROM proyectos_autonomia pa
+		  LEFT JOIN proyectos p ON p.id = pa.proyecto_id
+		 WHERE 1=1`
+	args := []any{}
+	if soloEnabled != nil {
+		q += ` AND pa.enabled = ?`
+		args = append(args, boolToIntAutonomia(*soloEnabled))
+	}
+	q += ` ORDER BY pa.proyecto_id`
+	rows, err := DB.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*ProyectoAutonomia
+	for rows.Next() {
+		item, err := scanProyectoAutonomia(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func UpsertProyectoAutonomia(item *ProyectoAutonomia) (int64, error) {
+	if item == nil || item.ProyectoID <= 0 {
+		return 0, fmt.Errorf("proyecto_autonomia inválido")
+	}
+	item.ObjetivoGeneral = strings.TrimSpace(item.ObjetivoGeneral)
+	if strings.TrimSpace(item.DefinitionOfDoneJSON) == "" {
+		item.DefinitionOfDoneJSON = "{}"
+	}
+	if strings.TrimSpace(string(item.EstadoAutonomia)) == "" {
+		item.EstadoAutonomia = AutonomiaProyectoActiva
+	}
+	if _, err := DB.Exec(`
+		INSERT INTO proyectos_autonomia (
+			proyecto_id, enabled, objetivo_general, definition_of_done_json,
+			max_workers, reserve_reviewer, reserve_supervisor, review_required,
+			auto_create_tasks, auto_close_project, estado_autonomia,
+			last_supervision_at, last_review_at
+		) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(proyecto_id) DO UPDATE SET
+			enabled = excluded.enabled,
+			objetivo_general = excluded.objetivo_general,
+			definition_of_done_json = excluded.definition_of_done_json,
+			max_workers = excluded.max_workers,
+			reserve_reviewer = excluded.reserve_reviewer,
+			reserve_supervisor = excluded.reserve_supervisor,
+			review_required = excluded.review_required,
+			auto_create_tasks = excluded.auto_create_tasks,
+			auto_close_project = excluded.auto_close_project,
+			estado_autonomia = excluded.estado_autonomia,
+			last_supervision_at = excluded.last_supervision_at,
+			last_review_at = excluded.last_review_at,
+			updated_at = CURRENT_TIMESTAMP`,
+		item.ProyectoID, boolToIntAutonomia(item.Enabled), item.ObjetivoGeneral, item.DefinitionOfDoneJSON,
+		item.MaxWorkers, boolToIntAutonomia(item.ReserveReviewer), boolToIntAutonomia(item.ReserveSupervisor),
+		boolToIntAutonomia(item.ReviewRequired), boolToIntAutonomia(item.AutoCreateTasks), boolToIntAutonomia(item.AutoCloseProject),
+		string(item.EstadoAutonomia), nullableTimeAutonomia(item.LastSupervisionAt), nullableTimeAutonomia(item.LastReviewAt),
+	); err != nil {
+		return 0, err
+	}
+	Audit("orquesta", "upsert_proyecto_autonomia", "proyecto_autonomia", item.ProyectoID, item.ObjetivoGeneral)
+	return item.ProyectoID, nil
+}
+
+func RegistrarAutonomiaCiclo(item *AutonomiaCiclo) (int64, error) {
+	if item == nil || item.ProyectoID <= 0 || strings.TrimSpace(item.Kind) == "" {
+		return 0, fmt.Errorf("autonomia_ciclo inválido")
+	}
+	if strings.TrimSpace(item.InputJSON) == "" {
+		item.InputJSON = "{}"
+	}
+	if strings.TrimSpace(item.DecisionJSON) == "" {
+		item.DecisionJSON = "{}"
+	}
+	res, err := DB.Exec(`
+		INSERT INTO autonomia_ciclos (
+			proyecto_id, kind, agente, sesion_id, runtime_id, input_json, decision_json, resultado
+		) VALUES (?,?,?,?,?,?,?,?)`,
+		item.ProyectoID, strings.TrimSpace(item.Kind), strings.TrimSpace(item.Agente),
+		item.SesionID, item.RuntimeID, item.InputJSON, item.DecisionJSON, strings.TrimSpace(item.Resultado),
+	)
+	if err != nil {
+		return 0, err
+	}
+	id, _ := res.LastInsertId()
+	item.ID = id
+	Audit("orquesta", "registrar_autonomia_ciclo", "autonomia_ciclo", id, strings.TrimSpace(item.Kind))
+	return id, nil
+}
+
+func ListarAutonomiaCiclos(filtro FiltroAutonomiaCiclos) ([]*AutonomiaCiclo, error) {
+	q := `
+		SELECT ac.id, ac.proyecto_id, COALESCE(p.slug, ''), ac.kind, ac.agente,
+		       ac.sesion_id, ac.runtime_id, ac.input_json, ac.decision_json,
+		       ac.resultado, ac.created_at
+		  FROM autonomia_ciclos ac
+		  LEFT JOIN proyectos p ON p.id = ac.proyecto_id
+		 WHERE 1=1`
+	args := []any{}
+	if filtro.ProyectoID != nil {
+		q += ` AND ac.proyecto_id = ?`
+		args = append(args, *filtro.ProyectoID)
+	}
+	if filtro.Kind != nil {
+		q += ` AND ac.kind = ?`
+		args = append(args, strings.TrimSpace(*filtro.Kind))
+	}
+	if filtro.Agente != nil {
+		q += ` AND ac.agente = ?`
+		args = append(args, strings.TrimSpace(*filtro.Agente))
+	}
+	q += ` ORDER BY ac.id DESC`
+	if filtro.Limit <= 0 {
+		filtro.Limit = 50
+	}
+	q += ` LIMIT ?`
+	args = append(args, filtro.Limit)
+	rows, err := DB.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*AutonomiaCiclo
+	for rows.Next() {
+		item, err := scanAutonomiaCiclo(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func MarcarProyectoAutonomiaSupervisado(proyectoID int64, when time.Time) error {
+	if proyectoID <= 0 {
+		return fmt.Errorf("proyecto_id inválido")
+	}
+	_, err := DB.Exec(`
+		UPDATE proyectos_autonomia
+		   SET last_supervision_at = ?,
+		       updated_at = CURRENT_TIMESTAMP
+		 WHERE proyecto_id = ?`, when.UTC(), proyectoID)
+	return err
+}
+
+func MarcarProyectoAutonomiaRevisado(proyectoID int64, when time.Time) error {
+	if proyectoID <= 0 {
+		return fmt.Errorf("proyecto_id inválido")
+	}
+	_, err := DB.Exec(`
+		UPDATE proyectos_autonomia
+		   SET last_review_at = ?,
+		       updated_at = CURRENT_TIMESTAMP
+		 WHERE proyecto_id = ?`, when.UTC(), proyectoID)
+	return err
+}
+
+func proyectoAutonomiaDefault(proyectoID int64) *ProyectoAutonomia {
+	return &ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              false,
+		DefinitionOfDoneJSON: "{}",
+		ReserveReviewer:      true,
+		ReserveSupervisor:    true,
+		ReviewRequired:       true,
+		AutoCreateTasks:      true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      AutonomiaProyectoActiva,
+	}
+}
+
+func scanProyectoAutonomia(scanner interface{ Scan(dest ...any) error }) (*ProyectoAutonomia, error) {
+	var (
+		item              ProyectoAutonomia
+		enabled           int
+		reserveReviewer   int
+		reserveSupervisor int
+		reviewRequired    int
+		autoCreateTasks   int
+		autoCloseProject  int
+		lastSupervision   sql.NullTime
+		lastReview        sql.NullTime
+	)
+	if err := scanner.Scan(
+		&item.ProyectoID, &item.ProyectoSlug, &enabled, &item.ObjetivoGeneral,
+		&item.DefinitionOfDoneJSON, &item.MaxWorkers, &reserveReviewer,
+		&reserveSupervisor, &reviewRequired, &autoCreateTasks,
+		&autoCloseProject, &item.EstadoAutonomia, &lastSupervision,
+		&lastReview, &item.CreatedAt, &item.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+	item.Enabled = enabled == 1
+	item.ReserveReviewer = reserveReviewer == 1
+	item.ReserveSupervisor = reserveSupervisor == 1
+	item.ReviewRequired = reviewRequired == 1
+	item.AutoCreateTasks = autoCreateTasks == 1
+	item.AutoCloseProject = autoCloseProject == 1
+	if lastSupervision.Valid {
+		item.LastSupervisionAt = &lastSupervision.Time
+	}
+	if lastReview.Valid {
+		item.LastReviewAt = &lastReview.Time
+	}
+	return &item, nil
+}
+
+func scanAutonomiaCiclo(scanner interface{ Scan(dest ...any) error }) (*AutonomiaCiclo, error) {
+	var (
+		item      AutonomiaCiclo
+		sesionID  sql.NullInt64
+		runtimeID sql.NullInt64
+	)
+	if err := scanner.Scan(
+		&item.ID, &item.ProyectoID, &item.ProyectoSlug, &item.Kind, &item.Agente,
+		&sesionID, &runtimeID, &item.InputJSON, &item.DecisionJSON,
+		&item.Resultado, &item.CreatedAt,
+	); err != nil {
+		return nil, err
+	}
+	if sesionID.Valid {
+		item.SesionID = &sesionID.Int64
+	}
+	if runtimeID.Valid {
+		item.RuntimeID = &runtimeID.Int64
+	}
+	return &item, nil
+}
+
+func boolToIntAutonomia(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+func nullableTimeAutonomia(v *time.Time) any {
+	if v == nil {
+		return nil
+	}
+	return v.UTC()
+}

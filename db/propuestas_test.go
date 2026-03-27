@@ -1,27 +1,12 @@
 package db
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
 
 func TestCrearPropuestaCreaVotosPendientesSinBloquear(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 
 	if err := RegistrarAgente("CodexX", "programador"); err != nil {
 		t.Fatalf("RegistrarAgente: %v", err)
@@ -51,20 +36,7 @@ func TestCrearPropuestaCreaVotosPendientesSinBloquear(t *testing.T) {
 }
 
 func TestBackfillVotosPendientesRellenaPropuestasAbiertasSinVotos(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 
 	if _, err := DB.Exec(`DELETE FROM votos`); err != nil {
 		t.Fatalf("delete votos: %v", err)
@@ -102,20 +74,7 @@ func TestBackfillVotosPendientesRellenaPropuestasAbiertasSinVotos(t *testing.T) 
 }
 
 func TestActualizarPropuestaPermiteAnexarDescripcion(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 
 	if _, err := CrearPropuesta(&Propuesta{
 		Codigo:       "OP-901",
@@ -143,20 +102,7 @@ func TestActualizarPropuestaPermiteAnexarDescripcion(t *testing.T) {
 }
 
 func TestGetPropuestaNormalizaCerradaAtEnPropuestaAbierta(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 
 	cerradaAt := time.Date(2026, 3, 25, 17, 0, 0, 0, time.UTC)
 	if _, err := DB.Exec(`

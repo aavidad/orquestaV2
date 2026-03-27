@@ -2,26 +2,11 @@ package db
 
 import (
 	"database/sql"
-	"os"
-	"path/filepath"
 	"testing"
 )
 
 func TestGuardarYListarGitMerges(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 	var proyectoID int64
 	if err := DB.QueryRow(
 		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,
@@ -60,20 +45,7 @@ func TestGuardarYListarGitMerges(t *testing.T) {
 }
 
 func TestGuardarGitMergeActualizaEstadoExistente(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 	var proyectoID int64
 	if err := DB.QueryRow(
 		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,
@@ -116,20 +88,7 @@ func TestGuardarGitMergeActualizaEstadoExistente(t *testing.T) {
 }
 
 func TestGuardarGitMergeValidaCampos(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 	if _, err := GuardarGitMerge(&GitMerge{ProyectoID: 1, RequestedBy: "codex2"}); err == nil {
 		t.Fatalf("esperaba error por ramas vacias")
 	}

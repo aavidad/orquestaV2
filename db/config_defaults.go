@@ -16,6 +16,10 @@ func defaultConfigEntries() []configDefaultEntry {
 		{Clave: "connector_circuit_breaker_threshold", Valor: "3"},
 		{Clave: "connector_circuit_breaker_cooldown_seconds", Valor: "300"},
 		{Clave: "runtime_remote_sync_failure_threshold", Valor: "3"},
+		{Clave: "runtime_transcript_ingest_max_bytes", Valor: "65536"},
+		{Clave: "runtime_transcript_auto_guidance_enabled", Valor: "true"},
+		{Clave: "autonomia_supervision_interval_seconds", Valor: "300"},
+		{Clave: "autonomia_review_interval_seconds", Valor: "300"},
 		{Clave: "model_policy_default_profile", Valor: "implementacion"},
 		{Clave: "model_policy_default_reasoning", Valor: "high"},
 	}

@@ -1,27 +1,13 @@
 package db
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestIniciarSesionDevuelveIDPersistido(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 
 	if err := RegistrarAgente("codex-sesion", "programador"); err != nil {
 		t.Fatalf("RegistrarAgente: %v", err)
@@ -50,20 +36,7 @@ func TestIniciarSesionDevuelveIDPersistido(t *testing.T) {
 }
 
 func TestRegistrarCodexUsaNombreCanonicoYRespetaExistentes(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("RegistrarAgente Codex1: %v", err)
@@ -82,20 +55,7 @@ func TestRegistrarCodexUsaNombreCanonicoYRespetaExistentes(t *testing.T) {
 }
 
 func TestRegistrarAgenteAutoUsaPrefijoCanonicoSegunProveedor(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 	if err := RegistrarAgente("Claude1", "programador"); err != nil {
 		t.Fatalf("RegistrarAgente Claude1: %v", err)
 	}
@@ -121,20 +81,7 @@ func TestRegistrarAgenteAutoUsaPrefijoCanonicoSegunProveedor(t *testing.T) {
 }
 
 func TestEliminarAgenteBloqueaTareasActivas(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 	if err := RegistrarAgente("Codex7", "programador"); err != nil {
 		t.Fatalf("RegistrarAgente: %v", err)
 	}
@@ -166,20 +113,7 @@ func TestEliminarAgenteBloqueaTareasActivas(t *testing.T) {
 }
 
 func TestRetirarAgentePausaAsignacionesYLiberaTrabajo(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	dir := prepararDBTemporal(t)
 	if err := RegistrarAgente("CodexRetiro", "programador"); err != nil {
 		t.Fatalf("RegistrarAgente: %v", err)
 	}
@@ -283,20 +217,7 @@ func TestRetirarAgentePausaAsignacionesYLiberaTrabajo(t *testing.T) {
 }
 
 func TestListarAgentesAlineaEstadoVisibleConSesiones(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 	for _, agente := range []string{"CodexVisible1", "CodexVisible2"} {
 		if err := RegistrarAgente(agente, "programador"); err != nil {
 			t.Fatalf("RegistrarAgente %s: %v", agente, err)

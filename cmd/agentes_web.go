@@ -36,6 +36,7 @@ type webAgenteDetalleData struct {
 	Sesiones     []*db.Sesion
 	Runtimes     []*db.RuntimeInstance
 	Handles      []*db.RuntimeHandle
+	Transcript   []*db.RuntimeTranscriptEntry
 	Orders       []*db.RuntimeOrder
 	Mailbox      []*db.RuntimeMailboxMessage
 	Checkpoints  []*db.RuntimeCheckpoint
@@ -220,6 +221,7 @@ func construirWebAgenteDetalleData(nombre string) (*webAgenteDetalleData, error)
 		Sesiones:     limitarSesiones(detail.Sesiones, 12),
 		Runtimes:     limitarRuntimes(detail.Runtimes, 12),
 		Handles:      limitarHandles(detail.Handles, 12),
+		Transcript:   limitarTranscript(detail.Transcript, 40),
 		Orders:       limitarOrders(detail.Orders, 20),
 		Mailbox:      limitarMailbox(detail.Mailbox, 20),
 		Checkpoints:  detail.Checkpoints,
@@ -314,6 +316,13 @@ func limitarOrders(items []*db.RuntimeOrder, max int) []*db.RuntimeOrder {
 }
 
 func limitarMailbox(items []*db.RuntimeMailboxMessage, max int) []*db.RuntimeMailboxMessage {
+	if len(items) <= max {
+		return items
+	}
+	return items[:max]
+}
+
+func limitarTranscript(items []*db.RuntimeTranscriptEntry, max int) []*db.RuntimeTranscriptEntry {
 	if len(items) <= max {
 		return items
 	}
@@ -559,6 +568,15 @@ const webTplAgenteDetalle = `{{define "content"}}
           <tbody>{{range .Mailbox}}<tr><td>{{.ID}}</td><td>{{orDash .FromAgente}}</td><td>{{orDash .ToAgente}}</td><td>{{orDash .Kind}}</td><td>{{orDash .Estado}}</td><td>{{ftimev .CreatedAt}}</td></tr>{{end}}</tbody>
         </table>
         {{else}}<p>—</p>{{end}}
+      </article>
+      <article>
+        <header><strong>{{tr "agentes.detail.transcript"}}</strong></header>
+        {{if .Transcript}}
+        <table>
+          <thead><tr><th>ID</th><th>{{tr "runtime.when"}}</th><th>{{tr "agentes.transcript.stream"}}</th><th>{{tr "agentes.transcript.signal"}}</th><th>{{tr "runtime.detail"}}</th><th>{{tr "agentes.transcript.handled"}}</th></tr></thead>
+          <tbody>{{range .Transcript}}<tr><td>{{.ID}}</td><td>{{ftimev .CreatedAt}}</td><td>{{orDash .Stream}}</td><td>{{orDash .Classification}}</td><td>{{trunc .Text 140}}</td><td>{{if .HandledAt}}{{ftimev .HandledAt}}{{else}}{{orDash .HandlingNote}}{{end}}</td></tr>{{end}}</tbody>
+        </table>
+        {{else}}<p>{{tr "agentes.transcript.none"}}</p>{{end}}
       </article>
       <article>
         <header><strong>{{tr "agentes.detail.checkpoints"}}</strong></header>

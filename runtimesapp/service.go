@@ -24,6 +24,7 @@ type Store interface {
 	ListRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error)
 	GetActiveRuntimeHandle(agente string) (*db.RuntimeHandle, error)
 	GetActiveRuntimeHandleForProject(agente string, proyectoID *int64) (*db.RuntimeHandle, error)
+	ListRuntimeTranscript(filtro db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error)
 	ListRuntimeSamples(runtimeID int64, limit int) ([]*db.RuntimeTelemetrySample, error)
 	CreateRuntimeOrder(order *db.RuntimeOrder) (int64, error)
 	ListRuntimeOrders(filtro db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error)
@@ -110,6 +111,10 @@ func (s *Service) GetActiveRuntimeHandleForProject(agente string, proyectoID *in
 
 func (s *Service) GetActiveRuntimeHandleAgentProject(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
 	return s.GetActiveRuntimeHandleForProject(agente, proyectoID)
+}
+
+func (s *Service) ListRuntimeTranscript(filtro db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error) {
+	return s.store.ListRuntimeTranscript(filtro)
 }
 
 func (s *Service) ListRuntimeSamples(runtimeID int64, limit int) ([]*db.RuntimeTelemetrySample, error) {
@@ -286,6 +291,10 @@ func (Repository) GetActiveRuntimeHandle(agente string) (*db.RuntimeHandle, erro
 
 func (Repository) GetActiveRuntimeHandleForProject(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
 	return db.GetRuntimeHandleActivoAgenteProyecto(agente, proyectoID)
+}
+
+func (Repository) ListRuntimeTranscript(filtro db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error) {
+	return db.ListarRuntimeTranscript(filtro)
 }
 
 func (Repository) ListRuntimeSamples(runtimeID int64, limit int) ([]*db.RuntimeTelemetrySample, error) {

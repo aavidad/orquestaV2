@@ -2,26 +2,11 @@ package db
 
 import (
 	"database/sql"
-	"os"
-	"path/filepath"
 	"testing"
 )
 
 func TestFusionarAgentesMueveReferenciasYResuelveColisionDeVotos(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 	if err := RegistrarAgente("codex1", "programador"); err != nil {
 		t.Fatalf("registrar codex1: %v", err)
 	}
@@ -109,20 +94,7 @@ func TestFusionarAgentesMueveReferenciasYResuelveColisionDeVotos(t *testing.T) {
 }
 
 func TestFusionarAgentesFallaSiOrigenTieneSesionActiva(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "orquesta.db")
-	prev := os.Getenv("ORQUESTA_DB")
-	if err := os.Setenv("ORQUESTA_DB", path); err != nil {
-		t.Fatalf("setenv: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("ORQUESTA_DB", prev)
-		Close()
-	}()
-
-	if err := Open(); err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	prepararDBTemporal(t)
 	if err := RegistrarAgente("codex2", "programador"); err != nil {
 		t.Fatalf("registrar codex2: %v", err)
 	}

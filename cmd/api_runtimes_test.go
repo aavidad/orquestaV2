@@ -114,6 +114,10 @@ func TestAPIRuntimeControlPlaneEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("iniciar sesion: %v", err)
 	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("get runtime: %+v err=%v", runtime, err)
+	}
 	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
 		Agente:      "Codex1",
 		ProyectoID:  &proyectoID,
@@ -146,6 +150,17 @@ func TestAPIRuntimeControlPlaneEndpoints(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("crear runtime checkpoint: %v", err)
 	}
+	if _, err := db.RegistrarRuntimeTranscript(&db.RuntimeTranscriptEntry{
+		RuntimeID:      runtime.ID,
+		Agente:         "Codex1",
+		ProyectoID:     &proyectoID,
+		Stream:         "pty_out",
+		Text:           "¿me dejas seguir con el refactor?",
+		NormalizedText: "me dejas seguir con el refactor",
+		Classification: "approval_request",
+	}); err != nil {
+		t.Fatalf("crear runtime transcript: %v", err)
+	}
 
 	mux := http.NewServeMux()
 	registerAPIRoutes(mux)
@@ -171,6 +186,7 @@ func TestAPIRuntimeControlPlaneEndpoints(t *testing.T) {
 	}
 
 	assertKey(http.MethodGet, "/api/runtime-handles?agente=Codex1", nil, "handles", http.StatusOK)
+	assertKey(http.MethodGet, "/api/runtime-transcript?agente=Codex1&proyecto=orquestador", nil, "transcript", http.StatusOK)
 	assertKey(http.MethodGet, "/api/runtime-orders?agente=Codex1", nil, "orders", http.StatusOK)
 	assertKey(http.MethodGet, "/api/runtime-mailbox?to_agente=Codex2&proyecto=orquestador", nil, "mailbox", http.StatusOK)
 	assertKey(http.MethodGet, "/api/runtime-checkpoints/latest?agente=Codex1&proyecto=orquestador", nil, "checkpoint", http.StatusOK)

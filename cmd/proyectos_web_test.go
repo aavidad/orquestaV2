@@ -178,3 +178,85 @@ func TestWebProyectoOperacionRenderizaYGuardaPorAPI(t *testing.T) {
 		t.Fatalf("operacion guardada inesperada: %+v", operacion)
 	}
 }
+
+func TestWebProyectoAutonomiaYReviewGatesPorAPI(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "cerrar el proyecto sin intervención",
+		DefinitionOfDoneJSON: `{"tests":"green"}`,
+		MaxWorkers:           3,
+		ReserveReviewer:      true,
+		ReserveSupervisor:    true,
+		ReviewRequired:       true,
+		AutoCreateTasks:      true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if _, err := db.RegistrarAutonomiaCiclo(&db.AutonomiaCiclo{
+		ProyectoID:   proyectoID,
+		Kind:         "supervision",
+		Agente:       "Codex3",
+		InputJSON:    `{"reason":"periodic"}`,
+		DecisionJSON: `{"decision":"seguir"}`,
+		Resultado:    "ok",
+	}); err != nil {
+		t.Fatalf("registrar ciclo autonomia: %v", err)
+	}
+	if _, err := db.CrearReviewGate(&db.ReviewGate{
+		ProyectoID:     &proyectoID,
+		RequestedBy:    "orquesta",
+		ReviewerAgente: "CodexReview",
+		Estado:         db.ReviewGatePendiente,
+		SeverityMax:    "medium",
+		FindingsJSON:   `[{"kind":"coverage"}]`,
+	}); err != nil {
+		t.Fatalf("crear review gate: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/proyectos/orquestador?lang=en", nil)
+	rec := httptest.NewRecorder()
+	webHandlerProyectoDetalle(rec, req, "orquestador")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detalle status=%d cuerpo=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Project autonomy") || !strings.Contains(body, "Review gates") || !strings.Contains(body, "Recent cycles") {
+		t.Fatalf("detalle sin secciones de autonomia/review: %s", body)
+	}
+
+	form := strings.NewReader("enabled=1&estado_autonomia=activo&objetivo_general=seguir+autonomamente&definition_of_done_json=%7B%22tests%22%3A%22green%22%7D&max_workers=4&reserve_reviewer=1&reserve_supervisor=1&review_required=1&auto_create_tasks=1&auto_close_project=1")
+	req = httptest.NewRequest(http.MethodPost, "/proyectos/orquestador/autonomia?lang=en", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	webRouterProyectos(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("guardar autonomia status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	location := rec.Header().Get("Location")
+	if !strings.Contains(location, "Autonomy+policy+saved") {
+		t.Fatalf("redirect autonomia inesperado: %s", location)
+	}
+
+	policy, err := db.GetProyectoAutonomia(proyectoID)
+	if err != nil {
+		t.Fatalf("get proyecto autonomia: %v", err)
+	}
+	if policy.MaxWorkers != 4 || strings.TrimSpace(policy.ObjetivoGeneral) != "seguir autonomamente" {
+		t.Fatalf("autonomia guardada inesperada: %+v", policy)
+	}
+}

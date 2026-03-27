@@ -17,6 +17,7 @@ type fakeStore struct {
 	sessions          []*db.Sesion
 	runtimes          []*db.RuntimeInstance
 	handles           []*db.RuntimeHandle
+	transcript        []*db.RuntimeTranscriptEntry
 	orders            []*db.RuntimeOrder
 	mailbox           []*db.RuntimeMailboxMessage
 	checkpoints       []*db.RuntimeCheckpoint
@@ -130,6 +131,19 @@ func (f *fakeStore) ListRuntimeHandles(agent *string) ([]*db.RuntimeHandle, erro
 	var out []*db.RuntimeHandle
 	for _, item := range f.handles {
 		if item != nil && item.Agente == *agent {
+			out = append(out, item)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeStore) ListRuntimeTranscript(filter db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error) {
+	if filter.Agente == nil {
+		return f.transcript, nil
+	}
+	var out []*db.RuntimeTranscriptEntry
+	for _, item := range f.transcript {
+		if item != nil && item.Agente == *filter.Agente {
 			out = append(out, item)
 		}
 	}

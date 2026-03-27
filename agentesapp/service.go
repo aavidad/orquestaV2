@@ -30,6 +30,7 @@ type Store interface {
 	SaveActiveSession(agente string, proyectoID *int64, upd db.SesionUpdate) error
 	ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance, error)
 	ListRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error)
+	ListRuntimeTranscript(filtro db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error)
 	ListRuntimeOrders(filtro db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error)
 	EnqueueRuntimeOrder(order *db.RuntimeOrder) (int64, error)
 	ListRuntimeMailbox(filtro db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error)
@@ -76,6 +77,7 @@ type Detail struct {
 	Sesiones     []*db.Sesion
 	Runtimes     []*db.RuntimeInstance
 	Handles      []*db.RuntimeHandle
+	Transcript   []*db.RuntimeTranscriptEntry
 	Orders       []*db.RuntimeOrder
 	Mailbox      []*db.RuntimeMailboxMessage
 	Checkpoints  []*db.RuntimeCheckpoint
@@ -427,6 +429,10 @@ func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 	if err != nil {
 		return nil, err
 	}
+	transcript, err := s.store.ListRuntimeTranscript(db.FiltroRuntimeTranscript{Agente: &nombre, Limit: 80})
+	if err != nil {
+		return nil, err
+	}
 	mailbox, err := s.listMailboxForAgent(nombre)
 	if err != nil {
 		return nil, err
@@ -442,6 +448,7 @@ func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 		Sesiones:     sesiones,
 		Runtimes:     runtimes,
 		Handles:      handles,
+		Transcript:   transcript,
 		Orders:       orders,
 		Mailbox:      mailbox,
 		Checkpoints:  checkpoints,
@@ -591,6 +598,10 @@ func (Repository) ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance,
 
 func (Repository) ListRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error) {
 	return db.ListarRuntimeHandles(agente)
+}
+
+func (Repository) ListRuntimeTranscript(filtro db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error) {
+	return db.ListarRuntimeTranscript(filtro)
 }
 
 func (Repository) ListRuntimeOrders(filtro db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error) {
