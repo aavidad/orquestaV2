@@ -133,9 +133,21 @@ func NormalizarInstruccionProceso(obj ObjetivoProceso, instruccion string) strin
 		return ""
 	}
 	if _, ok, _ := ResolverPID(obj); ok {
-		return sanitizarInstruccionTTY(texto)
+		texto = sanitizarInstruccionTTY(texto)
+		if esRuntimeCodexLocal(obj) {
+			return compactarInstruccionCodexTTY(texto)
+		}
+		return texto
 	}
 	return texto
+}
+
+func esRuntimeCodexLocal(obj ObjetivoProceso) bool {
+	meta := strings.ToLower(strings.TrimSpace(obj.MetadataJSON))
+	if meta == "" {
+		return false
+	}
+	return strings.Contains(meta, "\"driver\":\"process_pty_cli\"") && strings.Contains(meta, "codex")
 }
 
 func sanitizarInstruccionTTY(raw string) string {
@@ -181,6 +193,47 @@ func sanitizarInstruccionTTY(raw string) string {
 		truncado = strings.TrimSpace(texto[:maxChars])
 	}
 	return truncado + " ..."
+}
+
+func compactarInstruccionCodexTTY(texto string) string {
+	lower := strings.ToLower(strings.TrimSpace(texto))
+	if lower == "" {
+		return ""
+	}
+	cases := []struct {
+		match []string
+		out   string
+	}{
+		{match: []string{"retoma el trabajo", "prompt de continuidad", "resume payload"}, out: "retoma trabajo previo y sigue"},
+		{match: []string{"supervisor autonomo", "supervisar_proyecto", "supervision_transcript_signal"}, out: "supervisa proyecto actual y sigue"},
+		{match: []string{"ready for review", "listo para review", "listo para revision"}, out: "prepara review y sigue"},
+		{match: []string{"approval_request", "waiting_human", "esperando aprobacion", "esperando aprobacion", "me dejas", "can i ", "should i"}, out: "no esperes; decide y sigue"},
+		{match: []string{"blocked", "bloqueado", "bloqueo"}, out: "reevalua bloqueo y sigue"},
+		{match: []string{"needs_replan", "siguiente paso", "backlog"}, out: "elige siguiente frente util"},
+		{match: []string{"continua de forma autonoma", "sigue trabajando", "continuar_trabajo"}, out: "continua trabajo actual"},
+	}
+	for _, tc := range cases {
+		for _, needle := range tc.match {
+			if strings.Contains(lower, needle) {
+				return tc.out
+			}
+		}
+	}
+	if strings.Contains(lower, "checkpoint") {
+		return "haz checkpoint si hace falta"
+	}
+	const maxChars = 48
+	if len(texto) <= maxChars {
+		return texto
+	}
+	truncado := strings.TrimSpace(texto[:maxChars])
+	if idx := strings.LastIndex(truncado, " "); idx > maxChars/2 {
+		truncado = strings.TrimSpace(truncado[:idx])
+	}
+	if truncado == "" {
+		return "continua trabajo actual"
+	}
+	return truncado
 }
 
 func EnviarInstruccionProceso(obj ObjetivoProceso, instruccion string) (bool, int, error) {

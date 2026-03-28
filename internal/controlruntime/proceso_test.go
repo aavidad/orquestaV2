@@ -120,3 +120,16 @@ func TestNormalizarInstruccionProcesoHaceASCIIYCorta(t *testing.T) {
 		t.Fatalf("la instruccion no deberia conservar acentos en PTY: %q", got)
 	}
 }
+
+func TestNormalizarInstruccionProcesoCompactaParaCodexLocal(t *testing.T) {
+	pid := int64(os.Getpid())
+	obj := ObjetivoProceso{
+		PID:          &pid,
+		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"codex"}`,
+	}
+	texto := "Orquesta: actúa como supervisor autónomo del proyecto y mantén el trabajo alineado con la planificación aprobada. Revisa el estado real del proyecto y empuja el siguiente frente útil sin detenerte."
+	got := NormalizarInstruccionProceso(obj, texto)
+	if got != "supervisa proyecto actual y sigue" {
+		t.Fatalf("compactacion inesperada para codex local: %q", got)
+	}
+}

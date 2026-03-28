@@ -579,6 +579,67 @@ func TestGetRuntimeHandleActivoAgenteProyectoRecuperaHandleFallidoVivo(t *testin
 	}
 }
 
+func TestGetRuntimeHandleActivoAgenteProyectoDescartaHandleFantasma(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	pidFantasma := int64(99999991)
+	runtimeID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "Codex1",
+		ProyectoID:   &proyectoID,
+		LogicalState: "esperando_io",
+		ProcessState: "S",
+		PID:          &pidFantasma,
+	})
+	if err != nil {
+		t.Fatalf("crear runtime: %v", err)
+	}
+	res, err := DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo', ?)`,
+		"Codex1", proyectoID, runtimeID, "cli", "process", strconv.FormatInt(pidFantasma, 10), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("insert handle fantasma: %v", err)
+	}
+	handleID, _ := res.LastInsertId()
+
+	handle, err := GetRuntimeHandleActivoAgenteProyecto("Codex1", &proyectoID)
+	if err != nil {
+		t.Fatalf("get handle activo: %v", err)
+	}
+	if handle != nil {
+		t.Fatalf("no esperaba handle activo para proceso inexistente: %+v", handle)
+	}
+
+	fallido, err := GetRuntimeHandle(handleID)
+	if err != nil {
+		t.Fatalf("get handle fallido: %v", err)
+	}
+	if fallido == nil || fallido.Estado != "fallido" {
+		t.Fatalf("handle fantasma no marcado fallido: %+v", fallido)
+	}
+
+	runtime, err := GetRuntime(runtimeID)
+	if err != nil {
+		t.Fatalf("get runtime: %v", err)
+	}
+	if runtime == nil || runtime.LogicalState != "fallido" || runtime.ProcessState != "finalizado" {
+		t.Fatalf("runtime fantasma no degradado: %+v", runtime)
+	}
+}
+
 func TestReconciliarRuntimeHandlesStaleMarcaHandleConSesionActivaPeroSinHeartbeat(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
@@ -1320,7 +1381,7 @@ func TestRuntimeOrderStartInyectaContinuidadAlProcesoReal(t *testing.T) {
 		if item == nil || item.Stream != "stdin" {
 			continue
 		}
-		if strings.Contains(item.Text, "Retoma el trabajo del agente Codex1") {
+		if strings.Contains(strings.ToLower(item.Text), "retoma") {
 			if len(item.Text) > 100 {
 				t.Fatalf("el continuity prompt saneado deberia quedar acotado para PTY: %q", item.Text)
 			}
@@ -1328,6 +1389,9 @@ func TestRuntimeOrderStartInyectaContinuidadAlProcesoReal(t *testing.T) {
 				if r < 32 || r > 126 {
 					t.Fatalf("el continuity prompt saneado deberia quedar en ASCII seguro: %q", item.Text)
 				}
+			}
+			if strings.Contains(strings.ToLower(item.Text), "checkpoint de referencia") {
+				t.Fatalf("el continuity prompt PTY no deberia arrastrar el resumen largo completo: %q", item.Text)
 			}
 			found = true
 			break

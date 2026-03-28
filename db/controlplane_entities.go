@@ -228,7 +228,10 @@ func GetRuntimeHandleActivoAgente(agente string) (*RuntimeHandle, error) {
 	if err == sql.ErrNoRows {
 		return recuperarRuntimeHandleVivoAgenteProyecto(strings.TrimSpace(agente), nil)
 	}
-	return h, err
+	if err != nil {
+		return nil, err
+	}
+	return validarRuntimeHandleActivo(h, strings.TrimSpace(agente), nil)
 }
 
 func GetRuntimeHandleActivoAgenteProyecto(agente string, proyectoID *int64) (*RuntimeHandle, error) {
@@ -244,7 +247,30 @@ func GetRuntimeHandleActivoAgenteProyecto(agente string, proyectoID *int64) (*Ru
 	if err == sql.ErrNoRows {
 		return recuperarRuntimeHandleVivoAgenteProyecto(strings.TrimSpace(agente), proyectoID)
 	}
-	return h, err
+	if err != nil {
+		return nil, err
+	}
+	return validarRuntimeHandleActivo(h, strings.TrimSpace(agente), proyectoID)
+}
+
+func validarRuntimeHandleActivo(handle *RuntimeHandle, agente string, proyectoID *int64) (*RuntimeHandle, error) {
+	if handle == nil {
+		return nil, nil
+	}
+	if !runtimeHandleSePuedeValidarLocalmente(handle) {
+		return handle, nil
+	}
+	revived, err := refrescarRuntimeHandleSiSigueVivo(handle)
+	if err != nil {
+		return nil, err
+	}
+	if revived != nil {
+		return revived, nil
+	}
+	if err := marcarRuntimeHandleFantasma(handle); err != nil {
+		return nil, err
+	}
+	return recuperarRuntimeHandleVivoAgenteProyecto(agente, proyectoID)
 }
 
 func recuperarRuntimeHandleVivoAgenteProyecto(agente string, proyectoID *int64) (*RuntimeHandle, error) {
@@ -317,6 +343,45 @@ func refrescarRuntimeHandleSiSigueVivo(handle *RuntimeHandle) (*RuntimeHandle, e
 		}
 	}
 	return GetRuntimeHandle(handle.ID)
+}
+
+func runtimeHandleSePuedeValidarLocalmente(handle *RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(handle.HandleKind), "process") {
+		return true
+	}
+	runtime, err := runtimeHandleRuntime(handle)
+	if err != nil || runtime == nil || runtime.PID == nil {
+		return false
+	}
+	return *runtime.PID > 0
+}
+
+func marcarRuntimeHandleFantasma(handle *RuntimeHandle) error {
+	if handle == nil {
+		return nil
+	}
+	if _, err := DB.Exec(`
+		UPDATE runtime_handles
+		SET estado='fallido', last_seen_at=CURRENT_TIMESTAMP
+		WHERE id = ?`, handle.ID); err != nil {
+		return err
+	}
+	runtime, err := runtimeHandleRuntime(handle)
+	if err != nil || runtime == nil {
+		return err
+	}
+	if _, err := DB.Exec(`
+		UPDATE runtime_instances
+		SET logical_state='fallido',
+		    process_state='finalizado',
+		    last_event_at=CURRENT_TIMESTAMP
+		WHERE id = ?`, runtime.ID); err != nil {
+		return err
+	}
+	return nil
 }
 
 func estadoReviveRuntimeHandle(handle *RuntimeHandle) string {
