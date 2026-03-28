@@ -591,6 +591,48 @@ func clasificarTextoTranscript(normalized string) string {
 			return "ready_for_review"
 		}
 	}
+	reviewApprovedPhrases := []string{
+		"review aprobada",
+		"review aprobado",
+		"revisión aprobada",
+		"revision aprobada",
+		"review: approved",
+		"approved after review",
+		"lgtm",
+		"looks good to me",
+	}
+	for _, phrase := range reviewApprovedPhrases {
+		if strings.Contains(normalized, phrase) {
+			return "review_approved"
+		}
+	}
+	reviewChangesPhrases := []string{
+		"cambios solicitados",
+		"cambios pedidos",
+		"review con cambios",
+		"revisión con cambios",
+		"revision con cambios",
+		"changes requested",
+		"requesting changes",
+	}
+	for _, phrase := range reviewChangesPhrases {
+		if strings.Contains(normalized, phrase) {
+			return "review_changes_requested"
+		}
+	}
+	reviewBlockedPhrases := []string{
+		"review bloqueada",
+		"review bloqueado",
+		"revisión bloqueada",
+		"revision bloqueada",
+		"review blocked",
+		"review on hold",
+	}
+	for _, phrase := range reviewBlockedPhrases {
+		if strings.Contains(normalized, phrase) {
+			return "review_blocked"
+		}
+	}
 	replanPhrases := []string{
 		"qué hago ahora",
 		"que hago ahora",
