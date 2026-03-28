@@ -19,9 +19,12 @@ import (
 	"orquesta/notificaciones"
 	"orquesta/planocontrol"
 	"orquesta/reviewapp"
+	"orquesta/tareasapp"
 )
 
 type dbAutomationService struct{}
+
+const autonomiaReplanTaskTitle = "Autonomía: replanificar backlog y abrir siguiente frente útil"
 
 func (dbAutomationService) CheckReanimaciones() ([]*db.Agente, error) {
 	return db.CheckReanimaciones()
@@ -318,12 +321,13 @@ func notificarSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry) (strin
 			return note, nil
 		}
 	}
+	notes := make([]string, 0, 3)
 	supervisor, activado, err := prepararAgentePreferidoAutonomia(proyecto.ID, strings.TrimSpace(policy.SupervisorAgente), "supervision_transcript_signal")
 	if err != nil {
 		return "", err
 	}
 	if activado {
-		return "supervisor_start", nil
+		notes = append(notes, "supervisor_start")
 	}
 	if supervisor == nil {
 		supervisor, err = seleccionarAgenteActivoProyectoPreferido(proyecto.ID, strings.TrimSpace(policy.SupervisorAgente), []string{"supervisor", "orquestador", "revisor", "reviewer", "admin", "programador"}, strings.TrimSpace(item.Agente))
@@ -331,13 +335,19 @@ func notificarSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry) (strin
 			return "", err
 		}
 	}
+	if note, err := asegurarTareaReplanAutonomiaSignal(item, policy, proyecto, supervisor); err != nil {
+		return "", err
+	} else if strings.TrimSpace(note) != "" {
+		notes = append(notes, note)
+	}
 	if supervisor == nil || strings.EqualFold(strings.TrimSpace(supervisor.Nombre), strings.TrimSpace(item.Agente)) {
-		return "", nil
+		return strings.Join(notes, ";"), nil
 	}
 	if pendiente, err := existeRuntimeOrderAutonomiaPendiente(supervisor.Nombre, &proyecto.ID, "nudge", "inspeccionar_transcript_signal"); err != nil {
 		return "", err
 	} else if pendiente {
-		return "supervisor_nudge_pendiente", nil
+		notes = append(notes, "supervisor_nudge_pendiente")
+		return strings.Join(notes, ";"), nil
 	}
 	resumen := fmt.Sprintf("agente=%s signal=%s transcript=%d", strings.TrimSpace(item.Agente), strings.TrimSpace(item.Classification), item.ID)
 	if encolada, err := encolarNudgeAutonomiaDetallado(supervisor.Nombre, proyecto, "inspeccionar_transcript_signal", resumen, construirInstruccionSupervisionSignalTranscript(policy, proyecto, supervisor.Nombre, item), map[string]any{
@@ -348,9 +358,84 @@ func notificarSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry) (strin
 	}); err != nil {
 		return "", err
 	} else if !encolada {
-		return "supervisor_nudge_omitido", nil
+		notes = append(notes, "supervisor_nudge_omitido")
+		return strings.Join(notes, ";"), nil
 	}
-	return "supervisor_nudged", nil
+	notes = append(notes, "supervisor_nudged")
+	return strings.Join(notes, ";"), nil
+}
+
+func asegurarTareaReplanAutonomiaSignal(item *db.RuntimeTranscriptEntry, policy *db.ProyectoAutonomia, proyecto *db.Proyecto, supervisor *db.Agente) (string, error) {
+	if item == nil || policy == nil || proyecto == nil || !policy.Enabled {
+		return "", nil
+	}
+	if strings.TrimSpace(item.Classification) != "needs_replan" {
+		return "", nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyecto.ID})
+	if err != nil {
+		return "", err
+	}
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaCompletada, db.TareaCancelada:
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(tarea.Titulo), autonomiaReplanTaskTitle) || strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:needs_replan") {
+			return "replan_task_exists", nil
+		}
+	}
+	target := ""
+	if supervisor != nil && !strings.EqualFold(strings.TrimSpace(supervisor.Nombre), strings.TrimSpace(item.Agente)) {
+		target = strings.TrimSpace(supervisor.Nombre)
+	} else if preferred := strings.TrimSpace(policy.SupervisorAgente); preferred != "" && !strings.EqualFold(preferred, strings.TrimSpace(item.Agente)) {
+		target = preferred
+	}
+	id, err := tareasService.Create(tareasapp.CreateTaskInput{
+		Titulo:      autonomiaReplanTaskTitle,
+		Descripcion: construirDescripcionTareaReplanAutonomia(policy, proyecto, item),
+		Modulo:      "autonomia",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Agente:      target,
+		Proyecto:    proyecto.Slug,
+		Notas:       fmt.Sprintf("autonomia:needs_replan;transcript:%d;agente_origen:%s", item.ID, strings.TrimSpace(item.Agente)),
+	})
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(target) != "" {
+		if err := tareasService.Start(id, target); err != nil {
+			return "", err
+		}
+	}
+	return fmt.Sprintf("replan_task_created:%d", id), nil
+}
+
+func construirDescripcionTareaReplanAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, item *db.RuntimeTranscriptEntry) string {
+	partes := []string{
+		"Orquesta ha detectado en el transcript una señal de needs_replan: el agente no tiene claro el siguiente paso útil.",
+		"Replanifica backlog, prioridades, propuestas, worktrees y checkpoints para abrir o reforzar el siguiente frente útil sin intervención humana.",
+	}
+	if proyecto != nil && strings.TrimSpace(proyecto.Slug) != "" {
+		partes = append(partes, "Proyecto: "+strings.TrimSpace(proyecto.Slug)+".")
+	}
+	if item != nil && strings.TrimSpace(item.Agente) != "" {
+		partes = append(partes, "Agente origen: "+strings.TrimSpace(item.Agente)+".")
+	}
+	if item != nil && strings.TrimSpace(item.Text) != "" {
+		partes = append(partes, "Señal transcript: "+strings.TrimSpace(item.Text)+".")
+	}
+	if policy != nil && strings.TrimSpace(policy.ObjetivoGeneral) != "" {
+		partes = append(partes, "Objetivo general: "+strings.TrimSpace(policy.ObjetivoGeneral)+".")
+	}
+	if policy != nil && strings.TrimSpace(policy.DefinitionOfDoneJSON) != "" && strings.TrimSpace(policy.DefinitionOfDoneJSON) != "{}" {
+		partes = append(partes, "Definition of done: "+strings.TrimSpace(policy.DefinitionOfDoneJSON)+".")
+	}
+	return strings.Join(partes, " ")
 }
 
 func notificarReviewerSignalTranscript(item *db.RuntimeTranscriptEntry, policy *db.ProyectoAutonomia, proyecto *db.Proyecto) (string, error) {
