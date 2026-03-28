@@ -533,7 +533,7 @@ func TestProcesarReviewGatesBatchCreaGateYEncolaRevision(t *testing.T) {
 	}
 }
 
-func TestProcesarReviewGatesBatchCreaSolicitudMergeTrasGateAprobado(t *testing.T) {
+func TestProcesarReviewGatesBatchCreaSolicitudMergeTrasGateAprobadoReactivaProyecto(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
@@ -2667,6 +2667,56 @@ func TestProcesarRuntimeTranscriptBatchEncolaGuiaAutomatica(t *testing.T) {
 	}
 	if !strings.Contains(orders[0].PayloadJSON, `"classification":"approval_request"`) {
 		t.Fatalf("payload de guía automática inesperado: %s", orders[0].PayloadJSON)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, "Aprobado automaticamente") {
+		t.Fatalf("la guía automática debería aprobar explícitamente acciones normales: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestConstruirRespuestaSignalTranscriptAplicaPoliticaPermisos(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		nombre         string
+		classification string
+		texto          string
+		wantContains   []string
+	}{
+		{
+			nombre:         "aprueba_trabajo_normal",
+			classification: "approval_request",
+			texto:          "me dejas seguir con el refactor y ejecutar go test ./...?",
+			wantContains:   []string{"Aprobado automaticamente", "go test", "No necesitas confirmacion humana"},
+		},
+		{
+			nombre:         "rechaza_accion_destructiva",
+			classification: "approval_request",
+			texto:          "quieres que haga git reset --hard y rm -rf de los cambios?",
+			wantContains:   []string{"No autorizado automaticamente", "git reset --hard", "workspace"},
+		},
+		{
+			nombre:         "detecta_dependencia_externa",
+			classification: "waiting_human",
+			texto:          "quedo a la espera, faltan credenciales oauth y token externo",
+			wantContains:   []string{"No inventes credenciales", "otro frente util"},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.nombre, func(t *testing.T) {
+			t.Parallel()
+			resp := construirRespuestaSignalTranscript(&db.RuntimeTranscriptEntry{
+				Classification: tc.classification,
+				NormalizedText: tc.texto,
+				Text:           tc.texto,
+			})
+			for _, token := range tc.wantContains {
+				if !strings.Contains(resp, token) {
+					t.Fatalf("respuesta sin %q:\n%s", token, resp)
+				}
+			}
+		})
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"orquesta/db"
+	"orquesta/gitgobernanza"
 	"orquesta/notificaciones"
 	"orquesta/planocontrol"
 	"orquesta/reviewapp"
@@ -71,6 +72,10 @@ func (dbAutomationService) ProcesarRefineriaBatch() (int, error) {
 
 func (dbAutomationService) ProcesarHandoffsBatch() (int, error) {
 	return db.ProcesarHandoffsBatch()
+}
+
+func (dbAutomationService) ProcesarGitMergesBatch() (int, error) {
+	return procesarGitMergesBatch()
 }
 
 func (dbAutomationService) Audit(agente, accion, entidad string, entidadID int64, detalle string) {
@@ -285,21 +290,142 @@ func esSignalFalloRuntime(item *db.RuntimeTranscriptEntry) bool {
 }
 
 func construirRespuestaSignalTranscript(item *db.RuntimeTranscriptEntry) string {
-	base := "Orquesta: continúa de forma autónoma dentro de la gobernanza efectiva del proyecto. No necesitas aprobación humana salvo que falten credenciales, secretos o un recurso externo real. Si el cambio es delicado, crea checkpoint y sigue."
+	base := "Orquesta: continua de forma autonoma dentro de la gobernanza efectiva del proyecto. Usa API/servicios para el flujo normal, no BD local salvo diagnostico o recuperacion, y mantén tests coherentes y eficientes. Si el cambio es delicado, crea checkpoint y sigue."
+	normalized := normalizarSignalTranscriptTexto(item)
+	politicaPermisos := construirPoliticaPermisosSignalTranscript(strings.TrimSpace(item.Classification), normalized)
 	switch strings.TrimSpace(item.Classification) {
 	case "approval_request":
-		return base + " Si dudas entre varias opciones seguras, elige la más alineada con el proyecto y continúa sin detenerte."
+		return base + " " + politicaPermisos + " Si dudas entre varias opciones seguras, elige la mas alineada con el proyecto y continua sin detenerte."
 	case "waiting_human":
-		return base + " No te quedes esperando respuesta: formula el siguiente paso razonable, ejecuta y documenta los supuestos."
+		return base + " " + politicaPermisos + " No te quedes esperando respuesta: formula el siguiente paso razonable, ejecuta y documenta los supuestos."
 	case "ready_for_review":
-		return base + " Deja un resumen breve, asegúrate de que el frente queda verificable y sigue disponible para que Orquesta relance review si procede."
+		return base + " Deja un resumen breve, asegurate de que el frente queda verificable y sigue disponible para que Orquesta relance review si procede."
 	case "needs_replan":
-		return base + " Si no ves el siguiente paso, revisa backlog, tareas, propuestas y último checkpoint, y continúa por el frente más útil disponible."
+		return base + " Si no ves el siguiente paso, revisa backlog, tareas, propuestas y ultimo checkpoint, y continua por el frente mas util disponible."
 	case "blocked":
-		return base + " Si el bloqueo es de contexto, reevalúa tareas, propuestas y estado del proyecto y avanza por el mejor siguiente paso disponible."
+		return base + " Si el bloqueo es de contexto, reevalua tareas, propuestas y estado del proyecto y avanza por el mejor siguiente paso disponible."
 	default:
 		return base
 	}
+}
+
+func normalizarSignalTranscriptTexto(item *db.RuntimeTranscriptEntry) string {
+	if item == nil {
+		return ""
+	}
+	texto := strings.TrimSpace(item.NormalizedText)
+	if texto == "" {
+		texto = strings.TrimSpace(strings.ToLower(item.Text))
+	}
+	texto = strings.ReplaceAll(texto, "\n", " ")
+	texto = strings.ReplaceAll(texto, "\r", " ")
+	return strings.TrimSpace(texto)
+}
+
+func construirPoliticaPermisosSignalTranscript(classification, normalized string) string {
+	if classification != "approval_request" && classification != "waiting_human" {
+		return ""
+	}
+	if textoPareceAccionDestructiva(normalized) {
+		return "No autorizado automaticamente para acciones destructivas o irreversibles. No uses rm -rf, git reset --hard, borrados masivos, drops de base de datos ni cambios fuera del workspace. Replantea una alternativa segura."
+	}
+	if textoPareceDependenciaExterna(normalized) {
+		return "No inventes credenciales, secretos ni permisos externos. Si de verdad faltan, deja trazabilidad del bloqueo y continua por otro frente util del proyecto."
+	}
+	if textoPareceAccionNormalAutonoma(normalized) {
+		return "Aprobado automaticamente para acciones normales dentro del workspace: editar codigo, refactorizar, crear o ajustar archivos, ejecutar build/test/lint, preparar worktrees y continuar el siguiente paso util. No necesitas confirmacion humana para seguir. " + detalleAccionNormalAutonoma(normalized)
+	}
+	return "Aprobado automaticamente para trabajo normal dentro del proyecto. No necesitas confirmacion humana para seguir por una opcion segura."
+}
+
+func textoPareceAccionNormalAutonoma(normalized string) bool {
+	for _, token := range []string{
+		"refactor",
+		"seguir",
+		"continuar",
+		"go test",
+		"npm test",
+		"pnpm test",
+		"yarn test",
+		"pytest",
+		"cargo test",
+		"build",
+		"lint",
+		"gofmt",
+		"formate",
+		"crear archivo",
+		"editar",
+		"ajustar",
+		"implementar",
+		"worktree",
+		"rama",
+	} {
+		if strings.Contains(normalized, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func detalleAccionNormalAutonoma(normalized string) string {
+	switch {
+	case strings.Contains(normalized, "go test"):
+		return "Puedes ejecutar go test y seguir con el ciclo normal."
+	case strings.Contains(normalized, "pytest"):
+		return "Puedes ejecutar pytest y seguir con el ciclo normal."
+	case strings.Contains(normalized, "npm test"), strings.Contains(normalized, "pnpm test"), strings.Contains(normalized, "yarn test"):
+		return "Puedes ejecutar los tests del frontend y seguir con el ciclo normal."
+	case strings.Contains(normalized, "build"):
+		return "Puedes ejecutar el build y seguir con el ciclo normal."
+	case strings.Contains(normalized, "lint"):
+		return "Puedes ejecutar lint y seguir con el ciclo normal."
+	case strings.Contains(normalized, "refactor"):
+		return "Puedes continuar con el refactor sin esperar confirmacion humana."
+	default:
+		return "Sigue por la opcion mas segura y util."
+	}
+}
+
+func textoPareceAccionDestructiva(normalized string) bool {
+	for _, token := range []string{
+		"rm -rf",
+		"rm -f",
+		"git reset --hard",
+		"git checkout --",
+		"drop table",
+		"drop database",
+		"truncate table",
+		"borrar la base de datos",
+		"borrar la bd",
+		"delete database",
+		"wipe",
+		"formatear disco",
+	} {
+		if strings.Contains(normalized, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func textoPareceDependenciaExterna(normalized string) bool {
+	for _, token := range []string{
+		"credencial",
+		"credenciales",
+		"secret",
+		"secreto",
+		"api key",
+		"token",
+		"ssh key",
+		"oauth",
+		"permiso externo",
+		"acceso externo",
+	} {
+		if strings.Contains(normalized, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func notificarSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
@@ -827,7 +953,47 @@ func proyectoTerminadoAutonomamente(proyecto *db.Proyecto) (bool, string, error)
 	if strings.TrimSpace(reviewMotivo) != "" {
 		motivo += "; " + strings.TrimSpace(reviewMotivo)
 	}
+	integrado, integracionMotivo, err := proyectoIntegracionAutonomaCompletada(proyecto)
+	if err != nil || !integrado {
+		return false, integracionMotivo, err
+	}
+	if strings.TrimSpace(integracionMotivo) != "" {
+		motivo += "; " + strings.TrimSpace(integracionMotivo)
+	}
 	return true, motivo, nil
+}
+
+func proyectoIntegracionAutonomaCompletada(proyecto *db.Proyecto) (bool, string, error) {
+	if proyecto == nil {
+		return false, "", nil
+	}
+	merges, err := gitgobernanza.NewService(gitgobernanza.Repository{}).ListRequests(strings.TrimSpace(proyecto.Slug), "")
+	if err != nil {
+		return false, "", err
+	}
+	if len(merges) == 0 {
+		return true, "", nil
+	}
+	var latestMerged *db.GitMerge
+	for _, merge := range merges {
+		if merge == nil {
+			continue
+		}
+		switch strings.TrimSpace(merge.Estado) {
+		case "pendiente", "validando", "aprobado", "ejecutando":
+			return false, fmt.Sprintf("esperando integración merge #%d (%s)", merge.ID, strings.TrimSpace(merge.Estado)), nil
+		case "fallido":
+			return false, fmt.Sprintf("integración merge #%d fallida", merge.ID), nil
+		case "fusionado":
+			if latestMerged == nil || merge.ID > latestMerged.ID {
+				latestMerged = merge
+			}
+		}
+	}
+	if latestMerged != nil {
+		return true, fmt.Sprintf("merge #%d fusionado", latestMerged.ID), nil
+	}
+	return false, "sin integración fusionada", nil
 }
 
 func procesarAparcadoAutonomoSesion(sesion *db.Sesion) (int, error) {
