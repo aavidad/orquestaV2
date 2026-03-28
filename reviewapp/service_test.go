@@ -219,12 +219,16 @@ func TestUpdateGatePermiteCambiosSinResolver(t *testing.T) {
 	}
 	service := NewService(store)
 	reviewer := "CodexReview2"
+	taskID := int64(77)
+	worktreeID := int64(88)
 	severity := "critical"
 	findings := `{"summary":"needs work"}`
 
 	gate, err := service.Update(UpdateGateInput{
 		ID:             5,
 		ReviewerAgente: &reviewer,
+		TareaID:        &taskID,
+		WorktreeID:     &worktreeID,
 		SeverityMax:    &severity,
 		FindingsJSON:   &findings,
 	})
@@ -239,6 +243,12 @@ func TestUpdateGatePermiteCambiosSinResolver(t *testing.T) {
 	}
 	if gate.FindingsJSON != findings {
 		t.Fatalf("findings inesperados: %s", gate.FindingsJSON)
+	}
+	if gate.TareaID == nil || *gate.TareaID != taskID {
+		t.Fatalf("tarea review inesperada: %+v", gate.TareaID)
+	}
+	if gate.WorktreeID == nil || *gate.WorktreeID != worktreeID {
+		t.Fatalf("worktree review inesperada: %+v", gate.WorktreeID)
 	}
 	if gate.ResolvedAt != nil {
 		t.Fatal("resolved_at no debería informarse sin aprobación")
