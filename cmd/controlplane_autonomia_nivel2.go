@@ -4,12 +4,16 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"orquesta/coordinacion"
 	"orquesta/db"
+	"orquesta/fabricaapp"
 	"orquesta/reviewapp"
 	"orquesta/supervisionapp"
 	"orquesta/tareasapp"
@@ -62,13 +66,11 @@ func procesarSupervisionAutonomaBatch() (int, error) {
 		if agente == nil {
 			continue
 		}
-		taskCreated := false
-		taskID := int64(0)
-		if id, created, err := asegurarTareaSemillaAutonomia(policy, proyecto, agente); err != nil {
+		autoCreate := autonomiaAutoCreateResult{}
+		if res, err := asegurarTrabajoAutonomia(policy, proyecto, agente); err != nil {
 			return total, err
-		} else if created {
-			taskCreated = true
-			taskID = id
+		} else {
+			autoCreate = res
 		}
 		if pendiente, err := existeRuntimeOrderAutonomiaPendiente(agente.Nombre, &proyecto.ID, "nudge", "supervisar_proyecto"); err != nil {
 			return total, err
@@ -80,20 +82,32 @@ func procesarSupervisionAutonomaBatch() (int, error) {
 			"accion": "supervisar_proyecto",
 			"motivo": resumen,
 		}
-		if taskCreated {
-			decision["auto_created_task"] = true
-			decision["auto_created_task_id"] = taskID
+		if autoCreate.Created {
+			decision["auto_created_work"] = true
+			if autoCreate.SeedTaskID > 0 {
+				decision["auto_created_task"] = true
+				decision["auto_created_task_id"] = autoCreate.SeedTaskID
+			}
+			if autoCreate.PlanCreated > 0 {
+				decision["auto_created_plan"] = true
+				decision["auto_created_tasks_count"] = autoCreate.PlanCreated
+				decision["auto_created_backlog"] = autoCreate.PlanBacklog
+			}
 		}
 		inputJSON, decisionJSON := construirPayloadCicloAutonomia(policy, proyecto, agente, contexto, "supervision", decision)
 		instruction := construirInstruccionSupervision(policy, proyecto, agente, resumen)
 		if encolada, err := encolarNudgeAutonomiaDetallado(agente.Nombre, proyecto, "supervisar_proyecto", resumen, instruction, map[string]any{
-			"objetivo_general":       strings.TrimSpace(policy.ObjetivoGeneral),
-			"definition_of_done":     strings.TrimSpace(policy.DefinitionOfDoneJSON),
-			"estado_autonomia":       strings.TrimSpace(string(policy.EstadoAutonomia)),
-			"supervision_cycle_kind": "supervision",
-			"auto_create_tasks":      policy.AutoCreateTasks,
-			"auto_created_task":      taskCreated,
-			"auto_created_task_id":   taskID,
+			"objetivo_general":         strings.TrimSpace(policy.ObjetivoGeneral),
+			"definition_of_done":       strings.TrimSpace(policy.DefinitionOfDoneJSON),
+			"estado_autonomia":         strings.TrimSpace(string(policy.EstadoAutonomia)),
+			"supervision_cycle_kind":   "supervision",
+			"auto_create_tasks":        policy.AutoCreateTasks,
+			"auto_created_work":        autoCreate.Created,
+			"auto_created_task":        autoCreate.SeedTaskID > 0,
+			"auto_created_task_id":     autoCreate.SeedTaskID,
+			"auto_created_plan":        autoCreate.PlanCreated > 0,
+			"auto_created_tasks_count": autoCreate.PlanCreated,
+			"auto_created_backlog":     autoCreate.PlanBacklog,
 		}); err != nil {
 			return total, err
 		} else if !encolada {
@@ -116,43 +130,74 @@ func procesarSupervisionAutonomaBatch() (int, error) {
 	return total, nil
 }
 
-func asegurarTareaSemillaAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, agente *db.Agente) (int64, bool, error) {
+type autonomiaAutoCreateResult struct {
+	Created     bool
+	SeedTaskID  int64
+	PlanCreated int
+	PlanBacklog int
+}
+
+func asegurarTrabajoAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, agente *db.Agente) (autonomiaAutoCreateResult, error) {
+	var zero autonomiaAutoCreateResult
 	if policy == nil || !policy.Enabled || !policy.AutoCreateTasks || proyecto == nil || agente == nil {
-		return 0, false, nil
+		return zero, nil
 	}
 	terminado, _, err := proyectoTerminadoAutonomamente(proyecto)
 	if err != nil || terminado {
-		return 0, false, err
+		return zero, err
 	}
 	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyecto.ID})
 	if err != nil {
-		return 0, false, err
+		return zero, err
 	}
+	hasAnyTask := false
 	for _, tarea := range tareas {
 		if tarea == nil {
 			continue
 		}
+		hasAnyTask = true
 		switch tarea.Estado {
 		case db.TareaCancelada, db.TareaCompletada:
 			continue
 		default:
-			return 0, false, nil
+			return zero, nil
 		}
 	}
 	estadoAbierta := db.PropuestaAbierta
 	propuestas, err := propuestasService.ListByProject(&estadoAbierta, proyecto.Slug)
 	if err != nil {
-		return 0, false, err
+		return zero, err
 	}
 	if len(propuestas) > 0 {
-		return 0, false, nil
+		return zero, nil
 	}
 	gates, err := reviewService.List(reviewapp.ListInput{ProyectoRef: proyecto.Slug, Limit: 20})
 	if err != nil {
-		return 0, false, err
+		return zero, err
 	}
 	if firstOpenGate(gates) != nil {
-		return 0, false, nil
+		return zero, nil
+	}
+	if !hasAnyTask {
+		spec := construirSpecFactoryAutonomia(policy, proyecto)
+		plan, err := newProjectAppFactory().Generate(spec)
+		if err != nil {
+			return zero, err
+		}
+		materialized, err := fabricaapp.Materialize(fabricaapp.DBStore{}, proyecto.ID, "orquesta", plan)
+		if err != nil {
+			return zero, err
+		}
+		primaryTaskID, err := arrancarPrimeraTareaPlanAutonomia(materialized.TaskIDs, strings.TrimSpace(agente.Nombre))
+		if err != nil {
+			return zero, err
+		}
+		return autonomiaAutoCreateResult{
+			Created:     materialized.Created > 0,
+			SeedTaskID:  primaryTaskID,
+			PlanCreated: materialized.Created,
+			PlanBacklog: materialized.Backlog,
+		}, nil
 	}
 	id, err := tareasService.Create(tareasapp.CreateTaskInput{
 		Titulo:      "Autonomía: revisar backlog y abrir siguiente frente útil",
@@ -165,12 +210,161 @@ func asegurarTareaSemillaAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Pr
 		Notas:       "autonomia:auto_create_tasks",
 	})
 	if err != nil {
-		return 0, false, err
+		return zero, err
 	}
 	if err := tareasService.Start(id, strings.TrimSpace(agente.Nombre)); err != nil {
-		return 0, false, err
+		return zero, err
 	}
-	return id, true, nil
+	return autonomiaAutoCreateResult{
+		Created:    true,
+		SeedTaskID: id,
+	}, nil
+}
+
+func construirSpecFactoryAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto) fabricaapp.AppSpec {
+	texto := strings.ToLower(strings.Join([]string{
+		strings.TrimSpace(proyectoNombreAutonomia(proyecto)),
+		strings.TrimSpace(proyectoSlugAutonomia(proyecto)),
+		strings.TrimSpace(policy.ObjetivoGeneral),
+		strings.TrimSpace(policy.DefinitionOfDoneJSON),
+	}, " "))
+	tipo := inferirTipoAppAutonomia(texto)
+	if tipo == "web_api" {
+		switch {
+		case proyectoTieneArchivoAutonomia(proyecto, "package.json") && !proyectoTieneArchivoAutonomia(proyecto, "go.mod"):
+			tipo = "web"
+		case proyectoTieneArchivoAutonomia(proyecto, "go.mod") && !proyectoTieneArchivoAutonomia(proyecto, "package.json") && !proyectoTieneDirAutonomia(proyecto, "web", "ui", "frontend", "templates", "static"):
+			tipo = "api"
+		}
+	}
+	spec := fabricaapp.AppSpec{
+		Nombre:      proyectoNombreAutonomia(proyecto),
+		Descripcion: descripcionFactoryAutonomia(policy, proyecto),
+		Tipo:        tipo,
+		Frontend:    tipo == "web" || tipo == "web_api",
+		API:         tipo == "api" || tipo == "web_api",
+		Auth:        contieneAlguno(texto, "auth", "autentic", "oauth", "login", "permiso", "sesion"),
+		Database: contieneAlguno(texto, "base de datos", "persistencia", "sqlite", "postgres", "mysql", "migracion", "migraciones") ||
+			proyectoTieneDirAutonomia(proyecto, "db", "migrations", "schema") ||
+			proyectoTieneArchivoAutonomia(proyecto, "orquesta.db"),
+		Docker: contieneAlguno(texto, "docker", "compose", "container", "contenedor", "deploy", "kubernetes", "k8s") ||
+			proyectoTieneArchivoAutonomia(proyecto, "Dockerfile", "docker-compose.yml", "compose.yml"),
+		I18n: !contieneAlguno(texto, "sin i18n", "solo un idioma", "monolingue") ||
+			proyectoTieneDirAutonomia(proyecto, "i18n", "locales", "translations"),
+		Idiomas: []string{"es", "en"},
+	}
+	if tipo == "api" || tipo == "web_api" {
+		spec.Database = true
+		spec.Docker = true
+	}
+	return spec
+}
+
+func arrancarPrimeraTareaPlanAutonomia(taskIDs map[string]int64, agente string) (int64, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return 0, nil
+	}
+	for _, key := range []string{"briefing", "investigacion", "arquitectura", "frontend_base", "api_base", "cli_base"} {
+		id := taskIDs[key]
+		if id <= 0 {
+			continue
+		}
+		if err := tareasService.Take(id, agente); err != nil {
+			return 0, err
+		}
+		if err := tareasService.Start(id, agente); err != nil {
+			return 0, err
+		}
+		return id, nil
+	}
+	return 0, nil
+}
+
+func proyectoNombreAutonomia(proyecto *db.Proyecto) string {
+	if proyecto == nil {
+		return "Proyecto"
+	}
+	if nombre := strings.TrimSpace(proyecto.Nombre); nombre != "" {
+		return nombre
+	}
+	if slug := strings.TrimSpace(proyecto.Slug); slug != "" {
+		return slug
+	}
+	return "Proyecto"
+}
+
+func proyectoSlugAutonomia(proyecto *db.Proyecto) string {
+	if proyecto == nil {
+		return ""
+	}
+	return strings.TrimSpace(proyecto.Slug)
+}
+
+func descripcionFactoryAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto) string {
+	if policy != nil && strings.TrimSpace(policy.ObjetivoGeneral) != "" {
+		return strings.TrimSpace(policy.ObjetivoGeneral)
+	}
+	return fmt.Sprintf("Backlog inicial generado automaticamente por Orquesta para %s.", proyectoNombreAutonomia(proyecto))
+}
+
+func inferirTipoAppAutonomia(texto string) string {
+	switch {
+	case contieneAlguno(texto, " cli ", " consola", "terminal", "linea de comandos", "comando "):
+		return "cli"
+	case contieneAlguno(texto, "web_api", "panel", "dashboard") || (contieneAlguno(texto, "web", "frontend", "ui") && contieneAlguno(texto, "api", "backend", "endpoint")):
+		return "web_api"
+	case contieneAlguno(texto, "frontend", "web", "ui", "panel"):
+		return "web"
+	case contieneAlguno(texto, "api", "backend", "endpoint", "servicio"):
+		return "api"
+	default:
+		return "web_api"
+	}
+}
+
+func contieneAlguno(texto string, needles ...string) bool {
+	for _, needle := range needles {
+		needle = strings.ToLower(strings.TrimSpace(needle))
+		if needle != "" && strings.Contains(texto, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func proyectoTieneArchivoAutonomia(proyecto *db.Proyecto, names ...string) bool {
+	if proyecto == nil || strings.TrimSpace(proyecto.RutaAbs) == "" {
+		return false
+	}
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		info, err := os.Stat(filepath.Join(proyecto.RutaAbs, filepath.Clean(name)))
+		if err == nil && !info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+func proyectoTieneDirAutonomia(proyecto *db.Proyecto, names ...string) bool {
+	if proyecto == nil || strings.TrimSpace(proyecto.RutaAbs) == "" {
+		return false
+	}
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		info, err := os.Stat(filepath.Join(proyecto.RutaAbs, filepath.Clean(name)))
+		if err == nil && info.IsDir() {
+			return true
+		}
+	}
+	return false
 }
 
 func construirDescripcionTareaSemillaAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto) string {

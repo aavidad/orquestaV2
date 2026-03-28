@@ -159,7 +159,7 @@ func TestProcesarSupervisionAutonomaBatchArrancaSupervisorPreferidoSinSesion(t *
 	}
 }
 
-func TestProcesarSupervisionAutonomaBatchCreaTareaSemillaSiAutoCreateTasks(t *testing.T) {
+func TestProcesarSupervisionAutonomaBatchGeneraBacklogInicialSiAutoCreateTasks(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
 	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
@@ -212,17 +212,41 @@ func TestProcesarSupervisionAutonomaBatchCreaTareaSemillaSiAutoCreateTasks(t *te
 	if err != nil {
 		t.Fatalf("listar tareas: %v", err)
 	}
-	if len(tareas) != 1 {
-		t.Fatalf("debería crear una tarea semilla, tareas=%+v", tareas)
+	if len(tareas) < 5 {
+		t.Fatalf("debería generar un backlog inicial completo, tareas=%+v", tareas)
 	}
-	if tareas[0].Titulo != "Autonomía: revisar backlog y abrir siguiente frente útil" {
-		t.Fatalf("tarea semilla inesperada: %+v", tareas[0])
+	var briefing, investigacion, arquitectura bool
+	var briefingActiva bool
+	var backlog int
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Titulo {
+		case "Definir briefing funcional de Orquestador":
+			briefing = true
+			if tarea.Estado == db.TareaEnProgreso && tarea.Agente != nil && *tarea.Agente == "CodexSupervisor" {
+				briefingActiva = true
+			}
+		case "Revisar catalogo y referencias de Orquestador":
+			investigacion = true
+		case "Cerrar arquitectura base de Orquestador":
+			arquitectura = true
+		case "Autonomía: revisar backlog y abrir siguiente frente útil":
+			t.Fatalf("no debería crear tarea semilla cuando el proyecto aún no tiene backlog: %+v", tarea)
+		}
+		if tarea.Estado == db.TareaBacklog {
+			backlog++
+		}
 	}
-	if tareas[0].Estado != db.TareaEnProgreso {
-		t.Fatalf("la tarea semilla debería arrancarse, got=%s", tareas[0].Estado)
+	if !briefing || !investigacion || !arquitectura {
+		t.Fatalf("faltan tareas base del plan inicial, tareas=%+v", tareas)
 	}
-	if tareas[0].Agente == nil || *tareas[0].Agente != "CodexSupervisor" {
-		t.Fatalf("la tarea semilla debería quedar en el supervisor, tarea=%+v", tareas[0])
+	if !briefingActiva {
+		t.Fatalf("el briefing debería arrancarse en el supervisor para poner en marcha el plan, tareas=%+v", tareas)
+	}
+	if backlog == 0 {
+		t.Fatalf("el backlog inicial debería dejar trabajo dependiente en backlog, tareas=%+v", tareas)
 	}
 
 	kind := "supervision"
@@ -230,7 +254,7 @@ func TestProcesarSupervisionAutonomaBatchCreaTareaSemillaSiAutoCreateTasks(t *te
 	if err != nil {
 		t.Fatalf("listar ciclos: %v", err)
 	}
-	if len(cycles) != 1 || !strings.Contains(cycles[0].DecisionJSON, `"auto_created_task":true`) {
+	if len(cycles) != 1 || !strings.Contains(cycles[0].DecisionJSON, `"auto_created_plan":true`) {
 		t.Fatalf("ciclo supervision sin traza de auto_create_tasks: %+v", cycles)
 	}
 }
