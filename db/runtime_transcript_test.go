@@ -153,6 +153,9 @@ func TestClasificarTextoTranscriptReconoceReviewYReplan(t *testing.T) {
 	}{
 		{raw: "Está listo para revisión final", want: "ready_for_review"},
 		{raw: "ready for review after the last fix", want: "ready_for_review"},
+		{raw: "Review aprobada, LGTM", want: "review_approved"},
+		{raw: "Changes requested after review", want: "review_changes_requested"},
+		{raw: "Review blocked pending credentials", want: "review_blocked"},
 		{raw: "¿Qué hago ahora? no tengo claro el siguiente paso", want: "needs_replan"},
 		{raw: "what should i do next after this task?", want: "needs_replan"},
 		{raw: "thread 'main' panicked at src/ui.rs:1:1", want: "runtime_panic"},

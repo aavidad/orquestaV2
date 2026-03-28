@@ -18,6 +18,7 @@ import (
 	"orquesta/db"
 	"orquesta/notificaciones"
 	"orquesta/planocontrol"
+	"orquesta/reviewapp"
 )
 
 type dbAutomationService struct{}
@@ -140,6 +141,11 @@ func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 	} else if handle == nil {
 		return "sin_runtime_activo", nil
 	}
+	if note, handled, err := resolverReviewGateDesdeSignalTranscript(item); err != nil {
+		return "", err
+	} else if handled {
+		return note, nil
+	}
 	if esSignalFalloRuntime(item) {
 		if supervisorNote, err := notificarSupervisorSignalTranscript(item); err != nil {
 			return "", err
@@ -195,6 +201,72 @@ func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 		notes = append(notes, strings.TrimSpace(supervisorNote))
 	}
 	return strings.Join(notes, ";"), nil
+}
+
+func resolverReviewGateDesdeSignalTranscript(item *db.RuntimeTranscriptEntry) (string, bool, error) {
+	if item == nil || item.ProyectoID == nil || *item.ProyectoID <= 0 {
+		return "", false, nil
+	}
+	var estado string
+	switch strings.TrimSpace(item.Classification) {
+	case "review_approved":
+		estado = reviewapp.GateStateApproved
+	case "review_changes_requested":
+		estado = reviewapp.GateStateChangesAsked
+	case "review_blocked":
+		estado = reviewapp.GateStateBlocked
+	default:
+		return "", false, nil
+	}
+	proyecto, err := db.GetProyecto(strconv.FormatInt(*item.ProyectoID, 10))
+	if err != nil || proyecto == nil {
+		return "", false, err
+	}
+	gates, err := reviewService.List(reviewapp.ListInput{
+		ProyectoRef:    proyecto.Slug,
+		ReviewerAgente: strings.TrimSpace(item.Agente),
+		Limit:          20,
+	})
+	if err != nil {
+		return "", false, err
+	}
+	gate := firstOpenGate(gates)
+	if gate == nil {
+		return "", false, nil
+	}
+	findingsJSON, err := construirFindingsReviewTranscript(item)
+	if err != nil {
+		return "", false, err
+	}
+	resolved, err := reviewService.Resolve(reviewapp.ResolveGateInput{
+		ID:             gate.ID,
+		Estado:         estado,
+		ReviewerAgente: strings.TrimSpace(item.Agente),
+		FindingsJSON:   findingsJSON,
+	})
+	if err != nil {
+		return "", false, err
+	}
+	detail := fmt.Sprintf("gate=%d transcript=%d estado=%s", resolved.ID, item.ID, strings.TrimSpace(estado))
+	db.Audit("orquesta", "runtime_transcript_review_resolution", "review_gate", resolved.ID, detail)
+	return "review_gate_resolved:" + detail, true, nil
+}
+
+func construirFindingsReviewTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
+	payload := []map[string]any{{
+		"source":         "runtime_transcript",
+		"transcript_id":  item.ID,
+		"classification": strings.TrimSpace(item.Classification),
+		"agente":         strings.TrimSpace(item.Agente),
+		"text":           strings.TrimSpace(item.Text),
+		"runtime_id":     item.RuntimeID,
+		"handle_id":      item.HandleID,
+	}}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
 }
 
 func esSignalFalloRuntime(item *db.RuntimeTranscriptEntry) bool {
