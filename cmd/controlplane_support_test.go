@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/coordinacion"
 	"orquesta/db"
 )
 
@@ -474,6 +475,20 @@ func TestProcesarReviewGatesBatchCreaGateYEncolaRevision(t *testing.T) {
 	if err := db.CompletarTarea(tareaID, "CodexReviewer", "abc123"); err != nil {
 		t.Fatalf("completar tarea: %v", err)
 	}
+	worktree, err := db.CoordinationWorktreeSQLRepository{}.Create(&coordinacion.Worktree{
+		ProjectID: proyectoID,
+		TaskID:    &tareaID,
+		Agent:     "CodexReviewer",
+		Name:      "orquestador-codexreviewer-t1",
+		Path:      filepath.Join(tmp, "wt-review"),
+		Branch:    "orq/orquestador/CodexReviewer/t1",
+		BaseRef:   "master",
+		State:     coordinacion.WorktreeActive,
+		Reason:    "review_test",
+	})
+	if err != nil {
+		t.Fatalf("crear worktree activa: %v", err)
+	}
 
 	n, err := procesarReviewGatesBatch()
 	if err != nil {
@@ -492,6 +507,12 @@ func TestProcesarReviewGatesBatchCreaGateYEncolaRevision(t *testing.T) {
 	}
 	if gates[0].ReviewerAgente != "CodexReviewer" || gates[0].Estado != db.ReviewGateEnRevision {
 		t.Fatalf("review gate inesperado: %+v", gates[0])
+	}
+	if gates[0].TareaID == nil || *gates[0].TareaID != tareaID {
+		t.Fatalf("el gate debería quedar ligado a la tarea revisada, gate=%+v", gates[0])
+	}
+	if gates[0].WorktreeID == nil || *gates[0].WorktreeID != worktree.ID {
+		t.Fatalf("el gate debería quedar ligado al worktree activo, gate=%+v", gates[0])
 	}
 	agente := "CodexReviewer"
 	estado := "pendiente"

@@ -106,6 +106,8 @@ type UpdateGateInput struct {
 	ID             int64
 	Estado         string
 	ReviewerAgente *string
+	TareaID        *int64
+	WorktreeID     *int64
 	SeverityMax    *string
 	FindingsJSON   *string
 }
@@ -289,6 +291,12 @@ func (s *Service) Update(input UpdateGateInput) (*Gate, error) {
 	}
 	if input.ReviewerAgente != nil {
 		gate.ReviewerAgente = strings.TrimSpace(*input.ReviewerAgente)
+	}
+	if input.TareaID != nil {
+		gate.TareaID = input.TareaID
+	}
+	if input.WorktreeID != nil {
+		gate.WorktreeID = input.WorktreeID
 	}
 	if input.SeverityMax != nil {
 		severity, err := NormalizeSeverity(*input.SeverityMax)
