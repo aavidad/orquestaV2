@@ -11,6 +11,7 @@ import (
 
 	"orquesta/coordinacion"
 	"orquesta/db"
+	"orquesta/reviewapp"
 )
 
 func TestProcesarSupervisionAutonomaBatchEncolaSupervisionYRegistraCiclo(t *testing.T) {
@@ -532,6 +533,115 @@ func TestProcesarReviewGatesBatchCreaGateYEncolaRevision(t *testing.T) {
 	}
 }
 
+func TestProcesarReviewGatesBatchCreaSolicitudMergeTrasGateAprobado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		ReviewerAgente:       "CodexReviewer",
+		ReviewRequired:       true,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Cerrar frente para merge",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.CompletarTarea(tareaID, "CodexReviewer", "abc123"); err != nil {
+		t.Fatalf("completar tarea: %v", err)
+	}
+	worktree, err := db.CoordinationWorktreeSQLRepository{}.Create(&coordinacion.Worktree{
+		ProjectID: proyectoID,
+		TaskID:    &tareaID,
+		Agent:     "CodexReviewer",
+		Name:      "orquestador-codexreviewer-merge",
+		Path:      filepath.Join(tmp, "wt-merge"),
+		Branch:    "orq/orquestador/CodexReviewer/t-merge",
+		BaseRef:   "master",
+		State:     coordinacion.WorktreeActive,
+		Reason:    "merge_test",
+	})
+	if err != nil {
+		t.Fatalf("crear worktree activa: %v", err)
+	}
+	now := time.Now().UTC()
+	if _, err := db.CrearReviewGate(&db.ReviewGate{
+		ProyectoID:     &proyectoID,
+		TareaID:        &tareaID,
+		WorktreeID:     &worktree.ID,
+		RequestedBy:    "orquesta",
+		ReviewerAgente: "CodexReviewer",
+		Estado:         db.ReviewGateAprobado,
+		ResolvedAt:     &now,
+	}); err != nil {
+		t.Fatalf("crear review gate aprobado: %v", err)
+	}
+
+	n, err := procesarReviewGatesBatch()
+	if err != nil {
+		t.Fatalf("procesar review gates: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 acción de auto-merge, got=%d", n)
+	}
+	merges, err := db.ListarGitMerges(&proyectoID, "")
+	if err != nil {
+		t.Fatalf("listar merges: %v", err)
+	}
+	if len(merges) != 1 {
+		t.Fatalf("debería crear una única solicitud de merge, merges=%+v", merges)
+	}
+	if merges[0].SourceBranch != "orq/orquestador/CodexReviewer/t-merge" || merges[0].TargetBranch != "master" {
+		t.Fatalf("solicitud de merge inesperada: %+v", merges[0])
+	}
+	if merges[0].Estado != "aprobado" {
+		t.Fatalf("la solicitud automática debería quedar aprobada, merge=%+v", merges[0])
+	}
+	if !strings.Contains(merges[0].Notas, "review gate") {
+		t.Fatalf("la solicitud de merge debería dejar trazabilidad del gate, merge=%+v", merges[0])
+	}
+
+	n, err = procesarReviewGatesBatch()
+	if err != nil {
+		t.Fatalf("reprocesar review gates: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no debería duplicar la solicitud de merge, got=%d", n)
+	}
+	merges, err = db.ListarGitMerges(&proyectoID, "")
+	if err != nil {
+		t.Fatalf("listar merges tras reproceso: %v", err)
+	}
+	if len(merges) != 1 {
+		t.Fatalf("no debería duplicar merges, merges=%+v", merges)
+	}
+}
+
 func TestProcesarReviewGatesBatchArrancaReviewerPreferidoSinSesion(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -863,6 +973,110 @@ func TestProcesarReviewGatesBatchEncolaCorreccionTrasCambiosPedidos(t *testing.T
 	}
 	if policy.EstadoAutonomia != db.AutonomiaProyectoActiva {
 		t.Fatalf("el proyecto deberia reactivarse para corregir, got=%s", policy.EstadoAutonomia)
+	}
+}
+
+func TestProcesarReviewGatesBatchCreaSolicitudMergeTrasGateAprobado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexReviewer", "admin"); err != nil {
+		t.Fatalf("registrar reviewer: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		ReviewerAgente:       "CodexReviewer",
+		ReviewRequired:       true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoEsperandoReview,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Ultimo frente",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.CompletarTarea(tareaID, "CodexReviewer", "abc123"); err != nil {
+		t.Fatalf("completar tarea: %v", err)
+	}
+	worktree, err := db.CoordinationWorktreeSQLRepository{}.Create(&coordinacion.Worktree{
+		ProjectID: proyectoID,
+		TaskID:    &tareaID,
+		Agent:     "CodexReviewer",
+		Name:      "orquestador-codexreviewer-t3",
+		Path:      filepath.Join(tmp, "wt-approved"),
+		Branch:    "orq/orquestador/CodexReviewer/t3",
+		BaseRef:   "master",
+		State:     coordinacion.WorktreeActive,
+		Reason:    "review_approved",
+	})
+	if err != nil {
+		t.Fatalf("crear worktree activa: %v", err)
+	}
+	now := time.Now().UTC()
+	if _, err := db.CrearReviewGate(&db.ReviewGate{
+		ProyectoID:     &proyectoID,
+		TareaID:        &tareaID,
+		WorktreeID:     &worktree.ID,
+		RequestedBy:    "orquesta",
+		ReviewerAgente: "CodexReviewer",
+		Estado:         db.ReviewGateAprobado,
+		SeverityMax:    "high",
+		ResolvedAt:     &now,
+	}); err != nil {
+		t.Fatalf("crear review gate aprobado: %v", err)
+	}
+
+	n, err := procesarReviewGatesBatch()
+	if err != nil {
+		t.Fatalf("procesar review gates: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 creación de solicitud de merge, got=%d", n)
+	}
+
+	merges, err := db.ListarGitMerges(&proyectoID, "")
+	if err != nil {
+		t.Fatalf("listar git merges: %v", err)
+	}
+	if len(merges) != 1 {
+		t.Fatalf("debería crear una solicitud de merge, merges=%+v", merges)
+	}
+	if merges[0].SourceBranch != "orq/orquestador/CodexReviewer/t3" || merges[0].TargetBranch != "master" || merges[0].Estado != "aprobado" {
+		t.Fatalf("solicitud de merge inesperada: %+v", merges[0])
+	}
+	if !strings.Contains(merges[0].MetadataJSON, `"review_gate":`) || !strings.Contains(merges[0].MetadataJSON, `"auto_created":true`) {
+		t.Fatalf("metadata de merge incompleta: %s", merges[0].MetadataJSON)
+	}
+	policy, err := db.GetProyectoAutonomia(proyectoID)
+	if err != nil {
+		t.Fatalf("get proyecto autonomia: %v", err)
+	}
+	if policy.EstadoAutonomia != db.AutonomiaProyectoActiva {
+		t.Fatalf("estado autonomia debería volver a activo tras review aprobada, got=%s", policy.EstadoAutonomia)
 	}
 }
 
@@ -2980,6 +3194,136 @@ func TestProcesarRuntimeTranscriptBatchResuelveReviewGateDesdeReviewer(t *testin
 	}
 	if len(orders) != 0 {
 		t.Fatalf("no debería dejar nudges o instrucciones pendientes al resolver el gate directamente: %+v", orders)
+	}
+}
+
+func TestAsegurarTareaReplanAutonomiaSignalCreaFrenteParaSupervisor(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	policy := &db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app sin intervención humana",
+		DefinitionOfDoneJSON: `{"tests":"green"}`,
+		SupervisorAgente:     "CodexSupervisor",
+	}
+	proyecto, err := db.GetProyecto(strconv.FormatInt(proyectoID, 10))
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	supervisor := &db.Agente{Nombre: "CodexSupervisor", Rol: "admin"}
+	item := &db.RuntimeTranscriptEntry{
+		ID:             77,
+		ProyectoID:     &proyectoID,
+		Agente:         "CodexWorker",
+		Classification: "needs_replan",
+		Text:           "No tengo claro el siguiente paso útil",
+	}
+
+	note, err := asegurarTareaReplanAutonomiaSignal(item, policy, proyecto, supervisor)
+	if err != nil {
+		t.Fatalf("asegurarTareaReplanAutonomiaSignal: %v", err)
+	}
+	if !strings.HasPrefix(note, "replan_task_created:") {
+		t.Fatalf("nota inesperada: %s", note)
+	}
+	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas: %v", err)
+	}
+	if len(tareas) != 1 {
+		t.Fatalf("debería crear exactamente una tarea de replan, tareas=%+v", tareas)
+	}
+	if tareas[0].Titulo != autonomiaReplanTaskTitle {
+		t.Fatalf("título de replan inesperado: %+v", tareas[0])
+	}
+	if tareas[0].Estado != db.TareaEnProgreso {
+		t.Fatalf("la tarea de replan debería arrancarse para el supervisor, tarea=%+v", tareas[0])
+	}
+	if tareas[0].Agente == nil || *tareas[0].Agente != "CodexSupervisor" {
+		t.Fatalf("la tarea de replan debería quedar en el supervisor, tarea=%+v", tareas[0])
+	}
+}
+
+func TestAsegurarSolicitudMergeDesdeGateAprobadoCreaSolicitud(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Cerrar review",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	worktree, err := db.CoordinationWorktreeSQLRepository{}.Create(&coordinacion.Worktree{
+		ProjectID: proyectoID,
+		TaskID:    &tareaID,
+		Agent:     "CodexReviewer",
+		Name:      "orquestador-codexreviewer-t1",
+		Path:      filepath.Join(tmp, "wt-review-merge"),
+		Branch:    "orq/orquestador/CodexReviewer/t1",
+		BaseRef:   "master",
+		State:     coordinacion.WorktreeActive,
+		Reason:    "review_merge",
+	})
+	if err != nil {
+		t.Fatalf("crear worktree: %v", err)
+	}
+	proyecto, err := db.GetProyecto(strconv.FormatInt(proyectoID, 10))
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	gate := &reviewapp.Gate{
+		ID:             91,
+		ProyectoID:     proyectoID,
+		ProyectoSlug:   proyecto.Slug,
+		TareaID:        &tareaID,
+		WorktreeID:     &worktree.ID,
+		ReviewerAgente: "CodexReviewer",
+		Estado:         reviewapp.GateStateApproved,
+	}
+
+	created, err := asegurarSolicitudMergeDesdeGateAprobado(proyecto, gate)
+	if err != nil {
+		t.Fatalf("asegurarSolicitudMergeDesdeGateAprobado: %v", err)
+	}
+	if !created {
+		t.Fatal("debería crear una solicitud de merge para un gate aprobado con worktree válido")
+	}
+	merges, err := db.ListarGitMerges(&proyectoID, "")
+	if err != nil {
+		t.Fatalf("listar merges: %v", err)
+	}
+	if len(merges) != 1 {
+		t.Fatalf("debería crear exactamente una solicitud de merge, merges=%+v", merges)
+	}
+	if merges[0].SourceBranch != worktree.Branch || merges[0].TargetBranch != "master" || merges[0].Estado != "aprobado" {
+		t.Fatalf("solicitud de merge inesperada: %+v", merges[0])
+	}
+	if !strings.Contains(merges[0].MetadataJSON, `"source":"review_gate_approved"`) {
+		t.Fatalf("metadata de merge inesperada: %s", merges[0].MetadataJSON)
 	}
 }
 

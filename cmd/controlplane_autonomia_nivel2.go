@@ -14,6 +14,7 @@ import (
 	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/fabricaapp"
+	"orquesta/gitgobernanza"
 	"orquesta/reviewapp"
 	"orquesta/supervisionapp"
 	"orquesta/tareasapp"
@@ -459,6 +460,65 @@ func seleccionarWorktreeReviewProyecto(proyectoID int64, tareaID *int64) (*int64
 	return &id, nil
 }
 
+func asegurarSolicitudMergeDesdeGateAprobado(proyecto *db.Proyecto, gate *reviewapp.Gate) (bool, error) {
+	if proyecto == nil || gate == nil || gate.WorktreeID == nil || *gate.WorktreeID <= 0 {
+		return false, nil
+	}
+	svc := gitgobernanza.NewService(gitgobernanza.Repository{})
+	worktree, err := svc.GetWorktree(*gate.WorktreeID)
+	if err != nil || worktree == nil {
+		return false, err
+	}
+	sourceBranch := strings.TrimSpace(worktree.Branch)
+	if sourceBranch == "" {
+		return false, nil
+	}
+	targetBranch := strings.TrimSpace(worktree.BaseRef)
+	if targetBranch == "" {
+		targetBranch = "main"
+	}
+	existing, err := svc.ListRequests(proyecto.Slug, "")
+	if err != nil {
+		return false, err
+	}
+	for _, item := range existing {
+		if item == nil {
+			continue
+		}
+		if strings.TrimSpace(item.SourceBranch) != sourceBranch || strings.TrimSpace(item.TargetBranch) != targetBranch {
+			continue
+		}
+		switch strings.TrimSpace(item.Estado) {
+		case "rechazado", "cancelado", "fallido":
+			continue
+		default:
+			return false, nil
+		}
+	}
+	metadataJSON, err := json.Marshal(map[string]any{
+		"auto_created": true,
+		"source":       "review_gate_approved",
+		"review_gate":  gate.ID,
+		"worktree_id":  gate.WorktreeID,
+		"tarea_id":     gate.TareaID,
+	})
+	if err != nil {
+		return false, err
+	}
+	if _, err := svc.SaveRequest(gitgobernanza.SaveMergeRequestInput{
+		ProyectoSlug: proyecto.Slug,
+		SourceBranch: sourceBranch,
+		TargetBranch: targetBranch,
+		RequestedBy:  valorConFallback(strings.TrimSpace(gate.ReviewerAgente), "orquesta"),
+		Estado:       "aprobado",
+		Notas:        fmt.Sprintf("Solicitud creada automáticamente tras aprobar review gate #%d.", gate.ID),
+		MetadataJSON: string(metadataJSON),
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func construirDescripcionTareaSemillaAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto) string {
 	partes := []string{
 		"Tarea semilla creada automáticamente por Orquesta porque el proyecto autónomo no tenía ningún frente abierto.",
@@ -510,6 +570,10 @@ func procesarReviewGatesBatch() (int, error) {
 			return total, err
 		}
 		if approved := latestApprovedGate(gates); approved != nil {
+			mergeCreated, err := asegurarSolicitudMergeDesdeGateAprobado(proyecto, approved)
+			if err != nil {
+				return total, err
+			}
 			when := now
 			if approved.ResolvedAt != nil {
 				when = approved.ResolvedAt.UTC()
@@ -523,6 +587,9 @@ func procesarReviewGatesBatch() (int, error) {
 				if err := persistirEstadoProyectoAutonomia(policy, db.AutonomiaProyectoActiva); err != nil {
 					return total, err
 				}
+			}
+			if mergeCreated {
+				total++
 			}
 			continue
 		}
