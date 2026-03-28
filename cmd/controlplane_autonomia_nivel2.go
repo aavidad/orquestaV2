@@ -367,6 +367,98 @@ func proyectoTieneDirAutonomia(proyecto *db.Proyecto, names ...string) bool {
 	return false
 }
 
+func resolverContextoReviewProyecto(proyectoID int64) (*int64, *int64, error) {
+	if proyectoID <= 0 {
+		return nil, nil, nil
+	}
+	tareaID, err := seleccionarTareaReviewProyecto(proyectoID)
+	if err != nil {
+		return nil, nil, err
+	}
+	worktreeID, err := seleccionarWorktreeReviewProyecto(proyectoID, tareaID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return tareaID, worktreeID, nil
+}
+
+func seleccionarTareaReviewProyecto(proyectoID int64) (*int64, error) {
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		return nil, err
+	}
+	var seleccion *db.Tarea
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		if !tareaAptaParaReview(tarea) {
+			continue
+		}
+		if seleccion == nil || prioridadTareaReview(tarea) > prioridadTareaReview(seleccion) || (prioridadTareaReview(tarea) == prioridadTareaReview(seleccion) && tarea.ID > seleccion.ID) {
+			seleccion = tarea
+		}
+	}
+	if seleccion == nil {
+		return nil, nil
+	}
+	return &seleccion.ID, nil
+}
+
+func tareaAptaParaReview(tarea *db.Tarea) bool {
+	if tarea == nil {
+		return false
+	}
+	switch tarea.Estado {
+	case db.TareaCompletada, db.TareaEnProgreso, db.TareaAsignada:
+		return true
+	default:
+		return false
+	}
+}
+
+func prioridadTareaReview(tarea *db.Tarea) int {
+	if tarea == nil {
+		return 0
+	}
+	switch tarea.Estado {
+	case db.TareaCompletada:
+		return 3
+	case db.TareaEnProgreso:
+		return 2
+	case db.TareaAsignada:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func seleccionarWorktreeReviewProyecto(proyectoID int64, tareaID *int64) (*int64, error) {
+	state := coordinacion.WorktreeActive
+	worktrees, err := db.ListarWorktreesCoord(coordinacion.WorktreeFilter{ProjectID: &proyectoID, State: &state})
+	if err != nil {
+		return nil, err
+	}
+	var fallback *coordinacion.Worktree
+	for _, worktree := range worktrees {
+		if worktree == nil {
+			continue
+		}
+		if fallback == nil || worktree.ID > fallback.ID {
+			fallback = worktree
+		}
+		if tareaID != nil && worktree.TaskID != nil && *worktree.TaskID == *tareaID {
+			id := worktree.ID
+			return &id, nil
+		}
+	}
+	if fallback == nil {
+		return nil, nil
+	}
+	id := fallback.ID
+	return &id, nil
+}
+
 func construirDescripcionTareaSemillaAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto) string {
 	partes := []string{
 		"Tarea semilla creada automáticamente por Orquesta porque el proyecto autónomo no tenía ningún frente abierto.",
@@ -521,10 +613,16 @@ func procesarReviewGatesBatch() (int, error) {
 		if reviewer == nil {
 			continue
 		}
+		reviewTaskID, reviewWorktreeID, err := resolverContextoReviewProyecto(proyecto.ID)
+		if err != nil {
+			return total, err
+		}
 		gate := firstOpenGate(gates)
 		if gate == nil {
 			created, err := reviewService.Create(reviewapp.CreateGateInput{
 				ProyectoRef:     proyecto.Slug,
+				TareaID:         reviewTaskID,
+				WorktreeID:      reviewWorktreeID,
 				RequestedBy:     "orquesta",
 				ReviewerAgente:  reviewer.Nombre,
 				SeverityMax:     "high",
@@ -535,9 +633,19 @@ func procesarReviewGatesBatch() (int, error) {
 			}
 			gate = created
 			total++
-		} else if strings.TrimSpace(gate.ReviewerAgente) == "" {
+		} else if strings.TrimSpace(gate.ReviewerAgente) == "" || gate.TareaID == nil || gate.WorktreeID == nil {
 			reviewerNombre := reviewer.Nombre
-			updated, err := reviewService.Update(reviewapp.UpdateGateInput{ID: gate.ID, ReviewerAgente: &reviewerNombre})
+			update := reviewapp.UpdateGateInput{ID: gate.ID}
+			if strings.TrimSpace(gate.ReviewerAgente) == "" {
+				update.ReviewerAgente = &reviewerNombre
+			}
+			if gate.TareaID == nil {
+				update.TareaID = reviewTaskID
+			}
+			if gate.WorktreeID == nil {
+				update.WorktreeID = reviewWorktreeID
+			}
+			updated, err := reviewService.Update(update)
 			if err != nil {
 				return total, err
 			}
