@@ -32,6 +32,26 @@ var proyectoFabricarAppCmd = &cobra.Command{
 		i18nEnabled, _ := cmd.Flags().GetBool("i18n")
 		idiomasRaw, _ := cmd.Flags().GetString("idiomas")
 		actor, _ := cmd.Flags().GetString("por")
+		platWeb, _ := cmd.Flags().GetBool("plat-web")
+		platDesktop, _ := cmd.Flags().GetBool("plat-desktop")
+		platMobile, _ := cmd.Flags().GetBool("plat-mobile")
+		platCLI, _ := cmd.Flags().GetBool("plat-cli")
+		platEmbedded, _ := cmd.Flags().GetBool("plat-embedded")
+		soLinux, _ := cmd.Flags().GetBool("so-linux")
+		soWindows, _ := cmd.Flags().GetBool("so-windows")
+		soMacOS, _ := cmd.Flags().GetBool("so-macos")
+		soAndroid, _ := cmd.Flags().GetBool("so-android")
+		soIOS, _ := cmd.Flags().GetBool("so-ios")
+		cRGPD, _ := cmd.Flags().GetBool("compliance-rgpd")
+		cENS, _ := cmd.Flags().GetBool("compliance-ens")
+		cLSSI, _ := cmd.Flags().GetBool("compliance-lssi")
+		cWCAG, _ := cmd.Flags().GetBool("compliance-wcag")
+		cFactura, _ := cmd.Flags().GetBool("compliance-factura-elec")
+		cReutil, _ := cmd.Flags().GetBool("compliance-reutilizacion")
+		ci, _ := cmd.Flags().GetBool("ci")
+		kubernetes, _ := cmd.Flags().GetBool("kubernetes")
+		terraform, _ := cmd.Flags().GetBool("terraform")
+		monitoring, _ := cmd.Flags().GetBool("monitoring")
 		if strings.TrimSpace(tipo) == "" {
 			return fmt.Errorf("--tipo es obligatorio")
 		}
@@ -48,6 +68,30 @@ var proyectoFabricarAppCmd = &cobra.Command{
 			I18n:        i18nEnabled,
 			Idiomas:     splitCSV(idiomasRaw),
 			Por:         strings.TrimSpace(actor),
+
+			PlatWeb:      platWeb,
+			PlatDesktop:  platDesktop,
+			PlatMobile:   platMobile,
+			PlatCLI:      platCLI,
+			PlatEmbedded: platEmbedded,
+
+			SOLinux:   soLinux,
+			SOWindows: soWindows,
+			SOmacOS:   soMacOS,
+			SOAndroid: soAndroid,
+			SOiOS:     soIOS,
+
+			ComplianceRGPD:          cRGPD,
+			ComplianceENS:           cENS,
+			ComplianceLSSI:          cLSSI,
+			ComplianceWCAG:          cWCAG,
+			ComplianceFacturaElec:   cFactura,
+			ComplianceReutilizacion: cReutil,
+
+			CI:         ci,
+			Kubernetes: kubernetes,
+			Terraform:  terraform,
+			Monitoring: monitoring,
 		}); err != nil {
 			return err
 		} else if ok {
@@ -77,7 +121,7 @@ func splitCSV(raw string) []string {
 }
 
 func init() {
-	proyectoFabricarAppCmd.Flags().String("tipo", "", "Tipo de app: web, api, web_api o cli")
+	proyectoFabricarAppCmd.Flags().String("tipo", "", "Tipo de app: web, api, web_api, cli, desktop, mobile, embedded")
 	proyectoFabricarAppCmd.Flags().String("nombre", "", "Nombre funcional de la app")
 	proyectoFabricarAppCmd.Flags().String("descripcion", "", "Resumen funcional para construir el backlog")
 	proyectoFabricarAppCmd.Flags().Bool("frontend", false, "Forzar tarea de frontend")
@@ -88,5 +132,29 @@ func init() {
 	proyectoFabricarAppCmd.Flags().Bool("i18n", true, "Incluir i18n y paquete inicial de idiomas")
 	proyectoFabricarAppCmd.Flags().String("idiomas", "es,en", "Lista CSV de idiomas iniciales")
 	proyectoFabricarAppCmd.Flags().String("por", "alberto", "Actor que genera el backlog")
+	// Plataformas
+	proyectoFabricarAppCmd.Flags().Bool("plat-web", false, "Plataforma: web (navegador)")
+	proyectoFabricarAppCmd.Flags().Bool("plat-desktop", false, "Plataforma: escritorio (Electron, Tauri, Qt…)")
+	proyectoFabricarAppCmd.Flags().Bool("plat-mobile", false, "Plataforma: móvil (Android/iOS)")
+	proyectoFabricarAppCmd.Flags().Bool("plat-cli", false, "Plataforma: línea de comandos")
+	proyectoFabricarAppCmd.Flags().Bool("plat-embedded", false, "Plataforma: embebido / IoT")
+	// Sistemas operativos
+	proyectoFabricarAppCmd.Flags().Bool("so-linux", false, "SO objetivo: Linux")
+	proyectoFabricarAppCmd.Flags().Bool("so-windows", false, "SO objetivo: Windows")
+	proyectoFabricarAppCmd.Flags().Bool("so-macos", false, "SO objetivo: macOS")
+	proyectoFabricarAppCmd.Flags().Bool("so-android", false, "SO objetivo: Android")
+	proyectoFabricarAppCmd.Flags().Bool("so-ios", false, "SO objetivo: iOS")
+	// Compliance
+	proyectoFabricarAppCmd.Flags().Bool("compliance-rgpd", false, "Cumplimiento RGPD (UE 2016/679)")
+	proyectoFabricarAppCmd.Flags().Bool("compliance-ens", false, "Esquema Nacional de Seguridad (RD 311/2022)")
+	proyectoFabricarAppCmd.Flags().Bool("compliance-lssi", false, "Ley de Servicios de la Sociedad de la Información")
+	proyectoFabricarAppCmd.Flags().Bool("compliance-wcag", false, "Accesibilidad WCAG 2.1 AA (RD 1112/2018)")
+	proyectoFabricarAppCmd.Flags().Bool("compliance-factura-elec", false, "Facturación electrónica (Ley Crea y Crece)")
+	proyectoFabricarAppCmd.Flags().Bool("compliance-reutilizacion", false, "Reutilización información pública (Ley 37/2007)")
+	// Infraestructura
+	proyectoFabricarAppCmd.Flags().Bool("ci", false, "Pipeline CI/CD")
+	proyectoFabricarAppCmd.Flags().Bool("kubernetes", false, "Orquestación Kubernetes")
+	proyectoFabricarAppCmd.Flags().Bool("terraform", false, "Infraestructura como código (Terraform)")
+	proyectoFabricarAppCmd.Flags().Bool("monitoring", false, "Observabilidad (métricas, trazas, logs)")
 	proyectoCmd.AddCommand(proyectoFabricarAppCmd)
 }

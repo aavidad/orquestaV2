@@ -76,6 +76,11 @@ type apiProyectoDocumentoCreateRequest struct {
 	MetadataJSON  string `json:"metadata_json"`
 }
 
+type apiProyectoFusionRequest struct {
+	Origen         string `json:"origen"`
+	ArchivarOrigen bool   `json:"archivar_origen"`
+}
+
 type apiProyectoAutonomiaSaveRequest struct {
 	Enabled              bool   `json:"enabled"`
 	ObjetivoGeneral      string `json:"objetivo_general"`
@@ -1499,6 +1504,8 @@ func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {
 		apiHandlerProyectoActualizar(w, r, ref)
 	case len(parts) == 2 && parts[1] == "overview" && r.Method == http.MethodGet:
 		apiHandlerProyectoOverview(w, r, ref)
+	case len(parts) == 2 && parts[1] == "fusionar" && r.Method == http.MethodPost:
+		apiHandlerProyectoFusionar(w, r, ref)
 	case len(parts) == 2 && parts[1] == "decisiones" && r.Method == http.MethodPost:
 		apiHandlerProyectoDecisionNueva(w, r, ref)
 	case len(parts) == 2 && parts[1] == "documentacion" && r.Method == http.MethodPost:
@@ -1515,6 +1522,8 @@ func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {
 		apiHandlerProyectoAutonomiaCiclos(w, r, ref)
 	case len(parts) == 2 && parts[1] == "fabricar-app" && r.Method == http.MethodPost:
 		apiHandlerProyectoFabricarApp(w, r, ref)
+	case len(parts) == 3 && parts[1] == "fabricar-app" && parts[2] == "preview" && r.Method == http.MethodPost:
+		apiHandlerProyectoFabricarAppPreview(w, r, ref)
 	default:
 		http.NotFound(w, r)
 	}
@@ -1560,6 +1569,22 @@ func apiHandlerProyectoActualizar(w http.ResponseWriter, r *http.Request, ref st
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{"proyecto": recargado})
+}
+
+func apiHandlerProyectoFusionar(w http.ResponseWriter, r *http.Request, ref string) {
+	var req apiProyectoFusionRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	resultado, err := db.FusionarProyectos(strings.TrimSpace(req.Origen), strings.TrimSpace(ref), db.FusionProyectosOptions{
+		ArchivarOrigen: req.ArchivarOrigen,
+	})
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiProyectoFusionResponse{Resultado: resultado})
 }
 
 func apiHandlerProyectoOverview(w http.ResponseWriter, r *http.Request, ref string) {
@@ -1663,6 +1688,30 @@ func apiHandlerProyectoFabricarApp(w http.ResponseWriter, r *http.Request, ref s
 		Docker:      req.Docker,
 		I18n:        req.I18n,
 		Idiomas:     req.Idiomas,
+
+		PlatWeb:      req.PlatWeb,
+		PlatDesktop:  req.PlatDesktop,
+		PlatMobile:   req.PlatMobile,
+		PlatCLI:      req.PlatCLI,
+		PlatEmbedded: req.PlatEmbedded,
+
+		SOLinux:   req.SOLinux,
+		SOWindows: req.SOWindows,
+		SOmacOS:   req.SOmacOS,
+		SOAndroid: req.SOAndroid,
+		SOiOS:     req.SOiOS,
+
+		ComplianceRGPD:          req.ComplianceRGPD,
+		ComplianceENS:           req.ComplianceENS,
+		ComplianceLSSI:          req.ComplianceLSSI,
+		ComplianceWCAG:          req.ComplianceWCAG,
+		ComplianceFacturaElec:   req.ComplianceFacturaElec,
+		ComplianceReutilizacion: req.ComplianceReutilizacion,
+
+		CI:         req.CI,
+		Kubernetes: req.Kubernetes,
+		Terraform:  req.Terraform,
+		Monitoring: req.Monitoring,
 	})
 	if err != nil {
 		apiError(w, http.StatusBadRequest, err)
@@ -1679,6 +1728,75 @@ func apiHandlerProyectoFabricarApp(w http.ResponseWriter, r *http.Request, ref s
 		Tipo:    strings.TrimSpace(req.Tipo),
 		Created: result.Created,
 		Backlog: result.Backlog,
+	})
+}
+
+func apiHandlerProyectoFabricarAppPreview(w http.ResponseWriter, r *http.Request, ref string) {
+	proyecto, err := db.GetProyecto(strings.TrimSpace(ref))
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	var req apiProyectoFabricarAppRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	if strings.TrimSpace(req.Tipo) == "" {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("--tipo es obligatorio"))
+		return
+	}
+	nombre := strings.TrimSpace(req.Nombre)
+	if nombre == "" {
+		nombre = strings.TrimSpace(proyecto.Nombre)
+	}
+	descripcion := strings.TrimSpace(req.Descripcion)
+	if descripcion == "" {
+		descripcion = "Preview de backlog de " + nombre + "."
+	}
+	plan, err := newProjectAppFactory().Generate(fabricaapp.AppSpec{
+		Nombre:      nombre,
+		Descripcion: descripcion,
+		Tipo:        strings.TrimSpace(req.Tipo),
+		Frontend:    req.Frontend,
+		API:         req.API,
+		Auth:        req.Auth,
+		Database:    req.Database,
+		Docker:      req.Docker,
+		I18n:        req.I18n,
+		Idiomas:     req.Idiomas,
+
+		PlatWeb:      req.PlatWeb,
+		PlatDesktop:  req.PlatDesktop,
+		PlatMobile:   req.PlatMobile,
+		PlatCLI:      req.PlatCLI,
+		PlatEmbedded: req.PlatEmbedded,
+
+		SOLinux:   req.SOLinux,
+		SOWindows: req.SOWindows,
+		SOmacOS:   req.SOmacOS,
+		SOAndroid: req.SOAndroid,
+		SOiOS:     req.SOiOS,
+
+		ComplianceRGPD:          req.ComplianceRGPD,
+		ComplianceENS:           req.ComplianceENS,
+		ComplianceLSSI:          req.ComplianceLSSI,
+		ComplianceWCAG:          req.ComplianceWCAG,
+		ComplianceFacturaElec:   req.ComplianceFacturaElec,
+		ComplianceReutilizacion: req.ComplianceReutilizacion,
+
+		CI:         req.CI,
+		Kubernetes: req.Kubernetes,
+		Terraform:  req.Terraform,
+		Monitoring: req.Monitoring,
+	})
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiProyectoFabricarAppPreviewResponse{
+		OK:    true,
+		Tasks: plan.Tasks,
 	})
 }
 

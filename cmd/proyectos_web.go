@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	"orquesta/db"
-	"orquesta/fabricaapp"
 	"orquesta/memoriaproyecto"
 	"orquesta/reviewapp"
 )
@@ -261,7 +260,11 @@ func webHandlerProyectoFabricarApp(w http.ResponseWriter, r *http.Request, slug 
 		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
-	spec := fabricaapp.AppSpec{
+	actor := strings.TrimSpace(r.FormValue("por"))
+	if actor == "" {
+		actor = "web"
+	}
+	if _, err := webFabricarAppProyectoPorAPI(slug, apiProyectoFabricarAppRequest{
 		Nombre:      strings.TrimSpace(r.FormValue("nombre")),
 		Descripcion: strings.TrimSpace(r.FormValue("descripcion")),
 		Tipo:        strings.TrimSpace(r.FormValue("tipo")),
@@ -272,23 +275,31 @@ func webHandlerProyectoFabricarApp(w http.ResponseWriter, r *http.Request, slug 
 		Docker:      webFormBool(r, "docker"),
 		I18n:        webFormBool(r, "i18n"),
 		Idiomas:     splitCSV(strings.TrimSpace(r.FormValue("idiomas"))),
-	}
-	actor := strings.TrimSpace(r.FormValue("por"))
-	if actor == "" {
-		actor = "web"
-	}
-	if _, err := webFabricarAppProyectoPorAPI(slug, apiProyectoFabricarAppRequest{
-		Nombre:      spec.Nombre,
-		Descripcion: spec.Descripcion,
-		Tipo:        spec.Tipo,
-		Frontend:    spec.Frontend,
-		API:         spec.API,
-		Auth:        spec.Auth,
-		Database:    spec.Database,
-		Docker:      spec.Docker,
-		I18n:        spec.I18n,
-		Idiomas:     spec.Idiomas,
 		Por:         actor,
+
+		PlatWeb:      webFormBool(r, "plat_web"),
+		PlatDesktop:  webFormBool(r, "plat_desktop"),
+		PlatMobile:   webFormBool(r, "plat_mobile"),
+		PlatCLI:      webFormBool(r, "plat_cli"),
+		PlatEmbedded: webFormBool(r, "plat_embedded"),
+
+		SOLinux:   webFormBool(r, "so_linux"),
+		SOWindows: webFormBool(r, "so_windows"),
+		SOmacOS:   webFormBool(r, "so_macos"),
+		SOAndroid: webFormBool(r, "so_android"),
+		SOiOS:     webFormBool(r, "so_ios"),
+
+		ComplianceRGPD:          webFormBool(r, "compliance_rgpd"),
+		ComplianceENS:           webFormBool(r, "compliance_ens"),
+		ComplianceLSSI:          webFormBool(r, "compliance_lssi"),
+		ComplianceWCAG:          webFormBool(r, "compliance_wcag"),
+		ComplianceFacturaElec:   webFormBool(r, "compliance_factura_elec"),
+		ComplianceReutilizacion: webFormBool(r, "compliance_reutilizacion"),
+
+		CI:         webFormBool(r, "ci"),
+		Kubernetes: webFormBool(r, "kubernetes"),
+		Terraform:  webFormBool(r, "terraform"),
+		Monitoring: webFormBool(r, "monitoring"),
 	}); err != nil {
 		http.Redirect(w, r, "/proyectos/"+slug+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
@@ -535,32 +546,267 @@ const webTplProyectoDetalle = `{{define "content"}}
     </div>
   </article>
 
-  <article>
+  <article id="factory-wizard">
     <h3>{{tr "projects.factory.title"}}</h3>
-    <form method="post" action="/proyectos/{{.Proyecto.Slug}}/fabricar-app">
-      <label>{{tr "projects.factory.type"}}
-        <select name="tipo" required>
-          <option value="web_api">web_api</option>
-          <option value="web">web</option>
-          <option value="api">api</option>
-          <option value="cli">cli</option>
-        </select>
-      </label>
+    <p style="font-size:.85rem;color:var(--pico-muted-color)">{{tr "projects.factory.fixed_note"}}</p>
+
+    <label>{{tr "projects.factory.preset"}}
+      <select id="factory-preset" onchange="factoryApplyPreset(this.value)">
+        <option value="">{{tr "projects.factory.preset.none"}}</option>
+        <option value="web-publica">{{tr "projects.factory.preset.web_publica"}}</option>
+        <option value="api-interna">{{tr "projects.factory.preset.api_interna"}}</option>
+        <option value="cli-devops">{{tr "projects.factory.preset.cli_devops"}}</option>
+        <option value="app-movil">{{tr "projects.factory.preset.app_movil"}}</option>
+        <option value="embedded">{{tr "projects.factory.preset.embedded"}}</option>
+      </select>
+    </label>
+
+    <form id="factory-form" method="post" action="/proyectos/{{.Proyecto.Slug}}/fabricar-app">
       <label>{{tr "projects.factory.name"}} <input name="nombre" value="{{.Proyecto.Nombre}}" required></label>
       <label>{{tr "projects.factory.description"}} <textarea name="descripcion"></textarea></label>
-      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem">
-        <label><input type="checkbox" name="frontend" value="1" checked> {{tr "projects.factory.frontend"}}</label>
-        <label><input type="checkbox" name="api" value="1" checked> {{tr "projects.factory.api"}}</label>
-        <label><input type="checkbox" name="auth" value="1"> {{tr "projects.factory.auth"}}</label>
-        <label><input type="checkbox" name="db" value="1"> {{tr "projects.factory.db"}}</label>
-        <label><input type="checkbox" name="docker" value="1" checked> {{tr "projects.factory.docker"}}</label>
-        <label><input type="checkbox" name="i18n" value="1" checked> {{tr "projects.factory.i18n"}}</label>
-      </div>
-      <label>{{tr "projects.factory.languages"}} <input name="idiomas" value="es,en"></label>
+
+      <label>{{tr "projects.factory.type"}}
+        <select name="tipo" id="factory-tipo" required>
+          <option value="web_api">web_api — {{tr "projects.factory.type.web_api"}}</option>
+          <option value="web">web — {{tr "projects.factory.type.web"}}</option>
+          <option value="api">api — {{tr "projects.factory.type.api"}}</option>
+          <option value="cli">cli — {{tr "projects.factory.type.cli"}}</option>
+          <option value="desktop">desktop — {{tr "projects.factory.type.desktop"}}</option>
+          <option value="mobile">mobile — {{tr "projects.factory.type.mobile"}}</option>
+          <option value="embedded">embedded — {{tr "projects.factory.type.embedded"}}</option>
+        </select>
+      </label>
+
+      <fieldset>
+        <legend>{{tr "projects.factory.section.components"}}</legend>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem">
+          <label><input type="checkbox" name="frontend" value="1" checked> {{tr "projects.factory.frontend"}}</label>
+          <label><input type="checkbox" name="api" value="1" checked> {{tr "projects.factory.api"}}</label>
+          <label><input type="checkbox" name="auth" value="1"> {{tr "projects.factory.auth"}}</label>
+          <label><input type="checkbox" name="db" value="1"> {{tr "projects.factory.db"}}</label>
+          <label><input type="checkbox" name="docker" id="cb-docker" value="1" checked> {{tr "projects.factory.docker"}}</label>
+          <label><input type="checkbox" name="i18n" value="1" checked> {{tr "projects.factory.i18n"}}</label>
+        </div>
+        <label style="margin-top:.5rem">{{tr "projects.factory.languages"}} <input name="idiomas" value="es,en"></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>{{tr "projects.factory.section.platforms"}}</legend>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem">
+          <label><input type="checkbox" name="plat_web" id="cb-plat-web" value="1"> {{tr "projects.factory.plat_web"}}</label>
+          <label><input type="checkbox" name="plat_desktop" id="cb-plat-desktop" value="1"> {{tr "projects.factory.plat_desktop"}}</label>
+          <label><input type="checkbox" name="plat_mobile" id="cb-plat-mobile" value="1"> {{tr "projects.factory.plat_mobile"}}</label>
+          <label><input type="checkbox" name="plat_cli" id="cb-plat-cli" value="1"> {{tr "projects.factory.plat_cli"}}</label>
+          <label><input type="checkbox" name="plat_embedded" id="cb-plat-embedded" value="1"> {{tr "projects.factory.plat_embedded"}}</label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>{{tr "projects.factory.section.os"}}</legend>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem">
+          <label><input type="checkbox" name="so_linux" id="cb-so-linux" value="1"> Linux</label>
+          <label><input type="checkbox" name="so_windows" id="cb-so-windows" value="1"> Windows</label>
+          <label><input type="checkbox" name="so_macos" id="cb-so-macos" value="1"> macOS</label>
+          <label><input type="checkbox" name="so_android" id="cb-so-android" value="1"> Android</label>
+          <label><input type="checkbox" name="so_ios" id="cb-so-ios" value="1"> iOS</label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>{{tr "projects.factory.section.compliance"}}</legend>
+        <p style="font-size:.8rem;color:var(--pico-muted-color)">{{tr "projects.factory.compliance_note"}}</p>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem">
+          <div>
+            <label><input type="checkbox" name="compliance_rgpd" value="1"> RGPD</label>
+            <small style="display:block;color:var(--pico-muted-color);font-size:.75rem;margin-left:1.4rem">{{tr "projects.factory.compliance_rgpd_help"}}</small>
+          </div>
+          <div>
+            <label><input type="checkbox" name="compliance_ens" value="1"> ENS</label>
+            <small style="display:block;color:var(--pico-muted-color);font-size:.75rem;margin-left:1.4rem">{{tr "projects.factory.compliance_ens_help"}}</small>
+          </div>
+          <div>
+            <label><input type="checkbox" name="compliance_lssi" value="1"> LSSI</label>
+            <small style="display:block;color:var(--pico-muted-color);font-size:.75rem;margin-left:1.4rem">{{tr "projects.factory.compliance_lssi_help"}}</small>
+          </div>
+          <div>
+            <label><input type="checkbox" name="compliance_wcag" value="1"> WCAG 2.1 AA</label>
+            <small style="display:block;color:var(--pico-muted-color);font-size:.75rem;margin-left:1.4rem">{{tr "projects.factory.compliance_wcag_help"}}</small>
+          </div>
+          <div>
+            <label><input type="checkbox" name="compliance_factura_elec" value="1"> {{tr "projects.factory.compliance_factura_elec"}}</label>
+            <small style="display:block;color:var(--pico-muted-color);font-size:.75rem;margin-left:1.4rem">{{tr "projects.factory.compliance_factura_elec_help"}}</small>
+          </div>
+          <div>
+            <label><input type="checkbox" name="compliance_reutilizacion" value="1"> {{tr "projects.factory.compliance_reutilizacion"}}</label>
+            <small style="display:block;color:var(--pico-muted-color);font-size:.75rem;margin-left:1.4rem">{{tr "projects.factory.compliance_reutilizacion_help"}}</small>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>{{tr "projects.factory.section.infra"}}</legend>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem">
+          <label><input type="checkbox" name="ci" value="1" checked> CI/CD — {{tr "projects.factory.ci"}}</label>
+          <label><input type="checkbox" name="kubernetes" id="cb-kubernetes" value="1"> Kubernetes — {{tr "projects.factory.kubernetes"}}</label>
+          <label><input type="checkbox" name="terraform" value="1"> Terraform — {{tr "projects.factory.terraform"}}</label>
+          <label><input type="checkbox" name="monitoring" value="1"> {{tr "projects.factory.monitoring"}}</label>
+        </div>
+      </fieldset>
+
       <label>{{tr "projects.factory.actor"}} <input name="por" value="web"></label>
-      <button type="submit">{{tr "projects.factory.submit"}}</button>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <button type="button" class="secondary" onclick="factoryPreview(this)">{{tr "projects.factory.preview_btn"}}</button>
+        <button type="submit">{{tr "projects.factory.submit"}}</button>
+      </div>
     </form>
+
+    <div id="factory-preview-result" style="display:none;margin-top:1rem">
+      <h4>{{tr "projects.factory.preview_title"}} (<span id="factory-preview-count">0</span>)</h4>
+      <table style="font-size:.8rem">
+        <thead><tr><th>Key</th><th>{{tr "projects.factory.preview_col_title"}}</th><th>{{tr "projects.factory.preview_col_phase"}}</th><th>{{tr "projects.factory.preview_col_module"}}</th></tr></thead>
+        <tbody id="factory-preview-tbody"></tbody>
+      </table>
+    </div>
   </article>
+
+  <script>
+  (function(){
+    // ── Dependencias automáticas entre checkboxes ────────────────────────
+    function cb(id){ return document.getElementById(id); }
+
+    function syncDeps(src, targets, checked){
+      targets.forEach(function(id){
+        var el = cb(id);
+        if(el && checked) el.checked = true;
+        // solo desmarcar si ninguna otra plataforma los requiere
+        if(el && !checked) {
+          var stillNeeded = false;
+          depRules.forEach(function(r){
+            if(r.targets.indexOf(id) !== -1 && r.src !== src){
+              var srcEl = cb(r.src);
+              if(srcEl && srcEl.checked) stillNeeded = true;
+            }
+          });
+          if(!stillNeeded) el.checked = false;
+        }
+      });
+    }
+
+    var depRules = [
+      {src:'cb-plat-mobile',   targets:['cb-so-android','cb-so-ios']},
+      {src:'cb-plat-desktop',  targets:['cb-so-linux','cb-so-windows','cb-so-macos']},
+      {src:'cb-plat-embedded', targets:['cb-so-linux']},
+      {src:'cb-plat-cli',      targets:['cb-so-linux']},
+      {src:'cb-kubernetes',    targets:['cb-docker']},
+    ];
+
+    depRules.forEach(function(rule){
+      var el = cb(rule.src);
+      if(!el) return;
+      el.addEventListener('change', function(){
+        syncDeps(rule.src, rule.targets, this.checked);
+      });
+    });
+
+    // ── Presets ───────────────────────────────────────────────────────────
+    var PRESETS = {
+      'web-publica': {
+        tipo:'web_api',
+        checks:{frontend:1,api:1,auth:1,db:1,docker:1,i18n:1,ci:1,
+                'plat_web':1,'compliance_rgpd':1,'compliance_lssi':1,'compliance_wcag':1}
+      },
+      'api-interna': {
+        tipo:'api',
+        checks:{api:1,auth:1,db:1,docker:1,ci:1,'plat_web':1}
+      },
+      'cli-devops': {
+        tipo:'cli',
+        checks:{docker:1,ci:1,terraform:1,'plat_cli':1,'so_linux':1}
+      },
+      'app-movil': {
+        tipo:'mobile',
+        checks:{auth:1,db:1,'plat_mobile':1,'so_android':1,'so_ios':1,'compliance_rgpd':1}
+      },
+      'embedded': {
+        tipo:'embedded',
+        checks:{docker:1,'plat_embedded':1,'so_linux':1}
+      }
+    };
+
+    window.factoryApplyPreset = function(key){
+      if(!key) return;
+      var preset = PRESETS[key];
+      if(!preset) return;
+      // reset all checkboxes in the form
+      var form = document.getElementById('factory-form');
+      form.querySelectorAll('input[type=checkbox]').forEach(function(el){
+        el.checked = false;
+      });
+      // set tipo
+      var tipoEl = document.getElementById('factory-tipo');
+      if(tipoEl) tipoEl.value = preset.tipo;
+      // set checkboxes
+      Object.keys(preset.checks).forEach(function(name){
+        var el = form.querySelector('input[name="'+name+'"]');
+        if(el) el.checked = true;
+      });
+      // reset preset selector back to blank so user can re-apply
+      document.getElementById('factory-preset').value = '';
+    };
+
+    // ── Preview ───────────────────────────────────────────────────────────
+    window.factoryPreview = function(btn){
+      var form = document.getElementById('factory-form');
+      var data = new FormData(form);
+      var obj = {};
+      data.forEach(function(v,k){ obj[k] = v; });
+      // convert checkbox booleans
+      var bools = ['frontend','api','auth','db','docker','i18n',
+                   'plat_web','plat_desktop','plat_mobile','plat_cli','plat_embedded',
+                   'so_linux','so_windows','so_macos','so_android','so_ios',
+                   'compliance_rgpd','compliance_ens','compliance_lssi','compliance_wcag',
+                   'compliance_factura_elec','compliance_reutilizacion',
+                   'ci','kubernetes','terraform','monitoring'];
+      var payload = {
+        nombre: obj['nombre']||'',
+        descripcion: obj['descripcion']||'',
+        tipo: obj['tipo']||'',
+        idiomas: (obj['idiomas']||'es,en').split(','),
+        por: obj['por']||'web'
+      };
+      bools.forEach(function(f){ payload[f] = obj[f]==='1'; });
+
+      var slug = form.action.split('/proyectos/')[1].split('/')[0];
+      btn.setAttribute('aria-busy','true');
+      btn.disabled = true;
+      fetch('/api/proyectos/'+encodeURIComponent(slug)+'/fabricar-app/preview',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        btn.removeAttribute('aria-busy');
+        btn.disabled = false;
+        if(!data.ok || !data.tasks) return;
+        var tbody = document.getElementById('factory-preview-tbody');
+        tbody.innerHTML = '';
+        data.tasks.forEach(function(t){
+          var tr = document.createElement('tr');
+          tr.innerHTML = '<td><code>'+t.Key+'</code></td><td>'+t.Titulo+'</td><td>'+t.Fase+'</td><td>'+t.Modulo+'</td>';
+          tbody.appendChild(tr);
+        });
+        document.getElementById('factory-preview-count').textContent = data.tasks.length;
+        document.getElementById('factory-preview-result').style.display = '';
+      })
+      .catch(function(e){
+        btn.removeAttribute('aria-busy');
+        btn.disabled = false;
+        alert('Error al obtener preview: '+e);
+      });
+    };
+  })();
+  </script>
 
   <article>
     <h3>{{tr "projects.decisions.title"}}</h3>
@@ -698,4 +944,327 @@ const webTplProyectoDetalle = `{{define "content"}}
     {{end}}
   </article>
 </section>
+{{end}}`
+
+// ── /nueva-app: página de wizard independiente ───────────────────────────────
+
+type webNuevaAppData struct {
+	Proyectos []webProyectoResumen
+	Preview   []previewTask
+	Msg       string
+	Err       string
+}
+
+type previewTask struct {
+	Key    string
+	Titulo string
+	Fase   string
+	Modulo string
+}
+
+func webHandlerNuevaApp(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		webHandlerNuevaAppGET(w, r)
+	case http.MethodPost:
+		webHandlerNuevaAppPOST(w, r)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func webHandlerNuevaAppGET(w http.ResponseWriter, r *http.Request) {
+	proyectos, _ := webCargarProyectosPorAPI()
+	var resumen []webProyectoResumen
+	for _, p := range proyectos {
+		resumen = append(resumen, webProyectoResumen{
+			Slug:   p.Slug,
+			Nombre: p.Nombre,
+			Tipo:   string(p.Tipo),
+			Activo: p.Activo,
+		})
+	}
+	webRender(w, r, webTplLayout+webTplNuevaApp, webNuevaAppData{
+		Proyectos: resumen,
+		Msg:       r.URL.Query().Get("ok"),
+		Err:       r.URL.Query().Get("err"),
+	})
+}
+
+func webHandlerNuevaAppPOST(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/nueva-app?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	slug := strings.TrimSpace(r.FormValue("proyecto_slug"))
+	if slug == "" {
+		http.Redirect(w, r, "/nueva-app?err="+url.QueryEscape("selecciona un proyecto"), http.StatusSeeOther)
+		return
+	}
+
+	actor := strings.TrimSpace(r.FormValue("por"))
+	if actor == "" {
+		actor = "web"
+	}
+
+	req := apiProyectoFabricarAppRequest{
+		Nombre:      strings.TrimSpace(r.FormValue("nombre")),
+		Descripcion: strings.TrimSpace(r.FormValue("descripcion")),
+		Tipo:        strings.TrimSpace(r.FormValue("tipo")),
+		Frontend:    webFormBool(r, "frontend"),
+		API:         webFormBool(r, "api"),
+		Auth:        webFormBool(r, "auth"),
+		Database:    webFormBool(r, "db"),
+		Docker:      webFormBool(r, "docker"),
+		I18n:        webFormBool(r, "i18n"),
+		Idiomas:     splitCSV(strings.TrimSpace(r.FormValue("idiomas"))),
+		Por:         actor,
+
+		PlatWeb:      webFormBool(r, "plat_web"),
+		PlatDesktop:  webFormBool(r, "plat_desktop"),
+		PlatMobile:   webFormBool(r, "plat_mobile"),
+		PlatCLI:      webFormBool(r, "plat_cli"),
+		PlatEmbedded: webFormBool(r, "plat_embedded"),
+
+		SOLinux:   webFormBool(r, "so_linux"),
+		SOWindows: webFormBool(r, "so_windows"),
+		SOmacOS:   webFormBool(r, "so_macos"),
+		SOAndroid: webFormBool(r, "so_android"),
+		SOiOS:     webFormBool(r, "so_ios"),
+
+		ComplianceRGPD:          webFormBool(r, "compliance_rgpd"),
+		ComplianceENS:           webFormBool(r, "compliance_ens"),
+		ComplianceLSSI:          webFormBool(r, "compliance_lssi"),
+		ComplianceWCAG:          webFormBool(r, "compliance_wcag"),
+		ComplianceFacturaElec:   webFormBool(r, "compliance_factura_elec"),
+		ComplianceReutilizacion: webFormBool(r, "compliance_reutilizacion"),
+
+		CI:         webFormBool(r, "ci"),
+		Kubernetes: webFormBool(r, "kubernetes"),
+		Terraform:  webFormBool(r, "terraform"),
+		Monitoring: webFormBool(r, "monitoring"),
+	}
+
+	// Preview: muestra tareas sin persistir
+	if r.URL.Query().Get("preview") == "1" {
+		var previewResp apiProyectoFabricarAppPreviewResponse
+		path := "/api/proyectos/" + url.PathEscape(slug) + "/fabricar-app/preview"
+		if err := webInvocarAPIJSON(http.MethodPost, path, req, &previewResp); err != nil {
+			http.Redirect(w, r, "/nueva-app?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+			return
+		}
+		proyectos, _ := webCargarProyectosPorAPI()
+		var resumen []webProyectoResumen
+		for _, p := range proyectos {
+			resumen = append(resumen, webProyectoResumen{Slug: p.Slug, Nombre: p.Nombre, Tipo: string(p.Tipo), Activo: p.Activo})
+		}
+		tasks := make([]previewTask, 0, len(previewResp.Tasks))
+		for _, t := range previewResp.Tasks {
+			tasks = append(tasks, previewTask{Key: t.Key, Titulo: t.Titulo, Fase: t.Fase, Modulo: t.Modulo})
+		}
+		webRender(w, r, webTplLayout+webTplNuevaApp, webNuevaAppData{Proyectos: resumen, Preview: tasks})
+		return
+	}
+
+	if _, err := webFabricarAppProyectoPorAPI(slug, req); err != nil {
+		http.Redirect(w, r, "/nueva-app?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/tareas?proyecto="+url.QueryEscape(slug)+"&ok="+url.QueryEscape(webTranslateRequestf(r, "projects.flash.factory_created")), http.StatusSeeOther)
+}
+
+const webTplNuevaApp = `{{define "content"}}
+<section class="container">
+  <h2 style="margin:0">{{tr "nueva_app.title"}}</h2>
+  <p style="color:#64748b">{{tr "projects.factory.fixed_note"}}</p>
+  {{if .Msg}}<article style="background:#ecfccb;border:1px solid #84cc16;padding:.75rem">{{.Msg}}</article>{{end}}
+  {{if .Err}}<article style="background:#fee2e2;border:1px solid #ef4444;padding:.75rem">{{.Err}}</article>{{end}}
+
+  <article>
+    <label>{{tr "nueva_app.project_select"}}
+      <select name="proyecto_slug" form="nueva-app-form" required>
+        {{range .Proyectos}}
+        <option value="{{.Slug}}">{{.Nombre}} ({{.Slug}})</option>
+        {{end}}
+      </select>
+    </label>
+
+    <label>{{tr "projects.factory.preset"}}
+      <select id="na-preset" onchange="factoryApplyPreset(this.value)">
+        <option value="">{{tr "projects.factory.preset.none"}}</option>
+        <option value="web-publica">{{tr "projects.factory.preset.web_publica"}}</option>
+        <option value="api-interna">{{tr "projects.factory.preset.api_interna"}}</option>
+        <option value="cli-devops">{{tr "projects.factory.preset.cli_devops"}}</option>
+        <option value="app-movil">{{tr "projects.factory.preset.app_movil"}}</option>
+        <option value="embedded">{{tr "projects.factory.preset.embedded"}}</option>
+      </select>
+    </label>
+
+    <form id="nueva-app-form" method="post" action="/nueva-app">
+      <input type="hidden" name="proyecto_slug" id="na-slug-hidden">
+      <label>{{tr "projects.factory.name"}} <input name="nombre" required></label>
+      <label>{{tr "projects.factory.description"}} <textarea name="descripcion"></textarea></label>
+
+      <label>{{tr "projects.factory.type"}}
+        <select name="tipo" id="factory-tipo" required>
+          <option value="web_api">web_api — {{tr "projects.factory.type.web_api"}}</option>
+          <option value="web">web — {{tr "projects.factory.type.web"}}</option>
+          <option value="api">api — {{tr "projects.factory.type.api"}}</option>
+          <option value="cli">cli — {{tr "projects.factory.type.cli"}}</option>
+          <option value="desktop">desktop — {{tr "projects.factory.type.desktop"}}</option>
+          <option value="mobile">mobile — {{tr "projects.factory.type.mobile"}}</option>
+          <option value="embedded">embedded — {{tr "projects.factory.type.embedded"}}</option>
+        </select>
+      </label>
+
+      <fieldset>
+        <legend>{{tr "projects.factory.section.components"}}</legend>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem">
+          <label><input type="checkbox" name="frontend" value="1" checked> {{tr "projects.factory.frontend"}}</label>
+          <label><input type="checkbox" name="api" value="1" checked> {{tr "projects.factory.api"}}</label>
+          <label><input type="checkbox" name="auth" value="1"> {{tr "projects.factory.auth"}}</label>
+          <label><input type="checkbox" name="db" value="1"> {{tr "projects.factory.db"}}</label>
+          <label><input type="checkbox" name="docker" id="cb-docker" value="1" checked> {{tr "projects.factory.docker"}}</label>
+          <label><input type="checkbox" name="i18n" value="1" checked> {{tr "projects.factory.i18n"}}</label>
+        </div>
+        <label style="margin-top:.5rem">{{tr "projects.factory.languages"}} <input name="idiomas" value="es,en"></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>{{tr "projects.factory.section.platforms"}}</legend>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem">
+          <label><input type="checkbox" name="plat_web" id="cb-plat-web" value="1"> {{tr "projects.factory.plat_web"}}</label>
+          <label><input type="checkbox" name="plat_desktop" id="cb-plat-desktop" value="1"> {{tr "projects.factory.plat_desktop"}}</label>
+          <label><input type="checkbox" name="plat_mobile" id="cb-plat-mobile" value="1"> {{tr "projects.factory.plat_mobile"}}</label>
+          <label><input type="checkbox" name="plat_cli" id="cb-plat-cli" value="1"> {{tr "projects.factory.plat_cli"}}</label>
+          <label><input type="checkbox" name="plat_embedded" id="cb-plat-embedded" value="1"> {{tr "projects.factory.plat_embedded"}}</label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>{{tr "projects.factory.section.os"}}</legend>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem">
+          <label><input type="checkbox" name="so_linux" id="cb-so-linux" value="1"> Linux</label>
+          <label><input type="checkbox" name="so_windows" id="cb-so-windows" value="1"> Windows</label>
+          <label><input type="checkbox" name="so_macos" id="cb-so-macos" value="1"> macOS</label>
+          <label><input type="checkbox" name="so_android" id="cb-so-android" value="1"> Android</label>
+          <label><input type="checkbox" name="so_ios" id="cb-so-ios" value="1"> iOS</label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>{{tr "projects.factory.section.compliance"}}</legend>
+        <p style="font-size:.8rem;color:var(--pico-muted-color)">{{tr "projects.factory.compliance_note"}}</p>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem">
+          <div><label><input type="checkbox" name="compliance_rgpd" value="1"> RGPD</label>
+          <small style="display:block;color:var(--pico-muted-color);font-size:.75rem;margin-left:1.4rem">{{tr "projects.factory.compliance_rgpd_help"}}</small></div>
+          <div><label><input type="checkbox" name="compliance_ens" value="1"> ENS</label>
+          <small style="display:block;color:var(--pico-muted-color);font-size:.75rem;margin-left:1.4rem">{{tr "projects.factory.compliance_ens_help"}}</small></div>
+          <div><label><input type="checkbox" name="compliance_lssi" value="1"> LSSI</label>
+          <small style="display:block;color:var(--pico-muted-color);font-size:.75rem;margin-left:1.4rem">{{tr "projects.factory.compliance_lssi_help"}}</small></div>
+          <div><label><input type="checkbox" name="compliance_wcag" value="1"> WCAG 2.1 AA</label>
+          <small style="display:block;color:var(--pico-muted-color);font-size:.75rem;margin-left:1.4rem">{{tr "projects.factory.compliance_wcag_help"}}</small></div>
+          <div><label><input type="checkbox" name="compliance_factura_elec" value="1"> {{tr "projects.factory.compliance_factura_elec"}}</label>
+          <small style="display:block;color:var(--pico-muted-color);font-size:.75rem;margin-left:1.4rem">{{tr "projects.factory.compliance_factura_elec_help"}}</small></div>
+          <div><label><input type="checkbox" name="compliance_reutilizacion" value="1"> {{tr "projects.factory.compliance_reutilizacion"}}</label>
+          <small style="display:block;color:var(--pico-muted-color);font-size:.75rem;margin-left:1.4rem">{{tr "projects.factory.compliance_reutilizacion_help"}}</small></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>{{tr "projects.factory.section.infra"}}</legend>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem">
+          <label><input type="checkbox" name="ci" value="1" checked> CI/CD — {{tr "projects.factory.ci"}}</label>
+          <label><input type="checkbox" name="kubernetes" id="cb-kubernetes" value="1"> Kubernetes — {{tr "projects.factory.kubernetes"}}</label>
+          <label><input type="checkbox" name="terraform" value="1"> Terraform — {{tr "projects.factory.terraform"}}</label>
+          <label><input type="checkbox" name="monitoring" value="1"> {{tr "projects.factory.monitoring"}}</label>
+        </div>
+      </fieldset>
+
+      <label>{{tr "projects.factory.actor"}} <input name="por" value="web"></label>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <button type="button" class="secondary" onclick="naPreview()">{{tr "projects.factory.preview_btn"}}</button>
+        <button type="submit">{{tr "projects.factory.submit"}}</button>
+      </div>
+    </form>
+
+    {{if .Preview}}
+    <div style="margin-top:1.5rem">
+      <h4>{{tr "projects.factory.preview_title"}} ({{len .Preview}})</h4>
+      <table style="font-size:.8rem">
+        <thead><tr><th>Key</th><th>{{tr "projects.factory.preview_col_title"}}</th><th>{{tr "projects.factory.preview_col_phase"}}</th><th>{{tr "projects.factory.preview_col_module"}}</th></tr></thead>
+        <tbody>
+          {{range .Preview}}
+          <tr><td><code>{{.Key}}</code></td><td>{{.Titulo}}</td><td>{{.Fase}}</td><td>{{.Modulo}}</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{end}}
+  </article>
+</section>
+<script>
+(function(){
+  // sync slug hidden field from select
+  var sel = document.querySelector('select[name=proyecto_slug]');
+  var hid = document.getElementById('na-slug-hidden');
+  if(sel && hid){ sel.addEventListener('change',function(){ hid.value=this.value; }); sel.dispatchEvent(new Event('change')); }
+
+  function cb(id){ return document.getElementById(id); }
+  var depRules = [
+    {src:'cb-plat-mobile',   targets:['cb-so-android','cb-so-ios']},
+    {src:'cb-plat-desktop',  targets:['cb-so-linux','cb-so-windows','cb-so-macos']},
+    {src:'cb-plat-embedded', targets:['cb-so-linux']},
+    {src:'cb-plat-cli',      targets:['cb-so-linux']},
+    {src:'cb-kubernetes',    targets:['cb-docker']},
+  ];
+  function syncDeps(src,targets,checked){
+    targets.forEach(function(id){
+      var el=cb(id); if(!el) return;
+      if(checked){ el.checked=true; return; }
+      var still=false;
+      depRules.forEach(function(r){ if(r.targets.indexOf(id)!==-1&&r.src!==src){ var s=cb(r.src); if(s&&s.checked) still=true; } });
+      if(!still) el.checked=false;
+    });
+  }
+  depRules.forEach(function(r){ var el=cb(r.src); if(!el) return; el.addEventListener('change',function(){ syncDeps(r.src,r.targets,this.checked); }); });
+
+  var PRESETS = {
+    'web-publica':{tipo:'web_api',checks:{frontend:1,api:1,auth:1,db:1,docker:1,i18n:1,ci:1,plat_web:1,compliance_rgpd:1,compliance_lssi:1,compliance_wcag:1}},
+    'api-interna':{tipo:'api',checks:{api:1,auth:1,db:1,docker:1,ci:1,plat_web:1}},
+    'cli-devops':{tipo:'cli',checks:{docker:1,ci:1,terraform:1,plat_cli:1,so_linux:1}},
+    'app-movil':{tipo:'mobile',checks:{auth:1,db:1,plat_mobile:1,so_android:1,so_ios:1,compliance_rgpd:1}},
+    'embedded':{tipo:'embedded',checks:{docker:1,plat_embedded:1,so_linux:1}}
+  };
+  window.factoryApplyPreset=function(key){
+    if(!key) return;
+    var p=PRESETS[key]; if(!p) return;
+    var form=document.getElementById('nueva-app-form');
+    form.querySelectorAll('input[type=checkbox]').forEach(function(el){ el.checked=false; });
+    var t=document.getElementById('factory-tipo'); if(t) t.value=p.tipo;
+    Object.keys(p.checks).forEach(function(n){ var el=form.querySelector('input[name="'+n+'"]'); if(el) el.checked=true; });
+    document.getElementById('na-preset').value='';
+  };
+  window.naPreview=function(){
+    var slug=document.querySelector('select[name=proyecto_slug]');
+    if(!slug||!slug.value){ alert('Selecciona un proyecto'); return; }
+    var form=document.getElementById('nueva-app-form');
+    var data=new FormData(form);
+    var obj={}; data.forEach(function(v,k){ obj[k]=v; });
+    var bools=['frontend','api','auth','db','docker','i18n','plat_web','plat_desktop','plat_mobile','plat_cli','plat_embedded','so_linux','so_windows','so_macos','so_android','so_ios','compliance_rgpd','compliance_ens','compliance_lssi','compliance_wcag','compliance_factura_elec','compliance_reutilizacion','ci','kubernetes','terraform','monitoring'];
+    var payload={nombre:obj['nombre']||'',descripcion:obj['descripcion']||'',tipo:obj['tipo']||'',idiomas:(obj['idiomas']||'es,en').split(','),por:obj['por']||'web'};
+    bools.forEach(function(f){ payload[f]=obj[f]==='1'; });
+    fetch('/api/proyectos/'+encodeURIComponent(slug.value)+'/fabricar-app/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok||!d.tasks) return;
+      var form2=document.createElement('form');
+      form2.method='post'; form2.action='/nueva-app?preview=1';
+      Object.keys(obj).forEach(function(k){ var i=document.createElement('input'); i.type='hidden'; i.name=k; i.value=obj[k]||''; form2.appendChild(i); });
+      var si=document.createElement('input'); si.type='hidden'; si.name='proyecto_slug'; si.value=slug.value; form2.appendChild(si);
+      document.body.appendChild(form2); form2.submit();
+    });
+  };
+})();
+</script>
 {{end}}`

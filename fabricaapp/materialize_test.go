@@ -21,6 +21,8 @@ func (f *fakeMaterializeStore) CreateTask(t *db.Tarea) (int64, error) {
 	return f.nextID, nil
 }
 
+func (f *fakeMaterializeStore) GetExistingTaskID(_ int64, _ string) int64 { return 0 }
+
 func (f *fakeMaterializeStore) MoveTaskToBacklog(id int64) error {
 	f.backlogIDs = append(f.backlogIDs, id)
 	return nil

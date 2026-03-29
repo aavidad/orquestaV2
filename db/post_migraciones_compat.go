@@ -30,6 +30,7 @@ func postMigrationStatements() []string {
 		`ALTER TABLE proyectos_autonomia ADD COLUMN supervisor_agente TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE proyectos_autonomia ADD COLUMN reviewer_agente TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE tareas ADD COLUMN contrato_definido INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE tareas ADD COLUMN blueprint_key TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE runtime_orders ADD COLUMN available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`,
 		`ALTER TABLE agentes ADD COLUMN consumo_dia_segundos INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE agentes ADD COLUMN consumo_semanal_segundos INTEGER NOT NULL DEFAULT 0`,
@@ -80,10 +81,17 @@ func postMigrationStatements() []string {
 	}
 }
 
+func postMigrationDDLStatements() []string {
+	return []string{
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_tareas_proyecto_blueprint_key ON tareas(proyecto_id, blueprint_key) WHERE blueprint_key != ''`,
+	}
+}
+
 func postMigrationStatementsForDriver(driver string) []string {
 	driver = strings.ToLower(strings.TrimSpace(driver))
 	if driver == "postgres" || driver == "postgresql" || driver == "mysql" {
 		return nil
 	}
-	return postMigrationStatements()
+	stmts := append([]string{}, postMigrationStatements()...)
+	return append(stmts, postMigrationDDLStatements()...)
 }

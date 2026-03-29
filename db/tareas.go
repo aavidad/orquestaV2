@@ -48,7 +48,8 @@ type Tarea struct {
 	PropuestaID      *int64  // nil = no vinculada a propuesta
 	Prioridad        PrioridadTarea
 	Dependencias     []int64
-	ContratoDefinido bool // true = interfaz/contrato de E/S documentado (OP-069)
+	ContratoDefinido bool   // true = interfaz/contrato de E/S documentado (OP-069)
+	BlueprintKey     string // clave única dentro del proyecto (evita duplicados en re-generación)
 	CreadoPor        string
 	CommitCierre     string
 	Notas            string
@@ -74,19 +75,35 @@ type ResumenBloqueo struct {
 }
 
 // CrearTarea inserta una nueva tarea y devuelve su ID.
+// Si blueprint_key no está vacío y ya existe una tarea con el mismo (proyecto_id, blueprint_key),
+// devuelve 0, nil (operación idempotente: no es un error, la tarea ya existe).
 func CrearTarea(t *Tarea) (int64, error) {
 	deps, _ := json.Marshal(t.Dependencias)
 	res, err := DB.Exec(`
-		INSERT INTO tareas (titulo, descripcion, proyecto_id, modulo, prioridad, dependencias, creado_por, notas, propuesta_id)
-		VALUES (?,?,?,?,?,?,?,?,?)`,
-		t.Titulo, t.Descripcion, t.ProyectoID, t.Modulo, t.Prioridad, string(deps), t.CreadoPor, t.Notas, t.PropuestaID,
+		INSERT INTO tareas (titulo, descripcion, proyecto_id, modulo, prioridad, dependencias, creado_por, notas, propuesta_id, blueprint_key)
+		VALUES (?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(proyecto_id, blueprint_key) WHERE blueprint_key != '' DO NOTHING`,
+		t.Titulo, t.Descripcion, t.ProyectoID, t.Modulo, t.Prioridad, string(deps), t.CreadoPor, t.Notas, t.PropuestaID, t.BlueprintKey,
 	)
 	if err != nil {
 		return 0, err
 	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		// tarea ya existía (blueprint_key duplicado, DO NOTHING) — no es error
+		return 0, nil
+	}
 	id, _ := res.LastInsertId()
 	Audit(t.CreadoPor, "crear_tarea", "tarea", id, t.Titulo)
 	return id, nil
+}
+
+// GetTareaIDBlueprintKey devuelve el ID de una tarea por proyecto_id + blueprint_key.
+// Devuelve 0 si no existe.
+func GetTareaIDBlueprintKey(proyectoID int64, key string) int64 {
+	var id int64
+	_ = DB.QueryRow(`SELECT id FROM tareas WHERE proyecto_id=? AND blueprint_key=? LIMIT 1`, proyectoID, key).Scan(&id)
+	return id
 }
 
 // GetTarea devuelve una tarea por ID.

@@ -136,8 +136,8 @@ func TestProcesarSupervisionAutonomaBatchArrancaSupervisorPreferidoSinSesion(t *
 	if err != nil {
 		t.Fatalf("procesar supervision: %v", err)
 	}
-	if n != 0 {
-		t.Fatalf("no debería contar supervisión hasta que el agente arranque, got=%d", n)
+	if n != 1 {
+		t.Fatalf("debería contar supervisión en el mismo ciclo de arranque, got=%d", n)
 	}
 
 	asignacion, err := db.GetAsignacionActivaAgente("CodexSupervisor")
@@ -157,8 +157,20 @@ func TestProcesarSupervisionAutonomaBatchArrancaSupervisorPreferidoSinSesion(t *
 	if err != nil {
 		t.Fatalf("listar orders: %v", err)
 	}
-	if len(orders) != 1 || orders[0].Tipo != "start" {
-		t.Fatalf("debería encolar start para supervisor preferido: %+v", orders)
+	var hasStart, hasNudge bool
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		if order.Tipo == "start" {
+			hasStart = true
+		}
+		if order.Tipo == "nudge" && strings.Contains(order.PayloadJSON, `"accion":"supervisar_proyecto"`) {
+			hasNudge = true
+		}
+	}
+	if !hasStart || !hasNudge {
+		t.Fatalf("debería encolar start y nudge de supervisión: %+v", orders)
 	}
 }
 
@@ -231,9 +243,11 @@ func TestProcesarSupervisionAutonomaBatchGeneraBacklogInicialSiAutoCreateTasks(t
 			if tarea.Estado == db.TareaEnProgreso && tarea.Agente != nil && *tarea.Agente == "CodexSupervisor" {
 				briefingActiva = true
 			}
-		case "Revisar catalogo y referencias de Orquestador":
+		case "Revisar catálogo y referencias de Orquestador",
+			"Revisar catalogo y referencias de Orquestador":
 			investigacion = true
-		case "Cerrar arquitectura base de Orquestador":
+		case "Cerrar arquitectura hexagonal y modular de Orquestador",
+			"Cerrar arquitectura base de Orquestador":
 			arquitectura = true
 		case "Autonomía: revisar backlog y abrir siguiente frente útil":
 			t.Fatalf("no debería crear tarea semilla cuando el proyecto aún no tiene backlog: %+v", tarea)
@@ -3796,6 +3810,7 @@ func TestProcesarGitMergesBatchFusionaCierraWorktreeYCompletaTarea(t *testing.T)
 	}
 	cmdGitAutonomia(t, worktree.Path, "add", "feature.txt")
 	cmdGitAutonomia(t, worktree.Path, "commit", "-m", "feat: add feature")
+	cmdGitAutonomia(t, repo, "checkout", "--detach")
 
 	metadataJSON, err := json.Marshal(map[string]any{
 		"auto_created": true,
@@ -3849,6 +3864,7 @@ func TestProcesarGitMergesBatchFusionaCierraWorktreeYCompletaTarea(t *testing.T)
 	if wt.State != coordinacion.WorktreeClosed {
 		t.Fatalf("worktree debería quedar cerrada: %+v", wt)
 	}
+	cmdGitAutonomia(t, repo, "checkout", "master")
 	if _, err := os.Stat(worktree.Path); !os.IsNotExist(err) {
 		t.Fatalf("la ruta de worktree debería haberse eliminado: err=%v", err)
 	}

@@ -1417,6 +1417,7 @@ const webTplLayout = `<!doctype html>
       <a href="/tareas">{{tr "Tareas"}}</a>
       <a href="/propuestas">{{tr "Propuestas"}}</a>
       <a href="/agentes">{{tr "Agentes"}}</a>
+      <a href="/nueva-app">{{tr "nueva_app.nav"}}</a>
       <a href="/progreso">{{tr "progress.title"}}</a>
       <a href="/pools">{{tr "pools.title"}}</a>
       <a href="/modelo">{{tr "model.title"}}</a>

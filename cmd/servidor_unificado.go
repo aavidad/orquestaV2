@@ -33,6 +33,7 @@ func registrarRutasServe(mux *http.ServeMux) {
 	mux.HandleFunc("/sesiones/", webRouterSesiones)
 	mux.HandleFunc("/proyectos", webHandlerProyectos)
 	mux.HandleFunc("/proyectos/", webRouterProyectos)
+	mux.HandleFunc("/nueva-app", webHandlerNuevaApp)
 	mux.HandleFunc("/progreso", webHandlerProgreso)
 	mux.HandleFunc("/progreso/", webRouterProgreso)
 	mux.HandleFunc("/pools", webHandlerPools)
@@ -127,8 +128,13 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 	}
 
 	controlCtx, cancel := context.WithCancel(context.Background())
+	runner := newControlPlaneRunner(debugLogger, debug.ControlPlane)
+	defer runner.Wait()
 	defer cancel()
-	newControlPlaneRunner(debugLogger, debug.ControlPlane).Start(controlCtx)
+	if err := bootstrapServerAutonomy(); err != nil {
+		return err
+	}
+	runner.Start(controlCtx)
 
 	server := &http.Server{
 		Addr:    listenAddr,

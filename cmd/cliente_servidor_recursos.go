@@ -17,6 +17,7 @@ import (
 	"orquesta/capacidadapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
+	"orquesta/fabricaapp"
 	"orquesta/gitgobernanza"
 )
 
@@ -139,6 +140,34 @@ type apiProyectoFabricarAppRequest struct {
 	I18n        bool     `json:"i18n"`
 	Idiomas     []string `json:"idiomas"`
 	Por         string   `json:"por"`
+
+	// Plataformas
+	PlatWeb      bool `json:"plat_web"`
+	PlatDesktop  bool `json:"plat_desktop"`
+	PlatMobile   bool `json:"plat_mobile"`
+	PlatCLI      bool `json:"plat_cli"`
+	PlatEmbedded bool `json:"plat_embedded"`
+
+	// Sistemas operativos
+	SOLinux   bool `json:"so_linux"`
+	SOWindows bool `json:"so_windows"`
+	SOmacOS   bool `json:"so_macos"`
+	SOAndroid bool `json:"so_android"`
+	SOiOS     bool `json:"so_ios"`
+
+	// Compliance legal
+	ComplianceRGPD          bool `json:"compliance_rgpd"`
+	ComplianceENS           bool `json:"compliance_ens"`
+	ComplianceLSSI          bool `json:"compliance_lssi"`
+	ComplianceWCAG          bool `json:"compliance_wcag"`
+	ComplianceFacturaElec   bool `json:"compliance_factura_elec"`
+	ComplianceReutilizacion bool `json:"compliance_reutilizacion"`
+
+	// Infraestructura
+	CI         bool `json:"ci"`
+	Kubernetes bool `json:"kubernetes"`
+	Terraform  bool `json:"terraform"`
+	Monitoring bool `json:"monitoring"`
 }
 
 type apiProyectoFabricarAppResponse struct {
@@ -147,6 +176,11 @@ type apiProyectoFabricarAppResponse struct {
 	Tipo    string `json:"tipo"`
 	Created int    `json:"created"`
 	Backlog int    `json:"backlog"`
+}
+
+type apiProyectoFabricarAppPreviewResponse struct {
+	OK    bool                     `json:"ok"`
+	Tasks []fabricaapp.BlueprintTask `json:"tasks"`
 }
 
 type apiProyectoOperacionResponse struct {
@@ -487,6 +521,22 @@ func cargarProyectoDesdeAPI(ref string) (*db.Proyecto, bool, error) {
 		return nil, ok, err
 	}
 	return resp.Proyecto, true, nil
+}
+
+func fusionarProyectoPorAPI(origen, destino string, archivarOrigen bool) (*db.FusionProyectosResultado, bool, error) {
+	var resp apiProyectoFusionResponse
+	ok, err := apiPost(
+		fmt.Sprintf("/api/proyectos/%s/fusionar", url.PathEscape(strings.TrimSpace(destino))),
+		apiProyectoFusionRequest{
+			Origen:         strings.TrimSpace(origen),
+			ArchivarOrigen: archivarOrigen,
+		},
+		&resp,
+	)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Resultado, true, nil
 }
 
 func fabricarAppProyectoPorAPI(ref string, req apiProyectoFabricarAppRequest) (*apiProyectoFabricarAppResponse, bool, error) {

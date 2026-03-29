@@ -9,6 +9,7 @@ import (
 
 type MaterializeStore interface {
 	CreateTask(t *db.Tarea) (int64, error)
+	GetExistingTaskID(projectID int64, blueprintKey string) int64
 	MoveTaskToBacklog(id int64) error
 	DefineContract(id int64, actor string) error
 }
@@ -48,9 +49,18 @@ func Materialize(store MaterializeStore, projectID int64, actor string, plan Gen
 			Dependencias: deps,
 			CreadoPor:    actor,
 			Notas:        buildSOPNotes(item),
+			BlueprintKey: item.Key,
 		})
 		if err != nil {
 			return MaterializeResult{}, err
+		}
+		if id == 0 {
+			// tarea ya existía con esta blueprint_key — recuperar ID para que las dependencias se resuelvan
+			id = store.GetExistingTaskID(projectID, item.Key)
+			if id > 0 {
+				result.TaskIDs[item.Key] = id
+			}
+			continue
 		}
 		result.TaskIDs[item.Key] = id
 		result.Created++
@@ -105,6 +115,10 @@ type DBStore struct{}
 
 func (DBStore) CreateTask(t *db.Tarea) (int64, error) {
 	return db.CrearTarea(t)
+}
+
+func (DBStore) GetExistingTaskID(projectID int64, blueprintKey string) int64 {
+	return db.GetTareaIDBlueprintKey(projectID, blueprintKey)
 }
 
 func (DBStore) MoveTaskToBacklog(id int64) error {
