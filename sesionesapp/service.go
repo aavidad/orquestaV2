@@ -76,6 +76,7 @@ type SessionBudgetResult struct {
 type StartContextInput struct {
 	Agente            string
 	NuevoCodex        bool
+	ArranqueLimpio    bool
 	Proyecto          string
 	Conector          string
 	CWD               string
@@ -356,6 +357,11 @@ func (s *Service) StartContext(input StartContextInput) (*StartContextResult, er
 	if agente == "" {
 		return nil, fmt.Errorf("indica el nombre del agente o usa --nuevo-codex")
 	}
+	if input.ArranqueLimpio {
+		input.ExternalSessionID = ""
+		input.ResumePayload = ""
+		input.Resumen = ""
+	}
 
 	var (
 		proyectoID *int64
@@ -373,9 +379,11 @@ func (s *Service) StartContext(input StartContextInput) (*StartContextResult, er
 		if err := s.store.ActivateAssignment(agente, proyecto.ID, "asignación automática al iniciar sesión"); err != nil {
 			return nil, err
 		}
-		previo, err = s.store.GetLastSession(agente, &proyecto.ID)
-		if err != nil && err != sql.ErrNoRows {
-			return nil, err
+		if !input.ArranqueLimpio {
+			previo, err = s.store.GetLastSession(agente, &proyecto.ID)
+			if err != nil && err != sql.ErrNoRows {
+				return nil, err
+			}
 		}
 	}
 

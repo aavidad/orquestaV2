@@ -2,7 +2,6 @@ package db
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -11,6 +10,7 @@ func BuildProjectContextSummary(agente string, proyecto *Proyecto) (map[string]a
 	if proyecto == nil {
 		return nil, ""
 	}
+	proyecto = ProyectoConRutaEfectiva(proyecto, "")
 	contexto := map[string]any{
 		"proyecto": map[string]any{
 			"id":   proyecto.ID,
@@ -57,31 +57,12 @@ func BuildProjectContextSummary(agente string, proyecto *Proyecto) (map[string]a
 }
 
 func AppendProjectContextPayload(prev string, contexto map[string]any) string {
-	prev = strings.TrimSpace(prev)
 	if len(contexto) == 0 {
-		return prev
+		return strings.TrimSpace(prev)
 	}
-	envelope := map[string]any{}
-	if prev != "" {
-		var parsed any
-		if err := json.Unmarshal([]byte(prev), &parsed); err == nil {
-			if obj, ok := parsed.(map[string]any); ok {
-				for key, value := range obj {
-					envelope[key] = value
-				}
-			} else {
-				envelope["resume_previo"] = parsed
-			}
-		} else {
-			envelope["resume_previo_raw"] = prev
-		}
-	}
-	envelope["project_context"] = contexto
-	data, err := json.Marshal(envelope)
-	if err != nil {
-		return prev
-	}
-	return string(data)
+	return MergeResumePayloadEnvelope(prev, map[string]any{
+		"project_context": contexto,
+	})
 }
 
 func getActiveWorktreeSummary(agente string, proyectoID int64) map[string]any {
@@ -105,6 +86,9 @@ func getActiveWorktreeSummary(agente string, proyectoID int64) map[string]any {
 		motivo  sql.NullString
 	)
 	if err := row.Scan(&id, &nombre, &ruta, &branch, &baseRef, &motivo); err != nil {
+		return nil
+	}
+	if !WorktreeActivaCoherente(proyectoID, ruta.String) {
 		return nil
 	}
 	return map[string]any{

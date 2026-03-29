@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ORQUESTA_BIN="$ROOT_DIR/orquesta"
 PLAN_FILE=""
 MODE="dry-run"
+DEFAULT_RUNTIME_CMD=""
 
 usage() {
   cat <<'EOF'
@@ -50,6 +51,20 @@ if [[ "$MODE" == "apply" && ! -x "$ORQUESTA_BIN" ]]; then
   echo "No encuentro el binario ejecutable: $ORQUESTA_BIN" >&2
   exit 1
 fi
+
+default_runtime_cmd() {
+  if [[ -n "${ORQUESTA_RUNTIME_CMD_DEFAULT:-}" ]]; then
+    printf '%s' "$ORQUESTA_RUNTIME_CMD_DEFAULT"
+    return 0
+  fi
+  if [[ -x "$HOME/Trabajo/codex-perfiles/bin/codex-perfil" ]]; then
+    printf '%s' "$HOME/Trabajo/codex-perfiles/bin/codex-perfil {{agent}}"
+    return 0
+  fi
+  printf '%s' "codex"
+}
+
+DEFAULT_RUNTIME_CMD="$(default_runtime_cmd)"
 
 trim() {
   local s="$1"
@@ -108,6 +123,21 @@ build_bash_command() {
   printf '%q ' "$ROOT_DIR/scripts/agente_console.sh" "$agente" "$ruta_proyecto" "$cwd_trabajo" "$conector" "$runtime_cmd" "$titulo"
 }
 
+resolve_runtime_command() {
+  local raw="$1"
+  local agente="$2"
+  local ruta_proyecto="$3"
+  local cwd_trabajo="$4"
+  local conector="$5"
+  local resolved="$raw"
+
+  resolved="${resolved//'{{agent}}'/$agente}"
+  resolved="${resolved//'{{project_path}}'/$ruta_proyecto}"
+  resolved="${resolved//'{{working_dir}}'/$cwd_trabajo}"
+  resolved="${resolved//'{{connector}}'/$conector}"
+  printf '%s' "$resolved"
+}
+
 if [[ "$MODE" == "apply" ]]; then
   "$ROOT_DIR/scripts/cargar_agentes.sh" --ejecutar "$PLAN_FILE" >&2
 else
@@ -119,7 +149,7 @@ for line in "${PLAN_LINES[@]}"; do
   agente="$(trim "${agente:-}")"
   ruta_proyecto="$(trim "${ruta_proyecto:-}")"
   conector="$(trim "${conector:-codex-cli}")"
-  runtime_cmd="$(trim "${runtime_cmd:-codex}")"
+  runtime_cmd="$(trim "${runtime_cmd:-$DEFAULT_RUNTIME_CMD}")"
 
   cwd_trabajo="$ruta_proyecto"
   if [[ ${PROJECT_COUNT["$ruta_proyecto"]:-0} -gt 1 ]]; then
@@ -129,6 +159,8 @@ for line in "${PLAN_LINES[@]}"; do
       cwd_trabajo="$ruta_proyecto/.orquesta-worktrees/$(basename "$ruta_proyecto")-${agente,,}"
     fi
   fi
+
+  runtime_cmd="$(resolve_runtime_command "$runtime_cmd" "$agente" "$ruta_proyecto" "$cwd_trabajo" "$conector")"
 
   titulo_tab="${agente} · $(basename "$ruta_proyecto")"
   bash_cmd="$(build_bash_command "$agente" "$ruta_proyecto" "$cwd_trabajo" "$conector" "$runtime_cmd" "$titulo_tab")"

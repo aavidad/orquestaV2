@@ -49,6 +49,17 @@ func prepararDesdeDatosConWorkspace(agente *db.Agente, proyecto *db.Proyecto, co
 	if agente == nil || proyecto == nil || conector == nil {
 		return nil, fmt.Errorf("agente, proyecto y conector son obligatorios")
 	}
+	var err error
+	proyecto = db.ProyectoConRutaEfectiva(proyecto, "")
+	perfilTarea, modelo, razonamiento, err = db.ResolverPerfilEjecucionLanzamiento(
+		strings.TrimSpace(proyecto.Slug),
+		perfilTarea,
+		modelo,
+		razonamiento,
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	worktree, err := asegurarWorktreeOperativa(strings.TrimSpace(agente.Nombre), proyecto, workspace)
 	if err != nil {

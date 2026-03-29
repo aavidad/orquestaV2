@@ -227,6 +227,164 @@ func TestRuntimeOrdersMailboxYCheckpoint(t *testing.T) {
 	}
 }
 
+func TestPurgarRuntimeHandlesInactivosBorraYMantieneReferencias(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "Codex1",
+		ProyectoID:        &proyectoID,
+		CWD:               filepath.Join(tmp, "orquestador"),
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-purge-runtime-handle",
+		Branch:            "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	handleActivo, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handleActivo == nil {
+		t.Fatalf("handle activo: %+v err=%v", handleActivo, err)
+	}
+
+	res, err := DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado
+	) VALUES (?,?,?,?,?,?,?)`,
+		"Codex1", proyectoID, runtime.ID, "cli", "process", "stale-1", "cerrado",
+	)
+	if err != nil {
+		t.Fatalf("insert handle cerrado: %v", err)
+	}
+	handleID, err := res.LastInsertId()
+	if err != nil {
+		t.Fatalf("last insert id handle: %v", err)
+	}
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handleID,
+		Tipo:        "checkpoint",
+		PayloadJSON: `{"motivo":"cleanup_test"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar runtime order: %v", err)
+	}
+	if err := MarcarRuntimeOrderEstado(orderID, "completada", `{"ok":true}`, ""); err != nil {
+		t.Fatalf("completar runtime order: %v", err)
+	}
+	transcriptID, err := RegistrarRuntimeTranscript(&RuntimeTranscriptEntry{
+		RuntimeID:      runtime.ID,
+		HandleID:       &handleID,
+		Agente:         "Codex1",
+		ProyectoID:     &proyectoID,
+		Stream:         "pty_out",
+		Text:           "runtime handle viejo",
+		NormalizedText: "runtime handle viejo",
+		Classification: "note",
+	})
+	if err != nil {
+		t.Fatalf("registrar transcript: %v", err)
+	}
+
+	agente := "Codex1"
+	resultado, err := PurgarRuntimeHandlesInactivos(FiltroPurgadoRuntimeHandles{Agente: &agente})
+	if err != nil {
+		t.Fatalf("purgar handles: %v", err)
+	}
+	if resultado.Deleted != 1 || len(resultado.DeletedIDs) != 1 || resultado.DeletedIDs[0] != handleID {
+		t.Fatalf("resultado de purga inesperado: %+v", resultado)
+	}
+	handleBorrado, err := GetRuntimeHandle(handleID)
+	if err != nil {
+		t.Fatalf("get handle borrado: %v", err)
+	}
+	if handleBorrado != nil {
+		t.Fatalf("el handle purgado sigue existiendo: %+v", handleBorrado)
+	}
+	handleActivo, err = GetRuntimeHandle(handleActivo.ID)
+	if err != nil || handleActivo == nil || handleActivo.Estado != "activo" {
+		t.Fatalf("el handle activo no deberia tocarse: %+v err=%v", handleActivo, err)
+	}
+
+	var (
+		orderHandleID      sql.NullInt64
+		transcriptHandleID sql.NullInt64
+	)
+	if err := DB.QueryRow(`SELECT handle_id FROM runtime_orders WHERE id = ?`, orderID).Scan(&orderHandleID); err != nil {
+		t.Fatalf("leer handle_id runtime order: %v", err)
+	}
+	if orderHandleID.Valid {
+		t.Fatalf("runtime order deberia quedar sin handle_id: %+v", orderHandleID)
+	}
+	if err := DB.QueryRow(`SELECT handle_id FROM runtime_transcript WHERE id = ?`, transcriptID).Scan(&transcriptHandleID); err != nil {
+		t.Fatalf("leer handle_id transcript: %v", err)
+	}
+	if transcriptHandleID.Valid {
+		t.Fatalf("runtime transcript deberia quedar sin handle_id: %+v", transcriptHandleID)
+	}
+}
+
+func TestPurgarRuntimeHandlesInactivosBloqueaOrdersVivas(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	res, err := DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, transporte, handle_kind, handle_ref, estado
+	) VALUES (?,?,?,?,?,?)`,
+		"Codex1", proyectoID, "cli", "process", "stale-2", "fallido",
+	)
+	if err != nil {
+		t.Fatalf("insert handle fallido: %v", err)
+	}
+	handleID, err := res.LastInsertId()
+	if err != nil {
+		t.Fatalf("last insert id handle: %v", err)
+	}
+	if _, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		HandleID:    &handleID,
+		Tipo:        "stop",
+		PayloadJSON: `{"motivo":"cleanup_test"}`,
+	}); err != nil {
+		t.Fatalf("encolar runtime order viva: %v", err)
+	}
+
+	agente := "Codex1"
+	if _, err := PurgarRuntimeHandlesInactivos(FiltroPurgadoRuntimeHandles{Agente: &agente}); err == nil || !strings.Contains(err.Error(), "runtime orders vivas") {
+		t.Fatalf("deberia bloquear purga con orders vivas, err=%v", err)
+	}
+}
+
 func TestControlarProcesoRuntimeSoportaHandleLegacySinKind(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
@@ -1301,6 +1459,231 @@ func TestRuntimeOrderStartYSendInstructionGobiernanProcesoReal(t *testing.T) {
 	}
 }
 
+func TestRuntimeOrderStopCierraHandleMuertoSinControlReal(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	pidMuerto := int64(999999)
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		PID:         &pidMuerto,
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime por sesion: %+v err=%v", runtime, err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle por sesion: %+v err=%v", handle, err)
+	}
+
+	stopID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "stop",
+		PayloadJSON: `{"motivo":"limpieza de pruebas"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar stop: %v", err)
+	}
+	stopOrder, err := GetRuntimeOrder(stopID)
+	if err != nil {
+		t.Fatalf("get stop order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStop(stopOrder); err != nil {
+		t.Fatalf("ejecutar stop sobre proceso muerto: %v", err)
+	}
+
+	stopOrder, err = GetRuntimeOrder(stopID)
+	if err != nil {
+		t.Fatalf("get stop order final: %v", err)
+	}
+	if stopOrder.Estado != "completada" {
+		t.Fatalf("stop no completada: %+v", stopOrder)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(stopOrder.ResultadoJSON), &result); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+	if got, _ := result["control_real"].(bool); got {
+		t.Fatalf("stop sobre proceso muerto no deberia marcar control_real=true: %+v", result)
+	}
+	if got, _ := result["already_stopped"].(bool); !got {
+		t.Fatalf("faltaba marca already_stopped en resultado: %+v", result)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle final: %+v err=%v", handle, err)
+	}
+	if handle.Estado != "cerrado" {
+		t.Fatalf("handle no cerrada tras stop tolerante: %+v", handle)
+	}
+	sesionActiva, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil && err != sql.ErrNoRows {
+		t.Fatalf("sesion activa tras stop: %v", err)
+	}
+	if sesionActiva != nil {
+		t.Fatalf("la sesion debia quedar cerrada tras stop tolerante: %+v", sesionActiva)
+	}
+}
+
+func TestRuntimeHandlePermiteSendInputInteractivoRespetaCapacidadesYFallbackCodex(t *testing.T) {
+	if RuntimeHandlePermiteSendInputInteractivo(nil) != true {
+		t.Fatal("nil handle deberia permitir por defecto")
+	}
+	if RuntimeHandlePermiteSendInputInteractivo(&RuntimeHandle{
+		CapabilitiesJSON: `{"can_send_input":false}`,
+	}) {
+		t.Fatal("can_send_input=false deberia desactivar input interactivo")
+	}
+	if RuntimeHandlePermiteSendInputInteractivo(&RuntimeHandle{
+		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex2"}`,
+	}) {
+		t.Fatal("codex local via PTY deberia desactivar input interactivo")
+	}
+}
+
+func TestRuntimeOrderSendInstructionHaceFallbackAMailboxCuandoHandleNoAdmiteInputInteractivo(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "cat-cli",
+		Nombre:     "Cat CLI",
+		Transporte: "cli",
+		Comando:    "cat",
+		Activo:     true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"cat-cli"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStart(startOrder); err != nil {
+		t.Fatalf("ejecutar start: %v", err)
+	}
+
+	sesion, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion activa: %+v err=%v", sesion, err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil || runtime.PID == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	t.Cleanup(func() {
+		_, _, _ = controlruntime.DetenerProceso(controlruntime.ObjetivoProceso{PID: runtime.PID})
+	})
+
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(handle.MetadataJSON), &meta); err != nil {
+		t.Fatalf("metadata handle: %v", err)
+	}
+	logPath, _ := meta["log_path"].(string)
+	meta["driver"] = "process_pty_cli"
+	meta["rendered_command"] = "/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1"
+	meta["can_send_input"] = false
+	metaJSON, _ := json.Marshal(meta)
+	capsJSON, _ := json.Marshal(map[string]any{
+		"can_send_input":       false,
+		"can_checkpoint":       true,
+		"can_resume":           true,
+		"can_capture_pid":      true,
+		"can_track_continuity": true,
+		"can_pause":            true,
+		"can_stop":             true,
+	})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, capabilities_json=? WHERE id=?`, string(metaJSON), string(capsJSON), handle.ID); err != nil {
+		t.Fatalf("update handle caps: %v", err)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle: %+v err=%v", handle, err)
+	}
+
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: `{"to_agente":"Codex1","texto":"hola mailbox fallback"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderSendInstruction(sendOrder); err != nil {
+		t.Fatalf("ejecutar send_instruction: %v", err)
+	}
+	sendOrder, err = GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "completada" {
+		t.Fatalf("send_instruction no completada: %+v", sendOrder)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"mailbox_id"`) {
+		t.Fatalf("send_instruction deberia caer a mailbox: %s", sendOrder.ResultadoJSON)
+	}
+	if strings.TrimSpace(logPath) != "" {
+		time.Sleep(150 * time.Millisecond)
+		if data, err := os.ReadFile(logPath); err == nil && strings.Contains(string(data), "hola mailbox fallback") {
+			t.Fatalf("el proceso no deberia recibir input interactivo: %s", string(data))
+		}
+	}
+}
+
 func TestRuntimeOrderStartInyectaContinuidadAlProcesoReal(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
@@ -1381,24 +1764,24 @@ func TestRuntimeOrderStartInyectaContinuidadAlProcesoReal(t *testing.T) {
 		if item == nil || item.Stream != "stdin" {
 			continue
 		}
-		if strings.Contains(strings.ToLower(item.Text), "retoma") {
+		if strings.Contains(item.Text, "Bootstrap de Orquesta") {
 			if len(item.Text) > 100 {
-				t.Fatalf("el continuity prompt saneado deberia quedar acotado para PTY: %q", item.Text)
+				t.Fatalf("el prompt inicial saneado deberia quedar acotado para PTY: %q", item.Text)
 			}
 			for _, r := range item.Text {
 				if r < 32 || r > 126 {
-					t.Fatalf("el continuity prompt saneado deberia quedar en ASCII seguro: %q", item.Text)
+					t.Fatalf("el prompt inicial saneado deberia quedar en ASCII seguro: %q", item.Text)
 				}
 			}
 			if strings.Contains(strings.ToLower(item.Text), "checkpoint de referencia") {
-				t.Fatalf("el continuity prompt PTY no deberia arrastrar el resumen largo completo: %q", item.Text)
+				t.Fatalf("el prompt inicial PTY no deberia arrastrar el resumen largo completo: %q", item.Text)
 			}
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("no se inyectó el continuity prompt en el transcript stdin: %+v", entries)
+		t.Fatalf("no se inyectó el prompt inicial en el transcript stdin: %+v", entries)
 	}
 }
 
@@ -2728,6 +3111,149 @@ func TestRuntimeOrderStartIntegraBootstrapDeHandoffMailboxYCheckpoint(t *testing
 	}
 	if len(msgsConsumidos) != 1 || msgsConsumidos[0].ID != msgID {
 		t.Fatalf("mailbox consumido inesperado: %+v", msgsConsumidos)
+	}
+}
+
+func TestRuntimeOrderStartEmbebeLaunchPromptMultilineaCuandoConectorLoDeclara(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	argLog := filepath.Join(tmp, "launch-argv.log")
+	promptLog := filepath.Join(tmp, "launch-prompt.log")
+	launcher := filepath.Join(tmp, "fake-launcher.sh")
+	script := "#!/usr/bin/env bash\nset -eu\nprintf '%s\\n' \"$@\" > " + strconv.Quote(argLog) + "\nprintf '%s' \"${!#}\" > " + strconv.Quote(promptLog) + "\nsleep 30\n"
+	if err := os.WriteFile(launcher, []byte(script), 0o755); err != nil {
+		t.Fatalf("write launcher: %v", err)
+	}
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:         "codex-launcher",
+		Nombre:       "Codex Launcher",
+		Transporte:   "cli",
+		Comando:      launcher,
+		MetadataJSON: `{"launch_prompt_positional":true}`,
+		Activo:       true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:     "Implementar bootstrap real",
+		Modulo:     "orquestador",
+		Prioridad:  PrioridadAlta,
+		CreadoPor:  "alberto",
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE tareas SET estado='asignada' WHERE id=?`, tareaID); err != nil {
+		t.Fatalf("marcar tarea asignada: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"codex-launcher"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStart(startOrder); err != nil {
+		t.Fatalf("ejecutar start: %v", err)
+	}
+
+	sesion, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion activa: %+v err=%v", sesion, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil || runtime.PID == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	t.Cleanup(func() {
+		_, _, _ = controlruntime.DetenerProceso(controlruntime.ObjetivoProceso{PID: runtime.PID})
+	})
+
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if !strings.Contains(handle.MetadataJSON, `"bootstrap_prompt"`) || !strings.Contains(handle.MetadataJSON, `"launch_prompt_embedded":true`) {
+		t.Fatalf("metadata de handle sin bootstrap embebido: %s", handle.MetadataJSON)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	var (
+		argvData   []byte
+		promptData []byte
+	)
+	for {
+		promptData, err = os.ReadFile(promptLog)
+		if err == nil && strings.Contains(string(promptData), "Bootstrap de Orquesta para Codex1.") {
+			break
+		}
+		if time.Now().After(deadline) {
+			if err != nil {
+				t.Fatalf("leer prompt log: %v", err)
+			}
+			argvData, _ = os.ReadFile(argLog)
+			t.Fatalf("el launcher no recibió el bootstrap esperado. prompt=%q argv=%s", string(promptData), string(argvData))
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	argvData, _ = os.ReadFile(argLog)
+	prompt := string(promptData)
+	expectedPrefix := strings.Join([]string{
+		"Bootstrap de Orquesta para Codex1.",
+		"Rol: programador. Proyecto: orquestador.",
+		"Directorio de trabajo: " + filepath.Join(tmp, "orquestador") + ".",
+	}, "\n")
+	if !strings.Contains(prompt, expectedPrefix) {
+		t.Fatalf("el bootstrap embebido deberia conservar las primeras lineas completas. prompt=%q argv=%s", prompt, string(argvData))
+	}
+	if !strings.Contains(prompt, "\nTareas activas: #"+strconv.FormatInt(tareaID, 10)+" [asignada] Implementar bootstrap real.") {
+		t.Fatalf("el prompt embebido deberia incluir la tarea activa en una linea propia. prompt=%q argv=%s", prompt, string(argvData))
+	}
+	if strings.Count(prompt, "\n") < 5 {
+		t.Fatalf("el bootstrap embebido deberia seguir siendo multilinea. prompt=%q argv=%s", prompt, string(argvData))
+	}
+
+	agente := "Codex1"
+	entries, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: &agente, Limit: 20})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	foundSystem := false
+	for _, item := range entries {
+		if item == nil || item.Stream != "system" {
+			continue
+		}
+		if strings.Contains(item.Text, "prompt inicial quedó embebido") {
+			foundSystem = true
+			break
+		}
+	}
+	if !foundSystem {
+		t.Fatalf("el transcript deberia reflejar el prompt inicial embebido: %+v", entries)
 	}
 }
 

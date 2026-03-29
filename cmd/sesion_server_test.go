@@ -122,3 +122,33 @@ func TestSesionRequiereServidor(t *testing.T) {
 		t.Fatalf("error inesperado: %v", err)
 	}
 }
+
+func TestSesionGuardarLimpiarContinuidadEnviaBanderaAPI(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/sesiones/guardar", func(w http.ResponseWriter, r *http.Request) {
+		var req apiSesionGuardarRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode sesion guardar: %v", err)
+		}
+		if !req.LimpiarContinuidad {
+			t.Fatalf("esperaba limpiar_continuidad=true: %+v", req)
+		}
+		_ = json.NewEncoder(w).Encode(apiSesionResponse{Sesion: &db.Sesion{ID: 91, Agente: "Codex1"}})
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	resetCommandFlags(sesionGuardarCmd)
+	_ = sesionGuardarCmd.Flags().Set("limpiar-continuidad", "true")
+	if err := sesionGuardarCmd.RunE(sesionGuardarCmd, []string{"Codex1"}); err != nil {
+		t.Fatalf("sesion guardar limpiar continuidad via api: %v", err)
+	}
+}

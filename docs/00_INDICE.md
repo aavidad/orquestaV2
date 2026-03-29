@@ -29,6 +29,10 @@
 - [D12 - OP-121 F1: catálogo base de skills, versionado y anti-duplicado](op_121_catalogo_skills_fase1.md)
 - [D13 - OP-121: seguridad básica y refresh dinámico de skills](op_121_skills_seguridad_y_refresh.md)
 
+## Análisis e Informes
+- [A01 - Ecosistema de Orquestación Multi-Agente 2026 (mejoras a implementar)](informe_ecosistema_orquestacion_2026-03-29.md)
+- [A02 - Análisis de repositorios de control de agentes 2026-03-23](analisis_repos_control_agentes_2026-03-23.md)
+
 ## Plantillas de Documentación
 - [README (ES/EN)](plantillas_documentacion/README_es.md)
 - [Manual de Usuario (ES/EN)](plantillas_documentacion/manual_usuario_es.md)

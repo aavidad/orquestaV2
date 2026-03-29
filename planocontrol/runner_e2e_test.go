@@ -46,6 +46,9 @@ func (dbAutomationServiceTest) ProcesarRuntimeTranscriptBatch() (int, error) {
 func (dbAutomationServiceTest) ProcesarRuntimeOrdersBatch() (int, error) {
 	return db.ProcesarRuntimeOrdersBatch()
 }
+func (dbAutomationServiceTest) ProcesarGitMergesBatch() (int, error) {
+	return 0, nil
+}
 func (dbAutomationServiceTest) ProcesarRefineriaBatch() (int, error) {
 	return db.ProcesarRefineriaBatch()
 }

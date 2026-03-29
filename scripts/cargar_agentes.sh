@@ -13,7 +13,7 @@ Formato del fichero: una línea por agente
   agente|rol|ruta_proyecto|titulo_tarea|prioridad|modulo|nota_asignacion|conector|comando_runtime
 
 Ejemplo:
-  Codex2|programador|/home/alberto/Trabajo/PlataformaMunicipal/orquestador|Locks y worktrees|alta|orquestador|locks y worktrees|codex-cli|codex
+  Codex2|programador|/home/alberto/Trabajo/PlataformaMunicipal/orquestador|Locks y worktrees|alta|orquestador|locks y worktrees|codex-cli|$HOME/Trabajo/codex-perfiles/bin/codex-perfil {{agent}}
 
 Comportamiento:
   - registra o reactiva el agente

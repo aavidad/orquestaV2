@@ -141,31 +141,12 @@ func BuildGovernanceContextSummaryForContext(tipoAgente string, proyectoID *int6
 }
 
 func AppendGovernanceCatalogPayload(prev string, contexto map[string]any) string {
-	prev = strings.TrimSpace(prev)
 	if len(contexto) == 0 {
-		return prev
+		return strings.TrimSpace(prev)
 	}
-	envelope := map[string]any{}
-	if prev != "" {
-		var parsed any
-		if err := json.Unmarshal([]byte(prev), &parsed); err == nil {
-			if obj, ok := parsed.(map[string]any); ok {
-				for key, value := range obj {
-					envelope[key] = value
-				}
-			} else {
-				envelope["resume_previo"] = parsed
-			}
-		} else {
-			envelope["resume_previo_raw"] = prev
-		}
-	}
-	envelope["governance_catalog"] = contexto
-	data, err := json.Marshal(envelope)
-	if err != nil {
-		return prev
-	}
-	return string(data)
+	return MergeResumePayloadEnvelope(prev, map[string]any{
+		"governance_catalog": contexto,
+	})
 }
 
 // GetReglasAgente devuelve las reglas activas para el rol de un agente.

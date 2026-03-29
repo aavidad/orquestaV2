@@ -133,3 +133,20 @@ func TestNormalizarInstruccionProcesoCompactaParaCodexLocal(t *testing.T) {
 		t.Fatalf("compactacion inesperada para codex local: %q", got)
 	}
 }
+
+func TestRenderedCommandLooksLikeCodexCLI(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want bool
+	}{
+		{raw: "codex --cd /tmp", want: true},
+		{raw: "/usr/local/bin/codex exec", want: true},
+		{raw: "/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex2", want: true},
+		{raw: "cat", want: false},
+	}
+	for _, tc := range cases {
+		if got := renderedCommandLooksLikeCodexCLI(tc.raw); got != tc.want {
+			t.Fatalf("renderedCommandLooksLikeCodexCLI(%q)=%v want=%v", tc.raw, got, tc.want)
+		}
+	}
+}

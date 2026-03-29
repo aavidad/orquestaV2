@@ -66,21 +66,22 @@ type PrepareInput struct {
 }
 
 type PrepareOutput struct {
-	Agente       string                    `json:"agente"`
-	Rol          string                    `json:"rol"`
-	Proyecto     ProjectBundle             `json:"proyecto"`
-	Conector     ConnectorBundle           `json:"conector"`
-	Politica     Policy                    `json:"politica"`
-	UltimaSesion *SessionBundle            `json:"ultima_sesion,omitempty"`
-	Plan         *runtimeagente.LaunchPlan `json:"plan"`
-	Reglas       []*db.Regla               `json:"reglas"`
-	Skills       []*db.Skill               `json:"skills"`
-	Workflows    []*db.Workflow            `json:"workflows"`
-	Memoria      []*db.EntidadMemoria      `json:"memoria,omitempty"`
-	Bootstrap    *bootstrapruntime.State   `json:"bootstrap,omitempty"`
-	ReanimarAt   *time.Time                `json:"reanimar_at,omitempty"`
-	MotivoPausa  string                    `json:"motivo_pausa,omitempty"`
-	EstadoCuota  string                    `json:"estado_cuota,omitempty"`
+	Agente          string                    `json:"agente"`
+	Rol             string                    `json:"rol"`
+	Proyecto        ProjectBundle             `json:"proyecto"`
+	Conector        ConnectorBundle           `json:"conector"`
+	Politica        Policy                    `json:"politica"`
+	UltimaSesion    *SessionBundle            `json:"ultima_sesion,omitempty"`
+	Plan            *runtimeagente.LaunchPlan `json:"plan"`
+	BootstrapPrompt string                    `json:"bootstrap_prompt,omitempty"`
+	Reglas          []*db.Regla               `json:"reglas"`
+	Skills          []*db.Skill               `json:"skills"`
+	Workflows       []*db.Workflow            `json:"workflows"`
+	Memoria         []*db.EntidadMemoria      `json:"memoria,omitempty"`
+	Bootstrap       *bootstrapruntime.State   `json:"bootstrap,omitempty"`
+	ReanimarAt      *time.Time                `json:"reanimar_at,omitempty"`
+	MotivoPausa     string                    `json:"motivo_pausa,omitempty"`
+	EstadoCuota     string                    `json:"estado_cuota,omitempty"`
 }
 
 type TickInput struct {
@@ -125,6 +126,10 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 	if err != nil {
 		return nil, err
 	}
+	agenteRuntime := *agente
+	if strings.EqualFold(strings.TrimSpace(input.Agente), strings.TrimSpace(agente.Nombre)) && strings.TrimSpace(input.Agente) != "" {
+		agenteRuntime.Nombre = strings.TrimSpace(input.Agente)
+	}
 	proyecto, err := s.store.GetProject(proyectoRef)
 	if err != nil {
 		return nil, err
@@ -148,14 +153,29 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 	if err != nil {
 		return nil, err
 	}
-	prep, err := lanzamientoruntime.PrepararDesdeDatos(agente, proyecto, conector, ultima, strings.TrimSpace(input.Modelo), strings.TrimSpace(input.Razonamiento), strings.TrimSpace(input.Perfil))
+	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &agenteNombre, ProyectoID: &proyecto.ID})
 	if err != nil {
 		return nil, err
 	}
+	propuestasPendientes, err := s.store.ListProjectPendingVotes(agenteNombre, proyecto.ID)
+	if err != nil {
+		return nil, err
+	}
+	prep, err := lanzamientoruntime.PrepararDesdeDatos(&agenteRuntime, proyecto, conector, ultima, strings.TrimSpace(input.Modelo), strings.TrimSpace(input.Razonamiento), strings.TrimSpace(input.Perfil))
+	if err != nil {
+		return nil, err
+	}
+	bootstrapPrompt := buildBootstrapPrompt(&agenteRuntime, proyecto, prep.Plan, catalogo, memoria, tareas, propuestasPendientes)
+	if prep.Plan != nil {
+		prep.Plan.BootstrapPrompt = strings.TrimSpace(bootstrapPrompt)
+		if err := runtimeagente.ApplyLaunchPromptMetadata(prep.Plan, conector.MetadataJSON); err != nil {
+			return nil, fmt.Errorf("metadata_json inválido para '%s': %w", strings.TrimSpace(conector.Slug), err)
+		}
+	}
 
 	out := &PrepareOutput{
-		Agente: agente.Nombre,
-		Rol:    agente.Rol,
+		Agente: agenteRuntime.Nombre,
+		Rol:    agenteRuntime.Rol,
 		Proyecto: ProjectBundle{
 			ID:      proyecto.ID,
 			Slug:    proyecto.Slug,
@@ -169,16 +189,17 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 			Transporte: conector.Transporte,
 			Comando:    conector.Comando,
 		},
-		Politica:    s.loadPolicy(),
-		Plan:        prep.Plan,
-		Reglas:      catalogo.Reglas,
-		Skills:      catalogo.Skills,
-		Workflows:   catalogo.Workflows,
-		Memoria:     memoria,
-		Bootstrap:   prep.Bootstrap,
-		ReanimarAt:  agente.ReanimarAt,
-		MotivoPausa: agente.MotivoPausa,
-		EstadoCuota: agente.EstadoCuota,
+		Politica:        s.loadPolicy(),
+		Plan:            prep.Plan,
+		BootstrapPrompt: bootstrapPrompt,
+		Reglas:          catalogo.Reglas,
+		Skills:          catalogo.Skills,
+		Workflows:       catalogo.Workflows,
+		Memoria:         memoria,
+		Bootstrap:       prep.Bootstrap,
+		ReanimarAt:      agente.ReanimarAt,
+		MotivoPausa:     agente.MotivoPausa,
+		EstadoCuota:     agente.EstadoCuota,
 	}
 	out.Politica.Modelo = prep.Plan.Modelo
 	out.Politica.Razonamiento = prep.Plan.Razonamiento
@@ -259,6 +280,19 @@ func (s *Service) loadPolicy() Policy {
 		ContinuarHasta:    "tarea_terminal_o_duda_real",
 		ConsultarProyecto: true,
 	}
+}
+
+func buildBootstrapPrompt(agente *db.Agente, proyecto *db.Proyecto, plan *runtimeagente.LaunchPlan, catalogo *db.GovernanceCatalog, memoria []*db.EntidadMemoria, tareas []*db.Tarea, propuestas []*db.Propuesta) string {
+	if agente == nil || proyecto == nil {
+		return ""
+	}
+	resumenProyecto := ""
+	resumenGobernanza := ""
+	if db.DB != nil {
+		_, resumenProyecto = db.BuildProjectContextSummary(strings.TrimSpace(agente.Nombre), proyecto)
+		_, resumenGobernanza = db.BuildGovernanceContextSummaryForContext(strings.TrimSpace(agente.Rol), &proyecto.ID, strings.TrimSpace(agente.Nombre))
+	}
+	return db.BuildLaunchBootstrapPrompt(agente, proyecto, plan, catalogo, memoria, tareas, propuestas, resumenProyecto, resumenGobernanza)
 }
 
 func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, sesionActiva *db.Sesion, cuotaPct int) (*TickOutput, error) {

@@ -2,6 +2,7 @@ package agentesapp
 
 import (
 	"database/sql"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +30,7 @@ type fakeStore struct {
 	memory            []*db.EntidadMemoria
 	config            map[string]string
 	lastMailboxFilter []db.FiltroRuntimeMailbox
+	lastTranscript    db.FiltroRuntimeTranscript
 	pausedAgent       string
 	pausedMinutes     int
 	pausedReason      string
@@ -138,6 +140,7 @@ func (f *fakeStore) ListRuntimeHandles(agent *string) ([]*db.RuntimeHandle, erro
 }
 
 func (f *fakeStore) ListRuntimeTranscript(filter db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error) {
+	f.lastTranscript = filter
 	if filter.Agente == nil {
 		return f.transcript, nil
 	}
@@ -408,6 +411,79 @@ func TestBuildDetailMergesMailboxWithoutDuplicates(t *testing.T) {
 	}
 	if store.lastMailboxFilter[2].FromAgente == nil || *store.lastMailboxFilter[2].FromAgente != "Codex2" {
 		t.Fatalf("detail outbox filter=%+v", store.lastMailboxFilter[2])
+	}
+}
+
+func TestInvestigateAgrupaContextoYEvidencia(t *testing.T) {
+	proyectoID := int64(42)
+	handleID := int64(77)
+	runtimeID := int64(55)
+	created := time.Now().UTC()
+	metaJSON, _ := json.Marshal(map[string]any{
+		"trace_dir":      "/repo/.orquesta-runtime/codex2/20260329-120000-000000001",
+		"trace_manifest": "/repo/.orquesta-runtime/codex2/20260329-120000-000000001/runtime.json",
+		"log_path":       "/repo/.orquesta-runtime/codex2/20260329-120000-000000001/pty.log",
+		"working_dir":    "/repo",
+	})
+
+	store := &fakeStore{
+		project: &db.Proyecto{ID: proyectoID, Slug: "orquestador", Nombre: "Orquestador"},
+		agents: []*db.Agente{
+			{Nombre: "Codex2", Rol: "programador"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: runtimeID, Agente: "Codex2", ProyectoID: &proyectoID, CWD: "/repo", UpdatedAt: created},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: handleID, Agente: "Codex2", ProyectoID: &proyectoID, MetadataJSON: string(metaJSON)},
+		},
+		transcript: []*db.RuntimeTranscriptEntry{
+			{ID: 90, RuntimeID: runtimeID, HandleID: &handleID, Agente: "Codex2", ProyectoID: &proyectoID, Text: "He implementado el refactor del router", CreatedAt: created},
+		},
+		checkpoints: []*db.RuntimeCheckpoint{
+			{ID: 33, Agente: "Codex2", ProyectoID: &proyectoID, Resumen: "router listo", CreatedAt: created},
+		},
+		tasks: []*db.Tarea{
+			{ID: 12, Agente: ptr("Codex2"), Estado: db.TareaEnProgreso},
+			{ID: 13, Agente: ptr("Codex2"), Estado: db.TareaCompletada},
+		},
+	}
+
+	report, err := NewService(store).Investigate("refactor router", "orquestador", 20)
+	if err != nil {
+		t.Fatalf("Investigate: %v", err)
+	}
+	if store.lastTranscript.Query == nil || *store.lastTranscript.Query != "refactor router" {
+		t.Fatalf("query transcript inesperada: %+v", store.lastTranscript)
+	}
+	if store.lastTranscript.ProyectoID == nil || *store.lastTranscript.ProyectoID != proyectoID {
+		t.Fatalf("proyecto transcript inesperado: %+v", store.lastTranscript)
+	}
+	if report.TotalMatches != 1 || len(report.Results) != 1 {
+		t.Fatalf("report inesperado: %+v", report)
+	}
+	result := report.Results[0]
+	if result.Agente == nil || result.Agente.Nombre != "Codex2" {
+		t.Fatalf("agente inesperado: %+v", result.Agente)
+	}
+	if result.OpenTasks != 1 {
+		t.Fatalf("open tasks inesperado: %d", result.OpenTasks)
+	}
+	if result.LastCheckpoint == nil || result.LastCheckpoint.ID != 33 {
+		t.Fatalf("checkpoint inesperado: %+v", result.LastCheckpoint)
+	}
+	if len(result.Matches) != 1 {
+		t.Fatalf("matches inesperados: %+v", result.Matches)
+	}
+	match := result.Matches[0]
+	if match.TraceDir == "" || !strings.Contains(match.TraceDir, ".orquesta-runtime/codex2") {
+		t.Fatalf("trace dir inesperado: %+v", match)
+	}
+	if match.TraceManifest == "" || !strings.HasSuffix(match.TraceManifest, "/runtime.json") {
+		t.Fatalf("trace manifest inesperado: %+v", match)
+	}
+	if match.LogPath == "" || !strings.HasSuffix(match.LogPath, "/pty.log") {
+		t.Fatalf("log path inesperado: %+v", match)
 	}
 }
 

@@ -62,6 +62,10 @@ type apiAgenteOverviewResponse struct {
 	Detail *agentesapp.Detail `json:"detail"`
 }
 
+type apiAgenteInvestigacionResponse struct {
+	Investigacion *agentesapp.InvestigationReport `json:"investigacion"`
+}
+
 type apiGitMergesResponse struct {
 	Merges []*db.GitMerge `json:"merges"`
 }
@@ -112,6 +116,15 @@ type apiRuntimeMailboxCreateResponse struct {
 
 type apiProyectoDescubrirRequest struct {
 	Ruta string `json:"ruta"`
+}
+
+type apiProyectoActualizarRequest struct {
+	Slug     string `json:"slug"`
+	Nombre   string `json:"nombre"`
+	RutaAbs  string `json:"ruta_abs"`
+	Tipo     string `json:"tipo"`
+	ParentID *int64 `json:"parent_id"`
+	Activo   *bool  `json:"activo"`
 }
 
 type apiProyectoFabricarAppRequest struct {
@@ -906,6 +919,23 @@ func adoptarContextoAgentePorAPI(req apiAgenteAdoptarContextoRequest) (*apiAgent
 		return nil, ok, err
 	}
 	return &resp, true, nil
+}
+
+func investigarAgentesPorAPI(texto, proyecto string, limit int) (*agentesapp.InvestigationReport, bool, error) {
+	query := url.Values{}
+	query.Set("q", strings.TrimSpace(texto))
+	if strings.TrimSpace(proyecto) != "" {
+		query.Set("proyecto", strings.TrimSpace(proyecto))
+	}
+	if limit > 0 {
+		query.Set("limit", strconv.Itoa(limit))
+	}
+	var resp apiAgenteInvestigacionResponse
+	ok, err := apiGetQuery("/api/agente/investigar", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Investigacion, true, nil
 }
 
 func cargarRuntimeMailboxDesdeAPI(query url.Values) ([]*db.RuntimeMailboxMessage, bool, error) {

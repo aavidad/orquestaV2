@@ -23,6 +23,28 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 		case r.URL.Path == "/api/agente/control" && r.Method == http.MethodPost:
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": 41, "agente": "Codex1", "accion": "start"})
+		case r.URL.Path == "/api/agente/investigar" && r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"investigacion": map[string]any{
+					"query":         r.URL.Query().Get("q"),
+					"total_matches": 1,
+					"results": []map[string]any{{
+						"agente":     map[string]any{"nombre": "Codex2", "rol": "programador"},
+						"open_tasks": 1,
+						"matches": []map[string]any{{
+							"trace_dir": "/repo/.orquesta-runtime/codex2/20260329-120000-000000001",
+							"log_path":  "/repo/.orquesta-runtime/codex2/20260329-120000-000000001/pty.log",
+							"transcript": map[string]any{
+								"id":         90,
+								"agente":     "Codex2",
+								"stream":     "pty_out",
+								"text":       "He implementado el refactor del router",
+								"created_at": "2026-03-29T12:00:00Z",
+							},
+						}},
+					}},
+				},
+			})
 		case r.URL.Path == "/api/agente/pausar" && r.Method == http.MethodPost:
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agente": "Codex1"})
 		case r.URL.Path == "/api/agente/handoff" && r.Method == http.MethodPost:
@@ -55,6 +77,15 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	})
 	if !strings.Contains(outPausar, "Codex1 pausado") {
 		t.Fatalf("salida pausar inesperada:\n%s", outPausar)
+	}
+
+	outInvestigar := capturarStdout(t, func() {
+		if err := agenteInvestigarCmd.RunE(agenteInvestigarCmd, []string{"refactor", "router"}); err != nil {
+			t.Fatalf("agente investigar via api: %v", err)
+		}
+	})
+	if !strings.Contains(outInvestigar, "Codex2") || !strings.Contains(outInvestigar, "refactor del router") {
+		t.Fatalf("salida investigar inesperada:\n%s", outInvestigar)
 	}
 
 	outHandoff := capturarStdout(t, func() {
@@ -126,6 +157,7 @@ func TestAgenteControlRequiereServidor(t *testing.T) {
 		setup  func(t *testing.T, cmd *cobra.Command)
 	}{
 		{nombre: "control", cmd: func() *cobra.Command { return agenteControlCmd }, args: []string{"arrancar", "Codex1"}},
+		{nombre: "investigar", cmd: func() *cobra.Command { return agenteInvestigarCmd }, args: []string{"refactor"}},
 		{
 			nombre: "preparar",
 			cmd:    func() *cobra.Command { return agentePrepararCmd },

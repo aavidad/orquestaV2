@@ -1,6 +1,10 @@
 package runtimesapp
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"orquesta/db"
@@ -17,8 +21,12 @@ type fakeStore struct {
 	treeResponse     []*db.RuntimeTreeNode
 	runtimeID        int64
 	runtimeResponse  *db.RuntimeInstance
+	handleID         int64
+	handleByIDResp   *db.RuntimeHandle
 	handlesFilter    *string
 	handlesResponse  []*db.RuntimeHandle
+	purgeFilter      db.FiltroPurgadoRuntimeHandles
+	purgeResponse    *db.PurgaRuntimeHandlesResultado
 	handleAgent      string
 	handleResponse   *db.RuntimeHandle
 	handleProjAgent  string
@@ -82,9 +90,17 @@ func (f *fakeStore) GetRuntime(id int64) (*db.RuntimeInstance, error) {
 	f.runtimeID = id
 	return f.runtimeResponse, nil
 }
+func (f *fakeStore) GetRuntimeHandle(id int64) (*db.RuntimeHandle, error) {
+	f.handleID = id
+	return f.handleByIDResp, nil
+}
 func (f *fakeStore) ListRuntimeHandles(filter *string) ([]*db.RuntimeHandle, error) {
 	f.handlesFilter = filter
 	return f.handlesResponse, nil
+}
+func (f *fakeStore) PurgeInactiveRuntimeHandles(filter db.FiltroPurgadoRuntimeHandles) (*db.PurgaRuntimeHandlesResultado, error) {
+	f.purgeFilter = filter
+	return f.purgeResponse, nil
 }
 func (f *fakeStore) GetActiveRuntimeHandle(agente string) (*db.RuntimeHandle, error) {
 	f.handleAgent = agente
@@ -175,6 +191,7 @@ func TestServiceDelegatesRuntimeQueries(t *testing.T) {
 		runtimesResponse: []*db.RuntimeInstance{{ID: 5}},
 		treeResponse:     []*db.RuntimeTreeNode{{Runtime: &db.RuntimeInstance{ID: 10}}},
 		runtimeResponse:  &db.RuntimeInstance{ID: 10},
+		handleByIDResp:   &db.RuntimeHandle{ID: 16},
 		handlesResponse:  []*db.RuntimeHandle{{ID: 15}},
 		handleResponse:   &db.RuntimeHandle{ID: 16},
 		handleProjResp:   &db.RuntimeHandle{ID: 17},
@@ -217,6 +234,12 @@ func TestServiceDelegatesRuntimeQueries(t *testing.T) {
 	}
 	if store.runtimeID != 10 {
 		t.Fatalf("runtimeID=%d", store.runtimeID)
+	}
+	if _, err := service.GetRuntimeHandle(16); err != nil {
+		t.Fatalf("GetRuntimeHandle: %v", err)
+	}
+	if store.handleID != 16 {
+		t.Fatalf("handleID=%d", store.handleID)
 	}
 	if _, err := service.ListRuntimeHandles(&agent); err != nil {
 		t.Fatalf("ListRuntimeHandles: %v", err)
@@ -370,5 +393,104 @@ func TestEnqueueAgentControlCreatesRuntimeOrder(t *testing.T) {
 	}
 	if store.auditAction != "control_agente_resume" || store.auditEntity != "runtime_order" || store.auditEntityID != 77 {
 		t.Fatalf("audit=%s %s %d", store.auditAction, store.auditEntity, store.auditEntityID)
+	}
+}
+
+func TestPurgeInactiveRuntimeHandlesDelegatesAndAudits(t *testing.T) {
+	projectID := int64(9)
+	store := &fakeStore{
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		agentResponse:   &db.Agente{Nombre: "Codex5", Rol: "programador"},
+		purgeResponse:   &db.PurgaRuntimeHandlesResultado{Deleted: 2, DeletedIDs: []int64{48, 39}, Estados: []string{"cerrado", "fallido"}},
+	}
+	service := NewService(store)
+
+	resultado, err := service.PurgeInactiveRuntimeHandles(RuntimeHandlePurgeRequest{
+		Agente:   "Codex5",
+		Proyecto: "orquestador",
+		Estados:  []string{"cerrado", "fallido"},
+		Actor:    "Codex1",
+	})
+	if err != nil {
+		t.Fatalf("PurgeInactiveRuntimeHandles: %v", err)
+	}
+	if resultado == nil || resultado.Deleted != 2 {
+		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+	if store.purgeFilter.Agente == nil || *store.purgeFilter.Agente != "Codex5" {
+		t.Fatalf("purgeFilter agente=%v", store.purgeFilter.Agente)
+	}
+	if store.purgeFilter.ProyectoID == nil || *store.purgeFilter.ProyectoID != projectID {
+		t.Fatalf("purgeFilter proyecto=%v", store.purgeFilter.ProyectoID)
+	}
+	if strings.Join(store.purgeFilter.Estados, ",") != "cerrado,fallido" {
+		t.Fatalf("purgeFilter estados=%v", store.purgeFilter.Estados)
+	}
+	if store.auditAction != "purgar_runtime_handles" || store.auditAgent != "Codex1" {
+		t.Fatalf("audit inesperado agente=%q accion=%q detalle=%q", store.auditAgent, store.auditAction, store.auditDetail)
+	}
+}
+
+func TestServiceReadRuntimeTracePorAgenteProyecto(t *testing.T) {
+	tmp := t.TempDir()
+	traceDir := filepath.Join(tmp, ".orquesta-runtime", "codex2", "20260329-120000-000000001")
+	if err := os.MkdirAll(traceDir, 0o700); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	logPath := filepath.Join(traceDir, "pty.log")
+	manifestPath := filepath.Join(traceDir, "runtime.json")
+	if err := os.WriteFile(logPath, []byte("inicio\navance\nfin\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, []byte("{}\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	projectID := int64(7)
+	metaJSON, _ := json.Marshal(map[string]any{
+		"trace_dir":      traceDir,
+		"trace_manifest": manifestPath,
+		"log_path":       logPath,
+		"working_dir":    "/repo",
+		"driver":         "process_pty_cli",
+	})
+	store := &fakeStore{
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		handleProjResp: &db.RuntimeHandle{
+			ID:           17,
+			Agente:       "Codex2",
+			ProyectoID:   &projectID,
+			MetadataJSON: string(metaJSON),
+		},
+	}
+
+	trace, err := NewService(store).ReadRuntimeTrace(RuntimeTraceRequest{
+		Agente:   "Codex2",
+		Proyecto: "orquestador",
+		MaxBytes: 10,
+	})
+	if err != nil {
+		t.Fatalf("ReadRuntimeTrace: %v", err)
+	}
+	if store.projectRef != "orquestador" {
+		t.Fatalf("projectRef=%q", store.projectRef)
+	}
+	if store.handleProjAgent != "Codex2" || store.handleProjID == nil || *store.handleProjID != projectID {
+		t.Fatalf("handleProj agent=%q project=%v", store.handleProjAgent, store.handleProjID)
+	}
+	if !trace.Available {
+		t.Fatalf("trace no disponible: %+v", trace)
+	}
+	if trace.HandleID != 17 || trace.Agente != "Codex2" || trace.Proyecto != "orquestador" {
+		t.Fatalf("trace basica inesperada: %+v", trace)
+	}
+	if trace.TraceManifest != manifestPath || trace.LogPath != logPath {
+		t.Fatalf("paths de trace inesperados: %+v", trace)
+	}
+	if !trace.Truncated || trace.TotalBytes == 0 || trace.BytesRead == 0 {
+		t.Fatalf("trace truncada inesperada: %+v", trace)
+	}
+	if !strings.Contains(trace.RawTail, "ance\nfin\n") {
+		t.Fatalf("tail inesperado: %q", trace.RawTail)
 	}
 }

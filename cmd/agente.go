@@ -103,21 +103,22 @@ type politicaAgente struct {
 }
 
 type agentePrepararOutput struct {
-	Agente       string                       `json:"agente"`
-	Rol          string                       `json:"rol"`
-	Proyecto     proyectoBundle               `json:"proyecto"`
-	Conector     conectorBundle               `json:"conector"`
-	Politica     politicaAgente               `json:"politica"`
-	UltimaSesion *sesionBundle                `json:"ultima_sesion,omitempty"`
-	Plan         *runtimeagente.LaunchPlan    `json:"plan"`
-	Reglas       []*db.Regla                  `json:"reglas"`
-	Skills       []*db.Skill                  `json:"skills"`
-	Workflows    []*db.Workflow               `json:"workflows"`
-	Memoria      []*db.EntidadMemoria         `json:"memoria,omitempty"`
-	Bootstrap    *agenteBootstrapRuntimeState `json:"bootstrap,omitempty"`
-	ReanimarAt   *time.Time                   `json:"reanimar_at,omitempty"`
-	MotivoPausa  string                       `json:"motivo_pausa,omitempty"`
-	EstadoCuota  string                       `json:"estado_cuota,omitempty"`
+	Agente          string                       `json:"agente"`
+	Rol             string                       `json:"rol"`
+	Proyecto        proyectoBundle               `json:"proyecto"`
+	Conector        conectorBundle               `json:"conector"`
+	Politica        politicaAgente               `json:"politica"`
+	UltimaSesion    *sesionBundle                `json:"ultima_sesion,omitempty"`
+	Plan            *runtimeagente.LaunchPlan    `json:"plan"`
+	BootstrapPrompt string                       `json:"bootstrap_prompt,omitempty"`
+	Reglas          []*db.Regla                  `json:"reglas"`
+	Skills          []*db.Skill                  `json:"skills"`
+	Workflows       []*db.Workflow               `json:"workflows"`
+	Memoria         []*db.EntidadMemoria         `json:"memoria,omitempty"`
+	Bootstrap       *agenteBootstrapRuntimeState `json:"bootstrap,omitempty"`
+	ReanimarAt      *time.Time                   `json:"reanimar_at,omitempty"`
+	MotivoPausa     string                       `json:"motivo_pausa,omitempty"`
+	EstadoCuota     string                       `json:"estado_cuota,omitempty"`
 }
 
 type itemLigero struct {
@@ -285,6 +286,7 @@ var agentePrepararCmd = &cobra.Command{
 		razonamiento, _ := cmd.Flags().GetString("razonamiento")
 		perfilTarea, _ := cmd.Flags().GetString("perfil")
 		jsonOut, _ := cmd.Flags().GetBool("json")
+		campo, _ := cmd.Flags().GetString("campo")
 
 		if strings.TrimSpace(proyectoRef) == "" {
 			return fmt.Errorf("debes indicar --proyecto")
@@ -310,6 +312,14 @@ var agentePrepararCmd = &cobra.Command{
 		if ok, err := apiGetQuery("/api/agente/preparar", params, &out); err != nil {
 			return err
 		} else if ok {
+			if strings.TrimSpace(campo) != "" {
+				v, err := valorCampoAgentePreparar(out, campo)
+				if err != nil {
+					return err
+				}
+				fmt.Println(v)
+				return nil
+			}
 			return imprimirAgentePreparar(out, jsonOut)
 		} else if !agenteModoRecuperacionLocalExplicito() {
 			return agenteErrorServerFirst()
@@ -362,6 +372,7 @@ func init() {
 	agentePrepararCmd.Flags().String("modelo", "", "Modelo concreto a usar para esta tarea")
 	agentePrepararCmd.Flags().String("razonamiento", "", "Nivel de razonamiento o esfuerzo para esta tarea")
 	agentePrepararCmd.Flags().String("perfil", "", "Perfil de tarea: orquestacion, analisis, script, implementacion, revision, etc.")
+	agentePrepararCmd.Flags().String("campo", "", "Emitir solo un campo (bootstrap-prompt, continuity-prompt, command, working-dir, mode, external-session-id, branch)")
 	agentePrepararCmd.Flags().Bool("json", false, "Salida JSON")
 
 	agenteTickCmd.Flags().String("proyecto", "", "Proyecto en el que reporta el agente")
@@ -801,6 +812,45 @@ func valorOGuion(v string) string {
 	return v
 }
 
+func valorCampoAgentePreparar(out agentePrepararOutput, campo string) (string, error) {
+	switch strings.TrimSpace(strings.ToLower(campo)) {
+	case "bootstrap-prompt", "bootstrap_prompt":
+		return strings.TrimSpace(out.BootstrapPrompt), nil
+	case "continuity-prompt", "continuity_prompt":
+		if out.Plan == nil {
+			return "", nil
+		}
+		return strings.TrimSpace(out.Plan.ContinuityPrompt), nil
+	case "command", "comando":
+		if out.Plan == nil {
+			return "", nil
+		}
+		return runtimeagente.RenderCommand(out.Plan), nil
+	case "working-dir", "working_dir", "cwd":
+		if out.Plan != nil && strings.TrimSpace(out.Plan.WorkingDir) != "" {
+			return strings.TrimSpace(out.Plan.WorkingDir), nil
+		}
+		return strings.TrimSpace(out.Proyecto.RutaAbs), nil
+	case "mode", "modo":
+		if out.Plan == nil {
+			return "", nil
+		}
+		return strings.TrimSpace(out.Plan.Modo), nil
+	case "external-session-id", "external_session_id":
+		if out.UltimaSesion == nil {
+			return "", nil
+		}
+		return strings.TrimSpace(out.UltimaSesion.ExternalSessionID), nil
+	case "branch":
+		if out.UltimaSesion == nil {
+			return "", nil
+		}
+		return strings.TrimSpace(out.UltimaSesion.Branch), nil
+	default:
+		return "", fmt.Errorf("campo de agente preparar no soportado: %s", campo)
+	}
+}
+
 func imprimirAgentePreparar(out agentePrepararOutput, jsonOut bool) error {
 	if jsonOut {
 		return imprimirJSON(out)
@@ -821,6 +871,9 @@ func imprimirAgentePreparar(out agentePrepararOutput, jsonOut bool) error {
 		if out.Plan.ContinuityPrompt != "" {
 			fmt.Printf("Continuidad: %s\n", out.Plan.ContinuityPrompt)
 		}
+	}
+	if strings.TrimSpace(out.BootstrapPrompt) != "" {
+		fmt.Printf("Bootstrap: %s\n", truncar(out.BootstrapPrompt, 220))
 	}
 	if out.EstadoCuota != "activo" {
 		msg := fmt.Sprintf("⚠️  AVISO: Agente en estado [%s]", out.EstadoCuota)

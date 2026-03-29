@@ -88,15 +88,14 @@ func IniciarSesion(agente string) (int64, error) {
 func IniciarSesionContexto(in SesionInicio) (*Sesion, error) {
 	agente := strings.TrimSpace(in.Agente)
 	// Verificar que el agente existe y está habilitado
-	var rol string
-	var habilitado bool
-	err := DB.QueryRow(`SELECT rol, habilitado FROM agentes WHERE nombre = ?`, agente).Scan(&rol, &habilitado)
+	agenteCanonico, _, habilitado, err := resolverAgentePorNombreCI(agente)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("agente '%s' no registrado; usa 'orquesta config agente-nuevo' para registrarlo", agente)
 	}
 	if err != nil {
 		return nil, err
 	}
+	agente = agenteCanonico
 	if !habilitado {
 		return nil, fmt.Errorf("agente '%s' está retirado y no puede iniciar sesión", agente)
 	}
@@ -428,12 +427,16 @@ func ListarAgentes() ([]*Agente, error) {
 }
 
 func GetAgente(nombre string) (*Agente, error) {
+	nombreCanonico, _, _, err := resolverAgentePorNombreCI(strings.TrimSpace(nombre))
+	if err != nil {
+		return nil, err
+	}
 	row := DB.QueryRow(`
 		SELECT nombre, rol, activo, habilitado, COALESCE(estado_sesion,''), ultima_sesion,
 		       consumo_dia_segundos, consumo_semanal_segundos, limite_dia_segundos,
 		       limite_semanal_segundos, last_usage_reset_at, estado_cuota,
 		       reanimar_at, motivo_pausa
-		FROM agentes WHERE nombre = ?`, nombre)
+		FROM agentes WHERE nombre = ?`, nombreCanonico)
 	a := &Agente{}
 	var ultima sql.NullTime
 	var lastReset sql.NullTime
@@ -457,12 +460,31 @@ func GetAgente(nombre string) (*Agente, error) {
 		a.ReanimarAt = &reanimar.Time
 	}
 	a.MotivoPausa = motivo.String
-	sesionActiva, err := GetSesionActiva(nombre, nil)
+	sesionActiva, err := GetSesionActiva(a.Nombre, nil)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
 	aplicarEstadoVisibleAgente(a, sesionActiva)
 	return a, nil
+}
+
+func resolverAgentePorNombreCI(nombre string) (string, string, bool, error) {
+	nombre = strings.TrimSpace(nombre)
+	var (
+		nombreCanonico string
+		rol            string
+		habilitado     bool
+	)
+	err := DB.QueryRow(`
+		SELECT nombre, rol, habilitado
+		FROM agentes
+		WHERE lower(nombre) = lower(?)
+		LIMIT 1`, nombre,
+	).Scan(&nombreCanonico, &rol, &habilitado)
+	if err != nil {
+		return "", "", false, err
+	}
+	return nombreCanonico, rol, habilitado, nil
 }
 
 // CheckReanimaciones busca agentes cuya fecha de reanimación ha vencido.
@@ -776,7 +798,7 @@ func RegistrarAgenteAuto(proveedor, rol string) (string, error) {
 	return nombre, nil
 }
 
-// RegistrarCodex registra un agente Codex y devuelve el nombre asignado (codex1, codex2…).
+// RegistrarCodex registra un agente Codex y devuelve el nombre asignado (Codex1, Codex2…).
 func RegistrarCodex() (string, error) {
 	return RegistrarAgenteAuto("codex", "programador")
 }

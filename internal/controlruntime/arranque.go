@@ -20,6 +20,7 @@ type ProcesoArrancado struct {
 	HandleRef         string
 	ExternalSessionID string
 	StdinPath         string
+	StdinRawPath      string
 	LogPath           string
 	WorkingDir        string
 	WrappedCommand    string

@@ -30,6 +30,11 @@ type RuntimeTranscriptEntry struct {
 	HandledAt      *time.Time `json:"handled_at,omitempty"`
 }
 
+type transcriptRawLine struct {
+	ByteOffset int64
+	Raw        string
+}
+
 type FiltroRuntimeTranscript struct {
 	Agente          *string
 	ProyectoID      *int64
@@ -37,6 +42,7 @@ type FiltroRuntimeTranscript struct {
 	HandleID        *int64
 	Stream          *string
 	Classification  *string
+	Query           *string
 	SoloSenalesPend bool
 	Limit           int
 }
@@ -114,6 +120,26 @@ func ListarRuntimeTranscript(filter FiltroRuntimeTranscript) ([]*RuntimeTranscri
 	if filter.Classification != nil {
 		q += ` AND t.classification = ?`
 		args = append(args, strings.TrimSpace(*filter.Classification))
+	}
+	if filter.Query != nil {
+		raw := strings.TrimSpace(*filter.Query)
+		if raw != "" {
+			normalized := normalizarTextoTranscript(raw)
+			if normalized == "" {
+				normalized = strings.ToLower(raw)
+			}
+			tokens := strings.Fields(normalized)
+			if len(tokens) == 0 {
+				tokens = []string{normalized}
+			}
+			for _, token := range tokens {
+				if strings.TrimSpace(token) == "" {
+					continue
+				}
+				q += ` AND (t.normalized_text LIKE ? OR t.text LIKE ? OR t.classification LIKE ?)`
+				args = append(args, "%"+token+"%", "%"+token+"%", "%"+token+"%")
+			}
+		}
 	}
 	if filter.SoloSenalesPend {
 		q += ` AND t.classification <> '' AND t.handled_at IS NULL`
@@ -356,16 +382,20 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 	}
 
 	chunk := string(buf[:n])
+	startOffset := offset - int64(len(pending))
 	offset += int64(n)
-	pending, lines := extraerLineasTranscript(pending + chunk)
+	pending, lines := extraerLineasTranscriptConOffsets(pending+chunk, startOffset)
 	if len(pending) > 4096 {
-		lines = append(lines, pending)
+		lines = append(lines, transcriptRawLine{
+			ByteOffset: startOffset + int64(len(pending+chunk)-len(pending)),
+			Raw:        pending,
+		})
 		pending = ""
 	}
 
 	total := 0
 	for _, line := range lines {
-		texto := limpiarLineaTranscript(line)
+		texto := limpiarLineaTranscript(line.Raw)
 		if texto == "" {
 			continue
 		}
@@ -378,14 +408,14 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 		if descartarRuidoTranscript(stream, texto, normalized, classification) {
 			continue
 		}
-		var byteOffset *int64
+		byteOffset := line.ByteOffset
 		id, err := RegistrarRuntimeTranscript(&RuntimeTranscriptEntry{
 			RuntimeID:      runtime.ID,
 			HandleID:       &handle.ID,
 			Agente:         strings.TrimSpace(handle.Agente),
 			ProyectoID:     runtime.ProyectoID,
 			Stream:         stream,
-			ByteOffset:     byteOffset,
+			ByteOffset:     &byteOffset,
 			Text:           texto,
 			NormalizedText: normalized,
 			Classification: classification,
@@ -472,6 +502,42 @@ func extraerLineasTranscript(raw string) (string, []string) {
 		return parts[0], nil
 	}
 	return parts[len(parts)-1], parts[:len(parts)-1]
+}
+
+func extraerLineasTranscriptConOffsets(raw string, startOffset int64) (string, []transcriptRawLine) {
+	if raw == "" {
+		return "", nil
+	}
+	out := make([]transcriptRawLine, 0, 8)
+	lineStart := 0
+	for i := 0; i < len(raw); {
+		switch raw[i] {
+		case '\r':
+			out = append(out, transcriptRawLine{
+				ByteOffset: startOffset + int64(lineStart),
+				Raw:        raw[lineStart:i],
+			})
+			if i+1 < len(raw) && raw[i+1] == '\n' {
+				i += 2
+			} else {
+				i++
+			}
+			lineStart = i
+		case '\n':
+			out = append(out, transcriptRawLine{
+				ByteOffset: startOffset + int64(lineStart),
+				Raw:        raw[lineStart:i],
+			})
+			i++
+			lineStart = i
+		default:
+			i++
+		}
+	}
+	if lineStart >= len(raw) {
+		return "", out
+	}
+	return raw[lineStart:], out
 }
 
 func limpiarLineaTranscript(raw string) string {

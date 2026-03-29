@@ -36,22 +36,28 @@ var ttyInstructionASCIIReplacer = strings.NewReplacer(
 )
 
 func arrancarPlanLocalPTY(req SolicitudArranque) (*ProcesoArrancado, error) {
-	baseDir := filepath.Join(os.TempDir(), "orquesta-runtime", sanitizePathFragment(req.Agente))
-	if err := os.MkdirAll(baseDir, 0o700); err != nil {
+	runDir := runtimeArtifactsRunDir(req, time.Now())
+	if err := os.MkdirAll(runDir, 0o700); err != nil {
 		return nil, err
 	}
 
-	token := fmt.Sprintf("%d", time.Now().UnixNano())
-	stdinPath := filepath.Join(baseDir, token+".stdin")
-	logPath := filepath.Join(baseDir, token+".log")
+	stdinPath := filepath.Join(runDir, "pty.stdin")
+	stdinRawPath := filepath.Join(runDir, "pty.stdin.raw")
+	logPath := filepath.Join(runDir, "pty.log")
+	manifestPath := filepath.Join(runDir, "runtime.json")
 
 	if err := syscall.Mkfifo(stdinPath, 0o600); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(stdinRawPath, nil, 0o600); err != nil {
+		_ = os.Remove(stdinPath)
 		return nil, err
 	}
 
 	stdin, err := os.OpenFile(stdinPath, os.O_RDWR, 0o600)
 	if err != nil {
 		_ = os.Remove(stdinPath)
+		_ = os.Remove(stdinRawPath)
 		return nil, err
 	}
 	defer stdin.Close()
@@ -59,6 +65,7 @@ func arrancarPlanLocalPTY(req SolicitudArranque) (*ProcesoArrancado, error) {
 	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
 	if err != nil {
 		_ = os.Remove(stdinPath)
+		_ = os.Remove(stdinRawPath)
 		return nil, err
 	}
 	defer devNull.Close()
@@ -70,6 +77,7 @@ func arrancarPlanLocalPTY(req SolicitudArranque) (*ProcesoArrancado, error) {
 	if cmd.Dir != "" {
 		if err := os.MkdirAll(cmd.Dir, 0o700); err != nil {
 			_ = os.Remove(stdinPath)
+			_ = os.Remove(stdinRawPath)
 			return nil, err
 		}
 	}
@@ -92,19 +100,25 @@ func arrancarPlanLocalPTY(req SolicitudArranque) (*ProcesoArrancado, error) {
 
 	if err := cmd.Start(); err != nil {
 		_ = os.Remove(stdinPath)
+		_ = os.Remove(stdinRawPath)
 		return nil, err
 	}
 
+	canSendInput := !renderedCommandLooksLikeCodexCLI(rendered)
 	metaJSON, _ := json.Marshal(map[string]any{
 		"stdin_path":       stdinPath,
+		"stdin_raw_path":   stdinRawPath,
 		"log_path":         logPath,
+		"trace_dir":        runDir,
+		"trace_manifest":   manifestPath,
 		"working_dir":      cmd.Dir,
 		"wrapped_command":  wrapped,
 		"rendered_command": rendered,
 		"driver":           "process_pty_cli",
+		"can_send_input":   canSendInput,
 	})
 	capsJSON, _ := json.Marshal(map[string]any{
-		"can_send_input":       true,
+		"can_send_input":       canSendInput,
 		"can_checkpoint":       true,
 		"can_resume":           true,
 		"can_capture_pid":      true,
@@ -112,12 +126,17 @@ func arrancarPlanLocalPTY(req SolicitudArranque) (*ProcesoArrancado, error) {
 		"can_pause":            true,
 		"can_stop":             true,
 	})
+	if err := writeRuntimeTraceManifest(manifestPath, req, cmd.Process.Pid, stdinPath, stdinRawPath, logPath, rendered, wrapped, canSendInput); err != nil {
+		_, _, _ = DetenerProceso(ObjetivoProceso{PID: intPtr64(int64(cmd.Process.Pid))})
+		return nil, err
+	}
 
 	return &ProcesoArrancado{
 		PID:              cmd.Process.Pid,
 		HandleKind:       "process",
 		HandleRef:        fmt.Sprintf("%d", cmd.Process.Pid),
 		StdinPath:        stdinPath,
+		StdinRawPath:     stdinRawPath,
 		LogPath:          logPath,
 		WorkingDir:       cmd.Dir,
 		WrappedCommand:   wrapped,
@@ -125,6 +144,68 @@ func arrancarPlanLocalPTY(req SolicitudArranque) (*ProcesoArrancado, error) {
 		MetadataJSON:     string(metaJSON),
 		CapabilitiesJSON: string(capsJSON),
 	}, nil
+}
+
+func runtimeArtifactsBaseDir(req SolicitudArranque) string {
+	if req.Plan != nil {
+		if workDir := strings.TrimSpace(req.Plan.WorkingDir); workDir != "" {
+			return filepath.Join(workDir, ".orquesta-runtime", sanitizePathFragment(req.Agente))
+		}
+	}
+	return filepath.Join(os.TempDir(), "orquesta-runtime", sanitizePathFragment(req.Agente))
+}
+
+func runtimeArtifactsRunDir(req SolicitudArranque, now time.Time) string {
+	return filepath.Join(runtimeArtifactsBaseDir(req), runtimeArtifactsToken(now))
+}
+
+func runtimeArtifactsToken(now time.Time) string {
+	now = now.UTC()
+	return fmt.Sprintf("%s-%09d", now.Format("20060102-150405"), now.Nanosecond())
+}
+
+func writeRuntimeTraceManifest(path string, req SolicitudArranque, pid int, stdinPath, stdinRawPath, logPath, rendered, wrapped string, canSendInput bool) error {
+	payload := map[string]any{
+		"created_at":       time.Now().UTC().Format(time.RFC3339Nano),
+		"agente":           strings.TrimSpace(req.Agente),
+		"proyecto":         strings.TrimSpace(req.Proyecto),
+		"working_dir":      strings.TrimSpace(renderedWorkingDir(req)),
+		"driver":           "process_pty_cli",
+		"pid":              pid,
+		"stdin_path":       stdinPath,
+		"stdin_raw_path":   stdinRawPath,
+		"log_path":         logPath,
+		"rendered_command": rendered,
+		"wrapped_command":  wrapped,
+		"can_send_input":   canSendInput,
+	}
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(path, data, 0o600)
+}
+
+func renderedWorkingDir(req SolicitudArranque) string {
+	if req.Plan == nil {
+		return ""
+	}
+	return req.Plan.WorkingDir
+}
+
+func intPtr64(v int64) *int64 {
+	return &v
+}
+
+func renderedCommandLooksLikeCodexCLI(rendered string) bool {
+	lower := strings.ToLower(strings.TrimSpace(rendered))
+	if lower == "" {
+		return false
+	}
+	return strings.Contains(lower, "codex-perfil") ||
+		strings.Contains(lower, "/codex") ||
+		strings.HasPrefix(lower, "codex ")
 }
 
 func NormalizarInstruccionProceso(obj ObjetivoProceso, instruccion string) string {
@@ -177,7 +258,7 @@ func sanitizarInstruccionTTY(raw string) string {
 			out = append(out, line)
 		}
 	}
-	texto := strings.TrimSpace(strings.Join(out, "\n"))
+	texto := strings.TrimSpace(strings.Join(out, " "))
 	if texto == "" {
 		return ""
 	}
@@ -277,6 +358,8 @@ func EnviarInstruccionProceso(obj ObjetivoProceso, instruccion string) (bool, in
 			}
 			return true, pid, err
 		}
+		// La traza raw no debe invalidar una instruccion ya entregada al PTY.
+		_ = appendRuntimeRawInput(stdinRawPathFromMetadata(obj.MetadataJSON), texto)
 		return true, pid, nil
 	}
 	return enviarInstruccionRemota(obj, instruccion)
@@ -288,4 +371,27 @@ func stdinPathFromMetadata(raw string) string {
 		return strings.TrimSpace(v)
 	}
 	return ""
+}
+
+func stdinRawPathFromMetadata(raw string) string {
+	payload := metadataMap(raw)
+	if v, ok := payload["stdin_raw_path"].(string); ok {
+		return strings.TrimSpace(v)
+	}
+	return ""
+}
+
+func appendRuntimeRawInput(path, texto string) error {
+	path = strings.TrimSpace(path)
+	texto = strings.TrimRight(texto, "\n")
+	if path == "" || texto == "" {
+		return nil
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.WriteString(texto + "\n")
+	return err
 }

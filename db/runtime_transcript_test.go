@@ -146,6 +146,144 @@ func TestRegistrarRuntimeTranscriptInputPersisteLinea(t *testing.T) {
 	}
 }
 
+func TestListarRuntimeTranscriptFiltraPorTextoLibre(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "demo",
+		Nombre:  "Demo",
+		RutaAbs: filepath.Join(t.TempDir(), "demo"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "demo"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, _ := GetRuntimeBySesionID(sesion.ID)
+
+	for _, item := range []*RuntimeTranscriptEntry{
+		{
+			RuntimeID:      runtime.ID,
+			Agente:         "Codex2",
+			ProyectoID:     &proyectoID,
+			Stream:         "pty_out",
+			Text:           "He preparado el refactor del router",
+			NormalizedText: "he preparado el refactor del router",
+			Classification: "ready_for_review",
+		},
+		{
+			RuntimeID:      runtime.ID,
+			Agente:         "Codex2",
+			ProyectoID:     &proyectoID,
+			Stream:         "pty_out",
+			Text:           "Sigo con los tests de integración",
+			NormalizedText: "sigo con los tests de integracion",
+		},
+	} {
+		if _, err := RegistrarRuntimeTranscript(item); err != nil {
+			t.Fatalf("registrar transcript: %v", err)
+		}
+	}
+
+	agente := "Codex2"
+	query := "refactor router"
+	items, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{
+		Agente: &agente,
+		Query:  &query,
+		Limit:  10,
+	})
+	if err != nil {
+		t.Fatalf("listar transcript filtrado: %v", err)
+	}
+	if len(items) != 1 || !strings.Contains(strings.ToLower(items[0].Text), "refactor") {
+		t.Fatalf("resultado filtrado inesperado: %+v", items)
+	}
+}
+
+func TestIngestarRuntimeTranscriptHandlePersisteByteOffset(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "trace-demo",
+		Nombre:  "Trace Demo",
+		RutaAbs: filepath.Join(t.TempDir(), "trace-demo"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex3",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "trace-demo"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+
+	logPath := filepath.Join(t.TempDir(), "offsets.log")
+	if err := os.WriteFile(logPath, []byte("uno\ndos\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	n, err := IngestarRuntimeTranscriptHandle(handle.ID)
+	if err != nil {
+		t.Fatalf("ingestar transcript: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("esperaba 2 líneas ingeridas, got=%d", n)
+	}
+
+	agente := "Codex3"
+	items, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: &agente, Limit: 10})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("transcript inesperado: %+v", items)
+	}
+	offsets := map[string]int64{}
+	for _, item := range items {
+		if item == nil || item.ByteOffset == nil {
+			t.Fatalf("byte_offset ausente: %+v", items)
+		}
+		offsets[item.Text] = *item.ByteOffset
+	}
+	if offsets["uno"] != 0 {
+		t.Fatalf("offset de 'uno' inesperado: %d", offsets["uno"])
+	}
+	if offsets["dos"] != 4 {
+		t.Fatalf("offset de 'dos' inesperado: %d", offsets["dos"])
+	}
+}
+
 func TestClasificarTextoTranscriptReconoceReviewYReplan(t *testing.T) {
 	cases := []struct {
 		raw  string

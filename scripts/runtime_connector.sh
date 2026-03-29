@@ -19,6 +19,31 @@ runtime_connector_hook() {
   "$script" "$action" "$@"
 }
 
+runtime_quote_arg() {
+  printf '%q' "$1"
+}
+
+runtime_first_token() {
+  local runtime_cmd="$1"
+  runtime_cmd="${runtime_cmd#"${runtime_cmd%%[![:space:]]*}"}"
+  printf '%s' "${runtime_cmd%%[[:space:]]*}"
+}
+
+runtime_is_codex_family() {
+  local runtime_cmd="$1"
+  local first
+  first="$(runtime_first_token "$runtime_cmd")"
+  first="${first##*/}"
+  case "$first" in
+    codex|codex-perfil)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 runtime_detect_external_session_id() {
   local runtime_cmd="$1"
   local cwd_trabajo="$2"
@@ -47,18 +72,20 @@ runtime_launch() {
     return 0
   fi
 
-  case "$runtime_cmd" in
-    codex)
-      if [[ -n "$external_session_id" ]]; then
-        codex resume -C "$cwd_trabajo" "$external_session_id"
-      else
-        codex -C "$cwd_trabajo" "$bootstrap_prompt"
-      fi
-      ;;
-    *)
-      bash -lc "$runtime_cmd"
-      ;;
-  esac
+  if runtime_is_codex_family "$runtime_cmd"; then
+    local quoted_cwd quoted_prompt quoted_external
+    quoted_cwd="$(runtime_quote_arg "$cwd_trabajo")"
+    quoted_prompt="$(runtime_quote_arg "$bootstrap_prompt")"
+    quoted_external="$(runtime_quote_arg "$external_session_id")"
+    if [[ -n "$external_session_id" ]]; then
+      bash -lc "$runtime_cmd resume -C $quoted_cwd $quoted_external"
+    else
+      bash -lc "$runtime_cmd -C $quoted_cwd $quoted_prompt"
+    fi
+    return 0
+  fi
+
+  bash -lc "$runtime_cmd"
 }
 
 runtime_resume_hint() {
@@ -76,12 +103,9 @@ runtime_resume_hint() {
     return 1
   fi
 
-  case "$runtime_cmd" in
-    codex)
-      printf 'codex resume %s' "$external_session_id"
-      ;;
-    *)
-      return 1
-      ;;
-  esac
+  if runtime_is_codex_family "$runtime_cmd"; then
+    printf '%s resume %s' "$runtime_cmd" "$external_session_id"
+    return 0
+  fi
+  return 1
 }

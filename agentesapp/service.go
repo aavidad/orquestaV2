@@ -83,6 +83,32 @@ type Detail struct {
 	Checkpoints  []*db.RuntimeCheckpoint
 }
 
+type InvestigationMatch struct {
+	Transcript    *db.RuntimeTranscriptEntry `json:"transcript"`
+	Runtime       *db.RuntimeInstance        `json:"runtime,omitempty"`
+	TraceDir      string                     `json:"trace_dir,omitempty"`
+	TraceManifest string                     `json:"trace_manifest,omitempty"`
+	LogPath       string                     `json:"log_path,omitempty"`
+	WorkingDir    string                     `json:"working_dir,omitempty"`
+}
+
+type InvestigationAgentResult struct {
+	Agente         *db.Agente            `json:"agente"`
+	Runtime        *db.RuntimeInstance   `json:"runtime,omitempty"`
+	LastCheckpoint *db.RuntimeCheckpoint `json:"last_checkpoint,omitempty"`
+	OpenTasks      int                   `json:"open_tasks"`
+	Matches        []*InvestigationMatch `json:"matches"`
+	handles        []*db.RuntimeHandle
+	runtimes       []*db.RuntimeInstance
+}
+
+type InvestigationReport struct {
+	Query        string                      `json:"query"`
+	Proyecto     *db.Proyecto                `json:"proyecto,omitempty"`
+	Results      []*InvestigationAgentResult `json:"results"`
+	TotalMatches int                         `json:"total_matches"`
+}
+
 func (s *Service) RegisterAgent(nombre, rol string) error {
 	return s.store.RegisterAgent(strings.TrimSpace(nombre), strings.TrimSpace(rol))
 }
@@ -453,6 +479,263 @@ func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 		Mailbox:      mailbox,
 		Checkpoints:  checkpoints,
 	}, nil
+}
+
+func (s *Service) Investigate(query, projectRef string, limit int) (*InvestigationReport, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, fmt.Errorf("consulta obligatoria")
+	}
+	if limit <= 0 {
+		limit = 25
+	}
+
+	var (
+		project   *db.Proyecto
+		projectID *int64
+		err       error
+	)
+	projectRef = strings.TrimSpace(projectRef)
+	if projectRef != "" {
+		project, err = s.store.GetProject(projectRef)
+		if err != nil {
+			return nil, err
+		}
+		if project != nil {
+			projectID = &project.ID
+		}
+	}
+
+	transcript, err := s.store.ListRuntimeTranscript(db.FiltroRuntimeTranscript{
+		ProyectoID: projectID,
+		Query:      &query,
+		Limit:      limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	report := &InvestigationReport{
+		Query:        query,
+		Proyecto:     project,
+		Results:      []*InvestigationAgentResult{},
+		TotalMatches: len(transcript),
+	}
+	if len(transcript) == 0 {
+		return report, nil
+	}
+
+	byAgent := map[string]*InvestigationAgentResult{}
+	agentOrder := make([]string, 0, len(transcript))
+	for _, item := range transcript {
+		if item == nil {
+			continue
+		}
+		agente := strings.TrimSpace(item.Agente)
+		if agente == "" {
+			continue
+		}
+		result := byAgent[agente]
+		if result == nil {
+			result, err = s.buildInvestigationAgentResult(agente, projectID)
+			if err != nil {
+				return nil, err
+			}
+			byAgent[agente] = result
+			agentOrder = append(agentOrder, agente)
+		}
+		match := &InvestigationMatch{Transcript: item}
+		match.Runtime = investigationRuntimeForMatch(result, item.RuntimeID)
+		if item.HandleID != nil {
+			traceDir, traceManifest, logPath, workingDir := investigationTraceInfo(result, *item.HandleID)
+			match.TraceDir = traceDir
+			match.TraceManifest = traceManifest
+			match.LogPath = logPath
+			match.WorkingDir = firstNonEmptyAgent(strings.TrimSpace(workingDir), runtimeWorkingDir(match.Runtime))
+		} else {
+			match.WorkingDir = runtimeWorkingDir(match.Runtime)
+		}
+		result.Matches = append(result.Matches, match)
+	}
+
+	for _, agente := range agentOrder {
+		if item := byAgent[agente]; item != nil {
+			report.Results = append(report.Results, item)
+		}
+	}
+	sort.Slice(report.Results, func(i, j int) bool {
+		left := latestInvestigationMoment(report.Results[i])
+		right := latestInvestigationMoment(report.Results[j])
+		if !left.Equal(right) {
+			return left.After(right)
+		}
+		leftName := ""
+		rightName := ""
+		if report.Results[i].Agente != nil {
+			leftName = strings.ToLower(strings.TrimSpace(report.Results[i].Agente.Nombre))
+		}
+		if report.Results[j].Agente != nil {
+			rightName = strings.ToLower(strings.TrimSpace(report.Results[j].Agente.Nombre))
+		}
+		return leftName < rightName
+	})
+	return report, nil
+}
+
+func (s *Service) buildInvestigationAgentResult(nombre string, projectID *int64) (*InvestigationAgentResult, error) {
+	agente, err := s.store.GetAgent(nombre)
+	if err != nil {
+		return nil, err
+	}
+	if agente == nil {
+		agente = &db.Agente{Nombre: nombre}
+	}
+	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{Agente: &nombre, ProyectoID: projectID})
+	if err != nil {
+		return nil, err
+	}
+	handles, err := s.store.ListRuntimeHandles(&nombre)
+	if err != nil {
+		return nil, err
+	}
+	tasks, err := s.store.ListTasks(db.FiltroTareas{Agente: &nombre, ProyectoID: projectID})
+	if err != nil {
+		return nil, err
+	}
+	checkpoints, err := s.store.ListRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{Agente: &nombre, ProyectoID: projectID, Limit: 5})
+	if err != nil {
+		return nil, err
+	}
+	return &InvestigationAgentResult{
+		Agente:         agente,
+		Runtime:        latestRuntimeForInvestigation(runtimes),
+		LastCheckpoint: latestCheckpointForInvestigation(checkpoints),
+		OpenTasks:      openTasksForInvestigation(tasks),
+		Matches:        []*InvestigationMatch{},
+		handles:        handles,
+		runtimes:       runtimes,
+	}, nil
+}
+
+func latestInvestigationMoment(result *InvestigationAgentResult) time.Time {
+	if result == nil {
+		return time.Time{}
+	}
+	var latest time.Time
+	for _, item := range result.Matches {
+		if item == nil || item.Transcript == nil {
+			continue
+		}
+		if item.Transcript.CreatedAt.After(latest) {
+			latest = item.Transcript.CreatedAt
+		}
+	}
+	return latest
+}
+
+func latestRuntimeForInvestigation(items []*db.RuntimeInstance) *db.RuntimeInstance {
+	var picked *db.RuntimeInstance
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		if picked == nil || runtimeMoment(item).After(runtimeMoment(picked)) {
+			picked = item
+		}
+	}
+	return picked
+}
+
+func latestCheckpointForInvestigation(items []*db.RuntimeCheckpoint) *db.RuntimeCheckpoint {
+	var picked *db.RuntimeCheckpoint
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		if picked == nil || item.CreatedAt.After(picked.CreatedAt) {
+			picked = item
+		}
+	}
+	return picked
+}
+
+func openTasksForInvestigation(items []*db.Tarea) int {
+	total := 0
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		switch item.Estado {
+		case db.TareaCompletada, db.TareaCancelada, db.TareaBacklog:
+			continue
+		default:
+			total++
+		}
+	}
+	return total
+}
+
+func investigationTraceInfo(result *InvestigationAgentResult, handleID int64) (string, string, string, string) {
+	if result == nil || handleID <= 0 {
+		return "", "", "", ""
+	}
+	for _, handle := range result.handles {
+		if handle == nil || handle.ID != handleID {
+			continue
+		}
+		meta := map[string]any{}
+		if strings.TrimSpace(handle.MetadataJSON) != "" {
+			_ = json.Unmarshal([]byte(handle.MetadataJSON), &meta)
+		}
+		return stringMapValueAgent(meta, "trace_dir"),
+			stringMapValueAgent(meta, "trace_manifest"),
+			stringMapValueAgent(meta, "log_path"),
+			stringMapValueAgent(meta, "working_dir")
+	}
+	return "", "", "", ""
+}
+
+func investigationRuntimeForMatch(result *InvestigationAgentResult, runtimeID int64) *db.RuntimeInstance {
+	if result == nil || runtimeID <= 0 {
+		return result.Runtime
+	}
+	for _, item := range result.runtimes {
+		if item != nil && item.ID == runtimeID {
+			return item
+		}
+	}
+	return result.Runtime
+}
+
+func runtimeWorkingDir(runtime *db.RuntimeInstance) string {
+	if runtime == nil {
+		return ""
+	}
+	return strings.TrimSpace(runtime.CWD)
+}
+
+func firstNonEmptyAgent(items ...string) string {
+	for _, item := range items {
+		if strings.TrimSpace(item) != "" {
+			return strings.TrimSpace(item)
+		}
+	}
+	return ""
+}
+
+func stringMapValueAgent(raw map[string]any, key string) string {
+	if raw == nil {
+		return ""
+	}
+	value, ok := raw[key]
+	if !ok {
+		return ""
+	}
+	text, ok := value.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(text)
 }
 
 func (s *Service) listMailboxForAgent(nombre string) ([]*db.RuntimeMailboxMessage, error) {

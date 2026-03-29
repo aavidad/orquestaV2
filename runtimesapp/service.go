@@ -21,7 +21,9 @@ type Store interface {
 	ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance, error)
 	BuildRuntimeTree(filtro db.FiltroRuntimes) ([]*db.RuntimeTreeNode, error)
 	GetRuntime(id int64) (*db.RuntimeInstance, error)
+	GetRuntimeHandle(id int64) (*db.RuntimeHandle, error)
 	ListRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error)
+	PurgeInactiveRuntimeHandles(filtro db.FiltroPurgadoRuntimeHandles) (*db.PurgaRuntimeHandlesResultado, error)
 	GetActiveRuntimeHandle(agente string) (*db.RuntimeHandle, error)
 	GetActiveRuntimeHandleForProject(agente string, proyectoID *int64) (*db.RuntimeHandle, error)
 	ListRuntimeTranscript(filtro db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error)
@@ -73,6 +75,13 @@ type AgentControlPayload struct {
 	Por          string `json:"por,omitempty"`
 }
 
+type RuntimeHandlePurgeRequest struct {
+	Agente   string
+	Proyecto string
+	Estados  []string
+	Actor    string
+}
+
 func (s *Service) GetProject(ref string) (*db.Proyecto, error) {
 	return s.store.GetProject(ref)
 }
@@ -93,8 +102,50 @@ func (s *Service) GetRuntime(id int64) (*db.RuntimeInstance, error) {
 	return s.store.GetRuntime(id)
 }
 
+func (s *Service) GetRuntimeHandle(id int64) (*db.RuntimeHandle, error) {
+	return s.store.GetRuntimeHandle(id)
+}
+
 func (s *Service) ListRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error) {
 	return s.store.ListRuntimeHandles(filtro)
+}
+
+func (s *Service) PurgeInactiveRuntimeHandles(req RuntimeHandlePurgeRequest) (*db.PurgaRuntimeHandlesResultado, error) {
+	agente := strings.TrimSpace(req.Agente)
+	proyectoRef := strings.TrimSpace(req.Proyecto)
+	actor := strings.TrimSpace(req.Actor)
+	if actor == "" {
+		actor = "orquesta"
+	}
+
+	var (
+		filtroAgente *string
+		proyectoID   *int64
+	)
+	if agente != "" {
+		if _, err := s.store.GetAgent(agente); err != nil {
+			return nil, err
+		}
+		filtroAgente = &agente
+	}
+	if proyectoRef != "" {
+		proyecto, err := s.store.GetProject(proyectoRef)
+		if err != nil {
+			return nil, err
+		}
+		proyectoID = &proyecto.ID
+	}
+	resultado, err := s.store.PurgeInactiveRuntimeHandles(db.FiltroPurgadoRuntimeHandles{
+		Agente:     filtroAgente,
+		ProyectoID: proyectoID,
+		Estados:    req.Estados,
+	})
+	if err != nil {
+		return nil, err
+	}
+	detalle := fmt.Sprintf("agente=%s proyecto=%s deleted=%d estados=%s", valueOrFallback(agente, "*"), valueOrFallback(proyectoRef, "*"), resultado.Deleted, strings.Join(resultado.Estados, ","))
+	s.store.Audit(actor, "purgar_runtime_handles", "runtime_handle", 0, detalle)
+	return resultado, nil
 }
 
 func (s *Service) GetActiveRuntimeHandle(agente string) (*db.RuntimeHandle, error) {
@@ -281,8 +332,16 @@ func (Repository) GetRuntime(id int64) (*db.RuntimeInstance, error) {
 	return db.GetRuntime(id)
 }
 
+func (Repository) GetRuntimeHandle(id int64) (*db.RuntimeHandle, error) {
+	return db.GetRuntimeHandle(id)
+}
+
 func (Repository) ListRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error) {
 	return db.ListarRuntimeHandles(filtro)
+}
+
+func (Repository) PurgeInactiveRuntimeHandles(filtro db.FiltroPurgadoRuntimeHandles) (*db.PurgaRuntimeHandlesResultado, error) {
+	return db.PurgarRuntimeHandlesInactivos(filtro)
 }
 
 func (Repository) GetActiveRuntimeHandle(agente string) (*db.RuntimeHandle, error) {

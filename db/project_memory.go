@@ -282,11 +282,11 @@ func (ProjectMemoryRepository) ResolveProyectoIDBySlug(slug string) (*int64, err
 }
 
 func (ProjectMemoryRepository) ListProjects(activo *bool) ([]*Proyecto, error) {
-	return ListarProyectos(FiltroProyectos{Activo: activo})
+	return ListarProyectosConRutaEfectiva(FiltroProyectos{Activo: activo}, "")
 }
 
 func (ProjectMemoryRepository) GetProjectBySlug(slug string) (*Proyecto, error) {
-	return GetProyecto(slug)
+	return GetProyectoConRutaEfectiva(slug, "")
 }
 
 func (ProjectMemoryRepository) ListVoteHistoryByProjectID(proyectoID int64) ([]*HistorialVotacionProyecto, error) {

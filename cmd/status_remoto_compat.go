@@ -248,10 +248,14 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 
 func fetchServerConfigAll(baseURL string) (map[string]string, error) {
 	var payload struct {
-		Items map[string]string `json:"items"`
+		Items  map[string]string `json:"items"`
+		Config map[string]string `json:"config"`
 	}
 	if err := fetchServerJSON(baseURL+"/api/config", &payload); err != nil {
 		return nil, err
+	}
+	if len(payload.Config) > 0 {
+		return payload.Config, nil
 	}
 	return payload.Items, nil
 }
@@ -314,10 +318,14 @@ func submitServerSessionFinish(baseURL, agente string) error {
 
 func fetchServerAgents(baseURL string) ([]*db.Agente, error) {
 	var payload struct {
-		Items []*db.Agente `json:"items"`
+		Items   []*db.Agente `json:"items"`
+		Agentes []*db.Agente `json:"agentes"`
 	}
 	if err := fetchServerJSON(baseURL+"/api/agentes", &payload); err != nil {
 		return nil, err
+	}
+	if payload.Agentes != nil {
+		return payload.Agentes, nil
 	}
 	return payload.Items, nil
 }
@@ -332,7 +340,8 @@ func submitServerAgentAction(baseURL, nombre, action string) error {
 
 func fetchServerTasks(baseURL string, query url.Values) ([]*db.Tarea, error) {
 	var payload struct {
-		Items []*db.Tarea `json:"items"`
+		Items  []*db.Tarea `json:"items"`
+		Tareas []*db.Tarea `json:"tareas"`
 	}
 	u := baseURL + "/api/tareas"
 	if encoded := query.Encode(); encoded != "" {
@@ -341,12 +350,16 @@ func fetchServerTasks(baseURL string, query url.Values) ([]*db.Tarea, error) {
 	if err := fetchServerJSON(u, &payload); err != nil {
 		return nil, err
 	}
+	if payload.Tareas != nil {
+		return payload.Tareas, nil
+	}
 	return payload.Items, nil
 }
 
 func fetchServerProposals(baseURL string, query url.Values) ([]*db.Propuesta, error) {
 	var payload struct {
-		Items []*db.Propuesta `json:"items"`
+		Items      []*db.Propuesta `json:"items"`
+		Propuestas []*db.Propuesta `json:"propuestas"`
 	}
 	u := baseURL + "/api/propuestas"
 	if encoded := query.Encode(); encoded != "" {
@@ -355,25 +368,44 @@ func fetchServerProposals(baseURL string, query url.Values) ([]*db.Propuesta, er
 	if err := fetchServerJSON(u, &payload); err != nil {
 		return nil, err
 	}
+	if payload.Propuestas != nil {
+		return payload.Propuestas, nil
+	}
 	return payload.Items, nil
 }
 
 func fetchServerTaskDetail(baseURL string, id int64) (*db.Tarea, error) {
 	var payload struct {
-		Item *db.Tarea `json:"item"`
+		Item  *db.Tarea `json:"item"`
+		Tarea *db.Tarea `json:"tarea"`
 	}
 	if err := fetchServerJSON(fmt.Sprintf("%s/api/tareas/%d", baseURL, id), &payload); err != nil {
 		return nil, err
+	}
+	if payload.Tarea != nil {
+		return payload.Tarea, nil
 	}
 	return payload.Item, nil
 }
 
 func fetchServerProposalDetail(baseURL, codigo string) (*propuestasapp.ProposalDetail, error) {
-	var payload propuestasapp.ProposalDetail
+	var payload struct {
+		Proposal  *db.Propuesta `json:"Proposal"`
+		Propuesta *db.Propuesta `json:"propuesta"`
+		Votes     []*db.Voto    `json:"Votes"`
+	}
 	if err := fetchServerJSON(baseURL+"/api/propuestas/"+url.PathEscape(codigo), &payload); err != nil {
 		return nil, err
 	}
-	return &payload, nil
+	propuesta := payload.Proposal
+	if propuesta == nil {
+		propuesta = payload.Propuesta
+	}
+	votos := payload.Votes
+	if len(votos) == 0 && propuesta != nil && len(propuesta.Votos) > 0 {
+		votos = propuesta.Votos
+	}
+	return &propuestasapp.ProposalDetail{Proposal: propuesta, Votes: votos}, nil
 }
 
 func submitServerTaskAction(baseURL string, id int64, action string, payload map[string]any) error {
@@ -385,21 +417,29 @@ func submitServerTaskAction(baseURL string, id int64, action string, payload map
 
 func submitServerCreateTask(baseURL string, payload map[string]any) (int64, error) {
 	var result struct {
-		ID int64 `json:"id"`
+		ID    int64     `json:"id"`
+		Tarea *db.Tarea `json:"tarea"`
 	}
 	if err := postServerJSON(baseURL+"/api/tareas", payload, &result); err != nil {
 		return 0, err
+	}
+	if result.ID == 0 && result.Tarea != nil {
+		result.ID = result.Tarea.ID
 	}
 	return result.ID, nil
 }
 
 func submitServerCreateProposal(baseURL string, payload map[string]any) (int64, string, error) {
 	var result struct {
-		ID     int64  `json:"id"`
-		Codigo string `json:"codigo"`
+		ID        int64         `json:"id"`
+		Codigo    string        `json:"codigo"`
+		Propuesta *db.Propuesta `json:"propuesta"`
 	}
 	if err := postServerJSON(baseURL+"/api/propuestas", payload, &result); err != nil {
 		return 0, "", err
+	}
+	if result.Codigo == "" && result.Propuesta != nil {
+		result.Codigo = result.Propuesta.Codigo
 	}
 	return result.ID, result.Codigo, nil
 }

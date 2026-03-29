@@ -205,6 +205,9 @@ func localRPCEnabled(args []string) bool {
 }
 
 func skipRemoteDelegation(args []string) bool {
+	if configuredServerURL() != "" {
+		return true
+	}
 	args = normalizedCommandArgs(args)
 	return len(args) > 0 && args[0] == "persistencia"
 }

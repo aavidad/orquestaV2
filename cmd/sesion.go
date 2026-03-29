@@ -36,7 +36,7 @@ var sesionInicioCmd = &cobra.Command{
 	Use:   "inicio [agente]",
 	Short: "Inicia sesión de un agente y muestra sus reglas, skills y workflows",
 	Long: `Inicia la sesión de un agente registrado.
-Si se usa --nuevo-codex, registra automáticamente el siguiente codexN disponible.
+Si se usa --nuevo-codex, registra automáticamente el siguiente CodexN disponible.
 
 Ejemplos:
   orquesta sesion inicio claude
@@ -69,12 +69,14 @@ func ejecutarInicioSesion(cmd *cobra.Command, args []string, forzarNuevoCodex bo
 	externalSessionID, _ := cmd.Flags().GetString("external-session-id")
 	resumePayload, _ := cmd.Flags().GetString("resume-payload")
 	resumen, _ := cmd.Flags().GetString("resumen")
+	arranqueLimpio, _ := cmd.Flags().GetBool("arranque-limpio")
 	host, _ := cmd.Flags().GetString("host")
 	pidRaw, _ := cmd.Flags().GetInt64("pid")
 
 	req := apiSesionInicioRequest{
 		Agente:            agente,
 		NuevoCodex:        nuevoCodex,
+		ArranqueLimpio:    arranqueLimpio,
 		Conector:          conectorRef,
 		Proyecto:          proyectoRef,
 		CWD:               cwd,
@@ -206,22 +208,24 @@ var sesionGuardarCmd = &cobra.Command{
 		externalSessionID, _ := cmd.Flags().GetString("external-session-id")
 		resumePayload, _ := cmd.Flags().GetString("resume-payload")
 		resumen, _ := cmd.Flags().GetString("resumen")
+		limpiarContinuidad, _ := cmd.Flags().GetBool("limpiar-continuidad")
 		host, _ := cmd.Flags().GetString("host")
 		estado, _ := cmd.Flags().GetString("estado")
 		pidRaw, _ := cmd.Flags().GetInt64("pid")
 
 		if ok, err := apiPost("/api/sesiones/guardar", apiSesionGuardarRequest{
-			Agente:            agente,
-			Proyecto:          proyectoRef,
-			CWD:               cwd,
-			Herramienta:       herramienta,
-			Branch:            branch,
-			ExternalSessionID: externalSessionID,
-			ResumePayload:     resumePayload,
-			Resumen:           resumen,
-			Host:              host,
-			Estado:            estado,
-			PID:               pidRaw,
+			Agente:             agente,
+			Proyecto:           proyectoRef,
+			LimpiarContinuidad: limpiarContinuidad,
+			CWD:                cwd,
+			Herramienta:        herramienta,
+			Branch:             branch,
+			ExternalSessionID:  externalSessionID,
+			ResumePayload:      resumePayload,
+			Resumen:            resumen,
+			Host:               host,
+			Estado:             estado,
+			PID:                pidRaw,
 		}, &apiSesionResponse{}); err != nil {
 			return err
 		} else if !ok {
@@ -384,14 +388,14 @@ var sesionListarCmd = &cobra.Command{
 // sesion nuevo-codex (atajo directo)
 var sesionNuevoCodexCmd = &cobra.Command{
 	Use:   "nuevo-codex",
-	Short: "Registra e inicia sesión para un nuevo agente Codex (auto-nombrado codex1, codex2…)",
+	Short: "Registra e inicia sesión para un nuevo agente Codex (auto-nombrado Codex1, Codex2…)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return ejecutarInicioSesion(cmd, nil, true)
 	},
 }
 
 func init() {
-	sesionInicioCmd.Flags().Bool("nuevo-codex", false, "Registra un nuevo agente Codex con nombre automático")
+	sesionInicioCmd.Flags().Bool("nuevo-codex", false, "Registra un nuevo agente Codex con nombre automático (CodexN)")
 	sesionInicioCmd.Flags().String("conector", "", "Conector/model runtime de la sesión")
 	sesionInicioCmd.Flags().String("proyecto", "", "Proyecto asignado a la sesión")
 	sesionInicioCmd.Flags().String("cwd", "", "Directorio de trabajo de la sesión")
@@ -400,6 +404,7 @@ func init() {
 	sesionInicioCmd.Flags().String("external-session-id", "", "ID externo de sesión reanudable")
 	sesionInicioCmd.Flags().String("resume-payload", "", "Payload JSON para reanudar contexto")
 	sesionInicioCmd.Flags().String("resumen", "", "Resumen corto de continuidad")
+	sesionInicioCmd.Flags().Bool("arranque-limpio", false, "Ignora y limpia la continuidad previa para iniciar desde cero")
 	sesionInicioCmd.Flags().String("host", "", "Host donde corre el agente")
 	sesionInicioCmd.Flags().Int64("pid", 0, "PID del proceso del agente")
 
@@ -410,6 +415,7 @@ func init() {
 	sesionGuardarCmd.Flags().String("external-session-id", "", "ID externo de sesión reanudable")
 	sesionGuardarCmd.Flags().String("resume-payload", "", "Payload JSON para reanudar contexto")
 	sesionGuardarCmd.Flags().String("resumen", "", "Resumen corto de continuidad")
+	sesionGuardarCmd.Flags().Bool("limpiar-continuidad", false, "Borra external-session-id, resume-payload y resumen de continuidad")
 	sesionGuardarCmd.Flags().String("host", "", "Host donde corre el agente")
 	sesionGuardarCmd.Flags().String("estado", "pausada", "Estado lógico de la sesión al guardarla")
 	sesionGuardarCmd.Flags().Int64("pid", 0, "PID del proceso del agente")

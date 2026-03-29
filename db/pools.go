@@ -246,6 +246,66 @@ func GetPoolModeloPorSlug(poolID int64, modelSlug string) (*PoolModelo, error) {
 	return scanPoolModelo(row)
 }
 
+func SeedPoolsIniciales() error {
+	seeds := []PoolCapacidad{
+		{
+			Slug:                "codex",
+			Proveedor:           "OpenAI",
+			Runtime:             "codex",
+			Plan:                "default",
+			EsDePago:            true,
+			CapacidadTotal:      4,
+			CapacidadReservada:  0,
+			PermiteHijos:        true,
+			PermiteModelosMulti: true,
+			PermiteSobrecoste:   false,
+			PoliticaHandoff:     "preventivo",
+			FuenteTelemetria:    "manual",
+			MetadataJSON:        "{}",
+			Activo:              true,
+		},
+		{
+			Slug:                "claude",
+			Proveedor:           "Anthropic",
+			Runtime:             "claude",
+			Plan:                "default",
+			EsDePago:            true,
+			CapacidadTotal:      1,
+			CapacidadReservada:  0,
+			PermiteHijos:        true,
+			PermiteModelosMulti: true,
+			PermiteSobrecoste:   false,
+			PoliticaHandoff:     "preventivo",
+			FuenteTelemetria:    "manual",
+			MetadataJSON:        "{}",
+			Activo:              true,
+		},
+		{
+			Slug:                "android",
+			Proveedor:           "Android",
+			Runtime:             "android",
+			Plan:                "default",
+			EsDePago:            false,
+			CapacidadTotal:      1,
+			CapacidadReservada:  0,
+			PermiteHijos:        false,
+			PermiteModelosMulti: false,
+			PermiteSobrecoste:   false,
+			PoliticaHandoff:     "preventivo",
+			FuenteTelemetria:    "manual",
+			MetadataJSON:        "{}",
+			Activo:              true,
+		},
+	}
+	for _, seed := range seeds {
+		seed := seed
+		if _, err := GuardarPool(&seed); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func SeedModelosIniciales() error {
 	seeds := []struct {
 		poolSlug string

@@ -2,9 +2,11 @@ package lanzamientoruntime
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"orquesta/db"
+	"orquesta/runtimeagente"
 )
 
 type fakeWorkspaceManager struct {
@@ -121,5 +123,67 @@ func TestPrepararDesdeDatosAseguraWorktreeActiva(t *testing.T) {
 	}
 	if prep.Plan.WorkingDir != workspace.calls[0].worktreePath {
 		t.Fatalf("working dir distinto a la worktree creada: got=%s want=%s", prep.Plan.WorkingDir, workspace.calls[0].worktreePath)
+	}
+}
+
+func TestPrepararDesdeDatosResuelveXHighPorDefectoParaImplementacion(t *testing.T) {
+	prepararDBTemporalLanzamiento(t)
+
+	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertConector(&db.Conector{
+		Slug:         "codex-cli",
+		Nombre:       "Codex CLI",
+		Transporte:   "cli",
+		Comando:      "codex",
+		MetadataJSON: `{"model_flag":"--model","reasoning_flag":"--reasoning-effort"}`,
+		Activo:       true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	_ = proyectoID
+	agente, err := db.GetAgente("Codex2")
+	if err != nil {
+		t.Fatalf("get agente: %v", err)
+	}
+	proyecto, err := db.GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	conector, err := db.GetConector("codex-cli")
+	if err != nil {
+		t.Fatalf("get conector: %v", err)
+	}
+
+	prep, err := prepararDesdeDatosConWorkspace(agente, proyecto, conector, nil, "", "", "", &fakeWorkspaceManager{})
+	if err != nil {
+		t.Fatalf("preparar desde datos: %v", err)
+	}
+	if prep == nil || prep.Plan == nil {
+		t.Fatalf("plan nil: %+v", prep)
+	}
+	if prep.Plan.PerfilTarea != "implementacion" {
+		t.Fatalf("perfil inesperado: %+v", prep.Plan)
+	}
+	if prep.Plan.Modelo != "gpt-5.4" {
+		t.Fatalf("modelo inesperado: %+v", prep.Plan)
+	}
+	if prep.Plan.Razonamiento != "xhigh" {
+		t.Fatalf("reasoning inesperado: %+v", prep.Plan)
+	}
+	rendered := runtimeagente.RenderCommand(prep.Plan)
+	if !strings.Contains(rendered, "'--reasoning-effort'") || !strings.Contains(rendered, "'xhigh'") {
+		t.Fatalf("comando sin xhigh: %s", rendered)
 	}
 }

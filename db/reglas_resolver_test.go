@@ -1,6 +1,7 @@
 package db
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -108,6 +109,36 @@ func TestAppendGovernanceCatalogPayloadConservaEnvelope(t *testing.T) {
 		if !strings.Contains(payload, token) {
 			t.Fatalf("payload incompleto, falta %s: %s", token, payload)
 		}
+	}
+}
+
+func TestMergeResumePayloadEnvelopeNoReanidaEnvelopeExistente(t *testing.T) {
+	prev := `{"project_context":{"slug":"demo"},"governance_catalog":{"hash":"abc123"}}`
+	payload := MergeResumePayloadEnvelope(prev, map[string]any{
+		"runtime_order": map[string]any{
+			"id":   7,
+			"tipo": "resume",
+		},
+	})
+	if payload == "" {
+		t.Fatalf("payload vacio")
+	}
+	if strings.Contains(payload, `"resume_previo"`) || strings.Contains(payload, `"resume_previo_raw"`) {
+		t.Fatalf("el envelope no deberia reanidarse: %s", payload)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(payload), &envelope); err != nil {
+		t.Fatalf("payload invalido: %v", err)
+	}
+	if _, ok := envelope["project_context"].(map[string]any); !ok {
+		t.Fatalf("falta project_context: %+v", envelope)
+	}
+	if _, ok := envelope["governance_catalog"].(map[string]any); !ok {
+		t.Fatalf("falta governance_catalog: %+v", envelope)
+	}
+	runtimeOrder, ok := envelope["runtime_order"].(map[string]any)
+	if !ok || runtimeOrder["tipo"] != "resume" {
+		t.Fatalf("runtime_order inesperado: %+v", envelope)
 	}
 }
 

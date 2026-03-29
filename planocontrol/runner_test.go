@@ -15,12 +15,14 @@ type stubAutomationService struct {
 	staleOrdersCount int
 	transcriptCount  int
 	processedCount   int
+	mergedCount      int
 	refinedCount     int
 	handoffCount     int
 	staleErr         error
 	staleOrdersErr   error
 	transcriptErr    error
 	processedErr     error
+	mergedErr        error
 	refinedErr       error
 	handoffErr       error
 	autonomyErr      error
@@ -54,6 +56,9 @@ func (s *stubAutomationService) ProcesarRuntimeTranscriptBatch() (int, error) {
 func (s *stubAutomationService) ProcesarRuntimeOrdersBatch() (int, error) {
 	return s.processedCount, s.processedErr
 }
+func (s *stubAutomationService) ProcesarGitMergesBatch() (int, error) {
+	return s.mergedCount, s.mergedErr
+}
 func (s *stubAutomationService) ProcesarRefineriaBatch() (int, error) {
 	return s.refinedCount, s.refinedErr
 }
@@ -73,14 +78,15 @@ func TestRunnerRunControlPlaneAuditaTrabajoProcesado(t *testing.T) {
 		staleOrdersCount: 1,
 		transcriptCount:  1,
 		processedCount:   3,
+		mergedCount:      1,
 		refinedCount:     1,
 		handoffCount:     1,
 	}
 	r := &Runner{Automation: service}
 	r.runControlPlane()
 
-	if len(service.audits) != 9 {
-		t.Fatalf("esperaba 9 auditorias, got=%d", len(service.audits))
+	if len(service.audits) != 10 {
+		t.Fatalf("esperaba 10 auditorias, got=%d", len(service.audits))
 	}
 }
 
@@ -103,14 +109,15 @@ func TestRunnerRunControlPlaneAuditaErrores(t *testing.T) {
 		staleOrdersErr: assertErr("fallo stale orders"),
 		transcriptErr:  assertErr("fallo transcript"),
 		processedErr:   assertErr("fallo batch"),
+		mergedErr:      assertErr("fallo merges"),
 		refinedErr:     assertErr("fallo refineria"),
 		handoffErr:     assertErr("fallo handoffs"),
 	}
 	r := &Runner{Automation: service}
 	r.runControlPlane()
 
-	if len(service.audits) != 9 {
-		t.Fatalf("esperaba 9 auditorias de error, got=%d", len(service.audits))
+	if len(service.audits) != 10 {
+		t.Fatalf("esperaba 10 auditorias de error, got=%d", len(service.audits))
 	}
 }
 
@@ -123,6 +130,7 @@ func TestRunnerRunControlPlaneEmiteDebug(t *testing.T) {
 		staleOrdersCount: 4,
 		transcriptCount:  4,
 		processedCount:   5,
+		mergedCount:      6,
 		refinedCount:     6,
 		handoffCount:     7,
 	}
@@ -138,7 +146,7 @@ func TestRunnerRunControlPlaneEmiteDebug(t *testing.T) {
 	if len(traces) == 0 {
 		t.Fatalf("esperaba trazas de debug")
 	}
-	if !strings.Contains(traces[len(traces)-1], "control_plane autonomia=%d supervision=%d review=%d handles_stale=%d orders_stale=%d transcript=%d runtime_orders=%d refineria=%d handoffs=%d") {
+	if !strings.Contains(traces[len(traces)-1], "control_plane autonomia=%d supervision=%d review=%d handles_stale=%d orders_stale=%d transcript=%d runtime_orders=%d git_merges=%d refineria=%d handoffs=%d") {
 		t.Fatalf("traza final inesperada: %+v", traces)
 	}
 }

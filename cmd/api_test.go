@@ -382,6 +382,135 @@ func TestAPIAsignacionActivarYSesionInicio(t *testing.T) {
 	}
 }
 
+func TestAPISesionInicioArranqueLimpioOmiteContinuidadPrevia(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	conectorID, err := db.UpsertConector(&db.Conector{
+		Slug:       "codex-cli",
+		Nombre:     "Codex CLI",
+		Transporte: "cli",
+		Comando:    "codex",
+		Activo:     true,
+	})
+	if err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "autofirmav2",
+		Nombre:  "AutofirmaV2",
+		RutaAbs: filepath.Join(tmp, "AutofirmaV2"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex1",
+		ProyectoID:         &proyectoID,
+		ConectorID:         &conectorID,
+		CWD:                filepath.Join(tmp, "AutofirmaV2"),
+		ExternalSessionID:  "sess-previa",
+		ResumePayloadJSON:  `{"continuidad":true}`,
+		ResumenContinuidad: "seguir desde antes",
+	}); err != nil {
+		t.Fatalf("iniciar sesion previa: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	sesionBody, _ := json.Marshal(apiSesionInicioRequest{
+		Agente:            "Codex1",
+		Proyecto:          "autofirmav2",
+		Conector:          "codex-cli",
+		CWD:               filepath.Join(tmp, "AutofirmaV2"),
+		ExternalSessionID: "sess-nueva",
+		ResumePayload:     `{"nueva":true}`,
+		Resumen:           "no deberia persistir",
+		ArranqueLimpio:    true,
+	})
+	recSesion := httptest.NewRecorder()
+	reqSesion := httptest.NewRequest(http.MethodPost, "/api/sesiones/inicio", bytes.NewReader(sesionBody))
+	mux.ServeHTTP(recSesion, reqSesion)
+	if recSesion.Code != http.StatusCreated {
+		t.Fatalf("status sesion inesperado: %d body=%s", recSesion.Code, recSesion.Body.String())
+	}
+	var resp apiSesionInicioResponse
+	if err := json.Unmarshal(recSesion.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode sesion inicio: %v", err)
+	}
+	if resp.SesionPrevia != nil {
+		t.Fatalf("no deberia exponer sesion previa: %+v", resp.SesionPrevia)
+	}
+
+	sesion, err := db.GetSesionActiva("Codex1", &proyectoID)
+	if err != nil {
+		t.Fatalf("get sesion activa: %v", err)
+	}
+	if sesion.ExternalSessionID != "" || sesion.ResumePayloadJSON != "" || sesion.ResumenContinuidad != "" {
+		t.Fatalf("continuidad no limpiada en arranque limpio: %+v", sesion)
+	}
+}
+
+func TestAPISesionGuardarPermiteLimpiarContinuidad(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "autofirmav2",
+		Nombre:  "AutofirmaV2",
+		RutaAbs: filepath.Join(tmp, "AutofirmaV2"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex1",
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "AutofirmaV2"),
+		ExternalSessionID:  "sess-guardar",
+		ResumePayloadJSON:  `{"continuidad":true}`,
+		ResumenContinuidad: "seguir guardado",
+		Branch:             "feature/x",
+	}); err != nil {
+		t.Fatalf("iniciar sesion activa: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	body, _ := json.Marshal(apiSesionGuardarRequest{
+		Agente:             "Codex1",
+		Proyecto:           "autofirmav2",
+		LimpiarContinuidad: true,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/sesiones/guardar", bytes.NewReader(body))
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status guardar inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	sesion, err := db.GetSesionActiva("Codex1", &proyectoID)
+	if err != nil {
+		t.Fatalf("get sesion activa: %v", err)
+	}
+	if sesion.ExternalSessionID != "" || sesion.ResumePayloadJSON != "" || sesion.ResumenContinuidad != "" {
+		t.Fatalf("continuidad no limpiada: %+v", sesion)
+	}
+	if sesion.Branch != "feature/x" {
+		t.Fatalf("branch no deberia cambiar: %+v", sesion)
+	}
+}
+
 func TestAPIAgenteAdoptarContextoPersisteContinuidadYGobernanza(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -928,6 +1057,23 @@ func TestAPIProyectoDescubrirYGestionAgentes(t *testing.T) {
 	mux.ServeHTTP(recProyecto, reqProyecto)
 	if recProyecto.Code != http.StatusOK {
 		t.Fatalf("status proyecto inesperado: %d body=%s", recProyecto.Code, recProyecto.Body.String())
+	}
+
+	actualizarBody, _ := json.Marshal(apiProyectoActualizarRequest{
+		RutaAbs: filepath.Join(tmp, "demo-renombrado"),
+	})
+	recActualizar := httptest.NewRecorder()
+	reqActualizar := httptest.NewRequest(http.MethodPost, "/api/proyectos/demo", bytes.NewReader(actualizarBody))
+	mux.ServeHTTP(recActualizar, reqActualizar)
+	if recActualizar.Code != http.StatusOK {
+		t.Fatalf("status actualizar proyecto inesperado: %d body=%s", recActualizar.Code, recActualizar.Body.String())
+	}
+	var actualizarResp map[string]*db.Proyecto
+	if err := json.Unmarshal(recActualizar.Body.Bytes(), &actualizarResp); err != nil {
+		t.Fatalf("decode actualizar proyecto: %v", err)
+	}
+	if actualizarResp["proyecto"] == nil || actualizarResp["proyecto"].RutaAbs != filepath.Join(tmp, "demo-renombrado") {
+		t.Fatalf("proyecto actualizado inesperado: %+v", actualizarResp["proyecto"])
 	}
 
 	agenteBody, _ := json.Marshal(apiAgenteRequest{Nombre: "temporal", Rol: "programador"})
@@ -1543,6 +1689,9 @@ func TestAPIAgentePrepararDevuelveBundle(t *testing.T) {
 	if out.Plan == nil {
 		t.Fatalf("plan no deberia ser nil")
 	}
+	if strings.TrimSpace(out.BootstrapPrompt) == "" || out.Plan.BootstrapPrompt != out.BootstrapPrompt {
+		t.Fatalf("bootstrap prompt inesperado: top=%q plan=%q", out.BootstrapPrompt, out.Plan.BootstrapPrompt)
+	}
 	if out.EstadoCuota == "" {
 		t.Fatalf("estado_cuota no deberia venir vacio")
 	}
@@ -1720,6 +1869,9 @@ func TestAPIAgentePrepararIntegraBootstrapRuntime(t *testing.T) {
 	if out.Plan == nil || out.Plan.Modo != "resume" {
 		t.Fatalf("plan de arranque inesperado: %+v", out.Plan)
 	}
+	if strings.TrimSpace(out.BootstrapPrompt) == "" || out.Plan.BootstrapPrompt != out.BootstrapPrompt {
+		t.Fatalf("bootstrap prompt inesperado: top=%q plan=%q", out.BootstrapPrompt, out.Plan.BootstrapPrompt)
+	}
 	if out.Plan.WorkingDir != filepath.Join(tmp, "orquestador", "sesion-previa") {
 		t.Fatalf("working_dir inesperado: %s", out.Plan.WorkingDir)
 	}
@@ -1756,5 +1908,83 @@ func TestAPIAgentePrepararIntegraBootstrapRuntime(t *testing.T) {
 	}
 	if len(mailbox) != len(out.Bootstrap.Mailbox) {
 		t.Fatalf("mailbox consumido inesperado: got=%d want=%d %+v", len(mailbox), len(out.Bootstrap.Mailbox), mailbox)
+	}
+}
+
+func TestAPIProyectosLecturaUsaRutaEfectivaAunquePersistaRutaHistorica(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	rutaHistorica := filepath.Join(tmp, "historico", "orquestador")
+	rutaActual := filepath.Join(tmp, "actual", "orquesta")
+	if err := os.MkdirAll(filepath.Join(rutaActual, "cmd"), 0o755); err != nil {
+		t.Fatalf("mkdir ruta actual: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaActual, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaHistorica,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(rutaActual, "cmd"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recProyecto := httptest.NewRecorder()
+	reqProyecto := httptest.NewRequest(http.MethodGet, "/api/proyectos/orquestador", nil)
+	mux.ServeHTTP(recProyecto, reqProyecto)
+	if recProyecto.Code != http.StatusOK {
+		t.Fatalf("status proyecto inesperado: %d body=%s", recProyecto.Code, recProyecto.Body.String())
+	}
+	var proyectoResp apiProyectoResponse
+	if err := json.Unmarshal(recProyecto.Body.Bytes(), &proyectoResp); err != nil {
+		t.Fatalf("decode proyecto: %v", err)
+	}
+	if proyectoResp.Proyecto == nil || proyectoResp.Proyecto.RutaAbs != rutaActual {
+		t.Fatalf("proyecto con ruta inesperada: %+v", proyectoResp.Proyecto)
+	}
+
+	recListado := httptest.NewRecorder()
+	reqListado := httptest.NewRequest(http.MethodGet, "/api/proyectos", nil)
+	mux.ServeHTTP(recListado, reqListado)
+	if recListado.Code != http.StatusOK {
+		t.Fatalf("status listado inesperado: %d body=%s", recListado.Code, recListado.Body.String())
+	}
+	var listadoResp apiProyectosResponse
+	if err := json.Unmarshal(recListado.Body.Bytes(), &listadoResp); err != nil {
+		t.Fatalf("decode listado: %v", err)
+	}
+	if len(listadoResp.Proyectos) != 1 || listadoResp.Proyectos[0] == nil || listadoResp.Proyectos[0].RutaAbs != rutaActual {
+		t.Fatalf("listado con ruta inesperada: %+v", listadoResp.Proyectos)
+	}
+
+	recOverview := httptest.NewRecorder()
+	reqOverview := httptest.NewRequest(http.MethodGet, "/api/proyectos/orquestador/overview", nil)
+	mux.ServeHTTP(recOverview, reqOverview)
+	if recOverview.Code != http.StatusOK {
+		t.Fatalf("status overview inesperado: %d body=%s", recOverview.Code, recOverview.Body.String())
+	}
+	var overviewResp apiProyectoOverviewResponse
+	if err := json.Unmarshal(recOverview.Body.Bytes(), &overviewResp); err != nil {
+		t.Fatalf("decode overview: %v", err)
+	}
+	if overviewResp.Overview == nil || overviewResp.Overview.Proyecto == nil || overviewResp.Overview.Proyecto.RutaAbs != rutaActual {
+		t.Fatalf("overview con ruta inesperada: %+v", overviewResp.Overview)
 	}
 }

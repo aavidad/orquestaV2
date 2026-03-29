@@ -132,14 +132,6 @@ func construirResumePayloadBootstrap(prev string, state *State) string {
 		return prev
 	}
 	envelope := map[string]any{}
-	if prev != "" {
-		var parsed any
-		if err := json.Unmarshal([]byte(prev), &parsed); err == nil {
-			envelope["resume_previo"] = parsed
-		} else {
-			envelope["resume_previo_raw"] = prev
-		}
-	}
 	if state.Order != nil {
 		envelope["runtime_order"] = map[string]any{
 			"id":      state.Order.ID,
@@ -179,11 +171,7 @@ func construirResumePayloadBootstrap(prev string, state *State) string {
 	if len(envelope) == 0 {
 		return prev
 	}
-	data, err := json.Marshal(envelope)
-	if err != nil {
-		return prev
-	}
-	return string(data)
+	return db.MergeResumePayloadEnvelope(prev, envelope)
 }
 
 func construirResumenBootstrap(prev string, state *State) string {

@@ -267,3 +267,38 @@ func TestStartContextBuildsFullResponse(t *testing.T) {
 		t.Fatalf("contexto inesperado: %+v", store.startedContext)
 	}
 }
+
+func TestStartContextArranqueLimpioLimpiaContinuidadYOmiteSesionPrevia(t *testing.T) {
+	projectID := int64(31)
+	store := &stubStore{
+		project:   &db.Proyecto{ID: projectID, Slug: "orquestador", RutaAbs: "/tmp/orquestador"},
+		connector: &db.Conector{ID: 12, Slug: "codex-cli"},
+		last:      &db.Sesion{ID: 41, Agente: "Codex2", ExternalSessionID: "sess-previa", ResumePayloadJSON: `{"continuidad":true}`, ResumenContinuidad: "seguir"},
+	}
+	service := NewService(store)
+
+	result, err := service.StartContext(StartContextInput{
+		Agente:            "Codex2",
+		Proyecto:          "orquestador",
+		Conector:          "codex-cli",
+		ExternalSessionID: "sess-nueva",
+		ResumePayload:     `{"nueva":true}`,
+		Resumen:           "no deberia persistir",
+		ArranqueLimpio:    true,
+	})
+	if err != nil {
+		t.Fatalf("StartContext arranque limpio: %v", err)
+	}
+	if result == nil || result.Sesion == nil {
+		t.Fatalf("resultado inesperado: %+v", result)
+	}
+	if result.SesionPrevia != nil {
+		t.Fatalf("no deberia exponer sesion previa en arranque limpio: %+v", result.SesionPrevia)
+	}
+	if store.startedContext == nil {
+		t.Fatalf("faltan datos de inicio")
+	}
+	if store.startedContext.ExternalSessionID != "" || store.startedContext.ResumePayloadJSON != "" || store.startedContext.ResumenContinuidad != "" {
+		t.Fatalf("continuidad no limpiada: %+v", store.startedContext)
+	}
+}

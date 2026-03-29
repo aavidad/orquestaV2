@@ -10,6 +10,9 @@ package runtimeagente
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -45,20 +48,24 @@ type LaunchRequest struct {
 }
 
 type LaunchPlan struct {
-	Driver           string            `json:"driver"`
-	Transporte       string            `json:"transporte"`
-	Modo             string            `json:"modo"`
-	Comando          string            `json:"comando"`
-	Args             []string          `json:"args"`
-	Env              map[string]string `json:"env"`
-	WorkingDir       string            `json:"working_dir"`
-	Modelo           string            `json:"modelo,omitempty"`
-	Razonamiento     string            `json:"razonamiento,omitempty"`
-	PerfilTarea      string            `json:"perfil_tarea,omitempty"`
-	NativeResume     bool              `json:"native_resume"`
-	ContinuityPrompt string            `json:"continuity_prompt,omitempty"`
-	RemoteConfigJSON string            `json:"remote_config_json,omitempty"`
-	Notas            []string          `json:"notas,omitempty"`
+	Driver               string            `json:"driver"`
+	Transporte           string            `json:"transporte"`
+	Modo                 string            `json:"modo"`
+	Comando              string            `json:"comando"`
+	Args                 []string          `json:"args"`
+	Env                  map[string]string `json:"env"`
+	WorkingDir           string            `json:"working_dir"`
+	Modelo               string            `json:"modelo,omitempty"`
+	Razonamiento         string            `json:"razonamiento,omitempty"`
+	PerfilTarea          string            `json:"perfil_tarea,omitempty"`
+	NativeResume         bool              `json:"native_resume"`
+	ContinuityPrompt     string            `json:"continuity_prompt,omitempty"`
+	BootstrapPrompt      string            `json:"bootstrap_prompt,omitempty"`
+	LaunchPromptEmbedded bool              `json:"launch_prompt_embedded,omitempty"`
+	LaunchPromptMode     string            `json:"launch_prompt_mode,omitempty"`
+	LaunchPromptDelayMS  int               `json:"launch_prompt_delay_ms,omitempty"`
+	RemoteConfigJSON     string            `json:"remote_config_json,omitempty"`
+	Notas                []string          `json:"notas,omitempty"`
 }
 
 type Driver interface {
@@ -132,13 +139,14 @@ func (d commandDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 	if workingDir == "" {
 		workingDir = strings.TrimSpace(req.ProyectoRuta)
 	}
+	vars := connectorTemplateVars(req, workingDir)
 	plan := &LaunchPlan{
 		Driver:       d.transport,
 		Transporte:   d.transport,
 		Modo:         "launch",
-		Comando:      req.Conector.Comando,
-		Args:         append([]string(nil), args...),
-		Env:          env,
+		Comando:      expandConnectorTemplate(strings.TrimSpace(req.Conector.Comando), vars),
+		Args:         expandConnectorArgs(args, vars),
+		Env:          expandConnectorEnv(env, vars),
 		WorkingDir:   workingDir,
 		Modelo:       strings.TrimSpace(req.Modelo),
 		Razonamiento: strings.TrimSpace(req.Razonamiento),
@@ -343,13 +351,110 @@ func defaultString(v, fallback string) string {
 	return strings.TrimSpace(v)
 }
 
+func connectorTemplateVars(req LaunchRequest, workingDir string) map[string]string {
+	orquestaExecutable, _ := os.Executable()
+	orquestaExecutable = strings.TrimSpace(orquestaExecutable)
+	orquestaBinDir := ""
+	if orquestaExecutable != "" {
+		orquestaBinDir = filepath.Dir(orquestaExecutable)
+	}
+	return map[string]string{
+		"agent":               strings.TrimSpace(req.Agente),
+		"role":                strings.TrimSpace(req.Rol),
+		"project_slug":        strings.TrimSpace(req.ProyectoSlug),
+		"project_path":        strings.TrimSpace(req.ProyectoRuta),
+		"working_dir":         strings.TrimSpace(workingDir),
+		"model":               strings.TrimSpace(req.Modelo),
+		"reasoning":           strings.TrimSpace(req.Razonamiento),
+		"task_profile":        strings.TrimSpace(req.PerfilTarea),
+		"connector_slug":      strings.TrimSpace(req.Conector.Slug),
+		"branch":              strings.TrimSpace(req.Resume.Branch),
+		"external_session_id": strings.TrimSpace(req.Resume.ExternalSessionID),
+		"orquesta_executable": orquestaExecutable,
+		"orquesta_bin_dir":    strings.TrimSpace(orquestaBinDir),
+		"host_path":           strings.TrimSpace(os.Getenv("PATH")),
+		"home":                strings.TrimSpace(os.Getenv("HOME")),
+	}
+}
+
+func expandConnectorTemplate(raw string, vars map[string]string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || len(vars) == 0 {
+		return raw
+	}
+	replacements := make([]string, 0, len(vars)*2)
+	for key, value := range vars {
+		replacements = append(replacements, "{{"+key+"}}", strings.TrimSpace(value))
+	}
+	return strings.NewReplacer(replacements...).Replace(raw)
+}
+
+func expandConnectorArgs(args []string, vars map[string]string) []string {
+	if len(args) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(args))
+	for _, arg := range args {
+		out = append(out, expandConnectorTemplate(arg, vars))
+	}
+	return out
+}
+
+func expandConnectorEnv(env map[string]string, vars map[string]string) map[string]string {
+	if len(env) == 0 {
+		return map[string]string{}
+	}
+	out := make(map[string]string, len(env))
+	for key, value := range env {
+		out[key] = expandConnectorTemplate(value, vars)
+	}
+	return out
+}
+
 func RenderCommand(plan *LaunchPlan) string {
 	if plan == nil {
 		return ""
 	}
-	partes := []string{strings.TrimSpace(plan.Comando)}
-	partes = append(partes, plan.Args...)
+	partes := []string{}
+	if cmd := strings.TrimSpace(plan.Comando); cmd != "" {
+		partes = append(partes, shellQuote(cmd))
+	}
+	for _, arg := range plan.Args {
+		partes = append(partes, shellQuote(arg))
+	}
 	return strings.TrimSpace(strings.Join(partes, " "))
+}
+
+func LaunchPromptText(plan *LaunchPlan) string {
+	if plan == nil {
+		return ""
+	}
+	partes := make([]string, 0, 2)
+	if bootstrap := strings.TrimSpace(plan.BootstrapPrompt); bootstrap != "" {
+		partes = append(partes, bootstrap)
+	}
+	if continuity := strings.TrimSpace(plan.ContinuityPrompt); continuity != "" {
+		if len(partes) == 0 || partes[len(partes)-1] != continuity {
+			partes = append(partes, continuity)
+		}
+	}
+	return strings.TrimSpace(strings.Join(partes, "\n\n"))
+}
+
+func ApplyLaunchPromptMetadata(plan *LaunchPlan, metadataJSON string) error {
+	metadata, err := parseAnyMapJSON(metadataJSON)
+	if err != nil {
+		return err
+	}
+	applyLaunchPromptHints(plan, metadata)
+	return nil
+}
+
+func shellQuote(raw string) string {
+	if raw == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(raw, "'", `'\''`) + "'"
 }
 
 func parseStringSliceJSON(raw string) ([]string, error) {
@@ -411,10 +516,80 @@ func applyLaunchHints(plan *LaunchPlan, metadata map[string]any, req LaunchReque
 	if flag := stringMetadata(metadata, "model_flag"); flag != "" && strings.TrimSpace(plan.Modelo) != "" {
 		plan.Args = append(plan.Args, flag, plan.Modelo)
 		aplicado = true
+	} else if key := stringMetadata(metadata, "model_config_key"); key != "" && strings.TrimSpace(plan.Modelo) != "" {
+		plan.Args = appendConnectorConfigOverride(plan.Args, metadata, key, plan.Modelo)
+		aplicado = true
 	}
 	if flag := stringMetadata(metadata, "reasoning_flag"); flag != "" && strings.TrimSpace(plan.Razonamiento) != "" {
 		plan.Args = append(plan.Args, flag, plan.Razonamiento)
 		aplicado = true
+	} else if key := stringMetadata(metadata, "reasoning_config_key"); key != "" && strings.TrimSpace(plan.Razonamiento) != "" {
+		plan.Args = appendConnectorConfigOverride(plan.Args, metadata, key, plan.Razonamiento)
+		aplicado = true
+	}
+	return aplicado
+}
+
+func appendConnectorConfigOverride(args []string, metadata map[string]any, key, value string) []string {
+	key = strings.TrimSpace(key)
+	value = strings.TrimSpace(value)
+	if key == "" || value == "" {
+		return args
+	}
+	flag := stringMetadata(metadata, "config_flag")
+	if flag == "" {
+		flag = "-c"
+	}
+	return append(args, flag, key+"="+strconv.Quote(value))
+}
+
+func applyLaunchPromptHints(plan *LaunchPlan, metadata map[string]any) bool {
+	if plan == nil || plan.LaunchPromptEmbedded || plan.NativeResume {
+		return false
+	}
+	prompt := LaunchPromptText(plan)
+	if strings.TrimSpace(prompt) == "" {
+		return false
+	}
+	if delayMS := intMetadata(metadata, "launch_prompt_delay_ms"); delayMS > 0 {
+		plan.LaunchPromptDelayMS = delayMS
+	}
+	switch strings.ToLower(strings.TrimSpace(stringMetadata(metadata, "launch_prompt_transport"))) {
+	case "post_start", "post-start", "pty", "stdin":
+		plan.LaunchPromptMode = "post_start"
+		return false
+	}
+	if maxBytes := intMetadata(metadata, "launch_prompt_max_bytes"); maxBytes > 0 && len([]byte(prompt)) > maxBytes {
+		plan.LaunchPromptMode = "post_start"
+		return false
+	}
+
+	aplicado := false
+	if flag := stringMetadata(metadata, "launch_prompt_flag"); flag != "" {
+		plan.Args = append(plan.Args, flag, prompt)
+		aplicado = true
+	}
+	if boolMetadata(metadata, "launch_prompt_positional") {
+		plan.Args = append(plan.Args, prompt)
+		aplicado = true
+	}
+	if envKey := stringMetadata(metadata, "launch_prompt_env"); envKey != "" {
+		if plan.Env == nil {
+			plan.Env = map[string]string{}
+		}
+		plan.Env[envKey] = prompt
+		aplicado = true
+	}
+	if boolMetadata(metadata, "launch_prompt_native") {
+		aplicado = true
+	}
+	if aplicado {
+		plan.LaunchPromptEmbedded = true
+		if plan.LaunchPromptMode == "" {
+			plan.LaunchPromptMode = "embedded"
+		}
+	} else if plan.LaunchPromptMode == "" {
+		plan.LaunchPromptMode = "post_start"
 	}
 	return aplicado
 }
@@ -436,14 +611,15 @@ func applyExecutionProfile(plan *LaunchPlan, metadata map[string]any) {
 
 func applyResumeHints(plan *LaunchPlan, metadata map[string]any, resume ResumeContext) bool {
 	aplicado := false
-	if subcmd := stringMetadata(metadata, "resume_subcommand"); subcmd != "" {
+	subcmd := stringMetadata(metadata, "resume_subcommand")
+	if subcmd != "" {
 		plan.Args = append([]string{subcmd}, plan.Args...)
 		aplicado = true
 	}
 	if flag := stringMetadata(metadata, "session_id_flag"); flag != "" && strings.TrimSpace(resume.ExternalSessionID) != "" {
 		plan.Args = append(plan.Args, flag, resume.ExternalSessionID)
 		aplicado = true
-	} else if subcmd := stringMetadata(metadata, "resume_subcommand"); subcmd != "" && strings.TrimSpace(resume.ExternalSessionID) != "" {
+	} else if subcmd != "" && strings.TrimSpace(resume.ExternalSessionID) != "" {
 		plan.Args = append(plan.Args, resume.ExternalSessionID)
 		aplicado = true
 	}
@@ -451,13 +627,14 @@ func applyResumeHints(plan *LaunchPlan, metadata map[string]any, resume ResumeCo
 		plan.Args = append(plan.Args, flag, resume.ResumePayloadJSON)
 		aplicado = true
 	}
+	if !aplicado {
+		return false
+	}
 	if flag := stringMetadata(metadata, "branch_flag"); flag != "" && strings.TrimSpace(resume.Branch) != "" {
 		plan.Args = append(plan.Args, flag, resume.Branch)
-		aplicado = true
 	}
 	if flag := stringMetadata(metadata, "cwd_flag"); flag != "" && strings.TrimSpace(plan.WorkingDir) != "" {
 		plan.Args = append(plan.Args, flag, plan.WorkingDir)
-		aplicado = true
 	}
 	return aplicado
 }

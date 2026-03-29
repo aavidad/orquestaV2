@@ -56,6 +56,14 @@ query_previous_field() {
     --campo "$field" 2>/dev/null || true
 }
 
+query_prepare_field() {
+  local field="$1"
+  "$ORQUESTA_BIN" agente preparar "$AGENTE" \
+    --proyecto "$RUTA_PROYECTO" \
+    --conector "$CONECTOR" \
+    --campo "$field" 2>/dev/null || true
+}
+
 current_branch() {
   git -C "$CWD_TRABAJO" branch --show-current 2>/dev/null || true
 }
@@ -118,7 +126,7 @@ PREV_SUMMARY="$(query_previous_field "resumen")"
 START_TS="$(date +%s)"
 BRANCH="$(current_branch)"
 BOOTSTRAP_TOKEN="AGENTE=$AGENTE PROYECTO=$(basename "$RUTA_PROYECTO") CWD=$CWD_TRABAJO START_TS=$START_TS"
-BOOTSTRAP_PROMPT="Contexto Orquesta: $BOOTSTRAP_TOKEN. Esta sesion pertenece al agente $AGENTE sobre el proyecto $(basename "$RUTA_PROYECTO"). Si no hay mas instrucciones del usuario, mantente en espera dentro del directorio actual."
+BOOTSTRAP_PROMPT_DEFAULT="Contexto Orquesta: $BOOTSTRAP_TOKEN. Esta sesion pertenece al agente $AGENTE sobre el proyecto $(basename "$RUTA_PROYECTO"). Si no hay mas instrucciones del usuario, mantente en espera dentro del directorio actual."
 
 session_args=(
   "$ORQUESTA_BIN" sesion inicio "$AGENTE"
@@ -134,6 +142,11 @@ if [[ -n "$PREV_SUMMARY" ]]; then
   session_args+=(--resumen "$PREV_SUMMARY")
 fi
 "${session_args[@]}" >/dev/null || true
+
+BOOTSTRAP_PROMPT="$(query_prepare_field "bootstrap-prompt")"
+if [[ -z "$BOOTSTRAP_PROMPT" ]]; then
+  BOOTSTRAP_PROMPT="$BOOTSTRAP_PROMPT_DEFAULT"
+fi
 
 cd "$CWD_TRABAJO"
 

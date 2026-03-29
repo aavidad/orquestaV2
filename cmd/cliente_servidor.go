@@ -197,6 +197,17 @@ type apiRuntimeHandlesResponse struct {
 	Handles []*db.RuntimeHandle `json:"handles"`
 }
 
+type apiRuntimeHandlesPurgeResponse struct {
+	OK         bool     `json:"ok"`
+	Deleted    int      `json:"deleted"`
+	DeletedIDs []int64  `json:"deleted_ids"`
+	Estados    []string `json:"estados"`
+}
+
+type apiRuntimeTranscriptResponse struct {
+	Transcript []*db.RuntimeTranscriptEntry `json:"transcript"`
+}
+
 type apiRuntimeOrdersResponse struct {
 	Orders []*db.RuntimeOrder `json:"orders"`
 }
@@ -342,7 +353,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "listar", "ver", "handles", "diagnostico", "ordenes", "orden-nueva", "nudge", "discordia", "checkpoints", "checkpoint-nuevo", "checkpoint-ver", "mailbox", "mailbox-enviar", "mailbox-entregar", "mailbox-consumir":
+		case "listar", "ver", "handles", "traza", "transcript", "diagnostico", "ordenes", "orden-nueva", "nudge", "discordia", "checkpoints", "checkpoint-nuevo", "checkpoint-ver", "mailbox", "mailbox-enviar", "mailbox-entregar", "mailbox-consumir":
 			return true
 		default:
 			return false
@@ -446,7 +457,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 	case "agente":
-		return len(tokens) > 1 && (tokens[1] == "preparar" || tokens[1] == "tick" || tokens[1] == "pausar" || tokens[1] == "control" || tokens[1] == "eliminar" || tokens[1] == "rehabilitar" || tokens[1] == "fusionar" || tokens[1] == "handoff" || tokens[1] == "reasignar-vivo" || tokens[1] == "lanzar-plan")
+		return len(tokens) > 1 && (tokens[1] == "preparar" || tokens[1] == "tick" || tokens[1] == "investigar" || tokens[1] == "pausar" || tokens[1] == "control" || tokens[1] == "eliminar" || tokens[1] == "rehabilitar" || tokens[1] == "fusionar" || tokens[1] == "handoff" || tokens[1] == "reasignar-vivo" || tokens[1] == "lanzar-plan")
 	case "sesion":
 		if len(tokens) <= 1 {
 			return false

@@ -972,10 +972,10 @@ INSERT INTO config (clave, valor) VALUES
     ('runtime_order_stale_seconds','120')
 ON CONFLICT(clave) DO NOTHING;
 
-INSERT INTO conectores (slug, nombre, transporte, comando, metadata_json) VALUES
-    ('claude-code', 'Claude Code', 'cli', 'claude', '{"familia":"anthropic","reanudable":true}'),
-    ('codex-cli',   'Codex CLI',   'cli', 'codex',  '{"familia":"openai","reanudable":true}'),
-    ('gemini-cli',  'Gemini CLI',  'cli', 'gemini', '{"familia":"google","reanudable":true}')
+INSERT INTO conectores (slug, nombre, transporte, comando, env_json, metadata_json) VALUES
+    ('claude-code', 'Claude Code', 'cli', 'claude', '{}', '{"familia":"anthropic","reanudable":true}'),
+    ('codex-cli',   'Codex CLI',   'cli', 'codex',  '{"ORQUESTA_BIN":"{{orquesta_executable}}","PATH":"{{orquesta_bin_dir}}:{{host_path}}"}', '{"familia":"openai","reanudable":true,"cwd_flag":"-C","launch_prompt_transport":"post_start","launch_prompt_delay_ms":1000,"model_flag":"--model","reasoning_config_key":"model_reasoning_effort"}'),
+    ('gemini-cli',  'Gemini CLI',  'cli', 'gemini', '{}', '{"familia":"google","reanudable":true}')
 ON CONFLICT(slug) DO NOTHING;
 
 -- ─── Reglas: programador ────────────────────────────────────────────────────

@@ -28,6 +28,7 @@ import (
 	"orquesta/progresoapp"
 	"orquesta/propuestasapp"
 	"orquesta/reviewapp"
+	"orquesta/runtimesapp"
 	"orquesta/sesionesapp"
 	"orquesta/supervisionapp"
 	"orquesta/tareasapp"
@@ -153,6 +154,7 @@ type apiAsignacionActivarRequest struct {
 
 type apiSesionInicioRequest struct {
 	NuevoCodex        bool   `json:"nuevo_codex"`
+	ArranqueLimpio    bool   `json:"arranque_limpio"`
 	Agente            string `json:"agente"`
 	Conector          string `json:"conector"`
 	Proyecto          string `json:"proyecto"`
@@ -167,17 +169,18 @@ type apiSesionInicioRequest struct {
 }
 
 type apiSesionGuardarRequest struct {
-	Agente            string `json:"agente"`
-	Proyecto          string `json:"proyecto"`
-	CWD               string `json:"cwd"`
-	Herramienta       string `json:"herramienta"`
-	Branch            string `json:"branch"`
-	ExternalSessionID string `json:"external_session_id"`
-	ResumePayload     string `json:"resume_payload_json"`
-	Resumen           string `json:"resumen_continuidad"`
-	Host              string `json:"host"`
-	Estado            string `json:"estado"`
-	PID               int64  `json:"pid"`
+	Agente             string `json:"agente"`
+	Proyecto           string `json:"proyecto"`
+	LimpiarContinuidad bool   `json:"limpiar_continuidad"`
+	CWD                string `json:"cwd"`
+	Herramienta        string `json:"herramienta"`
+	Branch             string `json:"branch"`
+	ExternalSessionID  string `json:"external_session_id"`
+	ResumePayload      string `json:"resume_payload_json"`
+	Resumen            string `json:"resumen_continuidad"`
+	Host               string `json:"host"`
+	Estado             string `json:"estado"`
+	PID                int64  `json:"pid"`
 }
 
 type apiSesionFinRequest struct {
@@ -574,6 +577,8 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtimes/tree", apiHandlerRuntimesTree)
 	mux.HandleFunc("/api/runtimes/", apiRouterRuntimes)
 	mux.HandleFunc("/api/runtime-handles", apiHandlerRuntimeHandles)
+	mux.HandleFunc("/api/runtime-handles/purgar", apiHandlerRuntimeHandlesPurgar)
+	mux.HandleFunc("/api/runtime-trace", apiHandlerRuntimeTrace)
 	mux.HandleFunc("/api/runtime-transcript", apiHandlerRuntimeTranscript)
 	mux.HandleFunc("/api/runtime-orders", apiHandlerRuntimeOrders)
 	mux.HandleFunc("/api/runtime-mailbox", apiHandlerRuntimeMailbox)
@@ -594,6 +599,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/sesiones/presupuesto", apiHandlerSesionPresupuesto)
 	mux.HandleFunc("/api/agente/handoff", apiHandlerAgenteHandoff)
 	mux.HandleFunc("/api/agente/control", apiHandlerAgenteControl)
+	mux.HandleFunc("/api/agente/investigar", apiHandlerAgenteInvestigar)
 	mux.HandleFunc("/api/agente/preparar", apiHandlerAgentePreparar)
 	mux.HandleFunc("/api/agente/adoptar-contexto", apiHandlerAgenteAdoptarContexto)
 	mux.HandleFunc("/api/agente/tick", apiHandlerAgenteTick)
@@ -1442,7 +1448,7 @@ func apiHandlerProyectos(w http.ResponseWriter, r *http.Request) {
 		activa := activaRaw == "1" || strings.EqualFold(activaRaw, "true")
 		activoPtr = &activa
 	}
-	proyectos, err := db.ListarProyectos(db.FiltroProyectos{Activo: activoPtr})
+	proyectos, err := db.ListarProyectosConRutaEfectiva(db.FiltroProyectos{Activo: activoPtr}, "")
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -1483,12 +1489,14 @@ func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {
 	ref := strings.TrimSpace(parts[0])
 	switch {
 	case len(parts) == 1 && r.Method == http.MethodGet:
-		proyecto, err := db.GetProyecto(ref)
+		proyecto, err := db.GetProyectoConRutaEfectiva(ref, "")
 		if err != nil {
 			apiError(w, http.StatusNotFound, err)
 			return
 		}
 		apiWriteJSON(w, http.StatusOK, map[string]any{"proyecto": proyecto})
+	case len(parts) == 1 && (r.Method == http.MethodPost || r.Method == http.MethodPut):
+		apiHandlerProyectoActualizar(w, r, ref)
 	case len(parts) == 2 && parts[1] == "overview" && r.Method == http.MethodGet:
 		apiHandlerProyectoOverview(w, r, ref)
 	case len(parts) == 2 && parts[1] == "decisiones" && r.Method == http.MethodPost:
@@ -1510,6 +1518,48 @@ func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func apiHandlerProyectoActualizar(w http.ResponseWriter, r *http.Request, ref string) {
+	proyecto, err := db.GetProyecto(strings.TrimSpace(ref))
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	var req apiProyectoActualizarRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	actualizado := *proyecto
+	if v := strings.TrimSpace(req.Slug); v != "" {
+		actualizado.Slug = v
+	}
+	if v := strings.TrimSpace(req.Nombre); v != "" {
+		actualizado.Nombre = v
+	}
+	if v := strings.TrimSpace(req.RutaAbs); v != "" {
+		actualizado.RutaAbs = v
+	}
+	if v := strings.TrimSpace(req.Tipo); v != "" {
+		actualizado.Tipo = db.TipoProyecto(v)
+	}
+	if req.ParentID != nil {
+		actualizado.ParentID = req.ParentID
+	}
+	if req.Activo != nil {
+		actualizado.Activo = *req.Activo
+	}
+	if err := db.UpdateProyecto(&actualizado); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	recargado, err := db.GetProyecto(fmt.Sprintf("%d", actualizado.ID))
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"proyecto": recargado})
 }
 
 func apiHandlerProyectoOverview(w http.ResponseWriter, r *http.Request, ref string) {
@@ -2765,6 +2815,40 @@ func apiHandlerRuntimeHandles(w http.ResponseWriter, r *http.Request) {
 	apiWriteJSON(w, http.StatusOK, map[string]any{"handles": handles})
 }
 
+type apiRuntimeHandlesPurgeRequest struct {
+	Agente   string   `json:"agente"`
+	Proyecto string   `json:"proyecto"`
+	Estados  []string `json:"estados"`
+	Actor    string   `json:"actor"`
+}
+
+func apiHandlerRuntimeHandlesPurgar(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiRuntimeHandlesPurgeRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	resultado, err := runtimesService.PurgeInactiveRuntimeHandles(runtimesapp.RuntimeHandlePurgeRequest{
+		Agente:   strings.TrimSpace(req.Agente),
+		Proyecto: strings.TrimSpace(req.Proyecto),
+		Estados:  req.Estados,
+		Actor:    strings.TrimSpace(req.Actor),
+	})
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiRuntimeHandlesPurgeResponse{
+		OK:         true,
+		Deleted:    resultado.Deleted,
+		DeletedIDs: resultado.DeletedIDs,
+		Estados:    resultado.Estados,
+	})
+}
+
 func apiHandlerRuntimeTranscript(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
@@ -2802,6 +2886,9 @@ func apiHandlerRuntimeTranscript(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		filter.HandleID = &id
+	}
+	if q := strings.TrimSpace(r.URL.Query().Get("q")); q != "" {
+		filter.Query = &q
 	}
 	if pending := strings.TrimSpace(r.URL.Query().Get("signals_pending")); pending != "" {
 		switch strings.ToLower(pending) {
@@ -3733,6 +3820,7 @@ func apiHandlerSesionInicio(w http.ResponseWriter, r *http.Request) {
 	result, err := sesionesAPIService.StartContext(sesionesapp.StartContextInput{
 		Agente:            req.Agente,
 		NuevoCodex:        req.NuevoCodex,
+		ArranqueLimpio:    req.ArranqueLimpio,
 		Proyecto:          req.Proyecto,
 		Conector:          req.Conector,
 		CWD:               req.CWD,
@@ -3795,6 +3883,12 @@ func apiHandlerSesionGuardar(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.PID > 0 {
 		upd.PID = &req.PID
+	}
+	if req.LimpiarContinuidad {
+		empty := ""
+		upd.ExternalSessionID = &empty
+		upd.ResumePayloadJSON = &empty
+		upd.ResumenContinuidad = &empty
 	}
 	sesion, err := sesionesAPIService.SaveActiveSession(req.Agente, req.Proyecto, upd)
 	if err != nil {
@@ -3905,13 +3999,12 @@ func apiHandlerAgentePreparar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agente, err := agentesService.GetAgent(agenteNombre)
-	if err != nil {
+	if _, err := agentesService.GetAgent(agenteNombre); err != nil {
 		apiError(w, http.StatusNotFound, err)
 		return
 	}
 	out, err := agentesService.BuildPrepare(agentesapp.PrepareInput{
-		Agente:       agente.Nombre,
+		Agente:       agenteNombre,
 		Proyecto:     proyectoRef,
 		Conector:     conectorRef,
 		Modelo:       modelo,

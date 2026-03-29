@@ -78,6 +78,18 @@ type RuntimeCheckpoint struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
+type FiltroPurgadoRuntimeHandles struct {
+	Agente     *string
+	ProyectoID *int64
+	Estados    []string
+}
+
+type PurgaRuntimeHandlesResultado struct {
+	Deleted    int      `json:"deleted"`
+	DeletedIDs []int64  `json:"deleted_ids"`
+	Estados    []string `json:"estados"`
+}
+
 type bootstrapRuntimeData struct {
 	Order      *RuntimeOrder
 	Mailbox    []*RuntimeMailboxMessage
@@ -199,6 +211,155 @@ func MarcarRuntimeHandlesCerradosPorAgente(agente string) error {
 		      SELECT id FROM sesiones WHERE agente = ? AND activa = 1
 		  ))`, strings.TrimSpace(agente), strings.TrimSpace(agente))
 	return err
+}
+
+func PurgarRuntimeHandlesInactivos(filtro FiltroPurgadoRuntimeHandles) (*PurgaRuntimeHandlesResultado, error) {
+	if filtro.Agente == nil && filtro.ProyectoID == nil {
+		return nil, fmt.Errorf("debes indicar agente o proyecto para purgar runtime handles")
+	}
+	estados, err := normalizarEstadosPurgadoRuntimeHandles(filtro.Estados)
+	if err != nil {
+		return nil, err
+	}
+	query := `SELECT id FROM runtime_handles WHERE estado IN (` + runtimeSQLPlaceholders(len(estados)) + `)`
+	args := make([]any, 0, len(estados)+2)
+	for _, estado := range estados {
+		args = append(args, estado)
+	}
+	if filtro.Agente != nil && strings.TrimSpace(*filtro.Agente) != "" {
+		query += ` AND agente = ?`
+		args = append(args, strings.TrimSpace(*filtro.Agente))
+	}
+	if filtro.ProyectoID != nil {
+		query += ` AND proyecto_id = ?`
+		args = append(args, *filtro.ProyectoID)
+	}
+	query += ` ORDER BY id DESC`
+
+	rows, err := DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ids := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return &PurgaRuntimeHandlesResultado{Estados: estados}, nil
+	}
+	if err := validarPurgadoRuntimeHandles(ids); err != nil {
+		return nil, err
+	}
+	tx, err := DB.Begin()
+	if err != nil {
+		return nil, err
+	}
+	argsDelete := int64SliceToAny(ids)
+	if _, err := tx.Exec(`UPDATE runtime_orders SET handle_id = NULL WHERE handle_id IN (`+runtimeSQLPlaceholders(len(ids))+`)`, argsDelete...); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	if _, err := tx.Exec(`UPDATE runtime_transcript SET handle_id = NULL WHERE handle_id IN (`+runtimeSQLPlaceholders(len(ids))+`)`, argsDelete...); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	if _, err := tx.Exec(`DELETE FROM runtime_handles WHERE id IN (`+runtimeSQLPlaceholders(len(ids))+`)`, argsDelete...); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &PurgaRuntimeHandlesResultado{
+		Deleted:    len(ids),
+		DeletedIDs: ids,
+		Estados:    estados,
+	}, nil
+}
+
+func normalizarEstadosPurgadoRuntimeHandles(estados []string) ([]string, error) {
+	if len(estados) == 0 {
+		return []string{"cerrado", "fallido"}, nil
+	}
+	seen := make(map[string]struct{}, len(estados))
+	out := make([]string, 0, len(estados))
+	for _, raw := range estados {
+		estado := strings.ToLower(strings.TrimSpace(raw))
+		switch estado {
+		case "cerrado", "fallido":
+		case "activo", "pausado":
+			return nil, fmt.Errorf("no se permite purgar handles en estado %q; deten el agente primero", estado)
+		default:
+			return nil, fmt.Errorf("estado de runtime handle no soportado: %s", strings.TrimSpace(raw))
+		}
+		if _, ok := seen[estado]; ok {
+			continue
+		}
+		seen[estado] = struct{}{}
+		out = append(out, estado)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("debes indicar al menos un estado purgable")
+	}
+	return out, nil
+}
+
+func validarPurgadoRuntimeHandles(ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := DB.Query(`
+		SELECT id, estado FROM runtime_orders
+		WHERE handle_id IN (`+runtimeSQLPlaceholders(len(ids))+`)
+		  AND estado IN ('pendiente','tomada','ejecutando')`,
+		int64SliceToAny(ids)...,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var vivos []string
+	for rows.Next() {
+		var (
+			id     int64
+			estado string
+		)
+		if err := rows.Scan(&id, &estado); err != nil {
+			return err
+		}
+		vivos = append(vivos, fmt.Sprintf("#%d(%s)", id, strings.TrimSpace(estado)))
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(vivos) > 0 {
+		return fmt.Errorf("no se pueden purgar handles con runtime orders vivas asociadas: %s", strings.Join(vivos, ", "))
+	}
+	return nil
+}
+
+func int64SliceToAny(ids []int64) []any {
+	out := make([]any, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, id)
+	}
+	return out
+}
+
+func runtimeSQLPlaceholders(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return strings.TrimRight(strings.Repeat("?,", n), ",")
 }
 
 func GetRuntimeHandleBySesionID(sesionID int64) (*RuntimeHandle, error) {
@@ -1627,6 +1788,25 @@ func controlarProcesoRuntime(order *RuntimeOrder, signaler func(controlruntime.O
 	return signaler(obj)
 }
 
+func runtimeProcesoLocalYaNoVive(order *RuntimeOrder) (bool, int, error) {
+	if order == nil {
+		return false, 0, nil
+	}
+	obj, err := objetivoProcesoParaOrden(order)
+	if err != nil {
+		return false, 0, err
+	}
+	pid, ok, err := controlruntime.ResolverPID(obj)
+	if err != nil || !ok {
+		return false, pid, err
+	}
+	vivo, _, err := controlruntime.ProcesoVivo(obj)
+	if err != nil {
+		return false, pid, err
+	}
+	return !vivo, pid, nil
+}
+
 func ejecutarRuntimeOrderStart(order *RuntimeOrder) error {
 	payload := map[string]any{}
 	_ = json.Unmarshal([]byte(order.PayloadJSON), &payload)
@@ -1727,7 +1907,7 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) error {
 				return err
 			}
 		}
-		if err := inyectarContinuidadArranque(handle, runtime, plan, order); err != nil {
+		if err := inyectarPromptArranque(handle, runtime, plan, order); err != nil {
 			return err
 		}
 	}
@@ -1761,7 +1941,7 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) error {
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
 }
 
-func inyectarContinuidadArranque(handle *RuntimeHandle, runtime *RuntimeInstance, plan *runtimeagente.LaunchPlan, order *RuntimeOrder) error {
+func inyectarPromptArranque(handle *RuntimeHandle, runtime *RuntimeInstance, plan *runtimeagente.LaunchPlan, order *RuntimeOrder) error {
 	if handle == nil || runtime == nil || plan == nil {
 		return nil
 	}
@@ -1773,9 +1953,12 @@ func inyectarContinuidadArranque(handle *RuntimeHandle, runtime *RuntimeInstance
 	if runtime.PID != nil && *runtime.PID > 0 {
 		obj.PID = runtime.PID
 	}
-	texto := controlruntime.NormalizarInstruccionProceso(obj, strings.TrimSpace(plan.ContinuityPrompt))
+	texto := controlruntime.NormalizarInstruccionProceso(obj, promptArranquePendiente(plan))
 	if texto == "" {
 		return nil
+	}
+	if plan.LaunchPromptDelayMS > 0 {
+		time.Sleep(time.Duration(plan.LaunchPromptDelayMS) * time.Millisecond)
 	}
 	aplicado, _, err := controlruntime.EnviarInstruccionProceso(obj, texto)
 	if err != nil {
@@ -1788,7 +1971,7 @@ func inyectarContinuidadArranque(handle *RuntimeHandle, runtime *RuntimeInstance
 		"texto":       texto,
 		"kind":        "instruction",
 		"from_agente": "orquesta",
-		"motivo":      "continuity_prompt_start",
+		"motivo":      "launch_prompt_start",
 	})
 	_, err = EnviarRuntimeMailbox(&RuntimeMailboxMessage{
 		FromAgente:  "orquesta",
@@ -1928,15 +2111,27 @@ func ejecutarRuntimeOrderStop(order *RuntimeOrder) error {
 		signaler = controlruntime.PausarProceso
 	}
 	aplicado, pid, err := controlarProcesoRuntime(order, signaler)
-	if err != nil {
-		return err
+	yaDetenido := false
+	if err != nil || !aplicado {
+		controlErr := err
+		yaDetenido, pid, err = runtimeProcesoLocalYaNoVive(order)
+		if err != nil {
+			return err
+		}
+		if !yaDetenido {
+			if controlErr != nil {
+				return controlErr
+			}
+			return fmt.Errorf("stop sin control real para %s", order.Agente)
+		}
+		aplicado = false
 	}
-	if !aplicado {
-		return fmt.Errorf("stop sin control real para %s", order.Agente)
-	}
-	checkpointID, err := asegurarCheckpointCambioContexto(order, "stop", "Checkpoint automático antes de detener")
-	if err != nil {
-		return err
+	checkpointID := int64(0)
+	if aplicado {
+		checkpointID, err = asegurarCheckpointCambioContexto(order, "stop", "Checkpoint automático antes de detener")
+		if err != nil {
+			return err
+		}
 	}
 	logicalState := "cerrado"
 	processState := "finalizado"
@@ -1977,6 +2172,9 @@ func ejecutarRuntimeOrderStop(order *RuntimeOrder) error {
 		"process_state": runtime.ProcessState,
 		"control_real":  aplicado,
 		"pid":           pid,
+	}
+	if yaDetenido {
+		result["already_stopped"] = true
 	}
 	if checkpointID > 0 {
 		result["checkpoint_id"] = checkpointID
@@ -2020,6 +2218,11 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 	}
 	texto := stringFromMap(payload, "texto", stringFromMap(payload, "instruction", ""))
 
+	handle, err := resolverHandleParaOrden(order)
+	if err != nil {
+		return err
+	}
+
 	obj, err := objetivoProcesoParaOrden(order)
 	if err != nil {
 		return err
@@ -2029,14 +2232,17 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 		return fmt.Errorf("send_instruction sin texto aplicable")
 	}
 
-	aplicado, pid, err := controlarProcesoRuntime(order, func(obj controlruntime.ObjetivoProceso) (bool, int, error) {
-		return controlruntime.EnviarInstruccionProceso(obj, texto)
-	})
-	if err != nil {
-		return err
+	aplicado := false
+	pid := 0
+	if RuntimeHandlePermiteSendInputInteractivo(handle) {
+		aplicado, pid, err = controlarProcesoRuntime(order, func(obj controlruntime.ObjetivoProceso) (bool, int, error) {
+			return controlruntime.EnviarInstruccionProceso(obj, texto)
+		})
+		if err != nil {
+			return err
+		}
 	}
 	if aplicado {
-		handle, _ := resolverHandleParaOrden(order)
 		runtime, _ := resolverRuntimeParaOrden(order)
 		if err := RegistrarRuntimeTranscriptInput(handle, runtime, texto); err != nil {
 			return err
@@ -2124,9 +2330,13 @@ func payloadJSONDesdePlan(plan *runtimeagente.LaunchPlan) string {
 		return "{}"
 	}
 	data, err := json.Marshal(map[string]any{
-		"modo":              strings.TrimSpace(plan.Modo),
-		"native_resume":     plan.NativeResume,
-		"continuity_prompt": strings.TrimSpace(plan.ContinuityPrompt),
+		"modo":                   strings.TrimSpace(plan.Modo),
+		"native_resume":          plan.NativeResume,
+		"continuity_prompt":      strings.TrimSpace(plan.ContinuityPrompt),
+		"bootstrap_prompt":       strings.TrimSpace(plan.BootstrapPrompt),
+		"launch_prompt_embedded": plan.LaunchPromptEmbedded,
+		"launch_prompt_mode":     strings.TrimSpace(plan.LaunchPromptMode),
+		"launch_prompt_delay_ms": plan.LaunchPromptDelayMS,
 	})
 	if err != nil {
 		return "{}"
@@ -2151,8 +2361,16 @@ func construirTranscriptArranque(plan *runtimeagente.LaunchPlan, resume runtimea
 		if strings.TrimSpace(plan.WorkingDir) != "" {
 			parts = append(parts, fmt.Sprintf("Directorio: %s.", strings.TrimSpace(plan.WorkingDir)))
 		}
+		if strings.TrimSpace(plan.BootstrapPrompt) != "" {
+			parts = append(parts, "Bootstrap inicial: "+strings.TrimSpace(plan.BootstrapPrompt))
+		}
 		if strings.TrimSpace(plan.ContinuityPrompt) != "" {
 			parts = append(parts, "Prompt de continuidad: "+strings.TrimSpace(plan.ContinuityPrompt))
+		}
+		if plan.LaunchPromptEmbedded {
+			parts = append(parts, "El prompt inicial quedó embebido en el comando de arranque.")
+		} else if strings.TrimSpace(promptArranquePendiente(plan)) != "" {
+			parts = append(parts, "El prompt inicial quedó programado para inyección tras arranque.")
 		}
 	}
 	if strings.TrimSpace(resume.ResumenContinuidad) != "" {
@@ -2213,6 +2431,10 @@ func actualizarHandleRuntimeArranque(handleID int64, arranque *controlruntime.Pr
 	if plan != nil {
 		meta["modo_plan"] = strings.TrimSpace(plan.Modo)
 		meta["continuity_prompt"] = strings.TrimSpace(plan.ContinuityPrompt)
+		meta["bootstrap_prompt"] = strings.TrimSpace(plan.BootstrapPrompt)
+		meta["launch_prompt_embedded"] = plan.LaunchPromptEmbedded
+		meta["launch_prompt_mode"] = strings.TrimSpace(plan.LaunchPromptMode)
+		meta["launch_prompt_delay_ms"] = plan.LaunchPromptDelayMS
 	}
 	if strings.TrimSpace(resume.ResumenContinuidad) != "" {
 		meta["resumen_continuidad"] = strings.TrimSpace(resume.ResumenContinuidad)
@@ -2270,11 +2492,21 @@ func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int
 	if err != nil {
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
 	}
+	proyecto = ProyectoConRutaEfectiva(proyecto, "")
 	ultima, err := ObtenerUltimaSesion(strings.TrimSpace(agenteRef), &proyecto.ID)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
 	}
 	conector, err := resolverConectorRuntimeOrder(conectorRef, ultima)
+	if err != nil {
+		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
+	}
+	perfilTarea, modelo, razonamiento, err = ResolverPerfilEjecucionLanzamiento(
+		strings.TrimSpace(proyecto.Slug),
+		perfilTarea,
+		modelo,
+		razonamiento,
+	)
 	if err != nil {
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
 	}
@@ -2293,7 +2525,7 @@ func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
 	}
 	plan, err := runtimeagente.DefaultRegistry().Prepare(runtimeagente.LaunchRequest{
-		Agente:       strings.TrimSpace(agente.Nombre),
+		Agente:       nombreAgenteRuntime(strings.TrimSpace(agenteRef), strings.TrimSpace(agente.Nombre)),
 		Rol:          strings.TrimSpace(agente.Rol),
 		ProyectoSlug: strings.TrimSpace(proyecto.Slug),
 		ProyectoRuta: strings.TrimSpace(proyecto.RutaAbs),
@@ -2315,7 +2547,30 @@ func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int
 	if err != nil {
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
 	}
+	plan.BootstrapPrompt, err = BuildLaunchBootstrapPromptForContext(agente, proyecto, plan)
+	if err != nil {
+		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
+	}
+	if err := runtimeagente.ApplyLaunchPromptMetadata(plan, strings.TrimSpace(conector.MetadataJSON)); err != nil {
+		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, fmt.Errorf("metadata_json inválido para '%s': %w", strings.TrimSpace(conector.Slug), err)
+	}
 	return agente, proyecto, conector, ultima, resume, bootstrap, plan, nil
+}
+
+func promptArranquePendiente(plan *runtimeagente.LaunchPlan) string {
+	if plan == nil || plan.LaunchPromptEmbedded {
+		return ""
+	}
+	return strings.TrimSpace(runtimeagente.LaunchPromptText(plan))
+}
+
+func nombreAgenteRuntime(preferido, almacenado string) string {
+	preferido = strings.TrimSpace(preferido)
+	almacenado = strings.TrimSpace(almacenado)
+	if preferido != "" && strings.EqualFold(preferido, almacenado) {
+		return preferido
+	}
+	return almacenado
 }
 
 func resolverConectorRuntimeOrder(conectorRef string, ultima *Sesion) (*Conector, error) {
@@ -2366,6 +2621,7 @@ func prepararResumeBootstrapRuntime(agente string, proyecto *Proyecto, resume ru
 	if proyecto == nil {
 		return resume, nil, nil
 	}
+	resume = SanitizeResumeContextForProject(resume, proyecto)
 	order, err := claimBootstrapRuntimeOrderParaStart(strings.TrimSpace(agente), &proyecto.ID, excludeOrderID)
 	if err != nil {
 		return resume, nil, err
@@ -2512,14 +2768,6 @@ func claimBootstrapRuntimeOrderParaStart(agente string, proyectoID *int64, exclu
 func construirResumePayloadBootstrapDB(prev string, order *RuntimeOrder, mailbox []*RuntimeMailboxMessage, checkpoint *RuntimeCheckpoint) string {
 	prev = strings.TrimSpace(prev)
 	envelope := map[string]any{}
-	if prev != "" {
-		var parsed any
-		if err := json.Unmarshal([]byte(prev), &parsed); err == nil {
-			envelope["resume_previo"] = parsed
-		} else {
-			envelope["resume_previo_raw"] = prev
-		}
-	}
 	if order != nil {
 		envelope["runtime_order"] = map[string]any{
 			"id":      order.ID,
@@ -2548,7 +2796,7 @@ func construirResumePayloadBootstrapDB(prev string, order *RuntimeOrder, mailbox
 		envelope["checkpoint"] = map[string]any{
 			"id":              checkpoint.ID,
 			"kind":            checkpoint.CheckpointKind,
-			"resumen":         checkpoint.Resumen,
+			"resumen":         resumenCheckpointPayload(checkpoint),
 			"branch":          checkpoint.Branch,
 			"cwd":             checkpoint.CWD,
 			"payload":         rawJSONOrStringDB(checkpoint.PayloadJSON),
@@ -2559,18 +2807,14 @@ func construirResumePayloadBootstrapDB(prev string, order *RuntimeOrder, mailbox
 	if len(envelope) == 0 {
 		return prev
 	}
-	data, err := json.Marshal(envelope)
-	if err != nil {
-		return prev
-	}
-	return string(data)
+	return MergeResumePayloadEnvelope(prev, envelope)
 }
 
 func construirResumenBootstrapDB(prev string, order *RuntimeOrder, mailbox []*RuntimeMailboxMessage, checkpoint *RuntimeCheckpoint) string {
 	partes := make([]string, 0, 4)
 	prev = strings.TrimSpace(prev)
-	if prev != "" {
-		partes = append(partes, prev)
+	if limpio := limpiarResumenBootstrapPrevio(prev); limpio != "" {
+		partes = append(partes, limpio)
 	}
 	if order != nil {
 		switch strings.TrimSpace(order.Tipo) {
@@ -2588,13 +2832,13 @@ func construirResumenBootstrapDB(prev string, order *RuntimeOrder, mailbox []*Ru
 			partes = append(partes, "Orden pendiente aplicada: "+strings.TrimSpace(order.Tipo))
 		}
 	}
-	if checkpoint != nil && strings.TrimSpace(checkpoint.Resumen) != "" {
-		partes = append(partes, "Checkpoint: "+strings.TrimSpace(checkpoint.Resumen))
+	if resumen := resumenCheckpointBootstrap(checkpoint, prev); resumen != "" {
+		partes = append(partes, resumen)
 	}
 	if len(mailbox) > 0 {
 		partes = append(partes, fmt.Sprintf("Mailbox: %d mensaje(s) inyectados", len(mailbox)))
 	}
-	return strings.Join(partes, ". ")
+	return unirPartesUnicasResume(partes)
 }
 
 func rawJSONOrStringDB(raw string) any {
@@ -3264,6 +3508,26 @@ func runtimeHandlePreservesExternalSession(handle *RuntimeHandle) bool {
 		return true
 	}
 	return false
+}
+
+func RuntimeHandlePermiteSendInputInteractivo(handle *RuntimeHandle) bool {
+	if handle == nil {
+		return true
+	}
+	caps := mapFromJSON(handle.CapabilitiesJSON)
+	if _, ok := caps["can_send_input"]; ok && !boolFromMap(caps, "can_send_input") {
+		return false
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if _, ok := meta["can_send_input"]; ok && !boolFromMap(meta, "can_send_input") {
+		return false
+	}
+	driver := strings.ToLower(strings.TrimSpace(stringFromMap(meta, "driver", "")))
+	rendered := strings.ToLower(strings.TrimSpace(stringFromMap(meta, "rendered_command", "")))
+	if driver == "process_pty_cli" && (strings.Contains(rendered, "codex-perfil") || strings.Contains(rendered, "/codex") || strings.HasPrefix(rendered, "codex ")) {
+		return false
+	}
+	return true
 }
 
 func asegurarCheckpointCambioContexto(order *RuntimeOrder, suffix, fallbackSummary string) (int64, error) {

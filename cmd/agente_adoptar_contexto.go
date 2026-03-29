@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
+	"orquesta/runtimeagente"
 	"orquesta/sesionesapp"
 )
 
@@ -111,17 +112,24 @@ func adoptarContextoAgente(req apiAgenteAdoptarContextoRequest) (*apiAgenteAdopt
 		}
 	}
 
-	if req.CWD == "" {
-		req.CWD = firstNonEmpty(existente.CWD, proyecto.RutaAbs)
-	}
 	if req.Herramienta == "" {
 		req.Herramienta = firstNonEmpty(existente.Herramienta, req.Conector, "codex-cli")
 	}
+	prevResume := db.SanitizeResumeContextForProject(runtimeagente.ResumeContext{
+		ExternalSessionID:  strings.TrimSpace(existente.ExternalSessionID),
+		ResumePayloadJSON:  strings.TrimSpace(existente.ResumePayloadJSON),
+		ResumenContinuidad: strings.TrimSpace(existente.ResumenContinuidad),
+		Branch:             strings.TrimSpace(existente.Branch),
+		CWD:                strings.TrimSpace(existente.CWD),
+	}, proyecto)
+	if req.CWD == "" {
+		req.CWD = firstNonEmpty(prevResume.CWD, proyecto.RutaAbs)
+	}
 	if req.Branch == "" {
-		req.Branch = strings.TrimSpace(existente.Branch)
+		req.Branch = strings.TrimSpace(prevResume.Branch)
 	}
 	if req.ExternalSessionID == "" {
-		req.ExternalSessionID = strings.TrimSpace(existente.ExternalSessionID)
+		req.ExternalSessionID = strings.TrimSpace(prevResume.ExternalSessionID)
 	}
 
 	contextoGob, resumenGob := db.BuildGovernanceContextSummaryForContext(rol, &proyecto.ID, agente.Nombre)
@@ -129,11 +137,11 @@ func adoptarContextoAgente(req apiAgenteAdoptarContextoRequest) (*apiAgenteAdopt
 	if err != nil {
 		return nil, err
 	}
-	resumePayload, err := construirResumePayloadAdoptado(existente.ResumePayloadJSON, req, proyecto, contextoGob)
+	resumePayload, err := construirResumePayloadAdoptado(prevResume.ResumePayloadJSON, req, proyecto, contextoGob)
 	if err != nil {
 		return nil, err
 	}
-	resumen := construirResumenContextoAdoptado(existente.ResumenContinuidad, req.Resumen, resumenGob, proyecto, req)
+	resumen := construirResumenContextoAdoptado(prevResume.ResumenContinuidad, req.Resumen, resumenGob, proyecto, req)
 	estado := "activa"
 	sesion, err := sesionesAPIService.SaveActiveSession(agente.Nombre, proyecto.Slug, db.SesionUpdate{
 		CWD:                stringPtr(req.CWD),
@@ -232,12 +240,8 @@ func adoptarContextoAgente(req apiAgenteAdoptarContextoRequest) (*apiAgenteAdopt
 }
 
 func construirResumePayloadAdoptado(prev string, req apiAgenteAdoptarContextoRequest, proyecto *db.Proyecto, contextoGob map[string]any) (string, error) {
-	envelope := map[string]any{}
-	if strings.TrimSpace(prev) != "" {
-		if err := json.Unmarshal([]byte(prev), &envelope); err != nil {
-			envelope["resume_payload_prev"] = prev
-		}
-	}
+	prev = db.SanitizeResumePayloadForProject(prev, proyecto)
+	envelope := db.ParseResumePayloadEnvelope(prev)
 	if strings.TrimSpace(req.ResumePayload) != "" {
 		var incoming map[string]any
 		if err := json.Unmarshal([]byte(req.ResumePayload), &incoming); err == nil {
@@ -248,11 +252,12 @@ func construirResumePayloadAdoptado(prev string, req apiAgenteAdoptarContextoReq
 			envelope["resume_payload_input"] = req.ResumePayload
 		}
 	}
+	rutaAbs := db.RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, req.CWD)
 	envelope["project_context"] = map[string]any{
 		"id":       proyecto.ID,
 		"slug":     proyecto.Slug,
 		"nombre":   proyecto.Nombre,
-		"ruta_abs": proyecto.RutaAbs,
+		"ruta_abs": rutaAbs,
 	}
 	if contextoGob != nil {
 		envelope["governance_catalog"] = contextoGob
@@ -274,6 +279,7 @@ func construirResumePayloadAdoptado(prev string, req apiAgenteAdoptarContextoReq
 }
 
 func construirResumenContextoAdoptado(previo, input, resumenGob string, proyecto *db.Proyecto, req apiAgenteAdoptarContextoRequest) string {
+	previo = db.SanitizeContinuitySummaryForProject(previo, proyecto)
 	partes := []string{}
 	if item := strings.TrimSpace(previo); item != "" {
 		partes = append(partes, item)

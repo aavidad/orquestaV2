@@ -136,6 +136,43 @@ func TestResolverPoliticaModeloEconomicaPorPerfil(t *testing.T) {
 	})
 }
 
+func TestEnsureCapacidadModeloBaseCodexFuerzaXHighEnImplementacion(t *testing.T) {
+	withTempDBPools(t, func() {
+		if err := SeedPoolsIniciales(); err != nil {
+			t.Fatalf("SeedPoolsIniciales: %v", err)
+		}
+		if err := SeedModelosIniciales(); err != nil {
+			t.Fatalf("SeedModelosIniciales: %v", err)
+		}
+		if err := SeedPoliticasModeloIniciales(); err != nil {
+			t.Fatalf("SeedPoliticasModeloIniciales: %v", err)
+		}
+		if _, err := DB.Exec(`
+			UPDATE politicas_modelo
+			SET reasoning_effort = 'high'
+			WHERE scope_tipo = 'perfil'
+			  AND scope_ref = 'implementacion'
+			  AND perfil_tarea = 'implementacion'`); err != nil {
+			t.Fatalf("downgrade politica implementacion: %v", err)
+		}
+
+		if err := EnsureCapacidadModeloBaseCodex(); err != nil {
+			t.Fatalf("EnsureCapacidadModeloBaseCodex: %v", err)
+		}
+
+		res, err := ResolverPoliticaModelo(ResolverPoliticaInput{PerfilTarea: "implementacion"})
+		if err != nil {
+			t.Fatalf("ResolverPoliticaModelo: %v", err)
+		}
+		if res.ModelSlug != "gpt-5.4" {
+			t.Fatalf("modelo inesperado: %+v", res)
+		}
+		if res.ReasoningEffort != "xhigh" {
+			t.Fatalf("reasoning inesperado: %+v", res)
+		}
+	})
+}
+
 func insertPoolsYModelosTest(t *testing.T) {
 	t.Helper()
 	for _, pool := range []PoolCapacidad{

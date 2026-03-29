@@ -152,3 +152,36 @@ func TestSesionInicioYNuevoCodexExigenServidorSalvoRecuperacionLocal(t *testing.
 		t.Fatalf("sesion nuevo-codex deberia exigir servidor, err=%v", err)
 	}
 }
+
+func TestSesionInicioArranqueLimpioEnviaBanderaAPI(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/sesiones/inicio", func(w http.ResponseWriter, r *http.Request) {
+		var req apiSesionInicioRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode sesion inicio: %v", err)
+		}
+		if !req.ArranqueLimpio {
+			t.Fatalf("esperaba arranque_limpio=true: %+v", req)
+		}
+		_ = json.NewEncoder(w).Encode(apiSesionInicioResponse{
+			Sesion: &db.Sesion{ID: 90, Agente: "Codex1"},
+			Rol:    "programador",
+		})
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	resetCommandFlags(sesionInicioCmd)
+	_ = sesionInicioCmd.Flags().Set("arranque-limpio", "true")
+	if err := sesionInicioCmd.RunE(sesionInicioCmd, []string{"Codex1"}); err != nil {
+		t.Fatalf("sesion inicio arranque limpio via API: %v", err)
+	}
+}

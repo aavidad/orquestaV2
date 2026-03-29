@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"time"
 
 	"orquesta/db"
+	"orquesta/internal/controlruntime"
 )
 
 func TestAPIControlPlaneOrquestacionEndToEnd(t *testing.T) {
@@ -319,6 +321,193 @@ func TestAPIControlPlaneOrquestacionEndToEnd(t *testing.T) {
 	}
 	if startOrder == nil || startOrder.Estado != "completada" {
 		t.Fatalf("start order no completada: %+v", startOrder)
+	}
+}
+
+func TestAPIControlPlaneArranqueRealConBootstrapMultilinea(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	argLog := filepath.Join(tmp, "launch-argv.log")
+	promptLog := filepath.Join(tmp, "launch-prompt.log")
+	launcher := filepath.Join(tmp, "fake-launcher.sh")
+	script := "#!/usr/bin/env bash\nset -eu\nprintf '%s\\n' \"$@\" > " + strconv.Quote(argLog) + "\nprintf '%s' \"${!#}\" > " + strconv.Quote(promptLog) + "\nsleep 30\n"
+	if err := os.WriteFile(launcher, []byte(script), 0o755); err != nil {
+		t.Fatalf("write launcher: %v", err)
+	}
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertConector(&db.Conector{
+		Slug:         "codex-launcher",
+		Nombre:       "Codex Launcher",
+		Transporte:   "cli",
+		Comando:      launcher,
+		MetadataJSON: `{"launch_prompt_positional":true}`,
+		Activo:       true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Implementar bootstrap real",
+		Modulo:     "orquestador",
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "alberto",
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE tareas SET estado='asignada' WHERE id=?`, tareaID); err != nil {
+		t.Fatalf("marcar tarea asignada: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	postJSON := func(path string, body any, wantCode int) []byte {
+		t.Helper()
+		data, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(data))
+		req.Header.Set("Content-Type", "application/json")
+		mux.ServeHTTP(rec, req)
+		if rec.Code != wantCode {
+			t.Fatalf("status inesperado POST %s: %d body=%s", path, rec.Code, rec.Body.String())
+		}
+		return rec.Body.Bytes()
+	}
+	decodeID := func(body []byte) int64 {
+		t.Helper()
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("decode id: %v body=%s", err, string(body))
+		}
+		id, _ := payload["id"].(float64)
+		return int64(id)
+	}
+
+	startID := decodeID(postJSON("/api/agente/control", apiAgenteControlRequest{
+		Agente:       "Codex1",
+		Proyecto:     "orquestador",
+		Accion:       "arrancar",
+		Conector:     "codex-launcher",
+		Modelo:       "gpt-5.4",
+		Razonamiento: "high",
+		Perfil:       "implementacion",
+		Motivo:       "arranque real e2e",
+		Por:          "test",
+	}, http.StatusCreated))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	runner := newControlPlaneRunner(nil, false)
+	runner.NotificationFeed = nil
+	runner.InitNotifications = nil
+	runner.Notifier = nil
+	runner.ReanimacionCada = time.Hour
+	runner.SaludCada = time.Hour
+	runner.PlanificacionCada = time.Hour
+	runner.ControlPlaneCada = 20 * time.Millisecond
+	runner.Start(ctx)
+
+	deadline := time.Now().Add(3 * time.Second)
+	var (
+		argvData   []byte
+		promptData []byte
+		startOrder *db.RuntimeOrder
+	)
+	for {
+		promptData, err = os.ReadFile(promptLog)
+		if err == nil && strings.Contains(string(promptData), "Bootstrap de Orquesta para Codex1.") {
+			startOrder, _ = db.GetRuntimeOrder(startID)
+			if startOrder != nil && startOrder.Estado == "completada" {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			if err != nil {
+				t.Fatalf("leer prompt log: %v", err)
+			}
+			argvData, _ = os.ReadFile(argLog)
+			startOrder, _ = db.GetRuntimeOrder(startID)
+			t.Fatalf("el launcher no recibió el bootstrap esperado. order=%+v prompt=%q argv=%s", startOrder, string(promptData), string(argvData))
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	sesion, err := db.GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion activa: %+v err=%v", sesion, err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil || runtime.PID == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	t.Cleanup(func() {
+		_, _, _ = controlruntime.DetenerProceso(controlruntime.ObjetivoProceso{PID: runtime.PID})
+	})
+
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if !strings.Contains(handle.MetadataJSON, `"bootstrap_prompt"`) || !strings.Contains(handle.MetadataJSON, `"launch_prompt_embedded":true`) {
+		t.Fatalf("metadata de handle sin bootstrap embebido: %s", handle.MetadataJSON)
+	}
+	if startOrder == nil || startOrder.Estado != "completada" {
+		t.Fatalf("start order no completada: %+v", startOrder)
+	}
+
+	argvData, _ = os.ReadFile(argLog)
+	prompt := string(promptData)
+	expectedPrefix := strings.Join([]string{
+		"Bootstrap de Orquesta para Codex1.",
+		"Rol: programador. Proyecto: orquestador.",
+		"Directorio de trabajo: " + filepath.Join(tmp, "orquestador") + ".",
+	}, "\n")
+	if !strings.Contains(prompt, expectedPrefix) {
+		t.Fatalf("el bootstrap embebido deberia conservar las primeras lineas completas. prompt=%q argv=%s", prompt, string(argvData))
+	}
+	if !strings.Contains(prompt, "\nTareas activas: #"+strconv.FormatInt(tareaID, 10)+" [asignada] Implementar bootstrap real.") {
+		t.Fatalf("el prompt embebido deberia incluir la tarea activa en una linea propia. prompt=%q argv=%s", prompt, string(argvData))
+	}
+	if strings.Count(prompt, "\n") < 5 {
+		t.Fatalf("el bootstrap embebido deberia seguir siendo multilinea. prompt=%q argv=%s", prompt, string(argvData))
+	}
+
+	agente := "Codex1"
+	entries, err := db.ListarRuntimeTranscript(db.FiltroRuntimeTranscript{Agente: &agente, Limit: 20})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	foundSystem := false
+	for _, item := range entries {
+		if item == nil || item.Stream != "system" {
+			continue
+		}
+		if strings.Contains(item.Text, "prompt inicial quedó embebido") {
+			foundSystem = true
+			break
+		}
+	}
+	if !foundSystem {
+		t.Fatalf("el transcript deberia reflejar el prompt inicial embebido: %+v", entries)
 	}
 }
 

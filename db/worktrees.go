@@ -99,7 +99,17 @@ func (CoordinationWorktreeSQLRepository) List(filter coordinacion.WorktreeFilter
 		}
 		out = append(out, worktree)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	filtradas := make([]*coordinacion.Worktree, 0, len(out))
+	for _, worktree := range out {
+		if worktree != nil && worktree.State == coordinacion.WorktreeActive && !WorktreeActivaCoherente(worktree.ProjectID, worktree.Path) {
+			continue
+		}
+		filtradas = append(filtradas, worktree)
+	}
+	return filtradas, nil
 }
 
 func (CoordinationWorktreeSQLRepository) Close(id int64, closedAt time.Time, reason string) (*coordinacion.Worktree, error) {
@@ -130,6 +140,7 @@ func (CoordinationProjectSQLRepository) GetByRef(ref string) (*coordinacion.Proj
 	if err != nil {
 		return nil, err
 	}
+	project = ProyectoConRutaEfectiva(project, "")
 	return &coordinacion.Project{
 		ID:       project.ID,
 		Slug:     project.Slug,

@@ -53,3 +53,22 @@ func TestExecuteLocalArgsReseteaFlagsEntreEjecuciones(t *testing.T) {
 		t.Fatalf("las flags de salida se contaminaron entre ejecuciones: %s", errTSV)
 	}
 }
+
+func TestSkipRemoteDelegationRespetaServidorExplicito(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "http://127.0.0.1:16546")()
+
+	if !skipRemoteDelegation([]string{"tarea", "completar", "12", "Codex1"}) {
+		t.Fatalf("deberia saltarse la delegacion RPC local cuando ORQUESTA_SERVER_URL esta fijado")
+	}
+}
+
+func TestSkipRemoteDelegationSoloPersisteSinServidorExplicito(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+
+	if skipRemoteDelegation([]string{"tarea", "completar", "12", "Codex1"}) {
+		t.Fatalf("no deberia saltarse la delegacion RPC local sin servidor explicito")
+	}
+	if !skipRemoteDelegation([]string{"persistencia"}) {
+		t.Fatalf("persistencia debe seguir saltandose la delegacion RPC local")
+	}
+}

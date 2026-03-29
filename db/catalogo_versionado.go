@@ -42,24 +42,24 @@ type ReglaVersion struct {
 }
 
 type SkillVersion struct {
-	ID               int64
-	SkillID          int64
-	VersionNum       int64
-	TipoAgente       string
-	Nombre           string
-	Descripcion      string
-	CuandoUsar       string
-	Escenario        string
-	Prioridad        int
-	AliasesJSON      string
-	HerramientasJSON string
-	Origen           string
-	NivelRiesgo      string
+	ID                 int64
+	SkillID            int64
+	VersionNum         int64
+	TipoAgente         string
+	Nombre             string
+	Descripcion        string
+	CuandoUsar         string
+	Escenario          string
+	Prioridad          int
+	AliasesJSON        string
+	HerramientasJSON   string
+	Origen             string
+	NivelRiesgo        string
 	RequiereAprobacion bool
-	Activa           bool
-	Actor            string
-	Accion           string
-	CreatedAt        time.Time
+	Activa             bool
+	Actor              string
+	Accion             string
+	CreatedAt          time.Time
 }
 
 type WorkflowVersion struct {
@@ -239,9 +239,7 @@ func permisoEdicionCatalogoPorRol(entidad, rol string) (*PermisoEdicionCatalogo,
 }
 
 func rolAgente(nombre string) (string, bool, error) {
-	var rol string
-	var habilitado bool
-	err := DB.QueryRow(`SELECT rol, habilitado FROM agentes WHERE nombre = ?`, strings.TrimSpace(nombre)).Scan(&rol, &habilitado)
+	_, rol, habilitado, err := resolverAgentePorNombreCI(strings.TrimSpace(nombre))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return "", false, fmt.Errorf("agente '%s' no registrado", nombre)

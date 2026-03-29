@@ -63,3 +63,47 @@ func TestRuntimeConnectorDetectExternalSessionIDUsaHook(t *testing.T) {
 		t.Fatalf("detect con hook inesperado: %q", got)
 	}
 }
+
+func TestRuntimeConnectorLaunchUsaCodexPerfilComoCodex(t *testing.T) {
+	tmp := t.TempDir()
+	scriptPath := runtimeConnectorScriptPath(t)
+	fakeRuntime := filepath.Join(tmp, "codex-perfil")
+
+	if err := os.WriteFile(fakeRuntime, []byte("#!/usr/bin/env bash\nprintf '<%s>\\n' \"$@\"\n"), 0o755); err != nil {
+		t.Fatalf("write fake runtime: %v", err)
+	}
+
+	cmd := exec.Command("bash", "-lc", `. "`+scriptPath+`"; runtime_launch "`+fakeRuntime+` Codex2" "/tmp/work" "" "hola bootstrap"`)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("runtime_launch codex-perfil: %v", err)
+	}
+	got := string(out)
+	for _, token := range []string{"<Codex2>", "<-C>", "</tmp/work>", "<hola bootstrap>"} {
+		if !strings.Contains(got, token) {
+			t.Fatalf("launch codex-perfil sin %s en %q", token, got)
+		}
+	}
+}
+
+func TestRuntimeConnectorLaunchResumeUsaCodexPerfilComoCodex(t *testing.T) {
+	tmp := t.TempDir()
+	scriptPath := runtimeConnectorScriptPath(t)
+	fakeRuntime := filepath.Join(tmp, "codex-perfil")
+
+	if err := os.WriteFile(fakeRuntime, []byte("#!/usr/bin/env bash\nprintf '<%s>\\n' \"$@\"\n"), 0o755); err != nil {
+		t.Fatalf("write fake runtime: %v", err)
+	}
+
+	cmd := exec.Command("bash", "-lc", `. "`+scriptPath+`"; runtime_launch "`+fakeRuntime+` Codex3" "/tmp/work" "sess-123" "ignorado"`)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("runtime_launch resume codex-perfil: %v", err)
+	}
+	got := string(out)
+	for _, token := range []string{"<Codex3>", "<resume>", "<-C>", "</tmp/work>", "<sess-123>"} {
+		if !strings.Contains(got, token) {
+			t.Fatalf("resume codex-perfil sin %s en %q", token, got)
+		}
+	}
+}

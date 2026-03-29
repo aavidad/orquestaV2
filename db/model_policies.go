@@ -17,25 +17,25 @@ import (
 )
 
 type PoliticaModelo struct {
-	ID               int64
-	ScopeTipo        string
-	ScopeRef         string
-	PerfilTarea      string
-	PoolSlug         string
-	ModelSlug        string
-	ReasoningEffort  string
-	Prioridad        int
-	Activa           bool
-	MetadataJSON     string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	ID              int64
+	ScopeTipo       string
+	ScopeRef        string
+	PerfilTarea     string
+	PoolSlug        string
+	ModelSlug       string
+	ReasoningEffort string
+	Prioridad       int
+	Activa          bool
+	MetadataJSON    string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type ResolverPoliticaInput struct {
 	TareaID      *int64
 	ProyectoSlug string
 	Fase         string
-	PerfilTarea string
+	PerfilTarea  string
 }
 
 type ResolucionModelo struct {
@@ -47,6 +47,73 @@ type ResolucionModelo struct {
 	FuenteModelo       string            `json:"fuente_modelo"`
 	FuenteReasoning    string            `json:"fuente_reasoning"`
 	PoliticasAplicadas []*PoliticaModelo `json:"politicas_aplicadas,omitempty"`
+}
+
+func ResolverPerfilEjecucionLanzamiento(proyectoSlug, perfilTarea, modelo, razonamiento string) (string, string, string, error) {
+	perfilTarea = strings.TrimSpace(perfilTarea)
+	modelo = strings.TrimSpace(modelo)
+	razonamiento = strings.TrimSpace(strings.ToLower(razonamiento))
+	if perfilTarea != "" && modelo != "" && razonamiento != "" {
+		return perfilTarea, modelo, razonamiento, nil
+	}
+	if err := EnsureCapacidadModeloBaseCodex(); err != nil {
+		return "", "", "", err
+	}
+	resolucion, err := ResolverPoliticaModelo(ResolverPoliticaInput{
+		ProyectoSlug: strings.TrimSpace(proyectoSlug),
+		PerfilTarea:  perfilTarea,
+	})
+	if err != nil {
+		return "", "", "", err
+	}
+	if perfilTarea == "" {
+		perfilTarea = strings.TrimSpace(resolucion.PerfilTarea)
+	}
+	if modelo == "" {
+		modelo = strings.TrimSpace(resolucion.ModelSlug)
+	}
+	if razonamiento == "" {
+		razonamiento = strings.TrimSpace(strings.ToLower(resolucion.ReasoningEffort))
+	}
+	return perfilTarea, modelo, razonamiento, nil
+}
+
+func EnsureCapacidadModeloBaseCodex() error {
+	if err := SeedPoolsIniciales(); err != nil {
+		return err
+	}
+	if err := SeedModelosIniciales(); err != nil {
+		return err
+	}
+	if err := SeedPoliticasModeloIniciales(); err != nil {
+		return err
+	}
+	return asegurarPoliticaImplementacionXHigh()
+}
+
+func asegurarPoliticaImplementacionXHigh() error {
+	res, err := DB.Exec(`
+		UPDATE politicas_modelo
+		SET reasoning_effort = 'xhigh'
+		WHERE scope_tipo = 'perfil'
+		  AND scope_ref = 'implementacion'
+		  AND perfil_tarea = 'implementacion'
+		  AND activa = 1`)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		return nil
+	}
+	_, err = GuardarPoliticaModelo(&PoliticaModelo{
+		ScopeTipo:       "perfil",
+		ScopeRef:        "implementacion",
+		PerfilTarea:     "implementacion",
+		ReasoningEffort: "xhigh",
+		Prioridad:       10,
+		Activa:          true,
+	})
+	return err
 }
 
 func GuardarPoliticaModelo(p *PoliticaModelo) (int64, error) {
@@ -476,7 +543,7 @@ func SeedPoliticasModeloIniciales() error {
 	iniciales := []PoliticaModelo{
 		{ScopeTipo: "perfil", ScopeRef: "orquestacion", PerfilTarea: "orquestacion", ReasoningEffort: "xhigh", Prioridad: 10, Activa: true},
 		{ScopeTipo: "perfil", ScopeRef: "analisis", PerfilTarea: "analisis", ReasoningEffort: "high", Prioridad: 10, Activa: true},
-		{ScopeTipo: "perfil", ScopeRef: "implementacion", PerfilTarea: "implementacion", ReasoningEffort: "high", Prioridad: 10, Activa: true},
+		{ScopeTipo: "perfil", ScopeRef: "implementacion", PerfilTarea: "implementacion", ReasoningEffort: "xhigh", Prioridad: 10, Activa: true},
 		{ScopeTipo: "perfil", ScopeRef: "script", PerfilTarea: "script", ReasoningEffort: "medium", Prioridad: 10, Activa: true},
 		{ScopeTipo: "perfil", ScopeRef: "revision", PerfilTarea: "revision", ReasoningEffort: "high", Prioridad: 10, Activa: true},
 		{ScopeTipo: "perfil", ScopeRef: "handoff", PerfilTarea: "handoff", ReasoningEffort: "medium", Prioridad: 10, Activa: true},

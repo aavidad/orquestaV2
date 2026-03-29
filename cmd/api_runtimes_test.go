@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -161,6 +162,32 @@ func TestAPIRuntimeControlPlaneEndpoints(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("crear runtime transcript: %v", err)
 	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get runtime handle: %+v err=%v", handle, err)
+	}
+	traceDir := filepath.Join(tmp, "orquestador", ".orquesta-runtime", "codex1", "20260329-120000-000000001")
+	if err := os.MkdirAll(traceDir, 0o700); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	logPath := filepath.Join(traceDir, "pty.log")
+	manifestPath := filepath.Join(traceDir, "runtime.json")
+	if err := os.WriteFile(logPath, []byte("inicio\navance\nfin\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, []byte("{}\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"trace_dir":      traceDir,
+		"trace_manifest": manifestPath,
+		"log_path":       logPath,
+		"working_dir":    filepath.Join(tmp, "orquestador"),
+		"driver":         "process_pty_cli",
+	})
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json = ? WHERE id = ?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update runtime handle metadata: %v", err)
+	}
 
 	mux := http.NewServeMux()
 	registerAPIRoutes(mux)
@@ -186,7 +213,51 @@ func TestAPIRuntimeControlPlaneEndpoints(t *testing.T) {
 	}
 
 	assertKey(http.MethodGet, "/api/runtime-handles?agente=Codex1", nil, "handles", http.StatusOK)
+	res, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado
+	) VALUES (?,?,?,?,?,?,?)`,
+		"Codex1", proyectoID, runtime.ID, "cli", "process", "stale-api", "cerrado",
+	)
+	if err != nil {
+		t.Fatalf("insert runtime handle cerrado: %v", err)
+	}
+	if _, err := res.LastInsertId(); err != nil {
+		t.Fatalf("last insert id runtime handle cerrado: %v", err)
+	}
+	assertKey(http.MethodPost, "/api/runtime-handles/purgar", []byte(`{"agente":"Codex1","actor":"Codex1"}`), "deleted", http.StatusOK)
+	assertKey(http.MethodGet, "/api/runtime-trace?agente=Codex1&proyecto=orquestador&bytes=8", nil, "trace", http.StatusOK)
 	assertKey(http.MethodGet, "/api/runtime-transcript?agente=Codex1&proyecto=orquestador", nil, "transcript", http.StatusOK)
+	recTranscript := httptest.NewRecorder()
+	reqTranscript := httptest.NewRequest(http.MethodGet, "/api/runtime-transcript?agente=Codex1&proyecto=orquestador&q=refactor", nil)
+	mux.ServeHTTP(recTranscript, reqTranscript)
+	if recTranscript.Code != http.StatusOK {
+		t.Fatalf("status inesperado transcript search: %d body=%s", recTranscript.Code, recTranscript.Body.String())
+	}
+	var payloadTranscript map[string]any
+	if err := json.Unmarshal(recTranscript.Body.Bytes(), &payloadTranscript); err != nil {
+		t.Fatalf("decode transcript search: %v", err)
+	}
+	items, _ := payloadTranscript["transcript"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("transcript search inesperado: %s", recTranscript.Body.String())
+	}
+	recTrace := httptest.NewRecorder()
+	reqTrace := httptest.NewRequest(http.MethodGet, "/api/runtime-trace?agente=Codex1&proyecto=orquestador&bytes=8", nil)
+	mux.ServeHTTP(recTrace, reqTrace)
+	if recTrace.Code != http.StatusOK {
+		t.Fatalf("status inesperado runtime trace: %d body=%s", recTrace.Code, recTrace.Body.String())
+	}
+	var payloadTrace map[string]any
+	if err := json.Unmarshal(recTrace.Body.Bytes(), &payloadTrace); err != nil {
+		t.Fatalf("decode runtime trace: %v", err)
+	}
+	trace, _ := payloadTrace["trace"].(map[string]any)
+	if rawTail, _ := trace["raw_tail"].(string); !strings.Contains(rawTail, "ce\nfin\n") {
+		t.Fatalf("raw_tail inesperado: %s", recTrace.Body.String())
+	}
+	if available, _ := trace["available"].(bool); !available {
+		t.Fatalf("trace deberia estar disponible: %s", recTrace.Body.String())
+	}
 	assertKey(http.MethodGet, "/api/runtime-orders?agente=Codex1", nil, "orders", http.StatusOK)
 	assertKey(http.MethodGet, "/api/runtime-mailbox?to_agente=Codex2&proyecto=orquestador", nil, "mailbox", http.StatusOK)
 	assertKey(http.MethodGet, "/api/runtime-checkpoints/latest?agente=Codex1&proyecto=orquestador", nil, "checkpoint", http.StatusOK)

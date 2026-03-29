@@ -74,10 +74,6 @@ func (dbAutomationService) ProcesarHandoffsBatch() (int, error) {
 	return db.ProcesarHandoffsBatch()
 }
 
-func (dbAutomationService) ProcesarGitMergesBatch() (int, error) {
-	return procesarGitMergesBatch()
-}
-
 func (dbAutomationService) Audit(agente, accion, entidad string, entidadID int64, detalle string) {
 	db.Audit(agente, accion, entidad, entidadID, detalle)
 }
@@ -699,6 +695,9 @@ func procesarRuntimeMailboxInteractivoBatch() (int, error) {
 		if handle == nil {
 			continue
 		}
+		if !db.RuntimeHandlePermiteSendInputInteractivo(handle) {
+			continue
+		}
 		payload := map[string]any{
 			"to_agente":    strings.TrimSpace(msg.ToAgente),
 			"from_agente":  strings.TrimSpace(msg.FromAgente),
@@ -1081,6 +1080,13 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 		if err != nil {
 			return 0, err
 		}
+		tieneTrabajo, err := dbAgenteTieneTrabajoArrancable(strings.TrimSpace(sesion.Agente), proyecto.ID)
+		if err != nil {
+			return 0, err
+		}
+		if !tieneTrabajo {
+			return 0, nil
+		}
 		if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
 			Agente:   strings.TrimSpace(sesion.Agente),
 			Proyecto: proyecto.Slug,
@@ -1446,6 +1452,8 @@ func encolarNudgeAutonomiaDetallado(agente string, proyecto *db.Proyecto, accion
 	if proyecto == nil {
 		return false, nil
 	}
+	agente = strings.TrimSpace(agente)
+	accion = strings.TrimSpace(accion)
 	if abierta, err := existeRuntimeOrderAbiertaAutonomia(strings.TrimSpace(agente), &proyecto.ID, "send_instruction"); err != nil {
 		return false, err
 	} else if abierta {
@@ -1468,12 +1476,19 @@ func encolarNudgeAutonomiaDetallado(agente string, proyecto *db.Proyecto, accion
 		if handle.RuntimeID != nil {
 			runtimeID = handle.RuntimeID
 		}
+		if !db.RuntimeHandlePermiteSendInputInteractivo(handle) {
+			if pendiente, err := existeRuntimeMailboxAutonomiaPendiente(agente, &proyecto.ID, accion); err != nil {
+				return false, err
+			} else if pendiente {
+				return false, nil
+			}
+		}
 	}
 	payload := map[string]any{
 		"from_agente": "server",
-		"to_agente":   strings.TrimSpace(agente),
+		"to_agente":   agente,
 		"kind":        "autonomia",
-		"accion":      strings.TrimSpace(accion),
+		"accion":      accion,
 		"texto":       strings.TrimSpace(motivo),
 	}
 	if strings.TrimSpace(instruction) != "" {
@@ -1498,6 +1513,31 @@ func encolarNudgeAutonomiaDetallado(agente string, proyecto *db.Proyecto, accion
 		return false, err
 	}
 	db.Audit("orquesta", "autonomia_nudge", "runtime_order", orderID,
-		fmt.Sprintf("agente=%s proyecto=%s accion=%s", strings.TrimSpace(agente), proyecto.Slug, strings.TrimSpace(accion)))
+		fmt.Sprintf("agente=%s proyecto=%s accion=%s", agente, proyecto.Slug, accion))
 	return true, nil
+}
+
+func existeRuntimeMailboxAutonomiaPendiente(agente string, proyectoID *int64, accion string) (bool, error) {
+	estado := "pendiente"
+	agente = strings.TrimSpace(agente)
+	accion = strings.TrimSpace(accion)
+	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente:   &agente,
+		ProyectoID: proyectoID,
+		Estado:     &estado,
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, msg := range mailbox {
+		if msg == nil || strings.TrimSpace(msg.Kind) != "autonomia" {
+			continue
+		}
+		payload := map[string]any{}
+		_ = json.Unmarshal([]byte(msg.PayloadJSON), &payload)
+		if strings.TrimSpace(stringMapValue(payload, "accion")) == accion {
+			return true, nil
+		}
+	}
+	return false, nil
 }

@@ -391,6 +391,31 @@ func TestFetchServerConfig(t *testing.T) {
 	}
 }
 
+func TestFetchServerConfigAceptaSobreActual(t *testing.T) {
+	prevClient := serverHTTPClient
+	serverHTTPClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			switch req.URL.Path + "?" + req.URL.RawQuery {
+			case "/api/config?":
+				return newJSONResponse(http.StatusOK, `{"config":{"model_policy_default_reasoning":"high","pool_default_budget_source":"manual"}}`), nil
+			default:
+				return newJSONResponse(http.StatusNotFound, `{"error":"not found"}`), nil
+			}
+		}),
+	}
+	defer func() {
+		serverHTTPClient = prevClient
+	}()
+
+	items, err := fetchServerConfigAll("http://orquesta.local")
+	if err != nil {
+		t.Fatalf("fetchServerConfigAll shape actual: %v", err)
+	}
+	if items["model_policy_default_reasoning"] != "high" || items["pool_default_budget_source"] != "manual" {
+		t.Fatalf("config actual inesperada: %+v", items)
+	}
+}
+
 func TestFetchServerText(t *testing.T) {
 	prevClient := serverHTTPClient
 	serverHTTPClient = &http.Client{
@@ -616,5 +641,90 @@ func TestFetchServerTasksAndProposals(t *testing.T) {
 	}
 	if propuesta == nil || propuesta.Proposal == nil || propuesta.Proposal.Codigo != "OP-080" {
 		t.Fatalf("propuesta detalle inesperada: %+v", propuesta)
+	}
+}
+
+func TestFetchServerRecursosAceptaSobresActuales(t *testing.T) {
+	prevClient := serverHTTPClient
+	serverHTTPClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			switch {
+			case req.URL.Path == "/api/agentes" && req.Method == http.MethodGet:
+				return newJSONResponse(http.StatusOK, `{"agentes":[{"Nombre":"Codex2","Rol":"programador","Activo":true}]}`), nil
+			case req.URL.Path == "/api/tareas" && req.Method == http.MethodGet:
+				return newJSONResponse(http.StatusOK, `{"tareas":[{"ID":12,"Titulo":"Tarea remota","Estado":"asignada","Modulo":"core","Prioridad":"media"}]}`), nil
+			case req.URL.Path == "/api/tareas/12" && req.Method == http.MethodGet:
+				return newJSONResponse(http.StatusOK, `{"tarea":{"ID":12,"Titulo":"Tarea remota","Estado":"asignada","Modulo":"core","Prioridad":"media","CreadoPor":"alberto"}}`), nil
+			case req.URL.Path == "/api/propuestas" && req.Method == http.MethodGet:
+				return newJSONResponse(http.StatusOK, `{"propuestas":[{"ID":80,"Codigo":"OP-080","Titulo":"Servidor unico","Estado":"abierta","Tipo":"arquitectura","PropuestoPor":"Codex1"}]}`), nil
+			case req.URL.Path == "/api/propuestas/OP-080" && req.Method == http.MethodGet:
+				return newJSONResponse(http.StatusOK, `{"propuesta":{"ID":80,"Codigo":"OP-080","Titulo":"Servidor unico","Estado":"abierta","Tipo":"arquitectura","PropuestoPor":"Codex1","Votos":[{"Agente":"Codex1","Posicion":"acuerdo"}]}}`), nil
+			case req.URL.Path == "/api/tareas" && req.Method == http.MethodPost:
+				return newJSONResponse(http.StatusCreated, `{"ok":true,"tarea":{"ID":55,"Titulo":"demo"}}`), nil
+			case req.URL.Path == "/api/propuestas" && req.Method == http.MethodPost:
+				return newJSONResponse(http.StatusCreated, `{"ok":true,"id":81,"propuesta":{"ID":81,"Codigo":"OP-081","Titulo":"demo"}}`), nil
+			default:
+				return newJSONResponse(http.StatusNotFound, `{"error":"not found"}`), nil
+			}
+		}),
+	}
+	defer func() {
+		serverHTTPClient = prevClient
+	}()
+
+	agentes, err := fetchServerAgents("http://orquesta.local")
+	if err != nil {
+		t.Fatalf("fetchServerAgents actual: %v", err)
+	}
+	if len(agentes) != 1 || agentes[0].Nombre != "Codex2" {
+		t.Fatalf("agentes actuales inesperados: %+v", agentes)
+	}
+
+	taskID, err := submitServerCreateTask("http://orquesta.local", map[string]any{"titulo": "demo"})
+	if err != nil {
+		t.Fatalf("submitServerCreateTask actual: %v", err)
+	}
+	if taskID != 55 {
+		t.Fatalf("taskID actual inesperado: %d", taskID)
+	}
+
+	proposalID, codigo, err := submitServerCreateProposal("http://orquesta.local", map[string]any{"titulo": "demo"})
+	if err != nil {
+		t.Fatalf("submitServerCreateProposal actual: %v", err)
+	}
+	if proposalID != 81 || codigo != "OP-081" {
+		t.Fatalf("propuesta actual inesperada: id=%d codigo=%s", proposalID, codigo)
+	}
+
+	tareas, err := fetchServerTasks("http://orquesta.local", nil)
+	if err != nil {
+		t.Fatalf("fetchServerTasks actual: %v", err)
+	}
+	if len(tareas) != 1 || tareas[0].ID != 12 {
+		t.Fatalf("tareas actuales inesperadas: %+v", tareas)
+	}
+
+	tarea, err := fetchServerTaskDetail("http://orquesta.local", 12)
+	if err != nil {
+		t.Fatalf("fetchServerTaskDetail actual: %v", err)
+	}
+	if tarea == nil || tarea.ID != 12 {
+		t.Fatalf("tarea detalle actual inesperada: %+v", tarea)
+	}
+
+	propuestas, err := fetchServerProposals("http://orquesta.local", nil)
+	if err != nil {
+		t.Fatalf("fetchServerProposals actual: %v", err)
+	}
+	if len(propuestas) != 1 || propuestas[0].Codigo != "OP-080" {
+		t.Fatalf("propuestas actuales inesperadas: %+v", propuestas)
+	}
+
+	propuesta, err := fetchServerProposalDetail("http://orquesta.local", "OP-080")
+	if err != nil {
+		t.Fatalf("fetchServerProposalDetail actual: %v", err)
+	}
+	if propuesta == nil || propuesta.Proposal == nil || propuesta.Proposal.Codigo != "OP-080" || len(propuesta.Votes) != 1 {
+		t.Fatalf("propuesta detalle actual inesperada: %+v", propuesta)
 	}
 }

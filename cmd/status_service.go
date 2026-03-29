@@ -20,7 +20,7 @@ func (dbStatusService) FetchStatus() (apiStatusResponse, error) {
 	if err != nil {
 		return apiStatusResponse{}, err
 	}
-	proyectos, err := db.ListarProyectos(db.FiltroProyectos{})
+	proyectos, err := db.ListarProyectosConRutaEfectiva(db.FiltroProyectos{}, "")
 	if err != nil {
 		return apiStatusResponse{}, err
 	}

@@ -15,10 +15,26 @@ import (
 )
 
 func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
+	var transcriptQuery string
 	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/api/status":
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		case r.URL.Path == "/api/runtime-transcript" && r.Method == http.MethodGet:
+			transcriptQuery = r.URL.Query().Get("q")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"transcript": []map[string]any{{
+					"id":              19,
+					"runtime_id":      7,
+					"agente":          "Codex2",
+					"proyecto_slug":   "orquestador",
+					"stream":          "pty_out",
+					"text":            "He preparado el refactor del router",
+					"normalized_text": "he preparado el refactor del router",
+					"classification":  "ready_for_review",
+					"created_at":      "2026-03-23T10:00:00Z",
+				}},
+			})
 		case r.URL.Path == "/api/runtime-handles":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"handles": []map[string]any{{
@@ -31,6 +47,31 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 					"created_at":  "2026-03-23T10:00:00Z",
 					"updated_at":  "2026-03-23T10:00:00Z",
 				}},
+			})
+		case r.URL.Path == "/api/runtime-handles/purgar" && r.Method == http.MethodPost:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":          true,
+				"deleted":     2,
+				"deleted_ids": []int64{48, 39},
+				"estados":     []string{"cerrado", "fallido"},
+			})
+		case r.URL.Path == "/api/runtime-trace" && r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"trace": map[string]any{
+					"handle_id":      7,
+					"agente":         "Codex1",
+					"proyecto":       "orquestador",
+					"trace_dir":      "/repo/.orquesta-runtime/codex1/20260323-100000-000000001",
+					"trace_manifest": "/repo/.orquesta-runtime/codex1/20260323-100000-000000001/runtime.json",
+					"log_path":       "/repo/.orquesta-runtime/codex1/20260323-100000-000000001/pty.log",
+					"working_dir":    "/repo",
+					"driver":         "process_pty_cli",
+					"available":      true,
+					"total_bytes":    42,
+					"bytes_read":     24,
+					"truncated":      true,
+					"raw_tail":       "linea uno\nlinea dos\n",
+				},
 			})
 		case r.URL.Path == "/api/runtime-orders" && r.Method == http.MethodGet:
 			_ = json.NewEncoder(w).Encode(map[string]any{
@@ -144,6 +185,70 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	})
 	if !strings.Contains(outHandles, "sess-001") {
 		t.Fatalf("salida handles sin datos del servidor:\n%s", outHandles)
+	}
+
+	if err := runtimePurgarHandlesCmd.Flags().Set("agente", "Codex5"); err != nil {
+		t.Fatalf("set agente purga handles: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = runtimePurgarHandlesCmd.Flags().Set("agente", "")
+	})
+	outPurge := capturarStdout(t, func() {
+		if err := runtimePurgarHandlesCmd.RunE(runtimePurgarHandlesCmd, nil); err != nil {
+			t.Fatalf("runtime purgar-handles via api: %v", err)
+		}
+	})
+	for _, token := range []string{"Purgados 2", "cerrado,fallido", "[48 39]"} {
+		if !strings.Contains(outPurge, token) {
+			t.Fatalf("salida purgar-handles sin %q:\n%s", token, outPurge)
+		}
+	}
+
+	if err := runtimeTrazaCmd.Flags().Set("agente", "Codex1"); err != nil {
+		t.Fatalf("set agente traza: %v", err)
+	}
+	if err := runtimeTrazaCmd.Flags().Set("proyecto", "orquestador"); err != nil {
+		t.Fatalf("set proyecto traza: %v", err)
+	}
+	if err := runtimeTrazaCmd.Flags().Set("bytes", "32"); err != nil {
+		t.Fatalf("set bytes traza: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = runtimeTrazaCmd.Flags().Set("agente", "")
+		_ = runtimeTrazaCmd.Flags().Set("proyecto", "")
+		_ = runtimeTrazaCmd.Flags().Set("bytes", "8192")
+	})
+	outTraza := capturarStdout(t, func() {
+		if err := runtimeTrazaCmd.RunE(runtimeTrazaCmd, nil); err != nil {
+			t.Fatalf("runtime traza via api: %v", err)
+		}
+	})
+	for _, token := range []string{"Codex1", "process_pty_cli", "pty.log", "linea dos"} {
+		if !strings.Contains(outTraza, token) {
+			t.Fatalf("salida traza sin %q:\n%s", token, outTraza)
+		}
+	}
+
+	if err := runtimeTranscriptCmd.Flags().Set("agente", "Codex2"); err != nil {
+		t.Fatalf("set agente transcript: %v", err)
+	}
+	if err := runtimeTranscriptCmd.Flags().Set("q", "refactor"); err != nil {
+		t.Fatalf("set q transcript: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = runtimeTranscriptCmd.Flags().Set("agente", "")
+		_ = runtimeTranscriptCmd.Flags().Set("q", "")
+	})
+	outTranscript := capturarStdout(t, func() {
+		if err := runtimeTranscriptCmd.RunE(runtimeTranscriptCmd, nil); err != nil {
+			t.Fatalf("runtime transcript via api: %v", err)
+		}
+	})
+	if transcriptQuery != "refactor" {
+		t.Fatalf("query transcript inesperada: %q", transcriptQuery)
+	}
+	if !strings.Contains(outTranscript, "refactor del router") {
+		t.Fatalf("salida transcript sin datos del servidor:\n%s", outTranscript)
 	}
 
 	outOrders := capturarStdout(t, func() {
@@ -294,5 +399,15 @@ func TestRuntimeRequiereServidor(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "requiere el servidor de Orquesta activo") {
 		t.Fatalf("error inesperado: %v", err)
+	}
+
+	resetCommandFlags(runtimeTrazaCmd)
+	_ = runtimeTrazaCmd.Flags().Set("agente", "Codex1")
+	err = runtimeTrazaCmd.RunE(runtimeTrazaCmd, nil)
+	if err == nil {
+		t.Fatalf("se esperaba error sin servidor en runtime traza")
+	}
+	if !strings.Contains(err.Error(), "requiere el servidor de Orquesta activo") {
+		t.Fatalf("error inesperado runtime traza: %v", err)
 	}
 }

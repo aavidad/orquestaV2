@@ -96,6 +96,80 @@ var runtimeHandlesCmd = &cobra.Command{
 	},
 }
 
+var runtimePurgarHandlesCmd = &cobra.Command{
+	Use:   "purgar-handles",
+	Short: "Purga runtime handles inactivos de pruebas sin borrar transcript ni trazas",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agente, _ := cmd.Flags().GetString("agente")
+		proyecto, _ := cmd.Flags().GetString("proyecto")
+		estados, _ := cmd.Flags().GetStringSlice("estado")
+		actor, _ := cmd.Flags().GetString("actor")
+		if strings.TrimSpace(agente) == "" && strings.TrimSpace(proyecto) == "" {
+			return fmt.Errorf("debes indicar --agente o --proyecto")
+		}
+		if resp, ok, err := purgarRuntimeHandlesDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), estados, strings.TrimSpace(actor)); ok {
+			if err != nil {
+				return err
+			}
+			fmt.Printf("✓ Purgados %d runtime handles inactivos", resp.Deleted)
+			if len(resp.Estados) > 0 {
+				fmt.Printf(" [%s]", strings.Join(resp.Estados, ","))
+			}
+			if len(resp.DeletedIDs) > 0 {
+				fmt.Printf(": %v", resp.DeletedIDs)
+			}
+			fmt.Println()
+			return nil
+		}
+		return serverFirstCommandError("runtime purgar-handles")
+	},
+}
+
+var runtimeTranscriptCmd = &cobra.Command{
+	Use:   "transcript",
+	Short: "Lista o busca transcript persistido de runtimes",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agente, _ := cmd.Flags().GetString("agente")
+		proyectoRef, _ := cmd.Flags().GetString("proyecto")
+		stream, _ := cmd.Flags().GetString("stream")
+		classification, _ := cmd.Flags().GetString("classification")
+		queryText, _ := cmd.Flags().GetString("q")
+		signalsPending, _ := cmd.Flags().GetBool("signals-pending")
+		limit, _ := cmd.Flags().GetInt("limit")
+
+		query := url.Values{}
+		if strings.TrimSpace(agente) != "" {
+			query.Set("agente", agente)
+		}
+		if strings.TrimSpace(proyectoRef) != "" {
+			query.Set("proyecto", proyectoRef)
+		}
+		if strings.TrimSpace(stream) != "" {
+			query.Set("stream", stream)
+		}
+		if strings.TrimSpace(classification) != "" {
+			query.Set("classification", classification)
+		}
+		if strings.TrimSpace(queryText) != "" {
+			query.Set("q", queryText)
+		}
+		if signalsPending {
+			query.Set("signals_pending", "true")
+		}
+		if limit > 0 {
+			query.Set("limit", strconv.Itoa(limit))
+		}
+
+		if items, ok, err := cargarRuntimeTranscriptDesdeAPI(query); ok {
+			if err != nil {
+				return err
+			}
+			return imprimirRuntimeTranscript(items)
+		}
+		return serverFirstCommandError("runtime transcript")
+	},
+}
+
 func imprimirRuntimeHandles(handles []*db.RuntimeHandle) error {
 	if len(handles) == 0 {
 		fmt.Println("No hay runtime handles con ese filtro.")
@@ -106,6 +180,28 @@ func imprimirRuntimeHandles(handles []*db.RuntimeHandle) error {
 		fmt.Printf("%-5d %-12s %-12s %-10s %-18s %-10s %s\n",
 			h.ID, truncar(h.Agente, 12), truncar(h.Transporte, 12), truncar(h.HandleKind, 10),
 			truncar(h.HandleRef, 18), truncar(h.Estado, 10), formatoTiempoPtr(h.LastSeenAt))
+	}
+	return nil
+}
+
+func imprimirRuntimeTranscript(items []*db.RuntimeTranscriptEntry) error {
+	if len(items) == 0 {
+		fmt.Println("No hay transcript con ese filtro.")
+		return nil
+	}
+	fmt.Printf("%-5s %-12s %-8s %-20s %-19s %s\n", "ID", "AGENTE", "STREAM", "SIGNAL", "CREADO", "TEXTO")
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		fmt.Printf("%-5d %-12s %-8s %-20s %-19s %s\n",
+			item.ID,
+			truncar(item.Agente, 12),
+			truncar(item.Stream, 8),
+			truncar(item.Classification, 20),
+			item.CreatedAt.Format("2006-01-02 15:04:05"),
+			truncar(item.Text, 120),
+		)
 	}
 	return nil
 }
@@ -556,6 +652,29 @@ func cargarRuntimeHandlesDesdeAPI(query url.Values) ([]*db.RuntimeHandle, bool, 
 	return resp.Handles, true, nil
 }
 
+func purgarRuntimeHandlesDesdeAPI(agente, proyecto string, estados []string, actor string) (*apiRuntimeHandlesPurgeResponse, bool, error) {
+	var resp apiRuntimeHandlesPurgeResponse
+	ok, err := apiPost("/api/runtime-handles/purgar", map[string]any{
+		"agente":   strings.TrimSpace(agente),
+		"proyecto": strings.TrimSpace(proyecto),
+		"estados":  estados,
+		"actor":    strings.TrimSpace(actor),
+	}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
+func cargarRuntimeTranscriptDesdeAPI(query url.Values) ([]*db.RuntimeTranscriptEntry, bool, error) {
+	var resp apiRuntimeTranscriptResponse
+	ok, err := apiGetQuery("/api/runtime-transcript", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Transcript, true, nil
+}
+
 func cargarRuntimeOrdersDesdeAPI(query url.Values) ([]*db.RuntimeOrder, bool, error) {
 	var resp apiRuntimeOrdersResponse
 	ok, err := apiGetQuery("/api/runtime-orders", query, &resp)
@@ -770,6 +889,17 @@ func init() {
 	runtimeListarCmd.Flags().String("proyecto", "", "Filtrar por proyecto")
 	runtimeListarCmd.Flags().String("activos", "", "Filtrar por activos=true|false")
 	runtimeHandlesCmd.Flags().String("agente", "", "Filtrar runtime handles por agente")
+	runtimePurgarHandlesCmd.Flags().String("agente", "", "Purga handles del agente indicado")
+	runtimePurgarHandlesCmd.Flags().String("proyecto", "", "Purga handles del proyecto indicado")
+	runtimePurgarHandlesCmd.Flags().StringSlice("estado", []string{"cerrado", "fallido"}, "Estados purgables; por seguridad solo cerrado/fallido")
+	runtimePurgarHandlesCmd.Flags().String("actor", "orquesta", "Actor que solicita la purga")
+	runtimeTranscriptCmd.Flags().String("agente", "", "Filtrar transcript por agente")
+	runtimeTranscriptCmd.Flags().String("proyecto", "", "Filtrar transcript por proyecto")
+	runtimeTranscriptCmd.Flags().String("stream", "", "Filtrar transcript por stream")
+	runtimeTranscriptCmd.Flags().String("classification", "", "Filtrar transcript por clasificación")
+	runtimeTranscriptCmd.Flags().String("q", "", "Buscar texto libre en transcript")
+	runtimeTranscriptCmd.Flags().Bool("signals-pending", false, "Mostrar solo señales pendientes de gestionar")
+	runtimeTranscriptCmd.Flags().Int("limit", 50, "Número máximo de líneas de transcript")
 	runtimeOrdenesCmd.Flags().String("agente", "", "Filtrar órdenes por agente")
 	runtimeOrdenesCmd.Flags().String("estado", "", "Filtrar órdenes por estado")
 	runtimeOrdenNuevaCmd.Flags().String("proyecto", "", "Proyecto asociado a la orden")
@@ -801,6 +931,6 @@ func init() {
 	runtimeMailboxEnviarCmd.Flags().String("proyecto", "", "Proyecto asociado al mensaje")
 	runtimeMailboxEnviarCmd.Flags().String("payload", "{}", "Payload JSON del mensaje")
 	runtimeMailboxEnviarCmd.Flags().Int64("runtime-order-id", 0, "Orden runtime asociada al mensaje")
-	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimeOrdenesCmd, runtimeOrdenNuevaCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd)
+	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenNuevaCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd)
 	rootCmd.AddCommand(runtimeCmd)
 }

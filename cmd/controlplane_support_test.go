@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -1158,6 +1159,111 @@ func TestProyectoTerminadoAutonomamenteEsperaReviewAprobada(t *testing.T) {
 	}
 }
 
+func TestProyectoTerminadoAutonomamenteEsperaMergeFusionadoSiExisteSolicitud(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	repo := prepararRepoGitAutonomia(t, filepath.Join(tmp, "orquestador"))
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: repo,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		ReviewRequired:       true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Ultimo frente",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.CompletarTarea(tareaID, "Codex1", "abc123"); err != nil {
+		t.Fatalf("completar tarea: %v", err)
+	}
+	now := time.Now().UTC()
+	if _, err := db.CrearReviewGate(&db.ReviewGate{
+		ProyectoID:  &proyectoID,
+		RequestedBy: "orquesta",
+		Estado:      db.ReviewGateAprobado,
+		ResolvedAt:  &now,
+	}); err != nil {
+		t.Fatalf("crear review gate aprobado: %v", err)
+	}
+	if _, err := db.GuardarGitMerge(&db.GitMerge{
+		ProyectoID:   proyectoID,
+		SourceBranch: "feature/x",
+		TargetBranch: "master",
+		RequestedBy:  "orquesta",
+		Estado:       "aprobado",
+		MetadataJSON: `{"auto_created":true,"source":"review_gate_approved"}`,
+	}); err != nil {
+		t.Fatalf("guardar git merge: %v", err)
+	}
+
+	proyecto, err := db.GetProyecto(strconv.FormatInt(proyectoID, 10))
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	terminado, motivo, err := proyectoTerminadoAutonomamente(proyecto)
+	if err != nil {
+		t.Fatalf("proyectoTerminadoAutonomamente esperando merge: %v", err)
+	}
+	if terminado {
+		t.Fatalf("no debería cerrar con merge aprobado pendiente, motivo=%s", motivo)
+	}
+	if !strings.Contains(motivo, "esperando integración merge") {
+		t.Fatalf("motivo inesperado esperando merge: %s", motivo)
+	}
+
+	merges, err := db.ListarGitMerges(&proyectoID, "")
+	if err != nil {
+		t.Fatalf("listar merges: %v", err)
+	}
+	if len(merges) != 1 {
+		t.Fatalf("esperaba 1 merge, got=%d", len(merges))
+	}
+	merges[0].Estado = "fusionado"
+	merges[0].CommitMerge = "def456"
+	if _, err := db.GuardarGitMerge(merges[0]); err != nil {
+		t.Fatalf("actualizar merge fusionado: %v", err)
+	}
+	terminado, motivo, err = proyectoTerminadoAutonomamente(proyecto)
+	if err != nil {
+		t.Fatalf("proyectoTerminadoAutonomamente con merge fusionado: %v", err)
+	}
+	if !terminado {
+		t.Fatalf("debería cerrar con merge fusionado, motivo=%s", motivo)
+	}
+	if !strings.Contains(motivo, "fusionado") {
+		t.Fatalf("motivo de cierre sin merge fusionado: %s", motivo)
+	}
+}
+
 func TestProyectoTerminadoAutonomamenteRespetaAutoCloseProjectFalse(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -1823,6 +1929,165 @@ func TestResetReanimacionEncolaResumeCuandoHayHandlePausado(t *testing.T) {
 	}
 }
 
+func TestProcesarRuntimeMailboxInteractivoBatchOmiteHandlesSinInputInteractivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(
+		`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`,
+		`{"can_send_input":false}`,
+		`{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","can_send_input":false}`,
+		handle.ID,
+	); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","motivo":"seguir frente"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxInteractivoBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox interactivo: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia crear send_instruction interactiva, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			t.Fatalf("no deberia crear send_instruction para handle sin input interactivo: %+v", order)
+		}
+	}
+
+	estado := "pendiente"
+	mailbox, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &agente, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar mailbox: %v", err)
+	}
+	if len(mailbox) != 1 || mailbox[0].ID != msgID {
+		t.Fatalf("mailbox pendiente inesperada: %+v", mailbox)
+	}
+}
+
+func TestEncolarNudgeAutonomiaDetalladoNoDuplicaMailboxPendienteEnHandleNoInteractivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(
+		`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`,
+		`{"can_send_input":false}`,
+		`{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","can_send_input":false}`,
+		handle.ID,
+	); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	runtimeOrderID := int64(91)
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:     "server",
+		ToAgente:       "Codex1",
+		ProyectoID:     &proyectoID,
+		RuntimeOrderID: &runtimeOrderID,
+		Kind:           "autonomia",
+		PayloadJSON:    `{"accion":"continuar_trabajo","motivo":"seguir frente","texto":"seguir"}`,
+	}); err != nil {
+		t.Fatalf("crear mailbox existente: %v", err)
+	}
+
+	proyecto, err := db.GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	encolada, err := encolarNudgeAutonomiaDetallado("Codex1", proyecto, "continuar_trabajo", "seguir frente", "sigue trabajando", nil)
+	if err != nil {
+		t.Fatalf("encolar nudge autonomia: %v", err)
+	}
+	if encolada {
+		t.Fatal("no deberia encolar un nuevo nudge cuando ya existe mailbox pendiente equivalente")
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia crear orden adicional: %+v", orders)
+	}
+
+	estado := "pendiente"
+	mailbox, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar mailbox: %v", err)
+	}
+	if len(mailbox) != 1 {
+		t.Fatalf("mailbox inesperado tras dedupe: %+v", mailbox)
+	}
+}
+
 func TestResetReanimacionEncolaStartCuandoNoHayRuntimePeroSiTrabajo(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -2437,6 +2702,20 @@ func TestProcesarAutonomiaAgentesBatchRecuperaRuntimeLocalFallidoRelanzaStart(t 
 	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
 		t.Fatalf("activar asignacion: %v", err)
 	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Recuperar runtime local",
+		Descripcion: "Hay trabajo real pendiente",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
 	conector, err := db.GetConector("codex-cli")
 	if err != nil || conector == nil {
 		t.Fatalf("get conector codex-cli: %+v err=%v", conector, err)
@@ -2499,6 +2778,87 @@ func TestProcesarAutonomiaAgentesBatchRecuperaRuntimeLocalFallidoRelanzaStart(t 
 	}
 	if !strings.Contains(orders[0].PayloadJSON, `"motivo":"local_runtime_failed"`) {
 		t.Fatalf("start de recuperacion local sin motivo esperado: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestProcesarAutonomiaAgentesBatchNoRelanzaRuntimeLocalFallidoSinTrabajoArrancable(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	conector, err := db.GetConector("codex-cli")
+	if err != nil || conector == nil {
+		t.Fatalf("get conector codex-cli: %+v err=%v", conector, err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex1",
+		ConectorID:         &conector.ID,
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador"),
+		Herramienta:        "codex-cli",
+		ResumenContinuidad: "continuidad activa",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`
+		UPDATE runtime_handles
+		SET transporte='cli',
+		    handle_kind='process',
+		    handle_ref='999999',
+		    estado='fallido'
+		WHERE id = ?`, handle.ID); err != nil {
+		t.Fatalf("degradar handle local: %v", err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("get runtime: %+v err=%v", runtime, err)
+	}
+	if _, err := db.DB.Exec(`
+		UPDATE runtime_instances
+		SET logical_state='fallido', process_state='fallido'
+		WHERE id = ?`, runtime.ID); err != nil {
+		t.Fatalf("degradar runtime local: %v", err)
+	}
+
+	sesionActual, err := db.GetSesionByID(sesion.ID)
+	if err != nil || sesionActual == nil {
+		t.Fatalf("get sesion actual: %+v err=%v", sesionActual, err)
+	}
+	n, err := procesarRecuperacionRuntimeDegradadoSesion(sesionActual)
+	if err != nil {
+		t.Fatalf("procesar recuperacion local fallida sin trabajo: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("sin trabajo arrancable no deberia relanzar start, got=%d", n)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("sin trabajo arrancable no deberia encolar ordenes: %+v", orders)
 	}
 }
 
@@ -3377,6 +3737,126 @@ func TestAsegurarSolicitudMergeDesdeGateAprobadoCreaSolicitud(t *testing.T) {
 	}
 }
 
+func TestProcesarGitMergesBatchFusionaCierraWorktreeYCompletaTarea(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	repo := prepararRepoGitAutonomia(t, filepath.Join(tmp, "orquestador"))
+
+	if err := db.RegistrarAgente("CodexReviewer", "admin"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: repo,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		ReviewRequired:       true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Integrar cambio",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexReviewer"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	worktree, err := newCoordinationService().PrepareWorktree(coordinacion.PrepareWorktreeInput{
+		ProjectRef: "orquestador",
+		Agent:      "CodexReviewer",
+		TaskID:     &tareaID,
+		Reason:     "review_merge",
+	})
+	if err != nil {
+		t.Fatalf("prepare worktree: %v", err)
+	}
+	cmdGitAutonomia(t, worktree.Path, "config", "user.name", "Orquesta Test")
+	cmdGitAutonomia(t, worktree.Path, "config", "user.email", "orquesta@example.test")
+	if err := os.WriteFile(filepath.Join(worktree.Path, "feature.txt"), []byte("hola\n"), 0o644); err != nil {
+		t.Fatalf("write feature: %v", err)
+	}
+	cmdGitAutonomia(t, worktree.Path, "add", "feature.txt")
+	cmdGitAutonomia(t, worktree.Path, "commit", "-m", "feat: add feature")
+
+	metadataJSON, err := json.Marshal(map[string]any{
+		"auto_created": true,
+		"source":       "review_gate_approved",
+		"review_gate":  91,
+		"worktree_id":  worktree.ID,
+		"tarea_id":     tareaID,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	if _, err := db.GuardarGitMerge(&db.GitMerge{
+		ProyectoID:   proyectoID,
+		SourceBranch: worktree.Branch,
+		TargetBranch: "master",
+		RequestedBy:  "CodexReviewer",
+		Estado:       "aprobado",
+		MetadataJSON: string(metadataJSON),
+	}); err != nil {
+		t.Fatalf("guardar git merge: %v", err)
+	}
+
+	n, err := procesarGitMergesBatch()
+	if err != nil {
+		t.Fatalf("procesar git merges: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 merge procesado, got=%d", n)
+	}
+	merges, err := db.ListarGitMerges(&proyectoID, "")
+	if err != nil {
+		t.Fatalf("listar merges: %v", err)
+	}
+	if len(merges) != 1 || merges[0].Estado != "fusionado" {
+		if len(merges) == 0 {
+			t.Fatalf("merge no fusionado correctamente: lista vacía")
+		}
+		t.Fatalf("merge no fusionado correctamente: %+v", *merges[0])
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != db.TareaCompletada || strings.TrimSpace(tarea.CommitCierre) != strings.TrimSpace(merges[0].CommitMerge) {
+		t.Fatalf("tarea no completada con commit de merge: %+v merge=%+v", tarea, merges[0])
+	}
+	wt, err := db.CoordinationWorktreeRepository().GetByID(worktree.ID)
+	if err != nil {
+		t.Fatalf("get worktree: %v", err)
+	}
+	if wt.State != coordinacion.WorktreeClosed {
+		t.Fatalf("worktree debería quedar cerrada: %+v", wt)
+	}
+	if _, err := os.Stat(worktree.Path); !os.IsNotExist(err) {
+		t.Fatalf("la ruta de worktree debería haberse eliminado: err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "feature.txt")); err != nil {
+		t.Fatalf("feature.txt debería quedar fusionado en repo base: %v", err)
+	}
+}
+
 func TestProcesarRuntimeTranscriptBatchMaterializaAutonomiaMailbox(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -3444,4 +3924,30 @@ func TestProcesarRuntimeTranscriptBatchMaterializaAutonomiaMailbox(t *testing.T)
 	if len(mailbox) != 1 {
 		t.Fatalf("mailbox no consumido tras materialización: %+v", mailbox)
 	}
+}
+
+func prepararRepoGitAutonomia(t *testing.T, repo string) string {
+	t.Helper()
+	cmdGitAutonomia(t, "", "init", "-b", "master", repo)
+	cmdGitAutonomia(t, repo, "config", "user.name", "Orquesta Test")
+	cmdGitAutonomia(t, repo, "config", "user.email", "orquesta@example.test")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("base\n"), 0o644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+	cmdGitAutonomia(t, repo, "add", "README.md")
+	cmdGitAutonomia(t, repo, "commit", "-m", "base")
+	return repo
+}
+
+func cmdGitAutonomia(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	if strings.TrimSpace(dir) != "" {
+		cmd.Dir = dir
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+	return strings.TrimSpace(string(out))
 }

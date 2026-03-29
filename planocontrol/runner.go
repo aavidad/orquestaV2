@@ -28,6 +28,7 @@ type AutomationService interface {
 	ReconciliarRuntimeOrdersStale() (int, error)
 	ProcesarRuntimeTranscriptBatch() (int, error)
 	ProcesarRuntimeOrdersBatch() (int, error)
+	ProcesarGitMergesBatch() (int, error)
 	ProcesarRefineriaBatch() (int, error)
 	ProcesarHandoffsBatch() (int, error)
 	Audit(agente, accion, entidad string, entidadID int64, detalle string)
@@ -184,6 +185,13 @@ func (r *Runner) runControlPlane() {
 	} else if processed > 0 {
 		r.Automation.Audit("server", "runtime_orders_batch", "runtime_order", 0, fmt.Sprintf("Órdenes procesadas en batch: %d", processed))
 	}
+	merged, err := r.Automation.ProcesarGitMergesBatch()
+	if err != nil {
+		r.Automation.Audit("server", "git_merges_batch_error", "git_merge", 0, err.Error())
+		r.debugf("control_plane git_merges_batch error=%v", err)
+	} else if merged > 0 {
+		r.Automation.Audit("server", "git_merges_batch", "git_merge", 0, fmt.Sprintf("Solicitudes de merge procesadas: %d", merged))
+	}
 	refined, err := r.Automation.ProcesarRefineriaBatch()
 	if err != nil {
 		r.Automation.Audit("server", "refineria_batch_error", "refineria_solicitud", 0, err.Error())
@@ -198,8 +206,8 @@ func (r *Runner) runControlPlane() {
 	} else if handoffs > 0 {
 		r.Automation.Audit("server", "handoff_batch", "agente", 0, fmt.Sprintf("Handoffs automáticos procesados: %d", handoffs))
 	}
-	r.debugf("control_plane autonomia=%d supervision=%d review=%d handles_stale=%d orders_stale=%d transcript=%d runtime_orders=%d refineria=%d handoffs=%d",
-		autonomia, supervision, review, stale, recovered, transcript, processed, refined, handoffs)
+	r.debugf("control_plane autonomia=%d supervision=%d review=%d handles_stale=%d orders_stale=%d transcript=%d runtime_orders=%d git_merges=%d refineria=%d handoffs=%d",
+		autonomia, supervision, review, stale, recovered, transcript, processed, merged, refined, handoffs)
 }
 
 func (r *Runner) notifier() notificaciones.Notificador {

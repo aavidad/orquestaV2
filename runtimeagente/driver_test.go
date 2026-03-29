@@ -9,6 +9,8 @@ package runtimeagente
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -69,7 +71,7 @@ func TestPrepareCLIConHintsActivaResumeNativo(t *testing.T) {
 		t.Fatalf("debía activar resume nativo")
 	}
 	rendered := RenderCommand(plan)
-	if !strings.Contains(rendered, "resume") || !strings.Contains(rendered, "--session abc-123") {
+	if !strings.Contains(rendered, "'resume'") || !strings.Contains(rendered, "'--session'") || !strings.Contains(rendered, "'abc-123'") {
 		t.Fatalf("comando inesperado: %s", rendered)
 	}
 }
@@ -96,8 +98,150 @@ func TestPrepareCLIPropagaModeloYRazonamiento(t *testing.T) {
 		t.Fatalf("perfil inesperado: %+v", plan)
 	}
 	rendered := RenderCommand(plan)
-	if !strings.Contains(rendered, "--model gpt-5.4") || !strings.Contains(rendered, "--reasoning-effort xhigh") {
+	if !strings.Contains(rendered, "'--model'") || !strings.Contains(rendered, "'gpt-5.4'") || !strings.Contains(rendered, "'--reasoning-effort'") || !strings.Contains(rendered, "'xhigh'") {
 		t.Fatalf("comando inesperado: %s", rendered)
+	}
+}
+
+func TestPrepareCLIPropagaRazonamientoPorConfigKey(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Codex1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Modelo:       "gpt-5.4",
+		Razonamiento: "xhigh",
+		PerfilTarea:  "implementacion",
+		Conector: ConnectorConfig{
+			Slug:         "codex-cli",
+			Transporte:   "cli",
+			Comando:      "codex",
+			MetadataJSON: `{"model_flag":"--model","reasoning_config_key":"model_reasoning_effort"}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	rendered := RenderCommand(plan)
+	if !strings.Contains(rendered, "'--model'") || !strings.Contains(rendered, "'gpt-5.4'") {
+		t.Fatalf("comando sin modelo esperado: %s", rendered)
+	}
+	if !strings.Contains(rendered, "'-c'") || !strings.Contains(rendered, `'model_reasoning_effort="xhigh"'`) {
+		t.Fatalf("comando sin override de razonamiento esperado: %s", rendered)
+	}
+}
+
+func TestPrepareCLIExpandePlaceholdersDeConector(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Codex4",
+		Rol:          "programador",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Modelo:       "gpt-5.4",
+		Razonamiento: "high",
+		PerfilTarea:  "implementacion",
+		Conector: ConnectorConfig{
+			Slug:       "codex-cli",
+			Transporte: "cli",
+			Comando:    "/tmp/codex-perfil",
+			ArgsJSON:   `["{{agent}}","--modo","{{task_profile}}"]`,
+			EnvJSON:    `{"ORQUESTA_AGENTE":"{{agent}}","ORQUESTA_PROYECTO":"{{project_slug}}","ORQUESTA_MODELO":"{{model}}","ORQUESTA_BIN":"{{orquesta_executable}}","PATH":"{{orquesta_bin_dir}}:{{host_path}}"}`,
+		},
+		Resume: ResumeContext{
+			Branch: "feature/control-plane",
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if plan.Comando != "/tmp/codex-perfil" {
+		t.Fatalf("comando inesperado: %s", plan.Comando)
+	}
+	if len(plan.Args) != 3 || plan.Args[0] != "Codex4" || plan.Args[2] != "implementacion" {
+		t.Fatalf("args inesperados: %+v", plan.Args)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable: %v", err)
+	}
+	if plan.Env["ORQUESTA_AGENTE"] != "Codex4" || plan.Env["ORQUESTA_PROYECTO"] != "orquestador" || plan.Env["ORQUESTA_MODELO"] != "gpt-5.4" {
+		t.Fatalf("env inesperado: %+v", plan.Env)
+	}
+	if plan.Env["ORQUESTA_BIN"] != exe {
+		t.Fatalf("orquesta bin inesperado: %+v", plan.Env)
+	}
+	if !strings.Contains(plan.Env["PATH"], os.Getenv("PATH")) || !strings.HasPrefix(plan.Env["PATH"], filepath.Dir(exe)+":") {
+		t.Fatalf("PATH expandido inesperado: %+v", plan.Env)
+	}
+}
+
+func TestApplyLaunchPromptMetadataEmbebePromptInicial(t *testing.T) {
+	plan := &LaunchPlan{
+		Comando:          "codex",
+		Args:             []string{"Codex2", "-C", "/tmp/demo"},
+		BootstrapPrompt:  "Bootstrap de Orquesta para Codex2.",
+		ContinuityPrompt: "Retoma el contexto del proyecto demo.",
+		Env:              map[string]string{},
+	}
+
+	if err := ApplyLaunchPromptMetadata(plan, `{"launch_prompt_positional":true}`); err != nil {
+		t.Fatalf("apply launch prompt metadata: %v", err)
+	}
+	if !plan.LaunchPromptEmbedded {
+		t.Fatalf("el plan deberia marcar el prompt inicial como embebido: %+v", plan)
+	}
+	if got := plan.Args[len(plan.Args)-1]; got != "Bootstrap de Orquesta para Codex2.\n\nRetoma el contexto del proyecto demo." {
+		t.Fatalf("prompt final inesperado: %q", got)
+	}
+
+	rendered := RenderCommand(plan)
+	if !strings.Contains(rendered, "'Bootstrap de Orquesta para Codex2.\n\nRetoma el contexto del proyecto demo.'") {
+		t.Fatalf("comando renderizado sin prompt inicial citado: %s", rendered)
+	}
+}
+
+func TestApplyLaunchPromptMetadataPostStartNoEmbebePromptInicial(t *testing.T) {
+	plan := &LaunchPlan{
+		Comando:          "codex",
+		Args:             []string{"Codex2", "-C", "/tmp/demo"},
+		BootstrapPrompt:  "Bootstrap de Orquesta para Codex2.",
+		ContinuityPrompt: "Retoma el contexto del proyecto demo.",
+	}
+
+	if err := ApplyLaunchPromptMetadata(plan, `{"launch_prompt_transport":"post_start","launch_prompt_delay_ms":1000}`); err != nil {
+		t.Fatalf("apply launch prompt metadata: %v", err)
+	}
+	if plan.LaunchPromptEmbedded {
+		t.Fatalf("el plan no deberia marcar el prompt inicial como embebido: %+v", plan)
+	}
+	if plan.LaunchPromptMode != "post_start" {
+		t.Fatalf("modo de prompt inesperado: %+v", plan)
+	}
+	if plan.LaunchPromptDelayMS != 1000 {
+		t.Fatalf("delay de prompt inesperado: %+v", plan)
+	}
+	if len(plan.Args) != 3 {
+		t.Fatalf("args inesperados tras post_start: %+v", plan.Args)
+	}
+}
+
+func TestApplyLaunchPromptMetadataExcesoTamanoCaeAPostStart(t *testing.T) {
+	plan := &LaunchPlan{
+		Comando:         "codex",
+		Args:            []string{"Codex2", "-C", "/tmp/demo"},
+		BootstrapPrompt: strings.Repeat("a", 32),
+	}
+
+	if err := ApplyLaunchPromptMetadata(plan, `{"launch_prompt_positional":true,"launch_prompt_max_bytes":8}`); err != nil {
+		t.Fatalf("apply launch prompt metadata: %v", err)
+	}
+	if plan.LaunchPromptEmbedded {
+		t.Fatalf("el plan no deberia embeber un prompt sobredimensionado: %+v", plan)
+	}
+	if plan.LaunchPromptMode != "post_start" {
+		t.Fatalf("modo de prompt inesperado: %+v", plan)
+	}
+	if len(plan.Args) != 3 {
+		t.Fatalf("args inesperados tras fallback por tamano: %+v", plan.Args)
 	}
 }
 
