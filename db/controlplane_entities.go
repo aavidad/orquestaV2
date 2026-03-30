@@ -3111,6 +3111,11 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 	if err != nil {
 		return err
 	}
+	if supersedida, err := completarRuntimeOrderSendInstructionSesionObsoleta(order, payload, handle, externalSessionID); err != nil {
+		return err
+	} else if supersedida {
+		return nil
+	}
 
 	obj := controlruntime.ObjetivoProceso{}
 	if handle != nil {
@@ -3336,6 +3341,13 @@ func runtimeOrderSendInstructionMailboxID(payload map[string]any) int64 {
 	return int64FromAny(payload["mailbox_id"])
 }
 
+func runtimeOrderSendInstructionExternalSessionID(payload map[string]any) string {
+	if payload == nil {
+		return ""
+	}
+	return strings.TrimSpace(stringFromMap(payload, "external_session_id", ""))
+}
+
 func runtimeOrderSendInstructionRetryDelay() time.Duration {
 	seconds := configIntOrDefault("runtime_send_instruction_retry_seconds", 15)
 	if seconds <= 0 {
@@ -3415,6 +3427,26 @@ func gestionarBackoffProveedorRuntimeOrderSendInstruction(order *RuntimeOrder, p
 		"pause_reason":     motivo,
 	})
 	return true, MarcarRuntimeOrderEstado(order.ID, "fallida", resultado, detalle)
+}
+
+func completarRuntimeOrderSendInstructionSesionObsoleta(order *RuntimeOrder, payload map[string]any, handle *RuntimeHandle, externalSessionID string) (bool, error) {
+	if order == nil || !runtimeOrderSendInstructionProvieneMailbox(payload) {
+		return false, nil
+	}
+	payloadExternal := runtimeOrderSendInstructionExternalSessionID(payload)
+	actualExternal := strings.TrimSpace(externalSessionID)
+	if payloadExternal == "" || actualExternal == "" || payloadExternal == actualExternal {
+		return false, nil
+	}
+	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
+		"ok":                 true,
+		"mailbox_id":         runtimeOrderSendInstructionMailboxID(payload),
+		"superseded":         true,
+		"superseded_reason":  "external_session_id_changed",
+		"external_session_id": actualExternal,
+		"handle_id":          runtimeHandleID(handle),
+	})
+	return true, MarcarRuntimeOrderEstado(order.ID, "completada", resultado, "")
 }
 
 func runtimeOrderProviderBackoff(err error) (time.Duration, string, bool) {

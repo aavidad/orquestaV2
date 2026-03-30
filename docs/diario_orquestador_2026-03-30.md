@@ -1239,6 +1239,31 @@ Validacion:
   - `./orquesta status` pasa de `5` a `4` agentes activos
   - `Codex2` ya no sale activo mientras `runtime handle #352` permanece `fallido`
 
+## 2026-03-31 02:0x aprox. — las `send_instruction` stale de mailbox ya no deben reintentarse contra una sesion vieja
+
+Hallazgo:
+
+- tras corregir la entrega segura para Codex, seguian quedando `send_instruction` antiguas (`#80150`, `#80157`) apuntando al mismo `mailbox_id=64424`
+- parte de esa deuda arrastraba `external_session_id` de una sesion anterior, aunque el agente ya hubiese arrancado una sesion nueva
+- reintentarlas indefinidamente no aportaba nada: la verdad seguia en el mailbox y la orden quedaba haciendo ruido operativo
+
+Decision:
+
+- si una `send_instruction` procedente de mailbox trae `external_session_id` vieja y el agente ya tiene otra `external_session_id` viva, la orden se completa como `superseded`
+- el mailbox permanece como verdad para bootstrap/continuidad; la orden stale deja de competir con la sesion actual
+
+Cambios:
+
+- `db/controlplane_entities.go`
+  - nuevo helper `completarRuntimeOrderSendInstructionSesionObsoleta(...)`
+  - `ejecutarRuntimeOrderSendInstruction(...)` corta antes los reintentos de mailbox stale por cambio de sesion
+- `db/controlplane_entities_test.go`
+  - nueva regresion `TestRuntimeOrderSendInstructionMailboxSupersedeSesionObsoleta`
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(RuntimeOrderSendInstructionMailboxSupersedeSesionObsoleta|GuardarSesionActivaPreservaMetadataRicaDelHandle|RuntimeOrderSendInstructionCodexSupervisadoSigueCayendoAMailbox)' -count=1` => OK
+
 ## 2026-03-31 02:0x aprox. — se corrige una falsa buena idea: `stdin` caliente a Codex PTY rompe el TUI
 
 Hallazgo:

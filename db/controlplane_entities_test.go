@@ -2610,6 +2610,105 @@ func TestRuntimeOrderSendInstructionCodexSupervisadoSigueCayendoAMailbox(t *test
 	}
 }
 
+func TestRuntimeOrderSendInstructionMailboxSupersedeSesionObsoleta(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	sesionVieja, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "Codex1",
+		ProyectoID:        &proyectoID,
+		CWD:               filepath.Join(tmp, "orquestador"),
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-old-1",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion vieja: %v", err)
+	}
+	if err := FinSesion("Codex1"); err != nil {
+		t.Fatalf("fin sesion vieja: %v", err)
+	}
+	sesionNueva, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "Codex1",
+		ProyectoID:        &proyectoID,
+		CWD:               filepath.Join(tmp, "orquestador"),
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-new-2",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion nueva: %v", err)
+	}
+	handleNuevo, err := GetRuntimeHandleBySesionID(sesionNueva.ID)
+	if err != nil || handleNuevo == nil {
+		t.Fatalf("handle nuevo: %+v err=%v", handleNuevo, err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"texto":"hola stale"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"to_agente":           "Codex1",
+		"from_agente":         "server",
+		"texto":               "hola stale",
+		"mailbox_id":          mailboxID,
+		"mailbox_kind":        "autonomia",
+		"external_session_id": "sess-old-1",
+	})
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   handleNuevo.RuntimeID,
+		HandleID:    &handleNuevo.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: string(payload),
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderSendInstruction(sendOrder); err != nil {
+		t.Fatalf("ejecutar send_instruction: %v", err)
+	}
+	sendOrder, err = GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "completada" {
+		t.Fatalf("la orden stale deberia quedar completada por supersede: %+v", sendOrder)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"superseded":true`) || !strings.Contains(sendOrder.ResultadoJSON, `"superseded_reason":"external_session_id_changed"`) {
+		t.Fatalf("resultado sin supersede: %s", sendOrder.ResultadoJSON)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"external_session_id":"sess-new-2"`) {
+		t.Fatalf("resultado sin external_session_id nueva: %s", sendOrder.ResultadoJSON)
+	}
+	if sesionVieja.ID == sesionNueva.ID {
+		t.Fatalf("las sesiones deberian ser distintas")
+	}
+}
+
 func TestRuntimeOrderSendInstructionMailboxSeReencolaSinDuplicarSiNoHayHandleEntregable(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
