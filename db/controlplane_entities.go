@@ -171,6 +171,10 @@ func UpsertRuntimeHandleDesdeSesion(s *Sesion) error {
 			h.Estado, h.CapabilitiesJSON, h.MetadataJSON, h.LastSeenAt,
 		)
 	} else {
+		h.HandleKind = reconciliarHandleKindSesion(existente, h)
+		h.HandleRef = reconciliarHandleRefSesion(existente, h)
+		h.CapabilitiesJSON = reconciliarCapabilitiesSesion(existente.CapabilitiesJSON, h.CapabilitiesJSON)
+		h.MetadataJSON = reconciliarMetadataSesion(existente.MetadataJSON, h.MetadataJSON)
 		_, err = DB.Exec(`
 			UPDATE runtime_handles
 			SET agente = ?,
@@ -202,6 +206,69 @@ func UpsertRuntimeHandleDesdeSesion(s *Sesion) error {
 		)
 	}
 	return err
+}
+
+func reconciliarHandleKindSesion(existente *RuntimeHandle, inferido *RuntimeHandle) string {
+	if existente == nil {
+		if inferido == nil {
+			return ""
+		}
+		return strings.TrimSpace(inferido.HandleKind)
+	}
+	if strings.TrimSpace(existente.HandleKind) != "" {
+		return strings.TrimSpace(existente.HandleKind)
+	}
+	if inferido == nil {
+		return ""
+	}
+	return strings.TrimSpace(inferido.HandleKind)
+}
+
+func reconciliarHandleRefSesion(existente *RuntimeHandle, inferido *RuntimeHandle) string {
+	if existente != nil && strings.TrimSpace(existente.HandleRef) != "" {
+		return strings.TrimSpace(existente.HandleRef)
+	}
+	if inferido == nil {
+		return ""
+	}
+	return strings.TrimSpace(inferido.HandleRef)
+}
+
+func reconciliarMetadataSesion(existenteJSON, inferidoJSON string) string {
+	existente := mapFromJSON(existenteJSON)
+	if existente == nil {
+		existente = map[string]any{}
+	}
+	inferido := mapFromJSON(inferidoJSON)
+	if inferido == nil {
+		inferido = map[string]any{}
+	}
+	for _, key := range []string{"herramienta", "external_session_id", "branch", "cwd"} {
+		if val := strings.TrimSpace(stringFromMap(inferido, key, "")); val != "" {
+			existente[key] = val
+		}
+	}
+	data, _ := json.Marshal(existente)
+	return string(data)
+}
+
+func reconciliarCapabilitiesSesion(existenteJSON, inferidoJSON string) string {
+	existente := mapFromJSON(existenteJSON)
+	if existente == nil {
+		existente = map[string]any{}
+	}
+	inferido := mapFromJSON(inferidoJSON)
+	if inferido == nil {
+		inferido = map[string]any{}
+	}
+	for key, value := range inferido {
+		if _, ok := existente[key]; ok {
+			continue
+		}
+		existente[key] = value
+	}
+	data, _ := json.Marshal(existente)
+	return string(data)
 }
 
 func MarcarRuntimeHandlesCerradosPorAgente(agente string) error {
@@ -5090,6 +5157,9 @@ func RuntimeHandlePermiteEntregaCalienteSupervisada(handle *RuntimeHandle) bool 
 		return false
 	}
 	meta := mapFromJSON(handle.MetadataJSON)
+	if runtimeHandleUsaCodexTTYInestable(meta) {
+		return false
+	}
 	if !strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "driver", "")), "process_pty_cli") {
 		return false
 	}

@@ -224,8 +224,9 @@ Contrato minimo obligatorio para `runtime_orders`:
 - la lease debe registrar quien la reclama, token de lease, intento y caducidad
 - una orden reencolada o finalizada debe liberar siempre su lease
 - `send_instruction` no se gobierna por un unico booleano `can_send_input`; el daemon debe distinguir entre input interactivo generico y entrega caliente por supervisor local de Orquesta
-- un runtime `process_pty_cli` con `stdin_path` y `supervisor_ref` validos puede recibir entrega caliente por el canal del supervisor aunque `can_send_input=false` por inestabilidad del TTY de Codex
+- un runtime `process_pty_cli` local y seguro con `stdin_path` y `supervisor_ref` validos puede recibir entrega caliente por el canal del supervisor aunque `can_send_input=false`
 - `session_resume` queda como fallback de continuidad, no como sustituto de la entrega caliente cuando Orquesta ya posee el proceso local y su canal de entrada
+- excepcion dura: Codex PTY/TUI no admite entrega caliente directa por `stdin` aunque exista supervisor local; si la traza demuestra `runtime_panic`, la doctrina correcta es prohibir ese camino para Codex y reservarlo solo a runtimes locales seguros
 - la reconciliacion stale no se decide solo por `started_at`; debe respetar la caducidad de la lease cuando exista
 
 Contrato minimo obligatorio para el supervisor local:

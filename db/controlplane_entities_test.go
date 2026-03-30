@@ -2107,9 +2107,14 @@ func TestRuntimeHandlePermiteEntregaCalienteSupervisadaExigeSupervisorYStdin(t *
 		t.Fatal("sin stdin_path no deberia permitir entrega caliente supervisada")
 	}
 	if !RuntimeHandlePermiteEntregaCalienteSupervisada(&RuntimeHandle{
-		MetadataJSON: `{"driver":"process_pty_cli","stdin_path":"/tmp/pty.stdin","supervisor_ref":"/tmp/ref","can_send_input":false}`,
+		MetadataJSON: `{"driver":"process_pty_cli","stdin_path":"/tmp/pty.stdin","supervisor_ref":"/tmp/ref","rendered_command":"cat","can_send_input":false}`,
 	}) {
 		t.Fatal("con supervisor_ref y stdin_path deberia permitir entrega caliente supervisada")
+	}
+	if RuntimeHandlePermiteEntregaCalienteSupervisada(&RuntimeHandle{
+		MetadataJSON: `{"driver":"process_pty_cli","stdin_path":"/tmp/pty.stdin","supervisor_ref":"/tmp/ref","rendered_command":"codex-perfil Codex2","can_send_input":false}`,
+	}) {
+		t.Fatal("codex PTY no deberia permitir entrega caliente supervisada aunque tenga supervisor_ref y stdin_path")
 	}
 }
 
@@ -2253,7 +2258,7 @@ func TestRuntimeOrderSendInstructionHaceFallbackAMailboxCuandoHandleNoAdmiteInpu
 	}
 }
 
-func TestRuntimeOrderSendInstructionEntregaEnCalientePorSupervisorLocalAunqueCanSendInputSeaFalse(t *testing.T) {
+func TestRuntimeOrderSendInstructionEntregaEnCalientePorSupervisorLocalSeguroAunqueCanSendInputSeaFalse(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {
@@ -2324,7 +2329,7 @@ func TestRuntimeOrderSendInstructionEntregaEnCalientePorSupervisorLocalAunqueCan
 		t.Fatalf("handle de prueba sin supervisor_ref/stdin_path: %+v", meta)
 	}
 	meta["driver"] = "process_pty_cli"
-	meta["rendered_command"] = "/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1"
+	meta["rendered_command"] = "cat"
 	meta["can_send_input"] = false
 	metaJSON, _ := json.Marshal(meta)
 	capsJSON, _ := json.Marshal(map[string]any{
@@ -2387,6 +2392,125 @@ func TestRuntimeOrderSendInstructionEntregaEnCalientePorSupervisorLocalAunqueCan
 			t.Fatalf("el proceso no recibio la instruccion por supervisor local")
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestRuntimeOrderSendInstructionCodexSupervisadoSigueCayendoAMailbox(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "cat-cli",
+		Nombre:     "Cat CLI",
+		Transporte: "cli",
+		Comando:    "cat",
+		Activo:     true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"cat-cli"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStart(startOrder); err != nil {
+		t.Fatalf("ejecutar start: %v", err)
+	}
+
+	sesion, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion activa: %+v err=%v", sesion, err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil || runtime.PID == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	t.Cleanup(func() {
+		_, _, _ = controlruntime.DetenerProceso(controlruntime.ObjetivoProceso{PID: runtime.PID})
+	})
+
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(handle.MetadataJSON), &meta); err != nil {
+		t.Fatalf("metadata handle: %v", err)
+	}
+	logPath, _ := meta["log_path"].(string)
+	meta["driver"] = "process_pty_cli"
+	meta["rendered_command"] = "/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1"
+	meta["can_send_input"] = false
+	metaJSON, _ := json.Marshal(meta)
+	capsJSON, _ := json.Marshal(map[string]any{
+		"can_send_input":        false,
+		"can_checkpoint":        true,
+		"can_resume":            true,
+		"can_capture_pid":       true,
+		"can_track_continuity":  true,
+		"can_pause":             true,
+		"can_stop":              true,
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryBootstrapOnly,
+	})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, capabilities_json=? WHERE id=?`, string(metaJSON), string(capsJSON), handle.ID); err != nil {
+		t.Fatalf("update handle caps: %v", err)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle: %+v err=%v", handle, err)
+	}
+
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: `{"to_agente":"Codex1","texto":"hola codex mailbox seguro"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderSendInstruction(sendOrder); err != nil {
+		t.Fatalf("ejecutar send_instruction: %v", err)
+	}
+	sendOrder, err = GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "completada" || !strings.Contains(sendOrder.ResultadoJSON, `"mailbox_id"`) {
+		t.Fatalf("codex supervisado deberia seguir cayendo a mailbox: %+v", sendOrder)
+	}
+	if strings.TrimSpace(logPath) != "" {
+		time.Sleep(150 * time.Millisecond)
+		if data, err := os.ReadFile(logPath); err == nil && strings.Contains(string(data), "hola codex mailbox seguro") {
+			t.Fatalf("codex no deberia recibir stdin directa: %s", string(data))
+		}
 	}
 }
 

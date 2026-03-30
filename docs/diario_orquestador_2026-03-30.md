@@ -1238,3 +1238,35 @@ Validacion:
 - validacion viva tras reiniciar daemon:
   - `./orquesta status` pasa de `5` a `4` agentes activos
   - `Codex2` ya no sale activo mientras `runtime handle #352` permanece `fallido`
+
+## 2026-03-31 02:0x aprox. — se corrige una falsa buena idea: `stdin` caliente a Codex PTY rompe el TUI
+
+Hallazgo:
+
+- la entrega caliente por supervisor local parecia funcionar porque `#80147` quedo completada y el transcript registraba `stdin`
+- la traza raw del handle `352` demostro la causa real del crash:
+  - `The application panicked (crashed).`
+  - `byte index ... is out of bounds of 'rueba supervisor local 2026-03-31T01:26Z'`
+  - origen en `tui_app_server/src/wrapping.rs:52`
+- por tanto, inyectar texto directo por PTY a Codex TUI no es un canal seguro aunque exista `stdin_path` y `supervisor_ref`
+
+Decision:
+
+- la entrega caliente por supervisor local queda permitida solo para runtimes locales seguros
+- Codex PTY sigue excluido y debe continuar por `mailbox/session_resume/bootstrap`, no por `stdin` directa
+- el hallazgo se fija en la biblia para no volver a caer en programacion ciclica
+
+Cambios:
+
+- `db/controlplane_entities.go`
+  - `RuntimeHandlePermiteEntregaCalienteSupervisada(...)` ahora excluye explicitamente `runtimeHandleUsaCodexTTYInestable(...)`
+- `db/controlplane_entities_test.go`
+  - se mantiene la entrega caliente para un runtime local seguro
+  - nueva regresion para forzar que Codex supervisado siga cayendo a mailbox segura
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(RuntimeHandlePermiteEntregaCalienteSupervisadaExigeSupervisorYStdin|RuntimeOrderSendInstructionHaceFallbackAMailboxCuandoHandleNoAdmiteInputInteractivo|RuntimeOrderSendInstructionEntregaEnCalientePorSupervisorLocalSeguroAunqueCanSendInputSeaFalse|RuntimeOrderSendInstructionCodexSupervisadoSigueCayendoAMailbox)' -count=1` => OK
+- validacion viva:
+  - `./orquesta runtime traza --handle-id 352 --bytes 4096` mostro el `runtime_panic` de Codex tras la inyeccion antigua
+  - tras la correccion, una nueva orden `#80161` ya no genero un nuevo `stdin` en transcript ni otro `runtime_panic`
