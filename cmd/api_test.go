@@ -458,6 +458,51 @@ func TestAPIAgentesYStatusOcultanSesionZombi(t *testing.T) {
 	}
 }
 
+func TestAPIStatusNoCuentaSesionConHandleFallidoReciente(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexFallo", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	var sesionID int64
+	if err := db.DB.QueryRow(`
+		INSERT INTO sesiones (agente, activa, estado, herramienta, host, heartbeat_at)
+		VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)
+		RETURNING id`,
+		"CodexFallo", 1, "activa", "codex-cli", "localhost",
+	).Scan(&sesionID); err != nil {
+		t.Fatalf("insert sesion: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		INSERT INTO runtime_handles (
+			agente, sesion_id, transporte, handle_kind, handle_ref, estado,
+			capabilities_json, metadata_json, last_seen_at, updated_at, created_at
+		) VALUES (?,?,?,?,?,'fallido','{}','{}',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+		"CodexFallo", sesionID, "cli", "process", "9999",
+	); err != nil {
+		t.Fatalf("insert handle fallido: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recStatus := httptest.NewRecorder()
+	reqStatus := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	mux.ServeHTTP(recStatus, reqStatus)
+	if recStatus.Code != http.StatusOK {
+		t.Fatalf("status global inesperado: %d body=%s", recStatus.Code, recStatus.Body.String())
+	}
+	var statusResp apiStatusResponse
+	if err := json.Unmarshal(recStatus.Body.Bytes(), &statusResp); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	for _, agente := range statusResp.Agentes {
+		if agente != nil && agente.Nombre == "CodexFallo" && agente.Activo {
+			t.Fatalf("CodexFallo no deberia salir activo via /api/status: %+v", agente)
+		}
+	}
+}
+
 func TestAPIAsignacionActivarYSesionInicio(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

@@ -399,3 +399,52 @@ func TestListarAgentesIgnoraSesionesConHeartbeatObsoleto(t *testing.T) {
 		}
 	}
 }
+
+func TestSesionRecienteNoCuentaComoOperativaSiSuUltimoHandleYaFallo(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexFallo", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	var sesionID int64
+	if err := DB.QueryRow(`
+		INSERT INTO sesiones (agente, activa, estado, herramienta, host, heartbeat_at)
+		VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)
+		RETURNING id`,
+		"CodexFallo", 1, "activa", "codex-cli", "localhost",
+	).Scan(&sesionID); err != nil {
+		t.Fatalf("insert sesion: %v", err)
+	}
+	if _, err := DB.Exec(`
+		INSERT INTO runtime_handles (
+			agente, sesion_id, transporte, handle_kind, handle_ref, estado,
+			capabilities_json, metadata_json, last_seen_at, updated_at, created_at
+		) VALUES (?,?,?,?,?,'fallido','{}','{}',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+		"CodexFallo", sesionID, "cli", "process", "9999",
+	); err != nil {
+		t.Fatalf("insert handle fallido: %v", err)
+	}
+
+	live, err := GetSesionActivaOperativa("CodexFallo", nil)
+	if err == nil || live != nil {
+		t.Fatalf("CodexFallo no deberia tener sesion operativa tras handle fallido: %+v err=%v", live, err)
+	}
+
+	sesiones, err := ListarSesionesActivas()
+	if err != nil {
+		t.Fatalf("ListarSesionesActivas: %v", err)
+	}
+	for _, sesion := range sesiones {
+		if sesion != nil && sesion.Agente == "CodexFallo" {
+			t.Fatalf("CodexFallo no deberia salir en sesiones operativas: %+v", sesion)
+		}
+	}
+
+	agente, err := GetAgente("CodexFallo")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.Activo || agente.EstadoSesion != "" {
+		t.Fatalf("CodexFallo no deberia seguir visible como activo: %+v", agente)
+	}
+}

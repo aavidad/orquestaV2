@@ -90,6 +90,11 @@ Sirve para:
 - checkpoints
 - progreso real del proyecto
 
+Regla de precedencia operativa para presencia de agentes:
+
+- una sesion con `heartbeat` reciente no basta para declarar un agente como activo si el ultimo `runtime_handle` de esa misma sesion ya esta `fallido` o `cerrado`
+- para presencia visible en `status`, `/api/status` y `/api/agentes`, el runtime terminal reciente invalida el heartbeat reciente de la sesion
+
 La documentacion no sustituye el estado vivo.
 Las tareas y propuestas vigentes no se leen de un `.md` si ya existen en Orquesta.
 

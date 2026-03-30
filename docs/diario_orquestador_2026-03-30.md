@@ -1208,3 +1208,33 @@ Cambios:
 Validacion:
 
 - `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(RuntimeHandlePermiteSendInputInteractivoRespetaCapacidadesExplicitas|RuntimeHandlePermiteEntregaCalienteSupervisadaExigeSupervisorYStdin|RuntimeOrderSendInstructionHaceFallbackAMailboxCuandoHandleNoAdmiteInputInteractivo|RuntimeOrderSendInstructionEntregaEnCalientePorSupervisorLocalAunqueCanSendInputSeaFalse)' -count=1` => OK
+
+## 2026-03-31 01:5x aprox. — `status` deja de mentir cuando la sesion sigue viva pero el runtime ya murio
+
+Hallazgo:
+
+- `Codex2` seguia apareciendo activo en `status` porque `ListarSesionesActivasOperativas()` daba prioridad al `heartbeat` reciente de la sesion
+- el ultimo `runtime_handle` de la misma sesion ya estaba `fallido`, asi que el sistema mostraba como vivo a un agente sin runtime entregable
+
+Decision:
+
+- para presencia visible, el ultimo handle de la misma sesion manda sobre el heartbeat reciente cuando ese handle ya esta `cerrado` o `fallido`
+- una sesion reciente no puede sostener por si sola un agente activo si su runtime mas reciente ya cayo
+
+Cambios:
+
+- `db/sesiones.go`
+  - mapa del ultimo handle por agente/proyecto
+  - invalidacion de sesion operativa por ultimo handle terminal reciente
+  - `GetSesionActivaOperativa(...)` y `ListarSesionesActivasOperativas()` ya comparten esa precedencia
+- tests:
+  - `db/sesiones_test.go`
+  - `cmd/api_test.go`
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(ListarAgentesIgnoraSesionesConHeartbeatObsoleto|SesionRecienteNoCuentaComoOperativaSiSuUltimoHandleYaFallo)' -count=1` => OK
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'Test(APIAgentesYStatusOcultanSesionZombi|APIStatusNoCuentaSesionConHandleFallidoReciente)' -count=1` => OK
+- validacion viva tras reiniciar daemon:
+  - `./orquesta status` pasa de `5` a `4` agentes activos
+  - `Codex2` ya no sale activo mientras `runtime handle #352` permanece `fallido`

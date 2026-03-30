@@ -421,6 +421,29 @@ func sesionTieneHandleActivoOperativo(agente string, proyectoID *int64) (bool, e
 	return handlesActivos[runtimeHandleCacheKey(agente, proyectoID)], nil
 }
 
+func listarUltimoHandlePorAgenteProyectoMap() (map[string]*RuntimeHandle, error) {
+	return consultarConReintentos(func() (map[string]*RuntimeHandle, error) {
+		rows, err := DB.Query(runtimeHandleSelectBase() + ` ORDER BY id DESC`)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		out := map[string]*RuntimeHandle{}
+		for rows.Next() {
+			handle, err := scanRuntimeHandle(rows)
+			if err != nil {
+				return nil, err
+			}
+			key := runtimeHandleCacheKey(handle.Agente, handle.ProyectoID)
+			if _, exists := out[key]; exists {
+				continue
+			}
+			out[key] = handle
+		}
+		return out, rows.Err()
+	})
+}
+
 func runtimeHandleSostieneSesionOperativa(handle *RuntimeHandle) bool {
 	return runtimeHandleSostieneSesionOperativaConCutoff(handle, sessionOperationalCutoff())
 }
@@ -454,6 +477,45 @@ func runtimeHandleSostieneSesionOperativaConCutoff(handle *RuntimeHandle, cutoff
 	return true
 }
 
+func sesionInvalidadaPorUltimoHandle(sesion *Sesion, handle *RuntimeHandle, cutoff time.Time, now time.Time) bool {
+	if sesion == nil || handle == nil {
+		return false
+	}
+	if handle.SesionID != nil && *handle.SesionID != sesion.ID {
+		return false
+	}
+	if runtimeHandleSostieneSesionOperativaConCutoff(handle, cutoff) {
+		return false
+	}
+	estado := strings.TrimSpace(handle.Estado)
+	if estado != "cerrado" && estado != "fallido" {
+		return false
+	}
+	ultimaHandle := preferTime(handle.LastSeenAt, &handle.UpdatedAt, &handle.CreatedAt)
+	if ultimaHandle == nil || ultimaHandle.Before(cutoff) {
+		return false
+	}
+	ultimaSesion := preferTime(sesion.HeartbeatAt, timePtr(sesion.Inicio), &now)
+	if ultimaSesion == nil {
+		return false
+	}
+	return !ultimaHandle.Before(*ultimaSesion)
+}
+
+func sesionEsActivaOperativaConMapas(sesion *Sesion, handlesActivos map[string]bool, ultimosHandles map[string]*RuntimeHandle, now time.Time) bool {
+	if sesion == nil {
+		return false
+	}
+	key := runtimeHandleCacheKey(sesion.Agente, sesion.ProyectoID)
+	if sesionOperativaPorHeartbeat(sesion.Activa, sesion.HeartbeatAt, sesion.Inicio, now) {
+		if sesionInvalidadaPorUltimoHandle(sesion, ultimosHandles[key], sessionOperationalCutoff(), now) {
+			return false
+		}
+		return true
+	}
+	return handlesActivos[key]
+}
+
 func ListarSesionesActivasOperativas() ([]*Sesion, error) {
 	sesiones, err := listarSesionesAbiertasRaw()
 	if err != nil {
@@ -463,17 +525,17 @@ func ListarSesionesActivasOperativas() ([]*Sesion, error) {
 	if err != nil {
 		return nil, err
 	}
+	ultimosHandles, err := listarUltimoHandlePorAgenteProyectoMap()
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	out := make([]*Sesion, 0, len(sesiones))
 	for _, sesion := range sesiones {
 		if sesion == nil {
 			continue
 		}
-		if sesionOperativaPorHeartbeat(sesion.Activa, sesion.HeartbeatAt, sesion.Inicio, now) {
-			out = append(out, sesion)
-			continue
-		}
-		if handlesActivos[runtimeHandleCacheKey(sesion.Agente, sesion.ProyectoID)] {
+		if sesionEsActivaOperativaConMapas(sesion, handlesActivos, ultimosHandles, now) {
 			out = append(out, sesion)
 		}
 	}
@@ -878,14 +940,15 @@ func GetSesionActivaOperativa(agente string, proyectoID *int64) (*Sesion, error)
 	if err != nil {
 		return nil, err
 	}
-	if SesionEsOperativa(sesion) {
-		return sesion, nil
-	}
-	activo, err := sesionTieneHandleActivoOperativo(sesion.Agente, proyectoID)
+	handlesActivos, err := listarHandlesActivosOperativosMap()
 	if err != nil {
 		return nil, err
 	}
-	if !activo {
+	ultimosHandles, err := listarUltimoHandlePorAgenteProyectoMap()
+	if err != nil {
+		return nil, err
+	}
+	if !sesionEsActivaOperativaConMapas(sesion, handlesActivos, ultimosHandles, time.Now().UTC()) {
 		return nil, sql.ErrNoRows
 	}
 	return sesion, nil
