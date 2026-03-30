@@ -3078,8 +3078,9 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 
 	aplicado := false
 	pid := 0
+	deliveryPath := ""
 	deliveryMode := RuntimeHandleMailboxDeliveryMode(handle)
-	if RuntimeHandlePermiteSendInputInteractivo(handle) {
+	if RuntimeHandlePermiteSendInputInteractivo(handle) || RuntimeHandlePermiteEntregaCalienteSupervisada(handle) {
 		aplicado, pid, err = controlarProcesoRuntime(order, func(obj controlruntime.ObjetivoProceso) (bool, int, error) {
 			return controlruntime.EnviarInstruccionProceso(obj, texto)
 		})
@@ -3088,6 +3089,13 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 				return reencolarRuntimeOrderSendInstruction(order, payload, err.Error())
 			}
 			return err
+		}
+		if aplicado {
+			if RuntimeHandlePermiteEntregaCalienteSupervisada(handle) && !RuntimeHandlePermiteSendInputInteractivo(handle) {
+				deliveryPath = "supervisor_local"
+			} else {
+				deliveryPath = "interactive"
+			}
 		}
 	}
 	if !aplicado && deliveryMode == runtimeagente.MailboxDeliverySessionResume {
@@ -3100,6 +3108,9 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 				return reencolarRuntimeOrderSendInstruction(order, payload, err.Error())
 			}
 			return err
+		}
+		if aplicado {
+			deliveryPath = "session_resume"
 		}
 	}
 	if aplicado {
@@ -3117,6 +3128,7 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 			"control_real":        true,
 			"pid":                 pid,
 			"mailbox_delivery":    deliveryMode,
+			"delivery_path":       deliveryPath,
 			"external_session_id": externalSessionID,
 			"handle_id":           runtimeHandleID(handle),
 		}
@@ -5068,6 +5080,23 @@ func RuntimeHandlePermiteSendInputInteractivo(handle *RuntimeHandle) bool {
 		return false
 	}
 	if runtimeHandleUsaCodexTTYInestable(meta) {
+		return false
+	}
+	return true
+}
+
+func RuntimeHandlePermiteEntregaCalienteSupervisada(handle *RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if !strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "driver", "")), "process_pty_cli") {
+		return false
+	}
+	if strings.TrimSpace(stringFromMap(meta, "stdin_path", "")) == "" {
+		return false
+	}
+	if strings.TrimSpace(stringFromMap(meta, "supervisor_ref", "")) == "" {
 		return false
 	}
 	return true

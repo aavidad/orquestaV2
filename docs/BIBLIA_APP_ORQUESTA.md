@@ -93,6 +93,12 @@ Sirve para:
 La documentacion no sustituye el estado vivo.
 Las tareas y propuestas vigentes no se leen de un `.md` si ya existen en Orquesta.
 
+Regla operativa adicional:
+
+- el slug canónico de proyecto no se asume por el nombre del repositorio en disco
+- antes de filtrar `runtime`, `mailbox`, `checkpoints`, `tareas` o `propuestas` por proyecto, hay que consultar el estado vivo en Orquesta
+- a fecha de este diario, el repositorio vive en `/home/alberto/Trabajo/orquesta`, pero el proyecto activo registrado en la BD sigue siendo `orquestador`; confundir `ruta` con `slug` rompe diagnósticos y puede aparentar falsos bugs de API
+
 ## Doctrina operativa obligatoria
 
 ### Server-first
@@ -212,6 +218,9 @@ Contrato minimo obligatorio para `runtime_orders`:
 - toda orden reclamada por el control plane debe quedar con `lease` explicita
 - la lease debe registrar quien la reclama, token de lease, intento y caducidad
 - una orden reencolada o finalizada debe liberar siempre su lease
+- `send_instruction` no se gobierna por un unico booleano `can_send_input`; el daemon debe distinguir entre input interactivo generico y entrega caliente por supervisor local de Orquesta
+- un runtime `process_pty_cli` con `stdin_path` y `supervisor_ref` validos puede recibir entrega caliente por el canal del supervisor aunque `can_send_input=false` por inestabilidad del TTY de Codex
+- `session_resume` queda como fallback de continuidad, no como sustituto de la entrega caliente cuando Orquesta ya posee el proceso local y su canal de entrada
 - la reconciliacion stale no se decide solo por `started_at`; debe respetar la caducidad de la lease cuando exista
 
 Contrato minimo obligatorio para el supervisor local:

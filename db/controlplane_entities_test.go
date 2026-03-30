@@ -2092,6 +2092,27 @@ func TestRuntimeHandlePermiteSendInputInteractivoRespetaCapacidadesExplicitas(t 
 	}
 }
 
+func TestRuntimeHandlePermiteEntregaCalienteSupervisadaExigeSupervisorYStdin(t *testing.T) {
+	if RuntimeHandlePermiteEntregaCalienteSupervisada(nil) {
+		t.Fatal("nil handle no deberia permitir entrega caliente supervisada")
+	}
+	if RuntimeHandlePermiteEntregaCalienteSupervisada(&RuntimeHandle{
+		MetadataJSON: `{"driver":"process_pty_cli","stdin_path":"/tmp/pty.stdin"}`,
+	}) {
+		t.Fatal("sin supervisor_ref no deberia permitir entrega caliente supervisada")
+	}
+	if RuntimeHandlePermiteEntregaCalienteSupervisada(&RuntimeHandle{
+		MetadataJSON: `{"driver":"process_pty_cli","supervisor_ref":"/tmp/ref"}`,
+	}) {
+		t.Fatal("sin stdin_path no deberia permitir entrega caliente supervisada")
+	}
+	if !RuntimeHandlePermiteEntregaCalienteSupervisada(&RuntimeHandle{
+		MetadataJSON: `{"driver":"process_pty_cli","stdin_path":"/tmp/pty.stdin","supervisor_ref":"/tmp/ref","can_send_input":false}`,
+	}) {
+		t.Fatal("con supervisor_ref y stdin_path deberia permitir entrega caliente supervisada")
+	}
+}
+
 func TestRuntimeHandleMailboxDeliveryModeRespetaCapacidadesYFallbacks(t *testing.T) {
 	if got := RuntimeHandleMailboxDeliveryMode(nil); got != runtimeagente.MailboxDeliveryInteractive {
 		t.Fatalf("modo default inesperado para nil: %s", got)
@@ -2177,6 +2198,7 @@ func TestRuntimeOrderSendInstructionHaceFallbackAMailboxCuandoHandleNoAdmiteInpu
 	meta["driver"] = "process_pty_cli"
 	meta["rendered_command"] = "/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1"
 	meta["can_send_input"] = false
+	meta["supervisor_ref"] = ""
 	metaJSON, _ := json.Marshal(meta)
 	capsJSON, _ := json.Marshal(map[string]any{
 		"can_send_input":       false,
@@ -2228,6 +2250,143 @@ func TestRuntimeOrderSendInstructionHaceFallbackAMailboxCuandoHandleNoAdmiteInpu
 		if data, err := os.ReadFile(logPath); err == nil && strings.Contains(string(data), "hola mailbox fallback") {
 			t.Fatalf("el proceso no deberia recibir input interactivo: %s", string(data))
 		}
+	}
+}
+
+func TestRuntimeOrderSendInstructionEntregaEnCalientePorSupervisorLocalAunqueCanSendInputSeaFalse(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "cat-cli",
+		Nombre:     "Cat CLI",
+		Transporte: "cli",
+		Comando:    "cat",
+		Activo:     true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"cat-cli"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStart(startOrder); err != nil {
+		t.Fatalf("ejecutar start: %v", err)
+	}
+
+	sesion, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion activa: %+v err=%v", sesion, err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil || runtime.PID == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	t.Cleanup(func() {
+		_, _, _ = controlruntime.DetenerProceso(controlruntime.ObjetivoProceso{PID: runtime.PID})
+	})
+
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(handle.MetadataJSON), &meta); err != nil {
+		t.Fatalf("metadata handle: %v", err)
+	}
+	logPath, _ := meta["log_path"].(string)
+	if strings.TrimSpace(logPath) == "" {
+		t.Fatalf("log_path vacio en metadata: %+v", meta)
+	}
+	if strings.TrimSpace(stringFromMap(meta, "stdin_path", "")) == "" || strings.TrimSpace(stringFromMap(meta, "supervisor_ref", "")) == "" {
+		t.Fatalf("handle de prueba sin supervisor_ref/stdin_path: %+v", meta)
+	}
+	meta["driver"] = "process_pty_cli"
+	meta["rendered_command"] = "/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1"
+	meta["can_send_input"] = false
+	metaJSON, _ := json.Marshal(meta)
+	capsJSON, _ := json.Marshal(map[string]any{
+		"can_send_input":        false,
+		"can_checkpoint":        true,
+		"can_resume":            true,
+		"can_capture_pid":       true,
+		"can_track_continuity":  true,
+		"can_pause":             true,
+		"can_stop":              true,
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryBootstrapOnly,
+	})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, capabilities_json=? WHERE id=?`, string(metaJSON), string(capsJSON), handle.ID); err != nil {
+		t.Fatalf("update handle caps: %v", err)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle: %+v err=%v", handle, err)
+	}
+
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: `{"to_agente":"Codex1","texto":"hola supervisor local"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderSendInstruction(sendOrder); err != nil {
+		t.Fatalf("ejecutar send_instruction: %v", err)
+	}
+	sendOrder, err = GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "completada" {
+		t.Fatalf("send_instruction no completada: %+v", sendOrder)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"delivery_path":"supervisor_local"`) {
+		t.Fatalf("resultado sin delivery_path supervisor_local: %s", sendOrder.ResultadoJSON)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		data, err := os.ReadFile(logPath)
+		if err == nil && strings.Contains(string(data), "hola supervisor local") {
+			break
+		}
+		if time.Now().After(deadline) {
+			if err != nil {
+				t.Fatalf("leer log: %v", err)
+			}
+			t.Fatalf("el proceso no recibio la instruccion por supervisor local")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

@@ -1065,6 +1065,25 @@ Validacion:
 - `go test ./db -run 'TestSQLite(PrepareAplicaPostMigracionesAunqueLaRevisionYaEsteMarcada|BootstrapRequiredEnDBVacia|PrepareOmiteBootstrapConSchemaActualSinRevision)' -count=1` => OK
 - `go build -o ./orquesta .` => OK
 
+## 2026-03-31 01:17 aprox. — falso bug de API por slug de proyecto incorrecto
+
+Hallazgo:
+
+- `runtime diagnostico`, `/api/runtimes/tree`, `/api/runtime-orders` y `/api/runtime-checkpoints` devolvian `sql: no rows in result set` cuando se consultaban con `proyecto=orquesta`
+- la API no estaba rota: el estado vivo mostraba que el proyecto activo en BD seguia siendo `orquestador`
+- el repositorio fisico vive en `/home/alberto/Trabajo/orquesta`, pero ese path no implica que el slug operativo sea `orquesta`
+
+Decision:
+
+- no tocar codigo para esconder un error de filtro
+- fijar en doctrina que el slug canónico se consulta en Orquesta y no se infiere del nombre del directorio
+
+Validacion viva:
+
+- `./orquesta proyecto listar` => proyecto activo `orquestador` con ruta `/home/alberto/Trabajo/orquesta`
+- `./orquesta runtime diagnostico --agente Codex2 --proyecto orquestador --limit 5` => OK
+- `./orquesta runtime ordenes --agente Codex2 --proyecto orquestador --estado pendiente` => OK
+
 ## 2026-03-31 01:2x aprox. — un batch colgado ya no congela todo el control plane
 
 Hallazgo:
@@ -1161,3 +1180,31 @@ Validacion:
 
 - `go test ./internal/controlruntime -run 'Test(ConsultarEstadoLocalDetectaSessionIDSinSobrescribirDriver|CommandIdentityHintsIncluyeFirmaUtil|SamePathResuelveSymlink|ValidarIdentidadProcesoLocalDetectaMismatchDeCWD)' -count=1`
 - `go test ./planocontrol -run 'TestRunner(RunControlPlaneRecuperaPanicDeBatchYSigue|RunControlPlaneTimeoutDeBatchNoCongelaElResto|SafeLoopCallRecuperaPanic)' -count=1`
+
+## 2026-03-31 01:4x aprox. — `send_instruction` recupera entrega caliente por supervisor local sin romper la politica anti-TTY
+
+Hallazgo:
+
+- la cola `runtime_orders_batch` estaba viva y los handles activos de Codex tenian `stdin_path`, `supervisor_ref` y `external_session_id`
+- aun asi, `send_instruction` seguia bloqueado en `bootstrap_only/session_resume` porque la decision solo miraba `RuntimeHandlePermiteSendInputInteractivo`
+- eso mezclaba dos conceptos distintos: TTY interactivo generico y canal de entrada ya supervisado por el daemon
+
+Decision:
+
+- mantener `RuntimeHandlePermiteSendInputInteractivo=false` para Codex PTY inestable
+- introducir una capacidad separada para el caso seguro: entrega caliente por supervisor local de Orquesta
+- si el handle `process_pty_cli` tiene `stdin_path` y `supervisor_ref` validos, el daemon debe intentar `controlruntime.EnviarInstruccionProceso(...)` antes de degradar a `session_resume` o mailbox
+
+Cambios:
+
+- `db/controlplane_entities.go`
+  - nuevo helper `RuntimeHandlePermiteEntregaCalienteSupervisada`
+  - `ejecutarRuntimeOrderSendInstruction(...)` ya usa esa via de control real y registra `delivery_path`
+- `db/controlplane_entities_test.go`
+  - regresion para exigir `stdin_path + supervisor_ref`
+  - regresion para mantener fallback a mailbox cuando falta `supervisor_ref`
+  - regresion para verificar entrega caliente por supervisor local aunque `can_send_input=false`
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(RuntimeHandlePermiteSendInputInteractivoRespetaCapacidadesExplicitas|RuntimeHandlePermiteEntregaCalienteSupervisadaExigeSupervisorYStdin|RuntimeOrderSendInstructionHaceFallbackAMailboxCuandoHandleNoAdmiteInputInteractivo|RuntimeOrderSendInstructionEntregaEnCalientePorSupervisorLocalAunqueCanSendInputSeaFalse)' -count=1` => OK
