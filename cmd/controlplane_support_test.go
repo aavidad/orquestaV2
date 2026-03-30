@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -2344,6 +2345,97 @@ func TestProcesarRuntimeMailboxSessionResumeBatchEncolaSendInstructionParaWatchd
 	}
 	if !strings.Contains(send.PayloadJSON, `"texto":"confirma estado o reanuda tick"`) {
 		t.Fatalf("send_instruction watchdog sin texto: %s", send.PayloadJSON)
+	}
+}
+
+func TestProcesarRuntimeMailboxSessionResumeBatchRespetaLeaseBootstrapPendiente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-bootstrap-resume","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"texto":"arranque autonomo"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	startID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	resumeID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		Tipo:       "resume",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","start_order_id":%d,"mailbox_ids":[%d],"sesion_id":%d}`,
+			startID, msgID, sesion.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar resume bootstrap: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, resumeID); err != nil {
+		t.Fatalf("marcar resume ejecutando: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia crear send_instruction si el mailbox ya esta cubierto por bootstrap, got=%d", n)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			t.Fatalf("no deberia existir send_instruction duplicada: %+v", order)
+		}
 	}
 }
 

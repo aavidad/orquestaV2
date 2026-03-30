@@ -3116,6 +3116,11 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 	} else if supersedida {
 		return nil
 	}
+	if supersedida, err := completarRuntimeOrderSendInstructionCubiertaPorBootstrap(order, payload, handle, runtime); err != nil {
+		return err
+	} else if supersedida {
+		return nil
+	}
 
 	obj := controlruntime.ObjetivoProceso{}
 	if handle != nil {
@@ -3143,7 +3148,7 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 
 	if handle == nil {
 		if runtimeOrderSendInstructionProvieneMailbox(payload) {
-			return reencolarRuntimeOrderSendInstruction(order, payload, "sin runtime activo entregable")
+			return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "sin runtime activo entregable")
 		}
 		return fmt.Errorf("send_instruction sin runtime handle entregable")
 	}
@@ -3212,7 +3217,7 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 	}
 
 	if runtimeOrderSendInstructionProvieneMailbox(payload) {
-		return reencolarRuntimeOrderSendInstruction(order, payload, "runtime no disponible para entrega inmediata")
+		return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "runtime no disponible para entrega inmediata")
 	}
 
 	existente, err := GetRuntimeMailboxByRuntimeOrderID(order.ID)
@@ -3403,6 +3408,24 @@ func reencolarRuntimeOrderSendInstructionAt(order *RuntimeOrder, payload map[str
 	return err
 }
 
+func completarRuntimeOrderSendInstructionDiferidaAMailbox(order *RuntimeOrder, payload map[string]any, reason string) error {
+	if order == nil {
+		return nil
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "mailbox retenido hasta runtime entregable"
+	}
+	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
+		"ok":              true,
+		"mailbox_id":      runtimeOrderSendInstructionMailboxID(payload),
+		"deferred":        true,
+		"deferred_reason": reason,
+		"mailbox_only":    true,
+	})
+	return MarcarRuntimeOrderEstado(order.ID, "completada", resultado, "")
+}
+
 func gestionarBackoffProveedorRuntimeOrderSendInstruction(order *RuntimeOrder, payload map[string]any, runtimeErr error) (bool, error) {
 	delay, motivo, ok := runtimeOrderProviderBackoff(runtimeErr)
 	if !ok {
@@ -3439,12 +3462,37 @@ func completarRuntimeOrderSendInstructionSesionObsoleta(order *RuntimeOrder, pay
 		return false, nil
 	}
 	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
-		"ok":                 true,
-		"mailbox_id":         runtimeOrderSendInstructionMailboxID(payload),
-		"superseded":         true,
-		"superseded_reason":  "external_session_id_changed",
+		"ok":                  true,
+		"mailbox_id":          runtimeOrderSendInstructionMailboxID(payload),
+		"superseded":          true,
+		"superseded_reason":   "external_session_id_changed",
 		"external_session_id": actualExternal,
+		"handle_id":           runtimeHandleID(handle),
+	})
+	return true, MarcarRuntimeOrderEstado(order.ID, "completada", resultado, "")
+}
+
+func completarRuntimeOrderSendInstructionCubiertaPorBootstrap(order *RuntimeOrder, payload map[string]any, handle *RuntimeHandle, runtime *RuntimeInstance) (bool, error) {
+	if order == nil || !runtimeOrderSendInstructionProvieneMailbox(payload) {
+		return false, nil
+	}
+	mailboxID := runtimeOrderSendInstructionMailboxID(payload)
+	if mailboxID <= 0 {
+		return false, nil
+	}
+	covered, bootstrapOrderID, startOrderID, err := RuntimeMailboxCubiertoPorBootstrapPendiente(mailboxID, handle, runtime)
+	if err != nil || !covered {
+		return false, err
+	}
+	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
+		"ok":                 true,
+		"mailbox_id":         mailboxID,
+		"superseded":         true,
+		"superseded_reason":  "covered_by_bootstrap_lease",
+		"bootstrap_order_id": bootstrapOrderID,
+		"start_order_id":     startOrderID,
 		"handle_id":          runtimeHandleID(handle),
+		"runtime_id":         runtimeInstanceID(runtime),
 	})
 	return true, MarcarRuntimeOrderEstado(order.ID, "completada", resultado, "")
 }
@@ -4116,6 +4164,22 @@ func AckBootstrapRuntimeLeaseByEvidence(handle *RuntimeHandle, runtime *RuntimeI
 		return err
 	}
 	return AckBootstrapRuntimeLease(startOrderID, order.ID, mailboxIDs, sesionID, ackSource)
+}
+
+func RuntimeMailboxCubiertoPorBootstrapPendiente(mailboxID int64, handle *RuntimeHandle, runtime *RuntimeInstance) (bool, int64, int64, error) {
+	if mailboxID <= 0 {
+		return false, 0, 0, nil
+	}
+	order, startOrderID, mailboxIDs, _, err := resolverBootstrapRuntimeLeasePendiente(handle, runtime)
+	if err != nil || order == nil {
+		return false, 0, 0, err
+	}
+	for _, id := range mailboxIDs {
+		if id == mailboxID {
+			return true, order.ID, startOrderID, nil
+		}
+	}
+	return false, 0, 0, nil
 }
 
 func resolverBootstrapRuntimeLeasePendiente(handle *RuntimeHandle, runtime *RuntimeInstance) (*RuntimeOrder, int64, []int64, int64, error) {

@@ -978,6 +978,11 @@ func procesarRuntimeMailboxSessionResumeBatch() (int, error) {
 		if handle == nil || strings.TrimSpace(externalSessionID) == "" {
 			continue
 		}
+		if covered, _, _, err := db.RuntimeMailboxCubiertoPorBootstrapPendiente(msg.ID, handle, runtime); err != nil {
+			return total, err
+		} else if covered {
+			continue
+		}
 		if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliverySessionResume {
 			continue
 		}

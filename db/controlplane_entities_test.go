@@ -2709,7 +2709,7 @@ func TestRuntimeOrderSendInstructionMailboxSupersedeSesionObsoleta(t *testing.T)
 	}
 }
 
-func TestRuntimeOrderSendInstructionMailboxSeReencolaSinDuplicarSiNoHayHandleEntregable(t *testing.T) {
+func TestRuntimeOrderSendInstructionMailboxSeCompletaDejandoLaVerdadEnMailboxSiNoHayHandleEntregable(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {
@@ -2765,14 +2765,11 @@ func TestRuntimeOrderSendInstructionMailboxSeReencolaSinDuplicarSiNoHayHandleEnt
 	if err != nil {
 		t.Fatalf("get send order final: %v", err)
 	}
-	if sendOrder.Estado != "pendiente" {
-		t.Fatalf("send_instruction de mailbox deberia reencolarse: %+v", sendOrder)
+	if sendOrder.Estado != "completada" {
+		t.Fatalf("send_instruction de mailbox deberia completarse dejando mailbox pendiente: %+v", sendOrder)
 	}
-	if !strings.Contains(sendOrder.ResultadoJSON, `"deferred":true`) {
+	if !strings.Contains(sendOrder.ResultadoJSON, `"deferred":true`) || !strings.Contains(sendOrder.ResultadoJSON, `"mailbox_only":true`) {
 		t.Fatalf("resultado sin marca de diferido: %s", sendOrder.ResultadoJSON)
-	}
-	if !sendOrder.AvailableAt.After(time.Now().UTC().Add(-time.Second)) {
-		t.Fatalf("available_at deberia moverse al futuro: %+v", sendOrder)
 	}
 
 	agente := "Codex1"
@@ -2787,6 +2784,111 @@ func TestRuntimeOrderSendInstructionMailboxSeReencolaSinDuplicarSiNoHayHandleEnt
 	}
 	if len(mailbox) != 1 || mailbox[0].ID != mailboxID {
 		t.Fatalf("mailbox pendiente inesperada: %+v", mailbox)
+	}
+}
+
+func TestRuntimeOrderSendInstructionMailboxCubiertaPorBootstrapSeCompletaSinReintento(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "Codex1",
+		ProyectoID:        &proyectoID,
+		CWD:               filepath.Join(tmp, "orquestador"),
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-bootstrap-1",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"texto":"hola bootstrap"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	resumeID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		Tipo:       "resume",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","start_order_id":%d,"mailbox_ids":[%d],"sesion_id":%d}`,
+			startID, mailboxID, sesion.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar resume bootstrap: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, resumeID); err != nil {
+		t.Fatalf("marcar resume ejecutando: %v", err)
+	}
+
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Codex1","texto":"hola bootstrap","mailbox_id":%d,"mailbox_kind":"autonomia"}`, mailboxID),
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderSendInstruction(sendOrder); err != nil {
+		t.Fatalf("ejecutar send_instruction: %v", err)
+	}
+
+	sendOrder, err = GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "completada" {
+		t.Fatalf("send_instruction cubierta por bootstrap deberia completarse: %+v", sendOrder)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"superseded_reason":"covered_by_bootstrap_lease"`) {
+		t.Fatalf("resultado sin supersede de bootstrap: %s", sendOrder.ResultadoJSON)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"bootstrap_order_id":`) {
+		t.Fatalf("resultado sin bootstrap_order_id: %s", sendOrder.ResultadoJSON)
 	}
 }
 

@@ -228,6 +228,10 @@ Contrato minimo obligatorio para `runtime_orders`:
 - `session_resume` queda como fallback de continuidad, no como sustituto de la entrega caliente cuando Orquesta ya posee el proceso local y su canal de entrada
 - excepcion dura: Codex PTY/TUI no admite entrega caliente directa por `stdin` aunque exista supervisor local; si la traza demuestra `runtime_panic`, la doctrina correcta es prohibir ese camino para Codex y reservarlo solo a runtimes locales seguros
 - la reconciliacion stale no se decide solo por `started_at`; debe respetar la caducidad de la lease cuando exista
+- si un `mailbox_id` ya forma parte de una `bootstrap lease` pendiente (`lease_state=waiting_for_evidence`), ningun batch (`interactive`, `session_resume`, `coordinated_restart`) puede materializar otra `send_instruction` para ese mismo mensaje
+- mientras una `bootstrap lease` siga pendiente, el mailbox incluido en ella sigue siendo verdad de continuidad; cualquier `send_instruction` redundante para ese `mailbox_id` debe cerrarse como `superseded`, no reintentarse
+- una `send_instruction` nacida desde `runtime_mailbox` no es una segunda cola durable; es solo un intento de entrega
+- si ese intento no encuentra runtime entregable inmediato, la orden se completa y la verdad queda en `runtime_mailbox`; no se permite bucle de reintentos sobre la misma orden derivada
 
 Contrato minimo obligatorio para el supervisor local:
 

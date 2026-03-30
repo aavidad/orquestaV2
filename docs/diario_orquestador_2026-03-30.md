@@ -1,5 +1,42 @@
 # Diario del orquestador — 2026-03-30
 
+## 2026-03-31 03:xx aprox. — el bootstrap pasa a poseer de verdad su mailbox y deja de duplicarse por `session_resume`
+
+Hallazgo:
+
+- el caso vivo de `Codex2` ya no era un problema generico de `send_instruction`
+- el `start #80154` habia arrancado con `bootstrap.mailbox_count=1`, es decir, el mensaje `64424` ya estaba dentro de la continuidad pendiente
+- aun asi, el batch `procesarRuntimeMailboxSessionResumeBatch()` materializo una segunda `send_instruction` (`#80157`) para ese mismo `mailbox_id`
+- eso demostraba una fuga de contrato: la `bootstrap lease` y el batch de mailbox competian por la misma verdad
+
+Decision:
+
+- si un `mailbox_id` ya esta cubierto por una `bootstrap lease` pendiente, ese mensaje pertenece al bootstrap hasta su `ack`
+- ningun batch puede crear otra `send_instruction` para ese mismo `mailbox_id`
+- si aun existe una `send_instruction` vieja para ese mailbox, debe cerrarse como `superseded` por `covered_by_bootstrap_lease`
+- ademas, una `send_instruction` creada desde mailbox deja de ser cola durable propia: si no hay runtime entregable inmediato, la orden se completa y la verdad queda solo en el mailbox
+
+Cambios:
+
+- `db/controlplane_entities.go`
+  - nuevo helper exportado `RuntimeMailboxCubiertoPorBootstrapPendiente(...)`
+  - nuevo cierre `completarRuntimeOrderSendInstructionCubiertaPorBootstrap(...)`
+  - nuevo cierre `completarRuntimeOrderSendInstructionDiferidaAMailbox(...)`
+  - `ejecutarRuntimeOrderSendInstruction(...)` deja de reencolar cuando la verdad ya esta cubierta por bootstrap o cuando el mailbox ya es la fuente durable suficiente
+- `cmd/controlplane_support.go`
+  - `procesarRuntimeMailboxSessionResumeBatch()` salta el mensaje si ya esta cubierto por la lease de bootstrap
+- tests nuevos:
+- `db/controlplane_entities_test.go`
+  - `TestRuntimeOrderSendInstructionMailboxCubiertaPorBootstrapSeCompletaSinReintento`
+  - `TestRuntimeOrderSendInstructionMailboxSeCompletaDejandoLaVerdadEnMailboxSiNoHayHandleEntregable`
+  - `cmd/controlplane_support_test.go`
+    - `TestProcesarRuntimeMailboxSessionResumeBatchRespetaLeaseBootstrapPendiente`
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(RuntimeOrderSendInstructionMailboxCubiertaPorBootstrapSeCompletaSinReintento|RuntimeOrderSendInstructionMailboxSupersedeSesionObsoleta|GuardarSesionActivaPreservaMetadataRicaDelHandle|RuntimeOrderSendInstructionCodexSupervisadoSigueCayendoAMailbox)' -count=1` => OK
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'Test(ProcesarRuntimeMailboxSessionResumeBatchEncolaSendInstruction|ProcesarRuntimeMailboxSessionResumeBatchEncolaSendInstructionParaWatchdog|ProcesarRuntimeMailboxSessionResumeBatchRespetaLeaseBootstrapPendiente|ProcesarRuntimeMailboxSessionResumeBatchCoalesceNudgeAunqueHayaOrdenAbierta)' -count=1` => OK
+
 ## 2026-03-31 00:xx aprox. — decision de no reescritura sobre framework externo y cierre de doctrina del nucleo
 
 Objetivo:
