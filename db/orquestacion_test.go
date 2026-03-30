@@ -198,6 +198,9 @@ func prepararDBTemporalConNombre(t *testing.T, nombre string) string {
 	if err := Open(); err != nil {
 		t.Fatalf("open db temporal: %v", err)
 	}
+	if err := EnsureCapacidadModeloBaseCodex(); err != nil {
+		t.Fatalf("seed capacidad/modelo base temporal: %v", err)
+	}
 	return tmp
 }
 

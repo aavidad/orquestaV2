@@ -3,8 +3,10 @@ package db
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"orquesta/runtimeagente"
 )
@@ -41,6 +43,11 @@ func BuildLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan *runtim
 	if agente == nil || proyecto == nil {
 		return ""
 	}
+	start := time.Now()
+	bootstrapPromptDebugf("BuildLaunchBootstrapPrompt start agente=%s proyecto=%s", strings.TrimSpace(agente.Nombre), strings.TrimSpace(proyecto.Slug))
+	defer func() {
+		bootstrapPromptDebugf("BuildLaunchBootstrapPrompt done agente=%s proyecto=%s duration=%s", strings.TrimSpace(agente.Nombre), strings.TrimSpace(proyecto.Slug), time.Since(start).Round(time.Millisecond))
+	}()
 
 	workingDir := strings.TrimSpace(proyecto.RutaAbs)
 	if plan != nil && strings.TrimSpace(plan.WorkingDir) != "" {
@@ -51,7 +58,9 @@ func BuildLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan *runtim
 		fmt.Sprintf("Bootstrap de Orquesta para %s.", strings.TrimSpace(agente.Nombre)),
 		fmt.Sprintf("Rol: %s. Proyecto: %s.", strings.TrimSpace(agente.Rol), strings.TrimSpace(proyecto.Slug)),
 		fmt.Sprintf("Directorio de trabajo: %s.", workingDir),
+		InstruccionDoctrinaCanonica(),
 		"Fuente de verdad operativa: daemon/API de Orquesta. No uses acceso directo a BD en el flujo normal salvo diagnóstico o recuperación.",
+		"Las tareas, propuestas, sesiones y runtimes vivos se consultan en Orquesta; la documentacion no sustituye el estado operativo.",
 		fmt.Sprintf("Este bootstrap ya equivale a orquesta sesion inicio %s y la sesión actual ya está abierta por Orquesta; no ejecutes sesion inicio de nuevo salvo recuperación explícita.", strings.TrimSpace(agente.Nombre)),
 		"Si la acción es destructiva, irreversible o de riesgo alto, consulta antes.",
 	}
@@ -72,6 +81,15 @@ func BuildLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan *runtim
 			lines = append(lines, "Continuidad disponible: "+continuity)
 		}
 	}
+	stepStart := time.Now()
+	if esSupervisor, supervisorOperativo, err := EsSupervisorAutonomiaOperativo(proyecto.ID, strings.TrimSpace(agente.Nombre)); err == nil {
+		if esSupervisor {
+			lines = append(lines, "Rol operativo en este proyecto: orquestador autónomo. Coordina a los demás agentes, reparte trabajo real y sigue hasta cerrar la app o dejar el siguiente frente útil en marcha.")
+		} else if supervisorOperativo != nil && strings.TrimSpace(supervisorOperativo.Nombre) != "" {
+			lines = append(lines, fmt.Sprintf("Supervisor operativo del proyecto: %s. Tu rol operativo aquí es programador y debes coordinarte con ese supervisor por Orquesta.", strings.TrimSpace(supervisorOperativo.Nombre)))
+		}
+	}
+	bootstrapPromptDebugf("BuildLaunchBootstrapPrompt step=supervision_role duration=%s", time.Since(stepStart).Round(time.Millisecond))
 
 	if resumenProyecto = strings.TrimSpace(resumenProyecto); resumenProyecto != "" {
 		lines = append(lines, ensurePromptSentence("Contexto operativo: "+resumenProyecto))
@@ -100,6 +118,13 @@ func BuildLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan *runtim
 
 	lines = append(lines, "Empieza por la tarea asignada o, si no hay una única clara, consulta Orquesta antes de desviarte.")
 	return strings.Join(lines, "\n")
+}
+
+func bootstrapPromptDebugf(format string, args ...any) {
+	if !preparePromptDebugEnabled() {
+		return
+	}
+	log.Printf("orquesta[prepare-prompt] "+format, args...)
 }
 
 func resumirTareasBootstrap(tareas []*Tarea) string {

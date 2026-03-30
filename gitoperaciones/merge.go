@@ -12,7 +12,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 )
 
 type MergeResult struct {
@@ -32,25 +34,32 @@ func MergeBranchIsolated(repoPath, sourceBranch, targetBranch string) (*MergeRes
 	if err != nil {
 		return nil, fmt.Errorf("resolver commit origen: %w", err)
 	}
-	tempRoot := filepath.Join(repoPath, ".orquesta-worktrees", ".merge-tmp")
-	if err := os.MkdirAll(tempRoot, 0o755); err != nil {
-		return nil, err
+	targetCommit, err := gitOutput(repoPath, "rev-parse", targetBranch)
+	if err != nil {
+		return nil, fmt.Errorf("resolver commit destino: %w", err)
 	}
-	worktreePath, err := os.MkdirTemp(tempRoot, "merge-")
+	tempRoot, err := os.MkdirTemp("", "orquesta-merge-")
 	if err != nil {
 		return nil, err
 	}
+	worktreePath := filepath.Join(tempRoot, "worktree")
 	manager := WorktreeManager{}
-	if err := manager.CreateWorktree(repoPath, worktreePath, targetBranch, targetBranch); err != nil {
-		_ = os.RemoveAll(worktreePath)
+	if err := manager.CreateDetachedWorktree(repoPath, worktreePath, targetCommit); err != nil {
+		_ = os.RemoveAll(tempRoot)
 		return nil, err
 	}
+	tempBranch := buildMergeTempBranch(targetBranch)
 	cleanup := func(abort bool) {
 		if abort {
 			_, _ = exec.Command("git", "-C", worktreePath, "merge", "--abort").CombinedOutput()
 		}
 		_ = manager.RemoveWorktree(repoPath, worktreePath)
-		_ = os.RemoveAll(worktreePath)
+		_, _ = exec.Command("git", "-C", repoPath, "branch", "-D", tempBranch).CombinedOutput()
+		_ = os.RemoveAll(tempRoot)
+	}
+	if out, err := exec.Command("git", "-C", worktreePath, "checkout", "-b", tempBranch).CombinedOutput(); err != nil {
+		cleanup(false)
+		return nil, fmt.Errorf("crear rama temporal de merge: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 
 	cmd := exec.Command("git", "-C", worktreePath, "merge", "--no-ff", "--no-edit", sourceBranch)
@@ -59,16 +68,126 @@ func MergeBranchIsolated(repoPath, sourceBranch, targetBranch string) (*MergeRes
 		return nil, fmt.Errorf("git merge %s -> %s: %w: %s", sourceBranch, targetBranch, err, strings.TrimSpace(string(out)))
 	}
 
-	mergeCommit, err := gitOutput(repoPath, "rev-parse", targetBranch)
+	mergeCommit, err := gitOutput(worktreePath, "rev-parse", "HEAD")
 	if err != nil {
 		cleanup(false)
 		return nil, fmt.Errorf("resolver commit merge: %w", err)
+	}
+	if err := promoteIsolatedMerge(repoPath, worktreePath, targetBranch, targetCommit, mergeCommit); err != nil {
+		cleanup(false)
+		return nil, err
 	}
 	cleanup(false)
 	return &MergeResult{
 		SourceCommit: sourceCommit,
 		MergeCommit:  mergeCommit,
 	}, nil
+}
+
+func buildMergeTempBranch(targetBranch string) string {
+	targetBranch = strings.NewReplacer("/", "-", "\\", "-", " ", "-", ":", "-").Replace(strings.TrimSpace(targetBranch))
+	targetBranch = strings.Trim(targetBranch, "-")
+	if targetBranch == "" {
+		targetBranch = "target"
+	}
+	return fmt.Sprintf("orquesta/merge-tmp/%s-%d", targetBranch, time.Now().UTC().UnixNano())
+}
+
+func promoteIsolatedMerge(repoPath, primaryWorktreePath, targetBranch, targetCommit, mergeCommit string) error {
+	if currentBranch, err := gitCurrentBranch(repoPath); err == nil && strings.TrimSpace(currentBranch) == targetBranch {
+		clean, err := gitWorktreeClean(repoPath)
+		if err != nil {
+			return err
+		}
+		if !clean {
+			return fmt.Errorf("la rama destino %s está activa en %s con cambios locales", targetBranch, filepath.Clean(strings.TrimSpace(repoPath)))
+		}
+		if out, err := exec.Command("git", "-C", repoPath, "merge", "--ff-only", mergeCommit).CombinedOutput(); err != nil {
+			return fmt.Errorf("promocionar merge aislado a %s: %w: %s", targetBranch, err, strings.TrimSpace(string(out)))
+		}
+		return nil
+	}
+	worktrees, err := listGitWorktrees(repoPath)
+	if err != nil {
+		return err
+	}
+	ocupadas := make([]string, 0, 1)
+	for _, wt := range worktrees {
+		if strings.TrimSpace(wt.Branch) != targetBranch {
+			continue
+		}
+		normalized := filepath.Clean(strings.TrimSpace(wt.Path))
+		if normalized == filepath.Clean(strings.TrimSpace(primaryWorktreePath)) {
+			continue
+		}
+		ocupadas = append(ocupadas, normalized)
+	}
+	sort.Strings(ocupadas)
+	switch len(ocupadas) {
+	case 0:
+		if _, err := gitOutput(repoPath, "update-ref", "refs/heads/"+targetBranch, mergeCommit, targetCommit); err != nil {
+			return fmt.Errorf("actualizar rama objetivo %s: %w", targetBranch, err)
+		}
+		return nil
+	case 1:
+		return fmt.Errorf("la rama destino %s está ocupada por la worktree %s", targetBranch, ocupadas[0])
+	default:
+		return fmt.Errorf("la rama destino %s está ocupada por múltiples worktrees: %s", targetBranch, strings.Join(ocupadas, ", "))
+	}
+}
+
+type gitWorktreeRef struct {
+	Path   string
+	Branch string
+}
+
+func listGitWorktrees(repoPath string) ([]gitWorktreeRef, error) {
+	out, err := gitOutput(repoPath, "worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, fmt.Errorf("listar worktrees git: %w", err)
+	}
+	lines := strings.Split(out, "\n")
+	worktrees := make([]gitWorktreeRef, 0, 4)
+	current := gitWorktreeRef{}
+	flush := func() {
+		if strings.TrimSpace(current.Path) == "" {
+			return
+		}
+		worktrees = append(worktrees, current)
+		current = gitWorktreeRef{}
+	}
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			flush()
+			continue
+		}
+		switch {
+		case strings.HasPrefix(line, "worktree "):
+			flush()
+			current.Path = strings.TrimSpace(strings.TrimPrefix(line, "worktree "))
+		case strings.HasPrefix(line, "branch "):
+			current.Branch = strings.TrimPrefix(strings.TrimSpace(strings.TrimPrefix(line, "branch ")), "refs/heads/")
+		}
+	}
+	flush()
+	return worktrees, nil
+}
+
+func gitWorktreeClean(repoPath string) (bool, error) {
+	out, err := gitOutput(repoPath, "status", "--porcelain")
+	if err != nil {
+		return false, fmt.Errorf("comprobar limpieza de worktree: %w", err)
+	}
+	return strings.TrimSpace(out) == "", nil
+}
+
+func gitCurrentBranch(repoPath string) (string, error) {
+	out, err := gitOutput(repoPath, "symbolic-ref", "--quiet", "--short", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
 }
 
 func gitOutput(repoPath string, args ...string) (string, error) {

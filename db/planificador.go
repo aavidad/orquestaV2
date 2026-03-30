@@ -42,7 +42,7 @@ func PlanificarTareasAutomaticamente() error {
 
 func reconciliarTareasHuerfanas() error {
 	rows, err := DB.Query(`
-		SELECT id, proyecto_id, agente, estado
+		SELECT id, proyecto_id, agente, estado, updated_at
 		FROM tareas
 		WHERE proyecto_id IS NOT NULL
 		  AND agente IS NOT NULL
@@ -58,11 +58,12 @@ func reconciliarTareasHuerfanas() error {
 		proyectoID int64
 		agente     string
 		estado     string
+		updatedAt  time.Time
 	}
 	var candidatas []tareaHuerfana
 	for rows.Next() {
 		var item tareaHuerfana
-		if err := rows.Scan(&item.id, &item.proyectoID, &item.agente, &item.estado); err != nil {
+		if err := rows.Scan(&item.id, &item.proyectoID, &item.agente, &item.estado, &item.updatedAt); err != nil {
 			return err
 		}
 		candidatas = append(candidatas, item)
@@ -71,7 +72,11 @@ func reconciliarTareasHuerfanas() error {
 		return err
 	}
 
+	limiteReciente := time.Now().UTC().Add(-ventanaGraciaRecuperacionTareaHuerfana())
 	for _, item := range candidatas {
+		if item.updatedAt.After(limiteReciente) {
+			continue
+		}
 		recuperable, err := tareaHuerfanaRecuperable(strings.TrimSpace(item.agente), item.proyectoID)
 		if err != nil {
 			return err
@@ -138,6 +143,10 @@ func tareaHuerfanaRecuperable(agente string, proyectoID int64) (bool, error) {
 		return false, nil
 	}
 	return true, nil
+}
+
+func ventanaGraciaRecuperacionTareaHuerfana() time.Duration {
+	return time.Duration(configIntOrDefault("orphan_task_recovery_grace_seconds", 300)) * time.Second
 }
 
 func planificarAgenteAutomaticamente(ag *Agente) error {

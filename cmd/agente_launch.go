@@ -8,6 +8,7 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -28,10 +29,19 @@ type agenteLanzarPlanOutput struct {
 	Ejecutar   bool              `json:"ejecutar"`
 }
 
+type agenteLanzarPlanEntry struct {
+	Agente     string `json:"agente"`
+	Proyecto   string `json:"proyecto"`
+	Conector   string `json:"conector"`
+	RuntimeCmd string `json:"runtime_cmd,omitempty"`
+}
+
+var createRuntimeOrderForLaunch = crearRuntimeOrderDesdeAPI
+
 var agenteLanzarPlanCmd = &cobra.Command{
 	Use:   "lanzar-plan <fichero.plan>",
 	Short: "Lanza manualmente un plan de agentes vía backend terminal",
-	Long: "Herramienta manual de operación/rescate para abrir consolas o terminales de agentes.\nLa vía oficial del orquestador para control continuo es daemon + API + control plane.",
+	Long: "Herramienta manual de operación/rescate para abrir consolas o terminales de agentes.\nLa vía oficial del orquestador para control continuo es daemon + API + control plane.\nUsa --server-first para encolar órdenes start por API sin pasar por launchers manuales.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		backend, _ := cmd.Flags().GetString("backend")
@@ -41,6 +51,54 @@ var agenteLanzarPlanCmd = &cobra.Command{
 		tmuxAttach, _ := cmd.Flags().GetBool("tmux-attach")
 		ejecutar, _ := cmd.Flags().GetBool("ejecutar")
 		jsonOut, _ := cmd.Flags().GetBool("json")
+		serverFirst, _ := cmd.Flags().GetBool("server-first")
+
+		if serverFirst {
+			entries, err := parseAgenteLanzarPlanEntries(args[0])
+			if err != nil {
+				return err
+			}
+			if len(entries) == 0 {
+				return fmt.Errorf("plan vacío: no hay entradas de agentes")
+			}
+			if !ejecutar {
+				if jsonOut {
+					data, err := json.MarshalIndent(map[string]any{
+						"mode":    "preview",
+						"entries": entries,
+					}, "", "  ")
+					if err != nil {
+						return err
+					}
+					fmt.Println(string(data))
+					return nil
+				}
+				fmt.Println("Preview server-first (sin ejecutar):")
+				for _, entry := range entries {
+					fmt.Printf("- agente=%s proyecto=%s conector=%s tipo=start\n", entry.Agente, entry.Proyecto, entry.Conector)
+				}
+				fmt.Println("Usa --ejecutar para encolar órdenes start por API.")
+				return nil
+			}
+			ids, err := enqueueAgenteLanzarPlanServerFirst(entries)
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				data, err := json.MarshalIndent(map[string]any{
+					"mode":         "apply",
+					"enqueued_ids": ids,
+					"count":        len(ids),
+				}, "", "  ")
+				if err != nil {
+					return err
+				}
+				fmt.Println(string(data))
+				return nil
+			}
+			fmt.Printf("✓ Encoladas %d órdenes start por server-first: %v\n", len(ids), ids)
+			return nil
+		}
 
 		launchMode, err := resolveAgenteLaunchMode(cmd)
 		if err != nil {
@@ -77,6 +135,7 @@ func init() {
 	agenteLanzarPlanCmd.Flags().Bool("ejecutar", false, "Aplica el plan y lanza los agentes")
 	agenteLanzarPlanCmd.Flags().Bool("tabs", false, "Lanza en pestañas cuando el backend lo soporte")
 	agenteLanzarPlanCmd.Flags().Bool("ventanas", false, "Lanza en ventanas/sesiones separadas")
+	agenteLanzarPlanCmd.Flags().Bool("server-first", false, "Encola start por API/control plane en vez de lanzar terminales manuales")
 	agenteLanzarPlanCmd.Flags().Bool("json", false, "Imprime la especificación del lanzamiento sin ejecutarla")
 
 	agenteCmd.AddCommand(agenteLanzarPlanCmd)
@@ -177,6 +236,82 @@ func resolveOrquestaScriptPath(scriptName string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no encuentro scripts/%s; usa ORQUESTA_SCRIPTS_DIR para indicarlo", scriptName)
+}
+
+func parseAgenteLanzarPlanEntries(planFile string) ([]agenteLanzarPlanEntry, error) {
+	planAbs, err := filepath.Abs(strings.TrimSpace(planFile))
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.Open(planAbs)
+	if err != nil {
+		return nil, fmt.Errorf("plan no encontrado: %s", planAbs)
+	}
+	defer f.Close()
+
+	entries := make([]agenteLanzarPlanEntry, 0, 8)
+	scanner := bufio.NewScanner(f)
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.Split(line, "|")
+		if len(parts) < 3 {
+			return nil, fmt.Errorf("línea %d inválida en plan: %s", lineNo, line)
+		}
+		agente := strings.TrimSpace(parts[0])
+		proyecto := strings.TrimSpace(parts[2])
+		if agente == "" || proyecto == "" {
+			return nil, fmt.Errorf("línea %d inválida (agente/proyecto vacíos): %s", lineNo, line)
+		}
+		conector := "codex-cli"
+		if len(parts) > 7 && strings.TrimSpace(parts[7]) != "" {
+			conector = strings.TrimSpace(parts[7])
+		}
+		runtimeCmd := ""
+		if len(parts) > 8 {
+			runtimeCmd = strings.TrimSpace(parts[8])
+		}
+		entries = append(entries, agenteLanzarPlanEntry{
+			Agente:     agente,
+			Proyecto:   proyecto,
+			Conector:   conector,
+			RuntimeCmd: runtimeCmd,
+		})
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+func enqueueAgenteLanzarPlanServerFirst(entries []agenteLanzarPlanEntry) ([]int64, error) {
+	ids := make([]int64, 0, len(entries))
+	for _, entry := range entries {
+		payload := map[string]any{
+			"proyecto": entry.Proyecto,
+			"conector": entry.Conector,
+		}
+		if strings.TrimSpace(entry.RuntimeCmd) != "" {
+			payload["runtime_cmd"] = entry.RuntimeCmd
+		}
+		payloadJSON, err := json.Marshal(payload)
+		if err != nil {
+			return nil, err
+		}
+		id, ok, err := createRuntimeOrderForLaunch(entry.Agente, "start", entry.Proyecto, string(payloadJSON))
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, serverFirstCommandError("agente lanzar-plan --server-first")
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 func mergeAgenteLaunchEnv(base []string, extra map[string]string) []string {

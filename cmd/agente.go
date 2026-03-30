@@ -238,6 +238,10 @@ func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesio
 	if sesionActiva != nil {
 		out.SesionActiva = resumirSesion(sesionActiva)
 	}
+	esSupervisorOperativo, supervisorOperativo, err := db.EsSupervisorAutonomiaOperativo(proyecto.ID, agenteNombre)
+	if err != nil {
+		return out, err
+	}
 
 	switch {
 	case agente.EstadoCuota != "activo":
@@ -253,6 +257,13 @@ func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesio
 		out.AccionRecomendada = "pausar_y_reasignar"
 		out.DebePausar = true
 		out.Motivo = "La asignación activa del agente ha cambiado al proyecto " + proyectoAsignado
+	case esSupervisorOperativo:
+		out.AccionRecomendada = "supervisar_proyecto"
+		if supervisorOperativo != nil && !strings.EqualFold(strings.TrimSpace(supervisorOperativo.Nombre), strings.TrimSpace(agenteNombre)) {
+			out.Motivo = "Debes asumir el relevo temporal de la orquestación del proyecto."
+		} else {
+			out.Motivo = "Eres el supervisor operativo del proyecto y debes coordinar el siguiente frente útil."
+		}
 	case len(propuestasPendientes) > 0:
 		out.AccionRecomendada = "votar_propuestas_pendientes"
 		out.Motivo = fmt.Sprintf("Hay %d propuestas pendientes de voto para este proyecto", len(propuestasPendientes))

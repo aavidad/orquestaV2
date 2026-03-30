@@ -866,6 +866,19 @@ CREATE TABLE IF NOT EXISTS workflows (
     created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS governance_overrides (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo_agente TEXT    NOT NULL CHECK (tipo_agente IN ('programador','documentador','admin')),
+    scope_tipo  TEXT    NOT NULL CHECK (scope_tipo IN ('proyecto','agente')),
+    scope_ref   TEXT    NOT NULL,
+    entidad     TEXT    NOT NULL CHECK (entidad IN ('regla','skill','workflow')),
+    entidad_id  INTEGER NOT NULL,
+    accion      TEXT    NOT NULL CHECK (accion IN ('enable','disable')),
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(scope_tipo, scope_ref, entidad, entidad_id)
+);
+
 -- ─── Versionado de catálogo ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS reglas_versiones (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -965,16 +978,18 @@ INSERT INTO config (clave, valor) VALUES
     ('pool_default_budget_source','manual'),
     ('connector_circuit_breaker_threshold','3'),
     ('connector_circuit_breaker_cooldown_seconds','300'),
-    ('model_policy_default_profile','implementacion'),
-    ('model_policy_default_reasoning','high'),
-    ('runtime_handle_stale_seconds','120'),
-    ('runtime_order_batch_size','10'),
-    ('runtime_order_stale_seconds','120')
-ON CONFLICT(clave) DO NOTHING;
+	    ('model_policy_default_profile','implementacion'),
+	    ('model_policy_default_reasoning','high'),
+	    ('runtime_handle_stale_seconds','120'),
+	    ('runtime_supervision_interval_seconds','30'),
+	    ('runtime_supervision_batch_size','10'),
+	    ('runtime_order_batch_size','10'),
+	    ('runtime_order_stale_seconds','120')
+	ON CONFLICT(clave) DO NOTHING;
 
 INSERT INTO conectores (slug, nombre, transporte, comando, env_json, metadata_json) VALUES
     ('claude-code', 'Claude Code', 'cli', 'claude', '{}', '{"familia":"anthropic","reanudable":true}'),
-    ('codex-cli',   'Codex CLI',   'cli', 'codex',  '{"ORQUESTA_BIN":"{{orquesta_executable}}","PATH":"{{orquesta_bin_dir}}:{{host_path}}"}', '{"familia":"openai","reanudable":true,"cwd_flag":"-C","launch_prompt_transport":"post_start","launch_prompt_delay_ms":1000,"model_flag":"--model","reasoning_config_key":"model_reasoning_effort"}'),
+    ('codex-cli',   'Codex CLI',   'cli', 'codex',  '{"ORQUESTA_BIN":"{{orquesta_executable}}","PATH":"{{orquesta_bin_dir}}:{{host_path}}"}', '{"familia":"openai","reanudable":true,"cwd_flag":"-C","launch_prompt_positional":true,"model_flag":"--model","reasoning_config_key":"model_reasoning_effort","can_send_input":false}'),
     ('gemini-cli',  'Gemini CLI',  'cli', 'gemini', '{}', '{"familia":"google","reanudable":true}')
 ON CONFLICT(slug) DO NOTHING;
 

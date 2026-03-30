@@ -99,6 +99,34 @@ func TestArrancarPlanYEnviarInstruccionProceso(t *testing.T) {
 	if got, _ := manifest["stdin_raw_path"].(string); got != arranque.StdinRawPath {
 		t.Fatalf("stdin_raw_path inesperado en manifest: %+v", manifest)
 	}
+	if got, _ := manifest["can_send_input"].(bool); !got {
+		t.Fatalf("el launcher PTY local deberia permitir input interactivo por defecto: %+v", manifest)
+	}
+	if got, _ := manifest["mailbox_delivery_mode"].(string); got != runtimeagente.MailboxDeliveryInteractive {
+		t.Fatalf("mailbox_delivery_mode inesperado en manifest: %+v", manifest)
+	}
+
+	var metaJSON map[string]any
+	if err := json.Unmarshal([]byte(arranque.MetadataJSON), &metaJSON); err != nil {
+		t.Fatalf("metadata arranque: %v", err)
+	}
+	if got, _ := metaJSON["can_send_input"].(bool); !got {
+		t.Fatalf("metadata del arranque sin can_send_input=true: %+v", metaJSON)
+	}
+	if got, _ := metaJSON["mailbox_delivery_mode"].(string); got != runtimeagente.MailboxDeliveryInteractive {
+		t.Fatalf("metadata del arranque sin mailbox_delivery_mode=interactive: %+v", metaJSON)
+	}
+
+	var capsJSON map[string]any
+	if err := json.Unmarshal([]byte(arranque.CapabilitiesJSON), &capsJSON); err != nil {
+		t.Fatalf("capabilities arranque: %v", err)
+	}
+	if got, _ := capsJSON["can_send_input"].(bool); !got {
+		t.Fatalf("capabilities del arranque sin can_send_input=true: %+v", capsJSON)
+	}
+	if got, _ := capsJSON["mailbox_delivery_mode"].(string); got != runtimeagente.MailboxDeliveryInteractive {
+		t.Fatalf("capabilities del arranque sin mailbox_delivery_mode=interactive: %+v", capsJSON)
+	}
 }
 
 func TestRuntimeArtifactsRunDirOrdenaPorAgenteYFecha(t *testing.T) {
@@ -121,5 +149,67 @@ func TestRuntimeArtifactsRunDirOrdenaPorAgenteYFecha(t *testing.T) {
 	}
 	if !(dir1 < dir2) {
 		t.Fatalf("las rutas deberian quedar ordenables cronologicamente: dir1=%s dir2=%s", dir1, dir2)
+	}
+}
+
+func TestArrancarPlanLocalRespetaOverrideCanSendInput(t *testing.T) {
+	if _, err := exec.LookPath("script"); err != nil {
+		t.Skip("script no disponible en el entorno")
+	}
+
+	dir := t.TempDir()
+	canSendInput := false
+	arranque, err := ArrancarPlan(SolicitudArranque{
+		Agente:   "Codex1",
+		Proyecto: "orquestador",
+		Plan: &runtimeagente.LaunchPlan{
+			Comando:      "cat",
+			WorkingDir:   dir,
+			CanSendInput: &canSendInput,
+		},
+	})
+	if err != nil {
+		t.Fatalf("arrancar plan: %v", err)
+	}
+	pid64 := int64(arranque.PID)
+	t.Cleanup(func() {
+		_, _, _ = DetenerProceso(ObjetivoProceso{PID: &pid64})
+	})
+
+	var manifest map[string]any
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(arranque.LogPath), "runtime.json"))
+	if err != nil {
+		t.Fatalf("leer manifest runtime: %v", err)
+	}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("parsear manifest runtime: %v", err)
+	}
+	if got, _ := manifest["can_send_input"].(bool); got {
+		t.Fatalf("el manifest deberia respetar el override can_send_input=false: %+v", manifest)
+	}
+	if got, _ := manifest["mailbox_delivery_mode"].(string); got != runtimeagente.MailboxDeliveryBootstrapOnly {
+		t.Fatalf("mailbox_delivery_mode inesperado en manifest: %+v", manifest)
+	}
+
+	var metaJSON map[string]any
+	if err := json.Unmarshal([]byte(arranque.MetadataJSON), &metaJSON); err != nil {
+		t.Fatalf("metadata arranque: %v", err)
+	}
+	if got, _ := metaJSON["can_send_input"].(bool); got {
+		t.Fatalf("metadata del arranque deberia respetar can_send_input=false: %+v", metaJSON)
+	}
+	if got, _ := metaJSON["mailbox_delivery_mode"].(string); got != runtimeagente.MailboxDeliveryBootstrapOnly {
+		t.Fatalf("metadata del arranque sin mailbox_delivery_mode=bootstrap_only: %+v", metaJSON)
+	}
+
+	var capsJSON map[string]any
+	if err := json.Unmarshal([]byte(arranque.CapabilitiesJSON), &capsJSON); err != nil {
+		t.Fatalf("capabilities arranque: %v", err)
+	}
+	if got, _ := capsJSON["can_send_input"].(bool); got {
+		t.Fatalf("capabilities del arranque deberian respetar can_send_input=false: %+v", capsJSON)
+	}
+	if got, _ := capsJSON["mailbox_delivery_mode"].(string); got != runtimeagente.MailboxDeliveryBootstrapOnly {
+		t.Fatalf("capabilities del arranque sin mailbox_delivery_mode=bootstrap_only: %+v", capsJSON)
 	}
 }

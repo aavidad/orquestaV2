@@ -50,11 +50,12 @@ func cargarRuntimeDiagnostico(agente, proyecto string, limit int) (*runtimeDiagn
 	if limit <= 0 {
 		limit = 5
 	}
-	if data, ok, err := cargarRuntimeDiagnosticoDesdeAPI(agente, proyecto, limit); ok {
-		if err != nil {
-			return nil, err
-		}
+	if data, ok, err := cargarRuntimeDiagnosticoDesdeAPI(agente, proyecto, limit); err != nil {
+		return nil, err
+	} else if ok {
 		return data, nil
+	} else if runtimeModoRecuperacionLocalExplicito() {
+		return cargarRuntimeDiagnosticoRecuperacionLocal(agente, proyecto, limit)
 	}
 	return nil, serverFirstCommandError("runtime diagnostico")
 }
@@ -103,6 +104,51 @@ func cargarRuntimeDiagnosticoDesdeAPI(agente, proyecto string, limit int) (*runt
 		MailboxPendiente: mailbox,
 		Checkpoints:      checkpoints,
 	}, true, nil
+}
+
+func cargarRuntimeDiagnosticoRecuperacionLocal(agente, proyecto string, limit int) (*runtimeDiagnosticoData, error) {
+	query := url.Values{"agente": []string{agente}}
+	if proyecto != "" {
+		query.Set("proyecto", proyecto)
+	}
+	tree, err := cargarArbolRuntimesRecuperacionLocal(query)
+	if err != nil {
+		return nil, err
+	}
+	handles, err := cargarRuntimeHandlesRecuperacionLocal(url.Values{"agente": []string{agente}})
+	if err != nil {
+		return nil, err
+	}
+	orders, err := cargarRuntimeOrdersRecuperacionLocal(query)
+	if err != nil {
+		return nil, err
+	}
+	mailQuery := url.Values{
+		"to_agente": []string{agente},
+		"estado":    []string{"pendiente"},
+	}
+	if proyecto != "" {
+		mailQuery.Set("proyecto", proyecto)
+	}
+	mailbox, err := cargarRuntimeMailboxRecuperacionLocal(mailQuery)
+	if err != nil {
+		return nil, err
+	}
+	checkpoints, err := cargarRuntimeCheckpointsRecuperacionLocal(agente, proyecto, "", "", limit)
+	if err != nil {
+		return nil, err
+	}
+
+	return &runtimeDiagnosticoData{
+		Agente:           agente,
+		Proyecto:         proyecto,
+		Fuente:           "local",
+		Runtimes:         aplanarArbolLocal(tree),
+		Handles:          handles,
+		Orders:           orders,
+		MailboxPendiente: mailbox,
+		Checkpoints:      checkpoints,
+	}, nil
 }
 
 func renderRuntimeDiagnostico(data *runtimeDiagnosticoData, limit int) {

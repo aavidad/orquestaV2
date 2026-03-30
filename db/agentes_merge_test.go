@@ -1,9 +1,15 @@
 package db
 
-import (
-	"database/sql"
-	"testing"
-)
+import "testing"
+
+func agenteExisteExacto(t *testing.T, nombre string) bool {
+	t.Helper()
+	var count int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM agentes WHERE nombre = ?`, nombre).Scan(&count); err != nil {
+		t.Fatalf("contar agente exacto %q: %v", nombre, err)
+	}
+	return count > 0
+}
 
 func TestFusionarAgentesMueveReferenciasYResuelveColisionDeVotos(t *testing.T) {
 	prepararDBTemporal(t)
@@ -52,10 +58,8 @@ func TestFusionarAgentesMueveReferenciasYResuelveColisionDeVotos(t *testing.T) {
 	if resultado.VotosDescartados != 1 {
 		t.Fatalf("votos descartados inesperados: %d", resultado.VotosDescartados)
 	}
-	if _, err := GetAgente("codex1"); err == nil {
+	if agenteExisteExacto(t, "codex1") {
 		t.Fatalf("el agente origen deberia haberse eliminado")
-	} else if err != sql.ErrNoRows {
-		t.Fatalf("get agente origen: %v", err)
 	}
 
 	tarea, err := GetTarea(1)
@@ -103,6 +107,13 @@ func TestFusionarAgentesFallaSiOrigenTieneSesionActiva(t *testing.T) {
 	}
 	if _, err := IniciarSesion("codex2"); err != nil {
 		t.Fatalf("iniciar sesion: %v", err)
+	}
+	var agenteSesion string
+	if err := DB.QueryRow(`SELECT agente FROM sesiones WHERE activa = 1 ORDER BY id DESC LIMIT 1`).Scan(&agenteSesion); err != nil {
+		t.Fatalf("leer sesion activa: %v", err)
+	}
+	if agenteSesion != "codex2" {
+		t.Fatalf("la sesion activa deberia pertenecer al origen exacto; got=%q", agenteSesion)
 	}
 
 	if _, err := FusionarAgentes("codex2", "Codex2"); err == nil {

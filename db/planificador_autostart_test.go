@@ -208,6 +208,9 @@ func TestPlanificarTareasAutomaticamenteRecuperaTareaHuerfanaYLaReasigna(t *test
 	if err := ActivarAsignacion("CodexNuevo", proyectoID, "frente libre"); err != nil {
 		t.Fatalf("activar asignacion nueva: %v", err)
 	}
+	if err := ConfigSet("orphan_task_recovery_grace_seconds", "0"); err != nil {
+		t.Fatalf("config grace stale: %v", err)
+	}
 	if _, err := IniciarSesionContexto(SesionInicio{
 		Agente:      "CodexStale",
 		CWD:         filepath.Join(tmp, "stale"),
@@ -238,8 +241,12 @@ func TestPlanificarTareasAutomaticamenteRecuperaTareaHuerfanaYLaReasigna(t *test
 	if err != nil {
 		t.Fatalf("get tarea: %v", err)
 	}
+	agenteAsignado := "<nil>"
+	if tarea.Agente != nil {
+		agenteAsignado = *tarea.Agente
+	}
 	if tarea.Agente == nil || *tarea.Agente != "CodexNuevo" || tarea.Estado != TareaAsignada {
-		t.Fatalf("la tarea huérfana debería reasignarse al nuevo agente: %+v", tarea)
+		t.Fatalf("la tarea huérfana debería reasignarse al nuevo agente, agente=%s estado=%s notas=%q", agenteAsignado, tarea.Estado, tarea.Notas)
 	}
 	agente := "CodexNuevo"
 	estado := "pendiente"
@@ -249,6 +256,72 @@ func TestPlanificarTareasAutomaticamenteRecuperaTareaHuerfanaYLaReasigna(t *test
 	}
 	if len(orders) != 1 || orders[0].Tipo != "start" {
 		t.Fatalf("debería encolar start para el nuevo agente: %+v", orders)
+	}
+}
+
+func TestPlanificarTareasAutomaticamenteNoRecuperaTareaRecienTomada(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexStale", "CodexNuevo")
+
+	if err := RegistrarAgente("CodexStale", "programador"); err != nil {
+		t.Fatalf("registrar agente stale: %v", err)
+	}
+	if err := RegistrarAgente("CodexNuevo", "programador"); err != nil {
+		t.Fatalf("registrar agente nuevo: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre IN ('CodexStale','CodexNuevo')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := ActivarAsignacion("CodexNuevo", proyectoID, "frente libre"); err != nil {
+		t.Fatalf("activar asignacion nueva: %v", err)
+	}
+	if err := ConfigSet("orphan_task_recovery_grace_seconds", "300"); err != nil {
+		t.Fatalf("config grace recent: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Mantener tarea recién tomada",
+		Descripcion: "No debe recuperarse durante la ventana de gracia",
+		ProyectoID:  &proyectoID,
+		Modulo:      "orquestador",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "CodexStale"); err != nil {
+		t.Fatalf("tomar tarea reciente: %v", err)
+	}
+
+	if err := PlanificarTareasAutomaticamente(); err != nil {
+		t.Fatalf("planificar: %v", err)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "CodexStale" || tarea.Estado != TareaAsignada {
+		t.Fatalf("la tarea recién tomada no debería liberarse todavía: %+v", tarea)
+	}
+	agente := "CodexNuevo"
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no debería arrancar un nuevo agente mientras la tarea sigue protegida: %+v", orders)
 	}
 }
 

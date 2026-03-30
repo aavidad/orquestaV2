@@ -19,8 +19,11 @@ import (
 	"strings"
 	"time"
 
+	"orquesta/db"
 	"orquesta/internal/rpclocal"
 )
+
+var listenServerTCP = net.Listen
 
 func registrarRutasServe(mux *http.ServeMux) {
 	mux.HandleFunc("/", webHandlerDash)
@@ -98,27 +101,33 @@ func montarRPCLocalEnMux(mux *http.ServeMux, kind, listenAddr string) (func(), e
 }
 
 func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug serverDebugOptions, security serverSecurityOptions) error {
-	if err := ensureServerDBOpen(); err != nil {
-		return err
-	}
-
 	mux := http.NewServeMux()
 	registrarRutasServe(mux)
+
+	listener, advertisedAddr, err := escucharServidorUnificado(listenAddr)
+	if err != nil {
+		return err
+	}
+	defer listener.Close()
+
 	cleanupRPC := func() {}
-	if shouldExposeLocalRPC(kind, listenAddr, security) {
-		var err error
-		cleanupRPC, err = montarRPCLocalEnMux(mux, kind, listenAddr)
+	if shouldExposeLocalRPC(kind, advertisedAddr, security) {
+		cleanupRPC, err = montarRPCLocalEnMux(mux, kind, advertisedAddr)
 		if err != nil {
 			return err
 		}
 	}
 	defer cleanupRPC()
 
+	if err := ensureServerDBOpen(); err != nil {
+		return err
+	}
+
 	if anunciar {
-		fmt.Printf("✓ Panel web en %s\n", publicServerURL(listenAddr, security))
+		fmt.Printf("✓ Panel web en %s\n", publicServerURL(advertisedAddr, security))
 		fmt.Println("  Ctrl+C para detener.")
 	} else {
-		fmt.Printf("Servidor local de Orquesta en %s\n", rpclocal.BaseURL(normalizarAddrServidorLocal(listenAddr)))
+		fmt.Printf("Servidor local de Orquesta en %s\n", rpclocal.BaseURL(advertisedAddr))
 	}
 
 	var debugLogger *log.Logger
@@ -131,17 +140,15 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 	runner := newControlPlaneRunner(debugLogger, debug.ControlPlane)
 	defer runner.Wait()
 	defer cancel()
-	if err := bootstrapServerAutonomy(); err != nil {
-		return err
-	}
 	runner.Start(controlCtx)
+	launchBootstrapServerAutonomy(debugLogger)
 
 	server := &http.Server{
-		Addr:    listenAddr,
+		Addr:    advertisedAddr,
 		Handler: wrapServeMuxWithDebug(mux, debug, debugLogger),
 	}
 	if strings.TrimSpace(security.TLSCert) == "" || strings.TrimSpace(security.TLSKey) == "" {
-		return server.ListenAndServe()
+		return server.Serve(listener)
 	}
 
 	tlsConfig, err := buildServerTLSConfig(security)
@@ -149,7 +156,18 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 		return err
 	}
 	server.TLSConfig = tlsConfig
-	return server.ListenAndServeTLS(security.TLSCert, security.TLSKey)
+	return server.ServeTLS(listener, security.TLSCert, security.TLSKey)
+}
+
+func launchBootstrapServerAutonomy(debugLogger *log.Logger) {
+	go func() {
+		if err := bootstrapServerAutonomy(); err != nil {
+			db.Audit("orquesta", "server_autobootstrap_error", "proyecto", 0, err.Error())
+			if debugLogger != nil {
+				debugLogger.Printf("server_autobootstrap error=%v", err)
+			}
+		}
+	}()
 }
 
 func normalizarAddrServidorLocal(listenAddr string) string {
@@ -166,6 +184,14 @@ func normalizarAddrServidorLocal(listenAddr string) string {
 		host = rpclocal.DefaultHost
 	}
 	return net.JoinHostPort(host, port)
+}
+
+func escucharServidorUnificado(listenAddr string) (net.Listener, string, error) {
+	listener, err := listenServerTCP("tcp", strings.TrimSpace(listenAddr))
+	if err != nil {
+		return nil, "", err
+	}
+	return listener, normalizarAddrServidorLocal(listener.Addr().String()), nil
 }
 
 func buildServerTLSConfig(security serverSecurityOptions) (*tls.Config, error) {

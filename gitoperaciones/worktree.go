@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 type WorktreeManager struct{}
@@ -28,6 +29,22 @@ func (WorktreeManager) CreateWorktree(repoPath, worktreePath, branch, baseRef st
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git worktree add: %w: %s", err, string(out))
+	}
+	return nil
+}
+
+func (WorktreeManager) CreateDetachedWorktree(repoPath, worktreePath, baseRef string) error {
+	if err := os.MkdirAll(filepath.Dir(worktreePath), 0o755); err != nil {
+		return err
+	}
+	args := []string{"-C", repoPath, "worktree", "add", "--detach", worktreePath}
+	if strings.TrimSpace(baseRef) != "" {
+		args = append(args, baseRef)
+	}
+	cmd := exec.Command("git", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git worktree add --detach: %w: %s", err, string(out))
 	}
 	return nil
 }

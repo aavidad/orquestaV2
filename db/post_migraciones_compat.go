@@ -83,6 +83,18 @@ func postMigrationStatements() []string {
 
 func postMigrationDDLStatements() []string {
 	return []string{
+		`CREATE TABLE IF NOT EXISTS governance_overrides (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			tipo_agente TEXT    NOT NULL CHECK (tipo_agente IN ('programador','documentador','admin')),
+			scope_tipo  TEXT    NOT NULL CHECK (scope_tipo IN ('proyecto','agente')),
+			scope_ref   TEXT    NOT NULL,
+			entidad     TEXT    NOT NULL CHECK (entidad IN ('regla','skill','workflow')),
+			entidad_id  INTEGER NOT NULL,
+			accion      TEXT    NOT NULL CHECK (accion IN ('enable','disable')),
+			created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(scope_tipo, scope_ref, entidad, entidad_id)
+		)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_tareas_proyecto_blueprint_key ON tareas(proyecto_id, blueprint_key) WHERE blueprint_key != ''`,
 	}
 }

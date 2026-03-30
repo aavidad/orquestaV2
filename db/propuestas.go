@@ -145,20 +145,22 @@ func ListarPropuestas(estado *EstadoPropuesta, proyectoID ...*int64) ([]*Propues
 	}
 	q += " ORDER BY id DESC"
 
-	rows, err := DB.Query(q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var list []*Propuesta
-	for rows.Next() {
-		p, err := escanearPropuesta(rows)
+	return consultarConReintentos(func() ([]*Propuesta, error) {
+		rows, err := DB.Query(q, args...)
 		if err != nil {
 			return nil, err
 		}
-		list = append(list, p)
-	}
-	return list, rows.Err()
+		defer rows.Close()
+		var list []*Propuesta
+		for rows.Next() {
+			p, err := escanearPropuesta(rows)
+			if err != nil {
+				return nil, err
+			}
+			list = append(list, p)
+		}
+		return list, rows.Err()
+	})
 }
 
 // CerrarPropuesta actualiza el estado y la fecha de cierre.

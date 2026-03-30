@@ -28,6 +28,9 @@ func (dbAutomationServiceTest) PlanificarTareasAutomaticamente() error {
 func (dbAutomationServiceTest) ProcesarAutonomiaAgentesBatch() (int, error) {
 	return 0, nil
 }
+func (dbAutomationServiceTest) ProcesarRuntimeSupervisionBatch() (int, error) {
+	return db.ProcesarRuntimeSupervisionBatch()
+}
 func (dbAutomationServiceTest) ProcesarSupervisionAutonomaBatch() (int, error) {
 	return 0, nil
 }
@@ -42,6 +45,9 @@ func (dbAutomationServiceTest) ReconciliarRuntimeOrdersStale() (int, error) {
 }
 func (dbAutomationServiceTest) ProcesarRuntimeTranscriptBatch() (int, error) {
 	return db.IngestarRuntimeTranscriptActivos()
+}
+func (dbAutomationServiceTest) ProcesarRuntimeMailboxBatch() (int, error) {
+	return 0, nil
 }
 func (dbAutomationServiceTest) ProcesarRuntimeOrdersBatch() (int, error) {
 	return db.ProcesarRuntimeOrdersBatch()
@@ -181,7 +187,6 @@ func TestRunnerWatchdogYHandoffConProcesoVivo(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	runner := &Runner{
 		Automation:        dbAutomationServiceTest{},
 		ReanimacionCada:   time.Hour,
@@ -189,6 +194,10 @@ func TestRunnerWatchdogYHandoffConProcesoVivo(t *testing.T) {
 		PlanificacionCada: time.Hour,
 		ControlPlaneCada:  20 * time.Millisecond,
 	}
+	t.Cleanup(func() {
+		cancel()
+		runner.Wait()
+	})
 	runner.Start(ctx)
 
 	agenteOrigen := "Codex1"
@@ -226,7 +235,7 @@ func TestRunnerWatchdogYHandoffConProcesoVivo(t *testing.T) {
 			}
 		}
 
-		ordersDestino, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agenteDestino, Estado: &estadoPendiente})
+		ordersDestino, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agenteDestino})
 		if err != nil {
 			t.Fatalf("listar orders destino: %v", err)
 		}
@@ -285,6 +294,9 @@ func TestRunnerWatchdogYHandoffConProcesoVivo(t *testing.T) {
 	}
 	if handoffOrder == nil || handoffOrder.Tipo != "handoff" {
 		t.Fatalf("handoff watchdog no creada: %+v", handoffOrder)
+	}
+	if handoffOrder.Estado == "fallida" {
+		t.Fatalf("handoff watchdog fallida: %+v", handoffOrder)
 	}
 	if tareaFinal == nil || tareaFinal.Agente == nil || *tareaFinal.Agente != "Codex2" || tareaFinal.Estado != db.TareaAsignada {
 		t.Fatalf("tarea no reasignada por watchdog: %+v", tareaFinal)
@@ -380,7 +392,6 @@ func TestRunnerHandoffPreventivoPorPresupuesto(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	runner := &Runner{
 		Automation:        dbAutomationServiceTest{},
 		ReanimacionCada:   time.Hour,
@@ -388,16 +399,19 @@ func TestRunnerHandoffPreventivoPorPresupuesto(t *testing.T) {
 		PlanificacionCada: time.Hour,
 		ControlPlaneCada:  20 * time.Millisecond,
 	}
+	t.Cleanup(func() {
+		cancel()
+		runner.Wait()
+	})
 	runner.Start(ctx)
 
 	agenteOrigen := "Codex1"
 	agenteDestino := "Codex2"
-	estadoPendiente := "pendiente"
 	var handoffOrder *db.RuntimeOrder
 
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		ordersDestino, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agenteDestino, Estado: &estadoPendiente})
+		ordersDestino, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agenteDestino})
 		if err != nil {
 			t.Fatalf("listar orders destino: %v", err)
 		}
@@ -416,7 +430,11 @@ func TestRunnerHandoffPreventivoPorPresupuesto(t *testing.T) {
 	if handoffOrder == nil {
 		t.Fatalf("no aparecio handoff por presupuesto")
 	}
+	if handoffOrder.Estado == "fallida" {
+		t.Fatalf("handoff por presupuesto fallida: %+v", handoffOrder)
+	}
 
+	estadoPendiente := "pendiente"
 	ordersOrigen, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agenteOrigen, Estado: &estadoPendiente})
 	if err != nil {
 		t.Fatalf("listar orders origen: %v", err)

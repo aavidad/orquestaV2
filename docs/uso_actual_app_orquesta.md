@@ -87,6 +87,7 @@ Por eso, mientras la interfaz gráfica no llegue a todo, la combinación correct
 - servicio/daemon como fuente de verdad
 - web y CLI como clientes del servicio
 - API para integración con escritorio, automatizaciones y control plane
+- OpenClaw Gateway como adaptador saliente opcional de notificaciones, configurado por `openclaw_gateway_url`, `openclaw_gateway_token` y `openclaw_gateway_operator`
 
 Consultas de briefing de agentes ya cubiertas por API:
 
@@ -135,7 +136,7 @@ Los agentes documentadores como `antigravity` deben usar:
 ## Limitaciones actuales
 
 - la web todavía no cubre todo el modelo de proyectos, conectores y control activo de agentes
-- el arranque autónomo completo de agentes sigue incompleto
+- el arranque autónomo completo de agentes sigue en cierre progresivo aunque el control plane y el autobootstrap ya operan
 - la app de escritorio aún no existe como producto terminado
 - parte del gobierno operativo sigue pasando por CLI y scripts
 

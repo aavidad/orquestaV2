@@ -1413,6 +1413,10 @@ func buildAgentBriefing(agente string) (string, error) {
 		fmt.Fprintf(&b, "- Estado de sesion: %s\n", actual.EstadoSesion)
 	}
 	b.WriteString("\n")
+	b.WriteString("## Doctrina canonica\n")
+	fmt.Fprintf(&b, "- Lectura obligatoria: %s\n", db.RutaDoctrinaCanonica)
+	b.WriteString("- Si hay conflicto entre documentos, manda esta doctrina y el estado vivo consultado en Orquesta.\n")
+	b.WriteString("- Tareas, propuestas, sesiones y runtimes vivos se leen desde Orquesta, no desde documentos estaticos.\n\n")
 
 	if actual.Rol == "admin" {
 		b.WriteString("Agente admin: no se genera briefing operativo adicional.\n")

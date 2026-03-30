@@ -12,7 +12,18 @@ import (
 	"orquesta/storage"
 )
 
+const (
+	persistenciaBusyMaxIntentos = 30
+	persistenciaBusyBackoff     = 200 * time.Millisecond
+)
+
 var DB *Handle
+
+type OpenOptions struct {
+	BootstrapSchema    *bool
+	SkipPostMigrations *bool
+	ReadOnly           bool
+}
 
 type EventoNotificacion struct {
 	Tipo       string // bloqueo | propuesta | fin_proyecto | mensaje
@@ -21,6 +32,7 @@ type EventoNotificacion struct {
 	Agente     string
 	Texto      string
 	ProyectoID int64
+	Payload    map[string]any
 }
 
 var CanalNotificaciones = make(chan EventoNotificacion, 100)
@@ -29,10 +41,15 @@ var CanalNotificaciones = make(chan EventoNotificacion, 100)
 // Resuelve el backend (SQLite/otros), aplica migraciones idempotentes y
 // prepara los canales de notificación en tiempo real.
 func Open() error {
-	backend, cfg, err := resolveBackend()
+	return OpenWithOptions(OpenOptions{})
+}
+
+func OpenWithOptions(opts OpenOptions) error {
+	backend, cfg, err := resolveOpenConfig()
 	if err != nil {
 		return err
 	}
+	cfg = applyOpenOptions(cfg, opts)
 	db, err := backend.Open(cfg)
 	if err != nil {
 		return err
@@ -49,6 +66,68 @@ func Open() error {
 	}
 	DB = newHandle(db, backend.Name())
 	return nil
+}
+
+func OpenRecoveryReadOnly() error {
+	disabled := false
+	skipPost := true
+	return OpenWithOptions(OpenOptions{
+		BootstrapSchema:    &disabled,
+		SkipPostMigrations: &skipPost,
+		ReadOnly:           true,
+	})
+}
+
+func resolveOpenConfig() (Backend, storage.Config, error) {
+	backend, cfg, err := resolveBackend()
+	if err != nil {
+		return nil, storage.Config{}, err
+	}
+	return backend, adjustConfigForOpen(cfg), nil
+}
+
+func adjustConfigForOpen(cfg storage.Config) storage.Config {
+	if shouldUseSQLiteRecoveryOpen(cfg) {
+		cfg.BootstrapSchema = false
+		cfg.SkipPostMigrations = true
+	}
+	return cfg
+}
+
+func applyOpenOptions(cfg storage.Config, opts OpenOptions) storage.Config {
+	if opts.BootstrapSchema != nil {
+		cfg.BootstrapSchema = *opts.BootstrapSchema
+	}
+	if opts.SkipPostMigrations != nil {
+		cfg.SkipPostMigrations = *opts.SkipPostMigrations
+	}
+	if opts.ReadOnly && normalizedDriverName(cfg.Driver) == "sqlite" {
+		cfg.DSN = storage.SQLiteDSNWithMode(cfg.Path, "ro")
+	}
+	return cfg
+}
+
+func shouldUseSQLiteRecoveryOpen(cfg storage.Config) bool {
+	if normalizedDriverName(cfg.Driver) != "sqlite" {
+		return false
+	}
+	if !envBoolEnabled("ORQUESTA_FORCE_LOCAL_DB") && !envBoolEnabled("ORQUESTA_FORCE_LOCAL") {
+		return false
+	}
+	target := strings.TrimSpace(cfg.Path)
+	if target == "" {
+		return false
+	}
+	info, err := os.Stat(target)
+	if err != nil || info.IsDir() {
+		return false
+	}
+	return info.Size() > 0
+}
+
+func envBoolEnabled(key string) bool {
+	value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	return value == "1" || value == "true" || value == "yes" || value == "si" || value == "on"
 }
 
 func Close() {
@@ -165,7 +244,7 @@ func aplicarSchemaPorDriver(db *sql.DB, driver string) error {
 
 func ejecutarConReintentos(fn func() error) error {
 	var err error
-	for intento := 0; intento < 12; intento++ {
+	for intento := 0; intento < persistenciaBusyMaxIntentos; intento++ {
 		err = fn()
 		if err == nil {
 			return nil
@@ -173,9 +252,27 @@ func ejecutarConReintentos(fn func() error) error {
 		if !esErrorPersistenciaBusy(err) {
 			return err
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(persistenciaBusyBackoff)
 	}
 	return err
+}
+
+func consultarConReintentos[T any](fn func() (T, error)) (T, error) {
+	var (
+		out T
+		err error
+	)
+	for intento := 0; intento < persistenciaBusyMaxIntentos; intento++ {
+		out, err = fn()
+		if err == nil {
+			return out, nil
+		}
+		if !esErrorPersistenciaBusy(err) {
+			return out, err
+		}
+		time.Sleep(persistenciaBusyBackoff)
+	}
+	return out, err
 }
 
 func esErrorPersistenciaBusy(err error) bool {
@@ -646,47 +743,51 @@ func Audit(agente, accion, entidad string, entidadID int64, detalle string) {
 
 // ListarAuditoria recupera registros del log de auditoría.
 func ListarAuditoria(f FiltroAuditoria) ([]*LogAuditoria, error) {
-	q := `SELECT id, agente, accion, entidad, entidad_id, detalle, created_at FROM audit_log WHERE 1=1`
-	args := []any{}
-	if f.Agente != nil {
-		q += " AND agente = ?"
-		args = append(args, *f.Agente)
-	}
-	if f.Accion != nil {
-		q += " AND accion = ?"
-		args = append(args, *f.Accion)
-	}
-	if f.Entidad != nil {
-		q += " AND entidad = ?"
-		args = append(args, *f.Entidad)
-	}
-	q += " ORDER BY id DESC"
-	if f.Limite > 0 {
-		q += fmt.Sprintf(" LIMIT %d", f.Limite)
-	} else {
-		q += " LIMIT 50"
-	}
-	rows, err := DB.Query(q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var list []*LogAuditoria
-	for rows.Next() {
-		l := &LogAuditoria{}
-		if err := rows.Scan(&l.ID, &l.Agente, &l.Accion, &l.Entidad, &l.EntidadID, &l.Detalle, &l.CreatedAt); err != nil {
+	return consultarConReintentos(func() ([]*LogAuditoria, error) {
+		q := `SELECT id, agente, accion, entidad, entidad_id, detalle, created_at FROM audit_log WHERE 1=1`
+		args := []any{}
+		if f.Agente != nil {
+			q += " AND agente = ?"
+			args = append(args, *f.Agente)
+		}
+		if f.Accion != nil {
+			q += " AND accion = ?"
+			args = append(args, *f.Accion)
+		}
+		if f.Entidad != nil {
+			q += " AND entidad = ?"
+			args = append(args, *f.Entidad)
+		}
+		q += " ORDER BY id DESC"
+		if f.Limite > 0 {
+			q += fmt.Sprintf(" LIMIT %d", f.Limite)
+		} else {
+			q += " LIMIT 50"
+		}
+		rows, err := DB.Query(q, args...)
+		if err != nil {
 			return nil, err
 		}
-		list = append(list, l)
-	}
-	return list, rows.Err()
+		defer rows.Close()
+		var list []*LogAuditoria
+		for rows.Next() {
+			l := &LogAuditoria{}
+			if err := rows.Scan(&l.ID, &l.Agente, &l.Accion, &l.Entidad, &l.EntidadID, &l.Detalle, &l.CreatedAt); err != nil {
+				return nil, err
+			}
+			list = append(list, l)
+		}
+		return list, rows.Err()
+	})
 }
 
 // ConfigGet devuelve el valor de una clave de configuración.
 func ConfigGet(clave string) (string, error) {
-	var v string
-	err := DB.QueryRow(`SELECT valor FROM config WHERE clave = ?`, clave).Scan(&v)
-	return v, err
+	return consultarConReintentos(func() (string, error) {
+		var v string
+		err := DB.QueryRow(`SELECT valor FROM config WHERE clave = ?`, clave).Scan(&v)
+		return v, err
+	})
 }
 
 // ConfigSet actualiza o inserta una clave de configuración.

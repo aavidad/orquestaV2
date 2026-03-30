@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestIniciarSesionDevuelveIDPersistido(t *testing.T) {
@@ -77,6 +78,32 @@ func TestRegistrarAgenteAutoUsaPrefijoCanonicoSegunProveedor(t *testing.T) {
 	}
 	if nombreGemini != "Gemini3" {
 		t.Fatalf("nombre Gemini inesperado: %s", nombreGemini)
+	}
+}
+
+func TestResolverAgentePorNombreCIAmbiguoSinCoincidenciaExactaFalla(t *testing.T) {
+	prepararDBTemporal(t)
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Codex1: %v", err)
+	}
+	if err := RegistrarAgente("CODEX1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente CODEX1: %v", err)
+	}
+
+	_, _, _, err := resolverAgentePorNombreCI("codex1")
+	if err == nil {
+		t.Fatalf("se esperaba error por ambiguedad de mayusculas/minusculas")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "ambigu") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+
+	nombre, _, _, err := resolverAgentePorNombreCI("Codex1")
+	if err != nil {
+		t.Fatalf("coincidencia exacta deberia seguir funcionando: %v", err)
+	}
+	if nombre != "Codex1" {
+		t.Fatalf("nombre canonico inesperado: %q", nombre)
 	}
 }
 
@@ -265,5 +292,110 @@ func TestListarAgentesAlineaEstadoVisibleConSesiones(t *testing.T) {
 	}
 	if visible2.Activo || visible2.EstadoSesion != "" {
 		t.Fatalf("GetAgente visible2 inesperado: %+v", visible2)
+	}
+}
+
+func TestListarAgentesOcultaSesionZombiPeroMantieneHandleActivo(t *testing.T) {
+	prepararDBTemporal(t)
+	for _, agente := range []string{"CodexFresh", "CodexZombie", "CodexHandle"} {
+		if err := RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", agente, err)
+		}
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='pensando' WHERE nombre IN ('CodexFresh','CodexZombie','CodexHandle')`); err != nil {
+		t.Fatalf("marcar estado visible: %v", err)
+	}
+	old := time.Now().UTC().Add(-2 * time.Hour).Format("2006-01-02 15:04:05")
+	if _, err := DB.Exec(`
+		INSERT INTO sesiones (agente, activa, estado, herramienta, host, heartbeat_at)
+		VALUES (?,?,?,?,?,CURRENT_TIMESTAMP),
+		       (?,?,?,?,?,?)`,
+		"CodexFresh", 1, "activa", "codex", "localhost",
+		"CodexZombie", 1, "activa", "codex", "localhost", old,
+	); err != nil {
+		t.Fatalf("insert sesiones visibles: %v", err)
+	}
+	var handleSesionID int64
+	if err := DB.QueryRow(`
+		INSERT INTO sesiones (agente, activa, estado, herramienta, host, heartbeat_at)
+		VALUES (?,?,?,?,?,?)
+		RETURNING id`,
+		"CodexHandle", 1, "activa", "codex", "localhost", old,
+	).Scan(&handleSesionID); err != nil {
+		t.Fatalf("insert sesion CodexHandle: %v", err)
+	}
+	if _, err := DB.Exec(`
+		INSERT INTO runtime_handles (
+			agente, sesion_id, transporte, handle_kind, handle_ref, estado,
+			capabilities_json, metadata_json, last_seen_at
+		) VALUES (?,?,?,?,?,'activo','{}','{}',CURRENT_TIMESTAMP)`,
+		"CodexHandle", handleSesionID, "cli", "session", "sess-codex-handle",
+	); err != nil {
+		t.Fatalf("insert handle CodexHandle: %v", err)
+	}
+
+	agentes, err := ListarAgentes()
+	if err != nil {
+		t.Fatalf("ListarAgentes: %v", err)
+	}
+	estado := map[string]*Agente{}
+	for _, agente := range agentes {
+		estado[agente.Nombre] = agente
+	}
+
+	if !estado["CodexFresh"].Activo {
+		t.Fatalf("CodexFresh deberia seguir activo: %+v", estado["CodexFresh"])
+	}
+	if estado["CodexZombie"].Activo || estado["CodexZombie"].EstadoSesion != "" {
+		t.Fatalf("CodexZombie no deberia verse activo: %+v", estado["CodexZombie"])
+	}
+	if !estado["CodexHandle"].Activo {
+		t.Fatalf("CodexHandle deberia seguir activo por handle vivo: %+v", estado["CodexHandle"])
+	}
+
+	zombie, err := GetSesionActivaOperativa("CodexZombie", nil)
+	if err == nil || zombie != nil {
+		t.Fatalf("CodexZombie no deberia tener sesion operativa: %+v err=%v", zombie, err)
+	}
+	live, err := GetSesionActivaOperativa("CodexHandle", nil)
+	if err != nil || live == nil {
+		t.Fatalf("CodexHandle deberia tener sesion operativa por handle activo: sesion=%+v err=%v", live, err)
+	}
+}
+
+func TestListarAgentesIgnoraSesionesConHeartbeatObsoleto(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexZombie", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	if _, err := IniciarSesion("CodexZombie"); err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+
+	old := time.Now().UTC().Add(-10 * time.Minute)
+	if _, err := DB.Exec(`UPDATE agentes SET activo=1, estado_sesion='pensando' WHERE nombre='CodexZombie'`); err != nil {
+		t.Fatalf("marcar agente activo: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE sesiones SET heartbeat_at=? WHERE agente=? AND activa=1`, old, "CodexZombie"); err != nil {
+		t.Fatalf("marcar heartbeat obsoleto: %v", err)
+	}
+
+	agente, err := GetAgente("CodexZombie")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.Activo || agente.EstadoSesion != "" {
+		t.Fatalf("el agente no deberia seguir visible como activo: %+v", agente)
+	}
+
+	sesiones, err := ListarSesionesActivas()
+	if err != nil {
+		t.Fatalf("ListarSesionesActivas: %v", err)
+	}
+	for _, sesion := range sesiones {
+		if sesion != nil && sesion.Agente == "CodexZombie" {
+			t.Fatalf("la sesion stale no deberia aparecer como operativa: %+v", sesion)
+		}
 	}
 }

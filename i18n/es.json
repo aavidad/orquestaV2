@@ -1,5 +1,5 @@
 {
-  "app.title": "Orquesta - ContaGrx",
+  "app.title": "Orquesta",
   "app.name": "Orquesta",
   "Dashboard": "Dashboard",
   "Tareas": "Tareas",
@@ -146,7 +146,7 @@
   "time_travel.verified_by": "Verificado por",
   "time_travel.value": "Valor",
   "time_travel.memory.none": "No hay memoria asociada a este proyecto.",
-  "ContaGrx footer": "ContaGrx · OSL Diputacion de Granada · GPLv3",
+  "app.footer": "Orquesta · OSL Diputacion de Granada · GPLv3",
   "runtime.a2ui.title": "Mensajes A2UI",
   "runtime.a2ui.none": "Sin mensajes A2UI visibles para este runtime.",
   "runtime.a2ui.from": "Desde",

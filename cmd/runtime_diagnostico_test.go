@@ -57,9 +57,6 @@ func TestRuntimeDiagnosticoUsaAPI(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
-	})
 	mux.HandleFunc("/api/runtimes/tree", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(apiRuntimeTreeResponse{
 			Runtimes: []*apiRuntimeTreeNode{{Runtime: runtime}},

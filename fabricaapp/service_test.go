@@ -49,10 +49,10 @@ func TestGenerateWebAPIBacklog(t *testing.T) {
 	if got := mustTask(t, result, "entrega_final"); len(got.Dependencias) < 2 {
 		t.Fatalf("la entrega debe depender de qa/docs y opcionalmente docker: %+v", got)
 	}
-	if got := mustTask(t, result, "documentacion").Descripcion; !strings.Contains(got, "Orquesta de Alberto Avidad Fernandez") {
+	if got := mustTask(t, result, "documentacion").Descripcion; !strings.Contains(got, "Orquesta de Alberto Avidad Fernández") {
 		t.Fatalf("descripcion docs sin atribucion: %s", got)
 	}
-	if got := mustTask(t, result, "entrega_final").Descripcion; !strings.Contains(got, "Orquesta de Alberto Avidad Fernandez") {
+	if got := mustTask(t, result, "entrega_final").Descripcion; !strings.Contains(got, "Orquesta de Alberto Avidad Fernández") {
 		t.Fatalf("descripcion entrega sin atribucion: %s", got)
 	}
 	arquitectura = mustTask(t, result, "arquitectura")
@@ -98,8 +98,13 @@ func TestGenerateRequiresNameAndType(t *testing.T) {
 	if _, err := svc.Generate(AppSpec{Nombre: "SinTipo"}); err == nil {
 		t.Fatalf("se esperaba error por tipo vacio")
 	}
-	if _, err := svc.Generate(AppSpec{Nombre: "Raro", Tipo: "desktop"}); err == nil {
-		t.Fatalf("se esperaba error por tipo no soportado")
+	result, err := svc.Generate(AppSpec{Nombre: "Raro", Tipo: "desktop"})
+	if err != nil {
+		t.Fatalf("desktop deberia estar soportado: %v", err)
+	}
+	assertHasTask(t, result, "desktop_base")
+	if got := mustTask(t, result, "desktop_base").Descripcion; !strings.Contains(got, "aplicación de escritorio") {
+		t.Fatalf("descripcion desktop inesperada: %s", got)
 	}
 }
 

@@ -57,7 +57,7 @@ Cada agente debe emitir:
 ## 5. Riesgos que deben revisar
 
 - que la complejidad no supere la capacidad de mantenimiento
-- que SQLite no quede expuesto a demasiada concurrencia
+- que el backend activo no quede expuesto a concurrencia lateral y que el single-writer no se rompa
 - que la capa de conectores no acabe duplicando logica del nucleo
 - que Terminator y sesiones manuales no introduzcan ambiguedad
 - que el calculo de progreso no se convierta en una metrica enganosa

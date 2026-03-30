@@ -54,6 +54,12 @@ var runtimeTrazaCmd = &cobra.Command{
 				return err
 			}
 			return imprimirRuntimeTraza(trace)
+		} else if runtimeModoRecuperacionLocalExplicito() {
+			trace, err := cargarRuntimeTraceRecuperacionLocal(query)
+			if err != nil {
+				return err
+			}
+			return imprimirRuntimeTraza(trace)
 		}
 		return serverFirstCommandError("runtime traza")
 	},
@@ -66,6 +72,28 @@ func cargarRuntimeTraceDesdeAPI(query url.Values) (*runtimesapp.RuntimeRawTrace,
 		return nil, ok, err
 	}
 	return resp.Trace, true, nil
+}
+
+func cargarRuntimeTraceRecuperacionLocal(query url.Values) (*runtimesapp.RuntimeRawTrace, error) {
+	req := runtimesapp.RuntimeTraceRequest{
+		Agente:   strings.TrimSpace(query.Get("agente")),
+		Proyecto: strings.TrimSpace(query.Get("proyecto")),
+	}
+	if raw := strings.TrimSpace(query.Get("handle_id")); raw != "" {
+		value, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || value <= 0 {
+			return nil, fmt.Errorf("handle_id inválido")
+		}
+		req.HandleID = value
+	}
+	if raw := strings.TrimSpace(query.Get("bytes")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value <= 0 {
+			return nil, fmt.Errorf("bytes inválido")
+		}
+		req.MaxBytes = value
+	}
+	return runtimesService.ReadRuntimeTrace(req)
 }
 
 func imprimirRuntimeTraza(trace *runtimesapp.RuntimeRawTrace) error {

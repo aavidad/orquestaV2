@@ -4,7 +4,7 @@ Guía de despliegue, mantenimiento y configuración de infraestructura para Orqu
 
 ## 1. Requisitos del Sistema
 - **Lenguaje:** Go 1.21+ para la compilación del binario.
-- **Base de Datos:** SQLite 3 (configurado en modo WAL para concurrencia).
+- **Persistencia:** backend soportado por Orquesta. SQLite sigue siendo el valor por defecto, pero la app ya razona por `ORQUESTA_DB_DRIVER` + `ORQUESTA_DB_DSN/ORQUESTA_DB`, no por una ruta SQLite fija.
 - **Entorno:** Linux (Ubuntu 22.04+ recomendado).
 
 ## 2. Despliegue (Docker/Compose)
@@ -22,7 +22,7 @@ Parámetros útiles:
 El servicio publica:
 
 - panel web y API en `http://localhost:16543`
-- base SQLite persistida en el volumen `orquesta-data`
+- backend de persistencia configurado por entorno
 - logs persistidos en el volumen `orquesta-logs`
 
 Comandos operativos básicos:
@@ -31,6 +31,8 @@ Comandos operativos básicos:
 docker compose ps
 docker compose logs -f orquesta
 docker compose down
+./orquesta respaldo bd
+./orquesta persistencia verificar
 ```
 
 Si se necesita imagen suelta sin Compose:
@@ -38,9 +40,21 @@ Si se necesita imagen suelta sin Compose:
 ```bash
 docker build -t orquesta:local .
 docker run --rm -p 16543:16543 \
+  -e ORQUESTA_DB_DRIVER=sqlite \
   -e ORQUESTA_DB=/app/data/orquesta.db \
   -e ORQUESTA_WORKSPACE_ROOT=/app/workspace \
   -v "$(pwd)/data:/app/data" \
+  -v "$(dirname "$(pwd)"):/app/workspace" \
+  orquesta:local
+```
+
+Para backends no SQLite:
+
+```bash
+docker run --rm -p 16543:16543 \
+  -e ORQUESTA_DB_DRIVER=postgres \
+  -e ORQUESTA_DB_DSN='postgres://user:pass@host/orquesta?sslmode=disable' \
+  -e ORQUESTA_WORKSPACE_ROOT=/app/workspace \
   -v "$(dirname "$(pwd)"):/app/workspace" \
   orquesta:local
 ```
@@ -57,7 +71,12 @@ El agente `Refinery` requiere acceso de lectura/escritura al socket de Docker y 
 - **Git Hooks:** Orquesta instala hooks automáticos para la validación previa de OPs.
 
 ## 5. Troubleshooting (Solución de Problemas)
-- **Base de Datos Bloqueada:** Si recibes un error `database is locked`, comprueba que no haya procesos `go run` colgados. Usa `pkill -9 orquesta`.
+- **Persistencia degradada o bloqueada:** empieza siempre por:
+  - `./orquesta server doctor`
+  - `./orquesta persistencia info`
+  - `./orquesta persistencia verificar`
+  - `./orquesta respaldo bd` si necesitas un snapshot manual desde el camino oficial
+  Si el backend es SQLite y además necesitas forense profunda de integridad, usa `scripts/verificar_bd.sh` como herramienta de rescate explícita, no como vía operativa normal.
 - **Timeout de API:** Si la CLI tarda en responder, revisa la URL del servicio y el estado del daemon. El modo local solo debe usarse de forma explícita con `--local`, `--allow-local-fallback` o las variables de recuperación previstas.
 - **Workspace no visible en contenedor:** verifica `docker compose config` y que `ORQUESTA_WORKSPACE_DIR` apunta al directorio host donde viven los proyectos gestionados por Orquesta.
 

@@ -44,7 +44,7 @@ func (n *TelegramNotificador) EnviarAlertaBloqueo(tareaID int64, agente, motivo 
 
 func (n *TelegramNotificador) EnviarPropuestaVotacion(codigo, titulo string) error {
 	texto := fmt.Sprintf("📩 *Nueva Propuesta (%s)*\n\n%s", codigo, titulo)
-	
+
 	payload := map[string]any{
 		"chat_id":    n.ChatID,
 		"text":       texto,
@@ -82,16 +82,19 @@ func (n *TelegramNotificador) postJSON(url string, data any) error {
 	return nil
 }
 
-// GlobalNotificador se inicializa si hay configuración disponible
-var GlobalNotificador *TelegramNotificador
+// GlobalNotificador se inicializa si hay configuración disponible.
+// Puede ser Telegram, OpenClaw Gateway o un fanout de ambos.
+var GlobalNotificador Notificador
 
 func InicializarDesdeConfig() {
-	token, _ := db.ConfigGet("telegram_token")
-	chatID, _ := db.ConfigGet("telegram_chat_id")
-	if token != "" && chatID != "" {
-		GlobalNotificador = &TelegramNotificador{Token: token, ChatID: chatID}
-		fmt.Println("✓ Notificaciones de Telegram activas.")
-		go StartPolling(GlobalNotificador)
+	GlobalNotificador = nil
+	notifier, telegram, labels := buildConfiguredNotifiers()
+	GlobalNotificador = notifier
+	for _, label := range labels {
+		fmt.Printf("✓ %s\n", label)
+	}
+	if telegram != nil {
+		go StartPolling(telegram)
 	}
 }
 
@@ -109,8 +112,8 @@ func StartPolling(n *TelegramNotificador) {
 		var updateResp struct {
 			Ok     bool `json:"ok"`
 			Result []struct {
-				UpdateID      int `json:"update_id"`
-				Message       *struct {
+				UpdateID int `json:"update_id"`
+				Message  *struct {
 					Text string `json:"text"`
 					From struct {
 						ID       int64  `json:"id"`
@@ -121,8 +124,8 @@ func StartPolling(n *TelegramNotificador) {
 					} `json:"chat"`
 				} `json:"message"`
 				CallbackQuery *struct {
-					ID   string `json:"id"`
-					Data string `json:"data"`
+					ID      string `json:"id"`
+					Data    string `json:"data"`
 					Message *struct {
 						Chat struct {
 							ID int64 `json:"id"`
@@ -200,7 +203,9 @@ func procesarComando(n *TelegramNotificador, text string) {
 		resBody := "📁 *Proyectos en el Orquestador:*\n\n"
 		for _, p := range proyectos {
 			status := "🟢 Activo"
-			if !p.Activo { status = "⚪️ Inactivo" }
+			if !p.Activo {
+				status = "⚪️ Inactivo"
+			}
 			resBody += fmt.Sprintf("• *%s*\n  👉 Nombre para la terminal: `%s`\n  _Status: %s_\n\n", p.Nombre, p.Slug, status)
 		}
 		resBody += "💡 Para lanzar un agente en este proyecto, usa:\n`./agente [nombre] -p [nombre_terminal]`"
@@ -209,8 +214,10 @@ func procesarComando(n *TelegramNotificador, text string) {
 	case "/status", "/dashboard":
 		m, _ := db.ContarTareasPorEstado()
 		total := 0
-		for _, v := range m { total += v }
-		res := fmt.Sprintf("📊 *Estado de Orquesta*\n\n- Tareas Totales: %d\n- En Progreso: %d\n- Bloqueadas: %d\n- Completadas: %d", 
+		for _, v := range m {
+			total += v
+		}
+		res := fmt.Sprintf("📊 *Estado de Orquesta*\n\n- Tareas Totales: %d\n- En Progreso: %d\n- Bloqueadas: %d\n- Completadas: %d",
 			total, m["en_progreso"], m["bloqueada"], m["completada"])
 		n.EnviarMensaje(res)
 
@@ -229,11 +236,11 @@ func procesarComando(n *TelegramNotificador, text string) {
 			if stats.Total > 0 {
 				pct = (stats.Completadas * 100) / stats.Total
 			}
-			
+
 			// Barra visual
 			blocks := pct / 10
 			bar := strings.Repeat("█", blocks) + strings.Repeat("░", 10-blocks)
-			
+
 			gitAlert := ""
 			if gitMsg, _ := db.GetEstadoGit(p.RutaAbs); gitMsg != "" {
 				gitAlert = " 📦⚠️ _Cambios pendientes en Git_"
@@ -286,7 +293,7 @@ func procesarComando(n *TelegramNotificador, text string) {
 		} else {
 			n.EnviarMensaje(fmt.Sprintf("🔓 Tarea #%d desbloqueada con éxito.", id))
 		}
-	
+
 	case "/pausar":
 		if len(args) < 3 {
 			n.EnviarMensaje("⚠️ Uso: `/pausar [agente] [minutos]`")
@@ -364,7 +371,9 @@ func procesarComando(n *TelegramNotificador, text string) {
 			return
 		}
 		desc := ""
-		if len(args) > 3 { desc = strings.Join(args[3:], " ") }
+		if len(args) > 3 {
+			desc = strings.Join(args[3:], " ")
+		}
 		t := &db.Tarea{
 			ProyectoID:  &p.ID,
 			Titulo:      args[2],
@@ -382,7 +391,9 @@ func procesarComando(n *TelegramNotificador, text string) {
 
 	case "/reglas":
 		tipo := "programador"
-		if len(args) > 1 { tipo = args[1] }
+		if len(args) > 1 {
+			tipo = args[1]
+		}
 		reglas, _ := db.GetReglasAgente(tipo)
 		if len(reglas) == 0 {
 			n.EnviarMensaje(fmt.Sprintf("📜 No hay reglas activas para *%s*.", tipo))
@@ -419,7 +430,9 @@ func procesarComando(n *TelegramNotificador, text string) {
 
 	case "/skills":
 		tipo := "programador"
-		if len(args) > 1 { tipo = args[1] }
+		if len(args) > 1 {
+			tipo = args[1]
+		}
 		skills, _ := db.GetSkillsAgente(tipo)
 		if len(skills) == 0 {
 			n.EnviarMensaje(fmt.Sprintf("🧠 No hay skills activas para *%s*.", tipo))
@@ -440,7 +453,9 @@ func procesarComando(n *TelegramNotificador, text string) {
 			return
 		}
 		head := strings.Fields(parts[0])
-		if len(head) < 2 { return }
+		if len(head) < 2 {
+			return
+		}
 		s := &db.Skill{
 			TipoAgente:  head[0],
 			Nombre:      strings.Join(head[1:], " "),
@@ -448,13 +463,17 @@ func procesarComando(n *TelegramNotificador, text string) {
 			CuandoUsar:  "",
 			Activa:      true,
 		}
-		if len(parts) > 2 { s.CuandoUsar = strings.TrimSpace(parts[2]) }
+		if len(parts) > 2 {
+			s.CuandoUsar = strings.TrimSpace(parts[2])
+		}
 		db.UpsertSkill(s)
 		n.EnviarMensaje(fmt.Sprintf("✅ Skill '%s' entrenada para %s.", s.Nombre, s.TipoAgente))
 
 	case "/workflows":
 		tipo := "programador"
-		if len(args) > 1 { tipo = args[1] }
+		if len(args) > 1 {
+			tipo = args[1]
+		}
 		wfs, _ := db.GetWorkflowsAgente(tipo)
 		res := fmt.Sprintf("🔄 *Workflows de %s:*\n\n", tipo)
 		for _, w := range wfs {
@@ -464,10 +483,12 @@ func procesarComando(n *TelegramNotificador, text string) {
 		n.EnviarMensaje(res)
 
 	case "/ver_workflow":
-		if len(args) < 2 { return }
+		if len(args) < 2 {
+			return
+		}
 		// Buscamos en cualquier agente
 		var wf *db.Workflow
-		for _, t := range []string{"programador","documentador","admin"} {
+		for _, t := range []string{"programador", "documentador", "admin"} {
 			if w, err := db.GetWorkflow(t, args[1]); err == nil {
 				wf = w
 				break

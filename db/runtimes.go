@@ -39,13 +39,14 @@ type RuntimeInstance struct {
 }
 
 type RuntimeEvent struct {
-	ID          int64     `json:"id"`
-	RuntimeID   int64     `json:"runtime_id"`
-	Kind        string    `json:"kind"`
-	Level       string    `json:"level"`
-	Message     string    `json:"message"`
-	PayloadJSON string    `json:"payload_json"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          int64          `json:"id"`
+	RuntimeID   int64          `json:"runtime_id"`
+	Kind        string         `json:"kind"`
+	Level       string         `json:"level"`
+	Message     string         `json:"message"`
+	PayloadJSON string         `json:"payload_json"`
+	Payload     map[string]any `json:"payload,omitempty"`
+	CreatedAt   time.Time      `json:"created_at"`
 }
 
 type RuntimeTelemetrySample struct {
@@ -66,6 +67,14 @@ type RuntimeTelemetrySample struct {
 type RuntimeTreeNode struct {
 	Runtime *RuntimeInstance   `json:"runtime"`
 	Hijos   []*RuntimeTreeNode `json:"hijos"`
+}
+
+type FiltroRuntimeEvents struct {
+	RuntimeID  *int64
+	Agente     *string
+	ProyectoID *int64
+	Kind       *string
+	Limit      int
 }
 
 type FiltroRuntimes struct {
@@ -174,17 +183,21 @@ func MarcarRuntimesCerradosPorAgente(agente string) error {
 }
 
 func GetRuntime(id int64) (*RuntimeInstance, error) {
-	row := DB.QueryRow(runtimeSelectBase()+` WHERE r.id = ?`, id)
-	return escanearRuntime(row)
+	return consultarConReintentos(func() (*RuntimeInstance, error) {
+		row := DB.QueryRow(runtimeSelectBase()+` WHERE r.id = ?`, id)
+		return escanearRuntime(row)
+	})
 }
 
 func GetRuntimeBySesionID(sesionID int64) (*RuntimeInstance, error) {
-	row := DB.QueryRow(runtimeSelectBase()+` WHERE r.sesion_id = ? ORDER BY r.id DESC LIMIT 1`, sesionID)
-	runtime, err := escanearRuntime(row)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	return runtime, err
+	return consultarConReintentos(func() (*RuntimeInstance, error) {
+		row := DB.QueryRow(runtimeSelectBase()+` WHERE r.sesion_id = ? ORDER BY r.id DESC LIMIT 1`, sesionID)
+		runtime, err := escanearRuntime(row)
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return runtime, err
+	})
 }
 
 func ListarRuntimes(filter FiltroRuntimes) ([]*RuntimeInstance, error) {
@@ -306,6 +319,67 @@ func NormalizarUltimaMuestraRuntime(runtimeID int64) (*observabilidadruntime.Sam
 		return nil, nil
 	}
 	return NormalizarMuestraRuntime(sample)
+}
+
+func ListarRuntimeEvents(filter FiltroRuntimeEvents) ([]*RuntimeEvent, error) {
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	rowsQuery := `
+		SELECT e.id, e.runtime_id, e.kind, e.level, e.message, e.payload_json, e.created_at
+		FROM runtime_events e
+		INNER JOIN runtime_instances r ON r.id = e.runtime_id
+		WHERE 1=1`
+	args := make([]any, 0, 5)
+	if filter.RuntimeID != nil {
+		rowsQuery += ` AND e.runtime_id = ?`
+		args = append(args, *filter.RuntimeID)
+	}
+	if filter.Agente != nil {
+		rowsQuery += ` AND r.agente = ?`
+		args = append(args, strings.TrimSpace(*filter.Agente))
+	}
+	if filter.ProyectoID != nil {
+		rowsQuery += ` AND r.proyecto_id = ?`
+		args = append(args, *filter.ProyectoID)
+	}
+	if filter.Kind != nil {
+		rowsQuery += ` AND e.kind = ?`
+		args = append(args, strings.TrimSpace(*filter.Kind))
+	}
+	rowsQuery += ` ORDER BY e.id DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := DB.Query(rowsQuery, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*RuntimeEvent
+	for rows.Next() {
+		var item RuntimeEvent
+		if err := rows.Scan(
+			&item.ID,
+			&item.RuntimeID,
+			&item.Kind,
+			&item.Level,
+			&item.Message,
+			&item.PayloadJSON,
+			&item.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(item.PayloadJSON) != "" {
+			payload := map[string]any{}
+			if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err == nil && len(payload) > 0 {
+				item.Payload = payload
+			}
+		}
+		out = append(out, &item)
+	}
+	return out, rows.Err()
 }
 
 func RegistrarRuntimeEvent(e *RuntimeEvent) (int64, error) {

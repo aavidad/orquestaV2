@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -34,6 +35,13 @@ type ResumeContext struct {
 	Branch             string
 	CWD                string
 }
+
+const (
+	MailboxDeliveryInteractive        = "interactive"
+	MailboxDeliveryBootstrapOnly      = "bootstrap_only"
+	MailboxDeliveryCoordinatedRestart = "coordinated_restart"
+	MailboxDeliverySessionResume      = "session_resume"
+)
 
 type LaunchRequest struct {
 	Agente       string
@@ -64,6 +72,8 @@ type LaunchPlan struct {
 	LaunchPromptEmbedded bool              `json:"launch_prompt_embedded,omitempty"`
 	LaunchPromptMode     string            `json:"launch_prompt_mode,omitempty"`
 	LaunchPromptDelayMS  int               `json:"launch_prompt_delay_ms,omitempty"`
+	CanSendInput         *bool             `json:"can_send_input,omitempty"`
+	MailboxDeliveryMode  string            `json:"mailbox_delivery_mode,omitempty"`
 	RemoteConfigJSON     string            `json:"remote_config_json,omitempty"`
 	Notas                []string          `json:"notas,omitempty"`
 }
@@ -134,6 +144,7 @@ func (d commandDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 	if err != nil {
 		return nil, fmt.Errorf("metadata_json inválido para '%s': %w", req.Conector.Slug, err)
 	}
+	metadata = normalizeConnectorMetadata(req.Conector, metadata)
 
 	workingDir := strings.TrimSpace(req.Resume.CWD)
 	if workingDir == "" {
@@ -153,6 +164,9 @@ func (d commandDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 		PerfilTarea:  strings.TrimSpace(req.PerfilTarea),
 	}
 	applyExecutionProfile(plan, metadata)
+	if applyLocalControlHints(plan, metadata) {
+		plan.Notas = append(plan.Notas, "El conector aporta capacidades locales de control desde metadata_json.")
+	}
 
 	if applyLaunchHints(plan, metadata, req) {
 		plan.Notas = append(plan.Notas, "El conector aporta hints de arranque desde metadata_json.")
@@ -183,6 +197,7 @@ func (d remoteDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 	if err != nil {
 		return nil, fmt.Errorf("metadata_json inválido para '%s': %w", req.Conector.Slug, err)
 	}
+	metadata = normalizeConnectorMetadata(req.Conector, metadata)
 	env, err := parseStringMapJSON(req.Conector.EnvJSON)
 	if err != nil {
 		return nil, fmt.Errorf("env_json inválido para '%s': %w", req.Conector.Slug, err)
@@ -213,6 +228,53 @@ func (d remoteDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 		plan.ContinuityPrompt = construirPromptContinuidad(req)
 	}
 	return plan, nil
+}
+
+func normalizeConnectorMetadata(conector ConnectorConfig, metadata map[string]any) map[string]any {
+	if !isCodexCLIConnector(conector) {
+		return metadata
+	}
+	legacyReasoning := stringMetadata(metadata, "reasoning_flag") != ""
+	needsCopy := legacyReasoning
+	if !hasMetadataKey(metadata, "can_send_input") {
+		needsCopy = true
+	}
+	if !needsCopy {
+		return metadata
+	}
+	out := make(map[string]any, len(metadata)+2)
+	for k, v := range metadata {
+		if strings.EqualFold(strings.TrimSpace(k), "reasoning_flag") {
+			continue
+		}
+		out[k] = v
+	}
+	if legacyReasoning {
+		if stringMetadata(out, "reasoning_config_key") == "" {
+			out["reasoning_config_key"] = "model_reasoning_effort"
+		}
+		if stringMetadata(out, "config_flag") == "" {
+			out["config_flag"] = "-c"
+		}
+	}
+	// Codex TUI is currently unstable under injected stdin. Treat mailbox as a
+	// durable queue to be consumed on the next natural restart instead of
+	// forcing coordinated restarts for routine nudges.
+	if !hasMetadataKey(out, "can_send_input") {
+		out["can_send_input"] = false
+	}
+	if stringMetadata(out, "mailbox_delivery_mode") == "" {
+		out["mailbox_delivery_mode"] = MailboxDeliveryBootstrapOnly
+	}
+	return out
+}
+
+func isCodexCLIConnector(conector ConnectorConfig) bool {
+	if strings.EqualFold(strings.TrimSpace(conector.Slug), "codex-cli") {
+		return true
+	}
+	comando := filepath.Base(strings.TrimSpace(conector.Comando))
+	return strings.EqualFold(comando, "codex")
 }
 
 func buildRemoteConfigJSON(req LaunchRequest, metadata map[string]any) string {
@@ -287,6 +349,48 @@ func buildRemoteConfigJSON(req LaunchRequest, metadata map[string]any) string {
 		return ""
 	}
 	return string(data)
+}
+
+func applyLocalControlHints(plan *LaunchPlan, metadata map[string]any) bool {
+	if plan == nil {
+		return false
+	}
+	applied := false
+	if hasMetadataKey(metadata, "can_send_input") {
+		value := boolMetadata(metadata, "can_send_input")
+		plan.CanSendInput = &value
+		applied = true
+	}
+	if mode := NormalizeMailboxDeliveryMode(stringMetadata(metadata, "mailbox_delivery_mode")); mode != "" {
+		plan.MailboxDeliveryMode = mode
+		applied = true
+	}
+	if plan.MailboxDeliveryMode == "" {
+		plan.MailboxDeliveryMode = defaultMailboxDeliveryMode(plan.CanSendInput)
+	}
+	return applied
+}
+
+func NormalizeMailboxDeliveryMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case MailboxDeliveryInteractive:
+		return MailboxDeliveryInteractive
+	case MailboxDeliveryBootstrapOnly:
+		return MailboxDeliveryBootstrapOnly
+	case MailboxDeliveryCoordinatedRestart:
+		return MailboxDeliveryCoordinatedRestart
+	case MailboxDeliverySessionResume:
+		return MailboxDeliverySessionResume
+	default:
+		return ""
+	}
+}
+
+func defaultMailboxDeliveryMode(canSendInput *bool) string {
+	if canSendInput != nil && !*canSendInput {
+		return MailboxDeliveryBootstrapOnly
+	}
+	return MailboxDeliveryInteractive
 }
 
 func boolMetadata(metadata map[string]any, key string) bool {
@@ -657,8 +761,8 @@ func construirPromptContinuidad(req LaunchRequest) string {
 	if strings.TrimSpace(req.Resume.ExternalSessionID) != "" {
 		detalle = append(detalle, "External session id: "+req.Resume.ExternalSessionID)
 	}
-	if strings.TrimSpace(req.Resume.ResumePayloadJSON) != "" {
-		detalle = append(detalle, "Resume payload JSON: "+req.Resume.ResumePayloadJSON)
+	if resumenPayload := resumirResumePayload(req.Resume.ResumePayloadJSON); resumenPayload != "" {
+		detalle = append(detalle, resumenPayload)
 	}
 
 	base := strings.Join(partes, ". ")
@@ -666,6 +770,88 @@ func construirPromptContinuidad(req LaunchRequest) string {
 		return base + "."
 	}
 	return base + ". " + strings.Join(detalle, ". ")
+}
+
+func resumirResumePayload(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	var parsed any
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return "Resume payload disponible"
+	}
+	obj, ok := parsed.(map[string]any)
+	if !ok {
+		return "Resume payload disponible"
+	}
+	partes := make([]string, 0, len(obj))
+	if order, ok := obj["runtime_order"].(map[string]any); ok {
+		label := "runtime_order"
+		if tipo := strings.TrimSpace(stringFromAny(order["tipo"])); tipo != "" {
+			label += "=" + tipo
+		}
+		partes = append(partes, label)
+		delete(obj, "runtime_order")
+	}
+	if checkpoint, ok := obj["checkpoint"].(map[string]any); ok {
+		label := "checkpoint"
+		if id := int64FromAny(checkpoint["id"]); id > 0 {
+			label += fmt.Sprintf("#%d", id)
+		}
+		if kind := strings.TrimSpace(stringFromAny(checkpoint["kind"])); kind != "" {
+			label += "(" + kind + ")"
+		}
+		partes = append(partes, label)
+		delete(obj, "checkpoint")
+	}
+	if mailbox, ok := obj["mailbox"].([]any); ok {
+		partes = append(partes, fmt.Sprintf("mailbox=%d", len(mailbox)))
+		delete(obj, "mailbox")
+	}
+	for _, key := range []string{"project_context", "governance_catalog", "adopted_context"} {
+		if _, ok := obj[key]; ok {
+			partes = append(partes, key)
+			delete(obj, key)
+		}
+	}
+	resto := make([]string, 0, len(obj))
+	for key := range obj {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		resto = append(resto, key)
+	}
+	sort.Strings(resto)
+	partes = append(partes, resto...)
+	if len(partes) == 0 {
+		return "Resume payload disponible"
+	}
+	return "Resume payload: " + strings.Join(partes, ", ")
+}
+
+func stringFromAny(v any) string {
+	s, _ := v.(string)
+	return s
+}
+
+func int64FromAny(v any) int64 {
+	switch n := v.(type) {
+	case float64:
+		return int64(n)
+	case float32:
+		return int64(n)
+	case int:
+		return int64(n)
+	case int64:
+		return n
+	case json.Number:
+		out, _ := n.Int64()
+		return out
+	default:
+		return 0
+	}
 }
 
 func stringMetadata(metadata map[string]any, key string) string {

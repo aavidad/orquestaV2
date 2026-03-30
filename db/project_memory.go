@@ -66,11 +66,16 @@ type DocumentoExterno struct {
 }
 
 func ListarHistorialVotacionesProyecto(proyectoID int64) ([]*HistorialVotacionProyecto, error) {
+	limit := configIntOrDefault("project_memory_vote_history_limit", 50)
+	if limit <= 0 {
+		limit = 50
+	}
 	rows, err := DB.Query(`
 		SELECT id, codigo, titulo, tipo, estado, propuesto_por, created_at, cerrada_at
 		FROM propuestas
 		WHERE proyecto_id = ?
-		ORDER BY created_at DESC, id DESC`, proyectoID)
+		ORDER BY created_at DESC, id DESC
+		LIMIT ?`, proyectoID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -94,15 +99,62 @@ func ListarHistorialVotacionesProyecto(proyectoID int64) ([]*HistorialVotacionPr
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
+	if len(list) == 0 {
+		return list, nil
+	}
+
+	placeholders := make([]string, 0, len(list))
+	args := make([]any, 0, len(list))
+	indexByProposalID := make(map[int64]*HistorialVotacionProyecto, len(list))
 	for _, item := range list {
-		item.Acuerdo, item.Desacuerdo, item.Abstencion, item.Pendiente, err = ContarVotos(item.PropuestaID)
-		if err != nil {
+		if item == nil {
+			continue
+		}
+		placeholders = append(placeholders, "?")
+		args = append(args, item.PropuestaID)
+		indexByProposalID[item.PropuestaID] = item
+	}
+
+	voteRows, err := DB.Query(`
+		SELECT propuesta_id, agente, posicion, comentario
+		FROM votos
+		WHERE propuesta_id IN (`+strings.Join(placeholders, ",")+`)
+		ORDER BY propuesta_id, id`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer voteRows.Close()
+
+	for voteRows.Next() {
+		var (
+			propuestaID int64
+			voto        Voto
+		)
+		if err := voteRows.Scan(&propuestaID, &voto.Agente, &voto.Posicion, &voto.Comentario); err != nil {
 			return nil, err
 		}
-		item.Votos, err = VotosDePropuesta(item.PropuestaID)
-		if err != nil {
-			return nil, err
+		item := indexByProposalID[propuestaID]
+		if item == nil {
+			continue
 		}
+		switch voto.Posicion {
+		case VotoAcuerdo:
+			item.Acuerdo++
+		case VotoDesacuerdo:
+			item.Desacuerdo++
+		case VotoAbstencion:
+			item.Abstencion++
+		case VotoPendiente:
+			item.Pendiente++
+		default:
+			item.Pendiente++
+		}
+		vCopy := voto
+		item.Votos = append(item.Votos, &vCopy)
+	}
+	if err := voteRows.Err(); err != nil {
+		return nil, err
 	}
 	return list, nil
 }
@@ -110,6 +162,11 @@ func ListarHistorialVotacionesProyecto(proyectoID int64) ([]*HistorialVotacionPr
 func GuardarDecisionProyecto(d *DecisionProyecto) (int64, error) {
 	if d == nil {
 		return 0, fmt.Errorf("decision obligatoria")
+	}
+	if legacy, err := decisionProjectLegacySchema(); err != nil {
+		return 0, err
+	} else if legacy {
+		return guardarDecisionProyectoLegacy(d)
 	}
 	d.Categoria = strings.TrimSpace(d.Categoria)
 	d.Titulo = strings.TrimSpace(d.Titulo)
@@ -168,6 +225,11 @@ func GuardarDecisionProyecto(d *DecisionProyecto) (int64, error) {
 }
 
 func ListarDecisionesProyecto(proyectoID int64) ([]*DecisionProyecto, error) {
+	if legacy, err := decisionProjectLegacySchema(); err != nil {
+		return nil, err
+	} else if legacy {
+		return listarDecisionesProyectoLegacy(proyectoID)
+	}
 	rows, err := DB.Query(`
 		SELECT id, proyecto_id, categoria, titulo, solucion, motivo, alternativas,
 		       impacto, estado, propuesta_id, tarea_id, metadata_json, created_at, updated_at
@@ -326,6 +388,180 @@ func scanDecisionProyecto(s scanner) (*DecisionProyecto, error) {
 		item.TareaID = &tareaID.Int64
 	}
 	return &item, nil
+}
+
+func decisionProjectLegacySchema() (bool, error) {
+	hasProjectID, err := ColumnExists("decisiones_proyecto", "proyecto_id")
+	if err != nil {
+		return false, err
+	}
+	return !hasProjectID, nil
+}
+
+func guardarDecisionProyectoLegacy(d *DecisionProyecto) (int64, error) {
+	d.Categoria = strings.TrimSpace(d.Categoria)
+	d.Titulo = strings.TrimSpace(d.Titulo)
+	d.Solucion = strings.TrimSpace(d.Solucion)
+	d.Motivo = strings.TrimSpace(d.Motivo)
+	d.Alternativas = strings.TrimSpace(d.Alternativas)
+	d.Impacto = strings.TrimSpace(d.Impacto)
+	if d.MetadataJSON == "" {
+		d.MetadataJSON = "{}"
+	}
+	if d.ProyectoID == 0 || d.Titulo == "" || d.Solucion == "" {
+		return 0, fmt.Errorf("proyecto, titulo y solucion son obligatorios")
+	}
+
+	proyectoSlug, err := proyectoSlugDesdeID(d.ProyectoID)
+	if err != nil {
+		return 0, err
+	}
+	propuestaCodigo, err := propuestaCodigoDesdeID(d.PropuestaID)
+	if err != nil {
+		return 0, err
+	}
+
+	var existenteID int64
+	err = DB.QueryRow(`SELECT id FROM decisiones_proyecto WHERE proyecto = ? AND titulo = ?`, proyectoSlug, d.Titulo).Scan(&existenteID)
+	switch err {
+	case nil:
+		_, err = DB.Exec(`
+			UPDATE decisiones_proyecto
+			   SET solucion_elegida = ?, motivo = ?, alternativas_descartadas = ?, impacto = ?,
+			       propuesta_codigo = ?, tarea_id = ?, registrado_por = ?
+			 WHERE id = ?`,
+			d.Solucion,
+			d.Motivo,
+			d.Alternativas,
+			legacyDecisionImpact(d.Impacto),
+			propuestaCodigo,
+			d.TareaID,
+			"orquesta",
+			existenteID,
+		)
+		if err != nil {
+			return 0, err
+		}
+		return existenteID, nil
+	case sql.ErrNoRows:
+		res, err := DB.Exec(`
+			INSERT INTO decisiones_proyecto (
+				proyecto, titulo, solucion_elegida, motivo, alternativas_descartadas, impacto,
+				propuesta_codigo, tarea_id, registrado_por
+			) VALUES (?,?,?,?,?,?,?,?,?)`,
+			proyectoSlug,
+			d.Titulo,
+			d.Solucion,
+			d.Motivo,
+			d.Alternativas,
+			legacyDecisionImpact(d.Impacto),
+			propuestaCodigo,
+			d.TareaID,
+			"orquesta",
+		)
+		if err != nil {
+			return 0, err
+		}
+		id, _ := res.LastInsertId()
+		return id, nil
+	default:
+		return 0, err
+	}
+}
+
+func listarDecisionesProyectoLegacy(proyectoID int64) ([]*DecisionProyecto, error) {
+	proyectoSlug, err := proyectoSlugDesdeID(proyectoID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := DB.Query(`
+		SELECT id, proyecto, titulo, solucion_elegida, motivo, alternativas_descartadas,
+		       impacto, propuesta_codigo, tarea_id, registrado_por, created_at, updated_at
+		  FROM decisiones_proyecto
+		 WHERE proyecto = ?
+		 ORDER BY titulo`, proyectoSlug)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*DecisionProyecto
+	for rows.Next() {
+		var (
+			item           DecisionProyecto
+			proyectoLegacy string
+			propuestaCod   string
+			registradoPor  string
+			tareaID        sql.NullInt64
+		)
+		if err := rows.Scan(
+			&item.ID,
+			&proyectoLegacy,
+			&item.Titulo,
+			&item.Solucion,
+			&item.Motivo,
+			&item.Alternativas,
+			&item.Impacto,
+			&propuestaCod,
+			&tareaID,
+			&registradoPor,
+			&item.CreatedAt,
+			&item.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		item.ProyectoID = proyectoID
+		item.Categoria = "general"
+		item.Estado = "vigente"
+		item.MetadataJSON = "{}"
+		if tareaID.Valid {
+			item.TareaID = &tareaID.Int64
+		}
+		if strings.TrimSpace(propuestaCod) != "" {
+			if propuesta, err := GetPropuesta(strings.TrimSpace(propuestaCod)); err == nil && propuesta != nil {
+				item.PropuestaID = &propuesta.ID
+			}
+		}
+		list = append(list, &item)
+	}
+	return list, rows.Err()
+}
+
+func proyectoSlugDesdeID(proyectoID int64) (string, error) {
+	proyecto, err := GetProyecto(fmt.Sprintf("%d", proyectoID))
+	if err != nil {
+		return "", err
+	}
+	if proyecto == nil || strings.TrimSpace(proyecto.Slug) == "" {
+		return "", fmt.Errorf("proyecto %d no encontrado", proyectoID)
+	}
+	return strings.TrimSpace(proyecto.Slug), nil
+}
+
+func propuestaCodigoDesdeID(propuestaID *int64) (string, error) {
+	if propuestaID == nil || *propuestaID <= 0 {
+		return "", nil
+	}
+	propuesta, err := GetPropuesta(fmt.Sprintf("%d", *propuestaID))
+	if err != nil {
+		return "", err
+	}
+	if propuesta == nil {
+		return "", nil
+	}
+	return strings.TrimSpace(propuesta.Codigo), nil
+}
+
+func legacyDecisionImpact(impacto string) string {
+	impacto = strings.ToLower(strings.TrimSpace(impacto))
+	switch {
+	case strings.Contains(impacto, "alto"):
+		return "alto"
+	case strings.Contains(impacto, "bajo"):
+		return "bajo"
+	default:
+		return "medio"
+	}
 }
 
 func scanDocumentoExterno(s scanner) (*DocumentoExterno, error) {

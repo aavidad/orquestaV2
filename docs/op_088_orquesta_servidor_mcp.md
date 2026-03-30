@@ -47,7 +47,7 @@ Para que un gestor como OpenClaw opere correctamente, Orquesta expondrá:
 - `orquesta://tareas/bloqueos`: Lista de tareas con estado `bloqueada` por requerimientos humanos o técnicos.
 
 ### 2. Prompts (Contexto y Briefings)
-- `orquesta://prompts/briefing/{agente}`: Inyección automática de todo el contenido de las tablas `reglas`, `skills` y `workflows` de SQLite al contexto de OpenClaw.
+- `orquesta://prompts/briefing/{agente}`: Inyección automática del catálogo activo de `reglas`, `skills` y `workflows` servido por Orquesta al contexto de OpenClaw.
 
 ### 3. Tools (Acciones Controladas)
 Acciones que OpenClaw podrá ejecutar, todas filtradas por los controles de Orquesta:
@@ -63,7 +63,7 @@ Es la duda más natural: si OpenClaw ya es un orquestador de agentes, ¿para qu�
 La respuesta es que cumplen roles completamente distintos y **ortogonales**:
 
 *   **OpenClaw es el "Orquestador de Inteligencia" (Agent Orchestrator):** Se encarga de saber qué LLM es mejor para cada tarea rutinaria, enrutar la memoria, gestionar la bolsa de contexto para no fallar (Token Limits), aislar los procesos IA en contenedores ligeros, y comunicarse con el usuario por Telegram/Discord.
-*   **Orquesta es el "Orquestador Organizacional" (Domain Orchestrator):** No le importa qué inteligencia se use (si es Claude, un becario humano o OpenClaw). Su trabajo es asegurar que **el código y la Ley de la Diputación se respetan**. Controla el acceso a Git, exige auditoría (tabla `audit_log`), impone las 14 fases (hasta que no hay documento OP-XXX, no se programa), gestiona el multi-tenancy y provee los contenedores (`git worktrees`) aislados.
+*   **Orquesta es el "Orquestador Organizacional" (Domain Orchestrator):** No le importa qué inteligencia se use (si es Claude, un becario humano o OpenClaw). Su trabajo es asegurar que **el código y la Ley de la Diputación se respetan**. Controla el acceso a Git, exige auditoría a través del backend activo de Orquesta, impone las 14 fases (hasta que no hay documento OP-XXX, no se programa), gestiona el multi-tenancy y provee los contenedores (`git worktrees`) aislados.
 
 Usar OpenClaw sobre tu repositorio a lo bruto sería el caos. **Orquesta como Servidor MCP es el muro que subordina la Inteligencia Creativa (OpenClaw) a las Reglas de Negocio (Orquesta)**.
 

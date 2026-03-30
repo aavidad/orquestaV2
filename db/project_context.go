@@ -3,13 +3,21 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"log"
+	"os"
 	"strings"
+	"time"
 )
 
 func BuildProjectContextSummary(agente string, proyecto *Proyecto) (map[string]any, string) {
 	if proyecto == nil {
 		return nil, ""
 	}
+	start := time.Now()
+	projectContextDebugf("BuildProjectContextSummary start agente=%s proyecto=%s", strings.TrimSpace(agente), strings.TrimSpace(proyecto.Slug))
+	defer func() {
+		projectContextDebugf("BuildProjectContextSummary done agente=%s proyecto=%s duration=%s", strings.TrimSpace(agente), strings.TrimSpace(proyecto.Slug), time.Since(start).Round(time.Millisecond))
+	}()
 	proyecto = ProyectoConRutaEfectiva(proyecto, "")
 	contexto := map[string]any{
 		"proyecto": map[string]any{
@@ -21,6 +29,7 @@ func BuildProjectContextSummary(agente string, proyecto *Proyecto) (map[string]a
 	}
 	resumen := make([]string, 0, 4)
 
+	stepStart := time.Now()
 	if op, err := GetProyectoOperacion(proyecto.ID); err == nil && op != nil {
 		contexto["operacion"] = map[string]any{
 			"estado":            strings.TrimSpace(string(op.EstadoOperativo)),
@@ -35,25 +44,50 @@ func BuildProjectContextSummary(agente string, proyecto *Proyecto) (map[string]a
 			resumen = append(resumen, "Estado operativo: "+string(op.EstadoOperativo))
 		}
 	}
+	projectContextDebugf("BuildProjectContextSummary step=operacion duration=%s", time.Since(stepStart).Round(time.Millisecond))
 
+	stepStart = time.Now()
 	if worktree := getActiveWorktreeSummary(strings.TrimSpace(agente), proyecto.ID); worktree != nil {
 		contexto["worktree_activa"] = worktree
 		if branch, _ := worktree["branch"].(string); strings.TrimSpace(branch) != "" {
 			resumen = append(resumen, "Worktree activa en "+strings.TrimSpace(branch))
 		}
 	}
+	projectContextDebugf("BuildProjectContextSummary step=worktree duration=%s", time.Since(stepStart).Round(time.Millisecond))
 
+	stepStart = time.Now()
 	if tareas := getActiveTaskSummaries(strings.TrimSpace(agente), proyecto.ID); len(tareas) > 0 {
 		contexto["tareas_activas"] = tareas
 		resumen = append(resumen, fmt.Sprintf("%d tarea(s) activas del agente", len(tareas)))
 	}
+	projectContextDebugf("BuildProjectContextSummary step=tareas duration=%s", time.Since(stepStart).Round(time.Millisecond))
 
+	stepStart = time.Now()
 	if propuestas := getOpenProposalSummaries(proyecto.ID); len(propuestas) > 0 {
 		contexto["propuestas_abiertas"] = propuestas
 		resumen = append(resumen, fmt.Sprintf("%d propuesta(s) abiertas", len(propuestas)))
 	}
+	projectContextDebugf("BuildProjectContextSummary step=propuestas duration=%s", time.Since(stepStart).Round(time.Millisecond))
 
 	return contexto, strings.Join(resumen, ". ")
+}
+
+func projectContextDebugf(format string, args ...any) {
+	if !preparePromptDebugEnabled() {
+		return
+	}
+	log.Printf("orquesta[prepare-context] "+format, args...)
+}
+
+func preparePromptDebugEnabled() bool {
+	for _, key := range []string{"ORQUESTA_DEBUG_PREPARE", "ORQUESTA_DEBUG"} {
+		value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+		switch value {
+		case "1", "true", "yes", "on", "si", "sí":
+			return true
+		}
+	}
+	return false
 }
 
 func AppendProjectContextPayload(prev string, contexto map[string]any) string {

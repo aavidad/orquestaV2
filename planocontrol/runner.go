@@ -10,6 +10,9 @@ package planocontrol
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
+	"strings"
+	"sync"
 	"time"
 
 	"orquesta/db"
@@ -22,11 +25,13 @@ type AutomationService interface {
 	GarantizarSaludAgentes() error
 	PlanificarTareasAutomaticamente() error
 	ProcesarAutonomiaAgentesBatch() (int, error)
+	ProcesarRuntimeSupervisionBatch() (int, error)
 	ProcesarSupervisionAutonomaBatch() (int, error)
 	ProcesarReviewGatesBatch() (int, error)
 	ReconciliarRuntimeHandlesStale() (int, error)
 	ReconciliarRuntimeOrdersStale() (int, error)
 	ProcesarRuntimeTranscriptBatch() (int, error)
+	ProcesarRuntimeMailboxBatch() (int, error)
 	ProcesarRuntimeOrdersBatch() (int, error)
 	ProcesarGitMergesBatch() (int, error)
 	ProcesarRefineriaBatch() (int, error)
@@ -44,6 +49,7 @@ type Runner struct {
 	SaludCada         time.Duration
 	PlanificacionCada time.Duration
 	ControlPlaneCada  time.Duration
+	wg                sync.WaitGroup
 }
 
 func (r *Runner) Start(ctx context.Context) {
@@ -56,15 +62,39 @@ func (r *Runner) Start(ctx context.Context) {
 		r.InitNotifications()
 	}
 
-	go r.loop(ctx, r.reanimacionCada(), r.runReanimaciones)
-	go r.loop(ctx, r.saludCada(), r.runSalud)
-	go r.loop(ctx, r.planificacionCada(), r.runPlanificacion)
-	go r.loop(ctx, r.controlPlaneCada(), r.runControlPlane)
-	go r.loopNotificaciones(ctx)
+	r.startLoop(ctx, "reanimaciones", r.reanimacionCada(), r.runReanimaciones)
+	r.startLoop(ctx, "salud", r.saludCada(), r.runSalud)
+	r.startLoop(ctx, "planificacion", r.planificacionCada(), r.runPlanificacion)
+	r.startLoop(ctx, "control_plane", r.controlPlaneCada(), r.runControlPlane)
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		r.loopNotificaciones(ctx)
+	}()
 }
 
-func (r *Runner) loop(ctx context.Context, each time.Duration, fn func()) {
-	fn()
+func (r *Runner) startLoop(ctx context.Context, name string, each time.Duration, fn func()) {
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		r.loop(ctx, name, each, fn)
+	}()
+}
+
+func (r *Runner) Wait() {
+	if r == nil {
+		return
+	}
+	r.wg.Wait()
+}
+
+func (r *Runner) loop(ctx context.Context, name string, each time.Duration, fn func()) {
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
+	r.safeLoopCall(name, fn)
 	ticker := time.NewTicker(each)
 	defer ticker.Stop()
 	for {
@@ -72,7 +102,7 @@ func (r *Runner) loop(ctx context.Context, each time.Duration, fn func()) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			fn()
+			r.safeLoopCall(name, fn)
 		}
 	}
 }
@@ -85,21 +115,34 @@ func (r *Runner) loopNotificaciones(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case ev := <-r.NotificationFeed:
-			n := r.notifier()
-			if n == nil {
-				continue
+		case ev, ok := <-r.NotificationFeed:
+			if !ok {
+				return
 			}
-			switch ev.Tipo {
-			case "bloqueo":
-				_ = n.EnviarAlertaBloqueo(ev.ID, ev.Agente, ev.Texto)
-			case "propuesta":
-				_ = n.EnviarPropuestaVotacion(ev.Codigo, ev.Texto)
-			case "fin_proyecto":
-				_ = n.EnviarAvisoFinProyecto(ev.ID, ev.Texto)
-			case "mensaje":
-				_ = n.EnviarMensaje(ev.Texto)
-			}
+			r.safeLoopCall("notificaciones", func() {
+				n := r.notifier()
+				if n == nil {
+					return
+				}
+				if aware, ok := n.(notificaciones.EventAware); ok {
+					if err := aware.EnviarEvento(ev); err != nil {
+						r.debugf("notificaciones event=%s error=%v", strings.TrimSpace(ev.Tipo), err)
+					}
+					return
+				}
+				switch ev.Tipo {
+				case "bloqueo":
+					_ = n.EnviarAlertaBloqueo(ev.ID, ev.Agente, ev.Texto)
+				case "propuesta":
+					_ = n.EnviarPropuestaVotacion(ev.Codigo, ev.Texto)
+				case "fin_proyecto":
+					_ = n.EnviarAvisoFinProyecto(ev.ID, ev.Texto)
+				case "mensaje":
+					_ = n.EnviarMensaje(ev.Texto)
+				default:
+					_ = n.EnviarMensaje(strings.TrimSpace(ev.Texto))
+				}
+			})
 		}
 	}
 }
@@ -136,78 +179,153 @@ func (r *Runner) runPlanificacion() {
 }
 
 func (r *Runner) runControlPlane() {
-	autonomia, err := r.Automation.ProcesarAutonomiaAgentesBatch()
-	if err != nil {
-		r.Automation.Audit("server", "autonomia_agentes_error", "agente", 0, err.Error())
-		r.debugf("control_plane autonomia error=%v", err)
-	} else if autonomia > 0 {
-		r.Automation.Audit("server", "autonomia_agentes_batch", "agente", 0, fmt.Sprintf("Decisiones autónomas procesadas: %d", autonomia))
+	autonomia := r.runControlPlaneBatch(
+		"autonomia",
+		"agente",
+		"autonomia_agentes_batch",
+		"autonomia_agentes_error",
+		"autonomia_agentes_panic",
+		"Decisiones autónomas procesadas: %d",
+		r.Automation.ProcesarAutonomiaAgentesBatch,
+	)
+	supervision := r.runControlPlaneBatch(
+		"runtime_supervision",
+		"runtime_handle",
+		"runtime_supervision_batch",
+		"runtime_supervision_error",
+		"runtime_supervision_panic",
+		"Supervisiones de runtime procesadas: %d",
+		r.Automation.ProcesarRuntimeSupervisionBatch,
+	)
+	supervisionAutonoma := r.runControlPlaneBatch(
+		"supervision",
+		"proyecto",
+		"supervision_autonoma_batch",
+		"supervision_autonoma_error",
+		"supervision_autonoma_panic",
+		"Supervisiones autónomas procesadas: %d",
+		r.Automation.ProcesarSupervisionAutonomaBatch,
+	)
+	review := r.runControlPlaneBatch(
+		"review",
+		"review_gate",
+		"review_gates_batch",
+		"review_gates_error",
+		"review_gates_panic",
+		"Review gates procesados: %d",
+		r.Automation.ProcesarReviewGatesBatch,
+	)
+	stale := r.runControlPlaneBatch(
+		"handles_stale",
+		"runtime_handle",
+		"runtime_handles_stale",
+		"runtime_handles_error",
+		"runtime_handles_panic",
+		"Handles reconciliados como stale: %d",
+		r.Automation.ReconciliarRuntimeHandlesStale,
+	)
+	recovered := r.runControlPlaneBatch(
+		"runtime_orders_stale",
+		"runtime_order",
+		"runtime_orders_stale",
+		"runtime_orders_stale_error",
+		"runtime_orders_stale_panic",
+		"Órdenes recuperadas por stale: %d",
+		r.Automation.ReconciliarRuntimeOrdersStale,
+	)
+	transcript := r.runControlPlaneBatch(
+		"runtime_transcript",
+		"runtime_transcript",
+		"runtime_transcript_batch",
+		"runtime_transcript_batch_error",
+		"runtime_transcript_batch_panic",
+		"Conversación/runtime transcript procesado: %d",
+		r.Automation.ProcesarRuntimeTranscriptBatch,
+	)
+	mailbox := r.runControlPlaneBatch(
+		"runtime_mailbox",
+		"runtime_mailbox",
+		"runtime_mailbox_batch",
+		"runtime_mailbox_batch_error",
+		"runtime_mailbox_batch_panic",
+		"Mailbox runtime procesado: %d",
+		r.Automation.ProcesarRuntimeMailboxBatch,
+	)
+	processed := r.runControlPlaneBatch(
+		"runtime_orders",
+		"runtime_order",
+		"runtime_orders_batch",
+		"runtime_orders_batch_error",
+		"runtime_orders_batch_panic",
+		"Órdenes procesadas en batch: %d",
+		r.Automation.ProcesarRuntimeOrdersBatch,
+	)
+	merged := r.runControlPlaneBatch(
+		"git_merges",
+		"git_merge",
+		"git_merges_batch",
+		"git_merges_batch_error",
+		"git_merges_batch_panic",
+		"Solicitudes de merge procesadas: %d",
+		r.Automation.ProcesarGitMergesBatch,
+	)
+	refined := r.runControlPlaneBatch(
+		"refineria",
+		"refineria_solicitud",
+		"refineria_batch",
+		"refineria_batch_error",
+		"refineria_batch_panic",
+		"Solicitudes de refinería procesadas: %d",
+		r.Automation.ProcesarRefineriaBatch,
+	)
+	handoffs := r.runControlPlaneBatch(
+		"handoffs",
+		"agente",
+		"handoff_batch",
+		"handoff_batch_error",
+		"handoff_batch_panic",
+		"Handoffs automáticos procesados: %d",
+		r.Automation.ProcesarHandoffsBatch,
+	)
+	r.debugf("control_plane autonomia=%d runtime_supervision=%d supervision=%d review=%d handles_stale=%d orders_stale=%d transcript=%d mailbox=%d runtime_orders=%d git_merges=%d refineria=%d handoffs=%d",
+		autonomia, supervision, supervisionAutonoma, review, stale, recovered, transcript, mailbox, processed, merged, refined, handoffs)
+}
+
+func (r *Runner) safeLoopCall(name string, fn func()) {
+	if fn == nil {
+		return
 	}
-	supervision, err := r.Automation.ProcesarSupervisionAutonomaBatch()
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			detail := fmt.Sprintf("loop=%s panic=%v\n%s", name, recovered, strings.TrimSpace(string(debug.Stack())))
+			if r != nil && r.Automation != nil {
+				r.Automation.Audit("server", "runner_loop_panic", "runner", 0, detail)
+			}
+			r.debugf("runner loop=%s panic=%v", name, recovered)
+		}
+	}()
+	fn()
+}
+
+func (r *Runner) runControlPlaneBatch(name, entity, auditOK, auditErr, auditPanic, successFmt string, fn func() (int, error)) (count int) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			detail := fmt.Sprintf("batch=%s panic=%v\n%s", name, recovered, strings.TrimSpace(string(debug.Stack())))
+			r.Automation.Audit("server", auditPanic, entity, 0, detail)
+			r.debugf("control_plane %s panic=%v", name, recovered)
+			count = 0
+		}
+	}()
+	count, err := fn()
 	if err != nil {
-		r.Automation.Audit("server", "supervision_autonoma_error", "proyecto", 0, err.Error())
-		r.debugf("control_plane supervision error=%v", err)
-	} else if supervision > 0 {
-		r.Automation.Audit("server", "supervision_autonoma_batch", "proyecto", 0, fmt.Sprintf("Supervisiones autónomas procesadas: %d", supervision))
+		r.Automation.Audit("server", auditErr, entity, 0, err.Error())
+		r.debugf("control_plane %s error=%v", name, err)
+		return 0
 	}
-	review, err := r.Automation.ProcesarReviewGatesBatch()
-	if err != nil {
-		r.Automation.Audit("server", "review_gates_error", "review_gate", 0, err.Error())
-		r.debugf("control_plane review error=%v", err)
-	} else if review > 0 {
-		r.Automation.Audit("server", "review_gates_batch", "review_gate", 0, fmt.Sprintf("Review gates procesados: %d", review))
+	if count > 0 {
+		r.Automation.Audit("server", auditOK, entity, 0, fmt.Sprintf(successFmt, count))
 	}
-	stale, err := r.Automation.ReconciliarRuntimeHandlesStale()
-	if err != nil {
-		r.Automation.Audit("server", "runtime_handles_error", "runtime_handle", 0, err.Error())
-		r.debugf("control_plane handles_stale error=%v", err)
-	} else if stale > 0 {
-		r.Automation.Audit("server", "runtime_handles_stale", "runtime_handle", 0, fmt.Sprintf("Handles reconciliados como stale: %d", stale))
-	}
-	recovered, err := r.Automation.ReconciliarRuntimeOrdersStale()
-	if err != nil {
-		r.Automation.Audit("server", "runtime_orders_stale_error", "runtime_order", 0, err.Error())
-		r.debugf("control_plane runtime_orders_stale error=%v", err)
-	} else if recovered > 0 {
-		r.Automation.Audit("server", "runtime_orders_stale", "runtime_order", 0, fmt.Sprintf("Órdenes recuperadas por stale: %d", recovered))
-	}
-	transcript, err := r.Automation.ProcesarRuntimeTranscriptBatch()
-	if err != nil {
-		r.Automation.Audit("server", "runtime_transcript_batch_error", "runtime_transcript", 0, err.Error())
-		r.debugf("control_plane runtime_transcript error=%v", err)
-	} else if transcript > 0 {
-		r.Automation.Audit("server", "runtime_transcript_batch", "runtime_transcript", 0, fmt.Sprintf("Conversación/runtime transcript procesado: %d", transcript))
-	}
-	processed, err := r.Automation.ProcesarRuntimeOrdersBatch()
-	if err != nil {
-		r.Automation.Audit("server", "runtime_orders_batch_error", "runtime_order", 0, err.Error())
-		r.debugf("control_plane runtime_orders_batch error=%v", err)
-	} else if processed > 0 {
-		r.Automation.Audit("server", "runtime_orders_batch", "runtime_order", 0, fmt.Sprintf("Órdenes procesadas en batch: %d", processed))
-	}
-	merged, err := r.Automation.ProcesarGitMergesBatch()
-	if err != nil {
-		r.Automation.Audit("server", "git_merges_batch_error", "git_merge", 0, err.Error())
-		r.debugf("control_plane git_merges_batch error=%v", err)
-	} else if merged > 0 {
-		r.Automation.Audit("server", "git_merges_batch", "git_merge", 0, fmt.Sprintf("Solicitudes de merge procesadas: %d", merged))
-	}
-	refined, err := r.Automation.ProcesarRefineriaBatch()
-	if err != nil {
-		r.Automation.Audit("server", "refineria_batch_error", "refineria_solicitud", 0, err.Error())
-		r.debugf("control_plane refineria_batch error=%v", err)
-	} else if refined > 0 {
-		r.Automation.Audit("server", "refineria_batch", "refineria_solicitud", 0, fmt.Sprintf("Solicitudes de refinería procesadas: %d", refined))
-	}
-	handoffs, err := r.Automation.ProcesarHandoffsBatch()
-	if err != nil {
-		r.Automation.Audit("server", "handoff_batch_error", "agente", 0, err.Error())
-		r.debugf("control_plane handoff_batch error=%v", err)
-	} else if handoffs > 0 {
-		r.Automation.Audit("server", "handoff_batch", "agente", 0, fmt.Sprintf("Handoffs automáticos procesados: %d", handoffs))
-	}
-	r.debugf("control_plane autonomia=%d supervision=%d review=%d handles_stale=%d orders_stale=%d transcript=%d runtime_orders=%d git_merges=%d refineria=%d handoffs=%d",
-		autonomia, supervision, review, stale, recovered, transcript, processed, merged, refined, handoffs)
+	return count
 }
 
 func (r *Runner) notifier() notificaciones.Notificador {

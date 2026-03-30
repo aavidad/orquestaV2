@@ -5,11 +5,16 @@ Autor: Alberto Avidad Fernandez
 Oficina de Software Libre (OSL) - Diputacion de Granada
 -->
 
-# Política de Copias de Seguridad de la Base de Datos
+# Política de Copias de Seguridad del Backend SQLite
+
+> Nota doctrinal: esta política cubre el backend SQLite.
+> La vía operativa oficial para snapshots manuales es `orquesta respaldo bd`.
+> La verificación operativa normal vive en `orquesta persistencia verificar`.
+> Si el backend activo no es SQLite, debe existir una política equivalente específica del motor.
 
 ## Principio
 
-La base de datos de Orquesta es la fuente de verdad de todo el ecosistema de agentes: tareas, propuestas, sesiones, reglas, decisiones y auditoría. Su pérdida o corrupción tendría un impacto irreversible sobre el desarrollo de todos los proyectos. Por ello, la realización de copias de seguridad periódicas es **obligatoria**.
+Cuando el backend activo es SQLite, la base de datos de Orquesta sigue siendo la fuente de verdad de todo el ecosistema de agentes: tareas, propuestas, sesiones, reglas, decisiones y auditoría. Su pérdida o corrupción tendría un impacto irreversible sobre el desarrollo de todos los proyectos. Por ello, la realización de copias de seguridad periódicas es **obligatoria**.
 
 ## Frecuencia y Retención
 
@@ -30,11 +35,11 @@ Las copias de seguridad deben alojarse **fuera del directorio de trabajo** del o
 
 ## Procedimiento de Restauración
 
-1. Parar todos los agentes activos (`orquesta sesion fin <agente>`).
-2. Hacer una copia de la BD actual antes de restaurar (por si la restauración empeora el estado).
-3. Copiar el fichero `.db.bak` deseado sobre `orquesta.db`.
-4. Verificar la integridad con `orquesta status`.
-5. Reiniciar las sesiones de los agentes.
+1. Parar el daemon y los agentes activos de forma ordenada.
+2. Hacer una copia del fichero SQLite actual antes de restaurar.
+3. Restaurar el `.db.bak` deseado sobre el fichero SQLite activo.
+4. Verificar con `orquesta persistencia info` y `orquesta persistencia verificar`.
+5. Volver a levantar el daemon y reanudar la operativa.
 
 ## Trazabilidad
 
@@ -46,4 +51,8 @@ Toda operación de backup (creación y restauración) debe quedar registrada com
 
 ## Implementación Técnica
 
-La implementación del script o tarea programada que materializa estos backups es responsabilidad del agente programador asignado a la **Tarea #217**. La presente política define los requisitos, no la implementación.
+La implementación técnica de referencia puede apoyarse en:
+- `orquesta respaldo bd` para snapshots manuales por el camino oficial
+- `scripts/backup_bd.sh` y `scripts/verificar_bd.sh` únicamente como automatización/rescate específica de SQLite
+
+La presente política define los requisitos, no la implementación.

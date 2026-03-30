@@ -179,17 +179,19 @@ func FinSesion(agente string) error {
 }
 
 func GetSesionByID(id int64) (*Sesion, error) {
-	row := DB.QueryRow(`
-		SELECT s.id, s.agente, s.conector_id, COALESCE(c.slug,''), COALESCE(c.nombre,''),
-		       s.proyecto_id, COALESCE(p.slug,''), COALESCE(p.nombre,''),
-		       s.inicio, s.fin, s.activa, s.estado, s.cwd, s.herramienta,
-		       s.external_session_id, s.resume_payload_json, s.resumen_continuidad,
-		       s.branch, s.heartbeat_at, s.host, s.pid
-		FROM sesiones s
-		LEFT JOIN conectores c ON c.id = s.conector_id
-		LEFT JOIN proyectos p ON p.id = s.proyecto_id
-		WHERE s.id = ?`, id)
-	return escanearSesion(row)
+	return consultarConReintentos(func() (*Sesion, error) {
+		row := DB.QueryRow(`
+			SELECT s.id, s.agente, s.conector_id, COALESCE(c.slug,''), COALESCE(c.nombre,''),
+			       s.proyecto_id, COALESCE(p.slug,''), COALESCE(p.nombre,''),
+			       s.inicio, s.fin, s.activa, s.estado, s.cwd, s.herramienta,
+			       s.external_session_id, s.resume_payload_json, s.resumen_continuidad,
+			       s.branch, s.heartbeat_at, s.host, s.pid
+			FROM sesiones s
+			LEFT JOIN conectores c ON c.id = s.conector_id
+			LEFT JOIN proyectos p ON p.id = s.proyecto_id
+			WHERE s.id = ?`, id)
+		return escanearSesion(row)
+	})
 }
 
 func ObtenerUltimaSesion(agente string, proyectoID *int64) (*Sesion, error) {
@@ -230,7 +232,10 @@ func GuardarSesionActiva(agente string, proyectoID *int64, upd SesionUpdate) err
 	q += ` ORDER BY id DESC LIMIT 1`
 
 	var id int64
-	if err := DB.QueryRow(q, args...).Scan(&id); err != nil {
+	if _, err := consultarConReintentos(func() (int64, error) {
+		err := DB.QueryRow(q, args...).Scan(&id)
+		return id, err
+	}); err != nil {
 		if err == sql.ErrNoRows {
 			return fmt.Errorf("el agente '%s' no tiene sesión activa", agente)
 		}
@@ -309,31 +314,170 @@ func GuardarSesionActiva(agente string, proyectoID *int64, upd SesionUpdate) err
 }
 
 func ListarSesionesActivas() ([]*Sesion, error) {
-	rows, err := DB.Query(`
-		SELECT s.id, s.agente, s.conector_id, COALESCE(c.slug,''), COALESCE(c.nombre,''),
-		       s.proyecto_id, COALESCE(p.slug,''), COALESCE(p.nombre,''),
-		       s.inicio, s.fin, s.activa, s.estado, s.cwd, s.herramienta,
-		       s.external_session_id, s.resume_payload_json, s.resumen_continuidad,
-		       s.branch, s.heartbeat_at, s.host, s.pid
-		FROM sesiones s
-		LEFT JOIN conectores c ON c.id = s.conector_id
-		LEFT JOIN proyectos p ON p.id = s.proyecto_id
-		WHERE s.activa = 1
-		ORDER BY s.id DESC`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+	return ListarSesionesActivasOperativas()
+}
 
-	var out []*Sesion
-	for rows.Next() {
-		s, err := escanearSesion(rows)
+func listarSesionesAbiertasRaw() ([]*Sesion, error) {
+	return consultarConReintentos(func() ([]*Sesion, error) {
+		rows, err := DB.Query(`
+			SELECT s.id, s.agente, s.conector_id, COALESCE(c.slug,''), COALESCE(c.nombre,''),
+			       s.proyecto_id, COALESCE(p.slug,''), COALESCE(p.nombre,''),
+			       s.inicio, s.fin, s.activa, s.estado, s.cwd, s.herramienta,
+			       s.external_session_id, s.resume_payload_json, s.resumen_continuidad,
+			       s.branch, s.heartbeat_at, s.host, s.pid
+			FROM sesiones s
+			LEFT JOIN conectores c ON c.id = s.conector_id
+			LEFT JOIN proyectos p ON p.id = s.proyecto_id
+			WHERE s.activa = 1
+			ORDER BY s.id DESC`)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, s)
+		defer rows.Close()
+
+		var out []*Sesion
+		for rows.Next() {
+			s, err := escanearSesion(rows)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, s)
+		}
+		return out, rows.Err()
+	})
+}
+
+func sessionOperationalStaleDuration() time.Duration {
+	seconds := configIntOrDefault("session_operational_stale_seconds", 180)
+	if seconds <= 0 {
+		tick := configIntOrDefault("agent_tick_seconds", 30)
+		if tick <= 0 {
+			tick = 30
+		}
+		seconds = tick * 6
 	}
-	return out, rows.Err()
+	return time.Duration(seconds) * time.Second
+}
+
+func sesionOperativaPorHeartbeat(activa bool, heartbeat *time.Time, inicio time.Time, now time.Time) bool {
+	if !activa {
+		return false
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	ultima := preferTime(heartbeat, timePtr(inicio), &now)
+	if ultima == nil || ultima.IsZero() {
+		return false
+	}
+	return !ultima.Before(now.Add(-sessionOperationalStaleDuration()))
+}
+
+func SesionEsOperativa(sesion *Sesion) bool {
+	if sesion == nil {
+		return false
+	}
+	return sesionOperativaPorHeartbeat(sesion.Activa, sesion.HeartbeatAt, sesion.Inicio, time.Now().UTC())
+}
+
+func runtimeHandleCacheKey(agente string, proyectoID *int64) string {
+	key := strings.ToLower(strings.TrimSpace(agente))
+	if proyectoID != nil && *proyectoID > 0 {
+		key = fmt.Sprintf("%s#%d", key, *proyectoID)
+	}
+	return key
+}
+
+func listarHandlesActivosOperativosMap() (map[string]bool, error) {
+	cutoff := sessionOperationalCutoff()
+	return consultarConReintentos(func() (map[string]bool, error) {
+		rows, err := DB.Query(runtimeHandleSelectBase() + `
+		 WHERE estado IN ('activo','pausado')
+		 ORDER BY id DESC`)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		out := map[string]bool{}
+		for rows.Next() {
+			handle, err := scanRuntimeHandle(rows)
+			if err != nil {
+				return nil, err
+			}
+			if !runtimeHandleSostieneSesionOperativaConCutoff(handle, cutoff) {
+				continue
+			}
+			out[runtimeHandleCacheKey(handle.Agente, handle.ProyectoID)] = true
+		}
+		return out, rows.Err()
+	})
+}
+
+func sesionTieneHandleActivoOperativo(agente string, proyectoID *int64) (bool, error) {
+	handlesActivos, err := listarHandlesActivosOperativosMap()
+	if err != nil {
+		return false, err
+	}
+	return handlesActivos[runtimeHandleCacheKey(agente, proyectoID)], nil
+}
+
+func runtimeHandleSostieneSesionOperativa(handle *RuntimeHandle) bool {
+	return runtimeHandleSostieneSesionOperativaConCutoff(handle, sessionOperationalCutoff())
+}
+
+func runtimeHandleSostieneSesionOperativaConCutoff(handle *RuntimeHandle, cutoff time.Time) bool {
+	if handle == nil {
+		return false
+	}
+	estado := strings.TrimSpace(handle.Estado)
+	if estado != "activo" && estado != "pausado" {
+		return false
+	}
+	ultima := preferTime(handle.LastSeenAt, &handle.UpdatedAt, &handle.CreatedAt)
+	if ultima == nil || ultima.Before(cutoff) {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(handle.HandleKind), "process") {
+		return true
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if externalSessionID := strings.TrimSpace(stringFromMap(meta, "external_session_id", "")); externalSessionID != "" {
+		return true
+	}
+	handleRef := strings.TrimSpace(handle.HandleRef)
+	if handleRef == "" {
+		return false
+	}
+	if handle.SesionID != nil && handleRef == jsonNumber(*handle.SesionID) {
+		return false
+	}
+	return true
+}
+
+func ListarSesionesActivasOperativas() ([]*Sesion, error) {
+	sesiones, err := listarSesionesAbiertasRaw()
+	if err != nil {
+		return nil, err
+	}
+	handlesActivos, err := listarHandlesActivosOperativosMap()
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	out := make([]*Sesion, 0, len(sesiones))
+	for _, sesion := range sesiones {
+		if sesion == nil {
+			continue
+		}
+		if sesionOperativaPorHeartbeat(sesion.Activa, sesion.HeartbeatAt, sesion.Inicio, now) {
+			out = append(out, sesion)
+			continue
+		}
+		if handlesActivos[runtimeHandleCacheKey(sesion.Agente, sesion.ProyectoID)] {
+			out = append(out, sesion)
+		}
+	}
+	return out, nil
 }
 
 func aplicarEstadoVisibleAgente(agente *Agente, sesion *Sesion) {
@@ -377,53 +521,64 @@ func aplicarEstadoVisibleAgentes(agentes []*Agente, sesiones []*Sesion) {
 }
 
 // ListarAgentes devuelve todos los agentes registrados con su estado de cuota.
-func ListarAgentes() ([]*Agente, error) {
-	rows, err := DB.Query(`
-		SELECT nombre, rol, activo, habilitado, COALESCE(estado_sesion,''), ultima_sesion,
-		       consumo_dia_segundos, consumo_semanal_segundos, limite_dia_segundos,
-		       limite_semanal_segundos, last_usage_reset_at, estado_cuota,
-		       reanimar_at, motivo_pausa
-		FROM agentes ORDER BY nombre`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var list []*Agente
-	for rows.Next() {
-		a := &Agente{}
-		var ultima sql.NullTime
-		var lastReset sql.NullTime
-		var reanimar sql.NullTime
-		var motivo sql.NullString
-		if err := rows.Scan(
-			&a.Nombre, &a.Rol, &a.Activo, &a.Habilitado, &a.EstadoSesion, &ultima,
-			&a.ConsumoDiaSegundos, &a.ConsumoSemanalSegundos, &a.LimiteDiaSegundos,
-			&a.LimiteSemanalSegundos, &lastReset, &a.EstadoCuota,
-			&reanimar, &motivo,
-		); err != nil {
+func listarAgentesRaw() ([]*Agente, error) {
+	return consultarConReintentos(func() ([]*Agente, error) {
+		rows, err := DB.Query(`
+			SELECT nombre, rol, activo, habilitado, COALESCE(estado_sesion,''), ultima_sesion,
+			       consumo_dia_segundos, consumo_semanal_segundos, limite_dia_segundos,
+			       limite_semanal_segundos, last_usage_reset_at, estado_cuota,
+			       reanimar_at, motivo_pausa
+			FROM agentes ORDER BY nombre`)
+		if err != nil {
 			return nil, err
 		}
-		if ultima.Valid {
-			a.UltimaSesion = &ultima.Time
+		defer rows.Close()
+		var list []*Agente
+		for rows.Next() {
+			a := &Agente{}
+			var ultima sql.NullTime
+			var lastReset sql.NullTime
+			var reanimar sql.NullTime
+			var motivo sql.NullString
+			if err := rows.Scan(
+				&a.Nombre, &a.Rol, &a.Activo, &a.Habilitado, &a.EstadoSesion, &ultima,
+				&a.ConsumoDiaSegundos, &a.ConsumoSemanalSegundos, &a.LimiteDiaSegundos,
+				&a.LimiteSemanalSegundos, &lastReset, &a.EstadoCuota,
+				&reanimar, &motivo,
+			); err != nil {
+				return nil, err
+			}
+			if ultima.Valid {
+				a.UltimaSesion = &ultima.Time
+			}
+			if lastReset.Valid {
+				a.LastUsageResetAt = &lastReset.Time
+			}
+			if reanimar.Valid {
+				a.ReanimarAt = &reanimar.Time
+			}
+			a.MotivoPausa = motivo.String
+			list = append(list, a)
 		}
-		if lastReset.Valid {
-			a.LastUsageResetAt = &lastReset.Time
-		}
-		if reanimar.Valid {
-			a.ReanimarAt = &reanimar.Time
-		}
-		a.MotivoPausa = motivo.String
-		list = append(list, a)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	sesionesActivas, err := ListarSesionesActivas()
+		return list, rows.Err()
+	})
+}
+
+func ListarAgentesConSesionesActivas(sesiones []*Sesion) ([]*Agente, error) {
+	list, err := listarAgentesRaw()
 	if err != nil {
 		return nil, err
 	}
-	aplicarEstadoVisibleAgentes(list, sesionesActivas)
+	aplicarEstadoVisibleAgentes(list, sesiones)
 	return list, nil
+}
+
+func ListarAgentes() ([]*Agente, error) {
+	sesionesActivas, err := ListarSesionesActivasOperativas()
+	if err != nil {
+		return nil, err
+	}
+	return ListarAgentesConSesionesActivas(sesionesActivas)
 }
 
 func GetAgente(nombre string) (*Agente, error) {
@@ -460,7 +615,7 @@ func GetAgente(nombre string) (*Agente, error) {
 		a.ReanimarAt = &reanimar.Time
 	}
 	a.MotivoPausa = motivo.String
-	sesionActiva, err := GetSesionActiva(a.Nombre, nil)
+	sesionActiva, err := GetSesionActivaOperativa(a.Nombre, nil)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
@@ -470,12 +625,42 @@ func GetAgente(nombre string) (*Agente, error) {
 
 func resolverAgentePorNombreCI(nombre string) (string, string, bool, error) {
 	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return "", "", false, sql.ErrNoRows
+	}
 	var (
 		nombreCanonico string
 		rol            string
 		habilitado     bool
 	)
 	err := DB.QueryRow(`
+		SELECT nombre, rol, habilitado
+		FROM agentes
+		WHERE nombre = ?
+		LIMIT 1`, nombre,
+	).Scan(&nombreCanonico, &rol, &habilitado)
+	if err == nil {
+		return nombreCanonico, rol, habilitado, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", "", false, err
+	}
+	var coincidencias int
+	if err := DB.QueryRow(`
+		SELECT COUNT(*)
+		FROM agentes
+		WHERE lower(nombre) = lower(?)`, nombre,
+	).Scan(&coincidencias); err != nil {
+		return "", "", false, err
+	}
+	switch coincidencias {
+	case 0:
+		return "", "", false, sql.ErrNoRows
+	case 1:
+	default:
+		return "", "", false, fmt.Errorf("nombre de agente ambiguo por mayusculas/minusculas: %s", nombre)
+	}
+	err = DB.QueryRow(`
 		SELECT nombre, rol, habilitado
 		FROM agentes
 		WHERE lower(nombre) = lower(?)
@@ -614,7 +799,36 @@ func SetEstadoSesion(agente, estado string) {
 	_, _ = DB.Exec(`UPDATE agentes SET estado_sesion=? WHERE nombre=? AND activo=1`, estado, agente)
 }
 
-func GetSesionActiva(agente string, proyectoID *int64) (*Sesion, error) {
+func sessionOperationalGrace() time.Duration {
+	tickSeconds := configIntOrDefault("agent_tick_seconds", 30)
+	if tickSeconds <= 0 {
+		tickSeconds = 30
+	}
+	grace := time.Duration(tickSeconds*4) * time.Second
+
+	handleStaleSeconds := configIntOrDefault("runtime_handle_stale_seconds", 120)
+	if handleStaleSeconds <= 0 {
+		handleStaleSeconds = 120
+	}
+	handleGrace := time.Duration(handleStaleSeconds) * time.Second
+	if handleGrace > grace {
+		grace = handleGrace
+	}
+	if grace < 2*time.Minute {
+		grace = 2 * time.Minute
+	}
+	return grace
+}
+
+func sessionOperationalCutoff() time.Time {
+	return time.Now().UTC().Add(-sessionOperationalGrace())
+}
+
+func sessionOperationalCutoffSQL() string {
+	return sessionOperationalCutoff().Format("2006-01-02 15:04:05")
+}
+
+func GetSesionAbierta(agente string, proyectoID *int64) (*Sesion, error) {
 	q := `
 		SELECT s.id, s.agente, s.conector_id, COALESCE(c.slug,''), COALESCE(c.nombre,''),
 		       s.proyecto_id, COALESCE(p.slug,''), COALESCE(p.nombre,''),
@@ -631,7 +845,50 @@ func GetSesionActiva(agente string, proyectoID *int64) (*Sesion, error) {
 		args = append(args, *proyectoID)
 	}
 	q += ` ORDER BY s.id DESC LIMIT 1`
-	return escanearSesion(DB.QueryRow(q, args...))
+	return consultarConReintentos(func() (*Sesion, error) {
+		return escanearSesion(DB.QueryRow(q, args...))
+	})
+}
+
+func GetSesionActiva(agente string, proyectoID *int64) (*Sesion, error) {
+	q := `
+		SELECT s.id, s.agente, s.conector_id, COALESCE(c.slug,''), COALESCE(c.nombre,''),
+		       s.proyecto_id, COALESCE(p.slug,''), COALESCE(p.nombre,''),
+		       s.inicio, s.fin, s.activa, s.estado, s.cwd, s.herramienta,
+		       s.external_session_id, s.resume_payload_json, s.resumen_continuidad,
+		       s.branch, s.heartbeat_at, s.host, s.pid
+		FROM sesiones s
+		LEFT JOIN conectores c ON c.id = s.conector_id
+		LEFT JOIN proyectos p ON p.id = s.proyecto_id
+		WHERE s.agente = ? AND s.activa = 1
+		  AND datetime(COALESCE(s.heartbeat_at, s.inicio)) >= datetime(?)`
+	args := []any{agente, sessionOperationalCutoffSQL()}
+	if proyectoID != nil {
+		q += ` AND s.proyecto_id = ?`
+		args = append(args, *proyectoID)
+	}
+	q += ` ORDER BY s.id DESC LIMIT 1`
+	return consultarConReintentos(func() (*Sesion, error) {
+		return escanearSesion(DB.QueryRow(q, args...))
+	})
+}
+
+func GetSesionActivaOperativa(agente string, proyectoID *int64) (*Sesion, error) {
+	sesion, err := GetSesionAbierta(agente, proyectoID)
+	if err != nil {
+		return nil, err
+	}
+	if SesionEsOperativa(sesion) {
+		return sesion, nil
+	}
+	activo, err := sesionTieneHandleActivoOperativo(sesion.Agente, proyectoID)
+	if err != nil {
+		return nil, err
+	}
+	if !activo {
+		return nil, sql.ErrNoRows
+	}
+	return sesion, nil
 }
 
 func SesionActivaDeAgente(agente string) (*Sesion, error) {

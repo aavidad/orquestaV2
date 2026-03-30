@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"orquesta/notificaciones"
 	"orquesta/planocontrol"
 	"orquesta/reviewapp"
+	"orquesta/runtimeagente"
 	"orquesta/tareasapp"
 )
 
@@ -50,6 +52,10 @@ func (dbAutomationService) ProcesarAutonomiaAgentesBatch() (int, error) {
 	return procesarAutonomiaAgentesBatch()
 }
 
+func (dbAutomationService) ProcesarRuntimeSupervisionBatch() (int, error) {
+	return db.ProcesarRuntimeSupervisionBatch()
+}
+
 func (dbAutomationService) ReconciliarRuntimeHandlesStale() (int, error) {
 	return db.ReconciliarRuntimeHandlesStale()
 }
@@ -60,6 +66,10 @@ func (dbAutomationService) ReconciliarRuntimeOrdersStale() (int, error) {
 
 func (dbAutomationService) ProcesarRuntimeTranscriptBatch() (int, error) {
 	return procesarRuntimeTranscriptBatch()
+}
+
+func (dbAutomationService) ProcesarRuntimeMailboxBatch() (int, error) {
+	return procesarRuntimeMailboxBatch()
 }
 
 func (dbAutomationService) ProcesarRuntimeOrdersBatch() (int, error) {
@@ -94,23 +104,19 @@ func newControlPlaneRunner(debugLogger *log.Logger, debugControlPlane bool) *pla
 }
 
 func procesarRuntimeTranscriptBatch() (int, error) {
-	mailbox, err := procesarRuntimeMailboxInteractivoBatch()
-	if err != nil {
-		return mailbox, err
-	}
 	ingested, err := db.IngestarRuntimeTranscriptActivos()
 	if err != nil {
-		return mailbox + ingested, err
+		return ingested, err
 	}
 	if !controlPlaneConfigBoolOrDefault("runtime_transcript_auto_guidance_enabled", true) {
-		return mailbox + ingested, nil
+		return ingested, nil
 	}
 	signals, err := db.ListarRuntimeTranscript(db.FiltroRuntimeTranscript{
 		SoloSenalesPend: true,
 		Limit:           50,
 	})
 	if err != nil {
-		return mailbox + ingested, err
+		return ingested, err
 	}
 	processedSignals := 0
 	for i := len(signals) - 1; i >= 0; i-- {
@@ -124,12 +130,71 @@ func procesarRuntimeTranscriptBatch() (int, error) {
 		}
 		if strings.TrimSpace(note) != "" {
 			if err := db.MarcarRuntimeTranscriptManejado(item.ID, note); err != nil {
-				return mailbox + ingested + processedSignals, err
+				return ingested + processedSignals, err
 			}
 		}
 		processedSignals++
 	}
-	return mailbox + ingested + processedSignals, nil
+	return ingested + processedSignals, nil
+}
+
+func procesarRuntimeMailboxBatch() (int, error) {
+	reconciled, err := reconciliarRuntimeMailboxWatchdogSinHandleBatch()
+	if err != nil {
+		return reconciled, err
+	}
+	interactive, err := procesarRuntimeMailboxInteractivoBatch()
+	if err != nil {
+		return reconciled + interactive, err
+	}
+	sessionResume, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		return reconciled + interactive + sessionResume, err
+	}
+	restarts, err := procesarRuntimeMailboxCoordinatedRestartBatch()
+	if err != nil {
+		return reconciled + interactive + sessionResume + restarts, err
+	}
+	return reconciled + interactive + sessionResume + restarts, nil
+}
+
+func reconciliarRuntimeMailboxWatchdogSinHandleBatch() (int, error) {
+	estado := "pendiente"
+	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &estado})
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, msg := range mailbox {
+		if msg == nil || strings.TrimSpace(msg.Kind) != "watchdog" {
+			continue
+		}
+		handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+		if err != nil {
+			return total, err
+		}
+		if handle != nil {
+			continue
+		}
+		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+			return total, err
+		}
+		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return total, err
+		}
+		db.Audit("orquesta", "runtime_mailbox_watchdog_sin_handle", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("agente=%s proyecto_id=%s watchdog consumido por ausencia de handle activo",
+				strings.TrimSpace(msg.ToAgente), runtimeMailboxProyectoDetalle(msg.ProyectoID)))
+		total++
+	}
+	return total, nil
+}
+
+func runtimeMailboxProyectoDetalle(proyectoID *int64) string {
+	if proyectoID == nil || *proyectoID <= 0 {
+		return "-"
+	}
+	return strconv.FormatInt(*proyectoID, 10)
 }
 
 func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
@@ -186,18 +251,26 @@ func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 	}
 	detail := fmt.Sprintf("transcript_id=%d agente=%s signal=%s", item.ID, agente, strings.TrimSpace(item.Classification))
 	db.Audit("orquesta", "runtime_transcript_signal", "runtime_order", orderID, detail)
-	payloadEvent, _ := json.Marshal(map[string]any{
-		"transcript_id":    item.ID,
-		"runtime_order_id": orderID,
-		"classification":   strings.TrimSpace(item.Classification),
-	})
+	payloadEvent, _ := json.Marshal(construirPayloadEventoAutoGuidance(item, orderID, order.Tipo, payload))
+	eventPayload := construirPayloadEventoAutoGuidance(item, orderID, order.Tipo, payload)
 	_, _ = db.RegistrarRuntimeEvent(&db.RuntimeEvent{
 		RuntimeID:   item.RuntimeID,
 		Kind:        "auto_guidance_sent",
 		Level:       "info",
-		Message:     fmt.Sprintf("Orquesta respondió a la señal %s", strings.TrimSpace(item.Classification)),
+		Message:     fmt.Sprintf("Orquesta envió guía automática a %s tras %s", agente, strings.TrimSpace(item.Classification)),
 		PayloadJSON: string(payloadEvent),
 	})
+	select {
+	case db.CanalNotificaciones <- db.EventoNotificacion{
+		Tipo:       "runtime_auto_guidance",
+		ID:         orderID,
+		Agente:     agente,
+		Texto:      construirMensajeNotificacionAutoGuidance(item),
+		ProyectoID: int64ProyectoRuntimeTranscript(item),
+		Payload:    eventPayload,
+	}:
+	default:
+	}
 	notes := []string{fmt.Sprintf("auto_guidance_order:%d", orderID)}
 	if supervisorNote, err := notificarSupervisorSignalTranscript(item); err != nil {
 		return "", err
@@ -205,6 +278,61 @@ func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 		notes = append(notes, strings.TrimSpace(supervisorNote))
 	}
 	return strings.Join(notes, ";"), nil
+}
+
+func construirPayloadEventoAutoGuidance(item *db.RuntimeTranscriptEntry, orderID int64, orderType string, instruction map[string]any) map[string]any {
+	if item == nil {
+		payload := map[string]any{
+			"runtime_order_id":   orderID,
+			"runtime_order_type": strings.TrimSpace(orderType),
+		}
+		if len(instruction) > 0 {
+			payload["instruction"] = instruction
+		}
+		return payload
+	}
+	payload := map[string]any{
+		"agente":             strings.TrimSpace(item.Agente),
+		"classification":     strings.TrimSpace(item.Classification),
+		"runtime_id":         item.RuntimeID,
+		"runtime_order_id":   orderID,
+		"runtime_order_type": strings.TrimSpace(orderType),
+		"signal_text":        strings.TrimSpace(item.Text),
+		"transcript_id":      item.ID,
+	}
+	if item.ProyectoID != nil && *item.ProyectoID > 0 {
+		payload["proyecto_id"] = *item.ProyectoID
+	}
+	if item.HandleID != nil && *item.HandleID > 0 {
+		payload["handle_id"] = *item.HandleID
+	}
+	if len(instruction) > 0 {
+		payload["instruction"] = instruction
+	}
+	return payload
+}
+
+func construirMensajeNotificacionAutoGuidance(item *db.RuntimeTranscriptEntry) string {
+	if item == nil {
+		return "Orquesta envió guía automática a un agente"
+	}
+	agente := strings.TrimSpace(item.Agente)
+	classification := strings.TrimSpace(item.Classification)
+	if agente == "" {
+		agente = "agente-desconocido"
+	}
+	texto := strings.TrimSpace(item.Text)
+	if texto == "" {
+		return fmt.Sprintf("Orquesta envió guía automática a %s tras %s", agente, classification)
+	}
+	return fmt.Sprintf("Orquesta envió guía automática a %s tras %s: %s", agente, classification, texto)
+}
+
+func int64ProyectoRuntimeTranscript(item *db.RuntimeTranscriptEntry) int64 {
+	if item == nil || item.ProyectoID == nil {
+		return 0
+	}
+	return *item.ProyectoID
 }
 
 func resolverReviewGateDesdeSignalTranscript(item *db.RuntimeTranscriptEntry) (string, bool, error) {
@@ -444,18 +572,12 @@ func notificarSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry) (strin
 		}
 	}
 	notes := make([]string, 0, 3)
-	supervisor, activado, err := prepararAgentePreferidoAutonomia(proyecto.ID, strings.TrimSpace(policy.SupervisorAgente), "supervision_transcript_signal")
+	supervisor, activado, err := resolverSupervisorAutonomiaOperativo(proyecto.ID, policy, "supervision_transcript_signal", strings.TrimSpace(item.Agente))
 	if err != nil {
 		return "", err
 	}
 	if activado {
 		notes = append(notes, "supervisor_start")
-	}
-	if supervisor == nil {
-		supervisor, err = seleccionarAgenteActivoProyectoPreferido(proyecto.ID, strings.TrimSpace(policy.SupervisorAgente), []string{"supervisor", "orquestador", "revisor", "reviewer", "admin", "programador"}, strings.TrimSpace(item.Agente))
-		if err != nil {
-			return "", err
-		}
 	}
 	if note, err := asegurarTareaReplanAutonomiaSignal(item, policy, proyecto, supervisor); err != nil {
 		return "", err
@@ -688,6 +810,9 @@ func procesarRuntimeMailboxInteractivoBatch() (int, error) {
 		if !ok {
 			continue
 		}
+		if err := coalescerRuntimeMailboxPendiente(msg); err != nil {
+			return total, err
+		}
 		handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
 		if err != nil {
 			return total, err
@@ -695,45 +820,307 @@ func procesarRuntimeMailboxInteractivoBatch() (int, error) {
 		if handle == nil {
 			continue
 		}
-		if !db.RuntimeHandlePermiteSendInputInteractivo(handle) {
+		if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryInteractive {
 			continue
 		}
-		payload := map[string]any{
-			"to_agente":    strings.TrimSpace(msg.ToAgente),
-			"from_agente":  strings.TrimSpace(msg.FromAgente),
-			"texto":        texto,
-			"mailbox_id":   msg.ID,
-			"mailbox_kind": strings.TrimSpace(msg.Kind),
+		if abierta, err := existeRuntimeOrderAbiertaPorHandle(handle.ID, "send_instruction"); err != nil {
+			return total, err
+		} else if abierta {
+			continue
 		}
-		raw, err := json.Marshal(payload)
+		orderID, err := encolarSendInstructionDesdeRuntimeMailbox(msg, handle, texto, "")
 		if err != nil {
 			return total, err
 		}
-		order := &db.RuntimeOrder{
-			Agente:      strings.TrimSpace(msg.ToAgente),
-			ProyectoID:  msg.ProyectoID,
-			Tipo:        "send_instruction",
-			PayloadJSON: string(raw),
-		}
-		if handle.RuntimeID != nil {
-			order.RuntimeID = handle.RuntimeID
-		}
-		order.HandleID = &handle.ID
-		orderID, err := db.EncolarRuntimeOrder(order)
-		if err != nil {
-			return total, err
-		}
-		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
-			return total, err
-		}
-		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
-			return total, err
+		if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) {
+			superseded, err := db.ConsumirRuntimeMailboxPendienteSupersedido(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, strings.TrimSpace(msg.Kind), msg.ID)
+			if err != nil {
+				return total, err
+			}
+			if superseded > 0 {
+				db.Audit("orquesta", "runtime_mailbox_interactivo_supersede", "runtime_mailbox", msg.ID,
+					fmt.Sprintf("agente=%s kind=%s superseded=%d", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), superseded))
+			}
 		}
 		db.Audit("orquesta", "runtime_mailbox_interactivo", "runtime_order", orderID,
 			fmt.Sprintf("mailbox_id=%d agente=%s kind=%s", msg.ID, strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
 		total++
 	}
 	return total, nil
+}
+
+func procesarRuntimeMailboxCoordinatedRestartBatch() (int, error) {
+	estado := "pendiente"
+	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &estado})
+	if err != nil {
+		return 0, err
+	}
+	type recycleKey struct {
+		agente     string
+		proyectoID int64
+	}
+	latest := make(map[recycleKey]*db.RuntimeMailboxMessage)
+	for _, msg := range mailbox {
+		if msg == nil || msg.ProyectoID == nil || *msg.ProyectoID <= 0 {
+			continue
+		}
+		if err := coalescerRuntimeMailboxPendiente(msg); err != nil {
+			return 0, err
+		}
+		if !runtimeMailboxKindRequiereCoordinatedRestart(strings.TrimSpace(msg.Kind)) {
+			continue
+		}
+		handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+		if err != nil {
+			return 0, err
+		}
+		if !runtimeHandleRequiereCoordinatedRestartMailbox(handle) {
+			continue
+		}
+		if pendiente, err := existeRuntimeOrderAbiertaAutonomia(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, "stop", "start", "restart", "resume", "handoff"); err != nil {
+			return 0, err
+		} else if pendiente {
+			continue
+		}
+		key := recycleKey{
+			agente:     strings.TrimSpace(msg.ToAgente),
+			proyectoID: *msg.ProyectoID,
+		}
+		if prev := latest[key]; prev == nil || msg.ID > prev.ID {
+			latest[key] = msg
+		}
+	}
+	keys := make([]recycleKey, 0, len(latest))
+	for key := range latest {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].proyectoID == keys[j].proyectoID {
+			return keys[i].agente < keys[j].agente
+		}
+		return keys[i].proyectoID < keys[j].proyectoID
+	})
+	total := 0
+	for _, key := range keys {
+		msg := latest[key]
+		if msg == nil {
+			continue
+		}
+		proyecto, err := runtimesService.GetProject(strconv.FormatInt(key.proyectoID, 10))
+		if err != nil || proyecto == nil {
+			return total, err
+		}
+		handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(key.agente, &key.proyectoID)
+		if err != nil {
+			return total, err
+		}
+		if handle == nil {
+			continue
+		}
+		motivo := fmt.Sprintf("runtime_mailbox_coordinated_restart:%s:%d", strings.TrimSpace(msg.Kind), msg.ID)
+		stopOrderID, startOrderID, err := encolarReinicioCoordinadoMailbox(handle, proyecto, msg, motivo)
+		if err != nil {
+			return total, err
+		}
+		if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) {
+			superseded, err := db.ConsumirRuntimeMailboxPendienteSupersedido(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, strings.TrimSpace(msg.Kind), msg.ID)
+			if err != nil {
+				return total, err
+			}
+			if superseded > 0 {
+				db.Audit("orquesta", "runtime_mailbox_coordinated_restart_supersede", "runtime_mailbox", msg.ID,
+					fmt.Sprintf("agente=%s kind=%s superseded=%d", key.agente, strings.TrimSpace(msg.Kind), superseded))
+			}
+		}
+		db.Audit("orquesta", "runtime_mailbox_coordinated_restart", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("agente=%s proyecto=%s kind=%s stop_order_id=%d start_order_id=%d", key.agente, proyecto.Slug, strings.TrimSpace(msg.Kind), stopOrderID, startOrderID))
+		total++
+	}
+	return total, nil
+}
+
+func procesarRuntimeMailboxSessionResumeBatch() (int, error) {
+	estado := "pendiente"
+	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &estado})
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, msg := range mailbox {
+		if msg == nil {
+			continue
+		}
+		texto, ok := construirInstruccionMailboxInteractivo(msg)
+		if !ok {
+			continue
+		}
+		if err := coalescerRuntimeMailboxPendiente(msg); err != nil {
+			return total, err
+		}
+		handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+		if err != nil {
+			return total, err
+		}
+		if handle == nil {
+			continue
+		}
+		var runtime *db.RuntimeInstance
+		if handle.RuntimeID != nil {
+			runtime, err = db.GetRuntime(*handle.RuntimeID)
+			if err != nil {
+				return total, err
+			}
+		}
+		handle, externalSessionID, err := db.SincronizarRuntimeHandleExternalSessionID(handle, runtime)
+		if err != nil {
+			return total, err
+		}
+		if handle == nil || strings.TrimSpace(externalSessionID) == "" {
+			continue
+		}
+		if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliverySessionResume {
+			continue
+		}
+		if abierta, err := existeRuntimeOrderAbiertaPorHandle(handle.ID, "send_instruction"); err != nil {
+			return total, err
+		} else if abierta {
+			continue
+		}
+		orderID, err := encolarSendInstructionDesdeRuntimeMailbox(msg, handle, texto, externalSessionID)
+		if err != nil {
+			return total, err
+		}
+		if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) {
+			superseded, err := db.ConsumirRuntimeMailboxPendienteSupersedido(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, strings.TrimSpace(msg.Kind), msg.ID)
+			if err != nil {
+				return total, err
+			}
+			if superseded > 0 {
+				db.Audit("orquesta", "runtime_mailbox_session_resume_supersede", "runtime_mailbox", msg.ID,
+					fmt.Sprintf("agente=%s kind=%s superseded=%d", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), superseded))
+			}
+		}
+		db.Audit("orquesta", "runtime_mailbox_session_resume", "runtime_order", orderID,
+			fmt.Sprintf("mailbox_id=%d agente=%s kind=%s", msg.ID, strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
+		total++
+	}
+	return total, nil
+}
+
+func encolarSendInstructionDesdeRuntimeMailbox(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, texto, externalSessionID string) (int64, error) {
+	if msg == nil || handle == nil {
+		return 0, nil
+	}
+	payload := map[string]any{
+		"to_agente":    strings.TrimSpace(msg.ToAgente),
+		"from_agente":  strings.TrimSpace(msg.FromAgente),
+		"texto":        strings.TrimSpace(texto),
+		"mailbox_id":   msg.ID,
+		"mailbox_kind": strings.TrimSpace(msg.Kind),
+	}
+	if strings.TrimSpace(externalSessionID) != "" {
+		payload["external_session_id"] = strings.TrimSpace(externalSessionID)
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return 0, err
+	}
+	order := &db.RuntimeOrder{
+		Agente:      strings.TrimSpace(msg.ToAgente),
+		ProyectoID:  msg.ProyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: string(raw),
+	}
+	if handle.RuntimeID != nil {
+		order.RuntimeID = handle.RuntimeID
+	}
+	order.HandleID = &handle.ID
+	return db.EncolarRuntimeOrder(order)
+}
+
+func encolarReinicioCoordinadoMailbox(handle *db.RuntimeHandle, proyecto *db.Proyecto, msg *db.RuntimeMailboxMessage, motivo string) (int64, int64, error) {
+	if handle == nil || msg == nil {
+		return 0, 0, nil
+	}
+	return db.EncolarReinicioCoordinadoRuntimeHandle(handle, proyectoIDPtr(proyecto), motivo, "orquesta")
+}
+
+func proyectoIDPtr(proyecto *db.Proyecto) *int64 {
+	if proyecto == nil || proyecto.ID <= 0 {
+		return nil
+	}
+	return &proyecto.ID
+}
+
+func runtimeMailboxKindCoalescible(kind string) bool {
+	switch strings.TrimSpace(kind) {
+	case "instruction", "autonomia", "nudge", "watchdog", db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
+		return true
+	default:
+		return false
+	}
+}
+
+func runtimeMailboxKindRequiereCoordinatedRestart(kind string) bool {
+	switch strings.TrimSpace(kind) {
+	case "instruction", "autonomia", "nudge", "watchdog", db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
+		return true
+	default:
+		return false
+	}
+}
+
+func coalescerRuntimeMailboxPendiente(msg *db.RuntimeMailboxMessage) error {
+	if msg == nil || !runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) {
+		return nil
+	}
+	superseded, err := db.ConsumirRuntimeMailboxPendienteSupersedido(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, strings.TrimSpace(msg.Kind), msg.ID)
+	if err != nil {
+		return err
+	}
+	if superseded > 0 {
+		db.Audit("orquesta", "runtime_mailbox_supersede", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("agente=%s kind=%s superseded=%d", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), superseded))
+	}
+	return nil
+}
+
+func runtimeHandleRequiereCoordinatedRestartMailbox(handle *db.RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	if strings.TrimSpace(handle.Transporte) != "cli" || strings.TrimSpace(handle.HandleKind) != "process" {
+		return false
+	}
+	if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryCoordinatedRestart {
+		return false
+	}
+	return true
+}
+
+func existeRuntimeOrderAbiertaPorHandle(handleID int64, tipos ...string) (bool, error) {
+	if handleID <= 0 || len(tipos) == 0 {
+		return false, nil
+	}
+	estados := []string{"pendiente", "tomada", "ejecutando"}
+	for _, estado := range estados {
+		estado := estado
+		orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{Estado: &estado})
+		if err != nil {
+			return false, err
+		}
+		for _, order := range orders {
+			if order == nil || order.HandleID == nil || *order.HandleID != handleID {
+				continue
+			}
+			for _, tipo := range tipos {
+				if strings.TrimSpace(order.Tipo) == strings.TrimSpace(tipo) {
+					return true, nil
+				}
+			}
+		}
+	}
+	return false, nil
 }
 
 func construirInstruccionMailboxInteractivo(msg *db.RuntimeMailboxMessage) (string, bool) {
@@ -749,6 +1136,12 @@ func construirInstruccionMailboxInteractivo(msg *db.RuntimeMailboxMessage) (stri
 		texto := stringMapValue(payload, "texto")
 		if texto == "" {
 			texto = stringMapValue(payload, "instruction")
+		}
+		return texto, strings.TrimSpace(texto) != ""
+	case "nudge", "watchdog":
+		texto := stringMapValue(payload, "instruction")
+		if texto == "" {
+			texto = stringMapValue(payload, "texto")
 		}
 		return texto, strings.TrimSpace(texto) != ""
 	case "autonomia":
@@ -854,7 +1247,7 @@ func procesarAutonomiaSesionActiva(sesion *db.Sesion) (int, error) {
 			return 0, err
 		}
 		return 1, nil
-	case "votar_propuestas_pendientes", "pedir_intervencion":
+	case "supervisar_proyecto", "votar_propuestas_pendientes", "pedir_intervencion":
 		if pendiente, err := existeRuntimeOrderAutonomiaPendiente(sesion.Agente, &proyecto.ID, "nudge", strings.TrimSpace(out.AccionRecomendada)); err != nil {
 			return 0, err
 		} else if pendiente {
@@ -867,17 +1260,11 @@ func procesarAutonomiaSesionActiva(sesion *db.Sesion) (int, error) {
 		}
 		return 1, nil
 	case "continuar_trabajo", "esperar_o_pedir_tarea":
-		if pendiente, err := existeRuntimeOrderAutonomiaPendiente(sesion.Agente, &proyecto.ID, "nudge", strings.TrimSpace(out.AccionRecomendada)); err != nil {
-			return 0, err
-		} else if pendiente {
-			return 0, nil
-		}
-		if encolada, err := encolarNudgeAutonomia(sesion.Agente, proyecto, out.AccionRecomendada, out.Motivo); err != nil {
-			return 0, err
-		} else if !encolada {
-			return 0, nil
-		}
-		return 1, nil
+		// Una sesión ya activa no debe recibir recordatorios periódicos para
+		// "seguir trabajando": en conectores no interactivos eso se traduce en
+		// churn de mailbox y reinicios artificiales. Las acciones pasivas quedan
+		// implícitas en la tarea y el contexto ya adoptado.
+		return 0, nil
 	default:
 		return 0, nil
 	}

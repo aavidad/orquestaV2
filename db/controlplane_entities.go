@@ -1399,7 +1399,7 @@ func ConsumirRuntimeMailboxPendienteSupersedido(toAgente string, proyectoID *int
 
 func runtimeMailboxKindSupersedible(kind string) bool {
 	switch strings.TrimSpace(kind) {
-	case "instruction", "autonomia", "watchdog", MailboxKindGovernanceRefresh, MailboxKindSkillsRefresh:
+	case "instruction", "autonomia", "nudge", "watchdog", MailboxKindGovernanceRefresh, MailboxKindSkillsRefresh:
 		return true
 	default:
 		return false

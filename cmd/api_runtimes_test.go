@@ -151,6 +151,15 @@ func TestAPIRuntimeControlPlaneEndpoints(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("crear runtime checkpoint: %v", err)
 	}
+	if _, err := db.RegistrarRuntimeEvent(&db.RuntimeEvent{
+		RuntimeID:   runtime.ID,
+		Kind:        "auto_guidance_sent",
+		Level:       "info",
+		Message:     "Orquesta respondió a approval_request",
+		PayloadJSON: `{"runtime_order_id":7,"classification":"approval_request"}`,
+	}); err != nil {
+		t.Fatalf("crear runtime event: %v", err)
+	}
 	if _, err := db.RegistrarRuntimeTranscript(&db.RuntimeTranscriptEntry{
 		RuntimeID:      runtime.ID,
 		Agente:         "Codex1",
@@ -213,6 +222,7 @@ func TestAPIRuntimeControlPlaneEndpoints(t *testing.T) {
 	}
 
 	assertKey(http.MethodGet, "/api/runtime-handles?agente=Codex1", nil, "handles", http.StatusOK)
+	assertKey(http.MethodGet, "/api/runtime-events?agente=Codex1&proyecto=orquestador&kind=auto_guidance_sent", nil, "events", http.StatusOK)
 	res, err := db.DB.Exec(`INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado
 	) VALUES (?,?,?,?,?,?,?)`,
@@ -262,6 +272,16 @@ func TestAPIRuntimeControlPlaneEndpoints(t *testing.T) {
 	assertKey(http.MethodGet, "/api/runtime-mailbox?to_agente=Codex2&proyecto=orquestador", nil, "mailbox", http.StatusOK)
 	assertKey(http.MethodGet, "/api/runtime-checkpoints/latest?agente=Codex1&proyecto=orquestador", nil, "checkpoint", http.StatusOK)
 	assertKey(http.MethodPost, "/api/runtime-orders", []byte(`{"agente":"Codex1","tipo":"checkpoint","proyecto":"orquestador","payload":"{}"}`), "id", http.StatusCreated)
+	recBadOrder := httptest.NewRecorder()
+	reqBadOrder := httptest.NewRequest(http.MethodPost, "/api/runtime-orders", strings.NewReader(`{"agente":"Codex1","tipo":"send_instruction","proyecto":"orquestador","payload":"{\"texto\":\"rota\""}`))
+	reqBadOrder.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(recBadOrder, reqBadOrder)
+	if recBadOrder.Code != http.StatusBadRequest {
+		t.Fatalf("status inesperado runtime order invalida: %d body=%s", recBadOrder.Code, recBadOrder.Body.String())
+	}
+	if !strings.Contains(recBadOrder.Body.String(), "payload_json inválido") {
+		t.Fatalf("mensaje inesperado runtime order invalida: %s", recBadOrder.Body.String())
+	}
 	assertKey(http.MethodPost, "/api/runtime-checkpoints", []byte(`{"agente":"Codex1","proyecto":"orquestador","checkpoint_kind":"manual","resumen":"checkpoint manual","branch":"main","cwd":"/tmp/orquestador","payload":"{}","resume_strategy":"resumen_y_payload","source":"api-test"}`), "id", http.StatusCreated)
 	assertKey(http.MethodPost, "/api/runtime-mailbox", []byte(`{"from_agente":"Codex1","to_agente":"Codex2","kind":"handoff","proyecto":"orquestador","payload":"{}"}`), "id", http.StatusCreated)
 	assertKey(http.MethodPost, "/api/runtime-mailbox/"+itoa(mailID)+"/entregar", []byte(`{}`), "id", http.StatusOK)

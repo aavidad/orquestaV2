@@ -275,6 +275,22 @@ func TestBuildGovernanceContextSummaryForContextIncluyeOverridesAgente(t *testin
 	}
 }
 
+func TestListarGovernanceOverridesSinTablaDevuelveVacio(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if _, err := DB.Exec(`DROP TABLE IF EXISTS governance_overrides`); err != nil {
+		t.Fatalf("drop governance_overrides: %v", err)
+	}
+
+	items, err := ListarGovernanceOverrides(GovernanceScopeProyecto, "demo", "programador", GovernanceEntityRegla)
+	if err != nil {
+		t.Fatalf("ListarGovernanceOverrides sin tabla: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("sin tabla deberia devolver vacio: %+v", items)
+	}
+}
+
 func mustGuardarGovernanceOverrideTest(t *testing.T, item *GovernanceOverride) int64 {
 	t.Helper()
 	id, err := GuardarGovernanceOverride("codex-test", item)

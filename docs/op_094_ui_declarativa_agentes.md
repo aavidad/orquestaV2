@@ -23,12 +23,11 @@ Rutas de código:
 - `internal/a2ui/a2ui.go`
 - `internal/a2ui/a2ui_test.go`
 
-Preparado pero no activado:
+Ya activado parcialmente:
 
-- no hay renderizado en el dashboard
-- no se han añadido rutas operativas nuevas para uso humano
-- no se ha cableado todavía a `serve`
-- no cambia el flujo actual de agentes ni de Alberto
+- `serve` muestra mensajes A2UI en modo lectura dentro del detalle de runtime
+- no se ha abierto todavía una vía de edición o respuesta humana específica sobre esos componentes
+- sigue siendo un canal complementario; no sustituye el flujo normal de tareas, propuestas o mailbox
 
 Envelope de mailbox preparado:
 

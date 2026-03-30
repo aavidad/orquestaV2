@@ -80,3 +80,12 @@ func TestPostMigrationStatementsForDriverPostgresVacioPorAhora(t *testing.T) {
 		t.Fatalf("postgres no deberia reutilizar post-migraciones sqlite-first por ahora: %v", got)
 	}
 }
+
+func TestPostMigrationStatementsForDriverSQLiteConservaDDLComplementario(t *testing.T) {
+	t.Parallel()
+
+	stmts := strings.Join(postMigrationStatementsForDriver("sqlite"), "\n")
+	if !strings.Contains(stmts, "CREATE UNIQUE INDEX IF NOT EXISTS idx_tareas_proyecto_blueprint_key") {
+		t.Fatalf("sqlite deberia conservar el DDL complementario para upgrades heredados")
+	}
+}

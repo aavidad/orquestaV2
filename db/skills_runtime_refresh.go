@@ -10,21 +10,21 @@ func notificarRefreshSkillCatalogo(actor string, skill *Skill, motivo string) {
 	if skill == nil {
 		return
 	}
-	sesiones, err := ListarSesionesActivas()
+	sesiones, err := ListarSesionesActivasOperativas()
 	if err != nil {
 		Audit(actor, "skill_refresh_error", "skill", skill.ID, err.Error())
 		return
 	}
 
 	payload, _ := json.Marshal(map[string]any{
-		"skill_id":             skill.ID,
-		"tipo_agente":          skill.TipoAgente,
-		"nombre":               skill.Nombre,
-		"motivo":               motivo,
-		"origen":               skill.Origen,
-		"nivel_riesgo":         skill.NivelRiesgo,
-		"requiere_aprobacion":  skill.RequiereAprobacion,
-		"activa":               skill.Activa,
+		"skill_id":            skill.ID,
+		"tipo_agente":         skill.TipoAgente,
+		"nombre":              skill.Nombre,
+		"motivo":              motivo,
+		"origen":              skill.Origen,
+		"nivel_riesgo":        skill.NivelRiesgo,
+		"requiere_aprobacion": skill.RequiereAprobacion,
+		"activa":              skill.Activa,
 	})
 
 	seen := map[string]struct{}{}
@@ -41,10 +41,10 @@ func notificarRefreshSkillCatalogo(actor string, skill *Skill, motivo string) {
 		}
 		seen[sesion.Agente] = struct{}{}
 		if _, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
-			FromAgente: actor,
-			ToAgente:   sesion.Agente,
-			ProyectoID: sesion.ProyectoID,
-			Kind:       MailboxKindSkillsRefresh,
+			FromAgente:  actor,
+			ToAgente:    sesion.Agente,
+			ProyectoID:  sesion.ProyectoID,
+			Kind:        MailboxKindSkillsRefresh,
 			PayloadJSON: string(payload),
 		}); err != nil {
 			Audit(actor, "skill_refresh_error", "skill", skill.ID, err.Error())

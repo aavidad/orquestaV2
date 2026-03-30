@@ -19,12 +19,13 @@ import (
 	"time"
 
 	"orquesta/db"
+	"orquesta/internal/rpclocal"
 	"orquesta/propuestasapp"
 )
 
 const serverURLVar = "ORQUESTA_SERVER_URL"
 
-var serverHTTPClient = &http.Client{Timeout: 3 * time.Second}
+var serverHTTPClient = httpClientOrquesta
 
 var (
 	discoveredServerURL     string
@@ -70,14 +71,24 @@ func discoverServerURL() string {
 }
 
 func candidateServerURLs() []string {
-	configured := configuredServerURL()
-	if configured == "" {
-		return []string{defaultServerURL}
+	candidates := make([]string, 0, 3)
+	seen := map[string]struct{}{}
+	add := func(raw string) {
+		raw = strings.TrimRight(strings.TrimSpace(raw), "/")
+		if raw == "" {
+			return
+		}
+		if _, ok := seen[raw]; ok {
+			return
+		}
+		seen[raw] = struct{}{}
+		candidates = append(candidates, raw)
 	}
-	if configured == defaultServerURL {
-		return []string{configured}
-	}
-	return []string{configured, defaultServerURL}
+
+	add(configuredServerURL())
+	add(rpclocal.ResolveServerAddr())
+	add(defaultServerURL)
+	return candidates
 }
 
 func pingServer(baseURL string) bool {
@@ -108,7 +119,12 @@ func shouldBypassLocalDB(args []string) bool {
 }
 
 func loadStatusSummary() (*statusContext, error) {
-	if serverURL := activeServerURL(); serverURL != "" {
+	serverURL := activeServerURL()
+	if serverURL == "" {
+		resetServerDiscovery()
+		serverURL = activeServerURL()
+	}
+	if serverURL != "" {
 		resumen, err := fetchServerStatus(serverURL)
 		if err != nil {
 			return nil, err
@@ -118,6 +134,12 @@ func loadStatusSummary() (*statusContext, error) {
 			backend = nil
 		}
 		return &statusContext{resumen: resumen, backend: backend}, nil
+	}
+	if !localRecoveryEnabled() {
+		return nil, serverFirstCommandError("status")
+	}
+	if err := openDBForCommand(currentOrOSArgs()); err != nil {
+		return nil, err
 	}
 	resumen, err := buildEstadoResumen()
 	if err != nil {
@@ -239,11 +261,64 @@ func fetchServerInfo(baseURL string) (*serverInfo, error) {
 }
 
 func fetchServerStatus(baseURL string) (*estadoResumen, error) {
-	var payload estadoResumen
+	var payload struct {
+		Generado                 string          `json:"generado"`
+		TareasPorEstado          map[string]int  `json:"tareasPorEstado"`
+		AgentesActivos           []*db.Agente    `json:"agentesActivos"`
+		PropuestasAbiertas       []propuestaLite `json:"propuestasAbiertas"`
+		TareasActivas            []tareaLite     `json:"tareasActivas"`
+		AgentesCompat            []*db.Agente    `json:"agentes"`
+		ConteoTareasCompat       map[string]int  `json:"conteo_tareas"`
+		PropuestasCompatAbiertas []*db.Propuesta `json:"propuestas_abiertas"`
+	}
 	if err := fetchServerJSON(baseURL+"/api/status", &payload); err != nil {
 		return nil, err
 	}
-	return &payload, nil
+	resumen := &estadoResumen{
+		Generado:           payload.Generado,
+		TareasPorEstado:    payload.TareasPorEstado,
+		AgentesActivos:     payload.AgentesActivos,
+		PropuestasAbiertas: payload.PropuestasAbiertas,
+		TareasActivas:      payload.TareasActivas,
+	}
+	if len(resumen.TareasPorEstado) == 0 {
+		resumen.TareasPorEstado = payload.ConteoTareasCompat
+	}
+	if len(resumen.AgentesActivos) == 0 {
+		resumen.AgentesActivos = payload.AgentesCompat
+	}
+	if len(resumen.PropuestasAbiertas) == 0 && len(payload.PropuestasCompatAbiertas) > 0 {
+		resumen.PropuestasAbiertas = make([]propuestaLite, 0, len(payload.PropuestasCompatAbiertas))
+		for _, propuesta := range payload.PropuestasCompatAbiertas {
+			if propuesta == nil {
+				continue
+			}
+			lite := propuestaLite{
+				ID:           propuesta.ID,
+				Codigo:       propuesta.Codigo,
+				Titulo:       propuesta.Titulo,
+				Estado:       propuesta.Estado,
+				PropuestoPor: propuesta.PropuestoPor,
+			}
+			for _, voto := range propuesta.Votos {
+				if voto == nil {
+					continue
+				}
+				switch voto.Posicion {
+				case db.VotoAcuerdo:
+					lite.Acuerdo++
+				case db.VotoDesacuerdo:
+					lite.Desacuerdo++
+				case db.VotoAbstencion:
+					lite.Abstencion++
+				default:
+					lite.Pendiente++
+				}
+			}
+			resumen.PropuestasAbiertas = append(resumen.PropuestasAbiertas, lite)
+		}
+	}
+	return resumen, nil
 }
 
 func fetchServerConfigAll(baseURL string) (map[string]string, error) {

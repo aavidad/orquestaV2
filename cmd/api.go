@@ -45,6 +45,11 @@ type apiStatusResponse struct {
 	AsignacionesActivas map[int64]int   `json:"asignaciones_activas"`
 	SesionesActivas     map[int64]int   `json:"sesiones_activas"`
 	PropuestasAbiertas  []*db.Propuesta `json:"propuestas_abiertas"`
+	Generado            string          `json:"generado,omitempty"`
+	TareasPorEstado     map[string]int  `json:"tareasPorEstado,omitempty"`
+	AgentesActivos      []*db.Agente    `json:"agentesActivos,omitempty"`
+	PropuestasResumen   []propuestaLite `json:"propuestasAbiertas,omitempty"`
+	TareasActivas       []tareaLite     `json:"tareasActivas,omitempty"`
 }
 
 type apiProyectoOverviewResponse struct {
@@ -524,6 +529,7 @@ type apiRuntimeHandoffRequest struct {
 }
 
 func registerAPIRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("/api/server", apiHandlerServer)
 	mux.HandleFunc("/api/status", apiHandlerStatus)
 	mux.HandleFunc("/api/diagnostico", apiHandlerDiagnostico)
 	mux.HandleFunc("/api/agentes", apiHandlerAgentes)
@@ -549,6 +555,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/config", apiHandlerConfig)
 	mux.HandleFunc("/api/audit", apiHandlerAudit)
 	mux.HandleFunc("/api/respaldo/bd", apiHandlerRespaldoBD)
+	mux.HandleFunc("/api/persistencia/verificar", apiHandlerPersistenciaVerificar)
 	mux.HandleFunc("/api/proyectos", apiHandlerProyectos)
 	mux.HandleFunc("/api/proyectos/descubrir", apiHandlerProyectoDescubrir)
 	mux.HandleFunc("/api/proyectos/", apiRouterProyectos)
@@ -584,6 +591,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtime-handles", apiHandlerRuntimeHandles)
 	mux.HandleFunc("/api/runtime-handles/purgar", apiHandlerRuntimeHandlesPurgar)
 	mux.HandleFunc("/api/runtime-trace", apiHandlerRuntimeTrace)
+	mux.HandleFunc("/api/runtime-events", apiHandlerRuntimeEvents)
 	mux.HandleFunc("/api/runtime-transcript", apiHandlerRuntimeTranscript)
 	mux.HandleFunc("/api/runtime-orders", apiHandlerRuntimeOrders)
 	mux.HandleFunc("/api/runtime-mailbox", apiHandlerRuntimeMailbox)
@@ -611,6 +619,28 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/agente/pausar", apiHandlerAgentePausar)
 }
 
+func apiHandlerServer(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	info := serverInfo{
+		Name:            "orquesta",
+		Version:         mcpServerVersion,
+		StorageMode:     "single-process",
+		StorageDriver:   db.CurrentStorageDriver(),
+		SQLPlaceholder:  db.PlaceholderStyle(),
+		BootstrapSchema: db.CurrentBootstrapSchemaEnabled(),
+		QueryRebinding:  db.QueryRebindingEnabled(),
+		Capabilities: []string{
+			"status",
+			"api",
+			"runtimes",
+			"control-plane",
+		},
+	}
+	apiWriteJSON(w, http.StatusOK, info)
+}
+
 func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
@@ -620,7 +650,20 @@ func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
-	apiWriteJSON(w, http.StatusOK, status)
+	payload := map[string]any{
+		"agentes":              status.Agentes,
+		"conteo_tareas":        status.ConteoTareas,
+		"proyectos":            status.Proyectos,
+		"asignaciones_activas": status.AsignacionesActivas,
+		"sesiones_activas":     status.SesionesActivas,
+		"propuestas_abiertas":  status.PropuestasAbiertas,
+		"generado":             status.Generado,
+		"tareasPorEstado":      status.TareasPorEstado,
+		"agentesActivos":       status.AgentesActivos,
+		"propuestasAbiertas":   status.PropuestasResumen,
+		"tareasActivas":        status.TareasActivas,
+	}
+	apiWriteJSON(w, http.StatusOK, payload)
 }
 
 func apiHandlerDiagnostico(w http.ResponseWriter, r *http.Request) {
@@ -1442,6 +1485,18 @@ func apiHandlerRespaldoBD(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, apiRespaldoBDResponse{OK: true, Ruta: ruta})
+}
+
+func apiHandlerPersistenciaVerificar(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	informe, err := db.VerificarPersistenciaActual()
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiPersistenciaVerificacionResponse{Informe: informe})
 }
 
 func apiHandlerProyectos(w http.ResponseWriter, r *http.Request) {
@@ -2967,6 +3022,49 @@ func apiHandlerRuntimeHandlesPurgar(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func apiHandlerRuntimeEvents(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	filter := db.FiltroRuntimeEvents{}
+	if agente := strings.TrimSpace(r.URL.Query().Get("agente")); agente != "" {
+		filter.Agente = &agente
+	}
+	if proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyecto != "" {
+		p, err := runtimesService.GetProject(proyecto)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		filter.ProyectoID = &p.ID
+	}
+	if runtimeID := strings.TrimSpace(r.URL.Query().Get("runtime_id")); runtimeID != "" {
+		id, err := strconv.ParseInt(runtimeID, 10, 64)
+		if err != nil || id <= 0 {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("runtime_id inválido"))
+			return
+		}
+		filter.RuntimeID = &id
+	}
+	if kind := strings.TrimSpace(r.URL.Query().Get("kind")); kind != "" {
+		filter.Kind = &kind
+	}
+	if limitStr := strings.TrimSpace(r.URL.Query().Get("limit")); limitStr != "" {
+		limit, err := strconv.Atoi(limitStr)
+		if err != nil || limit <= 0 {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("limit inválido"))
+			return
+		}
+		filter.Limit = limit
+	}
+	items, err := runtimesService.ListRuntimeEvents(filter)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"events": items})
+}
+
 func apiHandlerRuntimeTranscript(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
@@ -4141,13 +4239,16 @@ func apiHandlerAgenteTick(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Agente     string `json:"agente"`
-		Proyecto   string `json:"proyecto"`
-		Host       string `json:"host"`
-		PID        int64  `json:"pid"`
-		CuotaPct   int    `json:"cuota_pct"`
-		Finalizado bool   `json:"finalizado"`
-		Motivo     string `json:"motivo"`
+		Agente              string  `json:"agente"`
+		Proyecto            string  `json:"proyecto"`
+		Host                string  `json:"host"`
+		PID                 int64   `json:"pid"`
+		CuotaPct            int     `json:"cuota_pct"`
+		Finalizado          bool    `json:"finalizado"`
+		Motivo              string  `json:"motivo"`
+		AckStartOrderID     int64   `json:"ack_start_order_id"`
+		AckBootstrapOrderID int64   `json:"ack_bootstrap_order_id"`
+		AckMailboxIDs       []int64 `json:"ack_mailbox_ids"`
 	}
 	if err := apiDecodeJSON(r, &req); err != nil {
 		apiError(w, http.StatusBadRequest, err)
@@ -4158,13 +4259,16 @@ func apiHandlerAgenteTick(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out, err := agentesService.ProcessTick(agentesapp.TickInput{
-		Agente:     req.Agente,
-		Proyecto:   req.Proyecto,
-		Host:       req.Host,
-		PID:        req.PID,
-		CuotaPct:   req.CuotaPct,
-		Finalizado: req.Finalizado,
-		Motivo:     req.Motivo,
+		Agente:              req.Agente,
+		Proyecto:            req.Proyecto,
+		Host:                req.Host,
+		PID:                 req.PID,
+		CuotaPct:            req.CuotaPct,
+		Finalizado:          req.Finalizado,
+		Motivo:              req.Motivo,
+		AckStartOrderID:     req.AckStartOrderID,
+		AckBootstrapOrderID: req.AckBootstrapOrderID,
+		AckMailboxIDs:       req.AckMailboxIDs,
 	})
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)

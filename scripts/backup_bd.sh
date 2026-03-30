@@ -9,11 +9,16 @@
 #   scripts/backup_bd.sh [--ruta <dir>] [--max-diarios <n>] [--max-semanales <n>] [--max-mensuales <n>]
 #
 # Descripcion:
-#   Genera una copia de seguridad de la BD de Orquesta y aplica la politica de retencion definida:
+#   Genera una copia de seguridad verificada del backend SQLite de Orquesta y
+#   aplica la politica de retencion definida:
 #   - Diarios:   7 ficheros (1 cada 24h)
 #   - Semanales: 4 ficheros (1 cada lunes)
 #   - Mensuales: 3 ficheros (1 cada dia 1 de mes)
 #   La copia se almacena fuera del directorio de trabajo para protegerla de borrados accidentales.
+#   Esta es una utilidad de rescate/automatizacion solo-SQLite.
+#   El camino oficial interactivo desde Orquesta es: `./orquesta respaldo bd`
+#   Este script es solo para SQLite. Para otros backends debe usarse un adaptador
+#   de backup especifico del motor.
 set -euo pipefail
 
 # ── Configuracion por defecto ─────────────────────────────────────────────
@@ -23,6 +28,16 @@ BACKUP_DIR="${ORQUESTA_BACKUP_DIR:-$HOME/Trabajo/backups/orquestador}"
 MAX_DIARIOS="${MAX_BACKUPS_DIARIOS:-7}"
 MAX_SEMANALES="${MAX_BACKUPS_SEMANALES:-4}"
 MAX_MENSUALES="${MAX_BACKUPS_MENSUALES:-3}"
+VERIFY_SCRIPT="$ROOT_DIR/scripts/verificar_bd.sh"
+
+resolve_driver() {
+  local raw="${ORQUESTA_DB_DRIVER:-${ORQUESTA_DB_BACKEND:-sqlite}}"
+  raw="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+  case "$raw" in
+    ""|sqlite|sqlite3) printf 'sqlite\n' ;;
+    *) printf '%s\n' "$raw" ;;
+  esac
+}
 
 # ── Argumentos ────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -38,6 +53,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+DRIVER="$(resolve_driver)"
+if [[ "$DRIVER" != "sqlite" ]]; then
+  echo "[ERROR] scripts/backup_bd.sh solo cubre el backend sqlite; backend actual: $DRIVER" >&2
+  echo "[ERROR] Usa un adaptador de backup especifico del motor o una ruta server-first dedicada." >&2
+  exit 2
+fi
+
 # ── Validaciones ──────────────────────────────────────────────────────────
 if [[ ! -f "$DB_SRC" ]]; then
   echo "[ERROR] No se encuentra la BD en: $DB_SRC" >&2
@@ -49,18 +71,28 @@ mkdir -p "$BACKUP_DIR"
 # ── Nombre del fichero de backup ──────────────────────────────────────────
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
 BACKUP_FILE="$BACKUP_DIR/${TIMESTAMP}_orquesta.db.bak"
+BACKUP_TMP="$BACKUP_DIR/.${TIMESTAMP}_orquesta.db.bak.tmp"
 
-# ── Copia atomica mediante SQLite online backup ───────────────────────────
-# Usamos sqlite3 .backup en lugar de cp para garantizar consistencia incluso
-# si hay escrituras en vuelo (SQLite WAL mode).
-if command -v sqlite3 &>/dev/null; then
-  sqlite3 "$DB_SRC" ".backup '$BACKUP_FILE'"
-else
-  # Fallback: copia estandar (solo segura si no hay escrituras concurrentes)
-  cp "$DB_SRC" "$BACKUP_FILE"
+cleanup_tmp() {
+  rm -f "$BACKUP_TMP"
+}
+trap cleanup_tmp EXIT
+
+# ── Copia segura y verificada ─────────────────────────────────────────────
+# En WAL mode no es seguro copiar solo el fichero principal con cp/scp.
+# Exigimos sqlite3 para generar un snapshot consistente y verificable.
+if ! command -v sqlite3 &>/dev/null; then
+  echo "[ERROR] sqlite3 es obligatorio para crear respaldos seguros de Orquesta." >&2
+  exit 1
 fi
 
-echo "[OK] Backup creado: $BACKUP_FILE"
+rm -f "$BACKUP_TMP"
+sqlite3 "$DB_SRC" ".timeout 15000" ".backup '$BACKUP_TMP'"
+bash "$VERIFY_SCRIPT" --db "$BACKUP_TMP" --full >/dev/null
+mv "$BACKUP_TMP" "$BACKUP_FILE"
+trap - EXIT
+
+echo "[OK] Backup creado y verificado: $BACKUP_FILE"
 
 # ── Politica de retencion ─────────────────────────────────────────────────
 # Clasificamos cada backup segun su timestamp en: diario, semanal, mensual.

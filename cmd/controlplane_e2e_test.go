@@ -279,7 +279,7 @@ func TestAPIControlPlaneOrquestacionEndToEnd(t *testing.T) {
 	if !strings.Contains(prepHandoff.Plan.ContinuityPrompt, "handoff completo hacia Codex2") {
 		t.Fatalf("continuity prompt sin handoff: %s", prepHandoff.Plan.ContinuityPrompt)
 	}
-	if !strings.Contains(prepHandoff.Plan.ContinuityPrompt, `"mailbox"`) || !strings.Contains(prepHandoff.Plan.ContinuityPrompt, `"checkpoint"`) {
+	if !strings.Contains(prepHandoff.Plan.ContinuityPrompt, "mailbox=1") || !strings.Contains(prepHandoff.Plan.ContinuityPrompt, "checkpoint#") {
 		t.Fatalf("continuity prompt sin mailbox/checkpoint: %s", prepHandoff.Plan.ContinuityPrompt)
 	}
 
@@ -287,8 +287,8 @@ func TestAPIControlPlaneOrquestacionEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get handoff order: %v", err)
 	}
-	if handoffOrder == nil || handoffOrder.Estado != "completada" {
-		t.Fatalf("handoff order no completada: %+v", handoffOrder)
+	if handoffOrder == nil || handoffOrder.Estado != "pendiente" {
+		t.Fatalf("handoff order no deberia consumirse en preparar: %+v", handoffOrder)
 	}
 	startOrder, err := db.GetRuntimeOrder(startID)
 	if err != nil {
@@ -304,7 +304,7 @@ func TestAPIControlPlaneOrquestacionEndToEnd(t *testing.T) {
 	if err := json.Unmarshal(getJSON("/api/runtime-mailbox?to_agente=Codex2&proyecto=orquestador&estado=consumido", http.StatusOK), &consumedMailbox); err != nil {
 		t.Fatalf("decode mailbox consumido: %v", err)
 	}
-	if len(consumedMailbox.Mailbox) != 1 {
+	if len(consumedMailbox.Mailbox) != 0 {
 		t.Fatalf("mailbox consumido inesperado: %+v", consumedMailbox.Mailbox)
 	}
 
@@ -312,15 +312,15 @@ func TestAPIControlPlaneOrquestacionEndToEnd(t *testing.T) {
 	if err := json.Unmarshal(getJSON("/api/agente/preparar?agente=Codex2&proyecto=orquestador", http.StatusOK), &prepStart); err != nil {
 		t.Fatalf("decode preparar start: %v", err)
 	}
-	if prepStart.Bootstrap == nil || prepStart.Bootstrap.Order == nil || prepStart.Bootstrap.Order.ID != startID || prepStart.Bootstrap.Order.Tipo != "start" {
-		t.Fatalf("bootstrap start inesperado: %+v", prepStart.Bootstrap)
+	if prepStart.Bootstrap == nil || prepStart.Bootstrap.Order == nil || prepStart.Bootstrap.Order.ID != handoffID || prepStart.Bootstrap.Order.Tipo != "handoff" {
+		t.Fatalf("bootstrap handoff deberia seguir pendiente hasta arranque real: %+v", prepStart.Bootstrap)
 	}
 	startOrder, err = db.GetRuntimeOrder(startID)
 	if err != nil {
 		t.Fatalf("get start order final: %v", err)
 	}
-	if startOrder == nil || startOrder.Estado != "completada" {
-		t.Fatalf("start order no completada: %+v", startOrder)
+	if startOrder == nil || startOrder.Estado != "pendiente" {
+		t.Fatalf("start order no deberia mutar en preparar: %+v", startOrder)
 	}
 }
 
@@ -415,7 +415,6 @@ func TestAPIControlPlaneArranqueRealConBootstrapMultilinea(t *testing.T) {
 	}, http.StatusCreated))
 
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
 	runner := newControlPlaneRunner(nil, false)
 	runner.NotificationFeed = nil
 	runner.InitNotifications = nil
@@ -424,6 +423,10 @@ func TestAPIControlPlaneArranqueRealConBootstrapMultilinea(t *testing.T) {
 	runner.SaludCada = time.Hour
 	runner.PlanificacionCada = time.Hour
 	runner.ControlPlaneCada = 20 * time.Millisecond
+	t.Cleanup(func() {
+		cancel()
+		runner.Wait()
+	})
 	runner.Start(ctx)
 
 	deadline := time.Now().Add(3 * time.Second)
@@ -511,6 +514,138 @@ func TestAPIControlPlaneArranqueRealConBootstrapMultilinea(t *testing.T) {
 	}
 }
 
+func TestControlPlaneRunnerExponeEventoAutoGuidancePorAPI(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex1",
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador", "sesion-codex1"),
+		Herramienta:        "codex-cli",
+		ExternalSessionID:  "sess-codex1-openclaw-events",
+		ResumenContinuidad: "sesion activa para eventos openclaw",
+		Branch:             "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	logPath := filepath.Join(tmp, "codex-transcript-openclaw.log")
+	if err := os.WriteFile(logPath, []byte("¿me dejas seguir con el refactor?\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runner := newControlPlaneRunner(nil, false)
+	runner.NotificationFeed = nil
+	runner.InitNotifications = nil
+	runner.Notifier = nil
+	runner.ReanimacionCada = time.Hour
+	runner.SaludCada = time.Hour
+	runner.PlanificacionCada = time.Hour
+	runner.ControlPlaneCada = 20 * time.Millisecond
+	t.Cleanup(func() {
+		cancel()
+		runner.Wait()
+	})
+	runner.Start(ctx)
+
+	deadline := time.Now().Add(3 * time.Second)
+	var (
+		eventPayload map[string]any
+		order        *db.RuntimeOrder
+	)
+	for time.Now().Before(deadline) {
+		var resp struct {
+			Events []*db.RuntimeEvent `json:"events"`
+		}
+		if err := json.Unmarshal(getJSONTestNoBusy(t, mux, "/api/runtime-events?agente=Codex1&proyecto=orquestador&kind=auto_guidance_sent", http.StatusOK), &resp); err != nil {
+			t.Fatalf("decode runtime events: %v", err)
+		}
+		if len(resp.Events) == 0 || resp.Events[0] == nil {
+			time.Sleep(20 * time.Millisecond)
+			continue
+		}
+		eventPayload = resp.Events[0].Payload
+		if eventPayload == nil {
+			if err := json.Unmarshal([]byte(resp.Events[0].PayloadJSON), &eventPayload); err != nil {
+				t.Fatalf("decode runtime event payload: %v payload=%s", err, resp.Events[0].PayloadJSON)
+			}
+		}
+		orderID, _ := eventPayload["runtime_order_id"].(float64)
+		if int64(orderID) <= 0 {
+			time.Sleep(20 * time.Millisecond)
+			continue
+		}
+		order, err = getRuntimeOrderTestNoBusy(int64(orderID))
+		if err != nil {
+			t.Fatalf("get runtime order: %v", err)
+		}
+		if order != nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	if order == nil {
+		body := string(getJSONTestNoBusy(t, mux, "/api/runtime-events?agente=Codex1&proyecto=orquestador", http.StatusOK))
+		t.Fatalf("no apareció auto_guidance_sent visible por API a tiempo: %s", body)
+	}
+	if order.Tipo != "send_instruction" {
+		t.Fatalf("runtime order asociada inesperada: %+v", order)
+	}
+	if !strings.Contains(order.PayloadJSON, `"classification":"approval_request"`) {
+		t.Fatalf("send_instruction sin clasificación de approval_request: %s", order.PayloadJSON)
+	}
+	classification, _ := eventPayload["classification"].(string)
+	if strings.TrimSpace(classification) != "approval_request" {
+		t.Fatalf("payload del evento sin clasificación esperada: %+v", eventPayload)
+	}
+	transcriptID, _ := eventPayload["transcript_id"].(float64)
+	if int64(transcriptID) <= 0 {
+		t.Fatalf("payload del evento sin transcript_id útil: %+v", eventPayload)
+	}
+	signalText, _ := eventPayload["signal_text"].(string)
+	if !strings.Contains(signalText, "refactor") {
+		t.Fatalf("payload del evento sin signal_text accionable: %+v", eventPayload)
+	}
+	instruction, _ := eventPayload["instruction"].(map[string]any)
+	if instruction == nil {
+		t.Fatalf("payload del evento sin instruction útil: %+v", eventPayload)
+	}
+	toAgente, _ := instruction["to_agente"].(string)
+	if strings.TrimSpace(toAgente) != "Codex1" {
+		t.Fatalf("instruction.to_agente inesperado: %+v", instruction)
+	}
+	texto, _ := instruction["texto"].(string)
+	if !strings.Contains(texto, "Aprobado automaticamente") {
+		t.Fatalf("instruction.texto sin guía útil para OpenClaw: %+v", instruction)
+	}
+}
+
 func TestControlPlaneRunnerRecuperaRuntimeOrderStaleYLaProcesaEndToEnd(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -594,7 +729,6 @@ func TestControlPlaneRunnerRecuperaRuntimeOrderStaleYLaProcesaEndToEnd(t *testin
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
 	runner := newControlPlaneRunner(nil, false)
 	runner.NotificationFeed = nil
 	runner.InitNotifications = nil
@@ -603,47 +737,53 @@ func TestControlPlaneRunnerRecuperaRuntimeOrderStaleYLaProcesaEndToEnd(t *testin
 	runner.SaludCada = time.Hour
 	runner.PlanificacionCada = time.Hour
 	runner.ControlPlaneCada = 20 * time.Millisecond
+	t.Cleanup(func() {
+		cancel()
+		runner.Wait()
+	})
 	runner.Start(ctx)
 
 	deadline := time.Now().Add(2 * time.Second)
-	var sawStale, sawBatch bool
+	var sawBatch bool
 	for time.Now().Before(deadline) {
-		order, err := db.GetRuntimeOrder(orderID)
+		order, err := getRuntimeOrderTestNoBusy(orderID)
 		if err != nil {
+			if isSQLiteBusyTestErr(err) {
+				time.Sleep(20 * time.Millisecond)
+				continue
+			}
 			t.Fatalf("get runtime order: %v", err)
 		}
-		logs, err := db.ListarAuditoria(db.FiltroAuditoria{Limite: 20})
-		if err != nil {
-			t.Fatalf("listar auditoria: %v", err)
-		}
-		sawStale = false
-		sawBatch = false
-		for _, item := range logs {
-			switch item.Accion {
-			case "runtime_orders_stale":
-				sawStale = true
-			case "runtime_orders_batch":
-				sawBatch = true
+		if !sawBatch {
+			accion := "runtime_orders_batch"
+			logs, err := listarAuditoriaTestNoBusy(db.FiltroAuditoria{Accion: &accion, Limite: 20})
+			if err != nil {
+				if isSQLiteBusyTestErr(err) {
+					time.Sleep(20 * time.Millisecond)
+					continue
+				}
+				t.Fatalf("listar auditoria batch: %v", err)
 			}
+			sawBatch = len(logs) > 0
 		}
-		if order != nil && order.Estado == "completada" && sawStale && sawBatch {
+		if order != nil && order.Estado == "completada" && sawBatch {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	order, err := db.GetRuntimeOrder(orderID)
+	order, err := getRuntimeOrderTestNoBusy(orderID)
 	if err != nil {
 		t.Fatalf("get runtime order final: %v", err)
 	}
 	if order == nil || order.Estado != "completada" {
 		t.Fatalf("runtime order stale no completada: %+v", order)
 	}
-	if order.StartedAt == nil {
-		t.Fatalf("runtime order stale sin started_at tras reproceso: %+v", order)
+	if order.StartedAt == nil || !order.StartedAt.After(staleAt) {
+		t.Fatalf("runtime order stale sin reproceso efectivo, started_at=%v stale_at=%v order=%+v", order.StartedAt, staleAt, order)
 	}
 
-	cp, err := db.GetRuntimeCheckpointBySource("runtime_order:" + strconv.FormatInt(orderID, 10))
+	cp, err := getRuntimeCheckpointBySourceTestNoBusy("runtime_order:" + strconv.FormatInt(orderID, 10))
 	if err != nil {
 		t.Fatalf("checkpoint por source: %v", err)
 	}
@@ -651,13 +791,99 @@ func TestControlPlaneRunnerRecuperaRuntimeOrderStaleYLaProcesaEndToEnd(t *testin
 		t.Fatalf("checkpoint stale e2e inesperado: %+v", cp)
 	}
 
-	if !sawStale || !sawBatch {
-		logs, err := db.ListarAuditoria(db.FiltroAuditoria{Limite: 20})
-		if err != nil {
-			t.Fatalf("listar auditoria final: %v", err)
+	if !sawBatch {
+		var batchLogs []*db.LogAuditoria
+		var err error
+		if !sawBatch {
+			accion := "runtime_orders_batch"
+			batchLogs, err = listarAuditoriaTestNoBusy(db.FiltroAuditoria{Accion: &accion, Limite: 20})
+			if err != nil {
+				t.Fatalf("listar auditoria batch final: %v", err)
+			}
 		}
-		t.Fatalf("auditoria control plane incompleta: stale=%v batch=%v logs=%+v", sawStale, sawBatch, logs)
+		t.Fatalf("auditoria control plane incompleta: batch=%v batch_logs=%+v", sawBatch, batchLogs)
 	}
 	cancel()
 	time.Sleep(60 * time.Millisecond)
+}
+
+func getRuntimeOrderTestNoBusy(id int64) (*db.RuntimeOrder, error) {
+	var (
+		order *db.RuntimeOrder
+		err   error
+	)
+	for intento := 0; intento < 30; intento++ {
+		order, err = db.GetRuntimeOrder(id)
+		if err == nil || !isSQLiteBusyTestErr(err) {
+			return order, err
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return order, err
+}
+
+func getRuntimeCheckpointBySourceTestNoBusy(source string) (*db.RuntimeCheckpoint, error) {
+	var (
+		cp  *db.RuntimeCheckpoint
+		err error
+	)
+	for intento := 0; intento < 30; intento++ {
+		cp, err = db.GetRuntimeCheckpointBySource(source)
+		if err == nil || !isSQLiteBusyTestErr(err) {
+			return cp, err
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return cp, err
+}
+
+func listarAuditoriaTestNoBusy(filter db.FiltroAuditoria) ([]*db.LogAuditoria, error) {
+	var (
+		logs []*db.LogAuditoria
+		err  error
+	)
+	for intento := 0; intento < 30; intento++ {
+		logs, err = db.ListarAuditoria(filter)
+		if err == nil || !isSQLiteBusyTestErr(err) {
+			return logs, err
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return logs, err
+}
+
+func isSQLiteBusyTestErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "database is locked") || strings.Contains(msg, "sqlite_busy")
+}
+
+func getJSONTestNoBusy(t *testing.T, mux *http.ServeMux, path string, wantCode int) []byte {
+	t.Helper()
+	var lastBody string
+	var lastCode int
+	for intento := 0; intento < 30; intento++ {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		mux.ServeHTTP(rec, req)
+		if rec.Code == wantCode {
+			return rec.Body.Bytes()
+		}
+		lastCode = rec.Code
+		lastBody = rec.Body.String()
+		if isSQLiteBusyTestBody(lastBody) {
+			time.Sleep(20 * time.Millisecond)
+			continue
+		}
+		break
+	}
+	t.Fatalf("status inesperado GET %s: %d body=%s", path, lastCode, lastBody)
+	return nil
+}
+
+func isSQLiteBusyTestBody(body string) bool {
+	msg := strings.ToLower(strings.TrimSpace(body))
+	return strings.Contains(msg, "database is locked") || strings.Contains(msg, "sqlite_busy")
 }

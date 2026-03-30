@@ -163,6 +163,72 @@ func TestEnviarRuntimeMailboxCoalesceWatchdogPendiente(t *testing.T) {
 	}
 }
 
+func TestEnviarRuntimeMailboxCoalesceNudgePendiente(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("antigravity", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	viejoID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "antigravity",
+		ProyectoID:  &proyectoID,
+		Kind:        "nudge",
+		PayloadJSON: `{"texto":"nudge viejo"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox vieja: %v", err)
+	}
+	nuevoID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "antigravity",
+		ProyectoID:  &proyectoID,
+		Kind:        "nudge",
+		PayloadJSON: `{"texto":"nudge nuevo"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox nueva: %v", err)
+	}
+
+	pendiente := "pendiente"
+	toAgente := "antigravity"
+	pendientes, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{
+		ToAgente:   &toAgente,
+		ProyectoID: &proyectoID,
+		Estado:     &pendiente,
+	})
+	if err != nil {
+		t.Fatalf("listar nudge pendiente: %v", err)
+	}
+	if len(pendientes) != 1 || pendientes[0].ID != nuevoID {
+		t.Fatalf("nudge pendiente inesperada: %+v", pendientes)
+	}
+
+	consumido := "consumido"
+	consumidos, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{
+		ToAgente:   &toAgente,
+		ProyectoID: &proyectoID,
+		Estado:     &consumido,
+	})
+	if err != nil {
+		t.Fatalf("listar nudge consumida: %v", err)
+	}
+	if len(consumidos) != 1 || consumidos[0].ID != viejoID {
+		t.Fatalf("nudge consumida inesperada: %+v", consumidos)
+	}
+}
+
 func TestRuntimeOrdersMailboxYCheckpoint(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

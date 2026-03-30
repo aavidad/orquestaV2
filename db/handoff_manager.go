@@ -132,6 +132,8 @@ func DetectarAgentesAgotados() ([]*HandoffCandidato, error) {
 			if c.ProyectoID == nil && handle.ProyectoID != nil {
 				c.ProyectoID = handle.ProyectoID
 			}
+		} else if strings.TrimSpace(c.Disparador) == "watchdog" {
+			c.RequiereSondeo = false
 		}
 		disparado, err := enriquecerCandidatoHandoff(c, cutoff, threshold)
 		if err != nil {
@@ -198,9 +200,12 @@ func enriquecerCandidatoHandoff(c *HandoffCandidato, cutoff time.Time, threshold
 	}
 	if c.Inactividad >= threshold || (c.Inactividad > 0 && time.Now().UTC().Add(-c.Inactividad).Before(cutoff)) {
 		c.Disparador = "watchdog"
-		c.RequiereSondeo = true
+		c.RequiereSondeo = c.HandleID != nil
 		c.Motivo = fmt.Sprintf("heartbeat hace %.0f min (umbral: %.0f min)",
 			c.Inactividad.Minutes(), threshold.Minutes())
+		if c.HandleID == nil {
+			c.Motivo += "; sin runtime handle activo"
+		}
 		return true, nil
 	}
 	return false, nil
@@ -446,7 +451,11 @@ func ProcesarHandoffsBatch() (int, error) {
 		}
 
 		resumen := construirResumenContinuidad(c, checkpointID)
-		_, err = CrearHandoffAgenteVivo(c.Agente, destino, c.TareaID, c.Motivo, resumen, "")
+		if c.HandleID == nil {
+			_, err = CrearHandoffAgenteStale(c.Agente, destino, c.TareaID, c.Motivo, resumen, "")
+		} else {
+			_, err = CrearHandoffAgenteVivo(c.Agente, destino, c.TareaID, c.Motivo, resumen, "")
+		}
 		if err != nil {
 			Audit("server", "handoff_error", "agente", 0,
 				fmt.Sprintf("%s→%s disparador=%s error=%s", c.Agente, destino, c.Disparador, err.Error()))
@@ -515,17 +524,18 @@ func existeSondeoWatchdogReciente(agente string, proyectoID *int64) (bool, error
 }
 
 func encolarSondeoWatchdog(c *HandoffCandidato) error {
+	if c == nil || c.HandleID == nil {
+		return nil
+	}
 	var runtimeID *int64
 	var handleID *int64
-	if c.HandleID != nil {
-		handleID = c.HandleID
-		handle, err := GetRuntimeHandle(*c.HandleID)
-		if err != nil {
-			return err
-		}
-		if handle != nil && handle.RuntimeID != nil {
-			runtimeID = handle.RuntimeID
-		}
+	handleID = c.HandleID
+	handle, err := GetRuntimeHandle(*c.HandleID)
+	if err != nil {
+		return err
+	}
+	if handle != nil && handle.RuntimeID != nil {
+		runtimeID = handle.RuntimeID
 	}
 	payloadSync, _ := json.Marshal(map[string]any{
 		"motivo":      "watchdog_heartbeat_stale",

@@ -2,6 +2,8 @@ orquesta
 orquesta.db
 orquesta.db-wal
 orquesta.db-shm
+orquesta.db-journal
+.orquesta-runtime/
 .orquesta-worktrees/
 backups/
 certs/
@@ -10,3 +12,4 @@ certs/
 .ssl-key.log
 .codex-docker-home/
 .codex-sandbox-workspace/
+tmp/

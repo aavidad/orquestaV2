@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -21,8 +22,8 @@ func TestShouldDelegateToLocalServer(t *testing.T) {
 		{name: "server doctor", args: []string{"server", "doctor"}, want: false},
 		{name: "server run", args: []string{"server", "run"}, want: false},
 		{name: "serve", args: []string{"serve"}, want: false},
-		{name: "status sin opt-in", args: []string{"status"}, want: true},
-		{name: "tarea listar sin opt-in", args: []string{"tarea", "listar"}, want: true},
+		{name: "status sin opt-in", args: []string{"status"}, want: false},
+		{name: "tarea listar sin opt-in", args: []string{"tarea", "listar"}, want: false},
 		{name: "status con flag", args: []string{"--use-localrpc", "status"}, want: true},
 		{name: "flag local", args: []string{"--local", "status"}, want: false},
 		{name: "ayuda corta", args: []string{"status", "-h"}, want: false},
@@ -42,8 +43,11 @@ func TestShouldDelegateToLocalServer(t *testing.T) {
 func TestShouldDelegateToLocalServerExcluyeComandosDeRecuperacion(t *testing.T) {
 	t.Parallel()
 
-	if !shouldDelegateToLocalServer([]string{"status"}) {
-		t.Fatalf("deberia delegar los comandos con cobertura server-first")
+	if shouldDelegateToLocalServer([]string{"status"}) {
+		t.Fatalf("no deberia delegar sin opt-in explicito de localrpc")
+	}
+	if !shouldDelegateToLocalServer([]string{"--use-localrpc", "status"}) {
+		t.Fatalf("deberia delegar cuando localrpc se activa explicitamente")
 	}
 	if shouldDelegateToLocalServer([]string{"serve"}) {
 		t.Fatalf("serve no deberia delegar aunque exista daemon")
@@ -67,8 +71,8 @@ func TestCommandNeedsDBWithDelegationCoverage(t *testing.T) {
 		{name: "server status", args: []string{"server", "status"}, want: false},
 		{name: "server stop", args: []string{"server", "stop"}, want: false},
 		{name: "server doctor", args: []string{"server", "doctor"}, want: false},
-		{name: "server run", args: []string{"server", "run"}, want: true},
-		{name: "serve", args: []string{"serve"}, want: true},
+		{name: "server run", args: []string{"server", "run"}, want: false},
+		{name: "serve", args: []string{"serve"}, want: false},
 		{name: "status", args: []string{"status"}, want: true},
 		{name: "tarea listar", args: []string{"tarea", "listar"}, want: true},
 		{name: "flag local server stop", args: []string{"--local", "server", "stop"}, want: false},
@@ -84,6 +88,30 @@ func TestCommandNeedsDBWithDelegationCoverage(t *testing.T) {
 				t.Fatalf("commandNeedsDB(%v)=%v, want %v", tc.args, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestBuildLocalServerProcessEnvLimpiaRecuperacionLocal(t *testing.T) {
+	t.Parallel()
+
+	env := buildLocalServerProcessEnv([]string{
+		"HOME=/tmp/demo",
+		"ORQUESTA_FORCE_LOCAL=1",
+		"ORQUESTA_FORCE_LOCAL_DB=1",
+		"PATH=/usr/bin",
+	})
+
+	got := strings.Join(env, "\n")
+	if strings.Contains(got, "ORQUESTA_FORCE_LOCAL=") {
+		t.Fatalf("no deberia heredar ORQUESTA_FORCE_LOCAL: %s", got)
+	}
+	if strings.Contains(got, "ORQUESTA_FORCE_LOCAL_DB=") {
+		t.Fatalf("no deberia heredar ORQUESTA_FORCE_LOCAL_DB: %s", got)
+	}
+	for _, token := range []string{"HOME=/tmp/demo", "PATH=/usr/bin"} {
+		if !strings.Contains(got, token) {
+			t.Fatalf("env sin %q: %s", token, got)
+		}
 	}
 }
 

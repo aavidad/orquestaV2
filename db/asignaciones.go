@@ -172,25 +172,27 @@ func GetAsignacionActivaAgente(agente string) (*Asignacion, error) {
 }
 
 func ContarAsignacionesActivasPorProyecto() (map[int64]int, error) {
-	rows, err := DB.Query(`
-		SELECT proyecto_id, COUNT(*)
-		FROM asignaciones
-		WHERE estado = 'activa'
-		GROUP BY proyecto_id`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := make(map[int64]int)
-	for rows.Next() {
-		var proyectoID int64
-		var n int
-		if err := rows.Scan(&proyectoID, &n); err != nil {
+	return consultarConReintentos(func() (map[int64]int, error) {
+		rows, err := DB.Query(`
+			SELECT proyecto_id, COUNT(*)
+			FROM asignaciones
+			WHERE estado = 'activa'
+			GROUP BY proyecto_id`)
+		if err != nil {
 			return nil, err
 		}
-		out[proyectoID] = n
-	}
-	return out, rows.Err()
+		defer rows.Close()
+		out := make(map[int64]int)
+		for rows.Next() {
+			var proyectoID int64
+			var n int
+			if err := rows.Scan(&proyectoID, &n); err != nil {
+				return nil, err
+			}
+			out[proyectoID] = n
+		}
+		return out, rows.Err()
+	})
 }
 
 func escanearAsignacion(s scanner) (*Asignacion, error) {

@@ -112,6 +112,10 @@ func cargarPlantillaDBCmdTest() ([]byte, error) {
 			cmdTestBootstrapErr = err
 			return
 		}
+		if err := db.EnsureCapacidadModeloBaseCodex(); err != nil {
+			cmdTestBootstrapErr = err
+			return
+		}
 		db.Close()
 		cmdTestBootstrapData, cmdTestBootstrapErr = os.ReadFile(dbPath)
 	})
@@ -224,6 +228,9 @@ func prepararDBTemporalCmd(t *testing.T) string {
 	if err := db.Open(); err != nil {
 		t.Fatalf("open db temporal: %v", err)
 	}
+	if err := db.EnsureCapacidadModeloBaseCodex(); err != nil {
+		t.Fatalf("seed capacidad/modelo base cmd: %v", err)
+	}
 	return tmp
 }
 
@@ -242,6 +249,58 @@ func TestAPIAgentesListaJSON(t *testing.T) {
 	}
 	if got := rec.Header().Get("Content-Type"); len(got) < 16 || got[:16] != "application/json" {
 		t.Fatalf("content-type inesperado: %s", got)
+	}
+}
+
+func TestAPIServerExponeMetadatosDescubrimiento(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/server", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload serverInfo
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode /api/server: %v", err)
+	}
+	if payload.Name != "orquesta" {
+		t.Fatalf("name inesperado: %+v", payload)
+	}
+	if payload.StorageMode != "single-process" || payload.StorageDriver == "" || payload.SQLPlaceholder == "" {
+		t.Fatalf("payload de descubrimiento incompleto: %+v", payload)
+	}
+	if len(payload.Capabilities) == 0 {
+		t.Fatalf("capabilities vacias: %+v", payload)
+	}
+}
+
+func TestAPIStatusExponeResumenOperativoCompat(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode /api/status: %v", err)
+	}
+	for _, key := range []string{"agentes", "conteo_tareas", "generado", "tareasPorEstado", "agentesActivos", "propuestasAbiertas", "tareasActivas"} {
+		if _, ok := payload[key]; !ok {
+			t.Fatalf("/api/status sin clave %q: %+v", key, payload)
+		}
 	}
 }
 
@@ -310,6 +369,92 @@ func TestAPIAgentesYStatusAlineanActivoConSesionReal(t *testing.T) {
 	}
 	if estadoStatus["CodexVisible2"].Activo || estadoStatus["CodexVisible2"].EstadoSesion != "" {
 		t.Fatalf("agente visible2 inesperado via /api/status: %+v", estadoStatus["CodexVisible2"])
+	}
+}
+
+func TestAPIAgentesYStatusOcultanSesionZombi(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	for _, agente := range []string{"CodexZombie", "CodexHandle"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", agente, err)
+		}
+	}
+	old := "2026-03-22 16:39:43"
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_sesion='pensando' WHERE nombre='CodexZombie'`); err != nil {
+		t.Fatalf("estado zombie: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		INSERT INTO sesiones (agente, activa, estado, herramienta, host, heartbeat_at)
+		VALUES (?,?,?,?,?,?)`,
+		"CodexZombie", 1, "activa", "codex", "localhost", old,
+	); err != nil {
+		t.Fatalf("insert sesion zombie: %v", err)
+	}
+	var handleSesionID int64
+	if err := db.DB.QueryRow(`
+		INSERT INTO sesiones (agente, activa, estado, herramienta, host, heartbeat_at)
+		VALUES (?,?,?,?,?,?)
+		RETURNING id`,
+		"CodexHandle", 1, "activa", "codex", "localhost", old,
+	).Scan(&handleSesionID); err != nil {
+		t.Fatalf("insert sesion CodexHandle: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		INSERT INTO runtime_handles (
+			agente, sesion_id, transporte, handle_kind, handle_ref, estado,
+			capabilities_json, metadata_json, last_seen_at
+		) VALUES (?,?,?,?,?,'activo','{}','{}',CURRENT_TIMESTAMP)`,
+		"CodexHandle", handleSesionID, "cli", "session", "sess-codex-handle",
+	); err != nil {
+		t.Fatalf("insert handle CodexHandle: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recAgentes := httptest.NewRecorder()
+	reqAgentes := httptest.NewRequest(http.MethodGet, "/api/agentes", nil)
+	mux.ServeHTTP(recAgentes, reqAgentes)
+	if recAgentes.Code != http.StatusOK {
+		t.Fatalf("status agentes inesperado: %d body=%s", recAgentes.Code, recAgentes.Body.String())
+	}
+	var agentesResp struct {
+		Agentes []*db.Agente `json:"agentes"`
+	}
+	if err := json.Unmarshal(recAgentes.Body.Bytes(), &agentesResp); err != nil {
+		t.Fatalf("decode agentes: %v", err)
+	}
+	estadoAgentes := map[string]*db.Agente{}
+	for _, agente := range agentesResp.Agentes {
+		estadoAgentes[agente.Nombre] = agente
+	}
+	if estadoAgentes["CodexZombie"].Activo {
+		t.Fatalf("CodexZombie no deberia salir activo via /api/agentes: %+v", estadoAgentes["CodexZombie"])
+	}
+	if !estadoAgentes["CodexHandle"].Activo {
+		t.Fatalf("CodexHandle deberia seguir activo via /api/agentes: %+v", estadoAgentes["CodexHandle"])
+	}
+
+	recStatus := httptest.NewRecorder()
+	reqStatus := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	mux.ServeHTTP(recStatus, reqStatus)
+	if recStatus.Code != http.StatusOK {
+		t.Fatalf("status global inesperado: %d body=%s", recStatus.Code, recStatus.Body.String())
+	}
+	var statusResp apiStatusResponse
+	if err := json.Unmarshal(recStatus.Body.Bytes(), &statusResp); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	estadoStatus := map[string]*db.Agente{}
+	for _, agente := range statusResp.Agentes {
+		estadoStatus[agente.Nombre] = agente
+	}
+	if estadoStatus["CodexZombie"].Activo {
+		t.Fatalf("CodexZombie no deberia salir activo via /api/status: %+v", estadoStatus["CodexZombie"])
+	}
+	if !estadoStatus["CodexHandle"].Activo {
+		t.Fatalf("CodexHandle deberia seguir activo via /api/status: %+v", estadoStatus["CodexHandle"])
 	}
 }
 
@@ -1114,6 +1259,111 @@ func TestAPIProyectoDescubrirYGestionAgentes(t *testing.T) {
 	}
 }
 
+func TestAPIProyectoFusionar(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	destinoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "orquestador",
+		RutaAbs: "/tmp/orquestador",
+		Tipo:    db.ProyectoRaiz,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("crear destino: %v", err)
+	}
+	origenID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquesta",
+		Nombre:  "orquesta",
+		RutaAbs: "/tmp/orquesta",
+		Tipo:    db.ProyectoRaiz,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("crear origen: %v", err)
+	}
+	if _, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Tarea origen",
+		ProyectoID: &origenID,
+		Modulo:     "orquestacion",
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "Codex1",
+	}); err != nil {
+		t.Fatalf("crear tarea origen: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	body, _ := json.Marshal(apiProyectoFusionRequest{Origen: "orquesta", ArchivarOrigen: true})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/proyectos/orquestador/fusionar", bytes.NewReader(body))
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status fusionar proyecto inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp apiProyectoFusionResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode fusion proyecto: %v", err)
+	}
+	if resp.Resultado == nil || resp.Resultado.DestinoID != destinoID {
+		t.Fatalf("resultado de fusion inesperado: %+v", resp.Resultado)
+	}
+
+	tarea, err := db.GetTarea(1)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.ProyectoID == nil || *tarea.ProyectoID != destinoID {
+		t.Fatalf("tarea no movida al destino: %+v", tarea.ProyectoID)
+	}
+	origenArchivado, err := db.GetProyecto(resp.Resultado.SlugArchivado)
+	if err != nil {
+		t.Fatalf("get origen archivado: %v", err)
+	}
+	if origenArchivado == nil || origenArchivado.Activo {
+		t.Fatalf("origen no archivado: %+v", origenArchivado)
+	}
+}
+
+func TestAPIProyectoFusionarRechazaDesactivarArchivoOrigen(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "orquestador",
+		RutaAbs: "/tmp/orquestador",
+		Tipo:    db.ProyectoRaiz,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("crear destino: %v", err)
+	}
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquesta",
+		Nombre:  "orquesta",
+		RutaAbs: "/tmp/orquesta",
+		Tipo:    db.ProyectoRaiz,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("crear origen: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	body, _ := json.Marshal(apiProyectoFusionRequest{Origen: "orquesta", ArchivarOrigen: false})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/proyectos/orquestador/fusionar", bytes.NewReader(body))
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status inesperado al desactivar archivado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "todavía no está soportado") {
+		t.Fatalf("error inesperado: %s", rec.Body.String())
+	}
+}
+
 func TestAPIProyectoFabricarApp(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -1527,7 +1777,11 @@ func TestAPIAgenteFusionarCreaRespaldoYMueveReferencias(t *testing.T) {
 	if tarea.Agente == nil || *tarea.Agente != "Codex1" {
 		t.Fatalf("agente tarea inesperado tras fusion: %+v", tarea.Agente)
 	}
-	if _, err := db.GetAgente("codex1"); err == nil {
+	var agentesOrigen int
+	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM agentes WHERE nombre = ?`, "codex1").Scan(&agentesOrigen); err != nil {
+		t.Fatalf("count agente origen: %v", err)
+	}
+	if agentesOrigen != 0 {
 		t.Fatalf("el agente origen deberia haberse eliminado")
 	}
 }
@@ -1639,6 +1893,9 @@ func TestAPIAgentePrepararDevuelveBundle(t *testing.T) {
 	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar Codex1: %v", err)
 	}
+	if err := db.EnsureCapacidadModeloBaseCodex(); err != nil {
+		t.Fatalf("seed capacidad/modelo base: %v", err)
+	}
 	if _, err := db.UpsertProyecto(&db.Proyecto{
 		Slug:    "orquestador",
 		Nombre:  "Orquestador",
@@ -1706,6 +1963,9 @@ func TestAPIAgentePrepararIntegraBootstrapRuntime(t *testing.T) {
 	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar Codex1: %v", err)
 	}
+	if err := db.EnsureCapacidadModeloBaseCodex(); err != nil {
+		t.Fatalf("seed capacidad/modelo base: %v", err)
+	}
 	if _, err := db.UpsertProyecto(&db.Proyecto{
 		Slug:    "orquestador",
 		Nombre:  "Orquestador",
@@ -1761,6 +2021,9 @@ func TestAPIAgentePrepararIntegraBootstrapRuntime(t *testing.T) {
 		}`,
 	}); err != nil {
 		t.Fatalf("encolar nudge: %v", err)
+	}
+	if _, err := db.ProcesarRuntimeOrdersBasicasBatch(); err != nil {
+		t.Fatalf("procesar runtime orders basicas: %v", err)
 	}
 	if _, err := db.CrearRuntimeCheckpoint(&db.RuntimeCheckpoint{
 		Agente:         "Codex1",
@@ -1878,13 +2141,13 @@ func TestAPIAgentePrepararIntegraBootstrapRuntime(t *testing.T) {
 	if !strings.Contains(out.Plan.ContinuityPrompt, "handoff listo") {
 		t.Fatalf("continuity prompt sin handoff: %s", out.Plan.ContinuityPrompt)
 	}
-	if !strings.Contains(out.Plan.ContinuityPrompt, `"mailbox"`) || !strings.Contains(out.Plan.ContinuityPrompt, `"checkpoint"`) {
-		t.Fatalf("continuity prompt sin payload bootstrap: %s", out.Plan.ContinuityPrompt)
+	if !strings.Contains(out.Plan.ContinuityPrompt, "runtime_order=handoff") || !strings.Contains(out.Plan.ContinuityPrompt, "mailbox=2") || !strings.Contains(out.Plan.ContinuityPrompt, "checkpoint#") {
+		t.Fatalf("continuity prompt sin resumen bootstrap: %s", out.Plan.ContinuityPrompt)
 	}
-	if !strings.Contains(out.Plan.ContinuityPrompt, `"project_context"`) || !strings.Contains(out.Plan.ContinuityPrompt, "feature/wt-codex1") || !strings.Contains(out.Plan.ContinuityPrompt, "OP-901") {
+	if !strings.Contains(out.Plan.ContinuityPrompt, "project_context") || !strings.Contains(out.Plan.ContinuityPrompt, "Worktree activa en feature/wt-codex1") || !strings.Contains(out.Plan.ContinuityPrompt, "1 propuesta(s) abiertas") {
 		t.Fatalf("continuity prompt sin mapa operativo: %s", out.Plan.ContinuityPrompt)
 	}
-	if !strings.Contains(out.Plan.ContinuityPrompt, `"governance_catalog"`) || !strings.Contains(out.Plan.ContinuityPrompt, `"resolucion_actual":"rol+proyecto"`) {
+	if !strings.Contains(out.Plan.ContinuityPrompt, "governance_catalog") || !strings.Contains(out.Plan.ContinuityPrompt, "Catálogo efectivo") {
 		t.Fatalf("continuity prompt sin gobernanza efectiva: %s", out.Plan.ContinuityPrompt)
 	}
 
@@ -1892,11 +2155,11 @@ func TestAPIAgentePrepararIntegraBootstrapRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get order: %v", err)
 	}
-	if order == nil || order.Estado != "completada" {
-		t.Fatalf("runtime order no completada tras preparar: %+v", order)
+	if order == nil || order.Estado != "pendiente" {
+		t.Fatalf("runtime order no deberia consumirse tras preparar: %+v", order)
 	}
 
-	estadoConsumido := "consumido"
+	estadoConsumido := "pendiente"
 	toAgente := "Codex1"
 	mailbox, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
 		ToAgente:   &toAgente,
@@ -1904,10 +2167,10 @@ func TestAPIAgentePrepararIntegraBootstrapRuntime(t *testing.T) {
 		Estado:     &estadoConsumido,
 	})
 	if err != nil {
-		t.Fatalf("listar mailbox consumido: %v", err)
+		t.Fatalf("listar mailbox pendiente: %v", err)
 	}
 	if len(mailbox) != len(out.Bootstrap.Mailbox) {
-		t.Fatalf("mailbox consumido inesperado: got=%d want=%d %+v", len(mailbox), len(out.Bootstrap.Mailbox), mailbox)
+		t.Fatalf("mailbox pendiente inesperado: got=%d want=%d %+v", len(mailbox), len(out.Bootstrap.Mailbox), mailbox)
 	}
 }
 
@@ -1986,5 +2249,74 @@ func TestAPIProyectosLecturaUsaRutaEfectivaAunquePersistaRutaHistorica(t *testin
 	}
 	if overviewResp.Overview == nil || overviewResp.Overview.Proyecto == nil || overviewResp.Overview.Proyecto.RutaAbs != rutaActual {
 		t.Fatalf("overview con ruta inesperada: %+v", overviewResp.Overview)
+	}
+}
+
+func TestAPIProyectoOverviewSoportaDecisionesLegacy(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.DB.Exec(`DROP TABLE decisiones_proyecto`); err != nil {
+		t.Fatalf("drop decisiones_proyecto: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		CREATE TABLE decisiones_proyecto (
+			id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+			proyecto                 TEXT    NOT NULL,
+			titulo                   TEXT    NOT NULL,
+			solucion_elegida         TEXT    NOT NULL DEFAULT '',
+			motivo                   TEXT    NOT NULL DEFAULT '',
+			alternativas_descartadas TEXT    NOT NULL DEFAULT '',
+			impacto                  TEXT    NOT NULL DEFAULT 'medio'
+			                              CHECK (impacto IN ('alto','medio','bajo')),
+			propuesta_codigo         TEXT    NOT NULL DEFAULT '',
+			tarea_id                 INTEGER REFERENCES tareas(id) ON DELETE SET NULL,
+			registrado_por           TEXT    NOT NULL DEFAULT '',
+			created_at               DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at               DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`); err != nil {
+		t.Fatalf("create legacy decisiones_proyecto: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		INSERT INTO decisiones_proyecto (proyecto, titulo, solucion_elegida, motivo, alternativas_descartadas, impacto, registrado_por)
+		VALUES (?,?,?,?,?,?,?)`,
+		"orquestador",
+		"ADR legacy",
+		"Bridge OpenClaw",
+		"Compatibilidad con BD recuperada",
+		"Sin alternativa",
+		"medio",
+		"orquesta",
+	); err != nil {
+		t.Fatalf("insert legacy decision: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/proyectos/orquestador/overview", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status overview legacy inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp apiProyectoOverviewResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode overview legacy: %v", err)
+	}
+	if resp.Overview == nil || resp.Overview.Proyecto == nil || resp.Overview.Proyecto.ID != proyectoID {
+		t.Fatalf("overview legacy sin proyecto esperado: %+v", resp.Overview)
+	}
+	if len(resp.Overview.Decisiones) != 1 || resp.Overview.Decisiones[0] == nil || resp.Overview.Decisiones[0].Titulo != "ADR legacy" {
+		t.Fatalf("overview legacy sin decisiones esperadas: %+v", resp.Overview)
 	}
 }

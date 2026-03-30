@@ -1438,7 +1438,7 @@ const webTplLayout = `<!doctype html>
 <main class="container" style="padding-top:1.5rem;padding-bottom:2rem">
 {{template "content" .}}
 </main>
-<footer>{{tr "ContaGrx footer"}}</footer>
+<footer>{{tr "app.footer"}}</footer>
 </body></html>
 `
 

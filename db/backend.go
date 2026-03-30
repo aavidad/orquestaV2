@@ -13,6 +13,7 @@ type Backend interface {
 	Open(storage.Config) (*sql.DB, error)
 	Prepare(*sql.DB, storage.Config) error
 	Backup(*sql.DB, string) error
+	Verify(*sql.DB, storage.Config) *InformePersistencia
 	IsBusy(error) bool
 }
 
@@ -58,6 +59,17 @@ func CurrentStorageDriver() string {
 		return ""
 	}
 	return normalizedDriverName(cfg.Driver)
+}
+
+func CurrentBootstrapSchemaEnabled() bool {
+	if strings.TrimSpace(currentConfig.Driver) != "" {
+		return currentConfig.BootstrapSchema
+	}
+	cfg, err := storage.ResolveConfig(resolverRuta)
+	if err != nil {
+		return false
+	}
+	return cfg.BootstrapSchema
 }
 
 func BackupFilenameSuffix() string {
@@ -143,4 +155,24 @@ func BackupTo(path string) error {
 		return fmt.Errorf("backend de persistencia no inicializado")
 	}
 	return currentBackend.Backup(DB.DB, path)
+}
+
+func VerificarPersistenciaActual() (*InformePersistencia, error) {
+	if DB == nil {
+		return nil, fmt.Errorf("la base de datos no está inicializada")
+	}
+	if currentBackend == nil {
+		return nil, fmt.Errorf("backend de persistencia no inicializado")
+	}
+	informe := currentBackend.Verify(DB.DB, currentConfig)
+	if informe == nil {
+		return nil, fmt.Errorf("el backend de persistencia no ha devuelto informe de verificación")
+	}
+	if strings.TrimSpace(informe.Driver) == "" {
+		informe.Driver = normalizedDriverName(currentConfig.Driver)
+	}
+	if strings.TrimSpace(informe.Target) == "" {
+		informe.Target = storage.DisplayTarget(currentConfig)
+	}
+	return informe, nil
 }

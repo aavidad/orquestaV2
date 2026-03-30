@@ -104,6 +104,43 @@ var proyectoVerCmd = &cobra.Command{
 	},
 }
 
+var proyectoFusionarCmd = &cobra.Command{
+	Use:   "fusionar <origen> <destino>",
+	Short: "Fusiona un proyecto duplicado dentro del proyecto canónico y archiva el origen",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		archivarOrigen, _ := cmd.Flags().GetBool("archivar-origen")
+		resultado, ok, err := fusionarProyectoPorAPI(args[0], args[1], archivarOrigen)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return serverFirstCommandError("proyecto fusionar")
+		}
+		fmt.Printf("✓ Proyecto %s fusionado en %s\n", args[0], args[1])
+		if resultado != nil {
+			var conflictos int64
+			for _, n := range resultado.Conflictos {
+				conflictos += n
+			}
+			fmt.Printf("  Origen ID:        %d\n", resultado.OrigenID)
+			fmt.Printf("  Destino ID:       %d\n", resultado.DestinoID)
+			if resultado.SlugArchivado != "" {
+				fmt.Printf("  Slug archivado:   %s\n", resultado.SlugArchivado)
+			}
+			if resultado.RutaArchivada != "" {
+				fmt.Printf("  Ruta archivada:   %s\n", resultado.RutaArchivada)
+			}
+			fmt.Printf("  Actualizaciones:  %d\n", resultado.TotalActualizaciones())
+			if conflictos > 0 {
+				fmt.Printf("  Conflictos:       %d\n", conflictos)
+			}
+		}
+		return nil
+	},
+}
+
 func init() {
-	proyectoCmd.AddCommand(proyectoListarCmd, proyectoDescubrirCmd, proyectoVerCmd)
+	proyectoFusionarCmd.Flags().Bool("archivar-origen", true, "Archiva el proyecto origen tras la fusión")
+	proyectoCmd.AddCommand(proyectoListarCmd, proyectoDescubrirCmd, proyectoVerCmd, proyectoFusionarCmd)
 }

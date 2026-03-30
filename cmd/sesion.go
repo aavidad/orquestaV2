@@ -125,6 +125,7 @@ func imprimirInicioSesion(resp *apiSesionInicioResponse, nuevoCodex bool) {
 	if sesion.ConectorSlug != "" {
 		fmt.Printf("🔌 Conector: %s\n", sesion.ConectorSlug)
 	}
+	fmt.Printf("📖 Doctrina canonica: %s\n", db.RutaDoctrinaCanonica)
 	if strings.TrimSpace(sesion.Branch) != "" {
 		fmt.Printf("🌿 Branch: %s\n", sesion.Branch)
 	}

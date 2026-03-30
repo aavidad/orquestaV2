@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"orquesta/coordinacion"
 	"orquesta/runtimeagente"
 )
 
@@ -191,6 +192,89 @@ func TestPrepararStartRuntimeOrderAplicaXHighPorDefectoEnImplementacion(t *testi
 	}
 }
 
+func TestPrepararStartRuntimeOrderRecuperaWorktreeActivaSiResumeCWDInvalido(t *testing.T) {
+	prepararDBTemporal(t)
+	rutaBase := filepath.Join(t.TempDir(), "orquesta")
+	rutaWorktree := filepath.Join(rutaBase, ".orquesta-worktrees", "orquesta-codex1")
+	rutaInvalida := filepath.Join(t.TempDir(), "orquesta-validate-launch")
+	if err := os.MkdirAll(rutaWorktree, 0o755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
+	if err := os.MkdirAll(rutaInvalida, 0o755); err != nil {
+		t.Fatalf("mkdir ruta invalida: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaBase, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod base: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaWorktree, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod worktree: %v", err)
+	}
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaBase,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "cat-cli",
+		Nombre:     "Cat CLI",
+		Transporte: "cli",
+		Comando:    "cat",
+		Activo:     true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	if _, err := (CoordinationWorktreeSQLRepository{}).Create(&coordinacion.Worktree{
+		ProjectID: proyectoID,
+		Agent:     "Codex1",
+		Name:      "orquesta-codex1",
+		Path:      rutaWorktree,
+		Branch:    "orq-orquesta-codex1",
+		BaseRef:   "HEAD",
+		State:     coordinacion.WorktreeActive,
+		Reason:    "test",
+	}); err != nil {
+		t.Fatalf("crear worktree activa: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:             "Codex1",
+		ProyectoID:         &proyectoID,
+		CWD:                rutaInvalida,
+		Herramienta:        "codex-cli",
+		ExternalSessionID:  "sess-invalid-cwd",
+		ResumenContinuidad: "continuidad valida del mismo proyecto",
+		ResumePayloadJSON:  `{"persist":"ok"}`,
+		Branch:             "master",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	_, proyecto, _, _, resume, _, plan, err := prepararStartRuntimeOrder("Codex1", "orquestador", 0, "cat-cli", "", "", "")
+	if err != nil {
+		t.Fatalf("prepararStartRuntimeOrder: %v", err)
+	}
+	if proyecto == nil {
+		t.Fatalf("proyecto nil")
+	}
+	if resume.CWD != rutaWorktree {
+		t.Fatalf("resume cwd deberia recuperar la worktree activa: got=%s want=%s", resume.CWD, rutaWorktree)
+	}
+	if plan == nil {
+		t.Fatalf("plan nil")
+	}
+	if plan.WorkingDir != rutaWorktree {
+		t.Fatalf("working dir deberia apuntar a la worktree activa: got=%s want=%s", plan.WorkingDir, rutaWorktree)
+	}
+}
+
 func TestConstruirResumenBootstrapDBCompactaRuidoOperativoRepetido(t *testing.T) {
 	prev := "Catálogo efectivo abc123 (3 reglas, 1 skills, 1 workflows). Mailbox: 4 mensaje(s) inyectados"
 	checkpoint := &RuntimeCheckpoint{
@@ -232,5 +316,48 @@ func TestConstruirResumePayloadBootstrapDBCompactaResumenDeCheckpointRuidoso(t *
 	}
 	if strings.Contains(got, "Mailbox: 8 mensaje(s) inyectados") {
 		t.Fatalf("el payload no deberia arrastrar el resumen ruidoso del checkpoint: %s", got)
+	}
+}
+
+func TestSanitizeResumePayloadForProjectEliminaMetadatosEphemerosDeArranque(t *testing.T) {
+	proyecto := &Proyecto{
+		Slug:    "orquestador",
+		RutaAbs: "/tmp/orquestador",
+	}
+	got := SanitizeResumePayloadForProject(`{
+		"modo":"resume",
+		"native_resume":false,
+		"bootstrap_prompt":"Bootstrap de Orquesta para Codex2.",
+		"continuity_prompt":"Retoma el trabajo del agente Codex2. Resume payload JSON: {...}",
+		"launch_prompt_embedded":true,
+		"launch_prompt_mode":"embedded",
+		"launch_prompt_delay_ms":250,
+		"project_context":{"proyecto":{"slug":"orquestador","ruta":"/tmp/orquestador"}},
+		"governance_catalog":{"hash":"abc123"},
+		"checkpoint":{"id":9,"kind":"stop"},
+		"persist":"ok"
+	}`, proyecto)
+	for _, token := range []string{
+		`"modo"`,
+		`"native_resume"`,
+		`"bootstrap_prompt"`,
+		`"continuity_prompt"`,
+		`"launch_prompt_embedded"`,
+		`"launch_prompt_mode"`,
+		`"launch_prompt_delay_ms"`,
+	} {
+		if strings.Contains(got, token) {
+			t.Fatalf("el payload no deberia conservar %s: %s", token, got)
+		}
+	}
+	for _, token := range []string{
+		`"project_context"`,
+		`"governance_catalog"`,
+		`"checkpoint"`,
+		`"persist":"ok"`,
+	} {
+		if !strings.Contains(got, token) {
+			t.Fatalf("falta informacion util %s: %s", token, got)
+		}
 	}
 }

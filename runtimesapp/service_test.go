@@ -32,6 +32,8 @@ type fakeStore struct {
 	handleProjAgent  string
 	handleProjID     *int64
 	handleProjResp   *db.RuntimeHandle
+	eventsFilter     db.FiltroRuntimeEvents
+	eventsResp       []*db.RuntimeEvent
 	transcriptFilter db.FiltroRuntimeTranscript
 	transcriptResp   []*db.RuntimeTranscriptEntry
 	samplesID        int64
@@ -110,6 +112,10 @@ func (f *fakeStore) GetActiveRuntimeHandleForProject(agente string, proyectoID *
 	f.handleProjAgent = agente
 	f.handleProjID = proyectoID
 	return f.handleProjResp, nil
+}
+func (f *fakeStore) ListRuntimeEvents(filter db.FiltroRuntimeEvents) ([]*db.RuntimeEvent, error) {
+	f.eventsFilter = filter
+	return f.eventsResp, nil
 }
 func (f *fakeStore) ListRuntimeTranscript(filter db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error) {
 	f.transcriptFilter = filter
@@ -195,6 +201,7 @@ func TestServiceDelegatesRuntimeQueries(t *testing.T) {
 		handlesResponse:  []*db.RuntimeHandle{{ID: 15}},
 		handleResponse:   &db.RuntimeHandle{ID: 16},
 		handleProjResp:   &db.RuntimeHandle{ID: 17},
+		eventsResp:       []*db.RuntimeEvent{{ID: 17, Kind: "auto_guidance_sent"}},
 		transcriptResp:   []*db.RuntimeTranscriptEntry{{ID: 18}},
 		samplesResponse:  []*db.RuntimeTelemetrySample{{ID: 20}},
 		createOrderID:    25,
@@ -258,6 +265,12 @@ func TestServiceDelegatesRuntimeQueries(t *testing.T) {
 	}
 	if store.handleProjAgent != "Codex2" || store.handleProjID == nil || *store.handleProjID != 7 {
 		t.Fatalf("handleProj agent=%q project=%v", store.handleProjAgent, store.handleProjID)
+	}
+	if _, err := service.ListRuntimeEvents(db.FiltroRuntimeEvents{Agente: &agent, ProyectoID: &projectID, Limit: 5}); err != nil {
+		t.Fatalf("ListRuntimeEvents: %v", err)
+	}
+	if store.eventsFilter.Agente == nil || *store.eventsFilter.Agente != "Codex2" || store.eventsFilter.ProyectoID == nil || *store.eventsFilter.ProyectoID != 7 || store.eventsFilter.Limit != 5 {
+		t.Fatalf("eventsFilter=%+v", store.eventsFilter)
 	}
 	if _, err := service.ListRuntimeTranscript(db.FiltroRuntimeTranscript{Agente: &agent, Limit: 10}); err != nil {
 		t.Fatalf("ListRuntimeTranscript: %v", err)

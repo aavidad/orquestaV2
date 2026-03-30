@@ -394,6 +394,7 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 	}
 
 	total := 0
+	sawRuntimeOutput := false
 	for _, line := range lines {
 		texto := limpiarLineaTranscript(line.Raw)
 		if texto == "" {
@@ -424,7 +425,15 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 			return total, err
 		}
 		total++
+		if stream == "pty_out" {
+			sawRuntimeOutput = true
+		}
 		if err := registrarEventoDerivadoTranscript(id, handle, runtime, texto); err != nil {
+			return total, err
+		}
+	}
+	if sawRuntimeOutput {
+		if err := AckBootstrapRuntimeLeaseByEvidence(handle, runtime, "runtime_transcript"); err != nil {
 			return total, err
 		}
 	}

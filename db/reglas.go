@@ -114,9 +114,8 @@ func BuildGovernanceContextSummary(tipoAgente string, proyectoID *int64) (map[st
 	return BuildGovernanceContextSummaryForContext(tipoAgente, proyectoID, "")
 }
 
-func BuildGovernanceContextSummaryForContext(tipoAgente string, proyectoID *int64, agente string) (map[string]any, string) {
-	catalogo, err := ResolveGovernanceCatalogForContext(tipoAgente, proyectoID, agente)
-	if err != nil || catalogo == nil {
+func BuildGovernanceContextSummaryFromCatalog(catalogo *GovernanceCatalog) (map[string]any, string) {
+	if catalogo == nil {
 		return nil, ""
 	}
 	contexto := map[string]any{
@@ -127,8 +126,8 @@ func BuildGovernanceContextSummaryForContext(tipoAgente string, proyectoID *int6
 		"workflows":         len(catalogo.Workflows),
 		"resolucion_actual": strings.TrimSpace(catalogo.ResolucionActual),
 	}
-	if proyectoID != nil {
-		contexto["proyecto_id"] = *proyectoID
+	if catalogo.ProyectoID != nil {
+		contexto["proyecto_id"] = *catalogo.ProyectoID
 	}
 	resumen := fmt.Sprintf(
 		"Catálogo efectivo %s (%d reglas, %d skills, %d workflows)",
@@ -138,6 +137,14 @@ func BuildGovernanceContextSummaryForContext(tipoAgente string, proyectoID *int6
 		len(catalogo.Workflows),
 	)
 	return contexto, resumen
+}
+
+func BuildGovernanceContextSummaryForContext(tipoAgente string, proyectoID *int64, agente string) (map[string]any, string) {
+	catalogo, err := ResolveGovernanceCatalogForContext(tipoAgente, proyectoID, agente)
+	if err != nil || catalogo == nil {
+		return nil, ""
+	}
+	return BuildGovernanceContextSummaryFromCatalog(catalogo)
 }
 
 func AppendGovernanceCatalogPayload(prev string, contexto map[string]any) string {

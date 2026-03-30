@@ -44,6 +44,7 @@ func TestBuildBootstrapPromptIncluyeGobernanzaYTarea(t *testing.T) {
 	for _, token := range []string{
 		"Bootstrap de Orquesta para Codex2",
 		"Proyecto: demo-app",
+		"docs/BIBLIA_APP_ORQUESTA.md",
 		"no ejecutes sesion inicio de nuevo",
 		"Tareas activas: #42 [asignada] Montar app de prueba.",
 		"Reglas efectivas:",

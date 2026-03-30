@@ -53,7 +53,8 @@ La integracion correcta es **selectiva**:
 - los scripts de Terminator ya no consultan directamente la BD de Orquesta
 - `scripts/agente_console.sh` obtiene continuidad por `orquesta sesion continuar`
 - `scripts/terminator_agentes.sh` resuelve worktrees por `orquesta worktree resolver`
-- `orquesta.service` y `orquesta-vigilante.service` quedaron saneados como plantillas
+- `orquesta.service` quedo saneado como plantilla oficial
+- el `vigilante` separado se retiro despues del cierre server-first para no mantener un segundo plano de control
 - se extrajo un `controlplane.Runner` para sacar automatismos de `cmd/serve.go`
 - `go build ./...` y `go test ./cmd` estan en verde tras este corte
 

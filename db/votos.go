@@ -50,29 +50,65 @@ func Votar(propuestaID int64, agente string, posicion PosicionVoto, comentario s
 
 // VotosDePropuesta devuelve todos los votos de una propuesta.
 func VotosDePropuesta(propuestaID int64) ([]*Voto, error) {
-	rows, err := DB.Query(`
-		SELECT id, propuesta_id, agente, posicion, comentario, created_at, updated_at
-		FROM votos WHERE propuesta_id = ? ORDER BY agente`, propuestaID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var list []*Voto
-	for rows.Next() {
-		v := &Voto{}
-		if err := rows.Scan(&v.ID, &v.PropuestaID, &v.Agente, &v.Posicion,
-			&v.Comentario, &v.CreatedAt, &v.UpdatedAt); err != nil {
+	return consultarConReintentos(func() ([]*Voto, error) {
+		rows, err := DB.Query(`
+			SELECT id, propuesta_id, agente, posicion, comentario, created_at, updated_at
+			FROM votos WHERE propuesta_id = ? ORDER BY agente`, propuestaID)
+		if err != nil {
 			return nil, err
 		}
-		list = append(list, v)
-	}
-	return list, rows.Err()
+		defer rows.Close()
+		var list []*Voto
+		for rows.Next() {
+			v := &Voto{}
+			if err := rows.Scan(&v.ID, &v.PropuestaID, &v.Agente, &v.Posicion,
+				&v.Comentario, &v.CreatedAt, &v.UpdatedAt); err != nil {
+				return nil, err
+			}
+			list = append(list, v)
+		}
+		return list, rows.Err()
+	})
 }
 
 // ResumenVotos devuelve todos los votos de una propuesta (detalle por agente).
 // Alias de VotosDePropuesta — para uso en cmd/propuesta.go y cmd/exportar.go.
 func ResumenVotos(propuestaID int64) ([]*Voto, error) {
 	return VotosDePropuesta(propuestaID)
+}
+
+// ResumenVotosPorPropuestas devuelve el detalle de votos agrupado por propuesta
+// en una sola consulta para evitar N+1 en paneles y resúmenes globales.
+func ResumenVotosPorPropuestas(propuestaIDs []int64) (map[int64][]*Voto, error) {
+	grouped := make(map[int64][]*Voto, len(propuestaIDs))
+	if len(propuestaIDs) == 0 {
+		return grouped, nil
+	}
+	placeholders := joinInt64Placeholders(propuestaIDs)
+	args := int64Args(propuestaIDs)
+	return consultarConReintentos(func() (map[int64][]*Voto, error) {
+		rows, err := DB.Query(`
+			SELECT id, propuesta_id, agente, posicion, comentario, created_at, updated_at
+			FROM votos
+			WHERE propuesta_id IN (`+placeholders+`)
+			ORDER BY propuesta_id, agente`, args...)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		for _, propuestaID := range propuestaIDs {
+			grouped[propuestaID] = nil
+		}
+		for rows.Next() {
+			v := &Voto{}
+			if err := rows.Scan(&v.ID, &v.PropuestaID, &v.Agente, &v.Posicion,
+				&v.Comentario, &v.CreatedAt, &v.UpdatedAt); err != nil {
+				return nil, err
+			}
+			grouped[v.PropuestaID] = append(grouped[v.PropuestaID], v)
+		}
+		return grouped, rows.Err()
+	})
 }
 
 // ContarVotos devuelve conteo de posiciones para una propuesta.

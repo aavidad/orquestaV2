@@ -12,11 +12,12 @@ import (
 )
 
 type Config struct {
-	Driver          string
-	DSN             string
-	Path            string
-	MaxOpenConns    int
-	BootstrapSchema bool
+	Driver             string
+	DSN                string
+	Path               string
+	MaxOpenConns       int
+	BootstrapSchema    bool
+	SkipPostMigrations bool
 }
 
 func ResolveConfig(pathResolver func() string) (Config, error) {
@@ -43,6 +44,13 @@ func ResolveConfig(pathResolver func() string) (Config, error) {
 			return Config{}, fmt.Errorf("ORQUESTA_DB_BOOTSTRAP invalido: %q", v)
 		}
 		cfg.BootstrapSchema = enabled
+	}
+	if v := strings.TrimSpace(envFirst("ORQUESTA_DB_SKIP_POST_MIGRATIONS")); v != "" {
+		enabled, err := parseBool(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("ORQUESTA_DB_SKIP_POST_MIGRATIONS invalido: %q", v)
+		}
+		cfg.SkipPostMigrations = enabled
 	}
 
 	dsn := strings.TrimSpace(envFirst("ORQUESTA_DB_DSN"))
@@ -101,6 +109,19 @@ func SQLiteDSN(path string) string {
 	return path + sep + "_journal_mode=WAL&_foreign_keys=on&_busy_timeout=5000"
 }
 
+func SQLiteDSNWithMode(path, mode string) string {
+	dsn := SQLiteDSN(path)
+	mode = strings.TrimSpace(mode)
+	if mode == "" {
+		return dsn
+	}
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	return dsn + sep + "mode=" + url.QueryEscape(mode)
+}
+
 func DisplayTarget(cfg Config) string {
 	driver := normalizeDriver(cfg.Driver)
 	if driver == "sqlite" || driver == "" {
@@ -155,6 +176,9 @@ func normalizeDriver(v string) string {
 
 func defaultMaxOpenConns(driver string) int {
 	if normalizeDriver(driver) == "sqlite" || normalizeDriver(driver) == "" {
+		// En la práctica el daemon trabaja mejor con una sola conexión SQLite:
+		// evita SQLITE_BUSY persistentes con bases reales grandes mientras el
+		// control plane escribe y la API sirve lecturas concurrentes.
 		return 1
 	}
 	return 10

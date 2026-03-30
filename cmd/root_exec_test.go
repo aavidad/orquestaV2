@@ -72,3 +72,11 @@ func TestSkipRemoteDelegationSoloPersisteSinServidorExplicito(t *testing.T) {
 		t.Fatalf("persistencia debe seguir saltandose la delegacion RPC local")
 	}
 }
+
+func TestForceLocalModeRespetaRecuperacionLocalDB(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "1")()
+
+	if !forceLocalMode([]string{"status"}) {
+		t.Fatalf("ORQUESTA_FORCE_LOCAL_DB debe forzar modo local sin delegacion RPC")
+	}
+}

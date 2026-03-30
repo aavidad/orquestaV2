@@ -22,14 +22,16 @@ func NewMux(server *Server) *http.ServeMux {
 			return
 		}
 		writeJSON(w, http.StatusOK, HealthResponse{
-			OK:        true,
-			Addr:      server.State.Addr,
-			PID:       server.State.PID,
-			Kind:      server.State.Kind,
-			ScopeID:   server.State.ScopeID,
-			DBPath:    server.State.DBPath,
-			StartedAt: server.State.StartedAt,
-			Version:   server.State.Version,
+			OK:            true,
+			Addr:          server.State.Addr,
+			PID:           server.State.PID,
+			Kind:          server.State.Kind,
+			ScopeID:       server.State.ScopeID,
+			DBPath:        server.State.DBPath,
+			StorageDriver: server.State.StorageDriver,
+			StorageTarget: server.State.StorageTarget,
+			StartedAt:     server.State.StartedAt,
+			Version:       server.State.Version,
 		})
 	})
 	mux.HandleFunc(ExecPath, func(w http.ResponseWriter, r *http.Request) {

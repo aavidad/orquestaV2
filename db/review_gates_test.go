@@ -72,3 +72,26 @@ func TestReviewGateCRUDYResolucion(t *testing.T) {
 		t.Fatalf("review gate no resuelto correctamente: %+v", gate)
 	}
 }
+
+func TestListarReviewGatesSinTablaDevuelveVacio(t *testing.T) {
+	prepararDBTemporal(t)
+	if _, err := DB.Exec(`DROP TABLE review_gates`); err != nil {
+		t.Fatalf("drop review_gates: %v", err)
+	}
+
+	lista, err := ListarReviewGates(FiltroReviewGates{})
+	if err != nil {
+		t.Fatalf("listar review gates sin tabla: %v", err)
+	}
+	if len(lista) != 0 {
+		t.Fatalf("esperaba lista vacia; obtuvo %+v", lista)
+	}
+
+	gate, err := GetReviewGate(1)
+	if err != nil {
+		t.Fatalf("get review gate sin tabla: %v", err)
+	}
+	if gate != nil {
+		t.Fatalf("esperaba nil sin tabla; obtuvo %+v", gate)
+	}
+}

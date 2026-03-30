@@ -10,6 +10,7 @@ package cmd
 import (
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -188,12 +189,16 @@ func webCargarGitWorktreesPorAPI(estado, agente, proyecto string) ([]webGitWorkt
 	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
 		return nil, err
 	}
+	reconciled, err := webReconciliarGitWorktrees(resp.Worktrees, estado, agente, proyecto)
+	if err != nil {
+		return nil, err
+	}
 	projectSlugByID, err := webProyectoSlugPorID()
 	if err != nil {
 		return nil, err
 	}
-	rows := make([]webGitWorktreeRow, 0, len(resp.Worktrees))
-	for _, item := range resp.Worktrees {
+	rows := make([]webGitWorktreeRow, 0, len(reconciled))
+	for _, item := range reconciled {
 		if item == nil {
 			continue
 		}
@@ -207,6 +212,52 @@ func webCargarGitWorktreesPorAPI(estado, agente, proyecto string) ([]webGitWorkt
 		})
 	}
 	return rows, nil
+}
+
+func webReconciliarGitWorktrees(items []*coordinacion.Worktree, estado, agente, proyecto string) ([]*coordinacion.Worktree, error) {
+	rowsByID := make(map[int64]*coordinacion.Worktree, len(items))
+	for _, item := range items {
+		if item != nil {
+			rowsByID[item.ID] = item
+		}
+	}
+	filtro := coordinacion.WorktreeFilter{}
+	if estado = strings.TrimSpace(estado); estado != "" {
+		state := coordinacion.WorktreeState(estado)
+		filtro.State = &state
+	}
+	if agente = strings.TrimSpace(agente); agente != "" {
+		filtro.Agent = &agente
+	}
+	if proyecto = strings.TrimSpace(proyecto); proyecto != "" {
+		projectRow, err := db.GetProyecto(proyecto)
+		if err != nil {
+			return nil, err
+		}
+		filtro.ProjectID = &projectRow.ID
+	}
+	registradas, err := db.CoordinationWorktreeRepository().List(filtro)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range registradas {
+		if item != nil {
+			rowsByID[item.ID] = item
+		}
+	}
+	if len(rowsByID) == 0 {
+		return nil, nil
+	}
+	ids := make([]int64, 0, len(rowsByID))
+	for id := range rowsByID {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] > ids[j] })
+	out := make([]*coordinacion.Worktree, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, rowsByID[id])
+	}
+	return out, nil
 }
 
 func webCargarGitLocksPorAPI(estado, agente, proyecto string) ([]webGitLockRow, error) {

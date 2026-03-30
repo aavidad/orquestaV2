@@ -1,5 +1,104 @@
 # Diario del orquestador — 2026-03-30
 
+## 2026-03-31 00:xx aprox. — decision de no reescritura sobre framework externo y cierre de doctrina del nucleo
+
+Objetivo:
+
+- cortar el riesgo de seguir reprogramando sintomas sin una direccion fija
+- fijar por escrito si Orquesta se reescribe o no sobre LangChain/LangGraph/CrewAI/AutoGen
+- dejar una doctrina estable del nucleo de orquestacion para las siguientes pasadas
+
+Conclusion tomada:
+
+- no se reescribe Orquesta sobre LangChain, LangGraph, CrewAI ni otro framework externo
+- si se copiaran patrones, se copiaran como arquitectura y semantica, no como sustitucion del producto
+
+Motivo:
+
+- el problema real no es de prompts ni de grafo conversacional
+- el problema real es de control operativo duradero:
+  - daemon unico
+  - cola durable
+  - lease y ack
+  - handoff con continuidad
+  - supervisor de runtime
+  - reconciliacion tras reinicio o caida
+- cambiar de framework ahora destruiria continuidad y abriria otra transicion a medias
+
+Referencias estudiadas:
+
+- AutoGen Core como patron de supervisor/manager y mensajes entre agentes
+- OpenAI Agents para handoff filtrado y resumen de continuidad
+- Kubernetes controller/operator como referencia de reconciliacion declarativa
+- Celery/Temporal como referencia de cola durable con retry/backoff/ack
+
+Decision doctrinal fijada en la biblia:
+
+- `orquesta server` sigue siendo el unico plano de control
+- `runtime_orders` debe evolucionar a cola formal con `pending/leased/running/completed/failed/...`
+- `runtime_mailbox` debe tipificarse con claridad y no mezclar señales internas con mensajes entregables al agente
+- si un `kind` de mailbox puede quedar pendiente, debe tener una ruta oficial de entrega o consumo
+
+Hallazgo operativo ya visible antes de tocar codigo:
+
+- `Codex1` ya no tenia la orden `#79976` colgada en `ejecutando`; el daemon la reencolo en `pendiente`
+- aun asi seguian quedando `8` mensajes pendientes en mailbox para `Codex1` sin runtime vivo ni tarea activa
+- esto confirma que el siguiente frente correcto ya no es el arranque del daemon sino la semantica y reconciliacion de mailbox
+
+## 2026-03-31 01:xx aprox. — reconciliacion de watchdog pendiente sin ruta real de entrega
+
+Objetivo:
+
+- corregir una incoherencia concreta del control plane sin abrir otro refactor ciego
+- evitar que `watchdog` quede pendiente indefinidamente en `runtime_mailbox` cuando ya no existe handle activo para el agente
+
+Hallazgo:
+
+- `watchdog` si tiene sentido como señal persistente cuando existe un runtime activo al que sondar
+- pero tambien puede quedar pendiente mucho despues de que el runtime/handle haya desaparecido
+- en ese estado deja de ser una señal entregable y pasa a ser ruido operativo
+
+Cambio aplicado:
+
+- `procesarRuntimeMailboxBatch()` ahora empieza por reconciliar `watchdog` pendientes sin handle activo
+- esos mensajes se marcan como `entregado` + `consumido`
+- se deja auditoria explicita `runtime_mailbox_watchdog_sin_handle`
+
+Criterio doctrinal que queda reforzado:
+
+- un mensaje pendiente solo puede seguir vivo si existe una ruta oficial de entrega o consumo
+- si `watchdog` ya no tiene runtime/handle activo al que aplicarse, debe consumirse como señal obsoleta
+- esto no elimina `watchdog` como primitive; solo evita su acumulacion como mentira operativa
+
+## 2026-03-31 02:xx aprox. — unificacion oficial de `orquestador` -> `orquesta`
+
+Objetivo:
+
+- cortar otra fuente de confusion recurrente entre nombre de app, slug de proyecto y ruta fisica del repo
+- evitar que agentes futuros sigan mezclando `orquesta` y `orquestador` como si fueran dos proyectos vivos distintos
+
+Hallazgo:
+
+- el estado vivo seguia usando `orquestador` como slug del proyecto activo aunque la ruta real ya era `/home/alberto/Trabajo/orquesta`
+- no existian dos proyectos raiz activos distintos para la misma ruta; era el mismo registro persistido con slug legacy
+
+Accion ejecutada por la via oficial:
+
+- `./orquesta proyecto descubrir /home/alberto/Trabajo/orquesta`
+
+Resultado:
+
+- el proyecto activo `id=1` queda normalizado como `slug=orquesta`
+- las asignaciones activas de `Codex1-6` pasan a referenciar `orquesta`
+- las tareas activas/asignadas siguen accesibles bajo `--proyecto orquesta`
+- `orquestador` deja de existir como proyecto vivo en la lista
+
+Lectura doctrinal:
+
+- para esta base actual el proyecto canonico vivo es `orquesta`
+- `orquestador` queda ya como nombre legacy en documentos antiguos o en historico, pero no como slug operativo
+- cuando la via oficial puede normalizar sin fusion destructiva, se prefiere eso antes que borrar o manipular entidades a mano
+
 ## 23:55 aprox. — verificación oficial de persistencia y limpieza de mantenimiento
 
 Objetivo:
@@ -862,3 +961,57 @@ Cambios:
 Validacion:
 
 - `go test ./db -run 'TestRuntimeOrderSendInstruction(SessionResumeRecuperaWorkingDirPreferida|PausaPorCuotaProveedor|UsaSessionResumeCodexLocal)' -count=1` => OK
+
+## 2026-03-31 00:4x aprox. — `runtime_mailbox` deja de acumular `nudge/watchdog` eternos
+
+Hallazgo:
+
+- el problema visible ya no era una `runtime_order` atascada; la reconciliacion stale y el backoff de proveedor estaban funcionando
+- el hueco real quedaba en `runtime_mailbox`
+- `nudge` y `watchdog` si llegaban a mailbox persistente, pero la capa `procesarRuntimeMailbox*Batch()` no sabia convertir esos `kind` en `send_instruction`
+- resultado: mensajes pendientes viejos durante horas aunque hubiese handle activo, especialmente en `session_resume`
+- ademas, `nudge` no estaba marcado como supersedible/coalescible, asi que podia acumular varias copias del mismo empuje mientras habia una `send_instruction` abierta o un backoff largo
+
+Decision:
+
+- `nudge` y `watchdog` pasan a formar parte del mismo contrato de entrega persistente que `instruction` y `autonomia`
+- si son coalescibles, el control plane debe consumir los supersedidos aunque todavia no pueda entregar el ultimo por existir una orden abierta
+- la semantica correcta es "solo la ultima señal efimera sigue pendiente", no una pila eterna de nudges viejos
+
+Cambios:
+
+- `db/controlplane_entities.go`
+  - `nudge` pasa a ser `runtimeMailboxKindSupersedible(...)`
+- `cmd/controlplane_support.go`
+  - `nudge` y `watchdog` pasan a ser kinds coalescibles y entregables por `interactive`, `session_resume` y `coordinated_restart`
+  - nuevo `coalescerRuntimeMailboxPendiente(...)` para consumir supersedidos en el propio batch aunque exista una `send_instruction` abierta
+  - `construirInstruccionMailboxInteractivo(...)` ya traduce `nudge/watchdog` a texto entregable
+- tests:
+  - `db/controlplane_entities_test.go`
+  - `cmd/controlplane_support_test.go`
+
+Validacion prevista:
+
+- `runtime_mailbox` no debe seguir creciendo con `nudge/watchdog` antiguos para un mismo agente/proyecto
+- con una `send_instruction` abierta, solo debe sobrevivir el mensaje mas nuevo del kind coalescible
+- cuando el conector vuelva a poder entregar, `nudge/watchdog` deben convertirse en `send_instruction` por el camino oficial del daemon
+
+## 2026-03-31 01:03 aprox. — respaldo canonico antes de reescribir git
+
+Hallazgo:
+
+- la rama local tenia un commit valido de nucleo (`62f5ad1`) pero el push a remoto fallaba porque `orquesta.db` habia entrado en el commit y GitHub rechazaba el objeto por superar 100 MB
+- esa base contiene el estado vivo completo del orquestador: tareas, OP, sesiones, runtime orders, mailbox, checkpoints y auditoria
+
+Decision:
+
+- antes de tocar el historial git, hay que crear respaldos consistentes por el camino oficial de Orquesta
+- `orquesta.db` no debe volver a formar parte del historial git; la base viva se conserva fuera del indice y las copias canonicas se guardan fuera del repo
+
+Accion ejecutada:
+
+- respaldo oficial externo:
+  - `/home/alberto/Trabajo/backups/orquestador/2026-03-31_01-03-17.186503348_pre_amend_62f5ad1_orquesta.db.bak`
+- respaldo oficial local de salvaguarda:
+  - `/tmp/orquesta-backups/2026-03-31_01-03-34.704483012_pre_amend_62f5ad1_orquesta.db.bak`
+- despues del respaldo, `orquesta.db` se saca del indice git para reamendar el commit sin perder la base local

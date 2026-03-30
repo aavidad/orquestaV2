@@ -66,8 +66,12 @@ func CrearReviewGate(item *ReviewGate) (int64, error) {
 }
 
 func GetReviewGate(id int64) (*ReviewGate, error) {
-	if err := ensureReviewGateSchema(); err != nil {
+	exists, err := SchemaObjectExists("table", "review_gates")
+	if err != nil {
 		return nil, err
+	}
+	if !exists {
+		return nil, nil
 	}
 	row := DB.QueryRow(`
 		SELECT id, proyecto_id, tarea_id, worktree_id, requested_by, reviewer_agente,
@@ -82,8 +86,12 @@ func GetReviewGate(id int64) (*ReviewGate, error) {
 }
 
 func ListarReviewGates(filter FiltroReviewGates) ([]*ReviewGate, error) {
-	if err := ensureReviewGateSchema(); err != nil {
+	exists, err := SchemaObjectExists("table", "review_gates")
+	if err != nil {
 		return nil, err
+	}
+	if !exists {
+		return []*ReviewGate{}, nil
 	}
 	q := `
 		SELECT id, proyecto_id, tarea_id, worktree_id, requested_by, reviewer_agente,

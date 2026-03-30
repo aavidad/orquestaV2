@@ -120,6 +120,51 @@ func TestGetYListarProyectosConRutaEfectivaPriorizanRutaActual(t *testing.T) {
 	}
 }
 
+func TestRutaProyectoEfectivaIgnoraCWDNoRepoAjenoAlProyecto(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	rutaBase := filepath.Join(tmp, "orquesta")
+	rutaInvalida := filepath.Join(tmp, "orquesta-validate-launch")
+	if err := os.MkdirAll(rutaBase, 0o755); err != nil {
+		t.Fatalf("mkdir ruta base: %v", err)
+	}
+	if err := os.MkdirAll(rutaInvalida, 0o755); err != nil {
+		t.Fatalf("mkdir ruta invalida: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaBase, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaBase,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         rutaInvalida,
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	proyecto, err := GetProyectoConRutaEfectiva("orquestador", "")
+	if err != nil {
+		t.Fatalf("get proyecto efectivo: %v", err)
+	}
+	if proyecto.RutaAbs != rutaBase {
+		t.Fatalf("ruta efectiva no deberia contaminarse con cwd invalida: got=%s want=%s", proyecto.RutaAbs, rutaBase)
+	}
+}
+
 func TestRutaProyectoEfectivaNoSobrescribeRaizSiLaSesionYaEstaEnWorktreeActiva(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	rutaBase := filepath.Join(tmp, "orquesta")

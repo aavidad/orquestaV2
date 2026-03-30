@@ -51,16 +51,7 @@ func procesarSupervisionAutonomaBatch() (int, error) {
 		if !disponible {
 			continue
 		}
-		agente, activado, err := prepararAgentePreferidoAutonomia(proyecto.ID, strings.TrimSpace(policy.SupervisorAgente), "supervision_automatica")
-		if err != nil {
-			return total, err
-		}
-		if activado {
-			continue
-		}
-		if agente == nil {
-			agente, err = seleccionarAgenteActivoProyectoPreferido(proyecto.ID, strings.TrimSpace(policy.SupervisorAgente), []string{"supervisor", "orquestador", "revisor", "reviewer", "admin", "programador"}, "")
-		}
+		agente, _, err := resolverSupervisorAutonomiaOperativo(proyecto.ID, policy, "supervision_automatica", "")
 		if err != nil {
 			return total, err
 		}
@@ -809,6 +800,17 @@ func seleccionarAgenteActivoProyecto(proyectoID int64, preferredRoles []string, 
 }
 
 func prepararAgentePreferidoAutonomia(proyectoID int64, preferredAgent, activationReason string) (*db.Agente, bool, error) {
+	agente, activado, err := asegurarAgenteAutonomiaOperativo(proyectoID, preferredAgent, activationReason)
+	if err != nil {
+		return nil, false, err
+	}
+	if activado {
+		return nil, true, nil
+	}
+	return agente, false, nil
+}
+
+func asegurarAgenteAutonomiaOperativo(proyectoID int64, preferredAgent, activationReason string) (*db.Agente, bool, error) {
 	preferredAgent = strings.TrimSpace(preferredAgent)
 	if preferredAgent == "" || proyectoID <= 0 {
 		return nil, false, nil
@@ -820,7 +822,8 @@ func prepararAgentePreferidoAutonomia(proyectoID int64, preferredAgent, activati
 	if agente == nil || !agente.Habilitado {
 		return nil, false, nil
 	}
-	if strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "enfriamiento") {
+	estadoCuota := strings.ToLower(strings.TrimSpace(agente.EstadoCuota))
+	if estadoCuota != "" && estadoCuota != "activo" {
 		return nil, false, nil
 	}
 	proyectoActivoID, err := db.ObtenerProyectoActivoAgente(preferredAgent)
@@ -853,11 +856,33 @@ func prepararAgentePreferidoAutonomia(proyectoID int64, preferredAgent, activati
 	if err := db.EncolarStartAutomaticoSiHaceFalta(preferredAgent, proyecto, activationReason); err != nil {
 		return nil, false, err
 	}
-	return nil, true, nil
+	return agente, true, nil
+}
+
+func resolverSupervisorAutonomiaOperativo(proyectoID int64, policy *db.ProyectoAutonomia, activationReason, exclude string) (*db.Agente, bool, error) {
+	if policy == nil || !policy.Enabled || proyectoID <= 0 {
+		return nil, false, nil
+	}
+	preferred := strings.TrimSpace(policy.SupervisorAgente)
+	if preferred != "" && !strings.EqualFold(preferred, strings.TrimSpace(exclude)) {
+		if agente, activado, err := asegurarAgenteAutonomiaOperativo(proyectoID, preferred, activationReason); err != nil {
+			return nil, false, err
+		} else if agente != nil {
+			return agente, activado, nil
+		}
+	}
+	candidato, err := db.SeleccionarSupervisorAutonomiaOperativo(proyectoID, exclude)
+	if err != nil || candidato == nil {
+		return nil, false, err
+	}
+	if preferred != "" && strings.EqualFold(strings.TrimSpace(candidato.Nombre), preferred) {
+		return nil, false, nil
+	}
+	return asegurarAgenteAutonomiaOperativo(proyectoID, strings.TrimSpace(candidato.Nombre), activationReason)
 }
 
 func seleccionarAgenteActivoProyectoPreferido(proyectoID int64, preferredAgent string, preferredRoles []string, exclude string) (*db.Agente, error) {
-	sesiones, err := db.ListarSesionesActivas()
+	sesiones, err := db.ListarSesionesActivasOperativas()
 	if err != nil {
 		return nil, err
 	}

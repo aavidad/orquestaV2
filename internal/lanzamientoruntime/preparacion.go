@@ -3,7 +3,10 @@ package lanzamientoruntime
 import (
 	"database/sql"
 	"fmt"
+	"log"
+	"os"
 	"strings"
+	"time"
 
 	"orquesta/coordinacion"
 	"orquesta/db"
@@ -49,8 +52,14 @@ func prepararDesdeDatosConWorkspace(agente *db.Agente, proyecto *db.Proyecto, co
 	if agente == nil || proyecto == nil || conector == nil {
 		return nil, fmt.Errorf("agente, proyecto y conector son obligatorios")
 	}
+	start := time.Now()
+	prepareRuntimeDebugf("PrepararDesdeDatos start agente=%s proyecto=%s conector=%s", strings.TrimSpace(agente.Nombre), strings.TrimSpace(proyecto.Slug), strings.TrimSpace(conector.Slug))
+	defer func() {
+		prepareRuntimeDebugf("PrepararDesdeDatos done agente=%s proyecto=%s duration=%s", strings.TrimSpace(agente.Nombre), strings.TrimSpace(proyecto.Slug), time.Since(start).Round(time.Millisecond))
+	}()
 	var err error
 	proyecto = db.ProyectoConRutaEfectiva(proyecto, "")
+	stepStart := time.Now()
 	perfilTarea, modelo, razonamiento, err = db.ResolverPerfilEjecucionLanzamiento(
 		strings.TrimSpace(proyecto.Slug),
 		perfilTarea,
@@ -60,15 +69,20 @@ func prepararDesdeDatosConWorkspace(agente *db.Agente, proyecto *db.Proyecto, co
 	if err != nil {
 		return nil, err
 	}
+	prepareRuntimeDebugf("PrepararDesdeDatos step=resolver_perfil duration=%s", time.Since(stepStart).Round(time.Millisecond))
 
+	stepStart = time.Now()
 	worktree, err := asegurarWorktreeOperativa(strings.TrimSpace(agente.Nombre), proyecto, workspace)
 	if err != nil {
 		return nil, err
 	}
+	prepareRuntimeDebugf("PrepararDesdeDatos step=asegurar_worktree duration=%s", time.Since(stepStart).Round(time.Millisecond))
+	stepStart = time.Now()
 	resume, bootstrap, err := bootstrapruntime.Preparar(agente.Nombre, proyecto, ultima)
 	if err != nil {
 		return nil, err
 	}
+	prepareRuntimeDebugf("PrepararDesdeDatos step=bootstrap duration=%s", time.Since(stepStart).Round(time.Millisecond))
 	if worktree != nil {
 		if strings.TrimSpace(resume.CWD) == "" {
 			resume.CWD = strings.TrimSpace(worktree.Path)
@@ -97,10 +111,12 @@ func prepararDesdeDatosConWorkspace(agente *db.Agente, proyecto *db.Proyecto, co
 		},
 		Resume: resume,
 	}
+	stepStart = time.Now()
 	plan, err := runtimeagente.DefaultRegistry().Prepare(req)
 	if err != nil {
 		return nil, err
 	}
+	prepareRuntimeDebugf("PrepararDesdeDatos step=registry_prepare duration=%s", time.Since(stepStart).Round(time.Millisecond))
 
 	return &Preparacion{
 		Agente:    agente,
@@ -110,6 +126,24 @@ func prepararDesdeDatosConWorkspace(agente *db.Agente, proyecto *db.Proyecto, co
 		Bootstrap: bootstrap,
 		Plan:      plan,
 	}, nil
+}
+
+func prepareRuntimeDebugf(format string, args ...any) {
+	if !prepareRuntimeDebugEnabled() {
+		return
+	}
+	log.Printf("orquesta[prepare-runtime] "+format, args...)
+}
+
+func prepareRuntimeDebugEnabled() bool {
+	for _, key := range []string{"ORQUESTA_DEBUG_PREPARE", "ORQUESTA_DEBUG"} {
+		value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+		switch value {
+		case "1", "true", "yes", "on", "si", "sí":
+			return true
+		}
+	}
+	return false
 }
 
 func asegurarWorktreeOperativa(agente string, proyecto *db.Proyecto, workspace coordinacion.WorkspaceManager) (*coordinacion.Worktree, error) {

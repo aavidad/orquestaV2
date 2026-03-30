@@ -56,28 +56,17 @@ var serverStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Consulta el estado del servidor local",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		info, infoErr := rpclocal.LoadServerInfo()
-		addr := rpclocal.ResolveServerAddr()
-		if infoErr == nil {
-			addr = rpclocal.BaseURL(info.Addr)
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), rpclocal.DefaultTimeout())
-		defer cancel()
-		err := rpclocal.Ping(ctx, addr)
+		info, recoveredFromHealth, err := loadServerInfoWithHealthFallback("")
 		if err != nil {
-			if infoErr == nil {
-				fmt.Printf("Servidor no disponible en %s (pid=%d)\n", info.Addr, info.PID)
-				fmt.Printf("Log: %s\n", localServerLogPath())
-				return err
-			}
 			return err
 		}
-		if infoErr == nil {
-			fmt.Printf("Servidor activo en %s (pid=%d)\n", info.Addr, info.PID)
-			fmt.Printf("Log: %s\n", localServerLogPath())
-			return nil
+		fmt.Printf("Servidor activo en %s (pid=%d)\n", info.Addr, info.PID)
+		if recoveredFromHealth {
+			fmt.Printf("Statefile: ausente; usando healthz del daemon activo\n")
 		}
-		fmt.Printf("Servidor activo en %s\n", addr)
+		if driver := strings.TrimSpace(info.StorageDriver); driver != "" {
+			fmt.Printf("Storage: %s %s\n", driver, resolveServerStorageTarget(info))
+		}
 		fmt.Printf("Log: %s\n", localServerLogPath())
 		return nil
 	},
@@ -87,12 +76,9 @@ var serverStopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "Detiene el servidor local",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		info, err := rpclocal.LoadServerInfo()
+		info, _, err := loadServerInfoWithHealthFallback("")
 		if err != nil {
-			return fmt.Errorf("no hay statefile de servidor: %w", err)
-		}
-		if !rpclocal.MatchesCurrentScope(info) {
-			return fmt.Errorf("el statefile no pertenece al scope actual")
+			return err
 		}
 
 		addr := rpclocal.BaseURL(info.Addr)
@@ -109,8 +95,8 @@ var serverStopCmd = &cobra.Command{
 		if strings.TrimSpace(health.ScopeID) != "" && health.ScopeID != rpclocal.CurrentScopeID() {
 			return fmt.Errorf("el servidor activo pertenece a otro scope (%s)", health.ScopeID)
 		}
-		if strings.TrimSpace(health.DBPath) != "" && health.DBPath != db.CurrentDBPath() {
-			return fmt.Errorf("el servidor activo usa otra DB (%s)", health.DBPath)
+		if err := validateHealthStorage(health); err != nil {
+			return err
 		}
 
 		proc, err := os.FindProcess(health.PID)
@@ -145,12 +131,14 @@ var serverDoctorCmd = &cobra.Command{
 	Short: "Diagnostica el estado del modo servidor y la persistencia objetivo",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		infoPath := rpclocal.DefaultInfoPath()
-		dbPath := db.CurrentDBPath()
+		storageDriver := db.CurrentStorageDriver()
+		storageTarget := currentServerStorageTarget()
 		addr := rpclocal.ResolveServerAddr()
 
 		fmt.Printf("Modo objetivo: servidor local\n")
 		fmt.Printf("Statefile: %s\n", infoPath)
-		fmt.Printf("DB objetivo: %s\n", dbPath)
+		fmt.Printf("Storage driver: %s\n", storageDriver)
+		fmt.Printf("Storage target: %s\n", storageTarget)
 		fmt.Printf("Addr resuelta: %s\n", addr)
 
 		info, err := rpclocal.LoadServerInfo()
@@ -158,18 +146,25 @@ var serverDoctorCmd = &cobra.Command{
 			fmt.Printf("State: no disponible (%v)\n", err)
 		} else {
 			addr = rpclocal.BaseURL(info.Addr)
-			fmt.Printf("State: pid=%d addr=%s scope=%s db=%s started_at=%s\n", info.PID, info.Addr, info.ScopeID, info.DBPath, info.StartedAt.Format(time.RFC3339))
+			fmt.Printf("State: pid=%d addr=%s scope=%s storage=%s %s started_at=%s\n",
+				info.PID,
+				info.Addr,
+				info.ScopeID,
+				strings.TrimSpace(info.StorageDriver),
+				resolveServerStorageTarget(info),
+				info.StartedAt.Format(time.RFC3339),
+			)
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		if err := rpclocal.Ping(ctx, addr); err != nil {
 			fmt.Printf("Health RPC: KO (%v)\n", err)
-			fmt.Println("Modo local: solo con --local o ORQUESTA_FORCE_LOCAL=1 y solo para recuperación")
+			fmt.Println("Modo local: solo con ORQUESTA_FORCE_LOCAL_DB=1 y solo para recuperación")
 			return nil
 		}
 		fmt.Printf("Health RPC: OK\n")
-		fmt.Printf("Modo local: solo por recuperación explícita (--local / ORQUESTA_FORCE_LOCAL=1)\n")
+		fmt.Printf("Modo local: solo por recuperación explícita (ORQUESTA_FORCE_LOCAL_DB=1)\n")
 		return nil
 	},
 }
@@ -190,7 +185,90 @@ func ensureServerDBOpen() error {
 	if db.IsOpen() {
 		return nil
 	}
-	return db.Open()
+	if err := db.Open(); err != nil {
+		return err
+	}
+	if err := db.EnsureCapacidadModeloBaseCodex(); err != nil {
+		return fmt.Errorf("seed capacidad/modelo base: %w", err)
+	}
+	return nil
+}
+
+func loadServerInfoWithHealthFallback(addr string) (*rpclocal.ServerInfo, bool, error) {
+	info, err := rpclocal.LoadServerInfo()
+	if err == nil {
+		return info, false, nil
+	}
+
+	if strings.TrimSpace(addr) == "" {
+		addr = rpclocal.ResolveServerAddr()
+	}
+	resolvedAddr := strings.TrimPrefix(rpclocal.BaseURL(addr), "http://")
+	ctx, cancel := context.WithTimeout(context.Background(), rpclocal.DefaultTimeout())
+	defer cancel()
+	health, pingErr := rpclocal.NewClient(addr, nil).Ping(ctx)
+	if pingErr != nil {
+		return nil, false, fmt.Errorf("no hay statefile de servidor (%v) y healthz no responde en %s: %w", err, rpclocal.BaseURL(addr), pingErr)
+	}
+	if !health.OK {
+		return nil, false, fmt.Errorf("healthz responde pero no esta sano en %s", rpclocal.BaseURL(addr))
+	}
+	if strings.TrimSpace(health.ScopeID) != "" && health.ScopeID != rpclocal.CurrentScopeID() {
+		return nil, false, fmt.Errorf("el servidor activo pertenece a otro scope (%s)", health.ScopeID)
+	}
+	if err := validateHealthStorage(health); err != nil {
+		return nil, false, err
+	}
+	advertisedAddr := strings.TrimSpace(health.Addr)
+	if advertisedAddr == "" {
+		advertisedAddr = resolvedAddr
+	}
+	return &rpclocal.ServerInfo{
+		Addr:          advertisedAddr,
+		PID:           health.PID,
+		Kind:          health.Kind,
+		ScopeID:       health.ScopeID,
+		DBPath:        legacyStorageTarget(health.StorageTarget, health.DBPath),
+		StorageDriver: health.StorageDriver,
+		StorageTarget: legacyStorageTarget(health.StorageTarget, health.DBPath),
+		StartedAt:     health.StartedAt,
+		Version:       health.Version,
+	}, true, nil
+}
+
+func currentServerStorageTarget() string {
+	target := strings.TrimSpace(db.CurrentStorageDisplayTarget())
+	if target != "" {
+		return target
+	}
+	return strings.TrimSpace(db.CurrentDBPath())
+}
+
+func resolveServerStorageTarget(info *rpclocal.ServerInfo) string {
+	if info == nil {
+		return ""
+	}
+	return legacyStorageTarget(info.StorageTarget, info.DBPath)
+}
+
+func legacyStorageTarget(primary, fallback string) string {
+	if strings.TrimSpace(primary) != "" {
+		return strings.TrimSpace(primary)
+	}
+	return strings.TrimSpace(fallback)
+}
+
+func validateHealthStorage(health *rpclocal.HealthResponse) error {
+	if health == nil {
+		return nil
+	}
+	if driver := strings.TrimSpace(health.StorageDriver); driver != "" && driver != db.CurrentStorageDriver() {
+		return fmt.Errorf("el servidor activo usa otro driver de persistencia (%s)", driver)
+	}
+	if target := legacyStorageTarget(health.StorageTarget, health.DBPath); target != "" && target != currentServerStorageTarget() {
+		return fmt.Errorf("el servidor activo usa otro storage target (%s)", target)
+	}
+	return nil
 }
 
 func resolveServerSecurityOptions(cmd *cobra.Command) (serverSecurityOptions, error) {
@@ -222,6 +300,9 @@ func resolveServerSecurityOptions(cmd *cobra.Command) (serverSecurityOptions, er
 }
 
 func shouldDelegateToLocalServer(args []string) bool {
+	if !localRPCEnabled(args) {
+		return false
+	}
 	if len(args) == 0 {
 		return false
 	}
@@ -288,7 +369,7 @@ func ensureLocalServer(addr string) error {
 
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
-	cmd.Env = append(os.Environ(), "ORQUESTA_FORCE_LOCAL=1")
+	cmd.Env = buildLocalServerProcessEnv(os.Environ())
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		return err
@@ -308,20 +389,42 @@ func ensureLocalServer(addr string) error {
 	return errors.New("timeout esperando al servidor local")
 }
 
+func buildLocalServerProcessEnv(base []string) []string {
+	if len(base) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(base))
+	for _, entry := range base {
+		key, _, found := strings.Cut(entry, "=")
+		if !found {
+			continue
+		}
+		switch key {
+		case "ORQUESTA_FORCE_LOCAL", "ORQUESTA_FORCE_LOCAL_DB":
+			continue
+		default:
+			out = append(out, entry)
+		}
+	}
+	return out
+}
+
 func newLocalRPCState(kind, addr string) (rpclocal.ServerInfo, error) {
 	token, err := randomHexToken(32)
 	if err != nil {
 		return rpclocal.ServerInfo{}, err
 	}
 	return rpclocal.ServerInfo{
-		Addr:      strings.TrimPrefix(rpclocal.BaseURL(addr), "http://"),
-		PID:       os.Getpid(),
-		Kind:      kind,
-		ScopeID:   rpclocal.CurrentScopeID(),
-		DBPath:    db.CurrentDBPath(),
-		Token:     token,
-		StartedAt: time.Now().UTC(),
-		Version:   "dev",
+		Addr:          strings.TrimPrefix(rpclocal.BaseURL(addr), "http://"),
+		PID:           os.Getpid(),
+		Kind:          kind,
+		ScopeID:       rpclocal.CurrentScopeID(),
+		DBPath:        currentServerStorageTarget(),
+		StorageDriver: db.CurrentStorageDriver(),
+		StorageTarget: currentServerStorageTarget(),
+		Token:         token,
+		StartedAt:     time.Now().UTC(),
+		Version:       "dev",
 	}, nil
 }
 

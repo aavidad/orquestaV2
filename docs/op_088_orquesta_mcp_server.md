@@ -22,7 +22,7 @@ Acceso de solo lectura a:
 ```mermaid
 graph TD
     Client[Cliente MCP: Claude/Cursor] -->|JSON-RPC| Server[Orquesta MCP Server]
-    Server -->|Internal API| DB[(SQLite: orquesta.db)]
+    Server -->|Internal API| DB[(Storage Adapter: backend activo)]
     Server -->|Context| MB[Runtime Mailbox]
     MB --> Agentes[Agentes Vivos]
 ```

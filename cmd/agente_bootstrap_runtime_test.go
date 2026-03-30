@@ -99,7 +99,7 @@ func TestPrepararBootstrapRuntimeAgenteInyectaHandoffYMailbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get runtime order: %v", err)
 	}
-	if order.Estado != "completada" {
+	if order.Estado != "pendiente" {
 		t.Fatalf("estado de orden bootstrap inesperado: %s", order.Estado)
 	}
 	if sesionOrigen == nil || sesionOrigen.ID == 0 {

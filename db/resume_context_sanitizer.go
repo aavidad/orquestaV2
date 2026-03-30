@@ -21,12 +21,24 @@ type resumeProjectIdentity struct {
 	ruta string
 }
 
+var resumePayloadLaunchOnlyKeys = []string{
+	"modo",
+	"native_resume",
+	"continuity_prompt",
+	"bootstrap_prompt",
+	"launch_prompt_embedded",
+	"launch_prompt_mode",
+	"launch_prompt_delay_ms",
+}
+
 func SanitizeResumeContextForProject(resume runtimeagente.ResumeContext, proyecto *Proyecto) runtimeagente.ResumeContext {
+	originalPayload := strings.TrimSpace(resume.ResumePayloadJSON)
+	foreignPayload, foreignProject := resumePayloadForeignProject(originalPayload, proyecto)
+	resume.ResumePayloadJSON = SanitizeResumePayloadForProject(originalPayload, proyecto)
 	if proyecto == nil {
 		return resume
 	}
-	if foreignPayload, foreignProject := resumePayloadForeignProject(resume.ResumePayloadJSON, proyecto); foreignPayload {
-		resume.ResumePayloadJSON = SanitizeResumePayloadForProject(resume.ResumePayloadJSON, proyecto)
+	if foreignPayload {
 		resume.ResumenContinuidad = ""
 		resume.Branch = ""
 		resume.ExternalSessionID = ""
@@ -44,11 +56,22 @@ func SanitizeResumeContextForProject(resume runtimeagente.ResumeContext, proyect
 }
 
 func SanitizeResumePayloadForProject(prev string, proyecto *Proyecto) string {
-	prev = strings.TrimSpace(prev)
-	if prev == "" || proyecto == nil {
+	envelope := ParseResumePayloadEnvelope(prev)
+	for _, key := range resumePayloadLaunchOnlyKeys {
+		delete(envelope, key)
+	}
+	if len(envelope) == 0 {
+		return ""
+	}
+	data, err := json.Marshal(envelope)
+	if err != nil {
+		return ""
+	}
+	prev = string(data)
+	if proyecto == nil {
 		return prev
 	}
-	envelope := ParseResumePayloadEnvelope(prev)
+	envelope = ParseResumePayloadEnvelope(prev)
 	foreign, _ := envelopeReferencesForeignProject(envelope, proyecto)
 	if !foreign {
 		return prev
@@ -66,7 +89,7 @@ func SanitizeResumePayloadForProject(prev string, proyecto *Proyecto) string {
 	if len(envelope) == 0 {
 		return ""
 	}
-	data, err := json.Marshal(envelope)
+	data, err = json.Marshal(envelope)
 	if err != nil {
 		return ""
 	}

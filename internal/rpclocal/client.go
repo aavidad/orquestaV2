@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 )
 
 type Client struct {
@@ -19,7 +18,10 @@ type Client struct {
 
 func NewClient(addr string, httpClient *http.Client) *Client {
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 3 * time.Second}
+		// El deadline efectivo debe venir del contexto de cada llamada; un
+		// timeout fijo aquí corta operaciones CLI pesadas aunque el caller haya
+		// concedido más tiempo explícitamente.
+		httpClient = &http.Client{}
 	}
 	return &Client{
 		baseURL: BaseURL(addr),

@@ -24,7 +24,7 @@ Para resolver esto usando los elementos ya aprobados en **OP-087** y **OP-088**,
 ### 2. Eviction (Desalojo) y Checkpoint
 - Orquesta cambia inmediatamente el estado de la tarea de `en_progreso` a `handoff_en_curso`.
 - Se envía una señal `SIGTERM` o equivalente al `RuntimeHandle` del Agente A (se cierra el PTY o la conexión MCP).
-- **El paso crítico:** El daemon de Orquesta captura el estado del `worktree` actual (ficheros modificados sin commitear, rama activa, y la última instrucción que recibió) y escribe un registro completo en la tabla `runtime_checkpoints` en SQLite.
+- **El paso crítico:** El daemon de Orquesta captura el estado del `worktree` actual (ficheros modificados sin commitear, rama activa, y la última instrucción que recibió) y escribe un registro completo en `runtime_checkpoints` a través del adaptador de persistencia activo de Orquesta.
 
 ### 3. Reasignación Automática
 - Orquesta consulta su base de datos de `agentes` buscando otro agente que esté libre y tenga capacidad (tokens disponibles o distinta licencia).
@@ -37,7 +37,7 @@ Para resolver esto usando los elementos ya aprobados en **OP-087** y **OP-088**,
 
 ## Ventajas del modelo
 - **Resiliencia Pura:** Un trabajo masivo de refactorización (que consumiría la cuota diaria de un solo LLM) ahora se puede repartir entre múltiples agentes de forma encadenada ("Carrera de relevos").
-- **Coste Cero de Contexto Humano:** Alberto no tiene que "explicarle" al Agente B por dónde iba el Agente A. La base de datos de Orquesta serializa y transfiere la mente de la sesión automáticamente.
+- **Coste Cero de Contexto Humano:** Alberto no tiene que "explicarle" al Agente B por dónde iba el Agente A. La persistencia gobernada por Orquesta serializa y transfiere la mente de la sesión automáticamente.
 
 ## Votación y Tareas
 - Esta propuesta requiere crear el motor lógico de `Handoff Manager` dentro de `core/`.

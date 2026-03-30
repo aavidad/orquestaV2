@@ -1,0 +1,146 @@
+package controlruntime
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestDetectExternalSessionIDFromCodexPerfilSessionStore(t *testing.T) {
+	tmp := t.TempDir()
+	wrapper := filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil")
+	if err := os.MkdirAll(filepath.Dir(wrapper), 0o755); err != nil {
+		t.Fatalf("mkdir wrapper: %v", err)
+	}
+	startedAt := time.Now().UTC()
+	workingDir := filepath.Join(tmp, "work")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir working dir: %v", err)
+	}
+	sessionDir := filepath.Join(filepath.Dir(filepath.Dir(wrapper)), "homes", "Codex2", "sessions", startedAt.In(time.Local).Format("2006"), startedAt.In(time.Local).Format("01"), startedAt.In(time.Local).Format("02"))
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatalf("mkdir session dir: %v", err)
+	}
+	sessionFile := filepath.Join(sessionDir, "rollout-test.jsonl")
+	sessionMeta := `{"timestamp":"` + startedAt.Add(time.Second).Format(time.RFC3339Nano) + `","type":"session_meta","payload":{"id":"sess-codex-123","timestamp":"` + startedAt.Add(time.Second).Format(time.RFC3339Nano) + `","cwd":"` + workingDir + `"}}` + "\n"
+	if err := os.WriteFile(sessionFile, []byte(sessionMeta), 0o644); err != nil {
+		t.Fatalf("write session file: %v", err)
+	}
+
+	obj := ObjetivoProceso{
+		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"'` + wrapper + `' 'Codex2'","working_dir":"` + workingDir + `","started_at":"` + startedAt.Format(time.RFC3339Nano) + `"}`,
+	}
+	got, err := DetectExternalSessionID(obj)
+	if err != nil {
+		t.Fatalf("DetectExternalSessionID: %v", err)
+	}
+	if got != "sess-codex-123" {
+		t.Fatalf("session id inesperado: %q", got)
+	}
+}
+
+func TestEnviarInstruccionSesionResumeUsaCodexPerfil(t *testing.T) {
+	tmp := t.TempDir()
+	outPath := filepath.Join(tmp, "resume.out")
+	wrapper := filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil")
+	if err := os.MkdirAll(filepath.Dir(wrapper), 0o755); err != nil {
+		t.Fatalf("mkdir wrapper: %v", err)
+	}
+	script := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$@\" > " + shellQuoteForTest(outPath) + "\n"
+	if err := os.WriteFile(wrapper, []byte(script), 0o755); err != nil {
+		t.Fatalf("write wrapper: %v", err)
+	}
+
+	obj := ObjetivoProceso{
+		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"'` + wrapper + `' 'Codex5'","working_dir":"` + tmp + `","external_session_id":"sess-resume-456"}`,
+	}
+	aplicado, _, err := EnviarInstruccionSesionResume(obj, "", "hola session resume")
+	if err != nil {
+		t.Fatalf("EnviarInstruccionSesionResume: %v", err)
+	}
+	if !aplicado {
+		t.Fatal("session_resume deberia aplicar control real")
+	}
+	data, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read resume output: %v", err)
+	}
+	got := strings.Split(strings.TrimSpace(string(data)), "\n")
+	want := []string{"Codex5", "exec", "resume", "sess-resume-456", "hola session resume"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("argv inesperado: got=%q want=%q", got, want)
+	}
+}
+
+func TestDetectExternalSessionIDUsaSupervisorLocalResidente(t *testing.T) {
+	tmp := t.TempDir()
+	wrapper := filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil")
+	if err := os.MkdirAll(filepath.Dir(wrapper), 0o755); err != nil {
+		t.Fatalf("mkdir wrapper: %v", err)
+	}
+	startedAt := time.Now().UTC()
+	workingDir := filepath.Join(tmp, "work")
+	traceDir := filepath.Join(tmp, "trace")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir working dir: %v", err)
+	}
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	sessionDir := filepath.Join(filepath.Dir(filepath.Dir(wrapper)), "homes", "Codex7", "sessions", startedAt.In(time.Local).Format("2006"), startedAt.In(time.Local).Format("01"), startedAt.In(time.Local).Format("02"))
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatalf("mkdir session dir: %v", err)
+	}
+
+	cmd := exec.Command("sleep", "5")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start sleep: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+	})
+
+	ref := registrarSupervisorLocalResidente(descriptorSupervisorLocal{
+		Ref:             traceDir,
+		PID:             cmd.Process.Pid,
+		StartedAt:       startedAt,
+		TraceDir:        traceDir,
+		WorkingDir:      workingDir,
+		RenderedCommand: "'" + wrapper + "' 'Codex7'",
+	}, cmd)
+	if ref == "" {
+		t.Fatal("faltaba ref de supervisor")
+	}
+
+	sessionMeta := `{"timestamp":"` + startedAt.Add(time.Second).Format(time.RFC3339Nano) + `","type":"session_meta","payload":{"id":"sess-supervisor-789","timestamp":"` + startedAt.Add(time.Second).Format(time.RFC3339Nano) + `","cwd":"` + workingDir + `"}}` + "\n"
+	if err := os.WriteFile(filepath.Join(sessionDir, "rollout-supervisor.jsonl"), []byte(sessionMeta), 0o644); err != nil {
+		t.Fatalf("write session file: %v", err)
+	}
+
+	obj := ObjetivoProceso{
+		PID:          intPtr64(int64(cmd.Process.Pid)),
+		HandleKind:   "process",
+		HandleRef:    "process",
+		MetadataJSON: `{"driver":"process_pty_cli","supervisor_ref":"` + ref + `","rendered_command":"'` + wrapper + `' 'Codex7'","working_dir":"` + workingDir + `","started_at":"` + startedAt.Format(time.RFC3339Nano) + `"}`,
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		got, err := DetectExternalSessionID(obj)
+		if err != nil {
+			t.Fatalf("DetectExternalSessionID: %v", err)
+		}
+		if got == "sess-supervisor-789" {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatal("el supervisor local no detecto external_session_id a tiempo")
+}
+
+func shellQuoteForTest(raw string) string {
+	return "'" + strings.ReplaceAll(raw, "'", `'\''`) + "'"
+}

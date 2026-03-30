@@ -43,8 +43,41 @@ func TestMergeBranchIsolatedFusionaYActualizaRamaObjetivo(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(repo, "feature.txt")); err != nil {
 		t.Fatalf("feature.txt debería quedar fusionado en master: %v", err)
 	}
+	if ramas := mustGitOutput(t, repo, "branch", "--list", "orquesta/merge-tmp/*"); strings.TrimSpace(ramas) != "" {
+		t.Fatalf("ramas temporales de merge no limpiadas: %s", ramas)
+	}
 	if entries, err := os.ReadDir(filepath.Join(repo, ".orquesta-worktrees", ".merge-tmp")); err == nil && len(entries) != 0 {
 		t.Fatalf("worktrees temporales de merge no limpiados: %d", len(entries))
+	}
+}
+
+func TestMergeBranchIsolatedFallaSiRepoDestinoTieneNoTrackeados(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	mustRunGit(t, "", "init", "-b", "master", repo)
+	mustRunGit(t, repo, "config", "user.name", "Orquesta Test")
+	mustRunGit(t, repo, "config", "user.email", "orquesta@example.test")
+
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("base\n"), 0o644); err != nil {
+		t.Fatalf("write base: %v", err)
+	}
+	mustRunGit(t, repo, "add", "README.md")
+	mustRunGit(t, repo, "commit", "-m", "base")
+
+	mustRunGit(t, repo, "checkout", "-b", "feature/autonomia")
+	if err := os.WriteFile(filepath.Join(repo, "feature.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("write feature: %v", err)
+	}
+	mustRunGit(t, repo, "add", "feature.txt")
+	mustRunGit(t, repo, "commit", "-m", "feature")
+	mustRunGit(t, repo, "checkout", "master")
+
+	if err := os.WriteFile(filepath.Join(repo, "local.tmp"), []byte("no trackeado\n"), 0o644); err != nil {
+		t.Fatalf("write untracked: %v", err)
+	}
+
+	_, err := MergeBranchIsolated(repo, "feature/autonomia", "master")
+	if err == nil || !strings.Contains(err.Error(), "cambios locales") {
+		t.Fatalf("deberia rechazar repo destino sucio por no trackeados, got=%v", err)
 	}
 }
 

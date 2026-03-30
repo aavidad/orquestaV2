@@ -158,10 +158,15 @@ func webHandlerAgenteControl(w http.ResponseWriter, r *http.Request, nombre stri
 		http.Redirect(w, r, "/agentes/"+url.PathEscape(nombre)+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
 	}
+	accion := strings.TrimSpace(r.FormValue("accion"))
+	if !webAccionControlAgenteValida(accion) {
+		http.Redirect(w, r, "/agentes/"+url.PathEscape(nombre)+"?err="+url.QueryEscape("acción de control inválida"), http.StatusSeeOther)
+		return
+	}
 	req := apiAgenteControlRequest{
 		Agente:       strings.TrimSpace(nombre),
 		Proyecto:     strings.TrimSpace(r.FormValue("proyecto")),
-		Accion:       strings.TrimSpace(r.FormValue("accion")),
+		Accion:       accion,
 		Conector:     strings.TrimSpace(r.FormValue("conector")),
 		Modelo:       strings.TrimSpace(r.FormValue("modelo")),
 		Razonamiento: strings.TrimSpace(r.FormValue("razonamiento")),
@@ -184,6 +189,10 @@ func webHandlerAgenteEstado(w http.ResponseWriter, r *http.Request, nombre strin
 		return
 	}
 	accion := strings.TrimSpace(r.FormValue("accion"))
+	if !webAccionEstadoAgenteValida(accion) {
+		http.Redirect(w, r, "/agentes/"+url.PathEscape(nombre)+"?err="+url.QueryEscape("acción de estado inválida"), http.StatusSeeOther)
+		return
+	}
 	err := webAplicarAccionEstadoAgentePorAPI(nombre, accion)
 	if err != nil {
 		http.Redirect(w, r, "/agentes/"+url.PathEscape(nombre)+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
@@ -285,6 +294,24 @@ func webAplicarAccionEstadoAgentePorAPI(nombre, accion string) error {
 	}
 	path := "/api/agentes/" + url.PathEscape(nombre) + "/" + url.PathEscape(accion)
 	return webInvocarAPIJSON(http.MethodPost, path, map[string]any{}, nil)
+}
+
+func webAccionControlAgenteValida(accion string) bool {
+	switch strings.ToLower(strings.TrimSpace(accion)) {
+	case "arrancar", "pausar", "continuar", "detener", "start", "pause", "resume", "stop":
+		return true
+	default:
+		return false
+	}
+}
+
+func webAccionEstadoAgenteValida(accion string) bool {
+	switch strings.ToLower(strings.TrimSpace(accion)) {
+	case "retirar", "rehabilitar", "reset-reanimacion":
+		return true
+	default:
+		return false
+	}
 }
 
 func limitarSesiones(items []*db.Sesion, max int) []*db.Sesion {

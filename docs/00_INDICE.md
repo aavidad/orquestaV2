@@ -1,6 +1,7 @@
 # Índice de Documentación - Orquesta
 
 ## Módulos de Operación y Arquitectura
+- [M00 - Biblia de la App Orquesta](BIBLIA_APP_ORQUESTA.md)
 - [M00 - README Princial](../README.md)
 - [M01 - Visión de Orquesta V1](orquesta_v1_vision.md)
 - [M02 - Roadmap Orquesta V1](orquesta_v1_roadmap.md)
@@ -12,7 +13,7 @@
 - [P02 - Política Arquitectónica por Proyecto (ES)](politica_arquitectura_tipos_proyecto_es.md) | [(EN)](politica_arquitectura_tipos_proyecto_en.md)
 - [P03 - Gestión de Reglas, Skills y Workflows (ES)](gestion_reglas_skills_workflows_es.md) | [(EN)](gestion_reglas_skills_workflows_en.md)
 - [P04 - Política de Acceso a Persistencia - AP-077 (ES)](politica_acceso_persistencia_es.md) | [(EN)](politica_acceso_persistencia_en.md)
-- [P05 - Política de Copias de Seguridad de la BD (ES)](politica_backups_es.md) | [(EN)](politica_backups_en.md)
+- [P05 - Política de Copias de Seguridad del backend SQLite (ES)](politica_backups_es.md) | [(EN)](politica_backups_en.md)
 
 ## Diseño Técnico
 - [D01 - Matriz de Voto y Decisiones](op_050_matriz_voto.md)

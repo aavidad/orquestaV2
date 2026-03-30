@@ -8,6 +8,8 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -34,6 +36,37 @@ func TestNormalizarAddrServidorLocal(t *testing.T) {
 		})
 	}
 }
+
+func TestEscucharServidorUnificadoReservaListenerAntesDelArranque(t *testing.T) {
+	prev := listenServerTCP
+	t.Cleanup(func() {
+		listenServerTCP = prev
+	})
+	listenServerTCP = func(network, address string) (net.Listener, error) {
+		return fakeListener{addr: &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 16543}}, nil
+	}
+
+	listener, advertised, err := escucharServidorUnificado("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("escucharServidorUnificado: %v", err)
+	}
+	defer listener.Close()
+
+	if advertised == "" {
+		t.Fatalf("se esperaba addr anunciada")
+	}
+	if listener.Addr() == nil {
+		t.Fatalf("listener sin addr")
+	}
+}
+
+type fakeListener struct {
+	addr net.Addr
+}
+
+func (f fakeListener) Accept() (net.Conn, error) { return nil, io.EOF }
+func (f fakeListener) Close() error              { return nil }
+func (f fakeListener) Addr() net.Addr            { return f.addr }
 
 func TestRegistrarRutasServeMontaSuperficieOperativa(t *testing.T) {
 	prepararDBTemporalCmd(t)

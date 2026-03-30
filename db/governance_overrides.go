@@ -114,8 +114,12 @@ func GuardarGovernanceOverride(actor string, item *GovernanceOverride) (int64, e
 }
 
 func ListarGovernanceOverrides(scopeTipo, scopeRef, tipoAgente, entidad string) ([]*GovernanceOverride, error) {
-	if err := ensureGovernanceOverrideSchema(); err != nil {
+	exists, err := governanceOverrideSchemaExists()
+	if err != nil {
 		return nil, err
+	}
+	if !exists {
+		return nil, nil
 	}
 	q := `
 		SELECT id, tipo_agente, scope_tipo, scope_ref, entidad, entidad_id, accion, created_at, updated_at
@@ -265,6 +269,10 @@ func ensureGovernanceOverrideSchema() error {
 			UNIQUE(scope_tipo, scope_ref, entidad, entidad_id)
 		)`)
 	return err
+}
+
+func governanceOverrideSchemaExists() (bool, error) {
+	return SchemaObjectExists("table", "governance_overrides")
 }
 
 type governanceLayer struct {
@@ -439,7 +447,7 @@ func notificarRefreshGobernanzaScope(actor, tipoAgente, scopeTipo, scopeRef, mot
 	if strings.TrimSpace(tipoAgente) == "" {
 		return
 	}
-	sesiones, err := ListarSesionesActivas()
+	sesiones, err := ListarSesionesActivasOperativas()
 	if err != nil {
 		Audit(actor, "governance_refresh_error", "governance_override", 0, err.Error())
 		return

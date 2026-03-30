@@ -12,16 +12,24 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
+
+	"orquesta/db"
 )
 
 func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	var transcriptQuery string
+	var transcriptRuntimeID string
+	var transcriptHandleID string
+	var ordersProjectQuery string
 	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/api/status":
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 		case r.URL.Path == "/api/runtime-transcript" && r.Method == http.MethodGet:
 			transcriptQuery = r.URL.Query().Get("q")
+			transcriptRuntimeID = r.URL.Query().Get("runtime_id")
+			transcriptHandleID = r.URL.Query().Get("handle_id")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"transcript": []map[string]any{{
 					"id":              19,
@@ -74,6 +82,7 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 				},
 			})
 		case r.URL.Path == "/api/runtime-orders" && r.Method == http.MethodGet:
+			ordersProjectQuery = r.URL.Query().Get("proyecto")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"orders": []map[string]any{{
 					"id":             9,
@@ -235,9 +244,17 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	if err := runtimeTranscriptCmd.Flags().Set("q", "refactor"); err != nil {
 		t.Fatalf("set q transcript: %v", err)
 	}
+	if err := runtimeTranscriptCmd.Flags().Set("runtime-id", "77"); err != nil {
+		t.Fatalf("set runtime-id transcript: %v", err)
+	}
+	if err := runtimeTranscriptCmd.Flags().Set("handle-id", "88"); err != nil {
+		t.Fatalf("set handle-id transcript: %v", err)
+	}
 	t.Cleanup(func() {
 		_ = runtimeTranscriptCmd.Flags().Set("agente", "")
 		_ = runtimeTranscriptCmd.Flags().Set("q", "")
+		_ = runtimeTranscriptCmd.Flags().Set("runtime-id", "0")
+		_ = runtimeTranscriptCmd.Flags().Set("handle-id", "0")
 	})
 	outTranscript := capturarStdout(t, func() {
 		if err := runtimeTranscriptCmd.RunE(runtimeTranscriptCmd, nil); err != nil {
@@ -247,15 +264,30 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	if transcriptQuery != "refactor" {
 		t.Fatalf("query transcript inesperada: %q", transcriptQuery)
 	}
+	if transcriptRuntimeID != "77" {
+		t.Fatalf("runtime_id transcript inesperado: %q", transcriptRuntimeID)
+	}
+	if transcriptHandleID != "88" {
+		t.Fatalf("handle_id transcript inesperado: %q", transcriptHandleID)
+	}
 	if !strings.Contains(outTranscript, "refactor del router") {
 		t.Fatalf("salida transcript sin datos del servidor:\n%s", outTranscript)
 	}
 
+	if err := runtimeOrdenesCmd.Flags().Set("proyecto", "orquestador"); err != nil {
+		t.Fatalf("set proyecto ordenes: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = runtimeOrdenesCmd.Flags().Set("proyecto", "")
+	})
 	outOrders := capturarStdout(t, func() {
 		if err := runtimeOrdenesCmd.RunE(runtimeOrdenesCmd, nil); err != nil {
 			t.Fatalf("runtime ordenes via api: %v", err)
 		}
 	})
+	if ordersProjectQuery != "orquestador" {
+		t.Fatalf("query proyecto ordenes inesperada: %q", ordersProjectQuery)
+	}
 	if !strings.Contains(outOrders, "checkpoint") {
 		t.Fatalf("salida ordenes sin datos del servidor:\n%s", outOrders)
 	}
@@ -386,6 +418,31 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	}
 }
 
+func TestRuntimeTranscriptValidaIDs(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	resetCommandFlags(runtimeTranscriptCmd)
+	if err := runtimeTranscriptCmd.Flags().Set("runtime-id", "-1"); err != nil {
+		t.Fatalf("set runtime-id invalido: %v", err)
+	}
+	err := runtimeTranscriptCmd.RunE(runtimeTranscriptCmd, nil)
+	if err == nil || !strings.Contains(err.Error(), "--runtime-id inválido") {
+		t.Fatalf("error inesperado runtime-id inválido: %v", err)
+	}
+
+	resetCommandFlags(runtimeTranscriptCmd)
+	if err := runtimeTranscriptCmd.Flags().Set("handle-id", "-2"); err != nil {
+		t.Fatalf("set handle-id invalido: %v", err)
+	}
+	err = runtimeTranscriptCmd.RunE(runtimeTranscriptCmd, nil)
+	if err == nil || !strings.Contains(err.Error(), "--handle-id inválido") {
+		t.Fatalf("error inesperado handle-id inválido: %v", err)
+	}
+}
+
 func TestRuntimeRequiereServidor(t *testing.T) {
 	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
 	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
@@ -409,5 +466,64 @@ func TestRuntimeRequiereServidor(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "requiere el servidor de Orquesta activo") {
 		t.Fatalf("error inesperado runtime traza: %v", err)
+	}
+}
+
+func TestRuntimeOrdenesPermiteRecuperacionConForceLocal(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL", "1")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Codex1: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex1",
+		Tipo:        "nudge",
+		PayloadJSON: `{"texto":"seguir"}`,
+	}); err != nil {
+		t.Fatalf("EncolarRuntimeOrder: %v", err)
+	}
+
+	resetCommandFlags(runtimeOrdenesCmd)
+	if err := runtimeOrdenesCmd.Flags().Set("agente", "Codex1"); err != nil {
+		t.Fatalf("set agente runtime ordenes: %v", err)
+	}
+	out := capturarStdout(t, func() {
+		if err := runtimeOrdenesCmd.RunE(runtimeOrdenesCmd, nil); err != nil {
+			t.Fatalf("runtime ordenes en recuperacion local: %v", err)
+		}
+	})
+	if !strings.Contains(out, "nudge") {
+		t.Fatalf("salida runtime ordenes sin datos locales:\n%s", out)
+	}
+}
+
+func TestImprimirRuntimeOrdersMuestraDetalleDeferido(t *testing.T) {
+	out := capturarStdout(t, func() {
+		err := imprimirRuntimeOrders([]*db.RuntimeOrder{{
+			ID:          77,
+			Agente:      "Codex1",
+			Tipo:        "send_instruction",
+			Estado:      "pendiente",
+			ErrorText:   "primer intento\nruntime no disponible",
+			AvailableAt: time.Date(2026, 3, 30, 20, 30, 0, 0, time.UTC),
+			CreatedAt:   time.Date(2026, 3, 30, 20, 15, 0, 0, time.UTC),
+			ResultadoJSON: `{
+				"deferred": true,
+				"deferred_reason": "sin runtime activo entregable",
+				"retry_after": "2026-03-30T20:30:00Z"
+			}`,
+		}})
+		if err != nil {
+			t.Fatalf("imprimirRuntimeOrders: %v", err)
+		}
+	})
+	for _, token := range []string{"DISPONIBLE", "DETALLE", "sin runtime activo entregable", "2026-03-30 20:30:00"} {
+		if !strings.Contains(out, token) {
+			t.Fatalf("salida runtime ordenes sin %q:\n%s", token, out)
+		}
 	}
 }

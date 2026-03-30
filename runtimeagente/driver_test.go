@@ -48,6 +48,41 @@ func TestPrepareCLISinResumeNativoDevuelvePromptContinuidad(t *testing.T) {
 	}
 }
 
+func TestPrepareCLISinResumeNativoCompactaResumePayloadEnPrompt(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Codex2",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:       "codex-cli",
+			Transporte: "cli",
+			Comando:    "codex",
+		},
+		Resume: ResumeContext{
+			ResumenContinuidad: "seguir con control plane",
+			ResumePayloadJSON: `{
+				"bootstrap_prompt":"Bootstrap de Orquesta para Codex2.",
+				"checkpoint":{"id":9,"kind":"stop"},
+				"mailbox":[{"id":1},{"id":2}],
+				"project_context":{"proyecto":{"slug":"orquestador"}},
+				"governance_catalog":{"hash":"abc123"},
+				"persist":"ok"
+			}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if strings.Contains(plan.ContinuityPrompt, "Bootstrap de Orquesta para Codex2.") || strings.Contains(plan.ContinuityPrompt, `"checkpoint"`) {
+		t.Fatalf("el prompt de continuidad no deberia incrustar el JSON bruto: %s", plan.ContinuityPrompt)
+	}
+	for _, token := range []string{"checkpoint#9(stop)", "mailbox=2", "project_context", "governance_catalog", "persist"} {
+		if !strings.Contains(plan.ContinuityPrompt, token) {
+			t.Fatalf("falta resumen de resume payload %s en: %s", token, plan.ContinuityPrompt)
+		}
+	}
+}
+
 func TestPrepareCLIConHintsActivaResumeNativo(t *testing.T) {
 	plan, err := DefaultRegistry().Prepare(LaunchRequest{
 		Agente:       "claude1",
@@ -76,7 +111,7 @@ func TestPrepareCLIConHintsActivaResumeNativo(t *testing.T) {
 	}
 }
 
-func TestPrepareCLIPropagaModeloYRazonamiento(t *testing.T) {
+func TestPrepareCLINormalizaReasoningLegacyDeCodexCLI(t *testing.T) {
 	plan, err := DefaultRegistry().Prepare(LaunchRequest{
 		Agente:       "Codex1",
 		ProyectoSlug: "orquestador",
@@ -98,7 +133,13 @@ func TestPrepareCLIPropagaModeloYRazonamiento(t *testing.T) {
 		t.Fatalf("perfil inesperado: %+v", plan)
 	}
 	rendered := RenderCommand(plan)
-	if !strings.Contains(rendered, "'--model'") || !strings.Contains(rendered, "'gpt-5.4'") || !strings.Contains(rendered, "'--reasoning-effort'") || !strings.Contains(rendered, "'xhigh'") {
+	if !strings.Contains(rendered, "'--model'") || !strings.Contains(rendered, "'gpt-5.4'") {
+		t.Fatalf("comando sin modelo esperado: %s", rendered)
+	}
+	if strings.Contains(rendered, "'--reasoning-effort'") {
+		t.Fatalf("comando no deberia usar flag legacy de razonamiento: %s", rendered)
+	}
+	if !strings.Contains(rendered, "'-c'") || !strings.Contains(rendered, `'model_reasoning_effort="xhigh"'`) {
 		t.Fatalf("comando inesperado: %s", rendered)
 	}
 }
@@ -308,5 +349,50 @@ func TestPrepareRemotePermiteDesactivarCapacidadesPorMetadata(t *testing.T) {
 	}
 	if cfg["can_pause"] != false || cfg["can_send_input"] != false || cfg["can_stop"] != false {
 		t.Fatalf("capacidades remotas inesperadas: %+v", cfg)
+	}
+}
+
+func TestPrepareCLIPropagaCanSendInputDesdeMetadata(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Codex1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:         "codex-cli",
+			Transporte:   "cli",
+			Comando:      "codex",
+			MetadataJSON: `{"can_send_input":false}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if plan.CanSendInput == nil || *plan.CanSendInput {
+		t.Fatalf("el plan CLI deberia propagar can_send_input=false desde metadata: %+v", plan)
+	}
+	if plan.MailboxDeliveryMode != MailboxDeliveryBootstrapOnly {
+		t.Fatalf("modo mailbox inesperado: %+v", plan)
+	}
+}
+
+func TestPrepareCLICodexDesactivaSendInputInteractivoPorDefecto(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Codex1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:       "codex-cli",
+			Transporte: "cli",
+			Comando:    "codex",
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if plan.CanSendInput == nil || *plan.CanSendInput {
+		t.Fatalf("codex-cli deberia desactivar input interactivo por defecto: %+v", plan)
+	}
+	if plan.MailboxDeliveryMode != MailboxDeliveryBootstrapOnly {
+		t.Fatalf("codex-cli deberia dejar mailbox en bootstrap_only: %+v", plan)
 	}
 }

@@ -2,6 +2,7 @@ package db
 
 import (
 	"encoding/json"
+	"os"
 	"testing"
 )
 
@@ -77,9 +78,6 @@ func TestCrearHandoffAgenteVivoReasignaTareaYCreaOrden(t *testing.T) {
 	if len(orders) != 1 {
 		t.Fatalf("ordenes inesperadas: %+v", orders)
 	}
-	if orders[0].Tipo != "handoff" {
-		t.Fatalf("tipo inesperado: %s", orders[0].Tipo)
-	}
 
 	var payload HandoffPayload
 	if err := json.Unmarshal([]byte(orders[0].PayloadJSON), &payload); err != nil {
@@ -101,7 +99,7 @@ func TestCrearHandoffAgenteVivoReasignaTareaYCreaOrden(t *testing.T) {
 	}
 }
 
-func TestCrearHandoffAgenteVivoExigeHandleActivoEnOrigen(t *testing.T) {
+func TestCrearHandoffAgenteStalePermiteSesionAbiertaSinHandleActivo(t *testing.T) {
 	prepararDBTemporal(t)
 
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {
@@ -110,7 +108,8 @@ func TestCrearHandoffAgenteVivoExigeHandleActivoEnOrigen(t *testing.T) {
 	if err := RegistrarAgente("Codex2", "programador"); err != nil {
 		t.Fatalf("registrar Codex2: %v", err)
 	}
-	if _, err := IniciarSesion("Codex1"); err != nil {
+	sesionOrigenID, err := IniciarSesion("Codex1")
+	if err != nil {
 		t.Fatalf("IniciarSesion origen: %v", err)
 	}
 	if _, err := IniciarSesion("Codex2"); err != nil {
@@ -119,9 +118,66 @@ func TestCrearHandoffAgenteVivoExigeHandleActivoEnOrigen(t *testing.T) {
 	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='cerrado' WHERE agente=?`, "Codex1"); err != nil {
 		t.Fatalf("cerrar handles origen: %v", err)
 	}
+	watchdogID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		Kind:        "watchdog",
+		PayloadJSON: `{"texto":"heartbeat obsoleto"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear watchdog pendiente: %v", err)
+	}
+	if watchdogID == 0 {
+		t.Fatalf("watchdog id inesperado: %d", watchdogID)
+	}
 
-	if _, err := CrearHandoffAgenteVivo("Codex1", "Codex2", nil, "", "", ""); err == nil {
-		t.Fatalf("se esperaba error por falta de handle activo")
+	orderID, err := CrearHandoffAgenteStale("Codex1", "Codex2", nil, "watchdog", "continuar", "")
+	if err != nil {
+		t.Fatalf("CrearHandoffAgenteStale sin handle activo: %v", err)
+	}
+	if orderID == 0 {
+		t.Fatalf("order id inesperado: %d", orderID)
+	}
+
+	sesionOrigen, err := GetSesionByID(sesionOrigenID)
+	if err != nil {
+		t.Fatalf("GetSesionByID origen: %v", err)
+	}
+	if sesionOrigen.Activa || sesionOrigen.Estado != "pausada" {
+		t.Fatalf("sesion origen deberia quedar aparcada: %+v", sesionOrigen)
+	}
+
+	toAgente := "Codex1"
+	estadoPendiente := "pendiente"
+	mailboxPendiente, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{
+		ToAgente: &toAgente,
+		Estado:   &estadoPendiente,
+	})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	for _, msg := range mailboxPendiente {
+		if msg != nil && msg.Kind == "watchdog" {
+			t.Fatalf("no deberia quedar watchdog pendiente tras handoff stale: %+v", mailboxPendiente)
+		}
+	}
+	estadoConsumido := "consumido"
+	mailboxConsumido, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{
+		ToAgente: &toAgente,
+		Estado:   &estadoConsumido,
+	})
+	if err != nil {
+		t.Fatalf("listar mailbox consumido: %v", err)
+	}
+	encontradoWatchdog := false
+	for _, msg := range mailboxConsumido {
+		if msg != nil && msg.ID == watchdogID && msg.Kind == "watchdog" {
+			encontradoWatchdog = true
+			break
+		}
+	}
+	if !encontradoWatchdog {
+		t.Fatalf("watchdog deberia quedar consumido: %+v", mailboxConsumido)
 	}
 }
 
@@ -177,6 +233,98 @@ func TestCrearHandoffAgenteVivoReutilizaPendienteEquivalente(t *testing.T) {
 	}
 	if len(orders) != 1 {
 		t.Fatalf("deberia existir una sola orden pendiente equivalente: %+v", orders)
+	}
+}
+
+func TestCrearHandoffAgenteStaleConDestinoActivoProyectoEncolaReinicioBootstrap(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "handoff-bootstrap",
+		Nombre:  "handoff-bootstrap",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{Agente: "Codex1", ProyectoID: &proyectoID}); err != nil {
+		t.Fatalf("IniciarSesionContexto origen: %v", err)
+	}
+	pidDestino := int64(os.Getpid())
+	sesionDestino, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &proyectoID,
+		Herramienta: "codex-cli",
+		PID:         &pidDestino,
+	})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto destino: %v", err)
+	}
+	handleDestino, err := GetRuntimeHandleBySesionID(sesionDestino.ID)
+	if err != nil || handleDestino == nil {
+		t.Fatalf("GetRuntimeHandleBySesionID destino: %+v err=%v", handleDestino, err)
+	}
+	if _, err := DB.Exec(`
+		UPDATE runtime_handles
+		SET metadata_json = ?, capabilities_json = ?
+		WHERE id = ?`,
+		`{"driver":"process_pty_cli","rendered_command":"/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex2","can_send_input":false}`,
+		`{"can_send_input":false,"can_checkpoint":true,"can_resume":true,"can_capture_pid":true,"can_track_continuity":true,"can_pause":true,"can_stop":true}`,
+		handleDestino.ID,
+	); err != nil {
+		t.Fatalf("actualizar handle destino: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='cerrado' WHERE agente=?`, "Codex1"); err != nil {
+		t.Fatalf("cerrar handles origen: %v", err)
+	}
+
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:     "Revisar handoff bootstrap destino vivo",
+		Modulo:     "orquestador",
+		Prioridad:  PrioridadAlta,
+		CreadoPor:  "alberto",
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("TomarTarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("IniciarTarea: %v", err)
+	}
+
+	if _, err := CrearHandoffAgenteStale("Codex1", "Codex2", &tareaID, "watchdog", "continuar", ""); err != nil {
+		t.Fatalf("CrearHandoffAgenteStale: %v", err)
+	}
+
+	agente := "Codex2"
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("ListarRuntimeOrders: %v", err)
+	}
+	if len(orders) != 3 {
+		t.Fatalf("ordenes destino inesperadas: %+v", orders)
+	}
+	tipos := map[string]int{}
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		tipos[order.Tipo]++
+	}
+	if tipos["handoff"] != 1 || tipos["stop"] != 1 || tipos["start"] != 1 {
+		t.Fatalf("tipos de orden destino inesperados: %+v", tipos)
 	}
 }
 

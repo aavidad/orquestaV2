@@ -91,6 +91,72 @@ func TestGuardarYListarDecisionesProyecto(t *testing.T) {
 	}
 }
 
+func TestGuardarYListarDecisionesProyectoLegacySchema(t *testing.T) {
+	prepararDBTemporal(t)
+	if _, err := DB.Exec(`DROP TABLE decisiones_proyecto`); err != nil {
+		t.Fatalf("drop decisiones_proyecto: %v", err)
+	}
+	if _, err := DB.Exec(`
+		CREATE TABLE decisiones_proyecto (
+			id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+			proyecto                 TEXT    NOT NULL,
+			titulo                   TEXT    NOT NULL,
+			solucion_elegida         TEXT    NOT NULL DEFAULT '',
+			motivo                   TEXT    NOT NULL DEFAULT '',
+			alternativas_descartadas TEXT    NOT NULL DEFAULT '',
+			impacto                  TEXT    NOT NULL DEFAULT 'medio'
+			                              CHECK (impacto IN ('alto','medio','bajo')),
+			propuesta_codigo         TEXT    NOT NULL DEFAULT '',
+			tarea_id                 INTEGER REFERENCES tareas(id) ON DELETE SET NULL,
+			registrado_por           TEXT    NOT NULL DEFAULT '',
+			created_at               DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at               DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`); err != nil {
+		t.Fatalf("create legacy decisiones_proyecto: %v", err)
+	}
+
+	var proyectoID int64
+	if err := DB.QueryRow(
+		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,
+		"orquestador", "Orquestador", "/tmp/orquestador", "repo",
+	).Scan(&proyectoID); err != nil {
+		t.Fatalf("insert proyecto: %v", err)
+	}
+
+	id, err := GuardarDecisionProyecto(&DecisionProyecto{
+		ProyectoID:   proyectoID,
+		Categoria:    "arquitectura",
+		Titulo:       "Puerto de almacenamiento",
+		Solucion:     "Servicio y repositorio",
+		Motivo:       "Desacoplar SQLite",
+		Alternativas: "SQL directo en handlers",
+		Impacto:      "Permite MySQL sin acoplamiento local",
+	})
+	if err != nil {
+		t.Fatalf("GuardarDecisionProyecto legacy: %v", err)
+	}
+	if id == 0 {
+		t.Fatalf("id legacy invalido")
+	}
+
+	items, err := ListarDecisionesProyecto(proyectoID)
+	if err != nil {
+		t.Fatalf("ListarDecisionesProyecto legacy: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("esperaba 1 decision legacy, tengo %d", len(items))
+	}
+	if items[0].Titulo != "Puerto de almacenamiento" {
+		t.Fatalf("titulo legacy inesperado: %s", items[0].Titulo)
+	}
+	if items[0].ProyectoID != proyectoID {
+		t.Fatalf("proyecto_id legacy inesperado: %+v", items[0])
+	}
+	if items[0].Impacto != "medio" {
+		t.Fatalf("impacto legacy inesperado: %+v", items[0])
+	}
+}
+
 func TestGuardarYListarDocumentosExternosProyecto(t *testing.T) {
 	prepararDBTemporal(t)
 	var proyectoID int64

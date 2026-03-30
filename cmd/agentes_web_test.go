@@ -3,6 +3,7 @@ package cmd
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -339,5 +340,82 @@ func TestWebAgenteControlEncolaOrden(t *testing.T) {
 	}
 	if len(orders) != 1 || orders[0].Tipo != agenteControlAccionStart {
 		t.Fatalf("runtime orders inesperadas: %+v", orders)
+	}
+}
+
+func TestWebAgenteControlRechazaAccionInvalida(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	form := strings.NewReader("accion=reiniciar-force&proyecto=orquestador")
+	req := httptest.NewRequest(http.MethodPost, "/agentes/Codex1/control", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	testMuxAgentesWeb().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	loc := rec.Header().Get("Location")
+	if !strings.Contains(loc, "/agentes/Codex1?err=") {
+		t.Fatalf("redirect inesperado: %s", loc)
+	}
+	parsed, err := url.Parse(loc)
+	if err != nil {
+		t.Fatalf("parse redirect: %v", err)
+	}
+	if got := parsed.Query().Get("err"); !strings.Contains(got, "acción de control inválida") {
+		t.Fatalf("mensaje inesperado: %q", got)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no esperaba runtime orders para acción inválida: %+v", orders)
+	}
+}
+
+func TestWebAgenteEstadoRechazaAccionInvalida(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+
+	form := strings.NewReader("accion=destruir")
+	req := httptest.NewRequest(http.MethodPost, "/agentes/Codex1/estado", form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	testMuxAgentesWeb().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	loc := rec.Header().Get("Location")
+	if !strings.Contains(loc, "/agentes/Codex1?err=") {
+		t.Fatalf("redirect inesperado: %s", loc)
+	}
+	parsed, err := url.Parse(loc)
+	if err != nil {
+		t.Fatalf("parse redirect: %v", err)
+	}
+	if got := parsed.Query().Get("err"); !strings.Contains(got, "acción de estado inválida") {
+		t.Fatalf("mensaje inesperado: %q", got)
 	}
 }

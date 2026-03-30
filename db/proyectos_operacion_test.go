@@ -67,3 +67,18 @@ func TestBloquearYDesbloquearTareaActualizaEstadoOperativoProyecto(t *testing.T)
 		t.Fatalf("motivo deberia quedar vacio tras desbloqueo: %+v", op)
 	}
 }
+
+func TestGetProyectoOperacionSinTablaDevuelveDefault(t *testing.T) {
+	prepararDBTemporal(t)
+	if _, err := DB.Exec(`DROP TABLE proyectos_operacion`); err != nil {
+		t.Fatalf("drop proyectos_operacion: %v", err)
+	}
+
+	op, err := GetProyectoOperacion(42)
+	if err != nil {
+		t.Fatalf("get proyecto operacion sin tabla: %v", err)
+	}
+	if op == nil || op.ProyectoID != 42 || op.EstadoOperativo != ProyectoOperativoActivo {
+		t.Fatalf("default inesperado sin tabla: %+v", op)
+	}
+}

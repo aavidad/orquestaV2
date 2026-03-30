@@ -35,6 +35,18 @@ func ResolverPID(obj ObjetivoProceso) (int, bool, error) {
 }
 
 func ProcesoVivo(obj ObjetivoProceso) (bool, int, error) {
+	if estado, observed, err := ConsultarEstadoLocal(obj); observed {
+		if err != nil {
+			if estado != nil {
+				return false, estado.PID, err
+			}
+			return false, 0, err
+		}
+		if estado == nil {
+			return false, 0, nil
+		}
+		return estado.Vivo, estado.PID, nil
+	}
 	pid, ok, err := ResolverPID(obj)
 	if err != nil {
 		return false, pid, err
@@ -68,6 +80,9 @@ func DetenerProceso(obj ObjetivoProceso) (bool, int, error) {
 }
 
 func controlarProceso(obj ObjetivoProceso, sig syscall.Signal, accion string) (bool, int, error) {
+	if aplicado, pid, observed, err := controlarProcesoLocalSupervisado(obj, sig, accion); observed {
+		return aplicado, pid, err
+	}
 	pid, ok, err := ResolverPID(obj)
 	if err != nil {
 		return false, pid, err

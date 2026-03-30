@@ -30,14 +30,18 @@ type ProyectoOperacion struct {
 }
 
 func GetProyectoOperacion(proyectoID int64) (*ProyectoOperacion, error) {
-	if err := ensureProyectoOperacionSchema(); err != nil {
+	exists, err := SchemaObjectExists("table", "proyectos_operacion")
+	if err != nil {
 		return nil, err
+	}
+	if !exists {
+		return proyectoOperacionDefault(proyectoID), nil
 	}
 	var (
 		op     ProyectoOperacion
 		resume int
 	)
-	err := DB.QueryRow(`
+	err = DB.QueryRow(`
 		SELECT proyecto_id, estado_operativo, motivo, objetivo_pct, min_agentes, max_agentes,
 		       prioridad, resume_automatico, created_at, updated_at
 		FROM proyectos_operacion

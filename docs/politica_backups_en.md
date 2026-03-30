@@ -5,11 +5,16 @@ Autor: Alberto Avidad Fernandez
 Oficina de Software Libre (OSL) - Diputacion de Granada
 -->
 
-# Database Backup Policy
+# SQLite Backend Backup Policy
+
+> Doctrinal note: this policy covers the SQLite backend only.
+> The official manual snapshot path is `orquesta respaldo bd`.
+> Normal operational verification lives in `orquesta persistencia verificar`.
+> If the active backend is not SQLite, an equivalent engine-specific policy must exist.
 
 ## Principle
 
-Orquesta's database is the single source of truth for the entire agent ecosystem: tasks, proposals, sessions, rules, decisions, and audit logs. Its loss or corruption would have an irreversible impact on the development of all projects. Therefore, performing periodic backups is **mandatory**.
+When SQLite is the active backend, Orquesta's database remains the single source of truth for the entire agent ecosystem: tasks, proposals, sessions, rules, decisions, and audit logs. Its loss or corruption would have an irreversible impact on the development of all projects. Therefore, performing periodic backups is **mandatory**.
 
 ## Frequency and Retention
 
@@ -30,11 +35,11 @@ Backups must be stored **outside the orchestrator's working directory** so that 
 
 ## Restoration Procedure
 
-1. Stop all active agents (`orquesta sesion fin <agent>`).
-2. Make a copy of the current DB before restoring (in case restoration worsens the state).
-3. Copy the desired `.db.bak` file over `orquesta.db`.
-4. Verify integrity with `orquesta status`.
-5. Restart agent sessions.
+1. Stop the daemon and active agents in an orderly way.
+2. Make a copy of the current SQLite file before restoring.
+3. Restore the desired `.db.bak` over the active SQLite file.
+4. Verify with `orquesta persistencia info` and `orquesta persistencia verificar`.
+5. Bring the daemon back and resume operations.
 
 ## Traceability
 
@@ -46,4 +51,8 @@ Every backup operation (creation and restoration) must be recorded as a **note**
 
 ## Technical Implementation
 
-The implementation of the script or scheduled task that materialises these backups is the responsibility of the programmer agent assigned to **Task #217**. This policy defines the requirements, not the implementation.
+Reference implementation may rely on:
+- `orquesta respaldo bd` for manual snapshots through the official path
+- `scripts/backup_bd.sh` and `scripts/verificar_bd.sh` only as SQLite-specific rescue/automation
+
+This policy defines the requirements, not the implementation.

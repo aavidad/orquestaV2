@@ -3,7 +3,6 @@ package skillsapp
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -41,7 +40,7 @@ func TestFiltrarSkillsRemotas(t *testing.T) {
 }
 
 func TestSkillsSHCatalogoFetcherListar(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`<a href="/openai/skills/openai-docs">openai-docs</a><a href="/vercel-labs/skills/find-skills">find-skills</a>`))
 	}))
 	defer srv.Close()

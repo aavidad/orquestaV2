@@ -33,9 +33,6 @@ func TestCmdNoUsaSQLDirectoNiAperturasFueraDeExcepcionesControladas(t *testing.T
 		"cliente_servidor.go": {
 			"Open": true,
 		},
-		"persistencia.go": {
-			"CurrentDBPath": true,
-		},
 	}
 
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {

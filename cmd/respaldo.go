@@ -147,10 +147,6 @@ func respaldoDestinoPorDefecto() string {
 	return filepath.Join(".", "backups", "orquestador")
 }
 
-func literalSQLite(v string) string {
-	return "'" + strings.ReplaceAll(v, "'", "''") + "'"
-}
-
 func init() {
 	respaldoBDCmd.Flags().String("destino", "", "Directorio destino del respaldo")
 	respaldoBDCmd.Flags().String("etiqueta", "", "Etiqueta opcional para el nombre del fichero")

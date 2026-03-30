@@ -8,8 +8,12 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package db
 
 import (
+	"database/sql"
+	"os"
 	"path/filepath"
 	"testing"
+
+	"orquesta/storage"
 )
 
 func TestResolveBackendPorDefectoSQLite(t *testing.T) {
@@ -40,6 +44,72 @@ func TestResolveBackendRespetaORQUESTADBDRIVER(t *testing.T) {
 	}
 	if backend.Name() != "sqlite" {
 		t.Fatalf("backend inesperado: %s", backend.Name())
+	}
+}
+
+func TestResolveOpenConfigEnRecuperacionLocalOmiteBootstrapYPostMigraciones(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "orquesta.db")
+	if err := os.WriteFile(dbPath, []byte("sqlite-template"), 0o600); err != nil {
+		t.Fatalf("write db placeholder: %v", err)
+	}
+	t.Setenv("ORQUESTA_DB_DRIVER", "")
+	t.Setenv("ORQUESTA_DB_BACKEND", "")
+	t.Setenv("ORQUESTA_DB", dbPath)
+	t.Setenv("ORQUESTA_FORCE_LOCAL_DB", "1")
+	t.Setenv("ORQUESTA_DB_SKIP_POST_MIGRATIONS", "")
+
+	backend, cfg, err := resolveOpenConfig()
+	if err != nil {
+		t.Fatalf("resolveOpenConfig: %v", err)
+	}
+	if backend.Name() != "sqlite" {
+		t.Fatalf("backend inesperado: %s", backend.Name())
+	}
+	if cfg.BootstrapSchema {
+		t.Fatalf("la recuperacion local no deberia arrancar bootstrap sobre una DB sqlite existente")
+	}
+	if !cfg.SkipPostMigrations {
+		t.Fatalf("la recuperacion local deberia omitir post-migraciones sobre una DB sqlite existente")
+	}
+}
+
+func TestResolveOpenConfigMantieneBootstrapEnSQLiteNuevaAunqueSeaRecuperacionLocal(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "orquesta.db")
+	t.Setenv("ORQUESTA_DB_DRIVER", "")
+	t.Setenv("ORQUESTA_DB_BACKEND", "")
+	t.Setenv("ORQUESTA_DB", dbPath)
+	t.Setenv("ORQUESTA_FORCE_LOCAL_DB", "1")
+	t.Setenv("ORQUESTA_DB_SKIP_POST_MIGRATIONS", "")
+
+	_, cfg, err := resolveOpenConfig()
+	if err != nil {
+		t.Fatalf("resolveOpenConfig: %v", err)
+	}
+	if !cfg.BootstrapSchema {
+		t.Fatalf("una DB sqlite nueva debe seguir permitiendo bootstrap")
+	}
+	if cfg.SkipPostMigrations {
+		t.Fatalf("una DB sqlite nueva no deberia omitir post-migraciones por defecto")
+	}
+}
+
+func TestSQLitePrepareRecuperacionReadOnlyOmiteRevisionBootstrap(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "orquesta.db")
+	raw, err := sql.Open("sqlite", storage.SQLiteDSN(dbPath))
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer raw.Close()
+
+	err = (sqliteBackend{}).Prepare(raw, storage.Config{
+		Driver:             "sqlite",
+		Path:               dbPath,
+		DSN:                storage.SQLiteDSNWithMode(dbPath, "ro"),
+		BootstrapSchema:    false,
+		SkipPostMigrations: true,
+	})
+	if err != nil {
+		t.Fatalf("Prepare recovery readonly no deberia consultar bootstrap revision: %v", err)
 	}
 }
 

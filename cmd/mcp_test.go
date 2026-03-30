@@ -93,6 +93,9 @@ func TestMCPPromptBriefingIncluyeReglasYPropuestasPendientes(t *testing.T) {
 		if !strings.Contains(text, "Reglas activas") {
 			t.Fatalf("faltan reglas activas en el briefing: %s", text)
 		}
+		if !strings.Contains(text, "docs/BIBLIA_APP_ORQUESTA.md") {
+			t.Fatalf("falta la doctrina canonica en el briefing: %s", text)
+		}
 		if !strings.Contains(text, "orquesta.skills.detectar-carencia") {
 			t.Fatalf("falta el preflight de skills en el briefing: %s", text)
 		}

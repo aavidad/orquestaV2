@@ -36,7 +36,8 @@ var ttyInstructionASCIIReplacer = strings.NewReplacer(
 )
 
 func arrancarPlanLocalPTY(req SolicitudArranque) (*ProcesoArrancado, error) {
-	runDir := runtimeArtifactsRunDir(req, time.Now())
+	startedAt := time.Now().UTC()
+	runDir := runtimeArtifactsRunDir(req, startedAt)
 	if err := os.MkdirAll(runDir, 0o700); err != nil {
 		return nil, err
 	}
@@ -104,45 +105,78 @@ func arrancarPlanLocalPTY(req SolicitudArranque) (*ProcesoArrancado, error) {
 		return nil, err
 	}
 
-	canSendInput := !renderedCommandLooksLikeCodexCLI(rendered)
+	canSendInput, canSendInputSource := localPTYInputPolicy(req.Plan)
+	mailboxDeliveryMode := localPTYMailboxDeliveryMode(req.Plan, canSendInput)
+	externalSessionID := ""
+	if renderedCommandLooksLikeCodexCLI(rendered) {
+		externalSessionID, _ = detectCodexSessionID(rendered, cmd.Dir, startedAt, time.Now().UTC())
+	}
+	supervisorRef := registrarSupervisorLocalResidente(descriptorSupervisorLocal{
+		Ref:                 runDir,
+		Agente:              strings.TrimSpace(req.Agente),
+		Proyecto:            strings.TrimSpace(req.Proyecto),
+		PID:                 cmd.Process.Pid,
+		StartedAt:           startedAt,
+		TraceDir:            runDir,
+		StdinPath:           stdinPath,
+		StdinRawPath:        stdinRawPath,
+		LogPath:             logPath,
+		WorkingDir:          cmd.Dir,
+		WrappedCommand:      wrapped,
+		RenderedCommand:     rendered,
+		ExternalSessionID:   externalSessionID,
+		CanSendInput:        canSendInput,
+		MailboxDeliveryMode: mailboxDeliveryMode,
+	}, cmd)
 	metaJSON, _ := json.Marshal(map[string]any{
-		"stdin_path":       stdinPath,
-		"stdin_raw_path":   stdinRawPath,
-		"log_path":         logPath,
-		"trace_dir":        runDir,
-		"trace_manifest":   manifestPath,
-		"working_dir":      cmd.Dir,
-		"wrapped_command":  wrapped,
-		"rendered_command": rendered,
-		"driver":           "process_pty_cli",
-		"can_send_input":   canSendInput,
+		"agente":                strings.TrimSpace(req.Agente),
+		"proyecto":              strings.TrimSpace(req.Proyecto),
+		"stdin_path":            stdinPath,
+		"stdin_raw_path":        stdinRawPath,
+		"log_path":              logPath,
+		"trace_dir":             runDir,
+		"trace_manifest":        manifestPath,
+		"started_at":            startedAt.Format(time.RFC3339Nano),
+		"working_dir":           cmd.Dir,
+		"wrapped_command":       wrapped,
+		"rendered_command":      rendered,
+		"driver":                "process_pty_cli",
+		"supervisor_ref":        supervisorRef,
+		"supervision_mode":      supervisionModoResidente,
+		"supervisor_owner_pid":  os.Getpid(),
+		"can_send_input":        canSendInput,
+		"can_send_input_source": canSendInputSource,
+		"mailbox_delivery_mode": mailboxDeliveryMode,
+		"external_session_id":   externalSessionID,
 	})
 	capsJSON, _ := json.Marshal(map[string]any{
-		"can_send_input":       canSendInput,
-		"can_checkpoint":       true,
-		"can_resume":           true,
-		"can_capture_pid":      true,
-		"can_track_continuity": true,
-		"can_pause":            true,
-		"can_stop":             true,
+		"can_send_input":        canSendInput,
+		"can_checkpoint":        true,
+		"can_resume":            true,
+		"can_capture_pid":       true,
+		"can_track_continuity":  true,
+		"can_pause":             true,
+		"can_stop":              true,
+		"mailbox_delivery_mode": mailboxDeliveryMode,
 	})
-	if err := writeRuntimeTraceManifest(manifestPath, req, cmd.Process.Pid, stdinPath, stdinRawPath, logPath, rendered, wrapped, canSendInput); err != nil {
+	if err := writeRuntimeTraceManifest(manifestPath, req, startedAt, cmd.Process.Pid, stdinPath, stdinRawPath, logPath, rendered, wrapped, canSendInput, canSendInputSource, mailboxDeliveryMode, externalSessionID, supervisorRef, supervisionModoResidente); err != nil {
 		_, _, _ = DetenerProceso(ObjetivoProceso{PID: intPtr64(int64(cmd.Process.Pid))})
 		return nil, err
 	}
 
 	return &ProcesoArrancado{
-		PID:              cmd.Process.Pid,
-		HandleKind:       "process",
-		HandleRef:        fmt.Sprintf("%d", cmd.Process.Pid),
-		StdinPath:        stdinPath,
-		StdinRawPath:     stdinRawPath,
-		LogPath:          logPath,
-		WorkingDir:       cmd.Dir,
-		WrappedCommand:   wrapped,
-		RenderedCommand:  rendered,
-		MetadataJSON:     string(metaJSON),
-		CapabilitiesJSON: string(capsJSON),
+		PID:               cmd.Process.Pid,
+		HandleKind:        "process",
+		HandleRef:         fmt.Sprintf("%d", cmd.Process.Pid),
+		StdinPath:         stdinPath,
+		StdinRawPath:      stdinRawPath,
+		LogPath:           logPath,
+		WorkingDir:        cmd.Dir,
+		WrappedCommand:    wrapped,
+		RenderedCommand:   rendered,
+		ExternalSessionID: externalSessionID,
+		MetadataJSON:      string(metaJSON),
+		CapabilitiesJSON:  string(capsJSON),
 	}, nil
 }
 
@@ -164,20 +198,25 @@ func runtimeArtifactsToken(now time.Time) string {
 	return fmt.Sprintf("%s-%09d", now.Format("20060102-150405"), now.Nanosecond())
 }
 
-func writeRuntimeTraceManifest(path string, req SolicitudArranque, pid int, stdinPath, stdinRawPath, logPath, rendered, wrapped string, canSendInput bool) error {
+func writeRuntimeTraceManifest(path string, req SolicitudArranque, startedAt time.Time, pid int, stdinPath, stdinRawPath, logPath, rendered, wrapped string, canSendInput bool, canSendInputSource, mailboxDeliveryMode, externalSessionID, supervisorRef, supervisionMode string) error {
 	payload := map[string]any{
-		"created_at":       time.Now().UTC().Format(time.RFC3339Nano),
-		"agente":           strings.TrimSpace(req.Agente),
-		"proyecto":         strings.TrimSpace(req.Proyecto),
-		"working_dir":      strings.TrimSpace(renderedWorkingDir(req)),
-		"driver":           "process_pty_cli",
-		"pid":              pid,
-		"stdin_path":       stdinPath,
-		"stdin_raw_path":   stdinRawPath,
-		"log_path":         logPath,
-		"rendered_command": rendered,
-		"wrapped_command":  wrapped,
-		"can_send_input":   canSendInput,
+		"created_at":            startedAt.Format(time.RFC3339Nano),
+		"agente":                strings.TrimSpace(req.Agente),
+		"proyecto":              strings.TrimSpace(req.Proyecto),
+		"working_dir":           strings.TrimSpace(renderedWorkingDir(req)),
+		"driver":                "process_pty_cli",
+		"pid":                   pid,
+		"stdin_path":            stdinPath,
+		"stdin_raw_path":        stdinRawPath,
+		"log_path":              logPath,
+		"rendered_command":      rendered,
+		"wrapped_command":       wrapped,
+		"can_send_input":        canSendInput,
+		"can_send_input_source": strings.TrimSpace(canSendInputSource),
+		"mailbox_delivery_mode": strings.TrimSpace(mailboxDeliveryMode),
+		"external_session_id":   strings.TrimSpace(externalSessionID),
+		"supervisor_ref":        strings.TrimSpace(supervisorRef),
+		"supervision_mode":      strings.TrimSpace(supervisionMode),
 	}
 	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
@@ -203,9 +242,40 @@ func renderedCommandLooksLikeCodexCLI(rendered string) bool {
 	if lower == "" {
 		return false
 	}
+	first := lower
+	if fields := strings.Fields(lower); len(fields) > 0 {
+		first = fields[0]
+	}
+	base := filepath.Base(first)
 	return strings.Contains(lower, "codex-perfil") ||
 		strings.Contains(lower, "/codex") ||
-		strings.HasPrefix(lower, "codex ")
+		lower == "codex" ||
+		strings.HasPrefix(lower, "codex ") ||
+		base == "codex"
+}
+
+func localPTYCanSendInput(plan *runtimeagente.LaunchPlan) bool {
+	value, _ := localPTYInputPolicy(plan)
+	return value
+}
+
+func localPTYInputPolicy(plan *runtimeagente.LaunchPlan) (bool, string) {
+	if plan == nil || plan.CanSendInput == nil {
+		return true, "default"
+	}
+	return *plan.CanSendInput, "plan_override"
+}
+
+func localPTYMailboxDeliveryMode(plan *runtimeagente.LaunchPlan, canSendInput bool) string {
+	if plan != nil {
+		if mode := runtimeagente.NormalizeMailboxDeliveryMode(plan.MailboxDeliveryMode); mode != "" {
+			return mode
+		}
+	}
+	if canSendInput {
+		return runtimeagente.MailboxDeliveryInteractive
+	}
+	return runtimeagente.MailboxDeliveryBootstrapOnly
 }
 
 func NormalizarInstruccionProceso(obj ObjetivoProceso, instruccion string) string {
@@ -224,11 +294,12 @@ func NormalizarInstruccionProceso(obj ObjetivoProceso, instruccion string) strin
 }
 
 func esRuntimeCodexLocal(obj ObjetivoProceso) bool {
-	meta := strings.ToLower(strings.TrimSpace(obj.MetadataJSON))
-	if meta == "" {
+	meta := metadataMap(obj.MetadataJSON)
+	if !strings.EqualFold(strings.TrimSpace(stringValueFromMetadata(meta, "driver")), "process_pty_cli") {
 		return false
 	}
-	return strings.Contains(meta, "\"driver\":\"process_pty_cli\"") && strings.Contains(meta, "codex")
+	return renderedCommandLooksLikeCodexCLI(stringValueFromMetadata(meta, "rendered_command")) ||
+		renderedCommandLooksLikeCodexCLI(stringValueFromMetadata(meta, "wrapped_command"))
 }
 
 func sanitizarInstruccionTTY(raw string) string {
@@ -318,6 +389,28 @@ func compactarInstruccionCodexTTY(texto string) string {
 }
 
 func EnviarInstruccionProceso(obj ObjetivoProceso, instruccion string) (bool, int, error) {
+	if aplicado, pid, observed, err := enviarInstruccionProcesoLocalSupervisado(obj, instruccion); observed {
+		return aplicado, pid, err
+	}
+	return enviarInstruccionProcesoBase(obj, instruccion)
+}
+
+func enviarInstruccionProcesoLocalSupervisado(obj ObjetivoProceso, instruccion string) (bool, int, bool, error) {
+	estado, observed, err := ConsultarEstadoLocal(obj)
+	if err != nil || !observed {
+		return false, 0, observed, err
+	}
+	if estado == nil {
+		return false, 0, true, nil
+	}
+	if !estado.Vivo || estado.PID <= 0 {
+		return false, estado.PID, true, nil
+	}
+	aplicado, pid, err := enviarInstruccionProcesoBase(obj, instruccion)
+	return aplicado, pid, true, err
+}
+
+func enviarInstruccionProcesoBase(obj ObjetivoProceso, instruccion string) (bool, int, error) {
 	pid, ok, err := ResolverPID(obj)
 	if err != nil {
 		return false, pid, err
@@ -394,4 +487,14 @@ func appendRuntimeRawInput(path, texto string) error {
 	defer f.Close()
 	_, err = f.WriteString(texto + "\n")
 	return err
+}
+
+func stringValueFromMetadata(payload map[string]any, key string) string {
+	if payload == nil {
+		return ""
+	}
+	if v, ok := payload[key].(string); ok {
+		return strings.TrimSpace(v)
+	}
+	return ""
 }

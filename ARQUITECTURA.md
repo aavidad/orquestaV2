@@ -7,6 +7,12 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # Arquitectura objetivo de Orquesta
 
+Documento canonico consolidado:
+
+- `docs/BIBLIA_APP_ORQUESTA.md`
+
+Este fichero sigue siendo la referencia especifica de arquitectura, pero la doctrina estatica del proyecto se consolida ya en la biblia para evitar divergencias entre agentes y documentos dispersos.
+
 Este fichero resume la direccion arquitectonica.
 La especificacion ampliada de trabajo y la matriz de voto viven en:
 
@@ -73,6 +79,7 @@ Regla práctica:
 - lo nuevo debe entrar por servicio + puertos
 - `db/` no debe volver a actuar como núcleo de aplicación
 - la migración del legado se hará por fases
+- **Módulos e Idioma:** Todos los adaptadores y aplicaciones de dominio deben utilizar nomenclatura exclusiva en **castellano**, habitualmente sufijados con `app` (P.ej. usar `tareasapp`, `sesionesapp` en vez de `taskapp` o `sessionapp`). El objetivo es erradicar completamente el inglés de los nombres de carpeta para evitar confusiones de los modelos LLM (agentes).
 
 ## Modelo actual
 

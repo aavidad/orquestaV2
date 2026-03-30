@@ -56,9 +56,6 @@ func ResolverPerfilEjecucionLanzamiento(proyectoSlug, perfilTarea, modelo, razon
 	if perfilTarea != "" && modelo != "" && razonamiento != "" {
 		return perfilTarea, modelo, razonamiento, nil
 	}
-	if err := EnsureCapacidadModeloBaseCodex(); err != nil {
-		return "", "", "", err
-	}
 	resolucion, err := ResolverPoliticaModelo(ResolverPoliticaInput{
 		ProyectoSlug: strings.TrimSpace(proyectoSlug),
 		PerfilTarea:  perfilTarea,

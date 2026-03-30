@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"orquesta/coordinacion"
 )
 
 type TipoProyecto string
@@ -44,6 +46,16 @@ type FiltroProyectos struct {
 	Tipo     *TipoProyecto
 	ParentID *int64
 	Activo   *bool
+}
+
+type proyectoRutaSesion struct {
+	agente string
+	cwd    string
+}
+
+type proyectoRutaWorktree struct {
+	agente  string
+	rutaAbs string
 }
 
 func UpsertProyecto(p *Proyecto) (int64, error) {
@@ -150,7 +162,9 @@ func GetProyecto(ref string) (*Proyecto, error) {
 		args = append(args, id)
 	}
 
-	return escanearProyecto(DB.QueryRow(q, args...))
+	return consultarConReintentos(func() (*Proyecto, error) {
+		return escanearProyecto(DB.QueryRow(q, args...))
+	})
 }
 
 func GetProyectoConRutaEfectiva(ref, cwdHint string) (*Proyecto, error) {
@@ -174,19 +188,42 @@ func ProyectosConRutaEfectiva(proyectos []*Proyecto, cwdHint string) []*Proyecto
 	if len(proyectos) == 0 {
 		return proyectos
 	}
+	sesionesPorProyecto, worktreesPorProyecto := cargarContextoRutaProyectos(proyectos)
 	out := make([]*Proyecto, 0, len(proyectos))
 	for _, proyecto := range proyectos {
-		out = append(out, ProyectoConRutaEfectiva(proyecto, cwdHint))
+		out = append(out, proyectoConRutaEfectivaConContexto(
+			proyecto,
+			cwdHint,
+			sesionesPorProyecto[proyectoIDOrZero(proyecto)],
+			worktreesPorProyecto[proyectoIDOrZero(proyecto)],
+		))
 	}
 	return out
 }
 
+func proyectoConRutaEfectivaConContexto(proyecto *Proyecto, cwdHint string, sesion *proyectoRutaSesion, worktrees []proyectoRutaWorktree) *Proyecto {
+	if proyecto == nil {
+		return nil
+	}
+	copia := *proyecto
+	copia.RutaAbs = rutaProyectoEfectivaConContexto(copia.ID, copia.RutaAbs, cwdHint, sesion, worktrees)
+	return &copia
+}
+
 func RutaProyectoEfectiva(proyectoID int64, fallback, cwdHint string) string {
+	return rutaProyectoEfectivaConContexto(proyectoID, fallback, cwdHint, nil, nil)
+}
+
+func rutaProyectoEfectivaConContexto(proyectoID int64, fallback, cwdHint string, sesion *proyectoRutaSesion, worktrees []proyectoRutaWorktree) string {
 	fallback = normalizarRutaProyecto(fallback)
 	if ruta := candidataRutaProyectoEfectiva(proyectoID, "", cwdHint); ruta != "" {
 		return ruta
 	}
-	if agente, cwd, ok := ultimaRutaSesionProyecto(proyectoID); ok {
+	if sesion != nil {
+		if ruta := candidataRutaProyectoEfectivaConWorktrees(proyectoID, sesion.agente, sesion.cwd, worktrees); ruta != "" {
+			return ruta
+		}
+	} else if agente, cwd, ok := ultimaRutaSesionProyecto(proyectoID); ok {
 		if ruta := candidataRutaProyectoEfectiva(proyectoID, agente, cwd); ruta != "" {
 			return ruta
 		}
@@ -195,11 +232,19 @@ func RutaProyectoEfectiva(proyectoID int64, fallback, cwdHint string) string {
 }
 
 func candidataRutaProyectoEfectiva(proyectoID int64, agente, cwd string) string {
+	return candidataRutaProyectoEfectivaConWorktrees(proyectoID, agente, cwd, nil)
+}
+
+func candidataRutaProyectoEfectivaConWorktrees(proyectoID int64, agente, cwd string, worktrees []proyectoRutaWorktree) string {
 	cwd = normalizarRutaProyecto(cwd)
 	if cwd == "" {
 		return ""
 	}
-	if rutaSesionPerteneceAWorktreeActiva(proyectoID, agente, cwd) {
+	if len(worktrees) > 0 {
+		if rutaSesionPerteneceAWorktreeActivaBatch(agente, cwd, worktrees) {
+			return ""
+		}
+	} else if rutaSesionPerteneceAWorktreeActiva(proyectoID, agente, cwd) {
 		return ""
 	}
 	return resolverRaizTrabajo(cwd)
@@ -236,9 +281,14 @@ func normalizarRutaProyecto(path string) string {
 }
 
 func resolverRaizTrabajo(path string) string {
+	raiz, _ := resolverRaizTrabajoConMarcadores(path)
+	return raiz
+}
+
+func resolverRaizTrabajoConMarcadores(path string) (string, bool) {
 	path = normalizarRutaProyecto(path)
 	if path == "" {
-		return ""
+		return "", false
 	}
 	if info, err := os.Stat(path); err == nil && !info.IsDir() {
 		path = filepath.Dir(path)
@@ -247,14 +297,79 @@ func resolverRaizTrabajo(path string) string {
 	for {
 		ok, err := tieneMarcadoresRepo(actual)
 		if err == nil && ok {
-			return actual
+			if filepath.Dir(actual) == actual {
+				return "", false
+			}
+			return actual, true
 		}
 		siguiente := filepath.Dir(actual)
 		if siguiente == actual {
-			return path
+			return "", false
 		}
 		actual = siguiente
 	}
+}
+
+func RutaTrabajoPreferidaAgenteProyecto(agente string, proyecto *Proyecto, cwd string) string {
+	cwd = normalizarRutaProyecto(cwd)
+	if proyecto == nil {
+		return cwd
+	}
+	if rutaTrabajoPerteneceAProyectoAgente(proyecto, agente, cwd) {
+		return cwd
+	}
+	if ruta := rutaWorktreeActivaAgenteProyecto(proyecto.ID, agente); ruta != "" {
+		return ruta
+	}
+	if ruta := normalizarRutaProyecto(RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, "")); ruta != "" {
+		return ruta
+	}
+	return cwd
+}
+
+func rutaTrabajoPerteneceAProyectoAgente(proyecto *Proyecto, agente, cwd string) bool {
+	cwd = normalizarRutaProyecto(cwd)
+	if proyecto == nil || cwd == "" {
+		return false
+	}
+	rutaBase := normalizarRutaProyecto(RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, ""))
+	if rutaBase != "" && rutaDentroDe(rutaBase, cwd) {
+		return true
+	}
+	if ruta := rutaWorktreeActivaAgenteProyecto(proyecto.ID, agente); ruta != "" && rutaDentroDe(ruta, cwd) {
+		return true
+	}
+	return false
+}
+
+func rutaWorktreeActivaAgenteProyecto(proyectoID int64, agente string) string {
+	if proyectoID <= 0 || DB == nil {
+		return ""
+	}
+	estado := coordinacion.WorktreeActive
+	filter := coordinacion.WorktreeFilter{
+		ProjectID: &proyectoID,
+		State:     &estado,
+	}
+	agente = strings.TrimSpace(agente)
+	if agente != "" {
+		filter.Agent = &agente
+	}
+	worktrees, err := ListarWorktreesCoord(filter)
+	if err != nil {
+		return ""
+	}
+	for _, worktree := range worktrees {
+		if worktree == nil {
+			continue
+		}
+		ruta := normalizarRutaProyecto(worktree.Path)
+		if ruta == "" || !WorktreeActivaCoherente(proyectoID, ruta) {
+			continue
+		}
+		return ruta
+	}
+	return ""
 }
 
 func rutaSesionPerteneceAWorktreeActiva(proyectoID int64, agente, cwd string) bool {
@@ -283,6 +398,23 @@ func rutaSesionPerteneceAWorktreeActiva(proyectoID int64, agente, cwd string) bo
 			return false
 		}
 		if rutaDentroDe(worktreePath, cwd) {
+			return true
+		}
+	}
+	return false
+}
+
+func rutaSesionPerteneceAWorktreeActivaBatch(agente, cwd string, worktrees []proyectoRutaWorktree) bool {
+	cwd = normalizarRutaProyecto(cwd)
+	if cwd == "" {
+		return false
+	}
+	agente = strings.TrimSpace(agente)
+	for _, worktree := range worktrees {
+		if agente != "" && strings.TrimSpace(worktree.agente) != agente {
+			continue
+		}
+		if rutaDentroDe(worktree.rutaAbs, cwd) {
 			return true
 		}
 	}
@@ -361,21 +493,23 @@ func ListarProyectos(f FiltroProyectos) ([]*Proyecto, error) {
 	}
 	q += ` ORDER BY ruta_abs`
 
-	rows, err := DB.Query(q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var list []*Proyecto
-	for rows.Next() {
-		p, err := escanearProyecto(rows)
+	return consultarConReintentos(func() ([]*Proyecto, error) {
+		rows, err := DB.Query(q, args...)
 		if err != nil {
 			return nil, err
 		}
-		list = append(list, p)
-	}
-	return list, rows.Err()
+		defer rows.Close()
+
+		var list []*Proyecto
+		for rows.Next() {
+			p, err := escanearProyecto(rows)
+			if err != nil {
+				return nil, err
+			}
+			list = append(list, p)
+		}
+		return list, rows.Err()
+	})
 }
 
 func ListarProyectosConRutaEfectiva(f FiltroProyectos, cwdHint string) ([]*Proyecto, error) {
@@ -384,6 +518,113 @@ func ListarProyectosConRutaEfectiva(f FiltroProyectos, cwdHint string) ([]*Proye
 		return nil, err
 	}
 	return ProyectosConRutaEfectiva(proyectos, cwdHint), nil
+}
+
+func cargarContextoRutaProyectos(proyectos []*Proyecto) (map[int64]*proyectoRutaSesion, map[int64][]proyectoRutaWorktree) {
+	sesionesPorProyecto := map[int64]*proyectoRutaSesion{}
+	worktreesPorProyecto := map[int64][]proyectoRutaWorktree{}
+	if len(proyectos) == 0 || DB == nil {
+		return sesionesPorProyecto, worktreesPorProyecto
+	}
+	ids := make([]int64, 0, len(proyectos))
+	vistos := make(map[int64]struct{}, len(proyectos))
+	for _, proyecto := range proyectos {
+		id := proyectoIDOrZero(proyecto)
+		if id <= 0 {
+			continue
+		}
+		if _, ok := vistos[id]; ok {
+			continue
+		}
+		vistos[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return sesionesPorProyecto, worktreesPorProyecto
+	}
+
+	placeholders := joinInt64Placeholders(ids)
+	args := int64Args(ids)
+	if placeholders == "" || len(args) == 0 {
+		return sesionesPorProyecto, worktreesPorProyecto
+	}
+
+	rows, err := DB.Query(`
+		SELECT proyecto_id, agente, cwd
+		FROM sesiones
+		WHERE proyecto_id IN (`+placeholders+`)
+		  AND trim(cwd) <> ''
+		ORDER BY proyecto_id, activa DESC, id DESC`, args...)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var (
+				proyectoID int64
+				agente     string
+				cwd        string
+			)
+			if scanErr := rows.Scan(&proyectoID, &agente, &cwd); scanErr != nil {
+				break
+			}
+			if _, ok := sesionesPorProyecto[proyectoID]; ok {
+				continue
+			}
+			sesionesPorProyecto[proyectoID] = &proyectoRutaSesion{
+				agente: strings.TrimSpace(agente),
+				cwd:    strings.TrimSpace(cwd),
+			}
+		}
+	}
+
+	worktreeRows, err := DB.Query(`
+		SELECT proyecto_id, agente, ruta_abs
+		FROM worktrees
+		WHERE proyecto_id IN (`+placeholders+`)
+		  AND estado = 'activa'`, args...)
+	if err == nil {
+		defer worktreeRows.Close()
+		for worktreeRows.Next() {
+			var (
+				proyectoID int64
+				agente     string
+				rutaAbs    string
+			)
+			if scanErr := worktreeRows.Scan(&proyectoID, &agente, &rutaAbs); scanErr != nil {
+				break
+			}
+			worktreesPorProyecto[proyectoID] = append(worktreesPorProyecto[proyectoID], proyectoRutaWorktree{
+				agente:  strings.TrimSpace(agente),
+				rutaAbs: strings.TrimSpace(rutaAbs),
+			})
+		}
+	}
+	return sesionesPorProyecto, worktreesPorProyecto
+}
+
+func proyectoIDOrZero(proyecto *Proyecto) int64 {
+	if proyecto == nil {
+		return 0
+	}
+	return proyecto.ID
+}
+
+func joinInt64Placeholders(values []int64) string {
+	if len(values) == 0 {
+		return ""
+	}
+	placeholders := make([]string, 0, len(values))
+	for range values {
+		placeholders = append(placeholders, "?")
+	}
+	return strings.Join(placeholders, ",")
+}
+
+func int64Args(values []int64) []any {
+	args := make([]any, 0, len(values))
+	for _, value := range values {
+		args = append(args, value)
+	}
+	return args
 }
 
 func DescubrirProyectos(root string) ([]*Proyecto, error) {

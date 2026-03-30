@@ -59,7 +59,7 @@ func notificarRefreshGobernanza(actor, tipoAgente, motivo string, extra map[stri
 	if tipoAgente == "" {
 		return
 	}
-	sesiones, err := ListarSesionesActivas()
+	sesiones, err := ListarSesionesActivasOperativas()
 	if err != nil {
 		Audit(actor, "governance_refresh_error", "regla", 0, err.Error())
 		return

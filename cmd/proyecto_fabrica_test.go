@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -43,7 +42,7 @@ func TestProyectoFabricarAppUsaAPICuandoHayServidor(t *testing.T) {
 			Backlog: 3,
 		})
 	})
-	srv := httptest.NewServer(mux)
+	srv := newTestHTTPServerOrSkip(t, mux)
 	defer srv.Close()
 
 	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()

@@ -3,6 +3,8 @@ package agentesapp
 import (
 	"database/sql"
 	"fmt"
+	"log"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -85,13 +87,16 @@ type PrepareOutput struct {
 }
 
 type TickInput struct {
-	Agente     string
-	Proyecto   string
-	Host       string
-	PID        int64
-	CuotaPct   int
-	Finalizado bool
-	Motivo     string
+	Agente              string
+	Proyecto            string
+	Host                string
+	PID                 int64
+	CuotaPct            int
+	Finalizado          bool
+	Motivo              string
+	AckStartOrderID     int64
+	AckBootstrapOrderID int64
+	AckMailboxIDs       []int64
 }
 
 type TickOutput struct {
@@ -121,19 +126,29 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 	if agenteNombre == "" || proyectoRef == "" {
 		return nil, fmt.Errorf("debes indicar agente y proyecto")
 	}
+	start := time.Now()
+	prepareDebugf("BuildPrepare start agente=%s proyecto=%s conector=%s", agenteNombre, proyectoRef, strings.TrimSpace(input.Conector))
+	defer func() {
+		prepareDebugf("BuildPrepare done agente=%s proyecto=%s duration=%s", agenteNombre, proyectoRef, time.Since(start).Round(time.Millisecond))
+	}()
 
+	stepStart := time.Now()
 	agente, err := s.store.GetAgent(agenteNombre)
 	if err != nil {
 		return nil, err
 	}
+	prepareDebugf("BuildPrepare step=get_agent agente=%s duration=%s", agenteNombre, time.Since(stepStart).Round(time.Millisecond))
 	agenteRuntime := *agente
 	if strings.EqualFold(strings.TrimSpace(input.Agente), strings.TrimSpace(agente.Nombre)) && strings.TrimSpace(input.Agente) != "" {
 		agenteRuntime.Nombre = strings.TrimSpace(input.Agente)
 	}
+	stepStart = time.Now()
 	proyecto, err := s.store.GetProject(proyectoRef)
 	if err != nil {
 		return nil, err
 	}
+	prepareDebugf("BuildPrepare step=get_project proyecto=%s duration=%s", proyectoRef, time.Since(stepStart).Round(time.Millisecond))
+	stepStart = time.Now()
 	ultima, err := s.store.GetLastSession(agenteNombre, &proyecto.ID)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
@@ -141,30 +156,44 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 	if err == sql.ErrNoRows {
 		ultima = nil
 	}
+	prepareDebugf("BuildPrepare step=get_last_session agente=%s duration=%s", agenteNombre, time.Since(stepStart).Round(time.Millisecond))
+	stepStart = time.Now()
 	conector, err := s.resolvePrepareConnector(agenteNombre, strings.TrimSpace(input.Conector), ultima)
 	if err != nil {
 		return nil, err
 	}
+	prepareDebugf("BuildPrepare step=resolve_connector conector=%s duration=%s", strings.TrimSpace(conector.Slug), time.Since(stepStart).Round(time.Millisecond))
+	stepStart = time.Now()
 	catalogo, err := s.store.ResolveGovernanceCatalogForContext(agente.Rol, &proyecto.ID, agente.Nombre)
 	if err != nil {
 		return nil, err
 	}
+	prepareDebugf("BuildPrepare step=resolve_governance duration=%s", time.Since(stepStart).Round(time.Millisecond))
+	stepStart = time.Now()
 	memoria, err := s.store.ListMemoryEntities(db.FiltroEntidadesMemoria{ProyectoID: &proyecto.ID})
 	if err != nil {
 		return nil, err
 	}
+	prepareDebugf("BuildPrepare step=list_memory count=%d duration=%s", len(memoria), time.Since(stepStart).Round(time.Millisecond))
+	stepStart = time.Now()
 	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &agenteNombre, ProyectoID: &proyecto.ID})
 	if err != nil {
 		return nil, err
 	}
+	prepareDebugf("BuildPrepare step=list_tasks count=%d duration=%s", len(tareas), time.Since(stepStart).Round(time.Millisecond))
+	stepStart = time.Now()
 	propuestasPendientes, err := s.store.ListProjectPendingVotes(agenteNombre, proyecto.ID)
 	if err != nil {
 		return nil, err
 	}
+	prepareDebugf("BuildPrepare step=list_pending_votes count=%d duration=%s", len(propuestasPendientes), time.Since(stepStart).Round(time.Millisecond))
+	stepStart = time.Now()
 	prep, err := lanzamientoruntime.PrepararDesdeDatos(&agenteRuntime, proyecto, conector, ultima, strings.TrimSpace(input.Modelo), strings.TrimSpace(input.Razonamiento), strings.TrimSpace(input.Perfil))
 	if err != nil {
 		return nil, err
 	}
+	prepareDebugf("BuildPrepare step=prepare_runtime duration=%s", time.Since(stepStart).Round(time.Millisecond))
+	stepStart = time.Now()
 	bootstrapPrompt := buildBootstrapPrompt(&agenteRuntime, proyecto, prep.Plan, catalogo, memoria, tareas, propuestasPendientes)
 	if prep.Plan != nil {
 		prep.Plan.BootstrapPrompt = strings.TrimSpace(bootstrapPrompt)
@@ -172,6 +201,7 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 			return nil, fmt.Errorf("metadata_json inválido para '%s': %w", strings.TrimSpace(conector.Slug), err)
 		}
 	}
+	prepareDebugf("BuildPrepare step=build_prompt duration=%s", time.Since(stepStart).Round(time.Millisecond))
 
 	out := &PrepareOutput{
 		Agente: agenteRuntime.Nombre,
@@ -210,6 +240,24 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 	return out, nil
 }
 
+func prepareDebugf(format string, args ...any) {
+	if !prepareDebugEnabled() {
+		return
+	}
+	log.Printf("orquesta[prepare] "+format, args...)
+}
+
+func prepareDebugEnabled() bool {
+	for _, key := range []string{"ORQUESTA_DEBUG_PREPARE", "ORQUESTA_DEBUG"} {
+		value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+		switch value {
+		case "1", "true", "yes", "on", "si", "sí":
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
 	agenteNombre := strings.TrimSpace(input.Agente)
 	proyectoRef := strings.TrimSpace(input.Proyecto)
@@ -242,6 +290,9 @@ func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
 			if err := s.autoPause(agenteNombre, 60, "Auto-pausa por agotamiento: "+input.Motivo, "Detección de agotamiento en tick final: "+input.Motivo); err != nil {
 				return nil, err
 			}
+		}
+		if err := db.AckBootstrapRuntimeLease(input.AckStartOrderID, input.AckBootstrapOrderID, input.AckMailboxIDs, sesionActiva.ID, "agente_tick"); err != nil {
+			return nil, err
 		}
 		sesionActiva, err = s.store.GetActiveSession(agenteNombre, &proyecto.ID)
 		if err != nil {
@@ -290,7 +341,7 @@ func buildBootstrapPrompt(agente *db.Agente, proyecto *db.Proyecto, plan *runtim
 	resumenGobernanza := ""
 	if db.DB != nil {
 		_, resumenProyecto = db.BuildProjectContextSummary(strings.TrimSpace(agente.Nombre), proyecto)
-		_, resumenGobernanza = db.BuildGovernanceContextSummaryForContext(strings.TrimSpace(agente.Rol), &proyecto.ID, strings.TrimSpace(agente.Nombre))
+		_, resumenGobernanza = db.BuildGovernanceContextSummaryFromCatalog(catalogo)
 	}
 	return db.BuildLaunchBootstrapPrompt(agente, proyecto, plan, catalogo, memoria, tareas, propuestas, resumenProyecto, resumenGobernanza)
 }

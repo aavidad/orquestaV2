@@ -252,6 +252,17 @@ func TestProyectoUsaAPI(t *testing.T) {
 	mux.HandleFunc("/api/proyectos/orquestador", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(apiProyectoResponse{Proyecto: proyecto})
 	})
+	mux.HandleFunc("/api/proyectos/orquestador/fusionar", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiProyectoFusionResponse{Resultado: &db.FusionProyectosResultado{
+			OrigenID:      8,
+			OrigenSlug:    "orquesta",
+			DestinoID:     proyecto.ID,
+			DestinoSlug:   proyecto.Slug,
+			SlugArchivado: "orquesta-archivado-20260329-123000",
+			RutaArchivada: "/tmp/orquestador/.orquesta-archived-projects/orquesta-archivado-20260329-123000",
+			Actualizadas:  map[string]int64{"tareas.proyecto_id": 1},
+		}})
+	})
 	mux.HandleFunc("/api/proyectos/2", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(apiProyectoResponse{Proyecto: padre})
 	})
@@ -292,6 +303,17 @@ func TestProyectoUsaAPI(t *testing.T) {
 	})
 	if !strings.Contains(outDescubrir, "1 proyectos") {
 		t.Fatalf("salida proyecto descubrir inesperada:\n%s", outDescubrir)
+	}
+
+	outFusionar := capturarStdout(t, func() {
+		if err := proyectoFusionarCmd.RunE(proyectoFusionarCmd, []string{"orquesta", "orquestador"}); err != nil {
+			t.Fatalf("proyecto fusionar via api: %v", err)
+		}
+	})
+	for _, token := range []string{"Proyecto orquesta fusionado en orquestador", "Slug archivado", "Actualizaciones"} {
+		if !strings.Contains(outFusionar, token) {
+			t.Fatalf("salida proyecto fusionar sin %q:\n%s", token, outFusionar)
+		}
 	}
 }
 

@@ -26,6 +26,7 @@ type Store interface {
 	PurgeInactiveRuntimeHandles(filtro db.FiltroPurgadoRuntimeHandles) (*db.PurgaRuntimeHandlesResultado, error)
 	GetActiveRuntimeHandle(agente string) (*db.RuntimeHandle, error)
 	GetActiveRuntimeHandleForProject(agente string, proyectoID *int64) (*db.RuntimeHandle, error)
+	ListRuntimeEvents(filtro db.FiltroRuntimeEvents) ([]*db.RuntimeEvent, error)
 	ListRuntimeTranscript(filtro db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error)
 	ListRuntimeSamples(runtimeID int64, limit int) ([]*db.RuntimeTelemetrySample, error)
 	CreateRuntimeOrder(order *db.RuntimeOrder) (int64, error)
@@ -162,6 +163,10 @@ func (s *Service) GetActiveRuntimeHandleForProject(agente string, proyectoID *in
 
 func (s *Service) GetActiveRuntimeHandleAgentProject(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
 	return s.GetActiveRuntimeHandleForProject(agente, proyectoID)
+}
+
+func (s *Service) ListRuntimeEvents(filtro db.FiltroRuntimeEvents) ([]*db.RuntimeEvent, error) {
+	return s.store.ListRuntimeEvents(filtro)
 }
 
 func (s *Service) ListRuntimeTranscript(filtro db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error) {
@@ -350,6 +355,10 @@ func (Repository) GetActiveRuntimeHandle(agente string) (*db.RuntimeHandle, erro
 
 func (Repository) GetActiveRuntimeHandleForProject(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
 	return db.GetRuntimeHandleActivoAgenteProyecto(agente, proyectoID)
+}
+
+func (Repository) ListRuntimeEvents(filtro db.FiltroRuntimeEvents) ([]*db.RuntimeEvent, error) {
+	return db.ListarRuntimeEvents(filtro)
 }
 
 func (Repository) ListRuntimeTranscript(filtro db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error) {

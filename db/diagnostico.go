@@ -39,7 +39,7 @@ func ConstruirSnapshotDiagnostico(limitAudit int) (*SnapshotDiagnostico, error) 
 	if err != nil {
 		return nil, err
 	}
-	sesiones, err := ListarSesionesActivas()
+	sesiones, err := ListarSesionesActivasOperativas()
 	if err != nil {
 		return nil, err
 	}

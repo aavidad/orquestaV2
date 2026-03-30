@@ -13,25 +13,29 @@ const (
 )
 
 type State struct {
-	Addr      string    `json:"addr"`
-	PID       int       `json:"pid"`
-	Kind      string    `json:"kind,omitempty"`
-	ScopeID   string    `json:"scope_id,omitempty"`
-	DBPath    string    `json:"db_path,omitempty"`
-	Token     string    `json:"token,omitempty"`
-	StartedAt time.Time `json:"started_at"`
-	Version   string    `json:"version,omitempty"`
+	Addr          string    `json:"addr"`
+	PID           int       `json:"pid"`
+	Kind          string    `json:"kind,omitempty"`
+	ScopeID       string    `json:"scope_id,omitempty"`
+	DBPath        string    `json:"db_path,omitempty"`
+	StorageDriver string    `json:"storage_driver,omitempty"`
+	StorageTarget string    `json:"storage_target,omitempty"`
+	Token         string    `json:"token,omitempty"`
+	StartedAt     time.Time `json:"started_at"`
+	Version       string    `json:"version,omitempty"`
 }
 
 type HealthResponse struct {
-	OK        bool      `json:"ok"`
-	Addr      string    `json:"addr"`
-	PID       int       `json:"pid"`
-	Kind      string    `json:"kind,omitempty"`
-	ScopeID   string    `json:"scope_id,omitempty"`
-	DBPath    string    `json:"db_path,omitempty"`
-	StartedAt time.Time `json:"started_at"`
-	Version   string    `json:"version,omitempty"`
+	OK            bool      `json:"ok"`
+	Addr          string    `json:"addr"`
+	PID           int       `json:"pid"`
+	Kind          string    `json:"kind,omitempty"`
+	ScopeID       string    `json:"scope_id,omitempty"`
+	DBPath        string    `json:"db_path,omitempty"`
+	StorageDriver string    `json:"storage_driver,omitempty"`
+	StorageTarget string    `json:"storage_target,omitempty"`
+	StartedAt     time.Time `json:"started_at"`
+	Version       string    `json:"version,omitempty"`
 }
 
 type ExecRequest struct {

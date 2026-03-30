@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"orquesta/storage"
 )
@@ -22,11 +23,27 @@ func newHandle(inner *sql.DB, driver string) *Handle {
 }
 
 func (h *Handle) Exec(query string, args ...any) (sql.Result, error) {
-	return h.DB.Exec(storage.RebindQuery(h.driver, query), args...)
+	var (
+		res sql.Result
+		err error
+	)
+	err = ejecutarConReintentos(func() error {
+		res, err = h.DB.Exec(storage.RebindQuery(h.driver, query), args...)
+		return err
+	})
+	return res, err
 }
 
 func (h *Handle) Query(query string, args ...any) (*sql.Rows, error) {
-	return h.DB.Query(storage.RebindQuery(h.driver, query), args...)
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	err = ejecutarConReintentos(func() error {
+		rows, err = h.DB.Query(storage.RebindQuery(h.driver, query), args...)
+		return err
+	})
+	return rows, err
 }
 
 func (h *Handle) QueryRow(query string, args ...any) *sql.Row {
@@ -34,7 +51,14 @@ func (h *Handle) QueryRow(query string, args ...any) *sql.Row {
 }
 
 func (h *Handle) Begin() (*Tx, error) {
-	tx, err := h.DB.Begin()
+	var (
+		tx  *sql.Tx
+		err error
+	)
+	err = ejecutarConReintentos(func() error {
+		tx, err = h.DB.Begin()
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +66,17 @@ func (h *Handle) Begin() (*Tx, error) {
 }
 
 func (h *Handle) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
-	tx, err := h.DB.BeginTx(ctx, opts)
+	var (
+		tx  *sql.Tx
+		err error
+	)
+	for intento := 0; intento < persistenciaBusyMaxIntentos; intento++ {
+		tx, err = h.DB.BeginTx(ctx, opts)
+		if err == nil || !esErrorPersistenciaBusy(err) {
+			break
+		}
+		time.Sleep(persistenciaBusyBackoff)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -50,11 +84,27 @@ func (h *Handle) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 }
 
 func (tx *Tx) Exec(query string, args ...any) (sql.Result, error) {
-	return tx.Tx.Exec(storage.RebindQuery(tx.driver, query), args...)
+	var (
+		res sql.Result
+		err error
+	)
+	err = ejecutarConReintentos(func() error {
+		res, err = tx.Tx.Exec(storage.RebindQuery(tx.driver, query), args...)
+		return err
+	})
+	return res, err
 }
 
 func (tx *Tx) Query(query string, args ...any) (*sql.Rows, error) {
-	return tx.Tx.Query(storage.RebindQuery(tx.driver, query), args...)
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	err = ejecutarConReintentos(func() error {
+		rows, err = tx.Tx.Query(storage.RebindQuery(tx.driver, query), args...)
+		return err
+	})
+	return rows, err
 }
 
 func (tx *Tx) QueryRow(query string, args ...any) *sql.Row {

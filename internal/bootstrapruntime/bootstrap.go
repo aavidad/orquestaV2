@@ -29,12 +29,9 @@ func Preparar(agente string, proyecto *db.Proyecto, ultima *db.Sesion) (runtimea
 	if proyecto == nil {
 		return resume, nil, nil
 	}
-	if _, err := db.ProcesarRuntimeOrdersBasicasBatch(); err != nil {
-		return resume, nil, err
-	}
 
 	state := &State{}
-	order, err := db.ClaimNextBootstrapRuntimeOrder(strings.TrimSpace(agente), &proyecto.ID)
+	order, err := db.PeekNextBootstrapRuntimeOrder(strings.TrimSpace(agente), &proyecto.ID)
 	if err != nil {
 		return resume, nil, err
 	}
@@ -70,31 +67,6 @@ func Preparar(agente string, proyecto *db.Proyecto, ultima *db.Sesion) (runtimea
 	}
 	enriquecerResumeConContextoProyecto(&resume, strings.TrimSpace(agente), proyecto)
 	enriquecerResumeConGobernanza(&resume, strings.TrimSpace(agente), &proyecto.ID)
-
-	for _, msg := range state.Mailbox {
-		if msg == nil || msg.ID == 0 {
-			continue
-		}
-		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
-			return resume, nil, err
-		}
-		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
-			return resume, nil, err
-		}
-	}
-	if state.Order != nil {
-		resultado, _ := json.Marshal(map[string]any{
-			"ok":             true,
-			"bootstrap":      true,
-			"mailbox_count":  len(state.Mailbox),
-			"checkpoint_id":  checkpointIDOrZero(state.Checkpoint),
-			"continuidad":    strings.TrimSpace(resume.ResumenContinuidad) != "",
-			"resume_payload": strings.TrimSpace(resume.ResumePayloadJSON) != "",
-		})
-		if err := db.MarcarRuntimeOrderEstado(state.Order.ID, "completada", string(resultado), ""); err != nil {
-			return resume, nil, err
-		}
-	}
 	return resume, state, nil
 }
 

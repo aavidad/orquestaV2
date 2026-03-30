@@ -64,7 +64,7 @@ func TestWebGitGovUsaAPIParaWorktreesYLocks(t *testing.T) {
 		LockID:    &lock.ID,
 		Agent:     "Codex1",
 		Name:      "wt-codex1",
-		Path:      filepath.Join(tmp, "orquestador-wt"),
+		Path:      filepath.Join(tmp, "orquestador", ".orquesta-worktrees", "wt-codex1"),
 		Branch:    "feature/server-first",
 		BaseRef:   "main",
 		State:     coordinacion.WorktreeActive,

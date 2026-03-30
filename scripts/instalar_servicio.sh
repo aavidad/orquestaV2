@@ -12,9 +12,20 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 USUARIO="${USER}"
 UNIT_DIR="/etc/systemd/system"
 UNIT_ORQUESTA="orquesta.service"
-UNIT_VIGILANTE="orquesta-vigilante.service"
+UNIT_BACKUP="orquesta-backup-sqlite.service"
+UNIT_BACKUP_TIMER="orquesta-backup-sqlite.timer"
 UNIT_TEMPLATE_ORQUESTA="$(dirname "$0")/orquesta.service"
-UNIT_TEMPLATE_VIGILANTE="$(dirname "$0")/orquesta-vigilante.service"
+UNIT_TEMPLATE_BACKUP="$(dirname "$0")/orquesta-backup-sqlite.service"
+UNIT_TEMPLATE_BACKUP_TIMER="$(dirname "$0")/orquesta-backup-sqlite.timer"
+
+resolve_driver() {
+  local raw="${ORQUESTA_DB_DRIVER:-${ORQUESTA_DB_BACKEND:-sqlite}}"
+  raw="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+  case "$raw" in
+    ""|sqlite|sqlite3) printf 'sqlite\n' ;;
+    *) printf '%s\n' "$raw" ;;
+  esac
+}
 
 if [[ ! -f "${ROOT_DIR}/orquesta" ]]; then
   echo "❌ No encuentro el binario '${ROOT_DIR}/orquesta'. Compila primero con 'go build ./...'." >&2
@@ -32,7 +43,11 @@ render_unit() {
 
 echo "📦 Instalando servicios systemd en ${UNIT_DIR}"
 render_unit "${UNIT_TEMPLATE_ORQUESTA}" "${UNIT_DIR}/${UNIT_ORQUESTA}"
-render_unit "${UNIT_TEMPLATE_VIGILANTE}" "${UNIT_DIR}/${UNIT_VIGILANTE}"
+BACKEND_DRIVER="$(resolve_driver)"
+if [[ "${BACKEND_DRIVER}" == "sqlite" ]]; then
+  render_unit "${UNIT_TEMPLATE_BACKUP}" "${UNIT_DIR}/${UNIT_BACKUP}"
+  render_unit "${UNIT_TEMPLATE_BACKUP_TIMER}" "${UNIT_DIR}/${UNIT_BACKUP_TIMER}"
+fi
 
 echo "🔄 Recargando systemd..."
 sudo systemctl daemon-reload
@@ -40,6 +55,13 @@ sudo systemctl daemon-reload
 echo "✅ Habilitando e iniciando ${UNIT_ORQUESTA}..."
 sudo systemctl enable "${UNIT_ORQUESTA}"
 sudo systemctl restart "${UNIT_ORQUESTA}"
+
+if [[ "${BACKEND_DRIVER}" == "sqlite" ]]; then
+  echo "🕒 Habilitando temporizador de respaldo SQLite..."
+  sudo systemctl enable --now "${UNIT_BACKUP_TIMER}"
+else
+  echo "⚠️  No se instala backup systemd SQLite para backend '${BACKEND_DRIVER}'."
+fi
 
 echo ""
 echo "📊 Estado del servicio:"
@@ -49,6 +71,10 @@ echo ""
 echo "✅ Orquesta instalada como servicio."
 echo "   Ver logs:   journalctl -u ${UNIT_ORQUESTA} -f"
 echo "   Health:     curl -fsS http://127.0.0.1:16543/api/status"
-echo "   Vigilante legacy/manual: sudo systemctl enable --now ${UNIT_VIGILANTE}"
+if [[ "${BACKEND_DRIVER}" == "sqlite" ]]; then
+  echo "   Backup diario SQLite: sudo systemctl status ${UNIT_BACKUP_TIMER}"
+else
+  echo "   Backup diario: no configurado por este instalador para backend ${BACKEND_DRIVER}"
+fi
 echo "   Detener:    sudo systemctl stop ${UNIT_ORQUESTA}"
 echo "   Deshabilitar: sudo systemctl disable ${UNIT_ORQUESTA}"

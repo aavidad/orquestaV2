@@ -183,7 +183,10 @@ func TestPrepararDesdeDatosResuelveXHighPorDefectoParaImplementacion(t *testing.
 		t.Fatalf("reasoning inesperado: %+v", prep.Plan)
 	}
 	rendered := runtimeagente.RenderCommand(prep.Plan)
-	if !strings.Contains(rendered, "'--reasoning-effort'") || !strings.Contains(rendered, "'xhigh'") {
+	if strings.Contains(rendered, "'--reasoning-effort'") {
+		t.Fatalf("comando no deberia usar flag legacy de razonamiento: %s", rendered)
+	}
+	if !strings.Contains(rendered, "'-c'") || !strings.Contains(rendered, `'model_reasoning_effort="xhigh"'`) {
 		t.Fatalf("comando sin xhigh: %s", rendered)
 	}
 }

@@ -83,6 +83,27 @@ func TestDetectarAgentesAgotadosDevuelveAgentesConHeartbeatAntiguo(t *testing.T)
 	}
 }
 
+func TestDetectarAgentesAgotadosSinHandleActivoNoRequiereSondeo(t *testing.T) {
+	prepararDBTemporal(t)
+
+	sesionID, _ := prepararAgenteConTareaEnProgreso(t, "Codex1")
+	setHeartbeatStale(t, sesionID)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='cerrado' WHERE agente=?`, "Codex1"); err != nil {
+		t.Fatalf("cerrar handles origen: %v", err)
+	}
+
+	candidatos, err := DetectarAgentesAgotados()
+	if err != nil {
+		t.Fatalf("DetectarAgentesAgotados: %v", err)
+	}
+	if len(candidatos) != 1 {
+		t.Fatalf("esperaba 1 candidato, got=%d", len(candidatos))
+	}
+	if candidatos[0].Disparador != "watchdog" || candidatos[0].RequiereSondeo {
+		t.Fatalf("candidato watchdog sin handle inesperado: %+v", candidatos[0])
+	}
+}
+
 func TestDetectarAgentesAgotadosIgnoraHeartbeatReciente(t *testing.T) {
 	prepararDBTemporal(t)
 
@@ -454,6 +475,64 @@ func TestProcesarHandoffsBatchEscalaDeSondeoAHandoff(t *testing.T) {
 	}
 }
 
+func TestProcesarHandoffsBatchSinHandleHaceHandoffDirecto(t *testing.T) {
+	prepararDBTemporal(t)
+
+	sesionID, tareaID := prepararAgenteConTareaEnProgreso(t, "Codex1")
+	setHeartbeatStale(t, sesionID)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='cerrado' WHERE agente=?`, "Codex1"); err != nil {
+		t.Fatalf("cerrar handles origen: %v", err)
+	}
+
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+
+	n, err := ProcesarHandoffsBatch()
+	if err != nil {
+		t.Fatalf("ProcesarHandoffsBatch: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 handoff directo sin sondeo, got=%d", n)
+	}
+
+	estadoPendiente := "pendiente"
+	agenteOrigen := "Codex1"
+	ordersOrigen, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agenteOrigen, Estado: &estadoPendiente})
+	if err != nil {
+		t.Fatalf("ListarRuntimeOrders origen: %v", err)
+	}
+	for _, order := range ordersOrigen {
+		if order.Tipo == "sync_status" || order.Tipo == "nudge" {
+			t.Fatalf("no deberia crear sondeo watchdog sin handle: %+v", ordersOrigen)
+		}
+	}
+
+	agenteDestino := "Codex2"
+	ordersDestino, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agenteDestino, Estado: &estadoPendiente})
+	if err != nil {
+		t.Fatalf("ListarRuntimeOrders destino: %v", err)
+	}
+	if len(ordersDestino) != 1 || ordersDestino[0].Tipo != "handoff" {
+		t.Fatalf("handoff directo inesperado: %+v", ordersDestino)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("GetTarea: %v", err)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "Codex2" || tarea.Estado != EstadoAsignada {
+		t.Fatalf("tarea reasignada inesperada: %+v", tarea)
+	}
+	sesion, err := GetSesionByID(sesionID)
+	if err != nil {
+		t.Fatalf("GetSesionByID: %v", err)
+	}
+	if sesion.Activa || sesion.Estado != "pausada" {
+		t.Fatalf("sesion origen deberia quedar aparcada: %+v", sesion)
+	}
+}
+
 func TestProcesarHandoffsBatchPorPresupuestoNoRequiereSondeo(t *testing.T) {
 	prepararDBTemporal(t)
 
@@ -502,5 +581,59 @@ func TestProcesarHandoffsBatchPorPresupuestoNoRequiereSondeo(t *testing.T) {
 	}
 	if tarea.Agente == nil || *tarea.Agente != "Codex2" || tarea.Estado != TareaAsignada {
 		t.Fatalf("tarea no reasignada por presupuesto: %+v", tarea)
+	}
+}
+
+func TestProcesarHandoffsBatchSinHandleEscalaDirectoAHandoff(t *testing.T) {
+	prepararDBTemporal(t)
+
+	sesionID, tareaID := prepararAgenteConTareaEnProgreso(t, "Codex1")
+	setHeartbeatStale(t, sesionID)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='cerrado' WHERE agente=?`, "Codex1"); err != nil {
+		t.Fatalf("cerrar handles origen: %v", err)
+	}
+
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+
+	n, err := ProcesarHandoffsBatch()
+	if err != nil {
+		t.Fatalf("ProcesarHandoffsBatch: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 handoff directo sin sondeo, got=%d", n)
+	}
+
+	agenteDestino := "Codex2"
+	estadoPendiente := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agenteDestino, Estado: &estadoPendiente})
+	if err != nil {
+		t.Fatalf("ListarRuntimeOrders destino: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "handoff" {
+		t.Fatalf("handoff directo inesperado: %+v", orders)
+	}
+
+	agenteOrigen := "Codex1"
+	ordersOrigen, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agenteOrigen, Estado: &estadoPendiente})
+	if err != nil {
+		t.Fatalf("ListarRuntimeOrders origen: %v", err)
+	}
+	for _, order := range ordersOrigen {
+		if order == nil {
+			continue
+		}
+		if order.Tipo == "sync_status" || order.Tipo == "nudge" {
+			t.Fatalf("no deberia sondar watchdog cuando falta handle activo: %+v", ordersOrigen)
+		}
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("GetTarea: %v", err)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "Codex2" || tarea.Estado != TareaAsignada {
+		t.Fatalf("tarea no reasignada por handoff directo: %+v", tarea)
 	}
 }

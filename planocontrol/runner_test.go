@@ -1,19 +1,23 @@
 package planocontrol
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"orquesta/db"
+	"orquesta/notificaciones"
 )
 
 type stubAutomationService struct {
 	autonomyCount    int
+	runtimeSupCount  int
 	supervisionCount int
 	reviewCount      int
 	staleCount       int
 	staleOrdersCount int
 	transcriptCount  int
+	mailboxCount     int
 	processedCount   int
 	mergedCount      int
 	refinedCount     int
@@ -21,13 +25,16 @@ type stubAutomationService struct {
 	staleErr         error
 	staleOrdersErr   error
 	transcriptErr    error
+	mailboxErr       error
 	processedErr     error
 	mergedErr        error
 	refinedErr       error
 	handoffErr       error
 	autonomyErr      error
+	runtimeSupErr    error
 	supervisionErr   error
 	reviewErr        error
+	transcriptPanic  bool
 	audits           []string
 }
 
@@ -37,6 +44,9 @@ func (s *stubAutomationService) GarantizarSaludAgentes() error             { ret
 func (s *stubAutomationService) PlanificarTareasAutomaticamente() error    { return nil }
 func (s *stubAutomationService) ProcesarAutonomiaAgentesBatch() (int, error) {
 	return s.autonomyCount, s.autonomyErr
+}
+func (s *stubAutomationService) ProcesarRuntimeSupervisionBatch() (int, error) {
+	return s.runtimeSupCount, s.runtimeSupErr
 }
 func (s *stubAutomationService) ProcesarSupervisionAutonomaBatch() (int, error) {
 	return s.supervisionCount, s.supervisionErr
@@ -51,7 +61,13 @@ func (s *stubAutomationService) ReconciliarRuntimeOrdersStale() (int, error) {
 	return s.staleOrdersCount, s.staleOrdersErr
 }
 func (s *stubAutomationService) ProcesarRuntimeTranscriptBatch() (int, error) {
+	if s.transcriptPanic {
+		panic("boom transcript")
+	}
 	return s.transcriptCount, s.transcriptErr
+}
+func (s *stubAutomationService) ProcesarRuntimeMailboxBatch() (int, error) {
+	return s.mailboxCount, s.mailboxErr
 }
 func (s *stubAutomationService) ProcesarRuntimeOrdersBatch() (int, error) {
 	return s.processedCount, s.processedErr
@@ -72,11 +88,13 @@ func (s *stubAutomationService) Audit(agente, accion, entidad string, entidadID 
 func TestRunnerRunControlPlaneAuditaTrabajoProcesado(t *testing.T) {
 	service := &stubAutomationService{
 		autonomyCount:    1,
+		runtimeSupCount:  1,
 		supervisionCount: 1,
 		reviewCount:      1,
 		staleCount:       2,
 		staleOrdersCount: 1,
 		transcriptCount:  1,
+		mailboxCount:     1,
 		processedCount:   3,
 		mergedCount:      1,
 		refinedCount:     1,
@@ -85,8 +103,8 @@ func TestRunnerRunControlPlaneAuditaTrabajoProcesado(t *testing.T) {
 	r := &Runner{Automation: service}
 	r.runControlPlane()
 
-	if len(service.audits) != 10 {
-		t.Fatalf("esperaba 10 auditorias, got=%d", len(service.audits))
+	if len(service.audits) != 12 {
+		t.Fatalf("esperaba 12 auditorias, got=%d", len(service.audits))
 	}
 }
 
@@ -103,11 +121,13 @@ func TestRunnerRunControlPlaneSinTrabajoNoAudita(t *testing.T) {
 func TestRunnerRunControlPlaneAuditaErrores(t *testing.T) {
 	service := &stubAutomationService{
 		autonomyErr:    assertErr("fallo autonomia"),
+		runtimeSupErr:  assertErr("fallo runtime supervision"),
 		supervisionErr: assertErr("fallo supervision"),
 		reviewErr:      assertErr("fallo review"),
 		staleErr:       assertErr("fallo handles"),
 		staleOrdersErr: assertErr("fallo stale orders"),
 		transcriptErr:  assertErr("fallo transcript"),
+		mailboxErr:     assertErr("fallo mailbox"),
 		processedErr:   assertErr("fallo batch"),
 		mergedErr:      assertErr("fallo merges"),
 		refinedErr:     assertErr("fallo refineria"),
@@ -116,19 +136,21 @@ func TestRunnerRunControlPlaneAuditaErrores(t *testing.T) {
 	r := &Runner{Automation: service}
 	r.runControlPlane()
 
-	if len(service.audits) != 10 {
-		t.Fatalf("esperaba 10 auditorias de error, got=%d", len(service.audits))
+	if len(service.audits) != 12 {
+		t.Fatalf("esperaba 12 auditorias de error, got=%d", len(service.audits))
 	}
 }
 
 func TestRunnerRunControlPlaneEmiteDebug(t *testing.T) {
 	service := &stubAutomationService{
 		autonomyCount:    1,
+		runtimeSupCount:  2,
 		supervisionCount: 2,
 		reviewCount:      3,
 		staleCount:       2,
 		staleOrdersCount: 4,
 		transcriptCount:  4,
+		mailboxCount:     4,
 		processedCount:   5,
 		mergedCount:      6,
 		refinedCount:     6,
@@ -146,8 +168,72 @@ func TestRunnerRunControlPlaneEmiteDebug(t *testing.T) {
 	if len(traces) == 0 {
 		t.Fatalf("esperaba trazas de debug")
 	}
-	if !strings.Contains(traces[len(traces)-1], "control_plane autonomia=%d supervision=%d review=%d handles_stale=%d orders_stale=%d transcript=%d runtime_orders=%d git_merges=%d refineria=%d handoffs=%d") {
+	if !strings.Contains(traces[len(traces)-1], "control_plane autonomia=%d runtime_supervision=%d supervision=%d review=%d handles_stale=%d orders_stale=%d transcript=%d mailbox=%d runtime_orders=%d git_merges=%d refineria=%d handoffs=%d") {
 		t.Fatalf("traza final inesperada: %+v", traces)
+	}
+}
+
+func TestRunnerRunControlPlaneRecuperaPanicDeBatchYSigue(t *testing.T) {
+	service := &stubAutomationService{
+		transcriptPanic: true,
+		processedCount:  3,
+		handoffCount:    1,
+	}
+	r := &Runner{Automation: service}
+
+	r.runControlPlane()
+
+	audits := strings.Join(service.audits, "\n")
+	if !strings.Contains(audits, "runtime_transcript_batch_panic|runtime_transcript|") {
+		t.Fatalf("faltaba auditoria de panic: %s", audits)
+	}
+	if !strings.Contains(audits, "runtime_orders_batch|runtime_order|Órdenes procesadas en batch: 3") {
+		t.Fatalf("el control plane deberia seguir tras el panic: %s", audits)
+	}
+	if !strings.Contains(audits, "handoff_batch|agente|Handoffs automáticos procesados: 1") {
+		t.Fatalf("los batches posteriores deberian ejecutarse: %s", audits)
+	}
+}
+
+func TestRunnerSafeLoopCallRecuperaPanic(t *testing.T) {
+	service := &stubAutomationService{}
+	r := &Runner{Automation: service}
+
+	r.safeLoopCall("salud", func() { panic("boom salud") })
+	r.safeLoopCall("salud", func() {})
+
+	audits := strings.Join(service.audits, "\n")
+	if !strings.Contains(audits, "runner_loop_panic|runner|loop=salud panic=boom salud") {
+		t.Fatalf("faltaba auditoria de panic en loop: %s", audits)
+	}
+}
+
+func TestRunnerLoopNotificacionesPrefiereNotificadorEventAware(t *testing.T) {
+	service := &stubAutomationService{}
+	feed := make(chan db.EventoNotificacion, 1)
+	feed <- db.EventoNotificacion{
+		Tipo:   "runtime_auto_guidance",
+		Agente: "Codex1",
+		Texto:  "guía automática",
+	}
+	close(feed)
+
+	notifier := &stubEventAwareNotifier{}
+	r := &Runner{
+		Automation:       service,
+		NotificationFeed: feed,
+		Notifier: func() notificaciones.Notificador {
+			return notifier
+		},
+	}
+
+	r.loopNotificaciones(context.Background())
+
+	if len(notifier.events) != 1 || notifier.events[0].Tipo != "runtime_auto_guidance" {
+		t.Fatalf("eventAware no recibió el evento esperado: %+v", notifier.events)
+	}
+	if len(notifier.messages) != 0 {
+		t.Fatalf("no debería caer al path legacy cuando existe EventAware: %+v", notifier.messages)
 	}
 }
 
@@ -156,3 +242,30 @@ type simpleErr string
 func (e simpleErr) Error() string { return string(e) }
 
 func assertErr(msg string) error { return simpleErr(msg) }
+
+type stubEventAwareNotifier struct {
+	events   []db.EventoNotificacion
+	messages []string
+}
+
+func (s *stubEventAwareNotifier) EnviarMensaje(texto string) error {
+	s.messages = append(s.messages, texto)
+	return nil
+}
+
+func (s *stubEventAwareNotifier) EnviarAlertaBloqueo(tareaID int64, agente, motivo string) error {
+	return nil
+}
+
+func (s *stubEventAwareNotifier) EnviarPropuestaVotacion(codigo, titulo string) error {
+	return nil
+}
+
+func (s *stubEventAwareNotifier) EnviarAvisoFinProyecto(proyectoID int64, nombre string) error {
+	return nil
+}
+
+func (s *stubEventAwareNotifier) EnviarEvento(ev db.EventoNotificacion) error {
+	s.events = append(s.events, ev)
+	return nil
+}

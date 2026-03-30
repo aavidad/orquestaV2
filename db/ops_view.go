@@ -60,16 +60,40 @@ func ListarSesionesActivasOpsView() ([]*SesionActiva, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var list []*SesionActiva
+	items := make([]*SesionActiva, 0)
 	for rows.Next() {
 		item, err := scanSesionActiva(rows)
 		if err != nil {
+			_ = rows.Close()
 			return nil, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	list := make([]*SesionActiva, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		if !sesionOperativaPorHeartbeat(item.Activa, item.HeartbeatAt, item.Inicio, now) {
+			activo, err := sesionTieneHandleActivoOperativo(item.Agente, item.ProyectoID)
+			if err != nil {
+				return nil, err
+			}
+			if !activo {
+				continue
+			}
 		}
 		list = append(list, item)
 	}
-	return list, rows.Err()
+	return list, nil
 }
 
 type OpsViewRepository struct{}

@@ -1,0 +1,131 @@
+package controlruntime
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+	"time"
+)
+
+func TestConsultarEstadoLocalDetectaSessionIDSinSobrescribirDriver(t *testing.T) {
+	tmp := t.TempDir()
+	wrapper := filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil")
+	if err := os.MkdirAll(filepath.Dir(wrapper), 0o755); err != nil {
+		t.Fatalf("mkdir wrapper: %v", err)
+	}
+	startedAt := time.Now().UTC()
+	workingDir := filepath.Join(tmp, "work")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir working dir: %v", err)
+	}
+	sessionDir := filepath.Join(filepath.Dir(filepath.Dir(wrapper)), "homes", "Codex3", "sessions", startedAt.In(time.Local).Format("2006"), startedAt.In(time.Local).Format("01"), startedAt.In(time.Local).Format("02"))
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatalf("mkdir session dir: %v", err)
+	}
+	sessionFile := filepath.Join(sessionDir, "supervisor-status.jsonl")
+	sessionMeta := `{"timestamp":"` + startedAt.Add(time.Second).Format(time.RFC3339Nano) + `","type":"session_meta","payload":{"id":"sess-supervisor-123","timestamp":"` + startedAt.Add(time.Second).Format(time.RFC3339Nano) + `","cwd":"` + workingDir + `"}}` + "\n"
+	if err := os.WriteFile(sessionFile, []byte(sessionMeta), 0o644); err != nil {
+		t.Fatalf("write session file: %v", err)
+	}
+
+	pid := int64(os.Getpid())
+	estado, observed, err := ConsultarEstadoLocal(ObjetivoProceso{
+		PID: &pid,
+		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"'` + wrapper + `' 'Codex3'","working_dir":"` +
+			workingDir + `","started_at":"` + startedAt.Format(time.RFC3339Nano) + `"}`,
+	})
+	if err != nil {
+		t.Fatalf("ConsultarEstadoLocal: %v", err)
+	}
+	if !observed || estado == nil {
+		t.Fatalf("ConsultarEstadoLocal deberia observar el proceso local: observed=%v estado=%+v", observed, estado)
+	}
+	if !estado.Vivo {
+		t.Fatalf("el proceso actual deberia seguir vivo: %+v", estado)
+	}
+	meta := metadataMap(estado.MetadataJSON)
+	if got := stringValueFromMetadata(meta, "external_session_id"); got != "sess-supervisor-123" {
+		t.Fatalf("external_session_id inesperado: %q", got)
+	}
+	if got := stringValueFromMetadata(meta, "supervisor_driver"); got != "local_runtime_supervisor" {
+		t.Fatalf("supervisor_driver inesperado: %q", got)
+	}
+	if got := stringValueFromMetadata(meta, "driver"); got != "" {
+		t.Fatalf("el supervisor no deberia sobrescribir driver: %q", got)
+	}
+}
+
+func TestSupervisorLocalEmiteHeartbeatYFinalizacionAlActivarse(t *testing.T) {
+	cmd := exec.Command("sleep", "1")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start sleep: %v", err)
+	}
+	t.Cleanup(func() {
+		if cmd.Process == nil {
+			return
+		}
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+	})
+
+	signals := make(chan SupervisorSignal, 4)
+	prevHandler := func() SupervisorSignalHandler {
+		supervisorSignalRegistry.mu.RLock()
+		defer supervisorSignalRegistry.mu.RUnlock()
+		return supervisorSignalRegistry.handler
+	}()
+	SetSupervisorSignalHandler(func(signal SupervisorSignal) error {
+		signals <- signal
+		return nil
+	})
+	t.Cleanup(func() {
+		SetSupervisorSignalHandler(prevHandler)
+	})
+
+	ref := registrarSupervisorLocalResidente(descriptorSupervisorLocal{
+		Ref:      "test-supervisor-signals",
+		Agente:   "Codex1",
+		Proyecto: "orquestador",
+		PID:      cmd.Process.Pid,
+	}, cmd)
+	if ref == "" {
+		t.Fatal("faltaba ref supervisor")
+	}
+	obj := ObjetivoProceso{
+		PID:          intPtr64(int64(cmd.Process.Pid)),
+		HandleKind:   "process",
+		HandleRef:    "process",
+		MetadataJSON: `{"supervisor_ref":"` + ref + `","agente":"Codex1","proyecto":"orquestador"}`,
+	}
+	if err := ActivarSupervisionOrquestada(obj); err != nil {
+		t.Fatalf("activar supervision: %v", err)
+	}
+
+	select {
+	case signal := <-signals:
+		if signal.Finalizado {
+			t.Fatalf("la primera señal no debería ser final: %+v", signal)
+		}
+		if signal.Agente != "Codex1" || signal.Proyecto != "orquestador" {
+			t.Fatalf("heartbeat supervisor inesperado: %+v", signal)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout esperando heartbeat inicial del supervisor")
+	}
+
+	if err := cmd.Process.Kill(); err != nil {
+		t.Fatalf("kill process: %v", err)
+	}
+	select {
+	case signal := <-signals:
+		if !signal.Finalizado {
+			t.Fatalf("faltaba señal final del supervisor: %+v", signal)
+		}
+		if signal.Motivo != "process_exit" {
+			t.Fatalf("motivo final inesperado: %+v", signal)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout esperando señal final del supervisor")
+	}
+}

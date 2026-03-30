@@ -101,67 +101,77 @@ func CrearTarea(t *Tarea) (int64, error) {
 // GetTareaIDBlueprintKey devuelve el ID de una tarea por proyecto_id + blueprint_key.
 // Devuelve 0 si no existe.
 func GetTareaIDBlueprintKey(proyectoID int64, key string) int64 {
-	var id int64
-	_ = DB.QueryRow(`SELECT id FROM tareas WHERE proyecto_id=? AND blueprint_key=? LIMIT 1`, proyectoID, key).Scan(&id)
+	id, _ := consultarConReintentos(func() (int64, error) {
+		var found int64
+		err := DB.QueryRow(`SELECT id FROM tareas WHERE proyecto_id=? AND blueprint_key=? LIMIT 1`, proyectoID, key).Scan(&found)
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return found, err
+	})
 	return id
 }
 
 // GetTarea devuelve una tarea por ID.
 func GetTarea(id int64) (*Tarea, error) {
-	row := DB.QueryRow(`
-		SELECT id, titulo, descripcion, proyecto_id, modulo, estado, agente, propuesta_id, prioridad,
-		       dependencias, creado_por, commit_cierre, notas,
-		       created_at, updated_at, completada_at, contrato_definido
-		FROM tareas WHERE id = ?`, id)
-	return escanearTarea(row)
+	return consultarConReintentos(func() (*Tarea, error) {
+		row := DB.QueryRow(`
+			SELECT id, titulo, descripcion, proyecto_id, modulo, estado, agente, propuesta_id, prioridad,
+			       dependencias, creado_por, commit_cierre, notas,
+			       created_at, updated_at, completada_at, contrato_definido
+			FROM tareas WHERE id = ?`, id)
+		return escanearTarea(row)
+	})
 }
 
 // ListarTareas devuelve tareas según filtros opcionales.
 func ListarTareas(f FiltroTareas) ([]*Tarea, error) {
-	q := `SELECT id, titulo, descripcion, proyecto_id, modulo, estado, agente, propuesta_id, prioridad,
-		         dependencias, creado_por, commit_cierre, notas,
-		         created_at, updated_at, completada_at, contrato_definido
-		  FROM tareas WHERE 1=1`
-	args := []any{}
+	return consultarConReintentos(func() ([]*Tarea, error) {
+		q := `SELECT id, titulo, descripcion, proyecto_id, modulo, estado, agente, propuesta_id, prioridad,
+			         dependencias, creado_por, commit_cierre, notas,
+			         created_at, updated_at, completada_at, contrato_definido
+			  FROM tareas WHERE 1=1`
+		args := []any{}
 
-	if f.Libre {
-		q += " AND estado = 'libre'"
-	} else if f.Estado != nil {
-		q += " AND estado = ?"
-		args = append(args, *f.Estado)
-	}
-	if f.Agente != nil {
-		q += " AND agente = ?"
-		args = append(args, *f.Agente)
-	}
-	if f.ProyectoID != nil {
-		q += " AND proyecto_id = ?"
-		args = append(args, *f.ProyectoID)
-	}
-	if f.Modulo != nil {
-		q += " AND modulo = ?"
-		args = append(args, *f.Modulo)
-	}
-	if f.PropuestaID != nil {
-		q += " AND propuesta_id = ?"
-		args = append(args, *f.PropuestaID)
-	}
-	q += " ORDER BY CASE prioridad WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END, id"
+		if f.Libre {
+			q += " AND estado = 'libre'"
+		} else if f.Estado != nil {
+			q += " AND estado = ?"
+			args = append(args, *f.Estado)
+		}
+		if f.Agente != nil {
+			q += " AND agente = ?"
+			args = append(args, *f.Agente)
+		}
+		if f.ProyectoID != nil {
+			q += " AND proyecto_id = ?"
+			args = append(args, *f.ProyectoID)
+		}
+		if f.Modulo != nil {
+			q += " AND modulo = ?"
+			args = append(args, *f.Modulo)
+		}
+		if f.PropuestaID != nil {
+			q += " AND propuesta_id = ?"
+			args = append(args, *f.PropuestaID)
+		}
+		q += " ORDER BY CASE prioridad WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END, id"
 
-	rows, err := DB.Query(q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var list []*Tarea
-	for rows.Next() {
-		t, err := escanearTarea(rows)
+		rows, err := DB.Query(q, args...)
 		if err != nil {
 			return nil, err
 		}
-		list = append(list, t)
-	}
-	return list, rows.Err()
+		defer rows.Close()
+		var list []*Tarea
+		for rows.Next() {
+			t, err := escanearTarea(rows)
+			if err != nil {
+				return nil, err
+			}
+			list = append(list, t)
+		}
+		return list, rows.Err()
+	})
 }
 
 // ValidarDependencias comprueba que todas las dependencias previas de una tarea
@@ -437,21 +447,23 @@ func ReasignarTarea(id int64, nuevoAgente string) error {
 
 // ContarTareasPorEstado devuelve un mapa estado→cantidad.
 func ContarTareasPorEstado() (map[string]int, error) {
-	rows, err := DB.Query(`SELECT estado, COUNT(*) FROM tareas GROUP BY estado`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	m := make(map[string]int)
-	for rows.Next() {
-		var estado string
-		var n int
-		if err := rows.Scan(&estado, &n); err != nil {
+	return consultarConReintentos(func() (map[string]int, error) {
+		rows, err := DB.Query(`SELECT estado, COUNT(*) FROM tareas GROUP BY estado`)
+		if err != nil {
 			return nil, err
 		}
-		m[estado] = n
-	}
-	return m, rows.Err()
+		defer rows.Close()
+		m := make(map[string]int)
+		for rows.Next() {
+			var estado string
+			var n int
+			if err := rows.Scan(&estado, &n); err != nil {
+				return nil, err
+			}
+			m[estado] = n
+		}
+		return m, rows.Err()
+	})
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -495,25 +507,27 @@ func escanearTarea(s scanner) (*Tarea, error) {
 
 // ListarResumenBloqueos devuelve una lista de tareas bloqueadas con su motivo actual.
 func ListarResumenBloqueos() ([]ResumenBloqueo, error) {
-	rows, err := DB.Query(`
-		SELECT t.id, t.titulo, b.bloqueado_por, b.motivo
-		FROM tareas t
-		JOIN bloqueos b ON t.id = b.tarea_id
-		WHERE t.estado = 'bloqueada' AND b.resuelto = 0
-		ORDER BY t.updated_at DESC
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var res []ResumenBloqueo
-	for rows.Next() {
-		var rb ResumenBloqueo
-		if err := rows.Scan(&rb.ID, &rb.Titulo, &rb.Agente, &rb.Motivo); err != nil {
+	return consultarConReintentos(func() ([]ResumenBloqueo, error) {
+		rows, err := DB.Query(`
+			SELECT t.id, t.titulo, b.bloqueado_por, b.motivo
+			FROM tareas t
+			JOIN bloqueos b ON t.id = b.tarea_id
+			WHERE t.estado = 'bloqueada' AND b.resuelto = 0
+			ORDER BY t.updated_at DESC
+		`)
+		if err != nil {
 			return nil, err
 		}
-		res = append(res, rb)
-	}
-	return res, nil
+		defer rows.Close()
+
+		var res []ResumenBloqueo
+		for rows.Next() {
+			var rb ResumenBloqueo
+			if err := rows.Scan(&rb.ID, &rb.Titulo, &rb.Agente, &rb.Motivo); err != nil {
+				return nil, err
+			}
+			res = append(res, rb)
+		}
+		return res, rows.Err()
+	})
 }

@@ -3,7 +3,6 @@ package controlruntime
 import (
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +12,7 @@ import (
 
 func TestArrancarPlanRemotoYControlHTTP(t *testing.T) {
 	calls := make([]string, 0, 5)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls = append(calls, r.URL.Path)
 		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
 			t.Fatalf("auth header inesperado: %q", got)
@@ -94,7 +93,7 @@ func TestArrancarPlanRemotoYControlHTTP(t *testing.T) {
 }
 
 func TestArrancarPlanRemotoRespetaTimeout(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(80 * time.Millisecond)
 		_, _ = w.Write([]byte(`{}`))
 	}))
@@ -121,7 +120,7 @@ func TestArrancarPlanRemotoRespetaTimeout(t *testing.T) {
 
 func TestControlRemotoReintentaEnErroresTemporales(t *testing.T) {
 	attempts := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attempts++
 		if r.URL.Path != "/pause" {
 			t.Fatalf("ruta inesperada: %s", r.URL.Path)
@@ -156,7 +155,7 @@ func TestControlRemotoReintentaEnErroresTemporales(t *testing.T) {
 
 func TestEnviarInstruccionRemotaNoReintentaParaEvitarDuplicados(t *testing.T) {
 	attempts := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attempts++
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte(`{"error":"busy"}`))
@@ -186,7 +185,7 @@ func TestEnviarInstruccionRemotaNoReintentaParaEvitarDuplicados(t *testing.T) {
 }
 
 func TestArrancarPlanRemotoRespetaCapacidadesDesactivadas(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/launch":
 			_ = json.NewEncoder(w).Encode(map[string]any{
