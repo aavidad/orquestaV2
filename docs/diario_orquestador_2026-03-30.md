@@ -1042,6 +1042,29 @@ Validacion:
 
 - `go test ./internal/controlruntime -run 'Test(ConsultarEstadoLocalDetectaSessionIDSinSobrescribirDriver|SupervisorLocalEmiteHeartbeatYFinalizacionAlActivarse|CommandIdentityHintsIncluyeFirmaUtil|SamePathResuelveSymlink|ValidarIdentidadProcesoLocalDetectaMismatchDeCWD)' -count=1` => OK
 
+## 2026-03-31 01:15 aprox. — SQLite vuelve a validar schema real aunque la revision ya exista
+
+Hallazgo:
+
+- tras reiniciar el daemon con el binario nuevo, `orquesta runtime ordenes` fallaba contra la base viva con `SQL logic error: no such column: claimed_by`
+- el problema no era el modelo de dominio, sino la puerta de bootstrap SQLite: si la revision `_sqlite_bootstrap_revision` ya estaba marcada, dejaba de comprobar la estructura real y podia convivir con una `runtime_orders` incompleta
+
+Decision:
+
+- en SQLite no basta con “revision marcada”; siempre hay que validar la estructura real del schema si el daemon arranca con bootstrap habilitado
+- la revision sigue sirviendo como marca historica, pero no puede anular la verificacion efectiva de columnas y reconstrucciones necesarias
+
+Cambio:
+
+- `db/backend_sqlite.go`
+  - `Prepare(...)` vuelve a preguntar `sqliteBootstrapRequired(...)` siempre que `BootstrapSchema=true`
+  - `sqliteBootstrapRequired(...)` deja de cortocircuitar por revision marcada y valida tablas, columnas y rebuilds reales
+
+Validacion:
+
+- `go test ./db -run 'TestSQLite(PrepareAplicaPostMigracionesAunqueLaRevisionYaEsteMarcada|BootstrapRequiredEnDBVacia|PrepareOmiteBootstrapConSchemaActualSinRevision)' -count=1` => OK
+- `go build -o ./orquesta .` => OK
+
 ## 2026-03-31 01:2x aprox. — un batch colgado ya no congela todo el control plane
 
 Hallazgo:
@@ -1069,6 +1092,34 @@ Validacion:
 
 - `env GOCACHE=/tmp/orquesta-gocache go test ./planocontrol -run 'TestRunner(RunControlPlaneTimeoutDeBatchNoCongelaElResto|RunControlPlaneRecuperaPanicDeBatchYSigue|RunControlPlaneAuditaTrabajoProcesado|RunControlPlaneAuditaErrores)' -count=1` => OK
 
+## 2026-03-31 01:3x aprox. — SQLite arrancaba con schema drift si la revision ya estaba marcada
+
+Hallazgo:
+
+- tras reiniciar el daemon con el binario nuevo, `runtime ordenes` fallo con `SQL logic error: no such column: claimed_by (1)`
+- la columna y el contrato de lease ya existian en `schema.go` y en `post_migraciones_compat.go`
+- el fallo real estaba en la preparacion SQLite: las post-migraciones solo se ejecutaban cuando la revision de bootstrap no estaba marcada
+- ademas, la reconstruccion legacy de `runtime_orders` recreaba la tabla sin las nuevas columnas de lease, fiando la correccion a unas post-migraciones que podian no volver a correr
+
+Decision:
+
+- las post-migraciones SQLite deben ejecutarse siempre que no esten desactivadas explicitamente; son idempotentes y forman parte de la compatibilidad viva
+- la reconstruccion legacy de `runtime_orders` debe recrear ya la forma completa de la tabla, no una forma intermedia antigua
+
+Cambios:
+
+- `db/backend_sqlite.go`
+  - `Prepare(...)` aplica `postMigracionesPorDriver("sqlite")` siempre que `SkipPostMigrations=false`
+  - `sqliteRuntimeOrdersNeedsRebuild(...)` ya exige tambien `claimed_by`, `lease_token`, `attempt_count` y `lease_expires_at`
+- `db/db.go`
+  - `reconstruirRuntimeOrdersLegacy(...)` recrea `runtime_orders` con las columnas de lease y las rellena con defaults seguros durante la copia
+- `db/backend_sqlite_test.go`
+  - nueva regresion `TestSQLitePrepareAplicaPostMigracionesAunqueLaRevisionYaEsteMarcada`
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(SQLitePrepareAplicaPostMigracionesAunqueLaRevisionYaEsteMarcada|OpenMigraRuntimeTablesLegacy|SQLitePrepareOmiteBootstrapConSchemaActualSinRevision|SQLiteBootstrapRequiredEnDBVacia)' -count=1` => OK
+
 ## 2026-03-31 01:1x aprox. — `runtime_orders` deja de depender solo de timestamps para stale
 
 Hallazgo:
@@ -1093,3 +1144,20 @@ Cambios:
 - tests:
   - `db/runtime_legacy_migration_test.go`
   - `db/controlplane_entities_test.go`
+
+## 2026-03-31 01:2x aprox. — supervisor local y runner endurecidos contra identidades falsas y batches colgados
+
+Hallazgo:
+
+- el supervisor local podia considerar valido cualquier PID vivo aunque ya no correspondiese al runtime esperado
+- el runner del control plane podia quedarse colgado entero si un batch no devolvia
+
+Decision:
+
+- el supervisor local debe validar identidad por `cwd` y firma util del comando, no solo por PID
+- cada batch del runner necesita aislamiento por nombre y timeout propio para no congelar el resto del plano de control
+
+Validacion:
+
+- `go test ./internal/controlruntime -run 'Test(ConsultarEstadoLocalDetectaSessionIDSinSobrescribirDriver|CommandIdentityHintsIncluyeFirmaUtil|SamePathResuelveSymlink|ValidarIdentidadProcesoLocalDetectaMismatchDeCWD)' -count=1`
+- `go test ./planocontrol -run 'TestRunner(RunControlPlaneRecuperaPanicDeBatchYSigue|RunControlPlaneTimeoutDeBatchNoCongelaElResto|SafeLoopCallRecuperaPanic)' -count=1`

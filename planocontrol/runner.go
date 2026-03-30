@@ -49,6 +49,9 @@ type Runner struct {
 	SaludCada         time.Duration
 	PlanificacionCada time.Duration
 	ControlPlaneCada  time.Duration
+	BatchTimeout      time.Duration
+	mu                sync.Mutex
+	runningBatches    map[string]struct{}
 	wg                sync.WaitGroup
 }
 
@@ -308,24 +311,50 @@ func (r *Runner) safeLoopCall(name string, fn func()) {
 }
 
 func (r *Runner) runControlPlaneBatch(name, entity, auditOK, auditErr, auditPanic, successFmt string, fn func() (int, error)) (count int) {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			detail := fmt.Sprintf("batch=%s panic=%v\n%s", name, recovered, strings.TrimSpace(string(debug.Stack())))
-			r.Automation.Audit("server", auditPanic, entity, 0, detail)
-			r.debugf("control_plane %s panic=%v", name, recovered)
-			count = 0
-		}
-	}()
-	count, err := fn()
-	if err != nil {
-		r.Automation.Audit("server", auditErr, entity, 0, err.Error())
-		r.debugf("control_plane %s error=%v", name, err)
+	if !r.beginControlPlaneBatch(name) {
+		r.debugf("control_plane %s skipped=already_running", name)
 		return 0
 	}
-	if count > 0 {
-		r.Automation.Audit("server", auditOK, entity, 0, fmt.Sprintf(successFmt, count))
+	type batchOutcome struct {
+		count       int
+		err         error
+		panicDetail string
 	}
-	return count
+	outcomeCh := make(chan batchOutcome, 1)
+	go func() {
+		defer r.finishControlPlaneBatch(name)
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				outcomeCh <- batchOutcome{
+					panicDetail: fmt.Sprintf("batch=%s panic=%v\n%s", name, recovered, strings.TrimSpace(string(debug.Stack()))),
+				}
+			}
+		}()
+		count, err := fn()
+		outcomeCh <- batchOutcome{count: count, err: err}
+	}()
+	select {
+	case outcome := <-outcomeCh:
+		if outcome.panicDetail != "" {
+			r.Automation.Audit("server", auditPanic, entity, 0, outcome.panicDetail)
+			r.debugf("control_plane %s panic=%s", name, outcome.panicDetail)
+			return 0
+		}
+		if outcome.err != nil {
+			r.Automation.Audit("server", auditErr, entity, 0, outcome.err.Error())
+			r.debugf("control_plane %s error=%v", name, outcome.err)
+			return 0
+		}
+		if outcome.count > 0 {
+			r.Automation.Audit("server", auditOK, entity, 0, fmt.Sprintf(successFmt, outcome.count))
+		}
+		return outcome.count
+	case <-time.After(r.controlPlaneBatchTimeout()):
+		detail := fmt.Sprintf("batch=%s timeout=%s", name, r.controlPlaneBatchTimeout())
+		r.Automation.Audit("server", auditErr, entity, 0, detail)
+		r.debugf("control_plane %s timeout=%s", name, r.controlPlaneBatchTimeout())
+		return 0
+	}
 }
 
 func (r *Runner) notifier() notificaciones.Notificador {
@@ -361,6 +390,38 @@ func (r *Runner) controlPlaneCada() time.Duration {
 		return 15 * time.Second
 	}
 	return r.ControlPlaneCada
+}
+
+func (r *Runner) controlPlaneBatchTimeout() time.Duration {
+	if r.BatchTimeout <= 0 {
+		return 45 * time.Second
+	}
+	return r.BatchTimeout
+}
+
+func (r *Runner) beginControlPlaneBatch(name string) bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.runningBatches == nil {
+		r.runningBatches = map[string]struct{}{}
+	}
+	if _, exists := r.runningBatches[name]; exists {
+		return false
+	}
+	r.runningBatches[name] = struct{}{}
+	return true
+}
+
+func (r *Runner) finishControlPlaneBatch(name string) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.runningBatches, name)
 }
 
 func (r *Runner) debugf(format string, args ...any) {

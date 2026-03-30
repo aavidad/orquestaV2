@@ -76,3 +76,82 @@ func TestSQLiteBootstrapRequiredEnDBVacia(t *testing.T) {
 		t.Fatalf("una DB vacia debe requerir bootstrap")
 	}
 }
+
+func TestSQLitePrepareAplicaPostMigracionesAunqueLaRevisionYaEsteMarcada(t *testing.T) {
+	path := t.TempDir() + "/orquesta-runtime-orders-revision.db"
+	cfg := storage.Config{
+		Driver:          "sqlite",
+		DSN:             storage.SQLiteDSN(path),
+		Path:            path,
+		MaxOpenConns:    1,
+		BootstrapSchema: true,
+	}
+	raw, err := storage.Open(cfg)
+	if err != nil {
+		t.Fatalf("storage.Open sqlite: %v", err)
+	}
+	defer raw.Close()
+	if err := (sqliteBackend{}).Prepare(raw, cfg); err != nil {
+		t.Fatalf("Prepare sqlite inicial: %v", err)
+	}
+
+	if err := rebuildSQLiteTable(
+		raw,
+		"runtime_orders",
+		[]string{"idx_runtime_orders_estado_created"},
+		`CREATE TABLE runtime_orders (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			agente TEXT NOT NULL REFERENCES agentes(nombre),
+			proyecto_id INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+			runtime_id INTEGER REFERENCES runtime_instances(id) ON DELETE SET NULL,
+			handle_id INTEGER REFERENCES runtime_handles(id) ON DELETE SET NULL,
+			tipo TEXT NOT NULL,
+			payload_json TEXT NOT NULL DEFAULT '{}',
+			resultado_json TEXT NOT NULL DEFAULT '{}',
+			error_text TEXT NOT NULL DEFAULT '',
+			estado TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente','tomada','ejecutando','completada','fallida','expirada','cancelada')),
+			available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			started_at DATETIME,
+			finished_at DATETIME,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		[]string{
+			`CREATE INDEX idx_runtime_orders_estado_created ON runtime_orders(estado, available_at, id)`,
+		},
+		func(legacy string, legacyCols map[string]bool) (string, []any) {
+			return `INSERT INTO runtime_orders (
+				id, agente, proyecto_id, runtime_id, handle_id, tipo, payload_json,
+				resultado_json, error_text, estado, available_at, created_at,
+				started_at, finished_at, updated_at
+			)
+			SELECT id, agente, proyecto_id, runtime_id, handle_id, tipo, payload_json,
+			       resultado_json, error_text, estado, available_at, created_at,
+			       started_at, finished_at, updated_at
+			FROM ` + legacy, nil
+		},
+	); err != nil {
+		t.Fatalf("rebuild runtime_orders legacy: %v", err)
+	}
+	if err := (sqliteBackend{}).Prepare(raw, cfg); err != nil {
+		t.Fatalf("Prepare sqlite: %v", err)
+	}
+
+	for _, col := range []string{"claimed_by", "lease_token", "attempt_count", "lease_expires_at"} {
+		ok, err := tablaTieneColumna(raw, "runtime_orders", col)
+		if err != nil {
+			t.Fatalf("tablaTieneColumna runtime_orders.%s: %v", col, err)
+		}
+		if !ok {
+			t.Fatalf("faltaba columna post-migrada runtime_orders.%s", col)
+		}
+	}
+
+	var updatedAt string
+	if err := raw.QueryRow(`SELECT valor FROM config WHERE clave = ?`, sqliteBootstrapRevisionKey).Scan(&updatedAt); err != nil {
+		t.Fatalf("leer revision sqlite: %v", err)
+	}
+	if updatedAt != sqliteBootstrapRevision {
+		t.Fatalf("revision sqlite inesperada: %q", updatedAt)
+	}
+}

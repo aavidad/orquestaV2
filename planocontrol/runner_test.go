@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"orquesta/db"
 	"orquesta/notificaciones"
@@ -35,6 +36,7 @@ type stubAutomationService struct {
 	supervisionErr   error
 	reviewErr        error
 	transcriptPanic  bool
+	processedBlock   <-chan struct{}
 	audits           []string
 }
 
@@ -70,6 +72,9 @@ func (s *stubAutomationService) ProcesarRuntimeMailboxBatch() (int, error) {
 	return s.mailboxCount, s.mailboxErr
 }
 func (s *stubAutomationService) ProcesarRuntimeOrdersBatch() (int, error) {
+	if s.processedBlock != nil {
+		<-s.processedBlock
+	}
 	return s.processedCount, s.processedErr
 }
 func (s *stubAutomationService) ProcesarGitMergesBatch() (int, error) {
@@ -192,6 +197,27 @@ func TestRunnerRunControlPlaneRecuperaPanicDeBatchYSigue(t *testing.T) {
 	}
 	if !strings.Contains(audits, "handoff_batch|agente|Handoffs automáticos procesados: 1") {
 		t.Fatalf("los batches posteriores deberian ejecutarse: %s", audits)
+	}
+}
+
+func TestRunnerRunControlPlaneTimeoutDeBatchNoCongelaElResto(t *testing.T) {
+	service := &stubAutomationService{
+		processedBlock: make(chan struct{}),
+		handoffCount:   1,
+	}
+	r := &Runner{
+		Automation:   service,
+		BatchTimeout: 10 * time.Millisecond,
+	}
+
+	r.runControlPlane()
+
+	audits := strings.Join(service.audits, "\n")
+	if !strings.Contains(audits, "runtime_orders_batch_error|runtime_order|batch=runtime_orders timeout=10ms") {
+		t.Fatalf("faltaba auditoria de timeout del batch runtime_orders: %s", audits)
+	}
+	if !strings.Contains(audits, "handoff_batch|agente|Handoffs automáticos procesados: 1") {
+		t.Fatalf("los batches posteriores deberian seguir ejecutandose tras timeout: %s", audits)
 	}
 }
 

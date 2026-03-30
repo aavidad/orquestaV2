@@ -214,6 +214,12 @@ Contrato minimo obligatorio para `runtime_orders`:
 - una orden reencolada o finalizada debe liberar siempre su lease
 - la reconciliacion stale no se decide solo por `started_at`; debe respetar la caducidad de la lease cuando exista
 
+Contrato minimo obligatorio para el supervisor local:
+
+- no basta con ver un PID vivo; el supervisor debe validar identidad del proceso observado
+- si cambia el `cwd` o la firma de comando esperada, el proceso no puede seguir contandose como runtime valido
+- un batch del runner no puede congelar el resto del control plane; cada batch necesita aislamiento y timeout propio
+
 La referencia conceptual mas cercana para el nucleo es:
 
 - supervisor central al estilo AutoGen Core

@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -15,9 +16,9 @@ func TestConsultarEstadoLocalDetectaSessionIDSinSobrescribirDriver(t *testing.T)
 		t.Fatalf("mkdir wrapper: %v", err)
 	}
 	startedAt := time.Now().UTC()
-	workingDir := filepath.Join(tmp, "work")
-	if err := os.MkdirAll(workingDir, 0o755); err != nil {
-		t.Fatalf("mkdir working dir: %v", err)
+	workingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
 	}
 	sessionDir := filepath.Join(filepath.Dir(filepath.Dir(wrapper)), "homes", "Codex3", "sessions", startedAt.In(time.Local).Format("2006"), startedAt.In(time.Local).Format("01"), startedAt.In(time.Local).Format("02"))
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
@@ -30,9 +31,13 @@ func TestConsultarEstadoLocalDetectaSessionIDSinSobrescribirDriver(t *testing.T)
 	}
 
 	pid := int64(os.Getpid())
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("executable: %v", err)
+	}
 	estado, observed, err := ConsultarEstadoLocal(ObjetivoProceso{
 		PID: &pid,
-		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"'` + wrapper + `' 'Codex3'","working_dir":"` +
+		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"'` + wrapper + `' 'Codex3'","wrapped_command":"` + exe + `","working_dir":"` +
 			workingDir + `","started_at":"` + startedAt.Format(time.RFC3339Nano) + `"}`,
 	})
 	if err != nil {
@@ -127,5 +132,43 @@ func TestSupervisorLocalEmiteHeartbeatYFinalizacionAlActivarse(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timeout esperando señal final del supervisor")
+	}
+}
+
+func TestCommandIdentityHintsIncluyeFirmaUtil(t *testing.T) {
+	hints := commandIdentityHints(
+		"/usr/bin/script -qefc '/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1' /tmp/trace.log",
+		"/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1",
+	)
+	joined := strings.Join(hints, "|")
+	for _, want := range []string{"codex-perfil", "codex1", "script"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("faltaba hint %q en %q", want, joined)
+		}
+	}
+}
+
+func TestSamePathResuelveSymlink(t *testing.T) {
+	tmp := t.TempDir()
+	target := filepath.Join(tmp, "real")
+	link := filepath.Join(tmp, "link")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+	if !samePath(target, link) {
+		t.Fatalf("samePath deberia considerar equivalentes %q y %q", target, link)
+	}
+}
+
+func TestValidarIdentidadProcesoLocalDetectaMismatchDeCWD(t *testing.T) {
+	ok, err := validarIdentidadProcesoLocal(os.Getpid(), t.TempDir(), "go test", "")
+	if err != nil {
+		t.Fatalf("validarIdentidadProcesoLocal: %v", err)
+	}
+	if ok {
+		t.Fatal("un cwd incorrecto no deberia validar la identidad del proceso")
 	}
 }

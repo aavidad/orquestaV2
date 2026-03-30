@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -508,6 +509,15 @@ func (s *supervisorProcesoLocal) snapshot() (int, string, map[string]any, map[st
 	var aliveErr error
 	if exitedAt == nil && pid > 0 {
 		alive, aliveErr = procesoVivoPID(pid)
+		if alive {
+			if ok, err := validarIdentidadProcesoLocal(pid, workingDir, renderedCommand, wrappedCommand); err != nil {
+				alive = false
+				aliveErr = err
+			} else if !ok {
+				alive = false
+				aliveErr = fmt.Errorf("process identity mismatch")
+			}
+		}
 		if !alive {
 			s.marcarSalidaExterna(aliveErr)
 		}
@@ -681,4 +691,87 @@ func procesoVivoPID(pid int) (bool, error) {
 	default:
 		return false, err
 	}
+}
+
+func validarIdentidadProcesoLocal(pid int, workingDir, renderedCommand, wrappedCommand string) (bool, error) {
+	if pid <= 0 {
+		return false, nil
+	}
+	cwd := strings.TrimSpace(workingDir)
+	if cwd != "" {
+		actual, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", pid))
+		if err != nil {
+			return false, err
+		}
+		if !samePath(actual, cwd) {
+			return false, nil
+		}
+	}
+	expected := commandIdentityHints(renderedCommand, wrappedCommand)
+	if len(expected) == 0 {
+		return true, nil
+	}
+	cmdlineRaw, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+	if err != nil {
+		return false, err
+	}
+	cmdline := strings.ToLower(strings.TrimSpace(strings.ReplaceAll(string(cmdlineRaw), "\x00", " ")))
+	if cmdline == "" {
+		return false, nil
+	}
+	for _, hint := range expected {
+		if strings.Contains(cmdline, hint) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func commandIdentityHints(renderedCommand, wrappedCommand string) []string {
+	seen := map[string]struct{}{}
+	add := func(raw string) {
+		raw = strings.ToLower(strings.TrimSpace(raw))
+		if raw == "" {
+			return
+		}
+		seen[raw] = struct{}{}
+	}
+	addCommand := func(raw string) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return
+		}
+		add(raw)
+		for _, token := range strings.Fields(raw) {
+			base := strings.ToLower(strings.TrimSpace(filepath.Base(token)))
+			if base != "" {
+				add(base)
+			}
+		}
+	}
+	addCommand(renderedCommand)
+	addCommand(wrappedCommand)
+	out := make([]string, 0, len(seen))
+	for hint := range seen {
+		out = append(out, hint)
+	}
+	return out
+}
+
+func samePath(a, b string) bool {
+	a = strings.TrimSpace(a)
+	b = strings.TrimSpace(b)
+	if a == "" || b == "" {
+		return a == b
+	}
+	if a == b {
+		return true
+	}
+	if resolvedA, err := filepath.EvalSymlinks(a); err == nil {
+		a = resolvedA
+	}
+	if resolvedB, err := filepath.EvalSymlinks(b); err == nil {
+		b = resolvedB
+	}
+	return a == b
 }

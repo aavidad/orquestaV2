@@ -484,6 +484,10 @@ func reconstruirRuntimeOrdersLegacy(db *sql.DB) error {
 			error_text TEXT NOT NULL DEFAULT '',
 			estado TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente','tomada','ejecutando','completada','fallida','expirada','cancelada')),
 			available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			claimed_by TEXT NOT NULL DEFAULT '',
+			lease_token TEXT NOT NULL DEFAULT '',
+			attempt_count INTEGER NOT NULL DEFAULT 0,
+			lease_expires_at DATETIME,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			started_at DATETIME,
 			finished_at DATETIME,
@@ -495,7 +499,8 @@ func reconstruirRuntimeOrdersLegacy(db *sql.DB) error {
 		func(legacy string, legacyCols map[string]bool) (string, []any) {
 			insertCols := []string{
 				"id", "agente", "proyecto_id", "runtime_id", "handle_id", "tipo", "payload_json",
-				"resultado_json", "error_text", "estado", "available_at", "created_at",
+				"resultado_json", "error_text", "estado", "available_at", "claimed_by",
+				"lease_token", "attempt_count", "lease_expires_at", "created_at",
 				"started_at", "finished_at", "updated_at",
 			}
 			selectExprs := []string{
@@ -510,6 +515,10 @@ func reconstruirRuntimeOrdersLegacy(db *sql.DB) error {
 				runtimeLegacyExpr(legacyCols, "error_text", "''"),
 				runtimeLegacyEstadoOrderExpr(legacyCols),
 				runtimeLegacyExpr(legacyCols, "available_at", runtimeLegacyExpr(legacyCols, "created_at", "CURRENT_TIMESTAMP")),
+				runtimeLegacyExpr(legacyCols, "claimed_by", "''"),
+				runtimeLegacyExpr(legacyCols, "lease_token", "''"),
+				runtimeLegacyExpr(legacyCols, "attempt_count", "0"),
+				runtimeLegacyExpr(legacyCols, "lease_expires_at", "NULL"),
 				runtimeLegacyExpr(legacyCols, "created_at", "CURRENT_TIMESTAMP"),
 				runtimeLegacyExpr(legacyCols, "started_at", "NULL"),
 				runtimeLegacyExpr(legacyCols, "finished_at", "NULL"),

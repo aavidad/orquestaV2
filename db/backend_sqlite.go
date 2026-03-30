@@ -47,7 +47,7 @@ func (sqliteBackend) Prepare(db *sql.DB, cfg storage.Config) error {
 		return fmt.Errorf("verificando revision sqlite: %w", err)
 	}
 	needsBootstrap := false
-	if cfg.BootstrapSchema && !revisionApplied {
+	if cfg.BootstrapSchema {
 		needsBootstrap, err = sqliteBootstrapRequired(db)
 		if err != nil {
 			return fmt.Errorf("verificando schema sqlite: %w", err)
@@ -67,13 +67,13 @@ func (sqliteBackend) Prepare(db *sql.DB, cfg storage.Config) error {
 		}
 		return fmt.Errorf("normalizando propuestas sqlite: %w", err)
 	}
-	if cfg.BootstrapSchema && !revisionApplied {
-		if err := postMigracionesPorDriver(db, "sqlite"); err != nil {
-			if !needsBootstrap && (sqliteBackend{}).IsBusy(err) {
-				return nil
-			}
-			return fmt.Errorf("post-migraciones sqlite: %w", err)
+	if err := postMigracionesPorDriver(db, "sqlite"); err != nil {
+		if !needsBootstrap && (sqliteBackend{}).IsBusy(err) {
+			return nil
 		}
+		return fmt.Errorf("post-migraciones sqlite: %w", err)
+	}
+	if cfg.BootstrapSchema && !revisionApplied {
 		if err := sqliteMarkBootstrapRevision(db); err != nil {
 			if !needsBootstrap && (sqliteBackend{}).IsBusy(err) {
 				return nil
@@ -127,14 +127,6 @@ func literalSQLite(v string) string {
 }
 
 func sqliteBootstrapRequired(db *sql.DB) (bool, error) {
-	applied, err := sqliteBootstrapRevisionApplied(db)
-	if err != nil {
-		return false, err
-	}
-	if applied {
-		return false, nil
-	}
-
 	requiredTables := []string{
 		"config",
 		"agentes",
@@ -273,7 +265,8 @@ func sqliteRuntimeHandlesNeedsRebuild(db *sql.DB) (bool, error) {
 func sqliteRuntimeOrdersNeedsRebuild(db *sql.DB) (bool, error) {
 	cols := []string{
 		"id", "agente", "proyecto_id", "runtime_id", "handle_id", "tipo", "payload_json",
-		"resultado_json", "error_text", "estado", "available_at", "created_at",
+		"resultado_json", "error_text", "estado", "available_at", "claimed_by",
+		"lease_token", "attempt_count", "lease_expires_at", "created_at",
 		"started_at", "finished_at", "updated_at",
 	}
 	for _, col := range cols {
