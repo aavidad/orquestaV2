@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -19,10 +18,6 @@ import (
 	"github.com/spf13/cobra"
 	"orquesta/db"
 )
-
-func runtimeModoRecuperacionLocalExplicito() bool {
-	return strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1"
-}
 
 func runtimeErrorServerFirst() error {
 	return fmt.Errorf("este subcomando de runtime ya se sirve por Orquesta server; arranca el servidor o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
@@ -91,6 +86,12 @@ var runtimeHandlesCmd = &cobra.Command{
 				return err
 			}
 			return imprimirRuntimeHandles(handles)
+		} else if runtimeModoRecuperacionLocalExplicito() {
+			handles, err := cargarRuntimeHandlesRecuperacionLocal(query)
+			if err != nil {
+				return err
+			}
+			return imprimirRuntimeHandles(handles)
 		}
 		return serverFirstCommandError("runtime handles")
 	},
@@ -103,6 +104,7 @@ var runtimePurgarHandlesCmd = &cobra.Command{
 		agente, _ := cmd.Flags().GetString("agente")
 		proyecto, _ := cmd.Flags().GetString("proyecto")
 		estados, _ := cmd.Flags().GetStringSlice("estado")
+		estados = normalizarSliceFlags(estados)
 		actor, _ := cmd.Flags().GetString("actor")
 		if strings.TrimSpace(agente) == "" && strings.TrimSpace(proyecto) == "" {
 			return fmt.Errorf("debes indicar --agente o --proyecto")
@@ -134,6 +136,8 @@ var runtimeTranscriptCmd = &cobra.Command{
 		stream, _ := cmd.Flags().GetString("stream")
 		classification, _ := cmd.Flags().GetString("classification")
 		queryText, _ := cmd.Flags().GetString("q")
+		runtimeID, _ := cmd.Flags().GetInt64("runtime-id")
+		handleID, _ := cmd.Flags().GetInt64("handle-id")
 		signalsPending, _ := cmd.Flags().GetBool("signals-pending")
 		limit, _ := cmd.Flags().GetInt("limit")
 
@@ -153,6 +157,18 @@ var runtimeTranscriptCmd = &cobra.Command{
 		if strings.TrimSpace(queryText) != "" {
 			query.Set("q", queryText)
 		}
+		if runtimeID < 0 {
+			return fmt.Errorf("--runtime-id inválido")
+		}
+		if runtimeID > 0 {
+			query.Set("runtime_id", strconv.FormatInt(runtimeID, 10))
+		}
+		if handleID < 0 {
+			return fmt.Errorf("--handle-id inválido")
+		}
+		if handleID > 0 {
+			query.Set("handle_id", strconv.FormatInt(handleID, 10))
+		}
 		if signalsPending {
 			query.Set("signals_pending", "true")
 		}
@@ -161,6 +177,12 @@ var runtimeTranscriptCmd = &cobra.Command{
 		}
 
 		if items, ok, err := cargarRuntimeTranscriptDesdeAPI(query); ok {
+			if err != nil {
+				return err
+			}
+			return imprimirRuntimeTranscript(items)
+		} else if runtimeModoRecuperacionLocalExplicito() {
+			items, err := cargarRuntimeTranscriptRecuperacionLocal(query)
 			if err != nil {
 				return err
 			}
@@ -212,13 +234,7 @@ var runtimeOrdenesCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agente, _ := cmd.Flags().GetString("agente")
 		estado, _ := cmd.Flags().GetString("estado")
-		filter := db.FiltroRuntimeOrders{}
-		if strings.TrimSpace(agente) != "" {
-			filter.Agente = &agente
-		}
-		if strings.TrimSpace(estado) != "" {
-			filter.Estado = &estado
-		}
+		proyectoRef, _ := cmd.Flags().GetString("proyecto")
 		query := url.Values{}
 		if strings.TrimSpace(agente) != "" {
 			query.Set("agente", agente)
@@ -226,7 +242,16 @@ var runtimeOrdenesCmd = &cobra.Command{
 		if strings.TrimSpace(estado) != "" {
 			query.Set("estado", estado)
 		}
+		if strings.TrimSpace(proyectoRef) != "" {
+			query.Set("proyecto", proyectoRef)
+		}
 		if orders, ok, err := cargarRuntimeOrdersDesdeAPI(query); ok {
+			if err != nil {
+				return err
+			}
+			return imprimirRuntimeOrders(orders)
+		} else if runtimeModoRecuperacionLocalExplicito() {
+			orders, err := cargarRuntimeOrdersRecuperacionLocal(query)
 			if err != nil {
 				return err
 			}
@@ -241,13 +266,73 @@ func imprimirRuntimeOrders(orders []*db.RuntimeOrder) error {
 		fmt.Println("No hay órdenes con ese filtro.")
 		return nil
 	}
-	fmt.Printf("%-5s %-12s %-18s %-12s %s\n", "ID", "AGENTE", "TIPO", "ESTADO", "CREADA")
+	fmt.Printf("%-5s %-12s %-18s %-12s %-19s %s\n", "ID", "AGENTE", "TIPO", "ESTADO", "DISPONIBLE", "DETALLE")
 	for _, o := range orders {
-		fmt.Printf("%-5d %-12s %-18s %-12s %s\n",
+		fmt.Printf("%-5d %-12s %-18s %-12s %-19s %s\n",
 			o.ID, truncar(o.Agente, 12), truncar(o.Tipo, 18), truncar(o.Estado, 12),
-			o.CreatedAt.Format("2006-01-02 15:04:05"))
+			formatoTiempoValor(o.AvailableAt), truncar(runtimeOrderDetalleResumen(o), 72))
 	}
 	return nil
+}
+
+func runtimeOrderDetalleResumen(order *db.RuntimeOrder) string {
+	if order == nil {
+		return ""
+	}
+	resultado := map[string]any{}
+	if strings.TrimSpace(order.ResultadoJSON) != "" {
+		_ = json.Unmarshal([]byte(order.ResultadoJSON), &resultado)
+	}
+	if motivo := strings.TrimSpace(runtimeOrderResultadoString(resultado, "deferred_reason")); motivo != "" {
+		if retryAfter := strings.TrimSpace(runtimeOrderResultadoString(resultado, "retry_after")); retryAfter != "" {
+			return motivo + " -> " + retryAfter
+		}
+		return motivo
+	}
+	if errText := ultimoParrafoNoVacio(order.ErrorText); errText != "" {
+		return errText
+	}
+	if retryAfter := strings.TrimSpace(runtimeOrderResultadoString(resultado, "retry_after")); retryAfter != "" {
+		return "retry_after=" + retryAfter
+	}
+	if available := formatoTiempoValor(order.AvailableAt); available != "—" {
+		return "creada " + order.CreatedAt.Format("2006-01-02 15:04:05")
+	}
+	return order.CreatedAt.Format("2006-01-02 15:04:05")
+}
+
+func runtimeOrderResultadoString(payload map[string]any, key string) string {
+	if payload == nil {
+		return ""
+	}
+	if raw, ok := payload[key]; ok {
+		switch v := raw.(type) {
+		case string:
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
+func ultimoParrafoNoVacio(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	partes := strings.Split(raw, "\n")
+	for i := len(partes) - 1; i >= 0; i-- {
+		if texto := strings.TrimSpace(partes[i]); texto != "" {
+			return texto
+		}
+	}
+	return ""
+}
+
+func formatoTiempoValor(ts time.Time) string {
+	if ts.IsZero() {
+		return "—"
+	}
+	return ts.Format("2006-01-02 15:04:05")
 }
 
 var runtimeOrdenNuevaCmd = &cobra.Command{
@@ -367,7 +452,20 @@ var runtimeCheckpointsCmd = &cobra.Command{
 				}
 				return imprimirRuntimeCheckpointLista(checkpoints)
 			}
+			if runtimeModoRecuperacionLocalExplicito() {
+				checkpoints, err := cargarRuntimeCheckpointsRecuperacionLocal(agente, proyectoRef, checkpointKind, source, limit)
+				if err != nil {
+					return err
+				}
+				return imprimirRuntimeCheckpointLista(checkpoints)
+			}
 		} else if cp, ok, err := cargarCheckpointRuntimeDesdeAPI(agente, proyectoRef); ok {
+			if err != nil {
+				return err
+			}
+			return imprimirRuntimeCheckpoint(cp)
+		} else if runtimeModoRecuperacionLocalExplicito() {
+			cp, err := cargarCheckpointRuntimeRecuperacionLocal(agente, proyectoRef)
 			if err != nil {
 				return err
 			}
@@ -431,6 +529,12 @@ var runtimeCheckpointVerCmd = &cobra.Command{
 				return err
 			}
 			return imprimirRuntimeCheckpoint(cp)
+		} else if runtimeModoRecuperacionLocalExplicito() {
+			cp, err := cargarRuntimeCheckpointPorIDRecuperacionLocal(id)
+			if err != nil {
+				return err
+			}
+			return imprimirRuntimeCheckpoint(cp)
 		}
 		return serverFirstCommandError("runtime checkpoint-ver")
 	},
@@ -459,6 +563,12 @@ var runtimeMailboxCmd = &cobra.Command{
 			query.Set("proyecto", proyectoRef)
 		}
 		if mailbox, ok, err := cargarRuntimeMailboxDesdeAPI(query); ok {
+			if err != nil {
+				return err
+			}
+			return imprimirRuntimeMailbox(mailbox)
+		} else if runtimeModoRecuperacionLocalExplicito() {
+			mailbox, err := cargarRuntimeMailboxRecuperacionLocal(query)
 			if err != nil {
 				return err
 			}
@@ -600,6 +710,12 @@ var runtimeListarCmd = &cobra.Command{
 				return err
 			}
 			return imprimirArbolRuntimes(aplanarArbolAPI(tree), false)
+		} else if runtimeModoRecuperacionLocalExplicito() {
+			tree, err := cargarArbolRuntimesRecuperacionLocal(query)
+			if err != nil {
+				return err
+			}
+			return imprimirArbolRuntimes(aplanarArbolLocal(tree), false)
 		}
 		return serverFirstCommandError("runtime listar")
 	},
@@ -616,6 +732,12 @@ var runtimeVerCmd = &cobra.Command{
 		}
 
 		if detail, ok, err := cargarDetalleRuntimeDesdeAPI(id); ok {
+			if err != nil {
+				return err
+			}
+			return imprimirDetalleRuntime(detail.Runtime, detail.Samples)
+		} else if runtimeModoRecuperacionLocalExplicito() {
+			detail, err := cargarDetalleRuntimeRecuperacionLocal(id)
 			if err != nil {
 				return err
 			}
@@ -664,6 +786,24 @@ func purgarRuntimeHandlesDesdeAPI(agente, proyecto string, estados []string, act
 		return nil, ok, err
 	}
 	return &resp, true, nil
+}
+
+func normalizarSliceFlags(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		value = strings.TrimPrefix(value, "[")
+		value = strings.TrimSuffix(value, "]")
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		out = append(out, value)
+	}
+	return out
 }
 
 func cargarRuntimeTranscriptDesdeAPI(query url.Values) ([]*db.RuntimeTranscriptEntry, bool, error) {
@@ -742,6 +882,201 @@ func cargarRuntimeCheckpointPorIDDesdeAPI(id int64) (*db.RuntimeCheckpoint, bool
 		return nil, ok, err
 	}
 	return resp.Checkpoint, true, nil
+}
+
+func cargarRuntimeHandlesRecuperacionLocal(query url.Values) ([]*db.RuntimeHandle, error) {
+	var agente *string
+	if value := strings.TrimSpace(query.Get("agente")); value != "" {
+		agente = &value
+	}
+	return db.ListarRuntimeHandles(agente)
+}
+
+func cargarRuntimeTranscriptRecuperacionLocal(query url.Values) ([]*db.RuntimeTranscriptEntry, error) {
+	proyectoID, err := runtimeProyectoIDDesdeQuery(query)
+	if err != nil {
+		return nil, err
+	}
+	runtimeID, err := runtimeOptionalInt64Query(query, "runtime_id")
+	if err != nil {
+		return nil, err
+	}
+	handleID, err := runtimeOptionalInt64Query(query, "handle_id")
+	if err != nil {
+		return nil, err
+	}
+	limit, err := runtimeOptionalIntQuery(query, "limit")
+	if err != nil {
+		return nil, err
+	}
+	filter := db.FiltroRuntimeTranscript{
+		ProyectoID:      proyectoID,
+		RuntimeID:       runtimeID,
+		HandleID:        handleID,
+		SoloSenalesPend: strings.EqualFold(strings.TrimSpace(query.Get("signals_pending")), "true"),
+		Limit:           limit,
+	}
+	if value := strings.TrimSpace(query.Get("agente")); value != "" {
+		filter.Agente = &value
+	}
+	if value := strings.TrimSpace(query.Get("stream")); value != "" {
+		filter.Stream = &value
+	}
+	if value := strings.TrimSpace(query.Get("classification")); value != "" {
+		filter.Classification = &value
+	}
+	if value := strings.TrimSpace(query.Get("q")); value != "" {
+		filter.Query = &value
+	}
+	return db.ListarRuntimeTranscript(filter)
+}
+
+func cargarRuntimeOrdersRecuperacionLocal(query url.Values) ([]*db.RuntimeOrder, error) {
+	proyectoID, err := runtimeProyectoIDDesdeQuery(query)
+	if err != nil {
+		return nil, err
+	}
+	filter := db.FiltroRuntimeOrders{ProyectoID: proyectoID}
+	if value := strings.TrimSpace(query.Get("agente")); value != "" {
+		filter.Agente = &value
+	}
+	if value := strings.TrimSpace(query.Get("estado")); value != "" {
+		filter.Estado = &value
+	}
+	return db.ListarRuntimeOrders(filter)
+}
+
+func cargarCheckpointRuntimeRecuperacionLocal(agente, proyecto string) (*db.RuntimeCheckpoint, error) {
+	proyectoID, err := runtimeProyectoIDRef(proyecto)
+	if err != nil {
+		return nil, err
+	}
+	return db.UltimoRuntimeCheckpoint(strings.TrimSpace(agente), proyectoID)
+}
+
+func cargarRuntimeCheckpointsRecuperacionLocal(agente, proyecto, checkpointKind, source string, limit int) ([]*db.RuntimeCheckpoint, error) {
+	proyectoID, err := runtimeProyectoIDRef(proyecto)
+	if err != nil {
+		return nil, err
+	}
+	filter := db.FiltroRuntimeCheckpoints{
+		ProyectoID: proyectoID,
+		Limit:      limit,
+	}
+	agente = strings.TrimSpace(agente)
+	if agente != "" {
+		filter.Agente = &agente
+	}
+	checkpointKind = strings.TrimSpace(checkpointKind)
+	if checkpointKind != "" {
+		filter.CheckpointKind = &checkpointKind
+	}
+	source = strings.TrimSpace(source)
+	if source != "" {
+		filter.Source = &source
+	}
+	return db.ListarRuntimeCheckpoints(filter)
+}
+
+func cargarRuntimeCheckpointPorIDRecuperacionLocal(id int64) (*db.RuntimeCheckpoint, error) {
+	return db.GetRuntimeCheckpoint(id)
+}
+
+func cargarRuntimeMailboxRecuperacionLocal(query url.Values) ([]*db.RuntimeMailboxMessage, error) {
+	proyectoID, err := runtimeProyectoIDDesdeQuery(query)
+	if err != nil {
+		return nil, err
+	}
+	filter := db.FiltroRuntimeMailbox{ProyectoID: proyectoID}
+	if value := strings.TrimSpace(query.Get("to_agente")); value != "" {
+		filter.ToAgente = &value
+	}
+	if value := strings.TrimSpace(query.Get("from_agente")); value != "" {
+		filter.FromAgente = &value
+	}
+	if value := strings.TrimSpace(query.Get("estado")); value != "" {
+		filter.Estado = &value
+	}
+	return db.ListarRuntimeMailbox(filter)
+}
+
+func cargarArbolRuntimesRecuperacionLocal(query url.Values) ([]*db.RuntimeTreeNode, error) {
+	proyectoID, err := runtimeProyectoIDDesdeQuery(query)
+	if err != nil {
+		return nil, err
+	}
+	filter := db.FiltroRuntimes{ProyectoID: proyectoID}
+	if value := strings.TrimSpace(query.Get("agente")); value != "" {
+		filter.Agente = &value
+	}
+	if value := strings.TrimSpace(query.Get("activos")); value != "" {
+		switch strings.ToLower(value) {
+		case "1", "true", "yes", "si", "on":
+			v := true
+			filter.Activos = &v
+		case "0", "false", "no", "off":
+			v := false
+			filter.Activos = &v
+		default:
+			return nil, fmt.Errorf("--activos invalido: %s", value)
+		}
+	}
+	return db.ConstruirArbolRuntimes(filter)
+}
+
+func cargarDetalleRuntimeRecuperacionLocal(id int64) (*apiRuntimeDetailResponse, error) {
+	runtime, err := db.GetRuntime(id)
+	if err != nil {
+		return nil, err
+	}
+	samples, err := db.ListarMuestrasRuntime(id, 10)
+	if err != nil {
+		return nil, err
+	}
+	return &apiRuntimeDetailResponse{
+		Runtime: runtime,
+		Samples: samples,
+	}, nil
+}
+
+func runtimeProyectoIDDesdeQuery(query url.Values) (*int64, error) {
+	return runtimeProyectoIDRef(query.Get("proyecto"))
+}
+
+func runtimeProyectoIDRef(ref string) (*int64, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, nil
+	}
+	proyecto, err := db.GetProyecto(ref)
+	if err != nil {
+		return nil, err
+	}
+	return &proyecto.ID, nil
+}
+
+func runtimeOptionalInt64Query(query url.Values, key string) (*int64, error) {
+	raw := strings.TrimSpace(query.Get(key))
+	if raw == "" {
+		return nil, nil
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("%s invalido", key)
+	}
+	return &value, nil
+}
+
+func runtimeOptionalIntQuery(query url.Values, key string) (int, error) {
+	raw := strings.TrimSpace(query.Get(key))
+	if raw == "" {
+		return 0, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s invalido", key)
+	}
+	return value, nil
 }
 
 func aplanarArbolAPI(nodes []*apiRuntimeTreeNode) []runtimeRow {
@@ -898,10 +1233,13 @@ func init() {
 	runtimeTranscriptCmd.Flags().String("stream", "", "Filtrar transcript por stream")
 	runtimeTranscriptCmd.Flags().String("classification", "", "Filtrar transcript por clasificación")
 	runtimeTranscriptCmd.Flags().String("q", "", "Buscar texto libre en transcript")
+	runtimeTranscriptCmd.Flags().Int64("runtime-id", 0, "Filtrar transcript por runtime_id")
+	runtimeTranscriptCmd.Flags().Int64("handle-id", 0, "Filtrar transcript por handle_id")
 	runtimeTranscriptCmd.Flags().Bool("signals-pending", false, "Mostrar solo señales pendientes de gestionar")
 	runtimeTranscriptCmd.Flags().Int("limit", 50, "Número máximo de líneas de transcript")
 	runtimeOrdenesCmd.Flags().String("agente", "", "Filtrar órdenes por agente")
 	runtimeOrdenesCmd.Flags().String("estado", "", "Filtrar órdenes por estado")
+	runtimeOrdenesCmd.Flags().String("proyecto", "", "Filtrar órdenes por proyecto")
 	runtimeOrdenNuevaCmd.Flags().String("proyecto", "", "Proyecto asociado a la orden")
 	runtimeOrdenNuevaCmd.Flags().String("payload", "{}", "Payload JSON de la orden")
 	runtimeNudgeCmd.Flags().String("from", "server", "Agente o actor que emite el nudge")

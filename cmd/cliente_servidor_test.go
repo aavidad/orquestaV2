@@ -13,8 +13,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"orquesta/internal/rpclocal"
 )
 
 func TestCommandSupportsServerMode(t *testing.T) {
@@ -26,6 +30,7 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "proyecto listar", args: []string{"proyecto", "listar"}, want: true},
 		{nombre: "proyecto ver", args: []string{"proyecto", "ver", "orquestador"}, want: true},
 		{nombre: "proyecto descubrir", args: []string{"proyecto", "descubrir", "."}, want: true},
+		{nombre: "proyecto fusionar", args: []string{"proyecto", "fusionar", "orquesta", "orquestador"}, want: true},
 		{nombre: "pool listar", args: []string{"pool", "listar"}, want: true},
 		{nombre: "pool ver", args: []string{"pool", "ver", "codex"}, want: true},
 		{nombre: "politica modelo listar", args: []string{"politica-modelo", "listar"}, want: true},
@@ -100,6 +105,7 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "tarea cancelar", args: []string{"tarea", "cancelar", "12", "Codex1"}, want: true},
 		{nombre: "tarea notas", args: []string{"tarea", "notas", "12"}, want: true},
 		{nombre: "propuesta actualizar", args: []string{"propuesta", "actualizar", "OP-116", "--titulo", "Nuevo"}, want: true},
+		{nombre: "runtime purgar-handles", args: []string{"runtime", "purgar-handles", "--agente", "Codex1"}, want: true},
 		{nombre: "runtime no soportado", args: []string{"runtime", "foo"}, want: false},
 		{nombre: "serve", args: []string{"serve"}, want: false},
 	}
@@ -144,6 +150,103 @@ func TestShouldPreferAPIClientUsaHTTPServer(t *testing.T) {
 	}
 }
 
+func TestRuntimeMutacionesCriticasSoportanServerMode(t *testing.T) {
+	cases := [][]string{
+		{"runtime", "orden-nueva", "Codex1", "checkpoint"},
+		{"runtime", "nudge", "Codex1"},
+		{"runtime", "discordia", "Codex1", "bloqueo"},
+		{"runtime", "checkpoint-nuevo", "Codex1"},
+		{"runtime", "mailbox-enviar", "Codex1", "Codex2", "handoff"},
+		{"runtime", "mailbox-entregar", "42"},
+		{"runtime", "mailbox-consumir", "42"},
+		{"runtime", "purgar-handles", "--agente", "Codex6"},
+	}
+	for _, args := range cases {
+		if !commandSupportsServerMode(args) {
+			t.Fatalf("commandSupportsServerMode(%v)=false, deberia ser true", args)
+		}
+	}
+}
+
+func TestShouldPreferAPIClientConServidorExplicitoAunqueNoResponda(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "http://127.0.0.1:1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	if !shouldPreferAPIClient([]string{"runtime", "listar"}) {
+		t.Fatalf("con ORQUESTA_SERVER_URL explicito deberia preferir API para evitar fallback local")
+	}
+}
+
+func TestShouldPreferAPIClientParaServerFirstSinDescubrimientoPrevio(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_STATE", "")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_INFO", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	if !shouldPreferAPIClient([]string{"status"}) {
+		t.Fatalf("status deberia mantenerse en server-first aunque no haya descubrimiento previo")
+	}
+	if shouldPreferAPIClient([]string{"persistencia", "info"}) {
+		t.Fatalf("persistencia info no deberia preferir API")
+	}
+}
+
+func TestShouldPreferAPIClientUsaRPCLocalAunqueAPIStatusSeaLenta(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc(rpclocal.HealthPath, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(rpclocal.HealthResponse{OK: true})
+	})
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(500 * time.Millisecond)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	statePath := filepath.Join(t.TempDir(), "orquesta-localrpc.json")
+	if err := rpclocal.SaveState(statePath, &rpclocal.State{
+		Addr:    strings.TrimPrefix(srv.URL, "http://"),
+		ScopeID: rpclocal.CurrentScopeID(),
+	}); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_STATE", statePath)()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_INFO", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+
+	if !shouldPreferAPIClient([]string{"runtime", "listar"}) {
+		t.Fatalf("se esperaba preferencia por API apoyándose en localrpc aunque /api/status sea lento")
+	}
+}
+
+func TestServerBaseURLUsaHealthzSiFaltaStatefile(t *testing.T) {
+	var advertisedAddr string
+	mux := http.NewServeMux()
+	mux.HandleFunc(rpclocal.HealthPath, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(rpclocal.HealthResponse{
+			OK:      true,
+			Addr:    advertisedAddr,
+			PID:     4242,
+			ScopeID: rpclocal.CurrentScopeID(),
+		})
+	})
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+	advertisedAddr = strings.TrimPrefix(srv.URL, "http://")
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_INFO", t.TempDir()+"/missing-state.json")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_STATE", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_ADDR", strings.TrimPrefix(srv.URL, "http://"))()
+
+	if got := serverBaseURL(); got != srv.URL {
+		t.Fatalf("serverBaseURL=%q, want %q", got, srv.URL)
+	}
+}
+
 func TestRequireServerForCurrentCommand(t *testing.T) {
 	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "1")()
 	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
@@ -151,6 +254,22 @@ func TestRequireServerForCurrentCommand(t *testing.T) {
 
 	if !requireServerForCurrentCommand() {
 		t.Fatalf("se esperaba exigir servidor para runtime listar")
+	}
+}
+
+func TestAPIGetNoHaceFallbackConServidorExplicitoCaido(t *testing.T) {
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "http://127.0.0.1:1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+	defer cambiarEnv(t, "ORQUESTA_REQUIRE_SERVER", "")()
+
+	var resp apiRuntimesResponse
+	ok, err := apiGet("/api/runtimes", &resp)
+	if !ok {
+		t.Fatalf("se esperaba bloqueo explicito sin fallback local")
+	}
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "no se pudo contactar") {
+		t.Fatalf("error inesperado: %v", err)
 	}
 }
 
@@ -168,6 +287,26 @@ func TestAPIGetNoHaceFallbackCuandoServidorEsObligatorio(t *testing.T) {
 	}
 	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "requiere el servidor") {
 		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
+func TestAPIGetUsaAPILocalEnRecuperacionLocalDB(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "1")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+
+	var resp apiStatusResponse
+	ok, err := apiGet("/api/status", &resp)
+	if !ok {
+		t.Fatalf("se esperaba uso de API local en recuperacion")
+	}
+	if err != nil {
+		t.Fatalf("apiGet local: %v", err)
+	}
+	if resp.ConteoTareas == nil {
+		t.Fatalf("respuesta status local vacia: %+v", resp)
 	}
 }
 

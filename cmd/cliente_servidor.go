@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"strings"
@@ -21,6 +22,7 @@ import (
 
 	"orquesta/capacidadapp"
 	"orquesta/db"
+	"orquesta/internal/rpclocal"
 )
 
 type apiAgentesResponse struct {
@@ -29,6 +31,10 @@ type apiAgentesResponse struct {
 
 type apiProyectosResponse struct {
 	Proyectos []*db.Proyecto `json:"proyectos"`
+}
+
+type apiProyectoFusionResponse struct {
+	Resultado *db.FusionProyectosResultado `json:"resultado"`
 }
 
 type apiConectoresResponse struct {
@@ -171,6 +177,10 @@ type apiRespaldoBDResponse struct {
 	Ruta string `json:"ruta"`
 }
 
+type apiPersistenciaVerificacionResponse struct {
+	Informe *db.InformePersistencia `json:"informe"`
+}
+
 type apiDiagnosticoResponse struct {
 	Diagnostico db.SnapshotDiagnostico `json:"diagnostico"`
 }
@@ -243,23 +253,23 @@ type apiMemoriaEntidadResponse struct {
 }
 
 var httpClientOrquesta = &http.Client{
-	Timeout: 350 * time.Millisecond,
+	Timeout: 15 * time.Second,
 	Transport: &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           (&net.Dialer{Timeout: 150 * time.Millisecond, KeepAlive: 30 * time.Second}).DialContext,
-		ResponseHeaderTimeout: 200 * time.Millisecond,
+		DialContext:           (&net.Dialer{Timeout: 250 * time.Millisecond, KeepAlive: 30 * time.Second}).DialContext,
+		ResponseHeaderTimeout: 12 * time.Second,
 		DisableKeepAlives:     true,
 	},
 }
 
 func shouldPreferAPIClient(args []string) bool {
-	if strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1" {
+	if forceLocalMode(args) {
 		return false
 	}
 	if !commandSupportsServerMode(normalizedCommandArgs(args)) {
 		return false
 	}
-	return serverReachable()
+	return true
 }
 
 func requireServerForCurrentCommand() bool {
@@ -353,7 +363,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "listar", "ver", "handles", "traza", "transcript", "diagnostico", "ordenes", "orden-nueva", "nudge", "discordia", "checkpoints", "checkpoint-nuevo", "checkpoint-ver", "mailbox", "mailbox-enviar", "mailbox-entregar", "mailbox-consumir":
+		case "listar", "ver", "handles", "purgar-handles", "traza", "transcript", "diagnostico", "ordenes", "orden-nueva", "nudge", "discordia", "checkpoints", "checkpoint-nuevo", "checkpoint-ver", "mailbox", "mailbox-enviar", "mailbox-entregar", "mailbox-consumir":
 			return true
 		default:
 			return false
@@ -363,7 +373,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "listar", "ver", "descubrir":
+		case "listar", "ver", "descubrir", "fusionar":
 			return true
 		default:
 			return false
@@ -496,7 +506,14 @@ func serverBaseURL() string {
 	if strings.TrimSpace(os.Getenv("ORQUESTA_DISABLE_SERVER_CLIENT")) == "1" {
 		return ""
 	}
-	return defaultServerURL
+	if info, _, err := loadServerInfoWithHealthFallback(""); err == nil && info != nil && strings.TrimSpace(info.Addr) != "" {
+		return rpclocal.BaseURL(info.Addr)
+	}
+	return rpclocal.ResolveServerAddr()
+}
+
+func serverURLConfiguredExplicitly() bool {
+	return strings.TrimSpace(os.Getenv("ORQUESTA_SERVER_URL")) != ""
 }
 
 func serverReachable() bool {
@@ -504,7 +521,17 @@ func serverReachable() bool {
 	if base == "" {
 		return false
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+
+	if !serverURLConfiguredExplicitly() {
+		ctx, cancel := context.WithTimeout(context.Background(), rpclocal.DefaultTimeout())
+		err := rpclocal.Ping(ctx, rpclocal.ResolveServerAddr())
+		cancel()
+		if err == nil {
+			return true
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/status", nil)
 	if err != nil {
@@ -522,6 +549,12 @@ func ensureLocalDB() error {
 	if db.DB != nil {
 		return nil
 	}
+	if localRecoveryEnabled() {
+		if !localRecoveryCommandAllowed(currentOrOSArgs()) {
+			return localRecoveryUnsupportedError(currentOrOSArgs())
+		}
+		return db.OpenRecoveryReadOnly()
+	}
 	return db.Open()
 }
 
@@ -531,18 +564,12 @@ func apiGet(path string, dst any) (bool, error) {
 
 func apiGetQuery(path string, query url.Values, dst any) (bool, error) {
 	if strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1" {
-		return false, nil
+		return apiInvokeLocal(http.MethodGet, path, query, nil, dst)
 	}
 	base := serverBaseURL()
 	if base == "" {
 		if requireServerForCurrentCommand() {
-			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa --local solo para recuperacion")
-		}
-		return false, nil
-	}
-	if !serverReachable() {
-		if requireServerForCurrentCommand() {
-			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa --local solo para recuperacion")
+			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
 		}
 		return false, nil
 	}
@@ -556,7 +583,7 @@ func apiGetQuery(path string, query url.Values, dst any) (bool, error) {
 	}
 	resp, err := httpClientOrquesta.Do(req)
 	if err != nil {
-		if requireServerForCurrentCommand() {
+		if requireServerForCurrentCommand() || serverURLConfiguredExplicitly() {
 			return true, fmt.Errorf("no se pudo contactar con el servidor de Orquesta: %w", err)
 		}
 		return false, nil
@@ -590,18 +617,12 @@ func apiProjectSlugMap() (map[int64]string, bool, error) {
 
 func apiPost(path string, payload any, dst any) (bool, error) {
 	if strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1" {
-		return false, nil
+		return apiInvokeLocal(http.MethodPost, path, nil, payload, dst)
 	}
 	base := serverBaseURL()
 	if base == "" {
 		if requireServerForCurrentCommand() {
-			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa --local solo para recuperacion")
-		}
-		return false, nil
-	}
-	if !serverReachable() {
-		if requireServerForCurrentCommand() {
-			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa --local solo para recuperacion")
+			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
 		}
 		return false, nil
 	}
@@ -616,7 +637,7 @@ func apiPost(path string, payload any, dst any) (bool, error) {
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := httpClientOrquesta.Do(req)
 	if err != nil {
-		if requireServerForCurrentCommand() {
+		if requireServerForCurrentCommand() || serverURLConfiguredExplicitly() {
 			return true, fmt.Errorf("no se pudo contactar con el servidor de Orquesta: %w", err)
 		}
 		return false, nil
@@ -633,6 +654,53 @@ func apiPost(path string, payload any, dst any) (bool, error) {
 		return true, nil
 	}
 	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
+		return true, err
+	}
+	return true, nil
+}
+
+func apiInvokeLocal(method, path string, query url.Values, payload any, dst any) (bool, error) {
+	if err := ensureLocalDB(); err != nil {
+		return true, err
+	}
+
+	target := path
+	if len(query) > 0 {
+		target += "?" + query.Encode()
+	}
+
+	var body *bytes.Reader
+	if payload == nil {
+		body = bytes.NewReader(nil)
+	} else {
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return true, err
+		}
+		body = bytes.NewReader(raw)
+	}
+
+	req := httptest.NewRequest(method, target, body)
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	rec := httptest.NewRecorder()
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		var apiErr apiErrorResponse
+		if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&apiErr); err == nil && strings.TrimSpace(apiErr.Error) != "" {
+			return true, fmt.Errorf("%s", apiErr.Error)
+		}
+		return true, fmt.Errorf("respuesta HTTP inesperada: %d", rec.Code)
+	}
+	if dst == nil || rec.Body.Len() == 0 {
+		return true, nil
+	}
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(dst); err != nil {
 		return true, err
 	}
 	return true, nil

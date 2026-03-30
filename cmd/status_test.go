@@ -127,6 +127,9 @@ func TestShouldBypassLocalDBConServidorLocalDescubierto(t *testing.T) {
 	if !shouldBypassLocalDB([]string{"votar", "OP-080", "acuerdo", "--agente", "Codex2"}) {
 		t.Fatalf("votar deberia saltarse la BD local con servidor local descubierto")
 	}
+	if !shouldBypassLocalDB([]string{"proyecto", "fusionar", "orquesta", "orquestador"}) {
+		t.Fatalf("proyecto fusionar deberia saltarse la BD local con servidor local descubierto")
+	}
 	if !shouldBypassLocalDB([]string{"config", "set", "clave", "valor"}) {
 		t.Fatalf("config set deberia saltarse la BD local con servidor local descubierto")
 	}
@@ -153,6 +156,9 @@ func TestShouldBypassLocalDBConServidorLocalDescubierto(t *testing.T) {
 	}
 	if !shouldBypassLocalDB([]string{"runtime", "mailbox-enviar", "Codex1", "Codex2", "handoff"}) {
 		t.Fatalf("runtime mailbox-enviar deberia saltarse la BD local con servidor local descubierto")
+	}
+	if !shouldBypassLocalDB([]string{"runtime", "purgar-handles", "--agente", "Codex6"}) {
+		t.Fatalf("runtime purgar-handles deberia saltarse la BD local con servidor local descubierto")
 	}
 	if !shouldBypassLocalDB([]string{"progreso", "fase", "listar", "orquestador"}) {
 		t.Fatalf("progreso fase listar deberia saltarse la BD local con servidor local descubierto")
@@ -247,6 +253,53 @@ func TestStatusExigeServidorSalvoRecuperacionLocal(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(err.Error()), "servidor") {
 		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
+func TestStatusPermiteRecuperacionConForceLocal(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL", "1")()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+
+	out := captureOutput(t, func() {
+		if err := statusCmd.RunE(statusCmd, nil); err != nil {
+			t.Fatalf("status en recuperacion local: %v", err)
+		}
+	})
+	if !strings.Contains(out, "ORQUESTA") {
+		t.Fatalf("salida status inesperada en recuperacion local:\n%s", out)
+	}
+}
+
+func TestStatusFuncionaEnRecuperacionLocalDB(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "1")()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "1")()
+
+	out := captureOutput(t, func() {
+		if err := statusCmd.RunE(statusCmd, nil); err != nil {
+			t.Fatalf("status local recovery: %v", err)
+		}
+	})
+	if !strings.Contains(out, "ORQUESTA") {
+		t.Fatalf("salida status inesperada: %s", out)
+	}
+}
+
+func TestStatusRecuperacionLocalExplicitaRenderizaResumen(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	out := captureOutput(t, func() {
+		if err := statusCmd.RunE(statusCmd, nil); err != nil {
+			t.Fatalf("status local recovery: %v", err)
+		}
+	})
+	if !strings.Contains(out, "ORQUESTA — ESTADO DEL PROYECTO") {
+		t.Fatalf("salida inesperada en recuperacion local: %s", out)
 	}
 }
 

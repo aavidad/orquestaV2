@@ -1,6 +1,10 @@
 package cmd
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/spf13/pflag"
+)
 
 func TestCommandNeedsDB(t *testing.T) {
 	cases := []struct {
@@ -32,5 +36,17 @@ func TestNormalizedCommandArgs(t *testing.T) {
 	got := normalizedCommandArgs([]string{"--local", "tarea", "listar"})
 	if len(got) != 2 || got[0] != "tarea" || got[1] != "listar" {
 		t.Fatalf("normalizedCommandArgs inesperado: %v", got)
+	}
+}
+
+func TestNormalizedFlagResetValueStringSlice(t *testing.T) {
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	flags.StringSlice("estado", []string{"cerrado", "fallido"}, "demo")
+	flag := flags.Lookup("estado")
+	if flag == nil {
+		t.Fatal("flag estado no encontrada")
+	}
+	if got := normalizedFlagResetValue(flag); got != "cerrado,fallido" {
+		t.Fatalf("normalizedFlagResetValue(stringSlice)=%q, want %q", got, "cerrado,fallido")
 	}
 }

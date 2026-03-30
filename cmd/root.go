@@ -36,13 +36,13 @@ var (
 // Execute es el punto de entrada principal.
 func Execute() {
 	args := os.Args[1:]
-	if !forceLocalMode(args) && !skipRemoteDelegation(args) {
+	if localRPCEnabled(args) && !forceLocalMode(args) && !skipRemoteDelegation(args) {
 		ensureRequireServerEnv()
 		handled, exitCode, err := executeViaLocalServer(args, os.Stdout, os.Stderr)
 		if err != nil {
 			msg := fmt.Sprintf("orquesta: servidor local no disponible (%v)", err)
 			fmt.Fprintln(os.Stderr, msg)
-			fmt.Fprintln(os.Stderr, "usa --local o ORQUESTA_FORCE_LOCAL=1 solo para recuperacion consciente")
+			fmt.Fprintln(os.Stderr, "usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion consciente")
 			os.Exit(1)
 		}
 		if handled {
@@ -82,19 +82,30 @@ func init() {
 }
 
 func initDB() {
-	if !commandNeedsDB(getCurrentExecArgs()) {
+	args := currentOrOSArgs()
+	if !commandNeedsDB(args) {
 		return
 	}
 	if db.IsOpen() {
 		return
 	}
-	if shouldPreferAPIClient(getCurrentExecArgs()) {
+	if shouldPreferAPIClient(args) {
 		return
 	}
-	if err := db.Open(); err != nil {
+	if err := openDBForCommand(args); err != nil {
 		fmt.Fprintf(os.Stderr, "error abriendo base de datos: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func openDBForCommand(args []string) error {
+	if localRecoveryRequested(args) {
+		if !localRecoveryCommandAllowed(args) {
+			return localRecoveryUnsupportedError(args)
+		}
+		return db.OpenRecoveryReadOnly()
+	}
+	return db.Open()
 }
 
 func executeLocalArgs(args []string, stdout, stderr io.Writer) error {
@@ -120,9 +131,28 @@ func resetFlagSet(flags *pflag.FlagSet) {
 		return
 	}
 	flags.VisitAll(func(f *pflag.Flag) {
-		_ = flags.Set(f.Name, f.DefValue)
+		_ = flags.Set(f.Name, normalizedFlagResetValue(f))
 		f.Changed = false
 	})
+}
+
+func normalizedFlagResetValue(f *pflag.Flag) string {
+	if f == nil {
+		return ""
+	}
+	valueType := strings.TrimSpace(f.Value.Type())
+	switch valueType {
+	case "stringSlice", "stringArray", "intSlice", "int32Slice", "int64Slice", "uintSlice", "durationSlice", "ipSlice":
+		trimmed := strings.TrimSpace(f.DefValue)
+		if trimmed == "[]" {
+			return ""
+		}
+		trimmed = strings.TrimPrefix(trimmed, "[")
+		trimmed = strings.TrimSuffix(trimmed, "]")
+		return trimmed
+	default:
+		return f.DefValue
+	}
 }
 
 func ensureRequireServerEnv() {
@@ -134,6 +164,9 @@ func ensureRequireServerEnv() {
 
 func forceLocalMode(args []string) bool {
 	if strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL")) == "1" {
+		return true
+	}
+	if strings.TrimSpace(os.Getenv("ORQUESTA_FORCE_LOCAL_DB")) == "1" {
 		return true
 	}
 	for _, arg := range args {
@@ -159,6 +192,8 @@ func commandNeedsDB(args []string) bool {
 		return false
 	case "persistencia":
 		return false
+	case "serve":
+		return false
 	case "server":
 		if len(args) < 2 {
 			return false
@@ -167,7 +202,7 @@ func commandNeedsDB(args []string) bool {
 		case "status", "stop", "doctor":
 			return false
 		case "run":
-			return true
+			return false
 		default:
 			return false
 		}
