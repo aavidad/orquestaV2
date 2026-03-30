@@ -2395,6 +2395,102 @@ func TestRuntimeOrderSendInstructionEntregaEnCalientePorSupervisorLocalSeguroAun
 	}
 }
 
+func TestGuardarSesionActivaPreservaMetadataRicaDelHandle(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "Codex1",
+		ProyectoID:        &proyectoID,
+		CWD:               filepath.Join(tmp, "orquestador"),
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-orig-1",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "process_pty_cli",
+		"stdin_path":            filepath.Join(tmp, "pty.stdin"),
+		"stdin_raw_path":        filepath.Join(tmp, "pty.stdin.raw"),
+		"supervisor_ref":        filepath.Join(tmp, "supervisor.ref"),
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryBootstrapOnly,
+		"rendered_command":      "/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1",
+		"external_session_id":   "sess-orig-1",
+		"herramienta":           "codex-cli",
+		"cwd":                   filepath.Join(tmp, "orquestador"),
+		"branch":                "orq-orquesta-codex1",
+	})
+	capsJSON, _ := json.Marshal(map[string]any{
+		"can_send_input":        false,
+		"can_checkpoint":        true,
+		"can_resume":            true,
+		"can_capture_pid":       true,
+		"can_track_continuity":  true,
+		"can_pause":             true,
+		"can_stop":              true,
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryBootstrapOnly,
+	})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, capabilities_json=? WHERE id=?`, string(metaJSON), string(capsJSON), handle.ID); err != nil {
+		t.Fatalf("update handle rico: %v", err)
+	}
+
+	nuevoExternal := "sess-live-2"
+	nuevaBranch := "orq-orquesta-codex1-live"
+	if err := GuardarSesionActiva("Codex1", &proyectoID, SesionUpdate{
+		ExternalSessionID: &nuevoExternal,
+		Branch:            &nuevaBranch,
+		Heartbeat:         true,
+	}); err != nil {
+		t.Fatalf("guardar sesion: %v", err)
+	}
+
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle: %+v err=%v", handle, err)
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if got := strings.TrimSpace(stringFromMap(meta, "stdin_path", "")); got == "" {
+		t.Fatalf("stdin_path deberia preservarse: %+v", meta)
+	}
+	if got := strings.TrimSpace(stringFromMap(meta, "supervisor_ref", "")); got == "" {
+		t.Fatalf("supervisor_ref deberia preservarse: %+v", meta)
+	}
+	if got := strings.TrimSpace(stringFromMap(meta, "driver", "")); got != "process_pty_cli" {
+		t.Fatalf("driver rico perdido: %+v", meta)
+	}
+	if got := strings.TrimSpace(stringFromMap(meta, "external_session_id", "")); got != nuevoExternal {
+		t.Fatalf("external_session_id no sincronizada: got=%q meta=%+v", got, meta)
+	}
+	if got := strings.TrimSpace(stringFromMap(meta, "branch", "")); got != nuevaBranch {
+		t.Fatalf("branch no sincronizada: got=%q meta=%+v", got, meta)
+	}
+	caps := mapFromJSON(handle.CapabilitiesJSON)
+	if boolFromMap(caps, "can_send_input") {
+		t.Fatalf("can_send_input=false deberia preservarse: %+v", caps)
+	}
+	if got := runtimeagente.NormalizeMailboxDeliveryMode(stringFromMap(caps, "mailbox_delivery_mode", "")); got != runtimeagente.MailboxDeliveryBootstrapOnly {
+		t.Fatalf("mailbox_delivery_mode rico perdido: got=%q caps=%+v", got, caps)
+	}
+}
+
 func TestRuntimeOrderSendInstructionCodexSupervisadoSigueCayendoAMailbox(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
