@@ -88,7 +88,7 @@ func TestOpenMigraRuntimeTablesLegacy(t *testing.T) {
 			t.Fatalf("falta columna migrada runtime_handles.%s", col)
 		}
 	}
-	for _, col := range []string{"proyecto_id", "runtime_id", "handle_id", "resultado_json", "error_text", "available_at", "updated_at"} {
+	for _, col := range []string{"proyecto_id", "runtime_id", "handle_id", "resultado_json", "error_text", "available_at", "claimed_by", "lease_token", "attempt_count", "lease_expires_at", "updated_at"} {
 		ok, err := tablaTieneColumna(DB.DB, "runtime_orders", col)
 		if err != nil {
 			t.Fatalf("tablaTieneColumna runtime_orders.%s: %v", col, err)

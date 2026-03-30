@@ -207,6 +207,13 @@ Patron elegido como referencia:
 - handoff con contexto filtrado y resumen util
 - mensajes y ordenes duraderos con lease, ack, retry y backoff
 
+Contrato minimo obligatorio para `runtime_orders`:
+
+- toda orden reclamada por el control plane debe quedar con `lease` explicita
+- la lease debe registrar quien la reclama, token de lease, intento y caducidad
+- una orden reencolada o finalizada debe liberar siempre su lease
+- la reconciliacion stale no se decide solo por `started_at`; debe respetar la caducidad de la lease cuando exista
+
 La referencia conceptual mas cercana para el nucleo es:
 
 - supervisor central al estilo AutoGen Core

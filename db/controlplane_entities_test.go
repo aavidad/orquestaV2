@@ -269,6 +269,9 @@ func TestRuntimeOrdersMailboxYCheckpoint(t *testing.T) {
 	if claimed.Estado != "tomada" {
 		t.Fatalf("estado inesperado tras claim: %s", claimed.Estado)
 	}
+	if strings.TrimSpace(claimed.LeaseToken) == "" || strings.TrimSpace(claimed.ClaimedBy) == "" || claimed.AttemptCount != 1 || claimed.LeaseExpiresAt == nil {
+		t.Fatalf("lease de claim no materializada: %+v", claimed)
+	}
 	secondClaim, err := ClaimNextRuntimeOrder("Codex1")
 	if err != nil {
 		t.Fatalf("segundo claim runtime order: %v", err)
@@ -286,6 +289,9 @@ func TestRuntimeOrdersMailboxYCheckpoint(t *testing.T) {
 	}
 	if claimed.Estado != "completada" || claimed.FinishedAt == nil {
 		t.Fatalf("runtime order no completada: %+v", claimed)
+	}
+	if claimed.LeaseExpiresAt != nil || strings.TrimSpace(claimed.LeaseToken) != "" || strings.TrimSpace(claimed.ClaimedBy) != "" {
+		t.Fatalf("lease no liberada al completar: %+v", claimed)
 	}
 
 	mailID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
@@ -1391,8 +1397,9 @@ func TestReconciliarRuntimeOrdersStaleReencolaBasicasYExpiraNoSoportadas(t *test
 	}
 	if _, err := DB.Exec(`
 		UPDATE runtime_orders
-		SET started_at = ?, updated_at = ?
+		SET started_at = ?, updated_at = ?, lease_expires_at = ?
 		WHERE id IN (?, ?)`,
+		time.Now().UTC().Add(-10*time.Minute),
 		time.Now().UTC().Add(-10*time.Minute),
 		time.Now().UTC().Add(-10*time.Minute),
 		syncID, otherID,
@@ -1415,6 +1422,9 @@ func TestReconciliarRuntimeOrdersStaleReencolaBasicasYExpiraNoSoportadas(t *test
 	if syncOrder.Estado != "pendiente" || syncOrder.StartedAt != nil {
 		t.Fatalf("sync order no reencolada: %+v", syncOrder)
 	}
+	if syncOrder.LeaseExpiresAt != nil || strings.TrimSpace(syncOrder.LeaseToken) != "" || strings.TrimSpace(syncOrder.ClaimedBy) != "" {
+		t.Fatalf("sync order sin lease limpia tras stale: %+v", syncOrder)
+	}
 
 	otherOrder, err := GetRuntimeOrder(otherID)
 	if err != nil {
@@ -1422,6 +1432,9 @@ func TestReconciliarRuntimeOrdersStaleReencolaBasicasYExpiraNoSoportadas(t *test
 	}
 	if otherOrder.Estado != "pendiente" || otherOrder.StartedAt != nil {
 		t.Fatalf("handoff order no reencolada: %+v", otherOrder)
+	}
+	if otherOrder.LeaseExpiresAt != nil || strings.TrimSpace(otherOrder.LeaseToken) != "" || strings.TrimSpace(otherOrder.ClaimedBy) != "" {
+		t.Fatalf("handoff order sin lease limpia tras stale: %+v", otherOrder)
 	}
 }
 
@@ -4995,8 +5008,9 @@ func TestReconciliarRuntimeOrdersStaleRecuperaBasicasYExpiraNoSoportadas(t *test
 	}
 	if _, err := DB.Exec(`
 		UPDATE runtime_orders
-		SET started_at = ?, updated_at = ?
+		SET started_at = ?, updated_at = ?, lease_expires_at = ?
 		WHERE id IN (?, ?)`,
+		time.Now().UTC().Add(-10*time.Minute),
 		time.Now().UTC().Add(-10*time.Minute),
 		time.Now().UTC().Add(-10*time.Minute),
 		basicID, customID,
@@ -5019,6 +5033,9 @@ func TestReconciliarRuntimeOrdersStaleRecuperaBasicasYExpiraNoSoportadas(t *test
 	if basicOrder.Estado != "pendiente" || basicOrder.StartedAt != nil {
 		t.Fatalf("orden basica no reencolada: %+v", basicOrder)
 	}
+	if basicOrder.LeaseExpiresAt != nil || strings.TrimSpace(basicOrder.LeaseToken) != "" || strings.TrimSpace(basicOrder.ClaimedBy) != "" {
+		t.Fatalf("orden basica sin lease limpia: %+v", basicOrder)
+	}
 
 	customOrder, err := GetRuntimeOrder(customID)
 	if err != nil {
@@ -5026,6 +5043,9 @@ func TestReconciliarRuntimeOrdersStaleRecuperaBasicasYExpiraNoSoportadas(t *test
 	}
 	if customOrder.Estado != "expirada" || customOrder.FinishedAt == nil {
 		t.Fatalf("orden no soportada no expirada: %+v", customOrder)
+	}
+	if customOrder.LeaseExpiresAt != nil || strings.TrimSpace(customOrder.LeaseToken) != "" || strings.TrimSpace(customOrder.ClaimedBy) != "" {
+		t.Fatalf("orden expirada conserva lease: %+v", customOrder)
 	}
 }
 

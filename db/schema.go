@@ -405,6 +405,10 @@ CREATE TABLE IF NOT EXISTS runtime_orders (
     error_text          TEXT    NOT NULL DEFAULT '',
     estado              TEXT    NOT NULL DEFAULT 'pendiente'
                                CHECK (estado IN ('pendiente','tomada','ejecutando','completada','fallida','expirada','cancelada')),
+    claimed_by          TEXT    NOT NULL DEFAULT '',
+    lease_token         TEXT    NOT NULL DEFAULT '',
+    attempt_count       INTEGER NOT NULL DEFAULT 0,
+    lease_expires_at    DATETIME,
     available_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     started_at          DATETIME,
@@ -984,6 +988,7 @@ INSERT INTO config (clave, valor) VALUES
 	    ('runtime_supervision_interval_seconds','30'),
 	    ('runtime_supervision_batch_size','10'),
 	    ('runtime_order_batch_size','10'),
+	    ('runtime_order_lease_seconds','120'),
 	    ('runtime_order_stale_seconds','120')
 	ON CONFLICT(clave) DO NOTHING;
 

@@ -1015,3 +1015,81 @@ Accion ejecutada:
 - respaldo oficial local de salvaguarda:
   - `/tmp/orquesta-backups/2026-03-31_01-03-34.704483012_pre_amend_62f5ad1_orquesta.db.bak`
 - despues del respaldo, `orquesta.db` se saca del indice git para reamendar el commit sin perder la base local
+
+## 2026-03-31 01:10 aprox. — el supervisor local deja de revivir handles por PID fantasma
+
+Hallazgo:
+
+- el estado vivo mostraba `runtime_handles` de `Codex1` y `Codex2` como `activo` con `last_seen` reciente, pero los PID publicados ya no existian en `/proc`
+- la validacion local del supervisor se apoyaba practicamente en `kill(pid, 0)`, lo que es insuficiente para un proceso adjunto o tras reinicios/reutilizacion de PID
+
+Decision:
+
+- un runtime local no se considera el mismo proceso solo porque el PID responda
+- el supervisor debe validar tambien identidad minima del proceso:
+  - `cwd` esperada
+  - firma de comando esperada (`rendered_command` / `wrapped_command`)
+
+Cambio:
+
+- `internal/controlruntime/supervisor_local.go`
+  - nuevo endurecimiento de `snapshot()`: antes de revivir un runtime por PID vivo, valida identidad del proceso
+  - nuevas ayudas `validarIdentidadProcesoLocal(...)`, `commandIdentityHints(...)` y `samePath(...)`
+- `internal/controlruntime/supervisor_local_test.go`
+  - cobertura de hints de identidad, comparacion de rutas y mismatch de `cwd`
+
+Validacion:
+
+- `go test ./internal/controlruntime -run 'Test(ConsultarEstadoLocalDetectaSessionIDSinSobrescribirDriver|SupervisorLocalEmiteHeartbeatYFinalizacionAlActivarse|CommandIdentityHintsIncluyeFirmaUtil|SamePathResuelveSymlink|ValidarIdentidadProcesoLocalDetectaMismatchDeCWD)' -count=1` => OK
+
+## 2026-03-31 01:2x aprox. — un batch colgado ya no congela todo el control plane
+
+Hallazgo:
+
+- el estado vivo mostraba `runtime_orders` y `runtime_mailbox` pendientes durante horas aunque el servidor HTTP seguia sano
+- el patron real no era otra vez SQLite: una sola `send_instruction/session_resume` podia quedarse colgada y bloquear el loop entero del control plane
+- `planocontrol.Runner.runControlPlane()` ejecutaba todos los batches de forma secuencial en el mismo hilo logico; si uno no devolvia, tampoco corria `runtime_orders_stale`, `runtime_mailbox` ni el resto de reconciliaciones
+
+Decision:
+
+- el `Runner` no puede depender de que cada batch externo devuelva bien
+- cada batch del control plane debe tener timeout propio y exclusion mutua por nombre
+- si un batch se queda colgado, el resto del plano de control debe seguir avanzando y el batch atascado no debe duplicarse en paralelo
+
+Cambios:
+
+- `planocontrol/runner.go`
+  - nuevo timeout por batch (`BatchTimeout`, por defecto `45s`)
+  - exclusion por nombre de batch para no lanzar duplicados mientras uno sigue en curso
+  - auditoria explicita de timeout (`..._error`) en lugar de congelar el loop completo
+- `planocontrol/runner_test.go`
+  - nueva regresion `TestRunnerRunControlPlaneTimeoutDeBatchNoCongelaElResto`
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./planocontrol -run 'TestRunner(RunControlPlaneTimeoutDeBatchNoCongelaElResto|RunControlPlaneRecuperaPanicDeBatchYSigue|RunControlPlaneAuditaTrabajoProcesado|RunControlPlaneAuditaErrores)' -count=1` => OK
+
+## 2026-03-31 01:1x aprox. — `runtime_orders` deja de depender solo de timestamps para stale
+
+Hallazgo:
+
+- el control plane seguia reclamando ordenes solo con `estado + started_at`
+- la recuperacion stale se apoyaba sobre todo en `started_at/updated_at`, sin contrato de lease explicita
+- eso dejaba la reconciliacion a medio camino: mejor que antes, pero todavia demasiado heuristica para un supervisor server-first duradero
+
+Decision:
+
+- `runtime_orders` pasa a tener lease minima persistente: `claimed_by`, `lease_token`, `attempt_count`, `lease_expires_at`
+- toda reclamacion de orden debe materializar esa lease
+- toda finalizacion o reencolado debe liberarla
+- la reconciliacion stale debe mirar primero `lease_expires_at`
+
+Cambios:
+
+- `db/schema.go`
+- `db/post_migraciones_compat.go`
+- `db/config_defaults.go`
+- `db/controlplane_entities.go`
+- tests:
+  - `db/runtime_legacy_migration_test.go`
+  - `db/controlplane_entities_test.go`

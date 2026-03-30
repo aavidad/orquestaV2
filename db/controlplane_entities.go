@@ -33,21 +33,25 @@ type RuntimeHandle struct {
 }
 
 type RuntimeOrder struct {
-	ID            int64      `json:"id"`
-	Agente        string     `json:"agente"`
-	ProyectoID    *int64     `json:"proyecto_id,omitempty"`
-	RuntimeID     *int64     `json:"runtime_id,omitempty"`
-	HandleID      *int64     `json:"handle_id,omitempty"`
-	Tipo          string     `json:"tipo"`
-	PayloadJSON   string     `json:"payload_json"`
-	ResultadoJSON string     `json:"resultado_json"`
-	ErrorText     string     `json:"error_text"`
-	Estado        string     `json:"estado"`
-	AvailableAt   time.Time  `json:"available_at"`
-	CreatedAt     time.Time  `json:"created_at"`
-	StartedAt     *time.Time `json:"started_at,omitempty"`
-	FinishedAt    *time.Time `json:"finished_at,omitempty"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	ID             int64      `json:"id"`
+	Agente         string     `json:"agente"`
+	ProyectoID     *int64     `json:"proyecto_id,omitempty"`
+	RuntimeID      *int64     `json:"runtime_id,omitempty"`
+	HandleID       *int64     `json:"handle_id,omitempty"`
+	Tipo           string     `json:"tipo"`
+	PayloadJSON    string     `json:"payload_json"`
+	ResultadoJSON  string     `json:"resultado_json"`
+	ErrorText      string     `json:"error_text"`
+	Estado         string     `json:"estado"`
+	ClaimedBy      string     `json:"claimed_by"`
+	LeaseToken     string     `json:"lease_token"`
+	AttemptCount   int        `json:"attempt_count"`
+	LeaseExpiresAt *time.Time `json:"lease_expires_at,omitempty"`
+	AvailableAt    time.Time  `json:"available_at"`
+	CreatedAt      time.Time  `json:"created_at"`
+	StartedAt      *time.Time `json:"started_at,omitempty"`
+	FinishedAt     *time.Time `json:"finished_at,omitempty"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
 type RuntimeMailboxMessage struct {
@@ -1019,6 +1023,40 @@ func ClaimNextRuntimeOrder(agente string) (*RuntimeOrder, error) {
 	}
 }
 
+func runtimeOrderLeaseDuration() time.Duration {
+	seconds := configIntOrDefault("runtime_order_lease_seconds", 120)
+	if seconds <= 0 {
+		seconds = 120
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func runtimeOrderLeaseDeadline(now time.Time) time.Time {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	return now.UTC().Add(runtimeOrderLeaseDuration())
+}
+
+func runtimeOrderClaimedBy() string {
+	host, err := os.Hostname()
+	if err != nil {
+		host = ""
+	}
+	host = strings.TrimSpace(host)
+	if host == "" {
+		host = "unknown-host"
+	}
+	return fmt.Sprintf("control_plane:%s", host)
+}
+
+func runtimeOrderLeaseToken(orderID int64, now time.Time) string {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	return fmt.Sprintf("order:%d:%d", orderID, now.UTC().UnixNano())
+}
+
 func ClaimNextBootstrapRuntimeOrder(agente string, proyectoID *int64) (*RuntimeOrder, error) {
 	id, err := nextBootstrapRuntimeOrderID(strings.TrimSpace(agente), proyectoID)
 	if err != nil || id == 0 {
@@ -1159,22 +1197,48 @@ func MarcarRuntimeOrderEstado(id int64, estado, resultadoJSON, errorText string)
 	}
 	switch strings.TrimSpace(estado) {
 	case "ejecutando":
+		leaseUntil := runtimeOrderLeaseDeadline(time.Now().UTC())
 		_, err := DB.Exec(`
 			UPDATE runtime_orders
 			SET estado='ejecutando',
 			    resultado_json = ?,
 			    error_text = ?,
+			    lease_expires_at = ?,
 			    updated_at = CURRENT_TIMESTAMP
-			WHERE id = ?`, resultadoJSON, errorText, id)
+			WHERE id = ?`, resultadoJSON, errorText, leaseUntil, id)
 		return err
 	case "completada", "fallida", "expirada", "cancelada":
 		_, err := DB.Exec(`
 			UPDATE runtime_orders
-			SET estado = ?, resultado_json = ?, error_text = ?, finished_at = CURRENT_TIMESTAMP
+			SET estado = ?,
+			    resultado_json = ?,
+			    error_text = ?,
+			    finished_at = CURRENT_TIMESTAMP,
+			    claimed_by = '',
+			    lease_token = '',
+			    lease_expires_at = NULL
 			WHERE id = ?`, estado, resultadoJSON, errorText, id)
 		return err
+	case "pendiente":
+		_, err := DB.Exec(`
+			UPDATE runtime_orders
+			SET estado = 'pendiente',
+			    resultado_json = ?,
+			    error_text = ?,
+			    started_at = NULL,
+			    finished_at = NULL,
+			    claimed_by = '',
+			    lease_token = '',
+			    lease_expires_at = NULL,
+			    updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?`, resultadoJSON, errorText, id)
+		return err
 	default:
-		_, err := DB.Exec(`UPDATE runtime_orders SET estado = ? WHERE id = ?`, estado, id)
+		_, err := DB.Exec(`
+			UPDATE runtime_orders
+			SET estado = ?,
+			    updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?`, estado, id)
 		return err
 	}
 }
@@ -1461,17 +1525,18 @@ func ReconciliarRuntimeHandlesStale() (int, error) {
 }
 
 func ReconciliarRuntimeOrdersStale() (int, error) {
+	now := time.Now().UTC()
 	staleSeconds := configIntOrDefault("runtime_order_stale_seconds", 120)
 	if staleSeconds <= 0 {
 		staleSeconds = 120
 	}
-	cutoff := time.Now().UTC().Add(-time.Duration(staleSeconds) * time.Second)
+	cutoff := now.Add(-time.Duration(staleSeconds) * time.Second)
 	rows, err := DB.Query(`
 		SELECT id, tipo
 		FROM runtime_orders
 		WHERE estado IN ('tomada','ejecutando')
-		  AND COALESCE(started_at, updated_at, created_at) <= ?
-		ORDER BY id`, cutoff)
+		  AND COALESCE(lease_expires_at, started_at, updated_at, created_at) <= ?
+		ORDER BY id`, now)
 	if err != nil {
 		return 0, err
 	}
@@ -1649,7 +1714,8 @@ func runtimeHandleSelectBase() string {
 func runtimeOrderSelectBase() string {
 	return `
 		SELECT id, agente, proyecto_id, runtime_id, handle_id, tipo, payload_json, resultado_json,
-		       error_text, estado, available_at, created_at, started_at, finished_at, updated_at
+		       error_text, estado, claimed_by, lease_token, attempt_count, lease_expires_at,
+		       available_at, created_at, started_at, finished_at, updated_at
 		FROM runtime_orders`
 }
 
@@ -3231,6 +3297,9 @@ func reencolarRuntimeOrderSendInstructionAt(order *RuntimeOrder, payload map[str
 		    END,
 		    started_at = NULL,
 		    finished_at = NULL,
+		    claimed_by = '',
+		    lease_token = '',
+		    lease_expires_at = NULL,
 		    available_at = ?,
 		    updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?`,
@@ -3779,6 +3848,9 @@ func revertBootstrapRuntimePreparation(bootstrap *bootstrapRuntimeData) error {
 		UPDATE runtime_orders
 		SET estado='pendiente',
 		    started_at=NULL,
+		    claimed_by='',
+		    lease_token='',
+		    lease_expires_at=NULL,
 		    updated_at=CURRENT_TIMESTAMP
 		WHERE id = ?
 		  AND estado IN ('tomada','ejecutando')`, bootstrap.Order.ID)
@@ -4396,6 +4468,10 @@ func ejecutarRuntimeOrderHandoff(order *RuntimeOrder) error {
 }
 
 func claimRuntimeOrderByID(id int64) (*RuntimeOrder, error) {
+	now := time.Now().UTC()
+	leaseUntil := runtimeOrderLeaseDeadline(now)
+	claimedBy := runtimeOrderClaimedBy()
+	leaseToken := runtimeOrderLeaseToken(id, now)
 	tx, err := DB.Begin()
 	if err != nil {
 		return nil, err
@@ -4403,8 +4479,15 @@ func claimRuntimeOrderByID(id int64) (*RuntimeOrder, error) {
 
 	res, err := tx.Exec(`
 		UPDATE runtime_orders
-		SET estado = 'tomada', started_at = CURRENT_TIMESTAMP
-		WHERE id = ? AND estado = 'pendiente' AND available_at <= CURRENT_TIMESTAMP`, id)
+		SET estado = 'tomada',
+		    started_at = CURRENT_TIMESTAMP,
+		    updated_at = CURRENT_TIMESTAMP,
+		    claimed_by = ?,
+		    lease_token = ?,
+		    lease_expires_at = ?,
+		    attempt_count = attempt_count + 1
+		WHERE id = ? AND estado = 'pendiente' AND available_at <= CURRENT_TIMESTAMP`,
+		claimedBy, leaseToken, leaseUntil, id)
 	if err != nil {
 		_ = tx.Rollback()
 		return nil, err
@@ -4569,6 +4652,9 @@ func reconciliarRuntimeOrderStale(id int64, tipo string, cutoff time.Time) (bool
 			SET estado = 'pendiente',
 			    started_at = NULL,
 			    finished_at = NULL,
+			    claimed_by = '',
+			    lease_token = '',
+			    lease_expires_at = NULL,
 			    available_at = CURRENT_TIMESTAMP,
 			    error_text = CASE
 			        WHEN TRIM(COALESCE(error_text, '')) = '' THEN 'reencolada tras stale del control plane'
@@ -4576,19 +4662,22 @@ func reconciliarRuntimeOrderStale(id int64, tipo string, cutoff time.Time) (bool
 			    END
 			WHERE id = ?
 			  AND estado IN ('tomada','ejecutando')
-			  AND COALESCE(started_at, updated_at, created_at) <= ?`, id, cutoff)
+			  AND COALESCE(lease_expires_at, started_at, updated_at, created_at) <= ?`, id, cutoff)
 	} else {
 		res, err = DB.Exec(`
 			UPDATE runtime_orders
 			SET estado = 'expirada',
 			    finished_at = CURRENT_TIMESTAMP,
+			    claimed_by = '',
+			    lease_token = '',
+			    lease_expires_at = NULL,
 			    error_text = CASE
 			        WHEN TRIM(COALESCE(error_text, '')) = '' THEN 'orden expirada por stale sin dispatcher compatible'
 			        ELSE error_text || CHAR(10) || 'orden expirada por stale sin dispatcher compatible'
 			    END
 			WHERE id = ?
 			  AND estado IN ('tomada','ejecutando')
-			  AND COALESCE(started_at, updated_at, created_at) <= ?`, id, cutoff)
+			  AND COALESCE(lease_expires_at, started_at, updated_at, created_at) <= ?`, id, cutoff)
 	}
 	if err != nil {
 		return false, err
@@ -4647,11 +4736,13 @@ func scanRuntimeOrder(s scanner) (*RuntimeOrder, error) {
 	var proyectoID sql.NullInt64
 	var runtimeID sql.NullInt64
 	var handleID sql.NullInt64
+	var leaseExpires sql.NullTime
 	var startedAt sql.NullTime
 	var finishedAt sql.NullTime
 	err := s.Scan(
 		&o.ID, &o.Agente, &proyectoID, &runtimeID, &handleID, &o.Tipo, &o.PayloadJSON, &o.ResultadoJSON,
-		&o.ErrorText, &o.Estado, &o.AvailableAt, &o.CreatedAt, &startedAt, &finishedAt, &o.UpdatedAt,
+		&o.ErrorText, &o.Estado, &o.ClaimedBy, &o.LeaseToken, &o.AttemptCount, &leaseExpires,
+		&o.AvailableAt, &o.CreatedAt, &startedAt, &finishedAt, &o.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -4664,6 +4755,9 @@ func scanRuntimeOrder(s scanner) (*RuntimeOrder, error) {
 	}
 	if handleID.Valid {
 		o.HandleID = &handleID.Int64
+	}
+	if leaseExpires.Valid {
+		o.LeaseExpiresAt = &leaseExpires.Time
 	}
 	if startedAt.Valid {
 		o.StartedAt = &startedAt.Time
