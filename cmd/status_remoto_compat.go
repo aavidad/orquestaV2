@@ -180,6 +180,20 @@ func renderStatusSummary(ctx *statusContext) {
 	if len(resumen.AgentesActivos) == 0 {
 		fmt.Printf("   — sin agentes activos\n")
 	}
+	agentesEnCuota := agentesNoActivosConCuota(resumen.Agentes)
+	if len(agentesEnCuota) > 0 {
+		fmt.Printf("   ⏸️  En enfriamiento/cuota:\n")
+		for _, a := range agentesEnCuota {
+			fmt.Printf("      %-15s [%s]", a.Nombre, a.Rol)
+			if cuenta := resumenCuentaAgente(a); cuenta != "" {
+				fmt.Printf(" — %s", cuenta)
+			}
+			if detalle := resumenCuotaAgente(a); detalle != "" {
+				fmt.Printf(" — %s", detalle)
+			}
+			fmt.Println()
+		}
+	}
 	fmt.Println()
 
 	totalTareas := 0
@@ -293,6 +307,20 @@ func resumenDesgloseCuotaAgente(a *db.Agente) string {
 	return strings.Join(partes, " / ")
 }
 
+func agentesNoActivosConCuota(agentes []*db.Agente) []*db.Agente {
+	out := make([]*db.Agente, 0, len(agentes))
+	for _, agente := range agentes {
+		if agente == nil || agente.Activo {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "activo") {
+			continue
+		}
+		out = append(out, agente)
+	}
+	return out
+}
+
 func renderVentanaPresupuesto(nombre string, pct *int, resetAt *time.Time) string {
 	if pct == nil {
 		return ""
@@ -387,6 +415,7 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 	}
 	resumen := &estadoResumen{
 		Generado:           payload.Generado,
+		Agentes:            payload.AgentesCompat,
 		TareasPorEstado:    payload.TareasPorEstado,
 		AgentesActivos:     payload.AgentesActivos,
 		PropuestasAbiertas: payload.PropuestasAbiertas,

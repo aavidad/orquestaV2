@@ -468,6 +468,43 @@ func TestRenderStatusSummaryMuestraCuotaAgente(t *testing.T) {
 	}
 }
 
+func TestRenderStatusSummaryMuestraAgentesEnEnfriamiento(t *testing.T) {
+	resetAt := time.Date(2026, 4, 1, 1, 31, 33, 0, time.UTC)
+	pct := 0
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				Agentes: []*db.Agente{
+					{
+						Nombre:              "Codex5",
+						Rol:                 "programador",
+						Activo:              false,
+						EstadoCuota:         "agotado",
+						ReanimarAt:          &resetAt,
+						MotivoPausa:         "Presupuesto agotado observado",
+						CuotaRestantePct:    &pct,
+						PresupuestoVentana:  "5h",
+						PresupuestoResetAt:  &resetAt,
+						CuentaEmail:         "maritere@avidad.com",
+						PresupuestoEstado:   "agotado",
+						PresupuestoDiarioPct: &pct,
+					},
+				},
+				TareasPorEstado: map[string]int{},
+			},
+		})
+	})
+	if !strings.Contains(out, "En enfriamiento/cuota") {
+		t.Fatalf("salida sin bloque de agentes pausados: %s", out)
+	}
+	if !strings.Contains(out, "Codex5") || !strings.Contains(out, "cuenta maritere@avidad.com") {
+		t.Fatalf("salida sin detalle de agente pausado: %s", out)
+	}
+	if !strings.Contains(out, "cuota:agotado") {
+		t.Fatalf("salida sin estado de cuota del agente pausado: %s", out)
+	}
+}
+
 func TestFetchServerConfig(t *testing.T) {
 	prevClient := serverHTTPClient
 	serverHTTPClient = &http.Client{

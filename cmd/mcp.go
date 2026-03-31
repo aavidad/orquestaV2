@@ -1260,6 +1260,7 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 
 type estadoResumen struct {
 	Generado           string           `json:"generado"`
+	Agentes            []*db.Agente     `json:"agentes,omitempty"`
 	TareasPorEstado    map[string]int   `json:"tareasPorEstado"`
 	AgentesActivos     []*db.Agente     `json:"agentesActivos"`
 	Proyectos          []map[string]any `json:"proyectos"`
@@ -1370,6 +1371,7 @@ func buildEstadoResumen() (*estadoResumen, error) {
 
 	return &estadoResumen{
 		Generado:           time.Now().UTC().Format(time.RFC3339),
+		Agentes:            summary.Agents,
 		TareasPorEstado:    summary.TaskCounts,
 		AgentesActivos:     activos,
 		Proyectos:          proyectos,

@@ -3986,3 +3986,33 @@ Validacion viva:
   - `EstadoCuota=agotado`
   - `PresupuestoStale=false`
   - `PresupuestoVentana=5h`
+
+## 2026-03-31 — `status` ya muestra agentes en enfriamiento y cuota crítica
+
+Hallazgo:
+
+- tras cerrar la pausa por cuota, `status` seguia mostrando solo los agentes activos
+- operativamente eso ocultaba justo la informacion importante: `Codex1` y `Codex5` estaban fuera del pool por cuota, pero habia que deducirlo consultando `agente tick` o `agente presupuesto`
+
+Decision:
+
+- mantener el bloque de activos como vista principal
+- añadir un bloque pequeño de `En enfriamiento/cuota` con cuenta, cuota visible y reset, sin tocar API ni control plane
+
+Codigo:
+
+- [cmd/status_remoto_compat.go](/home/alberto/Trabajo/orquesta/cmd/status_remoto_compat.go)
+- [cmd/status_test.go](/home/alberto/Trabajo/orquesta/cmd/status_test.go)
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(RenderStatusSummaryMuestraCuotaAgente|RenderStatusSummaryMuestraAgentesEnEnfriamiento)$' -count=1`
+- `go build -o ./orquesta .`
+
+Validacion viva:
+
+- `./orquesta status` ya muestra:
+  - `Codex1` en enfriamiento
+  - `Codex5` agotado
+  - ambos con cuota y reset visibles, sin confundirlos con agentes activos
