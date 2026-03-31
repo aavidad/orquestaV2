@@ -260,6 +260,140 @@ func TestPlanificarTareasAutomaticamenteRecuperaTareaHuerfanaYLaReasigna(t *test
 	}
 }
 
+func TestBuscarSiguienteTareaLibreParaAgenteEvitaModuloYaOcupadoSiHayAlternativa(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaOcupada, err := CrearTarea(&Tarea{
+		Titulo:      "Trabajo runtime en curso",
+		Descripcion: "ocupado por otro agente",
+		ProyectoID:  &proyectoID,
+		Modulo:      "runtime",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea ocupada: %v", err)
+	}
+	if err := TomarTarea(tareaOcupada, "Codex2"); err != nil {
+		t.Fatalf("tomar tarea ocupada: %v", err)
+	}
+	if err := IniciarTarea(tareaOcupada, "Codex2"); err != nil {
+		t.Fatalf("iniciar tarea ocupada: %v", err)
+	}
+	if _, err := CrearTarea(&Tarea{
+		Titulo:      "Nueva tarea runtime",
+		Descripcion: "mismo modulo ya ocupado",
+		ProyectoID:  &proyectoID,
+		Modulo:      "runtime",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	}); err != nil {
+		t.Fatalf("crear tarea libre runtime: %v", err)
+	}
+	tareaWeb, err := CrearTarea(&Tarea{
+		Titulo:      "Nueva tarea web",
+		Descripcion: "modulo libre",
+		ProyectoID:  &proyectoID,
+		Modulo:      "web",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea libre web: %v", err)
+	}
+
+	tarea, err := buscarSiguienteTareaLibreParaAgente("Codex1", proyectoID)
+	if err != nil {
+		t.Fatalf("buscarSiguienteTareaLibreParaAgente: %v", err)
+	}
+	if tarea == nil || tarea.ID != tareaWeb {
+		t.Fatalf("deberia evitar el modulo ya ocupado si hay alternativa, got=%+v want=%d", tarea, tareaWeb)
+	}
+}
+
+func TestBuscarSiguienteTareaLibreParaAgentePrefiereAfinidadDeModuloSinSolape(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaHist, err := CrearTarea(&Tarea{
+		Titulo:      "Frente web previo",
+		Descripcion: "afinidad previa",
+		ProyectoID:  &proyectoID,
+		Modulo:      "web",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea historica: %v", err)
+	}
+	if err := TomarTarea(tareaHist, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea historica: %v", err)
+	}
+	if err := IniciarTarea(tareaHist, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea historica: %v", err)
+	}
+	if err := CompletarTarea(tareaHist, "Codex1", "sha-test"); err != nil {
+		t.Fatalf("completar tarea historica: %v", err)
+	}
+	tareaWeb, err := CrearTarea(&Tarea{
+		Titulo:      "Seguir web",
+		Descripcion: "deberia respetar afinidad",
+		ProyectoID:  &proyectoID,
+		Modulo:      "web",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea web: %v", err)
+	}
+	if _, err := CrearTarea(&Tarea{
+		Titulo:      "Trabajo api alternativo",
+		Descripcion: "misma prioridad, distinto modulo",
+		ProyectoID:  &proyectoID,
+		Modulo:      "api",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	}); err != nil {
+		t.Fatalf("crear tarea api: %v", err)
+	}
+
+	tarea, err := buscarSiguienteTareaLibreParaAgente("Codex1", proyectoID)
+	if err != nil {
+		t.Fatalf("buscarSiguienteTareaLibreParaAgente: %v", err)
+	}
+	if tarea == nil || tarea.ID != tareaWeb {
+		t.Fatalf("deberia preferir afinidad de modulo, got=%+v want=%d", tarea, tareaWeb)
+	}
+}
+
 func TestPlanificarTareasAutomaticamenteNoRecuperaTareaRecienTomada(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	restringirPlanificadorATestAgentes(t, "CodexStale", "CodexNuevo")

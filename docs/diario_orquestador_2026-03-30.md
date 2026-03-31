@@ -4515,3 +4515,29 @@ Validacion:
 
 - `go test ./cmd -run 'Test(ResetReanimacionConservaCooldownSiFallaReactivacion|ResetReanimacionSostieneCooldownSiLaCuotaVisibleSigueAgotada)' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — El planificador ya evita solapes de módulo y mantiene afinidad de frente
+
+Hallazgo:
+
+- aunque el núcleo operativo ya estaba bastante sólido, seguía faltando una parte táctica importante: `PlanificarTareasAutomaticamente()` elegía la primera tarea libre del proyecto
+- eso mueve trabajo, pero no orquesta como un técnico humano: si hay dos tareas libres equivalentes, puede mandar a otro agente al mismo `modulo` que ya está ocupado, o ignorar que ese agente venía afinado en otro frente del mismo proyecto
+
+Decision:
+
+- mejorar la selección de tarea libre por agente, no solo por proyecto
+- si hay alternativas:
+  - evitar `modulo` ya ocupado por otro agente en el proyecto
+  - preferir el `modulo` que ese agente ya traía reciente en el mismo proyecto
+- mantener el orden por prioridad como base, pero añadir esa capa táctica por encima
+
+Codigo:
+
+- [db/planificador.go](/home/alberto/Trabajo/orquesta/db/planificador.go)
+- [db/planificador_autostart_test.go](/home/alberto/Trabajo/orquesta/db/planificador_autostart_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./db -run 'Test(BuscarSiguienteTareaLibreParaAgenteEvitaModuloYaOcupadoSiHayAlternativa|BuscarSiguienteTareaLibreParaAgentePrefiereAfinidadDeModuloSinSolape|PlanificarTareasAutomaticamenteAutoasignaYEncolaStart|PlanificarTareasAutomaticamenteRecuperaTareaHuerfanaYLaReasigna)' -count=1`
+- `go build -o ./orquesta .`
