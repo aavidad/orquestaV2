@@ -114,11 +114,26 @@ func UltimoPresupuestoSesion(sesionID int64) (*PresupuestoSesion, error) {
 
 func UltimoPresupuestoAgente(agente string) (*PresupuestoSesion, *Sesion, error) {
 	sesion, err := GetSesionActiva(agente, nil)
-	if err == sql.ErrNoRows {
-		return nil, nil, err
-	}
 	if err != nil {
-		return nil, nil, err
+		if err != sql.ErrNoRows {
+			return nil, nil, err
+		}
+		sesion = nil
+	}
+	if sesion == nil {
+		sesion, err = GetSesionAbierta(agente, nil)
+		if err != nil && err != sql.ErrNoRows {
+			return nil, nil, err
+		}
+	}
+	if sesion == nil {
+		sesion, err = ObtenerUltimaSesion(agente, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if sesion == nil {
+		return nil, nil, sql.ErrNoRows
 	}
 	p, err := UltimoPresupuestoSesion(sesion.ID)
 	return p, sesion, err
@@ -140,7 +155,7 @@ func PresupuestoSesionFresco(p *PresupuestoSesion) bool {
 
 func presupuestoSnapshotMaxAgeSeconds(p *PresupuestoSesion) int64 {
 	if p != nil && strings.EqualFold(strings.TrimSpace(p.BudgetSource), "codex_token_count_observed") {
-		if observed := configInt64Fallback("pool_budget_snapshot_observed_max_age_seconds", 0); observed > 0 {
+		if observed := configInt64Fallback("pool_budget_snapshot_observed_max_age_seconds", 3600); observed > 0 {
 			return observed
 		}
 	}

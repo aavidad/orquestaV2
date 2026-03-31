@@ -6248,6 +6248,91 @@ func TestProcesarRuntimeMailboxBatchMaterializaAutonomiaMailbox(t *testing.T) {
 	}
 }
 
+func TestProcesarAutonomiaSesionActivaPersisteEnfriamientoPorCuota(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex5", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex5", proyectoID, "frente agotado"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex5",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente detenido por cuota",
+		Descripcion: "Debe pausar y persistir enfriamiento",
+		ProyectoID:  &proyectoID,
+		Modulo:      "web",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex5"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	started := time.Now().UTC().Add(-10 * time.Minute)
+	reset := time.Now().UTC().Add(90 * time.Minute)
+	credits := 0.0
+	if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+		SesionID:         sesion.ID,
+		WindowKind:       "5h",
+		WindowStartedAt:  &started,
+		ResetAt:          &reset,
+		RemainingCredits: &credits,
+		BudgetSource:     "codex_token_count_observed",
+		CheckedAt:        time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("registrar presupuesto: %v", err)
+	}
+
+	n, err := procesarAutonomiaSesionActiva(sesion)
+	if err != nil {
+		t.Fatalf("procesar autonomia sesion: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 accion autonoma, got=%d", n)
+	}
+	agente, err := db.GetAgente("Codex5")
+	if err != nil {
+		t.Fatalf("get agente: %v", err)
+	}
+	if strings.TrimSpace(agente.EstadoCuota) != "enfriamiento" {
+		t.Fatalf("deberia quedar en enfriamiento: %+v", agente)
+	}
+	if agente.ReanimarAt == nil || agente.ReanimarAt.Before(reset.Add(-time.Minute)) || agente.ReanimarAt.After(reset.Add(time.Minute)) {
+		t.Fatalf("reanimar_at deberia alinearse con reset del presupuesto: %+v reset=%s", agente, reset)
+	}
+	agenteNombre := "Codex5"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agenteNombre, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "pause" {
+		t.Fatalf("deberia encolar una pause: %+v", orders)
+	}
+}
+
 func prepararRepoGitAutonomia(t *testing.T, repo string) string {
 	t.Helper()
 	cmdGitAutonomia(t, "", "init", "-b", "master", repo)

@@ -17,6 +17,12 @@ func PlanificarTareasAutomaticamente() error {
 		return err
 	}
 
+	// 1.a Liberar tareas no iniciadas retenidas por agentes pausados por cuota
+	// para que el planificador pueda redistribuirlas sin tocar trabajo en progreso.
+	if err := reconciliarTareasAsignadasPorCuota(); err != nil {
+		return err
+	}
+
 	// 1.b Recuperar tareas huérfanas que siguen asignadas a agentes sin
 	// continuidad viva ni runtime activo para ese proyecto.
 	if err := reconciliarTareasHuerfanas(); err != nil {
@@ -37,6 +43,77 @@ func PlanificarTareasAutomaticamente() error {
 		}
 	}
 
+	return nil
+}
+
+func reconciliarTareasAsignadasPorCuota() error {
+	rows, err := DB.Query(`
+		SELECT t.id, t.proyecto_id, t.agente, COALESCE(a.estado_cuota, 'activo')
+		FROM tareas t
+		JOIN agentes a ON a.nombre = t.agente
+		WHERE t.proyecto_id IS NOT NULL
+		  AND t.agente IS NOT NULL
+		  AND trim(t.agente) <> ''
+		  AND t.estado = 'asignada'`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	type tareaPorCuota struct {
+		id          int64
+		proyectoID  int64
+		agente      string
+		estadoCuota string
+	}
+	var observadas []tareaPorCuota
+	for rows.Next() {
+		var item tareaPorCuota
+		if err := rows.Scan(&item.id, &item.proyectoID, &item.agente, &item.estadoCuota); err != nil {
+			return err
+		}
+		observadas = append(observadas, item)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	candidatas := make([]tareaPorCuota, 0, len(observadas))
+	for _, item := range observadas {
+		infoAgente, err := GetAgente(strings.TrimSpace(item.agente))
+		if err != nil {
+			if err == sql.ErrNoRows {
+				continue
+			}
+			return err
+		}
+		if infoAgente == nil {
+			continue
+		}
+		item.estadoCuota = strings.TrimSpace(infoAgente.EstadoCuota)
+		if item.estadoCuota != "enfriamiento" && item.estadoCuota != "agotado" {
+			continue
+		}
+		candidatas = append(candidatas, item)
+	}
+
+	for _, item := range candidatas {
+		anotacion := formatearAnotacionTarea("server",
+			fmt.Sprintf("tarea liberada automáticamente por cuota %s de %s", strings.TrimSpace(item.estadoCuota), strings.TrimSpace(item.agente)),
+			time.Now().UTC())
+		if _, err := DB.Exec(`
+			UPDATE tareas
+			SET estado='libre',
+			    agente=NULL,
+			    notas=COALESCE(notas,'') || ?
+			WHERE id=?`,
+			anotacion, item.id,
+		); err != nil {
+			return err
+		}
+		Audit("sistema", "liberar_tarea_por_cuota", "tarea", item.id,
+			fmt.Sprintf("agente=%s proyecto_id=%d estado_cuota=%s", strings.TrimSpace(item.agente), item.proyectoID, strings.TrimSpace(item.estadoCuota)))
+	}
 	return nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCupoDeseadoProyectoRespetaObjetivoMinYMax(t *testing.T) {
@@ -322,6 +323,155 @@ func TestPlanificarTareasAutomaticamenteNoRecuperaTareaRecienTomada(t *testing.T
 	}
 	if len(orders) != 0 {
 		t.Fatalf("no debería arrancar un nuevo agente mientras la tarea sigue protegida: %+v", orders)
+	}
+}
+
+func TestPlanificarTareasAutomaticamenteLiberaTareaAsignadaDeAgenteEnCuotaYLaReasigna(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexAgotado", "CodexNuevo")
+
+	if err := RegistrarAgente("CodexAgotado", "programador"); err != nil {
+		t.Fatalf("registrar agente agotado: %v", err)
+	}
+	if err := RegistrarAgente("CodexNuevo", "programador"); err != nil {
+		t.Fatalf("registrar agente nuevo: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre IN ('CodexAgotado','CodexNuevo')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', motivo_pausa='presupuesto agotado' WHERE nombre='CodexAgotado'`); err != nil {
+		t.Fatalf("marcar agente agotado: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := ActivarAsignacion("CodexNuevo", proyectoID, "frente libre"); err != nil {
+		t.Fatalf("activar asignacion nueva: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Repartir frente retenido por cuota",
+		Descripcion: "Debe volver al pool y reasignarse",
+		ProyectoID:  &proyectoID,
+		Modulo:      "orquestador",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "CodexAgotado"); err != nil {
+		t.Fatalf("tomar tarea agotado: %v", err)
+	}
+
+	if err := PlanificarTareasAutomaticamente(); err != nil {
+		t.Fatalf("planificar: %v", err)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	agenteAsignado := "<nil>"
+	if tarea.Agente != nil {
+		agenteAsignado = *tarea.Agente
+	}
+	if tarea.Agente == nil || *tarea.Agente != "CodexNuevo" || tarea.Estado != TareaAsignada {
+		t.Fatalf("la tarea retenida por cuota debería reasignarse al nuevo agente, agente=%s estado=%s notas=%q", agenteAsignado, tarea.Estado, tarea.Notas)
+	}
+	if !strings.Contains(strings.ToLower(tarea.Notas), "cuota enfriamiento") {
+		t.Fatalf("deberia anotar la liberacion por cuota: %q", tarea.Notas)
+	}
+	agente := "CodexNuevo"
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "start" {
+		t.Fatalf("debería encolar start para el nuevo agente: %+v", orders)
+	}
+}
+
+func TestPlanificarTareasAutomaticamenteLiberaTareaPorPresupuestoObservadoFresco(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexAgotado", "CodexNuevo")
+
+	if err := RegistrarAgente("CodexAgotado", "programador"); err != nil {
+		t.Fatalf("registrar agente agotado: %v", err)
+	}
+	if err := RegistrarAgente("CodexNuevo", "programador"); err != nil {
+		t.Fatalf("registrar agente nuevo: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre IN ('CodexAgotado','CodexNuevo')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+	if err := ConfigSet("pool_budget_snapshot_observed_max_age_seconds", "3600"); err != nil {
+		t.Fatalf("config observed snapshot max age: %v", err)
+	}
+	sesionID, err := IniciarSesion("CodexAgotado")
+	if err != nil {
+		t.Fatalf("iniciar sesion agotado: %v", err)
+	}
+	credits := 0.0
+	reset := time.Now().UTC().Add(90 * time.Minute)
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:         sesionID,
+		WindowKind:       "5h",
+		ResetAt:          &reset,
+		RemainingCredits: &credits,
+		BudgetSource:     "codex_token_count_observed",
+		CheckedAt:        time.Now().UTC().Add(-10 * time.Minute),
+	}); err != nil {
+		t.Fatalf("registrar presupuesto agotado: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := ActivarAsignacion("CodexNuevo", proyectoID, "frente libre"); err != nil {
+		t.Fatalf("activar asignacion nueva: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Repartir frente retenido por presupuesto observado",
+		Descripcion: "Debe volver al pool y reasignarse",
+		ProyectoID:  &proyectoID,
+		Modulo:      "orquestador",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "CodexAgotado"); err != nil {
+		t.Fatalf("tomar tarea agotado: %v", err)
+	}
+
+	if err := PlanificarTareasAutomaticamente(); err != nil {
+		t.Fatalf("planificar: %v", err)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "CodexNuevo" || tarea.Estado != TareaAsignada {
+		t.Fatalf("la tarea retenida por presupuesto observado debería reasignarse: %+v", tarea)
+	}
+	if !strings.Contains(strings.ToLower(tarea.Notas), "cuota agotado") {
+		t.Fatalf("deberia anotar la liberacion por cuota observada: %q", tarea.Notas)
 	}
 }
 

@@ -676,8 +676,16 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - la cuota visible de un agente no puede resumirse a un único porcentaje ambiguo. Orquesta debe conservar y exponer, como mínimo, `sesión`, `diario`, `semanal` y la `ventana efectiva` que manda en ese momento.
 - cada ventana visible debe incluir su propio `reset_at`; no vale mostrar solo el reset de la ventana ganadora si eso oculta un agotamiento semanal o de sesión.
 - la `ventana efectiva` es la más restrictiva entre presupuesto de sesión real y derivadas diaria/semanal. Si faltan snapshots ricos, se puede derivar, pero debe quedar claro qué ventana manda.
+- para `codex_token_count_observed`, si falta la clave de configuración específica, el TTL por defecto observado sigue siendo `3600s`; no puede caer silenciosamente al TTL genérico de `300s`, porque eso oculta agotamientos reales de la ventana `5h`.
+- un presupuesto fresco y crítico observado debe proyectarse también sobre `estado_cuota` visible del agente (`enfriamiento` o `agotado`) aunque la fila persistida aún no haya sido actualizada por un batch posterior.
 - la identidad de cuenta del agente (`usuario` / `correo`) debe salir solo de artefactos ya persistidos del runtime o del presupuesto (`raw_snapshot_json`, `metadata_json`). No se abre una segunda fuente de verdad ni se inventan credenciales.
 - si Orquesta no observa identidad fiable, deja el campo vacío. El contrato es `mejor dato observado`, no adivinación.
+
+## Liberación de tareas por cuota
+
+- la redistribución automática no puede depender solo del campo persistido `agentes.estado_cuota`. Si un agente tiene presupuesto fresco observado en estado crítico, el planificador debe tratarlo como no disponible aunque la reconciliación persistente llegue unos segundos después.
+- la liberación automática por cuota solo aplica a tareas `asignada`. Las tareas `en_progreso` no se sueltan por heurística de presupuesto; requieren relevo o checkpoint explícito.
+- los barridos del planificador no pueden abrir consultas adicionales mientras mantienen cursores vivos sobre SQLite con `MaxOpenConns=1`; primero se recopilan candidatos y después se enriquecen o validan.
 
 ## Mailbox en enfriamiento
 

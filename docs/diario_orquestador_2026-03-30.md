@@ -3874,3 +3874,83 @@ Resultado:
 
 - un agente con cuota agotada fresca deja de recibir `continuar_trabajo`
 - el siguiente batch autonomo ya puede pausar el runtime de forma coherente con la cuota efectiva
+
+Nota operativa:
+
+- aun faltaba una mitad del contrato: el control plane pausaba el runtime, pero no persistia `estado_cuota=enfriamiento`
+- sin ese estado persistido, el planificador no podia liberar tareas `asignada` retenidas por un agente parado por cuota
+
+## 2026-03-31 — La pausa por cuota persiste enfriamiento canónico
+
+Hallazgo:
+
+- `Codex5` ya devolvia `pausar_por_cuota` y el runtime quedaba pausado, pero seguia reteniendo tareas `asignada`
+- la causa real era que `procesarAutonomiaSesionActiva()` encolaba `pause` sin marcar al agente en `estado_cuota=enfriamiento`
+
+Decision:
+
+- cuando la autonomia decide `pausar_por_cuota`, primero debe persistir el enfriamiento canonico del agente
+- si existe un `PresupuestoSesion` fresco con `reset_at`, ese `reset_at` manda como `reanimar_at`
+- si no hay reset fiable, cae a una pausa prudente de `60m`
+
+Codigo:
+
+- [cmd/controlplane_support.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support.go)
+- [cmd/controlplane_support_test.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support_test.go)
+
+Validacion:
+
+- `go test ./cmd -run 'TestProcesarAutonomiaSesionActivaPersisteEnfriamientoPorCuota$' -count=1`
+
+Resultado:
+
+- la pausa por cuota deja al agente en estado canonico, no solo con el runtime pausado
+- eso desbloquea la liberacion posterior de tareas `asignada` retenidas por cuota
+
+## 2026-03-31 — La cuota observada fresca ya manda de verdad sobre el agente y el planificador
+
+Hallazgo:
+
+- `Codex5` tenia un `token_count` fresco de las `20:31Z` con `RemainingCredits=0`, pero Orquesta seguia tratandolo como `activo`
+- la causa era doble:
+  - si faltaba la clave `pool_budget_snapshot_observed_max_age_seconds`, la cuota observada de Codex caia al TTL generico de `300s`
+  - el planificador solo miraba `agentes.estado_cuota` persistido, no el estado visible proyectado desde presupuesto fresco
+
+Decision:
+
+- fijar `3600s` como fallback efectivo para `codex_token_count_observed` aunque la clave aun no exista en una BD vieja
+- proyectar `estado_cuota` visible desde presupuesto fresco (`agotado` / `enfriamiento`) sin esperar a otra reconciliacion
+- liberar tareas `asignada` retenidas por agentes con cuota visible critica, no solo por el campo persistido
+
+Codigo:
+
+- [db/presupuestos_sesion.go](/home/alberto/Trabajo/orquesta/db/presupuestos_sesion.go)
+- [db/sesiones.go](/home/alberto/Trabajo/orquesta/db/sesiones.go)
+- [db/planificador.go](/home/alberto/Trabajo/orquesta/db/planificador.go)
+- [db/presupuestos_sesion_test.go](/home/alberto/Trabajo/orquesta/db/presupuestos_sesion_test.go)
+- [db/planificador_autostart_test.go](/home/alberto/Trabajo/orquesta/db/planificador_autostart_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./db -run '^TestGetAgenteProyectaEstadoCuotaDesdePresupuestoObservadoFresco$' -count=1 -timeout 20s`
+- `go test ./db -run '^TestPlanificarTareasAutomaticamenteLiberaTareaPorPresupuestoObservadoFresco$' -count=1 -timeout 20s`
+- `go test ./db -run '^TestPlanificarTareasAutomaticamenteLiberaTareaAsignadaDeAgenteEnCuotaYLaReasigna$' -count=1 -timeout 20s`
+- `go test ./cmd ./db -run 'Test(ProcesarAutonomiaSesionActivaPersisteEnfriamientoPorCuota|ConstruirAgenteTickOutputPausaPorPresupuestoCriticoFresco|GetAgenteProyectaEstadoCuotaDesdePresupuestoObservadoFresco|PlanificarTareasAutomaticamenteLiberaTareaPorPresupuestoObservadoFresco)$' -count=1`
+- `go build -o ./orquesta .`
+
+Validacion viva:
+
+- `./orquesta agente tick Codex5 --proyecto orquestador` ya devuelve `pausar_por_cuota`
+- `./orquesta agente presupuesto --json` ya muestra para `Codex5`:
+  - `EstadoCuota=agotado`
+  - `PresupuestoStale=false`
+  - `PresupuestoVentana=5h`
+  - `ReanimarAt=2026-04-01T01:31:33Z`
+- `./orquesta status` ya ha liberado el frente de `Codex5`: quedan `8` tareas `asignada` y `4` `libre`
+- `./orquesta tarea listar --agente Codex5` ya no devuelve las tareas activas `414/415/417/425`
+
+Nota:
+
+- durante el primer intento aparecio un deadlock de SQLite en test: `reconciliarTareasAsignadasPorCuota()` llamaba a `GetAgente()` con el cursor de tareas aun abierto
+- el arreglo canonico es recopilar primero los candidatos y enriquecer despues, nunca consultar de nuevo con el `rows` vivo en SQLite `MaxOpenConns=1`

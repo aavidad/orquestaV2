@@ -350,6 +350,90 @@ func TestPresupuestoSesionFrescoUsaTTLObservadoEspecifico(t *testing.T) {
 	}
 }
 
+func TestUltimoPresupuestoAgenteRecuperaSesionPausadaReciente(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesionID, err := IniciarSesion("codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE sesiones SET estado='pausada' WHERE id=?`, sesionID); err != nil {
+		t.Fatalf("pausar sesion: %v", err)
+	}
+	credits := 0.0
+	reset := time.Now().UTC().Add(90 * time.Minute)
+	started := time.Now().UTC().Add(-10 * time.Minute)
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:         sesionID,
+		WindowKind:       "5h",
+		WindowStartedAt:  &started,
+		ResetAt:          &reset,
+		RemainingCredits: &credits,
+		BudgetSource:     "codex_token_count_observed",
+		CheckedAt:        time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion: %v", err)
+	}
+
+	p, sesion, err := UltimoPresupuestoAgente("codex1")
+	if err != nil {
+		t.Fatalf("UltimoPresupuestoAgente: %v", err)
+	}
+	if sesion == nil || sesion.ID != sesionID {
+		t.Fatalf("deberia reutilizar la sesion pausada reciente: %+v", sesion)
+	}
+	if p == nil || p.SesionID != sesionID {
+		t.Fatalf("presupuesto inesperado: %+v", p)
+	}
+}
+
+func TestGetAgenteProyectaEstadoCuotaDesdePresupuestoObservadoFresco(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesionID, err := IniciarSesion("codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	if err := ConfigSet("pool_budget_snapshot_observed_max_age_seconds", "3600"); err != nil {
+		t.Fatalf("config observed snapshot max age: %v", err)
+	}
+	credits := 0.0
+	reset := time.Now().UTC().Add(90 * time.Minute)
+	checkedAt := time.Now().UTC().Add(-10 * time.Minute)
+	raw := `{"account_email":"codex1@example.com","account_user":"codex1_user"}`
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:         sesionID,
+		WindowKind:       "5h",
+		ResetAt:          &reset,
+		RemainingCredits: &credits,
+		BudgetSource:     "codex_token_count_observed",
+		RawSnapshotJSON:  raw,
+		CheckedAt:        checkedAt,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion: %v", err)
+	}
+
+	agente, err := GetAgente("codex1")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.EstadoCuota != "agotado" {
+		t.Fatalf("estado_cuota proyectado inesperado: %+v", agente)
+	}
+	if agente.ReanimarAt == nil || agente.ReanimarAt.UTC().Unix() != reset.UTC().Unix() {
+		t.Fatalf("reanimar_at proyectado inesperado: %+v", agente)
+	}
+	if agente.PresupuestoStale {
+		t.Fatalf("el presupuesto observado no deberia estar stale: %+v", agente)
+	}
+}
+
 func TestGetAgenteExtraeCuentaDesdeRuntimeHandle(t *testing.T) {
 	abrirDBTemporalMemoria(t)
 

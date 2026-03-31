@@ -1940,6 +1940,11 @@ func procesarAutonomiaSesionActiva(sesion *db.Sesion) (int, error) {
 		} else if satisfecha {
 			return 0, nil
 		}
+		if strings.TrimSpace(out.AccionRecomendada) == "pausar_por_cuota" {
+			if err := persistirPausaPorCuotaAutonomia(sesion.Agente, out.Motivo); err != nil {
+				return 0, err
+			}
+		}
 		if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
 			Agente:   sesion.Agente,
 			Proyecto: proyecto.Slug,
@@ -1976,6 +1981,29 @@ func procesarAutonomiaSesionActiva(sesion *db.Sesion) (int, error) {
 	default:
 		return 0, nil
 	}
+}
+
+func persistirPausaPorCuotaAutonomia(agente, motivo string) error {
+	agente = strings.TrimSpace(agente)
+	motivo = strings.TrimSpace(motivo)
+	if agente == "" {
+		return nil
+	}
+	infoAgente, err := db.GetAgente(agente)
+	if err != nil {
+		return err
+	}
+	if infoAgente != nil && strings.EqualFold(strings.TrimSpace(infoAgente.EstadoCuota), "enfriamiento") && infoAgente.ReanimarAt != nil && infoAgente.ReanimarAt.After(time.Now().UTC()) {
+		return nil
+	}
+	p, _, err := db.UltimoPresupuestoAgente(agente)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	if err == nil && p != nil && db.PresupuestoSesionFresco(p) && p.ResetAt != nil && p.ResetAt.After(time.Now().UTC()) {
+		return db.PausarAgenteHasta(agente, p.ResetAt.UTC(), motivo)
+	}
+	return db.PausarAgente(agente, 60, motivo)
 }
 
 func procesarCierreProyectoSesion(sesion *db.Sesion) (int, error) {

@@ -823,6 +823,37 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 			aplicarIdentidadCuentaAgente(a, identidadCuentaDesdeHandle(handles[0]))
 		}
 	}
+	proyectarEstadoCuotaVisibleDesdePresupuesto(a)
+}
+
+func proyectarEstadoCuotaVisibleDesdePresupuesto(a *Agente) {
+	if a == nil {
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(a.EstadoCuota), "activo") {
+		return
+	}
+	if a.PresupuestoCheckedAt == nil || a.PresupuestoStale {
+		return
+	}
+	switch strings.ToLower(strings.TrimSpace(a.PresupuestoEstado)) {
+	case "agotado":
+		a.EstadoCuota = "agotado"
+		if a.PresupuestoResetAt != nil && a.PresupuestoResetAt.After(time.Now().UTC()) {
+			a.ReanimarAt = a.PresupuestoResetAt
+		}
+		if strings.TrimSpace(a.MotivoPausa) == "" {
+			a.MotivoPausa = "Presupuesto agotado observado"
+		}
+	case "handoff_preventivo":
+		a.EstadoCuota = "enfriamiento"
+		if a.PresupuestoResetAt != nil && a.PresupuestoResetAt.After(time.Now().UTC()) {
+			a.ReanimarAt = a.PresupuestoResetAt
+		}
+		if strings.TrimSpace(a.MotivoPausa) == "" {
+			a.MotivoPausa = "Presupuesto crítico observado"
+		}
+	}
 }
 
 type presupuestoAgenteCandidato struct {
