@@ -616,3 +616,10 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - los tests E2E que arrancan runtimes reales no deben depender de árboles de procesos ambiguos del shell.
 - cuando un launcher de test solo necesita dejar un proceso vivo, debe hacer `exec` del proceso final para que el cleanup mate exactamente al runtime y no deje hijos residuales.
 - los tests que esperan eventos visibles por API bajo carga de suite deben usar ventanas temporales realistas; si pasan en aislado y fallan solo por margen corto, se endurece el timeout del test, no se relaja la semántica del control plane.
+
+## Persistencia SQLite activa
+
+- mientras SQLite siga siendo backend soportado y backend vivo del servidor, el adaptador debe quedar sano por sí mismo; no vale asumir que el DSN ya aplicará siempre todos los pragmas correctos.
+- `journal_mode=WAL` es parte del contrato operativo del backend SQLite server-first; la verificación viva de persistencia debe reflejar `wal`, no `delete`, cuando el daemon ha arrancado con el binario correcto.
+- `runtime_mailbox.from_agente` representa un emisor lógico del control plane y no debe exigir FK a `agentes(nombre)`. El destinatario `to_agente` sí sigue siendo un agente real.
+- emisores como `server` u `orquesta` son canónicos en mailbox/runtime orders; el schema no puede romper esa semántica.

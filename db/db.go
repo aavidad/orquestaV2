@@ -299,6 +299,9 @@ func prepararSchemaLegacy(db *sql.DB) error {
 	if err := reconstruirRuntimeOrdersLegacy(db); err != nil {
 		return err
 	}
+	if err := reconstruirRuntimeMailboxLegacy(db); err != nil {
+		return err
+	}
 	if err := reconstruirAutonomiaCiclosLegacy(db); err != nil {
 		return err
 	}
@@ -581,6 +584,66 @@ func reconstruirAutonomiaCiclosLegacy(db *sql.DB) error {
 				runtimeLegacyExpr(legacyCols, "created_at", "CURRENT_TIMESTAMP"),
 			}
 			return `INSERT INTO autonomia_ciclos (` + strings.Join(insertCols, ", ") + `)
+				SELECT ` + strings.Join(selectExprs, ", ") + ` FROM ` + legacy, nil
+		},
+	)
+}
+
+func reconstruirRuntimeMailboxLegacy(db *sql.DB) error {
+	const tableName = "runtime_mailbox"
+	existe, err := tablaExiste(db, tableName)
+	if err != nil || !existe {
+		return err
+	}
+	sqlText, err := tablaSQL(db, tableName)
+	if err != nil {
+		return err
+	}
+	sqlNorm := strings.ToLower(strings.TrimSpace(sqlText))
+	if sqlNorm != "" && !strings.Contains(sqlNorm, "from_agente         text    not null references agentes(nombre)") &&
+		!strings.Contains(sqlNorm, "from_agente text not null references agentes(nombre)") {
+		return nil
+	}
+	return rebuildSQLiteTable(
+		db,
+		tableName,
+		[]string{"idx_runtime_mailbox_destino_estado"},
+		`CREATE TABLE runtime_mailbox (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			from_agente TEXT NOT NULL,
+			to_agente TEXT NOT NULL REFERENCES agentes(nombre),
+			proyecto_id INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+			runtime_order_id INTEGER REFERENCES runtime_orders(id) ON DELETE SET NULL,
+			kind TEXT NOT NULL,
+			payload_json TEXT NOT NULL DEFAULT '{}',
+			estado TEXT NOT NULL DEFAULT 'pendiente'
+				CHECK (estado IN ('pendiente','entregado','consumido','expirado','cancelado')),
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			delivered_at DATETIME,
+			consumed_at DATETIME
+		)`,
+		[]string{
+			`CREATE INDEX idx_runtime_mailbox_destino_estado ON runtime_mailbox(to_agente, estado, id DESC)`,
+		},
+		func(legacy string, legacyCols map[string]bool) (string, []any) {
+			insertCols := []string{
+				"id", "from_agente", "to_agente", "proyecto_id", "runtime_order_id",
+				"kind", "payload_json", "estado", "created_at", "delivered_at", "consumed_at",
+			}
+			selectExprs := []string{
+				runtimeLegacyExpr(legacyCols, "id", "NULL"),
+				runtimeLegacyExpr(legacyCols, "from_agente", "'server'"),
+				runtimeLegacyExpr(legacyCols, "to_agente", "''"),
+				runtimeLegacyExpr(legacyCols, "proyecto_id", "NULL"),
+				runtimeLegacyExpr(legacyCols, "runtime_order_id", "NULL"),
+				runtimeLegacyExpr(legacyCols, "kind", "'instruction'"),
+				runtimeLegacyExpr(legacyCols, "payload_json", "'{}'"),
+				runtimeLegacyExpr(legacyCols, "estado", "'pendiente'"),
+				runtimeLegacyExpr(legacyCols, "created_at", "CURRENT_TIMESTAMP"),
+				runtimeLegacyExpr(legacyCols, "delivered_at", "NULL"),
+				runtimeLegacyExpr(legacyCols, "consumed_at", "NULL"),
+			}
+			return `INSERT INTO runtime_mailbox (` + strings.Join(insertCols, ", ") + `)
 				SELECT ` + strings.Join(selectExprs, ", ") + ` FROM ` + legacy, nil
 		},
 	)

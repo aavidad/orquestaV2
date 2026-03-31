@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -34,6 +35,10 @@ func (sqliteBackend) Open(cfg storage.Config) (*sql.DB, error) {
 	db, err := storage.Open(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("abriendo DB sqlite en %s: %w", target, err)
+	}
+	if err := sqliteApplyConnectionPragmas(db, cfg); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("configurando pragmas sqlite en %s: %w", target, err)
 	}
 	return db, nil
 }
@@ -126,6 +131,35 @@ func literalSQLite(v string) string {
 	return "'" + strings.ReplaceAll(v, "'", "''") + "'"
 }
 
+func sqliteApplyConnectionPragmas(db *sql.DB, cfg storage.Config) error {
+	if db == nil {
+		return nil
+	}
+	if sqliteDSNMode(cfg.DSN) == "ro" {
+		return nil
+	}
+	if _, err := db.Exec(`PRAGMA journal_mode = WAL`); err != nil {
+		if (sqliteBackend{}).IsBusy(err) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+func sqliteDSNMode(dsn string) string {
+	dsn = strings.TrimSpace(dsn)
+	if dsn == "" {
+		return ""
+	}
+	if idx := strings.IndexByte(dsn, '?'); idx >= 0 && idx+1 < len(dsn) {
+		if values, err := url.ParseQuery(dsn[idx+1:]); err == nil {
+			return strings.TrimSpace(strings.ToLower(values.Get("mode")))
+		}
+	}
+	return ""
+}
+
 func sqliteBootstrapRequired(db *sql.DB) (bool, error) {
 	requiredTables := []string{
 		"config",
@@ -181,7 +215,15 @@ func sqliteBootstrapRequired(db *sql.DB) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return needsRebuild, err
+	if needsRebuild {
+		return true, nil
+	}
+
+	needsRebuild, err = sqliteRuntimeMailboxNeedsRebuild(db)
+	if err != nil {
+		return false, err
+	}
+	return needsRebuild, nil
 }
 
 func sqliteBootstrapRevisionApplied(db *sql.DB) (bool, error) {
@@ -296,6 +338,19 @@ func sqliteAutonomiaCiclosNeedsRebuild(db *sql.DB) (bool, error) {
 	}
 	sqlNorm := strings.ToLower(strings.TrimSpace(sqlText))
 	return sqlNorm == "" || !strings.Contains(sqlNorm, "review_feedback"), nil
+}
+
+func sqliteRuntimeMailboxNeedsRebuild(db *sql.DB) (bool, error) {
+	sqlText, err := tablaSQL(db, "runtime_mailbox")
+	if err != nil {
+		return false, err
+	}
+	sqlNorm := strings.ToLower(strings.TrimSpace(sqlText))
+	if sqlNorm == "" {
+		return false, nil
+	}
+	return strings.Contains(sqlNorm, "from_agente text not null references agentes(nombre)") ||
+		strings.Contains(sqlNorm, "from_agente         text    not null references agentes(nombre)"), nil
 }
 
 func sqliteNormalizeOpenProposalState(db *sql.DB) error {

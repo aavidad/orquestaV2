@@ -2459,3 +2459,35 @@ Validacion:
 - `go test ./cmd -run 'Test(APIControlPlaneArranqueRealConBootstrapMultilinea|ControlPlaneRunnerExponeEventoAutoGuidancePorAPI)' -count=10`
 - `go test ./... -count=1`
 - la suite completa queda en verde
+
+## 2026-03-31 — persistencia activa: mailbox con emisor lógico y SQLite en WAL
+
+Hallazgo:
+
+- el plano de control usa `server` y `orquesta` como emisores lógicos de `runtime_mailbox`, pero el schema seguía anclando `from_agente` a `agentes(nombre)`
+- al endurecer la apertura SQLite salieron dos verdades distintas: el bug estructural no era “usar SQLite”, sino que `runtime_mailbox.from_agente` estaba mal modelado; además la verificación viva seguía reportando `journal_mode=delete` hasta reiniciar el daemon con el binario nuevo
+
+Decision:
+
+- `runtime_mailbox.from_agente` deja de tener FK a `agentes(nombre)`; solo `to_agente` sigue referenciando un agente real
+- se añade migración/rebuild SQLite para `runtime_mailbox` legacy con ese contrato nuevo
+- el adaptador SQLite fija `journal_mode=WAL` al abrir en modo lectura-escritura, pero no fuerza pragmas mutables en `mode=ro`
+- no se fuerza `foreign_keys=ON` globalmente desde `Open`, porque ese cambio estaba arrastrando deuda legacy mucho más amplia y no era el bug a cerrar en este ciclo
+
+Codigo:
+
+- [db/schema.go](/home/alberto/Trabajo/orquesta/db/schema.go)
+- [db/db.go](/home/alberto/Trabajo/orquesta/db/db.go)
+- [db/backend_sqlite.go](/home/alberto/Trabajo/orquesta/db/backend_sqlite.go)
+- [db/backend_sqlite_test.go](/home/alberto/Trabajo/orquesta/db/backend_sqlite_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./db -run 'TestSQLitePrepareOmiteBootstrapConSchemaActualSinRevision|TestSQLitePrepareRebuildRuntimeMailboxPermiteEmisorLogico|TestSQLite(BackendOpenFuerzaJournalModeWALAunqueElDSNFalte|BackendOpenReadOnlyNoFuerzaPragmasMutables)' -count=1`
+- `go test ./db ./storage ./cmd -count=1`
+- `go build -o ./orquesta .`
+- reinicio del servidor por la vía oficial y validación viva:
+  - `./orquesta server doctor` => `Health RPC: OK`
+  - `./orquesta persistencia verificar` => `journal_mode=wal`
+  - `./orquesta status` vuelve a responder por server-first

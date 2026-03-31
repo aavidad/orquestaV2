@@ -421,7 +421,7 @@ ON runtime_orders(estado, available_at, id);
 
 CREATE TABLE IF NOT EXISTS runtime_mailbox (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    from_agente         TEXT    NOT NULL REFERENCES agentes(nombre),
+    from_agente         TEXT    NOT NULL,
     to_agente           TEXT    NOT NULL REFERENCES agentes(nombre),
     proyecto_id         INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
     runtime_order_id    INTEGER REFERENCES runtime_orders(id) ON DELETE SET NULL,
