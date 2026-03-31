@@ -67,6 +67,35 @@ Conclusion:
 - `local_runtime_failed` deja de ser una decision basada solo en estado fosilizado
 - la recuperacion local pasa a apoyarse primero en evidencia viva del proceso antes de relanzar
 
+## 2026-03-31 16:20 aprox. — `runtime_panic` deja de arrastrar el comando completo de `script(1)`
+
+Hallazgo:
+
+- la API de `runtime-events` seguia devolviendo algunos `runtime_panic` enormes
+- el caso real mezclaba en la misma linea el preambulo de `script(1)` (`Script started on ... [COMMAND=...]`) con el texto de panic
+- eso ensucia observabilidad, hincha respuestas y mete bootstrap completo donde solo deberia verse el fallo util
+
+Decision:
+
+- si una linea empieza por `Script started on ` y luego contiene el panic real, Orquesta debe recortarla al marcador de fallo
+- el transcript y el `runtime_event` deben conservar el panic, no el comando gigantesco que lo precede
+
+Cambios:
+
+- `db/runtime_transcript.go`
+  - nuevo helper `recortarPreambuloSistemaHastaFallo(...)`
+  - `limpiarLineaTranscript(...)` recorta el preambulo de `script(1)` antes de persistir
+- `db/runtime_transcript_test.go`
+  - nueva regresion `TestIngestarRuntimeTranscriptHandleRecortaPreambuloScriptEnRuntimePanic`
+
+Validacion:
+
+- el test nuevo verifica que el transcript y el `runtime_event` ya no contienen `Script started on ...` cuando la misma linea incluye `The application panicked (crashed).`
+
+Conclusion:
+
+- la observabilidad del panic deja de arrastrar bootstrap completo y vuelve a ser legible y barata
+
 ## 2026-03-31 11:3x aprox. — fusible permanente para `supervisor_local` tras `runtime_panic` real en Codex
 
 Hallazgo:

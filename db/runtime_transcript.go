@@ -557,8 +557,36 @@ func limpiarLineaTranscript(raw string) string {
 	raw = oscTranscriptRegexp.ReplaceAllString(raw, "")
 	raw = ansiTranscriptRegexp.ReplaceAllString(raw, "")
 	raw = strings.ReplaceAll(raw, "\x00", "")
+	raw = recortarPreambuloSistemaHastaFallo(raw)
 	raw = strings.TrimSpace(raw)
 	return raw
+}
+
+func recortarPreambuloSistemaHastaFallo(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if !strings.HasPrefix(raw, "Script started on ") {
+		return raw
+	}
+	panicMarkers := []string{
+		"The application panicked (crashed).",
+		"thread 'main' panicked",
+		"panic:",
+		"fatal error:",
+	}
+	best := -1
+	for _, marker := range panicMarkers {
+		idx := strings.Index(raw, marker)
+		if idx <= 0 {
+			continue
+		}
+		if best < 0 || idx < best {
+			best = idx
+		}
+	}
+	if best < 0 {
+		return raw
+	}
+	return raw[best:]
 }
 
 func normalizarTextoTranscript(raw string) string {

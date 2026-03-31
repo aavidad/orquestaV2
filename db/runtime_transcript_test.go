@@ -513,3 +513,76 @@ func TestIngestarRuntimeTranscriptHandleFiltraRuidoYClasificaPanic(t *testing.T)
 		t.Fatalf("level inesperado para runtime_panic: %s", level)
 	}
 }
+
+func TestIngestarRuntimeTranscriptHandleRecortaPreambuloScriptEnRuntimePanic(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, _ := GetRuntimeBySesionID(sesion.ID)
+	handle, _ := GetRuntimeHandleBySesionID(sesion.ID)
+
+	logPath := filepath.Join(t.TempDir(), "script-panic.log")
+	logData := strings.Join([]string{
+		`Script started on 2026-03-31 16:48:56+02:00 [COMMAND="'/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil' 'Codex1' '-C' '/tmp/orquesta' 'Bootstrap enorme ...'"] The application panicked (crashed).`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(logPath, []byte(logData), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	n, err := IngestarRuntimeTranscriptHandle(handle.ID)
+	if err != nil {
+		t.Fatalf("ingestar transcript: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("debería ingerir solo una línea útil, got=%d", n)
+	}
+
+	agente := "Codex1"
+	items, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: &agente, Limit: 10})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	if len(items) != 1 || items[0].Classification != "runtime_panic" {
+		t.Fatalf("clasificación inesperada: %+v", items)
+	}
+	if strings.Contains(items[0].Text, "Script started on ") {
+		t.Fatalf("el preámbulo de script no debería persistirse en el panic: %+v", items[0])
+	}
+	if !strings.Contains(items[0].Text, "The application panicked (crashed).") {
+		t.Fatalf("debería conservar el texto útil del panic: %+v", items[0])
+	}
+	var message string
+	if err := DB.QueryRow(`SELECT message FROM runtime_events WHERE runtime_id=? AND kind='runtime_panic' ORDER BY id DESC LIMIT 1`, runtime.ID).Scan(&message); err != nil {
+		t.Fatalf("runtime_event panic: %v", err)
+	}
+	if strings.Contains(message, "Script started on ") {
+		t.Fatalf("el evento runtime_panic no debería arrastrar el comando de script: %s", message)
+	}
+}

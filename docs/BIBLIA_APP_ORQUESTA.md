@@ -234,6 +234,7 @@ Regla operativa para `server_autobootstrap`:
 - el watchdog de handoff no puede decidir agotamiento solo por `sesiones.heartbeat_at`; si el runtime activo sigue emitiendo `last_event_at` o `last_heartbeat_at` recientes, esa actividad invalida el stale de la sesion y no debe encolarse `sync_status/watchdog`
 - por la misma razon, un proceso vivo con runtime activo reciente tampoco puede escalar directamente a `handoff`; antes de relevar a un agente, el plano de control debe distinguir entre “sesion sin latido” y “runtime realmente parado o degradado”
 - la recuperacion de runtime local no puede decidir `local_runtime_failed` solo por estados persistidos viejos; antes de reencolar `start/resume`, el daemon debe observar el proceso local y revivir `handle/runtime` si el proceso sigue vivo
+- la observabilidad de transcript no puede propagar el preambulo completo de `script(1)` ni comandos bootstrap gigantes dentro de un `runtime_panic`; si la linea mezcla `Script started on ... [COMMAND=...]` con el fallo real, Orquesta debe recortarla al texto util del panic antes de persistir transcript/evento
 
 Contrato minimo obligatorio para `runtime_orders`:
 
