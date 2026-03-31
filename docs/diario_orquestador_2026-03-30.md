@@ -2994,3 +2994,41 @@ Validacion:
   - `./orquesta server start`
   - `ls -l /tmp/orquesta-localrpc-2ea48e3b1141.json`
   - `./orquesta server doctor`
+
+## 2026-03-31 — cuota por ventana e identidad observada de cuenta
+
+Hallazgo:
+
+- `status` ya mostraba una cuota efectiva, pero seguía faltando el desglose visible por ventana con su `reset` propio; eso seguía ocultando si el cuello real era de `5h`, diario o semanal.
+- además faltaba una identidad operativa útil por agente (`correo`/`usuario`) para saber qué cuenta real estaba usando cada runtime cuando hay varias credenciales o ventanas activas.
+
+Decision:
+
+- `db.Agente` pasa a exponer porcentaje y `reset_at` por `sesión`, `diario` y `semanal`, además de la `ventana efectiva`.
+- la CLI de `status` renderiza ese desglose completo en una sola línea por agente.
+- la identidad de cuenta se extrae solo de snapshots ya persistidos:
+  - `presupuestos_sesion.raw_snapshot_json`
+  - `runtime_handles.metadata_json`
+- no se abre ninguna fuente paralela ni se “deduce” correo fuera de esos artefactos; si no hay dato observado, el campo queda vacío.
+
+Codigo:
+
+- [db/sesiones.go](/home/alberto/Trabajo/orquesta/db/sesiones.go)
+- [db/presupuestos_sesion_test.go](/home/alberto/Trabajo/orquesta/db/presupuestos_sesion_test.go)
+- [cmd/status_remoto_compat.go](/home/alberto/Trabajo/orquesta/cmd/status_remoto_compat.go)
+- [cmd/status_test.go](/home/alberto/Trabajo/orquesta/cmd/status_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(ListarAgentesEnriquecePresupuestoVisible|ListarAgentesUsaPresupuestoSemanalSiEsMasRestrictivo|GetAgenteExtraeCuentaDesdeRuntimeHandle|EvaluarPresupuestoSesionHandoffPreventivo)' -count=1`
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'Test(RenderStatusSummaryMuestraCuotaAgente|RenderStatusSummaryMuestraBackendActivo)' -count=1`
+- `go build -o ./orquesta .`
+- smoke vivo:
+  - `./orquesta server stop`
+  - `./orquesta server start`
+  - `./orquesta server doctor`
+  - `./orquesta status`
+- resultado vivo:
+  - `status` ya muestra `diario` y `semanal` con `reset` propio por agente
+  - los agentes activos aún no exponen `correo` porque no hay identidad observada en sus snapshots/metadata actuales; el soporte queda listo para mostrarla cuando el runtime la persista

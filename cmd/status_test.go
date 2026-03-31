@@ -407,26 +407,45 @@ func TestRenderStatusSummaryMuestraBackendActivo(t *testing.T) {
 func TestRenderStatusSummaryMuestraCuotaAgente(t *testing.T) {
 	pct := 18
 	credits := 3.5
+	sessionPct := 42
+	dailyPct := 77
+	weeklyPct := 12
 	resetAt := time.Date(2026, 4, 1, 2, 0, 0, 0, time.UTC)
+	sessionResetAt := time.Date(2026, 3, 31, 21, 0, 0, 0, time.UTC)
+	weeklyResetAt := time.Date(2026, 4, 6, 2, 0, 0, 0, time.UTC)
 	out := captureOutput(t, func() {
 		renderStatusSummary(&statusContext{
 			resumen: &estadoResumen{
 				AgentesActivos: []*db.Agente{
 					{
-						Nombre:           "Codex2",
-						Rol:              "programador",
-						CuotaRestantePct: &pct,
-						RemainingCredits: &credits,
-						PresupuestoEstado: "handoff_preventivo",
-						PresupuestoVentana: "weekly",
-						PresupuestoResetAt: &resetAt,
+						Nombre:                    "Codex2",
+						Rol:                       "programador",
+						CuentaEmail:               "codex2@example.com",
+						CuentaUsuario:             "codex2_user",
+						CuotaRestantePct:          &pct,
+						RemainingCredits:          &credits,
+						PresupuestoEstado:         "handoff_preventivo",
+						PresupuestoVentana:        "weekly",
+						PresupuestoResetAt:        &resetAt,
+						PresupuestoSesionPct:      &sessionPct,
+						PresupuestoSesionResetAt:  &sessionResetAt,
+						PresupuestoDiarioPct:      &dailyPct,
+						PresupuestoDiarioResetAt:  &resetAt,
+						PresupuestoSemanalPct:     &weeklyPct,
+						PresupuestoSemanalResetAt: &weeklyResetAt,
 					},
 				},
 				TareasPorEstado: map[string]int{},
 			},
 		})
 	})
-	if !strings.Contains(out, "restante 18%") {
+	if !strings.Contains(out, "cuenta codex2@example.com") {
+		t.Fatalf("salida sin cuenta visible: %s", out)
+	}
+	if !strings.Contains(out, "usuario codex2_user") {
+		t.Fatalf("salida sin usuario visible: %s", out)
+	}
+	if !strings.Contains(out, "efectivo 18%") {
 		t.Fatalf("salida sin porcentaje de cuota: %s", out)
 	}
 	if !strings.Contains(out, "cred 3.50") {
@@ -437,6 +456,15 @@ func TestRenderStatusSummaryMuestraCuotaAgente(t *testing.T) {
 	}
 	if !strings.Contains(out, "reset 2026-04-01 04:00") && !strings.Contains(out, "reset 2026-04-01 02:00") {
 		t.Fatalf("salida sin reset visible: %s", out)
+	}
+	if !strings.Contains(out, "sesión 42%") {
+		t.Fatalf("salida sin porcentaje de sesión: %s", out)
+	}
+	if !strings.Contains(out, "diario 77%") {
+		t.Fatalf("salida sin porcentaje diario: %s", out)
+	}
+	if !strings.Contains(out, "semanal 12%") {
+		t.Fatalf("salida sin porcentaje semanal: %s", out)
 	}
 }
 

@@ -169,6 +169,9 @@ func renderStatusSummary(ctx *statusContext) {
 	fmt.Printf("👥 Agentes: %d activos ahora\n", len(resumen.AgentesActivos))
 	for _, a := range resumen.AgentesActivos {
 		fmt.Printf("   🟢 %-15s [%s]", a.Nombre, a.Rol)
+		if cuenta := resumenCuentaAgente(a); cuenta != "" {
+			fmt.Printf(" — %s", cuenta)
+		}
 		if detalle := resumenCuotaAgente(a); detalle != "" {
 			fmt.Printf(" — %s", detalle)
 		}
@@ -226,13 +229,16 @@ func resumenCuotaAgente(a *db.Agente) string {
 	}
 	partes := make([]string, 0, 4)
 	if a.CuotaRestantePct != nil {
-		partes = append(partes, fmt.Sprintf("restante %d%%", *a.CuotaRestantePct))
+		partes = append(partes, fmt.Sprintf("efectivo %d%%", *a.CuotaRestantePct))
 	}
 	if a.PresupuestoVentana != "" {
 		partes = append(partes, "ventana "+a.PresupuestoVentana)
 	}
 	if a.PresupuestoResetAt != nil && !a.PresupuestoResetAt.IsZero() {
 		partes = append(partes, "reset "+a.PresupuestoResetAt.Local().Format("2006-01-02 15:04"))
+	}
+	if extra := resumenDesgloseCuotaAgente(a); extra != "" {
+		partes = append(partes, extra)
 	}
 	if a.RemainingCredits != nil {
 		partes = append(partes, fmt.Sprintf("cred %.2f", *a.RemainingCredits))
@@ -244,6 +250,51 @@ func resumenCuotaAgente(a *db.Agente) string {
 		partes = append(partes, "cuota:"+a.EstadoCuota)
 	}
 	return strings.Join(partes, " · ")
+}
+
+func resumenCuentaAgente(a *db.Agente) string {
+	if a == nil {
+		return ""
+	}
+	partes := make([]string, 0, 2)
+	if email := strings.TrimSpace(a.CuentaEmail); email != "" {
+		partes = append(partes, "cuenta "+email)
+	}
+	if usuario := strings.TrimSpace(a.CuentaUsuario); usuario != "" && !strings.EqualFold(usuario, strings.TrimSpace(a.CuentaEmail)) {
+		partes = append(partes, "usuario "+usuario)
+	}
+	return strings.Join(partes, " · ")
+}
+
+func resumenDesgloseCuotaAgente(a *db.Agente) string {
+	if a == nil {
+		return ""
+	}
+	partes := []string{}
+	if a.PresupuestoSesionPct != nil {
+		partes = append(partes, renderVentanaPresupuesto("sesión", a.PresupuestoSesionPct, a.PresupuestoSesionResetAt))
+	}
+	if a.PresupuestoDiarioPct != nil {
+		partes = append(partes, renderVentanaPresupuesto("diario", a.PresupuestoDiarioPct, a.PresupuestoDiarioResetAt))
+	}
+	if a.PresupuestoSemanalPct != nil {
+		partes = append(partes, renderVentanaPresupuesto("semanal", a.PresupuestoSemanalPct, a.PresupuestoSemanalResetAt))
+	}
+	if len(partes) == 0 {
+		return ""
+	}
+	return strings.Join(partes, " / ")
+}
+
+func renderVentanaPresupuesto(nombre string, pct *int, resetAt *time.Time) string {
+	if pct == nil {
+		return ""
+	}
+	parte := fmt.Sprintf("%s %d%%", nombre, *pct)
+	if resetAt != nil && !resetAt.IsZero() {
+		parte += " reset " + resetAt.Local().Format("2006-01-02 15:04")
+	}
+	return parte
 }
 
 func serverInfoLines(info *serverInfo) []string {

@@ -10,30 +10,40 @@ import (
 )
 
 type Agente struct {
-	Nombre                 string
-	Rol                    string
-	Activo                 bool   // en sesión ahora mismo
-	Habilitado             bool   // false = retirado por Alberto
-	EstadoSesion           string // disponible | programando | esperando | votando
-	UltimaSesion           *time.Time
-	ConsumoDiaSegundos     int
-	ConsumoSemanalSegundos int
-	LimiteDiaSegundos      int
-	LimiteSemanalSegundos  int
-	LastUsageResetAt       *time.Time
-	EstadoCuota            string
-	ReanimarAt             *time.Time
-	MotivoPausa            string
-	CuotaRestantePct       *int
-	PresupuestoEstado      string
-	PresupuestoFuente      string
-	PresupuestoCheckedAt   *time.Time
-	PresupuestoVentana     string
-	PresupuestoResetAt     *time.Time
-	RemainingSeconds       *int64
-	RemainingMessages      *int64
-	RemainingTokens        *int64
-	RemainingCredits       *float64
+	Nombre                    string
+	Rol                       string
+	Activo                    bool   // en sesión ahora mismo
+	Habilitado                bool   // false = retirado por Alberto
+	EstadoSesion              string // disponible | programando | esperando | votando
+	UltimaSesion              *time.Time
+	ConsumoDiaSegundos        int
+	ConsumoSemanalSegundos    int
+	LimiteDiaSegundos         int
+	LimiteSemanalSegundos     int
+	LastUsageResetAt          *time.Time
+	EstadoCuota               string
+	ReanimarAt                *time.Time
+	MotivoPausa               string
+	CuotaRestantePct          *int
+	PresupuestoEstado         string
+	PresupuestoFuente         string
+	PresupuestoCheckedAt      *time.Time
+	PresupuestoVentana        string
+	PresupuestoResetAt        *time.Time
+	PresupuestoSesionPct      *int
+	PresupuestoSesionResetAt  *time.Time
+	PresupuestoDiarioPct      *int
+	PresupuestoDiarioResetAt  *time.Time
+	PresupuestoSemanalPct     *int
+	PresupuestoSemanalResetAt *time.Time
+	RemainingSeconds          *int64
+	RemainingMessages         *int64
+	RemainingTokens           *int64
+	RemainingCredits          *float64
+	CuentaUsuario             string
+	CuentaEmail               string
+	CuentaFuente              string
+	CuentaObservadaAt         *time.Time
 }
 
 type Sesion struct {
@@ -726,55 +736,53 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 	if a == nil {
 		return
 	}
-	candidato := mejorPresupuestoDerivadoAgente(a)
-	if candidato.pct != nil {
-		a.CuotaRestantePct = candidato.pct
-		a.PresupuestoVentana = candidato.windowKind
-		a.PresupuestoFuente = candidato.source
-		a.PresupuestoResetAt = candidato.resetAt
-	}
+	diario := presupuestoDerivadoDiarioAgente(a)
+	semanal := presupuestoDerivadoSemanalAgente(a)
+	a.PresupuestoDiarioPct = diario.pct
+	a.PresupuestoDiarioResetAt = diario.resetAt
+	a.PresupuestoSemanalPct = semanal.pct
+	a.PresupuestoSemanalResetAt = semanal.resetAt
+	candidato := seleccionarPresupuestoEfectivo([]presupuestoAgenteCandidato{diario, semanal})
+	aplicarPresupuestoEfectivoAgente(a, candidato)
 
 	p, _, err := UltimoPresupuestoAgente(a.Nombre)
-	if err == sql.ErrNoRows || p == nil {
-		return
-	}
-	if err != nil {
-		return
-	}
-	ev, err := EvaluarPresupuestoSesion(p)
-	if err != nil {
-		return
-	}
-	a.PresupuestoEstado = strings.TrimSpace(ev.Estado)
-	a.PresupuestoFuente = strings.TrimSpace(p.BudgetSource)
-	a.PresupuestoCheckedAt = &p.CheckedAt
-	a.PresupuestoVentana = strings.TrimSpace(p.WindowKind)
-	a.PresupuestoResetAt = p.ResetAt
-	a.RemainingSeconds = p.RemainingSeconds
-	a.RemainingMessages = p.RemainingMessages
-	a.RemainingTokens = p.RemainingTokens
-	a.RemainingCredits = p.RemainingCredits
-	if ev.RemainingRatio != nil {
-		pct := int(math.Round(*ev.RemainingRatio * 100))
-		if pct < 0 {
-			pct = 0
+	if err == nil && p != nil {
+		ev, err := EvaluarPresupuestoSesion(p)
+		if err == nil {
+			a.PresupuestoEstado = strings.TrimSpace(ev.Estado)
+			a.PresupuestoFuente = strings.TrimSpace(p.BudgetSource)
+			a.PresupuestoCheckedAt = &p.CheckedAt
+			a.PresupuestoSesionResetAt = p.ResetAt
+			a.RemainingSeconds = p.RemainingSeconds
+			a.RemainingMessages = p.RemainingMessages
+			a.RemainingTokens = p.RemainingTokens
+			a.RemainingCredits = p.RemainingCredits
+			aplicarIdentidadCuentaAgente(a, identidadCuentaDesdePresupuesto(p))
+			var sesion presupuestoAgenteCandidato
+			if ev.RemainingRatio != nil {
+				pct := int(math.Round(*ev.RemainingRatio * 100))
+				if pct < 0 {
+					pct = 0
+				}
+				if pct > 100 {
+					pct = 100
+				}
+				a.PresupuestoSesionPct = &pct
+				sesion = presupuestoAgenteCandidato{
+					pct:        &pct,
+					windowKind: strings.TrimSpace(p.WindowKind),
+					resetAt:    p.ResetAt,
+					source:     strings.TrimSpace(p.BudgetSource),
+				}
+			}
+			candidato = seleccionarPresupuestoEfectivo([]presupuestoAgenteCandidato{sesion, diario, semanal})
+			aplicarPresupuestoEfectivoAgente(a, candidato)
 		}
-		if pct > 100 {
-			pct = 100
-		}
-		a.CuotaRestantePct = &pct
-		return
 	}
-	if candidato := mejorPresupuestoDerivadoAgente(a); candidato.pct != nil {
-		a.CuotaRestantePct = candidato.pct
-		if a.PresupuestoVentana == "" {
-			a.PresupuestoVentana = candidato.windowKind
-		}
-		if a.PresupuestoFuente == "" {
-			a.PresupuestoFuente = candidato.source
-		}
-		if a.PresupuestoResetAt == nil {
-			a.PresupuestoResetAt = candidato.resetAt
+	if strings.TrimSpace(a.CuentaEmail) == "" {
+		nombre := a.Nombre
+		if handles, err := ListarRuntimeHandles(&nombre); err == nil && len(handles) > 0 {
+			aplicarIdentidadCuentaAgente(a, identidadCuentaDesdeHandle(handles[0]))
 		}
 	}
 }
@@ -787,10 +795,13 @@ type presupuestoAgenteCandidato struct {
 }
 
 func mejorPresupuestoDerivadoAgente(a *Agente) presupuestoAgenteCandidato {
-	candidatos := []presupuestoAgenteCandidato{
+	return seleccionarPresupuestoEfectivo([]presupuestoAgenteCandidato{
 		presupuestoDerivadoDiarioAgente(a),
 		presupuestoDerivadoSemanalAgente(a),
-	}
+	})
+}
+
+func seleccionarPresupuestoEfectivo(candidatos []presupuestoAgenteCandidato) presupuestoAgenteCandidato {
 	best := presupuestoAgenteCandidato{}
 	for _, item := range candidatos {
 		if item.pct == nil {
@@ -801,6 +812,126 @@ func mejorPresupuestoDerivadoAgente(a *Agente) presupuestoAgenteCandidato {
 		}
 	}
 	return best
+}
+
+func aplicarPresupuestoEfectivoAgente(a *Agente, candidato presupuestoAgenteCandidato) {
+	if a == nil || candidato.pct == nil {
+		return
+	}
+	a.CuotaRestantePct = candidato.pct
+	a.PresupuestoVentana = candidato.windowKind
+	a.PresupuestoResetAt = candidato.resetAt
+	if strings.TrimSpace(a.PresupuestoFuente) == "" {
+		a.PresupuestoFuente = candidato.source
+	}
+}
+
+type identidadCuentaAgente struct {
+	usuario    string
+	email      string
+	fuente     string
+	observedAt *time.Time
+}
+
+func aplicarIdentidadCuentaAgente(a *Agente, identidad identidadCuentaAgente) {
+	if a == nil {
+		return
+	}
+	if strings.TrimSpace(a.CuentaEmail) == "" && strings.TrimSpace(identidad.email) != "" {
+		a.CuentaEmail = strings.TrimSpace(identidad.email)
+	}
+	if strings.TrimSpace(a.CuentaUsuario) == "" {
+		if usuario := strings.TrimSpace(identidad.usuario); usuario != "" {
+			a.CuentaUsuario = usuario
+		} else if email := strings.TrimSpace(identidad.email); email != "" {
+			if at := strings.Index(email, "@"); at > 0 {
+				a.CuentaUsuario = email[:at]
+			}
+		}
+	}
+	if strings.TrimSpace(a.CuentaFuente) == "" && strings.TrimSpace(identidad.fuente) != "" {
+		a.CuentaFuente = strings.TrimSpace(identidad.fuente)
+	}
+	if a.CuentaObservadaAt == nil && identidad.observedAt != nil && !identidad.observedAt.IsZero() {
+		a.CuentaObservadaAt = identidad.observedAt
+	}
+}
+
+func identidadCuentaDesdePresupuesto(p *PresupuestoSesion) identidadCuentaAgente {
+	if p == nil {
+		return identidadCuentaAgente{}
+	}
+	return identidadCuentaDesdeMapa(
+		mapFromJSON(p.RawSnapshotJSON),
+		strings.TrimSpace(p.BudgetSource),
+		&p.CheckedAt,
+	)
+}
+
+func identidadCuentaDesdeHandle(handle *RuntimeHandle) identidadCuentaAgente {
+	if handle == nil {
+		return identidadCuentaAgente{}
+	}
+	return identidadCuentaDesdeMapa(
+		mapFromJSON(handle.MetadataJSON),
+		"runtime_handle",
+		handle.LastSeenAt,
+	)
+}
+
+func identidadCuentaDesdeMapa(raw map[string]any, fuente string, observedAt *time.Time) identidadCuentaAgente {
+	if raw == nil {
+		return identidadCuentaAgente{}
+	}
+	email := buscarCadenaRecursiva(raw,
+		"account_email",
+		"user_email",
+		"identified_email",
+		"login_email",
+		"email",
+		"correo",
+		"mail",
+	)
+	usuario := buscarCadenaRecursiva(raw,
+		"account_user",
+		"account_name",
+		"user_name",
+		"username",
+		"login",
+		"usuario",
+	)
+	if strings.TrimSpace(email) == "" && strings.TrimSpace(usuario) == "" {
+		return identidadCuentaAgente{}
+	}
+	return identidadCuentaAgente{
+		usuario:    strings.TrimSpace(usuario),
+		email:      strings.TrimSpace(email),
+		fuente:     strings.TrimSpace(fuente),
+		observedAt: observedAt,
+	}
+}
+
+func buscarCadenaRecursiva(raw any, claves ...string) string {
+	switch value := raw.(type) {
+	case map[string]any:
+		for _, clave := range claves {
+			if text := strings.TrimSpace(stringFromMap(value, clave, "")); text != "" {
+				return text
+			}
+		}
+		for _, nested := range value {
+			if text := buscarCadenaRecursiva(nested, claves...); text != "" {
+				return text
+			}
+		}
+	case []any:
+		for _, nested := range value {
+			if text := buscarCadenaRecursiva(nested, claves...); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
 }
 
 func presupuestoDerivadoDiarioAgente(a *Agente) presupuestoAgenteCandidato {

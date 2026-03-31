@@ -658,3 +658,11 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - el clasificador de transcript no puede elevar a `runtime_panic` ruido de TUI/terminal que no representa un fallo semántico del runtime.
 - las secuencias `OSC` de título de terminal (`ESC ] ... BEL/ST`) y ruido equivalente del spinner deben limpiarse antes de clasificar y, si una línea queda vacía tras esa limpieza, debe descartarse por completo.
 - enfriar un agente o avisar al supervisor por transcript solo es válido sobre evidencia semántica real, no sobre artefactos visuales del cliente TUI.
+
+## Presupuesto visible e identidad de cuenta
+
+- la cuota visible de un agente no puede resumirse a un único porcentaje ambiguo. Orquesta debe conservar y exponer, como mínimo, `sesión`, `diario`, `semanal` y la `ventana efectiva` que manda en ese momento.
+- cada ventana visible debe incluir su propio `reset_at`; no vale mostrar solo el reset de la ventana ganadora si eso oculta un agotamiento semanal o de sesión.
+- la `ventana efectiva` es la más restrictiva entre presupuesto de sesión real y derivadas diaria/semanal. Si faltan snapshots ricos, se puede derivar, pero debe quedar claro qué ventana manda.
+- la identidad de cuenta del agente (`usuario` / `correo`) debe salir solo de artefactos ya persistidos del runtime o del presupuesto (`raw_snapshot_json`, `metadata_json`). No se abre una segunda fuente de verdad ni se inventan credenciales.
+- si Orquesta no observa identidad fiable, deja el campo vacío. El contrato es `mejor dato observado`, no adivinación.

@@ -128,6 +128,7 @@ func TestListarAgentesEnriquecePresupuestoVisible(t *testing.T) {
 		RemainingSeconds: &remaining,
 		RemainingCredits: &credits,
 		BudgetSource:     "runtime",
+		RawSnapshotJSON:  `{"account":{"email":"codex1@example.com","username":"codex1_user"}}`,
 	}); err != nil {
 		t.Fatalf("RegistrarPresupuestoSesion: %v", err)
 	}
@@ -149,6 +150,15 @@ func TestListarAgentesEnriquecePresupuestoVisible(t *testing.T) {
 	if agente.CuotaRestantePct == nil || *agente.CuotaRestantePct <= 0 {
 		t.Fatalf("cuota restante no enriquecida: %+v", agente)
 	}
+	if agente.PresupuestoSesionPct == nil || *agente.PresupuestoSesionPct <= 0 {
+		t.Fatalf("porcentaje de sesión no enriquecido: %+v", agente)
+	}
+	if agente.PresupuestoDiarioPct == nil || *agente.PresupuestoDiarioPct <= 0 {
+		t.Fatalf("porcentaje diario no enriquecido: %+v", agente)
+	}
+	if agente.PresupuestoSemanalPct == nil || *agente.PresupuestoSemanalPct <= 0 {
+		t.Fatalf("porcentaje semanal no enriquecido: %+v", agente)
+	}
 	if agente.PresupuestoVentana != "5h" {
 		t.Fatalf("ventana efectiva inesperada: %+v", agente)
 	}
@@ -160,6 +170,12 @@ func TestListarAgentesEnriquecePresupuestoVisible(t *testing.T) {
 	}
 	if agente.PresupuestoEstado != "handoff_preventivo" {
 		t.Fatalf("presupuesto estado inesperado: %+v", agente)
+	}
+	if agente.CuentaEmail != "codex1@example.com" {
+		t.Fatalf("email de cuenta inesperado: %+v", agente)
+	}
+	if agente.CuentaUsuario != "codex1_user" {
+		t.Fatalf("usuario de cuenta inesperado: %+v", agente)
 	}
 }
 
@@ -179,7 +195,50 @@ func TestListarAgentesUsaPresupuestoSemanalSiEsMasRestrictivo(t *testing.T) {
 	if agente.CuotaRestantePct == nil || *agente.CuotaRestantePct != 5 {
 		t.Fatalf("debería usar semanal como restricción efectiva: %+v", agente)
 	}
+	if agente.PresupuestoDiarioPct == nil || *agente.PresupuestoDiarioPct != 90 {
+		t.Fatalf("porcentaje diario inesperado: %+v", agente)
+	}
+	if agente.PresupuestoSemanalPct == nil || *agente.PresupuestoSemanalPct != 5 {
+		t.Fatalf("porcentaje semanal inesperado: %+v", agente)
+	}
 	if agente.PresupuestoVentana != "weekly" {
 		t.Fatalf("ventana efectiva debería ser weekly: %+v", agente)
+	}
+}
+
+func TestGetAgenteExtraeCuentaDesdeRuntimeHandle(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesionID, err := IniciarSesion("codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	sesion, err := GetSesionByID(sesionID)
+	if err != nil {
+		t.Fatalf("GetSesionByID: %v", err)
+	}
+	if err := UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("UpsertRuntimeHandleDesdeSesion: %v", err)
+	}
+	if _, err := DB.Exec(
+		`UPDATE runtime_handles SET metadata_json=? WHERE sesion_id=?`,
+		`{"auth":{"email":"codex1-handle@example.com"},"username":"codex1_handle"}`,
+		sesionID,
+	); err != nil {
+		t.Fatalf("update runtime_handle metadata: %v", err)
+	}
+
+	agente, err := GetAgente("codex1")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.CuentaEmail != "codex1-handle@example.com" {
+		t.Fatalf("email desde handle inesperado: %+v", agente)
+	}
+	if agente.CuentaUsuario != "codex1_handle" {
+		t.Fatalf("usuario desde handle inesperado: %+v", agente)
 	}
 }
