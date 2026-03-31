@@ -95,7 +95,6 @@ func newControlPlaneRunner(debugLogger *log.Logger, debugControlPlane bool) *pla
 		Automation:        dbAutomationService{},
 		NotificationFeed:  db.CanalNotificaciones,
 		InitNotifications: notificaciones.InicializarDesdeConfig,
-		StartupGrace:      5 * time.Second,
 		Notifier: func() notificaciones.Notificador {
 			return notificaciones.GlobalNotificador
 		},
@@ -285,7 +284,8 @@ func runtimeMailboxDebeConsumirsePorAgenteSinVida(msg *db.RuntimeMailboxMessage)
 	if handle != nil {
 		return false, "", nil
 	}
-	sesiones, err := db.ListarSesionesActivasOperativas()
+	activa := true
+	sesiones, err := sesionesAPIService.ListInspectionSessions(db.FiltroSesionesInspeccion{Activa: &activa})
 	if err != nil {
 		return false, "", err
 	}

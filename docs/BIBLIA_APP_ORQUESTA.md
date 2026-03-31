@@ -578,4 +578,15 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 
 - el listener y la API deben quedar disponibles antes de disparar batches pesados del control plane.
 - el `Runner` del servidor arranca con una `startup grace` para evitar que `status` o `/api/runtime-handles` queden bloqueados por trabajo interno nada más levantar el daemon.
-- esta gracia es del daemon server-first; no debe contaminar tests ni runners embebidos que necesiten ejecución inmediata.
+- esta gracia pertenece al arranque del daemon en [servidor_unificado.go](/home/alberto/Trabajo/orquesta/cmd/servidor_unificado.go), no al constructor genérico del runner; tests y runners embebidos deben poder ejecutar batches inmediatamente.
+
+## Bootstrap runtime
+
+- `agente preparar` y el bootstrap runtime siguen siendo lectura y proyección, no una ruta para mutar órdenes o consumir mailbox.
+- cuando exista guidance pendiente modelada como `runtime_order` de tipo `nudge` o `discordia`, el bootstrap debe proyectarla dentro del bundle como mailbox sintética para no perder contexto al reanudar o arrancar.
+- esa proyección no debe inventar consumo ni `mailbox_id` persistente; el consumo real sigue ocurriendo solo cuando la orden/mailbox se ejecuta o se acusa por el camino oficial.
+
+## Runtime orders stale
+
+- una orden en `tomada/ejecutando` puede quedar stale por dos causas válidas: lease vencida o edad efectiva del intento.
+- la reconciliación stale no puede depender solo de `lease_expires_at`; si `started_at/updated_at` demuestran que el intento es viejo, la orden debe recuperarse aunque la lease siga futura por metadata vieja o inconsistente.

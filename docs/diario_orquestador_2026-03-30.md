@@ -2339,3 +2339,33 @@ Validacion:
 - validacion viva inmediata tras reinicio:
   - `time curl -s -m 5 'http://127.0.0.1:16543/api/status'` => `200` en `~1.5s`
   - `time curl -s -m 5 'http://127.0.0.1:16543/api/runtime-handles?agente=Codex1'` => `200` en `~45ms`
+
+## 2026-03-31 — bootstrap runtime proyecta guidance pendiente y stale por edad real
+
+Hallazgo:
+
+- el refactor anterior habia dejado la `startup grace` en `newControlPlaneRunner`, contaminando tests y runners embebidos que necesitan ejecución inmediata
+- `prepararBootstrapRuntimeAgente` habia dejado de reflejar `nudge`/`discordia` pendientes en el bundle de bootstrap si todavía no existia `runtime_mailbox` real
+- la reconciliación de `runtime_orders stale` ignoraba intentos claramente viejos si `lease_expires_at` seguia futura, lo que dejaba órdenes atascadas en `ejecutando`
+
+Decision:
+
+- la `startup grace` pertenece al daemon server-first y se aplica en `servidor_unificado`, no en el constructor genérico del runner
+- el bootstrap debe proyectar guidance pendiente modelada como `runtime_order` simple sin mutar BD ni fingir consumo
+- `runtime_orders stale` debe recuperarse por lease vencida o por edad efectiva del intento; la lease no puede enmascarar un intento muerto
+
+Codigo:
+
+- [cmd/controlplane_support.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support.go)
+- [cmd/servidor_unificado.go](/home/alberto/Trabajo/orquesta/cmd/servidor_unificado.go)
+- [internal/bootstrapruntime/bootstrap.go](/home/alberto/Trabajo/orquesta/internal/bootstrapruntime/bootstrap.go)
+- [db/controlplane_entities.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(PrepararBootstrapRuntimeAgenteInyectaHandoffYMailbox|APIControlPlaneArranqueRealConBootstrapMultilinea|ControlPlaneRunnerExponeEventoAutoGuidancePorAPI|ControlPlaneRunnerRecuperaRuntimeOrderStaleYLaProcesaEndToEnd)' -count=1`
+- el bloque queda en verde
+- `prepararBootstrapRuntimeAgente` vuelve a exponer la `nudge` pendiente como mailbox sintética dentro del bundle
+- el runner embebido vuelve a ejecutar batches sin esperar `5s`
+- una `runtime_order` vieja en `ejecutando` vuelve a `pendiente` y se procesa de verdad aunque su `lease_expires_at` siga futura

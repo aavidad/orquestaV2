@@ -3322,6 +3322,11 @@ func TestProcesarRuntimeMailboxInteractivoBatchCoalesceAutonomiaPendiente(t *tes
 	if handle.RuntimeID == nil {
 		t.Fatalf("runtime handle sin runtime asociado: %+v", handle)
 	}
+	capsJSON := `{"can_send_input":true,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliveryInteractive + `"}`
+	metaJSON := `{"driver":"process_pty_cli","rendered_command":"cat-cli Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","can_send_input":true,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliveryInteractive + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle interactivo: %v", err)
+	}
 
 	msgViejo, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
 		FromAgente:  "server",
@@ -3520,6 +3525,11 @@ func TestProcesarRuntimeMailboxInteractivoBatchCoalesceInstructionPendiente(t *t
 	}
 	if handle.RuntimeID == nil {
 		t.Fatalf("runtime handle sin runtime asociado: %+v", handle)
+	}
+	capsJSON := `{"can_send_input":true,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliveryInteractive + `"}`
+	metaJSON := `{"driver":"process_pty_cli","rendered_command":"cat-cli Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","can_send_input":true,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliveryInteractive + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle interactivo: %v", err)
 	}
 
 	msgViejo, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{

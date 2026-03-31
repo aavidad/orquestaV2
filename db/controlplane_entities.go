@@ -1915,7 +1915,7 @@ func ReconciliarRuntimeOrdersStale() (int, error) {
 		WHERE estado IN ('tomada','ejecutando')
 		  AND (
 		        (lease_expires_at IS NOT NULL AND lease_expires_at <= ?)
-		     OR (lease_expires_at IS NULL AND COALESCE(started_at, updated_at, created_at) <= ?)
+		     OR COALESCE(started_at, updated_at, created_at) <= ?
 		  )
 		ORDER BY id`, now, cutoff)
 	if err != nil {
@@ -5369,7 +5369,7 @@ func reconciliarRuntimeOrderStale(id int64, tipo string, now, cutoff time.Time) 
 			  AND estado IN ('tomada','ejecutando')
 			  AND (
 			        (lease_expires_at IS NOT NULL AND lease_expires_at <= ?)
-			     OR (lease_expires_at IS NULL AND COALESCE(started_at, updated_at, created_at) <= ?)
+			     OR COALESCE(started_at, updated_at, created_at) <= ?
 			  )`, id, now, cutoff)
 	} else {
 		res, err = DB.Exec(`
@@ -5387,7 +5387,7 @@ func reconciliarRuntimeOrderStale(id int64, tipo string, now, cutoff time.Time) 
 			  AND estado IN ('tomada','ejecutando')
 			  AND (
 			        (lease_expires_at IS NOT NULL AND lease_expires_at <= ?)
-			     OR (lease_expires_at IS NULL AND COALESCE(started_at, updated_at, created_at) <= ?)
+			     OR COALESCE(started_at, updated_at, created_at) <= ?
 			  )`, id, now, cutoff)
 	}
 	if err != nil {

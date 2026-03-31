@@ -46,6 +46,7 @@ func Preparar(agente string, proyecto *db.Proyecto, ultima *db.Sesion) (runtimea
 	if err != nil {
 		return resume, nil, err
 	}
+	mailbox = append(mailbox, sintetizarBootstrapMailboxDesdeRuntimeOrders(strings.TrimSpace(agente), &proyecto.ID)...)
 	state.Mailbox = mailbox
 
 	checkpoint, err := db.UltimoRuntimeCheckpoint(strings.TrimSpace(agente), &proyecto.ID)
@@ -232,6 +233,77 @@ func checkpointIDOrZero(cp *db.RuntimeCheckpoint) int64 {
 		return 0
 	}
 	return cp.ID
+}
+
+func sintetizarBootstrapMailboxDesdeRuntimeOrders(agente string, proyectoID *int64) []*db.RuntimeMailboxMessage {
+	if strings.TrimSpace(agente) == "" {
+		return nil
+	}
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{
+		Agente:     strPtr(strings.TrimSpace(agente)),
+		ProyectoID: proyectoID,
+		Estado:     &estado,
+	})
+	if err != nil {
+		return nil
+	}
+	out := make([]*db.RuntimeMailboxMessage, 0, len(orders))
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		kind := bootstrapMailboxKindDesdeRuntimeOrder(order)
+		if kind == "" {
+			continue
+		}
+		existente, err := db.GetRuntimeMailboxByRuntimeOrderID(order.ID)
+		if err != nil {
+			return nil
+		}
+		if existente != nil {
+			continue
+		}
+		payload := strings.TrimSpace(order.PayloadJSON)
+		if payload == "" {
+			payload = "{}"
+		}
+		out = append(out, &db.RuntimeMailboxMessage{
+			FromAgente:     bootstrapMailboxFromAgente(order),
+			ToAgente:       strings.TrimSpace(order.Agente),
+			ProyectoID:     order.ProyectoID,
+			RuntimeOrderID: &order.ID,
+			Kind:           kind,
+			PayloadJSON:    payload,
+		})
+	}
+	return out
+}
+
+func bootstrapMailboxKindDesdeRuntimeOrder(order *db.RuntimeOrder) string {
+	if order == nil {
+		return ""
+	}
+	switch strings.TrimSpace(order.Tipo) {
+	case "nudge", "discordia":
+		return strings.TrimSpace(order.Tipo)
+	default:
+		return ""
+	}
+}
+
+func bootstrapMailboxFromAgente(order *db.RuntimeOrder) string {
+	if order == nil {
+		return ""
+	}
+	payload := map[string]any{}
+	if strings.TrimSpace(order.PayloadJSON) != "" {
+		_ = json.Unmarshal([]byte(order.PayloadJSON), &payload)
+	}
+	if from, ok := payload["from_agente"].(string); ok && strings.TrimSpace(from) != "" {
+		return strings.TrimSpace(from)
+	}
+	return "server"
 }
 
 func rawJSONOrString(raw string) any {

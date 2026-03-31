@@ -138,6 +138,7 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 
 	controlCtx, cancel := context.WithCancel(context.Background())
 	runner := newControlPlaneRunner(debugLogger, debug.ControlPlane)
+	runner.StartupGrace = 5 * time.Second
 	defer runner.Wait()
 	defer cancel()
 	runner.Start(controlCtx)
