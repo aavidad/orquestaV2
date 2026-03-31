@@ -5001,6 +5001,19 @@ func TestProcesarRuntimeTranscriptBatchNoGuiaAlWorkerEnRuntimePanic(t *testing.T
 	if supervisorNudge == nil || !strings.Contains(supervisorNudge.PayloadJSON, `"accion":"inspeccionar_transcript_signal"`) {
 		t.Fatalf("nudge al supervisor inesperado: %+v", supervisorNudge)
 	}
+	agenteInfo, err := db.GetAgente("Codex1")
+	if err != nil || agenteInfo == nil {
+		t.Fatalf("get agente: agente=%+v err=%v", agenteInfo, err)
+	}
+	if agenteInfo.EstadoCuota != "enfriamiento" {
+		t.Fatalf("runtime_panic deberia enfriar al agente: %+v", agenteInfo)
+	}
+	if agenteInfo.ReanimarAt == nil {
+		t.Fatalf("runtime_panic deberia fijar reanimar_at: %+v", agenteInfo)
+	}
+	if !strings.Contains(agenteInfo.MotivoPausa, "runtime_panic") {
+		t.Fatalf("motivo_pausa sin trazabilidad de runtime_panic: %+v", agenteInfo)
+	}
 }
 
 func TestProcesarRuntimeTranscriptBatchResuelveReviewGateDesdeReviewer(t *testing.T) {

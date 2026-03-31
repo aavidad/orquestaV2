@@ -871,6 +871,17 @@ func PausarAgente(nombre string, minutos int, motivo string) error {
 	return err
 }
 
+func PausarAgenteHasta(nombre string, reanimar time.Time, motivo string) error {
+	if reanimar.IsZero() {
+		reanimar = time.Now().UTC()
+	}
+	_, err := DB.Exec(`
+		UPDATE agentes
+		SET estado_cuota = 'enfriamiento', reanimar_at = ?, motivo_pausa = ?
+		WHERE nombre = ?`, reanimar.UTC(), motivo, nombre)
+	return err
+}
+
 // SetEstadoSesion actualiza el estado de actividad de un agente en sesión.
 func SetEstadoSesion(agente, estado string) {
 	if DB == nil || agente == "" {

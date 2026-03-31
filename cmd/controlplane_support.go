@@ -229,6 +229,38 @@ func runtimeMailboxProyectoDetalle(proyectoID *int64) string {
 	return strconv.FormatInt(*proyectoID, 10)
 }
 
+func enfriarAgentePorRuntimePanic(agente string, item *db.RuntimeTranscriptEntry) (string, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return "", nil
+	}
+	infoAgente, err := db.GetAgente(agente)
+	if err != nil {
+		return "", err
+	}
+	cooldownSeconds := controlPlaneConfigIntOrDefault("runtime_panic_cooldown_seconds", 180)
+	if cooldownSeconds <= 0 {
+		cooldownSeconds = 180
+	}
+	reanimarAt := time.Now().UTC().Add(time.Duration(cooldownSeconds) * time.Second)
+	if infoAgente != nil &&
+		strings.EqualFold(strings.TrimSpace(infoAgente.EstadoCuota), "enfriamiento") &&
+		infoAgente.ReanimarAt != nil &&
+		infoAgente.ReanimarAt.After(reanimarAt) {
+		return "runtime_panic_cooldown_exists", nil
+	}
+	motivo := "Auto-pausa por runtime_panic"
+	if item != nil && item.ID > 0 {
+		motivo = fmt.Sprintf("Auto-pausa por runtime_panic: transcript=%d", item.ID)
+	}
+	if err := db.PausarAgenteHasta(agente, reanimarAt, motivo); err != nil {
+		return "", err
+	}
+	db.Audit("orquesta", "runtime_panic_cooldown", "agente", 0,
+		fmt.Sprintf("agente=%s cooldown_until=%s motivo=%s", agente, reanimarAt.Format(time.RFC3339), motivo))
+	return "runtime_panic_cooldown", nil
+}
+
 func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 	if item == nil {
 		return "", nil
@@ -248,12 +280,19 @@ func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 		return note, nil
 	}
 	if esSignalFalloRuntime(item) {
+		notes := make([]string, 0, 3)
+		if cooldownNote, err := enfriarAgentePorRuntimePanic(agente, item); err != nil {
+			return "", err
+		} else if strings.TrimSpace(cooldownNote) != "" {
+			notes = append(notes, strings.TrimSpace(cooldownNote))
+		}
 		if supervisorNote, err := notificarSupervisorSignalTranscript(item); err != nil {
 			return "", err
 		} else if strings.TrimSpace(supervisorNote) != "" {
-			return supervisorNote + ";runtime_failure_signal", nil
+			notes = append(notes, strings.TrimSpace(supervisorNote))
 		}
-		return "runtime_failure_signal", nil
+		notes = append(notes, "runtime_failure_signal")
+		return strings.Join(notes, ";"), nil
 	}
 	payload := map[string]any{
 		"to_agente":      agente,

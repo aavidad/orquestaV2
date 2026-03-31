@@ -1932,3 +1932,37 @@ Validacion:
   - tras reiniciar el daemon y dejar correr el runner, `./orquesta runtime mailbox --to Codex2 --estado pendiente` ya no devuelve filas
   - `./orquesta runtime handles --agente Codex2 | head -n 8` sigue mostrando el handle `369` como `pausado`
   - conclusion: la cola deja de mentir y el agente no se reanima por error durante el cooldown
+
+## 2026-03-31T09:0xZ - `runtime_panic` entra en cuarentena corta antes de reanimar
+
+Problema:
+
+- `Codex1` llegó a registrar `runtime_panic` de TUI y, aun así, el sistema podía volver a empujar guidance al mismo worker demasiado pronto
+- el batch de transcript ya evitaba `send_instruction` inmediata al worker tras `runtime_panic`, pero no dejaba una cuarentena explícita de control plane
+- eso dejaba margen para reanimación/continuidad demasiado agresiva tras un crash del TUI
+
+Decision:
+
+- un `runtime_panic` o `runtime_crash` entra en enfriamiento corto usando el mecanismo oficial de `reanimar_at`
+- no se crea otro estado nuevo: se reutiliza `estado_cuota=enfriamiento` con `motivo_pausa` explícito de `runtime_panic`
+- al vencer ese tiempo, la reanimación automática existente sigue funcionando sin rutas paralelas
+
+Cambios:
+
+- `db/sesiones.go`
+  - nueva helper `PausarAgenteHasta(...)`
+- `cmd/controlplane_support.go`
+  - nueva helper `enfriarAgentePorRuntimePanic(...)`
+  - `procesarSignalTranscript(...)` aplica esa cuarentena antes de notificar al supervisor
+- `cmd/controlplane_support_test.go`
+  - `TestProcesarRuntimeTranscriptBatchNoGuiaAlWorkerEnRuntimePanic` ahora verifica también `estado_cuota=enfriamiento`, `reanimar_at` y `motivo_pausa` con trazabilidad de `runtime_panic`
+- `docs/BIBLIA_APP_ORQUESTA.md`
+  - queda fijado que `runtime_panic` no puede ir seguido de guidance inmediata al mismo worker
+
+Validacion:
+
+- `go test ./cmd -run 'Test(ProcesarRuntimeTranscriptBatchNoGuiaAlWorkerEnRuntimePanic|ResetReanimacionEncolaResumeCuandoHayHandlePausado|ResetReanimacionEncolaStartCuandoNoHayRuntimePeroSiTrabajo)' -count=1` => OK
+- `go build -o ./orquesta .` => OK
+- validacion operativa:
+  - el daemon sigue sano (`./orquesta status` responde y mantiene `Codex1`, `Codex3`, `Codex4`, `Codex5` visibles)
+  - no he forzado un nuevo panic en vivo para evitar meter ruido artificial en la flota; la validacion del contrato queda cerrada por test dirigido y por la observacion del incidente real previo de `Codex1`
