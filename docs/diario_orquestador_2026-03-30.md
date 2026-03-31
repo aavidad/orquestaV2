@@ -2152,3 +2152,25 @@ Codigo:
 Validacion:
 
 - `go test ./db -run 'Test(IngestarRuntimeTranscriptHandleClasificaYGeneraEventos|IngestarRuntimeTranscriptHandleNoClasificaLineaSistemaScript)' -count=1`
+
+## 2026-03-31 — el bootstrap del supervisor Codex debe compactarse antes de entrar al PTY
+
+Hallazgo:
+
+- tras quitar el falso positivo de `Script started on ...`, `Codex1` seguia cayendo, pero ahora con un `runtime_panic` real
+- el transcript ya muestra la causa: `tui_app_server/src/wrapping.rs:52` y `byte index ... is out of bounds of 'Orquesta: has sido arrancado como orquestador ...'`
+- `Codex2` no cae porque su bootstrap ya era mas corto y acababa compactado de facto; el hueco estaba en el texto especifico del supervisor
+
+Decision:
+
+- el bootstrap del supervisor para runtimes Codex locales debe compactarse a la misma forma corta segura que otras guias (`supervisa proyecto actual y sigue`)
+- no se inyectan parrafos largos crudos al PTY de Codex cuando el runtime local ya exige una instruccion corta y ASCII estable
+
+Codigo:
+
+- [internal/controlruntime/pty_local.go](/home/alberto/Trabajo/orquesta/internal/controlruntime/pty_local.go)
+- [internal/controlruntime/proceso_test.go](/home/alberto/Trabajo/orquesta/internal/controlruntime/proceso_test.go)
+
+Validacion:
+
+- `go test ./internal/controlruntime -run 'TestNormalizarInstruccionProceso(CompactaParaCodexLocal|CompactaBootstrapSupervisorCodexLocal|HaceASCIIYCorta)' -count=1`

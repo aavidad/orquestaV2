@@ -365,7 +365,7 @@ func compactarInstruccionCodexTTY(texto string) string {
 		out   string
 	}{
 		{match: []string{"retoma el trabajo", "prompt de continuidad", "resume payload"}, out: "retoma trabajo previo y sigue"},
-		{match: []string{"supervisor autonomo", "supervisar_proyecto", "supervision_transcript_signal"}, out: "supervisa proyecto actual y sigue"},
+		{match: []string{"supervisor autonomo", "orquestador autonomo", "arrancado como orquestador", "supervisar_proyecto", "supervision_transcript_signal"}, out: "supervisa proyecto actual y sigue"},
 		{match: []string{"ready for review", "listo para review", "listo para revision"}, out: "prepara review y sigue"},
 		{match: []string{"approval_request", "waiting_human", "esperando aprobacion", "esperando aprobacion", "me dejas", "can i ", "should i"}, out: "no esperes; decide y sigue"},
 		{match: []string{"blocked", "bloqueado", "bloqueo"}, out: "reevalua bloqueo y sigue"},

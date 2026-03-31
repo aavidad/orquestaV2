@@ -134,6 +134,19 @@ func TestNormalizarInstruccionProcesoCompactaParaCodexLocal(t *testing.T) {
 	}
 }
 
+func TestNormalizarInstruccionProcesoCompactaBootstrapSupervisorCodexLocal(t *testing.T) {
+	pid := int64(os.Getpid())
+	obj := ObjetivoProceso{
+		PID:          &pid,
+		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1 exec"}`,
+	}
+	texto := "Orquesta: has sido arrancado como orquestador autonomo del proyecto. Coordina a los demas Codex desde dentro de Orquesta, reparte trabajo real, revisa pruebas, deduplica frentes y no pidas intervencion humana salvo que falten credenciales, secretos o un recurso externo real."
+	got := NormalizarInstruccionProceso(obj, texto)
+	if got != "supervisa proyecto actual y sigue" {
+		t.Fatalf("compactacion inesperada para bootstrap supervisor: %q", got)
+	}
+}
+
 func TestRenderedCommandLooksLikeCodexCLI(t *testing.T) {
 	cases := []struct {
 		raw  string
