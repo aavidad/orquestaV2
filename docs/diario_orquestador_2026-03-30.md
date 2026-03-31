@@ -2422,3 +2422,40 @@ Validacion:
 - `go test ./db -run 'TestResolverPoliticaModelo(EconomicaPorPerfil|ConOverridesPorProyectoYTarea)' -count=1`
 - `go test ./cmd -count=1`
 - `./cmd` queda completo en verde
+
+## 2026-03-31 — cierre de suite completa: supervisor local, seeds y e2e estables
+
+Hallazgo:
+
+- `supervisor local` se habia estrechado bien para no tratar cualquier `PID` como runtime supervisado, pero seguia teniendo dos fugas: aceptaba señales demasiado débiles en algunos casos y, a la vez, podia mezclar estado viejo cuando un supervisor adjunto promovia una `supervisor_ref` canónica desde `runtime.json`
+- los tests de `pools` seguian asumiendo una BD temporal vacía, pero `prepararDBTemporal(...)` ya siembra pools/modelos/políticas base por contrato
+- los E2E de `cmd` estaban correctos funcionalmente, pero uno sufria una carrera de cleanup por árbol de procesos del shell y otro quedaba demasiado justo de tiempo bajo la carga de la suite completa
+- además, varios tests de `db` estaban mutando metadata de handles vivos hasta dejarla incoherente con el proceso real, y eso hacia que la validación local los descartara como fantasmas
+
+Decision:
+
+- `supervisor local` solo debe activarse con identidad real de runtime local: `supervisor_ref`, `supervisor_driver`, `driver=process_pty_cli`, `trace_manifest`, `trace_dir` o manifest detectable en `.orquesta-runtime`
+- `stdin_path` solo no convierte un handle en supervisor local
+- cuando una sesión adjunta pasa de `pid:<pid>` a `supervisor_ref` canónica, esa identidad canónica debe refrescar los campos ricos del supervisor
+- los tests de `pools` deben validar el pool objetivo (`codex`) en lugar de asumir que no existen seeds base
+- los E2E deben usar `exec sleep 30` en el launcher de prueba y un margen temporal suficiente para eventos API bajo carga de suite
+- los fixtures de `send_instruction` deben preservar la identidad real del runtime arrancado; si el test solo quiere simular `process_pty_cli` o `can_send_input=false`, no debe falsear `working_dir` o `rendered_command`
+
+Codigo:
+
+- [internal/controlruntime/supervisor_local.go](/home/alberto/Trabajo/orquesta/internal/controlruntime/supervisor_local.go)
+- [db/controlplane_entities.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities.go)
+- [db/model_policies.go](/home/alberto/Trabajo/orquesta/db/model_policies.go)
+- [db/pools_test.go](/home/alberto/Trabajo/orquesta/db/pools_test.go)
+- [db/controlplane_entities_test.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities_test.go)
+- [db/controlplane_handoff_test.go](/home/alberto/Trabajo/orquesta/db/controlplane_handoff_test.go)
+- [cmd/controlplane_e2e_test.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_e2e_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./internal/controlruntime -count=1`
+- `go test ./db -run 'TestGuardarPoolYListarResumen|TestProcesarRuntimeOrdersBatchSyncStatusObservaProcesoLocal|TestCrearHandoffAgenteStaleConDestinoActivoProyectoEncolaReinicioBootstrap|Test(RuntimeOrderSendInstructionHaceFallbackAMailboxCuandoHandleNoAdmiteInputInteractivo|RuntimeOrderSendInstructionCodexSupervisadoUsaSupervisorLocal)' -count=1`
+- `go test ./cmd -run 'Test(APIControlPlaneArranqueRealConBootstrapMultilinea|ControlPlaneRunnerExponeEventoAutoGuidancePorAPI)' -count=10`
+- `go test ./... -count=1`
+- la suite completa queda en verde

@@ -224,29 +224,44 @@ func UpsertRuntimeHandleDesdeSesion(s *Sesion) error {
 }
 
 func reconciliarHandleKindSesion(existente *RuntimeHandle, inferido *RuntimeHandle) string {
-	if existente == nil {
-		if inferido == nil {
+	if inferido == nil {
+		if existente == nil {
 			return ""
 		}
-		return strings.TrimSpace(inferido.HandleKind)
-	}
-	if strings.TrimSpace(existente.HandleKind) != "" {
 		return strings.TrimSpace(existente.HandleKind)
 	}
-	if inferido == nil {
-		return ""
+	inferidoKind := strings.TrimSpace(inferido.HandleKind)
+	if existente == nil {
+		return inferidoKind
 	}
-	return strings.TrimSpace(inferido.HandleKind)
+	existenteKind := strings.TrimSpace(existente.HandleKind)
+	if inferidoKind == "process" {
+		return "process"
+	}
+	if existenteKind != "" {
+		return existenteKind
+	}
+	return inferidoKind
 }
 
 func reconciliarHandleRefSesion(existente *RuntimeHandle, inferido *RuntimeHandle) string {
-	if existente != nil && strings.TrimSpace(existente.HandleRef) != "" {
+	if inferido == nil {
+		if existente == nil {
+			return ""
+		}
 		return strings.TrimSpace(existente.HandleRef)
 	}
-	if inferido == nil {
-		return ""
+	inferidoRef := strings.TrimSpace(inferido.HandleRef)
+	if existente == nil {
+		return inferidoRef
 	}
-	return strings.TrimSpace(inferido.HandleRef)
+	if strings.TrimSpace(inferido.HandleKind) == "process" && inferidoRef != "" {
+		return inferidoRef
+	}
+	if existenteRef := strings.TrimSpace(existente.HandleRef); existenteRef != "" {
+		return existenteRef
+	}
+	return inferidoRef
 }
 
 func reconciliarMetadataSesion(existenteJSON, inferidoJSON string) string {
@@ -2424,7 +2439,21 @@ func observarProcesoLocalRuntime(handle *RuntimeHandle, runtime *RuntimeInstance
 		}, err
 	}
 	if !observed {
-		return false, nil, nil
+		vivo, pid, err := controlruntime.ProcesoVivo(obj)
+		if err != nil {
+			return true, map[string]any{
+				"process_alive": false,
+				"process_error": strings.TrimSpace(err.Error()),
+			}, err
+		}
+		if pid <= 0 {
+			return false, nil, nil
+		}
+		estado = &controlruntime.EstadoLocal{
+			PID:  pid,
+			Vivo: vivo,
+		}
+		observed = true
 	}
 	if estado == nil {
 		return true, map[string]any{

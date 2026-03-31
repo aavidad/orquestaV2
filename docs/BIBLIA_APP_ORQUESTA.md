@@ -597,3 +597,22 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 
 - el contexto de un `review gate` debe poder enlazar el worktree activo registrado para la tarea aunque su path aún no haya pasado por validación de coherencia en disco; para gobernanza importa primero la relación registrada proyecto/tarea/worktree.
 - en resolución de políticas de modelo, a igualdad de `scope`, `perfil` y `prioridad`, debe ganar la política más reciente. Esto evita que seeds antiguas tapen overrides explícitos guardados después.
+
+## Supervisor local y observación de procesos
+
+- `supervisor local` no es cualquier `PID` ni cualquier handle con `stdin_path`; solo aplica cuando existe identidad de runtime local real: `supervisor_ref`, `supervisor_driver`, `driver=process_pty_cli`, `trace_manifest`, `trace_dir` o un `runtime.json` detectable bajo `.orquesta-runtime`.
+- `stdin_path` por sí solo no debe convertir un proceso en supervisor local. Ese dato sirve para entrega, no para observación de identidad.
+- cuando un supervisor adjunto nace con `ref=pid:<pid>` y luego aparece una `supervisor_ref` canónica desde `runtime.json`, la identidad canónica debe promocionarse y refrescar los campos ricos (`trace_dir`, `stdin_path`, `log_path`, `working_dir`, `wrapped_command`, `rendered_command`).
+- la observación local no debe contaminarse entre tests ni entre runtimes distintos que reutilicen el mismo `PID` del proceso padre.
+
+## Infraestructura de tests de persistencia
+
+- `prepararDBTemporal(...)` ya no representa una BD vacía; hoy siembra pools, modelos y políticas base codificadas por `EnsureCapacidadModeloBaseCodex()`.
+- por tanto, los tests que ejercen `pools` no deben asumir `len(resumen)==1` salvo que filtren por el pool que están verificando.
+- el comportamiento canónico es: la BD temporal nace con capacidad base operativa y los tests validan el elemento bajo prueba, no la ausencia de seeds.
+
+## E2E estables
+
+- los tests E2E que arrancan runtimes reales no deben depender de árboles de procesos ambiguos del shell.
+- cuando un launcher de test solo necesita dejar un proceso vivo, debe hacer `exec` del proceso final para que el cleanup mate exactamente al runtime y no deje hijos residuales.
+- los tests que esperan eventos visibles por API bajo carga de suite deben usar ventanas temporales realistas; si pasan en aislado y fallan solo por margen corto, se endurece el timeout del test, no se relaja la semántica del control plane.

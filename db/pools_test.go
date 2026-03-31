@@ -41,14 +41,24 @@ func TestGuardarPoolYListarResumen(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListarPoolsResumen: %v", err)
 		}
-		if len(resumen) != 1 {
+		if len(resumen) < 1 {
 			t.Fatalf("resumen inesperado: %+v", resumen)
 		}
-		if resumen[0].SesionesActivas != 1 {
-			t.Fatalf("sesiones activas inesperadas: %+v", resumen[0])
+		var resumenCodex *PoolCapacidadResumen
+		for _, item := range resumen {
+			if item != nil && item.Pool != nil && item.Pool.Slug == "codex" {
+				resumenCodex = item
+				break
+			}
 		}
-		if resumen[0].CapacidadDisponible != 2 {
-			t.Fatalf("capacidad disponible inesperada: %+v", resumen[0])
+		if resumenCodex == nil {
+			t.Fatalf("faltaba resumen del pool codex: %+v", resumen)
+		}
+		if resumenCodex.SesionesActivas != 1 {
+			t.Fatalf("sesiones activas inesperadas: %+v", resumenCodex)
+		}
+		if resumenCodex.CapacidadDisponible != 2 {
+			t.Fatalf("capacidad disponible inesperada: %+v", resumenCodex)
 		}
 	})
 }

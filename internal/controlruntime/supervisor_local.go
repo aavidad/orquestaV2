@@ -182,17 +182,37 @@ func supervisorLocalRefDesdeMetadata(raw string) string {
 }
 
 func supervisorLocalEsAplicable(obj ObjetivoProceso) bool {
-	if _, ok, _ := ResolverPID(obj); ok {
-		return true
-	}
-	if strings.TrimSpace(obj.HandleKind) == "process" {
-		return true
-	}
 	meta := metadataMap(obj.MetadataJSON)
+	if strings.TrimSpace(supervisorLocalRefDesdeMetadata(obj.MetadataJSON)) != "" {
+		return true
+	}
+	if strings.TrimSpace(stringValueFromMetadata(meta, "supervisor_driver")) != "" {
+		return true
+	}
 	if strings.EqualFold(strings.TrimSpace(stringValueFromMetadata(meta, "driver")), "process_pty_cli") {
 		return true
 	}
-	return strings.TrimSpace(supervisorLocalRefDesdeMetadata(obj.MetadataJSON)) != ""
+	for _, key := range []string{
+		"trace_manifest",
+		"trace_dir",
+	} {
+		if strings.TrimSpace(stringValueFromMetadata(meta, key)) != "" {
+			return true
+		}
+	}
+	if supervisorLocalTieneManifestCandidato(meta) {
+		return true
+	}
+	return false
+}
+
+func supervisorLocalTieneManifestCandidato(meta map[string]any) bool {
+	workdir := strings.TrimSpace(workingDirFromMetadata(meta))
+	if workdir == "" {
+		return false
+	}
+	matches, err := filepath.Glob(filepath.Join(workdir, ".orquesta-runtime", "*", "*", "runtime.json"))
+	return err == nil && len(matches) > 0
 }
 
 func descriptorSupervisorLocalDesdeObjetivo(obj ObjetivoProceso, pid int) descriptorSupervisorLocal {
@@ -387,6 +407,14 @@ func (r *registroSupervisoresLocales) resolver(obj ObjetivoProceso) (*supervisor
 	if ok && pid > 0 {
 		if supervisor := r.byPID[pid]; supervisor != nil {
 			r.mu.RUnlock()
+			if ref := strings.TrimSpace(desc.Ref); ref != "" {
+				supervisor.mu.RLock()
+				supervisorRef := strings.TrimSpace(supervisor.ref)
+				supervisor.mu.RUnlock()
+				if supervisorRef != "" && supervisorRef != ref {
+					return r.registrar(desc, supervisionModoAdjunto, nil), true, nil
+				}
+			}
 			supervisor.actualizar(desc, supervisionModoAdjunto, nil)
 			return supervisor, true, nil
 		}
@@ -459,6 +487,9 @@ func (r *registroSupervisoresLocales) registrar(desc descriptorSupervisorLocal, 
 func (s *supervisorProcesoLocal) actualizar(desc descriptorSupervisorLocal, modo string, proc *os.Process) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	refActual := strings.TrimSpace(s.ref)
+	refNueva := strings.TrimSpace(desc.Ref)
+	mismaRefCanonica := refNueva != "" && (refNueva == refActual || refActual == "" || strings.HasPrefix(refActual, "pid:"))
 	if strings.TrimSpace(desc.Ref) != "" {
 		s.ref = strings.TrimSpace(desc.Ref)
 	}
@@ -474,25 +505,25 @@ func (s *supervisorProcesoLocal) actualizar(desc descriptorSupervisorLocal, modo
 	if !desc.StartedAt.IsZero() {
 		s.startedAt = desc.StartedAt
 	}
-	if strings.TrimSpace(desc.TraceDir) != "" {
+	if (s.traceDir == "" || mismaRefCanonica) && strings.TrimSpace(desc.TraceDir) != "" {
 		s.traceDir = strings.TrimSpace(desc.TraceDir)
 	}
-	if strings.TrimSpace(desc.StdinPath) != "" {
+	if (s.stdinPath == "" || mismaRefCanonica) && strings.TrimSpace(desc.StdinPath) != "" {
 		s.stdinPath = strings.TrimSpace(desc.StdinPath)
 	}
-	if strings.TrimSpace(desc.StdinRawPath) != "" {
+	if (s.stdinRawPath == "" || mismaRefCanonica) && strings.TrimSpace(desc.StdinRawPath) != "" {
 		s.stdinRawPath = strings.TrimSpace(desc.StdinRawPath)
 	}
-	if strings.TrimSpace(desc.LogPath) != "" {
+	if (s.logPath == "" || mismaRefCanonica) && strings.TrimSpace(desc.LogPath) != "" {
 		s.logPath = strings.TrimSpace(desc.LogPath)
 	}
-	if strings.TrimSpace(desc.WorkingDir) != "" {
+	if (s.workingDir == "" || mismaRefCanonica) && strings.TrimSpace(desc.WorkingDir) != "" {
 		s.workingDir = strings.TrimSpace(desc.WorkingDir)
 	}
-	if strings.TrimSpace(desc.WrappedCommand) != "" {
+	if (s.wrappedCommand == "" || mismaRefCanonica) && strings.TrimSpace(desc.WrappedCommand) != "" {
 		s.wrappedCommand = strings.TrimSpace(desc.WrappedCommand)
 	}
-	if strings.TrimSpace(desc.RenderedCommand) != "" {
+	if (s.renderedCommand == "" || mismaRefCanonica) && strings.TrimSpace(desc.RenderedCommand) != "" {
 		s.renderedCommand = strings.TrimSpace(desc.RenderedCommand)
 	}
 	if strings.TrimSpace(desc.ExternalSessionID) != "" {

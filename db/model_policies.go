@@ -56,6 +56,9 @@ func ResolverPerfilEjecucionLanzamiento(proyectoSlug, perfilTarea, modelo, razon
 	if perfilTarea != "" && modelo != "" && razonamiento != "" {
 		return perfilTarea, modelo, razonamiento, nil
 	}
+	if err := EnsureCapacidadModeloBaseCodex(); err != nil {
+		return "", "", "", err
+	}
 	resolucion, err := ResolverPoliticaModelo(ResolverPoliticaInput{
 		ProyectoSlug: strings.TrimSpace(proyectoSlug),
 		PerfilTarea:  perfilTarea,
@@ -366,6 +369,10 @@ func resolverPoolPorModelo(perfil, modelSlug string) (*PoolCapacidad, error) {
 }
 
 func resolverPoolYModeloPorPerfil(perfil string) (*PoolCapacidad, *PoolModelo, error) {
+	return resolverPoolYModeloPorPerfilAutoSeed(perfil, false)
+}
+
+func resolverPoolYModeloPorPerfilAutoSeed(perfil string, seeded bool) (*PoolCapacidad, *PoolModelo, error) {
 	resumen, err := ListarPoolsResumen(boolPtr(true))
 	if err != nil {
 		return nil, nil, err
@@ -385,6 +392,11 @@ func resolverPoolYModeloPorPerfil(perfil string) (*PoolCapacidad, *PoolModelo, e
 		}
 	}
 	if mejor == nil {
+		if !seeded {
+			if err := EnsureCapacidadModeloBaseCodex(); err == nil {
+				return resolverPoolYModeloPorPerfilAutoSeed(perfil, true)
+			}
+		}
 		return nil, nil, fmt.Errorf("no hay pools activos con modelos configurados")
 	}
 	return mejor.Pool, mejor.Model, nil

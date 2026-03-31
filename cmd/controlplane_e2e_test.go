@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -329,7 +330,7 @@ func TestAPIControlPlaneArranqueRealConBootstrapMultilinea(t *testing.T) {
 	argLog := filepath.Join(tmp, "launch-argv.log")
 	promptLog := filepath.Join(tmp, "launch-prompt.log")
 	launcher := filepath.Join(tmp, "fake-launcher.sh")
-	script := "#!/usr/bin/env bash\nset -eu\nprintf '%s\\n' \"$@\" > " + strconv.Quote(argLog) + "\nprintf '%s' \"${!#}\" > " + strconv.Quote(promptLog) + "\nsleep 30\n"
+	script := "#!/usr/bin/env bash\nset -eu\nprintf '%s\\n' \"$@\" > " + strconv.Quote(argLog) + "\nprintf '%s' \"${!#}\" > " + strconv.Quote(promptLog) + "\nexec sleep 30\n"
 	if err := os.WriteFile(launcher, []byte(script), 0o755); err != nil {
 		t.Fatalf("write launcher: %v", err)
 	}
@@ -464,6 +465,13 @@ func TestAPIControlPlaneArranqueRealConBootstrapMultilinea(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		_, _, _ = controlruntime.DetenerProceso(controlruntime.ObjetivoProceso{PID: runtime.PID})
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			if err := syscall.Kill(int(*runtime.PID), 0); err != nil {
+				return
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
 	})
 
 	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
@@ -573,7 +581,7 @@ func TestControlPlaneRunnerExponeEventoAutoGuidancePorAPI(t *testing.T) {
 	})
 	runner.Start(ctx)
 
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	var (
 		eventPayload map[string]any
 		order        *db.RuntimeOrder

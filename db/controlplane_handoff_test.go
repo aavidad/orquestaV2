@@ -272,11 +272,19 @@ func TestCrearHandoffAgenteStaleConDestinoActivoProyectoEncolaReinicioBootstrap(
 	if err != nil || handleDestino == nil {
 		t.Fatalf("GetRuntimeHandleBySesionID destino: %+v err=%v", handleDestino, err)
 	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("Executable: %v", err)
+	}
 	if _, err := DB.Exec(`
 		UPDATE runtime_handles
 		SET metadata_json = ?, capabilities_json = ?
 		WHERE id = ?`,
-		`{"driver":"process_pty_cli","rendered_command":"/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex2","can_send_input":false}`,
+		`{"driver":"process_pty_cli","rendered_command":"`+exe+`","wrapped_command":"`+exe+`","working_dir":"`+cwd+`","can_send_input":false}`,
 		`{"can_send_input":false,"can_checkpoint":true,"can_resume":true,"can_capture_pid":true,"can_track_continuity":true,"can_pause":true,"can_stop":true}`,
 		handleDestino.ID,
 	); err != nil {

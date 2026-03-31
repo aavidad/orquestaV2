@@ -2583,7 +2583,6 @@ func TestRuntimeOrderSendInstructionHaceFallbackAMailboxCuandoHandleNoAdmiteInpu
 	}
 	logPath, _ := meta["log_path"].(string)
 	meta["driver"] = "process_pty_cli"
-	meta["rendered_command"] = "/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1"
 	meta["can_send_input"] = false
 	meta["supervisor_ref"] = ""
 	metaJSON, _ := json.Marshal(meta)
@@ -2938,7 +2937,6 @@ func TestRuntimeOrderSendInstructionCodexSupervisadoUsaSupervisorLocal(t *testin
 	}
 	logPath, _ := meta["log_path"].(string)
 	meta["driver"] = "process_pty_cli"
-	meta["rendered_command"] = "/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1"
 	meta["can_send_input"] = false
 	metaJSON, _ := json.Marshal(meta)
 	capsJSON, _ := json.Marshal(map[string]any{
