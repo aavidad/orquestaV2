@@ -236,6 +236,7 @@ Regla operativa para `server_autobootstrap`:
 - la recuperacion de runtime local no puede decidir `local_runtime_failed` solo por estados persistidos viejos; antes de reencolar `start/resume`, el daemon debe observar el proceso local y revivir `handle/runtime` si el proceso sigue vivo
 - la observabilidad de transcript no puede propagar el preambulo completo de `script(1)` ni comandos bootstrap gigantes dentro de un `runtime_panic`; si la linea mezcla `Script started on ... [COMMAND=...]` con el fallo real, Orquesta debe recortarla al texto util del panic antes de persistir transcript/evento
 - la API de observabilidad tambien debe servir proyecciones compactas: `runtime-events` no puede devolver mensajes ni payloads gigantes por defecto; el raw vive en BD/trazas, pero la lectura operativa se trunca a tamaños razonables para dashboard, web y CLI
+- la orquestacion profesional exige visibilidad de presupuesto por agente: `status`, `/api/status` y `/api/agentes` deben exponer cuanto queda (`remaining_credits`, segundos/tokens/mensajes cuando existan, y porcentaje restante). Si el proveedor no expone creditos, Orquesta debe caer al mejor porcentaje derivable y nunca dejar al orquestador ciego
 
 Contrato minimo obligatorio para `runtime_orders`:
 

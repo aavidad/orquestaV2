@@ -123,6 +123,36 @@ Conclusion:
 - la observabilidad histórica sigue disponible en BD/trazas
 - la superficie server-first deja de atascarse por eventos viejos desproporcionados
 
+## 2026-03-31 16:55 aprox. — `status` y la API ya enseñan presupuesto restante por agente
+
+Hallazgo:
+
+- el modelo de `presupuestos_sesion` ya existia, pero `status` y la proyeccion de agentes no mostraban cuanto quedaba por agente
+- eso dejaba al orquestador ciego justo en el punto que decide pausas, handoff y reparto de trabajo cuando los runtimes se quedan sin cuota
+
+Decision:
+
+- la vista server-first de agentes debe exponer presupuesto restante de forma operativa
+- prioridad de datos:
+  - snapshot real de `presupuestos_sesion`
+  - si falta, fallback al porcentaje derivable de consumo diario
+
+Cambios:
+
+- `db/sesiones.go`
+  - `Agente` incorpora presupuesto visible: porcentaje restante, estado, fuente y `remaining_*`
+  - `ListarAgentes*` y `GetAgente` enriquecen cada agente con el ultimo presupuesto evaluado
+- `cmd/status_remoto_compat.go`
+  - `status` muestra `restante %`, créditos y estado relevante junto al agente activo
+- tests:
+  - `db/presupuestos_sesion_test.go`
+  - `cmd/status_test.go`
+
+Conclusion:
+
+- ya se puede ver desde la app cuanto margen real le queda a cada agente
+- el siguiente paso es hacer que los runtimes reporten ese presupuesto con más regularidad, no solo al chocar contra `usage limit`
+
 ## 2026-03-31 11:3x aprox. — fusible permanente para `supervisor_local` tras `runtime_panic` real en Codex
 
 Hallazgo:

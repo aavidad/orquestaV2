@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 	"unicode"
@@ -23,6 +24,14 @@ type Agente struct {
 	EstadoCuota            string
 	ReanimarAt             *time.Time
 	MotivoPausa            string
+	CuotaRestantePct       *int
+	PresupuestoEstado      string
+	PresupuestoFuente      string
+	PresupuestoCheckedAt   *time.Time
+	RemainingSeconds       *int64
+	RemainingMessages      *int64
+	RemainingTokens        *int64
+	RemainingCredits       *float64
 }
 
 type Sesion struct {
@@ -649,6 +658,7 @@ func ListarAgentesConSesionesActivas(sesiones []*Sesion) ([]*Agente, error) {
 	if err != nil {
 		return nil, err
 	}
+	enriquecerAgentesConPresupuesto(list)
 	aplicarEstadoVisibleAgentes(list, sesiones)
 	return list, nil
 }
@@ -695,12 +705,73 @@ func GetAgente(nombre string) (*Agente, error) {
 		a.ReanimarAt = &reanimar.Time
 	}
 	a.MotivoPausa = motivo.String
+	enriquecerAgenteConPresupuesto(a)
 	sesionActiva, err := GetSesionActivaOperativa(a.Nombre, nil)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
 	aplicarEstadoVisibleAgente(a, sesionActiva)
 	return a, nil
+}
+
+func enriquecerAgentesConPresupuesto(list []*Agente) {
+	for _, agente := range list {
+		enriquecerAgenteConPresupuesto(agente)
+	}
+}
+
+func enriquecerAgenteConPresupuesto(a *Agente) {
+	if a == nil {
+		return
+	}
+	a.CuotaRestantePct = porcentajeRestanteDiarioAgente(a)
+
+	p, _, err := UltimoPresupuestoAgente(a.Nombre)
+	if err == sql.ErrNoRows || p == nil {
+		return
+	}
+	if err != nil {
+		return
+	}
+	ev, err := EvaluarPresupuestoSesion(p)
+	if err != nil {
+		return
+	}
+	a.PresupuestoEstado = strings.TrimSpace(ev.Estado)
+	a.PresupuestoFuente = strings.TrimSpace(p.BudgetSource)
+	a.PresupuestoCheckedAt = &p.CheckedAt
+	a.RemainingSeconds = p.RemainingSeconds
+	a.RemainingMessages = p.RemainingMessages
+	a.RemainingTokens = p.RemainingTokens
+	a.RemainingCredits = p.RemainingCredits
+	if ev.RemainingRatio != nil {
+		pct := int(math.Round(*ev.RemainingRatio * 100))
+		if pct < 0 {
+			pct = 0
+		}
+		if pct > 100 {
+			pct = 100
+		}
+		a.CuotaRestantePct = &pct
+	}
+}
+
+func porcentajeRestanteDiarioAgente(a *Agente) *int {
+	if a == nil || a.LimiteDiaSegundos <= 0 {
+		return nil
+	}
+	remaining := a.LimiteDiaSegundos - a.ConsumoDiaSegundos
+	if remaining < 0 {
+		remaining = 0
+	}
+	pct := int(math.Round(float64(remaining) * 100 / float64(a.LimiteDiaSegundos)))
+	if pct < 0 {
+		pct = 0
+	}
+	if pct > 100 {
+		pct = 100
+	}
+	return &pct
 }
 
 func resolverAgentePorNombreCI(nombre string) (string, string, bool, error) {

@@ -403,6 +403,33 @@ func TestRenderStatusSummaryMuestraBackendActivo(t *testing.T) {
 	}
 }
 
+func TestRenderStatusSummaryMuestraCuotaAgente(t *testing.T) {
+	pct := 18
+	credits := 3.5
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				AgentesActivos: []*db.Agente{
+					{
+						Nombre:           "Codex2",
+						Rol:              "programador",
+						CuotaRestantePct: &pct,
+						RemainingCredits: &credits,
+						PresupuestoEstado:"handoff_preventivo",
+					},
+				},
+				TareasPorEstado: map[string]int{},
+			},
+		})
+	})
+	if !strings.Contains(out, "restante 18%") {
+		t.Fatalf("salida sin porcentaje de cuota: %s", out)
+	}
+	if !strings.Contains(out, "cred 3.50") {
+		t.Fatalf("salida sin créditos restantes: %s", out)
+	}
+}
+
 func TestFetchServerConfig(t *testing.T) {
 	prevClient := serverHTTPClient
 	serverHTTPClient = &http.Client{

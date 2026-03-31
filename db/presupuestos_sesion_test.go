@@ -105,3 +105,54 @@ func TestEvaluarPresupuestoSesionHandoffPreventivo(t *testing.T) {
 		t.Fatalf("esperaba ratio restante")
 	}
 }
+
+func TestListarAgentesEnriquecePresupuestoVisible(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesionID, err := IniciarSesion("codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	remaining := int64(900)
+	credits := 12.5
+	inicio := time.Now().Add(-4*time.Hour - 30*time.Minute).UTC()
+	reset := inicio.Add(5 * time.Hour)
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:         sesionID,
+		WindowKind:       "5h",
+		WindowStartedAt:  &inicio,
+		ResetAt:          &reset,
+		RemainingSeconds: &remaining,
+		RemainingCredits: &credits,
+		BudgetSource:     "runtime",
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion: %v", err)
+	}
+
+	agentes, err := ListarAgentes()
+	if err != nil {
+		t.Fatalf("ListarAgentes: %v", err)
+	}
+	var agente *Agente
+	for _, item := range agentes {
+		if item != nil && item.Nombre == "codex1" {
+			agente = item
+			break
+		}
+	}
+	if agente == nil {
+		t.Fatalf("codex1 no aparece en agentes: %+v", agentes)
+	}
+	if agente.CuotaRestantePct == nil || *agente.CuotaRestantePct <= 0 {
+		t.Fatalf("cuota restante no enriquecida: %+v", agente)
+	}
+	if agente.RemainingCredits == nil || *agente.RemainingCredits != credits {
+		t.Fatalf("remaining credits inesperado: %+v", agente)
+	}
+	if agente.PresupuestoEstado != "handoff_preventivo" {
+		t.Fatalf("presupuesto estado inesperado: %+v", agente)
+	}
+}

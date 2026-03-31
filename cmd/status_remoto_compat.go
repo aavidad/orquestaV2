@@ -168,7 +168,11 @@ func renderStatusSummary(ctx *statusContext) {
 
 	fmt.Printf("👥 Agentes: %d activos ahora\n", len(resumen.AgentesActivos))
 	for _, a := range resumen.AgentesActivos {
-		fmt.Printf("   🟢 %-15s [%s]\n", a.Nombre, a.Rol)
+		fmt.Printf("   🟢 %-15s [%s]", a.Nombre, a.Rol)
+		if detalle := resumenCuotaAgente(a); detalle != "" {
+			fmt.Printf(" — %s", detalle)
+		}
+		fmt.Println()
 	}
 	if len(resumen.AgentesActivos) == 0 {
 		fmt.Printf("   — sin agentes activos\n")
@@ -214,6 +218,26 @@ func renderStatusSummary(ctx *statusContext) {
 		}
 		fmt.Println()
 	}
+}
+
+func resumenCuotaAgente(a *db.Agente) string {
+	if a == nil {
+		return ""
+	}
+	partes := make([]string, 0, 4)
+	if a.CuotaRestantePct != nil {
+		partes = append(partes, fmt.Sprintf("restante %d%%", *a.CuotaRestantePct))
+	}
+	if a.RemainingCredits != nil {
+		partes = append(partes, fmt.Sprintf("cred %.2f", *a.RemainingCredits))
+	}
+	if a.PresupuestoEstado != "" && a.PresupuestoEstado != "ok" {
+		partes = append(partes, a.PresupuestoEstado)
+	}
+	if a.EstadoCuota != "" && a.EstadoCuota != "activo" {
+		partes = append(partes, "cuota:"+a.EstadoCuota)
+	}
+	return strings.Join(partes, " · ")
 }
 
 func serverInfoLines(info *serverInfo) []string {
