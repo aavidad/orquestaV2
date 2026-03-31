@@ -3446,3 +3446,29 @@ Resultado vivo:
 
 - `Codex1/Codex5` ya se pueden beneficiar del snapshot mas fresco de la misma cuenta observada
 - la cuota efectiva sigue siendo segura; el cambio solo reduce ceguera operativa dentro de la misma identidad OAuth
+
+## 2026-03-31 — Retry de descubrimiento server-first tras restart
+
+Hallazgo:
+
+- tras `server stop && server start`, algunos subcomandos server-first podian caer en una ventana corta donde no redescubrian el daemon aunque este ya estuviese sano
+- `status` entraba porque su camino ya tenia una segunda oportunidad, pero `agente ranking-cuentas` podia fallar justo despues del restart
+
+Decision:
+
+- `apiGet(...)` y `apiPost(...)` ya hacen un segundo intento de descubrimiento del servidor si el primer `serverBaseURL()` sale vacio o si la primera conexion cae durante la ventana de reinicio
+- no se abre fallback local nuevo; sigue siendo server-first, solo con redescubrimiento mas robusto
+
+Codigo:
+
+- [cmd/cliente_servidor.go](/home/alberto/Trabajo/orquesta/cmd/cliente_servidor.go)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'Test(CommandSupportsServerMode|APIAgentesPresupuestoYCuentas|AgenteRankingCuentasCmdRenderizaListado)' -count=1`
+- smoke viva:
+  - `./orquesta server stop && ./orquesta server start && ./orquesta agente ranking-cuentas --activos`
+
+Resultado vivo:
+
+- `agente ranking-cuentas` ya responde correctamente inmediatamente tras el restart del daemon

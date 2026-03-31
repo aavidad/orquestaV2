@@ -625,6 +625,10 @@ func apiGetQuery(path string, query url.Values, dst any) (bool, error) {
 	}
 	base := serverBaseURL()
 	if base == "" {
+		resetServerDiscovery()
+		base = serverBaseURL()
+	}
+	if base == "" {
 		if requireServerForCurrentCommand() {
 			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
 		}
@@ -640,6 +644,26 @@ func apiGetQuery(path string, query url.Values, dst any) (bool, error) {
 	}
 	resp, err := httpClientOrquesta.Do(req)
 	if err != nil {
+		if !serverURLConfiguredExplicitly() {
+			resetServerDiscovery()
+			if retryBase := serverBaseURL(); retryBase != "" && retryBase != base {
+				retryEndpoint := retryBase + path
+				if len(query) > 0 {
+					retryEndpoint += "?" + query.Encode()
+				}
+				reqRetry, reqErr := http.NewRequest(http.MethodGet, retryEndpoint, nil)
+				if reqErr == nil {
+					if retryResp, retryErr := httpClientOrquesta.Do(reqRetry); retryErr == nil {
+						defer retryResp.Body.Close()
+						if retryResp.StatusCode == http.StatusOK {
+							if decErr := json.NewDecoder(retryResp.Body).Decode(dst); decErr == nil {
+								return true, nil
+							}
+						}
+					}
+				}
+			}
+		}
 		if requireServerForCurrentCommand() || serverURLConfiguredExplicitly() {
 			return true, fmt.Errorf("no se pudo contactar con el servidor de Orquesta: %w", err)
 		}
@@ -678,6 +702,10 @@ func apiPost(path string, payload any, dst any) (bool, error) {
 	}
 	base := serverBaseURL()
 	if base == "" {
+		resetServerDiscovery()
+		base = serverBaseURL()
+	}
+	if base == "" {
 		if requireServerForCurrentCommand() {
 			return true, fmt.Errorf("este comando requiere el servidor de Orquesta activo; arranca 'orquesta serve' o usa ORQUESTA_FORCE_LOCAL_DB=1 solo para recuperacion")
 		}
@@ -694,6 +722,26 @@ func apiPost(path string, payload any, dst any) (bool, error) {
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := httpClientOrquesta.Do(req)
 	if err != nil {
+		if !serverURLConfiguredExplicitly() {
+			resetServerDiscovery()
+			if retryBase := serverBaseURL(); retryBase != "" && retryBase != base {
+				reqRetry, reqErr := http.NewRequest(http.MethodPost, retryBase+path, bytes.NewReader(body))
+				if reqErr == nil {
+					reqRetry.Header.Set("Content-Type", "application/json")
+					if retryResp, retryErr := httpClientOrquesta.Do(reqRetry); retryErr == nil {
+						defer retryResp.Body.Close()
+						if retryResp.StatusCode >= http.StatusOK && retryResp.StatusCode < http.StatusMultipleChoices {
+							if dst == nil {
+								return true, nil
+							}
+							if decErr := json.NewDecoder(retryResp.Body).Decode(dst); decErr == nil {
+								return true, nil
+							}
+						}
+					}
+				}
+			}
+		}
 		if requireServerForCurrentCommand() || serverURLConfiguredExplicitly() {
 			return true, fmt.Errorf("no se pudo contactar con el servidor de Orquesta: %w", err)
 		}
