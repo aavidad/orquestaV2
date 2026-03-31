@@ -128,7 +128,7 @@ func PresupuestoSesionFresco(p *PresupuestoSesion) bool {
 	if p == nil {
 		return false
 	}
-	maxAge := time.Duration(configInt64Fallback("pool_budget_snapshot_max_age_seconds", 300)) * time.Second
+	maxAge := time.Duration(presupuestoSnapshotMaxAgeSeconds(p)) * time.Second
 	if maxAge <= 0 {
 		maxAge = 5 * time.Minute
 	}
@@ -136,6 +136,15 @@ func PresupuestoSesionFresco(p *PresupuestoSesion) bool {
 		return false
 	}
 	return time.Since(p.CheckedAt) <= maxAge
+}
+
+func presupuestoSnapshotMaxAgeSeconds(p *PresupuestoSesion) int64 {
+	if p != nil && strings.EqualFold(strings.TrimSpace(p.BudgetSource), "codex_token_count_observed") {
+		if observed := configInt64Fallback("pool_budget_snapshot_observed_max_age_seconds", 0); observed > 0 {
+			return observed
+		}
+	}
+	return configInt64Fallback("pool_budget_snapshot_max_age_seconds", 300)
 }
 
 func EvaluarPresupuestoSesion(p *PresupuestoSesion) (*EvaluacionPresupuesto, error) {

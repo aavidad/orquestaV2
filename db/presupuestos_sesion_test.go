@@ -294,6 +294,9 @@ func TestGetAgenteNoDejaQueSnapshotObservadoStaleMandeSobreLaCuotaEfectiva(t *te
 	if err := ConfigSet("pool_budget_snapshot_max_age_seconds", "60"); err != nil {
 		t.Fatalf("config snapshot max age: %v", err)
 	}
+	if err := ConfigSet("pool_budget_snapshot_observed_max_age_seconds", "60"); err != nil {
+		t.Fatalf("config observed snapshot max age: %v", err)
+	}
 	resetPrimary := time.Now().UTC().Add(-4 * time.Hour)
 	resetSecondary := time.Now().UTC().Add(3 * 24 * time.Hour)
 	raw := `{"rate_limits":{"primary":{"used_percent":12,"window_minutes":300,"resets_at":` + strconv.FormatInt(resetPrimary.Unix(), 10) + `},"secondary":{"used_percent":97,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetSecondary.Unix(), 10) + `}},"account_email":"codex1@example.com"}`
@@ -326,6 +329,24 @@ func TestGetAgenteNoDejaQueSnapshotObservadoStaleMandeSobreLaCuotaEfectiva(t *te
 	}
 	if agente.PresupuestoSemanalPct == nil || *agente.PresupuestoSemanalPct != 3 {
 		t.Fatalf("deberia seguir mostrando la semanal observada para inspeccion: %+v", agente)
+	}
+}
+
+func TestPresupuestoSesionFrescoUsaTTLObservadoEspecifico(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := ConfigSet("pool_budget_snapshot_max_age_seconds", "60"); err != nil {
+		t.Fatalf("config snapshot max age: %v", err)
+	}
+	if err := ConfigSet("pool_budget_snapshot_observed_max_age_seconds", "3600"); err != nil {
+		t.Fatalf("config observed snapshot max age: %v", err)
+	}
+	p := &PresupuestoSesion{
+		BudgetSource: "codex_token_count_observed",
+		CheckedAt:    time.Now().UTC().Add(-30 * time.Minute),
+	}
+	if !PresupuestoSesionFresco(p) {
+		t.Fatalf("la cuota observada de Codex deberia seguir fresca con TTL especifico")
 	}
 }
 

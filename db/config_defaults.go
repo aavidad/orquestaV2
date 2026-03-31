@@ -12,6 +12,7 @@ func defaultConfigEntries() []configDefaultEntry {
 		{Clave: "pool_handoff_threshold_seconds", Valor: "1800"},
 		{Clave: "pool_handoff_threshold_ratio", Valor: "0.10"},
 		{Clave: "pool_budget_snapshot_max_age_seconds", Valor: "300"},
+		{Clave: "pool_budget_snapshot_observed_max_age_seconds", Valor: "3600"},
 		{Clave: "pool_default_budget_source", Valor: "manual"},
 		{Clave: "connector_circuit_breaker_threshold", Valor: "3"},
 		{Clave: "connector_circuit_breaker_cooldown_seconds", Valor: "300"},

@@ -3819,3 +3819,31 @@ Nota de cierre:
 
 - al validar en vivo, `Codex5` ya pasó a snapshot fresco pero apareció una incoherencia menor: el presupuesto quedaba `agotado` por `credits=0` mientras la CLI seguía mostrando `ratio restante 1.00` por la ventana temporal
 - se corrige para que `remainingRatio()` fuerce `0` cuando el agotamiento viene por conteo (`seconds/messages/tokens/credits`) y la vista no mezcle “agotado” con “100%”
+
+## 2026-03-31 — La telemetría observada de Codex tiene TTL propio
+
+Hallazgo:
+
+- tras corregir el parser de `credits`, `Codex2/Codex5` ya pasaban a snapshots frescos de las `19:31-19:32`, pero la app seguia marcandolos `stale` enseguida porque el TTL general era de `300s`
+- ese TTL es razonable para telemetría viva, pero demasiado agresivo para `token_count` observada de Codex CLI, que se actualiza por turnos
+
+Decision:
+
+- separar el TTL observado de Codex del TTL general
+- mantener el TTL general corto para no mentir con telemetría viva
+- permitir una ventana mas realista para `codex_token_count_observed` antes de degradarla a `observado_stale`
+
+Codigo:
+
+- [db/presupuestos_sesion.go](/home/alberto/Trabajo/orquesta/db/presupuestos_sesion.go)
+- [db/config_defaults.go](/home/alberto/Trabajo/orquesta/db/config_defaults.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./db -run 'Test(GetAgenteNoDejaQueSnapshotObservadoStaleMandeSobreLaCuotaEfectiva|EvaluarPresupuestoSesionAgotadoPorCreditsFuerzaRatioCero|ListarAgentesUsaVentanasObservadasDesdeTokenCount)$' -count=1`
+
+Resultado:
+
+- Orquesta deja de tratar como `stale` a una `token_count` observada de menos de una hora solo por no ser “casi en tiempo real”
+- la cuota efectiva sigue protegida: cuando la observación supere su TTL real, volverá al derivado seguro y marcará `telemetría observada stale`
