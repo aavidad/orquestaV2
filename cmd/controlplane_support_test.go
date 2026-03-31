@@ -419,12 +419,12 @@ func TestProcesarSupervisionAutonomaBatchNoRepiteSupervisionSiSupervisorYaTieneT
 		t.Fatalf("iniciar sesion: %v", err)
 	}
 	taskID, err := db.CrearTarea(&db.Tarea{
-		Titulo:     "Supervision ya en curso",
-		Descripcion:"Auditoria real del proyecto",
-		ProyectoID: &proyectoID,
-		Modulo:     "autonomia",
-		Prioridad:  db.PrioridadAlta,
-		CreadoPor:  "orquesta",
+		Titulo:      "Supervision ya en curso",
+		Descripcion: "Auditoria real del proyecto",
+		ProyectoID:  &proyectoID,
+		Modulo:      "autonomia",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
 	})
 	if err != nil {
 		t.Fatalf("crear tarea: %v", err)
@@ -3212,7 +3212,7 @@ func TestProcesarRuntimeMailboxBatchConsumeWatchdogSinHandleActivo(t *testing.T)
 		t.Fatalf("watchdog consumido inesperado: %+v", consumidos)
 	}
 
-	logs, err := db.ListarAuditoria(db.FiltroAuditoria{Limite: 20})
+	logs, err := db.ListarAuditoria(db.FiltroAuditoria{Limite: 100})
 	if err != nil {
 		t.Fatalf("listar auditoria: %v", err)
 	}
@@ -3483,6 +3483,104 @@ func TestProcesarRuntimeMailboxBatchConsumeWatchdogEnEnfriamiento(t *testing.T) 
 	}
 	if !found {
 		t.Fatalf("faltaba auditoria de watchdog en enfriamiento")
+	}
+}
+
+func TestProcesarRuntimeMailboxBatchConsumeGovernanceRefreshEnEnfriamiento(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='pausado' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("pausar handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', motivo_pausa='cuota' WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("marcar enfriamiento: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        db.MailboxKindGovernanceRefresh,
+		PayloadJSON: `{"motivo":"quota_cooldown"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox governance_refresh: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia reconciliar exactamente un governance_refresh en enfriamiento, got=%d", n)
+	}
+
+	pendiente := "pendiente"
+	toAgente := "Codex1"
+	pendientes, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente:   &toAgente,
+		ProyectoID: &proyectoID,
+		Estado:     &pendiente,
+	})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	if len(pendientes) != 0 {
+		t.Fatalf("no deberia quedar governance_refresh pendiente en enfriamiento: %+v", pendientes)
+	}
+
+	consumido := "consumido"
+	consumidos, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente:   &toAgente,
+		ProyectoID: &proyectoID,
+		Estado:     &consumido,
+	})
+	if err != nil {
+		t.Fatalf("listar mailbox consumido: %v", err)
+	}
+	if len(consumidos) != 1 || consumidos[0].ID != msgID {
+		t.Fatalf("governance_refresh consumido inesperado: %+v", consumidos)
+	}
+
+	logs, err := db.ListarAuditoria(db.FiltroAuditoria{Limite: 20})
+	if err != nil {
+		t.Fatalf("listar auditoria: %v", err)
+	}
+	found := false
+	for _, item := range logs {
+		if item != nil && item.Accion == "runtime_mailbox_refresh_enfriamiento" && item.EntidadID == msgID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("faltaba auditoria de governance_refresh en enfriamiento")
 	}
 }
 

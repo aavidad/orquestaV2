@@ -396,6 +396,11 @@ func procesarRuntimeMailboxBatch() (int, error) {
 	if err != nil {
 		return reconciled, err
 	}
+	refreshCooldownReconciled, err := reconciliarRuntimeMailboxRefreshEnfriamientoBatch()
+	if err != nil {
+		return reconciled + refreshCooldownReconciled, err
+	}
+	reconciled += refreshCooldownReconciled
 	watchdogReconciled, err := reconciliarRuntimeMailboxWatchdogSinHandleBatch()
 	if err != nil {
 		return reconciled + watchdogReconciled, err
@@ -418,6 +423,31 @@ func procesarRuntimeMailboxBatch() (int, error) {
 		return reconciled + interactive + supervisorLocal + sessionResume + restarts, err
 	}
 	return reconciled + interactive + supervisorLocal + sessionResume + restarts, nil
+}
+
+func reconciliarRuntimeMailboxRefreshEnfriamientoBatch() (int, error) {
+	estado := "pendiente"
+	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &estado})
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, msg := range mailbox {
+		if msg == nil || !runtimeMailboxRefreshPuedeConsumirsePorEnfriamiento(msg) {
+			continue
+		}
+		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+			return total, err
+		}
+		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return total, err
+		}
+		db.Audit("orquesta", "runtime_mailbox_refresh_enfriamiento", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("agente=%s kind=%s refresh consumido por agente en enfriamiento",
+				strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
+		total++
+	}
+	return total, nil
 }
 
 func reconciliarRuntimeMailboxAgenteSinVidaBatch() (int, error) {
@@ -501,6 +531,22 @@ func watchdogPuedeConsumirsePorEnfriamiento(msg *db.RuntimeMailboxMessage, handl
 		return false
 	}
 	if !strings.EqualFold(strings.TrimSpace(handle.Estado), "pausado") {
+		return false
+	}
+	agente, err := db.GetAgente(strings.TrimSpace(msg.ToAgente))
+	if err != nil || agente == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "enfriamiento")
+}
+
+func runtimeMailboxRefreshPuedeConsumirsePorEnfriamiento(msg *db.RuntimeMailboxMessage) bool {
+	if msg == nil {
+		return false
+	}
+	switch strings.TrimSpace(msg.Kind) {
+	case db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
+	default:
 		return false
 	}
 	agente, err := db.GetAgente(strings.TrimSpace(msg.ToAgente))

@@ -3547,3 +3547,35 @@ Resultado vivo:
 
 - la purga automatica ya cubre deuda terminal vieja de `runtime_instances`, `runtime_handles` y `runtime_orders`
 - el daemon sigue sano y los handles vivos no se tocan
+
+## 2026-03-31 — Mailbox de refresh no debe quedar viva en enfriamiento
+
+Hallazgo:
+
+- `Codex1` seguia con `runtime_mailbox` pendiente `governance_refresh` aunque estaba correctamente en `estado_cuota=enfriamiento` por `usage limit`
+- eso no era trabajo entregable real; era ruido operativo que hacia parecer que quedaba deuda viva cuando el agente no debia despertarse todavia
+
+Decision:
+
+- extender la reconciliacion de mailbox para consumir tambien `governance_refresh` y `skills_refresh` cuando el agente esta en enfriamiento
+- mantener la misma doctrina que con `watchdog`: durante el cooldown esos mensajes ya no deben quedar pendientes; el contexto canonico se regenerara en el siguiente `start/resume`
+
+Codigo:
+
+- [cmd/controlplane_support.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support.go)
+- [cmd/controlplane_support_test.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'TestProcesarRuntimeMailboxBatch(ConsumeWatchdogEnEnfriamiento|ConsumeGovernanceRefreshEnEnfriamiento)' -count=1`
+- `env GOCACHE=/tmp/orquesta-gocache go build -o ./orquesta .`
+- smoke viva:
+  - `./orquesta server stop && ./orquesta server start && ./orquesta server doctor`
+  - `./orquesta runtime mailbox --to Codex1 --estado pendiente`
+
+Resultado vivo:
+
+- `Codex1` ya no deja `governance_refresh` pendiente durante el cooldown
+- `./orquesta runtime mailbox --to Codex1 --estado pendiente` vuelve a vacio
+- el daemon sigue sano con `Health RPC: OK`

@@ -673,3 +673,10 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - la `ventana efectiva` es la más restrictiva entre presupuesto de sesión real y derivadas diaria/semanal. Si faltan snapshots ricos, se puede derivar, pero debe quedar claro qué ventana manda.
 - la identidad de cuenta del agente (`usuario` / `correo`) debe salir solo de artefactos ya persistidos del runtime o del presupuesto (`raw_snapshot_json`, `metadata_json`). No se abre una segunda fuente de verdad ni se inventan credenciales.
 - si Orquesta no observa identidad fiable, deja el campo vacío. El contrato es `mejor dato observado`, no adivinación.
+
+## Mailbox en enfriamiento
+
+- un agente en `estado_cuota=enfriamiento` no debe arrastrar `runtime_mailbox` pendiente que ya no sea entregable durante ese cooldown.
+- `watchdog`, `governance_refresh` y `skills_refresh` deben consumirse como deuda satisfecha si el agente esta pausado o enfriado por una decision explicita del control plane.
+- dejar ese mailbox pendiente durante el cooldown ensucia diagnostico, da falsa sensacion de trabajo vivo y reabre bucles de entrega sin valor.
+- la reconciliacion correcta no es forzar entrega durante el enfriamiento, sino marcar esos mensajes como consumidos y dejar que el siguiente `start/resume` regenere el contexto canonico necesario.
