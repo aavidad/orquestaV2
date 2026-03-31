@@ -4160,6 +4160,61 @@ func TestResetReanimacionConservaCooldownSiFallaReactivacion(t *testing.T) {
 	}
 }
 
+func TestResetReanimacionSostieneCooldownSiLaCuotaVisibleSigueAgotada(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	sesionID, err := db.IniciarSesion("Codex1")
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	now := time.Now().UTC()
+	resetPrimary := now.Add(30 * time.Minute)
+	resetSecondary := now.Add(72 * time.Hour)
+	raw := `{"rate_limits":{"primary":{"used_percent":20,"window_minutes":300,"resets_at":` + strconv.FormatInt(resetPrimary.Unix(), 10) + `},"secondary":{"used_percent":100,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetSecondary.Unix(), 10) + `}}}`
+	if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "5h",
+		BudgetSource:    "codex_token_count_observed",
+		RawSnapshotJSON: raw,
+		CheckedAt:       now,
+	}); err != nil {
+		t.Fatalf("registrar presupuesto: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET reanimar_at=CURRENT_TIMESTAMP, estado_cuota='enfriamiento', motivo_pausa='cuota' WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("marcar reanimacion: %v", err)
+	}
+
+	if err := (dbAutomationService{}).ResetReanimacion("Codex1"); err != nil {
+		t.Fatalf("reset reanimacion: %v", err)
+	}
+
+	agente, err := db.GetAgente("Codex1")
+	if err != nil {
+		t.Fatalf("get agente: %v", err)
+	}
+	if agente == nil {
+		t.Fatalf("agente nil")
+	}
+	if strings.TrimSpace(agente.EstadoCuota) != "enfriamiento" {
+		t.Fatalf("estado_cuota inesperado: %+v", agente)
+	}
+	if agente.ReanimarAt == nil || agente.ReanimarAt.Before(resetSecondary.Add(-time.Minute)) {
+		t.Fatalf("deberia sostener cooldown hasta el reset visible semanal: %+v want>=%s", agente, resetSecondary.Format(time.RFC3339))
+	}
+	estado := "pendiente"
+	nombre := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &nombre, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia reactivar ni encolar ordenes mientras la cuota siga agotada: %+v", orders)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchEncolaPausePorBloqueoHumano(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

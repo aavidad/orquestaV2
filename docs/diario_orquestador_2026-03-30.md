@@ -4492,3 +4492,26 @@ Validacion viva:
 
 - `./orquesta server stop && ./orquesta server start && ./orquesta status`
 - `Codex1`, `Codex2` y `Codex5` ya muestran `cooldown hasta ...` al principio de la línea de cuota
+
+## 2026-04-01 — La reanimación automática ya no reabre agentes con cuota todavía bloqueada
+
+Hallazgo:
+
+- con la presencia y el cooldown ya visibles, quedaba una fuga seria en la automatización: al vencer `reanimar_at`, `ResetReanimacion()` podía intentar reactivar y limpiar el estado aunque la cuota visible siguiera en `0%`
+- eso abría la puerta a una reentrada falsa: budget weekly agotado o ventana corta todavía caída, pero Orquesta intentando `resume/start` por simple vencimiento de reloj
+
+Decision:
+
+- endurecer la reanimación automática con una última comprobación de cuota visible
+- si `CuotaRestantePct=0` y existe `PresupuestoResetAt` futuro, la reanimación no se ejecuta; el cooldown se sostiene hasta ese reset visible y no se encolan órdenes nuevas
+
+Codigo:
+
+- [cmd/controlplane_support.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support.go)
+- [cmd/controlplane_support_test.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(ResetReanimacionConservaCooldownSiFallaReactivacion|ResetReanimacionSostieneCooldownSiLaCuotaVisibleSigueAgotada)' -count=1`
+- `go build -o ./orquesta .`

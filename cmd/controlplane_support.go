@@ -37,6 +37,13 @@ func (dbAutomationService) CheckReanimaciones() ([]*db.Agente, error) {
 
 func (dbAutomationService) ResetReanimacion(nombre string) error {
 	nombre = strings.TrimSpace(nombre)
+	bloqueado, err := sostenerCooldownSiLaCuotaVisibleSigueBloqueada(nombre)
+	if err != nil {
+		return err
+	}
+	if bloqueado {
+		return nil
+	}
 	if err := reactivarAgenteTrasReanimacion(nombre); err != nil {
 		return err
 	}
@@ -45,6 +52,35 @@ func (dbAutomationService) ResetReanimacion(nombre string) error {
 
 func (dbAutomationService) GarantizarSaludAgentes() error {
 	return db.GarantizarSaludAgentes()
+}
+
+func sostenerCooldownSiLaCuotaVisibleSigueBloqueada(nombre string) (bool, error) {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return false, nil
+	}
+	agente, err := db.GetAgente(nombre)
+	if err != nil {
+		return false, err
+	}
+	if agente == nil || agente.CuotaRestantePct == nil || *agente.CuotaRestantePct > 0 {
+		return false, nil
+	}
+	if strings.TrimSpace(agente.PresupuestoVentana) == "" {
+		return false, nil
+	}
+	if agente.PresupuestoResetAt != nil && agente.PresupuestoResetAt.After(time.Now().UTC()) {
+		motivo := strings.TrimSpace(agente.MotivoPausa)
+		if motivo == "" {
+			if dbWindow := strings.TrimSpace(agente.PresupuestoVentana); dbWindow != "" {
+				motivo = "Auto-pausa sostenida por cuota visible: ventana " + dbWindow + " agotada"
+			} else {
+				motivo = "Auto-pausa sostenida por cuota visible agotada"
+			}
+		}
+		return true, db.PausarAgenteHasta(nombre, agente.PresupuestoResetAt.UTC(), motivo)
+	}
+	return false, nil
 }
 
 func (dbAutomationService) PlanificarTareasAutomaticamente() error {
