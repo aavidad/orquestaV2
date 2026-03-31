@@ -2129,3 +2129,26 @@ Codigo:
 Validacion:
 
 - `go test ./cmd -run 'TestProcesarRuntimeMailboxBatch(ConsumeAgenteSinVida|NoConsumeAgenteSinHandlePeroConTrabajo|ConsumeAgenteFueraDeFlotaConAsignacionAutomatica|ConsumeWatchdogSinHandleActivo)' -count=1`
+
+## 2026-03-31 — el banner de script no es un runtime panic
+
+Hallazgo:
+
+- `Codex1` seguia entrando en `runtime_panic` tras `start + send_instruction`, pero el transcript reciente mostraba como señal `runtime_panic` una linea de sistema: `Script started on ...`
+- el ingestor ya marcaba esas lineas como `stream=system`, pero aun las pasaba por el clasificador generico de `panic/crash`
+- el resultado era un falso positivo que disparaba cooldown y escondia al agente sin existir un fallo semantico real del runtime
+
+Decision:
+
+- las lineas `Script started on ...` y `Script done on ...` se siguen persistiendo como transcript de sistema
+- pero no se clasifican como `runtime_panic` ni `runtime_crash`
+- la deteccion de fallos debe salir del contenido semantico real del runtime, no del wrapper `script(1)`
+
+Codigo:
+
+- [db/runtime_transcript.go](/home/alberto/Trabajo/orquesta/db/runtime_transcript.go)
+- [db/runtime_transcript_test.go](/home/alberto/Trabajo/orquesta/db/runtime_transcript_test.go)
+
+Validacion:
+
+- `go test ./db -run 'Test(IngestarRuntimeTranscriptHandleClasificaYGeneraEventos|IngestarRuntimeTranscriptHandleNoClasificaLineaSistemaScript)' -count=1`

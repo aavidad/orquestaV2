@@ -262,6 +262,7 @@ Contrato minimo obligatorio para `runtime_orders`:
 - la mailbox pendiente de agentes fuera de vida operativa no puede quedar como ruido eterno: si el destinatario no tiene `runtime_handle` activo, ni sesion activa, ni asignacion activa, ni tareas activas, ni `runtime_orders` abiertas, la deuda se consume como zombi reconciliado
 - para esa regla, una asignacion `activa` mantenida solo por `reactivacion_automatica` no protege al agente si ya esta fuera de la flota `server_autobootstrap`; no puede retener mailbox zombie por si sola
 - `watchdog` queda fuera de esa reconciliacion generica y conserva su ruta especifica de consumo/auditoria
+- el ingestor de transcript no puede clasificar banners de `script(1)` (`Script started on ...`, `Script done on ...`) como `runtime_panic` o `runtime_crash`; esas lineas son sistema/observabilidad, no evidencia semantica de fallo del runtime
 - el runner de mailbox no se limita a `interactive`, `session_resume` y `coordinated_restart`: cuando exista un runtime supervisado por Orquesta con `stdin_path/supervisor_ref` reales, debe materializar `send_instruction` por un batch propio de `supervisor_local`
 - ese batch no puede decidir con metadata pobre; antes de enrutar debe rehidratar el handle desde el estado observado del supervisor y solo despues evaluar si hay entrega caliente supervisada
 - la `delivery_attempt_signature` de esos intentos debe registrar `supervisor_local|handle|session` para no mezclarlos con `bootstrap_only` ni con `session_resume`

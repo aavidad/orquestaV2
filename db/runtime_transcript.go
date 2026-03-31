@@ -405,7 +405,10 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 			stream = "system"
 		}
 		normalized := normalizarTextoTranscript(texto)
-		classification := clasificarTextoTranscript(normalized)
+		classification := ""
+		if stream != "system" {
+			classification = clasificarTextoTranscript(normalized)
+		}
 		if descartarRuidoTranscript(stream, texto, normalized, classification) {
 			continue
 		}

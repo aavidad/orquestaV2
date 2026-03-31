@@ -146,6 +146,76 @@ func TestRegistrarRuntimeTranscriptInputPersisteLinea(t *testing.T) {
 	}
 }
 
+func TestIngestarRuntimeTranscriptHandleNoClasificaLineaSistemaScript(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, _ := GetRuntimeBySesionID(sesion.ID)
+	handle, _ := GetRuntimeHandleBySesionID(sesion.ID)
+
+	logPath := filepath.Join(t.TempDir(), "system.log")
+	logData := strings.Join([]string{
+		`Script started on 2026-03-31 13:18:00+02:00 [COMMAND="'/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil' 'Codex1' 'exec'"]`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(logPath, []byte(logData), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	n, err := IngestarRuntimeTranscriptHandle(handle.ID)
+	if err != nil {
+		t.Fatalf("ingestar transcript: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 linea de sistema ingerida, got=%d", n)
+	}
+
+	agente := "Codex1"
+	items, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: &agente, Limit: 10})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("transcript inesperado: %+v", items)
+	}
+	if items[0].Stream != "system" || items[0].Classification != "" {
+		t.Fatalf("la linea de sistema no deberia clasificarse como fallo: %+v", items[0])
+	}
+	var count int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM runtime_events WHERE runtime_id=?`, runtime.ID).Scan(&count); err != nil {
+		t.Fatalf("count runtime_events: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("no deberia generar runtime_events para el banner de script, got=%d", count)
+	}
+}
+
 func TestListarRuntimeTranscriptFiltraPorTextoLibre(t *testing.T) {
 	abrirDBTemporalRuntimeObservabilidad(t)
 
