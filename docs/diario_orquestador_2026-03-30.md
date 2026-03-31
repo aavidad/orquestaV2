@@ -1332,3 +1332,31 @@ Validacion:
 - validacion viva:
   - `./orquesta runtime traza --handle-id 352 --bytes 4096` mostro el `runtime_panic` de Codex tras la inyeccion antigua
   - tras la correccion, una nueva orden `#80161` ya no genero un nuevo `stdin` en transcript ni otro `runtime_panic`
+
+## 2026-03-31 02:0x aprox. — el supervisor local rehidrata metadata rica desde el manifest del runtime
+
+Hallazgo:
+
+- tras reiniciar daemon o reanudar un proceso ya vivo, algunos `runtime_handles` activos quedaban con metadata generica de sesion (`cwd`, `external_session_id`, `herramienta`) aunque el runtime real ya tuviese `stdin_path`, `log_path`, `rendered_command`, `supervisor_ref` y `mailbox_delivery_mode`
+- eso degradaba la verdad operativa: el proceso seguia activo, pero el control plane lo veia como handle pobre y perdia capacidad de supervision fina
+
+Decision:
+
+- si el supervisor local observa un proceso valido y la metadata del handle sigue pobre, debe buscar el `runtime manifest` del mismo proceso y rehidratar la metadata rica
+- la rehidratacion correcta pertenece al camino oficial del daemon (`sync_status` y supervision), no a rescates manuales ni a acceso directo a BD
+
+Cambios:
+
+- `internal/controlruntime/supervisor_local.go`
+  - rehidratacion de `descriptorSupervisorLocal` desde `trace_manifest`, `trace_dir/runtime.json` y candidatos bajo `.orquesta-runtime/.../runtime.json`
+  - merge conservador contra manifest validando identidad por `pid`
+- `internal/controlruntime/supervisor_local_test.go`
+  - nueva regresion `TestConsultarEstadoLocalRehidrataMetadataRicaDesdeRuntimeManifest`
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./internal/controlruntime -run 'Test(ConsultarEstadoLocalDetectaSessionIDSinSobrescribirDriver|ConsultarEstadoLocalRehidrataMetadataRicaDesdeRuntimeManifest|SupervisorLocalEmiteHeartbeatYFinalizacionAlActivarse|ValidarIdentidadProcesoLocalDetectaMismatchDeCWD)' -count=1` => OK
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(GuardarSesionActivaPreservaMetadataRicaDelHandle)' -count=1` => OK
+- validacion viva:
+  - `./orquesta runtime orden-nueva Codex2 sync_status --proyecto orquestador --payload '{}'` => encolada `#80221`
+  - `curl -sS 'http://127.0.0.1:16543/api/runtime-handles?agente=Codex2'` ya devuelve para el handle activo `#363` metadata rica persistida con `log_path`, `mailbox_delivery_mode`, `rendered_command` y `can_send_input=false`

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -195,7 +196,7 @@ func supervisorLocalEsAplicable(obj ObjetivoProceso) bool {
 
 func descriptorSupervisorLocalDesdeObjetivo(obj ObjetivoProceso, pid int) descriptorSupervisorLocal {
 	meta := metadataMap(obj.MetadataJSON)
-	return descriptorSupervisorLocal{
+	desc := descriptorSupervisorLocal{
 		Ref:                 strings.TrimSpace(supervisorLocalRefDesdeMetadata(obj.MetadataJSON)),
 		Agente:              stringValueFromMetadata(meta, "agente"),
 		Proyecto:            stringValueFromMetadata(meta, "proyecto"),
@@ -205,13 +206,142 @@ func descriptorSupervisorLocalDesdeObjetivo(obj ObjetivoProceso, pid int) descri
 		StdinPath:           stringValueFromMetadata(meta, "stdin_path"),
 		StdinRawPath:        stringValueFromMetadata(meta, "stdin_raw_path"),
 		LogPath:             stringValueFromMetadata(meta, "log_path"),
-		WorkingDir:          stringValueFromMetadata(meta, "working_dir"),
+		WorkingDir:          workingDirFromMetadata(meta),
 		WrappedCommand:      stringValueFromMetadata(meta, "wrapped_command"),
 		RenderedCommand:     stringValueFromMetadata(meta, "rendered_command"),
 		ExternalSessionID:   stringValueFromMetadata(meta, "external_session_id"),
 		CanSendInput:        !metaBoolDefinedAndFalse(meta, "can_send_input"),
 		MailboxDeliveryMode: stringValueFromMetadata(meta, "mailbox_delivery_mode"),
 	}
+	return rehidratarDescriptorSupervisorLocalDesdeManifest(desc, meta)
+}
+
+func workingDirFromMetadata(meta map[string]any) string {
+	if workdir := stringValueFromMetadata(meta, "working_dir"); strings.TrimSpace(workdir) != "" {
+		return strings.TrimSpace(workdir)
+	}
+	return strings.TrimSpace(stringValueFromMetadata(meta, "cwd"))
+}
+
+func rehidratarDescriptorSupervisorLocalDesdeManifest(desc descriptorSupervisorLocal, meta map[string]any) descriptorSupervisorLocal {
+	if !descriptorSupervisorLocalNecesitaRehidratacion(desc) {
+		return desc
+	}
+	for _, manifestPath := range manifestPathsCandidatosSupervisorLocal(desc, meta) {
+		payload, err := loadRuntimeManifestSupervisorLocal(manifestPath)
+		if err != nil || payload == nil {
+			continue
+		}
+		if manifestPID, ok := payload["pid"].(float64); ok && desc.PID > 0 && int(manifestPID) != desc.PID {
+			continue
+		}
+		desc = mergeDescriptorSupervisorLocalManifest(desc, payload, manifestPath)
+		if !descriptorSupervisorLocalNecesitaRehidratacion(desc) {
+			return desc
+		}
+	}
+	return desc
+}
+
+func descriptorSupervisorLocalNecesitaRehidratacion(desc descriptorSupervisorLocal) bool {
+	return strings.TrimSpace(desc.TraceDir) == "" ||
+		strings.TrimSpace(desc.StdinPath) == "" ||
+		strings.TrimSpace(desc.LogPath) == "" ||
+		strings.TrimSpace(desc.WorkingDir) == "" ||
+		strings.TrimSpace(desc.RenderedCommand) == ""
+}
+
+func manifestPathsCandidatosSupervisorLocal(desc descriptorSupervisorLocal, meta map[string]any) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, 8)
+	add := func(path string) {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return
+		}
+		if _, ok := seen[path]; ok {
+			return
+		}
+		seen[path] = struct{}{}
+		out = append(out, path)
+	}
+	add(stringValueFromMetadata(meta, "trace_manifest"))
+	if traceDir := strings.TrimSpace(desc.TraceDir); traceDir != "" {
+		add(filepath.Join(traceDir, "runtime.json"))
+	}
+	if workdir := strings.TrimSpace(desc.WorkingDir); workdir != "" {
+		if matches, err := filepath.Glob(filepath.Join(workdir, ".orquesta-runtime", "*", "*", "runtime.json")); err == nil {
+			sort.Sort(sort.Reverse(sort.StringSlice(matches)))
+			for _, match := range matches {
+				add(match)
+			}
+		}
+	}
+	return out
+}
+
+func loadRuntimeManifestSupervisorLocal(path string) (map[string]any, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
+func mergeDescriptorSupervisorLocalManifest(desc descriptorSupervisorLocal, payload map[string]any, manifestPath string) descriptorSupervisorLocal {
+	if payload == nil {
+		return desc
+	}
+	if strings.TrimSpace(desc.TraceDir) == "" {
+		desc.TraceDir = filepath.Dir(strings.TrimSpace(manifestPath))
+	}
+	if strings.TrimSpace(desc.Ref) == "" {
+		desc.Ref = strings.TrimSpace(stringValueFromMetadata(payload, "supervisor_ref"))
+		if strings.TrimSpace(desc.Ref) == "" && strings.TrimSpace(desc.TraceDir) != "" {
+			desc.Ref = strings.TrimSpace(desc.TraceDir)
+		}
+	}
+	if strings.TrimSpace(desc.Agente) == "" {
+		desc.Agente = strings.TrimSpace(stringValueFromMetadata(payload, "agente"))
+	}
+	if strings.TrimSpace(desc.Proyecto) == "" {
+		desc.Proyecto = strings.TrimSpace(stringValueFromMetadata(payload, "proyecto"))
+	}
+	if desc.StartedAt.IsZero() {
+		desc.StartedAt = metadataTime(payload, "created_at")
+	}
+	if strings.TrimSpace(desc.StdinPath) == "" {
+		desc.StdinPath = strings.TrimSpace(stringValueFromMetadata(payload, "stdin_path"))
+	}
+	if strings.TrimSpace(desc.StdinRawPath) == "" {
+		desc.StdinRawPath = strings.TrimSpace(stringValueFromMetadata(payload, "stdin_raw_path"))
+	}
+	if strings.TrimSpace(desc.LogPath) == "" {
+		desc.LogPath = strings.TrimSpace(stringValueFromMetadata(payload, "log_path"))
+	}
+	if strings.TrimSpace(desc.WorkingDir) == "" {
+		desc.WorkingDir = strings.TrimSpace(stringValueFromMetadata(payload, "working_dir"))
+	}
+	if strings.TrimSpace(desc.WrappedCommand) == "" {
+		desc.WrappedCommand = strings.TrimSpace(stringValueFromMetadata(payload, "wrapped_command"))
+	}
+	if strings.TrimSpace(desc.RenderedCommand) == "" {
+		desc.RenderedCommand = strings.TrimSpace(stringValueFromMetadata(payload, "rendered_command"))
+	}
+	if strings.TrimSpace(desc.ExternalSessionID) == "" {
+		desc.ExternalSessionID = strings.TrimSpace(stringValueFromMetadata(payload, "external_session_id"))
+	}
+	if strings.TrimSpace(desc.MailboxDeliveryMode) == "" {
+		desc.MailboxDeliveryMode = strings.TrimSpace(stringValueFromMetadata(payload, "mailbox_delivery_mode"))
+	}
+	if _, ok := payload["can_send_input"].(bool); ok {
+		desc.CanSendInput = !metaBoolDefinedAndFalse(payload, "can_send_input")
+	}
+	return desc
 }
 
 func metaBoolDefinedAndFalse(meta map[string]any, key string) bool {

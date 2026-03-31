@@ -237,6 +237,8 @@ Contrato minimo obligatorio para el supervisor local:
 
 - no basta con ver un PID vivo; el supervisor debe validar identidad del proceso observado
 - si cambia el `cwd` o la firma de comando esperada, el proceso no puede seguir contandose como runtime valido
+- si un `runtime_handle` activo solo conserva metadata pobre de sesion pero existe `runtime manifest` valido del mismo proceso, el supervisor debe rehidratar `stdin_path`, `log_path`, `rendered_command`, `supervisor_ref` y demas metadata operativa rica antes de reconciliar el handle
+- esa rehidratacion no puede depender de SQLite directa ni de rescates manuales; debe ocurrir por el camino oficial del daemon, tipicamente durante `sync_status` o supervisión equivalente
 - un batch del runner no puede congelar el resto del control plane; cada batch necesita aislamiento y timeout propio
 
 La referencia conceptual mas cercana para el nucleo es:

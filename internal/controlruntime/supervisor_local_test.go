@@ -1,6 +1,7 @@
 package controlruntime
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -170,5 +171,69 @@ func TestValidarIdentidadProcesoLocalDetectaMismatchDeCWD(t *testing.T) {
 	}
 	if ok {
 		t.Fatal("un cwd incorrecto no deberia validar la identidad del proceso")
+	}
+}
+
+func TestConsultarEstadoLocalRehidrataMetadataRicaDesdeRuntimeManifest(t *testing.T) {
+	workingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("executable: %v", err)
+	}
+	runDir := filepath.Join(workingDir, ".orquesta-runtime", "codex2", "20990101-000000-000000000")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir run dir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.RemoveAll(filepath.Join(workingDir, ".orquesta-runtime"))
+	})
+	manifestPath := filepath.Join(runDir, "runtime.json")
+	payload := map[string]any{
+		"agente":                "Codex2",
+		"proyecto":              "orquestador",
+		"pid":                   os.Getpid(),
+		"driver":                "process_pty_cli",
+		"stdin_path":            filepath.Join(runDir, "pty.stdin"),
+		"stdin_raw_path":        filepath.Join(runDir, "pty.stdin.raw"),
+		"log_path":              filepath.Join(runDir, "pty.log"),
+		"working_dir":           workingDir,
+		"rendered_command":      "codex-perfil Codex2",
+		"wrapped_command":       exe,
+		"mailbox_delivery_mode": "bootstrap_only",
+		"can_send_input":        false,
+		"supervisor_ref":        runDir,
+		"created_at":            time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal manifest: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, append(data, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	pid := int64(os.Getpid())
+	estado, observed, err := ConsultarEstadoLocal(ObjetivoProceso{
+		PID:          &pid,
+		MetadataJSON: `{"cwd":"` + workingDir + `"}`,
+	})
+	if err != nil {
+		t.Fatalf("ConsultarEstadoLocal: %v", err)
+	}
+	if !observed || estado == nil || !estado.Vivo {
+		t.Fatalf("ConsultarEstadoLocal deberia observar el proceso local: observed=%v estado=%+v", observed, estado)
+	}
+	meta := metadataMap(estado.MetadataJSON)
+	if got := stringValueFromMetadata(meta, "stdin_path"); got != filepath.Join(runDir, "pty.stdin") {
+		t.Fatalf("stdin_path no rehidratado: %q meta=%+v", got, meta)
+	}
+	if got := stringValueFromMetadata(meta, "supervisor_ref"); got != runDir {
+		t.Fatalf("supervisor_ref no rehidratado: %q meta=%+v", got, meta)
+	}
+	if got := stringValueFromMetadata(meta, "rendered_command"); got != "codex-perfil Codex2" {
+		t.Fatalf("rendered_command no rehidratado: %q meta=%+v", got, meta)
 	}
 }
