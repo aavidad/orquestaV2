@@ -3385,6 +3385,9 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 			if handled, pauseErr := gestionarBackoffProveedorRuntimeOrderSendInstruction(order, payload, err); handled {
 				return pauseErr
 			}
+			if runtimeOrderSendInstructionDebeDegradarseAMailboxPorError(order, payload, err) {
+				return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, err.Error())
+			}
 			if runtimeOrderSendInstructionProvieneMailbox(payload) {
 				return reencolarRuntimeOrderSendInstruction(order, payload, err.Error())
 			}
@@ -3563,6 +3566,22 @@ func runtimeOrderSendInstructionRetryDelay() time.Duration {
 		seconds = 15
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+func runtimeOrderSendInstructionDebeDegradarseAMailboxPorError(order *RuntimeOrder, payload map[string]any, runtimeErr error) bool {
+	if order == nil || !runtimeOrderSendInstructionProvieneMailbox(payload) || runtimeErr == nil {
+		return false
+	}
+	raw := strings.ToLower(strings.TrimSpace(runtimeErr.Error()))
+	if !strings.Contains(raw, "session_resume timeout") {
+		return false
+	}
+	switch strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")) {
+	case "autonomia", "nudge", "watchdog", MailboxKindGovernanceRefresh, MailboxKindSkillsRefresh:
+		return true
+	default:
+		return false
+	}
 }
 
 func reencolarRuntimeOrderSendInstruction(order *RuntimeOrder, payload map[string]any, reason string) error {

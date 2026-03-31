@@ -3246,6 +3246,137 @@ func TestRuntimeOrderSendInstructionMailboxSeReencolaSiSessionResumeFalla(t *tes
 	}
 }
 
+func TestRuntimeOrderSendInstructionAutonomiaTimeoutDegradaAMailboxDurable(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir working dir: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: workingDir,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "Codex1",
+		ProyectoID:        &proyectoID,
+		CWD:               workingDir,
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-autonomia-timeout",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	wrapper := filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil")
+	if err := os.MkdirAll(filepath.Dir(wrapper), 0o755); err != nil {
+		t.Fatalf("mkdir wrapper: %v", err)
+	}
+	script := "#!/usr/bin/env bash\nset -euo pipefail\nsleep 1\n"
+	if err := os.WriteFile(wrapper, []byte(script), 0o755); err != nil {
+		t.Fatalf("write wrapper: %v", err)
+	}
+
+	meta := map[string]any{
+		"driver":                    "process_pty_cli",
+		"rendered_command":          "'" + wrapper + "' 'Codex1'",
+		"working_dir":               workingDir,
+		"external_session_id":       "sess-autonomia-timeout",
+		"can_send_input":            false,
+		"session_resume_timeout_ms": 10,
+	}
+	metaJSON, _ := json.Marshal(meta)
+	capsJSON, _ := json.Marshal(map[string]any{
+		"can_send_input":        false,
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryBootstrapOnly,
+	})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, capabilities_json=? WHERE id=?`, string(metaJSON), string(capsJSON), handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+
+	payload, _ := json.Marshal(map[string]any{
+		"to_agente":    "Codex1",
+		"from_agente":  "server",
+		"texto":        "Orquesta: continua de forma autonoma",
+		"mailbox_id":   mailboxID,
+		"mailbox_kind": "autonomia",
+	})
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: string(payload),
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderSendInstruction(sendOrder); err != nil {
+		t.Fatalf("ejecutar send_instruction: %v", err)
+	}
+
+	sendOrder, err = GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "completada" {
+		t.Fatalf("send_instruction autonomia deberia degradar a mailbox durable: %+v", sendOrder)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"mailbox_only":true`) || !strings.Contains(sendOrder.ResultadoJSON, `"deferred":true`) {
+		t.Fatalf("resultado sin marca mailbox_only: %s", sendOrder.ResultadoJSON)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"deferred_reason":"session_resume timeout`) {
+		t.Fatalf("resultado sin trazabilidad de timeout: %s", sendOrder.ResultadoJSON)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	mailbox, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{
+		ToAgente:   &agente,
+		ProyectoID: &proyectoID,
+		Estado:     &estado,
+	})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	if len(mailbox) != 1 || mailbox[0].ID != mailboxID {
+		t.Fatalf("mailbox pendiente inesperada: %+v", mailbox)
+	}
+}
+
 func TestRuntimeOrderSendInstructionRebindeaAlHandleActivoYEvitaWorkingDirObsoleto(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

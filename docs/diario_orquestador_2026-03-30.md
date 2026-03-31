@@ -1,5 +1,36 @@
 # Diario del orquestador — 2026-03-30
 
+## 2026-03-31 07:4x aprox. — timeout de `session_resume` para autonomia deja de reencolar la misma orden
+
+Hallazgo:
+
+- el siguiente cuello real tras bajar el timeout seguia concentrado en `autonomia` larga sobre `session_resume`
+- una `send_instruction` nacida de mailbox durable podia fallar por `session_resume timeout` y volver a `pendiente`
+- eso no mejoraba la entrega: solo hacia girar la misma orden mientras el mailbox ya era la fuente durable correcta
+
+Decision:
+
+- para mailbox autonomo (`autonomia`, `nudge`, `watchdog`, `governance_refresh`, `skills_refresh`), un `session_resume timeout` no se reintenta sobre la misma orden
+- la orden derivada se completa como `mailbox_only` con trazabilidad del timeout
+- el mensaje durable permanece pendiente en `runtime_mailbox`, que sigue siendo la unica verdad de continuidad
+
+Cambios:
+
+- `db/controlplane_entities.go`
+  - nuevo helper `runtimeOrderSendInstructionDebeDegradarseAMailboxPorError(...)`
+  - `ejecutarRuntimeOrderSendInstruction(...)` deja de reencolar el mismo intento cuando el fallo es `session_resume timeout` en kinds autonomos
+- `db/controlplane_entities_test.go`
+  - nueva regresion `TestRuntimeOrderSendInstructionAutonomiaTimeoutDegradaAMailboxDurable`
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(RuntimeOrderSendInstructionAutonomiaTimeoutDegradaAMailboxDurable|RuntimeOrderSendInstructionReencolaMailboxTrasFalloSessionResume)' -count=1` => OK
+- `go build -o ./orquesta .` => OK
+- validacion viva:
+  - el contrato nuevo ya queda cubierto por test dirigido
+  - al intentar reproducirlo en vivo sobre `Codex1` y `Codex2` aparecio otro problema distinto y previo: varias `send_instruction` quedan en `ejecutando` sin cerrar (`#80312`, `#80323`, `#80324`)
+  - ese leak de ciclo de vida del runner queda separado como siguiente frente; no se mezcla en este commit con el cambio de contrato del timeout
+
 ## 2026-03-31 03:xx aprox. — el bootstrap pasa a poseer de verdad su mailbox y deja de duplicarse por `session_resume`
 
 Hallazgo:
