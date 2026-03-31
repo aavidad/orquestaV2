@@ -580,3 +580,32 @@ func TestImprimirRuntimeOrdersMuestraDetalleDeferido(t *testing.T) {
 		}
 	}
 }
+
+func TestImprimirRuntimeTranscriptOcultaRuidoOperativoPorDefecto(t *testing.T) {
+	items := []*db.RuntimeTranscriptEntry{
+		{ID: 1, Agente: "Codex2", Stream: "pty_out", Text: "Perfil activo: Codex2", CreatedAt: time.Date(2026, 3, 31, 19, 0, 0, 0, time.UTC)},
+		{ID: 2, Agente: "Codex2", Stream: "pty_out", Text: "He terminado el refactor del router", CreatedAt: time.Date(2026, 3, 31, 19, 1, 0, 0, time.UTC)},
+	}
+	out := capturarStdout(t, func() {
+		if err := imprimirRuntimeTranscript(items, false); err != nil {
+			t.Fatalf("imprimirRuntimeTranscript: %v", err)
+		}
+	})
+	if strings.Contains(out, "Perfil activo") || !strings.Contains(out, "He terminado el refactor del router") {
+		t.Fatalf("salida transcript filtrada inesperada:\n%s", out)
+	}
+}
+
+func TestImprimirRuntimeTranscriptRawMantieneRuidoOperativo(t *testing.T) {
+	items := []*db.RuntimeTranscriptEntry{
+		{ID: 1, Agente: "Codex2", Stream: "pty_out", Text: "Perfil activo: Codex2", CreatedAt: time.Date(2026, 3, 31, 19, 0, 0, 0, time.UTC)},
+	}
+	out := capturarStdout(t, func() {
+		if err := imprimirRuntimeTranscript(items, true); err != nil {
+			t.Fatalf("imprimirRuntimeTranscript raw: %v", err)
+		}
+	})
+	if !strings.Contains(out, "Perfil activo") {
+		t.Fatalf("salida transcript raw sin banner:\n%s", out)
+	}
+}

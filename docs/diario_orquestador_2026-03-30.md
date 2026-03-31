@@ -3757,3 +3757,33 @@ Resultado:
 
 - el diagnostico ya enseña primero los runtimes/handles vivos o degradados y deja fuera la mayor parte de la arqueologia
 - sigue conservando el conteo total para no perder contexto
+
+## 2026-03-31 — `runtime transcript` oculta ruido operativo por defecto
+
+Hallazgo:
+
+- aunque el motor ya no reingesta banner nuevo, el transcript historico seguia mostrando banners viejos del launcher/TUI y hacia poco util la CLI diaria
+- la inspeccion normal necesitaba ver señal de trabajo; el ruido antiguo solo hacia falta en modo forense
+
+Decision:
+
+- `runtime transcript` pasa a filtrar por defecto el ruido operativo/banners ya conocidos
+- se añade `--raw` para recuperar la vista completa sin filtros cuando haga falta analisis forense
+
+Codigo:
+
+- [cmd/runtime.go](/home/alberto/Trabajo/orquesta/cmd/runtime.go)
+- [cmd/runtime_test.go](/home/alberto/Trabajo/orquesta/cmd/runtime_test.go)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'Test(ImprimirRuntimeTranscriptOcultaRuidoOperativoPorDefecto|ImprimirRuntimeTranscriptRawMantieneRuidoOperativo|RuntimeControlPlaneUsaAPICuandoHayServidor)$' -count=1`
+- `env GOCACHE=/tmp/orquesta-gocache go build -o ./orquesta .`
+- smoke viva:
+  - `./orquesta runtime transcript --agente Codex5 --limit 8`
+  - `./orquesta runtime transcript --agente Codex5 --limit 8 --raw`
+
+Resultado:
+
+- la vista normal ya enseña solo señal util
+- `--raw` mantiene el acceso a todo el transcript historico cuando se necesita

@@ -179,6 +179,7 @@ var runtimeTranscriptCmd = &cobra.Command{
 		handleID, _ := cmd.Flags().GetInt64("handle-id")
 		signalsPending, _ := cmd.Flags().GetBool("signals-pending")
 		limit, _ := cmd.Flags().GetInt("limit")
+		rawView, _ := cmd.Flags().GetBool("raw")
 
 		query := url.Values{}
 		if strings.TrimSpace(agente) != "" {
@@ -219,13 +220,13 @@ var runtimeTranscriptCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			return imprimirRuntimeTranscript(items)
+			return imprimirRuntimeTranscript(items, rawView)
 		} else if runtimeModoRecuperacionLocalExplicito() {
 			items, err := cargarRuntimeTranscriptRecuperacionLocal(query)
 			if err != nil {
 				return err
 			}
-			return imprimirRuntimeTranscript(items)
+			return imprimirRuntimeTranscript(items, rawView)
 		}
 		return serverFirstCommandError("runtime transcript")
 	},
@@ -245,7 +246,17 @@ func imprimirRuntimeHandles(handles []*db.RuntimeHandle) error {
 	return nil
 }
 
-func imprimirRuntimeTranscript(items []*db.RuntimeTranscriptEntry) error {
+func imprimirRuntimeTranscript(items []*db.RuntimeTranscriptEntry, rawView bool) error {
+	if !rawView {
+		filtered := items[:0]
+		for _, item := range items {
+			if runtimeTranscriptEsRuidoOperativo(item) {
+				continue
+			}
+			filtered = append(filtered, item)
+		}
+		items = filtered
+	}
 	if len(items) == 0 {
 		fmt.Println("No hay transcript con ese filtro.")
 		return nil
@@ -265,6 +276,35 @@ func imprimirRuntimeTranscript(items []*db.RuntimeTranscriptEntry) error {
 		)
 	}
 	return nil
+}
+
+func runtimeTranscriptEsRuidoOperativo(item *db.RuntimeTranscriptEntry) bool {
+	if item == nil {
+		return false
+	}
+	if strings.TrimSpace(item.Stream) != "pty_out" {
+		return false
+	}
+	text := strings.ToLower(strings.TrimSpace(item.Text))
+	if text == "" {
+		return true
+	}
+	markers := []string{
+		"perfil activo:",
+		"codex_home:",
+		"credenciales:",
+		"consejo:",
+		"github.com/openai/codex/releases/latest",
+		"chatgpt.com/codex/settings/usage",
+		"chatgpt.com/explore/pro",
+		"http://localhost:8080",
+	}
+	for _, marker := range markers {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 var runtimeOrdenesCmd = &cobra.Command{
@@ -1307,6 +1347,7 @@ func init() {
 	runtimeTranscriptCmd.Flags().Int64("handle-id", 0, "Filtrar transcript por handle_id")
 	runtimeTranscriptCmd.Flags().Bool("signals-pending", false, "Mostrar solo señales pendientes de gestionar")
 	runtimeTranscriptCmd.Flags().Int("limit", 50, "Número máximo de líneas de transcript")
+	runtimeTranscriptCmd.Flags().Bool("raw", false, "Mostrar también ruido operativo/banner del runtime")
 	runtimeOrdenesCmd.Flags().String("agente", "", "Filtrar órdenes por agente")
 	runtimeOrdenesCmd.Flags().String("estado", "", "Filtrar órdenes por estado")
 	runtimeOrdenesCmd.Flags().String("proyecto", "", "Filtrar órdenes por proyecto")
