@@ -26,6 +26,13 @@ func setHeartbeatStale(t *testing.T, sesionID int64) {
 	if _, err := DB.Exec(`UPDATE sesiones SET heartbeat_at=? WHERE id=?`, old, sesionID); err != nil {
 		t.Fatalf("setHeartbeatStale: %v", err)
 	}
+	if _, err := DB.Exec(`UPDATE runtime_instances
+		SET last_event_at=?,
+		    last_heartbeat_at=?,
+		    updated_at=?
+		WHERE sesion_id=?`, old, old, old, sesionID); err != nil {
+		t.Fatalf("setHeartbeatStale runtime: %v", err)
+	}
 }
 
 // prepararAgenteConTareaEnProgreso crea un agente con sesión activa y una tarea en progreso.
@@ -116,6 +123,38 @@ func TestDetectarAgentesAgotadosIgnoraHeartbeatReciente(t *testing.T) {
 	}
 	if len(candidatos) != 0 {
 		t.Fatalf("no esperaba candidatos con heartbeat reciente, got=%d", len(candidatos))
+	}
+}
+
+func TestDetectarAgentesAgotadosIgnoraHeartbeatSesionStaleSiRuntimeSigueActivoReciente(t *testing.T) {
+	prepararDBTemporal(t)
+
+	sesionID, _ := prepararAgenteConTareaEnProgreso(t, "Codex1")
+	setHeartbeatStale(t, sesionID)
+
+	handle, err := GetRuntimeHandleActivoAgente("Codex1")
+	if err != nil {
+		t.Fatalf("GetRuntimeHandleActivoAgente: %v", err)
+	}
+	if handle == nil || handle.RuntimeID == nil {
+		t.Fatalf("handle activo inesperado: %+v", handle)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_instances
+		SET logical_state='esperando_io',
+		    process_state='running',
+		    last_event_at=CURRENT_TIMESTAMP,
+		    last_heartbeat_at=CURRENT_TIMESTAMP,
+		    updated_at=CURRENT_TIMESTAMP
+		WHERE id=?`, *handle.RuntimeID); err != nil {
+		t.Fatalf("actualizar runtime activo: %v", err)
+	}
+
+	candidatos, err := DetectarAgentesAgotados()
+	if err != nil {
+		t.Fatalf("DetectarAgentesAgotados: %v", err)
+	}
+	if len(candidatos) != 0 {
+		t.Fatalf("no esperaba candidatos si el runtime sigue activo recientemente: %+v", candidatos)
 	}
 }
 

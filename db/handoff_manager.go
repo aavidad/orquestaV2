@@ -201,6 +201,11 @@ func enriquecerCandidatoHandoff(c *HandoffCandidato, cutoff time.Time, threshold
 			}
 		}
 	}
+	if activa, err := watchdogActividadRuntimeReciente(c, cutoff); err != nil {
+		return false, err
+	} else if activa {
+		return false, nil
+	}
 	if c.Inactividad >= threshold || (c.Inactividad > 0 && time.Now().UTC().Add(-c.Inactividad).Before(cutoff)) {
 		c.Disparador = "watchdog"
 		c.RequiereSondeo = c.HandleID != nil
@@ -230,6 +235,53 @@ func watchdogYaSatisfechoPorEnfriamiento(c *HandoffCandidato) bool {
 		return false
 	}
 	return strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "enfriamiento")
+}
+
+func watchdogActividadRuntimeReciente(c *HandoffCandidato, cutoff time.Time) (bool, error) {
+	if c == nil || c.HandleID == nil {
+		return false, nil
+	}
+	handle, err := GetRuntimeHandle(*c.HandleID)
+	if err != nil || handle == nil {
+		return false, err
+	}
+	if handle.RuntimeID == nil {
+		return false, nil
+	}
+	runtime, err := GetRuntime(*handle.RuntimeID)
+	if err != nil || runtime == nil {
+		return false, err
+	}
+	if strings.EqualFold(strings.TrimSpace(runtime.LogicalState), "cerrado") {
+		return false, nil
+	}
+	ultima := runtimeUltimaActividad(runtime)
+	if ultima == nil {
+		return false, nil
+	}
+	return !ultima.Before(cutoff), nil
+}
+
+func runtimeUltimaActividad(runtime *RuntimeInstance) *time.Time {
+	if runtime == nil {
+		return nil
+	}
+	candidatas := []time.Time{}
+	for _, ts := range []*time.Time{runtime.LastEventAt, runtime.LastHeartbeatAt} {
+		if ts != nil && !ts.IsZero() {
+			candidatas = append(candidatas, ts.UTC())
+		}
+	}
+	if len(candidatas) == 0 {
+		return nil
+	}
+	ultima := candidatas[0]
+	for _, ts := range candidatas[1:] {
+		if ts.After(ultima) {
+			ultima = ts
+		}
+	}
+	return &ultima
 }
 
 func presupuestoSesionFresco(p *PresupuestoSesion) bool {

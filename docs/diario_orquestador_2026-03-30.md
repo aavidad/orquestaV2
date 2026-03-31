@@ -2552,3 +2552,35 @@ Validacion:
   - `curl -sf http://127.0.0.1:16543/api/runtime-orders?agente=Codex1`
   - la ultima pareja previa al cambio seguia siendo `nudge(supervisar_proyecto) -> send_instruction`
   - tras reiniciar con el binario nuevo, el criterio de corte ya queda cubierto por test y por el emisor identificado; la siguiente comprobacion viva util es dejar pasar el siguiente intervalo de supervision sin que aparezca una pareja nueva equivalente
+
+## 2026-03-31 — el watchdog deja de declarar stale a un runtime que sigue vivo
+
+Hallazgo:
+
+- `Codex2` seguia recibiendo `sync_status + watchdog` con motivo `heartbeat hace 30 min` aun teniendo runtime y handle activos
+- la evidencia viva salia por API:
+  - `GET /api/runtime-orders?agente=Codex2` mostraba `#80635/#80636/#80637`
+  - `#80635` era `sync_status` por `watchdog_heartbeat_stale`
+  - `#80636` era el `nudge` watchdog derivado
+  - el mismo payload mostraba `runtime_id=392`, `handle_id=389`, `logical_state=esperando_io`, `process_alive=true`
+- la causa estructural estaba en `DetectarAgentesAgotados()`: solo miraba `sesiones.heartbeat_at` y podia considerar “agotado” a un agente cuyo runtime seguia vivo y con actividad reciente
+
+Decision:
+
+- el watchdog de handoff sigue usando la sesion como señal principal, pero antes de declarar stale debe consultar la actividad real del runtime activo
+- si el runtime activo del handle vigente tiene `last_event_at` o `last_heartbeat_at` recientes, no se encola `sync_status/watchdog`
+- timestamps administrativos como `updated_at` no cuentan como actividad viva; solo valen señales reales del runtime
+
+Codigo:
+
+- [db/handoff_manager.go](/home/alberto/Trabajo/orquesta/db/handoff_manager.go)
+- [db/handoff_manager_test.go](/home/alberto/Trabajo/orquesta/db/handoff_manager_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./db -run 'TestDetectarAgentesAgotados(DevuelveAgentesConHeartbeatAntiguo|SinHandleActivoNoRequiereSondeo|IgnoraHeartbeatReciente|IgnoraHeartbeatSesionStaleSiRuntimeSigueActivoReciente|IncluyePresupuestoCriticoConHeartbeatReciente|IgnoraPresupuestoObsoletoConHeartbeatReciente)' -count=1`
+- `go build -o ./orquesta .`
+- verificacion viva del caso que motivó el cambio:
+  - `curl -sf http://127.0.0.1:16543/api/runtime-orders?agente=Codex2`
+  - el problema real quedo aislado como falso stale de sesion con runtime vivo
