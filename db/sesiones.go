@@ -834,7 +834,7 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 					}
 				}
 			}
-			if ev.RemainingRatio != nil && fresco {
+			if ev.RemainingRatio != nil && fresco && sesion.pct == nil {
 				pct := int(math.Round(*ev.RemainingRatio * 100))
 				if pct < 0 {
 					pct = 0
@@ -849,7 +849,7 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 					resetAt:    p.ResetAt,
 					source:     strings.TrimSpace(p.BudgetSource),
 				}
-			} else if strings.EqualFold(strings.TrimSpace(ev.Estado), "agotado") && fresco {
+			} else if strings.EqualFold(strings.TrimSpace(ev.Estado), "agotado") && fresco && sesion.pct == nil {
 				pct := 0
 				a.PresupuestoSesionPct = &pct
 				sesion = presupuestoAgenteCandidato{
@@ -923,16 +923,54 @@ func mejorPresupuestoDerivadoAgente(a *Agente) presupuestoAgenteCandidato {
 }
 
 func seleccionarPresupuestoEfectivo(candidatos []presupuestoAgenteCandidato) presupuestoAgenteCandidato {
-	best := presupuestoAgenteCandidato{}
+	var weekly presupuestoAgenteCandidato
+	var short presupuestoAgenteCandidato
+	var fallback presupuestoAgenteCandidato
 	for _, item := range candidatos {
 		if item.pct == nil {
 			continue
 		}
-		if best.pct == nil || *item.pct < *best.pct {
-			best = item
+		if presupuestoEsVentanaSemanal(item.windowKind) {
+			weekly = item
+			continue
+		}
+		if short.pct == nil && presupuestoEsVentanaCorta(item.windowKind) {
+			short = item
+			continue
+		}
+		if fallback.pct == nil {
+			fallback = item
 		}
 	}
-	return best
+	if weekly.pct != nil {
+		if *weekly.pct <= 0 {
+			return weekly
+		}
+		if short.pct != nil {
+			return short
+		}
+		return weekly
+	}
+	if short.pct != nil {
+		return short
+	}
+	if fallback.pct != nil {
+		return fallback
+	}
+	return presupuestoAgenteCandidato{}
+}
+
+func presupuestoEsVentanaSemanal(windowKind string) bool {
+	return strings.EqualFold(strings.TrimSpace(windowKind), "weekly")
+}
+
+func presupuestoEsVentanaCorta(windowKind string) bool {
+	windowKind = strings.ToLower(strings.TrimSpace(windowKind))
+	switch windowKind {
+	case "5h", "session", "provider":
+		return true
+	}
+	return strings.HasSuffix(windowKind, "m")
 }
 
 func aplicarPresupuestoEfectivoAgente(a *Agente, candidato presupuestoAgenteCandidato) {

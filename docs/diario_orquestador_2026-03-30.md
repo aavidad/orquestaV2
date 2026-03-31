@@ -4388,3 +4388,38 @@ Validacion viva:
 - `./orquesta server stop && ./orquesta server start`
 - `curl -fsS 'http://127.0.0.1:16543/api/runtime-handles?agente=Codex2'`
 - el handle activo `#405` ya no devuelve `resumen_continuidad` crudo ni `transcript_log_pending`; la metadata viva queda mucho mas limpia para API/web
+
+## 2026-04-01 — La cuota efectiva respeta la jerarquia semanal -> 5h
+
+Hallazgo:
+
+- la proyeccion visible de presupuesto seguia tratando las ventanas como si bastara con elegir el minimo ciego entre `sesión`, `diario` y `semanal`
+- eso chocaba con la regla operativa real de Codex: si la cuota semanal se agota, el saldo de `5h` deja de importar; si la semanal sigue viva aunque sea con `1%`, entonces sí manda la ventana de `5h`
+- ademas, al enriquecer un agente desde snapshots observados, la candidata `5h` podia quedar pisada por una fila generica sin `reset_at`, perdiendo justo el dato operativo mas importante
+
+Decision:
+
+- fijar como doctrina y como codigo que la cuota efectiva se decide en dos pasos:
+  - primero `semanal`
+  - solo si `semanal > 0`, mirar `5h`
+- mantener visibles las ventanas derivadas y observadas para inspeccion, pero sin dejar que una heuristica de minimo ciego niegue la prioridad semanal
+- preservar la candidata observada `5h` cuando trae `reset_at` y telemetria rica; no sobrescribirla con una proyeccion generica peor
+
+Codigo:
+
+- [db/sesiones.go](/home/alberto/Trabajo/orquesta/db/sesiones.go)
+- [db/presupuestos_sesion_test.go](/home/alberto/Trabajo/orquesta/db/presupuestos_sesion_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./db -run 'Test(ListarAgentesUsaPresupuestoSemanalSiEsMasRestrictivo|ListarAgentesUsaVentanasObservadasDesdeTokenCount|ListarAgentesAgotaSiLaSemanalLlegaACeroAunqueLaVentanaCortaSigaViva|GetAgenteNoDejaQueSnapshotObservadoStaleMandeSobreLaCuotaEfectiva)' -count=1`
+- `go build -o ./orquesta .`
+
+Validacion viva pendiente de este mismo ciclo:
+
+- reiniciar el daemon con el binario nuevo
+- reconsultar `./orquesta agente presupuesto --json`
+- comprobar que:
+  - `weekly=0` gana siempre aunque `5h>0`
+  - si `weekly>0`, la ventana efectiva pasa a ser `5h`
