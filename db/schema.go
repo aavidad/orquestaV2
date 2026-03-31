@@ -989,6 +989,7 @@ INSERT INTO config (clave, valor) VALUES
 	    ('runtime_supervision_batch_size','10'),
 	    ('runtime_order_batch_size','10'),
 	    ('runtime_order_lease_seconds','120'),
+	    ('runtime_send_instruction_lease_seconds','35'),
 	    ('runtime_order_stale_seconds','120')
 	ON CONFLICT(clave) DO NOTHING;
 

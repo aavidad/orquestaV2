@@ -1276,11 +1276,31 @@ func runtimeOrderLeaseDuration() time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
+func runtimeOrderLeaseDurationForType(tipo string) time.Duration {
+	switch strings.TrimSpace(tipo) {
+	case "send_instruction":
+		seconds := configIntOrDefault("runtime_send_instruction_lease_seconds", 35)
+		if seconds <= 0 {
+			seconds = 35
+		}
+		return time.Duration(seconds) * time.Second
+	default:
+		return runtimeOrderLeaseDuration()
+	}
+}
+
 func runtimeOrderLeaseDeadline(now time.Time) time.Time {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
 	return now.UTC().Add(runtimeOrderLeaseDuration())
+}
+
+func runtimeOrderLeaseDeadlineForType(tipo string, now time.Time) time.Time {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	return now.UTC().Add(runtimeOrderLeaseDurationForType(tipo))
 }
 
 func runtimeOrderClaimedBy() string {
@@ -1486,6 +1506,26 @@ func MarcarRuntimeOrderEstado(id int64, estado, resultadoJSON, errorText string)
 			WHERE id = ?`, estado, id)
 		return err
 	}
+}
+
+func MarcarRuntimeOrderEjecutando(order *RuntimeOrder) error {
+	if order == nil {
+		return sql.ErrNoRows
+	}
+	resultadoJSON := strings.TrimSpace(order.ResultadoJSON)
+	if resultadoJSON == "" {
+		resultadoJSON = "{}"
+	}
+	leaseUntil := runtimeOrderLeaseDeadlineForType(order.Tipo, time.Now().UTC())
+	_, err := DB.Exec(`
+		UPDATE runtime_orders
+		SET estado='ejecutando',
+		    resultado_json = ?,
+		    error_text = '',
+		    lease_expires_at = ?,
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?`, resultadoJSON, leaseUntil, order.ID)
+	return err
 }
 
 func CrearRuntimeCheckpoint(cp *RuntimeCheckpoint) (int64, error) {
@@ -1972,7 +2012,7 @@ func procesarRuntimeOrdersBatchTipos(tipos []string) (int, error) {
 		if order == nil {
 			continue
 		}
-		if err := MarcarRuntimeOrderEstado(order.ID, "ejecutando", order.ResultadoJSON, ""); err != nil {
+		if err := MarcarRuntimeOrderEjecutando(order); err != nil {
 			return processed, err
 		}
 		if err := ejecutarRuntimeOrderBasica(order); err != nil {
@@ -4903,7 +4943,17 @@ func ejecutarRuntimeOrderHandoff(order *RuntimeOrder) error {
 
 func claimRuntimeOrderByID(id int64) (*RuntimeOrder, error) {
 	now := time.Now().UTC()
-	leaseUntil := runtimeOrderLeaseDeadline(now)
+	current, err := GetRuntimeOrder(id)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if current == nil {
+		return nil, nil
+	}
+	leaseUntil := runtimeOrderLeaseDeadlineForType(current.Tipo, now)
 	claimedBy := runtimeOrderClaimedBy()
 	leaseToken := runtimeOrderLeaseToken(id, now)
 	tx, err := DB.Begin()

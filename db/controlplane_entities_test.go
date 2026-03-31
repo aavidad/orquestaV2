@@ -6121,6 +6121,77 @@ func TestReconciliarRuntimeOrdersStaleRespetaCutoffConfigurado(t *testing.T) {
 	}
 }
 
+func TestClaimRuntimeOrderSendInstructionUsaLeaseCorta(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE config SET valor='120' WHERE clave='runtime_order_lease_seconds'`); err != nil {
+		t.Fatalf("config runtime_order_lease_seconds: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE config SET valor='35' WHERE clave='runtime_send_instruction_lease_seconds'`); err != nil {
+		t.Fatalf("config runtime_send_instruction_lease_seconds: %v", err)
+	}
+
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: `{"to_agente":"Codex1","texto":"hola"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	syncID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "sync_status",
+		PayloadJSON: `{}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar sync_status: %v", err)
+	}
+
+	before := time.Now().UTC()
+	sendOrder, err := claimRuntimeOrderByID(sendID)
+	if err != nil {
+		t.Fatalf("claim send_instruction: %v", err)
+	}
+	syncOrder, err := claimRuntimeOrderByID(syncID)
+	if err != nil {
+		t.Fatalf("claim sync_status: %v", err)
+	}
+	if sendOrder == nil || sendOrder.LeaseExpiresAt == nil {
+		t.Fatalf("send_instruction sin lease: %+v", sendOrder)
+	}
+	if syncOrder == nil || syncOrder.LeaseExpiresAt == nil {
+		t.Fatalf("sync_status sin lease: %+v", syncOrder)
+	}
+
+	sendLease := sendOrder.LeaseExpiresAt.Sub(before)
+	syncLease := syncOrder.LeaseExpiresAt.Sub(before)
+	if sendLease > 45*time.Second {
+		t.Fatalf("lease send_instruction demasiado larga: %s", sendLease)
+	}
+	if syncLease < 110*time.Second {
+		t.Fatalf("lease sync_status demasiado corta: %s", syncLease)
+	}
+	if !(sendLease < syncLease) {
+		t.Fatalf("send_instruction deberia reclamar lease mas corta: send=%s sync=%s", sendLease, syncLease)
+	}
+}
+
 func TestReconciliarRuntimeOrdersStaleRecuperaLeaseExpiradaSinEsperarOtroCutoff(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

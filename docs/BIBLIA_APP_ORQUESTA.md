@@ -248,6 +248,7 @@ Contrato minimo obligatorio para `runtime_orders`:
 - un agente `pausado` o en `estado_cuota=enfriamiento` no cuenta como “activo ahora” en `status`, `/api/status` ni `/api/agentes`, aunque conserve sesion operativa o handle reciente
 - la autonomia no puede rematerializar `pause` si la pausa ya esta satisfecha: una orden `pause` pendiente, una `sesion` ya `pausada` o un `runtime_handle` ya `pausado` con el agente en `estado_cuota=enfriamiento` deben tratarse como pausa vigente y cerrar el ciclo sin nuevas ordenes
 - la coalescencia de `runtime_mailbox` para guia operativa no va por `kind` exacto sino por familia de guidance: `autonomia`, `nudge`, `watchdog`, `governance_refresh` y `skills_refresh` se superseden entre si; `instruction` explicita queda fuera de esa familia y no se borra por una guia generica posterior
+- `send_instruction` no usa la misma `lease` que `start`/`handoff`: su ventana debe ser corta y operativa para que un `session_resume` colgado no secuestre `runtime_orders` durante minutos. La `lease` general sigue siendo larga para ciclo de vida, pero la de `send_instruction` es especifica y mas corta
 - si un `start` levanta runtime real con bootstrap inyectado pero sin `handoff/resume` pendiente, ese propio `start` debe hacer `ack` de los mailbox bootstrap incluidos; no se puede dejar esa continuidad pendiente por falta de lease formal
 
 Contrato minimo obligatorio para el supervisor local:

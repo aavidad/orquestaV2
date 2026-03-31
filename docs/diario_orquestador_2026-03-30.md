@@ -1786,3 +1786,38 @@ Validacion:
   - tras un ciclo del runner, `#80378` quedo `completada`
   - `runtime_mailbox #64332` paso de `pendiente` a `consumido`
   - la pendiente vigente para `Codex5` pasa a ser `#64491` (`autonomia`), no el `nudge` historico
+
+## 2026-03-31T08:33:00Z - `send_instruction` reclama lease corta
+
+Problema:
+
+- una `send_instruction` colgada heredaba la `lease` general de `runtime_orders` (`120s`)
+- eso dejaba el control plane demasiado tiempo con una orden en `ejecutando` aunque el camino real (`session_resume`) es corto y fragil
+
+Decision:
+
+- mantener `lease` larga para ciclo de vida (`start`, `handoff`, etc.)
+- introducir `lease` especifica y corta para `send_instruction`
+
+Cambios:
+
+- `db/controlplane_entities.go`
+  - nuevas helpers `runtimeOrderLeaseDurationForType(...)` y `runtimeOrderLeaseDeadlineForType(...)`
+  - nueva ruta `MarcarRuntimeOrderEjecutando(...)`
+  - `claimRuntimeOrderByID(...)` y `ProcesarRuntimeOrdersBatch()` usan `lease` por tipo de orden
+- `db/config_defaults.go`
+  - nueva config `runtime_send_instruction_lease_seconds=35`
+- `db/schema.go`
+  - misma clave añadida al bootstrap de config
+- `db/controlplane_entities_test.go`
+  - nueva regresion `TestClaimRuntimeOrderSendInstructionUsaLeaseCorta`
+
+Validacion:
+
+- `go test ./db -run 'Test(ClaimRuntimeOrderSendInstructionUsaLeaseCorta|ReconciliarRuntimeOrdersStaleRespetaCutoffConfigurado|ReconciliarRuntimeOrdersStaleRecuperaLeaseExpiradaSinEsperarOtroCutoff|EnviarRuntimeMailboxCoalesceFamiliaGuidancePendiente)' -count=1` => OK
+- `go build -o ./orquesta .` => OK
+- validacion viva:
+  - daemon reiniciado con el binario nuevo (`pid=3652622`, `Health RPC: OK`)
+  - `./orquesta runtime nudge Codex3 ... --kind autonomia --proyecto orquestador` => `#80382`
+  - el batch materializo `#80387 send_instruction`
+  - `#80387` entro en `ejecutando` con `lease_expires_at=2026-03-31T08:33:30Z`, es decir ~35s, no ~120s
