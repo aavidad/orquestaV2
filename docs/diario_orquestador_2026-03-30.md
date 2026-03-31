@@ -384,6 +384,29 @@ Conclusion:
 
 - Orquesta deja de sugerir “ocupado” donde solo hay presencia o espera de I/O
 
+## 2026-04-01 01:55 aprox. — se fija preparación limpia de sesión por `server preparar-sesion`
+
+Hallazgo:
+
+- al cambiar de tanda seguían apareciendo rarezas heredadas si el daemon no se reiniciaba y purgaba residuos terminales de forma explícita
+
+Decision:
+
+- la preparación de sesión pasa a ser un mando oficial del servidor, no una secuencia manual dispersa
+
+Cambios:
+
+- `cmd/server.go`
+  - nuevo subcomando `server preparar-sesion`
+  - reinicia limpio el daemon si ya existe
+  - purga `runtime_handles` cerrados/fallidos y `runtime_orders` terminales antiguas por proyecto
+- `cmd/root_gating_test.go`
+  - `server preparar-sesion` queda clasificado como comando no-DB local
+
+Conclusion:
+
+- Orquesta gana un arranque repetible y profesional entre tandas, sin depender de recordar pasos manuales
+
 ## 2026-03-31 16:55 aprox. — `status` y la API ya enseñan presupuesto restante por agente
 
 Hallazgo:

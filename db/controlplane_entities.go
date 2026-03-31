@@ -466,14 +466,16 @@ func PurgarRuntimeOrdersTerminales(filtro FiltroPurgadoRuntimeOrders) (*PurgaRun
 	if err != nil {
 		return nil, err
 	}
-	argsDelete := int64SliceToAny(ids)
-	if _, err := tx.Exec(`UPDATE runtime_mailbox SET runtime_order_id = NULL WHERE runtime_order_id IN (`+runtimeSQLPlaceholders(len(ids))+`)`, argsDelete...); err != nil {
-		_ = tx.Rollback()
-		return nil, err
-	}
-	if _, err := tx.Exec(`DELETE FROM runtime_orders WHERE id IN (`+runtimeSQLPlaceholders(len(ids))+`)`, argsDelete...); err != nil {
-		_ = tx.Rollback()
-		return nil, err
+	for _, chunk := range runtimeInt64Chunks(ids, 400) {
+		argsDelete := int64SliceToAny(chunk)
+		if _, err := tx.Exec(`UPDATE runtime_mailbox SET runtime_order_id = NULL WHERE runtime_order_id IN (`+runtimeSQLPlaceholders(len(chunk))+`)`, argsDelete...); err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		}
+		if _, err := tx.Exec(`DELETE FROM runtime_orders WHERE id IN (`+runtimeSQLPlaceholders(len(chunk))+`)`, argsDelete...); err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
@@ -768,34 +770,56 @@ func validarPurgadoRuntimeOrders(ids []int64) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	rows, err := DB.Query(`
-		SELECT id, estado FROM runtime_orders
-		WHERE id IN (`+runtimeSQLPlaceholders(len(ids))+`)
-		  AND estado IN ('pendiente','tomada','ejecutando')`,
-		int64SliceToAny(ids)...,
-	)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
 	var vivos []string
-	for rows.Next() {
-		var (
-			id     int64
-			estado string
+	for _, chunk := range runtimeInt64Chunks(ids, 400) {
+		rows, err := DB.Query(`
+			SELECT id, estado FROM runtime_orders
+			WHERE id IN (`+runtimeSQLPlaceholders(len(chunk))+`)
+			  AND estado IN ('pendiente','tomada','ejecutando')`,
+			int64SliceToAny(chunk)...,
 		)
-		if err := rows.Scan(&id, &estado); err != nil {
+		if err != nil {
 			return err
 		}
-		vivos = append(vivos, fmt.Sprintf("#%d(%s)", id, strings.TrimSpace(estado)))
-	}
-	if err := rows.Err(); err != nil {
-		return err
+		for rows.Next() {
+			var (
+				id     int64
+				estado string
+			)
+			if err := rows.Scan(&id, &estado); err != nil {
+				rows.Close()
+				return err
+			}
+			vivos = append(vivos, fmt.Sprintf("#%d(%s)", id, strings.TrimSpace(estado)))
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		rows.Close()
 	}
 	if len(vivos) > 0 {
 		return fmt.Errorf("no se pueden purgar runtime orders vivas: %s", strings.Join(vivos, ", "))
 	}
 	return nil
+}
+
+func runtimeInt64Chunks(ids []int64, chunkSize int) [][]int64 {
+	if len(ids) == 0 {
+		return nil
+	}
+	if chunkSize <= 0 {
+		chunkSize = 400
+	}
+	out := make([][]int64, 0, (len(ids)+chunkSize-1)/chunkSize)
+	for start := 0; start < len(ids); start += chunkSize {
+		end := start + chunkSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		out = append(out, ids[start:end])
+	}
+	return out
 }
 
 func validarPurgadoRuntimeInstances(ids []int64) error {

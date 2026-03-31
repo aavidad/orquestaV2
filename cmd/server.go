@@ -95,6 +95,63 @@ var serverStartCmd = &cobra.Command{
 	},
 }
 
+var serverPrepararSesionCmd = &cobra.Command{
+	Use:   "preparar-sesion",
+	Short: "Deja el servidor listo para una nueva sesión con limpieza segura de residuos terminales",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		addr, _ := cmd.Flags().GetString("addr")
+		baseURL := rpclocal.BaseURL(addr)
+		proyecto, _ := cmd.Flags().GetString("proyecto")
+		olderThanMinutes, _ := cmd.Flags().GetInt("older-than-minutes")
+		actor, _ := cmd.Flags().GetString("actor")
+		if olderThanMinutes < 0 {
+			return fmt.Errorf("--older-than-minutes no puede ser negativo")
+		}
+		if info, _, err := loadServerInfoWithHealthFallback(baseURL); err == nil {
+			fmt.Printf("Servidor previo detectado en %s (pid=%d); reinicio limpio...\n", rpclocal.BaseURL(info.Addr), info.PID)
+			if err := serverStopCmd.RunE(cmd, args); err != nil {
+				return err
+			}
+		}
+		if err := ensureLocalServer(baseURL); err != nil {
+			return err
+		}
+		info, _, err := loadServerInfoWithHealthFallback(baseURL)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Servidor activo en %s (pid=%d)\n", rpclocal.BaseURL(info.Addr), info.PID)
+
+		proyecto = strings.TrimSpace(proyecto)
+		if proyecto == "" {
+			proyecto = "orquestador"
+		}
+		actor = strings.TrimSpace(actor)
+		if actor == "" {
+			actor = "orquesta"
+		}
+
+		handlesResp, ok, err := purgarRuntimeHandlesDesdeAPI("", proyecto, []string{"cerrado", "fallido"}, actor)
+		if !ok {
+			return serverFirstCommandError("server preparar-sesion")
+		}
+		if err != nil {
+			return err
+		}
+		ordersResp, ok, err := purgarRuntimeOrdersDesdeAPI("", proyecto, []string{"completada", "fallida", "expirada", "cancelada"}, nil, olderThanMinutes, actor)
+		if !ok {
+			return serverFirstCommandError("server preparar-sesion")
+		}
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Limpieza segura: %d handles inactivos, %d órdenes terminales\n", handlesResp.Deleted, ordersResp.Deleted)
+		fmt.Printf("Proyecto: %s · corte órdenes: %d min\n", proyecto, olderThanMinutes)
+		return nil
+	},
+}
+
 var serverStopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "Detiene el servidor local",
@@ -197,6 +254,10 @@ var serverDoctorCmd = &cobra.Command{
 
 func init() {
 	serverStartCmd.Flags().String("addr", strings.TrimPrefix(rpclocal.DefaultAddr(), "http://"), "Dirección HTTP local del servidor")
+	serverPrepararSesionCmd.Flags().String("addr", strings.TrimPrefix(rpclocal.DefaultAddr(), "http://"), "Dirección HTTP local del servidor")
+	serverPrepararSesionCmd.Flags().String("proyecto", "orquestador", "Proyecto sobre el que purgar residuos terminales")
+	serverPrepararSesionCmd.Flags().Int("older-than-minutes", 60, "Purga solo órdenes terminales creadas hace más de N minutos")
+	serverPrepararSesionCmd.Flags().String("actor", "orquesta", "Actor que solicita la preparación")
 	serverRunCmd.Flags().String("addr", strings.TrimPrefix(rpclocal.DefaultAddr(), "http://"), "Dirección HTTP local del servidor")
 	serverRunCmd.Flags().String("tls-cert", "", "Certificado PEM del servidor")
 	serverRunCmd.Flags().String("tls-key", "", "Clave privada PEM del servidor")
@@ -204,7 +265,7 @@ func init() {
 	serverRunCmd.Flags().Bool("debug", false, "Activa logging de depuración del servidor")
 	serverRunCmd.Flags().Bool("debug-http", false, "Log HTTP detallado por request")
 	serverRunCmd.Flags().Bool("debug-control-plane", false, "Log detallado del ciclo del control plane")
-	serverCmd.AddCommand(serverStartCmd, serverRunCmd, serverStatusCmd, serverStopCmd, serverDoctorCmd)
+	serverCmd.AddCommand(serverStartCmd, serverPrepararSesionCmd, serverRunCmd, serverStatusCmd, serverStopCmd, serverDoctorCmd)
 	rootCmd.AddCommand(serverCmd)
 }
 
