@@ -9,6 +9,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -61,18 +62,26 @@ var agenteCuentasCmd = &cobra.Command{
 		}
 		for _, agente := range resp.Agentes {
 			fmt.Printf("%-16s", agente.Nombre)
-			if agente.CuentaEmail != "" {
-				fmt.Printf(" %s", agente.CuentaEmail)
-			} else {
-				fmt.Printf(" —")
-			}
-			if agente.CuentaUsuario != "" {
-				fmt.Printf(" (%s)", agente.CuentaUsuario)
-			}
+			fmt.Printf(" %s", resumenCuentaObservadaAgente(agente))
 			fmt.Println()
 		}
 		return nil
 	},
+}
+
+func resumenCuentaObservadaAgente(agente apiAgenteCuentaItem) string {
+	email := strings.TrimSpace(agente.CuentaEmail)
+	usuario := strings.TrimSpace(agente.CuentaUsuario)
+	switch {
+	case email != "" && usuario != "" && !strings.EqualFold(email, usuario):
+		return fmt.Sprintf("%s (%s)", email, usuario)
+	case email != "":
+		return email
+	case usuario != "":
+		return "usuario " + usuario
+	default:
+		return "—"
+	}
 }
 
 func init() {

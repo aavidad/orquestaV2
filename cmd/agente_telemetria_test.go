@@ -57,6 +57,29 @@ func TestAgenteCuentasCmdRenderizaListado(t *testing.T) {
 	}
 }
 
+func TestAgenteCuentasCmdRenderizaUsuarioSinGuionCuandoNoHayCorreo(t *testing.T) {
+	setAgentTelemetryHTTPClientForTest(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch {
+		case req.URL.Path == "/api/agentes/cuentas" && req.URL.Query().Get("activos") == "true":
+			return newJSONResponse(http.StatusOK, `{"generado":"2026-03-31T18:00:00Z","activos":true,"agentes":[{"nombre":"Codex1","cuenta_usuario":"Codex1"}]}`), nil
+		default:
+			return newJSONResponse(http.StatusNotFound, `{"error":"not found"}`), nil
+		}
+	}))
+	out := captureOutput(t, func() {
+		rootCmd.SetArgs([]string{"agente", "cuentas", "--activos"})
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("Execute agente cuentas: %v", err)
+		}
+	})
+	if !strings.Contains(out, "usuario Codex1") {
+		t.Fatalf("salida inesperada:\n%s", out)
+	}
+	if strings.Contains(out, "— (Codex1)") {
+		t.Fatalf("la salida no deberia usar el formato legado:\n%s", out)
+	}
+}
+
 func TestAgentePresupuestoCmdRenderizaListado(t *testing.T) {
 	setAgentTelemetryHTTPClientForTest(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		switch {

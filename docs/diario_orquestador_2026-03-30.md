@@ -95,6 +95,30 @@ Conclusion:
 - la familia `agente` recupera coherencia con el resto de superficies server-first
 - la telemetria nueva de cuentas/presupuesto deja de depender de una variable manual para ser usable
 
+## 2026-03-31 17:58 aprox. — `agente cuentas` deja de mostrar formato tosco cuando solo hay usuario
+
+Hallazgo:
+
+- tras exponer el perfil operativo vivo, la CLI seguia pintando `— (CodexN)` cuando no habia correo pero si `cuenta_usuario`
+- eso funcionaba, pero seguia pareciendo una ausencia parcial en vez de una identidad operativa valida
+
+Cambios:
+
+- `cmd/agente_telemetria.go`
+  - nuevo helper `resumenCuentaObservadaAgente(...)`
+  - si hay solo usuario, la salida pasa a `usuario CodexN`
+- `cmd/agente_telemetria_test.go`
+  - nueva regresion para impedir el formato legado
+
+Validacion viva:
+
+- `./orquesta agente cuentas --activos` ya devuelve:
+  - `Codex1 usuario Codex1`
+  - `Codex2 usuario Codex2`
+  - `Codex3 usuario Codex3`
+  - `Codex4 usuario Codex4`
+  - `Codex5 usuario Codex5`
+
 ## 2026-03-31 12:0x aprox. — la metadata viva del handle deja de arrastrar prompts crudos
 
 Hallazgo:
