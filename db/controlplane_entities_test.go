@@ -5666,8 +5666,8 @@ func TestRuntimeOrderStartIntegraBootstrapDeHandoffMailboxYCheckpoint(t *testing
 	if err != nil || handle == nil {
 		t.Fatalf("handle: %+v err=%v", handle, err)
 	}
-	if !strings.Contains(handle.MetadataJSON, `"continuity_prompt"`) || !strings.Contains(handle.MetadataJSON, "handoff listo") {
-		t.Fatalf("metadata de handle sin continuidad: %s", handle.MetadataJSON)
+	if strings.Contains(handle.MetadataJSON, `"continuity_prompt"`) {
+		t.Fatalf("metadata de handle no deberia conservar continuity_prompt crudo: %s", handle.MetadataJSON)
 	}
 	runtime, err := GetRuntimeBySesionID(sesion.ID)
 	if err != nil || runtime == nil {
@@ -5821,8 +5821,8 @@ func TestRuntimeOrderStartEmbebeLaunchPromptMultilineaCuandoConectorLoDeclara(t 
 	if err != nil || handle == nil {
 		t.Fatalf("handle: %+v err=%v", handle, err)
 	}
-	if !strings.Contains(handle.MetadataJSON, `"bootstrap_prompt"`) || !strings.Contains(handle.MetadataJSON, `"launch_prompt_embedded":true`) {
-		t.Fatalf("metadata de handle sin bootstrap embebido: %s", handle.MetadataJSON)
+	if strings.Contains(handle.MetadataJSON, `"bootstrap_prompt"`) || !strings.Contains(handle.MetadataJSON, `"launch_prompt_embedded":true`) {
+		t.Fatalf("metadata de handle no deberia conservar bootstrap_prompt crudo: %s", handle.MetadataJSON)
 	}
 
 	deadline := time.Now().Add(2 * time.Second)

@@ -1,5 +1,43 @@
 # Diario del orquestador — 2026-03-30
 
+## 2026-03-31 12:0x aprox. — la metadata viva del handle deja de arrastrar prompts crudos
+
+Hallazgo:
+
+- incluso despues de cortar `runtime_panic` por `supervisor_local`, la API seguia devolviendo handles enormes
+- en el caso vivo de `Codex1` el problema visible venia de `bootstrap_prompt` y `continuity_prompt` embebidos completos en `metadata_json`
+- eso infla respuestas, ensucia diagnosticos y aumenta el riesgo de errores o timeouts por cargar en cada vista texto que solo hace falta en el arranque
+
+Decision:
+
+- el handle vivo no es un almacén de prompts completos
+- `bootstrap_prompt` y `continuity_prompt` deben salir de la metadata persistida del handle
+- si hace falta trazabilidad, se guarda solo resumen compacto o longitud; el prompt completo pertenece al arranque efectivo, al transcript o al manifest del runtime
+
+Cambios:
+
+- `db/controlplane_entities.go`
+  - `actualizarHandleRuntimeArranque(...)` deja de persistir los prompts completos
+  - nuevos helpers:
+    - `compactarMetadataRuntimeHandle(...)`
+    - `asignarResumenPromptHandle(...)`
+    - `resumirPromptHandle(...)`
+    - `compactarMetadataHandleRuntimePersistida(...)`
+  - `SincronizarRuntimeHandleSupervisado(...)` compacta tambien handles viejos al sincronizarlos
+- tests ajustados:
+  - `db/controlplane_entities_test.go`
+  - `cmd/controlplane_e2e_test.go`
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(RuntimeOrderStartIntegraBootstrapDeHandoffMailboxYCheckpoint|RuntimeOrderStartEmbebeLaunchPromptMultilineaCuandoConectorLoDeclara)' -count=1` => OK
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'TestAPIControlPlaneArranqueRealConBootstrapMultilinea' -count=1` => OK
+
+Conclusion:
+
+- el arranque sigue recibiendo el bootstrap completo donde toca
+- el handle persistido deja de cargar esa mochila en cada lectura viva
+
 ## 2026-03-31 11:3x aprox. — fusible permanente para `supervisor_local` tras `runtime_panic` real en Codex
 
 Hallazgo:

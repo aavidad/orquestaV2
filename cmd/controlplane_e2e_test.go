@@ -470,8 +470,8 @@ func TestAPIControlPlaneArranqueRealConBootstrapMultilinea(t *testing.T) {
 	if err != nil || handle == nil {
 		t.Fatalf("handle: %+v err=%v", handle, err)
 	}
-	if !strings.Contains(handle.MetadataJSON, `"bootstrap_prompt"`) || !strings.Contains(handle.MetadataJSON, `"launch_prompt_embedded":true`) {
-		t.Fatalf("metadata de handle sin bootstrap embebido: %s", handle.MetadataJSON)
+	if strings.Contains(handle.MetadataJSON, `"bootstrap_prompt"`) || !strings.Contains(handle.MetadataJSON, `"launch_prompt_embedded":true`) {
+		t.Fatalf("metadata de handle no deberia conservar bootstrap_prompt crudo: %s", handle.MetadataJSON)
 	}
 	if startOrder == nil || startOrder.Estado != "completada" {
 		t.Fatalf("start order no completada: %+v", startOrder)

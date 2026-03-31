@@ -4017,8 +4017,8 @@ func actualizarHandleRuntimeArranque(handleID int64, arranque *controlruntime.Pr
 	}
 	if plan != nil {
 		meta["modo_plan"] = strings.TrimSpace(plan.Modo)
-		meta["continuity_prompt"] = strings.TrimSpace(plan.ContinuityPrompt)
-		meta["bootstrap_prompt"] = strings.TrimSpace(plan.BootstrapPrompt)
+		asignarResumenPromptHandle(meta, "continuity_prompt", plan.ContinuityPrompt)
+		asignarResumenPromptHandle(meta, "bootstrap_prompt", plan.BootstrapPrompt)
 		meta["launch_prompt_embedded"] = plan.LaunchPromptEmbedded
 		meta["launch_prompt_mode"] = strings.TrimSpace(plan.LaunchPromptMode)
 		meta["launch_prompt_delay_ms"] = plan.LaunchPromptDelayMS
@@ -4026,6 +4026,7 @@ func actualizarHandleRuntimeArranque(handleID int64, arranque *controlruntime.Pr
 	if strings.TrimSpace(resume.ResumenContinuidad) != "" {
 		meta["resumen_continuidad"] = strings.TrimSpace(resume.ResumenContinuidad)
 	}
+	compactarMetadataRuntimeHandle(meta)
 	metaJSON, _ := json.Marshal(meta)
 	caps := mapFromJSON(arranque.CapabilitiesJSON)
 	if caps == nil {
@@ -4328,6 +4329,47 @@ func marcarRuntimeMailboxConsumidoPorIDs(ids []int64) error {
 		}
 	}
 	return nil
+}
+
+func compactarMetadataRuntimeHandle(meta map[string]any) {
+	if meta == nil {
+		return
+	}
+	for _, key := range []string{"bootstrap_prompt", "continuity_prompt"} {
+		asignarResumenPromptHandle(meta, key, stringFromMap(meta, key, ""))
+	}
+}
+
+func asignarResumenPromptHandle(meta map[string]any, key, raw string) {
+	if meta == nil {
+		return
+	}
+	raw = strings.TrimSpace(raw)
+	delete(meta, key)
+	delete(meta, key+"_summary")
+	delete(meta, key+"_len")
+	if raw == "" {
+		return
+	}
+	meta[key+"_summary"] = resumirPromptHandle(raw)
+	meta[key+"_len"] = len([]rune(raw))
+}
+
+func resumirPromptHandle(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	first := raw
+	if idx := strings.IndexByte(first, '\n'); idx >= 0 {
+		first = first[:idx]
+	}
+	first = strings.Join(strings.Fields(strings.TrimSpace(first)), " ")
+	runes := []rune(first)
+	if len(runes) > 160 {
+		first = strings.TrimSpace(string(runes[:160])) + "..."
+	}
+	return first
 }
 
 func runtimeMailboxIDs(mailbox []*RuntimeMailboxMessage) []int64 {
@@ -5762,7 +5804,31 @@ func SincronizarRuntimeHandleSupervisado(handle *RuntimeHandle, runtime *Runtime
 	if err != nil {
 		return nil, nil, "", err
 	}
+	handle, err = compactarMetadataHandleRuntimePersistida(handle)
+	if err != nil {
+		return nil, nil, "", err
+	}
 	return handle, runtime, externalSessionID, nil
+}
+
+func compactarMetadataHandleRuntimePersistida(handle *RuntimeHandle) (*RuntimeHandle, error) {
+	if handle == nil || handle.ID <= 0 {
+		return handle, nil
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if meta == nil {
+		return handle, nil
+	}
+	before, _ := json.Marshal(meta)
+	compactarMetadataRuntimeHandle(meta)
+	after, _ := json.Marshal(meta)
+	if string(before) == string(after) {
+		return handle, nil
+	}
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, string(after), handle.ID); err != nil {
+		return nil, err
+	}
+	return GetRuntimeHandle(handle.ID)
 }
 
 func SincronizarRuntimeHandleWorkingDir(handle *RuntimeHandle, runtime *RuntimeInstance, agente string, proyectoID *int64) (*RuntimeHandle, string, error) {

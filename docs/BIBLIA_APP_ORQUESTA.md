@@ -263,6 +263,10 @@ Contrato minimo obligatorio para `runtime_orders`:
   - las entregas futuras para ese handle ya no pueden usar `supervisor_local`
   - el fallback vuelve a `session_resume` o `mailbox` segun contrato
   - la degradacion es por handle, no por agente: un handle nuevo puede recuperar capacidades si nace sano
+- la metadata viva de `runtime_handles` no puede arrastrar prompts crudos de arranque o continuidad:
+  - `bootstrap_prompt` y `continuity_prompt` completos no deben persistirse en el handle
+  - solo se admiten resúmenes compactos o metadatos de diagnóstico
+  - el prompt completo puede existir en el arranque efectivo o en trazas de runtime, pero no como lastre permanente en la fila viva del handle
 - la coalescencia de `runtime_mailbox` para guia operativa no va por `kind` exacto sino por familia de guidance: `autonomia`, `nudge`, `watchdog`, `governance_refresh` y `skills_refresh` se superseden entre si; `instruction` explicita queda fuera de esa familia y no se borra por una guia generica posterior
 - la mailbox pendiente de agentes fuera de vida operativa no puede quedar como ruido eterno: si el destinatario no tiene `runtime_handle` activo, ni sesion activa, ni asignacion activa, ni tareas activas, ni `runtime_orders` abiertas, la deuda se consume como zombi reconciliado
 - para esa regla, una asignacion `activa` mantenida solo por `reactivacion_automatica` no protege al agente si ya esta fuera de la flota `server_autobootstrap`; no puede retener mailbox zombie por si sola
