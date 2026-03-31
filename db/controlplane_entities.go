@@ -2963,6 +2963,9 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) (err error) {
 	if err := marcarBootstrapRuntimePreparationEjecutando(order, bootstrap, sesion, handle, runtime); err != nil {
 		return err
 	}
+	if err := ackBootstrapRuntimeSinLeaseEnStart(order, bootstrap, sesion); err != nil {
+		return err
+	}
 	result := map[string]any{
 		"ok":            true,
 		"agente":        agente.Nombre,
@@ -2988,6 +2991,29 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) (err error) {
 	}
 	data, _ := json.Marshal(result)
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+}
+
+func ackBootstrapRuntimeSinLeaseEnStart(startOrder *RuntimeOrder, bootstrap *bootstrapRuntimeData, sesion *Sesion) error {
+	if bootstrap == nil || bootstrap.Order != nil {
+		return nil
+	}
+	mailboxIDs := runtimeMailboxIDs(bootstrap.Mailbox)
+	if len(mailboxIDs) == 0 {
+		return nil
+	}
+	if err := marcarRuntimeMailboxConsumidoPorIDs(mailboxIDs); err != nil {
+		return err
+	}
+	bootstrap.Consumidos = len(mailboxIDs)
+	if startOrder != nil && startOrder.ID > 0 {
+		var sesionID int64
+		if sesion != nil {
+			sesionID = sesion.ID
+		}
+		Audit("orquesta", "runtime_bootstrap_start_ack", "runtime_order", startOrder.ID,
+			fmt.Sprintf("sesion_id=%d mailbox_ids=%v ack_mode=start_success", sesionID, mailboxIDs))
+	}
+	return nil
 }
 
 func inyectarPromptArranque(handle *RuntimeHandle, runtime *RuntimeInstance, plan *runtimeagente.LaunchPlan, order *RuntimeOrder) error {

@@ -1266,6 +1266,109 @@ func TestProcesarRuntimeOrdersBatchCompletaSyncStatusYCheckpoint(t *testing.T) {
 	}
 }
 
+func TestEjecutarRuntimeOrderStartConsumeMailboxBootstrapSinLease(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "cat-cli",
+		Nombre:     "Cat CLI",
+		Transporte: "cli",
+		Comando:    "cat",
+		Activo:     true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	msgID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"bootstrap durable"}`,
+	})
+	if err != nil {
+		t.Fatalf("enviar runtime mailbox: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"cat-cli"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStart(startOrder); err != nil {
+		t.Fatalf("ejecutar start: %v", err)
+	}
+
+	startOrder, err = GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order final: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(startOrder.ResultadoJSON), &result); err != nil {
+		t.Fatalf("parse start result: %v", err)
+	}
+	bootstrap, _ := result["bootstrap"].(map[string]any)
+	if int64FromAny(bootstrap["mailbox_count"]) != 1 {
+		t.Fatalf("mailbox_count inesperado en start result: %+v", bootstrap)
+	}
+	if int64FromAny(bootstrap["consumidos"]) != 1 {
+		t.Fatalf("consumidos inesperado en start result: %+v", bootstrap)
+	}
+
+	estadoConsumido := "consumido"
+	toAgente := "Codex1"
+	consumidos, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{
+		ToAgente:   &toAgente,
+		ProyectoID: &proyectoID,
+		Estado:     &estadoConsumido,
+	})
+	if err != nil {
+		t.Fatalf("listar runtime mailbox consumido: %v", err)
+	}
+	found := false
+	for _, msg := range consumidos {
+		if msg != nil && msg.ID == msgID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("mailbox bootstrap deberia quedar consumida: %+v", consumidos)
+	}
+
+	sesion, err := GetSesionActiva("Codex1", &proyectoID)
+	if err != nil || sesion == nil {
+		t.Fatalf("sesion activa: %+v err=%v", sesion, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil || runtime.PID == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	t.Cleanup(func() {
+		_, _, _ = controlruntime.DetenerProceso(controlruntime.ObjetivoProceso{PID: runtime.PID})
+	})
+}
+
 func TestProcesarRuntimeOrdersBatchSyncStatusObservaProcesoLocal(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

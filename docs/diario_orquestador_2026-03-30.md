@@ -1538,6 +1538,35 @@ Validacion:
 - estado vivo:
   - `Codex2` ya drena mailbox durable por `session_resume`
   - `Codex1` sigue exponiendo el siguiente cuello real: la entrega de `autonomia` larga sobre `session_resume` sigue siendo mas delicada que una instruccion corta y queda abierta como siguiente frente del nucleo
+
+## 2026-03-31 07:3x aprox. — el `start` reconoce y consume bootstrap mailbox sin lease formal
+
+Hallazgo:
+
+- en arranques normales del servidor (`server_autobootstrap_supervisor`) puede haber bootstrap con mailbox pendiente aunque no exista una orden `handoff/resume` que mantenga lease formal
+- en ese caso el runtime arranca bien y el `start` queda `completada`, pero el resultado seguia mostrando `mailbox_count>0` y `consumidos=0`
+- eso dejaba continuidad falsa: el propio `start` ya habia levantado runtime real, pero el mailbox bootstrap seguia pendiente por no pasar nunca por `AckBootstrapRuntimeLeaseByEvidence()`
+
+Decision:
+
+- cuando el `start` completa con runtime real y el bootstrap solo trae mailbox/checkpoint, sin orden de relevo asociada, el propio `start` debe hacer `ack` de esos mailbox bootstrap
+- ese `ack` se registra como `runtime_bootstrap_start_ack`
+
+Cambios:
+
+- `db/controlplane_entities.go`
+  - nueva ruta `ackBootstrapRuntimeSinLeaseEnStart(...)`
+  - `ejecutarRuntimeOrderStart(...)` consume mailbox bootstrap directa cuando no hay `bootstrap.Order`
+- `db/controlplane_entities_test.go`
+  - nueva regresion `TestEjecutarRuntimeOrderStartConsumeMailboxBootstrapSinLease`
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(EjecutarRuntimeOrderStartConsumeMailboxBootstrapSinLease|ReconciliarRuntimeOrdersStaleRespetaCutoffConfigurado|RuntimeHandleMailboxDeliveryModeRespetaCapacidadesYFallbacks)' -count=1` => OK
+- `go build -o ./orquesta .` => OK
+- validacion viva parcial:
+  - el caso historico `#80302` sigue mostrando el resultado viejo porque es anterior al parche
+  - no he forzado aun un `start` fresco equivalente solo para reescribir historia operativa; el cambio queda cubierto por test y listo para el siguiente arranque real
   - servicio `PurgeTerminalRuntimeOrders(...)`
 - `cmd/api.go`
   - endpoint `POST /api/runtime-orders/purgar`

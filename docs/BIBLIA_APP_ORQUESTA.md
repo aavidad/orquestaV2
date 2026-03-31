@@ -242,6 +242,7 @@ Contrato minimo obligatorio para `runtime_orders`:
 - para evitar congelar mailbox legacy tras una mejora real de contrato, cada `send_instruction` derivada desde mailbox debe persistir una `delivery_attempt_signature`
 - una orden `mailbox_only` con la misma firma debe deduplicar; una orden legacy sin firma puede permitirse un unico reintento cuando el handle actual ya tiene un contrato de entrega mas rico
 - `session_resume` no es un canal de latencia infinita: su timeout por defecto debe ser corto y operativo porque una llamada lenta bloquea `runtime_orders` aunque el daemon siga sano
+- si un `start` levanta runtime real con bootstrap inyectado pero sin `handoff/resume` pendiente, ese propio `start` debe hacer `ack` de los mailbox bootstrap incluidos; no se puede dejar esa continuidad pendiente por falta de lease formal
 
 Contrato minimo obligatorio para el supervisor local:
 
