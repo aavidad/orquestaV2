@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -56,6 +57,21 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 
 	if err := db.ConfigSet("clave_test_observabilidad", "valor-test"); err != nil {
 		t.Fatalf("config set: %v", err)
+	}
+	if err := db.ConfigSet("openclaw_gateway_url", "https://openclaw.local/gateway"); err != nil {
+		t.Fatalf("config openclaw url: %v", err)
+	}
+	if err := db.ConfigSet("openclaw_gateway_token", "secreto"); err != nil {
+		t.Fatalf("config openclaw token: %v", err)
+	}
+	if err := db.ConfigSet("openclaw_gateway_operator", "alberto"); err != nil {
+		t.Fatalf("config openclaw operator: %v", err)
+	}
+	if err := db.ConfigSet("telegram_token", "tg-token"); err != nil {
+		t.Fatalf("config telegram token: %v", err)
+	}
+	if err := db.ConfigSet("telegram_chat_id", "12345"); err != nil {
+		t.Fatalf("config telegram chat id: %v", err)
 	}
 
 	tareaID, err := db.CrearTarea(&db.Tarea{
@@ -142,6 +158,7 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 
 	assertOK("/api/config", "config")
 	assertOK("/api/config?clave=clave_test_observabilidad", "valor")
+	assertOK("/api/notificaciones", "notificaciones")
 	assertOK("/api/audit?limit=10&agente=Codex1", "audit")
 	assertOK("/api/diagnostico?audit_limit=5", "diagnostico")
 	assertOK("/api/reglas?tipo_agente=programador", "reglas")
@@ -154,6 +171,19 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	assertOK("/api/propuestas/"+propuestaDB.Codigo, "propuesta")
 	assertOK("/api/locks/"+itoa(lock.ID), "lock")
 	assertOK("/api/worktrees/"+itoa(worktree.ID), "worktree")
+
+	recNotif := httptest.NewRecorder()
+	reqNotif := httptest.NewRequest(http.MethodGet, "/api/notificaciones", nil)
+	mux.ServeHTTP(recNotif, reqNotif)
+	if recNotif.Code != http.StatusOK {
+		t.Fatalf("notificaciones status=%d body=%s", recNotif.Code, recNotif.Body.String())
+	}
+	bodyNotif := recNotif.Body.String()
+	for _, token := range []string{"OpenClaw Gateway", "openclaw.local/gateway", "Telegram", "12345"} {
+		if !strings.Contains(bodyNotif, token) {
+			t.Fatalf("notificaciones incompleta, falta %q:\n%s", token, bodyNotif)
+		}
+	}
 }
 
 func TestAPIWorkflowsDetalleReadOnly(t *testing.T) {

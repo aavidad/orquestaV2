@@ -11,6 +11,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -109,6 +111,94 @@ func TestFanoutNotificadorEnviarEventoUsaEventAwareYFallback(t *testing.T) {
 	}
 	if len(legacy.messages) != 1 || legacy.messages[0] != "OpenClaw Gateway: guía automática" {
 		t.Fatalf("legacy fallback inesperado: %+v", legacy.messages)
+	}
+}
+
+func TestDescribirConfiguracionReflejaOpenClawYTelegram(t *testing.T) {
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "orquesta-notificaciones.db")
+
+	anteriorDB := os.Getenv("ORQUESTA_DB")
+	anteriorDSN, teniaDSN := os.LookupEnv("ORQUESTA_DB_DSN")
+	anteriorDriver, teniaDriver := os.LookupEnv("ORQUESTA_DB_DRIVER")
+	anteriorBackend, teniaBackend := os.LookupEnv("ORQUESTA_DB_BACKEND")
+	anteriorForceLocal, teniaForceLocal := os.LookupEnv("ORQUESTA_FORCE_LOCAL_DB")
+	anteriorDisableServer, teniaDisableServer := os.LookupEnv("ORQUESTA_DISABLE_SERVER_CLIENT")
+	t.Cleanup(func() {
+		db.Close()
+		db.DB = nil
+		if anteriorDB == "" {
+			_ = os.Unsetenv("ORQUESTA_DB")
+		} else {
+			_ = os.Setenv("ORQUESTA_DB", anteriorDB)
+		}
+		if teniaDSN {
+			_ = os.Setenv("ORQUESTA_DB_DSN", anteriorDSN)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_DB_DSN")
+		}
+		if teniaDriver {
+			_ = os.Setenv("ORQUESTA_DB_DRIVER", anteriorDriver)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_DB_DRIVER")
+		}
+		if teniaBackend {
+			_ = os.Setenv("ORQUESTA_DB_BACKEND", anteriorBackend)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_DB_BACKEND")
+		}
+		if teniaForceLocal {
+			_ = os.Setenv("ORQUESTA_FORCE_LOCAL_DB", anteriorForceLocal)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_FORCE_LOCAL_DB")
+		}
+		if teniaDisableServer {
+			_ = os.Setenv("ORQUESTA_DISABLE_SERVER_CLIENT", anteriorDisableServer)
+		} else {
+			_ = os.Unsetenv("ORQUESTA_DISABLE_SERVER_CLIENT")
+		}
+	})
+
+	_ = os.Setenv("ORQUESTA_DB", dbPath)
+	_ = os.Unsetenv("ORQUESTA_DB_DSN")
+	_ = os.Unsetenv("ORQUESTA_DB_DRIVER")
+	_ = os.Unsetenv("ORQUESTA_DB_BACKEND")
+	_ = os.Setenv("ORQUESTA_FORCE_LOCAL_DB", "1")
+	_ = os.Setenv("ORQUESTA_DISABLE_SERVER_CLIENT", "1")
+
+	if err := db.Open(); err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Close()
+		db.DB = nil
+	})
+
+	if err := db.ConfigSet("openclaw_gateway_url", "https://openclaw.local/gateway"); err != nil {
+		t.Fatalf("config openclaw url: %v", err)
+	}
+	if err := db.ConfigSet("openclaw_gateway_token", "secreto"); err != nil {
+		t.Fatalf("config openclaw token: %v", err)
+	}
+	if err := db.ConfigSet("openclaw_gateway_operator", "alberto"); err != nil {
+		t.Fatalf("config openclaw operator: %v", err)
+	}
+	if err := db.ConfigSet("telegram_token", "tg-token"); err != nil {
+		t.Fatalf("config telegram token: %v", err)
+	}
+	if err := db.ConfigSet("telegram_chat_id", "12345"); err != nil {
+		t.Fatalf("config telegram chat id: %v", err)
+	}
+
+	estado := DescribirConfiguracion()
+	if len(estado.Canales) != 2 {
+		t.Fatalf("canales inesperados: %+v", estado)
+	}
+	if !estado.Canales[0].Activo || !strings.Contains(estado.Canales[0].Detalle, "openclaw.local/gateway") {
+		t.Fatalf("estado openclaw inesperado: %+v", estado.Canales[0])
+	}
+	if !estado.Canales[1].Activo || !strings.Contains(estado.Canales[1].Detalle, "12345") {
+		t.Fatalf("estado telegram inesperado: %+v", estado.Canales[1])
 	}
 }
 

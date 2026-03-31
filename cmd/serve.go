@@ -26,6 +26,7 @@ import (
 	"orquesta/db"
 	"orquesta/i18n"
 	"orquesta/internal/a2ui"
+	"orquesta/notificaciones"
 	"orquesta/propuestasapp"
 	"orquesta/tareasapp"
 )
@@ -33,17 +34,18 @@ import (
 // ─── Structs de datos ────────────────────────────────────────────────────────
 
 type webDashData struct {
-	Agentes     []*db.Agente
-	Counts      map[string]int
-	Total       int
-	Completadas int
-	Pct         int
-	Abiertas    []webPropResumen
-	EnProgreso  []webTareaRow
-	Runtimes    []webRuntimeRow
-	Checkpoints []webTimeTravelCheckpointRow
-	Generado    string
-	Msg         string
+	Agentes        []*db.Agente
+	Counts         map[string]int
+	Total          int
+	Completadas    int
+	Pct            int
+	Abiertas       []webPropResumen
+	EnProgreso     []webTareaRow
+	Runtimes       []webRuntimeRow
+	Checkpoints    []webTimeTravelCheckpointRow
+	Notificaciones notificaciones.EstadoNotificaciones
+	Generado       string
+	Msg            string
 }
 
 type webPropResumen struct {
@@ -674,11 +676,13 @@ func webHandlerDash(w http.ResponseWriter, r *http.Request) {
 		}
 		recentCheckpoints = append(recentCheckpoints, runtimeCheckpointToWeb(cp))
 	}
+	notifs := notificaciones.DescribirConfiguracion()
 	webRender(w, r, webTplLayout+webTplDash, webDashData{
 		Agentes: agentes, Counts: counts, Total: total,
 		Completadas: completadas, Pct: pct,
 		Abiertas: resAbiertas, EnProgreso: ep, Runtimes: runtimes, Checkpoints: recentCheckpoints,
-		Generado: time.Now().Format("2006-01-02 15:04:05"),
+		Notificaciones: notifs,
+		Generado:       time.Now().Format("2006-01-02 15:04:05"),
 	})
 }
 
@@ -1495,6 +1499,20 @@ const webTplDash = `{{define "content"}}
     </tbody></table>
   </div>
   <div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.5rem;padding:.8rem 1rem;margin-bottom:1rem">
+      <h4 style="margin:0 0 .7rem 0;font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em">OpenClaw / notificaciones</h4>
+      <table style="width:100%"><tbody>
+      {{range .Notificaciones.Canales}}
+        <tr style="border-bottom:1px solid #f1f5f9">
+          <td style="padding:.3rem 0;font-weight:600;font-size:.84rem">{{.Nombre}}</td>
+          <td style="padding:.3rem .4rem;text-align:right"><span class="tag {{if .Activo}}rt-disponible{{else}}rt-cerrado{{end}}">{{if .Activo}}activo{{else}}inactivo{{end}}</span></td>
+        </tr>
+        <tr>
+          <td colspan="2" style="padding:0 0 .45rem 0;font-size:.72rem;color:#64748b">{{.Detalle}}</td>
+        </tr>
+      {{end}}
+      </tbody></table>
+    </div>
     {{if .EnProgreso}}
     <h4 style="margin:0 0 .5rem 0">{{tr "En progreso"}}</h4>
     <table style="width:100%;margin-bottom:1.2rem"><thead><tr><th>#</th><th>{{tr "dashboard.module"}}</th><th>{{tr "Agente"}}</th><th>{{tr "projects.title_label"}}</th></tr></thead><tbody>

@@ -27,11 +27,29 @@ type httpDoer interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
+type EstadoCanalNotificacion struct {
+	Nombre  string `json:"nombre"`
+	Activo  bool   `json:"activo"`
+	Detalle string `json:"detalle,omitempty"`
+}
+
+type EstadoNotificaciones struct {
+	Canales []EstadoCanalNotificacion `json:"canales"`
+}
+
 type OpenClawGatewayNotificador struct {
 	URL      string
 	Token    string
 	Operator string
 	Client   httpDoer
+}
+
+type notificationConfigSnapshot struct {
+	gatewayURL      string
+	gatewayToken    string
+	gatewayOperator string
+	telegramToken   string
+	telegramChatID  string
 }
 
 type fanoutNotificador struct {
@@ -168,6 +186,16 @@ func (n *OpenClawGatewayNotificador) EnviarEvento(ev db.EventoNotificacion) erro
 	return nil
 }
 
+func DescribirConfiguracion() EstadoNotificaciones {
+	cfg := readNotificationConfigSnapshot()
+	return EstadoNotificaciones{
+		Canales: []EstadoCanalNotificacion{
+			describirCanalOpenClaw(cfg),
+			describirCanalTelegram(cfg),
+		},
+	}
+}
+
 func (n *OpenClawGatewayNotificador) client() httpDoer {
 	if n != nil && n.Client != nil {
 		return n.Client
@@ -231,22 +259,20 @@ func mapNotificationEventType(tipo string) string {
 
 func buildConfiguredNotifiers() (Notificador, *TelegramNotificador, []string) {
 	var (
-		items        []Notificador
-		telegram     *TelegramNotificador
-		labels       []string
-		gatewayURL   = strings.TrimSpace(configValue("openclaw_gateway_url"))
-		gatewayToken = strings.TrimSpace(configValue("openclaw_gateway_token"))
-		operator     = strings.TrimSpace(configValue("openclaw_gateway_operator"))
+		items    []Notificador
+		telegram *TelegramNotificador
+		labels   []string
+		cfg      = readNotificationConfigSnapshot()
 	)
-	if gatewayURL != "" {
+	if cfg.gatewayURL != "" {
 		items = append(items, &OpenClawGatewayNotificador{
-			URL:      gatewayURL,
-			Token:    gatewayToken,
-			Operator: operator,
+			URL:      cfg.gatewayURL,
+			Token:    cfg.gatewayToken,
+			Operator: cfg.gatewayOperator,
 		})
 		labels = append(labels, "OpenClaw Gateway activo.")
 	}
-	if bot := configuredTelegramNotificador(); bot != nil {
+	if bot := configuredTelegramNotificador(cfg); bot != nil {
 		telegram = bot
 		items = append(items, bot)
 		labels = append(labels, "Notificaciones de Telegram activas.")
@@ -261,13 +287,61 @@ func buildConfiguredNotifiers() (Notificador, *TelegramNotificador, []string) {
 	}
 }
 
-func configuredTelegramNotificador() *TelegramNotificador {
-	token := strings.TrimSpace(configValue("telegram_token"))
-	chatID := strings.TrimSpace(configValue("telegram_chat_id"))
-	if token == "" || chatID == "" {
+func configuredTelegramNotificador(cfg notificationConfigSnapshot) *TelegramNotificador {
+	if cfg.telegramToken == "" || cfg.telegramChatID == "" {
 		return nil
 	}
-	return &TelegramNotificador{Token: token, ChatID: chatID}
+	return &TelegramNotificador{Token: cfg.telegramToken, ChatID: cfg.telegramChatID}
+}
+
+func readNotificationConfigSnapshot() notificationConfigSnapshot {
+	return notificationConfigSnapshot{
+		gatewayURL:      strings.TrimSpace(configValue("openclaw_gateway_url")),
+		gatewayToken:    strings.TrimSpace(configValue("openclaw_gateway_token")),
+		gatewayOperator: strings.TrimSpace(configValue("openclaw_gateway_operator")),
+		telegramToken:   strings.TrimSpace(configValue("telegram_token")),
+		telegramChatID:  strings.TrimSpace(configValue("telegram_chat_id")),
+	}
+}
+
+func describirCanalOpenClaw(cfg notificationConfigSnapshot) EstadoCanalNotificacion {
+	if cfg.gatewayURL == "" {
+		return EstadoCanalNotificacion{
+			Nombre:  "OpenClaw Gateway",
+			Activo:  false,
+			Detalle: "sin openclaw_gateway_url",
+		}
+	}
+	detalle := cfg.gatewayURL
+	partes := []string{detalle}
+	if cfg.gatewayOperator != "" {
+		partes = append(partes, "operador="+cfg.gatewayOperator)
+	}
+	if cfg.gatewayToken != "" {
+		partes = append(partes, "token=configurado")
+	} else {
+		partes = append(partes, "token=vacío")
+	}
+	return EstadoCanalNotificacion{
+		Nombre:  "OpenClaw Gateway",
+		Activo:  true,
+		Detalle: strings.Join(partes, " · "),
+	}
+}
+
+func describirCanalTelegram(cfg notificationConfigSnapshot) EstadoCanalNotificacion {
+	if cfg.telegramToken == "" || cfg.telegramChatID == "" {
+		return EstadoCanalNotificacion{
+			Nombre:  "Telegram",
+			Activo:  false,
+			Detalle: "sin telegram_token o telegram_chat_id",
+		}
+	}
+	return EstadoCanalNotificacion{
+		Nombre:  "Telegram",
+		Activo:  true,
+		Detalle: "chat_id=" + cfg.telegramChatID + " · token=configurado",
+	}
 }
 
 func configValue(key string) string {
