@@ -4565,3 +4565,26 @@ Validacion:
 
 - `go test ./cmd -run 'Test(MCPPromptBriefingIncluyeReglasYPropuestasPendientes|MCPPromptBriefingSupervisorIncluyeFlotaYRetenidasPorCuota)' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — `server start` ya no da el daemon por listo antes de que la API responda
+
+Hallazgo:
+
+- seguía quedando una carrera corta justo después del arranque: `healthz` y `statefile` podían estar ya visibles mientras `/api/status` todavía devolvía `EOF` o una respuesta a medio publicar
+- eso dejaba un falso positivo operativo: `server start` salía con éxito, pero el primer cliente server-first podía tropezar inmediatamente
+
+Decision:
+
+- endurecer el readiness del arranque oficial
+- además de `healthz` y `statefile`, `server start` debe exigir que `/api/status` responda `200` con JSON decodificable antes de dar el daemon por listo
+
+Codigo:
+
+- [cmd/server.go](/home/alberto/Trabajo/orquesta/cmd/server.go)
+- [cmd/server_start_readiness_test.go](/home/alberto/Trabajo/orquesta/cmd/server_start_readiness_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestServerReadinessOK' -count=1`
+- `go test ./cmd -run 'Test(BuildLocalServerProcessEnvLimpiaRecuperacionLocal|ShouldDelegateToLocalServer|EscucharServidorUnificadoReservaListenerAntesDelArranque)' -count=1`

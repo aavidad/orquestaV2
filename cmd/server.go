@@ -11,11 +11,13 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -489,7 +491,10 @@ func ensureLocalServer(addr string) error {
 		if pingErr == nil {
 			if state, stateErr := rpclocal.LoadServerInfo(); stateErr == nil {
 				if strings.TrimSpace(state.Addr) != "" {
-					return nil
+					baseURL := rpclocal.BaseURL(state.Addr)
+					if readyErr := serverReadinessOK(baseURL); readyErr == nil {
+						return nil
+					}
 				}
 			}
 		}
@@ -497,6 +502,31 @@ func ensureLocalServer(addr string) error {
 	}
 	_ = rpclocal.RemoveState("")
 	return fmt.Errorf("timeout esperando al servidor local y su statefile. Log: %s", resumirServerLog(logPath))
+}
+
+func serverReadinessOK(baseURL string) error {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return fmt.Errorf("baseURL vacia")
+	}
+	req, err := http.NewRequest(http.MethodGet, strings.TrimRight(baseURL, "/")+"/api/status", nil)
+	if err != nil {
+		return err
+	}
+	client := &http.Client{Timeout: 1200 * time.Millisecond}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status %s", resp.Status)
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return err
+	}
+	return nil
 }
 
 func buildLocalServerProcessEnv(base []string) []string {
