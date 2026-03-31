@@ -848,6 +848,9 @@ func TestPurgarRuntimeHistoricoSoloBorraDeudaViejaTerminal(t *testing.T) {
 	if err := ConfigSet("runtime_orders_retention_hours", "72"); err != nil {
 		t.Fatalf("ConfigSet orders retention: %v", err)
 	}
+	if err := ConfigSet("runtime_instances_retention_hours", "72"); err != nil {
+		t.Fatalf("ConfigSet runtimes retention: %v", err)
+	}
 	sesionID, err := IniciarSesion("Codex1")
 	if err != nil {
 		t.Fatalf("IniciarSesion: %v", err)
@@ -892,15 +895,39 @@ func TestPurgarRuntimeHistoricoSoloBorraDeudaViejaTerminal(t *testing.T) {
 		t.Fatalf("insert recent order: %v", err)
 	}
 	orderRecentID, _ := orderRecentRes.LastInsertId()
+	oldRuntimeID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "Codex1",
+		LogicalState: "cerrado",
+		ProcessState: "finalizado",
+	})
+	if err != nil {
+		t.Fatalf("RegistrarRuntimeInstance old: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_instances SET last_event_at=?, last_heartbeat_at=?, created_at=?, updated_at=? WHERE id = ?`,
+		time.Now().UTC().Add(-96*time.Hour), time.Now().UTC().Add(-96*time.Hour), time.Now().UTC().Add(-96*time.Hour), time.Now().UTC().Add(-96*time.Hour), oldRuntimeID); err != nil {
+		t.Fatalf("ajustar old runtime: %v", err)
+	}
+	recentRuntimeID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "Codex1",
+		LogicalState: "cerrado",
+		ProcessState: "finalizado",
+	})
+	if err != nil {
+		t.Fatalf("RegistrarRuntimeInstance recent: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_instances SET last_event_at=?, last_heartbeat_at=?, created_at=?, updated_at=? WHERE id = ?`,
+		time.Now().UTC().Add(-2*time.Hour), time.Now().UTC().Add(-2*time.Hour), time.Now().UTC().Add(-2*time.Hour), time.Now().UTC().Add(-2*time.Hour), recentRuntimeID); err != nil {
+		t.Fatalf("ajustar recent runtime: %v", err)
+	}
 
 	resultado, err := PurgarRuntimeHistorico()
 	if err != nil {
 		t.Fatalf("PurgarRuntimeHistorico: %v", err)
 	}
-	if resultado == nil || resultado.Handles == nil || resultado.Orders == nil {
+	if resultado == nil || resultado.Handles == nil || resultado.Orders == nil || resultado.Runtimes == nil {
 		t.Fatalf("resultado inesperado: %+v", resultado)
 	}
-	if resultado.Handles.Deleted != 1 || resultado.Orders.Deleted != 1 {
+	if resultado.Handles.Deleted != 1 || resultado.Orders.Deleted != 1 || resultado.Runtimes.Deleted != 1 {
 		t.Fatalf("purga historica inesperada: %+v", resultado)
 	}
 	if handleOld, err := GetRuntimeHandle(handleOldID); err != nil {
@@ -922,6 +949,16 @@ func TestPurgarRuntimeHistoricoSoloBorraDeudaViejaTerminal(t *testing.T) {
 	}
 	if countOld != 0 || countRecent != 1 {
 		t.Fatalf("runtime_orders tras purga inesperadas: old=%d recent=%d", countOld, countRecent)
+	}
+	if runtimeOld, err := GetRuntime(oldRuntimeID); err != nil && err != sql.ErrNoRows {
+		t.Fatalf("GetRuntime old: %v", err)
+	} else if runtimeOld != nil {
+		t.Fatalf("runtime old deberia haber sido purgado: %+v", runtimeOld)
+	}
+	if runtimeRecent, err := GetRuntime(recentRuntimeID); err != nil {
+		t.Fatalf("GetRuntime recent: %v", err)
+	} else if runtimeRecent == nil {
+		t.Fatalf("runtime recent deberia seguir existiendo")
 	}
 }
 

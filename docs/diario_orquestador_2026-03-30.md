@@ -3507,10 +3507,43 @@ Validacion:
 - `env GOCACHE=/tmp/orquesta-gocache go test ./... -count=1`
 - `env GOCACHE=/tmp/orquesta-gocache go build -o ./orquesta .`
 - smoke viva:
-  - `./orquesta server doctor`
-  - `./orquesta runtime diagnostico --agente Codex1 --limit 5`
+- `./orquesta server doctor`
+- `./orquesta runtime diagnostico --agente Codex1 --limit 5`
 
 Resultado vivo:
 
 - el daemon sigue sano y el handle activo de `Codex1` permanece intacto
 - la higiene queda integrada en el runner oficial, sin scripts ni purgas manuales para la deuda terminal vieja
+
+## 2026-03-31 — La higiene automatica tambien purga runtimes terminales viejos
+
+Hallazgo:
+
+- tras integrar la higiene automatica de `runtime_handles` y `runtime_orders`, seguian acumulandose muchas `runtime_instances` cerradas/degradadas/fallidas
+- ese historico no bloqueaba el flujo vivo, pero hacia mas ruidoso `runtime diagnostico` y retrasaba el cierre del nucleo
+
+Decision:
+
+- extender `PurgarRuntimeHistorico()` para incluir tambien `runtime_instances` terminales viejas
+- mantener la misma disciplina: solo estados terminales, solo por cutoff configurable y con validacion previa para no tocar nada vivo
+- nueva retencion configurable: `runtime_instances_retention_hours`
+
+Codigo:
+
+- [db/config_defaults.go](/home/alberto/Trabajo/orquesta/db/config_defaults.go)
+- [db/controlplane_entities.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities.go)
+- [db/controlplane_entities_test.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities_test.go)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db ./planocontrol ./cmd -run 'TestPurgarRuntimeHistoricoSoloBorraDeudaViejaTerminal|TestRunner|TestRunnerE2E' -count=1`
+- `env GOCACHE=/tmp/orquesta-gocache go test ./... -count=1`
+- `env GOCACHE=/tmp/orquesta-gocache go build -o ./orquesta .`
+- smoke viva:
+  - `./orquesta server stop && ./orquesta server start && ./orquesta server doctor`
+  - `./orquesta runtime diagnostico --agente Codex1`
+
+Resultado vivo:
+
+- la purga automatica ya cubre deuda terminal vieja de `runtime_instances`, `runtime_handles` y `runtime_orders`
+- el daemon sigue sano y los handles vivos no se tocan
