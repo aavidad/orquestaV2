@@ -4071,3 +4071,34 @@ Validacion viva:
 - `./orquesta status` ya muestra:
   - bloque `En enfriamiento/cuota` con `Codex1` y `Codex5`
   - bloque `Retenidas por cuota` con `#416 -> Codex1`
+
+## 2026-03-31 — El backoff de proveedor ya no pierde la cuenta del agente
+
+Hallazgo:
+
+- cuando `Codex1` caia en `provider_backoff`, la cuota quedaba bien, pero se perdia el correo y solo sobrevivia `usuario Codex1`
+- eso era mala orquestacion: justo al agotarse una cuenta dejaba de verse con claridad qué correo habia chocado contra el limite
+
+Decision:
+
+- si el ultimo presupuesto no trae correo, Orquesta ya reutiliza la mejor identidad observada reciente del agente en presupuestos anteriores
+- la prioridad del fallback es simple:
+  - primero una identidad previa con `email`
+  - si no existe, una identidad previa con `usuario`
+
+Codigo:
+
+- [db/sesiones.go](/home/alberto/Trabajo/orquesta/db/sesiones.go)
+- [db/presupuestos_sesion_test.go](/home/alberto/Trabajo/orquesta/db/presupuestos_sesion_test.go)
+
+Validacion:
+
+- `go test ./db -run 'Test(GetAgenteRecuperaCuentaDesdePresupuestoPrevioSiBackoffNoTraeCorreo|GetAgenteProyectaEstadoCuotaDesdePresupuestoObservadoFresco)$' -count=1`
+- `go build -o ./orquesta .`
+
+Validacion viva:
+
+- `./orquesta status` ya muestra `Codex1` como `cuenta maritere@avidad.com`
+- `./orquesta agente presupuesto --json` ya devuelve para `Codex1`:
+  - `CuentaEmail = maritere@avidad.com`
+  - `CuentaUsuario = Codex1`

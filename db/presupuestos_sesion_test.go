@@ -471,6 +471,54 @@ func TestGetAgenteExtraeCuentaDesdeRuntimeHandle(t *testing.T) {
 	}
 }
 
+func TestGetAgenteRecuperaCuentaDesdePresupuestoPrevioSiBackoffNoTraeCorreo(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesionID, err := IniciarSesion("codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	checkedObserved := time.Now().UTC().Add(-20 * time.Minute)
+	rawObserved := `{"account_email":"codex1@example.com","account_user":"codex1_user"}`
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "5h",
+		BudgetSource:    "codex_token_count_observed",
+		RawSnapshotJSON: rawObserved,
+		CheckedAt:       checkedObserved,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion observed: %v", err)
+	}
+	reset := time.Now().UTC().Add(50 * time.Minute)
+	zeroMessages := int64(0)
+	rawBackoff := `{"source":"runtime_order_send_instruction","account_user":"Codex1"}`
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:          sesionID,
+		WindowKind:        "provider",
+		ResetAt:           &reset,
+		RemainingMessages: &zeroMessages,
+		BudgetSource:      "provider_backoff",
+		RawSnapshotJSON:   rawBackoff,
+		CheckedAt:         time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion backoff: %v", err)
+	}
+
+	agente, err := GetAgente("codex1")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.CuentaEmail != "codex1@example.com" {
+		t.Fatalf("deberia recuperar email observado previo: %+v", agente)
+	}
+	if agente.CuentaUsuario != "Codex1" {
+		t.Fatalf("deberia preservar el usuario mas reciente del backoff: %+v", agente)
+	}
+}
+
 func TestGetAgenteExtraePerfilDesdeRenderedCommandHandle(t *testing.T) {
 	abrirDBTemporalMemoria(t)
 

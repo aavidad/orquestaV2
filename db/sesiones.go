@@ -818,6 +818,9 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 		}
 	}
 	if strings.TrimSpace(a.CuentaEmail) == "" {
+		aplicarIdentidadCuentaAgente(a, ultimaIdentidadCuentaDesdePresupuestos(a.Nombre))
+	}
+	if strings.TrimSpace(a.CuentaEmail) == "" {
 		nombre := a.Nombre
 		if handles, err := ListarRuntimeHandles(&nombre); err == nil && len(handles) > 0 {
 			aplicarIdentidadCuentaAgente(a, identidadCuentaDesdeHandle(handles[0]))
@@ -935,6 +938,43 @@ func identidadCuentaDesdePresupuesto(p *PresupuestoSesion) identidadCuentaAgente
 		strings.TrimSpace(p.BudgetSource),
 		&p.CheckedAt,
 	)
+}
+
+func ultimaIdentidadCuentaDesdePresupuestos(agente string) identidadCuentaAgente {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return identidadCuentaAgente{}
+	}
+	rows, err := DB.Query(`
+		SELECT p.raw_snapshot_json, p.budget_source, p.checked_at
+		FROM presupuestos_sesion p
+		JOIN sesiones s ON s.id = p.sesion_id
+		WHERE s.agente = ?
+		ORDER BY p.checked_at DESC, p.id DESC
+		LIMIT 10`, agente)
+	if err != nil {
+		return identidadCuentaAgente{}
+	}
+	defer rows.Close()
+
+	var mejor identidadCuentaAgente
+	for rows.Next() {
+		var rawJSON string
+		var budgetSource string
+		var checkedAt time.Time
+		if err := rows.Scan(&rawJSON, &budgetSource, &checkedAt); err != nil {
+			return identidadCuentaAgente{}
+		}
+		identidad := identidadCuentaDesdeMapa(mapFromJSON(rawJSON), strings.TrimSpace(budgetSource), &checkedAt)
+		if strings.TrimSpace(identidad.email) != "" {
+			return identidad
+		}
+		if (strings.TrimSpace(mejor.usuario) == "" && strings.TrimSpace(mejor.email) == "") &&
+			(strings.TrimSpace(identidad.usuario) != "" || strings.TrimSpace(identidad.email) != "") {
+			mejor = identidad
+		}
+	}
+	return mejor
 }
 
 func identidadCuentaDesdeHandle(handle *RuntimeHandle) identidadCuentaAgente {
