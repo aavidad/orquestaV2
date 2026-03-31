@@ -98,6 +98,9 @@ func (dbStatusService) FetchStatus() (apiStatusResponse, error) {
 		if tarea == nil {
 			continue
 		}
+		if tarea.ProyectoID == nil {
+			continue
+		}
 		switch tarea.Estado {
 		case db.TareaAsignada, db.TareaEnProgreso, db.TareaBloqueada:
 		default:

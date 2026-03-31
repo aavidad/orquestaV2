@@ -304,6 +304,63 @@ func TestAPIStatusExponeResumenOperativoCompat(t *testing.T) {
 	}
 }
 
+func TestAPIStatusOmiteTareasActivasSinProyecto(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: t.TempDir(),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	conProyectoID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Con proyecto",
+		Descripcion: "Debe salir en status",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea con proyecto: %v", err)
+	}
+	if _, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Sin proyecto",
+		Descripcion: "No debe salir en status",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	}); err != nil {
+		t.Fatalf("crear tarea sin proyecto: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE tareas SET estado='en_progreso' WHERE id IN (?, (SELECT MAX(id) FROM tareas))`, conProyectoID, conProyectoID); err != nil {
+		t.Fatalf("marcar tareas en_progreso: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload apiStatusResponse
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode /api/status: %v", err)
+	}
+	if len(payload.TareasActivas) != 1 {
+		t.Fatalf("tareasActivas inesperadas: %+v", payload.TareasActivas)
+	}
+	if payload.TareasActivas[0].ID != conProyectoID {
+		t.Fatalf("tarea activa visible inesperada: %+v", payload.TareasActivas[0])
+	}
+}
+
 func TestAPIAgentesYStatusAlineanActivoConSesionReal(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

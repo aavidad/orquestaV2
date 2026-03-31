@@ -2083,3 +2083,25 @@ Validacion:
 
 - `go test ./cmd -run 'TestResetReanimacion(EncolaResumeCuandoHayHandlePausado|EncolaStartCuandoNoHayRuntimePeroSiTrabajo|ConservaCooldownSiFallaReactivacion)' -count=1`
 - `go test ./planocontrol -run 'TestRunnerRunReanimaciones(AuditaSoloExitoReal|AuditaErrorSinMentirExito)' -count=1`
+
+## 2026-03-31 — status no debe mezclar tareas globales sin proyecto en el bloque operativo
+
+Hallazgo:
+
+- `./orquesta status` mostraba la tarea `#252` dentro de `En progreso ahora mismo`
+- pero esa tarea no pertenece al proyecto operativo (`Proyecto: —`), asi que el bloque visible mentia: mezclaba backlog global sin proyecto con el estado del proyecto actual
+- eso hacia parecer que `Codex2` tenia trabajo activo en `orquestador` cuando `agente tick` ya respondia que no habia tarea activa en ese proyecto
+
+Decision:
+
+- `tareasActivas` del resumen de estado no debe incluir tareas sin `proyecto_id`
+- este ciclo corrige solo el bloque visible de tareas activas; no cambia aun los contadores globales de estado
+
+Codigo:
+
+- [cmd/status_service.go](/home/alberto/Trabajo/orquesta/cmd/status_service.go)
+- [cmd/api_test.go](/home/alberto/Trabajo/orquesta/cmd/api_test.go)
+
+Validacion:
+
+- `go test ./cmd -run 'TestAPIStatus(ExponeResumenOperativoCompat|OmiteTareasActivasSinProyecto)' -count=1`
