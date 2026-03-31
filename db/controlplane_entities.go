@@ -1780,8 +1780,11 @@ func ReconciliarRuntimeOrdersStale() (int, error) {
 		SELECT id, tipo
 		FROM runtime_orders
 		WHERE estado IN ('tomada','ejecutando')
-		  AND COALESCE(lease_expires_at, started_at, updated_at, created_at) <= ?
-		ORDER BY id`, cutoff)
+		  AND (
+		        (lease_expires_at IS NOT NULL AND lease_expires_at <= ?)
+		     OR (lease_expires_at IS NULL AND COALESCE(started_at, updated_at, created_at) <= ?)
+		  )
+		ORDER BY id`, now, cutoff)
 	if err != nil {
 		return 0, err
 	}
@@ -1805,7 +1808,7 @@ func ReconciliarRuntimeOrdersStale() (int, error) {
 
 	recovered := 0
 	for _, item := range orders {
-		applied, err := reconciliarRuntimeOrderStale(item.ID, item.Tipo, cutoff)
+		applied, err := reconciliarRuntimeOrderStale(item.ID, item.Tipo, now, cutoff)
 		if err != nil {
 			return recovered, err
 		}
@@ -5039,7 +5042,7 @@ func runtimeOrderTipoDespachable(tipo string) bool {
 	}
 }
 
-func reconciliarRuntimeOrderStale(id int64, tipo string, cutoff time.Time) (bool, error) {
+func reconciliarRuntimeOrderStale(id int64, tipo string, now, cutoff time.Time) (bool, error) {
 	var (
 		res sql.Result
 		err error
@@ -5060,7 +5063,10 @@ func reconciliarRuntimeOrderStale(id int64, tipo string, cutoff time.Time) (bool
 			    END
 			WHERE id = ?
 			  AND estado IN ('tomada','ejecutando')
-			  AND COALESCE(lease_expires_at, started_at, updated_at, created_at) <= ?`, id, cutoff)
+			  AND (
+			        (lease_expires_at IS NOT NULL AND lease_expires_at <= ?)
+			     OR (lease_expires_at IS NULL AND COALESCE(started_at, updated_at, created_at) <= ?)
+			  )`, id, now, cutoff)
 	} else {
 		res, err = DB.Exec(`
 			UPDATE runtime_orders
@@ -5075,7 +5081,10 @@ func reconciliarRuntimeOrderStale(id int64, tipo string, cutoff time.Time) (bool
 			    END
 			WHERE id = ?
 			  AND estado IN ('tomada','ejecutando')
-			  AND COALESCE(lease_expires_at, started_at, updated_at, created_at) <= ?`, id, cutoff)
+			  AND (
+			        (lease_expires_at IS NOT NULL AND lease_expires_at <= ?)
+			     OR (lease_expires_at IS NULL AND COALESCE(started_at, updated_at, created_at) <= ?)
+			  )`, id, now, cutoff)
 	}
 	if err != nil {
 		return false, err

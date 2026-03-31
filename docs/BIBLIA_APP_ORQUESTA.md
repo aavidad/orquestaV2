@@ -234,6 +234,7 @@ Contrato minimo obligatorio para `runtime_orders`:
 - para runtimes Codex degradados, `session_resume` no puede depender solo de la metadata persistida del `runtime_handle`; debe aceptar metadata observada por el supervisor local cuando esa observacion sea mas rica y coherente que la fila actual
 - el reconocimiento de un runtime Codex local no puede atarse a un unico campo como `driver`; debe poder reconstruirse desde `herramienta`, `conector`, `rendered_command`, `wrapped_command`, `supervisor_driver` y la observacion viva del supervisor
 - la reconciliacion stale no se decide solo por `started_at`; debe respetar la caducidad de la lease cuando exista
+- una `lease_expires_at` ya vencida se reconcilia contra `now`, no contra otro `cutoff` adicional; la lease no puede caducar dos veces
 - si un `mailbox_id` ya forma parte de una `bootstrap lease` pendiente (`lease_state=waiting_for_evidence`), ningun batch (`interactive`, `session_resume`, `coordinated_restart`) puede materializar otra `send_instruction` para ese mismo mensaje
 - mientras una `bootstrap lease` siga pendiente, el mailbox incluido en ella sigue siendo verdad de continuidad; cualquier `send_instruction` redundante para ese `mailbox_id` debe cerrarse como `superseded`, no reintentarse
 - una `send_instruction` nacida desde `runtime_mailbox` no es una segunda cola durable; es solo un intento de entrega

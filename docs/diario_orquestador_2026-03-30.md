@@ -1,5 +1,38 @@
 # Diario del orquestador — 2026-03-30
 
+## 2026-03-31 07:5x aprox. — la lease de `runtime_orders` deja de expirar dos veces
+
+Hallazgo:
+
+- las `send_instruction` que parecian "colgadas" no estaban necesariamente perdidas; el problema era que la reconciliacion stale trataba `lease_expires_at` como si aun necesitara pasar otro `stale_seconds`
+- la query hacia `COALESCE(lease_expires_at, started_at, updated_at, created_at) <= cutoff`
+- como `lease_expires_at` ya es una fecha futura de caducidad, compararla contra `cutoff=now-stale_seconds` retrasa la recuperacion aproximadamente otro ciclo completo
+
+Decision:
+
+- una lease vencida se reconcilia contra `now`
+- el `cutoff` solo aplica a ordenes sin lease explicita
+
+Cambios:
+
+- `db/controlplane_entities.go`
+  - `ReconciliarRuntimeOrdersStale()` separa:
+    - `lease_expires_at <= now`
+    - o, si no hay lease, `started_at/updated_at/created_at <= cutoff`
+  - `reconciliarRuntimeOrderStale(...)` aplica la misma regla al `UPDATE`
+- `db/controlplane_entities_test.go`
+  - `TestReconciliarRuntimeOrdersStaleRecuperaLeaseExpiradaSinEsperarOtroCutoff`
+  - ajuste de `TestReconciliarRuntimeOrdersStaleRespetaCutoffConfigurado`
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(ReconciliarRuntimeOrdersStaleRecuperaBasicasYExpiraNoSoportadas|ReconciliarRuntimeOrdersStaleRespetaCutoffConfigurado|ReconciliarRuntimeOrdersStaleRecuperaLeaseExpiradaSinEsperarOtroCutoff|ReconciliarRuntimeOrderStaleNoPisaOrdenYaCompletada|ReconciliarRuntimeOrderStaleNoPisaOrdenReclamadaDeNuevo)' -count=1` => OK
+- `go build -o ./orquesta .` => OK
+- validacion viva tras reiniciar daemon:
+  - `Codex1 #80312` pasa por fin a `completada`
+  - `Codex2 #80323` pasa a `completada` con `mailbox_only=true`
+  - `Codex2 #80324` deja de quedarse secuestrada y vuelve a `pendiente` al fallar `session_resume`
+
 ## 2026-03-31 07:4x aprox. — timeout de `session_resume` para autonomia deja de reencolar la misma orden
 
 Hallazgo:
