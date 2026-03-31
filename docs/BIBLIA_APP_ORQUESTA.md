@@ -120,6 +120,7 @@ Regla dura:
 - no hay operacion normal contra la BD local
 - el modo local queda solo para recuperacion explicita o diagnostico de bloqueo real
 - `ORQUESTA_FORCE_LOCAL_DB` y `--local` no autorizan mutaciones de negocio; solo inspeccion/diagnostico de solo lectura en los comandos explicitamente cubiertos
+- las superficies externas nuevas tambien entran por el daemon oficial: si Orquesta expone MCP por HTTP, debe hacerlo como endpoint server-first del mismo servidor (`/api/mcp`), no como proceso lateral con otra verdad operativa
 
 ### Single-writer
 

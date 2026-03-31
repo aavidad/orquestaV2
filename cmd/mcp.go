@@ -74,6 +74,10 @@ type mcpServer struct {
 	initialized bool
 }
 
+type mcpHandleOptions struct {
+	RequireInitialize bool
+}
+
 type mcpResource struct {
 	URI         string         `json:"uri"`
 	Name        string         `json:"name"`
@@ -186,35 +190,20 @@ func (s *mcpServer) serve() error {
 }
 
 func (s *mcpServer) handleRequest(req mcpRequest) (any, *mcpError) {
-	if req.Method != "initialize" && req.Method != "notifications/initialized" && req.Method != "ping" && !s.initialized {
+	result, rpcErr := handleMCPRequest(req, s.initialized, mcpHandleOptions{RequireInitialize: true})
+	if rpcErr == nil && req.Method == "initialize" {
+		s.initialized = true
+	}
+	return result, rpcErr
+}
+
+func handleMCPRequest(req mcpRequest, initialized bool, opts mcpHandleOptions) (any, *mcpError) {
+	if opts.RequireInitialize && req.Method != "initialize" && req.Method != "notifications/initialized" && req.Method != "ping" && !initialized {
 		return nil, &mcpError{Code: -32002, Message: "Servidor MCP no inicializado"}
 	}
-
 	switch req.Method {
 	case "initialize":
-		var params struct {
-			ProtocolVersion string         `json:"protocolVersion"`
-			Capabilities    map[string]any `json:"capabilities"`
-			ClientInfo      map[string]any `json:"clientInfo"`
-		}
-		if err := decodeParams(req.Params, &params); err != nil {
-			return nil, invalidParams(err)
-		}
-		s.initialized = true
-		return map[string]any{
-			"protocolVersion": negotiateProtocolVersion(params.ProtocolVersion),
-			"capabilities": map[string]any{
-				"prompts":   map[string]any{},
-				"resources": map[string]any{},
-				"tools":     map[string]any{},
-			},
-			"serverInfo": map[string]any{
-				"name":    mcpServerName,
-				"title":   "Orquesta MCP",
-				"version": mcpServerVersion,
-			},
-			"instructions": "Usa resources para contexto vivo, prompts para briefing/gobierno y tools para acciones controladas. Las mutaciones deben mantenerse con confirmacion humana.",
-		}, nil
+		return handleMCPInitialize(req.Params)
 
 	case "notifications/initialized":
 		return nil, nil
@@ -281,6 +270,31 @@ func (s *mcpServer) handleRequest(req mcpRequest) (any, *mcpError) {
 	}
 
 	return nil, &mcpError{Code: -32601, Message: "Metodo no soportado", Data: map[string]any{"method": req.Method}}
+}
+
+func handleMCPInitialize(raw json.RawMessage) (map[string]any, *mcpError) {
+	var params struct {
+		ProtocolVersion string         `json:"protocolVersion"`
+		Capabilities    map[string]any `json:"capabilities"`
+		ClientInfo      map[string]any `json:"clientInfo"`
+	}
+	if err := decodeParams(raw, &params); err != nil {
+		return nil, invalidParams(err)
+	}
+	return map[string]any{
+		"protocolVersion": negotiateProtocolVersion(params.ProtocolVersion),
+		"capabilities": map[string]any{
+			"prompts":   map[string]any{},
+			"resources": map[string]any{},
+			"tools":     map[string]any{},
+		},
+		"serverInfo": map[string]any{
+			"name":    mcpServerName,
+			"title":   "Orquesta MCP",
+			"version": mcpServerVersion,
+		},
+		"instructions": "Usa resources para contexto vivo, prompts para briefing/gobierno y tools para acciones controladas. Las mutaciones deben mantenerse con confirmacion humana.",
+	}, nil
 }
 
 func (s *mcpServer) writeResult(id json.RawMessage, result any) error {

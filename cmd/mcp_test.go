@@ -8,7 +8,10 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -43,6 +46,76 @@ func TestMCPHandleInitializeNegociaVersion(t *testing.T) {
 	if !srv.initialized {
 		t.Fatalf("el servidor no quedo inicializado")
 	}
+}
+
+func TestAPIMCPDescribeEndpoint(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/mcp", nil)
+	rec := httptest.NewRecorder()
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["endpoint"] != "/api/mcp" {
+		t.Fatalf("endpoint inesperado: %#v", payload)
+	}
+	if payload["transport"] != "http_jsonrpc" {
+		t.Fatalf("transport inesperado: %#v", payload)
+	}
+}
+
+func TestAPIMCPCallToolStateless(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+
+		body := mustJSON(t, map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name":      "orquesta.proyectos.listar",
+				"arguments": map[string]any{"tipo": "repo", "activo": true},
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/mcp", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		mux := http.NewServeMux()
+		registerAPIRoutes(mux)
+
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+		}
+
+		var resp mcpResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if resp.Error != nil {
+			t.Fatalf("mcp error inesperado: %+v", resp.Error)
+		}
+		result, ok := resp.Result.(map[string]any)
+		if !ok {
+			t.Fatalf("resultado inesperado: %#v", resp.Result)
+		}
+		content, ok := result["content"].([]any)
+		if !ok || len(content) == 0 {
+			t.Fatalf("content MCP inesperado: %#v", result)
+		}
+		item, _ := content[0].(map[string]any)
+		text, _ := item["text"].(string)
+		if !strings.Contains(text, `"slug": "orquestador"`) {
+			t.Fatalf("resultado MCP sin proyecto esperado: %s", text)
+		}
+	})
 }
 
 func TestMCPResourceReadDetallePropuesta(t *testing.T) {

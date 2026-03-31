@@ -539,6 +539,7 @@ type apiRuntimeHandoffRequest struct {
 
 func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/server", apiHandlerServer)
+	mux.HandleFunc("/api/mcp", apiHandlerMCP)
 	mux.HandleFunc("/api/status", apiHandlerStatus)
 	mux.HandleFunc("/api/diagnostico", apiHandlerDiagnostico)
 	mux.HandleFunc("/api/agentes", apiHandlerAgentes)
@@ -627,6 +628,56 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/agente/adoptar-contexto", apiHandlerAgenteAdoptarContexto)
 	mux.HandleFunc("/api/agente/tick", apiHandlerAgenteTick)
 	mux.HandleFunc("/api/agente/pausar", apiHandlerAgentePausar)
+}
+
+func apiHandlerMCP(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		apiWriteJSON(w, http.StatusOK, map[string]any{
+			"name":               mcpServerName,
+			"title":              "Orquesta MCP",
+			"version":            mcpServerVersion,
+			"transport":          "http_jsonrpc",
+			"endpoint":           "/api/mcp",
+			"protocol_version":   mcpProtocolLatest,
+			"supported_versions": mcpSupportedProtocols,
+			"modes":              []string{"initialize", "resources", "prompts", "tools"},
+			"stateless":          true,
+		})
+	case http.MethodPost:
+		var req mcpRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		if req.JSONRPC != "2.0" || strings.TrimSpace(req.Method) == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(mcpResponse{
+				JSONRPC: "2.0",
+				ID:      req.ID,
+				Error:   &mcpError{Code: -32600, Message: "Request inválida"},
+			})
+			return
+		}
+		result, rpcErr := handleMCPRequest(req, true, mcpHandleOptions{RequireInitialize: false})
+		status := http.StatusOK
+		resp := mcpResponse{JSONRPC: "2.0", ID: req.ID}
+		if rpcErr != nil {
+			resp.Error = rpcErr
+			if rpcErr.Code == -32600 || rpcErr.Code == -32602 {
+				status = http.StatusBadRequest
+			}
+		} else if req.hasID() {
+			resp.Result = result
+		} else {
+			resp.Result = map[string]any{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(resp)
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
 }
 
 func apiHandlerServer(w http.ResponseWriter, r *http.Request) {

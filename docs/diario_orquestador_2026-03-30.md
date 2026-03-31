@@ -2608,3 +2608,34 @@ Validacion:
 - `go test ./planocontrol -run 'TestRunner(NoEscalaWatchdogNiHandoffConProcesoVivo|HandoffPreventivoPorPresupuesto)' -count=1`
 - `go test ./... -count=1`
 - suite completa en verde
+
+## 2026-03-31 — MCP deja de ser solo stdio y pasa a superficie server-first del daemon
+
+Hallazgo:
+
+- MCP ya existia de verdad en `cmd/mcp.go`, con resources, prompts y tools cubiertos por tests, pero solo salia por `orquesta mcp serve` en `stdio`
+- eso dejaba OP-088 a medio cerrar como producto: habia nucleo MCP, pero no una puerta server-first del daemon para gestores externos HTTP
+
+Decision:
+
+- reutilizar el mismo nucleo MCP y exponerlo por `/api/mcp` en el servidor oficial
+- `GET /api/mcp` describe el endpoint y las versiones soportadas
+- `POST /api/mcp` acepta JSON-RPC 2.0 y reutiliza `resources`, `prompts` y `tools` sin duplicar logica
+- la via HTTP se deja explicita como `stateless`, para no fingir una segunda semantica de sesion MCP separada del daemon
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/api.go](/home/alberto/Trabajo/orquesta/cmd/api.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(APIMCPDescribeEndpoint|APIMCPCallToolStateless|MCP)' -count=1`
+- `go build -o ./orquesta .`
+- validacion viva:
+  - `./orquesta server stop && ./orquesta server start`
+  - `curl -sf http://127.0.0.1:16543/api/mcp`
+  - `curl -sf -X POST http://127.0.0.1:16543/api/mcp -H 'Content-Type: application/json' -d '{... \"method\":\"initialize\" ...}'`
+  - `curl -sf -X POST http://127.0.0.1:16543/api/mcp -H 'Content-Type: application/json' -d '{... \"method\":\"tools/list\" ...}'`
