@@ -214,6 +214,14 @@ type apiRuntimeHandlesPurgeResponse struct {
 	Estados    []string `json:"estados"`
 }
 
+type apiRuntimeOrdersPurgeResponse struct {
+	OK         bool     `json:"ok"`
+	Deleted    int      `json:"deleted"`
+	DeletedIDs []int64  `json:"deleted_ids"`
+	Estados    []string `json:"estados"`
+	Tipos      []string `json:"tipos,omitempty"`
+}
+
 type apiRuntimeTranscriptResponse struct {
 	Transcript []*db.RuntimeTranscriptEntry `json:"transcript"`
 }
@@ -363,7 +371,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "listar", "ver", "handles", "purgar-handles", "traza", "transcript", "diagnostico", "ordenes", "orden-nueva", "nudge", "discordia", "checkpoints", "checkpoint-nuevo", "checkpoint-ver", "mailbox", "mailbox-enviar", "mailbox-entregar", "mailbox-consumir":
+		case "listar", "ver", "handles", "purgar-handles", "purgar-ordenes", "traza", "transcript", "diagnostico", "ordenes", "orden-nueva", "nudge", "discordia", "checkpoints", "checkpoint-nuevo", "checkpoint-ver", "mailbox", "mailbox-enviar", "mailbox-entregar", "mailbox-consumir":
 			return true
 		default:
 			return false

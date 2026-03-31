@@ -96,6 +96,20 @@ type PurgaRuntimeHandlesResultado struct {
 	Estados    []string `json:"estados"`
 }
 
+type FiltroPurgadoRuntimeOrders struct {
+	Agente     *string
+	ProyectoID *int64
+	Estados    []string
+	Tipos      []string
+}
+
+type PurgaRuntimeOrdersResultado struct {
+	Deleted    int      `json:"deleted"`
+	DeletedIDs []int64  `json:"deleted_ids"`
+	Estados    []string `json:"estados"`
+	Tipos      []string `json:"tipos,omitempty"`
+}
+
 type bootstrapRuntimeData struct {
 	Order      *RuntimeOrder
 	Mailbox    []*RuntimeMailboxMessage
@@ -359,6 +373,86 @@ func PurgarRuntimeHandlesInactivos(filtro FiltroPurgadoRuntimeHandles) (*PurgaRu
 	}, nil
 }
 
+func PurgarRuntimeOrdersTerminales(filtro FiltroPurgadoRuntimeOrders) (*PurgaRuntimeOrdersResultado, error) {
+	if filtro.Agente == nil && filtro.ProyectoID == nil {
+		return nil, fmt.Errorf("debes indicar agente o proyecto para purgar runtime orders")
+	}
+	estados, err := normalizarEstadosPurgadoRuntimeOrders(filtro.Estados)
+	if err != nil {
+		return nil, err
+	}
+	tipos, err := normalizarTiposPurgadoRuntimeOrders(filtro.Tipos)
+	if err != nil {
+		return nil, err
+	}
+	query := `SELECT id FROM runtime_orders WHERE estado IN (` + runtimeSQLPlaceholders(len(estados)) + `)`
+	args := make([]any, 0, len(estados)+4)
+	for _, estado := range estados {
+		args = append(args, estado)
+	}
+	if filtro.Agente != nil && strings.TrimSpace(*filtro.Agente) != "" {
+		query += ` AND agente = ?`
+		args = append(args, strings.TrimSpace(*filtro.Agente))
+	}
+	if filtro.ProyectoID != nil {
+		query += ` AND proyecto_id = ?`
+		args = append(args, *filtro.ProyectoID)
+	}
+	if len(tipos) > 0 {
+		query += ` AND tipo IN (` + runtimeSQLPlaceholders(len(tipos)) + `)`
+		for _, tipo := range tipos {
+			args = append(args, tipo)
+		}
+	}
+	query += ` ORDER BY id DESC`
+
+	rows, err := DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ids := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return &PurgaRuntimeOrdersResultado{Estados: estados, Tipos: tipos}, nil
+	}
+	if err := validarPurgadoRuntimeOrders(ids); err != nil {
+		return nil, err
+	}
+	tx, err := DB.Begin()
+	if err != nil {
+		return nil, err
+	}
+	argsDelete := int64SliceToAny(ids)
+	if _, err := tx.Exec(`UPDATE runtime_mailbox SET runtime_order_id = NULL WHERE runtime_order_id IN (`+runtimeSQLPlaceholders(len(ids))+`)`, argsDelete...); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	if _, err := tx.Exec(`DELETE FROM runtime_orders WHERE id IN (`+runtimeSQLPlaceholders(len(ids))+`)`, argsDelete...); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &PurgaRuntimeOrdersResultado{
+		Deleted:    len(ids),
+		DeletedIDs: ids,
+		Estados:    estados,
+		Tipos:      tipos,
+	}, nil
+}
+
 func normalizarEstadosPurgadoRuntimeHandles(estados []string) ([]string, error) {
 	if len(estados) == 0 {
 		return []string{"cerrado", "fallido"}, nil
@@ -382,6 +476,56 @@ func normalizarEstadosPurgadoRuntimeHandles(estados []string) ([]string, error) 
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("debes indicar al menos un estado purgable")
+	}
+	return out, nil
+}
+
+func normalizarEstadosPurgadoRuntimeOrders(estados []string) ([]string, error) {
+	if len(estados) == 0 {
+		return []string{"completada", "fallida", "expirada", "cancelada"}, nil
+	}
+	seen := make(map[string]struct{}, len(estados))
+	out := make([]string, 0, len(estados))
+	for _, raw := range estados {
+		estado := strings.ToLower(strings.TrimSpace(raw))
+		switch estado {
+		case "completada", "fallida", "expirada", "cancelada":
+		case "pendiente", "tomada", "ejecutando":
+			return nil, fmt.Errorf("no se permite purgar runtime orders en estado %q; espera a que terminen o cancelalas primero", estado)
+		default:
+			return nil, fmt.Errorf("estado de runtime order no soportado: %s", strings.TrimSpace(raw))
+		}
+		if _, ok := seen[estado]; ok {
+			continue
+		}
+		seen[estado] = struct{}{}
+		out = append(out, estado)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("debes indicar al menos un estado purgable")
+	}
+	return out, nil
+}
+
+func normalizarTiposPurgadoRuntimeOrders(tipos []string) ([]string, error) {
+	if len(tipos) == 0 {
+		return nil, nil
+	}
+	seen := make(map[string]struct{}, len(tipos))
+	out := make([]string, 0, len(tipos))
+	for _, raw := range tipos {
+		tipo := strings.TrimSpace(raw)
+		if tipo == "" {
+			continue
+		}
+		if !runtimeOrderTipoDespachable(tipo) && tipo != "handoff" {
+			return nil, fmt.Errorf("tipo de runtime order no soportado para purga: %s", tipo)
+		}
+		if _, ok := seen[tipo]; ok {
+			continue
+		}
+		seen[tipo] = struct{}{}
+		out = append(out, tipo)
 	}
 	return out, nil
 }
@@ -416,6 +560,40 @@ func validarPurgadoRuntimeHandles(ids []int64) error {
 	}
 	if len(vivos) > 0 {
 		return fmt.Errorf("no se pueden purgar handles con runtime orders vivas asociadas: %s", strings.Join(vivos, ", "))
+	}
+	return nil
+}
+
+func validarPurgadoRuntimeOrders(ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := DB.Query(`
+		SELECT id, estado FROM runtime_orders
+		WHERE id IN (`+runtimeSQLPlaceholders(len(ids))+`)
+		  AND estado IN ('pendiente','tomada','ejecutando')`,
+		int64SliceToAny(ids)...,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var vivos []string
+	for rows.Next() {
+		var (
+			id     int64
+			estado string
+		)
+		if err := rows.Scan(&id, &estado); err != nil {
+			return err
+		}
+		vivos = append(vivos, fmt.Sprintf("#%d(%s)", id, strings.TrimSpace(estado)))
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(vivos) > 0 {
+		return fmt.Errorf("no se pueden purgar runtime orders vivas: %s", strings.Join(vivos, ", "))
 	}
 	return nil
 }

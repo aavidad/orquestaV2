@@ -127,6 +127,41 @@ var runtimePurgarHandlesCmd = &cobra.Command{
 	},
 }
 
+var runtimePurgarOrdenesCmd = &cobra.Command{
+	Use:   "purgar-ordenes",
+	Short: "Purga runtime orders terminales de pruebas sin tocar órdenes vivas",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agente, _ := cmd.Flags().GetString("agente")
+		proyecto, _ := cmd.Flags().GetString("proyecto")
+		estados, _ := cmd.Flags().GetStringSlice("estado")
+		tipos, _ := cmd.Flags().GetStringSlice("tipo")
+		actor, _ := cmd.Flags().GetString("actor")
+		estados = normalizarSliceFlags(estados)
+		tipos = normalizarSliceFlags(tipos)
+		if strings.TrimSpace(agente) == "" && strings.TrimSpace(proyecto) == "" {
+			return fmt.Errorf("debes indicar --agente o --proyecto")
+		}
+		if resp, ok, err := purgarRuntimeOrdersDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), estados, tipos, strings.TrimSpace(actor)); ok {
+			if err != nil {
+				return err
+			}
+			fmt.Printf("✓ Purgadas %d runtime orders terminales", resp.Deleted)
+			if len(resp.Estados) > 0 {
+				fmt.Printf(" [%s]", strings.Join(resp.Estados, ","))
+			}
+			if len(resp.Tipos) > 0 {
+				fmt.Printf(" tipos=%s", strings.Join(resp.Tipos, ","))
+			}
+			if len(resp.DeletedIDs) > 0 {
+				fmt.Printf(": %v", resp.DeletedIDs)
+			}
+			fmt.Println()
+			return nil
+		}
+		return serverFirstCommandError("runtime purgar-ordenes")
+	},
+}
+
 var runtimeTranscriptCmd = &cobra.Command{
 	Use:   "transcript",
 	Short: "Lista o busca transcript persistido de runtimes",
@@ -788,6 +823,21 @@ func purgarRuntimeHandlesDesdeAPI(agente, proyecto string, estados []string, act
 	return &resp, true, nil
 }
 
+func purgarRuntimeOrdersDesdeAPI(agente, proyecto string, estados, tipos []string, actor string) (*apiRuntimeOrdersPurgeResponse, bool, error) {
+	var resp apiRuntimeOrdersPurgeResponse
+	ok, err := apiPost("/api/runtime-orders/purgar", map[string]any{
+		"agente":   strings.TrimSpace(agente),
+		"proyecto": strings.TrimSpace(proyecto),
+		"estados":  estados,
+		"tipos":    tipos,
+		"actor":    strings.TrimSpace(actor),
+	}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
 func normalizarSliceFlags(values []string) []string {
 	if len(values) == 0 {
 		return nil
@@ -1228,6 +1278,11 @@ func init() {
 	runtimePurgarHandlesCmd.Flags().String("proyecto", "", "Purga handles del proyecto indicado")
 	runtimePurgarHandlesCmd.Flags().StringSlice("estado", []string{"cerrado", "fallido"}, "Estados purgables; por seguridad solo cerrado/fallido")
 	runtimePurgarHandlesCmd.Flags().String("actor", "orquesta", "Actor que solicita la purga")
+	runtimePurgarOrdenesCmd.Flags().String("agente", "", "Purga órdenes del agente indicado")
+	runtimePurgarOrdenesCmd.Flags().String("proyecto", "", "Purga órdenes del proyecto indicado")
+	runtimePurgarOrdenesCmd.Flags().StringSlice("estado", []string{"completada", "fallida", "expirada", "cancelada"}, "Estados purgables; por seguridad solo terminales")
+	runtimePurgarOrdenesCmd.Flags().StringSlice("tipo", nil, "Tipos de runtime order a purgar")
+	runtimePurgarOrdenesCmd.Flags().String("actor", "orquesta", "Actor que solicita la purga")
 	runtimeTranscriptCmd.Flags().String("agente", "", "Filtrar transcript por agente")
 	runtimeTranscriptCmd.Flags().String("proyecto", "", "Filtrar transcript por proyecto")
 	runtimeTranscriptCmd.Flags().String("stream", "", "Filtrar transcript por stream")
@@ -1269,6 +1324,6 @@ func init() {
 	runtimeMailboxEnviarCmd.Flags().String("proyecto", "", "Proyecto asociado al mensaje")
 	runtimeMailboxEnviarCmd.Flags().String("payload", "{}", "Payload JSON del mensaje")
 	runtimeMailboxEnviarCmd.Flags().Int64("runtime-order-id", 0, "Orden runtime asociada al mensaje")
-	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenNuevaCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd)
+	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimePurgarOrdenesCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenNuevaCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd)
 	rootCmd.AddCommand(runtimeCmd)
 }

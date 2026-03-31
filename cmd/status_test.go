@@ -160,6 +160,9 @@ func TestShouldBypassLocalDBConServidorLocalDescubierto(t *testing.T) {
 	if !shouldBypassLocalDB([]string{"runtime", "purgar-handles", "--agente", "Codex6"}) {
 		t.Fatalf("runtime purgar-handles deberia saltarse la BD local con servidor local descubierto")
 	}
+	if !shouldBypassLocalDB([]string{"runtime", "purgar-ordenes", "--agente", "Codex6"}) {
+		t.Fatalf("runtime purgar-ordenes deberia saltarse la BD local con servidor local descubierto")
+	}
 	if !shouldBypassLocalDB([]string{"progreso", "fase", "listar", "orquestador"}) {
 		t.Fatalf("progreso fase listar deberia saltarse la BD local con servidor local descubierto")
 	}

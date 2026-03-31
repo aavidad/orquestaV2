@@ -106,6 +106,7 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "tarea notas", args: []string{"tarea", "notas", "12"}, want: true},
 		{nombre: "propuesta actualizar", args: []string{"propuesta", "actualizar", "OP-116", "--titulo", "Nuevo"}, want: true},
 		{nombre: "runtime purgar-handles", args: []string{"runtime", "purgar-handles", "--agente", "Codex1"}, want: true},
+		{nombre: "runtime purgar-ordenes", args: []string{"runtime", "purgar-ordenes", "--agente", "Codex1"}, want: true},
 		{nombre: "runtime no soportado", args: []string{"runtime", "foo"}, want: false},
 		{nombre: "serve", args: []string{"serve"}, want: false},
 	}
@@ -160,6 +161,7 @@ func TestRuntimeMutacionesCriticasSoportanServerMode(t *testing.T) {
 		{"runtime", "mailbox-entregar", "42"},
 		{"runtime", "mailbox-consumir", "42"},
 		{"runtime", "purgar-handles", "--agente", "Codex6"},
+		{"runtime", "purgar-ordenes", "--agente", "Codex6"},
 	}
 	for _, args := range cases {
 		if !commandSupportsServerMode(args) {

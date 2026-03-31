@@ -269,6 +269,7 @@ func TestAPIRuntimeControlPlaneEndpoints(t *testing.T) {
 		t.Fatalf("trace deberia estar disponible: %s", recTrace.Body.String())
 	}
 	assertKey(http.MethodGet, "/api/runtime-orders?agente=Codex1", nil, "orders", http.StatusOK)
+	assertKey(http.MethodPost, "/api/runtime-orders/purgar", []byte(`{"agente":"Codex1","estados":["completada","fallida"],"tipos":["send_instruction"],"actor":"Codex1"}`), "deleted", http.StatusOK)
 	assertKey(http.MethodGet, "/api/runtime-mailbox?to_agente=Codex2&proyecto=orquestador", nil, "mailbox", http.StatusOK)
 	assertKey(http.MethodGet, "/api/runtime-checkpoints/latest?agente=Codex1&proyecto=orquestador", nil, "checkpoint", http.StatusOK)
 	assertKey(http.MethodPost, "/api/runtime-orders", []byte(`{"agente":"Codex1","tipo":"checkpoint","proyecto":"orquestador","payload":"{}"}`), "id", http.StatusCreated)

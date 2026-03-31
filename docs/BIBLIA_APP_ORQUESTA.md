@@ -173,6 +173,7 @@ Regla adicional:
 - si un script o unit solo cubre un backend concreto o un flujo legacy, debe declararlo de forma explicita o salir del camino oficial; no se mantiene como plantilla “generica” si ya no lo es
 - la observabilidad y verificacion operativa de persistencia se hacen desde Orquesta (`persistencia info`, `persistencia verificar`); los scripts backend-especificos quedan solo para rescate o forense
 - si se automatiza backup por systemd y el backend es SQLite, la unit debe nombrarse de forma explicita como SQLite; no se aceptan nombres genericos para unidades que no son multi-backend
+- las operaciones de limpieza o purga de pruebas tambien deben entrar por el daemon: `runtime purgar-handles` para handles inactivos y `runtime purgar-ordenes` solo para ordenes terminales; no se autorizan borrados manuales directos en la BD
 
 ## Doctrina de agentes y runtimes
 

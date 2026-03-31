@@ -27,6 +27,8 @@ type fakeStore struct {
 	handlesResponse  []*db.RuntimeHandle
 	purgeFilter      db.FiltroPurgadoRuntimeHandles
 	purgeResponse    *db.PurgaRuntimeHandlesResultado
+	purgeOrdersFilter   db.FiltroPurgadoRuntimeOrders
+	purgeOrdersResponse *db.PurgaRuntimeOrdersResultado
 	handleAgent      string
 	handleResponse   *db.RuntimeHandle
 	handleProjAgent  string
@@ -103,6 +105,10 @@ func (f *fakeStore) ListRuntimeHandles(filter *string) ([]*db.RuntimeHandle, err
 func (f *fakeStore) PurgeInactiveRuntimeHandles(filter db.FiltroPurgadoRuntimeHandles) (*db.PurgaRuntimeHandlesResultado, error) {
 	f.purgeFilter = filter
 	return f.purgeResponse, nil
+}
+func (f *fakeStore) PurgeTerminalRuntimeOrders(filter db.FiltroPurgadoRuntimeOrders) (*db.PurgaRuntimeOrdersResultado, error) {
+	f.purgeOrdersFilter = filter
+	return f.purgeOrdersResponse, nil
 }
 func (f *fakeStore) GetActiveRuntimeHandle(agente string) (*db.RuntimeHandle, error) {
 	f.handleAgent = agente
@@ -199,6 +205,8 @@ func TestServiceDelegatesRuntimeQueries(t *testing.T) {
 		runtimeResponse:  &db.RuntimeInstance{ID: 10},
 		handleByIDResp:   &db.RuntimeHandle{ID: 16},
 		handlesResponse:  []*db.RuntimeHandle{{ID: 15}},
+		purgeResponse:    &db.PurgaRuntimeHandlesResultado{Deleted: 2, Estados: []string{"cerrado", "fallido"}},
+		purgeOrdersResponse: &db.PurgaRuntimeOrdersResultado{Deleted: 3, Estados: []string{"completada", "fallida"}, Tipos: []string{"send_instruction"}},
 		handleResponse:   &db.RuntimeHandle{ID: 16},
 		handleProjResp:   &db.RuntimeHandle{ID: 17},
 		eventsResp:       []*db.RuntimeEvent{{ID: 17, Kind: "auto_guidance_sent"}},
@@ -256,6 +264,18 @@ func TestServiceDelegatesRuntimeQueries(t *testing.T) {
 	}
 	if _, err := service.GetActiveRuntimeHandle(agent); err != nil {
 		t.Fatalf("GetActiveRuntimeHandle: %v", err)
+	}
+	if _, err := service.PurgeInactiveRuntimeHandles(RuntimeHandlePurgeRequest{Agente: agent, Estados: []string{"cerrado"}}); err != nil {
+		t.Fatalf("PurgeInactiveRuntimeHandles: %v", err)
+	}
+	if store.purgeFilter.Agente == nil || *store.purgeFilter.Agente != "Codex2" {
+		t.Fatalf("purgeFilter=%+v", store.purgeFilter)
+	}
+	if _, err := service.PurgeTerminalRuntimeOrders(RuntimeOrderPurgeRequest{Agente: agent, Estados: []string{"completada", "fallida"}, Tipos: []string{"send_instruction"}}); err != nil {
+		t.Fatalf("PurgeTerminalRuntimeOrders: %v", err)
+	}
+	if store.purgeOrdersFilter.Agente == nil || *store.purgeOrdersFilter.Agente != "Codex2" || len(store.purgeOrdersFilter.Tipos) != 1 || store.purgeOrdersFilter.Tipos[0] != "send_instruction" {
+		t.Fatalf("purgeOrdersFilter=%+v", store.purgeOrdersFilter)
 	}
 	if store.handleAgent != "Codex2" {
 		t.Fatalf("handleAgent=%q", store.handleAgent)

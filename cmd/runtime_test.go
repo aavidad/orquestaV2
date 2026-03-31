@@ -63,6 +63,14 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 				"deleted_ids": []int64{48, 39},
 				"estados":     []string{"cerrado", "fallido"},
 			})
+		case r.URL.Path == "/api/runtime-orders/purgar" && r.Method == http.MethodPost:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":          true,
+				"deleted":     3,
+				"deleted_ids": []int64{91, 88, 77},
+				"estados":     []string{"completada", "fallida"},
+				"tipos":       []string{"send_instruction"},
+			})
 		case r.URL.Path == "/api/runtime-trace" && r.Method == http.MethodGet:
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"trace": map[string]any{
@@ -210,6 +218,27 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	for _, token := range []string{"Purgados 2", "cerrado,fallido", "[48 39]"} {
 		if !strings.Contains(outPurge, token) {
 			t.Fatalf("salida purgar-handles sin %q:\n%s", token, outPurge)
+		}
+	}
+
+	if err := runtimePurgarOrdenesCmd.Flags().Set("agente", "Codex5"); err != nil {
+		t.Fatalf("set agente purga ordenes: %v", err)
+	}
+	if err := runtimePurgarOrdenesCmd.Flags().Set("tipo", "send_instruction"); err != nil {
+		t.Fatalf("set tipo purga ordenes: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = runtimePurgarOrdenesCmd.Flags().Set("agente", "")
+		_ = runtimePurgarOrdenesCmd.Flags().Set("tipo", "")
+	})
+	outPurgeOrders := capturarStdout(t, func() {
+		if err := runtimePurgarOrdenesCmd.RunE(runtimePurgarOrdenesCmd, nil); err != nil {
+			t.Fatalf("runtime purgar-ordenes via api: %v", err)
+		}
+	})
+	for _, token := range []string{"Purgadas 3", "completada,fallida", "tipos=send_instruction", "[91 88 77]"} {
+		if !strings.Contains(outPurgeOrders, token) {
+			t.Fatalf("salida purgar-ordenes sin %q:\n%s", token, outPurgeOrders)
 		}
 	}
 

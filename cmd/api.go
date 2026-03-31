@@ -456,6 +456,14 @@ type apiRuntimeOrderCreateRequest struct {
 	Payload  string `json:"payload"`
 }
 
+type apiRuntimeOrdersPurgeRequest struct {
+	Agente   string   `json:"agente"`
+	Proyecto string   `json:"proyecto"`
+	Estados  []string `json:"estados"`
+	Tipos    []string `json:"tipos"`
+	Actor    string   `json:"actor"`
+}
+
 type apiRuntimeMailboxCreateRequest struct {
 	FromAgente     string `json:"from_agente"`
 	ToAgente       string `json:"to_agente"`
@@ -590,6 +598,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtimes/", apiRouterRuntimes)
 	mux.HandleFunc("/api/runtime-handles", apiHandlerRuntimeHandles)
 	mux.HandleFunc("/api/runtime-handles/purgar", apiHandlerRuntimeHandlesPurgar)
+	mux.HandleFunc("/api/runtime-orders/purgar", apiHandlerRuntimeOrdersPurgar)
 	mux.HandleFunc("/api/runtime-trace", apiHandlerRuntimeTrace)
 	mux.HandleFunc("/api/runtime-events", apiHandlerRuntimeEvents)
 	mux.HandleFunc("/api/runtime-transcript", apiHandlerRuntimeTranscript)
@@ -3185,6 +3194,35 @@ func apiHandlerRuntimeOrders(w http.ResponseWriter, r *http.Request) {
 	default:
 		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
+}
+
+func apiHandlerRuntimeOrdersPurgar(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiRuntimeOrdersPurgeRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	resultado, err := runtimesService.PurgeTerminalRuntimeOrders(runtimesapp.RuntimeOrderPurgeRequest{
+		Agente:   strings.TrimSpace(req.Agente),
+		Proyecto: strings.TrimSpace(req.Proyecto),
+		Estados:  req.Estados,
+		Tipos:    req.Tipos,
+		Actor:    strings.TrimSpace(req.Actor),
+	})
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiRuntimeOrdersPurgeResponse{
+		OK:         true,
+		Deleted:    resultado.Deleted,
+		DeletedIDs: resultado.DeletedIDs,
+		Estados:    resultado.Estados,
+		Tipos:      resultado.Tipos,
+	})
 }
 
 func apiHandlerRuntimeMailbox(w http.ResponseWriter, r *http.Request) {

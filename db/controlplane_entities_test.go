@@ -592,6 +592,117 @@ func TestPurgarRuntimeHandlesInactivosBloqueaOrdersVivas(t *testing.T) {
 	}
 }
 
+func TestPurgarRuntimeOrdersTerminalesBorraSoloTerminalesYDesenlazaMailbox(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: `{"texto":"cleanup terminal"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar runtime order: %v", err)
+	}
+	if err := MarcarRuntimeOrderEstado(orderID, "completada", `{"ok":true}`, ""); err != nil {
+		t.Fatalf("completar runtime order: %v", err)
+	}
+	msgID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:     "server",
+		ToAgente:       "Codex1",
+		ProyectoID:     &proyectoID,
+		RuntimeOrderID: &orderID,
+		Kind:           "instruction",
+		PayloadJSON:    `{"texto":"cleanup terminal"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	orderVivaID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "checkpoint",
+		PayloadJSON: `{"motivo":"seguir"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar runtime order viva: %v", err)
+	}
+
+	agente := "Codex1"
+	resultado, err := PurgarRuntimeOrdersTerminales(FiltroPurgadoRuntimeOrders{
+		Agente:  &agente,
+		Estados: []string{"completada"},
+		Tipos:   []string{"send_instruction"},
+	})
+	if err != nil {
+		t.Fatalf("purgar runtime orders: %v", err)
+	}
+	if resultado.Deleted != 1 || len(resultado.DeletedIDs) != 1 || resultado.DeletedIDs[0] != orderID {
+		t.Fatalf("resultado de purga inesperado: %+v", resultado)
+	}
+	orderBorrada, err := GetRuntimeOrder(orderID)
+	if err != nil && err != sql.ErrNoRows {
+		t.Fatalf("get runtime order borrada: %v", err)
+	}
+	if orderBorrada != nil {
+		t.Fatalf("la runtime order purgada sigue existiendo: %+v", orderBorrada)
+	}
+	orderViva, err := GetRuntimeOrder(orderVivaID)
+	if err != nil || orderViva == nil || orderViva.Estado != "pendiente" {
+		t.Fatalf("la runtime order viva no deberia tocarse: %+v err=%v", orderViva, err)
+	}
+	var mailboxOrderID sql.NullInt64
+	if err := DB.QueryRow(`SELECT runtime_order_id FROM runtime_mailbox WHERE id = ?`, msgID).Scan(&mailboxOrderID); err != nil {
+		t.Fatalf("leer runtime_order_id mailbox: %v", err)
+	}
+	if mailboxOrderID.Valid {
+		t.Fatalf("mailbox deberia quedar sin runtime_order_id: %+v", mailboxOrderID)
+	}
+}
+
+func TestPurgarRuntimeOrdersTerminalesBloqueaEstadosVivos(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: `{"texto":"viva"}`,
+	}); err != nil {
+		t.Fatalf("encolar runtime order viva: %v", err)
+	}
+	agente := "Codex1"
+	if _, err := PurgarRuntimeOrdersTerminales(FiltroPurgadoRuntimeOrders{Agente: &agente, Estados: []string{"pendiente"}}); err == nil || !strings.Contains(err.Error(), "no se permite purgar runtime orders") {
+		t.Fatalf("deberia bloquear purga con estado vivo, err=%v", err)
+	}
+}
+
 func TestControlarProcesoRuntimeSoportaHandleLegacySinKind(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

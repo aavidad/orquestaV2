@@ -1391,3 +1391,43 @@ Validacion:
   - se recompila `./orquesta`, se reinicia el daemon y `./orquesta server doctor` vuelve a `Health RPC: OK`
   - antes del reinicio ya existia la orden `#80240` para `mailbox_id=64431`; tras arrancar el daemon nuevo, `#80240` se completa a `mailbox_only`
   - despues del reinicio no aparecen ordenes nuevas `#8024x/#8025x` para ese mismo `mailbox_id=64431`; el mailbox durable sigue pendiente y la cascada de rematerializacion queda cortada
+
+## 2026-03-31 02:2x aprox. — Orquesta gana purga segura de runtime orders terminales para pruebas
+
+Hallazgo:
+
+- ya existia `runtime purgar-handles`, pero no habia una via oficial para limpiar `runtime_orders` de pruebas sin tocar la BD a mano
+- eso complicaba reproducir y limpiar escenarios, y empujaba a soluciones ad hoc que contradicen la doctrina server-first
+
+Decision:
+
+- se añade purga oficial solo para `runtime_orders` terminales
+- la purga exige filtro por `agente` o `proyecto`
+- solo admite estados terminales (`completada`, `fallida`, `expirada`, `cancelada`)
+- si se borran ordenes, cualquier `runtime_mailbox.runtime_order_id` asociado queda a `NULL`
+- no se ejecuta purga real sobre la BD viva durante esta sesión porque sería destructiva sin necesidad inmediata
+
+Cambios:
+
+- `db/controlplane_entities.go`
+  - `PurgarRuntimeOrdersTerminales(...)`
+  - validaciones y normalizacion de estados/tipos
+- `runtimesapp/service.go`
+  - servicio `PurgeTerminalRuntimeOrders(...)`
+- `cmd/api.go`
+  - endpoint `POST /api/runtime-orders/purgar`
+- `cmd/runtime.go`
+  - comando `runtime purgar-ordenes`
+- tests:
+  - `db/controlplane_entities_test.go`
+  - `runtimesapp/service_test.go`
+  - `cmd/api_runtimes_test.go`
+  - `cmd/runtime_test.go`
+  - `cmd/cliente_servidor_test.go`
+  - `cmd/status_test.go`
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'TestPurgarRuntimeOrdersTerminales(BorraSoloTerminalesYDesenlazaMailbox|BloqueaEstadosVivos)' -count=1` => OK
+- `env GOCACHE=/tmp/orquesta-gocache go test ./runtimesapp -run 'TestServiceDelegatesRuntimeQueries' -count=1` => OK
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'Test(APIRuntimeControlPlaneEndpoints|RuntimeControlPlaneUsaAPICuandoHayServidor|RuntimeMutacionesCriticasSoportanServerMode|ShouldBypassLocalDBConServidorDescubierto)' -count=1` => OK
