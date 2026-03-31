@@ -1079,6 +1079,7 @@ func cuentaPresupuestoDesdeAgente(agente *db.Agente) (string, apiCuentaPresupues
 		CuotaRestantePct:     agente.CuotaRestantePct,
 		PresupuestoVentana:   strings.TrimSpace(agente.PresupuestoVentana),
 		PresupuestoResetAt:   agente.PresupuestoResetAt,
+		PresupuestoStale:     agente.PresupuestoStale,
 		RemainingSeconds:     agente.RemainingSeconds,
 		RemainingMessages:    agente.RemainingMessages,
 		RemainingTokens:      agente.RemainingTokens,

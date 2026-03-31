@@ -63,6 +63,7 @@ type apiCuentaPresupuestoItem struct {
 	CuotaRestantePct     *int       `json:"cuota_restante_pct,omitempty"`
 	PresupuestoVentana   string     `json:"presupuesto_ventana,omitempty"`
 	PresupuestoResetAt   *time.Time `json:"presupuesto_reset_at,omitempty"`
+	PresupuestoStale     bool       `json:"presupuesto_stale,omitempty"`
 	RemainingSeconds     *int64     `json:"remaining_seconds,omitempty"`
 	RemainingMessages    *int64     `json:"remaining_messages,omitempty"`
 	RemainingTokens      *int64     `json:"remaining_tokens,omitempty"`

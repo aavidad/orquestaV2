@@ -238,7 +238,11 @@ func resumenCuotaAgente(a *db.Agente) string {
 		partes = append(partes, "reset "+a.PresupuestoResetAt.Local().Format("2006-01-02 15:04"))
 	}
 	if a.PresupuestoStale {
-		partes = append(partes, "telemetría observada stale")
+		if edad := edadPresupuestoObservado(a.PresupuestoCheckedAt); edad != "" {
+			partes = append(partes, "telemetría observada stale ("+edad+")")
+		} else {
+			partes = append(partes, "telemetría observada stale")
+		}
 	}
 	if extra := resumenDesgloseCuotaAgente(a); extra != "" {
 		partes = append(partes, extra)
@@ -298,6 +302,26 @@ func renderVentanaPresupuesto(nombre string, pct *int, resetAt *time.Time) strin
 		parte += " reset " + resetAt.Local().Format("2006-01-02 15:04")
 	}
 	return parte
+}
+
+func edadPresupuestoObservado(checkedAt *time.Time) string {
+	if checkedAt == nil || checkedAt.IsZero() {
+		return ""
+	}
+	d := time.Since(checkedAt.UTC())
+	if d < 0 {
+		d = 0
+	}
+	if d < time.Minute {
+		return "hace <1m"
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("hace %dm", int(d.Round(time.Minute)/time.Minute))
+	}
+	if d < 24*time.Hour {
+		return fmt.Sprintf("hace %dh%02dm", int(d/time.Hour), int((d%time.Hour)/time.Minute))
+	}
+	return fmt.Sprintf("hace %dd%02dh", int(d/(24*time.Hour)), int((d%(24*time.Hour))/time.Hour))
 }
 
 func serverInfoLines(info *serverInfo) []string {

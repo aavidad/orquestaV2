@@ -142,6 +142,17 @@ func resumenRankingCuenta(cuenta apiCuentaPresupuestoItem) string {
 		}
 		detalle += "ventana " + cuenta.PresupuestoVentana
 	}
+	if cuenta.PresupuestoStale {
+		if detalle != "" {
+			detalle += " · "
+		}
+		detalle += "stale"
+		if cuenta.PresupuestoCheckedAt != nil && !cuenta.PresupuestoCheckedAt.IsZero() {
+			if age := edadPresupuestoObservado(cuenta.PresupuestoCheckedAt); age != "" {
+				detalle += " (" + age + ")"
+			}
+		}
+	}
 	if len(cuenta.Agentes) > 0 {
 		if detalle != "" {
 			detalle += " · "
