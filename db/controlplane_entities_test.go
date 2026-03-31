@@ -5881,6 +5881,131 @@ func TestRuntimeOrderStartEmbebeLaunchPromptMultilineaCuandoConectorLoDeclara(t 
 	}
 }
 
+func TestGetRuntimeHandleBySesionIDCompactaMetadataLegacy(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:             "Codex1",
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador"),
+		Herramienta:        "codex-cli",
+		ExternalSessionID:  "sess-legacy",
+		ResumenContinuidad: "continuidad inicial",
+		Branch:             "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	legacyMeta := `{"bootstrap_prompt":"Bootstrap de Orquesta para Codex1.\nSegunda linea.","continuity_prompt":"Retoma la tarea 416 desde el checkpoint."}`
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE sesion_id=?`, legacyMeta, sesion.ID); err != nil {
+		t.Fatalf("inyectar metadata legacy: %v", err)
+	}
+
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	if strings.Contains(handle.MetadataJSON, `"bootstrap_prompt"`) || strings.Contains(handle.MetadataJSON, `"continuity_prompt"`) {
+		t.Fatalf("metadata legacy no compactada: %s", handle.MetadataJSON)
+	}
+	if !strings.Contains(handle.MetadataJSON, `"bootstrap_prompt_summary":"Bootstrap de Orquesta para Codex1."`) {
+		t.Fatalf("falta resumen bootstrap: %s", handle.MetadataJSON)
+	}
+	if !strings.Contains(handle.MetadataJSON, `"continuity_prompt_summary":"Retoma la tarea 416 desde el checkpoint."`) {
+		t.Fatalf("falta resumen continuity: %s", handle.MetadataJSON)
+	}
+	if !strings.Contains(handle.MetadataJSON, `"bootstrap_prompt_len":49`) {
+		t.Fatalf("falta longitud bootstrap: %s", handle.MetadataJSON)
+	}
+
+	var persisted string
+	if err := DB.QueryRow(`SELECT metadata_json FROM runtime_handles WHERE id = ?`, handle.ID).Scan(&persisted); err != nil {
+		t.Fatalf("leer metadata persistida: %v", err)
+	}
+	if strings.Contains(persisted, `"bootstrap_prompt"`) || strings.Contains(persisted, `"continuity_prompt"`) {
+		t.Fatalf("metadata persistida sigue legacy: %s", persisted)
+	}
+}
+
+func TestListarRuntimeHandlesCompactaMetadataLegacy(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:             "Codex1",
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador"),
+		Herramienta:        "codex-cli",
+		ExternalSessionID:  "sess-lista",
+		ResumenContinuidad: "continuidad",
+		Branch:             "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	legacyMeta := `{"bootstrap_prompt":"Bootstrap legacy para listado.","launch_prompt_embedded":true,"rendered_command":"'/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil' 'Codex1' '--model' 'gpt-5.4' 'Bootstrap de Orquesta para Codex1.\nLinea 2'","wrapped_command":"script -q -e -f -c '/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1 Bootstrap de Orquesta para Codex1.' '/tmp/pty.log'"}`
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE sesion_id=?`, legacyMeta, sesion.ID); err != nil {
+		t.Fatalf("inyectar metadata legacy: %v", err)
+	}
+
+	agente := "Codex1"
+	handles, err := ListarRuntimeHandles(&agente)
+	if err != nil {
+		t.Fatalf("listar handles: %v", err)
+	}
+	if len(handles) == 0 {
+		t.Fatalf("sin handles listados")
+	}
+	handle := handles[0]
+	if strings.Contains(handle.MetadataJSON, `"bootstrap_prompt"`) {
+		t.Fatalf("metadata listada sigue legacy: %s", handle.MetadataJSON)
+	}
+	if !strings.Contains(handle.MetadataJSON, `"bootstrap_prompt_summary":"Bootstrap legacy para listado."`) {
+		t.Fatalf("falta resumen bootstrap en listado: %s", handle.MetadataJSON)
+	}
+	if !strings.Contains(handle.MetadataJSON, `"launch_prompt_embedded":true`) {
+		t.Fatalf("se perdió launch_prompt_embedded: %s", handle.MetadataJSON)
+	}
+	if strings.Contains(handle.MetadataJSON, "Bootstrap de Orquesta para Codex1.") {
+		t.Fatalf("comando crudo no deberia persistirse en listado: %s", handle.MetadataJSON)
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if got := stringFromMap(meta, "rendered_command", ""); got != "'/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil' 'Codex1'" {
+		t.Fatalf("rendered_command no compactado: %q meta=%s", got, handle.MetadataJSON)
+	}
+	if got := stringFromMap(meta, "wrapped_command", ""); got != "'script' '-q' '-e' '-f' '<omitted>' '/tmp/pty.log'" {
+		t.Fatalf("wrapped_command no compactado: %q meta=%s", got, handle.MetadataJSON)
+	}
+	if got, ok := meta["rendered_command_len"].(float64); !ok || int(got) <= len([]rune(stringFromMap(meta, "rendered_command", ""))) {
+		t.Fatalf("falta rendered_command_len util: %+v meta=%s", meta["rendered_command_len"], handle.MetadataJSON)
+	}
+}
+
 func strPtrTest(v string) *string { return &v }
 
 func TestProcesarRuntimeOrdersBatchCompletaNudgeEnMailbox(t *testing.T) {

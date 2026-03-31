@@ -615,23 +615,27 @@ func runtimeSQLPlaceholders(n int) string {
 
 func GetRuntimeHandleBySesionID(sesionID int64) (*RuntimeHandle, error) {
 	return consultarConReintentos(func() (*RuntimeHandle, error) {
-		row := DB.QueryRow(runtimeHandleSelectBase()+` WHERE sesion_id = ? ORDER BY id DESC LIMIT 1`, sesionID)
-		h, err := scanRuntimeHandle(row)
+		h, err := getRuntimeHandleByQuery(runtimeHandleSelectBase()+` WHERE sesion_id = ? ORDER BY id DESC LIMIT 1`, sesionID)
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
-		return h, err
+		if err != nil {
+			return nil, err
+		}
+		return reconciliarMetadataRuntimeHandleLeida(h)
 	})
 }
 
 func GetRuntimeHandle(id int64) (*RuntimeHandle, error) {
 	return consultarConReintentos(func() (*RuntimeHandle, error) {
-		row := DB.QueryRow(runtimeHandleSelectBase()+` WHERE id = ?`, id)
-		h, err := scanRuntimeHandle(row)
+		h, err := getRuntimeHandleByQuery(runtimeHandleSelectBase()+` WHERE id = ?`, id)
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
-		return h, err
+		if err != nil {
+			return nil, err
+		}
+		return reconciliarMetadataRuntimeHandleLeida(h)
 	})
 }
 
@@ -874,7 +878,58 @@ func ListarRuntimeHandles(agente *string) ([]*RuntimeHandle, error) {
 		}
 		out = append(out, h)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	for i, h := range out {
+		out[i], err = compactarMetadataRuntimeHandleEnMemoria(h)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+func getRuntimeHandleByQuery(query string, args ...any) (*RuntimeHandle, error) {
+	row := DB.QueryRow(query, args...)
+	return scanRuntimeHandle(row)
+}
+
+func getRuntimeHandleRaw(id int64) (*RuntimeHandle, error) {
+	h, err := getRuntimeHandleByQuery(runtimeHandleSelectBase()+` WHERE id = ?`, id)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return h, err
+}
+
+func reconciliarMetadataRuntimeHandleLeida(handle *RuntimeHandle) (*RuntimeHandle, error) {
+	if handle == nil {
+		return nil, nil
+	}
+	return compactarMetadataHandleRuntimePersistida(handle)
+}
+
+func compactarMetadataRuntimeHandleEnMemoria(handle *RuntimeHandle) (*RuntimeHandle, error) {
+	if handle == nil {
+		return nil, nil
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if meta == nil {
+		return handle, nil
+	}
+	before, _ := json.Marshal(meta)
+	compactarMetadataRuntimeHandle(meta)
+	after, _ := json.Marshal(meta)
+	if string(before) == string(after) {
+		return handle, nil
+	}
+	clone := *handle
+	clone.MetadataJSON = string(after)
+	return &clone, nil
 }
 
 func EncolarRuntimeOrder(order *RuntimeOrder) (int64, error) {
@@ -4338,6 +4393,9 @@ func compactarMetadataRuntimeHandle(meta map[string]any) {
 	for _, key := range []string{"bootstrap_prompt", "continuity_prompt"} {
 		asignarResumenPromptHandle(meta, key, stringFromMap(meta, key, ""))
 	}
+	for _, key := range []string{"rendered_command", "wrapped_command"} {
+		compactarComandoMetadataHandle(meta, key)
+	}
 }
 
 func asignarResumenPromptHandle(meta map[string]any, key, raw string) {
@@ -4370,6 +4428,122 @@ func resumirPromptHandle(raw string) string {
 		first = strings.TrimSpace(string(runes[:160])) + "..."
 	}
 	return first
+}
+
+func compactarComandoMetadataHandle(meta map[string]any, key string) {
+	if meta == nil {
+		return
+	}
+	raw := strings.TrimSpace(stringFromMap(meta, key, ""))
+	if raw == "" {
+		delete(meta, key+"_len")
+		return
+	}
+	delete(meta, key+"_len")
+	compactado := resumirComandoRuntimeHandle(raw)
+	if compactado == raw {
+		return
+	}
+	meta[key] = compactado
+	meta[key+"_len"] = len([]rune(raw))
+}
+
+func resumirComandoRuntimeHandle(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	tokens, err := splitShellQuotedCommandRuntimeHandle(raw)
+	if err != nil || len(tokens) == 0 {
+		return raw
+	}
+	base := filepath.Base(strings.TrimSpace(tokens[0]))
+	switch base {
+	case "codex-perfil":
+		if len(tokens) >= 2 {
+			return joinShellQuotedTokens(tokens[:2])
+		}
+		return joinShellQuotedTokens(tokens[:1])
+	case "codex":
+		return joinShellQuotedTokens(tokens[:1])
+	case "script":
+		keep := minInt(len(tokens), 4)
+		out := append([]string{}, tokens[:keep]...)
+		if len(tokens) > keep {
+			last := strings.TrimSpace(tokens[len(tokens)-1])
+			if last != "" && last != tokens[keep-1] {
+				out = append(out, "<omitted>", last)
+			}
+		}
+		return joinShellQuotedTokens(out)
+	default:
+		if len(raw) <= 240 {
+			return raw
+		}
+		return strings.TrimSpace(string([]rune(raw)[:240])) + "..."
+	}
+}
+
+func joinShellQuotedTokens(tokens []string) string {
+	if len(tokens) == 0 {
+		return ""
+	}
+	out := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		out = append(out, shellQuoteRuntimeHandle(token))
+	}
+	return strings.Join(out, " ")
+}
+
+func shellQuoteRuntimeHandle(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(raw, "'", `'\''`) + "'"
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func splitShellQuotedCommandRuntimeHandle(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	var out []string
+	var token strings.Builder
+	inSingle := false
+	for i := 0; i < len(raw); i++ {
+		ch := raw[i]
+		switch {
+		case inSingle && ch == '\'':
+			inSingle = false
+		case !inSingle && ch == '\'':
+			inSingle = true
+		case !inSingle && (ch == ' ' || ch == '\t' || ch == '\n'):
+			if token.Len() > 0 {
+				out = append(out, token.String())
+				token.Reset()
+			}
+		case ch == '\\' && i+1 < len(raw):
+			i++
+			token.WriteByte(raw[i])
+		default:
+			token.WriteByte(ch)
+		}
+	}
+	if inSingle {
+		return nil, fmt.Errorf("runtime_handle command con comillas sin cerrar")
+	}
+	if token.Len() > 0 {
+		out = append(out, token.String())
+	}
+	return out, nil
 }
 
 func runtimeMailboxIDs(mailbox []*RuntimeMailboxMessage) []int64 {
@@ -5828,7 +6002,7 @@ func compactarMetadataHandleRuntimePersistida(handle *RuntimeHandle) (*RuntimeHa
 	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, string(after), handle.ID); err != nil {
 		return nil, err
 	}
-	return GetRuntimeHandle(handle.ID)
+	return getRuntimeHandleRaw(handle.ID)
 }
 
 func SincronizarRuntimeHandleWorkingDir(handle *RuntimeHandle, runtime *RuntimeInstance, agente string, proyectoID *int64) (*RuntimeHandle, string, error) {

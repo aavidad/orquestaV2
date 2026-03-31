@@ -561,3 +561,9 @@ Eso implica:
 - no degradarlo con excepciones oportunistas
 
 Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean los demas documentos.
+
+## Runtime handles vivos
+
+- `GetRuntimeHandle` y `GetRuntimeHandleBySesionID` pueden reconciliar y persistir compactacion de metadata legacy si el handle concreto aun conserva prompts o comandos crudos.
+- `ListarRuntimeHandles` y la API `/api/runtime-handles` no deben escribir sobre la BD para compactar toda la historia; en listado solo se compacta en memoria para mantener la vista operativa rapida.
+- `runtime_handles.metadata_json` no debe conservar prompts crudos ni comandos gigantes con el bootstrap completo embebido. Para observabilidad basta con resúmenes y comandos compactados que preserven detección/reanudación (`codex-perfil`, agente, wrapper, log).

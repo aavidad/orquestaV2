@@ -2251,3 +2251,31 @@ Codigo:
 Validacion:
 
 - `go test ./internal/controlruntime -run 'TestNormalizarInstruccionProceso(CompactaParaCodexLocal|CompactaBootstrapSupervisorCodexLocal|HaceASCIIYCorta)' -count=1`
+
+## 2026-03-31 — compactacion legacy de runtime handles sin bloquear la API
+
+Hallazgo:
+
+- el cambio previo ya compactaba `bootstrap_prompt` y `continuity_prompt`, pero los handles vivos antiguos seguian devolviendo metadata enorme por `rendered_command` y `wrapped_command`
+- al intentar persistir esa compactacion durante `ListarRuntimeHandles`, la ruta `/api/runtime-handles` pasaba a mezclar listado con escritura y se volvia lenta o bloqueante
+- la necesidad real era doble: sanear getters puntuales y mantener la vista operativa rapida
+
+Decision:
+
+- `GetRuntimeHandle` y `GetRuntimeHandleBySesionID` siguen reconciliando y persistiendo compactacion legacy del handle concreto
+- `ListarRuntimeHandles` deja de persistir durante el listado; compacta solo en memoria para responder rapido
+- `runtime_handles.metadata_json` ya no debe conservar comandos gigantes con el bootstrap entero embebido; se compactan a una forma observacional corta que preserva deteccion y `session_resume`
+
+Codigo:
+
+- [db/controlplane_entities.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities.go)
+- [db/controlplane_entities_test.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(GetRuntimeHandleBySesionIDCompactaMetadataLegacy|ListarRuntimeHandlesCompactaMetadataLegacy)' -count=1`
+- `go build -o ./orquesta .`
+- daemon reiniciado y sano: `./orquesta server doctor` => `Health RPC: OK`
+- `time curl -s -m 5 'http://127.0.0.1:16543/api/runtime-handles?agente=Codex1'` => `200` en menos de `1s`
+- validacion viva del handle `390` de `Codex1`: `rendered_command` ya sale como `'/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil' 'Codex1'`, `wrapped_command` compacto y `contains_bootstrap=False`
