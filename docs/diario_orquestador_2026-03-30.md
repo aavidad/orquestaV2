@@ -1360,3 +1360,34 @@ Validacion:
 - validacion viva:
   - `./orquesta runtime orden-nueva Codex2 sync_status --proyecto orquestador --payload '{}'` => encolada `#80221`
   - `curl -sS 'http://127.0.0.1:16543/api/runtime-handles?agente=Codex2'` ya devuelve para el handle activo `#363` metadata rica persistida con `log_path`, `mailbox_delivery_mode`, `rendered_command` y `can_send_input=false`
+
+## 2026-03-31 02:1x aprox. — el daemon deja de rematerializar `send_instruction` nuevas para el mismo mailbox durable
+
+Hallazgo:
+
+- ya habiamos cerrado el bucle dentro de una misma `send_instruction`, pero el control plane seguia fabricando ordenes nuevas para el mismo `mailbox_id`
+- el caso vivo estaba en `Codex2` con `mailbox_id=64431`: la orden derivada se completaba como `mailbox_only`, pero en el siguiente ciclo volvia a nacer otra `send_instruction` sobre el mismo `handle_id=363`
+
+Decision:
+
+- para `runtime_mailbox`, un intento de entrega queda identificado por `mailbox_id + handle_id + external_session_id efectiva`
+- si ya existe una `send_instruction` abierta para ese mismo intento, o una completada con `mailbox_only=true`, el batch no puede volver a materializar otra orden nueva
+- solo se permite un nuevo intento cuando cambia el handle, la sesion efectiva o el contrato de entrega
+
+Cambios:
+
+- `cmd/controlplane_support.go`
+  - nueva deduplicacion `existeIntentoSendInstructionMailboxParaHandle(...)`
+  - `procesarRuntimeMailboxInteractivoBatch()` y `procesarRuntimeMailboxSessionResumeBatch()` dejan de crear nuevas `send_instruction` si ya hubo intento diferido para el mismo mailbox sobre el mismo handle/sesion
+- `cmd/controlplane_support_test.go`
+  - nuevas regresiones:
+    - `TestProcesarRuntimeMailboxSessionResumeBatchNoRematerializaMailboxOnlyEnMismaSesion`
+    - `TestProcesarRuntimeMailboxInteractivoBatchNoRematerializaMailboxOnlyEnMismoHandle`
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'TestProcesarRuntimeMailbox(SessionResumeBatchNoRematerializaMailboxOnlyEnMismaSesion|InteractivoBatchNoRematerializaMailboxOnlyEnMismoHandle|SessionResumeBatchRespetaLeaseBootstrapPendiente|InteractivoBatchCoalesceAutonomiaPendiente)' -count=1` => OK
+- validacion viva:
+  - se recompila `./orquesta`, se reinicia el daemon y `./orquesta server doctor` vuelve a `Health RPC: OK`
+  - antes del reinicio ya existia la orden `#80240` para `mailbox_id=64431`; tras arrancar el daemon nuevo, `#80240` se completa a `mailbox_only`
+  - despues del reinicio no aparecen ordenes nuevas `#8024x/#8025x` para ese mismo `mailbox_id=64431`; el mailbox durable sigue pendiente y la cascada de rematerializacion queda cortada

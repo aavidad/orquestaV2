@@ -828,6 +828,11 @@ func procesarRuntimeMailboxInteractivoBatch() (int, error) {
 		} else if abierta {
 			continue
 		}
+		if dedupe, err := existeIntentoSendInstructionMailboxParaHandle(msg, handle, ""); err != nil {
+			return total, err
+		} else if dedupe {
+			continue
+		}
 		orderID, err := encolarSendInstructionDesdeRuntimeMailbox(msg, handle, texto, "")
 		if err != nil {
 			return total, err
@@ -991,6 +996,11 @@ func procesarRuntimeMailboxSessionResumeBatch() (int, error) {
 		} else if abierta {
 			continue
 		}
+		if dedupe, err := existeIntentoSendInstructionMailboxParaHandle(msg, handle, externalSessionID); err != nil {
+			return total, err
+		} else if dedupe {
+			continue
+		}
 		orderID, err := encolarSendInstructionDesdeRuntimeMailbox(msg, handle, texto, externalSessionID)
 		if err != nil {
 			return total, err
@@ -1041,6 +1051,86 @@ func encolarSendInstructionDesdeRuntimeMailbox(msg *db.RuntimeMailboxMessage, ha
 	}
 	order.HandleID = &handle.ID
 	return db.EncolarRuntimeOrder(order)
+}
+
+func existeIntentoSendInstructionMailboxParaHandle(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, externalSessionID string) (bool, error) {
+	if msg == nil || handle == nil || msg.ID <= 0 {
+		return false, nil
+	}
+	agente := strings.TrimSpace(msg.ToAgente)
+	if agente == "" {
+		return false, nil
+	}
+	orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: msg.ProyectoID})
+	if err != nil {
+		return false, err
+	}
+	currentSessionID := strings.TrimSpace(externalSessionID)
+	for _, order := range orders {
+		if order == nil || strings.TrimSpace(order.Tipo) != "send_instruction" {
+			continue
+		}
+		if runtimeOrderMailboxIDFromJSON(order.PayloadJSON) != msg.ID {
+			continue
+		}
+		if order.HandleID != nil && *order.HandleID != handle.ID {
+			continue
+		}
+		switch strings.TrimSpace(order.Estado) {
+		case "pendiente", "tomada", "ejecutando":
+			return true, nil
+		case "completada":
+			if !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) {
+				continue
+			}
+			orderSessionID := strings.TrimSpace(runtimeOrderExternalSessionIDFromJSON(order.PayloadJSON))
+			if currentSessionID != "" && orderSessionID != "" && currentSessionID != orderSessionID {
+				continue
+			}
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func runtimeOrderMailboxIDFromJSON(raw string) int64 {
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &payload); err != nil {
+		return 0
+	}
+	value, _ := payload["mailbox_id"]
+	switch v := value.(type) {
+	case float64:
+		return int64(v)
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	default:
+		return 0
+	}
+}
+
+func runtimeOrderExternalSessionIDFromJSON(raw string) string {
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &payload); err != nil {
+		return ""
+	}
+	value, _ := payload["external_session_id"]
+	if text, ok := value.(string); ok {
+		return strings.TrimSpace(text)
+	}
+	return ""
+}
+
+func runtimeOrderMailboxOnlyResult(raw string) bool {
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &payload); err != nil {
+		return false
+	}
+	value, _ := payload["mailbox_only"]
+	flag, ok := value.(bool)
+	return ok && flag
 }
 
 func encolarReinicioCoordinadoMailbox(handle *db.RuntimeHandle, proyecto *db.Proyecto, msg *db.RuntimeMailboxMessage, motivo string) (int64, int64, error) {
