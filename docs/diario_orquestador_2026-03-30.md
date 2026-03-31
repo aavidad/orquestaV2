@@ -2584,3 +2584,27 @@ Validacion:
 - verificacion viva del caso que motivó el cambio:
   - `curl -sf http://127.0.0.1:16543/api/runtime-orders?agente=Codex2`
   - el problema real quedo aislado como falso stale de sesion con runtime vivo
+
+## 2026-03-31 — el runner no debe handoffear a un agente cuyo proceso sigue vivo
+
+Hallazgo:
+
+- la suite completa detectó una contradiccion entre doctrina y e2e: `planocontrol.TestRunnerWatchdogYHandoffConProcesoVivo` seguia esperando `sync_status + watchdog + handoff` aunque el proceso local permaneciera vivo
+- ese test era compatible con el comportamiento viejo, pero ya no con la regla correcta fijada en el ciclo anterior: un runtime activo y reciente invalida el stale de sesion
+
+Decision:
+
+- el escenario e2e correcto pasa a ser el inverso: con proceso vivo y runtime activo reciente, el runner no debe encolar watchdog ni handoff
+- la tarea debe permanecer `en_progreso` con el agente original y el handle debe seguir `activo`
+- el relevo automatico sigue cubierto por los tests de presupuesto y por los escenarios donde el runtime ya no tiene actividad real
+
+Codigo:
+
+- [planocontrol/runner_e2e_test.go](/home/alberto/Trabajo/orquesta/planocontrol/runner_e2e_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./planocontrol -run 'TestRunner(NoEscalaWatchdogNiHandoffConProcesoVivo|HandoffPreventivoPorPresupuesto)' -count=1`
+- `go test ./... -count=1`
+- suite completa en verde

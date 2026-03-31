@@ -229,6 +229,7 @@ Regla operativa para `server_autobootstrap`:
 - los `upsert` de politica/autonomia no pueden borrar timestamps operativos como `last_supervision_at` o `last_review_at`; reiniciar el daemon no debe reabrir un ciclo de supervision “por olvido” del estado persistido
 - un agente en `estado_cuota=enfriamiento` con handle `pausado` no es candidato watchdog ni debe recibir `sync_status/watchdog`; el cooldown es ya una decision explicita del plano de control
 - el watchdog de handoff no puede decidir agotamiento solo por `sesiones.heartbeat_at`; si el runtime activo sigue emitiendo `last_event_at` o `last_heartbeat_at` recientes, esa actividad invalida el stale de la sesion y no debe encolarse `sync_status/watchdog`
+- por la misma razon, un proceso vivo con runtime activo reciente tampoco puede escalar directamente a `handoff`; antes de relevar a un agente, el plano de control debe distinguir entre “sesion sin latido” y “runtime realmente parado o degradado”
 
 Contrato minimo obligatorio para `runtime_orders`:
 

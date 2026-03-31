@@ -93,7 +93,7 @@ func prepararDBTemporalRunner(t *testing.T) string {
 	return tmp
 }
 
-func TestRunnerWatchdogYHandoffConProcesoVivo(t *testing.T) {
+func TestRunnerNoEscalaWatchdogNiHandoffConProcesoVivo(t *testing.T) {
 	tmp := prepararDBTemporalRunner(t)
 
 	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
@@ -276,50 +276,44 @@ func TestRunnerWatchdogYHandoffConProcesoVivo(t *testing.T) {
 			}
 		}
 
-		if syncOrder != nil && syncOrder.Estado == "completada" &&
-			nudgeOrder != nil && nudgeOrder.Estado == "completada" &&
-			handoffOrder != nil &&
-			tareaFinal != nil && tareaFinal.Agente != nil && *tareaFinal.Agente == "Codex2" &&
-			sawWatchdog && sawHandoffBatch {
+		if syncOrder == nil &&
+			nudgeOrder == nil &&
+			handoffOrder == nil &&
+			tareaFinal != nil && tareaFinal.Agente != nil && *tareaFinal.Agente == "Codex1" &&
+			!sawWatchdog && !sawHandoffBatch {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	if syncOrder == nil || syncOrder.Estado != "completada" {
-		t.Fatalf("sync_status watchdog no completada: %+v", syncOrder)
+	if syncOrder != nil {
+		t.Fatalf("no deberia encolar sync_status watchdog con proceso vivo: %+v", syncOrder)
 	}
-	if nudgeOrder == nil || nudgeOrder.Estado != "completada" {
-		t.Fatalf("nudge watchdog no completada: %+v", nudgeOrder)
+	if nudgeOrder != nil {
+		t.Fatalf("no deberia encolar nudge watchdog con proceso vivo: %+v", nudgeOrder)
 	}
-	if handoffOrder == nil || handoffOrder.Tipo != "handoff" {
-		t.Fatalf("handoff watchdog no creada: %+v", handoffOrder)
+	if handoffOrder != nil {
+		t.Fatalf("no deberia crear handoff watchdog con proceso vivo: %+v", handoffOrder)
 	}
-	if handoffOrder.Estado == "fallida" {
-		t.Fatalf("handoff watchdog fallida: %+v", handoffOrder)
+	if tareaFinal == nil || tareaFinal.Agente == nil || *tareaFinal.Agente != "Codex1" || tareaFinal.Estado != db.TareaEnProgreso {
+		t.Fatalf("la tarea debe permanecer con el agente original mientras el proceso siga vivo: %+v", tareaFinal)
 	}
-	if tareaFinal == nil || tareaFinal.Agente == nil || *tareaFinal.Agente != "Codex2" || tareaFinal.Estado != db.TareaAsignada {
-		t.Fatalf("tarea no reasignada por watchdog: %+v", tareaFinal)
-	}
-	if len(watchdogInbox) != 1 || watchdogInbox[0].Kind != "watchdog" {
-		t.Fatalf("mailbox watchdog inesperado: %+v", watchdogInbox)
-	}
-	if !strings.Contains(strings.ToLower(watchdogInbox[0].PayloadJSON), "heartbeat obsoleto") {
-		t.Fatalf("payload watchdog inesperado: %s", watchdogInbox[0].PayloadJSON)
+	if len(watchdogInbox) != 0 {
+		t.Fatalf("no deberia dejar mailbox watchdog pendiente: %+v", watchdogInbox)
 	}
 
 	handle, err = db.GetRuntimeHandleBySesionID(sesion.ID)
 	if err != nil {
 		t.Fatalf("get handle origen final: %v", err)
 	}
-	if handle == nil || handle.Estado != "pausado" {
-		t.Fatalf("handle origen no pausado tras handoff watchdog: %+v", handle)
+	if handle == nil || handle.Estado != "activo" {
+		t.Fatalf("el handle origen debe seguir activo mientras el proceso siga vivo: %+v", handle)
 	}
 	if err := proc.Process.Signal(syscall.Signal(0)); err != nil {
-		t.Fatalf("el proceso vivo debería seguir accesible durante el handoff: %v", err)
+		t.Fatalf("el proceso vivo deberia seguir accesible: %v", err)
 	}
-	if !sawWatchdog || !sawHandoffBatch {
-		t.Fatalf("auditoria watchdog/handoff incompleta: watchdog=%v handoff=%v", sawWatchdog, sawHandoffBatch)
+	if sawWatchdog || sawHandoffBatch {
+		t.Fatalf("no deberia auditar watchdog/handoff con proceso vivo: watchdog=%v handoff=%v", sawWatchdog, sawHandoffBatch)
 	}
 }
 
