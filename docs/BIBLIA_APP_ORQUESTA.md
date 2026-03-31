@@ -684,6 +684,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 ## Liberación de tareas por cuota
 
 - la redistribución automática no puede depender solo del campo persistido `agentes.estado_cuota`. Si un agente tiene presupuesto fresco observado en estado crítico, el planificador debe tratarlo como no disponible aunque la reconciliación persistente llegue unos segundos después.
+- por la misma razón, `ListarAgentesPlanificables()` no puede filtrar solo por SQL sobre `estado_cuota='activo'`; debe validar el estado visible enriquecido del agente antes de devolverlo como candidato.
 - la liberación automática por cuota solo aplica a tareas `asignada`. Las tareas `en_progreso` no se sueltan por heurística de presupuesto; requieren relevo o checkpoint explícito.
 - los barridos del planificador no pueden abrir consultas adicionales mientras mantienen cursores vivos sobre SQLite con `MaxOpenConns=1`; primero se recopilan candidatos y después se enriquecen o validan.
 

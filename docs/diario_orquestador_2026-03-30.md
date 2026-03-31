@@ -3954,3 +3954,35 @@ Nota:
 
 - durante el primer intento aparecio un deadlock de SQLite en test: `reconciliarTareasAsignadasPorCuota()` llamaba a `GetAgente()` con el cursor de tareas aun abierto
 - el arreglo canonico es recopilar primero los candidatos y enriquecer despues, nunca consultar de nuevo con el `rows` vivo en SQLite `MaxOpenConns=1`
+
+## 2026-03-31 — El planificador deja fuera a agentes con cuota crítica observada
+
+Hallazgo:
+
+- tras liberar las tareas de `Codex5`, el siguiente riesgo era que `ListarAgentesPlanificables()` lo volviera a considerar candidato porque filtraba solo por `agentes.estado_cuota='activo'`
+- eso dejaba una via de reentrada: presupuesto observado critico visible, pero fila persistida aun activa
+
+Decision:
+
+- la selección planificable ya no confía solo en SQL sobre `estado_cuota`
+- primero recoge candidatos base y luego valida el `GetAgente()` enriquecido; si la cuota visible no es `activo`, el agente no vuelve al pool
+
+Codigo:
+
+- [db/planificador.go](/home/alberto/Trabajo/orquesta/db/planificador.go)
+- [db/planificador_autostart_test.go](/home/alberto/Trabajo/orquesta/db/planificador_autostart_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./db -run 'Test(ListarAgentesPlanificablesExcluyeAgenteConPresupuestoObservadoCritico|PlanificarTareasAutomaticamenteLiberaTareaPorPresupuestoObservadoFresco)$' -count=1 -timeout 20s`
+- `go build -o ./orquesta .`
+
+Validacion viva:
+
+- `./orquesta runtime ordenes --agente Codex5 --limit 5` no muestra ningún `start` nuevo tras la pausa
+- `./orquesta tarea listar --estado libre` mantiene `414/415/417/425` en el pool
+- `./orquesta agente presupuesto --json` sigue mostrando para `Codex5`:
+  - `EstadoCuota=agotado`
+  - `PresupuestoStale=false`
+  - `PresupuestoVentana=5h`

@@ -475,6 +475,58 @@ func TestPlanificarTareasAutomaticamenteLiberaTareaPorPresupuestoObservadoFresco
 	}
 }
 
+func TestListarAgentesPlanificablesExcluyeAgenteConPresupuestoObservadoCritico(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("CodexAgotado", "programador"); err != nil {
+		t.Fatalf("registrar agente agotado: %v", err)
+	}
+	if err := RegistrarAgente("CodexNuevo", "programador"); err != nil {
+		t.Fatalf("registrar agente nuevo: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre IN ('CodexAgotado','CodexNuevo')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+	if err := ConfigSet("pool_budget_snapshot_observed_max_age_seconds", "3600"); err != nil {
+		t.Fatalf("config observed snapshot max age: %v", err)
+	}
+	sesionID, err := IniciarSesion("CodexAgotado")
+	if err != nil {
+		t.Fatalf("iniciar sesion agotado: %v", err)
+	}
+	credits := 0.0
+	reset := time.Now().UTC().Add(90 * time.Minute)
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:         sesionID,
+		WindowKind:       "5h",
+		ResetAt:          &reset,
+		RemainingCredits: &credits,
+		BudgetSource:     "codex_token_count_observed",
+		CheckedAt:        time.Now().UTC().Add(-10 * time.Minute),
+	}); err != nil {
+		t.Fatalf("registrar presupuesto agotado: %v", err)
+	}
+
+	agentes, err := ListarAgentesPlanificables()
+	if err != nil {
+		t.Fatalf("ListarAgentesPlanificables: %v", err)
+	}
+	for _, agente := range agentes {
+		if agente != nil && agente.Nombre == "CodexAgotado" {
+			t.Fatalf("CodexAgotado no deberia ser planificable con presupuesto observado critico: %+v", agentes)
+		}
+	}
+	var foundNuevo bool
+	for _, agente := range agentes {
+		if agente != nil && agente.Nombre == "CodexNuevo" {
+			foundNuevo = true
+		}
+	}
+	if !foundNuevo {
+		t.Fatalf("CodexNuevo deberia seguir siendo planificable: %+v", agentes)
+	}
+}
+
 func TestPlanificarTareasAutomaticamenteNoRecuperaTareaConSesionPausada(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	restringirPlanificadorATestAgentes(t, "CodexStale", "CodexNuevo")

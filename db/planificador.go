@@ -802,7 +802,6 @@ func ListarAgentesPlanificables() ([]*Agente, error) {
 		FROM agentes 
 		WHERE habilitado = 1
 		  AND rol = 'programador'
-		  AND COALESCE(estado_cuota, 'activo') = 'activo'
 		  AND COALESCE(estado_sesion, '') IN ('', 'disponible', 'esperando')`)
 	if err != nil {
 		return nil, err
@@ -823,6 +822,16 @@ func ListarAgentesPlanificables() ([]*Agente, error) {
 	var list []*Agente
 	for _, a := range candidatos {
 		if a == nil {
+			continue
+		}
+		infoAgente, err := GetAgente(a.Nombre)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				continue
+			}
+			return nil, err
+		}
+		if infoAgente == nil || !strings.EqualFold(strings.TrimSpace(infoAgente.EstadoCuota), "activo") {
 			continue
 		}
 		if sesionActiva, err := GetSesionActiva(a.Nombre, nil); err != nil && err != sql.ErrNoRows {
