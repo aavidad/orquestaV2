@@ -123,6 +123,61 @@ func TestObserveCodexArtifactsUsaSnapshotMasFrescoDelPerfil(t *testing.T) {
 	}
 }
 
+func TestObserveCodexArtifactsUsaSnapshotMasFrescoDeLaCuenta(t *testing.T) {
+	tmp := t.TempDir()
+	base := filepath.Join(tmp, "codex-perfiles")
+	if err := os.MkdirAll(filepath.Join(base, "bin"), 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	for _, profile := range []string{"Codex1", "Codex5"} {
+		if err := os.MkdirAll(filepath.Join(base, "homes", profile, "sessions", "2026", "03", "31"), 0o755); err != nil {
+			t.Fatalf("mkdir sessions %s: %v", profile, err)
+		}
+		authPath := filepath.Join(base, "homes", profile, "auth.json")
+		if err := os.WriteFile(authPath, []byte(`{"profile":{"email":"shared@example.com","name":"Cuenta Compartida"}}`), 0o600); err != nil {
+			t.Fatalf("write auth %s: %v", profile, err)
+		}
+	}
+	oldFile := filepath.Join(base, "homes", "Codex1", "sessions", "2026", "03", "31", "old.jsonl")
+	if err := os.WriteFile(oldFile, []byte(
+		`{"timestamp":"2026-03-31T10:00:00Z","type":"session_meta","payload":{"id":"sess-123","timestamp":"2026-03-31T10:00:00Z","cwd":"/tmp/orquesta"}}`+"\n"+
+			`{"timestamp":"2026-03-31T10:05:00Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":12,"window_minutes":300,"resets_at":1774958400},"secondary":{"used_percent":43,"window_minutes":10080,"resets_at":1775300000}}}}`+"\n",
+	), 0o600); err != nil {
+		t.Fatalf("write old session: %v", err)
+	}
+	newFile := filepath.Join(base, "homes", "Codex5", "sessions", "2026", "03", "31", "new.jsonl")
+	if err := os.WriteFile(newFile, []byte(
+		`{"timestamp":"2026-03-31T11:00:00Z","type":"session_meta","payload":{"id":"sess-555","timestamp":"2026-03-31T11:00:00Z","cwd":"/tmp/otro"}}`+"\n"+
+			`{"timestamp":"2026-03-31T11:25:00Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":28,"window_minutes":300,"resets_at":1774962000},"secondary":{"used_percent":41,"window_minutes":10080,"resets_at":1775303600}}}}`+"\n",
+	), 0o600); err != nil {
+		t.Fatalf("write new session: %v", err)
+	}
+	rendered := filepath.Join(base, "bin", "codex-perfil") + " Codex1"
+	meta := map[string]any{
+		"rendered_command":    rendered,
+		"working_dir":         "/tmp/orquesta",
+		"external_session_id": "sess-123",
+		"started_at":          time.Date(2026, 3, 31, 10, 0, 0, 0, time.UTC).Format(time.RFC3339),
+	}
+	metaJSON, _ := json.Marshal(meta)
+	artifacts, err := ObserveCodexArtifacts(ObjetivoProceso{MetadataJSON: string(metaJSON)})
+	if err != nil {
+		t.Fatalf("ObserveCodexArtifacts: %v", err)
+	}
+	if artifacts == nil {
+		t.Fatalf("artifacts nil")
+	}
+	if artifacts.ObservedScope != "account" {
+		t.Fatalf("scope inesperado: %+v", artifacts)
+	}
+	if artifacts.SessionPath != newFile {
+		t.Fatalf("deberia elegir el snapshot mas fresco de la cuenta: %s", artifacts.SessionPath)
+	}
+	if artifacts.Primary.UsedPercent == nil || *artifacts.Primary.UsedPercent != 28 {
+		t.Fatalf("primary inesperado: %+v", artifacts.Primary)
+	}
+}
+
 func jsonInt(v int64) string {
 	return strconv.FormatInt(v, 10)
 }

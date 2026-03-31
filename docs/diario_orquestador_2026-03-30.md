@@ -3414,3 +3414,35 @@ Resultado vivo:
 
 - la vista ya muestra edades observadas mas razonables donde el perfil tenia un snapshot mas fresco
 - el ranking sigue siendo coherente y seguro, sin volver a hacer pasar por vivo lo que no lo es
+
+## 2026-03-31 — Fallback al snapshot mas fresco de la cuenta OAuth compartida
+
+Hallazgo:
+
+- varios perfiles (`Codex1`, `Codex5`) comparten la misma cuenta OAuth
+- limitarse al perfil deja `stale` evitable cuando otro perfil de la misma cuenta ya emitio un `token_count` mas reciente
+
+Decision:
+
+- el observador de Codex ya no cae solo a `session` y `profile`
+- si el mismo correo aparece en otro home de `codex-perfiles`, Orquesta puede usar el `token_count` mas fresco de esa misma cuenta y marcarlo internamente como `account`
+- sigue siendo la misma fuente canonica observada (`auth.json` + `sessions/*.jsonl`), no una heuristica inventada
+
+Codigo:
+
+- [internal/controlruntime/codex_observe.go](/home/alberto/Trabajo/orquesta/internal/controlruntime/codex_observe.go)
+- [internal/controlruntime/codex_observe_test.go](/home/alberto/Trabajo/orquesta/internal/controlruntime/codex_observe_test.go)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./internal/controlruntime -run 'Test(ObserveCodexArtifactsLeeTokenCountYAuth|ObserveCodexArtifactsUsaSnapshotMasFrescoDelPerfil|ObserveCodexArtifactsUsaSnapshotMasFrescoDeLaCuenta)' -count=1`
+- `env GOCACHE=/tmp/orquesta-gocache go build -o ./orquesta .`
+- smoke viva:
+  - `./orquesta server stop`
+  - `./orquesta server start`
+  - `./orquesta status`
+
+Resultado vivo:
+
+- `Codex1/Codex5` ya se pueden beneficiar del snapshot mas fresco de la misma cuenta observada
+- la cuota efectiva sigue siendo segura; el cambio solo reduce ceguera operativa dentro de la misma identidad OAuth
