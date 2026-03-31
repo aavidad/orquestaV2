@@ -22,6 +22,8 @@ func defaultConfigEntries() []configDefaultEntry {
 		{Clave: "runtime_send_instruction_lease_seconds", Valor: "35"},
 		{Clave: "runtime_transcript_ingest_max_bytes", Valor: "65536"},
 		{Clave: "runtime_transcript_auto_guidance_enabled", Valor: "true"},
+		{Clave: "runtime_handles_retention_hours", Valor: "24"},
+		{Clave: "runtime_orders_retention_hours", Valor: "72"},
 		{Clave: "session_operational_stale_seconds", Valor: "180"},
 		{Clave: "openclaw_gateway_url", Valor: ""},
 		{Clave: "openclaw_gateway_token", Valor: ""},

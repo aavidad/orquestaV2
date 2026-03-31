@@ -837,6 +837,94 @@ func TestPurgarRuntimeOrdersTerminalesRespetaCreatedBefore(t *testing.T) {
 	}
 }
 
+func TestPurgarRuntimeHistoricoSoloBorraDeudaViejaTerminal(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	if err := ConfigSet("runtime_handles_retention_hours", "24"); err != nil {
+		t.Fatalf("ConfigSet handles retention: %v", err)
+	}
+	if err := ConfigSet("runtime_orders_retention_hours", "72"); err != nil {
+		t.Fatalf("ConfigSet orders retention: %v", err)
+	}
+	sesionID, err := IniciarSesion("Codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	sesionID2, err := IniciarSesion("Codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion 2: %v", err)
+	}
+	handleOld, err := GetRuntimeHandleBySesionID(sesionID)
+	if err != nil {
+		t.Fatalf("GetRuntimeHandleBySesionID old: %v", err)
+	}
+	if handleOld == nil {
+		t.Fatalf("handle old no encontrado")
+	}
+	handleRecent, err := GetRuntimeHandleBySesionID(sesionID2)
+	if err != nil {
+		t.Fatalf("GetRuntimeHandleBySesionID recent: %v", err)
+	}
+	if handleRecent == nil {
+		t.Fatalf("handle recent no encontrado")
+	}
+	handleOldID := handleOld.ID
+	handleRecentID := handleRecent.ID
+	if _, err := DB.Exec(`UPDATE runtime_handles SET handle_ref = '111', estado = 'cerrado', last_seen_at = ?, created_at = ?, updated_at = ? WHERE id = ?`,
+		time.Now().UTC().Add(-48*time.Hour), time.Now().UTC().Add(-48*time.Hour), time.Now().UTC().Add(-48*time.Hour), handleOldID); err != nil {
+		t.Fatalf("ajustar old handle: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_handles SET handle_ref = '222', estado = 'cerrado', last_seen_at = ?, created_at = ?, updated_at = ? WHERE id = ?`,
+		time.Now().UTC().Add(-2*time.Hour), time.Now().UTC().Add(-2*time.Hour), time.Now().UTC().Add(-2*time.Hour), handleRecentID); err != nil {
+		t.Fatalf("ajustar recent handle: %v", err)
+	}
+	orderOldRes, err := DB.Exec(`INSERT INTO runtime_orders (agente, handle_id, tipo, payload_json, resultado_json, estado, created_at, updated_at, available_at) VALUES ('Codex1', ?, 'send_instruction', '{}', '{}', 'fallida', ?, ?, ?)`,
+		handleOldID, time.Now().UTC().Add(-96*time.Hour), time.Now().UTC().Add(-96*time.Hour), time.Now().UTC().Add(-96*time.Hour))
+	if err != nil {
+		t.Fatalf("insert old order: %v", err)
+	}
+	orderOldID, _ := orderOldRes.LastInsertId()
+	orderRecentRes, err := DB.Exec(`INSERT INTO runtime_orders (agente, handle_id, tipo, payload_json, resultado_json, estado, created_at, updated_at, available_at) VALUES ('Codex1', ?, 'send_instruction', '{}', '{}', 'fallida', ?, ?, ?)`,
+		handleRecentID, time.Now().UTC().Add(-2*time.Hour), time.Now().UTC().Add(-2*time.Hour), time.Now().UTC().Add(-2*time.Hour))
+	if err != nil {
+		t.Fatalf("insert recent order: %v", err)
+	}
+	orderRecentID, _ := orderRecentRes.LastInsertId()
+
+	resultado, err := PurgarRuntimeHistorico()
+	if err != nil {
+		t.Fatalf("PurgarRuntimeHistorico: %v", err)
+	}
+	if resultado == nil || resultado.Handles == nil || resultado.Orders == nil {
+		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+	if resultado.Handles.Deleted != 1 || resultado.Orders.Deleted != 1 {
+		t.Fatalf("purga historica inesperada: %+v", resultado)
+	}
+	if handleOld, err := GetRuntimeHandle(handleOldID); err != nil {
+		t.Fatalf("GetRuntimeHandle old: %v", err)
+	} else if handleOld != nil {
+		t.Fatalf("handle old deberia haber sido purgado: %+v", handleOld)
+	}
+	if handleRecent, err := GetRuntimeHandle(handleRecentID); err != nil {
+		t.Fatalf("GetRuntimeHandle recent: %v", err)
+	} else if handleRecent == nil {
+		t.Fatalf("handle recent deberia seguir existiendo")
+	}
+	var countOld, countRecent int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM runtime_orders WHERE id = ?`, orderOldID).Scan(&countOld); err != nil {
+		t.Fatalf("count old order: %v", err)
+	}
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM runtime_orders WHERE id = ?`, orderRecentID).Scan(&countRecent); err != nil {
+		t.Fatalf("count recent order: %v", err)
+	}
+	if countOld != 0 || countRecent != 1 {
+		t.Fatalf("runtime_orders tras purga inesperadas: old=%d recent=%d", countOld, countRecent)
+	}
+}
+
 func TestControlarProcesoRuntimeSoportaHandleLegacySinKind(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

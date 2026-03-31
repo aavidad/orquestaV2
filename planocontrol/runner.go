@@ -33,6 +33,7 @@ type AutomationService interface {
 	ProcesarRuntimeTranscriptBatch() (int, error)
 	ProcesarRuntimeMailboxBatch() (int, error)
 	ProcesarRuntimeOrdersBatch() (int, error)
+	ProcesarRuntimeHygieneBatch() (int, error)
 	ProcesarGitMergesBatch() (int, error)
 	ProcesarRefineriaBatch() (int, error)
 	ProcesarHandoffsBatch() (int, error)
@@ -284,6 +285,15 @@ func (r *Runner) runControlPlane() {
 		"Órdenes procesadas en batch: %d",
 		r.Automation.ProcesarRuntimeOrdersBatch,
 	)
+	hygiene := r.runControlPlaneBatch(
+		"runtime_hygiene",
+		"runtime",
+		"runtime_hygiene_batch",
+		"runtime_hygiene_batch_error",
+		"runtime_hygiene_batch_panic",
+		"Deuda historica de runtime purgada: %d",
+		r.Automation.ProcesarRuntimeHygieneBatch,
+	)
 	merged := r.runControlPlaneBatch(
 		"git_merges",
 		"git_merge",
@@ -311,8 +321,8 @@ func (r *Runner) runControlPlane() {
 		"Handoffs automáticos procesados: %d",
 		r.Automation.ProcesarHandoffsBatch,
 	)
-	r.debugf("control_plane autonomia=%d runtime_supervision=%d supervision=%d review=%d handles_stale=%d orders_stale=%d transcript=%d mailbox=%d runtime_orders=%d git_merges=%d refineria=%d handoffs=%d",
-		autonomia, supervision, supervisionAutonoma, review, stale, recovered, transcript, mailbox, processed, merged, refined, handoffs)
+	r.debugf("control_plane autonomia=%d runtime_supervision=%d supervision=%d review=%d handles_stale=%d orders_stale=%d transcript=%d mailbox=%d runtime_orders=%d runtime_hygiene=%d git_merges=%d refineria=%d handoffs=%d",
+		autonomia, supervision, supervisionAutonoma, review, stale, recovered, transcript, mailbox, processed, hygiene, merged, refined, handoffs)
 }
 
 func (r *Runner) safeLoopCall(name string, fn func()) {

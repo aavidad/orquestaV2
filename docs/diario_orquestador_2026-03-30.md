@@ -3472,3 +3472,45 @@ Validacion:
 Resultado vivo:
 
 - `agente ranking-cuentas` ya responde correctamente inmediatamente tras el restart del daemon
+
+## 2026-03-31 — Higiene automatica de deuda historica de runtime
+
+Hallazgo:
+
+- el nucleo ya estaba estable, pero seguia acumulando deuda historica terminal en `runtime_handles` y `runtime_orders`
+- esa basura no bloqueaba el flujo vivo, pero contaminaba diagnostico, recuperacion y lectura operativa
+
+Decision:
+
+- el runner del control plane incorpora un batch `runtime_hygiene`
+- la purga automatica solo toca deuda terminal vieja:
+  - `runtime_handles` en `cerrado/fallido`
+  - `runtime_orders` en `completada/fallida/expirada/cancelada`
+- las ventanas de retencion quedan configurables con:
+  - `runtime_handles_retention_hours`
+  - `runtime_orders_retention_hours`
+- la purga valida antes de borrar y desvincula referencias (`runtime_orders.handle_id`, `runtime_transcript.handle_id`, `runtime_mailbox.runtime_order_id`) para no romper integridad
+
+Codigo:
+
+- [db/config_defaults.go](/home/alberto/Trabajo/orquesta/db/config_defaults.go)
+- [db/controlplane_entities.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities.go)
+- [cmd/controlplane_support.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support.go)
+- [planocontrol/runner.go](/home/alberto/Trabajo/orquesta/planocontrol/runner.go)
+- [db/controlplane_entities_test.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities_test.go)
+- [planocontrol/runner_test.go](/home/alberto/Trabajo/orquesta/planocontrol/runner_test.go)
+- [planocontrol/runner_e2e_test.go](/home/alberto/Trabajo/orquesta/planocontrol/runner_e2e_test.go)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db ./planocontrol ./cmd -run 'TestPurgarRuntimeHistoricoSoloBorraDeudaViejaTerminal|TestRunner|TestRunnerE2E' -count=1`
+- `env GOCACHE=/tmp/orquesta-gocache go test ./... -count=1`
+- `env GOCACHE=/tmp/orquesta-gocache go build -o ./orquesta .`
+- smoke viva:
+  - `./orquesta server doctor`
+  - `./orquesta runtime diagnostico --agente Codex1 --limit 5`
+
+Resultado vivo:
+
+- el daemon sigue sano y el handle activo de `Codex1` permanece intacto
+- la higiene queda integrada en el runner oficial, sin scripts ni purgas manuales para la deuda terminal vieja

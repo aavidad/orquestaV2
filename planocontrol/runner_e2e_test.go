@@ -52,6 +52,23 @@ func (dbAutomationServiceTest) ProcesarRuntimeMailboxBatch() (int, error) {
 func (dbAutomationServiceTest) ProcesarRuntimeOrdersBatch() (int, error) {
 	return db.ProcesarRuntimeOrdersBatch()
 }
+func (dbAutomationServiceTest) ProcesarRuntimeHygieneBatch() (int, error) {
+	resultado, err := db.PurgarRuntimeHistorico()
+	if err != nil {
+		return 0, err
+	}
+	if resultado == nil {
+		return 0, nil
+	}
+	total := 0
+	if resultado.Handles != nil {
+		total += resultado.Handles.Deleted
+	}
+	if resultado.Orders != nil {
+		total += resultado.Orders.Deleted
+	}
+	return total, nil
+}
 func (dbAutomationServiceTest) ProcesarGitMergesBatch() (int, error) {
 	return 0, nil
 }

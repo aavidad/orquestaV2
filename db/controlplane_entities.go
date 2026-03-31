@@ -111,6 +111,11 @@ type PurgaRuntimeOrdersResultado struct {
 	Tipos      []string `json:"tipos,omitempty"`
 }
 
+type PurgaRuntimeHistoricoResultado struct {
+	Handles *PurgaRuntimeHandlesResultado `json:"handles,omitempty"`
+	Orders  *PurgaRuntimeOrdersResultado  `json:"orders,omitempty"`
+}
+
 type bootstrapRuntimeData struct {
 	Order      *RuntimeOrder
 	Mailbox    []*RuntimeMailboxMessage
@@ -471,6 +476,127 @@ func PurgarRuntimeOrdersTerminales(filtro FiltroPurgadoRuntimeOrders) (*PurgaRun
 		Estados:    estados,
 		Tipos:      tipos,
 	}, nil
+}
+
+func PurgarRuntimeHistorico() (*PurgaRuntimeHistoricoResultado, error) {
+	now := time.Now().UTC()
+	handlesCutoff := now.Add(-time.Duration(configInt64Fallback("runtime_handles_retention_hours", 24)) * time.Hour)
+	if !handlesCutoff.Before(now) {
+		handlesCutoff = now.Add(-24 * time.Hour)
+	}
+	ordersCutoff := now.Add(-time.Duration(configInt64Fallback("runtime_orders_retention_hours", 72)) * time.Hour)
+	if !ordersCutoff.Before(now) {
+		ordersCutoff = now.Add(-72 * time.Hour)
+	}
+	handleIDs, err := listarRuntimeHandlesPurgablesHistoricos([]string{"cerrado", "fallido"}, handlesCutoff)
+	if err != nil {
+		return nil, err
+	}
+	orderIDs, err := listarRuntimeOrdersPurgablesHistoricos([]string{"completada", "fallida", "expirada", "cancelada"}, ordersCutoff)
+	if err != nil {
+		return nil, err
+	}
+	if err := validarPurgadoRuntimeHandles(handleIDs); err != nil {
+		return nil, err
+	}
+	if err := validarPurgadoRuntimeOrders(orderIDs); err != nil {
+		return nil, err
+	}
+	result := &PurgaRuntimeHistoricoResultado{
+		Handles: &PurgaRuntimeHandlesResultado{Estados: []string{"cerrado", "fallido"}},
+		Orders:  &PurgaRuntimeOrdersResultado{Estados: []string{"completada", "fallida", "expirada", "cancelada"}},
+	}
+	if len(handleIDs) == 0 && len(orderIDs) == 0 {
+		return result, nil
+	}
+	tx, err := DB.Begin()
+	if err != nil {
+		return nil, err
+	}
+	if len(handleIDs) > 0 {
+		args := int64SliceToAny(handleIDs)
+		if _, err := tx.Exec(`UPDATE runtime_orders SET handle_id = NULL WHERE handle_id IN (`+runtimeSQLPlaceholders(len(handleIDs))+`)`, args...); err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		}
+		if _, err := tx.Exec(`UPDATE runtime_transcript SET handle_id = NULL WHERE handle_id IN (`+runtimeSQLPlaceholders(len(handleIDs))+`)`, args...); err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		}
+		if _, err := tx.Exec(`DELETE FROM runtime_handles WHERE id IN (`+runtimeSQLPlaceholders(len(handleIDs))+`)`, args...); err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		}
+		result.Handles.Deleted = len(handleIDs)
+		result.Handles.DeletedIDs = handleIDs
+	}
+	if len(orderIDs) > 0 {
+		args := int64SliceToAny(orderIDs)
+		if _, err := tx.Exec(`UPDATE runtime_mailbox SET runtime_order_id = NULL WHERE runtime_order_id IN (`+runtimeSQLPlaceholders(len(orderIDs))+`)`, args...); err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		}
+		if _, err := tx.Exec(`DELETE FROM runtime_orders WHERE id IN (`+runtimeSQLPlaceholders(len(orderIDs))+`)`, args...); err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		}
+		result.Orders.Deleted = len(orderIDs)
+		result.Orders.DeletedIDs = orderIDs
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func listarRuntimeHandlesPurgablesHistoricos(estados []string, cutoff time.Time) ([]int64, error) {
+	query := `SELECT id FROM runtime_handles WHERE estado IN (` + runtimeSQLPlaceholders(len(estados)) + `)
+		AND COALESCE(last_seen_at, updated_at, created_at) < ?
+		ORDER BY id DESC`
+	args := make([]any, 0, len(estados)+1)
+	for _, estado := range estados {
+		args = append(args, estado)
+	}
+	args = append(args, cutoff.UTC())
+	rows, err := DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func listarRuntimeOrdersPurgablesHistoricos(estados []string, cutoff time.Time) ([]int64, error) {
+	query := `SELECT id FROM runtime_orders WHERE estado IN (` + runtimeSQLPlaceholders(len(estados)) + `)
+		AND created_at < ?
+		ORDER BY id DESC`
+	args := make([]any, 0, len(estados)+1)
+	for _, estado := range estados {
+		args = append(args, estado)
+	}
+	args = append(args, cutoff.UTC())
+	rows, err := DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func normalizarEstadosPurgadoRuntimeHandles(estados []string) ([]string, error) {

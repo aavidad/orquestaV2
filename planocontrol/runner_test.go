@@ -20,6 +20,7 @@ type stubAutomationService struct {
 	transcriptCount  int
 	mailboxCount     int
 	processedCount   int
+	hygieneCount     int
 	mergedCount      int
 	refinedCount     int
 	handoffCount     int
@@ -28,6 +29,7 @@ type stubAutomationService struct {
 	transcriptErr    error
 	mailboxErr       error
 	processedErr     error
+	hygieneErr       error
 	mergedErr        error
 	refinedErr       error
 	handoffErr       error
@@ -86,6 +88,9 @@ func (s *stubAutomationService) ProcesarRuntimeOrdersBatch() (int, error) {
 	}
 	return s.processedCount, s.processedErr
 }
+func (s *stubAutomationService) ProcesarRuntimeHygieneBatch() (int, error) {
+	return s.hygieneCount, s.hygieneErr
+}
 func (s *stubAutomationService) ProcesarGitMergesBatch() (int, error) {
 	return s.mergedCount, s.mergedErr
 }
@@ -110,6 +115,7 @@ func TestRunnerRunControlPlaneAuditaTrabajoProcesado(t *testing.T) {
 		transcriptCount:  1,
 		mailboxCount:     1,
 		processedCount:   3,
+		hygieneCount:     1,
 		mergedCount:      1,
 		refinedCount:     1,
 		handoffCount:     1,
@@ -117,8 +123,8 @@ func TestRunnerRunControlPlaneAuditaTrabajoProcesado(t *testing.T) {
 	r := &Runner{Automation: service}
 	r.runControlPlane()
 
-	if len(service.audits) != 12 {
-		t.Fatalf("esperaba 12 auditorias, got=%d", len(service.audits))
+	if len(service.audits) != 13 {
+		t.Fatalf("esperaba 13 auditorias, got=%d", len(service.audits))
 	}
 }
 
@@ -182,6 +188,7 @@ func TestRunnerRunControlPlaneAuditaErrores(t *testing.T) {
 		transcriptErr:  assertErr("fallo transcript"),
 		mailboxErr:     assertErr("fallo mailbox"),
 		processedErr:   assertErr("fallo batch"),
+		hygieneErr:     assertErr("fallo hygiene"),
 		mergedErr:      assertErr("fallo merges"),
 		refinedErr:     assertErr("fallo refineria"),
 		handoffErr:     assertErr("fallo handoffs"),
@@ -189,8 +196,8 @@ func TestRunnerRunControlPlaneAuditaErrores(t *testing.T) {
 	r := &Runner{Automation: service}
 	r.runControlPlane()
 
-	if len(service.audits) != 12 {
-		t.Fatalf("esperaba 12 auditorias de error, got=%d", len(service.audits))
+	if len(service.audits) != 13 {
+		t.Fatalf("esperaba 13 auditorias de error, got=%d", len(service.audits))
 	}
 }
 
@@ -205,6 +212,7 @@ func TestRunnerRunControlPlaneEmiteDebug(t *testing.T) {
 		transcriptCount:  4,
 		mailboxCount:     4,
 		processedCount:   5,
+		hygieneCount:     5,
 		mergedCount:      6,
 		refinedCount:     6,
 		handoffCount:     7,
@@ -221,7 +229,7 @@ func TestRunnerRunControlPlaneEmiteDebug(t *testing.T) {
 	if len(traces) == 0 {
 		t.Fatalf("esperaba trazas de debug")
 	}
-	if !strings.Contains(traces[len(traces)-1], "control_plane autonomia=%d runtime_supervision=%d supervision=%d review=%d handles_stale=%d orders_stale=%d transcript=%d mailbox=%d runtime_orders=%d git_merges=%d refineria=%d handoffs=%d") {
+	if !strings.Contains(traces[len(traces)-1], "control_plane autonomia=%d runtime_supervision=%d supervision=%d review=%d handles_stale=%d orders_stale=%d transcript=%d mailbox=%d runtime_orders=%d runtime_hygiene=%d git_merges=%d refineria=%d handoffs=%d") {
 		t.Fatalf("traza final inesperada: %+v", traces)
 	}
 }
