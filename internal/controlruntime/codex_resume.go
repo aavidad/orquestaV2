@@ -341,7 +341,7 @@ func codexResumeTimeout(meta map[string]any) time.Duration {
 	if timeoutMS, ok := meta["session_resume_timeout_ms"].(float64); ok && timeoutMS > 0 {
 		return time.Duration(timeoutMS) * time.Millisecond
 	}
-	return 90 * time.Second
+	return 20 * time.Second
 }
 
 func trimmedCommandOutput(raw []byte) string {

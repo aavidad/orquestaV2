@@ -5761,6 +5761,65 @@ func TestReconciliarRuntimeOrdersStaleRecuperaBasicasYExpiraNoSoportadas(t *test
 	}
 }
 
+func TestReconciliarRuntimeOrdersStaleRespetaCutoffConfigurado(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE config SET valor = '60' WHERE clave = 'runtime_order_stale_seconds'`); err != nil {
+		t.Fatalf("config stale seconds: %v", err)
+	}
+
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "sync_status",
+		PayloadJSON: `{}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar order: %v", err)
+	}
+	if err := MarcarRuntimeOrderEstado(orderID, "ejecutando", `{}`, ""); err != nil {
+		t.Fatalf("marcar ejecutando: %v", err)
+	}
+	recent := time.Now().UTC().Add(-10 * time.Second)
+	if _, err := DB.Exec(`
+		UPDATE runtime_orders
+		SET started_at = ?, updated_at = ?, lease_expires_at = ?
+		WHERE id = ?`,
+		recent, recent, recent, orderID,
+	); err != nil {
+		t.Fatalf("rejuvenecer order: %v", err)
+	}
+
+	n, err := ReconciliarRuntimeOrdersStale()
+	if err != nil {
+		t.Fatalf("reconciliar runtime orders stale: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia reconciliar una orden aun dentro del cutoff, got=%d", n)
+	}
+
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("get order: %v", err)
+	}
+	if order.Estado != "ejecutando" {
+		t.Fatalf("la orden deberia seguir ejecutando: %+v", order)
+	}
+}
+
 func TestReconciliarRuntimeOrderStaleNoPisaOrdenYaCompletada(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

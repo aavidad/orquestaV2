@@ -2485,7 +2485,7 @@ func TestProcesarRuntimeMailboxSessionResumeBatchNoRematerializaMailboxOnlyEnMis
 		t.Fatalf("mailbox: %v", err)
 	}
 
-	payload := fmt.Sprintf(`{"to_agente":"Codex1","from_agente":"server","texto":"instruccion durable","mailbox_id":%d,"mailbox_kind":"instruction","external_session_id":"sess-dedupe"}`, msgID)
+	payload := fmt.Sprintf(`{"to_agente":"Codex1","from_agente":"server","texto":"instruccion durable","mailbox_id":%d,"mailbox_kind":"instruction","external_session_id":"sess-dedupe","delivery_attempt_signature":"session_resume|handle:%d|session:sess-dedupe"}`, msgID, handle.ID)
 	resultado := fmt.Sprintf(`{"ok":true,"mailbox_id":%d,"deferred":true,"deferred_reason":"runtime no disponible para entrega inmediata","mailbox_only":true}`, msgID)
 	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
 		Agente:       "Codex1",
@@ -2521,6 +2521,98 @@ func TestProcesarRuntimeMailboxSessionResumeBatchNoRematerializaMailboxOnlyEnMis
 	}
 	if sendCount != 1 {
 		t.Fatalf("no deberia crear una nueva send_instruction: %d", sendCount)
+	}
+}
+
+func TestProcesarRuntimeMailboxSessionResumeBatchPermiteReintentoDeMailboxOnlyLegacySinFirma(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-live","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"legacy mailbox"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	payload := fmt.Sprintf(`{"to_agente":"Codex1","from_agente":"server","texto":"legacy mailbox","mailbox_id":%d,"mailbox_kind":"instruction","external_session_id":"sess-live"}`, msgID)
+	resultado := fmt.Sprintf(`{"ok":true,"mailbox_id":%d,"deferred":true,"deferred_reason":"runtime no disponible para entrega inmediata","mailbox_only":true}`, msgID)
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:        "Codex1",
+		ProyectoID:    &proyectoID,
+		RuntimeID:     handle.RuntimeID,
+		HandleID:      &handle.ID,
+		Tipo:          "send_instruction",
+		PayloadJSON:   payload,
+		ResultadoJSON: resultado,
+		Estado:        "completada",
+	}); err != nil {
+		t.Fatalf("encolar send_instruction legacy: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia permitir un reintento cuando falta firma de intento, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var sendCount int
+	var newest *db.RuntimeOrder
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			sendCount++
+			if newest == nil || order.ID > newest.ID {
+				newest = order
+			}
+		}
+	}
+	if sendCount != 2 {
+		t.Fatalf("deberia crear una nueva send_instruction para el retry util, got=%d", sendCount)
+	}
+	if newest == nil || !strings.Contains(newest.PayloadJSON, `"delivery_attempt_signature":"session_resume|handle:`) {
+		t.Fatalf("la orden nueva deberia persistir la firma del intento: %+v", newest)
 	}
 }
 
@@ -2953,7 +3045,7 @@ func TestProcesarRuntimeMailboxInteractivoBatchNoRematerializaMailboxOnlyEnMismo
 		t.Fatalf("mailbox: %v", err)
 	}
 
-	payload := fmt.Sprintf(`{"to_agente":"Codex1","from_agente":"server","texto":"instruccion interactiva durable","mailbox_id":%d,"mailbox_kind":"instruction"}`, msgID)
+	payload := fmt.Sprintf(`{"to_agente":"Codex1","from_agente":"server","texto":"instruccion interactiva durable","mailbox_id":%d,"mailbox_kind":"instruction","delivery_attempt_signature":"interactive|handle:%d|session:"}`, msgID, handle.ID)
 	resultado := fmt.Sprintf(`{"ok":true,"mailbox_id":%d,"deferred":true,"deferred_reason":"runtime no disponible para entrega inmediata","mailbox_only":true}`, msgID)
 	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
 		Agente:       "Codex1",

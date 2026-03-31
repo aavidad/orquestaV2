@@ -239,6 +239,9 @@ Contrato minimo obligatorio para `runtime_orders`:
 - una `send_instruction` nacida desde `runtime_mailbox` no es una segunda cola durable; es solo un intento de entrega
 - si ese intento no encuentra runtime entregable inmediato, la orden se completa y la verdad queda en `runtime_mailbox`; no se permite bucle de reintentos sobre la misma orden derivada
 - ademas, mientras sigan iguales el `mailbox_id`, el `handle_id` y la `external_session_id` efectiva, el daemon no puede volver a materializar otra `send_instruction` nueva para el mismo mensaje durable; el siguiente intento solo puede nacer tras un cambio real de handle, sesion o contrato de entrega
+- para evitar congelar mailbox legacy tras una mejora real de contrato, cada `send_instruction` derivada desde mailbox debe persistir una `delivery_attempt_signature`
+- una orden `mailbox_only` con la misma firma debe deduplicar; una orden legacy sin firma puede permitirse un unico reintento cuando el handle actual ya tiene un contrato de entrega mas rico
+- `session_resume` no es un canal de latencia infinita: su timeout por defecto debe ser corto y operativo porque una llamada lenta bloquea `runtime_orders` aunque el daemon siga sano
 
 Contrato minimo obligatorio para el supervisor local:
 

@@ -1027,11 +1027,12 @@ func encolarSendInstructionDesdeRuntimeMailbox(msg *db.RuntimeMailboxMessage, ha
 		return 0, nil
 	}
 	payload := map[string]any{
-		"to_agente":    strings.TrimSpace(msg.ToAgente),
-		"from_agente":  strings.TrimSpace(msg.FromAgente),
-		"texto":        strings.TrimSpace(texto),
-		"mailbox_id":   msg.ID,
-		"mailbox_kind": strings.TrimSpace(msg.Kind),
+		"to_agente":                  strings.TrimSpace(msg.ToAgente),
+		"from_agente":                strings.TrimSpace(msg.FromAgente),
+		"texto":                      strings.TrimSpace(texto),
+		"mailbox_id":                 msg.ID,
+		"mailbox_kind":               strings.TrimSpace(msg.Kind),
+		"delivery_attempt_signature": runtimeMailboxDeliveryAttemptSignature(handle, externalSessionID),
 	}
 	if strings.TrimSpace(externalSessionID) != "" {
 		payload["external_session_id"] = strings.TrimSpace(externalSessionID)
@@ -1066,6 +1067,7 @@ func existeIntentoSendInstructionMailboxParaHandle(msg *db.RuntimeMailboxMessage
 		return false, err
 	}
 	currentSessionID := strings.TrimSpace(externalSessionID)
+	currentSignature := runtimeMailboxDeliveryAttemptSignature(handle, externalSessionID)
 	for _, order := range orders {
 		if order == nil || strings.TrimSpace(order.Tipo) != "send_instruction" {
 			continue
@@ -1082,6 +1084,16 @@ func existeIntentoSendInstructionMailboxParaHandle(msg *db.RuntimeMailboxMessage
 		case "completada":
 			if !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) {
 				continue
+			}
+			orderSignature := runtimeOrderDeliveryAttemptSignature(order.PayloadJSON)
+			if currentSignature != "" {
+				if orderSignature == "" {
+					continue
+				}
+				if currentSignature != orderSignature {
+					continue
+				}
+				return true, nil
 			}
 			orderSessionID := strings.TrimSpace(runtimeOrderExternalSessionIDFromJSON(order.PayloadJSON))
 			if currentSessionID != "" && orderSessionID != "" && currentSessionID != orderSessionID {
@@ -1121,6 +1133,28 @@ func runtimeOrderExternalSessionIDFromJSON(raw string) string {
 		return strings.TrimSpace(text)
 	}
 	return ""
+}
+
+func runtimeOrderDeliveryAttemptSignature(raw string) string {
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &payload); err != nil {
+		return ""
+	}
+	if text, ok := payload["delivery_attempt_signature"].(string); ok {
+		return strings.TrimSpace(text)
+	}
+	return ""
+}
+
+func runtimeMailboxDeliveryAttemptSignature(handle *db.RuntimeHandle, externalSessionID string) string {
+	if handle == nil || handle.ID <= 0 {
+		return ""
+	}
+	mode := strings.TrimSpace(string(db.RuntimeHandleMailboxDeliveryMode(handle)))
+	if mode == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s|handle:%d|session:%s", mode, handle.ID, strings.TrimSpace(externalSessionID))
 }
 
 func runtimeOrderMailboxOnlyResult(raw string) bool {

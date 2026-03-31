@@ -108,6 +108,15 @@ func TestEnviarInstruccionSesionResumeAceptaMetadataDeSupervisorLocal(t *testing
 	}
 }
 
+func TestCodexResumeTimeoutDefaultYOverride(t *testing.T) {
+	if got := codexResumeTimeout(nil); got != 20*time.Second {
+		t.Fatalf("timeout por defecto inesperado: %s", got)
+	}
+	if got := codexResumeTimeout(map[string]any{"session_resume_timeout_ms": float64(3500)}); got != 3500*time.Millisecond {
+		t.Fatalf("timeout override inesperado: %s", got)
+	}
+}
+
 func TestDetectExternalSessionIDUsaSupervisorLocalResidente(t *testing.T) {
 	tmp := t.TempDir()
 	wrapper := filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil")

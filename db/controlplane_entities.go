@@ -1781,7 +1781,7 @@ func ReconciliarRuntimeOrdersStale() (int, error) {
 		FROM runtime_orders
 		WHERE estado IN ('tomada','ejecutando')
 		  AND COALESCE(lease_expires_at, started_at, updated_at, created_at) <= ?
-		ORDER BY id`, now)
+		ORDER BY id`, cutoff)
 	if err != nil {
 		return 0, err
 	}

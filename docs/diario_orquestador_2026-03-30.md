@@ -1479,6 +1479,65 @@ Validacion:
 - se reinicia `./orquesta server run --addr 127.0.0.1:16543`
 - `./orquesta server doctor` => `Health RPC: OK`
 - `./orquesta status` vuelve a responder con `5` agentes activos y progreso `353/414`
+
+## 2026-03-31 06:1x aprox. — la deduplicación de mailbox aprende a distinguir intento legacy de intento vigente
+
+Hallazgo:
+
+- tras habilitar `session_resume`, seguian quedando mailbox pendientes de `Codex1` y `Codex2` aunque ya existian `send_instruction` anteriores para el mismo `mailbox_id`
+- el problema no era solo “mismo mensaje”: varias de esas ordenes viejas eran `mailbox_only` legacy, creadas antes de que el handle actual expusiera un contrato de entrega mejor
+- al deduplicar solo por `mailbox_id + handle_id + external_session_id`, el daemon congelaba mensajes utiles para siempre
+
+Decision:
+
+- cada `send_instruction` derivada desde mailbox persiste una `delivery_attempt_signature`
+- una orden `mailbox_only` con la misma firma si bloquea nuevos intentos; una orden legacy sin firma puede permitir un unico reintento cuando el contrato actual ya es mas rico
+
+Cambios:
+
+- `cmd/controlplane_support.go`
+  - `encolarSendInstructionDesdeRuntimeMailbox(...)` persiste `delivery_attempt_signature`
+  - `existeIntentoSendInstructionMailboxParaHandle(...)` deja pasar un reintento util cuando la orden legacy no llevaba firma y el handle actual si
+- `cmd/controlplane_support_test.go`
+  - nueva regresion `TestProcesarRuntimeMailboxSessionResumeBatchPermiteReintentoDeMailboxOnlyLegacySinFirma`
+  - las regresiones de dedupe estable pasan a fijar firma explicita del intento
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'TestProcesarRuntimeMailbox(SessionResumeBatchNoRematerializaMailboxOnlyEnMismaSesion|SessionResumeBatchPermiteReintentoDeMailboxOnlyLegacySinFirma|InteractivoBatchNoRematerializaMailboxOnlyEnMismoHandle)' -count=1` => OK
+- validacion viva:
+  - tras reiniciar el daemon, aparecen `#80287` (`Codex1`) y `#80290` (`Codex2`) con firma `session_resume|handle|session`
+  - `#80290` completa por `session_resume` y el mailbox de `Codex2` queda por fin consumido (`64431` y `64424`)
+
+## 2026-03-31 06:2x aprox. — `session_resume` deja de tener timeout por defecto de 90s y stale usa su cutoff real
+
+Hallazgo:
+
+- el caso vivo de `Codex1` con mailbox `autonomia` mostraba la fragilidad restante: una `send_instruction` larga podia quedarse demasiado tiempo en `ejecutando` y frenar el batch
+- ademas, `ReconciliarRuntimeOrdersStale()` calculaba `cutoff` pero la query seguia seleccionando con `now`, lo que hacia menos coherente la reconciliacion
+
+Decision:
+
+- el timeout por defecto de `session_resume` baja a `20s`; sigue siendo configurable por metadata, pero el valor por defecto ya no puede bloquear tanto tiempo
+- la reconciliacion stale debe usar el `cutoff` calculado de verdad
+
+Cambios:
+
+- `internal/controlruntime/codex_resume.go`
+  - `codexResumeTimeout(...)` pasa a `20s` por defecto
+- `db/controlplane_entities.go`
+  - `ReconciliarRuntimeOrdersStale()` selecciona con `cutoff`
+- tests:
+  - `internal/controlruntime/codex_resume_test.go`
+  - `db/controlplane_entities_test.go`
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./internal/controlruntime -run 'Test(EnviarInstruccionSesionResumeUsaCodexPerfil|EnviarInstruccionSesionResumeAceptaMetadataDeSupervisorLocal|CodexResumeTimeoutDefaultYOverride)' -count=1` => OK
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(ReconciliarRuntimeOrdersStaleRecuperaBasicasYExpiraNoSoportadas|ReconciliarRuntimeOrdersStaleRespetaCutoffConfigurado|RuntimeHandlePermiteSendInputInteractivoRespetaCapacidadesExplicitas|RuntimeHandleMailboxDeliveryModeRespetaCapacidadesYFallbacks)' -count=1` => OK
+- estado vivo:
+  - `Codex2` ya drena mailbox durable por `session_resume`
+  - `Codex1` sigue exponiendo el siguiente cuello real: la entrega de `autonomia` larga sobre `session_resume` sigue siendo mas delicada que una instruccion corta y queda abierta como siguiente frente del nucleo
   - servicio `PurgeTerminalRuntimeOrders(...)`
 - `cmd/api.go`
   - endpoint `POST /api/runtime-orders/purgar`
