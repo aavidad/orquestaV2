@@ -109,14 +109,22 @@ func SetSupervisorSignalHandler(handler SupervisorSignalHandler) {
 	supervisorSignalRegistry.handler = handler
 }
 
-func emitSupervisorSignal(signal SupervisorSignal) error {
+func emitSupervisorSignal(signal SupervisorSignal) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("supervisor signal handler panic: %v", r)
+		}
+	}()
 	supervisorSignalRegistry.mu.RLock()
 	handler := supervisorSignalRegistry.handler
 	supervisorSignalRegistry.mu.RUnlock()
 	if handler == nil {
 		return nil
 	}
-	return handler(signal)
+	if err = handler(signal); err != nil {
+		return err
+	}
+	return nil
 }
 
 func registrarSupervisorLocalResidente(desc descriptorSupervisorLocal, cmd *exec.Cmd) string {

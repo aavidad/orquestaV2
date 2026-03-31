@@ -136,6 +136,27 @@ func TestSupervisorLocalEmiteHeartbeatYFinalizacionAlActivarse(t *testing.T) {
 	}
 }
 
+func TestEmitSupervisorSignalRecuperaPanicDelHandler(t *testing.T) {
+	prevHandler := func() SupervisorSignalHandler {
+		supervisorSignalRegistry.mu.RLock()
+		defer supervisorSignalRegistry.mu.RUnlock()
+		return supervisorSignalRegistry.handler
+	}()
+	t.Cleanup(func() {
+		SetSupervisorSignalHandler(prevHandler)
+	})
+	SetSupervisorSignalHandler(func(SupervisorSignal) error {
+		panic("boom")
+	})
+
+	if err := emitSupervisorSignal(SupervisorSignal{
+		Agente:   "Codex1",
+		Proyecto: "orquestador",
+	}); err == nil || !strings.Contains(err.Error(), "supervisor signal handler panic") {
+		t.Fatalf("el handler panic deberia recuperarse como error, got=%v", err)
+	}
+}
+
 func TestCommandIdentityHintsIncluyeFirmaUtil(t *testing.T) {
 	hints := commandIdentityHints(
 		"/usr/bin/script -qefc '/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1' /tmp/trace.log",
