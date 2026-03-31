@@ -3382,3 +3382,35 @@ Resultado vivo:
 - `Codex1` ya enseña `telemetría observada stale`
 - su `sesión 89%` y `semanal 3%` siguen visibles para inspeccion
 - la `cuota efectiva` vuelve a `77% daily`, que es la decision segura mientras la observacion siga vieja
+
+## 2026-03-31 — Fallback al snapshot mas fresco del perfil Codex
+
+Hallazgo:
+
+- la ingesta observada seguia atada en exceso a la sesion exacta del handle
+- eso dejaba `stale` innecesario cuando el mismo perfil de Codex ya habia emitido un `token_count` mas fresco en otra sesion del mismo home
+
+Decision:
+
+- `ObserveCodexArtifacts(...)` primero intenta la sesion exacta
+- si existe otro `token_count` mas fresco dentro del mismo perfil/home de Codex, Orquesta usa ese snapshot y lo marca internamente como `profile`
+- no inventa datos ni consulta nada fuera del propio home de Codex; solo elige la observacion canonica mas fresca disponible
+
+Codigo:
+
+- [internal/controlruntime/codex_observe.go](/home/alberto/Trabajo/orquesta/internal/controlruntime/codex_observe.go)
+- [internal/controlruntime/codex_observe_test.go](/home/alberto/Trabajo/orquesta/internal/controlruntime/codex_observe_test.go)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./internal/controlruntime -run 'Test(ObserveCodexArtifactsLeeTokenCountYAuth|ObserveCodexArtifactsUsaSnapshotMasFrescoDelPerfil)' -count=1`
+- `env GOCACHE=/tmp/orquesta-gocache go build -o ./orquesta .`
+- smoke viva:
+  - `./orquesta server stop`
+  - `./orquesta server start`
+  - `./orquesta status`
+
+Resultado vivo:
+
+- la vista ya muestra edades observadas mas razonables donde el perfil tenia un snapshot mas fresco
+- el ranking sigue siendo coherente y seguro, sin volver a hacer pasar por vivo lo que no lo es

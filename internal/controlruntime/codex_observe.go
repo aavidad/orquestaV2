@@ -22,6 +22,7 @@ type CodexObservedArtifacts struct {
 	ExternalID    string
 	SessionPath   string
 	ObservedAt    time.Time
+	ObservedScope string
 	AccountEmail  string
 	AccountUser   string
 	AccountSource string
@@ -86,15 +87,25 @@ func ObserveCodexArtifacts(obj ObjetivoProceso) (*CodexObservedArtifacts, error)
 	if err != nil {
 		return nil, err
 	}
+	scope := "session"
+	if latestPath, latestObservedAt, latestRaw, err := readCodexLatestTokenCount(rendered, "", time.Time{}); err != nil {
+		return nil, err
+	} else if latestObservedAt.After(observedAt) {
+		sessionPath = latestPath
+		observedAt = latestObservedAt
+		raw = latestRaw
+		scope = "profile"
+	}
 	if strings.TrimSpace(sessionPath) == "" {
 		return nil, nil
 	}
 	artifacts := &CodexObservedArtifacts{
-		ExternalID:  externalID,
-		SessionPath: sessionPath,
-		ObservedAt:  observedAt,
-		Credits:     raw.RateLimits.Credits,
-		PlanType:    strings.TrimSpace(raw.RateLimits.PlanType),
+		ExternalID:    externalID,
+		SessionPath:   sessionPath,
+		ObservedAt:    observedAt,
+		ObservedScope: scope,
+		Credits:       raw.RateLimits.Credits,
+		PlanType:      strings.TrimSpace(raw.RateLimits.PlanType),
 	}
 	if snapshot, err := json.Marshal(raw); err == nil {
 		artifacts.RawSnapshot = string(snapshot)
@@ -114,10 +125,20 @@ func ObserveCodexArtifacts(obj ObjetivoProceso) (*CodexObservedArtifacts, error)
 	if authRaw != "" && artifacts.RawSnapshot != "" {
 		var infoMap map[string]any
 		if err := json.Unmarshal([]byte(artifacts.RawSnapshot), &infoMap); err == nil {
+			infoMap["observed_scope"] = artifacts.ObservedScope
 			infoMap["account_email"] = email
 			infoMap["account_user"] = user
 			infoMap["account_source"] = source
 			infoMap["auth_snapshot"] = jsonMap(authRaw)
+			if merged, err := json.Marshal(infoMap); err == nil {
+				artifacts.RawSnapshot = string(merged)
+			}
+		}
+	}
+	if artifacts.RawSnapshot != "" && authRaw == "" {
+		var infoMap map[string]any
+		if err := json.Unmarshal([]byte(artifacts.RawSnapshot), &infoMap); err == nil {
+			infoMap["observed_scope"] = artifacts.ObservedScope
 			if merged, err := json.Marshal(infoMap); err == nil {
 				artifacts.RawSnapshot = string(merged)
 			}
