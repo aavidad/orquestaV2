@@ -346,6 +346,22 @@ func enfriarAgentePorRuntimePanic(agente string, item *db.RuntimeTranscriptEntry
 	if agente == "" {
 		return "", nil
 	}
+	notes := make([]string, 0, 2)
+	if item != nil && item.HandleID != nil && *item.HandleID > 0 {
+		handle, err := db.GetRuntimeHandle(*item.HandleID)
+		if err != nil {
+			return "", err
+		}
+		if handle != nil {
+			degradado, err := db.DeshabilitarEntregaCalienteSupervisadaHandle(handle, "runtime_panic", item.ID)
+			if err != nil {
+				return "", err
+			}
+			if degradado != nil && degradado.ID > 0 && strings.Contains(degradado.MetadataJSON, `"disable_supervisor_hot_input":true`) {
+				notes = append(notes, "supervisor_hot_input_disabled")
+			}
+		}
+	}
 	infoAgente, err := db.GetAgente(agente)
 	if err != nil {
 		return "", err
@@ -359,7 +375,8 @@ func enfriarAgentePorRuntimePanic(agente string, item *db.RuntimeTranscriptEntry
 		strings.EqualFold(strings.TrimSpace(infoAgente.EstadoCuota), "enfriamiento") &&
 		infoAgente.ReanimarAt != nil &&
 		infoAgente.ReanimarAt.After(reanimarAt) {
-		return "runtime_panic_cooldown_exists", nil
+		notes = append(notes, "runtime_panic_cooldown_exists")
+		return strings.Join(notes, ";"), nil
 	}
 	motivo := "Auto-pausa por runtime_panic"
 	if item != nil && item.ID > 0 {
@@ -370,7 +387,8 @@ func enfriarAgentePorRuntimePanic(agente string, item *db.RuntimeTranscriptEntry
 	}
 	db.Audit("orquesta", "runtime_panic_cooldown", "agente", 0,
 		fmt.Sprintf("agente=%s cooldown_until=%s motivo=%s", agente, reanimarAt.Format(time.RFC3339), motivo))
-	return "runtime_panic_cooldown", nil
+	notes = append(notes, "runtime_panic_cooldown")
+	return strings.Join(notes, ";"), nil
 }
 
 func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {

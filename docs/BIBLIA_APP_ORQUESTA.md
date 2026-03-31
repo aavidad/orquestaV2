@@ -258,6 +258,11 @@ Contrato minimo obligatorio para `runtime_orders`:
 - un agente `pausado` o en `estado_cuota=enfriamiento` no cuenta como “activo ahora” en `status`, `/api/status` ni `/api/agentes`, aunque conserve sesion operativa o handle reciente
 - el bloque `tareasActivas` de `status`, `/api/status` y sus clientes no debe mezclar backlog global sin proyecto con el estado del proyecto operativo; las tareas sin `proyecto_id` no se muestran ahi
 - la autonomia no puede rematerializar `pause` si la pausa ya esta satisfecha: una orden `pause` pendiente, una `sesion` ya `pausada` o un `runtime_handle` ya `pausado` con el agente en `estado_cuota=enfriamiento` deben tratarse como pausa vigente y cerrar el ciclo sin nuevas ordenes
+- si un runtime Codex supervisado emite `runtime_panic` o `runtime_crash` tras entrega caliente por `supervisor_local`, el handle debe degradarse de forma persistente para ese ciclo de vida:
+  - `disable_supervisor_hot_input=true` en metadata del handle
+  - las entregas futuras para ese handle ya no pueden usar `supervisor_local`
+  - el fallback vuelve a `session_resume` o `mailbox` segun contrato
+  - la degradacion es por handle, no por agente: un handle nuevo puede recuperar capacidades si nace sano
 - la coalescencia de `runtime_mailbox` para guia operativa no va por `kind` exacto sino por familia de guidance: `autonomia`, `nudge`, `watchdog`, `governance_refresh` y `skills_refresh` se superseden entre si; `instruction` explicita queda fuera de esa familia y no se borra por una guia generica posterior
 - la mailbox pendiente de agentes fuera de vida operativa no puede quedar como ruido eterno: si el destinatario no tiene `runtime_handle` activo, ni sesion activa, ni asignacion activa, ni tareas activas, ni `runtime_orders` abiertas, la deuda se consume como zombi reconciliado
 - para esa regla, una asignacion `activa` mantenida solo por `reactivacion_automatica` no protege al agente si ya esta fuera de la flota `server_autobootstrap`; no puede retener mailbox zombie por si sola

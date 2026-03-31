@@ -1,5 +1,44 @@
 # Diario del orquestador — 2026-03-30
 
+## 2026-03-31 11:3x aprox. — fusible permanente para `supervisor_local` tras `runtime_panic` real en Codex
+
+Hallazgo:
+
+- el caso vivo de `Codex1` ya no era el bootstrap largo ni el banner de `script(1)`; esos frentes estaban cerrados
+- aun con bootstrap compactado, `Codex1` seguia paniqueando en `tui_app_server/src/wrapping.rs:52` justo despues de una entrega por `stdin`
+- el problema ya no era de texto concreto sino del canal `supervisor_local` sobre ciertos handles Codex
+
+Decision:
+
+- no seguir reintentando `stdin` caliente sobre un handle que ya ha demostrado inestabilidad
+- degradar ese handle de forma persistente para el resto de su ciclo de vida
+- dejar que las entregas futuras caigan a `session_resume` o permanezcan en `runtime_mailbox`, que son caminos mas seguros
+
+Cambios:
+
+- `db/controlplane_entities.go`
+  - `RuntimeHandlePermiteEntregaCalienteSupervisada(...)` ya devuelve `false` si el handle tiene `disable_supervisor_hot_input=true`
+  - nuevo helper `DeshabilitarEntregaCalienteSupervisadaHandle(...)`
+- `cmd/controlplane_support.go`
+  - `enfriarAgentePorRuntimePanic(...)` ahora degrada primero el handle supervisado y luego aplica el cooldown del agente
+- tests nuevos o reforzados:
+  - `db/controlplane_entities_test.go`
+    - `TestRuntimeHandlePermiteEntregaCalienteSupervisadaExigeSupervisorYStdin`
+    - `TestRuntimeOrderSendInstructionCodexSupervisadoDegradadoCaeASessionResume`
+  - `cmd/controlplane_support_test.go`
+    - `TestProcesarRuntimeTranscriptBatchNoGuiaAlWorkerEnRuntimePanic` ahora verifica tambien la degradacion del handle
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(RuntimeHandlePermiteEntregaCalienteSupervisadaExigeSupervisorYStdin|RuntimeOrderSendInstructionCodexSupervisadoUsaSupervisorLocal|RuntimeOrderSendInstructionCodexSupervisadoDegradadoCaeASessionResume)' -count=1` => OK
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'TestProcesarRuntimeTranscriptBatchNoGuiaAlWorkerEnRuntimePanic' -count=1` => OK
+
+Conclusion:
+
+- Orquesta deja de tratar todos los handles Codex supervisados como iguales
+- un handle que revienta por `stdin` ya no vuelve a recibir guidance caliente como si nada
+- el siguiente paso vivo es observar el siguiente ciclo de `Codex1` con este fusible activo
+
 ## 2026-03-31 08:1x aprox. — `status` deja de contar agentes pausados o en enfriamiento como activos
 
 Hallazgo:

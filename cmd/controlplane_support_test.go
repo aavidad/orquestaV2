@@ -4696,7 +4696,16 @@ func TestProcesarRuntimeTranscriptBatchEncolaGuiaAutomatica(t *testing.T) {
 	if err := os.WriteFile(logPath, []byte("¿me dejas seguir con el refactor?\n"), 0o600); err != nil {
 		t.Fatalf("write log: %v", err)
 	}
-	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	metaJSON, _ := json.Marshal(map[string]any{
+		"log_path":       logPath,
+		"driver":         "process_pty_cli",
+		"stdin_path":     filepath.Join(tmp, "pty.stdin"),
+		"supervisor_ref": filepath.Join(tmp, "supervisor.ref"),
+		"rendered_command": filepath.Join(
+			tmp, "codex-perfiles", "bin", "codex-perfil",
+		) + " Codex1",
+		"can_send_input": false,
+	})
 	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
 		t.Fatalf("update handle metadata: %v", err)
 	}
@@ -4897,7 +4906,14 @@ func TestProcesarRuntimeTranscriptBatchDespiertaSupervisorPorSignal(t *testing.T
 	if err := os.WriteFile(logPath, []byte("quedo a la espera de tu respuesta\n"), 0o600); err != nil {
 		t.Fatalf("write log: %v", err)
 	}
-	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	metaJSON, _ := json.Marshal(map[string]any{
+		"log_path":         logPath,
+		"driver":           "process_pty_cli",
+		"stdin_path":       filepath.Join(tmp, "pty.stdin"),
+		"supervisor_ref":   filepath.Join(tmp, "supervisor.ref"),
+		"rendered_command": filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil") + " Codex1",
+		"can_send_input":   false,
+	})
 	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
 		t.Fatalf("update handle metadata: %v", err)
 	}
@@ -4996,7 +5012,14 @@ func TestProcesarRuntimeTranscriptBatchDespiertaReviewerPorReadyForReview(t *tes
 	if err := os.WriteFile(logPath, []byte("está listo para revisión final\n"), 0o600); err != nil {
 		t.Fatalf("write log: %v", err)
 	}
-	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	metaJSON, _ := json.Marshal(map[string]any{
+		"log_path":         logPath,
+		"driver":           "process_pty_cli",
+		"stdin_path":       filepath.Join(tmp, "pty.stdin"),
+		"supervisor_ref":   filepath.Join(tmp, "supervisor.ref"),
+		"rendered_command": filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil") + " Codex1",
+		"can_send_input":   false,
+	})
 	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
 		t.Fatalf("update handle metadata: %v", err)
 	}
@@ -5216,7 +5239,14 @@ func TestProcesarRuntimeTranscriptBatchNoGuiaAlWorkerEnRuntimePanic(t *testing.T
 	if err := os.WriteFile(logPath, []byte("thread 'main' panicked at src/ui.rs:1:1\n"), 0o600); err != nil {
 		t.Fatalf("write log: %v", err)
 	}
-	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	metaJSON, _ := json.Marshal(map[string]any{
+		"log_path":         logPath,
+		"driver":           "process_pty_cli",
+		"stdin_path":       filepath.Join(tmp, "pty.stdin"),
+		"supervisor_ref":   filepath.Join(tmp, "supervisor.ref"),
+		"rendered_command": filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil") + " Codex1",
+		"can_send_input":   false,
+	})
 	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
 		t.Fatalf("update handle metadata: %v", err)
 	}
@@ -5265,6 +5295,13 @@ func TestProcesarRuntimeTranscriptBatchNoGuiaAlWorkerEnRuntimePanic(t *testing.T
 	}
 	if !strings.Contains(agenteInfo.MotivoPausa, "runtime_panic") {
 		t.Fatalf("motivo_pausa sin trazabilidad de runtime_panic: %+v", agenteInfo)
+	}
+	handle, err = db.GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle: %+v err=%v", handle, err)
+	}
+	if !strings.Contains(handle.MetadataJSON, `"disable_supervisor_hot_input":true`) {
+		t.Fatalf("runtime_panic deberia degradar supervisor_local en el handle: %s", handle.MetadataJSON)
 	}
 }
 

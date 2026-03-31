@@ -5589,10 +5589,43 @@ func RuntimeHandlePermiteEntregaCalienteSupervisada(handle *RuntimeHandle) bool 
 	if strings.TrimSpace(stringFromMap(meta, "supervisor_ref", "")) == "" {
 		return false
 	}
+	if boolFromMap(meta, "disable_supervisor_hot_input") {
+		return false
+	}
 	if runtimeHandleUsaCodexTTYInestable(meta) {
 		return true
 	}
 	return true
+}
+
+func DeshabilitarEntregaCalienteSupervisadaHandle(handle *RuntimeHandle, reason string, transcriptID int64) (*RuntimeHandle, error) {
+	if handle == nil || handle.ID <= 0 {
+		return handle, nil
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	if !RuntimeHandlePermiteEntregaCalienteSupervisada(handle) && !boolFromMap(meta, "disable_supervisor_hot_input") {
+		return handle, nil
+	}
+	if boolFromMap(meta, "disable_supervisor_hot_input") {
+		return handle, nil
+	}
+	meta["disable_supervisor_hot_input"] = true
+	reason = strings.TrimSpace(reason)
+	if reason != "" {
+		meta["disable_supervisor_hot_input_reason"] = reason
+	}
+	if transcriptID > 0 {
+		meta["disable_supervisor_hot_input_transcript_id"] = transcriptID
+	}
+	meta["disable_supervisor_hot_input_at"] = time.Now().UTC().Format(time.RFC3339)
+	metaJSON, _ := json.Marshal(meta)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		return nil, err
+	}
+	return GetRuntimeHandle(handle.ID)
 }
 
 func runtimeHandleUsaCodexTTYInestable(meta map[string]any) bool {
