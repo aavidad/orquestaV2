@@ -304,6 +304,10 @@ func float64PtrLTEZero(v *float64) bool {
 }
 
 func remainingRatio(p *PresupuestoSesion) *float64 {
+	if agotadoPorConteo(p) {
+		ratio := 0.0
+		return &ratio
+	}
 	if p != nil && p.RemainingSeconds != nil && p.WindowStartedAt != nil && p.ResetAt != nil {
 		total := p.ResetAt.Sub(*p.WindowStartedAt).Seconds()
 		if total > 0 {

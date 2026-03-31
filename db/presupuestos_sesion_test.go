@@ -107,6 +107,31 @@ func TestEvaluarPresupuestoSesionHandoffPreventivo(t *testing.T) {
 	}
 }
 
+func TestEvaluarPresupuestoSesionAgotadoPorCreditsFuerzaRatioCero(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	credits := 0.0
+	inicio := time.Now().Add(-10 * time.Minute).UTC()
+	reset := inicio.Add(5 * time.Hour)
+	p := &PresupuestoSesion{
+		WindowKind:       "5h",
+		WindowStartedAt:  &inicio,
+		ResetAt:          &reset,
+		RemainingCredits: &credits,
+		BudgetSource:     "codex_token_count_observed",
+	}
+	ev, err := EvaluarPresupuestoSesion(p)
+	if err != nil {
+		t.Fatalf("EvaluarPresupuestoSesion: %v", err)
+	}
+	if ev.Estado != "agotado" {
+		t.Fatalf("estado inesperado: %+v", ev)
+	}
+	if ev.RemainingRatio == nil || *ev.RemainingRatio != 0 {
+		t.Fatalf("ratio deberia ser cero cuando el credito esta agotado: %+v", ev)
+	}
+}
+
 func TestListarAgentesEnriquecePresupuestoVisible(t *testing.T) {
 	abrirDBTemporalMemoria(t)
 

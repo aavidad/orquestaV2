@@ -178,6 +178,52 @@ func TestObserveCodexArtifactsUsaSnapshotMasFrescoDeLaCuenta(t *testing.T) {
 	}
 }
 
+func TestObserveCodexArtifactsAceptaCreditsObjetoEnTokenCount(t *testing.T) {
+	tmp := t.TempDir()
+	base := filepath.Join(tmp, "codex-perfiles")
+	sessionsDir := filepath.Join(base, "homes", "Codex2", "sessions", "2026", "03", "31")
+	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
+		t.Fatalf("mkdir sessions: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(base, "bin"), 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	sessionPath := filepath.Join(sessionsDir, "rollout-test.jsonl")
+	if err := os.WriteFile(sessionPath, []byte(
+		`{"timestamp":"2026-03-31T19:31:40Z","type":"session_meta","payload":{"id":"sess-credits","timestamp":"2026-03-31T19:31:40Z","cwd":"/tmp/orquesta"}}`+"\n"+
+			`{"timestamp":"2026-03-31T19:31:43Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":0,"window_minutes":300,"resets_at":1775003503},"secondary":{"used_percent":100,"window_minutes":10080,"resets_at":1775294400},"credits":{"has_credits":false,"unlimited":false,"balance":null},"plan_type":null}}}`+"\n",
+	), 0o600); err != nil {
+		t.Fatalf("write session: %v", err)
+	}
+	rendered := filepath.Join(base, "bin", "codex-perfil") + " Codex2"
+	meta := map[string]any{
+		"rendered_command":    rendered,
+		"working_dir":         "/tmp/orquesta",
+		"external_session_id": "sess-credits",
+		"started_at":          time.Date(2026, 3, 31, 19, 31, 40, 0, time.UTC).Format(time.RFC3339),
+	}
+	metaJSON, _ := json.Marshal(meta)
+	artifacts, err := ObserveCodexArtifacts(ObjetivoProceso{MetadataJSON: string(metaJSON)})
+	if err != nil {
+		t.Fatalf("ObserveCodexArtifacts: %v", err)
+	}
+	if artifacts == nil {
+		t.Fatalf("artifacts nil")
+	}
+	if artifacts.SessionPath != sessionPath {
+		t.Fatalf("session path inesperado: %s", artifacts.SessionPath)
+	}
+	if artifacts.Primary.UsedPercent == nil || *artifacts.Primary.UsedPercent != 0 {
+		t.Fatalf("primary inesperado: %+v", artifacts.Primary)
+	}
+	if artifacts.Secondary.UsedPercent == nil || *artifacts.Secondary.UsedPercent != 100 {
+		t.Fatalf("secondary inesperado: %+v", artifacts.Secondary)
+	}
+	if artifacts.Credits != nil {
+		t.Fatalf("credits deberia quedar nil cuando el proveedor expone objeto sin balance: %+v", artifacts.Credits)
+	}
+}
+
 func jsonInt(v int64) string {
 	return strconv.FormatInt(v, 10)
 }

@@ -40,8 +40,8 @@ type codexSessionEvent struct {
 }
 
 type codexTokenCountPayload struct {
-	Type       string   `json:"type"`
-	Info       struct{} `json:"info"`
+	Type       string          `json:"type"`
+	Info       json.RawMessage `json:"info"`
 	RateLimits struct {
 		Primary struct {
 			UsedPercent   *float64 `json:"used_percent"`
@@ -53,8 +53,8 @@ type codexTokenCountPayload struct {
 			WindowMinutes int      `json:"window_minutes"`
 			ResetsAt      any      `json:"resets_at"`
 		} `json:"secondary"`
-		Credits  *float64 `json:"credits"`
-		PlanType string   `json:"plan_type"`
+		Credits  any    `json:"credits"`
+		PlanType string `json:"plan_type"`
 	} `json:"rate_limits"`
 }
 
@@ -104,7 +104,7 @@ func ObserveCodexArtifacts(obj ObjetivoProceso) (*CodexObservedArtifacts, error)
 		SessionPath:   sessionPath,
 		ObservedAt:    observedAt,
 		ObservedScope: scope,
-		Credits:       raw.RateLimits.Credits,
+		Credits:       codexObservedCredits(raw.RateLimits.Credits),
 		PlanType:      strings.TrimSpace(raw.RateLimits.PlanType),
 	}
 	if snapshot, err := json.Marshal(raw); err == nil {
@@ -133,7 +133,7 @@ func ObserveCodexArtifacts(obj ObjetivoProceso) (*CodexObservedArtifacts, error)
 			artifacts.SessionPath = sessionPath
 			artifacts.ObservedAt = observedAt
 			artifacts.ObservedScope = scope
-			artifacts.Credits = raw.RateLimits.Credits
+			artifacts.Credits = codexObservedCredits(raw.RateLimits.Credits)
 			artifacts.PlanType = strings.TrimSpace(raw.RateLimits.PlanType)
 			artifacts.Primary = CodexObservedRateLimit{
 				UsedPercent:   raw.RateLimits.Primary.UsedPercent,
@@ -477,6 +477,40 @@ func jsonMap(raw string) map[string]any {
 		return nil
 	}
 	return out
+}
+
+func codexObservedCredits(raw any) *float64 {
+	switch value := raw.(type) {
+	case nil:
+		return nil
+	case float64:
+		out := value
+		return &out
+	case json.Number:
+		n, err := value.Float64()
+		if err != nil {
+			return nil
+		}
+		return &n
+	case string:
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return nil
+		}
+		n, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return nil
+		}
+		return &n
+	case map[string]any:
+		if unlimited, ok := value["unlimited"].(bool); ok && unlimited {
+			return nil
+		}
+		if balance, ok := value["balance"]; ok {
+			return codexObservedCredits(balance)
+		}
+	}
+	return nil
 }
 
 func recursiveString(raw any, keys ...string) string {

@@ -3787,3 +3787,35 @@ Resultado:
 
 - la vista normal ya enseña solo señal util
 - `--raw` mantiene el acceso a todo el transcript historico cuando se necesita
+
+## 2026-03-31 — El parser observado de Codex acepta `credits` como objeto
+
+Hallazgo:
+
+- `Codex2` y `Codex5` seguian mostrando cuota observada vieja aunque ya existian `token_count` frescos en sus JSONL recientes
+- la causa no era la vista ni el scheduler: el proveedor estaba emitiendo `rate_limits.credits` como objeto (`{has_credits, unlimited, balance}`) y el parser de Orquesta esperaba `*float64`
+- al no poder deserializar esa linea, Orquesta descartaba el `token_count` entero y se quedaba con el snapshot antiguo
+
+Decision:
+
+- aceptar `credits` en varios formatos sin perder el resto del `token_count`
+- si llega objeto sin balance usable, no inventar credito; mantener `nil` pero conservar `primary/secondary`, `resets_at` e identidad
+
+Codigo:
+
+- [internal/controlruntime/codex_observe.go](/home/alberto/Trabajo/orquesta/internal/controlruntime/codex_observe.go)
+- [internal/controlruntime/codex_observe_test.go](/home/alberto/Trabajo/orquesta/internal/controlruntime/codex_observe_test.go)
+
+Validacion:
+
+- `go test ./internal/controlruntime -run 'TestObserveCodexArtifacts(LeeTokenCountYAuth|UsaSnapshotMasFrescoDelPerfil|UsaSnapshotMasFrescoDeLaCuenta|AceptaCreditsObjetoEnTokenCount)$' -count=1`
+
+Resultado:
+
+- la ingestión observada ya no pierde `token_count` frescos cuando Codex CLI cambia la forma de `credits`
+- el siguiente paso operativo es reiniciar el daemon con este binario y verificar que `Codex2/Codex5` refrescan su presupuesto observado en vivo
+
+Nota de cierre:
+
+- al validar en vivo, `Codex5` ya pasó a snapshot fresco pero apareció una incoherencia menor: el presupuesto quedaba `agotado` por `credits=0` mientras la CLI seguía mostrando `ratio restante 1.00` por la ventana temporal
+- se corrige para que `remainingRatio()` fuerce `0` cuando el agotamiento viene por conteo (`seconds/messages/tokens/credits`) y la vista no mezcle “agotado” con “100%”
