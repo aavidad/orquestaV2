@@ -113,7 +113,14 @@ func (sqliteBackend) Verify(raw *sql.DB, cfg storage.Config) *InformePersistenci
 	if err != nil {
 		registrarComprobacionPersistencia(informe, "config_sqlite", "warn", "journal_mode no disponible: "+err.Error())
 	} else {
-		registrarComprobacionPersistencia(informe, "config_sqlite", "ok", "journal_mode="+journalMode)
+		journalMode = strings.ToLower(strings.TrimSpace(journalMode))
+		if sqliteDSNMode(cfg.DSN) == "ro" {
+			registrarComprobacionPersistencia(informe, "config_sqlite", "ok", "journal_mode="+journalMode+" (read-only)")
+		} else if journalMode != "wal" {
+			registrarComprobacionPersistencia(informe, "config_sqlite", "error", "journal_mode="+journalMode+" (se esperaba wal)")
+		} else {
+			registrarComprobacionPersistencia(informe, "config_sqlite", "ok", "journal_mode="+journalMode)
+		}
 	}
 	verificarTablasCorePersistencia(informe, raw, "sqlite")
 	return informe
