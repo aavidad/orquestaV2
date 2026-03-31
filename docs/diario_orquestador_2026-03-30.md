@@ -4423,3 +4423,44 @@ Validacion viva pendiente de este mismo ciclo:
 - comprobar que:
   - `weekly=0` gana siempre aunque `5h>0`
   - si `weekly>0`, la ventana efectiva pasa a ser `5h`
+
+Validacion viva:
+
+- `./orquesta server stop && ./orquesta server start`
+- `./orquesta agente presupuesto --json`
+- `./orquesta status`
+- resultado observado:
+  - `Codex2` y `Codex5` ya quedan con `efectivo 0% · ventana weekly`
+  - `Codex3` queda con `efectivo 98% · ventana 5h` porque su semanal sigue viva
+
+## 2026-04-01 — `status` deja de contar como conectados a agentes sin cuota visible activa
+
+Hallazgo:
+
+- tras fijar la jerarquía `weekly -> 5h`, apareció una incoherencia visible: `Codex2` seguía saliendo en `Agentes conectados` aunque ya mostraba `efectivo 0% · ventana weekly`
+- la causa era simple: `AgentesActivos` en el servicio de estado todavía se construía solo con `Activo=true`, sin respetar `EstadoCuota`
+
+Decision:
+
+- alinear la proyección visible y el resumen operativo con el estado real del presupuesto
+- un agente con sesión viva pero `EstadoCuota!=activo` no cuenta como conectado disponible; debe salir del bloque principal y aparecer en `En enfriamiento/cuota`
+
+Codigo:
+
+- [db/sesiones.go](/home/alberto/Trabajo/orquesta/db/sesiones.go)
+- [db/presupuestos_sesion_test.go](/home/alberto/Trabajo/orquesta/db/presupuestos_sesion_test.go)
+- [cmd/status_service.go](/home/alberto/Trabajo/orquesta/cmd/status_service.go)
+- [cmd/status_service_test.go](/home/alberto/Trabajo/orquesta/cmd/status_service_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./db -run 'Test(GetAgenteProyectaEstadoCuotaDesdePresupuestoObservadoFresco|GetAgenteMarcaAgotadoSiLaSemanalEsCeroAunqueLaVentanaCortaSigaViva|GetAgenteMarcaEnfriamientoSiSoloSeAgotaLaVentanaCorta|ListarAgentesAgotaSiLaSemanalLlegaACeroAunqueLaVentanaCortaSigaViva)' -count=1`
+- `go test ./cmd -run 'Test(AgenteCuentaComoConectadoRespetaEstadoCuotaVisible|RenderStatusSummaryMuestraCuotaAgente|APIHandlerStatusReturnsPayload)' -count=1`
+- `go build -o ./orquesta .`
+
+Validacion viva:
+
+- `./orquesta server stop && ./orquesta server start && ./orquesta status`
+- `Codex2` ya no sale como conectado normal; pasa al bloque `En enfriamiento/cuota`
+- las tareas de `Codex2` quedan visibles en `Retenidas por cuota`, que es la lectura operativa correcta

@@ -888,6 +888,28 @@ func proyectarEstadoCuotaVisibleDesdePresupuesto(a *Agente) {
 	if a.PresupuestoCheckedAt == nil || a.PresupuestoStale {
 		return
 	}
+	if a.CuotaRestantePct != nil && *a.CuotaRestantePct <= 0 {
+		switch {
+		case presupuestoEsVentanaSemanal(a.PresupuestoVentana):
+			a.EstadoCuota = "agotado"
+			if a.PresupuestoResetAt != nil && a.PresupuestoResetAt.After(time.Now().UTC()) {
+				a.ReanimarAt = a.PresupuestoResetAt
+			}
+			if strings.TrimSpace(a.MotivoPausa) == "" {
+				a.MotivoPausa = "Presupuesto semanal agotado observado"
+			}
+			return
+		case presupuestoEsVentanaCorta(a.PresupuestoVentana):
+			a.EstadoCuota = "enfriamiento"
+			if a.PresupuestoResetAt != nil && a.PresupuestoResetAt.After(time.Now().UTC()) {
+				a.ReanimarAt = a.PresupuestoResetAt
+			}
+			if strings.TrimSpace(a.MotivoPausa) == "" {
+				a.MotivoPausa = "Ventana corta agotada observada"
+			}
+			return
+		}
+	}
 	switch strings.ToLower(strings.TrimSpace(a.PresupuestoEstado)) {
 	case "agotado":
 		a.EstadoCuota = "agotado"

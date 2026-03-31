@@ -465,7 +465,7 @@ func TestGetAgenteProyectaEstadoCuotaDesdePresupuestoObservadoFresco(t *testing.
 	if err != nil {
 		t.Fatalf("GetAgente: %v", err)
 	}
-	if agente.EstadoCuota != "agotado" {
+	if agente.EstadoCuota != "enfriamiento" {
 		t.Fatalf("estado_cuota proyectado inesperado: %+v", agente)
 	}
 	if agente.ReanimarAt == nil || agente.ReanimarAt.UTC().Unix() != reset.UTC().Unix() {
@@ -473,6 +473,96 @@ func TestGetAgenteProyectaEstadoCuotaDesdePresupuestoObservadoFresco(t *testing.
 	}
 	if agente.PresupuestoStale {
 		t.Fatalf("el presupuesto observado no deberia estar stale: %+v", agente)
+	}
+}
+
+func TestGetAgenteMarcaAgotadoSiLaSemanalEsCeroAunqueLaVentanaCortaSigaViva(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesionID, err := IniciarSesion("codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	if err := ConfigSet("pool_budget_snapshot_observed_max_age_seconds", "3600"); err != nil {
+		t.Fatalf("config observed snapshot max age: %v", err)
+	}
+	now := time.Now().UTC()
+	resetPrimary := now.Add(4 * time.Hour)
+	resetSecondary := now.Add(4 * 24 * time.Hour)
+	raw := `{"rate_limits":{"primary":{"used_percent":18,"window_minutes":300,"resets_at":` + strconv.FormatInt(resetPrimary.Unix(), 10) + `},"secondary":{"used_percent":100,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetSecondary.Unix(), 10) + `}}}`
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "5h",
+		BudgetSource:    "codex_token_count_observed",
+		RawSnapshotJSON: raw,
+		CheckedAt:       now,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion: %v", err)
+	}
+
+	agente, err := GetAgente("codex1")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.CuotaRestantePct == nil || *agente.CuotaRestantePct != 0 {
+		t.Fatalf("la cuota efectiva deberia ser cero: %+v", agente)
+	}
+	if agente.PresupuestoVentana != "weekly" {
+		t.Fatalf("la ventana efectiva deberia ser weekly: %+v", agente)
+	}
+	if agente.EstadoCuota != "agotado" {
+		t.Fatalf("deberia proyectar agotado desde la semanal visible: %+v", agente)
+	}
+	if agente.ReanimarAt == nil || agente.ReanimarAt.UTC().Unix() != resetSecondary.UTC().Unix() {
+		t.Fatalf("reanimar_at semanal inesperado: %+v", agente)
+	}
+}
+
+func TestGetAgenteMarcaEnfriamientoSiSoloSeAgotaLaVentanaCorta(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesionID, err := IniciarSesion("codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	if err := ConfigSet("pool_budget_snapshot_observed_max_age_seconds", "3600"); err != nil {
+		t.Fatalf("config observed snapshot max age: %v", err)
+	}
+	now := time.Now().UTC()
+	resetPrimary := now.Add(4 * time.Hour)
+	resetSecondary := now.Add(4 * 24 * time.Hour)
+	raw := `{"rate_limits":{"primary":{"used_percent":100,"window_minutes":300,"resets_at":` + strconv.FormatInt(resetPrimary.Unix(), 10) + `},"secondary":{"used_percent":12,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetSecondary.Unix(), 10) + `}}}`
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "5h",
+		BudgetSource:    "codex_token_count_observed",
+		RawSnapshotJSON: raw,
+		CheckedAt:       now,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion: %v", err)
+	}
+
+	agente, err := GetAgente("codex1")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.CuotaRestantePct == nil || *agente.CuotaRestantePct != 0 {
+		t.Fatalf("la cuota efectiva deberia ser cero por 5h: %+v", agente)
+	}
+	if agente.PresupuestoVentana != "5h" {
+		t.Fatalf("la ventana efectiva deberia ser 5h: %+v", agente)
+	}
+	if agente.EstadoCuota != "enfriamiento" {
+		t.Fatalf("deberia proyectar enfriamiento desde la ventana corta: %+v", agente)
+	}
+	if agente.ReanimarAt == nil || agente.ReanimarAt.UTC().Unix() != resetPrimary.UTC().Unix() {
+		t.Fatalf("reanimar_at 5h inesperado: %+v", agente)
 	}
 }
 

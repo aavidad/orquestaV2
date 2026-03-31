@@ -16,6 +16,13 @@ var statusService StatusService = dbStatusService{}
 
 type dbStatusService struct{}
 
+func agenteCuentaComoConectado(agente *db.Agente) bool {
+	if agente == nil || !agente.Activo {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "activo")
+}
+
 func (dbStatusService) FetchStatus() (apiStatusResponse, error) {
 	sesiones, err := db.ListarSesionesActivasOperativas()
 	if err != nil {
@@ -130,14 +137,14 @@ func (dbStatusService) FetchStatus() (apiStatusResponse, error) {
 			continue
 		}
 		agentesPorNombre[agente.Nombre] = agente
-		if agente.Activo {
+		if agenteCuentaComoConectado(agente) {
 			agentesActivos = append(agentesActivos, agente)
 		}
 	}
 	trabajandoPorNombre := make(map[string]*db.Agente)
 	for nombre := range trabajandoNombres {
 		agente := agentesPorNombre[nombre]
-		if agente == nil || !agente.Activo {
+		if !agenteCuentaComoConectado(agente) {
 			continue
 		}
 		trabajandoPorNombre[agente.Nombre] = agente
