@@ -64,6 +64,15 @@ func procesarSupervisionAutonomaBatch() (int, error) {
 		} else {
 			autoCreate = res
 		}
+		if policy.LastSupervisionAt != nil && !autoCreate.Created {
+			tieneTrabajoActivo, err := supervisorAutonomiaTieneTrabajoActivo(agente.Nombre, proyecto.ID)
+			if err != nil {
+				return total, err
+			}
+			if tieneTrabajoActivo {
+				continue
+			}
+		}
 		if pendiente, err := existeRuntimeOrderAutonomiaPendiente(agente.Nombre, &proyecto.ID, "nudge", "supervisar_proyecto"); err != nil {
 			return total, err
 		} else if pendiente {
@@ -812,6 +821,30 @@ func supervisorAutonomiaYaOperativo(agente string, proyectoID int64) (bool, erro
 		return false, err
 	}
 	return sesion != nil && handle != nil, nil
+}
+
+func supervisorAutonomiaTieneTrabajoActivo(agente string, proyectoID int64) (bool, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || proyectoID <= 0 {
+		return false, nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{
+		Agente:     &agente,
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaAsignada, db.TareaEnProgreso, db.TareaBloqueada:
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func persistirEstadoProyectoAutonomia(policy *db.ProyectoAutonomia, estado db.EstadoAutonomiaProyecto) error {

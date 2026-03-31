@@ -378,6 +378,89 @@ func TestProcesarSupervisionAutonomaBatchNoRepiteSupervisionPeriodicaSiYaEmitioN
 	}
 }
 
+func TestProcesarSupervisionAutonomaBatchNoRepiteSupervisionSiSupervisorYaTieneTrabajoActivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		ReviewRequired:       true,
+		AutoCreateTasks:      true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSupervisor",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	taskID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Supervision ya en curso",
+		Descripcion:"Auditoria real del proyecto",
+		ProyectoID: &proyectoID,
+		Modulo:     "autonomia",
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(taskID, "CodexSupervisor"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(taskID, "CodexSupervisor"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE proyectos_autonomia
+		SET last_supervision_at=datetime('now','-10 minutes')
+		WHERE proyecto_id=?`, proyectoID); err != nil {
+		t.Fatalf("forzar supervision vencida: %v", err)
+	}
+
+	n, err := procesarSupervisionAutonomaBatch()
+	if err != nil {
+		t.Fatalf("procesar supervision: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia repetir supervision si el supervisor ya tiene trabajo activo, got=%d", n)
+	}
+
+	agente := "CodexSupervisor"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	for _, order := range orders {
+		if order != nil && order.Tipo == "nudge" && strings.Contains(order.PayloadJSON, `"accion":"supervisar_proyecto"`) {
+			t.Fatalf("no deberia crear nudge de supervision sobre supervisor con trabajo activo: %+v", orders)
+		}
+	}
+}
+
 func TestProcesarSupervisionAutonomaBatchGeneraBacklogInicialSiAutoCreateTasks(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

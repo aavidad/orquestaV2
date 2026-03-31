@@ -2776,3 +2776,28 @@ Validacion:
 
 - `go test ./notificaciones ./cmd -run 'Test(DescribirConfiguracionReflejaOpenClawYTelegram|APIObservabilidadReadOnly|WebDashMuestraEstadoOpenClawNotificaciones)' -count=1`
 - smoke web/API pendiente de ejecutar tras el formateo y la recompilacion final
+
+## 2026-03-31 — la supervisión periódica ya no repica sobre un supervisor que ya está trabajando
+
+Hallazgo:
+
+- `Codex1` seguía recibiendo ciclos `supervisar_proyecto` cada ~5 minutos aunque el mailbox drenara y la sesión/runtimes siguieran vivos
+- `last_supervision_at` sí se actualizaba; el problema no era el reloj sino el criterio de re-siembra
+- el batch periódico estaba tratando igual a un supervisor ocioso y a un supervisor que ya tenía tareas activas del proyecto
+
+Decision:
+
+- la supervisión periódica deja de sembrar `supervisar_proyecto` si el supervisor ya tiene trabajo activo real en ese proyecto
+- el criterio estable no depende solo de heartbeat/handle; incorpora también la verdad funcional del backlog activo del supervisor
+- esto endurece la orquestación contra repiques por estados transitorios del runtime
+
+Codigo:
+
+- [cmd/controlplane_autonomia_nivel2.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_autonomia_nivel2.go)
+- [cmd/controlplane_support_test.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestProcesarSupervisionAutonomaBatch(EncolaSupervisionYRegistraCiclo|ArrancaSupervisorPreferidoSinSesion|NoRepiteSupervisionPeriodicaConSupervisorOperativo|NoRepiteSupervisionPeriodicaSiYaEmitioNudgeReciente|NoRepiteSupervisionSiSupervisorYaTieneTrabajoActivo)' -count=1`
+- `go build -o ./orquesta .`

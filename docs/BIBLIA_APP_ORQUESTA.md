@@ -640,3 +640,9 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - la vía oficial para dejar el daemon levantado desde Orquesta es `server start`.
 - `server start` debe usar la misma ruta interna que emplea la CLI para levantar localrpc y, si el hijo muere antes de exponer `healthz`, debe devolver un error útil con resumen del log y limpiar estado falso.
 - no se debe depender de `server run &`, `nohup` o wrappers externos como contrato operativo del orquestador.
+
+## Supervisión autónoma periódica
+
+- la supervisión periódica no debe reinyectar `supervisar_proyecto` solo porque haya vencido el reloj si el supervisor ya tiene trabajo activo real en ese proyecto.
+- para este contrato, `trabajo activo real` significa al menos una tarea del supervisor en estado `asignada`, `en_progreso` o `bloqueada` dentro del proyecto.
+- el batch periódico de supervisión existe para sembrar o recuperar frente útil, no para interrumpir a un supervisor que ya está ejecutando ese frente.
