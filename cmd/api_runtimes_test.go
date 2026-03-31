@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"orquesta/db"
 )
@@ -287,4 +288,77 @@ func TestAPIRuntimeControlPlaneEndpoints(t *testing.T) {
 	assertKey(http.MethodPost, "/api/runtime-mailbox", []byte(`{"from_agente":"Codex1","to_agente":"Codex2","kind":"handoff","proyecto":"orquestador","payload":"{}"}`), "id", http.StatusCreated)
 	assertKey(http.MethodPost, "/api/runtime-mailbox/"+itoa(mailID)+"/entregar", []byte(`{}`), "id", http.StatusOK)
 	assertKey(http.MethodPost, "/api/runtime-mailbox/"+itoa(mailID)+"/consumir", []byte(`{}`), "id", http.StatusOK)
+}
+
+func TestAPIRuntimeEventsCompactaPayloadGigante(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	gigante := strings.Repeat("x", 5000)
+	if _, err := db.RegistrarRuntimeEvent(&db.RuntimeEvent{
+		RuntimeID:   runtime.ID,
+		Kind:        "runtime_panic",
+		Level:       "critical",
+		Message:     "panic " + gigante,
+		PayloadJSON: `{"text":"` + gigante + `","command":"` + gigante + `"}`,
+	}); err != nil {
+		t.Fatalf("registrar runtime event gigante: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/runtime-events?agente=Codex1&proyecto=orquestador&limit=5", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado runtime events: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode runtime events: %v", err)
+	}
+	items, _ := payload["events"].([]any)
+	if len(items) == 0 {
+		t.Fatalf("runtime events vacíos: %s", rec.Body.String())
+	}
+	first, _ := items[0].(map[string]any)
+	msg, _ := first["message"].(string)
+	if utf8.RuneCountInString(msg) > 512 {
+		t.Fatalf("message debería salir compactado, runes=%d", utf8.RuneCountInString(msg))
+	}
+	rawPayload, _ := first["payload_json"].(string)
+	if utf8.RuneCountInString(rawPayload) > 1536 {
+		t.Fatalf("payload_json debería salir compactado, runes=%d", utf8.RuneCountInString(rawPayload))
+	}
+	payloadMap, _ := first["payload"].(map[string]any)
+	texto, _ := payloadMap["text"].(string)
+	if utf8.RuneCountInString(texto) > 512 {
+		t.Fatalf("payload.text debería salir compactado, runes=%d", utf8.RuneCountInString(texto))
+	}
 }

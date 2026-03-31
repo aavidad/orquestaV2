@@ -3255,7 +3255,69 @@ func apiHandlerRuntimeEvents(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
-	apiWriteJSON(w, http.StatusOK, map[string]any{"events": items})
+	apiWriteJSON(w, http.StatusOK, map[string]any{"events": compactarRuntimeEventsAPI(items)})
+}
+
+func compactarRuntimeEventsAPI(items []*db.RuntimeEvent) []*db.RuntimeEvent {
+	if len(items) == 0 {
+		return items
+	}
+	out := make([]*db.RuntimeEvent, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		cloned := *item
+		cloned.Message = truncarTextoAPI(cloned.Message, 512)
+		if len(cloned.Payload) > 0 {
+			payload := make(map[string]any, len(cloned.Payload))
+			for k, v := range cloned.Payload {
+				payload[k] = compactarValorRuntimeEventAPI(v)
+			}
+			cloned.Payload = payload
+			if raw, err := json.Marshal(payload); err == nil {
+				cloned.PayloadJSON = truncarTextoAPI(string(raw), 1536)
+			} else {
+				cloned.PayloadJSON = truncarTextoAPI(cloned.PayloadJSON, 1536)
+			}
+		} else {
+			cloned.PayloadJSON = truncarTextoAPI(cloned.PayloadJSON, 1536)
+		}
+		out = append(out, &cloned)
+	}
+	return out
+}
+
+func compactarValorRuntimeEventAPI(v any) any {
+	switch raw := v.(type) {
+	case string:
+		return truncarTextoAPI(raw, 512)
+	case []any:
+		out := make([]any, 0, len(raw))
+		for _, item := range raw {
+			out = append(out, compactarValorRuntimeEventAPI(item))
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(raw))
+		for k, item := range raw {
+			out[k] = compactarValorRuntimeEventAPI(item)
+		}
+		return out
+	default:
+		return v
+	}
+}
+
+func truncarTextoAPI(raw string, limit int) string {
+	raw = strings.TrimSpace(raw)
+	if limit <= 0 || len(raw) <= limit {
+		return raw
+	}
+	if limit <= 1 {
+		return raw[:limit]
+	}
+	return raw[:limit-1] + "…"
 }
 
 func apiHandlerRuntimeTranscript(w http.ResponseWriter, r *http.Request) {

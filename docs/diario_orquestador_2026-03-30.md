@@ -96,6 +96,33 @@ Conclusion:
 
 - la observabilidad del panic deja de arrastrar bootstrap completo y vuelve a ser legible y barata
 
+## 2026-03-31 16:35 aprox. — `/api/runtime-events` deja de servir megatexto histórico
+
+Hallazgo:
+
+- aunque el ingest nuevo de transcript ya corta mejor los `runtime_panic`, la API seguia devolviendo eventos historicos gigantes
+- eso cargaba dashboard/CLI con `message` y `payload_json` enormes, incluso cuando el cliente solo necesita una proyeccion operativa
+
+Decision:
+
+- el raw se conserva en persistencia, pero la API de lectura debe ser compacta por defecto
+- `runtime-events` debe truncar `message`, `payload_json` y strings profundas del `payload` a tamaños razonables
+
+Cambios:
+
+- `cmd/api.go`
+  - `apiHandlerRuntimeEvents()` pasa por `compactarRuntimeEventsAPI(...)`
+  - nuevos helpers:
+    - `compactarValorRuntimeEventAPI(...)`
+    - `truncarTextoAPI(...)`
+- `cmd/api_runtimes_test.go`
+  - nueva regresion `TestAPIRuntimeEventsCompactaPayloadGigante`
+
+Conclusion:
+
+- la observabilidad histórica sigue disponible en BD/trazas
+- la superficie server-first deja de atascarse por eventos viejos desproporcionados
+
 ## 2026-03-31 11:3x aprox. — fusible permanente para `supervisor_local` tras `runtime_panic` real en Codex
 
 Hallazgo:
