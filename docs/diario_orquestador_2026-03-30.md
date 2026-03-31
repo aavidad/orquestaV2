@@ -2235,6 +2235,13 @@ Validacion:
 Hallazgo:
 
 - tras quitar el falso positivo de `Script started on ...`, `Codex1` seguia cayendo, pero ahora con un `runtime_panic` real
+
+## 2026-03-31 — verificación SQLite ya no acepta `journal_mode` fuera de WAL
+
+- el contrato documental ya decía que `journal_mode=WAL` forma parte del backend SQLite sano, pero `persistencia verificar` todavía no lo exigía de forma estricta
+- ese hueco permitia que un backend writable pudiera seguir apareciendo como `ok` aun si habia caido a `DELETE` o a un modo equivalente, escondiendo una regresion que despues puede volver a producir `SQLITE_BUSY`
+- se endurece `sqliteBackend.Verify` para marcar error cuando el `journal_mode` no es `wal` en modo writable
+- se añade test dirigido para cubrir la degradacion intencional a `DELETE` y fijar que la comprobacion `config_sqlite` pasa a `error`
 - el transcript ya muestra la causa: `tui_app_server/src/wrapping.rs:52` y `byte index ... is out of bounds of 'Orquesta: has sido arrancado como orquestador ...'`
 - `Codex2` no cae porque su bootstrap ya era mas corto y acababa compactado de facto; el hueco estaba en el texto especifico del supervisor
 
@@ -2638,4 +2645,82 @@ Validacion:
   - `./orquesta server stop && ./orquesta server start`
   - `curl -sf http://127.0.0.1:16543/api/mcp`
   - `curl -sf -X POST http://127.0.0.1:16543/api/mcp -H 'Content-Type: application/json' -d '{... \"method\":\"initialize\" ...}'`
-  - `curl -sf -X POST http://127.0.0.1:16543/api/mcp -H 'Content-Type: application/json' -d '{... \"method\":\"tools/list\" ...}'`
+- `curl -sf -X POST http://127.0.0.1:16543/api/mcp -H 'Content-Type: application/json' -d '{... \"method\":\"tools/list\" ...}'`
+
+## 2026-03-31 — A2UI gana superficie server-first en la API de runtimes
+
+Hallazgo:
+
+- A2UI ya estaba contractual y renderizaba en `serve`, pero seguia siendo una proyeccion solo HTML
+- faltaba una puerta canonica por API para que el mismo detalle llegase a clientes server-first sin duplicar parseo ni renderizado
+
+Decision:
+
+- exponer el detalle A2UI por `/api/runtimes/{id}/a2ui`
+- reutilizar la proyeccion existente del panel y solo transformar la respuesta a JSON estable
+- mantener `serve` como vista de lectura y no abrir aun edicion o respuesta humana por esta via
+
+Codigo:
+
+- [cmd/api.go](/home/alberto/Trabajo/orquesta/cmd/api.go)
+- [cmd/api_test.go](/home/alberto/Trabajo/orquesta/cmd/api_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+- [docs/op_094_ui_declarativa_agentes.md](/home/alberto/Trabajo/orquesta/docs/op_094_ui_declarativa_agentes.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestAPIRuntimeA2UIExponeMensajesDeFormaServerFirst' -count=1`
+- `go test ./cmd -run 'TestWebRuntimeDetalleMuestraA2UIReadOnly' -count=1`
+- smoke HTTP local pendiente de repetir con el binario recompilado si hace falta
+
+## 2026-03-31 — las señales asíncronas del supervisor local dejan de tumbar el teardown
+
+Hallazgo:
+
+- la ultima bateria global de `go test ./cmd ./db ./planocontrol ./internal/controlruntime -count=1` saco un `panic` real en `db/sqlwrap.go`
+- el origen no era SQL directo en el camino normal, sino un `SupervisorSignal` que llegaba tarde desde `internal/controlruntime/supervisor_local.go`
+- cuando el handler de `cmd/controlruntime_hooks.go` intentaba hacer `ProcessTick`, la base temporal de pruebas ya podia estar cerrada y el handler terminaba reventando el goroutine
+
+Decision:
+
+- la emision de señales del supervisor local debe ser panic-safe
+- si el plano de control ya se ha desmontado, la señal se degrada a error recuperable y no rompe ni el runtime local ni los tests
+
+Codigo:
+
+- [internal/controlruntime/supervisor_local.go](/home/alberto/Trabajo/orquesta/internal/controlruntime/supervisor_local.go)
+- [internal/controlruntime/supervisor_local_test.go](/home/alberto/Trabajo/orquesta/internal/controlruntime/supervisor_local_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd ./db ./planocontrol ./internal/controlruntime -count=1` pendiente de repetir tras el fix
+
+## 2026-03-31 — OpenClaw Gateway vuelve a ser visible para operador por API y dashboard
+
+Hallazgo:
+
+- el gateway OpenClaw ya existia como adaptador saliente real en `notificaciones/openclaw.go`
+- pero el operador no tenia una lectura canonica de su estado operativo, y la unica pista quedaba dispersa en claves de config
+- para cerrar el fleco sin crear otra fuente de verdad, el estado se expone ahora desde el daemon como snapshot de lectura
+
+Decision:
+
+- `OpenClaw Gateway` y Telegram se describen desde el servidor en `/api/notificaciones`
+- el dashboard web del daemon muestra el mismo snapshot para operador
+- no se ha tocado A2UI ni se ha creado una ruta paralela fuera del daemon
+
+Codigo:
+
+- [notificaciones/openclaw.go](/home/alberto/Trabajo/orquesta/notificaciones/openclaw.go)
+- [notificaciones/openclaw_test.go](/home/alberto/Trabajo/orquesta/notificaciones/openclaw_test.go)
+- [cmd/api.go](/home/alberto/Trabajo/orquesta/cmd/api.go)
+- [cmd/serve.go](/home/alberto/Trabajo/orquesta/cmd/serve.go)
+- [cmd/api_observabilidad_test.go](/home/alberto/Trabajo/orquesta/cmd/api_observabilidad_test.go)
+- [cmd/serve_notificaciones_test.go](/home/alberto/Trabajo/orquesta/cmd/serve_notificaciones_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./notificaciones ./cmd -run 'Test(DescribirConfiguracionReflejaOpenClawYTelegram|APIObservabilidadReadOnly|WebDashMuestraEstadoOpenClawNotificaciones)' -count=1`
+- smoke web/API pendiente de ejecutar tras el formateo y la recompilacion final

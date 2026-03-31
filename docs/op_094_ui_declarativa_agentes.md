@@ -2,7 +2,7 @@
 
 ## Estado actual
 
-Fecha: 2026-03-23
+Fecha: 2026-03-31
 
 Preparación técnica ya realizada, pero todavía no activada en la operativa normal.
 
@@ -26,8 +26,10 @@ Rutas de código:
 Ya activado parcialmente:
 
 - `serve` muestra mensajes A2UI en modo lectura dentro del detalle de runtime
+- la API server-first expone el mismo detalle A2UI en `/api/runtimes/{id}/a2ui`
 - no se ha abierto todavía una vía de edición o respuesta humana específica sobre esos componentes
 - sigue siendo un canal complementario; no sustituye el flujo normal de tareas, propuestas o mailbox
+- la proyeccion API reutiliza el contrato y el renderizado ya existentes; no duplica el parseo de mailbox
 
 Envelope de mailbox preparado:
 

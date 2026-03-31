@@ -121,6 +121,8 @@ Regla dura:
 - el modo local queda solo para recuperacion explicita o diagnostico de bloqueo real
 - `ORQUESTA_FORCE_LOCAL_DB` y `--local` no autorizan mutaciones de negocio; solo inspeccion/diagnostico de solo lectura en los comandos explicitamente cubiertos
 - las superficies externas nuevas tambien entran por el daemon oficial: si Orquesta expone MCP por HTTP, debe hacerlo como endpoint server-first del mismo servidor (`/api/mcp`), no como proceso lateral con otra verdad operativa
+- A2UI no es una excepcion: su superficie canonica por API debe colgar del mismo daemon, reutilizar la proyeccion existente de `serve` y exponer el detalle de runtime en `/api/runtimes/{id}/a2ui` antes de abrir cualquier edicion humana o flujo paralelo
+- OpenClaw Gateway y el resto de canales de notificacion tambien son estado operativo del daemon: se exponen por lectura server-first en `/api/notificaciones` y en el dashboard web del mismo servidor, no se infieren solo de claves de configuracion ni de scripts externos
 
 ### Single-writer
 
@@ -294,6 +296,7 @@ Contrato minimo obligatorio para el supervisor local:
 - si cambia el `cwd` o la firma de comando esperada, el proceso no puede seguir contandose como runtime valido
 - si un `runtime_handle` activo solo conserva metadata pobre de sesion pero existe `runtime manifest` valido del mismo proceso, el supervisor debe rehidratar `stdin_path`, `log_path`, `rendered_command`, `supervisor_ref` y demas metadata operativa rica antes de reconciliar el handle
 - esa rehidratacion no puede depender de SQLite directa ni de rescates manuales; debe ocurrir por el camino oficial del daemon, tipicamente durante `sync_status` o supervisión equivalente
+- la emision de `SupervisorSignal` no puede tumbar el runtime local ni el teardown de tests: el handler debe ser panic-safe y el supervisor local debe degradar la señal a error recuperable si el plano de control ya no esta disponible
 - un batch del runner no puede congelar el resto del control plane; cada batch necesita aislamiento y timeout propio
 
 La referencia conceptual mas cercana para el nucleo es:
@@ -625,6 +628,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 
 - mientras SQLite siga siendo backend soportado y backend vivo del servidor, el adaptador debe quedar sano por sí mismo; no vale asumir que el DSN ya aplicará siempre todos los pragmas correctos.
 - `journal_mode=WAL` es parte del contrato operativo del backend SQLite server-first; la verificación viva de persistencia debe reflejar `wal`, no `delete`, cuando el daemon ha arrancado con el binario correcto.
+- `persistencia verificar` debe marcar error si un SQLite writable sale de `WAL`; un estado `delete` o equivalente no es un backend sano aunque la conexión siga respondiendo.
 - `runtime_mailbox.from_agente` representa un emisor lógico del control plane y no debe exigir FK a `agentes(nombre)`. El destinatario `to_agente` sí sigue siendo un agente real.
 - emisores como `server` u `orquesta` son canónicos en mailbox/runtime orders; el schema no puede romper esa semántica.
 

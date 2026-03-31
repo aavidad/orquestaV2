@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"orquesta/db"
+	"orquesta/internal/a2ui"
 	"orquesta/reviewapp"
 	"orquesta/supervisionapp"
 )
@@ -557,6 +558,91 @@ func TestAPIStatusNoCuentaSesionConHandleFallidoReciente(t *testing.T) {
 		if agente != nil && agente.Nombre == "CodexFallo" && agente.Activo {
 			t.Fatalf("CodexFallo no deberia salir activo via /api/status: %+v", agente)
 		}
+	}
+}
+
+func TestAPIRuntimeA2UIExponeMensajesDeFormaServerFirst(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex1",
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador"),
+		Herramienta:        "codex-cli",
+		ExternalSessionID:  "sess-a2ui-api",
+		ResumenContinuidad: "runtime con a2ui",
+		Branch:             "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtimeInst, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtimeInst == nil {
+		t.Fatalf("get runtime: runtime=%+v err=%v", runtimeInst, err)
+	}
+	reqA2UI := &a2ui.RenderRequest{
+		Type:      a2ui.MessageRender,
+		Component: a2ui.ComponentDataTable,
+		Props: json.RawMessage(`{
+			"title":"Riesgos runtime",
+			"columns":["ID","Detalle"],
+			"data":[[1,"Handoff pendiente"],[2,"Checkpoint atrasado"]]
+		}`),
+	}
+	msg, err := a2ui.BuildMailboxMessage("Codex0", "Codex1", reqA2UI)
+	if err != nil {
+		t.Fatalf("build mailbox a2ui: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  msg.FromAgente,
+		ToAgente:    msg.ToAgente,
+		ProyectoID:  &proyectoID,
+		Kind:        msg.Kind,
+		PayloadJSON: msg.Payload,
+	}); err != nil {
+		t.Fatalf("crear mailbox a2ui: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/runtimes/"+itoa(runtimeInst.ID)+"/a2ui?limit=5", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload apiRuntimeA2UIResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode a2ui api: %v", err)
+	}
+	if payload.Runtime == nil || payload.Runtime.ID != runtimeInst.ID {
+		t.Fatalf("runtime inesperado en /api/runtimes/a2ui: %+v", payload.Runtime)
+	}
+	if len(payload.A2UI) != 1 {
+		t.Fatalf("mensajes a2ui inesperados: %+v", payload.A2UI)
+	}
+	if payload.A2UI[0].Component != string(a2ui.ComponentDataTable) {
+		t.Fatalf("componente a2ui inesperado: %+v", payload.A2UI[0])
+	}
+	if payload.A2UI[0].DataTable == nil || payload.A2UI[0].DataTable.Title != "Riesgos runtime" {
+		t.Fatalf("datatable a2ui inesperada: %+v", payload.A2UI[0])
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.Contains(got, "application/json") {
+		t.Fatalf("content-type inesperado: %s", got)
 	}
 }
 

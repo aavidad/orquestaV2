@@ -23,8 +23,10 @@ import (
 	"orquesta/fabricaapp"
 	"orquesta/gitgobernanza"
 	"orquesta/gobernanzaapp"
+	"orquesta/internal/a2ui"
 	"orquesta/lenguajeapp"
 	"orquesta/memoriaproyecto"
+	"orquesta/notificaciones"
 	"orquesta/progresoapp"
 	"orquesta/propuestasapp"
 	"orquesta/reviewapp"
@@ -537,6 +539,41 @@ type apiRuntimeHandoffRequest struct {
 	ExternalSessionID string `json:"external_session_id"`
 }
 
+type apiRuntimeA2UIResponse struct {
+	Runtime *db.RuntimeInstance     `json:"runtime"`
+	A2UI    []apiRuntimeA2UIMessage `json:"a2ui"`
+}
+
+type apiRuntimeA2UIMessage struct {
+	Creado     string                   `json:"creado"`
+	FromAgente string                   `json:"from_agente"`
+	Estado     string                   `json:"estado"`
+	Component  string                   `json:"component"`
+	Error      string                   `json:"error,omitempty"`
+	DataTable  *apiRuntimeA2UITable     `json:"data_table,omitempty"`
+	Chart      *apiRuntimeA2UIChart     `json:"chart,omitempty"`
+	Approval   *a2ui.ApprovalFormProps  `json:"approval,omitempty"`
+	Markdown   *a2ui.MarkdownBlockProps `json:"markdown,omitempty"`
+}
+
+type apiRuntimeA2UITable struct {
+	Title   string     `json:"title"`
+	Columns []string   `json:"columns"`
+	Rows    [][]string `json:"rows"`
+}
+
+type apiRuntimeA2UIChart struct {
+	Title     string                   `json:"title"`
+	ChartType string                   `json:"chart_type"`
+	Series    []string                 `json:"series"`
+	Rows      []apiRuntimeA2UIChartRow `json:"rows"`
+}
+
+type apiRuntimeA2UIChartRow struct {
+	Label  string   `json:"label"`
+	Values []string `json:"values"`
+}
+
 func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/server", apiHandlerServer)
 	mux.HandleFunc("/api/mcp", apiHandlerMCP)
@@ -563,6 +600,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/lenguaje/matriz/borrar", apiHandlerLenguajeMatrizBorrar)
 	mux.HandleFunc("/api/lenguaje/resolver", apiHandlerLenguajeResolver)
 	mux.HandleFunc("/api/config", apiHandlerConfig)
+	mux.HandleFunc("/api/notificaciones", apiHandlerNotificaciones)
 	mux.HandleFunc("/api/audit", apiHandlerAudit)
 	mux.HandleFunc("/api/respaldo/bd", apiHandlerRespaldoBD)
 	mux.HandleFunc("/api/persistencia/verificar", apiHandlerPersistenciaVerificar)
@@ -928,6 +966,15 @@ func apiHandlerConfig(w http.ResponseWriter, r *http.Request) {
 	default:
 		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
+}
+
+func apiHandlerNotificaciones(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{
+		"notificaciones": notificaciones.DescribirConfiguracion(),
+	})
 }
 
 func apiResolverTipoAgente(r *http.Request) (string, error) {
@@ -3010,6 +3057,32 @@ func apiRouterRuntimes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/runtimes/"), "/"), "/")
+	if len(parts) == 2 && parts[1] == "a2ui" {
+		id, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
+			return
+		}
+		runtime, err := runtimesService.GetRuntime(id)
+		if err != nil {
+			apiError(w, http.StatusNotFound, err)
+			return
+		}
+		limit := 8
+		if limitStr := strings.TrimSpace(r.URL.Query().Get("limit")); limitStr != "" {
+			parsed, err := strconv.Atoi(limitStr)
+			if err != nil || parsed <= 0 {
+				apiError(w, http.StatusBadRequest, fmt.Errorf("limit inválido"))
+				return
+			}
+			limit = parsed
+		}
+		apiWriteJSON(w, http.StatusOK, apiRuntimeA2UIResponse{
+			Runtime: runtime,
+			A2UI:    apiRuntimeA2UIToMessages(runtimeA2UIToWeb(runtime, limit)),
+		})
+		return
+	}
 	if len(parts) != 1 || parts[0] == "" {
 		http.NotFound(w, r)
 		return
@@ -3030,6 +3103,65 @@ func apiRouterRuntimes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{"runtime": runtime, "samples": samples})
+}
+
+func apiRuntimeA2UIToMessages(rows []webRuntimeA2UIRow) []apiRuntimeA2UIMessage {
+	out := make([]apiRuntimeA2UIMessage, 0, len(rows))
+	for _, row := range rows {
+		if row.Creado == "" && row.FromAgente == "" && row.Component == "" && row.Error == "" {
+			continue
+		}
+		msg := apiRuntimeA2UIMessage{
+			Creado:     row.Creado,
+			FromAgente: row.FromAgente,
+			Estado:     row.Estado,
+			Component:  row.Component,
+			Error:      row.Error,
+		}
+		if row.DataTable != nil {
+			msg.DataTable = &apiRuntimeA2UITable{
+				Title:   row.DataTable.Title,
+				Columns: append([]string(nil), row.DataTable.Columns...),
+				Rows:    cloneStringMatrix(row.DataTable.Rows),
+			}
+		}
+		if row.Chart != nil {
+			chartRows := make([]apiRuntimeA2UIChartRow, 0, len(row.Chart.Rows))
+			for _, src := range row.Chart.Rows {
+				chartRows = append(chartRows, apiRuntimeA2UIChartRow{
+					Label:  src.Label,
+					Values: append([]string(nil), src.Values...),
+				})
+			}
+			msg.Chart = &apiRuntimeA2UIChart{
+				Title:     row.Chart.Title,
+				ChartType: row.Chart.ChartType,
+				Series:    append([]string(nil), row.Chart.Series...),
+				Rows:      chartRows,
+			}
+		}
+		if row.Approval != nil {
+			copy := *row.Approval
+			msg.Approval = &copy
+		}
+		if row.Markdown != nil {
+			copy := *row.Markdown
+			msg.Markdown = &copy
+		}
+		out = append(out, msg)
+	}
+	return out
+}
+
+func cloneStringMatrix(src [][]string) [][]string {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([][]string, len(src))
+	for i := range src {
+		out[i] = append([]string(nil), src[i]...)
+	}
+	return out
 }
 
 func apiHandlerRuntimeHandles(w http.ResponseWriter, r *http.Request) {
