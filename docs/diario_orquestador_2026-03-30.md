@@ -3116,3 +3116,34 @@ Validacion:
 
 - `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'Test(APIAgentesPresupuestoYCuentas|APIAgentesYStatusExponenCuentaYCuotaVisible)' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-03-31 — CLI server-first para cuentas y presupuesto de agentes
+
+Hallazgo:
+
+- con los endpoints nuevos ya se podía consultar la telemetría por API, pero seguía faltando una vía operativa en CLI para el uso diario del orquestador sin tirar de `curl`
+
+Decision:
+
+- se añaden dos comandos server-first:
+  - `orquesta agente cuentas [--activos] [--json]`
+  - `orquesta agente presupuesto [--activos] [--json]`
+- ambos reutilizan los endpoints dedicados y no abren ninguna ruta local paralela
+
+Codigo:
+
+- [cmd/agente_telemetria.go](/home/alberto/Trabajo/orquesta/cmd/agente_telemetria.go)
+- [cmd/agente_telemetria_test.go](/home/alberto/Trabajo/orquesta/cmd/agente_telemetria_test.go)
+- [cmd/cliente_servidor_recursos.go](/home/alberto/Trabajo/orquesta/cmd/cliente_servidor_recursos.go)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'Test(AgenteCuentasCmdRenderizaListado|AgentePresupuestoCmdRenderizaListado|APIAgentesPresupuestoYCuentas)' -count=1`
+- `go build -o ./orquesta .`
+- smoke viva:
+  - `./orquesta server start`
+  - `./orquesta agente cuentas --activos`
+  - `./orquesta agente presupuesto --activos`
+- resultado vivo:
+  - `agente presupuesto` ya devuelve la cuota efectiva y el desglose diario/semanal de `Codex1-5`
+  - `agente cuentas --activos` hoy devuelve `—` en todos los agentes activos porque sus snapshots/metadata vivas todavía no persisten correo observado

@@ -179,7 +179,7 @@ type apiProyectoFabricarAppResponse struct {
 }
 
 type apiProyectoFabricarAppPreviewResponse struct {
-	OK    bool                     `json:"ok"`
+	OK    bool                       `json:"ok"`
 	Tasks []fabricaapp.BlueprintTask `json:"tasks"`
 }
 
@@ -888,6 +888,32 @@ func registrarConectorPorAPI(req apiConectorUpsertRequest) (int64, bool, error) 
 func registrarAgentePorAPI(nombre, rol string) (bool, error) {
 	ok, err := apiPost("/api/agentes", apiAgenteRequest{Nombre: nombre, Rol: rol}, nil)
 	return ok, err
+}
+
+func listarAgentesPresupuestoPorAPI(activos bool) (*apiAgentesPresupuestoResponse, bool, error) {
+	var resp apiAgentesPresupuestoResponse
+	path := "/api/agentes/presupuesto"
+	if activos {
+		path += "?activos=true"
+	}
+	ok, err := apiGet(path, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
+func listarAgentesCuentasPorAPI(activos bool) (*apiAgentesCuentasResponse, bool, error) {
+	var resp apiAgentesCuentasResponse
+	path := "/api/agentes/cuentas"
+	if activos {
+		path += "?activos=true"
+	}
+	ok, err := apiGet(path, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
 }
 
 func retirarAgentePorAPI(nombre string) (bool, error) {
