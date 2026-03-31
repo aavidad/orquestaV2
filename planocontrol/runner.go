@@ -45,6 +45,7 @@ type Runner struct {
 	InitNotifications func()
 	Notifier          func() notificaciones.Notificador
 	Debugf            func(format string, args ...any)
+	StartupGrace      time.Duration
 	ReanimacionCada   time.Duration
 	SaludCada         time.Duration
 	PlanificacionCada time.Duration
@@ -98,10 +99,20 @@ func (r *Runner) Wait() {
 }
 
 func (r *Runner) loop(ctx context.Context, name string, each time.Duration, fn func()) {
-	select {
-	case <-ctx.Done():
-		return
-	default:
+	if delay := r.startupGrace(); delay > 0 {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+	} else {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 	}
 	r.safeLoopCall(name, fn)
 	ticker := time.NewTicker(each)
@@ -411,6 +422,13 @@ func (r *Runner) controlPlaneBatchTimeout() time.Duration {
 		return 45 * time.Second
 	}
 	return r.BatchTimeout
+}
+
+func (r *Runner) startupGrace() time.Duration {
+	if r == nil || r.StartupGrace <= 0 {
+		return 0
+	}
+	return r.StartupGrace
 }
 
 func (r *Runner) beginControlPlaneBatch(name string, timeout time.Duration) (uint64, bool) {

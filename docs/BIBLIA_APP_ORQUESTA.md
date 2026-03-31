@@ -573,3 +573,9 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - `runtime purgar-ordenes` existe para limpiar ruido de pruebas y deuda terminal, pero debe trabajar con corte temporal conservador.
 - la purga de órdenes terminales no debe borrar actividad fresca; el camino oficial usa `older-than-minutes` y por defecto opera sobre órdenes con más de `60` minutos.
 - la limpieza de ruido se hace por daemon y con estados terminales (`completada`, `fallida`, `expirada`, `cancelada`), nunca sobre órdenes vivas.
+
+## Arranque del daemon
+
+- el listener y la API deben quedar disponibles antes de disparar batches pesados del control plane.
+- el `Runner` del servidor arranca con una `startup grace` para evitar que `status` o `/api/runtime-handles` queden bloqueados por trabajo interno nada más levantar el daemon.
+- esta gracia es del daemon server-first; no debe contaminar tests ni runners embebidos que necesiten ejecución inmediata.

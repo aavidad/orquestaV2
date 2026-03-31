@@ -44,13 +44,15 @@ type stubAutomationService struct {
 	resetErr         error
 }
 
-func (s *stubAutomationService) CheckReanimaciones() ([]*db.Agente, error) { return s.reanimar, s.reanimarErr }
+func (s *stubAutomationService) CheckReanimaciones() ([]*db.Agente, error) {
+	return s.reanimar, s.reanimarErr
+}
 func (s *stubAutomationService) ResetReanimacion(nombre string) error {
 	s.resetCalls = append(s.resetCalls, nombre)
 	return s.resetErr
 }
-func (s *stubAutomationService) GarantizarSaludAgentes() error             { return nil }
-func (s *stubAutomationService) PlanificarTareasAutomaticamente() error    { return nil }
+func (s *stubAutomationService) GarantizarSaludAgentes() error          { return nil }
+func (s *stubAutomationService) PlanificarTareasAutomaticamente() error { return nil }
 func (s *stubAutomationService) ProcesarAutonomiaAgentesBatch() (int, error) {
 	return s.autonomyCount, s.autonomyErr
 }
@@ -222,6 +224,32 @@ func TestRunnerRunControlPlaneEmiteDebug(t *testing.T) {
 	if !strings.Contains(traces[len(traces)-1], "control_plane autonomia=%d runtime_supervision=%d supervision=%d review=%d handles_stale=%d orders_stale=%d transcript=%d mailbox=%d runtime_orders=%d git_merges=%d refineria=%d handoffs=%d") {
 		t.Fatalf("traza final inesperada: %+v", traces)
 	}
+}
+
+func TestRunnerStartRespetaStartupGrace(t *testing.T) {
+	service := &stubAutomationService{autonomyCount: 1}
+	r := &Runner{
+		Automation:        service,
+		StartupGrace:      80 * time.Millisecond,
+		ControlPlaneCada:  time.Hour,
+		ReanimacionCada:   time.Hour,
+		SaludCada:         time.Hour,
+		PlanificacionCada: time.Hour,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r.Start(ctx)
+
+	time.Sleep(30 * time.Millisecond)
+	if len(service.audits) != 0 {
+		t.Fatalf("no deberia ejecutar batches antes de startup grace: %+v", service.audits)
+	}
+
+	time.Sleep(90 * time.Millisecond)
+	if len(service.audits) == 0 {
+		t.Fatalf("deberia ejecutar batches tras startup grace")
+	}
+	cancel()
+	r.Wait()
 }
 
 func TestRunnerRunControlPlaneRecuperaPanicDeBatchYSigue(t *testing.T) {

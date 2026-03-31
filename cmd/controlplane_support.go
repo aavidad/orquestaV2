@@ -95,6 +95,7 @@ func newControlPlaneRunner(debugLogger *log.Logger, debugControlPlane bool) *pla
 		Automation:        dbAutomationService{},
 		NotificationFeed:  db.CanalNotificaciones,
 		InitNotifications: notificaciones.InicializarDesdeConfig,
+		StartupGrace:      5 * time.Second,
 		Notifier: func() notificaciones.Notificador {
 			return notificaciones.GlobalNotificador
 		},

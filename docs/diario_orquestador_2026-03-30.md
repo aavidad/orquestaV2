@@ -2310,3 +2310,32 @@ Validacion:
 - `env GOCACHE=/tmp/orquesta-gocache go test ./runtimesapp -run 'Test(PurgeInactiveRuntimeHandlesDelegatesAndAudits|PurgeTerminalRuntimeOrdersAplicaCutoffYAudita)' -count=1`
 - `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'TestRuntimeControlPlaneUsaAPICuandoHayServidor' -count=1`
 - validacion viva: `./orquesta runtime purgar-ordenes --agente Codex2 --tipo send_instruction` => `1601` órdenes purgadas con el default seguro; despues `./orquesta runtime ordenes --agente Codex2 --estado fallo` ya no devuelve filas
+
+## 2026-03-31 — startup grace para el runner del servidor
+
+Hallazgo:
+
+- tras varios reinicios del daemon, `healthz` respondia enseguida pero `/api/status` y `/api/runtime-handles` podian quedarse esperando justo en la primera ventana de arranque
+- el `Runner` del control plane ejecutaba `salud`, `planificacion` y `control_plane` inmediatamente al hacer `Start`, compitiendo con la API server-first desde el segundo cero
+
+Decision:
+
+- el runner usado por el daemon server-first arranca con una `startup grace` corta antes del primer batch pesado
+- el objetivo no es retrasar el control plane indefinidamente, sino permitir que listener, statefile y API entren primero
+- la gracia se configura solo en `newControlPlaneRunner`; el `Runner` base mantiene comportamiento inmediato por defecto para no romper tests ni ejecuciones embebidas
+
+Codigo:
+
+- [planocontrol/runner.go](/home/alberto/Trabajo/orquesta/planocontrol/runner.go)
+- [planocontrol/runner_test.go](/home/alberto/Trabajo/orquesta/planocontrol/runner_test.go)
+- [cmd/controlplane_support.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./planocontrol -run 'Test(RunnerRunControlPlaneAuditaTrabajoProcesado|RunnerRunControlPlaneSinTrabajoNoAudita|RunnerStartRespetaStartupGrace)' -count=1`
+- `go build -o ./orquesta .`
+- daemon reiniciado con el binario nuevo
+- validacion viva inmediata tras reinicio:
+  - `time curl -s -m 5 'http://127.0.0.1:16543/api/status'` => `200` en `~1.5s`
+  - `time curl -s -m 5 'http://127.0.0.1:16543/api/runtime-handles?agente=Codex1'` => `200` en `~45ms`
