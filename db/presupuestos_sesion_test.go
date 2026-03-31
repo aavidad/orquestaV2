@@ -242,3 +242,40 @@ func TestGetAgenteExtraeCuentaDesdeRuntimeHandle(t *testing.T) {
 		t.Fatalf("usuario desde handle inesperado: %+v", agente)
 	}
 }
+
+func TestGetAgenteExtraePerfilDesdeRenderedCommandHandle(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesionID, err := IniciarSesion("codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	sesion, err := GetSesionByID(sesionID)
+	if err != nil {
+		t.Fatalf("GetSesionByID: %v", err)
+	}
+	if err := UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("UpsertRuntimeHandleDesdeSesion: %v", err)
+	}
+	if _, err := DB.Exec(
+		`UPDATE runtime_handles SET metadata_json=? WHERE sesion_id=?`,
+		`{"rendered_command":"'/tmp/codex-perfiles/bin/codex-perfil' 'CuentaReal-01'","driver":"process_pty_cli"}`,
+		sesionID,
+	); err != nil {
+		t.Fatalf("update runtime_handle metadata: %v", err)
+	}
+
+	agente, err := GetAgente("codex1")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.CuentaUsuario != "CuentaReal-01" {
+		t.Fatalf("usuario desde rendered_command inesperado: %+v", agente)
+	}
+	if agente.CuentaFuente != "runtime_handle_profile" {
+		t.Fatalf("fuente inesperada: %+v", agente)
+	}
+}

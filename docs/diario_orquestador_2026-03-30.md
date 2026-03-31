@@ -36,6 +36,41 @@ Conclusion:
 - la cuota efectiva ya no depende solo del diario/semanal cuando el proveedor ha cerrado la ventana real
 - la identidad de cuenta sigue sin inventarse, pero si el proveedor la deja en el stderr o snapshot ahora Orquesta la conserva y la proyecta por API/web/CLI
 
+## 2026-03-31 17:52 aprox. — `agente cuentas` ya enseña el perfil operativo vivo aunque no haya correo
+
+Hallazgo:
+
+- incluso con la superficie de cuentas ya expuesta, los agentes activos seguian apareciendo como `—` si no habia correo observado en snapshot de presupuesto ni en metadata explicita
+- en la practica el runtime ya dejaba una identidad operativa util en el propio `rendered_command`: el perfil real de `codex-perfil`
+
+Decision:
+
+- cuando no haya `account_email` ni `account_user` explicitos, Orquesta puede usar como `account_user` el perfil observado en `rendered_command`
+- eso da identidad viva util sin inventar correo ni abrir otra fuente de verdad
+
+Cambios:
+
+- `db/sesiones.go`
+  - `identidadCuentaDesdeHandle(...)` ahora cae a `perfilCuentaDesdeRenderedCommandHandle(...)`
+  - nuevo `CuentaFuente=runtime_handle_profile`
+- `db/presupuestos_sesion_test.go`
+  - nueva regresion `TestGetAgenteExtraePerfilDesdeRenderedCommandHandle`
+
+Validacion viva:
+
+- con `ORQUESTA_SERVER_URL=http://127.0.0.1:16543`, `./orquesta agente cuentas --activos --json` ya devuelve:
+  - `Codex1` `cuenta_usuario=Codex1`
+  - `Codex2` `cuenta_usuario=Codex2`
+  - `Codex3` `cuenta_usuario=Codex3`
+  - `Codex4` `cuenta_usuario=Codex4`
+  - `Codex5` `cuenta_usuario=Codex5`
+- `./orquesta status` ya muestra `usuario CodexN` en los cinco agentes activos
+
+Conclusion:
+
+- el correo sigue vacio cuando el runtime no lo expone
+- la identidad operativa del perfil ya no queda oculta y el orquestador deja de ver “agentes anonimos”
+
 ## 2026-03-31 12:0x aprox. — la metadata viva del handle deja de arrastrar prompts crudos
 
 Hallazgo:

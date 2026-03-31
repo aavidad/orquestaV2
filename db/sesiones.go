@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -881,11 +882,23 @@ func identidadCuentaDesdeHandle(handle *RuntimeHandle) identidadCuentaAgente {
 	if handle == nil {
 		return identidadCuentaAgente{}
 	}
-	return identidadCuentaDesdeMapa(
+	identidad := identidadCuentaDesdeMapa(
 		mapFromJSON(handle.MetadataJSON),
 		"runtime_handle",
 		handle.LastSeenAt,
 	)
+	if strings.TrimSpace(identidad.usuario) != "" || strings.TrimSpace(identidad.email) != "" {
+		return identidad
+	}
+	perfil := perfilCuentaDesdeRenderedCommandHandle(handle.MetadataJSON)
+	if strings.TrimSpace(perfil) == "" {
+		return identidadCuentaAgente{}
+	}
+	return identidadCuentaAgente{
+		usuario:    perfil,
+		fuente:     "runtime_handle_profile",
+		observedAt: handle.LastSeenAt,
+	}
 }
 
 func identidadCuentaDesdeMapa(raw map[string]any, fuente string, observedAt *time.Time) identidadCuentaAgente {
@@ -918,6 +931,23 @@ func identidadCuentaDesdeMapa(raw map[string]any, fuente string, observedAt *tim
 		fuente:     strings.TrimSpace(fuente),
 		observedAt: observedAt,
 	}
+}
+
+func perfilCuentaDesdeRenderedCommandHandle(metadataJSON string) string {
+	meta := mapFromJSON(metadataJSON)
+	if meta == nil {
+		return ""
+	}
+	rendered := strings.TrimSpace(stringFromMap(meta, "rendered_command", ""))
+	if rendered == "" {
+		return ""
+	}
+	re := regexp.MustCompile(`(?i)codex-perfil'\s+'([^']+)'`)
+	match := re.FindStringSubmatch(rendered)
+	if len(match) != 2 {
+		return ""
+	}
+	return strings.TrimSpace(match[1])
 }
 
 func buscarCadenaRecursiva(raw any, claves ...string) string {
