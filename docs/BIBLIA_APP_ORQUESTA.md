@@ -579,6 +579,8 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - el listener y la API deben quedar disponibles antes de disparar batches pesados del control plane.
 - el `Runner` del servidor arranca con una `startup grace` para evitar que `status` o `/api/runtime-handles` queden bloqueados por trabajo interno nada más levantar el daemon.
 - esta gracia pertenece al arranque del daemon en [servidor_unificado.go](/home/alberto/Trabajo/orquesta/cmd/servidor_unificado.go), no al constructor genérico del runner; tests y runners embebidos deben poder ejecutar batches inmediatamente.
+- `serve` y `server run` no deben abrir la BD desde el gating genérico del CLI; la apertura pertenece al arranque del servidor una vez reservado el listener.
+- los comandos server-first como `status` solo pueden caer a recuperación local cuando esta se ha pedido explícitamente; desactivar el cliente de servidor no convierte el comando en local por defecto.
 
 ## Bootstrap runtime
 

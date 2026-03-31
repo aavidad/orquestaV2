@@ -53,6 +53,9 @@ func configuredServerURL() string {
 }
 
 func activeServerURL() string {
+	if strings.TrimSpace(os.Getenv("ORQUESTA_DISABLE_SERVER_CLIENT")) == "1" {
+		return ""
+	}
 	if serverURLDiscoveryReady {
 		return discoveredServerURL
 	}

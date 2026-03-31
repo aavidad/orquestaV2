@@ -18,6 +18,14 @@ var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Muestra el estado global del proyecto",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		restoreArgs := false
+		if len(getCurrentExecArgs()) == 0 {
+			setCurrentExecArgs(append([]string{"status"}, args...))
+			restoreArgs = true
+		}
+		if restoreArgs {
+			defer setCurrentExecArgs(nil)
+		}
 		ctx, err := loadStatusSummary()
 		if err != nil {
 			return err

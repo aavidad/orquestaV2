@@ -2369,3 +2369,29 @@ Validacion:
 - `prepararBootstrapRuntimeAgente` vuelve a exponer la `nudge` pendiente como mailbox sintética dentro del bundle
 - el runner embebido vuelve a ejecutar batches sin esperar `5s`
 - una `runtime_order` vieja en `ejecutando` vuelve a `pendiente` y se procesa de verdad aunque su `lease_expires_at` siga futura
+
+## 2026-03-31 — server-first coherente en gating y status
+
+Hallazgo:
+
+- seguian conviviendo dos expectativas incompatibles sobre `serve/server run`: una antigua queria abrir BD desde el gating genérico y la doctrina nueva exige reservar listener primero y abrir persistencia dentro del servidor
+- `status` seguia descubriendo servidor aunque `ORQUESTA_DISABLE_SERVER_CLIENT=1`, y los tests que invocan `RunE` directo perdian el contexto de comando para recuperación local explícita
+
+Decision:
+
+- `serve` y `server run` no abren BD desde `commandNeedsDB`; el gating genérico debe seguir dejando esa responsabilidad al arranque del servidor
+- `activeServerURL()` debe respetar `ORQUESTA_DISABLE_SERVER_CLIENT`
+- `status` debe fijar su propio contexto de comando cuando se ejecuta por `RunE` directo en tests o llamadas embebidas
+
+Codigo:
+
+- [cmd/root.go](/home/alberto/Trabajo/orquesta/cmd/root.go)
+- [cmd/root_test.go](/home/alberto/Trabajo/orquesta/cmd/root_test.go)
+- [cmd/status.go](/home/alberto/Trabajo/orquesta/cmd/status.go)
+- [cmd/status_remoto_compat.go](/home/alberto/Trabajo/orquesta/cmd/status_remoto_compat.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(CommandNeedsDB|CommandNeedsDBWithDelegationCoverage|StatusExigeServidorSalvoRecuperacionLocal|StatusPermiteRecuperacionConForceLocal|StatusFuncionaEnRecuperacionLocalDB)' -count=1`
+- el bloque queda en verde
