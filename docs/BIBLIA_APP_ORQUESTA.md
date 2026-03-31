@@ -238,6 +238,8 @@ Regla operativa para `server_autobootstrap`:
 - la API de observabilidad tambien debe servir proyecciones compactas: `runtime-events` no puede devolver mensajes ni payloads gigantes por defecto; el raw vive en BD/trazas, pero la lectura operativa se trunca a tamaños razonables para dashboard, web y CLI
 - la orquestacion profesional exige visibilidad de presupuesto por agente: `status`, `/api/status` y `/api/agentes` deben exponer cuanto queda (`remaining_credits`, segundos/tokens/mensajes cuando existan, y porcentaje restante). Si el proveedor no expone creditos, Orquesta debe caer al mejor porcentaje derivable y nunca dejar al orquestador ciego
 - ese porcentaje no puede ser una cifra ciega de una sola ventana: Orquesta debe calcular el presupuesto efectivo mas restrictivo entre sesion, diario y semanal, indicar la `ventana` elegida y mostrar tambien `reset_at` cuando se conozca. Un `90%` diario no autoriza a ignorar un semanal casi agotado ni una ventana real de `5h`
+- si el proveedor devuelve `usage limit`, `rate limit`, `purchase more credits` o `try again at`, el daemon debe persistir de inmediato un `presupuesto_sesion` canonico con `budget_source=provider_backoff`, `reset_at` observado y ventana efectiva agotada. Esa telemetria no puede quedar solo en `motivo_pausa` o en texto de stderr
+- la identidad de cuenta del agente solo puede salir de artefactos canonicos observados por Orquesta. Si el proveedor incluye `email`, `login` o `perfil activo` en su salida o snapshot de presupuesto, el daemon debe promoverlo a claves canonicas (`account_email`, `account_user`) dentro de `raw_snapshot_json` o `metadata_json`; si no existe dato observado, el campo queda vacio y no se inventa
 
 Contrato minimo obligatorio para `runtime_orders`:
 

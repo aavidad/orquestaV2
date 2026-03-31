@@ -4302,6 +4302,44 @@ func TestRuntimeOrderSendInstructionSessionResumePausaPorCuotaProveedor(t *testi
 	if !strings.Contains(agente.MotivoPausa, "Auto-pausa por agotamiento") {
 		t.Fatalf("motivo_pausa inesperado: %+v", agente)
 	}
+	presupuesto, sesionActiva, err := UltimoPresupuestoAgente("Codex1")
+	if err != nil {
+		t.Fatalf("ultimo presupuesto agente: %v", err)
+	}
+	if sesionActiva == nil || sesionActiva.ID != sesion.ID {
+		t.Fatalf("sesion activa inesperada: %+v", sesionActiva)
+	}
+	if presupuesto == nil {
+		t.Fatalf("deberia haberse registrado presupuesto provider_backoff")
+	}
+	if presupuesto.BudgetSource != "provider_backoff" {
+		t.Fatalf("budget source inesperado: %+v", presupuesto)
+	}
+	if presupuesto.WindowKind != "provider" {
+		t.Fatalf("window kind inesperado: %+v", presupuesto)
+	}
+	if presupuesto.RemainingMessages == nil || *presupuesto.RemainingMessages != 0 {
+		t.Fatalf("remaining messages inesperado: %+v", presupuesto)
+	}
+	if presupuesto.ResetAt == nil || !presupuesto.ResetAt.After(presupuesto.CheckedAt) {
+		t.Fatalf("reset_at inesperado: %+v", presupuesto)
+	}
+	if !strings.Contains(presupuesto.RawSnapshotJSON, `"account_user":"Codex1"`) {
+		t.Fatalf("snapshot sin identidad observada: %s", presupuesto.RawSnapshotJSON)
+	}
+	agente, err = GetAgente("Codex1")
+	if err != nil {
+		t.Fatalf("get agente enriquecido: %v", err)
+	}
+	if agente.PresupuestoSesionPct == nil || *agente.PresupuestoSesionPct != 0 {
+		t.Fatalf("porcentaje de sesion inesperado: %+v", agente)
+	}
+	if agente.PresupuestoVentana != "provider" {
+		t.Fatalf("ventana efectiva inesperada: %+v", agente)
+	}
+	if agente.CuentaUsuario != "Codex1" {
+		t.Fatalf("usuario observado inesperado: %+v", agente)
+	}
 }
 
 func TestRuntimeOrderStartRemotoPersisteSesionYHandleSinPID(t *testing.T) {

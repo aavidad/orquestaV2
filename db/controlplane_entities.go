@@ -3827,6 +3827,9 @@ func gestionarBackoffProveedorRuntimeOrderSendInstruction(order *RuntimeOrder, p
 	if err := PausarAgente(strings.TrimSpace(order.Agente), minutos, motivoPausa); err != nil {
 		return true, err
 	}
+	if err := registrarPresupuestoSesionProviderBackoff(order, runtimeErr, delay, motivo); err != nil {
+		return true, err
+	}
 	detalle := fmt.Sprintf("agente en enfriamiento por %s", motivo)
 	if runtimeOrderSendInstructionProvieneMailbox(payload) {
 		return true, reencolarRuntimeOrderSendInstructionAt(order, payload, detalle, time.Now().UTC().Add(delay))
@@ -3913,6 +3916,145 @@ func runtimeOrderProviderBackoff(err error) (time.Duration, string, bool) {
 		delay = parsed
 	}
 	return delay, motivo, true
+}
+
+func registrarPresupuestoSesionProviderBackoff(order *RuntimeOrder, runtimeErr error, delay time.Duration, motivo string) error {
+	if order == nil || runtimeErr == nil || strings.TrimSpace(order.Agente) == "" {
+		return nil
+	}
+	sesionID, modelSlug, err := resolverSesionYModeloRuntimeOrder(order)
+	if err != nil || sesionID <= 0 {
+		return err
+	}
+	now := time.Now().UTC()
+	if delay <= 0 {
+		delay = 60 * time.Minute
+	}
+	resetAt := now.Add(delay)
+	remainingZero := int64(0)
+	raw := strings.TrimSpace(runtimeErr.Error())
+	snapshot := map[string]any{
+		"source":         "runtime_order_send_instruction",
+		"runtime_order":  order.ID,
+		"agente":         strings.TrimSpace(order.Agente),
+		"motivo":         strings.TrimSpace(motivo),
+		"window_kind":    "provider",
+		"window_start":   now.Format(time.RFC3339Nano),
+		"reset_at":       resetAt.Format(time.RFC3339Nano),
+		"remaining_zero": true,
+		"error":          raw,
+	}
+	for key, value := range identidadObservadaDesdeErrorProveedor(raw) {
+		snapshot[key] = value
+	}
+	for key, value := range identidadObservadaDesdeOrdenRuntime(order) {
+		if _, exists := snapshot[key]; !exists {
+			snapshot[key] = value
+		}
+	}
+	rawJSON, _ := json.Marshal(snapshot)
+	id, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:          sesionID,
+		ModelSlug:         strings.TrimSpace(modelSlug),
+		WindowKind:        "provider",
+		WindowStartedAt:   &now,
+		ResetAt:           &resetAt,
+		RemainingMessages: &remainingZero,
+		BudgetSource:      "provider_backoff",
+		RawSnapshotJSON:   string(rawJSON),
+		CheckedAt:         now,
+	})
+	if err != nil {
+		return err
+	}
+	Audit("orquesta", "registrar_presupuesto_provider_backoff", "presupuesto_sesion", id,
+		fmt.Sprintf("runtime_order=%d agente=%s reset_at=%s motivo=%s",
+			order.ID, strings.TrimSpace(order.Agente), resetAt.Format(time.RFC3339), strings.TrimSpace(motivo)))
+	return nil
+}
+
+func resolverSesionYModeloRuntimeOrder(order *RuntimeOrder) (int64, string, error) {
+	if order == nil {
+		return 0, "", nil
+	}
+	if order.HandleID != nil && *order.HandleID > 0 {
+		handle, err := GetRuntimeHandle(*order.HandleID)
+		if err != nil && err != sql.ErrNoRows {
+			return 0, "", err
+		}
+		if handle != nil && handle.SesionID != nil && *handle.SesionID > 0 {
+			model := ""
+			if handle.RuntimeID != nil && *handle.RuntimeID > 0 {
+				if runtime, err := GetRuntime(*handle.RuntimeID); err == nil && runtime != nil {
+					model = strings.TrimSpace(runtime.Model)
+				}
+			}
+			return *handle.SesionID, model, nil
+		}
+	}
+	if order.RuntimeID != nil && *order.RuntimeID > 0 {
+		runtime, err := GetRuntime(*order.RuntimeID)
+		if err != nil && err != sql.ErrNoRows {
+			return 0, "", err
+		}
+		if runtime != nil && runtime.SesionID != nil && *runtime.SesionID > 0 {
+			return *runtime.SesionID, strings.TrimSpace(runtime.Model), nil
+		}
+	}
+	sesion, err := GetSesionActiva(strings.TrimSpace(order.Agente), order.ProyectoID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, "", nil
+		}
+		return 0, "", err
+	}
+	return sesion.ID, "", nil
+}
+
+func identidadObservadaDesdeErrorProveedor(raw string) map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	out := map[string]any{}
+	emailRe := regexp.MustCompile(`(?i)[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}`)
+	if email := strings.TrimSpace(emailRe.FindString(raw)); email != "" {
+		out["account_email"] = email
+	}
+	userRe := regexp.MustCompile(`(?im)^(?:perfil activo|active profile|logged in as|usuario|user|username|login)\s*:\s*([^\r\n]+)\s*$`)
+	if match := userRe.FindStringSubmatch(raw); len(match) == 2 {
+		if user := strings.TrimSpace(match[1]); user != "" {
+			out["account_user"] = user
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func identidadObservadaDesdeOrdenRuntime(order *RuntimeOrder) map[string]any {
+	if order == nil || order.HandleID == nil || *order.HandleID <= 0 {
+		return nil
+	}
+	handle, err := GetRuntimeHandle(*order.HandleID)
+	if err != nil || handle == nil {
+		return nil
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if meta == nil {
+		return nil
+	}
+	rendered := strings.TrimSpace(stringFromMap(meta, "rendered_command", ""))
+	if rendered == "" {
+		return nil
+	}
+	re := regexp.MustCompile(`(?i)codex-perfil'\s+'([^']+)'`)
+	match := re.FindStringSubmatch(rendered)
+	if len(match) != 2 || strings.TrimSpace(match[1]) == "" {
+		return nil
+	}
+	return map[string]any{"account_user": strings.TrimSpace(match[1])}
 }
 
 func runtimeOrderProviderRetryDelay(lower string, now time.Time) (time.Duration, bool) {

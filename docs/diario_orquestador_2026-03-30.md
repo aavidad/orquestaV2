@@ -1,5 +1,41 @@
 # Diario del orquestador — 2026-03-30
 
+## 2026-03-31 17:5x aprox. — el `provider_backoff` ya deja telemetría canónica de ventana agotada
+
+Hallazgo:
+
+- la app ya mostraba diario, semanal y cuenta observada si existian artefactos persistidos, pero el caso mas importante seguia cojo: cuando `codex exec resume` devolvia `usage limit / try again at`, Orquesta solo pausaba al agente y reencolaba la orden
+- eso dejaba el presupuesto real de proveedor fuera del modelo canonico; `status` seguia dependiendo de diario/semanal aunque el bloqueo efectivo fuese una ventana del proveedor
+- ademas, el propio stderr del proveedor ya podia traer identidad util (`perfil activo`, `login`, correo), pero no se promovia a claves canonicas
+
+Decision:
+
+- `provider_backoff` pasa a convertirse en `presupuesto_sesion` persistido, no en texto efimero
+- cuando el proveedor indique agotamiento o `try again at`, Orquesta registra una ventana `provider` agotada (`remaining_messages=0`) con `reset_at` observado
+- si el stderr trae identidad util, se promueve a `account_user` / `account_email` dentro del snapshot canonico
+
+Cambios:
+
+- `db/controlplane_entities.go`
+  - `gestionarBackoffProveedorRuntimeOrderSendInstruction(...)` ahora registra `presupuesto_sesion` tras pausar al agente
+  - nuevos helpers:
+    - `registrarPresupuestoSesionProviderBackoff(...)`
+    - `resolverSesionYModeloRuntimeOrder(...)`
+    - `identidadObservadaDesdeErrorProveedor(...)`
+- `db/controlplane_entities_test.go`
+  - la regresion de `session_resume` con `usage limit` ahora verifica tambien:
+    - `budget_source=provider_backoff`
+    - `window_kind=provider`
+    - `remaining_messages=0`
+    - `reset_at` futuro
+    - identidad observada `account_user=Codex1`
+    - `GetAgente()` enriquecido con `PresupuestoSesionPct=0` y `PresupuestoVentana=provider`
+
+Conclusion:
+
+- la cuota efectiva ya no depende solo del diario/semanal cuando el proveedor ha cerrado la ventana real
+- la identidad de cuenta sigue sin inventarse, pero si el proveedor la deja en el stderr o snapshot ahora Orquesta la conserva y la proyecta por API/web/CLI
+
 ## 2026-03-31 12:0x aprox. — la metadata viva del handle deja de arrastrar prompts crudos
 
 Hallazgo:

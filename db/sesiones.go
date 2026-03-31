@@ -774,6 +774,15 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 					resetAt:    p.ResetAt,
 					source:     strings.TrimSpace(p.BudgetSource),
 				}
+			} else if strings.EqualFold(strings.TrimSpace(ev.Estado), "agotado") {
+				pct := 0
+				a.PresupuestoSesionPct = &pct
+				sesion = presupuestoAgenteCandidato{
+					pct:        &pct,
+					windowKind: strings.TrimSpace(p.WindowKind),
+					resetAt:    p.ResetAt,
+					source:     strings.TrimSpace(p.BudgetSource),
+				}
 			}
 			candidato = seleccionarPresupuestoEfectivo([]presupuestoAgenteCandidato{sesion, diario, semanal})
 			aplicarPresupuestoEfectivoAgente(a, candidato)
