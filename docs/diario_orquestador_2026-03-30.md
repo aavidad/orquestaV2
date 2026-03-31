@@ -2801,3 +2801,28 @@ Validacion:
 
 - `go test ./cmd -run 'TestProcesarSupervisionAutonomaBatch(EncolaSupervisionYRegistraCiclo|ArrancaSupervisorPreferidoSinSesion|NoRepiteSupervisionPeriodicaConSupervisorOperativo|NoRepiteSupervisionPeriodicaSiYaEmitioNudgeReciente|NoRepiteSupervisionSiSupervisorYaTieneTrabajoActivo)' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-03-31 — el spinner del TUI ya no dispara falsos `runtime_panic`
+
+Hallazgo:
+
+- seguían apareciendo señales de `runtime_panic` falsas originadas por transcript con secuencias `OSC` de título de terminal del TUI de Codex
+- ese ruido visual llegaba al clasificador como texto semántico y podía terminar enfriando agentes o generando nudges al supervisor sin fallo real
+
+Decision:
+
+- la limpieza de transcript ahora elimina secuencias `OSC` (`ESC ] ... BEL/ST`) antes de clasificar
+- si tras esa limpieza una línea queda vacía, se descarta por completo y no genera transcript ni `runtime_events`
+- el contrato correcto es: solo se escala por evidencia semántica real de fallo, no por ruido visual del cliente
+
+Codigo:
+
+- [db/runtime_transcript.go](/home/alberto/Trabajo/orquesta/db/runtime_transcript.go)
+- [db/runtime_transcript_test.go](/home/alberto/Trabajo/orquesta/db/runtime_transcript_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./db -run 'Test(IngestarRuntimeTranscriptHandleNoClasificaLineaSistemaScript|IngestarRuntimeTranscriptHandleNoClasificaRuidoOSCSpinner|IngestarRuntimeTranscriptHandleClasificaYGeneraEventos)' -count=1`
+- `go test ./cmd -run 'Test(ProcesarRuntimeTranscriptBatchNoGuiaAlWorkerEnRuntimePanic|ProcesarRuntimeTranscriptBatchEnviaNudgeSupervisorPorSignal)' -count=1`
+- `go build -o ./orquesta .`

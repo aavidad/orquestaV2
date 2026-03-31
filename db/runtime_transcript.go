@@ -48,6 +48,7 @@ type FiltroRuntimeTranscript struct {
 }
 
 var ansiTranscriptRegexp = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+var oscTranscriptRegexp = regexp.MustCompile(`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
 
 func RegistrarRuntimeTranscript(entry *RuntimeTranscriptEntry) (int64, error) {
 	if entry == nil {
@@ -553,6 +554,7 @@ func extraerLineasTranscriptConOffsets(raw string, startOffset int64) (string, [
 }
 
 func limpiarLineaTranscript(raw string) string {
+	raw = oscTranscriptRegexp.ReplaceAllString(raw, "")
 	raw = ansiTranscriptRegexp.ReplaceAllString(raw, "")
 	raw = strings.ReplaceAll(raw, "\x00", "")
 	raw = strings.TrimSpace(raw)

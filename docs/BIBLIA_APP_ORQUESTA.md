@@ -646,3 +646,9 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - la supervisión periódica no debe reinyectar `supervisar_proyecto` solo porque haya vencido el reloj si el supervisor ya tiene trabajo activo real en ese proyecto.
 - para este contrato, `trabajo activo real` significa al menos una tarea del supervisor en estado `asignada`, `en_progreso` o `bloqueada` dentro del proyecto.
 - el batch periódico de supervisión existe para sembrar o recuperar frente útil, no para interrumpir a un supervisor que ya está ejecutando ese frente.
+
+## Transcript y señales de runtime
+
+- el clasificador de transcript no puede elevar a `runtime_panic` ruido de TUI/terminal que no representa un fallo semántico del runtime.
+- las secuencias `OSC` de título de terminal (`ESC ] ... BEL/ST`) y ruido equivalente del spinner deben limpiarse antes de clasificar y, si una línea queda vacía tras esa limpieza, debe descartarse por completo.
+- enfriar un agente o avisar al supervisor por transcript solo es válido sobre evidencia semántica real, no sobre artefactos visuales del cliente TUI.
