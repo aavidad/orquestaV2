@@ -735,6 +735,19 @@ func TestSanitizarTextoObservabilidadRuntimeLimpiaPrefijoPuntualAntesDelPanic(t 
 	}
 }
 
+func TestSanitizarTextoObservabilidadRuntimeLimpiaPrefijosHistoricosCortos(t *testing.T) {
+	cases := []string{
+		"sThe application panicked (crashed).",
+		"[>7uThe application panicked (crashed).",
+	}
+	for _, raw := range cases {
+		got := SanitizarTextoObservabilidadRuntime(raw)
+		if got != "The application panicked (crashed)." {
+			t.Fatalf("texto saneado inesperado para %q: %q", raw, got)
+		}
+	}
+}
+
 func TestIngestarRuntimeTranscriptHandleCompactaPendingTranscript(t *testing.T) {
 	abrirDBTemporalRuntimeObservabilidad(t)
 

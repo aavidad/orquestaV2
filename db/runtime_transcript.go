@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 type RuntimeTranscriptEntry struct {
@@ -651,6 +652,9 @@ func limpiarPrefijoRuidoFalloRuntime(raw string) string {
 		}
 		prefix := strings.TrimSpace(raw[:idx])
 		if prefix == "." || prefix == ":" || prefix == "|" {
+			return raw[idx:]
+		}
+		if !strings.Contains(prefix, " ") && utf8.RuneCountInString(prefix) <= 4 {
 			return raw[idx:]
 		}
 	}

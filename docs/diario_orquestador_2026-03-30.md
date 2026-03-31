@@ -311,6 +311,28 @@ Conclusion:
 
 - `runtime_panic` visible queda limpio del todo también en eventos históricos heredados
 
+## 2026-04-01 01:00 aprox. — se limpian también prefijos históricos cortos sin espacios
+
+Hallazgo:
+
+- en la prueba seria con flota real todavía aparecían residuos históricos visibles como `sThe application panicked...` y `[>7uThe application panicked...`
+- ya no eran ANSI/CSI vivos, sino restos cortos heredados antes del marcador exacto de panic
+
+Decision:
+
+- si el prefijo antes de `The application panicked (crashed).` es corto, sin espacios y no aporta semántica, debe retirarse también en la proyección visible
+
+Cambios:
+
+- `db/runtime_transcript.go`
+  - `limpiarPrefijoRuidoFalloRuntime(...)` amplía el recorte a prefijos cortos sin espacios
+- `db/runtime_transcript_test.go`
+  - nueva regresión `TestSanitizarTextoObservabilidadRuntimeLimpiaPrefijosHistoricosCortos`
+
+Conclusion:
+
+- la API de observabilidad queda limpia incluso frente a residuos históricos más viejos y raros
+
 ## 2026-03-31 16:55 aprox. — `status` y la API ya enseñan presupuesto restante por agente
 
 Hallazgo:
