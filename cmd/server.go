@@ -221,7 +221,18 @@ func ensureServerDBOpen() error {
 func loadServerInfoWithHealthFallback(addr string) (*rpclocal.ServerInfo, bool, error) {
 	info, err := rpclocal.LoadServerInfo()
 	if err == nil {
-		return info, false, nil
+		ctx, cancel := context.WithTimeout(context.Background(), rpclocal.DefaultTimeout())
+		health, pingErr := rpclocal.NewClient(rpclocal.BaseURL(info.Addr), nil).Ping(ctx)
+		cancel()
+		if pingErr == nil {
+			if strings.TrimSpace(health.ScopeID) != "" && health.ScopeID != rpclocal.CurrentScopeID() {
+				return nil, false, fmt.Errorf("el servidor activo pertenece a otro scope (%s)", health.ScopeID)
+			}
+			if err := validateHealthStorage(health); err != nil {
+				return nil, false, err
+			}
+			return info, false, nil
+		}
 	}
 
 	if strings.TrimSpace(addr) == "" {

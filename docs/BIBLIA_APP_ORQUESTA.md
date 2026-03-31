@@ -652,6 +652,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - la vía oficial para dejar el daemon levantado desde Orquesta es `server start`.
 - `server start` debe usar la misma ruta interna que emplea la CLI para levantar localrpc y, si el hijo muere antes de exponer `healthz`, debe devolver un error útil con resumen del log y limpiar estado falso.
 - `server start` no debe dar el arranque por bueno solo porque responda `healthz`; el daemon tiene que haber publicado también su `statefile`.
+- un `statefile` existente no es fuente de verdad suficiente por si solo. Antes de darlo por valido, Orquesta debe comprobar que el proceso anunciado sigue vivo por `healthz` y que ese `healthz` coincide con el storage/scope esperados.
 - no se debe depender de `server run &`, `nohup` o wrappers externos como contrato operativo del orquestador.
 
 ## Supervisión autónoma periódica

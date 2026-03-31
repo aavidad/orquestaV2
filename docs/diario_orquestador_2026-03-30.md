@@ -3638,3 +3638,33 @@ Resultado vivo:
 
 - `runtime ordenes` ya devuelve solo el tramo reciente solicitado
 - la inspeccion viva del control plane vuelve a ser util sin tener que purgar historico para leer lo ultimo
+
+## 2026-03-31 — El statefile no vale si no pasa healthz
+
+Hallazgo:
+
+- `server start` podia devolver exito y, acto seguido, `server doctor` todavia ver un `statefile` viejo con `Health RPC: KO`
+- el problema no era el daemon nuevo, sino que `loadServerInfoWithHealthFallback()` confiaba demasiado pronto en el `statefile` si existia, sin verificar que ese estado seguia vivo
+
+Decision:
+
+- endurecer `loadServerInfoWithHealthFallback()` para validar por `healthz` el `statefile` cargado
+- si el `statefile` existe pero ya no responde o no cuadra con el scope/storage esperados, Orquesta cae al `healthz` real y recupera el estado vivo
+
+Codigo:
+
+- [cmd/server.go](/home/alberto/Trabajo/orquesta/cmd/server.go)
+- [cmd/server_health_fallback_test.go](/home/alberto/Trabajo/orquesta/cmd/server_health_fallback_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'TestLoadServerInfoWithHealthFallback(UsaHealthzSiFaltaStatefile|RecuperaStatefileStale|RechazaScopeAjeno|RechazaDBAjena|RechazaDriverAjeno)$' -count=1`
+- `env GOCACHE=/tmp/orquesta-gocache go build -o ./orquesta .`
+- smoke viva:
+  - `./orquesta server stop && ./orquesta server start && ./orquesta server doctor`
+
+Resultado vivo:
+
+- `server start` seguido inmediatamente de `server doctor` ya devuelve el PID/addr reales del daemon nuevo
+- el arranque oficial deja de mentir por un `statefile` stale
