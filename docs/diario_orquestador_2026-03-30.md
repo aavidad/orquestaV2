@@ -71,6 +71,30 @@ Conclusion:
 - el correo sigue vacio cuando el runtime no lo expone
 - la identidad operativa del perfil ya no queda oculta y el orquestador deja de ver “agentes anonimos”
 
+## 2026-03-31 17:55 aprox. — `agente cuentas/presupuesto` vuelven al camino server-first normal
+
+Hallazgo:
+
+- el daemon estaba sano y `server doctor` lo descubria, pero `agente cuentas` seguia cayendo con el mensaje legacy de “arranca serve”
+- la causa no era la API ni el modelo de datos, sino una fuga en la tabla canonica `commandSupportsServerMode(...)`: los subcomandos `agente cuentas` y `agente presupuesto` no estaban declarados como server-first
+
+Cambios:
+
+- `cmd/cliente_servidor.go`
+  - `commandSupportsServerMode(...)` ahora incluye `agente cuentas` y `agente presupuesto`
+- `cmd/cliente_servidor_test.go`
+  - regresion explicita para ambos subcomandos
+
+Validacion:
+
+- `go test ./cmd -run 'Test(CommandSupportsServerMode|AgenteCuentasCmdRenderizaListado|AgentePresupuestoCmdRenderizaListado)' -count=1` => OK
+- `./orquesta agente cuentas --activos` vuelve a funcionar sin `ORQUESTA_SERVER_URL`
+
+Conclusion:
+
+- la familia `agente` recupera coherencia con el resto de superficies server-first
+- la telemetria nueva de cuentas/presupuesto deja de depender de una variable manual para ser usable
+
 ## 2026-03-31 12:0x aprox. — la metadata viva del handle deja de arrastrar prompts crudos
 
 Hallazgo:

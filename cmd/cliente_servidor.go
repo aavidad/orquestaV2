@@ -498,7 +498,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 	case "agente":
-		return len(tokens) > 1 && (tokens[1] == "preparar" || tokens[1] == "tick" || tokens[1] == "investigar" || tokens[1] == "pausar" || tokens[1] == "control" || tokens[1] == "eliminar" || tokens[1] == "rehabilitar" || tokens[1] == "fusionar" || tokens[1] == "handoff" || tokens[1] == "reasignar-vivo" || tokens[1] == "lanzar-plan")
+		return len(tokens) > 1 && (tokens[1] == "preparar" || tokens[1] == "tick" || tokens[1] == "investigar" || tokens[1] == "pausar" || tokens[1] == "control" || tokens[1] == "eliminar" || tokens[1] == "rehabilitar" || tokens[1] == "fusionar" || tokens[1] == "handoff" || tokens[1] == "reasignar-vivo" || tokens[1] == "lanzar-plan" || tokens[1] == "cuentas" || tokens[1] == "presupuesto")
 	case "sesion":
 		if len(tokens) <= 1 {
 			return false

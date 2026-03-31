@@ -94,6 +94,8 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "memoria ver", args: []string{"memoria", "ver", "Core_API", "--proyecto", "orquestador"}, want: true},
 		{nombre: "memoria guardar", args: []string{"memoria", "guardar", "Core_API", "api", "--valor", "{}"}, want: true},
 		{nombre: "agente control arrancar", args: []string{"agente", "control", "arrancar", "Codex1", "--proyecto", "orquestador"}, want: true},
+		{nombre: "agente cuentas", args: []string{"agente", "cuentas", "--activos"}, want: true},
+		{nombre: "agente presupuesto", args: []string{"agente", "presupuesto", "--activos"}, want: true},
 		{nombre: "agente investigar", args: []string{"agente", "investigar", "refactor"}, want: true},
 		{nombre: "agente fusionar", args: []string{"agente", "fusionar", "codex1", "Codex1"}, want: true},
 		{nombre: "agente lanzar plan", args: []string{"agente", "lanzar-plan", "scripts/agentes.orquestador.plan"}, want: true},
