@@ -2944,6 +2944,166 @@ func TestProcesarRuntimeMailboxBatchConsumeWatchdogSinHandleActivo(t *testing.T)
 	}
 }
 
+func TestProcesarRuntimeMailboxBatchConsumeAgenteSinVida(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex6",
+		Kind:        "nudge",
+		PayloadJSON: `{"texto":"fuera de flota activa"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime mailbox: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia reconciliar exactamente un mailbox zombie, got=%d", n)
+	}
+
+	agente := "Codex6"
+	estado := "pendiente"
+	pendientes, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &agente, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	if len(pendientes) != 0 {
+		t.Fatalf("no deberia quedar mailbox pendiente para agente sin vida: %+v", pendientes)
+	}
+	estado = "consumido"
+	consumidos, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &agente, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar mailbox consumido: %v", err)
+	}
+	if len(consumidos) != 1 || consumidos[0].ID != msgID {
+		t.Fatalf("mailbox consumido inesperado: %+v", consumidos)
+	}
+}
+
+func TestProcesarRuntimeMailboxBatchNoConsumeAgenteSinHandlePeroConTrabajo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex6", proyectoID, "frente activo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Trabajo real",
+		Descripcion: "No debe consumirse el mailbox",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex6"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex6",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"retoma el trabajo"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime mailbox: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia reconciliar mailbox de agente con trabajo real, got=%d", n)
+	}
+
+	agente := "Codex6"
+	estado := "pendiente"
+	pendientes, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &agente, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	if len(pendientes) != 1 || pendientes[0].ID != msgID {
+		t.Fatalf("mailbox pendiente inesperado: %+v", pendientes)
+	}
+}
+
+func TestProcesarRuntimeMailboxBatchConsumeAgenteFueraDeFlotaConAsignacionAutomatica(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.ConfigSet("server_autobootstrap_supervisor_agent", "Codex1"); err != nil {
+		t.Fatalf("config supervisor: %v", err)
+	}
+	if err := db.ConfigSet("server_autobootstrap_worker_agents", "Codex2,Codex3,Codex4,Codex5"); err != nil {
+		t.Fatalf("config workers: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex6", proyectoID, "reactivacion_automatica"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex6",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"texto":"fuera de flota activa"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime mailbox: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia reconciliar mailbox de agente fuera de flota, got=%d", n)
+	}
+
+	agente := "Codex6"
+	estado := "consumido"
+	consumidos, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &agente, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar consumidos: %v", err)
+	}
+	if len(consumidos) != 1 || consumidos[0].ID != msgID {
+		t.Fatalf("mailbox consumido inesperado: %+v", consumidos)
+	}
+}
+
 func TestProcesarRuntimeMailboxBatchConsumeWatchdogEnEnfriamiento(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

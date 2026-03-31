@@ -141,10 +141,15 @@ func procesarRuntimeTranscriptBatch() (int, error) {
 }
 
 func procesarRuntimeMailboxBatch() (int, error) {
-	reconciled, err := reconciliarRuntimeMailboxWatchdogSinHandleBatch()
+	reconciled, err := reconciliarRuntimeMailboxAgenteSinVidaBatch()
 	if err != nil {
 		return reconciled, err
 	}
+	watchdogReconciled, err := reconciliarRuntimeMailboxWatchdogSinHandleBatch()
+	if err != nil {
+		return reconciled + watchdogReconciled, err
+	}
+	reconciled += watchdogReconciled
 	interactive, err := procesarRuntimeMailboxInteractivoBatch()
 	if err != nil {
 		return reconciled + interactive, err
@@ -162,6 +167,37 @@ func procesarRuntimeMailboxBatch() (int, error) {
 		return reconciled + interactive + supervisorLocal + sessionResume + restarts, err
 	}
 	return reconciled + interactive + supervisorLocal + sessionResume + restarts, nil
+}
+
+func reconciliarRuntimeMailboxAgenteSinVidaBatch() (int, error) {
+	estado := "pendiente"
+	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &estado})
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, msg := range mailbox {
+		if msg == nil {
+			continue
+		}
+		debeConsumirse, detalle, err := runtimeMailboxDebeConsumirsePorAgenteSinVida(msg)
+		if err != nil {
+			return total, err
+		}
+		if !debeConsumirse {
+			continue
+		}
+		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+			return total, err
+		}
+		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return total, err
+		}
+		db.Audit("orquesta", "runtime_mailbox_agente_sin_vida", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("agente=%s kind=%s %s", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), detalle))
+		total++
+	}
+	return total, nil
 }
 
 func reconciliarRuntimeMailboxWatchdogSinHandleBatch() (int, error) {
@@ -228,6 +264,81 @@ func runtimeMailboxProyectoDetalle(proyectoID *int64) string {
 		return "-"
 	}
 	return strconv.FormatInt(*proyectoID, 10)
+}
+
+func runtimeMailboxDebeConsumirsePorAgenteSinVida(msg *db.RuntimeMailboxMessage) (bool, string, error) {
+	if msg == nil {
+		return false, "", nil
+	}
+	agente := strings.TrimSpace(msg.ToAgente)
+	if agente == "" {
+		return false, "", nil
+	}
+	if strings.EqualFold(strings.TrimSpace(msg.Kind), "watchdog") {
+		return false, "", nil
+	}
+	handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(agente, msg.ProyectoID)
+	if err != nil {
+		return false, "", err
+	}
+	if handle != nil {
+		return false, "", nil
+	}
+	sesiones, err := db.ListarSesionesActivasOperativas()
+	if err != nil {
+		return false, "", err
+	}
+	for _, sesion := range sesiones {
+		if sesion == nil || strings.TrimSpace(sesion.Agente) != agente {
+			continue
+		}
+		if msg.ProyectoID == nil || sesion.ProyectoID == nil || *sesion.ProyectoID == *msg.ProyectoID {
+			return false, "", nil
+		}
+	}
+	proyectoActivoID, err := db.ObtenerProyectoActivoAgente(agente)
+	if err != nil {
+		return false, "", err
+	}
+	if proyectoActivoID > 0 && agentePerteneceAFlotaAutobootstrap(agente) {
+		return false, "", nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{Agente: &agente})
+	if err != nil {
+		return false, "", err
+	}
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaAsignada, db.TareaEnProgreso, db.TareaBloqueada:
+			return false, "", nil
+		}
+	}
+	if abierta, err := existeRuntimeOrderAbiertaAgente(agente, msg.ProyectoID); err != nil {
+		return false, "", err
+	} else if abierta {
+		return false, "", nil
+	}
+	return true, fmt.Sprintf("proyecto_id=%s sin runtime, sesion, asignacion, tareas ni ordenes abiertas", runtimeMailboxProyectoDetalle(msg.ProyectoID)), nil
+}
+
+func agentePerteneceAFlotaAutobootstrap(agente string) bool {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return false
+	}
+	cfg := loadServerAutobootstrapConfig()
+	if strings.EqualFold(agente, strings.TrimSpace(cfg.SupervisorAgent)) {
+		return true
+	}
+	for _, worker := range cfg.WorkerAgents {
+		if strings.EqualFold(agente, strings.TrimSpace(worker)) {
+			return true
+		}
+	}
+	return false
 }
 
 func enfriarAgentePorRuntimePanic(agente string, item *db.RuntimeTranscriptEntry) (string, error) {
@@ -2118,6 +2229,25 @@ func existeRuntimeOrderAbiertaAutonomia(agente string, proyectoID *int64, tipos 
 					return true, nil
 				}
 			}
+		}
+	}
+	return false, nil
+}
+
+func existeRuntimeOrderAbiertaAgente(agente string, proyectoID *int64) (bool, error) {
+	estados := []string{"pendiente", "tomada", "ejecutando"}
+	for _, estado := range estados {
+		estado := estado
+		orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
+			Agente:     &agente,
+			ProyectoID: proyectoID,
+			Estado:     &estado,
+		})
+		if err != nil {
+			return false, err
+		}
+		if len(orders) > 0 {
+			return true, nil
 		}
 	}
 	return false, nil

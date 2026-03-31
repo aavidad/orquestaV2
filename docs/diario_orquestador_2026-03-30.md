@@ -2105,3 +2105,27 @@ Codigo:
 Validacion:
 
 - `go test ./cmd -run 'TestAPIStatus(ExponeResumenOperativoCompat|OmiteTareasActivasSinProyecto)' -count=1`
+
+## 2026-03-31 — la mailbox zombi no puede quedar pendiente para agentes fuera de vida operativa
+
+Hallazgo:
+
+- la cola pendiente seguia arrastrando mensajes para `Codex6`, `antigravity` y `claude`
+- esos destinatarios ya no tenian runtime activo, ni sesion activa, ni trabajo vivo, pero la deuda seguia visible como si todavia fuera entregable
+- eso ensuciaba diagnostico y aparentaba trabajo pendiente donde ya no habia flota ni ciclo de vida que sostener
+
+Decision:
+
+- reconciliar de forma preventiva la mailbox pendiente de agentes sin vida operativa
+- criterio conservador: solo se consume si el destinatario no tiene handle activo, sesion activa, asignacion activa, tareas activas ni runtime orders abiertas
+- ajuste posterior: `Codex6` y `antigravity` seguian protegidos por una asignacion `activa` con nota `reactivacion_automatica`, pero ambos estaban ya fuera de la flota `Codex1-5`; esa asignacion ya no puede retener mailbox zombie
+- `watchdog` queda fuera de esta regla y conserva su auditoria especifica
+
+Codigo:
+
+- [cmd/controlplane_support.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support.go)
+- [cmd/controlplane_support_test.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support_test.go)
+
+Validacion:
+
+- `go test ./cmd -run 'TestProcesarRuntimeMailboxBatch(ConsumeAgenteSinVida|NoConsumeAgenteSinHandlePeroConTrabajo|ConsumeAgenteFueraDeFlotaConAsignacionAutomatica|ConsumeWatchdogSinHandleActivo)' -count=1`
