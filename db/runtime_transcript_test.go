@@ -751,6 +751,8 @@ func TestIngestarRuntimeTranscriptHandleDescartaBannerCodex(t *testing.T) {
 		"Credenciales: /tmp/auth.json",
 		"Consejo: si es el primer arranque, ejecuta codex-perfil Codex2 login",
 		"https://github.com/openai/codex/releases/latest",
+		"https://chatgpt.com/codex/settings/usage",
+		"(https://chatgpt.com/explore/pro),",
 		"  (http://localhost:8080).",
 		"",
 	}, "\n")

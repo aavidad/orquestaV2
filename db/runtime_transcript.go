@@ -682,6 +682,8 @@ func esBannerRuidoCodex(normalized string) bool {
 		"credenciales:",
 		"consejo: si es el primer arranque, ejecuta",
 		"https://github.com/openai/codex/releases/latest",
+		"https://chatgpt.com/codex/settings/usage",
+		"https://chatgpt.com/explore/pro",
 		"(http://localhost:8080).",
 	}
 	for _, marker := range banners {

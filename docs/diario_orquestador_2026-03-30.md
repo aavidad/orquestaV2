@@ -3723,6 +3723,8 @@ Resultado:
 - el transcript futuro ya no debe llenarse con banner de Codex al arrancar o reanudar
 - sube la calidad de la observabilidad y reduce falsas lecturas de “actividad” en agentes vivos
 
+Nota 2026-03-31 22: se amplía el filtro del banner para incluir también las URLs de uso/licencia de ChatGPT/Codex (`/codex/settings/usage`, `/explore/pro`), que seguían entrando como ruido operativo.
+
 ## 2026-03-31 — `runtime diagnostico` ya prioriza lo vivo y reciente
 
 Hallazgo:
