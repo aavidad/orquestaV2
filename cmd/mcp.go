@@ -1263,6 +1263,7 @@ type estadoResumen struct {
 	Agentes            []*db.Agente     `json:"agentes,omitempty"`
 	TareasPorEstado    map[string]int   `json:"tareasPorEstado"`
 	AgentesActivos     []*db.Agente     `json:"agentesActivos"`
+	AgentesTrabajando  []*db.Agente     `json:"agentesTrabajando,omitempty"`
 	Proyectos          []map[string]any `json:"proyectos"`
 	Pools              []map[string]any `json:"pools"`
 	Asignaciones       []map[string]any `json:"asignaciones"`
@@ -1301,11 +1302,6 @@ func buildEstadoResumen() (*estadoResumen, error) {
 		return nil, err
 	}
 	var activos []*db.Agente
-	for _, a := range summary.Agents {
-		if a.Activo {
-			activos = append(activos, a)
-		}
-	}
 	var abiertas []propuestaLite
 	for _, p := range summary.OpenProps {
 		abiertas = append(abiertas, propuestaLite{
@@ -1323,6 +1319,7 @@ func buildEstadoResumen() (*estadoResumen, error) {
 		return nil, err
 	}
 	var activas []tareaLite
+	trabajandoPorNombre := map[string]bool{}
 	for _, t := range tareas {
 		if t.Estado != db.TareaAsignada && t.Estado != db.TareaEnProgreso && t.Estado != db.TareaBloqueada {
 			continue
@@ -1336,8 +1333,21 @@ func buildEstadoResumen() (*estadoResumen, error) {
 		}
 		if t.Agente != nil {
 			row.Agente = *t.Agente
+			if t.Estado == db.TareaEnProgreso && strings.TrimSpace(*t.Agente) != "" {
+				trabajandoPorNombre[strings.TrimSpace(*t.Agente)] = true
+			}
 		}
 		activas = append(activas, row)
+	}
+	var trabajando []*db.Agente
+	for _, a := range summary.Agents {
+		if !a.Activo {
+			continue
+		}
+		activos = append(activos, a)
+		if trabajandoPorNombre[strings.TrimSpace(a.Nombre)] {
+			trabajando = append(trabajando, a)
+		}
 	}
 
 	conectores, err := listarConectores()
@@ -1374,6 +1384,7 @@ func buildEstadoResumen() (*estadoResumen, error) {
 		Agentes:            summary.Agents,
 		TareasPorEstado:    summary.TaskCounts,
 		AgentesActivos:     activos,
+		AgentesTrabajando:  trabajando,
 		Proyectos:          proyectos,
 		Pools:              pools,
 		Asignaciones:       asignaciones,

@@ -435,10 +435,18 @@ func TestRenderStatusSummaryMuestraCuotaAgente(t *testing.T) {
 						PresupuestoSemanalResetAt: &weeklyResetAt,
 					},
 				},
+				AgentesTrabajando: []*db.Agente{
+					{
+						Nombre: "Codex2",
+					},
+				},
 				TareasPorEstado: map[string]int{},
 			},
 		})
 	})
+	if !strings.Contains(out, "Agentes: 1 conectados · 1 con trabajo activo") {
+		t.Fatalf("salida sin resumen conectado/trabajando: %s", out)
+	}
 	if !strings.Contains(out, "cuenta codex2@example.com") {
 		t.Fatalf("salida sin cuenta visible: %s", out)
 	}

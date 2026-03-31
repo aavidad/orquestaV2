@@ -162,11 +162,18 @@ func renderStatusSummary(ctx *statusContext) {
 		fmt.Println()
 	}
 	resumen := ctx.resumen
+	if resumen != nil && len(resumen.AgentesTrabajando) == 0 {
+		resumen.AgentesTrabajando = derivarAgentesTrabajando(resumen.AgentesActivos, resumen.TareasActivas)
+	}
 	fmt.Printf("╔═══════════════════════════════════════════════════════════╗\n")
 	fmt.Printf("║           ORQUESTA — ESTADO DEL PROYECTO                 ║\n")
 	fmt.Printf("╚═══════════════════════════════════════════════════════════╝\n\n")
 
-	fmt.Printf("👥 Agentes: %d activos ahora\n", len(resumen.AgentesActivos))
+	fmt.Printf("👥 Agentes: %d conectados", len(resumen.AgentesActivos))
+	if len(resumen.AgentesTrabajando) > 0 {
+		fmt.Printf(" · %d con trabajo activo", len(resumen.AgentesTrabajando))
+	}
+	fmt.Println()
 	for _, a := range resumen.AgentesActivos {
 		fmt.Printf("   🟢 %-15s [%s]", a.Nombre, a.Rol)
 		if cuenta := resumenCuentaAgente(a); cuenta != "" {
@@ -178,7 +185,7 @@ func renderStatusSummary(ctx *statusContext) {
 		fmt.Println()
 	}
 	if len(resumen.AgentesActivos) == 0 {
-		fmt.Printf("   — sin agentes activos\n")
+		fmt.Printf("   — sin agentes conectados\n")
 	}
 	agentesEnCuota := agentesNoActivosConCuota(resumen.Agentes)
 	if len(agentesEnCuota) > 0 {
@@ -437,6 +444,7 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		Generado                 string          `json:"generado"`
 		TareasPorEstado          map[string]int  `json:"tareasPorEstado"`
 		AgentesActivos           []*db.Agente    `json:"agentesActivos"`
+		AgentesTrabajando        []*db.Agente    `json:"agentesTrabajando"`
 		PropuestasAbiertas       []propuestaLite `json:"propuestasAbiertas"`
 		TareasActivas            []tareaLite     `json:"tareasActivas"`
 		AgentesCompat            []*db.Agente    `json:"agentes"`
@@ -451,6 +459,7 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		Agentes:            payload.AgentesCompat,
 		TareasPorEstado:    payload.TareasPorEstado,
 		AgentesActivos:     payload.AgentesActivos,
+		AgentesTrabajando:  payload.AgentesTrabajando,
 		PropuestasAbiertas: payload.PropuestasAbiertas,
 		TareasActivas:      payload.TareasActivas,
 	}
@@ -459,6 +468,9 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 	}
 	if len(resumen.AgentesActivos) == 0 {
 		resumen.AgentesActivos = payload.AgentesCompat
+	}
+	if len(resumen.AgentesTrabajando) == 0 {
+		resumen.AgentesTrabajando = derivarAgentesTrabajando(resumen.AgentesActivos, resumen.TareasActivas)
 	}
 	if len(resumen.PropuestasAbiertas) == 0 && len(payload.PropuestasCompatAbiertas) > 0 {
 		resumen.PropuestasAbiertas = make([]propuestaLite, 0, len(payload.PropuestasCompatAbiertas))
@@ -492,6 +504,32 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		}
 	}
 	return resumen, nil
+}
+
+func derivarAgentesTrabajando(agentesActivos []*db.Agente, tareasActivas []tareaLite) []*db.Agente {
+	if len(agentesActivos) == 0 || len(tareasActivas) == 0 {
+		return nil
+	}
+	trabajando := make(map[string]bool, len(tareasActivas))
+	for _, tarea := range tareasActivas {
+		if tarea.Estado != db.TareaEnProgreso || strings.TrimSpace(tarea.Agente) == "" {
+			continue
+		}
+		trabajando[strings.TrimSpace(tarea.Agente)] = true
+	}
+	if len(trabajando) == 0 {
+		return nil
+	}
+	out := make([]*db.Agente, 0, len(trabajando))
+	for _, agente := range agentesActivos {
+		if agente == nil {
+			continue
+		}
+		if trabajando[strings.TrimSpace(agente.Nombre)] {
+			out = append(out, agente)
+		}
+	}
+	return out
 }
 
 func fetchServerConfigAll(baseURL string) (map[string]string, error) {

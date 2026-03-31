@@ -358,6 +358,32 @@ Conclusion:
 
 - Orquesta ya no debe enseñar agentes `trabajando` cuando solo queda una sesión/handle fósil sin actividad real del runtime
 
+## 2026-04-01 01:40 aprox. — `status` separa agentes conectados de agentes trabajando
+
+Hallazgo:
+
+- aunque el runtime siga vivo, el mensaje `X activos ahora` inducía a pensar que todos estaban trabajando de verdad
+- en la flota real había agentes conectados en `esperando_io`, no necesariamente ejecutando trabajo útil en ese instante
+
+Decision:
+
+- la capa visible debe hablar de `conectados` y exponer aparte cuántos tienen tarea real `en_progreso`
+
+Cambios:
+
+- `cmd/status_service.go`
+  - calcula `AgentesTrabajando` a partir de agentes activos con tareas `en_progreso`
+- `cmd/api.go`
+  - añade `agentesTrabajando` al payload de `/api/status`
+- `cmd/status_remoto_compat.go`
+  - renderiza `Agentes: N conectados · M con trabajo activo`
+- `cmd/mcp.go`
+  - alinea `estadoResumen` con la misma distinción
+
+Conclusion:
+
+- Orquesta deja de sugerir “ocupado” donde solo hay presencia o espera de I/O
+
 ## 2026-03-31 16:55 aprox. — `status` y la API ya enseñan presupuesto restante por agente
 
 Hallazgo:

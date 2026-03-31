@@ -43,6 +43,9 @@ func TestAPIHandlerStatusReturnsPayload(t *testing.T) {
 	if len(payload.Agentes) != 1 || payload.Agentes[0].Nombre != "CodexX" {
 		t.Fatalf("payload inesperado: %+v", payload)
 	}
+	if payload.AgentesTrabajando != nil && len(payload.AgentesTrabajando) != 0 {
+		t.Fatalf("agentesTrabajando inesperado: %+v", payload.AgentesTrabajando)
+	}
 }
 
 func TestAPIHandlerStatusPropagatesError(t *testing.T) {

@@ -51,6 +51,7 @@ type apiStatusResponse struct {
 	Generado            string          `json:"generado,omitempty"`
 	TareasPorEstado     map[string]int  `json:"tareasPorEstado,omitempty"`
 	AgentesActivos      []*db.Agente    `json:"agentesActivos,omitempty"`
+	AgentesTrabajando   []*db.Agente    `json:"agentesTrabajando,omitempty"`
 	PropuestasResumen   []propuestaLite `json:"propuestasAbiertas,omitempty"`
 	TareasActivas       []tareaLite     `json:"tareasActivas,omitempty"`
 }

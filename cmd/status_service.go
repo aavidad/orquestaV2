@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"strings"
 	"time"
 
 	"orquesta/db"
@@ -94,6 +95,7 @@ func (dbStatusService) FetchStatus() (apiStatusResponse, error) {
 		return apiStatusResponse{}, err
 	}
 	tareasActivas := make([]tareaLite, 0, len(todasLasTareas))
+	trabajandoNombres := make(map[string]bool)
 	for _, tarea := range todasLasTareas {
 		if tarea == nil {
 			continue
@@ -115,13 +117,38 @@ func (dbStatusService) FetchStatus() (apiStatusResponse, error) {
 		}
 		if tarea.Agente != nil {
 			lite.Agente = *tarea.Agente
+			if tarea.Estado == db.TareaEnProgreso && strings.TrimSpace(*tarea.Agente) != "" {
+				trabajandoNombres[strings.TrimSpace(*tarea.Agente)] = true
+			}
 		}
 		tareasActivas = append(tareasActivas, lite)
 	}
 	agentesActivos := make([]*db.Agente, 0, len(agentes))
+	agentesPorNombre := make(map[string]*db.Agente, len(agentes))
 	for _, agente := range agentes {
-		if agente != nil && agente.Activo {
+		if agente == nil {
+			continue
+		}
+		agentesPorNombre[agente.Nombre] = agente
+		if agente.Activo {
 			agentesActivos = append(agentesActivos, agente)
+		}
+	}
+	trabajandoPorNombre := make(map[string]*db.Agente)
+	for nombre := range trabajandoNombres {
+		agente := agentesPorNombre[nombre]
+		if agente == nil || !agente.Activo {
+			continue
+		}
+		trabajandoPorNombre[agente.Nombre] = agente
+	}
+	agentesTrabajando := make([]*db.Agente, 0, len(trabajandoPorNombre))
+	for _, agente := range agentesActivos {
+		if agente == nil {
+			continue
+		}
+		if trabajandoPorNombre[agente.Nombre] != nil {
+			agentesTrabajando = append(agentesTrabajando, agente)
 		}
 	}
 	return apiStatusResponse{
@@ -134,6 +161,7 @@ func (dbStatusService) FetchStatus() (apiStatusResponse, error) {
 		Generado:            time.Now().UTC().Format(time.RFC3339),
 		TareasPorEstado:     cuentas,
 		AgentesActivos:      agentesActivos,
+		AgentesTrabajando:   agentesTrabajando,
 		PropuestasResumen:   propuestasResumen,
 		TareasActivas:       tareasActivas,
 	}, nil
