@@ -3954,7 +3954,7 @@ func TestRuntimeOrderSendInstructionSessionResumePausaPorCuotaProveedor(t *testi
 	if err := os.MkdirAll(filepath.Dir(wrapper), 0o755); err != nil {
 		t.Fatalf("mkdir wrapper: %v", err)
 	}
-	script := "#!/usr/bin/env bash\nset -euo pipefail\necho \"ERROR: You've hit your usage limit. Upgrade to Pro, purchase more credits or try again at 12:56 AM.\" >&2\nexit 1\n"
+	script := "#!/usr/bin/env bash\nset -euo pipefail\necho \"Perfil activo: Codex1\" >&2\necho \"CODEX_HOME: /tmp/codex\" >&2\necho \"Consejo: login\" >&2\necho \"ERROR: You've hit your usage limit. Upgrade to Pro, purchase more credits or try again at 12:56 AM.\" >&2\nexit 1\n"
 	if err := os.WriteFile(wrapper, []byte(script), 0o755); err != nil {
 		t.Fatalf("write wrapper: %v", err)
 	}

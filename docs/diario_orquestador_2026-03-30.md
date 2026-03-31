@@ -1,5 +1,40 @@
 # Diario del orquestador — 2026-03-30
 
+## 2026-03-31 08:0x aprox. — `session_resume` detecta cuota aunque Codex anteponga banner
+
+Hallazgo:
+
+- el caso vivo de `Codex2` seguia quedando como `session_resume fallo: exit status 1`
+- la reproduccion exacta del comando `codex-perfil Codex2 exec resume ...` devolvio el error real:
+  - `ERROR: You've hit your usage limit ...`
+- el problema no era el control plane, sino el resumen de stderr:
+  - Codex imprime antes `Perfil activo`, `CODEX_HOME`, `Consejo`
+  - `trimmedCommandOutput(...)` truncaba desde el principio y el detector de `provider_backoff` no llegaba a ver `usage limit`
+
+Decision:
+
+- el resumen de salida debe priorizar el error relevante frente al banner
+- si el stderr contiene `usage limit`, `rate limit`, `purchase more credits`, `try again at` o `ERROR:`, la salida resumida debe recortarse desde ese punto
+
+Cambios:
+
+- `internal/controlruntime/codex_resume.go`
+  - `trimmedCommandOutput(...)` prioriza marcadores de error relevantes antes de truncar
+- `internal/controlruntime/codex_resume_test.go`
+  - nueva regresion `TestTrimmedCommandOutputPrefiereErrorRelevanteAlBanner`
+- `db/controlplane_entities_test.go`
+  - `TestRuntimeOrderSendInstructionSessionResumePausaPorCuotaProveedor` pasa a cubrir stderr con banner previo de Codex
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./internal/controlruntime -run 'Test(CodexResumeTimeoutDefaultYOverride|TrimmedCommandOutputPrefiereErrorRelevanteAlBanner|EnviarInstruccionSesionResumeUsaCodexPerfil|EnviarInstruccionSesionResumeAceptaMetadataDeSupervisorLocal)' -count=1` => OK
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'TestRuntimeOrderSendInstructionSessionResumePausaPorCuotaProveedor' -count=1` => OK
+- `go build -o ./orquesta .` => OK
+- validacion viva tras reiniciar daemon:
+  - `#80324` y `#80327` dejan de quedar como `session_resume fallo: exit status 1`
+  - pasan a `agente en enfriamiento por usage limit de proveedor`
+  - `./orquesta agente tick Codex2 --proyecto orquestador` devuelve `pausar_por_cuota`
+
 ## 2026-03-31 07:5x aprox. — la lease de `runtime_orders` deja de expirar dos veces
 
 Hallazgo:

@@ -117,6 +117,17 @@ func TestCodexResumeTimeoutDefaultYOverride(t *testing.T) {
 	}
 }
 
+func TestTrimmedCommandOutputPrefiereErrorRelevanteAlBanner(t *testing.T) {
+	raw := []byte("Perfil activo: Codex2\nCODEX_HOME: /tmp/codex\nConsejo: login\nERROR: You've hit your usage limit. Try again at Apr 4th, 2026 11:20 AM.\n")
+	got := trimmedCommandOutput(raw)
+	if !strings.Contains(strings.ToLower(got), "usage limit") {
+		t.Fatalf("faltaba usage limit en salida resumida: %q", got)
+	}
+	if strings.Contains(got, "Perfil activo") {
+		t.Fatalf("el banner no deberia tapar el error relevante: %q", got)
+	}
+}
+
 func TestDetectExternalSessionIDUsaSupervisorLocalResidente(t *testing.T) {
 	tmp := t.TempDir()
 	wrapper := filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil")

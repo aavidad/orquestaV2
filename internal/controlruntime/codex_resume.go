@@ -349,6 +349,20 @@ func trimmedCommandOutput(raw []byte) string {
 	if texto == "" {
 		return ""
 	}
+	lower := strings.ToLower(texto)
+	for _, marker := range []string{
+		"hit your usage limit",
+		"usage limit",
+		"rate limit",
+		"purchase more credits",
+		"try again at",
+		"error:",
+	} {
+		if idx := strings.Index(lower, marker); idx >= 0 {
+			texto = strings.TrimSpace(texto[idx:])
+			break
+		}
+	}
 	const maxChars = 240
 	if len(texto) <= maxChars {
 		return texto
