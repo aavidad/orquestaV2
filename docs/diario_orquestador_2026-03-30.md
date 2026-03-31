@@ -4464,3 +4464,31 @@ Validacion viva:
 - `./orquesta server stop && ./orquesta server start && ./orquesta status`
 - `Codex2` ya no sale como conectado normal; pasa al bloque `En enfriamiento/cuota`
 - las tareas de `Codex2` quedan visibles en `Retenidas por cuota`, que es la lectura operativa correcta
+
+## 2026-04-01 — `status` prioriza el cooldown visible sobre porcentajes stale
+
+Hallazgo:
+
+- con la presencia ya alineada, seguia quedando una lectura fea en `Codex1`: aparecia en cuota con `efectivo 95% · weekly` porque la observacion critica vieja ya habia caducado, pero el `provider_backoff` persistido seguia vigente hasta `reanimar_at`
+- la decision del sistema era correcta (`agente tick` devolvia `pausar_por_cuota`), pero la vista podia parecer contradictoria
+
+Decision:
+
+- cuando un agente esté fuera del pool por cuota y tenga `reanimar_at` futuro, `status` debe empezar por `cooldown hasta ...`
+- ese dato no sustituye al desglose de presupuesto; simplemente pone delante la señal operativa que manda
+
+Codigo:
+
+- [cmd/status_remoto_compat.go](/home/alberto/Trabajo/orquesta/cmd/status_remoto_compat.go)
+- [cmd/status_test.go](/home/alberto/Trabajo/orquesta/cmd/status_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(RenderStatusSummaryMuestraAgentesEnEnfriamiento|RenderStatusSummaryMuestraCuotaAgente)' -count=1`
+- `go build -o ./orquesta .`
+
+Validacion viva:
+
+- `./orquesta server stop && ./orquesta server start && ./orquesta status`
+- `Codex1`, `Codex2` y `Codex5` ya muestran `cooldown hasta ...` al principio de la línea de cuota

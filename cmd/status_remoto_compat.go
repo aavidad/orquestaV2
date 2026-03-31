@@ -260,6 +260,9 @@ func resumenCuotaAgente(a *db.Agente) string {
 		return ""
 	}
 	partes := make([]string, 0, 4)
+	if a.EstadoCuota != "" && a.EstadoCuota != "activo" && a.ReanimarAt != nil && !a.ReanimarAt.IsZero() && a.ReanimarAt.After(time.Now().UTC()) {
+		partes = append(partes, "cooldown hasta "+a.ReanimarAt.Local().Format("2006-01-02 15:04"))
+	}
 	if a.CuotaRestantePct != nil {
 		partes = append(partes, fmt.Sprintf("efectivo %d%%", *a.CuotaRestantePct))
 	}

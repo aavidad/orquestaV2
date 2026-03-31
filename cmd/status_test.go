@@ -508,6 +508,9 @@ func TestRenderStatusSummaryMuestraAgentesEnEnfriamiento(t *testing.T) {
 	if !strings.Contains(out, "Codex5") || !strings.Contains(out, "cuenta maritere@avidad.com") {
 		t.Fatalf("salida sin detalle de agente pausado: %s", out)
 	}
+	if !strings.Contains(out, "cooldown hasta") {
+		t.Fatalf("salida sin cooldown visible: %s", out)
+	}
 	if !strings.Contains(out, "cuota:agotado") {
 		t.Fatalf("salida sin estado de cuota del agente pausado: %s", out)
 	}
