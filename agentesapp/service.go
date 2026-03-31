@@ -38,6 +38,7 @@ type Store interface {
 	ListTasks(filtro db.FiltroTareas) ([]*db.Tarea, error)
 	ListProjectPendingVotes(agente string, proyectoID int64) ([]*db.Propuesta, error)
 	ListProjectOpenProposals(proyectoID int64) ([]*db.Propuesta, error)
+	GetLatestAgentBudget(agente string) (*db.PresupuestoSesion, *db.Sesion, error)
 	ResolveGovernanceCatalog(rol string, proyectoID *int64) (*db.GovernanceCatalog, error)
 	ResolveGovernanceCatalogForContext(rol string, proyectoID *int64, agente string) (*db.GovernanceCatalog, error)
 	ListRules(rol string) ([]*db.Regla, error)
@@ -914,6 +915,10 @@ func (Repository) ListProjectPendingVotes(agente string, proyectoID int64) ([]*d
 func (Repository) ListProjectOpenProposals(proyectoID int64) ([]*db.Propuesta, error) {
 	estado := db.PropuestaAbierta
 	return db.ListarPropuestas(&estado, &proyectoID)
+}
+
+func (Repository) GetLatestAgentBudget(agente string) (*db.PresupuestoSesion, *db.Sesion, error) {
+	return db.UltimoPresupuestoAgente(agente)
 }
 
 func (Repository) ResolveGovernanceCatalog(rol string, proyectoID *int64) (*db.GovernanceCatalog, error) {

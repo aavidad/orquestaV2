@@ -406,6 +406,10 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 	if err != nil {
 		return nil, err
 	}
+	pausarPorPresupuesto, motivoPresupuesto, err := s.shouldPauseByFreshBudget(agenteNombre)
+	if err != nil {
+		return nil, err
+	}
 
 	out := &TickOutput{
 		Agente: agenteNombre,
@@ -433,6 +437,10 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 	}
 
 	switch {
+	case pausarPorPresupuesto:
+		out.AccionRecomendada = "pausar_por_cuota"
+		out.DebePausar = true
+		out.Motivo = motivoPresupuesto
 	case agente.EstadoCuota != "activo":
 		out.AccionRecomendada = "pausar_por_cuota"
 		out.DebePausar = true
@@ -459,6 +467,28 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		out.Motivo = "No hay tarea activa asignada en este proyecto"
 	}
 	return out, nil
+}
+
+func (s *Service) shouldPauseByFreshBudget(agente string) (bool, string, error) {
+	p, _, err := s.store.GetLatestAgentBudget(strings.TrimSpace(agente))
+	if err != nil {
+		return false, "", err
+	}
+	if p == nil || !db.PresupuestoSesionFresco(p) {
+		return false, "", nil
+	}
+	ev, err := db.EvaluarPresupuestoSesion(p)
+	if err != nil {
+		return false, "", err
+	}
+	if ev == nil || !ev.DebeHandoff {
+		return false, "", nil
+	}
+	motivo := strings.TrimSpace(ev.Motivo)
+	if motivo == "" {
+		motivo = "presupuesto crítico"
+	}
+	return true, "Presupuesto crítico. Pausa y relevo recomendados: " + motivo, nil
 }
 
 func (s *Service) resolveActiveAssignment(agente string, proyectoID int64) (bool, string, error) {

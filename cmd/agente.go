@@ -9,6 +9,7 @@ package cmd
 
 import (
 	"bufio"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -242,8 +243,16 @@ func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesio
 	if err != nil {
 		return out, err
 	}
+	pausarPorPresupuesto, motivoPresupuesto, err := agenteDebePausarPorPresupuesto(agenteNombre)
+	if err != nil {
+		return out, err
+	}
 
 	switch {
+	case pausarPorPresupuesto:
+		out.AccionRecomendada = "pausar_por_cuota"
+		out.DebePausar = true
+		out.Motivo = motivoPresupuesto
 	case agente.EstadoCuota != "activo":
 		out.AccionRecomendada = "pausar_por_cuota"
 		out.DebePausar = true
@@ -279,6 +288,31 @@ func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesio
 	}
 
 	return out, nil
+}
+
+func agenteDebePausarPorPresupuesto(nombre string) (bool, string, error) {
+	p, _, err := db.UltimoPresupuestoAgente(nombre)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, "", nil
+		}
+		return false, "", err
+	}
+	if p == nil || !db.PresupuestoSesionFresco(p) {
+		return false, "", nil
+	}
+	ev, err := db.EvaluarPresupuestoSesion(p)
+	if err != nil {
+		return false, "", err
+	}
+	if ev == nil || !ev.DebeHandoff {
+		return false, "", nil
+	}
+	motivo := strings.TrimSpace(ev.Motivo)
+	if motivo == "" {
+		motivo = "presupuesto crítico"
+	}
+	return true, "Presupuesto crítico. Pausa y relevo recomendados: " + motivo, nil
 }
 
 func resumeContextNoVacio(resume runtimeagente.ResumeContext) bool {

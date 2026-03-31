@@ -3847,3 +3847,30 @@ Resultado:
 
 - Orquesta deja de tratar como `stale` a una `token_count` observada de menos de una hora solo por no ser “casi en tiempo real”
 - la cuota efectiva sigue protegida: cuando la observación supere su TTL real, volverá al derivado seguro y marcará `telemetría observada stale`
+
+## 2026-03-31 — `agente tick` deja de mandar seguir trabajando con presupuesto agotado
+
+Hallazgo:
+
+- despues de corregir la ingesta y el TTL observado, `Codex5` ya aparecia como `efectivo 0% · ventana 5h · agotado`
+- aun asi, `./orquesta agente tick Codex5 --proyecto orquestador` seguia devolviendo `continuar_trabajo`
+- el problema no estaba en handoff ni en la vista: el tick autonomo solo miraba `estado_cuota` persistido y no la evaluacion fresca del ultimo presupuesto
+
+Decision:
+
+- alinear `agente tick` con el mismo criterio de presupuesto critico fresco que usa el control plane
+- si el ultimo `PresupuestoSesion` fresco exige handoff/pausa, el tick debe devolver `pausar_por_cuota` y no seguir empujando trabajo
+
+Codigo:
+
+- [cmd/agente.go](/home/alberto/Trabajo/orquesta/cmd/agente.go)
+- [cmd/agente_tick_autonomia_test.go](/home/alberto/Trabajo/orquesta/cmd/agente_tick_autonomia_test.go)
+
+Validacion:
+
+- `go test ./cmd -run 'TestConstruirAgenteTickOutput(PriorizaSupervisionParaSupervisorOperativo|PausaPorPresupuestoCriticoFresco)$' -count=1`
+
+Resultado:
+
+- un agente con cuota agotada fresca deja de recibir `continuar_trabajo`
+- el siguiente batch autonomo ya puede pausar el runtime de forma coherente con la cuota efectiva

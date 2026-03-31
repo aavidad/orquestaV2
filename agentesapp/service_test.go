@@ -24,6 +24,7 @@ type fakeStore struct {
 	checkpoints       []*db.RuntimeCheckpoint
 	tasks             []*db.Tarea
 	proposals         []*db.Propuesta
+	latestBudget      *db.PresupuestoSesion
 	rules             []*db.Regla
 	skills            []*db.Skill
 	workflows         []*db.Workflow
@@ -210,6 +211,17 @@ func (f *fakeStore) ListProjectPendingVotes(agente string, proyectoID int64) ([]
 
 func (f *fakeStore) ListProjectOpenProposals(proyectoID int64) ([]*db.Propuesta, error) {
 	return f.proposals, nil
+}
+
+func (f *fakeStore) GetLatestAgentBudget(agente string) (*db.PresupuestoSesion, *db.Sesion, error) {
+	if f.latestBudget == nil {
+		return nil, nil, sql.ErrNoRows
+	}
+	var sesion *db.Sesion
+	if len(f.sessions) > 0 {
+		sesion = f.sessions[0]
+	}
+	return f.latestBudget, sesion, nil
 }
 
 func (f *fakeStore) ResolveGovernanceCatalog(rol string, proyectoID *int64) (*db.GovernanceCatalog, error) {
