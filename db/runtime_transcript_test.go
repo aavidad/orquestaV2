@@ -655,6 +655,79 @@ func TestIngestarRuntimeTranscriptHandleRecortaPreambuloScriptEnRuntimePanic(t *
 	}
 }
 
+func TestIngestarRuntimeTranscriptHandleLimpiaCSIPrivadoEnRuntimePanic(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, _ := GetRuntimeBySesionID(sesion.ID)
+	handle, _ := GetRuntimeHandleBySesionID(sesion.ID)
+
+	logPath := filepath.Join(t.TempDir(), "csi-panic.log")
+	logData := strings.Join([]string{
+		".\x1b[<1uThe application panicked (crashed).",
+		"",
+	}, "\n")
+	if err := os.WriteFile(logPath, []byte(logData), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	n, err := IngestarRuntimeTranscriptHandle(handle.ID)
+	if err != nil {
+		t.Fatalf("ingestar transcript: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("debería ingerir una línea útil, got=%d", n)
+	}
+
+	agente := "Codex1"
+	items, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: &agente, Limit: 10})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	if len(items) != 1 || items[0].Classification != "runtime_panic" {
+		t.Fatalf("clasificación inesperada: %+v", items)
+	}
+	if strings.Contains(items[0].Text, "\x1b[<1u") {
+		t.Fatalf("la secuencia CSI privada no debería persistirse: %+v", items[0])
+	}
+	if strings.Contains(items[0].Text, "[<1u") {
+		t.Fatalf("la secuencia CSI privada no debería quedar visible: %+v", items[0])
+	}
+	var message string
+	if err := DB.QueryRow(`SELECT message FROM runtime_events WHERE runtime_id=? AND kind='runtime_panic' ORDER BY id DESC LIMIT 1`, runtime.ID).Scan(&message); err != nil {
+		t.Fatalf("runtime_event panic: %v", err)
+	}
+	if strings.Contains(message, "[<1u") {
+		t.Fatalf("el runtime_event no debería arrastrar el CSI privado: %s", message)
+	}
+}
+
 func TestIngestarRuntimeTranscriptHandleCompactaPendingTranscript(t *testing.T) {
 	abrirDBTemporalRuntimeObservabilidad(t)
 

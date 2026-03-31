@@ -242,6 +242,29 @@ Conclusion:
 - la observabilidad histórica sigue disponible en BD/trazas
 - la superficie server-first deja de atascarse por eventos viejos desproporcionados
 
+## 2026-04-01 00:30 aprox. — el transcript limpia CSI privado residual del TUI
+
+Hallazgo:
+
+- seguían entrando `runtime_panic` visibles como `.\u001b[<1uThe application panicked (crashed).`
+- la causa era concreta: el regex ANSI no absorbía secuencias CSI privadas con `<`, así que el residuo del TUI sobrevivía a la limpieza
+
+Decision:
+
+- la limpieza de transcript debe tragarse también esas secuencias privadas
+- `runtime_panic` debe persistir solo el texto útil del fallo, no ruido del terminal
+
+Cambios:
+
+- `db/runtime_transcript.go`
+  - `ansiTranscriptRegexp` pasa a aceptar `<` en el bloque de parámetros CSI
+- `db/runtime_transcript_test.go`
+  - nueva regresión `TestIngestarRuntimeTranscriptHandleLimpiaCSIPrivadoEnRuntimePanic`
+
+Conclusion:
+
+- la clasificación y la observabilidad de `runtime_panic` quedan más limpias y estables para TUI/PTY reales
+
 ## 2026-03-31 16:55 aprox. — `status` y la API ya enseñan presupuesto restante por agente
 
 Hallazgo:

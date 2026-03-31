@@ -47,7 +47,7 @@ type FiltroRuntimeTranscript struct {
 	Limit           int
 }
 
-var ansiTranscriptRegexp = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+var ansiTranscriptRegexp = regexp.MustCompile(`\x1b\[[0-9;?<]*[ -/]*[@-~]`)
 var oscTranscriptRegexp = regexp.MustCompile(`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
 
 func RegistrarRuntimeTranscript(entry *RuntimeTranscriptEntry) (int64, error) {
