@@ -18,6 +18,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -68,6 +69,28 @@ var serverStatusCmd = &cobra.Command{
 			fmt.Printf("Storage: %s %s\n", driver, resolveServerStorageTarget(info))
 		}
 		fmt.Printf("Log: %s\n", localServerLogPath())
+		return nil
+	},
+}
+
+var serverStartCmd = &cobra.Command{
+	Use:   "start",
+	Short: "Arranca el servidor local como daemon y espera healthz",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		addr, _ := cmd.Flags().GetString("addr")
+		baseURL := rpclocal.BaseURL(addr)
+		if info, _, err := loadServerInfoWithHealthFallback(baseURL); err == nil {
+			fmt.Printf("Servidor ya activo en %s (pid=%d)\n", rpclocal.BaseURL(info.Addr), info.PID)
+			return nil
+		}
+		if err := ensureLocalServer(baseURL); err != nil {
+			return err
+		}
+		info, _, err := loadServerInfoWithHealthFallback(baseURL)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Servidor activo en %s (pid=%d)\n", rpclocal.BaseURL(info.Addr), info.PID)
 		return nil
 	},
 }
@@ -170,6 +193,7 @@ var serverDoctorCmd = &cobra.Command{
 }
 
 func init() {
+	serverStartCmd.Flags().String("addr", strings.TrimPrefix(rpclocal.DefaultAddr(), "http://"), "Dirección HTTP local del servidor")
 	serverRunCmd.Flags().String("addr", strings.TrimPrefix(rpclocal.DefaultAddr(), "http://"), "Dirección HTTP local del servidor")
 	serverRunCmd.Flags().String("tls-cert", "", "Certificado PEM del servidor")
 	serverRunCmd.Flags().String("tls-key", "", "Clave privada PEM del servidor")
@@ -177,7 +201,7 @@ func init() {
 	serverRunCmd.Flags().Bool("debug", false, "Activa logging de depuración del servidor")
 	serverRunCmd.Flags().Bool("debug-http", false, "Log HTTP detallado por request")
 	serverRunCmd.Flags().Bool("debug-control-plane", false, "Log detallado del ciclo del control plane")
-	serverCmd.AddCommand(serverRunCmd, serverStatusCmd, serverStopCmd, serverDoctorCmd)
+	serverCmd.AddCommand(serverStartCmd, serverRunCmd, serverStatusCmd, serverStopCmd, serverDoctorCmd)
 	rootCmd.AddCommand(serverCmd)
 }
 
@@ -369,15 +393,21 @@ func ensureLocalServer(addr string) error {
 
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
+	cmd.Stdin = nil
 	cmd.Env = buildLocalServerProcessEnv(os.Environ())
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		return err
 	}
+	childPID := cmd.Process.Pid
 	_ = cmd.Process.Release()
 
 	deadline := time.Now().Add(rpclocal.DefaultStartWait())
 	for time.Now().Before(deadline) {
+		if !pidSigueVivo(childPID) {
+			_ = rpclocal.RemoveState("")
+			return fmt.Errorf("el servidor local terminó antes de publicar healthz (pid=%d). Log: %s", childPID, resumirServerLog(logPath))
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), rpclocal.DefaultTimeout())
 		pingErr := rpclocal.Ping(ctx, addr)
 		cancel()
@@ -386,7 +416,8 @@ func ensureLocalServer(addr string) error {
 		}
 		time.Sleep(150 * time.Millisecond)
 	}
-	return errors.New("timeout esperando al servidor local")
+	_ = rpclocal.RemoveState("")
+	return fmt.Errorf("timeout esperando al servidor local. Log: %s", resumirServerLog(logPath))
 }
 
 func buildLocalServerProcessEnv(base []string) []string {
@@ -426,6 +457,34 @@ func newLocalRPCState(kind, addr string) (rpclocal.ServerInfo, error) {
 		StartedAt:     time.Now().UTC(),
 		Version:       "dev",
 	}, nil
+}
+
+func pidSigueVivo(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	err := syscall.Kill(pid, 0)
+	return err == nil || errors.Is(err, syscall.EPERM)
+}
+
+func resumirServerLog(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "sin log"
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Sprintf("sin log legible (%v)", err)
+	}
+	text := strings.TrimSpace(string(data))
+	if text == "" {
+		return fmt.Sprintf("%s (vacío)", filepath.Base(path))
+	}
+	lines := strings.Split(text, "\n")
+	if len(lines) > 8 {
+		lines = lines[len(lines)-8:]
+	}
+	return fmt.Sprintf("%s :: %s", filepath.Base(path), strings.Join(lines, " | "))
 }
 
 func randomHexToken(size int) (string, error) {

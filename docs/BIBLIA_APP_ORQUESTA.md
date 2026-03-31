@@ -623,3 +623,10 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - `journal_mode=WAL` es parte del contrato operativo del backend SQLite server-first; la verificación viva de persistencia debe reflejar `wal`, no `delete`, cuando el daemon ha arrancado con el binario correcto.
 - `runtime_mailbox.from_agente` representa un emisor lógico del control plane y no debe exigir FK a `agentes(nombre)`. El destinatario `to_agente` sí sigue siendo un agente real.
 - emisores como `server` u `orquesta` son canónicos en mailbox/runtime orders; el schema no puede romper esa semántica.
+
+## Arranque oficial del daemon
+
+- `server run` sigue siendo la ejecución foreground del servidor.
+- la vía oficial para dejar el daemon levantado desde Orquesta es `server start`.
+- `server start` debe usar la misma ruta interna que emplea la CLI para levantar localrpc y, si el hijo muere antes de exponer `healthz`, debe devolver un error útil con resumen del log y limpiar estado falso.
+- no se debe depender de `server run &`, `nohup` o wrappers externos como contrato operativo del orquestador.

@@ -15,6 +15,7 @@ func TestCommandNeedsDB(t *testing.T) {
 		{args: []string{"help"}, want: false},
 		{args: []string{"completion"}, want: false},
 		{args: []string{"server", "status"}, want: false},
+		{args: []string{"server", "start"}, want: false},
 		{args: []string{"server", "stop"}, want: false},
 		{args: []string{"server", "doctor"}, want: false},
 		{args: []string{"server", "run"}, want: false},
@@ -23,6 +24,7 @@ func TestCommandNeedsDB(t *testing.T) {
 		{args: []string{"tarea", "listar"}, want: true},
 		{args: []string{"--local", "status"}, want: true},
 		{args: []string{"server", "status", "--help"}, want: false},
+		{args: []string{"server", "start", "--help"}, want: false},
 	}
 
 	for _, tc := range cases {

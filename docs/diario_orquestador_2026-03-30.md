@@ -2491,3 +2491,32 @@ Validacion:
   - `./orquesta server doctor` => `Health RPC: OK`
   - `./orquesta persistencia verificar` => `journal_mode=wal`
   - `./orquesta status` vuelve a responder por server-first
+
+## 2026-03-31 — daemonización oficial del servidor
+
+Hallazgo:
+
+- el servidor ya arrancaba sano en foreground con `server run`, pero faltaba una vía oficial y robusta para dejarlo residente sin depender de `nohup`, `&` o arranques manuales externos
+- además, cuando el hijo falla antes de publicar `healthz`, la ruta interna de arranque local necesitaba diagnosticar mejor el fallo y limpiar estado falso
+
+Decision:
+
+- se añade `server start` como comando canónico para levantar el daemon local y esperar a `healthz`
+- `ensureLocalServer()` pasa a detectar muerte temprana del hijo, resumir el log y limpiar el `statefile` en fallos/timeout
+- `server run` se mantiene como modo foreground; la operación persistente del orquestador deja de apoyarse en background manual
+
+Codigo:
+
+- [cmd/server.go](/home/alberto/Trabajo/orquesta/cmd/server.go)
+- [cmd/root_test.go](/home/alberto/Trabajo/orquesta/cmd/root_test.go)
+- [cmd/root_gating_test.go](/home/alberto/Trabajo/orquesta/cmd/root_gating_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(CommandNeedsDB|ShouldDelegateToLocalServer|CommandNeedsDBWithDelegationCoverage|BuildLocalServerProcessEnvLimpiaRecuperacionLocal)' -count=1`
+- `go build -o ./orquesta .`
+- validación viva:
+  - `./orquesta server start` => servidor activo
+  - `./orquesta server doctor` => `Health RPC: OK`
+  - `./orquesta status` => vuelve a responder por server-first

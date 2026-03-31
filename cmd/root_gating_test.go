@@ -18,6 +18,7 @@ func TestShouldDelegateToLocalServer(t *testing.T) {
 		{name: "help", args: []string{"help"}, want: false},
 		{name: "completion", args: []string{"completion", "bash"}, want: false},
 		{name: "server status", args: []string{"server", "status"}, want: false},
+		{name: "server start", args: []string{"server", "start"}, want: false},
 		{name: "server stop", args: []string{"server", "stop"}, want: false},
 		{name: "server doctor", args: []string{"server", "doctor"}, want: false},
 		{name: "server run", args: []string{"server", "run"}, want: false},
@@ -69,6 +70,7 @@ func TestCommandNeedsDBWithDelegationCoverage(t *testing.T) {
 		{name: "help", args: []string{"help"}, want: false},
 		{name: "completion", args: []string{"completion", "bash"}, want: false},
 		{name: "server status", args: []string{"server", "status"}, want: false},
+		{name: "server start", args: []string{"server", "start"}, want: false},
 		{name: "server stop", args: []string{"server", "stop"}, want: false},
 		{name: "server doctor", args: []string{"server", "doctor"}, want: false},
 		{name: "server run", args: []string{"server", "run"}, want: false},
@@ -76,6 +78,7 @@ func TestCommandNeedsDBWithDelegationCoverage(t *testing.T) {
 		{name: "status", args: []string{"status"}, want: true},
 		{name: "tarea listar", args: []string{"tarea", "listar"}, want: true},
 		{name: "flag local server stop", args: []string{"--local", "server", "stop"}, want: false},
+		{name: "flag local server start", args: []string{"--local", "server", "start"}, want: false},
 		{name: "flag local status", args: []string{"--local", "status"}, want: true},
 		{name: "help corto", args: []string{"status", "-h"}, want: false},
 	}
