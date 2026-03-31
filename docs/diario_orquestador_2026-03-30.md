@@ -3305,3 +3305,44 @@ Validacion:
   - `Codex2` queda primero con `89%`
   - `Codex1` segundo con `77%`
   - `Codex5` tercero con `74%`
+
+## 2026-03-31 — Ingesta canonica de `auth.json` y `token_count` de Codex CLI
+
+Hallazgo:
+
+- la telemetria de cuota de Codex no sale por un comando externo fiable, pero si queda persistida en artefactos locales del propio perfil:
+  - `auth.json` con identidad/correo
+  - `sessions/*.jsonl` con eventos `token_count`
+- hasta ahora Orquesta solo reflejaba bien el bloqueo cuando el proveedor respondia `usage limit`; faltaba la via observada regular para ventanas `5h` y semanal
+
+Decision:
+
+- el daemon ingesta esa telemetria observada dentro del ciclo del control plane
+- la ventana primaria `300m` pasa a proyectarse como `5h`
+- la secundaria `10080m` pasa a alimentar el presupuesto semanal observado
+- la cuenta observada sale de `auth.json` / claims del token y queda persistida con `cuenta_fuente=codex_token_count_observed`
+
+Codigo:
+
+- [internal/controlruntime/codex_observe.go](/home/alberto/Trabajo/orquesta/internal/controlruntime/codex_observe.go)
+- [internal/controlruntime/codex_observe_test.go](/home/alberto/Trabajo/orquesta/internal/controlruntime/codex_observe_test.go)
+- [cmd/controlplane_support.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support.go)
+- [db/presupuestos_sesion.go](/home/alberto/Trabajo/orquesta/db/presupuestos_sesion.go)
+- [db/sesiones.go](/home/alberto/Trabajo/orquesta/db/sesiones.go)
+- [db/presupuestos_sesion_test.go](/home/alberto/Trabajo/orquesta/db/presupuestos_sesion_test.go)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./internal/controlruntime ./db ./cmd -run 'Test(ObserveCodexArtifactsLeeTokenCountYAuth|ListarAgentesUsaVentanasObservadasDesdeTokenCount)' -count=1`
+- `env GOCACHE=/tmp/orquesta-gocache go build -o ./orquesta .`
+- smoke viva:
+  - `./orquesta server stop`
+  - `./orquesta server start`
+  - `./orquesta sesion presupuesto ver --agente Codex1`
+  - `./orquesta agente presupuesto --activos --json`
+  - `./orquesta agente cuentas --activos`
+  - `./orquesta agente ranking-cuentas --activos`
+- resultado vivo:
+  - `Codex1` ya muestra `Window kind: 5h`, `Ratio restante: 0.89`
+  - `agente cuentas --activos` ya devuelve correos reales observados
+  - el ranking por cuenta ya agrupa por email real y deja a `maritere@avidad.com` con `Codex1,Codex5`

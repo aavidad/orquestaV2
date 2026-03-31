@@ -8,6 +8,7 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package db
 
 import (
+	"strconv"
 	"testing"
 	"time"
 )
@@ -203,6 +204,51 @@ func TestListarAgentesUsaPresupuestoSemanalSiEsMasRestrictivo(t *testing.T) {
 	}
 	if agente.PresupuestoVentana != "weekly" {
 		t.Fatalf("ventana efectiva debería ser weekly: %+v", agente)
+	}
+}
+
+func TestListarAgentesUsaVentanasObservadasDesdeTokenCount(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesionID, err := IniciarSesion("codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	resetPrimary := time.Date(2026, 3, 31, 14, 0, 0, 0, time.UTC)
+	resetSecondary := time.Date(2026, 4, 6, 7, 26, 0, 0, time.UTC)
+	raw := `{"rate_limits":{"primary":{"used_percent":12,"window_minutes":300,"resets_at":` + strconv.FormatInt(resetPrimary.Unix(), 10) + `},"secondary":{"used_percent":43,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetSecondary.Unix(), 10) + `}},"account_email":"codex1@example.com","account_user":"codex1_user"}`
+	checkedAt := time.Date(2026, 3, 31, 10, 5, 0, 0, time.UTC)
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "5h",
+		BudgetSource:    "codex_token_count_observed",
+		RawSnapshotJSON: raw,
+		CheckedAt:       checkedAt,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion: %v", err)
+	}
+
+	agente, err := GetAgente("codex1")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.PresupuestoSesionPct == nil || *agente.PresupuestoSesionPct != 88 {
+		t.Fatalf("sesion pct inesperado: %+v", agente)
+	}
+	if agente.PresupuestoSemanalPct == nil || *agente.PresupuestoSemanalPct != 57 {
+		t.Fatalf("semanal pct inesperado: %+v", agente)
+	}
+	if agente.PresupuestoVentana != "weekly" {
+		t.Fatalf("ventana efectiva inesperada: %+v", agente)
+	}
+	if agente.PresupuestoResetAt == nil || !agente.PresupuestoResetAt.Equal(resetSecondary) {
+		t.Fatalf("reset efectivo inesperado: %+v", agente)
+	}
+	if agente.CuentaEmail != "codex1@example.com" || agente.CuentaUsuario != "codex1_user" {
+		t.Fatalf("identidad inesperada: %+v", agente)
 	}
 }
 

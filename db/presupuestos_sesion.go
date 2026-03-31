@@ -9,8 +9,10 @@ package db
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -275,7 +277,8 @@ func agotadoPorConteo(p *PresupuestoSesion) bool {
 	return int64PtrLTEZero(p.RemainingSeconds) ||
 		int64PtrLTEZero(p.RemainingMessages) ||
 		int64PtrLTEZero(p.RemainingTokens) ||
-		float64PtrLTEZero(p.RemainingCredits)
+		float64PtrLTEZero(p.RemainingCredits) ||
+		snapshotRateLimitAgotado(p)
 }
 
 func int64PtrLTEZero(v *int64) bool {
@@ -287,16 +290,75 @@ func float64PtrLTEZero(v *float64) bool {
 }
 
 func remainingRatio(p *PresupuestoSesion) *float64 {
-	if p == nil || p.RemainingSeconds == nil || p.WindowStartedAt == nil || p.ResetAt == nil {
+	if p != nil && p.RemainingSeconds != nil && p.WindowStartedAt != nil && p.ResetAt != nil {
+		total := p.ResetAt.Sub(*p.WindowStartedAt).Seconds()
+		if total > 0 {
+			ratio := float64(*p.RemainingSeconds) / total
+			if ratio < 0 {
+				ratio = 0
+			}
+			return &ratio
+		}
+	}
+	if ratio := snapshotRemainingRatio(p); ratio != nil {
+		return ratio
+	}
+	return nil
+}
+
+func snapshotRemainingRatio(p *PresupuestoSesion) *float64 {
+	if p == nil {
 		return nil
 	}
-	total := p.ResetAt.Sub(*p.WindowStartedAt).Seconds()
-	if total <= 0 {
+	raw := mapFromJSON(p.RawSnapshotJSON)
+	if raw == nil {
 		return nil
 	}
-	ratio := float64(*p.RemainingSeconds) / total
+	rateLimits, _ := raw["rate_limits"].(map[string]any)
+	if rateLimits == nil {
+		return nil
+	}
+	primary, _ := rateLimits["primary"].(map[string]any)
+	if primary == nil {
+		return nil
+	}
+	used, ok := snapshotFloat64(primary["used_percent"])
+	if !ok {
+		return nil
+	}
+	ratio := 1 - (used / 100)
 	if ratio < 0 {
 		ratio = 0
 	}
+	if ratio > 1 {
+		ratio = 1
+	}
 	return &ratio
+}
+
+func snapshotRateLimitAgotado(p *PresupuestoSesion) bool {
+	ratio := snapshotRemainingRatio(p)
+	return ratio != nil && *ratio <= 0
+}
+
+func snapshotFloat64(raw any) (float64, bool) {
+	switch v := raw.(type) {
+	case float64:
+		return v, true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case json.Number:
+		out, err := v.Float64()
+		if err == nil {
+			return out, true
+		}
+	case string:
+		out, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+		if err == nil {
+			return out, true
+		}
+	}
+	return 0, false
 }

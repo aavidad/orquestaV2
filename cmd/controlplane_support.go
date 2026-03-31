@@ -19,6 +19,7 @@ import (
 
 	"orquesta/db"
 	"orquesta/gitgobernanza"
+	"orquesta/internal/controlruntime"
 	"orquesta/notificaciones"
 	"orquesta/planocontrol"
 	"orquesta/reviewapp"
@@ -110,15 +111,19 @@ func procesarRuntimeTranscriptBatch() (int, error) {
 	if err != nil {
 		return ingested, err
 	}
+	observedBudget, err := procesarPresupuestoSesionObservadoBatch()
+	if err != nil {
+		return ingested + observedBudget, err
+	}
 	if !controlPlaneConfigBoolOrDefault("runtime_transcript_auto_guidance_enabled", true) {
-		return ingested, nil
+		return ingested + observedBudget, nil
 	}
 	signals, err := db.ListarRuntimeTranscript(db.FiltroRuntimeTranscript{
 		SoloSenalesPend: true,
 		Limit:           50,
 	})
 	if err != nil {
-		return ingested, err
+		return ingested + observedBudget, err
 	}
 	processedSignals := 0
 	for i := len(signals) - 1; i >= 0; i-- {
@@ -132,12 +137,240 @@ func procesarRuntimeTranscriptBatch() (int, error) {
 		}
 		if strings.TrimSpace(note) != "" {
 			if err := db.MarcarRuntimeTranscriptManejado(item.ID, note); err != nil {
-				return ingested + processedSignals, err
+				return ingested + observedBudget + processedSignals, err
 			}
 		}
 		processedSignals++
 	}
-	return ingested + processedSignals, nil
+	return ingested + observedBudget + processedSignals, nil
+}
+
+func procesarPresupuestoSesionObservadoBatch() (int, error) {
+	handles, err := db.ListarRuntimeHandles(nil)
+	if err != nil {
+		return 0, err
+	}
+	procesados := 0
+	vistos := map[string]struct{}{}
+	for _, handle := range handles {
+		if handle == nil {
+			continue
+		}
+		agente := strings.TrimSpace(handle.Agente)
+		if agente == "" {
+			continue
+		}
+		if _, ok := vistos[agente]; ok {
+			continue
+		}
+		estado := strings.TrimSpace(handle.Estado)
+		if !strings.EqualFold(estado, "activo") && !strings.EqualFold(estado, "pausado") {
+			continue
+		}
+		obj := controlruntime.ObjetivoProceso{
+			PID:          int64PtrFromHandleRef(handle.HandleKind, handle.HandleRef),
+			HandleKind:   strings.TrimSpace(handle.HandleKind),
+			HandleRef:    strings.TrimSpace(handle.HandleRef),
+			MetadataJSON: strings.TrimSpace(handle.MetadataJSON),
+		}
+		observed, err := controlruntime.ObserveCodexArtifacts(obj)
+		if err != nil {
+			return procesados, err
+		}
+		if observed == nil || observed.ObservedAt.IsZero() {
+			continue
+		}
+		if err := persistirPresupuestoSesionObservado(handle, observed); err != nil {
+			return procesados, err
+		}
+		vistos[agente] = struct{}{}
+		procesados++
+	}
+	return procesados, nil
+}
+
+func persistirPresupuestoSesionObservado(handle *db.RuntimeHandle, observed *controlruntime.CodexObservedArtifacts) error {
+	if handle == nil || observed == nil {
+		return nil
+	}
+	sesionID := int64(0)
+	if handle.SesionID != nil && *handle.SesionID > 0 {
+		sesionID = *handle.SesionID
+	}
+	if sesionID <= 0 {
+		sesion, err := db.GetSesionActivaOperativa(strings.TrimSpace(handle.Agente), handle.ProyectoID)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return nil
+			}
+			return err
+		}
+		if sesion == nil || sesion.ID <= 0 {
+			return nil
+		}
+		sesionID = sesion.ID
+	}
+	if ultimo, err := db.UltimoPresupuestoSesion(sesionID); err == nil && ultimo != nil && !ultimo.CheckedAt.IsZero() && !observed.ObservedAt.After(ultimo.CheckedAt) {
+		if presupuestoSnapshotObservadoUsable(ultimo.RawSnapshotJSON) {
+			return nil
+		}
+	}
+	rawSnapshot := observed.RawSnapshot
+	if strings.TrimSpace(rawSnapshot) == "" {
+		payload := map[string]any{}
+		if observed.Primary.UsedPercent != nil || observed.Secondary.UsedPercent != nil {
+			rateLimits := map[string]any{}
+			if observed.Primary.UsedPercent != nil {
+				rateLimits["primary"] = codexObservedRateLimitPayload(observed.Primary)
+			}
+			if observed.Secondary.UsedPercent != nil {
+				rateLimits["secondary"] = codexObservedRateLimitPayload(observed.Secondary)
+			}
+			payload["rate_limits"] = rateLimits
+		}
+		if observed.AccountEmail != "" {
+			payload["account_email"] = observed.AccountEmail
+		}
+		if observed.AccountUser != "" {
+			payload["account_user"] = observed.AccountUser
+		}
+		if observed.AccountSource != "" {
+			payload["account_source"] = observed.AccountSource
+		}
+		if observed.PlanType != "" {
+			payload["plan_type"] = observed.PlanType
+		}
+		if raw, err := json.Marshal(payload); err == nil {
+			rawSnapshot = string(raw)
+		}
+	}
+	windowKind, startedAt, resetAt := codexObservedWindowMeta(observed.Primary, observed.Secondary, observed.ObservedAt)
+	presupuesto := &db.PresupuestoSesion{
+		SesionID:         sesionID,
+		WindowKind:       windowKind,
+		WindowStartedAt:  startedAt,
+		ResetAt:          resetAt,
+		RemainingCredits: observed.Credits,
+		BudgetSource:     "codex_token_count_observed",
+		RawSnapshotJSON:  rawSnapshot,
+		CheckedAt:        observed.ObservedAt,
+	}
+	if _, err := db.RegistrarPresupuestoSesion(presupuesto); err != nil {
+		return err
+	}
+	db.Audit("orquesta", "registrar_presupuesto_codex_observado", "presupuesto_sesion", 0,
+		fmt.Sprintf("agente=%s sesion=%d source=codex_token_count_observed session_file=%s", strings.TrimSpace(handle.Agente), sesionID, strings.TrimSpace(observed.SessionPath)))
+	return nil
+}
+
+func int64PtrFromHandleRef(kind, ref string) *int64 {
+	if !strings.EqualFold(strings.TrimSpace(kind), "process") {
+		return nil
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(ref), 10, 64)
+	if err != nil || n <= 0 {
+		return nil
+	}
+	return &n
+}
+
+func codexObservedRateLimitPayload(limit controlruntime.CodexObservedRateLimit) map[string]any {
+	payload := map[string]any{
+		"window_minutes": limit.WindowMinutes,
+	}
+	if limit.UsedPercent != nil {
+		payload["used_percent"] = *limit.UsedPercent
+	}
+	if limit.ResetsAt != nil && !limit.ResetsAt.IsZero() {
+		payload["resets_at"] = limit.ResetsAt.UTC().Unix()
+	}
+	return payload
+}
+
+func presupuestoSnapshotObservadoUsable(raw string) bool {
+	meta := mapFromJSON(raw)
+	if meta == nil {
+		return false
+	}
+	rateLimits, _ := meta["rate_limits"].(map[string]any)
+	if rateLimits == nil {
+		return false
+	}
+	for _, key := range []string{"primary", "secondary"} {
+		window, _ := rateLimits[key].(map[string]any)
+		if window == nil {
+			continue
+		}
+		if _, ok := float64FromAny(window["used_percent"]); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func codexObservedWindowMeta(primary, secondary controlruntime.CodexObservedRateLimit, observedAt time.Time) (string, *time.Time, *time.Time) {
+	chosen := primary
+	kind := observedWindowKind(primary.WindowMinutes, "primary")
+	if chosen.UsedPercent == nil && secondary.UsedPercent != nil {
+		chosen = secondary
+		kind = observedWindowKind(secondary.WindowMinutes, "secondary")
+	}
+	if chosen.ResetsAt == nil || chosen.ResetsAt.IsZero() {
+		return kind, nil, nil
+	}
+	minutes := chosen.WindowMinutes
+	if minutes <= 0 {
+		return kind, nil, chosen.ResetsAt
+	}
+	startedAt := chosen.ResetsAt.Add(-time.Duration(minutes) * time.Minute).UTC()
+	return kind, &startedAt, chosen.ResetsAt
+}
+
+func observedWindowKind(minutes int, fallback string) string {
+	switch {
+	case minutes == 300:
+		return "5h"
+	case minutes >= 7*24*60:
+		return "weekly"
+	case minutes > 0:
+		return fmt.Sprintf("%dm", minutes)
+	default:
+		return fallback
+	}
+}
+
+func mapFromJSON(raw string) map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	out := map[string]any{}
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return nil
+	}
+	return out
+}
+
+func float64FromAny(raw any) (float64, bool) {
+	switch v := raw.(type) {
+	case float64:
+		return v, true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case json.Number:
+		out, err := v.Float64()
+		if err == nil {
+			return out, true
+		}
+	case string:
+		out, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+		if err == nil {
+			return out, true
+		}
+	}
+	return 0, false
 }
 
 func procesarRuntimeMailboxBatch() (int, error) {

@@ -2,9 +2,11 @@ package db
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"math"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -760,6 +762,22 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 			a.RemainingCredits = p.RemainingCredits
 			aplicarIdentidadCuentaAgente(a, identidadCuentaDesdePresupuesto(p))
 			var sesion presupuestoAgenteCandidato
+			if observedPrimary, observedSecondary := presupuestosObservadosDesdeSnapshot(p); observedPrimary.pct != nil || observedSecondary.pct != nil {
+				if observedPrimary.pct != nil {
+					a.PresupuestoSesionPct = observedPrimary.pct
+					if observedPrimary.resetAt != nil {
+						a.PresupuestoSesionResetAt = observedPrimary.resetAt
+					}
+					sesion = observedPrimary
+				}
+				if observedSecondary.pct != nil {
+					a.PresupuestoSemanalPct = observedSecondary.pct
+					if observedSecondary.resetAt != nil {
+						a.PresupuestoSemanalResetAt = observedSecondary.resetAt
+					}
+					semanal = observedSecondary
+				}
+			}
 			if ev.RemainingRatio != nil {
 				pct := int(math.Round(*ev.RemainingRatio * 100))
 				if pct < 0 {
@@ -984,6 +1002,142 @@ func presupuestoDerivadoDiarioAgente(a *Agente) presupuestoAgenteCandidato {
 		resetAt:    nextDailyResetAt(),
 		source:     "derived_daily",
 	}
+}
+
+func presupuestosObservadosDesdeSnapshot(p *PresupuestoSesion) (presupuestoAgenteCandidato, presupuestoAgenteCandidato) {
+	if p == nil {
+		return presupuestoAgenteCandidato{}, presupuestoAgenteCandidato{}
+	}
+	raw := mapFromJSON(p.RawSnapshotJSON)
+	if raw == nil {
+		return presupuestoAgenteCandidato{}, presupuestoAgenteCandidato{}
+	}
+	rateLimits, _ := raw["rate_limits"].(map[string]any)
+	if rateLimits == nil {
+		return presupuestoAgenteCandidato{}, presupuestoAgenteCandidato{}
+	}
+	return presupuestoObservadoDesdeMapa(rateLimits, "primary", strings.TrimSpace(p.BudgetSource)),
+		presupuestoObservadoDesdeMapa(rateLimits, "secondary", strings.TrimSpace(p.BudgetSource))
+}
+
+func presupuestoObservadoDesdeMapa(rateLimits map[string]any, key, source string) presupuestoAgenteCandidato {
+	window, _ := rateLimits[key].(map[string]any)
+	if window == nil {
+		return presupuestoAgenteCandidato{}
+	}
+	usedPercent, ok := float64FromAny(window["used_percent"])
+	if !ok {
+		return presupuestoAgenteCandidato{}
+	}
+	pct := int(math.Round(100 - usedPercent))
+	if pct < 0 {
+		pct = 0
+	}
+	if pct > 100 {
+		pct = 100
+	}
+	return presupuestoAgenteCandidato{
+		pct:        &pct,
+		windowKind: normalizarWindowKindObservado(key, intFromAny(window["window_minutes"])),
+		resetAt:    timeFromAny(window["resets_at"]),
+		source:     source,
+	}
+}
+
+func normalizarWindowKindObservado(key string, minutes int) string {
+	switch {
+	case strings.EqualFold(strings.TrimSpace(key), "secondary") || minutes >= 7*24*60:
+		return "weekly"
+	case minutes == 300:
+		return "5h"
+	case minutes > 0:
+		return fmt.Sprintf("%dm", minutes)
+	default:
+		return strings.TrimSpace(key)
+	}
+}
+
+func float64FromAny(raw any) (float64, bool) {
+	switch v := raw.(type) {
+	case float64:
+		return v, true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case json.Number:
+		out, err := v.Float64()
+		if err == nil {
+			return out, true
+		}
+	case string:
+		out, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+		if err == nil {
+			return out, true
+		}
+	}
+	return 0, false
+}
+
+func intFromAny(raw any) int {
+	switch v := raw.(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case json.Number:
+		out, err := v.Int64()
+		if err == nil {
+			return int(out)
+		}
+	case string:
+		out, err := strconv.Atoi(strings.TrimSpace(v))
+		if err == nil {
+			return out
+		}
+	}
+	return 0
+}
+
+func timeFromAny(raw any) *time.Time {
+	switch v := raw.(type) {
+	case float64:
+		if v <= 0 {
+			return nil
+		}
+		ts := time.Unix(int64(v), 0).UTC()
+		return &ts
+	case int64:
+		if v <= 0 {
+			return nil
+		}
+		ts := time.Unix(v, 0).UTC()
+		return &ts
+	case json.Number:
+		out, err := v.Int64()
+		if err == nil && out > 0 {
+			ts := time.Unix(out, 0).UTC()
+			return &ts
+		}
+	case string:
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return nil
+		}
+		if out, err := strconv.ParseInt(v, 10, 64); err == nil && out > 0 {
+			ts := time.Unix(out, 0).UTC()
+			return &ts
+		}
+		for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+			if ts, err := time.Parse(layout, v); err == nil {
+				ts = ts.UTC()
+				return &ts
+			}
+		}
+	}
+	return nil
 }
 
 func presupuestoDerivadoSemanalAgente(a *Agente) presupuestoAgenteCandidato {
