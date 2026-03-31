@@ -8,6 +8,7 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -1361,9 +1362,9 @@ func procesarAutonomiaSesionActiva(sesion *db.Sesion) (int, error) {
 	}
 	switch strings.TrimSpace(out.AccionRecomendada) {
 	case "pausar_por_cuota", "pausar_y_reasignar":
-		if pendiente, err := existeRuntimeOrderAutonomiaPendiente(sesion.Agente, &proyecto.ID, "pause", ""); err != nil {
+		if satisfecha, err := pausaAutonomiaYaSatisfecha(sesion.Agente, &proyecto.ID, sesion); err != nil {
 			return 0, err
-		} else if pendiente {
+		} else if satisfecha {
 			return 0, nil
 		}
 		if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
@@ -1429,9 +1430,9 @@ func procesarCierreProyectoSesion(sesion *db.Sesion) (int, error) {
 		}
 		return 1, nil
 	}
-	if pendiente, err := existeRuntimeOrderAutonomiaPendiente(sesion.Agente, &proyecto.ID, "pause", ""); err != nil {
+	if satisfecha, err := pausaAutonomiaYaSatisfecha(sesion.Agente, &proyecto.ID, sesion); err != nil {
 		return 0, err
-	} else if pendiente {
+	} else if satisfecha {
 		return 0, nil
 	}
 	if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
@@ -1551,9 +1552,9 @@ func procesarAparcadoAutonomoSesion(sesion *db.Sesion) (int, error) {
 		}
 		return 1, nil
 	}
-	if pendiente, err := existeRuntimeOrderAutonomiaPendiente(sesion.Agente, sesion.ProyectoID, "pause", ""); err != nil {
+	if satisfecha, err := pausaAutonomiaYaSatisfecha(sesion.Agente, sesion.ProyectoID, sesion); err != nil {
 		return 0, err
-	} else if pendiente {
+	} else if satisfecha {
 		return 0, nil
 	}
 	if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
@@ -1635,9 +1636,9 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 			if err != nil {
 				return 0, err
 			}
-			if pendiente, err := existeRuntimeOrderAutonomiaPendiente(sesion.Agente, sesion.ProyectoID, "pause", ""); err != nil {
+			if satisfecha, err := pausaAutonomiaYaSatisfecha(sesion.Agente, sesion.ProyectoID, sesion); err != nil {
 				return 0, err
-			} else if pendiente {
+			} else if satisfecha {
 				return 1, nil
 			}
 			if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
@@ -1852,6 +1853,38 @@ func existeRuntimeOrderAutonomiaPendiente(agente string, proyectoID *int64, tipo
 			strings.Contains(strings.ToLower(order.PayloadJSON), fmt.Sprintf(`"accion":"%s"`, strings.ToLower(strings.TrimSpace(accion)))) {
 			return true, nil
 		}
+	}
+	return false, nil
+}
+
+func pausaAutonomiaYaSatisfecha(agente string, proyectoID *int64, sesion *db.Sesion) (bool, error) {
+	if pendiente, err := existeRuntimeOrderAutonomiaPendiente(agente, proyectoID, "pause", ""); err != nil {
+		return false, err
+	} else if pendiente {
+		return true, nil
+	}
+	if sesion != nil && strings.EqualFold(strings.TrimSpace(sesion.Estado), "pausada") {
+		return true, nil
+	}
+	infoAgente, err := db.GetAgente(strings.TrimSpace(agente))
+	if err != nil && err != sql.ErrNoRows {
+		return false, err
+	}
+	if infoAgente != nil && strings.EqualFold(strings.TrimSpace(infoAgente.EstadoCuota), "enfriamiento") {
+		handle, err := resolverHandleControlAgente(strings.TrimSpace(agente), proyectoID)
+		if err != nil {
+			return false, err
+		}
+		if handle == nil || strings.EqualFold(strings.TrimSpace(handle.Estado), "pausado") {
+			return true, nil
+		}
+	}
+	handle, err := resolverHandleControlAgente(strings.TrimSpace(agente), proyectoID)
+	if err != nil {
+		return false, err
+	}
+	if handle != nil && strings.EqualFold(strings.TrimSpace(handle.Estado), "pausado") {
+		return true, nil
 	}
 	return false, nil
 }

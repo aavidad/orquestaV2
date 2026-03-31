@@ -1718,3 +1718,37 @@ Validacion:
 - `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'TestPurgarRuntimeOrdersTerminales(BorraSoloTerminalesYDesenlazaMailbox|BloqueaEstadosVivos)' -count=1` => OK
 - `env GOCACHE=/tmp/orquesta-gocache go test ./runtimesapp -run 'TestServiceDelegatesRuntimeQueries' -count=1` => OK
 - `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'Test(APIRuntimeControlPlaneEndpoints|RuntimeControlPlaneUsaAPICuandoHayServidor|RuntimeMutacionesCriticasSoportanServerMode|ShouldBypassLocalDBConServidorDescubierto)' -count=1` => OK
+
+## 2026-03-31T08:19:24Z - Autonomia deja de duplicar `pause` para agentes ya pausados
+
+Problema:
+
+- `Codex2` seguia generando una cascada de `runtime_orders pause` (`#80350`-`#80373`) pese a estar ya en `estado_cuota=enfriamiento` y con `runtime_handle` `pausado`
+- el control plane solo evitaba duplicados si ya existia otra `pause` `pendiente`; en cuanto una `pause` completaba, el siguiente tick podia rematerializar otra aunque la pausa siguiese vigente
+
+Decision:
+
+- la pausa debe ser idempotente a nivel operativo, no solo a nivel de cola
+- la autonomia debe considerar la pausa ya satisfecha si:
+  - existe `pause` pendiente
+  - la `sesion` ya esta `pausada`
+  - el `runtime_handle` ya esta `pausado`
+  - o el agente esta en `estado_cuota=enfriamiento` sin runtime entregable activo
+
+Cambios:
+
+- `cmd/controlplane_support.go`
+  - nueva guarda `pausaAutonomiaYaSatisfecha(...)`
+  - `procesarAutonomiaSesionActiva`, `procesarCierreProyectoSesion`, `procesarAparcadoAutonomoSesion` y la rama de conector no disponible ya usan la misma semantica antes de encolar `pause`
+- `cmd/controlplane_support_test.go`
+  - nueva regresion `TestProcesarAutonomiaAgentesBatchNoDuplicaPauseSiYaEstaPausadoPorCuota`
+
+Validacion:
+
+- `go test ./cmd -run 'TestProcesarAutonomiaAgentesBatch(NoDuplicaPauseSiYaEstaPausadoPorCuota|EncolaPausePorBloqueoHumano|AparcaSesionBloqueadaYPausaAsignacion|RespetaEstadoOperativoProyectoEsperandoHumano)' -count=1` => OK
+- `go test ./cmd -run 'TestResetReanimacionEncola(StartCuandoNoHayRuntimePeroSiTrabajo|ResumeCuandoHandlePausado)' -count=1` => OK
+- `go build -o ./orquesta .` => OK
+- validacion viva:
+  - daemon reiniciado con el binario nuevo (`pid=3645754`, `Health RPC: OK`)
+  - `./orquesta agente tick Codex2 --proyecto orquestador` sigue devolviendo `pausar_por_cuota`
+  - tras el reinicio no aparecieron nuevas `pause` por encima de `#80373`; la cascada quedo cortada

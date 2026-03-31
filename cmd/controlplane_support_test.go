@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -2488,14 +2489,14 @@ func TestProcesarRuntimeMailboxSessionResumeBatchNoRematerializaMailboxOnlyEnMis
 	payload := fmt.Sprintf(`{"to_agente":"Codex1","from_agente":"server","texto":"instruccion durable","mailbox_id":%d,"mailbox_kind":"instruction","external_session_id":"sess-dedupe","delivery_attempt_signature":"session_resume|handle:%d|session:sess-dedupe"}`, msgID, handle.ID)
 	resultado := fmt.Sprintf(`{"ok":true,"mailbox_id":%d,"deferred":true,"deferred_reason":"runtime no disponible para entrega inmediata","mailbox_only":true}`, msgID)
 	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
-		Agente:       "Codex1",
-		ProyectoID:   &proyectoID,
-		RuntimeID:    handle.RuntimeID,
-		HandleID:     &handle.ID,
-		Tipo:         "send_instruction",
-		PayloadJSON:  payload,
+		Agente:        "Codex1",
+		ProyectoID:    &proyectoID,
+		RuntimeID:     handle.RuntimeID,
+		HandleID:      &handle.ID,
+		Tipo:          "send_instruction",
+		PayloadJSON:   payload,
 		ResultadoJSON: resultado,
-		Estado:       "completada",
+		Estado:        "completada",
 	}); err != nil {
 		t.Fatalf("encolar send_instruction previa: %v", err)
 	}
@@ -3048,14 +3049,14 @@ func TestProcesarRuntimeMailboxInteractivoBatchNoRematerializaMailboxOnlyEnMismo
 	payload := fmt.Sprintf(`{"to_agente":"Codex1","from_agente":"server","texto":"instruccion interactiva durable","mailbox_id":%d,"mailbox_kind":"instruction","delivery_attempt_signature":"interactive|handle:%d|session:"}`, msgID, handle.ID)
 	resultado := fmt.Sprintf(`{"ok":true,"mailbox_id":%d,"deferred":true,"deferred_reason":"runtime no disponible para entrega inmediata","mailbox_only":true}`, msgID)
 	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
-		Agente:       "Codex1",
-		ProyectoID:   &proyectoID,
-		RuntimeID:    handle.RuntimeID,
-		HandleID:     &handle.ID,
-		Tipo:         "send_instruction",
-		PayloadJSON:  payload,
+		Agente:        "Codex1",
+		ProyectoID:    &proyectoID,
+		RuntimeID:     handle.RuntimeID,
+		HandleID:      &handle.ID,
+		Tipo:          "send_instruction",
+		PayloadJSON:   payload,
 		ResultadoJSON: resultado,
-		Estado:       "completada",
+		Estado:        "completada",
 	}); err != nil {
 		t.Fatalf("encolar send_instruction previa: %v", err)
 	}
@@ -3402,6 +3403,81 @@ func TestProcesarAutonomiaAgentesBatchEncolaPausePorBloqueoHumano(t *testing.T) 
 	}
 	if op.EstadoOperativo != db.ProyectoOperativoEsperandoHumano {
 		t.Fatalf("estado operativo inesperado: %+v", op)
+	}
+}
+
+func TestProcesarAutonomiaAgentesBatchNoDuplicaPauseSiYaEstaPausadoPorCuota(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Agente en enfriamiento",
+		Descripcion: "No debe crear pause duplicada",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='pausado' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("pausar handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET reanimar_at=CURRENT_TIMESTAMP, estado_cuota='enfriamiento', motivo_pausa='cuota' WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("marcar enfriamiento: %v", err)
+	}
+
+	n, err := procesarAutonomiaAgentesBatch()
+	if err != nil {
+		t.Fatalf("procesar autonomia: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia crear decision nueva, got=%d", n)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil && err != sql.ErrNoRows {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia crear pause duplicada: %+v", orders)
 	}
 }
 
