@@ -3606,3 +3606,35 @@ Resultado vivo:
 
 - el transcript futuro ya no debe registrar restos `BEL/BS` ni repintados de un solo caracter como output util
 - la observabilidad del runtime queda mas limpia y el control plane depende menos de ruido del TUI
+
+## 2026-03-31 — `runtime ordenes` ya soporta limite real
+
+Hallazgo:
+
+- `./orquesta runtime ordenes --agente Codex3` seguia volcando toda la historia y dificultaba inspeccionar el estado reciente del control plane
+- ya existia `--limit` en transcript y checkpoints, pero no en runtime orders, asi que el diagnostico reciente era innecesariamente ruidoso
+
+Decision:
+
+- añadir `limit` de punta a punta en runtime orders: filtro DB, API server-first, CLI y recuperacion local
+- mantener el orden `ORDER BY id DESC`, pero permitir recortar en origen para que la salida operativa sirva de verdad
+
+Codigo:
+
+- [db/controlplane_entities.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities.go)
+- [cmd/api.go](/home/alberto/Trabajo/orquesta/cmd/api.go)
+- [cmd/runtime.go](/home/alberto/Trabajo/orquesta/cmd/runtime.go)
+- [cmd/runtime_test.go](/home/alberto/Trabajo/orquesta/cmd/runtime_test.go)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd ./db -run 'Test(RuntimeControlPlaneUsaAPICuandoHayServidor|RuntimeOrdenesPermiteRecuperacionConForceLocal)$' -count=1`
+- `env GOCACHE=/tmp/orquesta-gocache go build -o ./orquesta .`
+- smoke viva:
+  - `./orquesta server stop && ./orquesta server start && ./orquesta server doctor`
+  - `./orquesta runtime ordenes --agente Codex3 --limit 5`
+
+Resultado vivo:
+
+- `runtime ordenes` ya devuelve solo el tramo reciente solicitado
+- la inspeccion viva del control plane vuelve a ser util sin tener que purgar historico para leer lo ultimo

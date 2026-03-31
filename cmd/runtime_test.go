@@ -22,6 +22,7 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	var transcriptRuntimeID string
 	var transcriptHandleID string
 	var ordersProjectQuery string
+	var ordersLimitQuery string
 	var purgeOrdersReq map[string]any
 	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -93,6 +94,7 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 			})
 		case r.URL.Path == "/api/runtime-orders" && r.Method == http.MethodGet:
 			ordersProjectQuery = r.URL.Query().Get("proyecto")
+			ordersLimitQuery = r.URL.Query().Get("limit")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"orders": []map[string]any{{
 					"id":             9,
@@ -311,8 +313,12 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	if err := runtimeOrdenesCmd.Flags().Set("proyecto", "orquestador"); err != nil {
 		t.Fatalf("set proyecto ordenes: %v", err)
 	}
+	if err := runtimeOrdenesCmd.Flags().Set("limit", "5"); err != nil {
+		t.Fatalf("set limit ordenes: %v", err)
+	}
 	t.Cleanup(func() {
 		_ = runtimeOrdenesCmd.Flags().Set("proyecto", "")
+		_ = runtimeOrdenesCmd.Flags().Set("limit", "0")
 	})
 	outOrders := capturarStdout(t, func() {
 		if err := runtimeOrdenesCmd.RunE(runtimeOrdenesCmd, nil); err != nil {
@@ -321,6 +327,9 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	})
 	if ordersProjectQuery != "orquestador" {
 		t.Fatalf("query proyecto ordenes inesperada: %q", ordersProjectQuery)
+	}
+	if ordersLimitQuery != "5" {
+		t.Fatalf("query limit ordenes inesperada: %q", ordersLimitQuery)
 	}
 	if !strings.Contains(outOrders, "checkpoint") {
 		t.Fatalf("salida ordenes sin datos del servidor:\n%s", outOrders)
@@ -520,18 +529,28 @@ func TestRuntimeOrdenesPermiteRecuperacionConForceLocal(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("EncolarRuntimeOrder: %v", err)
 	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex1",
+		Tipo:        "checkpoint",
+		PayloadJSON: `{}`,
+	}); err != nil {
+		t.Fatalf("EncolarRuntimeOrder segunda: %v", err)
+	}
 
 	resetCommandFlags(runtimeOrdenesCmd)
 	if err := runtimeOrdenesCmd.Flags().Set("agente", "Codex1"); err != nil {
 		t.Fatalf("set agente runtime ordenes: %v", err)
+	}
+	if err := runtimeOrdenesCmd.Flags().Set("limit", "1"); err != nil {
+		t.Fatalf("set limit runtime ordenes: %v", err)
 	}
 	out := capturarStdout(t, func() {
 		if err := runtimeOrdenesCmd.RunE(runtimeOrdenesCmd, nil); err != nil {
 			t.Fatalf("runtime ordenes en recuperacion local: %v", err)
 		}
 	})
-	if !strings.Contains(out, "nudge") {
-		t.Fatalf("salida runtime ordenes sin datos locales:\n%s", out)
+	if !strings.Contains(out, "checkpoint") || strings.Contains(out, "nudge") {
+		t.Fatalf("salida runtime ordenes no respeta limit local:\n%s", out)
 	}
 }
 

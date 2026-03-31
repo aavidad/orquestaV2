@@ -3629,6 +3629,14 @@ func apiHandlerRuntimeOrders(w http.ResponseWriter, r *http.Request) {
 			}
 			filter.ProyectoID = &p.ID
 		}
+		if limitStr := strings.TrimSpace(r.URL.Query().Get("limit")); limitStr != "" {
+			limit, err := strconv.Atoi(limitStr)
+			if err != nil || limit <= 0 {
+				apiError(w, http.StatusBadRequest, fmt.Errorf("limit inválido"))
+				return
+			}
+			filter.Limit = limit
+		}
 		orders, err := runtimesService.ListRuntimeOrders(filter)
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)

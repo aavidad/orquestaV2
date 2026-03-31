@@ -274,6 +274,7 @@ var runtimeOrdenesCmd = &cobra.Command{
 		agente, _ := cmd.Flags().GetString("agente")
 		estado, _ := cmd.Flags().GetString("estado")
 		proyectoRef, _ := cmd.Flags().GetString("proyecto")
+		limit, _ := cmd.Flags().GetInt("limit")
 		query := url.Values{}
 		if strings.TrimSpace(agente) != "" {
 			query.Set("agente", agente)
@@ -283,6 +284,9 @@ var runtimeOrdenesCmd = &cobra.Command{
 		}
 		if strings.TrimSpace(proyectoRef) != "" {
 			query.Set("proyecto", proyectoRef)
+		}
+		if limit > 0 {
+			query.Set("limit", strconv.Itoa(limit))
 		}
 		if orders, ok, err := cargarRuntimeOrdersDesdeAPI(query); ok {
 			if err != nil {
@@ -998,6 +1002,11 @@ func cargarRuntimeOrdersRecuperacionLocal(query url.Values) ([]*db.RuntimeOrder,
 	if value := strings.TrimSpace(query.Get("estado")); value != "" {
 		filter.Estado = &value
 	}
+	limit, err := runtimeOptionalIntQuery(query, "limit")
+	if err != nil {
+		return nil, err
+	}
+	filter.Limit = limit
 	return db.ListarRuntimeOrders(filter)
 }
 
@@ -1301,6 +1310,7 @@ func init() {
 	runtimeOrdenesCmd.Flags().String("agente", "", "Filtrar órdenes por agente")
 	runtimeOrdenesCmd.Flags().String("estado", "", "Filtrar órdenes por estado")
 	runtimeOrdenesCmd.Flags().String("proyecto", "", "Filtrar órdenes por proyecto")
+	runtimeOrdenesCmd.Flags().Int("limit", 0, "Limitar órdenes devueltas")
 	runtimeOrdenNuevaCmd.Flags().String("proyecto", "", "Proyecto asociado a la orden")
 	runtimeOrdenNuevaCmd.Flags().String("payload", "{}", "Payload JSON de la orden")
 	runtimeNudgeCmd.Flags().String("from", "server", "Agente o actor que emite el nudge")
