@@ -69,6 +69,15 @@ func procesarSupervisionAutonomaBatch() (int, error) {
 		} else if pendiente {
 			continue
 		}
+		if policy.LastSupervisionAt != nil {
+			operativo, err := supervisorAutonomiaYaOperativo(agente.Nombre, proyecto.ID)
+			if err != nil {
+				return total, err
+			}
+			if operativo {
+				continue
+			}
+		}
 		contexto, resumen := db.BuildProjectContextSummary(strings.TrimSpace(agente.Nombre), proyecto)
 		decision := map[string]any{
 			"accion": "supervisar_proyecto",
@@ -780,6 +789,24 @@ func supervisionDue(policy *db.ProyectoAutonomia, now time.Time, interval time.D
 		return true
 	}
 	return now.Sub(policy.LastSupervisionAt.UTC()) >= interval
+}
+
+func supervisorAutonomiaYaOperativo(agente string, proyectoID int64) (bool, error) {
+	if strings.TrimSpace(agente) == "" || proyectoID <= 0 {
+		return false, nil
+	}
+	sesion, err := db.GetSesionActivaOperativa(strings.TrimSpace(agente), &proyectoID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	handle, err := resolverHandleControlAgente(strings.TrimSpace(agente), &proyectoID)
+	if err != nil {
+		return false, err
+	}
+	return sesion != nil && handle != nil, nil
 }
 
 func persistirEstadoProyectoAutonomia(policy *db.ProyectoAutonomia, estado db.EstadoAutonomiaProyecto) error {

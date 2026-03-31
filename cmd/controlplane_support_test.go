@@ -177,6 +177,103 @@ func TestProcesarSupervisionAutonomaBatchArrancaSupervisorPreferidoSinSesion(t *
 	}
 }
 
+func TestProcesarSupervisionAutonomaBatchNoRepiteSupervisionPeriodicaConSupervisorOperativo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "CodexSupervisor",
+		ReviewRequired:       true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSupervisor",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	n, err := procesarSupervisionAutonomaBatch()
+	if err != nil {
+		t.Fatalf("primer ciclo supervision: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba bootstrap inicial de supervision, got=%d", n)
+	}
+
+	agente := "CodexSupervisor"
+	completada := "completada"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &completada})
+	if err != nil {
+		t.Fatalf("listar orders completadas: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no esperaba completadas antes de materializar la prueba: %+v", orders)
+	}
+
+	pendiente := "pendiente"
+	orders, err = db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &pendiente})
+	if err != nil {
+		t.Fatalf("listar orders pendientes: %v", err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("esperaba una sola order inicial, got=%d", len(orders))
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders
+		SET estado='completada',
+		    started_at=datetime('now','-10 minutes'),
+		    finished_at=datetime('now','-10 minutes'),
+		    updated_at=datetime('now','-10 minutes')
+		WHERE id=?`, orders[0].ID); err != nil {
+		t.Fatalf("cerrar order inicial: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE proyectos_autonomia
+		SET last_supervision_at=datetime('now','-10 minutes')
+		WHERE proyecto_id=?`, proyectoID); err != nil {
+		t.Fatalf("forzar supervision vencida: %v", err)
+	}
+
+	n, err = procesarSupervisionAutonomaBatch()
+	if err != nil {
+		t.Fatalf("segundo ciclo supervision: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia repetir supervision periodica con supervisor operativo, got=%d", n)
+	}
+
+	orders, err = db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar todas las orders: %v", err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("no deberia crear una segunda order periodica: %+v", orders)
+	}
+}
+
 func TestProcesarSupervisionAutonomaBatchGeneraBacklogInicialSiAutoCreateTasks(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

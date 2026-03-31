@@ -225,6 +225,7 @@ Regla operativa para `server_autobootstrap`:
 - si un agente ya tiene sesion activa, handle activo o mailbox bootstrap durable pendiente para ese proyecto, el daemon no debe reenviarle otro bootstrap al reiniciar
 - reiniciar el servidor no puede equivaler a “volver a arrancar” a todos los workers ni a reinyectar el mismo `esperar_o_pedir_tarea`
 - una sesion activa del supervisor no debe recibir `supervisar_proyecto` pasivo en cada tick de autonomia; la supervision rica pertenece al batch de supervision y a las señales de transcript/review, no al pulso generico de sesion viva
+- la supervision autonoma periodica tampoco debe reinyectar `supervisar_proyecto` si el supervisor ya sigue operativo en ese proyecto; el primer bootstrap de supervision es valido, pero los ciclos posteriores deben apoyarse en actividad viva y señales reales, no en repetir la misma guidance cada intervalo
 - los `upsert` de politica/autonomia no pueden borrar timestamps operativos como `last_supervision_at` o `last_review_at`; reiniciar el daemon no debe reabrir un ciclo de supervision “por olvido” del estado persistido
 - un agente en `estado_cuota=enfriamiento` con handle `pausado` no es candidato watchdog ni debe recibir `sync_status/watchdog`; el cooldown es ya una decision explicita del plano de control
 

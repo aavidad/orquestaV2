@@ -2520,3 +2520,35 @@ Validacion:
   - `./orquesta server start` => servidor activo
   - `./orquesta server doctor` => `Health RPC: OK`
   - `./orquesta status` => vuelve a responder por server-first
+
+## 2026-03-31 — la supervision periodica deja de reinyectarse sobre un supervisor ya operativo
+
+Hallazgo:
+
+- el repique visible de `Codex1` no venia de mailbox ni de watchdog, sino de la supervision autonoma periodica
+- la evidencia viva quedo aislada por API server-first:
+  - `GET /api/runtime-orders?agente=Codex1` mostraba la pareja `#80638/#80639`
+  - `#80638` era `nudge` con `accion=supervisar_proyecto`
+  - `#80639` era su `send_instruction` derivada con el texto de supervision rica
+- el batch de supervision ya respetaba `last_supervision_at`, pero una vez vencido el intervalo seguia reinyectando la misma guidance aunque el supervisor tuviera sesion operativa y handle activo en ese mismo proyecto
+
+Decision:
+
+- el primer bootstrap de supervision sigue permitido
+- a partir de ahi, si `last_supervision_at` ya existe y el supervisor sigue operativo de verdad en ese proyecto, `procesarSupervisionAutonomaBatch()` no debe volver a encolar `supervisar_proyecto`
+- la supervision periodica solo debe volver a inyectarse cuando el supervisor ya no este operativo o cuando haya señales reales que lo justifiquen
+
+Codigo:
+
+- [cmd/controlplane_autonomia_nivel2.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_autonomia_nivel2.go)
+- [cmd/controlplane_support_test.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestProcesarSupervisionAutonomaBatch(EncolaSupervisionYRegistraCiclo|ArrancaSupervisorPreferidoSinSesion|NoRepiteSupervisionPeriodicaConSupervisorOperativo)' -count=1`
+- `go build -o ./orquesta .`
+- verificacion viva del emisor:
+  - `curl -sf http://127.0.0.1:16543/api/runtime-orders?agente=Codex1`
+  - la ultima pareja previa al cambio seguia siendo `nudge(supervisar_proyecto) -> send_instruction`
+  - tras reiniciar con el binario nuevo, el criterio de corte ya queda cubierto por test y por el emisor identificado; la siguiente comprobacion viva util es dejar pasar el siguiente intervalo de supervision sin que aparezca una pareja nueva equivalente
