@@ -4016,3 +4016,30 @@ Validacion viva:
   - `Codex1` en enfriamiento
   - `Codex5` agotado
   - ambos con cuota y reset visibles, sin confundirlos con agentes activos
+
+## 2026-03-31 — `server doctor` ya recupera el daemon nuevo tras restart
+
+Hallazgo:
+
+- despues de `server stop && server start`, `server doctor` podia seguir enseñando un `statefile` viejo y fallar con `healthz KO` aunque el daemon nuevo ya estuviera arriba
+- `server status` ya usaba `loadServerInfoWithHealthFallback(...)`, pero `doctor` seguia leyendo `statefile` directo
+
+Decision:
+
+- alinear `server doctor` con la misma ruta canónica de descubrimiento que `server status`
+- si el `statefile` va tarde o queda stale, `doctor` debe recuperar por `healthz` y mostrar el daemon vivo real
+
+Codigo:
+
+- [cmd/server.go](/home/alberto/Trabajo/orquesta/cmd/server.go)
+
+Validacion:
+
+- `go build -o ./orquesta .`
+
+Validacion viva:
+
+- `./orquesta server stop && ./orquesta server start && ./orquesta server doctor`
+- resultado:
+  - `State: pid=690920 ...`
+  - `Health RPC: OK`

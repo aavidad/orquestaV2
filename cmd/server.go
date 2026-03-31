@@ -164,7 +164,7 @@ var serverDoctorCmd = &cobra.Command{
 		fmt.Printf("Storage target: %s\n", storageTarget)
 		fmt.Printf("Addr resuelta: %s\n", addr)
 
-		info, err := rpclocal.LoadServerInfo()
+		info, recoveredFromHealth, err := loadServerInfoWithHealthFallback(addr)
 		if err != nil {
 			fmt.Printf("State: no disponible (%v)\n", err)
 		} else {
@@ -177,6 +177,9 @@ var serverDoctorCmd = &cobra.Command{
 				resolveServerStorageTarget(info),
 				info.StartedAt.Format(time.RFC3339),
 			)
+			if recoveredFromHealth {
+				fmt.Printf("State recovery: healthz (statefile ausente o stale)\n")
+			}
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
