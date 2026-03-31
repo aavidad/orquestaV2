@@ -2826,3 +2826,29 @@ Validacion:
 - `go test ./db -run 'Test(IngestarRuntimeTranscriptHandleNoClasificaLineaSistemaScript|IngestarRuntimeTranscriptHandleNoClasificaRuidoOSCSpinner|IngestarRuntimeTranscriptHandleClasificaYGeneraEventos)' -count=1`
 - `go test ./cmd -run 'Test(ProcesarRuntimeTranscriptBatchNoGuiaAlWorkerEnRuntimePanic|ProcesarRuntimeTranscriptBatchEnviaNudgeSupervisorPorSignal)' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-03-31 — `server start` espera publicación real del `statefile`
+
+Hallazgo:
+
+- había una carrera operativa en el arranque del daemon: `server start` podía considerar listo al servidor con `healthz` antes de que el `statefile` estuviera visible
+- eso dejaba un estado incómodo donde el servidor ya estaba sano pero `doctor` podía responder `State: no disponible` en la comprobación inmediata
+
+Decision:
+
+- el handshake de `server start` ahora exige no solo `healthz`, sino también que `LoadServerInfo()` ya vea un `statefile` válido publicado por el daemon
+- el contrato correcto de “daemon arrancado” incluye salud HTTP y descubrimiento local coherente
+
+Codigo:
+
+- [cmd/server.go](/home/alberto/Trabajo/orquesta/cmd/server.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go build -o ./orquesta .`
+- smoke vivo:
+  - `./orquesta server stop`
+  - `./orquesta server start`
+  - `ls -l /tmp/orquesta-localrpc-2ea48e3b1141.json`
+  - `./orquesta server doctor`

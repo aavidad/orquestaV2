@@ -639,6 +639,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - `server run` sigue siendo la ejecución foreground del servidor.
 - la vía oficial para dejar el daemon levantado desde Orquesta es `server start`.
 - `server start` debe usar la misma ruta interna que emplea la CLI para levantar localrpc y, si el hijo muere antes de exponer `healthz`, debe devolver un error útil con resumen del log y limpiar estado falso.
+- `server start` no debe dar el arranque por bueno solo porque responda `healthz`; el daemon tiene que haber publicado también su `statefile`.
 - no se debe depender de `server run &`, `nohup` o wrappers externos como contrato operativo del orquestador.
 
 ## Supervisión autónoma periódica

@@ -412,12 +412,16 @@ func ensureLocalServer(addr string) error {
 		pingErr := rpclocal.Ping(ctx, addr)
 		cancel()
 		if pingErr == nil {
-			return nil
+			if state, stateErr := rpclocal.LoadServerInfo(); stateErr == nil {
+				if strings.TrimSpace(state.Addr) != "" {
+					return nil
+				}
+			}
 		}
 		time.Sleep(150 * time.Millisecond)
 	}
 	_ = rpclocal.RemoveState("")
-	return fmt.Errorf("timeout esperando al servidor local. Log: %s", resumirServerLog(logPath))
+	return fmt.Errorf("timeout esperando al servidor local y su statefile. Log: %s", resumirServerLog(logPath))
 }
 
 func buildLocalServerProcessEnv(base []string) []string {
