@@ -4165,3 +4165,33 @@ Validacion viva:
 
 - `./orquesta server stop && ./orquesta server start && ./orquesta server doctor` => `Health RPC: OK`
 - el cambio se deja como endurecimiento del batch; no altera la semantica de cuota visible salvo evitar que un handle roto bloquee el refresco del resto
+
+## 2026-03-31 — El API de handles ya no expone `transcript_log_pending` crudo
+
+Hallazgo:
+
+- al consultar `/api/runtime-handles?agente=Codex2`, el handle activo seguia arrastrando `transcript_log_pending` con secuencias PTY/OSC crudas dentro de `metadata_json`
+- eso reintroducia basura operativa en la API aunque el ingest del transcript ya compactaba ese campo
+
+Decision:
+
+- normalizar `transcript_log_pending` tambien en la sincronizacion de estado observado (`aplicarEstadoLocalObservado` y `aplicarEstadoRemotoObservado`)
+- la regla es la misma que en el ingest:
+  - compactar control chars/OSC/ANSI
+  - borrar la clave si no queda contenido semantico
+
+Codigo:
+
+- [db/controlplane_entities.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities.go)
+- [db/controlplane_entities_test.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities_test.go)
+
+Validacion:
+
+- `go test ./db -run 'Test(AplicarEstadoLocalObservadoCompactaPendingTranscript|EjecutarRuntimeOrderSendInstructionBackoffCompletaSiMailboxYaFueConsumido|ProcesarRuntimeOrdersBatchReconciliaPendienteSiMailboxYaFueConsumido)$' -count=1`
+- `go build -o ./orquesta .`
+
+Validacion viva:
+
+- `./orquesta server stop && ./orquesta server start`
+- `curl -fsS 'http://127.0.0.1:16543/api/runtime-handles?agente=Codex2'`
+- el handle activo `#405` ya no expone `transcript_log_pending`; el resto de metadata viva se mantiene

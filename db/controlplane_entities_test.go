@@ -4877,6 +4877,58 @@ func TestProcesarRuntimeOrdersBatchReconciliaPendienteSiMailboxYaFueConsumido(t 
 	}
 }
 
+func TestAplicarEstadoLocalObservadoCompactaPendingTranscript(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if err := UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("upsert handle: %v", err)
+	}
+	handle, err := GetRuntimeHandleActivoAgenteProyecto("Codex1", &proyectoID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle activo: %v %+v", err, handle)
+	}
+
+	estado := &controlruntime.EstadoLocal{
+		Vivo:         true,
+		HandleEstado: "activo",
+		MetadataJSON: `{"transcript_log_pending":"\u001b]11;?\u0007\u001b[;m hola \u001b[0m   mundo \u0000","working_dir":"` + filepath.Join(tmp, "orquestador") + `"}`,
+	}
+	if err := aplicarEstadoLocalObservado(handle, estado); err != nil {
+		t.Fatalf("aplicar estado local: %v", err)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil {
+		t.Fatalf("recargar handle: %v", err)
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	got := strings.TrimSpace(stringFromMap(meta, "transcript_log_pending", ""))
+	if got != "hola    mundo" {
+		t.Fatalf("pending compactado inesperado: %q", got)
+	}
+}
+
 func TestProcesarRuntimeOrdersBatchDespachaCicloDeVidaRemoto(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	calls := make([]string, 0, 8)

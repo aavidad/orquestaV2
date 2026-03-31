@@ -2891,6 +2891,7 @@ func aplicarEstadoLocalObservado(handle *RuntimeHandle, estado *controlruntime.E
 	for k, v := range mapFromJSON(estado.MetadataJSON) {
 		meta[k] = v
 	}
+	normalizarMetadataTranscriptObservada(meta)
 	meta["local_last_status_at"] = time.Now().UTC().Format(time.RFC3339Nano)
 	metaJSON, _ := json.Marshal(meta)
 	caps := handle.CapabilitiesJSON
@@ -2957,6 +2958,7 @@ func aplicarEstadoRemotoObservado(handle *RuntimeHandle, runtime *RuntimeInstanc
 		for k, v := range mapFromJSON(estado.MetadataJSON) {
 			meta[k] = v
 		}
+		normalizarMetadataTranscriptObservada(meta)
 		metaJSON, _ := json.Marshal(meta)
 		caps := handle.CapabilitiesJSON
 		if strings.TrimSpace(estado.CapabilitiesJSON) != "" {
@@ -3005,6 +3007,18 @@ func aplicarEstadoRemotoObservado(handle *RuntimeHandle, runtime *RuntimeInstanc
 		}
 	}
 	return nil
+}
+
+func normalizarMetadataTranscriptObservada(meta map[string]any) {
+	if meta == nil {
+		return
+	}
+	pending := compactarPendingTranscript(strings.TrimSpace(stringFromMap(meta, "transcript_log_pending", "")))
+	if pending == "" {
+		delete(meta, "transcript_log_pending")
+	} else {
+		meta["transcript_log_pending"] = pending
+	}
 }
 
 func marcarSesionHeartbeatSupervisada(handle *RuntimeHandle, runtime *RuntimeInstance, pid *int64, logicalState string) error {
