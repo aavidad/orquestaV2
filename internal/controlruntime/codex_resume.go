@@ -26,6 +26,9 @@ func DetectExternalSessionID(obj ObjetivoProceso) (string, error) {
 	if estado, observed, err := ConsultarEstadoLocal(obj); err != nil {
 		return "", err
 	} else if observed && estado != nil {
+		if strings.TrimSpace(estado.MetadataJSON) != "" {
+			obj.MetadataJSON = estado.MetadataJSON
+		}
 		if ext := strings.TrimSpace(stringValueFromMetadata(metadataMap(estado.MetadataJSON), "external_session_id")); ext != "" {
 			return ext, nil
 		}
@@ -47,6 +50,11 @@ func DetectExternalSessionID(obj ObjetivoProceso) (string, error) {
 }
 
 func EnviarInstruccionSesionResume(obj ObjetivoProceso, externalSessionID, instruccion string) (bool, int, error) {
+	if estado, observed, err := ConsultarEstadoLocal(obj); err != nil {
+		return false, 0, err
+	} else if observed && estado != nil && strings.TrimSpace(estado.MetadataJSON) != "" {
+		obj.MetadataJSON = estado.MetadataJSON
+	}
 	meta := metadataMap(obj.MetadataJSON)
 	if !esRuntimeCodexLocal(obj) {
 		return false, 0, nil

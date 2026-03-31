@@ -1413,6 +1413,41 @@ Cambios:
   - `PurgarRuntimeOrdersTerminales(...)`
   - validaciones y normalizacion de estados/tipos
 - `runtimesapp/service.go`
+
+## 2026-03-31 06:0x aprox. — `session_resume` vuelve a funcionar para Codex desde metadata observada y no desde handles degradados
+
+Hallazgo:
+
+- el runtime real de `Codex1` seguia vivo y supervisado, pero el `runtime_handle` activo podia quedar degradado con metadata pobre de sesion
+- en ese estado, la deteccion de runtime Codex y la ruta `session_resume` miraban demasiado la metadata persistida del handle y demasiado poco la observacion viva del supervisor
+- el efecto visible era falso: `send_instruction` quedaba completada como `mailbox_only` o `runtime no disponible para entrega inmediata` aunque el proceso real y la `external_session_id` siguiesen siendo validos
+
+Decision:
+
+- para runtimes locales supervisados, `session_resume` debe priorizar la metadata observada por el supervisor local cuando esa observacion sea mas rica que la metadata persistida del handle
+- el reconocimiento de Codex no puede depender solo de `driver=process_pty_cli`; debe aceptar senales equivalentes en `herramienta`, `conector`, `rendered_command`, `wrapped_command` y `supervisor_driver`
+- `RuntimeHandlePermiteSendInputInteractivo()` debe seguir prohibiendo la ruta insegura de `stdin` directa para Codex, incluso cuando el supervisor tenga metadata rica
+
+Cambios:
+
+- `internal/controlruntime/codex_resume.go`
+  - `DetectExternalSessionID(...)` y `EnviarInstruccionSesionResume(...)` consultan primero el estado observado por `ConsultarEstadoLocal(...)` y reutilizan esa metadata si es mas rica/coherente
+- `internal/controlruntime/pty_local.go`
+  - `esRuntimeCodexLocal(...)` acepta metadatos degradados y señales equivalentes de Codex mas alla del `driver`
+- `db/controlplane_entities.go`
+  - el gating de entrega interactiva endurece la deteccion de handles sin canal real y evita considerar entregable a un runtime local sin `stdin_path`
+- tests:
+  - `internal/controlruntime/codex_resume_test.go`
+  - `db/controlplane_entities_test.go`
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./internal/controlruntime -run 'Test(DetectExternalSessionIDFromCodexPerfilSessionStore|EnviarInstruccionSesionResumeUsaCodexPerfil|EnviarInstruccionSesionResumeAceptaMetadataDeSupervisorLocal|DetectExternalSessionIDUsaSupervisorLocalResidente)' -count=1` => OK
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(RuntimeHandlePermiteSendInputInteractivoRespetaCapacidadesExplicitas|RuntimeHandleMailboxDeliveryModeRespetaCapacidadesYFallbacks|RuntimeOrderSendInstructionCodexSupervisadoSigueCayendoAMailbox)' -count=1` => OK
+- validacion viva:
+  - `./orquesta runtime orden-nueva Codex1 send_instruction --proyecto orquestador --payload '{\"prompt\":\"SMOKE resume Codex1 2026-03-31T06:03Z\"}'` crea la orden `#80281`
+  - `/api/runtime-orders?agente=Codex1` muestra `#80281` como `completada` con `control_real=true`, `delivery_path=session_resume` y `mailbox_delivery=session_resume`
+  - `./orquesta runtime transcript --agente Codex1 --limit 12` registra la entrada `stdin` `SMOKE resume Codex1 2026-03-31T06:03Z`
   - servicio `PurgeTerminalRuntimeOrders(...)`
 - `cmd/api.go`
   - endpoint `POST /api/runtime-orders/purgar`

@@ -295,11 +295,19 @@ func NormalizarInstruccionProceso(obj ObjetivoProceso, instruccion string) strin
 
 func esRuntimeCodexLocal(obj ObjetivoProceso) bool {
 	meta := metadataMap(obj.MetadataJSON)
-	if !strings.EqualFold(strings.TrimSpace(stringValueFromMetadata(meta, "driver")), "process_pty_cli") {
-		return false
+	if renderedCommandLooksLikeCodexCLI(stringValueFromMetadata(meta, "rendered_command")) ||
+		renderedCommandLooksLikeCodexCLI(stringValueFromMetadata(meta, "wrapped_command")) {
+		return true
 	}
-	return renderedCommandLooksLikeCodexCLI(stringValueFromMetadata(meta, "rendered_command")) ||
-		renderedCommandLooksLikeCodexCLI(stringValueFromMetadata(meta, "wrapped_command"))
+	if strings.Contains(strings.ToLower(strings.TrimSpace(stringValueFromMetadata(meta, "herramienta"))), "codex") {
+		return true
+	}
+	if strings.Contains(strings.ToLower(strings.TrimSpace(stringValueFromMetadata(meta, "conector"))), "codex") {
+		return true
+	}
+	driver := strings.ToLower(strings.TrimSpace(stringValueFromMetadata(meta, "driver")))
+	supervisorDriver := strings.ToLower(strings.TrimSpace(stringValueFromMetadata(meta, "supervisor_driver")))
+	return driver == "process_pty_cli" || supervisorDriver == "local_runtime_supervisor"
 }
 
 func sanitizarInstruccionTTY(raw string) string {

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"sort"
 	"strings"
 	"sync"
@@ -646,6 +647,12 @@ func (s *supervisorProcesoLocal) snapshot() (int, string, map[string]any, map[st
 			} else if !ok {
 				alive = false
 				aliveErr = fmt.Errorf("process identity mismatch")
+			} else if vacio, err := procesoWrapperPTYSinHijo(pid, renderedCommand, wrappedCommand, contarHijosProcesoLocal); err != nil {
+				alive = false
+				aliveErr = err
+			} else if vacio {
+				alive = false
+				aliveErr = fmt.Errorf("pty wrapper sin runtime hijo")
 			}
 		}
 		if !alive {
@@ -714,6 +721,63 @@ func (s *supervisorProcesoLocal) snapshot() (int, string, map[string]any, map[st
 		"mailbox_delivery_mode": mailboxDeliveryMode,
 	}
 	return pid, modo, meta, caps, alive, aliveErr
+}
+
+func procesoWrapperPTYSinHijo(pid int, renderedCommand, wrappedCommand string, childCounter func(int64) (int, error)) (bool, error) {
+	if pid <= 0 || childCounter == nil {
+		return false, nil
+	}
+	actualCommand, err := comandoProcesoLocal(pid)
+	if err != nil && !os.IsNotExist(err) {
+		return false, err
+	}
+	if !pareceWrapperPTY(wrappedCommand, renderedCommand, actualCommand) {
+		return false, nil
+	}
+	count, err := childCounter(int64(pid))
+	if err != nil {
+		return false, err
+	}
+	return count == 0, nil
+}
+
+func pareceWrapperPTY(candidates ...string) bool {
+	for _, candidate := range candidates {
+		text := strings.ToLower(strings.TrimSpace(candidate))
+		if text == "" {
+			continue
+		}
+		first := text
+		if fields := strings.Fields(text); len(fields) > 0 {
+			first = fields[0]
+		}
+		base := filepath.Base(first)
+		if base == "script" || strings.HasPrefix(text, "script ") || strings.Contains(text, "/script ") {
+			return true
+		}
+	}
+	return false
+}
+
+func comandoProcesoLocal(pid int) (string, error) {
+	data, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "cmdline"))
+	if err != nil {
+		return "", err
+	}
+	text := strings.ReplaceAll(string(data), "\x00", " ")
+	return strings.TrimSpace(text), nil
+}
+
+func contarHijosProcesoLocal(pid int64) (int, error) {
+	childrenPath := filepath.Join("/proc", strconv.FormatInt(pid, 10), "task", strconv.FormatInt(pid, 10), "children")
+	data, err := os.ReadFile(childrenPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return len(strings.Fields(string(data))), nil
 }
 
 func (s *supervisorProcesoLocal) activarSignalLoop() {

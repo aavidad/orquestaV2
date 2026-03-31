@@ -5423,6 +5423,9 @@ func RuntimeHandlePermiteSendInputInteractivo(handle *RuntimeHandle) bool {
 	if runtimeHandleUsaCodexTTYInestable(meta) {
 		return false
 	}
+	if runtimeHandleLocalProcesoSinCanalInteractivo(handle, meta) {
+		return false
+	}
 	return true
 }
 
@@ -5447,19 +5450,60 @@ func RuntimeHandlePermiteEntregaCalienteSupervisada(handle *RuntimeHandle) bool 
 }
 
 func runtimeHandleUsaCodexTTYInestable(meta map[string]any) bool {
-	rendered := strings.ToLower(strings.TrimSpace(stringFromMap(meta, "rendered_command", "")))
-	if rendered == "" {
+	for _, candidate := range []string{
+		stringFromMap(meta, "rendered_command", ""),
+		stringFromMap(meta, "wrapped_command", ""),
+		stringFromMap(meta, "herramienta", ""),
+		stringFromMap(meta, "conector", ""),
+	} {
+		text := strings.ToLower(strings.TrimSpace(candidate))
+		if text == "" {
+			continue
+		}
+		first := text
+		if fields := strings.Fields(text); len(fields) > 0 {
+			first = fields[0]
+		}
+		base := filepath.Base(first)
+		if strings.Contains(text, "codex-perfil") ||
+			strings.Contains(text, "/codex") ||
+			base == "codex" ||
+			base == "codex-cli" ||
+			strings.HasPrefix(text, "codex ") ||
+			strings.Contains(text, "codex-cli") {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeHandleLocalProcesoSinCanalInteractivo(handle *RuntimeHandle, meta map[string]any) bool {
+	if handle == nil {
 		return false
 	}
-	first := rendered
-	if fields := strings.Fields(rendered); len(fields) > 0 {
-		first = fields[0]
+	if strings.TrimSpace(handle.HandleKind) != "process" {
+		return false
 	}
-	base := filepath.Base(first)
-	return strings.Contains(rendered, "codex-perfil") ||
-		strings.Contains(rendered, "/codex") ||
-		base == "codex" ||
-		strings.HasPrefix(rendered, "codex ")
+	if strings.TrimSpace(stringFromMap(meta, "stdin_path", "")) != "" {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "cli") {
+		return true
+	}
+	driver := strings.TrimSpace(stringFromMap(meta, "driver", ""))
+	if strings.EqualFold(driver, "process_pty_cli") {
+		return true
+	}
+	if strings.TrimSpace(stringFromMap(meta, "supervisor_ref", "")) != "" {
+		return true
+	}
+	if _, ok := meta["supervisor_owner_pid"]; ok {
+		return true
+	}
+	if strings.TrimSpace(stringFromMap(meta, "supervision_mode", "")) != "" {
+		return true
+	}
+	return false
 }
 
 func SincronizarRuntimeHandleExternalSessionID(handle *RuntimeHandle, runtime *RuntimeInstance) (*RuntimeHandle, string, error) {

@@ -75,6 +75,39 @@ func TestEnviarInstruccionSesionResumeUsaCodexPerfil(t *testing.T) {
 	}
 }
 
+func TestEnviarInstruccionSesionResumeAceptaMetadataDeSupervisorLocal(t *testing.T) {
+	tmp := t.TempDir()
+	outPath := filepath.Join(tmp, "resume-supervisor.out")
+	wrapper := filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil")
+	if err := os.MkdirAll(filepath.Dir(wrapper), 0o755); err != nil {
+		t.Fatalf("mkdir wrapper: %v", err)
+	}
+	script := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$@\" > " + shellQuoteForTest(outPath) + "\n"
+	if err := os.WriteFile(wrapper, []byte(script), 0o755); err != nil {
+		t.Fatalf("write wrapper: %v", err)
+	}
+
+	obj := ObjetivoProceso{
+		MetadataJSON: `{"supervisor_driver":"local_runtime_supervisor","wrapped_command":"` + wrapper + ` Codex5","working_dir":"` + tmp + `","external_session_id":"sess-supervisor-456","herramienta":"codex-cli"}`,
+	}
+	aplicado, _, err := EnviarInstruccionSesionResume(obj, "", "hola supervisor resume")
+	if err != nil {
+		t.Fatalf("EnviarInstruccionSesionResume supervisor: %v", err)
+	}
+	if !aplicado {
+		t.Fatal("session_resume deberia aplicar control real desde metadata de supervisor")
+	}
+	data, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read resume output: %v", err)
+	}
+	got := strings.Split(strings.TrimSpace(string(data)), "\n")
+	want := []string{"Codex5", "exec", "resume", "sess-supervisor-456", "hola supervisor resume"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("argv inesperado desde supervisor: got=%q want=%q", got, want)
+	}
+}
+
 func TestDetectExternalSessionIDUsaSupervisorLocalResidente(t *testing.T) {
 	tmp := t.TempDir()
 	wrapper := filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil")

@@ -237,3 +237,44 @@ func TestConsultarEstadoLocalRehidrataMetadataRicaDesdeRuntimeManifest(t *testin
 		t.Fatalf("rendered_command no rehidratado: %q meta=%+v", got, meta)
 	}
 }
+
+func TestProcesoWrapperPTYSinHijoDetectaWrapperVacio(t *testing.T) {
+	vacio, err := procesoWrapperPTYSinHijo(4242, "codex-perfil Codex1", "script -q -e -f -c 'codex-perfil Codex1' /tmp/pty.log", func(int64) (int, error) {
+		return 0, nil
+	})
+	if err != nil {
+		t.Fatalf("procesoWrapperPTYSinHijo: %v", err)
+	}
+	if !vacio {
+		t.Fatal("wrapper PTY sin hijos deberia marcarse como vacio")
+	}
+}
+
+func TestProcesoWrapperPTYSinHijoRespetaRuntimeConHijo(t *testing.T) {
+	vacio, err := procesoWrapperPTYSinHijo(4242, "codex-perfil Codex1", "script -q -e -f -c 'codex-perfil Codex1' /tmp/pty.log", func(int64) (int, error) {
+		return 1, nil
+	})
+	if err != nil {
+		t.Fatalf("procesoWrapperPTYSinHijo: %v", err)
+	}
+	if vacio {
+		t.Fatal("wrapper PTY con hijo real no deberia marcarse como vacio")
+	}
+}
+
+func TestProcesoWrapperPTYSinHijoNoAfectaProcesosNormales(t *testing.T) {
+	llamado := false
+	vacio, err := procesoWrapperPTYSinHijo(4242, "sleep 30", "/usr/bin/sleep 30", func(int64) (int, error) {
+		llamado = true
+		return 0, nil
+	})
+	if err != nil {
+		t.Fatalf("procesoWrapperPTYSinHijo: %v", err)
+	}
+	if vacio {
+		t.Fatal("un proceso normal no deberia tratarse como wrapper PTY vacio")
+	}
+	if llamado {
+		t.Fatal("no deberia consultar hijos para procesos que no son wrapper PTY")
+	}
+}

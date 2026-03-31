@@ -2201,6 +2201,20 @@ func TestRuntimeHandlePermiteSendInputInteractivoRespetaCapacidadesExplicitas(t 
 	}) {
 		t.Fatal("codex local via PTY deberia caer a mailbox por defecto aunque arrastre metadata legacy")
 	}
+	if RuntimeHandlePermiteSendInputInteractivo(&RuntimeHandle{
+		Transporte:   "cli",
+		HandleKind:   "process",
+		MetadataJSON: `{"herramienta":"codex-cli","external_session_id":"sess-live-1"}`,
+	}) {
+		t.Fatal("codex cli con metadata degradada no deberia anunciar input interactivo")
+	}
+	if RuntimeHandlePermiteSendInputInteractivo(&RuntimeHandle{
+		Transporte:   "cli",
+		HandleKind:   "process",
+		MetadataJSON: `{"driver":"process_pty_cli","supervision_mode":"attached"}`,
+	}) {
+		t.Fatal("proceso local sin stdin_path no deberia anunciar input interactivo")
+	}
 }
 
 func TestRuntimeHandlePermiteEntregaCalienteSupervisadaExigeSupervisorYStdin(t *testing.T) {
@@ -2244,6 +2258,13 @@ func TestRuntimeHandleMailboxDeliveryModeRespetaCapacidadesYFallbacks(t *testing
 		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex2"}`,
 	}); got != runtimeagente.MailboxDeliveryBootstrapOnly {
 		t.Fatalf("codex local deberia quedarse en bootstrap_only: %s", got)
+	}
+	if got := RuntimeHandleMailboxDeliveryMode(&RuntimeHandle{
+		Transporte:   "cli",
+		HandleKind:   "process",
+		MetadataJSON: `{"herramienta":"codex-cli","external_session_id":"sess-live-1"}`,
+	}); got != runtimeagente.MailboxDeliverySessionResume {
+		t.Fatalf("codex con metadata degradada pero external_session_id deberia usar session_resume: %s", got)
 	}
 }
 
