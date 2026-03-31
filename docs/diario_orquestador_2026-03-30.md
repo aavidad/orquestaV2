@@ -1966,3 +1966,25 @@ Validacion:
 - validacion operativa:
   - el daemon sigue sano (`./orquesta status` responde y mantiene `Codex1`, `Codex3`, `Codex4`, `Codex5` visibles)
   - no he forzado un nuevo panic en vivo para evitar meter ruido artificial en la flota; la validacion del contrato queda cerrada por test dirigido y por la observacion del incidente real previo de `Codex1`
+## 2026-03-31 — server_autobootstrap no debe resembrar workers vivos
+
+Hallazgo:
+
+- la cascada `nudge -> send_instruction -> start` vista en `Codex3-5` no venia del mailbox general ni del tick de sesion
+- el origen real eran nudges repetidos con `bootstrap_kind=server_autobootstrap`
+- al reiniciar el daemon, `bootstrapServerAutonomy()` reinyectaba `esperar_o_pedir_tarea` aunque el worker ya estuviera operativo
+
+Decision:
+
+- el autobootstrap pasa a ser sembrado inicial, no recordatorio periodico por reinicio de servidor
+- si un agente ya tiene sesion activa, handle activo o mailbox bootstrap durable pendiente para el proyecto, no se vuelve a encolar bootstrap
+
+Codigo:
+
+- [cmd/server_autobootstrap.go](/home/alberto/Trabajo/orquesta/cmd/server_autobootstrap.go)
+- [cmd/server_autobootstrap_test.go](/home/alberto/Trabajo/orquesta/cmd/server_autobootstrap_test.go)
+
+Validacion:
+
+- `go test ./cmd -run 'TestBootstrapServerAutonomy(ConfiguraProyectoYArranque|NoDuplicaBootstrapEnAgenteYaOperativo)|TestAgenteYaBootstrappeadoServidorDetectaMailboxDurablePendiente' -count=1`
+- tras este cambio, el siguiente reinicio del daemon debe conservar los agentes ya vivos sin reinyectarles bootstrap `server_autobootstrap`

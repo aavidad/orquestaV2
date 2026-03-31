@@ -219,6 +219,12 @@ Patron elegido como referencia:
 - handoff con contexto filtrado y resumen util
 - mensajes y ordenes duraderos con lease, ack, retry y backoff
 
+Regla operativa para `server_autobootstrap`:
+
+- el autobootstrap del servidor solo debe sembrar bootstrap inicial para agentes que todavia no estan operativos
+- si un agente ya tiene sesion activa, handle activo o mailbox bootstrap durable pendiente para ese proyecto, el daemon no debe reenviarle otro bootstrap al reiniciar
+- reiniciar el servidor no puede equivaler a “volver a arrancar” a todos los workers ni a reinyectar el mismo `esperar_o_pedir_tarea`
+
 Contrato minimo obligatorio para `runtime_orders`:
 
 - toda orden reclamada por el control plane debe quedar con `lease` explicita

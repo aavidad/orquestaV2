@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -61,13 +63,17 @@ func bootstrapServerAutonomy() error {
 		return err
 	}
 	if supervisor != nil {
-		if _, err := encolarNudgeAutonomiaDetallado(supervisor.Nombre, proyecto, "supervisar_proyecto", "arranque_autonomo_servidor", construirInstruccionBootstrapSupervisor(policy, proyecto, supervisor.Nombre, cfg.WorkerAgents), map[string]any{
-			"bootstrap":               true,
-			"bootstrap_kind":          "server_autobootstrap",
-			"objetivo_general":        strings.TrimSpace(policy.ObjetivoGeneral),
-			"definition_of_done_json": strings.TrimSpace(policy.DefinitionOfDoneJSON),
-		}); err != nil {
+		if listo, err := agenteYaBootstrappeadoServidor(supervisor.Nombre, proyecto.ID); err != nil {
 			return err
+		} else if !listo {
+			if _, err := encolarNudgeAutonomiaDetallado(supervisor.Nombre, proyecto, "supervisar_proyecto", "arranque_autonomo_servidor", construirInstruccionBootstrapSupervisor(policy, proyecto, supervisor.Nombre, cfg.WorkerAgents), map[string]any{
+				"bootstrap":               true,
+				"bootstrap_kind":          "server_autobootstrap",
+				"objetivo_general":        strings.TrimSpace(policy.ObjetivoGeneral),
+				"definition_of_done_json": strings.TrimSpace(policy.DefinitionOfDoneJSON),
+			}); err != nil {
+				return err
+			}
 		}
 	}
 	for _, worker := range cfg.WorkerAgents {
@@ -81,15 +87,67 @@ func bootstrapServerAutonomy() error {
 		if supervisor != nil && strings.EqualFold(worker, strings.TrimSpace(supervisor.Nombre)) {
 			continue
 		}
-		if _, err := encolarNudgeAutonomiaDetallado(worker, proyecto, "esperar_o_pedir_tarea", "arranque_autonomo_servidor", construirInstruccionBootstrapWorker(policy, proyecto, supervisorNameOrDefault(supervisor, cfg.SupervisorAgent)), map[string]any{
-			"bootstrap":      true,
-			"bootstrap_kind": "server_autobootstrap",
-		}); err != nil {
+		if listo, err := agenteYaBootstrappeadoServidor(worker, proyecto.ID); err != nil {
 			return err
+		} else if !listo {
+			if _, err := encolarNudgeAutonomiaDetallado(worker, proyecto, "esperar_o_pedir_tarea", "arranque_autonomo_servidor", construirInstruccionBootstrapWorker(policy, proyecto, supervisorNameOrDefault(supervisor, cfg.SupervisorAgent)), map[string]any{
+				"bootstrap":      true,
+				"bootstrap_kind": "server_autobootstrap",
+			}); err != nil {
+				return err
+			}
 		}
 	}
 	db.Audit("orquesta", "server_autobootstrap", "proyecto", proyecto.ID, fmt.Sprintf("slug=%s supervisor=%s workers=%d", proyecto.Slug, supervisorNameOrDefault(supervisor, cfg.SupervisorAgent), len(cfg.WorkerAgents)))
 	return nil
+}
+
+func agenteYaBootstrappeadoServidor(agente string, proyectoID int64) (bool, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || proyectoID <= 0 {
+		return false, nil
+	}
+	if sesion, err := db.GetSesionActiva(agente, &proyectoID); err != nil && err != sql.ErrNoRows {
+		return false, err
+	} else if sesion != nil {
+		return true, nil
+	}
+	if handle, err := db.GetRuntimeHandleActivoAgenteProyecto(agente, &proyectoID); err != nil {
+		return false, err
+	} else if handle != nil {
+		return true, nil
+	}
+	estadoPendiente := "pendiente"
+	mailbox, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente:   &agente,
+		ProyectoID: &proyectoID,
+		Estado:     &estadoPendiente,
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, msg := range mailbox {
+		if runtimeMailboxEsBootstrapServidor(msg) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func runtimeMailboxEsBootstrapServidor(msg *db.RuntimeMailboxMessage) bool {
+	if msg == nil || strings.TrimSpace(msg.Kind) != "autonomia" {
+		return false
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(msg.PayloadJSON)), &payload); err != nil || payload == nil {
+		return false
+	}
+	kind := strings.TrimSpace(stringMapValue(payload, "bootstrap_kind"))
+	if kind != "server_autobootstrap" {
+		return false
+	}
+	bootstrap, _ := payload["bootstrap"].(bool)
+	return bootstrap
 }
 
 func loadServerAutobootstrapConfig() serverAutobootstrapConfig {
