@@ -3573,6 +3573,41 @@ func TestResetReanimacionEncolaStartCuandoNoHayRuntimePeroSiTrabajo(t *testing.T
 	}
 }
 
+func TestResetReanimacionConservaCooldownSiFallaReactivacion(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := db.DB.Exec(`INSERT INTO asignaciones (agente, proyecto_id, estado, nota) VALUES ('Codex1', 999999, 'activa', 'forzar error de proyecto')`); err != nil {
+		t.Fatalf("insert asignacion inconsistente: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET reanimar_at=CURRENT_TIMESTAMP, estado_cuota='enfriamiento', motivo_pausa='cuota' WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("marcar reanimacion: %v", err)
+	}
+
+	if err := (dbAutomationService{}).ResetReanimacion("Codex1"); err == nil {
+		t.Fatalf("esperaba error al reactivar con proyecto inconsistente")
+	}
+
+	agente, err := db.GetAgente("Codex1")
+	if err != nil {
+		t.Fatalf("get agente: %v", err)
+	}
+	if agente == nil {
+		t.Fatalf("agente nil")
+	}
+	if !strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "enfriamiento") {
+		t.Fatalf("estado_cuota inesperado: %+v", agente)
+	}
+	if agente.ReanimarAt == nil {
+		t.Fatalf("reanimar_at no deberia limpiarse si falla la reactivacion: %+v", agente)
+	}
+	if strings.TrimSpace(agente.MotivoPausa) == "" {
+		t.Fatalf("motivo_pausa no deberia vaciarse si falla la reactivacion: %+v", agente)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchEncolaPausePorBloqueoHumano(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

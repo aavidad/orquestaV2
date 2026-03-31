@@ -164,8 +164,12 @@ func (r *Runner) runReanimaciones() {
 	}
 	r.debugf("reanimaciones candidatos=%d", len(reanimar))
 	for _, a := range reanimar {
+		if err := r.Automation.ResetReanimacion(a.Nombre); err != nil {
+			r.debugf("reanimacion agente=%s error=%v", a.Nombre, err)
+			r.Automation.Audit("server", "reanimar_agente_error", "agente", 0, fmt.Sprintf("Agente %s no pudo reanimarse tras pausa: %v", a.Nombre, err))
+			continue
+		}
 		r.Automation.Audit("server", "reanimar_agente", "agente", 0, fmt.Sprintf("Agente %s reanimado tras pausa: %s", a.Nombre, a.MotivoPausa))
-		_ = r.Automation.ResetReanimacion(a.Nombre)
 	}
 }
 

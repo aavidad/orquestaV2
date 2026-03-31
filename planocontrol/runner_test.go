@@ -38,10 +38,17 @@ type stubAutomationService struct {
 	transcriptPanic  bool
 	processedBlock   <-chan struct{}
 	audits           []string
+	reanimar         []*db.Agente
+	reanimarErr      error
+	resetCalls       []string
+	resetErr         error
 }
 
-func (s *stubAutomationService) CheckReanimaciones() ([]*db.Agente, error) { return nil, nil }
-func (s *stubAutomationService) ResetReanimacion(nombre string) error      { return nil }
+func (s *stubAutomationService) CheckReanimaciones() ([]*db.Agente, error) { return s.reanimar, s.reanimarErr }
+func (s *stubAutomationService) ResetReanimacion(nombre string) error {
+	s.resetCalls = append(s.resetCalls, nombre)
+	return s.resetErr
+}
 func (s *stubAutomationService) GarantizarSaludAgentes() error             { return nil }
 func (s *stubAutomationService) PlanificarTareasAutomaticamente() error    { return nil }
 func (s *stubAutomationService) ProcesarAutonomiaAgentesBatch() (int, error) {
@@ -120,6 +127,45 @@ func TestRunnerRunControlPlaneSinTrabajoNoAudita(t *testing.T) {
 
 	if len(service.audits) != 0 {
 		t.Fatalf("no esperaba auditorias, got=%d", len(service.audits))
+	}
+}
+
+func TestRunnerRunReanimacionesAuditaSoloExitoReal(t *testing.T) {
+	service := &stubAutomationService{
+		reanimar: []*db.Agente{{Nombre: "Codex1", MotivoPausa: "cuota"}},
+	}
+	r := &Runner{Automation: service}
+
+	r.runReanimaciones()
+
+	if len(service.resetCalls) != 1 || service.resetCalls[0] != "Codex1" {
+		t.Fatalf("reset calls inesperadas: %+v", service.resetCalls)
+	}
+	if len(service.audits) != 1 || !strings.Contains(service.audits[0], "reanimar_agente|") {
+		t.Fatalf("auditorias inesperadas: %+v", service.audits)
+	}
+}
+
+func TestRunnerRunReanimacionesAuditaErrorSinMentirExito(t *testing.T) {
+	service := &stubAutomationService{
+		reanimar: []*db.Agente{{Nombre: "Codex1", MotivoPausa: "cuota"}},
+		resetErr: context.DeadlineExceeded,
+	}
+	r := &Runner{Automation: service}
+
+	r.runReanimaciones()
+
+	if len(service.resetCalls) != 1 || service.resetCalls[0] != "Codex1" {
+		t.Fatalf("reset calls inesperadas: %+v", service.resetCalls)
+	}
+	if len(service.audits) != 1 {
+		t.Fatalf("esperaba una auditoria de error, got=%d", len(service.audits))
+	}
+	if !strings.Contains(service.audits[0], "reanimar_agente_error|") {
+		t.Fatalf("auditoria inesperada: %+v", service.audits)
+	}
+	if strings.Contains(service.audits[0], "reanimar_agente|") {
+		t.Fatalf("no deberia auditar exito si falla la reanimacion: %+v", service.audits)
 	}
 }
 

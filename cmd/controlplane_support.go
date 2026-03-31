@@ -35,10 +35,11 @@ func (dbAutomationService) CheckReanimaciones() ([]*db.Agente, error) {
 }
 
 func (dbAutomationService) ResetReanimacion(nombre string) error {
-	if err := db.ResetReanimacion(nombre); err != nil {
+	nombre = strings.TrimSpace(nombre)
+	if err := reactivarAgenteTrasReanimacion(nombre); err != nil {
 		return err
 	}
-	return reactivarAgenteTrasReanimacion(strings.TrimSpace(nombre))
+	return db.ResetReanimacion(nombre)
 }
 
 func (dbAutomationService) GarantizarSaludAgentes() error {

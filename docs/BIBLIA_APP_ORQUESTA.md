@@ -264,6 +264,8 @@ Contrato minimo obligatorio para `runtime_orders`:
 - un `watchdog` no puede quedarse pendiente cuando el agente ya está conscientemente aparcado por cuota: si el agente está en `estado_cuota=enfriamiento` y su handle vigente está `pausado`, el runner debe consumir ese watchdog como deuda ya satisfecha, no intentar reanimarlo
 - un `runtime_panic` o `runtime_crash` de Codex no puede ir seguido de guidance inmediata al mismo worker: primero se aplica una cuarentena corta con `reanimar_at`, se despierta al supervisor y solo al vencer esa cuarentena vuelve la reanimación automática normal
 - esa cuarentena debe reutilizar el mecanismo oficial de `enfriamiento/reanimar_at` con un `motivo_pausa` explícito de `runtime_panic`, no otro subsistema paralelo
+- una reanimacion automatica no se da por cerrada cuando vence el tiempo; solo cuando Orquesta ha encolado con exito su `resume` o `start`, o ha confirmado que ya existe una orden abierta equivalente
+- por tanto, `reanimar_at`, `estado_cuota` y `motivo_pausa` no se limpian antes de la reactivacion efectiva; si la reactivacion falla, la deuda sigue visible para reintento en el siguiente ciclo
 - `send_instruction` no usa la misma `lease` que `start`/`handoff`: su ventana debe ser corta y operativa para que un `session_resume` colgado no secuestre `runtime_orders` durante minutos. La `lease` general sigue siendo larga para ciclo de vida, pero la de `send_instruction` es especifica y mas corta
 - si un `start` levanta runtime real con bootstrap inyectado pero sin `handoff/resume` pendiente, ese propio `start` debe hacer `ack` de los mailbox bootstrap incluidos; no se puede dejar esa continuidad pendiente por falta de lease formal
 

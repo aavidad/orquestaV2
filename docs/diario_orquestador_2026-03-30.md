@@ -2057,3 +2057,29 @@ Codigo:
 Validacion:
 
 - `go test ./db -run 'TestProcesarHandoffsBatch(SinHandleHaceHandoffDirecto|PorPresupuestoNoRequiereSondeo|SinHandleEscalaDirectoAHandoff|NoSondeaAgenteEnEnfriamientoPausado)' -count=1`
+
+## 2026-03-31 — la reanimacion no puede perderse por limpiar el cooldown demasiado pronto
+
+Hallazgo:
+
+- el runner llamaba a `ResetReanimacion()` y ese servicio limpiaba `reanimar_at/estado_cuota/motivo_pausa` antes de intentar encolar el `resume/start`
+- si la reactivacion fallaba despues, el agente quedaba fuera de cooldown pero sin haber sido reactivado, y el siguiente ciclo ya no podia reintentarlo porque la deuda habia desaparecido
+- ademas, el runner auditaba `reanimar_agente` antes de conocer el resultado real
+
+Decision:
+
+- la reactivacion debe ejecutarse primero y solo despues limpiar el cooldown
+- si la reactivacion falla, la deuda de reanimacion debe seguir visible para el siguiente ciclo
+- el runner solo audita `reanimar_agente` en exito real; en fallo audita `reanimar_agente_error`
+
+Codigo:
+
+- [cmd/controlplane_support.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support.go)
+- [cmd/controlplane_support_test.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support_test.go)
+- [planocontrol/runner.go](/home/alberto/Trabajo/orquesta/planocontrol/runner.go)
+- [planocontrol/runner_test.go](/home/alberto/Trabajo/orquesta/planocontrol/runner_test.go)
+
+Validacion:
+
+- `go test ./cmd -run 'TestResetReanimacion(EncolaResumeCuandoHayHandlePausado|EncolaStartCuandoNoHayRuntimePeroSiTrabajo|ConservaCooldownSiFallaReactivacion)' -count=1`
+- `go test ./planocontrol -run 'TestRunnerRunReanimaciones(AuditaSoloExitoReal|AuditaErrorSinMentirExito)' -count=1`
