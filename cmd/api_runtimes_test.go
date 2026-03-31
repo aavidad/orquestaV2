@@ -362,3 +362,72 @@ func TestAPIRuntimeEventsCompactaPayloadGigante(t *testing.T) {
 		t.Fatalf("payload.text debería salir compactado, runes=%d", utf8.RuneCountInString(texto))
 	}
 }
+
+func TestAPIRuntimeEventsSaneaCSIHistorico(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	raw := ".\x1b[<1uThe application panicked (crashed)."
+	if _, err := db.RegistrarRuntimeEvent(&db.RuntimeEvent{
+		RuntimeID:   runtime.ID,
+		Kind:        "runtime_panic",
+		Level:       "critical",
+		Message:     raw,
+		PayloadJSON: `{"text":"` + raw + `"}`,
+	}); err != nil {
+		t.Fatalf("registrar runtime event CSI: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/runtime-events?agente=Codex1&proyecto=orquestador&limit=5", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado runtime events: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode runtime events: %v", err)
+	}
+	items, _ := payload["events"].([]any)
+	if len(items) == 0 {
+		t.Fatalf("runtime events vacíos: %s", rec.Body.String())
+	}
+	first, _ := items[0].(map[string]any)
+	msg, _ := first["message"].(string)
+	if strings.Contains(msg, "[<1u") || strings.Contains(msg, "\u001b") {
+		t.Fatalf("message debería salir saneado: %q", msg)
+	}
+	payloadMap, _ := first["payload"].(map[string]any)
+	texto, _ := payloadMap["text"].(string)
+	if strings.Contains(texto, "[<1u") || strings.Contains(texto, "\u001b") {
+		t.Fatalf("payload.text debería salir saneado: %q", texto)
+	}
+}

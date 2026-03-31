@@ -265,6 +265,30 @@ Conclusion:
 
 - la clasificación y la observabilidad de `runtime_panic` quedan más limpias y estables para TUI/PTY reales
 
+## 2026-04-01 00:40 aprox. — la API sanea también eventos históricos con ANSI/CSI residual
+
+Hallazgo:
+
+- aunque el ingest nuevo ya limpia mejor transcript y `runtime_panic`, `/api/runtime-events` seguía mostrando basura ANSI/CSI en eventos viejos porque solo truncaba, no saneaba
+
+Decision:
+
+- la proyección API de observabilidad debe pasar por el mismo saneador textual antes de truncar
+- el raw histórico sigue en BD, pero la lectura visible no puede arrastrar `ESC`, `CSI` ni restos de TUI
+
+Cambios:
+
+- `db/runtime_transcript.go`
+  - nuevo helper exportado `SanitizarTextoObservabilidadRuntime(...)`
+- `cmd/api.go`
+  - `truncarTextoAPI(...)` sanea primero con el helper de observabilidad
+- `cmd/api_runtimes_test.go`
+  - nueva regresión `TestAPIRuntimeEventsSaneaCSIHistorico`
+
+Conclusion:
+
+- la observabilidad server-first ya no depende de que el evento fuera ingerido antes o después de los fixes de transcript
+
 ## 2026-03-31 16:55 aprox. — `status` y la API ya enseñan presupuesto restante por agente
 
 Hallazgo:

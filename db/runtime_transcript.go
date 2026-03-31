@@ -605,6 +605,10 @@ func limpiarLineaTranscript(raw string) string {
 	return raw
 }
 
+func SanitizarTextoObservabilidadRuntime(raw string) string {
+	return limpiarLineaTranscript(raw)
+}
+
 func recortarPreambuloSistemaHastaFallo(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if !strings.HasPrefix(raw, "Script started on ") {

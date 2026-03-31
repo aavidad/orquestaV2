@@ -3538,7 +3538,7 @@ func compactarValorRuntimeEventAPI(v any) any {
 }
 
 func truncarTextoAPI(raw string, limit int) string {
-	raw = strings.TrimSpace(raw)
+	raw = db.SanitizarTextoObservabilidadRuntime(raw)
 	if limit <= 0 || len(raw) <= limit {
 		return raw
 	}
