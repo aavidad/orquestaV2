@@ -29,6 +29,29 @@ type apiAgentesResponse struct {
 	Agentes []*db.Agente `json:"agentes"`
 }
 
+type apiAgentesPresupuestoResponse struct {
+	Generado string       `json:"generado"`
+	Activos  bool         `json:"activos"`
+	Agentes  []*db.Agente `json:"agentes"`
+}
+
+type apiAgenteCuentaItem struct {
+	Nombre            string     `json:"nombre"`
+	Rol               string     `json:"rol,omitempty"`
+	Activo            bool       `json:"activo"`
+	Habilitado        bool       `json:"habilitado"`
+	CuentaEmail       string     `json:"cuenta_email,omitempty"`
+	CuentaUsuario     string     `json:"cuenta_usuario,omitempty"`
+	CuentaFuente      string     `json:"cuenta_fuente,omitempty"`
+	CuentaObservadaAt *time.Time `json:"cuenta_observada_at,omitempty"`
+}
+
+type apiAgentesCuentasResponse struct {
+	Generado string                `json:"generado"`
+	Activos  bool                  `json:"activos"`
+	Agentes  []apiAgenteCuentaItem `json:"agentes"`
+}
+
 type apiProyectosResponse struct {
 	Proyectos []*db.Proyecto `json:"proyectos"`
 }

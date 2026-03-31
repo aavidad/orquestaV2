@@ -839,6 +839,14 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodGet {
+		if len(parts) == 1 && parts[0] == "presupuesto" {
+			apiHandlerAgentesPresupuesto(w, r)
+			return
+		}
+		if len(parts) == 1 && parts[0] == "cuentas" {
+			apiHandlerAgentesCuentas(w, r)
+			return
+		}
 		if len(parts) == 2 && parts[1] == "overview" {
 			detail, err := agentesService.BuildDetail(parts[0])
 			if err != nil {
@@ -927,6 +935,62 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "agente": nombre})
+}
+
+func apiHandlerAgentesPresupuesto(w http.ResponseWriter, r *http.Request) {
+	activosOnly := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("activos")), "true")
+	agentes, err := agentesService.ListAgents()
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if activosOnly {
+		filtrados := make([]*db.Agente, 0, len(agentes))
+		for _, agente := range agentes {
+			if agente != nil && agente.Activo {
+				filtrados = append(filtrados, agente)
+			}
+		}
+		agentes = filtrados
+	}
+	apiWriteJSON(w, http.StatusOK, apiAgentesPresupuestoResponse{
+		Generado: time.Now().UTC().Format(time.RFC3339),
+		Activos:  activosOnly,
+		Agentes:  agentes,
+	})
+}
+
+func apiHandlerAgentesCuentas(w http.ResponseWriter, r *http.Request) {
+	activosOnly := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("activos")), "true")
+	agentes, err := agentesService.ListAgents()
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	items := make([]apiAgenteCuentaItem, 0, len(agentes))
+	for _, agente := range agentes {
+		if agente == nil {
+			continue
+		}
+		if activosOnly && !agente.Activo {
+			continue
+		}
+		items = append(items, apiAgenteCuentaItem{
+			Nombre:            agente.Nombre,
+			Rol:               agente.Rol,
+			Activo:            agente.Activo,
+			Habilitado:        agente.Habilitado,
+			CuentaEmail:       strings.TrimSpace(agente.CuentaEmail),
+			CuentaUsuario:     strings.TrimSpace(agente.CuentaUsuario),
+			CuentaFuente:      strings.TrimSpace(agente.CuentaFuente),
+			CuentaObservadaAt: agente.CuentaObservadaAt,
+		})
+	}
+	apiWriteJSON(w, http.StatusOK, apiAgentesCuentasResponse{
+		Generado: time.Now().UTC().Format(time.RFC3339),
+		Activos:  activosOnly,
+		Agentes:  items,
+	})
 }
 
 func apiHandlerConfig(w http.ResponseWriter, r *http.Request) {

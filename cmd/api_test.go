@@ -403,6 +403,97 @@ func TestAPIAgentesYStatusExponenCuentaYCuotaVisible(t *testing.T) {
 	}
 }
 
+func TestAPIAgentesPresupuestoYCuentas(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexCuenta", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente CodexCuenta: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexSinCuenta", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente CodexSinCuenta: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:            "CodexCuenta",
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-cuentas-001",
+		Host:              "worker-api",
+	})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("UpsertRuntimeHandleDesdeSesion: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE sesion_id=?`,
+		`{"auth":{"email":"codexcuenta@example.com"},"username":"codexcuenta_user"}`, sesion.ID); err != nil {
+		t.Fatalf("update runtime handle metadata: %v", err)
+	}
+	remaining := int64(900)
+	resetSesion := time.Date(2026, 3, 31, 21, 0, 0, 0, time.UTC)
+	inicioSesion := resetSesion.Add(-5 * time.Hour)
+	if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+		SesionID:         sesion.ID,
+		WindowKind:       "5h",
+		WindowStartedAt:  &inicioSesion,
+		ResetAt:          &resetSesion,
+		RemainingSeconds: &remaining,
+		BudgetSource:     "runtime",
+		RawSnapshotJSON:  `{"account":{"email":"codexcuenta@example.com","username":"codexcuenta_user"}}`,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recPresupuesto := httptest.NewRecorder()
+	reqPresupuesto := httptest.NewRequest(http.MethodGet, "/api/agentes/presupuesto?activos=true", nil)
+	mux.ServeHTTP(recPresupuesto, reqPresupuesto)
+	if recPresupuesto.Code != http.StatusOK {
+		t.Fatalf("status presupuesto inesperado: %d body=%s", recPresupuesto.Code, recPresupuesto.Body.String())
+	}
+	var presupuestoResp apiAgentesPresupuestoResponse
+	if err := json.Unmarshal(recPresupuesto.Body.Bytes(), &presupuestoResp); err != nil {
+		t.Fatalf("decode presupuesto: %v", err)
+	}
+	if !presupuestoResp.Activos || len(presupuestoResp.Agentes) != 1 || presupuestoResp.Agentes[0].Nombre != "CodexCuenta" {
+		t.Fatalf("respuesta presupuesto inesperada: %+v", presupuestoResp)
+	}
+	if presupuestoResp.Agentes[0].PresupuestoSesionPct == nil || presupuestoResp.Agentes[0].PresupuestoDiarioPct == nil || presupuestoResp.Agentes[0].PresupuestoSemanalPct == nil {
+		t.Fatalf("presupuesto sin desglose completo: %+v", presupuestoResp.Agentes[0])
+	}
+
+	recCuentas := httptest.NewRecorder()
+	reqCuentas := httptest.NewRequest(http.MethodGet, "/api/agentes/cuentas", nil)
+	mux.ServeHTTP(recCuentas, reqCuentas)
+	if recCuentas.Code != http.StatusOK {
+		t.Fatalf("status cuentas inesperado: %d body=%s", recCuentas.Code, recCuentas.Body.String())
+	}
+	var cuentasResp apiAgentesCuentasResponse
+	if err := json.Unmarshal(recCuentas.Body.Bytes(), &cuentasResp); err != nil {
+		t.Fatalf("decode cuentas: %v", err)
+	}
+	if len(cuentasResp.Agentes) < 2 {
+		t.Fatalf("respuesta cuentas incompleta: %+v", cuentasResp)
+	}
+	var cuentaItem, sinCuentaItem *apiAgenteCuentaItem
+	for i := range cuentasResp.Agentes {
+		item := &cuentasResp.Agentes[i]
+		switch item.Nombre {
+		case "CodexCuenta":
+			cuentaItem = item
+		case "CodexSinCuenta":
+			sinCuentaItem = item
+		}
+	}
+	if cuentaItem == nil || cuentaItem.CuentaEmail != "codexcuenta@example.com" || cuentaItem.CuentaUsuario != "codexcuenta_user" {
+		t.Fatalf("cuenta expuesta inesperada: %+v", cuentaItem)
+	}
+	if sinCuentaItem == nil {
+		t.Fatalf("faltaba agente sin cuenta: %+v", cuentasResp.Agentes)
+	}
+}
+
 func TestAPIStatusOmiteTareasActivasSinProyecto(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

@@ -3086,3 +3086,33 @@ Validacion:
 
 - `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'Test(WebAgentesPanelMuestraEstadoVivo|WebAgenteDetalleMuestraControlPlaneYDetalleOperativo|APIAgentesYStatusExponenCuentaYCuotaVisible|WebDashMuestraCuentaYVentanasDeCuotaAgente)' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-03-31 — endpoints dedicados de presupuesto y cuentas de agentes
+
+Hallazgo:
+
+- `/api/status` y `/api/agentes` ya exponían cuenta y cuota, pero eran payloads demasiado amplios para un consumidor que solo quiera telemetría operativa
+- hacía falta una entrada API pequeña para:
+  - presupuestos por agente
+  - nombre de agente + cuenta observada
+
+Decision:
+
+- se añade `GET /api/agentes/presupuesto`
+  - devuelve solo telemetría de cuota por agente
+  - acepta `?activos=true` para filtrar la flota viva
+- se añade `GET /api/agentes/cuentas`
+  - devuelve `nombre`, `rol`, `activo`, `habilitado`, `cuenta_email`, `cuenta_usuario`, `cuenta_fuente`
+  - acepta también `?activos=true`
+- ambos endpoints salen del mismo modelo enriquecido de `db.Agente`; no abren ninguna fuente de verdad nueva
+
+Codigo:
+
+- [cmd/api.go](/home/alberto/Trabajo/orquesta/cmd/api.go)
+- [cmd/cliente_servidor.go](/home/alberto/Trabajo/orquesta/cmd/cliente_servidor.go)
+- [cmd/api_test.go](/home/alberto/Trabajo/orquesta/cmd/api_test.go)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'Test(APIAgentesPresupuestoYCuentas|APIAgentesYStatusExponenCuentaYCuotaVisible)' -count=1`
+- `go build -o ./orquesta .`
