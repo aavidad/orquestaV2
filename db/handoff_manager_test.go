@@ -637,3 +637,49 @@ func TestProcesarHandoffsBatchSinHandleEscalaDirectoAHandoff(t *testing.T) {
 		t.Fatalf("tarea no reasignada por handoff directo: %+v", tarea)
 	}
 }
+
+func TestProcesarHandoffsBatchNoSondeaAgenteEnEnfriamientoPausado(t *testing.T) {
+	prepararDBTemporal(t)
+
+	sesionID, _ := prepararAgenteConTareaEnProgreso(t, "Codex1")
+	setHeartbeatStale(t, sesionID)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='pausado' WHERE agente=?`, "Codex1"); err != nil {
+		t.Fatalf("pausar handle origen: %v", err)
+	}
+	if err := PausarAgenteHasta("Codex1", time.Now().UTC().Add(30*time.Minute), "Auto-pausa por agotamiento: usage limit de proveedor"); err != nil {
+		t.Fatalf("pausar agente hasta: %v", err)
+	}
+
+	candidatos, err := DetectarAgentesAgotados()
+	if err != nil {
+		t.Fatalf("DetectarAgentesAgotados: %v", err)
+	}
+	for _, candidato := range candidatos {
+		if candidato != nil && candidato.Agente == "Codex1" {
+			t.Fatalf("Codex1 no deberia entrar como watchdog si esta en enfriamiento con handle pausado: %+v", candidato)
+		}
+	}
+
+	n, err := ProcesarHandoffsBatch()
+	if err != nil {
+		t.Fatalf("ProcesarHandoffsBatch: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia generar handoff ni sondeo para agente en enfriamiento, got=%d", n)
+	}
+
+	agenteOrigen := "Codex1"
+	estadoPendiente := "pendiente"
+	ordersOrigen, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agenteOrigen, Estado: &estadoPendiente})
+	if err != nil {
+		t.Fatalf("ListarRuntimeOrders origen: %v", err)
+	}
+	for _, order := range ordersOrigen {
+		if order == nil {
+			continue
+		}
+		if order.Tipo == "sync_status" || order.Tipo == "nudge" || order.Tipo == "handoff" {
+			t.Fatalf("no deberia crear ruido watchdog para enfriamiento: %+v", ordersOrigen)
+		}
+	}
+}

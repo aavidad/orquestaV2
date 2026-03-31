@@ -2035,3 +2035,25 @@ Validacion:
 
 - `go test ./db -run 'Test(ProyectoAutonomiaUpsertYListarActivos|ProyectoAutonomiaUpsertPreservaTimestampsOperativosSiNoSeInforman|AutonomiaCyclesRegistrarYFiltrar)' -count=1`
 - `go test ./cmd -run 'TestProcesarSupervisionAutonomaBatch(EncolaSupervisionYRegistraCiclo|ArrancaSupervisorPreferidoSinSesion|GeneraBacklogInicialSiAutoCreateTasks)' -count=1`
+
+## 2026-03-31 — watchdog no debe sondar agentes ya enfriados
+
+Hallazgo:
+
+- `Codex2` estaba correctamente pausado por `usage limit de proveedor` hasta una hora concreta
+- aun asi, el handoff manager seguia detectando `heartbeat_stale` y generaba `sync_status + watchdog`
+- eso no desbloqueaba nada; solo metia ruido operativo sobre un agente que el propio control plane ya habia aparcado
+
+Decision:
+
+- un agente en `estado_cuota=enfriamiento` con handle `pausado` deja de ser candidato watchdog
+- el watchdog solo sirve para estados ambiguos; no para reinterrogar un cooldown ya reconocido por Orquesta
+
+Codigo:
+
+- [db/handoff_manager.go](/home/alberto/Trabajo/orquesta/db/handoff_manager.go)
+- [db/handoff_manager_test.go](/home/alberto/Trabajo/orquesta/db/handoff_manager_test.go)
+
+Validacion:
+
+- `go test ./db -run 'TestProcesarHandoffsBatch(SinHandleHaceHandoffDirecto|PorPresupuestoNoRequiereSondeo|SinHandleEscalaDirectoAHandoff|NoSondeaAgenteEnEnfriamientoPausado)' -count=1`

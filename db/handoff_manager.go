@@ -180,6 +180,9 @@ func enriquecerCandidatoHandoff(c *HandoffCandidato, cutoff time.Time, threshold
 	if c == nil {
 		return false, nil
 	}
+	if watchdogYaSatisfechoPorEnfriamiento(c) {
+		return false, nil
+	}
 	if c.SesionID != nil {
 		presupuesto, err := UltimoPresupuestoSesion(*c.SesionID)
 		if err != nil && err != sql.ErrNoRows {
@@ -209,6 +212,24 @@ func enriquecerCandidatoHandoff(c *HandoffCandidato, cutoff time.Time, threshold
 		return true, nil
 	}
 	return false, nil
+}
+
+func watchdogYaSatisfechoPorEnfriamiento(c *HandoffCandidato) bool {
+	if c == nil || c.HandleID == nil || strings.TrimSpace(c.Agente) == "" {
+		return false
+	}
+	handle, err := GetRuntimeHandle(*c.HandleID)
+	if err != nil || handle == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(handle.Estado), "pausado") {
+		return false
+	}
+	agente, err := GetAgente(strings.TrimSpace(c.Agente))
+	if err != nil || agente == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "enfriamiento")
 }
 
 func presupuestoSesionFresco(p *PresupuestoSesion) bool {
