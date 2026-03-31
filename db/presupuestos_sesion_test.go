@@ -149,10 +149,37 @@ func TestListarAgentesEnriquecePresupuestoVisible(t *testing.T) {
 	if agente.CuotaRestantePct == nil || *agente.CuotaRestantePct <= 0 {
 		t.Fatalf("cuota restante no enriquecida: %+v", agente)
 	}
+	if agente.PresupuestoVentana != "5h" {
+		t.Fatalf("ventana efectiva inesperada: %+v", agente)
+	}
+	if agente.PresupuestoResetAt == nil || agente.PresupuestoResetAt.IsZero() {
+		t.Fatalf("reset_at debería exponerse: %+v", agente)
+	}
 	if agente.RemainingCredits == nil || *agente.RemainingCredits != credits {
 		t.Fatalf("remaining credits inesperado: %+v", agente)
 	}
 	if agente.PresupuestoEstado != "handoff_preventivo" {
 		t.Fatalf("presupuesto estado inesperado: %+v", agente)
+	}
+}
+
+func TestListarAgentesUsaPresupuestoSemanalSiEsMasRestrictivo(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET consumo_dia_segundos=100, limite_dia_segundos=1000, consumo_semanal_segundos=950, limite_semanal_segundos=1000 WHERE nombre='codex1'`); err != nil {
+		t.Fatalf("update agente: %v", err)
+	}
+	agente, err := GetAgente("codex1")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.CuotaRestantePct == nil || *agente.CuotaRestantePct != 5 {
+		t.Fatalf("debería usar semanal como restricción efectiva: %+v", agente)
+	}
+	if agente.PresupuestoVentana != "weekly" {
+		t.Fatalf("ventana efectiva debería ser weekly: %+v", agente)
 	}
 }

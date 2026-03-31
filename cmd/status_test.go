@@ -14,6 +14,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"orquesta/db"
 )
@@ -406,6 +407,7 @@ func TestRenderStatusSummaryMuestraBackendActivo(t *testing.T) {
 func TestRenderStatusSummaryMuestraCuotaAgente(t *testing.T) {
 	pct := 18
 	credits := 3.5
+	resetAt := time.Date(2026, 4, 1, 2, 0, 0, 0, time.UTC)
 	out := captureOutput(t, func() {
 		renderStatusSummary(&statusContext{
 			resumen: &estadoResumen{
@@ -415,7 +417,9 @@ func TestRenderStatusSummaryMuestraCuotaAgente(t *testing.T) {
 						Rol:              "programador",
 						CuotaRestantePct: &pct,
 						RemainingCredits: &credits,
-						PresupuestoEstado:"handoff_preventivo",
+						PresupuestoEstado: "handoff_preventivo",
+						PresupuestoVentana: "weekly",
+						PresupuestoResetAt: &resetAt,
 					},
 				},
 				TareasPorEstado: map[string]int{},
@@ -427,6 +431,12 @@ func TestRenderStatusSummaryMuestraCuotaAgente(t *testing.T) {
 	}
 	if !strings.Contains(out, "cred 3.50") {
 		t.Fatalf("salida sin créditos restantes: %s", out)
+	}
+	if !strings.Contains(out, "ventana weekly") {
+		t.Fatalf("salida sin ventana efectiva: %s", out)
+	}
+	if !strings.Contains(out, "reset 2026-04-01 04:00") && !strings.Contains(out, "reset 2026-04-01 02:00") {
+		t.Fatalf("salida sin reset visible: %s", out)
 	}
 }
 

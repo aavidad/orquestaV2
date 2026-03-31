@@ -153,6 +153,33 @@ Conclusion:
 - ya se puede ver desde la app cuanto margen real le queda a cada agente
 - el siguiente paso es hacer que los runtimes reporten ese presupuesto con más regularidad, no solo al chocar contra `usage limit`
 
+## 2026-03-31 18:55 aprox. — el porcentaje visible ya distingue ventana efectiva y reset
+
+Hallazgo:
+
+- mostrar solo un `%` suelto seguia siendo ambiguo
+- un agente podia salir bien en diario y estar casi agotado en semanal, o tener una ventana real de `5h` mas restrictiva que ambas
+
+Decision:
+
+- el `%` visible debe ser el presupuesto efectivo mas restrictivo
+- junto al porcentaje, Orquesta debe mostrar que `ventana` ha ganado (`5h`, `daily`, `weekly`, etc.) y su `reset_at` cuando exista
+
+Cambios:
+
+- `db/sesiones.go`
+  - el enriquecimiento de `Agente` ya elige el minimo entre presupuesto de sesion, diario y semanal
+  - se exponen `PresupuestoVentana` y `PresupuestoResetAt`
+- `cmd/status_remoto_compat.go`
+  - `status` muestra `restante % · ventana ... · reset ...`
+- tests:
+  - `db/presupuestos_sesion_test.go`
+  - `cmd/status_test.go`
+
+Conclusion:
+
+- el orquestador ya no ve una cifra aislada, sino el limite efectivo que realmente manda
+
 ## 2026-03-31 11:3x aprox. — fusible permanente para `supervisor_local` tras `runtime_panic` real en Codex
 
 Hallazgo:

@@ -228,6 +228,12 @@ func resumenCuotaAgente(a *db.Agente) string {
 	if a.CuotaRestantePct != nil {
 		partes = append(partes, fmt.Sprintf("restante %d%%", *a.CuotaRestantePct))
 	}
+	if a.PresupuestoVentana != "" {
+		partes = append(partes, "ventana "+a.PresupuestoVentana)
+	}
+	if a.PresupuestoResetAt != nil && !a.PresupuestoResetAt.IsZero() {
+		partes = append(partes, "reset "+a.PresupuestoResetAt.Local().Format("2006-01-02 15:04"))
+	}
 	if a.RemainingCredits != nil {
 		partes = append(partes, fmt.Sprintf("cred %.2f", *a.RemainingCredits))
 	}

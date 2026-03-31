@@ -28,6 +28,8 @@ type Agente struct {
 	PresupuestoEstado      string
 	PresupuestoFuente      string
 	PresupuestoCheckedAt   *time.Time
+	PresupuestoVentana     string
+	PresupuestoResetAt     *time.Time
 	RemainingSeconds       *int64
 	RemainingMessages      *int64
 	RemainingTokens        *int64
@@ -724,7 +726,13 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 	if a == nil {
 		return
 	}
-	a.CuotaRestantePct = porcentajeRestanteDiarioAgente(a)
+	candidato := mejorPresupuestoDerivadoAgente(a)
+	if candidato.pct != nil {
+		a.CuotaRestantePct = candidato.pct
+		a.PresupuestoVentana = candidato.windowKind
+		a.PresupuestoFuente = candidato.source
+		a.PresupuestoResetAt = candidato.resetAt
+	}
 
 	p, _, err := UltimoPresupuestoAgente(a.Nombre)
 	if err == sql.ErrNoRows || p == nil {
@@ -740,6 +748,8 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 	a.PresupuestoEstado = strings.TrimSpace(ev.Estado)
 	a.PresupuestoFuente = strings.TrimSpace(p.BudgetSource)
 	a.PresupuestoCheckedAt = &p.CheckedAt
+	a.PresupuestoVentana = strings.TrimSpace(p.WindowKind)
+	a.PresupuestoResetAt = p.ResetAt
 	a.RemainingSeconds = p.RemainingSeconds
 	a.RemainingMessages = p.RemainingMessages
 	a.RemainingTokens = p.RemainingTokens
@@ -753,18 +763,88 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 			pct = 100
 		}
 		a.CuotaRestantePct = &pct
+		return
+	}
+	if candidato := mejorPresupuestoDerivadoAgente(a); candidato.pct != nil {
+		a.CuotaRestantePct = candidato.pct
+		if a.PresupuestoVentana == "" {
+			a.PresupuestoVentana = candidato.windowKind
+		}
+		if a.PresupuestoFuente == "" {
+			a.PresupuestoFuente = candidato.source
+		}
+		if a.PresupuestoResetAt == nil {
+			a.PresupuestoResetAt = candidato.resetAt
+		}
 	}
 }
 
-func porcentajeRestanteDiarioAgente(a *Agente) *int {
-	if a == nil || a.LimiteDiaSegundos <= 0 {
-		return nil
+type presupuestoAgenteCandidato struct {
+	pct        *int
+	windowKind string
+	resetAt    *time.Time
+	source     string
+}
+
+func mejorPresupuestoDerivadoAgente(a *Agente) presupuestoAgenteCandidato {
+	candidatos := []presupuestoAgenteCandidato{
+		presupuestoDerivadoDiarioAgente(a),
+		presupuestoDerivadoSemanalAgente(a),
 	}
-	remaining := a.LimiteDiaSegundos - a.ConsumoDiaSegundos
+	best := presupuestoAgenteCandidato{}
+	for _, item := range candidatos {
+		if item.pct == nil {
+			continue
+		}
+		if best.pct == nil || *item.pct < *best.pct {
+			best = item
+		}
+	}
+	return best
+}
+
+func presupuestoDerivadoDiarioAgente(a *Agente) presupuestoAgenteCandidato {
+	pct := porcentajeRestante(remainingBounded(a.ConsumoDiaSegundos, a.LimiteDiaSegundos), a.LimiteDiaSegundos)
+	if pct == nil {
+		return presupuestoAgenteCandidato{}
+	}
+	return presupuestoAgenteCandidato{
+		pct:        pct,
+		windowKind: "daily",
+		resetAt:    nextDailyResetAt(),
+		source:     "derived_daily",
+	}
+}
+
+func presupuestoDerivadoSemanalAgente(a *Agente) presupuestoAgenteCandidato {
+	pct := porcentajeRestante(remainingBounded(a.ConsumoSemanalSegundos, a.LimiteSemanalSegundos), a.LimiteSemanalSegundos)
+	if pct == nil {
+		return presupuestoAgenteCandidato{}
+	}
+	return presupuestoAgenteCandidato{
+		pct:        pct,
+		windowKind: "weekly",
+		resetAt:    nextWeeklyResetAt(a.LastUsageResetAt),
+		source:     "derived_weekly",
+	}
+}
+
+func remainingBounded(consumo int, limite int) int {
+	if limite <= 0 {
+		return 0
+	}
+	remaining := limite - consumo
 	if remaining < 0 {
 		remaining = 0
 	}
-	pct := int(math.Round(float64(remaining) * 100 / float64(a.LimiteDiaSegundos)))
+	return remaining
+}
+
+func porcentajeRestante(remaining int, total int) *int {
+	if total <= 0 {
+		return nil
+	}
+	pct := int(math.Round(float64(remaining) * 100 / float64(total)))
 	if pct < 0 {
 		pct = 0
 	}
@@ -772,6 +852,29 @@ func porcentajeRestanteDiarioAgente(a *Agente) *int {
 		pct = 100
 	}
 	return &pct
+}
+
+func nextDailyResetAt() *time.Time {
+	now := time.Now().UTC()
+	reset := time.Date(now.Year(), now.Month(), now.Day(), 2, 0, 0, 0, time.UTC)
+	if !now.Before(reset) {
+		reset = reset.Add(24 * time.Hour)
+	}
+	return &reset
+}
+
+func nextWeeklyResetAt(lastReset *time.Time) *time.Time {
+	if lastReset != nil && !lastReset.IsZero() {
+		next := lastReset.UTC().Add(7 * 24 * time.Hour)
+		return &next
+	}
+	now := time.Now().UTC()
+	daysUntilMonday := (8 - int(now.Weekday())) % 7
+	if daysUntilMonday == 0 {
+		daysUntilMonday = 7
+	}
+	next := time.Date(now.Year(), now.Month(), now.Day(), 2, 0, 0, 0, time.UTC).AddDate(0, 0, daysUntilMonday)
+	return &next
 }
 
 func resolverAgentePorNombreCI(nombre string) (string, string, bool, error) {
