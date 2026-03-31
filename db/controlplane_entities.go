@@ -2892,6 +2892,7 @@ func aplicarEstadoLocalObservado(handle *RuntimeHandle, estado *controlruntime.E
 		meta[k] = v
 	}
 	normalizarMetadataTranscriptObservada(meta)
+	compactarMetadataRuntimeHandle(meta)
 	meta["local_last_status_at"] = time.Now().UTC().Format(time.RFC3339Nano)
 	metaJSON, _ := json.Marshal(meta)
 	caps := handle.CapabilitiesJSON
@@ -2959,6 +2960,7 @@ func aplicarEstadoRemotoObservado(handle *RuntimeHandle, runtime *RuntimeInstanc
 			meta[k] = v
 		}
 		normalizarMetadataTranscriptObservada(meta)
+		compactarMetadataRuntimeHandle(meta)
 		metaJSON, _ := json.Marshal(meta)
 		caps := handle.CapabilitiesJSON
 		if strings.TrimSpace(estado.CapabilitiesJSON) != "" {
@@ -4917,6 +4919,7 @@ func compactarMetadataRuntimeHandle(meta map[string]any) {
 	for _, key := range []string{"bootstrap_prompt", "continuity_prompt"} {
 		asignarResumenPromptHandle(meta, key, stringFromMap(meta, key, ""))
 	}
+	asignarResumenPromptHandle(meta, "resumen_continuidad", stringFromMap(meta, "resumen_continuidad", ""))
 	for _, key := range []string{"rendered_command", "wrapped_command"} {
 		compactarComandoMetadataHandle(meta, key)
 	}

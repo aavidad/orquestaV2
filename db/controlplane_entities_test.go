@@ -4929,6 +4929,21 @@ func TestAplicarEstadoLocalObservadoCompactaPendingTranscript(t *testing.T) {
 	}
 }
 
+func TestCompactarMetadataRuntimeHandleResumeSummary(t *testing.T) {
+	largo := "Linea 1 de continuidad muy larga.\nLinea 2 con detalle adicional que no debe vivir cruda en metadata del handle."
+	meta := map[string]any{
+		"resumen_continuidad": largo,
+	}
+	compactarMetadataRuntimeHandle(meta)
+	raw, _ := json.Marshal(meta)
+	if strings.Contains(string(raw), `"resumen_continuidad":"`) {
+		t.Fatalf("metadata no deberia conservar resumen_continuidad crudo: %s", string(raw))
+	}
+	if !strings.Contains(string(raw), `"resumen_continuidad_summary":"Linea 1 de continuidad muy larga."`) {
+		t.Fatalf("faltó resumen resumido: %s", string(raw))
+	}
+}
+
 func TestProcesarRuntimeOrdersBatchDespachaCicloDeVidaRemoto(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	calls := make([]string, 0, 8)

@@ -4195,3 +4195,31 @@ Validacion viva:
 - `./orquesta server stop && ./orquesta server start`
 - `curl -fsS 'http://127.0.0.1:16543/api/runtime-handles?agente=Codex2'`
 - el handle activo `#405` ya no expone `transcript_log_pending`; el resto de metadata viva se mantiene
+
+## 2026-03-31 — La metadata viva de handles ya no arrastra continuidad cruda
+
+Hallazgo:
+
+- aun saneado `transcript_log_pending`, el API de handles seguia devolviendo `resumen_continuidad` crudo y enorme en handles vivos
+- ese texto debe seguir viviendo en sesiones/resume, no en la metadata viva que usa observabilidad y sincronizacion de runtime
+
+Decision:
+
+- aplicar la compactacion canonica de metadata tambien en la sincronizacion observada de handles
+- `resumen_continuidad` pasa a resumen corto + longitud, igual que ya haciamos con prompts largos
+
+Codigo:
+
+- [db/controlplane_entities.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities.go)
+- [db/controlplane_entities_test.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities_test.go)
+
+Validacion:
+
+- `go test ./db -run 'Test(AplicarEstadoLocalObservadoCompactaPendingTranscript|CompactarMetadataRuntimeHandleResumeSummary|ProcesarRuntimeOrdersBatchReconciliaPendienteSiMailboxYaFueConsumido)$' -count=1`
+- `go build -o ./orquesta .`
+
+Validacion viva:
+
+- `./orquesta server stop && ./orquesta server start`
+- `curl -fsS 'http://127.0.0.1:16543/api/runtime-handles?agente=Codex2'`
+- el handle activo `#405` ya no devuelve `resumen_continuidad` crudo ni `transcript_log_pending`; la metadata viva queda mucho mas limpia para API/web
