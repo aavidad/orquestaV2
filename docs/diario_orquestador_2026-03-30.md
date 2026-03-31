@@ -1859,3 +1859,44 @@ Validacion:
   - `./orquesta runtime ordenes --agente Codex3 | head -n 8` muestra `#80393` `completada`
   - `./orquesta runtime transcript --agente Codex3 --limit 5` registra `stdin` con `prueba directa supervisor local codex 2026-03-31T08:41Z`
   - conclusion: el camino `supervisor_local` ya funciona para Codex supervisado sin reabrir el canal `interactive`
+
+## 2026-03-31T08:4xZ - el runner materializa mailbox durable por `supervisor_local`
+
+Problema:
+
+- tras habilitar la entrega caliente supervisada para Codex, seguian quedando mailbox durables pendientes en `Codex4` y `Codex5`
+- la causa ya no era el handle ni el agente: el runner solo tenia batches para `interactive`, `session_resume` y `coordinated_restart`
+- ademas, el nuevo camino `supervisor_local` decidia demasiado pronto con metadata persistida pobre; en vivo los handles activos tenian `trace dir` y `manifest`, pero no siempre `stdin_path/supervisor_ref` ya rehidratados en la fila antes del batch
+
+Decision:
+
+- introducir un batch especifico de `runtime_mailbox -> send_instruction` para `supervisor_local`
+- hacer que ese batch sincronice primero el estado observado del supervisor local y solo despues evalúe el contrato de entrega
+- persistir esos intentos con firma propia `supervisor_local|handle|session` para no mezclarlos con `bootstrap_only` ni con `session_resume`
+
+Cambios:
+
+- `cmd/controlplane_support.go`
+  - nuevo `procesarRuntimeMailboxSupervisorLocalBatch()`
+  - `procesarRuntimeMailboxBatch()` suma ya `interactive + supervisor_local + session_resume + coordinated_restart`
+  - `runtimeMailboxDeliveryAttemptSignature(...)` usa `supervisor_local` cuando el handle admite entrega caliente supervisada pero no `interactive`
+- `db/controlplane_entities.go`
+  - nueva helper exportada `SincronizarRuntimeHandleSupervisado(...)`
+  - primero observa y rehidrata metadata del supervisor local, luego sincroniza `external_session_id`
+- `cmd/controlplane_support_test.go`
+  - nueva regresion `TestProcesarRuntimeMailboxSupervisorLocalBatchEncolaSendInstructionParaCodexSupervisado`
+  - ajuste de `TestProcesarRuntimeMailboxBatchMaterializaAutonomiaMailbox` para el contrato durable actual del batch general
+- `docs/BIBLIA_APP_ORQUESTA.md`
+  - queda fijado que `supervisor_local` es un batch propio y que no puede decidir con metadata pobre
+
+Validacion:
+
+- `go test ./cmd -run 'TestProcesarRuntimeMailbox(InteractivoBatchOmiteHandlesSinInputInteractivo|SupervisorLocalBatchEncolaSendInstructionParaCodexSupervisado|SessionResumeBatchEncolaSendInstructionSinConsumirMailbox|BatchMaterializaAutonomiaMailbox)' -count=1` => OK
+- `go test ./db -run 'TestRuntimeHandlePermiteEntregaCalienteSupervisadaExigeSupervisorYStdin|TestRuntimeHandleMailboxDeliveryModeRespetaCapacidadesYFallbacks|TestRuntimeOrderSendInstructionCodexSupervisadoUsaSupervisorLocal' -count=1` => OK
+- `go build -o ./orquesta .` => OK
+- validacion viva:
+  - antes del cierre, `Codex4` y `Codex5` tenian mailbox pendientes `#64498` y `#64499`
+  - tras el ciclo del runner, `./orquesta runtime mailbox --to Codex4 --estado pendiente` y `--to Codex5 --estado pendiente` ya no devuelven filas
+  - `./orquesta runtime ordenes --agente Codex4 | head -n 10` muestra `#80397 send_instruction completada`
+  - `./orquesta runtime ordenes --agente Codex5 | head -n 10` muestra `#80396 send_instruction completada`
+  - `./orquesta runtime transcript --agente Codex4 --limit 4` ya registra `stdin`

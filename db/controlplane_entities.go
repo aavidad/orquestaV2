@@ -5696,6 +5696,42 @@ func SincronizarRuntimeHandleExternalSessionID(handle *RuntimeHandle, runtime *R
 	return fresh, externalSessionID, nil
 }
 
+func SincronizarRuntimeHandleSupervisado(handle *RuntimeHandle, runtime *RuntimeInstance, source string) (*RuntimeHandle, *RuntimeInstance, string, error) {
+	if handle == nil {
+		return nil, runtime, "", nil
+	}
+	if runtime == nil {
+		var err error
+		runtime, err = runtimeHandleRuntime(handle)
+		if err != nil {
+			return nil, nil, "", err
+		}
+	}
+	if observed, _, err := observarProcesoLocalRuntime(handle, runtime, source); err != nil {
+		return nil, nil, "", err
+	} else if observed {
+		fresh, err := GetRuntimeHandle(handle.ID)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		handle = fresh
+		if runtime != nil && runtime.ID > 0 {
+			if refreshedRuntime, err := GetRuntime(runtime.ID); err == nil && refreshedRuntime != nil {
+				runtime = refreshedRuntime
+			}
+		} else if handle != nil && handle.RuntimeID != nil {
+			if refreshedRuntime, err := GetRuntime(*handle.RuntimeID); err == nil && refreshedRuntime != nil {
+				runtime = refreshedRuntime
+			}
+		}
+	}
+	handle, externalSessionID, err := SincronizarRuntimeHandleExternalSessionID(handle, runtime)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	return handle, runtime, externalSessionID, nil
+}
+
 func SincronizarRuntimeHandleWorkingDir(handle *RuntimeHandle, runtime *RuntimeInstance, agente string, proyectoID *int64) (*RuntimeHandle, string, error) {
 	current := ""
 	if handle != nil {

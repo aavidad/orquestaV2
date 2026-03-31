@@ -148,15 +148,19 @@ func procesarRuntimeMailboxBatch() (int, error) {
 	if err != nil {
 		return reconciled + interactive, err
 	}
+	supervisorLocal, err := procesarRuntimeMailboxSupervisorLocalBatch()
+	if err != nil {
+		return reconciled + interactive + supervisorLocal, err
+	}
 	sessionResume, err := procesarRuntimeMailboxSessionResumeBatch()
 	if err != nil {
-		return reconciled + interactive + sessionResume, err
+		return reconciled + interactive + supervisorLocal + sessionResume, err
 	}
 	restarts, err := procesarRuntimeMailboxCoordinatedRestartBatch()
 	if err != nil {
-		return reconciled + interactive + sessionResume + restarts, err
+		return reconciled + interactive + supervisorLocal + sessionResume + restarts, err
 	}
-	return reconciled + interactive + sessionResume + restarts, nil
+	return reconciled + interactive + supervisorLocal + sessionResume + restarts, nil
 }
 
 func reconciliarRuntimeMailboxWatchdogSinHandleBatch() (int, error) {
@@ -855,6 +859,78 @@ func procesarRuntimeMailboxInteractivoBatch() (int, error) {
 	return total, nil
 }
 
+func procesarRuntimeMailboxSupervisorLocalBatch() (int, error) {
+	estado := "pendiente"
+	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &estado})
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, msg := range mailbox {
+		if msg == nil {
+			continue
+		}
+		texto, ok := construirInstruccionMailboxInteractivo(msg)
+		if !ok {
+			continue
+		}
+		if err := coalescerRuntimeMailboxPendiente(msg); err != nil {
+			return total, err
+		}
+		handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+		if err != nil {
+			return total, err
+		}
+		if handle == nil {
+			continue
+		}
+		var runtime *db.RuntimeInstance
+		handle, runtime, externalSessionID, err := db.SincronizarRuntimeHandleSupervisado(handle, runtime, "runtime_mailbox_supervisor_local")
+		if err != nil {
+			return total, err
+		}
+		if handle == nil {
+			continue
+		}
+		if !db.RuntimeHandlePermiteEntregaCalienteSupervisada(handle) || db.RuntimeHandlePermiteSendInputInteractivo(handle) {
+			continue
+		}
+		if covered, _, _, err := db.RuntimeMailboxCubiertoPorBootstrapPendiente(msg.ID, handle, runtime); err != nil {
+			return total, err
+		} else if covered {
+			continue
+		}
+		if abierta, err := existeRuntimeOrderAbiertaPorHandle(handle.ID, "send_instruction"); err != nil {
+			return total, err
+		} else if abierta {
+			continue
+		}
+		if dedupe, err := existeIntentoSendInstructionMailboxParaHandle(msg, handle, externalSessionID); err != nil {
+			return total, err
+		} else if dedupe {
+			continue
+		}
+		orderID, err := encolarSendInstructionDesdeRuntimeMailbox(msg, handle, texto, externalSessionID)
+		if err != nil {
+			return total, err
+		}
+		if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) {
+			superseded, err := db.ConsumirRuntimeMailboxPendienteSupersedido(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, strings.TrimSpace(msg.Kind), msg.ID)
+			if err != nil {
+				return total, err
+			}
+			if superseded > 0 {
+				db.Audit("orquesta", "runtime_mailbox_supervisor_local_supersede", "runtime_mailbox", msg.ID,
+					fmt.Sprintf("agente=%s kind=%s superseded=%d", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), superseded))
+			}
+		}
+		db.Audit("orquesta", "runtime_mailbox_supervisor_local", "runtime_order", orderID,
+			fmt.Sprintf("mailbox_id=%d agente=%s kind=%s", msg.ID, strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
+		total++
+	}
+	return total, nil
+}
+
 func procesarRuntimeMailboxCoordinatedRestartBatch() (int, error) {
 	estado := "pendiente"
 	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &estado})
@@ -1152,6 +1228,9 @@ func runtimeMailboxDeliveryAttemptSignature(handle *db.RuntimeHandle, externalSe
 		return ""
 	}
 	mode := strings.TrimSpace(string(db.RuntimeHandleMailboxDeliveryMode(handle)))
+	if db.RuntimeHandlePermiteEntregaCalienteSupervisada(handle) && !db.RuntimeHandlePermiteSendInputInteractivo(handle) {
+		mode = "supervisor_local"
+	}
 	if mode == "" {
 		return ""
 	}

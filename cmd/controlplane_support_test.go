@@ -2016,6 +2016,95 @@ func TestProcesarRuntimeMailboxInteractivoBatchOmiteHandlesSinInputInteractivo(t
 	}
 }
 
+func TestProcesarRuntimeMailboxSupervisorLocalBatchEncolaSendInstructionParaCodexSupervisado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"process_pty_cli","stdin_path":"` + filepath.Join(tmp, "pty.stdin") + `","supervisor_ref":"` + filepath.Join(tmp, "supervisor.ref") + `","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-supervisor-local","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliveryBootstrapOnly + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","motivo":"seguir frente"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSupervisorLocalBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox supervisor local: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia crear una sola send_instruction por supervisor local, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var send *db.RuntimeOrder
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			send = order
+			break
+		}
+	}
+	if send == nil {
+		t.Fatal("faltaba send_instruction supervisor local")
+	}
+	if !strings.Contains(send.PayloadJSON, `"mailbox_id":`+strconv.FormatInt(msgID, 10)) {
+		t.Fatalf("send_instruction sin mailbox_id: %s", send.PayloadJSON)
+	}
+	if !strings.Contains(send.PayloadJSON, `"delivery_attempt_signature":"supervisor_local|handle:`) {
+		t.Fatalf("firma de intento supervisor_local inesperada: %s", send.PayloadJSON)
+	}
+	if !strings.Contains(send.PayloadJSON, `"external_session_id":"sess-supervisor-local"`) {
+		t.Fatalf("send_instruction sin external_session_id viva: %s", send.PayloadJSON)
+	}
+
+	pendiente := "pendiente"
+	mailboxPendiente, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &agente, Estado: &pendiente})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	if len(mailboxPendiente) != 1 || mailboxPendiente[0].ID != msgID {
+		t.Fatalf("la mailbox durable debe seguir pendiente hasta entrega real: %+v", mailboxPendiente)
+	}
+}
+
 func TestProcesarRuntimeMailboxBatchCoordinaRestartParaHandlesBootstrapOnly(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -5208,6 +5297,11 @@ func TestProcesarRuntimeMailboxBatchMaterializaAutonomiaMailbox(t *testing.T) {
 	if err != nil || handle == nil {
 		t.Fatalf("handle: %+v err=%v", handle, err)
 	}
+	metaJSON := `{"driver":"process_pty_cli","stdin_path":"` + filepath.Join(tmp, "pty.stdin") + `","supervisor_ref":"` + filepath.Join(tmp, "supervisor.ref") + `","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-batch-main","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliveryBootstrapOnly + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle supervisor local: %v", err)
+	}
 	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
 		FromAgente:  "orquesta",
 		ToAgente:    "Codex1",
@@ -5237,13 +5331,16 @@ func TestProcesarRuntimeMailboxBatchMaterializaAutonomiaMailbox(t *testing.T) {
 	if orders[0].HandleID == nil || *orders[0].HandleID != handle.ID {
 		t.Fatalf("send_instruction sin handle activo: %+v", orders[0])
 	}
-	mailboxEstado := "consumido"
+	if !strings.Contains(orders[0].PayloadJSON, `"delivery_attempt_signature":"supervisor_local|handle:`) {
+		t.Fatalf("autonomia del batch general deberia materializarse por supervisor_local: %s", orders[0].PayloadJSON)
+	}
+	mailboxEstado := "pendiente"
 	mailbox, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &agente, ProyectoID: &proyectoID, Estado: &mailboxEstado})
 	if err != nil {
 		t.Fatalf("listar mailbox: %v", err)
 	}
 	if len(mailbox) != 1 {
-		t.Fatalf("mailbox no consumido tras materialización: %+v", mailbox)
+		t.Fatalf("la mailbox durable debe seguir pendiente tras materialización: %+v", mailbox)
 	}
 }
 
