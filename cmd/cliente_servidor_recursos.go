@@ -916,6 +916,19 @@ func listarAgentesCuentasPorAPI(activos bool) (*apiAgentesCuentasResponse, bool,
 	return &resp, true, nil
 }
 
+func listarAgentesRankingCuentasPorAPI(activos bool) (*apiAgentesRankingCuentasResponse, bool, error) {
+	var resp apiAgentesRankingCuentasResponse
+	path := "/api/agentes/ranking-cuentas"
+	if activos {
+		path += "?activos=true"
+	}
+	ok, err := apiGet(path, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
 func retirarAgentePorAPI(nombre string) (bool, error) {
 	ok, err := apiPost(fmt.Sprintf("/api/agentes/%s/retirar", url.PathEscape(nombre)), map[string]any{}, nil)
 	return ok, err

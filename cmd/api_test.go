@@ -492,6 +492,26 @@ func TestAPIAgentesPresupuestoYCuentas(t *testing.T) {
 	if sinCuentaItem == nil {
 		t.Fatalf("faltaba agente sin cuenta: %+v", cuentasResp.Agentes)
 	}
+
+	recRanking := httptest.NewRecorder()
+	reqRanking := httptest.NewRequest(http.MethodGet, "/api/agentes/ranking-cuentas?activos=true", nil)
+	mux.ServeHTTP(recRanking, reqRanking)
+	if recRanking.Code != http.StatusOK {
+		t.Fatalf("status ranking cuentas inesperado: %d body=%s", recRanking.Code, recRanking.Body.String())
+	}
+	var rankingResp apiAgentesRankingCuentasResponse
+	if err := json.Unmarshal(recRanking.Body.Bytes(), &rankingResp); err != nil {
+		t.Fatalf("decode ranking cuentas: %v", err)
+	}
+	if len(rankingResp.Cuentas) != 1 {
+		t.Fatalf("ranking de cuentas inesperado: %+v", rankingResp)
+	}
+	if rankingResp.Cuentas[0].CuentaClave != "codexcuenta@example.com" {
+		t.Fatalf("cuenta clave inesperada: %+v", rankingResp.Cuentas[0])
+	}
+	if rankingResp.Cuentas[0].Criterio != "remaining_seconds" && rankingResp.Cuentas[0].Criterio != "cuota_pct" {
+		t.Fatalf("criterio inesperado: %+v", rankingResp.Cuentas[0])
+	}
 }
 
 func TestAPIStatusOmiteTareasActivasSinProyecto(t *testing.T) {

@@ -3266,3 +3266,42 @@ Validacion:
 - resultado vivo:
   - `agente presupuesto` ya devuelve la cuota efectiva y el desglose diario/semanal de `Codex1-5`
   - `agente cuentas --activos` hoy devuelve `—` en todos los agentes activos porque sus snapshots/metadata vivas todavía no persisten correo observado
+
+## 2026-03-31 — Ranking de cuentas y separacion entre telemetria viva y observada
+
+Hallazgo:
+
+- `codex --help` no expone un comando externo claro tipo `usage` o `whoami`, pero los perfiles de Codex CLI si dejan artefactos utiles fuera de la TUI:
+  - `auth.json` con identidad/cuenta
+  - eventos `token_count` en `sessions/*.jsonl` con ventanas primaria `300m` y secundaria `10080m`, `used_percent` y `resets_at`
+- esos artefactos son valiosos, pero no equivalen siempre a dato vivo al segundo; si se mezclan sin marcar frescura, el orquestador puede tomar malas decisiones
+
+Decision:
+
+- se anade `GET /api/agentes/ranking-cuentas` y `orquesta agente ranking-cuentas [--activos] [--json]`
+- el ranking agrupa por cuenta observada y ordena por la mejor telemetria disponible: `remaining_tokens`, `remaining_credits`, `remaining_messages`, `remaining_seconds` y, si no existe nada mejor, `cuota_pct`
+- se fija en la doctrina que Orquesta debe distinguir entre telemetria `viva` y `observada`; la segunda sirve como respaldo/enriquecimiento, no como mentira de tiempo real
+
+Codigo:
+
+- [cmd/api.go](/home/alberto/Trabajo/orquesta/cmd/api.go)
+- [cmd/cliente_servidor.go](/home/alberto/Trabajo/orquesta/cmd/cliente_servidor.go)
+- [cmd/cliente_servidor_recursos.go](/home/alberto/Trabajo/orquesta/cmd/cliente_servidor_recursos.go)
+- [cmd/agente_telemetria.go](/home/alberto/Trabajo/orquesta/cmd/agente_telemetria.go)
+- [cmd/api_test.go](/home/alberto/Trabajo/orquesta/cmd/api_test.go)
+- [cmd/agente_telemetria_test.go](/home/alberto/Trabajo/orquesta/cmd/agente_telemetria_test.go)
+- [cmd/cliente_servidor_test.go](/home/alberto/Trabajo/orquesta/cmd/cliente_servidor_test.go)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'Test(APIAgentesPresupuestoYCuentas|AgenteRankingCuentasCmdRenderizaListado|CommandSupportsServerMode|AgenteCuentasCmdRenderizaListado|AgentePresupuestoCmdRenderizaListado)' -count=1`
+- `env GOCACHE=/tmp/orquesta-gocache go build -o ./orquesta .`
+- smoke viva:
+  - `./orquesta server stop`
+  - `./orquesta server start`
+  - `curl -sS http://127.0.0.1:16543/api/agentes/ranking-cuentas?activos=true`
+  - `./orquesta agente ranking-cuentas --activos`
+- resultado vivo:
+  - `Codex2` queda primero con `89%`
+  - `Codex1` segundo con `77%`
+  - `Codex5` tercero con `74%`

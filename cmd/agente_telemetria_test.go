@@ -99,3 +99,26 @@ func TestAgentePresupuestoCmdRenderizaListado(t *testing.T) {
 		t.Fatalf("salida inesperada:\n%s", out)
 	}
 }
+
+func TestAgenteRankingCuentasCmdRenderizaListado(t *testing.T) {
+	setAgentTelemetryHTTPClientForTest(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch {
+		case req.URL.Path == "/api/agentes/ranking-cuentas" && req.URL.Query().Get("activos") == "true":
+			return newJSONResponse(http.StatusOK, `{"generado":"2026-03-31T18:00:00Z","activos":true,"cuentas":[{"cuenta_clave":"codex2@example.com","cuenta_email":"codex2@example.com","cuenta_usuario":"codex2","criterio":"remaining_tokens","remaining_tokens":120000,"agentes":["Codex2"]},{"cuenta_clave":"codex1","cuenta_usuario":"codex1","criterio":"cuota_pct","cuota_restante_pct":77,"presupuesto_ventana":"daily","agentes":["Codex1"]}]}`), nil
+		default:
+			return newJSONResponse(http.StatusNotFound, `{"error":"not found"}`), nil
+		}
+	}))
+	out := captureOutput(t, func() {
+		rootCmd.SetArgs([]string{"agente", "ranking-cuentas", "--activos"})
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("Execute agente ranking-cuentas: %v", err)
+		}
+	})
+	if !strings.Contains(out, "1.") || !strings.Contains(out, "codex2@example.com") || !strings.Contains(out, "tokens 120000") {
+		t.Fatalf("salida inesperada:\n%s", out)
+	}
+	if !strings.Contains(out, "2.") || !strings.Contains(out, "efectivo 77%") {
+		t.Fatalf("salida inesperada:\n%s", out)
+	}
+}

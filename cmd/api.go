@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -847,6 +848,10 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 			apiHandlerAgentesCuentas(w, r)
 			return
 		}
+		if len(parts) == 1 && parts[0] == "ranking-cuentas" {
+			apiHandlerAgentesRankingCuentas(w, r)
+			return
+		}
 		if len(parts) == 2 && parts[1] == "overview" {
 			detail, err := agentesService.BuildDetail(parts[0])
 			if err != nil {
@@ -991,6 +996,164 @@ func apiHandlerAgentesCuentas(w http.ResponseWriter, r *http.Request) {
 		Activos:  activosOnly,
 		Agentes:  items,
 	})
+}
+
+func apiHandlerAgentesRankingCuentas(w http.ResponseWriter, r *http.Request) {
+	activosOnly := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("activos")), "true")
+	agentes, err := agentesService.ListAgents()
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	items := construirRankingCuentasAgentes(agentes, activosOnly)
+	apiWriteJSON(w, http.StatusOK, apiAgentesRankingCuentasResponse{
+		Generado: time.Now().UTC().Format(time.RFC3339),
+		Activos:  activosOnly,
+		Cuentas:  items,
+	})
+}
+
+func construirRankingCuentasAgentes(agentes []*db.Agente, activosOnly bool) []apiCuentaPresupuestoItem {
+	ranking := map[string]*apiCuentaPresupuestoItem{}
+	for _, agente := range agentes {
+		if agente == nil {
+			continue
+		}
+		if activosOnly && !agente.Activo {
+			continue
+		}
+		key, item := cuentaPresupuestoDesdeAgente(agente)
+		if key == "" {
+			continue
+		}
+		actual := ranking[key]
+		if actual == nil {
+			clone := item
+			clone.Agentes = append(clone.Agentes, strings.TrimSpace(agente.Nombre))
+			ranking[key] = &clone
+			continue
+		}
+		actual.Agentes = append(actual.Agentes, strings.TrimSpace(agente.Nombre))
+		sort.Strings(actual.Agentes)
+		if cuentaPresupuestoMejor(item, *actual) {
+			names := actual.Agentes
+			updated := item
+			updated.Agentes = names
+			ranking[key] = &updated
+		}
+	}
+	out := make([]apiCuentaPresupuestoItem, 0, len(ranking))
+	for _, item := range ranking {
+		if item == nil {
+			continue
+		}
+		sort.Strings(item.Agentes)
+		out = append(out, *item)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return cuentaPresupuestoMejor(out[i], out[j])
+	})
+	return out
+}
+
+func cuentaPresupuestoDesdeAgente(agente *db.Agente) (string, apiCuentaPresupuestoItem) {
+	item := apiCuentaPresupuestoItem{}
+	if agente == nil {
+		return "", item
+	}
+	email := strings.TrimSpace(agente.CuentaEmail)
+	usuario := strings.TrimSpace(agente.CuentaUsuario)
+	key := email
+	if key == "" {
+		key = usuario
+	}
+	if key == "" {
+		return "", item
+	}
+	item = apiCuentaPresupuestoItem{
+		CuentaClave:          key,
+		CuentaEmail:          email,
+		CuentaUsuario:        usuario,
+		CuentaFuente:         strings.TrimSpace(agente.CuentaFuente),
+		CuentaObservadaAt:    agente.CuentaObservadaAt,
+		CuotaRestantePct:     agente.CuotaRestantePct,
+		PresupuestoVentana:   strings.TrimSpace(agente.PresupuestoVentana),
+		PresupuestoResetAt:   agente.PresupuestoResetAt,
+		RemainingSeconds:     agente.RemainingSeconds,
+		RemainingMessages:    agente.RemainingMessages,
+		RemainingTokens:      agente.RemainingTokens,
+		RemainingCredits:     agente.RemainingCredits,
+		PresupuestoFuente:    strings.TrimSpace(agente.PresupuestoFuente),
+		PresupuestoCheckedAt: agente.PresupuestoCheckedAt,
+	}
+	switch {
+	case agente.RemainingTokens != nil:
+		item.Criterio = "remaining_tokens"
+	case agente.RemainingCredits != nil:
+		item.Criterio = "remaining_credits"
+	case agente.RemainingMessages != nil:
+		item.Criterio = "remaining_messages"
+	case agente.RemainingSeconds != nil:
+		item.Criterio = "remaining_seconds"
+	case agente.CuotaRestantePct != nil:
+		item.Criterio = "cuota_pct"
+	default:
+		item.Criterio = "sin_datos"
+	}
+	return key, item
+}
+
+func cuentaPresupuestoMejor(a, b apiCuentaPresupuestoItem) bool {
+	rankA, valueA := cuentaPresupuestoOrden(a)
+	rankB, valueB := cuentaPresupuestoOrden(b)
+	if rankA != rankB {
+		return rankA > rankB
+	}
+	if valueA != valueB {
+		return valueA > valueB
+	}
+	timeA := cuentaPresupuestoObservedAt(a)
+	timeB := cuentaPresupuestoObservedAt(b)
+	if !timeA.Equal(timeB) {
+		return timeA.After(timeB)
+	}
+	return strings.ToLower(strings.TrimSpace(a.CuentaClave)) < strings.ToLower(strings.TrimSpace(b.CuentaClave))
+}
+
+func cuentaPresupuestoOrden(item apiCuentaPresupuestoItem) (int, float64) {
+	switch item.Criterio {
+	case "remaining_tokens":
+		if item.RemainingTokens != nil {
+			return 5, float64(*item.RemainingTokens)
+		}
+	case "remaining_credits":
+		if item.RemainingCredits != nil {
+			return 4, *item.RemainingCredits
+		}
+	case "remaining_messages":
+		if item.RemainingMessages != nil {
+			return 3, float64(*item.RemainingMessages)
+		}
+	case "remaining_seconds":
+		if item.RemainingSeconds != nil {
+			return 2, float64(*item.RemainingSeconds)
+		}
+	case "cuota_pct":
+		if item.CuotaRestantePct != nil {
+			return 1, float64(*item.CuotaRestantePct)
+		}
+	}
+	return 0, 0
+}
+
+func cuentaPresupuestoObservedAt(item apiCuentaPresupuestoItem) time.Time {
+	if item.PresupuestoCheckedAt != nil && !item.PresupuestoCheckedAt.IsZero() {
+		return item.PresupuestoCheckedAt.UTC()
+	}
+	if item.CuentaObservadaAt != nil && !item.CuentaObservadaAt.IsZero() {
+		return item.CuentaObservadaAt.UTC()
+	}
+	return time.Time{}
 }
 
 func apiHandlerConfig(w http.ResponseWriter, r *http.Request) {

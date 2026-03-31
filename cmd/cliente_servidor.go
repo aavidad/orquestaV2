@@ -52,6 +52,31 @@ type apiAgentesCuentasResponse struct {
 	Agentes  []apiAgenteCuentaItem `json:"agentes"`
 }
 
+type apiCuentaPresupuestoItem struct {
+	CuentaClave          string     `json:"cuenta_clave"`
+	CuentaEmail          string     `json:"cuenta_email,omitempty"`
+	CuentaUsuario        string     `json:"cuenta_usuario,omitempty"`
+	CuentaFuente         string     `json:"cuenta_fuente,omitempty"`
+	CuentaObservadaAt    *time.Time `json:"cuenta_observada_at,omitempty"`
+	Agentes              []string   `json:"agentes,omitempty"`
+	Criterio             string     `json:"criterio"`
+	CuotaRestantePct     *int       `json:"cuota_restante_pct,omitempty"`
+	PresupuestoVentana   string     `json:"presupuesto_ventana,omitempty"`
+	PresupuestoResetAt   *time.Time `json:"presupuesto_reset_at,omitempty"`
+	RemainingSeconds     *int64     `json:"remaining_seconds,omitempty"`
+	RemainingMessages    *int64     `json:"remaining_messages,omitempty"`
+	RemainingTokens      *int64     `json:"remaining_tokens,omitempty"`
+	RemainingCredits     *float64   `json:"remaining_credits,omitempty"`
+	PresupuestoFuente    string     `json:"presupuesto_fuente,omitempty"`
+	PresupuestoCheckedAt *time.Time `json:"presupuesto_checked_at,omitempty"`
+}
+
+type apiAgentesRankingCuentasResponse struct {
+	Generado string                     `json:"generado"`
+	Activos  bool                       `json:"activos"`
+	Cuentas  []apiCuentaPresupuestoItem `json:"cuentas"`
+}
+
 type apiProyectosResponse struct {
 	Proyectos []*db.Proyecto `json:"proyectos"`
 }
@@ -498,7 +523,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 	case "agente":
-		return len(tokens) > 1 && (tokens[1] == "preparar" || tokens[1] == "tick" || tokens[1] == "investigar" || tokens[1] == "pausar" || tokens[1] == "control" || tokens[1] == "eliminar" || tokens[1] == "rehabilitar" || tokens[1] == "fusionar" || tokens[1] == "handoff" || tokens[1] == "reasignar-vivo" || tokens[1] == "lanzar-plan" || tokens[1] == "cuentas" || tokens[1] == "presupuesto")
+		return len(tokens) > 1 && (tokens[1] == "preparar" || tokens[1] == "tick" || tokens[1] == "investigar" || tokens[1] == "pausar" || tokens[1] == "control" || tokens[1] == "eliminar" || tokens[1] == "rehabilitar" || tokens[1] == "fusionar" || tokens[1] == "handoff" || tokens[1] == "reasignar-vivo" || tokens[1] == "lanzar-plan" || tokens[1] == "cuentas" || tokens[1] == "presupuesto" || tokens[1] == "ranking-cuentas")
 	case "sesion":
 		if len(tokens) <= 1 {
 			return false
