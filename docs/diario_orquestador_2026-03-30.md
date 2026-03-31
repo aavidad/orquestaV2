@@ -4137,3 +4137,31 @@ Validacion viva:
 - tras un ciclo con el binario nuevo:
   - `./orquesta runtime ordenes --estado pendiente --limit 20` devuelve vacio
   - `./orquesta runtime mailbox --estado pendiente` sigue vacio
+
+## 2026-03-31 — La observación de cuota ya no se cae entera por un handle roto
+
+Hallazgo:
+
+- la observación de artefactos Codex CLI seguía siendo sensible a errores por handle:
+  - si `ObserveCodexArtifacts(...)` fallaba para uno, el batch abortaba entero
+- eso convertía un problema local de un runtime en ceguera global de cuota observada
+
+Decision:
+
+- hacer `procesarPresupuestoSesionObservadoBatch()` tolerante a fallos de observación por handle
+- el batch sigue persistiendo y contando los handles sanos, y solo mantiene error duro si falla la persistencia en la BD
+
+Codigo:
+
+- [cmd/controlplane_support.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support.go)
+- [cmd/controlplane_support_test.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support_test.go)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(ProcesarPresupuestoSesionObservadoBatchToleraHandleRoto|ProcesarAutonomiaSesionActivaPersisteEnfriamientoPorCuota)$' -count=1`
+- `go build -o ./orquesta .`
+
+Validacion viva:
+
+- `./orquesta server stop && ./orquesta server start && ./orquesta server doctor` => `Health RPC: OK`
+- el cambio se deja como endurecimiento del batch; no altera la semantica de cuota visible salvo evitar que un handle roto bloquee el refresco del resto

@@ -193,7 +193,7 @@ func procesarPresupuestoSesionObservadoBatch() (int, error) {
 		}
 		observed, err := controlruntime.ObserveCodexArtifacts(obj)
 		if err != nil {
-			return procesados, err
+			continue
 		}
 		if observed == nil || observed.ObservedAt.IsZero() {
 			continue

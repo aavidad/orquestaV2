@@ -6333,6 +6333,121 @@ func TestProcesarAutonomiaSesionActivaPersisteEnfriamientoPorCuota(t *testing.T)
 	}
 }
 
+func TestProcesarPresupuestoSesionObservadoBatchToleraHandleRoto(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	base := filepath.Join(tmp, "codex-perfiles")
+	if err := os.MkdirAll(filepath.Join(base, "bin"), 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	sessionsDir := filepath.Join(base, "homes", "CodexBueno", "sessions", "2026", "03", "31")
+	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
+		t.Fatalf("mkdir sessions bueno: %v", err)
+	}
+	authPath := filepath.Join(base, "homes", "CodexBueno", "auth.json")
+	if err := os.MkdirAll(filepath.Dir(authPath), 0o755); err != nil {
+		t.Fatalf("mkdir auth bueno: %v", err)
+	}
+	if err := os.WriteFile(authPath, []byte(`{"profile":{"email":"bueno@example.com","name":"Cuenta Buena"}}`), 0o600); err != nil {
+		t.Fatalf("write auth bueno: %v", err)
+	}
+	resetPrimary := time.Date(2026, 3, 31, 14, 0, 0, 0, time.UTC)
+	resetSecondary := time.Date(2026, 4, 6, 7, 26, 0, 0, time.UTC)
+	sessionPath := filepath.Join(sessionsDir, "rollout-test.jsonl")
+	lines := []string{
+		`{"timestamp":"2026-03-31T10:00:00Z","type":"session_meta","payload":{"id":"sess-buena","timestamp":"2026-03-31T10:00:00Z","cwd":"` + filepath.Join(tmp, "orquestador") + `"}}`,
+		`{"timestamp":"2026-03-31T10:05:00Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":12,"window_minutes":300,"resets_at":` + strconv.FormatInt(resetPrimary.Unix(), 10) + `},"secondary":{"used_percent":43,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetSecondary.Unix(), 10) + `},"credits":null,"plan_type":"plus"}}}`,
+	}
+	if err := os.WriteFile(sessionPath, []byte(lines[0]+"\n"+lines[1]+"\n"), 0o600); err != nil {
+		t.Fatalf("write session bueno: %v", err)
+	}
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, nombre := range []string{"CodexBueno", "CodexRoto"} {
+		if err := db.RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("registrar %s: %v", nombre, err)
+		}
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      nombre,
+			ProyectoID:  &proyectoID,
+			CWD:         filepath.Join(tmp, "orquestador"),
+			Herramienta: "codex-cli",
+		})
+		if err != nil {
+			t.Fatalf("iniciar sesion %s: %v", nombre, err)
+		}
+		if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+			t.Fatalf("upsert handle %s: %v", nombre, err)
+		}
+	}
+	bueno, err := db.GetRuntimeHandleActivoAgenteProyecto("CodexBueno", &proyectoID)
+	if err != nil || bueno == nil {
+		t.Fatalf("get handle bueno: %v %+v", err, bueno)
+	}
+	rendidoBueno := filepath.Join(base, "bin", "codex-perfil") + " CodexBueno"
+	metaBueno := map[string]any{
+		"rendered_command":    rendidoBueno,
+		"working_dir":         filepath.Join(tmp, "orquestador"),
+		"external_session_id": "sess-buena",
+		"started_at":          time.Date(2026, 3, 31, 10, 0, 0, 0, time.UTC).Format(time.RFC3339),
+	}
+	metaBuenoJSON, _ := json.Marshal(metaBueno)
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaBuenoJSON), bueno.ID); err != nil {
+		t.Fatalf("update handle bueno: %v", err)
+	}
+
+	roto, err := db.GetRuntimeHandleActivoAgenteProyecto("CodexRoto", &proyectoID)
+	if err != nil || roto == nil {
+		t.Fatalf("get handle roto: %v %+v", err, roto)
+	}
+	badRoot := filepath.Join(tmp, "codex-roto")
+	badSessionsDir := filepath.Join(badRoot, "homes", "CodexRoto", "sessions", "2026", "03", "31")
+	if err := os.MkdirAll(filepath.Join(badRoot, "bin"), 0o755); err != nil {
+		t.Fatalf("mkdir bin roto: %v", err)
+	}
+	if err := os.MkdirAll(badSessionsDir, 0o755); err != nil {
+		t.Fatalf("mkdir sessions roto: %v", err)
+	}
+	if err := os.Chmod(badSessionsDir, 0o000); err != nil {
+		t.Fatalf("chmod sessions roto: %v", err)
+	}
+	defer func() { _ = os.Chmod(badSessionsDir, 0o755) }()
+	rendidoRoto := filepath.Join(badRoot, "bin", "codex-perfil") + " CodexRoto"
+	metaRoto := map[string]any{
+		"rendered_command":    rendidoRoto,
+		"working_dir":         filepath.Join(tmp, "orquestador"),
+		"external_session_id": "sess-rota",
+		"started_at":          time.Date(2026, 3, 31, 10, 0, 0, 0, time.UTC).Format(time.RFC3339),
+	}
+	metaRotoJSON, _ := json.Marshal(metaRoto)
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaRotoJSON), roto.ID); err != nil {
+		t.Fatalf("update handle roto: %v", err)
+	}
+
+	procesados, err := procesarPresupuestoSesionObservadoBatch()
+	if err != nil {
+		t.Fatalf("procesar presupuesto observado: %v", err)
+	}
+	if procesados != 1 {
+		t.Fatalf("deberia procesar solo el handle sano: %d", procesados)
+	}
+	agenteBueno, err := db.GetAgente("CodexBueno")
+	if err != nil {
+		t.Fatalf("get agente bueno: %v", err)
+	}
+	if agenteBueno.PresupuestoCheckedAt == nil || agenteBueno.CuentaEmail != "bueno@example.com" {
+		t.Fatalf("deberia persistir telemetria del handle sano: %+v", agenteBueno)
+	}
+}
+
 func prepararRepoGitAutonomia(t *testing.T, repo string) string {
 	t.Helper()
 	cmdGitAutonomia(t, "", "init", "-b", "master", repo)
