@@ -10,6 +10,7 @@ package cmd
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -170,13 +171,15 @@ func renderRuntimeDiagnostico(data *runtimeDiagnosticoData, limit int) {
 	fmt.Printf("Mailbox:    %d pendiente(s)\n", len(data.MailboxPendiente))
 	fmt.Printf("Checkpoints:%d recientes\n", len(data.Checkpoints))
 
-	if len(data.Runtimes) > 0 {
+	runtimes := runtimeRowsRelevantes(data.Runtimes, limit)
+	if len(runtimes) > 0 {
 		fmt.Println("\nRuntimes")
-		_ = imprimirArbolRuntimes(data.Runtimes, false)
+		_ = imprimirArbolRuntimes(runtimes, false)
 	}
-	if len(data.Handles) > 0 {
+	handles := runtimeHandlesRelevantes(data.Handles, limit)
+	if len(handles) > 0 {
 		fmt.Println("\nHandles")
-		_ = imprimirRuntimeHandles(data.Handles)
+		_ = imprimirRuntimeHandles(handles)
 	}
 	orders := runtimeOrdersRelevantes(data.Orders, limit)
 	if len(orders) > 0 {
@@ -190,6 +193,95 @@ func renderRuntimeDiagnostico(data *runtimeDiagnosticoData, limit int) {
 	if len(data.Checkpoints) > 0 {
 		fmt.Println("\nCheckpoints recientes")
 		_ = imprimirRuntimeDiagnosticoCheckpoints(data.Checkpoints)
+	}
+}
+
+func runtimeRowsRelevantes(rows []runtimeRow, limit int) []runtimeRow {
+	if limit <= 0 {
+		limit = 5
+	}
+	if len(rows) <= limit {
+		return rows
+	}
+	pick := make([]runtimeRow, 0, limit)
+	seen := map[int64]struct{}{}
+	appendIf := func(row runtimeRow) bool {
+		if _, ok := seen[row.ID]; ok {
+			return false
+		}
+		seen[row.ID] = struct{}{}
+		pick = append(pick, row)
+		return len(pick) >= limit
+	}
+	for i := len(rows) - 1; i >= 0; i-- {
+		row := rows[i]
+		if runtimeEstadoTerminal(strings.TrimSpace(row.Estado)) {
+			continue
+		}
+		if appendIf(row) {
+			break
+		}
+	}
+	if len(pick) < limit {
+		for i := len(rows) - 1; i >= 0; i-- {
+			row := rows[i]
+			if !runtimeEstadoTerminal(strings.TrimSpace(row.Estado)) {
+				continue
+			}
+			if appendIf(row) {
+				break
+			}
+		}
+	}
+	slices.Reverse(pick)
+	return pick
+}
+
+func runtimeHandlesRelevantes(handles []*db.RuntimeHandle, limit int) []*db.RuntimeHandle {
+	if limit <= 0 {
+		limit = 5
+	}
+	if len(handles) <= limit {
+		return handles
+	}
+	pick := make([]*db.RuntimeHandle, 0, limit)
+	seen := map[int64]struct{}{}
+	appendIf := func(handle *db.RuntimeHandle) bool {
+		if handle == nil {
+			return false
+		}
+		if _, ok := seen[handle.ID]; ok {
+			return false
+		}
+		seen[handle.ID] = struct{}{}
+		pick = append(pick, handle)
+		return len(pick) >= limit
+	}
+	for _, handle := range handles {
+		if handle == nil || runtimeEstadoTerminal(strings.TrimSpace(handle.Estado)) {
+			continue
+		}
+		if appendIf(handle) {
+			return pick
+		}
+	}
+	for _, handle := range handles {
+		if handle == nil || !runtimeEstadoTerminal(strings.TrimSpace(handle.Estado)) {
+			continue
+		}
+		if appendIf(handle) {
+			return pick
+		}
+	}
+	return pick
+}
+
+func runtimeEstadoTerminal(estado string) bool {
+	switch strings.TrimSpace(strings.ToLower(estado)) {
+	case "cerrado", "fallido", "cancelada", "cancelado", "completada", "completado":
+		return true
+	default:
+		return false
 	}
 }
 

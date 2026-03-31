@@ -3722,3 +3722,36 @@ Resultado:
 
 - el transcript futuro ya no debe llenarse con banner de Codex al arrancar o reanudar
 - sube la calidad de la observabilidad y reduce falsas lecturas de “actividad” en agentes vivos
+
+## 2026-03-31 — `runtime diagnostico` ya prioriza lo vivo y reciente
+
+Hallazgo:
+
+- `runtime diagnostico --limit 5` seguia mostrando bloques enormes de runtimes cerrados viejos, porque el limite solo afectaba a órdenes/checkpoints
+- eso hacia poco usable el diagnostico operativo justo cuando mas se necesitaba
+
+Decision:
+
+- mantener el resumen global completo (`Runtimes: 69`, `Órdenes: 4554`, etc.)
+- pero recortar las secciones detalladas de `Runtimes` y `Handles` a lo reciente/relevante:
+  - primero estados no terminales (`activo`, `degradado`, `esperando_*`, etc.)
+  - luego solo el tramo terminal mas reciente si sobra hueco
+
+Codigo:
+
+- [cmd/runtime_diagnostico.go](/home/alberto/Trabajo/orquesta/cmd/runtime_diagnostico.go)
+- [cmd/runtime_diagnostico_test.go](/home/alberto/Trabajo/orquesta/cmd/runtime_diagnostico_test.go)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'Test(RuntimeDiagnosticoUsaAPI|RuntimeDiagnosticoRequiereServidor|RuntimeDiagnosticoRecortaRuntimesYHandlesSegunLimit)$' -count=1`
+- `env GOCACHE=/tmp/orquesta-gocache go build -o ./orquesta .`
+- smoke viva:
+  - `./orquesta server stop && ./orquesta server start`
+  - `./orquesta server doctor`
+  - `./orquesta runtime diagnostico --agente Codex2 --limit 5`
+
+Resultado:
+
+- el diagnostico ya enseña primero los runtimes/handles vivos o degradados y deja fuera la mayor parte de la arqueologia
+- sigue conservando el conteo total para no perder contexto

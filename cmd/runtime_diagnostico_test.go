@@ -133,3 +133,35 @@ func TestRuntimeDiagnosticoRequiereServidor(t *testing.T) {
 		t.Fatalf("error inesperado: %v", err)
 	}
 }
+
+func TestRuntimeDiagnosticoRecortaRuntimesYHandlesSegunLimit(t *testing.T) {
+	data := &runtimeDiagnosticoData{
+		Agente: "CodexX",
+		Fuente: "api",
+		Runtimes: []runtimeRow{
+			{ID: 1, Agente: "CodexX", Estado: "cerrado"},
+			{ID: 2, Agente: "CodexX", Estado: "fallido"},
+			{ID: 3, Agente: "CodexX", Estado: "degradado"},
+			{ID: 4, Agente: "CodexX", Estado: "esperando_io"},
+		},
+		Handles: []*db.RuntimeHandle{
+			{ID: 10, Agente: "CodexX", Estado: "fallido"},
+			{ID: 11, Agente: "CodexX", Estado: "activo"},
+			{ID: 12, Agente: "CodexX", Estado: "fallido"},
+		},
+		Orders: []*db.RuntimeOrder{},
+	}
+
+	out := capturarStdout(t, func() {
+		renderRuntimeDiagnostico(data, 2)
+	})
+
+	if strings.Contains(out, "1     cerrado") || strings.Contains(out, "10    CodexX       cli") {
+		t.Fatalf("diagnostico no deberia mostrar terminales viejos cuando el limit ya lo ocupan vivos:\n%s", out)
+	}
+	for _, token := range []string{"3     degradado", "4     esperando_…", "11    CodexX"} {
+		if !strings.Contains(out, token) {
+			t.Fatalf("diagnostico recortado sin %q:\n%s", token, out)
+		}
+	}
+}
