@@ -1,5 +1,39 @@
 # Diario del orquestador — 2026-03-30
 
+## 2026-03-31 08:1x aprox. — `status` deja de contar agentes pausados o en enfriamiento como activos
+
+Hallazgo:
+
+- tras corregir `provider_backoff`, `Codex2` quedaba bien pausado por cuota:
+  - handle `369` en `pausado`
+  - `agente tick` devolviendo `pausar_por_cuota`
+- aun asi, `status` seguia mostrandolo dentro de “Agentes: 5 activos ahora”
+- la causa estaba en `aplicarEstadoVisibleAgente(...)`: marcaba `Activo=true` con solo tener sesion operativa
+
+Decision:
+
+- un agente en `estado_cuota=enfriamiento` no puede contarse como activo visible
+- una sesion `pausada` tampoco debe sumar presencia activa, aunque conserve heartbeat o handle reciente
+
+Cambios:
+
+- `db/sesiones.go`
+  - `aplicarEstadoVisibleAgente(...)` deja `Activo=false` para:
+    - `estado_cuota=enfriamiento`
+    - `sesion.Estado=pausada`
+- `db/sesiones_test.go`
+  - `TestListarAgentesOcultaAgenteEnEnfriamientoAunqueTengaSesionOperativa`
+  - `TestListarAgentesOcultaAgentePausadoAunqueMantengaHeartbeat`
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(ListarAgentesOcultaAgenteEnEnfriamientoAunqueTengaSesionOperativa|ListarAgentesOcultaAgentePausadoAunqueMantengaHeartbeat|ListarAgentesOcultaSesionZombiPeroMantieneHandleActivo|ListarAgentesIgnoraSesionesConHeartbeatObsoleto)' -count=1` => OK
+- `go build -o ./orquesta .` => OK
+- validacion viva tras reiniciar daemon:
+  - `curl /api/runtime-handles?agente=Codex2` => handle `369`, estado `pausado`
+  - `./orquesta agente tick Codex2 --proyecto orquestador` => `pausar_por_cuota`
+  - `./orquesta status` pasa de `5 activos` a `4 activos` y deja fuera a `Codex2`
+
 ## 2026-03-31 08:0x aprox. — `session_resume` detecta cuota aunque Codex anteponga banner
 
 Hallazgo:

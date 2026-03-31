@@ -245,6 +245,7 @@ Contrato minimo obligatorio para `runtime_orders`:
 - `session_resume` no es un canal de latencia infinita: su timeout por defecto debe ser corto y operativo porque una llamada lenta bloquea `runtime_orders` aunque el daemon siga sano
 - si una `send_instruction` derivada de mailbox autonomo (`autonomia`, `nudge`, `watchdog`, `governance_refresh`, `skills_refresh`) falla por `session_resume timeout`, el intento se cierra como `mailbox_only`; el mensaje durable sigue pendiente y no se reencola la misma orden en bucle
 - la clasificacion de errores de proveedor en `session_resume` debe leer el error relevante aunque el CLI anteponga banner, perfil o cabeceras; si hay `usage limit` o `rate limit`, Orquesta debe traducirlo a `provider_backoff` y `pausa_por_cuota`
+- un agente `pausado` o en `estado_cuota=enfriamiento` no cuenta como “activo ahora” en `status`, `/api/status` ni `/api/agentes`, aunque conserve sesion operativa o handle reciente
 - si un `start` levanta runtime real con bootstrap inyectado pero sin `handoff/resume` pendiente, ese propio `start` debe hacer `ack` de los mailbox bootstrap incluidos; no se puede dejar esa continuidad pendiente por falta de lease formal
 
 Contrato minimo obligatorio para el supervisor local:

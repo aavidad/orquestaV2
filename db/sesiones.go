@@ -551,6 +551,24 @@ func aplicarEstadoVisibleAgente(agente *Agente, sesion *Sesion) {
 		agente.EstadoSesion = ""
 		return
 	}
+	if strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "enfriamiento") {
+		agente.Activo = false
+		if estado := strings.TrimSpace(agente.EstadoSesion); estado != "" {
+			agente.EstadoSesion = estado
+		} else {
+			agente.EstadoSesion = "pausada"
+		}
+		return
+	}
+	if strings.EqualFold(strings.TrimSpace(sesion.Estado), "pausada") {
+		agente.Activo = false
+		if estado := strings.TrimSpace(agente.EstadoSesion); estado != "" {
+			agente.EstadoSesion = estado
+		} else {
+			agente.EstadoSesion = "pausada"
+		}
+		return
+	}
 	agente.Activo = true
 	if estado := strings.TrimSpace(agente.EstadoSesion); estado != "" {
 		agente.EstadoSesion = estado

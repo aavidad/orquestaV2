@@ -400,6 +400,60 @@ func TestListarAgentesIgnoraSesionesConHeartbeatObsoleto(t *testing.T) {
 	}
 }
 
+func TestListarAgentesOcultaAgenteEnEnfriamientoAunqueTengaSesionOperativa(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexCooldown", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='pensando', estado_cuota='enfriamiento', reanimar_at=CURRENT_TIMESTAMP WHERE nombre='CodexCooldown'`); err != nil {
+		t.Fatalf("marcar enfriamiento: %v", err)
+	}
+	if _, err := DB.Exec(`INSERT INTO sesiones (agente, activa, estado, herramienta, host, heartbeat_at) VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)`,
+		"CodexCooldown", 1, "activa", "codex", "localhost",
+	); err != nil {
+		t.Fatalf("insert sesion: %v", err)
+	}
+
+	agente, err := GetAgente("CodexCooldown")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.Activo {
+		t.Fatalf("el agente en enfriamiento no deberia verse activo: %+v", agente)
+	}
+	if agente.EstadoSesion != "pensando" {
+		t.Fatalf("estado visible inesperado: %+v", agente)
+	}
+}
+
+func TestListarAgentesOcultaAgentePausadoAunqueMantengaHeartbeat(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexPausado", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='pausada' WHERE nombre='CodexPausado'`); err != nil {
+		t.Fatalf("marcar estado sesion: %v", err)
+	}
+	if _, err := DB.Exec(`INSERT INTO sesiones (agente, activa, estado, herramienta, host, heartbeat_at) VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)`,
+		"CodexPausado", 1, "pausada", "codex", "localhost",
+	); err != nil {
+		t.Fatalf("insert sesion: %v", err)
+	}
+
+	agente, err := GetAgente("CodexPausado")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.Activo {
+		t.Fatalf("el agente pausado no deberia verse activo: %+v", agente)
+	}
+	if agente.EstadoSesion != "pausada" {
+		t.Fatalf("estado visible inesperado: %+v", agente)
+	}
+}
+
 func TestSesionRecienteNoCuentaComoOperativaSiSuUltimoHandleYaFallo(t *testing.T) {
 	prepararDBTemporal(t)
 
