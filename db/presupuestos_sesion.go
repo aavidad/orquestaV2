@@ -124,6 +124,20 @@ func UltimoPresupuestoAgente(agente string) (*PresupuestoSesion, *Sesion, error)
 	return p, sesion, err
 }
 
+func PresupuestoSesionFresco(p *PresupuestoSesion) bool {
+	if p == nil {
+		return false
+	}
+	maxAge := time.Duration(configInt64Fallback("pool_budget_snapshot_max_age_seconds", 300)) * time.Second
+	if maxAge <= 0 {
+		maxAge = 5 * time.Minute
+	}
+	if p.CheckedAt.IsZero() {
+		return false
+	}
+	return time.Since(p.CheckedAt) <= maxAge
+}
+
 func EvaluarPresupuestoSesion(p *PresupuestoSesion) (*EvaluacionPresupuesto, error) {
 	if p == nil {
 		return &EvaluacionPresupuesto{Estado: "sin_datos", Motivo: "sin presupuesto registrado"}, nil

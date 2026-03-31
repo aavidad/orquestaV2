@@ -31,6 +31,7 @@ type Agente struct {
 	PresupuestoEstado         string
 	PresupuestoFuente         string
 	PresupuestoCheckedAt      *time.Time
+	PresupuestoStale          bool
 	PresupuestoVentana        string
 	PresupuestoResetAt        *time.Time
 	PresupuestoSesionPct      *int
@@ -752,9 +753,11 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 	if err == nil && p != nil {
 		ev, err := EvaluarPresupuestoSesion(p)
 		if err == nil {
+			fresco := PresupuestoSesionFresco(p)
 			a.PresupuestoEstado = strings.TrimSpace(ev.Estado)
 			a.PresupuestoFuente = strings.TrimSpace(p.BudgetSource)
 			a.PresupuestoCheckedAt = &p.CheckedAt
+			a.PresupuestoStale = !fresco
 			a.PresupuestoSesionResetAt = p.ResetAt
 			a.RemainingSeconds = p.RemainingSeconds
 			a.RemainingMessages = p.RemainingMessages
@@ -768,17 +771,21 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 					if observedPrimary.resetAt != nil {
 						a.PresupuestoSesionResetAt = observedPrimary.resetAt
 					}
-					sesion = observedPrimary
+					if fresco {
+						sesion = observedPrimary
+					}
 				}
 				if observedSecondary.pct != nil {
 					a.PresupuestoSemanalPct = observedSecondary.pct
 					if observedSecondary.resetAt != nil {
 						a.PresupuestoSemanalResetAt = observedSecondary.resetAt
 					}
-					semanal = observedSecondary
+					if fresco {
+						semanal = observedSecondary
+					}
 				}
 			}
-			if ev.RemainingRatio != nil {
+			if ev.RemainingRatio != nil && fresco {
 				pct := int(math.Round(*ev.RemainingRatio * 100))
 				if pct < 0 {
 					pct = 0
@@ -793,7 +800,7 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 					resetAt:    p.ResetAt,
 					source:     strings.TrimSpace(p.BudgetSource),
 				}
-			} else if strings.EqualFold(strings.TrimSpace(ev.Estado), "agotado") {
+			} else if strings.EqualFold(strings.TrimSpace(ev.Estado), "agotado") && fresco {
 				pct := 0
 				a.PresupuestoSesionPct = &pct
 				sesion = presupuestoAgenteCandidato{
@@ -805,6 +812,9 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 			}
 			candidato = seleccionarPresupuestoEfectivo([]presupuestoAgenteCandidato{sesion, diario, semanal})
 			aplicarPresupuestoEfectivoAgente(a, candidato)
+			if a.PresupuestoStale && strings.TrimSpace(a.PresupuestoEstado) == "ok" {
+				a.PresupuestoEstado = "observado_stale"
+			}
 		}
 	}
 	if strings.TrimSpace(a.CuentaEmail) == "" {

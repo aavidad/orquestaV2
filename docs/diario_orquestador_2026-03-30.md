@@ -3346,3 +3346,39 @@ Validacion:
   - `Codex1` ya muestra `Window kind: 5h`, `Ratio restante: 0.89`
   - `agente cuentas --activos` ya devuelve correos reales observados
   - el ranking por cuenta ya agrupa por email real y deja a `maritere@avidad.com` con `Codex1,Codex5`
+
+## 2026-03-31 — La cuota observada stale deja de mandar sobre la efectiva
+
+Hallazgo:
+
+- tras meter la ingesta de `token_count`, los snapshots observados de primera hora seguian pudiendo dominar la cuota efectiva muchas horas despues
+- eso era peligroso: para inspeccion sirve, pero para orquestacion profesional una foto vieja no puede gobernar decisiones vivas
+
+Decision:
+
+- si `presupuestos_sesion` es observada y supera `pool_budget_snapshot_max_age_seconds`, Orquesta:
+  - mantiene visibles `sesión` y `semanal` observadas
+  - marca `telemetría observada stale`
+  - deja que la `cuota efectiva` vuelva al derivado seguro
+
+Codigo:
+
+- [db/presupuestos_sesion.go](/home/alberto/Trabajo/orquesta/db/presupuestos_sesion.go)
+- [db/sesiones.go](/home/alberto/Trabajo/orquesta/db/sesiones.go)
+- [db/handoff_manager.go](/home/alberto/Trabajo/orquesta/db/handoff_manager.go)
+- [cmd/status_remoto_compat.go](/home/alberto/Trabajo/orquesta/cmd/status_remoto_compat.go)
+- [db/presupuestos_sesion_test.go](/home/alberto/Trabajo/orquesta/db/presupuestos_sesion_test.go)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db ./cmd -run 'Test(GetAgenteNoDejaQueSnapshotObservadoStaleMandeSobreLaCuotaEfectiva|ListarAgentesUsaVentanasObservadasDesdeTokenCount)' -count=1`
+- smoke viva:
+  - `./orquesta server stop`
+  - `./orquesta server start`
+  - `./orquesta status`
+
+Resultado vivo:
+
+- `Codex1` ya enseña `telemetría observada stale`
+- su `sesión 89%` y `semanal 3%` siguen visibles para inspeccion
+- la `cuota efectiva` vuelve a `77% daily`, que es la decision segura mientras la observacion siga vieja

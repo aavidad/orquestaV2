@@ -217,10 +217,11 @@ func TestListarAgentesUsaVentanasObservadasDesdeTokenCount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IniciarSesion: %v", err)
 	}
-	resetPrimary := time.Date(2026, 3, 31, 14, 0, 0, 0, time.UTC)
-	resetSecondary := time.Date(2026, 4, 6, 7, 26, 0, 0, time.UTC)
+	now := time.Now().UTC()
+	resetPrimary := now.Add(4 * time.Hour)
+	resetSecondary := now.Add(4 * 24 * time.Hour)
 	raw := `{"rate_limits":{"primary":{"used_percent":12,"window_minutes":300,"resets_at":` + strconv.FormatInt(resetPrimary.Unix(), 10) + `},"secondary":{"used_percent":43,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetSecondary.Unix(), 10) + `}},"account_email":"codex1@example.com","account_user":"codex1_user"}`
-	checkedAt := time.Date(2026, 3, 31, 10, 5, 0, 0, time.UTC)
+	checkedAt := now
 	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
 		SesionID:        sesionID,
 		WindowKind:      "5h",
@@ -244,11 +245,62 @@ func TestListarAgentesUsaVentanasObservadasDesdeTokenCount(t *testing.T) {
 	if agente.PresupuestoVentana != "weekly" {
 		t.Fatalf("ventana efectiva inesperada: %+v", agente)
 	}
-	if agente.PresupuestoResetAt == nil || !agente.PresupuestoResetAt.Equal(resetSecondary) {
+	if agente.PresupuestoResetAt == nil || agente.PresupuestoResetAt.UTC().Unix() != resetSecondary.UTC().Unix() {
 		t.Fatalf("reset efectivo inesperado: %+v", agente)
 	}
 	if agente.CuentaEmail != "codex1@example.com" || agente.CuentaUsuario != "codex1_user" {
 		t.Fatalf("identidad inesperada: %+v", agente)
+	}
+}
+
+func TestGetAgenteNoDejaQueSnapshotObservadoStaleMandeSobreLaCuotaEfectiva(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET consumo_dia_segundos=4200, limite_dia_segundos=18000, consumo_semanal_segundos=4560, limite_semanal_segundos=126000 WHERE nombre='codex1'`); err != nil {
+		t.Fatalf("update agente: %v", err)
+	}
+	sesionID, err := IniciarSesion("codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	if err := ConfigSet("pool_budget_snapshot_max_age_seconds", "60"); err != nil {
+		t.Fatalf("config snapshot max age: %v", err)
+	}
+	resetPrimary := time.Now().UTC().Add(-4 * time.Hour)
+	resetSecondary := time.Now().UTC().Add(3 * 24 * time.Hour)
+	raw := `{"rate_limits":{"primary":{"used_percent":12,"window_minutes":300,"resets_at":` + strconv.FormatInt(resetPrimary.Unix(), 10) + `},"secondary":{"used_percent":97,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetSecondary.Unix(), 10) + `}},"account_email":"codex1@example.com"}`
+	checkedAt := time.Now().UTC().Add(-2 * time.Hour)
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "5h",
+		BudgetSource:    "codex_token_count_observed",
+		RawSnapshotJSON: raw,
+		CheckedAt:       checkedAt,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion: %v", err)
+	}
+
+	agente, err := GetAgente("codex1")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.CuotaRestantePct == nil || *agente.CuotaRestantePct != 77 {
+		t.Fatalf("la cuota efectiva deberia volver al derivado diario, got=%+v", agente)
+	}
+	if !agente.PresupuestoStale {
+		t.Fatalf("deberia marcar el snapshot observado como stale: %+v", agente)
+	}
+	if agente.PresupuestoEstado != "observado_stale" {
+		t.Fatalf("estado de presupuesto inesperado: %+v", agente)
+	}
+	if agente.PresupuestoSesionPct == nil || *agente.PresupuestoSesionPct != 88 {
+		t.Fatalf("deberia seguir mostrando la sesion observada para inspeccion: %+v", agente)
+	}
+	if agente.PresupuestoSemanalPct == nil || *agente.PresupuestoSemanalPct != 3 {
+		t.Fatalf("deberia seguir mostrando la semanal observada para inspeccion: %+v", agente)
 	}
 }
 

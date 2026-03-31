@@ -285,17 +285,7 @@ func runtimeUltimaActividad(runtime *RuntimeInstance) *time.Time {
 }
 
 func presupuestoSesionFresco(p *PresupuestoSesion) bool {
-	if p == nil {
-		return false
-	}
-	maxAge := time.Duration(configInt64Fallback("pool_budget_snapshot_max_age_seconds", 300)) * time.Second
-	if maxAge <= 0 {
-		maxAge = 5 * time.Minute
-	}
-	if p.CheckedAt.IsZero() {
-		return false
-	}
-	return time.Since(p.CheckedAt) <= maxAge
+	return PresupuestoSesionFresco(p)
 }
 
 // SeleccionarAgenteReemplazo elige el mejor agente disponible para reemplazar

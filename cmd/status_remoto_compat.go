@@ -237,6 +237,9 @@ func resumenCuotaAgente(a *db.Agente) string {
 	if a.PresupuestoResetAt != nil && !a.PresupuestoResetAt.IsZero() {
 		partes = append(partes, "reset "+a.PresupuestoResetAt.Local().Format("2006-01-02 15:04"))
 	}
+	if a.PresupuestoStale {
+		partes = append(partes, "telemetría observada stale")
+	}
 	if extra := resumenDesgloseCuotaAgente(a); extra != "" {
 		partes = append(partes, extra)
 	}
