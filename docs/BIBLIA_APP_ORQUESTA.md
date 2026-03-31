@@ -298,6 +298,7 @@ Contrato minimo obligatorio para el supervisor local:
 - esa rehidratacion no puede depender de SQLite directa ni de rescates manuales; debe ocurrir por el camino oficial del daemon, tipicamente durante `sync_status` o supervisión equivalente
 - la emision de `SupervisorSignal` no puede tumbar el runtime local ni el teardown de tests: el handler debe ser panic-safe y el supervisor local debe degradar la señal a error recuperable si el plano de control ya no esta disponible
 - un batch del runner no puede congelar el resto del control plane; cada batch necesita aislamiento y timeout propio
+- la supervision autonoma periodica no puede resembrar el mismo `supervisar_proyecto` por reloj si ya emitio un nudge reciente para el mismo agente/proyecto; la deduplicacion debe aguantar estados transitorios del runtime y no depender solo de que el handle siga “operativo”
 
 La referencia conceptual mas cercana para el nucleo es:
 

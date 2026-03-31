@@ -69,6 +69,11 @@ func procesarSupervisionAutonomaBatch() (int, error) {
 		} else if pendiente {
 			continue
 		}
+		if reciente, err := existeRuntimeOrderAutonomiaReciente(agente.Nombre, &proyecto.ID, "nudge", "supervisar_proyecto", interval); err != nil {
+			return total, err
+		} else if reciente {
+			continue
+		}
 		if policy.LastSupervisionAt != nil {
 			operativo, err := supervisorAutonomiaYaOperativo(agente.Nombre, proyecto.ID)
 			if err != nil {

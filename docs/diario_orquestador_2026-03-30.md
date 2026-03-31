@@ -2696,6 +2696,29 @@ Validacion:
 
 - `go test ./cmd ./db ./planocontrol ./internal/controlruntime -count=1` pendiente de repetir tras el fix
 
+## 2026-03-31 — la supervision periodica ya no repica el mismo nudge sobre un supervisor vivo
+
+Hallazgo:
+
+- el nucleo ya no se quedaba atascado, pero seguia sembrando `nudge` + `send_instruction` de autonomia cada ~5 minutos sobre `Codex1`
+- la evidencia salio por `/api/runtime-orders?agente=Codex1`: payload `accion=supervisar_proyecto`, `kind=autonomia`, repetido en serie aunque la mailbox ya drenaba a vacio
+- la guardia de `supervisorAutonomiaYaOperativo()` no bastaba en estados transitorios del runtime y dejaba escapar repiques periodicos del mismo ciclo de supervision
+
+Decision:
+
+- la supervision autonoma periodica debe deduplicar por semantica reciente, no solo por “order pendiente” ni por “handle operativo”
+- si ya existe un `nudge` reciente con `accion=supervisar_proyecto` para el mismo agente/proyecto dentro del intervalo de supervision, no se vuelve a sembrar
+
+Codigo:
+
+- [cmd/controlplane_autonomia_nivel2.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_autonomia_nivel2.go)
+- [cmd/controlplane_support_test.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestProcesarSupervisionAutonomaBatch(NoRepiteSupervisionPeriodicaConSupervisorOperativo|NoRepiteSupervisionPeriodicaSiYaEmitioNudgeReciente)' -count=1`
+
 ## 2026-03-31 — OpenClaw Gateway vuelve a ser visible para operador por API y dashboard
 
 Hallazgo:
