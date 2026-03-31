@@ -1482,6 +1482,12 @@ const webTplDash = `{{define "content"}}
         </td>
         <td style="padding:.3rem .3rem">
           <div style="font-weight:600;font-size:.85rem">{{.Nombre}}</div>
+          {{if .CuentaEmail}}
+            <div style="font-size:.68rem;color:#0f172a">cuenta: {{.CuentaEmail}}</div>
+          {{end}}
+          {{if .CuentaUsuario}}
+            <div style="font-size:.66rem;color:#64748b">usuario: {{.CuentaUsuario}}</div>
+          {{end}}
           {{if eq .EstadoCuota "enfriamiento"}}
             <div style="font-size:.7rem;color:#f59e0b;font-style:italic">{{tr "dashboard.sleeping"}}: {{.MotivoPausa}}</div>
             <div style="font-size:.65rem;color:#94a3b8">{{reanimacionEn .ReanimarAt}}</div>
@@ -1489,6 +1495,20 @@ const webTplDash = `{{define "content"}}
             <div style="font-size:.7rem;color:#dc2626">{{tr "dashboard.weekly_exhausted"}}</div>
           {{else}}
             <div style="font-size:.72rem;color:#94a3b8">{{tr .Rol}}</div>
+          {{end}}
+          {{if .CuotaRestantePct}}
+            <div style="font-size:.66rem;color:#0f766e">
+              efectivo {{.CuotaRestantePct}}%{{if .PresupuestoVentana}} · {{.PresupuestoVentana}}{{end}}{{if .PresupuestoResetAt}} · reset {{.PresupuestoResetAt.Local.Format "2006-01-02 15:04"}}{{end}}
+            </div>
+          {{end}}
+          {{if or .PresupuestoSesionPct .PresupuestoDiarioPct .PresupuestoSemanalPct}}
+            <div style="font-size:.64rem;color:#64748b">
+              {{if .PresupuestoSesionPct}}sesión {{.PresupuestoSesionPct}}%{{if .PresupuestoSesionResetAt}} reset {{.PresupuestoSesionResetAt.Local.Format "2006-01-02 15:04"}}{{end}}{{end}}
+              {{if and .PresupuestoSesionPct (or .PresupuestoDiarioPct .PresupuestoSemanalPct)}} · {{end}}
+              {{if .PresupuestoDiarioPct}}diario {{.PresupuestoDiarioPct}}%{{if .PresupuestoDiarioResetAt}} reset {{.PresupuestoDiarioResetAt.Local.Format "2006-01-02 15:04"}}{{end}}{{end}}
+              {{if and .PresupuestoDiarioPct .PresupuestoSemanalPct}} · {{end}}
+              {{if .PresupuestoSemanalPct}}semanal {{.PresupuestoSemanalPct}}%{{if .PresupuestoSemanalResetAt}} reset {{.PresupuestoSemanalResetAt.Local.Format "2006-01-02 15:04"}}{{end}}{{end}}
+            </div>
           {{end}}
         </td>
         <td style="text-align:right;padding:.3rem 0">

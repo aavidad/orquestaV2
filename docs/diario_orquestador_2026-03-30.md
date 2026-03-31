@@ -3032,3 +3032,33 @@ Validacion:
 - resultado vivo:
   - `status` ya muestra `diario` y `semanal` con `reset` propio por agente
   - los agentes activos aún no exponen `correo` porque no hay identidad observada en sus snapshots/metadata actuales; el soporte queda listo para mostrarla cuando el runtime la persista
+
+## 2026-03-31 — el dashboard ya enseña cuenta observada y ventanas de cuota
+
+Hallazgo:
+
+- la CLI `status` ya mostraba cuenta y desglose de cuota, pero el panel web seguía ciego a esos datos
+- eso obligaba a usar terminal para ver qué cuenta estaba detrás de cada agente y qué ventana (`5h`, diaria o semanal) estaba mandando
+
+Decision:
+
+- el dashboard de `/` pasa a renderizar en la tarjeta de cada agente:
+  - `cuenta`
+  - `usuario`
+  - `efectivo`
+  - desglose `sesión / diario / semanal` con su `reset` propio
+- el panel sigue sin inventar correo: solo pinta lo que Orquesta haya observado y persistido
+
+Codigo:
+
+- [cmd/serve.go](/home/alberto/Trabajo/orquesta/cmd/serve.go)
+- [cmd/serve_notificaciones_test.go](/home/alberto/Trabajo/orquesta/cmd/serve_notificaciones_test.go)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'Test(WebDashMuestraEstadoOpenClawNotificaciones|WebDashMuestraCuentaYVentanasDeCuotaAgente|RenderStatusSummaryMuestraCuotaAgente|RenderStatusSummaryMuestraBackendActivo)' -count=1`
+- `go build -o ./orquesta .`
+- resultado:
+  - el dashboard ya pinta `cuenta` y `usuario` cuando existen en snapshots persistidos
+  - el dashboard ya muestra `efectivo`, `diario` y `semanal` con su `reset` propio
+  - la ventana `sesión` también aparece cuando el snapshot trae datos suficientes para calcular ratio (`window_started_at`, `reset_at`, `remaining_seconds`)
