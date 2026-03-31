@@ -502,3 +502,68 @@ func TestSesionRecienteNoCuentaComoOperativaSiSuUltimoHandleYaFallo(t *testing.T
 		t.Fatalf("CodexFallo no deberia seguir visible como activo: %+v", agente)
 	}
 }
+
+func TestListarAgentesOcultaHandleActivoSiSuRuntimePrincipalYaEstaStale(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexRuntimeStale", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	var sesionID int64
+	if err := DB.QueryRow(`
+		INSERT INTO sesiones (agente, activa, estado, herramienta, host, heartbeat_at)
+		VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)
+		RETURNING id`,
+		"CodexRuntimeStale", 1, "activa", "codex-cli", "localhost",
+	).Scan(&sesionID); err != nil {
+		t.Fatalf("insert sesion: %v", err)
+	}
+	runtimeID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:            "CodexRuntimeStale",
+		SesionID:          &sesionID,
+		Provider:          "openai",
+		Connector:         "codex-cli",
+		LogicalState:      "esperando_io",
+		ProcessState:      "running",
+		ExternalSessionID: "sess-runtime-stale",
+	})
+	if err != nil {
+		t.Fatalf("RegistrarRuntimeInstance: %v", err)
+	}
+	old := time.Now().UTC().Add(-15 * time.Minute)
+	if _, err := DB.Exec(`
+		UPDATE runtime_instances
+		SET last_event_at=?, last_heartbeat_at=?, updated_at=?
+		WHERE id = ?`,
+		old, old, old, runtimeID,
+	); err != nil {
+		t.Fatalf("stale runtime: %v", err)
+	}
+	if _, err := DB.Exec(`
+		INSERT INTO runtime_handles (
+			agente, sesion_id, runtime_id, transporte, handle_kind, handle_ref, estado,
+			capabilities_json, metadata_json, last_seen_at, updated_at, created_at
+		) VALUES (?,?,?,?,?,'7777','activo','{}','{}',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+		"CodexRuntimeStale", sesionID, runtimeID, "cli", "process",
+	); err != nil {
+		t.Fatalf("insert handle activo: %v", err)
+	}
+
+	agente, err := GetAgente("CodexRuntimeStale")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.Activo || agente.EstadoSesion != "" {
+		t.Fatalf("CodexRuntimeStale no deberia verse activo: %+v", agente)
+	}
+
+	sesiones, err := ListarSesionesActivas()
+	if err != nil {
+		t.Fatalf("ListarSesionesActivas: %v", err)
+	}
+	for _, sesion := range sesiones {
+		if sesion != nil && sesion.Agente == "CodexRuntimeStale" {
+			t.Fatalf("CodexRuntimeStale no deberia salir en sesiones operativas: %+v", sesion)
+		}
+	}
+}

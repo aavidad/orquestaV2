@@ -469,6 +469,30 @@ func listarUltimoHandlePorAgenteProyectoMap() (map[string]*RuntimeHandle, error)
 	})
 }
 
+func listarUltimoRuntimePorAgenteProyectoMap() (map[string]*RuntimeInstance, error) {
+	return consultarConReintentos(func() (map[string]*RuntimeInstance, error) {
+		rows, err := DB.Query(runtimeSelectBase() + `
+		 ORDER BY ` + runtimeActividadExpr("r") + ` DESC, r.id DESC`)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		out := map[string]*RuntimeInstance{}
+		for rows.Next() {
+			runtime, err := escanearRuntime(rows)
+			if err != nil {
+				return nil, err
+			}
+			key := runtimeHandleCacheKey(runtime.Agente, runtime.ProyectoID)
+			if _, exists := out[key]; exists {
+				continue
+			}
+			out[key] = runtime
+		}
+		return out, rows.Err()
+	})
+}
+
 func runtimeHandleSostieneSesionOperativa(handle *RuntimeHandle) bool {
 	return runtimeHandleSostieneSesionOperativaConCutoff(handle, sessionOperationalCutoff())
 }
@@ -502,6 +526,24 @@ func runtimeHandleSostieneSesionOperativaConCutoff(handle *RuntimeHandle, cutoff
 	return true
 }
 
+func runtimeSostieneSesionOperativaConCutoff(runtime *RuntimeInstance, cutoff time.Time) bool {
+	if runtime == nil {
+		return false
+	}
+	logicalState := strings.ToLower(strings.TrimSpace(runtime.LogicalState))
+	switch logicalState {
+	case "cerrado", "fallido", "bloqueado", "finalizado":
+		return false
+	}
+	processState := strings.ToLower(strings.TrimSpace(runtime.ProcessState))
+	switch processState {
+	case "finalizado", "fallido", "exited", "dead":
+		return false
+	}
+	ultima := preferTime(runtime.UltimaActividadAt, runtime.LastHeartbeatAt, runtime.LastEventAt, &runtime.UpdatedAt, &runtime.CreatedAt)
+	return ultima != nil && !ultima.Before(cutoff)
+}
+
 func sesionInvalidadaPorUltimoHandle(sesion *Sesion, handle *RuntimeHandle, cutoff time.Time, now time.Time) bool {
 	if sesion == nil || handle == nil {
 		return false
@@ -527,11 +569,14 @@ func sesionInvalidadaPorUltimoHandle(sesion *Sesion, handle *RuntimeHandle, cuto
 	return !ultimaHandle.Before(*ultimaSesion)
 }
 
-func sesionEsActivaOperativaConMapas(sesion *Sesion, handlesActivos map[string]bool, ultimosHandles map[string]*RuntimeHandle, now time.Time) bool {
+func sesionEsActivaOperativaConMapas(sesion *Sesion, handlesActivos map[string]bool, ultimosHandles map[string]*RuntimeHandle, ultimosRuntimes map[string]*RuntimeInstance, now time.Time) bool {
 	if sesion == nil {
 		return false
 	}
 	key := runtimeHandleCacheKey(sesion.Agente, sesion.ProyectoID)
+	if runtime := ultimosRuntimes[key]; runtime != nil && !runtimeSostieneSesionOperativaConCutoff(runtime, sessionOperationalCutoff()) {
+		return false
+	}
 	if sesionOperativaPorHeartbeat(sesion.Activa, sesion.HeartbeatAt, sesion.Inicio, now) {
 		if sesionInvalidadaPorUltimoHandle(sesion, ultimosHandles[key], sessionOperationalCutoff(), now) {
 			return false
@@ -554,13 +599,17 @@ func ListarSesionesActivasOperativas() ([]*Sesion, error) {
 	if err != nil {
 		return nil, err
 	}
+	ultimosRuntimes, err := listarUltimoRuntimePorAgenteProyectoMap()
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	out := make([]*Sesion, 0, len(sesiones))
 	for _, sesion := range sesiones {
 		if sesion == nil {
 			continue
 		}
-		if sesionEsActivaOperativaConMapas(sesion, handlesActivos, ultimosHandles, now) {
+		if sesionEsActivaOperativaConMapas(sesion, handlesActivos, ultimosHandles, ultimosRuntimes, now) {
 			out = append(out, sesion)
 		}
 	}
@@ -1556,7 +1605,11 @@ func GetSesionActivaOperativa(agente string, proyectoID *int64) (*Sesion, error)
 	if err != nil {
 		return nil, err
 	}
-	if !sesionEsActivaOperativaConMapas(sesion, handlesActivos, ultimosHandles, time.Now().UTC()) {
+	ultimosRuntimes, err := listarUltimoRuntimePorAgenteProyectoMap()
+	if err != nil {
+		return nil, err
+	}
+	if !sesionEsActivaOperativaConMapas(sesion, handlesActivos, ultimosHandles, ultimosRuntimes, time.Now().UTC()) {
 		return nil, sql.ErrNoRows
 	}
 	return sesion, nil

@@ -770,6 +770,72 @@ func TestAPIStatusNoCuentaSesionConHandleFallidoReciente(t *testing.T) {
 	}
 }
 
+func TestAPIStatusNoCuentaAgenteConRuntimePrincipalStaleAunqueMantengaHandleActivo(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexRuntimeStale", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	var sesionID int64
+	if err := db.DB.QueryRow(`
+		INSERT INTO sesiones (agente, activa, estado, herramienta, host, heartbeat_at)
+		VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)
+		RETURNING id`,
+		"CodexRuntimeStale", 1, "activa", "codex-cli", "localhost",
+	).Scan(&sesionID); err != nil {
+		t.Fatalf("insert sesion: %v", err)
+	}
+	runtimeID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:            "CodexRuntimeStale",
+		SesionID:          &sesionID,
+		Provider:          "openai",
+		Connector:         "codex-cli",
+		LogicalState:      "esperando_io",
+		ProcessState:      "running",
+		ExternalSessionID: "sess-runtime-stale",
+	})
+	if err != nil {
+		t.Fatalf("RegistrarRuntimeInstance: %v", err)
+	}
+	old := time.Now().UTC().Add(-15 * time.Minute)
+	if _, err := db.DB.Exec(`
+		UPDATE runtime_instances
+		SET last_event_at=?, last_heartbeat_at=?, updated_at=?
+		WHERE id = ?`,
+		old, old, old, runtimeID,
+	); err != nil {
+		t.Fatalf("stale runtime: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		INSERT INTO runtime_handles (
+			agente, sesion_id, runtime_id, transporte, handle_kind, handle_ref, estado,
+			capabilities_json, metadata_json, last_seen_at, updated_at, created_at
+		) VALUES (?,?,?,?,?,'7777','activo','{}','{}',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+		"CodexRuntimeStale", sesionID, runtimeID, "cli", "process",
+	); err != nil {
+		t.Fatalf("insert handle activo: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recStatus := httptest.NewRecorder()
+	reqStatus := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	mux.ServeHTTP(recStatus, reqStatus)
+	if recStatus.Code != http.StatusOK {
+		t.Fatalf("status global inesperado: %d body=%s", recStatus.Code, recStatus.Body.String())
+	}
+	var statusResp apiStatusResponse
+	if err := json.Unmarshal(recStatus.Body.Bytes(), &statusResp); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	for _, agente := range statusResp.Agentes {
+		if agente != nil && agente.Nombre == "CodexRuntimeStale" && agente.Activo {
+			t.Fatalf("CodexRuntimeStale no deberia salir activo via /api/status: %+v", agente)
+		}
+	}
+}
+
 func TestAPIRuntimeA2UIExponeMensajesDeFormaServerFirst(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

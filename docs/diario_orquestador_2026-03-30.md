@@ -333,6 +333,31 @@ Conclusion:
 
 - la API de observabilidad queda limpia incluso frente a residuos históricos más viejos y raros
 
+## 2026-04-01 01:25 aprox. — `status` deja de enseñar agentes ocupados por runtime stale
+
+Hallazgo:
+
+- `status` seguía enseñando `Codex2-5` como `activos ahora` aunque el `runtime_handle` y el `runtime principal` llevaban horas sin actividad real
+- la proyección visible usaba sesión abierta y handle fresco, pero no invalidaba por `runtime principal` stale
+
+Decision:
+
+- un agente solo puede verse activo si la sesión/handle y, cuando exista, el `runtime principal` siguen frescos y no terminales
+
+Cambios:
+
+- `db/sesiones.go`
+  - nuevo mapa de `runtime principal` por agente/proyecto
+  - `sesionEsActivaOperativaConMapas(...)` invalida por `runtime principal` stale o terminal
+- `db/sesiones_test.go`
+  - nueva regresión `TestListarAgentesOcultaHandleActivoSiSuRuntimePrincipalYaEstaStale`
+- `cmd/api_test.go`
+  - nueva regresión `TestAPIStatusNoCuentaAgenteConRuntimePrincipalStaleAunqueMantengaHandleActivo`
+
+Conclusion:
+
+- Orquesta ya no debe enseñar agentes `trabajando` cuando solo queda una sesión/handle fósil sin actividad real del runtime
+
 ## 2026-03-31 16:55 aprox. — `status` y la API ya enseñan presupuesto restante por agente
 
 Hallazgo:
