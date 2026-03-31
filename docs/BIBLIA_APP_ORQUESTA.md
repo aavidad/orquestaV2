@@ -592,3 +592,8 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 
 - una orden en `tomada/ejecutando` puede quedar stale por dos causas válidas: lease vencida o edad efectiva del intento.
 - la reconciliación stale no puede depender solo de `lease_expires_at`; si `started_at/updated_at` demuestran que el intento es viejo, la orden debe recuperarse aunque la lease siga futura por metadata vieja o inconsistente.
+
+## Review gates y políticas de modelo
+
+- el contexto de un `review gate` debe poder enlazar el worktree activo registrado para la tarea aunque su path aún no haya pasado por validación de coherencia en disco; para gobernanza importa primero la relación registrada proyecto/tarea/worktree.
+- en resolución de políticas de modelo, a igualdad de `scope`, `perfil` y `prioridad`, debe ganar la política más reciente. Esto evita que seeds antiguas tapen overrides explícitos guardados después.

@@ -2395,3 +2395,30 @@ Validacion:
 
 - `go test ./cmd -run 'Test(CommandNeedsDB|CommandNeedsDBWithDelegationCoverage|StatusExigeServidorSalvoRecuperacionLocal|StatusPermiteRecuperacionConForceLocal|StatusFuncionaEnRecuperacionLocalDB)' -count=1`
 - el bloque queda en verde
+
+## 2026-03-31 — cierre final de `./cmd`: review gate y política MCP
+
+Hallazgo:
+
+- `procesarReviewGatesBatch` estaba buscando worktrees con la vista coherente, lo que descartaba worktrees activos registrados pero aún no materializados en disco y dejaba `WorktreeID=nil` en el gate
+- `ResolverPoliticaModelo` resolvía por `id` ascendente cuando dos políticas tenían misma prioridad, así que una seed vieja podía tapar un override explícito reciente en MCP
+
+Decision:
+
+- separar listado raw de worktrees para decisiones de gobernanza donde importa la relación registrada, no la verificación física del path
+- a igualdad de prioridad, la política de modelo más reciente debe ganar
+
+Codigo:
+
+- [db/worktrees.go](/home/alberto/Trabajo/orquesta/db/worktrees.go)
+- [cmd/controlplane_autonomia_nivel2.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_autonomia_nivel2.go)
+- [db/model_policies.go](/home/alberto/Trabajo/orquesta/db/model_policies.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestProcesarReviewGatesBatchCreaGateYEncolaRevision' -count=1`
+- `go test ./cmd -run 'TestMCPToolResuelveModeloPorPolitica' -count=1`
+- `go test ./db -run 'TestResolverPoliticaModelo(EconomicaPorPerfil|ConOverridesPorProyectoYTarea)' -count=1`
+- `go test ./cmd -count=1`
+- `./cmd` queda completo en verde

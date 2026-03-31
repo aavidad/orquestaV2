@@ -26,6 +26,10 @@ func ListarWorktreesCoord(filter coordinacion.WorktreeFilter) ([]*coordinacion.W
 	return (CoordinationWorktreeSQLRepository{}).List(filter)
 }
 
+func ListarWorktreesCoordRaw(filter coordinacion.WorktreeFilter) ([]*coordinacion.Worktree, error) {
+	return (CoordinationWorktreeSQLRepository{}).ListRaw(filter)
+}
+
 func (CoordinationWorktreeSQLRepository) Create(worktree *coordinacion.Worktree) (*coordinacion.Worktree, error) {
 	if worktree == nil {
 		return nil, fmt.Errorf("worktree nil")
@@ -67,6 +71,21 @@ func (CoordinationWorktreeSQLRepository) GetActiveByPath(path string) (*coordina
 }
 
 func (CoordinationWorktreeSQLRepository) List(filter coordinacion.WorktreeFilter) ([]*coordinacion.Worktree, error) {
+	out, err := (CoordinationWorktreeSQLRepository{}).ListRaw(filter)
+	if err != nil {
+		return nil, err
+	}
+	filtradas := make([]*coordinacion.Worktree, 0, len(out))
+	for _, worktree := range out {
+		if worktree != nil && worktree.State == coordinacion.WorktreeActive && !WorktreeActivaCoherente(worktree.ProjectID, worktree.Path) {
+			continue
+		}
+		filtradas = append(filtradas, worktree)
+	}
+	return filtradas, nil
+}
+
+func (CoordinationWorktreeSQLRepository) ListRaw(filter coordinacion.WorktreeFilter) ([]*coordinacion.Worktree, error) {
 	q := `
 		SELECT id, proyecto_id, tarea_id, lock_id, agente, nombre, ruta_abs, branch, base_ref, estado,
 		       motivo, created_at, updated_at, cerrada_at
@@ -102,14 +121,7 @@ func (CoordinationWorktreeSQLRepository) List(filter coordinacion.WorktreeFilter
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	filtradas := make([]*coordinacion.Worktree, 0, len(out))
-	for _, worktree := range out {
-		if worktree != nil && worktree.State == coordinacion.WorktreeActive && !WorktreeActivaCoherente(worktree.ProjectID, worktree.Path) {
-			continue
-		}
-		filtradas = append(filtradas, worktree)
-	}
-	return filtradas, nil
+	return out, nil
 }
 
 func (CoordinationWorktreeSQLRepository) Close(id int64, closedAt time.Time, reason string) (*coordinacion.Worktree, error) {

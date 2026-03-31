@@ -427,7 +427,7 @@ func prioridadTareaReview(tarea *db.Tarea) int {
 
 func seleccionarWorktreeReviewProyecto(proyectoID int64, tareaID *int64) (*int64, error) {
 	state := coordinacion.WorktreeActive
-	worktrees, err := db.ListarWorktreesCoord(coordinacion.WorktreeFilter{ProjectID: &proyectoID, State: &state})
+	worktrees, err := db.ListarWorktreesCoordRaw(coordinacion.WorktreeFilter{ProjectID: &proyectoID, State: &state})
 	if err != nil {
 		return nil, err
 	}

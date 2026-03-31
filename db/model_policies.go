@@ -327,7 +327,7 @@ func mejorPoliticaLayer(scopeTipo, scopeRef, perfil string) (*PoliticaModelo, er
 		  AND scope_tipo = ?
 		  AND scope_ref = ?
 		  AND perfil_tarea IN (?, '*')
-		ORDER BY CASE WHEN perfil_tarea = ? THEN 0 ELSE 1 END, prioridad, id
+		ORDER BY CASE WHEN perfil_tarea = ? THEN 0 ELSE 1 END, prioridad, id DESC
 		LIMIT 1`,
 		scopeTipo, scopeRef, perfil, perfil,
 	)
