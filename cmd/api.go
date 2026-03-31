@@ -457,11 +457,12 @@ type apiRuntimeOrderCreateRequest struct {
 }
 
 type apiRuntimeOrdersPurgeRequest struct {
-	Agente   string   `json:"agente"`
-	Proyecto string   `json:"proyecto"`
-	Estados  []string `json:"estados"`
-	Tipos    []string `json:"tipos"`
-	Actor    string   `json:"actor"`
+	Agente           string   `json:"agente"`
+	Proyecto         string   `json:"proyecto"`
+	Estados          []string `json:"estados"`
+	Tipos            []string `json:"tipos"`
+	OlderThanMinutes int      `json:"older_than_minutes"`
+	Actor            string   `json:"actor"`
 }
 
 type apiRuntimeMailboxCreateRequest struct {
@@ -3206,11 +3207,12 @@ func apiHandlerRuntimeOrdersPurgar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resultado, err := runtimesService.PurgeTerminalRuntimeOrders(runtimesapp.RuntimeOrderPurgeRequest{
-		Agente:   strings.TrimSpace(req.Agente),
-		Proyecto: strings.TrimSpace(req.Proyecto),
-		Estados:  req.Estados,
-		Tipos:    req.Tipos,
-		Actor:    strings.TrimSpace(req.Actor),
+		Agente:           strings.TrimSpace(req.Agente),
+		Proyecto:         strings.TrimSpace(req.Proyecto),
+		Estados:          req.Estados,
+		Tipos:            req.Tipos,
+		OlderThanMinutes: req.OlderThanMinutes,
+		Actor:            strings.TrimSpace(req.Actor),
 	})
 	if err != nil {
 		apiError(w, http.StatusBadRequest, err)

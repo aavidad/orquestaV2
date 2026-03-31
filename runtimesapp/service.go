@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"orquesta/db"
 )
@@ -85,11 +86,12 @@ type RuntimeHandlePurgeRequest struct {
 }
 
 type RuntimeOrderPurgeRequest struct {
-	Agente   string
-	Proyecto string
-	Estados  []string
-	Tipos    []string
-	Actor    string
+	Agente           string
+	Proyecto         string
+	Estados          []string
+	Tipos            []string
+	OlderThanMinutes int
+	Actor            string
 }
 
 func (s *Service) GetProject(ref string) (*db.Proyecto, error) {
@@ -165,10 +167,14 @@ func (s *Service) PurgeTerminalRuntimeOrders(req RuntimeOrderPurgeRequest) (*db.
 	if actor == "" {
 		actor = "orquesta"
 	}
+	if req.OlderThanMinutes < 0 {
+		return nil, fmt.Errorf("older_than_minutes no puede ser negativo")
+	}
 
 	var (
-		filtroAgente *string
-		proyectoID   *int64
+		filtroAgente  *string
+		proyectoID    *int64
+		createdBefore *time.Time
 	)
 	if agente != "" {
 		if _, err := s.store.GetAgent(agente); err != nil {
@@ -183,16 +189,21 @@ func (s *Service) PurgeTerminalRuntimeOrders(req RuntimeOrderPurgeRequest) (*db.
 		}
 		proyectoID = &proyecto.ID
 	}
+	if req.OlderThanMinutes > 0 {
+		cutoff := time.Now().UTC().Add(-time.Duration(req.OlderThanMinutes) * time.Minute)
+		createdBefore = &cutoff
+	}
 	resultado, err := s.store.PurgeTerminalRuntimeOrders(db.FiltroPurgadoRuntimeOrders{
-		Agente:     filtroAgente,
-		ProyectoID: proyectoID,
-		Estados:    req.Estados,
-		Tipos:      req.Tipos,
+		Agente:        filtroAgente,
+		ProyectoID:    proyectoID,
+		Estados:       req.Estados,
+		Tipos:         req.Tipos,
+		CreatedBefore: createdBefore,
 	})
 	if err != nil {
 		return nil, err
 	}
-	detalle := fmt.Sprintf("agente=%s proyecto=%s deleted=%d estados=%s tipos=%s", valueOrFallback(agente, "*"), valueOrFallback(proyectoRef, "*"), resultado.Deleted, strings.Join(resultado.Estados, ","), strings.Join(resultado.Tipos, ","))
+	detalle := fmt.Sprintf("agente=%s proyecto=%s deleted=%d estados=%s tipos=%s older_than_minutes=%d", valueOrFallback(agente, "*"), valueOrFallback(proyectoRef, "*"), resultado.Deleted, strings.Join(resultado.Estados, ","), strings.Join(resultado.Tipos, ","), req.OlderThanMinutes)
 	s.store.Audit(actor, "purgar_runtime_orders", "runtime_order", 0, detalle)
 	return resultado, nil
 }

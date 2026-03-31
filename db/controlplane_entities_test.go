@@ -769,6 +769,74 @@ func TestPurgarRuntimeOrdersTerminalesBloqueaEstadosVivos(t *testing.T) {
 	}
 }
 
+func TestPurgarRuntimeOrdersTerminalesRespetaCreatedBefore(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	oldID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: `{"texto":"old terminal"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar runtime order vieja: %v", err)
+	}
+	if err := MarcarRuntimeOrderEstado(oldID, "completada", `{"ok":true}`, ""); err != nil {
+		t.Fatalf("completar vieja: %v", err)
+	}
+	recentID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: `{"texto":"recent terminal"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar runtime order reciente: %v", err)
+	}
+	if err := MarcarRuntimeOrderEstado(recentID, "completada", `{"ok":true}`, ""); err != nil {
+		t.Fatalf("completar reciente: %v", err)
+	}
+	oldStamp := time.Now().UTC().Add(-2 * time.Hour)
+	if _, err := DB.Exec(`UPDATE runtime_orders SET created_at=?, updated_at=? WHERE id=?`, oldStamp, oldStamp, oldID); err != nil {
+		t.Fatalf("envejecer order vieja: %v", err)
+	}
+	cutoff := time.Now().UTC().Add(-60 * time.Minute)
+	agente := "Codex1"
+	resultado, err := PurgarRuntimeOrdersTerminales(FiltroPurgadoRuntimeOrders{
+		Agente:        &agente,
+		Estados:       []string{"completada"},
+		Tipos:         []string{"send_instruction"},
+		CreatedBefore: &cutoff,
+	})
+	if err != nil {
+		t.Fatalf("purgar runtime orders con cutoff: %v", err)
+	}
+	if resultado.Deleted != 1 || len(resultado.DeletedIDs) != 1 || resultado.DeletedIDs[0] != oldID {
+		t.Fatalf("resultado inesperado con cutoff: %+v", resultado)
+	}
+	if order, err := GetRuntimeOrder(oldID); err != nil && err != sql.ErrNoRows {
+		t.Fatalf("get old order: %v", err)
+	} else if order != nil {
+		t.Fatalf("la order vieja deberia haberse purgado: %+v", order)
+	}
+	if order, err := GetRuntimeOrder(recentID); err != nil || order == nil {
+		t.Fatalf("la order reciente deberia seguir: %+v err=%v", order, err)
+	}
+}
+
 func TestControlarProcesoRuntimeSoportaHandleLegacySinKind(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

@@ -2279,3 +2279,34 @@ Validacion:
 - daemon reiniciado y sano: `./orquesta server doctor` => `Health RPC: OK`
 - `time curl -s -m 5 'http://127.0.0.1:16543/api/runtime-handles?agente=Codex1'` => `200` en menos de `1s`
 - validacion viva del handle `390` de `Codex1`: `rendered_command` ya sale como `'/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil' 'Codex1'`, `wrapped_command` compacto y `contains_bootstrap=False`
+
+## 2026-03-31 — purga segura de runtime orders terminales antiguas
+
+Hallazgo:
+
+- `runtime purgar-ordenes` ya existia, pero sin corte temporal; servia para limpiar ruido, pero era demasiado agresivo para un control plane serio
+- el diagnostico vivo de `Codex2` seguia mostrando miles de `send_instruction` terminales historicas aunque ya no hubiera órdenes vivas ni mailbox pendiente
+
+Decision:
+
+- la purga de órdenes terminales debe aceptar y propagar un cutoff temporal
+- el camino oficial por CLI/API usa `older-than-minutes` y el default conservador queda en `60`
+- `Get/Purge` de pruebas deben seguir yendo por daemon, no por acceso lateral a BD
+
+Codigo:
+
+- [db/controlplane_entities.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities.go)
+- [db/controlplane_entities_test.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities_test.go)
+- [runtimesapp/service.go](/home/alberto/Trabajo/orquesta/runtimesapp/service.go)
+- [runtimesapp/service_test.go](/home/alberto/Trabajo/orquesta/runtimesapp/service_test.go)
+- [cmd/api.go](/home/alberto/Trabajo/orquesta/cmd/api.go)
+- [cmd/runtime.go](/home/alberto/Trabajo/orquesta/cmd/runtime.go)
+- [cmd/runtime_test.go](/home/alberto/Trabajo/orquesta/cmd/runtime_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'Test(PurgarRuntimeOrdersTerminales(BorraSoloTerminalesYDesenlazaMailbox|BloqueaEstadosVivos|RespetaCreatedBefore)|GetRuntimeHandleBySesionIDCompactaMetadataLegacy|ListarRuntimeHandlesCompactaMetadataLegacy)' -count=1`
+- `env GOCACHE=/tmp/orquesta-gocache go test ./runtimesapp -run 'Test(PurgeInactiveRuntimeHandlesDelegatesAndAudits|PurgeTerminalRuntimeOrdersAplicaCutoffYAudita)' -count=1`
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'TestRuntimeControlPlaneUsaAPICuandoHayServidor' -count=1`
+- validacion viva: `./orquesta runtime purgar-ordenes --agente Codex2 --tipo send_instruction` => `1601` órdenes purgadas con el default seguro; despues `./orquesta runtime ordenes --agente Codex2 --estado fallo` ya no devuelve filas

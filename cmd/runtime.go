@@ -135,13 +135,17 @@ var runtimePurgarOrdenesCmd = &cobra.Command{
 		proyecto, _ := cmd.Flags().GetString("proyecto")
 		estados, _ := cmd.Flags().GetStringSlice("estado")
 		tipos, _ := cmd.Flags().GetStringSlice("tipo")
+		olderThanMinutes, _ := cmd.Flags().GetInt("older-than-minutes")
 		actor, _ := cmd.Flags().GetString("actor")
 		estados = normalizarSliceFlags(estados)
 		tipos = normalizarSliceFlags(tipos)
 		if strings.TrimSpace(agente) == "" && strings.TrimSpace(proyecto) == "" {
 			return fmt.Errorf("debes indicar --agente o --proyecto")
 		}
-		if resp, ok, err := purgarRuntimeOrdersDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), estados, tipos, strings.TrimSpace(actor)); ok {
+		if olderThanMinutes < 0 {
+			return fmt.Errorf("--older-than-minutes no puede ser negativo")
+		}
+		if resp, ok, err := purgarRuntimeOrdersDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), estados, tipos, olderThanMinutes, strings.TrimSpace(actor)); ok {
 			if err != nil {
 				return err
 			}
@@ -823,14 +827,15 @@ func purgarRuntimeHandlesDesdeAPI(agente, proyecto string, estados []string, act
 	return &resp, true, nil
 }
 
-func purgarRuntimeOrdersDesdeAPI(agente, proyecto string, estados, tipos []string, actor string) (*apiRuntimeOrdersPurgeResponse, bool, error) {
+func purgarRuntimeOrdersDesdeAPI(agente, proyecto string, estados, tipos []string, olderThanMinutes int, actor string) (*apiRuntimeOrdersPurgeResponse, bool, error) {
 	var resp apiRuntimeOrdersPurgeResponse
 	ok, err := apiPost("/api/runtime-orders/purgar", map[string]any{
-		"agente":   strings.TrimSpace(agente),
-		"proyecto": strings.TrimSpace(proyecto),
-		"estados":  estados,
-		"tipos":    tipos,
-		"actor":    strings.TrimSpace(actor),
+		"agente":             strings.TrimSpace(agente),
+		"proyecto":           strings.TrimSpace(proyecto),
+		"estados":            estados,
+		"tipos":              tipos,
+		"older_than_minutes": olderThanMinutes,
+		"actor":              strings.TrimSpace(actor),
 	}, &resp)
 	if !ok || err != nil {
 		return nil, ok, err
@@ -1282,6 +1287,7 @@ func init() {
 	runtimePurgarOrdenesCmd.Flags().String("proyecto", "", "Purga órdenes del proyecto indicado")
 	runtimePurgarOrdenesCmd.Flags().StringSlice("estado", []string{"completada", "fallida", "expirada", "cancelada"}, "Estados purgables; por seguridad solo terminales")
 	runtimePurgarOrdenesCmd.Flags().StringSlice("tipo", nil, "Tipos de runtime order a purgar")
+	runtimePurgarOrdenesCmd.Flags().Int("older-than-minutes", 60, "Purga solo órdenes terminales creadas hace más de N minutos")
 	runtimePurgarOrdenesCmd.Flags().String("actor", "orquesta", "Actor que solicita la purga")
 	runtimeTranscriptCmd.Flags().String("agente", "", "Filtrar transcript por agente")
 	runtimeTranscriptCmd.Flags().String("proyecto", "", "Filtrar transcript por proyecto")

@@ -6,72 +6,73 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"orquesta/db"
 )
 
 type fakeStore struct {
-	projectRef       string
-	projectResponse  *db.Proyecto
-	agentName        string
-	agentResponse    *db.Agente
-	runtimesFilter   db.FiltroRuntimes
-	runtimesResponse []*db.RuntimeInstance
-	treeFilter       db.FiltroRuntimes
-	treeResponse     []*db.RuntimeTreeNode
-	runtimeID        int64
-	runtimeResponse  *db.RuntimeInstance
-	handleID         int64
-	handleByIDResp   *db.RuntimeHandle
-	handlesFilter    *string
-	handlesResponse  []*db.RuntimeHandle
-	purgeFilter      db.FiltroPurgadoRuntimeHandles
-	purgeResponse    *db.PurgaRuntimeHandlesResultado
+	projectRef          string
+	projectResponse     *db.Proyecto
+	agentName           string
+	agentResponse       *db.Agente
+	runtimesFilter      db.FiltroRuntimes
+	runtimesResponse    []*db.RuntimeInstance
+	treeFilter          db.FiltroRuntimes
+	treeResponse        []*db.RuntimeTreeNode
+	runtimeID           int64
+	runtimeResponse     *db.RuntimeInstance
+	handleID            int64
+	handleByIDResp      *db.RuntimeHandle
+	handlesFilter       *string
+	handlesResponse     []*db.RuntimeHandle
+	purgeFilter         db.FiltroPurgadoRuntimeHandles
+	purgeResponse       *db.PurgaRuntimeHandlesResultado
 	purgeOrdersFilter   db.FiltroPurgadoRuntimeOrders
 	purgeOrdersResponse *db.PurgaRuntimeOrdersResultado
-	handleAgent      string
-	handleResponse   *db.RuntimeHandle
-	handleProjAgent  string
-	handleProjID     *int64
-	handleProjResp   *db.RuntimeHandle
-	eventsFilter     db.FiltroRuntimeEvents
-	eventsResp       []*db.RuntimeEvent
-	transcriptFilter db.FiltroRuntimeTranscript
-	transcriptResp   []*db.RuntimeTranscriptEntry
-	samplesID        int64
-	samplesLimit     int
-	samplesResponse  []*db.RuntimeTelemetrySample
-	createOrder      *db.RuntimeOrder
-	createOrderID    int64
-	ordersFilter     db.FiltroRuntimeOrders
-	ordersResponse   []*db.RuntimeOrder
-	createMailbox    *db.RuntimeMailboxMessage
-	createMailboxID  int64
-	mailboxFilter    db.FiltroRuntimeMailbox
-	mailboxResponse  []*db.RuntimeMailboxMessage
-	deliveredID      int64
-	consumedID       int64
-	createCheck      *db.RuntimeCheckpoint
-	createCheckID    int64
-	checkFilter      db.FiltroRuntimeCheckpoints
-	checkResponse    []*db.RuntimeCheckpoint
-	checkpointID     int64
-	checkpointResp   *db.RuntimeCheckpoint
-	latestAgent      string
-	latestProjectID  *int64
-	latestResp       *db.RuntimeCheckpoint
-	memoryFilter     db.FiltroEntidadesMemoria
-	memoryResponse   []*db.EntidadMemoria
-	memoryUpsert     *db.EntidadMemoria
-	memoryUpsertID   int64
-	memoryName       string
-	memoryProjectID  *int64
-	memoryEntityResp *db.EntidadMemoria
-	auditAgent       string
-	auditAction      string
-	auditEntity      string
-	auditEntityID    int64
-	auditDetail      string
+	handleAgent         string
+	handleResponse      *db.RuntimeHandle
+	handleProjAgent     string
+	handleProjID        *int64
+	handleProjResp      *db.RuntimeHandle
+	eventsFilter        db.FiltroRuntimeEvents
+	eventsResp          []*db.RuntimeEvent
+	transcriptFilter    db.FiltroRuntimeTranscript
+	transcriptResp      []*db.RuntimeTranscriptEntry
+	samplesID           int64
+	samplesLimit        int
+	samplesResponse     []*db.RuntimeTelemetrySample
+	createOrder         *db.RuntimeOrder
+	createOrderID       int64
+	ordersFilter        db.FiltroRuntimeOrders
+	ordersResponse      []*db.RuntimeOrder
+	createMailbox       *db.RuntimeMailboxMessage
+	createMailboxID     int64
+	mailboxFilter       db.FiltroRuntimeMailbox
+	mailboxResponse     []*db.RuntimeMailboxMessage
+	deliveredID         int64
+	consumedID          int64
+	createCheck         *db.RuntimeCheckpoint
+	createCheckID       int64
+	checkFilter         db.FiltroRuntimeCheckpoints
+	checkResponse       []*db.RuntimeCheckpoint
+	checkpointID        int64
+	checkpointResp      *db.RuntimeCheckpoint
+	latestAgent         string
+	latestProjectID     *int64
+	latestResp          *db.RuntimeCheckpoint
+	memoryFilter        db.FiltroEntidadesMemoria
+	memoryResponse      []*db.EntidadMemoria
+	memoryUpsert        *db.EntidadMemoria
+	memoryUpsertID      int64
+	memoryName          string
+	memoryProjectID     *int64
+	memoryEntityResp    *db.EntidadMemoria
+	auditAgent          string
+	auditAction         string
+	auditEntity         string
+	auditEntityID       int64
+	auditDetail         string
 }
 
 func (f *fakeStore) GetProject(ref string) (*db.Proyecto, error) {
@@ -198,31 +199,31 @@ func TestServiceDelegatesRuntimeQueries(t *testing.T) {
 	agent := "Codex2"
 	projectID := int64(7)
 	store := &fakeStore{
-		projectResponse:  &db.Proyecto{Slug: "orquestador"},
-		agentResponse:    &db.Agente{Nombre: "Codex2", Rol: "programador"},
-		runtimesResponse: []*db.RuntimeInstance{{ID: 5}},
-		treeResponse:     []*db.RuntimeTreeNode{{Runtime: &db.RuntimeInstance{ID: 10}}},
-		runtimeResponse:  &db.RuntimeInstance{ID: 10},
-		handleByIDResp:   &db.RuntimeHandle{ID: 16},
-		handlesResponse:  []*db.RuntimeHandle{{ID: 15}},
-		purgeResponse:    &db.PurgaRuntimeHandlesResultado{Deleted: 2, Estados: []string{"cerrado", "fallido"}},
+		projectResponse:     &db.Proyecto{Slug: "orquestador"},
+		agentResponse:       &db.Agente{Nombre: "Codex2", Rol: "programador"},
+		runtimesResponse:    []*db.RuntimeInstance{{ID: 5}},
+		treeResponse:        []*db.RuntimeTreeNode{{Runtime: &db.RuntimeInstance{ID: 10}}},
+		runtimeResponse:     &db.RuntimeInstance{ID: 10},
+		handleByIDResp:      &db.RuntimeHandle{ID: 16},
+		handlesResponse:     []*db.RuntimeHandle{{ID: 15}},
+		purgeResponse:       &db.PurgaRuntimeHandlesResultado{Deleted: 2, Estados: []string{"cerrado", "fallido"}},
 		purgeOrdersResponse: &db.PurgaRuntimeOrdersResultado{Deleted: 3, Estados: []string{"completada", "fallida"}, Tipos: []string{"send_instruction"}},
-		handleResponse:   &db.RuntimeHandle{ID: 16},
-		handleProjResp:   &db.RuntimeHandle{ID: 17},
-		eventsResp:       []*db.RuntimeEvent{{ID: 17, Kind: "auto_guidance_sent"}},
-		transcriptResp:   []*db.RuntimeTranscriptEntry{{ID: 18}},
-		samplesResponse:  []*db.RuntimeTelemetrySample{{ID: 20}},
-		createOrderID:    25,
-		ordersResponse:   []*db.RuntimeOrder{{ID: 30}},
-		createMailboxID:  35,
-		mailboxResponse:  []*db.RuntimeMailboxMessage{{ID: 40}},
-		createCheckID:    45,
-		checkResponse:    []*db.RuntimeCheckpoint{{ID: 50}},
-		checkpointResp:   &db.RuntimeCheckpoint{ID: 50},
-		latestResp:       &db.RuntimeCheckpoint{ID: 55},
-		memoryResponse:   []*db.EntidadMemoria{{ID: 60}},
-		memoryUpsertID:   61,
-		memoryEntityResp: &db.EntidadMemoria{ID: 62, Nombre: "decision"},
+		handleResponse:      &db.RuntimeHandle{ID: 16},
+		handleProjResp:      &db.RuntimeHandle{ID: 17},
+		eventsResp:          []*db.RuntimeEvent{{ID: 17, Kind: "auto_guidance_sent"}},
+		transcriptResp:      []*db.RuntimeTranscriptEntry{{ID: 18}},
+		samplesResponse:     []*db.RuntimeTelemetrySample{{ID: 20}},
+		createOrderID:       25,
+		ordersResponse:      []*db.RuntimeOrder{{ID: 30}},
+		createMailboxID:     35,
+		mailboxResponse:     []*db.RuntimeMailboxMessage{{ID: 40}},
+		createCheckID:       45,
+		checkResponse:       []*db.RuntimeCheckpoint{{ID: 50}},
+		checkpointResp:      &db.RuntimeCheckpoint{ID: 50},
+		latestResp:          &db.RuntimeCheckpoint{ID: 55},
+		memoryResponse:      []*db.EntidadMemoria{{ID: 60}},
+		memoryUpsertID:      61,
+		memoryEntityResp:    &db.EntidadMemoria{ID: 62, Nombre: "decision"},
 	}
 	service := NewService(store)
 
@@ -460,6 +461,47 @@ func TestPurgeInactiveRuntimeHandlesDelegatesAndAudits(t *testing.T) {
 		t.Fatalf("purgeFilter estados=%v", store.purgeFilter.Estados)
 	}
 	if store.auditAction != "purgar_runtime_handles" || store.auditAgent != "Codex1" {
+		t.Fatalf("audit inesperado agente=%q accion=%q detalle=%q", store.auditAgent, store.auditAction, store.auditDetail)
+	}
+}
+
+func TestPurgeTerminalRuntimeOrdersAplicaCutoffYAudita(t *testing.T) {
+	projectID := int64(9)
+	store := &fakeStore{
+		projectResponse:     &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		agentResponse:       &db.Agente{Nombre: "Codex5", Rol: "programador"},
+		purgeOrdersResponse: &db.PurgaRuntimeOrdersResultado{Deleted: 3, DeletedIDs: []int64{91, 88, 77}, Estados: []string{"completada", "fallida"}, Tipos: []string{"send_instruction"}},
+	}
+	service := NewService(store)
+	beforeCall := time.Now().UTC()
+
+	resultado, err := service.PurgeTerminalRuntimeOrders(RuntimeOrderPurgeRequest{
+		Agente:           "Codex5",
+		Proyecto:         "orquestador",
+		Estados:          []string{"completada", "fallida"},
+		Tipos:            []string{"send_instruction"},
+		OlderThanMinutes: 60,
+		Actor:            "Codex1",
+	})
+	if err != nil {
+		t.Fatalf("PurgeTerminalRuntimeOrders: %v", err)
+	}
+	if resultado == nil || resultado.Deleted != 3 {
+		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+	if store.purgeOrdersFilter.Agente == nil || *store.purgeOrdersFilter.Agente != "Codex5" {
+		t.Fatalf("purgeOrdersFilter agente=%v", store.purgeOrdersFilter.Agente)
+	}
+	if store.purgeOrdersFilter.ProyectoID == nil || *store.purgeOrdersFilter.ProyectoID != projectID {
+		t.Fatalf("purgeOrdersFilter proyecto=%v", store.purgeOrdersFilter.ProyectoID)
+	}
+	if store.purgeOrdersFilter.CreatedBefore == nil {
+		t.Fatalf("purgeOrdersFilter.CreatedBefore deberia estar informado")
+	}
+	if got := store.purgeOrdersFilter.CreatedBefore.UTC(); got.After(beforeCall.Add(-59*time.Minute)) || got.Before(beforeCall.Add(-61*time.Minute)) {
+		t.Fatalf("cutoff inesperado: %s", got.Format(time.RFC3339))
+	}
+	if store.auditAction != "purgar_runtime_orders" || store.auditAgent != "Codex1" || !strings.Contains(store.auditDetail, "older_than_minutes=60") {
 		t.Fatalf("audit inesperado agente=%q accion=%q detalle=%q", store.auditAgent, store.auditAction, store.auditDetail)
 	}
 }

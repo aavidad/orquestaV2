@@ -22,6 +22,7 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	var transcriptRuntimeID string
 	var transcriptHandleID string
 	var ordersProjectQuery string
+	var purgeOrdersReq map[string]any
 	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/api/status":
@@ -64,6 +65,7 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 				"estados":     []string{"cerrado", "fallido"},
 			})
 		case r.URL.Path == "/api/runtime-orders/purgar" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&purgeOrdersReq)
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"ok":          true,
 				"deleted":     3,
@@ -240,6 +242,9 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 		if !strings.Contains(outPurgeOrders, token) {
 			t.Fatalf("salida purgar-ordenes sin %q:\n%s", token, outPurgeOrders)
 		}
+	}
+	if got, ok := purgeOrdersReq["older_than_minutes"].(float64); !ok || int(got) != 60 {
+		t.Fatalf("older_than_minutes inesperado en request: %+v", purgeOrdersReq)
 	}
 
 	if err := runtimeTrazaCmd.Flags().Set("agente", "Codex1"); err != nil {

@@ -567,3 +567,9 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - `GetRuntimeHandle` y `GetRuntimeHandleBySesionID` pueden reconciliar y persistir compactacion de metadata legacy si el handle concreto aun conserva prompts o comandos crudos.
 - `ListarRuntimeHandles` y la API `/api/runtime-handles` no deben escribir sobre la BD para compactar toda la historia; en listado solo se compacta en memoria para mantener la vista operativa rapida.
 - `runtime_handles.metadata_json` no debe conservar prompts crudos ni comandos gigantes con el bootstrap completo embebido. Para observabilidad basta con resúmenes y comandos compactados que preserven detección/reanudación (`codex-perfil`, agente, wrapper, log).
+
+## Purga segura del control plane
+
+- `runtime purgar-ordenes` existe para limpiar ruido de pruebas y deuda terminal, pero debe trabajar con corte temporal conservador.
+- la purga de órdenes terminales no debe borrar actividad fresca; el camino oficial usa `older-than-minutes` y por defecto opera sobre órdenes con más de `60` minutos.
+- la limpieza de ruido se hace por daemon y con estados terminales (`completada`, `fallida`, `expirada`, `cancelada`), nunca sobre órdenes vivas.

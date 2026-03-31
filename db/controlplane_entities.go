@@ -97,10 +97,11 @@ type PurgaRuntimeHandlesResultado struct {
 }
 
 type FiltroPurgadoRuntimeOrders struct {
-	Agente     *string
-	ProyectoID *int64
-	Estados    []string
-	Tipos      []string
+	Agente        *string
+	ProyectoID    *int64
+	Estados       []string
+	Tipos         []string
+	CreatedBefore *time.Time
 }
 
 type PurgaRuntimeOrdersResultado struct {
@@ -403,6 +404,10 @@ func PurgarRuntimeOrdersTerminales(filtro FiltroPurgadoRuntimeOrders) (*PurgaRun
 		for _, tipo := range tipos {
 			args = append(args, tipo)
 		}
+	}
+	if filtro.CreatedBefore != nil && !filtro.CreatedBefore.IsZero() {
+		query += ` AND created_at < ?`
+		args = append(args, filtro.CreatedBefore.UTC())
 	}
 	query += ` ORDER BY id DESC`
 
