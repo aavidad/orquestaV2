@@ -582,6 +582,13 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 			MIMEType:    "text/markdown",
 		},
 		{
+			URITemplate: "orquesta://supervision/{supervisor}/briefing",
+			Name:        "briefing-supervisor",
+			Title:       "Briefing de supervisor",
+			Description: "Resumen operativo integral para el agente jefe: flota, cuota, tareas retenidas y frentes activos",
+			MIMEType:    "text/markdown",
+		},
+		{
 			URITemplate: "orquesta://proyectos/{slug}",
 			Name:        "proyecto-por-slug",
 			Title:       "Detalle de proyecto",
@@ -724,6 +731,13 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 			return nil, err
 		}
 		return resourceText(uri, "text/markdown", texto), nil
+	case strings.HasPrefix(uri, "orquesta://supervision/") && strings.HasSuffix(uri, "/briefing"):
+		supervisor := strings.TrimSuffix(strings.TrimPrefix(uri, "orquesta://supervision/"), "/briefing")
+		texto, err := buildSupervisorBriefing(supervisor)
+		if err != nil {
+			return nil, err
+		}
+		return resourceText(uri, "text/markdown", texto), nil
 	default:
 		return nil, fmt.Errorf("resource not found")
 	}
@@ -737,6 +751,14 @@ func listMCPPrompts() []mcpPrompt {
 			Description: "Devuelve el briefing operativo del agente usando reglas, skills, workflows y propuestas pendientes",
 			Arguments: []mcpPromptArgument{
 				{Name: "agente", Description: "Nombre del agente registrado en Orquesta", Required: true},
+			},
+		},
+		{
+			Name:        "orquesta.briefing.supervisor",
+			Title:       "Briefing de supervisor",
+			Description: "Devuelve el briefing operativo integral para el agente jefe que coordina la flota",
+			Arguments: []mcpPromptArgument{
+				{Name: "supervisor", Description: "Nombre del supervisor operativo, por ejemplo OpenClaw", Required: false},
 			},
 		},
 		{
@@ -781,6 +803,25 @@ func getMCPPrompt(name string, args map[string]any) (map[string]any, error) {
 		}
 		return map[string]any{
 			"description": "Briefing operativo generado desde la BD de Orquesta",
+			"messages": []mcpPromptMessage{
+				{
+					Role: "user",
+					Content: map[string]any{
+						"type": "text",
+						"text": briefing,
+					},
+				},
+			},
+		}, nil
+
+	case "orquesta.briefing.supervisor":
+		supervisor := optionalStringArg(args, "supervisor")
+		briefing, err := buildSupervisorBriefing(supervisor)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"description": "Briefing operativo integral para el supervisor de Orquesta",
 			"messages": []mcpPromptMessage{
 				{
 					Role: "user",
@@ -1497,6 +1538,119 @@ func buildAgentBriefing(agente string) (string, error) {
 	}
 
 	return strings.TrimSpace(b.String()) + "\n", nil
+}
+
+func buildSupervisorBriefing(supervisor string) (string, error) {
+	supervisor = strings.TrimSpace(supervisor)
+	if supervisor == "" {
+		if cfg, err := db.ConfigGet("openclaw_gateway_operator"); err == nil && strings.TrimSpace(cfg) != "" {
+			supervisor = strings.TrimSpace(cfg)
+		} else {
+			supervisor = "OpenClaw"
+		}
+	}
+	status, err := statusService.FetchStatus()
+	if err != nil {
+		return "", err
+	}
+
+	conectados := status.AgentesActivos
+	enCuota := agentesNoActivosConCuota(status.Agentes)
+	retenidas := tareasRetenidasPorCuota(status.TareasActivas, status.Agentes)
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Briefing de supervisor: %s\n\n", supervisor)
+	b.WriteString("## Doctrina canonica\n")
+	fmt.Fprintf(&b, "- Lectura obligatoria: %s\n", db.RutaDoctrinaCanonica)
+	b.WriteString("- Orquesta es la fuente de verdad para flota, cuota, tareas, handoffs y runtime.\n")
+	b.WriteString("- El supervisor no recompone estado desde documentos sueltos ni desde rutas locales; decide sobre el estado vivo del daemon.\n\n")
+
+	fmt.Fprintf(&b, "## Estado de flota\n")
+	fmt.Fprintf(&b, "- Conectados y disponibles: %d\n", len(conectados))
+	fmt.Fprintf(&b, "- En enfriamiento/cuota: %d\n", len(enCuota))
+	fmt.Fprintf(&b, "- Con trabajo activo: %d\n\n", len(status.AgentesTrabajando))
+
+	if len(conectados) > 0 {
+		b.WriteString("### Workers disponibles\n")
+		for _, agente := range conectados {
+			if agente == nil {
+				continue
+			}
+			fmt.Fprintf(&b, "- %s: %s\n", strings.TrimSpace(agente.Nombre), resumenSupervisorAgente(agente))
+		}
+		b.WriteString("\n")
+	}
+	if len(enCuota) > 0 {
+		b.WriteString("### Workers fuera del pool por cuota\n")
+		for _, agente := range enCuota {
+			if agente == nil {
+				continue
+			}
+			fmt.Fprintf(&b, "- %s: %s\n", strings.TrimSpace(agente.Nombre), resumenSupervisorAgente(agente))
+		}
+		b.WriteString("\n")
+	}
+	if len(status.TareasActivas) > 0 {
+		b.WriteString("## Frentes activos\n")
+		for _, tarea := range status.TareasActivas {
+			fmt.Fprintf(&b, "- #%d [%s] %s", tarea.ID, tarea.Estado, strings.TrimSpace(tarea.Titulo))
+			if strings.TrimSpace(tarea.Agente) != "" {
+				fmt.Fprintf(&b, " -> %s", strings.TrimSpace(tarea.Agente))
+			}
+			if strings.TrimSpace(tarea.Modulo) != "" {
+				fmt.Fprintf(&b, " (%s)", strings.TrimSpace(tarea.Modulo))
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+	if len(retenidas) > 0 {
+		b.WriteString("## Tareas retenidas por cuota\n")
+		for _, tarea := range retenidas {
+			fmt.Fprintf(&b, "- #%d %s -> %s\n", tarea.ID, strings.TrimSpace(tarea.Titulo), strings.TrimSpace(tarea.Agente))
+		}
+		b.WriteString("\n")
+	}
+	if len(status.PropuestasResumen) > 0 {
+		b.WriteString("## Propuestas abiertas\n")
+		for _, propuesta := range status.PropuestasResumen {
+			fmt.Fprintf(&b, "- %s: %s (✓%d ✗%d ⏳%d)\n", strings.TrimSpace(propuesta.Codigo), strings.TrimSpace(propuesta.Titulo), propuesta.Acuerdo, propuesta.Desacuerdo, propuesta.Pendiente)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("## Instrucciones operativas para el supervisor\n")
+	b.WriteString("- Reparte trabajo evitando solapes de modulo cuando haya alternativa.\n")
+	b.WriteString("- Prioriza workers con cuota activa y frentes no bloqueados.\n")
+	b.WriteString("- Si un worker cae a cuota, no lo reanimes a mano antes de `reanimar_at` y del presupuesto visible.\n")
+	b.WriteString("- Integra solo cambios con pruebas dirigidas y sin abrir rutas paralelas.\n")
+
+	return strings.TrimSpace(b.String()) + "\n", nil
+}
+
+func resumenSupervisorAgente(a *db.Agente) string {
+	if a == nil {
+		return ""
+	}
+	partes := make([]string, 0, 6)
+	if strings.TrimSpace(a.Rol) != "" {
+		partes = append(partes, strings.TrimSpace(a.Rol))
+	}
+	if a.CuotaRestantePct != nil {
+		partes = append(partes, fmt.Sprintf("efectivo %d%%", *a.CuotaRestantePct))
+	}
+	if strings.TrimSpace(a.PresupuestoVentana) != "" {
+		partes = append(partes, "ventana "+strings.TrimSpace(a.PresupuestoVentana))
+	}
+	if a.ReanimarAt != nil && !a.ReanimarAt.IsZero() && a.ReanimarAt.After(time.Now().UTC()) {
+		partes = append(partes, "cooldown hasta "+a.ReanimarAt.Local().Format("2006-01-02 15:04"))
+	}
+	if strings.TrimSpace(a.CuentaEmail) != "" {
+		partes = append(partes, "cuenta "+strings.TrimSpace(a.CuentaEmail))
+	}
+	if strings.TrimSpace(a.EstadoCuota) != "" && strings.TrimSpace(a.EstadoCuota) != "activo" {
+		partes = append(partes, "cuota:"+strings.TrimSpace(a.EstadoCuota))
+	}
+	return strings.Join(partes, " · ")
 }
 
 func buildProposalReviewPrompt(codigo, agente string) (string, error) {

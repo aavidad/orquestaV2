@@ -692,6 +692,13 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - evitar mandar dos agentes al mismo `modulo` si existe otra opción libre
   - preferir la afinidad de `modulo` del propio agente dentro del proyecto cuando no genere conflicto real
 - la afinidad de proyecto ya no basta; el orquestador profesional también debe preservar afinidad de frente/módulo para reducir pisadas, conflictos y handoffs innecesarios.
+- el agente jefe (`OpenClaw`) no debe entrar a dirigir la flota con contexto parcial. Orquesta debe exponer un `briefing de supervisor` canónico con:
+  - flota conectada y disponible
+  - agentes fuera del pool por cuota/cooldown
+  - frentes activos
+  - tareas retenidas por cuota
+  - propuestas abiertas
+- ese briefing de supervisor debe salir del estado vivo del daemon y exponerse por MCP como prompt/recurso de primera clase; no se recompone desde varios endpoints ni desde documentos estáticos.
 - para `codex_token_count_observed`, si falta la clave de configuración específica, el TTL por defecto observado sigue siendo `3600s`; no puede caer silenciosamente al TTL genérico de `300s`, porque eso oculta agotamientos reales de la ventana `5h`.
 - un presupuesto fresco y crítico observado debe proyectarse también sobre `estado_cuota` visible del agente (`enfriamiento` o `agotado`) aunque la fila persistida aún no haya sido actualizada por un batch posterior.
 - la identidad de cuenta del agente (`usuario` / `correo`) debe salir solo de artefactos ya persistidos del runtime o del presupuesto (`raw_snapshot_json`, `metadata_json`). No se abre una segunda fuente de verdad ni se inventan credenciales.

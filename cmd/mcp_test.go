@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"orquesta/db"
 )
@@ -171,6 +172,66 @@ func TestMCPPromptBriefingIncluyeReglasYPropuestasPendientes(t *testing.T) {
 		}
 		if !strings.Contains(text, "orquesta.skills.detectar-carencia") {
 			t.Fatalf("falta el preflight de skills en el briefing: %s", text)
+		}
+	})
+}
+
+func TestMCPPromptBriefingSupervisorIncluyeFlotaYRetenidasPorCuota(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrando Codex3: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex5", "programador"); err != nil {
+			t.Fatalf("registrando Codex5: %v", err)
+		}
+		if _, err := db.IniciarSesion("Codex3"); err != nil {
+			t.Fatalf("iniciar sesion Codex3: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE agentes SET estado_sesion='esperando', estado_cuota='activo' WHERE nombre='Codex3'`); err != nil {
+			t.Fatalf("activar Codex3: %v", err)
+		}
+		reset := time.Now().UTC().Add(2 * time.Hour)
+		if _, err := db.DB.Exec(`UPDATE agentes SET activo=0, estado_cuota='enfriamiento', reanimar_at=? WHERE nombre='Codex5'`, reset); err != nil {
+			t.Fatalf("enfriar Codex5: %v", err)
+		}
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Retenida por cuota",
+			Descripcion: "Debe aparecer en el briefing de supervisor",
+			ProyectoID:  &proyectoID,
+			Modulo:      "api",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE tareas SET estado='asignada', agente='Codex5' WHERE id=?`, tareaID); err != nil {
+			t.Fatalf("asignar tarea retenida: %v", err)
+		}
+
+		result, err := getMCPPrompt("orquesta.briefing.supervisor", map[string]any{"supervisor": "OpenClaw"})
+		if err != nil {
+			t.Fatalf("getMCPPrompt supervisor: %v", err)
+		}
+		messages, ok := result["messages"].([]mcpPromptMessage)
+		if !ok || len(messages) != 1 {
+			t.Fatalf("mensajes inesperados: %#v", result["messages"])
+		}
+		content, _ := messages[0].Content.(map[string]any)
+		text, _ := content["text"].(string)
+		for _, token := range []string{
+			"Briefing de supervisor: OpenClaw",
+			"Workers disponibles",
+			"Codex3",
+			"Workers fuera del pool por cuota",
+			"Codex5",
+			"Tareas retenidas por cuota",
+			"Retenida por cuota",
+		} {
+			if !strings.Contains(text, token) {
+				t.Fatalf("falta %q en el briefing de supervisor: %s", token, text)
+			}
 		}
 	})
 }

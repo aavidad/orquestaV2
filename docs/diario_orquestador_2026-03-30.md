@@ -4541,3 +4541,27 @@ Validacion:
 
 - `go test ./db -run 'Test(BuscarSiguienteTareaLibreParaAgenteEvitaModuloYaOcupadoSiHayAlternativa|BuscarSiguienteTareaLibreParaAgentePrefiereAfinidadDeModuloSinSolape|PlanificarTareasAutomaticamenteAutoasignaYEncolaStart|PlanificarTareasAutomaticamenteRecuperaTareaHuerfanaYLaReasigna)' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — MCP ya expone briefing canónico para el supervisor `OpenClaw`
+
+Hallazgo:
+
+- Orquesta ya tenía briefing por agente, pero seguía faltando la vista que necesita un jefe operativo real
+- para que `OpenClaw` pueda asumir la jefatura del orquestador, no basta con reglas/skills/tareas sueltas; necesita una sola pieza de contexto con flota, cuota, tareas retenidas y frentes activos
+
+Decision:
+
+- crear un `briefing de supervisor` canónico para `OpenClaw`
+- exponerlo por MCP como prompt y recurso de primera clase
+- construirlo desde el `status` vivo del daemon, no recomponiéndolo desde documentación o endpoints dispersos
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(MCPPromptBriefingIncluyeReglasYPropuestasPendientes|MCPPromptBriefingSupervisorIncluyeFlotaYRetenidasPorCuota)' -count=1`
+- `go build -o ./orquesta .`
