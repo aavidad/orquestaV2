@@ -3579,3 +3579,30 @@ Resultado vivo:
 - `Codex1` ya no deja `governance_refresh` pendiente durante el cooldown
 - `./orquesta runtime mailbox --to Codex1 --estado pendiente` vuelve a vacio
 - el daemon sigue sano con `Health RPC: OK`
+
+## 2026-03-31 — El transcript PTY no debe tragar fragmentos de control
+
+Hallazgo:
+
+- en la flota viva seguian apareciendo en transcript entradas recientes de `pty_out` con restos tipo `BEL/BS` y fragmentos de un solo caracter (`r`, `"`, etc.)
+- eso no rompia la entrega, pero ensuciaba diagnostico y abria la puerta a tomar ruido de repintado como actividad real del runtime
+
+Decision:
+
+- endurecer `limpiarLineaTranscript()` para eliminar caracteres de control residuales del PTY antes de clasificar o registrar la linea
+- mantener la doctrina de que solo el texto semantico cuenta como output util; fragmentos de repintado no deben entrar en transcript ni derivar eventos
+
+Codigo:
+
+- [db/runtime_transcript.go](/home/alberto/Trabajo/orquesta/db/runtime_transcript.go)
+- [db/runtime_transcript_test.go](/home/alberto/Trabajo/orquesta/db/runtime_transcript_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'TestIngestarRuntimeTranscriptHandle(NoClasificaRuidoOSCSpinner|DescartaFragmentosPTYConControlChars|FiltraRuidoYClasificaPanic|RecortaPreambuloScriptEnRuntimePanic)' -count=1`
+
+Resultado vivo:
+
+- el transcript futuro ya no debe registrar restos `BEL/BS` ni repintados de un solo caracter como output util
+- la observabilidad del runtime queda mas limpia y el control plane depende menos de ruido del TUI

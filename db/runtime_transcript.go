@@ -557,6 +557,16 @@ func limpiarLineaTranscript(raw string) string {
 	raw = oscTranscriptRegexp.ReplaceAllString(raw, "")
 	raw = ansiTranscriptRegexp.ReplaceAllString(raw, "")
 	raw = strings.ReplaceAll(raw, "\x00", "")
+	raw = strings.Map(func(r rune) rune {
+		switch {
+		case r == '\t':
+			return ' '
+		case unicode.IsControl(r):
+			return -1
+		default:
+			return r
+		}
+	}, raw)
 	raw = recortarPreambuloSistemaHastaFallo(raw)
 	raw = strings.TrimSpace(raw)
 	return raw
