@@ -252,6 +252,7 @@ Contrato minimo obligatorio para `runtime_orders`:
 - el runner de mailbox no se limita a `interactive`, `session_resume` y `coordinated_restart`: cuando exista un runtime supervisado por Orquesta con `stdin_path/supervisor_ref` reales, debe materializar `send_instruction` por un batch propio de `supervisor_local`
 - ese batch no puede decidir con metadata pobre; antes de enrutar debe rehidratar el handle desde el estado observado del supervisor y solo despues evaluar si hay entrega caliente supervisada
 - la `delivery_attempt_signature` de esos intentos debe registrar `supervisor_local|handle|session` para no mezclarlos con `bootstrap_only` ni con `session_resume`
+- un `watchdog` no puede quedarse pendiente cuando el agente ya está conscientemente aparcado por cuota: si el agente está en `estado_cuota=enfriamiento` y su handle vigente está `pausado`, el runner debe consumir ese watchdog como deuda ya satisfecha, no intentar reanimarlo
 - `send_instruction` no usa la misma `lease` que `start`/`handoff`: su ventana debe ser corta y operativa para que un `session_resume` colgado no secuestre `runtime_orders` durante minutos. La `lease` general sigue siendo larga para ciclo de vida, pero la de `send_instruction` es especifica y mas corta
 - si un `start` levanta runtime real con bootstrap inyectado pero sin `handoff/resume` pendiente, ese propio `start` debe hacer `ack` de los mailbox bootstrap incluidos; no se puede dejar esa continuidad pendiente por falta de lease formal
 

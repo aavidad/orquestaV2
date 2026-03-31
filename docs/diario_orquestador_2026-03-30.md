@@ -1900,3 +1900,35 @@ Validacion:
   - `./orquesta runtime ordenes --agente Codex4 | head -n 10` muestra `#80397 send_instruction completada`
   - `./orquesta runtime ordenes --agente Codex5 | head -n 10` muestra `#80396 send_instruction completada`
   - `./orquesta runtime transcript --agente Codex4 --limit 4` ya registra `stdin`
+
+## 2026-03-31T08:5xZ - el `watchdog` no revive agentes ya pausados por cuota
+
+Problema:
+
+- `Codex2` seguia acumulando `runtime_mailbox watchdog` pendiente aunque Orquesta ya lo tenia en `estado_cuota=enfriamiento`
+- el handle vivo de `Codex2` estaba `pausado`, así que ese watchdog ya no representaba trabajo real sino deuda de cola
+
+Decision:
+
+- si un watchdog apunta a un agente en `enfriamiento` y el handle vigente ya está `pausado`, el runner debe consumirlo
+- ese caso no debe intentar reanimar al agente ni dejar basura pendiente hasta que acabe el cooldown
+
+Cambios:
+
+- `cmd/controlplane_support.go`
+  - `reconciliarRuntimeMailboxWatchdogSinHandleBatch()` ahora consume también watchdogs satisfechos por enfriamiento
+  - nueva helper `watchdogPuedeConsumirsePorEnfriamiento(...)`
+- `cmd/controlplane_support_test.go`
+  - nueva regresion `TestProcesarRuntimeMailboxBatchConsumeWatchdogEnEnfriamiento`
+- `docs/BIBLIA_APP_ORQUESTA.md`
+  - queda fijado que el watchdog no despierta agentes ya pausados conscientemente por cuota
+
+Validacion:
+
+- `go test ./cmd -run 'TestProcesarRuntimeMailboxBatch(ConsumeWatchdogSinHandleActivo|ConsumeWatchdogEnEnfriamiento)' -count=1` => OK
+- `go build -o ./orquesta .` => OK
+- validacion viva:
+  - antes del cambio, `Codex2` mantenia `runtime_mailbox #64496` (`watchdog`) en `pendiente`
+  - tras reiniciar el daemon y dejar correr el runner, `./orquesta runtime mailbox --to Codex2 --estado pendiente` ya no devuelve filas
+  - `./orquesta runtime handles --agente Codex2 | head -n 8` sigue mostrando el handle `369` como `pausado`
+  - conclusion: la cola deja de mentir y el agente no se reanima por error durante el cooldown

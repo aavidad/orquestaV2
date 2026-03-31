@@ -178,6 +178,19 @@ func reconciliarRuntimeMailboxWatchdogSinHandleBatch() (int, error) {
 		if err != nil {
 			return total, err
 		}
+		if watchdogPuedeConsumirsePorEnfriamiento(msg, handle) {
+			if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+				return total, err
+			}
+			if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+				return total, err
+			}
+			db.Audit("orquesta", "runtime_mailbox_watchdog_enfriamiento", "runtime_mailbox", msg.ID,
+				fmt.Sprintf("agente=%s proyecto_id=%s watchdog consumido por agente en enfriamiento",
+					strings.TrimSpace(msg.ToAgente), runtimeMailboxProyectoDetalle(msg.ProyectoID)))
+			total++
+			continue
+		}
 		if handle != nil {
 			continue
 		}
@@ -193,6 +206,20 @@ func reconciliarRuntimeMailboxWatchdogSinHandleBatch() (int, error) {
 		total++
 	}
 	return total, nil
+}
+
+func watchdogPuedeConsumirsePorEnfriamiento(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle) bool {
+	if msg == nil || handle == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(handle.Estado), "pausado") {
+		return false
+	}
+	agente, err := db.GetAgente(strings.TrimSpace(msg.ToAgente))
+	if err != nil || agente == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "enfriamiento")
 }
 
 func runtimeMailboxProyectoDetalle(proyectoID *int64) string {
