@@ -5505,6 +5505,15 @@ func RuntimeHandleMailboxDeliveryMode(handle *RuntimeHandle) string {
 	}
 	meta := mapFromJSON(handle.MetadataJSON)
 	caps := mapFromJSON(handle.CapabilitiesJSON)
+	if RuntimeHandlePermiteEntregaCalienteSupervisada(handle) {
+		if mode := runtimeagente.NormalizeMailboxDeliveryMode(stringFromMap(caps, "mailbox_delivery_mode", "")); mode != "" {
+			return mode
+		}
+		if mode := runtimeagente.NormalizeMailboxDeliveryMode(stringFromMap(meta, "mailbox_delivery_mode", "")); mode != "" {
+			return mode
+		}
+		return runtimeagente.MailboxDeliveryBootstrapOnly
+	}
 	if runtimeHandleUsaCodexTTYInestable(meta) && runtimeHandleTieneExternalSessionID(handle, nil) {
 		return runtimeagente.MailboxDeliverySessionResume
 	}
@@ -5571,9 +5580,6 @@ func RuntimeHandlePermiteEntregaCalienteSupervisada(handle *RuntimeHandle) bool 
 		return false
 	}
 	meta := mapFromJSON(handle.MetadataJSON)
-	if runtimeHandleUsaCodexTTYInestable(meta) {
-		return false
-	}
 	if !strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "driver", "")), "process_pty_cli") {
 		return false
 	}
@@ -5582,6 +5588,9 @@ func RuntimeHandlePermiteEntregaCalienteSupervisada(handle *RuntimeHandle) bool 
 	}
 	if strings.TrimSpace(stringFromMap(meta, "supervisor_ref", "")) == "" {
 		return false
+	}
+	if runtimeHandleUsaCodexTTYInestable(meta) {
+		return true
 	}
 	return true
 }

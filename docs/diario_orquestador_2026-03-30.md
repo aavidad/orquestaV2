@@ -1821,3 +1821,41 @@ Validacion:
   - `./orquesta runtime nudge Codex3 ... --kind autonomia --proyecto orquestador` => `#80382`
   - el batch materializo `#80387 send_instruction`
   - `#80387` entro en `ejecutando` con `lease_expires_at=2026-03-31T08:33:30Z`, es decir ~35s, no ~120s
+
+## 2026-03-31T08:4xZ - Codex supervisado separa `interactive=false` de `supervisor_local=true`
+
+Problema:
+
+- el nucleo seguia tratando `codex-perfil` como si toda entrega caliente fuese equivalente a `send_input` interactivo
+- eso congelaba el contrato en falso: aunque el handle activo tuviese `stdin_path`, `supervisor_ref` y supervision local real, `RuntimeHandlePermiteEntregaCalienteSupervisada(...)` devolvia `false`
+- el efecto visible era que `Codex3` y `Codex5` seguian cayendo a `session_resume` o dejando mailbox pendiente aunque el runtime supervisado ya estaba vivo y trazable
+
+Decision:
+
+- separar de forma definitiva dos conceptos distintos:
+  - `can_send_input=false` sigue prohibiendo el input interactivo generico para Codex
+  - `supervisor_local=true` queda permitido cuando el handle real es `process_pty_cli` y trae `stdin_path` + `supervisor_ref`
+- `session_resume` deja de ser el camino preferente para un Codex ya supervisado; pasa a fallback cuando no existe entrega caliente supervisada real
+
+Cambios:
+
+- `db/controlplane_entities.go`
+  - `RuntimeHandlePermiteEntregaCalienteSupervisada(...)` ya no excluye a Codex por ser Codex si el handle tiene supervision local real
+  - `RuntimeHandleMailboxDeliveryMode(...)` prioriza el contrato observado del supervisor local antes de degradar a `session_resume`
+- `db/controlplane_entities_test.go`
+  - `TestRuntimeHandlePermiteEntregaCalienteSupervisadaExigeSupervisorYStdin`
+  - `TestRuntimeHandleMailboxDeliveryModeRespetaCapacidadesYFallbacks`
+  - `TestRuntimeOrderSendInstructionCodexSupervisadoUsaSupervisorLocal`
+- `docs/BIBLIA_APP_ORQUESTA.md`
+  - queda fijado que para Codex sigue prohibido el `interactive` generico, pero no la entrega caliente supervisada por Orquesta
+
+Validacion:
+
+- `go test ./db -run 'TestRuntimeHandlePermiteEntregaCalienteSupervisadaExigeSupervisorYStdin|TestRuntimeHandleMailboxDeliveryModeRespetaCapacidadesYFallbacks|TestRuntimeOrderSendInstructionCodexSupervisadoUsaSupervisorLocal|TestRuntimeOrderSendInstructionHaceFallbackAMailboxCuandoHandleNoAdmiteInputInteractivo|TestRuntimeOrderSendInstructionMailboxSupersedeSesionObsoleta|TestRuntimeOrderSendInstructionMailboxSeCompletaDejandoLaVerdadEnMailboxSiNoHayHandleEntregable' -count=1` => OK
+- `go build -o ./orquesta .` => OK
+- validacion viva:
+  - daemon reiniciado con el binario nuevo (`pid=3658025`, `Health RPC: OK`)
+  - `./orquesta runtime orden-nueva Codex3 send_instruction --proyecto orquestador --payload '{...}'` => `#80393`
+  - `./orquesta runtime ordenes --agente Codex3 | head -n 8` muestra `#80393` `completada`
+  - `./orquesta runtime transcript --agente Codex3 --limit 5` registra `stdin` con `prueba directa supervisor local codex 2026-03-31T08:41Z`
+  - conclusion: el camino `supervisor_local` ya funciona para Codex supervisado sin reabrir el canal `interactive`

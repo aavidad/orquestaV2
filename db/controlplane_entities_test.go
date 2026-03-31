@@ -2405,10 +2405,10 @@ func TestRuntimeHandlePermiteEntregaCalienteSupervisadaExigeSupervisorYStdin(t *
 	}) {
 		t.Fatal("con supervisor_ref y stdin_path deberia permitir entrega caliente supervisada")
 	}
-	if RuntimeHandlePermiteEntregaCalienteSupervisada(&RuntimeHandle{
+	if !RuntimeHandlePermiteEntregaCalienteSupervisada(&RuntimeHandle{
 		MetadataJSON: `{"driver":"process_pty_cli","stdin_path":"/tmp/pty.stdin","supervisor_ref":"/tmp/ref","rendered_command":"codex-perfil Codex2","can_send_input":false}`,
 	}) {
-		t.Fatal("codex PTY no deberia permitir entrega caliente supervisada aunque tenga supervisor_ref y stdin_path")
+		t.Fatal("codex PTY supervisado deberia permitir entrega caliente sin reabrir stdin interactivo")
 	}
 }
 
@@ -2420,6 +2420,14 @@ func TestRuntimeHandleMailboxDeliveryModeRespetaCapacidadesYFallbacks(t *testing
 		CapabilitiesJSON: `{"mailbox_delivery_mode":"bootstrap_only","can_send_input":false}`,
 	}); got != runtimeagente.MailboxDeliveryBootstrapOnly {
 		t.Fatalf("modo explicito inesperado: %s", got)
+	}
+	if got := RuntimeHandleMailboxDeliveryMode(&RuntimeHandle{
+		Transporte:       "cli",
+		HandleKind:       "process",
+		CapabilitiesJSON: `{"mailbox_delivery_mode":"bootstrap_only","can_send_input":false}`,
+		MetadataJSON:     `{"driver":"process_pty_cli","stdin_path":"/tmp/pty.stdin","supervisor_ref":"/tmp/ref","rendered_command":"codex-perfil Codex2"}`,
+	}); got != runtimeagente.MailboxDeliveryBootstrapOnly {
+		t.Fatalf("codex supervisado deberia preservar bootstrap_only como modo durable base: %s", got)
 	}
 	if got := RuntimeHandleMailboxDeliveryMode(&RuntimeHandle{
 		Transporte:   "cli",
@@ -2792,7 +2800,7 @@ func TestGuardarSesionActivaPreservaMetadataRicaDelHandle(t *testing.T) {
 	}
 }
 
-func TestRuntimeOrderSendInstructionCodexSupervisadoSigueCayendoAMailbox(t *testing.T) {
+func TestRuntimeOrderSendInstructionCodexSupervisadoUsaSupervisorLocal(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {
@@ -2900,13 +2908,23 @@ func TestRuntimeOrderSendInstructionCodexSupervisadoSigueCayendoAMailbox(t *test
 	if err != nil {
 		t.Fatalf("get send order final: %v", err)
 	}
-	if sendOrder.Estado != "completada" || !strings.Contains(sendOrder.ResultadoJSON, `"mailbox_id"`) {
-		t.Fatalf("codex supervisado deberia seguir cayendo a mailbox: %+v", sendOrder)
+	if sendOrder.Estado != "completada" || !strings.Contains(sendOrder.ResultadoJSON, `"delivery_path":"supervisor_local"`) {
+		t.Fatalf("codex supervisado deberia usar supervisor_local: %+v", sendOrder)
 	}
 	if strings.TrimSpace(logPath) != "" {
-		time.Sleep(150 * time.Millisecond)
-		if data, err := os.ReadFile(logPath); err == nil && strings.Contains(string(data), "hola codex mailbox seguro") {
-			t.Fatalf("codex no deberia recibir stdin directa: %s", string(data))
+		deadline := time.Now().Add(2 * time.Second)
+		for {
+			data, err := os.ReadFile(logPath)
+			if err == nil && strings.Contains(string(data), "hola codex mailbox seguro") {
+				break
+			}
+			if time.Now().After(deadline) {
+				if err != nil {
+					t.Fatalf("leer log: %v", err)
+				}
+				t.Fatalf("codex supervisado deberia recibir la instruccion por supervisor local: %s", string(data))
+			}
+			time.Sleep(50 * time.Millisecond)
 		}
 	}
 }
