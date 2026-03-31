@@ -3062,3 +3062,27 @@ Validacion:
   - el dashboard ya pinta `cuenta` y `usuario` cuando existen en snapshots persistidos
   - el dashboard ya muestra `efectivo`, `diario` y `semanal` con su `reset` propio
   - la ventana `sesión` también aparece cuando el snapshot trae datos suficientes para calcular ratio (`window_started_at`, `reset_at`, `remaining_seconds`)
+
+## 2026-03-31 — la vista de agentes y la API ya exponen cuenta y cuota
+
+Hallazgo:
+
+- el dashboard ya estaba alineado, pero la vista operativa `/agentes` y el detalle `/agentes/:nombre` seguían sin mostrar qué cuenta estaba detrás del agente ni el desglose completo de presupuesto
+- además el contrato JSON de `/api/agentes` y `/api/status` lo exponía por serialización implícita, pero no estaba congelado con un test explícito
+
+Decision:
+
+- el panel de agentes pasa a mostrar `cuenta`, `usuario`, cuota `efectiva`, `diaria` y `semanal`
+- el detalle de agente añade esos mismos datos en el resumen lateral
+- se congela con test que `/api/agentes` y `/api/status` expongan cuenta y desglose de cuota cuando existan snapshots persistidos
+
+Codigo:
+
+- [cmd/agentes_web.go](/home/alberto/Trabajo/orquesta/cmd/agentes_web.go)
+- [cmd/agentes_web_test.go](/home/alberto/Trabajo/orquesta/cmd/agentes_web_test.go)
+- [cmd/api_test.go](/home/alberto/Trabajo/orquesta/cmd/api_test.go)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./cmd -run 'Test(WebAgentesPanelMuestraEstadoVivo|WebAgenteDetalleMuestraControlPlaneYDetalleOperativo|APIAgentesYStatusExponenCuentaYCuotaVisible|WebDashMuestraCuentaYVentanasDeCuotaAgente)' -count=1`
+- `go build -o ./orquesta .`

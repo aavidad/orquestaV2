@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"orquesta/db"
 	"orquesta/internal/a2ui"
@@ -302,6 +303,103 @@ func TestAPIStatusExponeResumenOperativoCompat(t *testing.T) {
 		if _, ok := payload[key]; !ok {
 			t.Fatalf("/api/status sin clave %q: %+v", key, payload)
 		}
+	}
+}
+
+func TestAPIAgentesYStatusExponenCuentaYCuotaVisible(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexCuenta", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:            "CodexCuenta",
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-cuenta-001",
+		Host:              "worker-api",
+	})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("UpsertRuntimeHandleDesdeSesion: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE sesion_id=?`,
+		`{"auth":{"email":"codexcuenta@example.com"},"username":"codexcuenta_user"}`, sesion.ID); err != nil {
+		t.Fatalf("update runtime handle metadata: %v", err)
+	}
+	remaining := int64(900)
+	resetSesion := time.Date(2026, 3, 31, 21, 0, 0, 0, time.UTC)
+	inicioSesion := resetSesion.Add(-5 * time.Hour)
+	if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+		SesionID:         sesion.ID,
+		WindowKind:       "5h",
+		WindowStartedAt:  &inicioSesion,
+		ResetAt:          &resetSesion,
+		RemainingSeconds: &remaining,
+		BudgetSource:     "runtime",
+		RawSnapshotJSON:  `{"account":{"email":"codexcuenta@example.com","username":"codexcuenta_user"}}`,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recAgentes := httptest.NewRecorder()
+	reqAgentes := httptest.NewRequest(http.MethodGet, "/api/agentes", nil)
+	mux.ServeHTTP(recAgentes, reqAgentes)
+	if recAgentes.Code != http.StatusOK {
+		t.Fatalf("status agentes inesperado: %d body=%s", recAgentes.Code, recAgentes.Body.String())
+	}
+	var agentesResp struct {
+		Agentes []*db.Agente `json:"agentes"`
+	}
+	if err := json.Unmarshal(recAgentes.Body.Bytes(), &agentesResp); err != nil {
+		t.Fatalf("decode agentes: %v", err)
+	}
+	var agenteAPI *db.Agente
+	for _, item := range agentesResp.Agentes {
+		if item != nil && item.Nombre == "CodexCuenta" {
+			agenteAPI = item
+			break
+		}
+	}
+	if agenteAPI == nil {
+		t.Fatalf("CodexCuenta no expuesto via /api/agentes: %+v", agentesResp.Agentes)
+	}
+	if agenteAPI.CuentaEmail != "codexcuenta@example.com" || agenteAPI.CuentaUsuario != "codexcuenta_user" {
+		t.Fatalf("cuenta inesperada via /api/agentes: %+v", agenteAPI)
+	}
+	if agenteAPI.PresupuestoSesionPct == nil || agenteAPI.PresupuestoDiarioPct == nil || agenteAPI.PresupuestoSemanalPct == nil {
+		t.Fatalf("desglose de cuota incompleto via /api/agentes: %+v", agenteAPI)
+	}
+
+	recStatus := httptest.NewRecorder()
+	reqStatus := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	mux.ServeHTTP(recStatus, reqStatus)
+	if recStatus.Code != http.StatusOK {
+		t.Fatalf("status global inesperado: %d body=%s", recStatus.Code, recStatus.Body.String())
+	}
+	var statusResp apiStatusResponse
+	if err := json.Unmarshal(recStatus.Body.Bytes(), &statusResp); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	var agenteStatus *db.Agente
+	for _, item := range statusResp.AgentesActivos {
+		if item != nil && item.Nombre == "CodexCuenta" {
+			agenteStatus = item
+			break
+		}
+	}
+	if agenteStatus == nil {
+		t.Fatalf("CodexCuenta no expuesto via /api/status: %+v", statusResp.AgentesActivos)
+	}
+	if agenteStatus.CuentaEmail != "codexcuenta@example.com" || agenteStatus.CuentaUsuario != "codexcuenta_user" {
+		t.Fatalf("cuenta inesperada via /api/status: %+v", agenteStatus)
+	}
+	if agenteStatus.PresupuestoVentana == "" || agenteStatus.PresupuestoResetAt == nil {
+		t.Fatalf("ventana efectiva incompleta via /api/status: %+v", agenteStatus)
 	}
 }
 

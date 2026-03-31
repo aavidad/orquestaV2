@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"orquesta/db"
 )
@@ -62,6 +63,24 @@ func TestWebAgentesPanelMuestraEstadoVivo(t *testing.T) {
 	}
 	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
 		t.Fatalf("upsert runtime handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE sesion_id=?`,
+		`{"auth":{"email":"codex1@example.com"},"username":"codex1_user"}`, sesion.ID); err != nil {
+		t.Fatalf("update runtime handle metadata: %v", err)
+	}
+	remaining := int64(900)
+	resetSesion := time.Date(2026, 3, 31, 21, 0, 0, 0, time.UTC)
+	inicioSesion := resetSesion.Add(-5 * time.Hour)
+	if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+		SesionID:         sesion.ID,
+		WindowKind:       "5h",
+		WindowStartedAt:  &inicioSesion,
+		ResetAt:          &resetSesion,
+		RemainingSeconds: &remaining,
+		BudgetSource:     "runtime",
+		RawSnapshotJSON:  `{"account":{"email":"codex1@example.com","username":"codex1_user"}}`,
+	}); err != nil {
+		t.Fatalf("registrar presupuesto: %v", err)
 	}
 	runtimeInst, err := db.GetRuntimeBySesionID(sesion.ID)
 	if err != nil || runtimeInst == nil {
@@ -130,6 +149,11 @@ func TestWebAgentesPanelMuestraEstadoVivo(t *testing.T) {
 		"pending mailbox",
 		"auto-refresh every 5 s",
 		"/agentes/Codex1",
+		"cuenta: codex1@example.com",
+		"usuario: codex1_user",
+		"efectivo",
+		"diario",
+		"semanal",
 	} {
 		if !strings.Contains(body, token) {
 			t.Fatalf("panel agentes sin %q:\n%s", token, body)
@@ -174,6 +198,24 @@ func TestWebAgenteDetalleMuestraControlPlaneYDetalleOperativo(t *testing.T) {
 	}
 	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
 		t.Fatalf("upsert runtime handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE sesion_id=?`,
+		`{"auth":{"email":"codex1-detalle@example.com"},"username":"codex1_detail"}`, sesion.ID); err != nil {
+		t.Fatalf("update runtime handle metadata: %v", err)
+	}
+	remaining := int64(1200)
+	resetSesion := time.Date(2026, 4, 1, 8, 0, 0, 0, time.UTC)
+	inicioSesion := resetSesion.Add(-5 * time.Hour)
+	if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+		SesionID:         sesion.ID,
+		WindowKind:       "5h",
+		WindowStartedAt:  &inicioSesion,
+		ResetAt:          &resetSesion,
+		RemainingSeconds: &remaining,
+		BudgetSource:     "runtime",
+		RawSnapshotJSON:  `{"account":{"email":"codex1-detalle@example.com","username":"codex1_detail"}}`,
+	}); err != nil {
+		t.Fatalf("registrar presupuesto: %v", err)
 	}
 	runtimeInst, err := db.GetRuntimeBySesionID(sesion.ID)
 	if err != nil || runtimeInst == nil {
@@ -246,6 +288,12 @@ func TestWebAgenteDetalleMuestraControlPlaneYDetalleOperativo(t *testing.T) {
 		"approval_request",
 		"¿me dejas seguir con el refactor?",
 		"Reset reanimation",
+		"Cuenta:",
+		"codex1-detalle@example.com",
+		"Usuario:",
+		"codex1_detail",
+		"Cuota efectiva:",
+		"Cuota semanal:",
 	} {
 		if !strings.Contains(body, token) {
 			t.Fatalf("detalle agente sin %q:\n%s", token, body)

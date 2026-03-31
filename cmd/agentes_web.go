@@ -409,6 +409,8 @@ const webTplAgentesPanel = `{{define "content"}}
           <td>
             <strong>{{.Agente.Nombre}}</strong><br>
             <small>{{if .Agente.Habilitado}}{{tr "agentes.enabled"}}{{else}}{{tr "agentes.retired"}}{{end}} · {{if .Agente.Activo}}{{tr "agentes.active_now"}}{{else}}{{tr "agentes.inactive_now"}}{{end}}</small>
+            {{if .Agente.CuentaEmail}}<br><small>cuenta: {{.Agente.CuentaEmail}}</small>{{end}}
+            {{if .Agente.CuentaUsuario}}<br><small>usuario: {{.Agente.CuentaUsuario}}</small>{{end}}
           </td>
           <td>{{orDash .Agente.Rol}}</td>
           <td>
@@ -416,6 +418,9 @@ const webTplAgentesPanel = `{{define "content"}}
             <small>{{tr "Cuota"}}: {{orDash .Agente.EstadoCuota}}</small><br>
             <small>{{tr "Última sesión"}}: {{ftime .Agente.UltimaSesion}}</small>
             {{if .Agente.ReanimarAt}}<br><small>{{tr "Reanimación"}}: {{reanimacionEn .Agente.ReanimarAt}}</small>{{end}}
+            {{if .Agente.CuotaRestantePct}}<br><small>efectivo {{.Agente.CuotaRestantePct}}%{{if .Agente.PresupuestoVentana}} · {{.Agente.PresupuestoVentana}}{{end}}</small>{{end}}
+            {{if .Agente.PresupuestoDiarioPct}}<br><small>diario {{.Agente.PresupuestoDiarioPct}}%{{if .Agente.PresupuestoDiarioResetAt}} · reset {{.Agente.PresupuestoDiarioResetAt.Local.Format "2006-01-02 15:04"}}{{end}}</small>{{end}}
+            {{if .Agente.PresupuestoSemanalPct}}<br><small>semanal {{.Agente.PresupuestoSemanalPct}}%{{if .Agente.PresupuestoSemanalResetAt}} · reset {{.Agente.PresupuestoSemanalResetAt.Local.Format "2006-01-02 15:04"}}{{end}}</small>{{end}}
           </td>
           <td>
             {{if .Asignacion}}
@@ -495,6 +500,11 @@ const webTplAgenteDetalle = `{{define "content"}}
         <p><strong>{{tr "agentes.enabled"}}:</strong> {{if .Row.Agente.Habilitado}}{{tr "common.yes"}}{{else}}{{tr "common.no"}}{{end}}</p>
         <p><strong>{{tr "agentes.active_now"}}:</strong> {{if .Row.Agente.Activo}}{{tr "common.yes"}}{{else}}{{tr "common.no"}}{{end}}</p>
         <p><strong>{{tr "Última sesión"}}:</strong> {{ftime .Row.Agente.UltimaSesion}}</p>
+        <p><strong>Cuenta:</strong> {{orDash .Row.Agente.CuentaEmail}}</p>
+        <p><strong>Usuario:</strong> {{orDash .Row.Agente.CuentaUsuario}}</p>
+        <p><strong>Cuota efectiva:</strong> {{if .Row.Agente.CuotaRestantePct}}{{.Row.Agente.CuotaRestantePct}}%{{else}}—{{end}}{{if .Row.Agente.PresupuestoVentana}} · {{.Row.Agente.PresupuestoVentana}}{{end}}</p>
+        <p><strong>Cuota diaria:</strong> {{if .Row.Agente.PresupuestoDiarioPct}}{{.Row.Agente.PresupuestoDiarioPct}}%{{else}}—{{end}}{{if .Row.Agente.PresupuestoDiarioResetAt}} · reset {{.Row.Agente.PresupuestoDiarioResetAt.Local.Format "2006-01-02 15:04"}}{{end}}</p>
+        <p><strong>Cuota semanal:</strong> {{if .Row.Agente.PresupuestoSemanalPct}}{{.Row.Agente.PresupuestoSemanalPct}}%{{else}}—{{end}}{{if .Row.Agente.PresupuestoSemanalResetAt}} · reset {{.Row.Agente.PresupuestoSemanalResetAt.Local.Format "2006-01-02 15:04"}}{{end}}</p>
         <p><strong>{{tr "Reanimación"}}:</strong> {{if .Row.Agente.ReanimarAt}}{{reanimacionEn .Row.Agente.ReanimarAt}}{{else}}—{{end}}</p>
         {{if .Row.Agente.MotivoPausa}}<p><strong>{{tr "Motivo"}}:</strong> {{.Row.Agente.MotivoPausa}}</p>{{end}}
       </article>
