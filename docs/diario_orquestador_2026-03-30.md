@@ -1448,6 +1448,37 @@ Validacion:
   - `./orquesta runtime orden-nueva Codex1 send_instruction --proyecto orquestador --payload '{\"prompt\":\"SMOKE resume Codex1 2026-03-31T06:03Z\"}'` crea la orden `#80281`
   - `/api/runtime-orders?agente=Codex1` muestra `#80281` como `completada` con `control_real=true`, `delivery_path=session_resume` y `mailbox_delivery=session_resume`
   - `./orquesta runtime transcript --agente Codex1 --limit 12` registra la entrada `stdin` `SMOKE resume Codex1 2026-03-31T06:03Z`
+
+## 2026-03-31 06:1x aprox. — el runner recupera batches expirados sin depender de goroutines zombis
+
+Hallazgo:
+
+- `healthz` podia seguir sano aunque un batch del control plane quedase colgado
+- el timeout actual del runner devolvia control al loop, pero no liberaba `runningBatches[name]` hasta que el goroutine terminase realmente
+- eso dejaba una fuga estructural: si `runtime_orders` o cualquier otro batch se colgaba una vez, los ciclos siguientes lo veian como `already_running` y dejaban de reclamarlo
+
+Decision:
+
+- `runningBatches` deja de ser un set por nombre y pasa a ser una lease por batch con `token` de generacion y `expires_at`
+- si una lease expira, el siguiente ciclo del runner puede volver a reclamar ese batch sin esperar a que el goroutine viejo muera
+- el cierre de lease debe validar el token; un goroutine viejo no puede borrar la lease de una ejecucion posterior
+
+Cambios:
+
+- `planocontrol/runner.go`
+  - `runningBatches` pasa a `map[string]runningBatchState`
+  - `beginControlPlaneBatch(...)` asigna token y caducidad por lease
+  - `finishControlPlaneBatch(...)` libera solo si el token coincide
+- `planocontrol/runner_test.go`
+  - nueva regresion `TestRunnerRunControlPlaneReclamaBatchExpiradoEnSiguienteCiclo`
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./planocontrol -run 'TestRunnerRunControlPlane(TimeoutDeBatchNoCongelaElResto|ReclamaBatchExpiradoEnSiguienteCiclo|RecuperaPanicDeBatchYSigue)' -count=1` => OK
+- `go build -o ./orquesta .` => OK
+- se reinicia `./orquesta server run --addr 127.0.0.1:16543`
+- `./orquesta server doctor` => `Health RPC: OK`
+- `./orquesta status` vuelve a responder con `5` agentes activos y progreso `353/414`
   - servicio `PurgeTerminalRuntimeOrders(...)`
 - `cmd/api.go`
   - endpoint `POST /api/runtime-orders/purgar`

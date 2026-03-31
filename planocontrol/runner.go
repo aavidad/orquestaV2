@@ -51,8 +51,14 @@ type Runner struct {
 	ControlPlaneCada  time.Duration
 	BatchTimeout      time.Duration
 	mu                sync.Mutex
-	runningBatches    map[string]struct{}
+	runningBatches    map[string]runningBatchState
+	nextBatchToken    uint64
 	wg                sync.WaitGroup
+}
+
+type runningBatchState struct {
+	token     uint64
+	expiresAt time.Time
 }
 
 func (r *Runner) Start(ctx context.Context) {
@@ -311,9 +317,13 @@ func (r *Runner) safeLoopCall(name string, fn func()) {
 }
 
 func (r *Runner) runControlPlaneBatch(name, entity, auditOK, auditErr, auditPanic, successFmt string, fn func() (int, error)) (count int) {
-	if !r.beginControlPlaneBatch(name) {
+	token, reclaimed := r.beginControlPlaneBatch(name, r.controlPlaneBatchTimeout())
+	if token == 0 {
 		r.debugf("control_plane %s skipped=already_running", name)
 		return 0
+	}
+	if reclaimed {
+		r.debugf("control_plane %s reclaimed=expired_lease", name)
 	}
 	type batchOutcome struct {
 		count       int
@@ -322,7 +332,7 @@ func (r *Runner) runControlPlaneBatch(name, entity, auditOK, auditErr, auditPani
 	}
 	outcomeCh := make(chan batchOutcome, 1)
 	go func() {
-		defer r.finishControlPlaneBatch(name)
+		defer r.finishControlPlaneBatch(name, token)
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				outcomeCh <- batchOutcome{
@@ -399,28 +409,42 @@ func (r *Runner) controlPlaneBatchTimeout() time.Duration {
 	return r.BatchTimeout
 }
 
-func (r *Runner) beginControlPlaneBatch(name string) bool {
+func (r *Runner) beginControlPlaneBatch(name string, timeout time.Duration) (uint64, bool) {
 	if r == nil {
-		return false
+		return 0, false
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.runningBatches == nil {
-		r.runningBatches = map[string]struct{}{}
+		r.runningBatches = map[string]runningBatchState{}
 	}
-	if _, exists := r.runningBatches[name]; exists {
-		return false
+	now := time.Now()
+	if state, exists := r.runningBatches[name]; exists {
+		if state.expiresAt.IsZero() || now.Before(state.expiresAt) {
+			return 0, false
+		}
 	}
-	r.runningBatches[name] = struct{}{}
-	return true
+	r.nextBatchToken++
+	r.runningBatches[name] = runningBatchState{
+		token:     r.nextBatchToken,
+		expiresAt: now.Add(timeout),
+	}
+	return r.nextBatchToken, true
 }
 
-func (r *Runner) finishControlPlaneBatch(name string) {
+func (r *Runner) finishControlPlaneBatch(name string, token uint64) {
 	if r == nil {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	state, ok := r.runningBatches[name]
+	if !ok {
+		return
+	}
+	if state.token != token {
+		return
+	}
 	delete(r.runningBatches, name)
 }
 

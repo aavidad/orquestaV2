@@ -221,6 +221,26 @@ func TestRunnerRunControlPlaneTimeoutDeBatchNoCongelaElResto(t *testing.T) {
 	}
 }
 
+func TestRunnerRunControlPlaneReclamaBatchExpiradoEnSiguienteCiclo(t *testing.T) {
+	block := make(chan struct{})
+	service := &stubAutomationService{
+		processedBlock: block,
+	}
+	r := &Runner{
+		Automation:   service,
+		BatchTimeout: 10 * time.Millisecond,
+	}
+
+	r.runControlPlane()
+	r.runControlPlane()
+	close(block)
+
+	audits := strings.Join(service.audits, "\n")
+	if strings.Count(audits, "runtime_orders_batch_error|runtime_order|batch=runtime_orders timeout=10ms") < 2 {
+		t.Fatalf("el batch runtime_orders deberia volver a intentarse tras expirar la lease: %s", audits)
+	}
+}
+
 func TestRunnerSafeLoopCallRecuperaPanic(t *testing.T) {
 	service := &stubAutomationService{}
 	r := &Runner{Automation: service}
