@@ -393,6 +393,7 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 		})
 		pending = ""
 	}
+	pending = compactarPendingTranscript(pending)
 
 	total := 0
 	sawRuntimeOutput := false
@@ -454,6 +455,38 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 		return total, err
 	}
 	return total, nil
+}
+
+func compactarPendingTranscript(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	raw = oscTranscriptRegexp.ReplaceAllString(raw, "")
+	raw = ansiTranscriptRegexp.ReplaceAllString(raw, "")
+	raw = strings.ReplaceAll(raw, "\x00", "")
+	raw = strings.Map(func(r rune) rune {
+		switch {
+		case r == '\n' || r == '\r':
+			return ' '
+		case r == '\t':
+			return ' '
+		case unicode.IsControl(r):
+			return -1
+		default:
+			return r
+		}
+	}, raw)
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if len(raw) > 512 {
+		raw = raw[len(raw)-512:]
+	}
+	if contarRunasSemanticas(strings.ToLower(raw)) == 0 {
+		return ""
+	}
+	return raw
 }
 
 func registrarEventoDerivadoTranscript(transcriptID int64, handle *RuntimeHandle, runtime *RuntimeInstance, texto string) error {

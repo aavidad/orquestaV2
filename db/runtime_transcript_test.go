@@ -654,3 +654,63 @@ func TestIngestarRuntimeTranscriptHandleRecortaPreambuloScriptEnRuntimePanic(t *
 		t.Fatalf("el evento runtime_panic no debería arrastrar el comando de script: %s", message)
 	}
 }
+
+func TestIngestarRuntimeTranscriptHandleCompactaPendingTranscript(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, _ := GetRuntimeHandleBySesionID(sesion.ID)
+
+	logPath := filepath.Join(t.TempDir(), "pending.log")
+	logData := "\x1b]0;spinner\x1b\\\x07\x08\t\tpartial pending"
+	if err := os.WriteFile(logPath, []byte(logData), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	n, err := IngestarRuntimeTranscriptHandle(handle.ID)
+	if err != nil {
+		t.Fatalf("ingestar transcript: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia ingerir líneas completas, got=%d", n)
+	}
+
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("recargar handle: %+v err=%v", handle, err)
+	}
+	meta := map[string]any{}
+	if err := json.Unmarshal([]byte(handle.MetadataJSON), &meta); err != nil {
+		t.Fatalf("metadata invalida: %v", err)
+	}
+	got, _ := meta["transcript_log_pending"].(string)
+	if got != "partial pending" {
+		t.Fatalf("pending compactado inesperado: %q", got)
+	}
+}

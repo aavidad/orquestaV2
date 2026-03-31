@@ -3668,3 +3668,30 @@ Resultado vivo:
 
 - `server start` seguido inmediatamente de `server doctor` ya devuelve el PID/addr reales del daemon nuevo
 - el arranque oficial deja de mentir por un `statefile` stale
+
+## 2026-03-31 — `transcript_log_pending` ya no arrastra basura del PTY
+
+Hallazgo:
+
+- los handles activos seguian guardando en `metadata_json` un `transcript_log_pending` enorme con secuencias ANSI/control del PTY
+- eso no aportaba continuidad real y convertia la metadata viva en un sumidero de ruido
+
+Decision:
+
+- compactar `transcript_log_pending` antes de persistirlo
+- limpiar OSC/ANSI/control chars, normalizar espacios, truncar a un tamaño razonable y eliminarlo por completo si no queda contenido semantico
+
+Codigo:
+
+- [db/runtime_transcript.go](/home/alberto/Trabajo/orquesta/db/runtime_transcript.go)
+- [db/runtime_transcript_test.go](/home/alberto/Trabajo/orquesta/db/runtime_transcript_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'TestIngestarRuntimeTranscriptHandle(CompactaPendingTranscript|DescartaFragmentosPTYConControlChars|NoClasificaRuidoOSCSpinner)$' -count=1`
+
+Resultado:
+
+- la metadata futura del handle ya no debe arrastrar pendientes crudos del TUI
+- baja el ruido persistido y se hace mas fiable la inspeccion de handles vivos
