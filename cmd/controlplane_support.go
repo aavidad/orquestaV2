@@ -1866,6 +1866,10 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 		return 0, err
 	}
 	if !esTransporteRemotoAutonomia(handle.Transporte) {
+		handle, runtime, _, err = db.SincronizarRuntimeHandleSupervisado(handle, runtime, "autonomia_runtime_recovery")
+		if err != nil {
+			return 0, err
+		}
 		if !runtimeLocalFallido(handle, runtime) {
 			return 0, nil
 		}

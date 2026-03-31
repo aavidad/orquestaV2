@@ -4856,6 +4856,118 @@ func TestProcesarAutonomiaAgentesBatchNoRelanzaRuntimeLocalFallidoSinTrabajoArra
 	}
 }
 
+func TestProcesarAutonomiaAgentesBatchNoRelanzaRuntimeLocalSiSigueVivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Runtime local vivo",
+		Descripcion: "No debe relanzarse si el proceso observado sigue vivo",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	conector, err := db.GetConector("codex-cli")
+	if err != nil || conector == nil {
+		t.Fatalf("get conector codex-cli: %+v err=%v", conector, err)
+	}
+	pid := int64(os.Getpid())
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex1",
+		ConectorID:         &conector.ID,
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador"),
+		Herramienta:        "codex-cli",
+		PID:                &pid,
+		ResumenContinuidad: "continuidad activa",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("get runtime: %+v err=%v", runtime, err)
+	}
+	if _, err := db.DB.Exec(`
+		UPDATE runtime_handles
+		SET transporte='cli',
+		    handle_kind='process',
+		    handle_ref=?,
+		    estado='fallido'
+		WHERE id = ?`, strconv.FormatInt(pid, 10), handle.ID); err != nil {
+		t.Fatalf("degradar handle local vivo: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		UPDATE runtime_instances
+		SET pid=?, logical_state='fallido', process_state='fallido'
+		WHERE id = ?`, pid, runtime.ID); err != nil {
+		t.Fatalf("degradar runtime local vivo: %v", err)
+	}
+
+	sesionActual, err := db.GetSesionByID(sesion.ID)
+	if err != nil || sesionActual == nil {
+		t.Fatalf("get sesion actual: %+v err=%v", sesionActual, err)
+	}
+	n, err := procesarRecuperacionRuntimeDegradadoSesion(sesionActual)
+	if err != nil {
+		t.Fatalf("procesar recuperacion local viva: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia relanzar start si el proceso local sigue vivo, got=%d", n)
+	}
+
+	handle, err = db.GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle tras recuperacion: %+v err=%v", handle, err)
+	}
+	if handle.Estado != "activo" {
+		t.Fatalf("el handle vivo deberia revivir a activo: %+v", handle)
+	}
+	runtime, err = db.GetRuntime(runtime.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("get runtime tras recuperacion: %+v err=%v", runtime, err)
+	}
+	if strings.EqualFold(strings.TrimSpace(runtime.ProcessState), "fallido") {
+		t.Fatalf("el runtime vivo no deberia seguir fallido: %+v", runtime)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar ordenes al revivir handle vivo: %+v", orders)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchBloqueaProyectoPorCircuitoAbiertoConector(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

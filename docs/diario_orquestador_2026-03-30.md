@@ -38,6 +38,35 @@ Conclusion:
 - el arranque sigue recibiendo el bootstrap completo donde toca
 - el handle persistido deja de cargar esa mochila en cada lectura viva
 
+## 2026-03-31 16:05 aprox. — la recuperacion local ya no relanza por estado fosilizado
+
+Hallazgo:
+
+- la recuperacion autonoma de runtime local seguia decidiendo `local_runtime_failed` a partir de `runtime_instances.logical_state/process_state` y `runtime_handles.estado` persistidos
+- eso puede disparar un `start` nuevo aunque el proceso local supervisado siga vivo y solo se haya quedado degradado en la BD
+
+Decision:
+
+- antes de reencolar `start` para un runtime local, el daemon debe observar el proceso real
+- si el proceso sigue vivo, la ruta correcta es revivir `handle/runtime`, no relanzar otro runtime
+
+Cambios:
+
+- `cmd/controlplane_support.go`
+  - `procesarRecuperacionRuntimeDegradadoSesion()` sincroniza primero el handle local por `db.SincronizarRuntimeHandleSupervisado(..., "autonomia_runtime_recovery")`
+- `cmd/controlplane_support_test.go`
+  - nueva regresion `TestProcesarAutonomiaAgentesBatchNoRelanzaRuntimeLocalSiSigueVivo`
+  - fuerza `handle/runtime` a `fallido` con `PID` vivo y verifica que no aparece ninguna `runtime_order` nueva
+
+Validacion:
+
+- la nueva regresion cubre justo el caso que estaba faltando: estado degradado en persistencia pero proceso local vivo
+
+Conclusion:
+
+- `local_runtime_failed` deja de ser una decision basada solo en estado fosilizado
+- la recuperacion local pasa a apoyarse primero en evidencia viva del proceso antes de relanzar
+
 ## 2026-03-31 11:3x aprox. — fusible permanente para `supervisor_local` tras `runtime_panic` real en Codex
 
 Hallazgo:
