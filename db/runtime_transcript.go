@@ -606,7 +606,7 @@ func limpiarLineaTranscript(raw string) string {
 }
 
 func SanitizarTextoObservabilidadRuntime(raw string) string {
-	return limpiarLineaTranscript(raw)
+	return limpiarPrefijoRuidoFalloRuntime(limpiarLineaTranscript(raw))
 }
 
 func recortarPreambuloSistemaHastaFallo(raw string) string {
@@ -634,6 +634,27 @@ func recortarPreambuloSistemaHastaFallo(raw string) string {
 		return raw
 	}
 	return raw[best:]
+}
+
+func limpiarPrefijoRuidoFalloRuntime(raw string) string {
+	raw = strings.TrimSpace(raw)
+	failureMarkers := []string{
+		"The application panicked (crashed).",
+		"thread 'main' panicked",
+		"panic:",
+		"fatal error:",
+	}
+	for _, marker := range failureMarkers {
+		idx := strings.Index(raw, marker)
+		if idx <= 0 {
+			continue
+		}
+		prefix := strings.TrimSpace(raw[:idx])
+		if prefix == "." || prefix == ":" || prefix == "|" {
+			return raw[idx:]
+		}
+	}
+	return raw
 }
 
 func normalizarTextoTranscript(raw string) string {

@@ -728,6 +728,13 @@ func TestIngestarRuntimeTranscriptHandleLimpiaCSIPrivadoEnRuntimePanic(t *testin
 	}
 }
 
+func TestSanitizarTextoObservabilidadRuntimeLimpiaPrefijoPuntualAntesDelPanic(t *testing.T) {
+	got := SanitizarTextoObservabilidadRuntime(".\x1b[<1uThe application panicked (crashed).")
+	if got != "The application panicked (crashed)." {
+		t.Fatalf("texto saneado inesperado: %q", got)
+	}
+}
+
 func TestIngestarRuntimeTranscriptHandleCompactaPendingTranscript(t *testing.T) {
 	abrirDBTemporalRuntimeObservabilidad(t)
 

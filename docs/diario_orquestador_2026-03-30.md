@@ -289,6 +289,28 @@ Conclusion:
 
 - la observabilidad server-first ya no depende de que el evento fuera ingerido antes o después de los fixes de transcript
 
+## 2026-04-01 00:45 aprox. — se elimina el prefijo huérfano antes del panic visible
+
+Hallazgo:
+
+- tras limpiar CSI privado en eventos históricos, todavía quedaba un punto huérfano en mensajes como `.The application panicked (crashed).`
+
+Decision:
+
+- si el saneado deja solo un prefijo puntual sin semántica justo antes del marcador de fallo, la proyección visible debe retirarlo
+
+Cambios:
+
+- `db/runtime_transcript.go`
+  - nuevo helper `limpiarPrefijoRuidoFalloRuntime(...)`
+  - `SanitizarTextoObservabilidadRuntime(...)` pasa también por ese recorte
+- `db/runtime_transcript_test.go`
+  - nueva regresión `TestSanitizarTextoObservabilidadRuntimeLimpiaPrefijoPuntualAntesDelPanic`
+
+Conclusion:
+
+- `runtime_panic` visible queda limpio del todo también en eventos históricos heredados
+
 ## 2026-03-31 16:55 aprox. — `status` y la API ya enseñan presupuesto restante por agente
 
 Hallazgo:
