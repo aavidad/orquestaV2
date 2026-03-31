@@ -2719,6 +2719,35 @@ Validacion:
 
 - `go test ./cmd -run 'TestProcesarSupervisionAutonomaBatch(NoRepiteSupervisionPeriodicaConSupervisorOperativo|NoRepiteSupervisionPeriodicaSiYaEmitioNudgeReciente)' -count=1`
 
+## 2026-03-31 — `/api/runtime-handles` ya devuelve metadata viva del supervisor local
+
+Hallazgo:
+
+- la orquestacion ya estaba mas estable, pero la observabilidad de handles seguia siendo demasiado pasiva
+- tras reiniciar el daemon, un `runtime_handle` activo observado por el supervisor local podia seguir devolviendo `supervisor_owner_pid` viejo hasta que otra ruta incidental lo resincronizara
+- eso degradaba la verdad visible del sistema y hacia menos profesional la autoridad del daemon sobre runtimes vivos
+
+Decision:
+
+- cuando el listado de handles se pide filtrado por agente, el servicio debe resincronizar primero cada handle supervisado antes de devolverlo
+- la observabilidad server-first debe ser verdad viva, no solo un dump de metadata persistida
+
+Codigo:
+
+- [runtimesapp/service.go](/home/alberto/Trabajo/orquesta/runtimesapp/service.go)
+- [runtimesapp/service_test.go](/home/alberto/Trabajo/orquesta/runtimesapp/service_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./runtimesapp -count=1`
+- `go test ./cmd -run 'TestAPIObservabilidadReadOnly|TestAPIRuntimeA2UIExponeMensajesDeFormaServerFirst' -count=1`
+- `go build -o ./orquesta .`
+- reinicio del daemon y comprobacion viva:
+  - `./orquesta server stop && ./orquesta server start && ./orquesta server doctor`
+  - `curl -sf 'http://127.0.0.1:16543/api/runtime-handles?agente=Codex1'`
+  - el handle activo `#395` ya devuelve `supervisor_owner_pid=3840830`, que coincide con el daemon vivo actual
+
 ## 2026-03-31 — OpenClaw Gateway vuelve a ser visible para operador por API y dashboard
 
 Hallazgo:

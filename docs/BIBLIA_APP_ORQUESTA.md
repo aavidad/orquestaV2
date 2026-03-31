@@ -299,6 +299,7 @@ Contrato minimo obligatorio para el supervisor local:
 - la emision de `SupervisorSignal` no puede tumbar el runtime local ni el teardown de tests: el handler debe ser panic-safe y el supervisor local debe degradar la señal a error recuperable si el plano de control ya no esta disponible
 - un batch del runner no puede congelar el resto del control plane; cada batch necesita aislamiento y timeout propio
 - la supervision autonoma periodica no puede resembrar el mismo `supervisar_proyecto` por reloj si ya emitio un nudge reciente para el mismo agente/proyecto; la deduplicacion debe aguantar estados transitorios del runtime y no depender solo de que el handle siga “operativo”
+- la observabilidad server-first de handles tampoco puede devolver metadata fosilizada del supervisor local; al listar handles filtrados de un agente, Orquesta debe resincronizar primero el estado supervisado para que `supervision_mode`, `supervisor_owner_pid` y demas metadata operativa reflejen el daemon vivo actual
 
 La referencia conceptual mas cercana para el nucleo es:
 

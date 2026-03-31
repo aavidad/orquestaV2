@@ -26,6 +26,9 @@ type fakeStore struct {
 	handleByIDResp      *db.RuntimeHandle
 	handlesFilter       *string
 	handlesResponse     []*db.RuntimeHandle
+	syncHandleInput     *db.RuntimeHandle
+	syncHandleSource    string
+	syncHandleResp      *db.RuntimeHandle
 	purgeFilter         db.FiltroPurgadoRuntimeHandles
 	purgeResponse       *db.PurgaRuntimeHandlesResultado
 	purgeOrdersFilter   db.FiltroPurgadoRuntimeOrders
@@ -102,6 +105,14 @@ func (f *fakeStore) GetRuntimeHandle(id int64) (*db.RuntimeHandle, error) {
 func (f *fakeStore) ListRuntimeHandles(filter *string) ([]*db.RuntimeHandle, error) {
 	f.handlesFilter = filter
 	return f.handlesResponse, nil
+}
+func (f *fakeStore) SyncSupervisedRuntimeHandle(handle *db.RuntimeHandle, source string) (*db.RuntimeHandle, error) {
+	f.syncHandleInput = handle
+	f.syncHandleSource = source
+	if f.syncHandleResp != nil {
+		return f.syncHandleResp, nil
+	}
+	return handle, nil
 }
 func (f *fakeStore) PurgeInactiveRuntimeHandles(filter db.FiltroPurgadoRuntimeHandles) (*db.PurgaRuntimeHandlesResultado, error) {
 	f.purgeFilter = filter
@@ -206,6 +217,7 @@ func TestServiceDelegatesRuntimeQueries(t *testing.T) {
 		runtimeResponse:     &db.RuntimeInstance{ID: 10},
 		handleByIDResp:      &db.RuntimeHandle{ID: 16},
 		handlesResponse:     []*db.RuntimeHandle{{ID: 15}},
+		syncHandleResp:      &db.RuntimeHandle{ID: 15, Estado: "activo"},
 		purgeResponse:       &db.PurgaRuntimeHandlesResultado{Deleted: 2, Estados: []string{"cerrado", "fallido"}},
 		purgeOrdersResponse: &db.PurgaRuntimeOrdersResultado{Deleted: 3, Estados: []string{"completada", "fallida"}, Tipos: []string{"send_instruction"}},
 		handleResponse:      &db.RuntimeHandle{ID: 16},
@@ -262,6 +274,12 @@ func TestServiceDelegatesRuntimeQueries(t *testing.T) {
 	}
 	if store.handlesFilter == nil || *store.handlesFilter != "Codex2" {
 		t.Fatalf("handlesFilter=%v", store.handlesFilter)
+	}
+	if store.syncHandleInput == nil || store.syncHandleInput.ID != 15 {
+		t.Fatalf("syncHandleInput=%+v", store.syncHandleInput)
+	}
+	if store.syncHandleSource != "runtimesapp_list_runtime_handles" {
+		t.Fatalf("syncHandleSource=%q", store.syncHandleSource)
 	}
 	if _, err := service.GetActiveRuntimeHandle(agent); err != nil {
 		t.Fatalf("GetActiveRuntimeHandle: %v", err)

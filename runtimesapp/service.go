@@ -24,6 +24,7 @@ type Store interface {
 	GetRuntime(id int64) (*db.RuntimeInstance, error)
 	GetRuntimeHandle(id int64) (*db.RuntimeHandle, error)
 	ListRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error)
+	SyncSupervisedRuntimeHandle(handle *db.RuntimeHandle, source string) (*db.RuntimeHandle, error)
 	PurgeInactiveRuntimeHandles(filtro db.FiltroPurgadoRuntimeHandles) (*db.PurgaRuntimeHandlesResultado, error)
 	PurgeTerminalRuntimeOrders(filtro db.FiltroPurgadoRuntimeOrders) (*db.PurgaRuntimeOrdersResultado, error)
 	GetActiveRuntimeHandle(agente string) (*db.RuntimeHandle, error)
@@ -119,7 +120,22 @@ func (s *Service) GetRuntimeHandle(id int64) (*db.RuntimeHandle, error) {
 }
 
 func (s *Service) ListRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error) {
-	return s.store.ListRuntimeHandles(filtro)
+	handles, err := s.store.ListRuntimeHandles(filtro)
+	if err != nil {
+		return nil, err
+	}
+	if filtro == nil || strings.TrimSpace(*filtro) == "" {
+		return handles, nil
+	}
+	for i, handle := range handles {
+		if handle == nil {
+			continue
+		}
+		if refreshed, err := s.store.SyncSupervisedRuntimeHandle(handle, "runtimesapp_list_runtime_handles"); err == nil && refreshed != nil {
+			handles[i] = refreshed
+		}
+	}
+	return handles, nil
 }
 
 func (s *Service) PurgeInactiveRuntimeHandles(req RuntimeHandlePurgeRequest) (*db.PurgaRuntimeHandlesResultado, error) {
@@ -402,6 +418,11 @@ func (Repository) GetRuntimeHandle(id int64) (*db.RuntimeHandle, error) {
 
 func (Repository) ListRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error) {
 	return db.ListarRuntimeHandles(filtro)
+}
+
+func (Repository) SyncSupervisedRuntimeHandle(handle *db.RuntimeHandle, source string) (*db.RuntimeHandle, error) {
+	handle, _, _, err := db.SincronizarRuntimeHandleSupervisado(handle, nil, source)
+	return handle, err
 }
 
 func (Repository) PurgeInactiveRuntimeHandles(filtro db.FiltroPurgadoRuntimeHandles) (*db.PurgaRuntimeHandlesResultado, error) {
