@@ -4043,3 +4043,31 @@ Validacion viva:
 - resultado:
   - `State: pid=690920 ...`
   - `Health RPC: OK`
+
+## 2026-03-31 — `status` ya marca tareas retenidas por cuota
+
+Hallazgo:
+
+- aunque `status` ya mostraba `Codex1` y `Codex5` en enfriamiento/cuota, seguia haciendo falta leer la tabla de tareas para detectar qué frente estaba realmente bloqueado por eso
+- el caso vivo era claro: `#416` seguia en `en_progreso` sobre `Codex1`, pero el resumen principal no lo explicitaba como trabajo retenido por cuota
+
+Decision:
+
+- mantener `En progreso ahora mismo` como listado operativo general
+- añadir un bloque corto `Retenidas por cuota` para tareas activas cuyo agente asignado no esta activo y tiene `estado_cuota != activo`
+
+Codigo:
+
+- [cmd/status_remoto_compat.go](/home/alberto/Trabajo/orquesta/cmd/status_remoto_compat.go)
+- [cmd/status_test.go](/home/alberto/Trabajo/orquesta/cmd/status_test.go)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(RenderStatusSummaryMuestraAgentesEnEnfriamiento|RenderStatusSummaryMuestraTareasRetenidasPorCuota)$' -count=1`
+- `go build -o ./orquesta .`
+
+Validacion viva:
+
+- `./orquesta status` ya muestra:
+  - bloque `En enfriamiento/cuota` con `Codex1` y `Codex5`
+  - bloque `Retenidas por cuota` con `#416 -> Codex1`

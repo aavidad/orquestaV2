@@ -505,6 +505,33 @@ func TestRenderStatusSummaryMuestraAgentesEnEnfriamiento(t *testing.T) {
 	}
 }
 
+func TestRenderStatusSummaryMuestraTareasRetenidasPorCuota(t *testing.T) {
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				Agentes: []*db.Agente{
+					{
+						Nombre:      "Codex1",
+						Rol:         "programador",
+						Activo:      false,
+						EstadoCuota: "enfriamiento",
+					},
+				},
+				TareasActivas: []tareaLite{
+					{ID: 416, Titulo: "Integrar eventos del control plane", Agente: "Codex1", Estado: db.TareaEnProgreso},
+				},
+				TareasPorEstado: map[string]int{},
+			},
+		})
+	})
+	if !strings.Contains(out, "Retenidas por cuota") {
+		t.Fatalf("salida sin bloque de tareas retenidas: %s", out)
+	}
+	if !strings.Contains(out, "[416]") || !strings.Contains(out, "Codex1") {
+		t.Fatalf("salida sin tarea retenida visible: %s", out)
+	}
+}
+
 func TestFetchServerConfig(t *testing.T) {
 	prevClient := serverHTTPClient
 	serverHTTPClient = &http.Client{

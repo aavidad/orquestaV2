@@ -235,6 +235,17 @@ func renderStatusSummary(ctx *statusContext) {
 		}
 		fmt.Println()
 	}
+	if retenidas := tareasRetenidasPorCuota(resumen.TareasActivas, resumen.Agentes); len(retenidas) > 0 {
+		fmt.Printf("⏸️  Retenidas por cuota:\n")
+		for _, t := range retenidas {
+			agente := "—"
+			if t.Agente != "" {
+				agente = t.Agente
+			}
+			fmt.Printf("   [%d] %-40s → %s\n", t.ID, truncar(t.Titulo, 38), agente)
+		}
+		fmt.Println()
+	}
 }
 
 func resumenCuotaAgente(a *db.Agente) string {
@@ -317,6 +328,28 @@ func agentesNoActivosConCuota(agentes []*db.Agente) []*db.Agente {
 			continue
 		}
 		out = append(out, agente)
+	}
+	return out
+}
+
+func tareasRetenidasPorCuota(tareas []tareaLite, agentes []*db.Agente) []tareaLite {
+	if len(tareas) == 0 || len(agentes) == 0 {
+		return nil
+	}
+	porNombre := make(map[string]*db.Agente, len(agentes))
+	for _, agente := range agentes {
+		if agente == nil {
+			continue
+		}
+		porNombre[strings.TrimSpace(agente.Nombre)] = agente
+	}
+	out := make([]tareaLite, 0)
+	for _, tarea := range tareas {
+		agente := porNombre[strings.TrimSpace(tarea.Agente)]
+		if agente == nil || agente.Activo || strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "activo") {
+			continue
+		}
+		out = append(out, tarea)
 	}
 	return out
 }
