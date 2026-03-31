@@ -2023,6 +2023,17 @@ func GetRuntimeMailboxByRuntimeOrderID(runtimeOrderID int64) (*RuntimeMailboxMes
 	return msg, err
 }
 
+func GetRuntimeMailbox(id int64) (*RuntimeMailboxMessage, error) {
+	row := DB.QueryRow(runtimeMailboxSelectBase()+`
+		WHERE id = ?
+		LIMIT 1`, id)
+	msg, err := scanRuntimeMailbox(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return msg, err
+}
+
 func MarcarRuntimeMailboxEntregado(id int64) error {
 	_, err := DB.Exec(`
 		UPDATE runtime_mailbox
@@ -2214,12 +2225,16 @@ func ReconciliarRuntimeOrdersStale() (int, error) {
 }
 
 func ProcesarRuntimeOrdersBatch() (int, error) {
+	reconciled, err := reconciliarRuntimeOrdersPendientesMailboxConsumido()
+	if err != nil {
+		return 0, err
+	}
 	processed, err := procesarRuntimeOrdersBatchTipos(runtimeOrderTiposDespachables())
 	if err != nil {
-		return processed, err
+		return reconciled + processed, err
 	}
 	promoted, err := procesarBootstrapRuntimeOrdersActivosBatch()
-	return processed + promoted, err
+	return reconciled + processed + promoted, err
 }
 
 func ProcesarRuntimeSupervisionBatch() (int, error) {
@@ -2340,6 +2355,70 @@ func procesarRuntimeOrdersBatchTipos(tipos []string) (int, error) {
 			_ = MarcarRuntimeOrderEstado(order.ID, "fallida", `{"ok":false}`, err.Error())
 			processed++
 			continue
+		}
+		processed++
+	}
+	return processed, nil
+}
+
+func reconciliarRuntimeOrdersPendientesMailboxConsumido() (int, error) {
+	limit := configIntOrDefault("runtime_order_batch_size", 10)
+	if limit <= 0 {
+		limit = 10
+	}
+	rows, err := DB.Query(`
+		SELECT id
+		FROM runtime_orders
+		WHERE estado = 'pendiente'
+		  AND tipo = 'send_instruction'
+		ORDER BY id
+		LIMIT ?`, limit)
+	if err != nil {
+		return 0, err
+	}
+	ids := make([]int64, 0, limit)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, err
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+
+	processed := 0
+	for _, id := range ids {
+		order, err := GetRuntimeOrder(id)
+		if err != nil {
+			return processed, err
+		}
+		if order == nil || !strings.EqualFold(strings.TrimSpace(order.Estado), "pendiente") || strings.TrimSpace(order.Tipo) != "send_instruction" {
+			continue
+		}
+		payload := mapFromJSON(order.PayloadJSON)
+		if !runtimeOrderSendInstructionProvieneMailbox(payload) {
+			continue
+		}
+		mailboxID := runtimeOrderSendInstructionMailboxID(payload)
+		if mailboxID <= 0 {
+			continue
+		}
+		msg, err := GetRuntimeMailbox(mailboxID)
+		if err != nil {
+			return processed, err
+		}
+		if msg == nil || strings.EqualFold(strings.TrimSpace(msg.Estado), "pendiente") {
+			continue
+		}
+		if err := completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "mailbox ya "+strings.TrimSpace(msg.Estado)); err != nil {
+			return processed, err
 		}
 		processed++
 	}
@@ -4078,6 +4157,15 @@ func gestionarBackoffProveedorRuntimeOrderSendInstruction(order *RuntimeOrder, p
 	}
 	detalle := fmt.Sprintf("agente en enfriamiento por %s", motivo)
 	if runtimeOrderSendInstructionProvieneMailbox(payload) {
+		if mailboxID := runtimeOrderSendInstructionMailboxID(payload); mailboxID > 0 {
+			msg, err := GetRuntimeMailbox(mailboxID)
+			if err != nil {
+				return true, err
+			}
+			if msg != nil && !strings.EqualFold(strings.TrimSpace(msg.Estado), "pendiente") {
+				return true, completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, detalle+"; mailbox ya "+strings.TrimSpace(msg.Estado))
+			}
+		}
 		return true, reencolarRuntimeOrderSendInstructionAt(order, payload, detalle, time.Now().UTC().Add(delay))
 	}
 	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{

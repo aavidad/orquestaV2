@@ -4102,3 +4102,38 @@ Validacion viva:
 - `./orquesta agente presupuesto --json` ya devuelve para `Codex1`:
   - `CuentaEmail = maritere@avidad.com`
   - `CuentaUsuario = Codex1`
+
+## 2026-03-31 — La cola ya no conserva `send_instruction` respaldadas por mailbox consumida
+
+Hallazgo:
+
+- seguia quedando una orden ruido en `runtime_orders`:
+  - `#80685 Codex1 send_instruction pendiente`
+- su `payload_json` apuntaba a `mailbox_id=64624`, pero ese `runtime_mailbox` ya estaba `consumido`
+- el caso aparecia tras `provider_backoff`: la orden quedaba reencolada con `retry_after` aunque la verdad durable ya estaba resuelta en mailbox
+
+Decision:
+
+- cerrar ese caso en el propio nucleo de runtime orders, sin otra cola ni otro script:
+  - si una `send_instruction` respaldada por mailbox entra en `provider_backoff` y su `mailbox_id` ya no esta `pendiente`, la orden se completa como `mailbox_only`
+  - ademas, `ProcesarRuntimeOrdersBatch()` empieza reconciliando `send_instruction` pendientes cuyo mailbox ya esta `entregado/consumido`
+- la reconciliacion recoge primero los `id` y cierra el cursor antes de cargar cada orden para no reabrir el deadlock de `MaxOpenConns=1`
+
+Codigo:
+
+- [db/controlplane_entities.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities.go)
+- [db/controlplane_entities_test.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities_test.go)
+
+Validacion:
+
+- `go test ./db -run 'Test(EjecutarRuntimeOrderSendInstructionBackoffCompletaSiMailboxYaFueConsumido|ProcesarRuntimeOrdersBatchReconciliaPendienteSiMailboxYaFueConsumido|GetAgenteRecuperaCuentaDesdePresupuestoPrevioSiBackoffNoTraeCorreo)$' -count=1`
+- `go build -o ./orquesta .`
+
+Validacion viva:
+
+- `./orquesta server stop && ./orquesta server start && ./orquesta server doctor`
+- antes del ciclo del runner:
+  - `./orquesta runtime ordenes --estado pendiente --limit 20` mostraba `#80685`
+- tras un ciclo con el binario nuevo:
+  - `./orquesta runtime ordenes --estado pendiente --limit 20` devuelve vacio
+  - `./orquesta runtime mailbox --estado pendiente` sigue vacio
