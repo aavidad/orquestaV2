@@ -1684,16 +1684,23 @@ func ConsumirRuntimeMailboxPendienteSupersedido(toAgente string, proyectoID *int
 	if toAgente == "" || kind == "" || keepID <= 0 {
 		return 0, nil
 	}
-	args := []any{toAgente, kind, keepID}
+	args := []any{toAgente}
 	q := `
 		UPDATE runtime_mailbox
 		SET estado='consumido',
 		    delivered_at=COALESCE(delivered_at, CURRENT_TIMESTAMP),
 		    consumed_at=CURRENT_TIMESTAMP
 		WHERE estado='pendiente'
-		  AND to_agente = ?
-		  AND kind = ?
-		  AND id < ?`
+		  AND to_agente = ?`
+	if family := runtimeMailboxSupersedeFamily(kind); family != "" {
+		q += ` AND kind IN (` + runtimeMailboxFamilyPlaceholders(family) + `)`
+		args = append(args, runtimeMailboxFamilyKinds(family)...)
+	} else {
+		q += ` AND kind = ?`
+		args = append(args, kind)
+	}
+	q += ` AND id < ?`
+	args = append(args, keepID)
 	if proyectoID != nil {
 		q += ` AND proyecto_id = ?`
 		args = append(args, *proyectoID)
@@ -1704,6 +1711,32 @@ func ConsumirRuntimeMailboxPendienteSupersedido(toAgente string, proyectoID *int
 	}
 	rows, _ := res.RowsAffected()
 	return rows, nil
+}
+
+func runtimeMailboxSupersedeFamily(kind string) string {
+	switch strings.TrimSpace(kind) {
+	case "autonomia", "nudge", "watchdog", MailboxKindGovernanceRefresh, MailboxKindSkillsRefresh:
+		return "guidance"
+	default:
+		return ""
+	}
+}
+
+func runtimeMailboxFamilyKinds(family string) []any {
+	switch strings.TrimSpace(family) {
+	case "guidance":
+		return []any{"autonomia", "nudge", "watchdog", MailboxKindGovernanceRefresh, MailboxKindSkillsRefresh}
+	default:
+		return nil
+	}
+}
+
+func runtimeMailboxFamilyPlaceholders(family string) string {
+	kinds := runtimeMailboxFamilyKinds(family)
+	if len(kinds) == 0 {
+		return "?"
+	}
+	return runtimeSQLPlaceholders(len(kinds))
 }
 
 func runtimeMailboxKindSupersedible(kind string) bool {

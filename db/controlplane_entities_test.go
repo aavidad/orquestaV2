@@ -229,6 +229,72 @@ func TestEnviarRuntimeMailboxCoalesceNudgePendiente(t *testing.T) {
 	}
 }
 
+func TestEnviarRuntimeMailboxCoalesceFamiliaGuidancePendiente(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("antigravity", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	viejoID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "antigravity",
+		ProyectoID:  &proyectoID,
+		Kind:        "nudge",
+		PayloadJSON: `{"texto":"nudge viejo"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox vieja: %v", err)
+	}
+	nuevoID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "antigravity",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"texto":"autonomia nueva"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox nueva: %v", err)
+	}
+
+	pendiente := "pendiente"
+	toAgente := "antigravity"
+	pendientes, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{
+		ToAgente:   &toAgente,
+		ProyectoID: &proyectoID,
+		Estado:     &pendiente,
+	})
+	if err != nil {
+		t.Fatalf("listar guidance pendiente: %v", err)
+	}
+	if len(pendientes) != 1 || pendientes[0].ID != nuevoID || pendientes[0].Kind != "autonomia" {
+		t.Fatalf("guidance pendiente inesperada: %+v", pendientes)
+	}
+
+	consumido := "consumido"
+	consumidos, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{
+		ToAgente:   &toAgente,
+		ProyectoID: &proyectoID,
+		Estado:     &consumido,
+	})
+	if err != nil {
+		t.Fatalf("listar guidance consumida: %v", err)
+	}
+	if len(consumidos) != 1 || consumidos[0].ID != viejoID || consumidos[0].Kind != "nudge" {
+		t.Fatalf("guidance consumida inesperada: %+v", consumidos)
+	}
+}
+
 func TestRuntimeOrdersMailboxYCheckpoint(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

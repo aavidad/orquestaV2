@@ -1752,3 +1752,37 @@ Validacion:
   - daemon reiniciado con el binario nuevo (`pid=3645754`, `Health RPC: OK`)
   - `./orquesta agente tick Codex2 --proyecto orquestador` sigue devolviendo `pausar_por_cuota`
   - tras el reinicio no aparecieron nuevas `pause` por encima de `#80373`; la cascada quedo cortada
+
+## 2026-03-31T08:25:57Z - La mailbox guidance supersede entre `nudge` y `autonomia`
+
+Problema:
+
+- habia mailbox pendientes viejas que no se limpiaban aunque ya hubiera guia operativa mas nueva para el mismo agente
+- caso vivo claro: `Codex5` conservaba `runtime_mailbox #64332` (`nudge`) en `pendiente` aunque el runtime ya habia seguido recibiendo `autonomia` y `governance_refresh`
+- la causa era que `ConsumirRuntimeMailboxPendienteSupersedido(...)` solo coalescia por `kind` exacto
+
+Decision:
+
+- la coalescencia de guia operativa debe ir por familia, no por kind literal
+- familia `guidance`: `autonomia`, `nudge`, `watchdog`, `governance_refresh`, `skills_refresh`
+- `instruction` explicita queda fuera para no borrar mensajes dirigidos por una guia generica
+
+Cambios:
+
+- `db/controlplane_entities.go`
+  - `ConsumirRuntimeMailboxPendienteSupersedido(...)` ahora supersede por familia `guidance`
+  - nuevas helpers `runtimeMailboxSupersedeFamily(...)`, `runtimeMailboxFamilyKinds(...)` y `runtimeMailboxFamilyPlaceholders(...)`
+- `db/controlplane_entities_test.go`
+  - nueva regresion `TestEnviarRuntimeMailboxCoalesceFamiliaGuidancePendiente`
+
+Validacion:
+
+- `go test ./db -run 'TestEnviarRuntimeMailboxCoalesce(WatchdogPendiente|NudgePendiente|FamiliaGuidancePendiente)' -count=1` => OK
+- `go test ./db -run 'Test(RuntimeOrderSendInstructionMailboxSupersedeSesionObsoleta|RuntimeOrderSendInstructionCubiertaPorBootstrapLease|EjecutarRuntimeOrderStartConsumeMailboxBootstrapSinLease)' -count=1` => OK
+- `go build -o ./orquesta .` => OK
+- validacion viva:
+  - daemon reiniciado con el binario nuevo (`pid=3648618`, `Health RPC: OK`)
+  - `./orquesta runtime nudge Codex5 ... --kind autonomia --proyecto orquestador` => `#80378`
+  - tras un ciclo del runner, `#80378` quedo `completada`
+  - `runtime_mailbox #64332` paso de `pendiente` a `consumido`
+  - la pendiente vigente para `Codex5` pasa a ser `#64491` (`autonomia`), no el `nudge` historico

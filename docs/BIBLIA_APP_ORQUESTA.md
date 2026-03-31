@@ -247,6 +247,7 @@ Contrato minimo obligatorio para `runtime_orders`:
 - la clasificacion de errores de proveedor en `session_resume` debe leer el error relevante aunque el CLI anteponga banner, perfil o cabeceras; si hay `usage limit` o `rate limit`, Orquesta debe traducirlo a `provider_backoff` y `pausa_por_cuota`
 - un agente `pausado` o en `estado_cuota=enfriamiento` no cuenta como “activo ahora” en `status`, `/api/status` ni `/api/agentes`, aunque conserve sesion operativa o handle reciente
 - la autonomia no puede rematerializar `pause` si la pausa ya esta satisfecha: una orden `pause` pendiente, una `sesion` ya `pausada` o un `runtime_handle` ya `pausado` con el agente en `estado_cuota=enfriamiento` deben tratarse como pausa vigente y cerrar el ciclo sin nuevas ordenes
+- la coalescencia de `runtime_mailbox` para guia operativa no va por `kind` exacto sino por familia de guidance: `autonomia`, `nudge`, `watchdog`, `governance_refresh` y `skills_refresh` se superseden entre si; `instruction` explicita queda fuera de esa familia y no se borra por una guia generica posterior
 - si un `start` levanta runtime real con bootstrap inyectado pero sin `handoff/resume` pendiente, ese propio `start` debe hacer `ack` de los mailbox bootstrap incluidos; no se puede dejar esa continuidad pendiente por falta de lease formal
 
 Contrato minimo obligatorio para el supervisor local:
