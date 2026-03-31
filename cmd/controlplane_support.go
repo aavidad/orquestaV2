@@ -1522,7 +1522,12 @@ func procesarAutonomiaSesionActiva(sesion *db.Sesion) (int, error) {
 			return 0, err
 		}
 		return 1, nil
-	case "supervisar_proyecto", "votar_propuestas_pendientes", "pedir_intervencion":
+	case "supervisar_proyecto":
+		// La supervisión rica del proyecto ya tiene su propio batch y señales
+		// dedicadas. Repetir un nudge genérico por cada tick de una sesión viva
+		// solo reinyecta guidance redundante sobre un runtime ya activo.
+		return 0, nil
+	case "votar_propuestas_pendientes", "pedir_intervencion":
 		if pendiente, err := existeRuntimeOrderAutonomiaPendiente(sesion.Agente, &proyecto.ID, "nudge", strings.TrimSpace(out.AccionRecomendada)); err != nil {
 			return 0, err
 		} else if pendiente {

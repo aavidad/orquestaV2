@@ -1988,3 +1988,50 @@ Validacion:
 
 - `go test ./cmd -run 'TestBootstrapServerAutonomy(ConfiguraProyectoYArranque|NoDuplicaBootstrapEnAgenteYaOperativo)|TestAgenteYaBootstrappeadoServidorDetectaMailboxDurablePendiente' -count=1`
 - tras este cambio, el siguiente reinicio del daemon debe conservar los agentes ya vivos sin reinyectarles bootstrap `server_autobootstrap`
+
+## 2026-03-31 — el supervisor no debe recibir nudge pasivo por tick
+
+Hallazgo:
+
+- `Codex1` seguia recibiendo `nudge/send_instruction` cada ~1 minuto aunque el runtime estaba sano, el mailbox limpio y el bootstrap ya corregido
+- el payload mostraba `accion=supervisar_proyecto` sin `supervision_cycle_kind`
+- la fuente era `procesarAutonomiaSesionActiva()`, que trataba al supervisor activo como si necesitara un recordatorio generico por cada tick
+
+Decision:
+
+- `supervisar_proyecto` deja de emitirse desde el tick pasivo de una sesion ya activa
+- la supervision del supervisor queda solo en:
+  - `procesarSupervisionAutonomaBatch()`
+  - señales ricas de transcript/review
+
+Codigo:
+
+- [cmd/controlplane_support.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support.go)
+- [cmd/controlplane_support_test.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support_test.go)
+
+Validacion:
+
+- `go test ./cmd -run 'TestProcesarAutonomiaAgentesBatch(NoEncolaNudgePorContinuarTrabajoEnSesionActiva|NoEncolaNudgePorEsperarOPedirTareaEnSesionActiva|NoEncolaNudgePorSupervisarProyectoEnSesionActiva|EncolaNudgePorPropuestasPendientes)' -count=1`
+
+## 2026-03-31 — el upsert de autonomia debe preservar timestamps operativos
+
+Hallazgo:
+
+- tras corregir el nudge pasivo del supervisor, `Codex1` seguia recibiendo supervision rica inmediatamente despues de reiniciar el daemon
+- la causa no era el intervalo de supervision, sino que `bootstrapServerAutonomy()` hace `UpsertProjectPolicy()` al arrancar
+- `UpsertProyectoAutonomia()` estaba sobrescribiendo `last_supervision_at` y `last_review_at` con `NULL` cuando el caller no los informaba
+
+Decision:
+
+- el `upsert` de autonomia debe preservar `last_supervision_at` y `last_review_at` existentes si el caller no los trae
+- reiniciar el daemon no puede rearmar supervision rica como si nunca hubiera corrido
+
+Codigo:
+
+- [db/autonomia_proyecto.go](/home/alberto/Trabajo/orquesta/db/autonomia_proyecto.go)
+- [db/autonomia_proyecto_test.go](/home/alberto/Trabajo/orquesta/db/autonomia_proyecto_test.go)
+
+Validacion:
+
+- `go test ./db -run 'Test(ProyectoAutonomiaUpsertYListarActivos|ProyectoAutonomiaUpsertPreservaTimestampsOperativosSiNoSeInforman|AutonomiaCyclesRegistrarYFiltrar)' -count=1`
+- `go test ./cmd -run 'TestProcesarSupervisionAutonomaBatch(EncolaSupervisionYRegistraCiclo|ArrancaSupervisorPreferidoSinSesion|GeneraBacklogInicialSiAutoCreateTasks)' -count=1`

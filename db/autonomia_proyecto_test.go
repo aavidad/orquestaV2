@@ -98,3 +98,55 @@ func TestAutonomiaCyclesRegistrarYFiltrar(t *testing.T) {
 		t.Fatalf("ciclos inesperados: %+v", ciclos)
 	}
 }
+
+func TestProyectoAutonomiaUpsertPreservaTimestampsOperativosSiNoSeInforman(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	now := time.Now().UTC().Truncate(time.Second)
+	item := &ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		MaxWorkers:           4,
+		SupervisorAgente:     "Codex1",
+		EstadoAutonomia:      AutonomiaProyectoActiva,
+		LastSupervisionAt:    &now,
+	}
+	if _, err := UpsertProyectoAutonomia(item); err != nil {
+		t.Fatalf("upsert autonomia inicial: %v", err)
+	}
+
+	if _, err := UpsertProyectoAutonomia(&ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app mejor",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		MaxWorkers:           4,
+		SupervisorAgente:     "Codex1",
+		EstadoAutonomia:      AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia sin timestamps: %v", err)
+	}
+
+	got, err := GetProyectoAutonomia(proyectoID)
+	if err != nil {
+		t.Fatalf("get autonomia: %v", err)
+	}
+	if got == nil || got.LastSupervisionAt == nil {
+		t.Fatalf("last_supervision_at perdido: %+v", got)
+	}
+	if !got.LastSupervisionAt.UTC().Equal(now) {
+		t.Fatalf("last_supervision_at inesperado: got=%v want=%v", got.LastSupervisionAt.UTC(), now)
+	}
+}

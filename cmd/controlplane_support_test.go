@@ -1758,6 +1758,63 @@ func TestProcesarAutonomiaAgentesBatchNoEncolaNudgePorEsperarOPedirTareaEnSesion
 	}
 }
 
+func TestProcesarAutonomiaAgentesBatchNoEncolaNudgePorSupervisarProyectoEnSesionActiva(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "Codex1",
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	n, err := procesarAutonomiaAgentesBatch()
+	if err != nil {
+		t.Fatalf("procesar autonomia: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia forzar nudge de supervisor en sesion activa, got=%d", n)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia crear nudge supervisor pasivo: %+v", orders)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchNoRepiteNudgeRecienteMaterializado(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
