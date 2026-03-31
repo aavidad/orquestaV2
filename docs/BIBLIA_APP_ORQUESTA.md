@@ -668,6 +668,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - también deben eliminarse los caracteres de control residuales del PTY (`BEL`, `BS`, etc.) antes de decidir si una línea tiene valor semántico.
 - fragmentos de un solo carácter o restos de repintado del TUI no cuentan como `runtime output` útil y no deben contaminar transcript ni servir como evidencia para `ack` operativo.
 - `transcript_log_pending` tampoco puede conservar basura cruda del PTY. Si queda una línea parcial, se compacta a texto imprimible y acotado; si no tiene contenido semántico, se elimina.
+- el banner de arranque de Codex (`Perfil activo`, `CODEX_HOME`, `Credenciales`, URL de releases, consejo de login, localhost del TUI) tampoco es trabajo del agente y debe descartarse del transcript operativo.
 - enfriar un agente o avisar al supervisor por transcript solo es válido sobre evidencia semántica real, no sobre artefactos visuales del cliente TUI.
 
 ## Presupuesto visible e identidad de cuenta

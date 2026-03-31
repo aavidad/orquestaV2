@@ -3695,3 +3695,30 @@ Resultado:
 
 - la metadata futura del handle ya no debe arrastrar pendientes crudos del TUI
 - baja el ruido persistido y se hace mas fiable la inspeccion de handles vivos
+
+## 2026-03-31 — El transcript ya descarta el banner de arranque de Codex
+
+Hallazgo:
+
+- incluso con el saneado de control chars, el transcript reciente de agentes activos seguia mostrando lineas de banner como `Perfil activo`, `CODEX_HOME`, `Credenciales`, consejo de login o la URL de releases
+- eso seguia ensuciando la lectura operativa: parecia salida del agente cuando en realidad era solo banner del launcher/TUI
+
+Decision:
+
+- descartar explicitamente ese banner de arranque de Codex durante la ingestión de transcript
+- mantener en transcript solo sistema relevante y salida semantica del agente, no ruido del bootstrap del cliente
+
+Codigo:
+
+- [db/runtime_transcript.go](/home/alberto/Trabajo/orquesta/db/runtime_transcript.go)
+- [db/runtime_transcript_test.go](/home/alberto/Trabajo/orquesta/db/runtime_transcript_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `env GOCACHE=/tmp/orquesta-gocache go test ./db -run 'TestIngestarRuntimeTranscriptHandle(DescartaBannerCodex|CompactaPendingTranscript|DescartaFragmentosPTYConControlChars|NoClasificaRuidoOSCSpinner)$' -count=1`
+
+Resultado:
+
+- el transcript futuro ya no debe llenarse con banner de Codex al arrancar o reanudar
+- sube la calidad de la observabilidad y reduce falsas lecturas de “actividad” en agentes vivos

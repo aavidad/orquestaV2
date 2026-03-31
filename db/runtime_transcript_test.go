@@ -714,3 +714,75 @@ func TestIngestarRuntimeTranscriptHandleCompactaPendingTranscript(t *testing.T) 
 		t.Fatalf("pending compactado inesperado: %q", got)
 	}
 }
+
+func TestIngestarRuntimeTranscriptHandleDescartaBannerCodex(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtime, _ := GetRuntimeBySesionID(sesion.ID)
+	handle, _ := GetRuntimeHandleBySesionID(sesion.ID)
+
+	logPath := filepath.Join(t.TempDir(), "codex-banner.log")
+	logData := strings.Join([]string{
+		"Perfil activo: Codex2",
+		"CODEX_HOME: /tmp/codex",
+		"Credenciales: /tmp/auth.json",
+		"Consejo: si es el primer arranque, ejecuta codex-perfil Codex2 login",
+		"https://github.com/openai/codex/releases/latest",
+		"  (http://localhost:8080).",
+		"",
+	}, "\n")
+	if err := os.WriteFile(logPath, []byte(logData), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	n, err := IngestarRuntimeTranscriptHandle(handle.ID)
+	if err != nil {
+		t.Fatalf("ingestar transcript: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("el banner de Codex deberia descartarse, got=%d", n)
+	}
+
+	agente := "Codex2"
+	items, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: &agente, Limit: 10})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("transcript inesperado: %+v", items)
+	}
+	var count int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM runtime_events WHERE runtime_id=?`, runtime.ID).Scan(&count); err != nil {
+		t.Fatalf("count runtime_events: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("no deberia generar runtime_events para el banner de Codex, got=%d", count)
+	}
+}

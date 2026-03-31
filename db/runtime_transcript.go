@@ -652,6 +652,9 @@ func descartarRuidoTranscript(stream, texto, normalized, classification string) 
 	if normalized == "" {
 		return true
 	}
+	if esBannerRuidoCodex(normalized) {
+		return true
+	}
 	alnum := contarRunasSemanticas(normalized)
 	if alnum == 0 {
 		return true
@@ -665,6 +668,26 @@ func descartarRuidoTranscript(stream, texto, normalized, classification string) 
 	}
 	if float64(alnum)/float64(total) < 0.25 {
 		return true
+	}
+	return false
+}
+
+func esBannerRuidoCodex(normalized string) bool {
+	if normalized == "" {
+		return false
+	}
+	banners := []string{
+		"perfil activo:",
+		"codex_home:",
+		"credenciales:",
+		"consejo: si es el primer arranque, ejecuta",
+		"https://github.com/openai/codex/releases/latest",
+		"(http://localhost:8080).",
+	}
+	for _, marker := range banners {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
 	}
 	return false
 }
