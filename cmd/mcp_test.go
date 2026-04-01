@@ -2249,6 +2249,74 @@ func TestMCPToolSupervisorInspeccionaWorktreeDrift(t *testing.T) {
 	})
 }
 
+func TestMCPToolSupervisorSolicitaCheckpointPorWorktreeDrift(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		prevDrift := openClawWorktreeDriftBuilder
+		defer func() {
+			statusService = prev
+			openClawWorktreeDriftBuilder = prevDrift
+		}()
+
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar Codex3: %v", err)
+		}
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		insertTestAsignacion(t, "Codex3", proyectoID, "frente activo")
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"}},
+			Agentes:        []*db.Agente{{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"}},
+		}}
+		openClawWorktreeDriftBuilder = func(status apiStatusResponse) ([]apiOpenClawWorktreeDrift, error) {
+			return []apiOpenClawWorktreeDrift{{
+				Agente:       "Codex3",
+				Branch:       "orq-orquesta-codex3",
+				Path:         "/tmp/orquesta/.orquesta-worktrees/orquesta-codex3",
+				CurrentHead:  "c51c0ac9",
+				ExpectedHead: "ec39312c",
+				Dirty:        true,
+				DirtySummary: "12 tracked · 6 untracked",
+			}}, nil
+		}
+
+		result, err := applySupervisorRecommendedAction("OpenClaw", "revisar_worktree_desfasada", "agente:Codex3", "Codex3")
+		if err != nil {
+			t.Fatalf("applySupervisorRecommendedAction: %v", err)
+		}
+		if result["nudge_enqueued"] != true {
+			t.Fatalf("deberia haber encolado guidance durable: %#v", result)
+		}
+		if result["proyecto"] != "orquestador" {
+			t.Fatalf("proyecto inesperado: %#v", result["proyecto"])
+		}
+		instruction, _ := result["checkpoint_request"].(string)
+		for _, token := range []string{"checkpoint", "c51c0ac9", "ec39312c", "12 tracked · 6 untracked"} {
+			if !strings.Contains(instruction, token) {
+				t.Fatalf("instruction sin %q: %s", token, instruction)
+			}
+		}
+		orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: strPtr("Codex3"), Limit: 10})
+		if err != nil {
+			t.Fatalf("listar runtime orders: %v", err)
+		}
+		found := false
+		for _, order := range orders {
+			if order == nil || order.Tipo != "nudge" {
+				continue
+			}
+			if strings.Contains(order.PayloadJSON, `"supervisor_action":"revisar_worktree_desfasada"`) &&
+				strings.Contains(order.PayloadJSON, `"dirty_summary":"12 tracked · 6 untracked"`) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("no aparecio nudge de checkpoint worktree en runtime orders: %+v", orders)
+		}
+	})
+}
+
 func TestMCPRevisionSupervisorExponeRefrescoSeguroDeWorktreeLimpia(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := statusService

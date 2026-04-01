@@ -7074,3 +7074,15 @@ Resultado:
 - Validación:
   - `go test ./cmd -run 'TestWebOpenClawMuestraOperatorReviewYEntregas' -count=1`
   - `go build -o ./orquesta .`
+
+## 2026-04-02 — OpenClaw ya pide checkpoint por worktree drift sucia
+
+- Hallazgo:
+  - `revisar_worktree_desfasada` seguía siendo solo inspección: OpenClaw veía el problema, pero no dejaba una acción durable al agente
+- Corrección:
+  - `applySupervisorRecommendedAction("revisar_worktree_desfasada", ...)` ahora resuelve proyecto canónico del agente
+  - encola un `nudge` durable con `supervisor_action=revisar_worktree_desfasada`
+  - la instruction pide checkpoint útil, resumen de cambios y preparación del refresco controlado
+  - sigue siendo una acción manual: no refresca automáticamente una worktree sucia
+- Validación:
+  - `go test ./cmd -run 'TestMCPToolSupervisorSolicitaCheckpointPorWorktreeDrift' -count=1`

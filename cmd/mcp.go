@@ -4440,14 +4440,24 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 		}
 		for _, item := range items {
 			if strings.EqualFold(strings.TrimSpace(item.Agente), agente) {
-				return map[string]any{
-					"ok":             true,
-					"supervisor":     supervisor,
-					"action":         selected,
-					"agente":         agente,
-					"assignee":       worker,
-					"worktree_drift": item,
-				}, nil
+				result := map[string]any{
+					"ok":                 true,
+					"supervisor":         supervisor,
+					"action":             selected,
+					"agente":             agente,
+					"assignee":           worker,
+					"worktree_drift":     item,
+					"checkpoint_request": buildSupervisorWorktreeCheckpointInstruction(item),
+					"nudge_enqueued":     false,
+				}
+				enqueued, proyecto, err := requestSupervisorWorktreeCheckpoint(agente, item)
+				if err == nil {
+					result["nudge_enqueued"] = enqueued
+					result["proyecto"] = proyecto
+				} else {
+					result["request_error"] = err.Error()
+				}
+				return result, nil
 			}
 		}
 		return nil, fmt.Errorf("no hay worktree desfasada para %s", agente)
@@ -4493,6 +4503,65 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 	default:
 		return nil, fmt.Errorf("acción no aplicable automáticamente: %s", strings.TrimSpace(selected.Action))
 	}
+}
+
+func resolveSupervisorActionProjectForAgent(agente string) (*db.Proyecto, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil, fmt.Errorf("agente obligatorio")
+	}
+	if asignacion, err := db.GetAsignacionActivaAgente(agente); err == nil && asignacion != nil {
+		return db.GetProyecto(strconv.FormatInt(asignacion.ProyectoID, 10))
+	}
+	projectSlug := strings.TrimSpace(configOrDefault("server_autobootstrap_project_slug", "orquestador"))
+	if projectSlug == "" {
+		projectSlug = "orquestador"
+	}
+	return db.GetProyecto(projectSlug)
+}
+
+func buildSupervisorWorktreeCheckpointInstruction(item apiOpenClawWorktreeDrift) string {
+	parts := []string{
+		"tu worktree esta desfasada respecto al HEAD del servidor",
+	}
+	if strings.TrimSpace(item.CurrentHead) != "" || strings.TrimSpace(item.ExpectedHead) != "" {
+		parts = append(parts, fmt.Sprintf("base %s -> %s", strings.TrimSpace(item.CurrentHead), strings.TrimSpace(item.ExpectedHead)))
+	}
+	if strings.TrimSpace(item.DirtySummary) != "" {
+		parts = append(parts, "estado local "+strings.TrimSpace(item.DirtySummary))
+	}
+	parts = append(parts, "haz checkpoint util, resume cambios locales y deja la worktree lista para refresco controlado")
+	return strings.Join(parts, "; ")
+}
+
+func requestSupervisorWorktreeCheckpoint(agente string, item apiOpenClawWorktreeDrift) (bool, string, error) {
+	proyecto, err := resolveSupervisorActionProjectForAgent(agente)
+	if err != nil {
+		return false, "", err
+	}
+	instruction := buildSupervisorWorktreeCheckpointInstruction(item)
+	enqueued, err := encolarNudgeAutonomiaDetallado(
+		agente,
+		proyecto,
+		"continuar_trabajo",
+		"worktree_desfasada",
+		instruction,
+		map[string]any{
+			"worktree_drift": map[string]any{
+				"branch":        strings.TrimSpace(item.Branch),
+				"path":          strings.TrimSpace(item.Path),
+				"current_head":  strings.TrimSpace(item.CurrentHead),
+				"expected_head": strings.TrimSpace(item.ExpectedHead),
+				"dirty":         item.Dirty,
+				"dirty_summary": strings.TrimSpace(item.DirtySummary),
+			},
+			"supervisor_action": "revisar_worktree_desfasada",
+		},
+	)
+	if err != nil {
+		return false, "", err
+	}
+	return enqueued, strings.TrimSpace(proyecto.Slug), nil
 }
 
 func normalizeSupervisorBatchKind(kind string) string {
