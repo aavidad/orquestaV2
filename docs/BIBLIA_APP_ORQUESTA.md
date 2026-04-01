@@ -830,3 +830,9 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - La degradación de `supervisor_local` por `runtime_panic` es válida solo para la generación observada del handle. Si el runtime ya arrancó otra vez, el transcript anterior no puede contaminar el handle nuevo.
 - Existe una red de seguridad adicional: `disable_supervisor_hot_input` expira automáticamente tras `runtime_supervisor_hot_input_disable_seconds` cuando el runtime sigue vivo. Esa rehabilitación no sustituye al guardarraíl de generación; solo evita condenas permanentes del handle.
 - En pruebas reales con Codex, la validación buena no es solo “sin panic”: hay que comprobar `runtime_mailbox -> send_instruction -> stdin` en transcript y confirmar que, tras un panic previo, la siguiente generación del handle puede volver a aceptar trabajo real.
+
+### Guidance durable y `session_resume`
+
+- Cuando una guidance durable (`autonomia`, `nudge`, `watchdog`, `governance_refresh`, `skills_refresh`) cae a `mailbox_only` por `session_resume timeout` sobre la misma sesión activa, Orquesta no debe rematerializarla en bucle.
+- Ese intento debe quedar deduplicado mientras no cambien `handle` o `external_session_id`.
+- Para `instruction` normal sí puede seguir existiendo reintento tras TTL; para guidance operativa del servidor, el criterio correcto es evitar repiques sobre la misma sesión viva.

@@ -5791,3 +5791,12 @@ Resultado:
   - el `nudge` pendiente de `Codex4` volvió a consumirse
   - apareció `stdin` nueva en transcript (`10629`)
   - el bug dejó de ser “bloqueo permanente de la siguiente generación”; quedó reducido a la inestabilidad propia del TUI de Codex y a reintentos de autonomía más largos
+
+## 2026-04-01 — guidance durable sin repique en la misma sesión
+
+- La prueba viva de `Codex4` reveló un segundo patrón: tras resolver el problema de generaciones, la guidance `autonomia` podía seguir rematerializando `send_instruction` por `session_resume` sobre la misma sesión activa.
+- Se ajustó la deduplicación de `mailbox_only` para que guidance del servidor (`autonomia`, `nudge`, `watchdog`, `governance_refresh`, `skills_refresh`) quede pegajosa mientras no cambien `handle` o `external_session_id`.
+- Validación viva:
+  - `80818`, `80819`, `80820`, `80821` cerraron y dejaron de generar un `80822`
+  - `runtime_mailbox 64663` pasó finalmente a `consumido`
+  - `runtime diagnostico --agente Codex4` volvió a `Órdenes: completada=16` y `Mailbox: 0 pendiente(s)`

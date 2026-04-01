@@ -1782,6 +1782,9 @@ func runtimeOrderMailboxOnlyExpired(order *db.RuntimeOrder) bool {
 	if order == nil {
 		return false
 	}
+	if runtimeOrderMailboxOnlySticky(order) {
+		return false
+	}
 	reference := order.UpdatedAt
 	if order.FinishedAt != nil && !order.FinishedAt.IsZero() {
 		reference = order.FinishedAt.UTC()
@@ -1793,6 +1796,19 @@ func runtimeOrderMailboxOnlyExpired(order *db.RuntimeOrder) bool {
 		return false
 	}
 	return time.Since(reference.UTC()) > runtimeMailboxOnlyDedupeTTL()
+}
+
+func runtimeOrderMailboxOnlySticky(order *db.RuntimeOrder) bool {
+	if order == nil || !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) {
+		return false
+	}
+	switch strings.TrimSpace(runtimeOrderMailboxKindFromJSON(order.PayloadJSON)) {
+	case "autonomia", "nudge", "watchdog", db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
+	default:
+		return false
+	}
+	reason := strings.ToLower(strings.TrimSpace(runtimeOrderDeferredReason(order.ResultadoJSON)))
+	return strings.Contains(reason, "session_resume timeout")
 }
 
 func runtimeMailboxOnlyDedupeTTL() time.Duration {
@@ -1844,6 +1860,17 @@ func runtimeOrderDeliveryAttemptSignature(raw string) string {
 	return ""
 }
 
+func runtimeOrderMailboxKindFromJSON(raw string) string {
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &payload); err != nil {
+		return ""
+	}
+	if text, ok := payload["mailbox_kind"].(string); ok {
+		return strings.TrimSpace(text)
+	}
+	return ""
+}
+
 func runtimeMailboxDeliveryAttemptSignature(handle *db.RuntimeHandle, externalSessionID string) string {
 	if handle == nil || handle.ID <= 0 {
 		return ""
@@ -1866,6 +1893,17 @@ func runtimeOrderMailboxOnlyResult(raw string) bool {
 	value, _ := payload["mailbox_only"]
 	flag, ok := value.(bool)
 	return ok && flag
+}
+
+func runtimeOrderDeferredReason(raw string) string {
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &payload); err != nil {
+		return ""
+	}
+	if text, ok := payload["deferred_reason"].(string); ok {
+		return strings.TrimSpace(text)
+	}
+	return ""
 }
 
 func encolarReinicioCoordinadoMailbox(handle *db.RuntimeHandle, proyecto *db.Proyecto, msg *db.RuntimeMailboxMessage, motivo string) (int64, int64, error) {
