@@ -279,6 +279,9 @@ func TestMCPPromptRevisionSupervisorIncluyeGatesYSignals(t *testing.T) {
 		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
 			t.Fatalf("registrando Codex3: %v", err)
 		}
+		if err := db.RegistrarAgente("Codex4", "programador"); err != nil {
+			t.Fatalf("registrando Codex4: %v", err)
+		}
 		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
 		tareaID, err := db.CrearTarea(&db.Tarea{
 			Titulo:      "Integrar API",
@@ -290,6 +293,23 @@ func TestMCPPromptRevisionSupervisorIncluyeGatesYSignals(t *testing.T) {
 		})
 		if err != nil {
 			t.Fatalf("crear tarea: %v", err)
+		}
+		tareaID2, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Ajustar contrato API",
+			Descripcion: "Debe aparecer como colisión de módulo",
+			ProyectoID:  &proyectoID,
+			Modulo:      "api",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear segunda tarea: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE tareas SET estado='en_progreso', agente='Codex3' WHERE id=?`, tareaID); err != nil {
+			t.Fatalf("activar tarea Codex3: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE tareas SET estado='en_progreso', agente='Codex4' WHERE id=?`, tareaID2); err != nil {
+			t.Fatalf("activar tarea Codex4: %v", err)
 		}
 		if _, err := db.CrearReviewGate(&db.ReviewGate{
 			ProyectoID:     &proyectoID,
@@ -349,6 +369,8 @@ func TestMCPPromptRevisionSupervisorIncluyeGatesYSignals(t *testing.T) {
 			"ready_for_review",
 			"Solicitudes de merge vivas",
 			"orq/orquestador/Codex3/api->master",
+			"Riesgos de colisión detectados",
+			"Ajustar contrato API",
 			"Criterio de decisión",
 		} {
 			if !strings.Contains(text, token) {

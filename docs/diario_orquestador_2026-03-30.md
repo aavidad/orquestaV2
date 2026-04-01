@@ -4654,3 +4654,25 @@ Validacion:
 
 - `go test ./cmd -run 'TestMCPPromptRevisionSupervisorIncluyeGatesYSignals' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — La cola MCP de OpenClaw ya avisa de colisiones de módulo
+
+Hallazgo:
+
+- con gates, señales y merges ya visibles, seguía faltando el tipo de alerta que más uso en revisión manual: dos agentes tocando el mismo `módulo` activo a la vez
+
+Decision:
+
+- añadir detección de colisión por `módulo` activo a la cola MCP estrecha del supervisor
+- si hay varias tareas activas del mismo módulo con agentes distintos, OpenClaw debe verlo antes de aceptar o fusionar trabajo
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestMCPPromptRevisionSupervisorIncluyeGatesYSignals' -count=1`
+- `go build -o ./orquesta .`

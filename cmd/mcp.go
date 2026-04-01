@@ -1810,6 +1810,10 @@ func buildSupervisorReviewBriefing(supervisor string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	conflicts, err := buildSupervisorConflictOverview()
+	if err != nil {
+		return "", err
+	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Cola de revisión del supervisor: %s\n\n", supervisor)
 	fmt.Fprintf(&b, "- Doctrina: %s\n", db.RutaDoctrinaCanonica)
@@ -1821,11 +1825,59 @@ func buildSupervisorReviewBriefing(supervisor string) (string, error) {
 	} else {
 		b.WriteString("## Revisión e integración\n- Sin gates abiertos ni señales recientes.\n\n")
 	}
+	if strings.TrimSpace(conflicts) != "" {
+		b.WriteString(conflicts)
+		b.WriteString("\n\n")
+	}
 	b.WriteString("## Criterio de decisión\n")
 	b.WriteString("- `approval_request`: arbitra y desbloquea sin abrir espera humana innecesaria.\n")
 	b.WriteString("- `waiting_human`: reencuadra y relanza si el bloqueo no es externo real.\n")
 	b.WriteString("- `ready_for_review`: inspecciona, decide gate y encamina merge o cambios.\n")
 	return strings.TrimSpace(b.String()) + "\n", nil
+}
+
+func buildSupervisorConflictOverview() (string, error) {
+	status, err := statusService.FetchStatus()
+	if err != nil {
+		return "", err
+	}
+	moduleGroups := map[string][]tareaLite{}
+	for _, tarea := range status.TareasActivas {
+		modulo := strings.TrimSpace(tarea.Modulo)
+		agente := strings.TrimSpace(tarea.Agente)
+		if modulo == "" || agente == "" {
+			continue
+		}
+		moduleGroups[modulo] = append(moduleGroups[modulo], tarea)
+	}
+	lines := make([]string, 0, 8)
+	for modulo, tareas := range moduleGroups {
+		agents := map[string]struct{}{}
+		for _, tarea := range tareas {
+			if strings.TrimSpace(tarea.Agente) != "" {
+				agents[strings.TrimSpace(tarea.Agente)] = struct{}{}
+			}
+		}
+		if len(agents) < 2 {
+			continue
+		}
+		partes := make([]string, 0, len(tareas))
+		for _, tarea := range tareas {
+			partes = append(partes, fmt.Sprintf("#%d %s -> %s", tarea.ID, compactMCPLine(strings.TrimSpace(tarea.Titulo), 80), strings.TrimSpace(tarea.Agente)))
+		}
+		sort.Strings(partes)
+		lines = append(lines, fmt.Sprintf("- módulo=%s · %s", modulo, strings.Join(partes, " | ")))
+	}
+	sort.Strings(lines)
+	if len(lines) == 0 {
+		return "", nil
+	}
+	var b strings.Builder
+	b.WriteString("## Riesgos de colisión detectados\n")
+	for _, line := range lines {
+		b.WriteString(line + "\n")
+	}
+	return strings.TrimSpace(b.String()), nil
 }
 
 type supervisorReviewSignal struct {
