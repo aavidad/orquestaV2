@@ -160,6 +160,7 @@ func buildSupervisorObservedAgentSessions() ([]*supervisorObservedAgentSessionSu
 			ObservedUsageUpdatedAt: agente.ObservedUsageUpdatedAt,
 		}
 		if sesion := sesionesPorAgente[item.Agente]; sesion != nil {
+			item.Activo = true
 			item.Herramienta = strings.TrimSpace(sesion.Herramienta)
 			item.Host = strings.TrimSpace(sesion.Host)
 			item.ExternalSessionID = strings.TrimSpace(sesion.ExternalSessionID)

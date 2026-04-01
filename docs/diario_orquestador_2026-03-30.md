@@ -7002,3 +7002,14 @@ Resultado:
   - `applySupervisorRecommendedAction()` ya devuelve el `session_candidate` canónico para API/MCP/web sin inventar un relanzamiento automático
 - Validación:
   - `go test ./cmd -run 'TestMCP(RevisionSupervisorExponeSesionObservadaReutilizable|ToolSupervisorInspeccionaSesionObservada|RevisionSupervisorExponeGuidanceDurablePendiente|ToolsAgentesPrepararEInvestigarOperanPorLaViaCanonica)' -count=1`
+
+## 2026-04-01 — session_candidates ya no contradice al status canónico
+
+- Hallazgo:
+  - `observed_agent_sessions` usaba el flag persistido `agente.Activo` sin promoverlo cuando ya existía una sesión operativa viva
+  - eso permitía que OpenClaw/API enseñaran `session_candidates` con `activo=false` para agentes que el daemon ya consideraba conectados
+- Corrección:
+  - la proyección observada ya marca la sesión como activa si existe sesión operativa viva para el agente
+  - la regresión cubre `buildOpenClawSessionCandidates()` para no volver a degradar esa convergencia
+- Validación:
+  - `go test ./cmd -run 'Test(BuildOpenClawSessionCandidatesPromueveSesionOperativaComoActiva|MCPRevisionSupervisorExponeSesionObservadaReutilizable|ToolSupervisorInspeccionaSesionObservada|APIObservabilidadReadOnly)' -count=1`

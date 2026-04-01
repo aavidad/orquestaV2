@@ -56,6 +56,38 @@ func TestCuentaPresupuestoDesdeAgenteUsaObservedUsageCuandoNoHayCuotaReal(t *tes
 	}
 }
 
+func TestBuildOpenClawSessionCandidatesPromueveSesionOperativaComoActiva(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar codex3: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:            "Codex3",
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-codex3-1",
+		Host:              "host-codex3",
+	}); err != nil {
+		t.Fatalf("iniciar sesion codex3: %v", err)
+	}
+	snapshot, err := buildSupervisorThreadsSnapshot("OpenClaw", "", 100)
+	if err != nil {
+		t.Fatalf("buildSupervisorThreadsSnapshot: %v", err)
+	}
+	candidates := buildOpenClawSessionCandidates(snapshot)
+	if len(candidates) == 0 {
+		t.Fatalf("session_candidates vacio")
+	}
+	for _, item := range candidates {
+		if item.Agente == "Codex3" {
+			if !item.Activo {
+				t.Fatalf("Codex3 debe salir activo si tiene sesion operativa viva: %#v", item)
+			}
+			return
+		}
+	}
+	t.Fatalf("no aparece Codex3 en session_candidates: %#v", candidates)
+}
+
 var cmdTestDBMu sync.Mutex
 var cmdTestBootstrapOnce sync.Once
 var cmdTestBootstrapData []byte
