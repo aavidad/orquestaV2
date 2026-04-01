@@ -1458,6 +1458,54 @@ func TestMCPRevisionSupervisorSugiereAssigneePorMenorCargaEnReplanificacion(t *t
 	})
 }
 
+func TestMCPRevisionSupervisorExponeTodasLasRetenidasPorCuota(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex2", Rol: "programador", Activo: false, EstadoCuota: "enfriamiento"},
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			TareasActivas: []tareaLite{
+				{ID: 410, Estado: db.TareaEnProgreso, Titulo: "Runtime", Agente: "Codex3"},
+				{ID: 411, Estado: db.TareaEnProgreso, Titulo: "Server", Agente: "Codex4"},
+				{ID: 416, Estado: db.TareaEnProgreso, Titulo: "Controlplane", Agente: "Codex2"},
+				{ID: 421, Estado: db.TareaEnProgreso, Titulo: "Eventos", Agente: "Codex2"},
+			},
+		}}
+
+		snapshot, err := buildSupervisorReviewSnapshot("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshot: %v", err)
+		}
+		queue, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+		if len(queue) < 2 {
+			t.Fatalf("cola operativa insuficiente: %+v", queue)
+		}
+		targets := make(map[string]bool, len(queue))
+		for _, item := range queue {
+			if item.Action != "replanificar_por_cuota" {
+				continue
+			}
+			targets[item.Target] = true
+		}
+		if !targets["tarea:416"] || !targets["tarea:421"] {
+			t.Fatalf("faltan retenidas por cuota en action_queue: %+v", queue)
+		}
+	})
+}
+
 func TestMCPToolSupervisorAplicaReplanificacionPorCuotaConFallbackExplicito(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := statusService

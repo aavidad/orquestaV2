@@ -955,3 +955,6 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `status.agentesActivos` y `status.agentesTrabajando` en `/api/openclaw/operator` deben salir de la misma fuente canónica que `/api/status`
   - la fuente canónica es `statusService.FetchStatus()`, no una reconstrucción paralela desde `panelService`
   - si OpenClaw y `/api/status` divergen en la flota visible, el bug está en la composición y debe corregirse ahí, no con filtros ad hoc en la web o en MCP
+- La cola operativa del supervisor no puede truncar trabajo retenido por cuota:
+  - si hay varias tareas retenidas viables, `action_queue` debe incluir una acción por cada una
+  - `next_action` sigue siendo la primera priorizada, pero OpenClaw debe ver el conjunto completo para decidir secuenciación e integración

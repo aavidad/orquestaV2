@@ -6179,3 +6179,19 @@ Resultado:
   - `GET /api/status` => `agentesActivos = [Codex3, Codex4]`
   - `GET /api/openclaw/operator` => `status.agentesActivos = [Codex3, Codex4]`
   - `agentesTrabajando` coincide también en ambas superficies
+
+## 2026-04-01 — OpenClaw ya ve todas las retenidas por cuota, no solo la primera
+
+- La cola operativa del supervisor estaba truncando información útil:
+  - había dos tareas retenidas por cuota (`#416`, `#421`)
+  - `next_action` y `action_queue` solo enseñaban `#416`
+- Se corrigió `buildSupervisorOperationalActions(...)`:
+  - ahora genera una acción `replanificar_por_cuota` por cada retenida viable
+  - `next_action` sigue saliendo de la primera priorizada
+  - `action_queue` ya representa el conjunto real de decisiones pendientes
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(MCPRevisionSupervisorSugiereAssigneePorMenorCargaEnReplanificacion|MCPRevisionSupervisorExponeTodasLasRetenidasPorCuota|MCPToolSupervisorAplicaReplanificacionPorCuotaConFallbackExplicito)' -count=1`
+- Validación viva:
+  - `GET /api/openclaw/operator` ya muestra en `review.action_queue`:
+    - `tarea:416 -> Codex3`
+    - `tarea:421 -> Codex3`

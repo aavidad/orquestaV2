@@ -3766,14 +3766,17 @@ func buildSupervisorOperationalActions(status apiStatusResponse) []supervisorRec
 		if len(status.AgentesActivos) == 0 {
 			priority = "alta"
 		}
-		actions = append(actions, supervisorRecommendedAction{
-			Kind:     "quota_hold",
-			Target:   fmt.Sprintf("tarea:%d", retenidas[0].ID),
-			Action:   "replanificar_por_cuota",
-			Reason:   "Hay trabajo retenido por cuota; revisar reasignación o secuenciación sin esperar al agente bloqueado.",
-			Priority: priority,
-			Assignee: preferredSupervisorWorker(status),
-		})
+		assignee := preferredSupervisorWorker(status)
+		for _, retenida := range retenidas {
+			actions = append(actions, supervisorRecommendedAction{
+				Kind:     "quota_hold",
+				Target:   fmt.Sprintf("tarea:%d", retenida.ID),
+				Action:   "replanificar_por_cuota",
+				Reason:   "Hay trabajo retenido por cuota; revisar reasignación o secuenciación sin esperar al agente bloqueado.",
+				Priority: priority,
+				Assignee: assignee,
+			})
+		}
 	}
 	return actions
 }
