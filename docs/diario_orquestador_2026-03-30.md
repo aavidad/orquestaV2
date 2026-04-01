@@ -4632,3 +4632,25 @@ Validacion:
 
 - `go test ./cmd -run 'TestMCPPromptRevisionSupervisorIncluyeGatesYSignals' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — La cola MCP de OpenClaw ya enseña merges vivos
+
+Hallazgo:
+
+- con gates y signals ya visibles, todavía faltaba la última pieza para decidir integración sin saltar a otra superficie: las solicitudes de merge vivas
+
+Decision:
+
+- ampliar la cola MCP estrecha de revisión con merge requests en estados operativos (`pendiente`, `validando`, `aprobado`, `ejecutando`, `fallido`)
+- mantener una sola vista canónica de integración para `OpenClaw`
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestMCPPromptRevisionSupervisorIncluyeGatesYSignals' -count=1`
+- `go build -o ./orquesta .`

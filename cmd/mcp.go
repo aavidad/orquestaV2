@@ -1718,7 +1718,11 @@ func buildSupervisorReviewOverview() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(openGates) == 0 && len(signals) == 0 {
+	merges, err := listarMergesRevisionSupervisor(12)
+	if err != nil {
+		return "", err
+	}
+	if len(openGates) == 0 && len(signals) == 0 && len(merges) == 0 {
 		return "", nil
 	}
 
@@ -1763,6 +1767,29 @@ func buildSupervisorReviewOverview() (string, error) {
 			}
 			if strings.TrimSpace(item.Event.Message) != "" {
 				linea += " · " + compactMCPLine(item.Event.Message, 180)
+			}
+			b.WriteString(linea + "\n")
+		}
+		b.WriteString("\n")
+	}
+	if len(merges) > 0 {
+		b.WriteString("## Solicitudes de merge vivas\n")
+		for _, merge := range merges {
+			if merge == nil {
+				continue
+			}
+			linea := fmt.Sprintf("- #%d estado=%s", merge.ID, strings.TrimSpace(merge.Estado))
+			if strings.TrimSpace(merge.ProyectoSlug) != "" {
+				linea += " proyecto=" + strings.TrimSpace(merge.ProyectoSlug)
+			}
+			if strings.TrimSpace(merge.SourceBranch) != "" || strings.TrimSpace(merge.TargetBranch) != "" {
+				linea += fmt.Sprintf(" %s->%s", strings.TrimSpace(merge.SourceBranch), strings.TrimSpace(merge.TargetBranch))
+			}
+			if strings.TrimSpace(merge.RequestedBy) != "" {
+				linea += " por=" + strings.TrimSpace(merge.RequestedBy)
+			}
+			if strings.TrimSpace(merge.Notas) != "" {
+				linea += " · " + compactMCPLine(merge.Notas, 180)
 			}
 			b.WriteString(linea + "\n")
 		}
@@ -1847,6 +1874,39 @@ func listarSignalsRevisionSupervisor(limit int) ([]*supervisorReviewSignal, erro
 	}
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].Event.CreatedAt.After(items[j].Event.CreatedAt)
+	})
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return items, nil
+}
+
+func listarMergesRevisionSupervisor(limit int) ([]*db.GitMerge, error) {
+	if limit <= 0 {
+		limit = 12
+	}
+	svc := gitgobernanza.NewService(gitgobernanza.Repository{})
+	estados := []string{"pendiente", "validando", "aprobado", "ejecutando", "fallido"}
+	items := make([]*db.GitMerge, 0, limit*len(estados))
+	seen := make(map[int64]struct{}, limit*len(estados))
+	for _, estado := range estados {
+		rows, err := svc.ListRequests("", estado)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			if row == nil {
+				continue
+			}
+			if _, ok := seen[row.ID]; ok {
+				continue
+			}
+			seen[row.ID] = struct{}{}
+			items = append(items, row)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].CreatedAt.After(items[j].CreatedAt)
 	})
 	if len(items) > limit {
 		items = items[:limit]

@@ -322,6 +322,17 @@ func TestMCPPromptRevisionSupervisorIncluyeGatesYSignals(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("registrar runtime event: %v", err)
 		}
+		if _, err := db.GuardarGitMerge(&db.GitMerge{
+			ProyectoID:   proyectoID,
+			SourceBranch: "orq/orquestador/Codex3/api",
+			TargetBranch: "master",
+			RequestedBy:  "OpenClaw",
+			Estado:       "aprobado",
+			Notas:        "Solicitud creada tras review gate aprobado",
+			MetadataJSON: `{"source":"review_gate_approved"}`,
+		}); err != nil {
+			t.Fatalf("guardar merge: %v", err)
+		}
 
 		result, err := getMCPPrompt("orquesta.supervision.revision", map[string]any{"supervisor": "OpenClaw"})
 		if err != nil {
@@ -336,6 +347,8 @@ func TestMCPPromptRevisionSupervisorIncluyeGatesYSignals(t *testing.T) {
 			"Integrar API",
 			"Señales recientes de revisión e integración",
 			"ready_for_review",
+			"Solicitudes de merge vivas",
+			"orq/orquestador/Codex3/api->master",
 			"Criterio de decisión",
 		} {
 			if !strings.Contains(text, token) {
