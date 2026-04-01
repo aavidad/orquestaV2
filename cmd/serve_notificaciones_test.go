@@ -175,6 +175,8 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 		"RUNBOOK_TELEGRAM.md",
 		"Reservas preparadas",
 		"Review e integración",
+		"Worktrees desfasadas",
+		"Sin worktrees desfasadas detectadas.",
 		"Eventos normalizados del supervisor",
 		"Threads y subagentes",
 		"Sesiones observadas de agentes",

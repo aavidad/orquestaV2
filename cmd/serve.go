@@ -50,30 +50,31 @@ type webDashData struct {
 }
 
 type webOpenClawData struct {
-	Status           apiOpenClawStatusLite
-	EnCuota          []*db.Agente
-	MailboxPendiente []apiOpenClawMailboxLite
-	Retenidas        []tareaLite
-	TareasReservadas []tareaLite
-	ReviewGates      []*db.ReviewGate
-	Signals          []*supervisorReviewSignal
-	Merges           []*db.GitMerge
-	NormalizedEvents []openClawNormalizedEvent
-	ThreadSessions   []*db.SupervisorThreadSessionSummary
-	ObservedSessions []*supervisorObservedAgentSessionSummary
+	Status            apiOpenClawStatusLite
+	EnCuota           []*db.Agente
+	MailboxPendiente  []apiOpenClawMailboxLite
+	WorktreeDrift     []apiOpenClawWorktreeDrift
+	Retenidas         []tareaLite
+	TareasReservadas  []tareaLite
+	ReviewGates       []*db.ReviewGate
+	Signals           []*supervisorReviewSignal
+	Merges            []*db.GitMerge
+	NormalizedEvents  []openClawNormalizedEvent
+	ThreadSessions    []*db.SupervisorThreadSessionSummary
+	ObservedSessions  []*supervisorObservedAgentSessionSummary
 	SessionCandidates []apiOpenClawSessionCandidate
-	PipelineStates   []*db.SupervisorPipelineState
-	Recommended      []supervisorRecommendedAction
-	SafeRecommended  []supervisorRecommendedAction
-	QueueSummary     apiOpenClawQueueSummary
-	NextAction       *supervisorRecommendedAction
-	NextSafeAction   *supervisorRecommendedAction
-	Notificaciones   notificaciones.EstadoNotificaciones
-	NotifOutbox      notificaciones.OutboxSummary
-	Integration      webOpenClawIntegrationInfo
-	Generado         string
-	Msg              string
-	Err              string
+	PipelineStates    []*db.SupervisorPipelineState
+	Recommended       []supervisorRecommendedAction
+	SafeRecommended   []supervisorRecommendedAction
+	QueueSummary      apiOpenClawQueueSummary
+	NextAction        *supervisorRecommendedAction
+	NextSafeAction    *supervisorRecommendedAction
+	Notificaciones    notificaciones.EstadoNotificaciones
+	NotifOutbox       notificaciones.OutboxSummary
+	Integration       webOpenClawIntegrationInfo
+	Generado          string
+	Msg               string
+	Err               string
 }
 
 type webOpenClawIntegrationInfo struct {
@@ -778,6 +779,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 	}
 	recommended, _ := review["recommended_actions"].([]supervisorRecommendedAction)
 	safeRecommended, _ := review["safe_action_queue"].([]supervisorRecommendedAction)
+	worktreeDrift, _ := buildOpenClawWorktreeDrift(status)
 	var nextAction *supervisorRecommendedAction
 	switch item := review["next_action"].(type) {
 	case supervisorRecommendedAction:
@@ -799,30 +801,31 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	webRender(w, r, webTplLayout+webTplOpenClaw, webOpenClawData{
-		Status:           operatorStatus,
-		EnCuota:          agentesNoActivosConCuota(status.Agentes),
-		MailboxPendiente: mustOpenClawPendingMailbox(status.Agentes),
-		Retenidas:        tareasRetenidasPorCuota(status.TareasActivas, status.Agentes),
-		TareasReservadas: filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
-		ReviewGates:      reviewGates,
-		Signals:          signals,
-		Merges:           merges,
-		NormalizedEvents: normalizedEvents,
-		ThreadSessions:   threadSessions,
-		ObservedSessions: observedSessions,
+		Status:            operatorStatus,
+		EnCuota:           agentesNoActivosConCuota(status.Agentes),
+		MailboxPendiente:  mustOpenClawPendingMailbox(status.Agentes),
+		WorktreeDrift:     worktreeDrift,
+		Retenidas:         tareasRetenidasPorCuota(status.TareasActivas, status.Agentes),
+		TareasReservadas:  filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
+		ReviewGates:       reviewGates,
+		Signals:           signals,
+		Merges:            merges,
+		NormalizedEvents:  normalizedEvents,
+		ThreadSessions:    threadSessions,
+		ObservedSessions:  observedSessions,
 		SessionCandidates: sessionCandidates,
-		PipelineStates:   pipelineStates,
-		Recommended:      recommended,
-		SafeRecommended:  safeRecommended,
-		QueueSummary:     buildOpenClawQueueSummary(review),
-		NextAction:       nextAction,
-		NextSafeAction:   nextSafeAction,
-		Notificaciones:   notificaciones.DescribirConfiguracion(),
-		NotifOutbox:      notificaciones.DescribirOutbox(10),
-		Integration:      buildWebOpenClawIntegrationInfo(),
-		Generado:         time.Now().Format("2006-01-02 15:04:05"),
-		Msg:              r.URL.Query().Get("ok"),
-		Err:              r.URL.Query().Get("err"),
+		PipelineStates:    pipelineStates,
+		Recommended:       recommended,
+		SafeRecommended:   safeRecommended,
+		QueueSummary:      buildOpenClawQueueSummary(review),
+		NextAction:        nextAction,
+		NextSafeAction:    nextSafeAction,
+		Notificaciones:    notificaciones.DescribirConfiguracion(),
+		NotifOutbox:       notificaciones.DescribirOutbox(10),
+		Integration:       buildWebOpenClawIntegrationInfo(),
+		Generado:          time.Now().Format("2006-01-02 15:04:05"),
+		Msg:               r.URL.Query().Get("ok"),
+		Err:               r.URL.Query().Get("err"),
 	})
 }
 
@@ -2209,6 +2212,26 @@ const webTplOpenClaw = `{{define "content"}}
       {{end}}
       {{if and (not .ReviewGates) (not .Signals) (not .Merges) (not .NormalizedEvents)}}
       <p style="margin:0;color:#64748b">Sin review gates, señales ni merges vivos.</p>
+      {{end}}
+    </section>
+
+    <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
+      <h3 style="margin:0 0 .7rem 0">Worktrees desfasadas</h3>
+      {{if .WorktreeDrift}}
+      <table style="width:100%"><thead><tr><th>Agente</th><th>Branch</th><th>Actual</th><th>Esperada</th><th>Suciedad</th></tr></thead><tbody>
+      {{range .WorktreeDrift}}
+        <tr>
+          <td><strong>{{.Agente}}</strong></td>
+          <td><code>{{orDash .Branch}}</code></td>
+          <td><code>{{orDash .CurrentHead}}</code></td>
+          <td><code>{{orDash .ExpectedHead}}</code></td>
+          <td>{{if .DirtySummary}}{{.DirtySummary}}{{else if .Dirty}}sucia{{else}}limpia{{end}}</td>
+        </tr>
+        <tr><td colspan="5" style="font-size:.74rem;color:#64748b;padding-bottom:.4rem">{{orDash .Path}}</td></tr>
+      {{end}}
+      </tbody></table>
+      {{else}}
+      <p style="margin:0;color:#64748b">Sin worktrees desfasadas detectadas.</p>
       {{end}}
     </section>
 

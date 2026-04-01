@@ -7060,3 +7060,17 @@ Resultado:
   - si `dirty=true`, la acción sigue siendo `revisar_worktree_desfasada` y no se autoaplica
 - Validación:
   - `go test ./cmd -run 'TestMCP(RevisionSupervisorExponeRefrescoSeguroDeWorktreeLimpia|ToolSupervisorRefrescaWorktreeLimpia|RevisionSupervisorExponeWorktreeDrift|ToolSupervisorInspeccionaWorktreeDrift)' -count=1`
+
+## 2026-04-02 — `/openclaw` ya muestra worktree drift y suciedad local
+
+- Hallazgo:
+  - la API del operador y el snapshot MCP ya exponían `worktree_drift` y `dirty_summary`
+  - la web `/openclaw` seguía obligando a mirar JSON crudo para ver si un agente estaba trabajando sobre una base vieja y sucia
+- Corrección:
+  - `webOpenClawData` incorpora `WorktreeDrift`
+  - `webHandlerOpenClaw()` reutiliza `buildOpenClawWorktreeDrift(status)` y lo pasa a la plantilla
+  - `/openclaw` renderiza una sección `Worktrees desfasadas` con `branch`, `current_head`, `expected_head`, `dirty_summary` y `path`
+  - si no hay drift, la web muestra `Sin worktrees desfasadas detectadas.`
+- Validación:
+  - `go test ./cmd -run 'TestWebOpenClawMuestraOperatorReviewYEntregas' -count=1`
+  - `go build -o ./orquesta .`
