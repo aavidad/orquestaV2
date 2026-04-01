@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/db"
 	"orquesta/reviewapp"
 )
@@ -653,6 +654,101 @@ func TestMCPToolsTareasYNudgeOperanPorLaViaCanonica(t *testing.T) {
 		}
 		if !foundNudge {
 			t.Fatalf("no apareció nudge en runtime orders: %+v", orders)
+		}
+	})
+}
+
+func TestMCPToolsRuntimeYTickOperanPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrando Codex3: %v", err)
+		}
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:     "Codex3",
+			ProyectoID: &proyectoID,
+		})
+		if err != nil {
+			t.Fatalf("iniciar sesion contexto: %v", err)
+		}
+		credits := 50.0
+		started := time.Now().UTC().Add(-10 * time.Minute)
+		reset := started.Add(5 * time.Hour)
+		if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+			SesionID:         sesion.ID,
+			WindowKind:       "5h",
+			WindowStartedAt:  &started,
+			ResetAt:          &reset,
+			RemainingCredits: &credits,
+			BudgetSource:     "codex_token_count_observed",
+			CheckedAt:        time.Now().UTC(),
+		}); err != nil {
+			t.Fatalf("registrar presupuesto: %v", err)
+		}
+
+		if _, err := callMCPTool("orquesta.runtime.nudge", map[string]any{
+			"to_agente":   "Codex3",
+			"from_agente": "OpenClaw",
+			"proyecto":    "orquestador",
+			"texto":       "inspecciona el runtime",
+		}); err != nil {
+			t.Fatalf("runtime nudge MCP: %v", err)
+		}
+		if _, err := runtimesService.SendRuntimeMailbox(&db.RuntimeMailboxMessage{
+			FromAgente:  "orquesta",
+			ToAgente:    "Codex3",
+			Kind:        "governance_refresh",
+			PayloadJSON: `{"motivo":"refresh"}`,
+		}); err != nil {
+			t.Fatalf("crear runtime mailbox: %v", err)
+		}
+
+		ordersResult, err := callMCPTool("orquesta.runtime.ordenes.listar", map[string]any{
+			"agente": "Codex3",
+			"limit":  10,
+		})
+		if err != nil {
+			t.Fatalf("listar runtime orders MCP: %v", err)
+		}
+		if ordersResult["isError"] != false {
+			t.Fatalf("runtime orders marcado como error: %#v", ordersResult)
+		}
+		orders, _ := ordersResult["structuredContent"].([]*db.RuntimeOrder)
+		if len(orders) == 0 || orders[0].Tipo == "" {
+			t.Fatalf("runtime orders inesperadas: %#v", ordersResult["structuredContent"])
+		}
+
+		mailboxResult, err := callMCPTool("orquesta.runtime.mailbox.listar", map[string]any{
+			"to_agente": "Codex3",
+			"estado":    "pendiente",
+		})
+		if err != nil {
+			t.Fatalf("listar runtime mailbox MCP: %v", err)
+		}
+		if mailboxResult["isError"] != false {
+			t.Fatalf("runtime mailbox marcado como error: %#v", mailboxResult)
+		}
+		mailbox, _ := mailboxResult["structuredContent"].([]*db.RuntimeMailboxMessage)
+		if len(mailbox) == 0 || mailbox[0].Kind == "" {
+			t.Fatalf("runtime mailbox inesperada: %#v", mailboxResult["structuredContent"])
+		}
+
+		tickResult, err := callMCPTool("orquesta.agentes.tick", map[string]any{
+			"agente":    "Codex3",
+			"proyecto":  "orquestador",
+			"host":      "test-host",
+			"pid":       1234,
+			"cuota_pct": 42,
+		})
+		if err != nil {
+			t.Fatalf("agente tick MCP: %v", err)
+		}
+		if tickResult["isError"] != false {
+			t.Fatalf("agente tick marcado como error: %#v", tickResult)
+		}
+		tickOut, _ := tickResult["structuredContent"].(*agentesapp.TickOutput)
+		if tickOut == nil || tickOut.Agente != "Codex3" || strings.TrimSpace(tickOut.Proyecto.Slug) != "orquestador" {
+			t.Fatalf("tick output inesperado: %#v", tickResult["structuredContent"])
 		}
 	})
 }

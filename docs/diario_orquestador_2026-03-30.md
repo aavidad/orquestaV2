@@ -4791,3 +4791,27 @@ Validacion:
 
 - `go test ./cmd -run 'TestMCPToolsTareasYNudgeOperanPorLaViaCanonica' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — El MCP ya inspecciona runtime y procesa tick de agente
+
+Hallazgo:
+
+- tras cubrir tareas, review, merges y `nudge`, seguía faltando una pieza para llamar al MCP “completo”: que el supervisor pudiera inspeccionar `runtime_orders`, `runtime_mailbox` y disparar el `tick` canónico del agente sin salir del servidor
+
+Decision:
+
+- añadir tools MCP para:
+  - listar `runtime_orders`
+  - listar `runtime_mailbox`
+  - ejecutar `agente tick`
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(MCPToolsTareasYNudgeOperanPorLaViaCanonica|MCPToolsRuntimeYTickOperanPorLaViaCanonica)' -count=1`
+- `go build -o ./orquesta .`

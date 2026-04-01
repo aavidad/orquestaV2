@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"orquesta/agentesapp"
 	"orquesta/db"
 	"orquesta/gitgobernanza"
 	"orquesta/panelapp"
@@ -1180,6 +1181,61 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.runtime.ordenes.listar",
+			Title:       "Listar runtime orders",
+			Description: "Lista runtime orders por agente, proyecto o estado",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":   map[string]any{"type": "string"},
+					"proyecto": map[string]any{"type": "string"},
+					"estado":   map[string]any{"type": "string"},
+					"limit":    map[string]any{"type": "integer"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.mailbox.listar",
+			Title:       "Listar runtime mailbox",
+			Description: "Lista mensajes del runtime mailbox por destino, origen, proyecto o estado",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"to_agente":   map[string]any{"type": "string"},
+					"from_agente": map[string]any{"type": "string"},
+					"proyecto":    map[string]any{"type": "string"},
+					"estado":      map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.agentes.tick",
+			Title:       "Tick de agente",
+			Description: "Procesa un tick canónico de agente y devuelve la siguiente acción recomendada",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":                 map[string]any{"type": "string"},
+					"proyecto":               map[string]any{"type": "string"},
+					"host":                   map[string]any{"type": "string"},
+					"pid":                    map[string]any{"type": "integer"},
+					"cuota_pct":              map[string]any{"type": "integer"},
+					"finalizado":             map[string]any{"type": "boolean"},
+					"motivo":                 map[string]any{"type": "string"},
+					"ack_start_order_id":     map[string]any{"type": "integer"},
+					"ack_bootstrap_order_id": map[string]any{"type": "integer"},
+					"ack_mailbox_ids": map[string]any{
+						"type":  "array",
+						"items": map[string]any{"type": "integer"},
+					},
+				},
+				"required":             []string{"agente", "proyecto"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.runtime.nudge",
 			Title:       "Nudge runtime",
 			Description: "Encola un nudge canónico a un agente a través del control plane",
@@ -1494,6 +1550,70 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return nil, err
 		}
 		return toolResult(prettyJSON(sesiones), sesiones, false), nil
+
+	case "orquesta.runtime.ordenes.listar":
+		filter := db.FiltroRuntimeOrders{
+			Agente: stringPtrOrNil(optionalStringArg(args, "agente")),
+			Estado: stringPtrOrNil(optionalStringArg(args, "estado")),
+			Limit:  intArgOrDefault(args, "limit", 50),
+		}
+		if proyecto := strings.TrimSpace(optionalStringArg(args, "proyecto")); proyecto != "" {
+			p, err := runtimesService.GetProject(proyecto)
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			filter.ProyectoID = &p.ID
+		}
+		orders, err := runtimesService.ListRuntimeOrders(filter)
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(orders), orders, false), nil
+
+	case "orquesta.runtime.mailbox.listar":
+		filter := db.FiltroRuntimeMailbox{
+			ToAgente:   stringPtrOrNil(optionalStringArg(args, "to_agente")),
+			FromAgente: stringPtrOrNil(optionalStringArg(args, "from_agente")),
+			Estado:     stringPtrOrNil(optionalStringArg(args, "estado")),
+		}
+		if proyecto := strings.TrimSpace(optionalStringArg(args, "proyecto")); proyecto != "" {
+			p, err := runtimesService.GetProject(proyecto)
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			filter.ProyectoID = &p.ID
+		}
+		mailbox, err := runtimesService.ListRuntimeMailbox(filter)
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(mailbox), mailbox, false), nil
+
+	case "orquesta.agentes.tick":
+		agente, err := requiredStringArg(args, "agente")
+		if err != nil {
+			return nil, err
+		}
+		proyecto, err := requiredStringArg(args, "proyecto")
+		if err != nil {
+			return nil, err
+		}
+		out, err := agentesService.ProcessTick(agentesapp.TickInput{
+			Agente:              agente,
+			Proyecto:            proyecto,
+			Host:                optionalStringArg(args, "host"),
+			PID:                 optionalInt64Arg(args, "pid"),
+			CuotaPct:            optionalIntArg(args, "cuota_pct"),
+			Finalizado:          boolArgOrFalse(args, "finalizado"),
+			Motivo:              optionalStringArg(args, "motivo"),
+			AckStartOrderID:     optionalInt64Arg(args, "ack_start_order_id"),
+			AckBootstrapOrderID: optionalInt64Arg(args, "ack_bootstrap_order_id"),
+			AckMailboxIDs:       optionalInt64SliceArg(args, "ack_mailbox_ids"),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(out), out, false), nil
 
 	case "orquesta.runtime.nudge":
 		toAgente, err := requiredStringArg(args, "to_agente")
@@ -3185,6 +3305,105 @@ func boolPtrArg(args map[string]any, key string) *bool {
 		return &v
 	}
 	return nil
+}
+
+func boolArgOrFalse(args map[string]any, key string) bool {
+	v, _ := boolArg(args, key)
+	return v
+}
+
+func optionalIntArg(args map[string]any, key string) int {
+	if args == nil {
+		return 0
+	}
+	v, ok := args[key]
+	if !ok || v == nil {
+		return 0
+	}
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case json.Number:
+		value, _ := n.Int64()
+		return int(value)
+	case string:
+		value, _ := strconv.Atoi(strings.TrimSpace(n))
+		return value
+	default:
+		return 0
+	}
+}
+
+func optionalInt64Arg(args map[string]any, key string) int64 {
+	if args == nil {
+		return 0
+	}
+	v, ok := args[key]
+	if !ok || v == nil {
+		return 0
+	}
+	switch n := v.(type) {
+	case float64:
+		return int64(n)
+	case int:
+		return int64(n)
+	case int64:
+		return n
+	case json.Number:
+		value, _ := n.Int64()
+		return value
+	case string:
+		value, _ := strconv.ParseInt(strings.TrimSpace(n), 10, 64)
+		return value
+	default:
+		return 0
+	}
+}
+
+func optionalInt64SliceArg(args map[string]any, key string) []int64 {
+	if args == nil {
+		return nil
+	}
+	raw, ok := args[key]
+	if !ok || raw == nil {
+		return nil
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]int64, 0, len(items))
+	for _, item := range items {
+		switch n := item.(type) {
+		case float64:
+			out = append(out, int64(n))
+		case int:
+			out = append(out, int64(n))
+		case int64:
+			out = append(out, n)
+		case json.Number:
+			if value, err := n.Int64(); err == nil {
+				out = append(out, value)
+			}
+		case string:
+			if value, err := strconv.ParseInt(strings.TrimSpace(n), 10, 64); err == nil {
+				out = append(out, value)
+			}
+		}
+	}
+	return out
+}
+
+func stringPtrOrNil(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func invalidParams(err error) *mcpError {
