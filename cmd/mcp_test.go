@@ -1496,6 +1496,58 @@ func TestMCPSubagentesSupervisorRefrescaStoreClaude(t *testing.T) {
 	})
 }
 
+func TestMCPSubagentesSupervisorLanzaExternoYSincronizaStore(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		storeDir := t.TempDir()
+		t.Setenv("CLAWD_AGENT_STORE", storeDir)
+		launcherPath := filepath.Join(t.TempDir(), "launcher.sh")
+		script := `#!/usr/bin/env bash
+set -euo pipefail
+id="agent-test-001"
+manifest="${ORQUESTA_SUBAGENT_STORE}/${id}.json"
+output="${ORQUESTA_SUBAGENT_STORE}/${id}.md"
+mkdir -p "${ORQUESTA_SUBAGENT_STORE}"
+printf '# result\n' > "${output}"
+cat > "${manifest}" <<JSON
+{"agentId":"${id}","name":"${ORQUESTA_SUBAGENT_NAME}","description":"${ORQUESTA_SUBAGENT_DESCRIPTION}","subagentType":"${ORQUESTA_SUBAGENT_TYPE}","model":"${ORQUESTA_SUBAGENT_MODEL}","status":"running","outputFile":"${output}","manifestFile":"${manifest}","createdAt":"2026-04-02T12:00:00Z","startedAt":"2026-04-02T12:00:00Z"}
+JSON
+printf 'ok\n'
+`
+		if err := os.WriteFile(launcherPath, []byte(script), 0o755); err != nil {
+			t.Fatalf("write launcher: %v", err)
+		}
+		t.Setenv("ORQUESTA_CLAUDE_SUBAGENT_LAUNCHER", launcherPath)
+
+		result, err := callMCPTool("orquesta.supervision.subagentes.lanzar_externo", map[string]any{
+			"supervisor":    "OpenClaw",
+			"proyecto":      "orquestador",
+			"name":          "Claude Explore 1",
+			"description":   "explora modulo openclaw",
+			"prompt":        "revisa el modulo openclaw y resume riesgos",
+			"subagent_type": "explore",
+			"model":         "claude-opus-4-6",
+		})
+		if err != nil {
+			t.Fatalf("lanzar subagente externo: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("lanzar externo marcado como error: %#v", result)
+		}
+		items, err := db.ListarSupervisorSubagents(db.FiltroSupervisorSubagents{
+			Supervisor:   "OpenClaw",
+			ProyectoSlug: "orquestador",
+			Limit:        10,
+		})
+		if err != nil {
+			t.Fatalf("listar subagentes tras launch: %v", err)
+		}
+		if len(items) != 1 || items[0].ThreadID != "agent-test-001" || items[0].Status != "running" {
+			t.Fatalf("subagentes inesperados tras launch: %+v", items)
+		}
+	})
+}
+
 func TestMCPRevisionSupervisorSugiereDispatchOperativo(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := statusService

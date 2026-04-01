@@ -1198,3 +1198,18 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
     - fallback `./.clawd-agents`
   - si el store existe y hay manifests, OpenClaw debe poder disparar una sincronización canónica por MCP/API
   - el store es fuente externa observable; la fuente de verdad final sigue siendo `supervisor_subagents`
+- El spawn de subagentes Claude desde Orquesta debe ser configurable y desacoplado del binario:
+  - Orquesta no debe asumir una CLI concreta de Claude como contrato inmutable
+  - el lanzamiento se hace mediante `ORQUESTA_CLAUDE_SUBAGENT_LAUNCHER` o `openclaw_claude_subagent_launcher`
+  - Orquesta entrega al launcher el contexto por variables de entorno:
+    - `ORQUESTA_SUBAGENT_SUPERVISOR`
+    - `ORQUESTA_SUBAGENT_PROJECT`
+    - `ORQUESTA_SUBAGENT_NAME`
+    - `ORQUESTA_SUBAGENT_DESCRIPTION`
+    - `ORQUESTA_SUBAGENT_PROMPT`
+    - `ORQUESTA_SUBAGENT_TYPE`
+    - `ORQUESTA_SUBAGENT_MODEL`
+    - `ORQUESTA_SUBAGENT_STORE`
+    - `CLAWD_AGENT_STORE`
+  - tras el spawn, Orquesta debe refrescar inmediatamente el store y persistir el resultado en `supervisor_subagents`
+  - esto mantiene server-first: el launcher es backend externo; el estado canónico sigue entrando por Orquesta

@@ -7177,3 +7177,19 @@ Resultado:
 - Validación:
   - `go test ./cmd -run 'Test(MCP(SubagentesSupervisorRefrescaStoreClaude|RevisionSupervisorPromueveSubagentesTerminales|SubagentesSupervisorOperanPorLaViaCanonica)|APIObservabilidadReadOnly|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
   - `go build -o ./orquesta .`
+
+## 2026-04-02 — Lanzamiento externo configurable de subagentes Claude
+
+- Hallazgo:
+  - el launcher Rust tiene valor como backend de spawn, pero no conviene acoplar Orquesta a su CLI exacta
+  - lo estable hoy es el contrato `launcher externo -> store .clawd-agents -> importación canónica`
+- Corrección:
+  - MCP expone `orquesta.supervision.subagentes.lanzar_externo`
+  - Orquesta resuelve el launcher por:
+    - `ORQUESTA_CLAUDE_SUBAGENT_LAUNCHER`
+    - `openclaw_claude_subagent_launcher`
+  - el launcher recibe prompt, tipo, modelo y store por variables de entorno
+  - tras ejecutar el launcher, Orquesta refresca automáticamente `.clawd-agents` y persiste el subagente en `supervisor_subagents`
+- Validación:
+  - `go test ./cmd -run 'Test(MCP(SubagentesSupervisorLanzaExternoYSincronizaStore|SubagentesSupervisorRefrescaStoreClaude|RevisionSupervisorPromueveSubagentesTerminales|SubagentesSupervisorOperanPorLaViaCanonica)|APIObservabilidadReadOnly|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
+  - `go build -o ./orquesta .`

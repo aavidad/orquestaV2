@@ -1981,6 +1981,25 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.supervision.subagentes.lanzar_externo",
+			Title:       "Lanzar subagente Claude externo",
+			Description: "Ejecuta un launcher externo configurable y luego sincroniza el store .clawd-agents con Orquesta",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"supervisor":    map[string]any{"type": "string"},
+					"proyecto":      map[string]any{"type": "string"},
+					"name":          map[string]any{"type": "string"},
+					"description":   map[string]any{"type": "string"},
+					"prompt":        map[string]any{"type": "string"},
+					"subagent_type": map[string]any{"type": "string"},
+					"model":         map[string]any{"type": "string"},
+				},
+				"required":             []string{"description", "prompt"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.supervision.acciones.aplicar",
 			Title:       "Aplicar acción del supervisor",
 			Description: "Aplica una acción canónica sugerida al supervisor cuando la semántica es segura",
@@ -2969,6 +2988,21 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 
 	case "orquesta.supervision.subagentes.refrescar_store":
 		result, err := refreshSupervisorSubagentsFromStore(optionalStringArg(args, "supervisor"), optionalStringArg(args, "proyecto"))
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.supervision.subagentes.lanzar_externo":
+		result, err := launchClaudeSubagentExternal(supervisorSubagentLaunchRequest{
+			Supervisor:   optionalStringArg(args, "supervisor"),
+			Proyecto:     optionalStringArg(args, "proyecto"),
+			Name:         optionalStringArg(args, "name"),
+			Description:  optionalStringArg(args, "description"),
+			Prompt:       optionalStringArg(args, "prompt"),
+			SubagentType: optionalStringArg(args, "subagent_type"),
+			Model:        optionalStringArg(args, "model"),
+		})
 		if err != nil {
 			return toolResult(err.Error(), nil, true), nil
 		}
