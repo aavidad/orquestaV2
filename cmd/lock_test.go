@@ -116,6 +116,31 @@ func TestLockUsaAPI(t *testing.T) {
 	}
 }
 
+func TestLockListarFiltraActivosPorDefecto(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/locks", func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("estado"); got != string(coordinacion.LockActive) {
+			t.Fatalf("estado por defecto inesperado: %q", got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"locks": []*coordinacion.Lock{}})
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	resetCommandFlags(lockListarCmd)
+	if err := lockListarCmd.RunE(lockListarCmd, nil); err != nil {
+		t.Fatalf("lock listar via api: %v", err)
+	}
+}
+
 func TestLockRequiereServidor(t *testing.T) {
 	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
 	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()

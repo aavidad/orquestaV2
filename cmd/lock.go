@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"orquesta/coordinacion"
 )
 
 var lockCmd = &cobra.Command{
@@ -41,8 +42,12 @@ var lockListarCmd = &cobra.Command{
 		if proyectoRef, _ := cmd.Flags().GetString("proyecto"); strings.TrimSpace(proyectoRef) != "" {
 			query.Set("proyecto", proyectoRef)
 		}
-		if estadoStr, _ := cmd.Flags().GetString("estado"); strings.TrimSpace(estadoStr) != "" {
+		estadoStr, _ := cmd.Flags().GetString("estado")
+		includeAll, _ := cmd.Flags().GetBool("todos")
+		if strings.TrimSpace(estadoStr) != "" {
 			query.Set("estado", estadoStr)
+		} else if !includeAll {
+			query.Set("estado", string(coordinacion.LockActive))
 		}
 
 		locks, ok, err := cargarLocksDesdeAPI(query)
@@ -165,6 +170,7 @@ func init() {
 	lockListarCmd.Flags().String("agente", "", "Filtrar por agente")
 	lockListarCmd.Flags().String("proyecto", "", "Filtrar por proyecto")
 	lockListarCmd.Flags().String("estado", "", "Filtrar por estado")
+	lockListarCmd.Flags().Bool("todos", false, "Incluir locks no activas")
 
 	lockTomarCmd.Flags().String("proyecto", "", "Proyecto asociado")
 	lockTomarCmd.Flags().Int64("tarea", 0, "Tarea asociada")

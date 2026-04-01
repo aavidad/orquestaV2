@@ -1053,3 +1053,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
     - sin `runtime_orders` pendientes residuales
     - sin `runtime_mailbox` pendiente residual
     - con `status` convergiendo a la verdad final del destino
+- `lock listar` y `worktree listar` deben enseñar por defecto solo estado operativo vivo:
+  - `lock listar` => solo `activa`
+  - `worktree listar` => solo `activa`
+  - el histórico (`liberada`, `cerrada`) sigue siendo trazable, pero solo mediante una opción explícita (`--todos`) para no meter ruido en la operativa diaria

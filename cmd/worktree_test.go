@@ -113,6 +113,28 @@ func TestWorktreeUsaAPI(t *testing.T) {
 	}
 }
 
+func TestWorktreeListarFiltraActivasPorDefecto(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/worktrees", func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("estado"); got != string(coordinacion.WorktreeActive) {
+			t.Fatalf("estado por defecto inesperado: %q", got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"worktrees": []*coordinacion.Worktree{}})
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	resetCommandFlags(worktreeListarCmd)
+	if err := worktreeListarCmd.RunE(worktreeListarCmd, nil); err != nil {
+		t.Fatalf("worktree listar via api: %v", err)
+	}
+}
+
 func TestWorktreeRequiereServidor(t *testing.T) {
 	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", "")()
 	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()

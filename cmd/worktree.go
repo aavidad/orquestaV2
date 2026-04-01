@@ -33,8 +33,12 @@ var worktreeListarCmd = &cobra.Command{
 		if proyectoRef, _ := cmd.Flags().GetString("proyecto"); strings.TrimSpace(proyectoRef) != "" {
 			query.Set("proyecto", proyectoRef)
 		}
-		if estadoStr, _ := cmd.Flags().GetString("estado"); strings.TrimSpace(estadoStr) != "" {
+		estadoStr, _ := cmd.Flags().GetString("estado")
+		includeAll, _ := cmd.Flags().GetBool("todos")
+		if strings.TrimSpace(estadoStr) != "" {
 			query.Set("estado", estadoStr)
+		} else if !includeAll {
+			query.Set("estado", string(coordinacion.WorktreeActive))
 		}
 
 		worktrees, ok, err := cargarWorktreesDesdeAPI(query)
@@ -157,6 +161,7 @@ func init() {
 	worktreeListarCmd.Flags().String("agente", "", "Filtrar por agente")
 	worktreeListarCmd.Flags().String("proyecto", "", "Filtrar por proyecto")
 	worktreeListarCmd.Flags().String("estado", "", "Filtrar por estado")
+	worktreeListarCmd.Flags().Bool("todos", false, "Incluir worktrees no activas")
 
 	worktreeCrearCmd.Flags().Int64("tarea", 0, "Tarea asociada")
 	worktreeCrearCmd.Flags().Int64("lock", 0, "Lock asociado")

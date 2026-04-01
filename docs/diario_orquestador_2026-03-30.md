@@ -6625,3 +6625,21 @@ Resultado:
 - Conclusión:
   - no quedó deriva entre web, API y CLI en este flujo
   - la auditoría `runtime/control plane y web server-first` pasa en este frente sin necesidad de nuevo código
+
+## 2026-04-01 — `lock listar` y `worktree listar` ya no mezclan histórico con operativa viva
+
+- En la auditoría git/worktree apareció ruido operativo real:
+  - tras cerrar una worktree y liberar su lock, `worktree listar` seguía mostrando la worktree cerrada
+  - `lock listar` seguía mostrando el lock `liberada`
+- Eso no rompía datos, pero sí rompía lectura operativa y dejaba “cosas raras” tras una sesión.
+- Se corrigió el comportamiento por defecto:
+  - `worktree listar` filtra `estado=activa`
+  - `lock listar` filtra `estado=activa`
+  - `--todos` mantiene acceso explícito al histórico
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(WorktreeUsaAPI|WorktreeListarFiltraActivasPorDefecto|LockUsaAPI|LockListarFiltraActivosPorDefecto)' -count=1`
+- Validación viva:
+  - tras cerrar `worktree 9` y liberar `lock 1`
+  - `./orquesta worktree listar` ya no muestra `wt-alberto-426`
+  - `./orquesta lock listar` devuelve vacío
+  - `./orquesta worktree listar --todos` y `./orquesta lock listar --todos` sí muestran el histórico
