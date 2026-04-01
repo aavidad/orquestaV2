@@ -303,7 +303,11 @@ func resumenCuotaAgente(a *db.Agente) string {
 		partes = append(partes, a.PresupuestoEstado)
 	}
 	if a.EstadoCuota != "" && a.EstadoCuota != "activo" {
-		partes = append(partes, "cuota:"+a.EstadoCuota)
+		if agenteMotivoPausaOperativa(a.MotivoPausa) {
+			partes = append(partes, "pausa:runtime")
+		} else {
+			partes = append(partes, "cuota:"+a.EstadoCuota)
+		}
 	}
 	return strings.Join(partes, " · ")
 }

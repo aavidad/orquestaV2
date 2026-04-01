@@ -159,3 +159,46 @@ func TestConstruirAgenteTickOutputPausaPorPresupuestoCriticoFresco(t *testing.T)
 		t.Fatalf("motivo inesperado: %q", out.Motivo)
 	}
 }
+
+func TestConstruirAgenteTickOutputDescribePausaOperativaPorRuntimePanic(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex4", "programador"); err != nil {
+		t.Fatalf("registrar Codex4: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex4", proyectoID, "worker"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	reanimarAt := time.Now().UTC().Add(10 * time.Minute)
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', reanimar_at=?, motivo_pausa='Auto-pausa por runtime_panic: transcript=10576' WHERE nombre='Codex4'`, reanimarAt); err != nil {
+		t.Fatalf("actualizar agente: %v", err)
+	}
+
+	proyecto, err := db.GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	out, err := construirAgenteTickOutput("Codex4", proyecto, nil, 99)
+	if err != nil {
+		t.Fatalf("construir tick: %v", err)
+	}
+	if out.AccionRecomendada != "pausar_por_cuota" || !out.DebePausar {
+		t.Fatalf("salida inesperada: %+v", out)
+	}
+	if !strings.Contains(out.Motivo, "Pausa operativa") {
+		t.Fatalf("deberia describir pausa operativa: %q", out.Motivo)
+	}
+	if strings.Contains(out.Motivo, "Cuota agotada") {
+		t.Fatalf("no deberia mentir con cuota agotada: %q", out.Motivo)
+	}
+}

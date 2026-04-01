@@ -256,11 +256,19 @@ func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesio
 	case agente.EstadoCuota != "activo":
 		out.AccionRecomendada = "pausar_por_cuota"
 		out.DebePausar = true
+		prefijo := "Cuota agotada"
+		if agenteMotivoPausaOperativa(agente.MotivoPausa) {
+			prefijo = "Pausa operativa"
+		}
 		if agente.ReanimarAt != nil {
-			out.Motivo = fmt.Sprintf("Cuota agotada (%s). Reanimación programada para: %s. Motivo: %s",
-				agente.EstadoCuota, agente.ReanimarAt.Format("15:04:05"), agente.MotivoPausa)
+			out.Motivo = fmt.Sprintf("%s (%s). Reanimación programada para: %s. Motivo: %s",
+				prefijo, agente.EstadoCuota, agente.ReanimarAt.Format("15:04:05"), agente.MotivoPausa)
 		} else {
-			out.Motivo = "Cuota agotada o modo enfriamiento activo."
+			if agenteMotivoPausaOperativa(agente.MotivoPausa) {
+				out.Motivo = "Pausa operativa o modo enfriamiento activo."
+			} else {
+				out.Motivo = "Cuota agotada o modo enfriamiento activo."
+			}
 		}
 	case !asignadoAProyecto && proyectoAsignado != "":
 		out.AccionRecomendada = "pausar_y_reasignar"
@@ -288,6 +296,11 @@ func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesio
 	}
 
 	return out, nil
+}
+
+func agenteMotivoPausaOperativa(motivo string) bool {
+	motivo = strings.ToLower(strings.TrimSpace(motivo))
+	return strings.Contains(motivo, "runtime_panic") || strings.Contains(motivo, "runtime_crash")
 }
 
 func agenteDebePausarPorPresupuesto(nombre string) (bool, string, error) {

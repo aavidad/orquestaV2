@@ -1,5 +1,40 @@
 # Diario del orquestador — 2026-03-30
 
+## 2026-04-01 10:4x aprox. — la visibilidad ya no llama "cuota" a un `runtime_panic`
+
+Hallazgo:
+
+- `Codex4` habia entrado en `enfriamiento`, pero no por saldo ni por limite semanal/5h
+- el transcript mostraba un `runtime_panic` real del TUI de `codex-cli` tras recibir `stdin` larga (`tui/src/wrapping.rs:52`, `byte index ... is out of bounds`)
+- aun asi, `agente tick` y `status` lo presentaban como `Cuota agotada`, mezclando pausa operativa con bloqueo presupuestario
+
+Decision:
+
+- la semantica visible debe separar las dos cosas
+- si `motivo_pausa` indica `runtime_panic` o `runtime_crash`, la CLI y el resumen visible no pueden llamarlo cuota
+- la accion recomendada puede seguir siendo conservadora (`pausar_por_cuota`) mientras no se reabra el runtime, pero el texto visible debe decir la verdad operativa
+
+Cambios:
+
+- `cmd/agente.go`
+  - nuevo helper `agenteMotivoPausaOperativa(...)`
+  - `construirAgenteTickOutput(...)` ahora usa `Pausa operativa` cuando el enfriamiento viene de `runtime_panic/runtime_crash`
+- `cmd/status_remoto_compat.go`
+  - `resumenCuotaAgente(...)` marca `pausa:runtime` en vez de `cuota:enfriamiento` cuando el motivo real es operativo
+- tests nuevos:
+  - `cmd/agente_tick_autonomia_test.go`
+  - `cmd/status_test.go`
+
+Validacion:
+
+- `go test ./cmd -run 'Test(ConstruirAgenteTickOutputDescribePausaOperativaPorRuntimePanic|ConstruirAgenteTickOutputPausaPorPresupuestoCriticoFresco|ResumenCuotaAgenteMarcaPausaRuntimeSinMentirConCuota)$' -count=1` => OK
+- `go build -o ./orquesta .` => OK
+
+Conclusion:
+
+- la cuota visible sigue siendo canonica, pero ya no tapa un crash del runtime con un mensaje falso de presupuesto
+- el siguiente paso no es cosmetico: cortar la entrega `stdin` larga que esta provocando el `runtime_panic` real en Codex supervisado
+
 ## 2026-03-31 17:5x aprox. — el `provider_backoff` ya deja telemetría canónica de ventana agotada
 
 Hallazgo:

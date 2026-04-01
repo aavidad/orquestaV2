@@ -584,6 +584,25 @@ func TestResumenCuotaAgenteMuestraCooldownSiReanimarAtVieneInformado(t *testing.
 	}
 }
 
+func TestResumenCuotaAgenteMarcaPausaRuntimeSinMentirConCuota(t *testing.T) {
+	reanimarAt := time.Now().UTC().Add(2 * time.Hour)
+	pct := 99
+	detalle := resumenCuotaAgente(&db.Agente{
+		Nombre:             "Codex4",
+		EstadoCuota:        "enfriamiento",
+		ReanimarAt:         &reanimarAt,
+		MotivoPausa:        "Auto-pausa por runtime_panic: transcript=10576",
+		CuotaRestantePct:   &pct,
+		PresupuestoVentana: "5h",
+	})
+	if !strings.Contains(detalle, "pausa:runtime") {
+		t.Fatalf("detalle sin marca de pausa runtime: %s", detalle)
+	}
+	if strings.Contains(detalle, "cuota:enfriamiento") {
+		t.Fatalf("no deberia presentar pausa runtime como cuota: %s", detalle)
+	}
+}
+
 func TestRenderStatusSummaryMuestraTareasRetenidasPorCuota(t *testing.T) {
 	out := captureOutput(t, func() {
 		renderStatusSummary(&statusContext{
