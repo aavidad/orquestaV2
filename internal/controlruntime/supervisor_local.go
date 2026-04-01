@@ -6,8 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -677,7 +677,7 @@ func (s *supervisorProcesoLocal) snapshot() (int, string, map[string]any, map[st
 
 	alive := false
 	var aliveErr error
-	if exitedAt == nil && pid > 0 {
+	if pid > 0 {
 		alive, aliveErr = procesoVivoPID(pid)
 		if alive {
 			if ok, err := validarIdentidadProcesoLocal(pid, workingDir, renderedCommand, wrappedCommand); err != nil {
@@ -694,7 +694,15 @@ func (s *supervisorProcesoLocal) snapshot() (int, string, map[string]any, map[st
 				aliveErr = fmt.Errorf("pty wrapper sin runtime hijo")
 			}
 		}
-		if !alive {
+		if alive {
+			if exitedAt != nil {
+				s.rehabilitarSalidaExterna(nowUTC())
+				exitedAt = nil
+				exitCode = nil
+				exitError = ""
+				lastStatusAt = nowUTC()
+			}
+		} else {
 			s.marcarSalidaExterna(aliveErr)
 		}
 	} else if exitedAt == nil && pid <= 0 {
@@ -760,6 +768,10 @@ func (s *supervisorProcesoLocal) snapshot() (int, string, map[string]any, map[st
 		"mailbox_delivery_mode": mailboxDeliveryMode,
 	}
 	return pid, modo, meta, caps, alive, aliveErr
+}
+
+func nowUTC() time.Time {
+	return time.Now().UTC()
 }
 
 func procesoWrapperPTYSinHijo(pid int, renderedCommand, wrappedCommand string, childCounter func(int64) (int, error)) (bool, error) {
@@ -874,6 +886,15 @@ func (s *supervisorProcesoLocal) marcarSalidaExterna(aliveErr error) {
 	if aliveErr != nil {
 		s.exitError = strings.TrimSpace(aliveErr.Error())
 	}
+}
+
+func (s *supervisorProcesoLocal) rehabilitarSalidaExterna(now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.exitedAt = nil
+	s.exitCode = nil
+	s.exitError = ""
+	s.lastStatusAt = now
 }
 
 func (s *supervisorProcesoLocal) controlar(sig syscall.Signal, accion string) (bool, int, bool, error) {

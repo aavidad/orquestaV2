@@ -5800,3 +5800,17 @@ Resultado:
   - `80818`, `80819`, `80820`, `80821` cerraron y dejaron de generar un `80822`
   - `runtime_mailbox 64663` pasó finalmente a `consumido`
   - `runtime diagnostico --agente Codex4` volvió a `Órdenes: completada=16` y `Mailbox: 0 pendiente(s)`
+
+## 2026-04-01 — el supervisor no debe fossilizar un PID vivo
+
+- La prueba viva de `Codex3` sacó otra incoherencia: el `stdin` entraba bien, pero el handle terminaba `fallido` mientras el runtime seguía con muestras `esperando_io`.
+- Causa: `supervisor_local.snapshot()` dejaba de comprobar el PID si ya existía `exitedAt`, así que un falso “process_exit” quedaba fossilizado para siempre.
+- Corrección:
+  - si hay `pid > 0`, el supervisor vuelve a comprobar vida/identidad aunque exista `exitedAt`
+  - si el proceso sigue vivo, limpia `exitedAt`, `exitCode` y `exitError` y rehabilita el handle
+- Cobertura añadida:
+  - `TestSupervisorLocalEstadoRehabilitaSalidaExternaSiPIDSigueVivo`
+- Validación viva:
+  - tras reiniciar el daemon, `Codex3` pasó a handle activo `429`
+  - `/api/runtime-handles?agente=Codex3` ya devolvió `estado=activo`
+  - `runtime diagnostico --agente Codex3` dejó de mostrar el último handle vivo como `fallido`

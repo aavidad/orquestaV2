@@ -836,3 +836,12 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - Cuando una guidance durable (`autonomia`, `nudge`, `watchdog`, `governance_refresh`, `skills_refresh`) cae a `mailbox_only` por `session_resume timeout` sobre la misma sesión activa, Orquesta no debe rematerializarla en bucle.
 - Ese intento debe quedar deduplicado mientras no cambien `handle` o `external_session_id`.
 - Para `instruction` normal sí puede seguir existiendo reintento tras TTL; para guidance operativa del servidor, el criterio correcto es evitar repiques sobre la misma sesión viva.
+
+### Supervisor local y salidas externas falsas
+
+- `supervisor_local` no puede dejar un handle en `fallido/cerrado` solo porque alguna observación previa fijó `exited_at`.
+- Si el `pid` sigue vivo y la identidad del proceso sigue cuadrando, el supervisor debe rehabilitar el estado observado y limpiar `exited_at/exit_error/exit_code`.
+- La verdad operativa manda en este orden:
+  1. proceso vivo e identidad válida
+  2. entonces handle activo
+  3. solo si el proceso realmente dejó de existir o perdió identidad se conserva `fallido/cerrado`

@@ -259,6 +259,62 @@ func TestConsultarEstadoLocalRehidrataMetadataRicaDesdeRuntimeManifest(t *testin
 	}
 }
 
+func TestSupervisorLocalEstadoRehabilitaSalidaExternaSiPIDSigueVivo(t *testing.T) {
+	now := time.Now().UTC()
+	s := &supervisorProcesoLocal{
+		ref:                 "rehabilita-test",
+		agente:              "Codex3",
+		proyecto:            "orquestador",
+		pid:                 os.Getpid(),
+		modo:                supervisionModoAdjunto,
+		workingDir:          mustGetwdTest(t),
+		renderedCommand:     "codex-perfil Codex3",
+		wrappedCommand:      mustExecutableTest(t),
+		traceDir:            mustGetwdTest(t),
+		stdinPath:           filepath.Join(t.TempDir(), "pty.stdin"),
+		mailboxDeliveryMode: "bootstrap_only",
+		exitedAt:            ptrTime(now.Add(-time.Minute)),
+		exitError:           "process identity mismatch",
+	}
+
+	estado := s.estado()
+	if estado == nil {
+		t.Fatal("faltaba estado")
+	}
+	if !estado.Vivo {
+		t.Fatalf("el proceso actual deberia rehabilitarse como vivo: %+v", estado)
+	}
+	if estado.HandleEstado != "activo" {
+		t.Fatalf("handle_state inesperado tras rehabilitarse: %+v", estado)
+	}
+	meta := metadataMap(estado.MetadataJSON)
+	if got := stringValueFromMetadata(meta, "exited_at"); got != "" {
+		t.Fatalf("no deberia conservar exited_at tras rehabilitarse: %q meta=%+v", got, meta)
+	}
+}
+
+func mustGetwdTest(t *testing.T) string {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	return wd
+}
+
+func mustExecutableTest(t *testing.T) string {
+	t.Helper()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("executable: %v", err)
+	}
+	return exe
+}
+
+func ptrTime(v time.Time) *time.Time {
+	return &v
+}
+
 func TestProcesoWrapperPTYSinHijoDetectaWrapperVacio(t *testing.T) {
 	vacio, err := procesoWrapperPTYSinHijo(4242, "codex-perfil Codex1", "script -q -e -f -c 'codex-perfil Codex1' /tmp/pty.log", func(int64) (int, error) {
 		return 0, nil
