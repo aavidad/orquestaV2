@@ -3956,10 +3956,6 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 	if selected == nil {
 		return nil, fmt.Errorf("no se encontró una acción aplicable del supervisor")
 	}
-	taskID, err := resolveSupervisorActionTaskID(*selected)
-	if err != nil {
-		return nil, err
-	}
 	worker := strings.TrimSpace(selected.Assignee)
 	if worker == "" {
 		worker = strings.TrimSpace(assignee)
@@ -3970,6 +3966,10 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 
 	switch strings.TrimSpace(selected.Action) {
 	case "asignar_tarea_libre":
+		taskID, err := resolveSupervisorActionTaskID(*selected)
+		if err != nil {
+			return nil, err
+		}
 		task, err := tareasService.Get(taskID)
 		if err != nil {
 			return nil, err
@@ -3988,7 +3988,19 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 		default:
 			return nil, fmt.Errorf("la tarea #%d no está libre para dispatch", taskID)
 		}
+		result := map[string]any{
+			"ok":         true,
+			"supervisor": supervisor,
+			"action":     selected,
+			"task_id":    taskID,
+			"assignee":   worker,
+		}
+		return result, nil
 	case "replanificar_por_cuota":
+		taskID, err := resolveSupervisorActionTaskID(*selected)
+		if err != nil {
+			return nil, err
+		}
 		task, err := tareasService.Get(taskID)
 		if err != nil {
 			return nil, err
@@ -4005,18 +4017,33 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 				return nil, err
 			}
 		}
+		result := map[string]any{
+			"ok":         true,
+			"supervisor": supervisor,
+			"action":     selected,
+			"task_id":    taskID,
+			"assignee":   worker,
+		}
+		return result, nil
+	case "seguir_guidance_durable":
+		mailboxID, err := resolveSupervisorActionMailboxID(*selected, worker)
+		if err != nil {
+			return nil, err
+		}
+		if err := runtimesService.MarkRuntimeMailboxConsumed(mailboxID); err != nil {
+			return nil, err
+		}
+		result := map[string]any{
+			"ok":         true,
+			"supervisor": supervisor,
+			"action":     selected,
+			"mailbox_id": mailboxID,
+			"assignee":   worker,
+		}
+		return result, nil
 	default:
 		return nil, fmt.Errorf("acción no aplicable automáticamente: %s", strings.TrimSpace(selected.Action))
 	}
-
-	result := map[string]any{
-		"ok":         true,
-		"supervisor": supervisor,
-		"action":     selected,
-		"task_id":    taskID,
-		"assignee":   worker,
-	}
-	return result, nil
 }
 
 func applySupervisorRecommendedActionsBatch(supervisor string, maxItems int) (map[string]any, error) {
@@ -4035,7 +4062,7 @@ func applySupervisorRecommendedActionsBatch(supervisor string, maxItems int) (ma
 			break
 		}
 		switch strings.TrimSpace(item.Action) {
-		case "asignar_tarea_libre", "replanificar_por_cuota":
+		case "asignar_tarea_libre", "replanificar_por_cuota", "seguir_guidance_durable":
 		default:
 			continue
 		}
@@ -4098,6 +4125,14 @@ func fallbackSupervisorRecommendedAction(actionName, target, assignee string) *s
 			Priority: "media",
 			Assignee: assignee,
 		}
+	case "seguir_guidance_durable":
+		return &supervisorRecommendedAction{
+			Kind:     "mailbox_pending",
+			Action:   actionName,
+			Target:   target,
+			Priority: "media",
+			Assignee: assignee,
+		}
 	default:
 		return nil
 	}
@@ -4124,6 +4159,30 @@ func resolveSupervisorActionTaskID(action supervisorRecommendedAction) (int64, e
 	default:
 		return 0, fmt.Errorf("target no soportado para aplicación automática: %s", target)
 	}
+}
+
+func resolveSupervisorActionMailboxID(action supervisorRecommendedAction, agente string) (int64, error) {
+	agente = strings.TrimSpace(agente)
+	target := strings.TrimSpace(action.Target)
+	if !strings.HasPrefix(target, "agente:") {
+		return 0, fmt.Errorf("target no soportado para mailbox: %s", target)
+	}
+	targetAgente := strings.TrimSpace(strings.TrimPrefix(target, "agente:"))
+	if targetAgente == "" {
+		return 0, fmt.Errorf("target de agente inválido: %s", target)
+	}
+	if agente != "" && !strings.EqualFold(targetAgente, agente) {
+		return 0, fmt.Errorf("assignee %s no coincide con target %s", agente, targetAgente)
+	}
+	estado := "pendiente"
+	rows, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &targetAgente, Estado: &estado})
+	if err != nil {
+		return 0, err
+	}
+	if len(rows) == 0 || rows[0] == nil {
+		return 0, fmt.Errorf("no hay mailbox pendiente para %s", targetAgente)
+	}
+	return rows[0].ID, nil
 }
 
 func compactMCPLine(text string, maxRunes int) string {

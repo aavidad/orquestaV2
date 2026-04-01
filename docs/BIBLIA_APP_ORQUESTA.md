@@ -972,6 +972,9 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - La guidance durable pendiente debe llevar antigüedad visible:
   - OpenClaw necesita distinguir deuda fresca de deuda envejecida
   - la prioridad de `seguir_guidance_durable` debe subir cuando el backlog envejece
+- `seguir_guidance_durable` ya es acción canónica segura del supervisor:
+  - debe consumir la mailbox pendiente por la vía oficial del servidor
+  - tras aplicarla, la verdad viva de OpenClaw debe converger a `mailbox=null` / cola vacía
 - La carga activa por agente debe ser visible para el supervisor:
   - Orquesta ya usa esa carga para sugerir `assignee`
   - OpenClaw debe verla explícitamente en API y web para que la recomendación sea explicable y auditable

@@ -1554,6 +1554,66 @@ func TestMCPRevisionSupervisorExponeGuidanceDurablePendiente(t *testing.T) {
 	})
 }
 
+func TestMCPToolSupervisorConsumeGuidanceDurable(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar Codex3: %v", err)
+		}
+		msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+			FromAgente:  "server",
+			ToAgente:    "Codex3",
+			Kind:        "autonomia",
+			PayloadJSON: `{"texto":"continua"}`,
+			Estado:      "pendiente",
+		})
+		if err != nil {
+			t.Fatalf("crear mailbox pendiente: %v", err)
+		}
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+		}}
+
+		result, err := callMCPTool("orquesta.supervision.acciones.aplicar", map[string]any{
+			"supervisor": "OpenClaw",
+			"action":     "seguir_guidance_durable",
+			"target":     "agente:Codex3",
+			"assignee":   "Codex3",
+		})
+		if err != nil {
+			t.Fatalf("aplicar guidance durable: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("guidance durable marcada como error: %#v", result)
+		}
+		rows, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: strPtr("Codex3")})
+		if err != nil {
+			t.Fatalf("listar mailbox: %v", err)
+		}
+		var found *db.RuntimeMailboxMessage
+		for _, row := range rows {
+			if row != nil && row.ID == msgID {
+				found = row
+				break
+			}
+		}
+		if found == nil || found.Estado != "consumido" {
+			t.Fatalf("mailbox no consumida: %+v", found)
+		}
+	})
+}
+
 func TestMCPToolSupervisorAplicaReplanificacionPorCuotaConFallbackExplicito(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := statusService

@@ -6288,3 +6288,18 @@ Resultado:
   - `Codex3` muestra `oldest_age_min = 153`
   - `next_action` ya sale como `seguir_guidance_durable` con prioridad `alta`
   - `/openclaw` enseña la antigüedad en minutos y la razón enriquecida en la acción siguiente
+
+## 2026-04-01 — OpenClaw ya puede consumir guidance durable por la vía canónica
+
+- La acción `seguir_guidance_durable` ya no es solo observacional.
+- Se añadió ejecución canónica en `applySupervisorRecommendedAction(...)`:
+  - resuelve la mailbox pendiente del agente objetivo
+  - llama a `runtimesService.MarkRuntimeMailboxConsumed(...)`
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(MCPToolSupervisorConsumeGuidanceDurable|MCPRevisionSupervisorExponeGuidanceDurablePendiente|APIObservabilidadReadOnly)' -count=1`
+- Validación viva:
+  - `POST /openclaw` con `action=seguir_guidance_durable&target=agente:Codex3`
+  - `GET /api/openclaw/operator` converge a `mailbox = null`
+- Hallazgo adicional:
+  - `./orquesta runtime mailbox --estado pendiente --to Codex3` todavía puede enseñar el mensaje viejo aunque la verdad del servidor ya haya convergido
+  - eso apunta a una incoherencia residual del CLI server-first de runtime mailbox, no del supervisor/OpenClaw
