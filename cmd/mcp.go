@@ -3167,6 +3167,10 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	normalizedEvents, err := buildOpenClawNormalizedEvents(20)
+	if err != nil {
+		return nil, err
+	}
 	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
 	var nextAction any
 	if len(recommended) > 0 {
@@ -3178,6 +3182,7 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 		"signals":             signals,
 		"merges":              merges,
 		"module_conflicts":    conflicts,
+		"normalized_events":   normalizedEvents,
 		"recommended_actions": recommended,
 		"action_queue":        recommended,
 		"next_action":         nextAction,

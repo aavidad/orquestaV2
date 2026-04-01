@@ -189,6 +189,13 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	if recNotif.Code != http.StatusOK {
 		t.Fatalf("notificaciones status=%d body=%s", recNotif.Code, recNotif.Body.String())
 	}
+	var notifJSON map[string]any
+	if err := json.NewDecoder(bytes.NewReader(recNotif.Body.Bytes())).Decode(&notifJSON); err != nil {
+		t.Fatalf("decode notificaciones: %v", err)
+	}
+	if _, ok := notifJSON["eventos_normalizados"]; !ok {
+		t.Fatalf("notificaciones sin eventos_normalizados: %s", recNotif.Body.String())
+	}
 	bodyNotif := recNotif.Body.String()
 	for _, token := range []string{"OpenClaw Gateway", "openclaw.local/gateway", "Telegram", "12345", "entregas", "fallida"} {
 		if !strings.Contains(bodyNotif, token) {
@@ -202,8 +209,15 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	if recOperator.Code != http.StatusOK {
 		t.Fatalf("openclaw operator status=%d body=%s", recOperator.Code, recOperator.Body.String())
 	}
+	var operatorJSON map[string]any
+	if err := json.NewDecoder(bytes.NewReader(recOperator.Body.Bytes())).Decode(&operatorJSON); err != nil {
+		t.Fatalf("decode operator: %v", err)
+	}
+	if _, ok := operatorJSON["eventos_normalizados"]; !ok {
+		t.Fatalf("operator sin eventos_normalizados: %s", recOperator.Body.String())
+	}
 	bodyOperator := recOperator.Body.String()
-	for _, token := range []string{"status", "review", "notificaciones", "entregas"} {
+	for _, token := range []string{"status", "review", "notificaciones", "entregas", "eventos_normalizados"} {
 		if !strings.Contains(bodyOperator, token) {
 			t.Fatalf("openclaw operator incompleto, falta %q:\n%s", token, bodyOperator)
 		}

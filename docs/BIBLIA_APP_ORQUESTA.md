@@ -733,7 +733,9 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - y debe cubrir además las fases de preparación e investigación del agente desde MCP: `agente preparar` e `investigar` tienen que salir por el mismo servidor oficial para que el supervisor construya contexto y diagnóstico sin recurrir a CLI local ni a recomposición manual.
 - y debe cubrir también el cierre de sesión y la observabilidad fina del runtime desde MCP: listar `runtime_handles`, listar `runtime_events` y ejecutar `sesion fin` por la misma vía canónica, sin depender de endpoints o comandos separados para el trabajo normal del supervisor.
 - además del MCP, OpenClaw debe tener una superficie HTTP agregada y server-first para operación conversacional: `/api/openclaw/operator` debe reunir al menos `status`, `review`, `notificaciones` y `entregas`, reutilizando exactamente la lógica viva ya expuesta por el servidor, sin recomposición manual ni lectura directa de BD.
+- esa superficie agregada y el MCP del supervisor deben compartir además una proyección única de `eventos_normalizados`, derivada del estado vivo de `review_gates`, señales runtime, `git_merges` y outbox de notificaciones. No se crean eventos paralelos ni se mezcla taxonomía cruda con derivada en cada cliente.
 - además de ese endpoint agregado, la web canónica del supervisor debe existir como `/openclaw`: una vista HTML server-first que renderiza el mismo estado vivo del daemon para flota disponible, frentes activos, review/integración, tareas retenidas por cuota y outbox de notificaciones, sin depender de JSON pegado ni de varias pantallas dispersas.
+- `/openclaw`, `/api/notificaciones`, `/api/openclaw/operator` y `orquesta.supervision.revision` deben reutilizar esa misma proyección `eventos_normalizados`; OpenClaw no debe recomponer a mano qué es `review.ready`, `merge.failed` o `notification.pending` según cada endpoint.
 
 ## Configuración web de OpenClaw
 

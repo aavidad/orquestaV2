@@ -131,6 +131,7 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 		"OpenClaw Operator",
 		"Acción siguiente",
 		"Review e integración",
+		"Eventos normalizados del supervisor",
 		"OpenClaw Gateway y notificaciones",
 		"gateway down",
 		"Operador OpenClaw",

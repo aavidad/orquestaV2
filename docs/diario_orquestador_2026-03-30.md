@@ -5863,3 +5863,34 @@ Resultado:
     - mailbox pendiente
     - una sola materialización durable
     - ningún repique posterior para la misma mailbox viva
+
+## 2026-04-01 — contrato de eventos normalizados para OpenClaw y supervisor
+
+- Se revisó `oh-my-codex` como referencia y la mejora útil real no era copiar su runtime, sino copiar su claridad contractual para supervisor/eventos.
+- Se añadió una proyección aditiva `eventos_normalizados` en Orquesta, derivada de:
+  - `review_gates`
+  - señales runtime de revisión/integración
+  - `git_merges`
+  - outbox de `notificaciones`
+- La taxonomía nueva no sustituye los datos vivos originales; los normaliza para consumo estable del supervisor:
+  - `review.gate_open`
+  - `review.in_progress`
+  - `review.changes_requested`
+  - `review.blocked`
+  - `supervisor.approval_required`
+  - `supervisor.input_required`
+  - `review.ready`
+  - `merge.pending|validating|approved|executing|failed`
+  - `notification.pending|failed|delivered`
+- La misma proyección se reutiliza en:
+  - `/api/notificaciones`
+  - `/api/openclaw/operator`
+  - MCP `orquesta.supervision.revision`
+  - web `/openclaw`
+- Se evita así que cada cliente recomponga su propia semántica sobre `review_gates`, señales o outbox.
+- Validación:
+  - `go test ./cmd -run 'Test(APIObservabilidadReadOnly|MCPToolRevisionSupervisorDevuelveJSONEstructurado|WebOpenClawMuestraReviewYNotificaciones)' -count=1`
+  - `go build -o ./orquesta .`
+  - reinicio del daemon y verificación viva con:
+    - `/api/notificaciones` devolviendo `eventos_normalizados`
+    - `/api/openclaw/operator` devolviendo `eventos_normalizados`

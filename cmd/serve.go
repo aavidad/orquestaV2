@@ -56,6 +56,7 @@ type webOpenClawData struct {
 	ReviewGates       []*db.ReviewGate
 	Signals           []*supervisorReviewSignal
 	Merges            []*db.GitMerge
+	NormalizedEvents  []openClawNormalizedEvent
 	Recommended       []supervisorRecommendedAction
 	NextAction        *supervisorRecommendedAction
 	Notificaciones    notificaciones.EstadoNotificaciones
@@ -723,6 +724,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 	reviewGates, _ := review["review_gates"].([]*db.ReviewGate)
 	signals, _ := review["signals"].([]*supervisorReviewSignal)
 	merges, _ := review["merges"].([]*db.GitMerge)
+	normalizedEvents, _ := review["normalized_events"].([]openClawNormalizedEvent)
 	recommended, _ := review["recommended_actions"].([]supervisorRecommendedAction)
 	var nextAction *supervisorRecommendedAction
 	switch item := review["next_action"].(type) {
@@ -738,6 +740,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		ReviewGates:    reviewGates,
 		Signals:        signals,
 		Merges:         merges,
+		NormalizedEvents: normalizedEvents,
 		Recommended:    recommended,
 		NextAction:     nextAction,
 		Notificaciones: notificaciones.DescribirConfiguracion(),
@@ -1869,7 +1872,21 @@ const webTplOpenClaw = `{{define "content"}}
       {{end}}
       </tbody></table>
       {{end}}
-      {{if and (not .ReviewGates) (not .Signals) (not .Merges)}}
+      {{if .NormalizedEvents}}
+      <div style="font-size:.8rem;color:#334155;margin:.75rem 0 .45rem;font-weight:600">Eventos normalizados del supervisor</div>
+      <table style="width:100%"><thead><tr><th>Evento</th><th>Origen</th><th>Proyecto</th><th>Acción sugerida</th></tr></thead><tbody>
+      {{range .NormalizedEvents}}
+        <tr>
+          <td><code>{{.NormalizedEvent}}</code></td>
+          <td>{{.Source}}</td>
+          <td>{{orDash .Project}}</td>
+          <td>{{orDash .SuggestedAction}}</td>
+        </tr>
+        <tr><td colspan="4" style="font-size:.74rem;color:#64748b;padding-bottom:.4rem">{{orDash .Message}}</td></tr>
+      {{end}}
+      </tbody></table>
+      {{end}}
+      {{if and (not .ReviewGates) (not .Signals) (not .Merges) (not .NormalizedEvents)}}
       <p style="margin:0;color:#64748b">Sin review gates, señales ni merges vivos.</p>
       {{end}}
     </section>

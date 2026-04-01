@@ -485,6 +485,9 @@ func TestMCPToolRevisionSupervisorDevuelveJSONEstructurado(t *testing.T) {
 		if conflicts := reflect.ValueOf(structured["module_conflicts"]); !conflicts.IsValid() || conflicts.Len() == 0 {
 			t.Fatalf("module_conflicts vacío: %#v", structured)
 		}
+		if events := reflect.ValueOf(structured["normalized_events"]); !events.IsValid() || events.Len() == 0 {
+			t.Fatalf("normalized_events vacío: %#v", structured)
+		}
 		if actions := reflect.ValueOf(structured["recommended_actions"]); !actions.IsValid() || actions.Len() == 0 {
 			t.Fatalf("recommended_actions vacío: %#v", structured)
 		}

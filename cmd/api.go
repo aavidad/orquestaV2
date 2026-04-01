@@ -1209,9 +1209,15 @@ func apiHandlerNotificaciones(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
 	}
+	eventos, err := buildOpenClawNormalizedEvents(10)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{
-		"notificaciones": notificaciones.DescribirConfiguracion(),
-		"entregas":       notificaciones.DescribirOutbox(10),
+		"notificaciones":      notificaciones.DescribirConfiguracion(),
+		"entregas":            notificaciones.DescribirOutbox(10),
+		"eventos_normalizados": eventos,
 	})
 }
 
@@ -1229,11 +1235,17 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
+	eventos, err := buildOpenClawNormalizedEvents(20)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{
-		"status":         status,
-		"review":         revision,
-		"notificaciones": notificaciones.DescribirConfiguracion(),
-		"entregas":       notificaciones.DescribirOutbox(10),
+		"status":              status,
+		"review":              revision,
+		"notificaciones":      notificaciones.DescribirConfiguracion(),
+		"entregas":            notificaciones.DescribirOutbox(10),
+		"eventos_normalizados": eventos,
 	})
 }
 
