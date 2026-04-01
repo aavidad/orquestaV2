@@ -4299,6 +4299,8 @@ func normalizeSupervisorBatchKind(kind string) string {
 	switch strings.TrimSpace(strings.ToLower(kind)) {
 	case "proposal", "dispatch", "guidance":
 		return strings.TrimSpace(strings.ToLower(kind))
+	case "mailbox_pending":
+		return "guidance"
 	default:
 		return ""
 	}

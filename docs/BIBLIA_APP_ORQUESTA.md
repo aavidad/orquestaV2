@@ -1123,6 +1123,8 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - la protección correcta aquí es regresión explícita de API, no confiar en observaciones manuales puntuales
   - el supervisor no debe filtrar esa deuda por la proyección visible de agentes si eso puede ocultar mailbox real
   - `mailboxPendiente` debe derivar de toda la cola `pendiente`, no de una lista momentánea de agentes permitidos
+  - el lote `batch_kind=guidance` debe incluir acciones `mailbox_pending` que ejecutan `seguir_guidance_durable`
+  - la semántica no cambia: se normaliza la clasificación del batch, no el contrato de la acción
 - La superficie de supervisor debe exponer también sesiones observadas de agentes:
   - `thread_sessions` no debe limitarse a threads del supervisor; debe incluir `observed_agent_sessions`
   - cada elemento debe servir para decidir `reuse/spawn/reanudación` sin recomponer estado manual:

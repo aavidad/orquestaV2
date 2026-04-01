@@ -6959,3 +6959,20 @@ Resultado:
   - validación viva tras reinicio:
     - `/api/openclaw/operator` vuelve a mostrar `Codex3` y `Codex4` en `mailboxPendiente`
     - `runtime mailbox --estado pendiente` coincide con la misma deuda
+
+## 2026-04-01 — El batch `guidance` ya drena `mailbox_pending`
+
+- Hallazgo:
+  - `safe_action_queue` clasificaba `seguir_guidance_durable` como `mailbox_pending`
+  - `batch_kind=guidance` no lo cogía porque la normalización solo aceptaba `guidance`
+- Corrección:
+  - `mailbox_pending` ya normaliza a `guidance` para los lotes del supervisor
+- Revalidación viva:
+  - `POST /api/openclaw/operator {"mode":"batch","batch_kind":"guidance","max_items":2}` ya devuelve `count=2`
+  - después:
+    - `runtime mailbox --estado pendiente` => vacío
+    - `/api/runtime-mailbox?estado=pendiente` => vacío
+    - `/api/openclaw/operator.mailboxPendiente` => vacío
+- Nota de proceso:
+  - se abrió una tarea extra asumiendo que `seguir_guidance_durable` no consumía de verdad
+  - la revalidación limpia mostró que ese efecto ya era correcto; el ruido venía de mezclar la llamada batch con la ventana de reinicio del daemon

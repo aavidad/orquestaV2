@@ -707,6 +707,71 @@ func TestAPIOpenClawOperatorAccionaPorLaViaCanonica(t *testing.T) {
 	}
 }
 
+func TestAPIOpenClawOperatorBatchGuidanceAplicaMailboxPending(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prev := statusService
+	defer func() { statusService = prev }()
+
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar Codex3: %v", err)
+	}
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex3",
+		Kind:        "nudge",
+		PayloadJSON: `{"texto":"continua"}`,
+		Estado:      "pendiente",
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox pendiente: %v", err)
+	}
+
+	statusService = stubStatusService{response: apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		Agentes: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+	}}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recBatch := httptest.NewRecorder()
+	reqBatch := httptest.NewRequest(http.MethodPost, "/api/openclaw/operator", strings.NewReader(`{
+		"mode":"batch",
+		"batch_kind":"guidance",
+		"max_items":1
+	}`))
+	reqBatch.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(recBatch, reqBatch)
+	if recBatch.Code != http.StatusOK {
+		t.Fatalf("openclaw operator batch guidance status=%d body=%s", recBatch.Code, recBatch.Body.String())
+	}
+
+	pendiente := "pendiente"
+	items, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &pendiente})
+	if err != nil {
+		t.Fatalf("listar runtime mailbox: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("batch guidance no dreno mailbox pendiente: %+v", items)
+	}
+	consumido := "consumido"
+	items, err = db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &consumido})
+	if err != nil {
+		t.Fatalf("listar runtime mailbox consumido: %v", err)
+	}
+	if len(items) != 1 || items[0].ID != msgID {
+		t.Fatalf("batch guidance no consumio la mailbox esperada: %+v", items)
+	}
+}
+
 func TestAPIWorkflowsDetalleReadOnly(t *testing.T) {
 	prepararDBTemporalCmd(t)
 
