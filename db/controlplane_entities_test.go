@@ -6978,6 +6978,79 @@ func TestProcesarRuntimeOrdersBatchCompletaDiscordiaEnMailbox(t *testing.T) {
 	}
 }
 
+func TestProcesarRuntimeOrdersBatchMantieneHandoffBootstrapPendiente(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex0", "programador"); err != nil {
+		t.Fatalf("registrar Codex0: %v", err)
+	}
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	handoffPayload, err := json.Marshal(HandoffPayload{
+		AgenteOrigen:       "Codex0",
+		AgenteDestino:      "Codex1",
+		Motivo:             "traspaso",
+		ResumenContinuidad: "handoff pendiente para bootstrap",
+	})
+	if err != nil {
+		t.Fatalf("marshal handoff: %v", err)
+	}
+	handoffID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "handoff",
+		PayloadJSON: string(handoffPayload),
+	})
+	if err != nil {
+		t.Fatalf("encolar handoff: %v", err)
+	}
+	syncID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "sync_status",
+		PayloadJSON: `{}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar sync_status: %v", err)
+	}
+
+	n, err := ProcesarRuntimeOrdersBatch()
+	if err != nil {
+		t.Fatalf("procesar batch: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba procesar solo sync_status y reservar handoff para bootstrap, got=%d", n)
+	}
+
+	syncOrder, err := GetRuntimeOrder(syncID)
+	if err != nil {
+		t.Fatalf("get sync order: %v", err)
+	}
+	if syncOrder == nil || syncOrder.Estado != "completada" {
+		t.Fatalf("sync order no completada: %+v", syncOrder)
+	}
+
+	handoffOrder, err := GetRuntimeOrder(handoffID)
+	if err != nil {
+		t.Fatalf("get handoff order: %v", err)
+	}
+	if handoffOrder == nil || handoffOrder.Estado != "pendiente" {
+		t.Fatalf("handoff bootstrap no deberia consumirse en el batch: %+v", handoffOrder)
+	}
+}
+
 func TestReconciliarRuntimeOrdersStaleRecuperaBasicasYExpiraNoSoportadas(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

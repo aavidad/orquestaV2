@@ -1075,3 +1075,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - si hay skew de carga visible y existen tareas `asignada`, OpenClaw puede proponer `rebalancear_reserva`
   - esa acción es segura solo sobre tareas reservadas (`estado=asignada`)
   - nunca debe mover una tarea `en_progreso` bajo esta semántica; para eso ya existen `replanificar_por_cuota` o arbitraje manual
+- El batch genérico de `runtime_orders` no puede consumir `handoff` de bootstrap:
+  - `handoff` debe seguir por su circuito específico de bootstrap/handoff
+  - en el batch general puede convivir con órdenes básicas, pero debe permanecer `pendiente`
+  - la protección correcta aquí es una regresión explícita, no reabrir el diseño del control plane sin evidencia de bug vivo

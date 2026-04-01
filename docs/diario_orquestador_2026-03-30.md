@@ -6692,3 +6692,17 @@ Resultado:
 - Validación dirigida:
   - `go test ./cmd -run 'Test(MCPRevisionSupervisorSugiereRebalanceoDeReserva|MCPToolSupervisorRebalanceaReserva|WebOpenClawAccionAplicaRebalanceoReserva)' -count=1`
   - `go build -o ./orquesta .`
+
+## 2026-04-01 — `handoff` queda blindado fuera del batch genérico
+
+- Revisión del trabajo de `Codex3`:
+  - no hacía falta rehacer el control plane
+  - el tronco ya excluye `handoff` del batch principal por `runtimeOrderTiposDespachables()`
+- El hueco real era de protección:
+  - faltaba una regresión explícita que impidiera que una refactorización futura vuelva a consumir `handoff` en el batch genérico
+- Se añadió:
+  - `TestProcesarRuntimeOrdersBatchMantieneHandoffBootstrapPendiente`
+- Contrato blindado:
+  - si hay `handoff` + `sync_status`
+  - `ProcesarRuntimeOrdersBatch()` procesa la básica
+  - `handoff` sigue `pendiente` para su circuito de bootstrap
