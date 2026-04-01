@@ -92,6 +92,8 @@ func reconcileSupervisorPipelineState(supervisor, proyectoSlug string) (*db.Supe
 		return nil, err
 	}
 	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
+	recommended = append(recommended, buildSupervisorOperationalActions(status)...)
+	sortSupervisorRecommendedActions(recommended)
 	retenidas := tareasRetenidasPorCuota(status.TareasActivas, status.Agentes)
 	item := deriveSupervisorPipelineState(supervisor, proyectoSlug, status, recommended, retenidas)
 	return db.UpsertSupervisorPipelineState(item)
@@ -181,10 +183,17 @@ func phaseFromRecommendedAction(action supervisorRecommendedAction) (string, str
 		currentTaskID = parseSupervisorActionTargetID("tarea:", action.Target)
 	case "signal":
 		phase = "arbitrar_revision"
+	case "quota_hold":
+		phase = "blocked_by_quota"
+		status = "blocked"
+		currentTaskID = parseSupervisorActionTargetID("tarea:", action.Target)
+	case "dispatch":
+		phase = "dispatch"
+		currentTaskID = parseSupervisorActionTargetID("tarea:", action.Target)
 	default:
 		phase = "coordinar_workers"
 	}
-	if strings.TrimSpace(action.Priority) == "alta" {
+	if strings.TrimSpace(action.Priority) == "alta" && status == "active" {
 		status = "active"
 	}
 	return phase, status, currentTaskID, currentGateID, currentMergeID

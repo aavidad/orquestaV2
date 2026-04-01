@@ -6034,3 +6034,22 @@ Resultado:
   - `go test ./cmd -run 'TestAPIHandlerStatusReturnsPayload' -count=1`
   - build + reinicio del daemon
   - `GET /api/status` devolviendo `agentesTrabajando=['Codex4']`
+
+## 2026-04-01 — la pipeline persistida del supervisor ya refleja la cola operativa
+
+- Se detectó otra deriva fina:
+  - `OpenClaw` veía `next_action/action_queue` operativas
+  - pero `supervisor-loop` persistida seguía con `recommended_count=0` y `action_queue=[]`
+- Se alineó la reconciliación para que `supervisor_pipeline_states` incluya también:
+  - `replanificar_por_cuota`
+  - `asignar_tarea_libre`
+- Además se corrigió la semántica de fase/estado:
+  - `quota_hold` ahora persiste como `blocked_by_quota / blocked`
+- Validación:
+  - `go test ./cmd -run 'Test(BuildSupervisorPipelineSnapshotDerivaLoopReview|BuildSupervisorPipelineSnapshotDerivaBlockedByQuota|BuildSupervisorPipelineSnapshotDerivaCoordinarWorkers|MCPRevisionSupervisorSugiereDispatchOperativo)' -count=1`
+  - build + reinicio del daemon
+  - `GET /api/openclaw/pipeline` devolviendo:
+    - `current_phase=blocked_by_quota`
+    - `status=blocked`
+    - `recommended_count=2`
+    - `action_queue=[replanificar_por_cuota, asignar_tarea_libre]`

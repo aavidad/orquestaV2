@@ -913,6 +913,11 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
     - `asignar_tarea_libre`
 - Si hay workers conectados e idle y backlog libre, el supervisor debe ver una acción explícita de `dispatch`.
 - Si hay trabajo retenido por cuota, el supervisor debe ver una acción explícita de `replanificar_por_cuota` antes de abrir nuevos frentes.
+- `supervisor-loop` persistida no puede quedarse atrás respecto al snapshot:
+  - `metadata_json.recommended_count`
+  - `metadata_json.next_action`
+  - `artifacts_json.action_queue`
+  deben reflejar la misma cola operativa viva que ve OpenClaw.
 
 ### Superficie web del supervisor
 
