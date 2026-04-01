@@ -10,6 +10,8 @@ package cmd
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -137,6 +139,137 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 		if !strings.Contains(body, token) {
 			t.Fatalf("pagina openclaw sin %q:\n%s", token, body)
 		}
+	}
+}
+
+func TestWebOpenClawAccionResuelveReviewGate(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	taskID, err := db.CrearTarea(&db.Tarea{
+		Titulo:    "Review OpenClaw",
+		Modulo:    "openclaw",
+		Prioridad: db.PrioridadAlta,
+		CreadoPor: "OpenClaw",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	gateID, err := db.CrearReviewGate(&db.ReviewGate{
+		TareaID:         &taskID,
+		RequestedBy:     "Codex3",
+		ReviewerAgente:  "OpenClaw",
+		Estado:          db.ReviewGatePendiente,
+		SeverityMax:     "media",
+		FindingsJSON:    `[{"severity":"media","title":"falta prueba"}]`,
+	})
+	if err != nil {
+		t.Fatalf("crear review gate: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/openclaw", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			webHandlerOpenClawAccion(w, r)
+			return
+		}
+		webHandlerOpenClaw(w, r)
+	})
+	registerAPIRoutes(mux)
+
+	form := url.Values{
+		"kind":            {"review_gate"},
+		"gate_id":         {strconv.FormatInt(gateID, 10)},
+		"estado":          {"aprobado"},
+		"reviewer_agente": {"OpenClaw"},
+		"findings_json":   {`[{"severity":"baja","title":"ok"}]`},
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/openclaw", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("accion openclaw status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	location := rec.Header().Get("Location")
+	if !strings.Contains(location, "Review+gate") {
+		t.Fatalf("redirect inesperado: %s", location)
+	}
+	gate, err := db.GetReviewGate(gateID)
+	if err != nil {
+		t.Fatalf("get review gate: %v", err)
+	}
+	if gate == nil || gate.Estado != db.ReviewGateAprobado {
+		t.Fatalf("gate no resuelto: %#v", gate)
+	}
+	if gate.ResolvedAt == nil {
+		t.Fatalf("gate aprobado sin resolved_at: %#v", gate)
+	}
+}
+
+func TestWebOpenClawAccionReseteaReanimacionDeAgente(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex5", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	reanimarAt := time.Now().UTC().Add(45 * time.Minute)
+	if _, err := db.DB.Exec(`
+		UPDATE agentes
+		SET activo = 0,
+		    estado_cuota = 'enfriamiento',
+		    motivo_pausa = 'usage limit',
+		    reanimar_at = ?,
+		    limite_semanal_segundos = 604800,
+		    consumo_semanal_segundos = 3600,
+		    limite_dia_segundos = 18000,
+		    consumo_dia_segundos = 1200
+		WHERE nombre = ?`, reanimarAt, "Codex5"); err != nil {
+		t.Fatalf("preparar agente: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/openclaw", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			webHandlerOpenClawAccion(w, r)
+			return
+		}
+		webHandlerOpenClaw(w, r)
+	})
+	registerAPIRoutes(mux)
+
+	form := url.Values{
+		"kind":   {"agente"},
+		"agente": {"Codex5"},
+		"accion": {"reset-reanimacion"},
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/openclaw", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("accion openclaw status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	location := rec.Header().Get("Location")
+	if !strings.Contains(location, "Acci%C3%B3n+reset-reanimacion") {
+		t.Fatalf("redirect inesperado: %s", location)
+	}
+	agente, err := db.GetAgente("Codex5")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente == nil {
+		t.Fatalf("agente nil")
+	}
+	if strings.TrimSpace(agente.EstadoCuota) != "activo" {
+		t.Fatalf("estado_cuota no reseteado: %#v", agente)
+	}
+	if agente.ReanimarAt != nil {
+		t.Fatalf("reanmiar_at no limpiado: %#v", agente)
 	}
 }
 

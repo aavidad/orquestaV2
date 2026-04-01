@@ -61,6 +61,8 @@ type webOpenClawData struct {
 	Notificaciones    notificaciones.EstadoNotificaciones
 	NotifOutbox       notificaciones.OutboxSummary
 	Generado          string
+	Msg               string
+	Err               string
 }
 
 type webPropResumen struct {
@@ -741,7 +743,61 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		Notificaciones: notificaciones.DescribirConfiguracion(),
 		NotifOutbox:    notificaciones.DescribirOutbox(10),
 		Generado:       time.Now().Format("2006-01-02 15:04:05"),
+		Msg:            r.URL.Query().Get("ok"),
+		Err:            r.URL.Query().Get("err"),
 	})
+}
+
+func webHandlerOpenClawAccion(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/openclaw" || r.Method != http.MethodPost {
+		http.NotFound(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/openclaw?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+	kind := strings.TrimSpace(r.FormValue("kind"))
+	switch kind {
+	case "agente":
+		nombre := strings.TrimSpace(r.FormValue("agente"))
+		accion := strings.TrimSpace(r.FormValue("accion"))
+		if nombre == "" || !webAccionEstadoAgenteValida(accion) {
+			http.Redirect(w, r, "/openclaw?err="+url.QueryEscape("accion de agente invalida"), http.StatusSeeOther)
+			return
+		}
+		if err := webAplicarAccionEstadoAgentePorAPI(nombre, accion); err != nil {
+			http.Redirect(w, r, "/openclaw?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+			return
+		}
+		http.Redirect(w, r, "/openclaw?ok="+url.QueryEscape(fmt.Sprintf("Acción %s aplicada a %s", accion, nombre)), http.StatusSeeOther)
+		return
+	case "review_gate":
+		gateID := strings.TrimSpace(r.FormValue("gate_id"))
+		estado := strings.TrimSpace(r.FormValue("estado"))
+		reviewer := strings.TrimSpace(r.FormValue("reviewer_agente"))
+		findings := strings.TrimSpace(r.FormValue("findings_json"))
+		if gateID == "" || estado == "" {
+			http.Redirect(w, r, "/openclaw?err="+url.QueryEscape("review gate invalido"), http.StatusSeeOther)
+			return
+		}
+		var resp map[string]any
+		path := "/api/review-gates/" + url.PathEscape(gateID) + "/resolver"
+		req := apiReviewGateResolveRequest{
+			Estado:         estado,
+			ReviewerAgente: reviewer,
+			FindingsJSON:   findings,
+		}
+		if err := webInvocarAPIJSON(http.MethodPost, path, req, &resp); err != nil {
+			http.Redirect(w, r, "/openclaw?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+			return
+		}
+		http.Redirect(w, r, "/openclaw?ok="+url.QueryEscape(fmt.Sprintf("Review gate %s actualizada a %s", gateID, estado)), http.StatusSeeOther)
+		return
+	default:
+		http.Redirect(w, r, "/openclaw?err="+url.QueryEscape("accion openclaw desconocida"), http.StatusSeeOther)
+		return
+	}
 }
 
 // ─── Tareas: lista ────────────────────────────────────────────────────────────
@@ -1691,6 +1747,8 @@ const webTplOpenClaw = `{{define "content"}}
   <small style="color:#94a3b8">{{.Generado}}</small>
 </div>
 <meta http-equiv="refresh" content="10">
+{{if .Msg}}<div class="alert-ok">✓ {{.Msg}}</div>{{end}}
+{{if .Err}}<div class="alert-err">✗ {{.Err}}</div>{{end}}
 
 <div class="stats">
   <div class="stat"><div class="n">{{len .Status.AgentesActivos}}</div><div class="l">conectados</div></div>
@@ -1762,6 +1820,28 @@ const webTplOpenClaw = `{{define "content"}}
         </tr>
       {{end}}
       </tbody></table>
+      {{range .ReviewGates}}
+      <form method="post" action="/openclaw?lang={{lang}}" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.45rem;align-items:end;margin:.55rem 0;padding:.65rem;border:1px solid #e2e8f0;border-radius:.45rem;background:white">
+        <input type="hidden" name="kind" value="review_gate">
+        <input type="hidden" name="gate_id" value="{{.ID}}">
+        <label style="margin:0">Estado
+          <select name="estado">
+            <option value="pendiente" {{if eq .Estado "pendiente"}}selected{{end}}>pendiente</option>
+            <option value="en_revision" {{if eq .Estado "en_revision"}}selected{{end}}>en_revision</option>
+            <option value="cambios_pedidos" {{if eq .Estado "cambios_pedidos"}}selected{{end}}>cambios_pedidos</option>
+            <option value="aprobado" {{if eq .Estado "aprobado"}}selected{{end}}>aprobado</option>
+            <option value="bloqueado" {{if eq .Estado "bloqueado"}}selected{{end}}>bloqueado</option>
+          </select>
+        </label>
+        <label style="margin:0">Reviewer
+          <input type="text" name="reviewer_agente" value="{{.ReviewerAgente}}">
+        </label>
+        <label style="margin:0">Findings JSON
+          <input type="text" name="findings_json" value="{{.FindingsJSON}}">
+        </label>
+        <button type="submit" class="btn-sm">Guardar gate</button>
+      </form>
+      {{end}}
       {{end}}
       {{if .Signals}}
       <div style="font-size:.8rem;color:#334155;margin-bottom:.45rem;font-weight:600">Señales recientes</div>
@@ -1808,6 +1888,15 @@ const webTplOpenClaw = `{{define "content"}}
         </tr>
       {{end}}
       </tbody></table>
+      {{range .EnCuota}}
+      <form method="post" action="/openclaw?lang={{lang}}" style="display:flex;gap:.45rem;align-items:center;flex-wrap:wrap;margin-top:.5rem">
+        <input type="hidden" name="kind" value="agente">
+        <input type="hidden" name="agente" value="{{.Nombre}}">
+        <span style="font-size:.82rem;color:#475569;min-width:8rem">{{.Nombre}}</span>
+        <button type="submit" class="btn-sm" name="accion" value="reset-reanimacion">Reset reanimación</button>
+        {{if not .Habilitado}}<button type="submit" class="btn-sm" name="accion" value="rehabilitar">Rehabilitar</button>{{end}}
+      </form>
+      {{end}}
       {{else}}
       <p style="margin:0;color:#64748b">Sin agentes retenidos por cuota.</p>
       {{end}}

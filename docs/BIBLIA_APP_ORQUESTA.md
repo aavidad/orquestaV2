@@ -770,6 +770,15 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - la flota oficial sale de `server_autobootstrap_supervisor_agent` + `server_autobootstrap_worker_agents`.
 - no se accede a configuración o estado por la BD local desde `server preparar-sesion`; la lectura de pool y las acciones de sesión/agente van por la vía server-first.
 
+## OpenClaw web operativa
+
+- `/openclaw` no puede quedarse en panel pasivo. Si expone `review_gates` o workers fuera del pool, debe permitir actuar sobre ellos por la misma vía canónica del servidor.
+- las acciones de la web del supervisor se resuelven por API embebida server-first; no se admiten scripts laterales ni mutaciones directas sobre la BD.
+- las primeras acciones mínimas obligatorias son:
+  - resolver `review_gates`
+  - resetear reanimación de agentes retenidos por cuota
+- si una nueva superficie web de supervisor no tiene regresión de `POST` con efecto real sobre estado persistente, no se considera cerrada.
+
 ## Mailbox en enfriamiento
 
 - un agente en `estado_cuota=enfriamiento` no debe arrastrar `runtime_mailbox` pendiente que ya no sea entregable durante ese cooldown.

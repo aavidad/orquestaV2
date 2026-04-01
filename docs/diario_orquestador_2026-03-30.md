@@ -5672,3 +5672,35 @@ Resultado:
 - dejó trazabilidad visible de la higiene aplicada (`sesiones cerradas`, `pausas reseteadas`, agentes saneados)
 - `antigravity` dejó de salir como `pausa operativa` y pasó al bloque correcto de `en enfriamiento/cuota`
 - el preflight de una nueva sesión ya es una operación canónica real del servidor, no una secuencia manual
+
+## 2026-04-01 — `/openclaw` ya acciona review y cooldown por la vía canónica
+
+Hallazgo:
+
+- la nueva superficie `/openclaw` ya enseñaba review, merges, flota y notificaciones, pero todavía era demasiado pasiva
+- eso dejaba un riesgo clásico: panel bonito sin capacidad operativa real, obligando a volver a comandos o a otra pantalla para ejecutar la acción siguiente
+
+Decision:
+
+- convertir `/openclaw` en superficie operativa mínima del supervisor
+- resolver `review_gates` y resetear reanimación de agentes retenidos desde la propia web
+- mantener todo por API embebida server-first, sin rutas laterales ni accesos directos a la BD
+
+Codigo:
+
+- [cmd/serve.go](/home/alberto/Trabajo/orquesta/cmd/serve.go)
+- [cmd/servidor_unificado.go](/home/alberto/Trabajo/orquesta/cmd/servidor_unificado.go)
+- [cmd/serve_notificaciones_test.go](/home/alberto/Trabajo/orquesta/cmd/serve_notificaciones_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestWeb(OpenClawMuestraOperatorReviewYEntregas|OpenClawAccionResuelveReviewGate|OpenClawAccionReseteaReanimacionDeAgente|DashMuestraEstadoOpenClawNotificaciones)' -count=1`
+- `go test ./cmd -run 'Test(RenderStatusSummaryCuentaVentanaTemporalAgotadaComoCuotaReal|LimpiarFlotaFueraDePoolCierraNoPoolYReseteaPausaOperativa|ServerPrepararSesionAllowedAgentsIncluyeFlotaOficial)' -count=1`
+- `go build -o ./orquesta .`
+
+Resultado:
+
+- `/openclaw` ya no es solo lectura: puede cerrar un `review_gate` y actuar sobre un worker retenido por cuota desde la propia interfaz
+- las acciones quedan soportadas por regresiones de `POST` con efecto real sobre estado persistente
+- el supervisor web ya está más cerca de ser un puesto operativo completo y no solo una vista de estado
