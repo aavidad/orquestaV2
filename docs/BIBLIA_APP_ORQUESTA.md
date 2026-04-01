@@ -841,6 +841,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   1. conservar el mensaje en `runtime_mailbox`
   2. completar la `send_instruction` como `mailbox_only`
   3. no generar `stdin` viva ni reanimación por esa guidance
+- La materialización durable correcta es exactamente una por `mailbox_id` y sesión/handle vigentes. Si la mailbox sigue pendiente, no debe rematerializar otra `send_instruction` idéntica cada ciclo.
 - La razón es operativa y ya validada en vivo: incluso frases cortas y canónicas (`resume riesgo y siguiente paso`) pueden disparar `runtime_panic` en Codex TUI.
 - La guidance viva para Codex solo podrá reabrirse cuando exista un canal distinto y demostrablemente estable; mientras tanto, la durabilidad manda sobre la inmediatez.
 

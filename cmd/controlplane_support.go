@@ -1804,11 +1804,10 @@ func runtimeOrderMailboxOnlySticky(order *db.RuntimeOrder) bool {
 	}
 	switch strings.TrimSpace(runtimeOrderMailboxKindFromJSON(order.PayloadJSON)) {
 	case "autonomia", "nudge", "watchdog", db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
+		return true
 	default:
 		return false
 	}
-	reason := strings.ToLower(strings.TrimSpace(runtimeOrderDeferredReason(order.ResultadoJSON)))
-	return strings.Contains(reason, "session_resume timeout")
 }
 
 func runtimeMailboxOnlyDedupeTTL() time.Duration {

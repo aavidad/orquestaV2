@@ -5843,3 +5843,23 @@ Resultado:
 - Conclusión:
   - el núcleo ya distingue entre guidance durable y entrega viva segura
   - para Codex, hoy la entrega viva segura no existe; la estrategia profesional es durabilidad + bootstrap/reanudación posterior, no insistir por `stdin`
+
+## 2026-04-01 — prueba grande final: sin repique de guidance durable
+
+- Tras fijar `codex_guidance_mailbox_durable`, apareció un último bug fino: la misma `runtime_mailbox` pendiente seguía rematerializando `send_instruction` idénticas en cada ciclo del runner.
+- Causa exacta:
+  - la deduplicación `mailbox_only` solo trataba como sticky el caso `session_resume timeout`
+  - no consideraba sticky la nueva razón `codex_guidance_mailbox_durable`
+- Corrección:
+  - `runtimeOrderMailboxOnlySticky` pasa a tratar toda guidance `mailbox_only` (`autonomia`, `nudge`, `watchdog`, `governance_refresh`, `skills_refresh`) como sticky en la misma sesión/handle
+- Validación:
+  - tests dirigidos de `cmd` en verde
+  - reinicio del daemon con binario nuevo
+  - observación viva:
+    - `64669` y `64670` dejaron de generar nuevas `send_instruction` tras el reinicio correcto
+    - una `nudge` nueva por agente (`64671`, `64672`) generó exactamente una `send_instruction` durable (`80880`, `80879`) y luego quedó plana
+- Conclusión:
+  - el contrato correcto ya está cerrado:
+    - mailbox pendiente
+    - una sola materialización durable
+    - ningún repique posterior para la misma mailbox viva
