@@ -5467,3 +5467,34 @@ Resultado:
 - el caso vivo de `Codex4` drena a limpio: `runtime_mailbox=0` y `runtime_orders=0`
 - el daemon queda sano con `Health RPC: OK`
 - la suite completa vuelve a verde
+
+## 2026-04-01 — preset web server-first para OpenClaw
+
+Hallazgo:
+
+- `Codex3` traía un bloque útil y bastante aislado para `/config`: preset rápido de OpenClaw y edición inline de las claves relevantes
+- la UI actual de configuración seguía siendo demasiado plana y sin camino canónico visible para preparar `OpenClaw`
+
+Decision:
+
+- integrar ese bloque en la rama principal, pero manteniendo solo la parte contenida y validable por tests
+- el preset escribe exclusivamente por `/api/config`, preserva `lang` en redirects y usa flashes i18n
+
+Codigo:
+
+- [cmd/config_web.go](/home/alberto/Trabajo/orquesta/cmd/config_web.go)
+- [cmd/config_web_test.go](/home/alberto/Trabajo/orquesta/cmd/config_web_test.go)
+- [i18n/en.json](/home/alberto/Trabajo/orquesta/i18n/en.json)
+- [i18n/es.json](/home/alberto/Trabajo/orquesta/i18n/es.json)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestWebConfig(ListaYGuardaPorAPI|GuardarValidaClaveConI18n|AplicaPresetOpenClaw|RechazaPresetDesconocido)' -count=1`
+- `go build -o ./orquesta .`
+
+Resultado:
+
+- `/config` ya muestra una sección rápida de integración OpenClaw
+- el preset `openclaw_server_first` deja la configuración mínima lista sin salir de la UI server-first
+- la edición manual y el preset conservan `lang` y feedback traducido

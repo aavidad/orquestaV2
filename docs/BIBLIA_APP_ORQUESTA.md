@@ -731,6 +731,19 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - y debe cubrir también la coordinación base del trabajo: activar asignaciones, adquirir/liberar locks y preparar/cerrar worktrees desde MCP, sin rutas laterales ni wrappers de CLI.
 - y debe cubrir además las fases de preparación e investigación del agente desde MCP: `agente preparar` e `investigar` tienen que salir por el mismo servidor oficial para que el supervisor construya contexto y diagnóstico sin recurrir a CLI local ni a recomposición manual.
 - y debe cubrir también el cierre de sesión y la observabilidad fina del runtime desde MCP: listar `runtime_handles`, listar `runtime_events` y ejecutar `sesion fin` por la misma vía canónica, sin depender de endpoints o comandos separados para el trabajo normal del supervisor.
+
+## Configuración web de OpenClaw
+
+- la pantalla `/config` es una superficie operativa válida para preparar integración server-first con `OpenClaw`, pero siempre escribiendo por `/api/config`
+- debe existir un preset rápido y explícito para el modo `openclaw_server_first`, visible y editable desde la propia UI
+- el preset oficial fija:
+  - `integration_openclaw_enabled=true`
+  - `integration_openclaw_transport=mcp_http`
+  - `integration_openclaw_endpoint=http://127.0.0.1:16543/mcp`
+  - `integration_openclaw_workspace_mode=worktree`
+  - `integration_openclaw_agent_prefix=OpenClaw-`
+  - `integration_openclaw_require_identity=true`
+- los formularios de configuración deben conservar `lang` en redirects y usar mensajes i18n; no se admiten flashes hardcodeados ni rutas laterales fuera del servidor
 - para `codex_token_count_observed`, si falta la clave de configuración específica, el TTL por defecto observado sigue siendo `3600s`; no puede caer silenciosamente al TTL genérico de `300s`, porque eso oculta agotamientos reales de la ventana `5h`.
 - un presupuesto fresco y crítico observado debe proyectarse también sobre `estado_cuota` visible del agente (`enfriamiento` o `agotado`) aunque la fila persistida aún no haya sido actualizada por un batch posterior.
 - la identidad de cuenta del agente (`usuario` / `correo`) debe salir solo de artefactos ya persistidos del runtime o del presupuesto (`raw_snapshot_json`, `metadata_json`). No se abre una segunda fuente de verdad ni se inventan credenciales.
