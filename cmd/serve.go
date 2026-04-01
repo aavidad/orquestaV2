@@ -49,6 +49,20 @@ type webDashData struct {
 	Msg            string
 }
 
+type webOpenClawData struct {
+	Status            *estadoResumen
+	EnCuota           []*db.Agente
+	Retenidas         []tareaLite
+	ReviewGates       []*db.ReviewGate
+	Signals           []*supervisorReviewSignal
+	Merges            []*db.GitMerge
+	Recommended       []supervisorRecommendedAction
+	NextAction        *supervisorRecommendedAction
+	Notificaciones    notificaciones.EstadoNotificaciones
+	NotifOutbox       notificaciones.OutboxSummary
+	Generado          string
+}
+
 type webPropResumen struct {
 	Codigo     string
 	Titulo     string
@@ -685,6 +699,47 @@ func webHandlerDash(w http.ResponseWriter, r *http.Request) {
 		Abiertas: resAbiertas, EnProgreso: ep, Runtimes: runtimes, Checkpoints: recentCheckpoints,
 		Notificaciones: notifs,
 		NotifOutbox:    notifOutbox,
+		Generado:       time.Now().Format("2006-01-02 15:04:05"),
+	})
+}
+
+func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/openclaw" {
+		http.NotFound(w, r)
+		return
+	}
+	status, err := buildEstadoResumen()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	review, err := buildSupervisorReviewSnapshot("")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	reviewGates, _ := review["review_gates"].([]*db.ReviewGate)
+	signals, _ := review["signals"].([]*supervisorReviewSignal)
+	merges, _ := review["merges"].([]*db.GitMerge)
+	recommended, _ := review["recommended_actions"].([]supervisorRecommendedAction)
+	var nextAction *supervisorRecommendedAction
+	switch item := review["next_action"].(type) {
+	case supervisorRecommendedAction:
+		nextAction = &item
+	case *supervisorRecommendedAction:
+		nextAction = item
+	}
+	webRender(w, r, webTplLayout+webTplOpenClaw, webOpenClawData{
+		Status:         status,
+		EnCuota:        agentesNoActivosConCuota(status.Agentes),
+		Retenidas:      tareasRetenidasPorCuota(status.TareasActivas, status.Agentes),
+		ReviewGates:    reviewGates,
+		Signals:        signals,
+		Merges:         merges,
+		Recommended:    recommended,
+		NextAction:     nextAction,
+		Notificaciones: notificaciones.DescribirConfiguracion(),
+		NotifOutbox:    notificaciones.DescribirOutbox(10),
 		Generado:       time.Now().Format("2006-01-02 15:04:05"),
 	})
 }
@@ -1431,6 +1486,7 @@ const webTplLayout = `<!doctype html>
       <a href="/memoria">{{tr "memory.title"}}</a>
       <a href="/deploy">{{tr "deploy.title"}}</a>
       <a href="/config">{{tr "config.title"}}</a>
+      <a href="/openclaw">OpenClaw</a>
       <a href="/conectores">{{tr "connectors.title"}}</a>
       <a href="/diagnostico">{{tr "ops.diagnosis.title"}}</a>
       <a href="/auditoria">{{tr "ops.audit.title"}}</a>
@@ -1621,6 +1677,202 @@ const webTplDash = `{{define "content"}}
       </div>
       {{end}}
     </div>
+  </div>
+</div>
+{{end}}
+`
+
+const webTplOpenClaw = `{{define "content"}}
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1.2rem">
+  <div>
+    <h2 style="margin:0">OpenClaw Operator</h2>
+    <small style="color:#64748b">Vista operativa server-first del supervisor</small>
+  </div>
+  <small style="color:#94a3b8">{{.Generado}}</small>
+</div>
+<meta http-equiv="refresh" content="10">
+
+<div class="stats">
+  <div class="stat"><div class="n">{{len .Status.AgentesActivos}}</div><div class="l">conectados</div></div>
+  <div class="stat"><div class="n">{{len .Status.AgentesTrabajando}}</div><div class="l">trabajando</div></div>
+  <div class="stat"><div class="n">{{len .EnCuota}}</div><div class="l">en cuota/cooldown</div></div>
+  <div class="stat"><div class="n">{{len .Retenidas}}</div><div class="l">retenidas por cuota</div></div>
+  <div class="stat"><div class="n">{{len .ReviewGates}}</div><div class="l">review gates</div></div>
+  <div class="stat"><div class="n">{{len .Merges}}</div><div class="l">merges vivos</div></div>
+</div>
+
+{{if .NextAction}}
+<section style="background:linear-gradient(135deg,#0f172a,#1e293b);color:#fff;border-radius:.8rem;padding:1rem 1.2rem;margin-bottom:1.2rem">
+  <div style="font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:#93c5fd;margin-bottom:.35rem">Acción siguiente</div>
+  <div style="font-size:1.05rem;font-weight:700">{{.NextAction.Action}}</div>
+  <div style="margin-top:.25rem;color:#cbd5e1">{{.NextAction.Reason}}</div>
+  <div style="margin-top:.45rem;font-size:.8rem;color:#93c5fd">objetivo={{.NextAction.Target}} · prioridad={{.NextAction.Priority}} · tipo={{.NextAction.Kind}}</div>
+</section>
+{{end}}
+
+<div style="display:grid;grid-template-columns:1.15fr .85fr;gap:1rem;align-items:start">
+  <div style="display:grid;gap:1rem">
+    <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
+      <h3 style="margin:0 0 .7rem 0">Flota disponible</h3>
+      {{if .Status.AgentesActivos}}
+      <table style="width:100%"><thead><tr><th>Agente</th><th>Rol</th><th>Cuota visible</th><th>Cuenta</th></tr></thead><tbody>
+      {{range .Status.AgentesActivos}}
+        <tr>
+          <td><strong>{{.Nombre}}</strong></td>
+          <td>{{orDash .Rol}}</td>
+          <td>{{if .CuotaRestantePct}}{{.CuotaRestantePct}}%{{if .PresupuestoVentana}} · {{.PresupuestoVentana}}{{end}}{{else}}—{{end}}</td>
+          <td>{{if .CuentaEmail}}{{.CuentaEmail}}{{else}}—{{end}}</td>
+        </tr>
+      {{end}}
+      </tbody></table>
+      {{else}}
+      <p style="margin:0;color:#64748b">Sin workers disponibles ahora mismo.</p>
+      {{end}}
+    </section>
+
+    <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
+      <h3 style="margin:0 0 .7rem 0">Frentes activos</h3>
+      {{if .Status.TareasActivas}}
+      <table style="width:100%"><thead><tr><th>#</th><th>Estado</th><th>Módulo</th><th>Agente</th><th>Título</th></tr></thead><tbody>
+      {{range .Status.TareasActivas}}
+        <tr>
+          <td>{{.ID}}</td>
+          <td><span class="tag t-{{.Estado}}">{{.Estado}}</span></td>
+          <td><code>{{orDash .Modulo}}</code></td>
+          <td>{{orDash .Agente}}</td>
+          <td>{{.Titulo}}</td>
+        </tr>
+      {{end}}
+      </tbody></table>
+      {{else}}
+      <p style="margin:0;color:#64748b">Sin tareas activas.</p>
+      {{end}}
+    </section>
+
+    <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
+      <h3 style="margin:0 0 .7rem 0">Review e integración</h3>
+      {{if .ReviewGates}}
+      <table style="width:100%;margin-bottom:1rem"><thead><tr><th>Gate</th><th>Estado</th><th>Reviewer</th><th>Severidad</th></tr></thead><tbody>
+      {{range .ReviewGates}}
+        <tr>
+          <td>#{{.ID}}{{if .TareaID}} · tarea {{.TareaID}}{{end}}</td>
+          <td><span class="tag t-media">{{.Estado}}</span></td>
+          <td>{{orDash .ReviewerAgente}}</td>
+          <td>{{orDash .SeverityMax}}</td>
+        </tr>
+      {{end}}
+      </tbody></table>
+      {{end}}
+      {{if .Signals}}
+      <div style="font-size:.8rem;color:#334155;margin-bottom:.45rem;font-weight:600">Señales recientes</div>
+      <table style="width:100%;margin-bottom:1rem"><thead><tr><th>Tipo</th><th>Agente</th><th>Proyecto</th><th>Mensaje</th></tr></thead><tbody>
+      {{range .Signals}}
+        <tr>
+          <td>{{.Event.Kind}}</td>
+          <td>{{orDash .Agent}}</td>
+          <td>{{orDash .Project}}</td>
+          <td>{{orDash .Event.Message}}</td>
+        </tr>
+      {{end}}
+      </tbody></table>
+      {{end}}
+      {{if .Merges}}
+      <div style="font-size:.8rem;color:#334155;margin-bottom:.45rem;font-weight:600">Solicitudes de merge</div>
+      <table style="width:100%"><thead><tr><th>#</th><th>Estado</th><th>Proyecto</th><th>Ramas</th></tr></thead><tbody>
+      {{range .Merges}}
+        <tr>
+          <td>#{{.ID}}</td>
+          <td><span class="tag t-media">{{.Estado}}</span></td>
+          <td>{{orDash .ProyectoSlug}}</td>
+          <td>{{orDash .SourceBranch}} → {{orDash .TargetBranch}}</td>
+        </tr>
+      {{end}}
+      </tbody></table>
+      {{end}}
+      {{if and (not .ReviewGates) (not .Signals) (not .Merges)}}
+      <p style="margin:0;color:#64748b">Sin review gates, señales ni merges vivos.</p>
+      {{end}}
+    </section>
+  </div>
+
+  <div style="display:grid;gap:1rem">
+    <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
+      <h3 style="margin:0 0 .7rem 0">Workers fuera del pool</h3>
+      {{if .EnCuota}}
+      <table style="width:100%"><thead><tr><th>Agente</th><th>Estado</th><th>Reanima</th></tr></thead><tbody>
+      {{range .EnCuota}}
+        <tr>
+          <td>{{.Nombre}}</td>
+          <td>{{orDash .EstadoCuota}}</td>
+          <td>{{if .ReanimarAt}}{{.ReanimarAt.Local.Format "2006-01-02 15:04"}}{{else}}—{{end}}</td>
+        </tr>
+      {{end}}
+      </tbody></table>
+      {{else}}
+      <p style="margin:0;color:#64748b">Sin agentes retenidos por cuota.</p>
+      {{end}}
+    </section>
+
+    <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
+      <h3 style="margin:0 0 .7rem 0">Tareas retenidas por cuota</h3>
+      {{if .Retenidas}}
+      <table style="width:100%"><thead><tr><th>#</th><th>Agente</th><th>Título</th></tr></thead><tbody>
+      {{range .Retenidas}}
+        <tr>
+          <td>{{.ID}}</td>
+          <td>{{orDash .Agente}}</td>
+          <td>{{.Titulo}}</td>
+        </tr>
+      {{end}}
+      </tbody></table>
+      {{else}}
+      <p style="margin:0;color:#64748b">Sin tareas retenidas.</p>
+      {{end}}
+    </section>
+
+    <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
+      <h3 style="margin:0 0 .7rem 0">OpenClaw Gateway y notificaciones</h3>
+      <table style="width:100%;margin-bottom:.8rem"><tbody>
+      {{range .Notificaciones.Canales}}
+        <tr>
+          <td style="font-weight:600">{{.Nombre}}</td>
+          <td style="text-align:right"><span class="tag {{if .Activo}}rt-disponible{{else}}rt-cerrado{{end}}">{{if .Activo}}activo{{else}}inactivo{{end}}</span></td>
+        </tr>
+        <tr><td colspan="2" style="font-size:.75rem;color:#64748b;padding-bottom:.4rem">{{.Detalle}}</td></tr>
+      {{end}}
+      </tbody></table>
+      {{if .NotifOutbox.Recientes}}
+      <table style="width:100%"><thead><tr><th>Canal</th><th>Evento</th><th>Estado</th></tr></thead><tbody>
+      {{range .NotifOutbox.Recientes}}
+        <tr>
+          <td>{{.Canal}}</td>
+          <td>{{.TipoEvento}}</td>
+          <td><span class="tag {{if eq .Estado "entregada"}}rt-disponible{{else if eq .Estado "fallida"}}rt-cerrado{{else}}t-media{{end}}">{{.Estado}}</span></td>
+        </tr>
+        <tr><td colspan="3" style="font-size:.74rem;color:#64748b;padding-bottom:.4rem">{{orDash .Destino}}{{if .UltimoError}} · err={{.UltimoError}}{{end}}</td></tr>
+      {{end}}
+      </tbody></table>
+      {{else}}
+      <p style="margin:0;color:#64748b">Sin entregas recientes.</p>
+      {{end}}
+    </section>
+
+    <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
+      <h3 style="margin:0 0 .7rem 0">Cola recomendada</h3>
+      {{if .Recommended}}
+      <ol style="margin:0;padding-left:1.2rem">
+      {{range .Recommended}}
+        <li style="margin-bottom:.45rem">
+          <strong>{{.Action}}</strong>
+          <div style="font-size:.8rem;color:#64748b">{{.Reason}}</div>
+          <div style="font-size:.74rem;color:#94a3b8">objetivo={{.Target}} · prioridad={{.Priority}} · tipo={{.Kind}}</div>
+        </li>
+      {{end}}
+      </ol>
+      {{else}}
+      <p style="margin:0;color:#64748b">Sin acciones recomendadas ahora mismo.</p>
+      {{end}}
+    </section>
   </div>
 </div>
 {{end}}

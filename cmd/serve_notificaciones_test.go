@@ -62,6 +62,84 @@ func TestWebDashMuestraEstadoOpenClawNotificaciones(t *testing.T) {
 	}
 }
 
+func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ConfigSet("openclaw_gateway_url", "https://openclaw.local/gateway"); err != nil {
+		t.Fatalf("config openclaw url: %v", err)
+	}
+	if err := db.ConfigSet("openclaw_gateway_operator", "OpenClaw"); err != nil {
+		t.Fatalf("config openclaw operator: %v", err)
+	}
+	entregaID, err := db.CrearEntregaNotificacion("openclaw_gateway", "https://openclaw.local/gateway", db.EventoNotificacion{
+		Tipo:  "mensaje",
+		Texto: "hola openclaw",
+	})
+	if err != nil {
+		t.Fatalf("crear entrega notificacion: %v", err)
+	}
+	if err := db.MarcarEntregaNotificacionFallida(entregaID, "gateway down", time.Now().UTC().Add(time.Minute)); err != nil {
+		t.Fatalf("marcar entrega fallida: %v", err)
+	}
+	taskID, err := db.CrearTarea(&db.Tarea{
+		Titulo:    "Operador OpenClaw",
+		Modulo:    "openclaw",
+		Prioridad: db.PrioridadAlta,
+		CreadoPor: "OpenClaw",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(taskID, "Codex3"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(taskID, "Codex3"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	gateID, err := db.CrearReviewGate(&db.ReviewGate{
+		TareaID:         &taskID,
+		Estado:          db.ReviewGatePendiente,
+		ReviewerAgente:  "OpenClaw",
+		SeverityMax:     "media",
+		RequestedBy:     "Codex3",
+	})
+	if err != nil {
+		t.Fatalf("crear review gate: %v", err)
+	}
+	if gateID <= 0 {
+		t.Fatalf("review gate invalido: %d", gateID)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/openclaw", webHandlerOpenClaw)
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/openclaw", nil)
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("openclaw status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, token := range []string{
+		"OpenClaw Operator",
+		"Acción siguiente",
+		"Review e integración",
+		"OpenClaw Gateway y notificaciones",
+		"gateway down",
+		"Operador OpenClaw",
+		"OpenClaw",
+	} {
+		if !strings.Contains(body, token) {
+			t.Fatalf("pagina openclaw sin %q:\n%s", token, body)
+		}
+	}
+}
+
 func TestWebDashMuestraCuentaYVentanasDeCuotaAgente(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

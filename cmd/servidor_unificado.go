@@ -53,6 +53,7 @@ func registrarRutasServe(mux *http.ServeMux) {
 		}
 		webHandlerConfig(w, r)
 	})
+	mux.HandleFunc("/openclaw", webHandlerOpenClaw)
 	mux.HandleFunc("/conectores", webHandlerConectores)
 	mux.HandleFunc("/conectores/", webRouterConectores)
 	mux.HandleFunc("/diagnostico", webHandlerDiagnostico)

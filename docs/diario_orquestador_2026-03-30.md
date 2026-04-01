@@ -5600,3 +5600,37 @@ Resultado:
 
 - OpenClaw dispone de un endpoint HTTP único con `status`, `review`, `notificaciones` y `entregas`
 - la superficie operativa del operador deja de depender solo de MCP o de múltiples endpoints sueltos
+
+## 2026-04-01 — superficie web dedicada para OpenClaw operator
+
+Hallazgo:
+
+- después de cerrar `/api/openclaw/operator`, seguía faltando una superficie web canónica para operador humano o conversacional
+- dashboard y `/config` ya enseñaban piezas, pero no había una pantalla única de OpenClaw para flota, revisión y outbox
+
+Decision:
+
+- añadir `/openclaw` como vista HTML server-first del supervisor
+- la página reutiliza el mismo estado vivo del daemon: `buildEstadoResumen()`, `buildSupervisorReviewSnapshot("")`, `DescribirConfiguracion()` y `DescribirOutbox()`
+- no se mete cliente JS ni recomposición manual desde varios endpoints
+
+Codigo:
+
+- [cmd/serve.go](/home/alberto/Trabajo/orquesta/cmd/serve.go)
+- [cmd/servidor_unificado.go](/home/alberto/Trabajo/orquesta/cmd/servidor_unificado.go)
+- [cmd/serve_notificaciones_test.go](/home/alberto/Trabajo/orquesta/cmd/serve_notificaciones_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(WebDashMuestraEstadoOpenClawNotificaciones|WebOpenClawMuestraOperatorReviewYEntregas|APIObservabilidadReadOnly)' -count=1`
+- `go build -o ./orquesta .`
+- `./orquesta server stop`
+- `./orquesta server start`
+- `curl -sf http://127.0.0.1:16543/openclaw`
+
+Resultado:
+
+- OpenClaw ya tiene una superficie web operativa real en `/openclaw`
+- la página enseña flota disponible, workers fuera del pool por cuota, frentes activos, review gates, señales, merges, notificaciones/outbox y cola de acciones recomendadas
+- la web del supervisor deja de depender de JSON crudo o del dashboard generalista
