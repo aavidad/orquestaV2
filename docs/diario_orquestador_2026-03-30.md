@@ -6842,3 +6842,23 @@ Resultado:
   - eso confirma que no existe runtime observable de `Codex6` para refrescar, así que el bloqueo sigue siendo estimado
   - `POST /api/openclaw/operator {"mode":"action","action":"replanificar_por_cuota","target":"tarea:410","assignee":"Codex6"}` ya falla con `agente Codex6 bloqueado por cuota estimada`
   - `./orquesta status` ya muestra `bloqueo_estimado:*` en los agentes bloqueados con telemetría vieja
+
+## 2026-04-01 — Cuota real frente a uso observado de Claude
+
+- El hueco real:
+  - tras integrar `claude_rust_session_observed`, el ranking de cuentas y parte de la salida visible seguían tratando esos casos como `sin_datos`
+  - eso ocultaba la diferencia importante entre:
+    - no tener cuota real del proveedor
+    - sí tener uso observado fresco de una sesión Claude
+- Se añadió:
+  - criterio explícito `observed_usage` en el ranking/API de cuentas
+  - render específico en CLI para `uso observado ... tok · coste est. ...`
+  - nota visible `sin cuota real del proveedor` cuando la fuente es `claude_rust_session_observed` y no existe ninguna cuota real asociada
+- Regla canónica:
+  - `observed_usage` no compite con saldo real; solo aporta frescura e intensidad de uso
+  - el orden de decisión de capacidad no cambia:
+    - cuota real primero
+    - uso observado solo como contexto adicional
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(AgenteRankingCuentasCmdMarcaUsoObservadoClaude|CuentaPresupuestoDesdeAgenteUsaObservedUsageCuandoNoHayCuotaReal)' -count=1`
+  - `go build -o ./orquesta .`

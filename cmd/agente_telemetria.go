@@ -144,6 +144,16 @@ func resumenRankingCuenta(cuenta apiCuentaPresupuestoItem) string {
 		if cuenta.CuotaRestantePct != nil {
 			detalle = fmt.Sprintf("%s %d%%", etiquetaCuotaVisibleCuenta(cuenta.PresupuestoStale, cuenta.PresupuestoFuente), *cuenta.CuotaRestantePct)
 		}
+	case "observed_usage":
+		if cuenta.ObservedUsageTokens != nil {
+			detalle = fmt.Sprintf("uso observado %d tok", *cuenta.ObservedUsageTokens)
+		}
+		if cuenta.ObservedUsageCostUSD != nil {
+			if detalle != "" {
+				detalle += " · "
+			}
+			detalle += fmt.Sprintf("coste est. $%.4f", *cuenta.ObservedUsageCostUSD)
+		}
 	default:
 		if cuenta.ObservedUsageTokens != nil {
 			detalle = fmt.Sprintf("uso %d tok", *cuenta.ObservedUsageTokens)

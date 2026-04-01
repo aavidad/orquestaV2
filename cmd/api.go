@@ -1152,6 +1152,8 @@ func cuentaPresupuestoDesdeAgente(agente *db.Agente) (string, apiCuentaPresupues
 		item.Criterio = "remaining_seconds"
 	case agente.CuotaRestantePct != nil:
 		item.Criterio = "cuota_pct"
+	case agente.ObservedUsageTokens != nil || agente.ObservedUsageCostUSD != nil:
+		item.Criterio = "observed_usage"
 	default:
 		item.Criterio = "sin_datos"
 	}
@@ -1196,6 +1198,13 @@ func cuentaPresupuestoOrden(item apiCuentaPresupuestoItem) (int, float64) {
 	case "cuota_pct":
 		if item.CuotaRestantePct != nil {
 			return 1, float64(*item.CuotaRestantePct)
+		}
+	case "observed_usage":
+		if item.ObservedUsageTokens != nil {
+			return 0, float64(*item.ObservedUsageTokens)
+		}
+		if item.ObservedUsageCostUSD != nil {
+			return 0, *item.ObservedUsageCostUSD
 		}
 	}
 	return 0, 0

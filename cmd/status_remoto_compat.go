@@ -344,6 +344,10 @@ func resumenCuotaAgente(a *db.Agente) string {
 		}
 		partes = append(partes, usage)
 	}
+	if strings.EqualFold(strings.TrimSpace(a.PresupuestoFuente), "claude_rust_session_observed") &&
+		a.RemainingSeconds == nil && a.RemainingMessages == nil && a.RemainingTokens == nil && a.RemainingCredits == nil && a.CuotaRestantePct == nil {
+		partes = append(partes, "sin cuota real del proveedor")
+	}
 	if a.RemainingCredits != nil {
 		partes = append(partes, fmt.Sprintf("cred %.2f", *a.RemainingCredits))
 	}

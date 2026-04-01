@@ -26,6 +26,28 @@ import (
 	"orquesta/supervisionapp"
 )
 
+func TestCuentaPresupuestoDesdeAgenteUsaObservedUsageCuandoNoHayCuotaReal(t *testing.T) {
+	tokens := int64(1570)
+	cost := 0.042
+	key, item := cuentaPresupuestoDesdeAgente(&db.Agente{
+		Nombre:               "Codex6",
+		CuentaEmail:          "claude@example.com",
+		PresupuestoFuente:    "claude_rust_session_observed",
+		ObservedUsageTokens:  &tokens,
+		ObservedUsageCostUSD: &cost,
+	})
+	if key != "claude@example.com" {
+		t.Fatalf("cuenta clave inesperada: %q", key)
+	}
+	if item.Criterio != "observed_usage" {
+		t.Fatalf("criterio inesperado: %+v", item)
+	}
+	rank, value := cuentaPresupuestoOrden(item)
+	if rank != 0 || value != float64(tokens) {
+		t.Fatalf("orden inesperado: rank=%d value=%v", rank, value)
+	}
+}
+
 var cmdTestDBMu sync.Mutex
 var cmdTestBootstrapOnce sync.Once
 var cmdTestBootstrapData []byte

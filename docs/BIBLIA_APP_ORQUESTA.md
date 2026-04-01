@@ -1101,3 +1101,8 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `handoff` debe seguir por su circuito específico de bootstrap/handoff
   - en el batch general puede convivir con órdenes básicas, pero debe permanecer `pendiente`
   - la protección correcta aquí es una regresión explícita, no reabrir el diseño del control plane sin evidencia de bug vivo
+- En telemetría de cuentas hay que separar `cuota real` de `uso observado`:
+  - si una fuente como `claude_rust_session_observed` solo aporta identidad y uso de sesión, no debe presentarse como saldo disponible
+  - el ranking/API/CLI deben marcar esos casos como `observed_usage`
+  - `observed_usage` sirve para frescura y contexto operativo, no para decidir capacidad restante
+  - si no existe una cuota real del proveedor, la UI debe decirlo de forma explícita y no esconderlo tras `sin_datos`
