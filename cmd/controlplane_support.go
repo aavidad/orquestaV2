@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -379,7 +380,75 @@ func refrescarPresupuestoSesionObservadoAgente(nombre string) (int, error) {
 			break
 		}
 	}
+	if procesados > 0 {
+		return procesados, nil
+	}
+	sesion, err := db.ObtenerUltimaSesion(nombre, nil)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, err
+	}
+	ok, err := refrescarPresupuestoSesionObservadoDesdeSesion(sesion)
+	if err != nil {
+		return 0, err
+	}
+	if ok {
+		return 1, nil
+	}
 	return procesados, nil
+}
+
+func refrescarPresupuestoSesionObservadoDesdeSesion(sesion *db.Sesion) (bool, error) {
+	if sesion == nil || sesion.ID <= 0 {
+		return false, nil
+	}
+	workingDir := strings.TrimSpace(sesion.CWD)
+	if workingDir == "" && sesion.ProyectoID != nil && *sesion.ProyectoID > 0 {
+		if proyecto, err := db.GetProyecto(strconv.FormatInt(*sesion.ProyectoID, 10)); err == nil && proyecto != nil {
+			workingDir = strings.TrimSpace(proyecto.RutaAbs)
+		}
+	}
+	meta := map[string]any{
+		"working_dir":          workingDir,
+		"herramienta":          strings.TrimSpace(sesion.Herramienta),
+		"external_session_id":  strings.TrimSpace(sesion.ExternalSessionID),
+		"resume_payload_json":  strings.TrimSpace(sesion.ResumePayloadJSON),
+	}
+	if cfgHome := strings.TrimSpace(os.Getenv("CLAUDE_CONFIG_HOME")); cfgHome != "" {
+		meta["claude_config_home"] = cfgHome
+	}
+	if strings.TrimSpace(sesion.Herramienta) != "" {
+		meta["rendered_command"] = strings.TrimSpace(sesion.Herramienta)
+	}
+	if sesion.HeartbeatAt != nil && !sesion.HeartbeatAt.IsZero() {
+		meta["started_at"] = sesion.HeartbeatAt.UTC().Format(time.RFC3339Nano)
+	} else if !sesion.Inicio.IsZero() {
+		meta["started_at"] = sesion.Inicio.UTC().Format(time.RFC3339Nano)
+	}
+	metaJSON, _ := json.Marshal(meta)
+	handle := &db.RuntimeHandle{
+		Agente:       strings.TrimSpace(sesion.Agente),
+		ProyectoID:   sesion.ProyectoID,
+		SesionID:     &sesion.ID,
+		Estado:       "activo",
+		MetadataJSON: string(metaJSON),
+	}
+	obj := controlruntime.ObjetivoProceso{
+		MetadataJSON: handle.MetadataJSON,
+	}
+	if observed, err := controlruntime.ObserveCodexArtifacts(obj); err != nil {
+		return false, nil
+	} else if observed != nil && !observed.ObservedAt.IsZero() {
+		return true, persistirPresupuestoSesionObservado(handle, observed)
+	}
+	if observed, err := controlruntime.ObserveClaudeRustArtifacts(obj); err != nil {
+		return false, nil
+	} else if observed != nil && !observed.ObservedAt.IsZero() {
+		return true, persistirPresupuestoSesionClaudeObservado(handle, observed)
+	}
+	return false, nil
 }
 
 func refrescarPresupuestoSesionObservadoHandle(handle *db.RuntimeHandle) (bool, string, error) {
@@ -404,10 +473,20 @@ func refrescarPresupuestoSesionObservadoHandle(handle *db.RuntimeHandle) (bool, 
 	if err != nil {
 		return false, agente, nil
 	}
-	if observed == nil || observed.ObservedAt.IsZero() {
+	if observed != nil && !observed.ObservedAt.IsZero() {
+		if err := persistirPresupuestoSesionObservado(handle, observed); err != nil {
+			return false, agente, err
+		}
+		return true, agente, nil
+	}
+	claudeObserved, err := controlruntime.ObserveClaudeRustArtifacts(obj)
+	if err != nil {
 		return false, agente, nil
 	}
-	if err := persistirPresupuestoSesionObservado(handle, observed); err != nil {
+	if claudeObserved == nil || claudeObserved.ObservedAt.IsZero() {
+		return false, agente, nil
+	}
+	if err := persistirPresupuestoSesionClaudeObservado(handle, claudeObserved); err != nil {
 		return false, agente, err
 	}
 	return true, agente, nil
@@ -487,6 +566,88 @@ func persistirPresupuestoSesionObservado(handle *db.RuntimeHandle, observed *con
 	return nil
 }
 
+func persistirPresupuestoSesionClaudeObservado(handle *db.RuntimeHandle, observed *controlruntime.ClaudeRustObservedArtifacts) error {
+	if handle == nil || observed == nil {
+		return nil
+	}
+	sesionID := int64(0)
+	if handle.SesionID != nil && *handle.SesionID > 0 {
+		sesionID = *handle.SesionID
+	}
+	if sesionID <= 0 {
+		sesion, err := db.GetSesionActivaOperativa(strings.TrimSpace(handle.Agente), handle.ProyectoID)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return nil
+			}
+			return err
+		}
+		if sesion == nil || sesion.ID <= 0 {
+			return nil
+		}
+		sesionID = sesion.ID
+	}
+	if ultimo, err := db.UltimoPresupuestoSesion(sesionID); err == nil && ultimo != nil && !ultimo.CheckedAt.IsZero() && !observed.ObservedAt.After(ultimo.CheckedAt) {
+		if presupuestoSnapshotObservadoUsable(ultimo.RawSnapshotJSON) {
+			return nil
+		}
+	}
+	rawSnapshot := strings.TrimSpace(observed.RawSnapshot)
+	if rawSnapshot == "" {
+		payload := map[string]any{
+			"observed_scope": "claude_rust_session",
+		}
+		if observed.AccountEmail != "" {
+			payload["account_email"] = observed.AccountEmail
+		}
+		if observed.AccountUser != "" {
+			payload["account_user"] = observed.AccountUser
+		}
+		if observed.AccountSource != "" {
+			payload["account_source"] = observed.AccountSource
+		}
+		if observed.OAuthExpiresAt != nil && !observed.OAuthExpiresAt.IsZero() {
+			payload["oauth"] = map[string]any{"expires_at": observed.OAuthExpiresAt.UTC().Format(time.RFC3339Nano)}
+		}
+		if observed.Usage.TotalTokens > 0 || observed.Usage.MessageCount > 0 || strings.TrimSpace(observed.SessionPath) != "" {
+			sessionPayload := map[string]any{
+				"session_path":   strings.TrimSpace(observed.SessionPath),
+				"message_count":  observed.Usage.MessageCount,
+				"turns":          observed.Usage.Turns,
+				"input_tokens":   observed.Usage.InputTokens,
+				"output_tokens":  observed.Usage.OutputTokens,
+				"cache_creation_input_tokens": observed.Usage.CacheCreationInputTokens,
+				"cache_read_input_tokens":     observed.Usage.CacheReadInputTokens,
+				"total_tokens":   observed.Usage.TotalTokens,
+				"pricing_source": "rust_default_sonnet",
+			}
+			if observed.Usage.EstimatedCostUSD != nil {
+				sessionPayload["estimated_cost_usd"] = *observed.Usage.EstimatedCostUSD
+			}
+			if observed.Usage.UpdatedAt != nil && !observed.Usage.UpdatedAt.IsZero() {
+				sessionPayload["updated_at"] = observed.Usage.UpdatedAt.UTC().Format(time.RFC3339Nano)
+			}
+			payload["session_usage"] = sessionPayload
+		}
+		if raw, err := json.Marshal(payload); err == nil {
+			rawSnapshot = string(raw)
+		}
+	}
+	presupuesto := &db.PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "unknown",
+		BudgetSource:    "claude_rust_session_observed",
+		RawSnapshotJSON: rawSnapshot,
+		CheckedAt:       observed.ObservedAt,
+	}
+	if _, err := db.RegistrarPresupuestoSesion(presupuesto); err != nil {
+		return err
+	}
+	db.Audit("orquesta", "registrar_presupuesto_claude_observado", "presupuesto_sesion", 0,
+		fmt.Sprintf("agente=%s sesion=%d source=claude_rust_session_observed session_file=%s", strings.TrimSpace(handle.Agente), sesionID, strings.TrimSpace(observed.SessionPath)))
+	return nil
+}
+
 func int64PtrFromHandleRef(kind, ref string) *int64 {
 	if !strings.EqualFold(strings.TrimSpace(kind), "process") {
 		return nil
@@ -528,6 +689,20 @@ func presupuestoSnapshotObservadoUsable(raw string) bool {
 		if _, ok := float64FromAny(window["used_percent"]); ok {
 			return true
 		}
+	}
+	if usage, _ := meta["session_usage"].(map[string]any); usage != nil {
+		if _, ok := float64FromAny(usage["total_tokens"]); ok {
+			return true
+		}
+		if _, ok := float64FromAny(usage["estimated_cost_usd"]); ok {
+			return true
+		}
+	}
+	if email, _ := meta["account_email"].(string); strings.TrimSpace(email) != "" {
+		return true
+	}
+	if user, _ := meta["account_user"].(string); strings.TrimSpace(user) != "" {
+		return true
 	}
 	return false
 }

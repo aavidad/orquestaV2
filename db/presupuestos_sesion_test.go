@@ -814,6 +814,60 @@ func TestGetAgenteOcultaDerivadosCuandoProviderBackoffMarcaAgotado(t *testing.T)
 	}
 }
 
+func TestGetAgenteConservaCuotaObservadaYUsoClaudeMasReciente(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("claude1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesionID, err := IniciarSesion("claude1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	now := time.Now().UTC()
+	resetWeekly := now.Add(5 * 24 * time.Hour)
+	rawObserved := `{"rate_limits":{"secondary":{"used_percent":40,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetWeekly.Unix(), 10) + `}},"account_email":"carlos@avidad.com"}`
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "weekly",
+		BudgetSource:    "codex_token_count_observed",
+		RawSnapshotJSON: rawObserved,
+		CheckedAt:       now.Add(-10 * time.Minute),
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion observed: %v", err)
+	}
+	rawClaude := `{"account_email":"carlos@avidad.com","account_user":"Carlos Claude","session_usage":{"total_tokens":1570,"estimated_cost_usd":0.042,"turns":1,"updated_at":"` + now.Format(time.RFC3339Nano) + `"}}`
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "unknown",
+		BudgetSource:    "claude_rust_session_observed",
+		RawSnapshotJSON: rawClaude,
+		CheckedAt:       now,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion claude observed: %v", err)
+	}
+
+	agente, err := GetAgente("claude1")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.CuotaRestantePct == nil || *agente.CuotaRestantePct != 60 {
+		t.Fatalf("deberia conservar la cuota observada previa: %+v", agente)
+	}
+	if agente.CuentaEmail != "carlos@avidad.com" || agente.CuentaUsuario != "Carlos Claude" {
+		t.Fatalf("deberia usar la identidad mas reciente de Claude: %+v", agente)
+	}
+	if agente.ObservedUsageTokens == nil || *agente.ObservedUsageTokens != 1570 {
+		t.Fatalf("uso observado inesperado: %+v", agente)
+	}
+	if agente.ObservedUsageCostUSD == nil || *agente.ObservedUsageCostUSD <= 0 {
+		t.Fatalf("coste observado inesperado: %+v", agente)
+	}
+	if agente.PresupuestoFuente != "codex_token_count_observed" {
+		t.Fatalf("la fuente de cuota deberia seguir siendo la que aporta cuota: %+v", agente)
+	}
+}
+
 func TestGetAgenteExtraePerfilDesdeRenderedCommandHandle(t *testing.T) {
 	abrirDBTemporalMemoria(t)
 

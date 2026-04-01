@@ -144,6 +144,16 @@ func resumenRankingCuenta(cuenta apiCuentaPresupuestoItem) string {
 		if cuenta.CuotaRestantePct != nil {
 			detalle = fmt.Sprintf("%s %d%%", etiquetaCuotaVisibleCuenta(cuenta.PresupuestoStale, cuenta.PresupuestoFuente), *cuenta.CuotaRestantePct)
 		}
+	default:
+		if cuenta.ObservedUsageTokens != nil {
+			detalle = fmt.Sprintf("uso %d tok", *cuenta.ObservedUsageTokens)
+		}
+		if cuenta.ObservedUsageCostUSD != nil {
+			if detalle != "" {
+				detalle += " · "
+			}
+			detalle += fmt.Sprintf("coste est. $%.4f", *cuenta.ObservedUsageCostUSD)
+		}
 	}
 	if cuenta.PresupuestoVentana != "" {
 		if detalle != "" {
@@ -160,6 +170,13 @@ func resumenRankingCuenta(cuenta apiCuentaPresupuestoItem) string {
 			if age := edadPresupuestoObservado(cuenta.PresupuestoCheckedAt); age != "" {
 				detalle += " (" + age + ")"
 			}
+		}
+	} else if cuenta.ObservedUsageAt != nil && !cuenta.ObservedUsageAt.IsZero() {
+		if detalle != "" {
+			detalle += " · "
+		}
+		if age := edadPresupuestoObservado(cuenta.ObservedUsageAt); age != "" {
+			detalle += "uso observado " + age
 		}
 	}
 	if len(cuenta.Agentes) > 0 {

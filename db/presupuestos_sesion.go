@@ -154,12 +154,140 @@ func PresupuestoSesionFresco(p *PresupuestoSesion) bool {
 }
 
 func presupuestoSnapshotMaxAgeSeconds(p *PresupuestoSesion) int64 {
-	if p != nil && strings.EqualFold(strings.TrimSpace(p.BudgetSource), "codex_token_count_observed") {
+	if p != nil && (strings.EqualFold(strings.TrimSpace(p.BudgetSource), "codex_token_count_observed") ||
+		strings.EqualFold(strings.TrimSpace(p.BudgetSource), "claude_rust_session_observed")) {
 		if observed := configInt64Fallback("pool_budget_snapshot_observed_max_age_seconds", 3600); observed > 0 {
 			return observed
 		}
 	}
 	return configInt64Fallback("pool_budget_snapshot_max_age_seconds", 300)
+}
+
+func PresupuestoSesionAportaCuota(p *PresupuestoSesion) bool {
+	if p == nil {
+		return false
+	}
+	if p.RemainingSeconds != nil || p.RemainingMessages != nil || p.RemainingTokens != nil || p.RemainingCredits != nil {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(p.BudgetSource), "provider_backoff") {
+		return true
+	}
+	raw := mapFromJSON(p.RawSnapshotJSON)
+	if raw == nil {
+		return false
+	}
+	rateLimits, _ := raw["rate_limits"].(map[string]any)
+	if rateLimits == nil {
+		return false
+	}
+	for _, key := range []string{"primary", "secondary"} {
+		window, _ := rateLimits[key].(map[string]any)
+		if window == nil {
+			continue
+		}
+		if _, ok := snapshotFloat64(window["used_percent"]); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func UltimoPresupuestoAgenteConCuota(agente string) (*PresupuestoSesion, *Sesion, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil, nil, sql.ErrNoRows
+	}
+	rows, err := DB.Query(`
+		SELECT p.id, p.sesion_id, p.pool_id, p.model_slug, p.window_kind, p.window_started_at, p.reset_at,
+		       p.remaining_seconds, p.remaining_messages, p.remaining_tokens, p.remaining_credits,
+		       p.budget_source, p.raw_snapshot_json, p.checked_at, p.created_at,
+		       s.id, s.agente, s.conector_id, s.proyecto_id, s.inicio, s.fin, s.activa, s.estado,
+		       s.cwd, s.herramienta, s.external_session_id, s.resume_payload_json, s.resumen_continuidad,
+		       s.branch, s.heartbeat_at, s.host, s.pid
+		FROM presupuestos_sesion p
+		JOIN sesiones s ON s.id = p.sesion_id
+		WHERE s.agente = ?
+		ORDER BY p.checked_at DESC, p.id DESC
+		LIMIT 25`, agente)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		p, sesion, err := scanPresupuestoAgenteConSesion(rows)
+		if err != nil {
+			return nil, nil, err
+		}
+		if PresupuestoSesionAportaCuota(p) {
+			return p, sesion, nil
+		}
+	}
+	return nil, nil, sql.ErrNoRows
+}
+
+func scanPresupuestoAgenteConSesion(s scanner) (*PresupuestoSesion, *Sesion, error) {
+	p := &PresupuestoSesion{}
+	sesion := &Sesion{}
+	var poolID sql.NullInt64
+	var startedAt sql.NullTime
+	var resetAt sql.NullTime
+	var remainingSeconds sql.NullInt64
+	var remainingMessages sql.NullInt64
+	var remainingTokens sql.NullInt64
+	var remainingCredits sql.NullFloat64
+	var conectorID sql.NullInt64
+	var proyectoID sql.NullInt64
+	var fin sql.NullTime
+	var heartbeat sql.NullTime
+	var pid sql.NullInt64
+	if err := s.Scan(
+		&p.ID, &p.SesionID, &poolID, &p.ModelSlug, &p.WindowKind, &startedAt, &resetAt,
+		&remainingSeconds, &remainingMessages, &remainingTokens, &remainingCredits,
+		&p.BudgetSource, &p.RawSnapshotJSON, &p.CheckedAt, &p.CreatedAt,
+		&sesion.ID, &sesion.Agente, &conectorID, &proyectoID, &sesion.Inicio, &fin, &sesion.Activa, &sesion.Estado,
+		&sesion.CWD, &sesion.Herramienta, &sesion.ExternalSessionID, &sesion.ResumePayloadJSON, &sesion.ResumenContinuidad,
+		&sesion.Branch, &heartbeat, &sesion.Host, &pid,
+	); err != nil {
+		return nil, nil, err
+	}
+	if poolID.Valid {
+		p.PoolID = &poolID.Int64
+	}
+	if startedAt.Valid {
+		p.WindowStartedAt = &startedAt.Time
+	}
+	if resetAt.Valid {
+		p.ResetAt = &resetAt.Time
+	}
+	if remainingSeconds.Valid {
+		p.RemainingSeconds = &remainingSeconds.Int64
+	}
+	if remainingMessages.Valid {
+		p.RemainingMessages = &remainingMessages.Int64
+	}
+	if remainingTokens.Valid {
+		p.RemainingTokens = &remainingTokens.Int64
+	}
+	if remainingCredits.Valid {
+		p.RemainingCredits = &remainingCredits.Float64
+	}
+	if conectorID.Valid {
+		sesion.ConectorID = &conectorID.Int64
+	}
+	if proyectoID.Valid {
+		sesion.ProyectoID = &proyectoID.Int64
+	}
+	if fin.Valid {
+		sesion.Fin = &fin.Time
+	}
+	if heartbeat.Valid {
+		sesion.HeartbeatAt = &heartbeat.Time
+	}
+	if pid.Valid {
+		sesion.PID = &pid.Int64
+	}
+	return p, sesion, nil
 }
 
 func EvaluarPresupuestoSesion(p *PresupuestoSesion) (*EvaluacionPresupuesto, error) {

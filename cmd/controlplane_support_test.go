@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/base64"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -6953,6 +6954,76 @@ func TestProcesarPresupuestoSesionObservadoBatchToleraHandleRoto(t *testing.T) {
 	}
 	if agenteBueno.PresupuestoCheckedAt == nil || agenteBueno.CuentaEmail != "bueno@example.com" {
 		t.Fatalf("deberia persistir telemetria del handle sano: %+v", agenteBueno)
+	}
+}
+
+func TestRefrescarPresupuestoSesionObservadoAgenteUsaUltimaSesionClaudeSinHandle(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	configHome := filepath.Join(tmp, "claude-home")
+	if err := os.MkdirAll(configHome, 0o755); err != nil {
+		t.Fatalf("mkdir config home: %v", err)
+	}
+	claims := base64.RawURLEncoding.EncodeToString([]byte(`{"email":"claude1@example.com","name":"Claude Uno"}`))
+	if err := os.WriteFile(filepath.Join(configHome, "credentials.json"), []byte(`{"oauth":{"access_token":"header.`+claims+`.sig","expires_at":"2026-04-01T12:00:00Z"}}`), 0o600); err != nil {
+		t.Fatalf("write credentials: %v", err)
+	}
+	prevConfigHome := os.Getenv("CLAUDE_CONFIG_HOME")
+	if err := os.Setenv("CLAUDE_CONFIG_HOME", configHome); err != nil {
+		t.Fatalf("setenv CLAUDE_CONFIG_HOME: %v", err)
+	}
+	defer func() {
+		if prevConfigHome == "" {
+			_ = os.Unsetenv("CLAUDE_CONFIG_HOME")
+		} else {
+			_ = os.Setenv("CLAUDE_CONFIG_HOME", prevConfigHome)
+		}
+	}()
+	workingDir := filepath.Join(tmp, "repo")
+	sessionsDir := filepath.Join(workingDir, ".claude", "sessions")
+	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
+		t.Fatalf("mkdir sessions: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sessionsDir, "session-1.json"), []byte(`{"version":1,"messages":[{"role":"assistant","blocks":[{"type":"text","text":"ok"}],"usage":{"input_tokens":1200,"output_tokens":300,"cache_creation_input_tokens":50,"cache_read_input_tokens":20}}]}`), 0o600); err != nil {
+		t.Fatalf("write managed session: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: workingDir,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("claude1", "programador"); err != nil {
+		t.Fatalf("registrar claude1: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "claude1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "claude-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion claude1: %v", err)
+	}
+
+	procesados, err := refrescarPresupuestoSesionObservadoAgente("claude1")
+	if err != nil {
+		t.Fatalf("refresh presupuesto observado claude1: %v", err)
+	}
+	if procesados != 1 {
+		t.Fatalf("deberia refrescar por sesion sin handle: %d", procesados)
+	}
+	agente, err := db.GetAgente("claude1")
+	if err != nil {
+		t.Fatalf("get agente claude1: %v", err)
+	}
+	if agente.CuentaEmail != "claude1@example.com" || agente.CuentaUsuario != "Claude Uno" {
+		t.Fatalf("identidad observada inesperada: %+v", agente)
+	}
+	if agente.PresupuestoCheckedAt == nil || strings.TrimSpace(agente.PresupuestoFuente) != "claude_rust_session_observed" {
+		t.Fatalf("deberia persistir telemetria claude observada por sesion: %+v", agente)
 	}
 }
 

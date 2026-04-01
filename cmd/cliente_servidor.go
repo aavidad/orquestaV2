@@ -68,6 +68,10 @@ type apiCuentaPresupuestoItem struct {
 	RemainingMessages    *int64     `json:"remaining_messages,omitempty"`
 	RemainingTokens      *int64     `json:"remaining_tokens,omitempty"`
 	RemainingCredits     *float64   `json:"remaining_credits,omitempty"`
+	ObservedUsageTokens  *int64     `json:"observed_usage_tokens,omitempty"`
+	ObservedUsageCostUSD *float64   `json:"observed_usage_cost_usd,omitempty"`
+	ObservedUsageTurns   *int       `json:"observed_usage_turns,omitempty"`
+	ObservedUsageAt      *time.Time `json:"observed_usage_at,omitempty"`
 	PresupuestoFuente    string     `json:"presupuesto_fuente,omitempty"`
 	PresupuestoCheckedAt *time.Time `json:"presupuesto_checked_at,omitempty"`
 }

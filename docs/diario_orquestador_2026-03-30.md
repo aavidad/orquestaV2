@@ -150,6 +150,52 @@ Conclusion:
 - el correo sigue vacio cuando el runtime no lo expone
 - la identidad operativa del perfil ya no queda oculta y el orquestador deja de ver “agentes anonimos”
 
+## 2026-04-01 23:40 aprox. — Claude Rust ya entra en el refresh canonico de saldos
+
+Hallazgo:
+
+- el launcher `claw-code-dev-rust` sí expone dos artefactos utiles para Orquesta:
+  - identidad OAuth en `credentials.json`
+  - uso/coste acumulado de sesion en `.claude/sessions/*.json`
+- no expone de forma clara una cuota restante tipo `weekly/5h` equivalente a Codex
+- por tanto, hasta ahora Orquesta quedaba ciega para Claude si no habia `runtime_handle` activo y solo devolvia la telemetria vieja o derivada
+
+Decisión doctrinal aplicada:
+
+- `agente presupuesto --refresh` y `POST /api/agentes/presupuesto/refrescar` ya saben intentar observacion Claude/Rust por la via canonica del daemon
+- si hay `runtime_handle`, la observacion sale de ahi
+- si no lo hay, Orquesta cae a la ultima sesion conocida del agente para reutilizar `cwd/herramienta` y refrescar identidad observada sin abrir un camino lateral
+- el snapshot Rust se persiste como `claude_rust_session_observed`
+- ese snapshot no puede reemplazar una cuota real si el launcher no la publica; sirve para `cuenta`, `oauth` y `uso observado`, no para inventar saldo restante
+
+Cambios:
+
+- `internal/controlruntime/claude_observe.go`
+- `internal/controlruntime/claude_observe_test.go`
+- `cmd/controlplane_support.go`
+- `cmd/controlplane_support_test.go`
+- `db/presupuestos_sesion.go`
+- `db/presupuestos_sesion_test.go`
+- `db/sesiones.go`
+- `cmd/cliente_servidor.go`
+- `cmd/api.go`
+- `cmd/agente_telemetria.go`
+- `cmd/status_remoto_compat.go`
+- `docs/BIBLIA_APP_ORQUESTA.md`
+
+Validación:
+
+- `go test ./internal/controlruntime -run 'TestObserve(ClaudeRustArtifactsLeeCredencialesYSesion|CodexArtifactsLeeTokenCountYAuth)' -count=1`
+- `go test ./db -run 'TestGetAgente(ConservaCuotaObservadaYUsoClaudeMasReciente|UsaSoloLaSemanalCuandoNoExisteVentanaTemporal|OcultaDerivadosCuandoProviderBackoffMarcaAgotado)' -count=1`
+- `go test ./cmd -run 'Test(AgentePresupuestoCmdRefrescaAntesDeListar|ProcesarPresupuestoSesionObservadoBatchToleraHandleRoto|RefrescarPresupuestoSesionObservadoAgenteUsaUltimaSesionClaudeSinHandle)' -count=1`
+- `go build -o ./orquesta .`
+
+Resultado real:
+
+- el refresh canonico ya puede observar Claude por launcher Rust sin inventar un saldo semanal/5h falso
+- la identidad Claude se refresca por la via del daemon incluso sin `runtime_handle` activo si hay ultima sesion reutilizable
+- el caso `Codex6` sigue sin refrescarse por esta via porque hoy su verdad observada en Orquesta sigue viniendo de snapshots Codex antiguos y no hay artefacto Claude vivo asociado que el daemon pueda inspeccionar
+
 ## 2026-03-31 17:55 aprox. — `agente cuentas/presupuesto` vuelven al camino server-first normal
 
 Hallazgo:

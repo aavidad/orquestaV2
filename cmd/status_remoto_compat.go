@@ -337,6 +337,13 @@ func resumenCuotaAgente(a *db.Agente) string {
 	if extra := resumenDesgloseCuotaAgente(a); extra != "" {
 		partes = append(partes, extra)
 	}
+	if a.ObservedUsageTokens != nil {
+		usage := fmt.Sprintf("uso_obs %d tok", *a.ObservedUsageTokens)
+		if a.ObservedUsageCostUSD != nil {
+			usage += fmt.Sprintf(" · $%.4f", *a.ObservedUsageCostUSD)
+		}
+		partes = append(partes, usage)
+	}
 	if a.RemainingCredits != nil {
 		partes = append(partes, fmt.Sprintf("cred %.2f", *a.RemainingCredits))
 	}

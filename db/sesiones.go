@@ -44,6 +44,10 @@ type Agente struct {
 	RemainingMessages         *int64
 	RemainingTokens           *int64
 	RemainingCredits          *float64
+	ObservedUsageTokens       *int64
+	ObservedUsageCostUSD      *float64
+	ObservedUsageTurns        *int
+	ObservedUsageUpdatedAt    *time.Time
 	CuentaUsuario             string
 	CuentaEmail               string
 	CuentaFuente              string
@@ -982,21 +986,28 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 
 	p, _, err := UltimoPresupuestoAgente(a.Nombre)
 	if err == nil && p != nil {
-		ev, err := EvaluarPresupuestoSesion(p)
+		presupuestoCuota := p
+		if !PresupuestoSesionAportaCuota(p) {
+			if conCuota, _, quotaErr := UltimoPresupuestoAgenteConCuota(a.Nombre); quotaErr == nil && conCuota != nil {
+				presupuestoCuota = conCuota
+			}
+		}
+		aplicarUsoObservadoAgente(a, p)
+		ev, err := EvaluarPresupuestoSesion(presupuestoCuota)
 		if err == nil {
-			fresco := PresupuestoSesionFresco(p)
+			fresco := PresupuestoSesionFresco(presupuestoCuota)
 			a.PresupuestoEstado = strings.TrimSpace(ev.Estado)
-			a.PresupuestoFuente = strings.TrimSpace(p.BudgetSource)
-			a.PresupuestoCheckedAt = &p.CheckedAt
+			a.PresupuestoFuente = strings.TrimSpace(presupuestoCuota.BudgetSource)
+			a.PresupuestoCheckedAt = &presupuestoCuota.CheckedAt
 			a.PresupuestoStale = !fresco
-			a.PresupuestoSesionResetAt = p.ResetAt
-			a.RemainingSeconds = p.RemainingSeconds
-			a.RemainingMessages = p.RemainingMessages
-			a.RemainingTokens = p.RemainingTokens
-			a.RemainingCredits = p.RemainingCredits
+			a.PresupuestoSesionResetAt = presupuestoCuota.ResetAt
+			a.RemainingSeconds = presupuestoCuota.RemainingSeconds
+			a.RemainingMessages = presupuestoCuota.RemainingMessages
+			a.RemainingTokens = presupuestoCuota.RemainingTokens
+			a.RemainingCredits = presupuestoCuota.RemainingCredits
 			aplicarIdentidadCuentaAgente(a, identidadCuentaDesdePresupuesto(p))
 			var sesion presupuestoAgenteCandidato
-			if observedPrimary, observedSecondary := presupuestosObservadosDesdeSnapshot(p); observedPrimary.pct != nil || observedSecondary.pct != nil {
+			if observedPrimary, observedSecondary := presupuestosObservadosDesdeSnapshot(presupuestoCuota); observedPrimary.pct != nil || observedSecondary.pct != nil {
 				if observedPrimary.pct != nil {
 					a.PresupuestoSesionPct = observedPrimary.pct
 					if observedPrimary.resetAt != nil {
@@ -1027,18 +1038,18 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 				a.PresupuestoSesionPct = &pct
 				sesion = presupuestoAgenteCandidato{
 					pct:        &pct,
-					windowKind: strings.TrimSpace(p.WindowKind),
-					resetAt:    p.ResetAt,
-					source:     strings.TrimSpace(p.BudgetSource),
+					windowKind: strings.TrimSpace(presupuestoCuota.WindowKind),
+					resetAt:    presupuestoCuota.ResetAt,
+					source:     strings.TrimSpace(presupuestoCuota.BudgetSource),
 				}
 			} else if strings.EqualFold(strings.TrimSpace(ev.Estado), "agotado") && fresco && sesion.pct == nil {
 				pct := 0
 				a.PresupuestoSesionPct = &pct
 				sesion = presupuestoAgenteCandidato{
 					pct:        &pct,
-					windowKind: strings.TrimSpace(p.WindowKind),
-					resetAt:    p.ResetAt,
-					source:     strings.TrimSpace(p.BudgetSource),
+					windowKind: strings.TrimSpace(presupuestoCuota.WindowKind),
+					resetAt:    presupuestoCuota.ResetAt,
+					source:     strings.TrimSpace(presupuestoCuota.BudgetSource),
 				}
 			}
 			candidato = seleccionarPresupuestoEfectivo([]presupuestoAgenteCandidato{sesion, diario, semanal})
@@ -1046,7 +1057,7 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 			if a.PresupuestoStale && strings.TrimSpace(a.PresupuestoEstado) == "ok" {
 				a.PresupuestoEstado = "observado_stale"
 			}
-			if strings.EqualFold(strings.TrimSpace(p.BudgetSource), "provider_backoff") &&
+			if strings.EqualFold(strings.TrimSpace(presupuestoCuota.BudgetSource), "provider_backoff") &&
 				strings.EqualFold(strings.TrimSpace(a.PresupuestoEstado), "agotado") {
 				// Un provider_backoff agotado invalida los porcentajes derivados de uso
 				// local: mantenerlos visibles produce contradicciones como "semanal 95%"
@@ -1068,6 +1079,33 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 	}
 	proyectarEstadoCuotaVisibleDesdePresupuesto(a)
 	sincronizarPresupuestoEfectivoVisible(a)
+}
+
+func aplicarUsoObservadoAgente(a *Agente, p *PresupuestoSesion) {
+	if a == nil || p == nil {
+		return
+	}
+	raw := mapFromJSON(p.RawSnapshotJSON)
+	if raw == nil {
+		return
+	}
+	sessionUsage, _ := raw["session_usage"].(map[string]any)
+	if sessionUsage == nil {
+		return
+	}
+	if totalRaw, ok := sessionUsage["total_tokens"]; ok {
+		total := int64FromAny(totalRaw)
+		a.ObservedUsageTokens = &total
+	}
+	if cost, ok := float64FromAny(sessionUsage["estimated_cost_usd"]); ok {
+		a.ObservedUsageCostUSD = &cost
+	}
+	if turns, ok := intFromAnyWithBool(sessionUsage["turns"]); ok {
+		a.ObservedUsageTurns = &turns
+	}
+	if updatedAt := timeFromAny(sessionUsage["updated_at"]); updatedAt != nil {
+		a.ObservedUsageUpdatedAt = updatedAt
+	}
 }
 
 func proyectarEstadoCuotaVisibleDesdePresupuesto(a *Agente) {
@@ -1522,6 +1560,29 @@ func intFromAny(raw any) int {
 	}
 	return 0
 }
+
+func intFromAnyWithBool(raw any) (int, bool) {
+	switch v := raw.(type) {
+	case float64:
+		return int(v), true
+	case int:
+		return v, true
+	case int64:
+		return int(v), true
+	case json.Number:
+		out, err := v.Int64()
+		if err == nil {
+			return int(out), true
+		}
+	case string:
+		out, err := strconv.Atoi(strings.TrimSpace(v))
+		if err == nil {
+			return out, true
+		}
+	}
+	return 0, false
+}
+
 
 func timeFromAny(raw any) *time.Time {
 	switch v := raw.(type) {
