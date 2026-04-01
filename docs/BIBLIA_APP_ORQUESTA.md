@@ -913,6 +913,10 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
     - `asignar_tarea_libre`
 - Si hay workers conectados e idle y backlog libre, el supervisor debe ver una acción explícita de `dispatch`.
 - Si hay trabajo retenido por cuota, el supervisor debe ver una acción explícita de `replanificar_por_cuota` antes de abrir nuevos frentes.
+- Las acciones operativas del supervisor deben incluir `assignee` sugerido cuando Orquesta pueda proponer un worker concreto sin ambigüedad.
+- Esa sugerencia debe verse igual en:
+  - MCP/API (`next_action`, `action_queue`)
+  - web `/openclaw`
 - `supervisor-loop` persistida no puede quedarse atrás respecto al snapshot:
   - `metadata_json.recommended_count`
   - `metadata_json.next_action`

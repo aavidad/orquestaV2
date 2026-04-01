@@ -6053,3 +6053,18 @@ Resultado:
     - `status=blocked`
     - `recommended_count=2`
     - `action_queue=[replanificar_por_cuota, asignar_tarea_libre]`
+
+## 2026-04-01 — OpenClaw ya ve `assignee` sugerido en la cola operativa
+
+- Se añadió `assignee` opcional a `supervisorRecommendedAction`.
+- Orquesta ya propone worker concreto cuando la decisión es inequívoca:
+  - `Codex3` para `replanificar_por_cuota`
+  - `Codex3` para `asignar_tarea_libre`
+- La sugerencia se expone en:
+  - MCP/API del supervisor
+  - web `/openclaw`
+- Validación:
+  - `go test ./cmd -run 'Test(MCPRevisionSupervisorSugiereDispatchOperativo|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
+  - build + reinicio del daemon
+  - `GET /api/openclaw/operator` devolviendo `assignee=Codex3`
+  - `/openclaw` mostrando `sugerido=Codex3`

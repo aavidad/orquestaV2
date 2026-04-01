@@ -1779,7 +1779,7 @@ const webTplOpenClaw = `{{define "content"}}
   <div style="font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:#93c5fd;margin-bottom:.35rem">Acción siguiente</div>
   <div style="font-size:1.05rem;font-weight:700">{{.NextAction.Action}}</div>
   <div style="margin-top:.25rem;color:#cbd5e1">{{.NextAction.Reason}}</div>
-  <div style="margin-top:.45rem;font-size:.8rem;color:#93c5fd">objetivo={{.NextAction.Target}} · prioridad={{.NextAction.Priority}} · tipo={{.NextAction.Kind}}</div>
+  <div style="margin-top:.45rem;font-size:.8rem;color:#93c5fd">objetivo={{.NextAction.Target}} · prioridad={{.NextAction.Priority}} · tipo={{.NextAction.Kind}}{{if .NextAction.Assignee}} · sugerido={{.NextAction.Assignee}}{{end}}</div>
 </section>
 {{end}}
 
@@ -2019,7 +2019,7 @@ const webTplOpenClaw = `{{define "content"}}
         <li style="margin-bottom:.45rem">
           <strong>{{.Action}}</strong>
           <div style="font-size:.8rem;color:#64748b">{{.Reason}}</div>
-          <div style="font-size:.74rem;color:#94a3b8">objetivo={{.Target}} · prioridad={{.Priority}} · tipo={{.Kind}}</div>
+          <div style="font-size:.74rem;color:#94a3b8">objetivo={{.Target}} · prioridad={{.Priority}} · tipo={{.Kind}}{{if .Assignee}} · sugerido={{.Assignee}}{{end}}</div>
         </li>
       {{end}}
       </ol>

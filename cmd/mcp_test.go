@@ -1310,6 +1310,9 @@ func TestMCPRevisionSupervisorSugiereDispatchOperativo(t *testing.T) {
 		if nextAction.Target != "tarea:"+itoa(tareaID) {
 			t.Fatalf("target inesperado: %+v", nextAction)
 		}
+		if nextAction.Assignee != "Codex3" {
+			t.Fatalf("assignee inesperado: %+v", nextAction)
+		}
 	})
 }
 

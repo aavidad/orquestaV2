@@ -3447,6 +3447,7 @@ type supervisorRecommendedAction struct {
 	Action   string `json:"action"`
 	Reason   string `json:"reason"`
 	Priority string `json:"priority"`
+	Assignee string `json:"assignee,omitempty"`
 }
 
 func listarSignalsRevisionSupervisor(limit int) ([]*supervisorReviewSignal, error) {
@@ -3763,6 +3764,7 @@ func buildSupervisorOperationalActions(status apiStatusResponse) []supervisorRec
 	actions := make([]supervisorRecommendedAction, 0, 4)
 	idle := idleSupervisorWorkers(status.AgentesActivos, status.AgentesTrabajando)
 	if len(idle) > 0 {
+		assignee := idle[0]
 		target := "backlog:libre"
 		reason := fmt.Sprintf("Hay workers conectados sin trabajo (%s) y backlog libre disponible.", strings.Join(idle, ", "))
 		priority := "media"
@@ -3780,6 +3782,7 @@ func buildSupervisorOperationalActions(status apiStatusResponse) []supervisorRec
 				Action:   "asignar_tarea_libre",
 				Reason:   reason,
 				Priority: priority,
+				Assignee: assignee,
 			})
 		}
 	}
@@ -3795,6 +3798,7 @@ func buildSupervisorOperationalActions(status apiStatusResponse) []supervisorRec
 			Action:   "replanificar_por_cuota",
 			Reason:   "Hay trabajo retenido por cuota; revisar reasignación o secuenciación sin esperar al agente bloqueado.",
 			Priority: priority,
+			Assignee: firstIdleSupervisorWorker(idle),
 		})
 	}
 	return actions
@@ -3841,6 +3845,13 @@ func idleSupervisorWorkers(conectados, trabajando []*db.Agente) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func firstIdleSupervisorWorker(idle []string) string {
+	if len(idle) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(idle[0])
 }
 
 func sortSupervisorRecommendedActions(actions []supervisorRecommendedAction) {
