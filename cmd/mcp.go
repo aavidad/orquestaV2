@@ -3560,6 +3560,10 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	mailboxPendiente, err := buildOpenClawPendingMailbox(status.Agentes)
+	if err != nil {
+		return nil, err
+	}
 	normalizedEvents, err := buildOpenClawNormalizedEvents(20)
 	if err != nil {
 		return nil, err
@@ -3573,7 +3577,7 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 		return nil, err
 	}
 	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
-	recommended = append(recommended, buildSupervisorOperationalActions(status)...)
+	recommended = append(recommended, buildSupervisorOperationalActions(status, mailboxPendiente)...)
 	sortSupervisorRecommendedActions(recommended)
 	var nextAction any
 	if len(recommended) > 0 {
@@ -3585,6 +3589,7 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 		"signals":             signals,
 		"merges":              merges,
 		"module_conflicts":    conflicts,
+		"mailbox_pending":     mailboxPendiente,
 		"normalized_events":   normalizedEvents,
 		"thread_sessions":     threadSessions,
 		"pipeline_state":      pipelineState,
@@ -3754,8 +3759,8 @@ func buildSupervisorRecommendedActions(gates []*db.ReviewGate, signals []*superv
 	return actions
 }
 
-func buildSupervisorOperationalActions(status apiStatusResponse) []supervisorRecommendedAction {
-	actions := make([]supervisorRecommendedAction, 0, 4)
+func buildSupervisorOperationalActions(status apiStatusResponse, mailboxPendiente []apiOpenClawMailboxLite) []supervisorRecommendedAction {
+	actions := make([]supervisorRecommendedAction, 0, 4+len(mailboxPendiente))
 	idle := idleSupervisorWorkers(status.AgentesActivos, status.AgentesTrabajando)
 	if len(idle) > 0 {
 		assignee := idle[0]
@@ -3797,6 +3802,19 @@ func buildSupervisorOperationalActions(status apiStatusResponse) []supervisorRec
 				Assignee: assignee,
 			})
 		}
+	}
+	for _, item := range mailboxPendiente {
+		if strings.TrimSpace(item.Agente) == "" || item.Count <= 0 {
+			continue
+		}
+		actions = append(actions, supervisorRecommendedAction{
+			Kind:     "mailbox_pending",
+			Target:   "agente:" + strings.TrimSpace(item.Agente),
+			Action:   "seguir_guidance_durable",
+			Reason:   fmt.Sprintf("El worker mantiene guidance durable pendiente (%d mensaje(s): %s); conviene observar continuidad y drenado.", item.Count, strings.TrimSpace(item.KindsCSV)),
+			Priority: "baja",
+			Assignee: strings.TrimSpace(item.Agente),
+		})
 	}
 	return actions
 }

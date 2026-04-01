@@ -1506,6 +1506,54 @@ func TestMCPRevisionSupervisorExponeTodasLasRetenidasPorCuota(t *testing.T) {
 	})
 }
 
+func TestMCPRevisionSupervisorExponeGuidanceDurablePendiente(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar Codex3: %v", err)
+		}
+		if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+			FromAgente:  "server",
+			ToAgente:    "Codex3",
+			Kind:        "autonomia",
+			PayloadJSON: `{"texto":"continua"}`,
+			Estado:      "pendiente",
+		}); err != nil {
+			t.Fatalf("crear mailbox pendiente: %v", err)
+		}
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+		}}
+
+		snapshot, err := buildSupervisorReviewSnapshot("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshot: %v", err)
+		}
+		queue, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+		found := false
+		for _, item := range queue {
+			if item.Action == "seguir_guidance_durable" && item.Target == "agente:Codex3" && item.Assignee == "Codex3" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("no aparece acción por guidance durable pendiente: %+v", queue)
+		}
+	})
+}
+
 func TestMCPToolSupervisorAplicaReplanificacionPorCuotaConFallbackExplicito(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := statusService

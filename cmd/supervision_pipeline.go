@@ -91,8 +91,12 @@ func reconcileSupervisorPipelineState(supervisor, proyectoSlug string) (*db.Supe
 	if err != nil {
 		return nil, err
 	}
+	mailboxPendiente, err := buildOpenClawPendingMailbox(status.Agentes)
+	if err != nil {
+		return nil, err
+	}
 	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
-	recommended = append(recommended, buildSupervisorOperationalActions(status)...)
+	recommended = append(recommended, buildSupervisorOperationalActions(status, mailboxPendiente)...)
 	sortSupervisorRecommendedActions(recommended)
 	retenidas := tareasRetenidasPorCuota(status.TareasActivas, status.Agentes)
 	item := deriveSupervisorPipelineState(supervisor, proyectoSlug, status, recommended, retenidas)

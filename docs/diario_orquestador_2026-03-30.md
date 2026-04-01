@@ -6253,3 +6253,21 @@ Resultado:
     - `Codex3 -> carga_activa 4`
     - `Codex4 -> carga_activa 3`
   - `/openclaw` muestra la columna `Carga` con esos mismos valores
+
+## 2026-04-01 — La cola de OpenClaw ya refleja guidance durable pendiente
+
+- Quedaba una incoherencia operativa:
+  - `status.mailboxPendiente` enseñaba guidance durable pendiente para `Codex3`
+  - pero `review.action_queue` podía quedar vacía
+- Eso hacía que OpenClaw viera backlog en `status` pero ninguna acción priorizada en la cola.
+- Se corrigió la cola del supervisor:
+  - `buildSupervisorOperationalActions(...)` ahora también proyecta `mailbox_pending`
+  - cuando hay guidance durable pendiente, genera `seguir_guidance_durable`
+- La pipeline viva del supervisor también quedó alineada con esa semántica.
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(MCPRevisionSupervisorExponeGuidanceDurablePendiente|MCPRevisionSupervisorExponeTodasLasRetenidasPorCuota|MCPRevisionSupervisorSugiereAssigneePorMenorCargaEnReplanificacion)' -count=1`
+- Validación viva:
+  - `GET /api/openclaw/operator` ya devuelve:
+    - `next_action = seguir_guidance_durable`
+    - `target = agente:Codex3`
+    - `mailbox_pending = Codex3 -> autonomia`

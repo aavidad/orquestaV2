@@ -966,6 +966,9 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `/api/openclaw/operator` debe exponer backlog de `runtime_mailbox` pendiente por agente
   - `/openclaw` debe mostrar ese backlog sin depender de dumps crudos del control plane
   - la guidance durable pendiente es parte del estado operativo real del worker
+- Si existe guidance durable pendiente relevante, la cola del supervisor no puede quedar vacía:
+  - debe aparecer una acción explícita de seguimiento (`seguir_guidance_durable`)
+  - eso evita una falsa sensación de “sin trabajo operativo” cuando aún hay continuidad pendiente en mailbox
 - La carga activa por agente debe ser visible para el supervisor:
   - Orquesta ya usa esa carga para sugerir `assignee`
   - OpenClaw debe verla explícitamente en API y web para que la recomendación sea explicable y auditable
