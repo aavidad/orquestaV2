@@ -7049,3 +7049,14 @@ Resultado:
   - la razón de `revisar_worktree_desfasada` incorpora ese resumen para que OpenClaw sepa si el refresco es trivial o si debe preservar cambios primero
 - Validación:
   - `go test ./cmd -run 'Test(ParseGitStatusPorcelainSummary|BuildOpenClawWorktreeDriftFromRefs|MCPToolSupervisorInspeccionaWorktreeDrift)' -count=1`
+
+## 2026-04-01 — OpenClaw ya refresca automáticamente worktrees limpias
+
+- Hallazgo:
+  - `worktree_drift` ya priorizaba el problema, pero faltaba una salida segura para el caso trivial: worktree vieja y limpia
+- Corrección:
+  - la cola del supervisor ya usa `refrescar_worktree_limpia` cuando `dirty=false`
+  - la acción cierra la worktree activa por la vía canónica y la vuelve a preparar sobre `HEAD`
+  - si `dirty=true`, la acción sigue siendo `revisar_worktree_desfasada` y no se autoaplica
+- Validación:
+  - `go test ./cmd -run 'TestMCP(RevisionSupervisorExponeRefrescoSeguroDeWorktreeLimpia|ToolSupervisorRefrescaWorktreeLimpia|RevisionSupervisorExponeWorktreeDrift|ToolSupervisorInspeccionaWorktreeDrift)' -count=1`

@@ -3814,7 +3814,7 @@ func buildSupervisorRecommendedActions(gates []*db.ReviewGate, signals []*superv
 
 func supervisorActionIsAutomaticallyApplicable(action string) bool {
 	switch strings.TrimSpace(action) {
-	case "asignar_tarea_libre", "reservar_tarea_libre", "replanificar_por_cuota", "seguir_guidance_durable", "rebalancear_reserva", "cerrar_propuesta_rechazada":
+	case "asignar_tarea_libre", "reservar_tarea_libre", "replanificar_por_cuota", "seguir_guidance_durable", "rebalancear_reserva", "cerrar_propuesta_rechazada", "refrescar_worktree_limpia":
 		return true
 	default:
 		return false
@@ -3919,6 +3919,7 @@ func buildSupervisorOperationalActions(status apiStatusResponse, mailboxPendient
 }
 
 var openClawWorktreeDriftBuilder = buildOpenClawWorktreeDriftFromAPIStatus
+var supervisorRefreshCleanWorktreeDrift = refreshSupervisorCleanWorktreeDrift
 
 func buildSupervisorWorktreeDriftActions(items []apiOpenClawWorktreeDrift) []supervisorRecommendedAction {
 	if len(items) == 0 {
@@ -3937,10 +3938,14 @@ func buildSupervisorWorktreeDriftActions(items []apiOpenClawWorktreeDrift) []sup
 		if strings.TrimSpace(item.DirtySummary) != "" {
 			reason += " Estado local: " + strings.TrimSpace(item.DirtySummary) + "."
 		}
+		actionName := "revisar_worktree_desfasada"
+		if !item.Dirty {
+			actionName = "refrescar_worktree_limpia"
+		}
 		actions = append(actions, supervisorRecommendedAction{
 			Kind:     "worktree_drift",
 			Target:   "agente:" + agente,
-			Action:   "revisar_worktree_desfasada",
+			Action:   actionName,
 			Reason:   reason,
 			Priority: "alta",
 			Assignee: agente,
@@ -4446,6 +4451,45 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 			}
 		}
 		return nil, fmt.Errorf("no hay worktree desfasada para %s", agente)
+	case "refrescar_worktree_limpia":
+		target := strings.TrimSpace(selected.Target)
+		if !strings.HasPrefix(target, "agente:") {
+			return nil, fmt.Errorf("target no soportado para refresco de worktree: %s", target)
+		}
+		agente := strings.TrimSpace(strings.TrimPrefix(target, "agente:"))
+		if agente == "" {
+			return nil, fmt.Errorf("target de agente inválido: %s", target)
+		}
+		status, err := statusService.FetchStatus()
+		if err != nil {
+			return nil, err
+		}
+		items, err := openClawWorktreeDriftBuilder(status)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range items {
+			if !strings.EqualFold(strings.TrimSpace(item.Agente), agente) {
+				continue
+			}
+			if item.Dirty {
+				return nil, fmt.Errorf("la worktree de %s no es limpia; requiere arbitraje manual", agente)
+			}
+			refreshed, err := supervisorRefreshCleanWorktreeDrift(item)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{
+				"ok":               true,
+				"supervisor":       supervisor,
+				"action":           selected,
+				"agente":           agente,
+				"assignee":         worker,
+				"worktree_drift":   item,
+				"worktree_refresh": refreshed,
+			}, nil
+		}
+		return nil, fmt.Errorf("no hay worktree limpia desfasada para %s", agente)
 	default:
 		return nil, fmt.Errorf("acción no aplicable automáticamente: %s", strings.TrimSpace(selected.Action))
 	}
@@ -4615,6 +4659,14 @@ func fallbackSupervisorRecommendedAction(actionName, target, assignee string) *s
 			Assignee: assignee,
 		}
 	case "revisar_worktree_desfasada":
+		return &supervisorRecommendedAction{
+			Kind:     "worktree_drift",
+			Action:   actionName,
+			Target:   target,
+			Priority: "alta",
+			Assignee: assignee,
+		}
+	case "refrescar_worktree_limpia":
 		return &supervisorRecommendedAction{
 			Kind:     "worktree_drift",
 			Action:   actionName,

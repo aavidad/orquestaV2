@@ -2193,6 +2193,7 @@ func TestMCPRevisionSupervisorExponeWorktreeDrift(t *testing.T) {
 				Path:         "/tmp/orquesta/.orquesta-worktrees/orquesta-codex3",
 				CurrentHead:  "c51c0ac9",
 				ExpectedHead: "faa85e13",
+				Dirty:        true,
 			}}, nil
 		}
 
@@ -2244,6 +2245,88 @@ func TestMCPToolSupervisorInspeccionaWorktreeDrift(t *testing.T) {
 		drift, _ := result["worktree_drift"].(apiOpenClawWorktreeDrift)
 		if drift.Agente != "Codex3" || drift.CurrentHead != "c51c0ac9" || drift.ExpectedHead != "faa85e13" {
 			t.Fatalf("worktree drift inesperado: %#v", result["worktree_drift"])
+		}
+	})
+}
+
+func TestMCPRevisionSupervisorExponeRefrescoSeguroDeWorktreeLimpia(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		prevDrift := openClawWorktreeDriftBuilder
+		defer func() {
+			statusService = prev
+			openClawWorktreeDriftBuilder = prevDrift
+		}()
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"}},
+			Agentes:        []*db.Agente{{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"}},
+		}}
+		openClawWorktreeDriftBuilder = func(status apiStatusResponse) ([]apiOpenClawWorktreeDrift, error) {
+			return []apiOpenClawWorktreeDrift{{
+				Agente:       "Codex3",
+				Branch:       "orq-orquesta-codex3",
+				Path:         "/tmp/orquesta/.orquesta-worktrees/orquesta-codex3",
+				CurrentHead:  "c51c0ac9",
+				ExpectedHead: "faa85e13",
+				Dirty:        false,
+			}}, nil
+		}
+
+		snapshot, err := buildSupervisorReviewSnapshot("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshot: %v", err)
+		}
+		queue, _ := snapshot["safe_action_queue"].([]supervisorRecommendedAction)
+		found := false
+		for _, item := range queue {
+			if item.Action == "refrescar_worktree_limpia" && item.Target == "agente:Codex3" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("no aparece acción segura para worktree limpia: %+v", queue)
+		}
+	})
+}
+
+func TestMCPToolSupervisorRefrescaWorktreeLimpia(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		prevDrift := openClawWorktreeDriftBuilder
+		prevRefresh := supervisorRefreshCleanWorktreeDrift
+		defer func() {
+			statusService = prev
+			openClawWorktreeDriftBuilder = prevDrift
+			supervisorRefreshCleanWorktreeDrift = prevRefresh
+		}()
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"}},
+			Agentes:        []*db.Agente{{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"}},
+		}}
+		openClawWorktreeDriftBuilder = func(status apiStatusResponse) ([]apiOpenClawWorktreeDrift, error) {
+			return []apiOpenClawWorktreeDrift{{
+				Agente:       "Codex3",
+				Branch:       "orq-orquesta-codex3",
+				Path:         "/tmp/orquesta/.orquesta-worktrees/orquesta-codex3",
+				CurrentHead:  "c51c0ac9",
+				ExpectedHead: "faa85e13",
+				Dirty:        false,
+			}}, nil
+		}
+		supervisorRefreshCleanWorktreeDrift = func(item apiOpenClawWorktreeDrift) (map[string]any, error) {
+			return map[string]any{"reopened_worktree_id": int64(99), "path": item.Path}, nil
+		}
+
+		result, err := applySupervisorRecommendedAction("OpenClaw", "refrescar_worktree_limpia", "agente:Codex3", "Codex3")
+		if err != nil {
+			t.Fatalf("applySupervisorRecommendedAction: %v", err)
+		}
+		refresh, _ := result["worktree_refresh"].(map[string]any)
+		if refresh["reopened_worktree_id"] != int64(99) {
+			t.Fatalf("refresh inesperado: %#v", result["worktree_refresh"])
 		}
 	})
 }
