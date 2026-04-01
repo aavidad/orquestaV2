@@ -4720,3 +4720,25 @@ Validacion:
 
 - `go test ./cmd -run 'TestMCPToolRevisionSupervisorDevuelveJSONEstructurado' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — La tool MCP de OpenClaw ya marca `next_action` y `action_queue`
+
+Hallazgo:
+
+- con `recommended_actions` ya presentes, todavía quedaba una pequeña ambigüedad: OpenClaw seguía teniendo que escoger cuál era la primera acción operativa
+
+Decision:
+
+- añadir `next_action` como recomendación única más prioritaria
+- exponer también `action_queue` como alias ordenado de ejecución, para automatismos sencillos
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestMCPToolRevisionSupervisorDevuelveJSONEstructurado' -count=1`
+- `go build -o ./orquesta .`

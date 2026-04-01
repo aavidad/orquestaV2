@@ -2014,13 +2014,19 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 		return nil, err
 	}
 	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
+	var nextAction any
+	if len(recommended) > 0 {
+		nextAction = recommended[0]
+	}
 	return map[string]any{
-		"supervisor":       supervisor,
-		"review_gates":     openGates,
-		"signals":          signals,
-		"merges":           merges,
-		"module_conflicts": conflicts,
+		"supervisor":          supervisor,
+		"review_gates":        openGates,
+		"signals":             signals,
+		"merges":              merges,
+		"module_conflicts":    conflicts,
 		"recommended_actions": recommended,
+		"action_queue":        recommended,
+		"next_action":         nextAction,
 	}, nil
 }
 
