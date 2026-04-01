@@ -6893,3 +6893,15 @@ Resultado:
   - no se añade otra semántica de saldo falsa por haber inspeccionado otro launcher
 - Efecto operativo:
   - se pueden cerrar como resueltas las tareas de análisis de cuota Claude que ya no requieren más código salvo aparecer una fuente nueva real
+
+## 2026-04-01 — Paridad canónica entre OpenClaw y `runtime mailbox`
+
+- Hallazgo vivo:
+  - tras aplicar `seguir_guidance_durable` desde OpenClaw, la divergencia antigua ya no reaparecía en vivo
+  - la CLI `./orquesta runtime mailbox --estado pendiente` y `/api/runtime-mailbox?estado=pendiente` convergían correctamente
+- Cierre estructural:
+  - añadida regresión de API para exigir que `/api/openclaw/operator.status.mailboxPendiente` y `/api/runtime-mailbox?estado=pendiente` reflejen la misma deuda durable
+  - la prueba compara cuenta y agente destino, no solo presencia de datos
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(APIObservabilidadReadOnly|APIOpenClawOperatorExponeStatusLiteEnRaiz)' -count=1`
+  - `go build -o ./orquesta .`

@@ -314,6 +314,31 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	if _, ok := operatorJSON["saturated_agents"].([]any); !ok {
 		t.Fatalf("openclaw operator sin saturated_agents estructurado: %s", recOperator.Body.String())
 	}
+
+	recMailbox := httptest.NewRecorder()
+	reqMailbox := httptest.NewRequest(http.MethodGet, "/api/runtime-mailbox?estado=pendiente", nil)
+	mux.ServeHTTP(recMailbox, reqMailbox)
+	if recMailbox.Code != http.StatusOK {
+		t.Fatalf("runtime mailbox status=%d body=%s", recMailbox.Code, recMailbox.Body.String())
+	}
+	var mailboxJSON map[string]any
+	if err := json.NewDecoder(bytes.NewReader(recMailbox.Body.Bytes())).Decode(&mailboxJSON); err != nil {
+		t.Fatalf("decode mailbox: %v", err)
+	}
+	mailboxList, ok := mailboxJSON["mailbox"].([]any)
+	if !ok {
+		t.Fatalf("runtime mailbox sin lista estructurada: %s", recMailbox.Body.String())
+	}
+	if len(mailboxList) != len(mailboxPendiente) {
+		t.Fatalf("openclaw operator y runtime mailbox discrepan (%d vs %d): operator=%s mailbox=%s", len(mailboxPendiente), len(mailboxList), recOperator.Body.String(), recMailbox.Body.String())
+	}
+	firstMailboxAPI, ok := mailboxList[0].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime mailbox sin primer elemento estructurado: %s", recMailbox.Body.String())
+	}
+	if firstMailboxAPI["to_agente"] != firstMailbox["agente"] {
+		t.Fatalf("openclaw operator y runtime mailbox discrepan en agente destino: operator=%v mailbox=%v", firstMailbox["agente"], firstMailboxAPI["to_agente"])
+	}
 }
 
 func TestAPIOpenClawThreadsOperaPorLaViaCanonica(t *testing.T) {

@@ -1117,3 +1117,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - revisar un launcher ajeno sirve para absorber metadatos o contratos útiles
   - no sirve para inventar `weekly/5h` de Claude si el propio launcher solo ofrece uso acumulado, coste estimado o OAuth/session state
   - cuando no exista cuota real del proveedor, Orquesta debe decir `observed_usage` y `sin cuota real del proveedor`
+- OpenClaw y la CLI de runtime no pueden divergir sobre guidance durable:
+  - `/api/openclaw/operator.mailboxPendiente` y `/api/runtime-mailbox?estado=pendiente` deben reflejar la misma deuda pendiente
+  - si OpenClaw consume `seguir_guidance_durable`, la CLI `runtime mailbox --estado pendiente` debe converger al mismo resultado
+  - la protección correcta aquí es regresión explícita de API, no confiar en observaciones manuales puntuales
