@@ -1113,3 +1113,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `updated_at`
   - esos campos deben viajar hasta la superficie de Orquesta para que el operador pueda ubicar y reanudar sesiones Claude desde la app
   - esto no convierte ese snapshot en cuota restante; sigue siendo `observed_usage`
+- `claw-code-main` no debe tratarse como fuente milagrosa de cuota restante si no la expone:
+  - revisar un launcher ajeno sirve para absorber metadatos o contratos útiles
+  - no sirve para inventar `weekly/5h` de Claude si el propio launcher solo ofrece uso acumulado, coste estimado o OAuth/session state
+  - cuando no exista cuota real del proveedor, Orquesta debe decir `observed_usage` y `sin cuota real del proveedor`

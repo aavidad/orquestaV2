@@ -6880,3 +6880,16 @@ Resultado:
   - `go test ./cmd -run 'Test(AgenteRankingCuentasCmdMarcaUsoObservadoClaude|CuentaPresupuestoDesdeAgenteUsaObservedUsageCuandoNoHayCuotaReal)' -count=1`
   - `go test ./db -run 'TestGetAgenteConservaCuotaObservadaYUsoClaudeMasReciente' -count=1`
   - `go build -o ./orquesta .`
+
+## 2026-04-01 — Cierre de la vía `claw-code-main` para cuota real Claude
+
+- Revisión hecha:
+  - `claw-code-main` también expone sobre todo sesión, uso/coste y surface del launcher
+  - no apareció una fuente verificable de cuota restante `weekly/5h` reutilizable por Orquesta
+- Conclusión canónica:
+  - para Claude seguimos teniendo:
+    - cuota real solo si el proveedor/launcher la publica de verdad
+    - en otro caso, `observed_usage` + sesión observada
+  - no se añade otra semántica de saldo falsa por haber inspeccionado otro launcher
+- Efecto operativo:
+  - se pueden cerrar como resueltas las tareas de análisis de cuota Claude que ya no requieren más código salvo aparecer una fuente nueva real
