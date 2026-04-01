@@ -1611,16 +1611,6 @@ func buildOpenClawPendingMailbox(agentes []*db.Agente) ([]apiOpenClawMailboxLite
 	if err != nil {
 		return nil, err
 	}
-	permitidos := make(map[string]bool, len(agentes))
-	for _, agente := range agentes {
-		if agente == nil {
-			continue
-		}
-		nombre := strings.TrimSpace(agente.Nombre)
-		if nombre != "" {
-			permitidos[nombre] = true
-		}
-	}
 	type agg struct {
 		count  int
 		kinds  map[string]bool
@@ -1632,7 +1622,7 @@ func buildOpenClawPendingMailbox(agentes []*db.Agente) ([]apiOpenClawMailboxLite
 			continue
 		}
 		agente := strings.TrimSpace(item.ToAgente)
-		if agente == "" || !permitidos[agente] {
+		if agente == "" {
 			continue
 		}
 		entry := byAgent[agente]

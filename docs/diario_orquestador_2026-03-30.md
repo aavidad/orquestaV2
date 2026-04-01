@@ -6942,3 +6942,20 @@ Resultado:
   - validación viva:
     - `/api/openclaw/operator` devuelve `session_candidates`
     - `/openclaw` renderiza `Candidatas para reuse/spawn`
+
+## 2026-04-01 — Paridad de mailbox pendiente entre diagnóstico y OpenClaw
+
+- Hallazgo vivo:
+  - `runtime diagnostico` y `/api/runtime-mailbox?estado=pendiente` enseñaban `64680/64681`
+  - `/api/openclaw/operator.mailboxPendiente` los ocultaba
+- Causa:
+  - `buildOpenClawPendingMailbox()` filtraba por la proyección visible de agentes
+  - si esa proyección se quedaba por detrás, el supervisor perdía deuda durable real
+- Corrección:
+  - `mailboxPendiente` ya se agrega desde toda la cola pendiente y no desde una lista de agentes permitidos
+- Validación:
+  - `go test ./cmd -run 'Test(APIObservabilidadReadOnly|BuildOpenClawPendingMailboxNoOcultaDeudaPorProyeccionVisible)' -count=1`
+  - `go build -o ./orquesta .`
+  - validación viva tras reinicio:
+    - `/api/openclaw/operator` vuelve a mostrar `Codex3` y `Codex4` en `mailboxPendiente`
+    - `runtime mailbox --estado pendiente` coincide con la misma deuda

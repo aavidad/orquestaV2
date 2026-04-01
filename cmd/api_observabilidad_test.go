@@ -397,6 +397,29 @@ func TestAPIOpenClawThreadsOperaPorLaViaCanonica(t *testing.T) {
 	}
 }
 
+func TestBuildOpenClawPendingMailboxNoOcultaDeudaPorProyeccionVisible(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar codex3: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex3",
+		Kind:        "nudge",
+		PayloadJSON: `{"texto":"continua"}`,
+		Estado:      "pendiente",
+	}); err != nil {
+		t.Fatalf("crear mailbox pendiente: %v", err)
+	}
+	items, err := buildOpenClawPendingMailbox([]*db.Agente{{Nombre: "Codex4"}})
+	if err != nil {
+		t.Fatalf("buildOpenClawPendingMailbox: %v", err)
+	}
+	if len(items) != 1 || items[0].Agente != "Codex3" || items[0].Count != 1 {
+		t.Fatalf("mailbox pendiente inesperada: %#v", items)
+	}
+}
+
 func TestAPIOpenClawOperatorSeparaCargaActivaYReservada(t *testing.T) {
 	prepararDBTemporalCmd(t)
 
