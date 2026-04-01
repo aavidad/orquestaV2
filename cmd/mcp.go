@@ -620,6 +620,13 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 			MIMEType:    "application/json",
 		},
 		{
+			URITemplate: "orquesta://supervision/{supervisor}/pipeline",
+			Name:        "pipeline-supervisor",
+			Title:       "Pipeline del supervisor",
+			Description: "Estado explícito de fases y pipeline operativa del supervisor/OpenClaw",
+			MIMEType:    "application/json",
+		},
+		{
 			URITemplate: "orquesta://proyectos/{slug}",
 			Name:        "proyecto-por-slug",
 			Title:       "Detalle de proyecto",
@@ -797,6 +804,13 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 			return nil, err
 		}
 		return resourceText(uri, "application/json", prettyJSON(snapshot)), nil
+	case strings.HasPrefix(uri, "orquesta://supervision/") && strings.HasSuffix(uri, "/pipeline"):
+		supervisor := strings.TrimSuffix(strings.TrimPrefix(uri, "orquesta://supervision/"), "/pipeline")
+		snapshot, err := buildSupervisorPipelineSnapshot(supervisor, "", 20)
+		if err != nil {
+			return nil, err
+		}
+		return resourceText(uri, "application/json", prettyJSON(snapshot)), nil
 	default:
 		return nil, fmt.Errorf("resource not found")
 	}
@@ -848,6 +862,14 @@ func listMCPPrompts() []mcpPrompt {
 			Name:        "orquesta.supervision.threads",
 			Title:       "Threads del supervisor",
 			Description: "Resume threads y subagentes activos del supervisor/OpenClaw",
+			Arguments: []mcpPromptArgument{
+				{Name: "supervisor", Description: "Nombre del supervisor operativo, por ejemplo OpenClaw", Required: false},
+			},
+		},
+		{
+			Name:        "orquesta.supervision.pipeline",
+			Title:       "Pipeline del supervisor",
+			Description: "Resume la fase actual y el estado explícito del pipeline del supervisor/OpenClaw",
 			Arguments: []mcpPromptArgument{
 				{Name: "supervisor", Description: "Nombre del supervisor operativo, por ejemplo OpenClaw", Required: false},
 			},
@@ -992,6 +1014,25 @@ func getMCPPrompt(name string, args map[string]any) (map[string]any, error) {
 		}
 		return map[string]any{
 			"description": "Resumen de threads y subagentes del supervisor",
+			"messages": []mcpPromptMessage{
+				{
+					Role: "user",
+					Content: map[string]any{
+						"type": "text",
+						"text": texto,
+					},
+				},
+			},
+		}, nil
+
+	case "orquesta.supervision.pipeline":
+		supervisor := optionalStringArg(args, "supervisor")
+		texto, err := buildSupervisorPipelineOverview(supervisor)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"description": "Resumen de pipeline y fases del supervisor",
 			"messages": []mcpPromptMessage{
 				{
 					Role: "user",
@@ -1805,6 +1846,41 @@ func listMCPTools() []mcpTool {
 				"properties": map[string]any{
 					"supervisor": map[string]any{"type": "string"},
 					"session_id": map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.supervision.pipeline.actualizar",
+			Title:       "Actualizar pipeline del supervisor",
+			Description: "Persiste la fase actual y el estado explícito del pipeline del supervisor/OpenClaw",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"supervisor":       map[string]any{"type": "string"},
+					"proyecto":         map[string]any{"type": "string"},
+					"pipeline_name":    map[string]any{"type": "string"},
+					"current_phase":    map[string]any{"type": "string"},
+					"status":           map[string]any{"type": "string", "enum": []string{"active", "paused", "blocked", "completed", "failed"}},
+					"current_task_id":  map[string]any{"type": "integer"},
+					"current_gate_id":  map[string]any{"type": "integer"},
+					"current_merge_id": map[string]any{"type": "integer"},
+					"artifacts_json":   map[string]any{"type": "string"},
+					"metadata_json":    map[string]any{"type": "string"},
+				},
+				"required":             []string{"pipeline_name", "current_phase"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.supervision.pipeline.listar",
+			Title:       "Listar pipeline del supervisor",
+			Description: "Devuelve en JSON la pipeline operativa explícita del supervisor",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"supervisor": map[string]any{"type": "string"},
+					"proyecto":   map[string]any{"type": "string"},
 				},
 				"additionalProperties": false,
 			},
@@ -2693,6 +2769,34 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return nil, err
 		}
 		return toolResult(prettyJSON(resumen), resumen, false), nil
+
+	case "orquesta.supervision.pipeline.actualizar":
+		currentTaskID := optionalInt64PtrArg(args, "current_task_id")
+		currentGateID := optionalInt64PtrArg(args, "current_gate_id")
+		currentMergeID := optionalInt64PtrArg(args, "current_merge_id")
+		item, err := db.UpsertSupervisorPipelineState(db.UpsertSupervisorPipelineStateInput{
+			Supervisor:     resolveSupervisorName(optionalStringArg(args, "supervisor")),
+			ProyectoSlug:   optionalStringArg(args, "proyecto"),
+			PipelineName:   optionalStringArg(args, "pipeline_name"),
+			CurrentPhase:   optionalStringArg(args, "current_phase"),
+			Status:         optionalStringArg(args, "status"),
+			CurrentTaskID:  currentTaskID,
+			CurrentGateID:  currentGateID,
+			CurrentMergeID: currentMergeID,
+			ArtifactsJSON:  optionalStringArg(args, "artifacts_json"),
+			MetadataJSON:   optionalStringArg(args, "metadata_json"),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(item), item, false), nil
+
+	case "orquesta.supervision.pipeline.listar":
+		resumen, err := buildSupervisorPipelineSnapshot(optionalStringArg(args, "supervisor"), optionalStringArg(args, "proyecto"), 20)
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(resumen), resumen, false), nil
 	}
 
 	return nil, fmt.Errorf("tool no soportada: %s", name)
@@ -3465,6 +3569,10 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	pipelineState, err := buildSupervisorPipelineSnapshot(supervisor, "", 20)
+	if err != nil {
+		return nil, err
+	}
 	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
 	var nextAction any
 	if len(recommended) > 0 {
@@ -3478,6 +3586,7 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 		"module_conflicts":    conflicts,
 		"normalized_events":   normalizedEvents,
 		"thread_sessions":     threadSessions,
+		"pipeline_state":      pipelineState,
 		"recommended_actions": recommended,
 		"action_queue":        recommended,
 		"next_action":         nextAction,
@@ -4382,6 +4491,14 @@ func optionalInt64Arg(args map[string]any, key string) int64 {
 	default:
 		return 0
 	}
+}
+
+func optionalInt64PtrArg(args map[string]any, key string) *int64 {
+	value := optionalInt64Arg(args, key)
+	if value <= 0 {
+		return nil
+	}
+	return &value
 }
 
 func optionalInt64SliceArg(args map[string]any, key string) []int64 {

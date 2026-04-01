@@ -606,6 +606,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/notificaciones", apiHandlerNotificaciones)
 	mux.HandleFunc("/api/openclaw/operator", apiHandlerOpenClawOperator)
 	mux.HandleFunc("/api/openclaw/threads", apiHandlerOpenClawThreads)
+	mux.HandleFunc("/api/openclaw/pipeline", apiHandlerOpenClawPipeline)
 	mux.HandleFunc("/api/audit", apiHandlerAudit)
 	mux.HandleFunc("/api/respaldo/bd", apiHandlerRespaldoBD)
 	mux.HandleFunc("/api/persistencia/verificar", apiHandlerPersistenciaVerificar)
@@ -1246,6 +1247,11 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
+	pipeline, err := buildSupervisorPipelineSnapshot("", strings.TrimSpace(r.URL.Query().Get("proyecto")), 20)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{
 		"status":               status,
 		"review":               revision,
@@ -1253,6 +1259,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		"entregas":             notificaciones.DescribirOutbox(10),
 		"eventos_normalizados": eventos,
 		"thread_sessions":      threads,
+		"pipeline_state":       pipeline,
 	})
 }
 
@@ -1289,6 +1296,56 @@ func apiHandlerOpenClawThreads(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "thread": item})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func apiHandlerOpenClawPipeline(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		supervisor := strings.TrimSpace(r.URL.Query().Get("supervisor"))
+		proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto"))
+		pipeline, err := buildSupervisorPipelineSnapshot(supervisor, proyecto, 20)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, pipeline)
+	case http.MethodPost:
+		var req struct {
+			Supervisor     string `json:"supervisor"`
+			Proyecto       string `json:"proyecto"`
+			PipelineName   string `json:"pipeline_name"`
+			CurrentPhase   string `json:"current_phase"`
+			Status         string `json:"status"`
+			CurrentTaskID  *int64 `json:"current_task_id"`
+			CurrentGateID  *int64 `json:"current_gate_id"`
+			CurrentMergeID *int64 `json:"current_merge_id"`
+			ArtifactsJSON  string `json:"artifacts_json"`
+			MetadataJSON   string `json:"metadata_json"`
+		}
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		item, err := db.UpsertSupervisorPipelineState(db.UpsertSupervisorPipelineStateInput{
+			Supervisor:     resolveSupervisorName(req.Supervisor),
+			ProyectoSlug:   strings.TrimSpace(req.Proyecto),
+			PipelineName:   strings.TrimSpace(req.PipelineName),
+			CurrentPhase:   strings.TrimSpace(req.CurrentPhase),
+			Status:         strings.TrimSpace(req.Status),
+			CurrentTaskID:  req.CurrentTaskID,
+			CurrentGateID:  req.CurrentGateID,
+			CurrentMergeID: req.CurrentMergeID,
+			ArtifactsJSON:  strings.TrimSpace(req.ArtifactsJSON),
+			MetadataJSON:   strings.TrimSpace(req.MetadataJSON),
+		})
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "pipeline": item})
 	default:
 		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}

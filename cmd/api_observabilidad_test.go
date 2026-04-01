@@ -219,8 +219,11 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	if _, ok := operatorJSON["thread_sessions"]; !ok {
 		t.Fatalf("operator sin thread_sessions: %s", recOperator.Body.String())
 	}
+	if _, ok := operatorJSON["pipeline_state"]; !ok {
+		t.Fatalf("operator sin pipeline_state: %s", recOperator.Body.String())
+	}
 	bodyOperator := recOperator.Body.String()
-	for _, token := range []string{"status", "review", "notificaciones", "entregas", "eventos_normalizados", "thread_sessions"} {
+	for _, token := range []string{"status", "review", "notificaciones", "entregas", "eventos_normalizados", "thread_sessions", "pipeline_state"} {
 		if !strings.Contains(bodyOperator, token) {
 			t.Fatalf("openclaw operator incompleto, falta %q:\n%s", token, bodyOperator)
 		}
@@ -257,6 +260,37 @@ func TestAPIOpenClawThreadsOperaPorLaViaCanonica(t *testing.T) {
 	}
 	if !strings.Contains(recGet.Body.String(), "sess-api-1") {
 		t.Fatalf("openclaw threads sin sesion esperada: %s", recGet.Body.String())
+	}
+}
+
+func TestAPIOpenClawPipelineOperaPorLaViaCanonica(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recPost := httptest.NewRecorder()
+	reqPost := httptest.NewRequest(http.MethodPost, "/api/openclaw/pipeline", strings.NewReader(`{
+		"supervisor":"OpenClaw",
+		"proyecto":"orquestador",
+		"pipeline_name":"autopilot",
+		"current_phase":"review",
+		"status":"active",
+		"metadata_json":"{\"mode\":\"review\"}"
+	}`))
+	reqPost.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(recPost, reqPost)
+	if recPost.Code != http.StatusOK {
+		t.Fatalf("openclaw pipeline post status=%d body=%s", recPost.Code, recPost.Body.String())
+	}
+
+	recGet := httptest.NewRecorder()
+	reqGet := httptest.NewRequest(http.MethodGet, "/api/openclaw/pipeline?supervisor=OpenClaw&proyecto=orquestador", nil)
+	mux.ServeHTTP(recGet, reqGet)
+	if recGet.Code != http.StatusOK {
+		t.Fatalf("openclaw pipeline get status=%d body=%s", recGet.Code, recGet.Body.String())
+	}
+	if !strings.Contains(recGet.Body.String(), "autopilot") || !strings.Contains(recGet.Body.String(), "review") {
+		t.Fatalf("openclaw pipeline sin contenido esperado: %s", recGet.Body.String())
 	}
 }
 

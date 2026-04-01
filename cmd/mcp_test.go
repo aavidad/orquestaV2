@@ -1217,6 +1217,58 @@ func TestMCPThreadsSupervisorOperanPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestMCPPipelineSupervisorOperaPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		updateResult, err := callMCPTool("orquesta.supervision.pipeline.actualizar", map[string]any{
+			"supervisor":    "OpenClaw",
+			"proyecto":      "orquestador",
+			"pipeline_name": "autopilot",
+			"current_phase": "review",
+			"status":        "active",
+			"metadata_json": `{"mode":"review"}`,
+		})
+		if err != nil {
+			t.Fatalf("actualizar pipeline supervisor MCP: %v", err)
+		}
+		if updateResult["isError"] != false {
+			t.Fatalf("actualizar pipeline marcado como error: %#v", updateResult)
+		}
+		listResult, err := callMCPTool("orquesta.supervision.pipeline.listar", map[string]any{
+			"supervisor": "OpenClaw",
+			"proyecto":   "orquestador",
+		})
+		if err != nil {
+			t.Fatalf("listar pipeline supervisor MCP: %v", err)
+		}
+		if listResult["isError"] != false {
+			t.Fatalf("listar pipeline marcado como error: %#v", listResult)
+		}
+		structured, _ := listResult["structuredContent"].(map[string]any)
+		if structured == nil {
+			t.Fatalf("structuredContent pipeline inesperado: %#v", listResult["structuredContent"])
+		}
+		pipelines := reflect.ValueOf(structured["pipelines"])
+		if !pipelines.IsValid() || pipelines.Len() == 0 {
+			t.Fatalf("pipelines vacío: %#v", structured)
+		}
+		contents, err := readMCPResource("orquesta://supervision/OpenClaw/pipeline")
+		if err != nil {
+			t.Fatalf("readMCPResource pipeline supervisor: %v", err)
+		}
+		if len(contents) == 0 || !strings.Contains(fmt.Sprintf("%v", contents[0]["text"]), "autopilot") {
+			t.Fatalf("resource pipeline inesperado: %#v", contents)
+		}
+		prompt, err := getMCPPrompt("orquesta.supervision.pipeline", map[string]any{"supervisor": "OpenClaw"})
+		if err != nil {
+			t.Fatalf("getMCPPrompt pipeline supervisor: %v", err)
+		}
+		if !strings.Contains(fmt.Sprintf("%v", prompt), "Pipeline del supervisor") {
+			t.Fatalf("prompt pipeline sin contenido esperado: %#v", prompt)
+		}
+	})
+}
+
 func TestMCPToolsPropuestasCrearYAccionarOperanPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")

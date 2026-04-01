@@ -5951,3 +5951,14 @@ Resultado:
   - `go test ./db -run 'TestRecordSupervisorThreadTurnYSummary' -count=1`
   - `go test ./cmd -run 'Test(MCPThreadsSupervisorOperanPorLaViaCanonica|APIObservabilidadReadOnly|APIOpenClawThreadsOperaPorLaViaCanonica)' -count=1`
   - `go build -o ./orquesta .`
+
+## 2026-04-01 — estado explícito de pipeline del supervisor
+
+- Inspirado en `oh-my-codex`, pero integrado en Orquesta sin otra ruta paralela.
+- Se añadió `supervisor_pipeline_states` como capa ligera para fase actual, estado y artefactos mínimos del supervisor/OpenClaw.
+- Nuevas superficies:
+  - API `GET/POST /api/openclaw/pipeline`
+  - MCP resource `orquesta://supervision/{supervisor}/pipeline`
+  - MCP prompt `orquesta.supervision.pipeline`
+  - MCP tools `orquesta.supervision.pipeline.actualizar`, `orquesta.supervision.pipeline.listar`
+- `buildSupervisorReviewSnapshot()` y `/api/openclaw/operator` ya incluyen `pipeline_state`.

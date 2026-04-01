@@ -231,6 +231,28 @@ ON supervisor_threads(supervisor, session_id, last_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_supervisor_threads_project
 ON supervisor_threads(proyecto_slug, supervisor, last_seen_at DESC);
 
+CREATE TABLE IF NOT EXISTS supervisor_pipeline_states (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    supervisor     TEXT    NOT NULL,
+    proyecto_slug  TEXT    NOT NULL DEFAULT '',
+    pipeline_name  TEXT    NOT NULL DEFAULT '',
+    current_phase  TEXT    NOT NULL DEFAULT '',
+    status         TEXT    NOT NULL DEFAULT 'active'
+                           CHECK (status IN ('active','paused','blocked','completed','failed')),
+    current_task_id INTEGER REFERENCES tareas(id) ON DELETE SET NULL,
+    current_gate_id INTEGER REFERENCES review_gates(id) ON DELETE SET NULL,
+    current_merge_id INTEGER REFERENCES git_merges(id) ON DELETE SET NULL,
+    artifacts_json TEXT    NOT NULL DEFAULT '{}',
+    metadata_json  TEXT    NOT NULL DEFAULT '{}',
+    started_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at   DATETIME,
+    UNIQUE(supervisor, proyecto_slug, pipeline_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_supervisor_pipeline_states_supervisor
+ON supervisor_pipeline_states(supervisor, updated_at DESC);
+
 -- ─── Asignaciones agente → proyecto ───────────────────────────────────────
 CREATE TABLE IF NOT EXISTS asignaciones (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,

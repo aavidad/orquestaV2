@@ -873,5 +873,16 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - API: `/api/openclaw/threads`
   - MCP resource: `orquesta://supervision/{supervisor}/threads`
   - MCP prompt: `orquesta.supervision.threads`
-  - MCP tools: `orquesta.supervision.threads.registrar`, `orquesta.supervision.threads.listar`
+- MCP tools: `orquesta.supervision.threads.registrar`, `orquesta.supervision.threads.listar`
 - El objetivo es mejorar `handoff`, `review` e integración del supervisor. No es una segunda sesión runtime.
+
+### Pipeline explícita del supervisor
+
+- Además del tracking de threads, el supervisor necesita un estado pequeño y explícito de pipeline/modos.
+- La capa correcta es `supervisor_pipeline_states`: `pipeline_name`, `current_phase`, `status` y artefactos mínimos del supervisor/OpenClaw.
+- Este estado se expone por la vía canónica del servidor:
+  - API: `/api/openclaw/pipeline`
+  - MCP resource: `orquesta://supervision/{supervisor}/pipeline`
+  - MCP prompt: `orquesta.supervision.pipeline`
+  - MCP tools: `orquesta.supervision.pipeline.actualizar`, `orquesta.supervision.pipeline.listar`
+- No sustituye a `review_gates`, `git_merges` ni `eventos_normalizados`; los ordena en una fase operativa explícita para reanudación y gobierno.
