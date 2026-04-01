@@ -925,6 +925,10 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - La replanificación por cuota aplicada por OpenClaw debe preservar el estado de trabajo cuando la tarea ya estaba en `en_progreso`:
   - si la tarea retenida se mueve a otro worker, Orquesta debe dejarla en `en_progreso`
   - no puede degradarla a `asignada` por usar una mutación demasiado débil
+- Cuando no haya workers `idle` pero sí workers conectados viables, la recomendación de `replanificar_por_cuota` debe proponer el worker con menor carga visible:
+  - primero se usan workers ociosos
+  - si no hay ociosos, se elige el conectado con menos tareas activas
+  - empate: orden estable por nombre
 - La action tool del supervisor debe aceptar un fallback explícito seguro cuando la cola viva haya cambiado entre la recomendación y la ejecución:
   - si `action`, `target` y `assignee` siguen siendo válidos, OpenClaw debe poder aplicar la acción sin depender de que siga presente en `action_queue`
 - `supervisor-loop` persistida no puede quedarse atrás respecto al snapshot:

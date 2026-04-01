@@ -1414,6 +1414,50 @@ func TestMCPToolsPropuestasCrearYAccionarOperanPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestMCPRevisionSupervisorSugiereAssigneePorMenorCargaEnReplanificacion(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex2", Rol: "programador", Activo: false, EstadoCuota: "enfriamiento"},
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			TareasActivas: []tareaLite{
+				{ID: 410, Estado: db.TareaEnProgreso, Titulo: "Runtime", Agente: "Codex3"},
+				{ID: 411, Estado: db.TareaEnProgreso, Titulo: "Server", Agente: "Codex4"},
+				{ID: 414, Estado: db.TareaEnProgreso, Titulo: "Web", Agente: "Codex4"},
+				{ID: 416, Estado: db.TareaEnProgreso, Titulo: "Controlplane", Agente: "Codex2"},
+			},
+		}}
+
+		snapshot, err := buildSupervisorReviewSnapshot("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshot: %v", err)
+		}
+		nextAction, _ := snapshot["next_action"].(supervisorRecommendedAction)
+		if nextAction.Action != "replanificar_por_cuota" {
+			t.Fatalf("next_action inesperada: %+v", nextAction)
+		}
+		if nextAction.Target != "tarea:416" {
+			t.Fatalf("target inesperado: %+v", nextAction)
+		}
+		if nextAction.Assignee != "Codex3" {
+			t.Fatalf("assignee por menor carga inesperado: %+v", nextAction)
+		}
+	})
+}
+
 func TestMCPToolSupervisorAplicaReplanificacionPorCuotaConFallbackExplicito(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := statusService

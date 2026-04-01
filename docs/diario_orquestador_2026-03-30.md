@@ -6117,3 +6117,20 @@ Resultado:
   - la tarea `#413` converge a `Codex4` y permanece en `en_progreso`
   - `./orquesta status` pasa a mostrar `#413` en `En progreso ahora mismo`
   - la lista `Retenidas por cuota` baja y ya no incluye `#413`
+
+## 2026-04-01 — OpenClaw ya sugiere assignee por menor carga en tareas retenidas
+
+- Hasta ahora la replanificación por cuota solo sugería `assignee` si había workers `idle`.
+- Eso dejaba a `OpenClaw` con una acción correcta pero incompleta en escenarios más realistas:
+  - workers conectados
+  - nadie ocioso
+  - todavía hay capacidad razonable para repartir una retenida
+- Se endureció la heurística:
+  - primero se siguen usando workers idle
+  - si no hay idle, se propone el worker conectado con menor carga visible (`asignada/en_progreso/bloqueada`)
+  - empate por nombre para mantener orden estable
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(MCPRevisionSupervisorSugiereDispatchOperativo|MCPRevisionSupervisorSugiereAssigneePorMenorCargaEnReplanificacion|MCPToolSupervisorAplicaReplanificacionPorCuotaConFallbackExplicito)' -count=1`
+- Validación viva:
+  - `GET /api/openclaw/operator` ya expone `assignee=Codex3` en la `next_action/action_queue` de `replanificar_por_cuota`
+  - el supervisor ya no depende de que exista un worker estrictamente ocioso para ver una propuesta ejecutable

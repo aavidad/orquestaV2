@@ -3820,7 +3820,7 @@ func buildSupervisorOperationalActions(status apiStatusResponse) []supervisorRec
 			Action:   "replanificar_por_cuota",
 			Reason:   "Hay trabajo retenido por cuota; revisar reasignación o secuenciación sin esperar al agente bloqueado.",
 			Priority: priority,
-			Assignee: firstIdleSupervisorWorker(idle),
+			Assignee: preferredSupervisorWorker(status),
 		})
 	}
 	return actions
@@ -3874,6 +3874,48 @@ func firstIdleSupervisorWorker(idle []string) string {
 		return ""
 	}
 	return strings.TrimSpace(idle[0])
+}
+
+func preferredSupervisorWorker(status apiStatusResponse) string {
+	idle := idleSupervisorWorkers(status.AgentesActivos, status.AgentesTrabajando)
+	if len(idle) > 0 {
+		return firstIdleSupervisorWorker(idle)
+	}
+	if len(status.AgentesActivos) == 0 {
+		return ""
+	}
+	load := make(map[string]int, len(status.AgentesActivos))
+	for _, agente := range status.AgentesActivos {
+		if agente == nil {
+			continue
+		}
+		nombre := strings.TrimSpace(agente.Nombre)
+		if nombre != "" {
+			load[nombre] = 0
+		}
+	}
+	for _, tarea := range status.TareasActivas {
+		nombre := strings.TrimSpace(tarea.Agente)
+		if nombre == "" {
+			continue
+		}
+		if _, ok := load[nombre]; !ok {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaAsignada, db.TareaEnProgreso, db.TareaBloqueada:
+			load[nombre]++
+		}
+	}
+	best := ""
+	bestLoad := 0
+	for nombre, n := range load {
+		if best == "" || n < bestLoad || (n == bestLoad && nombre < best) {
+			best = nombre
+			bestLoad = n
+		}
+	}
+	return best
 }
 
 func sortSupervisorRecommendedActions(actions []supervisorRecommendedAction) {
