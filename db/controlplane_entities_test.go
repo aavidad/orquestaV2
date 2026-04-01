@@ -2643,6 +2643,76 @@ func TestRuntimeHandleMailboxDeliveryModeRespetaCapacidadesYFallbacks(t *testing
 	}
 }
 
+func TestRehabilitarEntregaCalienteSupervisadaHandleSiProcede(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := ConfigSet("runtime_supervisor_hot_input_disable_seconds", "60"); err != nil {
+		t.Fatalf("config cooldown: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if err := UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("upsert handle: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                              "process_pty_cli",
+		"stdin_path":                          filepath.Join(tmp, "pty.stdin"),
+		"supervisor_ref":                      filepath.Join(tmp, "supervisor.ref"),
+		"rendered_command":                    "codex-perfil Codex1",
+		"can_send_input":                      false,
+		"disable_supervisor_hot_input":        true,
+		"disable_supervisor_hot_input_at":     time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339),
+		"disable_supervisor_hot_input_reason": "runtime_panic",
+	})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle: %+v err=%v", handle, err)
+	}
+	if RuntimeHandlePermiteEntregaCalienteSupervisada(handle) {
+		t.Fatal("el handle degradado no deberia permitir entrega caliente antes de rehabilitarse")
+	}
+	handle, changed, err := RehabilitarEntregaCalienteSupervisadaHandleSiProcede(handle)
+	if err != nil {
+		t.Fatalf("rehabilitar handle: %v", err)
+	}
+	if !changed {
+		t.Fatal("deberia rehabilitar la entrega caliente tras vencer el cooldown")
+	}
+	if !RuntimeHandlePermiteEntregaCalienteSupervisada(handle) {
+		t.Fatalf("el handle deberia volver a permitir entrega caliente: %+v", handle)
+	}
+	if strings.Contains(handle.MetadataJSON, "disable_supervisor_hot_input") {
+		t.Fatalf("la marca de degradacion no deberia persistir: %s", handle.MetadataJSON)
+	}
+}
+
 func TestRuntimeOrderSendInstructionHaceFallbackAMailboxCuandoHandleNoAdmiteInputInteractivo(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

@@ -21,6 +21,7 @@ func defaultConfigEntries() []configDefaultEntry {
 		{Clave: "runtime_supervision_batch_size", Valor: "10"},
 		{Clave: "runtime_order_lease_seconds", Valor: "120"},
 		{Clave: "runtime_send_instruction_lease_seconds", Valor: "35"},
+		{Clave: "runtime_supervisor_hot_input_disable_seconds", Valor: "900"},
 		{Clave: "runtime_transcript_ingest_max_bytes", Valor: "65536"},
 		{Clave: "runtime_transcript_auto_guidance_enabled", Valor: "true"},
 		{Clave: "runtime_instances_retention_hours", Valor: "72"},

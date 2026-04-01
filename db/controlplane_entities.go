@@ -6423,6 +6423,49 @@ func DeshabilitarEntregaCalienteSupervisadaHandle(handle *RuntimeHandle, reason 
 	return GetRuntimeHandle(handle.ID)
 }
 
+func RehabilitarEntregaCalienteSupervisadaHandleSiProcede(handle *RuntimeHandle) (*RuntimeHandle, bool, error) {
+	if handle == nil || handle.ID <= 0 {
+		return handle, false, nil
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if !boolFromMap(meta, "disable_supervisor_hot_input") {
+		return handle, false, nil
+	}
+	cooldownSeconds := configIntOrDefault("runtime_supervisor_hot_input_disable_seconds", 900)
+	if cooldownSeconds <= 0 {
+		cooldownSeconds = 900
+	}
+	disableAtRaw := strings.TrimSpace(stringFromMap(meta, "disable_supervisor_hot_input_at", ""))
+	if disableAtRaw == "" {
+		return handle, false, nil
+	}
+	disableAt, err := time.Parse(time.RFC3339, disableAtRaw)
+	if err != nil {
+		if parsed, altErr := time.Parse(time.RFC3339Nano, disableAtRaw); altErr == nil {
+			disableAt = parsed
+		} else {
+			return handle, false, nil
+		}
+	}
+	if time.Since(disableAt.UTC()) < time.Duration(cooldownSeconds)*time.Second {
+		return handle, false, nil
+	}
+	delete(meta, "disable_supervisor_hot_input")
+	delete(meta, "disable_supervisor_hot_input_reason")
+	delete(meta, "disable_supervisor_hot_input_transcript_id")
+	delete(meta, "disable_supervisor_hot_input_at")
+	compactarMetadataRuntimeHandle(meta)
+	metaJSON, _ := json.Marshal(meta)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		return nil, false, err
+	}
+	fresh, err := GetRuntimeHandle(handle.ID)
+	if err != nil {
+		return nil, false, err
+	}
+	return fresh, true, nil
+}
+
 func runtimeHandleUsaCodexTTYInestable(meta map[string]any) bool {
 	for _, candidate := range []string{
 		stringFromMap(meta, "rendered_command", ""),
@@ -6558,6 +6601,10 @@ func SincronizarRuntimeHandleSupervisado(handle *RuntimeHandle, runtime *Runtime
 		return nil, nil, "", err
 	}
 	handle, err = compactarMetadataHandleRuntimePersistida(handle)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	handle, _, err = RehabilitarEntregaCalienteSupervisadaHandleSiProcede(handle)
 	if err != nil {
 		return nil, nil, "", err
 	}

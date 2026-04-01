@@ -5776,3 +5776,18 @@ Resultado:
 - `server start` ya no devuelve antes de que el daemon quede listo de verdad
 - la secuencia inmediata `start -> doctor` pasa sin ventana muerta
 - el handshake del daemon queda alineado con el criterio profesional de readiness del núcleo
+## 2026-04-01 — runtime_panic viejo no debe degradar la siguiente generación
+
+- Prueba real ejecutada con `Codex3` y `Codex4` sobre la flota viva.
+- `Codex3` confirmó el camino sano `nudge -> runtime_mailbox -> send_instruction -> stdin`.
+- `Codex4` mostró el bug real: tras un `runtime_panic`, un transcript viejo podía terminar degradando `supervisor_local` del handle ya reiniciado, dejando el siguiente `nudge` fuera de `stdin` o cayendo a `session_resume`.
+- Se corrigió en dos capas:
+  - `db`: rehabilitación automática de `disable_supervisor_hot_input` tras `runtime_supervisor_hot_input_disable_seconds` para evitar condenas permanentes.
+  - `cmd/controlplane_support.go`: un `runtime_panic` ya no degrada el handle actual si el `started_at` observado del handle es posterior al `CreatedAt` del transcript.
+- Cobertura añadida:
+  - `TestRehabilitarEntregaCalienteSupervisadaHandleSiProcede`
+  - `TestEnfriarAgentePorRuntimePanicNoDegradaHandleDeGeneracionNueva`
+- Validación viva posterior:
+  - el `nudge` pendiente de `Codex4` volvió a consumirse
+  - apareció `stdin` nueva en transcript (`10629`)
+  - el bug dejó de ser “bloqueo permanente de la siguiente generación”; quedó reducido a la inestabilidad propia del TUI de Codex y a reintentos de autonomía más largos

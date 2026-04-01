@@ -824,3 +824,9 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - la deduplicación de `mailbox_only` es válida solo durante una TTL corta de reintento, suficiente para cortar bucles pero no para bloquear reentregas legítimas.
 - los `nudge` heredados o demasiado largos deben compactarse antes de materializar `send_instruction`; no se inyectan textos verbosos de Orquesta a Codex cuando existe una forma corta y estable.
 - el estado sano del núcleo exige que `runtime_mailbox` y `runtime_orders` puedan drenar a vacío tras reintentos; no se aceptan pendientes perpetuos por una dedupe vieja o por guidance mal formada.
+### Generaciones de runtime y `runtime_panic`
+
+- Un `runtime_panic` debe enfriar al agente y puede deshabilitar temporalmente `supervisor_local`, pero nunca debe degradar una generación nueva del runtime por un transcript viejo.
+- La degradación de `supervisor_local` por `runtime_panic` es válida solo para la generación observada del handle. Si el runtime ya arrancó otra vez, el transcript anterior no puede contaminar el handle nuevo.
+- Existe una red de seguridad adicional: `disable_supervisor_hot_input` expira automáticamente tras `runtime_supervisor_hot_input_disable_seconds` cuando el runtime sigue vivo. Esa rehabilitación no sustituye al guardarraíl de generación; solo evita condenas permanentes del handle.
+- En pruebas reales con Codex, la validación buena no es solo “sin panic”: hay que comprobar `runtime_mailbox -> send_instruction -> stdin` en transcript y confirmar que, tras un panic previo, la siguiente generación del handle puede volver a aceptar trabajo real.

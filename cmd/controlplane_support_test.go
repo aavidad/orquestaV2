@@ -2068,12 +2068,12 @@ func TestProcesarAutonomiaAgentesBatchAutoasignaTrabajoASesionActivaIdle(t *test
 		t.Fatalf("upsert proyecto: %v", err)
 	}
 	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
-		ProyectoID:      proyectoID,
-		Enabled:         true,
-		MaxWorkers:      1,
-		SupervisorAgente: "CodexSupervisor",
+		ProyectoID:        proyectoID,
+		Enabled:           true,
+		MaxWorkers:        1,
+		SupervisorAgente:  "CodexSupervisor",
 		ReserveSupervisor: true,
-		EstadoAutonomia: db.AutonomiaProyectoActiva,
+		EstadoAutonomia:   db.AutonomiaProyectoActiva,
 	}); err != nil {
 		t.Fatalf("upsert autonomia: %v", err)
 	}
@@ -6115,14 +6115,19 @@ func TestProcesarRuntimeTranscriptBatchNoGuiaAlWorkerEnRuntimePanic(t *testing.T
 	if err != nil || agenteInfo == nil {
 		t.Fatalf("get agente: agente=%+v err=%v", agenteInfo, err)
 	}
-	if agenteInfo.EstadoCuota != "enfriamiento" {
-		t.Fatalf("runtime_panic deberia enfriar al agente: %+v", agenteInfo)
-	}
-	if agenteInfo.ReanimarAt == nil {
-		t.Fatalf("runtime_panic deberia fijar reanimar_at: %+v", agenteInfo)
-	}
 	if !strings.Contains(agenteInfo.MotivoPausa, "runtime_panic") {
 		t.Fatalf("motivo_pausa sin trazabilidad de runtime_panic: %+v", agenteInfo)
+	}
+	var estadoCuota string
+	var reanimarAt sql.NullTime
+	if err := db.DB.QueryRow(`SELECT estado_cuota, reanimar_at FROM agentes WHERE nombre=?`, "Codex1").Scan(&estadoCuota, &reanimarAt); err != nil {
+		t.Fatalf("leer estado persistido de agente: %v", err)
+	}
+	if estadoCuota != "enfriamiento" {
+		t.Fatalf("runtime_panic deberia persistir enfriamiento, got=%s agente=%+v", estadoCuota, agenteInfo)
+	}
+	if !reanimarAt.Valid {
+		t.Fatalf("runtime_panic deberia persistir reanimar_at, agente=%+v", agenteInfo)
 	}
 	handle, err = db.GetRuntimeHandle(handle.ID)
 	if err != nil || handle == nil {
@@ -6130,6 +6135,70 @@ func TestProcesarRuntimeTranscriptBatchNoGuiaAlWorkerEnRuntimePanic(t *testing.T
 	}
 	if !strings.Contains(handle.MetadataJSON, `"disable_supervisor_hot_input":true`) {
 		t.Fatalf("runtime_panic deberia degradar supervisor_local en el handle: %s", handle.MetadataJSON)
+	}
+}
+
+func TestEnfriarAgentePorRuntimePanicNoDegradaHandleDeGeneracionNueva(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion worker: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle worker: %+v err=%v", handle, err)
+	}
+	startedAt := time.Now().UTC()
+	metaJSON, _ := json.Marshal(map[string]any{
+		"log_path":         filepath.Join(tmp, "panic.log"),
+		"driver":           "process_pty_cli",
+		"stdin_path":       filepath.Join(tmp, "pty.stdin"),
+		"supervisor_ref":   filepath.Join(tmp, "supervisor.ref"),
+		"rendered_command": filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil") + " Codex1",
+		"can_send_input":   false,
+		"started_at":       startedAt.Format(time.RFC3339Nano),
+	})
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	item := &db.RuntimeTranscriptEntry{
+		ID:             10576,
+		Agente:         "Codex1",
+		HandleID:       &handle.ID,
+		CreatedAt:      startedAt.Add(-2 * time.Second),
+		Stream:         "pty_out",
+		Classification: "runtime_panic",
+	}
+	if _, err := enfriarAgentePorRuntimePanic("Codex1", item); err != nil {
+		t.Fatalf("enfriar agente por runtime panic: %v", err)
+	}
+	handle, err = db.GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle: %+v err=%v", handle, err)
+	}
+	if strings.Contains(handle.MetadataJSON, `"disable_supervisor_hot_input":true`) {
+		t.Fatalf("no deberia degradar el handle actual por un panic de la generacion anterior: %s", handle.MetadataJSON)
 	}
 }
 

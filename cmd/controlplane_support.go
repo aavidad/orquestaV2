@@ -687,12 +687,16 @@ func enfriarAgentePorRuntimePanic(agente string, item *db.RuntimeTranscriptEntry
 			return "", err
 		}
 		if handle != nil {
-			degradado, err := db.DeshabilitarEntregaCalienteSupervisadaHandle(handle, "runtime_panic", item.ID)
-			if err != nil {
-				return "", err
-			}
-			if degradado != nil && degradado.ID > 0 && strings.Contains(degradado.MetadataJSON, `"disable_supervisor_hot_input":true`) {
-				notes = append(notes, "supervisor_hot_input_disabled")
+			if runtimePanicDebeDegradarHandleActual(handle, item) {
+				degradado, err := db.DeshabilitarEntregaCalienteSupervisadaHandle(handle, "runtime_panic", item.ID)
+				if err != nil {
+					return "", err
+				}
+				if degradado != nil && degradado.ID > 0 && strings.Contains(degradado.MetadataJSON, `"disable_supervisor_hot_input":true`) {
+					notes = append(notes, "supervisor_hot_input_disabled")
+				}
+			} else {
+				notes = append(notes, "supervisor_hot_input_skip_stale_generation")
 			}
 		}
 	}
@@ -723,6 +727,38 @@ func enfriarAgentePorRuntimePanic(agente string, item *db.RuntimeTranscriptEntry
 		fmt.Sprintf("agente=%s cooldown_until=%s motivo=%s", agente, reanimarAt.Format(time.RFC3339), motivo))
 	notes = append(notes, "runtime_panic_cooldown")
 	return strings.Join(notes, ";"), nil
+}
+
+func runtimePanicDebeDegradarHandleActual(handle *db.RuntimeHandle, item *db.RuntimeTranscriptEntry) bool {
+	if handle == nil || item == nil || item.CreatedAt.IsZero() {
+		return true
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	startedAtRaw := ""
+	if meta != nil {
+		if v, ok := meta["started_at"].(string); ok {
+			startedAtRaw = strings.TrimSpace(v)
+		}
+	}
+	if startedAtRaw == "" {
+		return true
+	}
+	startedAt, err := parseMetadataTimeRuntimePanic(startedAtRaw)
+	if err != nil {
+		return true
+	}
+	return !startedAt.After(item.CreatedAt.Add(1 * time.Second))
+}
+
+func parseMetadataTimeRuntimePanic(raw string) (time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, fmt.Errorf("empty time")
+	}
+	if parsed, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+		return parsed, nil
+	}
+	return time.Parse(time.RFC3339, raw)
 }
 
 func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
