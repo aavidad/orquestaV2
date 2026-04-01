@@ -5032,3 +5032,30 @@ Validacion:
 - `go build -o ./orquesta .`
 - `./orquesta server stop && ./orquesta server start`
 - `./orquesta status`
+
+## 2026-04-01 — `status` ya enseña cooldown útil aunque el `reanimar_at` persistido no sirva
+
+Hallazgo:
+
+- varios agentes seguían saliendo en `enfriamiento` sin `cooldown hasta ...` aunque el presupuesto visible ya conocía un reset futuro
+- eso dejaba al operador con una pausa “muda”: se sabía que el agente estaba bloqueado, pero no hasta cuándo
+
+Decision:
+
+- si el agente ya está fuera del pool y `reanimar_at` está vacío o vencido, usar el mejor reset futuro visible del presupuesto (`presupuesto_reset_at`, semanal, diario o sesión) como horizonte operativo de cooldown
+- el render de `status` debe usar esa misma jerarquía visible aunque el campo persistido no llegue perfecto
+
+Codigo:
+
+- [db/sesiones.go](/home/alberto/Trabajo/orquesta/db/sesiones.go)
+- [db/presupuestos_sesion_test.go](/home/alberto/Trabajo/orquesta/db/presupuestos_sesion_test.go)
+- [cmd/status_remoto_compat.go](/home/alberto/Trabajo/orquesta/cmd/status_remoto_compat.go)
+- [cmd/status_test.go](/home/alberto/Trabajo/orquesta/cmd/status_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./db -run 'TestGetAgenteRecuperaReanimarAtVisibleDesdeResetSemanalSiYaEstaEnfriado' -count=1`
+- `go test ./cmd -run 'Test(ResumenCuotaAgenteMuestraCooldownSiReanimarAtVieneInformado|RenderStatusSummaryUsaResetPresupuestoComoCooldownVisibleSiReanimarAtNoSirve)' -count=1`
+- `go build -o ./orquesta .`
+- `./orquesta status`

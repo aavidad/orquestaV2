@@ -542,6 +542,48 @@ func TestRenderStatusSummaryMuestraAgentesEnEnfriamiento(t *testing.T) {
 	}
 }
 
+func TestRenderStatusSummaryUsaResetPresupuestoComoCooldownVisibleSiReanimarAtNoSirve(t *testing.T) {
+	resetAt := time.Now().UTC().Add(4 * time.Hour)
+	pct := 0
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				Agentes: []*db.Agente{
+					{
+						Nombre:               "Codex2",
+						Rol:                  "programador",
+						Activo:               false,
+						EstadoCuota:          "enfriamiento",
+						PresupuestoVentana:   "weekly",
+						PresupuestoResetAt:   &resetAt,
+						PresupuestoSemanalPct: &pct,
+						CuotaRestantePct:     &pct,
+					},
+				},
+				TareasPorEstado: map[string]int{},
+			},
+		})
+	})
+	if !strings.Contains(out, "cooldown hasta") {
+		t.Fatalf("salida sin cooldown derivado desde reset presupuesto: %s", out)
+	}
+}
+
+func TestResumenCuotaAgenteMuestraCooldownSiReanimarAtVieneInformado(t *testing.T) {
+	reanimarAt := time.Now().UTC().Add(2 * time.Hour)
+	pct := 75
+	detalle := resumenCuotaAgente(&db.Agente{
+		Nombre:            "Codex2",
+		EstadoCuota:       "enfriamiento",
+		ReanimarAt:        &reanimarAt,
+		CuotaRestantePct:  &pct,
+		PresupuestoVentana: "weekly",
+	})
+	if !strings.Contains(detalle, "cooldown hasta") {
+		t.Fatalf("detalle sin cooldown visible: %s", detalle)
+	}
+}
+
 func TestRenderStatusSummaryMuestraTareasRetenidasPorCuota(t *testing.T) {
 	out := captureOutput(t, func() {
 		renderStatusSummary(&statusContext{

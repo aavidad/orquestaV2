@@ -621,6 +621,7 @@ func aplicarEstadoVisibleAgente(agente *Agente, sesion *Sesion) {
 		return
 	}
 	proyectarBloqueoVisibleDesdePresupuestoObservado(agente)
+	sincronizarReanimacionVisibleDesdePresupuesto(agente)
 	if sesion == nil {
 		agente.Activo = false
 		agente.EstadoSesion = ""
@@ -701,6 +702,31 @@ func proyectarBloqueoVisibleDesdePresupuestoObservado(a *Agente) {
 		}
 		if a.PresupuestoResetAt != nil && a.PresupuestoResetAt.After(now) {
 			a.ReanimarAt = a.PresupuestoResetAt
+		}
+	}
+}
+
+func sincronizarReanimacionVisibleDesdePresupuesto(a *Agente) {
+	if a == nil {
+		return
+	}
+	if strings.EqualFold(strings.TrimSpace(a.EstadoCuota), "activo") {
+		return
+	}
+	now := time.Now().UTC()
+	if a.ReanimarAt != nil && !a.ReanimarAt.IsZero() && a.ReanimarAt.After(now) {
+		return
+	}
+	candidatos := []*time.Time{
+		a.PresupuestoResetAt,
+		a.PresupuestoSemanalResetAt,
+		a.PresupuestoDiarioResetAt,
+		a.PresupuestoSesionResetAt,
+	}
+	for _, candidate := range candidatos {
+		if candidate != nil && !candidate.IsZero() && candidate.After(now) {
+			a.ReanimarAt = candidate
+			return
 		}
 	}
 }

@@ -260,8 +260,10 @@ func resumenCuotaAgente(a *db.Agente) string {
 		return ""
 	}
 	partes := make([]string, 0, 4)
-	if a.EstadoCuota != "" && a.EstadoCuota != "activo" && a.ReanimarAt != nil && !a.ReanimarAt.IsZero() && a.ReanimarAt.After(time.Now().UTC()) {
-		partes = append(partes, "cooldown hasta "+a.ReanimarAt.Local().Format("2006-01-02 15:04"))
+	if a.EstadoCuota != "" && a.EstadoCuota != "activo" {
+		if reanimarAt := cooldownVisibleAgente(a); reanimarAt != nil {
+			partes = append(partes, "cooldown hasta "+reanimarAt.Local().Format("2006-01-02 15:04"))
+		}
 	}
 	if a.CuotaRestantePct != nil {
 		partes = append(partes, fmt.Sprintf("efectivo %d%%", *a.CuotaRestantePct))
@@ -292,6 +294,22 @@ func resumenCuotaAgente(a *db.Agente) string {
 		partes = append(partes, "cuota:"+a.EstadoCuota)
 	}
 	return strings.Join(partes, " · ")
+}
+
+func cooldownVisibleAgente(a *db.Agente) *time.Time {
+	if a == nil {
+		return nil
+	}
+	now := time.Now().UTC()
+	if a.ReanimarAt != nil && !a.ReanimarAt.IsZero() && a.ReanimarAt.After(now) {
+		return a.ReanimarAt
+	}
+	for _, candidate := range []*time.Time{a.PresupuestoResetAt, a.PresupuestoSemanalResetAt, a.PresupuestoDiarioResetAt, a.PresupuestoSesionResetAt} {
+		if candidate != nil && !candidate.IsZero() && candidate.After(now) {
+			return candidate
+		}
+	}
+	return nil
 }
 
 func resumenCuentaAgente(a *db.Agente) string {
