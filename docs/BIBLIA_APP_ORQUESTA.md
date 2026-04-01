@@ -937,3 +937,9 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 
 - `/openclaw` no puede quedarse solo con review/notificaciones; también debe reutilizar `thread_sessions` y `pipeline_state` del servidor.
 - La web del supervisor es una proyección de la misma verdad viva que MCP/API, no otra composición manual.
+- `/openclaw` debe poder aplicar también las acciones seguras del supervisor, no solo leerlas:
+  - `dispatch` de tarea libre
+  - `replanificar_por_cuota`
+- La web no debe inventar otra semántica; debe reutilizar la misma acción canónica que MCP:
+  - `applySupervisorRecommendedAction(...)`
+- Si la cola no trae `assignee` cerrado, la web debe permitir introducirlo manualmente en la acción recomendada.

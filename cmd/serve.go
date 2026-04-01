@@ -809,6 +809,24 @@ func webHandlerOpenClawAccion(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Redirect(w, r, "/openclaw?ok="+url.QueryEscape(fmt.Sprintf("Review gate %s actualizada a %s", gateID, estado)), http.StatusSeeOther)
 		return
+	case "supervision_action":
+		action := strings.TrimSpace(r.FormValue("action"))
+		target := strings.TrimSpace(r.FormValue("target"))
+		assignee := strings.TrimSpace(r.FormValue("assignee"))
+		if action == "" || target == "" {
+			http.Redirect(w, r, "/openclaw?err="+url.QueryEscape("accion de supervision invalida"), http.StatusSeeOther)
+			return
+		}
+		if _, err := applySupervisorRecommendedAction("OpenClaw", action, target, assignee); err != nil {
+			http.Redirect(w, r, "/openclaw?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+			return
+		}
+		msg := fmt.Sprintf("Acción %s aplicada sobre %s", action, target)
+		if assignee != "" {
+			msg += " con " + assignee
+		}
+		http.Redirect(w, r, "/openclaw?ok="+url.QueryEscape(msg), http.StatusSeeOther)
+		return
 	default:
 		http.Redirect(w, r, "/openclaw?err="+url.QueryEscape("accion openclaw desconocida"), http.StatusSeeOther)
 		return
@@ -1780,6 +1798,15 @@ const webTplOpenClaw = `{{define "content"}}
   <div style="font-size:1.05rem;font-weight:700">{{.NextAction.Action}}</div>
   <div style="margin-top:.25rem;color:#cbd5e1">{{.NextAction.Reason}}</div>
   <div style="margin-top:.45rem;font-size:.8rem;color:#93c5fd">objetivo={{.NextAction.Target}} · prioridad={{.NextAction.Priority}} · tipo={{.NextAction.Kind}}{{if .NextAction.Assignee}} · sugerido={{.NextAction.Assignee}}{{end}}</div>
+  <form method="post" action="/openclaw?lang={{lang}}" style="display:flex;gap:.55rem;align-items:end;flex-wrap:wrap;margin-top:.8rem">
+    <input type="hidden" name="kind" value="supervision_action">
+    <input type="hidden" name="action" value="{{.NextAction.Action}}">
+    <input type="hidden" name="target" value="{{.NextAction.Target}}">
+    <label style="margin:0;font-size:.82rem;color:#cbd5e1">Assignee
+      <input type="text" name="assignee" value="{{.NextAction.Assignee}}" placeholder="Codex3" style="min-width:8rem">
+    </label>
+    <button type="submit" class="btn-sm" style="background:#38bdf8;border-color:#38bdf8;color:#082f49">Aplicar acción</button>
+  </form>
 </section>
 {{end}}
 
@@ -2020,6 +2047,15 @@ const webTplOpenClaw = `{{define "content"}}
           <strong>{{.Action}}</strong>
           <div style="font-size:.8rem;color:#64748b">{{.Reason}}</div>
           <div style="font-size:.74rem;color:#94a3b8">objetivo={{.Target}} · prioridad={{.Priority}} · tipo={{.Kind}}{{if .Assignee}} · sugerido={{.Assignee}}{{end}}</div>
+          <form method="post" action="/openclaw?lang={{lang}}" style="display:flex;gap:.45rem;align-items:end;flex-wrap:wrap;margin-top:.35rem">
+            <input type="hidden" name="kind" value="supervision_action">
+            <input type="hidden" name="action" value="{{.Action}}">
+            <input type="hidden" name="target" value="{{.Target}}">
+            <label style="margin:0;font-size:.75rem;color:#475569">Assignee
+              <input type="text" name="assignee" value="{{.Assignee}}" placeholder="Codex3" style="min-width:8rem">
+            </label>
+            <button type="submit" class="btn-sm">Aplicar</button>
+          </form>
         </li>
       {{end}}
       </ol>

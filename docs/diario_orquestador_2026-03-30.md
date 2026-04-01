@@ -6100,3 +6100,20 @@ Resultado:
   - la tarea `#412` converge a `Codex3` y permanece en `en_progreso`
   - `./orquesta status` pasa a mostrar `#412` en `En progreso ahora mismo` con `Codex3`
   - la lista `Retenidas por cuota` ya no incluye `#412`
+
+## 2026-04-01 — `/openclaw` ya ejecuta acciones recomendadas del supervisor
+
+- La web del supervisor ya no se limita a observar review, cuota y pipeline.
+- Se añadió ejecución directa de acciones seguras del supervisor desde `/openclaw`:
+  - `dispatch` de tarea libre
+  - `replanificar_por_cuota`
+- La acción web reutiliza la misma vía canónica que MCP:
+  - `applySupervisorRecommendedAction(...)`
+- Si la recomendación no trae `assignee` cerrado, la UI deja introducirlo manualmente.
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(WebOpenClawAccionAplicaReplanificacionSupervisor|WebOpenClawAccionResuelveReviewGate|WebOpenClawAccionReseteaReanimacionDeAgente)' -count=1`
+- Validación viva:
+  - `POST /openclaw` con `kind=supervision_action`, `action=replanificar_por_cuota`, `target=tarea:413`, `assignee=Codex4` devuelve `303`
+  - la tarea `#413` converge a `Codex4` y permanece en `en_progreso`
+  - `./orquesta status` pasa a mostrar `#413` en `En progreso ahora mismo`
+  - la lista `Retenidas por cuota` baja y ya no incluye `#413`
