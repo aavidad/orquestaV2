@@ -5059,3 +5059,30 @@ Validacion:
 - `go test ./cmd -run 'Test(ResumenCuotaAgenteMuestraCooldownSiReanimarAtVieneInformado|RenderStatusSummaryUsaResetPresupuestoComoCooldownVisibleSiReanimarAtNoSirve)' -count=1`
 - `go build -o ./orquesta .`
 - `./orquesta status`
+
+## 2026-04-01 — `status` deja de duplicar tareas retenidas como si estuvieran ejecutándose
+
+Hallazgo:
+
+- las tareas de `Codex2` aparecían dos veces en la vista operativa:
+  - en `En progreso ahora mismo`
+  - y otra vez en `Retenidas por cuota`
+- eso daba una falsa sensación de ejecución real cuando en verdad el trabajo estaba congelado por presupuesto
+
+Decision:
+
+- separar los bloques:
+  - `En progreso ahora mismo` solo muestra trabajo realmente ejecutable
+  - `Retenidas por cuota` absorbe las tareas congeladas y evita duplicados
+
+Codigo:
+
+- [cmd/status_remoto_compat.go](/home/alberto/Trabajo/orquesta/cmd/status_remoto_compat.go)
+- [cmd/status_test.go](/home/alberto/Trabajo/orquesta/cmd/status_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestRenderStatusSummaryNoDuplicaTareasRetenidasEnProgresoAhoraMismo' -count=1`
+- `go build -o ./orquesta .`
+- `./orquesta status`

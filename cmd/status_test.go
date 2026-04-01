@@ -611,6 +611,43 @@ func TestRenderStatusSummaryMuestraTareasRetenidasPorCuota(t *testing.T) {
 	}
 }
 
+func TestRenderStatusSummaryNoDuplicaTareasRetenidasEnProgresoAhoraMismo(t *testing.T) {
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				Agentes: []*db.Agente{
+					{
+						Nombre:      "Codex2",
+						Rol:         "programador",
+						Activo:      false,
+						EstadoCuota: "enfriamiento",
+					},
+					{
+						Nombre:      "Codex3",
+						Rol:         "programador",
+						Activo:      true,
+						EstadoCuota: "activo",
+					},
+				},
+				TareasActivas: []tareaLite{
+					{ID: 412, Titulo: "Persistencia multi-backend", Agente: "Codex2", Estado: db.TareaEnProgreso},
+					{ID: 410, Titulo: "Runtime/control plane", Agente: "Codex3", Estado: db.TareaEnProgreso},
+				},
+				TareasPorEstado: map[string]int{},
+			},
+		})
+	})
+	if !strings.Contains(out, "En progreso ahora mismo") || !strings.Contains(out, "[410]") {
+		t.Fatalf("salida sin tarea activa real: %s", out)
+	}
+	if !strings.Contains(out, "Retenidas por cuota") || !strings.Contains(out, "[412]") {
+		t.Fatalf("salida sin tarea retenida: %s", out)
+	}
+	if strings.Count(out, "[412]") != 1 {
+		t.Fatalf("la tarea retenida aparece duplicada: %s", out)
+	}
+}
+
 func TestFetchStatusNoCuentaComoConectadoAgenteConSemanalObservadaAgotada(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex5", "programador"); err != nil {

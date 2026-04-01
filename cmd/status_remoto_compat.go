@@ -231,9 +231,21 @@ func renderStatusSummary(ctx *statusContext) {
 	}
 	fmt.Println()
 
-	if len(resumen.TareasActivas) > 0 {
+	retenidas := tareasRetenidasPorCuota(resumen.TareasActivas, resumen.Agentes)
+	retenidasIDs := make(map[int64]struct{}, len(retenidas))
+	for _, t := range retenidas {
+		retenidasIDs[t.ID] = struct{}{}
+	}
+	tareasEnProgresoVisibles := make([]tareaLite, 0, len(resumen.TareasActivas))
+	for _, t := range resumen.TareasActivas {
+		if _, blocked := retenidasIDs[t.ID]; blocked {
+			continue
+		}
+		tareasEnProgresoVisibles = append(tareasEnProgresoVisibles, t)
+	}
+	if len(tareasEnProgresoVisibles) > 0 {
 		fmt.Printf("⚙️  En progreso ahora mismo:\n")
-		for _, t := range resumen.TareasActivas {
+		for _, t := range tareasEnProgresoVisibles {
 			agente := "—"
 			if t.Agente != "" {
 				agente = t.Agente
@@ -242,7 +254,7 @@ func renderStatusSummary(ctx *statusContext) {
 		}
 		fmt.Println()
 	}
-	if retenidas := tareasRetenidasPorCuota(resumen.TareasActivas, resumen.Agentes); len(retenidas) > 0 {
+	if len(retenidas) > 0 {
 		fmt.Printf("⏸️  Retenidas por cuota:\n")
 		for _, t := range retenidas {
 			agente := "—"
