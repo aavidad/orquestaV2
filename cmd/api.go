@@ -1261,6 +1261,10 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 	apiWriteJSON(w, http.StatusOK, map[string]any{
 		"status":               statusResumen,
 		"review":               revision,
+		"next_action":          revision["next_action"],
+		"action_queue":         revision["action_queue"],
+		"next_safe_action":     revision["next_safe_action"],
+		"safe_action_queue":    revision["safe_action_queue"],
 		"notificaciones":       notificaciones.DescribirConfiguracion(),
 		"entregas":             notificaciones.DescribirOutbox(10),
 		"eventos_normalizados": eventos,

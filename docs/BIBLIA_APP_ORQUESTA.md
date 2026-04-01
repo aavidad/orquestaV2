@@ -954,6 +954,11 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - acciones de review, signal, merge o conflicto pueden requerir arbitraje humano/supervisor
   - OpenClaw solo debe mostrar botón de aplicar sobre acciones seguras y canónicas
   - si la `next_action` no es segura, `/openclaw` debe mostrarla como contexto operativo, no como automatismo.
+- El supervisor debe ver explícitamente dos colas:
+  - `action_queue`: cola operativa completa
+  - `safe_action_queue`: subconjunto autoaplicable
+  - y sus equivalentes `next_action` / `next_safe_action`
+- OpenClaw no debe deducir la cola segura por su cuenta desde `recommended_actions`; Orquesta debe exponerla ya separada.
 - `supervisor-loop` persistida no puede quedarse atrás respecto al snapshot:
   - `metadata_json.recommended_count`
   - `metadata_json.next_action`

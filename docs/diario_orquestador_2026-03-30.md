@@ -6402,3 +6402,23 @@ Resultado:
   - `GET /openclaw`
   - `next_action` seguía saliendo como revisión
   - el botón desapareció y quedó visible solo el aviso de revisión manual
+
+## 2026-04-01 — OpenClaw ya expone la cola segura separada
+
+- Hasta ahora el supervisor recibía:
+  - `recommended_actions`
+  - `action_queue`
+  - `next_action`
+- Pero la parte segura había que inferirla por cliente a partir de la acción, lo que volvía a meter lógica en OpenClaw.
+- Se añadió proyección explícita:
+  - `safe_action_queue`
+  - `next_safe_action`
+- Esto queda disponible tanto en el snapshot MCP como en `/api/openclaw/operator`.
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(MCPToolRevisionSupervisorDevuelveJSONEstructurado|APIObservabilidadReadOnly)' -count=1`
+- Validación viva:
+  - `GET /api/openclaw/operator`
+  - devolvió:
+    - `next_action = reservar_tarea_libre tarea:417 -> Codex3`
+    - `next_safe_action = reservar_tarea_libre tarea:417 -> Codex3`
+    - `safe_action_queue = [reservar_tarea_libre]`

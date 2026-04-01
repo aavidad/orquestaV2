@@ -3599,9 +3599,19 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
 	recommended = append(recommended, buildSupervisorOperationalActions(status, mailboxPendiente)...)
 	sortSupervisorRecommendedActions(recommended)
+	safeQueue := make([]supervisorRecommendedAction, 0, len(recommended))
+	for _, item := range recommended {
+		if supervisorActionIsAutomaticallyApplicable(item.Action) {
+			safeQueue = append(safeQueue, item)
+		}
+	}
 	var nextAction any
 	if len(recommended) > 0 {
 		nextAction = recommended[0]
+	}
+	var nextSafeAction any
+	if len(safeQueue) > 0 {
+		nextSafeAction = safeQueue[0]
 	}
 	return map[string]any{
 		"supervisor":          supervisor,
@@ -3616,6 +3626,8 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 		"recommended_actions": recommended,
 		"action_queue":        recommended,
 		"next_action":         nextAction,
+		"safe_action_queue":   safeQueue,
+		"next_safe_action":    nextSafeAction,
 	}, nil
 }
 
