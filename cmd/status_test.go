@@ -710,6 +710,42 @@ func TestTareasRetenidasPorCuotaIgnoraPausaNoPresupuestaria(t *testing.T) {
 	}
 }
 
+func TestRenderStatusSummaryCuentaVentanaTemporalAgotadaComoCuotaReal(t *testing.T) {
+	resetAt := time.Now().UTC().Add(6 * time.Hour)
+	weekly := 69
+	daily := 0
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				Agentes: []*db.Agente{
+					{
+						Nombre:                "antigravity",
+						Rol:                   "programador",
+						Activo:                false,
+						EstadoCuota:           "agotado",
+						ReanimarAt:            &resetAt,
+						MotivoPausa:           "Cuota diaria agotada",
+						CuotaRestantePct:      &weekly,
+						PresupuestoVentana:    "weekly",
+						PresupuestoSemanalPct: &weekly,
+						PresupuestoDiarioPct:  &daily,
+					},
+				},
+				TareasPorEstado: map[string]int{},
+			},
+		})
+	})
+	if !strings.Contains(out, "En enfriamiento/cuota") {
+		t.Fatalf("salida sin bloque de cuota real: %s", out)
+	}
+	if strings.Contains(out, "En pausa operativa:\n      antigravity") {
+		t.Fatalf("antigravity no deberia salir como pausa operativa: %s", out)
+	}
+	if !strings.Contains(out, "cuota:agotado") {
+		t.Fatalf("detalle sin marca de cuota real: %s", out)
+	}
+}
+
 func TestRenderStatusSummaryNoDuplicaTareasRetenidasEnProgresoAhoraMismo(t *testing.T) {
 	out := captureOutput(t, func() {
 		renderStatusSummary(&statusContext{

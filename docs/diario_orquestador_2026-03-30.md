@@ -5634,3 +5634,41 @@ Resultado:
 - OpenClaw ya tiene una superficie web operativa real en `/openclaw`
 - la página enseña flota disponible, workers fuera del pool por cuota, frentes activos, review gates, señales, merges, notificaciones/outbox y cola de acciones recomendadas
 - la web del supervisor deja de depender de JSON crudo o del dashboard generalista
+
+## 2026-04-01 — `server preparar-sesion` ya sanea la flota fuera del pool oficial
+
+Hallazgo:
+
+- `server preparar-sesion` ya existía y purgaba residuos terminales, pero no terminaba de dejar limpia la flota antes de una nueva tanda
+- además, el primer intento de ampliarlo leyó configuración por la ruta local equivocada y reventó justo después del restart del daemon
+- el estado visible seguía dejando un caso incoherente: `antigravity` aparecía como `pausa operativa` aunque la API ya lo trataba como bloqueo de cuota por ventana corta agotada
+
+Decision:
+
+- endurecer `server preparar-sesion` para que también sanee agentes fuera del pool oficial cuando no tienen trabajo activo
+- leer la flota oficial (`supervisor + workers`) por `/api/config`, no por la BD local
+- cerrar sesiones fuera de pool y resetear solo pausas operativas heredadas, siempre por la vía canónica del servidor
+- corregir la clasificación visible de cuota: una ventana temporal agotada con semanal todavía viva sigue siendo cuota real, no pausa operativa
+
+Codigo:
+
+- [cmd/server.go](/home/alberto/Trabajo/orquesta/cmd/server.go)
+- [cmd/server_prepare_session_test.go](/home/alberto/Trabajo/orquesta/cmd/server_prepare_session_test.go)
+- [cmd/status_remoto_compat.go](/home/alberto/Trabajo/orquesta/cmd/status_remoto_compat.go)
+- [cmd/status_test.go](/home/alberto/Trabajo/orquesta/cmd/status_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(RenderStatusSummarySeparaPausaOperativaDeCuota|TareasRetenidasPorCuotaIgnoraPausaNoPresupuestaria|RenderStatusSummaryCuentaVentanaTemporalAgotadaComoCuotaReal|LimpiarFlotaFueraDePoolCierraNoPoolYReseteaPausaOperativa|ServerPrepararSesionAllowedAgentsIncluyeFlotaOficial)' -count=1`
+- `go build -o ./orquesta .`
+- `./orquesta server preparar-sesion --proyecto orquestador --older-than-minutes 60`
+- `./orquesta status`
+- `./orquesta server doctor`
+
+Resultado:
+
+- `server preparar-sesion` ya reinicia, purga residuos y sanea la flota fuera de pool sin salir de la vía server-first
+- dejó trazabilidad visible de la higiene aplicada (`sesiones cerradas`, `pausas reseteadas`, agentes saneados)
+- `antigravity` dejó de salir como `pausa operativa` y pasó al bloque correcto de `en enfriamiento/cuota`
+- el preflight de una nueva sesión ya es una operación canónica real del servidor, no una secuencia manual

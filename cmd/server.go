@@ -18,9 +18,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -147,11 +149,35 @@ var serverPrepararSesionCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		status, err := fetchServerStatus(baseURL)
+		if err != nil {
+			return err
+		}
+		allowedAgents, err := serverPrepararSesionAllowedAgents(baseURL)
+		if err != nil {
+			return err
+		}
+		poolResp, err := limpiarFlotaFueraDePool(baseURL, allowedAgents, status)
+		if err != nil {
+			return err
+		}
 
 		fmt.Printf("Limpieza segura: %d handles inactivos, %d órdenes terminales\n", handlesResp.Deleted, ordersResp.Deleted)
+		if poolResp != nil {
+			fmt.Printf("Higiene de pool: %d sesiones cerradas, %d pausas operativas reseteadas\n", poolResp.SessionsFinished, poolResp.ReanimationsReset)
+			if len(poolResp.Agents) > 0 {
+				fmt.Printf("Fuera de pool saneados: %s\n", strings.Join(poolResp.Agents, ", "))
+			}
+		}
 		fmt.Printf("Proyecto: %s · corte órdenes: %d min\n", proyecto, olderThanMinutes)
 		return nil
 	},
+}
+
+type serverPrepareSessionPoolSummary struct {
+	SessionsFinished int
+	ReanimationsReset int
+	Agents []string
 }
 
 var serverStopCmd = &cobra.Command{
@@ -343,6 +369,88 @@ func currentServerStorageTarget() string {
 		return target
 	}
 	return strings.TrimSpace(db.CurrentDBPath())
+}
+
+func serverPrepararSesionAllowedAgents(baseURL string) (map[string]struct{}, error) {
+	allowed := map[string]struct{}{}
+	add := func(name string) {
+		name = strings.ToLower(strings.TrimSpace(name))
+		if name != "" {
+			allowed[name] = struct{}{}
+		}
+	}
+	var configResp struct {
+		Config map[string]string `json:"config"`
+	}
+	if err := fetchServerJSON(strings.TrimRight(baseURL, "/")+"/api/config", &configResp); err != nil {
+		return nil, err
+	}
+	supervisor := strings.TrimSpace(configResp.Config["server_autobootstrap_supervisor_agent"])
+	if supervisor == "" {
+		supervisor = "Codex1"
+	}
+	add(supervisor)
+	workers := strings.TrimSpace(configResp.Config["server_autobootstrap_worker_agents"])
+	if workers == "" {
+		workers = "Codex2,Codex3,Codex4,Codex5"
+	}
+	for _, item := range splitServerAutobootstrapAgents(workers) {
+		add(item)
+	}
+	return allowed, nil
+}
+
+func limpiarFlotaFueraDePool(baseURL string, allowed map[string]struct{}, status *estadoResumen) (*serverPrepareSessionPoolSummary, error) {
+	var resp apiAgentesResponse
+	if err := fetchServerJSON(strings.TrimRight(baseURL, "/")+"/api/agentes", &resp); err != nil {
+		return nil, err
+	}
+	busy := make(map[string]struct{})
+	if status != nil {
+		for _, tarea := range status.TareasActivas {
+			nombre := strings.ToLower(strings.TrimSpace(tarea.Agente))
+			if nombre != "" {
+				busy[nombre] = struct{}{}
+			}
+		}
+	}
+	out := &serverPrepareSessionPoolSummary{}
+	for _, agente := range resp.Agentes {
+		if agente == nil {
+			continue
+		}
+		nombre := strings.TrimSpace(agente.Nombre)
+		if nombre == "" || strings.EqualFold(strings.TrimSpace(agente.Rol), "admin") {
+			continue
+		}
+		key := strings.ToLower(nombre)
+		if _, ok := allowed[key]; ok {
+			continue
+		}
+		if _, ok := busy[key]; ok {
+			continue
+		}
+		touched := false
+		if !agenteBloqueadoPorCuotaVisible(agente) && (!strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "activo") || strings.TrimSpace(agente.MotivoPausa) != "" || (agente.ReanimarAt != nil && !agente.ReanimarAt.IsZero())) {
+			if err := postServerJSON(strings.TrimRight(baseURL, "/")+"/api/agentes/"+url.PathEscape(nombre)+"/reset-reanimacion", map[string]any{"agente": nombre}, nil); err != nil {
+				return nil, err
+			}
+			out.ReanimationsReset++
+			touched = true
+		}
+		if agente.Activo || strings.TrimSpace(agente.EstadoSesion) != "" {
+			if err := postServerJSON(strings.TrimRight(baseURL, "/")+"/api/sesiones/fin", apiSesionFinRequest{Agente: nombre}, &map[string]any{}); err != nil {
+				return nil, err
+			}
+			out.SessionsFinished++
+			touched = true
+		}
+		if touched {
+			out.Agents = append(out.Agents, nombre)
+		}
+	}
+	sort.Strings(out.Agents)
+	return out, nil
 }
 
 func resolveServerStorageTarget(info *rpclocal.ServerInfo) string {

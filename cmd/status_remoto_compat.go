@@ -455,6 +455,9 @@ func agenteBloqueadoPorCuotaVisible(a *db.Agente) bool {
 	if a.PresupuestoSemanalPct != nil && *a.PresupuestoSemanalPct <= 0 {
 		return true
 	}
+	if a.PresupuestoDiarioPct != nil && *a.PresupuestoDiarioPct <= 0 {
+		return true
+	}
 	if a.PresupuestoSesionPct != nil && *a.PresupuestoSesionPct <= 0 {
 		return true
 	}
@@ -466,6 +469,7 @@ func agenteBloqueadoPorCuotaVisible(a *db.Agente) bool {
 	}
 	if (a.CuotaRestantePct != nil && *a.CuotaRestantePct > 0) ||
 		(a.PresupuestoSemanalPct != nil && *a.PresupuestoSemanalPct > 0) ||
+		(a.PresupuestoDiarioPct != nil && *a.PresupuestoDiarioPct > 0) ||
 		(a.PresupuestoSesionPct != nil && *a.PresupuestoSesionPct > 0) {
 		return false
 	}

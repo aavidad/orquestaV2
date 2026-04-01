@@ -758,9 +758,17 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - la redistribución automática no puede depender solo del campo persistido `agentes.estado_cuota`. Si un agente tiene presupuesto fresco observado en estado crítico, el planificador debe tratarlo como no disponible aunque la reconciliación persistente llegue unos segundos después.
 - por la misma razón, `ListarAgentesPlanificables()` no puede filtrar solo por SQL sobre `estado_cuota='activo'`; debe validar el estado visible enriquecido del agente antes de devolverlo como candidato.
 - `MaxWorkers` no puede contar como workers efectivos a agentes con asignación activa pero `estado_cuota!=activo`. Un worker bloqueado por cuota no debe secuestrar cupo y dejar backlog libre sin drenar para otros agentes sanos.
+- la clasificación visible de cuota debe respetar la jerarquía canónica: primero semanal; si semanal sigue viva, manda la ventana temporal corta. Una diaria/sesión en `0%` con semanal `>0` sigue siendo bloqueo real de cuota, no `pausa operativa`.
 - la liberación automática por cuota solo aplica a tareas `asignada`. Las tareas `en_progreso` no se sueltan por heurística de presupuesto; requieren relevo o checkpoint explícito.
 - los barridos del planificador no pueden abrir consultas adicionales mientras mantienen cursores vivos sobre SQLite con `MaxOpenConns=1`; primero se recopilan candidatos y después se enriquecen o validan.
 - una sesión activa e idle que devuelve `esperar_o_pedir_tarea` no debe quedarse muerta esperando a que otra parte la reinicie. Orquesta debe poder autoasignarle un frente real y empujarle un nudge útil, pero solo cuando la asignación haya ocurrido de verdad; nunca como recordatorio vacío periódico.
+
+## Preparación de sesión del servidor
+
+- la entrada canónica antes de una nueva tanda es `orquesta server preparar-sesion`.
+- ese comando no solo reinicia y purga residuos terminales; también sanea agentes fuera del pool oficial cuando no tienen trabajo real, usando la propia API del servidor.
+- la flota oficial sale de `server_autobootstrap_supervisor_agent` + `server_autobootstrap_worker_agents`.
+- no se accede a configuración o estado por la BD local desde `server preparar-sesion`; la lectura de pool y las acciones de sesión/agente van por la vía server-first.
 
 ## Mailbox en enfriamiento
 
