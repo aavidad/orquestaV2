@@ -6706,3 +6706,25 @@ Resultado:
   - si hay `handoff` + `sync_status`
   - `ProcesarRuntimeOrdersBatch()` procesa la básica
   - `handoff` sigue `pendiente` para su circuito de bootstrap
+
+## 2026-04-01 — OpenClaw ya filtra lotes seguros por tipo
+
+- Apareció un hueco operativo real:
+  - OpenClaw ya podía aplicar la cola segura completa
+  - pero no podía separar cierres de propuestas de rebalanceos/dispatch
+  - eso obligaba a mezclar automatismos distintos en un único gesto
+- Se añadió:
+  - filtro de lote seguro por tipo `proposal|dispatch|guidance`
+  - `queue_summary.safe_by_kind` en MCP/API/web
+  - botones batch específicos en `/openclaw`
+- Superficies alineadas:
+  - `orquesta.supervision.acciones.aplicar_lote` acepta `kind`
+  - `/api/openclaw/operator` devuelve `queue_summary.safe_by_kind`
+  - `/openclaw` renderiza acciones batch por tipo sin divergencia con MCP/API
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(MCPToolSupervisorAplicaLoteFiltradoPorProposal|MCPToolRevisionSupervisorDevuelveJSONEstructurado|WebOpenClawAccionAplicaLoteProposal|WebOpenClawMuestraOperatorReviewYEntregas|APIObservabilidadReadOnly)' -count=1`
+  - `go build -o ./orquesta .`
+- Validación viva:
+  - tras reiniciar el daemon, `/api/openclaw/operator` expuso `safe_by_kind={proposal:6, dispatch:3}`
+  - `POST /openclaw kind=supervision_batch&batch_kind=proposal&max_items=6` cerró las seis propuestas rechazadas pendientes
+  - la cola convergió a `dispatch` puro con `safe_by_kind={dispatch:3}`

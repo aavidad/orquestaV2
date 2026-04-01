@@ -256,6 +256,9 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	if _, ok := operatorJSON["queue_summary"]; !ok {
 		t.Fatalf("openclaw operator sin queue_summary: %s", recOperator.Body.String())
 	}
+	if queueSummary, ok := operatorJSON["queue_summary"].(map[string]any); !ok || queueSummary["safe_by_kind"] == nil {
+		t.Fatalf("openclaw operator sin safe_by_kind en queue_summary: %s", recOperator.Body.String())
+	}
 	if _, ok := operatorJSON["capacity_summary"]; !ok {
 		t.Fatalf("openclaw operator sin capacity_summary: %s", recOperator.Body.String())
 	}

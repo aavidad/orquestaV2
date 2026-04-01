@@ -576,9 +576,20 @@ func TestMCPToolRevisionSupervisorDevuelveJSONEstructurado(t *testing.T) {
 		if queue := reflect.ValueOf(structured["safe_action_queue"]); !queue.IsValid() {
 			t.Fatalf("falta safe_action_queue: %#v", structured)
 		}
-		queueSummary, _ := structured["queue_summary"].(map[string]any)
-		if queueSummary == nil {
-			t.Fatalf("falta queue_summary: %#v", structured)
+		switch queueSummary := structured["queue_summary"].(type) {
+		case map[string]any:
+			if queueSummary == nil {
+				t.Fatalf("falta queue_summary: %#v", structured)
+			}
+			if _, ok := queueSummary["safe_by_kind"]; !ok {
+				t.Fatalf("queue_summary sin safe_by_kind: %#v", queueSummary)
+			}
+		case apiOpenClawQueueSummary:
+			if queueSummary.SafeByKind == nil {
+				t.Fatalf("queue_summary sin safe_by_kind: %#v", queueSummary)
+			}
+		default:
+			t.Fatalf("queue_summary con tipo inesperado: %#v", structured["queue_summary"])
 		}
 		if _, ok := structured["capacity_summary"]; !ok {
 			t.Fatalf("falta capacity_summary: %#v", structured)
@@ -1832,6 +1843,117 @@ func TestMCPToolSupervisorCierraPropuestaRechazada(t *testing.T) {
 		}
 		if propuesta == nil || propuesta.Estado != db.PropuestaRechazada {
 			t.Fatalf("propuesta no quedó rechazada: %+v", propuesta)
+		}
+	})
+}
+
+func TestMCPToolSupervisorAplicaLoteFiltradoPorProposal(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+			t.Fatalf("registrar Codex1: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+			t.Fatalf("registrar Codex2: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar Codex3: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex4", "programador"); err != nil {
+			t.Fatalf("registrar Codex4: %v", err)
+		}
+
+		id, _, err := propuestasService.Create(propuestasapp.CreateProposalInput{
+			Codigo:       "OP-602",
+			Titulo:       "Cerrar propuesta por lote",
+			Descripcion:  "Debe cerrarse sin mezclar dispatch",
+			Tipo:         "implementacion",
+			PropuestoPor: "antigravity",
+		})
+		if err != nil {
+			t.Fatalf("crear propuesta: %v", err)
+		}
+		if _, err := db.Votar(id, "Codex1", db.VotoAcuerdo, "ok"); err != nil {
+			t.Fatalf("voto acuerdo: %v", err)
+		}
+		if _, err := db.Votar(id, "Codex2", db.VotoDesacuerdo, "no"); err != nil {
+			t.Fatalf("voto desacuerdo: %v", err)
+		}
+		if _, err := db.Votar(id, "Codex3", db.VotoDesacuerdo, "no"); err != nil {
+			t.Fatalf("segundo voto desacuerdo: %v", err)
+		}
+		agenteCodex3 := "Codex3"
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Reserva para no mezclar",
+			Descripcion: "Debe quedar intacta si el lote filtra proposal",
+			Modulo:      "cmd",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "OpenClaw",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE tareas SET estado='asignada', agente=? WHERE id=?`, agenteCodex3, tareaID); err != nil {
+			t.Fatalf("preparar tarea asignada: %v", err)
+		}
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			PropuestasResumen: []propuestaLite{
+				{Codigo: "OP-602", Titulo: "Cerrar propuesta por lote", Estado: db.PropuestaAbierta, Acuerdo: 1, Desacuerdo: 2, Pendiente: 0},
+			},
+			TareasActivas: []tareaLite{
+				{ID: tareaID, Estado: db.TareaAsignada, Titulo: "Reserva para no mezclar", Agente: "Codex3", Modulo: "cmd"},
+				{ID: 999, Estado: db.TareaEnProgreso, Titulo: "Carga activa en Codex3", Agente: "Codex3", Modulo: "db"},
+				{ID: 1000, Estado: db.TareaEnProgreso, Titulo: "Carga activa en Codex3 2", Agente: "Codex3", Modulo: "web"},
+				{ID: 1001, Estado: db.TareaEnProgreso, Titulo: "Carga activa en Codex4", Agente: "Codex4", Modulo: "api"},
+			},
+		}}
+
+		result, err := callMCPTool("orquesta.supervision.acciones.aplicar_lote", map[string]any{
+			"supervisor": "OpenClaw",
+			"kind":       "proposal",
+			"max_items":  5,
+		})
+		if err != nil {
+			t.Fatalf("aplicar lote proposal: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("lote proposal marcado como error: %#v", result)
+		}
+		structured, _ := result["structuredContent"].(map[string]any)
+		if structured == nil {
+			t.Fatalf("structuredContent vacío: %#v", result)
+		}
+		if got, _ := structured["kind"].(string); got != "proposal" {
+			t.Fatalf("kind inesperado: %#v", structured)
+		}
+		propuesta, err := db.GetPropuesta("OP-602")
+		if err != nil {
+			t.Fatalf("get propuesta: %v", err)
+		}
+		if propuesta == nil || propuesta.Estado != db.PropuestaRechazada {
+			t.Fatalf("propuesta no quedó rechazada: %+v", propuesta)
+		}
+		tarea, err := db.GetTarea(tareaID)
+		if err != nil {
+			t.Fatalf("get tarea: %v", err)
+		}
+		if tarea == nil || tarea.Agente == nil || *tarea.Agente != "Codex3" || tarea.Estado != db.TareaAsignada {
+			t.Fatalf("dispatch mezclado en lote proposal: %+v", tarea)
 		}
 	})
 }

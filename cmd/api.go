@@ -1316,18 +1316,18 @@ type apiOpenClawAgentLite struct {
 }
 
 type apiOpenClawStatusLite struct {
-	Generado           string                 `json:"generado,omitempty"`
-	TareasPorEstado    map[string]int         `json:"tareasPorEstado,omitempty"`
-	AgentesActivos     []apiOpenClawAgentLite `json:"agentesActivos,omitempty"`
-	AgentesTrabajando  []apiOpenClawAgentLite `json:"agentesTrabajando,omitempty"`
-	EnCuota            []apiOpenClawAgentLite `json:"enCuota,omitempty"`
-	MailboxPendiente   []apiOpenClawMailboxLite `json:"mailboxPendiente,omitempty"`
-	RetenidasPorCuota  []tareaLite            `json:"retenidasPorCuota,omitempty"`
-	TareasActivas      []tareaLite            `json:"tareasActivas,omitempty"`
-	TareasReservadas   []tareaLite            `json:"tareasReservadas,omitempty"`
-	PropuestasAbiertas []propuestaLite        `json:"propuestasAbiertas,omitempty"`
+	Generado           string                     `json:"generado,omitempty"`
+	TareasPorEstado    map[string]int             `json:"tareasPorEstado,omitempty"`
+	AgentesActivos     []apiOpenClawAgentLite     `json:"agentesActivos,omitempty"`
+	AgentesTrabajando  []apiOpenClawAgentLite     `json:"agentesTrabajando,omitempty"`
+	EnCuota            []apiOpenClawAgentLite     `json:"enCuota,omitempty"`
+	MailboxPendiente   []apiOpenClawMailboxLite   `json:"mailboxPendiente,omitempty"`
+	RetenidasPorCuota  []tareaLite                `json:"retenidasPorCuota,omitempty"`
+	TareasActivas      []tareaLite                `json:"tareasActivas,omitempty"`
+	TareasReservadas   []tareaLite                `json:"tareasReservadas,omitempty"`
+	PropuestasAbiertas []propuestaLite            `json:"propuestasAbiertas,omitempty"`
 	CapacitySummary    apiOpenClawCapacitySummary `json:"capacity_summary,omitempty"`
-	AgentesSaturados   []apiOpenClawAgentLite `json:"agentesSaturados,omitempty"`
+	AgentesSaturados   []apiOpenClawAgentLite     `json:"agentesSaturados,omitempty"`
 }
 
 type apiOpenClawMailboxLite struct {
@@ -1340,18 +1340,19 @@ type apiOpenClawMailboxLite struct {
 }
 
 type apiOpenClawQueueSummary struct {
-	Total   int `json:"total"`
-	Safe    int `json:"safe"`
-	Manual  int `json:"manual"`
+	Total      int            `json:"total"`
+	Safe       int            `json:"safe"`
+	Manual     int            `json:"manual"`
+	SafeByKind map[string]int `json:"safe_by_kind,omitempty"`
 }
 
 type apiOpenClawCapacitySummary struct {
-	WorkersConectados int `json:"workers_conectados"`
-	WorkersOciosos    int `json:"workers_ociosos"`
+	WorkersConectados  int `json:"workers_conectados"`
+	WorkersOciosos     int `json:"workers_ociosos"`
 	WorkersDisponibles int `json:"workers_disponibles"`
-	WorkersSaturados  int `json:"workers_saturados"`
-	CapacidadLibre    int `json:"capacidad_libre"`
-	BacklogLibre      int `json:"backlog_libre"`
+	WorkersSaturados   int `json:"workers_saturados"`
+	CapacidadLibre     int `json:"capacidad_libre"`
+	BacklogLibre       int `json:"backlog_libre"`
 }
 
 func buildOpenClawOperatorStatus(status *estadoResumen) (apiOpenClawStatusLite, error) {
@@ -1387,16 +1388,29 @@ func buildOpenClawQueueSummary(review map[string]any) apiOpenClawQueueSummary {
 	if items, ok := review["safe_action_queue"].([]supervisorRecommendedAction); ok {
 		safeActions = items
 	}
+	return buildOpenClawQueueSummaryFromActions(allActions, safeActions)
+}
+
+func buildOpenClawQueueSummaryFromActions(allActions, safeActions []supervisorRecommendedAction) apiOpenClawQueueSummary {
 	total := len(allActions)
 	safe := len(safeActions)
 	manual := total - safe
 	if manual < 0 {
 		manual = 0
 	}
+	safeByKind := make(map[string]int)
+	for _, item := range safeActions {
+		kind := normalizeSupervisorBatchKind(item.Kind)
+		if kind == "" {
+			continue
+		}
+		safeByKind[kind]++
+	}
 	return apiOpenClawQueueSummary{
-		Total:  total,
-		Safe:   safe,
-		Manual: manual,
+		Total:      total,
+		Safe:       safe,
+		Manual:     manual,
+		SafeByKind: safeByKind,
 	}
 }
 
@@ -1415,12 +1429,12 @@ func buildOpenClawCapacitySummary(agentesActivos, agentesTrabajando []*db.Agente
 		backlogLibre = tareasPorEstado[string(db.TareaLibre)]
 	}
 	return apiOpenClawCapacitySummary{
-		WorkersConectados: connected,
-		WorkersOciosos:    idleCount,
+		WorkersConectados:  connected,
+		WorkersOciosos:     idleCount,
 		WorkersDisponibles: available,
-		WorkersSaturados:  saturatedCount,
-		CapacidadLibre:    idleCount,
-		BacklogLibre:      backlogLibre,
+		WorkersSaturados:   saturatedCount,
+		CapacidadLibre:     idleCount,
+		BacklogLibre:       backlogLibre,
 	}
 }
 

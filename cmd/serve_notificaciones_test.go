@@ -535,6 +535,124 @@ func TestWebOpenClawAccionCierraPropuestaRechazada(t *testing.T) {
 	}
 }
 
+func TestWebOpenClawAccionAplicaLoteProposal(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prev := statusService
+	defer func() { statusService = prev }()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar Codex3: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex4", "programador"); err != nil {
+		t.Fatalf("registrar Codex4: %v", err)
+	}
+	propuestaID, _, err := propuestasService.Create(propuestasapp.CreateProposalInput{
+		Codigo:       "OP-603",
+		Titulo:       "Cerrar propuesta por lote web",
+		Descripcion:  "Debe cerrarse en batch filtrado",
+		Tipo:         "implementacion",
+		PropuestoPor: "antigravity",
+	})
+	if err != nil {
+		t.Fatalf("crear propuesta: %v", err)
+	}
+	if _, err := db.Votar(propuestaID, "Codex1", db.VotoAcuerdo, "ok"); err != nil {
+		t.Fatalf("voto acuerdo: %v", err)
+	}
+	if _, err := db.Votar(propuestaID, "Codex2", db.VotoDesacuerdo, "no"); err != nil {
+		t.Fatalf("voto desacuerdo: %v", err)
+	}
+	if _, err := db.Votar(propuestaID, "Codex3", db.VotoDesacuerdo, "no"); err != nil {
+		t.Fatalf("segundo voto desacuerdo: %v", err)
+	}
+	agenteCodex3 := "Codex3"
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Reserva web que no debe moverse",
+		Descripcion: "No debe entrar en el batch de propuestas",
+		Modulo:      "web",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "OpenClaw",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE tareas SET estado='asignada', agente=? WHERE id=?`, agenteCodex3, tareaID); err != nil {
+		t.Fatalf("preparar tarea asignada: %v", err)
+	}
+
+	statusService = stubStatusService{response: apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		Agentes: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		PropuestasResumen: []propuestaLite{
+			{Codigo: "OP-603", Titulo: "Cerrar propuesta por lote web", Estado: db.PropuestaAbierta, Acuerdo: 1, Desacuerdo: 2, Pendiente: 0},
+		},
+		TareasActivas: []tareaLite{
+			{ID: tareaID, Estado: db.TareaAsignada, Titulo: "Reserva web que no debe moverse", Agente: "Codex3", Modulo: "web"},
+			{ID: 2001, Estado: db.TareaEnProgreso, Titulo: "Carga en Codex3", Agente: "Codex3", Modulo: "db"},
+			{ID: 2002, Estado: db.TareaEnProgreso, Titulo: "Carga en Codex3 2", Agente: "Codex3", Modulo: "api"},
+			{ID: 2003, Estado: db.TareaEnProgreso, Titulo: "Carga en Codex4", Agente: "Codex4", Modulo: "planocontrol"},
+		},
+	}}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/openclaw", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			webHandlerOpenClawAccion(w, r)
+			return
+		}
+		webHandlerOpenClaw(w, r)
+	})
+	registerAPIRoutes(mux)
+
+	form := url.Values{
+		"kind":       {"supervision_batch"},
+		"batch_kind": {"proposal"},
+		"max_items":  {"1"},
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/openclaw", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("accion lote proposal openclaw status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if location := rec.Header().Get("Location"); !strings.Contains(location, "proposal") {
+		t.Fatalf("redirect inesperado: %s", location)
+	}
+	propuesta, err := db.GetPropuesta("OP-603")
+	if err != nil {
+		t.Fatalf("get propuesta: %v", err)
+	}
+	if propuesta == nil || propuesta.Estado != db.PropuestaRechazada {
+		t.Fatalf("propuesta no quedó rechazada: %+v", propuesta)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Agente == nil || *tarea.Agente != "Codex3" || tarea.Estado != db.TareaAsignada {
+		t.Fatalf("dispatch mezclado en lote web de proposal: %+v", tarea)
+	}
+}
+
 func TestWebOpenClawAccionAplicaLoteSupervisor(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

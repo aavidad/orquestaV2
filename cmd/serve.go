@@ -63,6 +63,7 @@ type webOpenClawData struct {
 	PipelineStates   []*db.SupervisorPipelineState
 	Recommended      []supervisorRecommendedAction
 	SafeRecommended  []supervisorRecommendedAction
+	QueueSummary     apiOpenClawQueueSummary
 	NextAction       *supervisorRecommendedAction
 	NextSafeAction   *supervisorRecommendedAction
 	Notificaciones   notificaciones.EstadoNotificaciones
@@ -74,17 +75,17 @@ type webOpenClawData struct {
 }
 
 type webOpenClawIntegrationInfo struct {
-	MCPEndpoint       string
-	Configured        bool
-	Transport         string
-	Endpoint          string
-	WorkspaceMode     string
-	AgentPrefix       string
-	RequireIdentity   string
-	PluginPath        string
-	RunbookPath       string
-	SmokeCommand      string
-	GatewayConfigured bool
+	MCPEndpoint        string
+	Configured         bool
+	Transport          string
+	Endpoint           string
+	WorkspaceMode      string
+	AgentPrefix        string
+	RequireIdentity    string
+	PluginPath         string
+	RunbookPath        string
+	SmokeCommand       string
+	GatewayConfigured  bool
 	TelegramConfigured bool
 }
 
@@ -267,6 +268,12 @@ var webFuncMap = template.FuncMap{
 	"neStr": func(a, b string) bool { return a != b },
 	"sub": func(a, b int) int {
 		return a - b
+	},
+	"indexOrZero": func(values map[string]int, key string) int {
+		if values == nil {
+			return 0
+		}
+		return values[strings.TrimSpace(key)]
 	},
 	"ftime": func(t *time.Time) string {
 		if t == nil || t.IsZero() {
@@ -799,6 +806,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		PipelineStates:   pipelineStates,
 		Recommended:      recommended,
 		SafeRecommended:  safeRecommended,
+		QueueSummary:     buildOpenClawQueueSummary(review),
 		NextAction:       nextAction,
 		NextSafeAction:   nextSafeAction,
 		Notificaciones:   notificaciones.DescribirConfiguracion(),
@@ -820,15 +828,15 @@ func mustOpenClawPendingMailbox(agentes []*db.Agente) []apiOpenClawMailboxLite {
 
 func buildWebOpenClawIntegrationInfo() webOpenClawIntegrationInfo {
 	info := webOpenClawIntegrationInfo{
-		MCPEndpoint:      webOpenClawDefaultEndpoint(),
-		PluginPath:       "./plugins/openclaw-orquesta-api",
-		RunbookPath:      "./plugins/openclaw-orquesta-api/RUNBOOK_TELEGRAM.md",
-		SmokeCommand:     "./plugins/openclaw-orquesta-api/scripts/smoke_openclaw_orquesta.sh",
-		Transport:        strings.TrimSpace(configGetDefault("integration_openclaw_transport", "")),
-		Endpoint:         strings.TrimSpace(configGetDefault("integration_openclaw_endpoint", "")),
-		WorkspaceMode:    strings.TrimSpace(configGetDefault("integration_openclaw_workspace_mode", "")),
-		AgentPrefix:      strings.TrimSpace(configGetDefault("integration_openclaw_agent_prefix", "")),
-		RequireIdentity:  strings.TrimSpace(configGetDefault("integration_openclaw_require_identity", "")),
+		MCPEndpoint:       webOpenClawDefaultEndpoint(),
+		PluginPath:        "./plugins/openclaw-orquesta-api",
+		RunbookPath:       "./plugins/openclaw-orquesta-api/RUNBOOK_TELEGRAM.md",
+		SmokeCommand:      "./plugins/openclaw-orquesta-api/scripts/smoke_openclaw_orquesta.sh",
+		Transport:         strings.TrimSpace(configGetDefault("integration_openclaw_transport", "")),
+		Endpoint:          strings.TrimSpace(configGetDefault("integration_openclaw_endpoint", "")),
+		WorkspaceMode:     strings.TrimSpace(configGetDefault("integration_openclaw_workspace_mode", "")),
+		AgentPrefix:       strings.TrimSpace(configGetDefault("integration_openclaw_agent_prefix", "")),
+		RequireIdentity:   strings.TrimSpace(configGetDefault("integration_openclaw_require_identity", "")),
 		GatewayConfigured: strings.TrimSpace(configGetDefault("openclaw_gateway_url", "")) != "",
 		TelegramConfigured: strings.TrimSpace(configGetDefault("telegram_token", "")) != "" &&
 			strings.TrimSpace(configGetDefault("telegram_chat_id", "")) != "",
@@ -935,13 +943,18 @@ func webHandlerOpenClawAccion(w http.ResponseWriter, r *http.Request) {
 				maxItems = parsed
 			}
 		}
-		result, err := applySupervisorRecommendedActionsBatch("OpenClaw", maxItems)
+		batchKind := normalizeSupervisorBatchKind(strings.TrimSpace(r.FormValue("batch_kind")))
+		result, err := applySupervisorRecommendedActionsBatch("OpenClaw", maxItems, batchKind)
 		if err != nil {
 			http.Redirect(w, r, "/openclaw?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 			return
 		}
 		count, _ := result["count"].(int)
-		http.Redirect(w, r, "/openclaw?ok="+url.QueryEscape(fmt.Sprintf("Aplicadas %d acciones seguras del supervisor", count)), http.StatusSeeOther)
+		msg := fmt.Sprintf("Aplicadas %d acciones seguras del supervisor", count)
+		if batchKind != "" {
+			msg = fmt.Sprintf("Aplicadas %d acciones seguras (%s) del supervisor", count, batchKind)
+		}
+		http.Redirect(w, r, "/openclaw?ok="+url.QueryEscape(msg), http.StatusSeeOther)
 		return
 	case "supervision_next":
 		result, err := applySupervisorNextAction("OpenClaw")
@@ -2061,6 +2074,32 @@ const webTplOpenClaw = `{{define "content"}}
         <input type="hidden" name="max_items" value="{{len .SafeRecommended}}">
         <button type="submit" class="btn-sm" style="background:#0f766e;border-color:#0f766e;color:#ecfeff">Aplicar cola segura</button>
       </form>
+      <div style="display:flex;gap:.45rem;flex-wrap:wrap;margin:0 0 .85rem 0">
+        {{if gt (indexOrZero .QueueSummary.SafeByKind "proposal") 0}}
+        <form method="post" action="/openclaw?lang={{lang}}" style="margin:0">
+          <input type="hidden" name="kind" value="supervision_batch">
+          <input type="hidden" name="batch_kind" value="proposal">
+          <input type="hidden" name="max_items" value="{{indexOrZero .QueueSummary.SafeByKind "proposal"}}">
+          <button type="submit" class="btn-sm" style="background:#1d4ed8;border-color:#1d4ed8;color:#eff6ff">Cerrar propuestas rechazadas</button>
+        </form>
+        {{end}}
+        {{if gt (indexOrZero .QueueSummary.SafeByKind "dispatch") 0}}
+        <form method="post" action="/openclaw?lang={{lang}}" style="margin:0">
+          <input type="hidden" name="kind" value="supervision_batch">
+          <input type="hidden" name="batch_kind" value="dispatch">
+          <input type="hidden" name="max_items" value="{{indexOrZero .QueueSummary.SafeByKind "dispatch"}}">
+          <button type="submit" class="btn-sm" style="background:#7c3aed;border-color:#7c3aed;color:#faf5ff">Aplicar dispatch seguro</button>
+        </form>
+        {{end}}
+        {{if gt (indexOrZero .QueueSummary.SafeByKind "guidance") 0}}
+        <form method="post" action="/openclaw?lang={{lang}}" style="margin:0">
+          <input type="hidden" name="kind" value="supervision_batch">
+          <input type="hidden" name="batch_kind" value="guidance">
+          <input type="hidden" name="max_items" value="{{indexOrZero .QueueSummary.SafeByKind "guidance"}}">
+          <button type="submit" class="btn-sm" style="background:#0f766e;border-color:#0f766e;color:#ecfeff">Consumir guidance durable</button>
+        </form>
+        {{end}}
+      </div>
       <ol style="margin:0;padding-left:1.2rem">
       {{range .SafeRecommended}}
         <li style="margin-bottom:.45rem">

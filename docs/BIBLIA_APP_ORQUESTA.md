@@ -1075,6 +1075,13 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - si hay skew de carga visible y existen tareas `asignada`, OpenClaw puede proponer `rebalancear_reserva`
   - esa acción es segura solo sobre tareas reservadas (`estado=asignada`)
   - nunca debe mover una tarea `en_progreso` bajo esta semántica; para eso ya existen `replanificar_por_cuota` o arbitraje manual
+- OpenClaw debe poder aplicar lotes seguros filtrados por tipo:
+  - `proposal`, `dispatch`, `guidance`
+  - cerrar propuestas rechazadas no debe mezclar rebalanceos o reservas de dispatch en la misma orden batch
+  - esa capacidad debe vivir por la vía canónica del servidor en MCP, API y web
+- `queue_summary` ya no es solo volumen:
+  - debe incluir `safe_by_kind`
+  - `/api/openclaw/operator`, `orquesta.supervision.revision` y `/openclaw` deben exponer la misma composición segura por tipo
 - El batch genérico de `runtime_orders` no puede consumir `handoff` de bootstrap:
   - `handoff` debe seguir por su circuito específico de bootstrap/handoff
   - en el batch general puede convivir con órdenes básicas, pero debe permanecer `pendiente`

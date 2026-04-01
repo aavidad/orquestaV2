@@ -1909,6 +1909,7 @@ func listMCPTools() []mcpTool {
 				"properties": map[string]any{
 					"supervisor": map[string]any{"type": "string"},
 					"max_items":  map[string]any{"type": "integer"},
+					"kind":       map[string]any{"type": "string", "description": "Filtro opcional: proposal, dispatch o guidance"},
 				},
 				"additionalProperties": false,
 			},
@@ -2846,7 +2847,7 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		return toolResult(prettyJSON(result), result, false), nil
 
 	case "orquesta.supervision.acciones.aplicar_lote":
-		result, err := applySupervisorRecommendedActionsBatch(optionalStringArg(args, "supervisor"), optionalIntArg(args, "max_items"))
+		result, err := applySupervisorRecommendedActionsBatch(optionalStringArg(args, "supervisor"), optionalIntArg(args, "max_items"), optionalStringArg(args, "kind"))
 		if err != nil {
 			return toolResult(err.Error(), nil, true), nil
 		}
@@ -3459,13 +3460,13 @@ type supervisorModuleConflict struct {
 }
 
 type supervisorRecommendedAction struct {
-	Kind     string `json:"kind"`
-	Target   string `json:"target"`
-	Action   string `json:"action"`
-	Reason   string `json:"reason"`
-	Priority string `json:"priority"`
-	Assignee string `json:"assignee,omitempty"`
-	AutoAplicable bool `json:"auto_aplicable,omitempty"`
+	Kind          string `json:"kind"`
+	Target        string `json:"target"`
+	Action        string `json:"action"`
+	Reason        string `json:"reason"`
+	Priority      string `json:"priority"`
+	Assignee      string `json:"assignee,omitempty"`
+	AutoAplicable bool   `json:"auto_aplicable,omitempty"`
 }
 
 func listarSignalsRevisionSupervisor(limit int) ([]*supervisorReviewSignal, error) {
@@ -3619,12 +3620,9 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	if len(safeQueue) > 0 {
 		nextSafeAction = safeQueue[0]
 	}
-	manualCount := len(recommended) - len(safeQueue)
-	if manualCount < 0 {
-		manualCount = 0
-	}
 	capacitySummary := buildOpenClawCapacitySummary(status.AgentesActivos, status.AgentesTrabajando, status.TareasActivas, status.TareasPorEstado)
 	saturatedAgents := buildOpenClawSaturatedAgents(status.AgentesActivos, status.TareasActivas)
+	queueSummary := buildOpenClawQueueSummaryFromActions(recommended, safeQueue)
 	return map[string]any{
 		"supervisor":          supervisor,
 		"review_gates":        openGates,
@@ -3642,11 +3640,7 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 		"next_safe_action":    nextSafeAction,
 		"capacity_summary":    capacitySummary,
 		"saturated_agents":    saturatedAgents,
-		"queue_summary": map[string]any{
-			"total":  len(recommended),
-			"safe":   len(safeQueue),
-			"manual": manualCount,
-		},
+		"queue_summary":       queueSummary,
 	}, nil
 }
 
@@ -4293,13 +4287,41 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 	}
 }
 
-func applySupervisorRecommendedActionsBatch(supervisor string, maxItems int) (map[string]any, error) {
+func normalizeSupervisorBatchKind(kind string) string {
+	switch strings.TrimSpace(strings.ToLower(kind)) {
+	case "proposal", "dispatch", "guidance":
+		return strings.TrimSpace(strings.ToLower(kind))
+	default:
+		return ""
+	}
+}
+
+func supervisorActionMatchesBatchKind(action supervisorRecommendedAction, batchKind string) bool {
+	batchKind = normalizeSupervisorBatchKind(batchKind)
+	if batchKind == "" {
+		return true
+	}
+	return normalizeSupervisorBatchKind(action.Kind) == batchKind
+}
+
+func applySupervisorRecommendedActionsBatch(supervisor string, maxItems int, batchKind string) (map[string]any, error) {
 	supervisor = resolveSupervisorName(supervisor)
 	snapshot, err := buildSupervisorReviewSnapshot(supervisor)
 	if err != nil {
 		return nil, err
 	}
 	actions, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+	batchKind = normalizeSupervisorBatchKind(batchKind)
+	if batchKind != "" {
+		filtered := make([]supervisorRecommendedAction, 0, len(actions))
+		for _, item := range actions {
+			if !supervisorActionMatchesBatchKind(item, batchKind) {
+				continue
+			}
+			filtered = append(filtered, item)
+		}
+		actions = filtered
+	}
 	if maxItems <= 0 || maxItems > len(actions) {
 		maxItems = len(actions)
 	}
@@ -4322,6 +4344,7 @@ func applySupervisorRecommendedActionsBatch(supervisor string, maxItems int) (ma
 		"supervisor": supervisor,
 		"count":      len(applied),
 		"applied":    applied,
+		"kind":       batchKind,
 	}, nil
 }
 
