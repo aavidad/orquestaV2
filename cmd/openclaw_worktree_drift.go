@@ -17,6 +17,8 @@ type apiOpenClawWorktreeDrift struct {
 	Path         string `json:"path,omitempty"`
 	CurrentHead  string `json:"current_head,omitempty"`
 	ExpectedHead string `json:"expected_head,omitempty"`
+	Dirty        bool   `json:"dirty,omitempty"`
+	DirtySummary string `json:"dirty_summary,omitempty"`
 }
 
 type gitWorktreeHeadRef struct {
@@ -141,7 +143,7 @@ func buildOpenClawWorktreeDrift(status *estadoResumen) ([]apiOpenClawWorktreeDri
 		return nil, err
 	}
 	relevantAgents := relevantOpenClawWorktreeAgentsFromEstadoResumen(status)
-	return buildOpenClawWorktreeDriftFromRefs(worktrees, repoHead, heads, relevantAgents), nil
+	return enrichOpenClawWorktreeDriftWithDirty(buildOpenClawWorktreeDriftFromRefs(worktrees, repoHead, heads, relevantAgents)), nil
 }
 
 func buildOpenClawWorktreeDriftFromAPIStatus(status apiStatusResponse) ([]apiOpenClawWorktreeDrift, error) {
@@ -155,7 +157,7 @@ func buildOpenClawWorktreeDriftFromAPIStatus(status apiStatusResponse) ([]apiOpe
 		return nil, err
 	}
 	relevantAgents := relevantOpenClawWorktreeAgentsFromAPIStatus(status)
-	return buildOpenClawWorktreeDriftFromRefs(worktrees, repoHead, heads, relevantAgents), nil
+	return enrichOpenClawWorktreeDriftWithDirty(buildOpenClawWorktreeDriftFromRefs(worktrees, repoHead, heads, relevantAgents)), nil
 }
 
 func relevantOpenClawWorktreeAgentsFromEstadoResumen(status *estadoResumen) map[string]struct{} {
@@ -200,4 +202,56 @@ func shortGitHash(hash string) string {
 		return hash[:8]
 	}
 	return hash
+}
+
+func parseGitStatusPorcelainSummary(raw string) (bool, string) {
+	tracked := 0
+	untracked := 0
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "??") {
+			untracked++
+			continue
+		}
+		tracked++
+	}
+	if tracked == 0 && untracked == 0 {
+		return false, ""
+	}
+	parts := make([]string, 0, 2)
+	if tracked > 0 {
+		parts = append(parts, fmt.Sprintf("%d tracked", tracked))
+	}
+	if untracked > 0 {
+		parts = append(parts, fmt.Sprintf("%d untracked", untracked))
+	}
+	return true, strings.Join(parts, " · ")
+}
+
+func inspectGitWorktreeDirty(path string) (bool, string) {
+	path = filepath.Clean(strings.TrimSpace(path))
+	if path == "" {
+		return false, ""
+	}
+	out, err := exec.Command("git", "-C", path, "status", "--porcelain").Output()
+	if err != nil {
+		return false, ""
+	}
+	return parseGitStatusPorcelainSummary(string(out))
+}
+
+func enrichOpenClawWorktreeDriftWithDirty(items []apiOpenClawWorktreeDrift) []apiOpenClawWorktreeDrift {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]apiOpenClawWorktreeDrift, 0, len(items))
+	for _, item := range items {
+		copyItem := item
+		copyItem.Dirty, copyItem.DirtySummary = inspectGitWorktreeDirty(copyItem.Path)
+		out = append(out, copyItem)
+	}
+	return out
 }

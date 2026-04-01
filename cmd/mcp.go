@@ -3934,6 +3934,9 @@ func buildSupervisorWorktreeDriftActions(items []apiOpenClawWorktreeDrift) []sup
 		if item.CurrentHead != "" || item.ExpectedHead != "" {
 			reason = fmt.Sprintf("La worktree del agente está desfasada (%s -> %s); conviene refrescar base antes de integrar cambios.", strings.TrimSpace(item.CurrentHead), strings.TrimSpace(item.ExpectedHead))
 		}
+		if strings.TrimSpace(item.DirtySummary) != "" {
+			reason += " Estado local: " + strings.TrimSpace(item.DirtySummary) + "."
+		}
 		actions = append(actions, supervisorRecommendedAction{
 			Kind:     "worktree_drift",
 			Target:   "agente:" + agente,

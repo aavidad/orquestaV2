@@ -132,6 +132,16 @@ func TestBuildOpenClawWorktreeDriftFromRefs(t *testing.T) {
 	}
 }
 
+func TestParseGitStatusPorcelainSummary(t *testing.T) {
+	dirty, summary := parseGitStatusPorcelainSummary(" M cmd/api.go\n?? cmd/new_file.go\n")
+	if !dirty {
+		t.Fatalf("deberia marcar dirty")
+	}
+	if summary != "1 tracked · 1 untracked" {
+		t.Fatalf("summary inesperado: %q", summary)
+	}
+}
+
 var cmdTestDBMu sync.Mutex
 var cmdTestBootstrapOnce sync.Once
 var cmdTestBootstrapData []byte

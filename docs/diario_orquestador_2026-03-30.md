@@ -7038,3 +7038,14 @@ Resultado:
   - así el supervisor ve primero el desfase y luego decide si refresca/rebasea o si reencuadra al agente
 - Validación:
   - `go test ./cmd -run 'TestMCP(RevisionSupervisorExponeWorktreeDrift|ToolSupervisorInspeccionaWorktreeDrift|RevisionSupervisorExponeSesionObservadaReutilizable|ToolSupervisorInspeccionaSesionObservada)' -count=1`
+
+## 2026-04-01 — worktree_drift ya enseña suciedad local
+
+- Hallazgo:
+  - saber solo que una worktree está en un commit viejo no basta para decidir si se puede refrescar sin riesgo
+  - hacía falta distinguir entre drift limpio y drift con cambios locales del agente
+- Corrección:
+  - `worktree_drift` ya incluye `dirty_summary` a partir de `git status --porcelain`
+  - la razón de `revisar_worktree_desfasada` incorpora ese resumen para que OpenClaw sepa si el refresco es trivial o si debe preservar cambios primero
+- Validación:
+  - `go test ./cmd -run 'Test(ParseGitStatusPorcelainSummary|BuildOpenClawWorktreeDriftFromRefs|MCPToolSupervisorInspeccionaWorktreeDrift)' -count=1`
