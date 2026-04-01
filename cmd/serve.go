@@ -63,6 +63,7 @@ type webOpenClawData struct {
 	ThreadSessions    []*db.SupervisorThreadSessionSummary
 	ObservedSessions  []*supervisorObservedAgentSessionSummary
 	SessionCandidates []apiOpenClawSessionCandidate
+	Subagents         []*db.SupervisorSubagent
 	PipelineStates    []*db.SupervisorPipelineState
 	Recommended       []supervisorRecommendedAction
 	SafeRecommended   []supervisorRecommendedAction
@@ -777,6 +778,10 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 	if snapshot, ok := review["pipeline_state"].(map[string]any); ok {
 		pipelineStates, _ = snapshot["pipelines"].([]*db.SupervisorPipelineState)
 	}
+	var subagents []*db.SupervisorSubagent
+	if snapshot, ok := review["subagents"].(map[string]any); ok {
+		subagents, _ = snapshot["subagents"].([]*db.SupervisorSubagent)
+	}
 	recommended, _ := review["recommended_actions"].([]supervisorRecommendedAction)
 	safeRecommended, _ := review["safe_action_queue"].([]supervisorRecommendedAction)
 	worktreeDrift, _ := buildOpenClawWorktreeDrift(status)
@@ -814,6 +819,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		ThreadSessions:    threadSessions,
 		ObservedSessions:  observedSessions,
 		SessionCandidates: sessionCandidates,
+		Subagents:         subagents,
 		PipelineStates:    pipelineStates,
 		Recommended:       recommended,
 		SafeRecommended:   safeRecommended,
@@ -2400,6 +2406,23 @@ const webTplOpenClaw = `{{define "content"}}
       </tbody></table>
       {{else}}
       <p style="margin:0;color:#64748b">Sin candidatas visibles ahora mismo.</p>
+      {{end}}
+      <h4 style="margin:1rem 0 .6rem 0">Subagentes explícitos</h4>
+      {{if .Subagents}}
+      <table style="width:100%"><thead><tr><th>Thread</th><th>Nombre</th><th>Tipo</th><th>Estado</th><th>Padre</th><th>Manifest</th></tr></thead><tbody>
+      {{range .Subagents}}
+        <tr>
+          <td>{{.ThreadID}}</td>
+          <td>{{orDash .SubagentName}}</td>
+          <td><code>{{orDash .SubagentType}}</code></td>
+          <td><span class="tag t-media">{{.Status}}</span></td>
+          <td>{{orDash .ParentThreadID}}</td>
+          <td>{{orDash .ManifestPath}}</td>
+        </tr>
+      {{end}}
+      </tbody></table>
+      {{else}}
+      <p style="margin:0;color:#64748b">Sin subagentes explícitos registrados.</p>
       {{end}}
     </section>
 

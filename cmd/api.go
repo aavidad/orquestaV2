@@ -1343,6 +1343,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 			"entregas":             notificaciones.DescribirOutbox(10),
 			"eventos_normalizados": eventos,
 			"thread_sessions":      threads,
+			"subagentes":           revision["subagents"],
 			"session_candidates":   sessionCandidates,
 			"worktree_drift":       worktreeDrift,
 			"pipeline_state":       pipeline,

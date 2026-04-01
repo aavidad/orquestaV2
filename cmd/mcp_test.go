@@ -1318,6 +1318,61 @@ func TestMCPPipelineSupervisorOperaPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestMCPSubagentesSupervisorOperanPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		registerResult, err := callMCPTool("orquesta.supervision.subagentes.registrar", map[string]any{
+			"supervisor":       "OpenClaw",
+			"proyecto":         "orquestador",
+			"session_id":       "sess-openclaw-1",
+			"parent_thread_id": "leader-1",
+			"thread_id":        "sub-exp-1",
+			"subagent_name":    "OpenClaw-Explore-1",
+			"subagent_type":    "Explore",
+			"manifest_path":    "/tmp/sub-exp-1/manifest.json",
+			"output_path":      "/tmp/sub-exp-1/output.md",
+		})
+		if err != nil {
+			t.Fatalf("registrar subagente supervisor MCP: %v", err)
+		}
+		if registerResult["isError"] != false {
+			t.Fatalf("registrar subagente marcado como error: %#v", registerResult)
+		}
+		listResult, err := callMCPTool("orquesta.supervision.subagentes.listar", map[string]any{
+			"supervisor": "OpenClaw",
+			"proyecto":   "orquestador",
+		})
+		if err != nil {
+			t.Fatalf("listar subagentes supervisor MCP: %v", err)
+		}
+		if listResult["isError"] != false {
+			t.Fatalf("listar subagentes marcado como error: %#v", listResult)
+		}
+		structured, _ := listResult["structuredContent"].(map[string]any)
+		if structured == nil {
+			t.Fatalf("structuredContent subagentes inesperado: %#v", listResult["structuredContent"])
+		}
+		subagents := reflect.ValueOf(structured["subagents"])
+		if !subagents.IsValid() || subagents.Len() == 0 {
+			t.Fatalf("subagents vacío: %#v", structured)
+		}
+		contents, err := readMCPResource("orquesta://supervision/OpenClaw/subagents")
+		if err != nil {
+			t.Fatalf("readMCPResource subagents supervisor: %v", err)
+		}
+		if len(contents) == 0 || !strings.Contains(fmt.Sprintf("%v", contents[0]["text"]), "sub-exp-1") {
+			t.Fatalf("resource subagents inesperado: %#v", contents)
+		}
+		prompt, err := getMCPPrompt("orquesta.supervision.subagentes", map[string]any{"supervisor": "OpenClaw"})
+		if err != nil {
+			t.Fatalf("getMCPPrompt subagentes supervisor: %v", err)
+		}
+		if !strings.Contains(fmt.Sprintf("%v", prompt), "Subagentes del supervisor") {
+			t.Fatalf("prompt subagentes sin contenido esperado: %#v", prompt)
+		}
+	})
+}
+
 func TestMCPRevisionSupervisorSugiereDispatchOperativo(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := statusService

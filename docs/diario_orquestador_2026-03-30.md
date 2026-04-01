@@ -7124,3 +7124,23 @@ Resultado:
 - Validación:
   - `go test ./db -run 'Test(SupervisorSubagentsPersistAndProfile|SupervisorSubagentToolProfiles|RecordSupervisorThreadTurnYSummary|UpsertSupervisorPipelineState)' -count=1`
   - `go build -o ./orquesta .`
+
+## 2026-04-02 — Subagentes visibles por API, MCP y OpenClaw
+
+- Hallazgo:
+  - tras introducir `supervisor_subagents`, el modelo seguía siendo interno si no se proyectaba a las superficies del supervisor
+  - eso repetía el error viejo de Orquesta: tener capacidad en la base pero obligar a recomponerla desde piezas sueltas
+- Corrección:
+  - se añadió snapshot `buildSupervisorSubagentsSnapshot()` y overview `buildSupervisorSubagentsOverview()`
+  - MCP ahora expone:
+    - resource `orquesta://supervision/{supervisor}/subagents`
+    - prompt `orquesta.supervision.subagentes`
+    - tools `orquesta.supervision.subagentes.registrar` y `orquesta.supervision.subagentes.listar`
+  - `/api/openclaw/operator` ya devuelve `subagentes` en raíz
+  - `/openclaw` ya muestra la tabla `Subagentes explícitos`
+- Validación:
+  - `go test ./cmd -run 'Test(MCP(SubagentesSupervisorOperanPorLaViaCanonica|ThreadsSupervisorOperanPorLaViaCanonica|PipelineSupervisorOperaPorLaViaCanonica)|APIObservabilidadReadOnly|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
+  - `go build -o ./orquesta .`
+  - validación viva:
+    - `GET /api/openclaw/operator` devuelve `subagentes`
+    - `GET /openclaw` renderiza `Subagentes explícitos`

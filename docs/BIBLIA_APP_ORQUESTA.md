@@ -1176,3 +1176,11 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - cada tipo debe proyectar un `tool_profile_json` estructurado y estable
   - si no se informa un perfil explícito, Orquesta debe derivarlo del `subagent_type`
   - esa normalización debe vivir en el núcleo (`db`/modelo), no repartida entre MCP, web y prompts
+- Los subagentes explícitos no pueden quedar ocultos en una sola superficie:
+  - API, MCP y `/openclaw` deben exponer la misma verdad de `supervisor_subagents`
+  - el operador de OpenClaw debe incluir `subagentes` en la respuesta raíz junto a `thread_sessions` y `pipeline_state`
+  - MCP debe ofrecer:
+    - resource `orquesta://supervision/{supervisor}/subagents`
+    - prompt `orquesta.supervision.subagentes`
+    - tools `orquesta.supervision.subagentes.registrar` y `orquesta.supervision.subagentes.listar`
+  - la web `/openclaw` debe renderizar una tabla de subagentes explícitos y no obligar a inspeccionar JSON crudo

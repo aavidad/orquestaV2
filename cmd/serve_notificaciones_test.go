@@ -181,6 +181,7 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 		"Threads y subagentes",
 		"Sesiones observadas de agentes",
 		"Candidatas para reuse/spawn",
+		"Subagentes explícitos",
 		"Pipeline del supervisor",
 		"Guidance durable pendiente",
 		"autopilot",

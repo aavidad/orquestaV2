@@ -246,6 +246,9 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	if _, ok := operatorJSON["thread_sessions"]; !ok {
 		t.Fatalf("operator sin thread_sessions: %s", recOperator.Body.String())
 	}
+	if _, ok := operatorJSON["subagentes"]; !ok {
+		t.Fatalf("operator sin subagentes: %s", recOperator.Body.String())
+	}
 	if candidates, ok := operatorJSON["session_candidates"].([]any); !ok || len(candidates) == 0 {
 		t.Fatalf("operator sin session_candidates: %s", recOperator.Body.String())
 	}
@@ -253,7 +256,7 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 		t.Fatalf("operator sin pipeline_state: %s", recOperator.Body.String())
 	}
 	bodyOperator := recOperator.Body.String()
-	for _, token := range []string{"status", "review", "notificaciones", "entregas", "eventos_normalizados", "thread_sessions", "pipeline_state"} {
+	for _, token := range []string{"status", "review", "notificaciones", "entregas", "eventos_normalizados", "thread_sessions", "subagentes", "pipeline_state"} {
 		if !strings.Contains(bodyOperator, token) {
 			t.Fatalf("openclaw operator incompleto, falta %q:\n%s", token, bodyOperator)
 		}

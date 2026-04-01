@@ -627,6 +627,13 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 			MIMEType:    "application/json",
 		},
 		{
+			URITemplate: "orquesta://supervision/{supervisor}/subagents",
+			Name:        "subagents-supervisor",
+			Title:       "Subagentes del supervisor",
+			Description: "Modelo persistente de subagentes explícitos y perfiles canónicos del supervisor/OpenClaw",
+			MIMEType:    "application/json",
+		},
+		{
 			URITemplate: "orquesta://proyectos/{slug}",
 			Name:        "proyecto-por-slug",
 			Title:       "Detalle de proyecto",
@@ -811,6 +818,13 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 			return nil, err
 		}
 		return resourceText(uri, "application/json", prettyJSON(snapshot)), nil
+	case strings.HasPrefix(uri, "orquesta://supervision/") && strings.HasSuffix(uri, "/subagents"):
+		supervisor := strings.TrimSuffix(strings.TrimPrefix(uri, "orquesta://supervision/"), "/subagents")
+		snapshot, err := buildSupervisorSubagentsSnapshot(supervisor, "", "", 100)
+		if err != nil {
+			return nil, err
+		}
+		return resourceText(uri, "application/json", prettyJSON(snapshot)), nil
 	default:
 		return nil, fmt.Errorf("resource not found")
 	}
@@ -870,6 +884,14 @@ func listMCPPrompts() []mcpPrompt {
 			Name:        "orquesta.supervision.pipeline",
 			Title:       "Pipeline del supervisor",
 			Description: "Resume la fase actual y el estado explícito del pipeline del supervisor/OpenClaw",
+			Arguments: []mcpPromptArgument{
+				{Name: "supervisor", Description: "Nombre del supervisor operativo, por ejemplo OpenClaw", Required: false},
+			},
+		},
+		{
+			Name:        "orquesta.supervision.subagentes",
+			Title:       "Subagentes del supervisor",
+			Description: "Resume los subagentes explícitos y perfiles canónicos del supervisor/OpenClaw",
 			Arguments: []mcpPromptArgument{
 				{Name: "supervisor", Description: "Nombre del supervisor operativo, por ejemplo OpenClaw", Required: false},
 			},
@@ -1033,6 +1055,25 @@ func getMCPPrompt(name string, args map[string]any) (map[string]any, error) {
 		}
 		return map[string]any{
 			"description": "Resumen de pipeline y fases del supervisor",
+			"messages": []mcpPromptMessage{
+				{
+					Role: "user",
+					Content: map[string]any{
+						"type": "text",
+						"text": texto,
+					},
+				},
+			},
+		}, nil
+
+	case "orquesta.supervision.subagentes":
+		supervisor := optionalStringArg(args, "supervisor")
+		texto, err := buildSupervisorSubagentsOverview(supervisor)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"description": "Resumen de subagentes explícitos y perfiles del supervisor",
 			"messages": []mcpPromptMessage{
 				{
 					Role: "user",
@@ -1881,6 +1922,47 @@ func listMCPTools() []mcpTool {
 				"properties": map[string]any{
 					"supervisor": map[string]any{"type": "string"},
 					"proyecto":   map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.supervision.subagentes.registrar",
+			Title:       "Registrar subagente del supervisor",
+			Description: "Persiste un subagente explícito del supervisor/OpenClaw por la vía canónica",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"supervisor":        map[string]any{"type": "string"},
+					"proyecto":          map[string]any{"type": "string"},
+					"session_id":        map[string]any{"type": "string"},
+					"parent_thread_id":  map[string]any{"type": "string"},
+					"thread_id":         map[string]any{"type": "string"},
+					"subagent_name":     map[string]any{"type": "string"},
+					"subagent_type":     map[string]any{"type": "string"},
+					"tool_profile_json": map[string]any{"type": "string"},
+					"status":            map[string]any{"type": "string", "enum": []string{"running", "completed", "failed", "cancelled"}},
+					"manifest_path":     map[string]any{"type": "string"},
+					"output_path":       map[string]any{"type": "string"},
+					"error_message":     map[string]any{"type": "string"},
+					"metadata_json":     map[string]any{"type": "string"},
+				},
+				"required":             []string{"thread_id"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.supervision.subagentes.listar",
+			Title:       "Listar subagentes del supervisor",
+			Description: "Devuelve en JSON el modelo persistente de subagentes explícitos del supervisor",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"supervisor":    map[string]any{"type": "string"},
+					"proyecto":      map[string]any{"type": "string"},
+					"session_id":    map[string]any{"type": "string"},
+					"status":        map[string]any{"type": "string"},
+					"subagent_type": map[string]any{"type": "string"},
 				},
 				"additionalProperties": false,
 			},
@@ -2839,6 +2921,39 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		}
 		return toolResult(prettyJSON(resumen), resumen, false), nil
 
+	case "orquesta.supervision.subagentes.registrar":
+		item, err := db.UpsertSupervisorSubagent(db.UpsertSupervisorSubagentInput{
+			Supervisor:      resolveSupervisorName(optionalStringArg(args, "supervisor")),
+			ProyectoSlug:    optionalStringArg(args, "proyecto"),
+			SessionID:       optionalStringArg(args, "session_id"),
+			ParentThreadID:  optionalStringArg(args, "parent_thread_id"),
+			ThreadID:        optionalStringArg(args, "thread_id"),
+			SubagentName:    optionalStringArg(args, "subagent_name"),
+			SubagentType:    optionalStringArg(args, "subagent_type"),
+			ToolProfileJSON: optionalStringArg(args, "tool_profile_json"),
+			Status:          optionalStringArg(args, "status"),
+			ManifestPath:    optionalStringArg(args, "manifest_path"),
+			OutputPath:      optionalStringArg(args, "output_path"),
+			ErrorMessage:    optionalStringArg(args, "error_message"),
+			MetadataJSON:    optionalStringArg(args, "metadata_json"),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(item), item, false), nil
+
+	case "orquesta.supervision.subagentes.listar":
+		resumen, err := buildSupervisorSubagentsSnapshot(
+			optionalStringArg(args, "supervisor"),
+			optionalStringArg(args, "proyecto"),
+			optionalStringArg(args, "session_id"),
+			100,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(resumen), resumen, false), nil
+
 	case "orquesta.supervision.acciones.aplicar":
 		result, err := applySupervisorRecommendedAction(optionalStringArg(args, "supervisor"), optionalStringArg(args, "action"), optionalStringArg(args, "target"), optionalStringArg(args, "assignee"))
 		if err != nil {
@@ -3597,6 +3712,10 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	subagents, err := buildSupervisorSubagentsSnapshot(supervisor, "", "", 100)
+	if err != nil {
+		return nil, err
+	}
 	pipelineState, err := buildSupervisorPipelineSnapshot(supervisor, "", 20)
 	if err != nil {
 		return nil, err
@@ -3638,6 +3757,7 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 		"mailbox_pending":     mailboxPendiente,
 		"normalized_events":   normalizedEvents,
 		"thread_sessions":     threadSessions,
+		"subagents":           subagents,
 		"worktree_drift":      worktreeDrift,
 		"pipeline_state":      pipelineState,
 		"recommended_actions": recommended,
