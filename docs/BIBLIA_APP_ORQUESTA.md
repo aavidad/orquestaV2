@@ -736,6 +736,8 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - esa superficie agregada y el MCP del supervisor deben compartir además una proyección única de `eventos_normalizados`, derivada del estado vivo de `review_gates`, señales runtime, `git_merges` y outbox de notificaciones. No se crean eventos paralelos ni se mezcla taxonomía cruda con derivada en cada cliente.
 - además de ese endpoint agregado, la web canónica del supervisor debe existir como `/openclaw`: una vista HTML server-first que renderiza el mismo estado vivo del daemon para flota disponible, frentes activos, review/integración, tareas retenidas por cuota y outbox de notificaciones, sin depender de JSON pegado ni de varias pantallas dispersas.
 - `/openclaw`, `/api/notificaciones`, `/api/openclaw/operator` y `orquesta.supervision.revision` deben reutilizar esa misma proyección `eventos_normalizados`; OpenClaw no debe recomponer a mano qué es `review.ready`, `merge.failed` o `notification.pending` según cada endpoint.
+- además del briefing libre, Orquesta debe exponer `guidance` canónica de agente y supervisor con secciones fijas: `Role & Intent`, `Operating Principles`, `Execution Protocol`, `Constraints & Safety`, `Verification & Completion` y `Recovery & Lifecycle`.
+- esa `guidance` es aditiva y reutiliza la doctrina vigente; no sustituye el briefing operativo ni abre una tercera taxonomía de instrucciones.
 
 ## Configuración web de OpenClaw
 

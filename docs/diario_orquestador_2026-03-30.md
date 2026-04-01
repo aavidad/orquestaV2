@@ -5894,3 +5894,39 @@ Resultado:
   - reinicio del daemon y verificación viva con:
     - `/api/notificaciones` devolviendo `eventos_normalizados`
     - `/api/openclaw/operator` devolviendo `eventos_normalizados`
+
+## 2026-04-01 — guidance canónica de agente y supervisor por MCP
+
+- A partir del estudio de `oh-my-codex`, se añadió una capa aditiva de `guidance` canónica en Orquesta sin romper los briefings existentes.
+- Nuevas superficies:
+  - recurso `orquesta://agentes/{agente}/guidance`
+  - recurso `orquesta://supervision/{supervisor}/guidance`
+  - prompt `orquesta.guidance.agente`
+  - prompt `orquesta.guidance.supervisor`
+- La guidance usa un esquema fijo:
+  - `Role & Intent`
+  - `Operating Principles`
+  - `Execution Protocol`
+  - `Constraints & Safety`
+  - `Verification & Completion`
+  - `Recovery & Lifecycle`
+- La mejora es contractual, no un refactor del núcleo:
+  - el briefing operativo sigue existiendo
+  - la guidance nueva no abre otra fuente de verdad
+  - todo sigue sirviéndose desde Orquesta/MCP server-first
+- Validación:
+  - `go test ./cmd -run 'Test(MCPPromptBriefingIncluyeReglasYPropuestasPendientes|MCPPromptGuidanceAgenteExponeContratoCanonico|MCPPromptBriefingSupervisorIncluyeFlotaYRetenidasPorCuota|MCPPromptGuidanceSupervisorExponeContratoCanonico)' -count=1`
+  - `go build -o ./orquesta .`
+
+## 2026-04-01 — revisión rápida de `claw-code-main`
+
+- La carpeta real descargada es `**claw-code-main`, no `claw-code-main` a secas.
+- Lo útil encontrado:
+  - modelo explícito de `Session` y `ConversationMessage` en Rust
+  - separación más clara de `ContentBlock` (`text`, `tool_use`, `tool_result`)
+- Lo que no merece copiar ahora:
+  - `remote_runtime.py` es placeholder
+  - `session_store.py` es muy básico y no aporta un control plane mejor que el de Orquesta
+- Conclusión:
+  - sirve como referencia para el siguiente frente de tracking/memoria de sesiones
+  - no aporta una lógica de runtime/supervisión superior al núcleo actual de Orquesta

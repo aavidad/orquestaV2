@@ -585,10 +585,24 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 			MIMEType:    "text/markdown",
 		},
 		{
+			URITemplate: "orquesta://agentes/{agente}/guidance",
+			Name:        "guidance-agente",
+			Title:       "Guidance canónica de agente",
+			Description: "Contrato estructurado de guidance para el agente: intención, principios, protocolo, seguridad, verificación y recuperación",
+			MIMEType:    "text/markdown",
+		},
+		{
 			URITemplate: "orquesta://supervision/{supervisor}/briefing",
 			Name:        "briefing-supervisor",
 			Title:       "Briefing de supervisor",
 			Description: "Resumen operativo integral para el agente jefe: flota, cuota, tareas retenidas y frentes activos",
+			MIMEType:    "text/markdown",
+		},
+		{
+			URITemplate: "orquesta://supervision/{supervisor}/guidance",
+			Name:        "guidance-supervisor",
+			Title:       "Guidance canónica de supervisor",
+			Description: "Contrato estructurado del supervisor OpenClaw: intención, principios, protocolo, seguridad, verificación y recuperación",
 			MIMEType:    "text/markdown",
 		},
 		{
@@ -741,9 +755,23 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 			return nil, err
 		}
 		return resourceText(uri, "text/markdown", texto), nil
+	case strings.HasPrefix(uri, "orquesta://agentes/") && strings.HasSuffix(uri, "/guidance"):
+		agente := strings.TrimSuffix(strings.TrimPrefix(uri, "orquesta://agentes/"), "/guidance")
+		texto, err := buildAgentGuidance(agente)
+		if err != nil {
+			return nil, err
+		}
+		return resourceText(uri, "text/markdown", texto), nil
 	case strings.HasPrefix(uri, "orquesta://supervision/") && strings.HasSuffix(uri, "/briefing"):
 		supervisor := strings.TrimSuffix(strings.TrimPrefix(uri, "orquesta://supervision/"), "/briefing")
 		texto, err := buildSupervisorBriefing(supervisor)
+		if err != nil {
+			return nil, err
+		}
+		return resourceText(uri, "text/markdown", texto), nil
+	case strings.HasPrefix(uri, "orquesta://supervision/") && strings.HasSuffix(uri, "/guidance"):
+		supervisor := strings.TrimSuffix(strings.TrimPrefix(uri, "orquesta://supervision/"), "/guidance")
+		texto, err := buildSupervisorGuidance(supervisor)
 		if err != nil {
 			return nil, err
 		}
@@ -774,6 +802,22 @@ func listMCPPrompts() []mcpPrompt {
 			Name:        "orquesta.briefing.supervisor",
 			Title:       "Briefing de supervisor",
 			Description: "Devuelve el briefing operativo integral para el agente jefe que coordina la flota",
+			Arguments: []mcpPromptArgument{
+				{Name: "supervisor", Description: "Nombre del supervisor operativo, por ejemplo OpenClaw", Required: false},
+			},
+		},
+		{
+			Name:        "orquesta.guidance.agente",
+			Title:       "Guidance canónica de agente",
+			Description: "Devuelve la guidance estructurada del agente con secciones canónicas de ejecución, seguridad y recuperación",
+			Arguments: []mcpPromptArgument{
+				{Name: "agente", Description: "Nombre del agente registrado en Orquesta", Required: true},
+			},
+		},
+		{
+			Name:        "orquesta.guidance.supervisor",
+			Title:       "Guidance canónica de supervisor",
+			Description: "Devuelve la guidance estructurada del supervisor OpenClaw sobre el estado vivo de Orquesta",
 			Arguments: []mcpPromptArgument{
 				{Name: "supervisor", Description: "Nombre del supervisor operativo, por ejemplo OpenClaw", Required: false},
 			},
@@ -853,6 +897,47 @@ func getMCPPrompt(name string, args map[string]any) (map[string]any, error) {
 					Content: map[string]any{
 						"type": "text",
 						"text": briefing,
+					},
+				},
+			},
+		}, nil
+
+	case "orquesta.guidance.agente":
+		agente, err := requiredStringArg(args, "agente")
+		if err != nil {
+			return nil, err
+		}
+		guidance, err := buildAgentGuidance(agente)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"description": "Guidance canónica de ejecución para un agente de Orquesta",
+			"messages": []mcpPromptMessage{
+				{
+					Role: "user",
+					Content: map[string]any{
+						"type": "text",
+						"text": guidance,
+					},
+				},
+			},
+		}, nil
+
+	case "orquesta.guidance.supervisor":
+		supervisor := optionalStringArg(args, "supervisor")
+		guidance, err := buildSupervisorGuidance(supervisor)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"description": "Guidance canónica del supervisor OpenClaw sobre el estado vivo de Orquesta",
+			"messages": []mcpPromptMessage{
+				{
+					Role: "user",
+					Content: map[string]any{
+						"type": "text",
+						"text": guidance,
 					},
 				},
 			},
@@ -2755,6 +2840,59 @@ func buildAgentBriefing(agente string) (string, error) {
 	return strings.TrimSpace(b.String()) + "\n", nil
 }
 
+func buildAgentGuidance(agente string) (string, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return "", fmt.Errorf("agente obligatorio")
+	}
+	briefing, err := sesionesAPIService.BuildBriefing(agente)
+	if err != nil {
+		return "", fmt.Errorf("agente no encontrado: %s", agente)
+	}
+	actual := briefing.Agent
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Guidance canónica de %s\n\n", actual.Nombre)
+	b.WriteString("## Role & Intent\n")
+	fmt.Fprintf(&b, "- Eres `%s` con rol `%s` dentro de Orquesta.\n", actual.Nombre, strings.TrimSpace(actual.Rol))
+	b.WriteString("- Tu objetivo es cerrar trabajo real sin crear rutas paralelas ni segundas fuentes de verdad.\n")
+	b.WriteString("- Trabajas sobre el estado vivo del daemon y la doctrina canónica, no sobre recuerdos de conversaciones.\n\n")
+
+	b.WriteString("## Operating Principles\n")
+	b.WriteString("- Server-first siempre: API, web, MCP y daemon antes que accesos locales.\n")
+	b.WriteString("- No reescribas piezas sanas solo por estilo; mejora solo cuando el cambio añade claridad, fiabilidad o cierre operativo.\n")
+	b.WriteString("- Evita solapes de módulo y cambios que abran deriva entre agentes.\n")
+	b.WriteString("- Usa pruebas dirigidas y evidencia real antes de afirmar cierre.\n\n")
+
+	b.WriteString("## Execution Protocol\n")
+	b.WriteString("- Lee la biblia y luego el estado vivo de Orquesta.\n")
+	b.WriteString("- Revisa tarea asignada, módulo, propuesta asociada y riesgo de colisión.\n")
+	b.WriteString("- Implementa por la vía canónica del servidor.\n")
+	b.WriteString("- Valida con tests dirigidos y, si aplica, verificación viva.\n")
+	b.WriteString("- Deja evidencia en tarea/diario antes de dar algo por terminado.\n\n")
+
+	b.WriteString("## Constraints & Safety\n")
+	fmt.Fprintf(&b, "- Doctrina obligatoria: %s\n", db.RutaDoctrinaCanonica)
+	b.WriteString("- No uses scripts laterales ni SQL manual salvo bloqueo real y diagnóstico explícito.\n")
+	b.WriteString("- No inventes contratos nuevos si ya existe uno en API/MCP/daemon.\n")
+	b.WriteString("- Si detectas programación cíclica, paras y escalas al supervisor.\n\n")
+
+	b.WriteString("## Verification & Completion\n")
+	b.WriteString("- Una tarea no se da por cerrada sin pruebas dirigidas o evidencia operativa suficiente.\n")
+	b.WriteString("- Si tocas núcleo, valida también la proyección visible afectada.\n")
+	b.WriteString("- Registra notas o hallazgos útiles para el siguiente agente.\n\n")
+
+	b.WriteString("## Recovery & Lifecycle\n")
+	if strings.TrimSpace(actual.EstadoSesion) != "" {
+		fmt.Fprintf(&b, "- Estado de sesión actual: %s.\n", strings.TrimSpace(actual.EstadoSesion))
+	}
+	b.WriteString("- Si quedas bloqueado, deja checkpoint útil y prepara handoff claro.\n")
+	b.WriteString("- Si el runtime cae por cuota o cooldown, no intentes reanimación manual fuera del control plane.\n")
+	b.WriteString("- Si falta contexto, usa briefing, revisión MCP y estado vivo antes de pedirlo fuera.\n")
+
+	return strings.TrimSpace(b.String()) + "\n", nil
+}
+
 func buildSupervisorBriefing(supervisor string) (string, error) {
 	supervisor = strings.TrimSpace(supervisor)
 	if supervisor == "" {
@@ -2846,6 +2984,59 @@ func buildSupervisorBriefing(supervisor string) (string, error) {
 	b.WriteString("- Prioriza workers con cuota activa y frentes no bloqueados.\n")
 	b.WriteString("- Si un worker cae a cuota, no lo reanimes a mano antes de `reanimar_at` y del presupuesto visible.\n")
 	b.WriteString("- Integra solo cambios con pruebas dirigidas y sin abrir rutas paralelas.\n")
+
+	return strings.TrimSpace(b.String()) + "\n", nil
+}
+
+func buildSupervisorGuidance(supervisor string) (string, error) {
+	supervisor = strings.TrimSpace(supervisor)
+	if supervisor == "" {
+		if cfg, err := db.ConfigGet("openclaw_gateway_operator"); err == nil && strings.TrimSpace(cfg) != "" {
+			supervisor = strings.TrimSpace(cfg)
+		} else {
+			supervisor = "OpenClaw"
+		}
+	}
+	status, err := statusService.FetchStatus()
+	if err != nil {
+		return "", err
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Guidance canónica del supervisor: %s\n\n", supervisor)
+	b.WriteString("## Role & Intent\n")
+	b.WriteString("- Eres el supervisor operativo de la flota y del cierre de integración.\n")
+	b.WriteString("- Decides reparto, arbitraje, review, handoff e integración sin crear otra fuente de verdad.\n")
+	b.WriteString("- OpenClaw consume estado estructurado de Orquesta; no recompone el sistema desde documentos dispersos.\n\n")
+
+	b.WriteString("## Operating Principles\n")
+	b.WriteString("- Prioriza trabajo real, no movimiento cosmético de tareas.\n")
+	b.WriteString("- No asignes dos agentes al mismo módulo si hay alternativa equivalente.\n")
+	b.WriteString("- El presupuesto semanal manda; la ventana corta solo decide operativa si la semanal sigue viva.\n")
+	b.WriteString("- Integra por la vía canónica: review gates, merge queue, MCP y web server-first.\n\n")
+
+	b.WriteString("## Execution Protocol\n")
+	fmt.Fprintf(&b, "- Flota conectada ahora: %d.\n", len(status.AgentesActivos))
+	fmt.Fprintf(&b, "- Flota trabajando ahora: %d.\n", len(status.AgentesTrabajando))
+	b.WriteString("- Lee briefing, guidance y cola de revisión antes de tomar decisiones.\n")
+	b.WriteString("- Usa `next_action`, `action_queue` y `eventos_normalizados` como resumen operativo, no como sustituto de la verdad viva.\n")
+	b.WriteString("- Si un gate, señal o merge necesita acción, prioriza arbitraje e integración antes que abrir nuevos frentes.\n\n")
+
+	b.WriteString("## Constraints & Safety\n")
+	fmt.Fprintf(&b, "- Doctrina obligatoria: %s\n", db.RutaDoctrinaCanonica)
+	b.WriteString("- No fuerces reanimaciones manuales durante cooldown/cuota.\n")
+	b.WriteString("- No aceptes cambios sin pruebas dirigidas o evidencia suficiente.\n")
+	b.WriteString("- No derives semántica distinta en cada cliente; MCP, API y web deben reutilizar el mismo contrato.\n\n")
+
+	b.WriteString("## Verification & Completion\n")
+	b.WriteString("- Antes de integrar, revisa colisiones de módulo, review gates abiertos y merges vivos.\n")
+	b.WriteString("- Antes de reasignar, verifica cuota visible, trabajo activo y continuidad.\n")
+	b.WriteString("- Antes de cerrar un frente, deja evidencia operativa o test dirigida.\n\n")
+
+	b.WriteString("## Recovery & Lifecycle\n")
+	b.WriteString("- Si un worker cae, decide entre checkpoint, handoff o enfriamiento, no entre parches locales.\n")
+	b.WriteString("- Si aparece deriva o bucle, corta guidance repetitiva y vuelve al control plane.\n")
+	b.WriteString("- Si la integración queda bloqueada, usa review queue y eventos normalizados para arbitrar la siguiente acción.\n")
 
 	return strings.TrimSpace(b.String()) + "\n", nil
 }

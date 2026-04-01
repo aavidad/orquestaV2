@@ -183,6 +183,38 @@ func TestMCPPromptBriefingIncluyeReglasYPropuestasPendientes(t *testing.T) {
 	})
 }
 
+func TestMCPPromptGuidanceAgenteExponeContratoCanonico(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+			t.Fatalf("registrando agente: %v", err)
+		}
+		result, err := getMCPPrompt("orquesta.guidance.agente", map[string]any{"agente": "Codex2"})
+		if err != nil {
+			t.Fatalf("getMCPPrompt guidance agente: %v", err)
+		}
+		messages, ok := result["messages"].([]mcpPromptMessage)
+		if !ok || len(messages) != 1 {
+			t.Fatalf("mensajes inesperados: %#v", result["messages"])
+		}
+		content, _ := messages[0].Content.(map[string]any)
+		text, _ := content["text"].(string)
+		for _, token := range []string{
+			"Guidance canónica de Codex2",
+			"## Role & Intent",
+			"## Operating Principles",
+			"## Execution Protocol",
+			"## Constraints & Safety",
+			"## Verification & Completion",
+			"## Recovery & Lifecycle",
+			"docs/BIBLIA_APP_ORQUESTA.md",
+		} {
+			if !strings.Contains(text, token) {
+				t.Fatalf("falta %q en guidance agente: %s", token, text)
+			}
+		}
+	})
+}
+
 func TestMCPPromptBriefingSupervisorIncluyeFlotaYRetenidasPorCuota(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
@@ -277,6 +309,45 @@ func TestMCPPromptBriefingSupervisorIncluyeFlotaYRetenidasPorCuota(t *testing.T)
 		}
 		if !strings.Contains(text, "Codex5") {
 			t.Fatalf("falta Codex5 en el briefing de supervisor: %s", text)
+		}
+	})
+}
+
+func TestMCPPromptGuidanceSupervisorExponeContratoCanonico(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrando Codex3: %v", err)
+		}
+		if _, err := db.IniciarSesion("Codex3"); err != nil {
+			t.Fatalf("iniciar sesion Codex3: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE agentes SET estado_sesion='esperando', estado_cuota='activo' WHERE nombre='Codex3'`); err != nil {
+			t.Fatalf("activar Codex3: %v", err)
+		}
+		result, err := getMCPPrompt("orquesta.guidance.supervisor", map[string]any{"supervisor": "OpenClaw"})
+		if err != nil {
+			t.Fatalf("getMCPPrompt guidance supervisor: %v", err)
+		}
+		messages, ok := result["messages"].([]mcpPromptMessage)
+		if !ok || len(messages) != 1 {
+			t.Fatalf("mensajes inesperados: %#v", result["messages"])
+		}
+		content, _ := messages[0].Content.(map[string]any)
+		text, _ := content["text"].(string)
+		for _, token := range []string{
+			"Guidance canónica del supervisor: OpenClaw",
+			"## Role & Intent",
+			"## Operating Principles",
+			"## Execution Protocol",
+			"## Constraints & Safety",
+			"## Verification & Completion",
+			"## Recovery & Lifecycle",
+			"Flota conectada ahora",
+			"docs/BIBLIA_APP_ORQUESTA.md",
+		} {
+			if !strings.Contains(text, token) {
+				t.Fatalf("falta %q en guidance supervisor: %s", token, text)
+			}
 		}
 	})
 }
