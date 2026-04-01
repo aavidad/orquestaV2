@@ -5930,3 +5930,24 @@ Resultado:
 - Conclusión:
   - sirve como referencia para el siguiente frente de tracking/memoria de sesiones
   - no aporta una lógica de runtime/supervisión superior al núcleo actual de Orquesta
+
+## 2026-04-01 — tracking ligero de threads del supervisor
+
+- Se revisó la orquestación de subagentes en `**oh-my-codex-main` y `**claw-code-main`.
+- La conclusión útil fue concreta:
+  - `oh-my-codex` aporta un tracker mínimo y bueno de `session_id/thread_id/turn_id` con distinción `leader/subagent`
+  - `claw-code-main` aporta claridad en `Session -> ConversationMessage -> ContentBlock`, pero no un control plane mejor
+- Se implementó la mejora como capa aditiva en Orquesta, sin tocar el núcleo sano:
+  - nueva tabla `supervisor_threads`
+  - tracking ligero de threads del supervisor y subagentes
+  - snapshot de revisión ya incluye `thread_sessions`
+  - exposición server-first por API y MCP
+- Nuevas superficies:
+  - API `GET/POST /api/openclaw/threads`
+  - MCP resource `orquesta://supervision/{supervisor}/threads`
+  - MCP prompt `orquesta.supervision.threads`
+  - MCP tools `orquesta.supervision.threads.registrar`, `orquesta.supervision.threads.listar`
+- Validación:
+  - `go test ./db -run 'TestRecordSupervisorThreadTurnYSummary' -count=1`
+  - `go test ./cmd -run 'Test(MCPThreadsSupervisorOperanPorLaViaCanonica|APIObservabilidadReadOnly|APIOpenClawThreadsOperaPorLaViaCanonica)' -count=1`
+  - `go build -o ./orquesta .`

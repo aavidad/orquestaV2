@@ -605,6 +605,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/config", apiHandlerConfig)
 	mux.HandleFunc("/api/notificaciones", apiHandlerNotificaciones)
 	mux.HandleFunc("/api/openclaw/operator", apiHandlerOpenClawOperator)
+	mux.HandleFunc("/api/openclaw/threads", apiHandlerOpenClawThreads)
 	mux.HandleFunc("/api/audit", apiHandlerAudit)
 	mux.HandleFunc("/api/respaldo/bd", apiHandlerRespaldoBD)
 	mux.HandleFunc("/api/persistencia/verificar", apiHandlerPersistenciaVerificar)
@@ -1215,8 +1216,8 @@ func apiHandlerNotificaciones(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{
-		"notificaciones":      notificaciones.DescribirConfiguracion(),
-		"entregas":            notificaciones.DescribirOutbox(10),
+		"notificaciones":       notificaciones.DescribirConfiguracion(),
+		"entregas":             notificaciones.DescribirOutbox(10),
 		"eventos_normalizados": eventos,
 	})
 }
@@ -1240,13 +1241,57 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
+	threads, err := buildSupervisorThreadsSnapshot("", strings.TrimSpace(r.URL.Query().Get("session_id")), 100)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{
-		"status":              status,
-		"review":              revision,
-		"notificaciones":      notificaciones.DescribirConfiguracion(),
-		"entregas":            notificaciones.DescribirOutbox(10),
+		"status":               status,
+		"review":               revision,
+		"notificaciones":       notificaciones.DescribirConfiguracion(),
+		"entregas":             notificaciones.DescribirOutbox(10),
 		"eventos_normalizados": eventos,
+		"thread_sessions":      threads,
 	})
+}
+
+func apiHandlerOpenClawThreads(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		supervisor := strings.TrimSpace(r.URL.Query().Get("supervisor"))
+		sessionID := strings.TrimSpace(r.URL.Query().Get("session_id"))
+		threads, err := buildSupervisorThreadsSnapshot(supervisor, sessionID, 100)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, threads)
+	case http.MethodPost:
+		var req struct {
+			Supervisor string `json:"supervisor"`
+			Proyecto   string `json:"proyecto"`
+			SessionID  string `json:"session_id"`
+			ThreadID   string `json:"thread_id"`
+			Kind       string `json:"kind"`
+			Mode       string `json:"mode"`
+			Status     string `json:"status"`
+			Source     string `json:"source"`
+			TurnID     string `json:"turn_id"`
+		}
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		item, err := registrarSupervisorThreadLigero(req.Supervisor, req.Proyecto, req.SessionID, req.ThreadID, req.Kind, req.Mode, req.Status, req.Source, req.TurnID)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "thread": item})
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
 }
 
 func apiResolverTipoAgente(r *http.Request) (string, error) {

@@ -216,11 +216,47 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	if _, ok := operatorJSON["eventos_normalizados"]; !ok {
 		t.Fatalf("operator sin eventos_normalizados: %s", recOperator.Body.String())
 	}
+	if _, ok := operatorJSON["thread_sessions"]; !ok {
+		t.Fatalf("operator sin thread_sessions: %s", recOperator.Body.String())
+	}
 	bodyOperator := recOperator.Body.String()
-	for _, token := range []string{"status", "review", "notificaciones", "entregas", "eventos_normalizados"} {
+	for _, token := range []string{"status", "review", "notificaciones", "entregas", "eventos_normalizados", "thread_sessions"} {
 		if !strings.Contains(bodyOperator, token) {
 			t.Fatalf("openclaw operator incompleto, falta %q:\n%s", token, bodyOperator)
 		}
+	}
+}
+
+func TestAPIOpenClawThreadsOperaPorLaViaCanonica(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recPost := httptest.NewRecorder()
+	reqPost := httptest.NewRequest(http.MethodPost, "/api/openclaw/threads", strings.NewReader(`{
+		"supervisor":"OpenClaw",
+		"proyecto":"orquestador",
+		"session_id":"sess-api-1",
+		"thread_id":"leader-1",
+		"kind":"leader",
+		"mode":"review",
+		"source":"api_test",
+		"turn_id":"turn-1"
+	}`))
+	reqPost.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(recPost, reqPost)
+	if recPost.Code != http.StatusOK {
+		t.Fatalf("openclaw threads post status=%d body=%s", recPost.Code, recPost.Body.String())
+	}
+
+	recGet := httptest.NewRecorder()
+	reqGet := httptest.NewRequest(http.MethodGet, "/api/openclaw/threads?supervisor=OpenClaw&session_id=sess-api-1", nil)
+	mux.ServeHTTP(recGet, reqGet)
+	if recGet.Code != http.StatusOK {
+		t.Fatalf("openclaw threads get status=%d body=%s", recGet.Code, recGet.Body.String())
+	}
+	if !strings.Contains(recGet.Body.String(), "sess-api-1") {
+		t.Fatalf("openclaw threads sin sesion esperada: %s", recGet.Body.String())
 	}
 }
 

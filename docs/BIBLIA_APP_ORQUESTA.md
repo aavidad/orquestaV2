@@ -863,3 +863,15 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - `/api/status` debe exponer un resumen de tareas estable para clientes server-first y MCP.
 - La clave canónica visible es `resumenTareas`.
 - `tareasPorEstado` se mantiene como alias compatible, pero los clientes nuevos deben poder apoyarse en `resumenTareas` sin recomposición adicional.
+
+### Threads ligeras del supervisor
+
+- El supervisor (`OpenClaw`) puede gobernar subagentes e hilos derivados, pero esa memoria no debe duplicar `sesiones`, `runtime_handles` ni `runtime_mailbox`.
+- La capa correcta es `supervisor_threads`: tracking ligero de `session_id`, `thread_id`, `turn_id`, `kind`, `mode`, `status` y actividad reciente.
+- `leader` y `subagent` son roles explícitos del hilo; no se reconstruyen más tarde desde transcript disperso.
+- Esta memoria se expone solo por la vía canónica del servidor:
+  - API: `/api/openclaw/threads`
+  - MCP resource: `orquesta://supervision/{supervisor}/threads`
+  - MCP prompt: `orquesta.supervision.threads`
+  - MCP tools: `orquesta.supervision.threads.registrar`, `orquesta.supervision.threads.listar`
+- El objetivo es mejorar `handoff`, `review` e integración del supervisor. No es una segunda sesión runtime.

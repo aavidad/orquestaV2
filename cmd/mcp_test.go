@@ -10,6 +10,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1146,6 +1147,72 @@ func TestMCPToolsSesionesYObservabilidadRuntimeOperanPorLaViaCanonica(t *testing
 		}
 		if sesionActiva, err := db.GetSesionActiva("Codex3", &proyectoID); err == nil && sesionActiva != nil {
 			t.Fatalf("la sesión siguió activa tras sesion fin: %#v", sesionActiva)
+		}
+	})
+}
+
+func TestMCPThreadsSupervisorOperanPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		registerResult, err := callMCPTool("orquesta.supervision.threads.registrar", map[string]any{
+			"supervisor": "OpenClaw",
+			"proyecto":   "orquestador",
+			"session_id": "sess-openclaw-1",
+			"thread_id":  "leader-1",
+			"kind":       "leader",
+			"mode":       "review",
+			"source":     "mcp_tool",
+			"turn_id":    "turn-1",
+		})
+		if err != nil {
+			t.Fatalf("registrar thread supervisor MCP: %v", err)
+		}
+		if registerResult["isError"] != false {
+			t.Fatalf("registrar thread marcado como error: %#v", registerResult)
+		}
+		if _, err := callMCPTool("orquesta.supervision.threads.registrar", map[string]any{
+			"supervisor": "OpenClaw",
+			"proyecto":   "orquestador",
+			"session_id": "sess-openclaw-1",
+			"thread_id":  "sub-1",
+			"kind":       "subagent",
+			"mode":       "integration",
+			"source":     "mcp_tool",
+			"turn_id":    "turn-2",
+		}); err != nil {
+			t.Fatalf("registrar subagent thread MCP: %v", err)
+		}
+		listResult, err := callMCPTool("orquesta.supervision.threads.listar", map[string]any{
+			"supervisor": "OpenClaw",
+			"session_id": "sess-openclaw-1",
+		})
+		if err != nil {
+			t.Fatalf("listar threads supervisor MCP: %v", err)
+		}
+		if listResult["isError"] != false {
+			t.Fatalf("listar threads marcado como error: %#v", listResult)
+		}
+		structured, _ := listResult["structuredContent"].(map[string]any)
+		if structured == nil {
+			t.Fatalf("structuredContent inesperado: %#v", listResult["structuredContent"])
+		}
+		sessions := reflect.ValueOf(structured["sessions"])
+		if !sessions.IsValid() || sessions.Len() == 0 {
+			t.Fatalf("sessions vacío: %#v", structured)
+		}
+		contents, err := readMCPResource("orquesta://supervision/OpenClaw/threads")
+		if err != nil {
+			t.Fatalf("readMCPResource threads supervisor: %v", err)
+		}
+		if len(contents) == 0 || !strings.Contains(fmt.Sprintf("%v", contents[0]["text"]), "sess-openclaw-1") {
+			t.Fatalf("resource threads inesperado: %#v", contents)
+		}
+		prompt, err := getMCPPrompt("orquesta.supervision.threads", map[string]any{"supervisor": "OpenClaw"})
+		if err != nil {
+			t.Fatalf("getMCPPrompt threads supervisor: %v", err)
+		}
+		if !strings.Contains(fmt.Sprintf("%v", prompt), "Threads y subagentes del supervisor") {
+			t.Fatalf("prompt threads sin contenido esperado: %#v", prompt)
 		}
 	})
 }

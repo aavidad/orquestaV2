@@ -204,6 +204,33 @@ CREATE TABLE IF NOT EXISTS sesiones (
     pid                   INTEGER
 );
 
+-- ─── Tracking ligero de threads del supervisor ────────────────────────────
+CREATE TABLE IF NOT EXISTS supervisor_threads (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    supervisor    TEXT    NOT NULL,
+    proyecto_slug TEXT    NOT NULL DEFAULT '',
+    session_id    TEXT    NOT NULL DEFAULT '',
+    thread_id     TEXT    NOT NULL,
+    kind          TEXT    NOT NULL DEFAULT 'subagent'
+                          CHECK (kind IN ('leader','subagent')),
+    mode          TEXT    NOT NULL DEFAULT '',
+    status        TEXT    NOT NULL DEFAULT 'active'
+                          CHECK (status IN ('active','idle','closed')),
+    source        TEXT    NOT NULL DEFAULT '',
+    last_turn_id  TEXT    NOT NULL DEFAULT '',
+    turn_count    INTEGER NOT NULL DEFAULT 1,
+    metadata_json TEXT    NOT NULL DEFAULT '{}',
+    first_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(supervisor, session_id, thread_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_supervisor_threads_supervisor_session
+ON supervisor_threads(supervisor, session_id, last_seen_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_supervisor_threads_project
+ON supervisor_threads(proyecto_slug, supervisor, last_seen_at DESC);
+
 -- ─── Asignaciones agente → proyecto ───────────────────────────────────────
 CREATE TABLE IF NOT EXISTS asignaciones (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,

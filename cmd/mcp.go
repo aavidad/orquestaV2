@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"orquesta/coordinacion"
 	"orquesta/agentesapp"
+	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/gitgobernanza"
 	"orquesta/panelapp"
@@ -613,6 +613,13 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 			MIMEType:    "text/markdown",
 		},
 		{
+			URITemplate: "orquesta://supervision/{supervisor}/threads",
+			Name:        "threads-supervisor",
+			Title:       "Threads del supervisor",
+			Description: "Tracking ligero de threads y subagentes del supervisor para handoff, review e integración",
+			MIMEType:    "application/json",
+		},
+		{
 			URITemplate: "orquesta://proyectos/{slug}",
 			Name:        "proyecto-por-slug",
 			Title:       "Detalle de proyecto",
@@ -783,6 +790,13 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 			return nil, err
 		}
 		return resourceText(uri, "text/markdown", texto), nil
+	case strings.HasPrefix(uri, "orquesta://supervision/") && strings.HasSuffix(uri, "/threads"):
+		supervisor := strings.TrimSuffix(strings.TrimPrefix(uri, "orquesta://supervision/"), "/threads")
+		snapshot, err := buildSupervisorThreadsSnapshot(supervisor, "", 100)
+		if err != nil {
+			return nil, err
+		}
+		return resourceText(uri, "application/json", prettyJSON(snapshot)), nil
 	default:
 		return nil, fmt.Errorf("resource not found")
 	}
@@ -826,6 +840,14 @@ func listMCPPrompts() []mcpPrompt {
 			Name:        "orquesta.supervision.revision",
 			Title:       "Cola de revisión del supervisor",
 			Description: "Devuelve la vista estrecha de integración: review gates y señales recientes para OpenClaw",
+			Arguments: []mcpPromptArgument{
+				{Name: "supervisor", Description: "Nombre del supervisor operativo, por ejemplo OpenClaw", Required: false},
+			},
+		},
+		{
+			Name:        "orquesta.supervision.threads",
+			Title:       "Threads del supervisor",
+			Description: "Resume threads y subagentes activos del supervisor/OpenClaw",
 			Arguments: []mcpPromptArgument{
 				{Name: "supervisor", Description: "Nombre del supervisor operativo, por ejemplo OpenClaw", Required: false},
 			},
@@ -957,6 +979,25 @@ func getMCPPrompt(name string, args map[string]any) (map[string]any, error) {
 					Content: map[string]any{
 						"type": "text",
 						"text": briefing,
+					},
+				},
+			},
+		}, nil
+
+	case "orquesta.supervision.threads":
+		supervisor := optionalStringArg(args, "supervisor")
+		texto, err := buildSupervisorThreadsOverview(supervisor)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"description": "Resumen de threads y subagentes del supervisor",
+			"messages": []mcpPromptMessage{
+				{
+					Role: "user",
+					Content: map[string]any{
+						"type": "text",
+						"text": texto,
 					},
 				},
 			},
@@ -1139,13 +1180,13 @@ func listMCPTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"codigo":       map[string]any{"type": "string"},
-					"titulo":       map[string]any{"type": "string"},
-					"descripcion":  map[string]any{"type": "string"},
-					"tipo":         map[string]any{"type": "string"},
-					"proyecto":     map[string]any{"type": "string"},
+					"codigo":        map[string]any{"type": "string"},
+					"titulo":        map[string]any{"type": "string"},
+					"descripcion":   map[string]any{"type": "string"},
+					"tipo":          map[string]any{"type": "string"},
+					"proyecto":      map[string]any{"type": "string"},
 					"propuesto_por": map[string]any{"type": "string"},
-					"distribuidor": map[string]any{"type": "string"},
+					"distribuidor":  map[string]any{"type": "string"},
 				},
 				"required":             []string{"codigo", "titulo"},
 				"additionalProperties": false,
@@ -1158,10 +1199,10 @@ func listMCPTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"codigo":       map[string]any{"type": "string"},
-					"accion":       map[string]any{"type": "string", "enum": []string{"cerrar", "reabrir", "reparar_votos"}},
+					"codigo":        map[string]any{"type": "string"},
+					"accion":        map[string]any{"type": "string", "enum": []string{"cerrar", "reabrir", "reparar_votos"}},
 					"estado_cierre": map[string]any{"type": "string"},
-					"agente":       map[string]any{"type": "string"},
+					"agente":        map[string]any{"type": "string"},
 				},
 				"required":             []string{"codigo", "accion"},
 				"additionalProperties": false,
@@ -1734,6 +1775,40 @@ func listMCPTools() []mcpTool {
 				"additionalProperties": false,
 			},
 		},
+		{
+			Name:        "orquesta.supervision.threads.registrar",
+			Title:       "Registrar thread de supervisor",
+			Description: "Registra un turno de leader/subagent para OpenClaw sin duplicar la sesión runtime",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"supervisor": map[string]any{"type": "string"},
+					"proyecto":   map[string]any{"type": "string"},
+					"session_id": map[string]any{"type": "string"},
+					"thread_id":  map[string]any{"type": "string"},
+					"kind":       map[string]any{"type": "string", "enum": []string{"leader", "subagent"}},
+					"mode":       map[string]any{"type": "string"},
+					"status":     map[string]any{"type": "string", "enum": []string{"active", "idle", "closed"}},
+					"source":     map[string]any{"type": "string"},
+					"turn_id":    map[string]any{"type": "string"},
+				},
+				"required":             []string{"thread_id"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.supervision.threads.listar",
+			Title:       "Listar threads del supervisor",
+			Description: "Devuelve en JSON el tracking ligero de leader/subagents del supervisor",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"supervisor": map[string]any{"type": "string"},
+					"session_id": map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
 	}
 }
 
@@ -2213,9 +2288,9 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return toolResult(err.Error(), nil, true), nil
 		}
 		result := map[string]any{
-			"id":            id,
-			"order_id":      id,
-			"agente_origen": origen,
+			"id":             id,
+			"order_id":       id,
+			"agente_origen":  origen,
 			"agente_destino": destino,
 		}
 		return toolResult(prettyJSON(result), result, false), nil
@@ -2590,6 +2665,30 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 	case "orquesta.supervision.revision":
 		supervisor := optionalStringArg(args, "supervisor")
 		resumen, err := buildSupervisorReviewSnapshot(supervisor)
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(resumen), resumen, false), nil
+
+	case "orquesta.supervision.threads.registrar":
+		item, err := registrarSupervisorThreadLigero(
+			optionalStringArg(args, "supervisor"),
+			optionalStringArg(args, "proyecto"),
+			optionalStringArg(args, "session_id"),
+			optionalStringArg(args, "thread_id"),
+			optionalStringArg(args, "kind"),
+			optionalStringArg(args, "mode"),
+			optionalStringArg(args, "status"),
+			optionalStringArg(args, "source"),
+			optionalStringArg(args, "turn_id"),
+		)
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(item), item, false), nil
+
+	case "orquesta.supervision.threads.listar":
+		resumen, err := buildSupervisorThreadsSnapshot(optionalStringArg(args, "supervisor"), optionalStringArg(args, "session_id"), 100)
 		if err != nil {
 			return nil, err
 		}
@@ -3234,16 +3333,16 @@ type supervisorReviewSignal struct {
 }
 
 type supervisorModuleConflict struct {
-	Modulo string     `json:"modulo"`
+	Modulo string      `json:"modulo"`
 	Tareas []tareaLite `json:"tareas"`
 }
 
 type supervisorRecommendedAction struct {
-	Kind      string `json:"kind"`
-	Target    string `json:"target"`
-	Action    string `json:"action"`
-	Reason    string `json:"reason"`
-	Priority  string `json:"priority"`
+	Kind     string `json:"kind"`
+	Target   string `json:"target"`
+	Action   string `json:"action"`
+	Reason   string `json:"reason"`
+	Priority string `json:"priority"`
 }
 
 func listarSignalsRevisionSupervisor(limit int) ([]*supervisorReviewSignal, error) {
@@ -3362,6 +3461,10 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	threadSessions, err := buildSupervisorThreadsSnapshot(supervisor, "", 100)
+	if err != nil {
+		return nil, err
+	}
 	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
 	var nextAction any
 	if len(recommended) > 0 {
@@ -3374,6 +3477,7 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 		"merges":              merges,
 		"module_conflicts":    conflicts,
 		"normalized_events":   normalizedEvents,
+		"thread_sessions":     threadSessions,
 		"recommended_actions": recommended,
 		"action_queue":        recommended,
 		"next_action":         nextAction,
