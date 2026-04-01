@@ -1032,3 +1032,11 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - La carga activa por agente debe ser visible para el supervisor:
   - Orquesta ya usa esa carga para sugerir `assignee`
   - OpenClaw debe verla explícitamente en API y web para que la recomendación sea explicable y auditable
+- El `handoff` canónico con reinicio del daemon no debe exigir intervención manual para converger:
+  - al crear el relevo, la tarea puede pasar transitoriamente a `asignada` en el agente destino mientras el control plane completa `handoff + stop + start`
+  - esa ventana transitoria es aceptable si converge sola a `en_progreso`
+  - la condición de éxito del núcleo es:
+    - sin pérdida de tarea
+    - sin `runtime_orders` pendientes residuales
+    - sin `runtime_mailbox` pendiente residual
+    - con `status` convergiendo a la verdad final del destino

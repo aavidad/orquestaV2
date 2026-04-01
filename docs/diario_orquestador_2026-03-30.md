@@ -6528,3 +6528,25 @@ Resultado:
   - `./orquesta status`
   - `410, 412, 413, 414, 416, 421` salen en `En progreso ahora mismo`
   - `411, 415` salen en `Reservadas ahora mismo`
+
+## 2026-04-01 — prueba final del núcleo: `handoff + restart + cuota` converge sin deriva
+
+- Se ejecutó una prueba real sobre la flota viva:
+  - `handoff Codex3 -> Codex4` de la tarea `#414`
+  - `./orquesta server stop`
+  - `./orquesta server start`
+- Observación inmediata tras el reinicio:
+  - la tarea quedó temporalmente `asignada` a `Codex4`
+  - `runtime_orders` mostraba:
+    - `80891 handoff`
+    - `80892 stop`
+    - `80893 start`
+    - todas aún `pendiente`
+- Convergencia natural a los ~15s:
+  - `#414` pasó a `en_progreso` en `Codex4`
+  - `80891/80892/80893` pasaron a `completada`
+  - `runtime_mailbox` siguió en `0 pendiente(s)`
+  - `./orquesta status` volvió a mostrar `#414` en `En progreso ahora mismo`
+- Conclusión:
+  - el núcleo ya soporta un relevo real con reinicio del daemon en mitad del ciclo
+  - la ventana transitoria visible existe, pero converge sola y no deja deriva operativa
