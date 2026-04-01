@@ -6749,3 +6749,26 @@ Resultado:
 - Validación viva:
   - `POST /api/openclaw/operator {"mode":"next"}` devolvió `ok` y rebalanceó `#411` a `Codex4`
   - la lectura posterior por `/api/tareas/411` y `./orquesta tarea ver 411` convergió al mismo estado
+
+## 2026-04-01 — Refresh server-first de saldos bajo demanda
+
+- El hueco real:
+  - el operador necesitaba pedir `saldo` y obtener la mejor lectura fresca posible "al momento"
+  - hasta ahora `agente presupuesto` solo listaba snapshots ya persistidos
+- Se añadió:
+  - `POST /api/agentes/presupuesto/refrescar`
+  - `./orquesta agente presupuesto --refresh [--agente <nombre>]`
+- Regla canónica:
+  - el refresh reutiliza la observación viva del daemon sobre `runtime_handles`
+  - persiste primero el `presupuesto_sesion` observado por la misma vía canónica del control plane
+  - después lista la telemetría resultante
+- Límite explícito:
+  - si no existe runtime observable gestionado por Orquesta, el refresh no inventa una verdad externa
+  - en ese caso devuelve la mejor observación persistida y puede seguir saliendo `stale`
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(AgentePresupuestoCmdRefrescaAntesDeListar|APIAgentesPresupuestoRefrescarOperaPorLaViaCanonica|AgentePresupuestoCmdRenderizaListado|AgentePresupuestoCmdMarcaObservadoSiLaTelemetriaEsStale)' -count=1`
+  - `go build -o ./orquesta .`
+- Validación viva:
+  - `./orquesta agente presupuesto --refresh --agente Codex6 --json` ya dispara el refresh por daemon antes del listado
+  - el comando funciona, pero `Codex6` sigue devolviendo snapshot observado stale
+  - eso confirma el contrato correcto: la ruta nueva refresca saldo solo cuando Orquesta puede observar un handle/runtime real del agente

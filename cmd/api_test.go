@@ -571,6 +571,32 @@ func TestAPIStatusOmiteTareasActivasSinProyecto(t *testing.T) {
 	}
 }
 
+func TestAPIAgentesPresupuestoRefrescarOperaPorLaViaCanonica(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/agentes/presupuesto/refrescar", bytes.NewReader([]byte(`{"agente":"Codex6"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status refrescar presupuesto inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode refresh presupuesto: %v", err)
+	}
+	if payload["ok"] != true {
+		t.Fatalf("payload refresh sin ok: %#v", payload)
+	}
+	if payload["agente"] != "Codex6" {
+		t.Fatalf("agente refresh inesperado: %#v", payload)
+	}
+}
+
 func TestAPIAgentesYStatusAlineanActivoConSesionReal(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

@@ -586,6 +586,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/diagnostico", apiHandlerDiagnostico)
 	mux.HandleFunc("/api/agentes", apiHandlerAgentes)
 	mux.HandleFunc("/api/agentes/", apiRouterAgentes)
+	mux.HandleFunc("/api/agentes/presupuesto/refrescar", apiHandlerAgentesPresupuestoRefrescar)
 	mux.HandleFunc("/api/reglas", apiHandlerReglas)
 	mux.HandleFunc("/api/reglas/", apiRouterReglas)
 	mux.HandleFunc("/api/skills", apiHandlerSkills)
@@ -960,6 +961,9 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 }
 
 func apiHandlerAgentesPresupuesto(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
 	activosOnly := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("activos")), "true")
 	agentes, err := agentesService.ListAgents()
 	if err != nil {
@@ -984,6 +988,30 @@ func apiHandlerAgentesPresupuesto(w http.ResponseWriter, r *http.Request) {
 		Generado: time.Now().UTC().Format(time.RFC3339),
 		Activos:  activosOnly,
 		Agentes:  agentes,
+	})
+}
+
+func apiHandlerAgentesPresupuestoRefrescar(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req struct {
+		Agente string `json:"agente"`
+	}
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	refrescados, err := refrescarPresupuestoSesionObservadoAgente(req.Agente)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{
+		"ok":           true,
+		"agente":       strings.TrimSpace(req.Agente),
+		"refrescados":  refrescados,
+		"generated_at": time.Now().UTC().Format(time.RFC3339),
 	})
 }
 

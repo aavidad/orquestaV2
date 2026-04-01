@@ -20,6 +20,15 @@ var agentePresupuestoCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		activos, _ := cmd.Flags().GetBool("activos")
 		jsonOut, _ := cmd.Flags().GetBool("json")
+		refresh, _ := cmd.Flags().GetBool("refresh")
+		agenteFiltro, _ := cmd.Flags().GetString("agente")
+		if refresh {
+			if _, ok, err := refrescarAgentesPresupuestoPorAPI(agenteFiltro); err != nil {
+				return err
+			} else if !ok {
+				return agenteErrorServerFirst()
+			}
+		}
 		resp, ok, err := listarAgentesPresupuestoPorAPI(activos)
 		if err != nil {
 			return err
@@ -172,6 +181,10 @@ func init() {
 	for _, sub := range []*cobra.Command{agentePresupuestoCmd, agenteCuentasCmd, agenteRankingCuentasCmd} {
 		sub.Flags().Bool("activos", false, "Mostrar solo agentes activos")
 		sub.Flags().Bool("json", false, "Emitir JSON crudo")
+		if sub == agentePresupuestoCmd {
+			sub.Flags().Bool("refresh", false, "Refrescar telemetría observada antes de listar")
+			sub.Flags().String("agente", "", "Refrescar solo este agente")
+		}
 		agenteCmd.AddCommand(sub)
 	}
 }

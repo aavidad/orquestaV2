@@ -903,6 +903,17 @@ func listarAgentesPresupuestoPorAPI(activos bool) (*apiAgentesPresupuestoRespons
 	return &resp, true, nil
 }
 
+func refrescarAgentesPresupuestoPorAPI(agente string) (map[string]any, bool, error) {
+	var resp map[string]any
+	ok, err := apiPost("/api/agentes/presupuesto/refrescar", map[string]any{
+		"agente": strings.TrimSpace(agente),
+	}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp, true, nil
+}
+
 func listarAgentesCuentasPorAPI(activos bool) (*apiAgentesCuentasResponse, bool, error) {
 	var resp apiAgentesCuentasResponse
 	path := "/api/agentes/cuentas"

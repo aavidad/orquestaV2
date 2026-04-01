@@ -123,6 +123,33 @@ func TestAgentePresupuestoCmdMarcaObservadoSiLaTelemetriaEsStale(t *testing.T) {
 	}
 }
 
+func TestAgentePresupuestoCmdRefrescaAntesDeListar(t *testing.T) {
+	refreshed := false
+	setAgentTelemetryHTTPClientForTest(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch {
+		case req.Method == http.MethodPost && req.URL.Path == "/api/agentes/presupuesto/refrescar":
+			refreshed = true
+			return newJSONResponse(http.StatusOK, `{"ok":true,"agente":"Codex6","refrescados":1}`), nil
+		case req.URL.Path == "/api/agentes/presupuesto" && req.URL.Query().Get("activos") == "true":
+			return newJSONResponse(http.StatusOK, `{"generado":"2026-03-31T18:00:00Z","activos":true,"agentes":[{"Nombre":"Codex6","CuotaRestantePct":63,"PresupuestoVentana":"weekly"}]}`), nil
+		default:
+			return newJSONResponse(http.StatusNotFound, `{"error":"not found"}`), nil
+		}
+	}))
+	out := captureOutput(t, func() {
+		rootCmd.SetArgs([]string{"agente", "presupuesto", "--activos", "--refresh", "--agente", "Codex6"})
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("Execute agente presupuesto refresh: %v", err)
+		}
+	})
+	if !refreshed {
+		t.Fatalf("no se llamó al refresh previo")
+	}
+	if !strings.Contains(out, "Codex6") || !strings.Contains(out, "63%") {
+		t.Fatalf("salida inesperada:\n%s", out)
+	}
+}
+
 func TestAgenteRankingCuentasCmdRenderizaListado(t *testing.T) {
 	setAgentTelemetryHTTPClientForTest(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		switch {

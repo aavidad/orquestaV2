@@ -207,40 +207,74 @@ func procesarPresupuestoSesionObservadoBatch() (int, error) {
 	procesados := 0
 	vistos := map[string]struct{}{}
 	for _, handle := range handles {
-		if handle == nil {
-			continue
-		}
-		agente := strings.TrimSpace(handle.Agente)
-		if agente == "" {
-			continue
-		}
-		if _, ok := vistos[agente]; ok {
-			continue
-		}
-		estado := strings.TrimSpace(handle.Estado)
-		if !strings.EqualFold(estado, "activo") && !strings.EqualFold(estado, "pausado") {
-			continue
-		}
-		obj := controlruntime.ObjetivoProceso{
-			PID:          int64PtrFromHandleRef(handle.HandleKind, handle.HandleRef),
-			HandleKind:   strings.TrimSpace(handle.HandleKind),
-			HandleRef:    strings.TrimSpace(handle.HandleRef),
-			MetadataJSON: strings.TrimSpace(handle.MetadataJSON),
-		}
-		observed, err := controlruntime.ObserveCodexArtifacts(obj)
+		ok, agente, err := refrescarPresupuestoSesionObservadoHandle(handle)
 		if err != nil {
-			continue
-		}
-		if observed == nil || observed.ObservedAt.IsZero() {
-			continue
-		}
-		if err := persistirPresupuestoSesionObservado(handle, observed); err != nil {
 			return procesados, err
+		}
+		if !ok || agente == "" {
+			continue
+		}
+		if _, dup := vistos[agente]; dup {
+			continue
 		}
 		vistos[agente] = struct{}{}
 		procesados++
 	}
 	return procesados, nil
+}
+
+func refrescarPresupuestoSesionObservadoAgente(nombre string) (int, error) {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return procesarPresupuestoSesionObservadoBatch()
+	}
+	handles, err := db.ListarRuntimeHandles(&nombre)
+	if err != nil {
+		return 0, err
+	}
+	procesados := 0
+	for _, handle := range handles {
+		ok, _, err := refrescarPresupuestoSesionObservadoHandle(handle)
+		if err != nil {
+			return procesados, err
+		}
+		if ok {
+			procesados++
+			break
+		}
+	}
+	return procesados, nil
+}
+
+func refrescarPresupuestoSesionObservadoHandle(handle *db.RuntimeHandle) (bool, string, error) {
+	if handle == nil {
+		return false, "", nil
+	}
+	agente := strings.TrimSpace(handle.Agente)
+	if agente == "" {
+		return false, "", nil
+	}
+	estado := strings.TrimSpace(handle.Estado)
+	if !strings.EqualFold(estado, "activo") && !strings.EqualFold(estado, "pausado") {
+		return false, agente, nil
+	}
+	obj := controlruntime.ObjetivoProceso{
+		PID:          int64PtrFromHandleRef(handle.HandleKind, handle.HandleRef),
+		HandleKind:   strings.TrimSpace(handle.HandleKind),
+		HandleRef:    strings.TrimSpace(handle.HandleRef),
+		MetadataJSON: strings.TrimSpace(handle.MetadataJSON),
+	}
+	observed, err := controlruntime.ObserveCodexArtifacts(obj)
+	if err != nil {
+		return false, agente, nil
+	}
+	if observed == nil || observed.ObservedAt.IsZero() {
+		return false, agente, nil
+	}
+	if err := persistirPresupuestoSesionObservado(handle, observed); err != nil {
+		return false, agente, err
+	}
+	return true, agente, nil
 }
 
 func persistirPresupuestoSesionObservado(handle *db.RuntimeHandle, observed *controlruntime.CodexObservedArtifacts) error {
