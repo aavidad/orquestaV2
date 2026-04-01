@@ -1181,6 +1181,36 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.agentes.listar",
+			Title:       "Listar agentes",
+			Description: "Lista agentes, opcionalmente filtrados por activos",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"activos": map[string]any{"type": "boolean"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.agentes.pausar",
+			Title:       "Pausar agente",
+			Description: "Pausa temporalmente un agente por la vía canónica del servidor",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":  map[string]any{"type": "string"},
+					"minutos": map[string]any{"type": "integer"},
+					"motivo":  map[string]any{"type": "string"},
+					"accion":  map[string]any{"type": "string"},
+					"entidad": map[string]any{"type": "string"},
+					"detalle": map[string]any{"type": "string"},
+				},
+				"required":             []string{"agente", "minutos", "motivo"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.runtime.ordenes.listar",
 			Title:       "Listar runtime orders",
 			Description: "Lista runtime orders por agente, proyecto o estado",
@@ -1594,6 +1624,41 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return nil, err
 		}
 		return toolResult(prettyJSON(sesiones), sesiones, false), nil
+
+	case "orquesta.agentes.listar":
+		agentes, err := agentesService.ListAgents()
+		if err != nil {
+			return nil, err
+		}
+		if activos, ok := boolArg(args, "activos"); ok && activos {
+			filtrados := make([]*db.Agente, 0, len(agentes))
+			for _, agente := range agentes {
+				if agente != nil && agente.Activo {
+					filtrados = append(filtrados, agente)
+				}
+			}
+			agentes = filtrados
+		}
+		return toolResult(prettyJSON(agentes), agentes, false), nil
+
+	case "orquesta.agentes.pausar":
+		agente, err := requiredStringArg(args, "agente")
+		if err != nil {
+			return nil, err
+		}
+		minutos := optionalIntArg(args, "minutos")
+		motivo, err := requiredStringArg(args, "motivo")
+		if err != nil {
+			return nil, err
+		}
+		if err := agentesService.PauseTemporarily(agente, minutos, motivo, optionalStringArg(args, "accion"), optionalStringArg(args, "entidad"), optionalStringArg(args, "detalle")); err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		detail, err := agentesService.GetAgent(agente)
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(detail), detail, false), nil
 
 	case "orquesta.runtime.ordenes.listar":
 		filter := db.FiltroRuntimeOrders{

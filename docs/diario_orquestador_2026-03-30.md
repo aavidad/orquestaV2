@@ -4839,3 +4839,26 @@ Validacion:
 
 - `go test ./cmd -run 'Test(MCPToolsRuntimeYTickOperanPorLaViaCanonica|MCPToolsRuntimeMailboxGestionanCicloCanonico)' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — El MCP ya gobierna la flota básica
+
+Hallazgo:
+
+- seguía faltando un bloque de mando para que `OpenClaw` ejerciera de supervisor real: listar agentes disponibles y poder pausarlos sin salir del MCP
+
+Decision:
+
+- añadir tools MCP para:
+  - listar agentes
+  - pausar agentes temporalmente
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(MCPToolsRuntimeMailboxGestionanCicloCanonico|MCPToolsAgentesListarYPausarOperanPorLaViaCanonica)' -count=1`
+- `go build -o ./orquesta .`

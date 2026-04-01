@@ -809,6 +809,55 @@ func TestMCPToolsRuntimeMailboxGestionanCicloCanonico(t *testing.T) {
 	})
 }
 
+func TestMCPToolsAgentesListarYPausarOperanPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex5", "programador"); err != nil {
+			t.Fatalf("registrando Codex5: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE agentes SET activo=1 WHERE nombre='Codex5'`); err != nil {
+			t.Fatalf("activar Codex5: %v", err)
+		}
+
+		listResult, err := callMCPTool("orquesta.agentes.listar", map[string]any{})
+		if err != nil {
+			t.Fatalf("agentes listar MCP: %v", err)
+		}
+		if listResult["isError"] != false {
+			t.Fatalf("agentes listar marcado como error: %#v", listResult)
+		}
+		agentes, _ := listResult["structuredContent"].([]*db.Agente)
+		found := false
+		for _, agente := range agentes {
+			if agente != nil && strings.TrimSpace(agente.Nombre) == "Codex5" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("agentes listados inesperados: %#v", listResult["structuredContent"])
+		}
+
+		pauseResult, err := callMCPTool("orquesta.agentes.pausar", map[string]any{
+			"agente":  "Codex5",
+			"minutos": 15,
+			"motivo":  "prueba MCP",
+			"accion":  "openclaw_pause",
+			"entidad": "agente",
+			"detalle": "Pausa de prueba desde MCP",
+		})
+		if err != nil {
+			t.Fatalf("agentes pausar MCP: %v", err)
+		}
+		if pauseResult["isError"] != false {
+			t.Fatalf("agentes pausar marcado como error: %#v", pauseResult)
+		}
+		agente, _ := pauseResult["structuredContent"].(*db.Agente)
+		if agente == nil || strings.TrimSpace(agente.EstadoCuota) != "enfriamiento" {
+			t.Fatalf("agente no quedo pausado: %#v", pauseResult["structuredContent"])
+		}
+	})
+}
+
 func TestMCPToolVotarPropuestaActualizaEstado(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
