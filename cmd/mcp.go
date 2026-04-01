@@ -1618,6 +1618,14 @@ func buildSupervisorBriefing(supervisor string) (string, error) {
 		}
 		b.WriteString("\n")
 	}
+	revision, err := buildSupervisorReviewOverview()
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(revision) != "" {
+		b.WriteString(revision)
+		b.WriteString("\n\n")
+	}
 	b.WriteString("## Instrucciones operativas para el supervisor\n")
 	b.WriteString("- Reparte trabajo evitando solapes de modulo cuando haya alternativa.\n")
 	b.WriteString("- Prioriza workers con cuota activa y frentes no bloqueados.\n")
@@ -1651,6 +1659,142 @@ func resumenSupervisorAgente(a *db.Agente) string {
 		partes = append(partes, "cuota:"+strings.TrimSpace(a.EstadoCuota))
 	}
 	return strings.Join(partes, " · ")
+}
+
+func buildSupervisorReviewOverview() (string, error) {
+	gates, err := db.ListarReviewGates(db.FiltroReviewGates{Limit: 20})
+	if err != nil {
+		return "", err
+	}
+	openGates := make([]*db.ReviewGate, 0, len(gates))
+	for _, gate := range gates {
+		if gate == nil || gate.Estado == db.ReviewGateAprobado {
+			continue
+		}
+		openGates = append(openGates, gate)
+	}
+	signals, err := listarSignalsRevisionSupervisor(12)
+	if err != nil {
+		return "", err
+	}
+	if len(openGates) == 0 && len(signals) == 0 {
+		return "", nil
+	}
+
+	var b strings.Builder
+	if len(openGates) > 0 {
+		b.WriteString("## Review gates abiertos\n")
+		for _, gate := range openGates {
+			linea := fmt.Sprintf("- #%d estado=%s", gate.ID, strings.TrimSpace(string(gate.Estado)))
+			if gate.TareaID != nil && *gate.TareaID > 0 {
+				linea += fmt.Sprintf(" tarea=%d", *gate.TareaID)
+			}
+			if gate.ProyectoID != nil && *gate.ProyectoID > 0 {
+				if proyecto, err := db.GetProyecto(strconv.FormatInt(*gate.ProyectoID, 10)); err == nil && proyecto != nil && strings.TrimSpace(proyecto.Slug) != "" {
+					linea += " proyecto=" + strings.TrimSpace(proyecto.Slug)
+				}
+			}
+			if strings.TrimSpace(gate.ReviewerAgente) != "" {
+				linea += " reviewer=" + strings.TrimSpace(gate.ReviewerAgente)
+			}
+			if strings.TrimSpace(gate.SeverityMax) != "" {
+				linea += " severity=" + strings.TrimSpace(gate.SeverityMax)
+			}
+			b.WriteString(linea + "\n")
+		}
+		b.WriteString("\n")
+	}
+	if len(signals) > 0 {
+		b.WriteString("## Señales recientes de revisión e integración\n")
+		for _, item := range signals {
+			if item == nil || item.Event == nil {
+				continue
+			}
+			linea := fmt.Sprintf("- %s", strings.TrimSpace(item.Event.Kind))
+			if strings.TrimSpace(item.Agent) != "" {
+				linea += " agente=" + strings.TrimSpace(item.Agent)
+			}
+			if strings.TrimSpace(item.Project) != "" {
+				linea += " proyecto=" + strings.TrimSpace(item.Project)
+			}
+			if strings.TrimSpace(item.Event.Message) != "" {
+				linea += " · " + compactMCPLine(item.Event.Message, 180)
+			}
+			b.WriteString(linea + "\n")
+		}
+	}
+	return strings.TrimSpace(b.String()), nil
+}
+
+type supervisorReviewSignal struct {
+	Event   *db.RuntimeEvent
+	Agent   string
+	Project string
+}
+
+func listarSignalsRevisionSupervisor(limit int) ([]*supervisorReviewSignal, error) {
+	if limit <= 0 {
+		limit = 12
+	}
+	kinds := []string{"approval_request", "waiting_human", "ready_for_review"}
+	runtimeCache := map[int64]*db.RuntimeInstance{}
+	items := make([]*supervisorReviewSignal, 0, limit*len(kinds))
+	seen := make(map[int64]struct{}, limit*len(kinds))
+	for _, kind := range kinds {
+		kind := kind
+		events, err := db.ListarRuntimeEvents(db.FiltroRuntimeEvents{Kind: &kind, Limit: limit})
+		if err != nil {
+			return nil, err
+		}
+		for _, event := range events {
+			if event == nil {
+				continue
+			}
+			if _, ok := seen[event.ID]; ok {
+				continue
+			}
+			seen[event.ID] = struct{}{}
+			runtime := runtimeCache[event.RuntimeID]
+			if runtime == nil {
+				runtime, err = db.GetRuntime(event.RuntimeID)
+				if err != nil {
+					return nil, err
+				}
+				runtimeCache[event.RuntimeID] = runtime
+			}
+			item := &supervisorReviewSignal{Event: event}
+			if runtime != nil {
+				item.Agent = strings.TrimSpace(runtime.Agente)
+				item.Project = strings.TrimSpace(runtime.ProyectoSlug)
+			}
+			items = append(items, item)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].Event.CreatedAt.After(items[j].Event.CreatedAt)
+	})
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return items, nil
+}
+
+func compactMCPLine(text string, maxRunes int) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	text = strings.ReplaceAll(text, "\n", " ")
+	text = strings.ReplaceAll(text, "\r", " ")
+	text = strings.Join(strings.Fields(text), " ")
+	if maxRunes <= 0 {
+		return text
+	}
+	runes := []rune(text)
+	if len(runes) <= maxRunes {
+		return text
+	}
+	return strings.TrimSpace(string(runes[:maxRunes])) + "..."
 }
 
 func buildProposalReviewPrompt(codigo, agente string) (string, error) {

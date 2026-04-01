@@ -699,6 +699,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - frentes activos
   - tareas retenidas por cuota
   - propuestas abiertas
+  - review gates abiertos y señales recientes de revisión/integración (`approval_request`, `waiting_human`, `ready_for_review`)
 - ese briefing de supervisor debe salir del estado vivo del daemon y exponerse por MCP como prompt/recurso de primera clase; no se recompone desde varios endpoints ni desde documentos estáticos.
 - para `codex_token_count_observed`, si falta la clave de configuración específica, el TTL por defecto observado sigue siendo `3600s`; no puede caer silenciosamente al TTL genérico de `300s`, porque eso oculta agotamientos reales de la ventana `5h`.
 - un presupuesto fresco y crítico observado debe proyectarse también sobre `estado_cuota` visible del agente (`enfriamiento` o `agotado`) aunque la fila persistida aún no haya sido actualizada por un batch posterior.

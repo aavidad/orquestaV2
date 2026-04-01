@@ -4588,3 +4588,25 @@ Validacion:
 
 - `go test ./cmd -run 'TestServerReadinessOK' -count=1`
 - `go test ./cmd -run 'Test(BuildLocalServerProcessEnvLimpiaRecuperacionLocal|ShouldDelegateToLocalServer|EscucharServidorUnificadoReservaListenerAntesDelArranque)' -count=1`
+
+## 2026-04-01 — El briefing de OpenClaw ya incluye gates y señales de revisión
+
+Hallazgo:
+
+- el briefing del supervisor ya servía flota, cuota y frentes, pero seguía faltando la parte que más se recompone a mano antes de integrar trabajo: review gates abiertos y señales recientes de revisión/integración emitidas por los workers
+
+Decision:
+
+- ampliar el briefing canónico del supervisor, no abrir otra verdad paralela
+- incluir review gates abiertos y señales recientes `approval_request`, `waiting_human` y `ready_for_review` con agente, proyecto y resumen compacto
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestMCPPromptBriefingSupervisorIncluyeFlotaYRetenidasPorCuota' -count=1`
+- `go build -o ./orquesta .`

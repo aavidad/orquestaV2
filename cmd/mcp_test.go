@@ -209,6 +209,39 @@ func TestMCPPromptBriefingSupervisorIncluyeFlotaYRetenidasPorCuota(t *testing.T)
 		if _, err := db.DB.Exec(`UPDATE tareas SET estado='asignada', agente='Codex5' WHERE id=?`, tareaID); err != nil {
 			t.Fatalf("asignar tarea retenida: %v", err)
 		}
+		gateID, err := db.CrearReviewGate(&db.ReviewGate{
+			ProyectoID:     &proyectoID,
+			TareaID:        &tareaID,
+			RequestedBy:    "orquesta",
+			ReviewerAgente: "Codex4",
+			Estado:         db.ReviewGateEnRevision,
+			SeverityMax:    "high",
+		})
+		if err != nil {
+			t.Fatalf("crear review gate: %v", err)
+		}
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      "Codex3",
+			ProyectoID:  &proyectoID,
+			CWD:         "/tmp/orquestador",
+			Herramienta: "codex-cli",
+		})
+		if err != nil {
+			t.Fatalf("iniciar sesion runtime: %v", err)
+		}
+		runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+		if err != nil || runtime == nil {
+			t.Fatalf("runtime esperado, got=%+v err=%v", runtime, err)
+		}
+		if _, err := db.RegistrarRuntimeEvent(&db.RuntimeEvent{
+			RuntimeID:   runtime.ID,
+			Kind:        "approval_request",
+			Level:       "warning",
+			Message:     "Necesito confirmacion para integrar el frente API tras la ultima revision",
+			PayloadJSON: `{"classification":"approval_request"}`,
+		}); err != nil {
+			t.Fatalf("registrar runtime event: %v", err)
+		}
 
 		result, err := getMCPPrompt("orquesta.briefing.supervisor", map[string]any{"supervisor": "OpenClaw"})
 		if err != nil {
@@ -228,6 +261,11 @@ func TestMCPPromptBriefingSupervisorIncluyeFlotaYRetenidasPorCuota(t *testing.T)
 			"Codex5",
 			"Tareas retenidas por cuota",
 			"Retenida por cuota",
+			"Review gates abiertos",
+			"#" + itoa(gateID),
+			"Codex4",
+			"Señales recientes de revisión e integración",
+			"approval_request",
 		} {
 			if !strings.Contains(text, token) {
 				t.Fatalf("falta %q en el briefing de supervisor: %s", token, text)
