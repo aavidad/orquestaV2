@@ -465,6 +465,67 @@ func TestWebOpenClawAccionAplicaLoteSupervisor(t *testing.T) {
 	}
 }
 
+func TestWebOpenClawAccionAplicaSiguienteSupervisor(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prev := statusService
+	defer func() { statusService = prev }()
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Siguiente acción web",
+		Descripcion: "Debe aplicarse desde la tarjeta principal de OpenClaw",
+		Modulo:      "openclaw",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "OpenClaw",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar Codex3: %v", err)
+	}
+	statusService = stubStatusService{response: apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		Agentes: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+	}}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/openclaw", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			webHandlerOpenClawAccion(w, r)
+			return
+		}
+		webHandlerOpenClaw(w, r)
+	})
+	registerAPIRoutes(mux)
+
+	form := url.Values{
+		"kind": {"supervision_next"},
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/openclaw", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("accion siguiente openclaw status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if location := rec.Header().Get("Location"); !strings.Contains(location, "Aplicada+") {
+		t.Fatalf("redirect inesperado: %s", location)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Estado != db.TareaEnProgreso || tarea.Agente == nil || *tarea.Agente != "Codex3" {
+		t.Fatalf("siguiente acción web no aplicada: %+v", tarea)
+	}
+}
+
 func TestWebDashMuestraCuentaYVentanasDeCuotaAgente(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

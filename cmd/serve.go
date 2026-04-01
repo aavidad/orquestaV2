@@ -852,6 +852,22 @@ func webHandlerOpenClawAccion(w http.ResponseWriter, r *http.Request) {
 		count, _ := result["count"].(int)
 		http.Redirect(w, r, "/openclaw?ok="+url.QueryEscape(fmt.Sprintf("Aplicadas %d acciones seguras del supervisor", count)), http.StatusSeeOther)
 		return
+	case "supervision_next":
+		result, err := applySupervisorNextAction("OpenClaw")
+		if err != nil {
+			http.Redirect(w, r, "/openclaw?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+			return
+		}
+		action, _ := result["action"].(supervisorRecommendedAction)
+		msg := "Aplicada la siguiente acción segura del supervisor"
+		if strings.TrimSpace(action.Action) != "" {
+			msg = "Aplicada " + strings.TrimSpace(action.Action)
+			if strings.TrimSpace(action.Target) != "" {
+				msg += " sobre " + strings.TrimSpace(action.Target)
+			}
+		}
+		http.Redirect(w, r, "/openclaw?ok="+url.QueryEscape(msg), http.StatusSeeOther)
+		return
 	default:
 		http.Redirect(w, r, "/openclaw?err="+url.QueryEscape("accion openclaw desconocida"), http.StatusSeeOther)
 		return
@@ -1824,13 +1840,8 @@ const webTplOpenClaw = `{{define "content"}}
   <div style="margin-top:.25rem;color:#cbd5e1">{{.NextAction.Reason}}</div>
   <div style="margin-top:.45rem;font-size:.8rem;color:#93c5fd">objetivo={{.NextAction.Target}} · prioridad={{.NextAction.Priority}} · tipo={{.NextAction.Kind}}{{if .NextAction.Assignee}} · sugerido={{.NextAction.Assignee}}{{end}}</div>
   <form method="post" action="/openclaw?lang={{lang}}" style="display:flex;gap:.55rem;align-items:end;flex-wrap:wrap;margin-top:.8rem">
-    <input type="hidden" name="kind" value="supervision_action">
-    <input type="hidden" name="action" value="{{.NextAction.Action}}">
-    <input type="hidden" name="target" value="{{.NextAction.Target}}">
-    <label style="margin:0;font-size:.82rem;color:#cbd5e1">Assignee
-      <input type="text" name="assignee" value="{{.NextAction.Assignee}}" placeholder="Codex3" style="min-width:8rem">
-    </label>
-    <button type="submit" class="btn-sm" style="background:#38bdf8;border-color:#38bdf8;color:#082f49">Aplicar acción</button>
+    <input type="hidden" name="kind" value="supervision_next">
+    <button type="submit" class="btn-sm" style="background:#38bdf8;border-color:#38bdf8;color:#082f49">Aplicar siguiente acción</button>
   </form>
 </section>
 {{end}}

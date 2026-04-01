@@ -1913,6 +1913,18 @@ func listMCPTools() []mcpTool {
 				"additionalProperties": false,
 			},
 		},
+		{
+			Name:        "orquesta.supervision.acciones.aplicar_siguiente",
+			Title:       "Aplicar siguiente acción segura del supervisor",
+			Description: "Aplica la siguiente acción segura de la cola viva del supervisor",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"supervisor": map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
 	}
 }
 
@@ -2835,6 +2847,13 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 
 	case "orquesta.supervision.acciones.aplicar_lote":
 		result, err := applySupervisorRecommendedActionsBatch(optionalStringArg(args, "supervisor"), optionalIntArg(args, "max_items"))
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.supervision.acciones.aplicar_siguiente":
+		result, err := applySupervisorNextAction(optionalStringArg(args, "supervisor"))
 		if err != nil {
 			return toolResult(err.Error(), nil, true), nil
 		}
@@ -4125,6 +4144,22 @@ func applySupervisorRecommendedActionsBatch(supervisor string, maxItems int) (ma
 		"count":      len(applied),
 		"applied":    applied,
 	}, nil
+}
+
+func applySupervisorNextAction(supervisor string) (map[string]any, error) {
+	supervisor = resolveSupervisorName(supervisor)
+	snapshot, err := buildSupervisorReviewSnapshot(supervisor)
+	if err != nil {
+		return nil, err
+	}
+	actions, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+	for _, item := range actions {
+		switch strings.TrimSpace(item.Action) {
+		case "asignar_tarea_libre", "reservar_tarea_libre", "replanificar_por_cuota", "seguir_guidance_durable":
+			return applySupervisorRecommendedAction(supervisor, item.Action, item.Target, item.Assignee)
+		}
+	}
+	return nil, fmt.Errorf("no hay acción segura aplicable en la cola del supervisor")
 }
 
 func pickSupervisorRecommendedAction(actions []supervisorRecommendedAction, actionName, target, assignee string) *supervisorRecommendedAction {

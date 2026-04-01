@@ -937,6 +937,11 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - la acción debe estar disponible igual en MCP y en `/openclaw`.
 - La action tool del supervisor debe aceptar un fallback explícito seguro cuando la cola viva haya cambiado entre la recomendación y la ejecución:
   - si `action`, `target` y `assignee` siguen siendo válidos, OpenClaw debe poder aplicar la acción sin depender de que siga presente en `action_queue`
+- OpenClaw debe poder aplicar la `next_action` segura sin reenviar manualmente `action`, `target` y `assignee`:
+  - la cola viva del supervisor sigue siendo la fuente de verdad
+  - el atajo correcto es `aplicar_siguiente`
+  - ese atajo no introduce otra semántica ni otra priorización; solo ejecuta la primera acción segura vigente de `action_queue`
+  - debe existir igual en MCP y en `/openclaw`.
 - `supervisor-loop` persistida no puede quedarse atrás respecto al snapshot:
   - `metadata_json.recommended_count`
   - `metadata_json.next_action`

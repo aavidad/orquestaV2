@@ -6331,3 +6331,20 @@ Resultado:
   - `./orquesta tarea ver 415` convergió a:
     - `Estado: asignada`
     - `Agente: Codex4`
+
+## 2026-04-01 — OpenClaw ya puede aplicar la siguiente acción segura
+
+- La tarjeta principal de `/openclaw` ya mostraba `next_action`, pero obligaba a reenviar manualmente:
+  - `action`
+  - `target`
+  - `assignee`
+- Eso era innecesario porque la cola viva del supervisor ya ordena y valida esas acciones.
+- Se añadió el atajo canónico:
+  - MCP: `orquesta.supervision.acciones.aplicar_siguiente`
+  - web: `kind=supervision_next`
+- El atajo no crea otra lógica:
+  - reutiliza la misma `action_queue`
+  - toma la primera acción segura vigente
+  - delega su ejecución en `applySupervisorRecommendedAction(...)`
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(MCPToolSupervisorAplicaSiguiente|WebOpenClawAccionAplicaSiguienteSupervisor)' -count=1`

@@ -1375,6 +1375,51 @@ func TestMCPToolSupervisorAplicaDispatch(t *testing.T) {
 	})
 }
 
+func TestMCPToolSupervisorAplicaSiguiente(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Dispatch siguiente",
+			Descripcion: "Debe aplicarse como siguiente acción segura",
+			Modulo:      "web",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "OpenClaw",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea libre: %v", err)
+		}
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+		}}
+
+		result, err := callMCPTool("orquesta.supervision.acciones.aplicar_siguiente", map[string]any{
+			"supervisor": "OpenClaw",
+		})
+		if err != nil {
+			t.Fatalf("aplicar siguiente supervisor: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("aplicar siguiente marcado como error: %#v", result)
+		}
+
+		tarea, err := db.GetTarea(tareaID)
+		if err != nil {
+			t.Fatalf("get tarea: %v", err)
+		}
+		if tarea == nil || tarea.Estado != db.TareaEnProgreso || tarea.Agente == nil || *tarea.Agente != "Codex3" {
+			t.Fatalf("siguiente acción no aplicada: %+v", tarea)
+		}
+	})
+}
+
 func TestMCPToolsPropuestasCrearYAccionarOperanPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
