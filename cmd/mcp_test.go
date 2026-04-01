@@ -1569,6 +1569,102 @@ func TestMCPToolSupervisorAplicaReplanificacionPorCuotaConFallbackExplicito(t *t
 	})
 }
 
+func TestMCPToolSupervisorAplicaLoteSeguro(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		tareaLibreID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Dispatch en lote",
+			Descripcion: "Debe entrar por batch MCP",
+			Modulo:      "web",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea libre: %v", err)
+		}
+		tareaRetenidaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Retenida por cuota",
+			Descripcion: "Debe replanificarse por batch MCP",
+			Modulo:      "controlplane",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea retenida: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+			t.Fatalf("registrar Codex2: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar Codex3: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE tareas SET estado='en_progreso', agente='Codex2' WHERE id=?`, tareaRetenidaID); err != nil {
+			t.Fatalf("preparar retenida: %v", err)
+		}
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex2", Rol: "programador", Activo: false, EstadoCuota: "enfriamiento"},
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			TareasPorEstado: map[string]int{
+				string(db.TareaLibre): 1,
+			},
+			TareasActivas: []tareaLite{
+				{ID: tareaRetenidaID, Estado: db.TareaEnProgreso, Titulo: "Retenida por cuota", Agente: "Codex2"},
+			},
+		}}
+
+		result, err := callMCPTool("orquesta.supervision.acciones.aplicar_lote", map[string]any{
+			"supervisor": "OpenClaw",
+			"max_items":  2,
+		})
+		if err != nil {
+			t.Fatalf("aplicar lote supervisor: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("lote supervisor marcado como error: %#v", result)
+		}
+		structured, _ := result["structuredContent"].(map[string]any)
+		if structured == nil {
+			t.Fatalf("structuredContent vacío: %#v", result)
+		}
+		switch count := structured["count"].(type) {
+		case int:
+			if count != 2 {
+				t.Fatalf("count inesperado: %#v", structured)
+			}
+		case float64:
+			if count != 2 {
+				t.Fatalf("count inesperado: %#v", structured)
+			}
+		default:
+			t.Fatalf("count con tipo inesperado: %#v", structured)
+		}
+
+		tareaLibre, err := db.GetTarea(tareaLibreID)
+		if err != nil {
+			t.Fatalf("get tarea libre: %v", err)
+		}
+		if tareaLibre.Estado != db.TareaEnProgreso || tareaLibre.Agente == nil || *tareaLibre.Agente != "Codex3" {
+			t.Fatalf("tarea libre no aplicada por lote: %+v", tareaLibre)
+		}
+		tareaRetenida, err := db.GetTarea(tareaRetenidaID)
+		if err != nil {
+			t.Fatalf("get tarea retenida: %v", err)
+		}
+		if tareaRetenida.Estado != db.TareaEnProgreso || tareaRetenida.Agente == nil || *tareaRetenida.Agente != "Codex3" {
+			t.Fatalf("tarea retenida no aplicada por lote: %+v", tareaRetenida)
+		}
+	})
+}
+
 func TestMCPToolsCoordinacionOperanPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {

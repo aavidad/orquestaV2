@@ -958,3 +958,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - La cola operativa del supervisor no puede truncar trabajo retenido por cuota:
   - si hay varias tareas retenidas viables, `action_queue` debe incluir una acción por cada una
   - `next_action` sigue siendo la primera priorizada, pero OpenClaw debe ver el conjunto completo para decidir secuenciación e integración
+- Cuando la cola solo contiene acciones canónicas seguras, OpenClaw debe poder aplicarlas en lote:
+  - alcance actual permitido: `asignar_tarea_libre`, `replanificar_por_cuota`
+  - la vía canónica debe existir tanto en MCP como en `/openclaw`
+  - el lote no debe inventar semántica nueva; debe reutilizar la misma aplicación unitaria y dejar la cola converger a vacío

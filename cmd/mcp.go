@@ -1900,6 +1900,19 @@ func listMCPTools() []mcpTool {
 				"additionalProperties": false,
 			},
 		},
+		{
+			Name:        "orquesta.supervision.acciones.aplicar_lote",
+			Title:       "Aplicar lote seguro del supervisor",
+			Description: "Aplica en lote acciones canónicas seguras del supervisor",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"supervisor": map[string]any{"type": "string"},
+					"max_items":  map[string]any{"type": "integer"},
+				},
+				"additionalProperties": false,
+			},
+		},
 	}
 }
 
@@ -2815,6 +2828,13 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 
 	case "orquesta.supervision.acciones.aplicar":
 		result, err := applySupervisorRecommendedAction(optionalStringArg(args, "supervisor"), optionalStringArg(args, "action"), optionalStringArg(args, "target"), optionalStringArg(args, "assignee"))
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.supervision.acciones.aplicar_lote":
+		result, err := applySupervisorRecommendedActionsBatch(optionalStringArg(args, "supervisor"), optionalIntArg(args, "max_items"))
 		if err != nil {
 			return toolResult(err.Error(), nil, true), nil
 		}
@@ -3968,6 +3988,40 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 		"assignee":   worker,
 	}
 	return result, nil
+}
+
+func applySupervisorRecommendedActionsBatch(supervisor string, maxItems int) (map[string]any, error) {
+	supervisor = resolveSupervisorName(supervisor)
+	snapshot, err := buildSupervisorReviewSnapshot(supervisor)
+	if err != nil {
+		return nil, err
+	}
+	actions, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+	if maxItems <= 0 || maxItems > len(actions) {
+		maxItems = len(actions)
+	}
+	applied := make([]map[string]any, 0, maxItems)
+	for _, item := range actions {
+		if len(applied) >= maxItems {
+			break
+		}
+		switch strings.TrimSpace(item.Action) {
+		case "asignar_tarea_libre", "replanificar_por_cuota":
+		default:
+			continue
+		}
+		result, err := applySupervisorRecommendedAction(supervisor, item.Action, item.Target, item.Assignee)
+		if err != nil {
+			return nil, err
+		}
+		applied = append(applied, result)
+	}
+	return map[string]any{
+		"ok":         true,
+		"supervisor": supervisor,
+		"count":      len(applied),
+		"applied":    applied,
+	}, nil
 }
 
 func pickSupervisorRecommendedAction(actions []supervisorRecommendedAction, actionName, target, assignee string) *supervisorRecommendedAction {

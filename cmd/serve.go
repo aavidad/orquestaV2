@@ -827,6 +827,21 @@ func webHandlerOpenClawAccion(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Redirect(w, r, "/openclaw?ok="+url.QueryEscape(msg), http.StatusSeeOther)
 		return
+	case "supervision_batch":
+		maxItems := 0
+		if raw := strings.TrimSpace(r.FormValue("max_items")); raw != "" {
+			if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+				maxItems = parsed
+			}
+		}
+		result, err := applySupervisorRecommendedActionsBatch("OpenClaw", maxItems)
+		if err != nil {
+			http.Redirect(w, r, "/openclaw?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+			return
+		}
+		count, _ := result["count"].(int)
+		http.Redirect(w, r, "/openclaw?ok="+url.QueryEscape(fmt.Sprintf("Aplicadas %d acciones seguras del supervisor", count)), http.StatusSeeOther)
+		return
 	default:
 		http.Redirect(w, r, "/openclaw?err="+url.QueryEscape("accion openclaw desconocida"), http.StatusSeeOther)
 		return
@@ -2041,6 +2056,11 @@ const webTplOpenClaw = `{{define "content"}}
     <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
       <h3 style="margin:0 0 .7rem 0">Cola recomendada</h3>
       {{if .Recommended}}
+      <form method="post" action="/openclaw?lang={{lang}}" style="display:flex;gap:.45rem;align-items:end;flex-wrap:wrap;margin:0 0 .75rem 0">
+        <input type="hidden" name="kind" value="supervision_batch">
+        <input type="hidden" name="max_items" value="{{len .Recommended}}">
+        <button type="submit" class="btn-sm" style="background:#0f766e;border-color:#0f766e;color:#ecfeff">Aplicar cola segura</button>
+      </form>
       <ol style="margin:0;padding-left:1.2rem">
       {{range .Recommended}}
         <li style="margin-bottom:.45rem">

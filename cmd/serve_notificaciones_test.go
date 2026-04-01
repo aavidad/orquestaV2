@@ -370,6 +370,101 @@ func TestWebOpenClawAccionAplicaReplanificacionSupervisor(t *testing.T) {
 	}
 }
 
+func TestWebOpenClawAccionAplicaLoteSupervisor(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prev := statusService
+	defer func() { statusService = prev }()
+
+	tareaLibreID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Dispatch web batch",
+		Descripcion: "Debe asignarse por lote web",
+		Modulo:      "web",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "OpenClaw",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea libre: %v", err)
+	}
+	tareaRetenidaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Retenida web batch",
+		Descripcion: "Debe replanificarse por lote web",
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "OpenClaw",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea retenida: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar Codex3: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE tareas SET estado='en_progreso', agente='Codex2' WHERE id=?`, tareaRetenidaID); err != nil {
+		t.Fatalf("preparar retenida: %v", err)
+	}
+
+	statusService = stubStatusService{response: apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{},
+		Agentes: []*db.Agente{
+			{Nombre: "Codex2", Rol: "programador", Activo: false, EstadoCuota: "enfriamiento"},
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasPorEstado: map[string]int{
+			string(db.TareaLibre): 1,
+		},
+		TareasActivas: []tareaLite{
+			{ID: tareaRetenidaID, Estado: db.TareaEnProgreso, Titulo: "Retenida web batch", Agente: "Codex2"},
+		},
+	}}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/openclaw", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			webHandlerOpenClawAccion(w, r)
+			return
+		}
+		webHandlerOpenClaw(w, r)
+	})
+	registerAPIRoutes(mux)
+
+	form := url.Values{
+		"kind":      {"supervision_batch"},
+		"max_items": {"2"},
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/openclaw", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("accion lote openclaw status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if location := rec.Header().Get("Location"); !strings.Contains(location, "Aplicadas+2+acciones+seguras+del+supervisor") {
+		t.Fatalf("redirect inesperado: %s", location)
+	}
+
+	tareaLibre, err := db.GetTarea(tareaLibreID)
+	if err != nil {
+		t.Fatalf("get tarea libre: %v", err)
+	}
+	if tareaLibre.Estado != db.TareaEnProgreso || tareaLibre.Agente == nil || *tareaLibre.Agente != "Codex3" {
+		t.Fatalf("tarea libre no aplicada por lote web: %+v", tareaLibre)
+	}
+	tareaRetenida, err := db.GetTarea(tareaRetenidaID)
+	if err != nil {
+		t.Fatalf("get tarea retenida: %v", err)
+	}
+	if tareaRetenida.Estado != db.TareaEnProgreso || tareaRetenida.Agente == nil || *tareaRetenida.Agente != "Codex3" {
+		t.Fatalf("tarea retenida no aplicada por lote web: %+v", tareaRetenida)
+	}
+}
+
 func TestWebDashMuestraCuentaYVentanasDeCuotaAgente(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

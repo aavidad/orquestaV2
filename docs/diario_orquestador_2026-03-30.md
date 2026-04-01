@@ -6195,3 +6195,26 @@ Resultado:
   - `GET /api/openclaw/operator` ya muestra en `review.action_queue`:
     - `tarea:416 -> Codex3`
     - `tarea:421 -> Codex3`
+
+## 2026-04-01 — OpenClaw ya puede aplicar la cola segura en lote
+
+- El supervisor ya podía aplicar acciones seguras una a una, pero seguía faltando una operación útil para trabajo real:
+  - drenar varias `retenidas por cuota`
+  - o combinar `dispatch` + `replanificación` sin repetir clicks/tool-calls
+- Se añadió la vía canónica de lote:
+  - MCP: `orquesta.supervision.acciones.aplicar_lote`
+  - web: botón `Aplicar cola segura` en `/openclaw`
+- El lote solo ejecuta acciones seguras ya canónicas:
+  - `asignar_tarea_libre`
+  - `replanificar_por_cuota`
+- Internamente no crea otra semántica:
+  - reutiliza `applySupervisorRecommendedAction(...)`
+  - itera sobre `action_queue`
+  - deja la convergencia final en el propio control plane
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(MCPToolSupervisorAplicaLoteSeguro|WebOpenClawAccionAplicaLoteSupervisor|MCPToolSupervisorAplicaReplanificacionPorCuotaConFallbackExplicito|WebOpenClawAccionAplicaReplanificacionSupervisor)' -count=1`
+- Validación viva:
+  - `POST /openclaw` con `kind=supervision_batch&max_items=2` => `Aplicadas 2 acciones seguras del supervisor`
+  - `#416` pasó a `Codex3`
+  - `#421` pasó a `Codex3`
+  - `GET /api/openclaw/operator` quedó con `review.action_queue = []` y sin `retenidasPorCuota`
