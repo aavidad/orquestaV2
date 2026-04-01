@@ -1348,6 +1348,24 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.agentes.handoff",
+			Title:       "Handoff entre agentes",
+			Description: "Crea un handoff canónico entre agente origen y destino",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente_origen":       map[string]any{"type": "string"},
+					"agente_destino":      map[string]any{"type": "string"},
+					"tarea_id":            map[string]any{"type": "integer"},
+					"motivo":              map[string]any{"type": "string"},
+					"resumen":             map[string]any{"type": "string"},
+					"external_session_id": map[string]any{"type": "string"},
+				},
+				"required":             []string{"agente_origen", "agente_destino"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.runtime.ordenes.listar",
 			Title:       "Listar runtime orders",
 			Description: "Lista runtime orders por agente, proyecto o estado",
@@ -1999,6 +2017,38 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return nil, err
 		}
 		return toolResult(prettyJSON(detail), detail, false), nil
+
+	case "orquesta.agentes.handoff":
+		origen, err := requiredStringArg(args, "agente_origen")
+		if err != nil {
+			return nil, err
+		}
+		destino, err := requiredStringArg(args, "agente_destino")
+		if err != nil {
+			return nil, err
+		}
+		var tareaID *int64
+		if value := optionalInt64Arg(args, "tarea_id"); value > 0 {
+			tareaID = &value
+		}
+		id, err := db.CrearHandoffAgenteVivo(
+			origen,
+			destino,
+			tareaID,
+			optionalStringArg(args, "motivo"),
+			optionalStringArg(args, "resumen"),
+			optionalStringArg(args, "external_session_id"),
+		)
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := map[string]any{
+			"id":            id,
+			"order_id":      id,
+			"agente_origen": origen,
+			"agente_destino": destino,
+		}
+		return toolResult(prettyJSON(result), result, false), nil
 
 	case "orquesta.runtime.ordenes.listar":
 		filter := db.FiltroRuntimeOrders{

@@ -713,6 +713,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - y debe cerrar el ciclo de `runtime_mailbox` completo desde MCP: enviar, marcar entregado y marcar consumido, siempre por servicio oficial y sin wrappers de CLI.
 - y debe permitir al supervisor gobernar la flota desde MCP sin API paralela: listar agentes y pausarlos temporalmente por el mismo servicio canónico.
 - y debe permitir también gobernar el estado operativo de los agentes desde MCP: retirar, rehabilitar y resetear reanimación sin salir del servidor.
+- y debe poder disparar handoffs canónicos entre agentes desde MCP, porque ese relevo forma parte del mando normal del supervisor.
 - y debe cubrir el gobierno de propuestas, no solo su lectura: crear propuestas y cerrarlas/reabrirlas/reparar votos desde el mismo MCP oficial.
 - y debe cubrir también la coordinación base del trabajo: activar asignaciones, adquirir/liberar locks y preparar/cerrar worktrees desde MCP, sin rutas laterales ni wrappers de CLI.
 - para `codex_token_count_observed`, si falta la clave de configuración específica, el TTL por defecto observado sigue siendo `3600s`; no puede caer silenciosamente al TTL genérico de `300s`, porque eso oculta agotamientos reales de la ventana `5h`.

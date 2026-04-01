@@ -900,6 +900,61 @@ func TestMCPToolsAgentesAccionOperanPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestMCPToolsAgentesHandoffOperaPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+			t.Fatalf("registrando Codex1: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+			t.Fatalf("registrando Codex2: %v", err)
+		}
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:     "Handoff MCP",
+			ProyectoID: &proyectoID,
+			Prioridad:  db.PrioridadAlta,
+			CreadoPor:  "OpenClaw",
+			Agente:     strPtr("Codex1"),
+			Estado:     db.TareaEnProgreso,
+		})
+		if err != nil {
+			t.Fatalf("crear tarea: %v", err)
+		}
+		if _, err := db.IniciarSesionContexto(db.SesionInicio{Agente: "Codex1", ProyectoID: &proyectoID}); err != nil {
+			t.Fatalf("iniciar sesion origen: %v", err)
+		}
+
+		result, err := callMCPTool("orquesta.agentes.handoff", map[string]any{
+			"agente_origen":       "Codex1",
+			"agente_destino":      "Codex2",
+			"tarea_id":            tareaID,
+			"motivo":              "presupuesto",
+			"resumen":             "continua desde MCP",
+			"external_session_id": "sess-mcp-handoff",
+		})
+		if err != nil {
+			t.Fatalf("agentes handoff MCP: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("agentes handoff marcado como error: %#v", result)
+		}
+		orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: strPtr("Codex2"), Limit: 10})
+		if err != nil {
+			t.Fatalf("listar orders destino: %v", err)
+		}
+		found := false
+		for _, order := range orders {
+			if order != nil && order.Tipo == "handoff" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("no apareció handoff en runtime orders: %+v", orders)
+		}
+	})
+}
+
 func TestMCPToolsPropuestasCrearYAccionarOperanPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")

@@ -4933,3 +4933,25 @@ Validacion:
 
 - `go test ./cmd -run 'TestMCPToolsAgentesAccionOperanPorLaViaCanonica' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — El MCP ya dispara handoff entre agentes
+
+Hallazgo:
+
+- seguía faltando una pieza importante del control supervisor: poder ordenar un relevo real entre agentes sin salir del MCP oficial
+
+Decision:
+
+- añadir tool MCP para:
+  - crear `handoff` canónico entre agente origen y destino
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestMCPToolsAgentesHandoffOperaPorLaViaCanonica' -count=1`
+- `go build -o ./orquesta .`
