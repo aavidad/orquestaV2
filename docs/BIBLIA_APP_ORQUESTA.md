@@ -947,3 +947,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - La web no debe inventar otra semántica; debe reutilizar la misma acción canónica que MCP:
   - `applySupervisorRecommendedAction(...)`
 - Si la cola no trae `assignee` cerrado, la web debe permitir introducirlo manualmente en la acción recomendada.
+- `/api/openclaw/operator` no debe exponer dumps internos completos del daemon:
+  - `status` debe ser una proyección operativa compacta
+  - no debe arrastrar `resume_payload_json`, worktrees completas ni runtimes completas
+  - debe priorizar lo que OpenClaw necesita para decidir: workers activos, workers en cuota, retenidas, tareas activas y propuestas abiertas

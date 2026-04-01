@@ -228,6 +228,11 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 			t.Fatalf("openclaw operator incompleto, falta %q:\n%s", token, bodyOperator)
 		}
 	}
+	for _, forbidden := range []string{"resume_payload_json", "worktreesActivas", "runtimesActivos"} {
+		if strings.Contains(bodyOperator, forbidden) {
+			t.Fatalf("openclaw operator demasiado verboso, contiene %q:\n%s", forbidden, bodyOperator)
+		}
+	}
 }
 
 func TestAPIOpenClawThreadsOperaPorLaViaCanonica(t *testing.T) {

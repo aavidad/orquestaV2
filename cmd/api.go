@@ -1253,8 +1253,9 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
+	statusResumen := buildOpenClawOperatorStatus(status)
 	apiWriteJSON(w, http.StatusOK, map[string]any{
-		"status":               status,
+		"status":               statusResumen,
 		"review":               revision,
 		"notificaciones":       notificaciones.DescribirConfiguracion(),
 		"entregas":             notificaciones.DescribirOutbox(10),
@@ -1262,6 +1263,62 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		"thread_sessions":      threads,
 		"pipeline_state":       pipeline,
 	})
+}
+
+type apiOpenClawAgentLite struct {
+	Nombre             string     `json:"nombre"`
+	Rol                string     `json:"rol,omitempty"`
+	EstadoCuota        string     `json:"estado_cuota,omitempty"`
+	ReanimarAt         *time.Time `json:"reanimar_at,omitempty"`
+	CuentaEmail        string     `json:"cuenta_email,omitempty"`
+	PresupuestoVentana string     `json:"presupuesto_ventana,omitempty"`
+	CuotaRestantePct   *int       `json:"cuota_restante_pct,omitempty"`
+}
+
+type apiOpenClawStatusLite struct {
+	Generado           string                 `json:"generado,omitempty"`
+	TareasPorEstado    map[string]int         `json:"tareasPorEstado,omitempty"`
+	AgentesActivos     []apiOpenClawAgentLite `json:"agentesActivos,omitempty"`
+	AgentesTrabajando  []apiOpenClawAgentLite `json:"agentesTrabajando,omitempty"`
+	EnCuota            []apiOpenClawAgentLite `json:"enCuota,omitempty"`
+	RetenidasPorCuota  []tareaLite            `json:"retenidasPorCuota,omitempty"`
+	TareasActivas      []tareaLite            `json:"tareasActivas,omitempty"`
+	PropuestasAbiertas []propuestaLite        `json:"propuestasAbiertas,omitempty"`
+}
+
+func buildOpenClawOperatorStatus(status *estadoResumen) apiOpenClawStatusLite {
+	if status == nil {
+		return apiOpenClawStatusLite{}
+	}
+	return apiOpenClawStatusLite{
+		Generado:           status.Generado,
+		TareasPorEstado:    status.TareasPorEstado,
+		AgentesActivos:     compactOpenClawAgents(status.AgentesActivos),
+		AgentesTrabajando:  compactOpenClawAgents(status.AgentesTrabajando),
+		EnCuota:            compactOpenClawAgents(agentesNoActivosConCuota(status.Agentes)),
+		RetenidasPorCuota:  tareasRetenidasPorCuota(status.TareasActivas, status.Agentes),
+		TareasActivas:      status.TareasActivas,
+		PropuestasAbiertas: status.PropuestasAbiertas,
+	}
+}
+
+func compactOpenClawAgents(items []*db.Agente) []apiOpenClawAgentLite {
+	out := make([]apiOpenClawAgentLite, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		out = append(out, apiOpenClawAgentLite{
+			Nombre:             item.Nombre,
+			Rol:                item.Rol,
+			EstadoCuota:        item.EstadoCuota,
+			ReanimarAt:         item.ReanimarAt,
+			CuentaEmail:        item.CuentaEmail,
+			PresupuestoVentana: item.PresupuestoVentana,
+			CuotaRestantePct:   item.CuotaRestantePct,
+		})
+	}
+	return out
 }
 
 func apiHandlerOpenClawThreads(w http.ResponseWriter, r *http.Request) {

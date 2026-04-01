@@ -6134,3 +6134,30 @@ Resultado:
 - Validación viva:
   - `GET /api/openclaw/operator` ya expone `assignee=Codex3` en la `next_action/action_queue` de `replanificar_por_cuota`
   - el supervisor ya no depende de que exista un worker estrictamente ocioso para ver una propuesta ejecutable
+
+## 2026-04-01 — `/api/openclaw/operator` ya expone estado compacto y útil
+
+- El endpoint del operador estaba devolviendo demasiado ruido:
+  - `status` arrastraba dumps internos del daemon
+  - eso metía demasiado contexto irrelevante para OpenClaw y ensuciaba la respuesta
+- Se compactó `status` para el operador:
+  - `agentesActivos`
+  - `agentesTrabajando`
+  - `enCuota`
+  - `retenidasPorCuota`
+  - `tareasActivas`
+  - `propuestasAbiertas`
+  - `tareasPorEstado`
+- Se mantuvieron intactas las demás superficies del operador:
+  - `review`
+  - `pipeline_state`
+  - `thread_sessions`
+  - `eventos_normalizados`
+  - `notificaciones`
+  - `entregas`
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(APIObservabilidadReadOnly|APIOpenClawThreadsOperaPorLaViaCanonica|APIOpenClawPipelineOperaPorLaViaCanonica)' -count=1`
+- Validación viva:
+  - `GET /api/openclaw/operator` ya no incluye `resume_payload_json`
+  - sigue exponiendo `agentesActivos`, `retenidasPorCuota` y `propuestasAbiertas`
+  - la cola operativa sigue enseñando `replanificar_por_cuota` con `assignee=Codex3`
