@@ -1893,6 +1893,14 @@ type supervisorModuleConflict struct {
 	Tareas []tareaLite `json:"tareas"`
 }
 
+type supervisorRecommendedAction struct {
+	Kind      string `json:"kind"`
+	Target    string `json:"target"`
+	Action    string `json:"action"`
+	Reason    string `json:"reason"`
+	Priority  string `json:"priority"`
+}
+
 func listarSignalsRevisionSupervisor(limit int) ([]*supervisorReviewSignal, error) {
 	if limit <= 0 {
 		limit = 12
@@ -2005,12 +2013,14 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
 	return map[string]any{
 		"supervisor":       supervisor,
 		"review_gates":     openGates,
 		"signals":          signals,
 		"merges":           merges,
 		"module_conflicts": conflicts,
+		"recommended_actions": recommended,
 	}, nil
 }
 
@@ -2042,6 +2052,130 @@ func listarSupervisorModuleConflicts() ([]supervisorModuleConflict, error) {
 	}
 	sort.Slice(conflicts, func(i, j int) bool { return conflicts[i].Modulo < conflicts[j].Modulo })
 	return conflicts, nil
+}
+
+func buildSupervisorRecommendedActions(gates []*db.ReviewGate, signals []*supervisorReviewSignal, merges []*db.GitMerge, conflicts []supervisorModuleConflict) []supervisorRecommendedAction {
+	actions := make([]supervisorRecommendedAction, 0, len(gates)+len(signals)+len(merges)+len(conflicts))
+	for _, gate := range gates {
+		if gate == nil {
+			continue
+		}
+		target := fmt.Sprintf("review_gate:%d", gate.ID)
+		switch gate.Estado {
+		case db.ReviewGateBloqueado:
+			actions = append(actions, supervisorRecommendedAction{
+				Kind:     "review_gate",
+				Target:   target,
+				Action:   "escalar_bloqueo_real",
+				Reason:   "Gate bloqueado; revisar dependencia externa o decisión arquitectónica pendiente.",
+				Priority: "alta",
+			})
+		case db.ReviewGateCambiosPed:
+			actions = append(actions, supervisorRecommendedAction{
+				Kind:     "review_gate",
+				Target:   target,
+				Action:   "relanzar_correccion",
+				Reason:   "Gate con cambios pedidos; reenfocar al worker con findings actuales.",
+				Priority: "alta",
+			})
+		default:
+			actions = append(actions, supervisorRecommendedAction{
+				Kind:     "review_gate",
+				Target:   target,
+				Action:   "asignar_o_confirmar_reviewer",
+				Reason:   "Gate abierto sin cierre; revisar o confirmar responsible reviewer antes de integrar.",
+				Priority: "media",
+			})
+		}
+	}
+	for _, signal := range signals {
+		if signal == nil || signal.Event == nil {
+			continue
+		}
+		action := "inspeccionar_signal"
+		reason := "Señal de revisión reciente."
+		priority := "media"
+		switch strings.TrimSpace(signal.Event.Kind) {
+		case "approval_request":
+			action = "arbitrar_y_desbloquear"
+			reason = "El worker pide criterio del supervisor para continuar o integrar."
+			priority = "alta"
+		case "waiting_human":
+			action = "reencuadrar_sin_espera"
+			reason = "El worker parece esperando humano; comprobar si el bloqueo es realmente externo."
+			priority = "alta"
+		case "ready_for_review":
+			action = "inspeccionar_y_decidir_gate"
+			reason = "Hay trabajo listo para revisión; decidir gate y siguiente paso de integración."
+			priority = "media"
+		}
+		actions = append(actions, supervisorRecommendedAction{
+			Kind:     "signal",
+			Target:   fmt.Sprintf("runtime_event:%d", signal.Event.ID),
+			Action:   action,
+			Reason:   reason,
+			Priority: priority,
+		})
+	}
+	for _, merge := range merges {
+		if merge == nil {
+			continue
+		}
+		action := "inspeccionar_merge"
+		reason := "Solicitud de merge viva."
+		priority := "media"
+		switch strings.TrimSpace(merge.Estado) {
+		case "fallido":
+			action = "reabrir_integracion"
+			reason = "La integración falló; revisar causa y decidir corrección o reapertura."
+			priority = "alta"
+		case "aprobado":
+			action = "confirmar_ejecutar_merge"
+			reason = "El merge está aprobado; confirmar que no hay colisión ni gate pendiente antes de fusionar."
+			priority = "media"
+		case "pendiente", "validando":
+			action = "revisar_merge_pendiente"
+			reason = "Hay merge vivo aún sin completar ciclo de validación."
+			priority = "media"
+		}
+		actions = append(actions, supervisorRecommendedAction{
+			Kind:     "merge",
+			Target:   fmt.Sprintf("git_merge:%d", merge.ID),
+			Action:   action,
+			Reason:   reason,
+			Priority: priority,
+		})
+	}
+	for _, conflict := range conflicts {
+		if strings.TrimSpace(conflict.Modulo) == "" {
+			continue
+		}
+		actions = append(actions, supervisorRecommendedAction{
+			Kind:     "module_conflict",
+			Target:   "modulo:" + strings.TrimSpace(conflict.Modulo),
+			Action:   "repartir_o_serializar",
+			Reason:   "Hay varias tareas activas del mismo módulo con agentes distintos; riesgo alto de pisada.",
+			Priority: "alta",
+		})
+	}
+	sort.SliceStable(actions, func(i, j int) bool {
+		weight := func(v string) int {
+			switch v {
+			case "alta":
+				return 0
+			case "media":
+				return 1
+			default:
+				return 2
+			}
+		}
+		wi, wj := weight(actions[i].Priority), weight(actions[j].Priority)
+		if wi != wj {
+			return wi < wj
+		}
+		return actions[i].Target < actions[j].Target
+	})
+	return actions
 }
 
 func compactMCPLine(text string, maxRunes int) string {

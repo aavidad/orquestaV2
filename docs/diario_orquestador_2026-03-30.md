@@ -4698,3 +4698,25 @@ Validacion:
 
 - `go test ./cmd -run 'TestMCPToolRevisionSupervisorDevuelveJSONEstructurado' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — La tool MCP de OpenClaw ya sugiere la acción siguiente
+
+Hallazgo:
+
+- con la cola de revisión ya estructurada, el supervisor todavía debía decidir a mano la acción siguiente para cada gate, signal, merge o colisión
+
+Decision:
+
+- añadir `recommended_actions` a la tool MCP estructurada del supervisor
+- no son otra verdad ni otra cola: son una proyección recomendada derivada del mismo estado vivo
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestMCPToolRevisionSupervisorDevuelveJSONEstructurado' -count=1`
+- `go build -o ./orquesta .`

@@ -479,6 +479,17 @@ func TestMCPToolRevisionSupervisorDevuelveJSONEstructurado(t *testing.T) {
 		if conflicts := reflect.ValueOf(structured["module_conflicts"]); !conflicts.IsValid() || conflicts.Len() == 0 {
 			t.Fatalf("module_conflicts vacío: %#v", structured)
 		}
+		if actions := reflect.ValueOf(structured["recommended_actions"]); !actions.IsValid() || actions.Len() == 0 {
+			t.Fatalf("recommended_actions vacío: %#v", structured)
+		}
+		action0 := reflect.ValueOf(structured["recommended_actions"]).Index(0).Interface()
+		raw, err := json.Marshal(action0)
+		if err != nil {
+			t.Fatalf("marshal recommended action: %v", err)
+		}
+		if !strings.Contains(string(raw), "Action") && !strings.Contains(string(raw), "action") {
+			t.Fatalf("recommended action sin action: %s", string(raw))
+		}
 	})
 }
 
