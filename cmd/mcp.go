@@ -1153,6 +1153,18 @@ func listMCPTools() []mcpTool {
 				"additionalProperties": false,
 			},
 		},
+		{
+			Name:        "orquesta.supervision.revision",
+			Title:       "Cola de revisión del supervisor",
+			Description: "Devuelve en JSON la cola estrecha de revisión: gates, señales, merges y colisiones",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"supervisor": map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
 	}
 }
 
@@ -1333,6 +1345,14 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 				"abstencion": result.Abstencion,
 				"pendiente":  result.Pendiente,
 			},
+		}
+		return toolResult(prettyJSON(resumen), resumen, false), nil
+
+	case "orquesta.supervision.revision":
+		supervisor := optionalStringArg(args, "supervisor")
+		resumen, err := buildSupervisorReviewSnapshot(supervisor)
+		if err != nil {
+			return nil, err
 		}
 		return toolResult(prettyJSON(resumen), resumen, false), nil
 	}
@@ -1837,36 +1857,18 @@ func buildSupervisorReviewBriefing(supervisor string) (string, error) {
 }
 
 func buildSupervisorConflictOverview() (string, error) {
-	status, err := statusService.FetchStatus()
+	conflicts, err := listarSupervisorModuleConflicts()
 	if err != nil {
 		return "", err
 	}
-	moduleGroups := map[string][]tareaLite{}
-	for _, tarea := range status.TareasActivas {
-		modulo := strings.TrimSpace(tarea.Modulo)
-		agente := strings.TrimSpace(tarea.Agente)
-		if modulo == "" || agente == "" {
-			continue
-		}
-		moduleGroups[modulo] = append(moduleGroups[modulo], tarea)
-	}
 	lines := make([]string, 0, 8)
-	for modulo, tareas := range moduleGroups {
-		agents := map[string]struct{}{}
-		for _, tarea := range tareas {
-			if strings.TrimSpace(tarea.Agente) != "" {
-				agents[strings.TrimSpace(tarea.Agente)] = struct{}{}
-			}
-		}
-		if len(agents) < 2 {
-			continue
-		}
-		partes := make([]string, 0, len(tareas))
-		for _, tarea := range tareas {
+	for _, conflict := range conflicts {
+		partes := make([]string, 0, len(conflict.Tareas))
+		for _, tarea := range conflict.Tareas {
 			partes = append(partes, fmt.Sprintf("#%d %s -> %s", tarea.ID, compactMCPLine(strings.TrimSpace(tarea.Titulo), 80), strings.TrimSpace(tarea.Agente)))
 		}
 		sort.Strings(partes)
-		lines = append(lines, fmt.Sprintf("- módulo=%s · %s", modulo, strings.Join(partes, " | ")))
+		lines = append(lines, fmt.Sprintf("- módulo=%s · %s", conflict.Modulo, strings.Join(partes, " | ")))
 	}
 	sort.Strings(lines)
 	if len(lines) == 0 {
@@ -1884,6 +1886,11 @@ type supervisorReviewSignal struct {
 	Event   *db.RuntimeEvent
 	Agent   string
 	Project string
+}
+
+type supervisorModuleConflict struct {
+	Modulo string     `json:"modulo"`
+	Tareas []tareaLite `json:"tareas"`
 }
 
 func listarSignalsRevisionSupervisor(limit int) ([]*supervisorReviewSignal, error) {
@@ -1964,6 +1971,77 @@ func listarMergesRevisionSupervisor(limit int) ([]*db.GitMerge, error) {
 		items = items[:limit]
 	}
 	return items, nil
+}
+
+func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
+	supervisor = strings.TrimSpace(supervisor)
+	if supervisor == "" {
+		if cfg, err := db.ConfigGet("openclaw_gateway_operator"); err == nil && strings.TrimSpace(cfg) != "" {
+			supervisor = strings.TrimSpace(cfg)
+		} else {
+			supervisor = "OpenClaw"
+		}
+	}
+	gates, err := db.ListarReviewGates(db.FiltroReviewGates{Limit: 20})
+	if err != nil {
+		return nil, err
+	}
+	openGates := make([]*db.ReviewGate, 0, len(gates))
+	for _, gate := range gates {
+		if gate == nil || gate.Estado == db.ReviewGateAprobado {
+			continue
+		}
+		openGates = append(openGates, gate)
+	}
+	signals, err := listarSignalsRevisionSupervisor(12)
+	if err != nil {
+		return nil, err
+	}
+	merges, err := listarMergesRevisionSupervisor(12)
+	if err != nil {
+		return nil, err
+	}
+	conflicts, err := listarSupervisorModuleConflicts()
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"supervisor":       supervisor,
+		"review_gates":     openGates,
+		"signals":          signals,
+		"merges":           merges,
+		"module_conflicts": conflicts,
+	}, nil
+}
+
+func listarSupervisorModuleConflicts() ([]supervisorModuleConflict, error) {
+	status, err := statusService.FetchStatus()
+	if err != nil {
+		return nil, err
+	}
+	moduleGroups := map[string][]tareaLite{}
+	for _, tarea := range status.TareasActivas {
+		modulo := strings.TrimSpace(tarea.Modulo)
+		agente := strings.TrimSpace(tarea.Agente)
+		if modulo == "" || agente == "" {
+			continue
+		}
+		moduleGroups[modulo] = append(moduleGroups[modulo], tarea)
+	}
+	conflicts := make([]supervisorModuleConflict, 0, len(moduleGroups))
+	for modulo, tareas := range moduleGroups {
+		agents := map[string]struct{}{}
+		for _, tarea := range tareas {
+			agents[strings.TrimSpace(tarea.Agente)] = struct{}{}
+		}
+		if len(agents) < 2 {
+			continue
+		}
+		sort.Slice(tareas, func(i, j int) bool { return tareas[i].ID < tareas[j].ID })
+		conflicts = append(conflicts, supervisorModuleConflict{Modulo: modulo, Tareas: tareas})
+	}
+	sort.Slice(conflicts, func(i, j int) bool { return conflicts[i].Modulo < conflicts[j].Modulo })
+	return conflicts, nil
 }
 
 func compactMCPLine(text string, maxRunes int) string {

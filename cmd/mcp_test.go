@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -385,6 +386,98 @@ func TestMCPPromptRevisionSupervisorIncluyeGatesYSignals(t *testing.T) {
 		resourceText, _ := contents[0]["text"].(string)
 		if !strings.Contains(resourceText, "ready_for_review") {
 			t.Fatalf("recurso de revisión sin signal esperado: %s", resourceText)
+		}
+	})
+}
+
+func TestMCPToolRevisionSupervisorDevuelveJSONEstructurado(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrando Codex3: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex4", "programador"); err != nil {
+			t.Fatalf("registrando Codex4: %v", err)
+		}
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		tarea1, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Integrar API",
+			Descripcion: "Revisión estructurada",
+			ProyectoID:  &proyectoID,
+			Modulo:      "api",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea1: %v", err)
+		}
+		tarea2, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Revisar API",
+			Descripcion: "Segunda tarea mismo módulo",
+			ProyectoID:  &proyectoID,
+			Modulo:      "api",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea2: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE tareas SET estado='en_progreso', agente='Codex3' WHERE id=?`, tarea1); err != nil {
+			t.Fatalf("activar tarea1: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE tareas SET estado='en_progreso', agente='Codex4' WHERE id=?`, tarea2); err != nil {
+			t.Fatalf("activar tarea2: %v", err)
+		}
+		if _, err := db.CrearReviewGate(&db.ReviewGate{
+			ProyectoID:     &proyectoID,
+			TareaID:        &tarea1,
+			RequestedBy:    "orquesta",
+			ReviewerAgente: "Codex4",
+			Estado:         db.ReviewGateEnRevision,
+		}); err != nil {
+			t.Fatalf("crear gate: %v", err)
+		}
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      "Codex3",
+			ProyectoID:  &proyectoID,
+			CWD:         "/tmp/orquestador",
+			Herramienta: "codex-cli",
+		})
+		if err != nil {
+			t.Fatalf("iniciar sesion: %v", err)
+		}
+		runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+		if err != nil || runtime == nil {
+			t.Fatalf("runtime esperado, got=%+v err=%v", runtime, err)
+		}
+		if _, err := db.RegistrarRuntimeEvent(&db.RuntimeEvent{
+			RuntimeID:   runtime.ID,
+			Kind:        "approval_request",
+			Level:       "warning",
+			Message:     "Necesito arbitraje del supervisor",
+			PayloadJSON: `{"classification":"approval_request"}`,
+		}); err != nil {
+			t.Fatalf("registrar event: %v", err)
+		}
+
+		result, err := callMCPTool("orquesta.supervision.revision", map[string]any{"supervisor": "OpenClaw"})
+		if err != nil {
+			t.Fatalf("callMCPTool revision supervisor: %v", err)
+		}
+		structured, _ := result["structuredContent"].(map[string]any)
+		if structured == nil {
+			t.Fatalf("structuredContent vacío: %#v", result)
+		}
+		if got, _ := structured["supervisor"].(string); got != "OpenClaw" {
+			t.Fatalf("supervisor inesperado: %#v", structured["supervisor"])
+		}
+		if gates := reflect.ValueOf(structured["review_gates"]); !gates.IsValid() || gates.Len() == 0 {
+			t.Fatalf("review_gates vacío: %#v", structured)
+		}
+		if signals := reflect.ValueOf(structured["signals"]); !signals.IsValid() || signals.Len() == 0 {
+			t.Fatalf("signals vacío: %#v", structured)
+		}
+		if conflicts := reflect.ValueOf(structured["module_conflicts"]); !conflicts.IsValid() || conflicts.Len() == 0 {
+			t.Fatalf("module_conflicts vacío: %#v", structured)
 		}
 	})
 }

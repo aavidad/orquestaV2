@@ -4676,3 +4676,25 @@ Validacion:
 
 - `go test ./cmd -run 'TestMCPPromptRevisionSupervisorIncluyeGatesYSignals' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — OpenClaw ya puede consumir la cola de revisión como tool MCP JSON
+
+Hallazgo:
+
+- prompt y recurso Markdown ya servían bien para lectura humana, pero para automatizar arbitraje aún faltaba una salida estructurada que no obligara a parsear texto
+
+Decision:
+
+- exponer la misma cola estrecha de revisión como `tool` MCP estructurada
+- reutilizar exactamente la misma lógica canónica de gates, señales, merges y colisiones
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestMCPToolRevisionSupervisorDevuelveJSONEstructurado' -count=1`
+- `go build -o ./orquesta .`
