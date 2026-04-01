@@ -939,6 +939,10 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `carga_activa` debe contar solo `en_progreso` y `bloqueada`
   - `carga_reservada` debe reflejar `asignada`
   - OpenClaw debe ver ambas cifras separadas en API y web para no interpretar backlog reservado como ejecución real.
+- La misma separación debe existir en la lista de frentes:
+  - `tareasActivas` = `en_progreso` y `bloqueada`
+  - `tareasReservadas` = `asignada`
+  - `/openclaw` no puede mostrar reservas dentro de `Frentes activos`, porque eso degrada la lectura operativa del supervisor.
 - La action tool del supervisor debe aceptar un fallback explícito seguro cuando la cola viva haya cambiado entre la recomendación y la ejecución:
   - si `action`, `target` y `assignee` siguen siendo válidos, OpenClaw debe poder aplicar la acción sin depender de que siga presente en `action_queue`
 - OpenClaw debe poder aplicar la `next_action` segura sin reenviar manualmente `action`, `target` y `assignee`:

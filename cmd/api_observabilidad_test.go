@@ -360,6 +360,14 @@ func TestAPIOpenClawOperatorSeparaCargaActivaYReservada(t *testing.T) {
 	if got := int(first["carga_reservada"].(float64)); got != 1 {
 		t.Fatalf("carga_reservada inesperada: %#v", first)
 	}
+	reservadas, _ := statusMap["tareasReservadas"].([]any)
+	if len(reservadas) != 1 {
+		t.Fatalf("tareasReservadas inesperadas: %#v", statusMap["tareasReservadas"])
+	}
+	activas, _ := statusMap["tareasActivas"].([]any)
+	if len(activas) != 1 {
+		t.Fatalf("tareasActivas inesperadas: %#v", statusMap["tareasActivas"])
+	}
 }
 
 func TestAPIOpenClawPipelineOperaPorLaViaCanonica(t *testing.T) {

@@ -54,6 +54,7 @@ type webOpenClawData struct {
 	EnCuota          []*db.Agente
 	MailboxPendiente []apiOpenClawMailboxLite
 	Retenidas        []tareaLite
+	TareasReservadas []tareaLite
 	ReviewGates      []*db.ReviewGate
 	Signals          []*supervisorReviewSignal
 	Merges           []*db.GitMerge
@@ -749,6 +750,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		EnCuota:          agentesNoActivosConCuota(status.Agentes),
 		MailboxPendiente: mustOpenClawPendingMailbox(status.Agentes),
 		Retenidas:        tareasRetenidasPorCuota(status.TareasActivas, status.Agentes),
+		TareasReservadas: filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
 		ReviewGates:      reviewGates,
 		Signals:          signals,
 		Merges:           merges,
@@ -1884,6 +1886,25 @@ const webTplOpenClaw = `{{define "content"}}
       </tbody></table>
       {{else}}
       <p style="margin:0;color:#64748b">Sin tareas activas.</p>
+      {{end}}
+    </section>
+
+    <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
+      <h3 style="margin:0 0 .7rem 0">Reservas preparadas</h3>
+      {{if .TareasReservadas}}
+      <table style="width:100%"><thead><tr><th>#</th><th>Estado</th><th>Módulo</th><th>Agente</th><th>Título</th></tr></thead><tbody>
+      {{range .TareasReservadas}}
+        <tr>
+          <td>{{.ID}}</td>
+          <td><span class="tag t-{{.Estado}}">{{.Estado}}</span></td>
+          <td><code>{{orDash .Modulo}}</code></td>
+          <td>{{orDash .Agente}}</td>
+          <td>{{.Titulo}}</td>
+        </tr>
+      {{end}}
+      </tbody></table>
+      {{else}}
+      <p style="margin:0;color:#64748b">Sin reservas preparadas.</p>
       {{end}}
     </section>
 

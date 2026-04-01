@@ -6365,3 +6365,22 @@ Resultado:
   - `GET /api/openclaw/operator` ya muestra, por ejemplo:
     - `Codex3 -> carga_activa 4`
     - `Codex4 -> carga_activa 2, carga_reservada 2`
+
+## 2026-04-01 — OpenClaw ya separa frentes activos de reservas preparadas
+
+- El operador todavía mezclaba en una sola tabla:
+  - trabajo realmente en marcha
+  - trabajo solo reservado por `reservar_tarea_libre`
+- Eso mantenía una ambigüedad operativa incluso después de separar `carga_activa` y `carga_reservada`.
+- Se corrigió la proyección de OpenClaw:
+  - `tareasActivas` ahora incluye solo `en_progreso` y `bloqueada`
+  - `tareasReservadas` recoge `asignada`
+  - `/openclaw` muestra dos bloques distintos:
+    - `Frentes activos`
+    - `Reservas preparadas`
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(APIOpenClawOperatorSeparaCargaActivaYReservada|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
+- Validación viva:
+  - `GET /api/openclaw/operator` ya devuelve:
+    - `tareasActivas = [410, 412, 413, 414, 416, 421]`
+    - `tareasReservadas = [411, 415]`

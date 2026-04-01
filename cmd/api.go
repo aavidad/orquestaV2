@@ -1290,6 +1290,7 @@ type apiOpenClawStatusLite struct {
 	MailboxPendiente   []apiOpenClawMailboxLite `json:"mailboxPendiente,omitempty"`
 	RetenidasPorCuota  []tareaLite            `json:"retenidasPorCuota,omitempty"`
 	TareasActivas      []tareaLite            `json:"tareasActivas,omitempty"`
+	TareasReservadas   []tareaLite            `json:"tareasReservadas,omitempty"`
 	PropuestasAbiertas []propuestaLite        `json:"propuestasAbiertas,omitempty"`
 }
 
@@ -1318,9 +1319,30 @@ func buildOpenClawOperatorStatus(status *estadoResumen) (apiOpenClawStatusLite, 
 		EnCuota:            compactOpenClawAgents(agentesNoActivosConCuota(status.Agentes), status.TareasActivas),
 		MailboxPendiente:   mailboxPendiente,
 		RetenidasPorCuota:  tareasRetenidasPorCuota(status.TareasActivas, status.Agentes),
-		TareasActivas:      status.TareasActivas,
+		TareasActivas:      filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada),
+		TareasReservadas:   filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
 		PropuestasAbiertas: status.PropuestasAbiertas,
 	}, nil
+}
+
+func filtrarOpenClawTareasPorEstado(items []tareaLite, estados ...db.EstadoTarea) []tareaLite {
+	if len(items) == 0 || len(estados) == 0 {
+		return nil
+	}
+	permitidos := make(map[db.EstadoTarea]struct{}, len(estados))
+	for _, estado := range estados {
+		permitidos[estado] = struct{}{}
+	}
+	out := make([]tareaLite, 0, len(items))
+	for _, item := range items {
+		if _, ok := permitidos[item.Estado]; ok {
+			out = append(out, item)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func buildOpenClawPendingMailbox(agentes []*db.Agente) ([]apiOpenClawMailboxLite, error) {
