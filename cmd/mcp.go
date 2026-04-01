@@ -1334,6 +1334,20 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.agentes.accion",
+			Title:       "Acción de agente",
+			Description: "Aplica una acción canónica de estado sobre un agente",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente": map[string]any{"type": "string"},
+					"accion": map[string]any{"type": "string", "enum": []string{"retirar", "rehabilitar", "reset-reanimacion"}},
+				},
+				"required":             []string{"agente", "accion"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.runtime.ordenes.listar",
 			Title:       "Listar runtime orders",
 			Description: "Lista runtime orders por agente, proyecto o estado",
@@ -1960,6 +1974,24 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return nil, err
 		}
 		if err := agentesService.PauseTemporarily(agente, minutos, motivo, optionalStringArg(args, "accion"), optionalStringArg(args, "entidad"), optionalStringArg(args, "detalle")); err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		detail, err := agentesService.GetAgent(agente)
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(detail), detail, false), nil
+
+	case "orquesta.agentes.accion":
+		agente, err := requiredStringArg(args, "agente")
+		if err != nil {
+			return nil, err
+		}
+		accion, err := requiredStringArg(args, "accion")
+		if err != nil {
+			return nil, err
+		}
+		if err := agentesService.ApplyStateAction(agente, accion); err != nil {
 			return toolResult(err.Error(), nil, true), nil
 		}
 		detail, err := agentesService.GetAgent(agente)

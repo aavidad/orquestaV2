@@ -862,6 +862,44 @@ func TestMCPToolsAgentesListarYPausarOperanPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestMCPToolsAgentesAccionOperanPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+			t.Fatalf("registrando Codex6: %v", err)
+		}
+
+		retireResult, err := callMCPTool("orquesta.agentes.accion", map[string]any{
+			"agente": "Codex6",
+			"accion": "retirar",
+		})
+		if err != nil {
+			t.Fatalf("agentes accion retirar MCP: %v", err)
+		}
+		if retireResult["isError"] != false {
+			t.Fatalf("agentes accion retirar marcado como error: %#v", retireResult)
+		}
+		agente, _ := retireResult["structuredContent"].(*db.Agente)
+		if agente == nil || agente.Habilitado {
+			t.Fatalf("agente no quedó retirado: %#v", retireResult["structuredContent"])
+		}
+
+		rehabResult, err := callMCPTool("orquesta.agentes.accion", map[string]any{
+			"agente": "Codex6",
+			"accion": "rehabilitar",
+		})
+		if err != nil {
+			t.Fatalf("agentes accion rehabilitar MCP: %v", err)
+		}
+		if rehabResult["isError"] != false {
+			t.Fatalf("agentes accion rehabilitar marcado como error: %#v", rehabResult)
+		}
+		agente, _ = rehabResult["structuredContent"].(*db.Agente)
+		if agente == nil || !agente.Habilitado {
+			t.Fatalf("agente no quedó rehabilitado: %#v", rehabResult["structuredContent"])
+		}
+	})
+}
+
 func TestMCPToolsPropuestasCrearYAccionarOperanPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")

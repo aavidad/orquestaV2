@@ -4911,3 +4911,25 @@ Validacion:
 
 - `go test ./cmd -run 'TestMCPToolsCoordinacionOperanPorLaViaCanonica' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — El MCP ya cambia el estado operativo de agentes
+
+Hallazgo:
+
+- al supervisor todavía le faltaba una pieza de gobierno fino de la flota: podía pausar agentes, pero no retirarlos, rehabilitarlos ni resetear su reanimación desde el MCP oficial
+
+Decision:
+
+- añadir tool MCP para:
+  - aplicar acciones de estado sobre agentes (`retirar`, `rehabilitar`, `reset-reanimacion`)
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestMCPToolsAgentesAccionOperanPorLaViaCanonica' -count=1`
+- `go build -o ./orquesta .`
