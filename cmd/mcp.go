@@ -993,6 +993,47 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.tareas.crear",
+			Title:       "Crear tarea",
+			Description: "Crea una tarea por la vía canónica de Orquesta",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"titulo":      map[string]any{"type": "string"},
+					"descripcion": map[string]any{"type": "string"},
+					"proyecto":    map[string]any{"type": "string"},
+					"modulo":      map[string]any{"type": "string"},
+					"prioridad":   map[string]any{"type": "string"},
+					"creado_por":  map[string]any{"type": "string"},
+					"notas":       map[string]any{"type": "string"},
+					"propuesta":   map[string]any{"type": "string"},
+					"agente":      map[string]any{"type": "string"},
+				},
+				"required":             []string{"titulo"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.tareas.accion",
+			Title:       "Acción sobre tarea",
+			Description: "Ejecuta una acción canónica sobre una tarea existente",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":           map[string]any{"type": "integer"},
+					"accion":       map[string]any{"type": "string", "enum": []string{"tomar", "iniciar", "completar", "bloquear", "desbloquear", "nota", "backlog", "cancelar", "reasignar"}},
+					"agente":       map[string]any{"type": "string"},
+					"commit":       map[string]any{"type": "string"},
+					"motivo":       map[string]any{"type": "string"},
+					"resolucion":   map[string]any{"type": "string"},
+					"nota":         map[string]any{"type": "string"},
+					"nuevo_agente": map[string]any{"type": "string"},
+				},
+				"required":             []string{"id", "accion"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.propuestas.listar",
 			Title:       "Listar propuestas",
 			Description: "Lista propuestas, opcionalmente filtradas por estado",
@@ -1139,6 +1180,23 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.runtime.nudge",
+			Title:       "Nudge runtime",
+			Description: "Encola un nudge canónico a un agente a través del control plane",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"to_agente":   map[string]any{"type": "string"},
+					"texto":       map[string]any{"type": "string"},
+					"from_agente": map[string]any{"type": "string"},
+					"proyecto":    map[string]any{"type": "string"},
+					"kind":        map[string]any{"type": "string"},
+				},
+				"required":             []string{"to_agente", "texto"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.propuestas.votar",
 			Title:       "Votar propuesta",
 			Description: "Registra el voto de un agente sobre una propuesta abierta",
@@ -1273,6 +1331,67 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		}
 		return toolResult(prettyJSON(t), t, false), nil
 
+	case "orquesta.tareas.crear":
+		id, err := tareasService.Create(tareasapp.CreateTaskInput{
+			Titulo:          optionalStringArg(args, "titulo"),
+			Descripcion:     optionalStringArg(args, "descripcion"),
+			Modulo:          optionalStringArg(args, "modulo"),
+			Prioridad:       db.PrioridadTarea(optionalStringArg(args, "prioridad")),
+			CreadoPor:       optionalStringArg(args, "creado_por"),
+			Agente:          optionalStringArg(args, "agente"),
+			Proyecto:        optionalStringArg(args, "proyecto"),
+			PropuestaCodigo: optionalStringArg(args, "propuesta"),
+			Notas:           optionalStringArg(args, "notas"),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		t, err := tareasService.Get(id)
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(t), t, false), nil
+
+	case "orquesta.tareas.accion":
+		id, err := requiredInt64Arg(args, "id")
+		if err != nil {
+			return nil, err
+		}
+		accion, err := requiredStringArg(args, "accion")
+		if err != nil {
+			return nil, err
+		}
+		switch accion {
+		case "tomar":
+			err = tareasService.Take(id, optionalStringArg(args, "agente"))
+		case "iniciar":
+			err = tareasService.Start(id, optionalStringArg(args, "agente"))
+		case "completar":
+			err = tareasService.Complete(id, optionalStringArg(args, "agente"), optionalStringArg(args, "commit"))
+		case "bloquear":
+			err = tareasService.Block(id, optionalStringArg(args, "agente"), optionalStringArg(args, "motivo"))
+		case "desbloquear":
+			err = tareasService.Unblock(id, optionalStringArg(args, "agente"), optionalStringArg(args, "resolucion"))
+		case "nota":
+			err = tareasService.Note(id, optionalStringArg(args, "agente"), optionalStringArg(args, "nota"))
+		case "backlog":
+			err = tareasService.MoveToBacklog(id)
+		case "cancelar":
+			err = db.CancelarTarea(id, optionalStringArg(args, "agente"), valorConFallback(optionalStringArg(args, "motivo"), "cancelada via MCP"))
+		case "reasignar":
+			err = tareasService.Reassign(id, optionalStringArg(args, "nuevo_agente"))
+		default:
+			return nil, fmt.Errorf("acción desconocida: %s", accion)
+		}
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		t, err := tareasService.Get(id)
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(t), t, false), nil
+
 	case "orquesta.propuestas.listar":
 		var estadoPtr *db.EstadoPropuesta
 		if estado := optionalStringArg(args, "estado"); estado != "" {
@@ -1375,6 +1494,49 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return nil, err
 		}
 		return toolResult(prettyJSON(sesiones), sesiones, false), nil
+
+	case "orquesta.runtime.nudge":
+		toAgente, err := requiredStringArg(args, "to_agente")
+		if err != nil {
+			return nil, err
+		}
+		texto, err := requiredStringArg(args, "texto")
+		if err != nil {
+			return nil, err
+		}
+		kind := optionalStringArg(args, "kind")
+		if strings.TrimSpace(kind) == "" {
+			kind = "nudge"
+		}
+		payload := map[string]any{
+			"from_agente": optionalStringArg(args, "from_agente"),
+			"to_agente":   toAgente,
+			"kind":        kind,
+			"texto":       texto,
+		}
+		payloadJSON, err := json.Marshal(payload)
+		if err != nil {
+			return nil, fmt.Errorf("serializando payload runtime.nudge: %w", err)
+		}
+		var proyectoID *int64
+		if proyecto := strings.TrimSpace(optionalStringArg(args, "proyecto")); proyecto != "" {
+			p, err := runtimesService.GetProject(proyecto)
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			proyectoID = &p.ID
+		}
+		id, err := runtimesService.EnqueueRuntimeOrder(&db.RuntimeOrder{
+			Agente:      toAgente,
+			ProyectoID:  proyectoID,
+			Tipo:        "nudge",
+			PayloadJSON: string(payloadJSON),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := map[string]any{"id": id, "to_agente": toAgente, "kind": kind, "texto": texto}
+		return toolResult(prettyJSON(result), result, false), nil
 
 	case "orquesta.propuestas.votar":
 		codigo, err := requiredStringArg(args, "codigo")

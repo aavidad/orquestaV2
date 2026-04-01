@@ -589,6 +589,74 @@ func TestMCPToolsReviewGatesYGitMergesOperanPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestMCPToolsTareasYNudgeOperanPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrando Codex3: %v", err)
+		}
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+
+		createResult, err := callMCPTool("orquesta.tareas.crear", map[string]any{
+			"titulo":      "Cerrar MCP operativo",
+			"descripcion": "Debe nacer por tool MCP",
+			"proyecto":    "orquestador",
+			"modulo":      "mcp",
+			"prioridad":   "alta",
+			"creado_por":  "OpenClaw",
+			"agente":      "Codex3",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea MCP: %v", err)
+		}
+		if createResult["isError"] != false {
+			t.Fatalf("crear tarea marcado como error: %#v", createResult)
+		}
+		tarea, _ := createResult["structuredContent"].(*db.Tarea)
+		if tarea == nil || tarea.ID <= 0 {
+			t.Fatalf("tarea estructurada inválida: %#v", createResult)
+		}
+
+		startResult, err := callMCPTool("orquesta.tareas.accion", map[string]any{
+			"id":     tarea.ID,
+			"accion": "iniciar",
+			"agente": "Codex3",
+		})
+		if err != nil {
+			t.Fatalf("iniciar tarea MCP: %v", err)
+		}
+		if startResult["isError"] != false {
+			t.Fatalf("iniciar tarea marcado como error: %#v", startResult)
+		}
+
+		nudgeResult, err := callMCPTool("orquesta.runtime.nudge", map[string]any{
+			"to_agente":   "Codex3",
+			"from_agente": "OpenClaw",
+			"proyecto":    "orquestador",
+			"texto":       "continua con el cierre del frente MCP",
+		})
+		if err != nil {
+			t.Fatalf("runtime nudge MCP: %v", err)
+		}
+		if nudgeResult["isError"] != false {
+			t.Fatalf("runtime nudge marcado como error: %#v", nudgeResult)
+		}
+		orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: strPtr("Codex3"), Limit: 10})
+		if err != nil {
+			t.Fatalf("listar runtime orders: %v", err)
+		}
+		foundNudge := false
+		for _, order := range orders {
+			if order != nil && order.Tipo == "nudge" {
+				foundNudge = true
+				break
+			}
+		}
+		if !foundNudge {
+			t.Fatalf("no apareció nudge en runtime orders: %+v", orders)
+		}
+	})
+}
+
 func TestMCPToolVotarPropuestaActualizaEstado(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {

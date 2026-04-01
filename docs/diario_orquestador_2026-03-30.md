@@ -4767,3 +4767,27 @@ Validacion:
 
 - `go test ./cmd -run 'TestMCPToolsReviewGatesYGitMergesOperanPorLaViaCanonica' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — El MCP ya mueve tareas y empuja `nudge` a la flota
+
+Hallazgo:
+
+- aunque review e integración ya estaban cubiertas, todavía faltaba una parte esencial para llamar al MCP “completo”: mover trabajo real y empujar a los workers sin salir del servidor
+
+Decision:
+
+- añadir tools MCP para:
+  - crear tareas
+  - ejecutar acciones canónicas sobre tareas
+  - encolar `runtime nudge` por control plane
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestMCPToolsTareasYNudgeOperanPorLaViaCanonica' -count=1`
+- `go build -o ./orquesta .`
