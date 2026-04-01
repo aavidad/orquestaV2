@@ -1026,6 +1026,68 @@ func TestPlanificarTareasAutomaticamenteRespetaMaxWorkersAutonomia(t *testing.T)
 	}
 }
 
+func TestPlanificarTareasAutomaticamenteNoCuentaWorkerEnCuotaParaMaxWorkers(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexBloqueado", "CodexWorker")
+
+	if err := RegistrarAgente("CodexBloqueado", "programador"); err != nil {
+		t.Fatalf("registrar worker bloqueado: %v", err)
+	}
+	if err := RegistrarAgente("CodexWorker", "programador"); err != nil {
+		t.Fatalf("registrar worker libre: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre IN ('CodexBloqueado','CodexWorker')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', motivo_pausa='presupuesto observado' WHERE nombre='CodexBloqueado'`); err != nil {
+		t.Fatalf("bloquear worker por cuota: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertProyectoAutonomia(&ProyectoAutonomia{
+		ProyectoID:      proyectoID,
+		Enabled:         true,
+		MaxWorkers:      1,
+		EstadoAutonomia: AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := ActivarAsignacion("CodexBloqueado", proyectoID, "worker bloqueado"); err != nil {
+		t.Fatalf("activar asignacion bloqueada: %v", err)
+	}
+	tareaLibreID, err := CrearTarea(&Tarea{
+		Titulo:      "Worker disponible pese a cuota ajena",
+		Descripcion: "El cupo debe ignorar workers bloqueados por cuota",
+		ProyectoID:  &proyectoID,
+		Modulo:      "orquestador",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea libre: %v", err)
+	}
+
+	if err := PlanificarTareasAutomaticamente(); err != nil {
+		t.Fatalf("planificar: %v", err)
+	}
+
+	tareaLibre, err := GetTarea(tareaLibreID)
+	if err != nil {
+		t.Fatalf("get tarea libre: %v", err)
+	}
+	if tareaLibre.Agente == nil || *tareaLibre.Agente != "CodexWorker" || tareaLibre.Estado != TareaAsignada {
+		t.Fatalf("el worker libre deberia tomar la tarea cuando el otro esta en cuota: %+v", tareaLibre)
+	}
+}
+
 func TestPlanificarTareasAutomaticamenteNoDuplicaStartNiHandleActivo(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	restringirPlanificadorATestAgentes(t, "Codex1")

@@ -5086,3 +5086,35 @@ Validacion:
 - `go test ./cmd -run 'TestRenderStatusSummaryNoDuplicaTareasRetenidasEnProgresoAhoraMismo' -count=1`
 - `go build -o ./orquesta .`
 - `./orquesta status`
+
+## 2026-04-01 — `MaxWorkers` ya no queda secuestrado por workers bloqueados por cuota
+
+Hallazgo:
+
+- el planificador seguía dejando backlog libre aunque había workers sanos (`Codex3`) y tarea disponible
+- la causa estaba en `contarWorkersActivosProyecto()`: contaba cualquier asignación activa no reservada como worker consumiendo cupo
+- eso incluía agentes con `estado_cuota=enfriamiento/agotado`, así que `MaxWorkers` podía quedar lleno por workers ya fuera del pool
+
+Decision:
+
+- contar como worker efectivo solo a asignaciones activas de agentes con cuota visible `activa`
+- no tocar datos vivos a mano ni desactivar asignaciones para sortearlo; el arreglo correcto va en la lógica de planificación
+
+Codigo:
+
+- [db/planificador.go](/home/alberto/Trabajo/orquesta/db/planificador.go)
+- [db/planificador_autostart_test.go](/home/alberto/Trabajo/orquesta/db/planificador_autostart_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./db -run 'TestPlanificarTareasAutomaticamente(NoCuentaWorkerEnCuotaParaMaxWorkers|RespetaMaxWorkersAutonomia)$' -count=1`
+- `go build -o ./orquesta .`
+- `./orquesta server stop`
+- `./orquesta server start`
+- tras un ciclo real de planificación, el backlog volvió a drenarse automáticamente: ya apareció una tarea autoasignada y el proyecto dejó de quedarse clavado con `12` libres
+
+Observacion abierta:
+
+- al corregir el cupo, afloró otro problema distinto: el drenado fue a `claude1`, lo que indica que el planificador todavía puede salirse del pool Codex oficial si existe una asignación activa heredada fuera de esa flota
+- ese es el siguiente frente, separado de este fix

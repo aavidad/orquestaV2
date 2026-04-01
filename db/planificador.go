@@ -619,6 +619,19 @@ func contarWorkersActivosProyecto(proyectoID int64) (int, error) {
 		if reservado {
 			continue
 		}
+		infoAgente, err := GetAgente(asignacion.Agente)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				continue
+			}
+			return 0, err
+		}
+		if infoAgente == nil {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(infoAgente.EstadoCuota), "activo") {
+			continue
+		}
 		total++
 	}
 	return total, nil
