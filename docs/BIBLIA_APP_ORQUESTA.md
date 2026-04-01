@@ -741,11 +741,12 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `integration_openclaw_transport=mcp_http`
   - `integration_openclaw_endpoint=http://127.0.0.1:16543/mcp`
   - `integration_openclaw_workspace_mode=worktree`
-  - `integration_openclaw_agent_prefix=OpenClaw-`
-  - `integration_openclaw_require_identity=true`
+- `integration_openclaw_agent_prefix=OpenClaw-`
+- `integration_openclaw_require_identity=true`
 - los formularios de configuración deben conservar `lang` en redirects y usar mensajes i18n; no se admiten flashes hardcodeados ni rutas laterales fuera del servidor
 - para `codex_token_count_observed`, si falta la clave de configuración específica, el TTL por defecto observado sigue siendo `3600s`; no puede caer silenciosamente al TTL genérico de `300s`, porque eso oculta agotamientos reales de la ventana `5h`.
 - un presupuesto fresco y crítico observado debe proyectarse también sobre `estado_cuota` visible del agente (`enfriamiento` o `agotado`) aunque la fila persistida aún no haya sido actualizada por un batch posterior.
+- la visibilidad humana de cuota no puede llamar `efectivo` a una cifra observada pero `stale`; en ese caso debe presentarla como `observado`, y si además se muestran ventanas derivadas o auxiliares deben ir marcadas como `estimado` para no mezclar verdad dura con cálculo orientativo
 - la identidad de cuenta del agente (`usuario` / `correo`) debe salir solo de artefactos ya persistidos del runtime o del presupuesto (`raw_snapshot_json`, `metadata_json`). No se abre una segunda fuente de verdad ni se inventan credenciales.
 - si Orquesta no observa identidad fiable, deja el campo vacío. El contrato es `mejor dato observado`, no adivinación.
 

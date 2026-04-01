@@ -5498,3 +5498,35 @@ Resultado:
 - `/config` ya muestra una sección rápida de integración OpenClaw
 - el preset `openclaw_server_first` deja la configuración mínima lista sin salir de la UI server-first
 - la edición manual y el preset conservan `lang` y feedback traducido
+
+## 2026-04-01 — la telemetría stale deja de presentarse como cuota efectiva
+
+Hallazgo:
+
+- la salida viva seguía mezclando fuentes incompatibles: por ejemplo `Codex3` salía con `efectivo 82%` y, debajo, ventanas `sesión 98% / semanal 99%`
+- eso no era un bug de cálculo puro, sino de semántica visible: la línea principal venía de observación stale y el desglose de otra resolución
+
+Decision:
+
+- cuando la cuota visible procede de telemetría observada `stale`, la UI/CLI no la llaman `efectivo`, sino `observado`
+- si además se muestran ventanas auxiliares o derivadas en ese caso, se marcan como `estimado`
+
+Codigo:
+
+- [cmd/status_remoto_compat.go](/home/alberto/Trabajo/orquesta/cmd/status_remoto_compat.go)
+- [cmd/agente_telemetria.go](/home/alberto/Trabajo/orquesta/cmd/agente_telemetria.go)
+- [cmd/status_test.go](/home/alberto/Trabajo/orquesta/cmd/status_test.go)
+- [cmd/agente_telemetria_test.go](/home/alberto/Trabajo/orquesta/cmd/agente_telemetria_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(ResumenCuotaAgenteMarcaObservadoCuandoLaTelemetriaEsStale|RenderStatusSummaryMuestraCuotaAgente|AgentePresupuestoCmdMarcaObservadoSiLaTelemetriaEsStale|AgentePresupuestoCmdRenderizaListado|AgenteRankingCuentasCmdRenderizaListado)' -count=1`
+- `go build -o ./orquesta .`
+- `./orquesta status`
+- `./orquesta agente presupuesto`
+
+Resultado:
+
+- `Codex3` ya sale como `observado 82%` y el desglose como `estimado ...`
+- el estado visible deja de presentar telemetría stale como si fuera cuota efectiva consolidada

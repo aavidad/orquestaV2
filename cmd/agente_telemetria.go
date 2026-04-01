@@ -133,7 +133,7 @@ func resumenRankingCuenta(cuenta apiCuentaPresupuestoItem) string {
 		}
 	case "cuota_pct":
 		if cuenta.CuotaRestantePct != nil {
-			detalle = fmt.Sprintf("efectivo %d%%", *cuenta.CuotaRestantePct)
+			detalle = fmt.Sprintf("%s %d%%", etiquetaCuotaVisibleCuenta(cuenta.PresupuestoStale, cuenta.PresupuestoFuente), *cuenta.CuotaRestantePct)
 		}
 	}
 	if cuenta.PresupuestoVentana != "" {

@@ -100,6 +100,29 @@ func TestAgentePresupuestoCmdRenderizaListado(t *testing.T) {
 	}
 }
 
+func TestAgentePresupuestoCmdMarcaObservadoSiLaTelemetriaEsStale(t *testing.T) {
+	setAgentTelemetryHTTPClientForTest(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch {
+		case req.URL.Path == "/api/agentes/presupuesto" && req.URL.Query().Get("activos") == "true":
+			return newJSONResponse(http.StatusOK, `{"generado":"2026-03-31T18:00:00Z","activos":true,"agentes":[{"Nombre":"Codex3","CuotaRestantePct":82,"PresupuestoVentana":"weekly","PresupuestoStale":true,"PresupuestoEstado":"observado_stale","PresupuestoSesionPct":98,"PresupuestoSemanalPct":99}]}`), nil
+		default:
+			return newJSONResponse(http.StatusNotFound, `{"error":"not found"}`), nil
+		}
+	}))
+	out := captureOutput(t, func() {
+		rootCmd.SetArgs([]string{"agente", "presupuesto", "--activos"})
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("Execute agente presupuesto: %v", err)
+		}
+	})
+	if !strings.Contains(out, "Codex3") || !strings.Contains(out, "observado 82%") || !strings.Contains(out, "stale") {
+		t.Fatalf("salida inesperada:\n%s", out)
+	}
+	if strings.Contains(out, "efectivo 82%") {
+		t.Fatalf("la telemetria stale no deberia salir como efectiva:\n%s", out)
+	}
+}
+
 func TestAgenteRankingCuentasCmdRenderizaListado(t *testing.T) {
 	setAgentTelemetryHTTPClientForTest(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		switch {

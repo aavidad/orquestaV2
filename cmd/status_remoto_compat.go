@@ -293,7 +293,7 @@ func resumenCuotaAgente(a *db.Agente) string {
 		}
 	}
 	if a.CuotaRestantePct != nil {
-		partes = append(partes, fmt.Sprintf("efectivo %d%%", *a.CuotaRestantePct))
+		partes = append(partes, fmt.Sprintf("%s %d%%", etiquetaCuotaVisible(a), *a.CuotaRestantePct))
 	}
 	if a.PresupuestoVentana != "" {
 		partes = append(partes, "ventana "+a.PresupuestoVentana)
@@ -376,7 +376,11 @@ func resumenDesgloseCuotaAgente(a *db.Agente) string {
 	if len(partes) == 0 {
 		return ""
 	}
-	return strings.Join(partes, " / ")
+	texto := strings.Join(partes, " / ")
+	if presupuestoVisibleObservadoStale(a) {
+		return "estimado " + texto
+	}
+	return texto
 }
 
 func agentesNoActivosConCuota(agentes []*db.Agente) []*db.Agente {
@@ -477,6 +481,31 @@ func renderVentanaPresupuesto(nombre string, pct *int, resetAt *time.Time) strin
 		parte += " reset " + resetAt.Local().Format("2006-01-02 15:04")
 	}
 	return parte
+}
+
+func etiquetaCuotaVisible(a *db.Agente) string {
+	if presupuestoVisibleObservadoStaleAgente(a) {
+		return "observado"
+	}
+	return "efectivo"
+}
+
+func presupuestoVisibleObservadoStale(a *db.Agente) bool {
+	return presupuestoVisibleObservadoStaleAgente(a)
+}
+
+func presupuestoVisibleObservadoStaleAgente(a *db.Agente) bool {
+	if a == nil || !a.PresupuestoStale {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(a.PresupuestoEstado), "observado_stale")
+}
+
+func etiquetaCuotaVisibleCuenta(stale bool, estado string) string {
+	if stale {
+		return "observado"
+	}
+	return "efectivo"
 }
 
 func edadPresupuestoObservado(checkedAt *time.Time) string {

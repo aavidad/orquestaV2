@@ -603,6 +603,30 @@ func TestResumenCuotaAgenteMarcaPausaRuntimeSinMentirConCuota(t *testing.T) {
 	}
 }
 
+func TestResumenCuotaAgenteMarcaObservadoCuandoLaTelemetriaEsStale(t *testing.T) {
+	pct := 82
+	sessionPct := 98
+	weeklyPct := 99
+	detalle := resumenCuotaAgente(&db.Agente{
+		Nombre:                "Codex3",
+		CuotaRestantePct:      &pct,
+		PresupuestoVentana:    "weekly",
+		PresupuestoStale:      true,
+		PresupuestoEstado:     "observado_stale",
+		PresupuestoSesionPct:  &sessionPct,
+		PresupuestoSemanalPct: &weeklyPct,
+	})
+	if !strings.Contains(detalle, "observado 82%") {
+		t.Fatalf("detalle sin marca observada: %s", detalle)
+	}
+	if !strings.Contains(detalle, "estimado sesión 98% / semanal 99%") {
+		t.Fatalf("detalle sin marca estimada: %s", detalle)
+	}
+	if strings.Contains(detalle, "efectivo 82%") {
+		t.Fatalf("no deberia presentar cuota stale como efectiva: %s", detalle)
+	}
+}
+
 func TestRenderStatusSummaryMuestraTareasRetenidasPorCuota(t *testing.T) {
 	out := captureOutput(t, func() {
 		renderStatusSummary(&statusContext{
