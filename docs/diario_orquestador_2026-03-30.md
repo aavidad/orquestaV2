@@ -4742,3 +4742,28 @@ Validacion:
 
 - `go test ./cmd -run 'TestMCPToolRevisionSupervisorDevuelveJSONEstructurado' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — El MCP ya acciona review gates y git merges por la vía canónica
+
+Hallazgo:
+
+- OpenClaw ya podía leer el estado de revisión/integración, pero seguía faltando cerrar el ciclo con acciones MCP canónicas dentro del mismo servidor
+
+Decision:
+
+- ampliar MCP con tools para:
+  - listar `review_gates`
+  - resolver `review_gates`
+  - listar `git_merges`
+  - guardar `git_merges`
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestMCPToolsReviewGatesYGitMergesOperanPorLaViaCanonica' -count=1`
+- `go build -o ./orquesta .`

@@ -24,6 +24,7 @@ import (
 	"orquesta/gitgobernanza"
 	"orquesta/panelapp"
 	"orquesta/propuestasapp"
+	"orquesta/reviewapp"
 	"orquesta/runtimesapp"
 	"orquesta/sesionesapp"
 	"orquesta/tareasapp"
@@ -1154,6 +1155,72 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.review_gates.listar",
+			Title:       "Listar review gates",
+			Description: "Lista review gates por proyecto, estado o reviewer",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"proyecto":        map[string]any{"type": "string"},
+					"estado":          map[string]any{"type": "string"},
+					"reviewer_agente": map[string]any{"type": "string"},
+					"limit":           map[string]any{"type": "integer"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.review_gates.resolver",
+			Title:       "Resolver review gate",
+			Description: "Resuelve un review gate existente con estado y findings",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":              map[string]any{"type": "integer"},
+					"estado":          map[string]any{"type": "string"},
+					"reviewer_agente": map[string]any{"type": "string"},
+					"findings_json":   map[string]any{"type": "string"},
+				},
+				"required":             []string{"id", "estado"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.git.merges.listar",
+			Title:       "Listar merges",
+			Description: "Lista solicitudes de merge por proyecto o estado",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"proyecto": map[string]any{"type": "string"},
+					"estado":   map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.git.merges.guardar",
+			Title:       "Guardar merge",
+			Description: "Crea o actualiza una solicitud de merge por la vía canónica de Orquesta",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":            map[string]any{"type": "integer"},
+					"proyecto":      map[string]any{"type": "string"},
+					"source_branch": map[string]any{"type": "string"},
+					"target_branch": map[string]any{"type": "string"},
+					"requested_by":  map[string]any{"type": "string"},
+					"estado":        map[string]any{"type": "string"},
+					"commit_origen": map[string]any{"type": "string"},
+					"commit_merge":  map[string]any{"type": "string"},
+					"notas":         map[string]any{"type": "string"},
+					"metadata_json": map[string]any{"type": "string"},
+				},
+				"required":             []string{"proyecto", "source_branch", "target_branch", "requested_by"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.supervision.revision",
 			Title:       "Cola de revisión del supervisor",
 			Description: "Devuelve en JSON la cola estrecha de revisión: gates, señales, merges y colisiones",
@@ -1347,6 +1414,91 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			},
 		}
 		return toolResult(prettyJSON(resumen), resumen, false), nil
+
+	case "orquesta.review_gates.listar":
+		gates, err := reviewService.List(reviewapp.ListInput{
+			ProyectoRef:    optionalStringArg(args, "proyecto"),
+			Estado:         optionalStringArg(args, "estado"),
+			ReviewerAgente: optionalStringArg(args, "reviewer_agente"),
+			Limit:          intArgOrDefault(args, "limit", 50),
+		})
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(gates), gates, false), nil
+
+	case "orquesta.review_gates.resolver":
+		id, err := requiredInt64Arg(args, "id")
+		if err != nil {
+			return nil, err
+		}
+		estado, err := requiredStringArg(args, "estado")
+		if err != nil {
+			return nil, err
+		}
+		gate, err := reviewService.Resolve(reviewapp.ResolveGateInput{
+			ID:             id,
+			Estado:         estado,
+			ReviewerAgente: optionalStringArg(args, "reviewer_agente"),
+			FindingsJSON:   optionalStringArg(args, "findings_json"),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(gate), gate, false), nil
+
+	case "orquesta.git.merges.listar":
+		merges, err := gitgobernanza.NewService(gitgobernanza.Repository{}).ListRequests(optionalStringArg(args, "proyecto"), optionalStringArg(args, "estado"))
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(merges), merges, false), nil
+
+	case "orquesta.git.merges.guardar":
+		proyecto, err := requiredStringArg(args, "proyecto")
+		if err != nil {
+			return nil, err
+		}
+		sourceBranch, err := requiredStringArg(args, "source_branch")
+		if err != nil {
+			return nil, err
+		}
+		targetBranch, err := requiredStringArg(args, "target_branch")
+		if err != nil {
+			return nil, err
+		}
+		requestedBy, err := requiredStringArg(args, "requested_by")
+		if err != nil {
+			return nil, err
+		}
+		var mergeID int64
+		if raw, ok := args["id"]; ok && raw != nil {
+			value, err := requiredInt64Arg(args, "id")
+			if err != nil {
+				return nil, err
+			}
+			mergeID = value
+		}
+		id, err := gitgobernanza.NewService(gitgobernanza.Repository{}).SaveRequest(gitgobernanza.SaveMergeRequestInput{
+			ID:           mergeID,
+			ProyectoSlug: proyecto,
+			SourceBranch: sourceBranch,
+			TargetBranch: targetBranch,
+			RequestedBy:  requestedBy,
+			Estado:       optionalStringArg(args, "estado"),
+			CommitOrigen: optionalStringArg(args, "commit_origen"),
+			CommitMerge:  optionalStringArg(args, "commit_merge"),
+			Notas:        optionalStringArg(args, "notas"),
+			MetadataJSON: optionalStringArg(args, "metadata_json"),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		merge, err := db.GetGitMerge(id)
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(merge), merge, false), nil
 
 	case "orquesta.supervision.revision":
 		supervisor := optionalStringArg(args, "supervisor")
@@ -2028,6 +2180,28 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 		"action_queue":        recommended,
 		"next_action":         nextAction,
 	}, nil
+}
+
+func intArgOrDefault(args map[string]any, name string, fallback int) int {
+	raw, ok := args[name]
+	if !ok || raw == nil {
+		return fallback
+	}
+	switch v := raw.(type) {
+	case int:
+		if v > 0 {
+			return v
+		}
+	case int64:
+		if v > 0 {
+			return int(v)
+		}
+	case float64:
+		if int(v) > 0 {
+			return int(v)
+		}
+	}
+	return fallback
 }
 
 func listarSupervisorModuleConflicts() ([]supervisorModuleConflict, error) {

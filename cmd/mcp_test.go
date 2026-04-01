@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"orquesta/db"
+	"orquesta/reviewapp"
 )
 
 func TestMCPHandleInitializeNegociaVersion(t *testing.T) {
@@ -495,6 +496,95 @@ func TestMCPToolRevisionSupervisorDevuelveJSONEstructurado(t *testing.T) {
 		}
 		if !strings.Contains(string(raw), "Action") && !strings.Contains(string(raw), "action") {
 			t.Fatalf("recommended action sin action: %s", string(raw))
+		}
+	})
+}
+
+func TestMCPToolsReviewGatesYGitMergesOperanPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex4", "programador"); err != nil {
+			t.Fatalf("registrando Codex4: %v", err)
+		}
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Cerrar review MCP",
+			Descripcion: "Debe resolverse por tool MCP",
+			ProyectoID:  &proyectoID,
+			Modulo:      "mcp",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea: %v", err)
+		}
+		gateID, err := db.CrearReviewGate(&db.ReviewGate{
+			ProyectoID:     &proyectoID,
+			TareaID:        &tareaID,
+			RequestedBy:    "orquesta",
+			ReviewerAgente: "Codex4",
+			Estado:         db.ReviewGateEnRevision,
+		})
+		if err != nil {
+			t.Fatalf("crear gate: %v", err)
+		}
+
+		listResult, err := callMCPTool("orquesta.review_gates.listar", map[string]any{
+			"proyecto": "orquestador",
+			"estado":   "en_revision",
+		})
+		if err != nil {
+			t.Fatalf("listar review gates: %v", err)
+		}
+		listStructured, _ := listResult["structuredContent"].([]*reviewapp.Gate)
+		if len(listStructured) == 0 {
+			t.Fatalf("review gates vacíos: %#v", listResult)
+		}
+
+		resolveResult, err := callMCPTool("orquesta.review_gates.resolver", map[string]any{
+			"id":              gateID,
+			"estado":          "aprobado",
+			"reviewer_agente": "Codex4",
+			"findings_json":   `[{"summary":"ok"}]`,
+		})
+		if err != nil {
+			t.Fatalf("resolver review gate: %v", err)
+		}
+		if resolveResult["isError"] != false {
+			t.Fatalf("resolver review gate marcado como error: %#v", resolveResult)
+		}
+		gate, err := db.GetReviewGate(gateID)
+		if err != nil {
+			t.Fatalf("get review gate: %v", err)
+		}
+		if gate == nil || gate.Estado != db.ReviewGateAprobado {
+			t.Fatalf("gate no resuelto: %+v", gate)
+		}
+
+		saveMergeResult, err := callMCPTool("orquesta.git.merges.guardar", map[string]any{
+			"proyecto":      "orquestador",
+			"source_branch": "orq/orquestador/Codex4/mcp",
+			"target_branch": "master",
+			"requested_by":  "OpenClaw",
+			"estado":        "aprobado",
+			"notas":         "Creado por tool MCP",
+		})
+		if err != nil {
+			t.Fatalf("guardar merge: %v", err)
+		}
+		if saveMergeResult["isError"] != false {
+			t.Fatalf("guardar merge marcado como error: %#v", saveMergeResult)
+		}
+
+		listMergeResult, err := callMCPTool("orquesta.git.merges.listar", map[string]any{
+			"proyecto": "orquestador",
+			"estado":   "aprobado",
+		})
+		if err != nil {
+			t.Fatalf("listar merges: %v", err)
+		}
+		mergeText := listMergeResult["content"].([]map[string]any)[0]["text"].(string)
+		if !strings.Contains(mergeText, "orq/orquestador/Codex4/mcp") {
+			t.Fatalf("merge no visible por MCP: %s", mergeText)
 		}
 	})
 }
