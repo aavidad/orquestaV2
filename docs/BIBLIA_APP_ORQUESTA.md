@@ -1079,6 +1079,13 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `proposal`, `dispatch`, `guidance`
   - cerrar propuestas rechazadas no debe mezclar rebalanceos o reservas de dispatch en la misma orden batch
   - esa capacidad debe vivir por la vía canónica del servidor en MCP, API y web
+- OpenClaw no debe depender de `/openclaw` como cliente especial para accionar:
+  - `/api/openclaw/operator` debe servir tanto para lectura (`GET`) como para acción (`POST`)
+  - `POST` debe soportar al menos:
+    - `mode=action`
+    - `mode=batch`
+    - `mode=next`
+  - la semántica debe reutilizar exactamente las mismas primitivas del supervisor que MCP y web
 - `queue_summary` ya no es solo volumen:
   - debe incluir `safe_by_kind`
   - `/api/openclaw/operator`, `orquesta.supervision.revision` y `/openclaw` deben exponer la misma composición segura por tipo

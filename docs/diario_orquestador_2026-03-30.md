@@ -6728,3 +6728,24 @@ Resultado:
   - tras reiniciar el daemon, `/api/openclaw/operator` expuso `safe_by_kind={proposal:6, dispatch:3}`
   - `POST /openclaw kind=supervision_batch&batch_kind=proposal&max_items=6` cerró las seis propuestas rechazadas pendientes
   - la cola convergió a `dispatch` puro con `safe_by_kind={dispatch:3}`
+
+## 2026-04-01 — OpenClaw ya acciona por API HTTP canónica
+
+- Apareció otro hueco de producto:
+  - OpenClaw ya podía accionar por MCP y por la web `/openclaw`
+  - pero seguía faltando una vía HTTP canónica para clientes externos no-web
+- Se añadió:
+  - `POST /api/openclaw/operator`
+  - modos soportados:
+    - `action`
+    - `batch`
+    - `next`
+- Regla:
+  - la API HTTP no implementa semántica propia
+  - reutiliza exactamente `applySupervisorRecommendedAction`, `applySupervisorRecommendedActionsBatch` y `applySupervisorNextAction`
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(APIOpenClawOperatorAccionaPorLaViaCanonica|APIObservabilidadReadOnly|APIOpenClawOperatorSeparaCargaActivaYReservada)' -count=1`
+  - `go build -o ./orquesta .`
+- Validación viva:
+  - `POST /api/openclaw/operator {"mode":"next"}` devolvió `ok` y rebalanceó `#411` a `Codex4`
+  - la lectura posterior por `/api/tareas/411` y `./orquesta tarea ver 411` convergió al mismo estado

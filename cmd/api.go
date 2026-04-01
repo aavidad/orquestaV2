@@ -1235,57 +1235,98 @@ func apiHandlerNotificaciones(w http.ResponseWriter, r *http.Request) {
 }
 
 func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
-	if !apiRequireMethod(w, r, http.MethodGet) {
-		return
+	switch r.Method {
+	case http.MethodGet:
+		status, err := buildEstadoResumen()
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		revision, err := buildSupervisorReviewSnapshot("")
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		eventos, err := buildOpenClawNormalizedEvents(20)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		threads, err := buildSupervisorThreadsSnapshot("", strings.TrimSpace(r.URL.Query().Get("session_id")), 100)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		pipeline, err := buildSupervisorPipelineSnapshot("", strings.TrimSpace(r.URL.Query().Get("proyecto")), 20)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		statusResumen, err := buildOpenClawOperatorStatus(status)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		reviewCompact := buildOpenClawReviewCompact(revision)
+		queueSummary := buildOpenClawQueueSummary(revision)
+		apiWriteJSON(w, http.StatusOK, map[string]any{
+			"status":               statusResumen,
+			"review":               reviewCompact,
+			"next_action":          revision["next_action"],
+			"action_queue":         revision["action_queue"],
+			"next_safe_action":     revision["next_safe_action"],
+			"safe_action_queue":    revision["safe_action_queue"],
+			"queue_summary":        queueSummary,
+			"capacity_summary":     statusResumen.CapacitySummary,
+			"saturated_agents":     statusResumen.AgentesSaturados,
+			"notificaciones":       notificaciones.DescribirConfiguracion(),
+			"entregas":             notificaciones.DescribirOutbox(10),
+			"eventos_normalizados": eventos,
+			"thread_sessions":      threads,
+			"pipeline_state":       pipeline,
+		})
+	case http.MethodPost:
+		var req struct {
+			Supervisor string `json:"supervisor"`
+			Mode       string `json:"mode"`
+			Action     string `json:"action"`
+			Target     string `json:"target"`
+			Assignee   string `json:"assignee"`
+			MaxItems   int    `json:"max_items"`
+			BatchKind  string `json:"batch_kind"`
+		}
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		mode := strings.TrimSpace(strings.ToLower(req.Mode))
+		var (
+			result map[string]any
+			err    error
+		)
+		switch mode {
+		case "action":
+			if strings.TrimSpace(req.Action) == "" || strings.TrimSpace(req.Target) == "" {
+				apiError(w, http.StatusBadRequest, fmt.Errorf("action y target obligatorios"))
+				return
+			}
+			result, err = applySupervisorRecommendedAction(req.Supervisor, req.Action, req.Target, req.Assignee)
+		case "batch":
+			result, err = applySupervisorRecommendedActionsBatch(req.Supervisor, req.MaxItems, req.BatchKind)
+		case "next":
+			result, err = applySupervisorNextAction(req.Supervisor)
+		default:
+			apiError(w, http.StatusBadRequest, fmt.Errorf("mode inválido: usa action, batch o next"))
+			return
+		}
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, result)
+	default:
+		apiMethodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
-	status, err := buildEstadoResumen()
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	revision, err := buildSupervisorReviewSnapshot("")
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	eventos, err := buildOpenClawNormalizedEvents(20)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	threads, err := buildSupervisorThreadsSnapshot("", strings.TrimSpace(r.URL.Query().Get("session_id")), 100)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	pipeline, err := buildSupervisorPipelineSnapshot("", strings.TrimSpace(r.URL.Query().Get("proyecto")), 20)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	statusResumen, err := buildOpenClawOperatorStatus(status)
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
-	}
-	reviewCompact := buildOpenClawReviewCompact(revision)
-	queueSummary := buildOpenClawQueueSummary(revision)
-	apiWriteJSON(w, http.StatusOK, map[string]any{
-		"status":               statusResumen,
-		"review":               reviewCompact,
-		"next_action":          revision["next_action"],
-		"action_queue":         revision["action_queue"],
-		"next_safe_action":     revision["next_safe_action"],
-		"safe_action_queue":    revision["safe_action_queue"],
-		"queue_summary":        queueSummary,
-		"capacity_summary":     statusResumen.CapacitySummary,
-		"saturated_agents":     statusResumen.AgentesSaturados,
-		"notificaciones":       notificaciones.DescribirConfiguracion(),
-		"entregas":             notificaciones.DescribirOutbox(10),
-		"eventos_normalizados": eventos,
-		"thread_sessions":      threads,
-		"pipeline_state":       pipeline,
-	})
 }
 
 func buildOpenClawReviewCompact(review map[string]any) map[string]any {

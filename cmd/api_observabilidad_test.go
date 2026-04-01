@@ -10,6 +10,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -20,6 +21,7 @@ import (
 
 	"orquesta/coordinacion"
 	"orquesta/db"
+	"orquesta/propuestasapp"
 )
 
 func TestAPIObservabilidadReadOnly(t *testing.T) {
@@ -441,6 +443,143 @@ func TestAPIOpenClawPipelineOperaPorLaViaCanonica(t *testing.T) {
 	}
 	if !strings.Contains(recGet.Body.String(), "autopilot") || !strings.Contains(recGet.Body.String(), "review") {
 		t.Fatalf("openclaw pipeline sin contenido esperado: %s", recGet.Body.String())
+	}
+}
+
+func TestAPIOpenClawOperatorAccionaPorLaViaCanonica(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prev := statusService
+	defer func() { statusService = prev }()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar Codex3: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex4", "programador"); err != nil {
+		t.Fatalf("registrar Codex4: %v", err)
+	}
+	propuestaID, _, err := propuestasService.Create(propuestasapp.CreateProposalInput{
+		Codigo:       "OP-604",
+		Titulo:       "Cerrar propuesta por API",
+		Descripcion:  "Debe cerrarse por /api/openclaw/operator",
+		Tipo:         "implementacion",
+		PropuestoPor: "antigravity",
+	})
+	if err != nil {
+		t.Fatalf("crear propuesta: %v", err)
+	}
+	if _, err := db.Votar(propuestaID, "Codex1", db.VotoAcuerdo, "ok"); err != nil {
+		t.Fatalf("voto acuerdo: %v", err)
+	}
+	if _, err := db.Votar(propuestaID, "Codex2", db.VotoDesacuerdo, "no"); err != nil {
+		t.Fatalf("voto desacuerdo: %v", err)
+	}
+	if _, err := db.Votar(propuestaID, "Codex3", db.VotoDesacuerdo, "no"); err != nil {
+		t.Fatalf("segundo voto desacuerdo: %v", err)
+	}
+	agenteCodex3 := "Codex3"
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Reserva por API",
+		Descripcion: "Debe rebalancearse por API OpenClaw",
+		Modulo:      "cmd",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "OpenClaw",
+		Agente:      &agenteCodex3,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE tareas SET estado='asignada', agente=? WHERE id=?`, agenteCodex3, tareaID); err != nil {
+		t.Fatalf("preparar tarea asignada: %v", err)
+	}
+
+	statusService = stubStatusService{response: apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		Agentes: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		PropuestasResumen: []propuestaLite{
+			{Codigo: "OP-604", Titulo: "Cerrar propuesta por API", Estado: db.PropuestaAbierta, Acuerdo: 1, Desacuerdo: 2, Pendiente: 0},
+		},
+		TareasActivas: []tareaLite{
+			{ID: tareaID, Estado: db.TareaAsignada, Titulo: "Reserva por API", Agente: "Codex3", Modulo: "cmd"},
+			{ID: 3001, Estado: db.TareaEnProgreso, Titulo: "Carga en Codex3", Agente: "Codex3", Modulo: "db"},
+			{ID: 3002, Estado: db.TareaEnProgreso, Titulo: "Carga en Codex3 2", Agente: "Codex3", Modulo: "api"},
+			{ID: 3003, Estado: db.TareaEnProgreso, Titulo: "Carga en Codex4", Agente: "Codex4", Modulo: "planocontrol"},
+		},
+	}}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recBatch := httptest.NewRecorder()
+	reqBatch := httptest.NewRequest(http.MethodPost, "/api/openclaw/operator", strings.NewReader(`{
+		"mode":"batch",
+		"batch_kind":"proposal",
+		"max_items":1
+	}`))
+	reqBatch.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(recBatch, reqBatch)
+	if recBatch.Code != http.StatusOK {
+		t.Fatalf("openclaw operator batch status=%d body=%s", recBatch.Code, recBatch.Body.String())
+	}
+	propuesta, err := db.GetPropuesta("OP-604")
+	if err != nil {
+		t.Fatalf("get propuesta: %v", err)
+	}
+	if propuesta == nil || propuesta.Estado != db.PropuestaRechazada {
+		t.Fatalf("propuesta no quedó rechazada: %+v", propuesta)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Agente == nil || *tarea.Agente != "Codex3" || tarea.Estado != db.TareaAsignada {
+		t.Fatalf("dispatch mezclado en batch proposal por API: %+v", tarea)
+	}
+
+	recAction := httptest.NewRecorder()
+	reqAction := httptest.NewRequest(http.MethodPost, "/api/openclaw/operator", strings.NewReader(fmt.Sprintf(`{
+		"mode":"action",
+		"action":"rebalancear_reserva",
+		"target":"tarea:%d",
+		"assignee":"Codex4"
+	}`, tareaID)))
+	reqAction.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(recAction, reqAction)
+	if recAction.Code != http.StatusOK {
+		t.Fatalf("openclaw operator action status=%d body=%s", recAction.Code, recAction.Body.String())
+	}
+	tarea, err = db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea tras action: %v", err)
+	}
+	if tarea == nil || tarea.Agente == nil || *tarea.Agente != "Codex4" || tarea.Estado != db.TareaAsignada {
+		t.Fatalf("rebalanceo por API no aplicado: %+v", tarea)
+	}
+
+	recNext := httptest.NewRecorder()
+	reqNext := httptest.NewRequest(http.MethodPost, "/api/openclaw/operator", strings.NewReader(`{
+		"mode":"next"
+	}`))
+	reqNext.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(recNext, reqNext)
+	if recNext.Code != http.StatusOK {
+		t.Fatalf("openclaw operator next status=%d body=%s", recNext.Code, recNext.Body.String())
 	}
 }
 
