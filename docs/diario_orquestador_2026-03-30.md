@@ -6453,3 +6453,17 @@ Resultado:
   - ya solo enseña:
     - `Siguiente acción segura`
     - `Aplicar siguiente acción segura`
+
+## 2026-04-01 — `/openclaw` ya resume cola completa y cola segura en cabecera
+
+- La web ya separaba ambas colas en detalle, pero faltaba un resumen visible de un vistazo.
+- Se añadieron dos métricas en cabecera:
+  - `cola completa`
+  - `cola segura`
+- Validación dirigida:
+  - `go test ./cmd -run 'TestWebOpenClawMuestraOperatorReviewYEntregas' -count=1`
+- Validación viva:
+  - `GET /openclaw`
+  - la cabecera ya muestra:
+    - `cola completa = 1`
+    - `cola segura = 1`

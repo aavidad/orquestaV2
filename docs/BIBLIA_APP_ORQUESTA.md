@@ -963,6 +963,10 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `Siguiente acción segura` y `Cola segura` para automatismos
   - `Acción siguiente` y `Cola completa del supervisor` para contexto y arbitraje
   - no mezclar ambos planos en una sola tarjeta.
+- Esa separación también debe verse en el resumen de cabecera:
+  - contador de `cola completa`
+  - contador de `cola segura`
+  para que el supervisor vea de un vistazo cuánto arbitraje queda y cuánto puede automatizar.
 - Si `next_action` y `next_safe_action` apuntan al mismo elemento:
   - la web no debe duplicar tarjetas
   - debe quedar solo la tarjeta segura

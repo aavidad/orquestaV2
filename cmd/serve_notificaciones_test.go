@@ -150,6 +150,8 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 	for _, token := range []string{
 		"OpenClaw Operator",
 		"Acción siguiente",
+		"cola completa",
+		"cola segura",
 		"Reservas preparadas",
 		"Review e integración",
 		"Eventos normalizados del supervisor",
