@@ -415,6 +415,59 @@ func TestAPIOpenClawOperatorSeparaCargaActivaYReservada(t *testing.T) {
 	}
 }
 
+func TestAPIOpenClawOperatorExponeStatusLiteEnRaiz(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prev := statusService
+	defer func() { statusService = prev }()
+
+	statusService = stubStatusService{response: apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		AgentesTrabajando: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		Agentes: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 1, Estado: db.TareaEnProgreso, Agente: "Codex3", Titulo: "activa"},
+			{ID: 2, Estado: db.TareaAsignada, Agente: "Codex3", Titulo: "reservada"},
+		},
+		PropuestasResumen: []propuestaLite{
+			{ID: 9, Codigo: "OP-999", Titulo: "demo", Estado: db.PropuestaAbierta},
+		},
+	}}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/openclaw/operator", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("openclaw operator status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode operator: %v", err)
+	}
+	if activos, ok := payload["agentesActivos"].([]any); !ok || len(activos) != 1 {
+		t.Fatalf("agentesActivos raiz inesperados: %#v", payload["agentesActivos"])
+	}
+	if tareas, ok := payload["tareasActivas"].([]any); !ok || len(tareas) != 1 {
+		t.Fatalf("tareasActivas raiz inesperadas: %#v", payload["tareasActivas"])
+	}
+	if reservas, ok := payload["tareasReservadas"].([]any); !ok || len(reservas) != 1 {
+		t.Fatalf("tareasReservadas raiz inesperadas: %#v", payload["tareasReservadas"])
+	}
+	if propuestas, ok := payload["propuestasAbiertas"].([]any); !ok || len(propuestas) != 1 {
+		t.Fatalf("propuestasAbiertas raiz inesperadas: %#v", payload["propuestasAbiertas"])
+	}
+}
+
 func TestAPIOpenClawPipelineOperaPorLaViaCanonica(t *testing.T) {
 	prepararDBTemporalCmd(t)
 	mux := http.NewServeMux()

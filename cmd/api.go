@@ -1314,6 +1314,14 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		queueSummary := buildOpenClawQueueSummary(revision)
 		apiWriteJSON(w, http.StatusOK, map[string]any{
 			"status":               statusResumen,
+			"agentesActivos":       statusResumen.AgentesActivos,
+			"agentesTrabajando":    statusResumen.AgentesTrabajando,
+			"enCuota":              statusResumen.EnCuota,
+			"mailboxPendiente":     statusResumen.MailboxPendiente,
+			"retenidasPorCuota":    statusResumen.RetenidasPorCuota,
+			"tareasActivas":        statusResumen.TareasActivas,
+			"tareasReservadas":     statusResumen.TareasReservadas,
+			"propuestasAbiertas":   statusResumen.PropuestasAbiertas,
 			"review":               reviewCompact,
 			"next_action":          revision["next_action"],
 			"action_queue":         revision["action_queue"],
