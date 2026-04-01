@@ -783,6 +783,39 @@ func TestRenderStatusSummaryNoDuplicaTareasRetenidasEnProgresoAhoraMismo(t *test
 	}
 }
 
+func TestRenderStatusSummarySeparaReservadasDeEnProgreso(t *testing.T) {
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				Agentes: []*db.Agente{
+					{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+					{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				},
+				TareasActivas: []tareaLite{
+					{ID: 410, Titulo: "Runtime/control plane", Agente: "Codex3", Estado: db.TareaEnProgreso},
+					{ID: 411, Titulo: "CLI/API/web", Agente: "Codex4", Estado: db.TareaAsignada},
+				},
+				TareasEnProgreso: []tareaLite{
+					{ID: 410, Titulo: "Runtime/control plane", Agente: "Codex3", Estado: db.TareaEnProgreso},
+				},
+				TareasReservadas: []tareaLite{
+					{ID: 411, Titulo: "CLI/API/web", Agente: "Codex4", Estado: db.TareaAsignada},
+				},
+				TareasPorEstado: map[string]int{},
+			},
+		})
+	})
+	if !strings.Contains(out, "En progreso ahora mismo") || !strings.Contains(out, "[410]") {
+		t.Fatalf("salida sin tarea en progreso: %s", out)
+	}
+	if strings.Contains(out, "[411]") && strings.Contains(strings.Split(out, "📦 Reservadas ahora mismo:")[0], "[411]") {
+		t.Fatalf("la tarea reservada no deberia salir en el bloque de en progreso: %s", out)
+	}
+	if !strings.Contains(out, "📦 Reservadas ahora mismo") || !strings.Contains(out, "[411]") {
+		t.Fatalf("salida sin bloque de reservadas: %s", out)
+	}
+}
+
 func TestRenderStatusSummaryIgnoraDerivadoTemporalInexistenteCuandoSoloMandaSemanal(t *testing.T) {
 	weekly := 69
 	daily := 0

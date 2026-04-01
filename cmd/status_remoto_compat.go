@@ -250,8 +250,12 @@ func renderStatusSummary(ctx *statusContext) {
 	for _, t := range retenidas {
 		retenidasIDs[t.ID] = struct{}{}
 	}
-	tareasEnProgresoVisibles := make([]tareaLite, 0, len(resumen.TareasActivas))
-	for _, t := range resumen.TareasActivas {
+	tareasEnProgresoBase := resumen.TareasEnProgreso
+	if len(tareasEnProgresoBase) == 0 {
+		tareasEnProgresoBase = filtrarOpenClawTareasPorEstado(resumen.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada)
+	}
+	tareasEnProgresoVisibles := make([]tareaLite, 0, len(tareasEnProgresoBase))
+	for _, t := range tareasEnProgresoBase {
 		if _, blocked := retenidasIDs[t.ID]; blocked {
 			continue
 		}
@@ -260,6 +264,28 @@ func renderStatusSummary(ctx *statusContext) {
 	if len(tareasEnProgresoVisibles) > 0 {
 		fmt.Printf("⚙️  En progreso ahora mismo:\n")
 		for _, t := range tareasEnProgresoVisibles {
+			agente := "—"
+			if t.Agente != "" {
+				agente = t.Agente
+			}
+			fmt.Printf("   [%d] %-40s → %s\n", t.ID, truncar(t.Titulo, 38), agente)
+		}
+		fmt.Println()
+	}
+	tareasReservadasBase := resumen.TareasReservadas
+	if len(tareasReservadasBase) == 0 {
+		tareasReservadasBase = filtrarOpenClawTareasPorEstado(resumen.TareasActivas, db.TareaAsignada)
+	}
+	tareasReservadasVisibles := make([]tareaLite, 0, len(tareasReservadasBase))
+	for _, t := range tareasReservadasBase {
+		if _, blocked := retenidasIDs[t.ID]; blocked {
+			continue
+		}
+		tareasReservadasVisibles = append(tareasReservadasVisibles, t)
+	}
+	if len(tareasReservadasVisibles) > 0 {
+		fmt.Printf("📦 Reservadas ahora mismo:\n")
+		for _, t := range tareasReservadasVisibles {
 			agente := "—"
 			if t.Agente != "" {
 				agente = t.Agente
@@ -602,6 +628,8 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		AgentesTrabajando        []*db.Agente    `json:"agentesTrabajando"`
 		PropuestasAbiertas       []propuestaLite `json:"propuestasAbiertas"`
 		TareasActivas            []tareaLite     `json:"tareasActivas"`
+		TareasEnProgreso         []tareaLite     `json:"tareasEnProgreso"`
+		TareasReservadas         []tareaLite     `json:"tareasReservadas"`
 		AgentesCompat            []*db.Agente    `json:"agentes"`
 		ConteoTareasCompat       map[string]int  `json:"conteo_tareas"`
 		PropuestasCompatAbiertas []*db.Propuesta `json:"propuestas_abiertas"`
@@ -621,6 +649,8 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		AgentesTrabajando:  payload.AgentesTrabajando,
 		PropuestasAbiertas: payload.PropuestasAbiertas,
 		TareasActivas:      payload.TareasActivas,
+		TareasEnProgreso:   payload.TareasEnProgreso,
+		TareasReservadas:   payload.TareasReservadas,
 	}
 	if len(resumen.TareasPorEstado) == 0 {
 		resumen.TareasPorEstado = payload.ConteoTareasCompat
@@ -632,6 +662,12 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 	}
 	if len(resumen.AgentesTrabajando) == 0 {
 		resumen.AgentesTrabajando = derivarAgentesTrabajando(resumen.AgentesActivos, resumen.TareasActivas)
+	}
+	if len(resumen.TareasEnProgreso) == 0 {
+		resumen.TareasEnProgreso = filtrarOpenClawTareasPorEstado(resumen.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada)
+	}
+	if len(resumen.TareasReservadas) == 0 {
+		resumen.TareasReservadas = filtrarOpenClawTareasPorEstado(resumen.TareasActivas, db.TareaAsignada)
 	}
 	if len(resumen.PropuestasAbiertas) == 0 && len(payload.PropuestasCompatAbiertas) > 0 {
 		resumen.PropuestasAbiertas = make([]propuestaLite, 0, len(payload.PropuestasCompatAbiertas))

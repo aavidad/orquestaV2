@@ -55,6 +55,8 @@ type apiStatusResponse struct {
 	AgentesTrabajando   []*db.Agente    `json:"agentesTrabajando,omitempty"`
 	PropuestasResumen   []propuestaLite `json:"propuestasAbiertas,omitempty"`
 	TareasActivas       []tareaLite     `json:"tareasActivas,omitempty"`
+	TareasEnProgreso    []tareaLite     `json:"tareasEnProgreso,omitempty"`
+	TareasReservadas    []tareaLite     `json:"tareasReservadas,omitempty"`
 }
 
 type apiProyectoOverviewResponse struct {
@@ -769,6 +771,14 @@ func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
 		"agentesTrabajando":    status.AgentesTrabajando,
 		"propuestasAbiertas":   status.PropuestasResumen,
 		"tareasActivas":        status.TareasActivas,
+		"tareasEnProgreso":     status.TareasEnProgreso,
+		"tareasReservadas":     status.TareasReservadas,
+	}
+	if items, _ := payload["tareasEnProgreso"].([]tareaLite); len(items) == 0 {
+		payload["tareasEnProgreso"] = filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada)
+	}
+	if items, _ := payload["tareasReservadas"].([]tareaLite); len(items) == 0 {
+		payload["tareasReservadas"] = filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada)
 	}
 	apiWriteJSON(w, http.StatusOK, payload)
 }

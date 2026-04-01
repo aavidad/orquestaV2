@@ -2874,6 +2874,8 @@ type estadoResumen struct {
 	Asignaciones       []map[string]any `json:"asignaciones"`
 	PropuestasAbiertas []propuestaLite  `json:"propuestasAbiertas"`
 	TareasActivas      []tareaLite      `json:"tareasActivas"`
+	TareasEnProgreso   []tareaLite      `json:"tareasEnProgreso,omitempty"`
+	TareasReservadas   []tareaLite      `json:"tareasReservadas,omitempty"`
 	WorktreesActivas   []map[string]any `json:"worktreesActivas"`
 	LocksActivos       []map[string]any `json:"locksActivos"`
 	SesionesActivas    []map[string]any `json:"sesionesActivas"`
@@ -2947,6 +2949,8 @@ func buildEstadoResumen() (*estadoResumen, error) {
 		Asignaciones:       asignaciones,
 		PropuestasAbiertas: status.PropuestasResumen,
 		TareasActivas:      status.TareasActivas,
+		TareasEnProgreso:   filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada),
+		TareasReservadas:   filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
 		WorktreesActivas:   worktrees,
 		LocksActivos:       locks,
 		SesionesActivas:    sesiones,

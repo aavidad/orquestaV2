@@ -976,6 +976,11 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - El snapshot MCP de revisión/supervisión debe mantener la misma paridad:
   - `queue_summary` también debe vivir en `orquesta.supervision.revision`
   - OpenClaw no debe divergir según si consume HTTP o MCP.
+- `status` y `/api/status` no pueden llamar “en progreso” a trabajo que sigue solo reservado:
+  - `tareasEnProgreso` = `en_progreso` y `bloqueada`
+  - `tareasReservadas` = `asignada`
+  - la CLI debe renderizar ambos bloques por separado
+  - si el daemon aún no publica esos campos, el cliente puede derivarlos desde `tareasActivas` solo como compatibilidad.
 - Si `next_action` y `next_safe_action` apuntan al mismo elemento:
   - la web no debe duplicar tarjetas
   - debe quedar solo la tarjeta segura

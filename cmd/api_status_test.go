@@ -37,6 +37,12 @@ func TestAPIHandlerStatusReturnsPayload(t *testing.T) {
 			TareasPorEstado: map[string]int{
 				"asignada": 1,
 			},
+			TareasEnProgreso: []tareaLite{
+				{ID: 7, Titulo: "En progreso", Estado: db.TareaEnProgreso, Agente: "CodexX"},
+			},
+			TareasReservadas: []tareaLite{
+				{ID: 8, Titulo: "Reservada", Estado: db.TareaAsignada, Agente: "CodexX"},
+			},
 		},
 	}
 	rec := httptest.NewRecorder()
@@ -57,6 +63,12 @@ func TestAPIHandlerStatusReturnsPayload(t *testing.T) {
 	}
 	if len(payload.AgentesTrabajando) != 1 || payload.AgentesTrabajando[0].Nombre != "CodexX" {
 		t.Fatalf("agentesTrabajando inesperado: %+v", payload.AgentesTrabajando)
+	}
+	if len(payload.TareasEnProgreso) != 1 || payload.TareasEnProgreso[0].ID != 7 {
+		t.Fatalf("tareasEnProgreso inesperadas: %+v", payload.TareasEnProgreso)
+	}
+	if len(payload.TareasReservadas) != 1 || payload.TareasReservadas[0].ID != 8 {
+		t.Fatalf("tareasReservadas inesperadas: %+v", payload.TareasReservadas)
 	}
 }
 

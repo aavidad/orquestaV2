@@ -6508,3 +6508,23 @@ Resultado:
   - `queue_summary.manual`
 - Validación dirigida:
   - `go test ./cmd -run 'TestMCPToolRevisionSupervisorDevuelveJSONEstructurado' -count=1`
+
+## 2026-04-01 — `status` ya separa trabajo en marcha y reservas
+
+- El núcleo visible seguía teniendo una incoherencia seria:
+  - `status` llamaba `En progreso ahora mismo` a tareas `asignada`
+- Se corrigió de forma estructural:
+  - `/api/status` ahora publica también:
+    - `tareasEnProgreso`
+    - `tareasReservadas`
+  - `status` usa esos campos cuando existen
+  - y conserva fallback desde `tareasActivas` para compatibilidad con daemons antiguos
+- La CLI ya renderiza:
+  - `⚙️ En progreso ahora mismo`
+  - `📦 Reservadas ahora mismo`
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(APIHandlerStatusReturnsPayload|RenderStatusSummaryNoDuplicaTareasRetenidasEnProgresoAhoraMismo|RenderStatusSummarySeparaReservadasDeEnProgreso)' -count=1`
+- Validación viva:
+  - `./orquesta status`
+  - `410, 412, 413, 414, 416, 421` salen en `En progreso ahora mismo`
+  - `411, 415` salen en `Reservadas ahora mismo`
