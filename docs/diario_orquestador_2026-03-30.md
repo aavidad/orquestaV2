@@ -6609,3 +6609,19 @@ Resultado:
   - `GET /api/openclaw/operator`
   - tamaño JSON bajó de ~12.8 KB a ~8.6 KB
   - `review_keys = ['merges', 'module_conflicts', 'review_gates', 'signals', 'supervisor']`
+
+## 2026-04-01 — auditoría `423`: guidance durable converge igual por web, API y CLI
+
+- Se validó el circuito server-first completo para guidance durable pendiente:
+  - estado inicial:
+    - `GET /api/openclaw/operator` => `status.mailboxPendiente = Codex3/autonomia`
+    - `./orquesta runtime mailbox --to Codex3 --estado pendiente` => `64677`
+  - acción:
+    - `POST /openclaw` con `kind=supervision_next`
+  - convergencia:
+    - `/api/openclaw/operator` => `status.mailboxPendiente = null`
+    - `./orquesta runtime mailbox --to Codex3 --estado pendiente` => vacío
+    - `./orquesta runtime ordenes --estado pendiente` => vacío
+- Conclusión:
+  - no quedó deriva entre web, API y CLI en este flujo
+  - la auditoría `runtime/control plane y web server-first` pasa en este frente sin necesidad de nuevo código
