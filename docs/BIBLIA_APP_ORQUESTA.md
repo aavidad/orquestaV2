@@ -732,6 +732,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - y debe cubrir también la coordinación base del trabajo: activar asignaciones, adquirir/liberar locks y preparar/cerrar worktrees desde MCP, sin rutas laterales ni wrappers de CLI.
 - y debe cubrir además las fases de preparación e investigación del agente desde MCP: `agente preparar` e `investigar` tienen que salir por el mismo servidor oficial para que el supervisor construya contexto y diagnóstico sin recurrir a CLI local ni a recomposición manual.
 - y debe cubrir también el cierre de sesión y la observabilidad fina del runtime desde MCP: listar `runtime_handles`, listar `runtime_events` y ejecutar `sesion fin` por la misma vía canónica, sin depender de endpoints o comandos separados para el trabajo normal del supervisor.
+- además del MCP, OpenClaw debe tener una superficie HTTP agregada y server-first para operación conversacional: `/api/openclaw/operator` debe reunir al menos `status`, `review`, `notificaciones` y `entregas`, reutilizando exactamente la lógica viva ya expuesta por el servidor, sin recomposición manual ni lectura directa de BD.
 
 ## Configuración web de OpenClaw
 

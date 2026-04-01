@@ -5570,3 +5570,33 @@ Resultado:
 - el servidor publica `entregas` junto al estado de canales
 - OpenClaw Gateway ya deja rastro persistente de fallo/entrega y `next_retry_at`
 - el retry sale del daemon oficial y no de glue externo
+
+## 2026-04-01 — endpoint HTTP agregado para OpenClaw operator
+
+Hallazgo:
+
+- OpenClaw ya tenía bastante mando por MCP, pero faltaba una superficie HTTP agregada y evidente para operador conversacional
+- para `#419` seguía faltando una ruta única que devolviera estado, revisión y notificaciones sin recomposición cliente
+
+Decision:
+
+- exponer `/api/openclaw/operator` como vista server-first agregada
+- el endpoint reutiliza la misma lógica viva de estado/resumen y cola de revisión que ya usa MCP
+
+Codigo:
+
+- [cmd/api.go](/home/alberto/Trabajo/orquesta/cmd/api.go)
+- [cmd/api_observabilidad_test.go](/home/alberto/Trabajo/orquesta/cmd/api_observabilidad_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestAPIObservabilidadReadOnly' -count=1`
+- `go build -o ./orquesta .`
+- `./orquesta server start`
+- `curl -sf http://127.0.0.1:16543/api/openclaw/operator`
+
+Resultado:
+
+- OpenClaw dispone de un endpoint HTTP único con `status`, `review`, `notificaciones` y `entregas`
+- la superficie operativa del operador deja de depender solo de MCP o de múltiples endpoints sueltos

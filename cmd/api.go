@@ -603,6 +603,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/lenguaje/resolver", apiHandlerLenguajeResolver)
 	mux.HandleFunc("/api/config", apiHandlerConfig)
 	mux.HandleFunc("/api/notificaciones", apiHandlerNotificaciones)
+	mux.HandleFunc("/api/openclaw/operator", apiHandlerOpenClawOperator)
 	mux.HandleFunc("/api/audit", apiHandlerAudit)
 	mux.HandleFunc("/api/respaldo/bd", apiHandlerRespaldoBD)
 	mux.HandleFunc("/api/persistencia/verificar", apiHandlerPersistenciaVerificar)
@@ -1207,6 +1208,28 @@ func apiHandlerNotificaciones(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{
+		"notificaciones": notificaciones.DescribirConfiguracion(),
+		"entregas":       notificaciones.DescribirOutbox(10),
+	})
+}
+
+func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	status, err := buildEstadoResumen()
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	revision, err := buildSupervisorReviewSnapshot("")
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{
+		"status":         status,
+		"review":         revision,
 		"notificaciones": notificaciones.DescribirConfiguracion(),
 		"entregas":       notificaciones.DescribirOutbox(10),
 	})

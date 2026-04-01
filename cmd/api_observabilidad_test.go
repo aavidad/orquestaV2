@@ -169,6 +169,7 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	assertOK("/api/config", "config")
 	assertOK("/api/config?clave=clave_test_observabilidad", "valor")
 	assertOK("/api/notificaciones", "notificaciones")
+	assertOK("/api/openclaw/operator", "status")
 	assertOK("/api/audit?limit=10&agente=Codex1", "audit")
 	assertOK("/api/diagnostico?audit_limit=5", "diagnostico")
 	assertOK("/api/reglas?tipo_agente=programador", "reglas")
@@ -192,6 +193,19 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	for _, token := range []string{"OpenClaw Gateway", "openclaw.local/gateway", "Telegram", "12345", "entregas", "fallida"} {
 		if !strings.Contains(bodyNotif, token) {
 			t.Fatalf("notificaciones incompleta, falta %q:\n%s", token, bodyNotif)
+		}
+	}
+
+	recOperator := httptest.NewRecorder()
+	reqOperator := httptest.NewRequest(http.MethodGet, "/api/openclaw/operator", nil)
+	mux.ServeHTTP(recOperator, reqOperator)
+	if recOperator.Code != http.StatusOK {
+		t.Fatalf("openclaw operator status=%d body=%s", recOperator.Code, recOperator.Body.String())
+	}
+	bodyOperator := recOperator.Body.String()
+	for _, token := range []string{"status", "review", "notificaciones", "entregas"} {
+		if !strings.Contains(bodyOperator, token) {
+			t.Fatalf("openclaw operator incompleto, falta %q:\n%s", token, bodyOperator)
 		}
 	}
 }
