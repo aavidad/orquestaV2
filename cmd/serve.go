@@ -62,6 +62,7 @@ type webOpenClawData struct {
 	ThreadSessions   []*db.SupervisorThreadSessionSummary
 	PipelineStates   []*db.SupervisorPipelineState
 	Recommended      []supervisorRecommendedAction
+	SafeRecommended  []supervisorRecommendedAction
 	NextAction       *supervisorRecommendedAction
 	NextSafeAction   *supervisorRecommendedAction
 	Notificaciones   notificaciones.EstadoNotificaciones
@@ -739,6 +740,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		pipelineStates, _ = snapshot["pipelines"].([]*db.SupervisorPipelineState)
 	}
 	recommended, _ := review["recommended_actions"].([]supervisorRecommendedAction)
+	safeRecommended, _ := review["safe_action_queue"].([]supervisorRecommendedAction)
 	var nextAction *supervisorRecommendedAction
 	switch item := review["next_action"].(type) {
 	case supervisorRecommendedAction:
@@ -747,9 +749,15 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		nextAction = item
 	}
 	var nextSafeAction *supervisorRecommendedAction
-	for i := range recommended {
-		if supervisorActionIsAutomaticallyApplicable(recommended[i].Action) {
-			nextSafeAction = &recommended[i]
+	switch item := review["next_safe_action"].(type) {
+	case supervisorRecommendedAction:
+		nextSafeAction = &item
+	case *supervisorRecommendedAction:
+		nextSafeAction = item
+	}
+	if nextSafeAction == nil {
+		for i := range safeRecommended {
+			nextSafeAction = &safeRecommended[i]
 			break
 		}
 	}
@@ -766,6 +774,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		ThreadSessions:   threadSessions,
 		PipelineStates:   pipelineStates,
 		Recommended:      recommended,
+		SafeRecommended:  safeRecommended,
 		NextAction:       nextAction,
 		NextSafeAction:   nextSafeAction,
 		Notificaciones:   notificaciones.DescribirConfiguracion(),
@@ -1846,18 +1855,24 @@ const webTplOpenClaw = `{{define "content"}}
 
 {{if .NextAction}}
 <section style="background:linear-gradient(135deg,#0f172a,#1e293b);color:#fff;border-radius:.8rem;padding:1rem 1.2rem;margin-bottom:1.2rem">
-  <div style="font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:#93c5fd;margin-bottom:.35rem">{{if .NextAction.AutoAplicable}}Acción siguiente segura{{else}}Acción siguiente{{end}}</div>
+  <div style="font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:#93c5fd;margin-bottom:.35rem">Acción siguiente</div>
   <div style="font-size:1.05rem;font-weight:700">{{.NextAction.Action}}</div>
   <div style="margin-top:.25rem;color:#cbd5e1">{{.NextAction.Reason}}</div>
   <div style="margin-top:.45rem;font-size:.8rem;color:#93c5fd">objetivo={{.NextAction.Target}} · prioridad={{.NextAction.Priority}} · tipo={{.NextAction.Kind}}{{if .NextAction.Assignee}} · sugerido={{.NextAction.Assignee}}{{end}}</div>
-  {{if .NextAction.AutoAplicable}}
+  <div style="margin-top:.7rem;font-size:.82rem;color:#cbd5e1">Requiere revisión manual; usa la cola o el formulario específico.</div>
+</section>
+{{end}}
+
+{{if .NextSafeAction}}
+<section style="background:linear-gradient(135deg,#0f766e,#115e59);color:#fff;border-radius:.8rem;padding:1rem 1.2rem;margin-bottom:1.2rem">
+  <div style="font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:#99f6e4;margin-bottom:.35rem">Siguiente acción segura</div>
+  <div style="font-size:1.05rem;font-weight:700">{{.NextSafeAction.Action}}</div>
+  <div style="margin-top:.25rem;color:#ccfbf1">{{.NextSafeAction.Reason}}</div>
+  <div style="margin-top:.45rem;font-size:.8rem;color:#99f6e4">objetivo={{.NextSafeAction.Target}} · prioridad={{.NextSafeAction.Priority}} · tipo={{.NextSafeAction.Kind}}{{if .NextSafeAction.Assignee}} · sugerido={{.NextSafeAction.Assignee}}{{end}}</div>
   <form method="post" action="/openclaw?lang={{lang}}" style="display:flex;gap:.55rem;align-items:end;flex-wrap:wrap;margin-top:.8rem">
     <input type="hidden" name="kind" value="supervision_next">
-    <button type="submit" class="btn-sm" style="background:#38bdf8;border-color:#38bdf8;color:#082f49">Aplicar siguiente acción</button>
+    <button type="submit" class="btn-sm" style="background:#99f6e4;border-color:#99f6e4;color:#134e4a">Aplicar siguiente acción segura</button>
   </form>
-  {{else}}
-  <div style="margin-top:.7rem;font-size:.82rem;color:#cbd5e1">Requiere revisión manual; usa la cola o el formulario específico.</div>
-  {{end}}
 </section>
 {{end}}
 
@@ -1918,6 +1933,54 @@ const webTplOpenClaw = `{{define "content"}}
       </tbody></table>
       {{else}}
       <p style="margin:0;color:#64748b">Sin reservas preparadas.</p>
+      {{end}}
+    </section>
+
+    <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
+      <h3 style="margin:0 0 .7rem 0">Cola completa del supervisor</h3>
+      {{if .Recommended}}
+      <ol style="margin:0;padding-left:1.2rem">
+      {{range .Recommended}}
+        <li style="margin-bottom:.45rem">
+          <strong>{{.Action}}</strong>
+          <div style="font-size:.8rem;color:#64748b">{{.Reason}}</div>
+          <div style="font-size:.74rem;color:#94a3b8">objetivo={{.Target}} · prioridad={{.Priority}} · tipo={{.Kind}}{{if .Assignee}} · sugerido={{.Assignee}}{{end}}{{if .AutoAplicable}} · segura{{else}} · manual{{end}}</div>
+        </li>
+      {{end}}
+      </ol>
+      {{else}}
+      <p style="margin:0;color:#64748b">Sin acciones recomendadas ahora mismo.</p>
+      {{end}}
+    </section>
+
+    <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
+      <h3 style="margin:0 0 .7rem 0">Cola segura</h3>
+      {{if .SafeRecommended}}
+      <form method="post" action="/openclaw?lang={{lang}}" style="display:flex;gap:.45rem;align-items:end;flex-wrap:wrap;margin:0 0 .75rem 0">
+        <input type="hidden" name="kind" value="supervision_batch">
+        <input type="hidden" name="max_items" value="{{len .SafeRecommended}}">
+        <button type="submit" class="btn-sm" style="background:#0f766e;border-color:#0f766e;color:#ecfeff">Aplicar cola segura</button>
+      </form>
+      <ol style="margin:0;padding-left:1.2rem">
+      {{range .SafeRecommended}}
+        <li style="margin-bottom:.45rem">
+          <strong>{{.Action}}</strong>
+          <div style="font-size:.8rem;color:#64748b">{{.Reason}}</div>
+          <div style="font-size:.74rem;color:#94a3b8">objetivo={{.Target}} · prioridad={{.Priority}} · tipo={{.Kind}}{{if .Assignee}} · sugerido={{.Assignee}}{{end}}</div>
+          <form method="post" action="/openclaw?lang={{lang}}" style="display:flex;gap:.45rem;align-items:end;flex-wrap:wrap;margin-top:.35rem">
+            <input type="hidden" name="kind" value="supervision_action">
+            <input type="hidden" name="action" value="{{.Action}}">
+            <input type="hidden" name="target" value="{{.Target}}">
+            <label style="margin:0;font-size:.75rem;color:#475569">Assignee
+              <input type="text" name="assignee" value="{{.Assignee}}" placeholder="Codex3" style="min-width:8rem">
+            </label>
+            <button type="submit" class="btn-sm">Aplicar</button>
+          </form>
+        </li>
+      {{end}}
+      </ol>
+      {{else}}
+      <p style="margin:0;color:#64748b">Sin acciones seguras ahora mismo.</p>
       {{end}}
     </section>
 
@@ -2128,40 +2191,6 @@ const webTplOpenClaw = `{{define "content"}}
       {{end}}
     </section>
 
-    <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
-      <h3 style="margin:0 0 .7rem 0">Cola recomendada</h3>
-      {{if .Recommended}}
-      <form method="post" action="/openclaw?lang={{lang}}" style="display:flex;gap:.45rem;align-items:end;flex-wrap:wrap;margin:0 0 .75rem 0">
-        <input type="hidden" name="kind" value="supervision_batch">
-        <input type="hidden" name="max_items" value="{{len .Recommended}}">
-        <button type="submit" class="btn-sm" style="background:#0f766e;border-color:#0f766e;color:#ecfeff">Aplicar cola segura</button>
-      </form>
-      <ol style="margin:0;padding-left:1.2rem">
-      {{range .Recommended}}
-        <li style="margin-bottom:.45rem">
-          <strong>{{.Action}}</strong>
-          <div style="font-size:.8rem;color:#64748b">{{.Reason}}</div>
-          <div style="font-size:.74rem;color:#94a3b8">objetivo={{.Target}} · prioridad={{.Priority}} · tipo={{.Kind}}{{if .Assignee}} · sugerido={{.Assignee}}{{end}}</div>
-          {{if .AutoAplicable}}
-          <form method="post" action="/openclaw?lang={{lang}}" style="display:flex;gap:.45rem;align-items:end;flex-wrap:wrap;margin-top:.35rem">
-            <input type="hidden" name="kind" value="supervision_action">
-            <input type="hidden" name="action" value="{{.Action}}">
-            <input type="hidden" name="target" value="{{.Target}}">
-            <label style="margin:0;font-size:.75rem;color:#475569">Assignee
-              <input type="text" name="assignee" value="{{.Assignee}}" placeholder="Codex3" style="min-width:8rem">
-            </label>
-            <button type="submit" class="btn-sm">Aplicar</button>
-          </form>
-          {{else}}
-          <div style="margin-top:.35rem;font-size:.75rem;color:#64748b">Acción no autoaplicable: requiere revisión del supervisor.</div>
-          {{end}}
-        </li>
-      {{end}}
-      </ol>
-      {{else}}
-      <p style="margin:0;color:#64748b">Sin acciones recomendadas ahora mismo.</p>
-      {{end}}
-    </section>
   </div>
 </div>
 {{end}}

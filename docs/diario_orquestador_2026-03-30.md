@@ -6422,3 +6422,19 @@ Resultado:
     - `next_action = reservar_tarea_libre tarea:417 -> Codex3`
     - `next_safe_action = reservar_tarea_libre tarea:417 -> Codex3`
     - `safe_action_queue = [reservar_tarea_libre]`
+
+## 2026-04-01 — `/openclaw` ya separa cola completa y cola segura
+
+- Aunque la API ya exponía `next_safe_action` y `safe_action_queue`, la web todavía mezclaba:
+  - lectura operativa completa
+  - automatismos seguros
+- Se reordenó la vista:
+  - `Acción siguiente` queda como contexto general
+  - `Siguiente acción segura` queda como tarjeta operativa con botón
+  - `Cola completa del supervisor` muestra todo el arbitraje
+  - `Cola segura` muestra solo acciones autoaplicables
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(WebOpenClawMuestraOperatorReviewYEntregas|WebOpenClawAccionAplicaSiguienteSupervisor|WebOpenClawAccionAplicaLoteSupervisor)' -count=1`
+- Validación viva:
+  - `GET /openclaw`
+  - ya muestra `Siguiente acción segura`

@@ -959,6 +959,10 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `safe_action_queue`: subconjunto autoaplicable
   - y sus equivalentes `next_action` / `next_safe_action`
 - OpenClaw no debe deducir la cola segura por su cuenta desde `recommended_actions`; Orquesta debe exponerla ya separada.
+- La web `/openclaw` debe respetar esa misma separación:
+  - `Siguiente acción segura` y `Cola segura` para automatismos
+  - `Acción siguiente` y `Cola completa del supervisor` para contexto y arbitraje
+  - no mezclar ambos planos en una sola tarjeta.
 - `supervisor-loop` persistida no puede quedarse atrás respecto al snapshot:
   - `metadata_json.recommended_count`
   - `metadata_json.next_action`
