@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"orquesta/coordinacion"
 	"orquesta/agentesapp"
 	"orquesta/db"
 	"orquesta/gitgobernanza"
@@ -1181,6 +1182,21 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.asignaciones.activar",
+			Title:       "Activar asignación",
+			Description: "Activa la asignación de un agente a un proyecto por la vía canónica",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":   map[string]any{"type": "string"},
+					"proyecto": map[string]any{"type": "string"},
+					"nota":     map[string]any{"type": "string"},
+				},
+				"required":             []string{"agente", "proyecto"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.worktrees.listar",
 			Title:       "Listar worktrees",
 			Description: "Lista worktrees registradas en Orquesta",
@@ -1194,6 +1210,41 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.worktrees.preparar",
+			Title:       "Preparar worktree",
+			Description: "Prepara una worktree por la vía canónica de coordinación",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":   map[string]any{"type": "string"},
+					"proyecto": map[string]any{"type": "string"},
+					"tarea_id": map[string]any{"type": "integer"},
+					"lock_id":  map[string]any{"type": "integer"},
+					"nombre":   map[string]any{"type": "string"},
+					"branch":   map[string]any{"type": "string"},
+					"base_ref": map[string]any{"type": "string"},
+					"motivo":   map[string]any{"type": "string"},
+				},
+				"required":             []string{"agente", "proyecto"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.worktrees.cerrar",
+			Title:       "Cerrar worktree",
+			Description: "Cierra una worktree por la vía canónica de coordinación",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":       map[string]any{"type": "integer"},
+					"eliminar": map[string]any{"type": "boolean"},
+					"motivo":   map[string]any{"type": "string"},
+				},
+				"required":             []string{"id"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.locks.listar",
 			Title:       "Listar locks",
 			Description: "Lista locks registrados en Orquesta",
@@ -1203,6 +1254,43 @@ func listMCPTools() []mcpTool {
 					"estado": map[string]any{"type": "string"},
 					"agente": map[string]any{"type": "string"},
 				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.locks.adquirir",
+			Title:       "Adquirir lock",
+			Description: "Adquiere un lock por la vía canónica de coordinación",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":        map[string]any{"type": "string"},
+					"proyecto":      map[string]any{"type": "string"},
+					"tarea_id":      map[string]any{"type": "integer"},
+					"scope_type":    map[string]any{"type": "string"},
+					"scope_key":     map[string]any{"type": "string"},
+					"ruta":          map[string]any{"type": "string"},
+					"branch":        map[string]any{"type": "string"},
+					"motivo":        map[string]any{"type": "string"},
+					"lease_seconds": map[string]any{"type": "integer"},
+				},
+				"required":             []string{"agente", "scope_type", "scope_key"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.locks.liberar",
+			Title:       "Liberar lock",
+			Description: "Libera un lock por la vía canónica de coordinación",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":          map[string]any{"type": "integer"},
+					"agente":      map[string]any{"type": "string"},
+					"lease_token": map[string]any{"type": "string"},
+					"motivo":      map[string]any{"type": "string"},
+				},
+				"required":             []string{"id", "agente", "lease_token"},
 				"additionalProperties": false,
 			},
 		},
@@ -1692,6 +1780,21 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		}
 		return toolResult(prettyJSON(asignaciones), asignaciones, false), nil
 
+	case "orquesta.asignaciones.activar":
+		agente, err := requiredStringArg(args, "agente")
+		if err != nil {
+			return nil, err
+		}
+		proyecto, err := requiredStringArg(args, "proyecto")
+		if err != nil {
+			return nil, err
+		}
+		item, err := sesionesAPIService.ActivateAssignment(agente, proyecto, optionalStringArg(args, "nota"))
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(item), item, false), nil
+
 	case "orquesta.worktrees.listar":
 		worktrees, err := listarWorktreesFiltradas(optionalStringArg(args, "estado"), optionalStringArg(args, "agente"))
 		if err != nil {
@@ -1699,12 +1802,129 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		}
 		return toolResult(prettyJSON(worktrees), worktrees, false), nil
 
+	case "orquesta.worktrees.preparar":
+		agente, err := requiredStringArg(args, "agente")
+		if err != nil {
+			return nil, err
+		}
+		proyecto, err := requiredStringArg(args, "proyecto")
+		if err != nil {
+			return nil, err
+		}
+		var tareaID *int64
+		if value := optionalInt64Arg(args, "tarea_id"); value > 0 {
+			tareaID = &value
+		}
+		var lockID *int64
+		if value := optionalInt64Arg(args, "lock_id"); value > 0 {
+			lockID = &value
+		}
+		worktree, err := newCoordinationService().PrepareWorktree(coordinacion.PrepareWorktreeInput{
+			ProjectRef: proyecto,
+			Agent:      agente,
+			TaskID:     tareaID,
+			LockID:     lockID,
+			Name:       optionalStringArg(args, "nombre"),
+			Branch:     optionalStringArg(args, "branch"),
+			BaseRef:    optionalStringArg(args, "base_ref"),
+			Reason:     optionalStringArg(args, "motivo"),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(worktree), worktree, false), nil
+
+	case "orquesta.worktrees.cerrar":
+		id, err := requiredInt64Arg(args, "id")
+		if err != nil {
+			return nil, err
+		}
+		worktree, err := newCoordinationService().CloseWorktree(id, boolArgOrFalse(args, "eliminar"), optionalStringArg(args, "motivo"))
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(worktree), worktree, false), nil
+
 	case "orquesta.locks.listar":
 		locks, err := listarLocksFiltrados(optionalStringArg(args, "estado"), optionalStringArg(args, "agente"))
 		if err != nil {
 			return nil, err
 		}
 		return toolResult(prettyJSON(locks), locks, false), nil
+
+	case "orquesta.locks.adquirir":
+		agente, err := requiredStringArg(args, "agente")
+		if err != nil {
+			return nil, err
+		}
+		scopeType, err := requiredStringArg(args, "scope_type")
+		if err != nil {
+			return nil, err
+		}
+		scopeKey, err := requiredStringArg(args, "scope_key")
+		if err != nil {
+			return nil, err
+		}
+		var projectID *int64
+		proyectoRef := optionalStringArg(args, "proyecto")
+		if strings.TrimSpace(proyectoRef) != "" {
+			project, err := db.GetProyecto(proyectoRef)
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			projectID = &project.ID
+		}
+		var taskID *int64
+		if value := optionalInt64Arg(args, "tarea_id"); value > 0 {
+			taskID = &value
+		}
+		var sessionID *int64
+		if projectID != nil {
+			sesion, err := sesionesAPIService.GetActiveSession(agente, proyectoRef)
+			if err == nil && sesion != nil {
+				sessionID = &sesion.ID
+			}
+		}
+		lock, err := newCoordinationService().AcquireLock(coordinacion.AcquireLockInput{
+			ProjectID:    projectID,
+			TaskID:       taskID,
+			SessionID:    sessionID,
+			Agent:        agente,
+			ScopeType:    scopeType,
+			ScopeKey:     scopeKey,
+			Path:         optionalStringArg(args, "ruta"),
+			Branch:       optionalStringArg(args, "branch"),
+			Reason:       optionalStringArg(args, "motivo"),
+			LeaseSeconds: optionalIntArg(args, "lease_seconds"),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(lock), lock, false), nil
+
+	case "orquesta.locks.liberar":
+		id, err := requiredInt64Arg(args, "id")
+		if err != nil {
+			return nil, err
+		}
+		agente, err := requiredStringArg(args, "agente")
+		if err != nil {
+			return nil, err
+		}
+		leaseToken, err := requiredStringArg(args, "lease_token")
+		if err != nil {
+			return nil, err
+		}
+		lock, err := newCoordinationService().ReleaseLock(coordinacion.ReleaseLockInput{
+			ID:         id,
+			Agent:      agente,
+			LeaseToken: leaseToken,
+			Reason:     optionalStringArg(args, "motivo"),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(lock), lock, false), nil
 
 	case "orquesta.sesiones.activas":
 		sesiones, err := listarSesionesActivas()

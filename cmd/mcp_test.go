@@ -12,12 +12,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"orquesta/agentesapp"
+	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/reviewapp"
 )
@@ -897,6 +901,93 @@ func TestMCPToolsPropuestasCrearYAccionarOperanPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestMCPToolsCoordinacionOperanPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrando Codex3: %v", err)
+		}
+		repo := prepararRepoGitMCP(t)
+		insertTestProyecto(t, "orquestador", "orquestador", repo)
+
+		assignResult, err := callMCPTool("orquesta.asignaciones.activar", map[string]any{
+			"agente":   "Codex3",
+			"proyecto": "orquestador",
+			"nota":     "frente coordinado por MCP",
+		})
+		if err != nil {
+			t.Fatalf("asignaciones activar MCP: %v", err)
+		}
+		if assignResult["isError"] != false {
+			t.Fatalf("asignaciones activar marcado como error: %#v", assignResult)
+		}
+
+		lockResult, err := callMCPTool("orquesta.locks.adquirir", map[string]any{
+			"agente":        "Codex3",
+			"proyecto":      "orquestador",
+			"scope_type":    "branch",
+			"scope_key":     "orq-orquestador-codex3",
+			"branch":        "orq-orquestador-codex3",
+			"motivo":        "prueba MCP",
+			"lease_seconds": 120,
+		})
+		if err != nil {
+			t.Fatalf("locks adquirir MCP: %v", err)
+		}
+		if lockResult["isError"] != false {
+			t.Fatalf("locks adquirir marcado como error: %#v", lockResult)
+		}
+		lock, _ := lockResult["structuredContent"].(*coordinacion.Lock)
+		if lock == nil || lock.ID <= 0 || strings.TrimSpace(lock.LeaseToken) == "" {
+			t.Fatalf("lock inválido: %#v", lockResult["structuredContent"])
+		}
+
+		worktreeResult, err := callMCPTool("orquesta.worktrees.preparar", map[string]any{
+			"agente":   "Codex3",
+			"proyecto": "orquestador",
+			"lock_id":  lock.ID,
+			"motivo":   "prueba MCP",
+		})
+		if err != nil {
+			t.Fatalf("worktrees preparar MCP: %v", err)
+		}
+		if worktreeResult["isError"] != false {
+			t.Fatalf("worktrees preparar marcado como error: %#v", worktreeResult)
+		}
+		worktree, _ := worktreeResult["structuredContent"].(*coordinacion.Worktree)
+		if worktree == nil || worktree.ID <= 0 || strings.TrimSpace(worktree.Path) == "" {
+			t.Fatalf("worktree inválida: %#v", worktreeResult["structuredContent"])
+		}
+		if _, err := os.Stat(worktree.Path); err != nil {
+			t.Fatalf("worktree no creada en disco: %v", err)
+		}
+
+		closeResult, err := callMCPTool("orquesta.worktrees.cerrar", map[string]any{
+			"id":       worktree.ID,
+			"eliminar": true,
+			"motivo":   "fin prueba MCP",
+		})
+		if err != nil {
+			t.Fatalf("worktrees cerrar MCP: %v", err)
+		}
+		if closeResult["isError"] != false {
+			t.Fatalf("worktrees cerrar marcado como error: %#v", closeResult)
+		}
+
+		releaseResult, err := callMCPTool("orquesta.locks.liberar", map[string]any{
+			"id":          lock.ID,
+			"agente":      "Codex3",
+			"lease_token": lock.LeaseToken,
+			"motivo":      "fin prueba MCP",
+		})
+		if err != nil {
+			t.Fatalf("locks liberar MCP: %v", err)
+		}
+		if releaseResult["isError"] != false {
+			t.Fatalf("locks liberar marcado como error: %#v", releaseResult)
+		}
+	})
+}
+
 func TestMCPToolVotarPropuestaActualizaEstado(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
@@ -1250,6 +1341,33 @@ func insertTestPool(t *testing.T, slug, proveedor, runtime string, capacidadTota
 	}); err != nil {
 		t.Fatalf("insert pool: %v", err)
 	}
+}
+
+func prepararRepoGitMCP(t *testing.T) string {
+	t.Helper()
+	repo := filepath.Join(t.TempDir(), "orquestador")
+	cmdGitMCP(t, "", "init", "-b", "master", repo)
+	cmdGitMCP(t, repo, "config", "user.name", "Orquesta Test")
+	cmdGitMCP(t, repo, "config", "user.email", "orquesta@example.test")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("base\n"), 0o644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+	cmdGitMCP(t, repo, "add", "README.md")
+	cmdGitMCP(t, repo, "commit", "-m", "base")
+	return repo
+}
+
+func cmdGitMCP(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	if strings.TrimSpace(dir) != "" {
+		cmd.Dir = dir
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func insertTestPoolModelo(t *testing.T, poolSlug, modelSlug string, prioridad int, coste float64) {

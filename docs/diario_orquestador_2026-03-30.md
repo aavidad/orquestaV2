@@ -4887,3 +4887,27 @@ Validacion:
 
 - `go test ./cmd -run 'Test(MCPToolsAgentesListarYPausarOperanPorLaViaCanonica|MCPToolsPropuestasCrearYAccionarOperanPorLaViaCanonica)' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — El MCP ya coordina asignaciones, locks y worktrees
+
+Hallazgo:
+
+- para que `OpenClaw` pueda operar como supervisor real seguía faltando coordinar trabajo, no solo leerlo: asignar agentes a proyecto, bloquear recursos y abrir/cerrar worktrees desde el MCP oficial
+
+Decision:
+
+- añadir tools MCP para:
+  - activar asignaciones
+  - adquirir y liberar locks
+  - preparar y cerrar worktrees
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestMCPToolsCoordinacionOperanPorLaViaCanonica' -count=1`
+- `go build -o ./orquesta .`
