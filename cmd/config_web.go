@@ -37,7 +37,7 @@ type webConfigData struct {
 }
 
 func webOpenClawDefaultEndpoint() string {
-	return fmt.Sprintf("http://127.0.0.1:%d/mcp", defaultServePort)
+	return fmt.Sprintf("http://127.0.0.1:%d/api/mcp", defaultServePort)
 }
 
 func webConfigQuickSections(config map[string]string) []webConfigQuickSection {

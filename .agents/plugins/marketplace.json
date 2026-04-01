@@ -1,0 +1,20 @@
+{
+  "name": "orquesta-local",
+  "interface": {
+    "displayName": "Orquesta Local"
+  },
+  "plugins": [
+    {
+      "name": "openclaw-orquesta-api",
+      "source": {
+        "source": "local",
+        "path": "./plugins/openclaw-orquesta-api"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

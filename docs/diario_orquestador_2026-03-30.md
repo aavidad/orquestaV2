@@ -6550,3 +6550,19 @@ Resultado:
 - Conclusión:
   - el núcleo ya soporta un relevo real con reinicio del daemon en mitad del ciclo
   - la ventana transitoria visible existe, pero converge sola y no deja deriva operativa
+
+## 2026-04-01 — plugin local `openclaw-orquesta-api` y preset MCP corregido
+
+- La integración OpenClaw seguía teniendo una deriva peligrosa:
+  - parte de la doctrina y el preset web apuntaban a `http://127.0.0.1:16543/mcp`
+  - el endpoint vivo y canónico del servidor es `http://127.0.0.1:16543/api/mcp`
+- Se corrigió el preset server-first de `/config` para usar `/api/mcp`.
+- Además se creó el plugin local `plugins/openclaw-orquesta-api` con:
+  - `plugin.json` real
+  - `.mcp.json` apuntando a `/api/mcp`
+  - `README.md`
+  - `RUNBOOK_TELEGRAM.md`
+  - `scripts/smoke_openclaw_orquesta.sh`
+- Objetivo:
+  - dar a OpenClaw un frontal/plugin canónico contra API y MCP del daemon
+  - evitar otra integración lateral o mal documentada

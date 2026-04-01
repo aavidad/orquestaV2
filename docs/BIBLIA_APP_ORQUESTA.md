@@ -746,10 +746,12 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - el preset oficial fija:
   - `integration_openclaw_enabled=true`
   - `integration_openclaw_transport=mcp_http`
-  - `integration_openclaw_endpoint=http://127.0.0.1:16543/mcp`
+  - `integration_openclaw_endpoint=http://127.0.0.1:16543/api/mcp`
   - `integration_openclaw_workspace_mode=worktree`
 - `integration_openclaw_agent_prefix=OpenClaw-`
 - `integration_openclaw_require_identity=true`
+- el endpoint HTTP canónico de MCP en Orquesta es `/api/mcp`; no `/mcp`
+- cualquier plugin o tooling de OpenClaw debe apuntar a ese endpoint y validar antes `healthz`, `/api/openclaw/operator` y `/api/mcp`
 - los formularios de configuración deben conservar `lang` en redirects y usar mensajes i18n; no se admiten flashes hardcodeados ni rutas laterales fuera del servidor
 - para `codex_token_count_observed`, si falta la clave de configuración específica, el TTL por defecto observado sigue siendo `3600s`; no puede caer silenciosamente al TTL genérico de `300s`, porque eso oculta agotamientos reales de la ventana `5h`.
 - un presupuesto fresco y crítico observado debe proyectarse también sobre `estado_cuota` visible del agente (`enfriamiento` o `agotado`) aunque la fila persistida aún no haya sido actualizada por un batch posterior.
