@@ -140,6 +140,25 @@ func buildOpenClawWorktreeDrift(status *estadoResumen) ([]apiOpenClawWorktreeDri
 	if err != nil {
 		return nil, err
 	}
+	relevantAgents := relevantOpenClawWorktreeAgentsFromEstadoResumen(status)
+	return buildOpenClawWorktreeDriftFromRefs(worktrees, repoHead, heads, relevantAgents), nil
+}
+
+func buildOpenClawWorktreeDriftFromAPIStatus(status apiStatusResponse) ([]apiOpenClawWorktreeDrift, error) {
+	_, repoHead, heads, err := currentGitWorktreeHeads()
+	if err != nil {
+		return nil, err
+	}
+	state := coordinacion.WorktreeActive
+	worktrees, err := db.CoordinationWorktreeRepository().List(coordinacion.WorktreeFilter{State: &state})
+	if err != nil {
+		return nil, err
+	}
+	relevantAgents := relevantOpenClawWorktreeAgentsFromAPIStatus(status)
+	return buildOpenClawWorktreeDriftFromRefs(worktrees, repoHead, heads, relevantAgents), nil
+}
+
+func relevantOpenClawWorktreeAgentsFromEstadoResumen(status *estadoResumen) map[string]struct{} {
 	relevantAgents := make(map[string]struct{}, len(status.AgentesActivos)+len(status.TareasActivas))
 	for _, agente := range status.AgentesActivos {
 		if agente == nil {
@@ -154,7 +173,25 @@ func buildOpenClawWorktreeDrift(status *estadoResumen) ([]apiOpenClawWorktreeDri
 		}
 		relevantAgents[agente] = struct{}{}
 	}
-	return buildOpenClawWorktreeDriftFromRefs(worktrees, repoHead, heads, relevantAgents), nil
+	return relevantAgents
+}
+
+func relevantOpenClawWorktreeAgentsFromAPIStatus(status apiStatusResponse) map[string]struct{} {
+	relevantAgents := make(map[string]struct{}, len(status.AgentesActivos)+len(status.TareasActivas))
+	for _, agente := range status.AgentesActivos {
+		if agente == nil {
+			continue
+		}
+		relevantAgents[strings.ToLower(strings.TrimSpace(agente.Nombre))] = struct{}{}
+	}
+	for _, tarea := range status.TareasActivas {
+		agente := strings.ToLower(strings.TrimSpace(tarea.Agente))
+		if agente == "" {
+			continue
+		}
+		relevantAgents[agente] = struct{}{}
+	}
+	return relevantAgents
 }
 
 func shortGitHash(hash string) string {

@@ -309,6 +309,7 @@ Contrato minimo obligatorio para `runtime_orders`:
 - `observed_agent_sessions` es observación cruda y no debe inventar actividad por su cuenta
 - en `/api/openclaw/operator`, tanto `session_candidates` como `thread_sessions.observed_agent_sessions` deben alinearse con `agentesActivos` del `status` canónico del daemon; la vista del supervisor no puede degradar a inactivo un agente que ya aparece conectado por el servidor
 - OpenClaw debe ver `worktree_drift` cuando una worktree activa de un agente relevante apunta a un HEAD distinto del repo principal; esa señal es para arbitraje manual o refresco controlado, no para mezclar cambios automáticamente
+- `worktree_drift` debe promocionarse a acción prioritaria del supervisor antes que reservar más backlog libre; una base vieja es un riesgo mayor que quedarse sin otra tarea reservada
 - la mailbox pendiente de agentes fuera de vida operativa no puede quedar como ruido eterno: si el destinatario no tiene `runtime_handle` activo, ni sesion activa, ni asignacion activa, ni tareas activas, ni `runtime_orders` abiertas, la deuda se consume como zombi reconciliado
 - para esa regla, una asignacion `activa` mantenida solo por `reactivacion_automatica` no protege al agente si ya esta fuera de la flota `server_autobootstrap`; no puede retener mailbox zombie por si sola
 - `watchdog` queda fuera de esa reconciliacion generica y conserva su ruta especifica de consumo/auditoria

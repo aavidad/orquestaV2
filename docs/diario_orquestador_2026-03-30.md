@@ -7026,3 +7026,15 @@ Resultado:
   - se limita a visibilidad y arbitraje manual; no refresca ni fusiona worktrees por su cuenta
 - Validación:
   - `go test ./cmd -run 'Test(ParseGitWorktreeListPorcelain|BuildOpenClawWorktreeDriftFromRefs|APIObservabilidadReadOnly)' -count=1`
+
+## 2026-04-01 — worktree_drift ya sube a la cola del supervisor
+
+- Hallazgo:
+  - OpenClaw ya veía `worktree_drift`, pero la cola seguía priorizando `reservar_tarea_libre`
+  - eso ocultaba el riesgo real: revisar o integrar trabajo de una worktree muy vieja
+- Corrección:
+  - `buildSupervisorReviewSnapshot()` ya incorpora `worktree_drift` como acción `revisar_worktree_desfasada`
+  - la acción es manual y devuelve el drift estructurado del agente; no refresca worktrees automáticamente
+  - así el supervisor ve primero el desfase y luego decide si refresca/rebasea o si reencuadra al agente
+- Validación:
+  - `go test ./cmd -run 'TestMCP(RevisionSupervisorExponeWorktreeDrift|ToolSupervisorInspeccionaWorktreeDrift|RevisionSupervisorExponeSesionObservadaReutilizable|ToolSupervisorInspeccionaSesionObservada)' -count=1`

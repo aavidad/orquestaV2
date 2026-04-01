@@ -3601,7 +3601,12 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	worktreeDrift, err := openClawWorktreeDriftBuilder(status)
+	if err != nil {
+		return nil, err
+	}
 	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
+	recommended = append(recommended, buildSupervisorWorktreeDriftActions(worktreeDrift)...)
 	recommended = append(recommended, buildSupervisorOperationalActions(status, mailboxPendiente)...)
 	recommended = append(recommended, buildSupervisorObservedSessionActions(status, threadSessions)...)
 	recommended = append(recommended, buildSupervisorProposalActions(status.PropuestasResumen)...)
@@ -3633,6 +3638,7 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 		"mailbox_pending":     mailboxPendiente,
 		"normalized_events":   normalizedEvents,
 		"thread_sessions":     threadSessions,
+		"worktree_drift":      worktreeDrift,
 		"pipeline_state":      pipelineState,
 		"recommended_actions": recommended,
 		"action_queue":        recommended,
@@ -3907,6 +3913,34 @@ func buildSupervisorOperationalActions(status apiStatusResponse, mailboxPendient
 			Reason:   reason,
 			Priority: priority,
 			Assignee: strings.TrimSpace(item.Agente),
+		})
+	}
+	return actions
+}
+
+var openClawWorktreeDriftBuilder = buildOpenClawWorktreeDriftFromAPIStatus
+
+func buildSupervisorWorktreeDriftActions(items []apiOpenClawWorktreeDrift) []supervisorRecommendedAction {
+	if len(items) == 0 {
+		return nil
+	}
+	actions := make([]supervisorRecommendedAction, 0, len(items))
+	for _, item := range items {
+		agente := strings.TrimSpace(item.Agente)
+		if agente == "" {
+			continue
+		}
+		reason := "La worktree del agente está desfasada respecto al HEAD del servidor; conviene refrescar base antes de integrar cambios."
+		if item.CurrentHead != "" || item.ExpectedHead != "" {
+			reason = fmt.Sprintf("La worktree del agente está desfasada (%s -> %s); conviene refrescar base antes de integrar cambios.", strings.TrimSpace(item.CurrentHead), strings.TrimSpace(item.ExpectedHead))
+		}
+		actions = append(actions, supervisorRecommendedAction{
+			Kind:     "worktree_drift",
+			Target:   "agente:" + agente,
+			Action:   "revisar_worktree_desfasada",
+			Reason:   reason,
+			Priority: "alta",
+			Assignee: agente,
 		})
 	}
 	return actions
@@ -4379,6 +4413,36 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 			}
 		}
 		return nil, fmt.Errorf("no hay sesión observada para %s", agente)
+	case "revisar_worktree_desfasada":
+		target := strings.TrimSpace(selected.Target)
+		if !strings.HasPrefix(target, "agente:") {
+			return nil, fmt.Errorf("target no soportado para worktree drift: %s", target)
+		}
+		agente := strings.TrimSpace(strings.TrimPrefix(target, "agente:"))
+		if agente == "" {
+			return nil, fmt.Errorf("target de agente inválido: %s", target)
+		}
+		status, err := statusService.FetchStatus()
+		if err != nil {
+			return nil, err
+		}
+		items, err := openClawWorktreeDriftBuilder(status)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range items {
+			if strings.EqualFold(strings.TrimSpace(item.Agente), agente) {
+				return map[string]any{
+					"ok":             true,
+					"supervisor":     supervisor,
+					"action":         selected,
+					"agente":         agente,
+					"assignee":       worker,
+					"worktree_drift": item,
+				}, nil
+			}
+		}
+		return nil, fmt.Errorf("no hay worktree desfasada para %s", agente)
 	default:
 		return nil, fmt.Errorf("acción no aplicable automáticamente: %s", strings.TrimSpace(selected.Action))
 	}
@@ -4545,6 +4609,14 @@ func fallbackSupervisorRecommendedAction(actionName, target, assignee string) *s
 			Action:   actionName,
 			Target:   target,
 			Priority: "baja",
+			Assignee: assignee,
+		}
+	case "revisar_worktree_desfasada":
+		return &supervisorRecommendedAction{
+			Kind:     "worktree_drift",
+			Action:   actionName,
+			Target:   target,
+			Priority: "alta",
 			Assignee: assignee,
 		}
 	default:
