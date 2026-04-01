@@ -1637,6 +1637,122 @@ func TestMCPToolSupervisorReservaTareaLibre(t *testing.T) {
 	})
 }
 
+func TestMCPRevisionSupervisorSugiereRebalanceoDeReserva(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			TareasActivas: []tareaLite{
+				{ID: 410, Estado: db.TareaEnProgreso, Titulo: "Runtime", Agente: "Codex3"},
+				{ID: 412, Estado: db.TareaEnProgreso, Titulo: "Persistencia", Agente: "Codex3"},
+				{ID: 413, Estado: db.TareaEnProgreso, Titulo: "Git", Agente: "Codex4"},
+				{ID: 414, Estado: db.TareaEnProgreso, Titulo: "Web", Agente: "Codex4"},
+				{ID: 411, Estado: db.TareaAsignada, Titulo: "CLI/API", Agente: "Codex4"},
+				{ID: 415, Estado: db.TareaAsignada, Titulo: "OpenClaw", Agente: "Codex4"},
+			},
+		}}
+
+		snapshot, err := buildSupervisorReviewSnapshot("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshot: %v", err)
+		}
+		queue, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+		found := false
+		for _, item := range queue {
+			if item.Action == "rebalancear_reserva" && item.Target == "tarea:411" && item.Assignee == "Codex3" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("no aparece rebalanceo de reserva: %+v", queue)
+		}
+	})
+}
+
+func TestMCPToolSupervisorRebalanceaReserva(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Reserva a rebalancear",
+			Descripcion: "Debe cambiar de assignee sin start",
+			Modulo:      "openclaw",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar Codex3: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex4", "programador"); err != nil {
+			t.Fatalf("registrar Codex4: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE tareas SET estado='asignada', agente='Codex4' WHERE id=?`, tareaID); err != nil {
+			t.Fatalf("asignar tarea a Codex4: %v", err)
+		}
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			TareasActivas: []tareaLite{
+				{ID: 410, Estado: db.TareaEnProgreso, Titulo: "Runtime", Agente: "Codex3"},
+				{ID: 412, Estado: db.TareaEnProgreso, Titulo: "Persistencia", Agente: "Codex3"},
+				{ID: 413, Estado: db.TareaEnProgreso, Titulo: "Git", Agente: "Codex4"},
+				{ID: 414, Estado: db.TareaEnProgreso, Titulo: "Web", Agente: "Codex4"},
+				{ID: tareaID, Estado: db.TareaAsignada, Titulo: "Reserva", Agente: "Codex4"},
+				{ID: 415, Estado: db.TareaAsignada, Titulo: "Reserva 2", Agente: "Codex4"},
+			},
+		}}
+
+		result, err := callMCPTool("orquesta.supervision.acciones.aplicar", map[string]any{
+			"supervisor": "OpenClaw",
+			"action":     "rebalancear_reserva",
+			"target":     "tarea:" + itoa(tareaID),
+			"assignee":   "Codex3",
+		})
+		if err != nil {
+			t.Fatalf("rebalancear reserva: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("rebalanceo marcado como error: %#v", result)
+		}
+		tarea, err := db.GetTarea(tareaID)
+		if err != nil {
+			t.Fatalf("get tarea: %v", err)
+		}
+		if tarea.Estado != db.TareaAsignada || tarea.Agente == nil || *tarea.Agente != "Codex3" {
+			t.Fatalf("tarea no quedó rebalanceada: %+v", tarea)
+		}
+	})
+}
+
 func TestMCPRevisionSupervisorExponeTodasLasRetenidasPorCuota(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := statusService

@@ -1071,3 +1071,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - un worker cuenta como saturado si ya arrastra reservas preparadas
   - o si ya tiene una carga activa alta (`>=3`) en el estado visible
   - esa saturación es una señal operativa para OpenClaw; no sustituye la lógica del planificador ni crea otro contrato paralelo
+- El supervisor puede rebalancear reservas, pero no trabajo ya arrancado:
+  - si hay skew de carga visible y existen tareas `asignada`, OpenClaw puede proponer `rebalancear_reserva`
+  - esa acción es segura solo sobre tareas reservadas (`estado=asignada`)
+  - nunca debe mover una tarea `en_progreso` bajo esta semántica; para eso ya existen `replanificar_por_cuota` o arbitraje manual

@@ -3603,6 +3603,7 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
 	recommended = append(recommended, buildSupervisorOperationalActions(status, mailboxPendiente)...)
 	sortSupervisorRecommendedActions(recommended)
+	markSupervisorRecommendedActions(recommended)
 	safeQueue := make([]supervisorRecommendedAction, 0, len(recommended))
 	for _, item := range recommended {
 		if supervisorActionIsAutomaticallyApplicable(item.Action) {
@@ -3811,7 +3812,7 @@ func buildSupervisorRecommendedActions(gates []*db.ReviewGate, signals []*superv
 
 func supervisorActionIsAutomaticallyApplicable(action string) bool {
 	switch strings.TrimSpace(action) {
-	case "asignar_tarea_libre", "reservar_tarea_libre", "replanificar_por_cuota", "seguir_guidance_durable":
+	case "asignar_tarea_libre", "reservar_tarea_libre", "replanificar_por_cuota", "seguir_guidance_durable", "rebalancear_reserva":
 		return true
 	default:
 		return false
@@ -3869,6 +3870,7 @@ func buildSupervisorOperationalActions(status apiStatusResponse, mailboxPendient
 			})
 		}
 	}
+	actions = append(actions, buildSupervisorReserveRebalanceActions(status)...)
 	retenidas := tareasRetenidasPorCuota(status.TareasActivas, status.Agentes)
 	if len(retenidas) > 0 {
 		priority := "media"
@@ -3912,6 +3914,72 @@ func buildSupervisorOperationalActions(status apiStatusResponse, mailboxPendient
 		})
 	}
 	return actions
+}
+
+func buildSupervisorReserveRebalanceActions(status apiStatusResponse) []supervisorRecommendedAction {
+	reservadas := filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada)
+	if len(reservadas) == 0 || len(status.AgentesActivos) < 2 {
+		return nil
+	}
+	cargaActiva, cargaReservada := buildOpenClawAgentLoad(status.TareasActivas)
+	actions := make([]supervisorRecommendedAction, 0, len(reservadas))
+	for _, tarea := range reservadas {
+		origen := strings.TrimSpace(tarea.Agente)
+		if origen == "" {
+			continue
+		}
+		destino, cargaOrigen, cargaDestino := lowerLoadActiveWorker(status.AgentesActivos, cargaActiva, cargaReservada, origen)
+		if destino == "" {
+			continue
+		}
+		if cargaOrigen-cargaDestino < 2 {
+			continue
+		}
+		priority := "media"
+		if cargaOrigen-cargaDestino >= 3 {
+			priority = "alta"
+		}
+		actions = append(actions, supervisorRecommendedAction{
+			Kind:     "dispatch",
+			Target:   fmt.Sprintf("tarea:%d", tarea.ID),
+			Action:   "rebalancear_reserva",
+			Reason:   fmt.Sprintf("La reserva #%d está en %s con carga %d; %s tiene carga %d y puede absorberla sin tocar trabajo en progreso.", tarea.ID, origen, cargaOrigen, destino, cargaDestino),
+			Priority: priority,
+			Assignee: destino,
+		})
+	}
+	return actions
+}
+
+func lowerLoadActiveWorker(activos []*db.Agente, cargaActiva, cargaReservada map[string]int, exclude string) (string, int, int) {
+	exclude = strings.TrimSpace(exclude)
+	bestName := ""
+	bestLoad := 0
+	sourceLoad := 0
+	foundSource := false
+	for _, agente := range activos {
+		if agente == nil {
+			continue
+		}
+		nombre := strings.TrimSpace(agente.Nombre)
+		if nombre == "" {
+			continue
+		}
+		total := cargaActiva[nombre] + cargaReservada[nombre]
+		if strings.EqualFold(nombre, exclude) {
+			sourceLoad = total
+			foundSource = true
+			continue
+		}
+		if bestName == "" || total < bestLoad || (total == bestLoad && nombre < bestName) {
+			bestName = nombre
+			bestLoad = total
+		}
+	}
+	if !foundSource {
+		sourceLoad = cargaActiva[exclude] + cargaReservada[exclude]
+	}
+	return bestName, sourceLoad, bestLoad
 }
 
 func countLibreTasks(status apiStatusResponse) int {
@@ -4137,6 +4205,32 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 			"assignee":   worker,
 		}
 		return result, nil
+	case "rebalancear_reserva":
+		taskID, err := resolveSupervisorActionTaskID(*selected)
+		if err != nil {
+			return nil, err
+		}
+		task, err := tareasService.Get(taskID)
+		if err != nil {
+			return nil, err
+		}
+		if task == nil {
+			return nil, fmt.Errorf("tarea #%d no encontrada", taskID)
+		}
+		if task.Estado != db.TareaAsignada {
+			return nil, fmt.Errorf("la tarea #%d no está reservada para rebalanceo", taskID)
+		}
+		if err := tareasService.Reassign(taskID, worker); err != nil {
+			return nil, err
+		}
+		result := map[string]any{
+			"ok":         true,
+			"supervisor": supervisor,
+			"action":     selected,
+			"task_id":    taskID,
+			"assignee":   worker,
+		}
+		return result, nil
 	case "seguir_guidance_durable":
 		mailboxID, err := resolveSupervisorActionMailboxID(*selected, worker)
 		if err != nil {
@@ -4256,6 +4350,14 @@ func fallbackSupervisorRecommendedAction(actionName, target, assignee string) *s
 			Action:   actionName,
 			Target:   target,
 			Priority: "baja",
+			Assignee: assignee,
+		}
+	case "rebalancear_reserva":
+		return &supervisorRecommendedAction{
+			Kind:     "dispatch",
+			Action:   actionName,
+			Target:   target,
+			Priority: "media",
 			Assignee: assignee,
 		}
 	case "seguir_guidance_durable":

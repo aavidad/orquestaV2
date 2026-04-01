@@ -6673,3 +6673,22 @@ Resultado:
   - `GET /api/openclaw/operator`
   - comprobar `capacity_summary` y `saturated_agents`
   - comprobar `/openclaw` con `capacidad libre`, `backlog libre` y tabla de `Agentes saturados`
+
+## 2026-04-01 — OpenClaw ya puede rebalancear reservas de forma segura
+
+- Apareció un hueco operativo real:
+  - la cola del supervisor podía quedar vacía aunque hubiera skew de carga visible
+  - ejemplo vivo: `Codex4` con varias `asignada` y `Codex3` con menor carga total
+- Se añadió una acción segura nueva:
+  - `rebalancear_reserva`
+- Semántica:
+  - solo actúa sobre tareas `estado=asignada`
+  - nunca toca trabajo `en_progreso`
+  - se propone cuando la diferencia de carga visible entre origen y destino es al menos `2`
+- Superficies actualizadas:
+  - snapshot MCP del supervisor
+  - tool de aplicación del supervisor
+  - web `/openclaw`
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(MCPRevisionSupervisorSugiereRebalanceoDeReserva|MCPToolSupervisorRebalanceaReserva|WebOpenClawAccionAplicaRebalanceoReserva)' -count=1`
+  - `go build -o ./orquesta .`
