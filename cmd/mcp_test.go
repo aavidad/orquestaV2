@@ -1269,6 +1269,50 @@ func TestMCPPipelineSupervisorOperaPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestMCPRevisionSupervisorSugiereDispatchOperativo(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Cerrar backlog operativo",
+			Descripcion: "Debe aparecer como siguiente acción del supervisor",
+			Modulo:      "web",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea libre: %v", err)
+		}
+		if tareaID == 0 {
+			t.Fatalf("id tarea libre inválido: %d", tareaID)
+		}
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+		}}
+
+		snapshot, err := buildSupervisorReviewSnapshot("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshot: %v", err)
+		}
+		nextAction, _ := snapshot["next_action"].(supervisorRecommendedAction)
+		if nextAction.Action != "asignar_tarea_libre" {
+			t.Fatalf("next_action inesperada: %+v", nextAction)
+		}
+		if nextAction.Target != "tarea:"+itoa(tareaID) {
+			t.Fatalf("target inesperado: %+v", nextAction)
+		}
+	})
+}
+
 func TestMCPToolsPropuestasCrearYAccionarOperanPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")

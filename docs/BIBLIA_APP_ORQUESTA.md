@@ -905,6 +905,12 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `blocked_by_quota`
   - `idle`
 - API, MCP y `/openclaw` deben leer la misma `supervisor-loop` derivada.
+- `recommended_actions`, `action_queue` y `next_action` del supervisor no pueden quedarse solo en review/integración:
+  - deben incluir también acciones operativas derivadas del estado vivo, al menos:
+    - `replanificar_por_cuota`
+    - `asignar_tarea_libre`
+- Si hay workers conectados e idle y backlog libre, el supervisor debe ver una acción explícita de `dispatch`.
+- Si hay trabajo retenido por cuota, el supervisor debe ver una acción explícita de `replanificar_por_cuota` antes de abrir nuevos frentes.
 
 ### Superficie web del supervisor
 

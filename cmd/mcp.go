@@ -3561,6 +3561,10 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	status, err := statusService.FetchStatus()
+	if err != nil {
+		return nil, err
+	}
 	normalizedEvents, err := buildOpenClawNormalizedEvents(20)
 	if err != nil {
 		return nil, err
@@ -3574,6 +3578,8 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 		return nil, err
 	}
 	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
+	recommended = append(recommended, buildSupervisorOperationalActions(status)...)
+	sortSupervisorRecommendedActions(recommended)
 	var nextAction any
 	if len(recommended) > 0 {
 		nextAction = recommended[0]
@@ -3749,6 +3755,95 @@ func buildSupervisorRecommendedActions(gates []*db.ReviewGate, signals []*superv
 			Priority: "alta",
 		})
 	}
+	sortSupervisorRecommendedActions(actions)
+	return actions
+}
+
+func buildSupervisorOperationalActions(status apiStatusResponse) []supervisorRecommendedAction {
+	actions := make([]supervisorRecommendedAction, 0, 4)
+	idle := idleSupervisorWorkers(status.AgentesActivos, status.AgentesTrabajando)
+	if len(idle) > 0 {
+		target := "backlog:libre"
+		reason := fmt.Sprintf("Hay workers conectados sin trabajo (%s) y backlog libre disponible.", strings.Join(idle, ", "))
+		priority := "media"
+		if len(status.AgentesTrabajando) == 0 {
+			priority = "alta"
+		}
+		libres, err := db.ListarTareas(db.FiltroTareas{Libre: true})
+		if err == nil && len(libres) > 0 && libres[0] != nil {
+			target = fmt.Sprintf("tarea:%d", libres[0].ID)
+		}
+		if libresCount := countLibreTasks(status); libresCount > 0 || strings.HasPrefix(target, "tarea:") {
+			actions = append(actions, supervisorRecommendedAction{
+				Kind:     "dispatch",
+				Target:   target,
+				Action:   "asignar_tarea_libre",
+				Reason:   reason,
+				Priority: priority,
+			})
+		}
+	}
+	retenidas := tareasRetenidasPorCuota(status.TareasActivas, status.Agentes)
+	if len(retenidas) > 0 {
+		priority := "media"
+		if len(status.AgentesActivos) == 0 {
+			priority = "alta"
+		}
+		actions = append(actions, supervisorRecommendedAction{
+			Kind:     "quota_hold",
+			Target:   fmt.Sprintf("tarea:%d", retenidas[0].ID),
+			Action:   "replanificar_por_cuota",
+			Reason:   "Hay trabajo retenido por cuota; revisar reasignación o secuenciación sin esperar al agente bloqueado.",
+			Priority: priority,
+		})
+	}
+	return actions
+}
+
+func countLibreTasks(status apiStatusResponse) int {
+	if status.ResumenTareas != nil {
+		if n, ok := status.ResumenTareas[string(db.TareaLibre)]; ok {
+			return n
+		}
+	}
+	if status.TareasPorEstado != nil {
+		if n, ok := status.TareasPorEstado[string(db.TareaLibre)]; ok {
+			return n
+		}
+	}
+	return 0
+}
+
+func idleSupervisorWorkers(conectados, trabajando []*db.Agente) []string {
+	trabajandoSet := make(map[string]struct{}, len(trabajando))
+	for _, agente := range trabajando {
+		if agente == nil {
+			continue
+		}
+		nombre := strings.TrimSpace(agente.Nombre)
+		if nombre != "" {
+			trabajandoSet[nombre] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(conectados))
+	for _, agente := range conectados {
+		if agente == nil {
+			continue
+		}
+		nombre := strings.TrimSpace(agente.Nombre)
+		if nombre == "" {
+			continue
+		}
+		if _, busy := trabajandoSet[nombre]; busy {
+			continue
+		}
+		out = append(out, nombre)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func sortSupervisorRecommendedActions(actions []supervisorRecommendedAction) {
 	sort.SliceStable(actions, func(i, j int) bool {
 		weight := func(v string) int {
 			switch v {
@@ -3766,7 +3861,6 @@ func buildSupervisorRecommendedActions(gates []*db.ReviewGate, signals []*superv
 		}
 		return actions[i].Target < actions[j].Target
 	})
-	return actions
 }
 
 func compactMCPLine(text string, maxRunes int) string {

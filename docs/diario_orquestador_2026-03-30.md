@@ -6005,3 +6005,20 @@ Resultado:
   - fase observada: `coordinar_workers`
   - workers conectados: `Codex3`, `Codex4`
   - tarea foco visible: `#410`
+
+## 2026-04-01 — OpenClaw ya prioriza dispatch y cuota desde el estado vivo
+
+- El snapshot de supervisor ya no se queda en review/integración.
+- `buildSupervisorReviewSnapshot()` añade acciones operativas derivadas del estado vivo:
+  - `replanificar_por_cuota`
+  - `asignar_tarea_libre`
+- Esto evita que `OpenClaw` vea una cola vacía cuando en realidad:
+  - hay tareas retenidas por cuota
+  - hay workers conectados e idle
+  - hay backlog libre disponible
+- Validación:
+  - `go test ./cmd -run 'Test(MCPRevisionSupervisorSugiereDispatchOperativo|MCPPipelineSupervisorOperaPorLaViaCanonica)' -count=1`
+  - build + reinicio del daemon
+  - `GET /api/openclaw/operator` devolviendo:
+    - `next_action = replanificar_por_cuota` sobre `#412`
+    - segunda acción `asignar_tarea_libre` sobre `#414` para `Codex3`
