@@ -6303,3 +6303,31 @@ Resultado:
 - Hallazgo adicional:
   - `./orquesta runtime mailbox --estado pendiente --to Codex3` todavía puede enseñar el mensaje viejo aunque la verdad del servidor ya haya convergido
   - eso apunta a una incoherencia residual del CLI server-first de runtime mailbox, no del supervisor/OpenClaw
+
+## 2026-04-01 — OpenClaw ya puede reservar backlog libre sin arrancarlo
+
+- Hasta ahora el supervisor podía:
+  - reasignar trabajo retenido por cuota
+  - asignar tarea libre a worker `idle`
+- Faltaba un caso operativo real:
+  - hay backlog libre
+  - hay workers conectados
+  - ninguno está ocioso
+- En ese escenario, OpenClaw debe poder preparar el siguiente frente sin sobrecargar todavía al worker, usando una reserva canónica y reversible.
+- Se añadió la acción `reservar_tarea_libre` a la cola del supervisor:
+  - aparece cuando no hay `idle`, sí hay conectados viables y existe backlog libre
+  - usa `tareasService.Take(...)`
+  - deja la tarea en `asignada`
+  - no la sube a `en_progreso`
+- La acción quedó soportada en:
+  - MCP tool de supervisor
+  - batch seguro del supervisor
+  - `/openclaw`
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(MCPRevisionSupervisorSugiereReservaCuandoNoHayIdle|MCPToolSupervisorReservaTareaLibre)' -count=1`
+- Validación viva:
+  - `GET /api/openclaw/operator` sugirió `reservar_tarea_libre` sobre `#415` para `Codex4`
+  - `POST /openclaw kind=supervision_action action=reservar_tarea_libre target=tarea:415 assignee=Codex4`
+  - `./orquesta tarea ver 415` convergió a:
+    - `Estado: asignada`
+    - `Agente: Codex4`

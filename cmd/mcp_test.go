@@ -1458,6 +1458,124 @@ func TestMCPRevisionSupervisorSugiereAssigneePorMenorCargaEnReplanificacion(t *t
 	})
 }
 
+func TestMCPRevisionSupervisorSugiereReservaCuandoNoHayIdle(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		tareaLibreID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Reserva backlog",
+			Descripcion: "Debe sugerirse reserva sin start",
+			Modulo:      "openclaw",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea libre: %v", err)
+		}
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			TareasPorEstado: map[string]int{
+				string(db.TareaLibre): 1,
+			},
+			TareasActivas: []tareaLite{
+				{ID: 410, Estado: db.TareaEnProgreso, Titulo: "Runtime", Agente: "Codex3"},
+				{ID: 411, Estado: db.TareaEnProgreso, Titulo: "Server", Agente: "Codex4"},
+				{ID: 412, Estado: db.TareaEnProgreso, Titulo: "DB", Agente: "Codex3"},
+			},
+		}}
+
+		snapshot, err := buildSupervisorReviewSnapshot("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshot: %v", err)
+		}
+		queue, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+		found := false
+		for _, item := range queue {
+			if item.Action == "reservar_tarea_libre" && item.Target == "tarea:"+itoa(tareaLibreID) && item.Assignee == "Codex4" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("no aparece reserva de backlog libre: %+v", queue)
+		}
+	})
+}
+
+func TestMCPToolSupervisorReservaTareaLibre(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		tareaLibreID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Reserva real",
+			Descripcion: "Debe quedar asignada sin start",
+			Modulo:      "openclaw",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea libre: %v", err)
+		}
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+				{Nombre: "Codex4", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			TareasPorEstado: map[string]int{
+				string(db.TareaLibre): 1,
+			},
+			TareasActivas: []tareaLite{
+				{ID: 410, Estado: db.TareaEnProgreso, Titulo: "Runtime", Agente: "Codex3"},
+				{ID: 411, Estado: db.TareaEnProgreso, Titulo: "Server", Agente: "Codex4"},
+				{ID: 412, Estado: db.TareaEnProgreso, Titulo: "DB", Agente: "Codex3"},
+			},
+		}}
+
+		result, err := callMCPTool("orquesta.supervision.acciones.aplicar", map[string]any{
+			"supervisor": "OpenClaw",
+			"action":     "reservar_tarea_libre",
+			"target":     "tarea:" + itoa(tareaLibreID),
+			"assignee":   "Codex4",
+		})
+		if err != nil {
+			t.Fatalf("reservar tarea libre: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("reserva marcada como error: %#v", result)
+		}
+		tarea, err := db.GetTarea(tareaLibreID)
+		if err != nil {
+			t.Fatalf("get tarea: %v", err)
+		}
+		if tarea.Estado != db.TareaAsignada || tarea.Agente == nil || *tarea.Agente != "Codex4" {
+			t.Fatalf("tarea no quedó reservada: %+v", tarea)
+		}
+	})
+}
+
 func TestMCPRevisionSupervisorExponeTodasLasRetenidasPorCuota(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := statusService

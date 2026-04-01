@@ -929,6 +929,12 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - primero se usan workers ociosos
   - si no hay ociosos, se elige el conectado con menos tareas activas
   - empate: orden estable por nombre
+- Cuando no haya workers `idle` pero sí workers conectados y backlog libre, OpenClaw debe poder reservar el siguiente frente sin arrancarlo todavía:
+  - la acción canónica es `reservar_tarea_libre`
+  - debe usar la misma vía oficial de `Take`
+  - no puede degradar ni alterar el trabajo ya activo del worker elegido
+  - el resultado correcto es `asignada`, no `en_progreso`
+  - la acción debe estar disponible igual en MCP y en `/openclaw`.
 - La action tool del supervisor debe aceptar un fallback explícito seguro cuando la cola viva haya cambiado entre la recomendación y la ejecución:
   - si `action`, `target` y `assignee` siguen siendo válidos, OpenClaw debe poder aplicar la acción sin depender de que siga presente en `action_queue`
 - `supervisor-loop` persistida no puede quedarse atrás respecto al snapshot:

@@ -3785,6 +3785,25 @@ func buildSupervisorOperationalActions(status apiStatusResponse, mailboxPendient
 			})
 		}
 	}
+	if len(idle) == 0 && len(status.AgentesActivos) > 0 {
+		assignee := preferredSupervisorWorker(status)
+		target := "backlog:libre"
+		reason := "Hay backlog libre y workers conectados, pero ninguno ocioso; conviene reservar el siguiente frente sin arrancarlo aún."
+		libres, err := db.ListarTareas(db.FiltroTareas{Libre: true})
+		if err == nil && len(libres) > 0 && libres[0] != nil {
+			target = fmt.Sprintf("tarea:%d", libres[0].ID)
+		}
+		if libresCount := countLibreTasks(status); libresCount > 0 || strings.HasPrefix(target, "tarea:") {
+			actions = append(actions, supervisorRecommendedAction{
+				Kind:     "dispatch",
+				Target:   target,
+				Action:   "reservar_tarea_libre",
+				Reason:   reason,
+				Priority: "baja",
+				Assignee: assignee,
+			})
+		}
+	}
 	retenidas := tareasRetenidasPorCuota(status.TareasActivas, status.Agentes)
 	if len(retenidas) > 0 {
 		priority := "media"
@@ -3996,6 +4015,34 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 			"assignee":   worker,
 		}
 		return result, nil
+	case "reservar_tarea_libre":
+		taskID, err := resolveSupervisorActionTaskID(*selected)
+		if err != nil {
+			return nil, err
+		}
+		task, err := tareasService.Get(taskID)
+		if err != nil {
+			return nil, err
+		}
+		if task == nil {
+			return nil, fmt.Errorf("tarea #%d no encontrada", taskID)
+		}
+		switch task.Estado {
+		case db.TareaLibre, db.TareaBacklog:
+			if err := tareasService.Take(taskID, worker); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, fmt.Errorf("la tarea #%d no está libre para reserva", taskID)
+		}
+		result := map[string]any{
+			"ok":         true,
+			"supervisor": supervisor,
+			"action":     selected,
+			"task_id":    taskID,
+			"assignee":   worker,
+		}
+		return result, nil
 	case "replanificar_por_cuota":
 		taskID, err := resolveSupervisorActionTaskID(*selected)
 		if err != nil {
@@ -4062,7 +4109,7 @@ func applySupervisorRecommendedActionsBatch(supervisor string, maxItems int) (ma
 			break
 		}
 		switch strings.TrimSpace(item.Action) {
-		case "asignar_tarea_libre", "replanificar_por_cuota", "seguir_guidance_durable":
+		case "asignar_tarea_libre", "reservar_tarea_libre", "replanificar_por_cuota", "seguir_guidance_durable":
 		default:
 			continue
 		}
@@ -4123,6 +4170,14 @@ func fallbackSupervisorRecommendedAction(actionName, target, assignee string) *s
 			Action:   actionName,
 			Target:   target,
 			Priority: "media",
+			Assignee: assignee,
+		}
+	case "reservar_tarea_libre":
+		return &supervisorRecommendedAction{
+			Kind:     "dispatch",
+			Action:   actionName,
+			Target:   target,
+			Priority: "baja",
 			Assignee: assignee,
 		}
 	case "seguir_guidance_durable":
