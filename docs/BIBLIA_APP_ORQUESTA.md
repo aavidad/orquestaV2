@@ -1007,6 +1007,9 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `status` debe ser una proyección operativa compacta
   - no debe arrastrar `resume_payload_json`, worktrees completas ni runtimes completas
   - debe priorizar lo que OpenClaw necesita para decidir: workers activos, workers en cuota, retenidas, tareas activas y propuestas abiertas
+- `/openclaw` debe renderizarse contra esa misma proyección compacta de OpenClaw, no contra `estadoResumen` bruto:
+  - si la web necesita `carga_activa`, `carga_reservada`, `cuenta_email` o `mailboxPendiente`, debe leerlos del `status` compacto
+  - mezclar `estadoResumen` con la plantilla de OpenClaw rompe el render y deja HTML truncado
 - La proyección compacta de OpenClaw no puede inventar otra verdad de presencia:
   - `status.agentesActivos` y `status.agentesTrabajando` en `/api/openclaw/operator` deben salir de la misma fuente canónica que `/api/status`
   - la fuente canónica es `statusService.FetchStatus()`, no una reconstrucción paralela desde `panelService`
@@ -1028,6 +1031,11 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - La guidance durable pendiente debe llevar antigüedad visible:
   - OpenClaw necesita distinguir deuda fresca de deuda envejecida
   - la prioridad de `seguir_guidance_durable` debe subir cuando el backlog envejece
+- `/openclaw` también debe exponer el contrato de integración server-first:
+  - endpoint MCP canónico `/api/mcp`
+  - plugin local `openclaw-orquesta-api`
+  - runbook y smoke del plugin
+  - eso evita que el supervisor vuelva a integrarse contra rutas equivocadas o scripts laterales
 - `seguir_guidance_durable` ya es acción canónica segura del supervisor:
   - debe consumir la mailbox pendiente por la vía oficial del servidor
   - tras aplicarla, la verdad viva de OpenClaw debe converger a `mailbox=null` / cola vacía

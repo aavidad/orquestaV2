@@ -6566,3 +6566,26 @@ Resultado:
 - Objetivo:
   - dar a OpenClaw un frontal/plugin canónico contra API y MCP del daemon
   - evitar otra integración lateral o mal documentada
+
+## 2026-04-01 — `/openclaw` ya renderiza completo y muestra la integración server-first
+
+- Había un bug serio en la web del supervisor:
+  - la plantilla de `/openclaw` pedía campos compactos (`carga_activa`, `carga_reservada`, `cuenta_email`) sobre `estadoResumen`
+  - eso provocaba error de plantilla en runtime y HTML truncado
+- Se corrigió `webHandlerOpenClaw` para renderizar con `buildOpenClawOperatorStatus(...)` como fuente del `status` visible.
+- Además se añadió una tarjeta `Integración server-first` con:
+  - endpoint MCP canónico `/api/mcp`
+  - plugin local `openclaw-orquesta-api`
+  - runbook `RUNBOOK_TELEGRAM.md`
+  - smoke script server-first
+- Validación dirigida:
+  - `go test ./cmd -run 'TestWebOpenClawMuestraOperatorReviewYEntregas|TestWebConfigAplicaPresetOpenClaw' -count=1`
+- Validación viva:
+  - reinicio del daemon
+  - `GET /openclaw`
+  - la página ya contiene:
+    - `Integración server-first`
+    - `/api/mcp`
+    - `openclaw-orquesta-api`
+    - `RUNBOOK_TELEGRAM.md`
+    - `</html>`

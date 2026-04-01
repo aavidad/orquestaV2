@@ -50,7 +50,7 @@ type webDashData struct {
 }
 
 type webOpenClawData struct {
-	Status           *estadoResumen
+	Status           apiOpenClawStatusLite
 	EnCuota          []*db.Agente
 	MailboxPendiente []apiOpenClawMailboxLite
 	Retenidas        []tareaLite
@@ -67,9 +67,25 @@ type webOpenClawData struct {
 	NextSafeAction   *supervisorRecommendedAction
 	Notificaciones   notificaciones.EstadoNotificaciones
 	NotifOutbox      notificaciones.OutboxSummary
+	Integration      webOpenClawIntegrationInfo
 	Generado         string
 	Msg              string
 	Err              string
+}
+
+type webOpenClawIntegrationInfo struct {
+	MCPEndpoint       string
+	Configured        bool
+	Transport         string
+	Endpoint          string
+	WorkspaceMode     string
+	AgentPrefix       string
+	RequireIdentity   string
+	PluginPath        string
+	RunbookPath       string
+	SmokeCommand      string
+	GatewayConfigured bool
+	TelegramConfigured bool
 }
 
 type webPropResumen struct {
@@ -725,6 +741,11 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	operatorStatus, err := buildOpenClawOperatorStatus(status)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	review, err := buildSupervisorReviewSnapshot("")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -765,7 +786,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	webRender(w, r, webTplLayout+webTplOpenClaw, webOpenClawData{
-		Status:           status,
+		Status:           operatorStatus,
 		EnCuota:          agentesNoActivosConCuota(status.Agentes),
 		MailboxPendiente: mustOpenClawPendingMailbox(status.Agentes),
 		Retenidas:        tareasRetenidasPorCuota(status.TareasActivas, status.Agentes),
@@ -782,6 +803,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		NextSafeAction:   nextSafeAction,
 		Notificaciones:   notificaciones.DescribirConfiguracion(),
 		NotifOutbox:      notificaciones.DescribirOutbox(10),
+		Integration:      buildWebOpenClawIntegrationInfo(),
 		Generado:         time.Now().Format("2006-01-02 15:04:05"),
 		Msg:              r.URL.Query().Get("ok"),
 		Err:              r.URL.Query().Get("err"),
@@ -794,6 +816,52 @@ func mustOpenClawPendingMailbox(agentes []*db.Agente) []apiOpenClawMailboxLite {
 		return nil
 	}
 	return items
+}
+
+func buildWebOpenClawIntegrationInfo() webOpenClawIntegrationInfo {
+	info := webOpenClawIntegrationInfo{
+		MCPEndpoint:      webOpenClawDefaultEndpoint(),
+		PluginPath:       "./plugins/openclaw-orquesta-api",
+		RunbookPath:      "./plugins/openclaw-orquesta-api/RUNBOOK_TELEGRAM.md",
+		SmokeCommand:     "./plugins/openclaw-orquesta-api/scripts/smoke_openclaw_orquesta.sh",
+		Transport:        strings.TrimSpace(configGetDefault("integration_openclaw_transport", "")),
+		Endpoint:         strings.TrimSpace(configGetDefault("integration_openclaw_endpoint", "")),
+		WorkspaceMode:    strings.TrimSpace(configGetDefault("integration_openclaw_workspace_mode", "")),
+		AgentPrefix:      strings.TrimSpace(configGetDefault("integration_openclaw_agent_prefix", "")),
+		RequireIdentity:  strings.TrimSpace(configGetDefault("integration_openclaw_require_identity", "")),
+		GatewayConfigured: strings.TrimSpace(configGetDefault("openclaw_gateway_url", "")) != "",
+		TelegramConfigured: strings.TrimSpace(configGetDefault("telegram_token", "")) != "" &&
+			strings.TrimSpace(configGetDefault("telegram_chat_id", "")) != "",
+	}
+	info.Configured = info.Transport != "" || info.Endpoint != "" || info.WorkspaceMode != ""
+	if info.Transport == "" {
+		info.Transport = "mcp_http"
+	}
+	if info.Endpoint == "" {
+		info.Endpoint = info.MCPEndpoint
+	}
+	if info.WorkspaceMode == "" {
+		info.WorkspaceMode = "worktree"
+	}
+	if info.AgentPrefix == "" {
+		info.AgentPrefix = "OpenClaw-"
+	}
+	if info.RequireIdentity == "" {
+		info.RequireIdentity = "true"
+	}
+	return info
+}
+
+func configGetDefault(key, fallback string) string {
+	value, err := db.ConfigGet(key)
+	if err != nil {
+		return fallback
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func webHandlerOpenClawAccion(w http.ResponseWriter, r *http.Request) {
@@ -2077,6 +2145,25 @@ const webTplOpenClaw = `{{define "content"}}
   </div>
 
   <div style="display:grid;gap:1rem">
+    <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
+      <h3 style="margin:0 0 .7rem 0">Integración server-first</h3>
+      <table style="width:100%;margin-bottom:.8rem"><tbody>
+        <tr><td style="font-weight:600">MCP HTTP</td><td style="text-align:right"><code>{{.Integration.MCPEndpoint}}</code></td></tr>
+        <tr><td style="font-weight:600">Transporte</td><td style="text-align:right"><code>{{.Integration.Transport}}</code></td></tr>
+        <tr><td style="font-weight:600">Endpoint configurado</td><td style="text-align:right"><code>{{.Integration.Endpoint}}</code></td></tr>
+        <tr><td style="font-weight:600">Workspace</td><td style="text-align:right"><code>{{.Integration.WorkspaceMode}}</code></td></tr>
+        <tr><td style="font-weight:600">Prefijo agente</td><td style="text-align:right"><code>{{.Integration.AgentPrefix}}</code></td></tr>
+        <tr><td style="font-weight:600">Require identity</td><td style="text-align:right"><code>{{.Integration.RequireIdentity}}</code></td></tr>
+        <tr><td style="font-weight:600">Plugin local</td><td style="text-align:right"><code>{{.Integration.PluginPath}}</code></td></tr>
+        <tr><td style="font-weight:600">Runbook</td><td style="text-align:right"><code>{{.Integration.RunbookPath}}</code></td></tr>
+      </tbody></table>
+      <div style="font-size:.78rem;color:#475569;display:grid;gap:.2rem">
+        <div>Smoke: <code>{{.Integration.SmokeCommand}}</code></div>
+        <div>MCP canónico: <code>/api/mcp</code>{{if not .Integration.Configured}} · preset aún no guardado en config{{end}}</div>
+        <div>Gateway OpenClaw: {{if .Integration.GatewayConfigured}}configurado{{else}}sin configurar{{end}} · Telegram: {{if .Integration.TelegramConfigured}}configurado{{else}}sin configurar{{end}}</div>
+      </div>
+    </section>
+
     <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
       <h3 style="margin:0 0 .7rem 0">Workers fuera del pool</h3>
       {{if .EnCuota}}

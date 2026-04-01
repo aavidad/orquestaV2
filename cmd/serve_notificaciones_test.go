@@ -152,6 +152,10 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 		"Acción siguiente",
 		"cola completa",
 		"cola segura",
+		"Integración server-first",
+		"/api/mcp",
+		"openclaw-orquesta-api",
+		"RUNBOOK_TELEGRAM.md",
 		"Reservas preparadas",
 		"Review e integración",
 		"Eventos normalizados del supervisor",
@@ -173,6 +177,9 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 	}
 	if !strings.Contains(body, "Requiere revisión manual") {
 		t.Fatalf("la página debería advertir revisión manual para la siguiente acción:\n%s", body)
+	}
+	if !strings.Contains(body, "</html>") {
+		t.Fatalf("la página openclaw quedó truncada:\n%s", body)
 	}
 }
 
