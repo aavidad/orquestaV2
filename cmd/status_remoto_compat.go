@@ -348,6 +348,8 @@ func resumenCuotaAgente(a *db.Agente) string {
 			partes = append(partes, "pausa:runtime")
 		} else if !bloqueadoPorCuota {
 			partes = append(partes, "pausa:operativa")
+		} else if bloqueoCuotaEstimadoVisible(a) {
+			partes = append(partes, "bloqueo_estimado:"+a.EstadoCuota)
 		} else {
 			partes = append(partes, "cuota:"+a.EstadoCuota)
 		}
@@ -504,6 +506,16 @@ func agenteBloqueadoPorCuotaVisible(a *db.Agente) bool {
 	return true
 }
 
+func bloqueoCuotaEstimadoVisible(a *db.Agente) bool {
+	if !agenteBloqueadoPorCuotaVisible(a) {
+		return false
+	}
+	if agenteMotivoPausaOperativa(a.MotivoPausa) {
+		return false
+	}
+	return a.PresupuestoCheckedAt == nil || a.PresupuestoCheckedAt.IsZero() || a.PresupuestoStale
+}
+
 func presupuestoVisibleEsVentanaCorta(windowKind string) bool {
 	windowKind = strings.ToLower(strings.TrimSpace(windowKind))
 	switch windowKind {
@@ -657,7 +669,7 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 	}
 	if len(resumen.AgentesActivos) == 0 {
 		if _, present := raw["agentesActivos"]; !present {
-		resumen.AgentesActivos = payload.AgentesCompat
+			resumen.AgentesActivos = payload.AgentesCompat
 		}
 	}
 	if len(resumen.AgentesTrabajando) == 0 {

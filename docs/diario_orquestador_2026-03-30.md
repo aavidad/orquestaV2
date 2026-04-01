@@ -6772,3 +6772,27 @@ Resultado:
   - `./orquesta agente presupuesto --refresh --agente Codex6 --json` ya dispara el refresh por daemon antes del listado
   - el comando funciona, pero `Codex6` sigue devolviendo snapshot observado stale
   - eso confirma el contrato correcto: la ruta nueva refresca saldo solo cuando Orquesta puede observar un handle/runtime real del agente
+
+## 2026-04-01 — Revalidación automática de saldos bloqueados y preflight de cuota
+
+- El hueco real:
+  - no bastaba con `--refresh` manual
+  - un agente podía quedar mostrado como bloqueado "hasta dentro de días" con telemetría observada vieja
+  - además el supervisor todavía podía intentar asignar trabajo a un agente con bloqueo visible no revalidado
+- Se añadió:
+  - revalidación horaria del daemon para agentes bloqueados o `stale`
+  - preflight de presupuesto antes de `reset reanimación`
+  - preflight de presupuesto antes de acciones de dispatch/rebalanceo del supervisor
+  - etiqueta visible `bloqueo_estimado:*` cuando la cuota sigue bloqueando pero la telemetría no está confirmada en caliente
+- Regla canónica:
+  - el daemon intenta refrescar cada hora a los agentes fuera del pool por cuota o con snapshot observado viejo
+  - antes de reanimar o asignar trabajo, se fuerza una revalidación corta por la vía canónica
+  - si el bloqueo sigue tras la revalidación, la acción se rechaza
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(PresupuestoAgenteDebeRevalidarseAhoraParaBloqueadoStale|PresupuestoAgenteNoRevalidaAntesDeTiempo|ResumenCuotaAgenteMarcaBloqueoEstimadoCuandoLaCuotaSigueStale|ResetReanimacionSostieneCooldownSiLaCuotaVisibleSigueAgotada|WebOpenClawAccionAplicaSiguienteSupervisor|APIOpenClawOperatorAccionaPorLaViaCanonica)' -count=1`
+  - `go build -o ./orquesta .`
+- Validación viva:
+  - `./orquesta agente presupuesto --refresh --agente Codex6 --json` sigue mostrando `PresupuestoCheckedAt=2026-04-01T00:47:19.002Z` y `PresupuestoStale=true`
+  - eso confirma que no existe runtime observable de `Codex6` para refrescar, así que el bloqueo sigue siendo estimado
+  - `POST /api/openclaw/operator {"mode":"action","action":"replanificar_por_cuota","target":"tarea:410","assignee":"Codex6"}` ya falla con `agente Codex6 bloqueado por cuota estimada`
+  - `./orquesta status` ya muestra `bloqueo_estimado:*` en los agentes bloqueados con telemetría vieja

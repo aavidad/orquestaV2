@@ -32,11 +32,17 @@ type dbAutomationService struct{}
 const autonomiaReplanTaskTitle = "Autonomía: replanificar backlog y abrir siguiente frente útil"
 
 func (dbAutomationService) CheckReanimaciones() ([]*db.Agente, error) {
+	if _, err := revalidarPresupuestoBloqueadoBatch(); err != nil {
+		return nil, err
+	}
 	return db.CheckReanimaciones()
 }
 
 func (dbAutomationService) ResetReanimacion(nombre string) error {
 	nombre = strings.TrimSpace(nombre)
+	if _, err := revalidarPresupuestoAgenteSiCorresponde(nombre, presupuestoPreflightRevalidationAge(), true); err != nil {
+		return err
+	}
 	bloqueado, err := sostenerCooldownSiLaCuotaVisibleSigueBloqueada(nombre)
 	if err != nil {
 		return err
@@ -83,7 +89,137 @@ func sostenerCooldownSiLaCuotaVisibleSigueBloqueada(nombre string) (bool, error)
 	return false, nil
 }
 
+func presupuestoBlockedRevalidationAge() time.Duration {
+	seconds := controlPlaneConfigIntOrDefault("pool_budget_blocked_revalidation_seconds", 3600)
+	if seconds <= 0 {
+		seconds = 3600
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func presupuestoPreflightRevalidationAge() time.Duration {
+	seconds := controlPlaneConfigIntOrDefault("pool_budget_preflight_revalidation_seconds", 60)
+	if seconds <= 0 {
+		seconds = 60
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func presupuestoAgenteDebeRevalidarseAhora(a *db.Agente, minAge time.Duration, soloBloqueadosOStale bool) bool {
+	if a == nil {
+		return false
+	}
+	if soloBloqueadosOStale && !agenteBloqueadoPorCuotaVisible(a) && !a.PresupuestoStale {
+		return false
+	}
+	if minAge <= 0 {
+		minAge = time.Hour
+	}
+	if a.PresupuestoCheckedAt == nil || a.PresupuestoCheckedAt.IsZero() {
+		return true
+	}
+	return time.Since(a.PresupuestoCheckedAt.UTC()) >= minAge
+}
+
+func revalidarPresupuestoAgenteSiCorresponde(nombre string, minAge time.Duration, force bool) (int, error) {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return 0, nil
+	}
+	agente, err := db.GetAgente(nombre)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, err
+	}
+	if agente == nil {
+		return 0, nil
+	}
+	if !force && !presupuestoAgenteDebeRevalidarseAhora(agente, minAge, true) {
+		return 0, nil
+	}
+	if force && !presupuestoAgenteDebeRevalidarseAhora(agente, minAge, false) {
+		return 0, nil
+	}
+	return refrescarPresupuestoSesionObservadoAgente(nombre)
+}
+
+func revalidarPresupuestoBloqueadoBatch() (int, error) {
+	agentes, err := agentesService.ListAgents()
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	minAge := presupuestoBlockedRevalidationAge()
+	for _, agente := range agentes {
+		if !presupuestoAgenteDebeRevalidarseAhora(agente, minAge, true) {
+			continue
+		}
+		n, err := revalidarPresupuestoAgenteSiCorresponde(agente.Nombre, minAge, false)
+		if err != nil {
+			return total, err
+		}
+		total += n
+	}
+	return total, nil
+}
+
+func revalidarPresupuestoPlanificacionBatch() (int, error) {
+	agentes, err := agentesService.ListAgents()
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	minAge := presupuestoPreflightRevalidationAge()
+	for _, agente := range agentes {
+		if agente == nil || !agente.Habilitado {
+			continue
+		}
+		if !presupuestoAgenteDebeRevalidarseAhora(agente, minAge, false) {
+			continue
+		}
+		n, err := revalidarPresupuestoAgenteSiCorresponde(agente.Nombre, minAge, true)
+		if err != nil {
+			return total, err
+		}
+		total += n
+	}
+	return total, nil
+}
+
+func revalidarYVerificarAgenteDisponibleParaTrabajo(nombre string) error {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return fmt.Errorf("agente obligatorio")
+	}
+	if _, err := revalidarPresupuestoAgenteSiCorresponde(nombre, presupuestoPreflightRevalidationAge(), true); err != nil {
+		return err
+	}
+	agente, err := db.GetAgente(nombre)
+	if err != nil {
+		return err
+	}
+	if agente == nil {
+		return fmt.Errorf("agente %s no encontrado", nombre)
+	}
+	if !agenteBloqueadoPorCuotaVisible(agente) {
+		return nil
+	}
+	motivo := strings.TrimSpace(agente.MotivoPausa)
+	if motivo != "" {
+		motivo = ": " + motivo
+	}
+	if bloqueoCuotaEstimadoVisible(agente) {
+		return fmt.Errorf("agente %s bloqueado por cuota estimada%s", nombre, motivo)
+	}
+	return fmt.Errorf("agente %s bloqueado por cuota%s", nombre, motivo)
+}
+
 func (dbAutomationService) PlanificarTareasAutomaticamente() error {
+	if _, err := revalidarPresupuestoPlanificacionBatch(); err != nil {
+		return err
+	}
 	return db.PlanificarTareasAutomaticamente()
 }
 
@@ -2175,6 +2311,9 @@ func procesarAutonomiaSesionActiva(sesion *db.Sesion) (int, error) {
 		// Pero si el agente está idle y acaba de autoasignarse una tarea real,
 		// sí hay que empujarle ese nuevo frente sin esperar a reinicios o handoff.
 		if strings.TrimSpace(out.AccionRecomendada) != "esperar_o_pedir_tarea" {
+			return 0, nil
+		}
+		if err := revalidarYVerificarAgenteDisponibleParaTrabajo(sesion.Agente); err != nil {
 			return 0, nil
 		}
 		tarea, err := db.IntentarAutoasignarTareaAgente(sesion.Agente, proyecto.ID)

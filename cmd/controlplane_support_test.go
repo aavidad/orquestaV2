@@ -4576,6 +4576,29 @@ func TestResetReanimacionSostieneCooldownSiLaCuotaVisibleSigueAgotada(t *testing
 	}
 }
 
+func TestPresupuestoAgenteDebeRevalidarseAhoraParaBloqueadoStale(t *testing.T) {
+	checkedAt := time.Now().UTC().Add(-2 * time.Hour)
+	if !presupuestoAgenteDebeRevalidarseAhora(&db.Agente{
+		Nombre:               "Codex6",
+		EstadoCuota:          "enfriamiento",
+		PresupuestoStale:     true,
+		PresupuestoCheckedAt: &checkedAt,
+	}, time.Hour, true) {
+		t.Fatalf("deberia revalidar un agente bloqueado y stale tras la ventana")
+	}
+}
+
+func TestPresupuestoAgenteNoRevalidaAntesDeTiempo(t *testing.T) {
+	checkedAt := time.Now().UTC().Add(-30 * time.Second)
+	if presupuestoAgenteDebeRevalidarseAhora(&db.Agente{
+		Nombre:               "Codex3",
+		EstadoCuota:          "activo",
+		PresupuestoCheckedAt: &checkedAt,
+	}, time.Minute, false) {
+		t.Fatalf("no deberia revalidar antes del preflight mínimo")
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchEncolaPausePorBloqueoHumano(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

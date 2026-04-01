@@ -4134,6 +4134,14 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 	if worker == "" {
 		return nil, fmt.Errorf("la acción no tiene assignee sugerido ni explícito")
 	}
+	if strings.TrimSpace(selected.Action) == "asignar_tarea_libre" ||
+		strings.TrimSpace(selected.Action) == "reservar_tarea_libre" ||
+		strings.TrimSpace(selected.Action) == "replanificar_por_cuota" ||
+		strings.TrimSpace(selected.Action) == "rebalancear_reserva" {
+		if err := revalidarYVerificarAgenteDisponibleParaTrabajo(worker); err != nil {
+			return nil, err
+		}
+	}
 
 	switch strings.TrimSpace(selected.Action) {
 	case "asignar_tarea_libre":

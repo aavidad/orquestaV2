@@ -510,17 +510,17 @@ func TestRenderStatusSummaryMuestraAgentesEnEnfriamiento(t *testing.T) {
 			resumen: &estadoResumen{
 				Agentes: []*db.Agente{
 					{
-						Nombre:              "Codex5",
-						Rol:                 "programador",
-						Activo:              false,
-						EstadoCuota:         "agotado",
-						ReanimarAt:          &resetAt,
-						MotivoPausa:         "Presupuesto agotado observado",
-						CuotaRestantePct:    &pct,
-						PresupuestoVentana:  "5h",
-						PresupuestoResetAt:  &resetAt,
-						CuentaEmail:         "maritere@avidad.com",
-						PresupuestoEstado:   "agotado",
+						Nombre:               "Codex5",
+						Rol:                  "programador",
+						Activo:               false,
+						EstadoCuota:          "agotado",
+						ReanimarAt:           &resetAt,
+						MotivoPausa:          "Presupuesto agotado observado",
+						CuotaRestantePct:     &pct,
+						PresupuestoVentana:   "5h",
+						PresupuestoResetAt:   &resetAt,
+						CuentaEmail:          "maritere@avidad.com",
+						PresupuestoEstado:    "agotado",
 						PresupuestoDiarioPct: &pct,
 					},
 				},
@@ -550,14 +550,14 @@ func TestRenderStatusSummaryUsaResetPresupuestoComoCooldownVisibleSiReanimarAtNo
 			resumen: &estadoResumen{
 				Agentes: []*db.Agente{
 					{
-						Nombre:               "Codex2",
-						Rol:                  "programador",
-						Activo:               false,
-						EstadoCuota:          "enfriamiento",
-						PresupuestoVentana:   "weekly",
-						PresupuestoResetAt:   &resetAt,
+						Nombre:                "Codex2",
+						Rol:                   "programador",
+						Activo:                false,
+						EstadoCuota:           "enfriamiento",
+						PresupuestoVentana:    "weekly",
+						PresupuestoResetAt:    &resetAt,
 						PresupuestoSemanalPct: &pct,
-						CuotaRestantePct:     &pct,
+						CuotaRestantePct:      &pct,
 					},
 				},
 				TareasPorEstado: map[string]int{},
@@ -573,10 +573,10 @@ func TestResumenCuotaAgenteMuestraCooldownSiReanimarAtVieneInformado(t *testing.
 	reanimarAt := time.Now().UTC().Add(2 * time.Hour)
 	pct := 75
 	detalle := resumenCuotaAgente(&db.Agente{
-		Nombre:            "Codex2",
-		EstadoCuota:       "enfriamiento",
-		ReanimarAt:        &reanimarAt,
-		CuotaRestantePct:  &pct,
+		Nombre:             "Codex2",
+		EstadoCuota:        "enfriamiento",
+		ReanimarAt:         &reanimarAt,
+		CuotaRestantePct:   &pct,
 		PresupuestoVentana: "weekly",
 	})
 	if !strings.Contains(detalle, "cooldown hasta") {
@@ -627,6 +627,26 @@ func TestResumenCuotaAgenteMarcaObservadoCuandoLaTelemetriaEsStale(t *testing.T)
 	}
 }
 
+func TestResumenCuotaAgenteMarcaBloqueoEstimadoCuandoLaCuotaSigueStale(t *testing.T) {
+	resetAt := time.Now().UTC().Add(2 * time.Hour)
+	zero := 0
+	detalle := resumenCuotaAgente(&db.Agente{
+		Nombre:               "Codex6",
+		EstadoCuota:          "enfriamiento",
+		ReanimarAt:           &resetAt,
+		CuotaRestantePct:     &zero,
+		PresupuestoVentana:   "weekly",
+		PresupuestoCheckedAt: &time.Time{},
+		PresupuestoStale:     true,
+	})
+	if !strings.Contains(detalle, "bloqueo_estimado:enfriamiento") {
+		t.Fatalf("detalle sin bloqueo estimado visible: %s", detalle)
+	}
+	if strings.Contains(detalle, "cuota:enfriamiento") {
+		t.Fatalf("no deberia marcar bloqueo confirmado cuando sigue stale: %s", detalle)
+	}
+}
+
 func TestRenderStatusSummaryMuestraTareasRetenidasPorCuota(t *testing.T) {
 	out := captureOutput(t, func() {
 		renderStatusSummary(&statusContext{
@@ -662,14 +682,14 @@ func TestRenderStatusSummarySeparaPausaOperativaDeCuota(t *testing.T) {
 			resumen: &estadoResumen{
 				Agentes: []*db.Agente{
 					{
-						Nombre:               "antigravity",
-						Rol:                  "programador",
-						Activo:               false,
-						EstadoCuota:          "enfriamiento",
-						ReanimarAt:           &resetAt,
-						MotivoPausa:          "Cuota agotada o modo enfriamiento activo.",
-						CuotaRestantePct:     &pct,
-						PresupuestoVentana:   "weekly",
+						Nombre:                "antigravity",
+						Rol:                   "programador",
+						Activo:                false,
+						EstadoCuota:           "enfriamiento",
+						ReanimarAt:            &resetAt,
+						MotivoPausa:           "Cuota agotada o modo enfriamiento activo.",
+						CuotaRestantePct:      &pct,
+						PresupuestoVentana:    "weekly",
 						PresupuestoSemanalPct: &pct,
 					},
 				},
@@ -697,11 +717,11 @@ func TestTareasRetenidasPorCuotaIgnoraPausaNoPresupuestaria(t *testing.T) {
 		{ID: 412, Titulo: "Persistencia", Agente: "antigravity", Estado: db.TareaEnProgreso},
 	}, []*db.Agente{
 		{
-			Nombre:               "antigravity",
-			Activo:               false,
-			EstadoCuota:          "enfriamiento",
-			CuotaRestantePct:     &pct,
-			PresupuestoVentana:   "weekly",
+			Nombre:                "antigravity",
+			Activo:                false,
+			EstadoCuota:           "enfriamiento",
+			CuotaRestantePct:      &pct,
+			PresupuestoVentana:    "weekly",
 			PresupuestoSemanalPct: &pct,
 		},
 	})
@@ -824,14 +844,14 @@ func TestRenderStatusSummaryIgnoraDerivadoTemporalInexistenteCuandoSoloMandaSema
 			resumen: &estadoResumen{
 				Agentes: []*db.Agente{
 					{
-						Nombre:               "antigravity",
-						Rol:                  "programador",
-						Activo:               false,
-						EstadoCuota:          "agotado",
-						CuotaRestantePct:     &weekly,
-						PresupuestoVentana:   "weekly",
+						Nombre:                "antigravity",
+						Rol:                   "programador",
+						Activo:                false,
+						EstadoCuota:           "agotado",
+						CuotaRestantePct:      &weekly,
+						PresupuestoVentana:    "weekly",
 						PresupuestoSemanalPct: &weekly,
-						PresupuestoDiarioPct: &daily,
+						PresupuestoDiarioPct:  &daily,
 					},
 				},
 				TareasPorEstado: map[string]int{},
