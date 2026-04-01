@@ -178,6 +178,74 @@ func TestProcesarSupervisionAutonomaBatchArrancaSupervisorPreferidoSinSesion(t *
 	}
 }
 
+func TestProcesarSupervisionAutonomaBatchAceptaSupervisorPreferidoCaseInsensitive(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-case-insensitive",
+		Nombre:  "Orquestador Case Insensitive",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		SupervisorAgente:     "codexsupervisor",
+		ReviewRequired:       true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+
+	n, err := procesarSupervisionAutonomaBatch()
+	if err != nil {
+		t.Fatalf("procesar supervision: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("debería contar supervisión con nombre case-insensitive, got=%d", n)
+	}
+
+	asignacion, err := db.GetAsignacionActivaAgente("CodexSupervisor")
+	if err != nil {
+		t.Fatalf("get asignacion activa: %v", err)
+	}
+	if asignacion.ProyectoID != proyectoID {
+		t.Fatalf("asignacion activa inesperada: %+v", asignacion)
+	}
+
+	agente := "CodexSupervisor"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var hasStart, hasNudge bool
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		if order.Tipo == "start" {
+			hasStart = true
+		}
+		if order.Tipo == "nudge" && strings.Contains(order.PayloadJSON, `"accion":"supervisar_proyecto"`) {
+			hasNudge = true
+		}
+	}
+	if !hasStart || !hasNudge {
+		t.Fatalf("debería encolar start y nudge al supervisor canónico: %+v", orders)
+	}
+}
+
 func TestProcesarSupervisionAutonomaBatchNoRepiteSupervisionPeriodicaConSupervisorOperativo(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

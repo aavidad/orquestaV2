@@ -6976,3 +6976,17 @@ Resultado:
 - Nota de proceso:
   - se abrió una tarea extra asumiendo que `seguir_guidance_durable` no consumía de verdad
   - la revalidación limpia mostró que ese efecto ya era correcto; el ruido venía de mezclar la llamada batch con la ventana de reinicio del daemon
+
+## 2026-04-01 — El supervisor preferido de autonomía debe resolver nombre canónico
+
+- Hallazgo:
+  - la lógica operativa del supervisor ya soportaba selección por candidato y resolución razonable en `db`
+  - pero la activación de autonomía seguía usando el valor bruto de `SupervisorAgente` en `cmd`
+  - si la policy venía como `codexsupervisor` y el agente persistido era `CodexSupervisor`, la supervisión no arrancaba y no se creaba la asignación
+- Corrección:
+  - `asegurarAgenteAutonomiaOperativo()` ya resuelve primero el agente por nombre case-insensitive
+  - desde ese punto usa el nombre canónico (`agente.Nombre`) para sesión, handle, asignación y `start`
+  - añadida regresión de `cmd` para el caso `SupervisorAgente` con casing distinto
+- Validación:
+  - `go test ./cmd -run 'TestProcesarSupervisionAutonomaBatch(AceptaSupervisorPreferidoCaseInsensitive|ArrancaSupervisorPreferidoSinSesion|NoRepiteSupervisionPeriodicaConSupervisorOperativo)' -count=1`
+  - `go test ./db -run 'TestSeleccionarSupervisorAutonomiaOperativoUsaSupervisorConfigurado' -count=1`

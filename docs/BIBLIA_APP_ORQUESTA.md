@@ -304,6 +304,7 @@ Contrato minimo obligatorio para `runtime_orders`:
   - solo se admiten resúmenes compactos o metadatos de diagnóstico
   - el prompt completo puede existir en el arranque efectivo o en trazas de runtime, pero no como lastre permanente en la fila viva del handle
 - la coalescencia de `runtime_mailbox` para guia operativa no va por `kind` exacto sino por familia de guidance: `autonomia`, `nudge`, `watchdog`, `governance_refresh` y `skills_refresh` se superseden entre si; `instruction` explicita queda fuera de esa familia y no se borra por una guia generica posterior
+- en autonomia operativa, el `SupervisorAgente` configurado debe resolverse de forma case-insensitive solo para llegar al nombre canonico persistido; una vez resuelto, toda activacion, sesion, runtime handle y asignacion debe operar con el nombre canonico y no con la cadena original de la policy
 - la mailbox pendiente de agentes fuera de vida operativa no puede quedar como ruido eterno: si el destinatario no tiene `runtime_handle` activo, ni sesion activa, ni asignacion activa, ni tareas activas, ni `runtime_orders` abiertas, la deuda se consume como zombi reconciliado
 - para esa regla, una asignacion `activa` mantenida solo por `reactivacion_automatica` no protege al agente si ya esta fuera de la flota `server_autobootstrap`; no puede retener mailbox zombie por si sola
 - `watchdog` queda fuera de esa reconciliacion generica y conserva su ruta especifica de consumo/auditoria

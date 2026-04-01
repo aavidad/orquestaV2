@@ -880,13 +880,14 @@ func asegurarAgenteAutonomiaOperativo(proyectoID int64, preferredAgent, activati
 	if preferredAgent == "" || proyectoID <= 0 {
 		return nil, false, nil
 	}
-	agente, err := db.GetAgente(preferredAgent)
+	agente, err := resolverAgenteAutonomiaOperativo(preferredAgent)
 	if err != nil {
 		return nil, false, err
 	}
 	if agente == nil || !agente.Habilitado {
 		return nil, false, nil
 	}
+	preferredAgent = strings.TrimSpace(agente.Nombre)
 	estadoCuota := strings.ToLower(strings.TrimSpace(agente.EstadoCuota))
 	if estadoCuota != "" && estadoCuota != "activo" {
 		return nil, false, nil
@@ -922,6 +923,35 @@ func asegurarAgenteAutonomiaOperativo(proyectoID int64, preferredAgent, activati
 		return nil, false, err
 	}
 	return agente, true, nil
+}
+
+func resolverAgenteAutonomiaOperativo(nombre string) (*db.Agente, error) {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return nil, nil
+	}
+	agente, err := db.GetAgente(nombre)
+	if err == nil || err != sql.ErrNoRows {
+		return agente, err
+	}
+	agentes, err := db.ListarAgentes()
+	if err != nil {
+		return nil, err
+	}
+	var candidato *db.Agente
+	for _, item := range agentes {
+		if item == nil || !strings.EqualFold(strings.TrimSpace(item.Nombre), nombre) {
+			continue
+		}
+		if candidato != nil {
+			return nil, fmt.Errorf("agente ambiguo para autonomia: %s", nombre)
+		}
+		candidato = item
+	}
+	if candidato == nil {
+		return nil, sql.ErrNoRows
+	}
+	return candidato, nil
 }
 
 func resolverSupervisorAutonomiaOperativo(proyectoID int64, policy *db.ProyectoAutonomia, activationReason, exclude string) (*db.Agente, bool, error) {

@@ -28,6 +28,12 @@ func SeleccionarSupervisorAutonomiaOperativo(proyectoID int64, exclude string) (
 	exclude = strings.TrimSpace(exclude)
 	preferred := strings.TrimSpace(policy.SupervisorAgente)
 	if preferred != "" && !strings.EqualFold(preferred, exclude) {
+		nombreCanonico, _, _, err := resolverAgentePorNombreCI(preferred)
+		if err == nil {
+			preferred = nombreCanonico
+		} else if err != sql.ErrNoRows {
+			return nil, err
+		}
 		agente, err := GetAgente(preferred)
 		if err == sql.ErrNoRows {
 			agente = nil
