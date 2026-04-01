@@ -863,6 +863,8 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - `/api/status` debe exponer un resumen de tareas estable para clientes server-first y MCP.
 - La clave canónica visible es `resumenTareas`.
 - `tareasPorEstado` se mantiene como alias compatible, pero los clientes nuevos deben poder apoyarse en `resumenTareas` sin recomposición adicional.
+- `/api/status` debe exponer también `agentesTrabajando` cuando exista trabajo activo visible.
+- No se permite que la CLI derive “trabajando” mientras la API oculte esa misma señal; el contrato visible debe ser coherente en todas las superficies.
 
 ### Threads ligeras del supervisor
 

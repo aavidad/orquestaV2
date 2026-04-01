@@ -766,6 +766,7 @@ func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
 		"generado":             status.Generado,
 		"tareasPorEstado":      status.TareasPorEstado,
 		"agentesActivos":       status.AgentesActivos,
+		"agentesTrabajando":    status.AgentesTrabajando,
 		"propuestasAbiertas":   status.PropuestasResumen,
 		"tareasActivas":        status.TareasActivas,
 	}

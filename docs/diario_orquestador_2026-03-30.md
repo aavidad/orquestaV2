@@ -6022,3 +6022,15 @@ Resultado:
   - `GET /api/openclaw/operator` devolviendo:
     - `next_action = replanificar_por_cuota` sobre `#412`
     - segunda acción `asignar_tarea_libre` sobre `#414` para `Codex3`
+
+## 2026-04-01 — `/api/status` vuelve a exponer `agentesTrabajando`
+
+- Se detectó una incoherencia visible:
+  - la CLI derivaba `1 con trabajo activo`
+  - pero `/api/status` no incluía la clave `agentesTrabajando`
+- La causa no era de cálculo, sino del handler: `apiHandlerStatus` omitía la clave en el payload.
+- Se corrigió el contrato visible y se añadió regresión dirigida.
+- Validación:
+  - `go test ./cmd -run 'TestAPIHandlerStatusReturnsPayload' -count=1`
+  - build + reinicio del daemon
+  - `GET /api/status` devolviendo `agentesTrabajando=['Codex4']`

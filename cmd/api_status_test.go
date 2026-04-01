@@ -25,6 +25,12 @@ func TestAPIHandlerStatusReturnsPayload(t *testing.T) {
 	statusService = stubStatusService{
 		response: apiStatusResponse{
 			Agentes: []*db.Agente{{Nombre: "CodexX"}},
+			AgentesActivos: []*db.Agente{
+				{Nombre: "CodexX"},
+			},
+			AgentesTrabajando: []*db.Agente{
+				{Nombre: "CodexX"},
+			},
 			ConteoTareas: map[string]int{
 				"asignada": 1,
 			},
@@ -49,7 +55,7 @@ func TestAPIHandlerStatusReturnsPayload(t *testing.T) {
 	if payload.ResumenTareas["asignada"] != 1 {
 		t.Fatalf("resumenTareas inesperado: %+v", payload.ResumenTareas)
 	}
-	if payload.AgentesTrabajando != nil && len(payload.AgentesTrabajando) != 0 {
+	if len(payload.AgentesTrabajando) != 1 || payload.AgentesTrabajando[0].Nombre != "CodexX" {
 		t.Fatalf("agentesTrabajando inesperado: %+v", payload.AgentesTrabajando)
 	}
 }
