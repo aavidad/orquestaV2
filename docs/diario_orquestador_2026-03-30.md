@@ -5152,3 +5152,37 @@ Validacion:
   - `claude1` desapareció de `Agentes conectados`
   - `#410` volvió a `Codex3`
   - la flota visible quedó otra vez en Codex
+
+## 2026-04-01 — las sesiones vivas e idle ya pueden recibir tarea nueva sin reinicio
+
+Hallazgo:
+
+- `Codex4` estaba conectado, con cuota viva y asignación activa, pero seguía en `esperar_o_pedir_tarea`
+- el planificador global no lo ayudaba porque `ListarAgentesPlanificables()` excluye agentes con sesión viva; y el control plane, por evitar churn, trataba `esperar_o_pedir_tarea` como no-op absoluto
+- resultado: una sesión viva e idle podía quedarse muerta aunque hubiera backlog libre
+
+Decision:
+
+- mantener la regla anti-churn: `esperar_o_pedir_tarea` no debe generar nudges vacíos periódicos
+- pero si una sesión viva consigue una autoasignación real en ese momento, Orquesta debe:
+  - asignarle la tarea por la vía canónica
+  - encolarle un `nudge` útil de `continuar_trabajo`
+- la autoasignación para sesión viva se implementa como helper propio de planificador, reutilizando política y selección de tarea, sin duplicar lógica en el control plane
+
+Codigo:
+
+- [db/planificador.go](/home/alberto/Trabajo/orquesta/db/planificador.go)
+- [cmd/controlplane_support.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support.go)
+- [cmd/controlplane_support_test.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestProcesarAutonomiaAgentesBatch(NoEncolaNudgePorEsperarOPedirTareaEnSesionActiva|AutoasignaTrabajoASesionActivaIdle|NoEncolaNudgePorContinuarTrabajoEnSesionActiva)$' -count=1`
+- `go build -o ./orquesta .`
+- validacion viva:
+  - `./orquesta server stop`
+  - `./orquesta server start`
+  - tras un ciclo del control plane, `Codex4` tomó `#411` sin intervención manual
+  - `./orquesta status` pasó a mostrar `[411] ... -> Codex4`
+  - `./orquesta runtime ordenes --agente Codex4` mostró `nudge/send_instruction` completadas en ese nuevo frente

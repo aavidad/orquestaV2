@@ -735,6 +735,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - `MaxWorkers` no puede contar como workers efectivos a agentes con asignación activa pero `estado_cuota!=activo`. Un worker bloqueado por cuota no debe secuestrar cupo y dejar backlog libre sin drenar para otros agentes sanos.
 - la liberación automática por cuota solo aplica a tareas `asignada`. Las tareas `en_progreso` no se sueltan por heurística de presupuesto; requieren relevo o checkpoint explícito.
 - los barridos del planificador no pueden abrir consultas adicionales mientras mantienen cursores vivos sobre SQLite con `MaxOpenConns=1`; primero se recopilan candidatos y después se enriquecen o validan.
+- una sesión activa e idle que devuelve `esperar_o_pedir_tarea` no debe quedarse muerta esperando a que otra parte la reinicie. Orquesta debe poder autoasignarle un frente real y empujarle un nudge útil, pero solo cuando la asignación haya ocurrido de verdad; nunca como recordatorio vacío periódico.
 
 ## Mailbox en enfriamiento
 

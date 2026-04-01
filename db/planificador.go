@@ -47,6 +47,53 @@ func PlanificarTareasAutomaticamente() error {
 	return nil
 }
 
+// IntentarAutoasignarTareaAgente asigna una tarea libre al agente dentro del
+// proyecto indicado si cumple la política de autonomía y no tiene ya trabajo
+// arrancable. Está pensada para sesiones activas e idle que piden más trabajo.
+func IntentarAutoasignarTareaAgente(agente string, proyectoID int64) (*Tarea, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || proyectoID <= 0 {
+		return nil, nil
+	}
+	disponible, err := ProyectoDisponibleParaAutonomia(proyectoID)
+	if err != nil || !disponible {
+		return nil, err
+	}
+	proyecto, err := GetProyecto(jsonNumber(proyectoID))
+	if err != nil {
+		return nil, err
+	}
+	if !agentePertenecePoolAutobootstrapProyecto(agente, proyecto) {
+		return nil, nil
+	}
+	tieneTrabajo, err := agenteTieneTrabajoArrancable(agente, proyectoID)
+	if err != nil || tieneTrabajo {
+		return nil, err
+	}
+	reservado, _, err := agenteReservadoAutonomiaProyecto(agente, proyectoID)
+	if err != nil || reservado {
+		return nil, err
+	}
+	admiteWorker, err := proyectoAdmiteWorkerAutonomiaParaAgente(proyectoID, agente)
+	if err != nil || !admiteWorker {
+		return nil, err
+	}
+	tarea, err := buscarSiguienteTareaLibreParaAgente(agente, proyectoID)
+	if err != nil || tarea == nil {
+		return nil, err
+	}
+	if err := TomarTarea(tarea.ID, agente); err != nil {
+		return nil, nil
+	}
+	asignada, err := GetTarea(tarea.ID)
+	if err != nil {
+		return nil, err
+	}
+	Audit("sistema", "auto_asignacion_sesion_activa", "tarea", tarea.ID,
+		fmt.Sprintf("Asignada automáticamente a %s desde sesión activa", agente))
+	return asignada, nil
+}
+
 func reconciliarTareasAsignadasPorCuota() error {
 	rows, err := DB.Query(`
 		SELECT t.id, t.proyecto_id, t.agente, COALESCE(a.estado_cuota, 'activo')

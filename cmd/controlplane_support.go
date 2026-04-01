@@ -2009,10 +2009,34 @@ func procesarAutonomiaSesionActiva(sesion *db.Sesion) (int, error) {
 		}
 		return 1, nil
 	case "continuar_trabajo", "esperar_o_pedir_tarea":
-		// Una sesión ya activa no debe recibir recordatorios periódicos para
-		// "seguir trabajando": en conectores no interactivos eso se traduce en
-		// churn de mailbox y reinicios artificiales. Las acciones pasivas quedan
-		// implícitas en la tarea y el contexto ya adoptado.
+		// Una sesión ya activa no debe recibir recordatorios periódicos vacíos.
+		// Pero si el agente está idle y acaba de autoasignarse una tarea real,
+		// sí hay que empujarle ese nuevo frente sin esperar a reinicios o handoff.
+		if strings.TrimSpace(out.AccionRecomendada) != "esperar_o_pedir_tarea" {
+			return 0, nil
+		}
+		tarea, err := db.IntentarAutoasignarTareaAgente(sesion.Agente, proyecto.ID)
+		if err != nil || tarea == nil {
+			return 0, err
+		}
+		motivo := fmt.Sprintf("Tarea #%d asignada automáticamente", tarea.ID)
+		if pendiente, err := existeRuntimeOrderAutonomiaPendiente(sesion.Agente, &proyecto.ID, "nudge", "continuar_trabajo"); err != nil {
+			return 0, err
+		} else if pendiente {
+			return 0, nil
+		}
+		if encolada, err := encolarNudgeAutonomiaDetallado(
+			sesion.Agente,
+			proyecto,
+			"continuar_trabajo",
+			motivo,
+			fmt.Sprintf("Se te ha asignado automáticamente la tarea #%d: %s. Retoma trabajo en este frente sin abrir otro.", tarea.ID, strings.TrimSpace(tarea.Titulo)),
+			map[string]any{"tarea_id": tarea.ID, "motivo_autoasignacion": "sesion_activa_idle"},
+		); err != nil {
+			return 0, err
+		} else if encolada {
+			return 1, nil
+		}
 		return 0, nil
 	default:
 		return 0, nil
