@@ -274,6 +274,86 @@ func TestMCPPromptBriefingSupervisorIncluyeFlotaYRetenidasPorCuota(t *testing.T)
 	})
 }
 
+func TestMCPPromptRevisionSupervisorIncluyeGatesYSignals(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrando Codex3: %v", err)
+		}
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Integrar API",
+			Descripcion: "Debe aparecer en la cola de revisión",
+			ProyectoID:  &proyectoID,
+			Modulo:      "api",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea: %v", err)
+		}
+		if _, err := db.CrearReviewGate(&db.ReviewGate{
+			ProyectoID:     &proyectoID,
+			TareaID:        &tareaID,
+			RequestedBy:    "orquesta",
+			ReviewerAgente: "Codex4",
+			Estado:         db.ReviewGateEnRevision,
+		}); err != nil {
+			t.Fatalf("crear gate: %v", err)
+		}
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      "Codex3",
+			ProyectoID:  &proyectoID,
+			CWD:         "/tmp/orquestador",
+			Herramienta: "codex-cli",
+		})
+		if err != nil {
+			t.Fatalf("iniciar sesion: %v", err)
+		}
+		runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+		if err != nil || runtime == nil {
+			t.Fatalf("runtime esperado, got=%+v err=%v", runtime, err)
+		}
+		if _, err := db.RegistrarRuntimeEvent(&db.RuntimeEvent{
+			RuntimeID:   runtime.ID,
+			Kind:        "ready_for_review",
+			Level:       "info",
+			Message:     "Listo para revisión tras cerrar los tests dirigidos",
+			PayloadJSON: `{"classification":"ready_for_review"}`,
+		}); err != nil {
+			t.Fatalf("registrar runtime event: %v", err)
+		}
+
+		result, err := getMCPPrompt("orquesta.supervision.revision", map[string]any{"supervisor": "OpenClaw"})
+		if err != nil {
+			t.Fatalf("getMCPPrompt revision supervisor: %v", err)
+		}
+		messages := result["messages"].([]mcpPromptMessage)
+		content := messages[0].Content.(map[string]any)
+		text := content["text"].(string)
+		for _, token := range []string{
+			"Cola de revisión del supervisor: OpenClaw",
+			"Review gates abiertos",
+			"Integrar API",
+			"Señales recientes de revisión e integración",
+			"ready_for_review",
+			"Criterio de decisión",
+		} {
+			if !strings.Contains(text, token) {
+				t.Fatalf("falta %q en la cola de revisión: %s", token, text)
+			}
+		}
+
+		contents, err := readMCPResource("orquesta://supervision/OpenClaw/revision")
+		if err != nil {
+			t.Fatalf("readMCPResource revision supervisor: %v", err)
+		}
+		resourceText, _ := contents[0]["text"].(string)
+		if !strings.Contains(resourceText, "ready_for_review") {
+			t.Fatalf("recurso de revisión sin signal esperado: %s", resourceText)
+		}
+	})
+}
+
 func TestMCPToolVotarPropuestaActualizaEstado(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {

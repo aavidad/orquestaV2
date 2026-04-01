@@ -4610,3 +4610,25 @@ Validacion:
 
 - `go test ./cmd -run 'TestMCPPromptBriefingSupervisorIncluyeFlotaYRetenidasPorCuota' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — OpenClaw ya tiene cola MCP estrecha para revisión e integración
+
+Hallazgo:
+
+- meter review dentro del briefing general mejora mucho, pero el supervisor sigue necesitando una vista más estrecha para arbitrar integración sin releer siempre toda la flota
+
+Decision:
+
+- exponer una cola MCP de revisión del supervisor como recurso y prompt de primera clase
+- reutilizar el mismo resumen canónico de gates y señales; no crear otra lógica paralela
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestMCPPromptRevisionSupervisorIncluyeGatesYSignals' -count=1`
+- `go build -o ./orquesta .`

@@ -589,6 +589,13 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 			MIMEType:    "text/markdown",
 		},
 		{
+			URITemplate: "orquesta://supervision/{supervisor}/revision",
+			Name:        "revision-supervisor",
+			Title:       "Cola de revisión del supervisor",
+			Description: "Resumen estrecho de gates y señales recientes para decidir integración, cambios o relevo",
+			MIMEType:    "text/markdown",
+		},
+		{
 			URITemplate: "orquesta://proyectos/{slug}",
 			Name:        "proyecto-por-slug",
 			Title:       "Detalle de proyecto",
@@ -738,6 +745,13 @@ func readMCPResource(uri string) ([]map[string]any, error) {
 			return nil, err
 		}
 		return resourceText(uri, "text/markdown", texto), nil
+	case strings.HasPrefix(uri, "orquesta://supervision/") && strings.HasSuffix(uri, "/revision"):
+		supervisor := strings.TrimSuffix(strings.TrimPrefix(uri, "orquesta://supervision/"), "/revision")
+		texto, err := buildSupervisorReviewBriefing(supervisor)
+		if err != nil {
+			return nil, err
+		}
+		return resourceText(uri, "text/markdown", texto), nil
 	default:
 		return nil, fmt.Errorf("resource not found")
 	}
@@ -757,6 +771,14 @@ func listMCPPrompts() []mcpPrompt {
 			Name:        "orquesta.briefing.supervisor",
 			Title:       "Briefing de supervisor",
 			Description: "Devuelve el briefing operativo integral para el agente jefe que coordina la flota",
+			Arguments: []mcpPromptArgument{
+				{Name: "supervisor", Description: "Nombre del supervisor operativo, por ejemplo OpenClaw", Required: false},
+			},
+		},
+		{
+			Name:        "orquesta.supervision.revision",
+			Title:       "Cola de revisión del supervisor",
+			Description: "Devuelve la vista estrecha de integración: review gates y señales recientes para OpenClaw",
 			Arguments: []mcpPromptArgument{
 				{Name: "supervisor", Description: "Nombre del supervisor operativo, por ejemplo OpenClaw", Required: false},
 			},
@@ -822,6 +844,25 @@ func getMCPPrompt(name string, args map[string]any) (map[string]any, error) {
 		}
 		return map[string]any{
 			"description": "Briefing operativo integral para el supervisor de Orquesta",
+			"messages": []mcpPromptMessage{
+				{
+					Role: "user",
+					Content: map[string]any{
+						"type": "text",
+						"text": briefing,
+					},
+				},
+			},
+		}, nil
+
+	case "orquesta.supervision.revision":
+		supervisor := optionalStringArg(args, "supervisor")
+		briefing, err := buildSupervisorReviewBriefing(supervisor)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"description": "Cola estrecha de revisión e integración para el supervisor",
 			"messages": []mcpPromptMessage{
 				{
 					Role: "user",
@@ -1688,6 +1729,9 @@ func buildSupervisorReviewOverview() (string, error) {
 			linea := fmt.Sprintf("- #%d estado=%s", gate.ID, strings.TrimSpace(string(gate.Estado)))
 			if gate.TareaID != nil && *gate.TareaID > 0 {
 				linea += fmt.Sprintf(" tarea=%d", *gate.TareaID)
+				if tarea, err := tareasService.Get(*gate.TareaID); err == nil && tarea != nil && strings.TrimSpace(tarea.Titulo) != "" {
+					linea += " \"" + compactMCPLine(strings.TrimSpace(tarea.Titulo), 80) + "\""
+				}
 			}
 			if gate.ProyectoID != nil && *gate.ProyectoID > 0 {
 				if proyecto, err := db.GetProyecto(strconv.FormatInt(*gate.ProyectoID, 10)); err == nil && proyecto != nil && strings.TrimSpace(proyecto.Slug) != "" {
@@ -1724,6 +1768,37 @@ func buildSupervisorReviewOverview() (string, error) {
 		}
 	}
 	return strings.TrimSpace(b.String()), nil
+}
+
+func buildSupervisorReviewBriefing(supervisor string) (string, error) {
+	supervisor = strings.TrimSpace(supervisor)
+	if supervisor == "" {
+		if cfg, err := db.ConfigGet("openclaw_gateway_operator"); err == nil && strings.TrimSpace(cfg) != "" {
+			supervisor = strings.TrimSpace(cfg)
+		} else {
+			supervisor = "OpenClaw"
+		}
+	}
+	revision, err := buildSupervisorReviewOverview()
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Cola de revisión del supervisor: %s\n\n", supervisor)
+	fmt.Fprintf(&b, "- Doctrina: %s\n", db.RutaDoctrinaCanonica)
+	b.WriteString("- Usa esta vista para decidir si integras, pides cambios, reasignas reviewer o relanzas trabajo.\n")
+	b.WriteString("- No recompongas el estado de revisión desde varias rutas; esta cola ya resume gates y señales recientes del daemon.\n\n")
+	if strings.TrimSpace(revision) != "" {
+		b.WriteString(revision)
+		b.WriteString("\n\n")
+	} else {
+		b.WriteString("## Revisión e integración\n- Sin gates abiertos ni señales recientes.\n\n")
+	}
+	b.WriteString("## Criterio de decisión\n")
+	b.WriteString("- `approval_request`: arbitra y desbloquea sin abrir espera humana innecesaria.\n")
+	b.WriteString("- `waiting_human`: reencuadra y relanza si el bloqueo no es externo real.\n")
+	b.WriteString("- `ready_for_review`: inspecciona, decide gate y encamina merge o cambios.\n")
+	return strings.TrimSpace(b.String()) + "\n", nil
 }
 
 type supervisorReviewSignal struct {
