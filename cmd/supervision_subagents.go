@@ -29,6 +29,7 @@ func buildSupervisorSubagentsSnapshot(supervisor, proyectoSlug, sessionID string
 		"generated_at":  time.Now().UTC().Format(time.RFC3339),
 		"subagents":     items,
 		"tool_profiles": db.ListSupervisorSubagentToolProfiles(),
+		"store":         mustSupervisorSubagentStoreSummary(),
 	}, nil
 }
 
@@ -63,4 +64,12 @@ func buildSupervisorSubagentsOverview(supervisor string) (string, error) {
 		b.WriteString("\n")
 	}
 	return strings.TrimSpace(b.String()) + "\n", nil
+}
+
+func mustSupervisorSubagentStoreSummary() supervisorSubagentStoreSummary {
+	summary, _, err := inspectClaudeSubagentStore()
+	if err != nil {
+		return supervisorSubagentStoreSummary{}
+	}
+	return summary
 }

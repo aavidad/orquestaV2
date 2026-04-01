@@ -1429,6 +1429,73 @@ func TestMCPRevisionSupervisorPromueveSubagentesTerminales(t *testing.T) {
 	})
 }
 
+func TestMCPSubagentesSupervisorRefrescaStoreClaude(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		storeDir := t.TempDir()
+		t.Setenv("CLAWD_AGENT_STORE", storeDir)
+		manifestPath := filepath.Join(storeDir, "agent-1.json")
+		outputPath := filepath.Join(storeDir, "agent-1.md")
+		if err := os.WriteFile(outputPath, []byte("# output\n"), 0o644); err != nil {
+			t.Fatalf("write output: %v", err)
+		}
+		manifest := map[string]any{
+			"agentId":      "agent-1",
+			"name":         "Claude Explore 1",
+			"description":  "explora el repo",
+			"subagentType": "Explore",
+			"model":        "claude-opus-4-6",
+			"status":       "completed",
+			"outputFile":   outputPath,
+			"manifestFile": manifestPath,
+			"createdAt":    time.Now().UTC().Format(time.RFC3339),
+			"startedAt":    time.Now().UTC().Format(time.RFC3339),
+			"completedAt":  time.Now().UTC().Format(time.RFC3339),
+		}
+		raw, _ := json.Marshal(manifest)
+		if err := os.WriteFile(manifestPath, raw, 0o644); err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+
+		result, err := callMCPTool("orquesta.supervision.subagentes.refrescar_store", map[string]any{
+			"supervisor": "OpenClaw",
+			"proyecto":   "orquestador",
+		})
+		if err != nil {
+			t.Fatalf("refrescar store subagentes: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("refrescar store marcado como error: %#v", result)
+		}
+		items, err := db.ListarSupervisorSubagents(db.FiltroSupervisorSubagents{
+			Supervisor:   "OpenClaw",
+			ProyectoSlug: "orquestador",
+			Limit:        10,
+		})
+		if err != nil {
+			t.Fatalf("listar subagentes tras refresh: %v", err)
+		}
+		if len(items) != 1 || items[0].ThreadID != "agent-1" {
+			t.Fatalf("subagentes importados inesperados: %+v", items)
+		}
+		snapshot, err := buildSupervisorReviewSnapshot("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshot: %v", err)
+		}
+		queue, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+		var found bool
+		for _, item := range queue {
+			if item.Action == "recoger_resultado_subagente" && item.Target == "subagente:"+fmt.Sprintf("%d", items[0].ID) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("cola sin recoger_resultado_subagente: %+v", queue)
+		}
+	})
+}
+
 func TestMCPRevisionSupervisorSugiereDispatchOperativo(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := statusService

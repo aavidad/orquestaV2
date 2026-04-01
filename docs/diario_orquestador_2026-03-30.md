@@ -7159,3 +7159,21 @@ Resultado:
 - Validación:
   - `go test ./cmd -run 'Test(MCP(RevisionSupervisorPromueveSubagentesTerminales|SubagentesSupervisorOperanPorLaViaCanonica)|APIObservabilidadReadOnly|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
   - `go build -o ./orquesta .`
+
+## 2026-04-02 — Orquesta ya ingiere `.clawd-agents` del launcher Claude Rust
+
+- Hallazgo:
+  - `claw-code-dev-rust` deja un store simple y estable de `manifest.json` + `output.md`
+  - eso es mucho más aprovechable hoy que intentar absorber su runtime interno entero
+- Corrección:
+  - se añadió inspección del store `.clawd-agents`
+  - la ruta se resuelve por:
+    - `CLAWD_AGENT_STORE`
+    - config `openclaw_claude_subagent_store`
+    - fallback `./.clawd-agents`
+  - MCP expone `orquesta.supervision.subagentes.refrescar_store`
+  - la sincronización importa manifests al modelo `supervisor_subagents` con `source=clawd_store`
+  - si el store tiene manifests y todavía no hay subagentes importados, OpenClaw promueve `refrescar_store_subagentes`
+- Validación:
+  - `go test ./cmd -run 'Test(MCP(SubagentesSupervisorRefrescaStoreClaude|RevisionSupervisorPromueveSubagentesTerminales|SubagentesSupervisorOperanPorLaViaCanonica)|APIObservabilidadReadOnly|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
+  - `go build -o ./orquesta .`

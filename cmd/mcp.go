@@ -1968,6 +1968,19 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.supervision.subagentes.refrescar_store",
+			Title:       "Refrescar store de subagentes Claude",
+			Description: "Importa manifests/output del store .clawd-agents al modelo canónico de subagentes",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"supervisor": map[string]any{"type": "string"},
+					"proyecto":   map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.supervision.acciones.aplicar",
 			Title:       "Aplicar acción del supervisor",
 			Description: "Aplica una acción canónica sugerida al supervisor cuando la semántica es segura",
@@ -2954,6 +2967,13 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		}
 		return toolResult(prettyJSON(resumen), resumen, false), nil
 
+	case "orquesta.supervision.subagentes.refrescar_store":
+		result, err := refreshSupervisorSubagentsFromStore(optionalStringArg(args, "supervisor"), optionalStringArg(args, "proyecto"))
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(result), result, false), nil
+
 	case "orquesta.supervision.acciones.aplicar":
 		result, err := applySupervisorRecommendedAction(optionalStringArg(args, "supervisor"), optionalStringArg(args, "action"), optionalStringArg(args, "target"), optionalStringArg(args, "assignee"))
 		if err != nil {
@@ -3935,7 +3955,7 @@ func buildSupervisorRecommendedActions(gates []*db.ReviewGate, signals []*superv
 
 func supervisorActionIsAutomaticallyApplicable(action string) bool {
 	switch strings.TrimSpace(action) {
-	case "asignar_tarea_libre", "reservar_tarea_libre", "replanificar_por_cuota", "seguir_guidance_durable", "rebalancear_reserva", "cerrar_propuesta_rechazada", "refrescar_worktree_limpia":
+	case "asignar_tarea_libre", "reservar_tarea_libre", "replanificar_por_cuota", "seguir_guidance_durable", "rebalancear_reserva", "cerrar_propuesta_rechazada", "refrescar_worktree_limpia", "refrescar_store_subagentes":
 		return true
 	default:
 		return false
@@ -4206,10 +4226,18 @@ func buildSupervisorObservedSessionActions(status apiStatusResponse, snapshot ma
 
 func buildSupervisorSubagentActions(snapshot map[string]any) []supervisorRecommendedAction {
 	items, _ := snapshot["subagents"].([]*db.SupervisorSubagent)
-	if len(items) == 0 {
-		return nil
+	store, _ := snapshot["store"].(supervisorSubagentStoreSummary)
+	actions := make([]supervisorRecommendedAction, 0, len(items)+1)
+	if store.Exists && store.ManifestCount > 0 && len(items) == 0 {
+		actions = append(actions, supervisorRecommendedAction{
+			Kind:     "subagent_store",
+			Target:   "supervisor:" + resolveSupervisorName(""),
+			Action:   "refrescar_store_subagentes",
+			Reason:   "Hay manifests en .clawd-agents pero aún no se han importado al modelo canónico de subagentes.",
+			Priority: "media",
+			Assignee: resolveSupervisorName(""),
+		})
 	}
-	actions := make([]supervisorRecommendedAction, 0, len(items))
 	for _, item := range items {
 		if item == nil || item.ID <= 0 {
 			continue
@@ -4752,6 +4780,18 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 			"assignee":   worker,
 			"subagente":  item,
 		}, nil
+	case "refrescar_store_subagentes":
+		result, err := refreshSupervisorSubagentsFromStore(supervisor, "")
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"ok":         true,
+			"supervisor": supervisor,
+			"action":     selected,
+			"assignee":   worker,
+			"store_sync": result,
+		}, nil
 	default:
 		return nil, fmt.Errorf("acción no aplicable automáticamente: %s", strings.TrimSpace(selected.Action))
 	}
@@ -5017,6 +5057,14 @@ func fallbackSupervisorRecommendedAction(actionName, target, assignee string) *s
 			Action:   actionName,
 			Target:   target,
 			Priority: "baja",
+			Assignee: assignee,
+		}
+	case "refrescar_store_subagentes":
+		return &supervisorRecommendedAction{
+			Kind:     "subagent_store",
+			Action:   actionName,
+			Target:   target,
+			Priority: "media",
 			Assignee: assignee,
 		}
 	default:
