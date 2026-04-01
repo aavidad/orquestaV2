@@ -6589,3 +6589,23 @@ Resultado:
     - `openclaw-orquesta-api`
     - `RUNBOOK_TELEGRAM.md`
     - `</html>`
+
+## 2026-04-01 — `/api/openclaw/operator` ya no duplica media `review`
+
+- La superficie agregada de OpenClaw seguía siendo demasiado pesada:
+  - top-level y `review` repetían `action_queue`, `next_action`, `safe_action_queue`, `queue_summary`, `pipeline_state`, `thread_sessions` y `normalized_events`
+- Se compactó el contrato:
+  - top-level conserva la cola operativa y el estado agregado
+  - `review` queda solo con:
+    - `review_gates`
+    - `signals`
+    - `merges`
+    - `module_conflicts`
+    - `supervisor`
+- Validación dirigida:
+  - `go test ./cmd -run 'TestAPIObservabilidadReadOnly|TestAPIOpenClawOperatorSeparaCargaActivaYReservada' -count=1`
+- Validación viva:
+  - reinicio del daemon
+  - `GET /api/openclaw/operator`
+  - tamaño JSON bajó de ~12.8 KB a ~8.6 KB
+  - `review_keys = ['merges', 'module_conflicts', 'review_gates', 'signals', 'supervisor']`

@@ -256,6 +256,15 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	if _, ok := operatorJSON["queue_summary"]; !ok {
 		t.Fatalf("openclaw operator sin queue_summary: %s", recOperator.Body.String())
 	}
+	reviewMap, ok := operatorJSON["review"].(map[string]any)
+	if !ok {
+		t.Fatalf("openclaw operator sin review compacta: %s", recOperator.Body.String())
+	}
+	for _, forbidden := range []string{"action_queue", "next_action", "next_safe_action", "safe_action_queue", "thread_sessions", "pipeline_state", "queue_summary", "normalized_events", "mailbox_pending"} {
+		if _, present := reviewMap[forbidden]; present {
+			t.Fatalf("review compacta no deberia arrastrar %q: %s", forbidden, recOperator.Body.String())
+		}
+	}
 	for _, token := range []string{"next_safe_action", "safe_action_queue"} {
 		if !strings.Contains(bodyOperator, token) {
 			t.Fatalf("openclaw operator sin cola segura, falta %q:\n%s", token, bodyOperator)

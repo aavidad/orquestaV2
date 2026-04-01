@@ -1268,10 +1268,11 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
+	reviewCompact := buildOpenClawReviewCompact(revision)
 	queueSummary := buildOpenClawQueueSummary(revision)
 	apiWriteJSON(w, http.StatusOK, map[string]any{
 		"status":               statusResumen,
-		"review":               revision,
+		"review":               reviewCompact,
 		"next_action":          revision["next_action"],
 		"action_queue":         revision["action_queue"],
 		"next_safe_action":     revision["next_safe_action"],
@@ -1283,6 +1284,21 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		"thread_sessions":      threads,
 		"pipeline_state":       pipeline,
 	})
+}
+
+func buildOpenClawReviewCompact(review map[string]any) map[string]any {
+	if len(review) == 0 {
+		return map[string]any{}
+	}
+	compact := map[string]any{
+		"supervisor": review["supervisor"],
+	}
+	for _, key := range []string{"review_gates", "signals", "merges", "module_conflicts"} {
+		if value, ok := review[key]; ok {
+			compact[key] = value
+		}
+	}
+	return compact
 }
 
 type apiOpenClawAgentLite struct {

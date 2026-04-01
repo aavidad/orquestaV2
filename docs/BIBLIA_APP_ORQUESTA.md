@@ -1007,6 +1007,9 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `status` debe ser una proyección operativa compacta
   - no debe arrastrar `resume_payload_json`, worktrees completas ni runtimes completas
   - debe priorizar lo que OpenClaw necesita para decidir: workers activos, workers en cuota, retenidas, tareas activas y propuestas abiertas
+- el bloque `review` dentro de `/api/openclaw/operator` también debe ser compacto:
+  - solo `review_gates`, `signals`, `merges`, `module_conflicts` y `supervisor`
+  - `action_queue`, `next_action`, `safe_action_queue`, `queue_summary`, `pipeline_state`, `thread_sessions` y `normalized_events` ya salen arriba y no deben duplicarse dentro de `review`
 - `/openclaw` debe renderizarse contra esa misma proyección compacta de OpenClaw, no contra `estadoResumen` bruto:
   - si la web necesita `carga_activa`, `carga_reservada`, `cuenta_email` o `mailboxPendiente`, debe leerlos del `status` compacto
   - mezclar `estadoResumen` con la plantilla de OpenClaw rompe el render y deja HTML truncado
