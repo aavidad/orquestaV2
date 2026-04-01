@@ -2075,6 +2075,104 @@ func TestMCPRevisionSupervisorExponeGuidanceDurablePendiente(t *testing.T) {
 	})
 }
 
+func TestMCPRevisionSupervisorExponeSesionObservadaReutilizable(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+			t.Fatalf("registrar Codex6: %v", err)
+		}
+		sesionID, err := db.IniciarSesion("Codex6")
+		if err != nil {
+			t.Fatalf("iniciar sesion Codex6: %v", err)
+		}
+		now := time.Now().UTC()
+		rawClaude := `{"account_email":"carlos@avidad.com","account_user":"Carlos Claude","session_usage":{"session_path":"/tmp/.claude/sessions/session-codex6.json","message_count":7,"turns":2,"updated_at":"` + now.Format(time.RFC3339Nano) + `"}}`
+		if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+			SesionID:        sesionID,
+			WindowKind:      "unknown",
+			BudgetSource:    "claude_rust_session_observed",
+			RawSnapshotJSON: rawClaude,
+			CheckedAt:       now,
+		}); err != nil {
+			t.Fatalf("registrar presupuesto Claude observado: %v", err)
+		}
+		if err := db.FinSesion("Codex6"); err != nil {
+			t.Fatalf("fin sesion Codex6: %v", err)
+		}
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			Agentes: []*db.Agente{
+				{Nombre: "Codex6", Rol: "programador", Activo: false, EstadoCuota: "activo"},
+			},
+		}}
+
+		snapshot, err := buildSupervisorReviewSnapshot("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshot: %v", err)
+		}
+		queue, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+		found := false
+		for _, item := range queue {
+			if item.Action == "inspeccionar_sesion_observada" && item.Target == "agente:Codex6" && item.Assignee == "Codex6" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("no aparece acción para sesión observada reutilizable: %+v", queue)
+		}
+	})
+}
+
+func TestMCPToolSupervisorInspeccionaSesionObservada(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+			t.Fatalf("registrar Codex6: %v", err)
+		}
+		sesionID, err := db.IniciarSesion("Codex6")
+		if err != nil {
+			t.Fatalf("iniciar sesion Codex6: %v", err)
+		}
+		now := time.Now().UTC()
+		rawClaude := `{"account_email":"carlos@avidad.com","account_user":"Carlos Claude","session_usage":{"session_path":"/tmp/.claude/sessions/session-codex6.json","message_count":7,"turns":2,"updated_at":"` + now.Format(time.RFC3339Nano) + `"}}`
+		if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+			SesionID:        sesionID,
+			WindowKind:      "unknown",
+			BudgetSource:    "claude_rust_session_observed",
+			RawSnapshotJSON: rawClaude,
+			CheckedAt:       now,
+		}); err != nil {
+			t.Fatalf("registrar presupuesto Claude observado: %v", err)
+		}
+		if err := db.FinSesion("Codex6"); err != nil {
+			t.Fatalf("fin sesion Codex6: %v", err)
+		}
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			Agentes: []*db.Agente{
+				{Nombre: "Codex6", Rol: "programador", Activo: false, EstadoCuota: "activo"},
+			},
+		}}
+
+		result, err := applySupervisorRecommendedAction("OpenClaw", "inspeccionar_sesion_observada", "agente:Codex6", "Codex6")
+		if err != nil {
+			t.Fatalf("applySupervisorRecommendedAction: %v", err)
+		}
+		candidate, _ := result["session_candidate"].(apiOpenClawSessionCandidate)
+		if candidate.Agente != "Codex6" {
+			t.Fatalf("candidate inesperada: %#v", result["session_candidate"])
+		}
+		if candidate.ObservedSessionPath != "/tmp/.claude/sessions/session-codex6.json" {
+			t.Fatalf("session path inesperado: %#v", candidate)
+		}
+	})
+}
+
 func TestMCPToolSupervisorConsumeGuidanceDurable(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := statusService

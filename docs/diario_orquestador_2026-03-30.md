@@ -6990,3 +6990,15 @@ Resultado:
 - Validación:
   - `go test ./cmd -run 'TestProcesarSupervisionAutonomaBatch(AceptaSupervisorPreferidoCaseInsensitive|ArrancaSupervisorPreferidoSinSesion|NoRepiteSupervisionPeriodicaConSupervisorOperativo)' -count=1`
   - `go test ./db -run 'TestSeleccionarSupervisorAutonomiaOperativoUsaSupervisorConfigurado' -count=1`
+
+## 2026-04-01 — OpenClaw ya puede inspeccionar sesiones Claude observadas
+
+- Hallazgo:
+  - OpenClaw ya veía `session_candidates`, pero esa información no se convertía en una acción operativa del supervisor
+  - para agentes Claude sin runtime vivo pero con `observed_session_path`, el operador seguía teniendo que recomponer el siguiente paso a mano
+- Corrección:
+  - el snapshot del supervisor ya añade acciones `inspeccionar_sesion_observada` para candidatos reutilizables
+  - la acción se expone solo si el agente no está activo ni bloqueado por cuota
+  - `applySupervisorRecommendedAction()` ya devuelve el `session_candidate` canónico para API/MCP/web sin inventar un relanzamiento automático
+- Validación:
+  - `go test ./cmd -run 'TestMCP(RevisionSupervisorExponeSesionObservadaReutilizable|ToolSupervisorInspeccionaSesionObservada|RevisionSupervisorExponeGuidanceDurablePendiente|ToolsAgentesPrepararEInvestigarOperanPorLaViaCanonica)' -count=1`

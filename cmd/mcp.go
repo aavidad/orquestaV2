@@ -3603,6 +3603,7 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	}
 	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
 	recommended = append(recommended, buildSupervisorOperationalActions(status, mailboxPendiente)...)
+	recommended = append(recommended, buildSupervisorObservedSessionActions(status, threadSessions)...)
 	recommended = append(recommended, buildSupervisorProposalActions(status.PropuestasResumen)...)
 	sortSupervisorRecommendedActions(recommended)
 	markSupervisorRecommendedActions(recommended)
@@ -3906,6 +3907,67 @@ func buildSupervisorOperationalActions(status apiStatusResponse, mailboxPendient
 			Reason:   reason,
 			Priority: priority,
 			Assignee: strings.TrimSpace(item.Agente),
+		})
+	}
+	return actions
+}
+
+func buildSupervisorObservedSessionActions(status apiStatusResponse, snapshot map[string]any) []supervisorRecommendedAction {
+	candidates := buildOpenClawSessionCandidates(snapshot)
+	if len(candidates) == 0 {
+		return nil
+	}
+	activos := make(map[string]struct{}, len(status.AgentesActivos))
+	for _, agente := range status.AgentesActivos {
+		if agente == nil {
+			continue
+		}
+		activos[strings.ToLower(strings.TrimSpace(agente.Nombre))] = struct{}{}
+	}
+	enCuota := make(map[string]struct{}, len(status.Agentes))
+	for _, agente := range agentesNoActivosConCuota(status.Agentes) {
+		if agente == nil {
+			continue
+		}
+		enCuota[strings.ToLower(strings.TrimSpace(agente.Nombre))] = struct{}{}
+	}
+	actions := make([]supervisorRecommendedAction, 0, len(candidates))
+	for _, candidate := range candidates {
+		agente := strings.TrimSpace(candidate.Agente)
+		if agente == "" {
+			continue
+		}
+		key := strings.ToLower(agente)
+		if _, ok := activos[key]; ok {
+			continue
+		}
+		if _, ok := enCuota[key]; ok {
+			continue
+		}
+		reasonParts := make([]string, 0, 4)
+		if candidate.ExternalSessionID != "" {
+			reasonParts = append(reasonParts, "session_id="+candidate.ExternalSessionID)
+		}
+		if candidate.ObservedSessionPath != "" {
+			reasonParts = append(reasonParts, "path="+candidate.ObservedSessionPath)
+		}
+		if candidate.Herramienta != "" {
+			reasonParts = append(reasonParts, "tool="+candidate.Herramienta)
+		}
+		if candidate.UsageSummary != "" {
+			reasonParts = append(reasonParts, candidate.UsageSummary)
+		}
+		reason := "Existe una sesión observada reutilizable; conviene inspeccionarla antes de relanzar el agente."
+		if len(reasonParts) > 0 {
+			reason += " (" + strings.Join(reasonParts, " · ") + ")"
+		}
+		actions = append(actions, supervisorRecommendedAction{
+			Kind:     "session_candidate",
+			Target:   "agente:" + agente,
+			Action:   "inspeccionar_sesion_observada",
+			Reason:   reason,
+			Priority: "baja",
+			Assignee: agente,
 		})
 	}
 	return actions
@@ -4290,6 +4352,33 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 			"assignee":   worker,
 		}
 		return result, nil
+	case "inspeccionar_sesion_observada":
+		target := strings.TrimSpace(selected.Target)
+		if !strings.HasPrefix(target, "agente:") {
+			return nil, fmt.Errorf("target no soportado para sesión observada: %s", target)
+		}
+		agente := strings.TrimSpace(strings.TrimPrefix(target, "agente:"))
+		if agente == "" {
+			return nil, fmt.Errorf("target de agente inválido: %s", target)
+		}
+		snapshot, err := buildSupervisorThreadsSnapshot(supervisor, "", 100)
+		if err != nil {
+			return nil, err
+		}
+		candidates := buildOpenClawSessionCandidates(snapshot)
+		for _, item := range candidates {
+			if strings.EqualFold(strings.TrimSpace(item.Agente), agente) {
+				return map[string]any{
+					"ok":                true,
+					"supervisor":        supervisor,
+					"action":            selected,
+					"agente":            agente,
+					"assignee":          worker,
+					"session_candidate": item,
+				}, nil
+			}
+		}
+		return nil, fmt.Errorf("no hay sesión observada para %s", agente)
 	default:
 		return nil, fmt.Errorf("acción no aplicable automáticamente: %s", strings.TrimSpace(selected.Action))
 	}
@@ -4448,6 +4537,14 @@ func fallbackSupervisorRecommendedAction(actionName, target, assignee string) *s
 			Action:   actionName,
 			Target:   target,
 			Priority: "media",
+			Assignee: assignee,
+		}
+	case "inspeccionar_sesion_observada":
+		return &supervisorRecommendedAction{
+			Kind:     "session_candidate",
+			Action:   actionName,
+			Target:   target,
+			Priority: "baja",
 			Assignee: assignee,
 		}
 	default:
