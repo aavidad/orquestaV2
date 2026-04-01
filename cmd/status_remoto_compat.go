@@ -201,6 +201,20 @@ func renderStatusSummary(ctx *statusContext) {
 			fmt.Println()
 		}
 	}
+	agentesEnPausa := agentesNoActivosEnPausaOperativa(resumen.Agentes)
+	if len(agentesEnPausa) > 0 {
+		fmt.Printf("   ⏸️  En pausa operativa:\n")
+		for _, a := range agentesEnPausa {
+			fmt.Printf("      %-15s [%s]", a.Nombre, a.Rol)
+			if cuenta := resumenCuentaAgente(a); cuenta != "" {
+				fmt.Printf(" — %s", cuenta)
+			}
+			if detalle := resumenCuotaAgente(a); detalle != "" {
+				fmt.Printf(" — %s", detalle)
+			}
+			fmt.Println()
+		}
+	}
 	fmt.Println()
 
 	totalTareas := 0
@@ -272,6 +286,7 @@ func resumenCuotaAgente(a *db.Agente) string {
 		return ""
 	}
 	partes := make([]string, 0, 4)
+	bloqueadoPorCuota := agenteBloqueadoPorCuotaVisible(a)
 	if a.EstadoCuota != "" && a.EstadoCuota != "activo" {
 		if reanimarAt := cooldownVisibleAgente(a); reanimarAt != nil {
 			partes = append(partes, "cooldown hasta "+reanimarAt.Local().Format("2006-01-02 15:04"))
@@ -305,6 +320,8 @@ func resumenCuotaAgente(a *db.Agente) string {
 	if a.EstadoCuota != "" && a.EstadoCuota != "activo" {
 		if agenteMotivoPausaOperativa(a.MotivoPausa) {
 			partes = append(partes, "pausa:runtime")
+		} else if !bloqueadoPorCuota {
+			partes = append(partes, "pausa:operativa")
 		} else {
 			partes = append(partes, "cuota:"+a.EstadoCuota)
 		}
@@ -368,7 +385,24 @@ func agentesNoActivosConCuota(agentes []*db.Agente) []*db.Agente {
 		if agente == nil || agente.Activo {
 			continue
 		}
+		if !agenteBloqueadoPorCuotaVisible(agente) {
+			continue
+		}
+		out = append(out, agente)
+	}
+	return out
+}
+
+func agentesNoActivosEnPausaOperativa(agentes []*db.Agente) []*db.Agente {
+	out := make([]*db.Agente, 0, len(agentes))
+	for _, agente := range agentes {
+		if agente == nil || agente.Activo {
+			continue
+		}
 		if strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "activo") {
+			continue
+		}
+		if agenteBloqueadoPorCuotaVisible(agente) {
 			continue
 		}
 		out = append(out, agente)
@@ -390,12 +424,48 @@ func tareasRetenidasPorCuota(tareas []tareaLite, agentes []*db.Agente) []tareaLi
 	out := make([]tareaLite, 0)
 	for _, tarea := range tareas {
 		agente := porNombre[strings.TrimSpace(tarea.Agente)]
-		if agente == nil || agente.Activo || strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "activo") {
+		if agente == nil || agente.Activo || !agenteBloqueadoPorCuotaVisible(agente) {
 			continue
 		}
 		out = append(out, tarea)
 	}
 	return out
+}
+
+func agenteBloqueadoPorCuotaVisible(a *db.Agente) bool {
+	if a == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(a.EstadoCuota), "activo") {
+		return false
+	}
+	if agenteMotivoPausaOperativa(a.MotivoPausa) {
+		return false
+	}
+	if a.PresupuestoCheckedAt != nil && !a.PresupuestoCheckedAt.IsZero() {
+		return true
+	}
+	if strings.TrimSpace(a.PresupuestoEstado) != "" && !strings.EqualFold(strings.TrimSpace(a.PresupuestoEstado), "ok") {
+		return true
+	}
+	if a.PresupuestoSemanalPct != nil && *a.PresupuestoSemanalPct <= 0 {
+		return true
+	}
+	if a.PresupuestoSesionPct != nil && *a.PresupuestoSesionPct <= 0 {
+		return true
+	}
+	if a.RemainingCredits != nil && *a.RemainingCredits <= 0 {
+		return true
+	}
+	if a.CuotaRestantePct != nil && *a.CuotaRestantePct <= 0 {
+		return true
+	}
+	if (a.CuotaRestantePct != nil && *a.CuotaRestantePct > 0) ||
+		(a.PresupuestoSemanalPct != nil && *a.PresupuestoSemanalPct > 0) ||
+		(a.PresupuestoSesionPct != nil && *a.PresupuestoSesionPct > 0) {
+		return false
+	}
+	return true
 }
 
 func renderVentanaPresupuesto(nombre string, pct *int, resetAt *time.Time) string {

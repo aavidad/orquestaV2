@@ -751,3 +751,10 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - `watchdog`, `governance_refresh` y `skills_refresh` deben consumirse como deuda satisfecha si el agente esta pausado o enfriado por una decision explicita del control plane.
 - dejar ese mailbox pendiente durante el cooldown ensucia diagnostico, da falsa sensacion de trabajo vivo y reabre bucles de entrega sin valor.
 - la reconciliacion correcta no es forzar entrega durante el enfriamiento, sino marcar esos mensajes como consumidos y dejar que el siguiente `start/resume` regenere el contexto canonico necesario.
+
+## Estado visible de pausa
+
+- Orquesta no puede mezclar bajo el mismo rotulo una cuota real y una pausa operativa heredada.
+- `En enfriamiento/cuota` solo incluye agentes con evidencia visible de bloqueo presupuestario: snapshot observado, estado de presupuesto no trivial o saldo efectivo agotado.
+- si un agente conserva `estado_cuota!=activo` pero su presupuesto visible sigue positivo y no hay evidencia observada de bloqueo, debe mostrarse como `pausa:operativa`, no como cuota.
+- las tareas retenidas por cuota solo se listan si el agente esta realmente bloqueado por presupuesto; una pausa operativa no debe secuestrar tareas en ese bloque.

@@ -630,6 +630,62 @@ func TestRenderStatusSummaryMuestraTareasRetenidasPorCuota(t *testing.T) {
 	}
 }
 
+func TestRenderStatusSummarySeparaPausaOperativaDeCuota(t *testing.T) {
+	resetAt := time.Now().UTC().Add(6 * time.Hour)
+	pct := 69
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				Agentes: []*db.Agente{
+					{
+						Nombre:               "antigravity",
+						Rol:                  "programador",
+						Activo:               false,
+						EstadoCuota:          "enfriamiento",
+						ReanimarAt:           &resetAt,
+						MotivoPausa:          "Cuota agotada o modo enfriamiento activo.",
+						CuotaRestantePct:     &pct,
+						PresupuestoVentana:   "weekly",
+						PresupuestoSemanalPct: &pct,
+					},
+				},
+				TareasPorEstado: map[string]int{},
+			},
+		})
+	})
+	if !strings.Contains(out, "En pausa operativa") {
+		t.Fatalf("salida sin bloque de pausa operativa: %s", out)
+	}
+	if strings.Contains(out, "En enfriamiento/cuota:\n      antigravity") {
+		t.Fatalf("antigravity no deberia salir como cuota real: %s", out)
+	}
+	if !strings.Contains(out, "pausa:operativa") {
+		t.Fatalf("detalle sin marca de pausa operativa: %s", out)
+	}
+	if strings.Contains(out, "cuota:enfriamiento") {
+		t.Fatalf("no deberia presentar pausa derivada como cuota real: %s", out)
+	}
+}
+
+func TestTareasRetenidasPorCuotaIgnoraPausaNoPresupuestaria(t *testing.T) {
+	pct := 69
+	tareas := tareasRetenidasPorCuota([]tareaLite{
+		{ID: 412, Titulo: "Persistencia", Agente: "antigravity", Estado: db.TareaEnProgreso},
+	}, []*db.Agente{
+		{
+			Nombre:               "antigravity",
+			Activo:               false,
+			EstadoCuota:          "enfriamiento",
+			CuotaRestantePct:     &pct,
+			PresupuestoVentana:   "weekly",
+			PresupuestoSemanalPct: &pct,
+		},
+	})
+	if len(tareas) != 0 {
+		t.Fatalf("una pausa no presupuestaria no deberia retener tareas por cuota: %+v", tareas)
+	}
+}
+
 func TestRenderStatusSummaryNoDuplicaTareasRetenidasEnProgresoAhoraMismo(t *testing.T) {
 	out := captureOutput(t, func() {
 		renderStatusSummary(&statusContext{

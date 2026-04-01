@@ -5367,3 +5367,36 @@ Resultado:
 
 - la ruta de autoasignación queda acotada a una guidance corta y estable
 - deja de depender de la compactación defensiva del runtime para no volver a panicar Codex por ese texto
+
+## 2026-04-01 — el estado visible separa cuota real de pausa operativa
+
+Hallazgo:
+
+- `antigravity` seguia apareciendo bajo `En enfriamiento/cuota` con `efectivo 69%` y `semanal 69%`
+- no tenia sesion activa ni ordenes pendientes; solo un handle `pausado`
+- el presupuesto visible era derivado (`derived_weekly`) y sin `checked_at`, asi que no habia evidencia real de bloqueo por cuota
+
+Decision:
+
+- no reactivar el agente a ciegas
+- separar en la vista y en la logica reusable dos casos distintos:
+  - bloqueo presupuestario real
+  - pausa operativa/heredada
+
+Codigo:
+
+- [cmd/status_remoto_compat.go](/home/alberto/Trabajo/orquesta/cmd/status_remoto_compat.go)
+- [cmd/status_test.go](/home/alberto/Trabajo/orquesta/cmd/status_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(RenderStatusSummaryMuestraAgentesEnEnfriamiento|RenderStatusSummarySeparaPausaOperativaDeCuota|TareasRetenidasPorCuotaIgnoraPausaNoPresupuestaria|RenderStatusSummaryMuestraTareasRetenidasPorCuota|RenderStatusSummaryNoDuplicaTareasRetenidasEnProgresoAhoraMismo)' -count=1`
+- `go build -o ./orquesta .`
+- `./orquesta server stop && ./orquesta server start && ./orquesta status`
+
+Resultado:
+
+- `antigravity` ya no sale como cuota real; pasa a `En pausa operativa`
+- `Retenidas por cuota` solo conserva tareas de agentes realmente bloqueados por presupuesto
+- el estado visible del nucleo deja de mezclar pausas heredadas con agotamiento de cuota
