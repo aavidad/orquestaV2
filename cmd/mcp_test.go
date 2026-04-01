@@ -753,6 +753,62 @@ func TestMCPToolsRuntimeYTickOperanPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestMCPToolsRuntimeMailboxGestionanCicloCanonico(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex4", "programador"); err != nil {
+			t.Fatalf("registrando Codex4: %v", err)
+		}
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+
+		sendResult, err := callMCPTool("orquesta.runtime.mailbox.enviar", map[string]any{
+			"from_agente":  "OpenClaw",
+			"to_agente":    "Codex4",
+			"kind":         "governance_refresh",
+			"proyecto":     "orquestador",
+			"payload_json": `{"motivo":"review"}`,
+		})
+		if err != nil {
+			t.Fatalf("mailbox enviar MCP: %v", err)
+		}
+		if sendResult["isError"] != false {
+			t.Fatalf("mailbox enviar marcado como error: %#v", sendResult)
+		}
+		sent, _ := sendResult["structuredContent"].(map[string]any)
+		id, _ := sent["id"].(int64)
+		if id <= 0 {
+			t.Fatalf("id mailbox invalido: %#v", sendResult["structuredContent"])
+		}
+
+		deliverResult, err := callMCPTool("orquesta.runtime.mailbox.entregar", map[string]any{"id": id})
+		if err != nil {
+			t.Fatalf("mailbox entregar MCP: %v", err)
+		}
+		if deliverResult["isError"] != false {
+			t.Fatalf("mailbox entregar marcado como error: %#v", deliverResult)
+		}
+
+		consumeResult, err := callMCPTool("orquesta.runtime.mailbox.consumir", map[string]any{"id": id})
+		if err != nil {
+			t.Fatalf("mailbox consumir MCP: %v", err)
+		}
+		if consumeResult["isError"] != false {
+			t.Fatalf("mailbox consumir marcado como error: %#v", consumeResult)
+		}
+
+		estado := "consumido"
+		mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
+			ToAgente: strPtr("Codex4"),
+			Estado:   &estado,
+		})
+		if err != nil {
+			t.Fatalf("listar runtime mailbox: %v", err)
+		}
+		if len(mailbox) == 0 || mailbox[0].ID != id {
+			t.Fatalf("mailbox no quedo consumida: %+v", mailbox)
+		}
+	})
+}
+
 func TestMCPToolVotarPropuestaActualizaEstado(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {

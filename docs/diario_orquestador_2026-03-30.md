@@ -4815,3 +4815,27 @@ Validacion:
 
 - `go test ./cmd -run 'Test(MCPToolsTareasYNudgeOperanPorLaViaCanonica|MCPToolsRuntimeYTickOperanPorLaViaCanonica)' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — El MCP ya gestiona el ciclo completo de runtime mailbox
+
+Hallazgo:
+
+- aun faltaba cerrar el ciclo de mailbox desde MCP: el supervisor ya podia verla, pero no enviarla ni acusearla por la vía oficial del servidor
+
+Decision:
+
+- añadir tools MCP para:
+  - enviar mailbox
+  - marcar mailbox entregada
+  - marcar mailbox consumida
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(MCPToolsRuntimeYTickOperanPorLaViaCanonica|MCPToolsRuntimeMailboxGestionanCicloCanonico)' -count=1`
+- `go build -o ./orquesta .`

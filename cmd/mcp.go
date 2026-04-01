@@ -1211,6 +1211,50 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.runtime.mailbox.enviar",
+			Title:       "Enviar runtime mailbox",
+			Description: "Envia un mensaje al runtime mailbox por la vía canónica del servidor",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"from_agente":      map[string]any{"type": "string"},
+					"to_agente":        map[string]any{"type": "string"},
+					"kind":             map[string]any{"type": "string"},
+					"proyecto":         map[string]any{"type": "string"},
+					"runtime_order_id": map[string]any{"type": "integer"},
+					"payload_json":     map[string]any{"type": "string"},
+				},
+				"required":             []string{"from_agente", "to_agente", "kind"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.mailbox.entregar",
+			Title:       "Entregar runtime mailbox",
+			Description: "Marca un mensaje de runtime mailbox como entregado",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id": map[string]any{"type": "integer"},
+				},
+				"required":             []string{"id"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.mailbox.consumir",
+			Title:       "Consumir runtime mailbox",
+			Description: "Marca un mensaje de runtime mailbox como consumido",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id": map[string]any{"type": "integer"},
+				},
+				"required":             []string{"id"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.agentes.tick",
 			Title:       "Tick de agente",
 			Description: "Procesa un tick canónico de agente y devuelve la siguiente acción recomendada",
@@ -1588,6 +1632,71 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return nil, err
 		}
 		return toolResult(prettyJSON(mailbox), mailbox, false), nil
+
+	case "orquesta.runtime.mailbox.enviar":
+		fromAgente, err := requiredStringArg(args, "from_agente")
+		if err != nil {
+			return nil, err
+		}
+		toAgente, err := requiredStringArg(args, "to_agente")
+		if err != nil {
+			return nil, err
+		}
+		kind, err := requiredStringArg(args, "kind")
+		if err != nil {
+			return nil, err
+		}
+		payloadJSON := strings.TrimSpace(optionalStringArg(args, "payload_json"))
+		if payloadJSON == "" {
+			payloadJSON = "{}"
+		}
+		var proyectoID *int64
+		if proyecto := strings.TrimSpace(optionalStringArg(args, "proyecto")); proyecto != "" {
+			p, err := runtimesService.GetProject(proyecto)
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			proyectoID = &p.ID
+		}
+		var runtimeOrderID *int64
+		if value := optionalInt64Arg(args, "runtime_order_id"); value > 0 {
+			runtimeOrderID = &value
+		}
+		id, err := runtimesService.SendRuntimeMailbox(&db.RuntimeMailboxMessage{
+			FromAgente:     fromAgente,
+			ToAgente:       toAgente,
+			ProyectoID:     proyectoID,
+			RuntimeOrderID: runtimeOrderID,
+			Kind:           kind,
+			PayloadJSON:    payloadJSON,
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := map[string]any{"id": id, "from_agente": fromAgente, "to_agente": toAgente, "kind": kind}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtime.mailbox.entregar":
+		id, err := requiredInt64Arg(args, "id")
+		if err != nil {
+			return nil, err
+		}
+		if err := runtimesService.MarkRuntimeMailboxDelivered(id); err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := map[string]any{"id": id, "estado": "entregado"}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.runtime.mailbox.consumir":
+		id, err := requiredInt64Arg(args, "id")
+		if err != nil {
+			return nil, err
+		}
+		if err := runtimesService.MarkRuntimeMailboxConsumed(id); err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := map[string]any{"id": id, "estado": "consumido"}
+		return toolResult(prettyJSON(result), result, false), nil
 
 	case "orquesta.agentes.tick":
 		agente, err := requiredStringArg(args, "agente")
