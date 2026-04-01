@@ -5976,3 +5976,32 @@ Resultado:
 - Validación:
   - `go test ./cmd -run 'Test(WebOpenClawMuestraOperatorReviewYEntregas|APIObservabilidadReadOnly|APIOpenClawThreadsOperaPorLaViaCanonica|APIOpenClawPipelineOperaPorLaViaCanonica)' -count=1`
   - `go build -o ./orquesta .`
+
+## 2026-04-01 — `supervisor-loop` derivada desde estado vivo
+
+- Se cerró `#431`: la pipeline del supervisor ya no depende solo de escritura manual.
+- `buildSupervisorPipelineSnapshot()` ahora reconcilia `supervisor-loop` desde el mismo estado vivo que ya usa el briefing/snapshot del supervisor:
+  - `review_gates`
+  - señales de revisión
+  - merges vivos
+  - conflictos de módulo
+  - workers conectados/trabajando
+  - tareas retenidas por cuota
+- La proyección resultante alimenta por una sola vía:
+  - API `/api/openclaw/pipeline`
+  - MCP resource/prompt/tool de pipeline
+  - web `/openclaw`
+- Fases visibles cubiertas:
+  - `review`
+  - `blocked_by_quota`
+  - `coordinar_workers`
+  - y derivación base para `merge`, `resolver_conflicto`, `arbitrar_revision`, `dispatch`, `idle`
+- Validación de tests:
+  - `go test ./cmd -run 'Test(BuildSupervisorPipelineSnapshotDerivaLoopReview|BuildSupervisorPipelineSnapshotDerivaBlockedByQuota|BuildSupervisorPipelineSnapshotDerivaCoordinarWorkers|MCPPipelineSupervisorOperaPorLaViaCanonica|APIOpenClawPipelineOperaPorLaViaCanonica)' -count=1`
+  - `go build -o ./orquesta .`
+- Validación viva:
+  - reinicio del daemon con el binario nuevo
+  - `curl /api/openclaw/pipeline` devolviendo `supervisor-loop`
+  - fase observada: `coordinar_workers`
+  - workers conectados: `Codex3`, `Codex4`
+  - tarea foco visible: `#410`

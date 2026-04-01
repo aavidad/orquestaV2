@@ -886,6 +886,25 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - MCP prompt: `orquesta.supervision.pipeline`
 - MCP tools: `orquesta.supervision.pipeline.actualizar`, `orquesta.supervision.pipeline.listar`
 - No sustituye a `review_gates`, `git_merges` ni `eventos_normalizados`; los ordena en una fase operativa explícita para reanudación y gobierno.
+- La pipeline canónica visible del supervisor es `supervisor-loop`.
+- `supervisor-loop` no se mantiene a mano: se reconcilia desde el estado vivo del daemon usando las mismas señales ya canónicas:
+  - `review_gates`
+  - señales de revisión
+  - merges vivos
+  - conflictos de módulo
+  - workers conectados/trabajando
+  - tareas retenidas por cuota
+- La fase visible debe salir de esa reconciliación, no de otra heurística por cliente.
+- Fases mínimas admitidas en la proyección operativa:
+  - `review`
+  - `merge`
+  - `resolver_conflicto`
+  - `arbitrar_revision`
+  - `coordinar_workers`
+  - `dispatch`
+  - `blocked_by_quota`
+  - `idle`
+- API, MCP y `/openclaw` deben leer la misma `supervisor-loop` derivada.
 
 ### Superficie web del supervisor
 
