@@ -2863,57 +2863,9 @@ type tareaLite struct {
 }
 
 func buildEstadoResumen() (*estadoResumen, error) {
-	summary, err := panelService.BuildSummary()
+	status, err := statusService.FetchStatus()
 	if err != nil {
 		return nil, err
-	}
-	var activos []*db.Agente
-	var abiertas []propuestaLite
-	for _, p := range summary.OpenProps {
-		abiertas = append(abiertas, propuestaLite{
-			Codigo:     p.Codigo,
-			Titulo:     p.Titulo,
-			Estado:     db.PropuestaAbierta,
-			Acuerdo:    p.Acuerdo,
-			Desacuerdo: p.Desacuerdo,
-			Pendiente:  p.Pendiente,
-		})
-	}
-
-	tareas, err := tareasService.List(db.FiltroTareas{})
-	if err != nil {
-		return nil, err
-	}
-	var activas []tareaLite
-	trabajandoPorNombre := map[string]bool{}
-	for _, t := range tareas {
-		if t.Estado != db.TareaAsignada && t.Estado != db.TareaEnProgreso && t.Estado != db.TareaBloqueada {
-			continue
-		}
-		row := tareaLite{
-			ID:        t.ID,
-			Titulo:    t.Titulo,
-			Estado:    t.Estado,
-			Modulo:    t.Modulo,
-			Prioridad: t.Prioridad,
-		}
-		if t.Agente != nil {
-			row.Agente = *t.Agente
-			if t.Estado == db.TareaEnProgreso && strings.TrimSpace(*t.Agente) != "" {
-				trabajandoPorNombre[strings.TrimSpace(*t.Agente)] = true
-			}
-		}
-		activas = append(activas, row)
-	}
-	var trabajando []*db.Agente
-	for _, a := range summary.Agents {
-		if !a.Activo {
-			continue
-		}
-		activos = append(activos, a)
-		if trabajandoPorNombre[strings.TrimSpace(a.Nombre)] {
-			trabajando = append(trabajando, a)
-		}
 	}
 
 	conectores, err := listarConectores()
@@ -2947,15 +2899,15 @@ func buildEstadoResumen() (*estadoResumen, error) {
 
 	return &estadoResumen{
 		Generado:           time.Now().UTC().Format(time.RFC3339),
-		Agentes:            summary.Agents,
-		TareasPorEstado:    summary.TaskCounts,
-		AgentesActivos:     activos,
-		AgentesTrabajando:  trabajando,
+		Agentes:            status.Agentes,
+		TareasPorEstado:    status.TareasPorEstado,
+		AgentesActivos:     status.AgentesActivos,
+		AgentesTrabajando:  status.AgentesTrabajando,
 		Proyectos:          proyectos,
 		Pools:              pools,
 		Asignaciones:       asignaciones,
-		PropuestasAbiertas: abiertas,
-		TareasActivas:      activas,
+		PropuestasAbiertas: status.PropuestasResumen,
+		TareasActivas:      status.TareasActivas,
 		WorktreesActivas:   worktrees,
 		LocksActivos:       locks,
 		SesionesActivas:    sesiones,

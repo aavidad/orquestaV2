@@ -951,3 +951,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `status` debe ser una proyección operativa compacta
   - no debe arrastrar `resume_payload_json`, worktrees completas ni runtimes completas
   - debe priorizar lo que OpenClaw necesita para decidir: workers activos, workers en cuota, retenidas, tareas activas y propuestas abiertas
+- La proyección compacta de OpenClaw no puede inventar otra verdad de presencia:
+  - `status.agentesActivos` y `status.agentesTrabajando` en `/api/openclaw/operator` deben salir de la misma fuente canónica que `/api/status`
+  - la fuente canónica es `statusService.FetchStatus()`, no una reconstrucción paralela desde `panelService`
+  - si OpenClaw y `/api/status` divergen en la flota visible, el bug está en la composición y debe corregirse ahí, no con filtros ad hoc en la web o en MCP

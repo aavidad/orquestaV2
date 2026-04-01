@@ -28,6 +28,9 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
 	}
+	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar codex2: %v", err)
+	}
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
 		Slug:    "orquestador",
 		Nombre:  "Orquestador",
@@ -49,6 +52,18 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 		Host:               "host-a",
 	}); err != nil {
 		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex2",
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador"),
+		Herramienta:        "codex-cli",
+		ExternalSessionID:  "sess-read-002",
+		ResumenContinuidad: "lectura api 2",
+		Branch:             "main",
+		Host:               "host-b",
+	}); err != nil {
+		t.Fatalf("iniciar sesion codex2: %v", err)
 	}
 	sesion, err := db.GetSesionActiva("Codex1", &proyectoID)
 	if err != nil {
@@ -232,6 +247,17 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 		if strings.Contains(bodyOperator, forbidden) {
 			t.Fatalf("openclaw operator demasiado verboso, contiene %q:\n%s", forbidden, bodyOperator)
 		}
+	}
+	statusMap, ok := operatorJSON["status"].(map[string]any)
+	if !ok {
+		t.Fatalf("openclaw operator sin status estructurado: %s", recOperator.Body.String())
+	}
+	activos, ok := statusMap["agentesActivos"].([]any)
+	if !ok {
+		t.Fatalf("openclaw operator sin agentesActivos estructurados: %s", recOperator.Body.String())
+	}
+	if len(activos) != 2 {
+		t.Fatalf("openclaw operator deberia reflejar 2 agentes activos, obtuvo %d: %s", len(activos), recOperator.Body.String())
 	}
 }
 

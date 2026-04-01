@@ -6161,3 +6161,21 @@ Resultado:
   - `GET /api/openclaw/operator` ya no incluye `resume_payload_json`
   - sigue exponiendo `agentesActivos`, `retenidasPorCuota` y `propuestasAbiertas`
   - la cola operativa sigue enseñando `replanificar_por_cuota` con `assignee=Codex3`
+
+## 2026-04-01 — OpenClaw y `/api/status` ya comparten la misma verdad visible de flota
+
+- Apareció una doble verdad real:
+  - `/api/status` mostraba `Codex3` y `Codex4` como conectados/trabajando
+  - `/api/openclaw/operator` compactado podía perder `Codex3`
+- La causa era arquitectónica:
+  - `buildEstadoResumen()` seguía reconstruyendo `AgentesActivos` desde `panelService.BuildSummary()`
+  - `/api/status` ya usaba la vía canónica moderna `statusService.FetchStatus()`
+- Se corrigió la composición:
+  - `buildEstadoResumen()` ahora reutiliza `statusService.FetchStatus()` para `Agentes`, `TareasPorEstado`, `AgentesActivos`, `AgentesTrabajando`, `PropuestasAbiertas` y `TareasActivas`
+  - OpenClaw conserva su compactación, pero deja de mantener una segunda verdad de presencia
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(APIObservabilidadReadOnly|APIOpenClawPipelineOperaPorLaViaCanonica|APIOpenClawThreadsOperaPorLaViaCanonica)' -count=1`
+- Validación viva:
+  - `GET /api/status` => `agentesActivos = [Codex3, Codex4]`
+  - `GET /api/openclaw/operator` => `status.agentesActivos = [Codex3, Codex4]`
+  - `agentesTrabajando` coincide también en ambas superficies
