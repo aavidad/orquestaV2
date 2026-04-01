@@ -7003,13 +7003,14 @@ Resultado:
 - Validación:
   - `go test ./cmd -run 'TestMCP(RevisionSupervisorExponeSesionObservadaReutilizable|ToolSupervisorInspeccionaSesionObservada|RevisionSupervisorExponeGuidanceDurablePendiente|ToolsAgentesPrepararEInvestigarOperanPorLaViaCanonica)' -count=1`
 
-## 2026-04-01 — session_candidates ya no contradice al status canónico
+## 2026-04-01 — El operador alinea session_candidates con agentesActivos del daemon
 
 - Hallazgo:
-  - `observed_agent_sessions` usaba el flag persistido `agente.Activo` sin promoverlo cuando ya existía una sesión operativa viva
-  - eso permitía que OpenClaw/API enseñaran `session_candidates` con `activo=false` para agentes que el daemon ya consideraba conectados
+  - la observación cruda de sesiones no debe inventar actividad, pero la vista del operador sí debe converger con el `status` canónico
+  - eso seguía dejando `Codex3` como `session_candidate.activo=false` en `/api/openclaw/operator` aunque `status.agentesActivos` lo veía conectado
 - Corrección:
-  - la proyección observada ya marca la sesión como activa si existe sesión operativa viva para el agente
-  - la regresión cubre `buildOpenClawSessionCandidates()` para no volver a degradar esa convergencia
+  - `observed_agent_sessions` vuelve a quedar como observación cruda
+  - `/api/openclaw/operator` ya alinea `session_candidates` y `thread_sessions.observed_agent_sessions` con `status.AgentesActivos` antes de emitir la respuesta
+  - las regresiones cubren esa promoción explícita en la capa API del operador, sin contaminar la observación base
 - Validación:
-  - `go test ./cmd -run 'Test(BuildOpenClawSessionCandidatesPromueveSesionOperativaComoActiva|MCPRevisionSupervisorExponeSesionObservadaReutilizable|ToolSupervisorInspeccionaSesionObservada|APIObservabilidadReadOnly)' -count=1`
+  - `go test ./cmd -run 'Test(AlignOpenClawSessionCandidatesWithStatusPromueveActivosCanonicos|AlignSupervisorObservedSessionsWithStatusPromueveActivosCanonicos|APIObservabilidadReadOnly)' -count=1`

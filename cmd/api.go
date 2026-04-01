@@ -1310,9 +1310,12 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusInternalServerError, err)
 			return
 		}
+		if observed, ok := threads["observed_agent_sessions"].([]*supervisorObservedAgentSessionSummary); ok {
+			threads["observed_agent_sessions"] = alignSupervisorObservedSessionsWithStatus(observed, status.AgentesActivos)
+		}
 		reviewCompact := buildOpenClawReviewCompact(revision)
 		queueSummary := buildOpenClawQueueSummary(revision)
-		sessionCandidates := buildOpenClawSessionCandidates(threads)
+		sessionCandidates := alignOpenClawSessionCandidatesWithStatus(buildOpenClawSessionCandidates(threads), status.AgentesActivos)
 		apiWriteJSON(w, http.StatusOK, map[string]any{
 			"status":               statusResumen,
 			"agentesActivos":       statusResumen.AgentesActivos,
@@ -1502,6 +1505,59 @@ func buildOpenClawSessionCandidates(snapshot map[string]any) []apiOpenClawSessio
 			ObservedSessionPath: strings.TrimSpace(item.ObservedSessionPath),
 			UsageSummary:        strings.TrimSpace(item.UsageSummary),
 		})
+	}
+	return out
+}
+
+func alignSupervisorObservedSessionsWithStatus(items []*supervisorObservedAgentSessionSummary, activos []*db.Agente) []*supervisorObservedAgentSessionSummary {
+	if len(items) == 0 || len(activos) == 0 {
+		return items
+	}
+	activosSet := make(map[string]struct{}, len(activos))
+	for _, agente := range activos {
+		if agente == nil {
+			continue
+		}
+		nombre := strings.ToLower(strings.TrimSpace(agente.Nombre))
+		if nombre == "" {
+			continue
+		}
+		activosSet[nombre] = struct{}{}
+	}
+	out := make([]*supervisorObservedAgentSessionSummary, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		copyItem := *item
+		_, ok := activosSet[strings.ToLower(strings.TrimSpace(copyItem.Agente))]
+		copyItem.Activo = ok
+		out = append(out, &copyItem)
+	}
+	return out
+}
+
+func alignOpenClawSessionCandidatesWithStatus(candidates []apiOpenClawSessionCandidate, activos []*db.Agente) []apiOpenClawSessionCandidate {
+	if len(candidates) == 0 || len(activos) == 0 {
+		return candidates
+	}
+	activosSet := make(map[string]struct{}, len(activos))
+	for _, agente := range activos {
+		if agente == nil {
+			continue
+		}
+		nombre := strings.ToLower(strings.TrimSpace(agente.Nombre))
+		if nombre == "" {
+			continue
+		}
+		activosSet[nombre] = struct{}{}
+	}
+	out := make([]apiOpenClawSessionCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		item := candidate
+		_, ok := activosSet[strings.ToLower(strings.TrimSpace(item.Agente))]
+		item.Activo = ok
+		out = append(out, item)
 	}
 	return out
 }

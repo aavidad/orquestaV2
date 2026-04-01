@@ -56,36 +56,36 @@ func TestCuentaPresupuestoDesdeAgenteUsaObservedUsageCuandoNoHayCuotaReal(t *tes
 	}
 }
 
-func TestBuildOpenClawSessionCandidatesPromueveSesionOperativaComoActiva(t *testing.T) {
-	prepararDBTemporalCmd(t)
-	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
-		t.Fatalf("registrar codex3: %v", err)
+func TestAlignOpenClawSessionCandidatesWithStatusPromueveActivosCanonicos(t *testing.T) {
+	candidates := []apiOpenClawSessionCandidate{
+		{Agente: "Codex3", Activo: false, ExternalSessionID: "sess-codex3-1"},
+		{Agente: "Codex4", Activo: false, ExternalSessionID: "sess-codex4-1"},
 	}
-	if _, err := db.IniciarSesionContexto(db.SesionInicio{
-		Agente:            "Codex3",
-		Herramienta:       "codex-cli",
-		ExternalSessionID: "sess-codex3-1",
-		Host:              "host-codex3",
-	}); err != nil {
-		t.Fatalf("iniciar sesion codex3: %v", err)
+	aligned := alignOpenClawSessionCandidatesWithStatus(candidates, []*db.Agente{
+		{Nombre: "Codex3", Activo: true},
+	})
+	if !aligned[0].Activo {
+		t.Fatalf("Codex3 debe salir activo tras alinear con status: %#v", aligned)
 	}
-	snapshot, err := buildSupervisorThreadsSnapshot("OpenClaw", "", 100)
-	if err != nil {
-		t.Fatalf("buildSupervisorThreadsSnapshot: %v", err)
+	if aligned[1].Activo {
+		t.Fatalf("Codex4 no debe promocionarse sin estar en agentesActivos: %#v", aligned)
 	}
-	candidates := buildOpenClawSessionCandidates(snapshot)
-	if len(candidates) == 0 {
-		t.Fatalf("session_candidates vacio")
+}
+
+func TestAlignSupervisorObservedSessionsWithStatusPromueveActivosCanonicos(t *testing.T) {
+	items := []*supervisorObservedAgentSessionSummary{
+		{Agente: "Codex3", Activo: false, ExternalSessionID: "sess-codex3-1"},
+		{Agente: "Codex4", Activo: false, ExternalSessionID: "sess-codex4-1"},
 	}
-	for _, item := range candidates {
-		if item.Agente == "Codex3" {
-			if !item.Activo {
-				t.Fatalf("Codex3 debe salir activo si tiene sesion operativa viva: %#v", item)
-			}
-			return
-		}
+	aligned := alignSupervisorObservedSessionsWithStatus(items, []*db.Agente{
+		{Nombre: "Codex3", Activo: true},
+	})
+	if !aligned[0].Activo {
+		t.Fatalf("Codex3 debe salir activo tras alinear observed sessions: %#v", aligned)
 	}
-	t.Fatalf("no aparece Codex3 en session_candidates: %#v", candidates)
+	if aligned[1].Activo {
+		t.Fatalf("Codex4 no debe promocionarse sin estar en agentesActivos: %#v", aligned)
+	}
 }
 
 var cmdTestDBMu sync.Mutex
