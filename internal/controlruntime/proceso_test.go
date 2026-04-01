@@ -142,8 +142,34 @@ func TestNormalizarInstruccionProcesoCompactaBootstrapSupervisorCodexLocal(t *te
 	}
 	texto := "Orquesta: has sido arrancado como orquestador autonomo del proyecto. Coordina a los demas Codex desde dentro de Orquesta, reparte trabajo real, revisa pruebas, deduplica frentes y no pidas intervencion humana salvo que falten credenciales, secretos o un recurso externo real."
 	got := NormalizarInstruccionProceso(obj, texto)
-	if got != "supervisa proyecto actual y sigue" {
+	if got != "continua trabajo actual" {
 		t.Fatalf("compactacion inesperada para bootstrap supervisor: %q", got)
+	}
+}
+
+func TestNormalizarInstruccionProcesoCompactaAsignacionTareaCodexLocal(t *testing.T) {
+	pid := int64(os.Getpid())
+	obj := ObjetivoProceso{
+		PID:          &pid,
+		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex4 exec"}`,
+	}
+	texto := "Se te ha asignado automaticamente la tarea #411. Entra en Orquesta, revisa el contexto vivo y continua hasta cerrarla."
+	got := NormalizarInstruccionProceso(obj, texto)
+	if got != "toma tarea asignada y sigue" {
+		t.Fatalf("compactacion inesperada para asignacion de tarea: %q", got)
+	}
+}
+
+func TestNormalizarInstruccionProcesoCompactaOrquestaGenericaCodexLocal(t *testing.T) {
+	pid := int64(os.Getpid())
+	obj := ObjetivoProceso{
+		PID:          &pid,
+		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex4 exec"}`,
+	}
+	texto := "Orquesta: has sido arrancado como programador del proyecto. Revisa el estado vivo, comprueba la tarea activa y continua sin esperar aprobacion humana."
+	got := NormalizarInstruccionProceso(obj, texto)
+	if got != "continua trabajo actual" {
+		t.Fatalf("compactacion inesperada para guidance generica de Orquesta: %q", got)
 	}
 }
 

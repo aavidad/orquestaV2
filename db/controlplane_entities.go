@@ -3891,7 +3891,8 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 	pid := 0
 	deliveryPath := ""
 	deliveryMode := RuntimeHandleMailboxDeliveryMode(handle)
-	if RuntimeHandlePermiteSendInputInteractivo(handle) || RuntimeHandlePermiteEntregaCalienteSupervisada(handle) {
+	avoidSupervisorLocal, avoidSupervisorLocalReason := runtimeOrderSendInstructionDebeEvitarSupervisorLocal(handle, payload, texto)
+	if (RuntimeHandlePermiteSendInputInteractivo(handle) || RuntimeHandlePermiteEntregaCalienteSupervisada(handle)) && !avoidSupervisorLocal {
 		aplicado, pid, err = controlarProcesoRuntime(order, func(obj controlruntime.ObjetivoProceso) (bool, int, error) {
 			return controlruntime.EnviarInstruccionProceso(obj, texto)
 		})
@@ -3908,6 +3909,9 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 				deliveryPath = "interactive"
 			}
 		}
+	}
+	if avoidSupervisorLocal && runtimeOrderSendInstructionProvieneMailbox(payload) {
+		return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, avoidSupervisorLocalReason)
 	}
 	if !aplicado && deliveryMode == runtimeagente.MailboxDeliverySessionResume {
 		aplicado, pid, err = controlruntime.EnviarInstruccionSesionResume(obj, externalSessionID, texto)
@@ -4081,6 +4085,30 @@ func runtimeOrderSendInstructionMailboxID(payload map[string]any) int64 {
 		return 0
 	}
 	return int64FromAny(payload["mailbox_id"])
+}
+
+func runtimeOrderSendInstructionDebeEvitarSupervisorLocal(handle *RuntimeHandle, payload map[string]any, texto string) (bool, string) {
+	if handle == nil {
+		return false, ""
+	}
+	if !RuntimeHandlePermiteEntregaCalienteSupervisada(handle) || RuntimeHandlePermiteSendInputInteractivo(handle) {
+		return false, ""
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if !runtimeHandleUsaCodexTTYInestable(meta) {
+		return false, ""
+	}
+	texto = strings.TrimSpace(texto)
+	if len(texto) <= 32 {
+		return false, ""
+	}
+	reason := "codex_supervisor_hot_input_disabled_por_texto_largo"
+	if runtimeOrderSendInstructionProvieneMailbox(payload) {
+		if kind := strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")); kind != "" {
+			reason += ":" + kind
+		}
+	}
+	return true, reason
 }
 
 func runtimeOrderSendInstructionExternalSessionID(payload map[string]any) string {

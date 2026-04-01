@@ -35,6 +35,50 @@ Conclusion:
 - la cuota visible sigue siendo canonica, pero ya no tapa un crash del runtime con un mensaje falso de presupuesto
 - el siguiente paso no es cosmetico: cortar la entrega `stdin` larga que esta provocando el `runtime_panic` real en Codex supervisado
 
+## 2026-04-01 11:0x aprox. — Codex supervisado ya no acepta `stdin` larga sin guardarrail
+
+Hallazgo:
+
+- el crash real de `Codex4` no venia de una clasificacion falsa, sino de guidance larga entrando por TUI
+- el transcript mostraba dos frases repetidas justo antes del panic:
+  - `Orquesta: has sido arrancado como programador...`
+  - `Se te ha asignado automaticamente la tarea...`
+- aunque `NormalizarInstruccionProceso(...)` ya limpiaba ASCII y recortaba, la compactacion seguia dejando guidance demasiado rica para el TUI de Codex
+
+Decision:
+
+- reforzar la compactacion de guidance para Codex local
+- y, ademas, meter un guardarrail final: si una `send_instruction` a `supervisor_local` de Codex sigue saliendo larga, se degrada a `mailbox_only` y no se inyecta por `stdin`
+
+Cambios:
+
+- `internal/controlruntime/pty_local.go`
+  - `compactarInstruccionCodexTTY(...)` ahora colapsa frases de bootstrap/asignacion a guidance mas corta:
+    - `Se te ha asignado automaticamente la tarea...` => `toma tarea asignada y sigue`
+    - guidance generica `Orquesta: ...` => `continua trabajo actual`
+  - el fallback maximo baja a 32 caracteres para Codex local
+- `db/controlplane_entities.go`
+  - nuevo helper `runtimeOrderSendInstructionDebeEvitarSupervisorLocal(...)`
+  - si el handle es Codex supervisado, `supervisor_local` y la instruccion sigue larga (`>32`), la orden se completa como `mailbox_only` con trazabilidad explicita
+- tests nuevos:
+  - `internal/controlruntime/proceso_test.go`
+  - `db/controlplane_entities_test.go`
+
+Validacion:
+
+- `go test ./internal/controlruntime -run 'TestNormalizarInstruccionProceso(CompactaAsignacionTareaCodexLocal|CompactaOrquestaGenericaCodexLocal|CompactaParaCodexLocal|CompactaBootstrapSupervisorCodexLocal)$' -count=1` => OK
+- `go test ./db -run 'Test(RuntimeOrderSendInstructionCodexSupervisadoLargoDegradaAMailboxDurable|RuntimeOrderSendInstructionAutonomiaTimeoutDegradaAMailboxDurable)$' -count=1` => OK
+- `go build -o ./orquesta .` => OK
+- validacion viva:
+  - se encolo un `nudge` largo a `Codex4`
+  - el control plane lo materializo ya por `session_resume`, no por `supervisor_local`
+  - no aparecio un `runtime_panic` nuevo en transcript despues del reinicio del daemon
+
+Conclusion:
+
+- el TUI de Codex deja de depender de frases largas inyectadas por Orquesta
+- cuando la compactacion no baste, la entrega caliente se corta antes de convertir un nudge del control plane en otro crash
+
 ## 2026-03-31 17:5x aprox. — el `provider_backoff` ya deja telemetría canónica de ventana agotada
 
 Hallazgo:

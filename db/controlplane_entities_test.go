@@ -3762,6 +3762,108 @@ func TestRuntimeOrderSendInstructionAutonomiaTimeoutDegradaAMailboxDurable(t *te
 	}
 }
 
+func TestRuntimeOrderSendInstructionCodexSupervisadoLargoDegradaAMailboxDurable(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	metaJSON := `{"driver":"process_pty_cli","stdin_path":"` + filepath.Join(tmp, "pty.stdin") + `","supervisor_ref":"` + filepath.Join(tmp, "supervisor.ref") + `","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-codex-long","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliveryBootstrapOnly + `"}`
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, capsJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"mensaje largo"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+
+	payload, _ := json.Marshal(map[string]any{
+		"to_agente":    "Codex1",
+		"from_agente":  "server",
+		"texto":        "Esta instruccion larga de orquesta debe quedar en mailbox durable y no entrar por stdin del supervisor local de Codex.",
+		"mailbox_id":   mailboxID,
+		"mailbox_kind": "instruction",
+	})
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: string(payload),
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order: %v", err)
+	}
+
+	if err := ejecutarRuntimeOrderSendInstruction(sendOrder); err != nil {
+		t.Fatalf("ejecutar send_instruction: %v", err)
+	}
+
+	sendOrder, err = GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "completada" {
+		t.Fatalf("send_instruction deberia completarse dejando mailbox durable: %+v", sendOrder)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"mailbox_only":true`) {
+		t.Fatalf("resultado sin mailbox_only: %s", sendOrder.ResultadoJSON)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `codex_supervisor_hot_input_disabled_por_texto_largo`) {
+		t.Fatalf("resultado sin trazabilidad de degradacion protectora: %s", sendOrder.ResultadoJSON)
+	}
+	transcript, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: stringPtr("Codex1"), Limit: 20})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	for _, item := range transcript {
+		if item != nil && item.Stream == "stdin" && strings.Contains(item.Text, "mailbox durable") {
+			t.Fatalf("no deberia inyectar stdin larga a Codex supervisado: %+v", item)
+		}
+	}
+}
+
 func TestRuntimeOrderSendInstructionRebindeaAlHandleActivoYEvitaWorkingDirObsoleto(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

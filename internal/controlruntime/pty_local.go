@@ -364,6 +364,8 @@ func compactarInstruccionCodexTTY(texto string) string {
 		match []string
 		out   string
 	}{
+		{match: []string{"se te ha asignado automaticamente la tarea", "se te ha asignado la tarea"}, out: "toma tarea asignada y sigue"},
+		{match: []string{"has sido arrancado como programador", "has sido arrancado como agente", "has sido arrancado como"}, out: "continua trabajo actual"},
 		{match: []string{"retoma el trabajo", "prompt de continuidad", "resume payload"}, out: "retoma trabajo previo y sigue"},
 		{match: []string{"supervisor autonomo", "orquestador autonomo", "arrancado como orquestador", "supervisar_proyecto", "supervision_transcript_signal"}, out: "supervisa proyecto actual y sigue"},
 		{match: []string{"ready for review", "listo para review", "listo para revision"}, out: "prepara review y sigue"},
@@ -382,7 +384,10 @@ func compactarInstruccionCodexTTY(texto string) string {
 	if strings.Contains(lower, "checkpoint") {
 		return "haz checkpoint si hace falta"
 	}
-	const maxChars = 48
+	if strings.HasPrefix(lower, "orquesta:") {
+		return "continua trabajo actual"
+	}
+	const maxChars = 32
 	if len(texto) <= maxChars {
 		return texto
 	}
