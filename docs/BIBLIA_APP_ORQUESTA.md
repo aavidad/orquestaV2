@@ -935,6 +935,10 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - no puede degradar ni alterar el trabajo ya activo del worker elegido
   - el resultado correcto es `asignada`, no `en_progreso`
   - la acción debe estar disponible igual en MCP y en `/openclaw`.
+- La observabilidad del supervisor no puede mezclar reservas con trabajo en marcha:
+  - `carga_activa` debe contar solo `en_progreso` y `bloqueada`
+  - `carga_reservada` debe reflejar `asignada`
+  - OpenClaw debe ver ambas cifras separadas en API y web para no interpretar backlog reservado como ejecución real.
 - La action tool del supervisor debe aceptar un fallback explícito seguro cuando la cola viva haya cambiado entre la recomendación y la ejecución:
   - si `action`, `target` y `assignee` siguen siendo válidos, OpenClaw debe poder aplicar la acción sin depender de que siga presente en `action_queue`
 - OpenClaw debe poder aplicar la `next_action` segura sin reenviar manualmente `action`, `target` y `assignee`:

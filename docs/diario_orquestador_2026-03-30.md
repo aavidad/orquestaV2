@@ -6348,3 +6348,20 @@ Resultado:
   - delega su ejecución en `applySupervisorRecommendedAction(...)`
 - Validación dirigida:
   - `go test ./cmd -run 'Test(MCPToolSupervisorAplicaSiguiente|WebOpenClawAccionAplicaSiguienteSupervisor)' -count=1`
+
+## 2026-04-01 — OpenClaw ya separa carga activa de carga reservada
+
+- `carga_activa` estaba mezclando:
+  - trabajo realmente en marcha
+  - tareas solo reservadas (`asignada`)
+- Eso volvía ambigua la lectura del operador cuando OpenClaw empezaba a usar `reservar_tarea_libre`.
+- Se corrigió la proyección de OpenClaw:
+  - `carga_activa` cuenta solo `en_progreso` y `bloqueada`
+  - `carga_reservada` cuenta `asignada`
+- La web `/openclaw` ahora enseña ambas columnas por separado.
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(APIOpenClawOperatorSeparaCargaActivaYReservada|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
+- Validación viva:
+  - `GET /api/openclaw/operator` ya muestra, por ejemplo:
+    - `Codex3 -> carga_activa 4`
+    - `Codex4 -> carga_activa 2, carga_reservada 2`

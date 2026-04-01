@@ -315,6 +315,53 @@ func TestAPIOpenClawThreadsOperaPorLaViaCanonica(t *testing.T) {
 	}
 }
 
+func TestAPIOpenClawOperatorSeparaCargaActivaYReservada(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prev := statusService
+	defer func() { statusService = prev }()
+
+	statusService = stubStatusService{response: apiStatusResponse{
+		AgentesActivos: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		Agentes: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+		},
+		TareasActivas: []tareaLite{
+			{ID: 1, Estado: db.TareaEnProgreso, Agente: "Codex3", Titulo: "activa"},
+			{ID: 2, Estado: db.TareaAsignada, Agente: "Codex3", Titulo: "reservada"},
+		},
+	}}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/openclaw/operator", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("openclaw operator status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.NewDecoder(bytes.NewReader(rec.Body.Bytes())).Decode(&payload); err != nil {
+		t.Fatalf("decode operator: %v", err)
+	}
+	statusMap, _ := payload["status"].(map[string]any)
+	activos, _ := statusMap["agentesActivos"].([]any)
+	if len(activos) != 1 {
+		t.Fatalf("agentesActivos inesperados: %#v", statusMap["agentesActivos"])
+	}
+	first, _ := activos[0].(map[string]any)
+	if got := int(first["carga_activa"].(float64)); got != 1 {
+		t.Fatalf("carga_activa inesperada: %#v", first)
+	}
+	if got := int(first["carga_reservada"].(float64)); got != 1 {
+		t.Fatalf("carga_reservada inesperada: %#v", first)
+	}
+}
+
 func TestAPIOpenClawPipelineOperaPorLaViaCanonica(t *testing.T) {
 	prepararDBTemporalCmd(t)
 	mux := http.NewServeMux()

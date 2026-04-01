@@ -1278,6 +1278,7 @@ type apiOpenClawAgentLite struct {
 	PresupuestoVentana string     `json:"presupuesto_ventana,omitempty"`
 	CuotaRestantePct   *int       `json:"cuota_restante_pct,omitempty"`
 	CargaActiva        int        `json:"carga_activa,omitempty"`
+	CargaReservada     int        `json:"carga_reservada,omitempty"`
 }
 
 type apiOpenClawStatusLite struct {
@@ -1399,7 +1400,7 @@ func buildOpenClawPendingMailbox(agentes []*db.Agente) ([]apiOpenClawMailboxLite
 }
 
 func compactOpenClawAgents(items []*db.Agente, tareas []tareaLite) []apiOpenClawAgentLite {
-	load := buildOpenClawAgentLoad(tareas)
+	cargaActiva, cargaReservada := buildOpenClawAgentLoad(tareas)
 	out := make([]apiOpenClawAgentLite, 0, len(items))
 	for _, item := range items {
 		if item == nil {
@@ -1414,25 +1415,29 @@ func compactOpenClawAgents(items []*db.Agente, tareas []tareaLite) []apiOpenClaw
 			CuentaEmail:        item.CuentaEmail,
 			PresupuestoVentana: item.PresupuestoVentana,
 			CuotaRestantePct:   item.CuotaRestantePct,
-			CargaActiva:        load[nombre],
+			CargaActiva:        cargaActiva[nombre],
+			CargaReservada:     cargaReservada[nombre],
 		})
 	}
 	return out
 }
 
-func buildOpenClawAgentLoad(tareas []tareaLite) map[string]int {
-	out := make(map[string]int)
+func buildOpenClawAgentLoad(tareas []tareaLite) (map[string]int, map[string]int) {
+	activa := make(map[string]int)
+	reservada := make(map[string]int)
 	for _, tarea := range tareas {
 		nombre := strings.TrimSpace(tarea.Agente)
 		if nombre == "" {
 			continue
 		}
 		switch tarea.Estado {
-		case db.TareaAsignada, db.TareaEnProgreso, db.TareaBloqueada:
-			out[nombre]++
+		case db.TareaEnProgreso, db.TareaBloqueada:
+			activa[nombre]++
+		case db.TareaAsignada:
+			reservada[nombre]++
 		}
 	}
-	return out
+	return activa, reservada
 }
 
 func apiHandlerOpenClawThreads(w http.ResponseWriter, r *http.Request) {
