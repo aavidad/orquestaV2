@@ -7096,3 +7096,31 @@ Resultado:
   - mientras exista esa deuda durable, la cola prioriza `seguir_guidance_durable` y no reitera la misma petición manual
 - Validación:
   - `go test ./cmd -run 'Test(MCPToolSupervisorSolicitaCheckpointPorWorktreeDrift|MCPRevisionSupervisorNoRepiteWorktreeDriftSiYaHayGuidancePendiente)' -count=1`
+
+## 2026-04-02 — Subagentes explícitos persistentes y perfiles canónicos
+
+- Hallazgo:
+  - Orquesta ya tenía `supervisor_threads` y `supervisor_pipeline_states`, pero faltaba una entidad persistente explícita para subagentes
+  - eso dejaba la jerarquía supervisor -> hijo como tracking ligero, no como objeto durable con artefactos y estado terminal
+- Corrección:
+  - se añadió `supervisor_subagents` al schema canónico
+  - la entidad persiste:
+    - `parent_thread_id`
+    - `thread_id`
+    - `subagent_name`
+    - `subagent_type`
+    - `tool_profile_json`
+    - `manifest_path`
+    - `output_path`
+    - `status`
+    - `error_message`
+    - timestamps de vida
+  - además se normalizaron perfiles canónicos por tipo:
+    - `general-purpose`
+    - `explore`
+    - `plan`
+    - `verification`
+  - si no se aporta `tool_profile_json`, Orquesta lo deriva automáticamente desde `subagent_type`
+- Validación:
+  - `go test ./db -run 'Test(SupervisorSubagentsPersistAndProfile|SupervisorSubagentToolProfiles|RecordSupervisorThreadTurnYSummary|UpsertSupervisorPipelineState)' -count=1`
+  - `go build -o ./orquesta .`

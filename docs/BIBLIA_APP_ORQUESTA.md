@@ -1148,3 +1148,31 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - esta información debe estar alineada en API, MCP y `/openclaw`
   - además, OpenClaw debe promover una vista operativa compacta `session_candidates` en `/api/openclaw/operator`
   - `session_candidates` no sustituye `thread_sessions`; evita que el supervisor tenga que rebuscar en la estructura completa para decisiones de reuse/spawn
+- El tracking ligero de `supervisor_threads` no sustituye el modelo persistente de subagentes:
+  - `supervisor_threads` sigue siendo observación ligera de leader/subagent threads
+  - `supervisor_subagents` es la entidad persistente y canónica para hijos explícitos del supervisor
+  - debe guardar al menos:
+    - `supervisor`
+    - `proyecto_slug`
+    - `session_id`
+    - `parent_thread_id`
+    - `thread_id`
+    - `subagent_name`
+    - `subagent_type`
+    - `tool_profile_json`
+    - `manifest_path`
+    - `output_path`
+    - `status`
+    - `error_message`
+    - `metadata_json`
+    - `created_at/started_at/updated_at/completed_at`
+  - esa tabla no debe duplicar `runtime_handles` ni `sesiones`; sirve para gobierno explícito de subagentes y sus artefactos
+- Los subagentes deben tener perfiles canónicos normalizados, no perfiles ad hoc por cliente:
+  - tipos iniciales admitidos:
+    - `general-purpose`
+    - `explore`
+    - `plan`
+    - `verification`
+  - cada tipo debe proyectar un `tool_profile_json` estructurado y estable
+  - si no se informa un perfil explícito, Orquesta debe derivarlo del `subagent_type`
+  - esa normalización debe vivir en el núcleo (`db`/modelo), no repartida entre MCP, web y prompts
