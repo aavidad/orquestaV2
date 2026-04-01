@@ -154,11 +154,11 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 		"Eventos normalizados del supervisor",
 		"Threads y subagentes",
 		"Pipeline del supervisor",
+		"Guidance durable pendiente",
 		"autopilot",
 		"sess-openclaw-web",
 		"OpenClaw Gateway y notificaciones",
 		"gateway down",
-		"Operador OpenClaw",
 		"OpenClaw",
 	} {
 		if !strings.Contains(body, token) {

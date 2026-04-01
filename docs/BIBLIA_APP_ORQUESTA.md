@@ -962,3 +962,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - alcance actual permitido: `asignar_tarea_libre`, `replanificar_por_cuota`
   - la vía canónica debe existir tanto en MCP como en `/openclaw`
   - el lote no debe inventar semántica nueva; debe reutilizar la misma aplicación unitaria y dejar la cola converger a vacío
+- El supervisor también debe ver guidance durable pendiente, no solo tareas y cuota:
+  - `/api/openclaw/operator` debe exponer backlog de `runtime_mailbox` pendiente por agente
+  - `/openclaw` debe mostrar ese backlog sin depender de dumps crudos del control plane
+  - la guidance durable pendiente es parte del estado operativo real del worker

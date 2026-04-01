@@ -1253,7 +1253,11 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
-	statusResumen := buildOpenClawOperatorStatus(status)
+	statusResumen, err := buildOpenClawOperatorStatus(status)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{
 		"status":               statusResumen,
 		"review":               revision,
@@ -1281,14 +1285,26 @@ type apiOpenClawStatusLite struct {
 	AgentesActivos     []apiOpenClawAgentLite `json:"agentesActivos,omitempty"`
 	AgentesTrabajando  []apiOpenClawAgentLite `json:"agentesTrabajando,omitempty"`
 	EnCuota            []apiOpenClawAgentLite `json:"enCuota,omitempty"`
+	MailboxPendiente   []apiOpenClawMailboxLite `json:"mailboxPendiente,omitempty"`
 	RetenidasPorCuota  []tareaLite            `json:"retenidasPorCuota,omitempty"`
 	TareasActivas      []tareaLite            `json:"tareasActivas,omitempty"`
 	PropuestasAbiertas []propuestaLite        `json:"propuestasAbiertas,omitempty"`
 }
 
-func buildOpenClawOperatorStatus(status *estadoResumen) apiOpenClawStatusLite {
+type apiOpenClawMailboxLite struct {
+	Agente   string   `json:"agente"`
+	Count    int      `json:"count"`
+	Kinds    []string `json:"kinds,omitempty"`
+	KindsCSV string   `json:"kinds_csv,omitempty"`
+}
+
+func buildOpenClawOperatorStatus(status *estadoResumen) (apiOpenClawStatusLite, error) {
 	if status == nil {
-		return apiOpenClawStatusLite{}
+		return apiOpenClawStatusLite{}, nil
+	}
+	mailboxPendiente, err := buildOpenClawPendingMailbox(status.Agentes)
+	if err != nil {
+		return apiOpenClawStatusLite{}, err
 	}
 	return apiOpenClawStatusLite{
 		Generado:           status.Generado,
@@ -1296,10 +1312,73 @@ func buildOpenClawOperatorStatus(status *estadoResumen) apiOpenClawStatusLite {
 		AgentesActivos:     compactOpenClawAgents(status.AgentesActivos),
 		AgentesTrabajando:  compactOpenClawAgents(status.AgentesTrabajando),
 		EnCuota:            compactOpenClawAgents(agentesNoActivosConCuota(status.Agentes)),
+		MailboxPendiente:   mailboxPendiente,
 		RetenidasPorCuota:  tareasRetenidasPorCuota(status.TareasActivas, status.Agentes),
 		TareasActivas:      status.TareasActivas,
 		PropuestasAbiertas: status.PropuestasAbiertas,
+	}, nil
+}
+
+func buildOpenClawPendingMailbox(agentes []*db.Agente) ([]apiOpenClawMailboxLite, error) {
+	estado := "pendiente"
+	items, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &estado})
+	if err != nil {
+		return nil, err
 	}
+	permitidos := make(map[string]bool, len(agentes))
+	for _, agente := range agentes {
+		if agente == nil {
+			continue
+		}
+		nombre := strings.TrimSpace(agente.Nombre)
+		if nombre != "" {
+			permitidos[nombre] = true
+		}
+	}
+	type agg struct {
+		count int
+		kinds map[string]bool
+	}
+	byAgent := make(map[string]*agg)
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		agente := strings.TrimSpace(item.ToAgente)
+		if agente == "" || !permitidos[agente] {
+			continue
+		}
+		entry := byAgent[agente]
+		if entry == nil {
+			entry = &agg{kinds: map[string]bool{}}
+			byAgent[agente] = entry
+		}
+		entry.count++
+		if kind := strings.TrimSpace(item.Kind); kind != "" {
+			entry.kinds[kind] = true
+		}
+	}
+	out := make([]apiOpenClawMailboxLite, 0, len(byAgent))
+	for agente, entry := range byAgent {
+		kinds := make([]string, 0, len(entry.kinds))
+		for kind := range entry.kinds {
+			kinds = append(kinds, kind)
+		}
+		sort.Strings(kinds)
+		out = append(out, apiOpenClawMailboxLite{
+			Agente:   agente,
+			Count:    entry.count,
+			Kinds:    kinds,
+			KindsCSV: strings.Join(kinds, ", "),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Agente < out[j].Agente
+	})
+	return out, nil
 }
 
 func compactOpenClawAgents(items []*db.Agente) []apiOpenClawAgentLite {

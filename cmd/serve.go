@@ -52,6 +52,7 @@ type webDashData struct {
 type webOpenClawData struct {
 	Status           *estadoResumen
 	EnCuota          []*db.Agente
+	MailboxPendiente []apiOpenClawMailboxLite
 	Retenidas        []tareaLite
 	ReviewGates      []*db.ReviewGate
 	Signals          []*supervisorReviewSignal
@@ -746,6 +747,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 	webRender(w, r, webTplLayout+webTplOpenClaw, webOpenClawData{
 		Status:           status,
 		EnCuota:          agentesNoActivosConCuota(status.Agentes),
+		MailboxPendiente: mustOpenClawPendingMailbox(status.Agentes),
 		Retenidas:        tareasRetenidasPorCuota(status.TareasActivas, status.Agentes),
 		ReviewGates:      reviewGates,
 		Signals:          signals,
@@ -761,6 +763,14 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		Msg:              r.URL.Query().Get("ok"),
 		Err:              r.URL.Query().Get("err"),
 	})
+}
+
+func mustOpenClawPendingMailbox(agentes []*db.Agente) []apiOpenClawMailboxLite {
+	items, err := buildOpenClawPendingMailbox(agentes)
+	if err != nil {
+		return nil
+	}
+	return items
 }
 
 func webHandlerOpenClawAccion(w http.ResponseWriter, r *http.Request) {
@@ -1987,6 +1997,23 @@ const webTplOpenClaw = `{{define "content"}}
       </tbody></table>
       {{else}}
       <p style="margin:0;color:#64748b">Sin tareas retenidas.</p>
+      {{end}}
+    </section>
+
+    <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
+      <h3 style="margin:0 0 .7rem 0">Guidance durable pendiente</h3>
+      {{if .MailboxPendiente}}
+      <table style="width:100%"><thead><tr><th>Agente</th><th>Mensajes</th><th>Kinds</th></tr></thead><tbody>
+      {{range .MailboxPendiente}}
+        <tr>
+          <td>{{.Agente}}</td>
+          <td>{{.Count}}</td>
+          <td>{{orDash .KindsCSV}}</td>
+        </tr>
+      {{end}}
+      </tbody></table>
+      {{else}}
+      <p style="margin:0;color:#64748b">Sin guidance durable pendiente.</p>
       {{end}}
     </section>
 

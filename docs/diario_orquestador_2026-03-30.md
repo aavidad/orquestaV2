@@ -6218,3 +6218,25 @@ Resultado:
   - `#416` pasó a `Codex3`
   - `#421` pasó a `Codex3`
   - `GET /api/openclaw/operator` quedó con `review.action_queue = []` y sin `retenidasPorCuota`
+
+## 2026-04-01 — OpenClaw ya ve la guidance durable pendiente por agente
+
+- Hasta ahora el supervisor veía:
+  - flota
+  - cuota/cooldown
+  - tareas retenidas
+  - review/merges/eventos
+- Pero seguía faltando una parte del estado operativo real:
+  - guidance durable pendiente en `runtime_mailbox`
+  - por ejemplo, `autonomia` pendiente de `Codex3`
+- Se añadió proyección compacta de mailbox pendiente:
+  - API: `status.mailboxPendiente` en `/api/openclaw/operator`
+  - web: bloque `Guidance durable pendiente` en `/openclaw`
+- El agregado expone por agente:
+  - `count`
+  - `kinds`
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(APIObservabilidadReadOnly|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
+- Validación viva:
+  - `GET /api/openclaw/operator` ya devuelve `Codex3 -> autonomia`
+  - `/openclaw` ya muestra `Guidance durable pendiente` con `Codex3` y `autonomia`

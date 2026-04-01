@@ -98,6 +98,16 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	if err := db.ConfigSet("telegram_chat_id", "12345"); err != nil {
 		t.Fatalf("config telegram chat id: %v", err)
 	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"texto":"continua"}`,
+		Estado:      "pendiente",
+	}); err != nil {
+		t.Fatalf("crear mailbox pendiente: %v", err)
+	}
 
 	tareaID, err := db.CrearTarea(&db.Tarea{
 		Titulo:      "Tarea API read-only",
@@ -258,6 +268,10 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	}
 	if len(activos) != 2 {
 		t.Fatalf("openclaw operator deberia reflejar 2 agentes activos, obtuvo %d: %s", len(activos), recOperator.Body.String())
+	}
+	mailboxPendiente, ok := statusMap["mailboxPendiente"].([]any)
+	if !ok || len(mailboxPendiente) == 0 {
+		t.Fatalf("openclaw operator sin mailboxPendiente: %s", recOperator.Body.String())
 	}
 }
 
