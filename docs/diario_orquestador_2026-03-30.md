@@ -4955,3 +4955,26 @@ Validacion:
 
 - `go test ./cmd -run 'TestMCPToolsAgentesHandoffOperaPorLaViaCanonica' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — El MCP ya prepara e investiga agentes por la vía canónica
+
+Hallazgo:
+
+- el supervisor ya podía gobernar tareas, runtime, proposals, handoff y coordinación, pero todavía no tenía por MCP la misma capacidad oficial de `agente preparar` e `investigar` que usamos para construir contexto operativo y diagnóstico
+
+Decision:
+
+- añadir tools MCP para:
+  - `orquesta.agentes.preparar`
+  - `orquesta.agentes.investigar`
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestMCPToolsAgentesPrepararEInvestigarOperanPorLaViaCanonica' -count=1`
+- `go build -o ./orquesta .`

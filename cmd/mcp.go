@@ -1366,6 +1366,39 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.agentes.preparar",
+			Title:       "Preparar agente",
+			Description: "Construye el bundle canónico de preparación de un agente",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":       map[string]any{"type": "string"},
+					"proyecto":     map[string]any{"type": "string"},
+					"conector":     map[string]any{"type": "string"},
+					"modelo":       map[string]any{"type": "string"},
+					"razonamiento": map[string]any{"type": "string"},
+					"perfil":       map[string]any{"type": "string"},
+				},
+				"required":             []string{"agente", "proyecto"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.agentes.investigar",
+			Title:       "Investigar agente",
+			Description: "Ejecuta la investigación canónica de runtime/transcript",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"query":    map[string]any{"type": "string"},
+					"proyecto": map[string]any{"type": "string"},
+					"limit":    map[string]any{"type": "integer"},
+				},
+				"required":             []string{"query"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.runtime.ordenes.listar",
 			Title:       "Listar runtime orders",
 			Description: "Lista runtime orders por agente, proyecto o estado",
@@ -2049,6 +2082,39 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			"agente_destino": destino,
 		}
 		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.agentes.preparar":
+		agente, err := requiredStringArg(args, "agente")
+		if err != nil {
+			return nil, err
+		}
+		proyecto, err := requiredStringArg(args, "proyecto")
+		if err != nil {
+			return nil, err
+		}
+		out, err := agentesService.BuildPrepare(agentesapp.PrepareInput{
+			Agente:       agente,
+			Proyecto:     proyecto,
+			Conector:     optionalStringArg(args, "conector"),
+			Modelo:       optionalStringArg(args, "modelo"),
+			Razonamiento: optionalStringArg(args, "razonamiento"),
+			Perfil:       optionalStringArg(args, "perfil"),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(out), out, false), nil
+
+	case "orquesta.agentes.investigar":
+		query, err := requiredStringArg(args, "query")
+		if err != nil {
+			return nil, err
+		}
+		out, err := agentesService.Investigate(query, optionalStringArg(args, "proyecto"), intArgOrDefault(args, "limit", 25))
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(out), out, false), nil
 
 	case "orquesta.runtime.ordenes.listar":
 		filter := db.FiltroRuntimeOrders{

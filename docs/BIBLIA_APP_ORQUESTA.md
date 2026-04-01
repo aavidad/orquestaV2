@@ -716,6 +716,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - y debe poder disparar handoffs canónicos entre agentes desde MCP, porque ese relevo forma parte del mando normal del supervisor.
 - y debe cubrir el gobierno de propuestas, no solo su lectura: crear propuestas y cerrarlas/reabrirlas/reparar votos desde el mismo MCP oficial.
 - y debe cubrir también la coordinación base del trabajo: activar asignaciones, adquirir/liberar locks y preparar/cerrar worktrees desde MCP, sin rutas laterales ni wrappers de CLI.
+- y debe cubrir además las fases de preparación e investigación del agente desde MCP: `agente preparar` e `investigar` tienen que salir por el mismo servidor oficial para que el supervisor construya contexto y diagnóstico sin recurrir a CLI local ni a recomposición manual.
 - para `codex_token_count_observed`, si falta la clave de configuración específica, el TTL por defecto observado sigue siendo `3600s`; no puede caer silenciosamente al TTL genérico de `300s`, porque eso oculta agotamientos reales de la ventana `5h`.
 - un presupuesto fresco y crítico observado debe proyectarse también sobre `estado_cuota` visible del agente (`enfriamiento` o `agotado`) aunque la fila persistida aún no haya sido actualizada por un batch posterior.
 - la identidad de cuenta del agente (`usuario` / `correo`) debe salir solo de artefactos ya persistidos del runtime o del presupuesto (`raw_snapshot_json`, `metadata_json`). No se abre una segunda fuente de verdad ni se inventan credenciales.

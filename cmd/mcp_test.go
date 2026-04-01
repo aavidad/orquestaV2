@@ -955,6 +955,52 @@ func TestMCPToolsAgentesHandoffOperaPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestMCPToolsAgentesPrepararEInvestigarOperanPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrando Codex3: %v", err)
+		}
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+
+		prepareResult, err := callMCPTool("orquesta.agentes.preparar", map[string]any{
+			"agente":   "Codex3",
+			"proyecto": "orquestador",
+		})
+		if err != nil {
+			t.Fatalf("agentes preparar MCP: %v", err)
+		}
+		if prepareResult["isError"] != false {
+			t.Fatalf("agentes preparar marcado como error: %#v", prepareResult)
+		}
+		prepareOut, _ := prepareResult["structuredContent"].(*agentesapp.PrepareOutput)
+		if prepareOut == nil || prepareOut.Agente != "Codex3" {
+			t.Fatalf("prepare inesperado: %#v", prepareResult["structuredContent"])
+		}
+		if prepareOut.Proyecto.Slug != "orquestador" {
+			t.Fatalf("prepare sin proyecto esperado: %#v", prepareOut.Proyecto)
+		}
+
+		investResult, err := callMCPTool("orquesta.agentes.investigar", map[string]any{
+			"query":    "router",
+			"proyecto": "orquestador",
+			"limit":    10,
+		})
+		if err != nil {
+			t.Fatalf("agentes investigar MCP: %v", err)
+		}
+		if investResult["isError"] != false {
+			t.Fatalf("agentes investigar marcado como error: %#v", investResult)
+		}
+		report, _ := investResult["structuredContent"].(*agentesapp.InvestigationReport)
+		if report == nil || report.Query != "router" {
+			t.Fatalf("investigation report inesperado: %#v", investResult["structuredContent"])
+		}
+		if report.Proyecto == nil || report.Proyecto.Slug != "orquestador" {
+			t.Fatalf("investigation report sin proyecto esperado: %#v", report.Proyecto)
+		}
+	})
+}
+
 func TestMCPToolsPropuestasCrearYAccionarOperanPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
