@@ -731,6 +731,47 @@ func TestGetAgenteRecuperaCuentaDesdePresupuestoPrevioSiBackoffNoTraeCorreo(t *t
 	}
 }
 
+func TestGetAgenteOcultaDerivadosCuandoProviderBackoffMarcaAgotado(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesionID, err := IniciarSesion("codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	// El consumo local por si solo derivaria porcentajes positivos.
+	if _, err := DB.Exec(`UPDATE agentes SET consumo_semanal_segundos=5880, limite_semanal_segundos=126000, consumo_dia_segundos=0, limite_dia_segundos=18000 WHERE nombre=?`, "codex1"); err != nil {
+		t.Fatalf("update agentes: %v", err)
+	}
+	reset := time.Now().UTC().Add(50 * time.Minute)
+	zeroMessages := int64(0)
+	rawBackoff := `{"source":"runtime_order_send_instruction","account_user":"Codex1"}`
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:          sesionID,
+		WindowKind:        "provider",
+		ResetAt:           &reset,
+		RemainingMessages: &zeroMessages,
+		BudgetSource:      "provider_backoff",
+		RawSnapshotJSON:   rawBackoff,
+		CheckedAt:         time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion backoff: %v", err)
+	}
+
+	agente, err := GetAgente("codex1")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.PresupuestoEstado != "agotado" || agente.CuotaRestantePct == nil || *agente.CuotaRestantePct != 0 {
+		t.Fatalf("bloqueo visible inesperado: %+v", agente)
+	}
+	if agente.PresupuestoSesionPct != nil || agente.PresupuestoDiarioPct != nil || agente.PresupuestoSemanalPct != nil {
+		t.Fatalf("no deberia conservar porcentajes derivados tras provider_backoff agotado: %+v", agente)
+	}
+}
+
 func TestGetAgenteExtraePerfilDesdeRenderedCommandHandle(t *testing.T) {
 	abrirDBTemporalMemoria(t)
 

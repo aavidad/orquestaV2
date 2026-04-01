@@ -758,3 +758,9 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - `En enfriamiento/cuota` solo incluye agentes con evidencia visible de bloqueo presupuestario: snapshot observado, estado de presupuesto no trivial o saldo efectivo agotado.
 - si un agente conserva `estado_cuota!=activo` pero su presupuesto visible sigue positivo y no hay evidencia observada de bloqueo, debe mostrarse como `pausa:operativa`, no como cuota.
 - las tareas retenidas por cuota solo se listan si el agente esta realmente bloqueado por presupuesto; una pausa operativa no debe secuestrar tareas en ese bloque.
+
+## Provider backoff y porcentajes derivados
+
+- si el ultimo presupuesto visible viene de `provider_backoff` y marca `agotado`, Orquesta no puede seguir mostrando porcentajes derivados de consumo local (`diario`, `semanal` o `sesion`) como si fueran verdad operativa.
+- en ese caso manda el bloqueo observado del proveedor: `efectivo 0%`, `estado agotado` y `reset/reanimacion` visibles.
+- los porcentajes derivados se ocultan para no enseñar contradicciones del tipo `semanal 95%` junto a `agotado`.

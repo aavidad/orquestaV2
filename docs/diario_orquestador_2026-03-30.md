@@ -5400,3 +5400,34 @@ Resultado:
 - `antigravity` ya no sale como cuota real; pasa a `En pausa operativa`
 - `Retenidas por cuota` solo conserva tareas de agentes realmente bloqueados por presupuesto
 - el estado visible del nucleo deja de mezclar pausas heredadas con agotamiento de cuota
+
+## 2026-04-01 — provider_backoff agotado deja de mostrar porcentajes ficticios
+
+Hallazgo:
+
+- `Codex1` seguia saliendo como `agotado` por `provider_backoff`, pero a la vez mostraba `semanal 95%`
+- esa cifra venia de porcentajes derivados por consumo local, no de telemetria observada del proveedor
+
+Decision:
+
+- si el ultimo snapshot visible es `provider_backoff` y ya marca `agotado`, los porcentajes derivados dejan de ser presentables
+- en ese caso solo vale el bloqueo observado del proveedor
+
+Codigo:
+
+- [db/sesiones.go](/home/alberto/Trabajo/orquesta/db/sesiones.go)
+- [db/presupuestos_sesion_test.go](/home/alberto/Trabajo/orquesta/db/presupuestos_sesion_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./db -run 'Test(GetAgenteRecuperaCuentaDesdePresupuestoPrevioSiBackoffNoTraeCorreo|GetAgenteOcultaDerivadosCuandoProviderBackoffMarcaAgotado)' -count=1`
+- `go build -o ./orquesta .`
+- `./orquesta server stop && ./orquesta server start`
+- `./orquesta agente presupuesto`
+
+Resultado:
+
+- `Codex1` ya no enseña `semanal 95%` junto a `agotado`
+- la salida visible conserva `efectivo 0%`, `ventana weekly`, `reset` y `agotado`
+- el nucleo deja de mezclar una señal dura de proveedor con porcentajes derivados no fiables

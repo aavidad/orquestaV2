@@ -979,6 +979,15 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 			if a.PresupuestoStale && strings.TrimSpace(a.PresupuestoEstado) == "ok" {
 				a.PresupuestoEstado = "observado_stale"
 			}
+			if strings.EqualFold(strings.TrimSpace(p.BudgetSource), "provider_backoff") &&
+				strings.EqualFold(strings.TrimSpace(a.PresupuestoEstado), "agotado") {
+				// Un provider_backoff agotado invalida los porcentajes derivados de uso
+				// local: mantenerlos visibles produce contradicciones como "semanal 95%"
+				// junto a "efectivo 0%". En este caso solo vale el bloqueo observado.
+				a.PresupuestoSesionPct = nil
+				a.PresupuestoDiarioPct = nil
+				a.PresupuestoSemanalPct = nil
+			}
 		}
 	}
 	if strings.TrimSpace(a.CuentaEmail) == "" {
