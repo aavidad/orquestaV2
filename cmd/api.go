@@ -44,6 +44,7 @@ type apiErrorResponse struct {
 type apiStatusResponse struct {
 	Agentes             []*db.Agente    `json:"agentes"`
 	ConteoTareas        map[string]int  `json:"conteo_tareas"`
+	ResumenTareas       map[string]int  `json:"resumenTareas,omitempty"`
 	Proyectos           []*db.Proyecto  `json:"proyectos"`
 	AsignacionesActivas map[int64]int   `json:"asignaciones_activas"`
 	SesionesActivas     map[int64]int   `json:"sesiones_activas"`
@@ -755,6 +756,7 @@ func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
 	payload := map[string]any{
 		"agentes":              status.Agentes,
 		"conteo_tareas":        status.ConteoTareas,
+		"resumenTareas":        status.TareasPorEstado,
 		"proyectos":            status.Proyectos,
 		"asignaciones_activas": status.AsignacionesActivas,
 		"sesiones_activas":     status.SesionesActivas,

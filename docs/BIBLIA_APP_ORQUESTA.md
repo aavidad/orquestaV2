@@ -845,3 +845,9 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   1. proceso vivo e identidad válida
   2. entonces handle activo
   3. solo si el proceso realmente dejó de existir o perdió identidad se conserva `fallido/cerrado`
+
+### Contrato de `/api/status`
+
+- `/api/status` debe exponer un resumen de tareas estable para clientes server-first y MCP.
+- La clave canónica visible es `resumenTareas`.
+- `tareasPorEstado` se mantiene como alias compatible, pero los clientes nuevos deben poder apoyarse en `resumenTareas` sin recomposición adicional.

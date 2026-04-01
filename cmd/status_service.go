@@ -200,6 +200,7 @@ func (dbStatusService) FetchStatus() (apiStatusResponse, error) {
 	return apiStatusResponse{
 		Agentes:             agentes,
 		ConteoTareas:        cuentas,
+		ResumenTareas:       cuentas,
 		Proyectos:           proyectos,
 		AsignacionesActivas: asignaciones,
 		SesionesActivas:     sesionesPorProyecto,

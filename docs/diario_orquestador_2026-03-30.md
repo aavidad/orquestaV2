@@ -5814,3 +5814,11 @@ Resultado:
   - tras reiniciar el daemon, `Codex3` pasó a handle activo `429`
   - `/api/runtime-handles?agente=Codex3` ya devolvió `estado=activo`
   - `runtime diagnostico --agente Codex3` dejó de mostrar el último handle vivo como `fallido`
+
+## 2026-04-01 — `/api/status` expone `resumenTareas` como alias canónico
+
+- Se detectó una incoherencia de contrato: la API devolvía `tareasPorEstado`, pero no `resumenTareas`, lo que obligaba a clientes y herramientas a tratar `/api/status` de forma distinta.
+- Se añadió `resumenTareas` en `apiStatusResponse`, `statusService` y `apiHandlerStatus`, manteniendo `tareasPorEstado` por compatibilidad.
+- Validación viva:
+  - `/api/status` ya devuelve ambas claves con el mismo contenido
+  - `jq '{resumenTareas, tareasPorEstado}'` confirma el alias correcto en el daemon real

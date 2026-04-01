@@ -299,7 +299,7 @@ func TestAPIStatusExponeResumenOperativoCompat(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode /api/status: %v", err)
 	}
-	for _, key := range []string{"agentes", "conteo_tareas", "generado", "tareasPorEstado", "agentesActivos", "propuestasAbiertas", "tareasActivas"} {
+	for _, key := range []string{"agentes", "conteo_tareas", "resumenTareas", "generado", "tareasPorEstado", "agentesActivos", "propuestasAbiertas", "tareasActivas"} {
 		if _, ok := payload[key]; !ok {
 			t.Fatalf("/api/status sin clave %q: %+v", key, payload)
 		}

@@ -28,6 +28,9 @@ func TestAPIHandlerStatusReturnsPayload(t *testing.T) {
 			ConteoTareas: map[string]int{
 				"asignada": 1,
 			},
+			TareasPorEstado: map[string]int{
+				"asignada": 1,
+			},
 		},
 	}
 	rec := httptest.NewRecorder()
@@ -42,6 +45,9 @@ func TestAPIHandlerStatusReturnsPayload(t *testing.T) {
 	}
 	if len(payload.Agentes) != 1 || payload.Agentes[0].Nombre != "CodexX" {
 		t.Fatalf("payload inesperado: %+v", payload)
+	}
+	if payload.ResumenTareas["asignada"] != 1 {
+		t.Fatalf("resumenTareas inesperado: %+v", payload.ResumenTareas)
 	}
 	if payload.AgentesTrabajando != nil && len(payload.AgentesTrabajando) != 0 {
 		t.Fatalf("agentesTrabajando inesperado: %+v", payload.AgentesTrabajando)
