@@ -60,6 +60,7 @@ type webOpenClawData struct {
 	Merges           []*db.GitMerge
 	NormalizedEvents []openClawNormalizedEvent
 	ThreadSessions   []*db.SupervisorThreadSessionSummary
+	ObservedSessions []*supervisorObservedAgentSessionSummary
 	PipelineStates   []*db.SupervisorPipelineState
 	Recommended      []supervisorRecommendedAction
 	SafeRecommended  []supervisorRecommendedAction
@@ -763,8 +764,10 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 	merges, _ := review["merges"].([]*db.GitMerge)
 	normalizedEvents, _ := review["normalized_events"].([]openClawNormalizedEvent)
 	var threadSessions []*db.SupervisorThreadSessionSummary
+	var observedSessions []*supervisorObservedAgentSessionSummary
 	if snapshot, ok := review["thread_sessions"].(map[string]any); ok {
 		threadSessions, _ = snapshot["sessions"].([]*db.SupervisorThreadSessionSummary)
+		observedSessions, _ = snapshot["observed_agent_sessions"].([]*supervisorObservedAgentSessionSummary)
 	}
 	var pipelineStates []*db.SupervisorPipelineState
 	if snapshot, ok := review["pipeline_state"].(map[string]any); ok {
@@ -803,6 +806,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		Merges:           merges,
 		NormalizedEvents: normalizedEvents,
 		ThreadSessions:   threadSessions,
+		ObservedSessions: observedSessions,
 		PipelineStates:   pipelineStates,
 		Recommended:      recommended,
 		SafeRecommended:  safeRecommended,
@@ -2338,6 +2342,22 @@ const webTplOpenClaw = `{{define "content"}}
       </tbody></table>
       {{else}}
       <p style="margin:0;color:#64748b">Sin threads registradas todavía.</p>
+      {{end}}
+      <h4 style="margin:1rem 0 .6rem 0">Sesiones observadas de agentes</h4>
+      {{if .ObservedSessions}}
+      <table style="width:100%"><thead><tr><th>Agente</th><th>Runtime</th><th>Sesión externa</th><th>Sesión observada</th><th>Uso</th></tr></thead><tbody>
+      {{range .ObservedSessions}}
+        <tr>
+          <td>{{.Agente}}</td>
+          <td>{{orDash .Herramienta}}{{if .Host}} · {{.Host}}{{end}}</td>
+          <td>{{orDash .ExternalSessionID}}</td>
+          <td>{{orDash .ObservedSessionPath}}</td>
+          <td>{{orDash .UsageSummary}}</td>
+        </tr>
+      {{end}}
+      </tbody></table>
+      {{else}}
+      <p style="margin:0;color:#64748b">Sin sesiones observadas de agentes.</p>
       {{end}}
     </section>
 

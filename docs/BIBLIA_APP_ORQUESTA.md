@@ -1121,3 +1121,13 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `/api/openclaw/operator.mailboxPendiente` y `/api/runtime-mailbox?estado=pendiente` deben reflejar la misma deuda pendiente
   - si OpenClaw consume `seguir_guidance_durable`, la CLI `runtime mailbox --estado pendiente` debe converger al mismo resultado
   - la protección correcta aquí es regresión explícita de API, no confiar en observaciones manuales puntuales
+- La superficie de supervisor debe exponer también sesiones observadas de agentes:
+  - `thread_sessions` no debe limitarse a threads del supervisor; debe incluir `observed_agent_sessions`
+  - cada elemento debe servir para decidir `reuse/spawn/reanudación` sin recomponer estado manual:
+    - `agente`
+    - `external_session_id`
+    - `observed_session_path`
+    - `herramienta`
+    - `host`
+    - `message_count/turns` cuando existan
+  - esta información debe estar alineada en API, MCP y `/openclaw`

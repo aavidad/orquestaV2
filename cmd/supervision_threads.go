@@ -9,6 +9,19 @@ import (
 	"orquesta/db"
 )
 
+type supervisorObservedAgentSessionSummary struct {
+	Agente                 string     `json:"agente"`
+	Activo                 bool       `json:"activo"`
+	Herramienta            string     `json:"herramienta,omitempty"`
+	Host                   string     `json:"host,omitempty"`
+	ExternalSessionID      string     `json:"external_session_id,omitempty"`
+	ObservedSessionPath    string     `json:"observed_session_path,omitempty"`
+	ObservedUsageMessages  *int       `json:"observed_usage_messages,omitempty"`
+	ObservedUsageTurns     *int       `json:"observed_usage_turns,omitempty"`
+	ObservedUsageUpdatedAt *time.Time `json:"observed_usage_updated_at,omitempty"`
+	UsageSummary           string     `json:"usage_summary,omitempty"`
+}
+
 func resolveSupervisorName(supervisor string) string {
 	supervisor = strings.TrimSpace(supervisor)
 	if supervisor != "" {
@@ -96,13 +109,78 @@ func buildSupervisorThreadsSnapshot(supervisor, sessionID string, limit int) (ma
 		}
 		summaries = append(summaries, summary)
 	}
+	observedSessions, err := buildSupervisorObservedAgentSessions()
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
-		"supervisor":      supervisor,
-		"session_id":      strings.TrimSpace(sessionID),
-		"active_window_s": int(db.DefaultSupervisorThreadActiveWindow / time.Second),
-		"sessions":        summaries,
-		"threads":         items,
+		"supervisor":               supervisor,
+		"session_id":               strings.TrimSpace(sessionID),
+		"active_window_s":          int(db.DefaultSupervisorThreadActiveWindow / time.Second),
+		"sessions":                 summaries,
+		"threads":                  items,
+		"observed_agent_sessions":  observedSessions,
 	}, nil
+}
+
+func buildSupervisorObservedAgentSessions() ([]*supervisorObservedAgentSessionSummary, error) {
+	agentes, err := db.ListarAgentes()
+	if err != nil {
+		return nil, err
+	}
+	sesionesActivas, err := db.ListarSesionesActivasOperativas()
+	if err != nil {
+		return nil, err
+	}
+	sesionesPorAgente := map[string]*db.Sesion{}
+	for _, sesion := range sesionesActivas {
+		if sesion == nil {
+			continue
+		}
+		agente := strings.TrimSpace(sesion.Agente)
+		if agente == "" {
+			continue
+		}
+		actual := sesionesPorAgente[agente]
+		if actual == nil || actual.Inicio.Before(sesion.Inicio) {
+			sesionesPorAgente[agente] = sesion
+		}
+	}
+	out := make([]*supervisorObservedAgentSessionSummary, 0, len(agentes))
+	for _, agente := range agentes {
+		if agente == nil {
+			continue
+		}
+		item := &supervisorObservedAgentSessionSummary{
+			Agente:                 strings.TrimSpace(agente.Nombre),
+			Activo:                 agente.Activo,
+			ObservedSessionPath:    strings.TrimSpace(agente.ObservedSessionPath),
+			ObservedUsageMessages:  agente.ObservedUsageMessages,
+			ObservedUsageTurns:     agente.ObservedUsageTurns,
+			ObservedUsageUpdatedAt: agente.ObservedUsageUpdatedAt,
+		}
+		if sesion := sesionesPorAgente[item.Agente]; sesion != nil {
+			item.Herramienta = strings.TrimSpace(sesion.Herramienta)
+			item.Host = strings.TrimSpace(sesion.Host)
+			item.ExternalSessionID = strings.TrimSpace(sesion.ExternalSessionID)
+		}
+		usage := make([]string, 0, 2)
+		if item.ObservedUsageMessages != nil {
+			usage = append(usage, fmt.Sprintf("%d msg", *item.ObservedUsageMessages))
+		}
+		if item.ObservedUsageTurns != nil {
+			usage = append(usage, fmt.Sprintf("%d turns", *item.ObservedUsageTurns))
+		}
+		item.UsageSummary = strings.Join(usage, " · ")
+		if item.ExternalSessionID == "" && item.ObservedSessionPath == "" {
+			continue
+		}
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return strings.ToLower(out[i].Agente) < strings.ToLower(out[j].Agente)
+	})
+	return out, nil
 }
 
 func buildSupervisorThreadsOverview(supervisor string) (string, error) {

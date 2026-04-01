@@ -6905,3 +6905,24 @@ Resultado:
 - Validación dirigida:
   - `go test ./cmd -run 'Test(APIObservabilidadReadOnly|APIOpenClawOperatorExponeStatusLiteEnRaiz)' -count=1`
   - `go build -o ./orquesta .`
+
+## 2026-04-01 — Sesiones observadas de agentes para supervisor/subagentes
+
+- Idea absorbida de `claw-code-main`:
+  - no copiar el launcher entero, pero sí tratar la sesión observada del agente como dato de primera clase del supervisor
+- Implementación en Orquesta:
+  - `thread_sessions` ahora incluye `observed_agent_sessions`
+  - cada resumen expone:
+    - `agente`
+    - `external_session_id`
+    - `observed_session_path`
+    - `herramienta`
+    - `host`
+    - `usage_summary`
+  - eso viaja por API, MCP y web `/openclaw`
+- Validación:
+  - `go test ./cmd -run 'Test(APIOpenClawThreadsOperaPorLaViaCanonica|MCPThreadsSupervisorOperanPorLaViaCanonica|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
+  - `go build -o ./orquesta .`
+  - validación viva:
+    - `/api/openclaw/threads?supervisor=OpenClaw` ya devuelve `observed_agent_sessions`
+    - `/openclaw` ya muestra la sección `Sesiones observadas de agentes`

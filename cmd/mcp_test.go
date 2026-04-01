@@ -1182,6 +1182,23 @@ func TestMCPToolsSesionesYObservabilidadRuntimeOperanPorLaViaCanonica(t *testing
 func TestMCPThreadsSupervisorOperanPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+			t.Fatalf("registrar codex6: %v", err)
+		}
+		proyecto, err := db.GetProyecto("orquestador")
+		if err != nil {
+			t.Fatalf("get proyecto: %v", err)
+		}
+		if _, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:            "Codex6",
+			ProyectoID:        &proyecto.ID,
+			CWD:               "/tmp/orquestador",
+			Herramienta:       "claude-rust",
+			ExternalSessionID: "claude-sess-1",
+			Host:              "host-claude",
+		}); err != nil {
+			t.Fatalf("iniciar sesion codex6: %v", err)
+		}
 		registerResult, err := callMCPTool("orquesta.supervision.threads.registrar", map[string]any{
 			"supervisor": "OpenClaw",
 			"proyecto":   "orquestador",
@@ -1227,6 +1244,10 @@ func TestMCPThreadsSupervisorOperanPorLaViaCanonica(t *testing.T) {
 		sessions := reflect.ValueOf(structured["sessions"])
 		if !sessions.IsValid() || sessions.Len() == 0 {
 			t.Fatalf("sessions vacío: %#v", structured)
+		}
+		observed := reflect.ValueOf(structured["observed_agent_sessions"])
+		if !observed.IsValid() || observed.Len() == 0 {
+			t.Fatalf("observed_agent_sessions vacío: %#v", structured)
 		}
 		contents, err := readMCPResource("orquesta://supervision/OpenClaw/threads")
 		if err != nil {

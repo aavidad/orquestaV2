@@ -343,6 +343,23 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 
 func TestAPIOpenClawThreadsOperaPorLaViaCanonica(t *testing.T) {
 	prepararDBTemporalCmd(t)
+	if err := db.RegistrarAgente("Codex6", "programador"); err != nil {
+		t.Fatalf("registrar codex6: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{Slug: "orquestador", Nombre: "Orquestador", RutaAbs: "/tmp/orquestador", Tipo: db.ProyectoRepo, Activo: true})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:            "Codex6",
+		ProyectoID:        &proyectoID,
+		CWD:               "/tmp/orquestador",
+		Herramienta:       "claude-rust",
+		ExternalSessionID: "claude-sess-1",
+		Host:              "host-claude",
+	}); err != nil {
+		t.Fatalf("iniciar sesion codex6: %v", err)
+	}
 	mux := http.NewServeMux()
 	registerAPIRoutes(mux)
 
@@ -371,6 +388,9 @@ func TestAPIOpenClawThreadsOperaPorLaViaCanonica(t *testing.T) {
 	}
 	if !strings.Contains(recGet.Body.String(), "sess-api-1") {
 		t.Fatalf("openclaw threads sin sesion esperada: %s", recGet.Body.String())
+	}
+	if !strings.Contains(recGet.Body.String(), "observed_agent_sessions") || !strings.Contains(recGet.Body.String(), "claude-sess-1") {
+		t.Fatalf("openclaw threads sin sesiones observadas de agentes: %s", recGet.Body.String())
 	}
 }
 
