@@ -5118,3 +5118,37 @@ Observacion abierta:
 
 - al corregir el cupo, afloró otro problema distinto: el drenado fue a `claude1`, lo que indica que el planificador todavía puede salirse del pool Codex oficial si existe una asignación activa heredada fuera de esa flota
 - ese es el siguiente frente, separado de este fix
+
+## 2026-04-01 — la autoasignación ya respeta la flota oficial Codex del autobootstrap
+
+Hallazgo:
+
+- después de liberar `MaxWorkers`, el backlog volvió a moverse, pero una tarea libre cayó en `claude1`
+- eso demostró que faltaba una regla persistente de flota: el planificador seguía usando cualquier agente con asignación activa, aunque no perteneciera al pool oficial `Codex2-5`
+
+Decision:
+
+- para el proyecto gobernado por `server_autobootstrap`, la autoasignación solo puede usar `server_autobootstrap_worker_agents`
+- además, los agentes fuera de esa flota tampoco cuentan como workers efectivos para el cupo `MaxWorkers`
+- la limpieza del drift vivo se hace por Orquesta: cerrar sesión del agente fuera de pool y devolver la tarea a la flota oficial
+
+Codigo:
+
+- [db/planificador.go](/home/alberto/Trabajo/orquesta/db/planificador.go)
+- [db/planificador_autostart_test.go](/home/alberto/Trabajo/orquesta/db/planificador_autostart_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./db -run 'TestPlanificarTareasAutomaticamente(RestringePoolAutobootstrapAWorkersConfigurados|NoCuentaWorkerEnCuotaParaMaxWorkers|RespetaMaxWorkersAutonomia)$' -count=1`
+- `go build -o ./orquesta .`
+- limpieza viva:
+  - `./orquesta sesion fin claude1`
+  - `./orquesta tarea reasignar 410 Codex3`
+  - `./orquesta server start`
+  - `./orquesta server doctor`
+  - `./orquesta status`
+- resultado vivo:
+  - `claude1` desapareció de `Agentes conectados`
+  - `#410` volvió a `Codex3`
+  - la flota visible quedó otra vez en Codex

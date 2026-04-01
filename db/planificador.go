@@ -246,6 +246,9 @@ func planificarAgenteAutomaticamente(ag *Agente) error {
 	if err != nil {
 		return err
 	}
+	if !agentePertenecePoolAutobootstrapProyecto(ag.Nombre, proyecto) {
+		return nil
+	}
 
 	tieneTrabajo, err := agenteTieneTrabajoArrancable(ag.Nombre, proyectoID)
 	if err != nil {
@@ -599,6 +602,10 @@ func agenteReservadoAutonomiaProyecto(agente string, proyectoID int64) (bool, st
 }
 
 func contarWorkersActivosProyecto(proyectoID int64) (int, error) {
+	proyecto, err := GetProyecto(jsonNumber(proyectoID))
+	if err != nil {
+		return 0, err
+	}
 	estado := AsignacionActiva
 	asignaciones, err := ListarAsignaciones(FiltroAsignaciones{
 		ProyectoID: &proyectoID,
@@ -630,6 +637,9 @@ func contarWorkersActivosProyecto(proyectoID int64) (int, error) {
 			continue
 		}
 		if !strings.EqualFold(strings.TrimSpace(infoAgente.EstadoCuota), "activo") {
+			continue
+		}
+		if !agentePertenecePoolAutobootstrapProyecto(asignacion.Agente, proyecto) {
 			continue
 		}
 		total++
@@ -675,6 +685,48 @@ func proyectoAdmiteWorkerAutonomiaParaAgente(proyectoID int64, agente string) (b
 		}
 	}
 	return workers < policy.MaxWorkers, nil
+}
+
+func agentePertenecePoolAutobootstrapProyecto(agente string, proyecto *Proyecto) bool {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || proyecto == nil {
+		return true
+	}
+	projectSlug := strings.TrimSpace(configOrDefault("server_autobootstrap_project_slug", "orquestador"))
+	if projectSlug == "" || !strings.EqualFold(strings.TrimSpace(proyecto.Slug), projectSlug) {
+		return true
+	}
+	permitidos := splitConfigAgentList(configOrDefault("server_autobootstrap_worker_agents", "Codex2,Codex3,Codex4,Codex5"))
+	if len(permitidos) == 0 {
+		return true
+	}
+	for _, nombre := range permitidos {
+		if strings.EqualFold(agente, nombre) {
+			return true
+		}
+	}
+	return false
+}
+
+func splitConfigAgentList(raw string) []string {
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n'
+	})
+	seen := make(map[string]struct{}, len(parts))
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		key := strings.ToLower(part)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, part)
+	}
+	return out
 }
 
 func EncolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo string) error {

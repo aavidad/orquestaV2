@@ -1029,6 +1029,12 @@ func TestPlanificarTareasAutomaticamenteRespetaMaxWorkersAutonomia(t *testing.T)
 func TestPlanificarTareasAutomaticamenteNoCuentaWorkerEnCuotaParaMaxWorkers(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	restringirPlanificadorATestAgentes(t, "CodexBloqueado", "CodexWorker")
+	if err := ConfigSet("server_autobootstrap_project_slug", "orquestador"); err != nil {
+		t.Fatalf("config project slug: %v", err)
+	}
+	if err := ConfigSet("server_autobootstrap_worker_agents", "CodexWorker"); err != nil {
+		t.Fatalf("config worker agents: %v", err)
+	}
 
 	if err := RegistrarAgente("CodexBloqueado", "programador"); err != nil {
 		t.Fatalf("registrar worker bloqueado: %v", err)
@@ -1085,6 +1091,71 @@ func TestPlanificarTareasAutomaticamenteNoCuentaWorkerEnCuotaParaMaxWorkers(t *t
 	}
 	if tareaLibre.Agente == nil || *tareaLibre.Agente != "CodexWorker" || tareaLibre.Estado != TareaAsignada {
 		t.Fatalf("el worker libre deberia tomar la tarea cuando el otro esta en cuota: %+v", tareaLibre)
+	}
+}
+
+func TestPlanificarTareasAutomaticamenteRestringePoolAutobootstrapAWorkersConfigurados(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "claude1", "Codex3")
+
+	if err := ConfigSet("server_autobootstrap_project_slug", "orquestador"); err != nil {
+		t.Fatalf("config project slug: %v", err)
+	}
+	if err := ConfigSet("server_autobootstrap_worker_agents", "Codex3,Codex4"); err != nil {
+		t.Fatalf("config worker agents: %v", err)
+	}
+	if err := RegistrarAgente("claude1", "programador"); err != nil {
+		t.Fatalf("registrar claude1: %v", err)
+	}
+	if err := RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar Codex3: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre IN ('claude1','Codex3')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertProyectoAutonomia(&ProyectoAutonomia{
+		ProyectoID:      proyectoID,
+		Enabled:         true,
+		MaxWorkers:      1,
+		EstadoAutonomia: AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := ActivarAsignacion("claude1", proyectoID, "frente heredado"); err != nil {
+		t.Fatalf("activar asignacion claude1: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Solo la flota Codex debe autoasignarse",
+		Descripcion: "Los agentes fuera del pool no deben drenar backlog",
+		ProyectoID:  &proyectoID,
+		Modulo:      "planocontrol",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+
+	if err := PlanificarTareasAutomaticamente(); err != nil {
+		t.Fatalf("planificar: %v", err)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "Codex3" || tarea.Estado != TareaAsignada {
+		t.Fatalf("la tarea deberia quedarse en la flota configurada Codex, got=%+v", tarea)
 	}
 }
 

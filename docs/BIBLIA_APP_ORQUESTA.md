@@ -697,6 +697,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - evitar mandar dos agentes al mismo `modulo` si existe otra opción libre
   - preferir la afinidad de `modulo` del propio agente dentro del proyecto cuando no genere conflicto real
 - la afinidad de proyecto ya no basta; el orquestador profesional también debe preservar afinidad de frente/módulo para reducir pisadas, conflictos y handoffs innecesarios.
+- en el proyecto autobootstrapeado por servidor, la autoasignación solo puede usar el pool oficial de workers configurado (`server_autobootstrap_worker_agents`). Un agente heredado con sesión o asignación activa fuera de esa flota no puede drenar backlog ni consumir cupo `MaxWorkers`.
 - el agente jefe (`OpenClaw`) no debe entrar a dirigir la flota con contexto parcial. Orquesta debe exponer un `briefing de supervisor` canónico con:
   - flota conectada y disponible
   - agentes fuera del pool por cuota/cooldown
