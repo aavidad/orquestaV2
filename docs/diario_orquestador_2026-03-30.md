@@ -7014,3 +7014,15 @@ Resultado:
   - las regresiones cubren esa promoción explícita en la capa API del operador, sin contaminar la observación base
 - Validación:
   - `go test ./cmd -run 'Test(AlignOpenClawSessionCandidatesWithStatusPromueveActivosCanonicos|AlignSupervisorObservedSessionsWithStatusPromueveActivosCanonicos|APIObservabilidadReadOnly)' -count=1`
+
+## 2026-04-01 — OpenClaw ya ve worktrees desfasadas
+
+- Hallazgo:
+  - `Codex3` y `Codex4` podían seguir trabajando sobre worktrees ancladas en un commit viejo sin que el operador lo viera de un vistazo
+  - eso elevaba el riesgo de revisar o integrar trabajo sobre una base desfasada
+- Corrección:
+  - el operador ya expone `worktree_drift` a partir de `git worktree list --porcelain`
+  - la señal compara el HEAD de cada worktree activa relevante con el HEAD del repo principal del servidor
+  - se limita a visibilidad y arbitraje manual; no refresca ni fusiona worktrees por su cuenta
+- Validación:
+  - `go test ./cmd -run 'Test(ParseGitWorktreeListPorcelain|BuildOpenClawWorktreeDriftFromRefs|APIObservabilidadReadOnly)' -count=1`

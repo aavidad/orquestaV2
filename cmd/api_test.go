@@ -24,6 +24,7 @@ import (
 	"orquesta/internal/a2ui"
 	"orquesta/reviewapp"
 	"orquesta/supervisionapp"
+	"orquesta/coordinacion"
 )
 
 func TestCuentaPresupuestoDesdeAgenteUsaObservedUsageCuandoNoHayCuotaReal(t *testing.T) {
@@ -85,6 +86,49 @@ func TestAlignSupervisorObservedSessionsWithStatusPromueveActivosCanonicos(t *te
 	}
 	if aligned[1].Activo {
 		t.Fatalf("Codex4 no debe promocionarse sin estar en agentesActivos: %#v", aligned)
+	}
+}
+
+func TestParseGitWorktreeListPorcelain(t *testing.T) {
+	raw := strings.Join([]string{
+		"worktree /tmp/orquesta",
+		"HEAD abcdef0123456789",
+		"branch refs/heads/main",
+		"",
+		"worktree /tmp/orquesta/.orquesta-worktrees/orquesta-codex3",
+		"HEAD 1234567890abcdef",
+		"branch refs/heads/orq-orquesta-codex3",
+		"",
+	}, "\n")
+	refs := parseGitWorktreeListPorcelain(raw)
+	if len(refs) != 2 {
+		t.Fatalf("refs inesperadas: %#v", refs)
+	}
+	if refs[0].Path != "/tmp/orquesta" || refs[0].Head != "abcdef0123456789" {
+		t.Fatalf("ref principal inesperada: %#v", refs[0])
+	}
+	if refs[1].Path != "/tmp/orquesta/.orquesta-worktrees/orquesta-codex3" || refs[1].Head != "1234567890abcdef" {
+		t.Fatalf("ref secundaria inesperada: %#v", refs[1])
+	}
+}
+
+func TestBuildOpenClawWorktreeDriftFromRefs(t *testing.T) {
+	worktrees := []*coordinacion.Worktree{
+		{Agent: "Codex3", Path: "/tmp/orquesta/.orquesta-worktrees/orquesta-codex3", Branch: "orq-orquesta-codex3"},
+		{Agent: "Codex4", Path: "/tmp/orquesta/.orquesta-worktrees/orquesta-codex4", Branch: "orq-orquesta-codex4"},
+	}
+	drift := buildOpenClawWorktreeDriftFromRefs(worktrees, "aaaaaaaa11111111", map[string]string{
+		"/tmp/orquesta/.orquesta-worktrees/orquesta-codex3": "bbbbbbbb22222222",
+		"/tmp/orquesta/.orquesta-worktrees/orquesta-codex4": "aaaaaaaa11111111",
+	}, map[string]struct{}{
+		"codex3": {},
+		"codex4": {},
+	})
+	if len(drift) != 1 {
+		t.Fatalf("drift inesperado: %#v", drift)
+	}
+	if drift[0].Agente != "Codex3" || drift[0].CurrentHead != "bbbbbbbb" || drift[0].ExpectedHead != "aaaaaaaa" {
+		t.Fatalf("item drift inesperado: %#v", drift[0])
 	}
 }
 

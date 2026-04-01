@@ -1305,6 +1305,11 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusInternalServerError, err)
 			return
 		}
+		worktreeDrift, err := buildOpenClawWorktreeDrift(status)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
 		statusResumen, err := buildOpenClawOperatorStatus(status)
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
@@ -1339,6 +1344,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 			"eventos_normalizados": eventos,
 			"thread_sessions":      threads,
 			"session_candidates":   sessionCandidates,
+			"worktree_drift":       worktreeDrift,
 			"pipeline_state":       pipeline,
 		})
 	case http.MethodPost:
