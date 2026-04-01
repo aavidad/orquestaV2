@@ -7,8 +7,6 @@ import (
 )
 
 func TestShouldDelegateToLocalServer(t *testing.T) {
-	t.Parallel()
-
 	cases := []struct {
 		name string
 		args []string
@@ -34,7 +32,6 @@ func TestShouldDelegateToLocalServer(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 			if got := shouldDelegateToLocalServer(tc.args); got != tc.want {
 				t.Fatalf("shouldDelegateToLocalServer(%v)=%v, want %v", tc.args, got, tc.want)
 			}
@@ -43,8 +40,6 @@ func TestShouldDelegateToLocalServer(t *testing.T) {
 }
 
 func TestShouldDelegateToLocalServerExcluyeComandosDeRecuperacion(t *testing.T) {
-	t.Parallel()
-
 	if shouldDelegateToLocalServer([]string{"status"}) {
 		t.Fatalf("no deberia delegar sin opt-in explicito de localrpc")
 	}
@@ -121,8 +116,6 @@ func TestBuildLocalServerProcessEnvLimpiaRecuperacionLocal(t *testing.T) {
 }
 
 func TestLocalRPCEnabled(t *testing.T) {
-	t.Parallel()
-
 	prev := os.Getenv("ORQUESTA_USE_LOCALRPC")
 	t.Cleanup(func() {
 		if prev == "" {

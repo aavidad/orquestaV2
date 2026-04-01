@@ -991,6 +991,7 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 		}
 	}
 	proyectarEstadoCuotaVisibleDesdePresupuesto(a)
+	sincronizarPresupuestoEfectivoVisible(a)
 }
 
 func proyectarEstadoCuotaVisibleDesdePresupuesto(a *Agente) {
@@ -1033,6 +1034,54 @@ func proyectarEstadoCuotaVisibleDesdePresupuesto(a *Agente) {
 		}
 		if strings.TrimSpace(a.MotivoPausa) == "" {
 			a.MotivoPausa = "Presupuesto agotado observado"
+		}
+	}
+}
+
+func sincronizarPresupuestoEfectivoVisible(a *Agente) {
+	if a == nil {
+		return
+	}
+	now := time.Now().UTC()
+	zero := 0
+	if a.PresupuestoSemanalPct != nil && *a.PresupuestoSemanalPct <= 0 {
+		a.CuotaRestantePct = &zero
+		a.PresupuestoVentana = "weekly"
+		if a.PresupuestoSemanalResetAt != nil {
+			a.PresupuestoResetAt = a.PresupuestoSemanalResetAt
+		}
+		if a.ReanimarAt == nil || a.ReanimarAt.IsZero() || !a.ReanimarAt.After(now) {
+			if a.PresupuestoSemanalResetAt != nil && a.PresupuestoSemanalResetAt.After(now) {
+				a.ReanimarAt = a.PresupuestoSemanalResetAt
+			}
+		}
+		return
+	}
+	if a.PresupuestoSesionPct != nil && *a.PresupuestoSesionPct <= 0 {
+		a.CuotaRestantePct = &zero
+		if strings.TrimSpace(a.PresupuestoVentana) == "" || !presupuestoEsVentanaSemanal(a.PresupuestoVentana) {
+			if window := strings.TrimSpace(a.PresupuestoVentana); window == "" || !presupuestoEsVentanaCorta(window) {
+				a.PresupuestoVentana = "5h"
+			}
+		}
+		if a.PresupuestoSesionResetAt != nil {
+			a.PresupuestoResetAt = a.PresupuestoSesionResetAt
+		}
+		if a.ReanimarAt == nil || a.ReanimarAt.IsZero() || !a.ReanimarAt.After(now) {
+			if a.PresupuestoSesionResetAt != nil && a.PresupuestoSesionResetAt.After(now) {
+				a.ReanimarAt = a.PresupuestoSesionResetAt
+			}
+		}
+		return
+	}
+	if strings.EqualFold(strings.TrimSpace(a.PresupuestoEstado), "agotado") || (a.RemainingCredits != nil && *a.RemainingCredits <= 0) {
+		a.CuotaRestantePct = &zero
+		if presupuestoEsVentanaSemanal(strings.TrimSpace(a.PresupuestoVentana)) {
+			if a.PresupuestoSemanalResetAt != nil {
+				a.PresupuestoResetAt = a.PresupuestoSemanalResetAt
+			}
+		} else if a.PresupuestoSesionResetAt != nil {
+			a.PresupuestoResetAt = a.PresupuestoSesionResetAt
 		}
 	}
 }

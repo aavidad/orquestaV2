@@ -5303,3 +5303,39 @@ Resultado:
 - `/api/status` deja fuera a agentes con handle fallido reciente o runtime principal stale
 - `CodexCuenta` vuelve a salir visible y usable cuando está en `handoff_preventivo`
 - los tests del planificador ya fijan el pool oficial de `orquestador` y no reabren una semántica incompatible con la flota real
+
+## 2026-04-01 — la cuota efectiva visible deja de contradecir el cooldown observado
+
+Hallazgo:
+
+- el núcleo ya estaba decidiendo bien `agotado/enfriamiento`, pero la proyección visible seguía arrastrando un `efectivo` derivado alto en algunos agentes retenidos
+- eso producía líneas contradictorias del tipo `cooldown ... · efectivo 75% · semanal 0%`
+- además faltaba fijar el caso de cuentas no-pro: si no existe ventana temporal real, la única verdad operativa es `weekly`
+
+Decision:
+
+- cuando haya evidencia observada suficiente de bloqueo (`weekly=0`, `session/5h=0`, `RemainingCredits<=0` o `PresupuestoEstado=agotado`), el `efectivo` visible también cae a `0` en la ventana correcta
+- si no existe ventana temporal observada, Orquesta no la inventa: usa solo `weekly` para `CuotaRestantePct`, `PresupuestoVentana` y `PresupuestoResetAt`
+- el ajuste se hace en el modelo de agente (`db/sesiones.go`), no en la capa de render, para que CLI, API y MCP compartan la misma verdad
+
+Codigo:
+
+- [db/sesiones.go](/home/alberto/Trabajo/orquesta/db/sesiones.go)
+- [db/sesiones_test.go](/home/alberto/Trabajo/orquesta/db/sesiones_test.go)
+- [db/presupuestos_sesion_test.go](/home/alberto/Trabajo/orquesta/db/presupuestos_sesion_test.go)
+- [cmd/root_gating_test.go](/home/alberto/Trabajo/orquesta/cmd/root_gating_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./db -run 'Test(GetAgenteNoMuestraActivoSiLaSemanalObservadaStaleYaEstaAgotada|GetAgenteMarcaAgotadoSiLaSemanalEsCeroAunqueLaVentanaCortaSigaViva|GetAgenteMarcaEnfriamientoSiSoloSeAgotaLaVentanaCorta|GetAgenteUsaSoloLaSemanalCuandoNoExisteVentanaTemporal|GetAgenteNoDejaQueSnapshotObservadoStaleMandeSobreLaCuotaEfectiva)$' -count=1`
+- `go test ./cmd -run 'Test(ShouldDelegateToLocalServer|ShouldDelegateToLocalServerExcluyeComandosDeRecuperacion|LocalRPCEnabled)$' -count=1`
+- `go test ./... -count=1`
+- `go build -o ./orquesta .`
+- `./orquesta server stop && ./orquesta server start && ./orquesta status`
+
+Resultado:
+
+- `Codex2`, `Codex5` y `Codex6` ya salen con `efectivo 0%` y reset visible coherente con el bloqueo observado
+- el caso semanal-only queda cubierto por test y ya no inventa una ventana temporal
+- la suite completa vuelve a verde tras hacer deterministas los tests de gating que usaban env global en paralelo

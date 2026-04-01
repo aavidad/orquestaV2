@@ -603,4 +603,10 @@ func TestGetAgenteNoMuestraActivoSiLaSemanalObservadaStaleYaEstaAgotada(t *testi
 	if agente.EstadoCuota != "agotado" {
 		t.Fatalf("estado_cuota inesperado: %+v", agente)
 	}
+	if agente.CuotaRestantePct == nil || *agente.CuotaRestantePct != 0 {
+		t.Fatalf("la cuota visible deberia agotarse por semanal observada stale: %+v", agente)
+	}
+	if agente.PresupuestoVentana != "weekly" {
+		t.Fatalf("la ventana efectiva deberia seguir siendo weekly: %+v", agente)
+	}
 }

@@ -566,6 +566,50 @@ func TestGetAgenteMarcaEnfriamientoSiSoloSeAgotaLaVentanaCorta(t *testing.T) {
 	}
 }
 
+func TestGetAgenteUsaSoloLaSemanalCuandoNoExisteVentanaTemporal(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesionID, err := IniciarSesion("codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	if err := ConfigSet("pool_budget_snapshot_observed_max_age_seconds", "3600"); err != nil {
+		t.Fatalf("config observed snapshot max age: %v", err)
+	}
+	now := time.Now().UTC()
+	resetWeekly := now.Add(5 * 24 * time.Hour)
+	raw := `{"rate_limits":{"secondary":{"used_percent":27,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetWeekly.Unix(), 10) + `}}}`
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "weekly",
+		BudgetSource:    "codex_token_count_observed",
+		RawSnapshotJSON: raw,
+		CheckedAt:       now,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion: %v", err)
+	}
+
+	agente, err := GetAgente("codex1")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.PresupuestoSesionPct != nil {
+		t.Fatalf("no deberia inventar ventana temporal: %+v", agente)
+	}
+	if agente.PresupuestoSemanalPct == nil || *agente.PresupuestoSemanalPct != 73 {
+		t.Fatalf("semanal pct inesperado: %+v", agente)
+	}
+	if agente.CuotaRestantePct == nil || *agente.CuotaRestantePct != 73 {
+		t.Fatalf("la cuota efectiva deberia salir de la semanal: %+v", agente)
+	}
+	if agente.PresupuestoVentana != "weekly" {
+		t.Fatalf("la ventana efectiva deberia ser weekly: %+v", agente)
+	}
+}
+
 func TestGetAgenteRecuperaReanimarAtVisibleDesdeResetSemanalSiYaEstaEnfriado(t *testing.T) {
 	abrirDBTemporalMemoria(t)
 
