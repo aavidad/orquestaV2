@@ -6271,3 +6271,20 @@ Resultado:
     - `next_action = seguir_guidance_durable`
     - `target = agente:Codex3`
     - `mailbox_pending = Codex3 -> autonomia`
+
+## 2026-04-01 — OpenClaw ya ve la antigüedad de la guidance durable
+
+- El backlog durable ya era visible, pero faltaba una señal importante:
+  - cuánto tiempo llevaba pendiente
+- Se añadió antigüedad al agregado de mailbox:
+  - `oldest_created_at`
+  - `oldest_age_min`
+- También se usa para priorización:
+  - guidance fresca => prioridad baja
+  - guidance envejecida => prioridad media/alta
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(APIObservabilidadReadOnly|WebOpenClawMuestraOperatorReviewYEntregas|MCPRevisionSupervisorExponeGuidanceDurablePendiente)' -count=1`
+- Validación viva:
+  - `Codex3` muestra `oldest_age_min = 153`
+  - `next_action` ya sale como `seguir_guidance_durable` con prioridad `alta`
+  - `/openclaw` enseña la antigüedad en minutos y la razón enriquecida en la acción siguiente

@@ -1293,10 +1293,12 @@ type apiOpenClawStatusLite struct {
 }
 
 type apiOpenClawMailboxLite struct {
-	Agente   string   `json:"agente"`
-	Count    int      `json:"count"`
-	Kinds    []string `json:"kinds,omitempty"`
-	KindsCSV string   `json:"kinds_csv,omitempty"`
+	Agente          string     `json:"agente"`
+	Count           int        `json:"count"`
+	Kinds           []string   `json:"kinds,omitempty"`
+	KindsCSV        string     `json:"kinds_csv,omitempty"`
+	OldestCreatedAt *time.Time `json:"oldest_created_at,omitempty"`
+	OldestAgeMin    int        `json:"oldest_age_min,omitempty"`
 }
 
 func buildOpenClawOperatorStatus(status *estadoResumen) (apiOpenClawStatusLite, error) {
@@ -1337,8 +1339,9 @@ func buildOpenClawPendingMailbox(agentes []*db.Agente) ([]apiOpenClawMailboxLite
 		}
 	}
 	type agg struct {
-		count int
-		kinds map[string]bool
+		count  int
+		kinds  map[string]bool
+		oldest *time.Time
 	}
 	byAgent := make(map[string]*agg)
 	for _, item := range items {
@@ -1355,6 +1358,10 @@ func buildOpenClawPendingMailbox(agentes []*db.Agente) ([]apiOpenClawMailboxLite
 			byAgent[agente] = entry
 		}
 		entry.count++
+		if entry.oldest == nil || item.CreatedAt.Before(*entry.oldest) {
+			ts := item.CreatedAt
+			entry.oldest = &ts
+		}
 		if kind := strings.TrimSpace(item.Kind); kind != "" {
 			entry.kinds[kind] = true
 		}
@@ -1366,11 +1373,20 @@ func buildOpenClawPendingMailbox(agentes []*db.Agente) ([]apiOpenClawMailboxLite
 			kinds = append(kinds, kind)
 		}
 		sort.Strings(kinds)
+		oldestAge := 0
+		if entry.oldest != nil && !entry.oldest.IsZero() {
+			oldestAge = int(time.Since(*entry.oldest).Minutes())
+			if oldestAge < 0 {
+				oldestAge = 0
+			}
+		}
 		out = append(out, apiOpenClawMailboxLite{
-			Agente:   agente,
-			Count:    entry.count,
-			Kinds:    kinds,
-			KindsCSV: strings.Join(kinds, ", "),
+			Agente:          agente,
+			Count:           entry.count,
+			Kinds:           kinds,
+			KindsCSV:        strings.Join(kinds, ", "),
+			OldestCreatedAt: entry.oldest,
+			OldestAgeMin:    oldestAge,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {

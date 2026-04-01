@@ -969,6 +969,9 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - Si existe guidance durable pendiente relevante, la cola del supervisor no puede quedar vacía:
   - debe aparecer una acción explícita de seguimiento (`seguir_guidance_durable`)
   - eso evita una falsa sensación de “sin trabajo operativo” cuando aún hay continuidad pendiente en mailbox
+- La guidance durable pendiente debe llevar antigüedad visible:
+  - OpenClaw necesita distinguir deuda fresca de deuda envejecida
+  - la prioridad de `seguir_guidance_durable` debe subir cuando el backlog envejece
 - La carga activa por agente debe ser visible para el supervisor:
   - Orquesta ya usa esa carga para sugerir `assignee`
   - OpenClaw debe verla explícitamente en API y web para que la recomendación sea explicable y auditable

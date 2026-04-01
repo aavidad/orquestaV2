@@ -3807,12 +3807,23 @@ func buildSupervisorOperationalActions(status apiStatusResponse, mailboxPendient
 		if strings.TrimSpace(item.Agente) == "" || item.Count <= 0 {
 			continue
 		}
+		priority := "baja"
+		if item.OldestAgeMin >= 30 {
+			priority = "media"
+		}
+		if item.OldestAgeMin >= 120 {
+			priority = "alta"
+		}
+		reason := fmt.Sprintf("El worker mantiene guidance durable pendiente (%d mensaje(s): %s); conviene observar continuidad y drenado.", item.Count, strings.TrimSpace(item.KindsCSV))
+		if item.OldestAgeMin > 0 {
+			reason = fmt.Sprintf("El worker mantiene guidance durable pendiente desde hace %d min (%d mensaje(s): %s); conviene observar continuidad y drenado.", item.OldestAgeMin, item.Count, strings.TrimSpace(item.KindsCSV))
+		}
 		actions = append(actions, supervisorRecommendedAction{
 			Kind:     "mailbox_pending",
 			Target:   "agente:" + strings.TrimSpace(item.Agente),
 			Action:   "seguir_guidance_durable",
-			Reason:   fmt.Sprintf("El worker mantiene guidance durable pendiente (%d mensaje(s): %s); conviene observar continuidad y drenado.", item.Count, strings.TrimSpace(item.KindsCSV)),
-			Priority: "baja",
+			Reason:   reason,
+			Priority: priority,
 			Assignee: strings.TrimSpace(item.Agente),
 		})
 	}

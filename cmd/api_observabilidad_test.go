@@ -273,6 +273,13 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	if !ok || len(mailboxPendiente) == 0 {
 		t.Fatalf("openclaw operator sin mailboxPendiente: %s", recOperator.Body.String())
 	}
+	firstMailbox, ok := mailboxPendiente[0].(map[string]any)
+	if !ok {
+		t.Fatalf("openclaw operator sin mailboxPendiente estructurado: %s", recOperator.Body.String())
+	}
+	if firstMailbox["oldest_created_at"] == nil {
+		t.Fatalf("openclaw operator sin oldest_created_at en mailboxPendiente: %s", recOperator.Body.String())
+	}
 }
 
 func TestAPIOpenClawThreadsOperaPorLaViaCanonica(t *testing.T) {

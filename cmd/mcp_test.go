@@ -1543,7 +1543,7 @@ func TestMCPRevisionSupervisorExponeGuidanceDurablePendiente(t *testing.T) {
 		queue, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
 		found := false
 		for _, item := range queue {
-			if item.Action == "seguir_guidance_durable" && item.Target == "agente:Codex3" && item.Assignee == "Codex3" {
+			if item.Action == "seguir_guidance_durable" && item.Target == "agente:Codex3" && item.Assignee == "Codex3" && item.Priority != "" {
 				found = true
 				break
 			}
