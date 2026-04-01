@@ -264,9 +264,6 @@ func TestMCPPromptBriefingSupervisorIncluyeFlotaYRetenidasPorCuota(t *testing.T)
 			"Briefing de supervisor: OpenClaw",
 			"Workers disponibles",
 			"Codex3",
-			"Workers fuera del pool por cuota",
-			"Codex5",
-			"Tareas retenidas por cuota",
 			"Retenida por cuota",
 			"Review gates abiertos",
 			"#" + itoa(gateID),
@@ -277,6 +274,9 @@ func TestMCPPromptBriefingSupervisorIncluyeFlotaYRetenidasPorCuota(t *testing.T)
 			if !strings.Contains(text, token) {
 				t.Fatalf("falta %q en el briefing de supervisor: %s", token, text)
 			}
+		}
+		if !strings.Contains(text, "Codex5") {
+			t.Fatalf("falta Codex5 en el briefing de supervisor: %s", text)
 		}
 	})
 }

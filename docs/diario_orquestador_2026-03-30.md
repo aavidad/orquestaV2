@@ -5431,3 +5431,39 @@ Resultado:
 - `Codex1` ya no enseña `semanal 95%` junto a `agotado`
 - la salida visible conserva `efectivo 0%`, `ventana weekly`, `reset` y `agotado`
 - el nucleo deja de mezclar una señal dura de proveedor con porcentajes derivados no fiables
+
+## 2026-04-01 — mailbox durable ya no queda huérfana tras timeout viejo
+
+Hallazgo:
+
+- `Codex4` arrastraba un `runtime_mailbox` pendiente (`nudge`) con `runtime_orders=0`
+- la causa era doble:
+  - la deduplicacion de `mailbox_only` duraba para siempre sobre la misma firma
+  - el `nudge` heredado seguia entrando con guidance larga de Orquesta y provocaba nuevos `session_resume timeout`
+
+Decision:
+
+- la deduplicacion de `mailbox_only` pasa a tener TTL corta
+- la ruta `mailbox -> send_instruction` compacta guidance heredada antes de materializarla
+
+Codigo:
+
+- [cmd/controlplane_support.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support.go)
+- [cmd/controlplane_support_test.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support_test.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [db/controlplane_entities_test.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./... -count=1`
+- `go build -o ./orquesta .`
+- `./orquesta server doctor`
+- `./orquesta runtime mailbox --estado pendiente`
+- `./orquesta runtime ordenes --estado pendiente`
+
+Resultado:
+
+- el caso vivo de `Codex4` drena a limpio: `runtime_mailbox=0` y `runtime_orders=0`
+- el daemon queda sano con `Health RPC: OK`
+- la suite completa vuelve a verde

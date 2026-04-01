@@ -1633,6 +1633,12 @@ func encolarSendInstructionDesdeRuntimeMailbox(msg *db.RuntimeMailboxMessage, ha
 	if msg == nil || handle == nil {
 		return 0, nil
 	}
+	texto = compactarInstruccionMailboxEntrega(texto)
+	texto = controlruntime.NormalizarInstruccionProceso(controlruntime.ObjetivoProceso{
+		HandleKind:   handle.HandleKind,
+		HandleRef:    handle.HandleRef,
+		MetadataJSON: handle.MetadataJSON,
+	}, texto)
 	payload := map[string]any{
 		"to_agente":                  strings.TrimSpace(msg.ToAgente),
 		"from_agente":                strings.TrimSpace(msg.FromAgente),
@@ -1659,6 +1665,27 @@ func encolarSendInstructionDesdeRuntimeMailbox(msg *db.RuntimeMailboxMessage, ha
 	}
 	order.HandleID = &handle.ID
 	return db.EncolarRuntimeOrder(order)
+}
+
+func compactarInstruccionMailboxEntrega(texto string) string {
+	lower := strings.ToLower(strings.TrimSpace(texto))
+	switch {
+	case strings.Contains(lower, "se te ha asignado automaticamente la tarea"),
+		strings.Contains(lower, "se te ha asignado la tarea"):
+		return "toma tarea asignada y sigue"
+	case strings.Contains(lower, "has sido arrancado como programador"),
+		strings.Contains(lower, "has sido arrancado como agente"),
+		strings.Contains(lower, "has sido arrancado como"):
+		return "continua trabajo actual"
+	case strings.Contains(lower, "supervisor autonomo"),
+		strings.Contains(lower, "orquestador autonomo"),
+		strings.Contains(lower, "arrancado como orquestador"),
+		strings.Contains(lower, "supervisar_proyecto"),
+		strings.Contains(lower, "supervision_transcript_signal"):
+		return "supervisa proyecto actual y sigue"
+	default:
+		return strings.TrimSpace(texto)
+	}
 }
 
 func existeIntentoSendInstructionMailboxParaHandle(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, externalSessionID string) (bool, error) {
@@ -1692,6 +1719,9 @@ func existeIntentoSendInstructionMailboxParaHandle(msg *db.RuntimeMailboxMessage
 			if !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) {
 				continue
 			}
+			if runtimeOrderMailboxOnlyExpired(order) {
+				continue
+			}
 			orderSignature := runtimeOrderDeliveryAttemptSignature(order.PayloadJSON)
 			if currentSignature != "" {
 				if orderSignature == "" {
@@ -1710,6 +1740,31 @@ func existeIntentoSendInstructionMailboxParaHandle(msg *db.RuntimeMailboxMessage
 		}
 	}
 	return false, nil
+}
+
+func runtimeOrderMailboxOnlyExpired(order *db.RuntimeOrder) bool {
+	if order == nil {
+		return false
+	}
+	reference := order.UpdatedAt
+	if order.FinishedAt != nil && !order.FinishedAt.IsZero() {
+		reference = order.FinishedAt.UTC()
+	}
+	if reference.IsZero() {
+		reference = order.CreatedAt
+	}
+	if reference.IsZero() {
+		return false
+	}
+	return time.Since(reference.UTC()) > runtimeMailboxOnlyDedupeTTL()
+}
+
+func runtimeMailboxOnlyDedupeTTL() time.Duration {
+	seconds := configIntOrDefault("runtime_send_instruction_retry_seconds", 15)
+	if seconds <= 0 {
+		seconds = 15
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func runtimeOrderMailboxIDFromJSON(raw string) int64 {

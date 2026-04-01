@@ -4558,8 +4558,8 @@ func TestRuntimeOrderSendInstructionSessionResumePausaPorCuotaProveedor(t *testi
 	if err != nil {
 		t.Fatalf("get agente enriquecido: %v", err)
 	}
-	if agente.PresupuestoSesionPct == nil || *agente.PresupuestoSesionPct != 0 {
-		t.Fatalf("porcentaje de sesion inesperado: %+v", agente)
+	if agente.PresupuestoSesionPct != nil {
+		t.Fatalf("provider_backoff agotado no deberia conservar porcentaje de sesion derivado: %+v", agente)
 	}
 	if agente.PresupuestoVentana != "provider" {
 		t.Fatalf("ventana efectiva inesperada: %+v", agente)

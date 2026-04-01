@@ -3150,6 +3150,172 @@ func TestProcesarRuntimeMailboxSessionResumeBatchPermiteReintentoDeMailboxOnlyLe
 	}
 }
 
+func TestProcesarRuntimeMailboxSessionResumeBatchRematerializaMailboxOnlyCaducado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	old := time.Now().UTC().Add(-2 * runtimeMailboxOnlyDedupeTTL())
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-expirada","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"instruccion durable caducada"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	payload := fmt.Sprintf(`{"to_agente":"Codex1","from_agente":"server","texto":"instruccion durable caducada","mailbox_id":%d,"mailbox_kind":"instruction","external_session_id":"sess-expirada","delivery_attempt_signature":"session_resume|handle:%d|session:sess-expirada"}`, msgID, handle.ID)
+	resultado := fmt.Sprintf(`{"ok":true,"mailbox_id":%d,"deferred":true,"deferred_reason":"runtime no disponible para entrega inmediata","mailbox_only":true}`, msgID)
+	orderID, err := int64(0), error(nil)
+	if orderID, err = db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:        "Codex1",
+		ProyectoID:    &proyectoID,
+		RuntimeID:     handle.RuntimeID,
+		HandleID:      &handle.ID,
+		Tipo:          "send_instruction",
+		PayloadJSON:   payload,
+		ResultadoJSON: resultado,
+		Estado:        "completada",
+		FinishedAt:    &old,
+		UpdatedAt:     old,
+	}); err != nil {
+		t.Fatalf("encolar send_instruction previa: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_orders SET finished_at=?, updated_at=? WHERE id=?`,
+		old,
+		old,
+		orderID,
+	); err != nil {
+		t.Fatalf("envejecer send_instruction previa: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia rematerializar send_instruction mailbox_only caducada, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var sendCount int
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			sendCount++
+		}
+	}
+	if sendCount != 2 {
+		t.Fatalf("deberia crear una nueva send_instruction tras caducar el intento previo: %d", sendCount)
+	}
+}
+
+func TestEncolarSendInstructionDesdeRuntimeMailboxCompactaNudgeCodex(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex4", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex4",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"process_pty_cli","rendered_command":"'/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil' 'Codex4'","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-codex4","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=?, handle_ref=? WHERE id=?`, capsJSON, metaJSON, strconv.Itoa(os.Getpid()), handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	handle, err = db.GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("refrescar handle: %+v err=%v", handle, err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex4",
+		ProyectoID:  &proyectoID,
+		Kind:        "nudge",
+		PayloadJSON: `{"texto":"Se te ha asignado automaticamente la tarea #411. Entra en Orquesta, revisa el contexto vivo y continua hasta cerrarla."}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	orderID, err := encolarSendInstructionDesdeRuntimeMailbox(&db.RuntimeMailboxMessage{
+		ID:          msgID,
+		FromAgente:  "server",
+		ToAgente:    "Codex4",
+		ProyectoID:  &proyectoID,
+		Kind:        "nudge",
+		PayloadJSON: `{"texto":"Se te ha asignado automaticamente la tarea #411. Entra en Orquesta, revisa el contexto vivo y continua hasta cerrarla."}`,
+	}, handle, "Se te ha asignado automaticamente la tarea #411. Entra en Orquesta, revisa el contexto vivo y continua hasta cerrarla.", "sess-codex4")
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	order, err := db.GetRuntimeOrder(orderID)
+	if err != nil || order == nil {
+		t.Fatalf("get order: %+v err=%v", order, err)
+	}
+	if !strings.Contains(order.PayloadJSON, `"texto":"toma tarea asignada y sigue"`) {
+		t.Fatalf("payload no compactado para Codex: %s", order.PayloadJSON)
+	}
+}
+
 func TestProcesarRuntimeMailboxSessionResumeBatchCoalesceNudgeAunqueHayaOrdenAbierta(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

@@ -764,3 +764,10 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - si el ultimo presupuesto visible viene de `provider_backoff` y marca `agotado`, Orquesta no puede seguir mostrando porcentajes derivados de consumo local (`diario`, `semanal` o `sesion`) como si fueran verdad operativa.
 - en ese caso manda el bloqueo observado del proveedor: `efectivo 0%`, `estado agotado` y `reset/reanimacion` visibles.
 - los porcentajes derivados se ocultan para no enseñar contradicciones del tipo `semanal 95%` junto a `agotado`.
+
+## Mailbox durable y reintentos
+
+- una `send_instruction` completada como `mailbox_only` no puede deduplicar para siempre el mismo `mailbox_id`; eso deja deuda durable huérfana.
+- la deduplicación de `mailbox_only` es válida solo durante una TTL corta de reintento, suficiente para cortar bucles pero no para bloquear reentregas legítimas.
+- los `nudge` heredados o demasiado largos deben compactarse antes de materializar `send_instruction`; no se inyectan textos verbosos de Orquesta a Codex cuando existe una forma corta y estable.
+- el estado sano del núcleo exige que `runtime_mailbox` y `runtime_orders` puedan drenar a vacío tras reintentos; no se aceptan pendientes perpetuos por una dedupe vieja o por guidance mal formada.
