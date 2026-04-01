@@ -712,6 +712,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - y debe cubrir también la observabilidad y el pulso operativo mínimo de la flota: listar `runtime_orders`, listar `runtime_mailbox` y procesar `agente tick` por la misma vía canónica del servidor.
 - y debe cerrar el ciclo de `runtime_mailbox` completo desde MCP: enviar, marcar entregado y marcar consumido, siempre por servicio oficial y sin wrappers de CLI.
 - y debe permitir al supervisor gobernar la flota desde MCP sin API paralela: listar agentes y pausarlos temporalmente por el mismo servicio canónico.
+- y debe cubrir el gobierno de propuestas, no solo su lectura: crear propuestas y cerrarlas/reabrirlas/reparar votos desde el mismo MCP oficial.
 - para `codex_token_count_observed`, si falta la clave de configuración específica, el TTL por defecto observado sigue siendo `3600s`; no puede caer silenciosamente al TTL genérico de `300s`, porque eso oculta agotamientos reales de la ventana `5h`.
 - un presupuesto fresco y crítico observado debe proyectarse también sobre `estado_cuota` visible del agente (`enfriamiento` o `agotado`) aunque la fila persistida aún no haya sido actualizada por un batch posterior.
 - la identidad de cuenta del agente (`usuario` / `correo`) debe salir solo de artefactos ya persistidos del runtime o del presupuesto (`raw_snapshot_json`, `metadata_json`). No se abre una segunda fuente de verdad ni se inventan credenciales.

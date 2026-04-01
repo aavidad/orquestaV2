@@ -1047,6 +1047,41 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.propuestas.crear",
+			Title:       "Crear propuesta",
+			Description: "Crea una propuesta por la vía canónica de Orquesta",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"codigo":       map[string]any{"type": "string"},
+					"titulo":       map[string]any{"type": "string"},
+					"descripcion":  map[string]any{"type": "string"},
+					"tipo":         map[string]any{"type": "string"},
+					"proyecto":     map[string]any{"type": "string"},
+					"propuesto_por": map[string]any{"type": "string"},
+					"distribuidor": map[string]any{"type": "string"},
+				},
+				"required":             []string{"codigo", "titulo"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.propuestas.accion",
+			Title:       "Acción sobre propuesta",
+			Description: "Ejecuta una acción canónica sobre una propuesta existente",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"codigo":       map[string]any{"type": "string"},
+					"accion":       map[string]any{"type": "string", "enum": []string{"cerrar", "reabrir", "reparar_votos"}},
+					"estado_cierre": map[string]any{"type": "string"},
+					"agente":       map[string]any{"type": "string"},
+				},
+				"required":             []string{"codigo", "accion"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.proyectos.listar",
 			Title:       "Listar proyectos",
 			Description: "Lista proyectos registrados en Orquesta",
@@ -1533,6 +1568,59 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return nil, err
 		}
 		return toolResult(prettyJSON(propuestas), propuestas, false), nil
+
+	case "orquesta.propuestas.crear":
+		id, propuesta, err := propuestasService.Create(propuestasapp.CreateProposalInput{
+			Codigo:       optionalStringArg(args, "codigo"),
+			Titulo:       optionalStringArg(args, "titulo"),
+			Descripcion:  optionalStringArg(args, "descripcion"),
+			Tipo:         optionalStringArg(args, "tipo"),
+			Proyecto:     optionalStringArg(args, "proyecto"),
+			PropuestoPor: optionalStringArg(args, "propuesto_por"),
+			Distribuidor: optionalStringArg(args, "distribuidor"),
+		})
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		result := map[string]any{
+			"id":        id,
+			"propuesta": propuesta,
+		}
+		return toolResult(prettyJSON(result), result, false), nil
+
+	case "orquesta.propuestas.accion":
+		codigo, err := requiredStringArg(args, "codigo")
+		if err != nil {
+			return nil, err
+		}
+		accion, err := requiredStringArg(args, "accion")
+		if err != nil {
+			return nil, err
+		}
+		agente := valorConFallback(optionalStringArg(args, "agente"), "OpenClaw")
+		switch accion {
+		case "cerrar":
+			estadoCierre := valorConFallback(optionalStringArg(args, "estado_cierre"), string(db.PropuestaConsenso))
+			if err := propuestasService.Close(codigo, estadoCierre, agente); err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+		case "reabrir":
+			if _, err := propuestasService.Reopen(codigo, agente); err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+		case "reparar_votos":
+			if _, err := propuestasService.RepairPendingVotes(codigo, agente); err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+		default:
+			return nil, fmt.Errorf("acción desconocida: %s", accion)
+		}
+		detail, err := propuestasService.GetDetail(codigo)
+		if err != nil {
+			return nil, err
+		}
+		detail.Proposal.Votos = detail.Votes
+		return toolResult(prettyJSON(detail.Proposal), detail.Proposal, false), nil
 
 	case "orquesta.proyectos.listar":
 		proyectos, err := listarProyectosFiltrados(optionalStringArg(args, "tipo"), boolPtrArg(args, "activo"))

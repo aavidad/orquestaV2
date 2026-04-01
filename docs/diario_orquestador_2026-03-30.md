@@ -4862,3 +4862,28 @@ Validacion:
 
 - `go test ./cmd -run 'Test(MCPToolsRuntimeMailboxGestionanCicloCanonico|MCPToolsAgentesListarYPausarOperanPorLaViaCanonica)' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — El MCP ya gobierna propuestas
+
+Hallazgo:
+
+- al supervisor todavía le faltaba una pieza importante para ser autosuficiente: podía leer y votar propuestas, pero no crearlas ni cerrarlas/reabrirlas desde el MCP oficial
+
+Decision:
+
+- añadir tools MCP para:
+  - crear propuestas
+  - cerrar propuestas
+  - reabrir propuestas
+  - reparar votos pendientes
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(MCPToolsAgentesListarYPausarOperanPorLaViaCanonica|MCPToolsPropuestasCrearYAccionarOperanPorLaViaCanonica)' -count=1`
+- `go build -o ./orquesta .`

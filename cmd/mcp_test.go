@@ -858,6 +858,45 @@ func TestMCPToolsAgentesListarYPausarOperanPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestMCPToolsPropuestasCrearYAccionarOperanPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+
+		createResult, err := callMCPTool("orquesta.propuestas.crear", map[string]any{
+			"codigo":        "OP-500",
+			"titulo":        "Cerrar huecos del MCP",
+			"descripcion":   "Debe nacer por MCP",
+			"tipo":          "implementacion",
+			"proyecto":      "orquestador",
+			"propuesto_por": "OpenClaw",
+			"distribuidor":  "OpenClaw",
+		})
+		if err != nil {
+			t.Fatalf("propuestas crear MCP: %v", err)
+		}
+		if createResult["isError"] != false {
+			t.Fatalf("propuestas crear marcado como error: %#v", createResult)
+		}
+
+		actionResult, err := callMCPTool("orquesta.propuestas.accion", map[string]any{
+			"codigo":        "OP-500",
+			"accion":        "cerrar",
+			"estado_cierre": string(db.PropuestaBacklog),
+			"agente":        "OpenClaw",
+		})
+		if err != nil {
+			t.Fatalf("propuestas accion MCP: %v", err)
+		}
+		if actionResult["isError"] != false {
+			t.Fatalf("propuestas accion marcado como error: %#v", actionResult)
+		}
+		propuesta, _ := actionResult["structuredContent"].(*db.Propuesta)
+		if propuesta == nil || propuesta.Codigo != "OP-500" || propuesta.Estado != db.PropuestaBacklog {
+			t.Fatalf("propuesta no quedo cerrada: %#v", actionResult["structuredContent"])
+		}
+	})
+}
+
 func TestMCPToolVotarPropuestaActualizaEstado(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
