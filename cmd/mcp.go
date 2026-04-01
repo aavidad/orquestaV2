@@ -1304,6 +1304,19 @@ func listMCPTools() []mcpTool {
 			},
 		},
 		{
+			Name:        "orquesta.sesiones.fin",
+			Title:       "Cerrar sesión activa",
+			Description: "Cierra una sesión activa por la vía canónica del servidor",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente": map[string]any{"type": "string"},
+				},
+				"required":             []string{"agente"},
+				"additionalProperties": false,
+			},
+		},
+		{
 			Name:        "orquesta.agentes.listar",
 			Title:       "Listar agentes",
 			Description: "Lista agentes, opcionalmente filtrados por activos",
@@ -1395,6 +1408,34 @@ func listMCPTools() []mcpTool {
 					"limit":    map[string]any{"type": "integer"},
 				},
 				"required":             []string{"query"},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.handles.listar",
+			Title:       "Listar runtime handles",
+			Description: "Lista runtime handles, con resincronización supervisada cuando aplica",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente": map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "orquesta.runtime.events.listar",
+			Title:       "Listar runtime events",
+			Description: "Lista runtime events compactados por agente, proyecto, kind o level",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"agente":   map[string]any{"type": "string"},
+					"proyecto": map[string]any{"type": "string"},
+					"kind":     map[string]any{"type": "string"},
+					"level":    map[string]any{"type": "string"},
+					"limit":    map[string]any{"type": "integer"},
+				},
 				"additionalProperties": false,
 			},
 		},
@@ -1998,6 +2039,17 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 		}
 		return toolResult(prettyJSON(sesiones), sesiones, false), nil
 
+	case "orquesta.sesiones.fin":
+		agente, err := requiredStringArg(args, "agente")
+		if err != nil {
+			return nil, err
+		}
+		sesion, err := sesionesAPIService.Finish(agente)
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(sesion), sesion, false), nil
+
 	case "orquesta.agentes.listar":
 		agentes, err := agentesService.ListAgents()
 		if err != nil {
@@ -2115,6 +2167,44 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return toolResult(err.Error(), nil, true), nil
 		}
 		return toolResult(prettyJSON(out), out, false), nil
+
+	case "orquesta.runtime.handles.listar":
+		agente := optionalStringArg(args, "agente")
+		handles, err := runtimesService.ListRuntimeHandles(stringPtrOrNil(agente))
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(prettyJSON(handles), handles, false), nil
+
+	case "orquesta.runtime.events.listar":
+		level := optionalStringArg(args, "level")
+		filter := db.FiltroRuntimeEvents{
+			Agente: stringPtrOrNil(optionalStringArg(args, "agente")),
+			Kind:   stringPtrOrNil(optionalStringArg(args, "kind")),
+			Limit:  intArgOrDefault(args, "limit", 50),
+		}
+		if proyecto := strings.TrimSpace(optionalStringArg(args, "proyecto")); proyecto != "" {
+			p, err := runtimesService.GetProject(proyecto)
+			if err != nil {
+				return toolResult(err.Error(), nil, true), nil
+			}
+			filter.ProyectoID = &p.ID
+		}
+		events, err := runtimesService.ListRuntimeEvents(filter)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(level) != "" {
+			filtered := make([]*db.RuntimeEvent, 0, len(events))
+			for _, item := range events {
+				if item != nil && strings.EqualFold(strings.TrimSpace(item.Level), strings.TrimSpace(level)) {
+					filtered = append(filtered, item)
+				}
+			}
+			events = filtered
+		}
+		events = compactarRuntimeEventsAPI(events)
+		return toolResult(prettyJSON(events), events, false), nil
 
 	case "orquesta.runtime.ordenes.listar":
 		filter := db.FiltroRuntimeOrders{

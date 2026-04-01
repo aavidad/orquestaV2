@@ -1001,6 +1001,81 @@ func TestMCPToolsAgentesPrepararEInvestigarOperanPorLaViaCanonica(t *testing.T) 
 	})
 }
 
+func TestMCPToolsSesionesYObservabilidadRuntimeOperanPorLaViaCanonica(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrando Codex3: %v", err)
+		}
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      "Codex3",
+			ProyectoID:  &proyectoID,
+			CWD:         "/tmp/orquestador",
+			Herramienta: "codex-cli",
+		})
+		if err != nil {
+			t.Fatalf("iniciar sesion: %v", err)
+		}
+		handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+		if err != nil || handle == nil {
+			t.Fatalf("runtime handle esperado, got=%+v err=%v", handle, err)
+		}
+		runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+		if err != nil || runtime == nil {
+			t.Fatalf("runtime esperado, got=%+v err=%v", runtime, err)
+		}
+		if _, err := db.RegistrarRuntimeEvent(&db.RuntimeEvent{
+			RuntimeID:   runtime.ID,
+			Kind:        "approval_request",
+			Level:       "warning",
+			Message:     "Necesito confirmación para integrar",
+			PayloadJSON: `{"classification":"approval_request"}`,
+		}); err != nil {
+			t.Fatalf("registrar runtime event: %v", err)
+		}
+
+		handlesResult, err := callMCPTool("orquesta.runtime.handles.listar", map[string]any{"agente": "Codex3"})
+		if err != nil {
+			t.Fatalf("runtime handles listar MCP: %v", err)
+		}
+		if handlesResult["isError"] != false {
+			t.Fatalf("runtime handles listar marcado como error: %#v", handlesResult)
+		}
+		handles, _ := handlesResult["structuredContent"].([]*db.RuntimeHandle)
+		if len(handles) == 0 || handles[0] == nil {
+			t.Fatalf("runtime handles vacío: %#v", handlesResult["structuredContent"])
+		}
+
+		eventsResult, err := callMCPTool("orquesta.runtime.events.listar", map[string]any{
+			"agente":   "Codex3",
+			"proyecto": "orquestador",
+			"kind":     "approval_request",
+			"limit":    5,
+		})
+		if err != nil {
+			t.Fatalf("runtime events listar MCP: %v", err)
+		}
+		if eventsResult["isError"] != false {
+			t.Fatalf("runtime events listar marcado como error: %#v", eventsResult)
+		}
+		events, _ := eventsResult["structuredContent"].([]*db.RuntimeEvent)
+		if len(events) == 0 || events[0] == nil || events[0].Kind != "approval_request" {
+			t.Fatalf("runtime events inesperados: %#v", eventsResult["structuredContent"])
+		}
+
+		finishResult, err := callMCPTool("orquesta.sesiones.fin", map[string]any{"agente": "Codex3"})
+		if err != nil {
+			t.Fatalf("sesion fin MCP: %v", err)
+		}
+		if finishResult["isError"] != false {
+			t.Fatalf("sesion fin marcado como error: %#v", finishResult)
+		}
+		if sesionActiva, err := db.GetSesionActiva("Codex3", &proyectoID); err == nil && sesionActiva != nil {
+			t.Fatalf("la sesión siguió activa tras sesion fin: %#v", sesionActiva)
+		}
+	})
+}
+
 func TestMCPToolsPropuestasCrearYAccionarOperanPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")

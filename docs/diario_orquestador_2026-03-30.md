@@ -4978,3 +4978,27 @@ Validacion:
 
 - `go test ./cmd -run 'TestMCPToolsAgentesPrepararEInvestigarOperanPorLaViaCanonica' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — El MCP ya cierra sesiones y observa runtimes por la vía canónica
+
+Hallazgo:
+
+- incluso con tareas, handoff, mailbox, preparación e investigación cubiertos, al supervisor todavía le faltaba una parte básica de operación diaria: poder cerrar una sesión activa y observar `runtime_handles`/`runtime_events` sin salir del MCP oficial
+
+Decision:
+
+- añadir tools MCP para:
+  - `orquesta.sesiones.fin`
+  - `orquesta.runtime.handles.listar`
+  - `orquesta.runtime.events.listar`
+
+Codigo:
+
+- [cmd/mcp.go](/home/alberto/Trabajo/orquesta/cmd/mcp.go)
+- [cmd/mcp_test.go](/home/alberto/Trabajo/orquesta/cmd/mcp_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestMCPToolsSesionesYObservabilidadRuntimeOperanPorLaViaCanonica' -count=1`
+- `go build -o ./orquesta .`
