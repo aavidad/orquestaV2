@@ -276,6 +276,28 @@ func GetSupervisorSubagent(supervisor, sessionID, threadID string) (*SupervisorS
 	return item, err
 }
 
+func GetSupervisorSubagentByID(id int64) (*SupervisorSubagent, error) {
+	exists, err := SchemaObjectExists("table", "supervisor_subagents")
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, nil
+	}
+	row := DB.QueryRow(`
+		SELECT id, supervisor, proyecto_slug, session_id, parent_thread_id, thread_id,
+		       subagent_name, subagent_type, tool_profile_json, status, manifest_path,
+		       output_path, error_message, metadata_json, created_at, started_at, updated_at, completed_at
+		FROM supervisor_subagents
+		WHERE id = ?`, id,
+	)
+	item, err := scanSupervisorSubagent(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return item, err
+}
+
 func ListarSupervisorSubagents(filter FiltroSupervisorSubagents) ([]*SupervisorSubagent, error) {
 	exists, err := SchemaObjectExists("table", "supervisor_subagents")
 	if err != nil {

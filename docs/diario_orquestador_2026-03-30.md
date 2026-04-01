@@ -7144,3 +7144,18 @@ Resultado:
   - validación viva:
     - `GET /api/openclaw/operator` devuelve `subagentes`
     - `GET /openclaw` renderiza `Subagentes explícitos`
+
+## 2026-04-02 — Los subagentes terminales ya entran en la cola del supervisor
+
+- Hallazgo:
+  - `supervisor_subagents` ya era visible, pero OpenClaw aún no los trataba como deuda operativa
+  - un subagente `failed/completed/cancelled` podía existir en la base y quedar fuera de `action_queue`
+- Corrección:
+  - `buildSupervisorReviewSnapshot()` ya promueve subagentes terminales a acciones del supervisor:
+    - `revisar_subagente_fallido`
+    - `recoger_resultado_subagente`
+    - `limpiar_subagente_cancelado`
+  - `applySupervisorRecommendedAction()` ya resuelve `subagente:<id>` y devuelve la entidad canónica desde `supervisor_subagents`
+- Validación:
+  - `go test ./cmd -run 'Test(MCP(RevisionSupervisorPromueveSubagentesTerminales|SubagentesSupervisorOperanPorLaViaCanonica)|APIObservabilidadReadOnly|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
+  - `go build -o ./orquesta .`

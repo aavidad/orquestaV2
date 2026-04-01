@@ -3728,6 +3728,7 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	recommended = append(recommended, buildSupervisorWorktreeDriftActions(worktreeDrift)...)
 	recommended = append(recommended, buildSupervisorOperationalActions(status, mailboxPendiente)...)
 	recommended = append(recommended, buildSupervisorObservedSessionActions(status, threadSessions)...)
+	recommended = append(recommended, buildSupervisorSubagentActions(subagents)...)
 	recommended = append(recommended, buildSupervisorProposalActions(status.PropuestasResumen)...)
 	sortSupervisorRecommendedActions(recommended)
 	markSupervisorRecommendedActions(recommended)
@@ -4198,6 +4199,50 @@ func buildSupervisorObservedSessionActions(status apiStatusResponse, snapshot ma
 			Reason:   reason,
 			Priority: "baja",
 			Assignee: agente,
+		})
+	}
+	return actions
+}
+
+func buildSupervisorSubagentActions(snapshot map[string]any) []supervisorRecommendedAction {
+	items, _ := snapshot["subagents"].([]*db.SupervisorSubagent)
+	if len(items) == 0 {
+		return nil
+	}
+	actions := make([]supervisorRecommendedAction, 0, len(items))
+	for _, item := range items {
+		if item == nil || item.ID <= 0 {
+			continue
+		}
+		actionName := ""
+		reason := ""
+		priority := "baja"
+		switch strings.TrimSpace(item.Status) {
+		case "failed":
+			actionName = "revisar_subagente_fallido"
+			reason = "El subagente terminó en fallo; revisar artefactos y decidir relanzamiento o descarte."
+			priority = "alta"
+		case "completed":
+			actionName = "recoger_resultado_subagente"
+			reason = "El subagente completó su trabajo; recoger resultado y decidir integración."
+			priority = "media"
+		case "cancelled":
+			actionName = "limpiar_subagente_cancelado"
+			reason = "El subagente quedó cancelado; confirmar limpieza y estado terminal."
+			priority = "baja"
+		default:
+			continue
+		}
+		if name := strings.TrimSpace(item.SubagentName); name != "" {
+			reason = fmt.Sprintf("%s (subagente=%s tipo=%s)", reason, name, strings.TrimSpace(item.SubagentType))
+		}
+		actions = append(actions, supervisorRecommendedAction{
+			Kind:     "subagent",
+			Target:   fmt.Sprintf("subagente:%d", item.ID),
+			Action:   actionName,
+			Reason:   reason,
+			Priority: priority,
+			Assignee: resolveSupervisorName(item.Supervisor),
 		})
 	}
 	return actions
@@ -4688,6 +4733,25 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 			}, nil
 		}
 		return nil, fmt.Errorf("no hay worktree limpia desfasada para %s", agente)
+	case "recoger_resultado_subagente", "revisar_subagente_fallido", "limpiar_subagente_cancelado":
+		subagentID, err := resolveSupervisorActionSubagentID(selected.Target)
+		if err != nil {
+			return nil, err
+		}
+		item, err := db.GetSupervisorSubagentByID(subagentID)
+		if err != nil {
+			return nil, err
+		}
+		if item == nil {
+			return nil, fmt.Errorf("subagente #%d no encontrado", subagentID)
+		}
+		return map[string]any{
+			"ok":         true,
+			"supervisor": supervisor,
+			"action":     selected,
+			"assignee":   worker,
+			"subagente":  item,
+		}, nil
 	default:
 		return nil, fmt.Errorf("acción no aplicable automáticamente: %s", strings.TrimSpace(selected.Action))
 	}
@@ -4929,6 +4993,30 @@ func fallbackSupervisorRecommendedAction(actionName, target, assignee string) *s
 			Action:   actionName,
 			Target:   target,
 			Priority: "alta",
+			Assignee: assignee,
+		}
+	case "recoger_resultado_subagente":
+		return &supervisorRecommendedAction{
+			Kind:     "subagent",
+			Action:   actionName,
+			Target:   target,
+			Priority: "media",
+			Assignee: assignee,
+		}
+	case "revisar_subagente_fallido":
+		return &supervisorRecommendedAction{
+			Kind:     "subagent",
+			Action:   actionName,
+			Target:   target,
+			Priority: "alta",
+			Assignee: assignee,
+		}
+	case "limpiar_subagente_cancelado":
+		return &supervisorRecommendedAction{
+			Kind:     "subagent",
+			Action:   actionName,
+			Target:   target,
+			Priority: "baja",
 			Assignee: assignee,
 		}
 	default:

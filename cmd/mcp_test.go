@@ -1373,6 +1373,62 @@ func TestMCPSubagentesSupervisorOperanPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestMCPRevisionSupervisorPromueveSubagentesTerminales(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		failed, err := db.UpsertSupervisorSubagent(db.UpsertSupervisorSubagentInput{
+			Supervisor:     "OpenClaw",
+			ProyectoSlug:   "orquestador",
+			SessionID:      "sess-openclaw-1",
+			ParentThreadID: "leader-1",
+			ThreadID:       "sub-fail-1",
+			SubagentName:   "OpenClaw-Verify-1",
+			SubagentType:   "verification",
+			Status:         "failed",
+			ErrorMessage:   "panic",
+		})
+		if err != nil {
+			t.Fatalf("crear subagente fallido: %v", err)
+		}
+		if _, err := db.UpsertSupervisorSubagent(db.UpsertSupervisorSubagentInput{
+			Supervisor:     "OpenClaw",
+			ProyectoSlug:   "orquestador",
+			SessionID:      "sess-openclaw-1",
+			ParentThreadID: "leader-1",
+			ThreadID:       "sub-done-1",
+			SubagentName:   "OpenClaw-Explore-1",
+			SubagentType:   "explore",
+			Status:         "completed",
+			OutputPath:     "/tmp/sub-done-1/output.md",
+		}); err != nil {
+			t.Fatalf("crear subagente completado: %v", err)
+		}
+		snapshot, err := buildSupervisorReviewSnapshot("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshot: %v", err)
+		}
+		queue, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+		var found bool
+		for _, item := range queue {
+			if item.Action == "revisar_subagente_fallido" && item.Target == fmt.Sprintf("subagente:%d", failed.ID) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("cola sin subagente fallido: %+v", queue)
+		}
+		result, err := applySupervisorRecommendedAction("OpenClaw", "revisar_subagente_fallido", fmt.Sprintf("subagente:%d", failed.ID), "OpenClaw")
+		if err != nil {
+			t.Fatalf("aplicar revisar_subagente_fallido: %v", err)
+		}
+		subagente, _ := result["subagente"].(*db.SupervisorSubagent)
+		if subagente == nil || subagente.ID != failed.ID {
+			t.Fatalf("resultado de subagente inesperado: %#v", result["subagente"])
+		}
+	})
+}
+
 func TestMCPRevisionSupervisorSugiereDispatchOperativo(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := statusService

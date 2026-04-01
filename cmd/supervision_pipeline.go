@@ -218,6 +218,14 @@ func parseSupervisorActionTargetID(prefix, target string) *int64 {
 	return &id
 }
 
+func resolveSupervisorActionSubagentID(target string) (int64, error) {
+	id := parseSupervisorActionTargetID("subagente:", target)
+	if id == nil || *id <= 0 {
+		return 0, fmt.Errorf("target de subagente inválido: %s", strings.TrimSpace(target))
+	}
+	return *id, nil
+}
+
 func firstVisibleTaskID(tareas []tareaLite, retenidas []tareaLite) *int64 {
 	retenidasIDs := make(map[int64]struct{}, len(retenidas))
 	for _, tarea := range retenidas {

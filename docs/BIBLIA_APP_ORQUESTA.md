@@ -1184,3 +1184,9 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
     - prompt `orquesta.supervision.subagentes`
     - tools `orquesta.supervision.subagentes.registrar` y `orquesta.supervision.subagentes.listar`
   - la web `/openclaw` debe renderizar una tabla de subagentes explícitos y no obligar a inspeccionar JSON crudo
+- Los subagentes explícitos deben entrar también en la cola del supervisor:
+  - si un subagente termina `failed`, OpenClaw debe ver `revisar_subagente_fallido`
+  - si termina `completed`, OpenClaw debe ver `recoger_resultado_subagente`
+  - si termina `cancelled`, OpenClaw debe ver `limpiar_subagente_cancelado`
+  - esas acciones pueden ser manuales, pero deben salir del mismo `action_queue/next_action` que el resto del operador
+  - `applySupervisorRecommendedAction` debe devolver el `subagente` canónico desde `supervisor_subagents`, no una reconstrucción parcial
