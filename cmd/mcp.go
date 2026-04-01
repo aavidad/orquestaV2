@@ -3621,6 +3621,8 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	if manualCount < 0 {
 		manualCount = 0
 	}
+	capacitySummary := buildOpenClawCapacitySummary(status.AgentesActivos, status.AgentesTrabajando, status.TareasActivas, status.TareasPorEstado)
+	saturatedAgents := buildOpenClawSaturatedAgents(status.AgentesActivos, status.TareasActivas)
 	return map[string]any{
 		"supervisor":          supervisor,
 		"review_gates":        openGates,
@@ -3636,6 +3638,8 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 		"next_action":         nextAction,
 		"safe_action_queue":   safeQueue,
 		"next_safe_action":    nextSafeAction,
+		"capacity_summary":    capacitySummary,
+		"saturated_agents":    saturatedAgents,
 		"queue_summary": map[string]any{
 			"total":  len(recommended),
 			"safe":   len(safeQueue),

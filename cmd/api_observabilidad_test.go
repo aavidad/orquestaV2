@@ -256,6 +256,12 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	if _, ok := operatorJSON["queue_summary"]; !ok {
 		t.Fatalf("openclaw operator sin queue_summary: %s", recOperator.Body.String())
 	}
+	if _, ok := operatorJSON["capacity_summary"]; !ok {
+		t.Fatalf("openclaw operator sin capacity_summary: %s", recOperator.Body.String())
+	}
+	if _, ok := operatorJSON["saturated_agents"]; !ok {
+		t.Fatalf("openclaw operator sin saturated_agents: %s", recOperator.Body.String())
+	}
 	reviewMap, ok := operatorJSON["review"].(map[string]any)
 	if !ok {
 		t.Fatalf("openclaw operator sin review compacta: %s", recOperator.Body.String())
@@ -296,6 +302,12 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	}
 	if firstMailbox["oldest_created_at"] == nil {
 		t.Fatalf("openclaw operator sin oldest_created_at en mailboxPendiente: %s", recOperator.Body.String())
+	}
+	if _, ok := operatorJSON["capacity_summary"].(map[string]any); !ok {
+		t.Fatalf("openclaw operator sin capacity_summary estructurado: %s", recOperator.Body.String())
+	}
+	if _, ok := operatorJSON["saturated_agents"].([]any); !ok {
+		t.Fatalf("openclaw operator sin saturated_agents estructurado: %s", recOperator.Body.String())
 	}
 }
 
@@ -376,6 +388,17 @@ func TestAPIOpenClawOperatorSeparaCargaActivaYReservada(t *testing.T) {
 	}
 	if got := int(first["carga_reservada"].(float64)); got != 1 {
 		t.Fatalf("carga_reservada inesperada: %#v", first)
+	}
+	capacityMap, ok := payload["capacity_summary"].(map[string]any)
+	if !ok {
+		t.Fatalf("capacity_summary ausente: %s", rec.Body.String())
+	}
+	if got := int(capacityMap["workers_saturados"].(float64)); got != 1 {
+		t.Fatalf("workers_saturados inesperado: %#v", capacityMap)
+	}
+	saturated, ok := payload["saturated_agents"].([]any)
+	if !ok || len(saturated) != 1 {
+		t.Fatalf("saturated_agents inesperado: %#v", payload["saturated_agents"])
 	}
 	reservadas, _ := statusMap["tareasReservadas"].([]any)
 	if len(reservadas) != 1 {

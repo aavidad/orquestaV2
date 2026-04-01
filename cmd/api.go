@@ -1278,6 +1278,8 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		"next_safe_action":     revision["next_safe_action"],
 		"safe_action_queue":    revision["safe_action_queue"],
 		"queue_summary":        queueSummary,
+		"capacity_summary":     statusResumen.CapacitySummary,
+		"saturated_agents":     statusResumen.AgentesSaturados,
 		"notificaciones":       notificaciones.DescribirConfiguracion(),
 		"entregas":             notificaciones.DescribirOutbox(10),
 		"eventos_normalizados": eventos,
@@ -1324,6 +1326,8 @@ type apiOpenClawStatusLite struct {
 	TareasActivas      []tareaLite            `json:"tareasActivas,omitempty"`
 	TareasReservadas   []tareaLite            `json:"tareasReservadas,omitempty"`
 	PropuestasAbiertas []propuestaLite        `json:"propuestasAbiertas,omitempty"`
+	CapacitySummary    apiOpenClawCapacitySummary `json:"capacity_summary,omitempty"`
+	AgentesSaturados   []apiOpenClawAgentLite `json:"agentesSaturados,omitempty"`
 }
 
 type apiOpenClawMailboxLite struct {
@@ -1339,6 +1343,15 @@ type apiOpenClawQueueSummary struct {
 	Total   int `json:"total"`
 	Safe    int `json:"safe"`
 	Manual  int `json:"manual"`
+}
+
+type apiOpenClawCapacitySummary struct {
+	WorkersConectados int `json:"workers_conectados"`
+	WorkersOciosos    int `json:"workers_ociosos"`
+	WorkersDisponibles int `json:"workers_disponibles"`
+	WorkersSaturados  int `json:"workers_saturados"`
+	CapacidadLibre    int `json:"capacidad_libre"`
+	BacklogLibre      int `json:"backlog_libre"`
 }
 
 func buildOpenClawOperatorStatus(status *estadoResumen) (apiOpenClawStatusLite, error) {
@@ -1360,6 +1373,8 @@ func buildOpenClawOperatorStatus(status *estadoResumen) (apiOpenClawStatusLite, 
 		TareasActivas:      filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada),
 		TareasReservadas:   filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
 		PropuestasAbiertas: status.PropuestasAbiertas,
+		CapacitySummary:    buildOpenClawCapacitySummary(status.AgentesActivos, status.AgentesTrabajando, status.TareasActivas, status.TareasPorEstado),
+		AgentesSaturados:   buildOpenClawSaturatedAgents(status.AgentesActivos, status.TareasActivas),
 	}, nil
 }
 
@@ -1383,6 +1398,50 @@ func buildOpenClawQueueSummary(review map[string]any) apiOpenClawQueueSummary {
 		Safe:   safe,
 		Manual: manual,
 	}
+}
+
+func buildOpenClawCapacitySummary(agentesActivos, agentesTrabajando []*db.Agente, tareas []tareaLite, tareasPorEstado map[string]int) apiOpenClawCapacitySummary {
+	idle := idleSupervisorWorkers(agentesActivos, agentesTrabajando)
+	saturated := buildOpenClawSaturatedAgents(agentesActivos, tareas)
+	connected := len(agentesActivos)
+	idleCount := len(idle)
+	saturatedCount := len(saturated)
+	available := connected - saturatedCount
+	if available < 0 {
+		available = 0
+	}
+	backlogLibre := 0
+	if tareasPorEstado != nil {
+		backlogLibre = tareasPorEstado[string(db.TareaLibre)]
+	}
+	return apiOpenClawCapacitySummary{
+		WorkersConectados: connected,
+		WorkersOciosos:    idleCount,
+		WorkersDisponibles: available,
+		WorkersSaturados:  saturatedCount,
+		CapacidadLibre:    idleCount,
+		BacklogLibre:      backlogLibre,
+	}
+}
+
+func buildOpenClawSaturatedAgents(items []*db.Agente, tareas []tareaLite) []apiOpenClawAgentLite {
+	agents := compactOpenClawAgents(items, tareas)
+	out := make([]apiOpenClawAgentLite, 0, len(agents))
+	for _, agent := range agents {
+		if agent.CargaReservada > 0 || agent.CargaActiva >= 3 {
+			out = append(out, agent)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CargaReservada != out[j].CargaReservada {
+			return out[i].CargaReservada > out[j].CargaReservada
+		}
+		if out[i].CargaActiva != out[j].CargaActiva {
+			return out[i].CargaActiva > out[j].CargaActiva
+		}
+		return strings.TrimSpace(out[i].Nombre) < strings.TrimSpace(out[j].Nombre)
+	})
+	return out
 }
 
 func filtrarOpenClawTareasPorEstado(items []tareaLite, estados ...db.EstadoTarea) []tareaLite {

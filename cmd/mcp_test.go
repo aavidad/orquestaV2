@@ -579,6 +579,12 @@ func TestMCPToolRevisionSupervisorDevuelveJSONEstructurado(t *testing.T) {
 		if queueSummary == nil {
 			t.Fatalf("falta queue_summary: %#v", structured)
 		}
+		if _, ok := structured["capacity_summary"]; !ok {
+			t.Fatalf("falta capacity_summary: %#v", structured)
+		}
+		if _, ok := structured["saturated_agents"]; !ok {
+			t.Fatalf("falta saturated_agents: %#v", structured)
+		}
 		action0 := reflect.ValueOf(structured["recommended_actions"]).Index(0).Interface()
 		raw, err := json.Marshal(action0)
 		if err != nil {

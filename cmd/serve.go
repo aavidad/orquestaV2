@@ -1919,6 +1919,8 @@ const webTplOpenClaw = `{{define "content"}}
   <div class="stat"><div class="n">{{len .Status.AgentesActivos}}</div><div class="l">conectados</div></div>
   <div class="stat"><div class="n">{{len .Status.AgentesTrabajando}}</div><div class="l">trabajando</div></div>
   <div class="stat"><div class="n">{{len .EnCuota}}</div><div class="l">en cuota/cooldown</div></div>
+  <div class="stat"><div class="n">{{.Status.CapacitySummary.CapacidadLibre}}</div><div class="l">capacidad libre</div></div>
+  <div class="stat"><div class="n">{{.Status.CapacitySummary.BacklogLibre}}</div><div class="l">backlog libre</div></div>
   <div class="stat"><div class="n">{{len .Retenidas}}</div><div class="l">retenidas por cuota</div></div>
   <div class="stat"><div class="n">{{len .Recommended}}</div><div class="l">cola completa</div></div>
   <div class="stat"><div class="n">{{len .SafeRecommended}}</div><div class="l">cola segura</div></div>
@@ -1958,6 +1960,11 @@ const webTplOpenClaw = `{{define "content"}}
   <div style="display:grid;gap:1rem">
     <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
       <h3 style="margin:0 0 .7rem 0">Flota disponible</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.6rem;margin-bottom:.8rem">
+        <div class="stat" style="padding:.7rem"><div class="n" style="font-size:1.35rem">{{.Status.CapacitySummary.WorkersDisponibles}}</div><div class="l">disponibles</div></div>
+        <div class="stat" style="padding:.7rem"><div class="n" style="font-size:1.35rem">{{.Status.CapacitySummary.WorkersOciosos}}</div><div class="l">ociosos</div></div>
+        <div class="stat" style="padding:.7rem"><div class="n" style="font-size:1.35rem">{{.Status.CapacitySummary.WorkersSaturados}}</div><div class="l">saturados</div></div>
+      </div>
       {{if .Status.AgentesActivos}}
       <table style="width:100%"><thead><tr><th>Agente</th><th>Rol</th><th>Activa</th><th>Reservada</th><th>Cuota visible</th><th>Cuenta</th></tr></thead><tbody>
       {{range .Status.AgentesActivos}}
@@ -1973,6 +1980,21 @@ const webTplOpenClaw = `{{define "content"}}
       </tbody></table>
       {{else}}
       <p style="margin:0;color:#64748b">Sin workers disponibles ahora mismo.</p>
+      {{end}}
+      {{if .Status.AgentesSaturados}}
+      <div style="margin-top:.8rem">
+        <h4 style="margin:0 0 .45rem 0;font-size:.9rem">Agentes saturados</h4>
+        <table style="width:100%"><thead><tr><th>Agente</th><th>Activa</th><th>Reservada</th><th>Cuenta</th></tr></thead><tbody>
+        {{range .Status.AgentesSaturados}}
+          <tr>
+            <td><strong>{{.Nombre}}</strong></td>
+            <td>{{.CargaActiva}}</td>
+            <td>{{.CargaReservada}}</td>
+            <td>{{if .CuentaEmail}}{{.CuentaEmail}}{{else}}—{{end}}</td>
+          </tr>
+        {{end}}
+        </tbody></table>
+      </div>
       {{end}}
     </section>
 

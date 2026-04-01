@@ -1057,3 +1057,17 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `lock listar` => solo `activa`
   - `worktree listar` => solo `activa`
   - el histórico (`liberada`, `cerrada`) sigue siendo trazable, pero solo mediante una opción explícita (`--todos`) para no meter ruido en la operativa diaria
+- OpenClaw no debe obligar al supervisor a recomponer capacidad a mano:
+  - `/api/openclaw/operator`, MCP y `/openclaw` deben exponer `capacity_summary`
+  - el resumen mínimo es:
+    - `workers_conectados`
+    - `workers_ociosos`
+    - `workers_disponibles`
+    - `workers_saturados`
+    - `capacidad_libre`
+    - `backlog_libre`
+  - además debe existir `saturated_agents` con la misma semántica visible
+- La saturación visible del supervisor debe ser simple y explicable:
+  - un worker cuenta como saturado si ya arrastra reservas preparadas
+  - o si ya tiene una carga activa alta (`>=3`) en el estado visible
+  - esa saturación es una señal operativa para OpenClaw; no sustituye la lógica del planificador ni crea otro contrato paralelo

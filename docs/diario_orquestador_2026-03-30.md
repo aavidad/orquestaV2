@@ -6643,3 +6643,33 @@ Resultado:
   - `./orquesta worktree listar` ya no muestra `wt-alberto-426`
   - `./orquesta lock listar` devuelve vacío
   - `./orquesta worktree listar --todos` y `./orquesta lock listar --todos` sí muestran el histórico
+
+## 2026-04-01 — OpenClaw ya expone capacidad libre y saturación sin recomposición manual
+
+- Había un hueco operativo real en el supervisor:
+  - OpenClaw veía `carga_activa` y `carga_reservada` por agente
+  - pero no un resumen único de capacidad libre/saturación
+  - eso obligaba a recomponer a mano si la flota estaba saturada o si quedaba backlog libre
+- Se añadió una proyección canónica compartida:
+  - `capacity_summary`
+  - `saturated_agents`
+- La nueva semántica visible queda así:
+  - `workers_conectados`
+  - `workers_ociosos`
+  - `workers_disponibles`
+  - `workers_saturados`
+  - `capacidad_libre`
+  - `backlog_libre`
+  - `saturated_agents` = workers con reservas vivas o carga activa alta (`>=3`)
+- Superficies actualizadas:
+  - `/api/openclaw/operator`
+  - snapshot MCP `orquesta.supervision.revision`
+  - `/openclaw`
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(APIObservabilidadReadOnly|APIOpenClawOperatorSeparaCargaActivaYReservada|MCPToolRevisionSupervisorDevuelveJSONEstructurado|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
+  - `go build -o ./orquesta .`
+- Validación viva prevista para cierre del ciclo:
+  - reiniciar daemon con el binario nuevo
+  - `GET /api/openclaw/operator`
+  - comprobar `capacity_summary` y `saturated_agents`
+  - comprobar `/openclaw` con `capacidad libre`, `backlog libre` y tabla de `Agentes saturados`
