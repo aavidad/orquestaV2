@@ -1,12 +1,17 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"orquesta/db"
 	"orquesta/internal/rpclocal"
 )
 
@@ -63,4 +68,84 @@ func TestServerReadinessOKFallaConHTTPNoOK(t *testing.T) {
 		}
 		t.Fatalf("error inesperado: %v", err)
 	}
+}
+
+func TestWaitLocalServerStableExigeStatefilePublicada(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "server.json")
+	defer cambiarEnv(t, "ORQUESTA_SERVER_INFO", statePath)()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_STATE", "")()
+	dbPath := filepath.Join(t.TempDir(), "orquesta.db")
+	defer cambiarEnv(t, "ORQUESTA_DB", dbPath)()
+	defer cambiarEnv(t, "ORQUESTA_DB_DRIVER", "")()
+	defer cambiarEnv(t, "ORQUESTA_DB_DSN", "")()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(rpclocal.HealthPath, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(rpclocal.HealthResponse{
+			OK:            true,
+			Addr:          strings.TrimPrefix(strings.TrimPrefix(srvURLForRequest(r), "http://"), "https://"),
+			PID:           4242,
+			Kind:          "server",
+			ScopeID:       rpclocal.CurrentScopeID(),
+			StorageDriver: db.CurrentStorageDriver(),
+			StorageTarget: dbPath,
+			DBPath:        dbPath,
+		})
+	})
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"agentes":[],"conteoTareas":{}}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		info := rpclocal.ServerInfo{
+			Addr:          strings.TrimPrefix(strings.TrimPrefix(srv.URL, "http://"), "https://"),
+			PID:           4242,
+			Kind:          "server",
+			ScopeID:       rpclocal.CurrentScopeID(),
+			StorageDriver: db.CurrentStorageDriver(),
+			StorageTarget: dbPath,
+			DBPath:        dbPath,
+		}
+		_ = rpclocal.SaveServerInfo(info)
+	}()
+
+	if err := waitLocalServerStable(srv.URL, 2*time.Second); err != nil {
+		t.Fatalf("waitLocalServerStable deberia esperar al statefile: %v", err)
+	}
+}
+
+func TestWaitLocalServerStableFallaSinStatefile(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "missing-server.json")
+	defer cambiarEnv(t, "ORQUESTA_SERVER_INFO", statePath)()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_STATE", "")()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(rpclocal.HealthPath, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(rpclocal.HealthResponse{OK: true})
+	})
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"agentes":[],"conteoTareas":{}}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	if err := waitLocalServerStable(srv.URL, 250*time.Millisecond); err == nil {
+		t.Fatalf("deberia fallar si el statefile no llega a publicarse")
+	}
+}
+
+func srvURLForRequest(r *http.Request) string {
+	if r == nil || r.Host == "" {
+		return ""
+	}
+	scheme := "http://"
+	if r.TLS != nil {
+		scheme = "https://"
+	}
+	return scheme + r.Host
 }

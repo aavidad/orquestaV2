@@ -809,6 +809,15 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - una cuenta "solo semanal" no puede caer en `enfriamiento/cuota` solo porque el derivado local corto esté a `0`.
 - esta jerarquía debe gobernar tanto la presencia visible (`status`, `/api/status`) como la activación operativa del agente.
 
+## Handshake de arranque del daemon
+
+- `orquesta server start` no puede devolver éxito mientras el daemon siga en una ventana donde `server doctor` falle justo después.
+- el criterio de arranque estable exige tres cosas a la vez:
+  - `statefile` publicada
+  - `healthz` sana
+  - `/api/status` decodificable
+- si falta cualquiera de esas tres, el arranque no se considera completado.
+
 ## Mailbox durable y reintentos
 
 - una `send_instruction` completada como `mailbox_only` no puede deduplicar para siempre el mismo `mailbox_id`; eso deja deuda durable huérfana.

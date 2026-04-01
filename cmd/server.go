@@ -90,6 +90,9 @@ var serverStartCmd = &cobra.Command{
 		if err := ensureLocalServer(baseURL); err != nil {
 			return err
 		}
+		if err := waitLocalServerStable(baseURL, 3*time.Second); err != nil {
+			return err
+		}
 		info, _, err := loadServerInfoWithHealthFallback(baseURL)
 		if err != nil {
 			return err
@@ -118,6 +121,9 @@ var serverPrepararSesionCmd = &cobra.Command{
 			}
 		}
 		if err := ensureLocalServer(baseURL); err != nil {
+			return err
+		}
+		if err := waitLocalServerStable(baseURL, 3*time.Second); err != nil {
 			return err
 		}
 		info, _, err := loadServerInfoWithHealthFallback(baseURL)
@@ -610,6 +616,46 @@ func ensureLocalServer(addr string) error {
 	}
 	_ = rpclocal.RemoveState("")
 	return fmt.Errorf("timeout esperando al servidor local y su statefile. Log: %s", resumirServerLog(logPath))
+}
+
+func waitLocalServerStable(baseURL string, timeout time.Duration) error {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return fmt.Errorf("baseURL vacia")
+	}
+	if timeout <= 0 {
+		timeout = 3 * time.Second
+	}
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		state, err := rpclocal.LoadServerInfo()
+		if err == nil {
+			addr := baseURL
+			if strings.TrimSpace(state.Addr) != "" {
+				addr = rpclocal.BaseURL(state.Addr)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), rpclocal.DefaultTimeout())
+			pingErr := rpclocal.Ping(ctx, addr)
+			cancel()
+			if pingErr == nil {
+				if readyErr := serverReadinessOK(addr); readyErr == nil {
+					return nil
+				} else {
+					lastErr = readyErr
+				}
+			} else {
+				lastErr = pingErr
+			}
+		} else {
+			lastErr = err
+		}
+		time.Sleep(120 * time.Millisecond)
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("timeout esperando estabilidad del servidor")
+	}
+	return fmt.Errorf("servidor local sin estabilizar tras arranque: %w", lastErr)
 }
 
 func serverReadinessOK(baseURL string) error {

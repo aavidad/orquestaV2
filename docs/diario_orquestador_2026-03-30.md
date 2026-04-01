@@ -5742,3 +5742,37 @@ Resultado:
 - una cuenta solo semanal con saldo positivo ya no cae por un falso temporal inexistente
 - la presencia visible y la activación operativa usan la misma jerarquía correcta
 - `antigravity` dejó de aparecer retenido por cuota por ese motivo falso
+
+## 2026-04-01 — `server start` ya espera estabilidad real del daemon
+
+Hallazgo:
+
+- todavía quedaba una ventana incómoda: `orquesta server start` podía devolver éxito y, si se lanzaba `server doctor` inmediatamente, éste fallaba por `statefile` todavía no visible
+- eso no era un problema de producto sino de handshake incompleto del arranque
+
+Decision:
+
+- endurecer el post-arranque del daemon
+- tras `ensureLocalServer`, esperar explícitamente a estabilidad real:
+  - `statefile`
+  - `healthz`
+  - `/api/status` decodificable
+
+Codigo:
+
+- [cmd/server.go](/home/alberto/Trabajo/orquesta/cmd/server.go)
+- [cmd/server_start_readiness_test.go](/home/alberto/Trabajo/orquesta/cmd/server_start_readiness_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(ServerReadinessOKExigeStatusDecodificable|ServerReadinessOKFallaConHTTPNoOK|WaitLocalServerStableExigeStatefilePublicada|WaitLocalServerStableFallaSinStatefile|WebOpenClawAccionResuelveReviewGate|WebOpenClawAccionReseteaReanimacionDeAgente|AgenteCuentaComoConectadoRespetaEstadoCuotaVisible|RenderStatusSummaryIgnoraDerivadoTemporalInexistenteCuandoSoloMandaSemanal)' -count=1`
+- `go test ./db -run 'Test(GetAgenteUsaSoloLaSemanalCuandoNoExisteVentanaTemporal|GetAgenteNoBloqueaEstadoVisibleCuandoSoloHaySemanalPositiva)' -count=1`
+- `go build -o ./orquesta .`
+- `./orquesta server stop && ./orquesta server start && ./orquesta server doctor`
+
+Resultado:
+
+- `server start` ya no devuelve antes de que el daemon quede listo de verdad
+- la secuencia inmediata `start -> doctor` pasa sin ventana muerta
+- el handshake del daemon queda alineado con el criterio profesional de readiness del núcleo
