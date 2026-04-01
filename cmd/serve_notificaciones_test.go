@@ -32,6 +32,16 @@ func TestWebDashMuestraEstadoOpenClawNotificaciones(t *testing.T) {
 	if err := db.ConfigSet("telegram_chat_id", "12345"); err != nil {
 		t.Fatalf("config telegram chat id: %v", err)
 	}
+	entregaID, err := db.CrearEntregaNotificacion("openclaw_gateway", "https://openclaw.local/gateway", db.EventoNotificacion{
+		Tipo:  "mensaje",
+		Texto: "hola openclaw",
+	})
+	if err != nil {
+		t.Fatalf("crear entrega notificacion: %v", err)
+	}
+	if err := db.MarcarEntregaNotificacionFallida(entregaID, "gateway down", time.Now().UTC().Add(time.Minute)); err != nil {
+		t.Fatalf("marcar entrega fallida: %v", err)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", webHandlerDash)
@@ -45,7 +55,7 @@ func TestWebDashMuestraEstadoOpenClawNotificaciones(t *testing.T) {
 		t.Fatalf("dash status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	for _, token := range []string{"OpenClaw / notificaciones", "OpenClaw Gateway", "https://openclaw.local/gateway", "Telegram", "12345"} {
+	for _, token := range []string{"OpenClaw / notificaciones", "OpenClaw Gateway", "https://openclaw.local/gateway", "Telegram", "12345", "Entregas recientes", "fallida", "gateway down"} {
 		if !strings.Contains(body, token) {
 			t.Fatalf("dashboard sin %q:\n%s", token, body)
 		}

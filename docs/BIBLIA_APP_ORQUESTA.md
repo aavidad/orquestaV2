@@ -123,6 +123,7 @@ Regla dura:
 - las superficies externas nuevas tambien entran por el daemon oficial: si Orquesta expone MCP por HTTP, debe hacerlo como endpoint server-first del mismo servidor (`/api/mcp`), no como proceso lateral con otra verdad operativa
 - A2UI no es una excepcion: su superficie canonica por API debe colgar del mismo daemon, reutilizar la proyeccion existente de `serve` y exponer el detalle de runtime en `/api/runtimes/{id}/a2ui` antes de abrir cualquier edicion humana o flujo paralelo
 - OpenClaw Gateway y el resto de canales de notificacion tambien son estado operativo del daemon: se exponen por lectura server-first en `/api/notificaciones` y en el dashboard web del mismo servidor, no se infieren solo de claves de configuracion ni de scripts externos
+- OpenClaw Gateway no puede quedarse en `push best-effort`: el servidor mantiene un outbox persistente (`notificaciones_entregas`) con estado, intentos, error y `next_retry_at`; la entrega y el retry salen del mismo daemon y la observabilidad canonica se publica por `/api/notificaciones` y dashboard
 
 ### Single-writer
 

@@ -365,6 +365,20 @@ func TestRunnerLoopNotificacionesPrefiereNotificadorEventAware(t *testing.T) {
 	}
 }
 
+func TestRunnerRunNotificationRetryAuditaReintentos(t *testing.T) {
+	service := &stubAutomationService{}
+	r := &Runner{
+		Automation: service,
+		Notifier: func() notificaciones.Notificador {
+			return nil
+		},
+	}
+	r.runNotificationRetry()
+	if len(service.audits) != 0 {
+		t.Fatalf("no deberia auditar nada sin notificador: %+v", service.audits)
+	}
+}
+
 type simpleErr string
 
 func (e simpleErr) Error() string { return string(e) }

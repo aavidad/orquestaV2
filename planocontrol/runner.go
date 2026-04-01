@@ -41,21 +41,22 @@ type AutomationService interface {
 }
 
 type Runner struct {
-	Automation        AutomationService
-	NotificationFeed  <-chan db.EventoNotificacion
-	InitNotifications func()
-	Notifier          func() notificaciones.Notificador
-	Debugf            func(format string, args ...any)
-	StartupGrace      time.Duration
-	ReanimacionCada   time.Duration
-	SaludCada         time.Duration
-	PlanificacionCada time.Duration
-	ControlPlaneCada  time.Duration
-	BatchTimeout      time.Duration
-	mu                sync.Mutex
-	runningBatches    map[string]runningBatchState
-	nextBatchToken    uint64
-	wg                sync.WaitGroup
+	Automation            AutomationService
+	NotificationFeed      <-chan db.EventoNotificacion
+	InitNotifications     func()
+	Notifier              func() notificaciones.Notificador
+	Debugf                func(format string, args ...any)
+	StartupGrace          time.Duration
+	ReanimacionCada       time.Duration
+	SaludCada             time.Duration
+	PlanificacionCada     time.Duration
+	ControlPlaneCada      time.Duration
+	NotificationRetryCada time.Duration
+	BatchTimeout          time.Duration
+	mu                    sync.Mutex
+	runningBatches        map[string]runningBatchState
+	nextBatchToken        uint64
+	wg                    sync.WaitGroup
 }
 
 type runningBatchState struct {
@@ -77,6 +78,7 @@ func (r *Runner) Start(ctx context.Context) {
 	r.startLoop(ctx, "salud", r.saludCada(), r.runSalud)
 	r.startLoop(ctx, "planificacion", r.planificacionCada(), r.runPlanificacion)
 	r.startLoop(ctx, "control_plane", r.controlPlaneCada(), r.runControlPlane)
+	r.startLoop(ctx, "notification_retry", r.notificationRetryCada(), r.runNotificationRetry)
 	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()
@@ -399,6 +401,28 @@ func (r *Runner) notifier() notificaciones.Notificador {
 	return r.Notifier()
 }
 
+func (r *Runner) runNotificationRetry() {
+	n := r.notifier()
+	if n == nil {
+		return
+	}
+	count, err := notificaciones.RetryDueGatewayDeliveries(n, 10)
+	if err != nil {
+		r.debugf("notification_retry error=%v", err)
+		if r.Automation != nil {
+			r.Automation.Audit("server", "notification_retry_error", "notificacion", 0, err.Error())
+		}
+		return
+	}
+	if count <= 0 {
+		return
+	}
+	r.debugf("notification_retry retried=%d", count)
+	if r.Automation != nil {
+		r.Automation.Audit("server", "notification_retry", "notificacion", 0, fmt.Sprintf("Entregas OpenClaw reintentadas: %d", count))
+	}
+}
+
 func (r *Runner) reanimacionCada() time.Duration {
 	if r.ReanimacionCada <= 0 {
 		return time.Minute
@@ -425,6 +449,13 @@ func (r *Runner) controlPlaneCada() time.Duration {
 		return 15 * time.Second
 	}
 	return r.ControlPlaneCada
+}
+
+func (r *Runner) notificationRetryCada() time.Duration {
+	if r.NotificationRetryCada <= 0 {
+		return time.Minute
+	}
+	return r.NotificationRetryCada
 }
 
 func (r *Runner) controlPlaneBatchTimeout() time.Duration {

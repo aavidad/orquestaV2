@@ -1208,6 +1208,7 @@ func apiHandlerNotificaciones(w http.ResponseWriter, r *http.Request) {
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{
 		"notificaciones": notificaciones.DescribirConfiguracion(),
+		"entregas":       notificaciones.DescribirOutbox(10),
 	})
 }
 

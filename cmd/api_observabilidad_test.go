@@ -67,6 +67,16 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	if err := db.ConfigSet("openclaw_gateway_operator", "alberto"); err != nil {
 		t.Fatalf("config openclaw operator: %v", err)
 	}
+	entregaID, err := db.CrearEntregaNotificacion("openclaw_gateway", "https://openclaw.local/gateway", db.EventoNotificacion{
+		Tipo:  "mensaje",
+		Texto: "hola openclaw",
+	})
+	if err != nil {
+		t.Fatalf("crear entrega notificacion: %v", err)
+	}
+	if err := db.MarcarEntregaNotificacionFallida(entregaID, "boom", time.Now().UTC().Add(time.Minute)); err != nil {
+		t.Fatalf("marcar entrega fallida: %v", err)
+	}
 	if err := db.ConfigSet("telegram_token", "tg-token"); err != nil {
 		t.Fatalf("config telegram token: %v", err)
 	}
@@ -179,7 +189,7 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 		t.Fatalf("notificaciones status=%d body=%s", recNotif.Code, recNotif.Body.String())
 	}
 	bodyNotif := recNotif.Body.String()
-	for _, token := range []string{"OpenClaw Gateway", "openclaw.local/gateway", "Telegram", "12345"} {
+	for _, token := range []string{"OpenClaw Gateway", "openclaw.local/gateway", "Telegram", "12345", "entregas", "fallida"} {
 		if !strings.Contains(bodyNotif, token) {
 			t.Fatalf("notificaciones incompleta, falta %q:\n%s", token, bodyNotif)
 		}

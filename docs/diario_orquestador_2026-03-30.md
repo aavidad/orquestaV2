@@ -5530,3 +5530,43 @@ Resultado:
 
 - `Codex3` ya sale como `observado 82%` y el desglose como `estimado ...`
 - el estado visible deja de presentar telemetría stale como si fuera cuota efectiva consolidada
+
+## 2026-04-01 — OpenClaw Gateway deja outbox persistente y retry visible
+
+Hallazgo:
+
+- el adaptador saliente de OpenClaw existía, pero seguía siendo básicamente `POST best-effort`
+- faltaba cola consultable, trazabilidad de error y retry/backoff oficial del servidor
+
+Decision:
+
+- introducir un outbox persistente mínimo para notificaciones salientes de OpenClaw
+- el primer envío y los reintentos se registran en BD y se exponen por API/dashboard
+- el retry vive dentro del `Runner`, no en scripts ni procesos laterales
+
+Codigo:
+
+- [db/notificaciones_outbox.go](/home/alberto/Trabajo/orquesta/db/notificaciones_outbox.go)
+- [notificaciones/openclaw.go](/home/alberto/Trabajo/orquesta/notificaciones/openclaw.go)
+- [planocontrol/runner.go](/home/alberto/Trabajo/orquesta/planocontrol/runner.go)
+- [cmd/api.go](/home/alberto/Trabajo/orquesta/cmd/api.go)
+- [cmd/serve.go](/home/alberto/Trabajo/orquesta/cmd/serve.go)
+- [notificaciones/openclaw_test.go](/home/alberto/Trabajo/orquesta/notificaciones/openclaw_test.go)
+- [planocontrol/runner_test.go](/home/alberto/Trabajo/orquesta/planocontrol/runner_test.go)
+- [cmd/api_observabilidad_test.go](/home/alberto/Trabajo/orquesta/cmd/api_observabilidad_test.go)
+- [cmd/serve_notificaciones_test.go](/home/alberto/Trabajo/orquesta/cmd/serve_notificaciones_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./notificaciones ./planocontrol ./cmd -run 'Test(OpenClawGatewayNotificador(PersisteFalloYRetry|EnviarEvento)|RetryDueGatewayDeliveriesReenviaPendientes|RunnerRunNotificationRetryAuditaReintentos|APIObservabilidadReadOnly|WebDashMuestraEstadoOpenClawNotificaciones)' -count=1`
+- `go build -o ./orquesta .`
+- `./orquesta server start`
+- `./orquesta server doctor`
+- `curl -sf http://127.0.0.1:16543/api/notificaciones`
+
+Resultado:
+
+- el servidor publica `entregas` junto al estado de canales
+- OpenClaw Gateway ya deja rastro persistente de fallo/entrega y `next_retry_at`
+- el retry sale del daemon oficial y no de glue externo

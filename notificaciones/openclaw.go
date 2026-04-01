@@ -44,6 +44,11 @@ type OpenClawGatewayNotificador struct {
 	Client   httpDoer
 }
 
+type OutboxSummary struct {
+	Activas   []*db.EntregaNotificacion `json:"activas,omitempty"`
+	Recientes []*db.EntregaNotificacion `json:"recientes,omitempty"`
+}
+
 type notificationConfigSnapshot struct {
 	gatewayURL      string
 	gatewayToken    string
@@ -134,6 +139,21 @@ func (n *OpenClawGatewayNotificador) EnviarAvisoFinProyecto(proyectoID int64, no
 }
 
 func (n *OpenClawGatewayNotificador) EnviarEvento(ev db.EventoNotificacion) error {
+	entregaID, err := db.CrearEntregaNotificacion("openclaw_gateway", strings.TrimSpace(n.URL), ev)
+	if err != nil {
+		return err
+	}
+	err = n.enviarEventoHTTP(ev)
+	if err != nil {
+		nextRetryAt := time.Now().UTC().Add(notificationRetryDelay(1))
+		_ = db.MarcarEntregaNotificacionFallida(entregaID, err.Error(), nextRetryAt)
+		return err
+	}
+	_ = db.MarcarEntregaNotificacionEntregada(entregaID)
+	return nil
+}
+
+func (n *OpenClawGatewayNotificador) enviarEventoHTTP(ev db.EventoNotificacion) error {
 	url := strings.TrimSpace(n.URL)
 	if url == "" {
 		return nil
@@ -194,6 +214,22 @@ func DescribirConfiguracion() EstadoNotificaciones {
 			describirCanalTelegram(cfg),
 		},
 	}
+}
+
+func DescribirOutbox(limit int) OutboxSummary {
+	if limit <= 0 {
+		limit = 10
+	}
+	activas, _ := db.ListarEntregasNotificacion(db.FiltroEntregasNotificacion{
+		Canal:       "openclaw_gateway",
+		ActivasOnly: true,
+		Limit:       limit,
+	})
+	recientes, _ := db.ListarEntregasNotificacion(db.FiltroEntregasNotificacion{
+		Canal: "openclaw_gateway",
+		Limit: limit,
+	})
+	return OutboxSummary{Activas: activas, Recientes: recientes}
 }
 
 func (n *OpenClawGatewayNotificador) client() httpDoer {
@@ -285,6 +321,74 @@ func buildConfiguredNotifiers() (Notificador, *TelegramNotificador, []string) {
 	default:
 		return &fanoutNotificador{items: items}, telegram, labels
 	}
+}
+
+func RetryDueGatewayDeliveries(n Notificador, limit int) (int, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	gateway := extractOpenClawGatewayNotifier(n)
+	if gateway == nil {
+		return 0, nil
+	}
+	items, err := db.ListarEntregasNotificacion(db.FiltroEntregasNotificacion{
+		Canal:       "openclaw_gateway",
+		ActivasOnly: true,
+		DueOnly:     true,
+		Limit:       limit,
+	})
+	if err != nil {
+		return 0, err
+	}
+	processed := 0
+	for i := len(items) - 1; i >= 0; i-- {
+		item := items[i]
+		if item == nil {
+			continue
+		}
+		intentos, err := db.IncrementarIntentoEntregaNotificacion(item.ID)
+		if err != nil {
+			return processed, err
+		}
+		if err := gateway.enviarEventoHTTP(item.Evento); err != nil {
+			nextRetryAt := time.Now().UTC().Add(notificationRetryDelay(intentos))
+			if markErr := db.MarcarEntregaNotificacionFallida(item.ID, err.Error(), nextRetryAt); markErr != nil {
+				return processed, markErr
+			}
+			processed++
+			continue
+		}
+		if err := db.MarcarEntregaNotificacionEntregada(item.ID); err != nil {
+			return processed, err
+		}
+		processed++
+	}
+	return processed, nil
+}
+
+func extractOpenClawGatewayNotifier(n Notificador) *OpenClawGatewayNotificador {
+	switch v := n.(type) {
+	case *OpenClawGatewayNotificador:
+		return v
+	case *fanoutNotificador:
+		for _, item := range v.items {
+			if gateway := extractOpenClawGatewayNotifier(item); gateway != nil {
+				return gateway
+			}
+		}
+	}
+	return nil
+}
+
+func notificationRetryDelay(intentos int) time.Duration {
+	if intentos <= 1 {
+		return 30 * time.Second
+	}
+	delay := time.Duration(intentos*intentos) * time.Minute
+	if delay > 15*time.Minute {
+		return 15 * time.Minute
+	}
+	return delay
 }
 
 func configuredTelegramNotificador(cfg notificationConfigSnapshot) *TelegramNotificador {

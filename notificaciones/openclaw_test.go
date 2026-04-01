@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"orquesta/db"
 )
@@ -199,6 +200,138 @@ func TestDescribirConfiguracionReflejaOpenClawYTelegram(t *testing.T) {
 	}
 	if !estado.Canales[1].Activo || !strings.Contains(estado.Canales[1].Detalle, "12345") {
 		t.Fatalf("estado telegram inesperado: %+v", estado.Canales[1])
+	}
+}
+
+func TestOpenClawGatewayNotificadorPersisteFalloYRetry(t *testing.T) {
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "orquesta-notificaciones-retry.db")
+
+	prevDB := os.Getenv("ORQUESTA_DB")
+	prevForceLocal := os.Getenv("ORQUESTA_FORCE_LOCAL_DB")
+	prevDisableServer := os.Getenv("ORQUESTA_DISABLE_SERVER_CLIENT")
+	t.Cleanup(func() {
+		db.Close()
+		db.DB = nil
+		if prevDB == "" {
+			_ = os.Unsetenv("ORQUESTA_DB")
+		} else {
+			_ = os.Setenv("ORQUESTA_DB", prevDB)
+		}
+		if prevForceLocal == "" {
+			_ = os.Unsetenv("ORQUESTA_FORCE_LOCAL_DB")
+		} else {
+			_ = os.Setenv("ORQUESTA_FORCE_LOCAL_DB", prevForceLocal)
+		}
+		if prevDisableServer == "" {
+			_ = os.Unsetenv("ORQUESTA_DISABLE_SERVER_CLIENT")
+		} else {
+			_ = os.Setenv("ORQUESTA_DISABLE_SERVER_CLIENT", prevDisableServer)
+		}
+	})
+
+	_ = os.Setenv("ORQUESTA_DB", dbPath)
+	_ = os.Setenv("ORQUESTA_FORCE_LOCAL_DB", "1")
+	_ = os.Setenv("ORQUESTA_DISABLE_SERVER_CLIENT", "1")
+	if err := db.Open(); err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+
+	n := &OpenClawGatewayNotificador{
+		URL: "https://openclaw.local/gateway",
+		Client: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusBadGateway,
+				Body:       io.NopCloser(strings.NewReader("gateway down")),
+				Header:     make(http.Header),
+			}, nil
+		}),
+	}
+	err := n.EnviarEvento(db.EventoNotificacion{Tipo: "mensaje", Texto: "hola"})
+	if err == nil {
+		t.Fatalf("deberia fallar el envio inicial")
+	}
+
+	items, err := db.ListarEntregasNotificacion(db.FiltroEntregasNotificacion{Canal: "openclaw_gateway", Limit: 5})
+	if err != nil {
+		t.Fatalf("listar entregas: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("entregas inesperadas: %+v", items)
+	}
+	if items[0].Estado != db.EntregaNotificacionFallida || items[0].NextRetryAt == nil {
+		t.Fatalf("entrega sin retry esperado: %+v", items[0])
+	}
+}
+
+func TestRetryDueGatewayDeliveriesReenviaPendientes(t *testing.T) {
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "orquesta-notificaciones-outbox.db")
+
+	prevDB := os.Getenv("ORQUESTA_DB")
+	prevForceLocal := os.Getenv("ORQUESTA_FORCE_LOCAL_DB")
+	prevDisableServer := os.Getenv("ORQUESTA_DISABLE_SERVER_CLIENT")
+	t.Cleanup(func() {
+		db.Close()
+		db.DB = nil
+		if prevDB == "" {
+			_ = os.Unsetenv("ORQUESTA_DB")
+		} else {
+			_ = os.Setenv("ORQUESTA_DB", prevDB)
+		}
+		if prevForceLocal == "" {
+			_ = os.Unsetenv("ORQUESTA_FORCE_LOCAL_DB")
+		} else {
+			_ = os.Setenv("ORQUESTA_FORCE_LOCAL_DB", prevForceLocal)
+		}
+		if prevDisableServer == "" {
+			_ = os.Unsetenv("ORQUESTA_DISABLE_SERVER_CLIENT")
+		} else {
+			_ = os.Setenv("ORQUESTA_DISABLE_SERVER_CLIENT", prevDisableServer)
+		}
+	})
+
+	_ = os.Setenv("ORQUESTA_DB", dbPath)
+	_ = os.Setenv("ORQUESTA_FORCE_LOCAL_DB", "1")
+	_ = os.Setenv("ORQUESTA_DISABLE_SERVER_CLIENT", "1")
+	if err := db.Open(); err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+
+	id, err := db.CrearEntregaNotificacion("openclaw_gateway", "https://openclaw.local/gateway", db.EventoNotificacion{Tipo: "mensaje", Texto: "hola"})
+	if err != nil {
+		t.Fatalf("crear entrega: %v", err)
+	}
+	if err := db.MarcarEntregaNotificacionFallida(id, "boom", time.Now().UTC().Add(-time.Minute)); err != nil {
+		t.Fatalf("marcar fallida: %v", err)
+	}
+
+	calls := 0
+	notifier := &OpenClawGatewayNotificador{
+		URL: "https://openclaw.local/gateway",
+		Client: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			calls++
+			return &http.Response{
+				StatusCode: http.StatusAccepted,
+				Body:       io.NopCloser(strings.NewReader("{}")),
+				Header:     make(http.Header),
+			}, nil
+		}),
+	}
+	n := &fanoutNotificador{items: []Notificador{notifier}}
+	retried, err := RetryDueGatewayDeliveries(n, 5)
+	if err != nil {
+		t.Fatalf("retry due deliveries: %v", err)
+	}
+	if retried != 1 || calls != 1 {
+		t.Fatalf("reintentos inesperados: retried=%d calls=%d", retried, calls)
+	}
+	item, err := db.GetEntregaNotificacion(id)
+	if err != nil {
+		t.Fatalf("get entrega: %v", err)
+	}
+	if item == nil || item.Estado != db.EntregaNotificacionEntregada || item.DeliveredAt == nil {
+		t.Fatalf("entrega no consolidada como entregada: %+v", item)
 	}
 }
 

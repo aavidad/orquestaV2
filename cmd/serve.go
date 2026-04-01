@@ -44,6 +44,7 @@ type webDashData struct {
 	Runtimes       []webRuntimeRow
 	Checkpoints    []webTimeTravelCheckpointRow
 	Notificaciones notificaciones.EstadoNotificaciones
+	NotifOutbox    notificaciones.OutboxSummary
 	Generado       string
 	Msg            string
 }
@@ -677,11 +678,13 @@ func webHandlerDash(w http.ResponseWriter, r *http.Request) {
 		recentCheckpoints = append(recentCheckpoints, runtimeCheckpointToWeb(cp))
 	}
 	notifs := notificaciones.DescribirConfiguracion()
+	notifOutbox := notificaciones.DescribirOutbox(5)
 	webRender(w, r, webTplLayout+webTplDash, webDashData{
 		Agentes: agentes, Counts: counts, Total: total,
 		Completadas: completadas, Pct: pct,
 		Abiertas: resAbiertas, EnProgreso: ep, Runtimes: runtimes, Checkpoints: recentCheckpoints,
 		Notificaciones: notifs,
+		NotifOutbox:    notifOutbox,
 		Generado:       time.Now().Format("2006-01-02 15:04:05"),
 	})
 }
@@ -1532,6 +1535,24 @@ const webTplDash = `{{define "content"}}
         </tr>
       {{end}}
       </tbody></table>
+      {{if .NotifOutbox.Recientes}}
+      <div style="margin-top:.8rem;border-top:1px solid #e2e8f0;padding-top:.7rem">
+        <div style="font-size:.75rem;color:#64748b;margin-bottom:.4rem">Entregas recientes</div>
+        <table style="width:100%"><tbody>
+        {{range .NotifOutbox.Recientes}}
+          <tr style="border-bottom:1px solid #f1f5f9">
+            <td style="padding:.3rem 0;font-size:.74rem"><strong>{{.Canal}}</strong> · {{.TipoEvento}}</td>
+            <td style="padding:.3rem 0;text-align:right"><span class="tag {{if eq .Estado "entregada"}}rt-disponible{{else if eq .Estado "fallida"}}rt-cerrado{{else}}t-media{{end}}">{{.Estado}}</span></td>
+          </tr>
+          <tr>
+            <td colspan="2" style="padding:0 0 .45rem 0;font-size:.7rem;color:#64748b">
+              {{if .Destino}}{{.Destino}}{{if .UltimoError}} · {{end}}{{end}}{{if .UltimoError}}err={{.UltimoError}}{{end}}
+            </td>
+          </tr>
+        {{end}}
+        </tbody></table>
+      </div>
+      {{end}}
     </div>
     {{if .EnProgreso}}
     <h4 style="margin:0 0 .5rem 0">{{tr "En progreso"}}</h4>
