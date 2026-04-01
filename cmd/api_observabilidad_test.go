@@ -253,6 +253,9 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 			t.Fatalf("openclaw operator incompleto, falta %q:\n%s", token, bodyOperator)
 		}
 	}
+	if _, ok := operatorJSON["queue_summary"]; !ok {
+		t.Fatalf("openclaw operator sin queue_summary: %s", recOperator.Body.String())
+	}
 	for _, token := range []string{"next_safe_action", "safe_action_queue"} {
 		if !strings.Contains(bodyOperator, token) {
 			t.Fatalf("openclaw operator sin cola segura, falta %q:\n%s", token, bodyOperator)

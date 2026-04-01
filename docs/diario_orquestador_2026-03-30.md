@@ -6481,3 +6481,20 @@ Resultado:
     - `cola completa = 1`
     - `cola segura = 1`
     - `requieren arbitraje = 0`
+
+## 2026-04-01 — `/api/openclaw/operator` ya expone `queue_summary`
+
+- La web ya calculaba y mostraba:
+  - `cola completa`
+  - `cola segura`
+  - `requieren arbitraje`
+- Faltaba la misma proyección para clientes estructurados.
+- Se añadió `queue_summary` a `/api/openclaw/operator` con:
+  - `total`
+  - `safe`
+  - `manual`
+- Validación dirigida:
+  - `go test ./cmd -run 'TestAPIObservabilidadReadOnly' -count=1`
+- Validación viva:
+  - `GET /api/openclaw/operator`
+  - `queue_summary = {total:1, safe:1, manual:0}`

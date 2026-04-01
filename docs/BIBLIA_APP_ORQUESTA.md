@@ -968,6 +968,11 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - contador de `cola segura`
   - contador de `requieren arbitraje`
   para que el supervisor vea de un vistazo cuánto arbitraje queda y cuánto puede automatizar.
+- La API agregada de OpenClaw debe publicar ese mismo resumen como dato estructurado:
+  - `queue_summary.total`
+  - `queue_summary.safe`
+  - `queue_summary.manual`
+  sin obligar al cliente a recomputarlo desde las colas.
 - Si `next_action` y `next_safe_action` apuntan al mismo elemento:
   - la web no debe duplicar tarjetas
   - debe quedar solo la tarjeta segura

@@ -1258,6 +1258,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
+	queueSummary := buildOpenClawQueueSummary(revision)
 	apiWriteJSON(w, http.StatusOK, map[string]any{
 		"status":               statusResumen,
 		"review":               revision,
@@ -1265,6 +1266,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		"action_queue":         revision["action_queue"],
 		"next_safe_action":     revision["next_safe_action"],
 		"safe_action_queue":    revision["safe_action_queue"],
+		"queue_summary":        queueSummary,
 		"notificaciones":       notificaciones.DescribirConfiguracion(),
 		"entregas":             notificaciones.DescribirOutbox(10),
 		"eventos_normalizados": eventos,
@@ -1307,6 +1309,12 @@ type apiOpenClawMailboxLite struct {
 	OldestAgeMin    int        `json:"oldest_age_min,omitempty"`
 }
 
+type apiOpenClawQueueSummary struct {
+	Total   int `json:"total"`
+	Safe    int `json:"safe"`
+	Manual  int `json:"manual"`
+}
+
 func buildOpenClawOperatorStatus(status *estadoResumen) (apiOpenClawStatusLite, error) {
 	if status == nil {
 		return apiOpenClawStatusLite{}, nil
@@ -1327,6 +1335,28 @@ func buildOpenClawOperatorStatus(status *estadoResumen) (apiOpenClawStatusLite, 
 		TareasReservadas:   filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
 		PropuestasAbiertas: status.PropuestasAbiertas,
 	}, nil
+}
+
+func buildOpenClawQueueSummary(review map[string]any) apiOpenClawQueueSummary {
+	var allActions []supervisorRecommendedAction
+	if items, ok := review["action_queue"].([]supervisorRecommendedAction); ok {
+		allActions = items
+	}
+	var safeActions []supervisorRecommendedAction
+	if items, ok := review["safe_action_queue"].([]supervisorRecommendedAction); ok {
+		safeActions = items
+	}
+	total := len(allActions)
+	safe := len(safeActions)
+	manual := total - safe
+	if manual < 0 {
+		manual = 0
+	}
+	return apiOpenClawQueueSummary{
+		Total:  total,
+		Safe:   safe,
+		Manual: manual,
+	}
 }
 
 func filtrarOpenClawTareasPorEstado(items []tareaLite, estados ...db.EstadoTarea) []tareaLite {
