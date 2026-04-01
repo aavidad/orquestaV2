@@ -5822,3 +5822,24 @@ Resultado:
 - Validación viva:
   - `/api/status` ya devuelve ambas claves con el mismo contenido
   - `jq '{resumenTareas, tareasPorEstado}'` confirma el alias correcto en el daemon real
+
+## 2026-04-01 — prueba grande: Codex no admite guidance viva fiable
+
+- Se ejecutó una prueba real concurrente sobre `Codex3` y `Codex4` con `nudge` nuevas desde Orquesta y observación de `runtime_orders`, `runtime_mailbox` y transcript.
+- Hallazgo duro:
+  - `Codex3` y `Codex4` seguían pudiendo entrar en `runtime_panic` por `tui/src/wrapping.rs:52` incluso con frases ya compactadas y canónicas (`resume riesgo y siguiente paso`).
+  - El problema no era el texto largo; era la propia guidance viva por `stdin/session_resume` sobre Codex TTY.
+- Decisión estructural aplicada:
+  - para `Codex` local con TTY inestable, la guidance durable de mailbox (`autonomia`, `nudge`, `watchdog`, `governance_refresh`, `skills_refresh`) ya no se entrega en caliente
+  - la `send_instruction` se completa como `mailbox_only` y la verdad queda en `runtime_mailbox`
+- Cobertura añadida:
+  - `TestRuntimeOrderSendInstructionCodexGuidanceMailboxQuedaDurable`
+  - tests dirigidos en `internal/controlruntime` para que el fallback de compactación no vuelva a dejar pasar texto libre arbitrario a Codex
+- Validación viva posterior con el daemon nuevo:
+  - `nudge #80836` y `#80837` quedaron `completada`
+  - no aparecieron nuevas `send_instruction` para esos nudges
+  - no aparecieron nuevas líneas `stdin` ni nuevos `runtime_panic` en transcript
+  - `runtime_mailbox` mantuvo `64669` y `64670` pendientes como guidance durable correcta
+- Conclusión:
+  - el núcleo ya distingue entre guidance durable y entrega viva segura
+  - para Codex, hoy la entrega viva segura no existe; la estrategia profesional es durabilidad + bootstrap/reanudación posterior, no insistir por `stdin`

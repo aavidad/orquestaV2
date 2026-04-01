@@ -836,6 +836,13 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - Cuando una guidance durable (`autonomia`, `nudge`, `watchdog`, `governance_refresh`, `skills_refresh`) cae a `mailbox_only` por `session_resume timeout` sobre la misma sesión activa, Orquesta no debe rematerializarla en bucle.
 - Ese intento debe quedar deduplicado mientras no cambien `handle` o `external_session_id`.
 - Para `instruction` normal sí puede seguir existiendo reintento tras TTL; para guidance operativa del servidor, el criterio correcto es evitar repiques sobre la misma sesión viva.
+- Para `Codex` local con TTY inestable, la guidance durable de mailbox no se entrega en caliente ni por `supervisor_local` ni por `session_resume`.
+- El comportamiento correcto para `nudge`, `autonomia`, `watchdog`, `governance_refresh` y `skills_refresh` es:
+  1. conservar el mensaje en `runtime_mailbox`
+  2. completar la `send_instruction` como `mailbox_only`
+  3. no generar `stdin` viva ni reanimación por esa guidance
+- La razón es operativa y ya validada en vivo: incluso frases cortas y canónicas (`resume riesgo y siguiente paso`) pueden disparar `runtime_panic` en Codex TUI.
+- La guidance viva para Codex solo podrá reabrirse cuando exista un canal distinto y demostrablemente estable; mientras tanto, la durabilidad manda sobre la inmediatez.
 
 ### Supervisor local y salidas externas falsas
 

@@ -4098,6 +4098,16 @@ func runtimeOrderSendInstructionDebeEvitarSupervisorLocal(handle *RuntimeHandle,
 	if !runtimeHandleUsaCodexTTYInestable(meta) {
 		return false, ""
 	}
+	if runtimeOrderSendInstructionProvieneMailbox(payload) {
+		switch strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")) {
+		case "autonomia", "nudge", "watchdog", MailboxKindGovernanceRefresh, MailboxKindSkillsRefresh:
+			reason := "codex_guidance_mailbox_durable"
+			if kind := strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")); kind != "" {
+				reason += ":" + kind
+			}
+			return true, reason
+		}
+	}
 	texto = strings.TrimSpace(texto)
 	if len(texto) <= 32 {
 		return false, ""

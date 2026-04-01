@@ -173,6 +173,32 @@ func TestNormalizarInstruccionProcesoCompactaOrquestaGenericaCodexLocal(t *testi
 	}
 }
 
+func TestNormalizarInstruccionProcesoCompactaPruebaGrandeCodexLocal(t *testing.T) {
+	pid := int64(os.Getpid())
+	obj := ObjetivoProceso{
+		PID:          &pid,
+		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex3 exec"}`,
+	}
+	texto := "Prueba grande: resume en dos lineas el riesgo principal de #410 y el siguiente test que vas a correr."
+	got := NormalizarInstruccionProceso(obj, texto)
+	if got != "resume riesgo y siguiente paso" {
+		t.Fatalf("compactacion inesperada para prueba grande: %q", got)
+	}
+}
+
+func TestNormalizarInstruccionProcesoNoDejaFallbackLibreParaCodexLocal(t *testing.T) {
+	pid := int64(os.Getpid())
+	obj := ObjetivoProceso{
+		PID:          &pid,
+		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex4 exec"}`,
+	}
+	texto := "Texto libre muy raro sin patron estable 1234567890 y detalles arbitrarios que antes se truncaban y aun asi podian romper la TUI."
+	got := NormalizarInstruccionProceso(obj, texto)
+	if got != "continua trabajo actual" {
+		t.Fatalf("el fallback libre de Codex deberia colapsar a guidance segura, got=%q", got)
+	}
+}
+
 func TestRenderedCommandLooksLikeCodexCLI(t *testing.T) {
 	cases := []struct {
 		raw  string

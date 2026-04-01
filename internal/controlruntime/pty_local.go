@@ -371,6 +371,10 @@ func compactarInstruccionCodexTTY(texto string) string {
 		{match: []string{"ready for review", "listo para review", "listo para revision"}, out: "prepara review y sigue"},
 		{match: []string{"approval_request", "waiting_human", "esperando aprobacion", "esperando aprobacion", "me dejas", "can i ", "should i"}, out: "no esperes; decide y sigue"},
 		{match: []string{"blocked", "bloqueado", "bloqueo"}, out: "reevalua bloqueo y sigue"},
+		{match: []string{"riesgo principal", "risk principal", "riesgo"}, out: "resume riesgo y siguiente paso"},
+		{match: []string{"comprobacion server-first", "server-first", "siguiente test", "siguiente prueba", "que vas a correr"}, out: "corre prueba server-first y resume"},
+		{match: []string{"resume en dos lineas", "resume en dos lineas", "resumelo en dos lineas", "resume en dos lineas"}, out: "resume hallazgo y sigue"},
+		{match: []string{"prueba grande", "prueba real", "stress test"}, out: "corre prueba grande y resume"},
 		{match: []string{"needs_replan", "siguiente paso", "backlog"}, out: "elige siguiente frente util"},
 		{match: []string{"continua de forma autonoma", "sigue trabajando", "continuar_trabajo"}, out: "continua trabajo actual"},
 	}
@@ -387,18 +391,10 @@ func compactarInstruccionCodexTTY(texto string) string {
 	if strings.HasPrefix(lower, "orquesta:") {
 		return "continua trabajo actual"
 	}
-	const maxChars = 32
-	if len(texto) <= maxChars {
-		return texto
-	}
-	truncado := strings.TrimSpace(texto[:maxChars])
-	if idx := strings.LastIndex(truncado, " "); idx > maxChars/2 {
-		truncado = strings.TrimSpace(truncado[:idx])
-	}
-	if truncado == "" {
-		return "continua trabajo actual"
-	}
-	return truncado
+	// Codex TTY and session_resume are fragile under arbitrary free-form text.
+	// If no canonical pattern matches, fall back to a safe generic guidance
+	// instead of passing truncated user text that may still crash the TUI.
+	return "continua trabajo actual"
 }
 
 func EnviarInstruccionProceso(obj ObjetivoProceso, instruccion string) (bool, int, error) {
