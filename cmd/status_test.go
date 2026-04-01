@@ -503,7 +503,7 @@ func TestRenderStatusSummaryMuestraCuotaAgente(t *testing.T) {
 }
 
 func TestRenderStatusSummaryMuestraAgentesEnEnfriamiento(t *testing.T) {
-	resetAt := time.Date(2026, 4, 1, 1, 31, 33, 0, time.UTC)
+	resetAt := time.Now().UTC().Add(6 * time.Hour)
 	pct := 0
 	out := captureOutput(t, func() {
 		renderStatusSummary(&statusContext{

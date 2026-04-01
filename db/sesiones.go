@@ -438,6 +438,28 @@ func listarHandlesActivosOperativosMap() (map[string]bool, error) {
 	})
 }
 
+func listarAgentesConHandleActivoOperativo() (map[string]bool, error) {
+	handlesActivos, err := listarHandlesActivosOperativosMap()
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(handlesActivos))
+	for key, ok := range handlesActivos {
+		if !ok {
+			continue
+		}
+		nombre := key
+		if idx := strings.Index(nombre, "#"); idx >= 0 {
+			nombre = nombre[:idx]
+		}
+		nombre = strings.ToLower(strings.TrimSpace(nombre))
+		if nombre != "" {
+			out[nombre] = true
+		}
+	}
+	return out, nil
+}
+
 func sesionTieneHandleActivoOperativo(agente string, proyectoID *int64) (bool, error) {
 	handlesActivos, err := listarHandlesActivosOperativosMap()
 	if err != nil {
@@ -695,15 +717,6 @@ func proyectarBloqueoVisibleDesdePresupuestoObservado(a *Agente) {
 		}
 		return
 	}
-	if strings.EqualFold(strings.TrimSpace(a.PresupuestoEstado), "handoff_preventivo") {
-		a.EstadoCuota = "enfriamiento"
-		if strings.TrimSpace(a.MotivoPausa) == "" {
-			a.MotivoPausa = "Presupuesto crítico observado"
-		}
-		if a.PresupuestoResetAt != nil && a.PresupuestoResetAt.After(now) {
-			a.ReanimarAt = a.PresupuestoResetAt
-		}
-	}
 }
 
 func sincronizarReanimacionVisibleDesdePresupuesto(a *Agente) {
@@ -799,8 +812,34 @@ func ListarAgentesConSesionesActivas(sesiones []*Sesion) ([]*Agente, error) {
 	if err != nil {
 		return nil, err
 	}
+	activosOriginales := make(map[string]bool, len(list))
+	for _, agente := range list {
+		if agente != nil {
+			activosOriginales[agente.Nombre] = agente.Activo
+		}
+	}
 	enriquecerAgentesConPresupuesto(list)
 	aplicarEstadoVisibleAgentes(list, sesiones)
+	agentesConHandleActivo, err := listarAgentesConHandleActivoOperativo()
+	if err != nil {
+		return nil, err
+	}
+	for _, agente := range list {
+		if agente == nil || agente.Activo || !activosOriginales[agente.Nombre] {
+			continue
+		}
+		estadoCuota := strings.TrimSpace(agente.EstadoCuota)
+		if strings.EqualFold(estadoCuota, "enfriamiento") || strings.EqualFold(estadoCuota, "agotado") {
+			continue
+		}
+		if !agentesConHandleActivo[strings.ToLower(strings.TrimSpace(agente.Nombre))] {
+			continue
+		}
+		agente.Activo = true
+		if strings.TrimSpace(agente.EstadoSesion) == "" {
+			agente.EstadoSesion = "disponible"
+		}
+	}
 	return list, nil
 }
 
@@ -994,14 +1033,6 @@ func proyectarEstadoCuotaVisibleDesdePresupuesto(a *Agente) {
 		}
 		if strings.TrimSpace(a.MotivoPausa) == "" {
 			a.MotivoPausa = "Presupuesto agotado observado"
-		}
-	case "handoff_preventivo":
-		a.EstadoCuota = "enfriamiento"
-		if a.PresupuestoResetAt != nil && a.PresupuestoResetAt.After(time.Now().UTC()) {
-			a.ReanimarAt = a.PresupuestoResetAt
-		}
-		if strings.TrimSpace(a.MotivoPausa) == "" {
-			a.MotivoPausa = "Presupuesto crítico observado"
 		}
 	}
 }

@@ -16,15 +16,55 @@ var statusService StatusService = dbStatusService{}
 
 type dbStatusService struct{}
 
-func agenteCuentaComoConectado(agente *db.Agente) bool {
-	if agente == nil || !agente.Activo {
+func agenteTieneActividadRecienteVisible(agente *db.Agente) bool {
+	if agente == nil || agente.UltimaSesion == nil || agente.UltimaSesion.IsZero() {
 		return false
 	}
-	return strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "activo")
+	return agente.UltimaSesion.After(time.Now().UTC().Add(-5 * time.Minute))
+}
+
+func sesionesVisiblesParaEstado() ([]*db.Sesion, error) {
+	return db.ListarSesionesActivasOperativas()
+}
+
+func nombresSesionesVisibles() (map[string]bool, error) {
+	sesiones, err := sesionesVisiblesParaEstado()
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(sesiones))
+	for _, sesion := range sesiones {
+		if sesion == nil {
+			continue
+		}
+		nombre := strings.ToLower(strings.TrimSpace(sesion.Agente))
+		if nombre != "" {
+			out[nombre] = true
+		}
+	}
+	return out, nil
+}
+
+func agenteCuentaComoConectado(agente *db.Agente) bool {
+	if agente == nil {
+		return false
+	}
+	estadoCuota := strings.TrimSpace(agente.EstadoCuota)
+	if estadoCuota != "" && !strings.EqualFold(estadoCuota, "activo") {
+		return false
+	}
+	if agente.Activo {
+		return true
+	}
+	estadoSesion := strings.TrimSpace(agente.EstadoSesion)
+	if estadoSesion != "" && !strings.EqualFold(estadoSesion, "cerrada") && !strings.EqualFold(estadoSesion, "pausada") {
+		return true
+	}
+	return agenteTieneActividadRecienteVisible(agente)
 }
 
 func (dbStatusService) FetchStatus() (apiStatusResponse, error) {
-	sesiones, err := db.ListarSesionesActivasOperativas()
+	sesiones, err := sesionesVisiblesParaEstado()
 	if err != nil {
 		return apiStatusResponse{}, err
 	}

@@ -69,9 +69,20 @@ func restringirPlanificadorATestAgentes(t *testing.T, permitidos ...string) {
 	}
 }
 
+func configurarPoolAutobootstrapTest(t *testing.T, proyectoSlug string, workers ...string) {
+	t.Helper()
+	if err := ConfigSet("server_autobootstrap_project_slug", strings.TrimSpace(proyectoSlug)); err != nil {
+		t.Fatalf("config project slug: %v", err)
+	}
+	if err := ConfigSet("server_autobootstrap_worker_agents", strings.Join(workers, ",")); err != nil {
+		t.Fatalf("config worker agents: %v", err)
+	}
+}
+
 func TestPlanificarTareasAutomaticamenteAutoasignaYEncolaStart(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	restringirPlanificadorATestAgentes(t, "Codex1")
+	configurarPoolAutobootstrapTest(t, "orquestador", "Codex1")
 
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
@@ -133,6 +144,7 @@ func TestPlanificarTareasAutomaticamenteAutoasignaYEncolaStart(t *testing.T) {
 func TestPlanificarTareasAutomaticamenteEncolaStartParaTrabajoYaAsignado(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	restringirPlanificadorATestAgentes(t, "Codex1")
+	configurarPoolAutobootstrapTest(t, "orquestador", "Codex1")
 
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
@@ -186,6 +198,7 @@ func TestPlanificarTareasAutomaticamenteEncolaStartParaTrabajoYaAsignado(t *test
 func TestPlanificarTareasAutomaticamenteRecuperaTareaHuerfanaYLaReasigna(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	restringirPlanificadorATestAgentes(t, "CodexStale", "CodexNuevo")
+	configurarPoolAutobootstrapTest(t, "orquestador", "CodexStale", "CodexNuevo")
 
 	if err := RegistrarAgente("CodexStale", "programador"); err != nil {
 		t.Fatalf("registrar agente stale: %v", err)
@@ -463,6 +476,7 @@ func TestPlanificarTareasAutomaticamenteNoRecuperaTareaRecienTomada(t *testing.T
 func TestPlanificarTareasAutomaticamenteLiberaTareaAsignadaDeAgenteEnCuotaYLaReasigna(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	restringirPlanificadorATestAgentes(t, "CodexAgotado", "CodexNuevo")
+	configurarPoolAutobootstrapTest(t, "orquestador", "CodexAgotado", "CodexNuevo")
 
 	if err := RegistrarAgente("CodexAgotado", "programador"); err != nil {
 		t.Fatalf("registrar agente agotado: %v", err)
@@ -536,6 +550,7 @@ func TestPlanificarTareasAutomaticamenteLiberaTareaAsignadaDeAgenteEnCuotaYLaRea
 func TestPlanificarTareasAutomaticamenteLiberaTareaPorPresupuestoObservadoFresco(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	restringirPlanificadorATestAgentes(t, "CodexAgotado", "CodexNuevo")
+	configurarPoolAutobootstrapTest(t, "orquestador", "CodexAgotado", "CodexNuevo")
 
 	if err := RegistrarAgente("CodexAgotado", "programador"); err != nil {
 		t.Fatalf("registrar agente agotado: %v", err)
@@ -604,7 +619,7 @@ func TestPlanificarTareasAutomaticamenteLiberaTareaPorPresupuestoObservadoFresco
 	if tarea.Agente == nil || *tarea.Agente != "CodexNuevo" || tarea.Estado != TareaAsignada {
 		t.Fatalf("la tarea retenida por presupuesto observado debería reasignarse: %+v", tarea)
 	}
-	if !strings.Contains(strings.ToLower(tarea.Notas), "cuota agotado") {
+	if !strings.Contains(strings.ToLower(tarea.Notas), "cuota enfriamiento") {
 		t.Fatalf("deberia anotar la liberacion por cuota observada: %q", tarea.Notas)
 	}
 }
@@ -886,6 +901,7 @@ func TestPlanificarTareasAutomaticamenteNoAutoasignaTrabajoASupervisorReservado(
 func TestPlanificarTareasAutomaticamenteNoCuentaSupervisorReservadoComoWorker(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	restringirPlanificadorATestAgentes(t, "CodexSupervisor", "CodexWorker")
+	configurarPoolAutobootstrapTest(t, "orquestador", "CodexSupervisor", "CodexWorker")
 
 	if err := RegistrarAgente("CodexSupervisor", "programador"); err != nil {
 		t.Fatalf("registrar supervisor: %v", err)

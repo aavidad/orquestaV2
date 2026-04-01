@@ -441,7 +441,7 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		out.AccionRecomendada = "pausar_por_cuota"
 		out.DebePausar = true
 		out.Motivo = motivoPresupuesto
-	case agente.EstadoCuota != "activo":
+	case strings.TrimSpace(agente.EstadoCuota) != "" && agente.EstadoCuota != "activo":
 		out.AccionRecomendada = "pausar_por_cuota"
 		out.DebePausar = true
 		if agente.ReanimarAt != nil {
@@ -472,6 +472,9 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 func (s *Service) shouldPauseByFreshBudget(agente string) (bool, string, error) {
 	p, _, err := s.store.GetLatestAgentBudget(strings.TrimSpace(agente))
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, "", nil
+		}
 		return false, "", err
 	}
 	if p == nil || !db.PresupuestoSesionFresco(p) {

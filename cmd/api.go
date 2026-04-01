@@ -951,9 +951,14 @@ func apiHandlerAgentesPresupuesto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if activosOnly {
+		nombresVisibles, err := nombresSesionesVisibles()
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
 		filtrados := make([]*db.Agente, 0, len(agentes))
 		for _, agente := range agentes {
-			if agente != nil && agente.Activo {
+			if agenteCuentaComoConectado(agente) || (agente != nil && nombresVisibles[strings.ToLower(strings.TrimSpace(agente.Nombre))] && !strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "enfriamiento") && !strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "agotado")) {
 				filtrados = append(filtrados, agente)
 			}
 		}

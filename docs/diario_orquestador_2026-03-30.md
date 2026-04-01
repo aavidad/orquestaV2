@@ -5265,3 +5265,41 @@ Validacion:
   - tras un ciclo del control plane, `Codex4` tomó `#411` sin intervención manual
   - `./orquesta status` pasó a mostrar `[411] ... -> Codex4`
   - `./orquesta runtime ordenes --agente Codex4` mostró `nudge/send_instruction` completadas en ese nuevo frente
+
+## 2026-04-01 — la presencia visible vuelve a ser honesta y el planificador queda alineado con la flota oficial
+
+Hallazgo:
+
+- el ajuste de presupuesto visible había corregido `/api/status` para casos útiles como `CodexCuenta`, pero seguía quedando una fuga: cuando no había `sesiones operativas`, `status` caía a inspección por `heartbeat` puro y podía resucitar agentes con handle fallido o runtime principal stale
+- además, `handoff_preventivo` se estaba proyectando como `estado_cuota=enfriamiento`, lo que escondía agentes todavía usables bajo relevo preventivo
+- al corregir eso, la suite completa destapó otro acoplamiento real: varios tests del planificador en el proyecto `orquestador` seguían asumiendo que cualquier programador podía autoasignarse trabajo, ignorando el pool canónico `server_autobootstrap_worker_agents`
+
+Decision:
+
+- `status`, `/api/status` y `/api/agentes/presupuesto?activos=true` solo pueden contar como visibles las `sesiones operativas` canónicas; se elimina el fallback laxo por inspección
+- `handoff_preventivo` deja de bloquear visibilidad: sigue siendo presupuesto crítico, pero no pausa visible
+- el planificador no se relaja para contentar tests viejos; se alinean los tests del proyecto `orquestador` con el pool oficial de workers
+- el caso de presupuesto observado fresco con semanal viva y ventana corta agotada se documenta como `enfriamiento`, no `agotado`
+
+Codigo:
+
+- [agentesapp/runtime_service.go](/home/alberto/Trabajo/orquesta/agentesapp/runtime_service.go)
+- [cmd/api.go](/home/alberto/Trabajo/orquesta/cmd/api.go)
+- [cmd/status_service.go](/home/alberto/Trabajo/orquesta/cmd/status_service.go)
+- [cmd/status_test.go](/home/alberto/Trabajo/orquesta/cmd/status_test.go)
+- [db/sesiones.go](/home/alberto/Trabajo/orquesta/db/sesiones.go)
+- [db/planificador_autostart_test.go](/home/alberto/Trabajo/orquesta/db/planificador_autostart_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'Test(APIAgentesYStatusExponenCuentaYCuotaVisible|APIAgentesPresupuestoYCuentas|APIAgenteTickAutoPausaPorAgotamiento|RenderStatusSummaryMuestraAgentesEnEnfriamiento|APIStatusNoCuentaSesionConHandleFallidoReciente|APIStatusNoCuentaAgenteConRuntimePrincipalStaleAunqueMantengaHandleActivo|ShouldDelegateToLocalServerExcluyeComandosDeRecuperacion)$' -count=1`
+- `go test ./db -run 'Test(GetAgenteProyectaEstadoCuotaDesdePresupuestoObservadoFresco|GetAgenteProyectaEstadoCuotaDesdePresupuestoSemanalAgotado|GetAgenteProyectaEstadoCuotaDesdeProviderWindowAgotada|ListarAgentesIgnoraSesionesConHeartbeatObsoleto|SesionRecienteNoCuentaComoOperativaSiSuUltimoHandleYaFallo|ListarAgentesOcultaHandleActivoSiSuRuntimePrincipalYaEstaStale|PlanificarTareasAutomaticamenteAutoasignaYEncolaStart|PlanificarTareasAutomaticamenteEncolaStartParaTrabajoYaAsignado|PlanificarTareasAutomaticamenteRecuperaTareaHuerfanaYLaReasigna|PlanificarTareasAutomaticamenteLiberaTareaAsignadaDeAgenteEnCuotaYLaReasigna|PlanificarTareasAutomaticamenteLiberaTareaPorPresupuestoObservadoFresco|PlanificarTareasAutomaticamenteNoCuentaSupervisorReservadoComoWorker)$' -count=1`
+- `go test ./... -count=1`
+
+Resultado:
+
+- la suite completa volvió a verde
+- `/api/status` deja fuera a agentes con handle fallido reciente o runtime principal stale
+- `CodexCuenta` vuelve a salir visible y usable cuando está en `handoff_preventivo`
+- los tests del planificador ya fijan el pool oficial de `orquestador` y no reabren una semántica incompatible con la flota real
