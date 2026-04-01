@@ -2164,6 +2164,25 @@ const webTplOpenClaw = `{{define "content"}}
       <p style="margin:0;color:#64748b">Sin review gates, señales ni merges vivos.</p>
       {{end}}
     </section>
+
+    <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
+      <h3 style="margin:0 0 .7rem 0">Propuestas abiertas</h3>
+      {{if .Status.PropuestasAbiertas}}
+      <table style="width:100%"><thead><tr><th>Código</th><th>Título</th><th>Acuerdo</th><th>Desacuerdo</th><th>Pendiente</th></tr></thead><tbody>
+      {{range .Status.PropuestasAbiertas}}
+        <tr>
+          <td><code>{{.Codigo}}</code></td>
+          <td>{{.Titulo}}</td>
+          <td>{{.Acuerdo}}</td>
+          <td>{{.Desacuerdo}}</td>
+          <td>{{.Pendiente}}</td>
+        </tr>
+      {{end}}
+      </tbody></table>
+      {{else}}
+      <p style="margin:0;color:#64748b">Sin propuestas abiertas.</p>
+      {{end}}
+    </section>
   </div>
 
   <div style="display:grid;gap:1rem">

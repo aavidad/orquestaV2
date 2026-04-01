@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"orquesta/db"
+	"orquesta/propuestasapp"
 )
 
 func TestWebDashMuestraEstadoOpenClawNotificaciones(t *testing.T) {
@@ -462,6 +463,75 @@ func TestWebOpenClawAccionAplicaRebalanceoReserva(t *testing.T) {
 	}
 	if tarea == nil || tarea.Agente == nil || *tarea.Agente != "Codex3" || tarea.Estado != db.TareaAsignada {
 		t.Fatalf("rebalanceo web no aplicado: %+v", tarea)
+	}
+}
+
+func TestWebOpenClawAccionCierraPropuestaRechazada(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar Codex3: %v", err)
+	}
+	propuestaID, _, err := propuestasService.Create(propuestasapp.CreateProposalInput{
+		Codigo:       "OP-601",
+		Titulo:       "Cerrar propuesta en web",
+		Descripcion:  "Debe cerrarse como rechazada por /openclaw",
+		Tipo:         "implementacion",
+		PropuestoPor: "antigravity",
+	})
+	if err != nil {
+		t.Fatalf("crear propuesta: %v", err)
+	}
+	if _, err := db.Votar(propuestaID, "Codex1", db.VotoAcuerdo, "ok"); err != nil {
+		t.Fatalf("voto acuerdo: %v", err)
+	}
+	if _, err := db.Votar(propuestaID, "Codex2", db.VotoDesacuerdo, "no"); err != nil {
+		t.Fatalf("voto desacuerdo: %v", err)
+	}
+	if _, err := db.Votar(propuestaID, "Codex3", db.VotoDesacuerdo, "no"); err != nil {
+		t.Fatalf("segundo voto desacuerdo: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/openclaw", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			webHandlerOpenClawAccion(w, r)
+			return
+		}
+		webHandlerOpenClaw(w, r)
+	})
+	registerAPIRoutes(mux)
+
+	form := url.Values{
+		"kind":     {"supervision_action"},
+		"action":   {"cerrar_propuesta_rechazada"},
+		"target":   {"propuesta:OP-601"},
+		"assignee": {"OpenClaw"},
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/openclaw", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("accion openclaw status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	location := rec.Header().Get("Location")
+	if !strings.Contains(location, "cerrar_propuesta_rechazada") {
+		t.Fatalf("redirect inesperado: %s", location)
+	}
+	propuesta, err := db.GetPropuesta("OP-601")
+	if err != nil {
+		t.Fatalf("get propuesta: %v", err)
+	}
+	if propuesta == nil || propuesta.Estado != db.PropuestaRechazada {
+		t.Fatalf("propuesta no quedó rechazada: %+v", propuesta)
 	}
 }
 

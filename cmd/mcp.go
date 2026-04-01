@@ -3602,6 +3602,7 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	}
 	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
 	recommended = append(recommended, buildSupervisorOperationalActions(status, mailboxPendiente)...)
+	recommended = append(recommended, buildSupervisorProposalActions(status.PropuestasResumen)...)
 	sortSupervisorRecommendedActions(recommended)
 	markSupervisorRecommendedActions(recommended)
 	safeQueue := make([]supervisorRecommendedAction, 0, len(recommended))
@@ -3812,7 +3813,7 @@ func buildSupervisorRecommendedActions(gates []*db.ReviewGate, signals []*superv
 
 func supervisorActionIsAutomaticallyApplicable(action string) bool {
 	switch strings.TrimSpace(action) {
-	case "asignar_tarea_libre", "reservar_tarea_libre", "replanificar_por_cuota", "seguir_guidance_durable", "rebalancear_reserva":
+	case "asignar_tarea_libre", "reservar_tarea_libre", "replanificar_por_cuota", "seguir_guidance_durable", "rebalancear_reserva", "cerrar_propuesta_rechazada":
 		return true
 	default:
 		return false
@@ -3946,6 +3947,30 @@ func buildSupervisorReserveRebalanceActions(status apiStatusResponse) []supervis
 			Reason:   fmt.Sprintf("La reserva #%d está en %s con carga %d; %s tiene carga %d y puede absorberla sin tocar trabajo en progreso.", tarea.ID, origen, cargaOrigen, destino, cargaDestino),
 			Priority: priority,
 			Assignee: destino,
+		})
+	}
+	return actions
+}
+
+func buildSupervisorProposalActions(propuestas []propuestaLite) []supervisorRecommendedAction {
+	if len(propuestas) == 0 {
+		return nil
+	}
+	actions := make([]supervisorRecommendedAction, 0, len(propuestas))
+	for _, propuesta := range propuestas {
+		if propuesta.Estado != db.PropuestaAbierta || propuesta.Pendiente > 0 {
+			continue
+		}
+		if propuesta.Desacuerdo <= propuesta.Acuerdo {
+			continue
+		}
+		actions = append(actions, supervisorRecommendedAction{
+			Kind:     "proposal",
+			Target:   "propuesta:" + strings.TrimSpace(propuesta.Codigo),
+			Action:   "cerrar_propuesta_rechazada",
+			Reason:   fmt.Sprintf("La propuesta %s ya terminó la votación y tiene mayoría de desacuerdo (%d vs %d); conviene cerrarla canónicamente.", strings.TrimSpace(propuesta.Codigo), propuesta.Desacuerdo, propuesta.Acuerdo),
+			Priority: "media",
+			Assignee: "OpenClaw",
 		})
 	}
 	return actions
@@ -4231,6 +4256,22 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 			"assignee":   worker,
 		}
 		return result, nil
+	case "cerrar_propuesta_rechazada":
+		codigo, err := resolveSupervisorActionProposalCode(*selected)
+		if err != nil {
+			return nil, err
+		}
+		if err := propuestasService.Close(codigo, string(db.PropuestaRechazada), supervisor); err != nil {
+			return nil, err
+		}
+		result := map[string]any{
+			"ok":         true,
+			"supervisor": supervisor,
+			"action":     selected,
+			"codigo":     codigo,
+			"assignee":   worker,
+		}
+		return result, nil
 	case "seguir_guidance_durable":
 		mailboxID, err := resolveSupervisorActionMailboxID(*selected, worker)
 		if err != nil {
@@ -4360,6 +4401,14 @@ func fallbackSupervisorRecommendedAction(actionName, target, assignee string) *s
 			Priority: "media",
 			Assignee: assignee,
 		}
+	case "cerrar_propuesta_rechazada":
+		return &supervisorRecommendedAction{
+			Kind:     "proposal",
+			Action:   actionName,
+			Target:   target,
+			Priority: "media",
+			Assignee: assignee,
+		}
 	case "seguir_guidance_durable":
 		return &supervisorRecommendedAction{
 			Kind:     "mailbox_pending",
@@ -4394,6 +4443,18 @@ func resolveSupervisorActionTaskID(action supervisorRecommendedAction) (int64, e
 	default:
 		return 0, fmt.Errorf("target no soportado para aplicación automática: %s", target)
 	}
+}
+
+func resolveSupervisorActionProposalCode(action supervisorRecommendedAction) (string, error) {
+	target := strings.TrimSpace(action.Target)
+	if strings.HasPrefix(target, "propuesta:") {
+		target = strings.TrimPrefix(target, "propuesta:")
+	}
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return "", fmt.Errorf("target de propuesta inválido: %q", action.Target)
+	}
+	return target, nil
 }
 
 func resolveSupervisorActionMailboxID(action supervisorRecommendedAction, agente string) (int64, error) {

@@ -24,6 +24,7 @@ import (
 	"orquesta/agentesapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
+	"orquesta/propuestasapp"
 	"orquesta/reviewapp"
 )
 
@@ -1749,6 +1750,88 @@ func TestMCPToolSupervisorRebalanceaReserva(t *testing.T) {
 		}
 		if tarea.Estado != db.TareaAsignada || tarea.Agente == nil || *tarea.Agente != "Codex3" {
 			t.Fatalf("tarea no quedó rebalanceada: %+v", tarea)
+		}
+	})
+}
+
+func TestMCPRevisionSupervisorSugiereCerrarPropuestaRechazada(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			PropuestasResumen: []propuestaLite{
+				{Codigo: "OP-095", Titulo: "Orquestacion mixta", Estado: db.PropuestaAbierta, Acuerdo: 1, Desacuerdo: 2, Abstencion: 0, Pendiente: 0},
+			},
+		}}
+
+		snapshot, err := buildSupervisorReviewSnapshot("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshot: %v", err)
+		}
+		queue, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+		found := false
+		for _, item := range queue {
+			if item.Action == "cerrar_propuesta_rechazada" && item.Target == "propuesta:OP-095" && item.Assignee == "OpenClaw" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("no aparece cierre de propuesta rechazada: %+v", queue)
+		}
+	})
+}
+
+func TestMCPToolSupervisorCierraPropuestaRechazada(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+			t.Fatalf("registrar Codex1: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+			t.Fatalf("registrar Codex2: %v", err)
+		}
+		id, _, err := propuestasService.Create(propuestasapp.CreateProposalInput{
+			Codigo:       "OP-600",
+			Titulo:       "Cerrar propuesta rechazada",
+			Descripcion:  "Debe cerrarse desde OpenClaw",
+			Tipo:         "implementacion",
+			PropuestoPor: "antigravity",
+		})
+		if err != nil {
+			t.Fatalf("crear propuesta: %v", err)
+		}
+		if _, err := db.Votar(id, "Codex1", db.VotoAcuerdo, "ok"); err != nil {
+			t.Fatalf("voto acuerdo: %v", err)
+		}
+		if _, err := db.Votar(id, "Codex2", db.VotoDesacuerdo, "no"); err != nil {
+			t.Fatalf("voto desacuerdo: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar Codex3: %v", err)
+		}
+		if _, err := db.Votar(id, "Codex3", db.VotoDesacuerdo, "no"); err != nil {
+			t.Fatalf("segundo voto desacuerdo: %v", err)
+		}
+
+		result, err := callMCPTool("orquesta.supervision.acciones.aplicar", map[string]any{
+			"supervisor": "OpenClaw",
+			"action":     "cerrar_propuesta_rechazada",
+			"target":     "propuesta:OP-600",
+			"assignee":   "OpenClaw",
+		})
+		if err != nil {
+			t.Fatalf("cerrar propuesta rechazada: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("cierre de propuesta marcado como error: %#v", result)
+		}
+		propuesta, err := db.GetPropuesta("OP-600")
+		if err != nil {
+			t.Fatalf("get propuesta: %v", err)
+		}
+		if propuesta == nil || propuesta.Estado != db.PropuestaRechazada {
+			t.Fatalf("propuesta no quedó rechazada: %+v", propuesta)
 		}
 	})
 }
