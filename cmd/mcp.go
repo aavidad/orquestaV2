@@ -3931,6 +3931,9 @@ func buildSupervisorWorktreeDriftActions(items []apiOpenClawWorktreeDrift) []sup
 		if agente == "" {
 			continue
 		}
+		if pending, err := hasPendingWorktreeDriftCheckpointRequest(agente); err == nil && pending {
+			continue
+		}
 		reason := "La worktree del agente está desfasada respecto al HEAD del servidor; conviene refrescar base antes de integrar cambios."
 		if item.CurrentHead != "" || item.ExpectedHead != "" {
 			reason = fmt.Sprintf("La worktree del agente está desfasada (%s -> %s); conviene refrescar base antes de integrar cambios.", strings.TrimSpace(item.CurrentHead), strings.TrimSpace(item.ExpectedHead))
@@ -3952,6 +3955,71 @@ func buildSupervisorWorktreeDriftActions(items []apiOpenClawWorktreeDrift) []sup
 		})
 	}
 	return actions
+}
+
+func hasPendingWorktreeDriftCheckpointRequest(agente string) (bool, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return false, nil
+	}
+	estadoPendiente := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{
+		Agente: &agente,
+		Estado: &estadoPendiente,
+		Limit:  20,
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, order := range orders {
+		if runtimePayloadHasSupervisorAction(order.Tipo, order.PayloadJSON, "revisar_worktree_desfasada") {
+			return true, nil
+		}
+	}
+	mailbox, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente: &agente,
+		Estado:   &estadoPendiente,
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, msg := range mailbox {
+		if runtimePayloadHasSupervisorAction(msg.Kind, msg.PayloadJSON, "revisar_worktree_desfasada") {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func runtimePayloadHasSupervisorAction(kind, payloadJSON, expected string) bool {
+	if strings.TrimSpace(payloadJSON) == "" {
+		return false
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		return false
+	}
+	if action := strings.TrimSpace(supervisorActionString(payload["supervisor_action"])); action == strings.TrimSpace(expected) {
+		return true
+	}
+	if action := strings.TrimSpace(supervisorActionString(payload["accion"])); action == strings.TrimSpace(expected) && strings.TrimSpace(kind) == "autonomia" {
+		return true
+	}
+	if drift, ok := payload["worktree_drift"].(map[string]any); ok && strings.TrimSpace(expected) == "revisar_worktree_desfasada" {
+		return len(drift) > 0
+	}
+	return false
+}
+
+func supervisorActionString(v any) string {
+	switch item := v.(type) {
+	case string:
+		return item
+	case fmt.Stringer:
+		return item.String()
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }
 
 func buildSupervisorObservedSessionActions(status apiStatusResponse, snapshot map[string]any) []supervisorRecommendedAction {

@@ -7086,3 +7086,13 @@ Resultado:
   - sigue siendo una acción manual: no refresca automáticamente una worktree sucia
 - Validación:
   - `go test ./cmd -run 'TestMCPToolSupervisorSolicitaCheckpointPorWorktreeDrift' -count=1`
+
+## 2026-04-02 — OpenClaw ya no repite worktree drift ya solicitada
+
+- Hallazgo:
+  - tras aplicar `revisar_worktree_desfasada`, la cola del supervisor seguía proponiendo exactamente la misma acción manual porque la drift persistía
+- Corrección:
+  - `buildSupervisorWorktreeDriftActions()` ya ignora agentes que tengan `runtime_order` o `runtime_mailbox` pendiente con `supervisor_action=revisar_worktree_desfasada`
+  - mientras exista esa deuda durable, la cola prioriza `seguir_guidance_durable` y no reitera la misma petición manual
+- Validación:
+  - `go test ./cmd -run 'Test(MCPToolSupervisorSolicitaCheckpointPorWorktreeDrift|MCPRevisionSupervisorNoRepiteWorktreeDriftSiYaHayGuidancePendiente)' -count=1`

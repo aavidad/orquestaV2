@@ -2317,6 +2317,54 @@ func TestMCPToolSupervisorSolicitaCheckpointPorWorktreeDrift(t *testing.T) {
 	})
 }
 
+func TestMCPRevisionSupervisorNoRepiteWorktreeDriftSiYaHayGuidancePendiente(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		prevDrift := openClawWorktreeDriftBuilder
+		defer func() {
+			statusService = prev
+			openClawWorktreeDriftBuilder = prevDrift
+		}()
+
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar Codex3: %v", err)
+		}
+		proyectoID := insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		insertTestAsignacion(t, "Codex3", proyectoID, "frente activo")
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"}},
+			Agentes:        []*db.Agente{{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"}},
+		}}
+		openClawWorktreeDriftBuilder = func(status apiStatusResponse) ([]apiOpenClawWorktreeDrift, error) {
+			return []apiOpenClawWorktreeDrift{{
+				Agente:       "Codex3",
+				Branch:       "orq-orquesta-codex3",
+				Path:         "/tmp/orquesta/.orquesta-worktrees/orquesta-codex3",
+				CurrentHead:  "c51c0ac9",
+				ExpectedHead: "ec39312c",
+				Dirty:        true,
+				DirtySummary: "12 tracked · 6 untracked",
+			}}, nil
+		}
+
+		if _, err := applySupervisorRecommendedAction("OpenClaw", "revisar_worktree_desfasada", "agente:Codex3", "Codex3"); err != nil {
+			t.Fatalf("aplicar revisar_worktree_desfasada: %v", err)
+		}
+
+		snapshot, err := buildSupervisorReviewSnapshot("OpenClaw")
+		if err != nil {
+			t.Fatalf("buildSupervisorReviewSnapshot: %v", err)
+		}
+		queue, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+		for _, item := range queue {
+			if item.Action == "revisar_worktree_desfasada" && item.Target == "agente:Codex3" {
+				t.Fatalf("no deberia repetir worktree_drift mientras haya guidance pendiente: %+v", queue)
+			}
+		}
+	})
+}
+
 func TestMCPRevisionSupervisorExponeRefrescoSeguroDeWorktreeLimpia(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := statusService

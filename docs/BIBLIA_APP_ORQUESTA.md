@@ -314,6 +314,7 @@ Contrato minimo obligatorio para `runtime_orders`:
 - OpenClaw solo puede autoaplicar `refrescar_worktree_limpia` si `worktree_drift.dirty=false`; con suciedad local la acción debe seguir siendo manual y prioritaria
 - `/openclaw` debe renderizar `worktree_drift` con la misma semántica que `/api/openclaw/operator` y MCP; la suciedad local no puede quedar escondida solo en JSON si condiciona la decisión del supervisor
 - aplicar `revisar_worktree_desfasada` no debe refrescar una worktree sucia: debe encolar guidance durable para que el agente haga checkpoint, resuma cambios y prepare el refresco controlado
+- una vez encolada esa guidance durable, OpenClaw no debe repetir `revisar_worktree_desfasada` en la cola hasta que la deuda se drene o cambie el estado de la worktree
 - la mailbox pendiente de agentes fuera de vida operativa no puede quedar como ruido eterno: si el destinatario no tiene `runtime_handle` activo, ni sesion activa, ni asignacion activa, ni tareas activas, ni `runtime_orders` abiertas, la deuda se consume como zombi reconciliado
 - para esa regla, una asignacion `activa` mantenida solo por `reactivacion_automatica` no protege al agente si ya esta fuera de la flota `server_autobootstrap`; no puede retener mailbox zombie por si sola
 - `watchdog` queda fuera de esa reconciliacion generica y conserva su ruta especifica de consumo/auditoria
