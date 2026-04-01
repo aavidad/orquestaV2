@@ -6498,3 +6498,13 @@ Resultado:
 - Validación viva:
   - `GET /api/openclaw/operator`
   - `queue_summary = {total:1, safe:1, manual:0}`
+
+## 2026-04-01 — el snapshot MCP del supervisor ya expone `queue_summary`
+
+- Tras añadir `queue_summary` a `/api/openclaw/operator`, aún faltaba la misma proyección en la tool MCP de revisión.
+- Se añadió a `orquesta.supervision.revision`:
+  - `queue_summary.total`
+  - `queue_summary.safe`
+  - `queue_summary.manual`
+- Validación dirigida:
+  - `go test ./cmd -run 'TestMCPToolRevisionSupervisorDevuelveJSONEstructurado' -count=1`

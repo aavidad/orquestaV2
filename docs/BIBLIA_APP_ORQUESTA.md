@@ -973,6 +973,9 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `queue_summary.safe`
   - `queue_summary.manual`
   sin obligar al cliente a recomputarlo desde las colas.
+- El snapshot MCP de revisión/supervisión debe mantener la misma paridad:
+  - `queue_summary` también debe vivir en `orquesta.supervision.revision`
+  - OpenClaw no debe divergir según si consume HTTP o MCP.
 - Si `next_action` y `next_safe_action` apuntan al mismo elemento:
   - la web no debe duplicar tarjetas
   - debe quedar solo la tarjeta segura

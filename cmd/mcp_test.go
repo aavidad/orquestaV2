@@ -575,6 +575,10 @@ func TestMCPToolRevisionSupervisorDevuelveJSONEstructurado(t *testing.T) {
 		if queue := reflect.ValueOf(structured["safe_action_queue"]); !queue.IsValid() {
 			t.Fatalf("falta safe_action_queue: %#v", structured)
 		}
+		queueSummary, _ := structured["queue_summary"].(map[string]any)
+		if queueSummary == nil {
+			t.Fatalf("falta queue_summary: %#v", structured)
+		}
 		action0 := reflect.ValueOf(structured["recommended_actions"]).Index(0).Interface()
 		raw, err := json.Marshal(action0)
 		if err != nil {

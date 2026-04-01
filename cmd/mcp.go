@@ -3613,6 +3613,10 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	if len(safeQueue) > 0 {
 		nextSafeAction = safeQueue[0]
 	}
+	manualCount := len(recommended) - len(safeQueue)
+	if manualCount < 0 {
+		manualCount = 0
+	}
 	return map[string]any{
 		"supervisor":          supervisor,
 		"review_gates":        openGates,
@@ -3628,6 +3632,11 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 		"next_action":         nextAction,
 		"safe_action_queue":   safeQueue,
 		"next_safe_action":    nextSafeAction,
+		"queue_summary": map[string]any{
+			"total":  len(recommended),
+			"safe":   len(safeQueue),
+			"manual": manualCount,
+		},
 	}, nil
 }
 
