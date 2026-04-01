@@ -950,6 +950,10 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - el atajo correcto es `aplicar_siguiente`
   - ese atajo no introduce otra semántica ni otra priorización; solo ejecuta la primera acción segura vigente de `action_queue`
   - debe existir igual en MCP y en `/openclaw`.
+- No toda `recommended_action` es autoaplicable:
+  - acciones de review, signal, merge o conflicto pueden requerir arbitraje humano/supervisor
+  - OpenClaw solo debe mostrar botón de aplicar sobre acciones seguras y canónicas
+  - si la `next_action` no es segura, `/openclaw` debe mostrarla como contexto operativo, no como automatismo.
 - `supervisor-loop` persistida no puede quedarse atrás respecto al snapshot:
   - `metadata_json.recommended_count`
   - `metadata_json.next_action`

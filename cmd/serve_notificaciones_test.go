@@ -166,6 +166,12 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 			t.Fatalf("pagina openclaw sin %q:\n%s", token, body)
 		}
 	}
+	if strings.Contains(body, "Aplicar siguiente acción") {
+		t.Fatalf("la página no debería ofrecer aplicar automáticamente una acción no segura:\n%s", body)
+	}
+	if !strings.Contains(body, "Requiere revisión manual") {
+		t.Fatalf("la página debería advertir revisión manual para la siguiente acción:\n%s", body)
+	}
 }
 
 func TestWebOpenClawAccionResuelveReviewGate(t *testing.T) {

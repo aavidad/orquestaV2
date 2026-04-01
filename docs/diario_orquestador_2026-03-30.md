@@ -6384,3 +6384,21 @@ Resultado:
   - `GET /api/openclaw/operator` ya devuelve:
     - `tareasActivas = [410, 412, 413, 414, 416, 421]`
     - `tareasReservadas = [411, 415]`
+
+## 2026-04-01 — OpenClaw ya no ofrece autoaplicar acciones no seguras
+
+- El atajo `aplicar_siguiente` era correcto, pero la web seguía teniendo una mentira:
+  - mostraba botón de `Aplicar siguiente acción` aunque la `next_action` fuera una acción de revisión no autoaplicable
+- Eso abría una falsa expectativa y podía llevar a errores del supervisor.
+- Se corrigió así:
+  - `recommended_actions` quedan marcadas con `auto_aplicable`
+  - `/openclaw` solo enseña botón de aplicar en acciones seguras
+  - si la `next_action` no es segura, la UI muestra contexto y el aviso:
+    - `Requiere revisión manual; usa la cola o el formulario específico.`
+- `orquesta.supervision.acciones.aplicar_siguiente` sigue buscando la primera acción segura real de la cola.
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(WebOpenClawMuestraOperatorReviewYEntregas|WebOpenClawAccionAplicaSiguienteSupervisor|MCPToolSupervisorAplicaSiguiente)' -count=1`
+- Validación viva:
+  - `GET /openclaw`
+  - `next_action` seguía saliendo como revisión
+  - el botón desapareció y quedó visible solo el aviso de revisión manual

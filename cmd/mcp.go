@@ -3461,6 +3461,7 @@ type supervisorRecommendedAction struct {
 	Reason   string `json:"reason"`
 	Priority string `json:"priority"`
 	Assignee string `json:"assignee,omitempty"`
+	AutoAplicable bool `json:"auto_aplicable,omitempty"`
 }
 
 func listarSignalsRevisionSupervisor(limit int) ([]*supervisorReviewSignal, error) {
@@ -3775,7 +3776,23 @@ func buildSupervisorRecommendedActions(gates []*db.ReviewGate, signals []*superv
 		})
 	}
 	sortSupervisorRecommendedActions(actions)
+	markSupervisorRecommendedActions(actions)
 	return actions
+}
+
+func supervisorActionIsAutomaticallyApplicable(action string) bool {
+	switch strings.TrimSpace(action) {
+	case "asignar_tarea_libre", "reservar_tarea_libre", "replanificar_por_cuota", "seguir_guidance_durable":
+		return true
+	default:
+		return false
+	}
+}
+
+func markSupervisorRecommendedActions(actions []supervisorRecommendedAction) {
+	for i := range actions {
+		actions[i].AutoAplicable = supervisorActionIsAutomaticallyApplicable(actions[i].Action)
+	}
 }
 
 func buildSupervisorOperationalActions(status apiStatusResponse, mailboxPendiente []apiOpenClawMailboxLite) []supervisorRecommendedAction {
@@ -4127,9 +4144,7 @@ func applySupervisorRecommendedActionsBatch(supervisor string, maxItems int) (ma
 		if len(applied) >= maxItems {
 			break
 		}
-		switch strings.TrimSpace(item.Action) {
-		case "asignar_tarea_libre", "reservar_tarea_libre", "replanificar_por_cuota", "seguir_guidance_durable":
-		default:
+		if !supervisorActionIsAutomaticallyApplicable(item.Action) {
 			continue
 		}
 		result, err := applySupervisorRecommendedAction(supervisor, item.Action, item.Target, item.Assignee)
@@ -4154,8 +4169,7 @@ func applySupervisorNextAction(supervisor string) (map[string]any, error) {
 	}
 	actions, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
 	for _, item := range actions {
-		switch strings.TrimSpace(item.Action) {
-		case "asignar_tarea_libre", "reservar_tarea_libre", "replanificar_por_cuota", "seguir_guidance_durable":
+		if supervisorActionIsAutomaticallyApplicable(item.Action) {
 			return applySupervisorRecommendedAction(supervisor, item.Action, item.Target, item.Assignee)
 		}
 	}

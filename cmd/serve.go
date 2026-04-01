@@ -63,6 +63,7 @@ type webOpenClawData struct {
 	PipelineStates   []*db.SupervisorPipelineState
 	Recommended      []supervisorRecommendedAction
 	NextAction       *supervisorRecommendedAction
+	NextSafeAction   *supervisorRecommendedAction
 	Notificaciones   notificaciones.EstadoNotificaciones
 	NotifOutbox      notificaciones.OutboxSummary
 	Generado         string
@@ -745,6 +746,13 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 	case *supervisorRecommendedAction:
 		nextAction = item
 	}
+	var nextSafeAction *supervisorRecommendedAction
+	for i := range recommended {
+		if supervisorActionIsAutomaticallyApplicable(recommended[i].Action) {
+			nextSafeAction = &recommended[i]
+			break
+		}
+	}
 	webRender(w, r, webTplLayout+webTplOpenClaw, webOpenClawData{
 		Status:           status,
 		EnCuota:          agentesNoActivosConCuota(status.Agentes),
@@ -759,6 +767,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		PipelineStates:   pipelineStates,
 		Recommended:      recommended,
 		NextAction:       nextAction,
+		NextSafeAction:   nextSafeAction,
 		Notificaciones:   notificaciones.DescribirConfiguracion(),
 		NotifOutbox:      notificaciones.DescribirOutbox(10),
 		Generado:         time.Now().Format("2006-01-02 15:04:05"),
@@ -1837,14 +1846,18 @@ const webTplOpenClaw = `{{define "content"}}
 
 {{if .NextAction}}
 <section style="background:linear-gradient(135deg,#0f172a,#1e293b);color:#fff;border-radius:.8rem;padding:1rem 1.2rem;margin-bottom:1.2rem">
-  <div style="font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:#93c5fd;margin-bottom:.35rem">Acción siguiente</div>
+  <div style="font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:#93c5fd;margin-bottom:.35rem">{{if .NextAction.AutoAplicable}}Acción siguiente segura{{else}}Acción siguiente{{end}}</div>
   <div style="font-size:1.05rem;font-weight:700">{{.NextAction.Action}}</div>
   <div style="margin-top:.25rem;color:#cbd5e1">{{.NextAction.Reason}}</div>
   <div style="margin-top:.45rem;font-size:.8rem;color:#93c5fd">objetivo={{.NextAction.Target}} · prioridad={{.NextAction.Priority}} · tipo={{.NextAction.Kind}}{{if .NextAction.Assignee}} · sugerido={{.NextAction.Assignee}}{{end}}</div>
+  {{if .NextAction.AutoAplicable}}
   <form method="post" action="/openclaw?lang={{lang}}" style="display:flex;gap:.55rem;align-items:end;flex-wrap:wrap;margin-top:.8rem">
     <input type="hidden" name="kind" value="supervision_next">
     <button type="submit" class="btn-sm" style="background:#38bdf8;border-color:#38bdf8;color:#082f49">Aplicar siguiente acción</button>
   </form>
+  {{else}}
+  <div style="margin-top:.7rem;font-size:.82rem;color:#cbd5e1">Requiere revisión manual; usa la cola o el formulario específico.</div>
+  {{end}}
 </section>
 {{end}}
 
@@ -2129,6 +2142,7 @@ const webTplOpenClaw = `{{define "content"}}
           <strong>{{.Action}}</strong>
           <div style="font-size:.8rem;color:#64748b">{{.Reason}}</div>
           <div style="font-size:.74rem;color:#94a3b8">objetivo={{.Target}} · prioridad={{.Priority}} · tipo={{.Kind}}{{if .Assignee}} · sugerido={{.Assignee}}{{end}}</div>
+          {{if .AutoAplicable}}
           <form method="post" action="/openclaw?lang={{lang}}" style="display:flex;gap:.45rem;align-items:end;flex-wrap:wrap;margin-top:.35rem">
             <input type="hidden" name="kind" value="supervision_action">
             <input type="hidden" name="action" value="{{.Action}}">
@@ -2138,6 +2152,9 @@ const webTplOpenClaw = `{{define "content"}}
             </label>
             <button type="submit" class="btn-sm">Aplicar</button>
           </form>
+          {{else}}
+          <div style="margin-top:.35rem;font-size:.75rem;color:#64748b">Acción no autoaplicable: requiere revisión del supervisor.</div>
+          {{end}}
         </li>
       {{end}}
       </ol>
