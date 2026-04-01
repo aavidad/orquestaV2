@@ -5002,3 +5002,33 @@ Validacion:
 
 - `go test ./cmd -run 'TestMCPToolsSesionesYObservabilidadRuntimeOperanPorLaViaCanonica' -count=1`
 - `go build -o ./orquesta .`
+
+## 2026-04-01 — `status` deja de inflar conectados por compatibilidad falsa
+
+Hallazgo:
+
+- el daemon ya estaba devolviendo `/api/status` correcto, pero la CLI `./orquesta status` seguía mostrando agentes agotados/enfriados como `conectados`
+- la causa era doble:
+  - la compatibilidad remota rellenaba `AgentesActivos` con `agentes` cuando el servidor devolvía `agentesActivos: []`
+  - la proyección visible todavía podía dejar `Activo=true` aunque el presupuesto observado stale ya mostrara bloqueo semanal/créditos agotados
+
+Decision:
+
+- cortar el fallback de compatibilidad: solo vale si `agentesActivos` no existe en la respuesta, no si existe vacío
+- proyectar bloqueo visible también cuando el presupuesto observado ya deja evidencia suficiente de agotamiento o enfriamiento, aunque el snapshot sea stale
+
+Codigo:
+
+- [cmd/status_remoto_compat.go](/home/alberto/Trabajo/orquesta/cmd/status_remoto_compat.go)
+- [cmd/status_test.go](/home/alberto/Trabajo/orquesta/cmd/status_test.go)
+- [db/sesiones.go](/home/alberto/Trabajo/orquesta/db/sesiones.go)
+- [db/sesiones_test.go](/home/alberto/Trabajo/orquesta/db/sesiones_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./db -run 'TestGetAgenteNoMuestraActivoSiLaSemanalObservadaStaleYaEstaAgotada' -count=1`
+- `go test ./cmd -run 'Test(FetchServerStatusNoRecuperaAgentesCompatSiAgentesActivosVieneVacioPeroPresente|FetchStatusNoCuentaComoConectadoAgenteConSemanalObservadaAgotada)' -count=1`
+- `go build -o ./orquesta .`
+- `./orquesta server stop && ./orquesta server start`
+- `./orquesta status`

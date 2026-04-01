@@ -2,6 +2,7 @@ package db
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -565,5 +566,41 @@ func TestListarAgentesOcultaHandleActivoSiSuRuntimePrincipalYaEstaStale(t *testi
 		if sesion != nil && sesion.Agente == "CodexRuntimeStale" {
 			t.Fatalf("CodexRuntimeStale no deberia salir en sesiones operativas: %+v", sesion)
 		}
+	}
+}
+
+func TestGetAgenteNoMuestraActivoSiLaSemanalObservadaStaleYaEstaAgotada(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesionID, err := IniciarSesion("codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	now := time.Now().UTC()
+	resetPrimary := now.Add(2 * time.Hour)
+	resetWeekly := now.Add(4 * 24 * time.Hour)
+	raw := `{"rate_limits":{"primary":{"used_percent":5,"window_minutes":300,"resets_at":` + strconv.FormatInt(resetPrimary.Unix(), 10) + `},"secondary":{"used_percent":100,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetWeekly.Unix(), 10) + `}}}`
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "5h",
+		BudgetSource:    "codex_token_count_observed",
+		RawSnapshotJSON: raw,
+		CheckedAt:       now.Add(-6 * time.Hour),
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion: %v", err)
+	}
+
+	agente, err := GetAgente("codex1")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.Activo {
+		t.Fatalf("codex1 no deberia verse activo con semanal observada agotada: %+v", agente)
+	}
+	if agente.EstadoCuota != "agotado" {
+		t.Fatalf("estado_cuota inesperado: %+v", agente)
 	}
 }

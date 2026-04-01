@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -382,6 +383,31 @@ func TestLoadStatusSummaryIgnoraServerInfoInvalido(t *testing.T) {
 	}
 }
 
+func TestFetchServerStatusNoRecuperaAgentesCompatSiAgentesActivosVieneVacioPeroPresente(t *testing.T) {
+	prevClient := serverHTTPClient
+	serverHTTPClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			switch req.URL.Path {
+			case "/api/status":
+				return newJSONResponse(http.StatusOK, `{"generado":"2026-04-01T08:45:00Z","agentesActivos":[],"agentes":[{"Nombre":"Codex3","Activo":false,"EstadoCuota":"activo"}],"tareasPorEstado":{"completada":1}}`), nil
+			default:
+				return newJSONResponse(http.StatusNotFound, `{"error":"not found"}`), nil
+			}
+		}),
+	}
+	defer func() {
+		serverHTTPClient = prevClient
+	}()
+
+	status, err := fetchServerStatus("http://orquesta.local")
+	if err != nil {
+		t.Fatalf("fetchServerStatus: %v", err)
+	}
+	if len(status.AgentesActivos) != 0 {
+		t.Fatalf("agentes activos inesperados: %+v", status.AgentesActivos)
+	}
+}
+
 func TestRenderStatusSummaryMuestraBackendActivo(t *testing.T) {
 	out := captureOutput(t, func() {
 		renderStatusSummary(&statusContext{
@@ -541,6 +567,49 @@ func TestRenderStatusSummaryMuestraTareasRetenidasPorCuota(t *testing.T) {
 	if !strings.Contains(out, "[416]") || !strings.Contains(out, "Codex1") {
 		t.Fatalf("salida sin tarea retenida visible: %s", out)
 	}
+}
+
+func TestFetchStatusNoCuentaComoConectadoAgenteConSemanalObservadaAgotada(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		if err := db.RegistrarAgente("Codex5", "programador"); err != nil {
+			t.Fatalf("registrando Codex5: %v", err)
+		}
+		sesionID, err := db.IniciarSesion("Codex5")
+		if err != nil {
+			t.Fatalf("IniciarSesion Codex5: %v", err)
+		}
+		now := time.Now().UTC()
+		resetPrimary := now.Add(2 * time.Hour)
+		resetWeekly := now.Add(4 * 24 * time.Hour)
+		raw := `{"rate_limits":{"primary":{"used_percent":5,"window_minutes":300,"resets_at":` + strconv.FormatInt(resetPrimary.Unix(), 10) + `},"secondary":{"used_percent":100,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetWeekly.Unix(), 10) + `}}}`
+		if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+			SesionID:        sesionID,
+			WindowKind:      "5h",
+			BudgetSource:    "codex_token_count_observed",
+			RawSnapshotJSON: raw,
+			CheckedAt:       now.Add(-6 * time.Hour),
+		}); err != nil {
+			t.Fatalf("RegistrarPresupuestoSesion: %v", err)
+		}
+
+		resp, err := dbStatusService{}.FetchStatus()
+		if err != nil {
+			t.Fatalf("FetchStatus: %v", err)
+		}
+		if len(resp.AgentesActivos) != 0 {
+			t.Fatalf("Codex5 no deberia contarse como conectado: %+v", resp.AgentesActivos)
+		}
+		var codex5 *db.Agente
+		for _, agente := range resp.Agentes {
+			if agente != nil && agente.Nombre == "Codex5" {
+				codex5 = agente
+				break
+			}
+		}
+		if codex5 == nil || codex5.EstadoCuota != "agotado" || codex5.Activo {
+			t.Fatalf("estado visible inesperado para Codex5: %+v", codex5)
+		}
+	})
 }
 
 func TestFetchServerConfig(t *testing.T) {

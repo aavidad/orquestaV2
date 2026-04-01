@@ -443,6 +443,10 @@ func fetchServerInfo(baseURL string) (*serverInfo, error) {
 }
 
 func fetchServerStatus(baseURL string) (*estadoResumen, error) {
+	body, err := fetchServerText(baseURL + "/api/status")
+	if err != nil {
+		return nil, err
+	}
 	var payload struct {
 		Generado                 string          `json:"generado"`
 		TareasPorEstado          map[string]int  `json:"tareasPorEstado"`
@@ -454,7 +458,11 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		ConteoTareasCompat       map[string]int  `json:"conteo_tareas"`
 		PropuestasCompatAbiertas []*db.Propuesta `json:"propuestas_abiertas"`
 	}
-	if err := fetchServerJSON(baseURL+"/api/status", &payload); err != nil {
+	if err := json.Unmarshal([]byte(body), &payload); err != nil {
+		return nil, err
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(body), &raw); err != nil {
 		return nil, err
 	}
 	resumen := &estadoResumen{
@@ -470,7 +478,9 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		resumen.TareasPorEstado = payload.ConteoTareasCompat
 	}
 	if len(resumen.AgentesActivos) == 0 {
+		if _, present := raw["agentesActivos"]; !present {
 		resumen.AgentesActivos = payload.AgentesCompat
+		}
 	}
 	if len(resumen.AgentesTrabajando) == 0 {
 		resumen.AgentesTrabajando = derivarAgentesTrabajando(resumen.AgentesActivos, resumen.TareasActivas)

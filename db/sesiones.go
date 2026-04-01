@@ -620,12 +620,13 @@ func aplicarEstadoVisibleAgente(agente *Agente, sesion *Sesion) {
 	if agente == nil {
 		return
 	}
+	proyectarBloqueoVisibleDesdePresupuestoObservado(agente)
 	if sesion == nil {
 		agente.Activo = false
 		agente.EstadoSesion = ""
 		return
 	}
-	if strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "enfriamiento") {
+	if strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "enfriamiento") || strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "agotado") {
 		agente.Activo = false
 		if estado := strings.TrimSpace(agente.EstadoSesion); estado != "" {
 			agente.EstadoSesion = estado
@@ -653,6 +654,55 @@ func aplicarEstadoVisibleAgente(agente *Agente, sesion *Sesion) {
 		return
 	}
 	agente.EstadoSesion = "disponible"
+}
+
+func proyectarBloqueoVisibleDesdePresupuestoObservado(a *Agente) {
+	if a == nil {
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(a.EstadoCuota), "activo") {
+		return
+	}
+	now := time.Now().UTC()
+	if strings.EqualFold(strings.TrimSpace(a.PresupuestoEstado), "agotado") {
+		a.EstadoCuota = "agotado"
+		if strings.TrimSpace(a.MotivoPausa) == "" {
+			a.MotivoPausa = "Presupuesto agotado observado"
+		}
+		if a.PresupuestoResetAt != nil && a.PresupuestoResetAt.After(now) {
+			a.ReanimarAt = a.PresupuestoResetAt
+		}
+		return
+	}
+	if a.RemainingCredits != nil && *a.RemainingCredits <= 0 {
+		a.EstadoCuota = "agotado"
+		if strings.TrimSpace(a.MotivoPausa) == "" {
+			a.MotivoPausa = "Créditos agotados observados"
+		}
+		if a.PresupuestoResetAt != nil && a.PresupuestoResetAt.After(now) {
+			a.ReanimarAt = a.PresupuestoResetAt
+		}
+		return
+	}
+	if a.PresupuestoSemanalPct != nil && *a.PresupuestoSemanalPct <= 0 {
+		a.EstadoCuota = "agotado"
+		if strings.TrimSpace(a.MotivoPausa) == "" {
+			a.MotivoPausa = "Presupuesto semanal agotado observado"
+		}
+		if a.PresupuestoSemanalResetAt != nil && a.PresupuestoSemanalResetAt.After(now) {
+			a.ReanimarAt = a.PresupuestoSemanalResetAt
+		}
+		return
+	}
+	if strings.EqualFold(strings.TrimSpace(a.PresupuestoEstado), "handoff_preventivo") {
+		a.EstadoCuota = "enfriamiento"
+		if strings.TrimSpace(a.MotivoPausa) == "" {
+			a.MotivoPausa = "Presupuesto crítico observado"
+		}
+		if a.PresupuestoResetAt != nil && a.PresupuestoResetAt.After(now) {
+			a.ReanimarAt = a.PresupuestoResetAt
+		}
+	}
 }
 
 func aplicarEstadoVisibleAgentes(agentes []*Agente, sesiones []*Sesion) {
