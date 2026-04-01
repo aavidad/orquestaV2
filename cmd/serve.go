@@ -1853,13 +1853,17 @@ const webTplOpenClaw = `{{define "content"}}
   <div class="stat"><div class="n">{{len .Merges}}</div><div class="l">merges vivos</div></div>
 </div>
 
-{{if .NextAction}}
+{{if and .NextAction (or (not .NextSafeAction) (ne .NextAction.Action .NextSafeAction.Action) (ne .NextAction.Target .NextSafeAction.Target) (ne .NextAction.Assignee .NextSafeAction.Assignee))}}
 <section style="background:linear-gradient(135deg,#0f172a,#1e293b);color:#fff;border-radius:.8rem;padding:1rem 1.2rem;margin-bottom:1.2rem">
   <div style="font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:#93c5fd;margin-bottom:.35rem">Acción siguiente</div>
   <div style="font-size:1.05rem;font-weight:700">{{.NextAction.Action}}</div>
   <div style="margin-top:.25rem;color:#cbd5e1">{{.NextAction.Reason}}</div>
   <div style="margin-top:.45rem;font-size:.8rem;color:#93c5fd">objetivo={{.NextAction.Target}} · prioridad={{.NextAction.Priority}} · tipo={{.NextAction.Kind}}{{if .NextAction.Assignee}} · sugerido={{.NextAction.Assignee}}{{end}}</div>
+  {{if .NextAction.AutoAplicable}}
+  <div style="margin-top:.7rem;font-size:.82rem;color:#cbd5e1">Ya existe una acción segura equivalente más abajo.</div>
+  {{else}}
   <div style="margin-top:.7rem;font-size:.82rem;color:#cbd5e1">Requiere revisión manual; usa la cola o el formulario específico.</div>
+  {{end}}
 </section>
 {{end}}
 

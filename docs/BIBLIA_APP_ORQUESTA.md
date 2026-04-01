@@ -963,6 +963,10 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `Siguiente acción segura` y `Cola segura` para automatismos
   - `Acción siguiente` y `Cola completa del supervisor` para contexto y arbitraje
   - no mezclar ambos planos en una sola tarjeta.
+- Si `next_action` y `next_safe_action` apuntan al mismo elemento:
+  - la web no debe duplicar tarjetas
+  - debe quedar solo la tarjeta segura
+  - no puede aparecer un aviso falso de revisión manual sobre una acción ya autoaplicable.
 - `supervisor-loop` persistida no puede quedarse atrás respecto al snapshot:
   - `metadata_json.recommended_count`
   - `metadata_json.next_action`

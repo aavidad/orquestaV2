@@ -6438,3 +6438,18 @@ Resultado:
 - Validación viva:
   - `GET /openclaw`
   - ya muestra `Siguiente acción segura`
+
+## 2026-04-01 — `/openclaw` ya no duplica la misma acción como manual y segura
+
+- Tras separar `next_action` y `next_safe_action`, apareció una incoherencia visual:
+  - si ambas apuntaban a la misma acción segura, la web enseñaba dos tarjetas
+  - una de ellas además decía erróneamente `Requiere revisión manual`
+- Se corrigió la plantilla:
+  - si `next_action` y `next_safe_action` coinciden, solo se renderiza la tarjeta segura
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(WebOpenClawMuestraOperatorReviewYEntregas|WebOpenClawAccionAplicaSiguienteSupervisor)' -count=1`
+- Validación viva:
+  - `GET /openclaw`
+  - ya solo enseña:
+    - `Siguiente acción segura`
+    - `Aplicar siguiente acción segura`
