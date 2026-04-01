@@ -917,6 +917,11 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - Esa sugerencia debe verse igual en:
   - MCP/API (`next_action`, `action_queue`)
   - web `/openclaw`
+- Cuando la semántica sea segura, el supervisor debe poder aplicar la acción por la misma vía canónica:
+  - MCP tool `orquesta.supervision.acciones.aplicar`
+- Primer alcance permitido para automatización:
+  - `dispatch` de tarea libre
+  - replanificación simple de tarea retenida por cuota
 - `supervisor-loop` persistida no puede quedarse atrás respecto al snapshot:
   - `metadata_json.recommended_count`
   - `metadata_json.next_action`

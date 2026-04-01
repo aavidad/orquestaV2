@@ -1885,6 +1885,21 @@ func listMCPTools() []mcpTool {
 				"additionalProperties": false,
 			},
 		},
+		{
+			Name:        "orquesta.supervision.acciones.aplicar",
+			Title:       "Aplicar acción del supervisor",
+			Description: "Aplica una acción canónica sugerida al supervisor cuando la semántica es segura",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"supervisor": map[string]any{"type": "string"},
+					"action":     map[string]any{"type": "string"},
+					"target":     map[string]any{"type": "string"},
+					"assignee":   map[string]any{"type": "string"},
+				},
+				"additionalProperties": false,
+			},
+		},
 	}
 }
 
@@ -2797,6 +2812,13 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 			return nil, err
 		}
 		return toolResult(prettyJSON(resumen), resumen, false), nil
+
+	case "orquesta.supervision.acciones.aplicar":
+		result, err := applySupervisorRecommendedAction(optionalStringArg(args, "supervisor"), optionalStringArg(args, "action"), optionalStringArg(args, "target"), optionalStringArg(args, "assignee"))
+		if err != nil {
+			return toolResult(err.Error(), nil, true), nil
+		}
+		return toolResult(prettyJSON(result), result, false), nil
 	}
 
 	return nil, fmt.Errorf("tool no soportada: %s", name)
@@ -3872,6 +3894,114 @@ func sortSupervisorRecommendedActions(actions []supervisorRecommendedAction) {
 		}
 		return actions[i].Target < actions[j].Target
 	})
+}
+
+func applySupervisorRecommendedAction(supervisor, actionName, target, assignee string) (map[string]any, error) {
+	supervisor = resolveSupervisorName(supervisor)
+	snapshot, err := buildSupervisorReviewSnapshot(supervisor)
+	if err != nil {
+		return nil, err
+	}
+	actions, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
+	selected := pickSupervisorRecommendedAction(actions, strings.TrimSpace(actionName), strings.TrimSpace(target), strings.TrimSpace(assignee))
+	if selected == nil {
+		return nil, fmt.Errorf("no se encontró una acción aplicable del supervisor")
+	}
+	taskID, err := resolveSupervisorActionTaskID(*selected)
+	if err != nil {
+		return nil, err
+	}
+	worker := strings.TrimSpace(selected.Assignee)
+	if worker == "" {
+		worker = strings.TrimSpace(assignee)
+	}
+	if worker == "" {
+		return nil, fmt.Errorf("la acción no tiene assignee sugerido ni explícito")
+	}
+
+	switch strings.TrimSpace(selected.Action) {
+	case "asignar_tarea_libre":
+		task, err := tareasService.Get(taskID)
+		if err != nil {
+			return nil, err
+		}
+		if task == nil {
+			return nil, fmt.Errorf("tarea #%d no encontrada", taskID)
+		}
+		switch task.Estado {
+		case db.TareaLibre, db.TareaBacklog:
+			if err := tareasService.Take(taskID, worker); err != nil {
+				return nil, err
+			}
+			if err := tareasService.Start(taskID, worker); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, fmt.Errorf("la tarea #%d no está libre para dispatch", taskID)
+		}
+	case "replanificar_por_cuota":
+		if err := tareasService.Reassign(taskID, worker); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("acción no aplicable automáticamente: %s", strings.TrimSpace(selected.Action))
+	}
+
+	result := map[string]any{
+		"ok":         true,
+		"supervisor": supervisor,
+		"action":     selected,
+		"task_id":    taskID,
+		"assignee":   worker,
+	}
+	return result, nil
+}
+
+func pickSupervisorRecommendedAction(actions []supervisorRecommendedAction, actionName, target, assignee string) *supervisorRecommendedAction {
+	actionName = strings.TrimSpace(actionName)
+	target = strings.TrimSpace(target)
+	assignee = strings.TrimSpace(assignee)
+	for _, item := range actions {
+		if actionName != "" && strings.TrimSpace(item.Action) != actionName {
+			continue
+		}
+		if target != "" && strings.TrimSpace(item.Target) != target {
+			continue
+		}
+		if assignee != "" && strings.TrimSpace(item.Assignee) != assignee {
+			continue
+		}
+		copy := item
+		return &copy
+	}
+	if actionName == "" && target == "" && assignee == "" && len(actions) > 0 {
+		copy := actions[0]
+		return &copy
+	}
+	return nil
+}
+
+func resolveSupervisorActionTaskID(action supervisorRecommendedAction) (int64, error) {
+	target := strings.TrimSpace(action.Target)
+	switch {
+	case strings.HasPrefix(target, "tarea:"):
+		id, err := strconv.ParseInt(strings.TrimPrefix(target, "tarea:"), 10, 64)
+		if err != nil || id <= 0 {
+			return 0, fmt.Errorf("target de tarea inválido: %s", target)
+		}
+		return id, nil
+	case target == "backlog:libre":
+		libres, err := db.ListarTareas(db.FiltroTareas{Libre: true})
+		if err != nil {
+			return 0, err
+		}
+		if len(libres) == 0 || libres[0] == nil {
+			return 0, fmt.Errorf("no hay tareas libres para dispatch")
+		}
+		return libres[0].ID, nil
+	default:
+		return 0, fmt.Errorf("target no soportado para aplicación automática: %s", target)
+	}
 }
 
 func compactMCPLine(text string, maxRunes int) string {

@@ -6068,3 +6068,17 @@ Resultado:
   - build + reinicio del daemon
   - `GET /api/openclaw/operator` devolviendo `assignee=Codex3`
   - `/openclaw` mostrando `sugerido=Codex3`
+
+## 2026-04-01 — OpenClaw ya puede aplicar `dispatch` por MCP
+
+- Se añadió la tool MCP `orquesta.supervision.acciones.aplicar`.
+- Alcance inicial seguro:
+  - `asignar_tarea_libre`
+  - `replanificar_por_cuota`
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(MCPToolSupervisorAplicaDispatch|MCPRevisionSupervisorSugiereDispatchOperativo)' -count=1`
+- Validación viva:
+  - el daemon expone ya la tool en `tools/list`
+  - `tools/call` sobre `orquesta.supervision.acciones.aplicar` con `target=tarea:414` y `assignee=Codex3` devuelve `ok=true`
+  - la tarea `#414` queda en `en_progreso` con `Codex3`
+  - `./orquesta status` pasa a `2 con trabajo activo`

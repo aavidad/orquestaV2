@@ -1316,6 +1316,65 @@ func TestMCPRevisionSupervisorSugiereDispatchOperativo(t *testing.T) {
 	})
 }
 
+func TestMCPToolSupervisorAplicaDispatch(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Dispatch MCP supervisor",
+			Descripcion: "Debe pasar a en_progreso por acción canónica",
+			Modulo:      "web",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea libre: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar agente: %v", err)
+		}
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			TareasPorEstado: map[string]int{
+				string(db.TareaLibre): 1,
+			},
+		}}
+
+		result, err := callMCPTool("orquesta.supervision.acciones.aplicar", map[string]any{
+			"supervisor": "OpenClaw",
+			"action":     "asignar_tarea_libre",
+			"target":     "tarea:" + itoa(tareaID),
+			"assignee":   "Codex3",
+		})
+		if err != nil {
+			t.Fatalf("aplicar accion supervisor: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("accion supervisor marcada como error: %#v", result)
+		}
+
+		tarea, err := db.GetTarea(tareaID)
+		if err != nil {
+			t.Fatalf("get tarea: %v", err)
+		}
+		if tarea.Estado != db.TareaEnProgreso {
+			t.Fatalf("estado tarea inesperado: %+v", tarea)
+		}
+		if tarea.Agente == nil || *tarea.Agente != "Codex3" {
+			t.Fatalf("agente tarea inesperado: %+v", tarea)
+		}
+	})
+}
+
 func TestMCPToolsPropuestasCrearYAccionarOperanPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
