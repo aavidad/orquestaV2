@@ -6926,3 +6926,19 @@ Resultado:
   - validación viva:
     - `/api/openclaw/threads?supervisor=OpenClaw` ya devuelve `observed_agent_sessions`
     - `/openclaw` ya muestra la sección `Sesiones observadas de agentes`
+
+## 2026-04-01 — `session_candidates` operativas en OpenClaw
+
+- Mejora encima del bloque anterior:
+  - `observed_agent_sessions` seguía quedando demasiado enterrado en `thread_sessions`
+  - OpenClaw necesita una vista compacta y directa para decidir `reuse/spawn/reanudación`
+- Implementación:
+  - `/api/openclaw/operator` ahora expone `session_candidates`
+  - `/openclaw` muestra `Candidatas para reuse/spawn`
+  - la lista deriva del mismo snapshot canónico y no crea otra fuente de verdad
+- Validación:
+  - `go test ./cmd -run 'Test(APIObservabilidadReadOnly|APIOpenClawThreadsOperaPorLaViaCanonica|MCPThreadsSupervisorOperanPorLaViaCanonica|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
+  - `go build -o ./orquesta .`
+  - validación viva:
+    - `/api/openclaw/operator` devuelve `session_candidates`
+    - `/openclaw` renderiza `Candidatas para reuse/spawn`

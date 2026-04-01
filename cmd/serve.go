@@ -61,6 +61,7 @@ type webOpenClawData struct {
 	NormalizedEvents []openClawNormalizedEvent
 	ThreadSessions   []*db.SupervisorThreadSessionSummary
 	ObservedSessions []*supervisorObservedAgentSessionSummary
+	SessionCandidates []apiOpenClawSessionCandidate
 	PipelineStates   []*db.SupervisorPipelineState
 	Recommended      []supervisorRecommendedAction
 	SafeRecommended  []supervisorRecommendedAction
@@ -765,9 +766,11 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 	normalizedEvents, _ := review["normalized_events"].([]openClawNormalizedEvent)
 	var threadSessions []*db.SupervisorThreadSessionSummary
 	var observedSessions []*supervisorObservedAgentSessionSummary
+	var sessionCandidates []apiOpenClawSessionCandidate
 	if snapshot, ok := review["thread_sessions"].(map[string]any); ok {
 		threadSessions, _ = snapshot["sessions"].([]*db.SupervisorThreadSessionSummary)
 		observedSessions, _ = snapshot["observed_agent_sessions"].([]*supervisorObservedAgentSessionSummary)
+		sessionCandidates = buildOpenClawSessionCandidates(snapshot)
 	}
 	var pipelineStates []*db.SupervisorPipelineState
 	if snapshot, ok := review["pipeline_state"].(map[string]any); ok {
@@ -807,6 +810,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		NormalizedEvents: normalizedEvents,
 		ThreadSessions:   threadSessions,
 		ObservedSessions: observedSessions,
+		SessionCandidates: sessionCandidates,
 		PipelineStates:   pipelineStates,
 		Recommended:      recommended,
 		SafeRecommended:  safeRecommended,
@@ -2358,6 +2362,21 @@ const webTplOpenClaw = `{{define "content"}}
       </tbody></table>
       {{else}}
       <p style="margin:0;color:#64748b">Sin sesiones observadas de agentes.</p>
+      {{end}}
+      <h4 style="margin:1rem 0 .6rem 0">Candidatas para reuse/spawn</h4>
+      {{if .SessionCandidates}}
+      <table style="width:100%"><thead><tr><th>Agente</th><th>Sesión</th><th>Observada</th><th>Uso</th></tr></thead><tbody>
+      {{range .SessionCandidates}}
+        <tr>
+          <td>{{.Agente}}</td>
+          <td>{{orDash .ExternalSessionID}}</td>
+          <td>{{orDash .ObservedSessionPath}}</td>
+          <td>{{orDash .UsageSummary}}</td>
+        </tr>
+      {{end}}
+      </tbody></table>
+      {{else}}
+      <p style="margin:0;color:#64748b">Sin candidatas visibles ahora mismo.</p>
       {{end}}
     </section>
 

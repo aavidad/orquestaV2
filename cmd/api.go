@@ -1312,6 +1312,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		}
 		reviewCompact := buildOpenClawReviewCompact(revision)
 		queueSummary := buildOpenClawQueueSummary(revision)
+		sessionCandidates := buildOpenClawSessionCandidates(threads)
 		apiWriteJSON(w, http.StatusOK, map[string]any{
 			"status":               statusResumen,
 			"agentesActivos":       statusResumen.AgentesActivos,
@@ -1334,6 +1335,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 			"entregas":             notificaciones.DescribirOutbox(10),
 			"eventos_normalizados": eventos,
 			"thread_sessions":      threads,
+			"session_candidates":   sessionCandidates,
 			"pipeline_state":       pipeline,
 		})
 	case http.MethodPost:
@@ -1438,6 +1440,16 @@ type apiOpenClawQueueSummary struct {
 	SafeByKind map[string]int `json:"safe_by_kind,omitempty"`
 }
 
+type apiOpenClawSessionCandidate struct {
+	Agente              string `json:"agente"`
+	Activo              bool   `json:"activo"`
+	Herramienta         string `json:"herramienta,omitempty"`
+	Host                string `json:"host,omitempty"`
+	ExternalSessionID   string `json:"external_session_id,omitempty"`
+	ObservedSessionPath string `json:"observed_session_path,omitempty"`
+	UsageSummary        string `json:"usage_summary,omitempty"`
+}
+
 type apiOpenClawCapacitySummary struct {
 	WorkersConectados  int `json:"workers_conectados"`
 	WorkersOciosos     int `json:"workers_ociosos"`
@@ -1469,6 +1481,29 @@ func buildOpenClawOperatorStatus(status *estadoResumen) (apiOpenClawStatusLite, 
 		CapacitySummary:    buildOpenClawCapacitySummary(status.AgentesActivos, status.AgentesTrabajando, status.TareasActivas, status.TareasPorEstado),
 		AgentesSaturados:   buildOpenClawSaturatedAgents(status.AgentesActivos, status.TareasActivas),
 	}, nil
+}
+
+func buildOpenClawSessionCandidates(snapshot map[string]any) []apiOpenClawSessionCandidate {
+	items, _ := snapshot["observed_agent_sessions"].([]*supervisorObservedAgentSessionSummary)
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]apiOpenClawSessionCandidate, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		out = append(out, apiOpenClawSessionCandidate{
+			Agente:              strings.TrimSpace(item.Agente),
+			Activo:              item.Activo,
+			Herramienta:         strings.TrimSpace(item.Herramienta),
+			Host:                strings.TrimSpace(item.Host),
+			ExternalSessionID:   strings.TrimSpace(item.ExternalSessionID),
+			ObservedSessionPath: strings.TrimSpace(item.ObservedSessionPath),
+			UsageSummary:        strings.TrimSpace(item.UsageSummary),
+		})
+	}
+	return out
 }
 
 func buildOpenClawQueueSummary(review map[string]any) apiOpenClawQueueSummary {

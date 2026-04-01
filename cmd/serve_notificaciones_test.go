@@ -71,6 +71,20 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
 	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{Slug: "orquestador", Nombre: "Orquestador", RutaAbs: "/tmp/orquestador", Tipo: db.ProyectoRepo, Activo: true})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:            "Codex3",
+		ProyectoID:        &proyectoID,
+		CWD:               "/tmp/orquestador",
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-openclaw-web-agent",
+		Host:              "host-openclaw",
+	}); err != nil {
+		t.Fatalf("iniciar sesion agente: %v", err)
+	}
 	if err := db.ConfigSet("openclaw_gateway_url", "https://openclaw.local/gateway"); err != nil {
 		t.Fatalf("config openclaw url: %v", err)
 	}
@@ -163,10 +177,13 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 		"Review e integración",
 		"Eventos normalizados del supervisor",
 		"Threads y subagentes",
+		"Sesiones observadas de agentes",
+		"Candidatas para reuse/spawn",
 		"Pipeline del supervisor",
 		"Guidance durable pendiente",
 		"autopilot",
 		"sess-openclaw-web",
+		"sess-openclaw-web-agent",
 		"OpenClaw Gateway y notificaciones",
 		"gateway down",
 		"OpenClaw",

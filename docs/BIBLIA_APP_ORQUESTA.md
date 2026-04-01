@@ -1131,3 +1131,5 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
     - `host`
     - `message_count/turns` cuando existan
   - esta información debe estar alineada en API, MCP y `/openclaw`
+  - además, OpenClaw debe promover una vista operativa compacta `session_candidates` en `/api/openclaw/operator`
+  - `session_candidates` no sustituye `thread_sessions`; evita que el supervisor tenga que rebuscar en la estructura completa para decisiones de reuse/spawn

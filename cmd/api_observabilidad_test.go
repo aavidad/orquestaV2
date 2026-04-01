@@ -246,6 +246,9 @@ func TestAPIObservabilidadReadOnly(t *testing.T) {
 	if _, ok := operatorJSON["thread_sessions"]; !ok {
 		t.Fatalf("operator sin thread_sessions: %s", recOperator.Body.String())
 	}
+	if candidates, ok := operatorJSON["session_candidates"].([]any); !ok || len(candidates) == 0 {
+		t.Fatalf("operator sin session_candidates: %s", recOperator.Body.String())
+	}
 	if _, ok := operatorJSON["pipeline_state"]; !ok {
 		t.Fatalf("operator sin pipeline_state: %s", recOperator.Body.String())
 	}
