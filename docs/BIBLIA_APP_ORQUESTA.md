@@ -1106,3 +1106,10 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - el ranking/API/CLI deben marcar esos casos como `observed_usage`
   - `observed_usage` sirve para frescura y contexto operativo, no para decidir capacidad restante
   - si no existe una cuota real del proveedor, la UI debe decirlo de forma explícita y no esconderlo tras `sin_datos`
+- Del launcher Claude Rust sí merece la pena absorber metadatos de sesión, no solo coste:
+  - `session_path`
+  - `message_count`
+  - `turns`
+  - `updated_at`
+  - esos campos deben viajar hasta la superficie de Orquesta para que el operador pueda ubicar y reanudar sesiones Claude desde la app
+  - esto no convierte ese snapshot en cuota restante; sigue siendo `observed_usage`

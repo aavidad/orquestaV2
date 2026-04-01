@@ -6862,3 +6862,21 @@ Resultado:
 - Validación dirigida:
   - `go test ./cmd -run 'Test(AgenteRankingCuentasCmdMarcaUsoObservadoClaude|CuentaPresupuestoDesdeAgenteUsaObservedUsageCuandoNoHayCuotaReal)' -count=1`
   - `go build -o ./orquesta .`
+
+## 2026-04-01 — Metadatos de sesión Claude visibles en Orquesta
+
+- Lo útil de `claw-code-dev-rust` no era una cuota restante nueva, sino su sesión persistida:
+  - `session_path`
+  - `message_count`
+  - `turns`
+  - `updated_at`
+- Se integró en Orquesta:
+  - `GetAgente` ya proyecta esos metadatos desde `claude_rust_session_observed`
+  - el ranking/API/CLI ya enseñan la sesión observada (`session-*.json`) y el volumen básico (`msg`, `turns`)
+- Regla canónica:
+  - estos metadatos sirven para gobernar mejor agentes Claude desde la app
+  - no se reinterpretan como cuota restante ni sustituyen el criterio semanal/temporal
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(AgenteRankingCuentasCmdMarcaUsoObservadoClaude|CuentaPresupuestoDesdeAgenteUsaObservedUsageCuandoNoHayCuotaReal)' -count=1`
+  - `go test ./db -run 'TestGetAgenteConservaCuotaObservadaYUsoClaudeMasReciente' -count=1`
+  - `go build -o ./orquesta .`

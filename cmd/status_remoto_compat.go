@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -341,6 +342,15 @@ func resumenCuotaAgente(a *db.Agente) string {
 		usage := fmt.Sprintf("uso_obs %d tok", *a.ObservedUsageTokens)
 		if a.ObservedUsageCostUSD != nil {
 			usage += fmt.Sprintf(" · $%.4f", *a.ObservedUsageCostUSD)
+		}
+		if a.ObservedUsageMessages != nil {
+			usage += fmt.Sprintf(" · %d msg", *a.ObservedUsageMessages)
+		}
+		if a.ObservedUsageTurns != nil {
+			usage += fmt.Sprintf(" · %d turns", *a.ObservedUsageTurns)
+		}
+		if path := strings.TrimSpace(a.ObservedSessionPath); path != "" {
+			usage += " · sesion " + filepath.Base(path)
 		}
 		partes = append(partes, usage)
 	}

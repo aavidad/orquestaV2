@@ -836,7 +836,7 @@ func TestGetAgenteConservaCuotaObservadaYUsoClaudeMasReciente(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("RegistrarPresupuestoSesion observed: %v", err)
 	}
-	rawClaude := `{"account_email":"carlos@avidad.com","account_user":"Carlos Claude","session_usage":{"total_tokens":1570,"estimated_cost_usd":0.042,"turns":1,"updated_at":"` + now.Format(time.RFC3339Nano) + `"}}`
+	rawClaude := `{"account_email":"carlos@avidad.com","account_user":"Carlos Claude","session_usage":{"session_path":"/tmp/.claude/sessions/session-1.json","message_count":3,"total_tokens":1570,"estimated_cost_usd":0.042,"turns":1,"updated_at":"` + now.Format(time.RFC3339Nano) + `"}}`
 	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
 		SesionID:        sesionID,
 		WindowKind:      "unknown",
@@ -862,6 +862,12 @@ func TestGetAgenteConservaCuotaObservadaYUsoClaudeMasReciente(t *testing.T) {
 	}
 	if agente.ObservedUsageCostUSD == nil || *agente.ObservedUsageCostUSD <= 0 {
 		t.Fatalf("coste observado inesperado: %+v", agente)
+	}
+	if agente.ObservedUsageMessages == nil || *agente.ObservedUsageMessages != 3 {
+		t.Fatalf("message_count observado inesperado: %+v", agente)
+	}
+	if agente.ObservedSessionPath != "/tmp/.claude/sessions/session-1.json" {
+		t.Fatalf("session_path observada inesperada: %+v", agente)
 	}
 	if agente.PresupuestoFuente != "codex_token_count_observed" {
 		t.Fatalf("la fuente de cuota deberia seguir siendo la que aporta cuota: %+v", agente)

@@ -46,8 +46,10 @@ type Agente struct {
 	RemainingCredits          *float64
 	ObservedUsageTokens       *int64
 	ObservedUsageCostUSD      *float64
+	ObservedUsageMessages     *int
 	ObservedUsageTurns        *int
 	ObservedUsageUpdatedAt    *time.Time
+	ObservedSessionPath       string
 	CuentaUsuario             string
 	CuentaEmail               string
 	CuentaFuente              string
@@ -1100,12 +1102,16 @@ func aplicarUsoObservadoAgente(a *Agente, p *PresupuestoSesion) {
 	if cost, ok := float64FromAny(sessionUsage["estimated_cost_usd"]); ok {
 		a.ObservedUsageCostUSD = &cost
 	}
+	if count, ok := intFromAnyWithBool(sessionUsage["message_count"]); ok {
+		a.ObservedUsageMessages = &count
+	}
 	if turns, ok := intFromAnyWithBool(sessionUsage["turns"]); ok {
 		a.ObservedUsageTurns = &turns
 	}
 	if updatedAt := timeFromAny(sessionUsage["updated_at"]); updatedAt != nil {
 		a.ObservedUsageUpdatedAt = updatedAt
 	}
+	a.ObservedSessionPath = strings.TrimSpace(stringFromMap(sessionUsage, "session_path", ""))
 }
 
 func proyectarEstadoCuotaVisibleDesdePresupuesto(a *Agente) {

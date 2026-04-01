@@ -29,12 +29,17 @@ import (
 func TestCuentaPresupuestoDesdeAgenteUsaObservedUsageCuandoNoHayCuotaReal(t *testing.T) {
 	tokens := int64(1570)
 	cost := 0.042
+	msgs := 3
+	turns := 1
 	key, item := cuentaPresupuestoDesdeAgente(&db.Agente{
 		Nombre:               "Codex6",
 		CuentaEmail:          "claude@example.com",
 		PresupuestoFuente:    "claude_rust_session_observed",
 		ObservedUsageTokens:  &tokens,
 		ObservedUsageCostUSD: &cost,
+		ObservedUsageMessages: &msgs,
+		ObservedUsageTurns:   &turns,
+		ObservedSessionPath:  "/tmp/.claude/sessions/session-1.json",
 	})
 	if key != "claude@example.com" {
 		t.Fatalf("cuenta clave inesperada: %q", key)
@@ -45,6 +50,9 @@ func TestCuentaPresupuestoDesdeAgenteUsaObservedUsageCuandoNoHayCuotaReal(t *tes
 	rank, value := cuentaPresupuestoOrden(item)
 	if rank != 0 || value != float64(tokens) {
 		t.Fatalf("orden inesperado: rank=%d value=%v", rank, value)
+	}
+	if item.ObservedSessionPath != "/tmp/.claude/sessions/session-1.json" || item.ObservedUsageMessages == nil || *item.ObservedUsageMessages != 3 {
+		t.Fatalf("payload observed inesperado: %+v", item)
 	}
 }
 

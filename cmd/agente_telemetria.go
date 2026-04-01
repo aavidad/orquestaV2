@@ -9,6 +9,7 @@ package cmd
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -188,6 +189,25 @@ func resumenRankingCuenta(cuenta apiCuentaPresupuestoItem) string {
 		if age := edadPresupuestoObservado(cuenta.ObservedUsageAt); age != "" {
 			detalle += "uso observado " + age
 		}
+	}
+	if cuenta.ObservedUsageMessages != nil || cuenta.ObservedUsageTurns != nil {
+		if detalle != "" {
+			detalle += " · "
+		}
+		partes := make([]string, 0, 2)
+		if cuenta.ObservedUsageMessages != nil {
+			partes = append(partes, fmt.Sprintf("%d msg", *cuenta.ObservedUsageMessages))
+		}
+		if cuenta.ObservedUsageTurns != nil {
+			partes = append(partes, fmt.Sprintf("%d turns", *cuenta.ObservedUsageTurns))
+		}
+		detalle += strings.Join(partes, " · ")
+	}
+	if path := strings.TrimSpace(cuenta.ObservedSessionPath); path != "" {
+		if detalle != "" {
+			detalle += " · "
+		}
+		detalle += "sesion " + filepath.Base(path)
 	}
 	if len(cuenta.Agentes) > 0 {
 		if detalle != "" {

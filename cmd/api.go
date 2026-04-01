@@ -1136,8 +1136,10 @@ func cuentaPresupuestoDesdeAgente(agente *db.Agente) (string, apiCuentaPresupues
 		RemainingCredits:     agente.RemainingCredits,
 		ObservedUsageTokens:  agente.ObservedUsageTokens,
 		ObservedUsageCostUSD: agente.ObservedUsageCostUSD,
+		ObservedUsageMessages: agente.ObservedUsageMessages,
 		ObservedUsageTurns:   agente.ObservedUsageTurns,
 		ObservedUsageAt:      agente.ObservedUsageUpdatedAt,
+		ObservedSessionPath:  strings.TrimSpace(agente.ObservedSessionPath),
 		PresupuestoFuente:    strings.TrimSpace(agente.PresupuestoFuente),
 		PresupuestoCheckedAt: agente.PresupuestoCheckedAt,
 	}

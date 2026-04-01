@@ -177,7 +177,7 @@ func TestAgenteRankingCuentasCmdMarcaUsoObservadoClaude(t *testing.T) {
 	setAgentTelemetryHTTPClientForTest(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		switch {
 		case req.URL.Path == "/api/agentes/ranking-cuentas" && req.URL.Query().Get("activos") == "true":
-			return newJSONResponse(http.StatusOK, `{"generado":"2026-04-01T23:50:00Z","activos":true,"cuentas":[{"cuenta_clave":"claude@example.com","cuenta_email":"claude@example.com","criterio":"observed_usage","observed_usage_tokens":1570,"observed_usage_cost_usd":0.042,"presupuesto_fuente":"claude_rust_session_observed","agentes":["Codex6"]}]}`), nil
+			return newJSONResponse(http.StatusOK, `{"generado":"2026-04-01T23:50:00Z","activos":true,"cuentas":[{"cuenta_clave":"claude@example.com","cuenta_email":"claude@example.com","criterio":"observed_usage","observed_usage_tokens":1570,"observed_usage_cost_usd":0.042,"observed_usage_messages":3,"observed_usage_turns":1,"observed_session_path":"/tmp/.claude/sessions/session-1.json","presupuesto_fuente":"claude_rust_session_observed","agentes":["Codex6"]}]}`), nil
 		default:
 			return newJSONResponse(http.StatusNotFound, `{"error":"not found"}`), nil
 		}
@@ -189,6 +189,9 @@ func TestAgenteRankingCuentasCmdMarcaUsoObservadoClaude(t *testing.T) {
 		}
 	})
 	if !strings.Contains(out, "uso observado 1570 tok") || !strings.Contains(out, "coste est. $0.0420") {
+		t.Fatalf("salida inesperada:\n%s", out)
+	}
+	if !strings.Contains(out, "3 msg") || !strings.Contains(out, "1 turns") || !strings.Contains(out, "session-1.json") {
 		t.Fatalf("salida inesperada:\n%s", out)
 	}
 	if strings.Contains(out, "sin_datos") {
