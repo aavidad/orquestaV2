@@ -22,4 +22,14 @@ func TestAgenteCuentaComoConectadoRespetaEstadoCuotaVisible(t *testing.T) {
 	if !agenteCuentaComoConectado(&db.Agente{Nombre: "Codex4", Activo: true, EstadoCuota: "activo"}) {
 		t.Fatalf("un agente activo con cuota activa deberia contar como conectado")
 	}
+	if !agenteCuentaComoConectado(&db.Agente{
+		Nombre:               "antigravity",
+		Activo:               true,
+		EstadoCuota:          "agotado",
+		PresupuestoSemanalPct: intPtr(69),
+		CuotaRestantePct:     intPtr(69),
+		PresupuestoVentana:   "weekly",
+	}) {
+		t.Fatalf("una cuenta solo semanal con saldo positivo no deberia caer por una cuota legacy")
+	}
 }

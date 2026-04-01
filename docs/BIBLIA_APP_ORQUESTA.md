@@ -799,6 +799,16 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - en ese caso manda el bloqueo observado del proveedor: `efectivo 0%`, `estado agotado` y `reset/reanimacion` visibles.
 - los porcentajes derivados se ocultan para no enseñar contradicciones del tipo `semanal 95%` junto a `agotado`.
 
+## Jerarquía semanal frente a ventana corta
+
+- la cuota visible no puede tratar `diario` como si fuese la ventana corta real del proveedor.
+- la regla canónica es:
+  - si `semanal = 0`, el agente está bloqueado
+  - si `semanal > 0` y existe ventana corta observada, manda esa ventana corta
+  - si `semanal > 0` y no existe ventana corta observada, el agente no queda bloqueado por un derivado corto local
+- una cuenta "solo semanal" no puede caer en `enfriamiento/cuota` solo porque el derivado local corto esté a `0`.
+- esta jerarquía debe gobernar tanto la presencia visible (`status`, `/api/status`) como la activación operativa del agente.
+
 ## Mailbox durable y reintentos
 
 - una `send_instruction` completada como `mailbox_only` no puede deduplicar para siempre el mismo `mailbox_id`; eso deja deuda durable huérfana.

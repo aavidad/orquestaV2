@@ -49,8 +49,7 @@ func agenteCuentaComoConectado(agente *db.Agente) bool {
 	if agente == nil {
 		return false
 	}
-	estadoCuota := strings.TrimSpace(agente.EstadoCuota)
-	if estadoCuota != "" && !strings.EqualFold(estadoCuota, "activo") {
+	if agenteBloqueadoPorCuotaVisible(agente) {
 		return false
 	}
 	if agente.Activo {

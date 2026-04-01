@@ -5704,3 +5704,41 @@ Resultado:
 - `/openclaw` ya no es solo lectura: puede cerrar un `review_gate` y actuar sobre un worker retenido por cuota desde la propia interfaz
 - las acciones quedan soportadas por regresiones de `POST` con efecto real sobre estado persistente
 - el supervisor web ya está más cerca de ser un puesto operativo completo y no solo una vista de estado
+
+## 2026-04-01 — la cuota visible deja de bloquear cuentas solo semanales
+
+Hallazgo:
+
+- seguía quedando una contradicción de núcleo en `status`: algunas cuentas con saldo semanal positivo caían en `enfriamiento/cuota` porque el derivado corto local (`diario`) estaba a `0`
+- eso violaba la doctrina fijada: primero manda semanal, y solo si sigue viva y existe ventana corta observada se mira esa ventana corta
+
+Decision:
+
+- sacar `diario` de la decisión de bloqueo visible y operativo
+- usar solo:
+  - `semanal`
+  - ventana corta real observada (`sesión/5h/provider`)
+- si solo existe semanal positiva, el estado visible no puede seguir secuestrado por una cuota legacy
+
+Codigo:
+
+- [db/sesiones.go](/home/alberto/Trabajo/orquesta/db/sesiones.go)
+- [db/presupuestos_sesion_test.go](/home/alberto/Trabajo/orquesta/db/presupuestos_sesion_test.go)
+- [cmd/status_remoto_compat.go](/home/alberto/Trabajo/orquesta/cmd/status_remoto_compat.go)
+- [cmd/status_service.go](/home/alberto/Trabajo/orquesta/cmd/status_service.go)
+- [cmd/status_service_test.go](/home/alberto/Trabajo/orquesta/cmd/status_service_test.go)
+- [cmd/status_test.go](/home/alberto/Trabajo/orquesta/cmd/status_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./db ./cmd -run 'Test(GetAgenteUsaSoloLaSemanalCuandoNoExisteVentanaTemporal|GetAgenteNoBloqueaEstadoVisibleCuandoSoloHaySemanalPositiva|AgenteCuentaComoConectadoRespetaEstadoCuotaVisible|RenderStatusSummaryIgnoraDerivadoTemporalInexistenteCuandoSoloMandaSemanal)' -count=1`
+- `go build -o ./orquesta .`
+- `./orquesta server stop && ./orquesta server start`
+- `sleep 1; ./orquesta status`
+
+Resultado:
+
+- una cuenta solo semanal con saldo positivo ya no cae por un falso temporal inexistente
+- la presencia visible y la activación operativa usan la misma jerarquía correcta
+- `antigravity` dejó de aparecer retenido por cuota por ese motivo falso

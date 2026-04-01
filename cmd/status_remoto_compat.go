@@ -452,28 +452,39 @@ func agenteBloqueadoPorCuotaVisible(a *db.Agente) bool {
 	if strings.TrimSpace(a.PresupuestoEstado) != "" && !strings.EqualFold(strings.TrimSpace(a.PresupuestoEstado), "ok") {
 		return true
 	}
-	if a.PresupuestoSemanalPct != nil && *a.PresupuestoSemanalPct <= 0 {
-		return true
-	}
-	if a.PresupuestoDiarioPct != nil && *a.PresupuestoDiarioPct <= 0 {
-		return true
-	}
-	if a.PresupuestoSesionPct != nil && *a.PresupuestoSesionPct <= 0 {
-		return true
-	}
 	if a.RemainingCredits != nil && *a.RemainingCredits <= 0 {
 		return true
 	}
-	if a.CuotaRestantePct != nil && *a.CuotaRestantePct <= 0 {
+	if a.PresupuestoSemanalPct != nil && *a.PresupuestoSemanalPct <= 0 {
 		return true
+	}
+	tieneVentanaTemporalVisible := a.PresupuestoSesionPct != nil ||
+		presupuestoVisibleEsVentanaCorta(strings.TrimSpace(a.PresupuestoVentana)) ||
+		strings.EqualFold(strings.TrimSpace(a.PresupuestoFuente), "provider_backoff")
+	if a.PresupuestoSemanalPct != nil && *a.PresupuestoSemanalPct > 0 && !tieneVentanaTemporalVisible {
+		return false
+	}
+	if a.PresupuestoSesionPct != nil {
+		return *a.PresupuestoSesionPct <= 0
+	}
+	if tieneVentanaTemporalVisible && a.CuotaRestantePct != nil {
+		return *a.CuotaRestantePct <= 0
 	}
 	if (a.CuotaRestantePct != nil && *a.CuotaRestantePct > 0) ||
 		(a.PresupuestoSemanalPct != nil && *a.PresupuestoSemanalPct > 0) ||
-		(a.PresupuestoDiarioPct != nil && *a.PresupuestoDiarioPct > 0) ||
 		(a.PresupuestoSesionPct != nil && *a.PresupuestoSesionPct > 0) {
 		return false
 	}
 	return true
+}
+
+func presupuestoVisibleEsVentanaCorta(windowKind string) bool {
+	windowKind = strings.ToLower(strings.TrimSpace(windowKind))
+	switch windowKind {
+	case "5h", "session", "provider":
+		return true
+	}
+	return strings.HasSuffix(windowKind, "m")
 }
 
 func renderVentanaPresupuesto(nombre string, pct *int, resetAt *time.Time) string {

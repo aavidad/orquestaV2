@@ -783,6 +783,39 @@ func TestRenderStatusSummaryNoDuplicaTareasRetenidasEnProgresoAhoraMismo(t *test
 	}
 }
 
+func TestRenderStatusSummaryIgnoraDerivadoTemporalInexistenteCuandoSoloMandaSemanal(t *testing.T) {
+	weekly := 69
+	daily := 0
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				Agentes: []*db.Agente{
+					{
+						Nombre:               "antigravity",
+						Rol:                  "programador",
+						Activo:               false,
+						EstadoCuota:          "agotado",
+						CuotaRestantePct:     &weekly,
+						PresupuestoVentana:   "weekly",
+						PresupuestoSemanalPct: &weekly,
+						PresupuestoDiarioPct: &daily,
+					},
+				},
+				TareasPorEstado: map[string]int{},
+			},
+		})
+	})
+	if strings.Contains(out, "En enfriamiento/cuota:\n      antigravity") {
+		t.Fatalf("una cuenta solo semanal no deberia caer por un derivado temporal inexistente: %s", out)
+	}
+	if !strings.Contains(out, "En pausa operativa:\n      antigravity") {
+		t.Fatalf("deberia tratarlo como pausa operativa visible, no como cuota real: %s", out)
+	}
+	if strings.Contains(out, "cuota:agotado") {
+		t.Fatalf("no deberia marcar cuota real cuando solo queda semanal positiva: %s", out)
+	}
+}
+
 func TestFetchStatusNoCuentaComoConectadoAgenteConSemanalObservadaAgotada(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex5", "programador"); err != nil {

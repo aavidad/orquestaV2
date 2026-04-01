@@ -644,12 +644,19 @@ func aplicarEstadoVisibleAgente(agente *Agente, sesion *Sesion) {
 	}
 	proyectarBloqueoVisibleDesdePresupuestoObservado(agente)
 	sincronizarReanimacionVisibleDesdePresupuesto(agente)
+	if !agenteBloqueadoPorCuotaOperativo(agente) && !strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "activo") {
+		agente.EstadoCuota = "activo"
+		agente.ReanimarAt = nil
+		if !agenteMotivoPausaOperativaVisible(agente.MotivoPausa) {
+			agente.MotivoPausa = ""
+		}
+	}
 	if sesion == nil {
 		agente.Activo = false
 		agente.EstadoSesion = ""
 		return
 	}
-	if strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "enfriamiento") || strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "agotado") {
+	if agenteBloqueadoPorCuotaOperativo(agente) {
 		agente.Activo = false
 		if estado := strings.TrimSpace(agente.EstadoSesion); estado != "" {
 			agente.EstadoSesion = estado
@@ -677,6 +684,20 @@ func aplicarEstadoVisibleAgente(agente *Agente, sesion *Sesion) {
 		return
 	}
 	agente.EstadoSesion = "disponible"
+}
+
+func agenteMotivoPausaOperativaVisible(motivo string) bool {
+	motivo = strings.ToLower(strings.TrimSpace(motivo))
+	switch motivo {
+	case "", "usage limit", "cuota diaria agotada", "presupuesto agotado observado", "presupuesto semanal agotado observado", "ventana corta agotada observada", "créditos agotados observados", "creditos agotados observados":
+		return false
+	}
+	return strings.Contains(motivo, "runtime") ||
+		strings.Contains(motivo, "panic") ||
+		strings.Contains(motivo, "manual") ||
+		strings.Contains(motivo, "pausa") ||
+		strings.Contains(motivo, "detenido") ||
+		strings.Contains(motivo, "supervisor")
 }
 
 func proyectarBloqueoVisibleDesdePresupuestoObservado(a *Agente) {
@@ -717,6 +738,52 @@ func proyectarBloqueoVisibleDesdePresupuestoObservado(a *Agente) {
 		}
 		return
 	}
+}
+
+func agenteTieneVentanaTemporalVisible(a *Agente) bool {
+	if a == nil {
+		return false
+	}
+	if a.PresupuestoSesionPct != nil {
+		return true
+	}
+	if presupuestoEsVentanaCorta(strings.TrimSpace(a.PresupuestoVentana)) {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(a.PresupuestoFuente), "provider_backoff")
+}
+
+func agenteBloqueadoPorCuotaOperativo(a *Agente) bool {
+	if a == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(a.EstadoCuota), "activo") {
+		return false
+	}
+	if a.RemainingCredits != nil && *a.RemainingCredits <= 0 {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(a.PresupuestoEstado), "agotado") {
+		return true
+	}
+	if a.PresupuestoSemanalPct != nil {
+		if *a.PresupuestoSemanalPct <= 0 {
+			return true
+		}
+		if !agenteTieneVentanaTemporalVisible(a) {
+			return false
+		}
+	}
+	if a.PresupuestoSesionPct != nil {
+		return *a.PresupuestoSesionPct <= 0
+	}
+	if presupuestoEsVentanaCorta(strings.TrimSpace(a.PresupuestoVentana)) && a.CuotaRestantePct != nil {
+		return *a.CuotaRestantePct <= 0
+	}
+	if a.CuotaRestantePct != nil {
+		return *a.CuotaRestantePct <= 0
+	}
+	return true
 }
 
 func sincronizarReanimacionVisibleDesdePresupuesto(a *Agente) {
