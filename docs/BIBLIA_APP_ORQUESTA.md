@@ -922,6 +922,11 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - Primer alcance permitido para automatización:
   - `dispatch` de tarea libre
   - replanificación simple de tarea retenida por cuota
+- La replanificación por cuota aplicada por OpenClaw debe preservar el estado de trabajo cuando la tarea ya estaba en `en_progreso`:
+  - si la tarea retenida se mueve a otro worker, Orquesta debe dejarla en `en_progreso`
+  - no puede degradarla a `asignada` por usar una mutación demasiado débil
+- La action tool del supervisor debe aceptar un fallback explícito seguro cuando la cola viva haya cambiado entre la recomendación y la ejecución:
+  - si `action`, `target` y `assignee` siguen siendo válidos, OpenClaw debe poder aplicar la acción sin depender de que siga presente en `action_queue`
 - `supervisor-loop` persistida no puede quedarse atrás respecto al snapshot:
   - `metadata_json.recommended_count`
   - `metadata_json.next_action`

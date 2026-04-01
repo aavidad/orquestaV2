@@ -6082,3 +6082,21 @@ Resultado:
   - `tools/call` sobre `orquesta.supervision.acciones.aplicar` con `target=tarea:414` y `assignee=Codex3` devuelve `ok=true`
   - la tarea `#414` queda en `en_progreso` con `Codex3`
   - `./orquesta status` pasa a `2 con trabajo activo`
+
+## 2026-04-01 — OpenClaw ya puede replanificar cuota con fallback seguro
+
+- La primera validación viva de `replanificar_por_cuota` destapó un hueco fino:
+  - la tool MCP devolvía `ok=true`
+  - pero cuando la `action_queue` había cambiado entre recomendación y ejecución, podía no encontrar una acción aplicable
+- Se endureció `orquesta.supervision.acciones.aplicar` con fallback explícito:
+  - si `action`, `target` y `assignee` vienen informados y pertenecen al conjunto seguro, Orquesta puede ejecutar la acción aunque ya no siga visible en la cola actual
+- Además se corrigió la semántica de `replanificar_por_cuota`:
+  - si la tarea origen ya estaba en `en_progreso`, la reasignación canónica la mantiene en `en_progreso`
+  - no se degrada a `asignada`
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(MCPToolSupervisorAplicaDispatch|MCPToolSupervisorAplicaReplanificacionPorCuotaConFallbackExplicito|MCPRevisionSupervisorSugiereDispatchOperativo)' -count=1`
+- Validación viva:
+  - `POST /api/mcp` con `orquesta.supervision.acciones.aplicar`, `action=replanificar_por_cuota`, `target=tarea:412`, `assignee=Codex3` devuelve `ok=true`
+  - la tarea `#412` converge a `Codex3` y permanece en `en_progreso`
+  - `./orquesta status` pasa a mostrar `#412` en `En progreso ahora mismo` con `Codex3`
+  - la lista `Retenidas por cuota` ya no incluye `#412`

@@ -3905,6 +3905,9 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 	actions, _ := snapshot["action_queue"].([]supervisorRecommendedAction)
 	selected := pickSupervisorRecommendedAction(actions, strings.TrimSpace(actionName), strings.TrimSpace(target), strings.TrimSpace(assignee))
 	if selected == nil {
+		selected = fallbackSupervisorRecommendedAction(strings.TrimSpace(actionName), strings.TrimSpace(target), strings.TrimSpace(assignee))
+	}
+	if selected == nil {
 		return nil, fmt.Errorf("no se encontró una acción aplicable del supervisor")
 	}
 	taskID, err := resolveSupervisorActionTaskID(*selected)
@@ -3940,8 +3943,21 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 			return nil, fmt.Errorf("la tarea #%d no está libre para dispatch", taskID)
 		}
 	case "replanificar_por_cuota":
+		task, err := tareasService.Get(taskID)
+		if err != nil {
+			return nil, err
+		}
+		if task == nil {
+			return nil, fmt.Errorf("tarea #%d no encontrada", taskID)
+		}
+		wasInProgress := task.Estado == db.TareaEnProgreso
 		if err := tareasService.Reassign(taskID, worker); err != nil {
 			return nil, err
+		}
+		if wasInProgress {
+			if err := tareasService.Start(taskID, worker); err != nil {
+				return nil, err
+			}
 		}
 	default:
 		return nil, fmt.Errorf("acción no aplicable automáticamente: %s", strings.TrimSpace(selected.Action))
@@ -3979,6 +3995,32 @@ func pickSupervisorRecommendedAction(actions []supervisorRecommendedAction, acti
 		return &copy
 	}
 	return nil
+}
+
+func fallbackSupervisorRecommendedAction(actionName, target, assignee string) *supervisorRecommendedAction {
+	if actionName == "" || target == "" {
+		return nil
+	}
+	switch actionName {
+	case "asignar_tarea_libre":
+		return &supervisorRecommendedAction{
+			Kind:     "dispatch",
+			Action:   actionName,
+			Target:   target,
+			Priority: "media",
+			Assignee: assignee,
+		}
+	case "replanificar_por_cuota":
+		return &supervisorRecommendedAction{
+			Kind:     "quota_hold",
+			Action:   actionName,
+			Target:   target,
+			Priority: "media",
+			Assignee: assignee,
+		}
+	default:
+		return nil
+	}
 }
 
 func resolveSupervisorActionTaskID(action supervisorRecommendedAction) (int64, error) {

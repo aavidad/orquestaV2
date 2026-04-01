@@ -1414,6 +1414,69 @@ func TestMCPToolsPropuestasCrearYAccionarOperanPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestMCPToolSupervisorAplicaReplanificacionPorCuotaConFallbackExplicito(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		prev := statusService
+		defer func() { statusService = prev }()
+
+		insertTestProyecto(t, "orquestador", "orquestador", "/tmp/orquestador")
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      "Replanificar por cuota",
+			Descripcion: "Debe poder reasignarse aunque la cola viva no la recomiende ahora",
+			Modulo:      "runtime",
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+			t.Fatalf("registrar Codex2: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar Codex3: %v", err)
+		}
+		if _, err := db.DB.Exec(`UPDATE tareas SET estado='en_progreso', agente='Codex2' WHERE id=?`, tareaID); err != nil {
+			t.Fatalf("dejar tarea en progreso con Codex2: %v", err)
+		}
+
+		statusService = stubStatusService{response: apiStatusResponse{
+			AgentesActivos: []*db.Agente{
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+			AgentesTrabajando: []*db.Agente{},
+			Agentes: []*db.Agente{
+				{Nombre: "Codex2", Rol: "programador", Activo: false, EstadoCuota: "enfriamiento"},
+				{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			},
+		}}
+
+		result, err := callMCPTool("orquesta.supervision.acciones.aplicar", map[string]any{
+			"supervisor": "OpenClaw",
+			"action":     "replanificar_por_cuota",
+			"target":     "tarea:" + itoa(tareaID),
+			"assignee":   "Codex3",
+		})
+		if err != nil {
+			t.Fatalf("aplicar replanificacion supervisor: %v", err)
+		}
+		if result["isError"] != false {
+			t.Fatalf("replanificacion marcada como error: %#v", result)
+		}
+
+		tarea, err := db.GetTarea(tareaID)
+		if err != nil {
+			t.Fatalf("get tarea: %v", err)
+		}
+		if tarea.Agente == nil || *tarea.Agente != "Codex3" {
+			t.Fatalf("agente tarea inesperado tras replanificacion: %+v", tarea)
+		}
+		if tarea.Estado != db.TareaEnProgreso {
+			t.Fatalf("estado tarea inesperado tras replanificacion: %+v", tarea)
+		}
+	})
+}
+
 func TestMCPToolsCoordinacionOperanPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
