@@ -1277,6 +1277,7 @@ type apiOpenClawAgentLite struct {
 	CuentaEmail        string     `json:"cuenta_email,omitempty"`
 	PresupuestoVentana string     `json:"presupuesto_ventana,omitempty"`
 	CuotaRestantePct   *int       `json:"cuota_restante_pct,omitempty"`
+	CargaActiva        int        `json:"carga_activa,omitempty"`
 }
 
 type apiOpenClawStatusLite struct {
@@ -1309,9 +1310,9 @@ func buildOpenClawOperatorStatus(status *estadoResumen) (apiOpenClawStatusLite, 
 	return apiOpenClawStatusLite{
 		Generado:           status.Generado,
 		TareasPorEstado:    status.TareasPorEstado,
-		AgentesActivos:     compactOpenClawAgents(status.AgentesActivos),
-		AgentesTrabajando:  compactOpenClawAgents(status.AgentesTrabajando),
-		EnCuota:            compactOpenClawAgents(agentesNoActivosConCuota(status.Agentes)),
+		AgentesActivos:     compactOpenClawAgents(status.AgentesActivos, status.TareasActivas),
+		AgentesTrabajando:  compactOpenClawAgents(status.AgentesTrabajando, status.TareasActivas),
+		EnCuota:            compactOpenClawAgents(agentesNoActivosConCuota(status.Agentes), status.TareasActivas),
 		MailboxPendiente:   mailboxPendiente,
 		RetenidasPorCuota:  tareasRetenidasPorCuota(status.TareasActivas, status.Agentes),
 		TareasActivas:      status.TareasActivas,
@@ -1381,12 +1382,14 @@ func buildOpenClawPendingMailbox(agentes []*db.Agente) ([]apiOpenClawMailboxLite
 	return out, nil
 }
 
-func compactOpenClawAgents(items []*db.Agente) []apiOpenClawAgentLite {
+func compactOpenClawAgents(items []*db.Agente, tareas []tareaLite) []apiOpenClawAgentLite {
+	load := buildOpenClawAgentLoad(tareas)
 	out := make([]apiOpenClawAgentLite, 0, len(items))
 	for _, item := range items {
 		if item == nil {
 			continue
 		}
+		nombre := strings.TrimSpace(item.Nombre)
 		out = append(out, apiOpenClawAgentLite{
 			Nombre:             item.Nombre,
 			Rol:                item.Rol,
@@ -1395,7 +1398,23 @@ func compactOpenClawAgents(items []*db.Agente) []apiOpenClawAgentLite {
 			CuentaEmail:        item.CuentaEmail,
 			PresupuestoVentana: item.PresupuestoVentana,
 			CuotaRestantePct:   item.CuotaRestantePct,
+			CargaActiva:        load[nombre],
 		})
+	}
+	return out
+}
+
+func buildOpenClawAgentLoad(tareas []tareaLite) map[string]int {
+	out := make(map[string]int)
+	for _, tarea := range tareas {
+		nombre := strings.TrimSpace(tarea.Agente)
+		if nombre == "" {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaAsignada, db.TareaEnProgreso, db.TareaBloqueada:
+			out[nombre]++
+		}
 	}
 	return out
 }

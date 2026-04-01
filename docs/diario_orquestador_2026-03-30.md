@@ -6240,3 +6240,16 @@ Resultado:
 - Validación viva:
   - `GET /api/openclaw/operator` ya devuelve `Codex3 -> autonomia`
   - `/openclaw` ya muestra `Guidance durable pendiente` con `Codex3` y `autonomia`
+
+## 2026-04-01 — OpenClaw ya ve la carga activa por agente
+
+- El supervisor ya recibía `assignee` sugerido por menor carga visible, pero faltaba la justificación explícita en la interfaz.
+- Se añadió `carga_activa` al agregado compacto de agentes en `/api/openclaw/operator`.
+- La web `/openclaw` ahora muestra columna `Carga` en `Flota disponible`.
+- Validación dirigida:
+  - `go test ./cmd -run 'Test(APIObservabilidadReadOnly|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
+- Validación viva:
+  - `GET /api/openclaw/operator` devuelve:
+    - `Codex3 -> carga_activa 4`
+    - `Codex4 -> carga_activa 3`
+  - `/openclaw` muestra la columna `Carga` con esos mismos valores

@@ -1840,11 +1840,12 @@ const webTplOpenClaw = `{{define "content"}}
     <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
       <h3 style="margin:0 0 .7rem 0">Flota disponible</h3>
       {{if .Status.AgentesActivos}}
-      <table style="width:100%"><thead><tr><th>Agente</th><th>Rol</th><th>Cuota visible</th><th>Cuenta</th></tr></thead><tbody>
+      <table style="width:100%"><thead><tr><th>Agente</th><th>Rol</th><th>Carga</th><th>Cuota visible</th><th>Cuenta</th></tr></thead><tbody>
       {{range .Status.AgentesActivos}}
         <tr>
           <td><strong>{{.Nombre}}</strong></td>
           <td>{{orDash .Rol}}</td>
+          <td>{{.CargaActiva}}</td>
           <td>{{if .CuotaRestantePct}}{{.CuotaRestantePct}}%{{if .PresupuestoVentana}} · {{.PresupuestoVentana}}{{end}}{{else}}—{{end}}</td>
           <td>{{if .CuentaEmail}}{{.CuentaEmail}}{{else}}—{{end}}</td>
         </tr>
