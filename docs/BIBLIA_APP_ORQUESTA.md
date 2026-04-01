@@ -705,6 +705,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - la afinidad de proyecto ya no basta; el orquestador profesional también debe preservar afinidad de frente/módulo para reducir pisadas, conflictos y handoffs innecesarios.
 - en el proyecto autobootstrapeado por servidor, la autoasignación solo puede usar el pool oficial de workers configurado (`server_autobootstrap_worker_agents`). Un agente heredado con sesión o asignación activa fuera de esa flota no puede drenar backlog ni consumir cupo `MaxWorkers`.
 - los tests del planificador para el proyecto `orquestador` también deben fijar explícitamente ese pool. No se admite volver a una semántica implícita de “cualquier programador sirve” en el proyecto gobernado por `server_autobootstrap`.
+- la autoasignación a una sesión activa idle no puede generar guidance larga hacia Codex. El `instruction` canónico debe salir ya compactado desde origen (`toma tarea asignada y sigue`), sin confiar en que la compactación defensiva del runtime lo arregle más tarde.
 - el agente jefe (`OpenClaw`) no debe entrar a dirigir la flota con contexto parcial. Orquesta debe exponer un `briefing de supervisor` canónico con:
   - flota conectada y disponible
   - agentes fuera del pool por cuota/cooldown

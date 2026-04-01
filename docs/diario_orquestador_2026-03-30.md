@@ -5339,3 +5339,31 @@ Resultado:
 - `Codex2`, `Codex5` y `Codex6` ya salen con `efectivo 0%` y reset visible coherente con el bloqueo observado
 - el caso semanal-only queda cubierto por test y ya no inventa una ventana temporal
 - la suite completa vuelve a verde tras hacer deterministas los tests de gating que usaban env global en paralelo
+
+## 2026-04-01 — la autoasignación ya no inyecta guidance larga a Codex
+
+Hallazgo:
+
+- en vivo `Codex4` seguía mostrando un `runtime_panic` cuyo `stdin` era `Se te ha asignado automaticamente la tarea`
+- el runtime ya tenía compactación defensiva, pero esa frase seguía entrando demasiado larga por una ruta concreta del control plane: autoasignación de sesión activa idle
+
+Decision:
+
+- no confiar en la compactación aguas abajo para este caso
+- la autoasignación útil debe emitir ya desde origen una `instruction` mínima y estable para Codex: `toma tarea asignada y sigue`
+
+Codigo:
+
+- [cmd/controlplane_support.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support.go)
+- [cmd/controlplane_support_test.go](/home/alberto/Trabajo/orquesta/cmd/controlplane_support_test.go)
+- [docs/BIBLIA_APP_ORQUESTA.md](/home/alberto/Trabajo/orquesta/docs/BIBLIA_APP_ORQUESTA.md)
+
+Validacion:
+
+- `go test ./cmd -run 'TestProcesarAutonomiaAgentesBatch(AutoasignaTrabajoASesionActivaIdle|NoEncolaNudgePorEsperarOPedirTareaEnSesionActiva|NoEncolaNudgePorContinuarTrabajoEnSesionActiva)$' -count=1`
+- `go build -o ./orquesta .`
+
+Resultado:
+
+- la ruta de autoasignación queda acotada a una guidance corta y estable
+- deja de depender de la compactación defensiva del runtime para no volver a panicar Codex por ese texto

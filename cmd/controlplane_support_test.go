@@ -2140,6 +2140,9 @@ func TestProcesarAutonomiaAgentesBatchAutoasignaTrabajoASesionActivaIdle(t *test
 	if !strings.Contains(orders[0].PayloadJSON, `"accion":"continuar_trabajo"`) || !strings.Contains(orders[0].PayloadJSON, `"tarea_id":`) {
 		t.Fatalf("payload nudge inesperado: %s", orders[0].PayloadJSON)
 	}
+	if !strings.Contains(orders[0].PayloadJSON, `"instruction":"toma tarea asignada y sigue"`) {
+		t.Fatalf("instruction de autoasignacion demasiado larga o inesperada: %s", orders[0].PayloadJSON)
+	}
 }
 
 func TestProcesarAutonomiaAgentesBatchNoEncolaNudgePorSupervisarProyectoEnSesionActiva(t *testing.T) {

@@ -2030,7 +2030,7 @@ func procesarAutonomiaSesionActiva(sesion *db.Sesion) (int, error) {
 			proyecto,
 			"continuar_trabajo",
 			motivo,
-			fmt.Sprintf("Se te ha asignado automáticamente la tarea #%d: %s. Retoma trabajo en este frente sin abrir otro.", tarea.ID, strings.TrimSpace(tarea.Titulo)),
+			"toma tarea asignada y sigue",
 			map[string]any{"tarea_id": tarea.ID, "motivo_autoasignacion": "sesion_activa_idle"},
 		); err != nil {
 			return 0, err
