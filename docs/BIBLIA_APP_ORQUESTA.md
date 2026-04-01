@@ -884,5 +884,10 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - API: `/api/openclaw/pipeline`
   - MCP resource: `orquesta://supervision/{supervisor}/pipeline`
   - MCP prompt: `orquesta.supervision.pipeline`
-  - MCP tools: `orquesta.supervision.pipeline.actualizar`, `orquesta.supervision.pipeline.listar`
+- MCP tools: `orquesta.supervision.pipeline.actualizar`, `orquesta.supervision.pipeline.listar`
 - No sustituye a `review_gates`, `git_merges` ni `eventos_normalizados`; los ordena en una fase operativa explícita para reanudación y gobierno.
+
+### Superficie web del supervisor
+
+- `/openclaw` no puede quedarse solo con review/notificaciones; también debe reutilizar `thread_sessions` y `pipeline_state` del servidor.
+- La web del supervisor es una proyección de la misma verdad viva que MCP/API, no otra composición manual.

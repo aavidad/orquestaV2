@@ -50,20 +50,22 @@ type webDashData struct {
 }
 
 type webOpenClawData struct {
-	Status            *estadoResumen
-	EnCuota           []*db.Agente
-	Retenidas         []tareaLite
-	ReviewGates       []*db.ReviewGate
-	Signals           []*supervisorReviewSignal
-	Merges            []*db.GitMerge
-	NormalizedEvents  []openClawNormalizedEvent
-	Recommended       []supervisorRecommendedAction
-	NextAction        *supervisorRecommendedAction
-	Notificaciones    notificaciones.EstadoNotificaciones
-	NotifOutbox       notificaciones.OutboxSummary
-	Generado          string
-	Msg               string
-	Err               string
+	Status           *estadoResumen
+	EnCuota          []*db.Agente
+	Retenidas        []tareaLite
+	ReviewGates      []*db.ReviewGate
+	Signals          []*supervisorReviewSignal
+	Merges           []*db.GitMerge
+	NormalizedEvents []openClawNormalizedEvent
+	ThreadSessions   []*db.SupervisorThreadSessionSummary
+	PipelineStates   []*db.SupervisorPipelineState
+	Recommended      []supervisorRecommendedAction
+	NextAction       *supervisorRecommendedAction
+	Notificaciones   notificaciones.EstadoNotificaciones
+	NotifOutbox      notificaciones.OutboxSummary
+	Generado         string
+	Msg              string
+	Err              string
 }
 
 type webPropResumen struct {
@@ -725,6 +727,14 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 	signals, _ := review["signals"].([]*supervisorReviewSignal)
 	merges, _ := review["merges"].([]*db.GitMerge)
 	normalizedEvents, _ := review["normalized_events"].([]openClawNormalizedEvent)
+	var threadSessions []*db.SupervisorThreadSessionSummary
+	if snapshot, ok := review["thread_sessions"].(map[string]any); ok {
+		threadSessions, _ = snapshot["sessions"].([]*db.SupervisorThreadSessionSummary)
+	}
+	var pipelineStates []*db.SupervisorPipelineState
+	if snapshot, ok := review["pipeline_state"].(map[string]any); ok {
+		pipelineStates, _ = snapshot["pipelines"].([]*db.SupervisorPipelineState)
+	}
 	recommended, _ := review["recommended_actions"].([]supervisorRecommendedAction)
 	var nextAction *supervisorRecommendedAction
 	switch item := review["next_action"].(type) {
@@ -734,20 +744,22 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		nextAction = item
 	}
 	webRender(w, r, webTplLayout+webTplOpenClaw, webOpenClawData{
-		Status:         status,
-		EnCuota:        agentesNoActivosConCuota(status.Agentes),
-		Retenidas:      tareasRetenidasPorCuota(status.TareasActivas, status.Agentes),
-		ReviewGates:    reviewGates,
-		Signals:        signals,
-		Merges:         merges,
+		Status:           status,
+		EnCuota:          agentesNoActivosConCuota(status.Agentes),
+		Retenidas:        tareasRetenidasPorCuota(status.TareasActivas, status.Agentes),
+		ReviewGates:      reviewGates,
+		Signals:          signals,
+		Merges:           merges,
 		NormalizedEvents: normalizedEvents,
-		Recommended:    recommended,
-		NextAction:     nextAction,
-		Notificaciones: notificaciones.DescribirConfiguracion(),
-		NotifOutbox:    notificaciones.DescribirOutbox(10),
-		Generado:       time.Now().Format("2006-01-02 15:04:05"),
-		Msg:            r.URL.Query().Get("ok"),
-		Err:            r.URL.Query().Get("err"),
+		ThreadSessions:   threadSessions,
+		PipelineStates:   pipelineStates,
+		Recommended:      recommended,
+		NextAction:       nextAction,
+		Notificaciones:   notificaciones.DescribirConfiguracion(),
+		NotifOutbox:      notificaciones.DescribirOutbox(10),
+		Generado:         time.Now().Format("2006-01-02 15:04:05"),
+		Msg:              r.URL.Query().Get("ok"),
+		Err:              r.URL.Query().Get("err"),
 	})
 }
 
@@ -1933,6 +1945,42 @@ const webTplOpenClaw = `{{define "content"}}
       </tbody></table>
       {{else}}
       <p style="margin:0;color:#64748b">Sin tareas retenidas.</p>
+      {{end}}
+    </section>
+
+    <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
+      <h3 style="margin:0 0 .7rem 0">Pipeline del supervisor</h3>
+      {{if .PipelineStates}}
+      <table style="width:100%;margin-bottom:.8rem"><thead><tr><th>Pipeline</th><th>Proyecto</th><th>Fase</th><th>Estado</th></tr></thead><tbody>
+      {{range .PipelineStates}}
+        <tr>
+          <td>{{orDash .PipelineName}}</td>
+          <td>{{orDash .ProyectoSlug}}</td>
+          <td><code>{{orDash .CurrentPhase}}</code></td>
+          <td><span class="tag t-media">{{.Status}}</span></td>
+        </tr>
+      {{end}}
+      </tbody></table>
+      {{else}}
+      <p style="margin:0;color:#64748b">Sin pipeline explícita registrada.</p>
+      {{end}}
+    </section>
+
+    <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
+      <h3 style="margin:0 0 .7rem 0">Threads y subagentes</h3>
+      {{if .ThreadSessions}}
+      <table style="width:100%"><thead><tr><th>Sesión</th><th>Líder</th><th>Subagentes</th><th>Activos</th></tr></thead><tbody>
+      {{range .ThreadSessions}}
+        <tr>
+          <td>{{if .SessionID}}{{.SessionID}}{{else}}&lt;default&gt;{{end}}</td>
+          <td>{{orDash .LeaderThreadID}}</td>
+          <td>{{len .AllSubagentThreadIDs}}</td>
+          <td>{{len .ActiveSubagentThreadIDs}}</td>
+        </tr>
+      {{end}}
+      </tbody></table>
+      {{else}}
+      <p style="margin:0;color:#64748b">Sin threads registradas todavía.</p>
       {{end}}
     </section>
 

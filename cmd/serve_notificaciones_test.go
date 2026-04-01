@@ -102,17 +102,37 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 		t.Fatalf("iniciar tarea: %v", err)
 	}
 	gateID, err := db.CrearReviewGate(&db.ReviewGate{
-		TareaID:         &taskID,
-		Estado:          db.ReviewGatePendiente,
-		ReviewerAgente:  "OpenClaw",
-		SeverityMax:     "media",
-		RequestedBy:     "Codex3",
+		TareaID:        &taskID,
+		Estado:         db.ReviewGatePendiente,
+		ReviewerAgente: "OpenClaw",
+		SeverityMax:    "media",
+		RequestedBy:    "Codex3",
 	})
 	if err != nil {
 		t.Fatalf("crear review gate: %v", err)
 	}
 	if gateID <= 0 {
 		t.Fatalf("review gate invalido: %d", gateID)
+	}
+	if _, err := db.RecordSupervisorThreadTurn(db.RecordSupervisorThreadInput{
+		Supervisor:   "OpenClaw",
+		ProyectoSlug: "orquestador",
+		SessionID:    "sess-openclaw-web",
+		ThreadID:     "leader-1",
+		Kind:         "leader",
+		Mode:         "review",
+		Source:       "test",
+	}); err != nil {
+		t.Fatalf("record supervisor thread: %v", err)
+	}
+	if _, err := db.UpsertSupervisorPipelineState(db.UpsertSupervisorPipelineStateInput{
+		Supervisor:   "OpenClaw",
+		ProyectoSlug: "orquestador",
+		PipelineName: "autopilot",
+		CurrentPhase: "review",
+		Status:       "active",
+	}); err != nil {
+		t.Fatalf("upsert supervisor pipeline: %v", err)
 	}
 
 	mux := http.NewServeMux()
@@ -132,6 +152,10 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 		"Acción siguiente",
 		"Review e integración",
 		"Eventos normalizados del supervisor",
+		"Threads y subagentes",
+		"Pipeline del supervisor",
+		"autopilot",
+		"sess-openclaw-web",
 		"OpenClaw Gateway y notificaciones",
 		"gateway down",
 		"Operador OpenClaw",
@@ -159,12 +183,12 @@ func TestWebOpenClawAccionResuelveReviewGate(t *testing.T) {
 		t.Fatalf("crear tarea: %v", err)
 	}
 	gateID, err := db.CrearReviewGate(&db.ReviewGate{
-		TareaID:         &taskID,
-		RequestedBy:     "Codex3",
-		ReviewerAgente:  "OpenClaw",
-		Estado:          db.ReviewGatePendiente,
-		SeverityMax:     "media",
-		FindingsJSON:    `[{"severity":"media","title":"falta prueba"}]`,
+		TareaID:        &taskID,
+		RequestedBy:    "Codex3",
+		ReviewerAgente: "OpenClaw",
+		Estado:         db.ReviewGatePendiente,
+		SeverityMax:    "media",
+		FindingsJSON:   `[{"severity":"media","title":"falta prueba"}]`,
 	})
 	if err != nil {
 		t.Fatalf("crear review gate: %v", err)

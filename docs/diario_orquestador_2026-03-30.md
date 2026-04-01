@@ -5962,3 +5962,17 @@ Resultado:
   - MCP prompt `orquesta.supervision.pipeline`
   - MCP tools `orquesta.supervision.pipeline.actualizar`, `orquesta.supervision.pipeline.listar`
 - `buildSupervisorReviewSnapshot()` y `/api/openclaw/operator` ya incluyen `pipeline_state`.
+
+## 2026-04-01 — `/openclaw` ya muestra pipeline y threads del supervisor
+
+- La superficie web de OpenClaw se amplió para reutilizar también:
+  - `thread_sessions`
+  - `pipeline_state`
+- Con esto el supervisor ve en una sola pantalla:
+  - review/integración
+  - eventos normalizados
+  - hilos/subagentes
+  - fase operativa explícita
+- Validación:
+  - `go test ./cmd -run 'Test(WebOpenClawMuestraOperatorReviewYEntregas|APIObservabilidadReadOnly|APIOpenClawThreadsOperaPorLaViaCanonica|APIOpenClawPipelineOperaPorLaViaCanonica)' -count=1`
+  - `go build -o ./orquesta .`
