@@ -966,6 +966,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - Esa separación también debe verse en el resumen de cabecera:
   - contador de `cola completa`
   - contador de `cola segura`
+  - contador de `requieren arbitraje`
   para que el supervisor vea de un vistazo cuánto arbitraje queda y cuánto puede automatizar.
 - Si `next_action` y `next_safe_action` apuntan al mismo elemento:
   - la web no debe duplicar tarjetas

@@ -6467,3 +6467,17 @@ Resultado:
   - la cabecera ya muestra:
     - `cola completa = 1`
     - `cola segura = 1`
+
+## 2026-04-01 — `/openclaw` ya resume también la deuda de arbitraje manual
+
+- Los contadores de `cola completa` y `cola segura` mejoraban mucho la lectura, pero aún faltaba una cifra directa para la parte no automatizable.
+- Se añadió en cabecera:
+  - `requieren arbitraje = cola completa - cola segura`
+- Validación dirigida:
+  - `go test ./cmd -run 'TestWebOpenClawMuestraOperatorReviewYEntregas' -count=1`
+- Validación viva:
+  - `GET /openclaw`
+  - la cabecera ya muestra:
+    - `cola completa = 1`
+    - `cola segura = 1`
+    - `requieren arbitraje = 0`

@@ -249,6 +249,9 @@ var webFuncMap = template.FuncMap{
 	},
 	"eqStr": func(a, b string) bool { return a == b },
 	"neStr": func(a, b string) bool { return a != b },
+	"sub": func(a, b int) int {
+		return a - b
+	},
 	"ftime": func(t *time.Time) string {
 		if t == nil || t.IsZero() {
 			return "—"
@@ -1851,6 +1854,7 @@ const webTplOpenClaw = `{{define "content"}}
   <div class="stat"><div class="n">{{len .Retenidas}}</div><div class="l">retenidas por cuota</div></div>
   <div class="stat"><div class="n">{{len .Recommended}}</div><div class="l">cola completa</div></div>
   <div class="stat"><div class="n">{{len .SafeRecommended}}</div><div class="l">cola segura</div></div>
+  <div class="stat"><div class="n">{{sub (len .Recommended) (len .SafeRecommended)}}</div><div class="l">requieren arbitraje</div></div>
   <div class="stat"><div class="n">{{len .ReviewGates}}</div><div class="l">review gates</div></div>
   <div class="stat"><div class="n">{{len .Merges}}</div><div class="l">merges vivos</div></div>
 </div>
