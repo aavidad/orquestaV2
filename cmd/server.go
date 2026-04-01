@@ -628,6 +628,7 @@ func waitLocalServerStable(baseURL string, timeout time.Duration) error {
 	}
 	deadline := time.Now().Add(timeout)
 	var lastErr error
+	consecutiveReady := 0
 	for time.Now().Before(deadline) {
 		state, err := rpclocal.LoadServerInfo()
 		if err == nil {
@@ -640,14 +641,20 @@ func waitLocalServerStable(baseURL string, timeout time.Duration) error {
 			cancel()
 			if pingErr == nil {
 				if readyErr := serverReadinessOK(addr); readyErr == nil {
-					return nil
+					consecutiveReady++
+					if consecutiveReady >= 2 {
+						return nil
+					}
 				} else {
+					consecutiveReady = 0
 					lastErr = readyErr
 				}
 			} else {
+				consecutiveReady = 0
 				lastErr = pingErr
 			}
 		} else {
+			consecutiveReady = 0
 			lastErr = err
 		}
 		time.Sleep(120 * time.Millisecond)
