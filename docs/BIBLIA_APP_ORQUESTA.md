@@ -1252,3 +1252,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `listarSupervisorModuleConflicts()` puede seguir existiendo como fachada
   - pero la vía interna caliente debe usar `listarSupervisorModuleConflictsFromTasks(status.TareasActivas)`
   - no se hace un `FetchStatus()` adicional dentro del mismo snapshot del supervisor
+- las superficies de supervisor no deben pedir `buildEstadoResumen()` si solo consumen presencia, tareas y cuota:
+  - `/api/openclaw/operator` y `/openclaw` deben usar un `estadoResumen` ligero
+  - no cargan `proyectos`, `pools`, `asignaciones`, `worktrees`, `locks`, `sesiones` ni `conectores` si no los van a renderizar
+  - si una vista necesita esos bloques, se piden explícitamente y no por inercia

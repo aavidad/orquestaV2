@@ -1280,7 +1280,7 @@ func apiHandlerNotificaciones(w http.ResponseWriter, r *http.Request) {
 func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		status, err := buildEstadoResumen()
+		status, err := buildEstadoResumenLigero()
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return

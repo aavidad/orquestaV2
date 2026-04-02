@@ -753,7 +753,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	status, err := buildEstadoResumen()
+	status, err := buildEstadoResumenLigero()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -790,7 +790,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 	}
 	recommended, _ := review["recommended_actions"].([]supervisorRecommendedAction)
 	safeRecommended, _ := review["safe_action_queue"].([]supervisorRecommendedAction)
-	worktreeDrift, _ := buildOpenClawWorktreeDrift(status)
+	worktreeDrift := openClawWorktreeDriftFromReviewSnapshot(review)
 	var nextAction *supervisorRecommendedAction
 	switch item := review["next_action"].(type) {
 	case supervisorRecommendedAction:
@@ -829,7 +829,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		PipelineStates:    pipelineStates,
 		Recommended:       recommended,
 		SafeRecommended:   safeRecommended,
-		QueueSummary:      buildOpenClawQueueSummary(review),
+		QueueSummary:      buildOpenClawQueueSummaryFromReviewSnapshot(review),
 		NextAction:        nextAction,
 		NextSafeAction:    nextSafeAction,
 		Notificaciones:    notificaciones.DescribirConfiguracion(),

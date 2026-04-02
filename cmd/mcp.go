@@ -3129,6 +3129,24 @@ func buildEstadoResumen() (*estadoResumen, error) {
 	}, nil
 }
 
+func buildEstadoResumenLigero() (*estadoResumen, error) {
+	status, err := statusService.FetchStatus()
+	if err != nil {
+		return nil, err
+	}
+	return &estadoResumen{
+		Generado:           time.Now().UTC().Format(time.RFC3339),
+		Agentes:            status.Agentes,
+		TareasPorEstado:    status.TareasPorEstado,
+		AgentesActivos:     status.AgentesActivos,
+		AgentesTrabajando:  status.AgentesTrabajando,
+		PropuestasAbiertas: status.PropuestasResumen,
+		TareasActivas:      status.TareasActivas,
+		TareasEnProgreso:   filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada),
+		TareasReservadas:   filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
+	}, nil
+}
+
 func listarPoolsResumenDesdeServicio(activo *bool) ([]map[string]any, error) {
 	rows, err := capacidadService.ListPoolsSummary(activo)
 	if err != nil {

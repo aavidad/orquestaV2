@@ -7352,3 +7352,21 @@ Resultado:
     - `GET /api/openclaw/operator` ~ `29.1s`
     - `GET /api/proyectos/orquestador/cockpit` ~ `14.0s` en frío
   - el cuello no ha desaparecido, pero la mejora es material y ya no está en la duplicación obvia del handler
+
+## 2026-04-02 — OpenClaw deja de cargar un `estadoResumen` completo cuando no lo necesita
+
+- Hallazgo:
+  - incluso quitando la duplicación obvia, `/api/openclaw/operator` y `/openclaw` seguían arrastrando el coste de `buildEstadoResumen()`
+  - esa ruta cargaba `proyectos`, `pools`, `asignaciones`, `worktrees`, `locks`, `sesiones` y `conectores`, aunque el operador solo usa flota, tareas, propuestas y cuota
+- Corrección:
+  - se añadió `buildEstadoResumenLigero()`
+  - `/api/openclaw/operator` y `/openclaw` ya usan ese resumen ligero
+  - `/openclaw` además reutiliza `worktree_drift` y `queue_summary` del snapshot del supervisor, sin recalcularlos
+- Validación:
+  - `go test ./cmd -run 'Test(OpenClawOperatorReuseReviewSnapshotHelpers|ListarSupervisorModuleConflictsFromTasksReutilizaEstadoYaCargado|APIObservabilidadReadOnly|APIOpenClawOperatorExponeStatusLiteEnRaiz|APIOpenClawOperatorSeparaCargaActivaYReservada|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
+  - `go build -o ./orquesta .`
+  - validación viva tras reiniciar el daemon:
+    - `GET /api/openclaw/operator` ~ `25.1s`
+    - `GET /api/proyectos/orquestador/cockpit` ~ `7.0s`
+    - `GET /openclaw` ~ `23.6s`
+  - sigue habiendo trabajo por hacer en el snapshot del supervisor, pero el lastre del `estadoResumen` completo ya quedó fuera de OpenClaw
