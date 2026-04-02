@@ -3989,7 +3989,7 @@ func buildSupervisorRecommendedActions(gates []*db.ReviewGate, signals []*superv
 
 func supervisorActionIsAutomaticallyApplicable(action string) bool {
 	switch strings.TrimSpace(action) {
-	case "asignar_tarea_libre", "reservar_tarea_libre", "replanificar_por_cuota", "seguir_guidance_durable", "rebalancear_reserva", "cerrar_propuesta_rechazada", "refrescar_worktree_limpia", "refrescar_store_subagentes":
+	case "asignar_tarea_libre", "reservar_tarea_libre", "replanificar_por_cuota", "seguir_guidance_durable", "rebalancear_reserva", "cerrar_propuesta_rechazada", "revisar_worktree_desfasada", "refrescar_worktree_limpia", "refrescar_store_subagentes":
 		return true
 	default:
 		return false
@@ -4892,7 +4892,7 @@ func requestSupervisorWorktreeCheckpoint(agente string, item apiOpenClawWorktree
 
 func normalizeSupervisorBatchKind(kind string) string {
 	switch strings.TrimSpace(strings.ToLower(kind)) {
-	case "proposal", "dispatch", "guidance":
+	case "proposal", "dispatch", "guidance", "worktree_drift":
 		return strings.TrimSpace(strings.ToLower(kind))
 	case "mailbox_pending":
 		return "guidance"

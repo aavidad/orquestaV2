@@ -7211,6 +7211,10 @@ Resultado:
   - la tabla de worktrees desfasadas ya permite:
     - `Solicitar checkpoint` si la fila está sucia
     - `Refrescar` si la fila ya está limpia
+  - `revisar_worktree_desfasada` pasa a lote seguro:
+    - no toca worktree ni código
+    - solo solicita checkpoint/saneado por guidance durable
+    - OpenClaw ya puede lanzar `batch_kind=worktree_drift`
   - la proyección sigue siendo segura: mejora arbitraje, no automatiza refresh de worktree sucia
 - Validación:
   - `go test ./cmd -run 'Test(ParseGitStatusPorcelainSummaryIncluyeMuestraYOverflow|ParseGitStatusPorcelainSummaryLimpio|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`

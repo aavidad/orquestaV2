@@ -2122,6 +2122,14 @@ const webTplOpenClaw = `{{define "content"}}
           <button type="submit" class="btn-sm" style="background:#0f766e;border-color:#0f766e;color:#ecfeff">Consumir guidance durable</button>
         </form>
         {{end}}
+        {{if gt (indexOrZero .QueueSummary.SafeByKind "worktree_drift") 0}}
+        <form method="post" action="/openclaw?lang={{lang}}" style="margin:0">
+          <input type="hidden" name="kind" value="supervision_batch">
+          <input type="hidden" name="batch_kind" value="worktree_drift">
+          <input type="hidden" name="max_items" value="{{indexOrZero .QueueSummary.SafeByKind "worktree_drift"}}">
+          <button type="submit" class="btn-sm" style="background:#334155;border-color:#334155;color:#f8fafc">Solicitar checkpoints de worktree</button>
+        </form>
+        {{end}}
       </div>
       <ol style="margin:0;padding-left:1.2rem">
       {{range .SafeRecommended}}

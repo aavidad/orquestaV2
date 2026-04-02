@@ -1221,4 +1221,8 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - la tabla web de `worktree_drift` debe permitir accionar la vía canónica por fila:
     - `Solicitar checkpoint` si está sucia
     - `Refrescar` si ya está limpia
+  - `revisar_worktree_desfasada` cuenta como acción segura de supervisor:
+    - no refresca ni cierra worktrees
+    - solo encola guidance durable de checkpoint y saneado
+    - por eso puede entrar en `safe_action_queue` y en lotes `batch_kind=worktree_drift`
   - esto no autoriza refrescos automáticos sobre worktrees sucias; solo mejora la decisión del supervisor
