@@ -1218,4 +1218,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - cada drift debe exponer también divergencia de commits (`commits_ahead`, `commits_behind`) contra la base esperada del repo
   - si la worktree está sucia, OpenClaw debe ver una muestra corta de archivos (`dirty_files`) y el excedente (`dirty_overflow`)
   - la web `/openclaw`, la API y MCP deben reflejar la misma proyección compacta
+  - la tabla web de `worktree_drift` debe permitir accionar la vía canónica por fila:
+    - `Solicitar checkpoint` si está sucia
+    - `Refrescar` si ya está limpia
   - esto no autoriza refrescos automáticos sobre worktrees sucias; solo mejora la decisión del supervisor

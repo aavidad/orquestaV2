@@ -7208,6 +7208,9 @@ Resultado:
     - `dirty_files`
     - `dirty_overflow`
   - `/openclaw` renderiza el enlace al detalle, la divergencia `ahead/behind` y una muestra compacta de archivos sucios
+  - la tabla de worktrees desfasadas ya permite:
+    - `Solicitar checkpoint` si la fila está sucia
+    - `Refrescar` si la fila ya está limpia
   - la proyección sigue siendo segura: mejora arbitraje, no automatiza refresh de worktree sucia
 - Validación:
   - `go test ./cmd -run 'Test(ParseGitStatusPorcelainSummaryIncluyeMuestraYOverflow|ParseGitStatusPorcelainSummaryLimpio|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`

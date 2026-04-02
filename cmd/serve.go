@@ -2230,7 +2230,7 @@ const webTplOpenClaw = `{{define "content"}}
     <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
       <h3 style="margin:0 0 .7rem 0">Worktrees desfasadas</h3>
       {{if .WorktreeDrift}}
-      <table style="width:100%"><thead><tr><th>Agente</th><th>Branch</th><th>Actual</th><th>Esperada</th><th>Suciedad</th></tr></thead><tbody>
+      <table style="width:100%"><thead><tr><th>Agente</th><th>Branch</th><th>Actual</th><th>Esperada</th><th>Suciedad</th><th>Acción</th></tr></thead><tbody>
       {{range .WorktreeDrift}}
         <tr>
           <td><strong>{{.Agente}}</strong></td>
@@ -2238,12 +2238,25 @@ const webTplOpenClaw = `{{define "content"}}
           <td><code>{{orDash .CurrentHead}}</code></td>
           <td><code>{{orDash .ExpectedHead}}</code></td>
           <td>{{if .DirtySummary}}{{.DirtySummary}}{{else if .Dirty}}sucia{{else}}limpia{{end}}</td>
+          <td>
+            <form method="post" action="/openclaw?lang={{lang}}" style="margin:0;display:flex;gap:.35rem;align-items:end;flex-wrap:wrap">
+              <input type="hidden" name="kind" value="supervision_action">
+              {{if .Dirty}}
+              <input type="hidden" name="action" value="revisar_worktree_desfasada">
+              {{else}}
+              <input type="hidden" name="action" value="refrescar_worktree_limpia">
+              {{end}}
+              <input type="hidden" name="target" value="agente:{{.Agente}}">
+              <input type="hidden" name="assignee" value="{{.Agente}}">
+              <button type="submit" class="btn-sm">{{if .Dirty}}Solicitar checkpoint{{else}}Refrescar{{end}}</button>
+            </form>
+          </td>
         </tr>
-        <tr><td colspan="5" style="font-size:.74rem;color:#64748b">{{orDash .Path}}{{if .DetailPath}} · <a href="{{.DetailPath}}">detalle</a>{{end}}{{if or .CommitsAhead .CommitsBehind}} · ahead {{.CommitsAhead}} / behind {{.CommitsBehind}}{{end}}</td></tr>
+        <tr><td colspan="6" style="font-size:.74rem;color:#64748b">{{orDash .Path}}{{if .DetailPath}} · <a href="{{.DetailPath}}">detalle</a>{{end}}{{if or .CommitsAhead .CommitsBehind}} · ahead {{.CommitsAhead}} / behind {{.CommitsBehind}}{{end}}</td></tr>
         {{if .DirtyFiles}}
-        <tr><td colspan="5" style="font-size:.74rem;color:#475569;padding-bottom:.4rem">muestra: <code>{{join .DirtyFiles ", "}}</code>{{if gt .DirtyOverflow 0}} · +{{.DirtyOverflow}} más{{end}}</td></tr>
+        <tr><td colspan="6" style="font-size:.74rem;color:#475569;padding-bottom:.4rem">muestra: <code>{{join .DirtyFiles ", "}}</code>{{if gt .DirtyOverflow 0}} · +{{.DirtyOverflow}} más{{end}}</td></tr>
         {{else}}
-        <tr><td colspan="5" style="padding-bottom:.4rem"></td></tr>
+        <tr><td colspan="6" style="padding-bottom:.4rem"></td></tr>
         {{end}}
       {{end}}
       </tbody></table>
