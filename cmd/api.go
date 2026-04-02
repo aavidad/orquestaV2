@@ -1121,27 +1121,27 @@ func cuentaPresupuestoDesdeAgente(agente *db.Agente) (string, apiCuentaPresupues
 		return "", item
 	}
 	item = apiCuentaPresupuestoItem{
-		CuentaClave:          key,
-		CuentaEmail:          email,
-		CuentaUsuario:        usuario,
-		CuentaFuente:         strings.TrimSpace(agente.CuentaFuente),
-		CuentaObservadaAt:    agente.CuentaObservadaAt,
-		CuotaRestantePct:     agente.CuotaRestantePct,
-		PresupuestoVentana:   strings.TrimSpace(agente.PresupuestoVentana),
-		PresupuestoResetAt:   agente.PresupuestoResetAt,
-		PresupuestoStale:     agente.PresupuestoStale,
-		RemainingSeconds:     agente.RemainingSeconds,
-		RemainingMessages:    agente.RemainingMessages,
-		RemainingTokens:      agente.RemainingTokens,
-		RemainingCredits:     agente.RemainingCredits,
-		ObservedUsageTokens:  agente.ObservedUsageTokens,
-		ObservedUsageCostUSD: agente.ObservedUsageCostUSD,
+		CuentaClave:           key,
+		CuentaEmail:           email,
+		CuentaUsuario:         usuario,
+		CuentaFuente:          strings.TrimSpace(agente.CuentaFuente),
+		CuentaObservadaAt:     agente.CuentaObservadaAt,
+		CuotaRestantePct:      agente.CuotaRestantePct,
+		PresupuestoVentana:    strings.TrimSpace(agente.PresupuestoVentana),
+		PresupuestoResetAt:    agente.PresupuestoResetAt,
+		PresupuestoStale:      agente.PresupuestoStale,
+		RemainingSeconds:      agente.RemainingSeconds,
+		RemainingMessages:     agente.RemainingMessages,
+		RemainingTokens:       agente.RemainingTokens,
+		RemainingCredits:      agente.RemainingCredits,
+		ObservedUsageTokens:   agente.ObservedUsageTokens,
+		ObservedUsageCostUSD:  agente.ObservedUsageCostUSD,
 		ObservedUsageMessages: agente.ObservedUsageMessages,
-		ObservedUsageTurns:   agente.ObservedUsageTurns,
-		ObservedUsageAt:      agente.ObservedUsageUpdatedAt,
-		ObservedSessionPath:  strings.TrimSpace(agente.ObservedSessionPath),
-		PresupuestoFuente:    strings.TrimSpace(agente.PresupuestoFuente),
-		PresupuestoCheckedAt: agente.PresupuestoCheckedAt,
+		ObservedUsageTurns:    agente.ObservedUsageTurns,
+		ObservedUsageAt:       agente.ObservedUsageUpdatedAt,
+		ObservedSessionPath:   strings.TrimSpace(agente.ObservedSessionPath),
+		PresupuestoFuente:     strings.TrimSpace(agente.PresupuestoFuente),
+		PresupuestoCheckedAt:  agente.PresupuestoCheckedAt,
 	}
 	switch {
 	case agente.RemainingTokens != nil:
@@ -1435,12 +1435,14 @@ type apiOpenClawStatusLite struct {
 }
 
 type apiOpenClawMailboxLite struct {
-	Agente          string     `json:"agente"`
-	Count           int        `json:"count"`
-	Kinds           []string   `json:"kinds,omitempty"`
-	KindsCSV        string     `json:"kinds_csv,omitempty"`
-	OldestCreatedAt *time.Time `json:"oldest_created_at,omitempty"`
-	OldestAgeMin    int        `json:"oldest_age_min,omitempty"`
+	Agente               string     `json:"agente"`
+	Count                int        `json:"count"`
+	Kinds                []string   `json:"kinds,omitempty"`
+	KindsCSV             string     `json:"kinds_csv,omitempty"`
+	SupervisorActions    []string   `json:"supervisor_actions,omitempty"`
+	SupervisorActionsCSV string     `json:"supervisor_actions_csv,omitempty"`
+	OldestCreatedAt      *time.Time `json:"oldest_created_at,omitempty"`
+	OldestAgeMin         int        `json:"oldest_age_min,omitempty"`
 }
 
 type apiOpenClawQueueSummary struct {
@@ -1675,9 +1677,10 @@ func buildOpenClawPendingMailbox(agentes []*db.Agente) ([]apiOpenClawMailboxLite
 		return nil, err
 	}
 	type agg struct {
-		count  int
-		kinds  map[string]bool
-		oldest *time.Time
+		count             int
+		kinds             map[string]bool
+		supervisorActions map[string]bool
+		oldest            *time.Time
 	}
 	byAgent := make(map[string]*agg)
 	for _, item := range items {
@@ -1690,7 +1693,7 @@ func buildOpenClawPendingMailbox(agentes []*db.Agente) ([]apiOpenClawMailboxLite
 		}
 		entry := byAgent[agente]
 		if entry == nil {
-			entry = &agg{kinds: map[string]bool{}}
+			entry = &agg{kinds: map[string]bool{}, supervisorActions: map[string]bool{}}
 			byAgent[agente] = entry
 		}
 		entry.count++
@@ -1701,6 +1704,16 @@ func buildOpenClawPendingMailbox(agentes []*db.Agente) ([]apiOpenClawMailboxLite
 		if kind := strings.TrimSpace(item.Kind); kind != "" {
 			entry.kinds[kind] = true
 		}
+		var payload struct {
+			SupervisorAction string `json:"supervisor_action"`
+		}
+		if strings.TrimSpace(item.PayloadJSON) != "" && item.PayloadJSON != "{}" {
+			if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err == nil {
+				if action := strings.TrimSpace(payload.SupervisorAction); action != "" {
+					entry.supervisorActions[action] = true
+				}
+			}
+		}
 	}
 	out := make([]apiOpenClawMailboxLite, 0, len(byAgent))
 	for agente, entry := range byAgent {
@@ -1709,6 +1722,11 @@ func buildOpenClawPendingMailbox(agentes []*db.Agente) ([]apiOpenClawMailboxLite
 			kinds = append(kinds, kind)
 		}
 		sort.Strings(kinds)
+		supervisorActions := make([]string, 0, len(entry.supervisorActions))
+		for action := range entry.supervisorActions {
+			supervisorActions = append(supervisorActions, action)
+		}
+		sort.Strings(supervisorActions)
 		oldestAge := 0
 		if entry.oldest != nil && !entry.oldest.IsZero() {
 			oldestAge = int(time.Since(*entry.oldest).Minutes())
@@ -1717,12 +1735,14 @@ func buildOpenClawPendingMailbox(agentes []*db.Agente) ([]apiOpenClawMailboxLite
 			}
 		}
 		out = append(out, apiOpenClawMailboxLite{
-			Agente:          agente,
-			Count:           entry.count,
-			Kinds:           kinds,
-			KindsCSV:        strings.Join(kinds, ", "),
-			OldestCreatedAt: entry.oldest,
-			OldestAgeMin:    oldestAge,
+			Agente:               agente,
+			Count:                entry.count,
+			Kinds:                kinds,
+			KindsCSV:             strings.Join(kinds, ", "),
+			SupervisorActions:    supervisorActions,
+			SupervisorActionsCSV: strings.Join(supervisorActions, ", "),
+			OldestCreatedAt:      entry.oldest,
+			OldestAgeMin:         oldestAge,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {

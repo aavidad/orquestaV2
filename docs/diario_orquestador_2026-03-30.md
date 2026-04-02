@@ -7215,6 +7215,9 @@ Resultado:
     - no toca worktree ni código
     - solo solicita checkpoint/saneado por guidance durable
     - OpenClaw ya puede lanzar `batch_kind=worktree_drift`
+  - `mailboxPendiente` ahora expone `supervisor_actions`
+  - si la guidance pendiente corresponde a `revisar_worktree_desfasada`, OpenClaw deja de promocionarla como `seguir_guidance_durable`
+  - así el supervisor no “consume” un checkpoint pendiente como si fuera guidance genérica
   - la proyección sigue siendo segura: mejora arbitraje, no automatiza refresh de worktree sucia
 - Validación:
   - `go test ./cmd -run 'Test(ParseGitStatusPorcelainSummaryIncluyeMuestraYOverflow|ParseGitStatusPorcelainSummaryLimpio|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`

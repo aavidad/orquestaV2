@@ -423,6 +423,32 @@ func TestBuildOpenClawPendingMailboxNoOcultaDeudaPorProyeccionVisible(t *testing
 	}
 }
 
+func TestBuildOpenClawPendingMailboxExponeSupervisorAction(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar codex3: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex3",
+		Kind:        "autonomia",
+		PayloadJSON: `{"supervisor_action":"revisar_worktree_desfasada","texto":"haz checkpoint"}`,
+		Estado:      "pendiente",
+	}); err != nil {
+		t.Fatalf("crear mailbox pendiente: %v", err)
+	}
+	items, err := buildOpenClawPendingMailbox([]*db.Agente{{Nombre: "Codex3"}})
+	if err != nil {
+		t.Fatalf("buildOpenClawPendingMailbox: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("mailbox pendiente inesperada: %#v", items)
+	}
+	if items[0].SupervisorActionsCSV != "revisar_worktree_desfasada" {
+		t.Fatalf("supervisor action inesperada: %#v", items[0])
+	}
+}
+
 func TestAPIOpenClawOperatorSeparaCargaActivaYReservada(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

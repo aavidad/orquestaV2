@@ -4070,6 +4070,9 @@ func buildSupervisorOperationalActions(status apiStatusResponse, mailboxPendient
 		if strings.TrimSpace(item.Agente) == "" || item.Count <= 0 {
 			continue
 		}
+		if strings.Contains(strings.TrimSpace(item.SupervisorActionsCSV), "revisar_worktree_desfasada") {
+			continue
+		}
 		priority := "baja"
 		if item.OldestAgeMin >= 30 {
 			priority = "media"

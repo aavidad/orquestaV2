@@ -2445,6 +2445,30 @@ func TestMCPRevisionSupervisorExponeWorktreeDrift(t *testing.T) {
 	})
 }
 
+func TestBuildSupervisorOperationalActionsNoPromueveCheckpointPendienteComoGuidance(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	status := apiStatusResponse{
+		AgentesActivos: []*db.Agente{{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"}},
+		Agentes:        []*db.Agente{{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"}},
+	}
+	mailboxPendiente := []apiOpenClawMailboxLite{{
+		Agente:               "Codex3",
+		Count:                1,
+		Kinds:                []string{"autonomia"},
+		KindsCSV:             "autonomia",
+		SupervisorActions:    []string{"revisar_worktree_desfasada"},
+		SupervisorActionsCSV: "revisar_worktree_desfasada",
+		OldestAgeMin:         5,
+	}}
+
+	actions := buildSupervisorOperationalActions(status, mailboxPendiente)
+	for _, item := range actions {
+		if item.Action == "seguir_guidance_durable" && item.Target == "agente:Codex3" {
+			t.Fatalf("no debería promocionar guidance de checkpoint como drenado: %+v", actions)
+		}
+	}
+}
+
 func TestMCPToolSupervisorInspeccionaWorktreeDrift(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		prev := statusService

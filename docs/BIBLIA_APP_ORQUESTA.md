@@ -1225,4 +1225,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
     - no refresca ni cierra worktrees
     - solo encola guidance durable de checkpoint y saneado
     - por eso puede entrar en `safe_action_queue` y en lotes `batch_kind=worktree_drift`
+  - `mailboxPendiente` debe distinguir guidance genérica de guidance con `supervisor_action`
+  - una guidance pendiente con `supervisor_action=revisar_worktree_desfasada` no debe promover `seguir_guidance_durable`
+  - mientras ese checkpoint siga pendiente, OpenClaw debe verla como deuda operativa abierta, no como mensaje consumible sin más
   - esto no autoriza refrescos automáticos sobre worktrees sucias; solo mejora la decisión del supervisor
