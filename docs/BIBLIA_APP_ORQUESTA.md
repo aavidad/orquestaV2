@@ -1292,3 +1292,10 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `codex_token_count_observed` y `claude_rust_session_observed` no pueden compararse contra un `provider_backoff` posterior para decidir si el snapshot observado ya fue persistido
   - si se usa el último presupuesto global, el runner puede reinsertar el mismo snapshot observado en cada ciclo y disparar CPU innecesaria en el daemon
   - la consulta correcta para antirrepique es `UltimoPresupuestoSesionPorFuente(...)`
+- la observación pesada del núcleo no se hace “en cada ciclo”:
+  - el saldo se revalida siempre al inicio de una sesión de trabajo real del agente
+  - fuera de ese caso, la observación de saldo en background se hace con intervalo explícito (`runtime_budget_background_observation_interval_seconds`), no pegada al batch de transcript
+  - la supervisión pesada del runtime local no debe bajar de `1m` por defecto
+  - el `signalLoop` del supervisor local tampoco debe sondear `/proc` cada pocos segundos si no hay una acción de control en curso
+  - `/api/status` puede servirse desde snapshot corta de servidor; no necesita recomputar todo en cada petición repetida
+  - si hace falta frescura inmediata, se usa la vía bajo demanda (`--refresh`, preflight o acción explícita), no se degrada el daemon entero para todos

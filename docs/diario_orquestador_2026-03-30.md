@@ -7544,3 +7544,27 @@ Resultado:
 - Validación:
   - `go test ./db -run 'TestUltimoPresupuestoSesionPorFuenteIgnoraFuentesPosteriores' -count=1`
   - `go test ./cmd -run 'Test(.*Presupuesto.*|.*Observed.*)' -count=1`
+
+## 2026-04-02 — Se desacopla la observación pesada del ciclo caliente del daemon
+
+- Hallazgo:
+  - tras cortar el hot loop de `registrar_presupuesto_codex_observado`, el daemon seguía demasiado caliente
+  - la causa ya no era reinsertar snapshots, sino seguir haciendo trabajo caro con demasiada frecuencia:
+    - observación de saldo en background desde `procesarRuntimeTranscriptBatch()`
+    - supervisión local y heartbeats demasiado frecuentes para producción
+    - `/api/status` con snapshot demasiado corta para una ruta tan agregada
+  - la política correcta quedó fijada así:
+    - saldo siempre al principio de una sesión de uso real del agente
+    - después, revalidación periódica cada `1-2 min`
+    - no hace falta observar `/proc` o recomputar `status` en cada vuelta del runner
+- Corrección:
+  - `cmd/controlplane_support.go` ya desacopla la observación de saldo en background con `runtime_budget_background_observation_interval_seconds=120`
+  - `db/controlplane_entities.go` ya no permite que la supervisión pesada baje de `60s`
+  - `internal/controlruntime/supervisor_local.go` mueve el `signalLoop` del supervisor local a `1m`
+  - `cmd/status_service.go` amplía la snapshot corta de `/api/status` a `1m`
+  - `db/config_defaults.go` y `db/schema.go` ya siembran estos defaults de producción
+- Validación:
+  - `go test ./cmd -run 'Test(ProcesarPresupuestoSesionObservadoBatchToleraHandleRoto|ProcesarPresupuestoSesionObservadoBatchRespetaIntervaloBackground|StatusServiceCacheaSnapshotCorto)' -count=1`
+  - `go test ./db -run 'TestProcesarRuntimeSupervisionBatchSupervisaProcesoLocalSinDuplicar' -count=1`
+  - `go test ./internal/controlruntime -run 'Test(ConsultarEstadoLocalDetectaSessionIDSinSobrescribirDriver|SupervisorLocalEmiteHeartbeatYFinalizacionAlActivarse|ConsultarEstadoLocalRehidrataMetadataRicaDesdeRuntimeManifest)' -count=1`
+  - `go build -o ./orquesta .`

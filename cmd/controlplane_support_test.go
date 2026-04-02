@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"encoding/base64"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -6911,6 +6911,9 @@ func TestProcesarAutonomiaSesionActivaPersisteEnfriamientoPorCuota(t *testing.T)
 }
 
 func TestProcesarPresupuestoSesionObservadoBatchToleraHandleRoto(t *testing.T) {
+	resetRuntimeBudgetObservationBackgroundGate()
+	t.Cleanup(resetRuntimeBudgetObservationBackgroundGate)
+
 	tmp := prepararDBTemporalCmd(t)
 	base := filepath.Join(tmp, "codex-perfiles")
 	if err := os.MkdirAll(filepath.Join(base, "bin"), 0o755); err != nil {
@@ -7022,6 +7025,93 @@ func TestProcesarPresupuestoSesionObservadoBatchToleraHandleRoto(t *testing.T) {
 	}
 	if agenteBueno.PresupuestoCheckedAt == nil || agenteBueno.CuentaEmail != "bueno@example.com" {
 		t.Fatalf("deberia persistir telemetria del handle sano: %+v", agenteBueno)
+	}
+}
+
+func TestProcesarPresupuestoSesionObservadoBatchRespetaIntervaloBackground(t *testing.T) {
+	resetRuntimeBudgetObservationBackgroundGate()
+	t.Cleanup(resetRuntimeBudgetObservationBackgroundGate)
+
+	tmp := prepararDBTemporalCmd(t)
+	base := filepath.Join(tmp, "codex-perfiles")
+	if err := os.MkdirAll(filepath.Join(base, "bin"), 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	sessionsDir := filepath.Join(base, "homes", "Codex1", "sessions", "2026", "03", "31")
+	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
+		t.Fatalf("mkdir sessions: %v", err)
+	}
+	authPath := filepath.Join(base, "homes", "Codex1", "auth.json")
+	if err := os.MkdirAll(filepath.Dir(authPath), 0o755); err != nil {
+		t.Fatalf("mkdir auth dir: %v", err)
+	}
+	if err := os.WriteFile(authPath, []byte(`{"profile":{"email":"codex1@example.com","name":"Cuenta Codex1"}}`), 0o600); err != nil {
+		t.Fatalf("write auth: %v", err)
+	}
+	sessionPath := filepath.Join(sessionsDir, "rollout-test.jsonl")
+	if err := os.WriteFile(sessionPath, []byte(
+		`{"timestamp":"2026-03-31T10:00:00Z","type":"session_meta","payload":{"id":"sess-123","timestamp":"2026-03-31T10:00:00Z","cwd":"`+filepath.Join(tmp, "orquestador")+`"}}`+"\n"+
+			`{"timestamp":"2026-03-31T10:05:00Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":12,"window_minutes":300,"resets_at":1774958400},"secondary":{"used_percent":43,"window_minutes":10080,"resets_at":1775300000}}}}`+"\n",
+	), 0o600); err != nil {
+		t.Fatalf("write session: %v", err)
+	}
+	if err := db.ConfigSet("runtime_budget_background_observation_interval_seconds", "120"); err != nil {
+		t.Fatalf("config observation interval: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("upsert handle: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleActivoAgenteProyecto("Codex1", &proyectoID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	rendered := filepath.Join(base, "bin", "codex-perfil") + " Codex1"
+	meta := map[string]any{
+		"rendered_command":    rendered,
+		"working_dir":         filepath.Join(tmp, "orquestador"),
+		"external_session_id": "sess-123",
+		"started_at":          time.Date(2026, 3, 31, 10, 0, 0, 0, time.UTC).Format(time.RFC3339),
+	}
+	metaJSON, _ := json.Marshal(meta)
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	first, err := procesarPresupuestoSesionObservadoBatch()
+	if err != nil {
+		t.Fatalf("primer batch: %v", err)
+	}
+	if first != 1 {
+		t.Fatalf("el primer batch deberia observar una vez, got=%d", first)
+	}
+	second, err := procesarPresupuestoSesionObservadoBatch()
+	if err != nil {
+		t.Fatalf("segundo batch: %v", err)
+	}
+	if second != 0 {
+		t.Fatalf("el segundo batch deberia quedar throttled, got=%d", second)
 	}
 }
 

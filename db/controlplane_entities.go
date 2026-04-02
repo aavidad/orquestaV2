@@ -2266,9 +2266,12 @@ func ProcesarRuntimeSupervisionBatch() (int, error) {
 	if limit <= 0 {
 		limit = 10
 	}
-	intervalSeconds := configIntOrDefault("runtime_supervision_interval_seconds", 30)
+	intervalSeconds := configIntOrDefault("runtime_supervision_interval_seconds", 60)
 	if intervalSeconds <= 0 {
-		intervalSeconds = 30
+		intervalSeconds = 60
+	}
+	if intervalSeconds < 60 {
+		intervalSeconds = 60
 	}
 	cutoff := time.Now().UTC().Add(-time.Duration(intervalSeconds) * time.Second)
 

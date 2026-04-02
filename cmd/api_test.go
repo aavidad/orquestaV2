@@ -405,6 +405,7 @@ func cargarPlantillaDBCmdTest() ([]byte, error) {
 func prepararDBTemporalCmd(t *testing.T) string {
 	t.Helper()
 	cmdTestDBMu.Lock()
+	resetStatusSnapshotCache()
 
 	anteriorDB := os.Getenv("ORQUESTA_DB")
 	anteriorDSN, teniaDSN := os.LookupEnv("ORQUESTA_DB_DSN")
@@ -416,6 +417,7 @@ func prepararDBTemporalCmd(t *testing.T) string {
 	anteriorForceLocal, teniaForceLocal := os.LookupEnv("ORQUESTA_FORCE_LOCAL_DB")
 	anteriorDisableServer, teniaDisableServer := os.LookupEnv("ORQUESTA_DISABLE_SERVER_CLIENT")
 	t.Cleanup(func() {
+		resetStatusSnapshotCache()
 		db.Close()
 		db.DB = nil
 		if anteriorDB == "" {
@@ -468,6 +470,7 @@ func prepararDBTemporalCmd(t *testing.T) string {
 
 	db.Close()
 	db.DB = nil
+	resetStatusSnapshotCache()
 
 	tmp := t.TempDir()
 	dbPath := filepath.Join(tmp, "orquesta-api-test.db")

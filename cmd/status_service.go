@@ -16,7 +16,7 @@ type StatusService interface {
 var statusService StatusService = dbStatusService{}
 
 var (
-	statusSnapshotTTL  = 2 * time.Second
+	statusSnapshotTTL  = time.Minute
 	statusFreshFetcher = fetchStatusFresh
 	statusNowFunc      = time.Now
 	statusCacheState   struct {

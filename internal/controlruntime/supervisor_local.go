@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	supervisionModoResidente = "resident"
-	supervisionModoAdjunto   = "attached"
+	supervisionModoResidente      = "resident"
+	supervisionModoAdjunto        = "attached"
+	localSupervisorSignalInterval = time.Minute
 )
 
 type EstadoLocal struct {
@@ -839,7 +840,7 @@ func (s *supervisorProcesoLocal) activarSignalLoop() {
 
 func (s *supervisorProcesoLocal) signalLoop() {
 	s.emitirSignal(false, "runtime_supervisor_start")
-	ticker := time.NewTicker(15 * time.Second)
+	ticker := time.NewTicker(localSupervisorSignalInterval)
 	defer ticker.Stop()
 	for range ticker.C {
 		estado := s.estado()

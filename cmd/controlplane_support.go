@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"orquesta/db"
@@ -31,6 +32,11 @@ import (
 type dbAutomationService struct{}
 
 const autonomiaReplanTaskTitle = "Autonomía: replanificar backlog y abrir siguiente frente útil"
+
+var runtimeBudgetObservationBackgroundGate struct {
+	mu      sync.Mutex
+	expires time.Time
+}
 
 func (dbAutomationService) CheckReanimaciones() ([]*db.Agente, error) {
 	if _, err := revalidarPresupuestoBloqueadoBatch(); err != nil {
@@ -104,6 +110,30 @@ func presupuestoPreflightRevalidationAge() time.Duration {
 		seconds = 60
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+func runtimeBudgetBackgroundObservationInterval() time.Duration {
+	seconds := controlPlaneConfigIntOrDefault("runtime_budget_background_observation_interval_seconds", 120)
+	if seconds <= 0 {
+		seconds = 120
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func allowRuntimeBudgetBackgroundObservation(now time.Time) bool {
+	runtimeBudgetObservationBackgroundGate.mu.Lock()
+	defer runtimeBudgetObservationBackgroundGate.mu.Unlock()
+	if !runtimeBudgetObservationBackgroundGate.expires.IsZero() && now.Before(runtimeBudgetObservationBackgroundGate.expires) {
+		return false
+	}
+	runtimeBudgetObservationBackgroundGate.expires = now.Add(runtimeBudgetBackgroundObservationInterval())
+	return true
+}
+
+func resetRuntimeBudgetObservationBackgroundGate() {
+	runtimeBudgetObservationBackgroundGate.mu.Lock()
+	defer runtimeBudgetObservationBackgroundGate.mu.Unlock()
+	runtimeBudgetObservationBackgroundGate.expires = time.Time{}
 }
 
 func presupuestoAgenteDebeRevalidarseAhora(a *db.Agente, minAge time.Duration, soloBloqueadosOStale bool) bool {
@@ -337,6 +367,9 @@ func procesarRuntimeTranscriptBatch() (int, error) {
 }
 
 func procesarPresupuestoSesionObservadoBatch() (int, error) {
+	if !allowRuntimeBudgetBackgroundObservation(time.Now().UTC()) {
+		return 0, nil
+	}
 	handles, err := db.ListarRuntimeHandles(nil)
 	if err != nil {
 		return 0, err
