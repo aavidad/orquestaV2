@@ -184,6 +184,74 @@ func TestListarSupervisorModuleConflictsFromTasksReutilizaEstadoYaCargado(t *tes
 	}
 }
 
+func TestBuildProyectoPendingMailboxFiltraPorProyectoYAgente(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-mailbox",
+		Nombre:  "Orquestador Mailbox",
+		RutaAbs: t.TempDir(),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	otroProyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "otro-mailbox",
+		Nombre:  "Otro Mailbox",
+		RutaAbs: t.TempDir(),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert otro proyecto: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "orquesta",
+		ToAgente:    "Codex3",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"supervisor_action":"revisar_worktree_desfasada"}`,
+	}); err != nil {
+		t.Fatalf("encolar mailbox proyecto: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "orquesta",
+		ToAgente:    "Codex3",
+		ProyectoID:  &otroProyectoID,
+		Kind:        "nudge",
+		PayloadJSON: `{}`,
+	}); err != nil {
+		t.Fatalf("encolar mailbox otro proyecto: %v", err)
+	}
+
+	items, err := buildProyectoPendingMailbox(proyectoID, map[string]struct{}{"codex3": {}})
+	if err != nil {
+		t.Fatalf("buildProyectoPendingMailbox: %v", err)
+	}
+	if len(items) != 1 || items[0].Agente != "Codex3" || items[0].Count != 1 {
+		t.Fatalf("mailbox proyecto inesperada: %+v", items)
+	}
+	if items[0].SupervisorActionsCSV != "revisar_worktree_desfasada" {
+		t.Fatalf("supervisor action inesperada: %+v", items[0])
+	}
+}
+
+func TestFilterOpenClawWorktreeDriftByAgents(t *testing.T) {
+	items := []apiOpenClawWorktreeDrift{
+		{Agente: "Codex3", CommitsBehind: 4},
+		{Agente: "Codex4", CommitsBehind: 2},
+	}
+	out := filterOpenClawWorktreeDriftByAgents(items, map[string]struct{}{"codex4": {}})
+	if len(out) != 1 || out[0].Agente != "Codex4" {
+		t.Fatalf("drift filtrada inesperada: %+v", out)
+	}
+}
+
 func TestParseGitStatusPorcelainSummary(t *testing.T) {
 	dirty, summary, files, overflow := parseGitStatusPorcelainSummary(" M cmd/api.go\n?? cmd/new_file.go\n")
 	if !dirty {
@@ -3100,6 +3168,9 @@ func TestAPIProyectoCockpitExponeResumenOperativo(t *testing.T) {
 	}
 	if resp.Cockpit.PropuestasAbiertas != 1 || resp.Cockpit.ReviewGatesAbiertas != 1 || resp.Cockpit.RuntimeMailboxPendiente != 1 || resp.Cockpit.RuntimeOrdersAbiertas != 1 {
 		t.Fatalf("resumen operativo inesperado: %+v", resp.Cockpit)
+	}
+	if len(resp.Cockpit.MailboxPendiente) != 1 || resp.Cockpit.MailboxPendiente[0].Agente != "Codex3" {
+		t.Fatalf("mailbox pendiente de cockpit inesperada: %+v", resp.Cockpit.MailboxPendiente)
 	}
 }
 

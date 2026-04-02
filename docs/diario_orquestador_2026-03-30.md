@@ -7406,3 +7406,33 @@ Resultado:
     - `./orquesta server start`
     - ya no apareció el falso `Servidor ya activo`
     - el residuo actual sigue siendo otro: timeout esperando `statefile` con daemon finalmente sano y recuperable por `healthz`
+
+## 2026-04-02 — El cockpit de proyecto ya expone deuda operativa del supervisor
+
+- Hallazgo:
+  - el cockpit de proyecto ya enseñaba backlog, presencia y review, pero seguía ciego a la deuda operativa mínima del supervisor dentro del proyecto
+  - para ver guidance durable pendiente o worktrees desfasadas seguía siendo obligatorio abrir OpenClaw
+- Corrección:
+  - `apiProyectoCockpit` ya expone:
+    - `mailbox_pendiente`
+    - `worktree_drift`
+  - `buildProyectoCockpit()`:
+    - toma la presencia visible canónica desde `status`
+    - deriva los agentes relevantes del proyecto desde tareas, agentes activos y sesiones operativas
+    - agrega `runtime_mailbox` pendiente por agente solo para ese proyecto
+    - filtra `worktree_drift` a esos agentes relevantes
+  - `/proyectos/{slug}` ya muestra:
+    - contador de agentes con mailbox pendiente
+    - contador de worktrees desfasadas
+    - bloque `Guidance durable por agente`
+    - bloque `Worktrees desfasadas`
+- Validación:
+  - `go test ./cmd -run 'Test(BuildProyectoPendingMailboxFiltraPorProyectoYAgente|FilterOpenClawWorktreeDriftByAgents|APIProyectoCockpitExponeResumenOperativo|APIProyectoCockpitAlineaAgentesActivosConStatusVisible|WebProyectosMuestraCockpitOperativoLigero|WebProyectoDetalleMuestraCockpitOperativo)' -count=1`
+  - validación viva:
+    - `GET /api/proyectos/orquestador/cockpit` ya devuelve `mailbox_pendiente` para `Codex3` y `Codex4`
+    - `GET /api/proyectos/orquestador/cockpit` ya devuelve `worktree_drift` para `Codex3` y `Codex4`
+    - `GET /proyectos/orquestador` ya muestra:
+      - `agentes con mailbox pendiente`
+      - `worktrees desfasadas`
+      - `Guidance durable por agente`
+      - `Worktrees desfasadas`

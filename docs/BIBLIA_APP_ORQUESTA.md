@@ -1241,6 +1241,11 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - toma la presencia visible canónica de `status`
   - y la intersecta con las sesiones operativas del proyecto
   - así `status`, `/api/proyectos/{slug}/cockpit`, `/proyectos/{slug}` y OpenClaw comparten la misma verdad de flota conectada
+- el `cockpit` de proyecto debe exponer tambien la deuda operativa minima del supervisor para ese proyecto:
+  - `mailbox_pendiente` agregada por agente y filtrada por proyecto
+  - `worktree_drift` filtrada a los agentes relevantes del proyecto
+  - esto permite que `/api/proyectos/{slug}/cockpit` y `/proyectos/{slug}` funcionen como cockpit operativo ligero sin depender de cargar OpenClaw completo
+  - la fuente sigue siendo canónica: `status`, `runtime_mailbox` y `worktree_drift`, nunca una agregación paralela local
 - cuando una superficie de lectura admite varios estados del mismo recurso, la semántica debe ser OR y no AND accidental:
   - `tarea listar --estado ... --estado ...` y `GET /api/tareas?estado=...&estado=...` deben devolver la unión deduplicada
   - el `status` canónico no puede contradecir a la CLI por una limitación del parser de flags

@@ -529,10 +529,34 @@ const webTplProyectoDetalle = `{{define "content"}}
         <div style="border:1px solid var(--pico-muted-border-color);border-radius:.5rem;padding:.75rem"><strong>{{.Cockpit.RuntimeMailboxPendiente}}</strong><br><small>guidance durable pendiente</small></div>
         <div style="border:1px solid var(--pico-muted-border-color);border-radius:.5rem;padding:.75rem"><strong>{{.Cockpit.RuntimeOrdersAbiertas}}</strong><br><small>runtime orders abiertas</small></div>
       </div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem;margin-top:.5rem">
+        <div style="border:1px solid var(--pico-muted-border-color);border-radius:.5rem;padding:.75rem"><strong>{{len .Cockpit.MailboxPendiente}}</strong><br><small>agentes con mailbox pendiente</small></div>
+        <div style="border:1px solid var(--pico-muted-border-color);border-radius:.5rem;padding:.75rem"><strong>{{len .Cockpit.WorktreeDrift}}</strong><br><small>worktrees desfasadas</small></div>
+      </div>
       {{if .Cockpit.AgentesActivos}}
       <p style="margin:.75rem 0 0 0"><strong>Agentes activos:</strong>
         {{range $i, $item := .Cockpit.AgentesActivos}}{{if $i}}, {{end}}{{$item.Nombre}}{{if $item.Rol}} <small style="color:#64748b">({{$item.Rol}})</small>{{end}}{{end}}
       </p>
+      {{end}}
+      {{if .Cockpit.MailboxPendiente}}
+      <div style="margin-top:.75rem">
+        <strong>Guidance durable por agente</strong>
+        <ul style="margin:.35rem 0 0 1rem">
+          {{range .Cockpit.MailboxPendiente}}
+          <li><strong>{{.Agente}}</strong> — {{.Count}} pendiente(s) · {{.KindsCSV}}{{if .SupervisorActionsCSV}} · acciones {{.SupervisorActionsCSV}}{{end}}{{if gt .OldestAgeMin 0}} · {{.OldestAgeMin}} min{{end}}</li>
+          {{end}}
+        </ul>
+      </div>
+      {{end}}
+      {{if .Cockpit.WorktreeDrift}}
+      <div style="margin-top:.75rem">
+        <strong>Worktrees desfasadas</strong>
+        <ul style="margin:.35rem 0 0 1rem">
+          {{range .Cockpit.WorktreeDrift}}
+          <li><strong>{{.Agente}}</strong> — ahead {{.CommitsAhead}} / behind {{.CommitsBehind}}{{if .Dirty}} · {{.DirtySummary}}{{end}}</li>
+          {{end}}
+        </ul>
+      </div>
       {{end}}
     {{else}}
       <p>Sin resumen operativo.</p>

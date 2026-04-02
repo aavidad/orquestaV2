@@ -2,7 +2,10 @@ package cmd
 
 import (
 	"database/sql"
+	"encoding/json"
+	"sort"
 	"strings"
+	"time"
 
 	"orquesta/db"
 )
@@ -17,6 +20,8 @@ type apiProyectoCockpit struct {
 	TareasActivas           []tareaLite                `json:"tareas_activas,omitempty"`
 	TareasReservadas        []tareaLite                `json:"tareas_reservadas,omitempty"`
 	AgentesActivos          []apiProyectoCockpitAgente `json:"agentes_activos,omitempty"`
+	MailboxPendiente        []apiOpenClawMailboxLite   `json:"mailbox_pendiente,omitempty"`
+	WorktreeDrift           []apiOpenClawWorktreeDrift `json:"worktree_drift,omitempty"`
 	AsignacionesActivas     int                        `json:"asignaciones_activas"`
 	PropuestasAbiertas      int                        `json:"propuestas_abiertas"`
 	ReviewGatesAbiertas     int                        `json:"review_gates_abiertas"`
@@ -88,6 +93,21 @@ func buildProyectoCockpit(ref string) (*apiProyectoCockpit, error) {
 	}
 	cockpit.AgentesActivos = agentesActivos
 
+	status, err := statusService.FetchStatus()
+	if err != nil {
+		return nil, err
+	}
+	relevantAgents := projectRelevantAgentNames(proyecto.ID, tareas, status.AgentesActivos)
+	cockpit.MailboxPendiente, err = buildProyectoPendingMailbox(proyecto.ID, relevantAgents)
+	if err != nil {
+		return nil, err
+	}
+	drift, err := buildOpenClawWorktreeDriftFromAPIStatus(status)
+	if err != nil {
+		return nil, err
+	}
+	cockpit.WorktreeDrift = filterOpenClawWorktreeDriftByAgents(drift, relevantAgents)
+
 	cockpit.PropuestasAbiertas, err = countProyectoRows(`SELECT COUNT(*) FROM propuestas WHERE proyecto_id=? AND estado='abierta'`, proyecto.ID)
 	if err != nil {
 		return nil, err
@@ -121,6 +141,144 @@ func countProyectoRows(query string, args ...any) (int, error) {
 		return 0, nil
 	}
 	return n, err
+}
+
+func projectRelevantAgentNames(proyectoID int64, tareas []*db.Tarea, activos []*db.Agente) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		if agente := strings.ToLower(strings.TrimSpace(safeStringPtr(tarea.Agente))); agente != "" {
+			out[agente] = struct{}{}
+		}
+	}
+	for _, agente := range activos {
+		if agente == nil {
+			continue
+		}
+		if nombre := strings.ToLower(strings.TrimSpace(agente.Nombre)); nombre != "" {
+			out[nombre] = struct{}{}
+		}
+	}
+	sesiones, err := db.ListarSesionesActivasOperativas()
+	if err == nil {
+		for _, sesion := range sesiones {
+			if sesion == nil || sesion.ProyectoID == nil || *sesion.ProyectoID != proyectoID {
+				continue
+			}
+			if agente := strings.ToLower(strings.TrimSpace(sesion.Agente)); agente != "" {
+				out[agente] = struct{}{}
+			}
+		}
+	}
+	return out
+}
+
+func buildProyectoPendingMailbox(proyectoID int64, relevantAgents map[string]struct{}) ([]apiOpenClawMailboxLite, error) {
+	if proyectoID <= 0 {
+		return nil, nil
+	}
+	estado := "pendiente"
+	items, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		return nil, err
+	}
+	type agg struct {
+		count             int
+		kinds             map[string]bool
+		supervisorActions map[string]bool
+		oldest            *time.Time
+	}
+	byAgent := map[string]*agg{}
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		agente := strings.TrimSpace(item.ToAgente)
+		if agente == "" {
+			continue
+		}
+		if len(relevantAgents) > 0 {
+			if _, ok := relevantAgents[strings.ToLower(agente)]; !ok {
+				continue
+			}
+		}
+		entry := byAgent[agente]
+		if entry == nil {
+			entry = &agg{kinds: map[string]bool{}, supervisorActions: map[string]bool{}}
+			byAgent[agente] = entry
+		}
+		entry.count++
+		if entry.oldest == nil || item.CreatedAt.Before(*entry.oldest) {
+			ts := item.CreatedAt
+			entry.oldest = &ts
+		}
+		if kind := strings.TrimSpace(item.Kind); kind != "" {
+			entry.kinds[kind] = true
+		}
+		var payload struct {
+			SupervisorAction string `json:"supervisor_action"`
+		}
+		if strings.TrimSpace(item.PayloadJSON) != "" && item.PayloadJSON != "{}" {
+			if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err == nil {
+				if action := strings.TrimSpace(payload.SupervisorAction); action != "" {
+					entry.supervisorActions[action] = true
+				}
+			}
+		}
+	}
+	out := make([]apiOpenClawMailboxLite, 0, len(byAgent))
+	for agente, entry := range byAgent {
+		kinds := make([]string, 0, len(entry.kinds))
+		for kind := range entry.kinds {
+			kinds = append(kinds, kind)
+		}
+		sort.Strings(kinds)
+		supervisorActions := make([]string, 0, len(entry.supervisorActions))
+		for action := range entry.supervisorActions {
+			supervisorActions = append(supervisorActions, action)
+		}
+		sort.Strings(supervisorActions)
+		oldestAge := 0
+		if entry.oldest != nil && !entry.oldest.IsZero() {
+			oldestAge = int(time.Since(*entry.oldest).Minutes())
+			if oldestAge < 0 {
+				oldestAge = 0
+			}
+		}
+		out = append(out, apiOpenClawMailboxLite{
+			Agente:               agente,
+			Count:                entry.count,
+			Kinds:                kinds,
+			KindsCSV:             strings.Join(kinds, ", "),
+			SupervisorActions:    supervisorActions,
+			SupervisorActionsCSV: strings.Join(supervisorActions, ", "),
+			OldestAgeMin:         oldestAge,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Agente) < strings.ToLower(out[j].Agente) })
+	return out, nil
+}
+
+func filterOpenClawWorktreeDriftByAgents(items []apiOpenClawWorktreeDrift, relevantAgents map[string]struct{}) []apiOpenClawWorktreeDrift {
+	if len(items) == 0 {
+		return nil
+	}
+	if len(relevantAgents) == 0 {
+		return items
+	}
+	out := make([]apiOpenClawWorktreeDrift, 0, len(items))
+	for _, item := range items {
+		if _, ok := relevantAgents[strings.ToLower(strings.TrimSpace(item.Agente))]; !ok {
+			continue
+		}
+		out = append(out, item)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func listarAgentesActivosProyecto(proyectoID int64) ([]apiProyectoCockpitAgente, error) {
