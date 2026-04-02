@@ -15,6 +15,18 @@ func buildSupervisorPipelineSnapshot(supervisor, proyectoSlug string, limit int)
 	if _, err := reconcileSupervisorPipelineState(supervisor, strings.TrimSpace(proyectoSlug)); err != nil {
 		return nil, err
 	}
+	return listSupervisorPipelineSnapshot(supervisor, proyectoSlug, limit)
+}
+
+func buildSupervisorPipelineSnapshotFromInputs(supervisor, proyectoSlug string, limit int, status apiStatusResponse, gates []*db.ReviewGate, signals []*supervisorReviewSignal, merges []*db.GitMerge, conflicts []supervisorModuleConflict, mailboxPendiente []apiOpenClawMailboxLite) (map[string]any, error) {
+	supervisor = resolveSupervisorName(supervisor)
+	if _, err := reconcileSupervisorPipelineStateFromInputs(supervisor, strings.TrimSpace(proyectoSlug), status, gates, signals, merges, conflicts, mailboxPendiente); err != nil {
+		return nil, err
+	}
+	return listSupervisorPipelineSnapshot(supervisor, proyectoSlug, limit)
+}
+
+func listSupervisorPipelineSnapshot(supervisor, proyectoSlug string, limit int) (map[string]any, error) {
 	items, err := db.ListarSupervisorPipelineStates(db.FiltroSupervisorPipelineStates{
 		Supervisor:   strings.TrimSpace(supervisor),
 		ProyectoSlug: strings.TrimSpace(proyectoSlug),
@@ -92,6 +104,10 @@ func reconcileSupervisorPipelineState(supervisor, proyectoSlug string) (*db.Supe
 	if err != nil {
 		return nil, err
 	}
+	return reconcileSupervisorPipelineStateFromInputs(supervisor, proyectoSlug, status, openGates, signals, merges, conflicts, mailboxPendiente)
+}
+
+func reconcileSupervisorPipelineStateFromInputs(supervisor, proyectoSlug string, status apiStatusResponse, openGates []*db.ReviewGate, signals []*supervisorReviewSignal, merges []*db.GitMerge, conflicts []supervisorModuleConflict, mailboxPendiente []apiOpenClawMailboxLite) (*db.SupervisorPipelineState, error) {
 	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
 	recommended = append(recommended, buildSupervisorOperationalActions(status, mailboxPendiente)...)
 	sortSupervisorRecommendedActions(recommended)

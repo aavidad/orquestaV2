@@ -7370,3 +7370,21 @@ Resultado:
     - `GET /api/proyectos/orquestador/cockpit` ~ `7.0s`
     - `GET /openclaw` ~ `23.6s`
   - sigue habiendo trabajo por hacer en el snapshot del supervisor, pero el lastre del `estadoResumen` completo ya quedó fuera de OpenClaw
+
+## 2026-04-02 — La pipeline del supervisor ya no se recalcula dentro de su propio snapshot
+
+- Hallazgo:
+  - después del recorte anterior, el cuello principal seguía dentro de `buildSupervisorReviewSnapshot()`
+  - `buildSupervisorPipelineSnapshot()` recomputaba `status/gates/signals/merges/conflicts/mailbox` aunque el snapshot ya los había cargado
+- Corrección:
+  - se añadió `buildSupervisorPipelineSnapshotFromInputs(...)`
+  - y `reconcileSupervisorPipelineStateFromInputs(...)`
+  - el snapshot del supervisor ya deriva la pipeline con el contexto ya disponible
+  - la ruta autónoma de pipeline sigue pudiendo recomputar desde cero cuando se llama por separado
+- Validación:
+  - `go test ./cmd -run 'Test(OpenClawOperatorReuseReviewSnapshotHelpers|ListarSupervisorModuleConflictsFromTasksReutilizaEstadoYaCargado|APIObservabilidadReadOnly|APIOpenClawOperatorExponeStatusLiteEnRaiz|APIOpenClawOperatorSeparaCargaActivaYReservada|WebOpenClawMuestraOperatorReviewYEntregas|MCPToolRevisionSupervisorDevuelveJSONEstructurado)' -count=1`
+  - `go build -o ./orquesta .`
+  - validación viva tras reiniciar el daemon:
+    - `GET /api/openclaw/operator` ~ `18.0s`
+    - `GET /openclaw` ~ `18.1s`
+  - el cuello no está cerrado del todo, pero el snapshot del supervisor ya no se muerde la cola

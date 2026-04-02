@@ -3783,7 +3783,7 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	pipelineState, err := buildSupervisorPipelineSnapshot(supervisor, "", 20)
+	pipelineState, err := buildSupervisorPipelineSnapshotFromInputs(supervisor, "", 20, status, openGates, signals, merges, conflicts, mailboxPendiente)
 	if err != nil {
 		return nil, err
 	}

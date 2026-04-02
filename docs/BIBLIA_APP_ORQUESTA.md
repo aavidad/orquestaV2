@@ -1256,3 +1256,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - `/api/openclaw/operator` y `/openclaw` deben usar un `estadoResumen` ligero
   - no cargan `proyectos`, `pools`, `asignaciones`, `worktrees`, `locks`, `sesiones` ni `conectores` si no los van a renderizar
   - si una vista necesita esos bloques, se piden explícitamente y no por inercia
+- la `pipeline` del supervisor no puede reabrir su propio snapshot:
+  - si `status`, `gates`, `signals`, `merges`, `module_conflicts` y `mailboxPendiente` ya están cargados en `buildSupervisorReviewSnapshot()`, la pipeline debe derivarse de esos mismos datos
+  - `buildSupervisorPipelineSnapshotFromInputs(...)` es la vía correcta en caliente
+  - solo la ruta autónoma/aislada del pipeline puede usar el reconciliador completo desde cero
