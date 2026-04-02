@@ -1237,6 +1237,10 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - el listado `/proyectos` no debe reconstruir su propio resumen operativo:
   - consume el mismo `cockpit` canónico por proyecto
   - si una vista de lista necesita más contexto, se amplía el cockpit server-first; no se crea otra agregación paralela
+- el `cockpit` de proyecto tampoco define por su cuenta qué agentes están “activos”:
+  - toma la presencia visible canónica de `status`
+  - y la intersecta con las sesiones operativas del proyecto
+  - así `status`, `/api/proyectos/{slug}/cockpit`, `/proyectos/{slug}` y OpenClaw comparten la misma verdad de flota conectada
 - cuando una superficie de lectura admite varios estados del mismo recurso, la semántica debe ser OR y no AND accidental:
   - `tarea listar --estado ... --estado ...` y `GET /api/tareas?estado=...&estado=...` deben devolver la unión deduplicada
   - el `status` canónico no puede contradecir a la CLI por una limitación del parser de flags

@@ -7314,3 +7314,19 @@ Resultado:
     - ya devuelve `#410/#412/#413/#414/#415/#416/#421` y también `#409/#252`
   - observación adicional:
     - en este reinicio `server start` volvió a converger por `healthz` con `statefile` stale; no se ha mezclado ese fleco con este commit
+
+## 2026-04-02 — El cockpit de proyecto ya usa la misma presencia visible que `status`
+
+- Hallazgo:
+  - `/api/proyectos/{slug}/cockpit` seguía llamando “agentes activos” a cualquier sesión viva del proyecto
+  - eso hacía que el cockpit enseñara `Codex1-5` mientras `status` solo consideraba conectados visibles a `Codex3` y `Codex4`
+- Corrección:
+  - el cockpit ya no recalcula presencia desde abajo
+  - toma `status.AgentesActivos` como verdad canónica
+  - y la intersecta con las sesiones operativas del proyecto
+- Validación:
+  - `go test ./cmd -run 'Test(APIProyectoCockpitExponeResumenOperativo|APIProyectoCockpitAlineaAgentesActivosConStatusVisible)' -count=1`
+  - `go build -o ./orquesta .`
+  - validación viva:
+    - `GET /api/status` => `["Codex3","Codex4"]`
+    - `GET /api/proyectos/orquestador/cockpit` => `["Codex3","Codex4"]`

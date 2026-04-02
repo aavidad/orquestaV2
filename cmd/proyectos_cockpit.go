@@ -124,31 +124,47 @@ func countProyectoRows(query string, args ...any) (int, error) {
 }
 
 func listarAgentesActivosProyecto(proyectoID int64) ([]apiProyectoCockpitAgente, error) {
-	rows, err := db.DB.Query(`
-		SELECT DISTINCT s.agente, COALESCE(a.rol,'')
-		FROM sesiones s
-		LEFT JOIN agentes a ON a.nombre = s.agente
-		WHERE s.activa = 1 AND s.proyecto_id = ?
-		ORDER BY s.agente`, proyectoID)
+	sesiones, err := db.ListarSesionesActivasOperativas()
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var items []apiProyectoCockpitAgente
-	for rows.Next() {
-		var item apiProyectoCockpitAgente
-		if err := rows.Scan(&item.Nombre, &item.Rol); err != nil {
-			return nil, err
-		}
-		item.Nombre = strings.TrimSpace(item.Nombre)
-		item.Rol = strings.TrimSpace(item.Rol)
-		if item.Nombre == "" {
+	nombresProyecto := map[string]struct{}{}
+	for _, sesion := range sesiones {
+		if sesion == nil || sesion.ProyectoID == nil || *sesion.ProyectoID != proyectoID {
 			continue
 		}
-		items = append(items, item)
+		nombre := strings.TrimSpace(sesion.Agente)
+		if nombre != "" {
+			nombresProyecto[nombre] = struct{}{}
+		}
 	}
-	return items, rows.Err()
+	if len(nombresProyecto) == 0 {
+		return nil, nil
+	}
+	status, err := statusService.FetchStatus()
+	if err != nil {
+		return nil, err
+	}
+	items := make([]apiProyectoCockpitAgente, 0, len(status.AgentesActivos))
+	for _, agente := range status.AgentesActivos {
+		if agente == nil {
+			continue
+		}
+		nombre := strings.TrimSpace(agente.Nombre)
+		if nombre == "" || !containsProyectoAgente(nombresProyecto, nombre) {
+			continue
+		}
+		items = append(items, apiProyectoCockpitAgente{
+			Nombre: nombre,
+			Rol:    strings.TrimSpace(agente.Rol),
+		})
+	}
+	return items, nil
+}
+
+func containsProyectoAgente(nombres map[string]struct{}, nombre string) bool {
+	_, ok := nombres[strings.TrimSpace(nombre)]
+	return ok
 }
 
 func safeStringPtr(v *string) string {

@@ -3050,3 +3050,58 @@ func TestAPIProyectoCockpitExponeResumenOperativo(t *testing.T) {
 		t.Fatalf("resumen operativo inesperado: %+v", resp.Cockpit)
 	}
 }
+
+func TestAPIProyectoCockpitAlineaAgentesActivosConStatusVisible(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: t.TempDir(),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"Codex3", "Codex1"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{Agente: agente, ProyectoID: &proyectoID})
+		if err != nil {
+			t.Fatalf("iniciar sesion %s: %v", agente, err)
+		}
+		if agente == "Codex1" {
+			reset := time.Now().UTC().Add(2 * time.Hour)
+			zeroMessages := int64(0)
+			if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+				SesionID:          sesion.ID,
+				WindowKind:        "provider",
+				ResetAt:           &reset,
+				RemainingMessages: &zeroMessages,
+				BudgetSource:      "provider_backoff",
+				RawSnapshotJSON:   `{"source":"runtime_order_send_instruction","account_user":"Codex1"}`,
+				CheckedAt:         time.Now().UTC(),
+			}); err != nil {
+				t.Fatalf("bloquear presupuesto Codex1: %v", err)
+			}
+		}
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/proyectos/orquestador/cockpit", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status cockpit inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp apiProyectoCockpitResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode cockpit: %v", err)
+	}
+	if len(resp.Cockpit.AgentesActivos) != 1 || resp.Cockpit.AgentesActivos[0].Nombre != "Codex3" {
+		t.Fatalf("cockpit deberia alinear agentes visibles con status: %+v", resp.Cockpit.AgentesActivos)
+	}
+}
