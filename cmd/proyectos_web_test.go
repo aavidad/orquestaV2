@@ -339,3 +339,68 @@ func TestWebProyectoDetalleMuestraCockpitOperativo(t *testing.T) {
 		t.Fatalf("detalle sin cockpit operativo: %s", body)
 	}
 }
+
+func TestWebProyectosMuestraCockpitOperativoLigero(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: "/tmp/orquestador",
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.CrearTarea(&db.Tarea{
+		ProyectoID: &proyectoID,
+		Titulo:     "Cerrar cockpit",
+		Estado:     db.TareaEnProgreso,
+		Agente:     stringPtr("Codex3"),
+		Modulo:     "web",
+		Prioridad:  db.PrioridadAlta,
+	}); err != nil {
+		t.Fatalf("crear tarea activa: %v", err)
+	}
+	if _, err := db.CrearTarea(&db.Tarea{
+		ProyectoID: &proyectoID,
+		Titulo:     "Reservar backlog",
+		Estado:     db.TareaAsignada,
+		Agente:     stringPtr("Codex4"),
+		Modulo:     "api",
+		Prioridad:  db.PrioridadMedia,
+	}); err != nil {
+		t.Fatalf("crear tarea reservada: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:     "Codex3",
+		ProyectoID: &proyectoID,
+	}); err != nil {
+		t.Fatalf("iniciar sesion activa: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/proyectos", nil)
+	rec := httptest.NewRecorder()
+	webHandlerProyectos(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("proyectos status=%d cuerpo=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		"Cockpit",
+		"agentes",
+		"activas",
+		"reservadas",
+		"proposals 0",
+		"mailbox 0",
+		"orders 0",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("listado sin resumen operativo %q: %s", want, body)
+		}
+	}
+}

@@ -1234,3 +1234,6 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - luego se resuelven referencias adicionales
   - no se permite abrir `Get*` o `List*` anidadas dentro del `for rows.Next()`
   - esta regla es especialmente importante en vistas agregadas (`overview`, `cockpit`, `status`) porque si se viola bloquea todo el daemon
+- el listado `/proyectos` no debe reconstruir su propio resumen operativo:
+  - consume el mismo `cockpit` canónico por proyecto
+  - si una vista de lista necesita más contexto, se amplía el cockpit server-first; no se crea otra agregación paralela

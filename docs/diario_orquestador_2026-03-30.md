@@ -7273,3 +7273,24 @@ Resultado:
     - `GET /api/proyectos/orquestador/cockpit` => `200` en `~0.040s`
     - `GET /proyectos/orquestador` => `200` en `~0.054s`
     - `./orquesta status` vuelve a responder inmediatamente
+
+## 2026-04-02 — Listado de proyectos como cockpit ligero
+
+- Hallazgo:
+  - el detalle de proyecto ya era cockpit operativo, pero `/proyectos` seguía siendo una tabla pobre y obligaba a entrar proyecto a proyecto para ver carga real
+  - abrir otra agregación específica para el listado habría reintroducido una segunda verdad del resumen operativo
+- Corrección:
+  - `/proyectos` ahora consume el mismo `cockpit` canónico por proyecto
+  - cada fila muestra un resumen ligero con:
+    - agentes activos
+    - tareas activas
+    - tareas reservadas
+    - review gates abiertas
+    - propuestas abiertas
+    - runtime mailbox pendiente
+    - runtime orders abiertas
+  - la lista sigue siendo server-first; si el cockpit falla en una fila concreta, degrada a “Sin resumen operativo” sin romper toda la vista
+- Validación:
+  - `go test ./cmd -run 'TestWeb(ProyectosMuestraCockpitOperativoLigero|ProyectoDetalleMuestraCockpitOperativo|ProyectosRespetaIdiomaDelRequest)' -count=1`
+  - `go build -o ./orquesta .`
+  - `./orquesta server doctor` => `Health RPC: OK`

@@ -26,6 +26,7 @@ type webProyectoResumen struct {
 	Tipo    string
 	RutaAbs string
 	Activo  bool
+	Cockpit *apiProyectoCockpit
 }
 
 type webProyectosData struct {
@@ -89,12 +90,17 @@ func webHandlerProyectos(w http.ResponseWriter, r *http.Request) {
 	}
 	var proyectos []webProyectoResumen
 	for _, item := range items {
+		cockpit, errCockpit := webCargarProyectoCockpitPorAPI(item.Slug)
+		if errCockpit != nil {
+			cockpit = nil
+		}
 		proyectos = append(proyectos, webProyectoResumen{
 			Slug:    item.Slug,
 			Nombre:  item.Nombre,
 			Tipo:    string(item.Tipo),
 			RutaAbs: item.RutaAbs,
 			Activo:  item.Activo,
+			Cockpit: cockpit,
 		})
 	}
 	webRender(w, r, webTplLayout+webTplProyectos, webProyectosData{
@@ -466,7 +472,7 @@ const webTplProyectos = `{{define "content"}}
   {{if .Err}}<article style="background:#fee2e2;border:1px solid #ef4444;padding:.75rem">{{.Err}}</article>{{end}}
   {{if .Proyectos}}
   <table>
-    <thead><tr><th>{{tr "Proyecto"}}</th><th>{{tr "Tipo"}}</th><th>{{tr "projects.path"}}</th><th>{{tr "Estado"}}</th></tr></thead>
+    <thead><tr><th>{{tr "Proyecto"}}</th><th>{{tr "Tipo"}}</th><th>{{tr "projects.path"}}</th><th>{{tr "Estado"}}</th><th>Cockpit</th></tr></thead>
     <tbody>
       {{range .Proyectos}}
       <tr>
@@ -474,6 +480,21 @@ const webTplProyectos = `{{define "content"}}
         <td>{{.Tipo}}</td>
         <td><code>{{.RutaAbs}}</code></td>
         <td>{{if .Activo}}{{tr "projects.active"}}{{else}}{{tr "projects.inactive"}}{{end}}</td>
+        <td>
+          {{if .Cockpit}}
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.35rem;min-width:18rem">
+            <div style="border:1px solid var(--pico-muted-border-color);border-radius:.4rem;padding:.45rem"><strong>{{len .Cockpit.AgentesActivos}}</strong><br><small>agentes</small></div>
+            <div style="border:1px solid var(--pico-muted-border-color);border-radius:.4rem;padding:.45rem"><strong>{{len .Cockpit.TareasActivas}}</strong><br><small>activas</small></div>
+            <div style="border:1px solid var(--pico-muted-border-color);border-radius:.4rem;padding:.45rem"><strong>{{len .Cockpit.TareasReservadas}}</strong><br><small>reservadas</small></div>
+            <div style="border:1px solid var(--pico-muted-border-color);border-radius:.4rem;padding:.45rem"><strong>{{.Cockpit.ReviewGatesAbiertas}}</strong><br><small>review</small></div>
+          </div>
+          <small style="display:block;color:#64748b;margin-top:.35rem">
+            proposals {{.Cockpit.PropuestasAbiertas}} · mailbox {{.Cockpit.RuntimeMailboxPendiente}} · orders {{.Cockpit.RuntimeOrdersAbiertas}}
+          </small>
+          {{else}}
+          <small style="color:#64748b">Sin resumen operativo</small>
+          {{end}}
+        </td>
       </tr>
       {{end}}
     </tbody>
