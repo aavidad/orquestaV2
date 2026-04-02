@@ -507,7 +507,17 @@ func agenteBloqueadoPorCuotaVisible(a *db.Agente) bool {
 	if a.PresupuestoSemanalPct != nil && *a.PresupuestoSemanalPct <= 0 {
 		return true
 	}
+	tieneSenalVentanaCorta := a.PresupuestoSesionPct != nil ||
+		presupuestoVisibleEsVentanaCorta(strings.TrimSpace(a.PresupuestoVentana)) ||
+		strings.EqualFold(strings.TrimSpace(a.PresupuestoFuente), "provider_backoff") ||
+		(a.ReanimarAt != nil && !a.ReanimarAt.IsZero()) ||
+		strings.Contains(strings.ToLower(strings.TrimSpace(a.MotivoPausa)), "diaria") ||
+		strings.Contains(strings.ToLower(strings.TrimSpace(a.MotivoPausa)), "ventana corta")
+	if a.PresupuestoDiarioPct != nil && *a.PresupuestoDiarioPct <= 0 && tieneSenalVentanaCorta {
+		return true
+	}
 	tieneVentanaTemporalVisible := a.PresupuestoSesionPct != nil ||
+		(a.PresupuestoDiarioPct != nil && tieneSenalVentanaCorta) ||
 		presupuestoVisibleEsVentanaCorta(strings.TrimSpace(a.PresupuestoVentana)) ||
 		strings.EqualFold(strings.TrimSpace(a.PresupuestoFuente), "provider_backoff")
 	if a.PresupuestoSemanalPct != nil && *a.PresupuestoSemanalPct > 0 && !tieneVentanaTemporalVisible {
@@ -532,6 +542,11 @@ func bloqueoCuotaEstimadoVisible(a *db.Agente) bool {
 		return false
 	}
 	if agenteMotivoPausaOperativa(a.MotivoPausa) {
+		return false
+	}
+	motivo := strings.ToLower(strings.TrimSpace(a.MotivoPausa))
+	if a.ReanimarAt != nil && !a.ReanimarAt.IsZero() &&
+		(strings.Contains(motivo, "diaria") || strings.Contains(motivo, "ventana corta")) {
 		return false
 	}
 	return a.PresupuestoCheckedAt == nil || a.PresupuestoCheckedAt.IsZero() || a.PresupuestoStale

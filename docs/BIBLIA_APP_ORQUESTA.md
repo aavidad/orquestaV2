@@ -1117,6 +1117,11 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - el ranking/API/CLI deben marcar esos casos como `observed_usage`
   - `observed_usage` sirve para frescura y contexto operativo, no para decidir capacidad restante
   - si no existe una cuota real del proveedor, la UI debe decirlo de forma explícita y no esconderlo tras `sin_datos`
+- Un `provider_backoff` stale no puede secuestrar la cuota visible si la semanal derivada sigue viva:
+  - si `PresupuestoStale=true`, `PresupuestoFuente=provider_backoff` y la semanal derivada es `> 0`, Orquesta no debe seguir marcando `EstadoCuota=agotado/enfriamiento`
+  - en ese caso la proyección correcta es `PresupuestoEstado=observado_stale`
+  - la UI no debe enseñar a la vez `efectivo 95%` y `agotado` como si ambas fuesen verdad fuerte
+  - la ventana corta derivada solo cuenta como bloqueo real si hay evidencia explícita de ventana corta (`session`, `provider`, `reanimar_at` o motivo de cuota diaria/corta)
 - Del launcher Claude Rust sí merece la pena absorber metadatos de sesión, no solo coste:
   - `session_path`
   - `message_count`

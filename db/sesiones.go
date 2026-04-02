@@ -713,6 +713,12 @@ func proyectarBloqueoVisibleDesdePresupuestoObservado(a *Agente) {
 	if !strings.EqualFold(strings.TrimSpace(a.EstadoCuota), "activo") {
 		return
 	}
+	if a.PresupuestoStale &&
+		strings.EqualFold(strings.TrimSpace(a.PresupuestoFuente), "provider_backoff") &&
+		a.PresupuestoSemanalPct != nil &&
+		*a.PresupuestoSemanalPct > 0 {
+		return
+	}
 	now := time.Now().UTC()
 	if strings.EqualFold(strings.TrimSpace(a.PresupuestoEstado), "agotado") {
 		a.EstadoCuota = "agotado"
@@ -1059,7 +1065,14 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 			if a.PresupuestoStale && strings.TrimSpace(a.PresupuestoEstado) == "ok" {
 				a.PresupuestoEstado = "observado_stale"
 			}
-			if strings.EqualFold(strings.TrimSpace(presupuestoCuota.BudgetSource), "provider_backoff") &&
+			if a.PresupuestoStale &&
+				strings.EqualFold(strings.TrimSpace(presupuestoCuota.BudgetSource), "provider_backoff") &&
+				a.PresupuestoSemanalPct != nil &&
+				*a.PresupuestoSemanalPct > 0 {
+				a.PresupuestoEstado = "observado_stale"
+			}
+			if !a.PresupuestoStale &&
+				strings.EqualFold(strings.TrimSpace(presupuestoCuota.BudgetSource), "provider_backoff") &&
 				strings.EqualFold(strings.TrimSpace(a.PresupuestoEstado), "agotado") {
 				// Un provider_backoff agotado invalida los porcentajes derivados de uso
 				// local: mantenerlos visibles produce contradicciones como "semanal 95%"
@@ -1081,6 +1094,7 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 	}
 	proyectarEstadoCuotaVisibleDesdePresupuesto(a)
 	sincronizarPresupuestoEfectivoVisible(a)
+	reconciliarBloqueoPresupuestoStale(a)
 }
 
 func aplicarUsoObservadoAgente(a *Agente, p *PresupuestoSesion) {
@@ -1194,7 +1208,9 @@ func sincronizarPresupuestoEfectivoVisible(a *Agente) {
 		}
 		return
 	}
-	if strings.EqualFold(strings.TrimSpace(a.PresupuestoEstado), "agotado") || (a.RemainingCredits != nil && *a.RemainingCredits <= 0) {
+	providerBackoffStale := a.PresupuestoStale && strings.EqualFold(strings.TrimSpace(a.PresupuestoFuente), "provider_backoff")
+	if (strings.EqualFold(strings.TrimSpace(a.PresupuestoEstado), "agotado") && !providerBackoffStale) ||
+		(a.RemainingCredits != nil && *a.RemainingCredits <= 0 && !providerBackoffStale) {
 		a.CuotaRestantePct = &zero
 		if presupuestoEsVentanaSemanal(strings.TrimSpace(a.PresupuestoVentana)) {
 			if a.PresupuestoSemanalResetAt != nil {
@@ -1203,6 +1219,35 @@ func sincronizarPresupuestoEfectivoVisible(a *Agente) {
 		} else if a.PresupuestoSesionResetAt != nil {
 			a.PresupuestoResetAt = a.PresupuestoSesionResetAt
 		}
+	}
+}
+
+func reconciliarBloqueoPresupuestoStale(a *Agente) {
+	if a == nil {
+		return
+	}
+	if !a.PresupuestoStale {
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(a.PresupuestoFuente), "provider_backoff") {
+		return
+	}
+	if a.PresupuestoSemanalPct == nil || *a.PresupuestoSemanalPct <= 0 {
+		return
+	}
+	if a.CuotaRestantePct == nil || *a.CuotaRestantePct <= 0 {
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(a.EstadoCuota), "agotado") &&
+		!strings.EqualFold(strings.TrimSpace(a.EstadoCuota), "enfriamiento") {
+		return
+	}
+	a.EstadoCuota = "activo"
+	a.PresupuestoEstado = "observado_stale"
+	a.ReanimarAt = nil
+	if strings.Contains(strings.ToLower(strings.TrimSpace(a.MotivoPausa)), "presupuesto agotado observado") ||
+		strings.Contains(strings.ToLower(strings.TrimSpace(a.MotivoPausa)), "cuota agotada") {
+		a.MotivoPausa = "Bloqueo de cuota stale pendiente de revalidación"
 	}
 }
 

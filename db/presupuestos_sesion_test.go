@@ -814,6 +814,55 @@ func TestGetAgenteOcultaDerivadosCuandoProviderBackoffMarcaAgotado(t *testing.T)
 	}
 }
 
+func TestGetAgenteConservaDerivadosSiProviderBackoffYaEstaStale(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesionID, err := IniciarSesion("codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET consumo_semanal_segundos=31500, limite_semanal_segundos=126000, consumo_dia_segundos=0, limite_dia_segundos=18000 WHERE nombre=?`, "codex1"); err != nil {
+		t.Fatalf("update agentes: %v", err)
+	}
+	reset := time.Now().UTC().Add(6 * 24 * time.Hour)
+	zeroMessages := int64(0)
+	rawBackoff := `{"source":"runtime_order_send_instruction","account_user":"Codex1","account_email":"maritere@avidad.com"}`
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:          sesionID,
+		WindowKind:        "provider",
+		ResetAt:           &reset,
+		RemainingMessages: &zeroMessages,
+		BudgetSource:      "provider_backoff",
+		RawSnapshotJSON:   rawBackoff,
+		CheckedAt:         time.Now().UTC().Add(-25 * time.Hour),
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion backoff stale: %v", err)
+	}
+
+	agente, err := GetAgente("codex1")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if !agente.PresupuestoStale {
+		t.Fatalf("deberia marcarse stale: %+v", agente)
+	}
+	if agente.CuotaRestantePct == nil || *agente.CuotaRestantePct <= 0 {
+		t.Fatalf("no deberia bloquear con provider_backoff stale: %+v", agente)
+	}
+	if agente.PresupuestoSemanalPct == nil || *agente.PresupuestoSemanalPct <= 0 {
+		t.Fatalf("deberia conservar semanal derivada: %+v", agente)
+	}
+	if agente.EstadoCuota != "activo" {
+		t.Fatalf("no deberia quedar bloqueado con provider_backoff stale: %+v", agente)
+	}
+	if agente.PresupuestoEstado != "observado_stale" {
+		t.Fatalf("deberia degradar el estado a observado_stale: %+v", agente)
+	}
+}
+
 func TestGetAgenteConservaCuotaObservadaYUsoClaudeMasReciente(t *testing.T) {
 	abrirDBTemporalMemoria(t)
 

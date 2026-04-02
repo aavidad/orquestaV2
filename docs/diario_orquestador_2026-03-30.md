@@ -7462,3 +7462,25 @@ Resultado:
   - validación viva:
     - `POST /api/openclaw/operator` con `mode=subagent_store_refresh` responde `supervisor=OpenClaw`, `proyecto=orquestador`, `imported=0`
     - el store observado queda expuesto como `/home/alberto/Trabajo/orquesta/.clawd-agents`
+
+## 2026-04-02 — `provider_backoff` stale deja de secuestrar la cuota visible
+
+- Hallazgo:
+  - algunos agentes quedaban con contradicciones visibles del tipo:
+    - `efectivo 95%`
+    - `ventana weekly`
+    - y a la vez `agotado`
+  - la causa era una señal vieja `provider_backoff` que seguía marcando bloqueo aunque la semanal derivada ya fuese positiva
+- Corrección:
+  - `db/sesiones.go` ya degrada ese caso a `PresupuestoEstado=observado_stale`
+  - si `provider_backoff` está stale y la semanal derivada sigue viva:
+    - no proyecta `EstadoCuota=agotado/enfriamiento`
+    - no conserva el motivo de pausa viejo como verdad fuerte
+  - `cmd/status_remoto_compat.go` ahora trata `diario=0` como bloqueo real solo si hay evidencia explícita de ventana corta
+  - con eso se separan bien dos casos:
+    - ventana corta agotada confirmada
+    - derivado temporal fantasma con semanal viva
+- Validación:
+  - `go test ./db -run 'Test(GetAgenteOcultaDerivadosCuandoProviderBackoffMarcaAgotado|GetAgenteConservaDerivadosSiProviderBackoffYaEstaStale|GetAgenteConservaCuotaObservadaYUsoClaudeMasReciente)' -count=1`
+  - `go test ./cmd -run 'Test(RenderStatusSummaryIgnoraDerivadoTemporalInexistenteCuandoSoloMandaSemanal|RenderStatusSummaryCuentaVentanaTemporalAgotadaComoCuotaReal|AgenteCuentaComoConectadoRespetaEstadoCuotaVisible)' -count=1`
+  - `go build -o ./orquesta .`
