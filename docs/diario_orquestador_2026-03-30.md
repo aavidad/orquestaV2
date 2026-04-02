@@ -7484,3 +7484,22 @@ Resultado:
   - `go test ./db -run 'Test(GetAgenteOcultaDerivadosCuandoProviderBackoffMarcaAgotado|GetAgenteConservaDerivadosSiProviderBackoffYaEstaStale|GetAgenteConservaCuotaObservadaYUsoClaudeMasReciente)' -count=1`
   - `go test ./cmd -run 'Test(RenderStatusSummaryIgnoraDerivadoTemporalInexistenteCuandoSoloMandaSemanal|RenderStatusSummaryCuentaVentanaTemporalAgotadaComoCuotaReal|AgenteCuentaComoConectadoRespetaEstadoCuotaVisible)' -count=1`
   - `go build -o ./orquesta .`
+
+## 2026-04-02 — OpenClaw ya acciona subagentes terminales por fila
+
+- Hallazgo:
+  - OpenClaw ya mostraba subagentes explícitos y ya podía actuar sobre ellos por cola/MCP
+  - pero la tabla de `/openclaw` seguía siendo demasiado pasiva: faltaba poder actuar por fila sobre un subagente terminal
+- Corrección:
+  - la tabla `Subagentes explícitos` ahora enseña artefactos:
+    - `manifest`
+    - `output`
+    - `error`
+  - y además muestra acciones por estado:
+    - `completed` -> `Recoger resultado`
+    - `failed` -> `Revisar fallo`
+    - `cancelled` -> `Limpiar`
+  - esas acciones siguen entrando por la misma vía canónica `supervision_action`
+- Validación:
+  - `go test ./cmd -run 'Test(WebOpenClawMuestraOperatorReviewYEntregas|WebOpenClawOperaSubagentes|WebOpenClawAccionaSubagenteTerminal|WebOpenClawAccionAplicaSiguienteSupervisor)' -count=1`
+  - `go build -o ./orquesta .`

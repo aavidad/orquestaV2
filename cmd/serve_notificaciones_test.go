@@ -913,6 +913,63 @@ printf 'ok\n'
 	}
 }
 
+func TestWebOpenClawAccionaSubagenteTerminal(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	subagente, err := db.UpsertSupervisorSubagent(db.UpsertSupervisorSubagentInput{
+		Supervisor:   "OpenClaw",
+		ProyectoSlug: "orquestador",
+		ThreadID:     "sub-done-web-1",
+		SubagentName: "Claude Verify Web",
+		SubagentType: "verification",
+		Status:       "completed",
+		OutputPath:   "/tmp/sub-done-web-1/output.md",
+	})
+	if err != nil {
+		t.Fatalf("crear subagente completado: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/openclaw", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			webHandlerOpenClawAccion(w, r)
+			return
+		}
+		webHandlerOpenClaw(w, r)
+	})
+	registerAPIRoutes(mux)
+
+	recGet := httptest.NewRecorder()
+	reqGet := httptest.NewRequest(http.MethodGet, "/openclaw", nil)
+	mux.ServeHTTP(recGet, reqGet)
+	if recGet.Code != http.StatusOK {
+		t.Fatalf("openclaw get status=%d body=%s", recGet.Code, recGet.Body.String())
+	}
+	body := recGet.Body.String()
+	for _, token := range []string{"Claude Verify Web", "Recoger resultado", "/tmp/sub-done-web-1/output.md"} {
+		if !strings.Contains(body, token) {
+			t.Fatalf("openclaw sin %q:\n%s", token, body)
+		}
+	}
+
+	form := url.Values{
+		"kind":     {"supervision_action"},
+		"action":   {"recoger_resultado_subagente"},
+		"target":   {"subagente:" + strconv.FormatInt(subagente.ID, 10)},
+		"assignee": {"OpenClaw"},
+	}
+	recPost := httptest.NewRecorder()
+	reqPost := httptest.NewRequest(http.MethodPost, "/openclaw", strings.NewReader(form.Encode()))
+	reqPost.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	mux.ServeHTTP(recPost, reqPost)
+	if recPost.Code != http.StatusSeeOther {
+		t.Fatalf("accion subagente web status=%d body=%s", recPost.Code, recPost.Body.String())
+	}
+	if location := recPost.Header().Get("Location"); !strings.Contains(location, "Acci%C3%B3n+recoger_resultado_subagente+aplicada") && !strings.Contains(location, "Acción+recoger_resultado_subagente+aplicada") {
+		t.Fatalf("redirect inesperado: %s", location)
+	}
+}
+
 func TestWebDashMuestraCuentaYVentanasDeCuotaAgente(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

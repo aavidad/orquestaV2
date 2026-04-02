@@ -1203,6 +1203,11 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - si termina `cancelled`, OpenClaw debe ver `limpiar_subagente_cancelado`
   - esas acciones pueden ser manuales, pero deben salir del mismo `action_queue/next_action` que el resto del operador
   - `applySupervisorRecommendedAction` debe devolver el `subagente` canónico desde `supervisor_subagents`, no una reconstrucción parcial
+  - `/openclaw` también debe ofrecer esas acciones por fila en la tabla de subagentes terminales:
+    - `Recoger resultado`
+    - `Revisar fallo`
+    - `Limpiar`
+  - no se acepta esconder esa operativa solo en la cola o en MCP si la propia web del supervisor ya renderiza el subagente
 - El store `.clawd-agents` del launcher Rust de Claude puede alimentar Orquesta, pero no sustituye la BD:
   - Orquesta debe poder inspeccionar ese store e importar sus `manifest/output` al modelo canónico `supervisor_subagents`
   - la ruta del store debe resolverse por:

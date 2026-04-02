@@ -2508,7 +2508,7 @@ const webTplOpenClaw = `{{define "content"}}
         </form>
       </div>
       {{if .Subagents}}
-      <table style="width:100%"><thead><tr><th>Thread</th><th>Nombre</th><th>Tipo</th><th>Estado</th><th>Padre</th><th>Manifest</th></tr></thead><tbody>
+      <table style="width:100%"><thead><tr><th>Thread</th><th>Nombre</th><th>Tipo</th><th>Estado</th><th>Padre</th><th>Artefactos</th><th>Acción</th></tr></thead><tbody>
       {{range .Subagents}}
         <tr>
           <td>{{.ThreadID}}</td>
@@ -2516,7 +2516,40 @@ const webTplOpenClaw = `{{define "content"}}
           <td><code>{{orDash .SubagentType}}</code></td>
           <td><span class="tag t-media">{{.Status}}</span></td>
           <td>{{orDash .ParentThreadID}}</td>
-          <td>{{orDash .ManifestPath}}</td>
+          <td>
+            <small>
+              manifest: {{orDash .ManifestPath}}<br>
+              output: {{orDash .OutputPath}}
+              {{if .ErrorMessage}}<br>error: {{.ErrorMessage}}{{end}}
+            </small>
+          </td>
+          <td>
+            {{if eq .Status "completed"}}
+            <form method="post" action="/openclaw?lang={{lang}}" style="margin:0">
+              <input type="hidden" name="kind" value="supervision_action">
+              <input type="hidden" name="action" value="recoger_resultado_subagente">
+              <input type="hidden" name="target" value="subagente:{{.ID}}">
+              <input type="hidden" name="assignee" value="OpenClaw">
+              <button type="submit">Recoger resultado</button>
+            </form>
+            {{else if eq .Status "failed"}}
+            <form method="post" action="/openclaw?lang={{lang}}" style="margin:0">
+              <input type="hidden" name="kind" value="supervision_action">
+              <input type="hidden" name="action" value="revisar_subagente_fallido">
+              <input type="hidden" name="target" value="subagente:{{.ID}}">
+              <input type="hidden" name="assignee" value="OpenClaw">
+              <button type="submit">Revisar fallo</button>
+            </form>
+            {{else if eq .Status "cancelled"}}
+            <form method="post" action="/openclaw?lang={{lang}}" style="margin:0">
+              <input type="hidden" name="kind" value="supervision_action">
+              <input type="hidden" name="action" value="limpiar_subagente_cancelado">
+              <input type="hidden" name="target" value="subagente:{{.ID}}">
+              <input type="hidden" name="assignee" value="OpenClaw">
+              <button type="submit">Limpiar</button>
+            </form>
+            {{else}}<small style="color:#64748b">sin acción manual</small>{{end}}
+          </td>
         </tr>
       {{end}}
       </tbody></table>
