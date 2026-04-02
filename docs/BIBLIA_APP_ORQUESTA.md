@@ -1213,3 +1213,8 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
     - `CLAWD_AGENT_STORE`
   - tras el spawn, Orquesta debe refrescar inmediatamente el store y persistir el resultado en `supervisor_subagents`
   - esto mantiene server-first: el launcher es backend externo; el estado canónico sigue entrando por Orquesta
+- `worktree_drift` debe dar contexto suficiente para arbitraje manual sin obligar a shell:
+  - cada drift debe exponer `worktree_id` y `detail_path` del registro canónico
+  - si la worktree está sucia, OpenClaw debe ver una muestra corta de archivos (`dirty_files`) y el excedente (`dirty_overflow`)
+  - la web `/openclaw`, la API y MCP deben reflejar la misma proyección compacta
+  - esto no autoriza refrescos automáticos sobre worktrees sucias; solo mejora la decisión del supervisor

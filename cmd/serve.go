@@ -297,6 +297,12 @@ var webFuncMap = template.FuncMap{
 		}
 		return s
 	},
+	"join": func(items []string, sep string) string {
+		if len(items) == 0 {
+			return ""
+		}
+		return strings.Join(items, sep)
+	},
 	"pid": func(v *int64) string {
 		if v == nil || *v <= 0 {
 			return "—"
@@ -2233,7 +2239,12 @@ const webTplOpenClaw = `{{define "content"}}
           <td><code>{{orDash .ExpectedHead}}</code></td>
           <td>{{if .DirtySummary}}{{.DirtySummary}}{{else if .Dirty}}sucia{{else}}limpia{{end}}</td>
         </tr>
-        <tr><td colspan="5" style="font-size:.74rem;color:#64748b;padding-bottom:.4rem">{{orDash .Path}}</td></tr>
+        <tr><td colspan="5" style="font-size:.74rem;color:#64748b">{{orDash .Path}}{{if .DetailPath}} · <a href="{{.DetailPath}}">detalle</a>{{end}}</td></tr>
+        {{if .DirtyFiles}}
+        <tr><td colspan="5" style="font-size:.74rem;color:#475569;padding-bottom:.4rem">muestra: <code>{{join .DirtyFiles ", "}}</code>{{if gt .DirtyOverflow 0}} · +{{.DirtyOverflow}} más{{end}}</td></tr>
+        {{else}}
+        <tr><td colspan="5" style="padding-bottom:.4rem"></td></tr>
+        {{end}}
       {{end}}
       </tbody></table>
       {{else}}

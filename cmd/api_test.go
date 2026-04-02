@@ -20,11 +20,11 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/internal/a2ui"
 	"orquesta/reviewapp"
 	"orquesta/supervisionapp"
-	"orquesta/coordinacion"
 )
 
 func TestCuentaPresupuestoDesdeAgenteUsaObservedUsageCuandoNoHayCuotaReal(t *testing.T) {
@@ -33,14 +33,14 @@ func TestCuentaPresupuestoDesdeAgenteUsaObservedUsageCuandoNoHayCuotaReal(t *tes
 	msgs := 3
 	turns := 1
 	key, item := cuentaPresupuestoDesdeAgente(&db.Agente{
-		Nombre:               "Codex6",
-		CuentaEmail:          "claude@example.com",
-		PresupuestoFuente:    "claude_rust_session_observed",
-		ObservedUsageTokens:  &tokens,
-		ObservedUsageCostUSD: &cost,
+		Nombre:                "Codex6",
+		CuentaEmail:           "claude@example.com",
+		PresupuestoFuente:     "claude_rust_session_observed",
+		ObservedUsageTokens:   &tokens,
+		ObservedUsageCostUSD:  &cost,
 		ObservedUsageMessages: &msgs,
-		ObservedUsageTurns:   &turns,
-		ObservedSessionPath:  "/tmp/.claude/sessions/session-1.json",
+		ObservedUsageTurns:    &turns,
+		ObservedSessionPath:   "/tmp/.claude/sessions/session-1.json",
 	})
 	if key != "claude@example.com" {
 		t.Fatalf("cuenta clave inesperada: %q", key)
@@ -133,12 +133,15 @@ func TestBuildOpenClawWorktreeDriftFromRefs(t *testing.T) {
 }
 
 func TestParseGitStatusPorcelainSummary(t *testing.T) {
-	dirty, summary := parseGitStatusPorcelainSummary(" M cmd/api.go\n?? cmd/new_file.go\n")
+	dirty, summary, files, overflow := parseGitStatusPorcelainSummary(" M cmd/api.go\n?? cmd/new_file.go\n")
 	if !dirty {
 		t.Fatalf("deberia marcar dirty")
 	}
 	if summary != "1 tracked · 1 untracked" {
 		t.Fatalf("summary inesperado: %q", summary)
+	}
+	if len(files) != 2 || files[0] != "cmd/api.go" || files[1] != "cmd/new_file.go" || overflow != 0 {
+		t.Fatalf("detalle inesperado: files=%v overflow=%d", files, overflow)
 	}
 }
 

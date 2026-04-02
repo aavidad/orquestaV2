@@ -7193,3 +7193,21 @@ Resultado:
 - Validación:
   - `go test ./cmd -run 'Test(MCP(SubagentesSupervisorLanzaExternoYSincronizaStore|SubagentesSupervisorRefrescaStoreClaude|RevisionSupervisorPromueveSubagentesTerminales|SubagentesSupervisorOperanPorLaViaCanonica)|APIObservabilidadReadOnly|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
   - `go build -o ./orquesta .`
+
+## 2026-04-02 — Worktree drift con detalle operativo compacto
+
+- Hallazgo:
+  - OpenClaw ya priorizaba `revisar_worktree_desfasada`, pero la decisión seguía obligando a inspección manual fuera de Orquesta
+  - el supervisor solo veía `dirty_summary`, sin `worktree_id`, sin enlace canónico y sin muestra de archivos
+- Corrección:
+  - `worktree_drift` ahora expone:
+    - `worktree_id`
+    - `detail_path`
+    - `dirty_files`
+    - `dirty_overflow`
+  - `/openclaw` renderiza el enlace al detalle y una muestra compacta de archivos sucios
+  - la proyección sigue siendo segura: mejora arbitraje, no automatiza refresh de worktree sucia
+- Validación:
+  - `go test ./cmd -run 'Test(ParseGitStatusPorcelainSummaryIncluyeMuestraYOverflow|ParseGitStatusPorcelainSummaryLimpio|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
+  - `go test ./cmd -run 'Test(MCPRevisionSupervisorExponeWorktreeDrift|MCPToolSupervisorSolicitaCheckpointPorWorktreeDrift)' -count=1`
+  - `go build -o ./orquesta .`
