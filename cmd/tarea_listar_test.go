@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -41,29 +42,10 @@ func TestTareaListarTSVParaScripts(t *testing.T) {
 	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
 	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
 
-	for _, item := range []struct {
-		name  string
-		value string
-	}{
-		{name: "agente", value: "Codex1"},
-		{name: "estado", value: string(db.EstadoAsignada)},
-		{name: "tsv", value: "true"},
-		{name: "json", value: "false"},
-	} {
-		if err := tareaListarCmd.Flags().Set(item.name, item.value); err != nil {
-			t.Fatalf("set flag %s: %v", item.name, err)
-		}
-	}
-	t.Cleanup(func() {
-		_ = tareaListarCmd.Flags().Set("agente", "")
-		_ = tareaListarCmd.Flags().Set("estado", "")
-		_ = tareaListarCmd.Flags().Set("tsv", "false")
-		_ = tareaListarCmd.Flags().Set("json", "false")
-	})
-
+	var stderr bytes.Buffer
 	out := capturarStdout(t, func() {
-		if err := tareaListarCmd.RunE(tareaListarCmd, nil); err != nil {
-			t.Fatalf("run listar tsv: %v", err)
+		if err := executeLocalArgs([]string{"tarea", "listar", "--agente", "Codex1", "--estado", string(db.EstadoAsignada), "--tsv"}, &bytes.Buffer{}, &stderr); err != nil {
+			t.Fatalf("run listar tsv: %v stderr=%s", err, stderr.String())
 		}
 	})
 	want := "Revisar conector hexagonal"
@@ -75,5 +57,124 @@ func TestTareaListarTSVParaScripts(t *testing.T) {
 	}
 }
 
+func TestTareaListarAceptaEstadosMultiples(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/tareas", func(w http.ResponseWriter, r *http.Request) {
+		got := r.URL.Query()["estado"]
+		if len(got) != 2 || got[0] != string(db.EstadoEnProgreso) || got[1] != string(db.EstadoAsignada) {
+			t.Fatalf("estados enviados inesperados: %v", got)
+		}
+		_ = json.NewEncoder(w).Encode(apiTareasResponse{
+			Tareas: []*db.Tarea{{
+				ID:        17,
+				Titulo:    "Auditoria",
+				ProyectoID: ptrInt64(7),
+				Prioridad: db.PrioridadAlta,
+				Estado:    db.EstadoEnProgreso,
+			}},
+		})
+	})
+	mux.HandleFunc("/api/proyectos", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiProyectosResponse{
+			Proyectos: []*db.Proyecto{{ID: 7, Slug: "orquestador"}},
+		})
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	var stderr bytes.Buffer
+	out := capturarStdout(t, func() {
+		if err := executeLocalArgs([]string{"tarea", "listar", "--estado", string(db.EstadoEnProgreso), "--estado", string(db.EstadoAsignada)}, &bytes.Buffer{}, &stderr); err != nil {
+			t.Fatalf("run listar multiestado: %v stderr=%s", err, stderr.String())
+		}
+	})
+	if !strings.Contains(out, "Auditoria") {
+		t.Fatalf("salida inesperada:\n%s", out)
+	}
+}
+
+func TestListarTareasPorEstadosOR(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: "/tmp/orquestador",
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex4", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	libreID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Libre",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+	})
+	if err != nil {
+		t.Fatalf("crear libre: %v", err)
+	}
+	_ = libreID
+	reservadaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Reservada",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadMedia,
+	})
+	if err != nil {
+		t.Fatalf("crear reservada: %v", err)
+	}
+	if err := db.TomarTarea(reservadaID, "Codex4"); err != nil {
+		t.Fatalf("tomar reservada: %v", err)
+	}
+	cerradaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Cerrada",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadBaja,
+	})
+	if err != nil {
+		t.Fatalf("crear cerrada: %v", err)
+	}
+	if err := db.TomarTarea(cerradaID, "Codex4"); err != nil {
+		t.Fatalf("tomar cerrada: %v", err)
+	}
+	if err := db.IniciarTarea(cerradaID, "Codex4"); err != nil {
+		t.Fatalf("iniciar cerrada: %v", err)
+	}
+	if err := db.CompletarTarea(cerradaID, "Codex4", ""); err != nil {
+		t.Fatalf("completar cerrada: %v", err)
+	}
+
+	tareas, err := listarTareasPorEstadosOR(db.FiltroTareas{}, []db.EstadoTarea{db.EstadoLibre, db.EstadoAsignada})
+	if err != nil {
+		t.Fatalf("listarTareasPorEstadosOR: %v", err)
+	}
+	if len(tareas) != 2 {
+		t.Fatalf("tareas=%d, want 2", len(tareas))
+	}
+	got := []string{tareas[0].Titulo, tareas[1].Titulo}
+	if !(containsString(got, "Libre") && containsString(got, "Reservada")) {
+		t.Fatalf("titulos inesperados: %v", got)
+	}
+}
+
 func ptrInt64(v int64) *int64    { return &v }
 func ptrString(v string) *string { return &v }
+
+func containsString(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
+}

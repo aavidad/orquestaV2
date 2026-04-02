@@ -7294,3 +7294,23 @@ Resultado:
   - `go test ./cmd -run 'TestWeb(ProyectosMuestraCockpitOperativoLigero|ProyectoDetalleMuestraCockpitOperativo|ProyectosRespetaIdiomaDelRequest)' -count=1`
   - `go build -o ./orquesta .`
   - `./orquesta server doctor` => `Health RPC: OK`
+
+## 2026-04-02 — `tarea listar` ya acepta varios estados sin contradecir a `status`
+
+- Hallazgo:
+  - `./orquesta tarea listar --estado en_progreso --estado asignada --estado libre` devolvía vacío aunque `status` sí mostraba tareas activas y reservadas
+  - el bug no estaba en el control plane sino en la superficie CLI/API:
+    - la CLI perdía o pisaba estados repetidos
+    - la API solo entendía un `estado`
+- Corrección:
+  - `tarea listar` ahora recoge `--estado` repetidos desde los argumentos crudos de la ejecución
+  - `/api/tareas` ya admite `estado` repetido o CSV y aplica semántica OR
+  - la unión se deduplica por `id` y mantiene orden estable
+- Validación:
+  - `go test ./cmd -run 'Test(TareaListarTSVParaScripts|TareaListarAceptaEstadosMultiples|ListarTareasPorEstadosOR)' -count=1`
+  - `go build -o ./orquesta .`
+  - validación viva:
+    - `./orquesta tarea listar --estado en_progreso --estado asignada --estado libre`
+    - ya devuelve `#410/#412/#413/#414/#415/#416/#421` y también `#409/#252`
+  - observación adicional:
+    - en este reinicio `server start` volvió a converger por `healthz` con `statefile` stale; no se ha mezclado ese fleco con este commit

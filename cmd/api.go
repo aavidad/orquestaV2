@@ -3607,8 +3607,9 @@ func apiHandlerTareasListar(w http.ResponseWriter, r *http.Request) {
 	if modulo := strings.TrimSpace(r.URL.Query().Get("modulo")); modulo != "" {
 		filtro.Modulo = &modulo
 	}
-	if estadoStr := strings.TrimSpace(r.URL.Query().Get("estado")); estadoStr != "" {
-		estado := db.EstadoTarea(estadoStr)
+	estados := parseEstadoTareaQuery(r.URL.Query()["estado"])
+	if len(estados) == 1 {
+		estado := estados[0]
 		filtro.Estado = &estado
 	}
 	if proyectoRef := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyectoRef != "" {
@@ -3627,12 +3628,67 @@ func apiHandlerTareasListar(w http.ResponseWriter, r *http.Request) {
 		}
 		filtro.PropuestaID = propuestaID
 	}
-	tareas, err := tareasService.List(filtro)
+	var tareas []*db.Tarea
+	var err error
+	if len(estados) > 1 {
+		tareas, err = listarTareasPorEstadosOR(filtro, estados)
+	} else {
+		tareas, err = tareasService.List(filtro)
+	}
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{"tareas": tareas})
+}
+
+func parseEstadoTareaQuery(raw []string) []db.EstadoTarea {
+	out := make([]db.EstadoTarea, 0, len(raw))
+	seen := map[string]struct{}{}
+	for _, item := range raw {
+		for _, part := range strings.Split(item, ",") {
+			estado := strings.TrimSpace(part)
+			if estado == "" {
+				continue
+			}
+			if _, ok := seen[estado]; ok {
+				continue
+			}
+			seen[estado] = struct{}{}
+			out = append(out, db.EstadoTarea(estado))
+		}
+	}
+	return out
+}
+
+func listarTareasPorEstadosOR(base db.FiltroTareas, estados []db.EstadoTarea) ([]*db.Tarea, error) {
+	itemsByID := map[int64]*db.Tarea{}
+	for _, estado := range estados {
+		filtro := base
+		estadoCopy := estado
+		filtro.Estado = &estadoCopy
+		items, err := tareasService.List(filtro)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range items {
+			if item == nil {
+				continue
+			}
+			itemsByID[item.ID] = item
+		}
+	}
+	out := make([]*db.Tarea, 0, len(itemsByID))
+	for _, item := range itemsByID {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
+	return out, nil
 }
 
 func apiHandlerTareasCrear(w http.ResponseWriter, r *http.Request) {

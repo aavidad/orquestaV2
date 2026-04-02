@@ -26,7 +26,12 @@ var tareaListarCmd = &cobra.Command{
 	Use:   "listar",
 	Short: "Lista tareas (por defecto: libres y en progreso)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		estadoStr, _ := cmd.Flags().GetString("estado")
+		estados := rawRepeatedFlagValues(currentOrOSArgs(), "--estado")
+		if len(estados) == 0 {
+			if estadoStr, _ := cmd.Flags().GetString("estado"); strings.TrimSpace(estadoStr) != "" {
+				estados = splitCSV(estadoStr)
+			}
+		}
 		agente, _ := cmd.Flags().GetString("agente")
 		proyectoRef, _ := cmd.Flags().GetString("proyecto")
 		modulo, _ := cmd.Flags().GetString("modulo")
@@ -40,8 +45,12 @@ var tareaListarCmd = &cobra.Command{
 		var tareas []*db.Tarea
 		projectSlugs := map[int64]string{}
 		params := url.Values{}
-		if estadoStr != "" {
-			params.Set("estado", estadoStr)
+		for _, estado := range estados {
+			estado = strings.TrimSpace(estado)
+			if estado == "" {
+				continue
+			}
+			params.Add("estado", estado)
 		}
 		if agente != "" {
 			params.Set("agente", agente)
@@ -455,7 +464,7 @@ var tareaCancelarCmd = &cobra.Command{
 func init() {
 	tareaListarCmd.Flags().Bool("json", false, "Salida JSON")
 	tareaListarCmd.Flags().Bool("tsv", false, "Salida TSV pensada para scripts")
-	tareaListarCmd.Flags().String("estado", "", "Filtrar por estado (libre, asignada, en_progreso, completada, bloqueada, backlog)")
+	tareaListarCmd.Flags().String("estado", "", "Filtrar por estado (repetible: libre, asignada, en_progreso, completada, bloqueada, backlog)")
 	tareaListarCmd.Flags().String("agente", "", "Filtrar por agente")
 	tareaListarCmd.Flags().String("proyecto", "", "Filtrar por proyecto")
 	tareaListarCmd.Flags().String("modulo", "", "Filtrar por módulo")
@@ -557,4 +566,30 @@ su predecesora tenga el contrato definido o esté completada.`,
 		}
 		return serverFirstCommandError("tarea contrato")
 	},
+}
+
+func rawRepeatedFlagValues(args []string, flagName string) []string {
+	out := []string{}
+	flagName = strings.TrimSpace(flagName)
+	if flagName == "" {
+		return out
+	}
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		if arg == "" {
+			continue
+		}
+		if arg == flagName {
+			if i+1 >= len(args) {
+				continue
+			}
+			out = append(out, splitCSV(args[i+1])...)
+			i++
+			continue
+		}
+		if strings.HasPrefix(arg, flagName+"=") {
+			out = append(out, splitCSV(strings.TrimPrefix(arg, flagName+"="))...)
+		}
+	}
+	return out
 }
