@@ -84,8 +84,10 @@ var serverStartCmd = &cobra.Command{
 		addr, _ := cmd.Flags().GetString("addr")
 		baseURL := rpclocal.BaseURL(addr)
 		if info, _, err := loadServerInfoWithHealthFallback(baseURL); err == nil {
-			fmt.Printf("Servidor ya activo en %s (pid=%d)\n", rpclocal.BaseURL(info.Addr), info.PID)
-			return nil
+			if stableErr := waitLocalServerStable(rpclocal.BaseURL(info.Addr), 3*time.Second); stableErr == nil {
+				fmt.Printf("Servidor ya activo en %s (pid=%d)\n", rpclocal.BaseURL(info.Addr), info.PID)
+				return nil
+			}
 		}
 		if err := ensureLocalServer(baseURL); err != nil {
 			return err

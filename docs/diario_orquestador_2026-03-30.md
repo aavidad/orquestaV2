@@ -7388,3 +7388,21 @@ Resultado:
     - `GET /api/openclaw/operator` ~ `18.0s`
     - `GET /openclaw` ~ `18.1s`
   - el cuello no está cerrado del todo, pero el snapshot del supervisor ya no se muerde la cola
+
+## 2026-04-02 — `server start` deja de declarar “ya activo” un daemon inestable
+
+- Hallazgo:
+  - tras `server stop`, el `start` siguiente podía contestar `Servidor ya activo`
+  - segundos después, `server doctor` demostraba que no había ni `statefile` ni `healthz`
+  - causa probable: la rama de “ya activo” confiaba en un solo `healthz` transitorio del proceso viejo mientras estaba cayendo
+- Corrección:
+  - `server start` ya exige `waitLocalServerStable(...)` también cuando detecta un servidor previo
+  - si esa estabilidad no existe, no devuelve éxito prematuro y continúa por la ruta normal de arranque
+- Validación:
+  - `go test ./cmd -run 'Test(ServerReadinessOKExigeStatusDecodificable|WaitLocalServerStableExigeStatefilePublicada|WaitLocalServerStableExigeDosReadinessConsecutivos|WaitLocalServerStableFallaSinStatefile)' -count=1`
+  - `go build -o ./orquesta .`
+  - validación viva:
+    - `./orquesta server stop`
+    - `./orquesta server start`
+    - ya no apareció el falso `Servidor ya activo`
+    - el residuo actual sigue siendo otro: timeout esperando `statefile` con daemon finalmente sano y recuperable por `healthz`

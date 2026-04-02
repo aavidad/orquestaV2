@@ -1260,3 +1260,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - si `status`, `gates`, `signals`, `merges`, `module_conflicts` y `mailboxPendiente` ya están cargados en `buildSupervisorReviewSnapshot()`, la pipeline debe derivarse de esos mismos datos
   - `buildSupervisorPipelineSnapshotFromInputs(...)` es la vía correcta en caliente
   - solo la ruta autónoma/aislada del pipeline puede usar el reconciliador completo desde cero
+- `server start` no puede dar por “ya activo” un daemon con un único `healthz` transitorio:
+  - si descubre un servidor previo, debe exigir estabilidad real (`waitLocalServerStable(...)`) antes de devolver éxito
+  - si esa estabilidad no existe, debe continuar por la ruta normal de arranque
+  - esto evita el falso positivo típico tras `server stop` cuando el proceso viejo aún alcanza a responder una vez antes de caer
