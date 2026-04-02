@@ -41,8 +41,14 @@ func buildOpenClawNormalizedEvents(limit int) ([]openClawNormalizedEvent, error)
 		return nil, err
 	}
 	outbox := notificaciones.DescribirOutbox(limit)
+	return buildOpenClawNormalizedEventsFromData(gates, signals, merges, outbox.Recientes, limit), nil
+}
 
-	items := make([]openClawNormalizedEvent, 0, len(gates)+len(signals)+len(merges)+len(outbox.Recientes))
+func buildOpenClawNormalizedEventsFromData(gates []*db.ReviewGate, signals []*supervisorReviewSignal, merges []*db.GitMerge, deliveries []*db.EntregaNotificacion, limit int) []openClawNormalizedEvent {
+	if limit <= 0 {
+		limit = 20
+	}
+	items := make([]openClawNormalizedEvent, 0, len(gates)+len(signals)+len(merges)+len(deliveries))
 	for _, gate := range gates {
 		if gate == nil || gate.Estado == db.ReviewGateAprobado {
 			continue
@@ -61,7 +67,7 @@ func buildOpenClawNormalizedEvents(limit int) ([]openClawNormalizedEvent, error)
 		}
 		items = append(items, normalizeOpenClawMerge(merge))
 	}
-	for _, entrega := range outbox.Recientes {
+	for _, entrega := range deliveries {
 		if entrega == nil {
 			continue
 		}
@@ -74,7 +80,7 @@ func buildOpenClawNormalizedEvents(limit int) ([]openClawNormalizedEvent, error)
 	if len(items) > limit {
 		items = items[:limit]
 	}
-	return items, nil
+	return items
 }
 
 func normalizeOpenClawReviewGate(gate *db.ReviewGate) openClawNormalizedEvent {

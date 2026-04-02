@@ -132,6 +132,58 @@ func TestBuildOpenClawWorktreeDriftFromRefs(t *testing.T) {
 	}
 }
 
+func TestOpenClawOperatorReuseReviewSnapshotHelpers(t *testing.T) {
+	review := map[string]any{
+		"normalized_events": []openClawNormalizedEvent{{Source: "merge", NormalizedEvent: "merge.pending"}},
+		"thread_sessions": map[string]any{
+			"observed_agent_sessions": []*supervisorObservedAgentSessionSummary{{Agente: "Codex3"}},
+		},
+		"pipeline_state": map[string]any{"phase": "supervisor-loop"},
+		"worktree_drift": []apiOpenClawWorktreeDrift{{Agente: "Codex4", CommitsBehind: 2}},
+		"queue_summary":  apiOpenClawQueueSummary{Total: 3, Safe: 2, Manual: 1},
+	}
+
+	events := openClawEventsFromReviewSnapshot(review)
+	if len(events) != 1 || events[0].NormalizedEvent != "merge.pending" {
+		t.Fatalf("normalized_events inesperado: %#v", events)
+	}
+
+	threads := supervisorThreadsFromReviewSnapshot(review)
+	observed, _ := threads["observed_agent_sessions"].([]*supervisorObservedAgentSessionSummary)
+	if len(observed) != 1 || observed[0].Agente != "Codex3" {
+		t.Fatalf("thread_sessions inesperado: %#v", threads)
+	}
+
+	pipeline := supervisorPipelineFromReviewSnapshot(review)
+	if got, _ := pipeline["phase"].(string); got != "supervisor-loop" {
+		t.Fatalf("pipeline_state inesperado: %#v", pipeline)
+	}
+
+	drift := openClawWorktreeDriftFromReviewSnapshot(review)
+	if len(drift) != 1 || drift[0].Agente != "Codex4" || drift[0].CommitsBehind != 2 {
+		t.Fatalf("worktree_drift inesperado: %#v", drift)
+	}
+
+	queue := buildOpenClawQueueSummaryFromReviewSnapshot(review)
+	if queue.Total != 3 || queue.Safe != 2 || queue.Manual != 1 {
+		t.Fatalf("queue_summary inesperado: %#v", queue)
+	}
+}
+
+func TestListarSupervisorModuleConflictsFromTasksReutilizaEstadoYaCargado(t *testing.T) {
+	conflicts := listarSupervisorModuleConflictsFromTasks([]tareaLite{
+		{ID: 410, Modulo: "runtime", Agente: "Codex3"},
+		{ID: 411, Modulo: "runtime", Agente: "Codex4"},
+		{ID: 412, Modulo: "web", Agente: "Codex4"},
+	})
+	if len(conflicts) != 1 {
+		t.Fatalf("conflicts inesperados: %#v", conflicts)
+	}
+	if conflicts[0].Modulo != "runtime" || len(conflicts[0].Tareas) != 2 {
+		t.Fatalf("conflict inesperado: %#v", conflicts[0])
+	}
+}
+
 func TestParseGitStatusPorcelainSummary(t *testing.T) {
 	dirty, summary, files, overflow := parseGitStatusPorcelainSummary(" M cmd/api.go\n?? cmd/new_file.go\n")
 	if !dirty {

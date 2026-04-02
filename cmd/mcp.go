@@ -24,6 +24,7 @@ import (
 	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/gitgobernanza"
+	"orquesta/notificaciones"
 	"orquesta/panelapp"
 	"orquesta/propuestasapp"
 	"orquesta/reviewapp"
@@ -3746,22 +3747,16 @@ func buildSupervisorReviewSnapshot(supervisor string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	conflicts, err := listarSupervisorModuleConflicts()
-	if err != nil {
-		return nil, err
-	}
 	status, err := statusService.FetchStatus()
 	if err != nil {
 		return nil, err
 	}
+	conflicts := listarSupervisorModuleConflictsFromTasks(status.TareasActivas)
 	mailboxPendiente, err := buildOpenClawPendingMailbox(status.Agentes)
 	if err != nil {
 		return nil, err
 	}
-	normalizedEvents, err := buildOpenClawNormalizedEvents(20)
-	if err != nil {
-		return nil, err
-	}
+	normalizedEvents := buildOpenClawNormalizedEventsFromData(openGates, signals, merges, notificaciones.DescribirOutbox(20).Recientes, 20)
 	threadSessions, err := buildSupervisorThreadsSnapshot(supervisor, "", 100)
 	if err != nil {
 		return nil, err
@@ -3853,8 +3848,12 @@ func listarSupervisorModuleConflicts() ([]supervisorModuleConflict, error) {
 	if err != nil {
 		return nil, err
 	}
+	return listarSupervisorModuleConflictsFromTasks(status.TareasActivas), nil
+}
+
+func listarSupervisorModuleConflictsFromTasks(tareas []tareaLite) []supervisorModuleConflict {
 	moduleGroups := map[string][]tareaLite{}
-	for _, tarea := range status.TareasActivas {
+	for _, tarea := range tareas {
 		modulo := strings.TrimSpace(tarea.Modulo)
 		agente := strings.TrimSpace(tarea.Agente)
 		if modulo == "" || agente == "" {
@@ -3875,7 +3874,7 @@ func listarSupervisorModuleConflicts() ([]supervisorModuleConflict, error) {
 		conflicts = append(conflicts, supervisorModuleConflict{Modulo: modulo, Tareas: tareas})
 	}
 	sort.Slice(conflicts, func(i, j int) bool { return conflicts[i].Modulo < conflicts[j].Modulo })
-	return conflicts, nil
+	return conflicts
 }
 
 func buildSupervisorRecommendedActions(gates []*db.ReviewGate, signals []*supervisorReviewSignal, merges []*db.GitMerge, conflicts []supervisorModuleConflict) []supervisorRecommendedAction {

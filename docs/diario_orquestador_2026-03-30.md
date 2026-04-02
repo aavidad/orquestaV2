@@ -7330,3 +7330,25 @@ Resultado:
   - validación viva:
     - `GET /api/status` => `["Codex3","Codex4"]`
     - `GET /api/proyectos/orquestador/cockpit` => `["Codex3","Codex4"]`
+
+## 2026-04-02 — `/api/openclaw/operator` deja de recalcular el snapshot del supervisor dos veces
+
+- Hallazgo:
+  - `/api/openclaw/operator` seguía siendo anormalmente lento incluso después de estabilizar `status`
+  - medición viva antes del recorte:
+    - `GET /api/openclaw/operator` ~ `47.8s`
+    - `GET /api/proyectos/orquestador/cockpit` ~ `6.3s`
+  - el handler reconstruía `normalized_events`, `thread_sessions`, `pipeline_state`, `worktree_drift` y `queue_summary` aunque `buildSupervisorReviewSnapshot()` ya los había calculado
+  - dentro del propio snapshot, además, se volvía a abrir `FetchStatus()` para `module_conflicts`
+- Corrección:
+  - el handler `/api/openclaw/operator` ya reutiliza los bloques ya presentes en el snapshot del supervisor
+  - `queue_summary` también se toma del snapshot cuando viene ya calculado
+  - se añadió `listarSupervisorModuleConflictsFromTasks(status.TareasActivas)` para derivar conflictos de módulo desde el estado ya cargado
+  - los `normalized_events` del snapshot ya se construyen a partir de `gates/signals/merges/outbox` ya cargados, sin otra ronda de queries redundantes
+- Validación:
+  - `go test ./cmd -run 'Test(OpenClawOperatorReuseReviewSnapshotHelpers|ListarSupervisorModuleConflictsFromTasksReutilizaEstadoYaCargado|APIObservabilidadReadOnly|APIOpenClawOperatorExponeStatusLiteEnRaiz|APIOpenClawOperatorSeparaCargaActivaYReservada)' -count=1`
+  - `go build -o ./orquesta .`
+  - validación viva tras reiniciar el daemon:
+    - `GET /api/openclaw/operator` ~ `29.1s`
+    - `GET /api/proyectos/orquestador/cockpit` ~ `14.0s` en frío
+  - el cuello no ha desaparecido, pero la mejora es material y ya no está en la duplicación obvia del handler

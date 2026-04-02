@@ -87,10 +87,7 @@ func reconcileSupervisorPipelineState(supervisor, proyectoSlug string) (*db.Supe
 	if err != nil {
 		return nil, err
 	}
-	conflicts, err := listarSupervisorModuleConflicts()
-	if err != nil {
-		return nil, err
-	}
+	conflicts := listarSupervisorModuleConflictsFromTasks(status.TareasActivas)
 	mailboxPendiente, err := buildOpenClawPendingMailbox(status.Agentes)
 	if err != nil {
 		return nil, err

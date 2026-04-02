@@ -1244,3 +1244,11 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 - cuando una superficie de lectura admite varios estados del mismo recurso, la semántica debe ser OR y no AND accidental:
   - `tarea listar --estado ... --estado ...` y `GET /api/tareas?estado=...&estado=...` deben devolver la unión deduplicada
   - el `status` canónico no puede contradecir a la CLI por una limitación del parser de flags
+- `/api/openclaw/operator` no puede recalcular en cascada snapshots que el supervisor ya construyó en la misma petición:
+  - si `buildSupervisorReviewSnapshot()` ya aporta `normalized_events`, `thread_sessions`, `pipeline_state`, `worktree_drift` o `queue_summary`, el handler debe reutilizarlos
+  - no se admite volver a consultar `gates`, `signals`, `merges`, `status` o `worktree_drift` solo para reconstruir la misma proyección
+  - las rutas pesadas del supervisor deben compartir datos ya cargados antes de abrir otra ronda de consultas
+- cuando el supervisor ya dispone de `status.TareasActivas`, los conflictos de módulo deben derivarse de ahí:
+  - `listarSupervisorModuleConflicts()` puede seguir existiendo como fachada
+  - pero la vía interna caliente debe usar `listarSupervisorModuleConflictsFromTasks(status.TareasActivas)`
+  - no se hace un `FetchStatus()` adicional dentro del mismo snapshot del supervisor

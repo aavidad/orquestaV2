@@ -1290,36 +1290,20 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusInternalServerError, err)
 			return
 		}
-		eventos, err := buildOpenClawNormalizedEvents(20)
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
-		}
-		threads, err := buildSupervisorThreadsSnapshot("", strings.TrimSpace(r.URL.Query().Get("session_id")), 100)
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
-		}
-		pipeline, err := buildSupervisorPipelineSnapshot("", strings.TrimSpace(r.URL.Query().Get("proyecto")), 20)
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
-		}
-		worktreeDrift, err := buildOpenClawWorktreeDrift(status)
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err)
-			return
-		}
 		statusResumen, err := buildOpenClawOperatorStatus(status)
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
 		}
+		eventos := openClawEventsFromReviewSnapshot(revision)
+		threads := supervisorThreadsFromReviewSnapshot(revision)
+		pipeline := supervisorPipelineFromReviewSnapshot(revision)
+		worktreeDrift := openClawWorktreeDriftFromReviewSnapshot(revision)
 		if observed, ok := threads["observed_agent_sessions"].([]*supervisorObservedAgentSessionSummary); ok {
 			threads["observed_agent_sessions"] = alignSupervisorObservedSessionsWithStatus(observed, status.AgentesActivos)
 		}
 		reviewCompact := buildOpenClawReviewCompact(revision)
-		queueSummary := buildOpenClawQueueSummary(revision)
+		queueSummary := buildOpenClawQueueSummaryFromReviewSnapshot(revision)
 		sessionCandidates := alignOpenClawSessionCandidatesWithStatus(buildOpenClawSessionCandidates(threads), status.AgentesActivos)
 		apiWriteJSON(w, http.StatusOK, map[string]any{
 			"status":               statusResumen,
@@ -1581,6 +1565,56 @@ func buildOpenClawQueueSummary(review map[string]any) apiOpenClawQueueSummary {
 		safeActions = items
 	}
 	return buildOpenClawQueueSummaryFromActions(allActions, safeActions)
+}
+
+func buildOpenClawQueueSummaryFromReviewSnapshot(review map[string]any) apiOpenClawQueueSummary {
+	if review == nil {
+		return apiOpenClawQueueSummary{}
+	}
+	if summary, ok := review["queue_summary"].(apiOpenClawQueueSummary); ok {
+		return summary
+	}
+	return buildOpenClawQueueSummary(review)
+}
+
+func openClawEventsFromReviewSnapshot(review map[string]any) []openClawNormalizedEvent {
+	if review == nil {
+		return nil
+	}
+	if events, ok := review["normalized_events"].([]openClawNormalizedEvent); ok {
+		return events
+	}
+	return nil
+}
+
+func supervisorThreadsFromReviewSnapshot(review map[string]any) map[string]any {
+	if review == nil {
+		return map[string]any{}
+	}
+	if threads, ok := review["thread_sessions"].(map[string]any); ok && threads != nil {
+		return threads
+	}
+	return map[string]any{}
+}
+
+func supervisorPipelineFromReviewSnapshot(review map[string]any) map[string]any {
+	if review == nil {
+		return map[string]any{}
+	}
+	if pipeline, ok := review["pipeline_state"].(map[string]any); ok && pipeline != nil {
+		return pipeline
+	}
+	return map[string]any{}
+}
+
+func openClawWorktreeDriftFromReviewSnapshot(review map[string]any) []apiOpenClawWorktreeDrift {
+	if review == nil {
+		return nil
+	}
+	if drift, ok := review["worktree_drift"].([]apiOpenClawWorktreeDrift); ok {
+		return drift
+	}
+	return nil
 }
 
 func buildOpenClawQueueSummaryFromActions(allActions, safeActions []supervisorRecommendedAction) apiOpenClawQueueSummary {
