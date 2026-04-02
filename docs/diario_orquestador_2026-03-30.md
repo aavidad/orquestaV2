@@ -7203,9 +7203,11 @@ Resultado:
   - `worktree_drift` ahora expone:
     - `worktree_id`
     - `detail_path`
+    - `commits_ahead`
+    - `commits_behind`
     - `dirty_files`
     - `dirty_overflow`
-  - `/openclaw` renderiza el enlace al detalle y una muestra compacta de archivos sucios
+  - `/openclaw` renderiza el enlace al detalle, la divergencia `ahead/behind` y una muestra compacta de archivos sucios
   - la proyección sigue siendo segura: mejora arbitraje, no automatiza refresh de worktree sucia
 - Validación:
   - `go test ./cmd -run 'Test(ParseGitStatusPorcelainSummaryIncluyeMuestraYOverflow|ParseGitStatusPorcelainSummaryLimpio|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`

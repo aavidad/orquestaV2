@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"orquesta/coordinacion"
@@ -17,8 +18,12 @@ type apiOpenClawWorktreeDrift struct {
 	Branch        string   `json:"branch,omitempty"`
 	Path          string   `json:"path,omitempty"`
 	DetailPath    string   `json:"detail_path,omitempty"`
+	CurrentRef    string   `json:"-"`
+	ExpectedRef   string   `json:"-"`
 	CurrentHead   string   `json:"current_head,omitempty"`
 	ExpectedHead  string   `json:"expected_head,omitempty"`
+	CommitsAhead  int      `json:"commits_ahead,omitempty"`
+	CommitsBehind int      `json:"commits_behind,omitempty"`
 	Dirty         bool     `json:"dirty,omitempty"`
 	DirtySummary  string   `json:"dirty_summary,omitempty"`
 	DirtyFiles    []string `json:"dirty_files,omitempty"`
@@ -120,6 +125,8 @@ func buildOpenClawWorktreeDriftFromRefs(worktrees []*coordinacion.Worktree, repo
 			Agente:       agente,
 			Branch:       strings.TrimSpace(worktree.Branch),
 			Path:         path,
+			CurrentRef:   head,
+			ExpectedRef:  repoHead,
 			CurrentHead:  shortGitHash(head),
 			ExpectedHead: shortGitHash(repoHead),
 		})
@@ -208,6 +215,28 @@ func shortGitHash(hash string) string {
 	return hash
 }
 
+func inspectGitWorktreeDivergence(path, repoHead string) (int, int) {
+	path = filepath.Clean(strings.TrimSpace(path))
+	repoHead = strings.TrimSpace(repoHead)
+	if path == "" || repoHead == "" {
+		return 0, 0
+	}
+	out, err := exec.Command("git", "-C", path, "rev-list", "--left-right", "--count", "HEAD..."+repoHead).Output()
+	if err != nil {
+		return 0, 0
+	}
+	fields := strings.Fields(strings.TrimSpace(string(out)))
+	if len(fields) != 2 {
+		return 0, 0
+	}
+	ahead, errA := strconv.Atoi(fields[0])
+	behind, errB := strconv.Atoi(fields[1])
+	if errA != nil || errB != nil {
+		return 0, 0
+	}
+	return ahead, behind
+}
+
 func parseGitStatusPorcelainSummary(raw string) (bool, string, []string, int) {
 	tracked := 0
 	untracked := 0
@@ -270,6 +299,7 @@ func enrichOpenClawWorktreeDriftWithDirty(items []apiOpenClawWorktreeDrift) []ap
 	for _, item := range items {
 		copyItem := item
 		copyItem.Dirty, copyItem.DirtySummary, copyItem.DirtyFiles, copyItem.DirtyOverflow = inspectGitWorktreeDirty(copyItem.Path)
+		copyItem.CommitsAhead, copyItem.CommitsBehind = inspectGitWorktreeDivergence(copyItem.Path, item.ExpectedRef)
 		if worktree, err := db.CoordinationWorktreeRepository().GetActiveByPath(copyItem.Path); err == nil && worktree != nil {
 			copyItem.WorktreeID = worktree.ID
 			copyItem.DetailPath = fmt.Sprintf("/git/worktrees/%d", worktree.ID)

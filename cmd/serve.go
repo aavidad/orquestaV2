@@ -2239,7 +2239,7 @@ const webTplOpenClaw = `{{define "content"}}
           <td><code>{{orDash .ExpectedHead}}</code></td>
           <td>{{if .DirtySummary}}{{.DirtySummary}}{{else if .Dirty}}sucia{{else}}limpia{{end}}</td>
         </tr>
-        <tr><td colspan="5" style="font-size:.74rem;color:#64748b">{{orDash .Path}}{{if .DetailPath}} · <a href="{{.DetailPath}}">detalle</a>{{end}}</td></tr>
+        <tr><td colspan="5" style="font-size:.74rem;color:#64748b">{{orDash .Path}}{{if .DetailPath}} · <a href="{{.DetailPath}}">detalle</a>{{end}}{{if or .CommitsAhead .CommitsBehind}} · ahead {{.CommitsAhead}} / behind {{.CommitsBehind}}{{end}}</td></tr>
         {{if .DirtyFiles}}
         <tr><td colspan="5" style="font-size:.74rem;color:#475569;padding-bottom:.4rem">muestra: <code>{{join .DirtyFiles ", "}}</code>{{if gt .DirtyOverflow 0}} · +{{.DirtyOverflow}} más{{end}}</td></tr>
         {{else}}
