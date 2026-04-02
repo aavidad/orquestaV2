@@ -259,18 +259,13 @@ func IngestarRuntimeTranscriptHandle(handleID int64) (int, error) {
 }
 
 func IngestarRuntimeTranscriptActivos() (int, error) {
-	handles, err := ListarRuntimeHandles(nil)
+	handles, err := ListarRuntimeHandlesParaTranscript()
 	if err != nil {
 		return 0, err
 	}
 	total := 0
 	for _, handle := range handles {
 		if handle == nil {
-			continue
-		}
-		switch strings.TrimSpace(handle.Estado) {
-		case "activo", "pausado", "fallido":
-		default:
 			continue
 		}
 		n, err := ingestarRuntimeTranscriptHandle(handle)

@@ -1179,6 +1179,39 @@ func ListarRuntimeHandles(agente *string) ([]*RuntimeHandle, error) {
 	return out, nil
 }
 
+func ListarRuntimeHandlesParaTranscript() ([]*RuntimeHandle, error) {
+	rows, err := DB.Query(runtimeHandleSelectBase() + `
+		WHERE estado IN ('activo','pausado','fallido')
+		  AND metadata_json <> ''
+		  AND metadata_json LIKE '%log_path%'
+		ORDER BY id DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*RuntimeHandle
+	for rows.Next() {
+		h, err := scanRuntimeHandle(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	for i, h := range out {
+		out[i], err = compactarMetadataRuntimeHandleEnMemoria(h)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 func getRuntimeHandleByQuery(query string, args ...any) (*RuntimeHandle, error) {
 	row := DB.QueryRow(query, args...)
 	return scanRuntimeHandle(row)

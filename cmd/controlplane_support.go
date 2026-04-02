@@ -837,6 +837,168 @@ func float64FromAny(raw any) (float64, bool) {
 	return 0, false
 }
 
+type runtimeMailboxBatchSnapshot struct {
+	activeHandles        map[string]*db.RuntimeHandle
+	activeHandleLoaded   map[string]struct{}
+	projectsByID         map[int64]*db.Proyecto
+	projectsLoaded       map[int64]struct{}
+	quotaState           map[string]bool
+	quotaStateLoaded     map[string]struct{}
+	ordersByAgentProject map[string][]*db.RuntimeOrder
+	ordersLoaded         map[string]struct{}
+	supervisedByHandleID map[int64]runtimeMailboxSupervisedHandleSnapshot
+	externalByHandleID   map[int64]runtimeMailboxExternalSessionSnapshot
+}
+
+type runtimeMailboxSupervisedHandleSnapshot struct {
+	handle            *db.RuntimeHandle
+	runtime           *db.RuntimeInstance
+	externalSessionID string
+	err               error
+}
+
+type runtimeMailboxExternalSessionSnapshot struct {
+	handle            *db.RuntimeHandle
+	externalSessionID string
+	err               error
+}
+
+func newRuntimeMailboxBatchSnapshot() *runtimeMailboxBatchSnapshot {
+	return &runtimeMailboxBatchSnapshot{
+		activeHandles:        map[string]*db.RuntimeHandle{},
+		activeHandleLoaded:   map[string]struct{}{},
+		projectsByID:         map[int64]*db.Proyecto{},
+		projectsLoaded:       map[int64]struct{}{},
+		quotaState:           map[string]bool{},
+		quotaStateLoaded:     map[string]struct{}{},
+		ordersByAgentProject: map[string][]*db.RuntimeOrder{},
+		ordersLoaded:         map[string]struct{}{},
+		supervisedByHandleID: map[int64]runtimeMailboxSupervisedHandleSnapshot{},
+		externalByHandleID:   map[int64]runtimeMailboxExternalSessionSnapshot{},
+	}
+}
+
+func runtimeMailboxBatchKey(agente string, proyectoID *int64) string {
+	agente = strings.TrimSpace(agente)
+	if proyectoID == nil || *proyectoID <= 0 {
+		return agente + "|-"
+	}
+	return agente + "|" + strconv.FormatInt(*proyectoID, 10)
+}
+
+func runtimeMailboxQuotaStateKey(agente, estado string) string {
+	return strings.TrimSpace(agente) + "|" + strings.TrimSpace(estado)
+}
+
+func (s *runtimeMailboxBatchSnapshot) activeHandle(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
+	if s == nil {
+		return runtimesService.GetActiveRuntimeHandleAgentProject(strings.TrimSpace(agente), proyectoID)
+	}
+	key := runtimeMailboxBatchKey(agente, proyectoID)
+	if _, ok := s.activeHandleLoaded[key]; ok {
+		return s.activeHandles[key], nil
+	}
+	handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(strings.TrimSpace(agente), proyectoID)
+	if err != nil {
+		return nil, err
+	}
+	s.activeHandleLoaded[key] = struct{}{}
+	s.activeHandles[key] = handle
+	return handle, nil
+}
+
+func (s *runtimeMailboxBatchSnapshot) ordersForAgentProject(agente string, proyectoID *int64) ([]*db.RuntimeOrder, error) {
+	if s == nil {
+		return runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{Agente: stringPtr(strings.TrimSpace(agente)), ProyectoID: proyectoID})
+	}
+	key := runtimeMailboxBatchKey(agente, proyectoID)
+	if _, ok := s.ordersLoaded[key]; ok {
+		return s.ordersByAgentProject[key], nil
+	}
+	orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{Agente: stringPtr(strings.TrimSpace(agente)), ProyectoID: proyectoID})
+	if err != nil {
+		return nil, err
+	}
+	s.ordersLoaded[key] = struct{}{}
+	s.ordersByAgentProject[key] = orders
+	return orders, nil
+}
+
+func (s *runtimeMailboxBatchSnapshot) project(id int64) (*db.Proyecto, error) {
+	if id <= 0 {
+		return nil, nil
+	}
+	if s == nil {
+		return runtimesService.GetProject(strconv.FormatInt(id, 10))
+	}
+	if _, ok := s.projectsLoaded[id]; ok {
+		return s.projectsByID[id], nil
+	}
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(id, 10))
+	if err != nil {
+		return nil, err
+	}
+	s.projectsLoaded[id] = struct{}{}
+	s.projectsByID[id] = proyecto
+	return proyecto, nil
+}
+
+func (s *runtimeMailboxBatchSnapshot) quotaMatches(agente, estado string) (bool, error) {
+	if s == nil {
+		return agenteEstadoCuotaPersistido(agente, estado)
+	}
+	key := runtimeMailboxQuotaStateKey(agente, estado)
+	if _, ok := s.quotaStateLoaded[key]; ok {
+		return s.quotaState[key], nil
+	}
+	match, err := agenteEstadoCuotaPersistido(agente, estado)
+	if err != nil {
+		return false, err
+	}
+	s.quotaStateLoaded[key] = struct{}{}
+	s.quotaState[key] = match
+	return match, nil
+}
+
+func (s *runtimeMailboxBatchSnapshot) supervisedHandle(handle *db.RuntimeHandle) (*db.RuntimeHandle, *db.RuntimeInstance, string, error) {
+	if handle == nil {
+		return nil, nil, "", nil
+	}
+	if s == nil {
+		return db.SincronizarRuntimeHandleSupervisado(handle, nil, "runtime_mailbox_supervisor_local")
+	}
+	if cached, ok := s.supervisedByHandleID[handle.ID]; ok {
+		return cached.handle, cached.runtime, cached.externalSessionID, cached.err
+	}
+	resultHandle, runtime, externalSessionID, err := db.SincronizarRuntimeHandleSupervisado(handle, nil, "runtime_mailbox_supervisor_local")
+	s.supervisedByHandleID[handle.ID] = runtimeMailboxSupervisedHandleSnapshot{
+		handle:            resultHandle,
+		runtime:           runtime,
+		externalSessionID: externalSessionID,
+		err:               err,
+	}
+	return resultHandle, runtime, externalSessionID, err
+}
+
+func (s *runtimeMailboxBatchSnapshot) externalSessionHandle(handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (*db.RuntimeHandle, string, error) {
+	if handle == nil {
+		return nil, "", nil
+	}
+	if s == nil {
+		return db.SincronizarRuntimeHandleExternalSessionID(handle, runtime)
+	}
+	if cached, ok := s.externalByHandleID[handle.ID]; ok {
+		return cached.handle, cached.externalSessionID, cached.err
+	}
+	resultHandle, externalSessionID, err := db.SincronizarRuntimeHandleExternalSessionID(handle, runtime)
+	s.externalByHandleID[handle.ID] = runtimeMailboxExternalSessionSnapshot{
+		handle:            resultHandle,
+		externalSessionID: externalSessionID,
+		err:               err,
+	}
+	return resultHandle, externalSessionID, err
+}
+
 func procesarRuntimeMailboxBatch() (int, error) {
 	estado := "pendiente"
 	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &estado})
@@ -844,33 +1006,34 @@ func procesarRuntimeMailboxBatch() (int, error) {
 		return 0, err
 	}
 	consumed := map[int64]struct{}{}
-	reconciled, err := reconciliarRuntimeMailboxAgenteSinVidaBatchConMailbox(mailbox, consumed)
+	snapshot := newRuntimeMailboxBatchSnapshot()
+	reconciled, err := reconciliarRuntimeMailboxAgenteSinVidaBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
 		return reconciled, err
 	}
-	refreshCooldownReconciled, err := reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(mailbox, consumed)
+	refreshCooldownReconciled, err := reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
 		return reconciled + refreshCooldownReconciled, err
 	}
 	reconciled += refreshCooldownReconciled
-	watchdogReconciled, err := reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox, consumed)
+	watchdogReconciled, err := reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
 		return reconciled + watchdogReconciled, err
 	}
 	reconciled += watchdogReconciled
-	interactive, err := procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox, consumed)
+	interactive, err := procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
 		return reconciled + interactive, err
 	}
-	supervisorLocal, err := procesarRuntimeMailboxSupervisorLocalBatchConMailbox(mailbox, consumed)
+	supervisorLocal, err := procesarRuntimeMailboxSupervisorLocalBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
 		return reconciled + interactive + supervisorLocal, err
 	}
-	sessionResume, err := procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox, consumed)
+	sessionResume, err := procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
 		return reconciled + interactive + supervisorLocal + sessionResume, err
 	}
-	restarts, err := procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox, consumed)
+	restarts, err := procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
 		return reconciled + interactive + supervisorLocal + sessionResume + restarts, err
 	}
@@ -883,13 +1046,13 @@ func reconciliarRuntimeMailboxRefreshEnfriamientoBatch() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(mailbox, map[int64]struct{}{})
+	return reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(mailbox, map[int64]struct{}{}, newRuntimeMailboxBatchSnapshot())
 }
 
-func reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}) (int, error) {
+func reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
 	total := 0
 	for _, msg := range mailbox {
-		if msg == nil || !runtimeMailboxRefreshPuedeConsumirsePorEnfriamiento(msg) {
+		if msg == nil || !runtimeMailboxRefreshPuedeConsumirsePorEnfriamiento(msg, snapshot) {
 			continue
 		}
 		if _, skip := consumed[msg.ID]; skip {
@@ -916,10 +1079,10 @@ func reconciliarRuntimeMailboxAgenteSinVidaBatch() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return reconciliarRuntimeMailboxAgenteSinVidaBatchConMailbox(mailbox, map[int64]struct{}{})
+	return reconciliarRuntimeMailboxAgenteSinVidaBatchConMailbox(mailbox, map[int64]struct{}{}, newRuntimeMailboxBatchSnapshot())
 }
 
-func reconciliarRuntimeMailboxAgenteSinVidaBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}) (int, error) {
+func reconciliarRuntimeMailboxAgenteSinVidaBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
 	total := 0
 	for _, msg := range mailbox {
 		if msg == nil {
@@ -928,7 +1091,7 @@ func reconciliarRuntimeMailboxAgenteSinVidaBatchConMailbox(mailbox []*db.Runtime
 		if _, skip := consumed[msg.ID]; skip {
 			continue
 		}
-		debeConsumirse, detalle, err := runtimeMailboxDebeConsumirsePorAgenteSinVida(msg)
+		debeConsumirse, detalle, err := runtimeMailboxDebeConsumirsePorAgenteSinVida(msg, snapshot)
 		if err != nil {
 			return total, err
 		}
@@ -955,10 +1118,10 @@ func reconciliarRuntimeMailboxWatchdogSinHandleBatch() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox, map[int64]struct{}{})
+	return reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox, map[int64]struct{}{}, newRuntimeMailboxBatchSnapshot())
 }
 
-func reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}) (int, error) {
+func reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
 	total := 0
 	for _, msg := range mailbox {
 		if msg == nil || strings.TrimSpace(msg.Kind) != "watchdog" {
@@ -967,11 +1130,11 @@ func reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox []*db.Run
 		if _, skip := consumed[msg.ID]; skip {
 			continue
 		}
-		handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+		handle, err := snapshot.activeHandle(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
 		if err != nil {
 			return total, err
 		}
-		if watchdogPuedeConsumirsePorEnfriamiento(msg, handle) {
+		if watchdogPuedeConsumirsePorEnfriamiento(msg, handle, snapshot) {
 			if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
 				return total, err
 			}
@@ -1003,21 +1166,21 @@ func reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox []*db.Run
 	return total, nil
 }
 
-func watchdogPuedeConsumirsePorEnfriamiento(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle) bool {
+func watchdogPuedeConsumirsePorEnfriamiento(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, snapshot *runtimeMailboxBatchSnapshot) bool {
 	if msg == nil || handle == nil {
 		return false
 	}
 	if !strings.EqualFold(strings.TrimSpace(handle.Estado), "pausado") {
 		return false
 	}
-	ok, err := agenteEstadoCuotaPersistido(strings.TrimSpace(msg.ToAgente), "enfriamiento")
+	ok, err := snapshot.quotaMatches(strings.TrimSpace(msg.ToAgente), "enfriamiento")
 	if err != nil {
 		return false
 	}
 	return ok
 }
 
-func runtimeMailboxRefreshPuedeConsumirsePorEnfriamiento(msg *db.RuntimeMailboxMessage) bool {
+func runtimeMailboxRefreshPuedeConsumirsePorEnfriamiento(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) bool {
 	if msg == nil {
 		return false
 	}
@@ -1026,7 +1189,7 @@ func runtimeMailboxRefreshPuedeConsumirsePorEnfriamiento(msg *db.RuntimeMailboxM
 	default:
 		return false
 	}
-	ok, err := agenteEstadoCuotaPersistido(strings.TrimSpace(msg.ToAgente), "enfriamiento")
+	ok, err := snapshot.quotaMatches(strings.TrimSpace(msg.ToAgente), "enfriamiento")
 	if err != nil {
 		return false
 	}
@@ -1057,7 +1220,7 @@ func runtimeMailboxProyectoDetalle(proyectoID *int64) string {
 	return strconv.FormatInt(*proyectoID, 10)
 }
 
-func runtimeMailboxDebeConsumirsePorAgenteSinVida(msg *db.RuntimeMailboxMessage) (bool, string, error) {
+func runtimeMailboxDebeConsumirsePorAgenteSinVida(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) (bool, string, error) {
 	if msg == nil {
 		return false, "", nil
 	}
@@ -1068,7 +1231,7 @@ func runtimeMailboxDebeConsumirsePorAgenteSinVida(msg *db.RuntimeMailboxMessage)
 	if strings.EqualFold(strings.TrimSpace(msg.Kind), "watchdog") {
 		return false, "", nil
 	}
-	handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(agente, msg.ProyectoID)
+	handle, err := snapshot.activeHandle(agente, msg.ProyectoID)
 	if err != nil {
 		return false, "", err
 	}
@@ -1830,10 +1993,10 @@ func procesarRuntimeMailboxInteractivoBatch() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox, map[int64]struct{}{})
+	return procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox, map[int64]struct{}{}, newRuntimeMailboxBatchSnapshot())
 }
 
-func procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}) (int, error) {
+func procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
 	total := 0
 	for _, msg := range mailbox {
 		if msg == nil {
@@ -1849,7 +2012,7 @@ func procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox []*db.RuntimeMailb
 		if err := coalescerRuntimeMailboxPendiente(msg); err != nil {
 			return total, err
 		}
-		handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+		handle, err := snapshot.activeHandle(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
 		if err != nil {
 			return total, err
 		}
@@ -1859,12 +2022,12 @@ func procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox []*db.RuntimeMailb
 		if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryInteractive {
 			continue
 		}
-		if abierta, err := existeRuntimeOrderAbiertaPorHandle(handle.ID, "send_instruction"); err != nil {
+		if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
 			return total, err
 		} else if abierta {
 			continue
 		}
-		if dedupe, err := existeIntentoSendInstructionMailboxParaHandle(msg, handle, ""); err != nil {
+		if dedupe, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, ""); err != nil {
 			return total, err
 		} else if dedupe {
 			continue
@@ -1897,10 +2060,10 @@ func procesarRuntimeMailboxSupervisorLocalBatch() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return procesarRuntimeMailboxSupervisorLocalBatchConMailbox(mailbox, map[int64]struct{}{})
+	return procesarRuntimeMailboxSupervisorLocalBatchConMailbox(mailbox, map[int64]struct{}{}, newRuntimeMailboxBatchSnapshot())
 }
 
-func procesarRuntimeMailboxSupervisorLocalBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}) (int, error) {
+func procesarRuntimeMailboxSupervisorLocalBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
 	total := 0
 	for _, msg := range mailbox {
 		if msg == nil {
@@ -1916,15 +2079,14 @@ func procesarRuntimeMailboxSupervisorLocalBatchConMailbox(mailbox []*db.RuntimeM
 		if err := coalescerRuntimeMailboxPendiente(msg); err != nil {
 			return total, err
 		}
-		handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+		handle, err := snapshot.activeHandle(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
 		if err != nil {
 			return total, err
 		}
 		if handle == nil {
 			continue
 		}
-		var runtime *db.RuntimeInstance
-		handle, runtime, externalSessionID, err := db.SincronizarRuntimeHandleSupervisado(handle, runtime, "runtime_mailbox_supervisor_local")
+		handle, runtime, externalSessionID, err := snapshot.supervisedHandle(handle)
 		if err != nil {
 			return total, err
 		}
@@ -1939,12 +2101,12 @@ func procesarRuntimeMailboxSupervisorLocalBatchConMailbox(mailbox []*db.RuntimeM
 		} else if covered {
 			continue
 		}
-		if abierta, err := existeRuntimeOrderAbiertaPorHandle(handle.ID, "send_instruction"); err != nil {
+		if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
 			return total, err
 		} else if abierta {
 			continue
 		}
-		if dedupe, err := existeIntentoSendInstructionMailboxParaHandle(msg, handle, externalSessionID); err != nil {
+		if dedupe, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, externalSessionID); err != nil {
 			return total, err
 		} else if dedupe {
 			continue
@@ -1977,10 +2139,10 @@ func procesarRuntimeMailboxCoordinatedRestartBatch() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox, map[int64]struct{}{})
+	return procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox, map[int64]struct{}{}, newRuntimeMailboxBatchSnapshot())
 }
 
-func procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}) (int, error) {
+func procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
 	type recycleKey struct {
 		agente     string
 		proyectoID int64
@@ -1999,7 +2161,7 @@ func procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox []*db.Runti
 		if !runtimeMailboxKindRequiereCoordinatedRestart(strings.TrimSpace(msg.Kind)) {
 			continue
 		}
-		handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+		handle, err := snapshot.activeHandle(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
 		if err != nil {
 			return 0, err
 		}
@@ -2035,11 +2197,11 @@ func procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox []*db.Runti
 		if msg == nil {
 			continue
 		}
-		proyecto, err := runtimesService.GetProject(strconv.FormatInt(key.proyectoID, 10))
+		proyecto, err := snapshot.project(key.proyectoID)
 		if err != nil || proyecto == nil {
 			return total, err
 		}
-		handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(key.agente, &key.proyectoID)
+		handle, err := snapshot.activeHandle(key.agente, &key.proyectoID)
 		if err != nil {
 			return total, err
 		}
@@ -2074,10 +2236,10 @@ func procesarRuntimeMailboxSessionResumeBatch() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox, map[int64]struct{}{})
+	return procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox, map[int64]struct{}{}, newRuntimeMailboxBatchSnapshot())
 }
 
-func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}) (int, error) {
+func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
 	total := 0
 	for _, msg := range mailbox {
 		if msg == nil {
@@ -2093,7 +2255,7 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 		if err := coalescerRuntimeMailboxPendiente(msg); err != nil {
 			return total, err
 		}
-		handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+		handle, err := snapshot.activeHandle(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
 		if err != nil {
 			return total, err
 		}
@@ -2107,7 +2269,7 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 				return total, err
 			}
 		}
-		handle, externalSessionID, err := db.SincronizarRuntimeHandleExternalSessionID(handle, runtime)
+		handle, externalSessionID, err := snapshot.externalSessionHandle(handle, runtime)
 		if err != nil {
 			return total, err
 		}
@@ -2122,12 +2284,12 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 		if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliverySessionResume {
 			continue
 		}
-		if abierta, err := existeRuntimeOrderAbiertaPorHandle(handle.ID, "send_instruction"); err != nil {
+		if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
 			return total, err
 		} else if abierta {
 			continue
 		}
-		if dedupe, err := existeIntentoSendInstructionMailboxParaHandle(msg, handle, externalSessionID); err != nil {
+		if dedupe, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, externalSessionID); err != nil {
 			return total, err
 		} else if dedupe {
 			continue
@@ -2222,6 +2384,63 @@ func existeIntentoSendInstructionMailboxParaHandle(msg *db.RuntimeMailboxMessage
 		return false, nil
 	}
 	orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: msg.ProyectoID})
+	if err != nil {
+		return false, err
+	}
+	currentSessionID := strings.TrimSpace(externalSessionID)
+	currentSignature := runtimeMailboxDeliveryAttemptSignature(handle, externalSessionID)
+	for _, order := range orders {
+		if order == nil || strings.TrimSpace(order.Tipo) != "send_instruction" {
+			continue
+		}
+		if runtimeOrderMailboxIDFromJSON(order.PayloadJSON) != msg.ID {
+			continue
+		}
+		if order.HandleID != nil && *order.HandleID != handle.ID {
+			continue
+		}
+		switch strings.TrimSpace(order.Estado) {
+		case "pendiente", "tomada", "ejecutando":
+			return true, nil
+		case "completada":
+			if !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) {
+				continue
+			}
+			if runtimeOrderMailboxOnlyExpired(order) {
+				continue
+			}
+			orderSignature := runtimeOrderDeliveryAttemptSignature(order.PayloadJSON)
+			if currentSignature != "" {
+				if orderSignature == "" {
+					continue
+				}
+				if currentSignature != orderSignature {
+					continue
+				}
+				return true, nil
+			}
+			orderSessionID := strings.TrimSpace(runtimeOrderExternalSessionIDFromJSON(order.PayloadJSON))
+			if currentSessionID != "" && orderSessionID != "" && currentSessionID != orderSessionID {
+				continue
+			}
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot *runtimeMailboxBatchSnapshot, msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, externalSessionID string) (bool, error) {
+	if snapshot == nil {
+		return existeIntentoSendInstructionMailboxParaHandle(msg, handle, externalSessionID)
+	}
+	if msg == nil || handle == nil || msg.ID <= 0 {
+		return false, nil
+	}
+	agente := strings.TrimSpace(msg.ToAgente)
+	if agente == "" {
+		return false, nil
+	}
+	orders, err := snapshot.ordersForAgentProject(agente, msg.ProyectoID)
 	if err != nil {
 		return false, err
 	}
@@ -2474,6 +2693,37 @@ func existeRuntimeOrderAbiertaPorHandle(handleID int64, tipos ...string) (bool, 
 					return true, nil
 				}
 			}
+		}
+	}
+	return false, nil
+}
+
+func existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot *runtimeMailboxBatchSnapshot, msg *db.RuntimeMailboxMessage, handleID int64, tipos ...string) (bool, error) {
+	if snapshot == nil {
+		return existeRuntimeOrderAbiertaPorHandle(handleID, tipos...)
+	}
+	if msg == nil || handleID <= 0 || len(tipos) == 0 {
+		return false, nil
+	}
+	orders, err := snapshot.ordersForAgentProject(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	if err != nil {
+		return false, err
+	}
+	tiposWanted := map[string]struct{}{}
+	for _, tipo := range tipos {
+		tiposWanted[strings.TrimSpace(tipo)] = struct{}{}
+	}
+	for _, order := range orders {
+		if order == nil || order.HandleID == nil || *order.HandleID != handleID {
+			continue
+		}
+		switch strings.TrimSpace(order.Estado) {
+		case "pendiente", "tomada", "ejecutando":
+		default:
+			continue
+		}
+		if _, ok := tiposWanted[strings.TrimSpace(order.Tipo)]; ok {
+			return true, nil
 		}
 	}
 	return false, nil

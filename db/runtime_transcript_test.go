@@ -216,6 +216,77 @@ func TestIngestarRuntimeTranscriptHandleNoClasificaLineaSistemaScript(t *testing
 	}
 }
 
+func TestIngestarRuntimeTranscriptActivosFiltraHandlesSinLogPath(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente 1: %v", err)
+	}
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente 2: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	sesion1, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador1"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion 1: %v", err)
+	}
+	handle1, err := GetRuntimeHandleBySesionID(sesion1.ID)
+	if err != nil || handle1 == nil {
+		t.Fatalf("handle 1: %+v err=%v", handle1, err)
+	}
+
+	sesion2, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador2"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion 2: %v", err)
+	}
+	handle2, err := GetRuntimeHandleBySesionID(sesion2.ID)
+	if err != nil || handle2 == nil {
+		t.Fatalf("handle 2: %+v err=%v", handle2, err)
+	}
+
+	logPath := filepath.Join(t.TempDir(), "codex1.log")
+	if err := os.WriteFile(logPath, []byte("Necesito tu aprobación\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle1.ID); err != nil {
+		t.Fatalf("update handle1 metadata: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json='{}' WHERE id=?`, handle2.ID); err != nil {
+		t.Fatalf("update handle2 metadata: %v", err)
+	}
+
+	n, err := IngestarRuntimeTranscriptActivos()
+	if err != nil {
+		t.Fatalf("ingestar transcript activos: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("solo deberia ingerir el handle con log_path, got=%d", n)
+	}
+}
+
 func TestIngestarRuntimeTranscriptHandleNoClasificaRuidoOSCSpinner(t *testing.T) {
 	abrirDBTemporalRuntimeObservabilidad(t)
 

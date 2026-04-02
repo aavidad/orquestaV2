@@ -7610,3 +7610,24 @@ Resultado:
   - `fabricaapp/service.go` ahora genera una tarea explicita `servicio_residente_minimo` para apps con API/servicio
   - la arquitectura base de esas apps ya incorpora la obligacion de no convertir el servicio en un daemon caliente sobredimensionado
   - en Orquesta quedaron abiertas ademas las tareas `#482` y `#483` para dejar trazado este cambio de criterio en el producto y en el runtime
+
+## 2026-04-02 — Mailbox por snapshot de batch y transcript solo sobre handles candidatos
+
+- Hallazgo:
+  - tras recortar autonomia, el siguiente coste visible seguia entrando por dos frentes:
+    - `runtime_mailbox`, porque aunque ya no releia la BD varias veces, seguia repitiendo consultas por mensaje (`active handle`, ordenes abiertas, dedupe de `send_instruction`, proyecto, estado de cuota)
+    - `runtime_transcript`, porque seguia arrancando desde `ListarRuntimeHandles(nil)` y luego descartaba casi todo en memoria
+- Corrección:
+  - `cmd/controlplane_support.go` ahora crea un `runtimeMailboxBatchSnapshot` por ciclo:
+    - cachea `active handle` por agente/proyecto
+    - cachea ordenes por agente/proyecto
+    - cachea proyectos por `project_id`
+    - cachea `estado_cuota` persistido
+    - cachea sincronizacion supervisada y `external_session_id` por handle
+  - los recorridos de `runtime_mailbox` ya consumen esa snapshot en vez de reconsultar lo mismo por cada mensaje
+  - `db/controlplane_entities.go` añade `ListarRuntimeHandlesParaTranscript()`
+  - `db/runtime_transcript.go` ya ingiere transcript solo sobre handles operativos que realmente tienen `log_path`
+- Validación:
+  - `go test ./cmd -run 'Test(ProcesarRuntimeMailboxBatch|RuntimeMailbox|RuntimeOrderSendInstruction)' -count=1`
+  - `go test ./db -run 'Test(IngestarRuntimeTranscriptActivosFiltraHandlesSinLogPath|IngestarRuntimeTranscriptHandleClasificaYGeneraEventos|IngestarRuntimeTranscriptHandleNoClasificaLineaSistemaScript)' -count=1`
+  - `go build -o ./orquesta .`
