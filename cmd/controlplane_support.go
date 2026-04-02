@@ -411,10 +411,10 @@ func refrescarPresupuestoSesionObservadoDesdeSesion(sesion *db.Sesion) (bool, er
 		}
 	}
 	meta := map[string]any{
-		"working_dir":          workingDir,
-		"herramienta":          strings.TrimSpace(sesion.Herramienta),
-		"external_session_id":  strings.TrimSpace(sesion.ExternalSessionID),
-		"resume_payload_json":  strings.TrimSpace(sesion.ResumePayloadJSON),
+		"working_dir":         workingDir,
+		"herramienta":         strings.TrimSpace(sesion.Herramienta),
+		"external_session_id": strings.TrimSpace(sesion.ExternalSessionID),
+		"resume_payload_json": strings.TrimSpace(sesion.ResumePayloadJSON),
 	}
 	if cfgHome := strings.TrimSpace(os.Getenv("CLAUDE_CONFIG_HOME")); cfgHome != "" {
 		meta["claude_config_home"] = cfgHome
@@ -513,7 +513,7 @@ func persistirPresupuestoSesionObservado(handle *db.RuntimeHandle, observed *con
 		}
 		sesionID = sesion.ID
 	}
-	if ultimo, err := db.UltimoPresupuestoSesion(sesionID); err == nil && ultimo != nil && !ultimo.CheckedAt.IsZero() && !observed.ObservedAt.After(ultimo.CheckedAt) {
+	if ultimo, err := db.UltimoPresupuestoSesionPorFuente(sesionID, "codex_token_count_observed"); err == nil && ultimo != nil && !ultimo.CheckedAt.IsZero() && !observed.ObservedAt.After(ultimo.CheckedAt) {
 		if presupuestoSnapshotObservadoUsable(ultimo.RawSnapshotJSON) {
 			return nil
 		}
@@ -587,7 +587,7 @@ func persistirPresupuestoSesionClaudeObservado(handle *db.RuntimeHandle, observe
 		}
 		sesionID = sesion.ID
 	}
-	if ultimo, err := db.UltimoPresupuestoSesion(sesionID); err == nil && ultimo != nil && !ultimo.CheckedAt.IsZero() && !observed.ObservedAt.After(ultimo.CheckedAt) {
+	if ultimo, err := db.UltimoPresupuestoSesionPorFuente(sesionID, "claude_rust_session_observed"); err == nil && ultimo != nil && !ultimo.CheckedAt.IsZero() && !observed.ObservedAt.After(ultimo.CheckedAt) {
 		if presupuestoSnapshotObservadoUsable(ultimo.RawSnapshotJSON) {
 			return nil
 		}
@@ -611,15 +611,15 @@ func persistirPresupuestoSesionClaudeObservado(handle *db.RuntimeHandle, observe
 		}
 		if observed.Usage.TotalTokens > 0 || observed.Usage.MessageCount > 0 || strings.TrimSpace(observed.SessionPath) != "" {
 			sessionPayload := map[string]any{
-				"session_path":   strings.TrimSpace(observed.SessionPath),
-				"message_count":  observed.Usage.MessageCount,
-				"turns":          observed.Usage.Turns,
-				"input_tokens":   observed.Usage.InputTokens,
-				"output_tokens":  observed.Usage.OutputTokens,
+				"session_path":                strings.TrimSpace(observed.SessionPath),
+				"message_count":               observed.Usage.MessageCount,
+				"turns":                       observed.Usage.Turns,
+				"input_tokens":                observed.Usage.InputTokens,
+				"output_tokens":               observed.Usage.OutputTokens,
 				"cache_creation_input_tokens": observed.Usage.CacheCreationInputTokens,
 				"cache_read_input_tokens":     observed.Usage.CacheReadInputTokens,
-				"total_tokens":   observed.Usage.TotalTokens,
-				"pricing_source": "rust_default_sonnet",
+				"total_tokens":                observed.Usage.TotalTokens,
+				"pricing_source":              "rust_default_sonnet",
 			}
 			if observed.Usage.EstimatedCostUSD != nil {
 				sessionPayload["estimated_cost_usd"] = *observed.Usage.EstimatedCostUSD

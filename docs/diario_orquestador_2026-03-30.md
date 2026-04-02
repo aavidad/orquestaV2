@@ -7524,3 +7524,23 @@ Resultado:
 - Validación:
   - `go test ./cmd -run 'Test(WebOpenClawMuestraOperatorReviewYEntregas|WebOpenClawOperaSubagentes|WebOpenClawAccionaSubagenteTerminal|WebOpenClawAccionAplicaSiguienteSupervisor)' -count=1`
   - `go build -o ./orquesta .`
+
+## 2026-04-02 — Se corta el hot loop de CPU por presupuestos observados
+
+- Hallazgo:
+  - el daemon de Orquesta podía quedarse consumiendo ~100% CPU sin que los agentes estuvieran realmente trabajando
+  - la evidencia viva estaba en los logs:
+    - repetición constante de `registrar_presupuesto_codex_observado`
+    - repetición constante de `runtime_transcript_batch`
+  - la causa no era el scheduler del runner ni múltiples runners, sino la deduplicación incorrecta de snapshots observados:
+    - `persistirPresupuestoSesionObservado(...)`
+    - `persistirPresupuestoSesionClaudeObservado(...)`
+  - ambas comparaban contra `UltimoPresupuestoSesion(sesionID)`
+  - si el último presupuesto era un `provider_backoff` posterior, el mismo snapshot observado (`codex_token_count_observed` / `claude_rust_session_observed`) se volvía a registrar en cada ciclo
+- Corrección:
+  - se añadió `db.UltimoPresupuestoSesionPorFuente(...)`
+  - la deduplicación de snapshots observados ya compara contra la última fila de su misma fuente
+  - esto evita reinsertar observaciones ya persistidas cuando existe una fila posterior de otro tipo
+- Validación:
+  - `go test ./db -run 'TestUltimoPresupuestoSesionPorFuenteIgnoraFuentesPosteriores' -count=1`
+  - `go test ./cmd -run 'Test(.*Presupuesto.*|.*Observed.*)' -count=1`

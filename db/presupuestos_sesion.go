@@ -112,6 +112,18 @@ func UltimoPresupuestoSesion(sesionID int64) (*PresupuestoSesion, error) {
 	return escanearPresupuestoSesion(row)
 }
 
+func UltimoPresupuestoSesionPorFuente(sesionID int64, budgetSource string) (*PresupuestoSesion, error) {
+	row := DB.QueryRow(`
+		SELECT id, sesion_id, pool_id, model_slug, window_kind, window_started_at, reset_at,
+		       remaining_seconds, remaining_messages, remaining_tokens, remaining_credits,
+		       budget_source, raw_snapshot_json, checked_at, created_at
+		FROM presupuestos_sesion
+		WHERE sesion_id = ? AND budget_source = ?
+		ORDER BY checked_at DESC, id DESC
+		LIMIT 1`, sesionID, strings.TrimSpace(budgetSource))
+	return escanearPresupuestoSesion(row)
+}
+
 func UltimoPresupuestoAgente(agente string) (*PresupuestoSesion, *Sesion, error) {
 	sesion, err := GetSesionActiva(agente, nil)
 	if err != nil {

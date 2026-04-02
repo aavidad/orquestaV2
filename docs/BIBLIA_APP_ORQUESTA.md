@@ -1288,3 +1288,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - si descubre un servidor previo, debe exigir estabilidad real (`waitLocalServerStable(...)`) antes de devolver éxito
   - si esa estabilidad no existe, debe continuar por la ruta normal de arranque
   - esto evita el falso positivo típico tras `server stop` cuando el proceso viejo aún alcanza a responder una vez antes de caer
+- la deduplicación de presupuestos observados de sesión debe ser por `budget_source`, no por “último presupuesto global de la sesión”:
+  - `codex_token_count_observed` y `claude_rust_session_observed` no pueden compararse contra un `provider_backoff` posterior para decidir si el snapshot observado ya fue persistido
+  - si se usa el último presupuesto global, el runner puede reinsertar el mismo snapshot observado en cada ciclo y disparar CPU innecesaria en el daemon
+  - la consulta correcta para antirrepique es `UltimoPresupuestoSesionPorFuente(...)`

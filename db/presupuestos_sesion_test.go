@@ -959,3 +959,53 @@ func TestGetAgenteExtraePerfilDesdeRenderedCommandHandle(t *testing.T) {
 		t.Fatalf("fuente inesperada: %+v", agente)
 	}
 }
+
+func TestUltimoPresupuestoSesionPorFuenteIgnoraFuentesPosteriores(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesionID, err := IniciarSesion("codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	observedAt := time.Now().UTC().Add(-2 * time.Minute)
+	backoffAt := observedAt.Add(1 * time.Minute)
+	rawObserved := `{"account_email":"codex1@example.com","rate_limits":{"primary":{"used_percent":12}}}`
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "5h",
+		BudgetSource:    "codex_token_count_observed",
+		RawSnapshotJSON: rawObserved,
+		CheckedAt:       observedAt,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion observado: %v", err)
+	}
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "provider",
+		BudgetSource:    "provider_backoff",
+		RawSnapshotJSON: `{"error":"usage_limit"}`,
+		CheckedAt:       backoffAt,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion provider_backoff: %v", err)
+	}
+
+	ultimo, err := UltimoPresupuestoSesionPorFuente(sesionID, "codex_token_count_observed")
+	if err != nil {
+		t.Fatalf("UltimoPresupuestoSesionPorFuente: %v", err)
+	}
+	if ultimo == nil {
+		t.Fatalf("deberia devolver el snapshot observado")
+	}
+	if ultimo.BudgetSource != "codex_token_count_observed" {
+		t.Fatalf("fuente inesperada: %+v", ultimo)
+	}
+	if ultimo.CheckedAt.UTC().Unix() != observedAt.UTC().Unix() {
+		t.Fatalf("checked_at inesperado: %+v", ultimo)
+	}
+	if strings.TrimSpace(ultimo.RawSnapshotJSON) != rawObserved {
+		t.Fatalf("raw snapshot inesperado: %+v", ultimo)
+	}
+}
