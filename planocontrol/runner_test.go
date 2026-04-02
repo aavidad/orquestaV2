@@ -39,6 +39,7 @@ type stubAutomationService struct {
 	reviewErr        error
 	transcriptPanic  bool
 	processedBlock   <-chan struct{}
+	processedCalls   int
 	audits           []string
 	reanimar         []*db.Agente
 	reanimarErr      error
@@ -57,6 +58,9 @@ func (s *stubAutomationService) GarantizarSaludAgentes() error          { return
 func (s *stubAutomationService) PlanificarTareasAutomaticamente() error { return nil }
 func (s *stubAutomationService) ProcesarAutonomiaAgentesBatch() (int, error) {
 	return s.autonomyCount, s.autonomyErr
+}
+func (s *stubAutomationService) ProcesarPresupuestoSesionObservadoBatch() (int, error) {
+	return 0, nil
 }
 func (s *stubAutomationService) ProcesarRuntimeSupervisionBatch() (int, error) {
 	return s.runtimeSupCount, s.runtimeSupErr
@@ -83,6 +87,7 @@ func (s *stubAutomationService) ProcesarRuntimeMailboxBatch() (int, error) {
 	return s.mailboxCount, s.mailboxErr
 }
 func (s *stubAutomationService) ProcesarRuntimeOrdersBatch() (int, error) {
+	s.processedCalls++
 	if s.processedBlock != nil {
 		<-s.processedBlock
 	}
@@ -229,8 +234,22 @@ func TestRunnerRunControlPlaneEmiteDebug(t *testing.T) {
 	if len(traces) == 0 {
 		t.Fatalf("esperaba trazas de debug")
 	}
-	if !strings.Contains(traces[len(traces)-1], "control_plane autonomia=%d runtime_supervision=%d supervision=%d review=%d handles_stale=%d orders_stale=%d transcript=%d mailbox=%d runtime_orders=%d runtime_hygiene=%d git_merges=%d refineria=%d handoffs=%d") {
-		t.Fatalf("traza final inesperada: %+v", traces)
+	hasHot := false
+	hasWarm := false
+	hasCold := false
+	for _, tr := range traces {
+		if strings.Contains(tr, "control_plane_hot transcript=%d mailbox=%d runtime_orders=%d") {
+			hasHot = true
+		}
+		if strings.Contains(tr, "control_plane_warm autonomia=%d runtime_supervision=%d supervision=%d review=%d") {
+			hasWarm = true
+		}
+		if strings.Contains(tr, "control_plane_cold handles_stale=%d orders_stale=%d runtime_hygiene=%d") {
+			hasCold = true
+		}
+	}
+	if !hasHot || !hasWarm || !hasCold {
+		t.Fatalf("faltan trazas de carriles hot=%v warm=%v cold=%v: %+v", hasHot, hasWarm, hasCold, traces)
 	}
 }
 
@@ -303,7 +322,7 @@ func TestRunnerRunControlPlaneTimeoutDeBatchNoCongelaElResto(t *testing.T) {
 	}
 }
 
-func TestRunnerRunControlPlaneReclamaBatchExpiradoEnSiguienteCiclo(t *testing.T) {
+func TestRunnerRunControlPlaneNoDuplicaBatchExpiradoEnSiguienteCiclo(t *testing.T) {
 	block := make(chan struct{})
 	service := &stubAutomationService{
 		processedBlock: block,
@@ -318,8 +337,14 @@ func TestRunnerRunControlPlaneReclamaBatchExpiradoEnSiguienteCiclo(t *testing.T)
 	close(block)
 
 	audits := strings.Join(service.audits, "\n")
-	if strings.Count(audits, "runtime_orders_batch_error|runtime_order|batch=runtime_orders timeout=10ms") < 2 {
-		t.Fatalf("el batch runtime_orders deberia volver a intentarse tras expirar la lease: %s", audits)
+	if !strings.Contains(audits, "runtime_orders_batch_error|runtime_order|batch=runtime_orders timeout=10ms") {
+		t.Fatalf("faltaba timeout inicial del batch runtime_orders: %s", audits)
+	}
+	if !strings.Contains(audits, "runtime_orders_batch_error|runtime_order|batch=runtime_orders overdue timeout=10ms") {
+		t.Fatalf("faltaba auditoria de overdue del batch runtime_orders: %s", audits)
+	}
+	if service.processedCalls != 1 {
+		t.Fatalf("runtime_orders no deberia duplicarse mientras siga corriendo: calls=%d audits=%s", service.processedCalls, audits)
 	}
 }
 

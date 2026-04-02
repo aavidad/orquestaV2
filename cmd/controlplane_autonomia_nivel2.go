@@ -1258,7 +1258,7 @@ func construirInstruccionCorreccionReview(policy *db.ProyectoAutonomia, proyecto
 }
 
 func controlPlaneConfigIntOrDefault(clave string, fallback int) int {
-	v, err := db.ConfigGet(clave)
+	v, err := controlPlaneConfigGetCached(clave)
 	if err != nil {
 		return fallback
 	}

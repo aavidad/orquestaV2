@@ -145,6 +145,48 @@ Consecuencia:
 - el contrato de autoridad del daemon no se valida contra una ruta SQLite “especial”, sino contra el `storage_driver` y el `storage_target` del backend activo
 - `server status` y `server stop` pueden caer a `healthz` si falta el `statefile`, pero solo para el mismo `scope`, el mismo `storage_driver` y el mismo `storage_target`; el fallback no autoriza a cruzar de daemon ni de backend
 
+### Regla general para apps con servicio residente
+
+No toda app necesita un servicio siempre vivo.
+
+Regla canonica para cualquier app nueva fabricada con Orquesta:
+
+- solo las apps que realmente necesitan servicio residente pueden tener un proceso siempre en memoria
+- si la app no necesita servicio residente, la solucion preferida es on-demand
+- si la app si necesita servicio residente, su nucleo debe ser minimo
+
+Para apps con servicio residente:
+
+- el servicio residente solo conserva:
+  - entradas de servicio
+  - coordinacion ligera
+  - continuidad operativa
+  - estado caliente imprescindible
+- el trabajo pesado debe salir del nucleo:
+  - workers separados
+  - procesamiento orientado a eventos
+  - caminos on-demand
+  - snapshots cacheados con TTL corta
+- no se convierten en servicio caliente:
+  - auditorias profundas
+  - reconciliaciones historicas
+  - scans globales repetidos
+  - observabilidad rica que no sea necesaria para reaccion inmediata
+
+Regla de estado:
+
+- el estado efimero y muy frecuente puede vivir memoria-first si no rompe continuidad
+- el estado durable o contractual debe seguir siendo persistente
+- no se usa la BD como cache caliente por defecto
+- tampoco se sustituye la durabilidad por write-behind ciego
+
+Regla operativa minima:
+
+- presupuesto/saldo: comprobar al inicio de cada sesion real de trabajo del agente
+- despues, revalidar cada `1-2 min`
+- snapshots de `status`, `/proc` y observacion pesada: no mas frecuentes de lo necesario; por defecto `1 min` o mas
+- evitar polling agresivo si una lane puede despertar por evento
+
 ### Persistencia como adaptador
 
 La app no puede depender semanticamente de SQLite.
@@ -340,6 +382,14 @@ Contrato minimo obligatorio para el supervisor local:
 - esa rehidratacion no puede depender de SQLite directa ni de rescates manuales; debe ocurrir por el camino oficial del daemon, tipicamente durante `sync_status` o supervisión equivalente
 - la emision de `SupervisorSignal` no puede tumbar el runtime local ni el teardown de tests: el handler debe ser panic-safe y el supervisor local debe degradar la señal a error recuperable si el plano de control ya no esta disponible
 - un batch del runner no puede congelar el resto del control plane; cada batch necesita aislamiento y timeout propio
+- el runner del control plane no debe ejecutarse como un carril unico para todo:
+  - `hot`: transcript, mailbox y runtime orders
+  - `warm`: autonomia, supervision, review, merges, refineria y handoffs
+  - `cold`: stale handles, stale orders e higiene historica
+- si un batch supera su timeout, Orquesta no puede lanzar otra ejecucion duplicada del mismo batch mientras la anterior siga viva; solo debe marcarlo como `overdue` y extender la lease interna
+- `runtime_handles` es el mejor candidato para estado caliente memoria-first; `runtime_orders` y `runtime_mailbox` no dejan de ser durables
+- `runtime_orders` y `runtime_mailbox` pueden usar indices calientes o caches de pendientes, pero la BD sigue siendo la verdad persistente para continuidad, handoff, restart y `ack`
+- la GPU no aporta nada al control plane de Orquesta; la eficiencia del nucleo viene de menos scans, menos recomputacion, snapshots por tanda, caches cortas e indices calientes, no de pinning exotico ni offload grafico
 - la supervision autonoma periodica no puede resembrar el mismo `supervisar_proyecto` por reloj si ya emitio un nudge reciente para el mismo agente/proyecto; la deduplicacion debe aguantar estados transitorios del runtime y no depender solo de que el handle siga “operativo”
 - la observabilidad server-first de handles tampoco puede devolver metadata fosilizada del supervisor local; al listar handles filtrados de un agente, Orquesta debe resincronizar primero el estado supervisado para que `supervision_mode`, `supervisor_owner_pid` y demas metadata operativa reflejen el daemon vivo actual
 

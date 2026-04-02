@@ -406,6 +406,9 @@ func prepararDBTemporalCmd(t *testing.T) string {
 	t.Helper()
 	cmdTestDBMu.Lock()
 	resetStatusSnapshotCache()
+	resetControlPlaneConfigCache()
+	resetRuntimeBudgetObservationBackgroundGate()
+	resetAutonomiaActiveSessionsObservationGate()
 
 	anteriorDB := os.Getenv("ORQUESTA_DB")
 	anteriorDSN, teniaDSN := os.LookupEnv("ORQUESTA_DB_DSN")
@@ -418,6 +421,9 @@ func prepararDBTemporalCmd(t *testing.T) string {
 	anteriorDisableServer, teniaDisableServer := os.LookupEnv("ORQUESTA_DISABLE_SERVER_CLIENT")
 	t.Cleanup(func() {
 		resetStatusSnapshotCache()
+		resetControlPlaneConfigCache()
+		resetRuntimeBudgetObservationBackgroundGate()
+		resetAutonomiaActiveSessionsObservationGate()
 		db.Close()
 		db.DB = nil
 		if anteriorDB == "" {

@@ -50,12 +50,12 @@ type AppSpec struct {
 	SOiOS     bool
 
 	// Compliance legal y normativo (fijos conceptualmente, elegibles por proyecto)
-	ComplianceRGPD            bool // Reglamento General de Protección de Datos (UE 2016/679)
-	ComplianceENS             bool // Esquema Nacional de Seguridad (RD 311/2022)
-	ComplianceLSSI            bool // Ley Servicios Sociedad de la Información
-	ComplianceWCAG            bool // Accesibilidad web WCAG 2.1 AA (RD 1112/2018)
-	ComplianceFacturaElec     bool // Facturación electrónica (Ley Crea y Crece)
-	ComplianceReutilizacion   bool // Reutilización información sector público (Ley 37/2007)
+	ComplianceRGPD          bool // Reglamento General de Protección de Datos (UE 2016/679)
+	ComplianceENS           bool // Esquema Nacional de Seguridad (RD 311/2022)
+	ComplianceLSSI          bool // Ley Servicios Sociedad de la Información
+	ComplianceWCAG          bool // Accesibilidad web WCAG 2.1 AA (RD 1112/2018)
+	ComplianceFacturaElec   bool // Facturación electrónica (Ley Crea y Crece)
+	ComplianceReutilizacion bool // Reutilización información sector público (Ley 37/2007)
 
 	// Infraestructura y operación
 	CI         bool // Pipeline CI/CD (GitHub Actions, GitLab CI…)
@@ -127,6 +127,22 @@ func (s *Service) Generate(spec AppSpec) (GenerationResult, error) {
 		"Referencias externas resumidas",
 		"Riesgos tempranos identificados"))
 
+	if requiresResidentService(normalized) {
+		builder.add(withSOP(BlueprintTask{
+			Key:              "servicio_residente_minimo",
+			Titulo:           fmt.Sprintf("Diseñar núcleo residente mínimo de %s", normalized.Nombre),
+			Descripcion:      composeResidentServiceDescription(normalized),
+			Modulo:           "arquitectura",
+			Prioridad:        db.PrioridadAlta,
+			Dependencias:     []string{"briefing", "investigacion"},
+			ContratoDefinido: true,
+		}, "arquitecto", "arquitectura", "Modelo de servicio residente mínimo aprobado",
+			"Núcleo residente acotado y justificado",
+			"Trabajo pesado separado en workers, eventos o caminos on-demand",
+			"Estado caliente y persistencia durable distinguidos",
+			"Frecuencias de observación y presupuestos operativos documentadas"))
+	}
+
 	// ── Fase 1: Arquitectura (siempre hexagonal + modular) ───────────────────
 
 	builder.add(withSOP(BlueprintTask{
@@ -191,6 +207,9 @@ func (s *Service) Generate(spec AppSpec) (GenerationResult, error) {
 	// ── Fase 3: Implementación por tipo/plataforma ────────────────────────────
 
 	archDeps := []string{"arquitectura", "tooling_calidad", "testing_base"}
+	if requiresResidentService(normalized) {
+		archDeps = append(archDeps, "servicio_residente_minimo")
+	}
 	if hasCompliance(normalized) {
 		archDeps = append(archDeps, "compliance")
 	}
@@ -597,6 +616,10 @@ func hasCompliance(spec AppSpec) bool {
 		spec.ComplianceWCAG || spec.ComplianceFacturaElec || spec.ComplianceReutilizacion
 }
 
+func requiresResidentService(spec AppSpec) bool {
+	return spec.API
+}
+
 // ── Helpers de tareas específicas ─────────────────────────────────────────────
 
 func withSOP(task BlueprintTask, rol, fase, entregable string, criterios ...string) BlueprintTask {
@@ -806,6 +829,9 @@ func composeArchitectureDescription(spec AppSpec) string {
 		"Diseñar arquitectura hexagonal (puertos y adaptadores): núcleo de dominio aislado de infraestructura, adaptadores de entrada (API, CLI, UI) y salida (BD, servicios externos).",
 		"Definir módulos con contratos explícitos entre sí. Ningún módulo depende de la implementación concreta de otro.",
 	}
+	if requiresResidentService(spec) {
+		parts = append(parts, "Si la app necesita servicio residente, el núcleo siempre vivo debe ser mínimo: continuidad operativa, hot state imprescindible y coordinación ligera. La supervisión rica, snapshots pesados, reconciliaciones profundas y lecturas no críticas deben salir a workers separados, caminos on-demand o procesamiento orientado a eventos.")
+	}
 	if spec.Database {
 		parts = append(parts, "Incluir puerto de persistencia con adaptador(es) de BD.")
 	}
@@ -821,6 +847,17 @@ func composeArchitectureDescription(spec AppSpec) string {
 	}
 	if spec.Monitoring {
 		parts = append(parts, "Incluir puertos de observabilidad (logs, métricas, trazas).")
+	}
+	return strings.Join(parts, " ")
+}
+
+func composeResidentServiceDescription(spec AppSpec) string {
+	parts := []string{
+		fmt.Sprintf("La app %s necesita servicio residente, pero no debe convertir todo su trabajo interno en un daemon caliente.", spec.Nombre),
+		"Definir un núcleo residente mínimo: entradas de servicio, coordinación ligera, continuidad operativa y solo el estado caliente imprescindible en memoria.",
+		"Separar del núcleo todo lo que pueda ejecutarse por evento, por worker específico o bajo demanda: snapshots pesados, auditorías, reconciliaciones profundas, observabilidad rica y scans globales.",
+		"Distinguir de forma explícita el estado caliente efímero del estado durable. Lo efímero puede vivir en memoria; lo contractual o recuperable tras reinicio debe seguir siendo persistente.",
+		"Fijar frecuencias de observación razonables: presupuesto al inicio de cada sesión de trabajo y después cada 1-2 minutos; snapshots de estado y revisiones de procesos no más rápidas de lo necesario.",
 	}
 	return strings.Join(parts, " ")
 }

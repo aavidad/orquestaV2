@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/url"
 	"os"
 	"os/exec"
@@ -151,21 +152,55 @@ type agenteTickOutput struct {
 }
 
 func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesionActiva *db.Sesion, cuotaPct int) (agenteTickOutput, error) {
+	return construirAgenteTickOutputConSnapshot(agenteNombre, proyecto, sesionActiva, cuotaPct, nil)
+}
+
+func construirAgenteTickOutputConSnapshot(agenteNombre string, proyecto *db.Proyecto, sesionActiva *db.Sesion, cuotaPct int, snapshot *autonomiaBatchSnapshot) (agenteTickOutput, error) {
 	var out agenteTickOutput
 	if proyecto == nil {
 		return out, fmt.Errorf("proyecto obligatorio")
 	}
+	if snapshot == nil {
+		snapshot = &autonomiaBatchSnapshot{
+			asignacionesByAgent:        map[string][]*db.Asignacion{},
+			tareasByAgentProject:       map[string][]*db.Tarea{},
+			pendingVotesByAgentProject: map[string][]*db.Propuesta{},
+			openProposalsByProject:     map[int64][]*db.Propuesta{},
+			politicasByProject:         map[int64]*db.ProyectoAutonomia{},
+			activeProjectByAgent:       map[string]int64{},
+			activeHandleByAgentProject: map[string]bool{},
+			supervisorByProject:        map[int64]*db.Agente{},
+			supervisorLoaded:           map[int64]struct{}{},
+			pauseByAgent:               map[string]autonomiaBudgetPauseDecision{},
+			agentesByName:              map[string]*db.Agente{},
+		}
+	}
+	start := time.Now()
+	logStep := func(step string, since time.Time) {
+		if !autonomiaTickDebugEnabled() {
+			return
+		}
+		duration := time.Since(since).Round(time.Millisecond)
+		if duration < 250*time.Millisecond {
+			return
+		}
+		log.Printf("orquesta[autonomia-tick] agente=%s proyecto=%s step=%s duration=%s", strings.TrimSpace(agenteNombre), strings.TrimSpace(proyecto.Slug), step, duration)
+	}
 
 	politica := cargarPoliticaAgente()
-	asignadoAProyecto, proyectoAsignado, err := resolverAsignacionActiva(agenteNombre, proyecto.ID)
+	stepStart := time.Now()
+	asignadoAProyecto, proyectoAsignado, err := snapshot.assignment(agenteNombre, proyecto.ID)
 	if err != nil {
 		return out, err
 	}
+	logStep("resolver_asignacion", stepStart)
 
-	tareas, err := tareasService.List(db.FiltroTareas{Agente: &agenteNombre, ProyectoID: &proyecto.ID})
+	stepStart = time.Now()
+	tareas, err := snapshot.tasks(agenteNombre, proyecto.ID)
 	if err != nil {
 		return out, err
 	}
+	logStep("listar_tareas", stepStart)
 	var tareasActivas []itemLigero
 	var tieneBloqueos bool
 	var tieneTrabajo bool
@@ -186,10 +221,12 @@ func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesio
 		}
 	}
 
-	pendientes, err := propuestasService.ListPendingProjectVotes(agenteNombre, proyecto.Slug)
+	stepStart = time.Now()
+	pendientes, err := snapshot.pendingProjectVotes(agenteNombre, proyecto.ID)
 	if err != nil {
 		return out, err
 	}
+	logStep("propuestas_pendientes", stepStart)
 	var propuestasPendientes []itemLigero
 	for _, propuesta := range pendientes {
 		propuestasPendientes = append(propuestasPendientes, itemLigero{
@@ -200,11 +237,12 @@ func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesio
 		})
 	}
 
-	estadoAbierta := db.PropuestaAbierta
-	abiertas, err := propuestasService.ListByProject(&estadoAbierta, proyecto.Slug)
+	stepStart = time.Now()
+	abiertas, err := snapshot.openProjectProposals(proyecto.ID)
 	if err != nil {
 		return out, err
 	}
+	logStep("propuestas_abiertas", stepStart)
 	var propuestasAbiertas []itemLigero
 	for _, propuesta := range abiertas {
 		propuestasAbiertas = append(propuestasAbiertas, itemLigero{
@@ -215,10 +253,12 @@ func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesio
 		})
 	}
 
-	agente, err := runtimesService.GetAgent(agenteNombre)
+	stepStart = time.Now()
+	agente, err := snapshot.agent(agenteNombre)
 	if err != nil {
 		return out, err
 	}
+	logStep("get_agente", stepStart)
 
 	out = agenteTickOutput{
 		Agente:               agenteNombre,
@@ -239,14 +279,18 @@ func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesio
 	if sesionActiva != nil {
 		out.SesionActiva = resumirSesion(sesionActiva)
 	}
-	esSupervisorOperativo, supervisorOperativo, err := db.EsSupervisorAutonomiaOperativo(proyecto.ID, agenteNombre)
+	stepStart = time.Now()
+	esSupervisorOperativo, supervisorOperativo, err := snapshot.supervisorOperativo(proyecto.ID, agenteNombre)
 	if err != nil {
 		return out, err
 	}
-	pausarPorPresupuesto, motivoPresupuesto, err := agenteDebePausarPorPresupuesto(agenteNombre)
+	logStep("supervisor_operativo", stepStart)
+	stepStart = time.Now()
+	pausarPorPresupuesto, motivoPresupuesto, err := snapshot.budgetPause(agenteNombre)
 	if err != nil {
 		return out, err
 	}
+	logStep("presupuesto_visible", stepStart)
 
 	switch {
 	case pausarPorPresupuesto:
@@ -294,8 +338,19 @@ func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesio
 		out.AccionRecomendada = "esperar_o_pedir_tarea"
 		out.Motivo = "No hay tarea activa asignada en este proyecto"
 	}
+	if autonomiaTickDebugEnabled() {
+		duration := time.Since(start).Round(time.Millisecond)
+		if duration >= 250*time.Millisecond {
+			log.Printf("orquesta[autonomia-tick] agente=%s proyecto=%s total=%s accion=%s", strings.TrimSpace(agenteNombre), strings.TrimSpace(proyecto.Slug), duration, strings.TrimSpace(out.AccionRecomendada))
+		}
+	}
 
 	return out, nil
+}
+
+func autonomiaTickDebugEnabled() bool {
+	base := parseBoolDebug(strings.TrimSpace(os.Getenv("ORQUESTA_DEBUG")), false)
+	return parseBoolDebug(strings.TrimSpace(os.Getenv("ORQUESTA_DEBUG_CONTROL_PLANE")), base)
 }
 
 func agenteMotivoPausaOperativa(motivo string) bool {
@@ -835,7 +890,7 @@ func resumirSesion(s *db.Sesion) *sesionBundle {
 }
 
 func configOrDefault(clave, fallback string) string {
-	v, err := db.ConfigGet(clave)
+	v, err := controlPlaneConfigGetCached(clave)
 	if err != nil || strings.TrimSpace(v) == "" {
 		return fallback
 	}
@@ -843,7 +898,7 @@ func configOrDefault(clave, fallback string) string {
 }
 
 func configIntOrDefault(clave string, fallback int) int {
-	v, err := db.ConfigGet(clave)
+	v, err := controlPlaneConfigGetCached(clave)
 	if err != nil {
 		return fallback
 	}

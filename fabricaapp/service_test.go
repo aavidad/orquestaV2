@@ -27,6 +27,7 @@ func TestGenerateWebAPIBacklog(t *testing.T) {
 
 	assertHasTask(t, result, "briefing")
 	assertHasTask(t, result, "investigacion")
+	assertHasTask(t, result, "servicio_residente_minimo")
 	assertHasTask(t, result, "arquitectura")
 	assertHasTask(t, result, "persistencia")
 	assertHasTask(t, result, "api_base")
@@ -80,6 +81,9 @@ func TestGenerateCLIBacklogIsMinimal(t *testing.T) {
 	}
 	if hasTask(result.Tasks, "api_base") {
 		t.Fatalf("una app CLI no deberia incluir api por defecto")
+	}
+	if hasTask(result.Tasks, "servicio_residente_minimo") {
+		t.Fatalf("una app CLI no deberia forzar un servicio residente")
 	}
 	assertHasTask(t, result, "briefing")
 	assertHasTask(t, result, "investigacion")

@@ -11,7 +11,7 @@ import (
 	"orquesta/db"
 )
 
-const agenteRuntimeRefreshPollInterval = 5 * time.Second
+const agenteRuntimeRefreshPollInterval = time.Minute
 
 func construirInstruccionRefreshRuntime(msg *db.RuntimeMailboxMessage) (string, bool) {
 	return construirInstruccionRefreshRuntimeConCatalogo(msg, nil)

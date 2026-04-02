@@ -7568,3 +7568,45 @@ Resultado:
   - `go test ./db -run 'TestProcesarRuntimeSupervisionBatchSupervisaProcesoLocalSinDuplicar' -count=1`
   - `go test ./internal/controlruntime -run 'Test(ConsultarEstadoLocalDetectaSessionIDSinSobrescribirDriver|SupervisorLocalEmiteHeartbeatYFinalizacionAlActivarse|ConsultarEstadoLocalRehidrataMetadataRicaDesdeRuntimeManifest)' -count=1`
   - `go build -o ./orquesta .`
+
+## 2026-04-02 — Runner hot/warm/cold y mailbox sin relecturas repetidas
+
+- Hallazgo:
+  - tras cortar el hot loop de presupuestos observados, el daemon seguia pudiendo quemar CPU en reposo
+  - la medicion en `debug-control-plane` enseño que el mayor coste no venia de `/api/status`, sino de:
+    - `procesarAutonomiaAgentesBatch`: `8s-20s`
+    - `procesarRuntimeMailboxBatch`: `2.6s-5.4s`
+    - `ProcesarHandoffsBatch`: `1.3s-3.5s`
+  - ademas, el runner podia volver a intentar batches expirados mientras la ejecucion vieja seguia viva, lo que agravaba el consumo
+- Corrección:
+  - `planocontrol/runner.go` ya separa el control plane en tres carriles:
+    - `hot`: transcript, mailbox, runtime orders
+    - `warm`: autonomia, supervision, review, merges, refineria, handoffs
+    - `cold`: stale handles, stale orders e higiene historica
+  - si un batch expira, el runner ya no lanza otro duplicado; lo marca `overdue` y espera a que termine la ejecucion viva
+  - `cmd/controlplane_support.go` deja de releer la mailbox pendiente varias veces en el mismo ciclo; ahora carga una vez y comparte esa vista entre reconciliaciones y entregas
+  - la configuracion del camino caliente (`agente tick`, autonomia nivel 2) ya usa cache corta de config en vez de `ConfigGet` directo repetido
+  - el refresh runtime gobernanza/skills ya baja a `1m`, que es suficiente para produccion y evita polling agresivo por agente
+- Corrección semántica relacionada:
+  - `db/sesiones.go` ya no borra una pausa operativa valida (`runtime_panic`, pausa manual, supervisor) al proyectar el estado visible del agente
+  - las reconciliaciones de mailbox que consumen guidance/watchdog en enfriamiento miran el `estado_cuota` persistido del agente, no una proyeccion visible ya normalizada
+  - `cmd/controlplane_config_cache.go` incorpora reset explicito para no contaminar tests entre bases temporales
+- Validación:
+  - `go test ./planocontrol -count=1`
+  - `go test ./cmd -run 'Test(ConstruirAgenteTickOutputDescribePausaOperativaPorRuntimePanic|ProcesarRuntimeMailboxBatchConsumeWatchdogEnEnfriamiento|ProcesarRuntimeMailboxBatchConsumeGovernanceRefreshEnEnfriamiento|ProcesarAutonomiaAgentesBatch|ConstruirAgenteTickOutput|ProcesarRuntimeMailboxBatch|CommandSupportsServerMode|APIStatus|ServerReadinessOK)' -count=1`
+  - `go build -o ./orquesta .`
+
+## 2026-04-02 — Norma general para apps con servicio residente y trazabilidad del refactor caliente
+
+- Decision:
+  - la regla de eficiencia deja de ser solo una correccion de Orquesta y pasa a ser doctrina general para apps fabricadas con Orquesta
+  - solo las apps que realmente necesitan servicio residente pueden tener un proceso siempre vivo
+  - cuando una app si necesita servicio residente, el nucleo residente debe ser minimo
+- Regla:
+  - entradas de servicio, coordinacion ligera, continuidad operativa y estado caliente imprescindible pueden quedar residentes
+  - snapshots pesados, reconciliaciones profundas, auditorias y scans globales deben salir a workers, eventos o caminos on-demand
+  - memoria-first solo para estado efimero que no rompa continuidad; lo durable sigue persistente
+- Aplicacion:
+  - `fabricaapp/service.go` ahora genera una tarea explicita `servicio_residente_minimo` para apps con API/servicio
+  - la arquitectura base de esas apps ya incorpora la obligacion de no convertir el servicio en un daemon caliente sobredimensionado
+  - en Orquesta quedaron abiertas ademas las tareas `#482` y `#483` para dejar trazado este cambio de criterio en el producto y en el runtime

@@ -20,6 +20,7 @@ func defaultConfigEntries() []configDefaultEntry {
 		{Clave: "runtime_supervision_interval_seconds", Valor: "60"},
 		{Clave: "runtime_supervision_batch_size", Valor: "10"},
 		{Clave: "runtime_budget_background_observation_interval_seconds", Valor: "120"},
+		{Clave: "autonomia_active_sessions_interval_seconds", Valor: "60"},
 		{Clave: "runtime_order_lease_seconds", Valor: "120"},
 		{Clave: "runtime_send_instruction_lease_seconds", Valor: "35"},
 		{Clave: "runtime_supervisor_hot_input_disable_seconds", Valor: "900"},

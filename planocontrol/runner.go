@@ -24,6 +24,7 @@ type AutomationService interface {
 	ResetReanimacion(nombre string) error
 	GarantizarSaludAgentes() error
 	PlanificarTareasAutomaticamente() error
+	ProcesarPresupuestoSesionObservadoBatch() (int, error)
 	ProcesarAutonomiaAgentesBatch() (int, error)
 	ProcesarRuntimeSupervisionBatch() (int, error)
 	ProcesarSupervisionAutonomaBatch() (int, error)
@@ -51,16 +52,24 @@ type Runner struct {
 	SaludCada             time.Duration
 	PlanificacionCada     time.Duration
 	ControlPlaneCada      time.Duration
+	ControlPlaneWarmCada  time.Duration
+	ControlPlaneColdCada  time.Duration
+	RuntimeTranscriptCada time.Duration
+	RuntimeMailboxCada    time.Duration
+	RuntimeOrdersCada     time.Duration
+	RuntimeBudgetCada     time.Duration
 	NotificationRetryCada time.Duration
 	BatchTimeout          time.Duration
 	mu                    sync.Mutex
 	runningBatches        map[string]runningBatchState
+	batchIntervals        map[string]time.Time
 	nextBatchToken        uint64
 	wg                    sync.WaitGroup
 }
 
 type runningBatchState struct {
 	token     uint64
+	startedAt time.Time
 	expiresAt time.Time
 }
 
@@ -68,8 +77,11 @@ func (r *Runner) Start(ctx context.Context) {
 	if r == nil || r.Automation == nil {
 		return
 	}
-	r.debugf("runner start reanimacion=%s salud=%s planificacion=%s control_plane=%s",
-		r.reanimacionCada(), r.saludCada(), r.planificacionCada(), r.controlPlaneCada())
+	r.debugf("runner start reanimacion=%s salud=%s planificacion=%s control_plane_hot=%s warm=%s cold=%s",
+		r.reanimacionCada(), r.saludCada(), r.planificacionCada(),
+		r.controlPlaneCada(), r.controlPlaneWarmCada(), r.controlPlaneColdCada())
+	r.debugf("runner hot_intervals transcript=%s mailbox=%s runtime_orders=%s budget=%s",
+		r.runtimeTranscriptCada(), r.runtimeMailboxCada(), r.runtimeOrdersCada(), r.runtimeBudgetCada())
 	if r.InitNotifications != nil {
 		r.InitNotifications()
 	}
@@ -77,7 +89,12 @@ func (r *Runner) Start(ctx context.Context) {
 	r.startLoop(ctx, "reanimaciones", r.reanimacionCada(), r.runReanimaciones)
 	r.startLoop(ctx, "salud", r.saludCada(), r.runSalud)
 	r.startLoop(ctx, "planificacion", r.planificacionCada(), r.runPlanificacion)
-	r.startLoop(ctx, "control_plane", r.controlPlaneCada(), r.runControlPlane)
+	r.startLoopAfter(ctx, "control_plane_runtime_orders", r.runtimeOrdersCada(), 0, r.runControlPlaneRuntimeOrders)
+	r.startLoopAfter(ctx, "control_plane_runtime_transcript", r.runtimeTranscriptCada(), 10*time.Second, r.runControlPlaneRuntimeTranscript)
+	r.startLoopAfter(ctx, "control_plane_runtime_mailbox", r.runtimeMailboxCada(), 20*time.Second, r.runControlPlaneRuntimeMailbox)
+	r.startLoopAfter(ctx, "control_plane_runtime_budget", r.runtimeBudgetCada(), 30*time.Second, r.runControlPlaneBudget)
+	r.startLoop(ctx, "control_plane_warm", r.controlPlaneWarmCada(), r.runControlPlaneWarm)
+	r.startLoop(ctx, "control_plane_cold", r.controlPlaneColdCada(), r.runControlPlaneCold)
 	r.startLoop(ctx, "notification_retry", r.notificationRetryCada(), r.runNotificationRetry)
 	r.wg.Add(1)
 	go func() {
@@ -87,10 +104,14 @@ func (r *Runner) Start(ctx context.Context) {
 }
 
 func (r *Runner) startLoop(ctx context.Context, name string, each time.Duration, fn func()) {
+	r.startLoopAfter(ctx, name, each, 0, fn)
+}
+
+func (r *Runner) startLoopAfter(ctx context.Context, name string, each time.Duration, extraDelay time.Duration, fn func()) {
 	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()
-		r.loop(ctx, name, each, fn)
+		r.loop(ctx, name, each, extraDelay, fn)
 	}()
 }
 
@@ -101,8 +122,8 @@ func (r *Runner) Wait() {
 	r.wg.Wait()
 }
 
-func (r *Runner) loop(ctx context.Context, name string, each time.Duration, fn func()) {
-	if delay := r.startupGrace(); delay > 0 {
+func (r *Runner) loop(ctx context.Context, name string, each time.Duration, extraDelay time.Duration, fn func()) {
+	if delay := r.startupGrace() + extraDelay; delay > 0 {
 		timer := time.NewTimer(delay)
 		defer timer.Stop()
 		select {
@@ -125,7 +146,23 @@ func (r *Runner) loop(ctx context.Context, name string, each time.Duration, fn f
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			start := time.Now()
 			r.safeLoopCall(name, fn)
+			elapsed := time.Since(start)
+			if elapsed > each/2 {
+				backoff := elapsed
+				if backoff > 2*each {
+					backoff = 2 * each
+				}
+				r.debugf("runner loop=%s backpressure=%s (elapsed=%s interval=%s)", name, backoff, elapsed, each)
+				cooldown := time.NewTimer(backoff)
+				select {
+				case <-ctx.Done():
+					cooldown.Stop()
+					return
+				case <-cooldown.C:
+				}
+			}
 		}
 	}
 }
@@ -205,7 +242,119 @@ func (r *Runner) runPlanificacion() {
 	r.debugf("planificacion ok")
 }
 
+// runControlPlane ejecuta todos los batches (compat para tests existentes).
 func (r *Runner) runControlPlane() {
+	r.runControlPlaneHotNow()
+	r.runControlPlaneBudget()
+	r.runControlPlaneWarm()
+	r.runControlPlaneCold()
+}
+
+// runControlPlaneHot: path caliente — runtime orders, mailbox, transcript.
+func (r *Runner) runControlPlaneHot() {
+	r.runControlPlaneHotInternal(false)
+}
+
+func (r *Runner) runControlPlaneHotNow() {
+	r.runControlPlaneHotInternal(true)
+}
+
+func (r *Runner) runControlPlaneHotInternal(force bool) {
+	now := time.Now()
+	transcript := 0
+	if force || r.allowIntervalBatch("runtime_transcript_interval", r.runtimeTranscriptCada(), now) {
+		transcript = r.runControlPlaneBatch(
+			"runtime_transcript",
+			"runtime_transcript",
+			"runtime_transcript_batch",
+			"runtime_transcript_batch_error",
+			"runtime_transcript_batch_panic",
+			"Conversación/runtime transcript procesado: %d",
+			r.Automation.ProcesarRuntimeTranscriptBatch,
+		)
+	}
+	mailbox := 0
+	if force || r.allowIntervalBatch("runtime_mailbox_interval", r.runtimeMailboxCada(), now) {
+		mailbox = r.runControlPlaneBatch(
+			"runtime_mailbox",
+			"runtime_mailbox",
+			"runtime_mailbox_batch",
+			"runtime_mailbox_batch_error",
+			"runtime_mailbox_batch_panic",
+			"Mailbox runtime procesado: %d",
+			r.Automation.ProcesarRuntimeMailboxBatch,
+		)
+	}
+	processed := 0
+	if force || r.allowIntervalBatch("runtime_orders_interval", r.runtimeOrdersCada(), now) {
+		processed = r.runControlPlaneBatch(
+			"runtime_orders",
+			"runtime_order",
+			"runtime_orders_batch",
+			"runtime_orders_batch_error",
+			"runtime_orders_batch_panic",
+			"Órdenes procesadas en batch: %d",
+			r.Automation.ProcesarRuntimeOrdersBatch,
+		)
+	}
+	r.debugf("control_plane_hot transcript=%d mailbox=%d runtime_orders=%d",
+		transcript, mailbox, processed)
+}
+
+func (r *Runner) runControlPlaneRuntimeTranscript() {
+	count := r.runControlPlaneBatch(
+		"runtime_transcript",
+		"runtime_transcript",
+		"runtime_transcript_batch",
+		"runtime_transcript_batch_error",
+		"runtime_transcript_batch_panic",
+		"Conversación/runtime transcript procesado: %d",
+		r.Automation.ProcesarRuntimeTranscriptBatch,
+	)
+	r.debugf("control_plane_runtime_transcript count=%d", count)
+}
+
+func (r *Runner) runControlPlaneRuntimeMailbox() {
+	count := r.runControlPlaneBatch(
+		"runtime_mailbox",
+		"runtime_mailbox",
+		"runtime_mailbox_batch",
+		"runtime_mailbox_batch_error",
+		"runtime_mailbox_batch_panic",
+		"Mailbox runtime procesado: %d",
+		r.Automation.ProcesarRuntimeMailboxBatch,
+	)
+	r.debugf("control_plane_runtime_mailbox count=%d", count)
+}
+
+func (r *Runner) runControlPlaneRuntimeOrders() {
+	count := r.runControlPlaneBatch(
+		"runtime_orders",
+		"runtime_order",
+		"runtime_orders_batch",
+		"runtime_orders_batch_error",
+		"runtime_orders_batch_panic",
+		"Órdenes procesadas en batch: %d",
+		r.Automation.ProcesarRuntimeOrdersBatch,
+	)
+	r.debugf("control_plane_runtime_orders count=%d", count)
+}
+
+func (r *Runner) runControlPlaneBudget() {
+	count := r.runControlPlaneBatch(
+		"runtime_budget_observation",
+		"presupuesto_sesion",
+		"runtime_budget_observation_batch",
+		"runtime_budget_observation_batch_error",
+		"runtime_budget_observation_batch_panic",
+		"Presupuestos observados procesados: %d",
+		r.Automation.ProcesarPresupuestoSesionObservadoBatch,
+	)
+	r.debugf("control_plane_runtime_budget count=%d", count)
+}
+
+// runControlPlaneWarm: gestión — autonomia, supervision, review, handoffs, merges, refineria.
+func (r *Runner) runControlPlaneWarm() {
 	autonomia := r.runControlPlaneBatch(
 		"autonomia",
 		"agente",
@@ -242,60 +391,6 @@ func (r *Runner) runControlPlane() {
 		"Review gates procesados: %d",
 		r.Automation.ProcesarReviewGatesBatch,
 	)
-	stale := r.runControlPlaneBatch(
-		"handles_stale",
-		"runtime_handle",
-		"runtime_handles_stale",
-		"runtime_handles_error",
-		"runtime_handles_panic",
-		"Handles reconciliados como stale: %d",
-		r.Automation.ReconciliarRuntimeHandlesStale,
-	)
-	recovered := r.runControlPlaneBatch(
-		"runtime_orders_stale",
-		"runtime_order",
-		"runtime_orders_stale",
-		"runtime_orders_stale_error",
-		"runtime_orders_stale_panic",
-		"Órdenes recuperadas por stale: %d",
-		r.Automation.ReconciliarRuntimeOrdersStale,
-	)
-	transcript := r.runControlPlaneBatch(
-		"runtime_transcript",
-		"runtime_transcript",
-		"runtime_transcript_batch",
-		"runtime_transcript_batch_error",
-		"runtime_transcript_batch_panic",
-		"Conversación/runtime transcript procesado: %d",
-		r.Automation.ProcesarRuntimeTranscriptBatch,
-	)
-	mailbox := r.runControlPlaneBatch(
-		"runtime_mailbox",
-		"runtime_mailbox",
-		"runtime_mailbox_batch",
-		"runtime_mailbox_batch_error",
-		"runtime_mailbox_batch_panic",
-		"Mailbox runtime procesado: %d",
-		r.Automation.ProcesarRuntimeMailboxBatch,
-	)
-	processed := r.runControlPlaneBatch(
-		"runtime_orders",
-		"runtime_order",
-		"runtime_orders_batch",
-		"runtime_orders_batch_error",
-		"runtime_orders_batch_panic",
-		"Órdenes procesadas en batch: %d",
-		r.Automation.ProcesarRuntimeOrdersBatch,
-	)
-	hygiene := r.runControlPlaneBatch(
-		"runtime_hygiene",
-		"runtime",
-		"runtime_hygiene_batch",
-		"runtime_hygiene_batch_error",
-		"runtime_hygiene_batch_panic",
-		"Deuda historica de runtime purgada: %d",
-		r.Automation.ProcesarRuntimeHygieneBatch,
-	)
 	merged := r.runControlPlaneBatch(
 		"git_merges",
 		"git_merge",
@@ -323,8 +418,41 @@ func (r *Runner) runControlPlane() {
 		"Handoffs automáticos procesados: %d",
 		r.Automation.ProcesarHandoffsBatch,
 	)
-	r.debugf("control_plane autonomia=%d runtime_supervision=%d supervision=%d review=%d handles_stale=%d orders_stale=%d transcript=%d mailbox=%d runtime_orders=%d runtime_hygiene=%d git_merges=%d refineria=%d handoffs=%d",
-		autonomia, supervision, supervisionAutonoma, review, stale, recovered, transcript, mailbox, processed, hygiene, merged, refined, handoffs)
+	r.debugf("control_plane_warm autonomia=%d runtime_supervision=%d supervision=%d review=%d git_merges=%d refineria=%d handoffs=%d",
+		autonomia, supervision, supervisionAutonoma, review, merged, refined, handoffs)
+}
+
+// runControlPlaneCold: limpieza — stale handles, stale orders, hygiene.
+func (r *Runner) runControlPlaneCold() {
+	stale := r.runControlPlaneBatch(
+		"handles_stale",
+		"runtime_handle",
+		"runtime_handles_stale",
+		"runtime_handles_error",
+		"runtime_handles_panic",
+		"Handles reconciliados como stale: %d",
+		r.Automation.ReconciliarRuntimeHandlesStale,
+	)
+	recovered := r.runControlPlaneBatch(
+		"runtime_orders_stale",
+		"runtime_order",
+		"runtime_orders_stale",
+		"runtime_orders_stale_error",
+		"runtime_orders_stale_panic",
+		"Órdenes recuperadas por stale: %d",
+		r.Automation.ReconciliarRuntimeOrdersStale,
+	)
+	hygiene := r.runControlPlaneBatch(
+		"runtime_hygiene",
+		"runtime",
+		"runtime_hygiene_batch",
+		"runtime_hygiene_batch_error",
+		"runtime_hygiene_batch_panic",
+		"Deuda historica de runtime purgada: %d",
+		r.Automation.ProcesarRuntimeHygieneBatch,
+	)
+	r.debugf("control_plane_cold handles_stale=%d orders_stale=%d runtime_hygiene=%d",
+		stale, recovered, hygiene)
 }
 
 func (r *Runner) safeLoopCall(name string, fn func()) {
@@ -344,14 +472,23 @@ func (r *Runner) safeLoopCall(name string, fn func()) {
 }
 
 func (r *Runner) runControlPlaneBatch(name, entity, auditOK, auditErr, auditPanic, successFmt string, fn func() (int, error)) (count int) {
-	token, reclaimed := r.beginControlPlaneBatch(name, r.controlPlaneBatchTimeout())
+	timeout := r.controlPlaneBatchTimeout()
+	token, running, overdue := r.beginControlPlaneBatch(name, timeout)
 	if token == 0 {
-		r.debugf("control_plane %s skipped=already_running", name)
+		if overdue {
+			detail := fmt.Sprintf("batch=%s overdue timeout=%s", name, timeout)
+			r.Automation.Audit("server", auditErr, entity, 0, detail)
+			r.debugf("control_plane %s overdue=still_running timeout=%s", name, timeout)
+			return 0
+		}
+		if running {
+			r.debugf("control_plane %s skipped=already_running", name)
+			return 0
+		}
+		r.debugf("control_plane %s skipped=unavailable", name)
 		return 0
 	}
-	if reclaimed {
-		r.debugf("control_plane %s reclaimed=expired_lease", name)
-	}
+	start := time.Now()
 	type batchOutcome struct {
 		count       int
 		err         error
@@ -370,26 +507,30 @@ func (r *Runner) runControlPlaneBatch(name, entity, auditOK, auditErr, auditPani
 		count, err := fn()
 		outcomeCh <- batchOutcome{count: count, err: err}
 	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 	select {
 	case outcome := <-outcomeCh:
+		duration := time.Since(start).Round(time.Millisecond)
 		if outcome.panicDetail != "" {
 			r.Automation.Audit("server", auditPanic, entity, 0, outcome.panicDetail)
-			r.debugf("control_plane %s panic=%s", name, outcome.panicDetail)
+			r.debugf("control_plane %s panic=%s duration=%s", name, outcome.panicDetail, duration)
 			return 0
 		}
 		if outcome.err != nil {
 			r.Automation.Audit("server", auditErr, entity, 0, outcome.err.Error())
-			r.debugf("control_plane %s error=%v", name, outcome.err)
+			r.debugf("control_plane %s error=%v duration=%s", name, outcome.err, duration)
 			return 0
 		}
 		if outcome.count > 0 {
 			r.Automation.Audit("server", auditOK, entity, 0, fmt.Sprintf(successFmt, outcome.count))
 		}
+		r.debugf("control_plane %s ok count=%d duration=%s", name, outcome.count, duration)
 		return outcome.count
-	case <-time.After(r.controlPlaneBatchTimeout()):
-		detail := fmt.Sprintf("batch=%s timeout=%s", name, r.controlPlaneBatchTimeout())
+	case <-timer.C:
+		detail := fmt.Sprintf("batch=%s timeout=%s", name, timeout)
 		r.Automation.Audit("server", auditErr, entity, 0, detail)
-		r.debugf("control_plane %s timeout=%s", name, r.controlPlaneBatchTimeout())
+		r.debugf("control_plane %s timeout=%s", name, timeout)
 		return 0
 	}
 }
@@ -439,16 +580,81 @@ func (r *Runner) saludCada() time.Duration {
 
 func (r *Runner) planificacionCada() time.Duration {
 	if r.PlanificacionCada <= 0 {
-		return 30 * time.Second
+		return time.Minute
 	}
 	return r.PlanificacionCada
 }
 
 func (r *Runner) controlPlaneCada() time.Duration {
 	if r.ControlPlaneCada <= 0 {
-		return 15 * time.Second
+		return 30 * time.Second
 	}
 	return r.ControlPlaneCada
+}
+
+func (r *Runner) controlPlaneWarmCada() time.Duration {
+	if r.ControlPlaneWarmCada <= 0 && r.ControlPlaneCada > 0 {
+		return r.ControlPlaneCada
+	}
+	if r.ControlPlaneWarmCada <= 0 {
+		return 2 * time.Minute
+	}
+	return r.ControlPlaneWarmCada
+}
+
+func (r *Runner) controlPlaneColdCada() time.Duration {
+	if r.ControlPlaneColdCada <= 0 && r.ControlPlaneCada > 0 {
+		return r.ControlPlaneCada
+	}
+	if r.ControlPlaneColdCada <= 0 {
+		return 5 * time.Minute
+	}
+	return r.ControlPlaneColdCada
+}
+
+func (r *Runner) runtimeTranscriptCada() time.Duration {
+	if r.RuntimeTranscriptCada <= 0 {
+		return time.Minute
+	}
+	return r.RuntimeTranscriptCada
+}
+
+func (r *Runner) runtimeMailboxCada() time.Duration {
+	if r.RuntimeMailboxCada <= 0 {
+		return time.Minute
+	}
+	return r.RuntimeMailboxCada
+}
+
+func (r *Runner) runtimeOrdersCada() time.Duration {
+	if r.RuntimeOrdersCada <= 0 {
+		return r.controlPlaneCada()
+	}
+	return r.RuntimeOrdersCada
+}
+
+func (r *Runner) runtimeBudgetCada() time.Duration {
+	if r.RuntimeBudgetCada <= 0 {
+		return 2 * time.Minute
+	}
+	return r.RuntimeBudgetCada
+}
+
+func (r *Runner) allowIntervalBatch(name string, each time.Duration, now time.Time) bool {
+	if each <= 0 {
+		return true
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.batchIntervals == nil {
+		r.batchIntervals = map[string]time.Time{}
+	}
+	last := r.batchIntervals[name]
+	if !last.IsZero() && now.Sub(last) < each {
+		return false
+	}
+	r.batchIntervals[name] = now
+	return true
 }
 
 func (r *Runner) notificationRetryCada() time.Duration {
@@ -472,9 +678,9 @@ func (r *Runner) startupGrace() time.Duration {
 	return r.StartupGrace
 }
 
-func (r *Runner) beginControlPlaneBatch(name string, timeout time.Duration) (uint64, bool) {
+func (r *Runner) beginControlPlaneBatch(name string, timeout time.Duration) (token uint64, running bool, overdue bool) {
 	if r == nil {
-		return 0, false
+		return 0, false, false
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -484,15 +690,19 @@ func (r *Runner) beginControlPlaneBatch(name string, timeout time.Duration) (uin
 	now := time.Now()
 	if state, exists := r.runningBatches[name]; exists {
 		if state.expiresAt.IsZero() || now.Before(state.expiresAt) {
-			return 0, false
+			return 0, true, false
 		}
+		state.expiresAt = now.Add(timeout)
+		r.runningBatches[name] = state
+		return 0, true, true
 	}
 	r.nextBatchToken++
 	r.runningBatches[name] = runningBatchState{
 		token:     r.nextBatchToken,
+		startedAt: now,
 		expiresAt: now.Add(timeout),
 	}
-	return r.nextBatchToken, true
+	return r.nextBatchToken, false, false
 }
 
 func (r *Runner) finishControlPlaneBatch(name string, token uint64) {
