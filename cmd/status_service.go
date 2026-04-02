@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"strings"
+	"sync"
 	"time"
 
 	"orquesta/db"
@@ -13,6 +14,18 @@ type StatusService interface {
 }
 
 var statusService StatusService = dbStatusService{}
+
+var (
+	statusSnapshotTTL  = 2 * time.Second
+	statusFreshFetcher = fetchStatusFresh
+	statusNowFunc      = time.Now
+	statusCacheState   struct {
+		mu      sync.Mutex
+		value   apiStatusResponse
+		expires time.Time
+		ok      bool
+	}
+)
 
 type dbStatusService struct{}
 
@@ -63,6 +76,29 @@ func agenteCuentaComoConectado(agente *db.Agente) bool {
 }
 
 func (dbStatusService) FetchStatus() (apiStatusResponse, error) {
+	now := statusNowFunc().UTC()
+	statusCacheState.mu.Lock()
+	if statusCacheState.ok && now.Before(statusCacheState.expires) {
+		value := statusCacheState.value
+		statusCacheState.mu.Unlock()
+		return value, nil
+	}
+	statusCacheState.mu.Unlock()
+
+	status, err := statusFreshFetcher()
+	if err != nil {
+		return apiStatusResponse{}, err
+	}
+
+	statusCacheState.mu.Lock()
+	statusCacheState.value = status
+	statusCacheState.expires = now.Add(statusSnapshotTTL)
+	statusCacheState.ok = true
+	statusCacheState.mu.Unlock()
+	return status, nil
+}
+
+func fetchStatusFresh() (apiStatusResponse, error) {
 	sesiones, err := sesionesVisiblesParaEstado()
 	if err != nil {
 		return apiStatusResponse{}, err
@@ -212,4 +248,12 @@ func (dbStatusService) FetchStatus() (apiStatusResponse, error) {
 		PropuestasResumen:   propuestasResumen,
 		TareasActivas:       tareasActivas,
 	}, nil
+}
+
+func resetStatusSnapshotCache() {
+	statusCacheState.mu.Lock()
+	defer statusCacheState.mu.Unlock()
+	statusCacheState.value = apiStatusResponse{}
+	statusCacheState.expires = time.Time{}
+	statusCacheState.ok = false
 }
