@@ -7223,3 +7223,18 @@ Resultado:
   - `go test ./cmd -run 'Test(ParseGitStatusPorcelainSummaryIncluyeMuestraYOverflow|ParseGitStatusPorcelainSummaryLimpio|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
   - `go test ./cmd -run 'Test(MCPRevisionSupervisorExponeWorktreeDrift|MCPToolSupervisorSolicitaCheckpointPorWorktreeDrift)' -count=1`
   - `go build -o ./orquesta .`
+
+## 2026-04-02 — Cobertura explícita del supervisor operativo
+
+- Hallazgo:
+  - el selector `SeleccionarSupervisorAutonomiaOperativo()` ya estaba mejor que la variante dejada por `Codex4`, pero le faltaba cobertura dedicada en el árbol principal
+  - el valor útil del worktree era la batería de casos, no un cambio de lógica
+- Corrección:
+  - añadida cobertura propia en `db/autonomia_supervisor_operativo_test.go` para:
+    - fallback cuando el supervisor preferido no está disponible
+    - prioridad del candidato ya activo en el proyecto
+    - respeto de `exclude`
+    - contrato de `EsSupervisorAutonomiaOperativo()`
+  - no se ha tocado la lógica viva del selector; solo se ha blindado contra regresión
+- Validación:
+  - `go test ./db -run 'Test(SeleccionarSupervisorAutonomiaOperativo|EsSupervisorAutonomiaOperativo|BuildLaunchBootstrapPromptIncluyeRolOperativoAutonomo)' -count=1`
