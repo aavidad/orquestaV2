@@ -315,11 +315,16 @@ func RutaTrabajoPreferidaAgenteProyecto(agente string, proyecto *Proyecto, cwd s
 	if proyecto == nil {
 		return cwd
 	}
+	if ruta := rutaWorktreeActivaAgenteProyecto(proyecto.ID, agente); ruta != "" {
+		if ruta == cwd {
+			return cwd
+		}
+		if cwd == "" || !rutaTrabajoPerteneceAProyectoAgente(proyecto, agente, cwd) {
+			return ruta
+		}
+	}
 	if rutaTrabajoPerteneceAProyectoAgente(proyecto, agente, cwd) {
 		return cwd
-	}
-	if ruta := rutaWorktreeActivaAgenteProyecto(proyecto.ID, agente); ruta != "" {
-		return ruta
 	}
 	if ruta := normalizarRutaProyecto(RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, "")); ruta != "" {
 		return ruta
