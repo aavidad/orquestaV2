@@ -2573,6 +2573,8 @@ func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {
 		apiHandlerProyectoActualizar(w, r, ref)
 	case len(parts) == 2 && parts[1] == "overview" && r.Method == http.MethodGet:
 		apiHandlerProyectoOverview(w, r, ref)
+	case len(parts) == 2 && parts[1] == "cockpit" && r.Method == http.MethodGet:
+		apiHandlerProyectoCockpit(w, r, ref)
 	case len(parts) == 2 && parts[1] == "fusionar" && r.Method == http.MethodPost:
 		apiHandlerProyectoFusionar(w, r, ref)
 	case len(parts) == 2 && parts[1] == "decisiones" && r.Method == http.MethodPost:
@@ -2664,6 +2666,15 @@ func apiHandlerProyectoOverview(w http.ResponseWriter, r *http.Request, ref stri
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, apiProyectoOverviewResponse{Overview: overview})
+}
+
+func apiHandlerProyectoCockpit(w http.ResponseWriter, r *http.Request, ref string) {
+	cockpit, err := buildProyectoCockpit(strings.TrimSpace(ref))
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiProyectoCockpitResponse{Cockpit: cockpit})
 }
 
 func apiHandlerProyectoDecisionNueva(w http.ResponseWriter, r *http.Request, ref string) {

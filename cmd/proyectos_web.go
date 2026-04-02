@@ -36,6 +36,7 @@ type webProyectosData struct {
 
 type webProyectoDetalleData struct {
 	Proyecto    *db.Proyecto
+	Cockpit     *apiProyectoCockpit
 	Operacion   *db.ProyectoOperacion
 	Autonomia   *db.ProyectoAutonomia
 	Ciclos      []*db.AutonomiaCiclo
@@ -109,6 +110,7 @@ func webHandlerProyectoDetalle(w http.ResponseWriter, r *http.Request, slug stri
 		http.NotFound(w, r)
 		return
 	}
+	cockpit, errCockpit := webCargarProyectoCockpitPorAPI(slug)
 	operacion, err := webCargarProyectoOperacionPorAPI(slug)
 	autonomia, errAutonomia := webCargarProyectoAutonomiaPorAPI(slug)
 	reviewGates, errReviewGates := webListarReviewGatesPorAPI(slug, "", 20)
@@ -132,11 +134,15 @@ func webHandlerProyectoDetalle(w http.ResponseWriter, r *http.Request, slug stri
 	if errAutonomia != nil {
 		errParts = append(errParts, errAutonomia.Error())
 	}
+	if errCockpit != nil {
+		errParts = append(errParts, errCockpit.Error())
+	}
 	if errReviewGates != nil {
 		errParts = append(errParts, errReviewGates.Error())
 	}
 	webRender(w, r, webTplLayout+webTplProyectoDetalle, webProyectoDetalleData{
 		Proyecto:    overview.Proyecto,
+		Cockpit:     cockpit,
 		Operacion:   operacion,
 		Autonomia:   autonomiaItem,
 		Ciclos:      cicloItems,
@@ -325,6 +331,15 @@ func webCargarProyectoOverviewPorAPI(ref string) (*memoriaproyecto.ProjectOvervi
 	return resp.Overview, nil
 }
 
+func webCargarProyectoCockpitPorAPI(ref string) (*apiProyectoCockpit, error) {
+	var resp apiProyectoCockpitResponse
+	path := "/api/proyectos/" + url.PathEscape(strings.TrimSpace(ref)) + "/cockpit"
+	if err := webInvocarAPIJSON(http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Cockpit, nil
+}
+
 func webCrearDecisionProyectoPorAPI(ref string, req apiProyectoDecisionCreateRequest) (int64, error) {
 	var resp apiCatalogoMutationResponse
 	path := "/api/proyectos/" + url.PathEscape(strings.TrimSpace(ref)) + "/decisiones"
@@ -479,6 +494,30 @@ const webTplProyectoDetalle = `{{define "content"}}
 </section>
 
 <section class="container grid">
+  <article>
+    <h3>Cockpit operativo</h3>
+    {{if .Cockpit}}
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.5rem">
+        <div style="border:1px solid var(--pico-muted-border-color);border-radius:.5rem;padding:.75rem"><strong>{{len .Cockpit.AgentesActivos}}</strong><br><small>agentes activos</small></div>
+        <div style="border:1px solid var(--pico-muted-border-color);border-radius:.5rem;padding:.75rem"><strong>{{len .Cockpit.TareasActivas}}</strong><br><small>tareas en progreso</small></div>
+        <div style="border:1px solid var(--pico-muted-border-color);border-radius:.5rem;padding:.75rem"><strong>{{len .Cockpit.TareasReservadas}}</strong><br><small>tareas reservadas</small></div>
+        <div style="border:1px solid var(--pico-muted-border-color);border-radius:.5rem;padding:.75rem"><strong>{{.Cockpit.PropuestasAbiertas}}</strong><br><small>propuestas abiertas</small></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem;margin-top:.5rem">
+        <div style="border:1px solid var(--pico-muted-border-color);border-radius:.5rem;padding:.75rem"><strong>{{.Cockpit.ReviewGatesAbiertas}}</strong><br><small>review gates abiertas</small></div>
+        <div style="border:1px solid var(--pico-muted-border-color);border-radius:.5rem;padding:.75rem"><strong>{{.Cockpit.RuntimeMailboxPendiente}}</strong><br><small>guidance durable pendiente</small></div>
+        <div style="border:1px solid var(--pico-muted-border-color);border-radius:.5rem;padding:.75rem"><strong>{{.Cockpit.RuntimeOrdersAbiertas}}</strong><br><small>runtime orders abiertas</small></div>
+      </div>
+      {{if .Cockpit.AgentesActivos}}
+      <p style="margin:.75rem 0 0 0"><strong>Agentes activos:</strong>
+        {{range $i, $item := .Cockpit.AgentesActivos}}{{if $i}}, {{end}}{{$item.Nombre}}{{if $item.Rol}} <small style="color:#64748b">({{$item.Rol}})</small>{{end}}{{end}}
+      </p>
+      {{end}}
+    {{else}}
+      <p>Sin resumen operativo.</p>
+    {{end}}
+  </article>
+
   <article>
     <h3>{{tr "projects.operation.title"}}</h3>
     <form method="post" action="/proyectos/{{.Proyecto.Slug}}/operacion">

@@ -7238,3 +7238,38 @@ Resultado:
   - no se ha tocado la lógica viva del selector; solo se ha blindado contra regresión
 - Validación:
   - `go test ./db -run 'Test(SeleccionarSupervisorAutonomiaOperativo|EsSupervisorAutonomiaOperativo|BuildLaunchBootstrapPromptIncluyeRolOperativoAutonomo)' -count=1`
+
+## 2026-04-02 — Cockpit operativo de proyecto y cierre del cuelgue en overview
+
+- Hallazgo:
+  - el frente más rentable tras el núcleo era `proyectos` como cockpit operativo principal
+  - al implementar `/api/proyectos/{slug}/cockpit` apareció además un cuello viejo: `/api/proyectos/{slug}/overview` podía bloquear el daemon
+  - la causa exacta estaba en `listarDecisionesProyectoLegacy()`: hacía `GetPropuesta()` dentro del bucle de `rows`, lo que con SQLite y `MaxOpenConns=1` secuestraba la conexión
+- Corrección:
+  - nuevo resumen canónico `cockpit` por proyecto:
+    - `tareas_por_estado`
+    - `tareas_activas`
+    - `tareas_reservadas`
+    - `agentes_activos`
+    - `asignaciones_activas`
+    - `propuestas_abiertas`
+    - `review_gates_abiertas`
+    - `runtime_mailbox_pendiente`
+    - `runtime_orders_abiertas`
+  - expuesto por:
+    - `GET /api/proyectos/{slug}/cockpit`
+    - `/proyectos/{slug}` embebido como `Cockpit operativo`
+  - el cockpit usa lecturas ligeras (`COUNT` y selects directos) para no reabrir el cuello de SQLite
+  - `listarDecisionesProyectoLegacy()` ahora:
+    - primero escanea filas
+    - luego resuelve `propuesta_codigo`
+    - ya no hace consultas anidadas con `rows` abiertas
+- Validación:
+  - `go test ./cmd -run 'Test(APIProyectoCockpitExponeResumenOperativo|WebProyectoDetalleMuestraCockpitOperativo)' -count=1`
+  - `go test ./db -run 'Test(GuardarYListarDecisionesProyectoLegacySchema|ListarDecisionesProyectoLegacyNoBloqueaConMaxOpenConnsUno|HistorialVotacionesProyecto)' -count=1`
+  - `go build -o ./orquesta .`
+  - validación viva:
+    - `GET /api/proyectos/orquestador/overview` => `200` en `~0.003s`
+    - `GET /api/proyectos/orquestador/cockpit` => `200` en `~0.040s`
+    - `GET /proyectos/orquestador` => `200` en `~0.054s`
+    - `./orquesta status` vuelve a responder inmediatamente

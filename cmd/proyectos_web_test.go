@@ -263,3 +263,79 @@ func TestWebProyectoAutonomiaYReviewGatesPorAPI(t *testing.T) {
 		t.Fatalf("agentes preferidos en web inesperados: %+v", policy)
 	}
 }
+
+func TestWebProyectoDetalleMuestraCockpitOperativo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex3", proyectoID, "worker"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex3",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Integrar cockpit",
+		ProyectoID:  &proyectoID,
+		Modulo:      "web",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Descripcion: "detalle",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex3"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex3"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "orquesta",
+		ToAgente:    "Codex3",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{}`,
+	}); err != nil {
+		t.Fatalf("encolar mailbox: %v", err)
+	}
+	if _, err := db.CrearReviewGate(&db.ReviewGate{
+		ProyectoID:  &proyectoID,
+		RequestedBy: "orquesta",
+		Estado:      db.ReviewGatePendiente,
+	}); err != nil {
+		t.Fatalf("crear review gate: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/proyectos/orquestador", nil)
+	rec := httptest.NewRecorder()
+	webHandlerProyectoDetalle(rec, req, "orquestador")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detalle status=%d cuerpo=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Cockpit operativo") ||
+		!strings.Contains(body, "agentes activos") ||
+		!strings.Contains(body, "guidance durable pendiente") ||
+		!strings.Contains(body, "Codex3") {
+		t.Fatalf("detalle sin cockpit operativo: %s", body)
+	}
+}

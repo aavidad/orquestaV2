@@ -485,7 +485,12 @@ func listarDecisionesProyectoLegacy(proyectoID int64) ([]*DecisionProyecto, erro
 	}
 	defer rows.Close()
 
-	var list []*DecisionProyecto
+	type legacyDecisionRow struct {
+		item         *DecisionProyecto
+		propuestaCod string
+	}
+
+	var rowsScanned []legacyDecisionRow
 	for rows.Next() {
 		var (
 			item           DecisionProyecto
@@ -517,14 +522,28 @@ func listarDecisionesProyectoLegacy(proyectoID int64) ([]*DecisionProyecto, erro
 		if tareaID.Valid {
 			item.TareaID = &tareaID.Int64
 		}
-		if strings.TrimSpace(propuestaCod) != "" {
-			if propuesta, err := GetPropuesta(strings.TrimSpace(propuestaCod)); err == nil && propuesta != nil {
-				item.PropuestaID = &propuesta.ID
+		rowsScanned = append(rowsScanned, legacyDecisionRow{
+			item:         &item,
+			propuestaCod: strings.TrimSpace(propuestaCod),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	list := make([]*DecisionProyecto, 0, len(rowsScanned))
+	for _, row := range rowsScanned {
+		if row.item == nil {
+			continue
+		}
+		if row.propuestaCod != "" {
+			if propuesta, err := GetPropuesta(row.propuestaCod); err == nil && propuesta != nil {
+				row.item.PropuestaID = &propuesta.ID
 			}
 		}
-		list = append(list, &item)
+		list = append(list, row.item)
 	}
-	return list, rows.Err()
+	return list, nil
 }
 
 func proyectoSlugDesdeID(proyectoID int64) (string, error) {

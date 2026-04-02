@@ -2,6 +2,7 @@ package db
 
 import (
 	"testing"
+	"time"
 )
 
 func TestHistorialVotacionesProyecto(t *testing.T) {
@@ -154,6 +155,100 @@ func TestGuardarYListarDecisionesProyectoLegacySchema(t *testing.T) {
 	}
 	if items[0].Impacto != "medio" {
 		t.Fatalf("impacto legacy inesperado: %+v", items[0])
+	}
+}
+
+func TestListarDecisionesProyectoLegacyNoBloqueaConMaxOpenConnsUno(t *testing.T) {
+	prepararDBTemporal(t)
+	if _, err := DB.Exec(`DROP TABLE decisiones_proyecto`); err != nil {
+		t.Fatalf("drop decisiones_proyecto: %v", err)
+	}
+	if _, err := DB.Exec(`
+		CREATE TABLE decisiones_proyecto (
+			id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+			proyecto                 TEXT    NOT NULL,
+			titulo                   TEXT    NOT NULL,
+			solucion_elegida         TEXT    NOT NULL DEFAULT '',
+			motivo                   TEXT    NOT NULL DEFAULT '',
+			alternativas_descartadas TEXT    NOT NULL DEFAULT '',
+			impacto                  TEXT    NOT NULL DEFAULT 'medio'
+			                              CHECK (impacto IN ('alto','medio','bajo')),
+			propuesta_codigo         TEXT    NOT NULL DEFAULT '',
+			tarea_id                 INTEGER REFERENCES tareas(id) ON DELETE SET NULL,
+			registrado_por           TEXT    NOT NULL DEFAULT '',
+			created_at               DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at               DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`); err != nil {
+		t.Fatalf("create legacy decisiones_proyecto: %v", err)
+	}
+
+	var proyectoID int64
+	if err := DB.QueryRow(
+		`INSERT INTO proyectos (slug, nombre, ruta_abs, tipo, activo) VALUES (?,?,?,?,1) RETURNING id`,
+		"orquestador", "Orquestador", "/tmp/orquestador", "repo",
+	).Scan(&proyectoID); err != nil {
+		t.Fatalf("insert proyecto: %v", err)
+	}
+	propID, err := CrearPropuesta(&Propuesta{
+		Codigo:       "OP-901",
+		Titulo:       "Decision vinculada",
+		Descripcion:  "Descripcion",
+		Tipo:         "arquitectura",
+		PropuestoPor: "alberto",
+		Distribuidor: "alberto",
+		ProyectoID:   &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("crear propuesta: %v", err)
+	}
+	if propID == 0 {
+		t.Fatal("propuesta id invalido")
+	}
+	if _, err := DB.Exec(`
+		INSERT INTO decisiones_proyecto (
+			proyecto, titulo, solucion_elegida, motivo, alternativas_descartadas, impacto,
+			propuesta_codigo, tarea_id, registrado_por
+		) VALUES (?,?,?,?,?,?,?,?,?)`,
+		"orquestador",
+		"Decision con propuesta",
+		"Servicio y repositorio",
+		"Desacoplar",
+		"SQL directo",
+		"medio",
+		"OP-901",
+		nil,
+		"orquesta",
+	); err != nil {
+		t.Fatalf("insert legacy decision: %v", err)
+	}
+
+	prevMaxOpen := DB.Stats().MaxOpenConnections
+	DB.SetMaxOpenConns(1)
+	defer DB.SetMaxOpenConns(prevMaxOpen)
+
+	done := make(chan []*DecisionProyecto, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		items, err := ListarDecisionesProyecto(proyectoID)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		done <- items
+	}()
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("listar decisiones legacy: %v", err)
+	case items := <-done:
+		if len(items) != 1 {
+			t.Fatalf("esperaba 1 decision legacy, tengo %d", len(items))
+		}
+		if items[0].PropuestaID == nil || *items[0].PropuestaID != propID {
+			t.Fatalf("propuesta vinculada inesperada: %+v", items[0])
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("listar decisiones legacy quedo bloqueado con MaxOpenConns=1")
 	}
 }
 

@@ -1229,3 +1229,8 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
   - una guidance pendiente con `supervisor_action=revisar_worktree_desfasada` no debe promover `seguir_guidance_durable`
   - mientras ese checkpoint siga pendiente, OpenClaw debe verla como deuda operativa abierta, no como mensaje consumible sin más
   - esto no autoriza refrescos automáticos sobre worktrees sucias; solo mejora la decisión del supervisor
+- en lectura server-first con SQLite y `MaxOpenConns=1`, ninguna ruta de API/web debe hacer queries reentrantes mientras mantiene `rows` abiertas:
+  - primero se escanean filas
+  - luego se resuelven referencias adicionales
+  - no se permite abrir `Get*` o `List*` anidadas dentro del `for rows.Next()`
+  - esta regla es especialmente importante en vistas agregadas (`overview`, `cockpit`, `status`) porque si se viola bloquea todo el daemon

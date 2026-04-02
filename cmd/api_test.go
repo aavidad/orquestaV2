@@ -2928,3 +2928,125 @@ func TestAPIProyectoOverviewSoportaDecisionesLegacy(t *testing.T) {
 		t.Fatalf("overview legacy sin decisiones esperadas: %+v", resp.Overview)
 	}
 }
+
+func TestAPIProyectoCockpitExponeResumenOperativo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex3", proyectoID, "worker"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex3",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	libreID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Libre",
+		ProyectoID:  &proyectoID,
+		Modulo:      "web",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Descripcion: "pendiente",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea libre: %v", err)
+	}
+	if err := db.TomarTarea(libreID, "Codex3"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(libreID, "Codex3"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	reservadaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Reservada",
+		ProyectoID:  &proyectoID,
+		Modulo:      "api",
+		Prioridad:   db.PrioridadMedia,
+		CreadoPor:   "orquesta",
+		Descripcion: "reservada",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea reservada: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE tareas SET estado='asignada', agente='Codex3' WHERE id=?`, reservadaID); err != nil {
+		t.Fatalf("forzar reservada: %v", err)
+	}
+	if _, err := db.CrearPropuesta(&db.Propuesta{
+		Titulo:       "Abrir frente",
+		Descripcion:  "resumen",
+		ProyectoID:   &proyectoID,
+		Tipo:         "arquitectura",
+		PropuestoPor: "orquesta",
+		Distribuidor: "orquesta",
+	}); err != nil {
+		t.Fatalf("crear propuesta: %v", err)
+	}
+	if _, err := db.CrearReviewGate(&db.ReviewGate{
+		ProyectoID:  &proyectoID,
+		RequestedBy: "orquesta",
+		Estado:      db.ReviewGatePendiente,
+	}); err != nil {
+		t.Fatalf("crear review gate: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "orquesta",
+		ToAgente:    "Codex3",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{}`,
+	}); err != nil {
+		t.Fatalf("encolar mailbox: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex3",
+		ProyectoID:  &proyectoID,
+		Tipo:        "nudge",
+		PayloadJSON: `{}`,
+	}); err != nil {
+		t.Fatalf("encolar runtime order: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/proyectos/orquestador/cockpit", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status cockpit inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp apiProyectoCockpitResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode cockpit: %v", err)
+	}
+	if resp.Cockpit == nil || resp.Cockpit.Proyecto == nil || resp.Cockpit.Proyecto.ID != proyectoID {
+		t.Fatalf("cockpit sin proyecto esperado: %+v", resp.Cockpit)
+	}
+	if got := resp.Cockpit.TareasPorEstado["en_progreso"]; got != 1 {
+		t.Fatalf("tareas en progreso inesperadas: %+v", resp.Cockpit.TareasPorEstado)
+	}
+	if got := resp.Cockpit.TareasPorEstado["asignada"]; got != 1 {
+		t.Fatalf("tareas reservadas inesperadas: %+v", resp.Cockpit.TareasPorEstado)
+	}
+	if len(resp.Cockpit.AgentesActivos) != 1 || resp.Cockpit.AgentesActivos[0].Nombre != "Codex3" {
+		t.Fatalf("agentes activos inesperados: %+v", resp.Cockpit.AgentesActivos)
+	}
+	if resp.Cockpit.PropuestasAbiertas != 1 || resp.Cockpit.ReviewGatesAbiertas != 1 || resp.Cockpit.RuntimeMailboxPendiente != 1 || resp.Cockpit.RuntimeOrdersAbiertas != 1 {
+		t.Fatalf("resumen operativo inesperado: %+v", resp.Cockpit)
+	}
+}
