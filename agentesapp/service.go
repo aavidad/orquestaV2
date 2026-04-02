@@ -13,6 +13,7 @@ import (
 type Store interface {
 	RegisterAgent(nombre, rol string) error
 	RegisterAgentAuto(proveedor, rol string) (string, error)
+	ObserveAgentIdentity(nombre, email, usuario, fuente string, observedAt *time.Time) error
 	RetireAgent(nombre string) error
 	RehabilitateAgent(nombre string) error
 	ResetReanimation(nombre string) error
@@ -116,6 +117,10 @@ func (s *Service) RegisterAgent(nombre, rol string) error {
 
 func (s *Service) RegisterAgentAuto(proveedor, rol string) (string, error) {
 	return s.store.RegisterAgentAuto(strings.TrimSpace(proveedor), strings.TrimSpace(rol))
+}
+
+func (s *Service) ObserveAgentIdentity(nombre, email, usuario, fuente string, observedAt *time.Time) error {
+	return s.store.ObserveAgentIdentity(strings.TrimSpace(nombre), strings.TrimSpace(email), strings.TrimSpace(usuario), strings.TrimSpace(fuente), observedAt)
 }
 
 func (s *Service) GetAgent(nombre string) (*db.Agente, error) {
@@ -814,6 +819,10 @@ func (Repository) RegisterAgent(nombre, rol string) error {
 
 func (Repository) RegisterAgentAuto(proveedor, rol string) (string, error) {
 	return db.RegistrarAgenteAuto(proveedor, rol)
+}
+
+func (Repository) ObserveAgentIdentity(nombre, email, usuario, fuente string, observedAt *time.Time) error {
+	return db.UpsertAgenteIdentidadObservada(nombre, email, usuario, fuente, observedAt)
 }
 
 func (Repository) RetireAgent(nombre string) error {

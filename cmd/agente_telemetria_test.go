@@ -198,3 +198,30 @@ func TestAgenteRankingCuentasCmdMarcaUsoObservadoClaude(t *testing.T) {
 		t.Fatalf("no deberia caer a sin_datos:\n%s", out)
 	}
 }
+
+func TestAgenteObservarCuentaCmdRegistraYRenderizaResultado(t *testing.T) {
+	posted := false
+	setAgentTelemetryHTTPClientForTest(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch {
+		case req.Method == http.MethodPost && req.URL.Path == "/api/agentes/Codex7/observar-cuenta":
+			posted = true
+			return newJSONResponse(http.StatusOK, `{"ok":true,"agente":"Codex7"}`), nil
+		case req.URL.Path == "/api/agentes/cuentas":
+			return newJSONResponse(http.StatusOK, `{"generado":"2026-04-02T10:00:00Z","activos":false,"agentes":[{"nombre":"Codex7","cuenta_email":"berserk@avidad.com","cuenta_usuario":"berserk"}]}`), nil
+		default:
+			return newJSONResponse(http.StatusNotFound, `{"error":"not found"}`), nil
+		}
+	}))
+	out := captureOutput(t, func() {
+		rootCmd.SetArgs([]string{"agente", "observar-cuenta", "Codex7", "--email", "berserk@avidad.com", "--usuario", "berserk"})
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("Execute agente observar-cuenta: %v", err)
+		}
+	})
+	if !posted {
+		t.Fatalf("no se envió la observación por API")
+	}
+	if !strings.Contains(out, "Codex7") || !strings.Contains(out, "berserk@avidad.com") {
+		t.Fatalf("salida inesperada:\n%s", out)
+	}
+}

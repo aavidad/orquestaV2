@@ -6863,6 +6863,27 @@ Resultado:
   - `go test ./cmd -run 'Test(AgenteRankingCuentasCmdMarcaUsoObservadoClaude|CuentaPresupuestoDesdeAgenteUsaObservedUsageCuandoNoHayCuotaReal)' -count=1`
   - `go build -o ./orquesta .`
 
+## 2026-04-02 — Identidad observada canónica para agentes sin runtime visible
+
+- El hueco real:
+  - `Codex7-13` podían existir ya dados de alta e incluso estar identificados manualmente por OAuth fuera de Orquesta
+  - pero si todavía no había `runtime_handle` ni `presupuesto_sesion`, `agente cuentas` seguía mostrándolos vacíos
+  - eso obligaba a depender de observación efímera y dejaba mal resuelto el alta operativa de agentes nuevos
+- Se añadió:
+  - tabla canónica `agentes_identidad_observada`
+  - integración en `GetAgente/ListarAgentes` como fallback final de `cuenta observada`
+  - API server-first `POST /api/agentes/{agente}/observar-cuenta`
+  - CLI server-first `./orquesta agente observar-cuenta <agente> --email ... [--usuario ...]`
+- Regla canónica:
+  - esta vía solo fija identidad observada (`email/usuario/fuente/observed_at`)
+  - no fabrica cuota ni saldo
+  - sirve para reflejar en Orquesta una identidad ya verificada manualmente mientras llega la observación viva del runtime
+- Validación dirigida:
+  - `go test ./db -run 'TestGetAgenteUsaIdentidadObservadaComoFallback' -count=1`
+  - `go test ./cmd -run 'Test(AgenteObservarCuentaCmdRegistraYRenderizaResultado|APIAgentesObservarCuentaActualizaCuentas|CommandSupportsServerMode)' -count=1`
+  - `go test ./agentesapp -run 'Test' -count=1`
+  - `go build -o ./orquesta .`
+
 ## 2026-04-01 — Metadatos de sesión Claude visibles en Orquesta
 
 - Lo útil de `claw-code-dev-rust` no era una cuota restante nueva, sino su sesión persistida:

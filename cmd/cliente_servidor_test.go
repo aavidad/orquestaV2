@@ -97,6 +97,7 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "agente cuentas", args: []string{"agente", "cuentas", "--activos"}, want: true},
 		{nombre: "agente presupuesto", args: []string{"agente", "presupuesto", "--activos"}, want: true},
 		{nombre: "agente ranking cuentas", args: []string{"agente", "ranking-cuentas", "--activos"}, want: true},
+		{nombre: "agente observar cuenta", args: []string{"agente", "observar-cuenta", "Codex7", "--email", "berserk@avidad.com"}, want: true},
 		{nombre: "agente investigar", args: []string{"agente", "investigar", "refactor"}, want: true},
 		{nombre: "agente fusionar", args: []string{"agente", "fusionar", "codex1", "Codex1"}, want: true},
 		{nombre: "agente lanzar plan", args: []string{"agente", "lanzar-plan", "scripts/agentes.orquestador.plan"}, want: true},

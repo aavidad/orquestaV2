@@ -891,6 +891,20 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 	}
 	nombre := parts[0]
 	switch parts[1] {
+	case "observar-cuenta":
+		var req apiAgenteObservarCuentaRequest
+		if err := apiDecodeJSON(r, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		fuente := strings.TrimSpace(req.Fuente)
+		if fuente == "" {
+			fuente = "manual_observed_identity"
+		}
+		if err := agentesService.ObserveAgentIdentity(nombre, req.Email, req.Usuario, fuente, req.ObservedAt); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
 	case "retirar":
 		if err := agentesService.ApplyStateAction(nombre, "retirar"); err != nil {
 			apiError(w, http.StatusBadRequest, err)

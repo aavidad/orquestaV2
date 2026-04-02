@@ -36,12 +36,27 @@ type fakeStore struct {
 	pausedMinutes     int
 	pausedReason      string
 	retiredAgent      string
+	observedIdentity  struct {
+		nombre string
+		email  string
+		user   string
+		source string
+		when   *time.Time
+	}
 	enqueuedOrders    []*db.RuntimeOrder
 }
 
 func (f *fakeStore) RegisterAgent(nombre, rol string) error { return nil }
 func (f *fakeStore) RegisterAgentAuto(proveedor, rol string) (string, error) {
 	return "Codex1", nil
+}
+func (f *fakeStore) ObserveAgentIdentity(nombre, email, usuario, fuente string, observedAt *time.Time) error {
+	f.observedIdentity.nombre = nombre
+	f.observedIdentity.email = email
+	f.observedIdentity.user = usuario
+	f.observedIdentity.source = fuente
+	f.observedIdentity.when = observedAt
+	return nil
 }
 func (f *fakeStore) RetireAgent(nombre string) error {
 	f.retiredAgent = nombre

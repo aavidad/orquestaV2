@@ -1092,6 +1092,9 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 			aplicarIdentidadCuentaAgente(a, identidadCuentaDesdeHandle(handles[0]))
 		}
 	}
+	if strings.TrimSpace(a.CuentaEmail) == "" {
+		aplicarIdentidadCuentaAgente(a, UltimaIdentidadCuentaObservadaAgente(a.Nombre))
+	}
 	proyectarEstadoCuotaVisibleDesdePresupuesto(a)
 	sincronizarPresupuestoEfectivoVisible(a)
 	reconciliarBloqueoPresupuestoStale(a)

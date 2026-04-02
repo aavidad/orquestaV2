@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"orquesta/agentesapp"
 	"orquesta/capacidadapp"
@@ -233,6 +234,13 @@ type apiAgenteRequest struct {
 	Nombre    string `json:"nombre"`
 	Rol       string `json:"rol"`
 	Proveedor string `json:"proveedor"`
+}
+
+type apiAgenteObservarCuentaRequest struct {
+	Email      string     `json:"email"`
+	Usuario    string     `json:"usuario"`
+	Fuente     string     `json:"fuente"`
+	ObservedAt *time.Time `json:"observed_at,omitempty"`
 }
 
 type apiConfigSetRequest struct {
@@ -942,6 +950,20 @@ func listarAgentesRankingCuentasPorAPI(activos bool) (*apiAgentesRankingCuentasR
 		return nil, ok, err
 	}
 	return &resp, true, nil
+}
+
+func observarCuentaAgentePorAPI(nombre, email, usuario, fuente string, observedAt *time.Time) (bool, error) {
+	ok, err := apiPost(
+		fmt.Sprintf("/api/agentes/%s/observar-cuenta", url.PathEscape(strings.TrimSpace(nombre))),
+		apiAgenteObservarCuentaRequest{
+			Email:      strings.TrimSpace(email),
+			Usuario:    strings.TrimSpace(usuario),
+			Fuente:     strings.TrimSpace(fuente),
+			ObservedAt: observedAt,
+		},
+		nil,
+	)
+	return ok, err
 }
 
 func retirarAgentePorAPI(nombre string) (bool, error) {

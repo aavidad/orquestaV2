@@ -57,6 +57,45 @@ func TestCuentaPresupuestoDesdeAgenteUsaObservedUsageCuandoNoHayCuotaReal(t *tes
 	}
 }
 
+func TestAPIAgentesObservarCuentaActualizaCuentas(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	if err := db.RegistrarAgente("Codex7", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/agentes/Codex7/observar-cuenta", bytes.NewBufferString(`{"email":"berserk@avidad.com","usuario":"berserk","fuente":"manual_observed_identity"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	apiRouterAgentes(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST observar-cuenta status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/agentes/cuentas", nil)
+	getRec := httptest.NewRecorder()
+	apiHandlerAgentesCuentas(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("GET cuentas status=%d body=%s", getRec.Code, getRec.Body.String())
+	}
+	var resp apiAgentesCuentasResponse
+	if err := json.Unmarshal(getRec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode cuentas: %v", err)
+	}
+	var item *apiAgenteCuentaItem
+	for i := range resp.Agentes {
+		if strings.EqualFold(resp.Agentes[i].Nombre, "Codex7") {
+			item = &resp.Agentes[i]
+			break
+		}
+	}
+	if item == nil {
+		t.Fatalf("Codex7 no aparece en cuentas: %+v", resp.Agentes)
+	}
+	if item.CuentaEmail != "berserk@avidad.com" || item.CuentaUsuario != "berserk" {
+		t.Fatalf("cuenta inesperada: %+v", item)
+	}
+}
+
 func TestAlignOpenClawSessionCandidatesWithStatusPromueveActivosCanonicos(t *testing.T) {
 	candidates := []apiOpenClawSessionCandidate{
 		{Agente: "Codex3", Activo: false, ExternalSessionID: "sess-codex3-1"},

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -98,6 +99,51 @@ var agenteRankingCuentasCmd = &cobra.Command{
 		for i, cuenta := range resp.Cuentas {
 			fmt.Printf("%d. %-18s %s", i+1, cuenta.CuentaClave, resumenRankingCuenta(cuenta))
 			fmt.Println()
+		}
+		return nil
+	},
+}
+
+var agenteObservarCuentaCmd = &cobra.Command{
+	Use:   "observar-cuenta <agente>",
+	Short: "Registra de forma canónica la cuenta observada de un agente",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agente := strings.TrimSpace(args[0])
+		email, _ := cmd.Flags().GetString("email")
+		usuario, _ := cmd.Flags().GetString("usuario")
+		fuente, _ := cmd.Flags().GetString("fuente")
+		if strings.TrimSpace(fuente) == "" {
+			fuente = "manual_observed_identity"
+		}
+		var observedAt *time.Time
+		if raw, _ := cmd.Flags().GetString("observed-at"); strings.TrimSpace(raw) != "" {
+			parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(raw))
+			if err != nil {
+				return fmt.Errorf("observed-at debe ir en RFC3339: %w", err)
+			}
+			parsed = parsed.UTC()
+			observedAt = &parsed
+		}
+		ok, err := observarCuentaAgentePorAPI(agente, email, usuario, fuente, observedAt)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return agenteErrorServerFirst()
+		}
+		resp, ok, err := listarAgentesCuentasPorAPI(false)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return agenteErrorServerFirst()
+		}
+		for _, item := range resp.Agentes {
+			if strings.EqualFold(strings.TrimSpace(item.Nombre), agente) {
+				fmt.Printf("%-16s %s\n", item.Nombre, resumenCuentaObservadaAgente(item))
+				return nil
+			}
 		}
 		return nil
 	},
@@ -234,4 +280,9 @@ func init() {
 		}
 		agenteCmd.AddCommand(sub)
 	}
+	agenteObservarCuentaCmd.Flags().String("email", "", "Correo observado para el agente")
+	agenteObservarCuentaCmd.Flags().String("usuario", "", "Usuario observado para el agente")
+	agenteObservarCuentaCmd.Flags().String("fuente", "manual_observed_identity", "Fuente de la observación")
+	agenteObservarCuentaCmd.Flags().String("observed-at", "", "Timestamp RFC3339 opcional de la observación")
+	agenteCmd.AddCommand(agenteObservarCuentaCmd)
 }
