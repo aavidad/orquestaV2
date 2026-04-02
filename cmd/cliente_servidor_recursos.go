@@ -890,13 +890,17 @@ func registrarAgentePorAPI(nombre, rol string) (bool, error) {
 	return ok, err
 }
 
-func listarAgentesPresupuestoPorAPI(activos bool) (*apiAgentesPresupuestoResponse, bool, error) {
+func listarAgentesPresupuestoPorAPI(activos bool, agente string) (*apiAgentesPresupuestoResponse, bool, error) {
 	var resp apiAgentesPresupuestoResponse
 	path := "/api/agentes/presupuesto"
+	query := url.Values{}
 	if activos {
-		path += "?activos=true"
+		query.Set("activos", "true")
 	}
-	ok, err := apiGet(path, &resp)
+	if strings.TrimSpace(agente) != "" {
+		query.Set("agente", strings.TrimSpace(agente))
+	}
+	ok, err := apiGetQuery(path, query, &resp)
 	if !ok || err != nil {
 		return nil, ok, err
 	}

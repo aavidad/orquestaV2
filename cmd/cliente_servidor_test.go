@@ -126,12 +126,12 @@ func TestCommandSupportsServerMode(t *testing.T) {
 
 func TestShouldPreferAPIClientUsaHTTPServer(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/server", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "metodo no soportado", http.StatusMethodNotAllowed)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(map[string]any{"name": "orquesta"})
 	})
 	mux.HandleFunc("/api/runtimes", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"runtimes": []any{}})
@@ -201,9 +201,9 @@ func TestShouldPreferAPIClientUsaRPCLocalAunqueAPIStatusSeaLenta(t *testing.T) {
 	mux.HandleFunc(rpclocal.HealthPath, func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(rpclocal.HealthResponse{OK: true})
 	})
-	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/server", func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(500 * time.Millisecond)
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(map[string]any{"name": "orquesta"})
 	})
 	srv := newTestHTTPServerOrSkip(t, mux)
 	defer srv.Close()

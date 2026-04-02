@@ -30,7 +30,7 @@ var agentePresupuestoCmd = &cobra.Command{
 				return agenteErrorServerFirst()
 			}
 		}
-		resp, ok, err := listarAgentesPresupuestoPorAPI(activos)
+		resp, ok, err := listarAgentesPresupuestoPorAPI(activos, agenteFiltro)
 		if err != nil {
 			return err
 		}

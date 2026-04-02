@@ -702,6 +702,20 @@ func TestAPIAgentesPresupuestoYCuentas(t *testing.T) {
 		t.Fatalf("presupuesto sin desglose completo: %+v", presupuestoResp.Agentes[0])
 	}
 
+	recPresupuestoAgente := httptest.NewRecorder()
+	reqPresupuestoAgente := httptest.NewRequest(http.MethodGet, "/api/agentes/presupuesto?agente=CodexCuenta", nil)
+	mux.ServeHTTP(recPresupuestoAgente, reqPresupuestoAgente)
+	if recPresupuestoAgente.Code != http.StatusOK {
+		t.Fatalf("status presupuesto por agente inesperado: %d body=%s", recPresupuestoAgente.Code, recPresupuestoAgente.Body.String())
+	}
+	var presupuestoAgenteResp apiAgentesPresupuestoResponse
+	if err := json.Unmarshal(recPresupuestoAgente.Body.Bytes(), &presupuestoAgenteResp); err != nil {
+		t.Fatalf("decode presupuesto por agente: %v", err)
+	}
+	if len(presupuestoAgenteResp.Agentes) != 1 || presupuestoAgenteResp.Agentes[0].Nombre != "CodexCuenta" {
+		t.Fatalf("respuesta presupuesto por agente inesperada: %+v", presupuestoAgenteResp)
+	}
+
 	recCuentas := httptest.NewRecorder()
 	reqCuentas := httptest.NewRequest(http.MethodGet, "/api/agentes/cuentas", nil)
 	mux.ServeHTTP(recCuentas, reqCuentas)

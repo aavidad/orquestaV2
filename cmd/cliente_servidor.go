@@ -596,7 +596,7 @@ func serverReachable() bool {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/status", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/server", nil)
 	if err != nil {
 		return false
 	}

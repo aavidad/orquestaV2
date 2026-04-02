@@ -605,12 +605,11 @@ func ensureLocalServer(addr string) error {
 		pingErr := rpclocal.Ping(ctx, addr)
 		cancel()
 		if pingErr == nil {
-			if state, stateErr := rpclocal.LoadServerInfo(); stateErr == nil {
-				if strings.TrimSpace(state.Addr) != "" {
-					baseURL := rpclocal.BaseURL(state.Addr)
-					if readyErr := serverReadinessOK(baseURL); readyErr == nil {
-						return nil
-					}
+			state, stateErr := ensureServerInfoFromHealth(addr)
+			if stateErr == nil && state != nil && strings.TrimSpace(state.Addr) != "" {
+				baseURL := rpclocal.BaseURL(state.Addr)
+				if readyErr := serverReadinessOK(baseURL); readyErr == nil {
+					return nil
 				}
 			}
 		}
@@ -618,6 +617,20 @@ func ensureLocalServer(addr string) error {
 	}
 	_ = rpclocal.RemoveState("")
 	return fmt.Errorf("timeout esperando al servidor local y su statefile. Log: %s", resumirServerLog(logPath))
+}
+
+func ensureServerInfoFromHealth(addr string) (*rpclocal.ServerInfo, error) {
+	if state, err := rpclocal.LoadServerInfo(); err == nil {
+		return state, nil
+	}
+	info, recovered, err := loadServerInfoWithHealthFallback(addr)
+	if err != nil {
+		return nil, err
+	}
+	if recovered && info != nil {
+		_ = rpclocal.SaveServerInfo(*info)
+	}
+	return info, nil
 }
 
 func waitLocalServerStable(baseURL string, timeout time.Duration) error {
@@ -672,7 +685,7 @@ func serverReadinessOK(baseURL string) error {
 	if baseURL == "" {
 		return fmt.Errorf("baseURL vacia")
 	}
-	req, err := http.NewRequest(http.MethodGet, strings.TrimRight(baseURL, "/")+"/api/status", nil)
+	req, err := http.NewRequest(http.MethodGet, strings.TrimRight(baseURL, "/")+"/api/server", nil)
 	if err != nil {
 		return err
 	}
@@ -685,9 +698,12 @@ func serverReadinessOK(baseURL string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("status %s", resp.Status)
 	}
-	var payload map[string]any
+	var payload serverInfo
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return err
+	}
+	if strings.TrimSpace(payload.Name) == "" {
+		return fmt.Errorf("respuesta readiness sin name")
 	}
 	return nil
 }

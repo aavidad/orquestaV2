@@ -965,10 +965,24 @@ func apiHandlerAgentesPresupuesto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	activosOnly := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("activos")), "true")
+	agenteFiltro := strings.TrimSpace(r.URL.Query().Get("agente"))
 	agentes, err := agentesService.ListAgents()
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
+	}
+	if agenteFiltro != "" {
+		filtrados := make([]*db.Agente, 0, 1)
+		for _, agente := range agentes {
+			if agente == nil {
+				continue
+			}
+			if strings.EqualFold(strings.TrimSpace(agente.Nombre), agenteFiltro) {
+				filtrados = append(filtrados, agente)
+				break
+			}
+		}
+		agentes = filtrados
 	}
 	if activosOnly {
 		nombresVisibles, err := nombresSesionesVisibles()

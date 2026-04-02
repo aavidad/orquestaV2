@@ -15,14 +15,10 @@ import (
 	"orquesta/internal/rpclocal"
 )
 
-func TestServerReadinessOKExigeStatusDecodificable(t *testing.T) {
+func TestServerReadinessOKExigeServerDecodificable(t *testing.T) {
 	var calls int32
 	mux := http.NewServeMux()
-	mux.HandleFunc(rpclocal.HealthPath, func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	})
-	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/server", func(w http.ResponseWriter, r *http.Request) {
 		n := atomic.AddInt32(&calls, 1)
 		if n == 1 {
 			hj, ok := w.(http.Hijacker)
@@ -37,7 +33,7 @@ func TestServerReadinessOKExigeStatusDecodificable(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"agentes":[],"conteoTareas":{}}`))
+		_, _ = w.Write([]byte(`{"name":"orquesta","storageDriver":"sqlite"}`))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -49,13 +45,13 @@ func TestServerReadinessOKExigeStatusDecodificable(t *testing.T) {
 		t.Fatalf("la segunda lectura deberia pasar: %v", err)
 	}
 	if got := atomic.LoadInt32(&calls); got < 2 {
-		t.Fatalf("se esperaban al menos 2 llamadas a /api/status, got=%d", got)
+		t.Fatalf("se esperaban al menos 2 llamadas a /api/server, got=%d", got)
 	}
 }
 
 func TestServerReadinessOKFallaConHTTPNoOK(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/server", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "boom", http.StatusServiceUnavailable)
 	})
 	srv := httptest.NewServer(mux)
@@ -92,9 +88,9 @@ func TestWaitLocalServerStableExigeStatefilePublicada(t *testing.T) {
 			DBPath:        dbPath,
 		})
 	})
-	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/server", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"agentes":[],"conteoTareas":{}}`))
+		_, _ = w.Write([]byte(`{"name":"orquesta"}`))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -141,15 +137,15 @@ func TestWaitLocalServerStableExigeDosReadinessConsecutivos(t *testing.T) {
 			DBPath:        dbPath,
 		})
 	})
-	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/server", func(w http.ResponseWriter, r *http.Request) {
 		n := atomic.AddInt32(&statusCalls, 1)
 		if n == 1 {
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"agentes":[],"conteoTareas":{}}`))
+			_, _ = w.Write([]byte(`{"name":"orquesta"}`))
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"agentes":[],"conteoTareas":{}}`))
+		_, _ = w.Write([]byte(`{"name":"orquesta"}`))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -182,9 +178,9 @@ func TestWaitLocalServerStableFallaSinStatefile(t *testing.T) {
 	mux.HandleFunc(rpclocal.HealthPath, func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(rpclocal.HealthResponse{OK: true})
 	})
-	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/server", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"agentes":[],"conteoTareas":{}}`))
+		_, _ = w.Write([]byte(`{"name":"orquesta"}`))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
