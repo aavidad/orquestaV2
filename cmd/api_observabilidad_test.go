@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -798,6 +799,70 @@ func TestAPIOpenClawOperatorBatchGuidanceAplicaMailboxPending(t *testing.T) {
 	}
 	if len(items) != 1 || items[0].ID != msgID {
 		t.Fatalf("batch guidance no consumio la mailbox esperada: %+v", items)
+	}
+}
+
+func TestAPIOpenClawOperatorOperaSubagentes(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	storeDir := t.TempDir()
+	t.Setenv("CLAWD_AGENT_STORE", storeDir)
+	launcherPath := filepath.Join(t.TempDir(), "launcher.sh")
+	script := `#!/usr/bin/env bash
+set -euo pipefail
+id="agent-test-api-001"
+manifest="${ORQUESTA_SUBAGENT_STORE}/${id}.json"
+output="${ORQUESTA_SUBAGENT_STORE}/${id}.md"
+mkdir -p "${ORQUESTA_SUBAGENT_STORE}"
+printf '# result\n' > "${output}"
+cat > "${manifest}" <<JSON
+{"agentId":"${id}","name":"${ORQUESTA_SUBAGENT_NAME}","description":"${ORQUESTA_SUBAGENT_DESCRIPTION}","subagentType":"${ORQUESTA_SUBAGENT_TYPE}","model":"${ORQUESTA_SUBAGENT_MODEL}","status":"running","outputFile":"${output}","manifestFile":"${manifest}","createdAt":"2026-04-02T12:00:00Z","startedAt":"2026-04-02T12:00:00Z"}
+JSON
+printf 'ok\n'
+`
+	if err := os.WriteFile(launcherPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write launcher: %v", err)
+	}
+	t.Setenv("ORQUESTA_CLAUDE_SUBAGENT_LAUNCHER", launcherPath)
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recLaunch := httptest.NewRecorder()
+	reqLaunch := httptest.NewRequest(http.MethodPost, "/api/openclaw/operator", strings.NewReader(`{
+		"mode":"subagent_launch",
+		"supervisor":"OpenClaw",
+		"proyecto":"orquestador",
+		"name":"Claude Explore API",
+		"description":"explora modulo openclaw",
+		"prompt":"resume riesgos y plan",
+		"subagent_type":"explore",
+		"model":"claude-opus-4-6"
+	}`))
+	reqLaunch.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(recLaunch, reqLaunch)
+	if recLaunch.Code != http.StatusOK {
+		t.Fatalf("launch subagent API status=%d body=%s", recLaunch.Code, recLaunch.Body.String())
+	}
+
+	items, err := db.ListarSupervisorSubagents(db.FiltroSupervisorSubagents{Supervisor: "OpenClaw", ProyectoSlug: "orquestador", Limit: 10})
+	if err != nil {
+		t.Fatalf("listar subagentes: %v", err)
+	}
+	if len(items) != 1 || items[0].ThreadID != "agent-test-api-001" {
+		t.Fatalf("subagentes inesperados tras launch API: %+v", items)
+	}
+
+	recRefresh := httptest.NewRecorder()
+	reqRefresh := httptest.NewRequest(http.MethodPost, "/api/openclaw/operator", strings.NewReader(`{
+		"mode":"subagent_store_refresh",
+		"supervisor":"OpenClaw",
+		"proyecto":"orquestador"
+	}`))
+	reqRefresh.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(recRefresh, reqRefresh)
+	if recRefresh.Code != http.StatusOK {
+		t.Fatalf("refresh store API status=%d body=%s", recRefresh.Code, recRefresh.Body.String())
 	}
 }
 

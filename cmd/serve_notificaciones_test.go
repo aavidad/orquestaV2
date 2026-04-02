@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -826,6 +828,88 @@ func TestWebOpenClawAccionAplicaSiguienteSupervisor(t *testing.T) {
 	}
 	if tarea == nil || tarea.Estado != db.TareaEnProgreso || tarea.Agente == nil || *tarea.Agente != "Codex3" {
 		t.Fatalf("siguiente acción web no aplicada: %+v", tarea)
+	}
+}
+
+func TestWebOpenClawOperaSubagentes(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	storeDir := t.TempDir()
+	t.Setenv("CLAWD_AGENT_STORE", storeDir)
+	launcherPath := filepath.Join(t.TempDir(), "launcher.sh")
+	script := `#!/usr/bin/env bash
+set -euo pipefail
+id="agent-test-web-001"
+manifest="${ORQUESTA_SUBAGENT_STORE}/${id}.json"
+output="${ORQUESTA_SUBAGENT_STORE}/${id}.md"
+mkdir -p "${ORQUESTA_SUBAGENT_STORE}"
+printf '# result\n' > "${output}"
+cat > "${manifest}" <<JSON
+{"agentId":"${id}","name":"${ORQUESTA_SUBAGENT_NAME}","description":"${ORQUESTA_SUBAGENT_DESCRIPTION}","subagentType":"${ORQUESTA_SUBAGENT_TYPE}","model":"${ORQUESTA_SUBAGENT_MODEL}","status":"running","outputFile":"${output}","manifestFile":"${manifest}","createdAt":"2026-04-02T12:00:00Z","startedAt":"2026-04-02T12:00:00Z"}
+JSON
+printf 'ok\n'
+`
+	if err := os.WriteFile(launcherPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write launcher: %v", err)
+	}
+	t.Setenv("ORQUESTA_CLAUDE_SUBAGENT_LAUNCHER", launcherPath)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/openclaw", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			webHandlerOpenClawAccion(w, r)
+			return
+		}
+		webHandlerOpenClaw(w, r)
+	})
+	registerAPIRoutes(mux)
+
+	formLaunch := url.Values{
+		"kind":          {"subagent_launch"},
+		"proyecto":      {"orquestador"},
+		"name":          {"Claude Explore Web"},
+		"description":   {"explora web openclaw"},
+		"prompt":        {"resume riesgos"},
+		"subagent_type": {"explore"},
+		"model":         {"claude-opus-4-6"},
+	}
+	recLaunch := httptest.NewRecorder()
+	reqLaunch := httptest.NewRequest(http.MethodPost, "/openclaw", strings.NewReader(formLaunch.Encode()))
+	reqLaunch.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	mux.ServeHTTP(recLaunch, reqLaunch)
+	if recLaunch.Code != http.StatusSeeOther {
+		t.Fatalf("launch subagent web status=%d body=%s", recLaunch.Code, recLaunch.Body.String())
+	}
+	if location := recLaunch.Header().Get("Location"); !strings.Contains(location, "Subagente+Claude+lanzado") {
+		t.Fatalf("redirect launch inesperado: %s", location)
+	}
+
+	formRefresh := url.Values{
+		"kind":     {"subagent_store_refresh"},
+		"proyecto": {"orquestador"},
+	}
+	recRefresh := httptest.NewRecorder()
+	reqRefresh := httptest.NewRequest(http.MethodPost, "/openclaw", strings.NewReader(formRefresh.Encode()))
+	reqRefresh.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	mux.ServeHTTP(recRefresh, reqRefresh)
+	if recRefresh.Code != http.StatusSeeOther {
+		t.Fatalf("refresh subagent web status=%d body=%s", recRefresh.Code, recRefresh.Body.String())
+	}
+	if location := recRefresh.Header().Get("Location"); !strings.Contains(location, "Store+de+subagentes+refrescado") {
+		t.Fatalf("redirect refresh inesperado: %s", location)
+	}
+
+	recGet := httptest.NewRecorder()
+	reqGet := httptest.NewRequest(http.MethodGet, "/openclaw", nil)
+	mux.ServeHTTP(recGet, reqGet)
+	if recGet.Code != http.StatusOK {
+		t.Fatalf("openclaw get status=%d body=%s", recGet.Code, recGet.Body.String())
+	}
+	body := recGet.Body.String()
+	for _, token := range []string{"Store Claude observada", "Lanzar subagente Claude", "Subagentes explícitos", "agent-test-web-001"} {
+		if !strings.Contains(body, token) {
+			t.Fatalf("openclaw sin %q:\n%s", token, body)
+		}
 	}
 }
 

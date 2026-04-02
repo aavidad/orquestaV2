@@ -7436,3 +7436,29 @@ Resultado:
       - `worktrees desfasadas`
       - `Guidance durable por agente`
       - `Worktrees desfasadas`
+
+## 2026-04-02 — OpenClaw ya opera subagentes por API y web
+
+- Hallazgo:
+  - OpenClaw ya veía `supervisor_subagents`, `tool_profiles` y el store Claude observado, pero seguía dependiendo de MCP para accionar
+  - faltaba cerrar la paridad server-first en `/api/openclaw/operator` y `/openclaw`
+- Corrección:
+  - `POST /api/openclaw/operator` ya acepta:
+    - `mode=subagent_store_refresh`
+    - `mode=subagent_launch`
+  - el GET del operador ya expone además:
+    - `subagent_store`
+    - `subagent_profiles`
+  - `/openclaw` ahora renderiza:
+    - bloque `Store Claude observada`
+    - formulario `Lanzar subagente Claude`
+    - tabla `Subagentes explícitos`
+  - la web acciona por la misma vía canónica:
+    - `refreshSupervisorSubagentsFromStore(...)`
+    - `launchClaudeSubagentExternal(...)`
+- Validación:
+  - `go test ./cmd -run 'Test(APIOpenClawOperatorAccionaPorLaViaCanonica|APIOpenClawOperatorBatchGuidanceAplicaMailboxPending|APIOpenClawOperatorOperaSubagentes|WebOpenClawAccionAplicaSiguienteSupervisor|WebOpenClawOperaSubagentes|WebOpenClawMuestraOperatorReviewYEntregas)' -count=1`
+  - `go build -o ./orquesta .`
+  - validación viva:
+    - `POST /api/openclaw/operator` con `mode=subagent_store_refresh` responde `supervisor=OpenClaw`, `proyecto=orquestador`, `imported=0`
+    - el store observado queda expuesto como `/home/alberto/Trabajo/orquesta/.clawd-agents`

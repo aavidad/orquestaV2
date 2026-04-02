@@ -1299,6 +1299,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		threads := supervisorThreadsFromReviewSnapshot(revision)
 		pipeline := supervisorPipelineFromReviewSnapshot(revision)
 		worktreeDrift := openClawWorktreeDriftFromReviewSnapshot(revision)
+		subagents := supervisorSubagentsFromReviewSnapshot(revision)
 		if observed, ok := threads["observed_agent_sessions"].([]*supervisorObservedAgentSessionSummary); ok {
 			threads["observed_agent_sessions"] = alignSupervisorObservedSessionsWithStatus(observed, status.AgentesActivos)
 		}
@@ -1327,7 +1328,9 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 			"entregas":             notificaciones.DescribirOutbox(10),
 			"eventos_normalizados": eventos,
 			"thread_sessions":      threads,
-			"subagentes":           revision["subagents"],
+			"subagentes":           subagents["subagents"],
+			"subagent_store":       subagents["store"],
+			"subagent_profiles":    subagents["tool_profiles"],
 			"session_candidates":   sessionCandidates,
 			"worktree_drift":       worktreeDrift,
 			"pipeline_state":       pipeline,
@@ -1341,6 +1344,12 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 			Assignee   string `json:"assignee"`
 			MaxItems   int    `json:"max_items"`
 			BatchKind  string `json:"batch_kind"`
+			Proyecto   string `json:"proyecto"`
+			Name       string `json:"name"`
+			Description string `json:"description"`
+			Prompt     string `json:"prompt"`
+			SubagentType string `json:"subagent_type"`
+			Model      string `json:"model"`
 		}
 		if err := apiDecodeJSON(r, &req); err != nil {
 			apiError(w, http.StatusBadRequest, err)
@@ -1348,7 +1357,7 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		}
 		mode := strings.TrimSpace(strings.ToLower(req.Mode))
 		var (
-			result map[string]any
+			result any
 			err    error
 		)
 		switch mode {
@@ -1362,8 +1371,24 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 			result, err = applySupervisorRecommendedActionsBatch(req.Supervisor, req.MaxItems, req.BatchKind)
 		case "next":
 			result, err = applySupervisorNextAction(req.Supervisor)
+		case "subagent_store_refresh":
+			result, err = refreshSupervisorSubagentsFromStore(req.Supervisor, req.Proyecto)
+		case "subagent_launch":
+			if strings.TrimSpace(req.Description) == "" || strings.TrimSpace(req.Prompt) == "" {
+				apiError(w, http.StatusBadRequest, fmt.Errorf("description y prompt obligatorios"))
+				return
+			}
+			result, err = launchClaudeSubagentExternal(supervisorSubagentLaunchRequest{
+				Supervisor:   req.Supervisor,
+				Proyecto:     req.Proyecto,
+				Name:         req.Name,
+				Description:  req.Description,
+				Prompt:       req.Prompt,
+				SubagentType: req.SubagentType,
+				Model:        req.Model,
+			})
 		default:
-			apiError(w, http.StatusBadRequest, fmt.Errorf("mode inválido: usa action, batch o next"))
+			apiError(w, http.StatusBadRequest, fmt.Errorf("mode inválido: usa action, batch, next, subagent_store_refresh o subagent_launch"))
 			return
 		}
 		if err != nil {
@@ -1593,6 +1618,13 @@ func supervisorThreadsFromReviewSnapshot(review map[string]any) map[string]any {
 	}
 	if threads, ok := review["thread_sessions"].(map[string]any); ok && threads != nil {
 		return threads
+	}
+	return map[string]any{}
+}
+
+func supervisorSubagentsFromReviewSnapshot(review map[string]any) map[string]any {
+	if snapshot, ok := review["subagents"].(map[string]any); ok {
+		return snapshot
 	}
 	return map[string]any{}
 }

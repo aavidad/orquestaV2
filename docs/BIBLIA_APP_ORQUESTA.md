@@ -1184,6 +1184,14 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
     - prompt `orquesta.supervision.subagentes`
     - tools `orquesta.supervision.subagentes.registrar` y `orquesta.supervision.subagentes.listar`
   - la web `/openclaw` debe renderizar una tabla de subagentes explícitos y no obligar a inspeccionar JSON crudo
+  - además, OpenClaw debe poder operar subagentes por la vía canónica del servidor:
+    - `POST /api/openclaw/operator` con `mode=subagent_store_refresh`
+    - `POST /api/openclaw/operator` con `mode=subagent_launch`
+    - `/openclaw` con formulario de refresco de store y formulario de lanzamiento explícito
+  - API y web deben reutilizar exactamente:
+    - `refreshSupervisorSubagentsFromStore(...)`
+    - `launchClaudeSubagentExternal(...)`
+  - no se admite una vía paralela “solo MCP” para lanzar o refrescar subagentes si OpenClaw ya es el frontal supervisor
 - Los subagentes explícitos deben entrar también en la cola del supervisor:
   - si un subagente termina `failed`, OpenClaw debe ver `revisar_subagente_fallido`
   - si termina `completed`, OpenClaw debe ver `recoger_resultado_subagente`

@@ -64,6 +64,8 @@ type webOpenClawData struct {
 	ObservedSessions  []*supervisorObservedAgentSessionSummary
 	SessionCandidates []apiOpenClawSessionCandidate
 	Subagents         []*db.SupervisorSubagent
+	SubagentStore     supervisorSubagentStoreSummary
+	SubagentProfiles  []db.SupervisorSubagentToolProfile
 	PipelineStates    []*db.SupervisorPipelineState
 	Recommended       []supervisorRecommendedAction
 	SafeRecommended   []supervisorRecommendedAction
@@ -785,8 +787,12 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		pipelineStates, _ = snapshot["pipelines"].([]*db.SupervisorPipelineState)
 	}
 	var subagents []*db.SupervisorSubagent
+	var subagentStore supervisorSubagentStoreSummary
+	var subagentProfiles []db.SupervisorSubagentToolProfile
 	if snapshot, ok := review["subagents"].(map[string]any); ok {
 		subagents, _ = snapshot["subagents"].([]*db.SupervisorSubagent)
+		subagentStore, _ = snapshot["store"].(supervisorSubagentStoreSummary)
+		subagentProfiles, _ = snapshot["tool_profiles"].([]db.SupervisorSubagentToolProfile)
 	}
 	recommended, _ := review["recommended_actions"].([]supervisorRecommendedAction)
 	safeRecommended, _ := review["safe_action_queue"].([]supervisorRecommendedAction)
@@ -826,6 +832,8 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		ObservedSessions:  observedSessions,
 		SessionCandidates: sessionCandidates,
 		Subagents:         subagents,
+		SubagentStore:     subagentStore,
+		SubagentProfiles:  subagentProfiles,
 		PipelineStates:    pipelineStates,
 		Recommended:       recommended,
 		SafeRecommended:   safeRecommended,
@@ -992,6 +1000,36 @@ func webHandlerOpenClawAccion(w http.ResponseWriter, r *http.Request) {
 			if strings.TrimSpace(action.Target) != "" {
 				msg += " sobre " + strings.TrimSpace(action.Target)
 			}
+		}
+		http.Redirect(w, r, "/openclaw?ok="+url.QueryEscape(msg), http.StatusSeeOther)
+		return
+	case "subagent_store_refresh":
+		result, err := refreshSupervisorSubagentsFromStore("OpenClaw", strings.TrimSpace(r.FormValue("proyecto")))
+		if err != nil {
+			http.Redirect(w, r, "/openclaw?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+			return
+		}
+		imported, _ := result.Imported, result
+		msg := fmt.Sprintf("Store de subagentes refrescado: %d importados", imported)
+		http.Redirect(w, r, "/openclaw?ok="+url.QueryEscape(msg), http.StatusSeeOther)
+		return
+	case "subagent_launch":
+		result, err := launchClaudeSubagentExternal(supervisorSubagentLaunchRequest{
+			Supervisor:   "OpenClaw",
+			Proyecto:     strings.TrimSpace(r.FormValue("proyecto")),
+			Name:         strings.TrimSpace(r.FormValue("name")),
+			Description:  strings.TrimSpace(r.FormValue("description")),
+			Prompt:       r.FormValue("prompt"),
+			SubagentType: strings.TrimSpace(r.FormValue("subagent_type")),
+			Model:        strings.TrimSpace(r.FormValue("model")),
+		})
+		if err != nil {
+			http.Redirect(w, r, "/openclaw?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+			return
+		}
+		msg := "Subagente Claude lanzado"
+		if strings.TrimSpace(result.Stdout) != "" {
+			msg += ": " + strings.TrimSpace(result.Stdout)
 		}
 		http.Redirect(w, r, "/openclaw?ok="+url.QueryEscape(msg), http.StatusSeeOther)
 		return
@@ -2441,6 +2479,34 @@ const webTplOpenClaw = `{{define "content"}}
       <p style="margin:0;color:#64748b">Sin candidatas visibles ahora mismo.</p>
       {{end}}
       <h4 style="margin:1rem 0 .6rem 0">Subagentes explícitos</h4>
+      <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-start;margin:.4rem 0 .8rem 0">
+        <div style="flex:1 1 18rem;padding:.8rem;border:1px solid #e2e8f0;border-radius:.5rem;background:white">
+          <strong>Store Claude observada</strong><br>
+          <small style="color:#64748b">{{if .SubagentStore.Exists}}{{.SubagentStore.Path}} · {{.SubagentStore.ManifestCount}} manifests{{else}}sin store observada{{end}}</small>
+          <form method="post" action="/openclaw?lang={{lang}}" style="margin-top:.6rem">
+            <input type="hidden" name="kind" value="subagent_store_refresh">
+            <input type="hidden" name="proyecto" value="orquestador">
+            <button type="submit">Refrescar store Claude</button>
+          </form>
+        </div>
+        <form method="post" action="/openclaw?lang={{lang}}" style="flex:2 1 34rem;display:grid;gap:.45rem;padding:.8rem;border:1px solid #e2e8f0;border-radius:.5rem;background:white">
+          <input type="hidden" name="kind" value="subagent_launch">
+          <input type="hidden" name="proyecto" value="orquestador">
+          <strong>Lanzar subagente Claude</strong>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.45rem">
+            <label>Nombre <input name="name" placeholder="OpenClaw-Explore-1"></label>
+            <label>Tipo
+              <select name="subagent_type">
+                {{range .SubagentProfiles}}<option value="{{.SubagentType}}">{{.Name}}</option>{{end}}
+              </select>
+            </label>
+            <label>Modelo <input name="model" placeholder="claude-opus-4-6"></label>
+          </div>
+          <label>Descripción <input name="description" required placeholder="explora el módulo y resume riesgos"></label>
+          <label>Prompt <textarea name="prompt" required rows="4" placeholder="revisa el área asignada y devuelve riesgos, plan corto y ficheros afectados"></textarea></label>
+          <div><button type="submit">Lanzar subagente</button></div>
+        </form>
+      </div>
       {{if .Subagents}}
       <table style="width:100%"><thead><tr><th>Thread</th><th>Nombre</th><th>Tipo</th><th>Estado</th><th>Padre</th><th>Manifest</th></tr></thead><tbody>
       {{range .Subagents}}
