@@ -2214,6 +2214,26 @@ func TestProcesarAutonomiaAgentesBatchAutoasignaTrabajoASesionActivaIdle(t *test
 	}
 }
 
+func TestAutonomiaIdleAutoassignShouldAttemptThrottle(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	autonomiaIdleAutoassignGate.mu.Lock()
+	autonomiaIdleAutoassignGate.last = nil
+	autonomiaIdleAutoassignGate.mu.Unlock()
+
+	if !autonomiaIdleAutoassignShouldAttempt("Codex1", 1) {
+		t.Fatalf("primer intento deberia permitirse")
+	}
+	if autonomiaIdleAutoassignShouldAttempt("Codex1", 1) {
+		t.Fatalf("segundo intento inmediato no deberia permitirse")
+	}
+	if !autonomiaIdleAutoassignShouldAttempt("Codex1", 2) {
+		t.Fatalf("proyecto distinto deberia permitir intento")
+	}
+	if !autonomiaIdleAutoassignShouldAttempt("Codex2", 1) {
+		t.Fatalf("agente distinto deberia permitir intento")
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchNoEncolaNudgePorSupervisarProyectoEnSesionActiva(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -3436,7 +3456,7 @@ func TestEncolarSendInstructionDesdeRuntimeMailboxCompactaNudgeCodex(t *testing.
 	if err != nil || handle == nil {
 		t.Fatalf("handle: %+v err=%v", handle, err)
 	}
-	metaJSON := `{"driver":"process_pty_cli","rendered_command":"'/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil' 'Codex4'","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-codex4","can_send_input":false}`
+	metaJSON := `{"driver":"process_pty_cli","rendered_command":"'/tmp/codex-perfiles/bin/codex-perfil' 'Codex4'","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-codex4","can_send_input":false}`
 	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
 	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=?, handle_ref=? WHERE id=?`, capsJSON, metaJSON, strconv.Itoa(os.Getpid()), handle.ID); err != nil {
 		t.Fatalf("update handle: %v", err)
@@ -4668,6 +4688,22 @@ func TestPresupuestoAgenteNoRevalidaAntesDeTiempo(t *testing.T) {
 	}
 }
 
+func TestPresupuestoPrimerUsoSesionGate(t *testing.T) {
+	presupuestoPrimerUsoSesionGate.mu.Lock()
+	presupuestoPrimerUsoSesionGate.seen = nil
+	presupuestoPrimerUsoSesionGate.mu.Unlock()
+
+	if !presupuestoPrimerUsoSesion("Codex3") {
+		t.Fatalf("el primer uso de la sesion deberia forzar refresh")
+	}
+	if presupuestoPrimerUsoSesion("Codex3") {
+		t.Fatalf("el segundo uso de la misma sesion no deberia volver a marcar primer uso")
+	}
+	if !presupuestoPrimerUsoSesion("Codex4") {
+		t.Fatalf("otro agente deberia mantener su propio primer uso")
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchEncolaPausePorBloqueoHumano(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -4975,6 +5011,300 @@ func TestProcesarAutonomiaAgentesBatchRespetaEstadoOperativoProyectoEsperandoHum
 	}
 	if !strings.Contains(orders[0].PayloadJSON, "bloqueo_humano:esperando decision externa") {
 		t.Fatalf("payload pause inesperado: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestProcesarAutonomiaAgentesBatchReanudaSesionPausadaSiHayTrabajoActivoYBloqueoHumanoStale(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaActivaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Implementar cambio",
+		Descripcion: "Trabajo activo real",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea activa: %v", err)
+	}
+	if err := db.TomarTarea(tareaActivaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea activa: %v", err)
+	}
+	if err := db.IniciarTarea(tareaActivaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea activa: %v", err)
+	}
+	tareaBloqueadaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Esperando respuesta",
+		Descripcion: "Bloqueo parcial",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea bloqueada: %v", err)
+	}
+	if err := db.TomarTarea(tareaBloqueadaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea bloqueada: %v", err)
+	}
+	if err := db.IniciarTarea(tareaBloqueadaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea bloqueada: %v", err)
+	}
+	if err := db.BloquearTarea(tareaBloqueadaID, "Codex1", "esperando decision humana"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE sesiones SET estado='pausada' WHERE id=?`, sesion.ID); err != nil {
+		t.Fatalf("pausar sesion: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='pausado' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("pausar handle: %v", err)
+	}
+	if err := db.PausarAsignacion("Codex1", proyectoID, "bloqueo_humano:esperando decision humana"); err != nil {
+		t.Fatalf("pausar asignacion: %v", err)
+	}
+	if err := db.MarcarProyectoEsperandoHumano(proyectoID, "esperando decision humana"); err != nil {
+		t.Fatalf("marcar proyecto esperando humano: %v", err)
+	}
+
+	n, err := procesarAutonomiaAgentesBatch()
+	if err != nil {
+		t.Fatalf("procesar autonomia: %v", err)
+	}
+	if n < 0 {
+		t.Fatalf("resultado inesperado: %d", n)
+	}
+
+	op, err := db.GetProyectoOperacion(proyectoID)
+	if err != nil {
+		t.Fatalf("get proyecto operacion: %v", err)
+	}
+	if op.EstadoOperativo != db.ProyectoOperativoActivo {
+		t.Fatalf("el proyecto deberia reactivarse al detectar trabajo activo: %+v", op)
+	}
+	asignaciones, err := db.ListarAsignaciones(db.FiltroAsignaciones{Agente: strPtr("Codex1")})
+	if err != nil {
+		t.Fatalf("listar asignaciones: %v", err)
+	}
+	if len(asignaciones) == 0 || asignaciones[0].Estado != db.AsignacionActiva {
+		t.Fatalf("la asignacion deberia reactivarse: %+v", asignaciones)
+	}
+	sesionRecargada, err := db.GetSesionByID(sesion.ID)
+	if err != nil {
+		t.Fatalf("get sesion: %v", err)
+	}
+	if !strings.EqualFold(strings.TrimSpace(sesionRecargada.Estado), "activa") {
+		t.Fatalf("la sesion deberia quedar activa: %+v", sesionRecargada)
+	}
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	for _, order := range orders {
+		if order != nil && order.Tipo == "pause" && strings.Contains(order.PayloadJSON, "bloqueo_humano:") {
+			t.Fatalf("no deberia volver a encolar una pausa por bloqueo humano: %+v", orders)
+		}
+	}
+}
+
+func TestProcesarAutonomiaAgentesBatchReanudaSesionPausadaConTrabajoActivoYProyectoOperativo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Reanudar worker",
+		Descripcion: "Trabajo activo real",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE sesiones SET estado='pausada' WHERE id=?`, sesion.ID); err != nil {
+		t.Fatalf("pausar sesion: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='pausado' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("pausar handle: %v", err)
+	}
+	if err := db.PausarAsignacion("Codex1", proyectoID, "pausa espuria"); err != nil {
+		t.Fatalf("pausar asignacion: %v", err)
+	}
+
+	n, err := procesarAutonomiaAgentesBatch()
+	if err != nil {
+		t.Fatalf("procesar autonomia: %v", err)
+	}
+	if n < 0 {
+		t.Fatalf("resultado inesperado: %d", n)
+	}
+
+	asignaciones, err := db.ListarAsignaciones(db.FiltroAsignaciones{Agente: strPtr("Codex1")})
+	if err != nil {
+		t.Fatalf("listar asignaciones: %v", err)
+	}
+	if len(asignaciones) == 0 || asignaciones[0].Estado != db.AsignacionActiva {
+		t.Fatalf("la asignacion deberia reactivarse: %+v", asignaciones)
+	}
+	sesionRecargada, err := db.GetSesionByID(sesion.ID)
+	if err != nil {
+		t.Fatalf("get sesion: %v", err)
+	}
+	if !strings.EqualFold(strings.TrimSpace(sesionRecargada.Estado), "activa") {
+		t.Fatalf("la sesion deberia quedar activa: %+v", sesionRecargada)
+	}
+}
+
+func TestProcesarAutonomiaAgentesBatchReutilizaHandleActivoAlReactivarSesionPausada(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Seguir trabajo",
+		Descripcion: "Sesion pausada con handle vivo",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE sesiones SET estado='pausada' WHERE id=?`, sesion.ID); err != nil {
+		t.Fatalf("pausar sesion: %v", err)
+	}
+
+	n, err := procesarAutonomiaAgentesBatch()
+	if err != nil {
+		t.Fatalf("procesar autonomia: %v", err)
+	}
+	if n < 1 {
+		t.Fatalf("esperaba al menos una decision de reactivacion, got=%d", n)
+	}
+
+	sesionRecargada, err := db.GetSesionByID(sesion.ID)
+	if err != nil {
+		t.Fatalf("get sesion: %v", err)
+	}
+	if !strings.EqualFold(strings.TrimSpace(sesionRecargada.Estado), "activa") {
+		t.Fatalf("la sesion deberia quedar activa: %+v", sesionRecargada)
+	}
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	foundResume := false
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		if order.Tipo == "start" {
+			t.Fatalf("no deberia duplicar start con handle ya activo: %+v", orders)
+		}
+		if order.Tipo == "resume" {
+			foundResume = true
+		}
+	}
+	if !foundResume {
+		t.Fatalf("deberia encolar resume para una sesion pausada con handle activo: %+v", orders)
 	}
 }
 

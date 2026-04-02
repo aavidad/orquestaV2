@@ -2554,12 +2554,12 @@ func TestRuntimeHandlePermiteSendInputInteractivoRespetaCapacidadesExplicitas(t 
 		t.Fatal("can_send_input=false deberia desactivar input interactivo")
 	}
 	if RuntimeHandlePermiteSendInputInteractivo(&RuntimeHandle{
-		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex2","can_send_input":false}`,
+		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"/tmp/codex-perfiles/bin/codex-perfil Codex2","can_send_input":false}`,
 	}) {
 		t.Fatal("metadata can_send_input=false deberia desactivar input interactivo")
 	}
 	if RuntimeHandlePermiteSendInputInteractivo(&RuntimeHandle{
-		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex2"}`,
+		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"/tmp/codex-perfiles/bin/codex-perfil Codex2"}`,
 	}) {
 		t.Fatal("codex local via PTY deberia caer a mailbox por defecto aunque arrastre metadata legacy")
 	}
@@ -2626,6 +2626,14 @@ func TestRuntimeHandleMailboxDeliveryModeRespetaCapacidadesYFallbacks(t *testing
 		MetadataJSON:     `{"driver":"process_pty_cli","stdin_path":"/tmp/pty.stdin","supervisor_ref":"/tmp/ref","rendered_command":"codex-perfil Codex2"}`,
 	}); got != runtimeagente.MailboxDeliveryBootstrapOnly {
 		t.Fatalf("codex supervisado deberia preservar bootstrap_only como modo durable base: %s", got)
+	}
+	if got := RuntimeHandleMailboxDeliveryMode(&RuntimeHandle{
+		Transporte:       "cli",
+		HandleKind:       "process",
+		CapabilitiesJSON: `{"mailbox_delivery_mode":"bootstrap_only","can_send_input":false}`,
+		MetadataJSON:     `{"driver":"process_pty_cli","stdin_path":"/tmp/pty.stdin","supervisor_ref":"/tmp/ref","rendered_command":"codex-perfil Codex2","external_session_id":"sess-live-2","modo_plan":"resume"}`,
+	}); got != runtimeagente.MailboxDeliverySessionResume {
+		t.Fatalf("codex supervisado en resume deberia elevarse a session_resume: %s", got)
 	}
 	if got := RuntimeHandleMailboxDeliveryMode(&RuntimeHandle{
 		Transporte:   "cli",
@@ -3008,7 +3016,7 @@ func TestGuardarSesionActivaPreservaMetadataRicaDelHandle(t *testing.T) {
 		"stdin_raw_path":        filepath.Join(tmp, "pty.stdin.raw"),
 		"supervisor_ref":        filepath.Join(tmp, "supervisor.ref"),
 		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryBootstrapOnly,
-		"rendered_command":      "/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1",
+		"rendered_command":      "/tmp/codex-perfiles/bin/codex-perfil Codex1",
 		"external_session_id":   "sess-orig-1",
 		"herramienta":           "codex-cli",
 		"cwd":                   filepath.Join(tmp, "orquestador"),
@@ -4210,6 +4218,130 @@ func TestRuntimeOrderSendInstructionRebindeaAlHandleActivoYEvitaWorkingDirObsole
 	}
 }
 
+func TestRuntimeOrderSendInstructionMailboxPausadoQuedaDurable(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	rutaBase := filepath.Join(tmp, "orquestador")
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaBase,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "Codex1",
+		ProyectoID:        &proyectoID,
+		CWD:               rutaBase,
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-pausado-1",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"unsafe_tty":  true,
+		"working_dir": filepath.Join(rutaBase, ".orquesta-worktrees", "orquesta-codex1"),
+		"rendered_command": "codex-perfil Codex1",
+		"external_session_id": "sess-pausado-1",
+	})
+	capsJSON, _ := json.Marshal(map[string]any{
+		"can_send_input":        false,
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliverySessionResume,
+	})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='pausado', metadata_json=?, capabilities_json=? WHERE id=?`, string(metaJSON), string(capsJSON), handle.ID); err != nil {
+		t.Fatalf("update handle pausado: %v", err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"to_agente":"Codex1","texto":"continua trabajo actual"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+
+	payload, _ := json.Marshal(map[string]any{
+		"to_agente":    "Codex1",
+		"from_agente":  "server",
+		"texto":        "continua trabajo actual",
+		"mailbox_id":   mailboxID,
+		"mailbox_kind": "instruction",
+	})
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: string(payload),
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderSendInstruction(sendOrder); err != nil {
+		t.Fatalf("ejecutar send_instruction: %v", err)
+	}
+
+	sendOrder, err = GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "completada" {
+		t.Fatalf("send_instruction pausada deberia quedar completada como durable: %+v", sendOrder)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"mailbox_only":true`) || !strings.Contains(sendOrder.ResultadoJSON, `runtime_handle_pausado_mailbox_only:instruction`) {
+		t.Fatalf("resultado sin degradacion durable esperada: %s", sendOrder.ResultadoJSON)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	mailbox, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{
+		ToAgente:   &agente,
+		ProyectoID: &proyectoID,
+		Estado:     &estado,
+	})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	if len(mailbox) != 1 || mailbox[0].ID != mailboxID {
+		t.Fatalf("mailbox pendiente inesperada: %+v", mailbox)
+	}
+	transcript, err := ListarRuntimeTranscript(FiltroRuntimeTranscript{Agente: stringPtr("Codex1"), Limit: 20})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	for _, item := range transcript {
+		if item != nil && item.Stream == "stdin" {
+			t.Fatalf("no deberia inyectar input vivo sobre handle pausado: %+v", item)
+		}
+	}
+	if runtime.ID <= 0 {
+		t.Fatalf("runtimeID invalido: %d", runtime.ID)
+	}
+}
+
 func TestRuntimeOrderStartInyectaContinuidadAlProcesoReal(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
@@ -4580,6 +4712,110 @@ func TestRuntimeOrderSendInstructionSessionResumeRecuperaWorkingDirPreferida(t *
 	}
 	if runtime.CWD != rutaWorktree {
 		t.Fatalf("cwd de runtime no saneado: got=%s want=%s", runtime.CWD, rutaWorktree)
+	}
+}
+
+func TestRuntimeOrderSendInstructionMailboxSessionResumeQuedaDurable(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "orquestador")
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: workingDir,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "Codex1",
+		ProyectoID:        &proyectoID,
+		CWD:               workingDir,
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-runtime-resume-mailbox",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	wrapper := filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil")
+	if err := os.MkdirAll(filepath.Dir(wrapper), 0o755); err != nil {
+		t.Fatalf("mkdir wrapper: %v", err)
+	}
+	outPath := filepath.Join(tmp, "session-resume-mailbox.out")
+	script := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$@\" > '" + strings.ReplaceAll(outPath, "'", `'\''`) + "'\n"
+	if err := os.WriteFile(wrapper, []byte(script), 0o755); err != nil {
+		t.Fatalf("write wrapper: %v", err)
+	}
+
+	meta := map[string]any{
+		"driver":              "process_pty_cli",
+		"rendered_command":    "'" + wrapper + "' 'Codex1'",
+		"working_dir":         workingDir,
+		"external_session_id": "sess-runtime-resume-mailbox",
+		"can_send_input":      false,
+	}
+	metaJSON, _ := json.Marshal(meta)
+	capsJSON, _ := json.Marshal(map[string]any{
+		"can_send_input":        false,
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliverySessionResume,
+	})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, capabilities_json=? WHERE id=?`, string(metaJSON), string(capsJSON), handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "nudge",
+		PayloadJSON: `{"texto":"continua"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Codex1","texto":"continua trabajo actual","mailbox_id":%d,"mailbox_kind":"nudge","external_session_id":"sess-runtime-resume-mailbox"}`, mailboxID),
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderSendInstruction(sendOrder); err != nil {
+		t.Fatalf("ejecutar send_instruction: %v", err)
+	}
+	sendOrder, err = GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "completada" {
+		t.Fatalf("send_instruction mailbox session_resume deberia completarse: %+v", sendOrder)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"mailbox_only":true`) || !strings.Contains(sendOrder.ResultadoJSON, `runtime_handle_session_resume_mailbox_only:nudge`) {
+		t.Fatalf("resultado sin degradacion durable esperada: %s", sendOrder.ResultadoJSON)
+	}
+	if _, err := os.Stat(outPath); !os.IsNotExist(err) {
+		t.Fatalf("session_resume no deberia ejecutarse para mailbox durable, stat err=%v", err)
 	}
 }
 
@@ -6719,7 +6955,7 @@ func TestListarRuntimeHandlesCompactaMetadataLegacy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("iniciar sesion: %v", err)
 	}
-	legacyMeta := `{"bootstrap_prompt":"Bootstrap legacy para listado.","launch_prompt_embedded":true,"rendered_command":"'/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil' 'Codex1' '--model' 'gpt-5.4' 'Bootstrap de Orquesta para Codex1.\nLinea 2'","wrapped_command":"script -q -e -f -c '/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1 Bootstrap de Orquesta para Codex1.' '/tmp/pty.log'"}`
+	legacyMeta := `{"bootstrap_prompt":"Bootstrap legacy para listado.","launch_prompt_embedded":true,"rendered_command":"'/tmp/codex-perfiles/bin/codex-perfil' 'Codex1' '--model' 'gpt-5.4' 'Bootstrap de Orquesta para Codex1.\nLinea 2'","wrapped_command":"script -q -e -f -c '/tmp/codex-perfiles/bin/codex-perfil Codex1 Bootstrap de Orquesta para Codex1.' '/tmp/pty.log'"}`
 	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE sesion_id=?`, legacyMeta, sesion.ID); err != nil {
 		t.Fatalf("inyectar metadata legacy: %v", err)
 	}
@@ -6746,7 +6982,7 @@ func TestListarRuntimeHandlesCompactaMetadataLegacy(t *testing.T) {
 		t.Fatalf("comando crudo no deberia persistirse en listado: %s", handle.MetadataJSON)
 	}
 	meta := mapFromJSON(handle.MetadataJSON)
-	if got := stringFromMap(meta, "rendered_command", ""); got != "'/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil' 'Codex1'" {
+	if got := stringFromMap(meta, "rendered_command", ""); got != "'/tmp/codex-perfiles/bin/codex-perfil' 'Codex1'" {
 		t.Fatalf("rendered_command no compactado: %q meta=%s", got, handle.MetadataJSON)
 	}
 	if got := stringFromMap(meta, "wrapped_command", ""); got != "'script' '-q' '-e' '-f' '<omitted>' '/tmp/pty.log'" {

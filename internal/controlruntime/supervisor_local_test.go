@@ -62,6 +62,57 @@ func TestConsultarEstadoLocalDetectaSessionIDSinSobrescribirDriver(t *testing.T)
 	}
 }
 
+func TestConsultarEstadoLocalRehidrataSupervisorDesdeManifestSinPIDInicial(t *testing.T) {
+	tmp := t.TempDir()
+	workingDir := filepath.Join(tmp, "repo")
+	runDir := filepath.Join(workingDir, ".orquesta-runtime", "codex7", "20260402-150000-000000001")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir run dir: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "runtime.json")
+	payload := map[string]any{
+		"agente":              "Codex7",
+		"proyecto":            "orquestador",
+		"working_dir":         workingDir,
+		"driver":              "process_pty_cli",
+		"pid":                 os.Getpid(),
+		"stdin_path":          filepath.Join(runDir, "pty.stdin"),
+		"stdin_raw_path":      filepath.Join(runDir, "pty.stdin.raw"),
+		"log_path":            filepath.Join(runDir, "pty.log"),
+		"rendered_command":    "codex-perfil Codex7",
+		"wrapped_command":     "script ...",
+		"supervisor_ref":      runDir,
+		"mailbox_delivery_mode": "bootstrap_only",
+		"created_at":          time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal manifest: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, append(data, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	estado, observed, err := ConsultarEstadoLocal(ObjetivoProceso{
+		HandleKind:   "session",
+		HandleRef:    "remote-session-like",
+		MetadataJSON: `{"working_dir":"` + workingDir + `","agente":"Codex7","proyecto":"orquestador"}`,
+	})
+	if err != nil {
+		t.Fatalf("ConsultarEstadoLocal: %v", err)
+	}
+	if !observed || estado == nil {
+		t.Fatalf("deberia rehidratar un supervisor local desde manifest: observed=%v estado=%+v", observed, estado)
+	}
+	meta := metadataMap(estado.MetadataJSON)
+	if got := stringValueFromMetadata(meta, "stdin_path"); got != filepath.Join(runDir, "pty.stdin") {
+		t.Fatalf("stdin_path no rehidratado: %q meta=%+v", got, meta)
+	}
+	if got := stringValueFromMetadata(meta, "supervisor_driver"); got != "local_runtime_supervisor" {
+		t.Fatalf("supervisor_driver inesperado: %q meta=%+v", got, meta)
+	}
+}
+
 func TestSupervisorLocalEmiteHeartbeatYFinalizacionAlActivarse(t *testing.T) {
 	cmd := exec.Command("sleep", "1")
 	if err := cmd.Start(); err != nil {
@@ -159,8 +210,8 @@ func TestEmitSupervisorSignalRecuperaPanicDelHandler(t *testing.T) {
 
 func TestCommandIdentityHintsIncluyeFirmaUtil(t *testing.T) {
 	hints := commandIdentityHints(
-		"/usr/bin/script -qefc '/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1' /tmp/trace.log",
-		"/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1",
+		"/usr/bin/script -qefc '/tmp/codex-perfiles/bin/codex-perfil Codex1' /tmp/trace.log",
+		"/tmp/codex-perfiles/bin/codex-perfil Codex1",
 	)
 	joined := strings.Join(hints, "|")
 	for _, want := range []string{"codex-perfil", "codex1", "script"} {

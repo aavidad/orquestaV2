@@ -206,7 +206,7 @@ func TestRenderedCommandLooksLikeCodexCLI(t *testing.T) {
 	}{
 		{raw: "codex --cd /tmp", want: true},
 		{raw: "/usr/local/bin/codex exec", want: true},
-		{raw: "/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex2", want: true},
+		{raw: "/tmp/codex-perfiles/bin/codex-perfil Codex2", want: true},
 		{raw: "cat", want: false},
 	}
 	for _, tc := range cases {

@@ -177,7 +177,7 @@ func TestIngestarRuntimeTranscriptHandleNoClasificaLineaSistemaScript(t *testing
 
 	logPath := filepath.Join(t.TempDir(), "system.log")
 	logData := strings.Join([]string{
-		`Script started on 2026-03-31 13:18:00+02:00 [COMMAND="'/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil' 'Codex1' 'exec'"]`,
+		`Script started on 2026-03-31 13:18:00+02:00 [COMMAND="'/tmp/codex-perfiles/bin/codex-perfil' 'Codex1' 'exec'"]`,
 		"",
 	}, "\n")
 	if err := os.WriteFile(logPath, []byte(logData), 0o600); err != nil {
@@ -284,6 +284,162 @@ func TestIngestarRuntimeTranscriptActivosFiltraHandlesSinLogPath(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("solo deberia ingerir el handle con log_path, got=%d", n)
+	}
+}
+
+func TestIngestarRuntimeTranscriptActivosDifiereHandleFallidoEstable(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+
+	logPath := filepath.Join(t.TempDir(), "fallido.log")
+	if err := os.WriteFile(logPath, []byte("thread 'main' panicked at src/ui.rs:1:1\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"log_path": logPath})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='fallido', metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle metadata: %v", err)
+	}
+
+	n, err := IngestarRuntimeTranscriptActivos()
+	if err != nil {
+		t.Fatalf("primer ingestado transcript: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 línea ingerida en el handle fallido, got=%d", n)
+	}
+	n, err = IngestarRuntimeTranscriptActivos()
+	if err != nil {
+		t.Fatalf("segundo ingestado transcript: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no debería reingestar el handle fallido estable, got=%d", n)
+	}
+
+	blockedDir := filepath.Join(t.TempDir(), "blocked")
+	if err := os.Mkdir(blockedDir, 0o700); err != nil {
+		t.Fatalf("mkdir blocked: %v", err)
+	}
+	if err := os.Chmod(blockedDir, 0o000); err != nil {
+		t.Fatalf("chmod blocked: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(blockedDir, 0o700)
+	})
+
+	blockedMetaJSON, _ := json.Marshal(map[string]any{
+		"log_path": filepath.Join(blockedDir, "denied.log"),
+	})
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(blockedMetaJSON), handle.ID); err != nil {
+		t.Fatalf("update blocked handle metadata: %v", err)
+	}
+
+	n, err = IngestarRuntimeTranscriptActivos()
+	if err != nil {
+		t.Fatalf("el cooldown en memoria debería evitar re-sondear el handle fallido estable: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("el handle fallido estable no debería aportar trabajo mientras sigue en cooldown, got=%d", n)
+	}
+
+	resetRuntimeTranscriptHotIdleState()
+	if _, err := IngestarRuntimeTranscriptActivos(); err == nil {
+		t.Fatalf("sin cooldown en memoria el log_path inaccesible debería volver a aflorar error")
+	}
+}
+
+func TestListarRuntimeHandlesParaPresupuestoFiltraSoloOperativosConMetadata(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente 1: %v", err)
+	}
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente 2: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	sesion1, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador1"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion 1: %v", err)
+	}
+	handle1, err := GetRuntimeHandleBySesionID(sesion1.ID)
+	if err != nil || handle1 == nil {
+		t.Fatalf("handle 1: %+v err=%v", handle1, err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json='{\"working_dir\":\"/tmp/codex1\"}' WHERE id=?`, handle1.ID); err != nil {
+		t.Fatalf("update handle1 metadata: %v", err)
+	}
+
+	sesion2, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(t.TempDir(), "orquestador2"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion 2: %v", err)
+	}
+	handle2, err := GetRuntimeHandleBySesionID(sesion2.ID)
+	if err != nil || handle2 == nil {
+		t.Fatalf("handle 2: %+v err=%v", handle2, err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json='' WHERE id=?`, handle2.ID); err != nil {
+		t.Fatalf("update handle2 metadata: %v", err)
+	}
+
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='cerrado' WHERE id=?`, handle2.ID); err != nil {
+		t.Fatalf("cerrar handle2: %v", err)
+	}
+
+	handles, err := ListarRuntimeHandlesParaPresupuesto()
+	if err != nil {
+		t.Fatalf("listar handles para presupuesto: %v", err)
+	}
+	if len(handles) != 1 || handles[0].ID != handle1.ID {
+		t.Fatalf("handles para presupuesto inesperados: %+v", handles)
 	}
 }
 
@@ -684,7 +840,7 @@ func TestIngestarRuntimeTranscriptHandleRecortaPreambuloScriptEnRuntimePanic(t *
 
 	logPath := filepath.Join(t.TempDir(), "script-panic.log")
 	logData := strings.Join([]string{
-		`Script started on 2026-03-31 16:48:56+02:00 [COMMAND="'/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil' 'Codex1' '-C' '/tmp/orquesta' 'Bootstrap enorme ...'"] The application panicked (crashed).`,
+		`Script started on 2026-03-31 16:48:56+02:00 [COMMAND="'/tmp/codex-perfiles/bin/codex-perfil' 'Codex1' '-C' '/tmp/orquesta' 'Bootstrap enorme ...'"] The application panicked (crashed).`,
 		"",
 	}, "\n")
 	if err := os.WriteFile(logPath, []byte(logData), 0o600); err != nil {
