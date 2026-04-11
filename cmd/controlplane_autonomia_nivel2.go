@@ -899,12 +899,17 @@ func asegurarAgenteAutonomiaOperativo(proyectoID int64, preferredAgent, activati
 	if proyectoActivoID != 0 && proyectoActivoID != proyectoID {
 		return nil, false, nil
 	}
+	if disponible, _, err := autonomiaCuentaCompartidaDisponible(preferredAgent); err != nil {
+		return nil, false, err
+	} else if !disponible {
+		return nil, false, nil
+	}
 	if sesion, err := db.GetSesionActiva(preferredAgent, &proyectoID); err != nil && err != sql.ErrNoRows {
 		return nil, false, err
 	} else if sesion != nil {
 		return agente, false, nil
 	}
-	if handle, err := db.GetRuntimeHandleActivoAgenteProyecto(preferredAgent, &proyectoID); err != nil {
+	if handle, err := db.GetRuntimeHandleOperativoRecienteAgenteProyecto(preferredAgent, &proyectoID); err != nil {
 		return nil, false, err
 	} else if handle != nil {
 		return agente, false, nil

@@ -16,6 +16,7 @@ import (
 
 	"orquesta/db"
 	"orquesta/operacionesapp"
+	"orquesta/sesionesapp"
 )
 
 var operacionesService = operacionesapp.NewService(operacionesapp.Repository{})
@@ -36,8 +37,8 @@ type webSesionesData struct {
 
 type webSesionDetalleData struct {
 	Sesion      *db.Sesion
-	Presupuesto *db.PresupuestoSesion
-	Evaluacion  *db.EvaluacionPresupuesto
+	Presupuesto *sesionesapp.PresupuestoSesion
+	Evaluacion  *sesionesapp.EvaluacionPresupuesto
 }
 
 func webHandlerAgentes(w http.ResponseWriter, r *http.Request) {
@@ -115,11 +116,25 @@ func webHandlerSesionDetalle(w http.ResponseWriter, r *http.Request, id int64) {
 		return
 	}
 	presupuesto, evaluacion, _ := webCargarPresupuestoSesionPorAPI(id)
+	// Fallback local si no hay servidor disponible
+	if presupuesto == nil {
+		presupuesto, evaluacion, _ = webCargarPresupuestoSesionLocal(id)
+	}
 	webRender(w, r, webTplLayout+webTplSesionDetalle, webSesionDetalleData{
 		Sesion:      sesion,
 		Presupuesto: presupuesto,
 		Evaluacion:  evaluacion,
 	})
+}
+
+func webCargarPresupuestoSesionLocal(sesionID int64) (*sesionesapp.PresupuestoSesion, *sesionesapp.EvaluacionPresupuesto, error) {
+	repo := db.SqliteSesionesRepo{}
+	p, err := repo.GetLatestSessionBudget(sesionID)
+	if err != nil || p == nil {
+		return nil, nil, err
+	}
+	ev, err := repo.EvaluateSessionBudget(p)
+	return p, ev, err
 }
 
 func webCargarAsignacionesOpsPorAPI(estado, agente string) ([]*db.Asignacion, error) {
@@ -174,7 +189,7 @@ func webCargarSesionInspeccionPorAPI(id int64) (*db.Sesion, error) {
 	return resp.Sesion, nil
 }
 
-func webCargarPresupuestoSesionPorAPI(sesionID int64) (*db.PresupuestoSesion, *db.EvaluacionPresupuesto, error) {
+func webCargarPresupuestoSesionPorAPI(sesionID int64) (*sesionesapp.PresupuestoSesion, *sesionesapp.EvaluacionPresupuesto, error) {
 	var resp apiSesionPresupuestoResponse
 	if err := webInvocarAPIJSON(http.MethodGet, "/api/sesiones/presupuesto?sesion="+strconv.FormatInt(sesionID, 10), nil, &resp); err != nil {
 		return nil, nil, err

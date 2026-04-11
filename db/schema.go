@@ -137,6 +137,36 @@ CREATE TABLE IF NOT EXISTS tareas (
     completada_at DATETIME
 );
 
+-- ─── Especificaciones de función para microprogramación dirigida ──────────
+CREATE TABLE IF NOT EXISTS especificaciones_funcion (
+    id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+    tarea_id                        INTEGER REFERENCES tareas(id) ON DELETE SET NULL,
+    proyecto_id                     INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+    titulo                          TEXT    NOT NULL,
+    archivo_objetivo                TEXT    NOT NULL,
+    simbolo_objetivo                TEXT    NOT NULL,
+    descripcion                     TEXT    NOT NULL DEFAULT '',
+    precondiciones_json             TEXT    NOT NULL DEFAULT '[]',
+    postcondiciones_json            TEXT    NOT NULL DEFAULT '[]',
+    dependencias_permitidas_json    TEXT    NOT NULL DEFAULT '[]',
+    dependencias_prohibidas_json    TEXT    NOT NULL DEFAULT '[]',
+    tests_obligatorios_json         TEXT    NOT NULL DEFAULT '[]',
+    write_set_json                  TEXT    NOT NULL DEFAULT '[]',
+    formato_salida                  TEXT    NOT NULL DEFAULT 'patch+evidencia',
+    estado                          TEXT    NOT NULL DEFAULT 'activa'
+                                          CHECK (estado IN ('borrador','activa','reemplazada','archivada')),
+    version                         INTEGER NOT NULL DEFAULT 1,
+    creado_por                      TEXT    NOT NULL DEFAULT 'alberto',
+    created_at                      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_especificaciones_funcion_tarea
+ON especificaciones_funcion(tarea_id, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_especificaciones_funcion_proyecto_estado
+ON especificaciones_funcion(proyecto_id, estado, id DESC);
+
 -- ─── Propuestas de orquestación ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS propuestas (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -167,6 +197,10 @@ CREATE TABLE IF NOT EXISTS votos (
     updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(propuesta_id, agente)
 );
+CREATE INDEX IF NOT EXISTS idx_propuestas_estado_proyecto_id
+ON propuestas(estado, proyecto_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_votos_agente_posicion_propuesta
+ON votos(agente, posicion, propuesta_id);
 
 -- ─── Bloqueos ──────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS bloqueos (
@@ -203,6 +237,15 @@ CREATE TABLE IF NOT EXISTS sesiones (
     host                  TEXT    NOT NULL DEFAULT '',
     pid                   INTEGER
 );
+
+CREATE INDEX IF NOT EXISTS idx_sesiones_activa_id
+ON sesiones(activa, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_sesiones_agente_activa_id
+ON sesiones(agente, activa, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_sesiones_agente_id
+ON sesiones(agente, id DESC);
 
 -- ─── Tracking ligero de threads del supervisor ────────────────────────────
 CREATE TABLE IF NOT EXISTS supervisor_threads (
@@ -294,6 +337,12 @@ CREATE TABLE IF NOT EXISTS asignaciones (
     updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     cerrada_at  DATETIME
 );
+
+CREATE INDEX IF NOT EXISTS idx_asignaciones_agente_estado_proyecto_id
+ON asignaciones(agente, estado, proyecto_id, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_asignaciones_proyecto_estado_agente_id
+ON asignaciones(proyecto_id, estado, agente, id DESC);
 
 -- ─── Locks de coordinación ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS locks (
@@ -515,6 +564,9 @@ CREATE TABLE IF NOT EXISTS runtime_mailbox (
 CREATE INDEX IF NOT EXISTS idx_runtime_mailbox_destino_estado
 ON runtime_mailbox(to_agente, estado, id DESC);
 
+CREATE INDEX IF NOT EXISTS idx_runtime_mailbox_estado_id
+ON runtime_mailbox(estado, id DESC);
+
 CREATE TABLE IF NOT EXISTS runtime_checkpoints (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     agente              TEXT    NOT NULL REFERENCES agentes(nombre),
@@ -729,6 +781,12 @@ CREATE TABLE IF NOT EXISTS presupuestos_sesion (
     checked_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_presupuestos_sesion_sesion_checked_id
+ON presupuestos_sesion(sesion_id, checked_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_presupuestos_sesion_sesion_fuente_checked_id
+ON presupuestos_sesion(sesion_id, budget_source, checked_at DESC, id DESC);
 
 CREATE TABLE IF NOT EXISTS entidades_memoria (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1072,10 +1130,11 @@ INSERT INTO config (clave, valor) VALUES
 	    ('runtime_order_stale_seconds','120')
 	ON CONFLICT(clave) DO NOTHING;
 
-INSERT INTO conectores (slug, nombre, transporte, comando, env_json, metadata_json) VALUES
-    ('claude-code', 'Claude Code', 'cli', 'claude', '{}', '{"familia":"anthropic","reanudable":true}'),
-    ('codex-cli',   'Codex CLI',   'cli', 'codex',  '{"ORQUESTA_BIN":"{{orquesta_executable}}","PATH":"{{orquesta_bin_dir}}:{{host_path}}"}', '{"familia":"openai","reanudable":true,"cwd_flag":"-C","launch_prompt_positional":true,"model_flag":"--model","reasoning_config_key":"model_reasoning_effort","can_send_input":false}'),
-    ('gemini-cli',  'Gemini CLI',  'cli', 'gemini', '{}', '{"familia":"google","reanudable":true}')
+INSERT INTO conectores (slug, nombre, transporte, comando, args_json, env_json, metadata_json) VALUES
+    ('claude-code', 'Claude Code', 'cli', 'claude', '[]', '{}', '{"familia":"anthropic","reanudable":true}'),
+    ('codex-cli',   'Codex CLI',   'cli', '{{home}}/Trabajo/codex-perfiles/bin/codex-perfil', '["{{agent}}"]', '{"ORQUESTA_BIN":"{{orquesta_executable}}","PATH":"{{orquesta_bin_dir}}:{{host_path}}"}', '{"familia":"openai","reanudable":true,"cwd_flag":"-C","launch_prompt_positional":true,"model_flag":"--model","reasoning_config_key":"model_reasoning_effort","can_send_input":false}'),
+    ('gemini-cli',  'Gemini CLI',  'cli', 'gemini', '[]', '{}', '{"familia":"google","reanudable":true}'),
+    ('ollama-cli',  'Ollama CLI',  'cli', 'ollama', '["run"]', '{}', '{"familia":"ollama","reanudable":false,"default_model":"qwen2.5-coder:7b","default_reasoning_effort":"medium","default_task_profile":"implementacion","model_positional":true,"can_send_input":true,"mailbox_delivery_mode":"interactive","launch_prompt_transport":"post_start","launch_prompt_delay_ms":1200}')
 ON CONFLICT(slug) DO NOTHING;
 
 -- ─── Reglas: programador ────────────────────────────────────────────────────

@@ -383,6 +383,27 @@ func agenteDebePausarPorPresupuesto(nombre string) (bool, string, error) {
 	return true, "Presupuesto crítico. Pausa y relevo recomendados: " + motivo, nil
 }
 
+func agenteDebePausarPorPresupuestoVisible(agente *db.Agente) (bool, string) {
+	if agente == nil || agente.PresupuestoStale {
+		return false, ""
+	}
+	switch strings.ToLower(strings.TrimSpace(agente.PresupuestoEstado)) {
+	case "agotado":
+		return true, "Presupuesto crítico. Pausa y relevo recomendados: presupuesto agotado"
+	case "handoff_preventivo":
+		motivo := "cuota restante baja"
+		if agente.CuotaRestantePct != nil {
+			motivo = fmt.Sprintf("cuota restante visible %d%%", *agente.CuotaRestantePct)
+			if ventana := strings.TrimSpace(agente.PresupuestoVentana); ventana != "" {
+				motivo += " en " + ventana
+			}
+		}
+		return true, "Presupuesto crítico. Pausa y relevo recomendados: " + motivo
+	default:
+		return false, ""
+	}
+}
+
 func resumeContextNoVacio(resume runtimeagente.ResumeContext) bool {
 	return lanzamientoruntime.ResumeContextNoVacio(resume)
 }
@@ -608,6 +629,8 @@ var agenteEjecutarCmd = &cobra.Command{
 			done := make(chan bool)
 			go func() {
 				scanner := bufio.NewScanner(pr)
+				buf := make([]byte, 64*1024)
+				scanner.Buffer(buf, 10*1024*1024)
 				for scanner.Scan() {
 					line := scanner.Text()
 					lower := strings.ToLower(line)
@@ -660,6 +683,10 @@ var agenteEjecutarCmd = &cobra.Command{
 						break
 					}
 				}
+				if err := scanner.Err(); err != nil {
+					fmt.Fprintf(os.Stderr, "\n[Orquesta] aviso: scanner de cuota degradado (%v); drenando pipe\n", err)
+				}
+				_, _ = io.Copy(io.Discard, pr)
 				done <- true
 			}()
 
@@ -669,8 +696,8 @@ var agenteEjecutarCmd = &cobra.Command{
 			<-done
 			<-refreshDone
 
-			fmt.Println("\n🏁 [Orquesta] Proceso finalizado. Reiniciando bucle de vigilancia...")
-			time.Sleep(5 * time.Second)
+			fmt.Println("\n🏁 [Orquesta] Proceso finalizado. Reiniciando bucle de vigilancia (cooldown)...")
+			time.Sleep(60 * time.Second)
 		}
 	},
 }

@@ -142,6 +142,7 @@ func FusionarAgentes(origen, destino string) (*FusionAgentesResultado, error) {
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	runtimeHandleHotReset()
 	return resultado, nil
 }
 

@@ -35,6 +35,9 @@ func resetControlPlaneConfigCache() {
 
 func controlPlaneConfigGetCached(clave string) (string, error) {
 	now := time.Now()
+	if db.DB == nil {
+		return "", nil
+	}
 
 	controlPlaneConfigCache.mu.RLock()
 	if entry, ok := controlPlaneConfigCache.entries[clave]; ok && now.Before(entry.expiresAt) {

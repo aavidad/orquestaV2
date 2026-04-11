@@ -140,7 +140,22 @@ func ListarAsignaciones(f FiltroAsignaciones) ([]*Asignacion, error) {
 		q += ` AND a.estado = ?`
 		args = append(args, *f.Estado)
 	}
-	q += ` ORDER BY p.slug, a.agente, a.id DESC`
+	switch {
+	case f.Agente != nil:
+		q += ` ORDER BY
+			CASE a.estado
+				WHEN 'activa' THEN 0
+				WHEN 'planificada' THEN 1
+				WHEN 'pausada' THEN 2
+				ELSE 9
+			END,
+			a.updated_at DESC,
+			a.id DESC`
+	case f.ProyectoID != nil:
+		q += ` ORDER BY a.agente, a.id DESC`
+	default:
+		q += ` ORDER BY p.slug, a.agente, a.id DESC`
+	}
 
 	rows, err := DB.Query(q, args...)
 	if err != nil {

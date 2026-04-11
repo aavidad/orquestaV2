@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -199,6 +200,7 @@ func UpsertRuntimeHandleDesdeSesion(s *Sesion) error {
 			h.Estado, h.CapabilitiesJSON, h.MetadataJSON, h.LastSeenAt,
 		)
 	} else {
+		h.Transporte = reconciliarTransporteSesion(existente, h)
 		h.HandleKind = reconciliarHandleKindSesion(existente, h)
 		h.HandleRef = reconciliarHandleRefSesion(existente, h)
 		h.CapabilitiesJSON = reconciliarCapabilitiesSesion(existente.CapabilitiesJSON, h.CapabilitiesJSON)
@@ -223,6 +225,7 @@ func UpsertRuntimeHandleDesdeSesion(s *Sesion) error {
 	if err != nil {
 		return err
 	}
+	runtimeHandleHotReset()
 	if h.Estado == "activo" || h.Estado == "pausado" {
 		_, err = DB.Exec(`
 			UPDATE runtime_handles
@@ -233,7 +236,84 @@ func UpsertRuntimeHandleDesdeSesion(s *Sesion) error {
 			s.Agente, s.ID,
 		)
 	}
+	if err == nil {
+		runtimeHandleHotReset()
+	}
 	return err
+}
+
+func runtimeHandleEsTMUXCanonico(handle *RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") {
+		return true
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "driver", "")), "tmux_cli_session") {
+		return true
+	}
+	return strings.TrimSpace(stringFromMap(meta, "tmux_session", "")) != "" ||
+		strings.TrimSpace(stringFromMap(meta, "tmux_pane_id", "")) != ""
+}
+
+func runtimeHandleTMUXSessionRef(handle *RuntimeHandle) string {
+	if handle == nil {
+		return ""
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	session := strings.TrimSpace(stringFromMap(meta, "tmux_session", ""))
+	pane := strings.TrimSpace(stringFromMap(meta, "tmux_pane_id", ""))
+	switch {
+	case session != "" && pane != "":
+		return session + "/" + pane
+	case session != "":
+		return session
+	case pane != "":
+		return pane
+	case strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") ||
+		strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session"):
+		return strings.TrimSpace(handle.HandleRef)
+	default:
+		return ""
+	}
+}
+
+func runtimeHandleTMUXSessionRefObserved(handle *RuntimeHandle) string {
+	if handle == nil {
+		return ""
+	}
+	if ref := runtimeHandleTMUXSessionRef(handle); ref != "" {
+		return ref
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
+	if err != nil || snap == nil {
+		return ""
+	}
+	if ref := strings.TrimSpace(snap.RuntimeRef()); ref != "" {
+		return ref
+	}
+	return strings.TrimSpace(snap.SessionRef())
+}
+
+func reconciliarTransporteSesion(existente *RuntimeHandle, inferido *RuntimeHandle) string {
+	if inferido == nil {
+		if existente == nil {
+			return ""
+		}
+		return strings.TrimSpace(existente.Transporte)
+	}
+	inferidoTransporte := strings.TrimSpace(inferido.Transporte)
+	if existente == nil {
+		return inferidoTransporte
+	}
+	if runtimeHandleEsTMUXCanonico(existente) {
+		return "tmux"
+	}
+	if inferidoTransporte != "" {
+		return inferidoTransporte
+	}
+	return strings.TrimSpace(existente.Transporte)
 }
 
 func reconciliarHandleKindSesion(existente *RuntimeHandle, inferido *RuntimeHandle) string {
@@ -246,6 +326,9 @@ func reconciliarHandleKindSesion(existente *RuntimeHandle, inferido *RuntimeHand
 	inferidoKind := strings.TrimSpace(inferido.HandleKind)
 	if existente == nil {
 		return inferidoKind
+	}
+	if runtimeHandleEsTMUXCanonico(existente) {
+		return "session"
 	}
 	existenteKind := strings.TrimSpace(existente.HandleKind)
 	if inferidoKind == "process" {
@@ -267,6 +350,11 @@ func reconciliarHandleRefSesion(existente *RuntimeHandle, inferido *RuntimeHandl
 	inferidoRef := strings.TrimSpace(inferido.HandleRef)
 	if existente == nil {
 		return inferidoRef
+	}
+	if runtimeHandleEsTMUXCanonico(existente) {
+		if tmuxRef := runtimeHandleTMUXSessionRef(existente); tmuxRef != "" {
+			return tmuxRef
+		}
 	}
 	if strings.TrimSpace(inferido.HandleKind) == "process" && inferidoRef != "" {
 		return inferidoRef
@@ -326,6 +414,9 @@ func MarcarRuntimeHandlesCerradosPorAgente(agente string) error {
 		  AND (sesion_id IS NULL OR sesion_id NOT IN (
 		      SELECT id FROM sesiones WHERE agente = ? AND activa = 1
 		  ))`, strings.TrimSpace(agente), strings.TrimSpace(agente))
+	if err == nil {
+		runtimeHandleHotReset()
+	}
 	return err
 }
 
@@ -395,6 +486,7 @@ func PurgarRuntimeHandlesInactivos(filtro FiltroPurgadoRuntimeHandles) (*PurgaRu
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	runtimeHandleHotReset()
 	return &PurgaRuntimeHandlesResultado{
 		Deleted:    len(ids),
 		DeletedIDs: ids,
@@ -490,18 +582,9 @@ func PurgarRuntimeOrdersTerminales(filtro FiltroPurgadoRuntimeOrders) (*PurgaRun
 
 func PurgarRuntimeHistorico() (*PurgaRuntimeHistoricoResultado, error) {
 	now := time.Now().UTC()
-	handlesCutoff := now.Add(-time.Duration(configInt64Fallback("runtime_handles_retention_hours", 24)) * time.Hour)
-	if !handlesCutoff.Before(now) {
-		handlesCutoff = now.Add(-24 * time.Hour)
-	}
-	ordersCutoff := now.Add(-time.Duration(configInt64Fallback("runtime_orders_retention_hours", 72)) * time.Hour)
-	if !ordersCutoff.Before(now) {
-		ordersCutoff = now.Add(-72 * time.Hour)
-	}
-	runtimesCutoff := now.Add(-time.Duration(configInt64Fallback("runtime_instances_retention_hours", 72)) * time.Hour)
-	if !runtimesCutoff.Before(now) {
-		runtimesCutoff = now.Add(-72 * time.Hour)
-	}
+	handlesCutoff := runtimeHistoricoRetentionCutoff(now, "runtime_handles_retention_minutes", "runtime_handles_retention_hours", 24)
+	ordersCutoff := runtimeHistoricoRetentionCutoff(now, "runtime_orders_retention_minutes", "runtime_orders_retention_hours", 72)
+	runtimesCutoff := runtimeHistoricoRetentionCutoff(now, "runtime_instances_retention_minutes", "runtime_instances_retention_hours", 72)
 	handleIDs, err := listarRuntimeHandlesPurgablesHistoricos([]string{"cerrado", "fallido"}, handlesCutoff)
 	if err != nil {
 		return nil, err
@@ -578,6 +661,26 @@ func PurgarRuntimeHistorico() (*PurgaRuntimeHistoricoResultado, error) {
 		return nil, err
 	}
 	return result, nil
+}
+
+func runtimeHistoricoRetentionCutoff(now time.Time, minutesKey, hoursKey string, fallbackHours int64) time.Time {
+	now = now.UTC()
+	if minutes := configInt64Fallback(minutesKey, -1); minutes >= 0 {
+		cutoff := now.Add(-time.Duration(minutes) * time.Minute)
+		if cutoff.Before(now) {
+			return cutoff
+		}
+		return now
+	}
+	hours := configInt64Fallback(hoursKey, fallbackHours)
+	if hours <= 0 {
+		hours = fallbackHours
+	}
+	cutoff := now.Add(-time.Duration(hours) * time.Hour)
+	if cutoff.Before(now) {
+		return cutoff
+	}
+	return now.Add(-time.Duration(fallbackHours) * time.Hour)
 }
 
 func listarRuntimeHandlesPurgablesHistoricos(estados []string, cutoff time.Time) ([]int64, error) {
@@ -908,6 +1011,7 @@ func GetRuntimeHandleBySesionID(sesionID int64) (*RuntimeHandle, error) {
 		if err != nil {
 			return nil, err
 		}
+		runtimeHandleHotRemember(h)
 		return reconciliarMetadataRuntimeHandleLeida(h)
 	})
 }
@@ -925,21 +1029,24 @@ func GetRuntimeHandle(id int64) (*RuntimeHandle, error) {
 	})
 }
 
-func GetRuntimeHandleActivoAgente(agente string) (*RuntimeHandle, error) {
-	return seleccionarRuntimeHandleActivo(strings.TrimSpace(agente), nil)
-}
-
-func GetRuntimeHandleActivoAgenteProyecto(agente string, proyectoID *int64) (*RuntimeHandle, error) {
-	return seleccionarRuntimeHandleActivo(strings.TrimSpace(agente), proyectoID)
-}
-
-func seleccionarRuntimeHandleActivo(agente string, proyectoID *int64) (*RuntimeHandle, error) {
-	handles, err := listarRuntimeHandlesActivosCandidatos(agente, proyectoID)
-	if err != nil {
-		return nil, err
+func ActualizarMetadataRuntimeHandle(id int64, metadataJSON string) error {
+	if id <= 0 {
+		return nil
 	}
-	for _, handle := range handles {
-		validado, err := validarRuntimeHandleActivoSinFallback(handle)
+	_, err := consultarConReintentos(func() (struct{}, error) {
+		if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, strings.TrimSpace(metadataJSON), id); err != nil {
+			return struct{}{}, err
+		}
+		runtimeHandleHotReset()
+		return struct{}{}, nil
+	})
+	return err
+}
+
+func GetRuntimeHandleActivoAgente(agente string) (*RuntimeHandle, error) {
+	agente = strings.TrimSpace(agente)
+	if cached := runtimeHandleHotLookup(agente, nil); cached != nil {
+		validado, err := validarRuntimeHandleActivoSinFallback(cached)
 		if err != nil {
 			return nil, err
 		}
@@ -947,7 +1054,210 @@ func seleccionarRuntimeHandleActivo(agente string, proyectoID *int64) (*RuntimeH
 			return validado, nil
 		}
 	}
+	handle, err := seleccionarRuntimeHandleActivo(agente, nil)
+	if err == nil && handle != nil {
+		runtimeHandleHotRemember(handle)
+	}
+	return handle, err
+}
+
+func GetRuntimeHandleActivoAgenteProyecto(agente string, proyectoID *int64) (*RuntimeHandle, error) {
+	agente = strings.TrimSpace(agente)
+	if cached := runtimeHandleHotLookup(agente, proyectoID); cached != nil {
+		validado, err := validarRuntimeHandleActivoSinFallback(cached)
+		if err != nil {
+			return nil, err
+		}
+		if validado != nil {
+			return validado, nil
+		}
+	}
+	handle, err := seleccionarRuntimeHandleActivo(agente, proyectoID)
+	if err == nil && handle != nil {
+		runtimeHandleHotRemember(handle)
+	}
+	return handle, err
+}
+
+func seleccionarRuntimeHandleActivo(agente string, proyectoID *int64) (*RuntimeHandle, error) {
+	handles, err := listarRuntimeHandlesActivosCandidatos(agente, proyectoID)
+	if err != nil {
+		return nil, err
+	}
+	validos := make([]*RuntimeHandle, 0, len(handles))
+	for _, handle := range handles {
+		validado, err := validarRuntimeHandleActivoSinFallback(handle)
+		if err != nil {
+			return nil, err
+		}
+		if validado != nil {
+			validos = append(validos, validado)
+		}
+	}
+	canonicos := make([]*RuntimeHandle, 0, len(validos))
+	for _, handle := range validos {
+		if runtimeHandleExcluidoDelActivoCanonico(handle) {
+			continue
+		}
+		canonicos = append(canonicos, handle)
+	}
+	if len(canonicos) > 0 {
+		preferido := elegirRuntimeHandleActivoPreferente(canonicos)
+		if preferido != nil {
+			if err := cerrarRuntimeHandlesActivosSuperseded(preferido, validos); err != nil {
+				return nil, err
+			}
+			return GetRuntimeHandle(preferido.ID)
+		}
+	}
 	return recuperarRuntimeHandleVivoAgenteProyecto(agente, proyectoID)
+}
+
+func runtimeHandleExcluidoDelActivoCanonico(handle *RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	if runtimeHandleUsaLegacyProcessPTY(mapFromJSON(handle.MetadataJSON)) {
+		return true
+	}
+	return false
+}
+
+func elegirRuntimeHandleActivoPreferente(handles []*RuntimeHandle) *RuntimeHandle {
+	if len(handles) == 0 {
+		return nil
+	}
+	now := time.Now().UTC()
+	best := handles[0]
+	bestInfo := runtimeHandleWorkerInfoFor(best, now)
+	for _, candidate := range handles[1:] {
+		candidateInfo := runtimeHandleWorkerInfoFor(candidate, now)
+		if runtimeHandlePreferibleConInfo(candidate, candidateInfo, best, bestInfo, now) {
+			best = candidate
+			bestInfo = candidateInfo
+		}
+	}
+	return best
+}
+
+func runtimeHandlePreferible(candidate, current *RuntimeHandle, now time.Time) bool {
+	return runtimeHandlePreferibleConInfo(
+		candidate,
+		runtimeHandleWorkerInfoFor(candidate, now),
+		current,
+		runtimeHandleWorkerInfoFor(current, now),
+		now,
+	)
+}
+
+type runtimeHandleWorkerInfo struct {
+	priority   int
+	structured bool
+	fresh      bool
+}
+
+func runtimeHandlePreferibleConInfo(candidate *RuntimeHandle, candidateInfo runtimeHandleWorkerInfo, current *RuntimeHandle, currentInfo runtimeHandleWorkerInfo, now time.Time) bool {
+	if candidateInfo.priority != currentInfo.priority {
+		return candidateInfo.priority > currentInfo.priority
+	}
+	if candidateInfo.fresh != currentInfo.fresh {
+		return candidateInfo.fresh
+	}
+	if candidateInfo.structured != currentInfo.structured {
+		return candidateInfo.structured
+	}
+	candidateActivo := strings.TrimSpace(candidate.Estado) == "activo"
+	currentActivo := strings.TrimSpace(current.Estado) == "activo"
+	if candidateActivo != currentActivo {
+		return candidateActivo
+	}
+	candidateSeen := runtimeHandleRecency(candidate)
+	currentSeen := runtimeHandleRecency(current)
+	if !candidateSeen.Equal(currentSeen) {
+		return candidateSeen.After(currentSeen)
+	}
+	return candidate.ID > current.ID
+}
+
+func runtimeHandleWorkerInfoFor(handle *RuntimeHandle, now time.Time) runtimeHandleWorkerInfo {
+	if handle == nil {
+		return runtimeHandleWorkerInfo{}
+	}
+	info := runtimeHandleWorkerInfo{}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
+	if err != nil || snap == nil {
+		return info
+	}
+	driver := strings.ToLower(strings.TrimSpace(snap.Driver()))
+	if driver == "" {
+		driver = strings.ToLower(strings.TrimSpace(stringFromMap(mapFromJSON(handle.MetadataJSON), "driver", "")))
+	}
+	if driver != "process_pty_cli" {
+		info.structured = true
+	}
+	info.fresh = snap.Alive() && !snap.IsHeartbeatStale(now, time.Minute)
+	switch driver {
+	case "tmux_cli_session":
+		if info.fresh {
+			info.priority = 40
+		} else {
+			info.priority = 30
+		}
+	case "process_pty_cli":
+		if info.fresh {
+			info.priority = 0
+		} else {
+			info.priority = -10
+		}
+	default:
+		if info.fresh {
+			info.priority = 5
+		} else {
+			info.priority = 1
+		}
+	}
+	return info
+}
+
+func runtimeHandleWorkerPriority(handle *RuntimeHandle, now time.Time) int {
+	return runtimeHandleWorkerInfoFor(handle, now).priority
+}
+
+func runtimeHandleRecency(handle *RuntimeHandle) time.Time {
+	if handle == nil {
+		return time.Time{}
+	}
+	if handle.LastSeenAt != nil && !handle.LastSeenAt.IsZero() {
+		return handle.LastSeenAt.UTC()
+	}
+	if !handle.UpdatedAt.IsZero() {
+		return handle.UpdatedAt.UTC()
+	}
+	return handle.CreatedAt.UTC()
+}
+
+func runtimeHandleTieneWorkerEstructurado(handle *RuntimeHandle) bool {
+	return runtimeHandleWorkerInfoFor(handle, time.Now().UTC()).structured
+}
+
+func runtimeHandleTieneWorkerEstructuradoFresco(handle *RuntimeHandle, now time.Time) bool {
+	return runtimeHandleWorkerInfoFor(handle, now).fresh
+}
+
+func cerrarRuntimeHandlesActivosSuperseded(preferido *RuntimeHandle, candidates []*RuntimeHandle) error {
+	now := time.Now().UTC()
+	if preferido == nil || !runtimeHandleWorkerInfoFor(preferido, now).fresh {
+		return nil
+	}
+	for _, handle := range candidates {
+		if handle == nil || handle.ID == preferido.ID {
+			continue
+		}
+		if err := marcarRuntimeHandleSuperseded(handle); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func listarRuntimeHandlesActivosCandidatos(agente string, proyectoID *int64) ([]*RuntimeHandle, error) {
@@ -989,8 +1299,32 @@ func validarRuntimeHandleActivoSinFallback(handle *RuntimeHandle) (*RuntimeHandl
 	if handle == nil {
 		return nil, nil
 	}
+	if runtimeHandleExcluidoDelActivoCanonico(handle) {
+		return nil, nil
+	}
+	estadoPersistido := strings.ToLower(strings.TrimSpace(handle.Estado))
+	if estadoPersistido == "pausado" || estadoPersistido == "cerrado" {
+		return nil, nil
+	}
 	if !runtimeHandleSePuedeValidarLocalmente(handle) {
-		return handle, nil
+		return normalizarRuntimeHandleTMUXCanonico(handle)
+	}
+	if superseded, err := supersedeRuntimeHandleSiHaceFalta(handle); err != nil {
+		return nil, err
+	} else if superseded {
+		return nil, nil
+	}
+	if fresh, estado, pid := runtimeHandleReviveStateFromStructuredWorker(handle, time.Now().UTC()); fresh {
+		if estado == "pausado" {
+			if _, err := revivirRuntimeHandle(handle, estado, pid); err != nil {
+				return nil, err
+			}
+			return nil, nil
+		}
+		return normalizarRuntimeHandleTMUXCanonico(handle)
+	}
+	if runtimeHandleConfiaEstadoReciente(handle, time.Now().UTC()) {
+		return normalizarRuntimeHandleTMUXCanonico(handle)
 	}
 	revived, err := refrescarRuntimeHandleSiSigueVivo(handle)
 	if err != nil {
@@ -1024,6 +1358,14 @@ func recuperarRuntimeHandleVivoAgenteProyecto(agente string, proyectoID *int64) 
 	if err != nil || handle == nil {
 		return handle, err
 	}
+	if superseded, err := supersedeRuntimeHandleSiHaceFalta(handle); err != nil {
+		return nil, err
+	} else if superseded {
+		return nil, nil
+	}
+	if fresh, estado, pid := runtimeHandleReviveStateFromStructuredWorker(handle, time.Now().UTC()); fresh {
+		return revivirRuntimeHandle(handle, estado, pid)
+	}
 	return refrescarRuntimeHandleSiSigueVivo(handle)
 }
 
@@ -1031,19 +1373,35 @@ func refrescarRuntimeHandleSiSigueVivo(handle *RuntimeHandle) (*RuntimeHandle, e
 	if handle == nil {
 		return nil, nil
 	}
-	obj := controlruntime.ObjetivoProceso{
-		HandleKind:   handle.HandleKind,
-		HandleRef:    handle.HandleRef,
-		MetadataJSON: handle.MetadataJSON,
+	now := time.Now().UTC()
+	if fresh, estado, pid := runtimeHandleReviveStateFromStructuredWorker(handle, now); fresh {
+		return revivirRuntimeHandle(handle, estado, pid)
 	}
-	if runtime, err := runtimeHandleRuntime(handle); err == nil && runtime != nil && runtime.PID != nil && *runtime.PID > 0 {
-		obj.PID = runtime.PID
+	meta := mapFromJSON(handle.MetadataJSON)
+	if runtimeHandleUsaLegacyProcessPTY(meta) {
+		return nil, nil
 	}
+	runtime, _ := runtimeHandleRuntime(handle)
+	obj := objetivoProcesoDesdeHandleRuntime(handle, runtime)
 	vivo, _, err := controlruntime.ProcesoVivo(obj)
 	if err != nil || !vivo {
 		return nil, nil
 	}
 	estado := estadoReviveRuntimeHandle(handle)
+	return revivirRuntimeHandle(handle, estado, obj.PID)
+}
+
+func revivirRuntimeHandle(handle *RuntimeHandle, estado string, pid *int64) (*RuntimeHandle, error) {
+	if handle == nil {
+		return nil, nil
+	}
+	normalizado, err := normalizarRuntimeHandleTMUXCanonico(handle)
+	if err != nil {
+		return nil, err
+	}
+	if normalizado != nil {
+		handle = normalizado
+	}
 	if _, err := DB.Exec(`
 		UPDATE runtime_handles
 		SET estado = ?,
@@ -1051,6 +1409,7 @@ func refrescarRuntimeHandleSiSigueVivo(handle *RuntimeHandle) (*RuntimeHandle, e
 		WHERE id = ?`, estado, handle.ID); err != nil {
 		return nil, err
 	}
+	runtimeHandleHotReset()
 	if runtime, err := runtimeHandleRuntime(handle); err == nil && runtime != nil {
 		processState := runtime.ProcessState
 		if strings.TrimSpace(processState) == "" || strings.EqualFold(strings.TrimSpace(processState), "fallido") {
@@ -1064,6 +1423,10 @@ func refrescarRuntimeHandleSiSigueVivo(handle *RuntimeHandle) (*RuntimeHandle, e
 			processState = "stopped"
 			logicalState = "pausado"
 		}
+		var runtimePID *int64
+		if pid != nil && *pid > 0 {
+			runtimePID = pid
+		}
 		if _, err := DB.Exec(`
 			UPDATE runtime_instances
 			SET pid = COALESCE(pid, ?),
@@ -1072,7 +1435,7 @@ func refrescarRuntimeHandleSiSigueVivo(handle *RuntimeHandle) (*RuntimeHandle, e
 			    last_event_at = CURRENT_TIMESTAMP,
 			    last_heartbeat_at = CURRENT_TIMESTAMP
 			WHERE id = ?`,
-			obj.PID, logicalState, processState, runtime.ID,
+			runtimePID, logicalState, processState, runtime.ID,
 		); err != nil {
 			return nil, err
 		}
@@ -1080,8 +1443,152 @@ func refrescarRuntimeHandleSiSigueVivo(handle *RuntimeHandle) (*RuntimeHandle, e
 	return GetRuntimeHandle(handle.ID)
 }
 
+func runtimeHandleReviveStateFromStructuredWorker(handle *RuntimeHandle, now time.Time) (bool, string, *int64) {
+	if handle == nil {
+		return false, "", nil
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
+	if err != nil || snap == nil {
+		return false, "", nil
+	}
+	view := snap.View(now, time.Minute)
+	if view == nil {
+		return false, "", nil
+	}
+	if strings.EqualFold(strings.TrimSpace(view.Driver), "process_pty_cli") && runtimeHandleUsaLegacyProcessPTY(meta) {
+		return false, "", nil
+	}
+	if view.HeartbeatStale || !view.Alive {
+		return false, "", nil
+	}
+	switch strings.ToLower(strings.TrimSpace(view.State)) {
+	case "", "failed", "stopped", "exited", "closed", "stale":
+		return false, "", nil
+	}
+	estado := estadoReviveRuntimeHandle(handle)
+	switch strings.ToLower(strings.TrimSpace(view.State)) {
+	case "paused", "pausado":
+		estado = "pausado"
+	case "running":
+		estado = "activo"
+	}
+	var pid *int64
+	if view.ChildPID > 0 {
+		childPID := int64(view.ChildPID)
+		pid = &childPID
+	}
+	return true, estado, pid
+}
+
+func runtimeHandleConfiaEstadoReciente(handle *RuntimeHandle, now time.Time) bool {
+	if handle == nil {
+		return false
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	driver := strings.ToLower(strings.TrimSpace(stringFromMap(meta, "driver", "")))
+	if driver != "tmux_cli_session" && !strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") && !strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") {
+		return false
+	}
+	if runtimeHandleUsaLegacyCLITMUXPreferred(meta) {
+		return false
+	}
+	recency := runtimeHandleRecency(handle)
+	if recency.IsZero() || now.Sub(recency.UTC()) > time.Minute {
+		return false
+	}
+	runtime, err := runtimeHandleRuntime(handle)
+	if err != nil {
+		return false
+	}
+	if runtime == nil {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(runtime.LogicalState)) {
+	case "fallido", "cerrado", "finalizado":
+		return false
+	default:
+		return true
+	}
+}
+
+func supersedeRuntimeHandleSiHaceFalta(handle *RuntimeHandle) (bool, error) {
+	if handle == nil {
+		return false, nil
+	}
+	superseded, err := runtimeHandleDebeCederAWorkerEstructurado(handle)
+	if err != nil {
+		return false, err
+	}
+	if !superseded {
+		return false, nil
+	}
+	if err := marcarRuntimeHandleSuperseded(handle); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func runtimeHandleDebeCederAWorkerEstructurado(handle *RuntimeHandle) (bool, error) {
+	if handle == nil {
+		return false, nil
+	}
+	now := time.Now().UTC()
+	currentInfo := runtimeHandleWorkerInfoFor(handle, now)
+	candidatos, err := listarRuntimeHandlesActivosCandidatos(handle.Agente, handle.ProyectoID)
+	if err != nil {
+		return false, err
+	}
+	for _, candidato := range candidatos {
+		if candidato == nil || candidato.ID == handle.ID {
+			continue
+		}
+		candidateInfo := runtimeHandleWorkerInfoFor(candidato, now)
+		if !candidateInfo.fresh {
+			continue
+		}
+		if runtimeHandlePreferibleConInfo(candidato, candidateInfo, handle, currentInfo, now) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func marcarRuntimeHandleSuperseded(handle *RuntimeHandle) error {
+	if handle == nil {
+		return nil
+	}
+	if err := detenerSesionTMUXObsoletaHandle(handle); err != nil {
+		return err
+	}
+	if _, err := DB.Exec(`
+		UPDATE runtime_handles
+		SET estado='cerrado',
+		    last_seen_at=CURRENT_TIMESTAMP
+		WHERE id = ?`, handle.ID); err != nil {
+		return err
+	}
+	runtimeHandleHotReset()
+	runtime, err := runtimeHandleRuntime(handle)
+	if err != nil || runtime == nil {
+		return err
+	}
+	if _, err := DB.Exec(`
+		UPDATE runtime_instances
+		SET logical_state='cerrado',
+		    process_state='finalizado',
+		    last_event_at=CURRENT_TIMESTAMP
+		WHERE id = ?`, runtime.ID); err != nil {
+		return err
+	}
+	return nil
+}
+
 func runtimeHandleSePuedeValidarLocalmente(handle *RuntimeHandle) bool {
 	if handle == nil {
+		return false
+	}
+	if runtimeHandleUsaLegacyProcessPTY(mapFromJSON(handle.MetadataJSON)) {
 		return false
 	}
 	if strings.EqualFold(strings.TrimSpace(handle.HandleKind), "process") {
@@ -1098,12 +1605,16 @@ func marcarRuntimeHandleFantasma(handle *RuntimeHandle) error {
 	if handle == nil {
 		return nil
 	}
+	if err := detenerSesionTMUXObsoletaHandle(handle); err != nil {
+		return err
+	}
 	if _, err := DB.Exec(`
 		UPDATE runtime_handles
 		SET estado='fallido', last_seen_at=CURRENT_TIMESTAMP
 		WHERE id = ?`, handle.ID); err != nil {
 		return err
 	}
+	runtimeHandleHotReset()
 	runtime, err := runtimeHandleRuntime(handle)
 	if err != nil || runtime == nil {
 		return err
@@ -1119,12 +1630,53 @@ func marcarRuntimeHandleFantasma(handle *RuntimeHandle) error {
 	return nil
 }
 
+func detenerSesionTMUXObsoletaHandle(handle *RuntimeHandle) error {
+	if handle == nil {
+		return nil
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if !strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "driver", "")), "tmux_cli_session") {
+		return nil
+	}
+	runtime, _ := runtimeHandleRuntime(handle)
+	obj := objetivoProcesoDesdeHandleRuntime(handle, runtime)
+	if _, _, err := controlruntime.DetenerProceso(obj); err != nil && !errorDetenerSesionTMUXIgnorable(err) {
+		return err
+	}
+	return nil
+}
+
+func errorDetenerSesionTMUXIgnorable(err error) bool {
+	if err == nil {
+		return true
+	}
+	raw := strings.ToLower(strings.TrimSpace(err.Error()))
+	switch {
+	case raw == "":
+		return true
+	case strings.Contains(raw, "can't find session"):
+		return true
+	case strings.Contains(raw, "no server running"):
+		return true
+	case strings.Contains(raw, "failed to connect to server"):
+		return true
+	case strings.Contains(raw, "no such process"):
+		return true
+	case strings.Contains(raw, "process already finished"):
+		return true
+	case strings.Contains(raw, "os: process already finished"):
+		return true
+	default:
+		return false
+	}
+}
+
 func estadoReviveRuntimeHandle(handle *RuntimeHandle) string {
 	if handle == nil {
 		return "activo"
 	}
 	if handle.SesionID != nil {
-		if sesion, err := GetSesionByID(*handle.SesionID); err == nil && sesion != nil {
+		if sesion, err := sesionIfExists(handle.SesionID); err == nil && sesion != nil {
 			switch strings.TrimSpace(sesion.Estado) {
 			case "pausada":
 				return "pausado"
@@ -1137,13 +1689,49 @@ func estadoReviveRuntimeHandle(handle *RuntimeHandle) string {
 }
 
 func runtimeHandleRuntime(handle *RuntimeHandle) (*RuntimeInstance, error) {
-	if handle == nil || handle.RuntimeID == nil || *handle.RuntimeID <= 0 {
+	if handle == nil {
 		return nil, nil
 	}
-	return GetRuntime(*handle.RuntimeID)
+	if handle.RuntimeID != nil && *handle.RuntimeID > 0 {
+		runtime, err := GetRuntime(*handle.RuntimeID)
+		if err != nil && err != sql.ErrNoRows {
+			return nil, err
+		}
+		if runtime != nil {
+			return runtime, nil
+		}
+	}
+	if handle.SesionID != nil && *handle.SesionID > 0 {
+		runtime, err := GetRuntimeBySesionID(*handle.SesionID)
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return runtime, err
+	}
+	return nil, nil
 }
 
 func ListarRuntimeHandles(agente *string) ([]*RuntimeHandle, error) {
+	if agente != nil && strings.TrimSpace(*agente) != "" {
+		if _, err := GetRuntimeHandleCanonicoRecienteAgente(strings.TrimSpace(*agente)); err != nil {
+			return nil, err
+		}
+	}
+	handles, err := listarRuntimeHandlesLeidos(agente)
+	if err != nil {
+		return nil, err
+	}
+	if err := reconciliarRuntimeHandlesDuplicadosEnLista(handles); err != nil {
+		return nil, err
+	}
+	return handles, nil
+}
+
+func ListarRuntimeHandlesPasivos(agente *string) ([]*RuntimeHandle, error) {
+	return listarRuntimeHandlesLeidos(agente)
+}
+
+func listarRuntimeHandlesLeidos(agente *string) ([]*RuntimeHandle, error) {
 	q := runtimeHandleSelectBase() + ` WHERE 1=1`
 	var args []any
 	if agente != nil {
@@ -1179,11 +1767,133 @@ func ListarRuntimeHandles(agente *string) ([]*RuntimeHandle, error) {
 	return out, nil
 }
 
+func reconciliarRuntimeHandlesDuplicadosEnLista(handles []*RuntimeHandle) error {
+	if len(handles) < 2 {
+		return nil
+	}
+	grupos := map[string][]*RuntimeHandle{}
+	for _, handle := range handles {
+		if handle == nil {
+			continue
+		}
+		estado := strings.TrimSpace(handle.Estado)
+		if estado != "activo" && estado != "pausado" {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(handle.Agente))
+		grupos[key] = append(grupos[key], handle)
+	}
+	now := time.Now().UTC()
+	for _, grupo := range grupos {
+		if len(grupo) < 2 {
+			continue
+		}
+		preferido := elegirRuntimeHandleActivoPreferente(grupo)
+		if preferido == nil || !runtimeHandleWorkerInfoFor(preferido, now).fresh {
+			continue
+		}
+		ids := make([]int64, 0, len(grupo)-1)
+		for _, handle := range grupo {
+			if handle == nil || handle.ID == preferido.ID {
+				continue
+			}
+			ids = append(ids, handle.ID)
+		}
+		if len(ids) == 0 {
+			continue
+		}
+		args := make([]any, 0, len(ids))
+		for _, id := range ids {
+			args = append(args, id)
+		}
+		if _, err := DB.Exec(`
+			UPDATE runtime_handles
+			SET estado='cerrado',
+			    last_seen_at=CURRENT_TIMESTAMP
+			WHERE id IN (`+runtimeSQLPlaceholders(len(ids))+`) AND estado IN ('activo','pausado')`, args...); err != nil {
+			return err
+		}
+		runtimeHandleHotReset()
+		for _, handle := range grupo {
+			if handle == nil || handle.ID == preferido.ID {
+				continue
+			}
+			handle.Estado = "cerrado"
+			ts := now
+			handle.LastSeenAt = &ts
+		}
+	}
+	return nil
+}
+
 func ListarRuntimeHandlesParaTranscript() ([]*RuntimeHandle, error) {
 	rows, err := DB.Query(runtimeHandleSelectBase() + `
 		WHERE estado IN ('activo','pausado','fallido')
 		  AND metadata_json <> ''
 		  AND metadata_json LIKE '%log_path%'
+		ORDER BY id DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*RuntimeHandle
+	for rows.Next() {
+		h, err := scanRuntimeHandle(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	for i, h := range out {
+		out[i], err = compactarMetadataRuntimeHandleEnMemoria(h)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+func ListarRuntimeHandlesParaPresupuesto() ([]*RuntimeHandle, error) {
+	if snapshot, err := runtimeHandleHotSnapshotCanonico(); err == nil && len(snapshot) > 0 {
+		out := make([]*RuntimeHandle, 0, len(snapshot))
+		for _, handle := range snapshot {
+			if handle == nil || strings.TrimSpace(handle.MetadataJSON) == "" {
+				continue
+			}
+			compacted, compactErr := compactarMetadataRuntimeHandleEnMemoria(handle)
+			if compactErr != nil {
+				return nil, compactErr
+			}
+			out = append(out, compacted)
+		}
+		sort.SliceStable(out, func(i, j int) bool {
+			left := preferTime(out[i].LastSeenAt, &out[i].UpdatedAt, &out[i].CreatedAt)
+			right := preferTime(out[j].LastSeenAt, &out[j].UpdatedAt, &out[j].CreatedAt)
+			switch {
+			case left == nil && right == nil:
+				return out[i].ID > out[j].ID
+			case left == nil:
+				return false
+			case right == nil:
+				return true
+			case !left.Equal(*right):
+				return left.After(*right)
+			default:
+				return out[i].ID > out[j].ID
+			}
+		})
+		return out, nil
+	}
+
+	rows, err := DB.Query(runtimeHandleSelectBase() + `
+		WHERE estado IN ('activo','pausado')
+		  AND metadata_json <> ''
 		ORDER BY id DESC`)
 	if err != nil {
 		return nil, err
@@ -1229,7 +1939,11 @@ func reconciliarMetadataRuntimeHandleLeida(handle *RuntimeHandle) (*RuntimeHandl
 	if handle == nil {
 		return nil, nil
 	}
-	return compactarMetadataHandleRuntimePersistida(handle)
+	refreshed, err := compactarMetadataHandleRuntimePersistida(handle)
+	if err != nil {
+		return nil, err
+	}
+	return normalizarRuntimeHandleTMUXCanonicoEnMemoria(refreshed), nil
 }
 
 func compactarMetadataRuntimeHandleEnMemoria(handle *RuntimeHandle) (*RuntimeHandle, error) {
@@ -1244,11 +1958,34 @@ func compactarMetadataRuntimeHandleEnMemoria(handle *RuntimeHandle) (*RuntimeHan
 	compactarMetadataRuntimeHandle(meta)
 	after, _ := json.Marshal(meta)
 	if string(before) == string(after) {
-		return handle, nil
+		return normalizarRuntimeHandleTMUXCanonicoEnMemoria(handle), nil
 	}
 	clone := *handle
 	clone.MetadataJSON = string(after)
-	return &clone, nil
+	return normalizarRuntimeHandleTMUXCanonicoEnMemoria(&clone), nil
+}
+
+func normalizarRuntimeHandleTMUXCanonicoEnMemoria(handle *RuntimeHandle) *RuntimeHandle {
+	if handle == nil {
+		return nil
+	}
+	if !runtimeHandleEsTMUXCanonico(handle) {
+		return handle
+	}
+	canonicalRef := runtimeHandleTMUXSessionRefObserved(handle)
+	if canonicalRef == "" {
+		return handle
+	}
+	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
+		strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") &&
+		strings.TrimSpace(handle.HandleRef) == canonicalRef {
+		return handle
+	}
+	clone := *handle
+	clone.Transporte = "tmux"
+	clone.HandleKind = "session"
+	clone.HandleRef = canonicalRef
+	return &clone
 }
 
 func EncolarRuntimeOrder(order *RuntimeOrder) (int64, error) {
@@ -1274,7 +2011,14 @@ func EncolarRuntimeOrder(order *RuntimeOrder) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if err := runtimeOrdersHotIndexSyncByID(id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 func normalizarRuntimeOrderPayloadJSON(raw string) (string, error) {
@@ -1344,7 +2088,7 @@ func crearHandoffAgente(origen, destino string, tareaID *int64, motivo, resumenC
 	if err != nil {
 		return 0, err
 	}
-	handleOrigen, err := GetRuntimeHandleActivoAgente(origen)
+	handleOrigen, err := runtimeHandleCanonicoRecienteConFallback(origen, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -1368,7 +2112,7 @@ func crearHandoffAgente(origen, destino string, tareaID *int64, motivo, resumenC
 	if sesionDestino != nil && sesionDestino.ProyectoID != nil {
 		proyectoID = sesionDestino.ProyectoID
 	}
-	destinoHandle, err = GetRuntimeHandleActivoAgente(destino)
+	destinoHandle, err = runtimeHandleOperativoRecienteConFallback(destino, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -1377,7 +2121,7 @@ func crearHandoffAgente(origen, destino string, tareaID *int64, motivo, resumenC
 			proyectoID = destinoHandle.ProyectoID
 		}
 		if destinoHandle.RuntimeID != nil {
-			destinoRuntime, err = GetRuntime(*destinoHandle.RuntimeID)
+			destinoRuntime, err = runtimeInstanceIfExists(destinoHandle.RuntimeID)
 			if err != nil {
 				return 0, err
 			}
@@ -1489,6 +2233,9 @@ func crearHandoffAgente(origen, destino string, tareaID *int64, motivo, resumenC
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
+	if err := runtimeOrdersHotIndexSyncByID(orderID); err != nil {
+		return orderID, err
+	}
 	if opts.RequireOriginHandle {
 		if err := marcarOrigenHandoffPausado(origen, sesionOrigen, handleOrigen); err != nil {
 			return 0, err
@@ -1577,13 +2324,24 @@ func runtimeHandlePermiteReinicioBootstrapHandoff(handle *RuntimeHandle) bool {
 	if handle == nil {
 		return false
 	}
-	if strings.TrimSpace(handle.Transporte) != "cli" || strings.TrimSpace(handle.HandleKind) != "process" {
-		return false
-	}
 	if runtimeHandlePreservesExternalSession(handle) {
 		return false
 	}
-	return true
+	if RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryBootstrapOnly {
+		return false
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	driver := strings.TrimSpace(stringFromMap(meta, "driver", ""))
+	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") ||
+		strings.EqualFold(driver, "tmux_cli_session") {
+		return true
+	}
+	if strings.TrimSpace(handle.Transporte) == "cli" &&
+		strings.TrimSpace(handle.HandleKind) == "process" &&
+		!runtimeHandleUsaLegacyProcessPTY(meta) {
+		return true
+	}
+	return false
 }
 
 func existeRuntimeOrderAbiertaDestino(proyectoID int64, agente string, tipos ...string) (bool, error) {
@@ -1616,29 +2374,33 @@ func existeRuntimeOrderAbiertaDestino(proyectoID int64, agente string, tipos ...
 
 func ClaimNextRuntimeOrder(agente string) (*RuntimeOrder, error) {
 	for {
-		var id int64
-		err := DB.QueryRow(`
-			SELECT id
-			FROM runtime_orders
-			WHERE agente = ?
-			  AND estado = 'pendiente'
-			  AND available_at <= CURRENT_TIMESTAMP
-			ORDER BY id
-			LIMIT 1`, strings.TrimSpace(agente)).Scan(&id)
-		if err == sql.ErrNoRows {
+		estado := "pendiente"
+		orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{
+			Agente: stringsPtrTrimmed(agente),
+			Estado: &estado,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if len(orders) == 0 {
 			return nil, nil
 		}
-		if err != nil {
-			return nil, err
+		sort.Slice(orders, func(i, j int) bool { return orders[i].ID < orders[j].ID })
+		now := time.Now().UTC()
+		for _, order := range orders {
+			if order == nil || !runtimeOrderPendingReady(order, now) {
+				continue
+			}
+			claimed, err := claimRuntimeOrderByID(order.ID)
+			if err != nil {
+				return nil, err
+			}
+			if claimed == nil {
+				continue
+			}
+			return claimed, nil
 		}
-		order, err := claimRuntimeOrderByID(id)
-		if err != nil {
-			return nil, err
-		}
-		if order == nil {
-			continue
-		}
-		return order, nil
+		return nil, nil
 	}
 }
 
@@ -1734,69 +2496,64 @@ func nextBootstrapRuntimeOrderID(agente string, proyectoID *int64) (int64, error
 	if agente == "" {
 		return 0, nil
 	}
-	tipos := runtimeOrderTiposBootstrap()
-	placeholders, tipoArgs := runtimeOrderPlaceholders(tipos)
-	argsBase := make([]any, 0, len(tipoArgs)+3)
-	argsBase = append(argsBase, agente)
-	argsBase = append(argsBase, tipoArgs...)
-	q := `
-		SELECT id
-		FROM runtime_orders
-		WHERE agente = ?
-		  AND estado = 'pendiente'
-		  AND available_at <= CURRENT_TIMESTAMP
-		  AND tipo IN (` + placeholders + `)`
-	args := append([]any(nil), argsBase...)
-	if proyectoID != nil {
-		q += `
-		  AND (proyecto_id = ? OR proyecto_id IS NULL)
-		ORDER BY
-		  CASE
-		    WHEN proyecto_id = ? THEN 0
-		    WHEN proyecto_id IS NULL THEN 1
-		    ELSE 2
-		  END,
-		  CASE tipo
-		    WHEN 'handoff' THEN 0
-		    WHEN 'resume' THEN 1
-		    WHEN 'start' THEN 2
-		    ELSE 9
-		  END,
-		  id
-		LIMIT 1`
-		args = append(args, *proyectoID, *proyectoID)
-	} else {
-		q += `
-		ORDER BY
-		  CASE
-		    WHEN proyecto_id IS NULL THEN 0
-		    ELSE 1
-		  END,
-		  CASE tipo
-		    WHEN 'handoff' THEN 0
-		    WHEN 'resume' THEN 1
-		    WHEN 'start' THEN 2
-		    ELSE 9
-		  END,
-		  id
-		LIMIT 1`
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{
+		Agente: &agente,
+		Estado: &estado,
+	})
+	if err != nil {
+		return 0, err
 	}
-	var id int64
-	err := DB.QueryRow(q, args...).Scan(&id)
-	if err == sql.ErrNoRows {
+	now := time.Now().UTC()
+	tipos := map[string]struct{}{}
+	for _, tipo := range runtimeOrderTiposBootstrap() {
+		tipos[strings.TrimSpace(tipo)] = struct{}{}
+	}
+	candidates := make([]*RuntimeOrder, 0, len(orders))
+	for _, order := range orders {
+		if order == nil || !runtimeOrderPendingReady(order, now) {
+			continue
+		}
+		if _, ok := tipos[strings.TrimSpace(order.Tipo)]; !ok {
+			continue
+		}
+		if proyectoID != nil && order.ProyectoID != nil && *order.ProyectoID != *proyectoID {
+			continue
+		}
+		candidates = append(candidates, order)
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		leftProject, leftType := runtimeOrderBootstrapPriority(candidates[i], proyectoID)
+		rightProject, rightType := runtimeOrderBootstrapPriority(candidates[j], proyectoID)
+		if leftProject != rightProject {
+			return leftProject < rightProject
+		}
+		if leftType != rightType {
+			return leftType < rightType
+		}
+		return candidates[i].ID < candidates[j].ID
+	})
+	if len(candidates) == 0 {
 		return 0, nil
 	}
-	return id, err
+	return candidates[0].ID, nil
 }
 
 func GetRuntimeOrder(id int64) (*RuntimeOrder, error) {
 	return consultarConReintentos(func() (*RuntimeOrder, error) {
 		row := DB.QueryRow(runtimeOrderSelectBase()+` WHERE id = ?`, id)
-		return scanRuntimeOrder(row)
+		order, err := scanRuntimeOrder(row)
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return order, err
 	})
 }
 
 func ListarRuntimeOrders(filter FiltroRuntimeOrders) ([]*RuntimeOrder, error) {
+	if filter.Estado != nil && runtimeOrderEstadoVivo(*filter.Estado) {
+		return ListarRuntimeOrdersVivas(filter)
+	}
 	return consultarConReintentos(func() ([]*RuntimeOrder, error) {
 		q := runtimeOrderSelectBase() + ` WHERE 1=1`
 		var args []any
@@ -1838,6 +2595,12 @@ func MarcarRuntimeOrderEstado(id int64, estado, resultadoJSON, errorText string)
 	if strings.TrimSpace(resultadoJSON) == "" {
 		resultadoJSON = "{}"
 	}
+	sync := func(err error) error {
+		if err != nil {
+			return err
+		}
+		return runtimeOrdersHotIndexSyncByID(id)
+	}
 	switch strings.TrimSpace(estado) {
 	case "ejecutando":
 		leaseUntil := runtimeOrderLeaseDeadline(time.Now().UTC())
@@ -1849,7 +2612,7 @@ func MarcarRuntimeOrderEstado(id int64, estado, resultadoJSON, errorText string)
 			    lease_expires_at = ?,
 			    updated_at = CURRENT_TIMESTAMP
 			WHERE id = ?`, resultadoJSON, errorText, leaseUntil, id)
-		return err
+		return sync(err)
 	case "completada", "fallida", "expirada", "cancelada":
 		_, err := DB.Exec(`
 			UPDATE runtime_orders
@@ -1861,7 +2624,7 @@ func MarcarRuntimeOrderEstado(id int64, estado, resultadoJSON, errorText string)
 			    lease_token = '',
 			    lease_expires_at = NULL
 			WHERE id = ?`, estado, resultadoJSON, errorText, id)
-		return err
+		return sync(err)
 	case "pendiente":
 		_, err := DB.Exec(`
 			UPDATE runtime_orders
@@ -1875,14 +2638,14 @@ func MarcarRuntimeOrderEstado(id int64, estado, resultadoJSON, errorText string)
 			    lease_expires_at = NULL,
 			    updated_at = CURRENT_TIMESTAMP
 			WHERE id = ?`, resultadoJSON, errorText, id)
-		return err
+		return sync(err)
 	default:
 		_, err := DB.Exec(`
 			UPDATE runtime_orders
 			SET estado = ?,
 			    updated_at = CURRENT_TIMESTAMP
 			WHERE id = ?`, estado, id)
-		return err
+		return sync(err)
 	}
 }
 
@@ -1903,7 +2666,10 @@ func MarcarRuntimeOrderEjecutando(order *RuntimeOrder) error {
 		    lease_expires_at = ?,
 		    updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?`, resultadoJSON, leaseUntil, order.ID)
-	return err
+	if err != nil {
+		return err
+	}
+	return runtimeOrdersHotIndexSyncByID(order.ID)
 }
 
 func CrearRuntimeCheckpoint(cp *RuntimeCheckpoint) (int64, error) {
@@ -2099,6 +2865,17 @@ func MarcarRuntimeMailboxEntregado(id int64) error {
 	return err
 }
 
+func RearmarRuntimeMailboxPendiente(id int64) error {
+	_, err := DB.Exec(`
+		UPDATE runtime_mailbox
+		SET estado='pendiente',
+		    delivered_at=NULL,
+		    consumed_at=NULL
+		WHERE id = ?
+		  AND estado='entregado'`, id)
+	return err
+}
+
 func MarcarRuntimeMailboxConsumido(id int64) error {
 	_, err := DB.Exec(`
 		UPDATE runtime_mailbox
@@ -2210,6 +2987,12 @@ func ReconciliarRuntimeHandlesStale() (int, error) {
 		if err != nil {
 			return 0, err
 		}
+		if superseded, err := supersedeRuntimeHandleSiHaceFalta(handle); err != nil {
+			return 0, err
+		} else if superseded {
+			reconciled++
+			continue
+		}
 		if revived, err := refrescarRuntimeHandleSiSigueVivo(handle); err != nil {
 			return 0, err
 		} else if revived != nil {
@@ -2225,6 +3008,7 @@ func ReconciliarRuntimeHandlesStale() (int, error) {
 		}
 		rows, _ := res.RowsAffected()
 		if rows > 0 {
+			runtimeHandleHotReset()
 			reconciled++
 		}
 	}
@@ -2238,38 +3022,30 @@ func ReconciliarRuntimeOrdersStale() (int, error) {
 		staleSeconds = 120
 	}
 	cutoff := now.Add(-time.Duration(staleSeconds) * time.Second)
-	rows, err := DB.Query(`
-		SELECT id, tipo
-		FROM runtime_orders
-		WHERE estado IN ('tomada','ejecutando')
-		  AND (
-		        (lease_expires_at IS NOT NULL AND lease_expires_at <= ?)
-		     OR COALESCE(started_at, updated_at, created_at) <= ?
-		  )
-		ORDER BY id`, now, cutoff)
-	if err != nil {
-		return 0, err
-	}
-	defer rows.Close()
-
-	type staleOrder struct {
-		ID   int64
-		Tipo string
-	}
-	var orders []staleOrder
-	for rows.Next() {
-		var item staleOrder
-		if err := rows.Scan(&item.ID, &item.Tipo); err != nil {
+	candidates := make([]*RuntimeOrder, 0, 16)
+	for _, estado := range []string{"tomada", "ejecutando"} {
+		estado := estado
+		orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{Estado: &estado})
+		if err != nil {
 			return 0, err
 		}
-		orders = append(orders, item)
+		for _, order := range orders {
+			if order == nil {
+				continue
+			}
+			if order.LeaseExpiresAt != nil && !order.LeaseExpiresAt.After(now) {
+				candidates = append(candidates, order)
+				continue
+			}
+			if runtimeOrderAttemptReference(order).After(cutoff) {
+				continue
+			}
+			candidates = append(candidates, order)
+		}
 	}
-	if err := rows.Err(); err != nil {
-		return 0, err
-	}
-
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].ID < candidates[j].ID })
 	recovered := 0
-	for _, item := range orders {
+	for _, item := range candidates {
 		applied, err := reconciliarRuntimeOrderStale(item.ID, item.Tipo, now, cutoff)
 		if err != nil {
 			return recovered, err
@@ -2286,12 +3062,20 @@ func ProcesarRuntimeOrdersBatch() (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	controlObsoletas, err := reconciliarRuntimeOrdersPendientesControlObsoletas()
+	if err != nil {
+		return reconciled, err
+	}
 	processed, err := procesarRuntimeOrdersBatchTipos(runtimeOrderTiposDespachables())
 	if err != nil {
-		return reconciled + processed, err
+		return reconciled + controlObsoletas + processed, err
 	}
 	promoted, err := procesarBootstrapRuntimeOrdersActivosBatch()
-	return reconciled + processed + promoted, err
+	if err != nil {
+		return reconciled + controlObsoletas + processed + promoted, err
+	}
+	deferred, err := procesarRuntimeOrdersBatchTipos(runtimeOrderTiposDiferibles())
+	return reconciled + controlObsoletas + processed + promoted + deferred, err
 }
 
 func ProcesarRuntimeSupervisionBatch() (int, error) {
@@ -2343,17 +3127,9 @@ func ProcesarRuntimeSupervisionBatch() (int, error) {
 		} else if abierta {
 			continue
 		}
-		var runtime *RuntimeInstance
-		if handle.RuntimeID != nil && *handle.RuntimeID > 0 {
-			runtime, err = GetRuntime(*handle.RuntimeID)
-			if err != nil {
-				return processed, err
-			}
-		} else if handle.SesionID != nil && *handle.SesionID > 0 {
-			runtime, err = GetRuntimeBySesionID(*handle.SesionID)
-			if err != nil {
-				return processed, err
-			}
+		runtime, err := runtimeHandleRuntime(handle)
+		if err != nil {
+			return processed, err
 		}
 		if _, err := supervisarRuntimeHandle(handle, runtime, "runtime_supervision"); err != nil {
 			return processed, err
@@ -2372,31 +3148,32 @@ func procesarRuntimeOrdersBatchTipos(tipos []string) (int, error) {
 	if limit <= 0 {
 		limit = 10
 	}
-	placeholders, args := runtimeOrderPlaceholders(tipos)
-	args = append(args, limit)
-	rows, err := DB.Query(`
-		SELECT id
-		FROM runtime_orders
-		WHERE estado = 'pendiente'
-		  AND available_at <= CURRENT_TIMESTAMP
-		  AND tipo IN (`+placeholders+`)
-		ORDER BY id
-		LIMIT ?`, args...)
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{Estado: &estado})
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
-
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return 0, err
+	tiposWanted := make(map[string]struct{}, len(tipos))
+	for _, tipo := range tipos {
+		tipo = strings.TrimSpace(tipo)
+		if tipo != "" {
+			tiposWanted[tipo] = struct{}{}
 		}
-		ids = append(ids, id)
 	}
-	if err := rows.Err(); err != nil {
-		return 0, err
+	now := time.Now().UTC()
+	ids := make([]int64, 0, limit)
+	sort.Slice(orders, func(i, j int) bool { return orders[i].ID < orders[j].ID })
+	for _, order := range orders {
+		if order == nil || !runtimeOrderPendingReady(order, now) {
+			continue
+		}
+		if _, ok := tiposWanted[strings.TrimSpace(order.Tipo)]; !ok {
+			continue
+		}
+		ids = append(ids, order.ID)
+		if len(ids) >= limit {
+			break
+		}
 	}
 
 	processed := 0
@@ -2426,31 +3203,21 @@ func reconciliarRuntimeOrdersPendientesMailboxConsumido() (int, error) {
 	if limit <= 0 {
 		limit = 10
 	}
-	rows, err := DB.Query(`
-		SELECT id
-		FROM runtime_orders
-		WHERE estado = 'pendiente'
-		  AND tipo = 'send_instruction'
-		ORDER BY id
-		LIMIT ?`, limit)
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{Estado: &estado})
 	if err != nil {
 		return 0, err
 	}
 	ids := make([]int64, 0, limit)
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			_ = rows.Close()
-			return 0, err
+	sort.Slice(orders, func(i, j int) bool { return orders[i].ID < orders[j].ID })
+	for _, order := range orders {
+		if order == nil || strings.TrimSpace(order.Tipo) != "send_instruction" {
+			continue
 		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return 0, err
-	}
-	if err := rows.Close(); err != nil {
-		return 0, err
+		ids = append(ids, order.ID)
+		if len(ids) >= limit {
+			break
+		}
 	}
 
 	processed := 0
@@ -2474,8 +3241,23 @@ func reconciliarRuntimeOrdersPendientesMailboxConsumido() (int, error) {
 		if err != nil {
 			return processed, err
 		}
-		if msg == nil || strings.EqualFold(strings.TrimSpace(msg.Estado), "pendiente") {
+		if msg == nil {
+			if err := retenerRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "mailbox_missing_rearmed"); err != nil {
+				return processed, err
+			}
+			processed++
 			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(msg.Estado)) {
+		case "pendiente":
+			continue
+		case "entregado":
+			if handled, err := reconciliarRuntimeOrderSendInstructionMailboxEntregado(order, payload, msg, time.Now().UTC()); err != nil {
+				return processed, err
+			} else if handled {
+				processed++
+				continue
+			}
 		}
 		if err := completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "mailbox ya "+strings.TrimSpace(msg.Estado)); err != nil {
 			return processed, err
@@ -2483,6 +3265,283 @@ func reconciliarRuntimeOrdersPendientesMailboxConsumido() (int, error) {
 		processed++
 	}
 	return processed, nil
+}
+
+func reconciliarRuntimeOrdersPendientesControlObsoletas() (int, error) {
+	limit := configIntOrDefault("runtime_order_batch_size", 10)
+	if limit <= 0 {
+		limit = 10
+	}
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{Estado: &estado})
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now().UTC()
+	ids := make([]int64, 0, limit)
+	sort.Slice(orders, func(i, j int) bool { return orders[i].ID < orders[j].ID })
+	for _, order := range orders {
+		if order == nil || !runtimeOrderPendingReady(order, now) {
+			continue
+		}
+		switch strings.TrimSpace(order.Tipo) {
+		case "start", "resume", "stop":
+			ids = append(ids, order.ID)
+		default:
+			continue
+		}
+		if len(ids) >= limit {
+			break
+		}
+	}
+	processed := 0
+	for _, id := range ids {
+		order, err := GetRuntimeOrder(id)
+		if err != nil {
+			return processed, err
+		}
+		if order == nil || !strings.EqualFold(strings.TrimSpace(order.Estado), "pendiente") {
+			continue
+		}
+		runtime, handle, err := resolverDestinoRuntimeOrderCanonico(order, nil, nil)
+		if err != nil {
+			return processed, err
+		}
+		reason := ""
+		if satisfied, satisfiedReason := runtimeOrderControlEstadoDeseadoSatisfecho(order, runtime, handle); satisfied {
+			reason = satisfiedReason
+		} else {
+			if !runtimeOrderControlObsoletaPorWorkerRecuperado(order, runtime, handle) {
+				continue
+			}
+			reason = "runtime_worker_recovered_after_order"
+		}
+		resultado := map[string]any{
+			"ok":       true,
+			"obsoleta": true,
+			"reason":   reason,
+		}
+		if runtime != nil && runtime.ID > 0 {
+			resultado["runtime_id"] = runtime.ID
+		}
+		if handle != nil && handle.ID > 0 {
+			resultado["handle_id"] = handle.ID
+		}
+		data, _ := json.Marshal(resultado)
+		if err := MarcarRuntimeOrderEstado(order.ID, "completada", string(data), ""); err != nil {
+			return processed, err
+		}
+		processed++
+	}
+	return processed, nil
+}
+
+func runtimeOrderControlEstadoDeseadoSatisfecho(order *RuntimeOrder, runtime *RuntimeInstance, handle *RuntimeHandle) (bool, string) {
+	if order == nil {
+		return false, ""
+	}
+	orderType := strings.ToLower(strings.TrimSpace(order.Tipo))
+	now := time.Now().UTC()
+	switch orderType {
+	case "start", "resume":
+		if handle != nil {
+			switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
+			case "pausado", "fallido", "cerrado", "fantasma":
+				return false, ""
+			}
+			if runtimeHandleSesionTMUXAusente(handle) {
+				return false, ""
+			}
+		}
+		if runtime != nil {
+			switch strings.ToLower(strings.TrimSpace(runtime.LogicalState)) {
+			case "pausado", "stopped", "fallido", "degradado", "cerrado":
+				return false, ""
+			}
+			switch strings.ToLower(strings.TrimSpace(runtime.ProcessState)) {
+			case "fallido", "crashed", "exited", "remote_status_error":
+				return false, ""
+			}
+		}
+		if runtimeWorkerSnapshotSatisfaceControlActual(orderType, handle, runtimeWorkerSnapshot(handle, runtime), now) {
+			return true, "runtime_worker_already_running"
+		}
+	case "stop":
+		if runtimeWorkerSnapshotSatisfaceControlActual(orderType, handle, runtimeWorkerSnapshot(handle, runtime), now) {
+			return true, "runtime_worker_already_stopped"
+		}
+		if handle == nil && runtime == nil {
+			return true, "runtime_already_stopped"
+		}
+		if handle != nil {
+			switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
+			case "cerrado", "fallido":
+				return true, "runtime_handle_already_closed"
+			case "pausado":
+				return false, ""
+			}
+		}
+		if runtime != nil {
+			switch strings.ToLower(strings.TrimSpace(runtime.LogicalState)) {
+			case "cerrado", "stopped", "fallido":
+				return true, "runtime_already_stopped"
+			}
+		}
+	}
+	return false, ""
+}
+
+func runtimeHandleSesionTMUXAusente(handle *RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	known, exists := controlruntime.TMUXSessionExistsMetadata(strings.TrimSpace(handle.MetadataJSON))
+	return known && !exists
+}
+
+func runtimeWorkerSnapshotSatisfaceControlActual(orderType string, handle *RuntimeHandle, snap *runtimeagente.WorkerSnapshot, now time.Time) bool {
+	if snap == nil {
+		return false
+	}
+	if runtimeHandleSesionTMUXAusente(handle) {
+		return strings.EqualFold(strings.TrimSpace(orderType), "stop")
+	}
+	view := snap.View(now.UTC(), time.Minute)
+	if view == nil {
+		return false
+	}
+	state := strings.ToLower(strings.TrimSpace(view.State))
+	switch strings.ToLower(strings.TrimSpace(orderType)) {
+	case "start", "resume":
+		if view.HeartbeatStale || !view.Alive || strings.TrimSpace(view.ExitError) != "" {
+			return false
+		}
+		return state == "ready" || state == "running"
+	case "stop":
+		switch state {
+		case "stopped", "failed", "exited", "closed", "stale":
+			return true
+		}
+		if strings.TrimSpace(view.ExitError) != "" {
+			return true
+		}
+		return !view.Alive && !view.HeartbeatStale
+	default:
+		return false
+	}
+}
+
+func runtimeOrderControlObsoletaPorWorkerRecuperado(order *RuntimeOrder, runtime *RuntimeInstance, handle *RuntimeHandle) bool {
+	if order == nil {
+		return false
+	}
+	orderType := strings.TrimSpace(order.Tipo)
+	switch orderType {
+	case "start", "resume":
+	default:
+		return false
+	}
+	if handle != nil && strings.EqualFold(strings.TrimSpace(handle.Estado), "pausado") {
+		return false
+	}
+	if runtimeHandleSesionTMUXAusente(handle) {
+		return false
+	}
+	if runtime != nil {
+		state := strings.ToLower(strings.TrimSpace(runtime.LogicalState))
+		if state == "pausado" || state == "stopped" {
+			return false
+		}
+	}
+	recovery := runtimeWorkerRecoveryMoment(handle, runtime)
+	if recovery.IsZero() {
+		return false
+	}
+	baseline := order.CreatedAt.UTC()
+	if order.StartedAt != nil && !order.StartedAt.IsZero() && order.StartedAt.UTC().After(baseline) {
+		baseline = order.StartedAt.UTC()
+	}
+	if snap := runtimeWorkerSnapshot(handle, runtime); snap != nil {
+		return runtimeWorkerSnapshotRecoveredAfterBaseline(orderType, snap, baseline)
+	}
+	return recovery.After(baseline)
+}
+
+func runtimeWorkerSnapshotRecoveredAfterBaseline(orderType string, snap *runtimeagente.WorkerSnapshot, baseline time.Time) bool {
+	if snap == nil || !snap.Alive() || snap.IsHeartbeatStale(time.Now().UTC(), time.Minute) {
+		return false
+	}
+	if strings.TrimSpace(snap.ExitError()) != "" {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(snap.EffectiveState())) {
+	case "ready", "running":
+	default:
+		return false
+	}
+	candidates := []*time.Time{
+		snap.ReadyTime(),
+		snap.StartedTime(),
+	}
+	if strings.EqualFold(strings.TrimSpace(orderType), "resume") {
+		candidates = append(candidates, snap.LastProgressTime(), snap.LastOutputTime())
+	}
+	for _, candidate := range candidates {
+		if candidate == nil || candidate.IsZero() {
+			continue
+		}
+		if baseline.IsZero() || candidate.UTC().After(baseline) {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeWorkerRecoveryMoment(handle *RuntimeHandle, runtime *RuntimeInstance) time.Time {
+	latest := time.Time{}
+	if runtime != nil {
+		if ts := runtimeMomentForRecovery(runtime); !ts.IsZero() && ts.After(latest) {
+			latest = ts
+		}
+	}
+	if handle != nil {
+		if handle.LastSeenAt != nil && !handle.LastSeenAt.IsZero() && handle.LastSeenAt.UTC().After(latest) {
+			latest = handle.LastSeenAt.UTC()
+		}
+		if !handle.UpdatedAt.IsZero() && handle.UpdatedAt.UTC().After(latest) {
+			latest = handle.UpdatedAt.UTC()
+		}
+	}
+	if snap := runtimeWorkerSnapshot(handle, runtime); snap != nil && snap.Alive() && !snap.IsHeartbeatStale(time.Now().UTC(), time.Minute) {
+		for _, candidate := range []*time.Time{
+			snap.ReadyTime(),
+			snap.LastProgressTime(),
+			snap.LastOutputTime(),
+			snap.HeartbeatTime(),
+			snap.UpdatedTime(),
+			snap.StartedTime(),
+		} {
+			if candidate != nil && !candidate.IsZero() && candidate.UTC().After(latest) {
+				latest = candidate.UTC()
+			}
+		}
+	}
+	return latest
+}
+
+func runtimeMomentForRecovery(runtime *RuntimeInstance) time.Time {
+	if runtime == nil {
+		return time.Time{}
+	}
+	for _, value := range []*time.Time{runtime.UltimaActividadAt, runtime.LastHeartbeatAt, runtime.LastEventAt} {
+		if value != nil && !value.IsZero() {
+			return value.UTC()
+		}
+	}
+	if !runtime.UpdatedAt.IsZero() {
+		return runtime.UpdatedAt.UTC()
+	}
+	return runtime.CreatedAt.UTC()
 }
 
 func runtimeHandleSelectBase() string {
@@ -2519,31 +3578,27 @@ func procesarBootstrapRuntimeOrdersActivosBatch() (int, error) {
 	if limit <= 0 {
 		limit = 10
 	}
-	placeholders, args := runtimeOrderPlaceholders([]string{"handoff", "resume"})
-	args = append(args, limit)
-	rows, err := DB.Query(runtimeOrderSelectBase()+`
-		WHERE estado = 'pendiente'
-		  AND available_at <= CURRENT_TIMESTAMP
-		  AND tipo IN (`+placeholders+`)
-		ORDER BY id
-		LIMIT ?`, args...)
+	estado := "pendiente"
+	candidates, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{Estado: &estado})
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
-
-	var orders []*RuntimeOrder
-	for rows.Next() {
-		order, err := scanRuntimeOrder(rows)
-		if err != nil {
-			return 0, err
+	now := time.Now().UTC()
+	orders := make([]*RuntimeOrder, 0, limit)
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].ID < candidates[j].ID })
+	for _, order := range candidates {
+		if order == nil || !runtimeOrderPendingReady(order, now) {
+			continue
 		}
-		if order != nil {
+		switch strings.TrimSpace(order.Tipo) {
+		case "handoff", "resume":
 			orders = append(orders, order)
+		default:
+			continue
 		}
-	}
-	if err := rows.Err(); err != nil {
-		return 0, err
+		if len(orders) >= limit {
+			break
+		}
 	}
 
 	processed := 0
@@ -2576,34 +3631,38 @@ func runtimeHandleActivoParaBootstrapOrder(order *RuntimeOrder) (*RuntimeHandle,
 	if order == nil {
 		return nil, nil
 	}
-	if order.ProyectoID != nil {
-		return GetRuntimeHandleActivoAgenteProyecto(strings.TrimSpace(order.Agente), order.ProyectoID)
-	}
-	return GetRuntimeHandleActivoAgente(strings.TrimSpace(order.Agente))
+	return runtimeHandleCanonicoRecienteConFallback(strings.TrimSpace(order.Agente), order.ProyectoID)
 }
 
 func existeRuntimeOrderAbiertaAgenteProyecto(agente string, proyectoID *int64, excludeID int64, tipos ...string) (bool, error) {
 	if strings.TrimSpace(agente) == "" || len(tipos) == 0 {
 		return false, nil
 	}
-	placeholders, args := runtimeOrderPlaceholders(tipos)
-	args = append([]any{strings.TrimSpace(agente), excludeID}, args...)
-	q := `
-		SELECT COUNT(*)
-		FROM runtime_orders
-		WHERE agente = ?
-		  AND id <> ?
-		  AND estado IN ('pendiente','tomada','ejecutando')
-		  AND tipo IN (` + placeholders + `)`
-	if proyectoID != nil {
-		q += ` AND (proyecto_id = ? OR proyecto_id IS NULL)`
-		args = append(args, *proyectoID)
-	}
-	var n int
-	if err := DB.QueryRow(q, args...).Scan(&n); err != nil {
+	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{
+		Agente: stringsPtrTrimmed(agente),
+	})
+	if err != nil {
 		return false, err
 	}
-	return n > 0, nil
+	tiposWanted := make(map[string]struct{}, len(tipos))
+	for _, tipo := range tipos {
+		tipo = strings.TrimSpace(tipo)
+		if tipo != "" {
+			tiposWanted[tipo] = struct{}{}
+		}
+	}
+	for _, order := range orders {
+		if order == nil || order.ID == excludeID {
+			continue
+		}
+		if proyectoID != nil && order.ProyectoID != nil && *order.ProyectoID != *proyectoID {
+			continue
+		}
+		if _, ok := tiposWanted[strings.TrimSpace(order.Tipo)]; ok {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func EncolarReinicioCoordinadoRuntimeHandle(handle *RuntimeHandle, proyectoID *int64, motivo, actor string) (int64, int64, error) {
@@ -2619,8 +3678,8 @@ func EncolarReinicioCoordinadoRuntimeHandle(handle *RuntimeHandle, proyectoID *i
 		projectRef = handle.ProyectoID
 	}
 	if projectRef == nil && handle.SesionID != nil {
-		sesion, err := GetSesionByID(*handle.SesionID)
-		if err != nil && err != sql.ErrNoRows {
+		sesion, err := sesionIfExists(handle.SesionID)
+		if err != nil {
 			return 0, 0, err
 		}
 		if sesion != nil && sesion.ProyectoID != nil && *sesion.ProyectoID > 0 {
@@ -2643,7 +3702,11 @@ func EncolarReinicioCoordinadoRuntimeHandle(handle *RuntimeHandle, proyectoID *i
 		PayloadJSON: string(stopPayload),
 		HandleID:    &handle.ID,
 	}
-	if handle.RuntimeID != nil && *handle.RuntimeID > 0 {
+	if runtime, err := runtimeHandleRuntime(handle); err != nil {
+		return 0, 0, err
+	} else if runtime != nil && runtime.ID > 0 {
+		stopOrder.RuntimeID = &runtime.ID
+	} else if handle.RuntimeID != nil && *handle.RuntimeID > 0 {
 		stopOrder.RuntimeID = handle.RuntimeID
 	}
 	stopOrderID, err := EncolarRuntimeOrder(stopOrder)
@@ -2775,7 +3838,7 @@ func supervisarRuntimeHandle(handle *RuntimeHandle, runtime *RuntimeInstance, so
 		}
 	}
 	if runtime != nil && runtime.ID > 0 {
-		freshRuntime, err := GetRuntime(runtime.ID)
+		freshRuntime, err := runtimeInstanceIfExists(&runtime.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -2808,14 +3871,25 @@ func observarProcesoLocalRuntime(handle *RuntimeHandle, runtime *RuntimeInstance
 	if handle == nil {
 		return false, nil, nil
 	}
-	obj := controlruntime.ObjetivoProceso{
-		HandleKind:   handle.HandleKind,
-		HandleRef:    handle.HandleRef,
-		MetadataJSON: handle.MetadataJSON,
+	if repaired, restarted, err := controlruntime.EnsureTMUXMonitorFromMetadataJSON(handle.MetadataJSON); err != nil {
+		return true, map[string]any{
+			"process_alive": false,
+			"process_error": strings.TrimSpace(err.Error()),
+		}, err
+	} else if strings.TrimSpace(repaired) != "" && strings.TrimSpace(repaired) != strings.TrimSpace(handle.MetadataJSON) {
+		if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, repaired, handle.ID); err != nil {
+			return true, map[string]any{
+				"process_alive": false,
+				"process_error": strings.TrimSpace(err.Error()),
+			}, err
+		}
+		runtimeHandleHotReset()
+		handle.MetadataJSON = repaired
+		if restarted {
+			handle.Estado = "activo"
+		}
 	}
-	if runtime != nil && runtime.PID != nil && *runtime.PID > 0 {
-		obj.PID = runtime.PID
-	}
+	obj := objetivoProcesoDesdeHandleRuntime(handle, runtime)
 	estado, observed, err := controlruntime.ConsultarEstadoLocal(obj)
 	if err != nil {
 		return true, map[string]any{
@@ -2852,6 +3926,23 @@ func observarProcesoLocalRuntime(handle *RuntimeHandle, runtime *RuntimeInstance
 			"process_alive": false,
 		}, nil
 	}
+	if superseded, err := runtimeHandleDebeCederAWorkerEstructurado(handle); err != nil {
+		return true, map[string]any{
+			"process_alive": vivo,
+			"process_error": strings.TrimSpace(err.Error()),
+		}, err
+	} else if superseded {
+		if err := marcarRuntimeHandleSuperseded(handle); err != nil {
+			return true, map[string]any{
+				"process_alive": vivo,
+				"process_error": strings.TrimSpace(err.Error()),
+			}, err
+		}
+		return true, map[string]any{
+			"process_alive":      vivo,
+			"process_superseded": true,
+		}, nil
+	}
 	if err := aplicarEstadoLocalObservado(handle, estado); err != nil {
 		return true, map[string]any{
 			"process_alive": vivo,
@@ -2881,6 +3972,7 @@ func observarProcesoLocalRuntime(handle *RuntimeHandle, runtime *RuntimeInstance
 		WHERE id = ?`, estadoHandle, handle.ID); err != nil {
 		return true, nil, err
 	}
+	runtimeHandleHotReset()
 
 	pid64 := int64(pid)
 	logicalState := ""
@@ -2972,7 +4064,7 @@ func aplicarEstadoLocalObservado(handle *RuntimeHandle, estado *controlruntime.E
 		WHERE id = ?`,
 		estadoHandle, string(metaJSON), caps, handle.ID,
 	)
-	return err
+	return runtimeHandleHotResetOnSuccess(err)
 }
 
 func marcarProcesoLocalNoDisponible(handle *RuntimeHandle, runtime *RuntimeInstance) error {
@@ -2982,6 +4074,50 @@ func marcarProcesoLocalNoDisponible(handle *RuntimeHandle, runtime *RuntimeInsta
 			SET estado = 'fallido',
 			    last_seen_at = CURRENT_TIMESTAMP
 			WHERE id = ?`, handle.ID); err != nil {
+			return err
+		}
+		runtimeHandleHotReset()
+	}
+	if runtime != nil && runtime.ID > 0 {
+		if _, err := DB.Exec(`
+			UPDATE runtime_instances
+			SET logical_state = 'degradado',
+			    process_state = 'missing',
+			    last_event_at = CURRENT_TIMESTAMP
+			WHERE id = ?`, runtime.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func MarcarRuntimeHandleCanalRoto(handle *RuntimeHandle, runtime *RuntimeInstance, reason string) error {
+	if handle == nil {
+		return nil
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	reason = strings.TrimSpace(reason)
+	if reason != "" {
+		meta["pty_last_broken_pipe_error"] = reason
+	}
+	meta["pty_last_broken_pipe_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+	metaJSON, _ := json.Marshal(meta)
+	if _, err := DB.Exec(`
+		UPDATE runtime_handles
+		SET estado = 'fallido',
+		    metadata_json = ?,
+		    last_seen_at = CURRENT_TIMESTAMP
+		WHERE id = ?`, string(metaJSON), handle.ID); err != nil {
+		return err
+	}
+	runtimeHandleHotReset()
+	if runtime == nil {
+		var err error
+		runtime, err = runtimeHandleRuntime(handle)
+		if err != nil {
 			return err
 		}
 	}
@@ -2995,6 +4131,7 @@ func marcarProcesoLocalNoDisponible(handle *RuntimeHandle, runtime *RuntimeInsta
 			return err
 		}
 	}
+	Audit("orquesta", "runtime_handle_broken_pipe", "runtime_handle", handle.ID, reason)
 	return nil
 }
 
@@ -3041,6 +4178,7 @@ func aplicarEstadoRemotoObservado(handle *RuntimeHandle, runtime *RuntimeInstanc
 		); err != nil {
 			return err
 		}
+		runtimeHandleHotReset()
 	}
 	if runtime != nil {
 		logical := strings.TrimSpace(runtime.LogicalState)
@@ -3185,8 +4323,8 @@ func resolverConectorRuntime(handle *RuntimeHandle, runtime *RuntimeInstance) (*
 		slug = stringFromMap(mapFromJSON(handle.MetadataJSON), "conector", "")
 	}
 	if slug == "" && handle != nil && handle.SesionID != nil {
-		sesion, err := GetSesionByID(*handle.SesionID)
-		if err != nil && err != sql.ErrNoRows {
+		sesion, err := sesionIfExists(handle.SesionID)
+		if err != nil {
 			return nil, err
 		}
 		if sesion != nil {
@@ -3377,15 +4515,7 @@ func controlarProcesoRuntime(order *RuntimeOrder, signaler func(controlruntime.O
 	if err != nil {
 		return false, 0, err
 	}
-	obj := controlruntime.ObjetivoProceso{}
-	if handle != nil {
-		obj.HandleKind = handle.HandleKind
-		obj.HandleRef = handle.HandleRef
-		obj.MetadataJSON = handle.MetadataJSON
-	}
-	if runtime != nil && (handle == nil || strings.TrimSpace(handle.HandleKind) == "" || strings.TrimSpace(handle.HandleKind) == "process") {
-		obj.PID = runtime.PID
-	}
+	obj := objetivoProcesoDesdeHandleRuntimeOrden(order, handle, runtime)
 	return signaler(obj)
 }
 
@@ -3393,12 +4523,27 @@ func runtimeProcesoLocalYaNoVive(order *RuntimeOrder) (bool, int, error) {
 	if order == nil {
 		return false, 0, nil
 	}
-	obj, err := objetivoProcesoParaOrden(order)
+	handle, err := resolverHandleParaOrden(order)
+	if err != nil {
+		return false, 0, err
+	}
+	if known, yaNoVive, pid, err := runtimeProcesoLocalStructuredWorkerState(order); known || err != nil {
+		return yaNoVive, pid, err
+	}
+	if handle != nil && RuntimeHandlePauseRequiresFreshStart(handle) {
+		if known, exists := controlruntime.TMUXSessionExistsMetadata(handle.MetadataJSON); known {
+			return !exists, 0, nil
+		}
+	}
+	obj, err := objetivoProcesoDiagnosticoParaOrden(order)
 	if err != nil {
 		return false, 0, err
 	}
 	pid, ok, err := controlruntime.ResolverPID(obj)
 	if err != nil || !ok {
+		if err == nil && handle != nil && RuntimeHandlePauseRequiresFreshStart(handle) {
+			return true, pid, nil
+		}
 		return false, pid, err
 	}
 	vivo, _, err := controlruntime.ProcesoVivo(obj)
@@ -3406,6 +4551,66 @@ func runtimeProcesoLocalYaNoVive(order *RuntimeOrder) (bool, int, error) {
 		return false, pid, err
 	}
 	return !vivo, pid, nil
+}
+
+func objetivoProcesoDiagnosticoParaOrden(order *RuntimeOrder) (controlruntime.ObjetivoProceso, error) {
+	obj, err := objetivoProcesoParaOrden(order)
+	if err != nil {
+		return controlruntime.ObjetivoProceso{}, err
+	}
+	var runtime *RuntimeInstance
+	var handle *RuntimeHandle
+	if order != nil {
+		handle, err = resolverHandleParaOrden(order)
+		if err != nil {
+			return controlruntime.ObjetivoProceso{}, err
+		}
+	}
+	runtime, err = resolverRuntimeParaOrden(order)
+	if err != nil {
+		return controlruntime.ObjetivoProceso{}, err
+	}
+	if runtime != nil && obj.PID == nil && runtime.PID != nil && !runtimeOrderBloqueaFallbackPID(order, runtime, handle) {
+		obj.PID = runtime.PID
+	}
+	return obj, nil
+}
+
+func runtimeProcesoLocalStructuredWorkerState(order *RuntimeOrder) (bool, bool, int, error) {
+	if order == nil {
+		return false, false, 0, nil
+	}
+	handle, err := resolverHandleParaOrden(order)
+	if err != nil {
+		return false, false, 0, err
+	}
+	if handle == nil {
+		return false, false, 0, nil
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
+	if err != nil || snap == nil {
+		return false, false, 0, nil
+	}
+	view := snap.View(time.Now().UTC(), time.Minute)
+	if view == nil {
+		return false, false, 0, nil
+	}
+	if strings.EqualFold(strings.TrimSpace(view.Driver), "process_pty_cli") {
+		return false, false, 0, nil
+	}
+	pid := view.ChildPID
+	state := strings.ToLower(strings.TrimSpace(view.State))
+	switch state {
+	case "failed", "stopped", "exited", "closed", "stale":
+		return true, true, pid, nil
+	}
+	if view.HeartbeatStale {
+		return false, false, pid, nil
+	}
+	if !view.Alive {
+		return true, true, pid, nil
+	}
+	return true, false, pid, nil
 }
 
 func ejecutarRuntimeOrderStart(order *RuntimeOrder) (err error) {
@@ -3500,10 +4705,30 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) (err error) {
 		if err != nil {
 			return err
 		}
+		if _, err := DB.Exec(`
+			UPDATE runtime_handles
+			SET estado='cerrado',
+			    last_seen_at=CURRENT_TIMESTAMP
+			WHERE agente=? AND id<>? AND estado IN ('activo','pausado')`, order.Agente, handle.ID); err != nil {
+			return err
+		}
+		runtimeHandleHotReset()
 	}
-	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	runtime, err := runtimeHandleRuntime(handle)
 	if err != nil {
 		return err
+	}
+	if runtime == nil {
+		runtime, err = GetRuntimePrincipalAgenteProyecto(order.Agente, order.ProyectoID)
+		if err != nil {
+			return err
+		}
+	}
+	if runtime == nil {
+		runtime, err = GetRuntimeBySesionID(sesion.ID)
+		if err != nil {
+			return err
+		}
 	}
 	if runtime == nil {
 		return fmt.Errorf("no se pudo registrar runtime para la sesion %d", sesion.ID)
@@ -3586,14 +4811,10 @@ func inyectarPromptArranque(handle *RuntimeHandle, runtime *RuntimeInstance, pla
 	if handle == nil || runtime == nil || plan == nil {
 		return nil
 	}
-	obj := controlruntime.ObjetivoProceso{
-		HandleKind:   handle.HandleKind,
-		HandleRef:    handle.HandleRef,
-		MetadataJSON: handle.MetadataJSON,
+	if plan.LaunchPromptEmbedded && plan.CanSendInput != nil && !*plan.CanSendInput {
+		return nil
 	}
-	if runtime.PID != nil && *runtime.PID > 0 {
-		obj.PID = runtime.PID
-	}
+	obj := objetivoProcesoDesdeHandleRuntime(handle, runtime)
 	texto := controlruntime.NormalizarInstruccionProceso(obj, promptArranquePendiente(plan))
 	if texto == "" {
 		return nil
@@ -3625,22 +4846,57 @@ func inyectarPromptArranque(handle *RuntimeHandle, runtime *RuntimeInstance, pla
 }
 
 func ejecutarRuntimeOrderPause(order *RuntimeOrder) error {
-	aplicado, pid, err := controlarProcesoRuntime(order, controlruntime.PausarProceso)
+	handle, err := resolverHandleParaOrden(order)
 	if err != nil {
 		return err
 	}
-	if !aplicado {
-		return fmt.Errorf("pause sin control real para %s", order.Agente)
+	signaler := controlruntime.PausarProceso
+	pausedViaStop := false
+	handleEstadoObjetivo := "pausado"
+	if RuntimeHandlePauseRequiresFreshStart(handle) {
+		signaler = controlruntime.DetenerProceso
+		pausedViaStop = true
+		handleEstadoObjetivo = "cerrado"
+	}
+	aplicado, pid, err := controlarProcesoRuntime(order, signaler)
+	yaDetenido := false
+	if err != nil || !aplicado {
+		controlErr := err
+		if pausedViaStop {
+			yaDetenido, pid, err = runtimeProcesoLocalYaNoVive(order)
+			if err != nil {
+				return err
+			}
+			if yaDetenido {
+				aplicado = false
+			} else if controlErr != nil {
+				return controlErr
+			} else {
+				return fmt.Errorf("pause sin control real para %s", order.Agente)
+			}
+		} else if controlErr != nil {
+			return controlErr
+		} else {
+			return fmt.Errorf("pause sin control real para %s", order.Agente)
+		}
 	}
 	runtime, err := actualizarEstadoRuntime(order, "pausado", "")
 	if err != nil {
 		return err
 	}
+	if handle != nil && handle.ID > 0 {
+		if _, err := DB.Exec(`
+		UPDATE runtime_handles SET estado=?, last_seen_at=CURRENT_TIMESTAMP
+		WHERE id=?`, handleEstadoObjetivo, handle.ID); err != nil {
+			return err
+		}
+	}
 	if _, err := DB.Exec(`
-		UPDATE runtime_handles SET estado='pausado', last_seen_at=CURRENT_TIMESTAMP
-		WHERE agente=? AND estado='activo'`, order.Agente); err != nil {
+		UPDATE runtime_handles SET estado=?, last_seen_at=CURRENT_TIMESTAMP
+		WHERE agente=? AND estado='activo'`, handleEstadoObjetivo, order.Agente); err != nil {
 		return err
 	}
+	runtimeHandleHotReset()
 	checkpointID, err := asegurarCheckpointCambioContexto(order, "pause", "Checkpoint automático antes de pausa")
 	if err != nil {
 		return err
@@ -3655,6 +4911,12 @@ func ejecutarRuntimeOrderPause(order *RuntimeOrder) error {
 		"control_real":  aplicado,
 		"pid":           pid,
 	}
+	if pausedViaStop {
+		result["paused_via_stop"] = true
+	}
+	if yaDetenido {
+		result["already_stopped"] = true
+	}
 	if checkpointID > 0 {
 		result["checkpoint_id"] = checkpointID
 	}
@@ -3663,6 +4925,10 @@ func ejecutarRuntimeOrderPause(order *RuntimeOrder) error {
 }
 
 func ejecutarRuntimeOrderResume(order *RuntimeOrder) error {
+	handle, err := resolverHandleParaOrden(order)
+	if err != nil {
+		return err
+	}
 	aplicado, pid, err := controlarProcesoRuntime(order, controlruntime.ContinuarProceso)
 	if err != nil {
 		return err
@@ -3674,11 +4940,19 @@ func ejecutarRuntimeOrderResume(order *RuntimeOrder) error {
 	if err != nil {
 		return err
 	}
+	if handle != nil && handle.ID > 0 {
+		if _, err := DB.Exec(`
+		UPDATE runtime_handles SET estado='activo', last_seen_at=CURRENT_TIMESTAMP
+		WHERE id=?`, handle.ID); err != nil {
+			return err
+		}
+	}
 	if _, err := DB.Exec(`
 		UPDATE runtime_handles SET estado='activo', last_seen_at=CURRENT_TIMESTAMP
 		WHERE agente=? AND estado IN ('pausado','fallido')`, order.Agente); err != nil {
 		return err
 	}
+	runtimeHandleHotReset()
 	if err := actualizarEstadoSesionParaOrden(order, "activa"); err != nil {
 		return err
 	}
@@ -3760,10 +5034,14 @@ func ejecutarRuntimeOrderStop(order *RuntimeOrder) error {
 			return err
 		}
 		if !yaDetenido {
-			if controlErr != nil {
-				return controlErr
+			if preserveExternalSession {
+				aplicado = false
+			} else {
+				if controlErr != nil {
+					return controlErr
+				}
+				return fmt.Errorf("stop sin control real para %s", order.Agente)
 			}
-			return fmt.Errorf("stop sin control real para %s", order.Agente)
 		}
 		aplicado = false
 	}
@@ -3786,11 +5064,19 @@ func ejecutarRuntimeOrderStop(order *RuntimeOrder) error {
 	if err != nil {
 		return err
 	}
+	if handle != nil && handle.ID > 0 {
+		if _, err := DB.Exec(`
+		UPDATE runtime_handles SET estado=?, last_seen_at=CURRENT_TIMESTAMP
+		WHERE id=?`, handleState, handle.ID); err != nil {
+			return err
+		}
+	}
 	if _, err := DB.Exec(`
 		UPDATE runtime_handles SET estado=?, last_seen_at=CURRENT_TIMESTAMP
-		WHERE agente=? AND estado IN ('activo','pausado')`, handleState, order.Agente); err != nil {
+		WHERE agente=? AND estado IN ('activo','pausado','fallido')`, handleState, order.Agente); err != nil {
 		return err
 	}
+	runtimeHandleHotReset()
 	sesion, err := GetSesionAbierta(order.Agente, order.ProyectoID)
 	if err != nil && err != sql.ErrNoRows {
 		return err
@@ -3837,6 +5123,7 @@ func ejecutarRuntimeOrderRestart(order *RuntimeOrder) error {
 		WHERE agente=? AND estado IN ('pausado','cerrado')`, order.Agente); err != nil {
 		return err
 	}
+	runtimeHandleHotReset()
 	result := map[string]any{
 		"ok":            true,
 		"runtime_id":    runtime.ID,
@@ -3853,6 +5140,7 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 	if err != nil {
 		return err
 	}
+	payloadDesdeMailbox := runtimeOrderSendInstructionProvieneMailbox(payload)
 
 	toAgente := stringFromMap(payload, "to_agente", order.Agente)
 	fromAgente := stringFromMap(payload, "from_agente", "server")
@@ -3860,14 +5148,44 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 		return fmt.Errorf("send_instruction sin agente destino")
 	}
 	texto := stringFromMap(payload, "texto", stringFromMap(payload, "instruction", ""))
+	if payloadDesdeMailbox {
+		mailboxID := runtimeOrderSendInstructionMailboxID(payload)
+		msg, err := GetRuntimeMailbox(mailboxID)
+		if err != nil {
+			return err
+		}
+		if msg != nil {
+			switch strings.ToLower(strings.TrimSpace(msg.Estado)) {
+			case "consumido", "cancelado", "expirado":
+				return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "mailbox ya "+strings.TrimSpace(msg.Estado))
+			case "entregado":
+				handled, err := reconciliarRuntimeOrderSendInstructionMailboxEntregado(order, payload, msg, time.Now().UTC())
+				if handled || err != nil {
+					return err
+				}
+			}
+		}
+	}
 
-	runtime, err := resolverRuntimeParaOrden(order)
+	var runtime *RuntimeInstance
+	runtime, err = runtimeInstanceIfExists(order.RuntimeID)
 	if err != nil {
 		return err
 	}
-	handle, err := resolverHandleParaOrden(order)
-	if err != nil {
-		return err
+	var handle *RuntimeHandle
+	if order.HandleID != nil {
+		handle, err = GetRuntimeHandle(*order.HandleID)
+		if err != nil {
+			return err
+		}
+	}
+	originalHandleID := int64(0)
+	if handle != nil {
+		originalHandleID = handle.ID
+	}
+	originalRuntimeID := int64(0)
+	if runtime != nil {
+		originalRuntimeID = runtime.ID
 	}
 	runtime, handle, err = resolverDestinoRuntimeOrderSendInstruction(order, runtime, handle)
 	if err != nil {
@@ -3877,8 +5195,17 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 	if err != nil {
 		return err
 	}
+	if strings.TrimSpace(externalSessionID) == "" {
+		externalSessionID = runtimeOrderSendInstructionExternalSessionID(payload)
+		if strings.TrimSpace(externalSessionID) == "" && handle != nil {
+			externalSessionID = strings.TrimSpace(stringFromMap(mapFromJSON(handle.MetadataJSON), "external_session_id", ""))
+		}
+	}
 	handle, workingDir, err := SincronizarRuntimeHandleWorkingDir(handle, runtime, order.Agente, order.ProyectoID)
 	if err != nil {
+		return err
+	}
+	if err := actualizarRuntimeOrderDestino(order.ID, runtime, handle); err != nil {
 		return err
 	}
 	if supersedida, err := completarRuntimeOrderSendInstructionSesionObsoleta(order, payload, handle, externalSessionID); err != nil {
@@ -3892,64 +5219,110 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 		return nil
 	}
 
-	obj := controlruntime.ObjetivoProceso{}
-	if handle != nil {
-		obj.HandleKind = handle.HandleKind
-		obj.HandleRef = handle.HandleRef
-		obj.MetadataJSON = handle.MetadataJSON
-	}
-	if strings.TrimSpace(workingDir) != "" {
-		meta := mapFromJSON(obj.MetadataJSON)
-		if meta == nil {
-			meta = map[string]any{}
-		}
-		meta["working_dir"] = strings.TrimSpace(workingDir)
-		if metaJSON, marshalErr := json.Marshal(meta); marshalErr == nil {
-			obj.MetadataJSON = string(metaJSON)
-		}
-	}
-	if runtime != nil && (handle == nil || strings.TrimSpace(handle.HandleKind) == "" || strings.TrimSpace(handle.HandleKind) == "process") {
-		obj.PID = runtime.PID
-	}
+	obj := objetivoProcesoSendInstruction(order, handle, runtime, workingDir)
 	texto = controlruntime.NormalizarInstruccionProceso(obj, texto)
 	if strings.TrimSpace(texto) == "" {
 		return fmt.Errorf("send_instruction sin texto aplicable")
 	}
 
 	if handle == nil {
-		if runtimeOrderSendInstructionProvieneMailbox(payload) {
-			return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "sin runtime activo entregable")
+		if runtimeOrderSendInstructionDebeRetenerSinRuntimeActivo(order, payload) {
+			return retenerRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "sin runtime activo entregable")
 		}
-		return fmt.Errorf("send_instruction sin runtime handle entregable")
+		return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "sin runtime activo entregable")
+	}
+
+	deliveryMode := RuntimeHandleMailboxDeliveryMode(handle)
+	if reason, ok := runtimeOrderSendInstructionDurableOnlyReason(handle, payload, texto, deliveryMode); ok {
+		return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, reason)
+	}
+	reboundToCanonical := (handle != nil && originalHandleID > 0 && handle.ID != originalHandleID) ||
+		(runtime != nil && originalRuntimeID > 0 && runtime.ID != originalRuntimeID)
+	attemptSessionResume := runtimeOrderSendInstructionDebeIntentarSessionResume(handle, runtime, payload, texto, externalSessionID, deliveryMode, reboundToCanonical)
+	if !payloadDesdeMailbox && !attemptSessionResume {
+		switch deliveryMode {
+		case runtimeagente.MailboxDeliveryBootstrapOnly:
+			if runtimeOrderSendInstructionDebeRetenerOrdenDirecta(handle, runtime, deliveryMode, externalSessionID) {
+				return retenerRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "runtime_handle_bootstrap_only_mailbox_only")
+			}
+			return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "runtime_handle_bootstrap_only_mailbox_only")
+		case runtimeagente.MailboxDeliverySessionResume:
+			if runtimeOrderSendInstructionDebeRetenerOrdenDirecta(handle, runtime, deliveryMode, externalSessionID) {
+				return retenerRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "runtime_handle_session_resume_mailbox_only")
+			}
+			return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "runtime_handle_session_resume_mailbox_only")
+		case runtimeagente.MailboxDeliveryCoordinatedRestart:
+			if runtimeOrderSendInstructionDebeRetenerOrdenDirecta(handle, runtime, deliveryMode, externalSessionID) {
+				return retenerRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "runtime_handle_coordinated_restart_mailbox_only")
+			}
+			return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "runtime_handle_coordinated_restart_mailbox_only")
+		}
+	}
+	if payloadDesdeMailbox && strings.EqualFold(strings.TrimSpace(handle.Estado), "pausado") {
+		reason := "runtime_handle_pausado_mailbox_only"
+		if kind := strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")); kind != "" {
+			reason += ":" + kind
+		}
+		return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, reason)
 	}
 
 	aplicado := false
 	pid := 0
 	deliveryPath := ""
-	deliveryMode := RuntimeHandleMailboxDeliveryMode(handle)
-	avoidSupervisorLocal, avoidSupervisorLocalReason := runtimeOrderSendInstructionDebeEvitarSupervisorLocal(handle, payload, texto)
-	if (RuntimeHandlePermiteSendInputInteractivo(handle) || RuntimeHandlePermiteEntregaCalienteSupervisada(handle)) && !avoidSupervisorLocal {
-		aplicado, pid, err = controlarProcesoRuntime(order, func(obj controlruntime.ObjetivoProceso) (bool, int, error) {
-			return controlruntime.EnviarInstruccionProceso(obj, texto)
-		})
+	if RuntimeHandlePermiteSendInputInteractivo(handle) {
+		if ready, reason := runtimeHandleListaParaDispatchInteractivo(handle, time.Now().UTC()); !ready {
+			if payloadDesdeMailbox {
+				return reencolarRuntimeOrderSendInstruction(order, payload, reason)
+			}
+			return retenerRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, reason)
+		}
+		aplicado, pid, err = controlruntime.EnviarInstruccionProceso(obj, texto)
 		if err != nil {
-			if runtimeOrderSendInstructionProvieneMailbox(payload) {
+			if reason, ok := runtimeOrderSendInstructionDiferirPorErrorTMUX(handle, err); ok {
+				if payloadDesdeMailbox {
+					return reencolarRuntimeOrderSendInstruction(order, payload, reason)
+				}
+				return retenerRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, reason)
+			}
+			if payloadDesdeMailbox {
 				return reencolarRuntimeOrderSendInstruction(order, payload, err.Error())
 			}
 			return err
 		}
 		if aplicado {
-			if RuntimeHandlePermiteEntregaCalienteSupervisada(handle) && !RuntimeHandlePermiteSendInputInteractivo(handle) {
-				deliveryPath = "supervisor_local"
-			} else {
-				deliveryPath = "interactive"
-			}
+			deliveryPath = "interactive"
 		}
 	}
-	if avoidSupervisorLocal && runtimeOrderSendInstructionProvieneMailbox(payload) {
-		return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, avoidSupervisorLocalReason)
+	if payloadDesdeMailbox &&
+		deliveryMode == runtimeagente.MailboxDeliveryBootstrapOnly &&
+		!attemptSessionResume &&
+		!RuntimeHandlePermiteSendInputInteractivo(handle) {
+		handled, err := intentarEntregarRuntimeOrderSendInstructionBootstrapTMUX(order, payload, handle, runtime, obj)
+		if handled || err != nil {
+			return err
+		}
 	}
-	if !aplicado && deliveryMode == runtimeagente.MailboxDeliverySessionResume {
+	if payloadDesdeMailbox &&
+		deliveryMode == runtimeagente.MailboxDeliveryBootstrapOnly &&
+		!RuntimeHandlePermiteSendInputInteractivo(handle) &&
+		!attemptSessionResume {
+		reason := "runtime_handle_bootstrap_only_mailbox_only"
+		if kind := strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")); kind != "" {
+			reason += ":" + kind
+		}
+		return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, reason)
+	}
+	if payloadDesdeMailbox &&
+		deliveryMode == runtimeagente.MailboxDeliverySessionResume &&
+		!RuntimeHandlePermiteSendInputInteractivo(handle) &&
+		!attemptSessionResume {
+		reason := "runtime_handle_session_resume_mailbox_only"
+		if kind := strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")); kind != "" {
+			reason += ":" + kind
+		}
+		return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, reason)
+	}
+	if !aplicado && attemptSessionResume {
 		aplicado, pid, err = controlruntime.EnviarInstruccionSesionResume(obj, externalSessionID, texto)
 		if err != nil {
 			if handled, pauseErr := gestionarBackoffProveedorRuntimeOrderSendInstruction(order, payload, err); handled {
@@ -3958,7 +5331,7 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 			if runtimeOrderSendInstructionDebeDegradarseAMailboxPorError(order, payload, err) {
 				return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, err.Error())
 			}
-			if runtimeOrderSendInstructionProvieneMailbox(payload) {
+			if payloadDesdeMailbox {
 				return reencolarRuntimeOrderSendInstruction(order, payload, err.Error())
 			}
 			return err
@@ -3993,7 +5366,10 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 		return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
 	}
 
-	if runtimeOrderSendInstructionProvieneMailbox(payload) {
+	if payloadDesdeMailbox {
+		if runtimeOrderSendInstructionDebeRetenerSinRuntimeActivo(order, payload) {
+			return retenerRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "runtime no disponible para entrega inmediata")
+		}
 		return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "runtime no disponible para entrega inmediata")
 	}
 
@@ -4002,15 +5378,11 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 		return err
 	}
 	if existente != nil {
-		result := map[string]any{
-			"ok":          true,
-			"mailbox_id":  existente.ID,
-			"to_agente":   existente.ToAgente,
-			"from_agente": existente.FromAgente,
-			"reused":      true,
-		}
-		data, _ := json.Marshal(result)
-		return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+		payload["mailbox_id"] = existente.ID
+		payload["mailbox_kind"] = "instruction"
+		payload["to_agente"] = existente.ToAgente
+		payload["from_agente"] = existente.FromAgente
+		return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "runtime no disponible para entrega inmediata")
 	}
 
 	id, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
@@ -4024,69 +5396,267 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 	if err != nil {
 		return err
 	}
-	result := map[string]any{
-		"ok":          true,
-		"mailbox_id":  id,
-		"to_agente":   toAgente,
-		"from_agente": fromAgente,
-		"kind":        "instruction",
+	payload["mailbox_id"] = id
+	payload["mailbox_kind"] = "instruction"
+	payload["to_agente"] = toAgente
+	payload["from_agente"] = fromAgente
+	if payloadDesdeMailbox {
+		if runtimeOrderSendInstructionDebeRetenerSinRuntimeActivo(order, payload) {
+			return retenerRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "runtime no disponible para entrega inmediata")
+		}
+		return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "runtime no disponible para entrega inmediata")
 	}
-	data, _ := json.Marshal(result)
-	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+	return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "runtime no disponible para entrega inmediata")
+}
+
+func runtimeOrderSendInstructionDebeRetenerSinRuntimeActivo(order *RuntimeOrder, payload map[string]any) bool {
+	if order == nil || !runtimeOrderSendInstructionProvieneMailbox(payload) {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(runtimeagente.ConectorPorDefectoAgente(order.Agente)), "ollama-cli")
+}
+
+func runtimeOrderSendInstructionMailboxOnlyReason(deliveryMode string, payload map[string]any) string {
+	reason := "runtime_handle_bootstrap_only_mailbox_only"
+	switch runtimeagente.NormalizeMailboxDeliveryMode(deliveryMode) {
+	case runtimeagente.MailboxDeliveryCoordinatedRestart:
+		reason = "runtime_handle_coordinated_restart_mailbox_only"
+	case runtimeagente.MailboxDeliverySessionResume:
+		reason = "runtime_handle_session_resume_mailbox_only"
+	}
+	if kind := strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")); kind != "" {
+		reason += ":" + kind
+	}
+	return reason
+}
+
+func runtimeOrderSendInstructionLongTextReason(handle *RuntimeHandle, payload map[string]any, texto string) string {
+	if handle == nil {
+		return ""
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if !runtimeHandleUsaCodexTTYInestable(meta) {
+		return ""
+	}
+	texto = strings.TrimSpace(texto)
+	if len(texto) <= 32 {
+		return ""
+	}
+	reason := "codex_long_text_mailbox_only"
+	if kind := strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")); kind != "" {
+		reason += ":" + kind
+	}
+	return reason
+}
+
+func runtimeOrderSendInstructionDurableOnlyReason(handle *RuntimeHandle, payload map[string]any, texto, deliveryMode string) (string, bool) {
+	if handle == nil {
+		return "", false
+	}
+	if reason := runtimeOrderSendInstructionLongTextReason(handle, payload, texto); reason != "" {
+		return reason, true
+	}
+	if !runtimeOrderSendInstructionProvieneMailbox(payload) {
+		return "", false
+	}
+	switch strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")) {
+	case "nudge":
+		return runtimeOrderSendInstructionMailboxOnlyReason(deliveryMode, payload), true
+	}
+	return "", false
+}
+
+func runtimeOrderSendInstructionDebeIntentarSessionResume(handle *RuntimeHandle, runtime *RuntimeInstance, payload map[string]any, texto, externalSessionID, deliveryMode string, reboundToCanonical bool) bool {
+	if handle == nil || RuntimeHandlePermiteSendInputInteractivo(handle) {
+		return false
+	}
+	if strings.TrimSpace(externalSessionID) == "" {
+		detected, err := runtimeHandleEffectiveExternalSessionID(handle, runtime)
+		if err == nil {
+			externalSessionID = strings.TrimSpace(detected)
+		}
+	}
+	externalSessionKnown := strings.TrimSpace(externalSessionID) != "" || runtimeHandleTieneExternalSessionID(handle, runtime)
+	sessionResumeRequested := runtimeHandleSolicitaSessionResume(handle, deliveryMode)
+	if !runtimeOrderSendInstructionProvieneMailbox(payload) {
+		return externalSessionKnown && (reboundToCanonical || runtimeHandlePermiteSessionResumeDirecto(handle, sessionResumeRequested))
+	}
+	if reason := runtimeOrderSendInstructionLongTextReason(handle, payload, texto); reason != "" {
+		return false
+	}
+	switch strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")) {
+	case "", "instruction":
+		return externalSessionKnown || sessionResumeRequested
+	case "autonomia", "nudge", "watchdog", MailboxKindGovernanceRefresh, MailboxKindSkillsRefresh:
+		return false
+	}
+	return sessionResumeRequested && externalSessionKnown
+}
+
+func runtimeHandlePermiteSessionResumeDirecto(handle *RuntimeHandle, sessionResumeRequested bool) bool {
+	if handle == nil {
+		return false
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	for _, key := range []string{"supervisor_ref", "stdin_path", "stdin_raw_path"} {
+		if strings.TrimSpace(stringFromMap(meta, key, "")) != "" {
+			return true
+		}
+	}
+	return sessionResumeRequested && !runtimeHandleUsaCodexTTYInestable(meta)
+}
+
+func runtimeHandleSolicitaSessionResume(handle *RuntimeHandle, deliveryMode string) bool {
+	if handle == nil {
+		return false
+	}
+	if runtimeagente.NormalizeMailboxDeliveryMode(deliveryMode) == runtimeagente.MailboxDeliverySessionResume {
+		return true
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	caps := mapFromJSON(handle.CapabilitiesJSON)
+	for _, raw := range []string{
+		stringFromMap(caps, "mailbox_delivery_mode", ""),
+		stringFromMap(meta, "mailbox_delivery_mode", ""),
+	} {
+		if runtimeagente.NormalizeMailboxDeliveryMode(raw) == runtimeagente.MailboxDeliverySessionResume {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeOrderSendInstructionDebeRetenerOrdenDirecta(handle *RuntimeHandle, runtime *RuntimeInstance, deliveryMode, externalSessionID string) bool {
+	if handle == nil {
+		return false
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	requiresDurableRuntime := runtimeHandleUsaCodexTTYInestable(meta) ||
+		strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") ||
+		strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "driver", "")), "tmux_cli_session")
+	switch runtimeagente.NormalizeMailboxDeliveryMode(deliveryMode) {
+	case runtimeagente.MailboxDeliveryBootstrapOnly:
+		return requiresDurableRuntime
+	case runtimeagente.MailboxDeliverySessionResume:
+		return strings.TrimSpace(externalSessionID) != "" || runtimeHandleTieneExternalSessionID(handle, runtime)
+	case runtimeagente.MailboxDeliveryCoordinatedRestart:
+		return requiresDurableRuntime
+	default:
+		return false
+	}
 }
 
 func resolverDestinoRuntimeOrderSendInstruction(order *RuntimeOrder, runtime *RuntimeInstance, handle *RuntimeHandle) (*RuntimeInstance, *RuntimeHandle, error) {
-	if order == nil {
-		return runtime, handle, nil
-	}
-	if handle != nil {
-		validado, err := validarRuntimeHandleActivo(handle, order.Agente, order.ProyectoID)
-		if err != nil {
-			return nil, nil, err
-		}
-		if validado != nil {
-			if validado.RuntimeID != nil && *validado.RuntimeID > 0 {
-				runtime, err = GetRuntime(*validado.RuntimeID)
-				if err != nil {
-					return nil, nil, err
-				}
-			} else {
-				runtime = nil
-			}
-			if handle.ID != validado.ID {
-				if err := actualizarRuntimeOrderDestino(order.ID, runtime, validado); err != nil {
-					return nil, nil, err
-				}
-			}
-			return runtime, validado, nil
-		}
-		handle = nil
-		runtime = nil
-	}
-
-	var (
-		candidato *RuntimeHandle
-		err       error
-	)
-	if order.ProyectoID != nil {
-		candidato, err = GetRuntimeHandleActivoAgenteProyecto(order.Agente, order.ProyectoID)
-	} else {
-		candidato, err = GetRuntimeHandleActivoAgente(order.Agente)
-	}
-	if err != nil || candidato == nil {
-		return runtime, handle, err
-	}
-	if handle != nil && handle.ID == candidato.ID {
-		return runtime, handle, nil
-	}
-	runtime, err = runtimeHandleRuntime(candidato)
+	explicitRuntime := runtime
+	explicitHandle := handle
+	resolvedRuntime, resolvedHandle, err := resolverDestinoRuntimeOrderCanonico(order, runtime, handle)
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := actualizarRuntimeOrderDestino(order.ID, runtime, candidato); err != nil {
-		return nil, nil, err
+	if resolvedHandle == nil && order != nil {
+		operationalHandle, operationalErr := runtimeHandleOperativoRecienteConFallback(order.Agente, order.ProyectoID)
+		if operationalErr != nil {
+			return nil, nil, operationalErr
+		}
+		if operationalHandle != nil {
+			operationalRuntime, runtimeErr := runtimeHandleRuntime(operationalHandle)
+			if runtimeErr != nil {
+				return nil, nil, runtimeErr
+			}
+			if !runtimeOrderSendInstructionDebePreferirHandleExplicito(explicitHandle, operationalHandle) {
+				if err := refrescarRuntimeOrderDestinoCanonico(order, operationalRuntime, operationalHandle); err != nil {
+					return nil, nil, err
+				}
+				return operationalRuntime, operationalHandle, nil
+			}
+		}
 	}
-	return runtime, candidato, nil
+	if resolvedHandle != nil || resolvedRuntime != nil {
+		if runtimeOrderSendInstructionDebePreferirHandleExplicito(explicitHandle, resolvedHandle) {
+			if explicitRuntime == nil && explicitHandle != nil {
+				explicitRuntime, err = runtimeHandleRuntime(explicitHandle)
+				if err != nil {
+					return nil, nil, err
+				}
+			}
+			return explicitRuntime, explicitHandle, nil
+		}
+		return resolvedRuntime, resolvedHandle, nil
+	}
+	if !runtimeOrderSendInstructionConservaHandleExplicito(order, explicitHandle) {
+		return resolvedRuntime, resolvedHandle, nil
+	}
+	if explicitRuntime == nil && explicitHandle != nil {
+		explicitRuntime, err = runtimeHandleRuntime(explicitHandle)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return explicitRuntime, explicitHandle, nil
+}
+
+func runtimeOrderSendInstructionDebePreferirHandleExplicito(explicitHandle, resolvedHandle *RuntimeHandle) bool {
+	if explicitHandle == nil || resolvedHandle == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(explicitHandle.Estado)) {
+	case "cerrado", "fallido", "fantasma":
+		return false
+	}
+	explicitScore := runtimeHandleContextoEntregaScore(explicitHandle)
+	resolvedScore := runtimeHandleContextoEntregaScore(resolvedHandle)
+	if explicitHandle.ID == resolvedHandle.ID {
+		return explicitScore > resolvedScore
+	}
+	return explicitScore > resolvedScore && runtimeHandleTieneContextoEntrega(explicitHandle) && !runtimeHandleTieneContextoEntrega(resolvedHandle)
+}
+
+func runtimeHandleTieneContextoEntrega(handle *RuntimeHandle) bool {
+	return runtimeHandleContextoEntregaScore(handle) > 0
+}
+
+func runtimeHandleContextoEntregaScore(handle *RuntimeHandle) int {
+	if handle == nil {
+		return 0
+	}
+	score := 0
+	meta := mapFromJSON(handle.MetadataJSON)
+	caps := mapFromJSON(handle.CapabilitiesJSON)
+	for _, key := range []string{
+		"driver",
+		"rendered_command",
+		"wrapped_command",
+		"working_dir",
+		"external_session_id",
+		"stdin_path",
+		"supervisor_ref",
+		"tmux_command",
+		"tmux_session",
+		"mailbox_delivery_mode",
+	} {
+		if strings.TrimSpace(stringFromMap(meta, key, "")) != "" {
+			score++
+		}
+	}
+	for _, key := range []string{"mailbox_delivery_mode"} {
+		if _, ok := caps[key]; ok {
+			score++
+		}
+	}
+	return score
+}
+
+func runtimeOrderSendInstructionConservaHandleExplicito(order *RuntimeOrder, handle *RuntimeHandle) bool {
+	if order == nil || handle == nil || order.HandleID == nil || *order.HandleID != handle.ID {
+		return false
+	}
+	if strings.TrimSpace(handle.MetadataJSON) != "" {
+		return true
+	}
+	if strings.TrimSpace(handle.HandleKind) != "" || strings.TrimSpace(handle.HandleRef) != "" {
+		return true
+	}
+	return false
 }
 
 func actualizarRuntimeOrderDestino(orderID int64, runtime *RuntimeInstance, handle *RuntimeHandle) error {
@@ -4096,6 +5666,10 @@ func actualizarRuntimeOrderDestino(orderID int64, runtime *RuntimeInstance, hand
 	var runtimeID any
 	if runtime != nil && runtime.ID > 0 {
 		runtimeID = runtime.ID
+	} else if resolvedRuntime, err := runtimeHandleRuntime(handle); err != nil {
+		return err
+	} else if resolvedRuntime != nil && resolvedRuntime.ID > 0 {
+		runtimeID = resolvedRuntime.ID
 	} else if handle.RuntimeID != nil && *handle.RuntimeID > 0 {
 		runtimeID = *handle.RuntimeID
 	}
@@ -4109,7 +5683,283 @@ func actualizarRuntimeOrderDestino(orderID int64, runtime *RuntimeInstance, hand
 		runtimeID,
 		orderID,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	return runtimeOrdersHotIndexSyncByID(orderID)
+}
+
+func intentarEntregarRuntimeOrderSendInstructionBootstrapTMUX(order *RuntimeOrder, payload map[string]any, handle *RuntimeHandle, runtime *RuntimeInstance, obj controlruntime.ObjetivoProceso) (bool, error) {
+	if order == nil || handle == nil || !runtimeOrderSendInstructionProvieneMailbox(payload) {
+		return false, nil
+	}
+	if !runtimeHandleListaParaDispatchBootstrapTMUX(handle, time.Now().UTC()) {
+		return false, nil
+	}
+	prompt, ok := runtimeOrderSendInstructionTMUXBootstrapPrompt(payload)
+	if !ok {
+		return false, nil
+	}
+	result, err := controlruntime.EnviarInstruccionTMUXVerificada(obj, prompt)
+	if err != nil {
+		return true, reencolarRuntimeOrderSendInstruction(order, payload, "tmux bootstrap dispatch error: "+strings.TrimSpace(err.Error()))
+	}
+	if !result.Attempted {
+		return false, nil
+	}
+	if result.Delivered {
+		if err := RegistrarRuntimeTranscriptInput(handle, runtime, prompt); err != nil {
+			return true, err
+		}
+		if mailboxID := runtimeOrderSendInstructionMailboxID(payload); mailboxID > 0 {
+			if err := MarcarRuntimeMailboxEntregado(mailboxID); err != nil {
+				return true, err
+			}
+		}
+		reason := "tmux bootstrap dispatch delivered"
+		if result.Reason != "" {
+			reason += ":" + strings.TrimSpace(result.Reason)
+		}
+		return true, retenerRuntimeOrderSendInstructionNotificada(order, payload, reason, time.Now().UTC())
+	}
+	reason := "tmux bootstrap dispatch unconfirmed"
+	if result.Reason != "" {
+		reason += ":" + strings.TrimSpace(result.Reason)
+	}
+	return true, reencolarRuntimeOrderSendInstruction(order, payload, reason)
+}
+
+func runtimeHandleListaParaDispatchBootstrapTMUX(handle *RuntimeHandle, now time.Time) bool {
+	if handle == nil {
+		return false
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if !strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "driver", "")), "tmux_cli_session") {
+		return false
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
+	if err != nil || snap == nil {
+		return false
+	}
+	ready, _ := snap.ReadyForTextDispatch(now, time.Minute)
+	return ready
+}
+
+func runtimeHandleListaParaDispatchInteractivo(handle *RuntimeHandle, now time.Time) (bool, string) {
+	if handle == nil {
+		return false, "worker_missing"
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
+	if err != nil || snap == nil {
+		return true, ""
+	}
+	view := snap.View(now, time.Minute)
+	if view == nil {
+		return true, ""
+	}
+	if !strings.EqualFold(strings.TrimSpace(view.Driver), "tmux_cli_session") &&
+		!strings.EqualFold(strings.TrimSpace(view.Transport), "tmux") {
+		return true, ""
+	}
+	return snap.ReadyForTextDispatch(now, time.Minute)
+}
+
+func runtimeOrderSendInstructionDiferirPorErrorTMUX(handle *RuntimeHandle, runtimeErr error) (string, bool) {
+	if handle == nil || runtimeErr == nil {
+		return "", false
+	}
+	ready, reason := runtimeHandleListaParaDispatchInteractivo(handle, time.Now().UTC())
+	if !ready && strings.TrimSpace(reason) != "" {
+		return reason, true
+	}
+	raw := strings.ToLower(strings.TrimSpace(runtimeErr.Error()))
+	switch {
+	case strings.Contains(raw, "tmux pane no listo para send-keys"):
+		return "worker_not_ready", true
+	case strings.Contains(raw, "tmux pane requiere autenticacion manual"):
+		return "worker_blocked_auth", true
+	case strings.Contains(raw, "tmux pane bloqueado por cuota"):
+		return "worker_blocked_quota", true
+	default:
+		return "", false
+	}
+}
+
+func runtimeOrderSendInstructionTMUXBootstrapPrompt(payload map[string]any) (string, bool) {
+	if !runtimeOrderSendInstructionProvieneMailbox(payload) {
+		return "", false
+	}
+	texto := strings.TrimSpace(stringFromMap(payload, "texto", ""))
+	if texto == "" {
+		return "", false
+	}
+	texto = strings.Join(strings.Fields(strings.ReplaceAll(texto, "\r", " ")), " ")
+	if texto == "" || len(texto) > 160 {
+		return "", false
+	}
+	return texto, true
+}
+
+func runtimeOrderSendInstructionReceiptTimeout() time.Duration {
+	seconds := configIntOrDefault("runtime_send_instruction_receipt_timeout_seconds", 120)
+	if seconds <= 0 {
+		seconds = 120
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func runtimeOrderSendInstructionNotifiedAt(order *RuntimeOrder, msg *RuntimeMailboxMessage) time.Time {
+	if msg != nil && msg.DeliveredAt != nil && !msg.DeliveredAt.IsZero() {
+		return msg.DeliveredAt.UTC()
+	}
+	result := mapFromJSON(order.ResultadoJSON)
+	if result == nil {
+		return time.Time{}
+	}
+	if raw := strings.TrimSpace(stringFromMap(result, "delivery_notified_at", "")); raw != "" {
+		for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+			if parsed, err := time.Parse(layout, raw); err == nil {
+				return parsed.UTC()
+			}
+		}
+	}
+	return time.Time{}
+}
+
+func runtimeOrderSendInstructionReceiptEvidence(order *RuntimeOrder, payload map[string]any, msg *RuntimeMailboxMessage) (bool, string, time.Time, error) {
+	if order == nil || msg == nil || !runtimeOrderSendInstructionProvieneMailbox(payload) {
+		return false, "", time.Time{}, nil
+	}
+	handle, err := resolverHandleParaOrden(order)
+	if err != nil {
+		return false, "", time.Time{}, err
+	}
+	runtime, err := resolverRuntimeParaOrden(order)
+	if err != nil {
+		return false, "", time.Time{}, err
+	}
+	runtime, handle, err = resolverDestinoRuntimeOrderSendInstruction(order, runtime, handle)
+	if err != nil || handle == nil {
+		return false, "", time.Time{}, err
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
+	if err != nil || snap == nil {
+		return false, "", time.Time{}, err
+	}
+	baseline := runtimeOrderSendInstructionNotifiedAt(order, msg)
+	if baseline.IsZero() {
+		baseline = msg.CreatedAt.UTC()
+	}
+	if progress := snap.LastProgressTime(); progress != nil {
+		progressAt := progress.UTC()
+		if progressAt.After(baseline) {
+			return true, "last_progress", progressAt, nil
+		}
+	}
+	if output := snap.LastOutputTime(); output != nil {
+		outputAt := output.UTC()
+		if outputAt.After(baseline) {
+			return true, "last_output", outputAt, nil
+		}
+	}
+	return false, "", time.Time{}, nil
+}
+
+func runtimeOrderSendInstructionReceiptBlocked(order *RuntimeOrder, payload map[string]any, msg *RuntimeMailboxMessage, now time.Time) (bool, string, error) {
+	if order == nil || msg == nil || !runtimeOrderSendInstructionProvieneMailbox(payload) {
+		return false, "", nil
+	}
+	handle, err := resolverHandleParaOrden(order)
+	if err != nil {
+		return false, "", err
+	}
+	runtime, err := resolverRuntimeParaOrden(order)
+	if err != nil {
+		return false, "", err
+	}
+	runtime, handle, err = resolverDestinoRuntimeOrderSendInstruction(order, runtime, handle)
+	if err != nil {
+		return false, "", err
+	}
+	if handle == nil {
+		return true, "worker_missing_after_notified_dispatch", nil
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
+	if err != nil {
+		return false, "", err
+	}
+	if snap == nil {
+		return true, "worker_snapshot_missing_after_notified_dispatch", nil
+	}
+	view := snap.View(now.UTC(), time.Minute)
+	if view == nil {
+		return true, "worker_view_missing_after_notified_dispatch", nil
+	}
+	if view.HeartbeatStale {
+		return true, "worker_heartbeat_stale_after_notified_dispatch", nil
+	}
+	if !view.Alive {
+		return true, "worker_not_alive_after_notified_dispatch", nil
+	}
+	switch strings.ToLower(strings.TrimSpace(view.State)) {
+	case "failed", "stopped", "exited", "closed", "stale":
+		return true, "worker_" + strings.ToLower(strings.TrimSpace(view.State)) + "_after_notified_dispatch", nil
+	default:
+		return false, "", nil
+	}
+}
+
+func runtimeOrderSendInstructionReceiptTimedOut(order *RuntimeOrder, msg *RuntimeMailboxMessage, now time.Time) bool {
+	notifiedAt := runtimeOrderSendInstructionNotifiedAt(order, msg)
+	if notifiedAt.IsZero() {
+		return false
+	}
+	return now.UTC().Sub(notifiedAt) > runtimeOrderSendInstructionReceiptTimeout()
+}
+
+func reconciliarRuntimeOrderSendInstructionMailboxEntregado(order *RuntimeOrder, payload map[string]any, msg *RuntimeMailboxMessage, now time.Time) (bool, error) {
+	if order == nil || msg == nil || !strings.EqualFold(strings.TrimSpace(msg.Estado), "entregado") {
+		return false, nil
+	}
+	confirmed, receiptSource, receiptAt, err := runtimeOrderSendInstructionReceiptEvidence(order, payload, msg)
+	if err != nil {
+		return true, err
+	}
+	if confirmed {
+		if err := MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return true, err
+		}
+		if err := completarRuntimeOrderSendInstructionEntregadaPorReceipt(order, payload, receiptSource, receiptAt); err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+	blocked, blockedReason, err := runtimeOrderSendInstructionReceiptBlocked(order, payload, msg, now)
+	if err != nil {
+		return true, err
+	}
+	if blocked {
+		if err := RearmarRuntimeMailboxPendiente(msg.ID); err != nil {
+			return true, err
+		}
+		if err := reencolarRuntimeOrderSendInstruction(order, payload, blockedReason); err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+	if runtimeOrderSendInstructionReceiptTimedOut(order, msg, now) {
+		if err := RearmarRuntimeMailboxPendiente(msg.ID); err != nil {
+			return true, err
+		}
+		if err := reencolarRuntimeOrderSendInstruction(order, payload, "delivery receipt timeout"); err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+	if err := retenerRuntimeOrderSendInstructionNotificada(order, payload, "mailbox notificado pendiente de recibo", runtimeOrderSendInstructionNotifiedAt(order, msg)); err != nil {
+		return true, err
+	}
+	return true, nil
 }
 
 func runtimeOrderSendInstructionProvieneMailbox(payload map[string]any) bool {
@@ -4123,38 +5973,29 @@ func runtimeOrderSendInstructionMailboxID(payload map[string]any) int64 {
 	return int64FromAny(payload["mailbox_id"])
 }
 
-func runtimeOrderSendInstructionDebeEvitarSupervisorLocal(handle *RuntimeHandle, payload map[string]any, texto string) (bool, string) {
-	if handle == nil {
-		return false, ""
+func objetivoProcesoSendInstruction(order *RuntimeOrder, handle *RuntimeHandle, runtime *RuntimeInstance, workingDir string) controlruntime.ObjetivoProceso {
+	obj := controlruntime.ObjetivoProceso{}
+	if handle != nil {
+		obj.HandleKind = handle.HandleKind
+		obj.HandleRef = handle.HandleRef
+		obj.MetadataJSON = handle.MetadataJSON
 	}
-	if !RuntimeHandlePermiteEntregaCalienteSupervisada(handle) || RuntimeHandlePermiteSendInputInteractivo(handle) {
-		return false, ""
-	}
-	meta := mapFromJSON(handle.MetadataJSON)
-	if !runtimeHandleUsaCodexTTYInestable(meta) {
-		return false, ""
-	}
-	if runtimeOrderSendInstructionProvieneMailbox(payload) {
-		switch strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")) {
-		case "autonomia", "nudge", "watchdog", MailboxKindGovernanceRefresh, MailboxKindSkillsRefresh:
-			reason := "codex_guidance_mailbox_durable"
-			if kind := strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")); kind != "" {
-				reason += ":" + kind
-			}
-			return true, reason
+	if strings.TrimSpace(workingDir) != "" {
+		meta := mapFromJSON(obj.MetadataJSON)
+		if meta == nil {
+			meta = map[string]any{}
+		}
+		meta["working_dir"] = strings.TrimSpace(workingDir)
+		if metaJSON, marshalErr := json.Marshal(meta); marshalErr == nil {
+			obj.MetadataJSON = string(metaJSON)
 		}
 	}
-	texto = strings.TrimSpace(texto)
-	if len(texto) <= 32 {
-		return false, ""
+	if runtime != nil &&
+		!runtimeOrderBloqueaFallbackPID(order, runtime, handle) &&
+		(handle == nil || strings.TrimSpace(handle.HandleKind) == "" || strings.TrimSpace(handle.HandleKind) == "process") {
+		obj.PID = runtime.PID
 	}
-	reason := "codex_supervisor_hot_input_disabled_por_texto_largo"
-	if runtimeOrderSendInstructionProvieneMailbox(payload) {
-		if kind := strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")); kind != "" {
-			reason += ":" + kind
-		}
-	}
-	return true, reason
+	return obj
 }
 
 func runtimeOrderSendInstructionExternalSessionID(payload map[string]any) string {
@@ -4170,6 +6011,85 @@ func runtimeOrderSendInstructionRetryDelay() time.Duration {
 		seconds = 15
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+func runtimeMailboxReusableForPendingSendInstruction(msg *RuntimeMailboxMessage) bool {
+	if msg == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(msg.Estado)) {
+	case "", "pendiente", "entregado":
+		return true
+	default:
+		return false
+	}
+}
+
+func runtimeOrderSendInstructionMailboxPayloadJSON(order *RuntimeOrder, payload map[string]any) string {
+	if payload == nil {
+		return strings.TrimSpace(order.PayloadJSON)
+	}
+	sanitized := make(map[string]any, len(payload))
+	for key, value := range payload {
+		switch strings.TrimSpace(key) {
+		case "mailbox_id":
+			continue
+		default:
+			sanitized[key] = value
+		}
+	}
+	if len(sanitized) == 0 {
+		return strings.TrimSpace(order.PayloadJSON)
+	}
+	raw, err := json.Marshal(sanitized)
+	if err != nil {
+		return strings.TrimSpace(order.PayloadJSON)
+	}
+	return string(raw)
+}
+
+func asegurarRuntimeOrderSendInstructionMailboxPendiente(order *RuntimeOrder, payload map[string]any) (int64, error) {
+	if order == nil {
+		return 0, nil
+	}
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	if mailboxID := runtimeOrderSendInstructionMailboxID(payload); mailboxID > 0 {
+		msg, err := GetRuntimeMailbox(mailboxID)
+		if err != nil {
+			return 0, err
+		}
+		if runtimeMailboxReusableForPendingSendInstruction(msg) {
+			return mailboxID, nil
+		}
+		delete(payload, "mailbox_id")
+	}
+	existente, err := GetRuntimeMailboxByRuntimeOrderID(order.ID)
+	if err != nil {
+		return 0, err
+	}
+	if runtimeMailboxReusableForPendingSendInstruction(existente) {
+		return existente.ID, nil
+	}
+	toAgente := stringFromMap(payload, "to_agente", order.Agente)
+	fromAgente := stringFromMap(payload, "from_agente", "server")
+	kind := strings.TrimSpace(stringFromMap(payload, "mailbox_kind", ""))
+	if kind == "" {
+		kind = "instruction"
+	}
+	msgID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:     fromAgente,
+		ToAgente:       toAgente,
+		ProyectoID:     order.ProyectoID,
+		RuntimeOrderID: &order.ID,
+		Kind:           kind,
+		PayloadJSON:    runtimeOrderSendInstructionMailboxPayloadJSON(order, payload),
+	})
+	if err != nil {
+		return 0, err
+	}
+	return msgID, nil
 }
 
 func runtimeOrderSendInstructionDebeDegradarseAMailboxPorError(order *RuntimeOrder, payload map[string]any, runtimeErr error) bool {
@@ -4204,11 +6124,15 @@ func reencolarRuntimeOrderSendInstructionAt(order *RuntimeOrder, payload map[str
 		nextAttempt = time.Now().UTC().Add(runtimeOrderSendInstructionRetryDelay())
 	}
 	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
-		"ok":              false,
-		"deferred":        true,
-		"mailbox_id":      runtimeOrderSendInstructionMailboxID(payload),
-		"retry_after":     nextAttempt.Format(time.RFC3339Nano),
-		"deferred_reason": reason,
+		"ok":                   false,
+		"deferred":             true,
+		"mailbox_id":           runtimeOrderSendInstructionMailboxID(payload),
+		"delivery_state":       "queued",
+		"delivery_notified_at": "",
+		"delivery_receipt_at":  "",
+		"receipt_source":       "",
+		"retry_after":          nextAttempt.Format(time.RFC3339Nano),
+		"deferred_reason":      reason,
 	})
 	_, err := DB.Exec(`
 		UPDATE runtime_orders
@@ -4232,7 +6156,147 @@ func reencolarRuntimeOrderSendInstructionAt(order *RuntimeOrder, payload map[str
 		nextAttempt,
 		order.ID,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	return runtimeOrdersHotIndexSyncByID(order.ID)
+}
+
+func retenerRuntimeOrderSendInstructionDiferidaAMailbox(order *RuntimeOrder, payload map[string]any, reason string) error {
+	if order == nil {
+		return nil
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "mailbox retenido hasta runtime entregable"
+	}
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	mailboxID, err := asegurarRuntimeOrderSendInstructionMailboxPendiente(order, payload)
+	if err != nil {
+		return err
+	}
+	payload["mailbox_id"] = mailboxID
+	if strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")) == "" {
+		payload["mailbox_kind"] = "instruction"
+	}
+	if strings.TrimSpace(stringFromMap(payload, "to_agente", "")) == "" && strings.TrimSpace(order.Agente) != "" {
+		payload["to_agente"] = strings.TrimSpace(order.Agente)
+	}
+	updatedPayloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	nextAttempt := time.Now().UTC().Add(runtimeOrderSendInstructionRetryDelay())
+	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
+		"ok":              false,
+		"mailbox_id":      mailboxID,
+		"deferred":        true,
+		"deferred_reason": reason,
+		"mailbox_only":    true,
+		"delivery_state":  "queued",
+		"retry_after":     nextAttempt.Format(time.RFC3339Nano),
+	})
+	_, err = DB.Exec(`
+		UPDATE runtime_orders
+		SET payload_json = ?,
+		    estado = 'pendiente',
+		    resultado_json = ?,
+		    error_text = CASE
+		        WHEN TRIM(COALESCE(error_text, '')) = '' THEN ?
+		        ELSE error_text || CHAR(10) || ?
+		    END,
+		    started_at = NULL,
+		    finished_at = NULL,
+		    claimed_by = '',
+		    lease_token = '',
+		    lease_expires_at = NULL,
+		    available_at = ?,
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?`,
+		string(updatedPayloadJSON),
+		resultado,
+		reason,
+		reason,
+		nextAttempt,
+		order.ID,
+	)
+	if err != nil {
+		return err
+	}
+	return runtimeOrdersHotIndexSyncByID(order.ID)
+}
+
+func retenerRuntimeOrderSendInstructionNotificada(order *RuntimeOrder, payload map[string]any, reason string, notifiedAt time.Time) error {
+	if order == nil {
+		return nil
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "mailbox notificado pendiente de recibo"
+	}
+	if notifiedAt.IsZero() {
+		notifiedAt = time.Now().UTC()
+	}
+	nextAttempt := time.Now().UTC().Add(runtimeOrderSendInstructionRetryDelay())
+	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
+		"ok":                   false,
+		"mailbox_id":           runtimeOrderSendInstructionMailboxID(payload),
+		"deferred":             true,
+		"deferred_reason":      reason,
+		"mailbox_only":         true,
+		"delivery_state":       "notified",
+		"delivery_notified_at": notifiedAt.Format(time.RFC3339Nano),
+		"delivery_receipt_at":  "",
+		"receipt_source":       "",
+		"retry_after":          nextAttempt.Format(time.RFC3339Nano),
+	})
+	_, err := DB.Exec(`
+		UPDATE runtime_orders
+		SET estado = 'pendiente',
+		    resultado_json = ?,
+		    error_text = CASE
+		        WHEN TRIM(COALESCE(error_text, '')) = '' THEN ?
+		        ELSE error_text || CHAR(10) || ?
+		    END,
+		    started_at = NULL,
+		    finished_at = NULL,
+		    claimed_by = '',
+		    lease_token = '',
+		    lease_expires_at = NULL,
+		    available_at = ?,
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?`,
+		resultado,
+		reason,
+		reason,
+		nextAttempt,
+		order.ID,
+	)
+	if err != nil {
+		return err
+	}
+	return runtimeOrdersHotIndexSyncByID(order.ID)
+}
+
+func completarRuntimeOrderSendInstructionEntregadaPorReceipt(order *RuntimeOrder, payload map[string]any, receiptSource string, receiptAt time.Time) error {
+	if order == nil {
+		return nil
+	}
+	if receiptAt.IsZero() {
+		receiptAt = time.Now().UTC()
+	}
+	receiptSource = strings.TrimSpace(receiptSource)
+	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
+		"ok":                  true,
+		"mailbox_id":          runtimeOrderSendInstructionMailboxID(payload),
+		"mailbox_only":        true,
+		"delivery_state":      "delivered",
+		"delivery_receipt_at": receiptAt.Format(time.RFC3339Nano),
+		"receipt_source":      receiptSource,
+	})
+	return MarcarRuntimeOrderEstado(order.ID, "completada", resultado, "")
 }
 
 func completarRuntimeOrderSendInstructionDiferidaAMailbox(order *RuntimeOrder, payload map[string]any, reason string) error {
@@ -4243,12 +6307,38 @@ func completarRuntimeOrderSendInstructionDiferidaAMailbox(order *RuntimeOrder, p
 	if reason == "" {
 		reason = "mailbox retenido hasta runtime entregable"
 	}
+	mailboxID := runtimeOrderSendInstructionMailboxID(payload)
+	if mailboxID <= 0 {
+		existente, err := GetRuntimeMailboxByRuntimeOrderID(order.ID)
+		if err != nil {
+			return err
+		}
+		if existente != nil {
+			mailboxID = existente.ID
+		} else {
+			toAgente := stringFromMap(payload, "to_agente", order.Agente)
+			fromAgente := stringFromMap(payload, "from_agente", "server")
+			msgID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+				FromAgente:     fromAgente,
+				ToAgente:       toAgente,
+				ProyectoID:     order.ProyectoID,
+				RuntimeOrderID: &order.ID,
+				Kind:           "instruction",
+				PayloadJSON:    order.PayloadJSON,
+			})
+			if err != nil {
+				return err
+			}
+			mailboxID = msgID
+		}
+	}
 	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
 		"ok":              true,
-		"mailbox_id":      runtimeOrderSendInstructionMailboxID(payload),
+		"mailbox_id":      mailboxID,
 		"deferred":        true,
 		"deferred_reason": reason,
 		"mailbox_only":    true,
+		"delivery_state":  "delivered",
 	})
 	return MarcarRuntimeOrderEstado(order.ID, "completada", resultado, "")
 }
@@ -4425,38 +6515,22 @@ func resolverSesionYModeloRuntimeOrder(order *RuntimeOrder) (int64, string, erro
 	if order == nil {
 		return 0, "", nil
 	}
-	if order.HandleID != nil && *order.HandleID > 0 {
-		handle, err := GetRuntimeHandle(*order.HandleID)
-		if err != nil && err != sql.ErrNoRows {
-			return 0, "", err
-		}
-		if handle != nil && handle.SesionID != nil && *handle.SesionID > 0 {
-			model := ""
-			if handle.RuntimeID != nil && *handle.RuntimeID > 0 {
-				if runtime, err := GetRuntime(*handle.RuntimeID); err == nil && runtime != nil {
-					model = strings.TrimSpace(runtime.Model)
-				}
-			}
-			return *handle.SesionID, model, nil
-		}
-	}
-	if order.RuntimeID != nil && *order.RuntimeID > 0 {
-		runtime, err := GetRuntime(*order.RuntimeID)
-		if err != nil && err != sql.ErrNoRows {
-			return 0, "", err
-		}
-		if runtime != nil && runtime.SesionID != nil && *runtime.SesionID > 0 {
-			return *runtime.SesionID, strings.TrimSpace(runtime.Model), nil
-		}
-	}
-	sesion, err := GetSesionActiva(strings.TrimSpace(order.Agente), order.ProyectoID)
+	runtime, err := resolverRuntimeParaOrden(order)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return 0, "", nil
-		}
 		return 0, "", err
 	}
-	return sesion.ID, "", nil
+	model := ""
+	if runtime != nil {
+		model = strings.TrimSpace(runtime.Model)
+	}
+	sesion, err := resolverSesionParaOrden(order)
+	if err != nil {
+		return 0, "", err
+	}
+	if sesion != nil {
+		return sesion.ID, model, nil
+	}
+	return 0, model, nil
 }
 
 func identidadObservadaDesdeErrorProveedor(raw string) map[string]any {
@@ -4482,11 +6556,32 @@ func identidadObservadaDesdeErrorProveedor(raw string) map[string]any {
 }
 
 func identidadObservadaDesdeOrdenRuntime(order *RuntimeOrder) map[string]any {
-	if order == nil || order.HandleID == nil || *order.HandleID <= 0 {
+	if order == nil {
 		return nil
 	}
-	handle, err := GetRuntimeHandle(*order.HandleID)
-	if err != nil || handle == nil {
+	candidates := make([]*RuntimeHandle, 0, 2)
+	if order.HandleID != nil && *order.HandleID > 0 {
+		handle, err := GetRuntimeHandle(*order.HandleID)
+		if err == nil && handle != nil {
+			candidates = append(candidates, handle)
+		}
+	}
+	handle, err := resolverHandleParaOrden(order)
+	if err == nil && handle != nil {
+		if len(candidates) == 0 || candidates[0].ID != handle.ID {
+			candidates = append(candidates, handle)
+		}
+	}
+	for _, candidate := range candidates {
+		if observed := identidadObservadaDesdeHandleRuntime(candidate); observed != nil {
+			return observed
+		}
+	}
+	return nil
+}
+
+func identidadObservadaDesdeHandleRuntime(handle *RuntimeHandle) map[string]any {
+	if handle == nil {
 		return nil
 	}
 	meta := mapFromJSON(handle.MetadataJSON)
@@ -4565,16 +6660,7 @@ func objetivoProcesoParaOrden(order *RuntimeOrder) (controlruntime.ObjetivoProce
 	if err != nil {
 		return controlruntime.ObjetivoProceso{}, err
 	}
-	obj := controlruntime.ObjetivoProceso{}
-	if handle != nil {
-		obj.HandleKind = handle.HandleKind
-		obj.HandleRef = handle.HandleRef
-		obj.MetadataJSON = handle.MetadataJSON
-	}
-	if runtime != nil && (handle == nil || strings.TrimSpace(handle.HandleKind) == "" || strings.TrimSpace(handle.HandleKind) == "process") {
-		obj.PID = runtime.PID
-	}
-	return obj, nil
+	return objetivoProcesoDesdeHandleRuntimeOrden(order, handle, runtime), nil
 }
 
 func runtimeHandleID(handle *RuntimeHandle) any {
@@ -4611,8 +6697,15 @@ func payloadJSONDesdePlan(plan *runtimeagente.LaunchPlan) string {
 }
 
 func payloadJSONDesdePlanYResume(plan *runtimeagente.LaunchPlan, resume runtimeagente.ResumeContext) string {
-	_ = plan
-	return strings.TrimSpace(resume.ResumePayloadJSON)
+	if plan == nil {
+		return strings.TrimSpace(resume.ResumePayloadJSON)
+	}
+	return MergeResumePayloadPerfilEjecucion(
+		resume.ResumePayloadJSON,
+		strings.TrimSpace(plan.PerfilTarea),
+		strings.TrimSpace(plan.Modelo),
+		strings.TrimSpace(plan.Razonamiento),
+	)
 }
 
 func construirTranscriptArranque(plan *runtimeagente.LaunchPlan, resume runtimeagente.ResumeContext, bootstrap *bootstrapRuntimeData) string {
@@ -4739,15 +6832,42 @@ func actualizarHandleRuntimeArranque(handleID int64, arranque *controlruntime.Pr
 			handleRef = strings.TrimSpace(arranque.ExternalSessionID)
 		}
 	}
+	transporte := inferirTransporteArranque(arranque)
 	_, err := DB.Exec(`
 		UPDATE runtime_handles
-		SET handle_kind = ?,
+		SET transporte = ?,
+		    handle_kind = ?,
 		    handle_ref = ?,
 		    metadata_json = ?,
 		    capabilities_json = ?,
 		    last_seen_at = CURRENT_TIMESTAMP
-		WHERE id = ?`, handleKind, handleRef, string(metaJSON), string(capsJSON), handleID)
-	return err
+		WHERE id = ?`, transporte, handleKind, handleRef, string(metaJSON), string(capsJSON), handleID)
+	return runtimeHandleHotResetOnSuccess(err)
+}
+
+func inferirTransporteArranque(arranque *controlruntime.ProcesoArrancado) string {
+	if arranque == nil {
+		return ""
+	}
+	meta := mapFromJSON(arranque.MetadataJSON)
+	for _, candidate := range []string{
+		stringFromMap(meta, "transport", ""),
+		stringFromMap(meta, "transporte", ""),
+	} {
+		if value := strings.TrimSpace(candidate); value != "" {
+			return value
+		}
+	}
+	switch strings.TrimSpace(stringFromMap(meta, "driver", "")) {
+	case "tmux_cli_session":
+		return "tmux"
+	case "process_pty_cli":
+		return "cli"
+	}
+	if strings.TrimSpace(arranque.HandleKind) == "session" {
+		return "tmux"
+	}
+	return "cli"
 }
 
 func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int64, conectorRef, modelo, razonamiento, perfilTarea string) (*Agente, *Proyecto, *Conector, *Sesion, runtimeagente.ResumeContext, *bootstrapRuntimeData, *runtimeagente.LaunchPlan, error) {
@@ -4764,16 +6884,7 @@ func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int
 	if err != nil && err != sql.ErrNoRows {
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
 	}
-	conector, err := resolverConectorRuntimeOrder(conectorRef, ultima)
-	if err != nil {
-		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
-	}
-	perfilTarea, modelo, razonamiento, err = ResolverPerfilEjecucionLanzamiento(
-		strings.TrimSpace(proyecto.Slug),
-		perfilTarea,
-		modelo,
-		razonamiento,
-	)
+	conector, err := resolverConectorRuntimeOrder(strings.TrimSpace(agenteRef), conectorRef, ultima)
 	if err != nil {
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
 	}
@@ -4787,9 +6898,87 @@ func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int
 			CWD:                strings.TrimSpace(ultima.CWD),
 		}
 	}
+	perfilSolicitado := strings.TrimSpace(perfilTarea)
+	modeloSolicitado := strings.TrimSpace(modelo)
+	razonamientoSolicitado := strings.TrimSpace(razonamiento)
+	perfilPersistido, modeloPersistido, razonamientoPersistido := ResumePayloadPerfilEjecucion(resume.ResumePayloadJSON)
+	if perfilSolicitado == "" {
+		perfilSolicitado = perfilPersistido
+		perfilTarea = perfilPersistido
+	}
+	if modeloSolicitado == "" {
+		if !strings.Contains(modeloPersistido, "gpt-5") {
+			modeloSolicitado = modeloPersistido
+			modelo = modeloPersistido
+		}
+	}
+	if razonamientoSolicitado == "" {
+		if !strings.Contains(modeloPersistido, "gpt-5") {
+			razonamientoSolicitado = razonamientoPersistido
+			razonamiento = razonamientoPersistido
+		}
+	}
+	perfilTarea, modelo, razonamiento, err = ResolverPerfilEjecucionLanzamiento(
+		&agenteRef,
+		strings.TrimSpace(proyecto.Slug),
+		perfilTarea,
+		modelo,
+		razonamiento,
+	)
+	if err != nil {
+		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
+	}
+	perfilTarea, modelo, razonamiento, err = runtimeagente.AplicarDefaultsConector(
+		runtimeagente.ConnectorConfig{
+			Slug:         strings.TrimSpace(conector.Slug),
+			Nombre:       strings.TrimSpace(conector.Nombre),
+			Transporte:   strings.TrimSpace(conector.Transporte),
+			Comando:      strings.TrimSpace(conector.Comando),
+			ArgsJSON:     strings.TrimSpace(conector.ArgsJSON),
+			EnvJSON:      strings.TrimSpace(conector.EnvJSON),
+			MetadataJSON: strings.TrimSpace(conector.MetadataJSON),
+			Activo:       conector.Activo,
+		},
+		perfilSolicitado,
+		modeloSolicitado,
+		razonamientoSolicitado,
+		perfilTarea,
+		modelo,
+		razonamiento,
+	)
+	if err != nil {
+		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, fmt.Errorf("metadata_json inválido para '%s': %w", strings.TrimSpace(conector.Slug), err)
+	}
 	resume, bootstrap, err := prepararResumeBootstrapRuntime(strings.TrimSpace(agenteRef), proyecto, resume, excludeOrderID)
 	if err != nil {
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
+	}
+	resume.ResumePayloadJSON = MergeResumePayloadPerfilEjecucion(
+		resume.ResumePayloadJSON,
+		strings.TrimSpace(perfilTarea),
+		strings.TrimSpace(modelo),
+		strings.TrimSpace(razonamiento),
+	)
+	resume = runtimeagente.SanitizarResumeParaConector(runtimeagente.ConnectorConfig{
+		Slug:         strings.TrimSpace(conector.Slug),
+		Nombre:       strings.TrimSpace(conector.Nombre),
+		Transporte:   strings.TrimSpace(conector.Transporte),
+		Comando:      strings.TrimSpace(conector.Comando),
+		ArgsJSON:     strings.TrimSpace(conector.ArgsJSON),
+		EnvJSON:      strings.TrimSpace(conector.EnvJSON),
+		MetadataJSON: strings.TrimSpace(conector.MetadataJSON),
+		Activo:       conector.Activo,
+	}, resume)
+	if strings.TrimSpace(resume.ExternalSessionID) == "" &&
+		strings.TrimSpace(resume.ResumenContinuidad) == "" &&
+		strings.TrimSpace(resume.ResumePayloadJSON) == "" &&
+		(strings.TrimSpace(perfilTarea) != "" || strings.TrimSpace(modelo) != "" || strings.TrimSpace(razonamiento) != "") {
+		resume.ResumePayloadJSON = MergeResumePayloadPerfilEjecucion(
+			"",
+			strings.TrimSpace(perfilTarea),
+			strings.TrimSpace(modelo),
+			strings.TrimSpace(razonamiento),
+		)
 	}
 	plan, err := runtimeagente.DefaultRegistry().Prepare(runtimeagente.LaunchRequest{
 		Agente:       nombreAgenteRuntime(strings.TrimSpace(agenteRef), strings.TrimSpace(agente.Nombre)),
@@ -4818,7 +7007,20 @@ func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int
 	if err != nil {
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
 	}
-	if err := runtimeagente.ApplyLaunchPromptMetadata(plan, strings.TrimSpace(conector.MetadataJSON)); err != nil {
+	metadataJSONNormalizada, err := runtimeagente.NormalizeConnectorMetadataJSON(runtimeagente.ConnectorConfig{
+		Slug:         strings.TrimSpace(conector.Slug),
+		Nombre:       strings.TrimSpace(conector.Nombre),
+		Transporte:   strings.TrimSpace(conector.Transporte),
+		Comando:      strings.TrimSpace(conector.Comando),
+		ArgsJSON:     strings.TrimSpace(conector.ArgsJSON),
+		EnvJSON:      strings.TrimSpace(conector.EnvJSON),
+		MetadataJSON: strings.TrimSpace(conector.MetadataJSON),
+		Activo:       conector.Activo,
+	})
+	if err != nil {
+		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, fmt.Errorf("metadata_json inválido para '%s': %w", strings.TrimSpace(conector.Slug), err)
+	}
+	if err := runtimeagente.ApplyLaunchPromptMetadata(plan, metadataJSONNormalizada); err != nil {
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, fmt.Errorf("metadata_json inválido para '%s': %w", strings.TrimSpace(conector.Slug), err)
 	}
 	return agente, proyecto, conector, ultima, resume, bootstrap, plan, nil
@@ -4840,7 +7042,7 @@ func nombreAgenteRuntime(preferido, almacenado string) string {
 	return almacenado
 }
 
-func resolverConectorRuntimeOrder(conectorRef string, ultima *Sesion) (*Conector, error) {
+func resolverConectorRuntimeOrder(agenteNombre, conectorRef string, ultima *Sesion) (*Conector, error) {
 	ref := strings.TrimSpace(conectorRef)
 	if ref == "" && ultima != nil {
 		if strings.TrimSpace(ultima.ConectorSlug) != "" {
@@ -4850,7 +7052,7 @@ func resolverConectorRuntimeOrder(conectorRef string, ultima *Sesion) (*Conector
 		}
 	}
 	if ref == "" {
-		ref = "codex-cli"
+		ref = runtimeagente.ConectorPorDefectoAgente(agenteNombre)
 	}
 	return GetConector(ref)
 }
@@ -4989,10 +7191,13 @@ func revertBootstrapRuntimePreparation(bootstrap *bootstrapRuntimeData) error {
 		    claimed_by='',
 		    lease_token='',
 		    lease_expires_at=NULL,
-		    updated_at=CURRENT_TIMESTAMP
+		updated_at=CURRENT_TIMESTAMP
 		WHERE id = ?
 		  AND estado IN ('tomada','ejecutando')`, bootstrap.Order.ID)
-	return err
+	if err != nil {
+		return err
+	}
+	return runtimeOrdersHotIndexSyncByID(bootstrap.Order.ID)
 }
 
 func marcarRuntimeMailboxConsumidoPorIDs(ids []int64) error {
@@ -5244,6 +7449,18 @@ func runtimeBootstrapLeaseFromOrder(order *RuntimeOrder) (startOrderID int64, ma
 	return startOrderID, mailboxIDs, sesionID
 }
 
+func marcarRuntimeMailboxEntregadoPorIDs(ids []int64) error {
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		if err := MarcarRuntimeMailboxEntregado(id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func AckBootstrapRuntimeLease(startOrderID, bootstrapOrderID int64, mailboxIDs []int64, sesionID int64, ackSource string) error {
 	if startOrderID <= 0 && bootstrapOrderID <= 0 && len(mailboxIDs) == 0 {
 		return nil
@@ -5251,6 +7468,9 @@ func AckBootstrapRuntimeLease(startOrderID, bootstrapOrderID int64, mailboxIDs [
 	ackSource = strings.TrimSpace(ackSource)
 	if ackSource == "" {
 		ackSource = "agente_tick"
+	}
+	if err := marcarBootstrapRuntimeLeaseEntregado(startOrderID, bootstrapOrderID, mailboxIDs, sesionID, ackSource, time.Now().UTC()); err != nil {
+		return err
 	}
 	if err := marcarRuntimeMailboxConsumidoPorIDs(mailboxIDs); err != nil {
 		return err
@@ -5298,10 +7518,179 @@ func AckBootstrapRuntimeLease(startOrderID, bootstrapOrderID int64, mailboxIDs [
 	return nil
 }
 
+func marcarBootstrapRuntimeLeaseEntregado(startOrderID, bootstrapOrderID int64, mailboxIDs []int64, sesionID int64, ackSource string, deliveredAt time.Time) error {
+	if startOrderID <= 0 && bootstrapOrderID <= 0 && len(mailboxIDs) == 0 {
+		return nil
+	}
+	ackSource = strings.TrimSpace(ackSource)
+	if ackSource == "" {
+		ackSource = "agente_tick"
+	}
+	if deliveredAt.IsZero() {
+		deliveredAt = time.Now().UTC()
+	}
+	if err := marcarRuntimeMailboxEntregadoPorIDs(mailboxIDs); err != nil {
+		return err
+	}
+	if bootstrapOrderID > 0 {
+		order, err := GetRuntimeOrder(bootstrapOrderID)
+		if err != nil {
+			return err
+		}
+		if order != nil && order.Estado != "completada" && order.Estado != "fallida" && order.Estado != "cancelada" && order.Estado != "expirada" {
+			resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
+				"bootstrap":    true,
+				"delivered_by": ackSource,
+				"delivered_at": deliveredAt.Format(time.RFC3339Nano),
+				"lease_state":  "delivered",
+				"sesion_id":    sesionID,
+				"mailbox_ids":  mailboxIDs,
+			})
+			if err := MarcarRuntimeOrderEstado(order.ID, order.Estado, resultado, order.ErrorText); err != nil {
+				return err
+			}
+		}
+	}
+	if startOrderID > 0 {
+		order, err := GetRuntimeOrder(startOrderID)
+		if err != nil {
+			return err
+		}
+		if order != nil && order.Estado == "ejecutando" {
+			resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
+				"delivered_by":       ackSource,
+				"delivered_at":       deliveredAt.Format(time.RFC3339Nano),
+				"lease_state":        "delivered",
+				"sesion_id":          sesionID,
+				"bootstrap_order_id": bootstrapOrderID,
+				"bootstrap_mailbox":  mailboxIDs,
+			})
+			if err := MarcarRuntimeOrderEstado(order.ID, order.Estado, resultado, order.ErrorText); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+type bootstrapLeaseEvidence struct {
+	delivered   bool
+	deliveredAt time.Time
+	consumed    bool
+}
+
+func bootstrapRuntimeLeaseEvidence(handle *RuntimeHandle, runtime *RuntimeInstance, order, startOrder *RuntimeOrder) bootstrapLeaseEvidence {
+	snap := runtimeWorkerSnapshot(handle, runtime)
+	if snap == nil || !snap.Alive() || snap.IsHeartbeatStale(time.Now().UTC(), time.Minute) {
+		return bootstrapLeaseEvidence{}
+	}
+	baseline := runtimeBootstrapLeaseBaseline(order, startOrder)
+	deliveredAt := time.Time{}
+	if readyAt := snap.ReadyTime(); readyAt != nil {
+		deliveredAt = readyAt.UTC()
+	} else if hb := snap.HeartbeatTime(); hb != nil {
+		deliveredAt = hb.UTC()
+	} else if updated := snap.UpdatedTime(); updated != nil {
+		deliveredAt = updated.UTC()
+	} else if state := strings.ToLower(strings.TrimSpace(snap.EffectiveState())); state == "ready" || state == "running" || state == "starting" {
+		if hb := snap.HeartbeatTime(); hb != nil {
+			deliveredAt = hb.UTC()
+		} else if updated := snap.UpdatedTime(); updated != nil {
+			deliveredAt = updated.UTC()
+		}
+	}
+	if deliveredAt.IsZero() {
+		return bootstrapLeaseEvidence{}
+	}
+	if !baseline.IsZero() && deliveredAt.Before(baseline) {
+		return bootstrapLeaseEvidence{}
+	}
+	evidence := bootstrapLeaseEvidence{
+		delivered:   true,
+		deliveredAt: deliveredAt,
+	}
+	if progressAt := snap.LastProgressTime(); progressAt != nil {
+		progress := progressAt.UTC()
+		if baseline.IsZero() || progress.After(baseline) {
+			evidence.consumed = true
+		}
+	}
+	return evidence
+}
+
+func runtimeWorkerSnapshot(handle *RuntimeHandle, runtime *RuntimeInstance) *runtimeagente.WorkerSnapshot {
+	if handle == nil {
+		return nil
+	}
+	metaJSON := strings.TrimSpace(handle.MetadataJSON)
+	if metaJSON == "" {
+		return nil
+	}
+	if snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(metaJSON); err == nil && snap != nil {
+		return snap
+	}
+	return nil
+}
+
+func runtimeBootstrapLeaseBaseline(order, startOrder *RuntimeOrder) time.Time {
+	latest := time.Time{}
+	for _, candidate := range []time.Time{
+		func() time.Time {
+			if startOrder != nil && startOrder.StartedAt != nil {
+				return startOrder.StartedAt.UTC()
+			}
+			return time.Time{}
+		}(),
+		func() time.Time {
+			if order != nil && order.StartedAt != nil {
+				return order.StartedAt.UTC()
+			}
+			return time.Time{}
+		}(),
+		func() time.Time {
+			if startOrder != nil {
+				return startOrder.CreatedAt.UTC()
+			}
+			return time.Time{}
+		}(),
+		func() time.Time {
+			if order != nil {
+				return order.CreatedAt.UTC()
+			}
+			return time.Time{}
+		}(),
+	} {
+		if candidate.IsZero() {
+			continue
+		}
+		if latest.IsZero() || candidate.After(latest) {
+			latest = candidate
+		}
+	}
+	return latest
+}
+
 func AckBootstrapRuntimeLeaseByEvidence(handle *RuntimeHandle, runtime *RuntimeInstance, ackSource string) error {
 	order, startOrderID, mailboxIDs, sesionID, err := resolverBootstrapRuntimeLeasePendiente(handle, runtime)
 	if err != nil || order == nil {
 		return err
+	}
+	var startOrder *RuntimeOrder
+	if startOrderID > 0 {
+		startOrder, err = GetRuntimeOrder(startOrderID)
+		if err != nil {
+			return err
+		}
+	}
+	evidence := bootstrapRuntimeLeaseEvidence(handle, runtime, order, startOrder)
+	if !evidence.delivered {
+		return nil
+	}
+	if err := marcarBootstrapRuntimeLeaseEntregado(startOrderID, order.ID, mailboxIDs, sesionID, ackSource, evidence.deliveredAt); err != nil {
+		return err
+	}
+	if !evidence.consumed {
+		return nil
 	}
 	return AckBootstrapRuntimeLease(startOrderID, order.ID, mailboxIDs, sesionID, ackSource)
 }
@@ -5640,7 +8029,17 @@ func marcarOrigenHandoffPausado(origen string, sesionOrigen *Sesion, handleOrige
 		if _, err := DB.Exec(`UPDATE sesiones SET estado='pausada' WHERE id=?`, sesionOrigen.ID); err != nil {
 			return err
 		}
-		if runtime, err := GetRuntimeBySesionID(sesionOrigen.ID); err == nil && runtime != nil {
+		runtime, err := runtimeHandleRuntime(handleOrigen)
+		if err != nil {
+			return err
+		}
+		if runtime == nil {
+			runtime, err = GetRuntimeBySesionID(sesionOrigen.ID)
+			if err != nil {
+				return err
+			}
+		}
+		if runtime != nil {
 			if _, err := DB.Exec(`
 				UPDATE runtime_instances
 				SET logical_state='pausado',
@@ -5649,8 +8048,6 @@ func marcarOrigenHandoffPausado(origen string, sesionOrigen *Sesion, handleOrige
 				WHERE id=?`, runtime.ID); err != nil {
 				return err
 			}
-		} else if err != nil {
-			return err
 		}
 	}
 	if handleOrigen != nil {
@@ -5661,6 +8058,7 @@ func marcarOrigenHandoffPausado(origen string, sesionOrigen *Sesion, handleOrige
 			WHERE id=?`, handleOrigen.ID); err != nil {
 			return err
 		}
+		runtimeHandleHotReset()
 	}
 	detalle := fmt.Sprintf("origen=%s control_real=%t pid=%d", strings.TrimSpace(origen), aplicado, pid)
 	var handleID int64
@@ -5825,6 +8223,9 @@ func claimRuntimeOrderByID(id int64) (*RuntimeOrder, error) {
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	if err := runtimeOrdersHotIndexSyncByID(id); err != nil {
+		return nil, err
+	}
 	return GetRuntimeOrder(id)
 }
 
@@ -5832,13 +8233,21 @@ func resolverHandleParaOrden(order *RuntimeOrder) (*RuntimeHandle, error) {
 	if order == nil {
 		return nil, nil
 	}
+	var (
+		handle *RuntimeHandle
+		err    error
+	)
 	if order.HandleID != nil {
-		return GetRuntimeHandle(*order.HandleID)
+		handle, err = GetRuntimeHandle(*order.HandleID)
+		if err != nil {
+			return nil, err
+		}
 	}
-	if order.ProyectoID != nil {
-		return GetRuntimeHandleActivoAgenteProyecto(order.Agente, order.ProyectoID)
+	_, handle, err = resolverDestinoRuntimeOrderCanonico(order, nil, handle)
+	if err != nil || handle != nil {
+		return handle, err
 	}
-	return GetRuntimeHandleActivoAgente(order.Agente)
+	return runtimeHandleCanonicoRecienteConFallback(order.Agente, order.ProyectoID)
 }
 
 func resolverSesionParaOrden(order *RuntimeOrder) (*Sesion, error) {
@@ -5846,21 +8255,31 @@ func resolverSesionParaOrden(order *RuntimeOrder) (*Sesion, error) {
 		return nil, nil
 	}
 	if order.HandleID != nil {
-		handle, err := GetRuntimeHandle(*order.HandleID)
+		handle, err := resolverHandleParaOrden(order)
 		if err != nil {
 			return nil, err
 		}
 		if handle != nil && handle.SesionID != nil {
-			return GetSesionByID(*handle.SesionID)
+			sesion, err := sesionIfExists(handle.SesionID)
+			if err != nil {
+				return nil, err
+			}
+			if sesion != nil {
+				return sesion, nil
+			}
 		}
 	}
-	if order.RuntimeID != nil {
-		runtime, err := GetRuntime(*order.RuntimeID)
+	runtime, err := resolverRuntimeParaOrden(order)
+	if err != nil {
+		return nil, err
+	}
+	if runtime != nil && runtime.SesionID != nil {
+		sesion, err := sesionIfExists(runtime.SesionID)
 		if err != nil {
 			return nil, err
 		}
-		if runtime != nil && runtime.SesionID != nil {
-			return GetSesionByID(*runtime.SesionID)
+		if sesion != nil {
+			return sesion, nil
 		}
 	}
 	sesion, err := GetSesionActiva(order.Agente, order.ProyectoID)
@@ -5881,19 +8300,32 @@ func resolverRuntimeParaOrden(order *RuntimeOrder) (*RuntimeInstance, error) {
 	if order == nil {
 		return nil, nil
 	}
-	if order.RuntimeID != nil {
-		return GetRuntime(*order.RuntimeID)
-	}
+	var (
+		handle  *RuntimeHandle
+		runtime *RuntimeInstance
+		err     error
+	)
 	if order.HandleID != nil {
-		handle, err := GetRuntimeHandle(*order.HandleID)
-		if err != nil || handle == nil {
+		handle, err = GetRuntimeHandle(*order.HandleID)
+		if err != nil {
 			return nil, err
 		}
-		if handle.RuntimeID != nil {
-			return GetRuntime(*handle.RuntimeID)
-		}
-		if handle.SesionID != nil {
-			return GetRuntimeBySesionID(*handle.SesionID)
+	}
+	runtime, err = runtimeInstanceIfExists(order.RuntimeID)
+	if err != nil {
+		return nil, err
+	}
+	runtime, handle, err = resolverDestinoRuntimeOrderCanonico(order, runtime, handle)
+	if err != nil {
+		return nil, err
+	}
+	if runtime != nil {
+		return runtime, nil
+	}
+	if handle != nil {
+		runtime, err := runtimeHandleRuntime(handle)
+		if err != nil || runtime != nil {
+			return runtime, err
 		}
 	}
 	sesion, err := GetSesionActiva(order.Agente, order.ProyectoID)
@@ -5919,7 +8351,147 @@ func resolverRuntimeParaOrden(order *RuntimeOrder) (*RuntimeInstance, error) {
 	return runtimePrincipalAgenteProyecto(order.Agente, order.ProyectoID)
 }
 
+func runtimeInstanceIfExists(runtimeID *int64) (*RuntimeInstance, error) {
+	if runtimeID == nil || *runtimeID <= 0 {
+		return nil, nil
+	}
+	runtime, err := GetRuntime(*runtimeID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return runtime, err
+}
+
+func sesionIfExists(sesionID *int64) (*Sesion, error) {
+	if sesionID == nil || *sesionID <= 0 {
+		return nil, nil
+	}
+	sesion, err := GetSesionByID(*sesionID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return sesion, err
+}
+
+func resolverDestinoRuntimeOrderCanonico(order *RuntimeOrder, runtime *RuntimeInstance, handle *RuntimeHandle) (*RuntimeInstance, *RuntimeHandle, error) {
+	if order == nil {
+		return runtime, handle, nil
+	}
+	if handle != nil {
+		validado, err := validarRuntimeHandleActivo(handle, order.Agente, order.ProyectoID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if validado != nil && !runtimeHandleExcluidoDelActivoCanonico(validado) {
+			handle = validado
+			runtime, err = runtimeHandleRuntime(validado)
+			if err != nil {
+				return nil, nil, err
+			}
+			if err := refrescarRuntimeOrderDestinoCanonico(order, runtime, validado); err != nil {
+				return nil, nil, err
+			}
+			return runtime, validado, nil
+		}
+		if runtimeOrderConservaHandleExplicitoParaControl(order, handle) {
+			if runtime == nil {
+				runtime, err = runtimeHandleRuntime(handle)
+				if err != nil {
+					return nil, nil, err
+				}
+			}
+			return runtime, handle, nil
+		}
+		handle = nil
+		runtime = nil
+	}
+
+	var (
+		candidato *RuntimeHandle
+		err       error
+	)
+	candidato, err = runtimeHandleCanonicoRecienteConFallback(order.Agente, order.ProyectoID)
+	if err != nil || candidato == nil {
+		return runtime, handle, err
+	}
+	runtime, err = runtimeHandleRuntime(candidato)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := refrescarRuntimeOrderDestinoCanonico(order, runtime, candidato); err != nil {
+		return nil, nil, err
+	}
+	return runtime, candidato, nil
+}
+
+func runtimeOrderConservaHandleExplicitoParaControl(order *RuntimeOrder, handle *RuntimeHandle) bool {
+	if order == nil || handle == nil || order.HandleID == nil || *order.HandleID != handle.ID {
+		return false
+	}
+	if runtimeHandleExcluidoDelActivoCanonico(handle) {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(order.Tipo)) {
+	case "pause", "stop":
+		return true
+	case "resume":
+		return strings.EqualFold(strings.TrimSpace(handle.Estado), "pausado") || RuntimeHandlePauseRequiresFreshStart(handle)
+	default:
+		return false
+	}
+}
+
+func refrescarRuntimeOrderDestinoCanonico(order *RuntimeOrder, runtime *RuntimeInstance, handle *RuntimeHandle) error {
+	if order == nil || handle == nil {
+		return nil
+	}
+	runtimeID := int64(0)
+	if runtime != nil && runtime.ID > 0 {
+		runtimeID = runtime.ID
+	} else if resolvedRuntime, err := runtimeHandleRuntime(handle); err != nil {
+		return err
+	} else if resolvedRuntime != nil && resolvedRuntime.ID > 0 {
+		runtimeID = resolvedRuntime.ID
+	} else if handle.RuntimeID != nil && *handle.RuntimeID > 0 {
+		runtimeID = *handle.RuntimeID
+	}
+	changed := order.HandleID == nil || *order.HandleID != handle.ID
+	if !changed {
+		switch {
+		case runtimeID == 0 && order.RuntimeID != nil && *order.RuntimeID > 0:
+			changed = true
+		case runtimeID > 0 && (order.RuntimeID == nil || *order.RuntimeID != runtimeID):
+			changed = true
+		}
+	}
+	if changed && order.ID > 0 {
+		if err := actualizarRuntimeOrderDestino(order.ID, runtime, handle); err != nil {
+			return err
+		}
+	}
+	order.HandleID = &handle.ID
+	if runtimeID > 0 {
+		order.RuntimeID = &runtimeID
+	} else {
+		order.RuntimeID = nil
+	}
+	return nil
+}
+
 func runtimePrincipalAgenteProyecto(agente string, proyectoID *int64) (*RuntimeInstance, error) {
+	handle, err := runtimeHandleCanonicoRecienteConFallback(agente, proyectoID)
+	if err != nil {
+		return nil, err
+	}
+	if handle != nil {
+		runtime, err := runtimeHandleRuntime(handle)
+		if err != nil {
+			return nil, err
+		}
+		if runtime != nil {
+			return runtime, nil
+		}
+	}
 	q := runtimeSelectBase() + ` WHERE r.agente = ?`
 	args := []any{strings.TrimSpace(agente)}
 	if proyectoID != nil {
@@ -5949,12 +8521,24 @@ func runtimeOrderTiposDespachables() []string {
 		"resume",
 		"stop",
 		"restart",
-		"send_instruction",
 	}
+}
+
+func runtimeOrderTiposDiferibles() []string {
+	return []string{"send_instruction"}
 }
 
 func runtimeOrderTiposBootstrap() []string {
 	return []string{"handoff", "resume", "start"}
+}
+
+func runtimeOrderTipoBootstrap(tipo string) bool {
+	switch strings.TrimSpace(tipo) {
+	case "handoff", "resume", "start":
+		return true
+	default:
+		return false
+	}
 }
 
 func runtimeOrderTipoDespachable(tipo string) bool {
@@ -5966,13 +8550,61 @@ func runtimeOrderTipoDespachable(tipo string) bool {
 	}
 }
 
+func runtimeOrderBootstrapStaleCoveredByFollowup(order *RuntimeOrder) (bool, string, string, error) {
+	if order == nil {
+		return false, "", "", nil
+	}
+	tipo := strings.TrimSpace(order.Tipo)
+	if tipo != "handoff" && tipo != "resume" && tipo != "start" {
+		return false, "", "", nil
+	}
+	result := mapFromJSON(order.ResultadoJSON)
+	if len(result) == 0 {
+		return false, "", "", nil
+	}
+	startOrderID := int64FromAny(result["start_order_id"])
+	if startOrderID <= 0 || startOrderID == order.ID {
+		return false, "", "", nil
+	}
+	startOrder, err := GetRuntimeOrder(startOrderID)
+	if err != nil {
+		return false, "", "", err
+	}
+	if startOrder == nil {
+		return false, "", "", nil
+	}
+	if !startOrder.CreatedAt.IsZero() && !order.CreatedAt.IsZero() && startOrder.CreatedAt.Before(order.CreatedAt) {
+		return false, "", "", nil
+	}
+	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
+		"ok":                true,
+		"obsoleta":          true,
+		"superseded":        true,
+		"superseded_reason": "bootstrap_followup_order_exists",
+		"start_order_id":    startOrderID,
+	})
+	return true, resultado, "bootstrap cubierto por start_order_id más reciente", nil
+}
+
 func reconciliarRuntimeOrderStale(id int64, tipo string, now, cutoff time.Time) (bool, error) {
+	order, err := GetRuntimeOrder(id)
+	if err != nil {
+		return false, err
+	}
+	if covered, resultado, detalle, coveredErr := runtimeOrderBootstrapStaleCoveredByFollowup(order); coveredErr != nil {
+		return false, coveredErr
+	} else if covered {
+		if err := MarcarRuntimeOrderEstado(id, "completada", resultado, detalle); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
 	var (
-		res sql.Result
-		err error
+		res     sql.Result
+		execErr error
 	)
 	if runtimeOrderTipoDespachable(tipo) {
-		res, err = DB.Exec(`
+		res, execErr = DB.Exec(`
 			UPDATE runtime_orders
 			SET estado = 'pendiente',
 			    started_at = NULL,
@@ -5992,7 +8624,7 @@ func reconciliarRuntimeOrderStale(id int64, tipo string, now, cutoff time.Time) 
 			     OR COALESCE(started_at, updated_at, created_at) <= ?
 			  )`, id, now, cutoff)
 	} else {
-		res, err = DB.Exec(`
+		res, execErr = DB.Exec(`
 			UPDATE runtime_orders
 			SET estado = 'expirada',
 			    finished_at = CURRENT_TIMESTAMP,
@@ -6010,8 +8642,8 @@ func reconciliarRuntimeOrderStale(id int64, tipo string, now, cutoff time.Time) 
 			     OR COALESCE(started_at, updated_at, created_at) <= ?
 			  )`, id, now, cutoff)
 	}
-	if err != nil {
-		return false, err
+	if execErr != nil {
+		return false, execErr
 	}
 	rows, _ := res.RowsAffected()
 	return rows > 0, nil
@@ -6340,23 +8972,51 @@ func runtimeHandlePreservesExternalSession(handle *RuntimeHandle) bool {
 	return false
 }
 
+func RuntimeHandlePauseRequiresFreshStart(handle *RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if !strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "driver", "")), "tmux_cli_session") {
+		return false
+	}
+	if runtimeHandlePreservesExternalSession(handle) {
+		return false
+	}
+	return RuntimeHandleMailboxDeliveryMode(handle) == runtimeagente.MailboxDeliveryBootstrapOnly
+}
+
 func RuntimeHandleMailboxDeliveryMode(handle *RuntimeHandle) string {
 	if handle == nil {
 		return runtimeagente.MailboxDeliveryInteractive
 	}
 	meta := mapFromJSON(handle.MetadataJSON)
 	caps := mapFromJSON(handle.CapabilitiesJSON)
-	if RuntimeHandlePermiteEntregaCalienteSupervisada(handle) {
-		if mode := runtimeagente.NormalizeMailboxDeliveryMode(stringFromMap(caps, "mailbox_delivery_mode", "")); mode != "" {
-			return mode
+	legacyTMUXPreferredCLI := runtimeHandleUsaLegacyCLITMUXPreferred(meta)
+	externalSessionReady := runtimeHandleTieneExternalSessionID(handle, nil)
+	localCLIBrokerNoInteractive := runtimeHandleUsaTMUXPreferredCLI(meta) && !RuntimeHandlePermiteSendInputInteractivo(handle)
+	normalizeMode := func(raw string) string {
+		mode := runtimeagente.NormalizeMailboxDeliveryMode(raw)
+		if mode == "" {
+			return ""
 		}
-		if mode := runtimeagente.NormalizeMailboxDeliveryMode(stringFromMap(meta, "mailbox_delivery_mode", "")); mode != "" {
-			return mode
+		if mode == runtimeagente.MailboxDeliverySessionResume && !externalSessionReady {
+			return runtimeagente.MailboxDeliveryBootstrapOnly
 		}
-		return runtimeagente.MailboxDeliveryBootstrapOnly
+		if legacyTMUXPreferredCLI && mode == runtimeagente.MailboxDeliveryInteractive {
+			return runtimeagente.MailboxDeliveryBootstrapOnly
+		}
+		return mode
 	}
-	if runtimeHandleUsaCodexTTYInestable(meta) && runtimeHandleTieneExternalSessionID(handle, nil) {
-		return runtimeagente.MailboxDeliverySessionResume
+	explicitMode := normalizeMode(stringFromMap(caps, "mailbox_delivery_mode", ""))
+	if explicitMode == "" {
+		explicitMode = normalizeMode(stringFromMap(meta, "mailbox_delivery_mode", ""))
+	}
+	if explicitMode != "" {
+		return explicitMode
+	}
+	if localCLIBrokerNoInteractive {
+		return runtimeagente.MailboxDeliveryBootstrapOnly
 	}
 	if runtimeHandleUsaCodexTTYInestable(meta) &&
 		!boolFromMap(meta, "mailbox_restart_safe") &&
@@ -6364,16 +9024,31 @@ func RuntimeHandleMailboxDeliveryMode(handle *RuntimeHandle) string {
 		!RuntimeHandlePermiteSendInputInteractivo(handle) {
 		return runtimeagente.MailboxDeliveryBootstrapOnly
 	}
-	if mode := runtimeagente.NormalizeMailboxDeliveryMode(stringFromMap(caps, "mailbox_delivery_mode", "")); mode != "" {
-		return mode
-	}
-	if mode := runtimeagente.NormalizeMailboxDeliveryMode(stringFromMap(meta, "mailbox_delivery_mode", "")); mode != "" {
-		return mode
-	}
 	if !RuntimeHandlePermiteSendInputInteractivo(handle) {
 		return runtimeagente.MailboxDeliveryBootstrapOnly
 	}
 	return runtimeagente.MailboxDeliveryInteractive
+}
+
+func runtimeHandleUsaTMUXPreferredCLI(meta map[string]any) bool {
+	if runtimeHandleUsaLegacyCLITMUXPreferred(meta) {
+		return true
+	}
+	if meta == nil {
+		return false
+	}
+	for _, candidate := range []string{
+		stringFromMap(meta, "rendered_command", ""),
+		stringFromMap(meta, "wrapped_command", ""),
+		stringFromMap(meta, "herramienta", ""),
+		stringFromMap(meta, "conector", ""),
+		stringFromMap(meta, "profile_status_wrapper", ""),
+	} {
+		if runtimeOrderUsaCLITMUXPreferred(candidate) {
+			return true
+		}
+	}
+	return false
 }
 
 func runtimeHandleTieneExternalSessionID(handle *RuntimeHandle, runtime *RuntimeInstance) bool {
@@ -6387,7 +9062,7 @@ func runtimeHandleTieneExternalSessionID(handle *RuntimeHandle, runtime *Runtime
 		return true
 	}
 	if handle.SesionID != nil {
-		sesion, err := GetSesionByID(*handle.SesionID)
+		sesion, err := sesionIfExists(handle.SesionID)
 		if err == nil && sesion != nil && strings.TrimSpace(sesion.ExternalSessionID) != "" {
 			return true
 		}
@@ -6407,6 +9082,9 @@ func RuntimeHandlePermiteSendInputInteractivo(handle *RuntimeHandle) bool {
 	if _, ok := meta["can_send_input"]; ok && !boolFromMap(meta, "can_send_input") {
 		return false
 	}
+	if runtimeHandleUsaLegacyCLITMUXPreferred(meta) {
+		return false
+	}
 	if runtimeHandleUsaCodexTTYInestable(meta) {
 		return false
 	}
@@ -6416,128 +9094,195 @@ func RuntimeHandlePermiteSendInputInteractivo(handle *RuntimeHandle) bool {
 	return true
 }
 
-func RuntimeHandlePermiteEntregaCalienteSupervisada(handle *RuntimeHandle) bool {
+func runtimeHandleUsaCodexTTYInestable(meta map[string]any) bool {
+	if runtimeHandleUsaLegacyCLITMUXPreferred(meta) {
+		return true
+	}
+	if meta == nil {
+		return false
+	}
+	for _, candidate := range []string{
+		stringFromMap(meta, "herramienta", ""),
+		stringFromMap(meta, "conector", ""),
+		stringFromMap(meta, "profile_status_wrapper", ""),
+	} {
+		if runtimeHandleLooksLikeCodexCLIRef(candidate) {
+			return true
+		}
+	}
+	for _, candidate := range []string{
+		stringFromMap(meta, "rendered_command", ""),
+		stringFromMap(meta, "wrapped_command", ""),
+	} {
+		if runtimeHandleLooksLikeCodexCommand(candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeHandleLooksLikeCodexCLIRef(ref string) bool {
+	lower := strings.ToLower(strings.TrimSpace(ref))
+	if lower == "" {
+		return false
+	}
+	switch lower {
+	case "codex", "codex-cli":
+		return true
+	}
+	base := filepath.Base(strings.Trim(lower, "'\""))
+	return strings.HasPrefix(base, "codex-perfil")
+}
+
+func runtimeHandleLooksLikeCodexCommand(rendered string) bool {
+	lower := strings.ToLower(strings.TrimSpace(rendered))
+	if lower == "" {
+		return false
+	}
+	if lower == "codex" || strings.HasPrefix(lower, "codex ") || strings.Contains(lower, "codex-perfil") {
+		return true
+	}
+	first := lower
+	if fields := strings.Fields(lower); len(fields) > 0 {
+		first = fields[0]
+	}
+	first = strings.Trim(first, "'\"")
+	base := filepath.Base(first)
+	return base == "codex" || base == "codex-cli" || strings.HasPrefix(base, "codex-perfil")
+}
+
+func runtimeOrderBloqueaFallbackPID(order *RuntimeOrder, runtime *RuntimeInstance, handle *RuntimeHandle) bool {
+	if handle != nil {
+		meta := mapFromJSON(handle.MetadataJSON)
+		driver, transport := runtimeHandleDriverTransportObserved(handle)
+		if strings.EqualFold(transport, "tmux") ||
+			strings.EqualFold(driver, "tmux_cli_session") ||
+			runtimeHandleUsaLegacyCLITMUXPreferred(meta) {
+			return true
+		}
+	}
+	if runtime != nil && runtimeOrderUsaCLITMUXPreferred(runtime.Connector) {
+		return true
+	}
+	sesion, err := resolverSesionParaOrden(order)
+	if err == nil && sesion != nil && runtimeOrderUsaCLITMUXPreferred(connectorDesdeSesion(sesion), sesion.Herramienta) {
+		return true
+	}
+	return false
+}
+
+func runtimeOrderUsaCLITMUXPreferred(refs ...string) bool {
+	for _, ref := range refs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			continue
+		}
+		if controlruntime.RenderedCommandLooksLikeTMUXPreferredCLI(ref) {
+			return true
+		}
+		lower := strings.ToLower(ref)
+		if strings.Contains(lower, "codex") || strings.Contains(lower, "claude") || strings.Contains(lower, "gemini") {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeHandleBloqueaFallbackPID(handle *RuntimeHandle) bool {
 	if handle == nil {
 		return false
 	}
+	driver, transport := runtimeHandleDriverTransportObserved(handle)
 	meta := mapFromJSON(handle.MetadataJSON)
-	if !strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "driver", "")), "process_pty_cli") {
-		return false
-	}
-	if strings.TrimSpace(stringFromMap(meta, "stdin_path", "")) == "" {
-		return false
-	}
-	if strings.TrimSpace(stringFromMap(meta, "supervisor_ref", "")) == "" {
-		return false
-	}
-	if boolFromMap(meta, "disable_supervisor_hot_input") {
-		return false
-	}
-	if runtimeHandleUsaCodexTTYInestable(meta) {
+	if strings.EqualFold(transport, "tmux") ||
+		strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") ||
+		strings.EqualFold(driver, "tmux_cli_session") ||
+		runtimeHandleUsaLegacyProcessPTY(meta) {
 		return true
 	}
-	return true
+	return false
 }
 
-func DeshabilitarEntregaCalienteSupervisadaHandle(handle *RuntimeHandle, reason string, transcriptID int64) (*RuntimeHandle, error) {
-	if handle == nil || handle.ID <= 0 {
-		return handle, nil
-	}
-	meta := mapFromJSON(handle.MetadataJSON)
-	if meta == nil {
-		meta = map[string]any{}
-	}
-	if !RuntimeHandlePermiteEntregaCalienteSupervisada(handle) && !boolFromMap(meta, "disable_supervisor_hot_input") {
-		return handle, nil
-	}
-	if boolFromMap(meta, "disable_supervisor_hot_input") {
-		return handle, nil
-	}
-	meta["disable_supervisor_hot_input"] = true
-	reason = strings.TrimSpace(reason)
-	if reason != "" {
-		meta["disable_supervisor_hot_input_reason"] = reason
-	}
-	if transcriptID > 0 {
-		meta["disable_supervisor_hot_input_transcript_id"] = transcriptID
-	}
-	meta["disable_supervisor_hot_input_at"] = time.Now().UTC().Format(time.RFC3339)
-	metaJSON, _ := json.Marshal(meta)
-	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, string(metaJSON), handle.ID); err != nil {
-		return nil, err
-	}
-	return GetRuntimeHandle(handle.ID)
-}
-
-func RehabilitarEntregaCalienteSupervisadaHandleSiProcede(handle *RuntimeHandle) (*RuntimeHandle, bool, error) {
-	if handle == nil || handle.ID <= 0 {
-		return handle, false, nil
-	}
-	meta := mapFromJSON(handle.MetadataJSON)
-	if !boolFromMap(meta, "disable_supervisor_hot_input") {
-		return handle, false, nil
-	}
-	cooldownSeconds := configIntOrDefault("runtime_supervisor_hot_input_disable_seconds", 900)
-	if cooldownSeconds <= 0 {
-		cooldownSeconds = 900
-	}
-	disableAtRaw := strings.TrimSpace(stringFromMap(meta, "disable_supervisor_hot_input_at", ""))
-	if disableAtRaw == "" {
-		return handle, false, nil
-	}
-	disableAt, err := time.Parse(time.RFC3339, disableAtRaw)
-	if err != nil {
-		if parsed, altErr := time.Parse(time.RFC3339Nano, disableAtRaw); altErr == nil {
-			disableAt = parsed
+func objetivoProcesoDesdeHandleRuntimeOrden(order *RuntimeOrder, handle *RuntimeHandle, runtime *RuntimeInstance) controlruntime.ObjetivoProceso {
+	obj := controlruntime.ObjetivoProceso{}
+	blockedPID := runtimeHandleBloqueaFallbackPID(handle)
+	if handle != nil {
+		driver, transport := runtimeHandleDriverTransportObserved(handle)
+		if strings.EqualFold(transport, "tmux") || strings.EqualFold(driver, "tmux_cli_session") {
+			obj.HandleKind = "session"
+			obj.HandleRef = runtimeHandleTMUXSessionRefObserved(handle)
 		} else {
-			return handle, false, nil
+			obj.HandleKind = handle.HandleKind
+			obj.HandleRef = handle.HandleRef
+		}
+		obj.MetadataJSON = handle.MetadataJSON
+	}
+	if runtime != nil &&
+		runtime.PID != nil &&
+		*runtime.PID > 0 &&
+		!blockedPID &&
+		!runtimeOrderBloqueaFallbackPID(order, runtime, handle) &&
+		(handle == nil || strings.TrimSpace(obj.HandleKind) == "" || strings.TrimSpace(obj.HandleKind) == "process") {
+		obj.PID = runtime.PID
+	}
+	return obj
+}
+
+func objetivoProcesoDesdeHandleRuntime(handle *RuntimeHandle, runtime *RuntimeInstance) controlruntime.ObjetivoProceso {
+	return objetivoProcesoDesdeHandleRuntimeOrden(nil, handle, runtime)
+}
+
+func runtimeHandleDriverTransportObserved(handle *RuntimeHandle) (string, string) {
+	if handle == nil {
+		return "", ""
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	driver := strings.TrimSpace(stringFromMap(meta, "driver", ""))
+	transport := strings.TrimSpace(handle.Transporte)
+	if transport == "" {
+		transport = strings.TrimSpace(stringFromMap(meta, "transport", ""))
+	}
+	if snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON); err == nil && snap != nil {
+		if value := strings.TrimSpace(snap.Driver()); value != "" {
+			driver = value
+		}
+		if value := strings.TrimSpace(snap.Transport()); value != "" {
+			transport = value
 		}
 	}
-	if time.Since(disableAt.UTC()) < time.Duration(cooldownSeconds)*time.Second {
-		return handle, false, nil
+	if transport == "" && strings.EqualFold(driver, "tmux_cli_session") {
+		transport = "tmux"
 	}
-	delete(meta, "disable_supervisor_hot_input")
-	delete(meta, "disable_supervisor_hot_input_reason")
-	delete(meta, "disable_supervisor_hot_input_transcript_id")
-	delete(meta, "disable_supervisor_hot_input_at")
-	compactarMetadataRuntimeHandle(meta)
-	metaJSON, _ := json.Marshal(meta)
-	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, string(metaJSON), handle.ID); err != nil {
-		return nil, false, err
-	}
-	fresh, err := GetRuntimeHandle(handle.ID)
-	if err != nil {
-		return nil, false, err
-	}
-	return fresh, true, nil
+	return strings.ToLower(driver), strings.ToLower(transport)
 }
 
-func runtimeHandleUsaCodexTTYInestable(meta map[string]any) bool {
+func runtimeHandleUsaLegacyCLITMUXPreferred(meta map[string]any) bool {
+	if meta == nil {
+		return false
+	}
+	if !runtimeHandleUsaLegacyProcessPTY(meta) {
+		return false
+	}
 	for _, candidate := range []string{
 		stringFromMap(meta, "rendered_command", ""),
 		stringFromMap(meta, "wrapped_command", ""),
 		stringFromMap(meta, "herramienta", ""),
 		stringFromMap(meta, "conector", ""),
+		stringFromMap(meta, "profile_status_wrapper", ""),
 	} {
-		text := strings.ToLower(strings.TrimSpace(candidate))
-		if text == "" {
+		if !controlruntime.RenderedCommandLooksLikeTMUXPreferredCLI(candidate) {
 			continue
 		}
-		first := text
-		if fields := strings.Fields(text); len(fields) > 0 {
-			first = fields[0]
-		}
-		base := filepath.Base(first)
-		if strings.Contains(text, "codex-perfil") ||
-			strings.Contains(text, "/codex") ||
-			base == "codex" ||
-			base == "codex-cli" ||
-			strings.HasPrefix(text, "codex ") ||
-			strings.Contains(text, "codex-cli") {
-			return true
-		}
+		return true
 	}
 	return false
+}
+
+func runtimeHandleUsaLegacyProcessPTY(meta map[string]any) bool {
+	if meta == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "driver", "")), "process_pty_cli")
 }
 
 func runtimeHandleLocalProcesoSinCanalInteractivo(handle *RuntimeHandle, meta map[string]any) bool {
@@ -6595,6 +9340,7 @@ func SincronizarRuntimeHandleExternalSessionID(handle *RuntimeHandle, runtime *R
 		if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, string(metaJSON), handle.ID); err != nil {
 			return nil, "", err
 		}
+		runtimeHandleHotReset()
 	}
 	if runtime != nil && runtime.ID > 0 && strings.TrimSpace(runtime.ExternalSessionID) != externalSessionID {
 		if _, err := DB.Exec(`UPDATE runtime_instances SET external_session_id=?, last_event_at=CURRENT_TIMESTAMP WHERE id=?`, externalSessionID, runtime.ID); err != nil {
@@ -6636,8 +9382,8 @@ func SincronizarRuntimeHandleSupervisado(handle *RuntimeHandle, runtime *Runtime
 			if refreshedRuntime, err := GetRuntime(runtime.ID); err == nil && refreshedRuntime != nil {
 				runtime = refreshedRuntime
 			}
-		} else if handle != nil && handle.RuntimeID != nil {
-			if refreshedRuntime, err := GetRuntime(*handle.RuntimeID); err == nil && refreshedRuntime != nil {
+		} else if handle != nil {
+			if refreshedRuntime, err := runtimeHandleRuntime(handle); err == nil && refreshedRuntime != nil {
 				runtime = refreshedRuntime
 			}
 		}
@@ -6646,15 +9392,67 @@ func SincronizarRuntimeHandleSupervisado(handle *RuntimeHandle, runtime *Runtime
 	if err != nil {
 		return nil, nil, "", err
 	}
+	handle, err = normalizarRuntimeHandleTMUXCanonico(handle)
+	if err != nil {
+		return nil, nil, "", err
+	}
 	handle, err = compactarMetadataHandleRuntimePersistida(handle)
 	if err != nil {
 		return nil, nil, "", err
 	}
-	handle, _, err = RehabilitarEntregaCalienteSupervisadaHandleSiProcede(handle)
-	if err != nil {
-		return nil, nil, "", err
-	}
 	return handle, runtime, externalSessionID, nil
+}
+
+func normalizarRuntimeHandleTMUXCanonico(handle *RuntimeHandle) (*RuntimeHandle, error) {
+	if handle == nil || handle.ID <= 0 {
+		return handle, nil
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	driver := strings.TrimSpace(stringFromMap(meta, "driver", ""))
+	transport := strings.TrimSpace(stringFromMap(meta, "transport", ""))
+	snap, snapErr := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
+	if snapErr == nil && snap != nil {
+		if driver == "" {
+			driver = strings.TrimSpace(snap.Driver())
+		}
+		if transport == "" {
+			transport = strings.TrimSpace(snap.Transport())
+		}
+	}
+	if !strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
+		!strings.EqualFold(driver, "tmux_cli_session") &&
+		!strings.EqualFold(transport, "tmux") &&
+		!runtimeHandleEsTMUXCanonico(handle) {
+		return handle, nil
+	}
+	canonicalRef := runtimeHandleTMUXSessionRefObserved(handle)
+	if canonicalRef == "" {
+		if snapErr != nil {
+			return handle, nil
+		}
+		if snap != nil {
+			canonicalRef = strings.TrimSpace(snap.RuntimeRef())
+		}
+	}
+	if canonicalRef == "" {
+		return handle, nil
+	}
+	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
+		strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") &&
+		strings.TrimSpace(handle.HandleRef) == canonicalRef {
+		return handle, nil
+	}
+	if _, err := DB.Exec(`
+		UPDATE runtime_handles
+		SET transporte='tmux',
+		    handle_kind='session',
+		    handle_ref=?,
+		    last_seen_at=CURRENT_TIMESTAMP
+		WHERE id=?`, canonicalRef, handle.ID); err != nil {
+		return nil, err
+	}
+	runtimeHandleHotReset()
+	return getRuntimeHandleRaw(handle.ID)
 }
 
 func compactarMetadataHandleRuntimePersistida(handle *RuntimeHandle) (*RuntimeHandle, error) {
@@ -6674,6 +9472,7 @@ func compactarMetadataHandleRuntimePersistida(handle *RuntimeHandle) (*RuntimeHa
 	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, string(after), handle.ID); err != nil {
 		return nil, err
 	}
+	runtimeHandleHotReset()
 	return getRuntimeHandleRaw(handle.ID)
 }
 
@@ -6709,6 +9508,7 @@ func SincronizarRuntimeHandleWorkingDir(handle *RuntimeHandle, runtime *RuntimeI
 		if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, string(metaJSON), handle.ID); err != nil {
 			return nil, "", err
 		}
+		runtimeHandleHotReset()
 	}
 	if runtime != nil && runtime.ID > 0 && strings.TrimSpace(runtime.CWD) != preferred {
 		if _, err := DB.Exec(`UPDATE runtime_instances SET cwd=?, last_event_at=CURRENT_TIMESTAMP WHERE id=?`, preferred, runtime.ID); err != nil {
@@ -6741,8 +9541,8 @@ func runtimeHandleEffectiveExternalSessionID(handle *RuntimeHandle, runtime *Run
 		return strings.TrimSpace(runtime.ExternalSessionID), nil
 	}
 	if handle.SesionID != nil && *handle.SesionID > 0 {
-		sesion, err := GetSesionByID(*handle.SesionID)
-		if err != nil && err != sql.ErrNoRows {
+		sesion, err := sesionIfExists(handle.SesionID)
+		if err != nil {
 			return "", err
 		}
 		if sesion != nil && strings.TrimSpace(sesion.ExternalSessionID) != "" {
@@ -6754,14 +9554,7 @@ func runtimeHandleEffectiveExternalSessionID(handle *RuntimeHandle, runtime *Run
 			return strings.TrimSpace(sample.SessionRef), nil
 		}
 	}
-	obj := controlruntime.ObjetivoProceso{
-		HandleKind:   handle.HandleKind,
-		HandleRef:    handle.HandleRef,
-		MetadataJSON: handle.MetadataJSON,
-	}
-	if runtime != nil && runtime.PID != nil && *runtime.PID > 0 {
-		obj.PID = runtime.PID
-	}
+	obj := objetivoProcesoDesdeHandleRuntime(handle, runtime)
 	return controlruntime.DetectExternalSessionID(obj)
 }
 

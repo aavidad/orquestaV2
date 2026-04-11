@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -50,6 +51,11 @@ type FiltroRuntimeTranscript struct {
 
 var ansiTranscriptRegexp = regexp.MustCompile(`\x1b\[[0-9;?<]*[ -/]*[@-~]`)
 var oscTranscriptRegexp = regexp.MustCompile(`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
+
+var runtimeTranscriptHotIdleState struct {
+	mu              sync.Mutex
+	failedHandleDue map[int64]time.Time
+}
 
 func RegistrarRuntimeTranscript(entry *RuntimeTranscriptEntry) (int64, error) {
 	if entry == nil {
@@ -264,8 +270,12 @@ func IngestarRuntimeTranscriptActivos() (int, error) {
 		return 0, err
 	}
 	total := 0
+	now := time.Now().UTC()
 	for _, handle := range handles {
 		if handle == nil {
+			continue
+		}
+		if runtimeTranscriptHotIdleSkip(handle, now) {
 			continue
 		}
 		n, err := ingestarRuntimeTranscriptHandle(handle)
@@ -330,14 +340,17 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 	if handle == nil {
 		return 0, nil
 	}
+	now := time.Now().UTC()
 	meta := mapFromJSON(handle.MetadataJSON)
 	logPath := strings.TrimSpace(stringFromMap(meta, "log_path", ""))
 	if logPath == "" {
+		runtimeTranscriptHotIdleClear(handle)
 		return 0, nil
 	}
 	info, err := os.Stat(logPath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			runtimeTranscriptHotIdleRemember(handle, now)
 			return 0, nil
 		}
 		return 0, err
@@ -354,6 +367,11 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 	}
 	remaining := info.Size() - offset
 	if remaining <= 0 {
+		if pending == "" {
+			runtimeTranscriptHotIdleRemember(handle, now)
+		} else {
+			runtimeTranscriptHotIdleClear(handle)
+		}
 		return 0, nil
 	}
 	if remaining > int64(readMax) {
@@ -371,6 +389,7 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 		return 0, err
 	}
 	if n == 0 {
+		runtimeTranscriptHotIdleRemember(handle, now)
 		return 0, nil
 	}
 	runtime, err := resolverRuntimeTranscript(handle, nil)
@@ -438,6 +457,11 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 			return total, err
 		}
 	}
+	if total > 0 || pending != "" {
+		runtimeTranscriptHotIdleClear(handle)
+	} else {
+		runtimeTranscriptHotIdleRemember(handle, now)
+	}
 
 	meta["transcript_log_offset"] = offset
 	if pending != "" {
@@ -450,6 +474,7 @@ func ingestarRuntimeTranscriptHandle(handle *RuntimeHandle) (int, error) {
 	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json = ? WHERE id = ?`, string(metaJSON), handle.ID); err != nil {
 		return total, err
 	}
+	runtimeHandleHotReset()
 	return total, nil
 }
 
@@ -483,6 +508,64 @@ func compactarPendingTranscript(raw string) string {
 		return ""
 	}
 	return raw
+}
+
+func runtimeTranscriptHotIdleSkip(handle *RuntimeHandle, now time.Time) bool {
+	if handle == nil || handle.ID <= 0 || !runtimeTranscriptHandleAdmiteIdle(handle) {
+		return false
+	}
+	runtimeTranscriptHotIdleState.mu.Lock()
+	defer runtimeTranscriptHotIdleState.mu.Unlock()
+	if runtimeTranscriptHotIdleState.failedHandleDue == nil {
+		return false
+	}
+	due := runtimeTranscriptHotIdleState.failedHandleDue[handle.ID]
+	return !due.IsZero() && now.Before(due)
+}
+
+func runtimeTranscriptHotIdleRemember(handle *RuntimeHandle, now time.Time) {
+	if handle == nil || handle.ID <= 0 {
+		return
+	}
+	if !runtimeTranscriptHandleAdmiteIdle(handle) {
+		runtimeTranscriptHotIdleClear(handle)
+		return
+	}
+	runtimeTranscriptHotIdleState.mu.Lock()
+	defer runtimeTranscriptHotIdleState.mu.Unlock()
+	if runtimeTranscriptHotIdleState.failedHandleDue == nil {
+		runtimeTranscriptHotIdleState.failedHandleDue = map[int64]time.Time{}
+	}
+	runtimeTranscriptHotIdleState.failedHandleDue[handle.ID] = now.Add(runtimeTranscriptFailedIdleCooldown())
+}
+
+func runtimeTranscriptHotIdleClear(handle *RuntimeHandle) {
+	if handle == nil || handle.ID <= 0 {
+		return
+	}
+	runtimeTranscriptHotIdleState.mu.Lock()
+	defer runtimeTranscriptHotIdleState.mu.Unlock()
+	if runtimeTranscriptHotIdleState.failedHandleDue == nil {
+		return
+	}
+	delete(runtimeTranscriptHotIdleState.failedHandleDue, handle.ID)
+}
+
+func runtimeTranscriptFailedIdleCooldown() time.Duration {
+	return 5 * time.Minute
+}
+
+func runtimeTranscriptHandleAdmiteIdle(handle *RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(handle.Estado), "fallido")
+}
+
+func resetRuntimeTranscriptHotIdleState() {
+	runtimeTranscriptHotIdleState.mu.Lock()
+	defer runtimeTranscriptHotIdleState.mu.Unlock()
+	runtimeTranscriptHotIdleState.failedHandleDue = nil
 }
 
 func registrarEventoDerivadoTranscript(transcriptID int64, handle *RuntimeHandle, runtime *RuntimeInstance, texto string) error {

@@ -145,25 +145,38 @@ func (d commandDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 		return nil, fmt.Errorf("metadata_json inválido para '%s': %w", req.Conector.Slug, err)
 	}
 	metadata = normalizeConnectorMetadata(req.Conector, metadata)
+	resume := SanitizarResumeParaConector(req.Conector, req.Resume)
+	req.Resume = resume
 
-	workingDir := strings.TrimSpace(req.Resume.CWD)
+	workingDir := strings.TrimSpace(resume.CWD)
 	if workingDir == "" {
 		workingDir = strings.TrimSpace(req.ProyectoRuta)
 	}
-	vars := connectorTemplateVars(req, workingDir)
 	plan := &LaunchPlan{
 		Driver:       d.transport,
 		Transporte:   d.transport,
 		Modo:         "launch",
-		Comando:      expandConnectorTemplate(strings.TrimSpace(req.Conector.Comando), vars),
-		Args:         expandConnectorArgs(args, vars),
-		Env:          expandConnectorEnv(env, vars),
 		WorkingDir:   workingDir,
 		Modelo:       strings.TrimSpace(req.Modelo),
 		Razonamiento: strings.TrimSpace(req.Razonamiento),
 		PerfilTarea:  strings.TrimSpace(req.PerfilTarea),
 	}
 	applyExecutionProfile(plan, metadata)
+
+	vars := connectorTemplateVars(req, workingDir)
+	vars["model"] = plan.Modelo
+	vars["reasoning"] = plan.Razonamiento
+	vars["task_profile"] = plan.PerfilTarea
+
+	comando := resolveConnectorCommandPath(expandConnectorTemplate(strings.TrimSpace(req.Conector.Comando), vars), strings.TrimSpace(req.ProyectoRuta))
+	expandedArgs := expandConnectorArgs(args, vars)
+	if isCodexCLIRequest(req) {
+		comando = canonicalCodexProfileWrapper(req, comando)
+		expandedArgs = canonicalCodexProfileArgs(req, expandedArgs)
+	}
+	plan.Comando = comando
+	plan.Args = expandedArgs
+	plan.Env = expandConnectorEnv(env, vars)
 	if applyLocalControlHints(plan, metadata) {
 		plan.Notas = append(plan.Notas, "El conector aporta capacidades locales de control desde metadata_json.")
 	}
@@ -172,9 +185,9 @@ func (d commandDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 		plan.Notas = append(plan.Notas, "El conector aporta hints de arranque desde metadata_json.")
 	}
 
-	if tieneContextoReanudable(req.Resume) {
+	if resumeActivaModoLocal(resume) {
 		plan.Modo = "resume"
-		plan.NativeResume = applyResumeHints(plan, metadata, req.Resume)
+		plan.NativeResume = applyResumeHints(plan, metadata, resume)
 		if !plan.NativeResume {
 			plan.ContinuityPrompt = construirPromptContinuidad(req)
 			plan.Notas = append(plan.Notas, "El conector no declara estrategia nativa de reanudación; se devuelve prompt de continuidad.")
@@ -198,6 +211,8 @@ func (d remoteDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 		return nil, fmt.Errorf("metadata_json inválido para '%s': %w", req.Conector.Slug, err)
 	}
 	metadata = normalizeConnectorMetadata(req.Conector, metadata)
+	resume := SanitizarResumeParaConector(req.Conector, req.Resume)
+	req.Resume = resume
 	env, err := parseStringMapJSON(req.Conector.EnvJSON)
 	if err != nil {
 		return nil, fmt.Errorf("env_json inválido para '%s': %w", req.Conector.Slug, err)
@@ -223,11 +238,92 @@ func (d remoteDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 	if endpoint := stringMetadata(metadata, "endpoint"); endpoint != "" {
 		plan.Notas = append(plan.Notas, "Endpoint: "+endpoint)
 	}
-	if tieneContextoReanudable(req.Resume) {
+	if resumeActivaModoRemoto(resume) {
 		plan.Modo = "resume"
 		plan.ContinuityPrompt = construirPromptContinuidad(req)
 	}
 	return plan, nil
+}
+
+func resolveConnectorCommandPath(command, projectPath string) string {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return ""
+	}
+	if filepath.IsAbs(command) {
+		return filepath.Clean(command)
+	}
+	if !strings.Contains(command, string(os.PathSeparator)) && !strings.Contains(command, "/") {
+		return command
+	}
+	projectPath = strings.TrimSpace(projectPath)
+	if projectPath == "" {
+		return command
+	}
+	if !filepath.IsAbs(projectPath) {
+		if abs, err := filepath.Abs(projectPath); err == nil {
+			projectPath = abs
+		}
+	}
+	if projectPath == "" {
+		return command
+	}
+	return filepath.Clean(filepath.Join(projectPath, command))
+}
+
+func canonicalCodexProfileWrapper(req LaunchRequest, resolvedCommand string) string {
+	resolvedCommand = strings.TrimSpace(resolvedCommand)
+	if filepath.Base(resolvedCommand) == "codex-perfil" {
+		return resolvedCommand
+	}
+	if wrapper := codexProfileWrapperPath(strings.TrimSpace(req.ProyectoRuta)); wrapper != "" {
+		return wrapper
+	}
+	return resolvedCommand
+}
+
+func canonicalCodexProfileArgs(req LaunchRequest, args []string) []string {
+	profile := strings.TrimSpace(req.Agente)
+	if profile == "" {
+		return args
+	}
+	if len(args) > 0 && strings.TrimSpace(args[0]) == profile {
+		return args
+	}
+	out := make([]string, 0, len(args)+1)
+	out = append(out, profile)
+	out = append(out, args...)
+	return out
+}
+
+func codexProfileWrapperPath(projectPath string) string {
+	if base := strings.TrimSpace(os.Getenv("CODEX_MULTI_BASE")); base != "" {
+		return filepath.Clean(filepath.Join(base, "bin", "codex-perfil"))
+	}
+	projectPath = strings.TrimSpace(projectPath)
+	if projectPath != "" {
+		if !filepath.IsAbs(projectPath) {
+			if abs, err := filepath.Abs(projectPath); err == nil {
+				projectPath = abs
+			}
+		}
+		current := projectPath
+		for current != "" {
+			parent := filepath.Dir(current)
+			if parent == "" || parent == current {
+				break
+			}
+			candidate := filepath.Join(parent, "codex-perfiles", "bin", "codex-perfil")
+			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+				return filepath.Clean(candidate)
+			}
+			current = parent
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+		return filepath.Join(home, "Trabajo", "codex-perfiles", "bin", "codex-perfil")
+	}
+	return "codex-perfil"
 }
 
 func normalizeConnectorMetadata(conector ConnectorConfig, metadata map[string]any) map[string]any {
@@ -239,10 +335,15 @@ func normalizeConnectorMetadata(conector ConnectorConfig, metadata map[string]an
 	if !hasMetadataKey(metadata, "can_send_input") {
 		needsCopy = true
 	}
+	for _, key := range []string{"sandbox_flag", "sandbox_mode", "approval_flag", "approval_policy"} {
+		if !hasMetadataKey(metadata, key) {
+			needsCopy = true
+		}
+	}
 	if !needsCopy {
 		return metadata
 	}
-	out := make(map[string]any, len(metadata)+2)
+	out := make(map[string]any, len(metadata)+6)
 	for k, v := range metadata {
 		if strings.EqualFold(strings.TrimSpace(k), "reasoning_flag") {
 			continue
@@ -263,18 +364,146 @@ func normalizeConnectorMetadata(conector ConnectorConfig, metadata map[string]an
 	if !hasMetadataKey(out, "can_send_input") {
 		out["can_send_input"] = false
 	}
+	if !hasMetadataKey(out, "can_run_slash_commands") {
+		out["can_run_slash_commands"] = false
+	}
+	// Preserve explicit launch-prompt embedding metadata for Codex. Forcing
+	// post_start here deadlocks bootstrap_only runtimes: they start without a
+	// first task, never create a resumable session, and mailbox delivery stays
+	// pending forever.
+	if stringMetadata(out, "launch_prompt_transport") == "" &&
+		!boolMetadata(out, "launch_prompt_positional") &&
+		stringMetadata(out, "launch_prompt_flag") == "" &&
+		stringMetadata(out, "launch_prompt_env") == "" &&
+		!boolMetadata(out, "launch_prompt_native") {
+		out["launch_prompt_transport"] = "post_start"
+	}
 	if stringMetadata(out, "mailbox_delivery_mode") == "" {
 		out["mailbox_delivery_mode"] = MailboxDeliveryBootstrapOnly
 	}
+	if stringMetadata(out, "sandbox_flag") == "" {
+		out["sandbox_flag"] = "--sandbox"
+	}
+	if stringMetadata(out, "sandbox_mode") == "" {
+		out["sandbox_mode"] = "danger-full-access"
+	}
+	if stringMetadata(out, "approval_flag") == "" {
+		out["approval_flag"] = "--ask-for-approval"
+	}
+	if stringMetadata(out, "approval_policy") == "" {
+		out["approval_policy"] = "never"
+	}
 	return out
+}
+
+func NormalizeConnectorMetadataJSON(conector ConnectorConfig) (string, error) {
+	metadata, err := parseAnyMapJSON(conector.MetadataJSON)
+	if err != nil {
+		return "", err
+	}
+	normalized := normalizeConnectorMetadata(conector, metadata)
+	data, err := json.Marshal(normalized)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
 
 func isCodexCLIConnector(conector ConnectorConfig) bool {
 	if strings.EqualFold(strings.TrimSpace(conector.Slug), "codex-cli") {
 		return true
 	}
-	comando := filepath.Base(strings.TrimSpace(conector.Comando))
-	return strings.EqualFold(comando, "codex")
+	comando := strings.ToLower(strings.TrimSpace(filepath.Base(strings.TrimSpace(conector.Comando))))
+	return comando == "codex" || comando == "codex-cli" || strings.HasPrefix(comando, "codex-perfil")
+}
+
+func isCodexCLIRequest(req LaunchRequest) bool {
+	return isCodexCLIConnector(req.Conector)
+}
+
+func isOllamaCLIConnector(conector ConnectorConfig) bool {
+	if strings.EqualFold(strings.TrimSpace(conector.Slug), "ollama-cli") {
+		return true
+	}
+	comando := strings.ToLower(strings.TrimSpace(filepath.Base(strings.TrimSpace(conector.Comando))))
+	return comando == "ollama" || comando == "ollama-cli" || strings.HasPrefix(comando, "ollama-perfil")
+}
+
+func SanitizarResumeParaConector(conector ConnectorConfig, resume ResumeContext) ResumeContext {
+	metadata, err := parseAnyMapJSON(conector.MetadataJSON)
+	if err != nil {
+		return resume
+	}
+	metadata = normalizeConnectorMetadata(conector, metadata)
+	if conectorPermiteResume(metadata) {
+		return resume
+	}
+	payloadTeniaContexto := resumePayloadTieneContextoReanudable(resume.ResumePayloadJSON)
+	resume.ExternalSessionID = ""
+	resume.ResumePayloadJSON = conservarSoloPerfilEjecucionResumePayload(resume.ResumePayloadJSON)
+	if payloadTeniaContexto {
+		resume.ResumePayloadJSON = ""
+	}
+	resume.ResumenContinuidad = ""
+	return resume
+}
+
+func conservarSoloPerfilEjecucionResumePayload(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	payload, err := parseAnyMapJSON(raw)
+	if err != nil {
+		return ""
+	}
+	perfilRaw, ok := payload["perfil_ejecucion"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	perfil := map[string]any{}
+	if value := strings.TrimSpace(stringFromAny(perfilRaw["perfil_tarea"])); value != "" {
+		perfil["perfil_tarea"] = value
+	}
+	if value := strings.TrimSpace(stringFromAny(perfilRaw["modelo"])); value != "" {
+		perfil["modelo"] = value
+	}
+	if value := strings.TrimSpace(stringFromAny(perfilRaw["razonamiento"])); value != "" {
+		perfil["razonamiento"] = value
+	}
+	if len(perfil) == 0 {
+		return ""
+	}
+	data, err := json.Marshal(map[string]any{
+		"perfil_ejecucion": perfil,
+	})
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+func resumeActivaModoLocal(resume ResumeContext) bool {
+	return strings.TrimSpace(resume.ExternalSessionID) != "" ||
+		strings.TrimSpace(resume.ResumenContinuidad) != ""
+}
+
+func resumeActivaModoRemoto(resume ResumeContext) bool {
+	return strings.TrimSpace(resume.ExternalSessionID) != ""
+}
+
+func conectorPermiteResume(metadata map[string]any) bool {
+	if metadata == nil {
+		return true
+	}
+	if hasMetadataKey(metadata, "reanudable") {
+		return boolMetadata(metadata, "reanudable")
+	}
+	return true
+}
+
+func isOllamaCLIRequest(req LaunchRequest) bool {
+	return isOllamaCLIConnector(req.Conector)
 }
 
 func buildRemoteConfigJSON(req LaunchRequest, metadata map[string]any) string {
@@ -599,8 +828,46 @@ func parseAnyMapJSON(raw string) (map[string]any, error) {
 
 func tieneContextoReanudable(r ResumeContext) bool {
 	return strings.TrimSpace(r.ExternalSessionID) != "" ||
-		strings.TrimSpace(r.ResumePayloadJSON) != "" ||
+		resumePayloadTieneContextoReanudable(r.ResumePayloadJSON) ||
 		strings.TrimSpace(r.ResumenContinuidad) != ""
+}
+
+func resumePayloadTieneContextoReanudable(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false
+	}
+	payload, err := parseAnyMapJSON(raw)
+	if err != nil {
+		return true
+	}
+	if len(payload) == 0 {
+		return false
+	}
+	for key, value := range payload {
+		if strings.EqualFold(strings.TrimSpace(key), "perfil_ejecucion") {
+			continue
+		}
+		if resumePayloadValorNoVacio(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func resumePayloadValorNoVacio(value any) bool {
+	switch typed := value.(type) {
+	case nil:
+		return false
+	case string:
+		return strings.TrimSpace(typed) != ""
+	case []any:
+		return len(typed) > 0
+	case map[string]any:
+		return len(typed) > 0
+	default:
+		return true
+	}
 }
 
 func applyLaunchHints(plan *LaunchPlan, metadata map[string]any, req LaunchRequest) bool {
@@ -608,6 +875,18 @@ func applyLaunchHints(plan *LaunchPlan, metadata map[string]any, req LaunchReque
 	if subcmd := stringMetadata(metadata, "launch_subcommand"); subcmd != "" {
 		plan.Args = append([]string{subcmd}, plan.Args...)
 		aplicado = true
+	}
+	if flag := stringMetadata(metadata, "sandbox_flag"); flag != "" {
+		if mode := stringMetadata(metadata, "sandbox_mode"); mode != "" && !argsContainOption(plan.Args, flag) {
+			plan.Args = append(plan.Args, flag, mode)
+			aplicado = true
+		}
+	}
+	if flag := stringMetadata(metadata, "approval_flag"); flag != "" {
+		if policy := stringMetadata(metadata, "approval_policy"); policy != "" && !argsContainOption(plan.Args, flag) {
+			plan.Args = append(plan.Args, flag, policy)
+			aplicado = true
+		}
 	}
 	if flag := stringMetadata(metadata, "cwd_flag"); flag != "" && strings.TrimSpace(plan.WorkingDir) != "" {
 		plan.Args = append(plan.Args, flag, plan.WorkingDir)
@@ -623,6 +902,9 @@ func applyLaunchHints(plan *LaunchPlan, metadata map[string]any, req LaunchReque
 	} else if key := stringMetadata(metadata, "model_config_key"); key != "" && strings.TrimSpace(plan.Modelo) != "" {
 		plan.Args = appendConnectorConfigOverride(plan.Args, metadata, key, plan.Modelo)
 		aplicado = true
+	} else if boolMetadata(metadata, "model_positional") && strings.TrimSpace(plan.Modelo) != "" {
+		plan.Args = append(plan.Args, plan.Modelo)
+		aplicado = true
 	}
 	if flag := stringMetadata(metadata, "reasoning_flag"); flag != "" && strings.TrimSpace(plan.Razonamiento) != "" {
 		plan.Args = append(plan.Args, flag, plan.Razonamiento)
@@ -632,6 +914,19 @@ func applyLaunchHints(plan *LaunchPlan, metadata map[string]any, req LaunchReque
 		aplicado = true
 	}
 	return aplicado
+}
+
+func argsContainOption(args []string, flag string) bool {
+	flag = strings.TrimSpace(flag)
+	if flag == "" {
+		return false
+	}
+	for _, arg := range args {
+		if strings.TrimSpace(arg) == flag {
+			return true
+		}
+	}
+	return false
 }
 
 func appendConnectorConfigOverride(args []string, metadata map[string]any, key, value string) []string {
@@ -744,6 +1039,35 @@ func applyResumeHints(plan *LaunchPlan, metadata map[string]any, resume ResumeCo
 }
 
 func construirPromptContinuidad(req LaunchRequest) string {
+	if isOllamaCLIRequest(req) {
+		partes := []string{
+			"PROTOCOLO_ORQUESTA_MICRO",
+			"NO_INTERPRETAR_COMO_PREGUNTA",
+			"SI_NO_HAY_MICROTAREA=ACK-ESPERA",
+			"ESPERA_MICROTAREA_CERRADA",
+		}
+		return strings.Join(partes, " ")
+	}
+	if isCodexCLIRequest(req) {
+		partes := []string{"Retoma el trabajo actual desde Orquesta."}
+		if strings.TrimSpace(req.ProyectoSlug) != "" {
+			partes = append(partes, "Proyecto: "+strings.TrimSpace(req.ProyectoSlug)+".")
+		}
+		if strings.TrimSpace(req.Resume.Branch) != "" {
+			partes = append(partes, "Rama: "+strings.TrimSpace(req.Resume.Branch)+".")
+		}
+		if resumen := resumirContinuidadCodex(req.Resume.ResumenContinuidad); resumen != "" {
+			partes = append(partes, "Continuidad: "+resumen+".")
+		}
+		if resumenPayload := resumirResumePayloadCodex(req.Resume.ResumePayloadJSON); resumenPayload != "" {
+			partes = append(partes, resumenPayload+".")
+		}
+		partes = append(partes, "Ignora cualquier conversación vieja que no coincida con la tarea activa o el mailbox actual.")
+		partes = append(partes, "No abras frentes nuevos ni reescribas código fuera del alcance inmediato.")
+		partes = append(partes, "Empieza por la tarea asignada y consulta Orquesta antes de desviarte.")
+		return strings.Join(partes, " ")
+	}
+
 	partes := []string{
 		fmt.Sprintf("Retoma el trabajo del agente %s", req.Agente),
 	}
@@ -772,7 +1096,170 @@ func construirPromptContinuidad(req LaunchRequest) string {
 	return base + ". " + strings.Join(detalle, ". ")
 }
 
+func resumirContinuidadCodex(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	clauses := splitContinuityClausesCodex(raw)
+	for _, clause := range clauses {
+		lower := strings.ToLower(clause)
+		if strings.Contains(lower, "handoff") {
+			if len(clause) <= 96 && len(strings.Fields(clause)) <= 12 {
+				return clause
+			}
+			return ""
+		}
+	}
+	if len(clauses) == 0 {
+		return ""
+	}
+	first := clauses[0]
+	if len(first) > 72 || len(strings.Fields(first)) > 8 {
+		return ""
+	}
+	return first
+}
+
+func splitContinuityClausesCodex(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	raw = strings.ReplaceAll(raw, "\n", ". ")
+	parts := strings.Split(raw, ". ")
+	out := make([]string, 0, len(parts))
+	for _, item := range parts {
+		item = strings.TrimSpace(strings.TrimSuffix(item, "."))
+		if item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func resumirResumePayloadCodex(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	var parsed any
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return ""
+	}
+	obj, ok := parsed.(map[string]any)
+	if !ok {
+		return ""
+	}
+	partes := make([]string, 0, 8)
+	if order, ok := obj["runtime_order"].(map[string]any); ok {
+		label := "runtime_order"
+		if tipo := strings.TrimSpace(stringFromAny(order["tipo"])); tipo != "" {
+			label += "=" + tipo
+		}
+		partes = append(partes, label)
+		delete(obj, "runtime_order")
+	}
+	if checkpoint, ok := obj["checkpoint"].(map[string]any); ok {
+		label := "checkpoint"
+		if id := int64FromAny(checkpoint["id"]); id > 0 {
+			label += fmt.Sprintf("#%d", id)
+		}
+		if kind := strings.TrimSpace(stringFromAny(checkpoint["kind"])); kind != "" {
+			label += "(" + kind + ")"
+		}
+		partes = append(partes, label)
+		delete(obj, "checkpoint")
+	}
+	if mailbox, ok := obj["mailbox"].([]any); ok {
+		partes = append(partes, fmt.Sprintf("mailbox=%d", len(mailbox)))
+		delete(obj, "mailbox")
+	}
+	if projectContext, ok := obj["project_context"]; ok {
+		partes = append(partes, resumirProjectContextCodex(projectContext))
+		delete(obj, "project_context")
+	}
+	if governanceCatalog, ok := obj["governance_catalog"]; ok {
+		partes = append(partes, resumirGovernanceCatalogCodex(governanceCatalog))
+		delete(obj, "governance_catalog")
+	}
+	if _, ok := obj["adopted_context"]; ok {
+		partes = append(partes, "adopted_context")
+		delete(obj, "adopted_context")
+	}
+	ignored := map[string]struct{}{
+		"bootstrap_prompt":         {},
+		"bootstrap_prompt_compact": {},
+	}
+	resto := make([]string, 0, len(obj))
+	for key := range obj {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if _, skip := ignored[key]; skip {
+			continue
+		}
+		resto = append(resto, key)
+	}
+	sort.Strings(resto)
+	partes = append(partes, resto...)
+	if len(partes) == 0 {
+		return ""
+	}
+	return strings.Join(partes, ", ")
+}
+
+func resumirProjectContextCodex(raw any) string {
+	ctx, ok := raw.(map[string]any)
+	if !ok {
+		return "project_context"
+	}
+	resumen := make([]string, 0, 3)
+	if worktree, ok := ctx["worktree_activa"].(map[string]any); ok {
+		if branch := strings.TrimSpace(stringFromAny(worktree["branch"])); branch != "" {
+			resumen = append(resumen, "Worktree activa en "+branch)
+		}
+	}
+	if tareas, ok := ctx["tareas_activas"].([]any); ok && len(tareas) > 0 {
+		resumen = append(resumen, fmt.Sprintf("%d tarea(s) activas del agente", len(tareas)))
+	}
+	if propuestas, ok := ctx["propuestas_abiertas"].([]any); ok && len(propuestas) > 0 {
+		resumen = append(resumen, fmt.Sprintf("%d propuesta(s) abiertas", len(propuestas)))
+	}
+	if len(resumen) == 0 {
+		return "project_context"
+	}
+	return "project_context: " + strings.Join(resumen, ". ")
+}
+
+func resumirGovernanceCatalogCodex(raw any) string {
+	ctx, ok := raw.(map[string]any)
+	if !ok {
+		return "governance_catalog"
+	}
+	resumen := "Catálogo efectivo"
+	if hash := strings.TrimSpace(stringFromAny(ctx["hash"])); hash != "" {
+		resumen += " " + hash
+	}
+	counts := make([]string, 0, 3)
+	if reglas := int(int64FromAny(ctx["reglas"])); reglas > 0 {
+		counts = append(counts, fmt.Sprintf("%d reglas", reglas))
+	}
+	if skills := int(int64FromAny(ctx["skills"])); skills > 0 {
+		counts = append(counts, fmt.Sprintf("%d skills", skills))
+	}
+	if workflows := int(int64FromAny(ctx["workflows"])); workflows > 0 {
+		counts = append(counts, fmt.Sprintf("%d workflows", workflows))
+	}
+	if len(counts) > 0 {
+		resumen += " (" + strings.Join(counts, ", ") + ")"
+	}
+	return "governance_catalog: " + resumen
+}
+
 func resumirResumePayload(raw string) string {
+
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return ""

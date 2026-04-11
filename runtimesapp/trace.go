@@ -126,11 +126,11 @@ func (s *Service) resolveRuntimeTraceHandle(req RuntimeTraceRequest) (*db.Runtim
 		if item == nil {
 			return nil, "", fmt.Errorf("proyecto no encontrado: %s", proyecto)
 		}
-		handle, err := s.store.GetActiveRuntimeHandleForProject(agente, &item.ID)
+		handle, err := s.store.GetOperationalRuntimeHandleForProject(agente, &item.ID)
 		return handle, strings.TrimSpace(item.Slug), err
 	}
 
-	handle, err := s.store.GetActiveRuntimeHandle(agente)
+	handle, err := s.store.GetOperationalRuntimeHandle(agente)
 	return handle, "", err
 }
 

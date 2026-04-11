@@ -296,6 +296,22 @@ func SeedPoolsIniciales() error {
 			MetadataJSON:        "{}",
 			Activo:              true,
 		},
+		{
+			Slug:                "ollama",
+			Proveedor:           "Ollama",
+			Runtime:             "ollama",
+			Plan:                "local",
+			EsDePago:            false,
+			CapacidadTotal:      1,
+			CapacidadReservada:  0,
+			PermiteHijos:        false,
+			PermiteModelosMulti: true,
+			PermiteSobrecoste:   false,
+			PoliticaHandoff:     "preventivo",
+			FuenteTelemetria:    "manual",
+			MetadataJSON:        `{"solo_explicito":true}`,
+			Activo:              true,
+		},
 	}
 	for _, seed := range seeds {
 		seed := seed
@@ -345,6 +361,16 @@ func SeedModelosIniciales() error {
 			poolSlug: "android",
 			modelo: PoolModelo{
 				ModelSlug:          "android-shell",
+				Activo:             true,
+				Prioridad:          30,
+				CosteRelativo:      0.1,
+				LimiteConocidoJSON: "{}",
+			},
+		},
+		{
+			poolSlug: "ollama",
+			modelo: PoolModelo{
+				ModelSlug:          "qwen2.5-coder:7b",
 				Activo:             true,
 				Prioridad:          10,
 				CosteRelativo:      0.1,

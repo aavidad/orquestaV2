@@ -188,3 +188,48 @@ func TestLoadServerInfoWithHealthFallbackRechazaDriverAjeno(t *testing.T) {
 		t.Fatalf("se esperaba error por driver ajeno, got %v", err)
 	}
 }
+
+func TestEnsureServerInfoFromHealthRecuperaYPublicaStatefile(t *testing.T) {
+	stateDir := t.TempDir()
+	statePath := filepath.Join(stateDir, "server.json")
+	dbPath := filepath.Join(stateDir, "orquesta.db")
+	defer cambiarEnv(t, "ORQUESTA_SERVER_INFO", statePath)()
+	defer cambiarEnv(t, "ORQUESTA_SERVER_STATE", "")()
+	defer cambiarEnv(t, "ORQUESTA_DB", dbPath)()
+	defer cambiarEnv(t, "ORQUESTA_DB_DRIVER", "")()
+	defer cambiarEnv(t, "ORQUESTA_DB_DSN", "")()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(rpclocal.HealthPath, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(rpclocal.HealthResponse{
+			OK:            true,
+			Addr:          "127.0.0.1:18888",
+			PID:           5555,
+			Kind:          "server",
+			ScopeID:       rpclocal.CurrentScopeID(),
+			DBPath:        dbPath,
+			StorageDriver: db.CurrentStorageDriver(),
+			StorageTarget: dbPath,
+			StartedAt:     time.Date(2026, 4, 2, 9, 0, 0, 0, time.UTC),
+			Version:       "test",
+		})
+	})
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	info, err := ensureServerInfoFromHealth(srv.URL)
+	if err != nil {
+		t.Fatalf("ensureServerInfoFromHealth: %v", err)
+	}
+	if info == nil || info.PID != 5555 || info.Addr != "127.0.0.1:18888" {
+		t.Fatalf("info inesperada: %+v", info)
+	}
+
+	state, err := rpclocal.LoadServerInfo()
+	if err != nil {
+		t.Fatalf("LoadServerInfo tras recovery: %v", err)
+	}
+	if state.PID != 5555 || state.Addr != "127.0.0.1:18888" {
+		t.Fatalf("statefile inesperado: %+v", state)
+	}
+}

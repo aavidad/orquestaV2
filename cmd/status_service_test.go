@@ -1,9 +1,13 @@
 package cmd
 
 import (
+	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/db"
 )
 
@@ -24,32 +28,55 @@ func TestAgenteCuentaComoConectadoRespetaEstadoCuotaVisible(t *testing.T) {
 		t.Fatalf("un agente activo con cuota activa deberia contar como conectado")
 	}
 	if !agenteCuentaComoConectado(&db.Agente{
-		Nombre:               "antigravity",
-		Activo:               true,
-		EstadoCuota:          "agotado",
+		Nombre:                "antigravity",
+		Activo:                true,
+		EstadoCuota:           "agotado",
 		PresupuestoSemanalPct: intPtr(69),
-		CuotaRestantePct:     intPtr(69),
-		PresupuestoVentana:   "weekly",
+		CuotaRestantePct:      intPtr(69),
+		PresupuestoVentana:    "weekly",
 	}) {
 		t.Fatalf("una cuenta solo semanal con saldo positivo no deberia caer por una cuota legacy")
+	}
+	if !agenteCuentaComoConectado(&db.Agente{
+		Nombre:            "Gemma1",
+		Activo:            true,
+		EstadoCuota:       "enfriamiento",
+		SinCuotaProveedor: true,
+	}) {
+		t.Fatalf("un agente local sin cuota de proveedor no deberia caer por enfriamiento legacy")
+	}
+	if !agenteCuentaComoConectado(&db.Agente{
+		Nombre:      "Qwen1",
+		Activo:      true,
+		EstadoCuota: "enfriamiento",
+	}) {
+		t.Fatalf("un agente local detectado por nombre no deberia caer por enfriamiento legacy")
 	}
 }
 
 func TestStatusServiceCacheaSnapshotCorto(t *testing.T) {
 	prevFetcher := statusFreshFetcher
+	prevFastFetcher := statusFastFetcher
 	prevNow := statusNowFunc
 	prevTTL := statusSnapshotTTL
+	prevAsync := statusAsyncRefresh
 	resetStatusSnapshotCache()
 	defer func() {
 		statusFreshFetcher = prevFetcher
+		statusFastFetcher = prevFastFetcher
 		statusNowFunc = prevNow
 		statusSnapshotTTL = prevTTL
+		statusAsyncRefresh = prevAsync
 		resetStatusSnapshotCache()
 	}()
 
 	current := time.Date(2026, 4, 2, 10, 0, 0, 0, time.UTC)
 	statusNowFunc = func() time.Time { return current }
 	statusSnapshotTTL = 2 * time.Second
+	statusAsyncRefresh = true
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		return apiStatusResponse{}, errors.New("sin fallback")
+	}
 
 	calls := 0
 	statusFreshFetcher = func() (apiStatusResponse, error) {
@@ -78,10 +105,340 @@ func TestStatusServiceCacheaSnapshotCorto(t *testing.T) {
 	if err != nil {
 		t.Fatalf("third fetch: %v", err)
 	}
-	if calls != 2 {
-		t.Fatalf("tras expirar la cache deberia recargar, calls=%d", calls)
+	if calls != 1 {
+		t.Fatalf("tras expirar la cache deberia devolver stale y refrescar en background, calls=%d", calls)
 	}
-	if third.Generado == second.Generado {
-		t.Fatalf("deberia haberse regenerado el snapshot tras expirar la cache")
+	if third.Generado != second.Generado {
+		t.Fatalf("deberia devolver el snapshot stale mientras refresca en background")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		statusCacheState.mu.Lock()
+		refreshed := !statusCacheState.refreshing && statusCacheState.ok && statusCacheState.value.Generado != second.Generado
+		statusCacheState.mu.Unlock()
+		if refreshed {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	statusCacheState.mu.Lock()
+	refreshed := statusCacheState.value.Generado
+	callsAfter := calls
+	statusCacheState.mu.Unlock()
+	if callsAfter != 2 {
+		t.Fatalf("deberia refrescar en background tras expirar la cache, calls=%d", callsAfter)
+	}
+	if refreshed == second.Generado {
+		t.Fatalf("la cache no se actualizo en background")
+	}
+}
+
+func TestStatusServiceNoRetieneSnapshotVacioSiHayTareasEnProgreso(t *testing.T) {
+	prevFetcher := statusFreshFetcher
+	prevFastFetcher := statusFastFetcher
+	prevNow := statusNowFunc
+	prevTTL := statusSnapshotTTL
+	prevAsync := statusAsyncRefresh
+	resetStatusSnapshotCache()
+	defer func() {
+		statusFreshFetcher = prevFetcher
+		statusFastFetcher = prevFastFetcher
+		statusNowFunc = prevNow
+		statusSnapshotTTL = prevTTL
+		statusAsyncRefresh = prevAsync
+		resetStatusSnapshotCache()
+	}()
+
+	current := time.Date(2026, 4, 7, 0, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return current }
+	statusSnapshotTTL = time.Minute
+	statusAsyncRefresh = true
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		return apiStatusResponse{}, errors.New("sin fallback")
+	}
+
+	calls := 0
+	statusFreshFetcher = func() (apiStatusResponse, error) {
+		calls++
+		if calls == 1 {
+			return apiStatusResponse{
+				Generado:         "stale",
+				AgentesActivos:   nil,
+				TareasEnProgreso: []tareaLite{{ID: 501, Estado: db.TareaEnProgreso, Agente: "Codex2"}},
+			}, nil
+		}
+		return apiStatusResponse{
+			Generado:         "fresh",
+			AgentesActivos:   []*db.Agente{{Nombre: "Codex2"}},
+			TareasEnProgreso: []tareaLite{{ID: 501, Estado: db.TareaEnProgreso, Agente: "Codex2"}},
+		}, nil
+	}
+
+	service := dbStatusService{}
+	first, err := service.FetchStatus()
+	if err != nil {
+		t.Fatalf("first fetch: %v", err)
+	}
+	if first.Generado != "stale" {
+		t.Fatalf("primer snapshot inesperado: %+v", first)
+	}
+	second, err := service.FetchStatus()
+	if err != nil {
+		t.Fatalf("second fetch: %v", err)
+	}
+	if second.Generado != "fresh" {
+		t.Fatalf("deberia refrescar de inmediato el snapshot inconsistente: %+v", second)
+	}
+	if calls != 2 {
+		t.Fatalf("deberia forzar un segundo fetch, calls=%d", calls)
+	}
+}
+
+func TestStatusServiceSerializaRefreshSincronoEnCacheMiss(t *testing.T) {
+	prevFetcher := statusFreshFetcher
+	prevFastFetcher := statusFastFetcher
+	prevNow := statusNowFunc
+	prevTTL := statusSnapshotTTL
+	prevAsync := statusAsyncRefresh
+	resetStatusSnapshotCache()
+	defer func() {
+		statusFreshFetcher = prevFetcher
+		statusFastFetcher = prevFastFetcher
+		statusNowFunc = prevNow
+		statusSnapshotTTL = prevTTL
+		statusAsyncRefresh = prevAsync
+		resetStatusSnapshotCache()
+	}()
+
+	current := time.Date(2026, 4, 8, 10, 0, 0, 0, time.UTC)
+	statusNowFunc = func() time.Time { return current }
+	statusSnapshotTTL = time.Minute
+	statusAsyncRefresh = true
+	statusFastFetcher = func() (apiStatusResponse, error) {
+		return apiStatusResponse{}, errors.New("sin fallback")
+	}
+
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	var calls atomic.Int32
+	statusFreshFetcher = func() (apiStatusResponse, error) {
+		if calls.Add(1) == 1 {
+			started <- struct{}{}
+		}
+		<-release
+		return apiStatusResponse{Generado: "fresh"}, nil
+	}
+
+	service := dbStatusService{}
+	var wg sync.WaitGroup
+	results := make(chan apiStatusResponse, 2)
+	errs := make(chan error, 2)
+	callFetch := func() {
+		defer wg.Done()
+		status, err := service.FetchStatus()
+		results <- status
+		errs <- err
+	}
+
+	wg.Add(1)
+	go callFetch()
+	<-started
+
+	wg.Add(1)
+	go callFetch()
+
+	time.Sleep(50 * time.Millisecond)
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("solo deberia haber un refresh en vuelo, calls=%d", got)
+	}
+
+	close(release)
+	wg.Wait()
+	close(results)
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("fetch concurrente fallo: %v", err)
+		}
+	}
+	for status := range results {
+		if status.Generado != "fresh" {
+			t.Fatalf("snapshot inesperado: %+v", status)
+		}
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("solo deberia ejecutarse un refresh, calls=%d", got)
+	}
+}
+
+func TestStoreStatusSnapshotUsaTTLReducidoSiNoHayActivosYHayTrabajo(t *testing.T) {
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	now := time.Date(2026, 4, 7, 0, 0, 0, 0, time.UTC)
+	storeStatusSnapshot(apiStatusResponse{
+		TareasEnProgreso: []tareaLite{{ID: 502, Estado: db.TareaEnProgreso, Agente: "Codex3"}},
+	}, now)
+
+	statusCacheState.mu.Lock()
+	expires := statusCacheState.expires
+	statusCacheState.mu.Unlock()
+	if got := expires.Sub(now); got != statusFallbackTTL {
+		t.Fatalf("ttl inesperado para snapshot inconsistente: %s", got)
+	}
+}
+
+func TestAgentesVisiblesPorEstadoOperativoRowsUsaEstadoOperativoCanónico(t *testing.T) {
+	agentes := []*db.Agente{
+		{Nombre: "Codex6", Rol: "programador"},
+		{Nombre: "Codex7", Rol: "programador"},
+		{Nombre: "Codex8", Rol: "programador"},
+		{Nombre: "Codex9", Rol: "programador"},
+		{Nombre: "Codex10", Rol: "programador"},
+		{Nombre: "Codex11", Rol: "programador"},
+	}
+	rows := []agentesapp.Row{
+		{Agente: agentes[0], EstadoOperativo: "arrancando"},
+		{Agente: agentes[1], EstadoOperativo: "trabajando"},
+		{Agente: agentes[2], EstadoOperativo: "disponible"},
+		{Agente: agentes[3], EstadoOperativo: "bloqueado_por_runtime"},
+		{Agente: agentes[4], EstadoOperativo: "saturado"},
+		{Agente: agentes[5], EstadoOperativo: "atascado"},
+	}
+
+	activos, trabajando, saturados, atascados, authManual, quotaBlocked, ok := agentesVisiblesPorEstadoOperativoRows(agentes, rows)
+	if !ok {
+		t.Fatalf("debería resolver filas operativas")
+	}
+	if len(activos) != 4 {
+		t.Fatalf("activos inesperados: %+v", activos)
+	}
+	if len(trabajando) != 2 {
+		t.Fatalf("trabajando inesperados: %+v", trabajando)
+	}
+	if len(saturados) != 1 || saturados[0].Nombre != "Codex10" {
+		t.Fatalf("saturados inesperados: %+v", saturados)
+	}
+	if len(atascados) != 1 || atascados[0].Nombre != "Codex11" {
+		t.Fatalf("atascados inesperados: %+v", atascados)
+	}
+	if len(authManual) != 0 {
+		t.Fatalf("auth manual inesperados: %+v", authManual)
+	}
+	if len(quotaBlocked) != 0 {
+		t.Fatalf("quota bloqueados inesperados: %+v", quotaBlocked)
+	}
+}
+
+func TestAgentesVisiblesPorEstadoOperativoRowsCuentaAtascadoSoloSiTieneRuntimeUtil(t *testing.T) {
+	agente := &db.Agente{Nombre: "Codex11", Rol: "programador"}
+	rows := []agentesapp.Row{
+		{
+			Agente:          agente,
+			EstadoOperativo: "atascado",
+			Handle:          &db.RuntimeHandle{Estado: "activo"},
+		},
+	}
+
+	activos, trabajando, saturados, atascados, authManual, quotaBlocked, ok := agentesVisiblesPorEstadoOperativoRows([]*db.Agente{agente}, rows)
+	if !ok {
+		t.Fatalf("debería resolver filas operativas")
+	}
+	if len(activos) != 1 || activos[0].Nombre != "Codex11" {
+		t.Fatalf("el atascado con handle activo debe seguir contando como conectado: %+v", activos)
+	}
+	if len(trabajando) != 0 || len(saturados) != 0 {
+		t.Fatalf("trabajando/saturados inesperados: %+v %+v", trabajando, saturados)
+	}
+	if len(atascados) != 1 || atascados[0].Nombre != "Codex11" {
+		t.Fatalf("atascados inesperados: %+v", atascados)
+	}
+	if len(authManual) != 0 {
+		t.Fatalf("auth manual inesperados: %+v", authManual)
+	}
+	if len(quotaBlocked) != 0 {
+		t.Fatalf("quota bloqueados inesperados: %+v", quotaBlocked)
+	}
+}
+
+func TestAgentesVisiblesPorEstadoOperativoRowsSeparaAutenticacionManual(t *testing.T) {
+	agente := &db.Agente{Nombre: "Codex2", Rol: "programador"}
+	rows := []agentesapp.Row{
+		{
+			Agente:           agente,
+			EstadoOperativo:  "bloqueado_por_runtime",
+			DetalleOperativo: "worker requiere autenticacion manual",
+		},
+	}
+
+	activos, trabajando, saturados, atascados, authManual, quotaBlocked, ok := agentesVisiblesPorEstadoOperativoRows([]*db.Agente{agente}, rows)
+	if !ok {
+		t.Fatalf("debería resolver filas operativas")
+	}
+	if len(activos) != 0 || len(trabajando) != 0 || len(saturados) != 0 || len(atascados) != 0 {
+		t.Fatalf("no deberia contar el agente auth como activo: activos=%+v trabajando=%+v saturados=%+v atascados=%+v", activos, trabajando, saturados, atascados)
+	}
+	if len(authManual) != 1 || authManual[0].Nombre != "Codex2" {
+		t.Fatalf("auth manual inesperados: %+v", authManual)
+	}
+	if len(quotaBlocked) != 0 {
+		t.Fatalf("quota bloqueados inesperados: %+v", quotaBlocked)
+	}
+}
+
+func TestAgentesVisiblesPorEstadoOperativoRowsSeparaBloqueadoPorCuota(t *testing.T) {
+	agente := &db.Agente{Nombre: "Codex2", Rol: "programador"}
+	rows := []agentesapp.Row{
+		{
+			Agente:           agente,
+			EstadoOperativo:  "bloqueado_por_cuota",
+			DetalleOperativo: "worker bloqueado por cuota",
+			WorkerState:      "blocked_quota",
+		},
+	}
+
+	activos, trabajando, saturados, atascados, authManual, quotaBlocked, ok := agentesVisiblesPorEstadoOperativoRows([]*db.Agente{agente}, rows)
+	if !ok {
+		t.Fatalf("debería resolver filas operativas")
+	}
+	if len(activos) != 0 || len(trabajando) != 0 || len(saturados) != 0 || len(atascados) != 0 {
+		t.Fatalf("no deberia contar el agente bloqueado por cuota como activo: activos=%+v trabajando=%+v saturados=%+v atascados=%+v", activos, trabajando, saturados, atascados)
+	}
+	if len(authManual) != 0 {
+		t.Fatalf("auth manual inesperados: %+v", authManual)
+	}
+	if len(quotaBlocked) != 1 || quotaBlocked[0].Nombre != "Codex2" {
+		t.Fatalf("quota bloqueados inesperados: %+v", quotaBlocked)
+	}
+}
+
+func TestReconciliarConteoTareasActivasVisibleUsaSoloLaListaVisible(t *testing.T) {
+	cuentas := map[string]int{
+		string(db.TareaEnProgreso): 4,
+		string(db.TareaAsignada):   2,
+		string(db.TareaBloqueada):  3,
+		string(db.TareaCompletada): 7,
+	}
+	tareasActivas := []tareaLite{
+		{ID: 478, Estado: db.TareaEnProgreso, Agente: "alberto"},
+		{ID: 492, Estado: db.TareaEnProgreso, Agente: "alberto"},
+		{ID: 502, Estado: db.TareaEnProgreso, Agente: "alberto"},
+		{ID: 511, Estado: db.TareaBloqueada, Agente: "Codex2"},
+	}
+
+	got := reconciliarConteoTareasActivasVisible(cuentas, tareasActivas)
+	if got[string(db.TareaEnProgreso)] != 3 {
+		t.Fatalf("en_progreso visible inesperado: %+v", got)
+	}
+	if got[string(db.TareaAsignada)] != 0 {
+		t.Fatalf("asignada visible inesperada: %+v", got)
+	}
+	if got[string(db.TareaBloqueada)] != 1 {
+		t.Fatalf("bloqueada visible inesperada: %+v", got)
+	}
+	if got[string(db.TareaCompletada)] != 7 {
+		t.Fatalf("completada no deberia cambiar: %+v", got)
 	}
 }

@@ -57,6 +57,22 @@ func TestCuentaPresupuestoDesdeAgenteUsaObservedUsageCuandoNoHayCuotaReal(t *tes
 	}
 }
 
+func TestCompactOpenClawAgentsIncluyeCuentaCanonica(t *testing.T) {
+	items := compactOpenClawAgents([]*db.Agente{{
+		Nombre:         "Codex7",
+		CuentaID:       "acc-codex-7",
+		CuentaEmail:    "shared@example.com",
+		CuentaUsuario:  "Codex7",
+		EstadoCuota:    "activo",
+	}}, nil)
+	if len(items) != 1 {
+		t.Fatalf("items inesperados: %+v", items)
+	}
+	if items[0].CuentaID != "acc-codex-7" || items[0].CuentaEmail != "shared@example.com" || items[0].CuentaUsuario != "Codex7" {
+		t.Fatalf("cuenta compacta inesperada: %+v", items[0])
+	}
+}
+
 func TestAPIAgentesObservarCuentaActualizaCuentas(t *testing.T) {
 	prepararDBTemporalCmd(t)
 	if err := db.RegistrarAgente("Codex7", "programador"); err != nil {
@@ -409,6 +425,11 @@ func prepararDBTemporalCmd(t *testing.T) string {
 	resetControlPlaneConfigCache()
 	resetRuntimeBudgetObservationBackgroundGate()
 	resetAutonomiaActiveSessionsObservationGate()
+	resetRuntimeMailboxReevaluationGate()
+	resetAutonomiaIdleAutoassignGate()
+	resetAutonomiaDegradedTaskGate()
+	resetPresupuestoPrimerUsoSesionGate()
+	db.ResetRuntimeHandlesHotCache()
 
 	anteriorDB := os.Getenv("ORQUESTA_DB")
 	anteriorDSN, teniaDSN := os.LookupEnv("ORQUESTA_DB_DSN")
@@ -424,6 +445,11 @@ func prepararDBTemporalCmd(t *testing.T) string {
 		resetControlPlaneConfigCache()
 		resetRuntimeBudgetObservationBackgroundGate()
 		resetAutonomiaActiveSessionsObservationGate()
+		resetRuntimeMailboxReevaluationGate()
+		resetAutonomiaIdleAutoassignGate()
+		resetAutonomiaDegradedTaskGate()
+		resetPresupuestoPrimerUsoSesionGate()
+		db.ResetRuntimeHandlesHotCache()
 		db.Close()
 		db.DB = nil
 		if anteriorDB == "" {
@@ -569,6 +595,35 @@ func TestAPIServerExponeMetadatosDescubrimiento(t *testing.T) {
 	}
 }
 
+func TestAPIServerOperationalExponeResumenOperativo(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexOp", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/server/operational", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload serverOperationalInfo
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode /api/server/operational: %v", err)
+	}
+	if payload.RegisteredAgents < 1 {
+		t.Fatalf("registeredAgents inesperado: %+v", payload)
+	}
+	if strings.TrimSpace(payload.State) == "" || strings.TrimSpace(payload.Reason) == "" {
+		t.Fatalf("estado operativo incompleto: %+v", payload)
+	}
+}
+
 func TestAPIStatusExponeResumenOperativoCompat(t *testing.T) {
 	prepararDBTemporalCmd(t)
 
@@ -586,7 +641,7 @@ func TestAPIStatusExponeResumenOperativoCompat(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode /api/status: %v", err)
 	}
-	for _, key := range []string{"agentes", "conteo_tareas", "resumenTareas", "generado", "tareasPorEstado", "agentesActivos", "propuestasAbiertas", "tareasActivas"} {
+	for _, key := range []string{"agentes", "conteo_tareas", "resumenTareas", "generado", "tareasPorEstado", "agentesActivos", "agentesSaturados", "propuestasAbiertas", "tareasActivas"} {
 		if _, ok := payload[key]; !ok {
 			t.Fatalf("/api/status sin clave %q: %+v", key, payload)
 		}
@@ -870,6 +925,9 @@ func TestAPIStatusOmiteTareasActivasSinProyecto(t *testing.T) {
 	if payload.TareasActivas[0].ID != conProyectoID {
 		t.Fatalf("tarea activa visible inesperada: %+v", payload.TareasActivas[0])
 	}
+	if got := payload.TareasPorEstado[string(db.TareaEnProgreso)]; got != 1 {
+		t.Fatalf("conteo visible de en_progreso inesperado: %+v", payload.TareasPorEstado)
+	}
 }
 
 func TestAPIAgentesPresupuestoRefrescarOperaPorLaViaCanonica(t *testing.T) {
@@ -906,16 +964,18 @@ func TestAPIAgentesYStatusAlineanActivoConSesionReal(t *testing.T) {
 			t.Fatalf("RegistrarAgente %s: %v", agente, err)
 		}
 	}
-	if _, err := db.DB.Exec(`UPDATE agentes SET estado_sesion='pensando' WHERE nombre='CodexVisible1'`); err != nil {
-		t.Fatalf("marcar estado visible1: %v", err)
-	}
 	if _, err := db.DB.Exec(`UPDATE agentes SET activo=1, estado_sesion='disponible' WHERE nombre='CodexVisible2'`); err != nil {
 		t.Fatalf("marcar activo visible2: %v", err)
 	}
-	if _, err := db.DB.Exec(`INSERT INTO sesiones (agente, activa, estado, herramienta, host) VALUES (?,?,?,?,?)`,
-		"CodexVisible1", 1, "activa", "codex", "localhost",
-	); err != nil {
-		t.Fatalf("insert sesion visible1: %v", err)
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexVisible1",
+		CWD:         "/tmp/orquesta-codex-visible1-api",
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("IniciarSesionContexto visible1: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_sesion='pensando' WHERE nombre='CodexVisible1'`); err != nil {
+		t.Fatalf("marcar estado visible1: %v", err)
 	}
 
 	mux := http.NewServeMux()

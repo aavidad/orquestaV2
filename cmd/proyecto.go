@@ -140,7 +140,37 @@ var proyectoFusionarCmd = &cobra.Command{
 	},
 }
 
+var proyectoActualizarCmd = &cobra.Command{
+	Use:   "actualizar <slug|id>",
+	Short: "Actualiza la ruta u otros campos de un proyecto registrado",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ruta, _ := cmd.Flags().GetString("ruta")
+		nombre, _ := cmd.Flags().GetString("nombre")
+		tipo, _ := cmd.Flags().GetString("tipo")
+		req := apiProyectoActualizarRequest{
+			RutaAbs: ruta,
+			Nombre:  nombre,
+			Tipo:    tipo,
+		}
+		p, ok, err := actualizarProyectoPorAPI(args[0], req)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return serverFirstCommandError("proyecto actualizar")
+		}
+		fmt.Printf("✓ Proyecto #%d actualizado\n", p.ID)
+		fmt.Printf("  Slug:     %s\n", p.Slug)
+		fmt.Printf("  Ruta ABS: %s\n", p.RutaAbs)
+		return nil
+	},
+}
+
 func init() {
 	proyectoFusionarCmd.Flags().Bool("archivar-origen", true, "Archiva el proyecto origen tras la fusión")
-	proyectoCmd.AddCommand(proyectoListarCmd, proyectoDescubrirCmd, proyectoVerCmd, proyectoFusionarCmd)
+	proyectoActualizarCmd.Flags().String("ruta", "", "Nueva ruta absoluta del proyecto")
+	proyectoActualizarCmd.Flags().String("nombre", "", "Nuevo nombre del proyecto")
+	proyectoActualizarCmd.Flags().String("tipo", "", "Nuevo tipo del proyecto")
+	proyectoCmd.AddCommand(proyectoListarCmd, proyectoDescubrirCmd, proyectoVerCmd, proyectoFusionarCmd, proyectoActualizarCmd)
 }

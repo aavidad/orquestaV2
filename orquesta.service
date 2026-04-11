@@ -5,12 +5,12 @@ After=network.target
 [Service]
 Type=simple
 User=alberto
-WorkingDirectory=/home/alberto/Trabajo/PlataformaMunicipal/orquestador
-ExecStart=/home/alberto/Trabajo/PlataformaMunicipal/orquestador/orquesta serve --puerto 8080
+WorkingDirectory=/home/alberto/Trabajo/orquesta
+ExecStart=/home/alberto/Trabajo/orquesta/orquesta serve --puerto 16543
 Restart=always
 RestartSec=10
-StandardOutput=append:/home/alberto/Trabajo/PlataformaMunicipal/orquestador/logs/daemon.log
-StandardError=append:/home/alberto/Trabajo/PlataformaMunicipal/orquestador/logs/daemon.err
+StandardOutput=append:/home/alberto/Trabajo/orquesta/logs/daemon.log
+StandardError=append:/home/alberto/Trabajo/orquesta/logs/daemon.err
 
 [Install]
 WantedBy=multi-user.target

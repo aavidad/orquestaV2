@@ -11,6 +11,7 @@ import (
 )
 
 func TestConsultarEstadoLocalDetectaSessionIDSinSobrescribirDriver(t *testing.T) {
+	resetSupervisoresLocalesForTest(t)
 	tmp := t.TempDir()
 	wrapper := filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil")
 	if err := os.MkdirAll(filepath.Dir(wrapper), 0o755); err != nil {
@@ -63,6 +64,7 @@ func TestConsultarEstadoLocalDetectaSessionIDSinSobrescribirDriver(t *testing.T)
 }
 
 func TestConsultarEstadoLocalRehidrataSupervisorDesdeManifestSinPIDInicial(t *testing.T) {
+	resetSupervisoresLocalesForTest(t)
 	tmp := t.TempDir()
 	workingDir := filepath.Join(tmp, "repo")
 	runDir := filepath.Join(workingDir, ".orquesta-runtime", "codex7", "20260402-150000-000000001")
@@ -210,8 +212,8 @@ func TestEmitSupervisorSignalRecuperaPanicDelHandler(t *testing.T) {
 
 func TestCommandIdentityHintsIncluyeFirmaUtil(t *testing.T) {
 	hints := commandIdentityHints(
-		"/usr/bin/script -qefc '/tmp/codex-perfiles/bin/codex-perfil Codex1' /tmp/trace.log",
-		"/tmp/codex-perfiles/bin/codex-perfil Codex1",
+		"/usr/bin/script -qefc '/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1' /tmp/trace.log",
+		"/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil Codex1",
 	)
 	joined := strings.Join(hints, "|")
 	for _, want := range []string{"codex-perfil", "codex1", "script"} {
@@ -247,6 +249,7 @@ func TestValidarIdentidadProcesoLocalDetectaMismatchDeCWD(t *testing.T) {
 }
 
 func TestConsultarEstadoLocalRehidrataMetadataRicaDesdeRuntimeManifest(t *testing.T) {
+	resetSupervisoresLocalesForTest(t)
 	workingDir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -290,7 +293,7 @@ func TestConsultarEstadoLocalRehidrataMetadataRicaDesdeRuntimeManifest(t *testin
 	pid := int64(os.Getpid())
 	estado, observed, err := ConsultarEstadoLocal(ObjetivoProceso{
 		PID:          &pid,
-		MetadataJSON: `{"cwd":"` + workingDir + `"}`,
+		MetadataJSON: `{"cwd":"` + workingDir + `","trace_dir":"` + runDir + `","trace_manifest":"` + manifestPath + `"}`,
 	})
 	if err != nil {
 		t.Fatalf("ConsultarEstadoLocal: %v", err)
@@ -351,6 +354,14 @@ func mustGetwdTest(t *testing.T) string {
 		t.Fatalf("getwd: %v", err)
 	}
 	return wd
+}
+
+func resetSupervisoresLocalesForTest(t *testing.T) {
+	t.Helper()
+	supervisoresLocales.mu.Lock()
+	supervisoresLocales.byRef = map[string]*supervisorProcesoLocal{}
+	supervisoresLocales.byPID = map[int]*supervisorProcesoLocal{}
+	supervisoresLocales.mu.Unlock()
 }
 
 func mustExecutableTest(t *testing.T) string {

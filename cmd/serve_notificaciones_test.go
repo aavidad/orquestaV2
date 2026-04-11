@@ -172,6 +172,7 @@ func TestWebOpenClawMuestraOperatorReviewYEntregas(t *testing.T) {
 		"cola segura",
 		"saturados",
 		"Integración server-first",
+		"__orquesta/healthz",
 		"/api/mcp",
 		"openclaw-orquesta-api",
 		"RUNBOOK_TELEGRAM.md",

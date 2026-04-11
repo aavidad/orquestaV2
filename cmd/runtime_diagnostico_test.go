@@ -3,6 +3,8 @@ package cmd
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -164,4 +166,438 @@ func TestRuntimeDiagnosticoRecortaRuntimesYHandlesSegunLimit(t *testing.T) {
 			t.Fatalf("diagnostico recortado sin %q:\n%s", token, out)
 		}
 	}
+}
+
+func TestRuntimeDiagnosticoMuestraWorkerEstructurado(t *testing.T) {
+	tmp := t.TempDir()
+	now := time.Now().UTC()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+
+	writeJSON := func(path string, payload any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	writeJSON(manifestPath, map[string]any{
+		"agent":                 "Codex8",
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex8-093000",
+		"tmux_pane_id":          "%3",
+		"child_pid":             4242,
+		"external_session_id":   "sess-rt-1",
+		"mailbox_delivery_mode": "session_resume",
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":                 "running",
+		"updated_at":            now.Format(time.RFC3339),
+		"alive":                 true,
+		"external_session_id":   "sess-rt-1",
+		"mailbox_delivery_mode": "session_resume",
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":               true,
+		"heartbeat_at":        now.Add(5 * time.Second).Format(time.RFC3339),
+		"external_session_id": "sess-rt-1",
+	})
+	meta, err := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal meta: %v", err)
+	}
+
+	data := &runtimeDiagnosticoData{
+		Agente: "Codex8",
+		Fuente: "api",
+		Handles: []*db.RuntimeHandle{
+			{ID: 547, Agente: "Codex8", Estado: "activo", MetadataJSON: string(meta)},
+		},
+		Workers: runtimeWorkerRows([]*db.RuntimeHandle{
+			{ID: 547, Agente: "Codex8", Estado: "activo", MetadataJSON: string(meta)},
+		}, 5),
+	}
+
+	out := capturarStdout(t, func() {
+		renderRuntimeDiagnostico(data, 5)
+	})
+	for _, token := range []string{"Worker estructurado", "running", "sess-rt-1", "session_resume", "tmux_cli_se…", "orq-codex8-093000/%3"} {
+		if !strings.Contains(out, token) {
+			t.Fatalf("salida sin %q:\n%s", token, out)
+		}
+	}
+}
+
+func TestRuntimeDiagnosticoMarcaWorkerStaleSiElHandleYaEsTerminal(t *testing.T) {
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+
+	writeJSON := func(path string, payload any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	writeJSON(manifestPath, map[string]any{"agent": "Codex7", "driver": "tmux_cli_session", "transport": "tmux"})
+	writeJSON(statusPath, map[string]any{"state": "running", "alive": true})
+	writeJSON(heartbeatPath, map[string]any{"alive": true})
+	meta, err := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal meta: %v", err)
+	}
+
+	rows := runtimeWorkerRows([]*db.RuntimeHandle{
+		{ID: 568, Agente: "Codex7", Estado: "fallido", MetadataJSON: string(meta)},
+	}, 5)
+	if len(rows) != 1 {
+		t.Fatalf("rows inesperadas: %+v", rows)
+	}
+	if rows[0].Alive {
+		t.Fatalf("worker stale no deberia salir vivo: %+v", rows[0])
+	}
+	if rows[0].State != "stale" {
+		t.Fatalf("state stale esperado: %+v", rows[0])
+	}
+	if !strings.Contains(rows[0].ExitError, "handle=fallido") {
+		t.Fatalf("exit error stale inesperado: %+v", rows[0])
+	}
+}
+
+func TestRuntimeDiagnosticoMarcaWorkerStalePorHeartbeatAtrasado(t *testing.T) {
+	tmp := t.TempDir()
+	now := time.Now().UTC()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+
+	writeJSON := func(path string, payload any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	writeJSON(manifestPath, map[string]any{
+		"agent":        "Codex7",
+		"driver":       "tmux_cli_session",
+		"transport":    "tmux",
+		"tmux_session": "orq-codex7-232657",
+		"tmux_pane_id": "%0",
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":      "running",
+		"updated_at": now.Add(-2 * time.Minute).Format(time.RFC3339),
+		"alive":      true,
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Add(-2 * time.Minute).Format(time.RFC3339),
+	})
+	meta, err := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal meta: %v", err)
+	}
+
+	rows := runtimeWorkerRows([]*db.RuntimeHandle{
+		{ID: 569, Agente: "Codex7", Estado: "activo", MetadataJSON: string(meta)},
+	}, 5)
+	if len(rows) != 1 {
+		t.Fatalf("rows inesperadas: %+v", rows)
+	}
+	if rows[0].Alive {
+		t.Fatalf("worker con heartbeat atrasado no deberia salir vivo: %+v", rows[0])
+	}
+	if rows[0].State != "stale" {
+		t.Fatalf("state stale esperado: %+v", rows[0])
+	}
+	if rows[0].SessionRef != "orq-codex7-232657/%0" {
+		t.Fatalf("session ref inesperado: %+v", rows[0])
+	}
+	if rows[0].ExitError != "heartbeat_lag" {
+		t.Fatalf("exit error inesperado: %+v", rows[0])
+	}
+}
+
+func TestRuntimeDiagnosticoMarcaWorkerPausedSiHandlePausado(t *testing.T) {
+	tmp := t.TempDir()
+	now := time.Now().UTC()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+
+	writeJSON := func(path string, payload any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	writeJSON(manifestPath, map[string]any{
+		"agent":        "Codex7",
+		"driver":       "tmux_cli_session",
+		"transport":    "tmux",
+		"tmux_session": "orq-codex7-232657",
+		"tmux_pane_id": "%0",
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":      "running",
+		"updated_at": now.Format(time.RFC3339),
+		"alive":      true,
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339),
+	})
+	meta, err := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal meta: %v", err)
+	}
+
+	rows := runtimeWorkerRows([]*db.RuntimeHandle{
+		{ID: 569, Agente: "Codex7", Estado: "pausado", MetadataJSON: string(meta)},
+	}, 5)
+	if len(rows) != 1 {
+		t.Fatalf("rows inesperadas: %+v", rows)
+	}
+	if !rows[0].Alive {
+		t.Fatalf("worker pausado no deberia salir muerto: %+v", rows[0])
+	}
+	if rows[0].State != "paused" {
+		t.Fatalf("state paused esperado: %+v", rows[0])
+	}
+}
+
+func TestRuntimeDiagnosticoIssuesDetectaHeartbeatLagYTMUX(t *testing.T) {
+	orig := runtimeDiagnosticoTmuxHasSession
+	runtimeDiagnosticoTmuxHasSession = func(sessionName string) bool {
+		return strings.TrimSpace(sessionName) == "orq-codex7-live"
+	}
+	origNow := runtimeDiagnosticoNow
+	runtimeDiagnosticoNow = func() time.Time {
+		return time.Date(2026, 4, 6, 22, 48, 0, 0, time.UTC)
+	}
+	t.Cleanup(func() {
+		runtimeDiagnosticoTmuxHasSession = orig
+		runtimeDiagnosticoNow = origNow
+	})
+
+	rows := []runtimeDiagnosticoWorkerRow{
+		{
+			HandleID:    1,
+			Agent:       "Codex7",
+			Transport:   "tmux",
+			RuntimeRef:  "orq-codex7-old/%0",
+			State:       "stale",
+			Alive:       false,
+			ExitError:   "heartbeat_lag",
+			TmuxSession: "orq-codex7-old",
+			SessionRef:  "orq-codex7-old/%0",
+			HeartbeatAt: nil,
+			UpdatedAt:   nil,
+			ChildPID:    123,
+		},
+		{
+			HandleID:    2,
+			Agent:       "Codex7",
+			Transport:   "tmux",
+			RuntimeRef:  "orq-codex7-live/%0",
+			State:       "paused",
+			Alive:       true,
+			TmuxSession: "orq-codex7-live",
+			SessionRef:  "orq-codex7-live/%0",
+		},
+		{
+			HandleID:    3,
+			Agent:       "Codex7",
+			Transport:   "tmux",
+			RuntimeRef:  "orq-codex7-missing/%0",
+			State:       "running",
+			Alive:       true,
+			TmuxSession: "orq-codex7-missing",
+			SessionRef:  "orq-codex7-missing/%0",
+		},
+	}
+
+	issues := runtimeDiagnosticoIssues(rows, nil, nil, nil)
+	if len(issues) != 2 {
+		t.Fatalf("issues inesperadas: %+v", issues)
+	}
+	if issues[0].Code != "heartbeat_lag" {
+		t.Fatalf("primer issue inesperado: %+v", issues)
+	}
+	if issues[1].Code != "tmux_session_missing" {
+		t.Fatalf("segundo issue inesperado: %+v", issues)
+	}
+}
+
+func TestRuntimeDiagnosticoIssuesNoMarcaOrphanSiOtraPaneVivaComparteSesion(t *testing.T) {
+	orig := runtimeDiagnosticoTmuxHasSession
+	runtimeDiagnosticoTmuxHasSession = func(sessionName string) bool {
+		return strings.TrimSpace(sessionName) == "orq-codex8-shared"
+	}
+	origNow := runtimeDiagnosticoNow
+	runtimeDiagnosticoNow = func() time.Time {
+		return time.Date(2026, 4, 6, 22, 48, 0, 0, time.UTC)
+	}
+	t.Cleanup(func() {
+		runtimeDiagnosticoTmuxHasSession = orig
+		runtimeDiagnosticoNow = origNow
+	})
+
+	rows := []runtimeDiagnosticoWorkerRow{
+		{
+			HandleID:    10,
+			Agent:       "Codex8",
+			Transport:   "tmux",
+			RuntimeRef:  "orq-codex8-shared/%6",
+			State:       "stopped",
+			Alive:       false,
+			TmuxSession: "orq-codex8-shared",
+			SessionRef:  "orq-codex8-shared/%6",
+		},
+		{
+			HandleID:    11,
+			Agent:       "Codex8",
+			Transport:   "tmux",
+			RuntimeRef:  "orq-codex8-shared/%7",
+			State:       "running",
+			Alive:       true,
+			TmuxSession: "orq-codex8-shared",
+			SessionRef:  "orq-codex8-shared/%7",
+		},
+	}
+
+	issues := runtimeDiagnosticoIssues(rows, nil, nil, nil)
+	if len(issues) != 0 {
+		t.Fatalf("no deberia marcar sesion compartida viva como huérfana: %+v", issues)
+	}
+}
+
+func TestRuntimeDiagnosticoIssuesDetectaSessionResumeBlocked(t *testing.T) {
+	origNow := runtimeDiagnosticoNow
+	runtimeDiagnosticoNow = func() time.Time {
+		return time.Date(2026, 4, 6, 22, 48, 0, 0, time.UTC)
+	}
+	t.Cleanup(func() { runtimeDiagnosticoNow = origNow })
+
+	rows := []runtimeDiagnosticoWorkerRow{
+		{
+			HandleID:            645,
+			Agent:               "Codex2",
+			State:               "running",
+			Alive:               true,
+			MailboxDeliveryMode: "session_resume",
+			UpdatedAt:           diagTimePtr(time.Date(2026, 4, 6, 22, 34, 0, 0, time.UTC)),
+		},
+	}
+	mailbox := []*db.RuntimeMailboxMessage{
+		{
+			ID:        65040,
+			ToAgente:  "Codex2",
+			Estado:    "pendiente",
+			CreatedAt: time.Date(2026, 4, 6, 22, 34, 56, 0, time.UTC),
+		},
+	}
+
+	issues := runtimeDiagnosticoIssues(rows, nil, mailbox, nil)
+	if len(issues) != 1 {
+		t.Fatalf("issues inesperadas: %+v", issues)
+	}
+	if issues[0].Code != "session_resume_blocked" {
+		t.Fatalf("issue inesperado: %+v", issues)
+	}
+}
+
+func TestRuntimeDiagnosticoIssuesDetectaResumeOrderPendingYRestartLoop(t *testing.T) {
+	origNow := runtimeDiagnosticoNow
+	runtimeDiagnosticoNow = func() time.Time {
+		return time.Date(2026, 4, 6, 22, 48, 0, 0, time.UTC)
+	}
+	t.Cleanup(func() { runtimeDiagnosticoNow = origNow })
+
+	rows := []runtimeDiagnosticoWorkerRow{
+		{
+			HandleID:            646,
+			Agent:               "Codex3",
+			State:               "running",
+			Alive:               true,
+			MailboxDeliveryMode: "session_resume",
+			UpdatedAt:           diagTimePtr(time.Date(2026, 4, 6, 22, 20, 0, 0, time.UTC)),
+		},
+	}
+	orders := []*db.RuntimeOrder{
+		{
+			ID:        84350,
+			Agente:    "Codex3",
+			Tipo:      "resume",
+			Estado:    "pendiente",
+			CreatedAt: time.Date(2026, 4, 6, 22, 30, 0, 0, time.UTC),
+		},
+	}
+	checkpoints := []*db.RuntimeCheckpoint{
+		{
+			ID:             35149,
+			Agente:         "Codex3",
+			CheckpointKind: "stop",
+			CreatedAt:      time.Date(2026, 4, 6, 18, 22, 56, 0, time.UTC),
+			Resumen:        "worker_atascado",
+			Source:         "runtime_order:84350",
+		},
+		{
+			ID:             35154,
+			Agente:         "Codex3",
+			CheckpointKind: "stop",
+			CreatedAt:      time.Date(2026, 4, 6, 22, 34, 56, 0, time.UTC),
+			Resumen:        "worker_atascado",
+			Source:         "runtime_order:84379",
+		},
+	}
+
+	issues := runtimeDiagnosticoIssues(rows, orders, nil, checkpoints)
+	if len(issues) != 2 {
+		t.Fatalf("issues inesperadas: %+v", issues)
+	}
+	if issues[0].Code != "resume_order_pending" {
+		t.Fatalf("primer issue inesperado: %+v", issues)
+	}
+	if issues[1].Code != "restart_loop" {
+		t.Fatalf("segundo issue inesperado: %+v", issues)
+	}
+}
+
+func diagTimePtr(ts time.Time) *time.Time {
+	return &ts
 }

@@ -23,7 +23,7 @@ After=network.target
 Type=simple
 User=$(whoami)
 WorkingDirectory=$(pwd)
-ExecStart=$(pwd)/orquesta serve --puerto 8080
+ExecStart=$(pwd)/orquesta serve --puerto 16543
 Restart=always
 RestartSec=10
 StandardOutput=append:$(pwd)/logs/daemon.log
@@ -43,4 +43,4 @@ echo "  sudo systemctl daemon-reload"
 echo "  sudo systemctl enable --now orquesta"
 echo ""
 echo "------------------------------------------------"
-echo "🔗 El panel estará en: http://localhost:8080"
+echo "🔗 El panel estará en: http://localhost:16543"

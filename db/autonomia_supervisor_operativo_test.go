@@ -1,6 +1,9 @@
 package db
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestSeleccionarSupervisorAutonomiaOperativoHaceFallbackSiPreferidoNoDisponible(t *testing.T) {
 	prepararDBTemporal(t)
@@ -142,6 +145,73 @@ func TestSeleccionarSupervisorAutonomiaOperativoRespetaExclude(t *testing.T) {
 	}
 }
 
+func TestSeleccionarSupervisorAutonomiaOperativoEvitaCuentaCompartidaOcupada(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexSupervisor", "programador"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	if err := RegistrarAgente("CodexWorker", "programador"); err != nil {
+		t.Fatalf("registrar worker: %v", err)
+	}
+	if err := RegistrarAgente("CodexOccupant", "programador"); err != nil {
+		t.Fatalf("registrar occupant: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := UpsertAgenteIdentidadObservada("CodexSupervisor", "shared@example.com", "shared", "test", &now); err != nil {
+		t.Fatalf("identidad supervisor: %v", err)
+	}
+	if err := UpsertAgenteIdentidadObservada("CodexOccupant", "shared@example.com", "shared", "test", &now); err != nil {
+		t.Fatalf("identidad occupant: %v", err)
+	}
+	if err := UpsertAgenteIdentidadObservada("CodexWorker", "worker@example.com", "worker", "test", &now); err != nil {
+		t.Fatalf("identidad worker: %v", err)
+	}
+
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "supervision-cuenta-compartida",
+		Nombre:  "supervision-cuenta-compartida",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertProyectoAutonomia(&ProyectoAutonomia{
+		ProyectoID:        proyectoID,
+		Enabled:           true,
+		SupervisorAgente:  "CodexSupervisor",
+		ReserveSupervisor: true,
+		EstadoAutonomia:   AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := ActivarAsignacion("CodexSupervisor", proyectoID, "supervision_supervisor"); err != nil {
+		t.Fatalf("activar supervisor: %v", err)
+	}
+	if err := ActivarAsignacion("CodexWorker", proyectoID, "supervision_worker"); err != nil {
+		t.Fatalf("activar worker: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "CodexOccupant",
+		ProyectoID:        &proyectoID,
+		CWD:               t.TempDir(),
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-codex-occupant",
+	}); err != nil {
+		t.Fatalf("iniciar sesion occupant: %v", err)
+	}
+
+	supervisor, err := SeleccionarSupervisorAutonomiaOperativo(proyectoID, "")
+	if err != nil {
+		t.Fatalf("seleccionar supervisor operativo: %v", err)
+	}
+	if supervisor == nil || supervisor.Nombre == "CodexSupervisor" {
+		t.Fatalf("deberia evitar arrancar otro supervisor sobre la misma cuenta ocupada, got=%+v", supervisor)
+	}
+}
+
 func TestEsSupervisorAutonomiaOperativoDevuelveSupervisorSeleccionado(t *testing.T) {
 	prepararDBTemporal(t)
 
@@ -205,5 +275,47 @@ func TestEsSupervisorAutonomiaOperativoDevuelveSupervisorSeleccionado(t *testing
 	}
 	if supervisor == nil || supervisor.Nombre != "CodexActivo" {
 		t.Fatalf("supervisor canónico inesperado: %+v", supervisor)
+	}
+}
+
+func TestAgenteAutonomiaActivoEnProyectoCuentaHandleOperativoSinSesionActiva(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexActivo", "programador"); err != nil {
+		t.Fatalf("registrar activo: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "supervision-handle-activo",
+		Nombre:  "supervision-handle-activo",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := ActivarAsignacion("CodexActivo", proyectoID, "activo"); err != nil {
+		t.Fatalf("activar asignacion activo: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "CodexActivo",
+		ProyectoID:        &proyectoID,
+		CWD:               t.TempDir(),
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-codex-handle-operativo",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion activa: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE sesiones SET activa=0, estado='cerrada' WHERE id=?`, sesion.ID); err != nil {
+		t.Fatalf("cerrar sesion conservando handle: %v", err)
+	}
+
+	ok, err := agenteAutonomiaActivoEnProyecto("CodexActivo", proyectoID)
+	if err != nil {
+		t.Fatalf("agenteAutonomiaActivoEnProyecto: %v", err)
+	}
+	if !ok {
+		t.Fatal("deberia contar el handle operativo reciente aunque la sesion ya no este activa")
 	}
 }

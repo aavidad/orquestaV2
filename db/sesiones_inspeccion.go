@@ -5,13 +5,7 @@ import (
 	"strings"
 )
 
-// FiltroSesionesInspeccion permite consultar sesiones sin tocar rutas de escritura.
-type FiltroSesionesInspeccion struct {
-	Agente     *string
-	ProyectoID *int64
-	Activa     *bool
-	Estado     *string
-}
+// FiltroSesionesInspeccion is aliased in db/sesiones.go
 
 // ListarSesionesInspeccion devuelve sesiones con filtros por agente, proyecto, activa y estado.
 func ListarSesionesInspeccion(f FiltroSesionesInspeccion) ([]*Sesion, error) {

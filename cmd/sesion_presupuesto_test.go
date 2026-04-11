@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"orquesta/db"
+	"orquesta/sesionesapp"
 )
 
 func TestSesionPresupuestoVerUsaAPI(t *testing.T) {
@@ -36,7 +36,7 @@ func TestSesionPresupuestoVerUsaAPI(t *testing.T) {
 			t.Fatalf("agente inesperado: %q", got)
 		}
 		_ = json.NewEncoder(w).Encode(apiSesionPresupuestoResponse{
-			Presupuesto: &db.PresupuestoSesion{
+			Presupuesto: &sesionesapp.PresupuestoSesion{
 				ID:                91,
 				SesionID:          77,
 				ModelSlug:         "gpt-5.4",
@@ -46,7 +46,7 @@ func TestSesionPresupuestoVerUsaAPI(t *testing.T) {
 				BudgetSource:      "api",
 				CheckedAt:         checkedAt,
 			},
-			Evaluacion: &db.EvaluacionPresupuesto{
+			Evaluacion: &sesionesapp.EvaluacionPresupuesto{
 				Estado:         "handoff_preventivo",
 				DebeHandoff:    true,
 				Motivo:         "quedan 900 s",
@@ -109,7 +109,7 @@ func TestSesionPresupuestoRegistrarUsaAPI(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(apiSesionPresupuestoResponse{
 			ID: 88,
-			Presupuesto: &db.PresupuestoSesion{
+			Presupuesto: &sesionesapp.PresupuestoSesion{
 				ID:               88,
 				SesionID:         77,
 				ModelSlug:        "gpt-5.4",
@@ -118,7 +118,7 @@ func TestSesionPresupuestoRegistrarUsaAPI(t *testing.T) {
 				BudgetSource:     "api",
 				CheckedAt:        checkedAt,
 			},
-			Evaluacion: &db.EvaluacionPresupuesto{
+			Evaluacion: &sesionesapp.EvaluacionPresupuesto{
 				Estado:      "handoff_preventivo",
 				DebeHandoff: true,
 				Motivo:      "quedan 600 s",

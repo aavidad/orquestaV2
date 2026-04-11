@@ -216,3 +216,46 @@ func TestAgenteYaBootstrappeadoServidorDetectaMailboxDurablePendiente(t *testing
 		t.Fatal("deberia detectar bootstrap durable pendiente")
 	}
 }
+
+func TestAgenteYaBootstrappeadoServidorCuentaHandleOperativoSinSesionActiva(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	t.Setenv("PWD", tmp)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "repo"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex3", proyectoID, "test"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:            "Codex3",
+		ProyectoID:        &proyectoID,
+		CWD:               filepath.Join(tmp, "repo"),
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-bootstrap-handle",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE sesiones SET activa=0, estado='cerrada' WHERE id=?`, sesion.ID); err != nil {
+		t.Fatalf("cerrar sesion conservando handle: %v", err)
+	}
+
+	ok, err := agenteYaBootstrappeadoServidor("Codex3", proyectoID)
+	if err != nil {
+		t.Fatalf("agenteYaBootstrappeadoServidor: %v", err)
+	}
+	if !ok {
+		t.Fatal("deberia detectar bootstrap por handle operativo reciente")
+	}
+}

@@ -49,7 +49,7 @@ var mcpSupportedProtocols = []string{
 var panelService = panelapp.NewService(panelapp.Repository{})
 var propuestasService = propuestasapp.NewService(propuestasapp.Repository{})
 var runtimesService = runtimesapp.NewService(runtimesapp.Repository{})
-var sesionesAPIService = sesionesapp.NewService(sesionesapp.Repository{})
+var sesionesAPIService = sesionesapp.NewService(db.SqliteSesionesRepo{})
 var tareasService = tareasapp.NewService(tareasapp.Repository{})
 
 type mcpRequest struct {
@@ -555,6 +555,7 @@ func listMCPResources() ([]mcpResource, error) {
 			Annotations: audienceAssistant(0.8),
 		})
 	}
+	resources = append(resources, microprogramacionMCPResources()...)
 
 	sort.Slice(resources, func(i, j int) bool {
 		return resources[i].URI < resources[j].URI
@@ -563,7 +564,7 @@ func listMCPResources() ([]mcpResource, error) {
 }
 
 func mcpResourceTemplates() []mcpResourceTemplate {
-	return []mcpResourceTemplate{
+	templates := []mcpResourceTemplate{
 		{
 			URITemplate: "orquesta://propuestas/{codigo}",
 			Name:        "propuesta-por-codigo",
@@ -649,9 +650,13 @@ func mcpResourceTemplates() []mcpResourceTemplate {
 			MIMEType:    "application/json",
 		},
 	}
+	return append(templates, microprogramacionMCPResourceTemplates()...)
 }
 
 func readMCPResource(uri string) ([]map[string]any, error) {
+	if contents, handled, err := readMicroprogramacionMCPResource(uri); handled {
+		return contents, err
+	}
 	switch {
 	case uri == "orquesta://arquitectura/mcp":
 		return resourceText(uri, "text/markdown", arquitecturaMCPText()), nil
@@ -1163,7 +1168,7 @@ func getMCPPrompt(name string, args map[string]any) (map[string]any, error) {
 }
 
 func listMCPTools() []mcpTool {
-	return []mcpTool{
+	tools := []mcpTool{
 		{
 			Name:        "orquesta.estado.resumen",
 			Title:       "Resumen del estado",
@@ -2042,9 +2047,13 @@ func listMCPTools() []mcpTool {
 			},
 		},
 	}
+	return append(tools, microprogramacionMCPTools()...)
 }
 
 func callMCPTool(name string, args map[string]any) (map[string]any, error) {
+	if result, handled, err := callMicroprogramacionMCPTool(name, args); handled {
+		return result, err
+	}
 	switch strings.TrimSpace(name) {
 	case "orquesta.estado.resumen":
 		resumen, err := buildEstadoResumen()
@@ -3035,22 +3044,26 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 }
 
 type estadoResumen struct {
-	Generado           string           `json:"generado"`
-	Agentes            []*db.Agente     `json:"agentes,omitempty"`
-	TareasPorEstado    map[string]int   `json:"tareasPorEstado"`
-	AgentesActivos     []*db.Agente     `json:"agentesActivos"`
-	AgentesTrabajando  []*db.Agente     `json:"agentesTrabajando,omitempty"`
-	Proyectos          []map[string]any `json:"proyectos"`
-	Pools              []map[string]any `json:"pools"`
-	Asignaciones       []map[string]any `json:"asignaciones"`
-	PropuestasAbiertas []propuestaLite  `json:"propuestasAbiertas"`
-	TareasActivas      []tareaLite      `json:"tareasActivas"`
-	TareasEnProgreso   []tareaLite      `json:"tareasEnProgreso,omitempty"`
-	TareasReservadas   []tareaLite      `json:"tareasReservadas,omitempty"`
-	WorktreesActivas   []map[string]any `json:"worktreesActivas"`
-	LocksActivos       []map[string]any `json:"locksActivos"`
-	SesionesActivas    []map[string]any `json:"sesionesActivas"`
-	Conectores         []map[string]any `json:"conectores"`
+	Generado            string           `json:"generado"`
+	Agentes             []*db.Agente     `json:"agentes,omitempty"`
+	TareasPorEstado     map[string]int   `json:"tareasPorEstado"`
+	AgentesActivos      []*db.Agente     `json:"agentesActivos"`
+	AgentesTrabajando   []*db.Agente     `json:"agentesTrabajando,omitempty"`
+	AgentesSaturados    []*db.Agente     `json:"agentesSaturados,omitempty"`
+	AgentesAtascados    []*db.Agente     `json:"agentesAtascados,omitempty"`
+	AgentesAuthManual   []*db.Agente     `json:"agentesAuthManual,omitempty"`
+	AgentesQuotaBlocked []*db.Agente     `json:"agentesQuotaBlocked,omitempty"`
+	Proyectos           []map[string]any `json:"proyectos"`
+	Pools               []map[string]any `json:"pools"`
+	Asignaciones        []map[string]any `json:"asignaciones"`
+	PropuestasAbiertas  []propuestaLite  `json:"propuestasAbiertas"`
+	TareasActivas       []tareaLite      `json:"tareasActivas"`
+	TareasEnProgreso    []tareaLite      `json:"tareasEnProgreso,omitempty"`
+	TareasReservadas    []tareaLite      `json:"tareasReservadas,omitempty"`
+	WorktreesActivas    []map[string]any `json:"worktreesActivas"`
+	LocksActivos        []map[string]any `json:"locksActivos"`
+	SesionesActivas     []map[string]any `json:"sesionesActivas"`
+	Conectores          []map[string]any `json:"conectores"`
 }
 
 type propuestaLite struct {
@@ -3110,22 +3123,26 @@ func buildEstadoResumen() (*estadoResumen, error) {
 	}
 
 	return &estadoResumen{
-		Generado:           time.Now().UTC().Format(time.RFC3339),
-		Agentes:            status.Agentes,
-		TareasPorEstado:    status.TareasPorEstado,
-		AgentesActivos:     status.AgentesActivos,
-		AgentesTrabajando:  status.AgentesTrabajando,
-		Proyectos:          proyectos,
-		Pools:              pools,
-		Asignaciones:       asignaciones,
-		PropuestasAbiertas: status.PropuestasResumen,
-		TareasActivas:      status.TareasActivas,
-		TareasEnProgreso:   filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada),
-		TareasReservadas:   filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
-		WorktreesActivas:   worktrees,
-		LocksActivos:       locks,
-		SesionesActivas:    sesiones,
-		Conectores:         conectores,
+		Generado:            time.Now().UTC().Format(time.RFC3339),
+		Agentes:             status.Agentes,
+		TareasPorEstado:     status.TareasPorEstado,
+		AgentesActivos:      status.AgentesActivos,
+		AgentesTrabajando:   status.AgentesTrabajando,
+		AgentesSaturados:    status.AgentesSaturados,
+		AgentesAtascados:    status.AgentesAtascados,
+		AgentesAuthManual:   status.AgentesAuthManual,
+		AgentesQuotaBlocked: status.AgentesQuotaBlocked,
+		Proyectos:           proyectos,
+		Pools:               pools,
+		Asignaciones:        asignaciones,
+		PropuestasAbiertas:  status.PropuestasResumen,
+		TareasActivas:       status.TareasActivas,
+		TareasEnProgreso:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada),
+		TareasReservadas:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
+		WorktreesActivas:    worktrees,
+		LocksActivos:        locks,
+		SesionesActivas:     sesiones,
+		Conectores:          conectores,
 	}, nil
 }
 
@@ -3135,15 +3152,19 @@ func buildEstadoResumenLigero() (*estadoResumen, error) {
 		return nil, err
 	}
 	return &estadoResumen{
-		Generado:           time.Now().UTC().Format(time.RFC3339),
-		Agentes:            status.Agentes,
-		TareasPorEstado:    status.TareasPorEstado,
-		AgentesActivos:     status.AgentesActivos,
-		AgentesTrabajando:  status.AgentesTrabajando,
-		PropuestasAbiertas: status.PropuestasResumen,
-		TareasActivas:      status.TareasActivas,
-		TareasEnProgreso:   filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada),
-		TareasReservadas:   filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
+		Generado:            time.Now().UTC().Format(time.RFC3339),
+		Agentes:             status.Agentes,
+		TareasPorEstado:     status.TareasPorEstado,
+		AgentesActivos:      status.AgentesActivos,
+		AgentesTrabajando:   status.AgentesTrabajando,
+		AgentesSaturados:    status.AgentesSaturados,
+		AgentesAtascados:    status.AgentesAtascados,
+		AgentesAuthManual:   status.AgentesAuthManual,
+		AgentesQuotaBlocked: status.AgentesQuotaBlocked,
+		PropuestasAbiertas:  status.PropuestasResumen,
+		TareasActivas:       status.TareasActivas,
+		TareasEnProgreso:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada),
+		TareasReservadas:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
 	}, nil
 }
 
@@ -3318,7 +3339,7 @@ func buildSupervisorBriefing(supervisor string) (string, error) {
 
 	conectados := status.AgentesActivos
 	enCuota := agentesNoActivosConCuota(status.Agentes)
-	retenidas := tareasRetenidasPorCuota(status.TareasActivas, status.Agentes)
+	retenidas := tareasRetenidasPorCuota(status.TareasActivas, status.Agentes, status.AgentesQuotaBlocked)
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Briefing de supervisor: %s\n\n", supervisor)
@@ -3467,8 +3488,8 @@ func resumenSupervisorAgente(a *db.Agente) string {
 	if a.ReanimarAt != nil && !a.ReanimarAt.IsZero() && a.ReanimarAt.After(time.Now().UTC()) {
 		partes = append(partes, "cooldown hasta "+a.ReanimarAt.Local().Format("2006-01-02 15:04"))
 	}
-	if strings.TrimSpace(a.CuentaEmail) != "" {
-		partes = append(partes, "cuenta "+strings.TrimSpace(a.CuentaEmail))
+	if cuenta := resumenCuentaCanonica(a.CuentaID, a.CuentaEmail, a.CuentaUsuario); cuenta != "" {
+		partes = append(partes, cuenta)
 	}
 	if strings.TrimSpace(a.EstadoCuota) != "" && strings.TrimSpace(a.EstadoCuota) != "activo" {
 		partes = append(partes, "cuota:"+strings.TrimSpace(a.EstadoCuota))
@@ -4065,7 +4086,7 @@ func buildSupervisorOperationalActions(status apiStatusResponse, mailboxPendient
 		}
 	}
 	actions = append(actions, buildSupervisorReserveRebalanceActions(status)...)
-	retenidas := tareasRetenidasPorCuota(status.TareasActivas, status.Agentes)
+	retenidas := tareasRetenidasPorCuota(status.TareasActivas, status.Agentes, status.AgentesQuotaBlocked)
 	if len(retenidas) > 0 {
 		priority := "media"
 		if len(status.AgentesActivos) == 0 {

@@ -7,6 +7,9 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # Diseño mínimo — Control activo de agentes vivos
 
+> Nota de vigencia 2026-04-05
+> Este diseño queda parcialmente obsoleto en el transporte local interactivo. La ruta canónica actual es `tmux_cli_session` con `manifest/status/heartbeat` y continuidad por `session_resume`. `pty/process` no debe seguir usándose como modelo principal.
+
 ## Problema
 
 Orquesta ya puede:
@@ -111,9 +114,9 @@ Tipos mínimos:
 
 ## Transportes previstos
 
-### `pty/process`
+### `tmux_cli_session`
 
-Para consolas locales como Terminator o procesos lanzados por Orquesta.
+Para agentes interactivos locales gobernados por Orquesta con sesión durable, pane canónico y artefactos estructurados.
 
 ### `mcp_session`
 
@@ -131,7 +134,7 @@ Primera fase:
 
 - órdenes en BD
 - API para crearlas
-- implementación real para `pty/process`
+- implementación real para `tmux_cli_session`
 
 ## Reparto sugerido
 

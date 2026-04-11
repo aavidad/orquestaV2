@@ -13,11 +13,15 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
+	"orquesta/internal/controlruntime"
 	"orquesta/reviewapp"
 	"orquesta/runtimeagente"
 )
+
+func timePtr(v time.Time) *time.Time { return &v }
 
 func TestProcesarSupervisionAutonomaBatchEncolaSupervisionYRegistraCiclo(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
@@ -104,6 +108,1256 @@ func TestProcesarSupervisionAutonomaBatchEncolaSupervisionYRegistraCiclo(t *test
 	}
 	if policy.LastSupervisionAt == nil {
 		t.Fatal("last_supervision_at debería informarse")
+	}
+}
+
+func TestRevalidarYVerificarAgenteDisponibleParaTrabajoNoCaeAStatusSiFaltaEnBD(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	prevStatus := statusService
+	defer func() { statusService = prevStatus }()
+	statusService = stubStatusService{
+		response: apiStatusResponse{
+			Agentes:           []*db.Agente{{Nombre: "CodexFantasma", EstadoCuota: "activo"}},
+			AgentesActivos:    []*db.Agente{{Nombre: "CodexFantasma", EstadoCuota: "activo"}},
+			AgentesTrabajando: []*db.Agente{{Nombre: "CodexFantasma", EstadoCuota: "activo"}},
+		},
+	}
+
+	err := revalidarYVerificarAgenteDisponibleParaTrabajo("CodexFantasma")
+	if err == nil {
+		t.Fatal("deberia fallar si el agente no existe en BD")
+	}
+	if !strings.Contains(err.Error(), "no encontrado") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
+func TestRefrescarPresupuestoSesionObservadoDesdeSesionPrefiereHandleTMUXCanonico(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex7", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:            "Codex7",
+		ProyectoID:        &proyectoID,
+		CWD:               filepath.Join(tmp, "orquestador"),
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-codex7-budget",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	base := filepath.Join(tmp, "codex-perfiles")
+	if err := os.MkdirAll(filepath.Join(base, "bin"), 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	wrapper := filepath.Join(base, "bin", "codex-perfil")
+	script := `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" != "Codex7" || "${2:-}" != "status-json" ]]; then
+  exit 9
+fi
+cat <<'JSON'
+{"source":"codex_profile_status","profile":"Codex7","checked_at":"2026-04-07T09:40:00Z","observed_at":"2026-04-07T09:39:30Z","session_path":"/tmp/sess-7.jsonl","session_id":"sess-codex7-budget","account":{"email":"alberto@avidad.com","user":"Alberto","plan_type":"team"},"rate_limits":{"primary":{"used_percent":18,"left_percent":82,"window_minutes":300,"resets_at":"2026-04-07T11:40:00Z"},"secondary":{"used_percent":41,"left_percent":59,"window_minutes":10080,"resets_at":"2026-04-14T06:47:00Z"},"credits":null,"plan_type":"team"}}
+JSON
+`
+	if err := os.WriteFile(wrapper, []byte(script), 0o755); err != nil {
+		t.Fatalf("write wrapper: %v", err)
+	}
+
+	runDir := filepath.Join(tmp, "runtime", "Codex7", "run-1")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir run dir: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	writeJSON := func(path string, payload map[string]any) {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	writeJSON(manifestPath, map[string]any{
+		"version":                1,
+		"agent":                  "Codex7",
+		"driver":                 "tmux_cli_session",
+		"transport":              "tmux",
+		"profile":                "Codex7",
+		"profile_status_wrapper": wrapper,
+		"tmux_session":           "orq-codex7-budget",
+		"tmux_pane_id":           "%3",
+		"status_path":            statusPath,
+		"heartbeat_path":         heartbeatPath,
+		"external_session_id":    "sess-codex7-budget",
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":               "running",
+		"updated_at":          now,
+		"alive":               true,
+		"child_pid":           7007,
+		"external_session_id": "sess-codex7-budget",
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":               true,
+		"heartbeat_at":        now,
+		"child_pid":           7007,
+		"external_session_id": "sess-codex7-budget",
+	})
+
+	pid := int64(7007)
+	runtimeID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:       "Codex7",
+		ProyectoID:   &proyectoID,
+		SesionID:     &sesion.ID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("crear runtime: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                 "tmux_cli_session",
+		"tmux_session":           "orq-codex7-budget",
+		"tmux_pane_id":           "%3",
+		"worker_manifest_path":   manifestPath,
+		"worker_status_path":     statusPath,
+		"worker_heartbeat_path":  heartbeatPath,
+		"profile_status_wrapper": wrapper,
+		"profile_name":           "Codex7",
+		"rendered_command":       "wrapper opaco sin perfil visible",
+		"external_session_id":    "sess-codex7-budget",
+	})
+	if _, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo', ?, CURRENT_TIMESTAMP)`,
+		"Codex7", proyectoID, runtimeID, "tmux", "session", "orq-codex7-budget/%3", string(metaJSON)); err != nil {
+		t.Fatalf("insert handle: %v", err)
+	}
+
+	ok, err := refrescarPresupuestoSesionObservadoDesdeSesion(sesion)
+	if err != nil {
+		t.Fatalf("refrescar presupuesto desde sesion: %v", err)
+	}
+	if !ok {
+		t.Fatal("deberia refrescar presupuesto via handle tmux canonico")
+	}
+	ultimo, err := db.UltimoPresupuestoSesionPorFuente(sesion.ID, "codex_profile_status")
+	if err != nil {
+		t.Fatalf("ultimo presupuesto codex_profile_status: %v", err)
+	}
+	if ultimo == nil {
+		t.Fatal("deberia persistir presupuesto codex_profile_status")
+	}
+	agente, err := db.GetAgente("Codex7")
+	if err != nil {
+		t.Fatalf("get agente: %v", err)
+	}
+	if agente.CuentaEmail != "alberto@avidad.com" {
+		t.Fatalf("cuenta inesperada tras refresh canonico: %+v", agente)
+	}
+	if agente.PresupuestoFuente != "codex_profile_status" {
+		t.Fatalf("fuente de presupuesto inesperada: %+v", agente)
+	}
+}
+
+func TestRuntimeRecuperacionSesionObjetivoPrefiereRuntimePrincipalCanonicoSiElHandleFreshNoEstaEnlazado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexRecover", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	resSesionLegacy, err := db.DB.Exec(`INSERT INTO sesiones (
+		agente, proyecto_id, activa, estado, herramienta, host, heartbeat_at
+	) VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)`,
+		"CodexRecover", proyectoID, 0, "cerrada", "codex-cli", "test-host")
+	if err != nil {
+		t.Fatalf("insert sesion legacy: %v", err)
+	}
+	sesionLegacyID, _ := resSesionLegacy.LastInsertId()
+
+	resSesionTMUX, err := db.DB.Exec(`INSERT INTO sesiones (
+		agente, proyecto_id, activa, estado, herramienta, host, heartbeat_at
+	) VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)`,
+		"CodexRecover", proyectoID, 1, "activa", "codex-cli", "test-host")
+	if err != nil {
+		t.Fatalf("insert sesion tmux: %v", err)
+	}
+	sesionTMUXID, _ := resSesionTMUX.LastInsertId()
+
+	now := time.Now().UTC()
+	nowText := now.Format(time.RFC3339Nano)
+	pid := int64(os.Getpid())
+
+	runtimeLegacyID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:       "CodexRecover",
+		ProyectoID:   &proyectoID,
+		SesionID:     &sesionLegacyID,
+		Connector:    "codex-cli",
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+		Model:        "gpt-4.1",
+	})
+	if err != nil {
+		t.Fatalf("registrar runtime legacy: %v", err)
+	}
+	legacyMetaJSON, _ := json.Marshal(map[string]any{
+		"driver":           "process_pty_cli",
+		"rendered_command": "'/tmp/codex-perfiles/bin/codex-perfil' 'CuentaLegacy'",
+		"working_dir":      filepath.Join(tmp, "legacy"),
+	})
+	if _, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, sesion_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?,?,?, 'activo', ?, ?)`,
+		"CodexRecover", proyectoID, runtimeLegacyID, sesionLegacyID, "cli", "process", strconv.Itoa(os.Getpid()), string(legacyMetaJSON), now); err != nil {
+		t.Fatalf("insert handle legacy: %v", err)
+	}
+
+	runtimeTMUXID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:       "CodexRecover",
+		ProyectoID:   &proyectoID,
+		SesionID:     &sesionTMUXID,
+		Connector:    "codex-cli",
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+		Model:        "gpt-5.4",
+	})
+	if err != nil {
+		t.Fatalf("registrar runtime tmux: %v", err)
+	}
+
+	runDir := filepath.Join(tmp, "runtime", "CodexRecover", "run-1")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir run dir: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	writeJSON := func(path string, payload map[string]any) {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	writeJSON(manifestPath, map[string]any{
+		"version":             1,
+		"agent":               "CodexRecover",
+		"driver":              "tmux_cli_session",
+		"transport":           "tmux",
+		"tmux_session":        "orq-codexrecover-1",
+		"tmux_pane_id":        "%11",
+		"status_path":         statusPath,
+		"heartbeat_path":      heartbeatPath,
+		"external_session_id": "sess-codexrecover",
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":      "running",
+		"updated_at": nowText,
+		"alive":      true,
+		"child_pid":  os.Getpid(),
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":        true,
+		"heartbeat_at": nowText,
+		"started_at":   nowText,
+		"child_pid":    os.Getpid(),
+	})
+	tmuxMetaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-codexrecover-1",
+		"tmux_pane_id":          "%11",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	resTMUX, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?, 'activo', ?, ?)`,
+		"CodexRecover", proyectoID, "tmux", "session", "orq-codexrecover-1", string(tmuxMetaJSON), now)
+	if err != nil {
+		t.Fatalf("insert handle tmux: %v", err)
+	}
+	tmuxHandleID, _ := resTMUX.LastInsertId()
+
+	sesionLegacy, err := db.GetSesionByID(sesionLegacyID)
+	if err != nil {
+		t.Fatalf("get sesion legacy: %v", err)
+	}
+	handle, runtime, err := runtimeRecuperacionSesionObjetivo(sesionLegacy)
+	if err != nil {
+		t.Fatalf("runtimeRecuperacionSesionObjetivo: %v", err)
+	}
+	if handle == nil || handle.ID != tmuxHandleID {
+		t.Fatalf("deberia preferir el handle tmux canónico reciente: %+v", handle)
+	}
+	if runtime == nil || runtime.ID != runtimeTMUXID {
+		t.Fatalf("deberia preferir el runtime principal canónico en vez del runtime de la sesión vieja: %+v", runtime)
+	}
+}
+
+func TestRefrescarPresupuestoSesionObservadoDesdeSesionResuelveConectorPorSlug(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexSlug", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	base := filepath.Join(tmp, "codex-perfiles")
+	if err := os.MkdirAll(filepath.Join(base, "bin"), 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	wrapper := filepath.Join(base, "bin", "codex-perfil")
+	script := `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" != "CodexSlug" || "${2:-}" != "status-json" ]]; then
+  exit 5
+fi
+cat <<'JSON'
+{"source":"codex_profile_status","profile":"CodexSlug","checked_at":"2026-04-07T10:20:00Z","observed_at":"2026-04-07T10:19:30Z","session_path":"/tmp/sess-slug.jsonl","session_id":"sess-codexslug-budget","account":{"email":"slug@avidad.com","user":"Codex Slug","plan_type":"team"},"rate_limits":{"primary":{"used_percent":21,"left_percent":79,"window_minutes":300,"resets_at":"2026-04-07T13:20:00Z"},"secondary":{"used_percent":44,"left_percent":56,"window_minutes":10080,"resets_at":"2026-04-14T10:20:00Z"},"credits":null,"plan_type":"team"}}
+JSON
+`
+	if err := os.WriteFile(wrapper, []byte(script), 0o755); err != nil {
+		t.Fatalf("write wrapper: %v", err)
+	}
+	conectorID, err := db.UpsertConector(&db.Conector{
+		Slug:       "codex-cli",
+		Nombre:     "Codex CLI",
+		Transporte: "cli",
+		Comando:    wrapper,
+		ArgsJSON:   `["{{agent}}"]`,
+		Activo:     true,
+	})
+	if err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:            "CodexSlug",
+		ConectorID:        &conectorID,
+		ProyectoID:        &proyectoID,
+		CWD:               filepath.Join(tmp, "orquestador"),
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-codexslug-budget",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	sesion.ConectorID = nil
+	sesion.ConectorSlug = "codex-cli"
+
+	ok, err := refrescarPresupuestoSesionObservadoDesdeSesion(sesion)
+	if err != nil {
+		t.Fatalf("refrescar presupuesto desde sesion por slug: %v", err)
+	}
+	if !ok {
+		t.Fatal("deberia refrescar presupuesto resolviendo el conector por slug")
+	}
+	ultimo, err := db.UltimoPresupuestoSesionPorFuente(sesion.ID, "codex_profile_status")
+	if err != nil {
+		t.Fatalf("ultimo presupuesto codex_profile_status: %v", err)
+	}
+	if ultimo == nil {
+		t.Fatal("deberia persistir presupuesto codex_profile_status por slug")
+	}
+	agente, err := db.GetAgente("CodexSlug")
+	if err != nil {
+		t.Fatalf("get agente: %v", err)
+	}
+	if agente.CuentaEmail != "slug@avidad.com" || agente.PresupuestoFuente != "codex_profile_status" {
+		t.Fatalf("refresh por slug inesperado: %+v", agente)
+	}
+}
+
+func TestRuntimeHandleCanonicoDesdeSesionPresupuestoPrefiereLaSesionConcreta(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexBudgetSession", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	sesionA, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexBudgetSession",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador-a"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("sesion A: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE sesiones SET activa=0 WHERE id=?`, sesionA.ID); err != nil {
+		t.Fatalf("cerrar sesion A: %v", err)
+	}
+	sesionB, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexBudgetSession",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador-b"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("sesion B: %v", err)
+	}
+
+	pid := int64(os.Getpid())
+	runtimeAID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:       "CodexBudgetSession",
+		SesionID:     &sesionA.ID,
+		ProyectoID:   &proyectoID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("runtime A: %v", err)
+	}
+	handleA, err := db.GetRuntimeHandleBySesionID(sesionA.ID)
+	if err != nil || handleA == nil {
+		t.Fatalf("get handle A: %+v err=%v", handleA, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles
+		SET proyecto_id=?, runtime_id=?, transporte='tmux', handle_kind='session', handle_ref='orq-a/%1',
+		    estado='activo', metadata_json=?, last_seen_at=?
+		WHERE id=?`,
+		proyectoID, runtimeAID,
+		`{"driver":"tmux_cli_session","tmux_session":"orq-a","account_email":"a@avidad.com"}`,
+		time.Now().UTC().Add(-time.Minute), handleA.ID); err != nil {
+		t.Fatalf("actualizar handle A: %v", err)
+	}
+	handleAID := handleA.ID
+
+	runtimeBID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:       "CodexBudgetSession",
+		SesionID:     &sesionB.ID,
+		ProyectoID:   &proyectoID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("runtime B: %v", err)
+	}
+	handleB, err := db.GetRuntimeHandleBySesionID(sesionB.ID)
+	if err != nil || handleB == nil {
+		t.Fatalf("get handle B: %+v err=%v", handleB, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles
+		SET proyecto_id=?, runtime_id=?, transporte='tmux', handle_kind='session', handle_ref='orq-b/%2',
+		    estado='activo', metadata_json=?, last_seen_at=?
+		WHERE id=?`,
+		proyectoID, runtimeBID,
+		`{"driver":"tmux_cli_session","tmux_session":"orq-b","account_email":"b@avidad.com"}`,
+		time.Now().UTC(), handleB.ID); err != nil {
+		t.Fatalf("actualizar handle B: %v", err)
+	}
+
+	handle := runtimeHandleCanonicoDesdeSesionPresupuesto(sesionA)
+	if handle == nil || handle.ID != handleAID {
+		t.Fatalf("deberia priorizar el handle de la sesion concreta, got=%+v", handle)
+	}
+}
+
+func TestRuntimeHandleCanonicoParaPresupuestoPrefiereTMUXSobreLegacy(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex8", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:            "Codex8",
+		ProyectoID:        &proyectoID,
+		CWD:               filepath.Join(tmp, "orquestador"),
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-codex8-budget",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	base := filepath.Join(tmp, "codex-perfiles")
+	if err := os.MkdirAll(filepath.Join(base, "bin"), 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	wrapper := filepath.Join(base, "bin", "codex-perfil")
+	script := `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" != "Codex8" || "${2:-}" != "status-json" ]]; then
+  exit 7
+fi
+cat <<'JSON'
+{"source":"codex_profile_status","profile":"Codex8","checked_at":"2026-04-07T09:50:00Z","observed_at":"2026-04-07T09:49:30Z","session_path":"/tmp/sess-8.jsonl","session_id":"sess-codex8-budget","account":{"email":"berserk@avidad.com","user":"Berserk","plan_type":"team"},"rate_limits":{"primary":{"used_percent":24,"left_percent":76,"window_minutes":300,"resets_at":"2026-04-07T11:50:00Z"},"secondary":{"used_percent":74,"left_percent":26,"window_minutes":10080,"resets_at":"2026-04-09T18:35:00Z"},"credits":null,"plan_type":"team"}}
+JSON
+`
+	if err := os.WriteFile(wrapper, []byte(script), 0o755); err != nil {
+		t.Fatalf("write wrapper: %v", err)
+	}
+
+	pid := int64(8008)
+	runtimeLegacyID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:       "Codex8",
+		ProyectoID:   &proyectoID,
+		SesionID:     &sesion.ID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("crear runtime legacy: %v", err)
+	}
+	legacyMetaJSON, _ := json.Marshal(map[string]any{
+		"driver":           "process_pty_cli",
+		"rendered_command": "codex-perfil Codex8 --model gpt-5.4",
+		"working_dir":      filepath.Join(tmp, "legacy"),
+	})
+	resLegacy, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo', ?, CURRENT_TIMESTAMP)`,
+		"Codex8", proyectoID, runtimeLegacyID, "cli", "process", strconv.Itoa(os.Getpid()), string(legacyMetaJSON))
+	if err != nil {
+		t.Fatalf("insert legacy handle: %v", err)
+	}
+	legacyHandleID, _ := resLegacy.LastInsertId()
+
+	runDir := filepath.Join(tmp, "runtime", "Codex8", "run-1")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir run dir: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	writeJSON := func(path string, payload map[string]any) {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	writeJSON(manifestPath, map[string]any{
+		"version":                1,
+		"agent":                  "Codex8",
+		"driver":                 "tmux_cli_session",
+		"transport":              "tmux",
+		"profile":                "Codex8",
+		"profile_status_wrapper": wrapper,
+		"tmux_session":           "orq-codex8-budget",
+		"tmux_pane_id":           "%8",
+		"status_path":            statusPath,
+		"heartbeat_path":         heartbeatPath,
+		"external_session_id":    "sess-codex8-budget",
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":               "running",
+		"updated_at":          now,
+		"alive":               true,
+		"child_pid":           8008,
+		"external_session_id": "sess-codex8-budget",
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":               true,
+		"heartbeat_at":        now,
+		"child_pid":           8008,
+		"external_session_id": "sess-codex8-budget",
+	})
+
+	runtimeTMUXID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:       "Codex8",
+		ProyectoID:   &proyectoID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("crear runtime tmux: %v", err)
+	}
+	tmuxMetaJSON, _ := json.Marshal(map[string]any{
+		"driver":                 "tmux_cli_session",
+		"tmux_session":           "orq-codex8-budget",
+		"tmux_pane_id":           "%8",
+		"worker_manifest_path":   manifestPath,
+		"worker_status_path":     statusPath,
+		"worker_heartbeat_path":  heartbeatPath,
+		"profile_status_wrapper": wrapper,
+		"profile_name":           "Codex8",
+		"external_session_id":    "sess-codex8-budget",
+		"rendered_command":       "wrapper opaco",
+	})
+	if _, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo', ?, CURRENT_TIMESTAMP)`,
+		"Codex8", proyectoID, runtimeTMUXID, "tmux", "session", "orq-codex8-budget/%8", string(tmuxMetaJSON)); err != nil {
+		t.Fatalf("insert tmux handle: %v", err)
+	}
+
+	legacyHandle, err := db.GetRuntimeHandle(legacyHandleID)
+	if err != nil {
+		t.Fatalf("get legacy handle: %v", err)
+	}
+	canonico := runtimeHandleCanonicoParaPresupuesto(legacyHandle)
+	if canonico == nil {
+		t.Fatal("deberia resolver un handle canónico para presupuesto")
+	}
+	if canonico.ID == legacyHandleID || strings.TrimSpace(canonico.HandleRef) != "orq-codex8-budget/%8" {
+		t.Fatalf("deberia preferir el tmux canónico sobre el legacy: %+v", canonico)
+	}
+}
+
+func TestRevalidarYVerificarAgenteDisponibleParaTrabajoRechazaAgenteAtascado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	if err := db.RegistrarAgente("CodexAtascado", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente atascado",
+		Descripcion: "El worker esta vivo pero sin progreso real",
+		ProyectoID:  &proyectoID,
+		Modulo:      "runtime-adapters",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexAtascado"); err != nil {
+		t.Fatalf("TomarTarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexAtascado"); err != nil {
+		t.Fatalf("IniciarTarea: %v", err)
+	}
+
+	metaJSON := structuredWorkerMetadataAtascadoRevalidacionTest(t, time.Now().UTC(), time.Now().UTC().Add(-30*time.Minute))
+	insertRuntimeHandleControlLifecycleTest(t, "CodexAtascado", metaJSON)
+
+	err = revalidarYVerificarAgenteDisponibleParaTrabajo("CodexAtascado")
+	if err == nil {
+		t.Fatal("deberia rechazar un agente atascado")
+	}
+	if !strings.Contains(err.Error(), "atascado") {
+		t.Fatalf("deberia rechazar por estado operativo atascado, got=%v", err)
+	}
+}
+
+func TestRowDebeMigrarRuntimeLegacyATMUX(t *testing.T) {
+	now := time.Now().UTC()
+	handle := &db.RuntimeHandle{
+		Agente:       "Codex8",
+		Transporte:   "cli",
+		HandleKind:   "process",
+		Estado:       "activo",
+		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex8 --model gpt-5.4"}`,
+	}
+	row := agentesapp.Row{
+		Agente: &db.Agente{
+			Nombre:      "Codex8",
+			EstadoCuota: "activo",
+		},
+		Handle:          handle,
+		WorkerAlive:     true,
+		WorkerHeartbeat: timePtr(now),
+		WorkerState:     "running",
+	}
+	if !rowDebeMigrarRuntimeLegacyATMUX(row, now) {
+		t.Fatal("un worker legacy process_pty_cli fresco de Codex deberia migrar a tmux")
+	}
+}
+
+func TestRowDebeMigrarRuntimeLegacyATMUXTambienDetectaClaude(t *testing.T) {
+	now := time.Now().UTC()
+	handle := &db.RuntimeHandle{
+		Agente:       "Claude1",
+		Transporte:   "cli",
+		HandleKind:   "process",
+		Estado:       "activo",
+		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"claude-perfil Claude1 --model sonnet"}`,
+	}
+	row := agentesapp.Row{
+		Agente: &db.Agente{
+			Nombre:      "Claude1",
+			EstadoCuota: "activo",
+		},
+		Handle:          handle,
+		WorkerAlive:     true,
+		WorkerHeartbeat: timePtr(now),
+		WorkerState:     "running",
+	}
+	if !rowDebeMigrarRuntimeLegacyATMUX(row, now) {
+		t.Fatal("un worker legacy process_pty_cli fresco de Claude deberia migrar a tmux")
+	}
+}
+
+func structuredWorkerMetadataAtascadoRevalidacionTest(t *testing.T, heartbeatAt, progressAt time.Time) string {
+	t.Helper()
+	tmp := t.TempDir()
+	heartbeatAt = heartbeatAt.UTC()
+	progressAt = progressAt.UTC()
+	workingDir := filepath.Join(tmp, "repo")
+	runDir := filepath.Join(workingDir, ".orquesta-runtime", "codexatascado", "20260407-010203-000000001")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	runtimeManifestPath := filepath.Join(runDir, "runtime.json")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir runDir: %v", err)
+	}
+	statusRaw := fmt.Sprintf(`{"state":"running","updated_at":"%s","alive":true,"child_pid":%d,"last_output_at":"%s","last_progress_at":"%s"}`,
+		heartbeatAt.Format(time.RFC3339Nano),
+		os.Getpid(),
+		progressAt.Format(time.RFC3339Nano),
+		progressAt.Format(time.RFC3339Nano),
+	)
+	heartbeatRaw := fmt.Sprintf(`{"alive":true,"heartbeat_at":"%s","started_at":"%s","child_pid":%d,"last_output_at":"%s","last_progress_at":"%s"}`,
+		heartbeatAt.Format(time.RFC3339Nano),
+		heartbeatAt.Add(-time.Minute).Format(time.RFC3339Nano),
+		os.Getpid(),
+		progressAt.Format(time.RFC3339Nano),
+		progressAt.Format(time.RFC3339Nano),
+	)
+	manifestRaw := fmt.Sprintf(`{"version":1,"agent":"CodexAtascado","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codexatascado-1","tmux_pane_id":"%%1","status_path":"%s","heartbeat_path":"%s","started_at":"%s","working_dir":"%s","child_pid":%d,"runtime_manifest_path":"%s"}`,
+		statusPath,
+		heartbeatPath,
+		heartbeatAt.Add(-time.Minute).Format(time.RFC3339Nano),
+		workingDir,
+		os.Getpid(),
+		runtimeManifestPath,
+	)
+	runtimeManifestRaw := fmt.Sprintf(`{"agente":"CodexAtascado","proyecto":"orquestador","working_dir":"%s","driver":"tmux_cli_session","transport":"tmux","pid":%d,"supervisor_ref":"%s","tmux_session":"orq-codexatascado-1","tmux_pane_id":"%%1","status_path":"%s","heartbeat_path":"%s","mailbox_delivery_mode":"session_resume","created_at":"%s"}`,
+		workingDir,
+		os.Getpid(),
+		runDir,
+		statusPath,
+		heartbeatPath,
+		heartbeatAt.Add(-time.Minute).Format(time.RFC3339Nano),
+	)
+	if err := os.WriteFile(statusPath, []byte(statusRaw), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(heartbeatRaw), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, []byte(manifestRaw), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(runtimeManifestPath, []byte(runtimeManifestRaw+"\n"), 0o600); err != nil {
+		t.Fatalf("write runtime manifest: %v", err)
+	}
+	return fmt.Sprintf(`{"driver":"tmux_cli_session","working_dir":"%s","worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`,
+		workingDir,
+		manifestPath,
+		statusPath,
+		heartbeatPath,
+	)
+}
+
+func TestRowDebeMigrarRuntimeLegacyATMUXNoMigraTMUXNiCuotaBloqueada(t *testing.T) {
+	now := time.Now().UTC()
+	tmuxRow := agentesapp.Row{
+		Agente: &db.Agente{
+			Nombre:      "Codex8",
+			EstadoCuota: "activo",
+		},
+		Handle: &db.RuntimeHandle{
+			Agente:       "Codex8",
+			Transporte:   "cli",
+			HandleKind:   "process",
+			Estado:       "activo",
+			MetadataJSON: `{"driver":"tmux_cli_session","rendered_command":"codex-perfil Codex8 --model gpt-5.4"}`,
+		},
+		WorkerAlive:     true,
+		WorkerHeartbeat: timePtr(now),
+		WorkerState:     "running",
+	}
+	if rowDebeMigrarRuntimeLegacyATMUX(tmuxRow, now) {
+		t.Fatal("un worker tmux ya sano no deberia migrarse otra vez")
+	}
+
+	blockedRow := agentesapp.Row{
+		Agente: &db.Agente{
+			Nombre:      "Codex8",
+			EstadoCuota: "enfriamiento",
+		},
+		Handle: &db.RuntimeHandle{
+			Agente:       "Codex8",
+			Transporte:   "cli",
+			HandleKind:   "process",
+			Estado:       "activo",
+			MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex8 --model gpt-5.4"}`,
+		},
+		WorkerAlive:     true,
+		WorkerHeartbeat: timePtr(now),
+		WorkerState:     "running",
+	}
+	if rowDebeMigrarRuntimeLegacyATMUX(blockedRow, now) {
+		t.Fatal("un agente bloqueado por cuota no deberia rearmarse a tmux")
+	}
+}
+
+func TestOrdenarHandlesParaPresupuestoVivoPrefiereTMUXSobreLegacy(t *testing.T) {
+	legacy := &db.RuntimeHandle{
+		ID:           1,
+		Agente:       "Codex8",
+		Estado:       "activo",
+		Transporte:   "cli",
+		HandleKind:   "process",
+		MetadataJSON: `{"driver":"process_pty_cli","stdin_path":"/tmp/pty.stdin","log_path":"/tmp/pty.log"}`,
+	}
+	tmux := &db.RuntimeHandle{
+		ID:           2,
+		Agente:       "Codex8",
+		Estado:       "activo",
+		Transporte:   "tmux",
+		HandleKind:   "process",
+		MetadataJSON: `{"driver":"tmux_cli_session","log_path":"/tmp/tmux.log"}`,
+	}
+	handles := []*db.RuntimeHandle{legacy, tmux}
+
+	ordenarHandlesParaPresupuestoVivo(handles)
+
+	if handles[0] == nil || handles[0].ID != tmux.ID {
+		t.Fatalf("deberia priorizar tmux sobre legacy para presupuesto vivo: %+v", handles)
+	}
+}
+
+func TestListarRuntimeHandlesPresupuestoAgentePrefiereCanonicosRecientes(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexBudget", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	pid := int64(os.Getpid())
+	runtimeLegacyID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:       "CodexBudget",
+		ProyectoID:   &proyectoID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("crear runtime legacy: %v", err)
+	}
+	legacyMetaJSON, _ := json.Marshal(map[string]any{
+		"driver":           "process_pty_cli",
+		"working_dir":      filepath.Join(tmp, "legacy"),
+		"rendered_command": "codex-perfil CodexBudget --model gpt-5.4",
+	})
+	if _, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
+		"CodexBudget", proyectoID, runtimeLegacyID, "cli", "process", strconv.Itoa(os.Getpid()), string(legacyMetaJSON), time.Now().UTC()); err != nil {
+		t.Fatalf("insert handle legacy: %v", err)
+	}
+
+	runDir := filepath.Join(tmp, "tmux-worker")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir tmux: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"CodexBudget","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codexbudget-1","tmux_pane_id":"%17","status_path":"`+statusPath+`","heartbeat_path":"`+heartbeatPath+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","updated_at":"`+now+`","alive":true,"child_pid":`+strconv.Itoa(os.Getpid())+`}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now+`","started_at":"`+now+`","child_pid":`+strconv.Itoa(os.Getpid())+`}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+
+	runtimeTMUXID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:       "CodexBudget",
+		ProyectoID:   &proyectoID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("crear runtime tmux: %v", err)
+	}
+	tmuxMetaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-codexbudget-1",
+		"tmux_pane_id":          "%17",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+		"rendered_command":      "codex-perfil CodexBudget",
+	})
+	resTMUX, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
+		"CodexBudget", proyectoID, runtimeTMUXID, "tmux", "session", "orq-codexbudget-1", string(tmuxMetaJSON), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("insert handle tmux: %v", err)
+	}
+	tmuxHandleID, _ := resTMUX.LastInsertId()
+
+	handles, err := listarRuntimeHandlesPresupuestoAgente("CodexBudget")
+	if err != nil {
+		t.Fatalf("listarRuntimeHandlesPresupuestoAgente: %v", err)
+	}
+	if len(handles) != 1 {
+		t.Fatalf("deberia quedarse solo con el canónico caliente, got=%d %+v", len(handles), handles)
+	}
+	if handles[0].ID != tmuxHandleID {
+		t.Fatalf("deberia priorizar el handle tmux canónico, got=%+v", handles[0])
+	}
+}
+
+func TestScoreHandlePresupuestoVivoPenalizaLegacySinOptIn(t *testing.T) {
+	t.Setenv("ORQUESTA_ALLOW_LEGACY_LIVE_STATUS", "")
+	legacy := &db.RuntimeHandle{
+		ID:           1,
+		Agente:       "Codex8",
+		Estado:       "activo",
+		Transporte:   "cli",
+		HandleKind:   "process",
+		MetadataJSON: `{"driver":"process_pty_cli","stdin_path":"/tmp/pty.stdin","log_path":"/tmp/pty.log"}`,
+	}
+	tmux := &db.RuntimeHandle{
+		ID:           2,
+		Agente:       "Codex8",
+		Estado:       "activo",
+		Transporte:   "tmux",
+		HandleKind:   "process",
+		MetadataJSON: `{"driver":"tmux_cli_session","log_path":"/tmp/tmux.log"}`,
+	}
+	if scoreHandlePresupuestoVivo(legacy) >= scoreHandlePresupuestoVivo(tmux) {
+		t.Fatalf("legacy no deberia puntuar mejor que tmux sin opt-in explicito")
+	}
+}
+
+func TestScoreHandlePresupuestoVivoNoPremiaProcessSiElWorkerEsTMUX(t *testing.T) {
+	tmuxProcess := &db.RuntimeHandle{
+		ID:           2,
+		Agente:       "Codex8",
+		Estado:       "activo",
+		Transporte:   "tmux",
+		HandleKind:   "process",
+		MetadataJSON: `{"driver":"tmux_cli_session","log_path":"/tmp/tmux.log"}`,
+	}
+	tmuxSession := &db.RuntimeHandle{
+		ID:           3,
+		Agente:       "Codex8",
+		Estado:       "activo",
+		Transporte:   "tmux",
+		HandleKind:   "session",
+		MetadataJSON: `{"driver":"tmux_cli_session","log_path":"/tmp/tmux.log"}`,
+	}
+	if scoreHandlePresupuestoVivo(tmuxProcess) != scoreHandlePresupuestoVivo(tmuxSession) {
+		t.Fatalf("tmux no deberia puntuar distinto solo por arrastrar handle_kind=process")
+	}
+}
+
+func TestRefrescarPresupuestoSesionObservadoHandleOmiteLegacyTMUXPorDefecto(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	t.Setenv("ORQUESTA_ALLOW_LEGACY_LIVE_STATUS", "")
+	t.Setenv("PATH", t.TempDir())
+	handle := &db.RuntimeHandle{
+		ID:           1,
+		Agente:       "Codex8",
+		Estado:       "activo",
+		Transporte:   "cli",
+		HandleKind:   "process",
+		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex8 --model gpt-5.4","stdin_path":"/tmp/pty.stdin"}`,
+	}
+
+	refrescado, agente, err := refrescarPresupuestoSesionObservadoHandle(handle)
+	if err != nil {
+		t.Fatalf("refrescar presupuesto legacy: %v", err)
+	}
+	if agente != "Codex8" {
+		t.Fatalf("agente=%q", agente)
+	}
+	_ = refrescado
+}
+
+func TestObjetivoProcesoPresupuestoDesdeHandleOmitePIDParaLegacyYTMUX(t *testing.T) {
+	legacy := &db.RuntimeHandle{
+		Agente:       "Codex8",
+		Transporte:   "cli",
+		HandleKind:   "process",
+		HandleRef:    strconv.Itoa(os.Getpid()),
+		Estado:       "activo",
+		MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex8 --model gpt-5.4"}`,
+	}
+	obj := objetivoProcesoPresupuestoDesdeHandle(legacy, `{"profile_name":"Codex8"}`)
+	if obj.PID != nil {
+		t.Fatalf("legacy tmux-preferred no deberia inyectar PID: %+v", obj)
+	}
+
+	legacyGeneric := &db.RuntimeHandle{
+		Agente:       "WorkerLegacy",
+		Transporte:   "cli",
+		HandleKind:   "process",
+		HandleRef:    strconv.Itoa(os.Getpid()),
+		Estado:       "activo",
+		MetadataJSON: `{"driver":"process_pty_cli","stdin_path":"/tmp/pty.stdin"}`,
+	}
+	obj = objetivoProcesoPresupuestoDesdeHandle(legacyGeneric, `{"profile_name":"WorkerLegacy"}`)
+	if obj.PID != nil {
+		t.Fatalf("cualquier process_pty_cli legacy no deberia inyectar PID: %+v", obj)
+	}
+
+	tmux := &db.RuntimeHandle{
+		Agente:       "Codex8",
+		Transporte:   "tmux",
+		HandleKind:   "session",
+		HandleRef:    "orq-codex8/%8",
+		Estado:       "activo",
+		MetadataJSON: `{"driver":"tmux_cli_session","tmux_session":"orq-codex8"}`,
+	}
+	obj = objetivoProcesoPresupuestoDesdeHandle(tmux, `{"profile_name":"Codex8"}`)
+	if obj.PID != nil {
+		t.Fatalf("tmux canónico no deberia inyectar PID: %+v", obj)
+	}
+
+	plain := &db.RuntimeHandle{
+		Agente:       "Worker1",
+		Transporte:   "cli",
+		HandleKind:   "process",
+		HandleRef:    strconv.Itoa(os.Getpid()),
+		Estado:       "activo",
+		MetadataJSON: `{"driver":"local_process"}`,
+	}
+	obj = objetivoProcesoPresupuestoDesdeHandle(plain, `{"profile_name":"Worker1"}`)
+	if obj.PID == nil || *obj.PID != int64(os.Getpid()) {
+		t.Fatalf("un proceso no legacy deberia conservar PID: %+v", obj)
+	}
+}
+
+func TestRefrescarPresupuestoHandleDesdeObjetivoHeredaPerfilDesdeSesionTMUX(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexProfile", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	base := filepath.Join(tmp, "codex-perfiles")
+	if err := os.MkdirAll(filepath.Join(base, "bin"), 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	wrapper := filepath.Join(base, "bin", "codex-perfil")
+	script := `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" != "CodexProfile" || "${2:-}" != "status-json" ]]; then
+  exit 6
+fi
+cat <<'JSON'
+{"source":"codex_profile_status","profile":"CodexProfile","checked_at":"2026-04-07T11:10:00Z","observed_at":"2026-04-07T11:09:30Z","session_path":"/tmp/sess-profile.jsonl","session_id":"sess-codexprofile-budget","account":{"email":"profile@avidad.com","user":"Codex Profile","plan_type":"team"},"rate_limits":{"primary":{"used_percent":11,"left_percent":89,"window_minutes":300,"resets_at":"2026-04-07T13:10:00Z"},"secondary":{"used_percent":33,"left_percent":67,"window_minutes":10080,"resets_at":"2026-04-14T11:10:00Z"},"credits":null,"plan_type":"team"}}
+JSON
+`
+	if err := os.WriteFile(wrapper, []byte(script), 0o755); err != nil {
+		t.Fatalf("write wrapper: %v", err)
+	}
+	conectorID, err := db.UpsertConector(&db.Conector{
+		Slug:       "codex-cli",
+		Nombre:     "Codex CLI",
+		Transporte: "cli",
+		Comando:    wrapper,
+		ArgsJSON:   `["{{agent}}"]`,
+		Activo:     true,
+	})
+	if err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:            "CodexProfile",
+		ConectorID:        &conectorID,
+		ProyectoID:        &proyectoID,
+		CWD:               filepath.Join(tmp, "orquestador"),
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-codexprofile-budget",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	pid := int64(9101)
+	runtimeID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:       "CodexProfile",
+		ProyectoID:   &proyectoID,
+		SesionID:     &sesion.ID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("crear runtime: %v", err)
+	}
+	handleMetaJSON, _ := json.Marshal(map[string]any{
+		"driver":              "tmux_cli_session",
+		"tmux_session":        "orq-codexprofile-1",
+		"tmux_pane_id":        "%4",
+		"external_session_id": "sess-codexprofile-budget",
+	})
+	res, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`,
+		"CodexProfile", proyectoID, runtimeID, "tmux", "session", "orq-codexprofile-1/%4", "activo", string(handleMetaJSON))
+	if err != nil {
+		t.Fatalf("insert handle: %v", err)
+	}
+	handleID, _ := res.LastInsertId()
+	handle, err := db.GetRuntimeHandle(handleID)
+	if err != nil {
+		t.Fatalf("get handle: %v", err)
+	}
+	metaJSON := metadataPresupuestoDesdeHandle(handle)
+	if !strings.Contains(metaJSON, wrapper) || !strings.Contains(metaJSON, "CodexProfile") {
+		t.Fatalf("metadata enriquecida inesperada: %s", metaJSON)
+	}
+	observed, err := controlruntime.ObserveCodexProfileStatus(controlruntime.ObjetivoProceso{MetadataJSON: metaJSON})
+	if err != nil {
+		t.Fatalf("observe codex profile status: %v", err)
+	}
+	if observed == nil || strings.TrimSpace(observed.AccountEmail) != "profile@avidad.com" {
+		t.Fatalf("observacion codex_profile_status inesperada: %+v", observed)
+	}
+	if observed.ObservedAt.IsZero() {
+		t.Fatalf("observacion inicial sin observed_at: %+v", observed)
+	}
+	synced, _, _, err := db.SincronizarRuntimeHandleSupervisado(handle, nil, "test_budget_refresh")
+	if err != nil {
+		t.Fatalf("sync handle: %v", err)
+	}
+	syncedMetaJSON := mergeBudgetMetadataJSON(metadataPresupuestoDesdeHandle(synced), metaJSON)
+	obj := controlruntime.ObjetivoProceso{
+		PID:          int64PtrFromHandleRef(synced.HandleKind, synced.HandleRef),
+		HandleKind:   strings.TrimSpace(synced.HandleKind),
+		HandleRef:    strings.TrimSpace(synced.HandleRef),
+		MetadataJSON: syncedMetaJSON,
+	}
+	observed, err = controlruntime.ObserveCodexProfileStatus(obj)
+	if err != nil {
+		t.Fatalf("observe codex profile status tras sync: %v", err)
+	}
+	if observed == nil || strings.TrimSpace(observed.AccountEmail) != "profile@avidad.com" {
+		t.Fatalf("observacion tras sync inesperada: %+v metadata=%s", observed, syncedMetaJSON)
+	}
+	if observed.ObservedAt.IsZero() {
+		t.Fatalf("observacion tras sync sin observed_at: %+v", observed)
+	}
+	okViaSesion, err := refrescarPresupuestoSesionObservadoDesdeSesion(sesion)
+	if err != nil {
+		t.Fatalf("refresh directo via sesion: %v", err)
+	}
+	if !okViaSesion {
+		t.Fatal("la sesion canonica deberia refrescar presupuesto por si sola")
+	}
+	ok, err := refrescarPresupuestoHandleDesdeObjetivo(handle, "CodexProfile", controlruntime.ObjetivoProceso{MetadataJSON: syncedMetaJSON})
+	if err != nil {
+		t.Fatalf("refrescar presupuesto desde objetivo broker-first: %v", err)
+	}
+	if !ok {
+		t.Fatal("el helper broker-first deberia persistir presupuesto con metadata enriquecida")
+	}
+	ultimo, err := db.UltimoPresupuestoSesionPorFuente(sesion.ID, "codex_profile_status")
+	if err != nil {
+		t.Fatalf("ultimo presupuesto: %v", err)
+	}
+	if ultimo == nil {
+		t.Fatal("deberia persistir presupuesto por codex_profile_status")
+	}
+	agenteDB, err := db.GetAgente("CodexProfile")
+	if err != nil {
+		t.Fatalf("get agente: %v", err)
+	}
+	if agenteDB.CuentaEmail != "profile@avidad.com" || agenteDB.PresupuestoFuente != "codex_profile_status" {
+		t.Fatalf("refresh desde handle tmux con sesion enriquecida inesperado: %+v", agenteDB)
 	}
 }
 
@@ -1881,7 +3135,7 @@ func TestProcesarCierreProyectoSesionRespetaAutoCloseProject(t *testing.T) {
 		Agente:      "Codex1",
 		ProyectoID:  &proyectoID,
 		CWD:         filepath.Join(tmp, "orquestador"),
-		Herramienta: "codex-cli",
+		Herramienta: "cat-cli",
 	})
 	if err != nil {
 		t.Fatalf("iniciar sesion: %v", err)
@@ -2164,7 +3418,7 @@ func TestProcesarAutonomiaAgentesBatchAutoasignaTrabajoASesionActivaIdle(t *test
 		Agente:      "Codex1",
 		ProyectoID:  &proyectoID,
 		CWD:         filepath.Join(tmp, "orquestador"),
-		Herramienta: "codex-cli",
+		Herramienta: "cat-cli",
 	})
 	if err != nil {
 		t.Fatalf("iniciar sesion: %v", err)
@@ -2336,6 +3590,18 @@ func TestProcesarAutonomiaAgentesBatchNoRepiteNudgeRecienteMaterializado(t *test
 	if err != nil {
 		t.Fatalf("iniciar sesion: %v", err)
 	}
+	resetAt := time.Now().UTC().Add(2 * time.Hour)
+	remaining := int64(10)
+	if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+		SesionID:          sesion.ID,
+		WindowKind:        "5h",
+		ResetAt:           &resetAt,
+		RemainingMessages: &remaining,
+		BudgetSource:      "test",
+		CheckedAt:         time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("registrar presupuesto: %v", err)
+	}
 	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
 	if err != nil || handle == nil {
 		t.Fatalf("handle: %+v err=%v", handle, err)
@@ -2390,6 +3656,13 @@ func TestProcesarAutonomiaAgentesBatchNoRepiteNudgeRecienteMaterializado(t *test
 
 func TestResetReanimacionEncolaResumeCuandoHayHandlePausado(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+	statusCacheState.mu.Lock()
+	statusCacheState.ok = true
+	statusCacheState.value = apiStatusResponse{Generado: "stale"}
+	statusCacheState.expires = time.Now().UTC().Add(time.Minute)
+	statusCacheState.mu.Unlock()
 
 	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
@@ -2442,19 +3715,29 @@ func TestResetReanimacionEncolaResumeCuandoHayHandlePausado(t *testing.T) {
 	if err != nil {
 		t.Fatalf("iniciar sesion: %v", err)
 	}
+	resetAt := time.Now().UTC().Add(2 * time.Hour)
+	remaining := int64(10)
+	if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+		SesionID:          sesion.ID,
+		WindowKind:        "5h",
+		ResetAt:           &resetAt,
+		RemainingMessages: &remaining,
+		BudgetSource:      "test",
+		CheckedAt:         time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("registrar presupuesto: %v", err)
+	}
 	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
 	if err != nil || handle == nil {
 		t.Fatalf("handle: %+v err=%v", handle, err)
 	}
-	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='pausado' WHERE id=?`, handle.ID); err != nil {
+	metaJSON := `{"driver":"tmux_cli_session","tmux_session":"orq-codex1-resume","mailbox_delivery_mode":"session_resume","external_session_id":"sess-resume-1","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"session_resume"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='pausado', metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, capsJSON, handle.ID); err != nil {
 		t.Fatalf("pausar handle: %v", err)
 	}
-	if _, err := db.DB.Exec(`UPDATE agentes SET reanimar_at=CURRENT_TIMESTAMP, estado_cuota='enfriamiento', motivo_pausa='cuota' WHERE nombre='Codex1'`); err != nil {
-		t.Fatalf("marcar reanimacion: %v", err)
-	}
-
-	if err := (dbAutomationService{}).ResetReanimacion("Codex1"); err != nil {
-		t.Fatalf("reset reanimacion: %v", err)
+	if err := reactivarAgenteTrasReanimacion("Codex1"); err != nil {
+		t.Fatalf("reactivar agente: %v", err)
 	}
 
 	agente := "Codex1"
@@ -2468,6 +3751,81 @@ func TestResetReanimacionEncolaResumeCuandoHayHandlePausado(t *testing.T) {
 	}
 	if !strings.Contains(orders[0].PayloadJSON, `"accion":"resume"`) {
 		t.Fatalf("payload resume inesperado: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestResetReanimacionEncolaStartSiHandlePausadoTMUXBootstrapOnly(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Retomar worker tmux pausado",
+		Descripcion: "Trabajo activo",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_session":"orq-codex1-bootstrap","mailbox_delivery_mode":"bootstrap_only","can_send_input":false}`)
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"bootstrap_only"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='pausado', metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, capsJSON, handle.ID); err != nil {
+		t.Fatalf("pausar handle tmux: %v", err)
+	}
+	pendienteAntes, err := existeRuntimeOrderAbiertaAutonomia("Codex1", &proyectoID, "resume", "start", "handoff")
+	if err != nil {
+		t.Fatalf("preflight open orders: %v", err)
+	}
+	if err := reactivarAgenteTrasReanimacion("Codex1"); err != nil {
+		t.Fatalf("reactivar agente: %v", err)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "start" {
+		handleReactivacion, _ := resolverHandleReactivacionAgente("Codex1", &proyectoID)
+		todas, _ := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+		t.Fatalf("start no encolado para tmux bootstrap_only pausado: open_before=%t pendientes=%+v todas=%+v handle=%+v", pendienteAntes, orders, todas, handleReactivacion)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"accion":"start"`) {
+		t.Fatalf("payload start inesperado: %s", orders[0].PayloadJSON)
 	}
 }
 
@@ -2549,8 +3907,117 @@ func TestProcesarRuntimeMailboxInteractivoBatchOmiteHandlesSinInputInteractivo(t
 	}
 }
 
+func TestProcesarRuntimeMailboxInteractivoBatchEsperaTMUXStarting(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Ollama1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Ollama1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "ollama-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+
+	workerDir := filepath.Join(tmp, "worker-starting")
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatalf("mkdir worker: %v", err)
+	}
+	manifestPath := filepath.Join(workerDir, "manifest.json")
+	statusPath := filepath.Join(workerDir, "status.json")
+	heartbeatPath := filepath.Join(workerDir, "heartbeat.json")
+	now := time.Now().UTC()
+	writeJSON := func(path string, payload map[string]any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	writeJSON(manifestPath, map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-ollama1-starting",
+		"tmux_pane_id":          "%4",
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+		"can_send_input":        true,
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":                 "starting",
+		"alive":                 true,
+		"updated_at":            now.Format(time.RFC3339Nano),
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	metaJSON := fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_session":"orq-ollama1-starting","tmux_pane_id":"%%4","can_send_input":true,"mailbox_delivery_mode":"interactive","worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`, manifestPath, statusPath, heartbeatPath)
+	if _, err := db.DB.Exec(
+		`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-ollama1-starting/%4', capabilities_json=?, metadata_json=? WHERE id=?`,
+		`{"can_send_input":true,"mailbox_delivery_mode":"interactive"}`,
+		metaJSON,
+		handle.ID,
+	); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Ollama1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"implementa solo la funcion pedida"}`,
+	}); err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxInteractivoBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox interactivo: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia crear send_instruction mientras tmux sigue starting, got=%d", n)
+	}
+
+	agente := "Ollama1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			t.Fatalf("no deberia encolar send_instruction con worker starting: %+v", order)
+		}
+	}
+}
+
 func TestProcesarRuntimeMailboxSupervisorLocalBatchEncolaSendInstructionParaCodexSupervisado(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+	t.Setenv("ORQUESTA_ALLOW_LEGACY_SUPERVISOR_HOT_INPUT", "1")
 
 	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
@@ -2599,8 +4066,8 @@ func TestProcesarRuntimeMailboxSupervisorLocalBatchEncolaSendInstructionParaCode
 	if err != nil {
 		t.Fatalf("procesar mailbox supervisor local: %v", err)
 	}
-	if n != 1 {
-		t.Fatalf("deberia crear una sola send_instruction por supervisor local, got=%d", n)
+	if n != 0 {
+		t.Fatalf("el batch supervisor_local legacy ya no deberia materializar send_instruction, got=%d", n)
 	}
 
 	agente := "Codex1"
@@ -2608,24 +4075,10 @@ func TestProcesarRuntimeMailboxSupervisorLocalBatchEncolaSendInstructionParaCode
 	if err != nil {
 		t.Fatalf("listar orders: %v", err)
 	}
-	var send *db.RuntimeOrder
 	for _, order := range orders {
 		if order != nil && order.Tipo == "send_instruction" {
-			send = order
-			break
+			t.Fatalf("no deberia crear send_instruction por supervisor_local legacy: %+v", order)
 		}
-	}
-	if send == nil {
-		t.Fatal("faltaba send_instruction supervisor local")
-	}
-	if !strings.Contains(send.PayloadJSON, `"mailbox_id":`+strconv.FormatInt(msgID, 10)) {
-		t.Fatalf("send_instruction sin mailbox_id: %s", send.PayloadJSON)
-	}
-	if !strings.Contains(send.PayloadJSON, `"delivery_attempt_signature":"supervisor_local|handle:`) {
-		t.Fatalf("firma de intento supervisor_local inesperada: %s", send.PayloadJSON)
-	}
-	if !strings.Contains(send.PayloadJSON, `"external_session_id":"sess-supervisor-local"`) {
-		t.Fatalf("send_instruction sin external_session_id viva: %s", send.PayloadJSON)
 	}
 
 	pendiente := "pendiente"
@@ -2808,6 +4261,278 @@ func TestProcesarRuntimeMailboxBatchNoDuplicaReinicioCoordinadoAbierto(t *testin
 	}
 }
 
+func TestProcesarRuntimeMailboxBatchCoordinaRestartParaTMUXBootstrapOnly(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexTMUX", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexTMUX",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(
+		`UPDATE runtime_handles SET transporte='cli', handle_kind='process', capabilities_json=?, metadata_json=? WHERE id=?`,
+		`{"can_send_input":false,"mailbox_delivery_mode":"bootstrap_only"}`,
+		`{"driver":"tmux_cli_session","tmux_session":"orq-codextmux-1","tmux_pane_id":"%1","can_send_input":false,"mailbox_delivery_mode":"bootstrap_only"}`,
+		handle.ID,
+	); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	msgViejo, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "CodexTMUX",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","motivo":"mensaje viejo"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox vieja: %v", err)
+	}
+	msgNuevo, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "CodexTMUX",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","motivo":"mensaje nuevo"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox nueva: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox batch: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("el worker tmux bootstrap_only deberia coordinar restart, got=%d", n)
+	}
+
+	agente := "CodexTMUX"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 2 {
+		t.Fatalf("deberia crear stop/start coordinados, got=%d %+v", len(orders), orders)
+	}
+	tipos := map[string]bool{}
+	for _, order := range orders {
+		if order != nil {
+			tipos[order.Tipo] = true
+		}
+	}
+	if !tipos["stop"] || !tipos["start"] {
+		t.Fatalf("ordenes coordinadas inesperadas: %+v", orders)
+	}
+
+	pendiente := "pendiente"
+	consumido := "consumido"
+	mailboxPendiente, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &agente, ProyectoID: &proyectoID, Estado: &pendiente})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	if len(mailboxPendiente) != 1 || mailboxPendiente[0].ID != msgNuevo {
+		t.Fatalf("deberia quedar solo la mailbox mas reciente pendiente: %+v", mailboxPendiente)
+	}
+	mailboxConsumido, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &agente, ProyectoID: &proyectoID, Estado: &consumido})
+	if err != nil {
+		t.Fatalf("listar mailbox consumido: %v", err)
+	}
+	if len(mailboxConsumido) != 1 || mailboxConsumido[0].ID != msgViejo {
+		t.Fatalf("mailbox consumida inesperada: %+v", mailboxConsumido)
+	}
+}
+
+func TestRuntimeHandleRequiereCoordinatedRestartMailboxAceptaTMUXCanonicoBootstrapOnly(t *testing.T) {
+	handle := &db.RuntimeHandle{
+		Transporte:       "tmux",
+		HandleKind:       "session",
+		MetadataJSON:     `{"driver":"tmux_cli_session","mailbox_delivery_mode":"bootstrap_only"}`,
+		CapabilitiesJSON: `{"can_send_input":false,"mailbox_delivery_mode":"bootstrap_only"}`,
+	}
+	if !runtimeHandleRequiereCoordinatedRestartMailbox(handle) {
+		t.Fatalf("un worker tmux bootstrap_only debe coordinar restart aunque el handle ya sea canónico")
+	}
+}
+
+func TestProcesarRuntimeMailboxBatchEncolaSendInstructionParaTMUXBootstrapOnlyReady(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexTMUX", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexTMUX",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	workerDir := filepath.Join(tmp, "worker-ready")
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatalf("mkdir workerDir: %v", err)
+	}
+	manifestPath := filepath.Join(workerDir, "manifest.json")
+	statusPath := filepath.Join(workerDir, "status.json")
+	heartbeatPath := filepath.Join(workerDir, "heartbeat.json")
+	now := time.Now().UTC()
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codextmux-ready",
+		"tmux_pane_id":          "%1",
+		"mailbox_delivery_mode": "bootstrap_only",
+		"can_send_input":        false,
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":                 "ready",
+		"alive":                 true,
+		"updated_at":            now.Format(time.RFC3339Nano),
+		"ready_at":              now.Format(time.RFC3339Nano),
+		"mailbox_delivery_mode": "bootstrap_only",
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+		"ready_at":     now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON := fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_session":"orq-codextmux-ready","tmux_pane_id":"%%1","can_send_input":false,"mailbox_delivery_mode":"bootstrap_only","worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`, manifestPath, statusPath, heartbeatPath)
+	if _, err := db.DB.Exec(
+		`UPDATE runtime_handles SET transporte='cli', handle_kind='process', capabilities_json=?, metadata_json=? WHERE id=?`,
+		`{"can_send_input":false,"mailbox_delivery_mode":"bootstrap_only"}`,
+		metaJSON,
+		handle.ID,
+	); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	handle, err = db.GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle: %+v err=%v", handle, err)
+	}
+	if !runtimeHandleListaParaDispatchBootstrapTMUX(handle) {
+		t.Fatalf("el handle deberia estar listo para bootstrap tmux: %+v", handle)
+	}
+
+	msgViejo, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "CodexTMUX",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","motivo":"mensaje viejo"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox vieja: %v", err)
+	}
+	msgNuevo, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "CodexTMUX",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","motivo":"mensaje nuevo"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox nueva: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox batch: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia materializar send_instruction tmux ready, got=%d", n)
+	}
+
+	agente := "CodexTMUX"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	foundSend := false
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		if order.Tipo == "send_instruction" {
+			foundSend = true
+			if !strings.Contains(order.PayloadJSON, `"mailbox_id":`+strconv.FormatInt(msgNuevo, 10)) {
+				t.Fatalf("payload send_instruction inesperado: %s", order.PayloadJSON)
+			}
+			continue
+		}
+		if order.Tipo == "stop" || order.Tipo == "start" {
+			t.Fatalf("no deberia coordinar restart cuando el worker tmux esta ready: %+v", orders)
+		}
+	}
+	if !foundSend {
+		t.Fatalf("deberia crear una send_instruction pendiente, got=%+v", orders)
+	}
+
+	pendiente := "pendiente"
+	consumido := "consumido"
+	mailboxPendiente, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &agente, ProyectoID: &proyectoID, Estado: &pendiente})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	if len(mailboxPendiente) != 1 || mailboxPendiente[0].ID != msgNuevo {
+		t.Fatalf("deberia quedar solo la mailbox mas reciente pendiente: %+v", mailboxPendiente)
+	}
+	mailboxConsumido, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &agente, ProyectoID: &proyectoID, Estado: &consumido})
+	if err != nil {
+		t.Fatalf("listar mailbox consumido: %v", err)
+	}
+	if len(mailboxConsumido) != 1 || mailboxConsumido[0].ID != msgViejo {
+		t.Fatalf("mailbox consumida inesperada: %+v", mailboxConsumido)
+	}
+}
+
 func TestProcesarRuntimeMailboxSessionResumeBatchEncolaSendInstructionSinConsumirMailbox(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -2891,6 +4616,152 @@ func TestProcesarRuntimeMailboxSessionResumeBatchEncolaSendInstructionSinConsumi
 	}
 	if len(mailboxPendiente) != 1 || mailboxPendiente[0].ID != msgID {
 		t.Fatalf("la mailbox debe seguir pendiente hasta entregar de verdad: %+v", mailboxPendiente)
+	}
+}
+
+func TestProcesarRuntimeMailboxSessionResumeBatchUsaRuntimePrincipalCanonicoSiHandleFreshNoEstaEnlazado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	resSesion, err := db.DB.Exec(`INSERT INTO sesiones (
+		agente, proyecto_id, activa, estado, herramienta, external_session_id, host, heartbeat_at
+	) VALUES (?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`,
+		"Codex1", proyectoID, 1, "activa", "codex-cli", "sess-canonico", "test-host")
+	if err != nil {
+		t.Fatalf("insert sesion: %v", err)
+	}
+	sesionID, _ := resSesion.LastInsertId()
+
+	pid := int64(os.Getpid())
+	runtimeID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:            "Codex1",
+		ProyectoID:        &proyectoID,
+		SesionID:          &sesionID,
+		Connector:         "codex-cli",
+		ExternalSessionID: "sess-canonico",
+		LogicalState:      "esperando_io",
+		ProcessState:      "running",
+		PID:               &pid,
+		Model:             "gpt-5.4",
+	})
+	if err != nil {
+		t.Fatalf("registrar runtime tmux: %v", err)
+	}
+
+	runDir := filepath.Join(tmp, "runtime", "Codex1", "run-session-resume")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir run dir: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	writeJSON := func(path string, payload map[string]any) {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	writeJSON(manifestPath, map[string]any{
+		"version":        1,
+		"agent":          "Codex1",
+		"driver":         "tmux_cli_session",
+		"transport":      "tmux",
+		"tmux_session":   "orq-codex1-sr",
+		"tmux_pane_id":   "%9",
+		"status_path":    statusPath,
+		"heartbeat_path": heartbeatPath,
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":      "running",
+		"updated_at": now,
+		"alive":      true,
+		"child_pid":  os.Getpid(),
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":        true,
+		"heartbeat_at": now,
+		"started_at":   now,
+		"child_pid":    os.Getpid(),
+	})
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-codex1-sr",
+		"tmux_pane_id":          "%9",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	capsJSON, _ := json.Marshal(map[string]any{
+		"can_send_input":        false,
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliverySessionResume,
+	})
+	if _, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, transporte, handle_kind, handle_ref, estado, metadata_json, capabilities_json, last_seen_at
+	) VALUES (?,?,?,?,?, 'activo', ?, ?, CURRENT_TIMESTAMP)`,
+		"Codex1", proyectoID, "tmux", "session", "orq-codex1-sr", string(metaJSON), string(capsJSON)); err != nil {
+		t.Fatalf("insert handle tmux: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"instruccion session resume canonica"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia crear una send_instruction usando el runtime principal canónico, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var send *db.RuntimeOrder
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			send = order
+			break
+		}
+	}
+	if send == nil {
+		t.Fatalf("faltaba send_instruction")
+	}
+	if !strings.Contains(send.PayloadJSON, `"mailbox_id":`+strconv.FormatInt(msgID, 10)) {
+		t.Fatalf("send_instruction sin mailbox_id: %s", send.PayloadJSON)
+	}
+	if !strings.Contains(send.PayloadJSON, `"external_session_id":"sess-canonico"`) {
+		t.Fatalf("send_instruction sin external_session_id canónico: %s", send.PayloadJSON)
+	}
+	if send.RuntimeID == nil || *send.RuntimeID != runtimeID {
+		t.Fatalf("send_instruction deberia apuntar al runtime canónico: %+v", send)
 	}
 }
 
@@ -3456,7 +5327,7 @@ func TestEncolarSendInstructionDesdeRuntimeMailboxCompactaNudgeCodex(t *testing.
 	if err != nil || handle == nil {
 		t.Fatalf("handle: %+v err=%v", handle, err)
 	}
-	metaJSON := `{"driver":"process_pty_cli","rendered_command":"'/tmp/codex-perfiles/bin/codex-perfil' 'Codex4'","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-codex4","can_send_input":false}`
+	metaJSON := `{"driver":"process_pty_cli","rendered_command":"'/home/alberto/Trabajo/codex-perfiles/bin/codex-perfil' 'Codex4'","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-codex4","can_send_input":false}`
 	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
 	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=?, handle_ref=? WHERE id=?`, capsJSON, metaJSON, strconv.Itoa(os.Getpid()), handle.ID); err != nil {
 		t.Fatalf("update handle: %v", err)
@@ -4124,6 +5995,7 @@ func TestProcesarRuntimeMailboxInteractivoBatchNoDuplicaSendInstructionAbierta(t
 
 func TestProcesarRuntimeMailboxInteractivoBatchCoalesceAutonomiaPendiente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
 
 	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
@@ -4155,9 +6027,19 @@ func TestProcesarRuntimeMailboxInteractivoBatchCoalesceAutonomiaPendiente(t *tes
 		t.Fatalf("runtime handle sin runtime asociado: %+v", handle)
 	}
 	capsJSON := `{"can_send_input":true,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliveryInteractive + `"}`
-	metaJSON := `{"driver":"process_pty_cli","rendered_command":"cat-cli Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","can_send_input":true,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliveryInteractive + `"}`
+	metaJSON := `{"driver":"tmux_cli_session","transporte":"tmux","tmux_session":"orq-codex1","tmux_pane_id":"%1","stdin_path":"` + filepath.Join(tmp, "tmux.stdin") + `","rendered_command":"cat-cli Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","can_send_input":true,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliveryInteractive + `"}`
 	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
 		t.Fatalf("update handle interactivo: %v", err)
+	}
+	handle, err = db.GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle: %+v err=%v", handle, err)
+	}
+	if got := db.RuntimeHandleMailboxDeliveryMode(handle); got != runtimeagente.MailboxDeliveryInteractive {
+		t.Fatalf("modo interactivo inesperado: %s", got)
+	}
+	if !db.RuntimeHandlePermiteSendInputInteractivo(handle) {
+		t.Fatalf("el handle tmux interactivo deberia permitir input")
 	}
 
 	msgViejo, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
@@ -4240,6 +6122,7 @@ func TestProcesarRuntimeMailboxInteractivoBatchCoalesceAutonomiaPendiente(t *tes
 
 func TestProcesarRuntimeMailboxInteractivoBatchNoRematerializaMailboxOnlyEnMismoHandle(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
 
 	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
@@ -4271,7 +6154,7 @@ func TestProcesarRuntimeMailboxInteractivoBatchNoRematerializaMailboxOnlyEnMismo
 		t.Fatalf("runtime handle sin runtime asociado: %+v", handle)
 	}
 	capsJSON := `{"can_send_input":true,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliveryInteractive + `"}`
-	metaJSON := `{"driver":"process_pty_cli","rendered_command":"cat-cli Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","can_send_input":true}`
+	metaJSON := `{"driver":"tmux_cli_session","transporte":"tmux","tmux_session":"orq-codex1","tmux_pane_id":"%1","stdin_path":"` + filepath.Join(tmp, "tmux.stdin") + `","rendered_command":"cat-cli Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","can_send_input":true}`
 	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
 		t.Fatalf("update handle: %v", err)
 	}
@@ -4326,8 +6209,74 @@ func TestProcesarRuntimeMailboxInteractivoBatchNoRematerializaMailboxOnlyEnMismo
 	}
 }
 
+func TestProcesarRuntimeMailboxInteractivoBatchIgnoraLegacyProcessPTY(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "cat-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	capsJSON := `{"can_send_input":true,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliveryInteractive + `"}`
+	metaJSON := `{"driver":"process_pty_cli","stdin_path":"` + filepath.Join(tmp, "pty.stdin") + `","rendered_command":"cat-cli Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","can_send_input":true,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliveryInteractive + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle legacy: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"legacy interactive"}`,
+	}); err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxInteractivoBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox interactivo: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("un handle legacy process_pty_cli no deberia materializar interactive, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			t.Fatalf("no deberia crear send_instruction interactive legacy: %+v", order)
+		}
+	}
+}
+
 func TestProcesarRuntimeMailboxInteractivoBatchCoalesceInstructionPendiente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
 
 	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
@@ -4359,9 +6308,19 @@ func TestProcesarRuntimeMailboxInteractivoBatchCoalesceInstructionPendiente(t *t
 		t.Fatalf("runtime handle sin runtime asociado: %+v", handle)
 	}
 	capsJSON := `{"can_send_input":true,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliveryInteractive + `"}`
-	metaJSON := `{"driver":"process_pty_cli","rendered_command":"cat-cli Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","can_send_input":true,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliveryInteractive + `"}`
+	metaJSON := `{"driver":"tmux_cli_session","transporte":"tmux","tmux_session":"orq-codex1","tmux_pane_id":"%1","stdin_path":"` + filepath.Join(tmp, "tmux.stdin") + `","rendered_command":"cat-cli Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","can_send_input":true,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliveryInteractive + `"}`
 	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
 		t.Fatalf("update handle interactivo: %v", err)
+	}
+	handle, err = db.GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle: %+v err=%v", handle, err)
+	}
+	if got := db.RuntimeHandleMailboxDeliveryMode(handle); got != runtimeagente.MailboxDeliveryInteractive {
+		t.Fatalf("modo interactivo inesperado: %s", got)
+	}
+	if !db.RuntimeHandlePermiteSendInputInteractivo(handle) {
+		t.Fatalf("el handle tmux interactivo deberia permitir input")
 	}
 
 	msgViejo, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
@@ -4575,6 +6534,132 @@ func TestResetReanimacionEncolaStartCuandoNoHayRuntimePeroSiTrabajo(t *testing.T
 	}
 }
 
+func TestResetReanimacionEncolaStartSiProyectoTieneBacklogRecuperable(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex1: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex7", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex7: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-reanimacion-backlog",
+		Nombre:  "Orquestador Reanimacion Backlog",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente libre"); err != nil {
+		t.Fatalf("activar asignacion Codex1: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex7", proyectoID, "frente cargado"); err != nil {
+		t.Fatalf("activar asignacion Codex7: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Backlog bloqueado por sobrecarga",
+		Descripcion: "Trabajo pendiente",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex7"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex7"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "Codex7", "Sobrecarga operativa: sin relevo sano disponible"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET reanimar_at=CURRENT_TIMESTAMP, estado_cuota='enfriamiento', motivo_pausa='cuota' WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("marcar reanimacion: %v", err)
+	}
+
+	if err := (dbAutomationService{}).ResetReanimacion("Codex1"); err != nil {
+		t.Fatalf("reset reanimacion: %v", err)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "start" {
+		t.Fatalf("deberia encolar start por backlog recuperable del proyecto: %+v", orders)
+	}
+}
+
+func TestResetReanimacionNoArrancaSoloPorBloqueoHumanoAjeno(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex1: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex7", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex7: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-reanimacion-bloqueo-humano",
+		Nombre:  "Orquestador Reanimacion Bloqueo Humano",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente libre"); err != nil {
+		t.Fatalf("activar asignacion Codex1: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex7", proyectoID, "frente bloqueado"); err != nil {
+		t.Fatalf("activar asignacion Codex7: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Esperando humano",
+		Descripcion: "Trabajo externo",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex7"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex7"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "Codex7", "esperando respuesta humana"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET reanimar_at=CURRENT_TIMESTAMP, estado_cuota='enfriamiento', motivo_pausa='cuota' WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("marcar reanimacion: %v", err)
+	}
+
+	if err := (dbAutomationService{}).ResetReanimacion("Codex1"); err != nil {
+		t.Fatalf("reset reanimacion: %v", err)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia arrancar solo por bloqueo humano ajeno: %+v", orders)
+	}
+}
+
 func TestResetReanimacionConservaCooldownSiFallaReactivacion(t *testing.T) {
 	prepararDBTemporalCmd(t)
 
@@ -4665,6 +6750,93 @@ func TestResetReanimacionSostieneCooldownSiLaCuotaVisibleSigueAgotada(t *testing
 	}
 }
 
+func TestResetReanimacionNoArrancaSiLaCuentaCompartidaYaEstaOcupada(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.ConfigSet("runtime_shared_account_active_ceiling", "1"); err != nil {
+		t.Fatalf("config shared account ceiling: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex1: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente Codex2: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-reanimacion-cuenta",
+		Nombre:  "Orquestador Reanimacion Cuenta",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente retenido"); err != nil {
+		t.Fatalf("activar asignacion Codex1: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Retomar cuando haya cuenta libre",
+		Descripcion: "Trabajo retenido por cuenta compartida",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	sesionID, err := db.IniciarSesion("Codex2")
+	if err != nil {
+		t.Fatalf("iniciar sesion Codex2: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		UPDATE runtime_handles
+		SET proyecto_id=?,
+		    transporte='tmux',
+		    handle_kind='session',
+		    handle_ref='orq-codex2',
+		    estado='activo',
+		    metadata_json=?,
+		    last_seen_at=CURRENT_TIMESTAMP
+		WHERE sesion_id=?`,
+		proyectoID,
+		`{"driver":"tmux_cli_session","account_email":"maritere@avidad.com","account_user":"maritere"}`,
+		sesionID,
+	); err != nil {
+		t.Fatalf("actualizar handle activo Codex2: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		INSERT INTO runtime_handles (
+			agente, proyecto_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+		) VALUES (?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`,
+		"Codex1", proyectoID, "tmux", "session", "orq-codex1", "pausado",
+		`{"driver":"tmux_cli_session","account_email":"maritere@avidad.com","account_user":"maritere"}`,
+	); err != nil {
+		t.Fatalf("registrar handle pausado Codex1: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET reanimar_at=CURRENT_TIMESTAMP, estado_cuota='activo', motivo_pausa='' WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("marcar reanimacion: %v", err)
+	}
+
+	if err := (dbAutomationService{}).ResetReanimacion("Codex1"); err != nil {
+		t.Fatalf("reset reanimacion: %v", err)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia reactivar si la cuenta compartida ya esta ocupada: %+v", orders)
+	}
+}
+
 func TestPresupuestoAgenteDebeRevalidarseAhoraParaBloqueadoStale(t *testing.T) {
 	checkedAt := time.Now().UTC().Add(-2 * time.Hour)
 	if !presupuestoAgenteDebeRevalidarseAhora(&db.Agente{
@@ -4701,6 +6873,39 @@ func TestPresupuestoPrimerUsoSesionGate(t *testing.T) {
 	}
 	if !presupuestoPrimerUsoSesion("Codex4") {
 		t.Fatalf("otro agente deberia mantener su propio primer uso")
+	}
+}
+
+func TestRowPermiteAutoRecuperacionConWorkerFreshYSoloBloqueadas(t *testing.T) {
+	now := time.Now().UTC()
+	row := agentesapp.Row{
+		EstadoOperativo:           "bloqueado",
+		OpenTasks:                 0,
+		BlockedTasks:              3,
+		WorkerState:               "running",
+		WorkerAlive:               true,
+		WorkerHeartbeat:           &now,
+		WorkerMailboxDeliveryMode: runtimeagente.MailboxDeliverySessionResume,
+		WorkerExternalSessionID:   "sess-codex7",
+	}
+	if !rowPermiteAutoRecuperacion(row, now) {
+		t.Fatalf("un worker vivo con backlog bloqueado deberia permitir auto recuperacion")
+	}
+}
+
+func TestRowPermiteAutoRecuperacionRechazaWorkerSinContinuidadConSoloBloqueadas(t *testing.T) {
+	now := time.Now().UTC()
+	row := agentesapp.Row{
+		EstadoOperativo:           "bloqueado",
+		OpenTasks:                 0,
+		BlockedTasks:              3,
+		WorkerState:               "running",
+		WorkerAlive:               true,
+		WorkerHeartbeat:           &now,
+		WorkerMailboxDeliveryMode: runtimeagente.MailboxDeliveryBootstrapOnly,
+	}
+	if rowPermiteAutoRecuperacion(row, now) {
+		t.Fatalf("un worker bootstrap_only no deberia auto-recuperar backlog bloqueado")
 	}
 }
 
@@ -4841,8 +7046,8 @@ func TestProcesarAutonomiaAgentesBatchNoDuplicaPauseSiYaEstaPausadoPorCuota(t *t
 	if err != nil {
 		t.Fatalf("procesar autonomia: %v", err)
 	}
-	if n != 0 {
-		t.Fatalf("no deberia crear decision nueva, got=%d", n)
+	if n != 1 {
+		t.Fatalf("deberia bloquear la tarea activa sin duplicar pause, got=%d", n)
 	}
 
 	agente := "Codex1"
@@ -4853,6 +7058,13 @@ func TestProcesarAutonomiaAgentesBatchNoDuplicaPauseSiYaEstaPausadoPorCuota(t *t
 	}
 	if len(orders) != 0 {
 		t.Fatalf("no deberia crear pause duplicada: %+v", orders)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Estado != db.EstadoBloqueada {
+		t.Fatalf("la tarea deberia quedar bloqueada al estar el agente en cuota: %+v", tarea)
 	}
 }
 
@@ -5134,6 +7346,87 @@ func TestProcesarAutonomiaAgentesBatchReanudaSesionPausadaSiHayTrabajoActivoYBlo
 	for _, order := range orders {
 		if order != nil && order.Tipo == "pause" && strings.Contains(order.PayloadJSON, "bloqueo_humano:") {
 			t.Fatalf("no deberia volver a encolar una pausa por bloqueo humano: %+v", orders)
+		}
+	}
+}
+
+func TestProcesarAutonomiaAgentesBatchNoPropagaBloqueoHumanoDesdeAutobloqueoDeOtroAgente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	for _, agente := range []string{"Codex3", "Codex7"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Autobloqueo runtime",
+		Descripcion: "No debe bloquear a otros agentes del proyecto",
+		ProyectoID:  &proyectoID,
+		Modulo:      "runtime",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex7"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex7"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "Codex7", "Agente Codex7 en estado bloqueado_por_runtime: pausado"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex3",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE sesiones SET estado='activa' WHERE id=?`, sesion.ID); err != nil {
+		t.Fatalf("activar sesion: %v", err)
+	}
+
+	n, err := procesarAutonomiaAgentesBatch()
+	if err != nil {
+		t.Fatalf("procesar autonomia: %v", err)
+	}
+	if n < 0 {
+		t.Fatalf("resultado inesperado: %d", n)
+	}
+
+	op, err := db.GetProyectoOperacion(proyectoID)
+	if err != nil {
+		t.Fatalf("get proyecto operacion: %v", err)
+	}
+	if op.EstadoOperativo != db.ProyectoOperativoActivo {
+		t.Fatalf("el proyecto no deberia quedar esperando_humano por autobloqueo de otro agente: %+v", op)
+	}
+	agente := "Codex3"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	for _, order := range orders {
+		if order != nil && order.Tipo == "pause" && strings.Contains(order.PayloadJSON, "bloqueo_humano:") {
+			t.Fatalf("no deberia pausar a otro agente por autobloqueo ajeno: %+v", orders)
 		}
 	}
 }
@@ -5500,6 +7793,9 @@ func TestProcesarAutonomiaAgentesBatchRecuperaRuntimeRemotoDegradado(t *testing.
 		}
 		switch order.Tipo {
 		case "checkpoint":
+			if order.RuntimeID == nil || *order.RuntimeID != runtime.ID {
+				t.Fatalf("checkpoint deberia usar el runtime canónico: %+v", order)
+			}
 			checkpointFound = strings.Contains(order.PayloadJSON, "remote_runtime_degraded")
 		case "resume":
 			resumeFound = strings.Contains(order.PayloadJSON, `"motivo":"remote_runtime_degraded"`)
@@ -5603,6 +7899,9 @@ func TestProcesarAutonomiaAgentesBatchRecuperaRuntimeRemotoDegradadoSinSesionExt
 		}
 		switch order.Tipo {
 		case "checkpoint":
+			if order.RuntimeID == nil || *order.RuntimeID != runtime.ID {
+				t.Fatalf("checkpoint deberia usar el runtime canónico: %+v", order)
+			}
 			checkpointFound = strings.Contains(order.PayloadJSON, "remote_runtime_degraded")
 		case "start":
 			startFound = strings.Contains(order.PayloadJSON, `"motivo":"remote_runtime_degraded"`)
@@ -5656,6 +7955,7 @@ func TestProcesarAutonomiaAgentesBatchRecuperaRuntimeLocalFallidoRelanzaStart(t 
 		ProyectoID:         &proyectoID,
 		CWD:                filepath.Join(tmp, "orquestador"),
 		Herramienta:        "codex-cli",
+		ResumePayloadJSON:  db.MergeResumePayloadPerfilEjecucion("", "implementacion", "gemma4:26b", "medium"),
 		ResumenContinuidad: "continuidad activa",
 	})
 	if err != nil {
@@ -5708,6 +8008,11 @@ func TestProcesarAutonomiaAgentesBatchRecuperaRuntimeLocalFallidoRelanzaStart(t 
 	}
 	if !strings.Contains(orders[0].PayloadJSON, `"motivo":"local_runtime_failed"`) {
 		t.Fatalf("start de recuperacion local sin motivo esperado: %s", orders[0].PayloadJSON)
+	}
+	for _, token := range []string{`"perfil":"implementacion"`, `"modelo":"gemma4:26b"`, `"razonamiento":"medium"`} {
+		if !strings.Contains(orders[0].PayloadJSON, token) {
+			t.Fatalf("start de recuperacion local sin perfil persistido %s: %s", token, orders[0].PayloadJSON)
+		}
 	}
 }
 
@@ -5901,6 +8206,198 @@ func TestProcesarAutonomiaAgentesBatchNoRelanzaRuntimeLocalSiSigueVivo(t *testin
 	}
 	if len(orders) != 0 {
 		t.Fatalf("no deberia encolar ordenes al revivir handle vivo: %+v", orders)
+	}
+}
+
+func TestProcesarAutonomiaAgentesBatchNoRecuperaSesionViejaSiYaHayTMUXOperativoReciente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "No duplicar recovery",
+		Descripcion: "Un tmux activo reciente debe ganar sobre una sesion vieja degradada",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	conector, err := db.GetConector("codex-cli")
+	if err != nil || conector == nil {
+		t.Fatalf("get conector codex-cli: %+v err=%v", conector, err)
+	}
+
+	sesionVieja, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex1",
+		ConectorID:         &conector.ID,
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador"),
+		Herramienta:        "codex-cli",
+		ResumenContinuidad: "sesion vieja degradada",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion vieja: %v", err)
+	}
+	handleViejo, err := db.GetRuntimeHandleBySesionID(sesionVieja.ID)
+	if err != nil || handleViejo == nil {
+		t.Fatalf("get handle viejo: %+v err=%v", handleViejo, err)
+	}
+	runtimeViejo, err := db.GetRuntimeBySesionID(sesionVieja.ID)
+	if err != nil || runtimeViejo == nil {
+		t.Fatalf("get runtime viejo: %+v err=%v", runtimeViejo, err)
+	}
+	if _, err := db.DB.Exec(`
+		UPDATE runtime_handles
+		SET transporte='cli',
+		    handle_kind='process',
+		    handle_ref='999999',
+		    estado='fallido'
+		WHERE id = ?`, handleViejo.ID); err != nil {
+		t.Fatalf("degradar handle viejo: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		UPDATE runtime_instances
+		SET logical_state='fallido', process_state='fallido'
+		WHERE id = ?`, runtimeViejo.ID); err != nil {
+		t.Fatalf("degradar runtime viejo: %v", err)
+	}
+
+	sesionNueva, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex1",
+		ConectorID:         &conector.ID,
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador"),
+		Herramienta:        "codex-cli",
+		ExternalSessionID:  "sess-codex1-fresh",
+		ResumenContinuidad: "sesion nueva tmux",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion nueva: %v", err)
+	}
+	handleNuevo, err := db.GetRuntimeHandleBySesionID(sesionNueva.ID)
+	if err != nil || handleNuevo == nil {
+		t.Fatalf("get handle nuevo: %+v err=%v", handleNuevo, err)
+	}
+	runtimeNuevo, err := db.GetRuntimeBySesionID(sesionNueva.ID)
+	if err != nil || runtimeNuevo == nil {
+		t.Fatalf("get runtime nuevo: %+v err=%v", runtimeNuevo, err)
+	}
+
+	workerDir := filepath.Join(tmp, "worker-fresh")
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatalf("mkdir worker dir: %v", err)
+	}
+	manifestPath := filepath.Join(workerDir, "manifest.json")
+	statusPath := filepath.Join(workerDir, "status.json")
+	heartbeatPath := filepath.Join(workerDir, "heartbeat.json")
+	now := time.Now().UTC()
+	manifestData, _ := json.Marshal(runtimeagente.WorkerManifest{
+		Version:       1,
+		Agent:         "Codex1",
+		Project:       "orquestador",
+		Driver:        "tmux_cli_session",
+		Transport:     "tmux",
+		CreatedAt:     now.Add(-time.Minute).Format(time.RFC3339),
+		StartedAt:     now.Add(-time.Minute).Format(time.RFC3339),
+		ChildPID:      4444,
+		StatusPath:    statusPath,
+		HeartbeatPath: heartbeatPath,
+	})
+	statusData, _ := json.Marshal(runtimeagente.WorkerStatus{
+		State:     "running",
+		UpdatedAt: now.Format(time.RFC3339),
+		Alive:     true,
+		ChildPID:  4444,
+		Agent:     "Codex1",
+		Project:   "orquestador",
+	})
+	heartbeatData, _ := json.Marshal(runtimeagente.WorkerHeartbeat{
+		Alive:       true,
+		HeartbeatAt: now.Format(time.RFC3339),
+		StartedAt:   now.Add(-time.Minute).Format(time.RFC3339),
+		ChildPID:    4444,
+		Agent:       "Codex1",
+		Project:     "orquestador",
+	})
+	for path, data := range map[string][]byte{
+		manifestPath:  manifestData,
+		statusPath:    statusData,
+		heartbeatPath: heartbeatData,
+	} {
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write worker artifact %s: %v", path, err)
+		}
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                 "tmux_cli_session",
+		"tmux_session":           "orq-codex1-fresh",
+		"worker_manifest_path":   manifestPath,
+		"worker_status_path":     statusPath,
+		"worker_heartbeat_path":  heartbeatPath,
+		"external_session_id":    "sess-codex1-fresh",
+		"mailbox_delivery_mode":  runtimeagente.MailboxDeliverySessionResume,
+		"profile_status_wrapper": "/tmp/codex-perfil",
+	})
+	if _, err := db.DB.Exec(`
+		UPDATE runtime_handles
+		SET transporte='tmux',
+		    handle_kind='session',
+		    handle_ref='orq-codex1-fresh/%1',
+		    estado='activo',
+		    runtime_id=?,
+		    metadata_json=?,
+		    last_seen_at=?
+		WHERE id = ?`, runtimeNuevo.ID, string(metaJSON), now, handleNuevo.ID); err != nil {
+		t.Fatalf("actualizar handle nuevo: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		UPDATE runtime_instances
+		SET logical_state='esperando_io', process_state='running'
+		WHERE id = ?`, runtimeNuevo.ID); err != nil {
+		t.Fatalf("actualizar runtime nuevo: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	sesionActual, err := db.GetSesionByID(sesionVieja.ID)
+	if err != nil || sesionActual == nil {
+		t.Fatalf("get sesion actual: %+v err=%v", sesionActual, err)
+	}
+	n, err := procesarRecuperacionRuntimeDegradadoSesion(sesionActual)
+	if err != nil {
+		t.Fatalf("procesar recuperacion vieja con tmux fresco: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia relanzar recovery si ya existe tmux operativo reciente, got=%d", n)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar ordenes con tmux reciente operativo: %+v", orders)
 	}
 }
 
@@ -6647,73 +9144,6 @@ func TestProcesarRuntimeTranscriptBatchNoGuiaAlWorkerEnRuntimePanic(t *testing.T
 	if err != nil || handle == nil {
 		t.Fatalf("reload handle: %+v err=%v", handle, err)
 	}
-	if !strings.Contains(handle.MetadataJSON, `"disable_supervisor_hot_input":true`) {
-		t.Fatalf("runtime_panic deberia degradar supervisor_local en el handle: %s", handle.MetadataJSON)
-	}
-}
-
-func TestEnfriarAgentePorRuntimePanicNoDegradaHandleDeGeneracionNueva(t *testing.T) {
-	tmp := prepararDBTemporalCmd(t)
-
-	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
-		t.Fatalf("registrar agente: %v", err)
-	}
-	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
-		Slug:    "orquestador",
-		Nombre:  "Orquestador",
-		RutaAbs: filepath.Join(tmp, "orquestador"),
-		Tipo:    db.ProyectoRepo,
-		Activo:  true,
-	})
-	if err != nil {
-		t.Fatalf("upsert proyecto: %v", err)
-	}
-	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
-		Agente:      "Codex1",
-		ProyectoID:  &proyectoID,
-		CWD:         filepath.Join(tmp, "orquestador"),
-		Herramienta: "codex-cli",
-		Branch:      "main",
-	})
-	if err != nil {
-		t.Fatalf("iniciar sesion worker: %v", err)
-	}
-	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
-	if err != nil || handle == nil {
-		t.Fatalf("handle worker: %+v err=%v", handle, err)
-	}
-	startedAt := time.Now().UTC()
-	metaJSON, _ := json.Marshal(map[string]any{
-		"log_path":         filepath.Join(tmp, "panic.log"),
-		"driver":           "process_pty_cli",
-		"stdin_path":       filepath.Join(tmp, "pty.stdin"),
-		"supervisor_ref":   filepath.Join(tmp, "supervisor.ref"),
-		"rendered_command": filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil") + " Codex1",
-		"can_send_input":   false,
-		"started_at":       startedAt.Format(time.RFC3339Nano),
-	})
-	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
-		t.Fatalf("update handle metadata: %v", err)
-	}
-
-	item := &db.RuntimeTranscriptEntry{
-		ID:             10576,
-		Agente:         "Codex1",
-		HandleID:       &handle.ID,
-		CreatedAt:      startedAt.Add(-2 * time.Second),
-		Stream:         "pty_out",
-		Classification: "runtime_panic",
-	}
-	if _, err := enfriarAgentePorRuntimePanic("Codex1", item); err != nil {
-		t.Fatalf("enfriar agente por runtime panic: %v", err)
-	}
-	handle, err = db.GetRuntimeHandle(handle.ID)
-	if err != nil || handle == nil {
-		t.Fatalf("reload handle: %+v err=%v", handle, err)
-	}
-	if strings.Contains(handle.MetadataJSON, `"disable_supervisor_hot_input":true`) {
-		t.Fatalf("no deberia degradar el handle actual por un panic de la generacion anterior: %s", handle.MetadataJSON)
-	}
 }
 
 func TestProcesarRuntimeTranscriptBatchResuelveReviewGateDesdeReviewer(t *testing.T) {
@@ -7127,8 +9557,8 @@ func TestProcesarRuntimeMailboxBatchMaterializaAutonomiaMailbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("procesar mailbox batch: %v", err)
 	}
-	if n < 1 {
-		t.Fatalf("esperaba al menos una materialización de mailbox, got=%d", n)
+	if n != 0 {
+		t.Fatalf("el batch general ya no deberia materializar runtime_mailbox por supervisor_local legacy, got=%d", n)
 	}
 	agente := "Codex1"
 	estado := "pendiente"
@@ -7136,14 +9566,8 @@ func TestProcesarRuntimeMailboxBatchMaterializaAutonomiaMailbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listar runtime orders: %v", err)
 	}
-	if len(orders) != 1 || orders[0].Tipo != "send_instruction" {
-		t.Fatalf("autonomia no materializada en send_instruction: %+v", orders)
-	}
-	if orders[0].HandleID == nil || *orders[0].HandleID != handle.ID {
-		t.Fatalf("send_instruction sin handle activo: %+v", orders[0])
-	}
-	if !strings.Contains(orders[0].PayloadJSON, `"delivery_attempt_signature":"supervisor_local|handle:`) {
-		t.Fatalf("autonomia del batch general deberia materializarse por supervisor_local: %s", orders[0].PayloadJSON)
+	if len(orders) != 0 {
+		t.Fatalf("el batch general no deberia crear send_instruction legacy: %+v", orders)
 	}
 	mailboxEstado := "pendiente"
 	mailbox, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &agente, ProyectoID: &proyectoID, Estado: &mailboxEstado})
@@ -7413,20 +9837,45 @@ func TestProcesarPresupuestoSesionObservadoBatchRespetaIntervaloBackground(t *te
 	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
 		t.Fatalf("upsert handle: %v", err)
 	}
-	handle, err := db.GetRuntimeHandleActivoAgenteProyecto("Codex1", &proyectoID)
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
 	if err != nil || handle == nil {
-		t.Fatalf("get handle: %+v err=%v", handle, err)
+		t.Fatalf("get handle by sesion: %+v err=%v", handle, err)
 	}
 	rendered := filepath.Join(base, "bin", "codex-perfil") + " Codex1"
+	runDir := filepath.Join(tmp, "runtime-worker")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir worker: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	workerNow := time.Date(2026, 3, 31, 10, 6, 0, 0, time.UTC)
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex1","driver":"tmux_cli_session","transport":"tmux","profile":"Codex1","profile_status_wrapper":"`+filepath.Join(base, "bin", "codex-perfil")+`","tmux_session":"orq-codex1-budget","tmux_pane_id":"%1","status_path":"`+statusPath+`","heartbeat_path":"`+heartbeatPath+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","updated_at":"`+workerNow.Format(time.RFC3339Nano)+`","alive":true,"child_pid":`+strconv.Itoa(os.Getpid())+`}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+workerNow.Format(time.RFC3339Nano)+`","started_at":"`+workerNow.Format(time.RFC3339Nano)+`","child_pid":`+strconv.Itoa(os.Getpid())+`}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
 	meta := map[string]any{
-		"rendered_command":    rendered,
-		"working_dir":         filepath.Join(tmp, "orquestador"),
-		"external_session_id": "sess-123",
-		"started_at":          time.Date(2026, 3, 31, 10, 0, 0, 0, time.UTC).Format(time.RFC3339),
+		"driver":                "tmux_cli_session",
+		"rendered_command":      rendered,
+		"working_dir":           filepath.Join(tmp, "orquestador"),
+		"external_session_id":   "sess-123",
+		"started_at":            time.Date(2026, 3, 31, 10, 0, 0, 0, time.UTC).Format(time.RFC3339),
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
 	}
 	metaJSON, _ := json.Marshal(meta)
 	if _, err := db.DB.Exec(`UPDATE runtime_handles SET metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
 		t.Fatalf("update handle: %v", err)
+	}
+	handle, err = db.GetRuntimeHandleActivoAgenteProyecto("Codex1", &proyectoID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle activo: %+v err=%v", handle, err)
 	}
 
 	first, err := procesarPresupuestoSesionObservadoBatch()
@@ -7447,6 +9896,13 @@ func TestProcesarPresupuestoSesionObservadoBatchRespetaIntervaloBackground(t *te
 
 func TestRefrescarPresupuestoSesionObservadoAgenteUsaUltimaSesionClaudeSinHandle(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+	statusCacheState.mu.Lock()
+	statusCacheState.ok = true
+	statusCacheState.value = apiStatusResponse{Generado: "stale"}
+	statusCacheState.expires = time.Now().UTC().Add(time.Minute)
+	statusCacheState.mu.Unlock()
 	configHome := filepath.Join(tmp, "claude-home")
 	if err := os.MkdirAll(configHome, 0o755); err != nil {
 		t.Fatalf("mkdir config home: %v", err)
@@ -7513,6 +9969,61 @@ func TestRefrescarPresupuestoSesionObservadoAgenteUsaUltimaSesionClaudeSinHandle
 	if agente.PresupuestoCheckedAt == nil || strings.TrimSpace(agente.PresupuestoFuente) != "claude_rust_session_observed" {
 		t.Fatalf("deberia persistir telemetria claude observada por sesion: %+v", agente)
 	}
+	statusCacheState.mu.Lock()
+	cacheValida := statusCacheState.ok
+	statusCacheState.mu.Unlock()
+	if cacheValida {
+		t.Fatalf("el refresh de presupuesto deberia invalidar la snapshot de status")
+	}
+}
+
+func TestEncolarControlAgenteLocalInvalidaSnapshotStatus(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+	statusCacheState.mu.Lock()
+	statusCacheState.ok = true
+	statusCacheState.value = apiStatusResponse{Generado: "stale"}
+	statusCacheState.expires = time.Now().UTC().Add(time.Minute)
+	statusCacheState.mu.Unlock()
+
+	if err := db.RegistrarAgente("CodexStart", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-status-cache",
+		Nombre:  "Orquestador Status Cache",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := db.UpsertAgenteIdentidadObservadaCanonica("CodexStart", "acc-codex-start", "codexstart@example.com", "Codex Start", "test", &now); err != nil {
+		t.Fatalf("upsert identidad observada: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='activo', reanimar_at=NULL, motivo_pausa='' WHERE nombre=?`, "CodexStart"); err != nil {
+		t.Fatalf("activar cuota: %v", err)
+	}
+
+	if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
+		Agente:   "CodexStart",
+		Proyecto: strconv.FormatInt(proyectoID, 10),
+		Accion:   "arrancar",
+		Por:      "test",
+		Motivo:   "status-cache",
+	}); err != nil {
+		t.Fatalf("encolar control agente: %v", err)
+	}
+
+	statusCacheState.mu.Lock()
+	cacheValida := statusCacheState.ok
+	statusCacheState.mu.Unlock()
+	if cacheValida {
+		t.Fatalf("encolar control agente deberia invalidar la snapshot de status")
+	}
 }
 
 func prepararRepoGitAutonomia(t *testing.T, repo string) string {
@@ -7539,4 +10050,2666 @@ func cmdGitAutonomia(t *testing.T, dir string, args ...string) string {
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
 	}
 	return strings.TrimSpace(string(out))
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchReasignaATrabajadorSano(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	autonomiaDegradedTaskGate.mu.Lock()
+	autonomiaDegradedTaskGate.last = nil
+	autonomiaDegradedTaskGate.mu.Unlock()
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"CodexBloqueado", "CodexSano"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente activo"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+	}
+	sesionBloqueada, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexBloqueado",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion bloqueada: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesionBloqueada); err != nil {
+		t.Fatalf("upsert handle bloqueado: %v", err)
+	}
+	handleBloqueado, err := db.GetRuntimeHandleActivoAgenteProyecto("CodexBloqueado", &proyectoID)
+	if err != nil || handleBloqueado == nil {
+		t.Fatalf("get handle bloqueado: %+v err=%v", handleBloqueado, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='fallido', last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, handleBloqueado.ID); err != nil {
+		t.Fatalf("marcar handle fallido: %v", err)
+	}
+	sesionSana, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSano",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion sana: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesionSana); err != nil {
+		t.Fatalf("upsert handle sano: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Recuperar worker degradado",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexBloqueado"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexBloqueado"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	autonomiaDegradedTaskGate.mu.Lock()
+	if autonomiaDegradedTaskGate.last == nil {
+		autonomiaDegradedTaskGate.last = map[int64]time.Time{}
+	}
+	autonomiaDegradedTaskGate.last[tareaID] = time.Now().UTC().Add(-autonomiaDegradedTaskCooldown - time.Minute)
+	autonomiaDegradedTaskGate.mu.Unlock()
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia procesar una tarea, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "CodexSano" || tarea.Estado != db.EstadoEnProgreso {
+		t.Fatalf("tarea no reasignada correctamente: %+v", tarea)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchBloqueaSinRelevoSano(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	autonomiaDegradedTaskGate.mu.Lock()
+	autonomiaDegradedTaskGate.last = nil
+	autonomiaDegradedTaskGate.mu.Unlock()
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-bloqueado",
+		Nombre:  "Orquestador Bloqueado",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexBloqueado", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexBloqueado", proyectoID, "frente unico"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexBloqueado",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("upsert handle: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleActivoAgenteProyecto("CodexBloqueado", &proyectoID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='fallido', last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("marcar handle fallido: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Bloquear por falta de relevo",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexBloqueado"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexBloqueado"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia procesar una tarea, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != db.EstadoBloqueada {
+		t.Fatalf("la tarea deberia quedar bloqueada, got=%s", tarea.Estado)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchBloqueaSinRelevoSiAgenteBloqueadoPorCuota(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	autonomiaDegradedTaskGate.mu.Lock()
+	autonomiaDegradedTaskGate.last = nil
+	autonomiaDegradedTaskGate.mu.Unlock()
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-cuota-bloqueada",
+		Nombre:  "Orquestador Cuota Bloqueada",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexBloqueado", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexBloqueado", proyectoID, "frente sin cuota"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', motivo_pausa='cuota visible agotada', reanimar_at=datetime('now','+2 hours') WHERE nombre='CodexBloqueado'`); err != nil {
+		t.Fatalf("marcar cuota agotada: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Bloquear por cuota sin relevo",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexBloqueado"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexBloqueado"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia bloquear la tarea sin relevo cuando el agente no tiene cuota, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != db.EstadoBloqueada {
+		t.Fatalf("la tarea deberia quedar bloqueada, got=%s", tarea.Estado)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchNoSaturaUnicoRelevoSano(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	autonomiaDegradedTaskGate.mu.Lock()
+	autonomiaDegradedTaskGate.last = nil
+	autonomiaDegradedTaskGate.mu.Unlock()
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-capacidad",
+		Nombre:  "Orquestador Capacidad",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"CodexBloqueado", "CodexSano"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente capacidad"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+	}
+	sesionBloqueada, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexBloqueado",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion bloqueada: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesionBloqueada); err != nil {
+		t.Fatalf("upsert handle bloqueado: %v", err)
+	}
+	handleBloqueado, err := db.GetRuntimeHandleActivoAgenteProyecto("CodexBloqueado", &proyectoID)
+	if err != nil || handleBloqueado == nil {
+		t.Fatalf("get handle bloqueado: %+v err=%v", handleBloqueado, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='fallido', last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, handleBloqueado.ID); err != nil {
+		t.Fatalf("marcar handle fallido: %v", err)
+	}
+	sesionSana, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSano",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion sana: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesionSana); err != nil {
+		t.Fatalf("upsert handle sano: %v", err)
+	}
+	for i := 0; i < autonomiaWorkerOpenTasksCeiling; i++ {
+		tareaSanaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      fmt.Sprintf("Trabajo ya activo %d", i+1),
+			Descripcion: "test",
+			ProyectoID:  &proyectoID,
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea sana %d: %v", i+1, err)
+		}
+		if err := db.TomarTarea(tareaSanaID, "CodexSano"); err != nil {
+			t.Fatalf("tomar tarea sana %d: %v", i+1, err)
+		}
+		if err := db.IniciarTarea(tareaSanaID, "CodexSano"); err != nil {
+			t.Fatalf("iniciar tarea sana %d: %v", i+1, err)
+		}
+	}
+	tareaBloqueadaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "No saturar relevo",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea bloqueada: %v", err)
+	}
+	if err := db.TomarTarea(tareaBloqueadaID, "CodexBloqueado"); err != nil {
+		t.Fatalf("tomar tarea bloqueada: %v", err)
+	}
+	if err := db.IniciarTarea(tareaBloqueadaID, "CodexBloqueado"); err != nil {
+		t.Fatalf("iniciar tarea bloqueada: %v", err)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia procesar una tarea, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaBloqueadaID)
+	if err != nil {
+		t.Fatalf("get tarea bloqueada: %v", err)
+	}
+	if tarea.Estado != db.EstadoBloqueada {
+		t.Fatalf("la tarea deberia quedar bloqueada para no saturar al relevo, got=%s", tarea.Estado)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchPriorizaAgenteConMasTareasBloqueadas(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	autonomiaDegradedTaskGate.mu.Lock()
+	autonomiaDegradedTaskGate.last = nil
+	autonomiaDegradedTaskGate.mu.Unlock()
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-prioridad-bloqueadas",
+		Nombre:  "Orquestador Prioridad Bloqueadas",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"CodexBloqueadoA", "CodexBloqueadoB", "CodexSano"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente prioridad"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+	}
+
+	for _, agente := range []string{"CodexBloqueadoA", "CodexBloqueadoB"} {
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      agente,
+			ProyectoID:  &proyectoID,
+			CWD:         filepath.Join(tmp, "orquestador"),
+			Herramienta: "codex-cli",
+		})
+		if err != nil {
+			t.Fatalf("iniciar sesion %s: %v", agente, err)
+		}
+		if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+			t.Fatalf("upsert handle %s: %v", agente, err)
+		}
+		handle, err := db.GetRuntimeHandleActivoAgenteProyecto(agente, &proyectoID)
+		if err != nil || handle == nil {
+			t.Fatalf("get handle %s: %+v err=%v", agente, handle, err)
+		}
+		if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='fallido', last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, handle.ID); err != nil {
+			t.Fatalf("marcar handle fallido %s: %v", agente, err)
+		}
+	}
+
+	sesionSana, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSano",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion sana: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesionSana); err != nil {
+		t.Fatalf("upsert handle sano: %v", err)
+	}
+	for i := 0; i < autonomiaBlockedTaskRecoveryOpenTasksCeiling; i++ {
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      fmt.Sprintf("Trabajo sano %d", i+1),
+			Descripcion: "test",
+			ProyectoID:  &proyectoID,
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea sana %d: %v", i+1, err)
+		}
+		if err := db.TomarTarea(tareaID, "CodexSano"); err != nil {
+			t.Fatalf("tomar tarea sana %d: %v", i+1, err)
+		}
+		if err := db.IniciarTarea(tareaID, "CodexSano"); err != nil {
+			t.Fatalf("iniciar tarea sana %d: %v", i+1, err)
+		}
+	}
+
+	crearTareaBloqueada := func(agente, titulo string) int64 {
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      titulo,
+			Descripcion: "test",
+			ProyectoID:  &proyectoID,
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea bloqueada %s: %v", titulo, err)
+		}
+		if err := db.TomarTarea(tareaID, agente); err != nil {
+			t.Fatalf("tomar tarea bloqueada %s: %v", titulo, err)
+		}
+		if err := db.IniciarTarea(tareaID, agente); err != nil {
+			t.Fatalf("iniciar tarea bloqueada %s: %v", titulo, err)
+		}
+		if err := db.BloquearTarea(tareaID, agente, "Agente "+agente+" en estado mailbox_atascada: mailbox pendiente con fallos de control"); err != nil {
+			t.Fatalf("bloquear tarea %s: %v", titulo, err)
+		}
+		return tareaID
+	}
+
+	tareaA := crearTareaBloqueada("CodexBloqueadoA", "Bloqueada A")
+	tareaB1 := crearTareaBloqueada("CodexBloqueadoB", "Bloqueada B1")
+	tareaB2 := crearTareaBloqueada("CodexBloqueadoB", "Bloqueada B2")
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia procesar solo una tarea bloqueada, got=%d", procesadas)
+	}
+
+	tarea, err := db.GetTarea(tareaA)
+	if err != nil {
+		t.Fatalf("get tarea A: %v", err)
+	}
+	if tarea.Estado != db.EstadoBloqueada {
+		t.Fatalf("la tarea del agente con menos bloqueadas deberia seguir bloqueada, got=%s", tarea.Estado)
+	}
+
+	reactivadas := 0
+	for _, tareaID := range []int64{tareaB1, tareaB2} {
+		tarea, err := db.GetTarea(tareaID)
+		if err != nil {
+			t.Fatalf("get tarea B %d: %v", tareaID, err)
+		}
+		if tarea.Estado == db.EstadoEnProgreso && tarea.Agente != nil && *tarea.Agente == "CodexSano" {
+			reactivadas++
+		}
+	}
+	if reactivadas != 1 {
+		t.Fatalf("deberia priorizar una tarea del agente con mas bloqueadas, reactivadas=%d", reactivadas)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchRespetaCooldownReasignacionAutomatica(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	autonomiaDegradedTaskGate.mu.Lock()
+	autonomiaDegradedTaskGate.last = nil
+	autonomiaDegradedTaskGate.mu.Unlock()
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-cooldown",
+		Nombre:  "Orquestador Cooldown",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"CodexBloqueado", "CodexSano"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente cooldown"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+	}
+	sesionBloqueada, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexBloqueado",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion bloqueada: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesionBloqueada); err != nil {
+		t.Fatalf("upsert handle bloqueado: %v", err)
+	}
+	handleBloqueado, err := db.GetRuntimeHandleActivoAgenteProyecto("CodexBloqueado", &proyectoID)
+	if err != nil || handleBloqueado == nil {
+		t.Fatalf("get handle bloqueado: %+v err=%v", handleBloqueado, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='fallido', last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, handleBloqueado.ID); err != nil {
+		t.Fatalf("marcar handle fallido: %v", err)
+	}
+	sesionSana, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSano",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion sana: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesionSana); err != nil {
+		t.Fatalf("upsert handle sano: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "No rebotar inmediatamente",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexBloqueado"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexBloqueado"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.AnotarTarea(tareaID, "orquesta", "Reasignada automáticamente desde Codex8 a CodexBloqueado: Agente Codex8 en estado mailbox_atascada"); err != nil {
+		t.Fatalf("anotar tarea: %v", err)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if procesadas != 0 {
+		t.Fatalf("no deberia reintervenir una tarea recien reasignada, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "CodexBloqueado" || tarea.Estado != db.EstadoEnProgreso {
+		t.Fatalf("la tarea no deberia haberse tocado: %+v", tarea)
+	}
+}
+
+func TestSeleccionarRelevoAutonomiaDescartaCandidatoEnMailboxAtascada(t *testing.T) {
+	proyectoID := int64(42)
+	tarea := &db.Tarea{ID: 7, ProyectoID: &proyectoID}
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexMailbox"},
+			Asignacion:      &db.Asignacion{Agente: "CodexMailbox", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+			EstadoOperativo: "mailbox_atascada",
+			MailboxPending:  1,
+		},
+		{
+			Agente:          &db.Agente{Nombre: "CodexSano"},
+			Asignacion:      &db.Asignacion{Agente: "CodexSano", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+			EstadoOperativo: "disponible",
+		},
+	}
+
+	relevo := seleccionarRelevoAutonomia(rows, map[string]int{"CodexMailbox": 0, "CodexSano": 0}, tarea, "CodexBloqueado")
+	if relevo != "CodexSano" {
+		t.Fatalf("deberia descartar candidato atascado por mailbox, got=%q", relevo)
+	}
+}
+
+func TestSeleccionarRelevoAutonomiaPermiteHistorialDeFallosSiElEstadoActualEsDisponible(t *testing.T) {
+	proyectoID := int64(42)
+	tarea := &db.Tarea{ID: 8, ProyectoID: &proyectoID}
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexConHistorial"},
+			Asignacion:      &db.Asignacion{Agente: "CodexConHistorial", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+			EstadoOperativo: "disponible",
+			OrdersFailed:    7,
+		},
+	}
+
+	relevo := seleccionarRelevoAutonomia(rows, map[string]int{"CodexConHistorial": 0}, tarea, "CodexBloqueado")
+	if relevo != "CodexConHistorial" {
+		t.Fatalf("deberia permitir relevo disponible aunque tenga fallos historicos, got=%q", relevo)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchRedistribuyeSobrecargaWorkerSano(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-sobrecarga",
+		Nombre:  "Orquestador Sobrecarga",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"CodexCargado", "CodexLibre"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente sobrecarga"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      agente,
+			ProyectoID:  &proyectoID,
+			CWD:         filepath.Join(tmp, "orquestador"),
+			Herramienta: "codex-cli",
+		})
+		if err != nil {
+			t.Fatalf("iniciar sesion %s: %v", agente, err)
+		}
+		if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+			t.Fatalf("upsert handle %s: %v", agente, err)
+		}
+	}
+
+	ids := make([]int64, 0, 3)
+	for i := 0; i < autonomiaWorkerOpenTasksCeiling+1; i++ {
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      fmt.Sprintf("Sobrecarga %d", i+1),
+			Descripcion: "test",
+			ProyectoID:  &proyectoID,
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea %d: %v", i+1, err)
+		}
+		if err := db.TomarTarea(tareaID, "CodexCargado"); err != nil {
+			t.Fatalf("tomar tarea %d: %v", i+1, err)
+		}
+		if err := db.IniciarTarea(tareaID, "CodexCargado"); err != nil {
+			t.Fatalf("iniciar tarea %d: %v", i+1, err)
+		}
+		ids = append(ids, tareaID)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados/sobrecarga: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia redistribuir una tarea por sobrecarga, got=%d", procesadas)
+	}
+
+	reasignadas := 0
+	for _, tareaID := range ids {
+		tarea, err := db.GetTarea(tareaID)
+		if err != nil {
+			t.Fatalf("get tarea %d: %v", tareaID, err)
+		}
+		if tarea.Agente != nil && *tarea.Agente == "CodexLibre" && tarea.Estado == db.EstadoEnProgreso {
+			reasignadas++
+		}
+	}
+	if reasignadas != 1 {
+		t.Fatalf("deberia haber exactamente una tarea redistribuida al relevo sano, got=%d", reasignadas)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchBloqueaSobrecargaSinRelevoSano(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-sobrecarga-bloqueo",
+		Nombre:  "Orquestador Sobrecarga Bloqueo",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexCargado", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexCargado", proyectoID, "frente sobrecarga"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexCargado",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("upsert handle: %v", err)
+	}
+
+	ids := make([]int64, 0, autonomiaWorkerOpenTasksCeiling+1)
+	for i := 0; i < autonomiaWorkerOpenTasksCeiling+1; i++ {
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      fmt.Sprintf("Sobrecarga sin relevo %d", i+1),
+			Descripcion: "test",
+			ProyectoID:  &proyectoID,
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea %d: %v", i+1, err)
+		}
+		if err := db.TomarTarea(tareaID, "CodexCargado"); err != nil {
+			t.Fatalf("tomar tarea %d: %v", i+1, err)
+		}
+		if err := db.IniciarTarea(tareaID, "CodexCargado"); err != nil {
+			t.Fatalf("iniciar tarea %d: %v", i+1, err)
+		}
+		ids = append(ids, tareaID)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados/sobrecarga: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia bloquear una tarea por sobrecarga sin relevo, got=%d", procesadas)
+	}
+
+	bloqueadas := 0
+	for _, tareaID := range ids {
+		tarea, err := db.GetTarea(tareaID)
+		if err != nil {
+			t.Fatalf("get tarea %d: %v", tareaID, err)
+		}
+		if tarea.Estado == db.EstadoBloqueada {
+			bloqueadas++
+		}
+	}
+	if bloqueadas != 1 {
+		t.Fatalf("deberia quedar una tarea bloqueada por sobrecarga, got=%d", bloqueadas)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchRecuperaBloqueoPorSobrecargaCuandoHayHueco(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-sobrecarga-recupera",
+		Nombre:  "Orquestador Sobrecarga Recupera",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexCapaz", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexCapaz", proyectoID, "frente sobrecarga"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexCapaz",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("upsert handle: %v", err)
+	}
+
+	tareaActivaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Activa",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea activa: %v", err)
+	}
+	if err := db.TomarTarea(tareaActivaID, "CodexCapaz"); err != nil {
+		t.Fatalf("tomar tarea activa: %v", err)
+	}
+	if err := db.IniciarTarea(tareaActivaID, "CodexCapaz"); err != nil {
+		t.Fatalf("iniciar tarea activa: %v", err)
+	}
+
+	tareaBloqueadaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Bloqueada por sobrecarga",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea bloqueada: %v", err)
+	}
+	if err := db.TomarTarea(tareaBloqueadaID, "CodexCapaz"); err != nil {
+		t.Fatalf("tomar tarea bloqueada: %v", err)
+	}
+	if err := db.IniciarTarea(tareaBloqueadaID, "CodexCapaz"); err != nil {
+		t.Fatalf("iniciar tarea bloqueada: %v", err)
+	}
+	if err := db.BloquearTarea(tareaBloqueadaID, "CodexCapaz", "Sobrecarga operativa: sin relevo sano disponible"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados/sobrecarga: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia recuperar una tarea bloqueada por sobrecarga al volver a haber hueco, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaBloqueadaID)
+	if err != nil {
+		t.Fatalf("get tarea recuperada: %v", err)
+	}
+	if tarea.Estado != db.EstadoEnProgreso || tarea.Agente == nil || *tarea.Agente != "CodexCapaz" {
+		t.Fatalf("la tarea bloqueada por sobrecarga deberia volver a en_progreso en el mismo agente: %+v", tarea)
+	}
+}
+
+func TestAutonomiaOpenTasksCeilingForRowElevaTMUXFresh(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	now := time.Now().UTC()
+	traceDir := filepath.Join(tmp, "runtime", "codex7")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	manifestPath := filepath.Join(traceDir, "manifest.json")
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"version":    1,
+		"agent":      "Codex7",
+		"driver":     "tmux_cli_session",
+		"transport":  "tmux",
+		"created_at": now.Format(time.RFC3339Nano),
+		"started_at": now.Format(time.RFC3339Nano),
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "running",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	hb := now
+	row := agentesapp.Row{
+		Handle:          &db.RuntimeHandle{MetadataJSON: string(metaJSON)},
+		WorkerState:     "running",
+		WorkerAlive:     true,
+		WorkerHeartbeat: &hb,
+		WorkerUpdatedAt: &hb,
+		EstadoOperativo: "trabajando",
+	}
+
+	if got := autonomiaOpenTasksCeilingForRow(row, now); got != autonomiaTMUXWorkerOpenTasksCeilingDefault {
+		t.Fatalf("ceiling tmux inesperado: %d", got)
+	}
+}
+
+func TestAutonomiaOpenTasksCeilingForRowElevaTMUXFreshDesdeRowCanonico(t *testing.T) {
+	_ = prepararDBTemporalCmd(t)
+	now := time.Now().UTC()
+	row := agentesapp.Row{
+		WorkerDriver:    "tmux_cli_session",
+		WorkerTransport: "tmux",
+		WorkerState:     "running",
+		WorkerAlive:     true,
+		WorkerHeartbeat: timePtr(now),
+		EstadoOperativo: "trabajando",
+	}
+
+	if got := autonomiaOpenTasksCeilingForRow(row, now); got != autonomiaTMUXWorkerOpenTasksCeilingDefault {
+		t.Fatalf("ceiling tmux inesperado desde row canonico: %d", got)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchRecuperaBloqueoPorSobrecargaHastaTechoTMUX(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	now := time.Now().UTC()
+	traceDir := filepath.Join(tmp, "runtime", "codex7")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	manifestPath := filepath.Join(traceDir, "manifest.json")
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"version":    1,
+		"agent":      "Codex7",
+		"driver":     "tmux_cli_session",
+		"transport":  "tmux",
+		"created_at": now.Format(time.RFC3339Nano),
+		"started_at": now.Format(time.RFC3339Nano),
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "running",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-sobrecarga-tmux",
+		Nombre:  "Orquestador Sobrecarga TMUX",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex7", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex7", proyectoID, "frente sobrecarga tmux"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex7",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo', metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='esperando_io', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtime.ID); err != nil {
+		t.Fatalf("update runtime: %v", err)
+	}
+
+	for i := 0; i < autonomiaWorkerOpenTasksCeiling; i++ {
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      fmt.Sprintf("Activa TMUX %d", i+1),
+			Descripcion: "test",
+			ProyectoID:  &proyectoID,
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear tarea activa %d: %v", i+1, err)
+		}
+		if err := db.TomarTarea(tareaID, "Codex7"); err != nil {
+			t.Fatalf("tomar tarea activa %d: %v", i+1, err)
+		}
+		if err := db.IniciarTarea(tareaID, "Codex7"); err != nil {
+			t.Fatalf("iniciar tarea activa %d: %v", i+1, err)
+		}
+	}
+
+	tareaBloqueadaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Bloqueada por sobrecarga con TMUX",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea bloqueada: %v", err)
+	}
+	if err := db.TomarTarea(tareaBloqueadaID, "Codex7"); err != nil {
+		t.Fatalf("tomar tarea bloqueada: %v", err)
+	}
+	if err := db.IniciarTarea(tareaBloqueadaID, "Codex7"); err != nil {
+		t.Fatalf("iniciar tarea bloqueada: %v", err)
+	}
+	if err := db.BloquearTarea(tareaBloqueadaID, "Codex7", "Sobrecarga operativa: sin relevo sano disponible"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados/sobrecarga: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia reactivar una tercera tarea en worker tmux sano, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaBloqueadaID)
+	if err != nil {
+		t.Fatalf("get tarea recuperada: %v", err)
+	}
+	if tarea.Estado != db.EstadoEnProgreso || tarea.Agente == nil || *tarea.Agente != "Codex7" {
+		t.Fatalf("la tarea bloqueada por sobrecarga deberia volver a en_progreso en Codex7: %+v", tarea)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchReasignaBloqueoPorSobrecargaASiHayRelevo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-sobrecarga-relevo",
+		Nombre:  "Orquestador Sobrecarga Relevo",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"CodexCargado", "CodexLibre"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente sobrecarga"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+		sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+			Agente:      agente,
+			ProyectoID:  &proyectoID,
+			CWD:         filepath.Join(tmp, "orquestador"),
+			Herramienta: "codex-cli",
+		})
+		if err != nil {
+			t.Fatalf("iniciar sesion %s: %v", agente, err)
+		}
+		if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+			t.Fatalf("upsert handle %s: %v", agente, err)
+		}
+	}
+
+	for i := 0; i < autonomiaWorkerOpenTasksCeiling; i++ {
+		tareaID, err := db.CrearTarea(&db.Tarea{
+			Titulo:      fmt.Sprintf("Carga %d", i+1),
+			Descripcion: "test",
+			ProyectoID:  &proyectoID,
+			Prioridad:   db.PrioridadAlta,
+			CreadoPor:   "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear carga %d: %v", i+1, err)
+		}
+		if err := db.TomarTarea(tareaID, "CodexCargado"); err != nil {
+			t.Fatalf("tomar carga %d: %v", i+1, err)
+		}
+		if err := db.IniciarTarea(tareaID, "CodexCargado"); err != nil {
+			t.Fatalf("iniciar carga %d: %v", i+1, err)
+		}
+	}
+
+	tareaBloqueadaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Bloqueada por sobrecarga con relevo",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea bloqueada: %v", err)
+	}
+	if err := db.TomarTarea(tareaBloqueadaID, "CodexCargado"); err != nil {
+		t.Fatalf("tomar tarea bloqueada: %v", err)
+	}
+	if err := db.IniciarTarea(tareaBloqueadaID, "CodexCargado"); err != nil {
+		t.Fatalf("iniciar tarea bloqueada: %v", err)
+	}
+	if err := db.BloquearTarea(tareaBloqueadaID, "CodexCargado", "Sobrecarga operativa: sin relevo sano disponible"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados/sobrecarga: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia reasignar una tarea bloqueada por sobrecarga a un relevo sano, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaBloqueadaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != db.EstadoEnProgreso || tarea.Agente == nil || *tarea.Agente != "CodexLibre" {
+		t.Fatalf("la tarea deberia reasignarse al relevo sano: %+v", tarea)
+	}
+}
+
+func TestSeleccionarRelevoAutonomiaConLimiteDescartaWorkerTrabajandoConDosTareas(t *testing.T) {
+	proyectoID := int64(42)
+	tarea := &db.Tarea{ID: 9, ProyectoID: &proyectoID}
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexCargado"},
+			Asignacion:      &db.Asignacion{Agente: "CodexCargado", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+			EstadoOperativo: "trabajando",
+			OpenTasks:       2,
+		},
+	}
+
+	relevo := seleccionarRelevoAutonomiaConLimite(rows, map[string]int{"CodexCargado": 2}, tarea, "CodexBloqueado", autonomiaBlockedTaskRecoveryOpenTasksCeiling)
+	if relevo != "" {
+		t.Fatalf("no deberia reutilizar un relevo que ya alcanzo el techo operativo de tareas, got=%q", relevo)
+	}
+}
+
+func TestSeleccionarRelevoAutonomiaConLimiteAceptaTMUXFreshConDosTareas(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	now := time.Now().UTC()
+	traceDir := filepath.Join(tmp, "runtime", "codex-tmux")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	manifestPath := filepath.Join(traceDir, "manifest.json")
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"version":    1,
+		"agent":      "CodexTMUX",
+		"driver":     "tmux_cli_session",
+		"transport":  "tmux",
+		"created_at": now.Format(time.RFC3339Nano),
+		"started_at": now.Format(time.RFC3339Nano),
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "running",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	proyectoID := int64(42)
+	tarea := &db.Tarea{ID: 11, ProyectoID: &proyectoID}
+	hb := now
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexTMUX"},
+			Asignacion:      &db.Asignacion{Agente: "CodexTMUX", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+			EstadoOperativo: "trabajando",
+			OpenTasks:       2,
+			WorkerState:     "running",
+			WorkerAlive:     true,
+			WorkerHeartbeat: &hb,
+			Handle:          &db.RuntimeHandle{MetadataJSON: string(metaJSON)},
+		},
+	}
+
+	relevo := seleccionarRelevoAutonomiaConLimite(rows, map[string]int{"CodexTMUX": 2}, tarea, "CodexBloqueado", autonomiaBlockedTaskRecoveryOpenTasksCeiling)
+	if relevo != "CodexTMUX" {
+		t.Fatalf("deberia aceptar relevo tmux fresco con dos tareas, got=%q", relevo)
+	}
+}
+
+func TestSeleccionarRelevoAutonomiaConLimiteDescartaWorkerTrabajandoConMasDeDosTareas(t *testing.T) {
+	proyectoID := int64(42)
+	tarea := &db.Tarea{ID: 10, ProyectoID: &proyectoID}
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexSaturado"},
+			Asignacion:      &db.Asignacion{Agente: "CodexSaturado", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+			EstadoOperativo: "trabajando",
+			OpenTasks:       3,
+		},
+	}
+
+	relevo := seleccionarRelevoAutonomiaConLimite(rows, map[string]int{"CodexSaturado": 3}, tarea, "CodexBloqueado", autonomiaBlockedTaskRecoveryOpenTasksCeiling)
+	if relevo != "" {
+		t.Fatalf("no deberia reutilizar un relevo trabajando con mas de dos tareas abiertas, got=%q", relevo)
+	}
+}
+
+func TestSeleccionarRelevoAutonomiaBloqueadaAceptaTMUXFreshConTresTareas(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	now := time.Now().UTC()
+	traceDir := filepath.Join(tmp, "runtime", "codex-tmux-burst")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	manifestPath := filepath.Join(traceDir, "manifest.json")
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"version":    1,
+		"agent":      "CodexTMUX",
+		"driver":     "tmux_cli_session",
+		"transport":  "tmux",
+		"created_at": now.Format(time.RFC3339Nano),
+		"started_at": now.Format(time.RFC3339Nano),
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":          "running",
+		"updated_at":     now.Format(time.RFC3339Nano),
+		"last_output_at": now.Format(time.RFC3339Nano),
+		"alive":          true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":          true,
+		"heartbeat_at":   now.Format(time.RFC3339Nano),
+		"last_output_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	proyectoID := int64(42)
+	tarea := &db.Tarea{ID: 12, ProyectoID: &proyectoID}
+	hb := now
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexTMUX"},
+			Asignacion:      &db.Asignacion{Agente: "CodexTMUX", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+			EstadoOperativo: "trabajando",
+			OpenTasks:       3,
+			WorkerState:     "running",
+			WorkerAlive:     true,
+			WorkerHeartbeat: &hb,
+			Handle:          &db.RuntimeHandle{MetadataJSON: string(metaJSON)},
+		},
+	}
+
+	relevo := seleccionarRelevoAutonomiaBloqueada(rows, map[string]int{"CodexTMUX": 3}, tarea, "CodexBloqueado")
+	if relevo != "CodexTMUX" {
+		t.Fatalf("deberia aceptar relevo tmux fresco con tres tareas en recuperación bloqueada, got=%q", relevo)
+	}
+}
+
+func TestSeleccionarRelevoAutonomiaBloqueadaAceptaTMUXFreshConTresTareasDesdeRowCanonico(t *testing.T) {
+	_ = prepararDBTemporalCmd(t)
+	now := time.Now().UTC()
+	proyectoID := int64(42)
+	tarea := &db.Tarea{ID: 14, ProyectoID: &proyectoID}
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexTMUX"},
+			Asignacion:      &db.Asignacion{Agente: "CodexTMUX", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+			EstadoOperativo: "trabajando",
+			OpenTasks:       3,
+			WorkerDriver:    "tmux_cli_session",
+			WorkerTransport: "tmux",
+			WorkerState:     "running",
+			WorkerAlive:     true,
+			WorkerHeartbeat: timePtr(now),
+		},
+	}
+
+	relevo := seleccionarRelevoAutonomiaBloqueada(rows, map[string]int{"CodexTMUX": 3}, tarea, "CodexBloqueado")
+	if relevo != "CodexTMUX" {
+		t.Fatalf("deberia aceptar relevo tmux fresco con tres tareas desde row canonico, got=%q", relevo)
+	}
+}
+
+func TestSeleccionarRelevoAutonomiaBloqueadaAceptaWorkerConDosTareasParaRecuperarBacklog(t *testing.T) {
+	proyectoID := int64(42)
+	tarea := &db.Tarea{ID: 15, ProyectoID: &proyectoID}
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexSano"},
+			Asignacion:      &db.Asignacion{Agente: "CodexSano", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+			EstadoOperativo: "trabajando",
+			OpenTasks:       2,
+		},
+	}
+
+	relevo := seleccionarRelevoAutonomiaBloqueada(rows, map[string]int{"CodexSano": 2}, tarea, "CodexBloqueado")
+	if relevo != "CodexSano" {
+		t.Fatalf("deberia permitir un burst controlado para recuperar backlog bloqueado, got=%q", relevo)
+	}
+}
+
+func TestSeleccionarRelevoAutonomiaBloqueadaDescartaWorkerNoTMUXConTresTareas(t *testing.T) {
+	_ = prepararDBTemporalCmd(t)
+	proyectoID := int64(42)
+	tarea := &db.Tarea{ID: 13, ProyectoID: &proyectoID}
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexNoTMUX"},
+			Asignacion:      &db.Asignacion{Agente: "CodexNoTMUX", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+			EstadoOperativo: "trabajando",
+			OpenTasks:       3,
+		},
+	}
+
+	relevo := seleccionarRelevoAutonomiaBloqueada(rows, map[string]int{"CodexNoTMUX": 3}, tarea, "CodexBloqueado")
+	if relevo != "" {
+		t.Fatalf("no deberia aceptar un relevo no tmux con tres tareas abiertas, got=%q", relevo)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchRecuperaTareaBloqueadaSiElWorkerVuelve(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetStatusSnapshotCache()
+	defer resetStatusSnapshotCache()
+	statusCacheState.mu.Lock()
+	statusCacheState.ok = true
+	statusCacheState.value = apiStatusResponse{Generado: "stale"}
+	statusCacheState.expires = time.Now().UTC().Add(time.Minute)
+	statusCacheState.mu.Unlock()
+	now := time.Now().UTC()
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "running",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-recuperacion-bloqueo",
+		Nombre:  "Orquestador Recuperacion Bloqueo",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex7", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex7", proyectoID, "frente recuperable"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex7",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo', metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='esperando_io', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtime.ID); err != nil {
+		t.Fatalf("update runtime: %v", err)
+	}
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Recuperar tarea bloqueada por degradacion",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex7"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex7"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "Codex7", "Agente Codex7 en estado bloqueado_por_runtime: pausado"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia reactivar una tarea, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != db.EstadoEnProgreso {
+		t.Fatalf("la tarea deberia volver a en_progreso, got=%s", tarea.Estado)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "Codex7" {
+		t.Fatalf("la tarea deberia seguir en Codex7: %+v", tarea)
+	}
+	bloqueos, err := db.ListarResumenBloqueos()
+	if err != nil {
+		t.Fatalf("listar bloqueos: %v", err)
+	}
+	for _, bloqueo := range bloqueos {
+		if bloqueo.ID == tareaID {
+			t.Fatalf("el bloqueo deberia quedar resuelto: %+v", bloqueo)
+		}
+	}
+	statusCacheState.mu.Lock()
+	cacheValida := statusCacheState.ok
+	statusCacheState.mu.Unlock()
+	if cacheValida {
+		t.Fatalf("la recuperacion automatica deberia invalidar la snapshot de status")
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchRecuperaTareaBloqueadaSiElWorkerSigueVivoPeroPausado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex7", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	traceDir := filepath.Join(tmp, "runtime", "codex7")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","alive":true,"updated_at":"`+time.Now().UTC().Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"state":"running","alive":true,"timestamp":"`+time.Now().UTC().Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	meta := map[string]any{
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	}
+	metaJSON, err := json.Marshal(meta)
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+
+	if err := db.ActivarAsignacion("Codex7", proyectoID, "frente recuperable"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex7",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='pausado', metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='pausado', process_state='stopped', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtime.ID); err != nil {
+		t.Fatalf("update runtime: %v", err)
+	}
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Recuperar tarea de worker pausado",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex7"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex7"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "Codex7", "Agente Codex7 en estado bloqueado_por_runtime: pausado"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia reactivar una tarea de worker vivo aunque siga pausado, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != db.EstadoEnProgreso {
+		t.Fatalf("la tarea deberia volver a en_progreso, got=%s", tarea.Estado)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchRecuperaTareaBloqueadaConMotivoLegacyDegradado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	traceDir := filepath.Join(tmp, "runtime", "codex3")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	now := time.Now().UTC()
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"state":"running","alive":true,"timestamp":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	meta := map[string]any{
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	}
+	metaJSON, err := json.Marshal(meta)
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+
+	if err := db.ActivarAsignacion("Codex3", proyectoID, "frente legacy"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex3",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo', metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='esperando_io', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtime.ID); err != nil {
+		t.Fatalf("update runtime: %v", err)
+	}
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Recuperar tarea legacy degradada",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex3"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex3"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "Codex3", "Agente degradado: mailbox pendiente y runtime no disponible para entrega inmediata"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia reactivar una tarea legacy de agente degradado, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != db.EstadoEnProgreso {
+		t.Fatalf("la tarea legacy deberia volver a en_progreso, got=%s", tarea.Estado)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchReasignaTareaBloqueadaARelevoSano(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"Codex8", "Codex7"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+	}
+
+	// Codex8: degradado con tarea bloqueada propia.
+	sesionBloqueada, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex8",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion degradada: %v", err)
+	}
+	handleBloqueado, err := db.GetRuntimeHandleBySesionID(sesionBloqueada.ID)
+	if err != nil || handleBloqueado == nil {
+		t.Fatalf("handle degradado: %+v err=%v", handleBloqueado, err)
+	}
+	runtimeBloqueado, err := db.GetRuntimeBySesionID(sesionBloqueada.ID)
+	if err != nil || runtimeBloqueado == nil {
+		t.Fatalf("runtime degradado: %+v err=%v", runtimeBloqueado, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='pausado' WHERE id=?`, handleBloqueado.ID); err != nil {
+		t.Fatalf("pausar handle degradado: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='pausado', process_state='stopped', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtimeBloqueado.ID); err != nil {
+		t.Fatalf("pausar runtime degradado: %v", err)
+	}
+
+	// Codex7: relevo sano disponible con worker estructurado fresco.
+	traceDir := filepath.Join(tmp, "runtime", "codex7")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	now := time.Now().UTC()
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"state":"running","alive":true,"timestamp":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata relevo: %v", err)
+	}
+	sesionSana, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex7",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion relevo: %v", err)
+	}
+	handleSano, err := db.GetRuntimeHandleBySesionID(sesionSana.ID)
+	if err != nil || handleSano == nil {
+		t.Fatalf("handle relevo: %+v err=%v", handleSano, err)
+	}
+	runtimeSano, err := db.GetRuntimeBySesionID(sesionSana.ID)
+	if err != nil || runtimeSano == nil {
+		t.Fatalf("runtime relevo: %+v err=%v", runtimeSano, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo', metadata_json=? WHERE id=?`, string(metaJSON), handleSano.ID); err != nil {
+		t.Fatalf("activar handle relevo: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='esperando_io', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtimeSano.ID); err != nil {
+		t.Fatalf("activar runtime relevo: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Reasignar tarea bloqueada",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex8"); err != nil {
+		t.Fatalf("tomar tarea degradada: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex8"); err != nil {
+		t.Fatalf("iniciar tarea degradada: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "Codex8", "Agente Codex8 en estado bloqueado_por_runtime: pausado"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia reasignar una tarea bloqueada a relevo sano, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != db.EstadoEnProgreso {
+		t.Fatalf("la tarea deberia quedar en_progreso, got=%s", tarea.Estado)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "Codex7" {
+		t.Fatalf("la tarea deberia quedar reasignada a Codex7: %+v", tarea)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchReiniciaWorkerTMUXAtascado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex7", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex7", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex7",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	runtimeInst, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtimeInst == nil {
+		t.Fatalf("runtime: %+v err=%v", runtimeInst, err)
+	}
+
+	traceDir := filepath.Join(tmp, "runtime", "codex7")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	now := time.Now().UTC()
+	lastOutput := now.Add(-5 * time.Hour)
+	manifestPath := filepath.Join(traceDir, "manifest.json")
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex7","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex7-test","created_at":"`+now.Format(time.RFC3339Nano)+`","started_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`","last_output_at":"`+lastOutput.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now.Format(time.RFC3339Nano)+`","last_output_at":"`+lastOutput.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo', metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("activar handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='esperando_io', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtimeInst.ID); err != nil {
+		t.Fatalf("activar runtime: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Worker tmux atascado",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex7"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex7"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	rows, buildErr := agentesService.BuildPanelRows()
+	if buildErr != nil {
+		t.Fatalf("build rows: %v", buildErr)
+	}
+	t.Logf("DEBUG rows=%d", len(rows))
+	for _, row := range rows {
+		if row.Agente != nil {
+			t.Logf("DEBUG agente=%s estado=%s opentasks=%d blocked=%d mailbox=%d workerDriver=%s workerAlive=%v", row.Agente.Nombre, row.EstadoOperativo, row.OpenTasks, row.BlockedTasks, row.MailboxPending, row.WorkerDriver, row.WorkerAlive)
+		}
+		if row.Agente != nil && strings.EqualFold(strings.TrimSpace(row.Agente.Nombre), "Codex7") {
+			runtimeState := ""
+			if row.Runtime != nil {
+				runtimeState = strings.TrimSpace(row.Runtime.LogicalState)
+			}
+			handleState := ""
+			if row.Handle != nil {
+				handleState = strings.TrimSpace(row.Handle.Estado)
+			}
+			t.Logf("DEBUG row estado=%s detalle=%s opentasks=%d blocked=%d mailbox=%d workerDriver=%s workerAlive=%v workerHeartbeat=%v workerUpdated=%v progress=%v output=%v runtime=%s handle=%s controlOpen=%d ordersFailed=%d",
+				row.EstadoOperativo,
+				row.DetalleOperativo,
+				row.OpenTasks,
+				row.BlockedTasks,
+				row.MailboxPending,
+				row.WorkerDriver,
+				row.WorkerAlive,
+				row.WorkerHeartbeat,
+				row.WorkerUpdatedAt,
+				row.WorkerLastProgress,
+				row.WorkerLastOutput,
+				runtimeState,
+				handleState,
+				row.ControlOrdersOpen,
+				row.OrdersFailed,
+			)
+		}
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia reiniciar un worker atascado, got=%d", procesadas)
+	}
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: ptrString("Codex7")})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var stopCount, startCount int
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch strings.TrimSpace(order.Tipo) {
+		case "stop":
+			stopCount++
+		case "start":
+			startCount++
+		}
+	}
+	if stopCount == 0 || startCount == 0 {
+		t.Fatalf("deberia encolar stop/start coordinado, stop=%d start=%d orders=%+v", stopCount, startCount, orders)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchEscalaTareaActivaSiWorkerTMUXAtascadoReincide(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex7", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex7", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex7",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	runtimeInst, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtimeInst == nil {
+		t.Fatalf("runtime: %+v err=%v", runtimeInst, err)
+	}
+
+	traceDir := filepath.Join(tmp, "runtime", "codex7")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	now := time.Now().UTC()
+	staleAt := now.Add(-5 * time.Hour)
+	manifestPath := filepath.Join(traceDir, "manifest.json")
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex7","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex7-test","created_at":"`+now.Format(time.RFC3339Nano)+`","started_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`","last_output_at":"`+staleAt.Format(time.RFC3339Nano)+`","last_progress_at":"`+staleAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now.Format(time.RFC3339Nano)+`","last_output_at":"`+staleAt.Format(time.RFC3339Nano)+`","last_progress_at":"`+staleAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo', metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("activar handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='esperando_io', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtimeInst.ID); err != nil {
+		t.Fatalf("activar runtime: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	for i := 0; i < 2; i++ {
+		orderID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+			Agente:     "Codex7",
+			ProyectoID: &proyectoID,
+			Tipo:       "stop",
+			PayloadJSON: fmt.Sprintf(`{"accion":"stop","motivo":"worker_atascado_%d","por":"orquesta"}`,
+				i),
+		})
+		if err != nil {
+			t.Fatalf("encolar stop reciente %d: %v", i, err)
+		}
+		if err := db.MarcarRuntimeOrderEstado(orderID, "completada", `{"ok":true}`, ""); err != nil {
+			t.Fatalf("completar stop reciente %d: %v", i, err)
+		}
+	}
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Worker tmux atascado reincidente",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex7"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex7"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia escalar la tarea activa del worker reincidente, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != db.EstadoBloqueada {
+		t.Fatalf("la tarea deberia quedar bloqueada, got=%s", tarea.Estado)
+	}
+	if !strings.Contains(strings.ToLower(tarea.Notas), "atasco persistente") {
+		t.Fatalf("la tarea deberia dejar nota de atasco persistente: %s", tarea.Notas)
+	}
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: ptrString("Codex7")})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	stopCount := 0
+	for _, order := range orders {
+		if order != nil && strings.TrimSpace(order.Tipo) == "stop" {
+			stopCount++
+		}
+	}
+	if stopCount != 2 {
+		t.Fatalf("no deberia encolar mas reinicios al escalar, got stop=%d", stopCount)
+	}
+}
+
+func TestProcesarWorkersAtascadosAutonomiaBatchReiniciaConMailboxPendienteAunqueNoHayaOpenTasks(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-stale-mailbox",
+		Nombre:  "Orquestador Stale Mailbox",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex2", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("upsert handle: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleActivoAgenteProyecto("Codex2", &proyectoID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle=%+v err=%v", handle, err)
+	}
+	now := time.Now().UTC()
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex2",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"pedir_intervencion","texto":"hay trabajo pendiente"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	rows := []agentesapp.Row{{
+		Agente:           &db.Agente{Nombre: "Codex2"},
+		Asignacion:       &db.Asignacion{Agente: "Codex2", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+		Handle:           handle,
+		WorkerDriver:     "tmux_cli_session",
+		WorkerState:      "running",
+		WorkerAlive:      true,
+		WorkerHeartbeat:  ptrTime(now),
+		WorkerUpdatedAt:  ptrTime(now),
+		MailboxPending:   1,
+		BlockedTasks:     1,
+		EstadoOperativo:  "atascado",
+		DetalleOperativo: "worker sin progreso reciente",
+	}}
+	procesadas, err := procesarWorkersAtascadosAutonomiaBatch(rows, now)
+	if err != nil {
+		t.Fatalf("procesar workers atascados: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("procesadas=%d, want 1", procesadas)
+	}
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: ptrString("Codex2")})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	stopCount := 0
+	startCount := 0
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch strings.TrimSpace(order.Tipo) {
+		case "stop":
+			stopCount++
+		case "start":
+			startCount++
+		}
+	}
+	if stopCount == 0 || startCount == 0 {
+		t.Fatalf("deberia encolar restart coordinado, stop=%d start=%d orders=%+v", stopCount, startCount, orders)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "pendiente" {
+		t.Fatalf("la mailbox debe seguir pendiente para el restart durable, got=%s", msg.Estado)
+	}
+}
+
+func TestExisteRuntimeOrderAutonomiaRecienteReconoceStopCoordinadoSinKindAutonomia(t *testing.T) {
+	_ = prepararDBTemporalCmd(t)
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: t.TempDir(),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex7",
+		ProyectoID:  &proyectoID,
+		Tipo:        "stop",
+		PayloadJSON: `{"accion":"stop","motivo":"worker_atascado","por":"orquesta"}`,
+	}); err != nil {
+		t.Fatalf("encolar stop: %v", err)
+	}
+	ok, err := existeRuntimeOrderAutonomiaReciente("Codex7", &proyectoID, "stop", "stop", time.Hour)
+	if err != nil {
+		t.Fatalf("existeRuntimeOrderAutonomiaReciente: %v", err)
+	}
+	if !ok {
+		t.Fatalf("deberia detectar stop coordinado reciente aunque no tenga kind=autonomia")
+	}
+}
+
+func TestDegradedTaskShouldInterveneRespetaAsumidaManualFueraDeFlota(t *testing.T) {
+	tarea := &db.Tarea{
+		ID:    77,
+		Notas: "Asumida manualmente fuera de la flota automatica: el frente lo lleva Alberto.",
+	}
+	if degradedTaskShouldIntervene(tarea, time.Now().UTC()) {
+		t.Fatalf("no deberia intervenir una tarea marcada como asumida manualmente")
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchBloqueaTareaActivaDeAgenteFueraDeOrquestacion(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Tarea huérfana por agente retirado",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE tareas SET agente='Codex4', estado=? WHERE id=?`, db.EstadoEnProgreso, tareaID); err != nil {
+		t.Fatalf("forzar tarea huérfana: %v", err)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("debería bloquear la tarea huérfana, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != db.EstadoBloqueada {
+		t.Fatalf("la tarea debería quedar bloqueada, got=%s", tarea.Estado)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "Codex4" {
+		t.Fatalf("la tarea debe conservar el último agente para trazabilidad: %+v", tarea)
+	}
+	bloqueos, err := db.ListarResumenBloqueos()
+	if err != nil {
+		t.Fatalf("listar bloqueos: %v", err)
+	}
+	encontrado := false
+	for _, bloqueo := range bloqueos {
+		if bloqueo.ID != tareaID {
+			continue
+		}
+		if !strings.Contains(strings.ToLower(bloqueo.Motivo), "fuera de orquestación") {
+			t.Fatalf("motivo de bloqueo inesperado: %+v", bloqueo)
+		}
+		encontrado = true
+	}
+	if !encontrado {
+		t.Fatalf("debería existir un resumen de bloqueo para la tarea huérfana")
+	}
+}
+
+func TestProcesarTareasActivasFueraDeOrquestacionBatchRespetaOperadorManualFueraDeFlota(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Tarea asumida por operador manual",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE tareas SET agente='alberto', estado=? WHERE id=?`, db.EstadoEnProgreso, tareaID); err != nil {
+		t.Fatalf("forzar tarea manual: %v", err)
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	tareasActivas := map[string][]*db.Tarea{
+		"alberto": {tarea},
+	}
+	procesadas, err := procesarTareasActivasFueraDeOrquestacionBatch(tareasActivas, map[string]agentesapp.Row{})
+	if err != nil {
+		t.Fatalf("procesar tareas fuera de orquestacion: %v", err)
+	}
+	if procesadas != 0 {
+		t.Fatalf("no deberia bloquear una tarea asumida por operador manual, got=%d", procesadas)
+	}
+	tarea, err = db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea tras procesado: %v", err)
+	}
+	if tarea.Estado != db.EstadoEnProgreso {
+		t.Fatalf("la tarea manual debe seguir en progreso, got=%s", tarea.Estado)
+	}
+}
+
+func TestConsumirRuntimeMailboxObsoletaPorWorkerSiProcedeConsumeNudgePrevioAStartedAt(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	startedAt := time.Now().UTC()
+	runDir := filepath.Join(tmp, "tmux-mailbox")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir runDir: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	startedRaw := startedAt.Format(time.RFC3339Nano)
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex3","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex3-mailbox","tmux_pane_id":"%21","started_at":"`+startedRaw+`","status_path":"`+statusPath+`","heartbeat_path":"`+heartbeatPath+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","updated_at":"`+startedRaw+`","alive":true,"last_output_at":"`+startedRaw+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+startedRaw+`","started_at":"`+startedRaw+`","last_output_at":"`+startedRaw+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-codex3-mailbox",
+		"tmux_pane_id":          "%21",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	res, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, transporte, handle_kind, handle_ref, estado, metadata_json, capabilities_json, last_seen_at
+	) VALUES (?,?,?,?,?,?,?, '{}', CURRENT_TIMESTAMP)`,
+		"Codex3", proyectoID, "tmux", "session", "orq-codex3-mailbox", "activo", string(metaJSON))
+	if err != nil {
+		t.Fatalf("insert handle: %v", err)
+	}
+	handleID, _ := res.LastInsertId()
+	handle, err := db.GetRuntimeHandle(handleID)
+	if err != nil {
+		t.Fatalf("get handle: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex3",
+		ProyectoID:  &proyectoID,
+		Kind:        "nudge",
+		PayloadJSON: `{"texto":"sigue"}`,
+	})
+	if err != nil {
+		t.Fatalf("enviar mailbox: %v", err)
+	}
+	oldCreatedAt := startedAt.Add(-10 * time.Minute)
+	if _, err := db.DB.Exec(`UPDATE runtime_mailbox SET created_at=? WHERE id=?`, oldCreatedAt, msgID); err != nil {
+		t.Fatalf("retroceder created_at: %v", err)
+	}
+	msgs, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: strPtr("Codex3")})
+	if err != nil || len(msgs) == 0 {
+		t.Fatalf("listar mailbox: %v len=%d", err, len(msgs))
+	}
+
+	consumida, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msgs[0], handle, "session_resume", time.Now().UTC())
+	if err != nil {
+		t.Fatalf("consumir mailbox obsoleta: %v", err)
+	}
+	if !consumida {
+		t.Fatalf("debería consumir el nudge obsoleto")
+	}
+
+	estado := "consumido"
+	consumidos, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: strPtr("Codex3"), Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar consumidos: %v", err)
+	}
+	if len(consumidos) != 1 || consumidos[0].ID != msgID {
+		t.Fatalf("el mailbox debería quedar consumido, got=%+v", consumidos)
+	}
+}
+
+func TestConsumirRuntimeMailboxObsoletaPorWorkerSiProcedeNoConsumeInstructionDurable(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	startedAt := time.Now().UTC()
+	runDir := filepath.Join(tmp, "tmux-mailbox-instruction")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir runDir: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	startedRaw := startedAt.Format(time.RFC3339Nano)
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex3","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex3-mailbox2","tmux_pane_id":"%22","started_at":"`+startedRaw+`","status_path":"`+statusPath+`","heartbeat_path":"`+heartbeatPath+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","updated_at":"`+startedRaw+`","alive":true,"last_output_at":"`+startedRaw+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+startedRaw+`","started_at":"`+startedRaw+`","last_output_at":"`+startedRaw+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-codex3-mailbox2",
+		"tmux_pane_id":          "%22",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	res, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, transporte, handle_kind, handle_ref, estado, metadata_json, capabilities_json, last_seen_at
+	) VALUES (?,?,?,?,?,?,?, '{}', CURRENT_TIMESTAMP)`,
+		"Codex3", proyectoID, "tmux", "session", "orq-codex3-mailbox2", "activo", string(metaJSON))
+	if err != nil {
+		t.Fatalf("insert handle: %v", err)
+	}
+	handleID, _ := res.LastInsertId()
+	handle, err := db.GetRuntimeHandle(handleID)
+	if err != nil {
+		t.Fatalf("get handle: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex3",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"haz esto"}`,
+	})
+	if err != nil {
+		t.Fatalf("enviar mailbox: %v", err)
+	}
+	oldCreatedAt := startedAt.Add(-10 * time.Minute)
+	if _, err := db.DB.Exec(`UPDATE runtime_mailbox SET created_at=? WHERE id=?`, oldCreatedAt, msgID); err != nil {
+		t.Fatalf("retroceder created_at: %v", err)
+	}
+	msgs, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: strPtr("Codex3")})
+	if err != nil || len(msgs) == 0 {
+		t.Fatalf("listar mailbox: %v len=%d", err, len(msgs))
+	}
+
+	consumida, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msgs[0], handle, "session_resume", time.Now().UTC())
+	if err != nil {
+		t.Fatalf("evaluar mailbox durable: %v", err)
+	}
+	if consumida {
+		t.Fatalf("una instruction durable no debería consumirse automáticamente")
+	}
+
+	estado := "pendiente"
+	pendientes, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: strPtr("Codex3"), Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar pendientes: %v", err)
+	}
+	if len(pendientes) != 1 || pendientes[0].ID != msgID {
+		t.Fatalf("la instruction debería seguir pendiente, got=%+v", pendientes)
+	}
+}
+
+func TestConsumirRuntimeMailboxObsoletaPorWorkerSiProcedeNoConsumeMailboxConRuntimeOrderViva(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	startedAt := time.Now().UTC()
+	runDir := filepath.Join(tmp, "tmux-mailbox-linked-order")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir runDir: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	startedRaw := startedAt.Format(time.RFC3339Nano)
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex3","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex3-mailbox3","tmux_pane_id":"%23","started_at":"`+startedRaw+`","status_path":"`+statusPath+`","heartbeat_path":"`+heartbeatPath+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","updated_at":"`+startedRaw+`","alive":true,"last_output_at":"`+startedRaw+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+startedRaw+`","started_at":"`+startedRaw+`","last_output_at":"`+startedRaw+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-codex3-mailbox3",
+		"tmux_pane_id":          "%23",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	res, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, transporte, handle_kind, handle_ref, estado, metadata_json, capabilities_json, last_seen_at
+	) VALUES (?,?,?,?,?,?,?, '{}', CURRENT_TIMESTAMP)`,
+		"Codex3", proyectoID, "tmux", "session", "orq-codex3-mailbox3/%23", "activo", string(metaJSON))
+	if err != nil {
+		t.Fatalf("insert handle: %v", err)
+	}
+	handleID, _ := res.LastInsertId()
+	handle, err := db.GetRuntimeHandle(handleID)
+	if err != nil {
+		t.Fatalf("get handle: %v", err)
+	}
+
+	runtimeOrderID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex3",
+		ProyectoID:  &proyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: `{"to_agente":"Codex3","texto":"sigue","mailbox_kind":"nudge"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar runtime order: %v", err)
+	}
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:     "server",
+		ToAgente:       "Codex3",
+		ProyectoID:     &proyectoID,
+		RuntimeOrderID: &runtimeOrderID,
+		Kind:           "nudge",
+		PayloadJSON:    `{"texto":"sigue"}`,
+	})
+	if err != nil {
+		t.Fatalf("enviar mailbox: %v", err)
+	}
+	oldCreatedAt := startedAt.Add(-10 * time.Minute)
+	if _, err := db.DB.Exec(`UPDATE runtime_mailbox SET created_at=? WHERE id=?`, oldCreatedAt, msgID); err != nil {
+		t.Fatalf("retroceder created_at: %v", err)
+	}
+	msgs, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: strPtr("Codex3")})
+	if err != nil || len(msgs) == 0 {
+		t.Fatalf("listar mailbox: %v len=%d", err, len(msgs))
+	}
+
+	consumida, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msgs[0], handle, "session_resume", time.Now().UTC())
+	if err != nil {
+		t.Fatalf("evaluar mailbox ligada a orden: %v", err)
+	}
+	if consumida {
+		t.Fatalf("una mailbox ligada a runtime_order viva no deberia consumirse fuera de la orden")
+	}
+
+	estadoPend := "pendiente"
+	pendientes, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: strPtr("Codex3"), Estado: &estadoPend})
+	if err != nil {
+		t.Fatalf("listar pendientes: %v", err)
+	}
+	if len(pendientes) != 1 || pendientes[0].ID != msgID {
+		t.Fatalf("la mailbox ligada a orden viva deberia seguir pendiente, got=%+v", pendientes)
+	}
+	order, err := db.GetRuntimeOrder(runtimeOrderID)
+	if err != nil {
+		t.Fatalf("get runtime order: %v", err)
+	}
+	if order == nil || order.Estado != "pendiente" {
+		t.Fatalf("la runtime order deberia seguir viva, got=%+v", order)
+	}
 }

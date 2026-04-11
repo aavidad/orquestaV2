@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -296,12 +297,12 @@ func CompletarTarea(id int64, agente, commit string) error {
 			if stats.Total > 0 && stats.Completadas == stats.Total {
 				p, _ := GetProyecto(fmt.Sprintf("%d", *t.ProyectoID))
 				if p != nil {
-					CanalNotificaciones <- EventoNotificacion{
+					EmitirNotificacion(EventoNotificacion{
 						Tipo:       "fin_proyecto",
 						ID:         p.ID,
 						Texto:      p.Nombre,
 						ProyectoID: p.ID,
-					}
+					})
 				}
 			}
 		}
@@ -351,20 +352,22 @@ func BloquearTarea(id int64, agente, motivo string) error {
 		return err
 	}
 	if t.ProyectoID != nil {
-		if err := MarcarProyectoEsperandoHumano(*t.ProyectoID, motivo); err != nil {
-			return err
+		if bloqueoProyectoRequiereIntervencionHumana(motivo) {
+			if err := MarcarProyectoEsperandoHumano(*t.ProyectoID, motivo); err != nil {
+				return err
+			}
 		}
 		EmitirHookCicloVida(agente, HookProjectBlocked, *t.ProyectoID, "tarea", id, agente, motivo)
 	}
 	Audit(agente, "bloquear_tarea", "tarea", id, t.Titulo+": "+motivo)
 	SetEstadoSesion(agente, "esperando")
 
-	CanalNotificaciones <- EventoNotificacion{
+	EmitirNotificacion(EventoNotificacion{
 		Tipo:   "bloqueo",
 		ID:     id,
 		Agente: agente,
 		Texto:  motivo,
-	}
+	})
 	return nil
 }
 
@@ -405,10 +408,10 @@ func DesbloquearTarea(id int64, agente, resolucion string) error {
 	Audit(agente, "desbloquear_tarea", "tarea", id, resolucion)
 	SetEstadoSesion(agente, "disponible")
 
-	CanalNotificaciones <- EventoNotificacion{
+	EmitirNotificacion(EventoNotificacion{
 		Tipo:  "mensaje",
 		Texto: fmt.Sprintf("🔓 *Tarea #%d Desbloqueada*\n\nResolución: %s", id, resolucion),
-	}
+	})
 	return nil
 }
 
@@ -503,6 +506,29 @@ func escanearTarea(s scanner) (*Tarea, error) {
 		t.CompletadaAt = &completadaAt.Time
 	}
 	return &t, nil
+}
+
+func MotivoBloqueoActivoTarea(tareaID int64) (string, error) {
+	if tareaID <= 0 {
+		return "", nil
+	}
+	return consultarConReintentos(func() (string, error) {
+		var motivo sql.NullString
+		err := DB.QueryRow(`
+			SELECT motivo
+			FROM bloqueos
+			WHERE tarea_id = ? AND resuelto = 0
+			ORDER BY id DESC
+			LIMIT 1
+		`, tareaID).Scan(&motivo)
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(motivo.String), nil
+	})
 }
 
 // ListarResumenBloqueos devuelve una lista de tareas bloqueadas con su motivo actual.

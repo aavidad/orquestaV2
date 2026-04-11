@@ -199,6 +199,44 @@ func TestNormalizarInstruccionProcesoNoDejaFallbackLibreParaCodexLocal(t *testin
 	}
 }
 
+func TestNormalizarInstruccionProcesoCompactaTMUXParaOllamaLocal(t *testing.T) {
+	pid := int64(os.Getpid())
+	obj := ObjetivoProceso{
+		PID:          &pid,
+		MetadataJSON: `{"driver":"tmux_cli_session","transport":"tmux","rendered_command":"ollama run qwen2.5-coder:7b","tmux_session":"orq-ollama1"}`,
+	}
+	texto := "MICROTAREA CERRADA\nSIMBOLO: NormalizarIdentificadorTecnico\nARCHIVO: tmp/ollama_smoke_eval/normalizar_identificador.go\nWRITE_SET: tmp/ollama_smoke_eval/normalizar_identificador.go\nTESTS: go test ./tmp/ollama_smoke_eval -count=1"
+	got := NormalizarInstruccionProceso(obj, texto)
+	if got == "" {
+		t.Fatal("la instruccion ollama no deberia quedar vacia")
+	}
+	if strings.Contains(got, "\n") {
+		t.Fatalf("ollama tmux deberia recibir una sola linea, got=%q", got)
+	}
+	for _, fragment := range []string{
+		"MICROTAREA CERRADA",
+		"SIMBOLO: NormalizarIdentificadorTecnico",
+		"WRITE_SET: tmp/ollama_smoke_eval/normalizar_identificador.go",
+	} {
+		if !strings.Contains(got, fragment) {
+			t.Fatalf("faltan datos relevantes tras compactar ollama: %q", got)
+		}
+	}
+}
+
+func TestNormalizarInstruccionProcesoPreservaMultilineaTMUXNoOllama(t *testing.T) {
+	pid := int64(os.Getpid())
+	obj := ObjetivoProceso{
+		PID:          &pid,
+		MetadataJSON: `{"driver":"tmux_cli_session","transport":"tmux","rendered_command":"codex-perfil Codex4 exec","tmux_session":"orq-codex4"}`,
+	}
+	texto := "linea uno\nlinea dos"
+	got := NormalizarInstruccionProceso(obj, texto)
+	if got != texto {
+		t.Fatalf("tmux no ollama deberia conservar multilinea, got=%q", got)
+	}
+}
+
 func TestRenderedCommandLooksLikeCodexCLI(t *testing.T) {
 	cases := []struct {
 		raw  string

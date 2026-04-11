@@ -9,6 +9,7 @@ import (
 
 type AgenteIdentidadObservada struct {
 	Agente     string
+	AccountID  string
 	Email      string
 	Usuario    string
 	Fuente     string
@@ -20,6 +21,7 @@ func ensureAgentesIdentidadObservadaSchema() error {
 	_, err := DB.Exec(`
 		CREATE TABLE IF NOT EXISTS agentes_identidad_observada (
 			agente      TEXT PRIMARY KEY REFERENCES agentes(nombre) ON DELETE CASCADE,
+			account_id  TEXT    NOT NULL DEFAULT '',
 			email       TEXT    NOT NULL DEFAULT '',
 			usuario     TEXT    NOT NULL DEFAULT '',
 			fuente      TEXT    NOT NULL DEFAULT '',
@@ -29,20 +31,37 @@ func ensureAgentesIdentidadObservadaSchema() error {
 	if err != nil {
 		return err
 	}
+	exists, err := ColumnExists("agentes_identidad_observada", "account_id")
+	if err != nil {
+		return err
+	}
+	if !exists {
+		if _, err := DB.Exec(`ALTER TABLE agentes_identidad_observada ADD COLUMN account_id TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if _, err = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_agentes_identidad_observada_account_id ON agentes_identidad_observada(account_id, updated_at DESC)`); err != nil {
+		return err
+	}
 	_, err = DB.Exec(`CREATE INDEX IF NOT EXISTS idx_agentes_identidad_observada_email ON agentes_identidad_observada(email, updated_at DESC)`)
 	return err
 }
 
 func UpsertAgenteIdentidadObservada(agente, email, usuario, fuente string, observedAt *time.Time) error {
+	return UpsertAgenteIdentidadObservadaCanonica(agente, "", email, usuario, fuente, observedAt)
+}
+
+func UpsertAgenteIdentidadObservadaCanonica(agente, accountID, email, usuario, fuente string, observedAt *time.Time) error {
 	agente = strings.TrimSpace(agente)
+	accountID = strings.TrimSpace(accountID)
 	email = strings.TrimSpace(email)
 	usuario = strings.TrimSpace(usuario)
 	fuente = strings.TrimSpace(fuente)
 	if agente == "" {
 		return fmt.Errorf("agente obligatorio")
 	}
-	if email == "" && usuario == "" {
-		return fmt.Errorf("debes indicar email o usuario")
+	if accountID == "" && email == "" && usuario == "" {
+		return fmt.Errorf("debes indicar account_id, email o usuario")
 	}
 	if _, err := GetAgente(agente); err != nil {
 		return err
@@ -57,9 +76,10 @@ func UpsertAgenteIdentidadObservada(agente, email, usuario, fuente string, obser
 	sqlText := buildUpsertValuesSQL(
 		CurrentStorageDriver(),
 		"agentes_identidad_observada",
-		[]string{"agente", "email", "usuario", "fuente", "observed_at", "updated_at"},
+		[]string{"agente", "account_id", "email", "usuario", "fuente", "observed_at", "updated_at"},
 		[]string{"agente"},
 		[]upsertAssignment{
+			{Column: "account_id"},
 			{Column: "email"},
 			{Column: "usuario"},
 			{Column: "fuente"},
@@ -67,11 +87,11 @@ func UpsertAgenteIdentidadObservada(agente, email, usuario, fuente string, obser
 			{Column: "updated_at"},
 		},
 	)
-	_, err := DB.Exec(sqlText, agente, email, usuario, fuente, when, time.Now().UTC())
+	_, err := DB.Exec(sqlText, agente, accountID, email, usuario, fuente, when, time.Now().UTC())
 	if err != nil {
 		return err
 	}
-	Audit("orquesta", "observar_cuenta_agente", "agente", 0, fmt.Sprintf("%s %s %s", agente, email, usuario))
+	Audit("orquesta", "observar_cuenta_agente", "agente", 0, fmt.Sprintf("%s %s %s %s", agente, accountID, email, usuario))
 	return nil
 }
 
@@ -84,18 +104,19 @@ func UltimaIdentidadCuentaObservadaAgente(agente string) identidadCuentaAgente {
 		return identidadCuentaAgente{}
 	}
 	row := DB.QueryRow(`
-		SELECT email, usuario, fuente, observed_at
+		SELECT account_id, email, usuario, fuente, observed_at
 		FROM agentes_identidad_observada
 		WHERE agente = ?`, agente)
-	var email, usuario, fuente string
+	var accountID, email, usuario, fuente string
 	var observedAt sql.NullTime
-	if err := row.Scan(&email, &usuario, &fuente, &observedAt); err != nil {
+	if err := row.Scan(&accountID, &email, &usuario, &fuente, &observedAt); err != nil {
 		return identidadCuentaAgente{}
 	}
 	out := identidadCuentaAgente{
-		email:   strings.TrimSpace(email),
-		usuario: strings.TrimSpace(usuario),
-		fuente:  strings.TrimSpace(fuente),
+		accountID: strings.TrimSpace(accountID),
+		email:     strings.TrimSpace(email),
+		usuario:   strings.TrimSpace(usuario),
+		fuente:    strings.TrimSpace(fuente),
 	}
 	if observedAt.Valid {
 		out.observedAt = &observedAt.Time

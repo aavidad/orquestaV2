@@ -16,8 +16,11 @@ func TestCmdNoUsaSQLDirectoNiAperturasFueraDeExcepcionesControladas(t *testing.T
 	patronSQLDirecto := regexp.MustCompile(`db\.DB\.(Exec|Query|QueryRow|QueryContext|QueryRowContext|ExecContext)\(`)
 	patronEnsureLocal := regexp.MustCompile(`ensureLocalDB\(`)
 	patronesHexagonalesCmd := map[string]*regexp.Regexp{
-		"api.go":                      regexp.MustCompile(`db\.(RegistrarAgente(Auto)?|RetirarAgente|RehabilitarAgente|EliminarAgente|FusionarAgentes|ResetReanimacion|PausarAgente|Config(Get|Set|All)|GetLanguagePolicy|SetLanguagePolicy|ListLanguageMatrixEntries|SetLanguageMatrixEntry|DeleteLanguageMatrixEntry|ResolveLanguage|GetAgente|CalcularResumenProgresoProyecto|ListarFasesProyecto|RegistrarFaseProyecto|GetFaseProyecto|ActualizarFaseProyecto|RegistrarAvanceTarea|UltimoPresupuestoSesion|EvaluarPresupuestoSesion|RegistrarPresupuestoSesion|GetSesionByID|GetSesionActiva|IniciarSesionContexto|ObtenerUltimaSesion|ActivarAsignacion|GetConector|PropuestasPendientesVoto|GetReglasAgente|GetSkillsAgente)\(`),
-		"agente_control_lifecycle.go": regexp.MustCompile(`db\.(GetAgente|Audit)\(`),
+		"api.go":                      regexp.MustCompile(`db\.(RegistrarAgente(Auto)?|RetirarAgente|RehabilitarAgente|EliminarAgente|FusionarAgentes|ResetReanimacion|PausarAgente|Config(Get|Set|All)|GetLanguagePolicy|SetLanguagePolicy|ListLanguageMatrixEntries|SetLanguageMatrixEntry|DeleteLanguageMatrixEntry|ResolveLanguage|GetAgente|CalcularResumenProgresoProyecto|ListarFasesProyecto|RegistrarFaseProyecto|GetFaseProyecto|ActualizarFaseProyecto|RegistrarAvanceTarea|UltimoPresupuestoSesion|EvaluarPresupuestoSesion|RegistrarPresupuestoSesion|GetSesionByID|GetSesionActiva|IniciarSesionContexto|ObtenerUltimaSesion|ActivarAsignacion|GetConector|PropuestasPendientesVoto|GetReglasAgente|GetSkillsAgente|CrearHandoffAgenteVivo)\(`),
+		"agente_control_lifecycle.go": regexp.MustCompile(`db\.(GetAgente|Audit|ListarRuntimeHandles|GetRuntimeHandle|GetRuntimeHandleOperativoRecienteAgente(Proyecto)?|GetRuntimeHandleCanonicoRecienteAgente(Proyecto)?)\(`),
+		"microprogramacion.go":        regexp.MustCompile(`db\.`),
+		"microprogramacion_api.go":    regexp.MustCompile(`db\.`),
+		"microprogramacion_mcp.go":    regexp.MustCompile(`db\.`),
 	}
 	permitidosPorFichero := map[string]map[string]bool{
 		"root.go": {

@@ -79,6 +79,20 @@ func configurarPoolAutobootstrapTest(t *testing.T, proyectoSlug string, workers 
 	}
 }
 
+func registrarHandleCuentaCompartidaPausado(t *testing.T, agente, email, usuario string) {
+	t.Helper()
+	meta := `{"driver":"tmux_cli_session","account_email":"` + strings.TrimSpace(email) + `","account_user":"` + strings.TrimSpace(usuario) + `"}`
+	if _, err := DB.Exec(`
+		INSERT INTO runtime_handles (
+			agente, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+		) VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)`,
+		strings.TrimSpace(agente), "tmux", "session", "orq-"+strings.ToLower(strings.TrimSpace(agente)), "pausado", meta,
+	); err != nil {
+		t.Fatalf("registrar handle de cuenta compartida: %v", err)
+	}
+	runtimeHandleHotReset()
+}
+
 func TestPlanificarTareasAutomaticamenteAutoasignaYEncolaStart(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	restringirPlanificadorATestAgentes(t, "Codex1")
@@ -138,6 +152,92 @@ func TestPlanificarTareasAutomaticamenteAutoasignaYEncolaStart(t *testing.T) {
 	}
 	if !strings.Contains(orders[0].PayloadJSON, `"proyecto":"orquestador"`) {
 		t.Fatalf("payload start inesperado: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestListarAgentesPlanificablesAgrupaAgentesDeLaMismaCuenta(t *testing.T) {
+	prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "Codex1", "Codex5")
+	if err := ConfigSet("runtime_shared_account_active_ceiling", "1"); err != nil {
+		t.Fatalf("config shared account ceiling: %v", err)
+	}
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Codex1: %v", err)
+	}
+	if err := RegistrarAgente("Codex5", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Codex5: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre IN ('Codex1','Codex5')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+	registrarHandleCuentaCompartidaPausado(t, "Codex1", "maritere@avidad.com", "maritere")
+	registrarHandleCuentaCompartidaPausado(t, "Codex5", "maritere@avidad.com", "maritere")
+
+	agentes, err := ListarAgentesPlanificables()
+	if err != nil {
+		t.Fatalf("ListarAgentesPlanificables: %v", err)
+	}
+	if len(agentes) != 1 {
+		t.Fatalf("deberia quedar solo un planificable por cuenta compartida, got=%d (%+v)", len(agentes), agentes)
+	}
+	if nombre := strings.TrimSpace(agentes[0].Nombre); nombre != "Codex1" && nombre != "Codex5" {
+		t.Fatalf("agente inesperado: %+v", agentes[0])
+	}
+}
+
+func TestEncolarStartAutomaticoSiHaceFaltaRetieneCuentaCompartidaOcupada(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "CodexActivo", "CodexNuevo")
+	configurarPoolAutobootstrapTest(t, "orquestador", "CodexActivo", "CodexNuevo")
+	if err := ConfigSet("runtime_shared_account_active_ceiling", "1"); err != nil {
+		t.Fatalf("config shared account ceiling: %v", err)
+	}
+	if err := RegistrarAgente("CodexActivo", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente CodexActivo: %v", err)
+	}
+	if err := RegistrarAgente("CodexNuevo", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente CodexNuevo: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre IN ('CodexActivo','CodexNuevo')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	proyecto, err := GetProyecto(jsonNumber(proyectoID))
+	if err != nil {
+		t.Fatalf("GetProyecto: %v", err)
+	}
+	if _, err := DB.Exec(`
+		INSERT INTO runtime_handles (
+			agente, proyecto_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+		) VALUES (?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`,
+		"CodexActivo", proyectoID, "tmux", "session", "orq-codexactivo", "activo",
+		`{"driver":"tmux_cli_session","account_email":"maritere@avidad.com","account_user":"maritere"}`,
+	); err != nil {
+		t.Fatalf("registrar handle activo: %v", err)
+	}
+	registrarHandleCuentaCompartidaPausado(t, "CodexNuevo", "maritere@avidad.com", "maritere")
+
+	if err := EncolarStartAutomaticoSiHaceFalta("CodexNuevo", proyecto, "prueba_cuenta_compartida"); err != nil {
+		t.Fatalf("EncolarStartAutomaticoSiHaceFalta: %v", err)
+	}
+
+	agente := "CodexNuevo"
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{Agente: &agente, Estado: &estado})
+	if err != nil {
+		t.Fatalf("ListarRuntimeOrdersVivas: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar start si la cuenta compartida ya está ocupada: %+v", orders)
 	}
 }
 
@@ -337,6 +437,63 @@ func TestBuscarSiguienteTareaLibreParaAgenteEvitaModuloYaOcupadoSiHayAlternativa
 	}
 	if tarea == nil || tarea.ID != tareaWeb {
 		t.Fatalf("deberia evitar el modulo ya ocupado si hay alternativa, got=%+v want=%d", tarea, tareaWeb)
+	}
+}
+
+func TestPlanificarTareasAutomaticamenteNoRecuperaTareaManualFueraDeFlota(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Frente manual del core",
+		Descripcion: "Tomado por operador manual fuera de la flota",
+		ProyectoID:  &proyectoID,
+		Modulo:      "runtime-adapters",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "alberto"); err != nil {
+		t.Fatalf("tomar tarea manual: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "alberto"); err != nil {
+		t.Fatalf("iniciar tarea manual: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE tareas SET updated_at=? WHERE id=?`, time.Now().UTC().Add(-10*time.Minute), tareaID); err != nil {
+		t.Fatalf("forzar updated_at antiguo: %v", err)
+	}
+
+	if err := PlanificarTareasAutomaticamente(); err != nil {
+		t.Fatalf("planificar: %v", err)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "alberto" {
+		got := "<nil>"
+		if tarea.Agente != nil {
+			got = *tarea.Agente
+		}
+		t.Fatalf("la tarea manual no deberia recuperarse del operador fuera de flota, agente=%s estado=%s notas=%q", got, tarea.Estado, tarea.Notas)
+	}
+	if tarea.Estado != TareaEnProgreso {
+		t.Fatalf("la tarea manual deberia seguir en progreso, estado=%s notas=%q", tarea.Estado, tarea.Notas)
+	}
+	if strings.Contains(strings.ToLower(tarea.Notas), "continuidad huérfana") || strings.Contains(strings.ToLower(tarea.Notas), "continuidad huerfana") {
+		t.Fatalf("no deberia anotar recuperación de continuidad huérfana: %q", tarea.Notas)
 	}
 }
 
@@ -673,6 +830,125 @@ func TestListarAgentesPlanificablesExcluyeAgenteConPresupuestoObservadoCritico(t
 	}
 	if !foundNuevo {
 		t.Fatalf("CodexNuevo deberia seguir siendo planificable: %+v", agentes)
+	}
+}
+
+func TestListarAgentesPlanificablesAgrupaCuentaCompartidaLibre(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+	restringirPlanificadorATestAgentes(t, "Codex2", "Codex3")
+
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	if err := RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar Codex3: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible', estado_cuota='activo' WHERE nombre IN ('Codex2','Codex3')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := UpsertAgenteIdentidadObservada("Codex2", "shared@example.com", "shared", "test", &now); err != nil {
+		t.Fatalf("identidad Codex2: %v", err)
+	}
+	if err := UpsertAgenteIdentidadObservada("Codex3", "shared@example.com", "shared", "test", &now); err != nil {
+		t.Fatalf("identidad Codex3: %v", err)
+	}
+
+	agentes, err := ListarAgentesPlanificables()
+	if err != nil {
+		t.Fatalf("ListarAgentesPlanificables: %v", err)
+	}
+	if len(agentes) != 1 {
+		t.Fatalf("deberia dejar un unico planificable por cuenta compartida libre, got=%d %+v", len(agentes), agentes)
+	}
+	if agentes[0] == nil || agentes[0].Nombre != "Codex2" {
+		t.Fatalf("deberia conservar el primer agente estable del grupo, got=%+v", agentes[0])
+	}
+}
+
+func TestListarAgentesPlanificablesNoAgrupaEmailsIgualesConAccountIDDistinto(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+	restringirPlanificadorATestAgentes(t, "Codex2", "Codex3")
+
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	if err := RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar Codex3: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible', estado_cuota='activo' WHERE nombre IN ('Codex2','Codex3')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := UpsertAgenteIdentidadObservadaCanonica("Codex2", "acct-codex2", "shared@example.com", "shared", "test", &now); err != nil {
+		t.Fatalf("identidad Codex2: %v", err)
+	}
+	if err := UpsertAgenteIdentidadObservadaCanonica("Codex3", "acct-codex3", "shared@example.com", "shared", "test", &now); err != nil {
+		t.Fatalf("identidad Codex3: %v", err)
+	}
+
+	agentes, err := ListarAgentesPlanificables()
+	if err != nil {
+		t.Fatalf("ListarAgentesPlanificables: %v", err)
+	}
+	if len(agentes) != 2 {
+		t.Fatalf("emails iguales con account_id distinto no deberian agruparse: got=%d %+v", len(agentes), agentes)
+	}
+}
+
+func TestEncolarStartAutomaticoSiHaceFaltaOmiteCuentaCompartidaOcupada(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	configurarPoolAutobootstrapTest(t, "orquestador", "Codex2", "Codex3")
+
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	if err := RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar Codex3: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := UpsertAgenteIdentidadObservada("Codex2", "shared@example.com", "shared", "test", &now); err != nil {
+		t.Fatalf("identidad Codex2: %v", err)
+	}
+	if err := UpsertAgenteIdentidadObservada("Codex3", "shared@example.com", "shared", "test", &now); err != nil {
+		t.Fatalf("identidad Codex3: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	proyecto, err := GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:            "Codex2",
+		ProyectoID:        &proyectoID,
+		CWD:               filepath.Join(tmp, "codex2"),
+		Herramienta:       "codex-cli",
+		ExternalSessionID: "sess-codex2",
+	}); err != nil {
+		t.Fatalf("iniciar sesion Codex2: %v", err)
+	}
+
+	if err := EncolarStartAutomaticoSiHaceFalta("Codex3", proyecto, "shared_account_test"); err != nil {
+		t.Fatalf("EncolarStartAutomaticoSiHaceFalta: %v", err)
+	}
+
+	agente := "Codex3"
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar start para una cuenta compartida ya ocupada: %+v", orders)
 	}
 }
 

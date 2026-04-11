@@ -15,8 +15,13 @@ type Store interface {
 	ResolveModelPolicy(input db.ResolverPoliticaInput) (*db.ResolucionModelo, error)
 }
 
+type PhaseProvider interface {
+	GetActivePhase(proyecto string) (string, error)
+}
+
 type Service struct {
-	store Store
+	store         Store
+	phaseProvider PhaseProvider
 }
 
 type PoolDetail struct {
@@ -28,6 +33,10 @@ type PoolDetail struct {
 
 func NewService(store Store) *Service {
 	return &Service{store: store}
+}
+
+func (s *Service) SetPhaseProvider(provider PhaseProvider) {
+	s.phaseProvider = provider
 }
 
 func (s *Service) ListPoolsSummary(activo *bool) ([]*db.PoolCapacidadResumen, error) {
@@ -92,6 +101,12 @@ func (s *Service) SeedInitialModelPolicies() error {
 }
 
 func (s *Service) ResolveModelPolicy(input db.ResolverPoliticaInput) (*db.ResolucionModelo, error) {
+	if input.ProyectoSlug != "" && input.Fase == "" && s.phaseProvider != nil {
+		fase, err := s.phaseProvider.GetActivePhase(input.ProyectoSlug)
+		if err == nil && fase != "" {
+			input.Fase = fase
+		}
+	}
 	return s.store.ResolveModelPolicy(input)
 }
 

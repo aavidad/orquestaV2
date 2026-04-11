@@ -52,6 +52,9 @@ func prepararDesdeDatosConWorkspace(agente *db.Agente, proyecto *db.Proyecto, co
 	if agente == nil || proyecto == nil || conector == nil {
 		return nil, fmt.Errorf("agente, proyecto y conector son obligatorios")
 	}
+	modeloSolicitado := strings.TrimSpace(modelo)
+	razonamientoSolicitado := strings.TrimSpace(razonamiento)
+	perfilSolicitado := strings.TrimSpace(perfilTarea)
 	start := time.Now()
 	prepareRuntimeDebugf("PrepararDesdeDatos start agente=%s proyecto=%s conector=%s", strings.TrimSpace(agente.Nombre), strings.TrimSpace(proyecto.Slug), strings.TrimSpace(conector.Slug))
 	defer func() {
@@ -61,6 +64,7 @@ func prepararDesdeDatosConWorkspace(agente *db.Agente, proyecto *db.Proyecto, co
 	proyecto = db.ProyectoConRutaEfectiva(proyecto, "")
 	stepStart := time.Now()
 	perfilTarea, modelo, razonamiento, err = db.ResolverPerfilEjecucionLanzamiento(
+		&agente.Nombre,
 		strings.TrimSpace(proyecto.Slug),
 		perfilTarea,
 		modelo,
@@ -68,6 +72,27 @@ func prepararDesdeDatosConWorkspace(agente *db.Agente, proyecto *db.Proyecto, co
 	)
 	if err != nil {
 		return nil, err
+	}
+	perfilTarea, modelo, razonamiento, err = runtimeagente.AplicarDefaultsConector(
+		runtimeagente.ConnectorConfig{
+			Slug:         strings.TrimSpace(conector.Slug),
+			Nombre:       strings.TrimSpace(conector.Nombre),
+			Transporte:   strings.TrimSpace(conector.Transporte),
+			Comando:      strings.TrimSpace(conector.Comando),
+			ArgsJSON:     strings.TrimSpace(conector.ArgsJSON),
+			EnvJSON:      strings.TrimSpace(conector.EnvJSON),
+			MetadataJSON: strings.TrimSpace(conector.MetadataJSON),
+			Activo:       conector.Activo,
+		},
+		perfilSolicitado,
+		modeloSolicitado,
+		razonamientoSolicitado,
+		perfilTarea,
+		modelo,
+		razonamiento,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("metadata_json inválido para '%s': %w", strings.TrimSpace(conector.Slug), err)
 	}
 	prepareRuntimeDebugf("PrepararDesdeDatos step=resolver_perfil duration=%s", time.Since(stepStart).Round(time.Millisecond))
 
@@ -83,14 +108,26 @@ func prepararDesdeDatosConWorkspace(agente *db.Agente, proyecto *db.Proyecto, co
 		return nil, err
 	}
 	prepareRuntimeDebugf("PrepararDesdeDatos step=bootstrap duration=%s", time.Since(stepStart).Round(time.Millisecond))
+	resume = db.SanitizeResumeContextForProject(resume, proyecto)
+	resume.CWD = db.RutaTrabajoPreferidaAgenteProyecto(strings.TrimSpace(agente.Nombre), proyecto, strings.TrimSpace(resume.CWD))
+	if strings.TrimSpace(resume.CWD) == "" {
+		resume.CWD = strings.TrimSpace(proyecto.RutaAbs)
+	}
 	if worktree != nil {
-		if strings.TrimSpace(resume.CWD) == "" {
-			resume.CWD = strings.TrimSpace(worktree.Path)
-		}
 		if strings.TrimSpace(resume.Branch) == "" {
 			resume.Branch = strings.TrimSpace(worktree.Branch)
 		}
 	}
+	resume = runtimeagente.SanitizarResumeParaConector(runtimeagente.ConnectorConfig{
+		Slug:         strings.TrimSpace(conector.Slug),
+		Nombre:       strings.TrimSpace(conector.Nombre),
+		Transporte:   strings.TrimSpace(conector.Transporte),
+		Comando:      strings.TrimSpace(conector.Comando),
+		ArgsJSON:     strings.TrimSpace(conector.ArgsJSON),
+		EnvJSON:      strings.TrimSpace(conector.EnvJSON),
+		MetadataJSON: strings.TrimSpace(conector.MetadataJSON),
+		Activo:       conector.Activo,
+	}, resume)
 	req := runtimeagente.LaunchRequest{
 		Agente:       strings.TrimSpace(agente.Nombre),
 		Rol:          strings.TrimSpace(agente.Rol),
@@ -230,11 +267,11 @@ func ResolverConector(agente, conectorRef string, ultima *db.Sesion) (*db.Conect
 		}
 	}
 	if ref == "" {
-		ref = "codex-cli"
+		ref = runtimeagente.ConectorPorDefectoAgente(agente)
 	}
 	conector, err := db.GetConector(ref)
 	if err != nil {
-		if ref != "codex-cli" {
+		if ref != runtimeagente.ConectorPorDefectoAgente(agente) {
 			return nil, fmt.Errorf("no se pudo resolver el conector para %s: %w", strings.TrimSpace(agente), err)
 		}
 		return nil, err

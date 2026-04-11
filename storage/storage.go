@@ -106,7 +106,7 @@ func SQLiteDSN(path string) string {
 	if strings.Contains(path, "?") {
 		sep = "&"
 	}
-	return path + sep + "_journal_mode=WAL&_foreign_keys=on&_busy_timeout=5000"
+	return path + sep + "_journal_mode=WAL&_synchronous=NORMAL&_wal_autocheckpoint=100&_foreign_keys=on&_busy_timeout=5000"
 }
 
 func SQLiteDSNWithMode(path, mode string) string {

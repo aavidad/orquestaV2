@@ -54,6 +54,10 @@ func BuildLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan *runtim
 		workingDir = strings.TrimSpace(plan.WorkingDir)
 	}
 
+	if promptBootstrapCompacto(plan) {
+		return buildCompactLaunchBootstrapPrompt(agente, proyecto, plan, workingDir, tareas)
+	}
+
 	lines := []string{
 		fmt.Sprintf("Bootstrap de Orquesta para %s.", strings.TrimSpace(agente.Nombre)),
 		fmt.Sprintf("Rol: %s. Proyecto: %s.", strings.TrimSpace(agente.Rol), strings.TrimSpace(proyecto.Slug)),
@@ -118,6 +122,129 @@ func BuildLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan *runtim
 
 	lines = append(lines, "Empieza por la tarea asignada o, si no hay una única clara, consulta Orquesta antes de desviarte.")
 	return strings.Join(lines, "\n")
+}
+
+func promptBootstrapCompacto(plan *runtimeagente.LaunchPlan) bool {
+	if plan == nil {
+		return false
+	}
+	if plan.CanSendInput != nil && !*plan.CanSendInput &&
+		strings.EqualFold(strings.TrimSpace(plan.MailboxDeliveryMode), runtimeagente.MailboxDeliveryBootstrapOnly) {
+		return true
+	}
+	if planLooksLikeOrchestratedAgentCLI(plan) {
+		return true
+	}
+	return false
+}
+
+func buildCompactLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan *runtimeagente.LaunchPlan, workingDir string, tareas []*Tarea) string {
+	if planLooksLikeOllamaCLI(plan) {
+		return buildCompactLaunchBootstrapPromptOllama(agente, proyecto, workingDir, tareas)
+	}
+	lines := []string{
+		fmt.Sprintf("Bootstrap de Orquesta para %s.", strings.TrimSpace(agente.Nombre)),
+		fmt.Sprintf("Rol: %s. Proyecto: %s.", strings.TrimSpace(agente.Rol), strings.TrimSpace(proyecto.Slug)),
+		fmt.Sprintf("Directorio: %s.", workingDir),
+		"Doctrina: " + RutaDoctrinaCanonica + ".",
+		"Fuente de verdad operativa: daemon/API de Orquesta.",
+		"Unidad de trabajo: microtarea cerrada.",
+		"Trabaja solo dentro del alcance de la tarea activa y del mailbox actual.",
+		"Implementa solo la funcion o el patch pedido. Respeta archivo, simbolo, write-set y tests obligatorios.",
+		"Si el contexto visible de la sesión no coincide con la tarea activa o el mailbox actual, ignóralo.",
+		"No propongas arquitectura, roadmap ni refactors globales salvo que la microtarea lo pida de forma explicita.",
+		"No reabras frentes viejos ni reescribas módulos fuera del alcance inmediato.",
+		"No expliques planes largos ni reabras decisiones de diseño ya tomadas.",
+		"Si todavía no tienes una microtarea cerrada, responde solo ACK-ESPERA y espera.",
+		"Cuando llegue una microtarea, ejecuta solo ese cambio y devuelve evidencia breve; no hagas trabajo adicional.",
+	}
+	if resumenTareas := resumirTareasBootstrapCompacto(tareas); resumenTareas != "" {
+		lines = append(lines, resumenTareas)
+	}
+	lines = append(lines, "Empieza por la tarea asignada y evita tocar BD local salvo diagnóstico o recuperación.")
+	lines = append(lines, "Si la acción es destructiva, irreversible o de riesgo alto, consulta antes.")
+	return strings.Join(lines, "\n")
+}
+
+func buildCompactLaunchBootstrapPromptOllama(agente *Agente, proyecto *Proyecto, workingDir string, tareas []*Tarea) string {
+	lines := []string{
+		"PROTOCOLO_ORQUESTA_MICRO",
+		"NO_INTERPRETAR_COMO_PREGUNTA",
+		"SALIDA_INMEDIATA=ACK-ESPERA",
+		"ESPERA_MICROTAREA_CERRADA",
+		"EJECUTA_SOLO_WRITE_SET",
+		"SI_BLOQUEO=BLOQUEO: <motivo concreto>",
+	}
+	return strings.Join(lines, "\n")
+}
+
+func resumirTareasBootstrapCompacto(tareas []*Tarea) string {
+	if len(tareas) == 0 {
+		return "No hay una tarea activa única; consulta Orquesta antes de desviarte."
+	}
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case TareaAsignada, TareaEnProgreso, TareaBloqueada:
+			return fmt.Sprintf("Tarea activa: #%d [%s] %s.", tarea.ID, tarea.Estado, strings.TrimSpace(tarea.Titulo))
+		}
+	}
+	return "No hay una tarea activa única; consulta Orquesta antes de desviarte."
+}
+
+func planLooksLikeOrchestratedAgentCLI(plan *runtimeagente.LaunchPlan) bool {
+	if plan == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(plan.Driver), "cli") {
+		return false
+	}
+	parts := make([]string, 0, 1+len(plan.Args))
+	if cmd := strings.ToLower(strings.TrimSpace(plan.Comando)); cmd != "" {
+		parts = append(parts, cmd)
+	}
+	for _, arg := range plan.Args {
+		arg = strings.ToLower(strings.TrimSpace(arg))
+		if arg != "" {
+			parts = append(parts, arg)
+		}
+	}
+	for _, part := range parts {
+		if strings.Contains(part, "codex-perfil") || strings.Contains(part, "claude-perfil") || strings.Contains(part, "gemini-perfil") {
+			return true
+		}
+		if part == "codex" || part == "claude" || part == "gemini" || part == "ollama" {
+			return true
+		}
+		if strings.Contains(part, "ollama-cli") || strings.Contains(part, "ollama-perfil") {
+			return true
+		}
+	}
+	return false
+}
+
+func planLooksLikeOllamaCLI(plan *runtimeagente.LaunchPlan) bool {
+	if plan == nil || !strings.EqualFold(strings.TrimSpace(plan.Driver), "cli") {
+		return false
+	}
+	parts := make([]string, 0, 1+len(plan.Args))
+	if cmd := strings.ToLower(strings.TrimSpace(plan.Comando)); cmd != "" {
+		parts = append(parts, cmd)
+	}
+	for _, arg := range plan.Args {
+		arg = strings.ToLower(strings.TrimSpace(arg))
+		if arg != "" {
+			parts = append(parts, arg)
+		}
+	}
+	for _, part := range parts {
+		if part == "ollama" || strings.Contains(part, "ollama-cli") || strings.Contains(part, "ollama-perfil") {
+			return true
+		}
+	}
+	return false
 }
 
 func bootstrapPromptDebugf(format string, args ...any) {

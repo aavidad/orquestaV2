@@ -2,7 +2,9 @@ package controlruntime
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"orquesta/runtimeagente"
@@ -43,11 +45,104 @@ func arrancarPlanLocal(req SolicitudArranque) (*ProcesoArrancado, error) {
 	if strings.TrimSpace(req.Plan.Comando) == "" {
 		return nil, fmt.Errorf("comando obligatorio")
 	}
-	if _, err := exec.LookPath("script"); err != nil {
-		return nil, fmt.Errorf("script no disponible: %w", err)
+	backend := localTerminalBackend(req)
+	switch backend {
+	case "tmux":
+		return arrancarPlanLocalTMUX(req)
 	}
-
+	if localTerminalRuntimeRequiresTMUX(req) {
+		return nil, fmt.Errorf("runtime local process_pty_cli deshabilitado para este agente; requiere tmux")
+	}
 	return arrancarPlanLocalPTY(req)
+}
+
+func localTerminalBackend(req SolicitudArranque) string {
+	if req.Plan != nil && req.Plan.Env != nil {
+		if backend := strings.ToLower(strings.TrimSpace(req.Plan.Env["ORQUESTA_TERMINAL_BACKEND"])); backend != "" {
+			return backend
+		}
+	}
+	if backend := strings.ToLower(strings.TrimSpace(os.Getenv("ORQUESTA_TERMINAL_BACKEND"))); backend != "" {
+		return backend
+	}
+	if localTerminalBackendShouldPreferTMUX(req) {
+		return "tmux"
+	}
+	return ""
+}
+
+func localTerminalBackendShouldPreferTMUX(req SolicitudArranque) bool {
+	if req.Plan == nil {
+		return false
+	}
+	if !localTerminalRuntimeRequiresTMUX(req) {
+		return false
+	}
+	if path := strings.TrimSpace(commandPathFromLaunchPlan(req.Plan)); path != "" {
+		return true
+	}
+	_, err := exec.LookPath("tmux")
+	return err == nil
+}
+
+func localTerminalRuntimeRequiresTMUX(req SolicitudArranque) bool {
+	if req.Plan == nil {
+		return false
+	}
+	rendered := runtimeagente.RenderCommand(req.Plan)
+	return renderedCommandLooksLikeTMUXPreferredCLI(rendered)
+}
+
+func RenderedCommandLooksLikeTMUXPreferredCLI(rendered string) bool {
+	return renderedCommandLooksLikeTMUXPreferredCLI(rendered)
+}
+
+func renderedCommandLooksLikeTMUXPreferredCLI(rendered string) bool {
+	lower := strings.ToLower(strings.TrimSpace(rendered))
+	if lower == "" {
+		return false
+	}
+	if renderedCommandLooksLikeCodexCLI(rendered) {
+		return true
+	}
+	first := lower
+	if fields := strings.Fields(lower); len(fields) > 0 {
+		first = fields[0]
+	}
+	first = strings.Trim(first, "'\"")
+	base := filepath.Base(first)
+	switch {
+	case strings.Contains(lower, "claude-perfil"),
+		strings.Contains(lower, "/claude"),
+		lower == "claude",
+		strings.HasPrefix(lower, "claude "),
+		base == "claude",
+		strings.Contains(lower, "gemini-perfil"),
+		strings.Contains(lower, "/gemini"),
+		lower == "gemini",
+		strings.HasPrefix(lower, "gemini "),
+		base == "gemini",
+		strings.Contains(lower, "/ollama"),
+		lower == "ollama",
+		strings.HasPrefix(lower, "ollama "),
+		base == "ollama",
+		// Modelos locales que corren vía ollama CLI
+		strings.HasPrefix(lower, "ollama run "),
+		strings.HasPrefix(lower, "ollama serve "):
+		return true
+	default:
+		return false
+	}
+}
+
+func commandPathFromLaunchPlan(plan *runtimeagente.LaunchPlan) string {
+	if plan == nil || plan.Env == nil {
+		return ""
+	}
+	if path := strings.TrimSpace(plan.Env["ORQUESTA_TMUX_BIN"]); path != "" {
+		return path
+	}
+	return strings.TrimSpace(os.Getenv("ORQUESTA_TMUX_BIN"))
 }
 
 func sanitizePathFragment(v string) string {

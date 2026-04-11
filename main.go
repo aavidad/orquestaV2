@@ -7,8 +7,19 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 package main
 
-import "orquesta/cmd"
+import (
+	"os"
+
+	"orquesta/cmd"
+	"orquesta/internal/controlruntime"
+)
 
 func main() {
+	if controlruntime.MaybeRunEmbeddedBroker(os.Args[1:]) {
+		return
+	}
+	if controlruntime.MaybeRunEmbeddedTmuxMonitor(os.Args[1:]) {
+		return
+	}
 	cmd.Execute()
 }

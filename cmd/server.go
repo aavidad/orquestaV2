@@ -278,11 +278,32 @@ var serverDoctorCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		if err := rpclocal.Ping(ctx, addr); err != nil {
-			fmt.Printf("Health RPC: KO (%v)\n", err)
+			fmt.Printf("Health RPC (daemon): KO (%v)\n", err)
 			fmt.Println("Modo local: solo con ORQUESTA_FORCE_LOCAL_DB=1 y solo para recuperación")
 			return nil
 		}
-		fmt.Printf("Health RPC: OK\n")
+		fmt.Printf("Health RPC (daemon): OK\n")
+		if err := serverAPIReadyOK(addr); err != nil {
+			fmt.Printf("API server: KO (%v)\n", err)
+		} else {
+			fmt.Printf("API server: OK\n")
+		}
+		if resumen, err := fetchServerStatus(strings.TrimRight(addr, "/")); err != nil {
+			fmt.Printf("Orquestación: KO (%v)\n", err)
+		} else {
+			ops := summarizeServerOperationalStatus(resumen)
+			fmt.Printf(
+				"Orquestación: %s (registrados=%d activos=%d trabajando=%d atascados=%d saturados=%d cuota=%d pausa=%d)\n",
+				serverOperationalLabel(ops),
+				ops.Registered,
+				ops.Connected,
+				ops.Working,
+				ops.Stuck,
+				ops.Saturated,
+				ops.Cooling,
+				ops.Paused,
+			)
+		}
 		fmt.Printf("Modo local: solo por recuperación explícita (ORQUESTA_FORCE_LOCAL_DB=1)\n")
 		return nil
 	},
@@ -608,7 +629,7 @@ func ensureLocalServer(addr string) error {
 			state, stateErr := ensureServerInfoFromHealth(addr)
 			if stateErr == nil && state != nil && strings.TrimSpace(state.Addr) != "" {
 				baseURL := rpclocal.BaseURL(state.Addr)
-				if readyErr := serverReadinessOK(baseURL); readyErr == nil {
+				if readyErr := serverAPIReadyOK(baseURL); readyErr == nil {
 					return nil
 				}
 			}
@@ -655,7 +676,7 @@ func waitLocalServerStable(baseURL string, timeout time.Duration) error {
 			pingErr := rpclocal.Ping(ctx, addr)
 			cancel()
 			if pingErr == nil {
-				if readyErr := serverReadinessOK(addr); readyErr == nil {
+				if readyErr := serverAPIReadyOK(addr); readyErr == nil {
 					consecutiveReady++
 					if consecutiveReady >= 2 {
 						return nil
@@ -680,7 +701,7 @@ func waitLocalServerStable(baseURL string, timeout time.Duration) error {
 	return fmt.Errorf("servidor local sin estabilizar tras arranque: %w", lastErr)
 }
 
-func serverReadinessOK(baseURL string) error {
+func serverAPIReadyOK(baseURL string) error {
 	baseURL = strings.TrimSpace(baseURL)
 	if baseURL == "" {
 		return fmt.Errorf("baseURL vacia")
@@ -706,6 +727,48 @@ func serverReadinessOK(baseURL string) error {
 		return fmt.Errorf("respuesta readiness sin name")
 	}
 	return nil
+}
+
+type serverOperationalSummary struct {
+	Registered int
+	Connected  int
+	Working    int
+	Saturated  int
+	Stuck      int
+	Cooling    int
+	Paused     int
+}
+
+func summarizeServerOperationalStatus(resumen *estadoResumen) serverOperationalSummary {
+	if resumen == nil {
+		return serverOperationalSummary{}
+	}
+	return serverOperationalSummary{
+		Registered: len(resumen.Agentes),
+		Connected:  len(resumen.AgentesActivos),
+		Working:    len(resumen.AgentesTrabajando),
+		Saturated:  len(resumen.AgentesSaturados),
+		Stuck:      len(resumen.AgentesAtascados),
+		Cooling:    len(agentesNoActivosConCuota(resumen.Agentes)),
+		Paused:     len(agentesNoActivosEnPausaOperativa(resumen.Agentes)),
+	}
+}
+
+func serverOperationalLabel(summary serverOperationalSummary) string {
+	switch {
+	case summary.Working > 0:
+		return "OK"
+	case summary.Connected > 0 && summary.Stuck > 0:
+		return "DEGRADADA"
+	case summary.Connected > 0:
+		return "LIMITADA"
+	case summary.Cooling > 0:
+		return "SIN_CAPACIDAD"
+	case summary.Registered > 0:
+		return "SIN_WORKERS"
+	default:
+		return "VACIA"
+	}
 }
 
 func buildLocalServerProcessEnv(base []string) []string {

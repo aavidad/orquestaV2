@@ -123,7 +123,7 @@ func DetectarAgentesAgotados() ([]*HandoffCandidato, error) {
 		if tarea.ProyectoID != nil {
 			c.ProyectoID = tarea.ProyectoID
 		}
-		handle, err := GetRuntimeHandleActivoAgente(c.Agente)
+		handle, err := runtimeHandleCanonicoRecienteConFallback(c.Agente, c.ProyectoID)
 		if err != nil {
 			return nil, err
 		}
@@ -245,10 +245,7 @@ func watchdogActividadRuntimeReciente(c *HandoffCandidato, cutoff time.Time) (bo
 	if err != nil || handle == nil {
 		return false, err
 	}
-	if handle.RuntimeID == nil {
-		return false, nil
-	}
-	runtime, err := GetRuntime(*handle.RuntimeID)
+	runtime, err := runtimeHandleRuntime(handle)
 	if err != nil || runtime == nil {
 		return false, err
 	}
@@ -597,7 +594,11 @@ func encolarSondeoWatchdog(c *HandoffCandidato) error {
 	if err != nil {
 		return err
 	}
-	if handle != nil && handle.RuntimeID != nil {
+	if runtime, err := runtimeHandleRuntime(handle); err != nil {
+		return err
+	} else if runtime != nil && runtime.ID > 0 {
+		runtimeID = &runtime.ID
+	} else if handle != nil && handle.RuntimeID != nil {
 		runtimeID = handle.RuntimeID
 	}
 	payloadSync, _ := json.Marshal(map[string]any{

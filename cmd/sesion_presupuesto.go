@@ -16,6 +16,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
+	"orquesta/sesionesapp"
 )
 
 var sesionPresupuestoCmd = &cobra.Command{
@@ -157,7 +158,7 @@ func referenciaSesionPresupuesto(cmd *cobra.Command) (int64, string, error) {
 	return sesionID, agente, nil
 }
 
-func imprimirRegistroPresupuesto(id, sesionID int64, ev *db.EvaluacionPresupuesto) {
+func imprimirRegistroPresupuesto(id, sesionID int64, ev *sesionesapp.EvaluacionPresupuesto) {
 	fmt.Printf("✓ Presupuesto registrado (id: %d) para sesión #%d\n", id, sesionID)
 	fmt.Printf("  Estado: %s", ev.Estado)
 	if ev.DebeHandoff {
@@ -169,7 +170,7 @@ func imprimirRegistroPresupuesto(id, sesionID int64, ev *db.EvaluacionPresupuest
 	}
 }
 
-func imprimirDetallePresupuesto(sesionID int64, p *db.PresupuestoSesion, ev *db.EvaluacionPresupuesto) {
+func imprimirDetallePresupuesto(sesionID int64, p *sesionesapp.PresupuestoSesion, ev *sesionesapp.EvaluacionPresupuesto) {
 	fmt.Printf("╔══════════════════════════════════════════════╗\n")
 	fmt.Printf("║  PRESUPUESTO — sesión #%d\n", sesionID)
 	fmt.Printf("╚══════════════════════════════════════════════╝\n")

@@ -10,11 +10,15 @@ package cmd
 import (
 	"fmt"
 	"net/url"
+	"os/exec"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"orquesta/db"
+	"orquesta/internal/controlruntime"
+	"orquesta/runtimeagente"
 )
 
 type runtimeDiagnosticoData struct {
@@ -23,9 +27,51 @@ type runtimeDiagnosticoData struct {
 	Fuente           string
 	Runtimes         []runtimeRow
 	Handles          []*db.RuntimeHandle
+	Workers          []runtimeDiagnosticoWorkerRow
+	Issues           []runtimeDiagnosticoIssue
 	Orders           []*db.RuntimeOrder
 	MailboxPendiente []*db.RuntimeMailboxMessage
 	Checkpoints      []*db.RuntimeCheckpoint
+}
+
+type runtimeDiagnosticoIssue struct {
+	Severity string
+	Code     string
+	Message  string
+}
+
+type runtimeDiagnosticoWorkerRow struct {
+	HandleID            int64
+	Agent               string
+	Driver              string
+	Transport           string
+	RuntimeRef          string
+	ChildPID            int
+	State               string
+	Alive               bool
+	HeartbeatAt         *time.Time
+	UpdatedAt           *time.Time
+	LastOutputAt        *time.Time
+	LastProgressAt      *time.Time
+	SessionRef          string
+	ExternalSessionID   string
+	MailboxDeliveryMode string
+	ExitError           string
+	ManifestPath        string
+	StatusPath          string
+	HeartbeatPath       string
+	TmuxSession         string
+	TmuxPaneID          string
+}
+
+const runtimeDiagnosticoWorkerHeartbeatThreshold = time.Minute
+const runtimeDiagnosticoWorkerProgressThreshold = 20 * time.Minute
+const runtimeDiagnosticoResumePendingThreshold = 10 * time.Minute
+const runtimeDiagnosticoRestartLoopWindow = 6 * time.Hour
+const runtimeDiagnosticoRestartLoopCount = 2
+
+var runtimeDiagnosticoNow = func() time.Time {
+	return time.Now().UTC()
 }
 
 var runtimeDiagnosticoCmd = &cobra.Command{
@@ -94,6 +140,7 @@ func cargarRuntimeDiagnosticoDesdeAPI(agente, proyecto string, limit int) (*runt
 	if !ok || err != nil {
 		return nil, ok, err
 	}
+	workers := runtimeWorkerRows(handles, limit)
 
 	return &runtimeDiagnosticoData{
 		Agente:           agente,
@@ -101,9 +148,11 @@ func cargarRuntimeDiagnosticoDesdeAPI(agente, proyecto string, limit int) (*runt
 		Fuente:           "api",
 		Runtimes:         aplanarArbolAPI(tree),
 		Handles:          handles,
+		Workers:          workers,
 		Orders:           orders,
 		MailboxPendiente: mailbox,
 		Checkpoints:      checkpoints,
+		Issues:           runtimeDiagnosticoIssues(workers, orders, mailbox, checkpoints),
 	}, true, nil
 }
 
@@ -140,16 +189,19 @@ func cargarRuntimeDiagnosticoRecuperacionLocal(agente, proyecto string, limit in
 		return nil, err
 	}
 
-	return &runtimeDiagnosticoData{
+	data := &runtimeDiagnosticoData{
 		Agente:           agente,
 		Proyecto:         proyecto,
 		Fuente:           "local",
 		Runtimes:         aplanarArbolLocal(tree),
 		Handles:          handles,
+		Workers:          runtimeWorkerRows(handles, limit),
 		Orders:           orders,
 		MailboxPendiente: mailbox,
 		Checkpoints:      checkpoints,
-	}, nil
+	}
+	data.Issues = runtimeDiagnosticoIssues(data.Workers, data.Orders, data.MailboxPendiente, data.Checkpoints)
+	return data, nil
 }
 
 func renderRuntimeDiagnostico(data *runtimeDiagnosticoData, limit int) {
@@ -180,6 +232,14 @@ func renderRuntimeDiagnostico(data *runtimeDiagnosticoData, limit int) {
 	if len(handles) > 0 {
 		fmt.Println("\nHandles")
 		_ = imprimirRuntimeHandles(handles)
+	}
+	if len(data.Workers) > 0 {
+		fmt.Println("\nWorker estructurado")
+		_ = imprimirRuntimeDiagnosticoWorkers(data.Workers)
+		if len(data.Issues) > 0 {
+			fmt.Println("\nIncidencias")
+			_ = imprimirRuntimeDiagnosticoIssues(data.Issues)
+		}
 	}
 	orders := runtimeOrdersRelevantes(data.Orders, limit)
 	if len(orders) > 0 {
@@ -357,6 +417,349 @@ func imprimirRuntimeDiagnosticoCheckpoints(checkpoints []*db.RuntimeCheckpoint) 
 			truncar(cp.Branch, 16), cp.CreatedAt.Format("2006-01-02 15:04:05"), truncar(cp.Resumen, 48))
 	}
 	return nil
+}
+
+func runtimeWorkerRows(handles []*db.RuntimeHandle, limit int) []runtimeDiagnosticoWorkerRow {
+	if limit <= 0 {
+		limit = 5
+	}
+	rows := make([]runtimeDiagnosticoWorkerRow, 0, limit)
+	now := runtimeDiagnosticoNow()
+	for _, handle := range runtimeHandlesRelevantes(handles, limit) {
+		if handle == nil {
+			continue
+		}
+		if repaired, restarted, err := controlruntime.EnsureTMUXMonitorFromMetadataJSON(handle.MetadataJSON); err == nil && strings.TrimSpace(repaired) != "" && strings.TrimSpace(repaired) != strings.TrimSpace(handle.MetadataJSON) {
+			handle.MetadataJSON = repaired
+			if restarted {
+				_ = db.ActualizarMetadataRuntimeHandle(handle.ID, repaired)
+			}
+		}
+		snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
+		if err != nil || snap == nil {
+			continue
+		}
+		state := snap.EffectiveState()
+		alive := snap.Alive()
+		exitError := snap.ExitError()
+		handleState := strings.TrimSpace(strings.ToLower(handle.Estado))
+		if runtimeEstadoTerminal(handleState) {
+			if alive {
+				state = "stale"
+				alive = false
+			}
+			if strings.TrimSpace(exitError) == "" {
+				exitError = "handle=" + strings.TrimSpace(handle.Estado)
+			}
+		} else if handleState == "pausado" {
+			state = "paused"
+		} else if alive && snap.IsHeartbeatStale(now, runtimeDiagnosticoWorkerHeartbeatThreshold) {
+			state = "stale"
+			alive = false
+			if strings.TrimSpace(exitError) == "" {
+				exitError = "heartbeat_lag"
+			}
+		}
+		rows = append(rows, runtimeDiagnosticoWorkerRow{
+			HandleID:            handle.ID,
+			Agent:               handle.Agente,
+			Driver:              snap.Driver(),
+			Transport:           snap.Transport(),
+			RuntimeRef:          snap.RuntimeRef(),
+			ChildPID:            snap.ChildPID(),
+			State:               state,
+			Alive:               alive,
+			HeartbeatAt:         snap.HeartbeatTime(),
+			UpdatedAt:           snap.UpdatedTime(),
+			LastOutputAt:        snap.LastOutputTime(),
+			LastProgressAt:      snap.LastProgressTime(),
+			SessionRef:          snap.SessionRef(),
+			ExternalSessionID:   snap.ExternalSessionID(),
+			MailboxDeliveryMode: snap.MailboxDeliveryMode(),
+			ExitError:           exitError,
+			ManifestPath:        snap.ManifestPath,
+			StatusPath:          snap.StatusPath,
+			HeartbeatPath:       snap.HeartbeatPath,
+			TmuxSession:         workerSnapshotManifestTMUXField(snap, true),
+			TmuxPaneID:          workerSnapshotManifestTMUXField(snap, false),
+		})
+	}
+	return rows
+}
+
+func workerSnapshotManifestTMUXField(snap *runtimeagente.WorkerSnapshot, wantSession bool) string {
+	if snap == nil || snap.Manifest == nil {
+		return ""
+	}
+	if wantSession {
+		return strings.TrimSpace(snap.Manifest.TmuxSession)
+	}
+	return strings.TrimSpace(snap.Manifest.TmuxPaneID)
+}
+
+var runtimeDiagnosticoTmuxHasSession = func(sessionName string) bool {
+	sessionName = strings.TrimSpace(sessionName)
+	if sessionName == "" {
+		return false
+	}
+	tmuxPath, err := exec.LookPath("tmux")
+	if err != nil {
+		return false
+	}
+	cmd := exec.Command(tmuxPath, "has-session", "-t", sessionName)
+	return cmd.Run() == nil
+}
+
+func runtimeDiagnosticoIssues(rows []runtimeDiagnosticoWorkerRow, orders []*db.RuntimeOrder, mailbox []*db.RuntimeMailboxMessage, checkpoints []*db.RuntimeCheckpoint) []runtimeDiagnosticoIssue {
+	issues := make([]runtimeDiagnosticoIssue, 0)
+	now := runtimeDiagnosticoNow()
+	aliveSessions := map[string]bool{}
+	aliveByAgent := map[string][]runtimeDiagnosticoWorkerRow{}
+	for _, row := range rows {
+		if row.Alive {
+			aliveByAgent[strings.TrimSpace(row.Agent)] = append(aliveByAgent[strings.TrimSpace(row.Agent)], row)
+		}
+		if !strings.EqualFold(strings.TrimSpace(row.Transport), "tmux") {
+			continue
+		}
+		if !row.Alive {
+			continue
+		}
+		sessionName := strings.TrimSpace(row.TmuxSession)
+		if sessionName == "" {
+			continue
+		}
+		aliveSessions[sessionName] = true
+	}
+	for _, row := range rows {
+		if row.State == "stale" && row.ExitError == "heartbeat_lag" {
+			issues = append(issues, runtimeDiagnosticoIssue{
+				Severity: "warn",
+				Code:     "heartbeat_lag",
+				Message:  fmt.Sprintf("%s handle=%d heartbeat atrasado (%s)", valorVacio(row.Agent), row.HandleID, valorVacio(row.RuntimeRef)),
+			})
+		}
+		if row.Alive && row.LastProgressAt != nil && !row.LastProgressAt.IsZero() && time.Since(row.LastProgressAt.UTC()) > runtimeDiagnosticoWorkerProgressThreshold {
+			issues = append(issues, runtimeDiagnosticoIssue{
+				Severity: "warn",
+				Code:     "worker_progress_stale",
+				Message:  fmt.Sprintf("%s handle=%d sin progreso desde %s (%s)", valorVacio(row.Agent), row.HandleID, formatearRuntimeDiagTime(row.LastProgressAt), valorVacio(row.RuntimeRef)),
+			})
+		}
+		if !strings.EqualFold(strings.TrimSpace(row.Transport), "tmux") {
+			continue
+		}
+		sessionName := strings.TrimSpace(row.TmuxSession)
+		if sessionName == "" {
+			continue
+		}
+		exists := runtimeDiagnosticoTmuxHasSession(sessionName)
+		switch {
+		case row.Alive && !exists:
+			issues = append(issues, runtimeDiagnosticoIssue{
+				Severity: "fail",
+				Code:     "tmux_session_missing",
+				Message:  fmt.Sprintf("%s handle=%d sesión tmux ausente (%s)", valorVacio(row.Agent), row.HandleID, sessionName),
+			})
+		case !row.Alive && exists && !aliveSessions[sessionName]:
+			issues = append(issues, runtimeDiagnosticoIssue{
+				Severity: "warn",
+				Code:     "orphan_tmux_session",
+				Message:  fmt.Sprintf("%s handle=%d conserva sesión tmux huérfana (%s)", valorVacio(row.Agent), row.HandleID, sessionName),
+			})
+		}
+	}
+	issues = append(issues, runtimeDiagnosticoResumeIssues(now, aliveByAgent, orders, mailbox)...)
+	issues = append(issues, runtimeDiagnosticoRestartLoopIssues(now, checkpoints)...)
+	return issues
+}
+
+func runtimeDiagnosticoResumeIssues(now time.Time, aliveByAgent map[string][]runtimeDiagnosticoWorkerRow, orders []*db.RuntimeOrder, mailbox []*db.RuntimeMailboxMessage) []runtimeDiagnosticoIssue {
+	issues := make([]runtimeDiagnosticoIssue, 0)
+	seenMailbox := map[string]bool{}
+	for _, msg := range mailbox {
+		if msg == nil || strings.TrimSpace(msg.Estado) != "pendiente" {
+			continue
+		}
+		agente := strings.TrimSpace(msg.ToAgente)
+		if agente == "" || seenMailbox[agente] {
+			continue
+		}
+		if now.Sub(msg.CreatedAt.UTC()) < runtimeDiagnosticoResumePendingThreshold {
+			continue
+		}
+		rows := aliveByAgent[agente]
+		if !runtimeDiagnosticoHasSessionResumeWorker(rows) {
+			continue
+		}
+		if runtimeDiagnosticoWorkerProgressedSince(rows, msg.CreatedAt.UTC()) {
+			continue
+		}
+		seenMailbox[agente] = true
+		issues = append(issues, runtimeDiagnosticoIssue{
+			Severity: "warn",
+			Code:     "session_resume_blocked",
+			Message:  fmt.Sprintf("%s mantiene mailbox pendiente sin progreso tras session_resume desde %s", valorVacio(agente), msg.CreatedAt.Local().Format("2006-01-02 15:04:05")),
+		})
+	}
+
+	seenOrders := map[string]bool{}
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		if seenOrders[strings.TrimSpace(order.Agente)] {
+			continue
+		}
+		if !runtimeDiagnosticoIsResumeOrder(order) {
+			continue
+		}
+		if now.Sub(order.CreatedAt.UTC()) < runtimeDiagnosticoResumePendingThreshold {
+			continue
+		}
+		rows := aliveByAgent[strings.TrimSpace(order.Agente)]
+		if runtimeDiagnosticoWorkerProgressedSince(rows, order.CreatedAt.UTC()) {
+			continue
+		}
+		seenOrders[strings.TrimSpace(order.Agente)] = true
+		issues = append(issues, runtimeDiagnosticoIssue{
+			Severity: "warn",
+			Code:     "resume_order_pending",
+			Message:  fmt.Sprintf("%s conserva orden %s pendiente sin progreso desde %s", valorVacio(order.Agente), valorVacio(order.Tipo), order.CreatedAt.Local().Format("2006-01-02 15:04:05")),
+		})
+	}
+	return issues
+}
+
+func runtimeDiagnosticoRestartLoopIssues(now time.Time, checkpoints []*db.RuntimeCheckpoint) []runtimeDiagnosticoIssue {
+	issues := make([]runtimeDiagnosticoIssue, 0)
+	counts := map[string]int{}
+	for _, cp := range checkpoints {
+		if cp == nil {
+			continue
+		}
+		if now.Sub(cp.CreatedAt.UTC()) > runtimeDiagnosticoRestartLoopWindow {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(cp.CheckpointKind), "stop") {
+			continue
+		}
+		text := strings.ToLower(strings.TrimSpace(cp.Resumen + " " + cp.Source))
+		if !strings.Contains(text, "worker_atascado") {
+			continue
+		}
+		counts[strings.TrimSpace(cp.Agente)]++
+	}
+	for agente, count := range counts {
+		if count < runtimeDiagnosticoRestartLoopCount {
+			continue
+		}
+		issues = append(issues, runtimeDiagnosticoIssue{
+			Severity: "warn",
+			Code:     "restart_loop",
+			Message:  fmt.Sprintf("%s acumula %d reinicios por worker_atascado en la última ventana de %s", valorVacio(agente), count, runtimeDiagnosticoRestartLoopWindow),
+		})
+	}
+	return issues
+}
+
+func runtimeDiagnosticoHasSessionResumeWorker(rows []runtimeDiagnosticoWorkerRow) bool {
+	for _, row := range rows {
+		if !row.Alive {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(row.MailboxDeliveryMode), "session_resume") {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeDiagnosticoWorkerProgressedSince(rows []runtimeDiagnosticoWorkerRow, since time.Time) bool {
+	for _, row := range rows {
+		if !row.Alive {
+			continue
+		}
+		if row.LastProgressAt != nil && row.LastProgressAt.UTC().After(since) {
+			return true
+		}
+		if row.LastOutputAt != nil && row.LastOutputAt.UTC().After(since) {
+			return true
+		}
+		if row.UpdatedAt != nil && row.UpdatedAt.UTC().After(since) {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeDiagnosticoIsResumeOrder(order *db.RuntimeOrder) bool {
+	if order == nil {
+		return false
+	}
+	switch strings.TrimSpace(order.Estado) {
+	case "pendiente", "tomada", "ejecutando":
+	default:
+		return false
+	}
+	switch strings.TrimSpace(order.Tipo) {
+	case "resume", "start":
+		return true
+	default:
+		return false
+	}
+}
+
+func imprimirRuntimeDiagnosticoWorkers(rows []runtimeDiagnosticoWorkerRow) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	fmt.Printf("%-7s %-12s %-12s %-22s %-10s %-6s %-18s %-18s %-18s %-18s %s\n", "HANDLE", "AGENTE", "DRIVER", "RUNTIME", "STATE", "ALIVE", "HEARTBEAT", "PROGRESS", "SESSION", "DELIVERY", "ERROR")
+	for _, row := range rows {
+		driver := valorVacio(row.Driver)
+		if transport := strings.TrimSpace(row.Transport); transport != "" {
+			driver = driver + "/" + transport
+		}
+		runtimeRef := valorVacio(row.RuntimeRef)
+		if row.ChildPID > 0 {
+			runtimeRef = truncar(runtimeRef+" pid="+fmt.Sprintf("%d", row.ChildPID), 22)
+		}
+		fmt.Printf("%-7d %-12s %-12s %-22s %-10s %-6t %-18s %-18s %-18s %-18s %s\n",
+			row.HandleID,
+			truncar(row.Agent, 12),
+			truncar(driver, 12),
+			truncar(runtimeRef, 22),
+			truncar(valorVacio(row.State), 10),
+			row.Alive,
+			formatearRuntimeDiagTime(row.HeartbeatAt),
+			formatearRuntimeDiagTime(row.LastProgressAt),
+			truncar(valorVacio(row.SessionRef), 18),
+			truncar(valorVacio(row.MailboxDeliveryMode), 18),
+			truncar(valorVacio(row.ExitError), 36),
+		)
+	}
+	return nil
+}
+
+func imprimirRuntimeDiagnosticoIssues(issues []runtimeDiagnosticoIssue) error {
+	for _, issue := range issues {
+		if strings.TrimSpace(issue.Code) == "" {
+			continue
+		}
+		icon := "[!!]"
+		if strings.EqualFold(strings.TrimSpace(issue.Severity), "fail") {
+			icon = "[XX]"
+		}
+		fmt.Printf("%s %-22s %s\n", icon, truncar(issue.Code, 22), issue.Message)
+	}
+	return nil
+}
+
+func formatearRuntimeDiagTime(ts *time.Time) string {
+	if ts == nil || ts.IsZero() {
+		return "—"
+	}
+	return ts.Local().Format("2006-01-02 15:04:05")
 }
 
 func init() {

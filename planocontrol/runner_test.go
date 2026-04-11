@@ -40,6 +40,7 @@ type stubAutomationService struct {
 	transcriptPanic  bool
 	processedBlock   <-chan struct{}
 	processedCalls   int
+	mailboxCalls     int
 	audits           []string
 	reanimar         []*db.Agente
 	reanimarErr      error
@@ -84,6 +85,7 @@ func (s *stubAutomationService) ProcesarRuntimeTranscriptBatch() (int, error) {
 	return s.transcriptCount, s.transcriptErr
 }
 func (s *stubAutomationService) ProcesarRuntimeMailboxBatch() (int, error) {
+	s.mailboxCalls++
 	return s.mailboxCount, s.mailboxErr
 }
 func (s *stubAutomationService) ProcesarRuntimeOrdersBatch() (int, error) {
@@ -279,6 +281,136 @@ func TestRunnerStartRespetaStartupGrace(t *testing.T) {
 	r.Wait()
 }
 
+func TestRunnerStartResidentCoreNoLanzaTrabajoNoResidente(t *testing.T) {
+	service := &stubAutomationService{
+		processedCount: 1,
+		autonomyCount:  1,
+		staleCount:     1,
+	}
+	r := &Runner{
+		Automation:        service,
+		StartupGrace:      5 * time.Millisecond,
+		ReanimacionCada:   time.Hour,
+		SaludCada:         time.Hour,
+		PlanificacionCada: time.Hour,
+		RuntimeOrdersCada: 10 * time.Millisecond,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r.StartResidentCore(ctx)
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+	r.Wait()
+
+	audits := strings.Join(service.audits, "\n")
+	if !strings.Contains(audits, "runtime_orders_batch|runtime_order|Órdenes procesadas en batch: 1") {
+		t.Fatalf("faltaba el trabajo caliente del núcleo residente: %s", audits)
+	}
+	if strings.Contains(audits, "autonomia_agentes_batch|") || strings.Contains(audits, "runtime_handles_stale|") {
+		t.Fatalf("el núcleo residente no debería lanzar trabajo no residente: %s", audits)
+	}
+}
+
+func TestRunnerWakeBatchDespiertaRuntimeOrdersSinEsperarIntervaloNiGrace(t *testing.T) {
+	service := &stubAutomationService{processedCount: 1}
+	r := &Runner{
+		Automation:            service,
+		StartupGrace:          time.Hour,
+		ReanimacionCada:       time.Hour,
+		SaludCada:             time.Hour,
+		PlanificacionCada:     time.Hour,
+		RuntimeTranscriptCada: time.Hour,
+		RuntimeMailboxCada:    time.Hour,
+		RuntimeBudgetCada:     time.Hour,
+		RuntimeOrdersCada:     time.Hour,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r.StartResidentCore(ctx)
+	defer func() {
+		cancel()
+		r.Wait()
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+	if service.processedCalls != 0 {
+		t.Fatalf("runtime_orders no debería ejecutarse antes del wake explícito: calls=%d", service.processedCalls)
+	}
+	if !r.WakeRuntimeOrders() {
+		t.Fatalf("el wake explícito debería aceptarse")
+	}
+	deadline := time.Now().Add(300 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if service.processedCalls > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("runtime_orders no se despertó con wake explícito: calls=%d audits=%v", service.processedCalls, service.audits)
+}
+
+func TestRunnerWakeBatchDespiertaRuntimeMailboxSinEsperarIntervaloNiGrace(t *testing.T) {
+	service := &stubAutomationService{mailboxCount: 1}
+	r := &Runner{
+		Automation:            service,
+		StartupGrace:          time.Hour,
+		ReanimacionCada:       time.Hour,
+		SaludCada:             time.Hour,
+		PlanificacionCada:     time.Hour,
+		RuntimeTranscriptCada: time.Hour,
+		RuntimeMailboxCada:    time.Hour,
+		RuntimeBudgetCada:     time.Hour,
+		RuntimeOrdersCada:     time.Hour,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r.StartResidentCore(ctx)
+	defer func() {
+		cancel()
+		r.Wait()
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+	if service.mailboxCalls != 0 {
+		t.Fatalf("runtime_mailbox no debería ejecutarse antes del wake explícito: calls=%d", service.mailboxCalls)
+	}
+	if !r.WakeRuntimeMailbox() {
+		t.Fatalf("el wake explícito debería aceptarse")
+	}
+	deadline := time.Now().Add(300 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if service.mailboxCalls > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("runtime_mailbox no se despertó con wake explícito: calls=%d audits=%v", service.mailboxCalls, service.audits)
+}
+
+func TestRunnerStartNonResidentWorkerNoLanzaNucleoResidente(t *testing.T) {
+	service := &stubAutomationService{
+		processedCount: 1,
+		autonomyCount:  1,
+	}
+	r := &Runner{
+		Automation:            service,
+		StartupGrace:          5 * time.Millisecond,
+		ControlPlaneWarmCada:  10 * time.Millisecond,
+		ControlPlaneColdCada:  time.Hour,
+		NotificationRetryCada: time.Hour,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r.StartNonResidentWorker(ctx)
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+	r.Wait()
+
+	audits := strings.Join(service.audits, "\n")
+	if !strings.Contains(audits, "autonomia_agentes_batch|agente|Decisiones autónomas procesadas: 1") {
+		t.Fatalf("faltaba el worker no residente: %s", audits)
+	}
+	if strings.Contains(audits, "runtime_orders_batch|") {
+		t.Fatalf("el worker no residente no debería lanzar el núcleo caliente: %s", audits)
+	}
+}
+
 func TestRunnerRunControlPlaneRecuperaPanicDeBatchYSigue(t *testing.T) {
 	service := &stubAutomationService{
 		transcriptPanic: true,
@@ -322,7 +454,7 @@ func TestRunnerRunControlPlaneTimeoutDeBatchNoCongelaElResto(t *testing.T) {
 	}
 }
 
-func TestRunnerRunControlPlaneNoDuplicaBatchExpiradoEnSiguienteCiclo(t *testing.T) {
+func TestRunnerRunControlPlaneNoReiniciaBatchExpiradoMientrasSigueVivo(t *testing.T) {
 	block := make(chan struct{})
 	service := &stubAutomationService{
 		processedBlock: block,
@@ -334,17 +466,22 @@ func TestRunnerRunControlPlaneNoDuplicaBatchExpiradoEnSiguienteCiclo(t *testing.
 
 	r.runControlPlane()
 	r.runControlPlane()
-	close(block)
-
 	audits := strings.Join(service.audits, "\n")
 	if !strings.Contains(audits, "runtime_orders_batch_error|runtime_order|batch=runtime_orders timeout=10ms") {
 		t.Fatalf("faltaba timeout inicial del batch runtime_orders: %s", audits)
 	}
-	if !strings.Contains(audits, "runtime_orders_batch_error|runtime_order|batch=runtime_orders overdue timeout=10ms") {
-		t.Fatalf("faltaba auditoria de overdue del batch runtime_orders: %s", audits)
+	if strings.Contains(audits, "overdue timeout=10ms restarting") {
+		t.Fatalf("no deberia reiniciar en paralelo un batch ya timeout: %s", audits)
 	}
 	if service.processedCalls != 1 {
-		t.Fatalf("runtime_orders no deberia duplicarse mientras siga corriendo: calls=%d audits=%s", service.processedCalls, audits)
+		t.Fatalf("runtime_orders no deberia duplicarse mientras el batch viejo sigue vivo: calls=%d audits=%s", service.processedCalls, audits)
+	}
+
+	close(block)
+	time.Sleep(20 * time.Millisecond)
+	r.runControlPlane()
+	if service.processedCalls != 2 {
+		t.Fatalf("runtime_orders deberia reanudarse solo tras terminar el batch original: calls=%d audits=%s", service.processedCalls, strings.Join(service.audits, "\n"))
 	}
 }
 

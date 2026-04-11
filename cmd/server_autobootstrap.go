@@ -112,7 +112,7 @@ func agenteYaBootstrappeadoServidor(agente string, proyectoID int64) (bool, erro
 	} else if sesion != nil {
 		return true, nil
 	}
-	if handle, err := db.GetRuntimeHandleActivoAgenteProyecto(agente, &proyectoID); err != nil {
+	if handle, err := db.GetRuntimeHandleOperativoRecienteAgenteProyecto(agente, &proyectoID); err != nil {
 		return false, err
 	} else if handle != nil {
 		return true, nil

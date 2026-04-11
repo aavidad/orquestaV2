@@ -211,6 +211,23 @@ func ProyectoDisponibleParaAutonomia(proyectoID int64) (bool, error) {
 	}
 }
 
+func bloqueoProyectoRequiereIntervencionHumana(motivo string) bool {
+	motivo = strings.TrimSpace(motivo)
+	if motivo == "" {
+		return true
+	}
+	switch {
+	case strings.HasPrefix(motivo, "Agente "):
+		return false
+	case strings.HasPrefix(motivo, "Agente degradado:"):
+		return false
+	case strings.HasPrefix(motivo, "Sobrecarga operativa:"):
+		return false
+	default:
+		return true
+	}
+}
+
 func ResolverBloqueoProyecto(proyectoID int64) (bool, string, error) {
 	if proyectoID == 0 {
 		return false, "", nil
@@ -228,24 +245,35 @@ func ResolverBloqueoProyecto(proyectoID int64) (bool, string, error) {
 	if activas > 0 || bloqueadas == 0 {
 		return false, "", nil
 	}
-	var motivo sql.NullString
-	err := DB.QueryRow(`
+	rows, err := DB.Query(`
 		SELECT b.motivo
 		FROM bloqueos b
 		JOIN tareas t ON t.id = b.tarea_id
 		WHERE t.proyecto_id = ?
 		  AND t.estado = 'bloqueada'
 		  AND b.resuelto = 0
-		ORDER BY b.id DESC
-		LIMIT 1`, proyectoID,
-	).Scan(&motivo)
-	if err != nil && err != sql.ErrNoRows {
+		ORDER BY b.id DESC`, proyectoID)
+	if err != nil {
 		return false, "", err
 	}
-	if !motivo.Valid || strings.TrimSpace(motivo.String) == "" {
-		return true, "esperando_desbloqueo_humano", nil
+	defer rows.Close()
+	for rows.Next() {
+		var motivo sql.NullString
+		if err := rows.Scan(&motivo); err != nil {
+			return false, "", err
+		}
+		if !motivo.Valid || strings.TrimSpace(motivo.String) == "" {
+			return true, "esperando_desbloqueo_humano", nil
+		}
+		resuelto := strings.TrimSpace(motivo.String)
+		if bloqueoProyectoRequiereIntervencionHumana(resuelto) {
+			return true, resuelto, nil
+		}
 	}
-	return true, strings.TrimSpace(motivo.String), nil
+	if err := rows.Err(); err != nil {
+		return false, "", err
+	}
+	return false, "", nil
 }
 
 func proyectoOperacionDefault(proyectoID int64) *ProyectoOperacion {

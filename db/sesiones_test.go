@@ -195,6 +195,35 @@ func TestRetirarAgentePausaAsignacionesYLiberaTrabajo(t *testing.T) {
 		t.Fatalf("IniciarTarea viva: %v", err)
 	}
 
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente: "server",
+		ToAgente:   "CodexRetiro",
+		ProyectoID: &proyectoID,
+		Kind:       "autonomia",
+		PayloadJSON:`{"accion":"continuar_trabajo"}`,
+	})
+	if err != nil {
+		t.Fatalf("EnviarRuntimeMailbox: %v", err)
+	}
+	orderID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "CodexRetiro",
+		ProyectoID:  &proyectoID,
+		Tipo:        "nudge",
+		PayloadJSON: `{"accion":"continuar_trabajo"}`,
+	})
+	if err != nil {
+		t.Fatalf("EnqueueRuntimeOrder nudge: %v", err)
+	}
+	pauseID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "CodexRetiro",
+		ProyectoID:  &proyectoID,
+		Tipo:        "pause",
+		PayloadJSON: `{"accion":"pause","motivo":"retiro_agente"}`,
+	})
+	if err != nil {
+		t.Fatalf("EnqueueRuntimeOrder pause: %v", err)
+	}
+
 	if err := RetirarAgente("CodexRetiro"); err != nil {
 		t.Fatalf("RetirarAgente: %v", err)
 	}
@@ -242,6 +271,52 @@ func TestRetirarAgentePausaAsignacionesYLiberaTrabajo(t *testing.T) {
 	if activas != 0 {
 		t.Fatalf("esperaba 0 sesiones activas, got=%d", activas)
 	}
+
+	mailbox, err := GetRuntimeMailbox(mailboxID)
+	if err != nil {
+		t.Fatalf("GetRuntimeMailbox: %v", err)
+	}
+	if mailbox == nil || mailbox.Estado != "cancelado" {
+		t.Fatalf("mailbox no cancelada: %+v", mailbox)
+	}
+
+	order, err := GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("GetRuntimeOrder nudge: %v", err)
+	}
+	if order == nil || order.Estado != "cancelada" {
+		t.Fatalf("runtime order nudge no cancelada: %+v", order)
+	}
+
+	pauseOrder, err := GetRuntimeOrder(pauseID)
+	if err != nil {
+		t.Fatalf("GetRuntimeOrder pause: %v", err)
+	}
+	if pauseOrder == nil || pauseOrder.Estado != "pendiente" {
+		t.Fatalf("runtime order pause no deberia cancelarse: %+v", pauseOrder)
+	}
+}
+
+func TestRegistrarAgenteNoRehabilitaAgenteRetirado(t *testing.T) {
+	prepararDBTemporal(t)
+	if err := RegistrarAgente("CodexRetenido", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente inicial: %v", err)
+	}
+	if err := RetirarAgente("CodexRetenido"); err != nil {
+		t.Fatalf("RetirarAgente: %v", err)
+	}
+
+	if err := RegistrarAgente("CodexRetenido", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente repetido: %v", err)
+	}
+
+	agente, err := GetAgente("CodexRetenido")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.Habilitado {
+		t.Fatalf("RegistrarAgente no deberia rehabilitar un agente retirado: %+v", agente)
+	}
 }
 
 func TestListarAgentesAlineaEstadoVisibleConSesiones(t *testing.T) {
@@ -251,16 +326,18 @@ func TestListarAgentesAlineaEstadoVisibleConSesiones(t *testing.T) {
 			t.Fatalf("RegistrarAgente %s: %v", agente, err)
 		}
 	}
-	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='pensando' WHERE nombre='CodexVisible1'`); err != nil {
-		t.Fatalf("marcar estado visible1: %v", err)
-	}
 	if _, err := DB.Exec(`UPDATE agentes SET activo=1, estado_sesion='disponible' WHERE nombre='CodexVisible2'`); err != nil {
 		t.Fatalf("marcar CodexVisible2 activo: %v", err)
 	}
-	if _, err := DB.Exec(`INSERT INTO sesiones (agente, activa, estado, herramienta, host) VALUES (?,?,?,?,?)`,
-		"CodexVisible1", 1, "activa", "codex", "localhost",
-	); err != nil {
-		t.Fatalf("insert sesion activa visible: %v", err)
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "CodexVisible1",
+		CWD:         "/tmp/orquesta-codex-visible1",
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("IniciarSesionContexto visible1: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='pensando' WHERE nombre='CodexVisible1'`); err != nil {
+		t.Fatalf("marcar estado visible1: %v", err)
 	}
 
 	agentes, err := ListarAgentes()
@@ -307,14 +384,19 @@ func TestListarAgentesOcultaSesionZombiPeroMantieneHandleActivo(t *testing.T) {
 		t.Fatalf("marcar estado visible: %v", err)
 	}
 	old := time.Now().UTC().Add(-2 * time.Hour).Format("2006-01-02 15:04:05")
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "CodexFresh",
+		CWD:         "/tmp/orquesta-codex-fresh",
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("IniciarSesionContexto CodexFresh: %v", err)
+	}
 	if _, err := DB.Exec(`
 		INSERT INTO sesiones (agente, activa, estado, herramienta, host, heartbeat_at)
-		VALUES (?,?,?,?,?,CURRENT_TIMESTAMP),
-		       (?,?,?,?,?,?)`,
-		"CodexFresh", 1, "activa", "codex", "localhost",
+		VALUES (?,?,?,?,?,?)`,
 		"CodexZombie", 1, "activa", "codex", "localhost", old,
 	); err != nil {
-		t.Fatalf("insert sesiones visibles: %v", err)
+		t.Fatalf("insert sesion zombie: %v", err)
 	}
 	var handleSesionID int64
 	if err := DB.QueryRow(`
@@ -407,13 +489,15 @@ func TestListarAgentesOcultaAgenteEnEnfriamientoAunqueTengaSesionOperativa(t *te
 	if err := RegistrarAgente("CodexCooldown", "programador"); err != nil {
 		t.Fatalf("RegistrarAgente: %v", err)
 	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "CodexCooldown",
+		CWD:         "/tmp/orquesta-codex-cooldown",
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("IniciarSesionContexto: %v", err)
+	}
 	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='pensando', estado_cuota='enfriamiento', reanimar_at=CURRENT_TIMESTAMP WHERE nombre='CodexCooldown'`); err != nil {
 		t.Fatalf("marcar enfriamiento: %v", err)
-	}
-	if _, err := DB.Exec(`INSERT INTO sesiones (agente, activa, estado, herramienta, host, heartbeat_at) VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)`,
-		"CodexCooldown", 1, "activa", "codex", "localhost",
-	); err != nil {
-		t.Fatalf("insert sesion: %v", err)
 	}
 
 	agente, err := GetAgente("CodexCooldown")
@@ -434,13 +518,19 @@ func TestListarAgentesOcultaAgentePausadoAunqueMantengaHeartbeat(t *testing.T) {
 	if err := RegistrarAgente("CodexPausado", "programador"); err != nil {
 		t.Fatalf("RegistrarAgente: %v", err)
 	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "CodexPausado",
+		CWD:         "/tmp/orquesta-codex-pausado",
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto: %v", err)
+	}
 	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='pausada' WHERE nombre='CodexPausado'`); err != nil {
 		t.Fatalf("marcar estado sesion: %v", err)
 	}
-	if _, err := DB.Exec(`INSERT INTO sesiones (agente, activa, estado, herramienta, host, heartbeat_at) VALUES (?,?,?,?,?,CURRENT_TIMESTAMP)`,
-		"CodexPausado", 1, "pausada", "codex", "localhost",
-	); err != nil {
-		t.Fatalf("insert sesion: %v", err)
+	if _, err := DB.Exec(`UPDATE sesiones SET estado='pausada' WHERE id=?`, sesion.ID); err != nil {
+		t.Fatalf("marcar sesion pausada: %v", err)
 	}
 
 	agente, err := GetAgente("CodexPausado")
@@ -501,6 +591,43 @@ func TestSesionRecienteNoCuentaComoOperativaSiSuUltimoHandleYaFallo(t *testing.T
 	}
 	if agente.Activo || agente.EstadoSesion != "" {
 		t.Fatalf("CodexFallo no deberia seguir visible como activo: %+v", agente)
+	}
+}
+
+func TestSesionRecienteSinRuntimeNiHandleNoCuentaComoOperativa(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("CodexSinSoporte", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "CodexSinSoporte",
+		CWD:         "/tmp/orquesta-codex-sin-soporte",
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("IniciarSesionContexto: %v", err)
+	}
+	if _, err := DB.Exec(`DELETE FROM runtime_handles WHERE agente=?`, "CodexSinSoporte"); err != nil {
+		t.Fatalf("delete runtime_handles: %v", err)
+	}
+	if _, err := DB.Exec(`DELETE FROM runtime_instances WHERE agente=?`, "CodexSinSoporte"); err != nil {
+		t.Fatalf("delete runtime_instances: %v", err)
+	}
+	runtimeHandleHotReset()
+
+	live, err := GetSesionActivaOperativa("CodexSinSoporte", nil)
+	if err == nil || live != nil {
+		t.Fatalf("CodexSinSoporte no deberia tener sesion operativa sin runtime/handle: %+v err=%v", live, err)
+	}
+
+	sesiones, err := ListarSesionesActivas()
+	if err != nil {
+		t.Fatalf("ListarSesionesActivas: %v", err)
+	}
+	for _, sesion := range sesiones {
+		if sesion != nil && sesion.Agente == "CodexSinSoporte" {
+			t.Fatalf("CodexSinSoporte no deberia salir en sesiones operativas: %+v", sesion)
+		}
 	}
 }
 
@@ -608,5 +735,108 @@ func TestGetAgenteNoMuestraActivoSiLaSemanalObservadaStaleYaEstaAgotada(t *testi
 	}
 	if agente.PresupuestoVentana != "weekly" {
 		t.Fatalf("la ventana efectiva deberia seguir siendo weekly: %+v", agente)
+	}
+}
+
+func TestGetAgenteConservaPausaOperativaVisibleSinSesionActiva(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("CodexRuntimePanic", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	reanimarAt := time.Now().UTC().Add(10 * time.Minute)
+	if _, err := DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', reanimar_at=?, motivo_pausa='Auto-pausa por runtime_panic: transcript=10576' WHERE nombre='CodexRuntimePanic'`, reanimarAt); err != nil {
+		t.Fatalf("actualizar agente: %v", err)
+	}
+
+	agente, err := GetAgente("CodexRuntimePanic")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.EstadoCuota != "enfriamiento" {
+		t.Fatalf("estado_cuota operativo no deberia limpiarse: %+v", agente)
+	}
+	if agente.ReanimarAt == nil || agente.ReanimarAt.IsZero() {
+		t.Fatalf("reanimar_at operativo no deberia limpiarse: %+v", agente)
+	}
+	if !strings.Contains(agente.MotivoPausa, "runtime_panic") {
+		t.Fatalf("motivo_pausa operativo inesperado: %+v", agente)
+	}
+}
+
+func TestGetAgentePrefiereIdentidadCuentaDesdeHandleCanonico(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("CodexCuenta", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+	sesionLegacyID, err := IniciarSesion("CodexCuenta")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	pid := int64(9101)
+	runtimeLegacyID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "CodexCuenta",
+		SesionID:     &sesionLegacyID,
+		ProyectoID:   &proyectoID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("RegistrarRuntimeInstance legacy: %v", err)
+	}
+	legacyMeta := `{"driver":"process_pty_cli","account_email":"legacy@avidad.com","account_user":"Legacy"}`
+	if _, err := DB.Exec(`
+		INSERT INTO runtime_handles (
+			agente, sesion_id, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado,
+			capabilities_json, metadata_json, last_seen_at, updated_at, created_at
+		) VALUES (?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+		"CodexCuenta", nil, proyectoID, runtimeLegacyID, "cli", "process", "9101", "activo", "{}", legacyMeta,
+	); err != nil {
+		t.Fatalf("insert legacy handle: %v", err)
+	}
+
+	runtimeTMUXID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "CodexCuenta",
+		SesionID:     &sesionLegacyID,
+		ProyectoID:   &proyectoID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("RegistrarRuntimeInstance tmux: %v", err)
+	}
+	tmuxMeta := `{"driver":"tmux_cli_session","tmux_session":"orq-codexcuenta-1","account_email":"canonico@avidad.com","account_user":"Canonico"}`
+	if _, err := DB.Exec(`
+		INSERT INTO runtime_handles (
+			agente, sesion_id, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado,
+			capabilities_json, metadata_json, last_seen_at, updated_at, created_at
+		) VALUES (?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+		"CodexCuenta", nil, proyectoID, runtimeTMUXID, "tmux", "session", "orq-codexcuenta-1/%1", "activo", "{}", tmuxMeta,
+	); err != nil {
+		t.Fatalf("insert tmux handle: %v", err)
+	}
+
+	agente, err := GetAgente("CodexCuenta")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.CuentaEmail != "canonico@avidad.com" {
+		t.Fatalf("deberia preferir identidad desde handle canónico tmux, got=%+v", agente)
+	}
+	if agente.CuentaUsuario != "Canonico" {
+		t.Fatalf("usuario inesperado: %+v", agente)
 	}
 }

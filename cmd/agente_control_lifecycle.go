@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"orquesta/agentesapp"
 	"orquesta/db"
 	"orquesta/runtimesapp"
 )
@@ -124,7 +125,7 @@ func encolarControlAgentePorAPI(req apiAgenteControlRequest) (int64, string, boo
 }
 
 func encolarControlAgenteLocal(req apiAgenteControlRequest) (int64, string, error) {
-	return runtimesService.EnqueueAgentControl(runtimesapp.AgentControlRequest{
+	orderID, accion, err := runtimesService.EnqueueAgentControl(runtimesapp.AgentControlRequest{
 		Agente:       strings.TrimSpace(req.Agente),
 		Proyecto:     strings.TrimSpace(req.Proyecto),
 		Accion:       strings.TrimSpace(req.Accion),
@@ -135,17 +136,102 @@ func encolarControlAgenteLocal(req apiAgenteControlRequest) (int64, string, erro
 		Motivo:       strings.TrimSpace(req.Motivo),
 		Por:          strings.TrimSpace(req.Por),
 	})
+	if err != nil {
+		return 0, "", err
+	}
+	resetStatusSnapshotCache()
+	return orderID, accion, nil
+}
+
+// apiAgenteLanzarRequest agrupa los parámetros del endpoint POST /api/agente/lanzar.
+type apiAgenteLanzarRequest struct {
+	Agente       string `json:"agente"`
+	Proyecto     string `json:"proyecto"`
+	Conector     string `json:"conector"`
+	Modelo       string `json:"modelo"`
+	Razonamiento string `json:"razonamiento"`
+	Perfil       string `json:"perfil"`
+	Motivo       string `json:"motivo"`
+	Por          string `json:"por"`
+}
+
+type apiAgenteLanzarResponse struct {
+	OK       bool                     `json:"ok"`
+	OrderID  int64                    `json:"order_id"`
+	Agente   string                   `json:"agente"`
+	Proyecto agentesapp.ProjectBundle `json:"proyecto"`
+	Conector agentesapp.ConnectorBundle `json:"conector"`
+}
+
+// apiHandlerAgenteLanzar combina BuildPrepare + encolar orden "start" en un solo POST.
+// Es el punto de entrada unificado para arrancar un agente desde el control plane.
+func apiHandlerAgenteLanzar(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiAgenteLanzarRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	req.Agente = strings.TrimSpace(req.Agente)
+	req.Proyecto = strings.TrimSpace(req.Proyecto)
+	if req.Agente == "" || req.Proyecto == "" {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("agente y proyecto son obligatorios"))
+		return
+	}
+
+	// Validar y resolver el plan completo antes de encolar.
+	prep, err := agentesService.BuildPrepare(agentesapp.PrepareInput{
+		Agente:       req.Agente,
+		Proyecto:     req.Proyecto,
+		Conector:     strings.TrimSpace(req.Conector),
+		Modelo:       strings.TrimSpace(req.Modelo),
+		Razonamiento: strings.TrimSpace(req.Razonamiento),
+		Perfil:       strings.TrimSpace(req.Perfil),
+	})
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	por := strings.TrimSpace(req.Por)
+	if por == "" {
+		por = "orquesta"
+	}
+	orderID, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
+		Agente:       req.Agente,
+		Proyecto:     req.Proyecto,
+		Accion:       agenteControlAccionStart,
+		Conector:     prep.Conector.Slug,
+		Modelo:       strings.TrimSpace(req.Modelo),
+		Razonamiento: strings.TrimSpace(req.Razonamiento),
+		Perfil:       strings.TrimSpace(req.Perfil),
+		Motivo:       strings.TrimSpace(req.Motivo),
+		Por:          por,
+	})
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	apiWriteJSON(w, http.StatusCreated, apiAgenteLanzarResponse{
+		OK:       true,
+		OrderID:  orderID,
+		Agente:   prep.Agente,
+		Proyecto: prep.Proyecto,
+		Conector: prep.Conector,
+	})
 }
 
 func resolverHandleControlAgente(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
-	if proyectoID != nil {
-		handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(agente, proyectoID)
-		if err != nil {
-			return nil, err
-		}
-		if handle != nil {
-			return handle, nil
-		}
-	}
-	return runtimesService.GetActiveRuntimeHandleAgent(agente)
+	return runtimesService.ResolveControlHandle(agente, proyectoID)
+}
+
+func resolverHandleEntregaAgente(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
+	return runtimesService.ResolveDeliveryHandle(agente, proyectoID)
+}
+
+func resolverHandleEntregaTranscript(item *db.RuntimeTranscriptEntry) (*db.RuntimeHandle, error) {
+	return runtimesService.ResolveTranscriptDeliveryHandle(item)
 }

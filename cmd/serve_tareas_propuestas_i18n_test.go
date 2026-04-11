@@ -44,6 +44,17 @@ func TestWebTareasYPropuestasRespetanIdiomaDelRequest(t *testing.T) {
 	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
 		t.Fatalf("tomar tarea: %v", err)
 	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.RegistrarAvanceTarea(&db.AvanceTarea{
+		TareaID:        tareaID,
+		Proyecto:       "orquestador",
+		ProgresoPct:    72,
+		ActualizadoPor: "Codex1",
+	}); err != nil {
+		t.Fatalf("registrar avance tarea: %v", err)
+	}
 
 	propuestaID, err := db.CrearPropuesta(&db.Propuesta{
 		Codigo:       "OP-401",
@@ -92,11 +103,12 @@ func TestWebTareasYPropuestasRespetanIdiomaDelRequest(t *testing.T) {
 		"Manage",
 		"high",
 		"Cerrar i18n web",
+		"72%",
 	)
 	assertPage(
 		"/tareas/"+itoa(tareaID)+"?lang=en",
 		"back to tasks",
-		"Start work",
+		"Complete task",
 		"Reassign to another agent",
 		"Add note",
 	)

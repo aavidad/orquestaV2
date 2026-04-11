@@ -87,6 +87,30 @@ func postMigrationStatements() []string {
 
 func postMigrationDDLStatements() []string {
 	return []string{
+		`CREATE TABLE IF NOT EXISTS especificaciones_funcion (
+			id                           INTEGER PRIMARY KEY AUTOINCREMENT,
+			tarea_id                     INTEGER REFERENCES tareas(id) ON DELETE SET NULL,
+			proyecto_id                  INTEGER REFERENCES proyectos(id) ON DELETE SET NULL,
+			titulo                       TEXT    NOT NULL,
+			archivo_objetivo             TEXT    NOT NULL,
+			simbolo_objetivo             TEXT    NOT NULL,
+			descripcion                  TEXT    NOT NULL DEFAULT '',
+			precondiciones_json          TEXT    NOT NULL DEFAULT '[]',
+			postcondiciones_json         TEXT    NOT NULL DEFAULT '[]',
+			dependencias_permitidas_json TEXT    NOT NULL DEFAULT '[]',
+			dependencias_prohibidas_json TEXT    NOT NULL DEFAULT '[]',
+			tests_obligatorios_json      TEXT    NOT NULL DEFAULT '[]',
+			write_set_json               TEXT    NOT NULL DEFAULT '[]',
+			formato_salida               TEXT    NOT NULL DEFAULT 'patch+evidencia',
+			estado                       TEXT    NOT NULL DEFAULT 'activa'
+			                                     CHECK (estado IN ('borrador','activa','reemplazada','archivada')),
+			version                      INTEGER NOT NULL DEFAULT 1,
+			creado_por                   TEXT    NOT NULL DEFAULT 'alberto',
+			created_at                   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at                   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_especificaciones_funcion_tarea ON especificaciones_funcion(tarea_id, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_especificaciones_funcion_proyecto_estado ON especificaciones_funcion(proyecto_id, estado, id DESC)`,
 		`CREATE TABLE IF NOT EXISTS governance_overrides (
 			id          INTEGER PRIMARY KEY AUTOINCREMENT,
 			tipo_agente TEXT    NOT NULL CHECK (tipo_agente IN ('programador','documentador','admin')),
@@ -100,6 +124,19 @@ func postMigrationDDLStatements() []string {
 			UNIQUE(scope_tipo, scope_ref, entidad, entidad_id)
 		)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_tareas_proyecto_blueprint_key ON tareas(proyecto_id, blueprint_key) WHERE blueprint_key != ''`,
+		`CREATE INDEX IF NOT EXISTS idx_sesiones_activa_id ON sesiones(activa, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_sesiones_agente_activa_id ON sesiones(agente, activa, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_sesiones_agente_id ON sesiones(agente, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_asignaciones_agente_estado_proyecto_id ON asignaciones(agente, estado, proyecto_id, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_asignaciones_proyecto_estado_agente_id ON asignaciones(proyecto_id, estado, agente, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_presupuestos_sesion_sesion_checked_id ON presupuestos_sesion(sesion_id, checked_at DESC, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_presupuestos_sesion_sesion_fuente_checked_id ON presupuestos_sesion(sesion_id, budget_source, checked_at DESC, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_propuestas_estado_proyecto_id ON propuestas(estado, proyecto_id, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_votos_agente_posicion_propuesta ON votos(agente, posicion, propuesta_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_runtime_mailbox_estado_id ON runtime_mailbox(estado, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_runtime_handles_estado_last_seen ON runtime_handles(estado, last_seen_at, id) WHERE estado IN ('activo','pausado')`,
+		`CREATE INDEX IF NOT EXISTS idx_runtime_handles_estado_id ON runtime_handles(estado, id)`,
+		`CREATE INDEX IF NOT EXISTS idx_runtime_mailbox_destino_estado_id ON runtime_mailbox(to_agente, estado, id DESC)`,
 	}
 }
 

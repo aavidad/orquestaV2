@@ -27,6 +27,9 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 - `orquesta_v1_roadmap.md`
   Orden de implementacion por bloques.
 
+- `diseno_microprogramacion_dirigida_agentes.md`
+  Decision de producto y arquitectura para pasar a microprogramacion dirigida con agentes.
+
 - `operacion_agentes_manuales.md`
   Operativa de sesiones manuales, worktrees y Terminator.
   Incluye el wrapper `scripts/inicio_agente.sh` como vía manual de compatibilidad y recuperación mientras el servicio termina de absorber el arranque completo.

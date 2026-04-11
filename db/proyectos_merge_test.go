@@ -104,6 +104,11 @@ func TestFusionarProyectosReasignaReferenciasYArchivaOrigen(t *testing.T) {
 	if err := UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
 		t.Fatalf("upsert handle: %v", err)
 	}
+	if hot, err := GetRuntimeHandleCanonicoRecienteAgenteProyecto("Codex2", &origenID); err != nil {
+		t.Fatalf("precargar cache hot origen: %v", err)
+	} else if hot == nil || hot.ProyectoID == nil || *hot.ProyectoID != origenID {
+		t.Fatalf("cache hot origen inesperada: %+v", hot)
+	}
 
 	resultado, err := FusionarProyectos("orquesta", "orquestador", FusionProyectosOptions{ArchivarOrigen: true})
 	if err != nil {
@@ -146,6 +151,16 @@ func TestFusionarProyectosReasignaReferenciasYArchivaOrigen(t *testing.T) {
 	}
 	if handle == nil || handle.ProyectoID == nil || *handle.ProyectoID != destinoID {
 		t.Fatalf("handle no movido al destino: %+v", handle)
+	}
+	if hotOrigen, err := GetRuntimeHandleCanonicoRecienteAgenteProyecto("Codex2", &origenID); err != nil {
+		t.Fatalf("hot cache origen tras fusion: %v", err)
+	} else if hotOrigen != nil {
+		t.Fatalf("la cache hot no deberia seguir devolviendo handle del proyecto origen: %+v", hotOrigen)
+	}
+	if hotDestino, err := GetRuntimeHandleCanonicoRecienteAgenteProyecto("Codex2", &destinoID); err != nil {
+		t.Fatalf("hot cache destino tras fusion: %v", err)
+	} else if hotDestino == nil || hotDestino.ProyectoID == nil || *hotDestino.ProyectoID != destinoID {
+		t.Fatalf("la cache hot deberia apuntar al proyecto destino: %+v", hotDestino)
 	}
 
 	asignaciones, err := ListarAsignaciones(FiltroAsignaciones{Agente: ptrStringProyectoMerge("Codex2")})

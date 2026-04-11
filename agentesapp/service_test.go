@@ -3,12 +3,16 @@ package agentesapp
 import (
 	"database/sql"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"orquesta/db"
 )
+
+func timePtr(v time.Time) *time.Time { return &v }
 
 type fakeStore struct {
 	agents            []*db.Agente
@@ -18,6 +22,8 @@ type fakeStore struct {
 	sessions          []*db.Sesion
 	runtimes          []*db.RuntimeInstance
 	handles           []*db.RuntimeHandle
+	canonicalHandles  []*db.RuntimeHandle
+	hotHandles        map[string]*db.RuntimeHandle
 	transcript        []*db.RuntimeTranscriptEntry
 	orders            []*db.RuntimeOrder
 	mailbox           []*db.RuntimeMailboxMessage
@@ -30,6 +36,7 @@ type fakeStore struct {
 	workflows         []*db.Workflow
 	memory            []*db.EntidadMemoria
 	config            map[string]string
+	lastConnectorRef  string
 	lastMailboxFilter []db.FiltroRuntimeMailbox
 	lastTranscript    db.FiltroRuntimeTranscript
 	pausedAgent       string
@@ -43,7 +50,7 @@ type fakeStore struct {
 		source string
 		when   *time.Time
 	}
-	enqueuedOrders    []*db.RuntimeOrder
+	enqueuedOrders []*db.RuntimeOrder
 }
 
 func (f *fakeStore) RegisterAgent(nombre, rol string) error { return nil }
@@ -81,7 +88,10 @@ func (f *fakeStore) GetAgent(nombre string) (*db.Agente, error) {
 
 func (f *fakeStore) GetProject(ref string) (*db.Proyecto, error) { return f.project, nil }
 
-func (f *fakeStore) GetConnector(ref string) (*db.Conector, error) { return f.connector, nil }
+func (f *fakeStore) GetConnector(ref string) (*db.Conector, error) {
+	f.lastConnectorRef = ref
+	return f.connector, nil
+}
 
 func (f *fakeStore) ListAgents() ([]*db.Agente, error) { return f.agents, nil }
 
@@ -155,6 +165,38 @@ func (f *fakeStore) ListRuntimeHandles(agent *string) ([]*db.RuntimeHandle, erro
 	return out, nil
 }
 
+func (f *fakeStore) ListCanonicalRuntimeHandles(agent *string) ([]*db.RuntimeHandle, error) {
+	source := f.canonicalHandles
+	if source == nil {
+		source = f.handles
+	}
+	if agent == nil {
+		return source, nil
+	}
+	var out []*db.RuntimeHandle
+	for _, item := range source {
+		if item != nil && item.Agente == *agent {
+			out = append(out, item)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeStore) ListRecentOperationalRuntimeHandles() (map[string]*db.RuntimeHandle, error) {
+	if f.hotHandles == nil {
+		return nil, nil
+	}
+	out := make(map[string]*db.RuntimeHandle, len(f.hotHandles))
+	for key, handle := range f.hotHandles {
+		if handle == nil {
+			continue
+		}
+		cp := *handle
+		out[key] = &cp
+	}
+	return out, nil
+}
+
 func (f *fakeStore) ListRuntimeTranscript(filter db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error) {
 	f.lastTranscript = filter
 	if filter.Agente == nil {
@@ -167,6 +209,23 @@ func (f *fakeStore) ListRuntimeTranscript(filter db.FiltroRuntimeTranscript) ([]
 		}
 	}
 	return out, nil
+}
+
+func TestBuildAgentEntityIncluyeCuentaID(t *testing.T) {
+	entity := buildAgentEntity(Row{
+		Agente: &db.Agente{
+			Nombre:        "Codex7",
+			CuentaID:      "acc-codex-7",
+			CuentaEmail:   "shared@example.com",
+			CuentaUsuario: "Codex7",
+		},
+	}, nil)
+	if entity == nil {
+		t.Fatal("entity nil")
+	}
+	if entity.AccountID != "acc-codex-7" || entity.AccountEmail != "shared@example.com" || entity.AccountUser != "Codex7" {
+		t.Fatalf("cuenta inesperada: %+v", entity)
+	}
 }
 
 func (f *fakeStore) ListRuntimeOrders(filter db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error) {
@@ -286,7 +345,7 @@ func TestApplyStateActionRetirarEncolaPauseSiHayHandleActivo(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
+	svc := NewService(store, nil)
 	if err := svc.ApplyStateAction("Codex1", "retirar"); err != nil {
 		t.Fatalf("ApplyStateAction retirar: %v", err)
 	}
@@ -319,7 +378,7 @@ func TestApplyStateActionRetirarNoDuplicaPauseSiYaExisteOrdenAbierta(t *testing.
 		},
 	}
 
-	svc := NewService(store)
+	svc := NewService(store, nil)
 	if err := svc.ApplyStateAction("Codex1", "retirar"); err != nil {
 		t.Fatalf("ApplyStateAction retirar: %v", err)
 	}
@@ -332,6 +391,31 @@ func TestApplyStateActionRetirarNoDuplicaPauseSiYaExisteOrdenAbierta(t *testing.
 	}
 }
 
+func TestApplyStateActionRetirarPrefiereHandlesCanonicosCalientes(t *testing.T) {
+	proyectoID := int64(42)
+	store := &fakeStore{
+		handles: []*db.RuntimeHandle{
+			{Agente: "Codex1", ProyectoID: &proyectoID, Estado: "cerrado"},
+		},
+		canonicalHandles: []*db.RuntimeHandle{
+			{Agente: "Codex1", ProyectoID: &proyectoID, Estado: "activo"},
+		},
+	}
+
+	svc := NewService(store, nil)
+	if err := svc.ApplyStateAction("Codex1", "retirar"); err != nil {
+		t.Fatalf("ApplyStateAction retirar: %v", err)
+	}
+
+	if len(store.enqueuedOrders) != 1 {
+		t.Fatalf("esperaba una orden de pause desde handles canonicos, got=%d", len(store.enqueuedOrders))
+	}
+	order := store.enqueuedOrders[0]
+	if order.Tipo != "pause" || order.Agente != "Codex1" {
+		t.Fatalf("orden encolada inesperada: %+v", order)
+	}
+}
+
 func TestBuildPanelRowsAggregatesOperationalState(t *testing.T) {
 	now := time.Now().UTC()
 	older := now.Add(-2 * time.Hour)
@@ -339,7 +423,7 @@ func TestBuildPanelRowsAggregatesOperationalState(t *testing.T) {
 	lastSeen := now.Add(-10 * time.Minute)
 	store := &fakeStore{
 		agents: []*db.Agente{
-			{Nombre: "Zulu", Rol: "programador"},
+			{Nombre: "Zulu", Rol: "programador", Habilitado: true},
 			{Nombre: "alpha", Rol: "programador", Activo: true, Habilitado: true},
 		},
 		assignments: []*db.Asignacion{
@@ -371,10 +455,11 @@ func TestBuildPanelRowsAggregatesOperationalState(t *testing.T) {
 		tasks: []*db.Tarea{
 			{ID: 70, Agente: ptr("alpha"), Estado: db.EstadoEnProgreso},
 			{ID: 71, Agente: ptr("alpha"), Estado: db.EstadoCompletada},
+			{ID: 72, Agente: ptr("Zulu"), Estado: db.EstadoBloqueada},
 		},
 	}
 
-	rows, err := NewService(store).BuildPanelRows()
+	rows, err := NewService(store, nil).BuildPanelRows()
 	if err != nil {
 		t.Fatalf("BuildPanelRows: %v", err)
 	}
@@ -409,23 +494,1446 @@ func TestBuildPanelRowsAggregatesOperationalState(t *testing.T) {
 	if got.OpenTasks != 1 {
 		t.Fatalf("open tasks=%d, want 1", got.OpenTasks)
 	}
+	if got.EstadoOperativo != "mailbox_atascada" {
+		t.Fatalf("estado operativo=%q", got.EstadoOperativo)
+	}
+	if got.DetalleOperativo == "" {
+		t.Fatalf("detalle operativo vacio")
+	}
+	if rows[1].BlockedTasks != 1 {
+		t.Fatalf("blocked tasks=%d, want 1", rows[1].BlockedTasks)
+	}
+	if rows[1].EstadoOperativo != "bloqueado" {
+		t.Fatalf("estado operativo zulu=%q", rows[1].EstadoOperativo)
+	}
+}
+
+func TestBuildPanelRowsMarcaRetiradoAunqueTengaRuntimeStale(t *testing.T) {
+	now := time.Now().UTC()
+	lastSeen := now.Add(-30 * time.Second)
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex4", Rol: "programador", Activo: true, Habilitado: false, EstadoSesion: "pensando"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex4", LogicalState: "running", CreatedAt: now.Add(-10 * time.Minute), UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex4", Estado: "activo", LastSeenAt: &lastSeen, CreatedAt: now.Add(-10 * time.Minute), UpdatedAt: now},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "retirado" {
+		t.Fatalf("estado operativo=%q, want retirado", rows[0].EstadoOperativo)
+	}
+}
+
+func TestBuildPanelRowsMarcaMailboxAtascadaConFallosAunqueHayaActividadReciente(t *testing.T) {
+	now := time.Now().UTC()
+	lastSeen := now.Add(-1 * time.Minute)
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex4", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex4", Estado: db.AsignacionActiva, ProyectoSlug: "orquestador"},
+		},
+		sessions: []*db.Sesion{
+			{ID: 10, Agente: "Codex4", Activa: true, Herramienta: "codex-cli"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex4", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex4", Estado: "activo", LastSeenAt: &lastSeen, UpdatedAt: now},
+		},
+		orders: []*db.RuntimeOrder{
+			{ID: 40, Agente: "Codex4", Estado: "fallida"},
+			{ID: 41, Agente: "Codex4", Estado: "fallida", ErrorText: "broken pipe"},
+		},
+		mailbox: []*db.RuntimeMailboxMessage{
+			{ID: 50, FromAgente: "server", ToAgente: "Codex4", Estado: "pendiente"},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("Codex4"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "mailbox_atascada" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+	if rows[0].DetalleOperativo != "mailbox pendiente con fallos de control" {
+		t.Fatalf("detalle operativo=%q", rows[0].DetalleOperativo)
+	}
+}
+
+func TestBuildPanelRowsNoMarcaMailboxAtascadaSiWorkerFreshYaEstaCorriendo(t *testing.T) {
+	now := time.Now().UTC()
+	lastSeen := now.Add(-1 * time.Minute)
+	tmp := t.TempDir()
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "running",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex8", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex8", Estado: db.AsignacionActiva, ProyectoSlug: "orquestador"},
+		},
+		sessions: []*db.Sesion{
+			{ID: 10, Agente: "Codex8", Activa: true, Herramienta: "codex-cli"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex8", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex8", Estado: "activo", LastSeenAt: &lastSeen, UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		orders: []*db.RuntimeOrder{
+			{ID: 40, Agente: "Codex8", Estado: "fallida"},
+			{ID: 41, Agente: "Codex8", Estado: "fallida", ErrorText: "broken pipe"},
+		},
+		mailbox: []*db.RuntimeMailboxMessage{
+			{ID: 50, FromAgente: "server", ToAgente: "Codex8", Estado: "pendiente"},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("Codex8"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo == "mailbox_atascada" {
+		t.Fatalf("estado operativo no deberia quedar atascado con worker fresco: %+v", rows[0])
+	}
+}
+
+func TestBuildPanelRowsMarcaAtascadoSiMailboxPendienteYWorkerStaleSinTareasActivas(t *testing.T) {
+	now := time.Now().UTC()
+	lastSeen := now.Add(-1 * time.Minute)
+	stale := now.Add(-14 * time.Hour)
+	tmp := t.TempDir()
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":            "running",
+		"updated_at":       now.Format(time.RFC3339Nano),
+		"alive":            true,
+		"last_output_at":   stale.Format(time.RFC3339Nano),
+		"last_progress_at": stale.Format(time.RFC3339Nano),
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":            true,
+		"heartbeat_at":     now.Format(time.RFC3339Nano),
+		"last_output_at":   stale.Format(time.RFC3339Nano),
+		"last_progress_at": stale.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+		"driver":                "tmux_cli_session",
+	})
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex2", Estado: db.AsignacionActiva, ProyectoSlug: "orquestador"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex2", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex2", Estado: "activo", LastSeenAt: &lastSeen, UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		mailbox: []*db.RuntimeMailboxMessage{
+			{ID: 50, FromAgente: "server", ToAgente: "Codex2", Estado: "pendiente"},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("Codex2"), Estado: db.EstadoBloqueada},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "atascado" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+}
+
+func TestBuildPanelRowsNoCuentaMailboxHuerfanaComoAtascado(t *testing.T) {
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "CodexZombie", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		mailbox: []*db.RuntimeMailboxMessage{
+			{ID: 50, FromAgente: "server", ToAgente: "CodexZombie", Estado: "pendiente"},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "bloqueado" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+	if rows[0].DetalleOperativo != "mailbox pendiente sin runtime activo" {
+		t.Fatalf("detalle operativo=%q", rows[0].DetalleOperativo)
+	}
+}
+
+func TestBuildPanelRowsMarcaMailboxHuerfanaConTareaActivaComoBloqueadoPorRuntime(t *testing.T) {
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "CodexZombie", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		mailbox: []*db.RuntimeMailboxMessage{
+			{ID: 50, FromAgente: "server", ToAgente: "CodexZombie", Estado: "pendiente"},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("CodexZombie"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "bloqueado_por_runtime" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+	if rows[0].DetalleOperativo != "mailbox pendiente sin runtime activo" {
+		t.Fatalf("detalle operativo=%q", rows[0].DetalleOperativo)
+	}
+}
+
+func TestBuildPanelRowsUsaWorkerStatusEHeartbeatEstructurados(t *testing.T) {
+	now := time.Now().UTC()
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"version":      1,
+		"agent":        "Codex7",
+		"driver":       "tmux_cli_session",
+		"transport":    "tmux",
+		"tmux_session": "orq-codex7-090000",
+		"tmux_pane_id": "%3",
+		"started_at":   now.Format(time.RFC3339Nano),
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "running",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex7", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex7", LogicalState: "degradado", UpdatedAt: now.Add(-20 * time.Minute)},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex7", Estado: "fallido", UpdatedAt: now.Add(-20 * time.Minute), MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("Codex7"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].WorkerState != "running" || !rows[0].WorkerAlive {
+		t.Fatalf("worker snapshot inesperado: %+v", rows[0])
+	}
+	if rows[0].WorkerDriver != "tmux_cli_session" || rows[0].WorkerTransport != "tmux" {
+		t.Fatalf("driver/transport worker inesperado: %+v", rows[0])
+	}
+	if rows[0].WorkerSessionRef != "orq-codex7-090000/%3" {
+		t.Fatalf("worker session ref inesperado: %+v", rows[0])
+	}
+	if rows[0].EstadoOperativo != "bloqueado_por_runtime" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+}
+
+func TestBuildPanelRowsMarcaLegacyCLIComoBloqueadoHastaMigrarATMUX(t *testing.T) {
+	now := time.Now().UTC()
+	tmp := t.TempDir()
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "running",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "process_pty_cli",
+		"rendered_command":      "/tmp/codex-perfiles/bin/codex-perfil Codex7 --model gpt-5.4",
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex7", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		sessions: []*db.Sesion{
+			{Agente: "Codex7", Herramienta: "codex-cli", Estado: "activa", Inicio: now},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex7", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex7", Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("Codex7"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "bloqueado_por_runtime" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+	if !strings.Contains(rows[0].DetalleOperativo, "legacy") {
+		t.Fatalf("detalle operativo inesperado: %q", rows[0].DetalleOperativo)
+	}
+}
+
+func TestBuildPanelRowsNoMarcaLegacySiWorkerEstructuradoNoDeclaraDriver(t *testing.T) {
+	now := time.Now().UTC()
+	tmp := t.TempDir()
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "running",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex7", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		sessions: []*db.Sesion{
+			{Agente: "Codex7", Herramienta: "codex-cli", Estado: "activa", Inicio: now},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex7", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex7", Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("Codex7"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo == "bloqueado_por_runtime" && strings.Contains(rows[0].DetalleOperativo, "legacy") {
+		t.Fatalf("un worker estructurado sin driver explicito no deberia caer a legacy por defecto: %+v", rows[0])
+	}
+}
+
+func TestBuildPanelRowsPrefiereSnapshotCalienteOperativo(t *testing.T) {
+	now := time.Now().UTC()
+	store := &fakeStore{
+		agents: []*db.Agente{{Nombre: "Codex7", Rol: "programador"}},
+		runtimes: []*db.RuntimeInstance{{
+			ID:           7,
+			Agente:       "Codex7",
+			Connector:    "codex-cli",
+			LogicalState: "running",
+			UpdatedAt:    now,
+			CreatedAt:    now.Add(-5 * time.Minute),
+			LastEventAt:  &now,
+		}},
+		handles: []*db.RuntimeHandle{{
+			ID:           71,
+			Agente:       "Codex7",
+			Estado:       "activo",
+			HandleKind:   "process",
+			Transporte:   "cli",
+			MetadataJSON: `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex7 --model gpt-5.4"}`,
+			UpdatedAt:    now,
+			CreatedAt:    now.Add(-5 * time.Minute),
+			LastSeenAt:   timePtr(now),
+		}},
+		hotHandles: map[string]*db.RuntimeHandle{
+			"codex7#1": {
+				ID:           72,
+				Agente:       "Codex7",
+				Estado:       "activo",
+				HandleKind:   "process",
+				Transporte:   "tmux",
+				MetadataJSON: `{"driver":"tmux_cli_session","tmux_session":"orq-codex7-1"}`,
+				UpdatedAt:    now.Add(10 * time.Second),
+				CreatedAt:    now,
+				LastSeenAt:   timePtr(now.Add(10 * time.Second)),
+			},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d", len(rows))
+	}
+	if rows[0].Handle == nil || rows[0].Handle.ID != 72 {
+		t.Fatalf("deberia preferir el handle del snapshot caliente, got=%+v", rows[0].Handle)
+	}
+}
+
+func TestBuildPanelRowsUsaCanonicosCalientesAntesDelBarridoCompleto(t *testing.T) {
+	now := time.Now().UTC()
+	store := &fakeStore{
+		agents: []*db.Agente{{Nombre: "CodexCanon", Rol: "programador"}},
+		handles: []*db.RuntimeHandle{{
+			ID:         81,
+			Agente:     "CodexCanon",
+			Estado:     "activo",
+			HandleKind: "process",
+			Transporte: "cli",
+			UpdatedAt:  now.Add(-2 * time.Hour),
+			CreatedAt:  now.Add(-3 * time.Hour),
+			LastSeenAt: timePtr(now.Add(-2 * time.Hour)),
+		}},
+		canonicalHandles: []*db.RuntimeHandle{{
+			ID:           82,
+			Agente:       "CodexCanon",
+			Estado:       "activo",
+			HandleKind:   "session",
+			Transporte:   "tmux",
+			MetadataJSON: `{"driver":"tmux_cli_session","tmux_session":"orq-codexcanon-1"}`,
+			UpdatedAt:    now,
+			CreatedAt:    now.Add(-5 * time.Minute),
+			LastSeenAt:   timePtr(now),
+		}},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d", len(rows))
+	}
+	if rows[0].Handle == nil || rows[0].Handle.ID != 82 {
+		t.Fatalf("deberia usar el handle canónico caliente antes del barrido completo, got=%+v", rows[0].Handle)
+	}
+}
+
+func TestBuildPanelRowsMarcaSaturadoSiTieneActivasYBloqueadasConActividad(t *testing.T) {
+	now := time.Now().UTC()
+	tmp := t.TempDir()
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "running",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex8", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex8", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex8", Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("Codex8"), Estado: db.EstadoEnProgreso},
+			{ID: 71, Agente: ptr("Codex8"), Estado: db.EstadoBloqueada},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "saturado" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+	if !strings.Contains(rows[0].DetalleOperativo, "activas") || !strings.Contains(rows[0].DetalleOperativo, "bloqueadas") {
+		t.Fatalf("detalle operativo=%q", rows[0].DetalleOperativo)
+	}
+}
+
+func TestBuildPanelRowsMarcaAtascadoSiWorkerFreshSinSalidaMasAllaDelUmbral(t *testing.T) {
+	now := time.Now().UTC()
+	lastOutput := now.Add(-25 * time.Minute)
+	tmp := t.TempDir()
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":          "running",
+		"updated_at":     now.Format(time.RFC3339Nano),
+		"alive":          true,
+		"last_output_at": lastOutput.Format(time.RFC3339Nano),
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":          true,
+		"heartbeat_at":   now.Format(time.RFC3339Nano),
+		"last_output_at": lastOutput.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex11", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex11", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex11", Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("Codex11"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "atascado" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+	if !strings.Contains(rows[0].DetalleOperativo, "sin salida") {
+		t.Fatalf("detalle operativo=%q", rows[0].DetalleOperativo)
+	}
+}
+
+func TestBuildPanelRowsMarcaAtascadoSiWorkerReadyLlevaDemasiadoTiempoSinProgreso(t *testing.T) {
+	now := time.Now().UTC()
+	readyAt := now.Add(-25 * time.Minute)
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":       "tmux_cli_session",
+		"transport":    "tmux",
+		"tmux_session": "orq-codex14-120000",
+		"tmux_pane_id": "%3",
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "ready",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+		"ready_at":   readyAt.Format(time.RFC3339Nano),
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+		"ready_at":     readyAt.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"driver":                "tmux_cli_session",
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex14", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		sessions: []*db.Sesion{
+			{Agente: "Codex14", Herramienta: "codex-cli", Estado: "activa", Inicio: now},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex14", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex14", Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("Codex14"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "atascado" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+	if !strings.Contains(rows[0].DetalleOperativo, "sin progreso desde listo") {
+		t.Fatalf("detalle operativo=%q", rows[0].DetalleOperativo)
+	}
+}
+
+func TestBuildPanelRowsMarcaBloqueadoSiWorkerRequiereAutenticacionManual(t *testing.T) {
+	now := time.Now().UTC()
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":       "tmux_cli_session",
+		"transport":    "tmux",
+		"tmux_session": "orq-codexauth-120000",
+		"tmux_pane_id": "%3",
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "blocked_auth",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+		"driver":                "tmux_cli_session",
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "CodexAuth", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 51, Agente: "CodexAuth", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 61, Agente: "CodexAuth", Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 71, Agente: ptr("CodexAuth"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "bloqueado_por_runtime" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+	if rows[0].DetalleOperativo != "worker requiere autenticacion manual" {
+		t.Fatalf("detalle operativo=%q", rows[0].DetalleOperativo)
+	}
+}
+
+func TestBuildPanelRowsMarcaBloqueadoPorCuotaSiWorkerGolpeaUsageLimit(t *testing.T) {
+	now := time.Now().UTC()
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":       "tmux_cli_session",
+		"transport":    "tmux",
+		"tmux_session": "orq-codexquota-120000",
+		"tmux_pane_id": "%4",
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "blocked_quota",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+		"driver":                "tmux_cli_session",
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "CodexQuota", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 52, Agente: "CodexQuota", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 62, Agente: "CodexQuota", Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 72, Agente: ptr("CodexQuota"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "bloqueado_por_cuota" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+	if rows[0].DetalleOperativo != "worker bloqueado por cuota" {
+		t.Fatalf("detalle operativo=%q", rows[0].DetalleOperativo)
+	}
+}
+
+func TestBuildPanelRowsNoMarcaCuotaParaAgenteLocalSinProveedor(t *testing.T) {
+	now := time.Now().UTC()
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":       "tmux_cli_session",
+		"transport":    "tmux",
+		"tmux_session": "orq-gemma1-120000",
+		"tmux_pane_id": "%7",
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "blocked_quota",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+		"driver":                "tmux_cli_session",
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Gemma1", Rol: "programador", Activo: true, Habilitado: true, SinCuotaProveedor: true, EstadoCuota: "enfriamiento"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 53, Agente: "Gemma1", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 63, Agente: "Gemma1", Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 73, Agente: ptr("Gemma1"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo == "bloqueado_por_cuota" {
+		t.Fatalf("un agente local sin cuota no deberia quedar bloqueado por cuota: %+v", rows[0])
+	}
+}
+
+func TestBuildPanelRowsNoMarcaAtascadoSiHayProgresoRecienteAunqueNoHayaSalida(t *testing.T) {
+	now := time.Now().UTC()
+	lastOutput := now.Add(-25 * time.Minute)
+	lastProgress := now.Add(-2 * time.Minute)
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":       "tmux_cli_session",
+		"transport":    "tmux",
+		"tmux_session": "orq-codex12-120000",
+		"tmux_pane_id": "%1",
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":            "running",
+		"updated_at":       now.Format(time.RFC3339Nano),
+		"alive":            true,
+		"last_output_at":   lastOutput.Format(time.RFC3339Nano),
+		"last_progress_at": lastProgress.Format(time.RFC3339Nano),
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":            true,
+		"heartbeat_at":     now.Format(time.RFC3339Nano),
+		"last_output_at":   lastOutput.Format(time.RFC3339Nano),
+		"last_progress_at": lastProgress.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"driver":                "tmux_cli_session",
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex12", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		sessions: []*db.Sesion{
+			{Agente: "Codex12", Herramienta: "codex-cli", Estado: "activa", Inicio: now},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex12", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex12", Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("Codex12"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "trabajando" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+}
+
+func TestBuildPanelRowsMarcaAtascadoSiElProgresoEstaStaleAunqueHayaSalidaReciente(t *testing.T) {
+	now := time.Now().UTC()
+	lastOutput := now.Add(-2 * time.Minute)
+	lastProgress := now.Add(-25 * time.Minute)
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":       "tmux_cli_session",
+		"transport":    "tmux",
+		"tmux_session": "orq-codex13-120000",
+		"tmux_pane_id": "%2",
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":            "running",
+		"updated_at":       now.Format(time.RFC3339Nano),
+		"alive":            true,
+		"last_output_at":   lastOutput.Format(time.RFC3339Nano),
+		"last_progress_at": lastProgress.Format(time.RFC3339Nano),
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":            true,
+		"heartbeat_at":     now.Format(time.RFC3339Nano),
+		"last_output_at":   lastOutput.Format(time.RFC3339Nano),
+		"last_progress_at": lastProgress.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"driver":                "tmux_cli_session",
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex13", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		sessions: []*db.Sesion{
+			{Agente: "Codex13", Herramienta: "codex-cli", Estado: "activa", Inicio: now},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex13", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex13", Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("Codex13"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "atascado" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+	if !strings.Contains(rows[0].DetalleOperativo, "sin progreso") {
+		t.Fatalf("detalle operativo=%q", rows[0].DetalleOperativo)
+	}
+}
+
+func TestBuildPanelRowsMarcaCheckpointPausaPorCuotaComoBloqueadoPorCuota(t *testing.T) {
+	now := time.Now().UTC()
+	tmp := t.TempDir()
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "running",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex7", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		sessions: []*db.Sesion{
+			{Agente: "Codex7", Herramienta: "codex-cli", Estado: "activa", Inicio: now},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex7", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex7", Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		checkpoints: []*db.RuntimeCheckpoint{
+			{
+				ID:             90,
+				Agente:         "Codex7",
+				CheckpointKind: "pause",
+				Resumen:        "Cuota agotada (enfriamiento). Reanimación programada a las 19:28",
+				Source:         "runtime_order:84053:pause",
+				CreatedAt:      now,
+			},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("Codex7"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "bloqueado_por_cuota" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+	if !strings.Contains(strings.ToLower(rows[0].DetalleOperativo), "enfriamiento") {
+		t.Fatalf("detalle operativo=%q", rows[0].DetalleOperativo)
+	}
+}
+
+func TestBuildPanelRowsMarcaOrdenControlPendienteComoBloqueadoPorRuntime(t *testing.T) {
+	now := time.Now().UTC()
+	tmp := t.TempDir()
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "running",
+		"updated_at": now.Add(-2 * time.Minute).Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Add(-2 * time.Minute).Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		sessions: []*db.Sesion{
+			{Agente: "Codex3", Herramienta: "codex-cli", Estado: "activa", Inicio: now},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex3", LogicalState: "esperando_io", UpdatedAt: now.Add(-2 * time.Minute)},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex3", Estado: "activo", UpdatedAt: now.Add(-2 * time.Minute), MetadataJSON: string(metaJSON)},
+		},
+		orders: []*db.RuntimeOrder{
+			{ID: 80, Agente: "Codex3", Tipo: "stop", Estado: "pendiente", CreatedAt: now.Add(-30 * time.Second), UpdatedAt: now.Add(-30 * time.Second), AvailableAt: now.Add(-30 * time.Second)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("Codex3"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "bloqueado_por_runtime" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+	if !strings.Contains(rows[0].DetalleOperativo, "stop") {
+		t.Fatalf("detalle operativo=%q", rows[0].DetalleOperativo)
+	}
+}
+
+func TestBuildPanelRowsNoBloqueaSiWorkerYaSeRecuperoTrasOrdenControlPendiente(t *testing.T) {
+	now := time.Now().UTC()
+	tmp := t.TempDir()
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "running",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex3", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		sessions: []*db.Sesion{
+			{Agente: "Codex3", Herramienta: "codex-cli", Estado: "activa", Inicio: now},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex3", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex3", Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		orders: []*db.RuntimeOrder{
+			{ID: 80, Agente: "Codex3", Tipo: "stop", Estado: "pendiente", CreatedAt: now.Add(-2 * time.Minute), UpdatedAt: now.Add(-2 * time.Minute), AvailableAt: now.Add(-2 * time.Minute)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 70, Agente: ptr("Codex3"), Estado: db.EstadoEnProgreso},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo == "bloqueado_por_runtime" && strings.Contains(rows[0].DetalleOperativo, "stop") {
+		t.Fatalf("el worker ya se recuperó tras la orden de control y no deberia seguir bloqueado: %+v", rows[0])
+	}
+}
+
+func TestBuildPanelRowsRespetaUmbralConfiguradoDeSalidaStale(t *testing.T) {
+	now := time.Now().UTC()
+	lastOutput := now.Add(-2 * time.Minute)
+	tmp := t.TempDir()
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":          "running",
+		"updated_at":     now.Format(time.RFC3339Nano),
+		"alive":          true,
+		"last_output_at": lastOutput.Format(time.RFC3339Nano),
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":          true,
+		"heartbeat_at":   now.Format(time.RFC3339Nano),
+		"last_output_at": lastOutput.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex12", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 22, Agente: "Codex12", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 32, Agente: "Codex12", Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 72, Agente: ptr("Codex12"), Estado: db.EstadoEnProgreso},
+		},
+		config: map[string]string{
+			"runtime_worker_output_stale_seconds": "60",
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "atascado" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+}
+
+func TestBuildPanelRowsNoTapaRuntimePausadoConWorkerFresh(t *testing.T) {
+	now := time.Now().UTC()
+	tmp := t.TempDir()
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "running",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex7", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex7", LogicalState: "pausado", ProcessState: "stopped", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 31, Agente: "Codex7", Estado: "pausado", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].WorkerState != "running" || !rows[0].WorkerAlive {
+		t.Fatalf("worker snapshot inesperado: %+v", rows[0])
+	}
+	if rows[0].EstadoOperativo != "bloqueado_por_runtime" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+	if rows[0].DetalleOperativo != "pausado" {
+		t.Fatalf("detalle operativo=%q", rows[0].DetalleOperativo)
+	}
+}
+
+func TestBuildPanelRowsNoMarcaDisponibleUnRuntimeRotoSinTareas(t *testing.T) {
+	now := time.Now().UTC()
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex11", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 41, Agente: "Codex11", LogicalState: "degradado", ProcessState: "stopped", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 51, Agente: "Codex11", Estado: "fallido", UpdatedAt: now},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo != "bloqueado_por_runtime" {
+		t.Fatalf("estado operativo=%q", rows[0].EstadoOperativo)
+	}
+	if rows[0].DetalleOperativo != "degradado" {
+		t.Fatalf("detalle operativo=%q", rows[0].DetalleOperativo)
+	}
 }
 
 func TestBuildDetailMergesMailboxWithoutDuplicates(t *testing.T) {
 	store := &fakeStore{
 		agents: []*db.Agente{{Nombre: "Codex2", Rol: "programador"}},
+		tasks: []*db.Tarea{
+			{ID: 200, Titulo: "lease activa", Agente: ptr("Codex2"), Estado: db.EstadoEnProgreso, Modulo: "runtime"},
+		},
 		mailbox: []*db.RuntimeMailboxMessage{
 			{ID: 100, FromAgente: "Supervisor", ToAgente: "Codex2"},
 			{ID: 101, FromAgente: "Codex2", ToAgente: "Codex1"},
 		},
 	}
 
-	detail, err := NewService(store).BuildDetail("Codex2")
+	detail, err := NewService(store, nil).BuildDetail("Codex2")
 	if err != nil {
 		t.Fatalf("BuildDetail: %v", err)
 	}
 	if detail.Row.Agente == nil || detail.Row.Agente.Nombre != "Codex2" {
 		t.Fatalf("row agent=%+v", detail.Row.Agente)
+	}
+	if detail.Entity == nil || detail.Entity.Name != "Codex2" {
+		t.Fatalf("entity inesperada: %+v", detail.Entity)
+	}
+	if len(detail.Entity.Leases) != 1 || detail.Entity.Leases[0].TaskID != 200 {
+		t.Fatalf("leases inesperadas: %+v", detail.Entity.Leases)
 	}
 	if len(detail.Mailbox) != 2 {
 		t.Fatalf("mailbox len=%d, want 2", len(detail.Mailbox))
@@ -476,7 +1984,7 @@ func TestInvestigateAgrupaContextoYEvidencia(t *testing.T) {
 		},
 	}
 
-	report, err := NewService(store).Investigate("refactor router", "orquestador", 20)
+	report, err := NewService(store, nil).Investigate("refactor router", "orquestador", 20)
 	if err != nil {
 		t.Fatalf("Investigate: %v", err)
 	}
@@ -511,6 +2019,32 @@ func TestInvestigateAgrupaContextoYEvidencia(t *testing.T) {
 	}
 	if match.LogPath == "" || !strings.HasSuffix(match.LogPath, "/pty.log") {
 		t.Fatalf("log path inesperado: %+v", match)
+	}
+}
+
+func TestResolvePrepareConnectorOllamaUsaConectorPorDefectoDelAgente(t *testing.T) {
+	store := &fakeStore{
+		connector: &db.Conector{
+			ID:           44,
+			Slug:         "ollama-cli",
+			Nombre:       "Ollama CLI",
+			Transporte:   "cli",
+			Comando:      "ollama",
+			ArgsJSON:     `["run"]`,
+			MetadataJSON: `{"default_model":"qwen2.5-coder:7b","default_reasoning_effort":"medium","model_positional":true}`,
+			Activo:       true,
+		},
+	}
+
+	conector, err := NewService(store, nil).resolvePrepareConnector("Ollama1", "", nil)
+	if err != nil {
+		t.Fatalf("resolvePrepareConnector: %v", err)
+	}
+	if store.lastConnectorRef != "ollama-cli" {
+		t.Fatalf("conector por defecto inesperado: %s", store.lastConnectorRef)
+	}
+	if conector == nil || conector.Slug != "ollama-cli" {
+		t.Fatalf("conector inesperado: %+v", conector)
 	}
 }
 

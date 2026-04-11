@@ -344,6 +344,31 @@ var runtimeOrdenesCmd = &cobra.Command{
 	},
 }
 
+var runtimeOrdenVerCmd = &cobra.Command{
+	Use:   "orden-ver <id>",
+	Short: "Muestra una orden runtime concreta por id",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := strconv.ParseInt(args[0], 10, 64)
+		if err != nil || id <= 0 {
+			return fmt.Errorf("id inválido")
+		}
+		if order, ok, err := cargarRuntimeOrderPorIDDesdeAPI(id); ok {
+			if err != nil {
+				return err
+			}
+			return imprimirRuntimeOrder(order)
+		} else if runtimeModoRecuperacionLocalExplicito() {
+			order, err := cargarRuntimeOrderPorIDRecuperacionLocal(id)
+			if err != nil {
+				return err
+			}
+			return imprimirRuntimeOrder(order)
+		}
+		return serverFirstCommandError("runtime orden-ver")
+	},
+}
+
 func imprimirRuntimeOrders(orders []*db.RuntimeOrder) error {
 	if len(orders) == 0 {
 		fmt.Println("No hay órdenes con ese filtro.")
@@ -355,6 +380,34 @@ func imprimirRuntimeOrders(orders []*db.RuntimeOrder) error {
 			o.ID, truncar(o.Agente, 12), truncar(o.Tipo, 18), truncar(o.Estado, 12),
 			formatoTiempoValor(o.AvailableAt), truncar(runtimeOrderDetalleResumen(o), 72))
 	}
+	return nil
+}
+
+func imprimirRuntimeOrder(order *db.RuntimeOrder) error {
+	if order == nil {
+		fmt.Println("No existe esa orden runtime.")
+		return nil
+	}
+	fmt.Printf("Orden runtime #%d\n", order.ID)
+	fmt.Printf("  Agente:       %s\n", valorVacio(order.Agente))
+	fmt.Printf("  Tipo:         %s\n", valorVacio(order.Tipo))
+	fmt.Printf("  Estado:       %s\n", valorVacio(order.Estado))
+	fmt.Printf("  ProyectoID:   %s\n", runtimeOptionalID(order.ProyectoID))
+	fmt.Printf("  RuntimeID:    %s\n", runtimeOptionalID(order.RuntimeID))
+	fmt.Printf("  HandleID:     %s\n", runtimeOptionalID(order.HandleID))
+	fmt.Printf("  AttemptCount: %d\n", order.AttemptCount)
+	fmt.Printf("  Disponible:   %s\n", formatoTiempoValor(order.AvailableAt))
+	fmt.Printf("  Creada:       %s\n", formatoTiempoValor(order.CreatedAt))
+	fmt.Printf("  Actualizada:  %s\n", formatoTiempoValor(order.UpdatedAt))
+	if order.StartedAt != nil {
+		fmt.Printf("  StartedAt:    %s\n", formatoTiempoValor(*order.StartedAt))
+	}
+	if order.FinishedAt != nil {
+		fmt.Printf("  FinishedAt:   %s\n", formatoTiempoValor(*order.FinishedAt))
+	}
+	fmt.Printf("  PayloadJSON:  %s\n", valorVacio(order.PayloadJSON))
+	fmt.Printf("  ResultadoJSON:%s\n", valorVacio(order.ResultadoJSON))
+	fmt.Printf("  ErrorText:    %s\n", valorVacio(order.ErrorText))
 	return nil
 }
 
@@ -661,6 +714,31 @@ var runtimeMailboxCmd = &cobra.Command{
 	},
 }
 
+var runtimeMailboxVerCmd = &cobra.Command{
+	Use:   "mailbox-ver <id>",
+	Short: "Muestra un mensaje concreto del runtime mailbox por id",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := strconv.ParseInt(args[0], 10, 64)
+		if err != nil || id <= 0 {
+			return fmt.Errorf("id inválido")
+		}
+		if msg, ok, err := cargarRuntimeMailboxPorIDDesdeAPI(id); ok {
+			if err != nil {
+				return err
+			}
+			return imprimirRuntimeMailboxDetalle(msg)
+		} else if runtimeModoRecuperacionLocalExplicito() {
+			msg, err := cargarRuntimeMailboxPorIDRecuperacionLocal(id)
+			if err != nil {
+				return err
+			}
+			return imprimirRuntimeMailboxDetalle(msg)
+		}
+		return serverFirstCommandError("runtime mailbox-ver")
+	},
+}
+
 var runtimeMailboxEnviarCmd = &cobra.Command{
 	Use:   "mailbox-enviar <from_agente> <to_agente> <kind>",
 	Short: "Envía un mensaje al runtime mailbox",
@@ -767,6 +845,29 @@ func imprimirRuntimeMailbox(mailbox []*db.RuntimeMailboxMessage) error {
 			msg.ID, truncar(msg.FromAgente, 12), truncar(msg.ToAgente, 12), truncar(msg.Kind, 16),
 			truncar(msg.Estado, 12), msg.CreatedAt.Format("2006-01-02 15:04:05"))
 	}
+	return nil
+}
+
+func imprimirRuntimeMailboxDetalle(msg *db.RuntimeMailboxMessage) error {
+	if msg == nil {
+		fmt.Println("No existe ese mensaje runtime mailbox.")
+		return nil
+	}
+	fmt.Printf("Runtime mailbox #%d\n", msg.ID)
+	fmt.Printf("  From:         %s\n", valorVacio(msg.FromAgente))
+	fmt.Printf("  To:           %s\n", valorVacio(msg.ToAgente))
+	fmt.Printf("  Kind:         %s\n", valorVacio(msg.Kind))
+	fmt.Printf("  Estado:       %s\n", valorVacio(msg.Estado))
+	fmt.Printf("  ProyectoID:   %s\n", runtimeOptionalID(msg.ProyectoID))
+	fmt.Printf("  RuntimeOrder: %s\n", runtimeOptionalID(msg.RuntimeOrderID))
+	fmt.Printf("  Creado:       %s\n", formatoTiempoValor(msg.CreatedAt))
+	if msg.DeliveredAt != nil {
+		fmt.Printf("  DeliveredAt:  %s\n", formatoTiempoValor(*msg.DeliveredAt))
+	}
+	if msg.ConsumedAt != nil {
+		fmt.Printf("  ConsumedAt:   %s\n", formatoTiempoValor(*msg.ConsumedAt))
+	}
+	fmt.Printf("  PayloadJSON:  %s\n", valorVacio(msg.PayloadJSON))
 	return nil
 }
 
@@ -923,6 +1024,15 @@ func cargarRuntimeOrdersDesdeAPI(query url.Values) ([]*db.RuntimeOrder, bool, er
 	return resp.Orders, true, nil
 }
 
+func cargarRuntimeOrderPorIDDesdeAPI(id int64) (*db.RuntimeOrder, bool, error) {
+	var resp apiRuntimeOrderResponse
+	ok, err := apiGet(fmt.Sprintf("/api/runtime-orders/%d", id), &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Order, true, nil
+}
+
 func crearRuntimeOrderDesdeAPI(agente, tipo, proyecto, payload string) (int64, bool, error) {
 	var resp apiRuntimeOrderCreateResponse
 	ok, err := apiPost("/api/runtime-orders", map[string]any{
@@ -988,7 +1098,7 @@ func cargarRuntimeHandlesRecuperacionLocal(query url.Values) ([]*db.RuntimeHandl
 	if value := strings.TrimSpace(query.Get("agente")); value != "" {
 		agente = &value
 	}
-	return db.ListarRuntimeHandles(agente)
+	return runtimesService.ListRuntimeHandles(agente)
 }
 
 func cargarRuntimeTranscriptRecuperacionLocal(query url.Values) ([]*db.RuntimeTranscriptEntry, error) {
@@ -1027,7 +1137,7 @@ func cargarRuntimeTranscriptRecuperacionLocal(query url.Values) ([]*db.RuntimeTr
 	if value := strings.TrimSpace(query.Get("q")); value != "" {
 		filter.Query = &value
 	}
-	return db.ListarRuntimeTranscript(filter)
+	return runtimesService.ListRuntimeTranscript(filter)
 }
 
 func cargarRuntimeOrdersRecuperacionLocal(query url.Values) ([]*db.RuntimeOrder, error) {
@@ -1047,7 +1157,11 @@ func cargarRuntimeOrdersRecuperacionLocal(query url.Values) ([]*db.RuntimeOrder,
 		return nil, err
 	}
 	filter.Limit = limit
-	return db.ListarRuntimeOrders(filter)
+	return runtimesService.ListRuntimeOrders(filter)
+}
+
+func cargarRuntimeOrderPorIDRecuperacionLocal(id int64) (*db.RuntimeOrder, error) {
+	return runtimesService.GetRuntimeOrder(id)
 }
 
 func cargarCheckpointRuntimeRecuperacionLocal(agente, proyecto string) (*db.RuntimeCheckpoint, error) {
@@ -1055,7 +1169,7 @@ func cargarCheckpointRuntimeRecuperacionLocal(agente, proyecto string) (*db.Runt
 	if err != nil {
 		return nil, err
 	}
-	return db.UltimoRuntimeCheckpoint(strings.TrimSpace(agente), proyectoID)
+	return runtimesService.LatestRuntimeCheckpoint(strings.TrimSpace(agente), proyectoID)
 }
 
 func cargarRuntimeCheckpointsRecuperacionLocal(agente, proyecto, checkpointKind, source string, limit int) ([]*db.RuntimeCheckpoint, error) {
@@ -1079,11 +1193,11 @@ func cargarRuntimeCheckpointsRecuperacionLocal(agente, proyecto, checkpointKind,
 	if source != "" {
 		filter.Source = &source
 	}
-	return db.ListarRuntimeCheckpoints(filter)
+	return runtimesService.ListRuntimeCheckpoints(filter)
 }
 
 func cargarRuntimeCheckpointPorIDRecuperacionLocal(id int64) (*db.RuntimeCheckpoint, error) {
-	return db.GetRuntimeCheckpoint(id)
+	return runtimesService.GetRuntimeCheckpoint(id)
 }
 
 func cargarRuntimeMailboxRecuperacionLocal(query url.Values) ([]*db.RuntimeMailboxMessage, error) {
@@ -1101,7 +1215,27 @@ func cargarRuntimeMailboxRecuperacionLocal(query url.Values) ([]*db.RuntimeMailb
 	if value := strings.TrimSpace(query.Get("estado")); value != "" {
 		filter.Estado = &value
 	}
-	return db.ListarRuntimeMailbox(filter)
+	return runtimesService.ListRuntimeMailbox(filter)
+}
+
+func cargarRuntimeMailboxPorIDDesdeAPI(id int64) (*db.RuntimeMailboxMessage, bool, error) {
+	var resp apiRuntimeMailboxItemResponse
+	ok, err := apiGet(fmt.Sprintf("/api/runtime-mailbox/%d", id), &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Message, true, nil
+}
+
+func cargarRuntimeMailboxPorIDRecuperacionLocal(id int64) (*db.RuntimeMailboxMessage, error) {
+	return runtimesService.GetRuntimeMailbox(id)
+}
+
+func runtimeOptionalID(id *int64) string {
+	if id == nil || *id <= 0 {
+		return "—"
+	}
+	return strconv.FormatInt(*id, 10)
 }
 
 func cargarArbolRuntimesRecuperacionLocal(query url.Values) ([]*db.RuntimeTreeNode, error) {
@@ -1125,15 +1259,15 @@ func cargarArbolRuntimesRecuperacionLocal(query url.Values) ([]*db.RuntimeTreeNo
 			return nil, fmt.Errorf("--activos invalido: %s", value)
 		}
 	}
-	return db.ConstruirArbolRuntimes(filter)
+	return runtimesService.BuildRuntimeTree(filter)
 }
 
 func cargarDetalleRuntimeRecuperacionLocal(id int64) (*apiRuntimeDetailResponse, error) {
-	runtime, err := db.GetRuntime(id)
+	runtime, err := runtimesService.GetRuntime(id)
 	if err != nil {
 		return nil, err
 	}
-	samples, err := db.ListarMuestrasRuntime(id, 10)
+	samples, err := runtimesService.ListRuntimeSamples(id, 10)
 	if err != nil {
 		return nil, err
 	}
@@ -1152,7 +1286,7 @@ func runtimeProyectoIDRef(ref string) (*int64, error) {
 	if ref == "" {
 		return nil, nil
 	}
-	proyecto, err := db.GetProyecto(ref)
+	proyecto, err := runtimesService.GetProject(ref)
 	if err != nil {
 		return nil, err
 	}
@@ -1381,6 +1515,6 @@ func init() {
 	runtimeMailboxEnviarCmd.Flags().String("proyecto", "", "Proyecto asociado al mensaje")
 	runtimeMailboxEnviarCmd.Flags().String("payload", "{}", "Payload JSON del mensaje")
 	runtimeMailboxEnviarCmd.Flags().Int64("runtime-order-id", 0, "Orden runtime asociada al mensaje")
-	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimePurgarOrdenesCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenNuevaCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd)
+	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimePurgarOrdenesCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenVerCmd, runtimeOrdenNuevaCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxVerCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd)
 	rootCmd.AddCommand(runtimeCmd)
 }

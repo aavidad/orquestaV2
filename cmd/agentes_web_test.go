@@ -154,6 +154,8 @@ func TestWebAgentesPanelMuestraEstadoVivo(t *testing.T) {
 		"efectivo",
 		"diario",
 		"semanal",
+		"Operativo",
+		"trabajando",
 	} {
 		if !strings.Contains(body, token) {
 			t.Fatalf("panel agentes sin %q:\n%s", token, body)
@@ -278,6 +280,9 @@ func TestWebAgenteDetalleMuestraControlPlaneYDetalleOperativo(t *testing.T) {
 	for _, token := range []string{
 		"Control",
 		"Admin",
+		"Entidad canónica",
+		"Adapter:",
+		"Leases:",
 		"feature/agentes",
 		"codex-cli",
 		"#" + itoa(orderID),

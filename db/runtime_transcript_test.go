@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestIngestarRuntimeTranscriptHandleClasificaYGeneraEventos(t *testing.T) {
@@ -440,6 +442,101 @@ func TestListarRuntimeHandlesParaPresupuestoFiltraSoloOperativosConMetadata(t *t
 	}
 	if len(handles) != 1 || handles[0].ID != handle1.ID {
 		t.Fatalf("handles para presupuesto inesperados: %+v", handles)
+	}
+}
+
+func TestListarRuntimeHandlesParaPresupuestoPrefiereCanonicoTMUXSobreLegacy(t *testing.T) {
+	abrirDBTemporalRuntimeObservabilidad(t)
+
+	if err := RegistrarAgente("CodexBudget", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	pid := int64(os.Getpid())
+	runtimeLegacyID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "CodexBudget",
+		ProyectoID:   &proyectoID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("crear runtime legacy: %v", err)
+	}
+	legacyMetaJSON, _ := json.Marshal(map[string]any{
+		"driver":           "process_pty_cli",
+		"working_dir":      filepath.Join(t.TempDir(), "legacy"),
+		"rendered_command": "codex-perfil CodexBudget --model gpt-5.4",
+	})
+	if _, err := DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
+		"CodexBudget", proyectoID, runtimeLegacyID, "cli", "process", strconv.Itoa(os.Getpid()), string(legacyMetaJSON), time.Now().UTC()); err != nil {
+		t.Fatalf("insert handle legacy: %v", err)
+	}
+
+	runDir := filepath.Join(t.TempDir(), "worker")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir worker: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"CodexBudget","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codexbudget-1","tmux_pane_id":"%17","status_path":"`+statusPath+`","heartbeat_path":"`+heartbeatPath+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","updated_at":"`+now+`","alive":true,"child_pid":`+strconv.Itoa(os.Getpid())+`}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now+`","started_at":"`+now+`","child_pid":`+strconv.Itoa(os.Getpid())+`}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+
+	runtimeTMUXID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "CodexBudget",
+		ProyectoID:   &proyectoID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("crear runtime tmux: %v", err)
+	}
+	tmuxMetaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-codexbudget-1",
+		"tmux_pane_id":          "%17",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+		"working_dir":           filepath.Join(runDir, "cwd"),
+	})
+	res, err := DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
+		"CodexBudget", proyectoID, runtimeTMUXID, "tmux", "process", "orq-codexbudget-1/%17", string(tmuxMetaJSON), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("insert handle tmux: %v", err)
+	}
+	tmuxHandleID, _ := res.LastInsertId()
+
+	handles, err := ListarRuntimeHandlesParaPresupuesto()
+	if err != nil {
+		t.Fatalf("listar handles para presupuesto: %v", err)
+	}
+	if len(handles) != 1 || handles[0].ID != tmuxHandleID {
+		t.Fatalf("deberia devolver solo el handle tmux canonico: %+v", handles)
 	}
 }
 

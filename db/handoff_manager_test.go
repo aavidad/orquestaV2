@@ -1,6 +1,9 @@
 package db
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -158,6 +161,42 @@ func TestDetectarAgentesAgotadosIgnoraHeartbeatSesionStaleSiRuntimeSigueActivoRe
 	}
 }
 
+func TestDetectarAgentesAgotadosIgnoraHeartbeatSesionStaleSiRuntimeSeResuelvePorSesionID(t *testing.T) {
+	prepararDBTemporal(t)
+
+	sesionID, _ := prepararAgenteConTareaEnProgreso(t, "Codex1")
+	setHeartbeatStale(t, sesionID)
+
+	handle, err := GetRuntimeHandleActivoAgente("Codex1")
+	if err != nil {
+		t.Fatalf("GetRuntimeHandleActivoAgente: %v", err)
+	}
+	if handle == nil || handle.SesionID == nil {
+		t.Fatalf("handle activo inesperado: %+v", handle)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_handles SET runtime_id=NULL WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("desenlazar runtime_id del handle: %v", err)
+	}
+	runtimeHandleHotReset()
+	if _, err := DB.Exec(`UPDATE runtime_instances
+		SET logical_state='esperando_io',
+		    process_state='running',
+		    last_event_at=CURRENT_TIMESTAMP,
+		    last_heartbeat_at=CURRENT_TIMESTAMP,
+		    updated_at=CURRENT_TIMESTAMP
+		WHERE sesion_id=?`, *handle.SesionID); err != nil {
+		t.Fatalf("actualizar runtime activo por sesion: %v", err)
+	}
+
+	candidatos, err := DetectarAgentesAgotados()
+	if err != nil {
+		t.Fatalf("DetectarAgentesAgotados: %v", err)
+	}
+	if len(candidatos) != 0 {
+		t.Fatalf("no esperaba candidatos si el runtime se puede resolver por sesion_id: %+v", candidatos)
+	}
+}
+
 func TestDetectarAgentesAgotadosExcluyeConHandoffPendiente(t *testing.T) {
 	prepararDBTemporal(t)
 
@@ -307,6 +346,178 @@ func TestDetectarAgentesAgotadosPrefiereTareaDelProyectoActivo(t *testing.T) {
 	}
 	if candidatos[0].ProyectoID == nil || *candidatos[0].ProyectoID != proyectoA {
 		t.Fatalf("proyecto candidato inesperado: %+v", candidatos[0])
+	}
+}
+
+func TestDetectarAgentesAgotadosUsaHandleDelProyectoActivoAunqueHayaOtroMasReciente(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	proyectoA, err := UpsertProyecto(&Proyecto{
+		Slug:    "proyecto-a",
+		Nombre:  "Proyecto A",
+		RutaAbs: filepath.Join(tmp, "proyecto-a"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto A: %v", err)
+	}
+	proyectoB, err := UpsertProyecto(&Proyecto{
+		Slug:    "proyecto-b",
+		Nombre:  "Proyecto B",
+		RutaAbs: filepath.Join(tmp, "proyecto-b"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto B: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoA,
+		CWD:         filepath.Join(tmp, "cwd-a"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto: %v", err)
+	}
+	if err := UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("UpsertRuntimeHandleDesdeSesion: %v", err)
+	}
+	tareaA, err := CrearTarea(&Tarea{
+		Titulo:     "Tarea en progreso A",
+		Modulo:     "orquestador",
+		Prioridad:  PrioridadMedia,
+		CreadoPor:  "alberto",
+		ProyectoID: &proyectoA,
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea A: %v", err)
+	}
+	if err := TomarTarea(tareaA, "Codex1"); err != nil {
+		t.Fatalf("TomarTarea A: %v", err)
+	}
+	if err := IniciarTarea(tareaA, "Codex1"); err != nil {
+		t.Fatalf("IniciarTarea A: %v", err)
+	}
+	setHeartbeatStale(t, sesion.ID)
+
+	handleA, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil {
+		t.Fatalf("GetRuntimeHandleBySesionID A: %v", err)
+	}
+	if handleA == nil {
+		t.Fatalf("faltaba handle del proyecto activo")
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	pid := int64(os.Getpid())
+
+	tmuxADir := filepath.Join(tmp, "tmux-a")
+	if err := os.MkdirAll(tmuxADir, 0o755); err != nil {
+		t.Fatalf("mkdir tmux A: %v", err)
+	}
+	tmuxAManifestPath := filepath.Join(tmuxADir, "manifest.json")
+	tmuxAStatusPath := filepath.Join(tmuxADir, "status.json")
+	tmuxAHeartbeatPath := filepath.Join(tmuxADir, "heartbeat.json")
+	if err := os.WriteFile(tmuxAManifestPath, []byte(`{"version":1,"agent":"Codex1","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1-a","tmux_pane_id":"%21","status_path":"`+tmuxAStatusPath+`","heartbeat_path":"`+tmuxAHeartbeatPath+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write manifest A: %v", err)
+	}
+	if err := os.WriteFile(tmuxAStatusPath, []byte(`{"state":"running","updated_at":"`+now+`","alive":true,"child_pid":`+jsonNumber(pid)+`}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write status A: %v", err)
+	}
+	if err := os.WriteFile(tmuxAHeartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now+`","started_at":"`+now+`","child_pid":`+jsonNumber(pid)+`}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write heartbeat A: %v", err)
+	}
+	runtimeAID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "Codex1",
+		ProyectoID:   &proyectoA,
+		SesionID:     &sesion.ID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("RegistrarRuntimeInstance A: %v", err)
+	}
+	metaAJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-codex1-a",
+		"tmux_pane_id":          "%21",
+		"worker_manifest_path":  tmuxAManifestPath,
+		"worker_status_path":    tmuxAStatusPath,
+		"worker_heartbeat_path": tmuxAHeartbeatPath,
+		"rendered_command":      "codex-perfil Codex1",
+	})
+	if _, err := DB.Exec(`UPDATE runtime_handles
+		SET runtime_id=?, transporte='tmux', handle_kind='process', handle_ref='orq-codex1-a',
+		    metadata_json=?, last_seen_at=CURRENT_TIMESTAMP
+		WHERE id=?`,
+		runtimeAID, string(metaAJSON), handleA.ID,
+	); err != nil {
+		t.Fatalf("actualizar handle A a tmux: %v", err)
+	}
+
+	runtimeBID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "Codex1",
+		ProyectoID:   &proyectoB,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("RegistrarRuntimeInstance B: %v", err)
+	}
+	tmuxBDir := filepath.Join(tmp, "tmux-b")
+	if err := os.MkdirAll(tmuxBDir, 0o755); err != nil {
+		t.Fatalf("mkdir tmux B: %v", err)
+	}
+	tmuxBManifestPath := filepath.Join(tmuxBDir, "manifest.json")
+	tmuxBStatusPath := filepath.Join(tmuxBDir, "status.json")
+	tmuxBHeartbeatPath := filepath.Join(tmuxBDir, "heartbeat.json")
+	if err := os.WriteFile(tmuxBManifestPath, []byte(`{"version":1,"agent":"Codex1","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex1-b","tmux_pane_id":"%22","status_path":"`+tmuxBStatusPath+`","heartbeat_path":"`+tmuxBHeartbeatPath+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write manifest B: %v", err)
+	}
+	if err := os.WriteFile(tmuxBStatusPath, []byte(`{"state":"running","updated_at":"`+now+`","alive":true,"child_pid":`+jsonNumber(pid)+`}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write status B: %v", err)
+	}
+	if err := os.WriteFile(tmuxBHeartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now+`","started_at":"`+now+`","child_pid":`+jsonNumber(pid)+`}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write heartbeat B: %v", err)
+	}
+	metaBJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-codex1-b",
+		"tmux_pane_id":          "%22",
+		"worker_manifest_path":  tmuxBManifestPath,
+		"worker_status_path":    tmuxBStatusPath,
+		"worker_heartbeat_path": tmuxBHeartbeatPath,
+		"rendered_command":      "codex-perfil Codex1",
+	})
+	resHandleB, err := DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo', ?, CURRENT_TIMESTAMP)`,
+		"Codex1", proyectoB, runtimeBID, "tmux", "process", "orq-codex1-b", string(metaBJSON))
+	if err != nil {
+		t.Fatalf("insert handle B: %v", err)
+	}
+	handleBID, _ := resHandleB.LastInsertId()
+	if _, err := DB.Exec(`UPDATE runtime_handles SET last_seen_at = datetime('now','+1 minute') WHERE id = ?`, handleBID); err != nil {
+		t.Fatalf("actualizar last_seen_at B: %v", err)
+	}
+	runtimeHandleHotReset()
+
+	candidatos, err := DetectarAgentesAgotados()
+	if err != nil {
+		t.Fatalf("DetectarAgentesAgotados: %v", err)
+	}
+	if len(candidatos) != 1 {
+		t.Fatalf("esperaba 1 candidato, got=%d", len(candidatos))
+	}
+	if candidatos[0].HandleID == nil || *candidatos[0].HandleID != handleA.ID {
+		t.Fatalf("deberia usar el handle del proyecto activo, no otro más reciente: %+v", candidatos[0])
 	}
 }
 

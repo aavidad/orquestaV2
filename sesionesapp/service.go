@@ -5,38 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"orquesta/db"
 )
-
-type Store interface {
-	RegisterCodex() (string, error)
-	StartSession(agente string) (int64, error)
-	FinishSession(agente string) error
-	GetProject(ref string) (*db.Proyecto, error)
-	GetConnector(ref string) (*db.Conector, error)
-	ActivateAssignment(agente string, proyectoID int64, nota string) error
-	StartSessionContext(in db.SesionInicio) (*db.Sesion, error)
-	GetLastSession(agente string, proyectoID *int64) (*db.Sesion, error)
-	GetSessionByID(id int64) (*db.Sesion, error)
-	ListInspectionSessions(filtro db.FiltroSesionesInspeccion) ([]*db.Sesion, error)
-	GetInspectionSessionByID(id int64) (*db.Sesion, error)
-	SaveActiveSession(agente string, proyectoID *int64, upd db.SesionUpdate) error
-	GetActiveSession(agente string, proyectoID *int64) (*db.Sesion, error)
-	GetLastSessionWithFilter(agente string, proyectoID *int64, cwd string) (*db.Sesion, error)
-	RegisterSessionBudget(p *db.PresupuestoSesion) (int64, error)
-	GetLatestSessionBudget(sesionID int64) (*db.PresupuestoSesion, error)
-	EvaluateSessionBudget(p *db.PresupuestoSesion) (*db.EvaluacionPresupuesto, error)
-	ListAgents() ([]*db.Agente, error)
-	ListPendingProposals(agente string) ([]*db.Propuesta, error)
-	ResolveGovernanceCatalog(rol string, proyectoID *int64) (*db.GovernanceCatalog, error)
-	ResolveGovernanceCatalogForContext(rol string, proyectoID *int64, agente string) (*db.GovernanceCatalog, error)
-	ResolveGovernanceWorkflowForContext(rol string, proyectoID *int64, agente, nombre string) (*db.Workflow, error)
-	ListRules(rol string) ([]*db.Regla, error)
-	ListSkills(rol string) ([]*db.Skill, error)
-	GetWorkflow(rol, nombre string) (*db.Workflow, error)
-	ListWorkflows(rol string) ([]*db.Workflow, error)
-}
 
 type Service struct {
 	store Store
@@ -46,9 +15,9 @@ type StartResult struct {
 	Agente               string
 	SesionID             int64
 	Rol                  string
-	PropuestasPendientes []*db.Propuesta
-	Reglas               []*db.Regla
-	Skills               []*db.Skill
+	PropuestasPendientes []*Propuesta
+	Reglas               []*Regla
+	Skills               []*Skill
 	WorkflowPasos        []string
 }
 
@@ -59,18 +28,18 @@ type FinishResult struct {
 }
 
 type BriefingResult struct {
-	Agent                *db.Agente
-	PropuestasPendientes []*db.Propuesta
-	Reglas               []*db.Regla
-	Skills               []*db.Skill
-	Workflows            []*db.Workflow
+	Agent                *Agente
+	PropuestasPendientes []*Propuesta
+	Reglas               []*Regla
+	Skills               []*Skill
+	Workflows            []*Workflow
 }
 
 type SessionBudgetResult struct {
 	ID          int64
-	Sesion      *db.Sesion
-	Presupuesto *db.PresupuestoSesion
-	Evaluacion  *db.EvaluacionPresupuesto
+	Sesion      *Sesion
+	Presupuesto *PresupuestoSesion
+	Evaluacion  *EvaluacionPresupuesto
 }
 
 type StartContextInput struct {
@@ -90,13 +59,13 @@ type StartContextInput struct {
 }
 
 type StartContextResult struct {
-	Sesion               *db.Sesion
-	SesionPrevia         *db.Sesion
+	Sesion               *Sesion
+	SesionPrevia         *Sesion
 	Rol                  string
-	PropuestasPendientes []*db.Propuesta
-	Reglas               []*db.Regla
-	Skills               []*db.Skill
-	Workflow             *db.Workflow
+	PropuestasPendientes []*Propuesta
+	Reglas               []*Regla
+	Skills               []*Skill
+	Workflow             *Workflow
 }
 
 func NewService(store Store) *Service {
@@ -168,7 +137,7 @@ func (s *Service) Finish(agente string) (*FinishResult, error) {
 	return result, nil
 }
 
-func (s *Service) ListAgents() ([]*db.Agente, error) {
+func (s *Service) ListAgents() ([]*Agente, error) {
 	return s.store.ListAgents()
 }
 
@@ -184,7 +153,7 @@ func (s *Service) ResolveProjectID(ref string) (*int64, error) {
 	return &proyecto.ID, nil
 }
 
-func (s *Service) GetProject(ref string) (*db.Proyecto, error) {
+func (s *Service) GetProject(ref string) (*Proyecto, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return nil, fmt.Errorf("proyecto obligatorio")
@@ -192,7 +161,7 @@ func (s *Service) GetProject(ref string) (*db.Proyecto, error) {
 	return s.store.GetProject(ref)
 }
 
-func (s *Service) ActivateAssignment(agente, proyectoRef, nota string) (*db.Proyecto, error) {
+func (s *Service) ActivateAssignment(agente, proyectoRef, nota string) (*Proyecto, error) {
 	proyectoRef = strings.TrimSpace(proyectoRef)
 	if proyectoRef == "" {
 		return nil, fmt.Errorf("proyecto obligatorio")
@@ -207,15 +176,15 @@ func (s *Service) ActivateAssignment(agente, proyectoRef, nota string) (*db.Proy
 	return proyecto, nil
 }
 
-func (s *Service) ListInspectionSessions(filtro db.FiltroSesionesInspeccion) ([]*db.Sesion, error) {
+func (s *Service) ListInspectionSessions(filtro FiltroInspeccion) ([]*Sesion, error) {
 	return s.store.ListInspectionSessions(filtro)
 }
 
-func (s *Service) GetInspectionSession(id int64) (*db.Sesion, error) {
+func (s *Service) GetInspectionSession(id int64) (*Sesion, error) {
 	return s.store.GetInspectionSessionByID(id)
 }
 
-func (s *Service) SaveActiveSession(agente, proyectoRef string, upd db.SesionUpdate) (*db.Sesion, error) {
+func (s *Service) SaveActiveSession(agente, proyectoRef string, upd SesionUpdate) (*Sesion, error) {
 	proyectoID, err := s.ResolveProjectID(proyectoRef)
 	if err != nil {
 		return nil, err
@@ -226,7 +195,7 @@ func (s *Service) SaveActiveSession(agente, proyectoRef string, upd db.SesionUpd
 	return s.store.GetActiveSession(strings.TrimSpace(agente), proyectoID)
 }
 
-func (s *Service) Continue(agente, proyectoRef, cwd string) (*db.Sesion, error) {
+func (s *Service) Continue(agente, proyectoRef, cwd string) (*Sesion, error) {
 	proyectoID, err := s.ResolveProjectID(proyectoRef)
 	if err != nil {
 		return nil, err
@@ -234,7 +203,7 @@ func (s *Service) Continue(agente, proyectoRef, cwd string) (*db.Sesion, error) 
 	return s.store.GetLastSessionWithFilter(strings.TrimSpace(agente), proyectoID, strings.TrimSpace(cwd))
 }
 
-func (s *Service) GetLastSession(agente, proyectoRef string) (*db.Sesion, error) {
+func (s *Service) GetLastSession(agente, proyectoRef string) (*Sesion, error) {
 	proyectoID, err := s.ResolveProjectID(proyectoRef)
 	if err != nil {
 		return nil, err
@@ -242,7 +211,7 @@ func (s *Service) GetLastSession(agente, proyectoRef string) (*db.Sesion, error)
 	return s.store.GetLastSession(strings.TrimSpace(agente), proyectoID)
 }
 
-func (s *Service) GetActiveSession(agente, proyectoRef string) (*db.Sesion, error) {
+func (s *Service) GetActiveSession(agente, proyectoRef string) (*Sesion, error) {
 	proyectoID, err := s.ResolveProjectID(proyectoRef)
 	if err != nil {
 		return nil, err
@@ -250,7 +219,7 @@ func (s *Service) GetActiveSession(agente, proyectoRef string) (*db.Sesion, erro
 	return s.store.GetActiveSession(strings.TrimSpace(agente), proyectoID)
 }
 
-func (s *Service) ResolveBudgetSession(sesionID int64, agente string) (*db.Sesion, error) {
+func (s *Service) ResolveBudgetSession(sesionID int64, agente string) (*Sesion, error) {
 	if sesionID > 0 {
 		return s.store.GetSessionByID(sesionID)
 	}
@@ -288,7 +257,7 @@ func (s *Service) GetBudget(sesionID int64, agente string) (*SessionBudgetResult
 	}, nil
 }
 
-func (s *Service) RegisterBudget(sesionID int64, agente string, p *db.PresupuestoSesion) (*SessionBudgetResult, error) {
+func (s *Service) RegisterBudget(sesionID int64, agente string, p *PresupuestoSesion) (*SessionBudgetResult, error) {
 	sesion, err := s.ResolveBudgetSession(sesionID, agente)
 	if err != nil {
 		return nil, err
@@ -320,7 +289,7 @@ func (s *Service) BuildBriefing(agente string) (*BriefingResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	var actual *db.Agente
+	var actual *Agente
 	for _, item := range agentes {
 		if item.Nombre == agente {
 			actual = item
@@ -365,7 +334,7 @@ func (s *Service) StartContext(input StartContextInput) (*StartContextResult, er
 
 	var (
 		proyectoID *int64
-		previo     *db.Sesion
+		previo     *Sesion
 	)
 	if proyectoRef := strings.TrimSpace(input.Proyecto); proyectoRef != "" {
 		proyecto, err := s.store.GetProject(proyectoRef)
@@ -403,7 +372,7 @@ func (s *Service) StartContext(input StartContextInput) (*StartContextResult, er
 	if input.PID > 0 {
 		pid = &input.PID
 	}
-	sesion, err := s.store.StartSessionContext(db.SesionInicio{
+	sesion, err := s.store.StartSessionContext(SesionInicio{
 		Agente:             agente,
 		ConectorID:         conectorID,
 		ProyectoID:         proyectoID,
@@ -462,108 +431,3 @@ func parseWorkflowSteps(raw string) []string {
 	return pasos
 }
 
-type Repository struct{}
-
-func (Repository) RegisterCodex() (string, error) {
-	return db.RegistrarCodex()
-}
-
-func (Repository) StartSession(agente string) (int64, error) {
-	return db.IniciarSesion(agente)
-}
-
-func (Repository) FinishSession(agente string) error {
-	return db.FinSesion(agente)
-}
-
-func (Repository) GetProject(ref string) (*db.Proyecto, error) {
-	return db.GetProyecto(ref)
-}
-
-func (Repository) GetConnector(ref string) (*db.Conector, error) {
-	return db.GetConector(ref)
-}
-
-func (Repository) ActivateAssignment(agente string, proyectoID int64, nota string) error {
-	return db.ActivarAsignacion(agente, proyectoID, nota)
-}
-
-func (Repository) StartSessionContext(in db.SesionInicio) (*db.Sesion, error) {
-	return db.IniciarSesionContexto(in)
-}
-
-func (Repository) GetLastSession(agente string, proyectoID *int64) (*db.Sesion, error) {
-	return db.ObtenerUltimaSesion(agente, proyectoID)
-}
-
-func (Repository) GetSessionByID(id int64) (*db.Sesion, error) {
-	return db.GetSesionByID(id)
-}
-
-func (Repository) ListInspectionSessions(filtro db.FiltroSesionesInspeccion) ([]*db.Sesion, error) {
-	return db.ListarSesionesInspeccion(filtro)
-}
-
-func (Repository) GetInspectionSessionByID(id int64) (*db.Sesion, error) {
-	return db.GetSesionInspeccionByID(id)
-}
-
-func (Repository) SaveActiveSession(agente string, proyectoID *int64, upd db.SesionUpdate) error {
-	return db.GuardarSesionActiva(agente, proyectoID, upd)
-}
-
-func (Repository) GetActiveSession(agente string, proyectoID *int64) (*db.Sesion, error) {
-	return db.GetSesionActiva(agente, proyectoID)
-}
-
-func (Repository) GetLastSessionWithFilter(agente string, proyectoID *int64, cwd string) (*db.Sesion, error) {
-	return db.ObtenerUltimaSesionConFiltro(agente, proyectoID, cwd)
-}
-
-func (Repository) RegisterSessionBudget(p *db.PresupuestoSesion) (int64, error) {
-	return db.RegistrarPresupuestoSesion(p)
-}
-
-func (Repository) GetLatestSessionBudget(sesionID int64) (*db.PresupuestoSesion, error) {
-	return db.UltimoPresupuestoSesion(sesionID)
-}
-
-func (Repository) EvaluateSessionBudget(p *db.PresupuestoSesion) (*db.EvaluacionPresupuesto, error) {
-	return db.EvaluarPresupuestoSesion(p)
-}
-
-func (Repository) ListAgents() ([]*db.Agente, error) {
-	return db.ListarAgentes()
-}
-
-func (Repository) ListPendingProposals(agente string) ([]*db.Propuesta, error) {
-	return db.PropuestasPendientesVoto(agente)
-}
-
-func (Repository) ResolveGovernanceCatalog(rol string, proyectoID *int64) (*db.GovernanceCatalog, error) {
-	return db.ResolveGovernanceCatalog(rol, proyectoID)
-}
-
-func (Repository) ResolveGovernanceCatalogForContext(rol string, proyectoID *int64, agente string) (*db.GovernanceCatalog, error) {
-	return db.ResolveGovernanceCatalogForContext(rol, proyectoID, agente)
-}
-
-func (Repository) ResolveGovernanceWorkflowForContext(rol string, proyectoID *int64, agente, nombre string) (*db.Workflow, error) {
-	return db.ResolveGovernanceWorkflowForContext(rol, proyectoID, agente, nombre)
-}
-
-func (Repository) ListRules(rol string) ([]*db.Regla, error) {
-	return db.GetReglasAgente(rol)
-}
-
-func (Repository) ListSkills(rol string) ([]*db.Skill, error) {
-	return db.GetSkillsAgente(rol)
-}
-
-func (Repository) GetWorkflow(rol, nombre string) (*db.Workflow, error) {
-	return db.GetWorkflow(rol, nombre)
-}
-
-func (Repository) ListWorkflows(rol string) ([]*db.Workflow, error) {
-	return db.GetWorkflowsAgente(rol)
-}

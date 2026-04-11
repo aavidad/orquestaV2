@@ -15,7 +15,7 @@ import (
 	"orquesta/internal/rpclocal"
 )
 
-func TestServerReadinessOKExigeServerDecodificable(t *testing.T) {
+func TestServerAPIReadyOKExigeServerDecodificable(t *testing.T) {
 	var calls int32
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/server", func(w http.ResponseWriter, r *http.Request) {
@@ -38,10 +38,10 @@ func TestServerReadinessOKExigeServerDecodificable(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	if err := serverReadinessOK(srv.URL); err == nil {
+	if err := serverAPIReadyOK(srv.URL); err == nil {
 		t.Fatalf("la primera lectura deberia fallar por EOF")
 	}
-	if err := serverReadinessOK(srv.URL); err != nil {
+	if err := serverAPIReadyOK(srv.URL); err != nil {
 		t.Fatalf("la segunda lectura deberia pasar: %v", err)
 	}
 	if got := atomic.LoadInt32(&calls); got < 2 {
@@ -49,7 +49,7 @@ func TestServerReadinessOKExigeServerDecodificable(t *testing.T) {
 	}
 }
 
-func TestServerReadinessOKFallaConHTTPNoOK(t *testing.T) {
+func TestServerAPIReadyOKFallaConHTTPNoOK(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/server", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "boom", http.StatusServiceUnavailable)
@@ -57,7 +57,7 @@ func TestServerReadinessOKFallaConHTTPNoOK(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	err := serverReadinessOK(srv.URL)
+	err := serverAPIReadyOK(srv.URL)
 	if err == nil || err.Error() != fmt.Sprintf("status %s", http.StatusText(http.StatusServiceUnavailable)) && err.Error() != "status 503 Service Unavailable" {
 		if err == nil {
 			t.Fatalf("se esperaba error readiness")

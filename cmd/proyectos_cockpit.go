@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"database/sql"
 	"encoding/json"
 	"sort"
 	"strings"
@@ -108,39 +107,24 @@ func buildProyectoCockpit(ref string) (*apiProyectoCockpit, error) {
 	}
 	cockpit.WorktreeDrift = filterOpenClawWorktreeDriftByAgents(drift, relevantAgents)
 
-	cockpit.PropuestasAbiertas, err = countProyectoRows(`SELECT COUNT(*) FROM propuestas WHERE proyecto_id=? AND estado='abierta'`, proyecto.ID)
+	cockpit.PropuestasAbiertas, err = db.CountProjectOpenProposals(proyecto.ID)
 	if err != nil {
 		return nil, err
 	}
-	cockpit.ReviewGatesAbiertas, err = countProyectoRows(`SELECT COUNT(*) FROM review_gates WHERE proyecto_id=? AND estado <> 'aprobado'`, proyecto.ID)
+	cockpit.ReviewGatesAbiertas, err = db.CountProjectOpenReviewGates(proyecto.ID)
 	if err != nil {
 		return nil, err
 	}
-	cockpit.RuntimeMailboxPendiente, err = countProyectoRows(`SELECT COUNT(*) FROM runtime_mailbox WHERE proyecto_id=? AND estado='pendiente'`, proyecto.ID)
+	cockpit.RuntimeMailboxPendiente, err = db.CountProjectPendingRuntimeMailbox(proyecto.ID)
 	if err != nil {
 		return nil, err
 	}
-	for _, estado := range []string{"pendiente", "tomada", "ejecutando"} {
-		n, err := countProyectoRows(`SELECT COUNT(*) FROM runtime_orders WHERE proyecto_id=? AND estado=?`, proyecto.ID, estado)
-		if err != nil {
-			return nil, err
-		}
-		cockpit.RuntimeOrdersAbiertas += n
+	cockpit.RuntimeOrdersAbiertas, err = db.CountProjectOpenRuntimeOrders(proyecto.ID, "pendiente", "tomada", "ejecutando")
+	if err != nil {
+		return nil, err
 	}
 
 	return cockpit, nil
-}
-
-func countProyectoRows(query string, args ...any) (int, error) {
-	if db.DB == nil {
-		return 0, nil
-	}
-	var n int
-	err := db.DB.QueryRow(query, args...).Scan(&n)
-	if err == sql.ErrNoRows {
-		return 0, nil
-	}
-	return n, err
 }
 
 func projectRelevantAgentNames(proyectoID int64, tareas []*db.Tarea, activos []*db.Agente) map[string]struct{} {

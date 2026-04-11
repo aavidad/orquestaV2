@@ -29,6 +29,7 @@
 - [D11 - Plan de traslado físico a ~/Trabajo/orquestador](plan_traslado_orquestador_a_trabajo.md)
 - [D12 - OP-121 F1: catálogo base de skills, versionado y anti-duplicado](op_121_catalogo_skills_fase1.md)
 - [D13 - OP-121: seguridad básica y refresh dinámico de skills](op_121_skills_seguridad_y_refresh.md)
+- [D14 - Microprogramación dirigida para agentes](diseno_microprogramacion_dirigida_agentes.md)
 
 ## Análisis e Informes
 - [A01 - Ecosistema de Orquestación Multi-Agente 2026 (mejoras a implementar)](informe_ecosistema_orquestacion_2026-03-29.md)

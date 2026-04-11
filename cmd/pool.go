@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"orquesta/capacidadapp"
 	"orquesta/db"
 )
 
@@ -30,7 +29,6 @@ func capacidadErrorServerFirst() error {
 	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
 }
 
-var capacidadService = capacidadapp.NewService(capacidadapp.Repository{})
 
 var poolListarCmd = &cobra.Command{
 	Use:   "listar",

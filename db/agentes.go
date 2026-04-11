@@ -91,36 +91,42 @@ func GarantizarSaludAgentes() error {
 	
 	// 1. Resetear cuotas si ha pasado de las 2 AM y no se ha reseteado hoy.
 	// Nota: Si last_usage_reset_at es NULL o no es hoy y ya son las 02:XX AM o más.
-	_, _ = DB.Exec(`
-		UPDATE agentes 
-		SET consumo_dia_segundos = 0, 
-		    estado_cuota = 'activo', 
-		    last_usage_reset_at = CURRENT_TIMESTAMP
-		WHERE last_usage_reset_at IS NULL 
-		   OR (
-			 strftime('%Y-%m-%d', last_usage_reset_at) != strftime('%Y-%m-%d', 'now') 
-			 AND strftime('%H', 'now') >= '02'
-		   )
-	`)
+	if _, err := DB.Exec(`
+			UPDATE agentes 
+			SET consumo_dia_segundos = 0, 
+			    estado_cuota = 'activo', 
+			    last_usage_reset_at = CURRENT_TIMESTAMP
+			WHERE last_usage_reset_at IS NULL 
+			   OR (
+				 strftime('%Y-%m-%d', last_usage_reset_at) != strftime('%Y-%m-%d', 'now') 
+				 AND strftime('%H', 'now') >= '02'
+			   )
+		`); err != nil {
+		return err
+	}
 
 	// 2. Mandar a dormir (agotado) a los que se pasen del límite diario.
-	_, _ = DB.Exec(`
-		UPDATE agentes 
-		SET estado_cuota = 'agotado', 
-		    motivo_pausa = 'Cuota diaria agotada' 
-		WHERE estado_cuota = 'activo' 
-		  AND consumo_dia_segundos >= limite_dia_segundos
-	`)
+	if _, err := DB.Exec(`
+			UPDATE agentes 
+			SET estado_cuota = 'agotado', 
+			    motivo_pausa = 'Cuota diaria agotada' 
+			WHERE estado_cuota = 'activo' 
+			  AND consumo_dia_segundos >= limite_dia_segundos
+		`); err != nil {
+		return err
+	}
 
 	// 3. Limpiar fantasmas (inactivos): si un agente figura como activo (1) 
 	// pero su última sesión fue hace más de 10 minutos, lo ponemos a 0.
 	limiteInactividad := ahora.Add(-10 * time.Minute)
-	_, _ = DB.Exec(`
-		UPDATE agentes 
-		SET activo = 0 
-		WHERE activo = 1 
-		  AND (ultima_sesion < ? OR ultima_sesion IS NULL)
-	`, limiteInactividad)
+	if _, err := DB.Exec(`
+			UPDATE agentes 
+			SET activo = 0 
+			WHERE activo = 1 
+			  AND (ultima_sesion < ? OR ultima_sesion IS NULL)
+		`, limiteInactividad); err != nil {
+		return err
+	}
 
 	return nil
 }

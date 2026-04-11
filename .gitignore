@@ -13,3 +13,8 @@ certs/
 .codex-docker-home/
 .codex-sandbox-workspace/
 tmp/
+logs/
+server.log
+server_new.log
+orquesta_bin
+orquesta_server

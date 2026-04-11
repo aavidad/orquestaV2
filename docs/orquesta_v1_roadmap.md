@@ -19,6 +19,8 @@ Convertir la vision de `OP-049` en un orden de trabajo que reduzca riesgo, prese
 4. La concurrencia contra SQLite debe reducirse, no aumentar.
 5. Las capacidades de alto riesgo se activan despues de tener trazabilidad y control.
 6. La hexagonalizacion es gate: no se debe seguir metiendo logica de negocio nueva en `db/` para acelerar la web, la API o la futura app de escritorio.
+7. La delegacion a agentes no puede ser abierta: el trabajo remoto debe salir de especificaciones de funcion cerradas y verificables.
+8. `tmux` y el runtime son transporte y observabilidad; la verdad del trabajo debe vivir en estado durable, dispatch y validacion de entrega.
 
 ## Bloque 1 — Consolidacion del modelo ya abierto
 
@@ -61,11 +63,34 @@ Antes de ampliar en serio:
 
 hay que mover casos de uso y reglas de negocio fuera de `db/`.
 
+### Decision operativa añadida durante el bloque
+
+El proyecto ha llegado a una conclusion adicional durante la propia ejecucion del roadmap:
+
+- la delegacion amplia a agentes hace divergir la solucion del roadmap
+- esa deriva termina manifestandose como deuda de hexagonalidad y cambios laterales fuera de control
+
+Por eso, este bloque ya no solo exige sacar logica de `db/`.
+Tambien exige cambiar el modelo de delegacion: Orquesta debe mandar microtareas cerradas por especificacion de funcion.
+
 ### Entregables
 
 - servicios de aplicacion para propuestas, tareas, sesiones y proyectos
 - puertos de persistencia claros
 - adaptadores SQLite reducidos a persistencia
+- modelo canónico de `especificacion de funcion`
+- validacion de entregas por `write_set`, firma, imports y tests
+- protocolo de worker por `inbox + ACK + claim-safe`
+- planificador de microprogramacion dirigida sobre funciones y no sobre frentes amplios
+
+Frente abierto en Orquesta para esta decision:
+
+- `#505` Definir especificacion de funcion y write-set obligatorio
+- `#506` Emitir microtareas desde Orquesta sobre especificaciones de funcion
+- `#507` Validar entregas de agentes por firma, write-set y tests obligatorios
+- `#508` Endurecer dispatch state-first con ack, receipt y ready gate
+- `#509` Restringir a los agentes al modo microprogramacion dirigida
+- `#510` Integrar review y merge solo desde entregas validadas
 
 ## Bloque 3 — Memoria y conocimiento
 
@@ -167,6 +192,12 @@ Cerrar bien el ciclo practico de agentes manuales y semiautomaticos.
 - arranque, pausa y reanudacion desde Orquesta
 - control de presupuesto restante por sesion
 - checkpoint y relevo preventivo segun politica aprobada
+
+Nota de diseno:
+
+- este bloque ya no puede interpretarse como "dar autonomia abierta a la consola del agente"
+- el runtime solo resuelve transporte, continuidad y observabilidad
+- la unidad de trabajo que baja al agente debe venir cerrada desde el orquestador
 
 ## Bloque 10 — Refactorizacion competitiva
 

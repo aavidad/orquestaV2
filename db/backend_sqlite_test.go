@@ -219,6 +219,106 @@ func TestSQLitePrepareAplicaPostMigracionesAunqueLaRevisionYaEsteMarcada(t *test
 	}
 }
 
+func TestSQLitePrepareRecuperaTablaEspecificacionesFuncionEnDBExistente(t *testing.T) {
+	path := t.TempDir() + "/orquesta-microprogramacion.db"
+	cfg := storage.Config{
+		Driver:          "sqlite",
+		DSN:             storage.SQLiteDSN(path),
+		Path:            path,
+		MaxOpenConns:    1,
+		BootstrapSchema: true,
+	}
+	raw, err := storage.Open(cfg)
+	if err != nil {
+		t.Fatalf("storage.Open sqlite: %v", err)
+	}
+	defer raw.Close()
+	if err := (sqliteBackend{}).Prepare(raw, cfg); err != nil {
+		t.Fatalf("Prepare sqlite inicial: %v", err)
+	}
+
+	if _, err := raw.Exec(`DROP TABLE especificaciones_funcion`); err != nil {
+		t.Fatalf("drop especificaciones_funcion: %v", err)
+	}
+
+	if err := (sqliteBackend{}).Prepare(raw, cfg); err != nil {
+		t.Fatalf("Prepare sqlite tras perder especificaciones_funcion: %v", err)
+	}
+
+	exists, err := tablaExiste(raw, "especificaciones_funcion")
+	if err != nil {
+		t.Fatalf("tablaExiste especificaciones_funcion: %v", err)
+	}
+	if !exists {
+		t.Fatalf("Prepare sqlite no recreó especificaciones_funcion")
+	}
+	for _, idx := range []string{
+		"idx_especificaciones_funcion_tarea",
+		"idx_especificaciones_funcion_proyecto_estado",
+	} {
+		var total int
+		err := raw.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name = ?`, idx).Scan(&total)
+		if err != nil {
+			t.Fatalf("sqlite_master índice %s: %v", idx, err)
+		}
+		if total == 0 {
+			t.Fatalf("falta índice %s tras Prepare sqlite", idx)
+		}
+	}
+}
+
+func TestSQLitePrepareRepueblaConfigDefaultsNuevosSinPisarOverrides(t *testing.T) {
+	path := t.TempDir() + "/orquesta-config-defaults.db"
+	cfg := storage.Config{
+		Driver:          "sqlite",
+		DSN:             storage.SQLiteDSN(path),
+		Path:            path,
+		MaxOpenConns:    1,
+		BootstrapSchema: true,
+	}
+	raw, err := storage.Open(cfg)
+	if err != nil {
+		t.Fatalf("storage.Open sqlite: %v", err)
+	}
+	defer raw.Close()
+	if err := (sqliteBackend{}).Prepare(raw, cfg); err != nil {
+		t.Fatalf("Prepare sqlite inicial: %v", err)
+	}
+
+	if _, err := raw.Exec(`DELETE FROM config WHERE clave IN (?, ?)`, "runtime_handles_retention_minutes", "runtime_orders_retention_minutes"); err != nil {
+		t.Fatalf("borrar defaults nuevos: %v", err)
+	}
+	if _, err := raw.Exec(`UPDATE config SET valor = ? WHERE clave = ?`, "999", "runtime_instances_retention_hours"); err != nil {
+		t.Fatalf("override config existente: %v", err)
+	}
+
+	if err := (sqliteBackend{}).Prepare(raw, cfg); err != nil {
+		t.Fatalf("Prepare sqlite repoblando config: %v", err)
+	}
+
+	var handlesMinutes string
+	if err := raw.QueryRow(`SELECT valor FROM config WHERE clave = ?`, "runtime_handles_retention_minutes").Scan(&handlesMinutes); err != nil {
+		t.Fatalf("leer runtime_handles_retention_minutes: %v", err)
+	}
+	if handlesMinutes != "10" {
+		t.Fatalf("runtime_handles_retention_minutes inesperado: %q", handlesMinutes)
+	}
+	var ordersMinutes string
+	if err := raw.QueryRow(`SELECT valor FROM config WHERE clave = ?`, "runtime_orders_retention_minutes").Scan(&ordersMinutes); err != nil {
+		t.Fatalf("leer runtime_orders_retention_minutes: %v", err)
+	}
+	if ordersMinutes != "30" {
+		t.Fatalf("runtime_orders_retention_minutes inesperado: %q", ordersMinutes)
+	}
+	var retainedOverride string
+	if err := raw.QueryRow(`SELECT valor FROM config WHERE clave = ?`, "runtime_instances_retention_hours").Scan(&retainedOverride); err != nil {
+		t.Fatalf("leer runtime_instances_retention_hours: %v", err)
+	}
+	if retainedOverride != "999" {
+		t.Fatalf("Prepare no deberia pisar overrides: %q", retainedOverride)
+	}
+}
+
 func TestSQLitePrepareRebuildRuntimeMailboxPermiteEmisorLogico(t *testing.T) {
 	path := t.TempDir() + "/orquesta-runtime-mailbox-legacy.db"
 	cfg := storage.Config{

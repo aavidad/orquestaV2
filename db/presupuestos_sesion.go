@@ -167,6 +167,8 @@ func PresupuestoSesionFresco(p *PresupuestoSesion) bool {
 
 func presupuestoSnapshotMaxAgeSeconds(p *PresupuestoSesion) int64 {
 	if p != nil && (strings.EqualFold(strings.TrimSpace(p.BudgetSource), "codex_token_count_observed") ||
+		strings.EqualFold(strings.TrimSpace(p.BudgetSource), "codex_status_live") ||
+		strings.EqualFold(strings.TrimSpace(p.BudgetSource), "codex_profile_status") ||
 		strings.EqualFold(strings.TrimSpace(p.BudgetSource), "claude_rust_session_observed")) {
 		if observed := configInt64Fallback("pool_budget_snapshot_observed_max_age_seconds", 3600); observed > 0 {
 			return observed
@@ -236,6 +238,121 @@ func UltimoPresupuestoAgenteConCuota(agente string) (*PresupuestoSesion, *Sesion
 		}
 	}
 	return nil, nil, sql.ErrNoRows
+}
+
+func UltimoPresupuestoCuentaCanonicaConCuota(accountID, email string) (*PresupuestoSesion, *Sesion, error) {
+	accountID = strings.ToLower(strings.TrimSpace(accountID))
+	email = strings.ToLower(strings.TrimSpace(email))
+	if accountID != "" {
+		p, s, err := ultimoPresupuestoCuentaConCuotaPorIdentidad("account_id", accountID)
+		if err == nil || err != sql.ErrNoRows {
+			return p, s, err
+		}
+	}
+	if email == "" {
+		return nil, nil, sql.ErrNoRows
+	}
+	return ultimoPresupuestoCuentaConCuotaPorIdentidad("account_email", email)
+}
+
+func ultimoPresupuestoCuentaConCuotaPorIdentidad(field, value string) (*PresupuestoSesion, *Sesion, error) {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return nil, nil, sql.ErrNoRows
+	}
+	if err := ensureAgentesIdentidadObservadaSchema(); err != nil {
+		return nil, nil, err
+	}
+	var where string
+	switch strings.ToLower(strings.TrimSpace(field)) {
+	case "account_id":
+		where = `LOWER(TRIM(COALESCE(ao.account_id,''))) = ?
+		   OR LOWER(p.raw_snapshot_json) LIKE ?`
+	default:
+		where = `LOWER(TRIM(COALESCE(ao.email,''))) = ?
+		   OR LOWER(p.raw_snapshot_json) LIKE ?`
+	}
+	rows, err := DB.Query(`
+		SELECT p.id, p.sesion_id, p.pool_id, p.model_slug, p.window_kind, p.window_started_at, p.reset_at,
+		       p.remaining_seconds, p.remaining_messages, p.remaining_tokens, p.remaining_credits,
+		       p.budget_source, p.raw_snapshot_json, p.checked_at, p.created_at,
+		       s.id, s.agente, s.conector_id, s.proyecto_id, s.inicio, s.fin, s.activa, s.estado,
+		       s.cwd, s.herramienta, s.external_session_id, s.resume_payload_json, s.resumen_continuidad,
+		       s.branch, s.heartbeat_at, s.host, s.pid
+		FROM presupuestos_sesion p
+		JOIN sesiones s ON s.id = p.sesion_id
+		LEFT JOIN agentes_identidad_observada ao ON ao.agente = s.agente
+		WHERE `+where+`
+		ORDER BY p.checked_at DESC, p.id DESC
+		LIMIT 100`, value, "%\""+strings.ToLower(strings.TrimSpace(field))+"\":\""+value+"\"%")
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	var (
+		bestP     *PresupuestoSesion
+		bestS     *Sesion
+		bestScore int64 = -1
+	)
+	for rows.Next() {
+		p, sesion, err := scanPresupuestoAgenteConSesion(rows)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !PresupuestoSesionAportaCuota(p) {
+			continue
+		}
+		score := scorePresupuestoCuentaCanonico(p)
+		if score > bestScore {
+			bestScore = score
+			bestP = p
+			bestS = sesion
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	if bestP == nil {
+		return nil, nil, sql.ErrNoRows
+	}
+	return bestP, bestS, nil
+}
+
+func scorePresupuestoCuentaCanonico(p *PresupuestoSesion) int64 {
+	if p == nil {
+		return -1
+	}
+	var score int64
+	if PresupuestoSesionAportaCuota(p) {
+		score += 1_000_000_000
+	}
+	if !p.CheckedAt.IsZero() {
+		age := time.Since(p.CheckedAt.UTC())
+		switch {
+		case age <= 15*time.Minute:
+			score += 100_000_000
+		case age <= time.Hour:
+			score += 75_000_000
+		case age <= 6*time.Hour:
+			score += 50_000_000
+		case age <= 24*time.Hour:
+			score += 25_000_000
+		}
+	}
+	switch strings.ToLower(strings.TrimSpace(p.BudgetSource)) {
+	case "codex_status_live", "claude_status_live":
+		score += 70_000_000
+	case "codex_profile_status":
+		score += 65_000_000
+	case "codex_token_count_observed", "claude_rust_session_observed":
+		score += 60_000_000
+	case "provider_backoff":
+		score += 10_000_000
+	default:
+		score += 5_000_000
+	}
+	score += p.CheckedAt.UTC().Unix()
+	return score
 }
 
 func scanPresupuestoAgenteConSesion(s scanner) (*PresupuestoSesion, *Sesion, error) {

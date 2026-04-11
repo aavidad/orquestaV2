@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"orquesta/runtimeagente"
 )
 
 type agenteLanzarPlanOutput struct {
@@ -41,7 +42,7 @@ var createRuntimeOrderForLaunch = crearRuntimeOrderDesdeAPI
 var agenteLanzarPlanCmd = &cobra.Command{
 	Use:   "lanzar-plan <fichero.plan>",
 	Short: "Lanza manualmente un plan de agentes vía backend terminal",
-	Long: "Herramienta manual de operación/rescate para abrir consolas o terminales de agentes.\nLa vía oficial del orquestador para control continuo es daemon + API + control plane.\nUsa --server-first para encolar órdenes start por API sin pasar por launchers manuales.",
+	Long:  "Herramienta manual de operación/rescate para abrir consolas o terminales de agentes.\nLa vía oficial del orquestador para control continuo es daemon + API + control plane.\nUsa --server-first para encolar órdenes start por API sin pasar por launchers manuales.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		backend, _ := cmd.Flags().GetString("backend")
@@ -267,7 +268,7 @@ func parseAgenteLanzarPlanEntries(planFile string) ([]agenteLanzarPlanEntry, err
 		if agente == "" || proyecto == "" {
 			return nil, fmt.Errorf("línea %d inválida (agente/proyecto vacíos): %s", lineNo, line)
 		}
-		conector := "codex-cli"
+		conector := runtimeagente.ConectorPorDefectoAgente(agente)
 		if len(parts) > 7 && strings.TrimSpace(parts[7]) != "" {
 			conector = strings.TrimSpace(parts[7])
 		}

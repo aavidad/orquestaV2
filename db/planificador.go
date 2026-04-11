@@ -235,14 +235,19 @@ func tareaHuerfanaRecuperable(agente string, proyectoID int64) (bool, error) {
 	if agente == "" || proyectoID <= 0 {
 		return false, nil
 	}
+	if agentePareceOperadorManualFueraDeFlota(agente) {
+		return false, nil
+	}
 	if sesion, err := GetSesionActiva(agente, &proyectoID); err != nil && err != sql.ErrNoRows {
 		return false, err
 	} else if sesion != nil {
 		return false, nil
 	}
-	if handle, err := GetRuntimeHandleActivoAgenteProyecto(agente, &proyectoID); err != nil {
+	handleOperativo, err := runtimeHandleOperativoRecienteConFallback(agente, &proyectoID)
+	if err != nil {
 		return false, err
-	} else if handle != nil {
+	}
+	if handleOperativo != nil {
 		return false, nil
 	}
 	var protegida int
@@ -270,12 +275,30 @@ func tareaHuerfanaRecuperable(agente string, proyectoID int64) (bool, error) {
 	return true, nil
 }
 
+func agentePareceOperadorManualFueraDeFlota(nombre string) bool {
+	nombre = strings.ToLower(strings.TrimSpace(nombre))
+	if nombre == "" {
+		return false
+	}
+	for _, prefix := range []string{"codex", "claude", "gemini", "ollama", "antigravity"} {
+		if strings.HasPrefix(nombre, prefix) {
+			return false
+		}
+	}
+	return true
+}
+
 func ventanaGraciaRecuperacionTareaHuerfana() time.Duration {
 	return time.Duration(configIntOrDefault("orphan_task_recovery_grace_seconds", 300)) * time.Second
 }
 
 func planificarAgenteAutomaticamente(ag *Agente) error {
 	if ag == nil {
+		return nil
+	}
+	if permite, _, err := cuentaCompartidaPermiteActivacion(ag); err != nil {
+		return err
+	} else if !permite {
 		return nil
 	}
 	proyectoID, err := ResolverProyectoPlanificableAgente(ag.Nombre)
@@ -514,7 +537,7 @@ func seleccionarProyectoAutomaticoDisponible(agente string) (int64, error) {
 		if !disponible {
 			continue
 		}
-	tarea, err := buscarSiguienteTareaLibreParaAgente(agente, proyecto.ID)
+		tarea, err := buscarSiguienteTareaLibreParaAgente(agente, proyecto.ID)
 		if err != nil {
 			return 0, err
 		}
@@ -780,6 +803,13 @@ func EncolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo
 	if proyecto == nil {
 		return nil
 	}
+	if permite, ocupadoPor, err := CuentaCompartidaPermiteActivacionAgente(agente); err != nil {
+		return err
+	} else if !permite {
+		Audit("sistema", "auto_start_runtime_cuenta_ocupada", "agente", 0,
+			fmt.Sprintf("agente=%s proyecto=%s ocupado_por=%s motivo=%s", agente, proyecto.Slug, ocupadoPor, motivo))
+		return nil
+	}
 	sesionActiva, err := GetSesionActiva(agente, nil)
 	if err != nil && err != sql.ErrNoRows {
 		return err
@@ -794,7 +824,7 @@ func EncolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo
 	if pendiente {
 		return nil
 	}
-	handleProyecto, err := GetRuntimeHandleActivoAgenteProyecto(agente, &proyecto.ID)
+	handleProyecto, err := runtimeHandleCanonicoRecienteConFallback(agente, &proyecto.ID)
 	if err != nil {
 		return err
 	}
@@ -825,7 +855,7 @@ func EncolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo
 		}
 		return nil
 	}
-	handle, err := GetRuntimeHandleActivoAgente(agente)
+	handle, err := runtimeHandleCanonicoRecienteConFallback(agente, nil)
 	if err != nil {
 		return err
 	}
@@ -860,23 +890,33 @@ func existeRuntimeOrderAbierta(agente string, proyectoID *int64, tipos ...string
 	if len(tipos) == 0 {
 		return false, nil
 	}
-	placeholders, tipoArgs := runtimeOrderPlaceholders(tipos)
-	args := make([]any, 0, len(tipoArgs)+4)
-	args = append(args, strings.TrimSpace(agente))
-	args = append(args, tipoArgs...)
-	q := `
-		SELECT COUNT(*)
-		FROM runtime_orders
-		WHERE agente = ?
-		  AND tipo IN (` + placeholders + `)
-		  AND estado IN ('pendiente','tomada','ejecutando')`
-	if proyectoID != nil {
-		q += ` AND proyecto_id = ?`
-		args = append(args, *proyectoID)
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{
+		Agente: stringsPtrTrimmed(agente),
+		Estado: &estado,
+	})
+	if err != nil {
+		return false, err
 	}
-	var count int
-	err := DB.QueryRow(q, args...).Scan(&count)
-	return count > 0, err
+	tiposWanted := make(map[string]struct{}, len(tipos))
+	for _, tipo := range tipos {
+		tipo = strings.TrimSpace(tipo)
+		if tipo != "" {
+			tiposWanted[tipo] = struct{}{}
+		}
+	}
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		if proyectoID != nil && order.ProyectoID != nil && *order.ProyectoID != *proyectoID {
+			continue
+		}
+		if _, ok := tiposWanted[strings.TrimSpace(order.Tipo)]; ok {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func liberarBacklog() error {
@@ -934,6 +974,8 @@ func ListarAgentesPlanificables() ([]*Agente, error) {
 		return nil, err
 	}
 	var list []*Agente
+	cuentasReservadas := map[string]int{}
+	cuentaCeiling := cuentaCompartidaCeiling()
 	for _, a := range candidatos {
 		if a == nil {
 			continue
@@ -953,10 +995,30 @@ func ListarAgentesPlanificables() ([]*Agente, error) {
 		} else if sesionActiva != nil && strings.TrimSpace(sesionActiva.Estado) != "pausada" {
 			continue
 		}
-		if handle, err := GetRuntimeHandleActivoAgente(a.Nombre); err != nil {
+		handle, err := runtimeHandleCanonicoRecienteConFallback(a.Nombre, nil)
+		if err != nil {
 			return nil, err
-		} else if handle != nil && strings.TrimSpace(handle.Estado) != "pausado" {
+		}
+		if handle != nil && strings.TrimSpace(handle.Estado) != "pausado" {
 			continue
+		}
+		if permite, _, err := cuentaCompartidaPermiteActivacion(infoAgente); err != nil {
+			return nil, err
+		} else if !permite {
+			continue
+		}
+		if cuentaKey := CuentaClaveAgente(infoAgente); cuentaKey != "" {
+			if _, ok := cuentasReservadas[cuentaKey]; !ok {
+				ocupantes, err := agentesOcupandoCuentaCompartida(cuentaKey, a.Nombre)
+				if err != nil {
+					return nil, err
+				}
+				cuentasReservadas[cuentaKey] = len(ocupantes)
+			}
+			if cuentasReservadas[cuentaKey] >= cuentaCeiling {
+				continue
+			}
+			cuentasReservadas[cuentaKey]++
 		}
 		list = append(list, a)
 	}

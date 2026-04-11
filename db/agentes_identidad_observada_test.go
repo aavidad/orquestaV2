@@ -7,12 +7,15 @@ func TestGetAgenteUsaIdentidadObservadaComoFallback(t *testing.T) {
 	if err := RegistrarAgente("Codex7", "programador"); err != nil {
 		t.Fatalf("registrar agente: %v", err)
 	}
-	if err := UpsertAgenteIdentidadObservada("Codex7", "berserk@avidad.com", "berserk", "manual_observed_identity", nil); err != nil {
+	if err := UpsertAgenteIdentidadObservadaCanonica("Codex7", "acc-berserk", "berserk@avidad.com", "berserk", "manual_observed_identity", nil); err != nil {
 		t.Fatalf("upsert identidad observada: %v", err)
 	}
 	agente, err := GetAgente("Codex7")
 	if err != nil {
 		t.Fatalf("get agente: %v", err)
+	}
+	if agente.CuentaID != "acc-berserk" {
+		t.Fatalf("cuenta id inesperada: %+v", agente)
 	}
 	if agente.CuentaEmail != "berserk@avidad.com" {
 		t.Fatalf("cuenta email inesperada: %+v", agente)
@@ -22,5 +25,22 @@ func TestGetAgenteUsaIdentidadObservadaComoFallback(t *testing.T) {
 	}
 	if agente.CuentaFuente != "manual_observed_identity" {
 		t.Fatalf("fuente inesperada: %+v", agente)
+	}
+}
+
+func TestGetAgenteUsaAccountIDObservadoComoClaveCanonica(t *testing.T) {
+	prepararDBTemporal(t)
+	if err := RegistrarAgente("Codex7", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := UpsertAgenteIdentidadObservadaCanonica("Codex7", "acct-codex7", "berserk@avidad.com", "berserk", "manual_observed_identity", nil); err != nil {
+		t.Fatalf("upsert identidad observada canonica: %v", err)
+	}
+	agente, err := GetAgente("Codex7")
+	if err != nil {
+		t.Fatalf("get agente: %v", err)
+	}
+	if agente.CuentaID != "acct-codex7" {
+		t.Fatalf("cuenta id inesperada: %+v", agente)
 	}
 }

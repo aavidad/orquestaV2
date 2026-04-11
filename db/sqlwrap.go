@@ -16,6 +16,7 @@ type Handle struct {
 type Tx struct {
 	*sql.Tx
 	driver string
+	dirty  bool
 }
 
 func newHandle(inner *sql.DB, driver string) *Handle {
@@ -31,6 +32,9 @@ func (h *Handle) Exec(query string, args ...any) (sql.Result, error) {
 		res, err = h.DB.Exec(storage.RebindQuery(h.driver, query), args...)
 		return err
 	})
+	if err == nil && runtimeOrdersHotIndexMutatingQuery(query) {
+		markRuntimeOrdersHotIndexDirty()
+	}
 	return res, err
 }
 
@@ -48,6 +52,21 @@ func (h *Handle) Query(query string, args ...any) (*sql.Rows, error) {
 
 func (h *Handle) QueryRow(query string, args ...any) *sql.Row {
 	return h.DB.QueryRow(storage.RebindQuery(h.driver, query), args...)
+}
+
+// WALCheckpoint ejecuta un checkpoint PASSIVE en SQLite para volcar el WAL al
+// archivo principal. Es seguro llamarlo con readers/writers activos: si hay
+// páginas ocupadas simplemente se omiten (sin bloquear). Devuelve el número de
+// páginas volcadas y las que quedaron pendientes. En drivers que no son SQLite
+// es un no-op.
+func (h *Handle) WALCheckpoint() (walPages, checkpointedPages int, err error) {
+	if h == nil || normalizedDriverName(h.driver) != "sqlite" {
+		return 0, 0, nil
+	}
+	row := h.DB.QueryRow(`PRAGMA wal_checkpoint(PASSIVE)`)
+	var status int
+	err = row.Scan(&status, &walPages, &checkpointedPages)
+	return walPages, checkpointedPages, err
 }
 
 func (h *Handle) Begin() (*Tx, error) {
@@ -92,6 +111,10 @@ func (tx *Tx) Exec(query string, args ...any) (sql.Result, error) {
 		res, err = tx.Tx.Exec(storage.RebindQuery(tx.driver, query), args...)
 		return err
 	})
+	if err == nil && runtimeOrdersHotIndexMutatingQuery(query) {
+		tx.dirty = true
+		markRuntimeOrdersHotIndexDirty()
+	}
 	return res, err
 }
 

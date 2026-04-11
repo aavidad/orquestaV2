@@ -116,6 +116,31 @@ func TestGuardarPoolModeloYListar(t *testing.T) {
 	})
 }
 
+func TestSeedPoolsInicialesIncluyeOllama(t *testing.T) {
+	withTempDBPools(t, func() {
+		if err := SeedPoolsIniciales(); err != nil {
+			t.Fatalf("SeedPoolsIniciales: %v", err)
+		}
+		if err := SeedModelosIniciales(); err != nil {
+			t.Fatalf("SeedModelosIniciales: %v", err)
+		}
+		pool, err := GetPool("ollama")
+		if err != nil {
+			t.Fatalf("GetPool ollama: %v", err)
+		}
+		if pool.Runtime != "ollama" {
+			t.Fatalf("pool ollama inesperado: %+v", pool)
+		}
+		modelos, err := ListarModelosPool("ollama")
+		if err != nil {
+			t.Fatalf("ListarModelosPool ollama: %v", err)
+		}
+		if len(modelos) == 0 || modelos[0].ModelSlug != "qwen2.5-coder:7b" {
+			t.Fatalf("modelos ollama inesperados: %+v", modelos)
+		}
+	})
+}
+
 func withTempDBPools(t *testing.T, fn func()) {
 	t.Helper()
 	prepararDBTemporal(t)

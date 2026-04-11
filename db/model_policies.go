@@ -9,6 +9,7 @@ package db
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -32,6 +33,7 @@ type PoliticaModelo struct {
 }
 
 type ResolverPoliticaInput struct {
+	AgenteNombre *string
 	TareaID      *int64
 	ProyectoSlug string
 	Fase         string
@@ -49,7 +51,7 @@ type ResolucionModelo struct {
 	PoliticasAplicadas []*PoliticaModelo `json:"politicas_aplicadas,omitempty"`
 }
 
-func ResolverPerfilEjecucionLanzamiento(proyectoSlug, perfilTarea, modelo, razonamiento string) (string, string, string, error) {
+func ResolverPerfilEjecucionLanzamiento(agenteNombre *string, proyectoSlug, perfilTarea, modelo, razonamiento string) (string, string, string, error) {
 	perfilTarea = strings.TrimSpace(perfilTarea)
 	modelo = strings.TrimSpace(modelo)
 	razonamiento = strings.TrimSpace(strings.ToLower(razonamiento))
@@ -59,8 +61,11 @@ func ResolverPerfilEjecucionLanzamiento(proyectoSlug, perfilTarea, modelo, razon
 	if err := EnsureCapacidadModeloBaseCodex(); err != nil {
 		return "", "", "", err
 	}
+	fase, _ := ObtenerFaseActivaProyecto(proyectoSlug)
 	resolucion, err := ResolverPoliticaModelo(ResolverPoliticaInput{
+		AgenteNombre: agenteNombre,
 		ProyectoSlug: strings.TrimSpace(proyectoSlug),
+		Fase:         fase,
 		PerfilTarea:  perfilTarea,
 	})
 	if err != nil {
@@ -315,6 +320,13 @@ func capasPolitica(input ResolverPoliticaInput, perfil string) []capaPolitica {
 	if strings.TrimSpace(input.Fase) != "" {
 		layers = append(layers, capaPolitica{scopeTipo: "fase", scopeRef: strings.TrimSpace(input.Fase)})
 	}
+	if input.AgenteNombre != nil && strings.TrimSpace(*input.AgenteNombre) != "" {
+		nombre := strings.TrimSpace(*input.AgenteNombre)
+		if agente, err := GetAgente(nombre); err == nil && agente != nil && strings.TrimSpace(agente.Rol) != "" {
+			layers = append(layers, capaPolitica{scopeTipo: "rol", scopeRef: strings.TrimSpace(agente.Rol)})
+		}
+		layers = append(layers, capaPolitica{scopeTipo: "agente", scopeRef: nombre})
+	}
 	if input.TareaID != nil {
 		layers = append(layers, capaPolitica{scopeTipo: "tarea", scopeRef: strconv.FormatInt(*input.TareaID, 10)})
 	}
@@ -379,6 +391,9 @@ func resolverPoolYModeloPorPerfilAutoSeed(perfil string, seeded bool) (*PoolCapa
 	}
 	var mejor *poolCandidate
 	for _, item := range resumen {
+		if poolSoloExplicito(item.Pool) {
+			continue
+		}
 		modelo, err := resolverModeloPool(item.Pool.Slug, perfil)
 		if err != nil {
 			if strings.Contains(err.Error(), "no hay modelos activos") {
@@ -400,6 +415,34 @@ func resolverPoolYModeloPorPerfilAutoSeed(perfil string, seeded bool) (*PoolCapa
 		return nil, nil, fmt.Errorf("no hay pools activos con modelos configurados")
 	}
 	return mejor.Pool, mejor.Model, nil
+}
+
+func poolSoloExplicito(pool *PoolCapacidad) bool {
+	if pool == nil {
+		return false
+	}
+	raw := strings.TrimSpace(pool.MetadataJSON)
+	if raw == "" || raw == "{}" {
+		return false
+	}
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(raw), &meta); err != nil {
+		return false
+	}
+	valor, ok := meta["solo_explicito"]
+	if !ok {
+		return false
+	}
+	switch v := valor.(type) {
+	case bool:
+		return v
+	case string:
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "1", "true", "yes", "si", "sí", "on":
+			return true
+		}
+	}
+	return false
 }
 
 func resolverModeloPool(poolSlug, perfil string) (*PoolModelo, error) {

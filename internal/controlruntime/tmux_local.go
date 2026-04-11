@@ -1,0 +1,348 @@
+package controlruntime
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"orquesta/runtimeagente"
+)
+
+func arrancarPlanLocalTMUX(req SolicitudArranque) (*ProcesoArrancado, error) {
+	startedAt := time.Now().UTC()
+	runDir := runtimeArtifactsRunDir(req, startedAt)
+	if err := os.MkdirAll(runDir, 0o700); err != nil {
+		return nil, err
+	}
+
+	tmuxCommand, err := tmuxCommandPath(req)
+	if err != nil {
+		return nil, err
+	}
+	logPath := filepath.Join(runDir, "tmux.log")
+	manifestPath := filepath.Join(runDir, "runtime.json")
+	workerPaths := workerArtifactsPaths(runDir)
+
+	if req.Plan != nil {
+		req.Plan.Comando = absolutizarComandoPlanLocal(strings.TrimSpace(req.Plan.Comando))
+	}
+	rendered := runtimeagente.RenderCommand(req.Plan)
+	commandLine := "exec " + shellQuoteSimple(strings.TrimSpace(req.Plan.Comando))
+	if joined := strings.TrimSpace(shellJoinQuoted(req.Plan.Args)); joined != "" {
+		commandLine += " " + joined
+	}
+	profileWrapper, profileName, hasProfileStatus := codexProfileCommandFromCandidates(rendered, commandLine)
+
+	sessionName := buildTmuxSessionName(req, startedAt)
+	windowName := buildTmuxWindowName(req)
+	paneInfo, err := startTmuxSession(tmuxCommand, sessionName, windowName, strings.TrimSpace(req.Plan.WorkingDir), commandLine, req.Plan.Env)
+	if err != nil {
+		_ = writeWorkerStatusFile(workerPaths.StatusPath, workerStatus{
+			State:     workerStatusFailed,
+			UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+			Alive:     false,
+			Agent:     strings.TrimSpace(req.Agente),
+			Project:   strings.TrimSpace(req.Proyecto),
+			LogPath:   logPath,
+			ExitError: strings.TrimSpace(err.Error()),
+		})
+		return nil, err
+	}
+
+	if err := tmuxPipePane(tmuxCommand, paneInfo.PaneID, logPath); err != nil {
+		_ = tmuxKillSession(tmuxCommand, sessionName)
+		return nil, err
+	}
+
+	canSendInput, canSendInputSource := localPTYInputPolicy(req.Plan)
+	mailboxDeliveryMode := localPTYMailboxDeliveryMode(req.Plan, canSendInput)
+	externalSessionID := ""
+	if renderedCommandLooksLikeCodexCLI(rendered) {
+		externalSessionID, _ = detectCodexSessionID(rendered, strings.TrimSpace(req.Plan.WorkingDir), startedAt, time.Now().UTC())
+	}
+	if mailboxDeliveryMode == runtimeagente.MailboxDeliverySessionResume && strings.TrimSpace(externalSessionID) == "" {
+		mailboxDeliveryMode = runtimeagente.MailboxDeliveryBootstrapOnly
+	}
+
+	supervisorRef := runDir
+	if err := writeRuntimeTraceManifestTMUX(manifestPath, req, startedAt, paneInfo.PanePID, logPath, rendered, commandLine, canSendInput, canSendInputSource, mailboxDeliveryMode, externalSessionID, supervisorRef, tmuxCommand, paneInfo); err != nil {
+		_ = tmuxKillSession(tmuxCommand, sessionName)
+		return nil, err
+	}
+	if err := writeWorkerManifestFile(workerPaths.ManifestPath, workerManifest{
+		Agent:                strings.TrimSpace(req.Agente),
+		Project:              strings.TrimSpace(req.Proyecto),
+		Driver:               "tmux_cli_session",
+		Transport:            "tmux",
+		Profile:              strings.TrimSpace(profileName),
+		ProfileStatusWrapper: strings.TrimSpace(profileWrapper),
+		TmuxSession:          strings.TrimSpace(paneInfo.SessionName),
+		TmuxWindow:           strings.TrimSpace(paneInfo.WindowName),
+		TmuxPaneID:           strings.TrimSpace(paneInfo.PaneID),
+		CreatedAt:            startedAt.Format(time.RFC3339Nano),
+		StartedAt:            startedAt.Format(time.RFC3339Nano),
+		ChildPID:             paneInfo.PanePID,
+		WorkingDir:           strings.TrimSpace(req.Plan.WorkingDir),
+		Command:              rendered,
+		RuntimeManifestPath:  manifestPath,
+		StatusPath:           workerPaths.StatusPath,
+		HeartbeatPath:        workerPaths.HeartbeatPath,
+		LogPath:              logPath,
+		ExternalSessionID:    strings.TrimSpace(externalSessionID),
+		MailboxDeliveryMode:  strings.TrimSpace(mailboxDeliveryMode),
+		CanSendInput:         canSendInput,
+	}); err != nil {
+		_ = tmuxKillSession(tmuxCommand, sessionName)
+		return nil, err
+	}
+	if err := writeWorkerStatusFile(workerPaths.StatusPath, workerStatus{
+		State:               workerStatusStarting,
+		UpdatedAt:           time.Now().UTC().Format(time.RFC3339Nano),
+		Alive:               true,
+		ChildPID:            paneInfo.PanePID,
+		Agent:               strings.TrimSpace(req.Agente),
+		Project:             strings.TrimSpace(req.Proyecto),
+		WorkingDir:          strings.TrimSpace(req.Plan.WorkingDir),
+		LogPath:             logPath,
+		ExternalSessionID:   strings.TrimSpace(externalSessionID),
+		MailboxDeliveryMode: strings.TrimSpace(mailboxDeliveryMode),
+	}); err != nil {
+		_ = tmuxKillSession(tmuxCommand, sessionName)
+		return nil, err
+	}
+	if err := writeWorkerHeartbeatFile(workerPaths.HeartbeatPath, workerHeartbeat{
+		Alive:             true,
+		HeartbeatAt:       time.Now().UTC().Format(time.RFC3339Nano),
+		StartedAt:         startedAt.Format(time.RFC3339Nano),
+		ChildPID:          paneInfo.PanePID,
+		Agent:             strings.TrimSpace(req.Agente),
+		Project:           strings.TrimSpace(req.Proyecto),
+		ExternalSessionID: strings.TrimSpace(externalSessionID),
+	}); err != nil {
+		_ = tmuxKillSession(tmuxCommand, sessionName)
+		return nil, err
+	}
+
+	monitorSpec := embeddedTmuxMonitorSpec{
+		TmuxCommand:         tmuxCommand,
+		SessionName:         paneInfo.SessionName,
+		WindowName:          paneInfo.WindowName,
+		PaneID:              paneInfo.PaneID,
+		ChildPID:            paneInfo.PanePID,
+		Agent:               strings.TrimSpace(req.Agente),
+		Project:             strings.TrimSpace(req.Proyecto),
+		WorkingDir:          strings.TrimSpace(req.Plan.WorkingDir),
+		StartedAt:           startedAt.Format(time.RFC3339Nano),
+		Command:             rendered,
+		LogPath:             logPath,
+		RuntimeManifestPath: manifestPath,
+		StatusPath:          workerPaths.StatusPath,
+		HeartbeatPath:       workerPaths.HeartbeatPath,
+		ExternalSessionID:   strings.TrimSpace(externalSessionID),
+		MailboxDeliveryMode: strings.TrimSpace(mailboxDeliveryMode),
+		OwnerPID:            os.Getpid(),
+	}
+	monitorPID, err := launchEmbeddedTmuxMonitor(monitorSpec, runDir)
+	if err != nil {
+		_ = tmuxKillSession(tmuxCommand, sessionName)
+		return nil, err
+	}
+	ready, readyErr := waitForTMUXPaneReady(tmuxCommand, paneInfo.PaneID, tmuxStartReadyTimeout)
+	if readyErr != nil {
+		_ = tmuxKillSession(tmuxCommand, sessionName)
+		return nil, readyErr
+	}
+	if ready {
+		_ = writeEmbeddedTmuxWorkerSnapshot(monitorSpec, workerStatusReady, true, "", nil, paneInfo.PanePID, time.Now().UTC(), time.Time{})
+	}
+
+	metaJSON, _ := json.Marshal(map[string]any{
+		"agente":                strings.TrimSpace(req.Agente),
+		"proyecto":              strings.TrimSpace(req.Proyecto),
+		"log_path":              logPath,
+		"trace_dir":             runDir,
+		"trace_manifest":        manifestPath,
+		"started_at":            startedAt.Format(time.RFC3339Nano),
+		"working_dir":           strings.TrimSpace(req.Plan.WorkingDir),
+		"wrapped_command":       commandLine,
+		"rendered_command":      rendered,
+		"driver":                "tmux_cli_session",
+		"transporte":            "tmux",
+		"supervisor_ref":        supervisorRef,
+		"supervisor_driver":     "tmux_runtime_monitor",
+		"supervision_mode":      supervisionModoAdjunto,
+		"supervisor_owner_pid":  os.Getpid(),
+		"tmux_command":          tmuxCommand,
+		"tmux_session":          paneInfo.SessionName,
+		"tmux_window":           paneInfo.WindowName,
+		"tmux_pane_id":          paneInfo.PaneID,
+		"tmux_monitor_pid":      monitorPID,
+		"worker_manifest_path":  workerPaths.ManifestPath,
+		"worker_status_path":    workerPaths.StatusPath,
+		"worker_heartbeat_path": workerPaths.HeartbeatPath,
+		"can_send_input":        canSendInput,
+		"can_send_input_source": canSendInputSource,
+		"mailbox_delivery_mode": mailboxDeliveryMode,
+		"external_session_id":   externalSessionID,
+		"profile_name":          strings.TrimSpace(profileName),
+		"profile_status_wrapper": func() string {
+			if !hasProfileStatus {
+				return ""
+			}
+			return strings.TrimSpace(profileWrapper)
+		}(),
+	})
+	capsJSON, _ := json.Marshal(map[string]any{
+		"can_send_input":        canSendInput,
+		"can_checkpoint":        true,
+		"can_resume":            true,
+		"can_capture_pid":       paneInfo.PanePID > 0,
+		"can_track_continuity":  true,
+		"can_pause":             paneInfo.PanePID > 0,
+		"can_stop":              true,
+		"mailbox_delivery_mode": mailboxDeliveryMode,
+	})
+	_ = publicarLogAgente(req, logPath)
+
+	return &ProcesoArrancado{
+		PID:               paneInfo.PanePID,
+		HandleKind:        "session",
+		HandleRef:         tmuxSessionHandleRef(paneInfo.SessionName, paneInfo.PaneID),
+		ExternalSessionID: externalSessionID,
+		LogPath:           logPath,
+		WorkingDir:        strings.TrimSpace(req.Plan.WorkingDir),
+		WrappedCommand:    commandLine,
+		RenderedCommand:   rendered,
+		MetadataJSON:      string(metaJSON),
+		CapabilitiesJSON:  string(capsJSON),
+	}, nil
+}
+
+func tmuxSessionHandleRef(sessionName, paneID string) string {
+	sessionName = strings.TrimSpace(sessionName)
+	paneID = strings.TrimSpace(paneID)
+	switch {
+	case sessionName != "" && paneID != "":
+		return sessionName + "/" + paneID
+	case sessionName != "":
+		return sessionName
+	default:
+		return paneID
+	}
+}
+
+type tmuxPaneInfo struct {
+	SessionName string
+	WindowName  string
+	PaneID      string
+	PanePID     int
+}
+
+func tmuxCommandPath(req SolicitudArranque) (string, error) {
+	if req.Plan != nil && req.Plan.Env != nil {
+		if path := strings.TrimSpace(req.Plan.Env["ORQUESTA_TMUX_BIN"]); path != "" {
+			return path, nil
+		}
+	}
+	if path := strings.TrimSpace(os.Getenv("ORQUESTA_TMUX_BIN")); path != "" {
+		return path, nil
+	}
+	return exec.LookPath("tmux")
+}
+
+func buildTmuxSessionName(req SolicitudArranque, startedAt time.Time) string {
+	return fmt.Sprintf("orq-%s-%s", sanitizePathFragment(req.Agente), strings.ToLower(startedAt.UTC().Format("150405")))
+}
+
+func buildTmuxWindowName(req SolicitudArranque) string {
+	if proyecto := sanitizePathFragment(strings.TrimSpace(req.Proyecto)); proyecto != "" {
+		return proyecto
+	}
+	return "worker"
+}
+
+func startTmuxSession(tmuxCommand, sessionName, windowName, workingDir, command string, env map[string]string) (*tmuxPaneInfo, error) {
+	args := []string{"new-session", "-d", "-P", "-F", "#{session_name}|#{window_name}|#{pane_id}|#{pane_pid}", "-s", sessionName, "-n", windowName}
+	if strings.TrimSpace(workingDir) != "" {
+		args = append(args, "-c", workingDir)
+	}
+	args = append(args, "bash", "-lc", command)
+	cmd := exec.Command(tmuxCommand, args...)
+	cmd.Env = append([]string(nil), os.Environ()...)
+	for k, v := range env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	parts := strings.Split(strings.TrimSpace(string(out)), "|")
+	if len(parts) < 4 {
+		return nil, fmt.Errorf("salida tmux invalida: %q", strings.TrimSpace(string(out)))
+	}
+	pid, _ := strconv.Atoi(strings.TrimSpace(parts[3]))
+	return &tmuxPaneInfo{
+		SessionName: strings.TrimSpace(parts[0]),
+		WindowName:  strings.TrimSpace(parts[1]),
+		PaneID:      strings.TrimSpace(parts[2]),
+		PanePID:     pid,
+	}, nil
+}
+
+func tmuxPipePane(tmuxCommand, paneID, logPath string) error {
+	command := fmt.Sprintf("cat >> %s", shellQuoteSimple(strings.TrimSpace(logPath)))
+	cmd := exec.Command(tmuxCommand, "pipe-pane", "-O", "-t", strings.TrimSpace(paneID), command)
+	return cmd.Run()
+}
+
+func tmuxKillSession(tmuxCommand, sessionName string) error {
+	if strings.TrimSpace(sessionName) == "" {
+		return nil
+	}
+	cmd := exec.Command(tmuxCommand, "kill-session", "-t", strings.TrimSpace(sessionName))
+	return cmd.Run()
+}
+
+func writeRuntimeTraceManifestTMUX(path string, req SolicitudArranque, startedAt time.Time, pid int, logPath, rendered, wrapped string, canSendInput bool, canSendInputSource, mailboxDeliveryMode, externalSessionID, supervisorRef, tmuxCommand string, paneInfo *tmuxPaneInfo) error {
+	payload := map[string]any{
+		"created_at":            startedAt.Format(time.RFC3339Nano),
+		"agente":                strings.TrimSpace(req.Agente),
+		"proyecto":              strings.TrimSpace(req.Proyecto),
+		"working_dir":           strings.TrimSpace(renderedWorkingDir(req)),
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"pid":                   pid,
+		"log_path":              logPath,
+		"rendered_command":      rendered,
+		"wrapped_command":       wrapped,
+		"can_send_input":        canSendInput,
+		"can_send_input_source": strings.TrimSpace(canSendInputSource),
+		"mailbox_delivery_mode": strings.TrimSpace(mailboxDeliveryMode),
+		"external_session_id":   strings.TrimSpace(externalSessionID),
+		"supervisor_ref":        strings.TrimSpace(supervisorRef),
+		"supervisor_driver":     "tmux_runtime_monitor",
+		"supervision_mode":      supervisionModoAdjunto,
+		"tmux_command":          strings.TrimSpace(tmuxCommand),
+	}
+	if paneInfo != nil {
+		payload["tmux_session"] = strings.TrimSpace(paneInfo.SessionName)
+		payload["tmux_window"] = strings.TrimSpace(paneInfo.WindowName)
+		payload["tmux_pane_id"] = strings.TrimSpace(paneInfo.PaneID)
+	}
+	if paths := workerArtifactsPaths(filepath.Dir(path)); strings.TrimSpace(paths.ManifestPath) != "" {
+		payload["worker_manifest_path"] = paths.ManifestPath
+		payload["worker_status_path"] = paths.StatusPath
+		payload["worker_heartbeat_path"] = paths.HeartbeatPath
+	}
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(path, data, 0o600)
+}

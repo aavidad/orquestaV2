@@ -192,6 +192,84 @@ func TestPrepararStartRuntimeOrderAplicaXHighPorDefectoEnImplementacion(t *testi
 	}
 }
 
+func TestPrepararStartRuntimeOrderOllamaNoReanudaSesionNoReanudable(t *testing.T) {
+	prepararDBTemporal(t)
+	rutaBase := filepath.Join(t.TempDir(), "orquestador")
+	rutaSesion := filepath.Join(rutaBase, ".orquesta-worktrees", "orq-ollama1")
+	if err := os.MkdirAll(rutaSesion, 0o755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
+
+	if err := RegistrarAgente("Ollama1", "programador"); err != nil {
+		t.Fatalf("registrar Ollama1: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaBase,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:         "ollama-cli",
+		Nombre:       "Ollama CLI",
+		Transporte:   "cli",
+		Comando:      "ollama",
+		ArgsJSON:     `["run"]`,
+		MetadataJSON: `{"reanudable":false,"default_model":"qwen2.5-coder:7b","model_positional":true}`,
+		Activo:       true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:             "Ollama1",
+		ProyectoID:         &proyectoID,
+		CWD:                rutaSesion,
+		Herramienta:        "ollama-cli",
+		ExternalSessionID:  "sess-ollama-previa",
+		ResumenContinuidad: "continuidad vieja que no debe reusarse",
+		ResumePayloadJSON:  `{"checkpoint":{"id":88,"kind":"stop"},"mailbox":[{"id":2}]}`,
+		Branch:             "orq-orquestador-ollama1",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	_, proyecto, _, _, resume, _, plan, err := prepararStartRuntimeOrder("Ollama1", "orquestador", 0, "ollama-cli", "", "", "")
+	if err != nil {
+		t.Fatalf("prepararStartRuntimeOrder: %v", err)
+	}
+	if proyecto == nil || plan == nil {
+		t.Fatalf("resultado incompleto: proyecto=%+v plan=%+v", proyecto, plan)
+	}
+	if resume.ExternalSessionID != "" || strings.TrimSpace(resume.ResumenContinuidad) != "" {
+		t.Fatalf("ollama no deberia conservar resume semantico: %+v", resume)
+	}
+	if strings.Contains(resume.ResumePayloadJSON, `"checkpoint"`) || strings.Contains(resume.ResumePayloadJSON, `"mailbox"`) {
+		t.Fatalf("ollama no deberia conservar resume payload semantico: %s", resume.ResumePayloadJSON)
+	}
+	if strings.TrimSpace(resume.ResumePayloadJSON) != "" {
+		perfil, modelo, razonamiento := ResumePayloadPerfilEjecucion(resume.ResumePayloadJSON)
+		if perfil == "" && modelo == "" && razonamiento == "" {
+			t.Fatalf("si ollama conserva payload, debe ser solo perfil de ejecucion: %s", resume.ResumePayloadJSON)
+		}
+	}
+	if plan.Modo != "launch" {
+		t.Fatalf("plan ollama deberia ser launch: %+v", plan)
+	}
+	if strings.TrimSpace(plan.ContinuityPrompt) != "" {
+		t.Fatalf("plan ollama no deberia llevar continuity prompt: %q", plan.ContinuityPrompt)
+	}
+	if !strings.Contains(plan.BootstrapPrompt, "PROTOCOLO_ORQUESTA_MICRO") {
+		t.Fatalf("bootstrap ollama deberia ser compacto: %s", plan.BootstrapPrompt)
+	}
+	if plan.WorkingDir != rutaSesion {
+		t.Fatalf("working dir inesperado: %s", plan.WorkingDir)
+	}
+}
+
 func TestPrepararStartRuntimeOrderRecuperaWorktreeActivaSiResumeCWDInvalido(t *testing.T) {
 	prepararDBTemporal(t)
 	rutaBase := filepath.Join(t.TempDir(), "orquesta")

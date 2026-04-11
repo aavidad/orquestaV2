@@ -129,6 +129,25 @@ func TestAgenteLanzarPlanJSONSmoke(t *testing.T) {
 	}
 }
 
+func TestParseAgenteLanzarPlanEntriesUsaConectorOllamaPorDefecto(t *testing.T) {
+	tmp := t.TempDir()
+	planPath := filepath.Join(tmp, "plan.plan")
+	if err := os.WriteFile(planPath, []byte("Ollama1|programador|orquestador|Titulo|alta|mod|nota\n"), 0o644); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+
+	entries, err := parseAgenteLanzarPlanEntries(planPath)
+	if err != nil {
+		t.Fatalf("parseAgenteLanzarPlanEntries: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries inesperadas: %+v", entries)
+	}
+	if entries[0].Conector != "ollama-cli" {
+		t.Fatalf("conector por defecto inesperado: %+v", entries[0])
+	}
+}
+
 func TestParseAgenteLanzarPlanEntries(t *testing.T) {
 	tmp := t.TempDir()
 	planPath := filepath.Join(tmp, "plan.plan")

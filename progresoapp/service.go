@@ -58,6 +58,19 @@ func (s *Service) ListPhases(proyecto string) ([]*db.FaseProyecto, error) {
 	return s.store.ListProjectPhases(strings.TrimSpace(proyecto))
 }
 
+func (s *Service) GetActivePhase(proyecto string) (string, error) {
+	phases, err := s.ListPhases(proyecto)
+	if err != nil {
+		return "", err
+	}
+	for _, p := range phases {
+		if strings.ToLower(p.Estado) == "activa" {
+			return p.Nombre, nil
+		}
+	}
+	return "", nil
+}
+
 func (s *Service) RegisterPhase(input RegisterPhaseInput) (int64, *db.FaseProyecto, error) {
 	id, err := s.store.RegisterProjectPhase(&db.FaseProyecto{
 		Proyecto:    strings.TrimSpace(input.Proyecto),

@@ -27,7 +27,7 @@ Orquesta se usa hoy por tres vías complementarias, pero con un único plano ope
 ## Arranque del panel web
 
 ```bash
-cd ~/Trabajo/PlataformaMunicipal/orquestador
+cd ~/Trabajo/orquesta
 ./orquesta serve
 ```
 

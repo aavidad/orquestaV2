@@ -36,6 +36,38 @@ func TestOpenDBForCommandRechazaMutacionesEnRecuperacionLocal(t *testing.T) {
 	}
 }
 
+// TestLocalRecovery verifica que localRecoveryCommandAllowed bloquea explícitamente
+// comandos de escritura y permite comandos de lectura en modo local de recuperación.
+func TestLocalRecovery(t *testing.T) {
+	bloqueados := [][]string{
+		{"tarea", "nueva", "--local"},
+		{"tarea", "completar", "--local"},
+		{"tarea", "iniciar", "--local"},
+		{"tarea", "cancelar", "--local"},
+		{"runtime", "orden-nueva", "--local"},
+		{"runtime", "mailbox-enviar", "--local"},
+		{"runtime", "nudge", "--local"},
+		{"agente", "control", "--local"},
+		{"agente", "ejecutar", "--local"},
+	}
+	for _, args := range bloqueados {
+		if localRecoveryCommandAllowed(args) {
+			t.Errorf("localRecoveryCommandAllowed(%v) = true; esperaba false (comando de escritura)", args)
+		}
+	}
+	permitidos := [][]string{
+		{"status", "--local"},
+		{"runtime", "listar", "--local"},
+		{"runtime", "diagnostico", "--local"},
+		{"runtime", "transcript", "--local"},
+	}
+	for _, args := range permitidos {
+		if !localRecoveryCommandAllowed(args) {
+			t.Errorf("localRecoveryCommandAllowed(%v) = false; esperaba true (comando de lectura)", args)
+		}
+	}
+}
+
 func TestEnsureLocalDBRechazaComandosNoDiagnosticosEnRecuperacionLocal(t *testing.T) {
 	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "1")()
 	defer cambiarArgs(t, []string{"orquesta", "runtime", "orden-nueva"})()

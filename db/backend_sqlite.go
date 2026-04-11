@@ -78,12 +78,40 @@ func (sqliteBackend) Prepare(db *sql.DB, cfg storage.Config) error {
 		}
 		return fmt.Errorf("post-migraciones sqlite: %w", err)
 	}
+	if err := sqliteEnsureDefaultConfig(db); err != nil {
+		if !needsBootstrap && (sqliteBackend{}).IsBusy(err) {
+			return nil
+		}
+		return fmt.Errorf("repoblando config sqlite: %w", err)
+	}
 	if cfg.BootstrapSchema && !revisionApplied {
 		if err := sqliteMarkBootstrapRevision(db); err != nil {
 			if !needsBootstrap && (sqliteBackend{}).IsBusy(err) {
 				return nil
 			}
 			return fmt.Errorf("registrando revision sqlite: %w", err)
+		}
+	}
+	return nil
+}
+
+func sqliteEnsureDefaultConfig(db *sql.DB) error {
+	entries := defaultConfigEntries()
+	for _, item := range entries {
+		clave := strings.TrimSpace(item.Clave)
+		if clave == "" {
+			continue
+		}
+		valor := item.Valor
+		if err := ejecutarConReintentos(func() error {
+			_, err := db.Exec(
+				`INSERT INTO config (clave, valor) VALUES (?, ?) ON CONFLICT(clave) DO NOTHING`,
+				clave,
+				valor,
+			)
+			return err
+		}); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -173,6 +201,7 @@ func sqliteBootstrapRequired(db *sql.DB) (bool, error) {
 		"agentes",
 		"sesiones",
 		"tareas",
+		"especificaciones_funcion",
 		"propuestas",
 		"runtime_handles",
 		"runtime_orders",

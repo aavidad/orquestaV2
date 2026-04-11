@@ -529,8 +529,12 @@ func TestAPIOpenClawOperatorExponeStatusLiteEnRaiz(t *testing.T) {
 		AgentesTrabajando: []*db.Agente{
 			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
 		},
+		AgentesAuthManual: []*db.Agente{
+			{Nombre: "CodexLogin", Rol: "programador", EstadoCuota: "activo"},
+		},
 		Agentes: []*db.Agente{
 			{Nombre: "Codex3", Rol: "programador", Activo: true, EstadoCuota: "activo"},
+			{Nombre: "CodexLogin", Rol: "programador", EstadoCuota: "activo"},
 		},
 		TareasActivas: []tareaLite{
 			{ID: 1, Estado: db.TareaEnProgreso, Agente: "Codex3", Titulo: "activa"},
@@ -557,6 +561,9 @@ func TestAPIOpenClawOperatorExponeStatusLiteEnRaiz(t *testing.T) {
 	}
 	if activos, ok := payload["agentesActivos"].([]any); !ok || len(activos) != 1 {
 		t.Fatalf("agentesActivos raiz inesperados: %#v", payload["agentesActivos"])
+	}
+	if auth, ok := payload["agentesAuthManual"].([]any); !ok || len(auth) != 1 {
+		t.Fatalf("agentesAuthManual raiz inesperados: %#v", payload["agentesAuthManual"])
 	}
 	if tareas, ok := payload["tareasActivas"].([]any); !ok || len(tareas) != 1 {
 		t.Fatalf("tareasActivas raiz inesperadas: %#v", payload["tareasActivas"])

@@ -9,6 +9,9 @@ import (
 func abrirDBTemporalRuntimeObservabilidad(t *testing.T) {
 	t.Helper()
 
+	resetRuntimeTranscriptHotIdleState()
+	t.Cleanup(resetRuntimeTranscriptHotIdleState)
+
 	if DB != nil {
 		Close()
 	}

@@ -188,7 +188,30 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 	}
 	prepareDebugf("BuildPrepare step=list_pending_votes count=%d duration=%s", len(propuestasPendientes), time.Since(stepStart).Round(time.Millisecond))
 	stepStart = time.Now()
-	prep, err := lanzamientoruntime.PrepararDesdeDatos(&agenteRuntime, proyecto, conector, ultima, strings.TrimSpace(input.Modelo), strings.TrimSpace(input.Razonamiento), strings.TrimSpace(input.Perfil))
+	// Resolución hexagonal de política de modelo (OP-HEX)
+	modeloSolicitado := strings.TrimSpace(input.Modelo)
+	razonamientoSolicitado := strings.TrimSpace(input.Razonamiento)
+	perfilSolicitado := strings.TrimSpace(input.Perfil)
+
+	if s.modelPolicyProvider != nil && (modeloSolicitado == "" || razonamientoSolicitado == "") {
+		resolucion, err := s.modelPolicyProvider.ResolveModelPolicy(db.ResolverPoliticaInput{
+			ProyectoSlug: proyecto.Slug,
+			PerfilTarea:  perfilSolicitado,
+		})
+		if err == nil && resolucion != nil {
+			if modeloSolicitado == "" {
+				modeloSolicitado = resolucion.ModelSlug
+			}
+			if razonamientoSolicitado == "" {
+				razonamientoSolicitado = resolucion.ReasoningEffort
+			}
+			if perfilSolicitado == "" {
+				perfilSolicitado = resolucion.PerfilTarea
+			}
+		}
+	}
+
+	prep, err := lanzamientoruntime.PrepararDesdeDatos(&agenteRuntime, proyecto, conector, ultima, modeloSolicitado, razonamientoSolicitado, perfilSolicitado)
 	if err != nil {
 		return nil, err
 	}
@@ -312,11 +335,11 @@ func (s *Service) resolvePrepareConnector(agente, conectorRef string, ultima *db
 		}
 	}
 	if ref == "" {
-		ref = "codex-cli"
+		ref = runtimeagente.ConectorPorDefectoAgente(agente)
 	}
 	conector, err := s.store.GetConnector(ref)
 	if err != nil {
-		if ref != "codex-cli" {
+		if ref != runtimeagente.ConectorPorDefectoAgente(agente) {
 			return nil, fmt.Errorf("no se pudo resolver el conector para %s: %w", strings.TrimSpace(agente), err)
 		}
 		return nil, err

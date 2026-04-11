@@ -111,7 +111,7 @@ func reconcileSupervisorPipelineStateFromInputs(supervisor, proyectoSlug string,
 	recommended := buildSupervisorRecommendedActions(openGates, signals, merges, conflicts)
 	recommended = append(recommended, buildSupervisorOperationalActions(status, mailboxPendiente)...)
 	sortSupervisorRecommendedActions(recommended)
-	retenidas := tareasRetenidasPorCuota(status.TareasActivas, status.Agentes)
+	retenidas := tareasRetenidasPorCuota(status.TareasActivas, status.Agentes, status.AgentesQuotaBlocked)
 	item := deriveSupervisorPipelineState(supervisor, proyectoSlug, status, recommended, retenidas)
 	return db.UpsertSupervisorPipelineState(item)
 }

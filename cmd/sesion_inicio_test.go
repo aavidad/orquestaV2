@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"orquesta/db"
+	"orquesta/sesionesapp"
 )
 
 func TestSesionInicioUsaAPIBriefing(t *testing.T) {
@@ -33,16 +34,16 @@ func TestSesionInicioUsaAPIBriefing(t *testing.T) {
 				Branch:         "main",
 			},
 			Rol: "programador",
-			PropuestasPendientes: []*db.Propuesta{
+			PropuestasPendientes: []*sesionesapp.Propuesta{
 				{Codigo: "OP-082", Titulo: "Observabilidad pasiva"},
 			},
-			Reglas: []*db.Regla{
+			Reglas: []*sesionesapp.Regla{
 				{Categoria: "sesion", Titulo: "Fuente de verdad", Descripcion: "Usar Orquesta"},
 			},
-			Skills: []*db.Skill{
+			Skills: []*sesionesapp.Skill{
 				{Nombre: "fix-bug", CuandoUsar: "Cuando hay un bug confirmado"},
 			},
-			Workflow: &db.Workflow{
+			Workflow: &sesionesapp.Workflow{
 				Nombre: "inicio-sesion",
 				Pasos:  `["1. Iniciar","2. Trabajar"]`,
 			},

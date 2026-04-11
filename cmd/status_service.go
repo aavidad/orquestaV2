@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/db"
 )
 
@@ -17,13 +18,18 @@ var statusService StatusService = dbStatusService{}
 
 var (
 	statusSnapshotTTL  = time.Minute
+	statusFallbackTTL  = 5 * time.Second
 	statusFreshFetcher = fetchStatusFresh
+	statusFastFetcher  = fetchStatusFastFallback
 	statusNowFunc      = time.Now
+	statusAsyncRefresh = true
 	statusCacheState   struct {
-		mu      sync.Mutex
-		value   apiStatusResponse
-		expires time.Time
-		ok      bool
+		mu         sync.Mutex
+		value      apiStatusResponse
+		expires    time.Time
+		ok         bool
+		refreshing bool
+		waitCh     chan struct{}
 	}
 )
 
@@ -75,27 +81,366 @@ func agenteCuentaComoConectado(agente *db.Agente) bool {
 	return agenteTieneActividadRecienteVisible(agente)
 }
 
-func (dbStatusService) FetchStatus() (apiStatusResponse, error) {
-	now := statusNowFunc().UTC()
-	statusCacheState.mu.Lock()
-	if statusCacheState.ok && now.Before(statusCacheState.expires) {
-		value := statusCacheState.value
-		statusCacheState.mu.Unlock()
-		return value, nil
-	}
-	statusCacheState.mu.Unlock()
+func agentRowsForStatus() ([]agentesapp.Row, error) {
+	return agentesService.BuildPanelRows()
+}
 
+func agentesVisiblesPorEstadoOperativoRows(agentes []*db.Agente, rows []agentesapp.Row) ([]*db.Agente, []*db.Agente, []*db.Agente, []*db.Agente, []*db.Agente, []*db.Agente, bool) {
+	rowPorNombre := make(map[string]agentesapp.Row, len(rows))
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		rowPorNombre[strings.ToLower(strings.TrimSpace(row.Agente.Nombre))] = row
+	}
+	agentesActivos := make([]*db.Agente, 0, len(agentes))
+	agentesTrabajando := make([]*db.Agente, 0, len(agentes))
+	agentesSaturados := make([]*db.Agente, 0, len(agentes))
+	agentesAtascados := make([]*db.Agente, 0, len(agentes))
+	agentesAuthManual := make([]*db.Agente, 0, len(agentes))
+	agentesQuotaBlocked := make([]*db.Agente, 0, len(agentes))
+	for _, agente := range agentes {
+		if agente == nil {
+			continue
+		}
+		row, ok := rowPorNombre[strings.ToLower(strings.TrimSpace(agente.Nombre))]
+		if !ok {
+			continue
+		}
+		switch strings.TrimSpace(row.EstadoOperativo) {
+		case "arrancando":
+			agentesActivos = append(agentesActivos, agente)
+		case "trabajando":
+			agentesActivos = append(agentesActivos, agente)
+			agentesTrabajando = append(agentesTrabajando, agente)
+		case "saturado":
+			agentesActivos = append(agentesActivos, agente)
+			agentesTrabajando = append(agentesTrabajando, agente)
+			agentesSaturados = append(agentesSaturados, agente)
+		case "atascado", "mailbox_atascada":
+			agentesAtascados = append(agentesAtascados, agente)
+			if rowCountsAsConnected(row) {
+				agentesActivos = append(agentesActivos, agente)
+			}
+		case "disponible":
+			agentesActivos = append(agentesActivos, agente)
+		case "bloqueado_por_runtime":
+			if strings.EqualFold(strings.TrimSpace(row.WorkerState), "blocked_auth") ||
+				strings.Contains(strings.ToLower(strings.TrimSpace(row.DetalleOperativo)), "autenticacion manual") {
+				agentesAuthManual = append(agentesAuthManual, agente)
+			}
+		case "bloqueado_por_cuota":
+			agentesQuotaBlocked = append(agentesQuotaBlocked, agente)
+		}
+	}
+	return agentesActivos, agentesTrabajando, agentesSaturados, agentesAtascados, agentesAuthManual, agentesQuotaBlocked, true
+}
+
+func aplicarVisibilidadOperativaAgentes(agentes []*db.Agente, rows []agentesapp.Row) {
+	rowPorNombre := make(map[string]agentesapp.Row, len(rows))
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		rowPorNombre[strings.ToLower(strings.TrimSpace(row.Agente.Nombre))] = row
+	}
+	for _, agente := range agentes {
+		if agente == nil {
+			continue
+		}
+		row, ok := rowPorNombre[strings.ToLower(strings.TrimSpace(agente.Nombre))]
+		if !ok {
+			continue
+		}
+		switch strings.TrimSpace(row.EstadoOperativo) {
+		case "arrancando", "trabajando", "disponible", "saturado", "atascado", "mailbox_atascada":
+			agente.Activo = rowCountsAsConnected(row)
+		default:
+			agente.Activo = false
+		}
+	}
+}
+
+func rowCountsAsConnected(row agentesapp.Row) bool {
+	switch strings.TrimSpace(row.EstadoOperativo) {
+	case "atascado", "mailbox_atascada":
+		if row.Handle != nil {
+			switch strings.ToLower(strings.TrimSpace(row.Handle.Estado)) {
+			case "activo", "active", "pausado", "paused":
+				return true
+			}
+		}
+		if row.Runtime != nil {
+			switch strings.ToLower(strings.TrimSpace(firstNonEmpty(row.Runtime.LogicalState, row.Runtime.ProcessState))) {
+			case "activo", "active", "pausado", "paused", "esperando_io", "running":
+				return true
+			}
+		}
+		if row.WorkerAlive || strings.TrimSpace(row.WorkerState) != "" || row.WorkerHeartbeat != nil || row.WorkerUpdatedAt != nil || strings.TrimSpace(row.WorkerTMUXSession) != "" {
+			return true
+		}
+		return false
+	default:
+		return true
+	}
+}
+
+func agentesVisiblesPorEstadoOperativo(agentes []*db.Agente) ([]*db.Agente, []*db.Agente, bool) {
+	rows, err := agentRowsForStatus()
+	if err != nil {
+		return nil, nil, false
+	}
+	activos, trabajando, _, _, _, _, ok := agentesVisiblesPorEstadoOperativoRows(agentes, rows)
+	return activos, trabajando, ok
+}
+
+func (dbStatusService) FetchStatus() (apiStatusResponse, error) {
+	for {
+		now := statusNowFunc().UTC()
+		statusCacheState.mu.Lock()
+		ok := statusCacheState.ok
+		value := statusCacheState.value
+		expires := statusCacheState.expires
+		refreshing := statusCacheState.refreshing
+		waitCh := statusCacheState.waitCh
+		needsRefresh := statusSnapshotNeedsImmediateRefresh(value)
+		if ok && now.Before(expires) && !needsRefresh {
+			statusCacheState.mu.Unlock()
+			return value, nil
+		}
+		if ok && !needsRefresh {
+			if statusAsyncRefresh && !refreshing {
+				waitCh = startStatusRefreshLocked()
+				statusCacheState.mu.Unlock()
+				go refreshStatusSnapshot(waitCh)
+				return value, nil
+			}
+			statusCacheState.mu.Unlock()
+			return value, nil
+		}
+		if refreshing && waitCh != nil {
+			statusCacheState.mu.Unlock()
+			<-waitCh
+			continue
+		}
+		waitCh = startStatusRefreshLocked()
+		statusCacheState.mu.Unlock()
+
+		status, err := statusFreshFetcher()
+		if err == nil {
+			storeStatusSnapshotAndFinish(waitCh, status, now, statusSnapshotTTL)
+			return status, nil
+		}
+		if status, fallbackErr := statusFastFetcher(); fallbackErr == nil {
+			storeStatusSnapshotAndFinish(waitCh, status, now, statusFallbackTTL)
+			return status, nil
+		}
+		finishStatusRefresh(waitCh, apiStatusResponse{}, time.Time{}, 0, false)
+		return apiStatusResponse{}, err
+	}
+}
+
+func startStatusRefreshLocked() chan struct{} {
+	if statusCacheState.refreshing && statusCacheState.waitCh != nil {
+		return statusCacheState.waitCh
+	}
+	statusCacheState.refreshing = true
+	statusCacheState.waitCh = make(chan struct{})
+	return statusCacheState.waitCh
+}
+
+func finishStatusRefresh(ch chan struct{}, status apiStatusResponse, now time.Time, ttl time.Duration, ok bool) {
+	statusCacheState.mu.Lock()
+	defer statusCacheState.mu.Unlock()
+	if ok {
+		statusCacheState.value = status
+		statusCacheState.expires = now.Add(ttl)
+		statusCacheState.ok = true
+	}
+	if statusCacheState.waitCh == ch {
+		statusCacheState.waitCh = nil
+	}
+	statusCacheState.refreshing = false
+	if ch != nil {
+		close(ch)
+	}
+}
+
+func storeStatusSnapshotAndFinish(ch chan struct{}, status apiStatusResponse, now time.Time, ttl time.Duration) {
+	finishStatusRefresh(ch, status, now, ttl, true)
+}
+
+func refreshStatusSnapshot(ch chan struct{}) {
+	defer func() {
+		_ = recover()
+	}()
+	now := statusNowFunc().UTC()
 	status, err := statusFreshFetcher()
+	if err != nil {
+		finishStatusRefresh(ch, apiStatusResponse{}, time.Time{}, 0, false)
+		return
+	}
+	storeStatusSnapshotAndFinish(ch, status, now, statusSnapshotTTL)
+}
+
+func storeStatusSnapshot(status apiStatusResponse, now time.Time) {
+	ttl := statusSnapshotTTL
+	if statusSnapshotNeedsImmediateRefresh(status) {
+		ttl = statusFallbackTTL
+	}
+	storeStatusSnapshotWithTTL(status, now, ttl)
+}
+
+func storeStatusSnapshotWithTTL(status apiStatusResponse, now time.Time, ttl time.Duration) {
+	statusCacheState.mu.Lock()
+	defer statusCacheState.mu.Unlock()
+	statusCacheState.value = status
+	statusCacheState.expires = now.Add(ttl)
+	statusCacheState.ok = true
+	statusCacheState.refreshing = false
+	statusCacheState.waitCh = nil
+}
+
+func statusSnapshotNeedsImmediateRefresh(status apiStatusResponse) bool {
+	if len(status.AgentesAuthManual) > 0 {
+		return true
+	}
+	if len(status.AgentesActivos) > 0 {
+		return false
+	}
+	if len(status.TareasEnProgreso) > 0 {
+		return true
+	}
+	for _, tarea := range status.TareasActivas {
+		if tarea.Estado == db.TareaEnProgreso {
+			return true
+		}
+	}
+	return false
+}
+
+func fetchStatusFastFallback() (apiStatusResponse, error) {
+	agentes, err := db.ListarAgentes()
 	if err != nil {
 		return apiStatusResponse{}, err
 	}
+	cuentas, err := db.ContarTareasPorEstado()
+	if err != nil {
+		return apiStatusResponse{}, err
+	}
+	openState := db.PropuestaAbierta
+	abiertas, err := db.ListarPropuestas(&openState, nil)
+	if err != nil {
+		return apiStatusResponse{}, err
+	}
+	propuestaIDs := make([]int64, 0, len(abiertas))
+	for _, propuesta := range abiertas {
+		if propuesta != nil {
+			propuestaIDs = append(propuestaIDs, propuesta.ID)
+		}
+	}
+	votosPorPropuesta, err := db.ResumenVotosPorPropuestas(propuestaIDs)
+	if err != nil {
+		return apiStatusResponse{}, err
+	}
+	propuestasResumen := make([]propuestaLite, 0, len(abiertas))
+	for _, propuesta := range abiertas {
+		if propuesta == nil {
+			continue
+		}
+		votos := votosPorPropuesta[propuesta.ID]
+		propuesta.Votos = votos
+		acuerdo, desacuerdo, abstencion, pendiente := 0, 0, 0, 0
+		for _, voto := range votos {
+			if voto == nil {
+				continue
+			}
+			switch voto.Posicion {
+			case db.VotoAcuerdo:
+				acuerdo++
+			case db.VotoDesacuerdo:
+				desacuerdo++
+			case db.VotoAbstencion:
+				abstencion++
+			default:
+				pendiente++
+			}
+		}
+		propuestasResumen = append(propuestasResumen, propuestaLite{
+			ID:           propuesta.ID,
+			Codigo:       propuesta.Codigo,
+			Titulo:       propuesta.Titulo,
+			Estado:       propuesta.Estado,
+			PropuestoPor: propuesta.PropuestoPor,
+			Acuerdo:      acuerdo,
+			Desacuerdo:   desacuerdo,
+			Abstencion:   abstencion,
+			Pendiente:    pendiente,
+		})
+	}
+	tareasActivas, err := listarTareasActivasRapido()
+	if err != nil {
+		return apiStatusResponse{}, err
+	}
+	cuentas = reconciliarConteoTareasActivasVisible(cuentas, tareasActivas)
+	tareasEnProgreso := filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaEnProgreso)
+	tareasReservadas := filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaAsignada)
+	var agentesActivos []*db.Agente
+	var agentesTrabajando []*db.Agente
+	var agentesSaturados []*db.Agente
+	var agentesAtascados []*db.Agente
+	var agentesAuthManual []*db.Agente
+	var agentesQuotaBlocked []*db.Agente
+	if rows, err := agentRowsForStatus(); err == nil {
+		aplicarVisibilidadOperativaAgentes(agentes, rows)
+		agentesActivos, agentesTrabajando, agentesSaturados, agentesAtascados, agentesAuthManual, agentesQuotaBlocked, _ = agentesVisiblesPorEstadoOperativoRows(agentes, rows)
+	}
+	return apiStatusResponse{
+		Agentes:            agentes,
+		ConteoTareas:       cuentas,
+		ResumenTareas:      cuentas,
+		Generado:           statusNowFunc().UTC().Format(time.RFC3339),
+		TareasPorEstado:    cuentas,
+		AgentesActivos:     agentesActivos,
+		AgentesTrabajando:  agentesTrabajando,
+		AgentesSaturados:   agentesSaturados,
+		AgentesAtascados:   agentesAtascados,
+		AgentesAuthManual:  agentesAuthManual,
+		AgentesQuotaBlocked: agentesQuotaBlocked,
+		PropuestasResumen:  propuestasResumen,
+		TareasActivas:      tareasActivas,
+		TareasEnProgreso:   tareasEnProgreso,
+		TareasReservadas:   tareasReservadas,
+		PropuestasAbiertas: abiertas,
+	}, nil
+}
 
-	statusCacheState.mu.Lock()
-	statusCacheState.value = status
-	statusCacheState.expires = now.Add(statusSnapshotTTL)
-	statusCacheState.ok = true
-	statusCacheState.mu.Unlock()
-	return status, nil
+func listarTareasActivasRapido() ([]tareaLite, error) {
+	estados := []db.EstadoTarea{db.TareaAsignada, db.TareaEnProgreso, db.TareaBloqueada}
+	out := make([]tareaLite, 0, 16)
+	for _, estado := range estados {
+		items, err := db.ListarTareas(db.FiltroTareas{Estado: &estado})
+		if err != nil {
+			return nil, err
+		}
+		for _, tarea := range items {
+			if tarea == nil || tarea.ProyectoID == nil {
+				continue
+			}
+			lite := tareaLite{
+				ID:        tarea.ID,
+				Titulo:    tarea.Titulo,
+				Estado:    tarea.Estado,
+				Modulo:    tarea.Modulo,
+				Prioridad: tarea.Prioridad,
+			}
+			if tarea.Agente != nil {
+				lite.Agente = *tarea.Agente
+			}
+			out = append(out, lite)
+		}
+	}
+	return out, nil
 }
 
 func fetchStatusFresh() (apiStatusResponse, error) {
@@ -103,7 +448,7 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 	if err != nil {
 		return apiStatusResponse{}, err
 	}
-	agentes, err := db.ListarAgentesConSesionesActivas(sesiones)
+	agentes, err := db.ListarAgentes()
 	if err != nil {
 		return apiStatusResponse{}, err
 	}
@@ -172,38 +517,16 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 		}
 		propuestasResumen = append(propuestasResumen, lite)
 	}
-	todasLasTareas, err := db.ListarTareas(db.FiltroTareas{})
+	tareasActivas, err := listarTareasActivasRapido()
 	if err != nil {
 		return apiStatusResponse{}, err
 	}
-	tareasActivas := make([]tareaLite, 0, len(todasLasTareas))
+	cuentas = reconciliarConteoTareasActivasVisible(cuentas, tareasActivas)
 	trabajandoNombres := make(map[string]bool)
-	for _, tarea := range todasLasTareas {
-		if tarea == nil {
-			continue
+	for _, tarea := range tareasActivas {
+		if strings.TrimSpace(tarea.Agente) != "" && tarea.Estado == db.TareaEnProgreso {
+			trabajandoNombres[strings.TrimSpace(tarea.Agente)] = true
 		}
-		if tarea.ProyectoID == nil {
-			continue
-		}
-		switch tarea.Estado {
-		case db.TareaAsignada, db.TareaEnProgreso, db.TareaBloqueada:
-		default:
-			continue
-		}
-		lite := tareaLite{
-			ID:        tarea.ID,
-			Titulo:    tarea.Titulo,
-			Estado:    tarea.Estado,
-			Modulo:    tarea.Modulo,
-			Prioridad: tarea.Prioridad,
-		}
-		if tarea.Agente != nil {
-			lite.Agente = *tarea.Agente
-			if tarea.Estado == db.TareaEnProgreso && strings.TrimSpace(*tarea.Agente) != "" {
-				trabajandoNombres[strings.TrimSpace(*tarea.Agente)] = true
-			}
-		}
-		tareasActivas = append(tareasActivas, lite)
 	}
 	agentesActivos := make([]*db.Agente, 0, len(agentes))
 	agentesPorNombre := make(map[string]*db.Agente, len(agentes))
@@ -225,6 +548,10 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 		trabajandoPorNombre[agente.Nombre] = agente
 	}
 	agentesTrabajando := make([]*db.Agente, 0, len(trabajandoPorNombre))
+	agentesSaturados := make([]*db.Agente, 0)
+	agentesAtascados := make([]*db.Agente, 0)
+	agentesAuthManual := make([]*db.Agente, 0)
+	agentesQuotaBlocked := make([]*db.Agente, 0)
 	for _, agente := range agentesActivos {
 		if agente == nil {
 			continue
@@ -232,6 +559,20 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 		if trabajandoPorNombre[agente.Nombre] != nil {
 			agentesTrabajando = append(agentesTrabajando, agente)
 		}
+	}
+	if rows, rowsErr := agentRowsForStatus(); rowsErr == nil {
+		aplicarVisibilidadOperativaAgentes(agentes, rows)
+		if activosOperativos, trabajandoOperativos, saturadosOperativos, atascadosOperativos, authManualOperativos, quotaBlockedOperativos, ok := agentesVisiblesPorEstadoOperativoRows(agentes, rows); ok {
+			agentesActivos = activosOperativos
+			agentesTrabajando = trabajandoOperativos
+			agentesSaturados = saturadosOperativos
+			agentesAtascados = atascadosOperativos
+			agentesAuthManual = authManualOperativos
+			agentesQuotaBlocked = quotaBlockedOperativos
+		}
+	} else if activosOperativos, trabajandoOperativos, ok := agentesVisiblesPorEstadoOperativo(agentes); ok {
+		agentesActivos = activosOperativos
+		agentesTrabajando = trabajandoOperativos
 	}
 	return apiStatusResponse{
 		Agentes:             agentes,
@@ -245,6 +586,10 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 		TareasPorEstado:     cuentas,
 		AgentesActivos:      agentesActivos,
 		AgentesTrabajando:   agentesTrabajando,
+		AgentesSaturados:    agentesSaturados,
+		AgentesAtascados:    agentesAtascados,
+		AgentesAuthManual:   agentesAuthManual,
+		AgentesQuotaBlocked: agentesQuotaBlocked,
 		PropuestasResumen:   propuestasResumen,
 		TareasActivas:       tareasActivas,
 	}, nil
@@ -256,4 +601,26 @@ func resetStatusSnapshotCache() {
 	statusCacheState.value = apiStatusResponse{}
 	statusCacheState.expires = time.Time{}
 	statusCacheState.ok = false
+	statusCacheState.refreshing = false
+	statusCacheState.waitCh = nil
+}
+
+func reconciliarConteoTareasActivasVisible(cuentas map[string]int, tareasActivas []tareaLite) map[string]int {
+	if cuentas == nil {
+		cuentas = map[string]int{}
+	}
+	out := make(map[string]int, len(cuentas)+3)
+	for estado, n := range cuentas {
+		out[estado] = n
+	}
+	for _, estado := range []db.EstadoTarea{db.TareaAsignada, db.TareaEnProgreso, db.TareaBloqueada} {
+		out[string(estado)] = 0
+	}
+	for _, tarea := range tareasActivas {
+		switch tarea.Estado {
+		case db.TareaAsignada, db.TareaEnProgreso, db.TareaBloqueada:
+			out[string(tarea.Estado)]++
+		}
+	}
+	return out
 }

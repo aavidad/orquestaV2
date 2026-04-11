@@ -81,6 +81,10 @@ func adoptarContextoAgente(req apiAgenteAdoptarContextoRequest) (*apiAgenteAdopt
 	if err != nil {
 		return nil, err
 	}
+	dbProyecto, err := db.GetProyecto(strconv.FormatInt(proyecto.ID, 10))
+	if err != nil {
+		return nil, err
+	}
 
 	rol := strings.TrimSpace(agente.Rol)
 	creadaPorAdopcion := false
@@ -113,7 +117,7 @@ func adoptarContextoAgente(req apiAgenteAdoptarContextoRequest) (*apiAgenteAdopt
 	}
 
 	if req.Herramienta == "" {
-		req.Herramienta = firstNonEmpty(existente.Herramienta, req.Conector, "codex-cli")
+		req.Herramienta = firstNonEmpty(existente.Herramienta, req.Conector, runtimeagente.ConectorPorDefectoAgente(req.Agente))
 	}
 	prevResume := db.SanitizeResumeContextForProject(runtimeagente.ResumeContext{
 		ExternalSessionID:  strings.TrimSpace(existente.ExternalSessionID),
@@ -121,7 +125,7 @@ func adoptarContextoAgente(req apiAgenteAdoptarContextoRequest) (*apiAgenteAdopt
 		ResumenContinuidad: strings.TrimSpace(existente.ResumenContinuidad),
 		Branch:             strings.TrimSpace(existente.Branch),
 		CWD:                strings.TrimSpace(existente.CWD),
-	}, proyecto)
+	}, dbProyecto)
 	if req.CWD == "" {
 		req.CWD = firstNonEmpty(prevResume.CWD, proyecto.RutaAbs)
 	}
@@ -137,11 +141,11 @@ func adoptarContextoAgente(req apiAgenteAdoptarContextoRequest) (*apiAgenteAdopt
 	if err != nil {
 		return nil, err
 	}
-	resumePayload, err := construirResumePayloadAdoptado(prevResume.ResumePayloadJSON, req, proyecto, contextoGob)
+	resumePayload, err := construirResumePayloadAdoptado(prevResume.ResumePayloadJSON, req, dbProyecto, contextoGob)
 	if err != nil {
 		return nil, err
 	}
-	resumen := construirResumenContextoAdoptado(prevResume.ResumenContinuidad, req.Resumen, resumenGob, proyecto, req)
+	resumen := construirResumenContextoAdoptado(prevResume.ResumenContinuidad, req.Resumen, resumenGob, dbProyecto, req)
 	estado := "activa"
 	sesion, err := sesionesAPIService.SaveActiveSession(agente.Nombre, proyecto.Slug, db.SesionUpdate{
 		CWD:                stringPtr(req.CWD),
@@ -189,7 +193,13 @@ func adoptarContextoAgente(req apiAgenteAdoptarContextoRequest) (*apiAgenteAdopt
 	}
 
 	var orderID *int64
-	handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(agente.Nombre, &proyecto.ID)
+	handle, err := runtimesService.GetOperationalRuntimeHandleAgentProject(agente.Nombre, &proyecto.ID)
+	if err != nil {
+		return nil, err
+	}
+	if handle == nil {
+		handle, err = runtimesService.GetActiveRuntimeHandleAgentProject(agente.Nombre, &proyecto.ID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -421,7 +431,7 @@ var agenteAdoptarContextoCmd = &cobra.Command{
 		}
 		herramienta, _ := cmd.Flags().GetString("herramienta")
 		if strings.TrimSpace(herramienta) == "" {
-			herramienta = "codex-cli"
+			herramienta = runtimeagente.ConectorPorDefectoAgente(strings.TrimSpace(args[0]))
 		}
 		conector, _ := cmd.Flags().GetString("conector")
 		externalSessionID, _ := cmd.Flags().GetString("external-session-id")

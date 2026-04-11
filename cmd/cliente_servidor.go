@@ -23,6 +23,7 @@ import (
 	"orquesta/capacidadapp"
 	"orquesta/db"
 	"orquesta/internal/rpclocal"
+	"orquesta/sesionesapp"
 )
 
 type apiAgentesResponse struct {
@@ -40,6 +41,7 @@ type apiAgenteCuentaItem struct {
 	Rol               string     `json:"rol,omitempty"`
 	Activo            bool       `json:"activo"`
 	Habilitado        bool       `json:"habilitado"`
+	CuentaID          string     `json:"cuenta_id,omitempty"`
 	CuentaEmail       string     `json:"cuenta_email,omitempty"`
 	CuentaUsuario     string     `json:"cuenta_usuario,omitempty"`
 	CuentaFuente      string     `json:"cuenta_fuente,omitempty"`
@@ -53,29 +55,30 @@ type apiAgentesCuentasResponse struct {
 }
 
 type apiCuentaPresupuestoItem struct {
-	CuentaClave          string     `json:"cuenta_clave"`
-	CuentaEmail          string     `json:"cuenta_email,omitempty"`
-	CuentaUsuario        string     `json:"cuenta_usuario,omitempty"`
-	CuentaFuente         string     `json:"cuenta_fuente,omitempty"`
-	CuentaObservadaAt    *time.Time `json:"cuenta_observada_at,omitempty"`
-	Agentes              []string   `json:"agentes,omitempty"`
-	Criterio             string     `json:"criterio"`
-	CuotaRestantePct     *int       `json:"cuota_restante_pct,omitempty"`
-	PresupuestoVentana   string     `json:"presupuesto_ventana,omitempty"`
-	PresupuestoResetAt   *time.Time `json:"presupuesto_reset_at,omitempty"`
-	PresupuestoStale     bool       `json:"presupuesto_stale,omitempty"`
-	RemainingSeconds     *int64     `json:"remaining_seconds,omitempty"`
-	RemainingMessages    *int64     `json:"remaining_messages,omitempty"`
-	RemainingTokens      *int64     `json:"remaining_tokens,omitempty"`
-	RemainingCredits     *float64   `json:"remaining_credits,omitempty"`
-	ObservedUsageTokens  *int64     `json:"observed_usage_tokens,omitempty"`
-	ObservedUsageCostUSD *float64   `json:"observed_usage_cost_usd,omitempty"`
-	ObservedUsageMessages *int      `json:"observed_usage_messages,omitempty"`
-	ObservedUsageTurns   *int       `json:"observed_usage_turns,omitempty"`
-	ObservedUsageAt      *time.Time `json:"observed_usage_at,omitempty"`
-	ObservedSessionPath  string     `json:"observed_session_path,omitempty"`
-	PresupuestoFuente    string     `json:"presupuesto_fuente,omitempty"`
-	PresupuestoCheckedAt *time.Time `json:"presupuesto_checked_at,omitempty"`
+	CuentaClave           string     `json:"cuenta_clave"`
+	CuentaID              string     `json:"cuenta_id,omitempty"`
+	CuentaEmail           string     `json:"cuenta_email,omitempty"`
+	CuentaUsuario         string     `json:"cuenta_usuario,omitempty"`
+	CuentaFuente          string     `json:"cuenta_fuente,omitempty"`
+	CuentaObservadaAt     *time.Time `json:"cuenta_observada_at,omitempty"`
+	Agentes               []string   `json:"agentes,omitempty"`
+	Criterio              string     `json:"criterio"`
+	CuotaRestantePct      *int       `json:"cuota_restante_pct,omitempty"`
+	PresupuestoVentana    string     `json:"presupuesto_ventana,omitempty"`
+	PresupuestoResetAt    *time.Time `json:"presupuesto_reset_at,omitempty"`
+	PresupuestoStale      bool       `json:"presupuesto_stale,omitempty"`
+	RemainingSeconds      *int64     `json:"remaining_seconds,omitempty"`
+	RemainingMessages     *int64     `json:"remaining_messages,omitempty"`
+	RemainingTokens       *int64     `json:"remaining_tokens,omitempty"`
+	RemainingCredits      *float64   `json:"remaining_credits,omitempty"`
+	ObservedUsageTokens   *int64     `json:"observed_usage_tokens,omitempty"`
+	ObservedUsageCostUSD  *float64   `json:"observed_usage_cost_usd,omitempty"`
+	ObservedUsageMessages *int       `json:"observed_usage_messages,omitempty"`
+	ObservedUsageTurns    *int       `json:"observed_usage_turns,omitempty"`
+	ObservedUsageAt       *time.Time `json:"observed_usage_at,omitempty"`
+	ObservedSessionPath   string     `json:"observed_session_path,omitempty"`
+	PresupuestoFuente     string     `json:"presupuesto_fuente,omitempty"`
+	PresupuestoCheckedAt  *time.Time `json:"presupuesto_checked_at,omitempty"`
 }
 
 type apiAgentesRankingCuentasResponse struct {
@@ -198,20 +201,20 @@ type apiSesionesInspeccionResponse struct {
 }
 
 type apiSesionPresupuestoResponse struct {
-	ID          int64                     `json:"id"`
-	Sesion      *db.Sesion                `json:"sesion,omitempty"`
-	Presupuesto *db.PresupuestoSesion     `json:"presupuesto"`
-	Evaluacion  *db.EvaluacionPresupuesto `json:"evaluacion"`
+	ID          int64                              `json:"id"`
+	Sesion      *db.Sesion                         `json:"sesion,omitempty"`
+	Presupuesto *sesionesapp.PresupuestoSesion     `json:"presupuesto"`
+	Evaluacion  *sesionesapp.EvaluacionPresupuesto `json:"evaluacion"`
 }
 
 type apiSesionInicioResponse struct {
-	Sesion               *db.Sesion      `json:"sesion"`
-	SesionPrevia         *db.Sesion      `json:"sesion_previa"`
-	Rol                  string          `json:"rol"`
-	PropuestasPendientes []*db.Propuesta `json:"propuestas_pendientes"`
-	Reglas               []*db.Regla     `json:"reglas"`
-	Skills               []*db.Skill     `json:"skills"`
-	Workflow             *db.Workflow    `json:"workflow"`
+	Sesion               *db.Sesion               `json:"sesion"`
+	SesionPrevia         *db.Sesion               `json:"sesion_previa"`
+	Rol                  string                   `json:"rol"`
+	PropuestasPendientes []*sesionesapp.Propuesta `json:"propuestas_pendientes"`
+	Reglas               []*sesionesapp.Regla     `json:"reglas"`
+	Skills               []*sesionesapp.Skill     `json:"skills"`
+	Workflow             *sesionesapp.Workflow    `json:"workflow"`
 }
 
 type apiPropuestasResponse struct {
@@ -285,8 +288,16 @@ type apiRuntimeOrdersResponse struct {
 	Orders []*db.RuntimeOrder `json:"orders"`
 }
 
+type apiRuntimeOrderResponse struct {
+	Order *db.RuntimeOrder `json:"order"`
+}
+
 type apiRuntimeMailboxResponse struct {
 	Mailbox []*db.RuntimeMailboxMessage `json:"mailbox"`
+}
+
+type apiRuntimeMailboxItemResponse struct {
+	Message *db.RuntimeMailboxMessage `json:"message"`
 }
 
 type apiRuntimeCheckpointResponse struct {
@@ -486,6 +497,16 @@ func commandSupportsServerMode(args []string) bool {
 		switch tokens[1] {
 		case "listar", "ver", "registrar":
 			return true
+		default:
+			return false
+		}
+	case "microprogramacion":
+		if len(tokens) <= 2 {
+			return false
+		}
+		switch tokens[1] {
+		case "especificacion":
+			return tokens[2] == "listar" || tokens[2] == "ver" || tokens[2] == "crear" || tokens[2] == "emitir" || tokens[2] == "despachar" || tokens[2] == "validar-entrega"
 		default:
 			return false
 		}

@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -153,6 +154,18 @@ func ListarFasesProyecto(proyecto string) ([]*FaseProyecto, error) {
 		list = append(list, f)
 	}
 	return list, rows.Err()
+}
+
+func ObtenerFaseActivaProyecto(proyecto string) (string, error) {
+	var nombre string
+	err := DB.QueryRow(`
+		SELECT nombre FROM fases_proyecto
+		WHERE proyecto = ? AND estado = 'activa'
+		LIMIT 1`, strings.TrimSpace(proyecto)).Scan(&nombre)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return nombre, err
 }
 
 func ActualizarFaseProyecto(f *FaseProyecto) error {

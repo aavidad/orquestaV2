@@ -88,4 +88,20 @@ func TestPostMigrationStatementsForDriverSQLiteConservaDDLComplementario(t *test
 	if !strings.Contains(stmts, "CREATE UNIQUE INDEX IF NOT EXISTS idx_tareas_proyecto_blueprint_key") {
 		t.Fatalf("sqlite deberia conservar el DDL complementario para upgrades heredados")
 	}
+	for _, required := range []string{
+		"CREATE INDEX IF NOT EXISTS idx_sesiones_activa_id",
+		"CREATE INDEX IF NOT EXISTS idx_sesiones_agente_activa_id",
+		"CREATE INDEX IF NOT EXISTS idx_sesiones_agente_id",
+		"CREATE INDEX IF NOT EXISTS idx_asignaciones_agente_estado_proyecto_id",
+		"CREATE INDEX IF NOT EXISTS idx_asignaciones_proyecto_estado_agente_id",
+		"CREATE INDEX IF NOT EXISTS idx_presupuestos_sesion_sesion_checked_id",
+		"CREATE INDEX IF NOT EXISTS idx_presupuestos_sesion_sesion_fuente_checked_id",
+		"CREATE INDEX IF NOT EXISTS idx_propuestas_estado_proyecto_id",
+		"CREATE INDEX IF NOT EXISTS idx_runtime_mailbox_estado_id",
+		"CREATE INDEX IF NOT EXISTS idx_votos_agente_posicion_propuesta",
+	} {
+		if !strings.Contains(stmts, required) {
+			t.Fatalf("sqlite deberia conservar el indice complementario %q", required)
+		}
+	}
 }

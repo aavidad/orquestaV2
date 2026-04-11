@@ -4,7 +4,7 @@
 
 set -e
 
-APP_DIR="/home/alberto/Trabajo/PlataformaMunicipal/orquestador"
+APP_DIR="/home/alberto/Trabajo/orquesta"
 BIN_NAME="orquesta"
 SERVICE_NAME="orquesta"
 USER_NAME="alberto"
@@ -33,7 +33,7 @@ After=network.target
 Type=simple
 User=$USER_NAME
 WorkingDirectory=$APP_DIR
-ExecStart=$APP_DIR/$BIN_NAME serve --puerto 8080
+ExecStart=$APP_DIR/$BIN_NAME serve --puerto 16543
 Restart=always
 RestartSec=5
 StandardOutput=append:$APP_DIR/logs/daemon.log
@@ -50,5 +50,5 @@ sudo systemctl enable $SERVICE_NAME
 sudo systemctl restart $SERVICE_NAME
 
 echo "✅ Orquesta está corriendo como servicio del sistema."
-echo "🔗 Panel web disponible en: http://localhost:8080"
+echo "🔗 Panel web disponible en: http://localhost:16543"
 echo "📜 Logs disponibles en: $APP_DIR/logs/daemon.log"

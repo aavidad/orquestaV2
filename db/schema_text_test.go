@@ -35,11 +35,17 @@ func TestSchemaIncluyeCoordinacionMultiProyectoYMCP(t *testing.T) {
 	for _, requerido := range []string{
 		"CREATE TABLE IF NOT EXISTS proyectos",
 		"CREATE TABLE IF NOT EXISTS asignaciones",
+		"CREATE INDEX IF NOT EXISTS idx_asignaciones_agente_estado_proyecto_id",
+		"CREATE INDEX IF NOT EXISTS idx_asignaciones_proyecto_estado_agente_id",
+		"CREATE INDEX IF NOT EXISTS idx_sesiones_activa_id",
+		"CREATE INDEX IF NOT EXISTS idx_sesiones_agente_activa_id",
+		"CREATE INDEX IF NOT EXISTS idx_sesiones_agente_id",
 		"CREATE TABLE IF NOT EXISTS conectores",
 		"CREATE TABLE IF NOT EXISTS locks",
 		"CREATE TABLE IF NOT EXISTS worktrees",
 		"CREATE TABLE IF NOT EXISTS runtime_handles",
 		"CREATE TABLE IF NOT EXISTS runtime_orders",
+		"CREATE INDEX IF NOT EXISTS idx_runtime_mailbox_estado_id",
 		"CREATE TABLE IF NOT EXISTS pools_capacidad",
 		"CREATE TABLE IF NOT EXISTS pool_modelos",
 		"CREATE TABLE IF NOT EXISTS politicas_modelo",
@@ -122,6 +128,13 @@ func TestSchemaSeparadoEnDDLYSemillas(t *testing.T) {
 	for _, required := range []string{
 		"CREATE UNIQUE INDEX IF NOT EXISTS idx_locks_scope_activo",
 		"CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_handles_agente_activo",
+		"CREATE INDEX IF NOT EXISTS idx_sesiones_activa_id",
+		"CREATE INDEX IF NOT EXISTS idx_sesiones_agente_activa_id",
+		"CREATE INDEX IF NOT EXISTS idx_sesiones_agente_id",
+		"CREATE INDEX IF NOT EXISTS idx_presupuestos_sesion_sesion_checked_id",
+		"CREATE INDEX IF NOT EXISTS idx_presupuestos_sesion_sesion_fuente_checked_id",
+		"CREATE INDEX IF NOT EXISTS idx_propuestas_estado_proyecto_id",
+		"CREATE INDEX IF NOT EXISTS idx_votos_agente_posicion_propuesta",
 	} {
 		if !strings.Contains(ddl, required) {
 			t.Fatalf("el DDL deberia incluir el indice auxiliar %q", required)

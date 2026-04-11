@@ -38,8 +38,12 @@ func setAgentTelemetryHTTPClientForTest(t *testing.T, transport roundTripFunc) {
 }
 
 func TestAgenteCuentasCmdRenderizaListado(t *testing.T) {
+	refreshed := false
 	setAgentTelemetryHTTPClientForTest(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		switch {
+		case req.Method == http.MethodPost && req.URL.Path == "/api/agentes/presupuesto/refrescar":
+			refreshed = true
+			return newJSONResponse(http.StatusOK, `{"ok":true,"refrescados":1}`), nil
 		case req.URL.Path == "/api/agentes/cuentas" && req.URL.Query().Get("activos") == "true":
 			return newJSONResponse(http.StatusOK, `{"generado":"2026-03-31T18:00:00Z","activos":true,"agentes":[{"nombre":"Codex1","cuenta_email":"codex1@example.com","cuenta_usuario":"codex1_user"}]}`), nil
 		default:
@@ -55,11 +59,30 @@ func TestAgenteCuentasCmdRenderizaListado(t *testing.T) {
 	if !strings.Contains(out, "Codex1") || !strings.Contains(out, "codex1@example.com") || !strings.Contains(out, "codex1_user") {
 		t.Fatalf("salida inesperada:\n%s", out)
 	}
+	if !refreshed {
+		t.Fatalf("deberia refrescar antes de listar cuentas")
+	}
+}
+
+func TestAgenteStatusVivoCmdRequiereOptInExplicito(t *testing.T) {
+	t.Setenv("ORQUESTA_ALLOW_LEGACY_LIVE_STATUS", "")
+	rootCmd.SetArgs([]string{"agente", "status-vivo", "--agente", "Codex1"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("status-vivo deberia requerir opt-in explícito")
+	}
+	if !strings.Contains(err.Error(), "status-vivo legacy deshabilitado") {
+		t.Fatalf("error inesperado: %v", err)
+	}
 }
 
 func TestAgenteCuentasCmdRenderizaUsuarioSinGuionCuandoNoHayCorreo(t *testing.T) {
+	refreshed := false
 	setAgentTelemetryHTTPClientForTest(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		switch {
+		case req.Method == http.MethodPost && req.URL.Path == "/api/agentes/presupuesto/refrescar":
+			refreshed = true
+			return newJSONResponse(http.StatusOK, `{"ok":true,"refrescados":1}`), nil
 		case req.URL.Path == "/api/agentes/cuentas" && req.URL.Query().Get("activos") == "true":
 			return newJSONResponse(http.StatusOK, `{"generado":"2026-03-31T18:00:00Z","activos":true,"agentes":[{"nombre":"Codex1","cuenta_usuario":"Codex1"}]}`), nil
 		default:
@@ -78,11 +101,18 @@ func TestAgenteCuentasCmdRenderizaUsuarioSinGuionCuandoNoHayCorreo(t *testing.T)
 	if strings.Contains(out, "— (Codex1)") {
 		t.Fatalf("la salida no deberia usar el formato legado:\n%s", out)
 	}
+	if !refreshed {
+		t.Fatalf("deberia refrescar antes de listar cuentas")
+	}
 }
 
 func TestAgentePresupuestoCmdRenderizaListado(t *testing.T) {
+	refreshed := false
 	setAgentTelemetryHTTPClientForTest(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		switch {
+		case req.Method == http.MethodPost && req.URL.Path == "/api/agentes/presupuesto/refrescar":
+			refreshed = true
+			return newJSONResponse(http.StatusOK, `{"ok":true,"refrescados":1}`), nil
 		case req.URL.Path == "/api/agentes/presupuesto" && req.URL.Query().Get("activos") == "true":
 			return newJSONResponse(http.StatusOK, `{"generado":"2026-03-31T18:00:00Z","activos":true,"agentes":[{"Nombre":"Codex1","CuotaRestantePct":18,"PresupuestoVentana":"weekly","PresupuestoResetAt":"2026-04-06T02:00:00Z","PresupuestoDiarioPct":77,"PresupuestoDiarioResetAt":"2026-04-01T02:00:00Z","PresupuestoSemanalPct":18,"PresupuestoSemanalResetAt":"2026-04-06T02:00:00Z"}]}`), nil
 		default:
@@ -98,11 +128,18 @@ func TestAgentePresupuestoCmdRenderizaListado(t *testing.T) {
 	if !strings.Contains(out, "Codex1") || !strings.Contains(out, "efectivo 18%") || !strings.Contains(out, "weekly") {
 		t.Fatalf("salida inesperada:\n%s", out)
 	}
+	if !refreshed {
+		t.Fatalf("deberia refrescar antes de listar presupuesto")
+	}
 }
 
 func TestAgentePresupuestoCmdMarcaObservadoSiLaTelemetriaEsStale(t *testing.T) {
+	refreshed := false
 	setAgentTelemetryHTTPClientForTest(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		switch {
+		case req.Method == http.MethodPost && req.URL.Path == "/api/agentes/presupuesto/refrescar":
+			refreshed = true
+			return newJSONResponse(http.StatusOK, `{"ok":true,"refrescados":1}`), nil
 		case req.URL.Path == "/api/agentes/presupuesto" && req.URL.Query().Get("activos") == "true":
 			return newJSONResponse(http.StatusOK, `{"generado":"2026-03-31T18:00:00Z","activos":true,"agentes":[{"Nombre":"Codex3","CuotaRestantePct":82,"PresupuestoVentana":"weekly","PresupuestoStale":true,"PresupuestoEstado":"observado_stale","PresupuestoSesionPct":98,"PresupuestoSemanalPct":99}]}`), nil
 		default:
@@ -120,6 +157,9 @@ func TestAgentePresupuestoCmdMarcaObservadoSiLaTelemetriaEsStale(t *testing.T) {
 	}
 	if strings.Contains(out, "efectivo 82%") {
 		t.Fatalf("la telemetria stale no deberia salir como efectiva:\n%s", out)
+	}
+	if !refreshed {
+		t.Fatalf("deberia refrescar antes de listar presupuesto")
 	}
 }
 
@@ -151,8 +191,12 @@ func TestAgentePresupuestoCmdRefrescaAntesDeListar(t *testing.T) {
 }
 
 func TestAgenteRankingCuentasCmdRenderizaListado(t *testing.T) {
+	refreshed := false
 	setAgentTelemetryHTTPClientForTest(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		switch {
+		case req.Method == http.MethodPost && req.URL.Path == "/api/agentes/presupuesto/refrescar":
+			refreshed = true
+			return newJSONResponse(http.StatusOK, `{"ok":true,"refrescados":1}`), nil
 		case req.URL.Path == "/api/agentes/ranking-cuentas" && req.URL.Query().Get("activos") == "true":
 			return newJSONResponse(http.StatusOK, `{"generado":"2026-03-31T18:00:00Z","activos":true,"cuentas":[{"cuenta_clave":"codex2@example.com","cuenta_email":"codex2@example.com","cuenta_usuario":"codex2","criterio":"remaining_tokens","remaining_tokens":120000,"agentes":["Codex2"]},{"cuenta_clave":"codex1","cuenta_usuario":"codex1","criterio":"cuota_pct","cuota_restante_pct":77,"presupuesto_ventana":"daily","agentes":["Codex1"]}]}`), nil
 		default:
@@ -171,11 +215,18 @@ func TestAgenteRankingCuentasCmdRenderizaListado(t *testing.T) {
 	if !strings.Contains(out, "2.") || !strings.Contains(out, "efectivo 77%") {
 		t.Fatalf("salida inesperada:\n%s", out)
 	}
+	if !refreshed {
+		t.Fatalf("deberia refrescar antes de listar ranking")
+	}
 }
 
 func TestAgenteRankingCuentasCmdMarcaUsoObservadoClaude(t *testing.T) {
+	refreshed := false
 	setAgentTelemetryHTTPClientForTest(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		switch {
+		case req.Method == http.MethodPost && req.URL.Path == "/api/agentes/presupuesto/refrescar":
+			refreshed = true
+			return newJSONResponse(http.StatusOK, `{"ok":true,"refrescados":1}`), nil
 		case req.URL.Path == "/api/agentes/ranking-cuentas" && req.URL.Query().Get("activos") == "true":
 			return newJSONResponse(http.StatusOK, `{"generado":"2026-04-01T23:50:00Z","activos":true,"cuentas":[{"cuenta_clave":"claude@example.com","cuenta_email":"claude@example.com","criterio":"observed_usage","observed_usage_tokens":1570,"observed_usage_cost_usd":0.042,"observed_usage_messages":3,"observed_usage_turns":1,"observed_session_path":"/tmp/.claude/sessions/session-1.json","presupuesto_fuente":"claude_rust_session_observed","agentes":["Codex6"]}]}`), nil
 		default:
@@ -196,6 +247,9 @@ func TestAgenteRankingCuentasCmdMarcaUsoObservadoClaude(t *testing.T) {
 	}
 	if strings.Contains(out, "sin_datos") {
 		t.Fatalf("no deberia caer a sin_datos:\n%s", out)
+	}
+	if !refreshed {
+		t.Fatalf("deberia refrescar antes de listar ranking")
 	}
 }
 

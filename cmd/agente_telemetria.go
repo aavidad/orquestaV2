@@ -8,12 +8,17 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"orquesta/db"
+	"orquesta/internal/controlruntime"
 )
 
 var agentePresupuestoCmd = &cobra.Command{
@@ -23,8 +28,9 @@ var agentePresupuestoCmd = &cobra.Command{
 		activos, _ := cmd.Flags().GetBool("activos")
 		jsonOut, _ := cmd.Flags().GetBool("json")
 		refresh, _ := cmd.Flags().GetBool("refresh")
+		cached, _ := cmd.Flags().GetBool("cached")
 		agenteFiltro, _ := cmd.Flags().GetString("agente")
-		if refresh {
+		if refresh || !cached {
 			if _, ok, err := refrescarAgentesPresupuestoPorAPI(agenteFiltro); err != nil {
 				return err
 			} else if !ok {
@@ -61,6 +67,14 @@ var agenteCuentasCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		activos, _ := cmd.Flags().GetBool("activos")
 		jsonOut, _ := cmd.Flags().GetBool("json")
+		cached, _ := cmd.Flags().GetBool("cached")
+		if !cached {
+			if _, ok, err := refrescarAgentesPresupuestoPorAPI(""); err != nil {
+				return err
+			} else if !ok {
+				return agenteErrorServerFirst()
+			}
+		}
 		resp, ok, err := listarAgentesCuentasPorAPI(activos)
 		if err != nil {
 			return err
@@ -86,6 +100,14 @@ var agenteRankingCuentasCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		activos, _ := cmd.Flags().GetBool("activos")
 		jsonOut, _ := cmd.Flags().GetBool("json")
+		cached, _ := cmd.Flags().GetBool("cached")
+		if !cached {
+			if _, ok, err := refrescarAgentesPresupuestoPorAPI(""); err != nil {
+				return err
+			} else if !ok {
+				return agenteErrorServerFirst()
+			}
+		}
 		resp, ok, err := listarAgentesRankingCuentasPorAPI(activos)
 		if err != nil {
 			return err
@@ -149,23 +171,253 @@ var agenteObservarCuentaCmd = &cobra.Command{
 	},
 }
 
-func resumenCuentaObservadaAgente(agente apiAgenteCuentaItem) string {
-	email := strings.TrimSpace(agente.CuentaEmail)
-	usuario := strings.TrimSpace(agente.CuentaUsuario)
-	switch {
-	case email != "" && usuario != "" && !strings.EqualFold(email, usuario):
-		return fmt.Sprintf("%s (%s)", email, usuario)
-	case email != "":
-		return email
-	case usuario != "":
-		return "usuario " + usuario
+type agenteStatusVivoItem struct {
+	Nombre        string     `json:"nombre"`
+	HandleID      int64      `json:"handle_id,omitempty"`
+	HandleKind    string     `json:"handle_kind,omitempty"`
+	HandleRef     string     `json:"handle_ref,omitempty"`
+	HandleEstado  string     `json:"handle_estado,omitempty"`
+	Driver        string     `json:"driver,omitempty"`
+	Fuente        string     `json:"fuente,omitempty"`
+	CuentaEmail   string     `json:"cuenta_email,omitempty"`
+	PlanType      string     `json:"plan_type,omitempty"`
+	SessionID     string     `json:"session_id,omitempty"`
+	FiveHourLeft  *float64   `json:"five_hour_left,omitempty"`
+	FiveHourReset *time.Time `json:"five_hour_reset,omitempty"`
+	WeeklyLeft    *float64   `json:"weekly_left,omitempty"`
+	WeeklyReset   *time.Time `json:"weekly_reset,omitempty"`
+	ObservedAt    *time.Time `json:"observed_at,omitempty"`
+	RawOutput     string     `json:"raw_output,omitempty"`
+	Error         string     `json:"error,omitempty"`
+}
+
+type agenteStatusVivoResponse struct {
+	Generado string                 `json:"generado"`
+	Agentes  []agenteStatusVivoItem `json:"agentes"`
+}
+
+var agenteStatusVivoCmd = &cobra.Command{
+	Use:        "status-vivo",
+	Short:      "Depuración legacy de /status vivo por PTY",
+	Hidden:     true,
+	Deprecated: "superficie legacy de depuración; use presupuesto/cuentas basados en tmux, profile-status y artefactos estructurados",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if !legacyLiveStatusEnabled() {
+			return fmt.Errorf("status-vivo legacy deshabilitado; exporte ORQUESTA_ALLOW_LEGACY_LIVE_STATUS=1 solo para depuración puntual")
+		}
+		jsonOut, _ := cmd.Flags().GetBool("json")
+		persist, _ := cmd.Flags().GetBool("persist")
+		agenteFiltro, _ := cmd.Flags().GetString("agente")
+
+		nombres, err := listarAgentesStatusVivo(agenteFiltro)
+		if err != nil {
+			return err
+		}
+		resp := agenteStatusVivoResponse{
+			Generado: time.Now().UTC().Format(time.RFC3339Nano),
+			Agentes:  make([]agenteStatusVivoItem, 0, len(nombres)),
+		}
+		for _, nombre := range nombres {
+			item, err := consultarStatusVivoAgente(nombre, persist)
+			if err != nil {
+				item = agenteStatusVivoItem{Nombre: nombre, Error: err.Error()}
+			}
+			resp.Agentes = append(resp.Agentes, item)
+		}
+		if jsonOut {
+			return imprimirJSON(resp)
+		}
+		for _, item := range resp.Agentes {
+			fmt.Printf("%-10s ", item.Nombre)
+			switch {
+			case strings.TrimSpace(item.Error) != "":
+				fmt.Printf("ERROR %s\n", strings.TrimSpace(item.Error))
+			default:
+				fmt.Printf("%s · semanal %s · 5h %s · fuente %s\n",
+					valorTexto(item.CuentaEmail, "sin cuenta"),
+					fmtPercent(item.WeeklyLeft),
+					fmtPercent(item.FiveHourLeft),
+					valorTexto(item.Fuente, "desconocida"),
+				)
+			}
+		}
+		return nil
+	},
+}
+
+func legacyLiveStatusEnabled() bool {
+	switch strings.TrimSpace(strings.ToLower(os.Getenv("ORQUESTA_ALLOW_LEGACY_LIVE_STATUS"))) {
+	case "1", "true", "yes", "si", "on":
+		return true
 	default:
+		return false
+	}
+}
+
+func listarAgentesStatusVivo(filtro string) ([]string, error) {
+	if nombre := strings.TrimSpace(filtro); nombre != "" {
+		return []string{nombre}, nil
+	}
+	agentes, err := db.ListarAgentes()
+	if err != nil {
+		return nil, err
+	}
+	nombres := make([]string, 0, len(agentes))
+	for _, agente := range agentes {
+		if agente == nil || strings.TrimSpace(agente.Nombre) == "" {
+			continue
+		}
+		nombre := strings.TrimSpace(agente.Nombre)
+		if strings.HasPrefix(strings.ToLower(nombre), "codex") {
+			nombres = append(nombres, nombre)
+		}
+	}
+	sort.Slice(nombres, func(i, j int) bool {
+		return naturalLessCodex(nombres[i], nombres[j])
+	})
+	return nombres, nil
+}
+
+func naturalLessCodex(a, b string) bool {
+	ai := codexSuffix(a)
+	bi := codexSuffix(b)
+	if ai >= 0 && bi >= 0 && ai != bi {
+		return ai < bi
+	}
+	return strings.ToLower(a) < strings.ToLower(b)
+}
+
+func codexSuffix(nombre string) int {
+	var n int
+	if _, err := fmt.Sscanf(strings.TrimSpace(nombre), "Codex%d", &n); err == nil {
+		return n
+	}
+	return -1
+}
+
+func consultarStatusVivoAgente(nombre string, persist bool) (agenteStatusVivoItem, error) {
+	item := agenteStatusVivoItem{Nombre: strings.TrimSpace(nombre)}
+	if !legacyLiveStatusEnabled() {
+		return item, fmt.Errorf("status-vivo legacy deshabilitado")
+	}
+	handles, err := db.ListarRuntimeHandles(ptrStringTrimmed(item.Nombre))
+	if err != nil {
+		return item, err
+	}
+	if len(handles) == 0 {
+		return item, fmt.Errorf("sin runtime handles")
+	}
+	ordenarHandlesParaPresupuestoVivo(handles)
+	var errs []string
+	for _, handle := range handles {
+		if handle == nil {
+			continue
+		}
+		if syncedHandle, _, _, err := db.SincronizarRuntimeHandleSupervisado(handle, nil, "status_live_cli"); err == nil && syncedHandle != nil {
+			handle = syncedHandle
+		}
+		estado := strings.TrimSpace(handle.Estado)
+		if !strings.EqualFold(estado, "activo") && !strings.EqualFold(estado, "pausado") {
+			errs = append(errs, fmt.Sprintf("handle %d %s", handle.ID, estado))
+			continue
+		}
+		obj := controlruntime.ObjetivoProceso{
+			PID:          int64PtrFromHandleRef(handle.HandleKind, handle.HandleRef),
+			HandleKind:   strings.TrimSpace(handle.HandleKind),
+			HandleRef:    strings.TrimSpace(handle.HandleRef),
+			MetadataJSON: strings.TrimSpace(handle.MetadataJSON),
+		}
+		restaurarPausa := false
+		if strings.EqualFold(estado, "pausado") {
+			if aplicado, _, err := controlruntime.ContinuarProceso(obj); err == nil && aplicado {
+				restaurarPausa = true
+				time.Sleep(1200 * time.Millisecond)
+			}
+		}
+		result, err := controlruntime.RunSlashCommandLive(obj, "/status", controlruntime.SlashCommandOptions{})
+		if restaurarPausa {
+			_, _, _ = controlruntime.PausarProceso(obj)
+		}
+		if err != nil {
+			if errors.Is(err, controlruntime.ErrSlashCommandBrokenPipe) {
+				_ = db.MarcarRuntimeHandleCanalRoto(handle, nil, err.Error())
+			}
+			errs = append(errs, fmt.Sprintf("handle %d slash: %v", handle.ID, err))
+			continue
+		}
+		if result == nil || strings.TrimSpace(result.RawOutput) == "" {
+			errs = append(errs, fmt.Sprintf("handle %d sin salida", handle.ID))
+			continue
+		}
+		status, err := controlruntime.ParseCodexStatusLive(result.RawOutput, result.FinishedAt)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("handle %d parse: %v", handle.ID, err))
+			continue
+		}
+		if status == nil {
+			errs = append(errs, fmt.Sprintf("handle %d status nil", handle.ID))
+			continue
+		}
+		item.HandleID = handle.ID
+		item.HandleKind = strings.TrimSpace(handle.HandleKind)
+		item.HandleRef = strings.TrimSpace(handle.HandleRef)
+		item.HandleEstado = strings.TrimSpace(handle.Estado)
+		item.Driver = strings.TrimSpace(stringValueFromJSON(handle.MetadataJSON, "driver"))
+		item.Fuente = "codex_status_live"
+		item.CuentaEmail = strings.TrimSpace(status.AccountEmail)
+		item.PlanType = strings.TrimSpace(status.PlanType)
+		item.SessionID = strings.TrimSpace(status.SessionID)
+		item.FiveHourLeft = status.FiveHourLeft
+		item.FiveHourReset = status.FiveHourReset
+		item.WeeklyLeft = status.WeeklyLeft
+		item.WeeklyReset = status.WeeklyReset
+		item.ObservedAt = &result.FinishedAt
+		item.RawOutput = strings.TrimSpace(status.RawOutput)
+		if persist {
+			if observed, err := controlruntime.ObserveCodexStatusLive(obj); err == nil && observed != nil {
+				_ = persistirPresupuestoSesionObservado(handle, observed)
+			}
+		}
+		return item, nil
+	}
+	if len(errs) == 0 {
+		return item, fmt.Errorf("sin handle PTY operativo")
+	}
+	return item, errors.New(strings.Join(errs, " | "))
+}
+
+func ptrStringTrimmed(v string) *string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+func fmtPercent(v *float64) string {
+	if v == nil {
 		return "—"
 	}
+	return fmt.Sprintf("%.0f%%", *v)
+}
+
+func valorTexto(v, fallback string) string {
+	if strings.TrimSpace(v) == "" {
+		return fallback
+	}
+	return strings.TrimSpace(v)
+}
+
+func resumenCuentaObservadaAgente(agente apiAgenteCuentaItem) string {
+	if texto := resumenCuentaCanonica(agente.CuentaID, agente.CuentaEmail, agente.CuentaUsuario); texto != "" {
+		return texto
+	}
+	return "—"
 }
 
 func resumenRankingCuenta(cuenta apiCuentaPresupuestoItem) string {
 	base := resumenCuentaObservadaAgente(apiAgenteCuentaItem{
+		CuentaID:      cuenta.CuentaID,
 		CuentaEmail:   cuenta.CuentaEmail,
 		CuentaUsuario: cuenta.CuentaUsuario,
 	})
@@ -271,12 +523,17 @@ func resumenRankingCuenta(cuenta apiCuentaPresupuestoItem) string {
 }
 
 func init() {
-	for _, sub := range []*cobra.Command{agentePresupuestoCmd, agenteCuentasCmd, agenteRankingCuentasCmd} {
+	for _, sub := range []*cobra.Command{agentePresupuestoCmd, agenteCuentasCmd, agenteRankingCuentasCmd, agenteStatusVivoCmd} {
 		sub.Flags().Bool("activos", false, "Mostrar solo agentes activos")
 		sub.Flags().Bool("json", false, "Emitir JSON crudo")
+		sub.Flags().Bool("cached", false, "No refrescar la telemetría viva antes de listar")
 		if sub == agentePresupuestoCmd {
 			sub.Flags().Bool("refresh", false, "Refrescar telemetría observada antes de listar")
 			sub.Flags().String("agente", "", "Refrescar solo este agente")
+		}
+		if sub == agenteStatusVivoCmd {
+			sub.Flags().String("agente", "", "Consultar solo este agente")
+			sub.Flags().Bool("persist", true, "Persistir el /status observado en la telemetría canónica")
 		}
 		agenteCmd.AddCommand(sub)
 	}

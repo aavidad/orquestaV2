@@ -19,6 +19,7 @@ La especificacion ampliada de trabajo y la matriz de voto viven en:
 - `docs/orquesta_v1_vision.md`
 - `docs/op_049_matriz_voto.md`
 - `docs/orquesta_v1_roadmap.md`
+- `docs/diseno_microprogramacion_dirigida_agentes.md`
 - `docs/operacion_agentes_manuales.md`
 
 ### Manuales Oficiales v1.0
@@ -33,9 +34,9 @@ El nucleo no debe depender de un LLM concreto. Debe depender de un contrato esta
 
 Nota operativa actual:
 
-- el objetivo fisico final es `~/Trabajo/orquestador`
-- a fecha `2026-03-22` el repo sigue en `~/Trabajo/PlataformaMunicipal/orquestador`
-- no debe moverse mientras existan agentes activos trabajando sobre esa ruta
+- el repositorio operativo actual vive en `~/Trabajo/orquesta`
+- las referencias antiguas a la ruta legacy previa del repositorio son historicas y no deben usarse como verdad operativa
+- cualquier traslado fisico futuro debe tratarse como migracion explicita, no como suposicion documental
 
 ## Principios
 
@@ -63,6 +64,10 @@ Nota operativa actual:
    No deben hablar directamente con SQLite, Git, runtimes, proveedores LLM ni conectores externos.
    Solo hablan con Orquesta y Orquesta actúa como único plano de control.
 
+8. La delegacion a agentes es cerrada y verificable.
+   El orquestador define el contrato exacto de trabajo: archivo, firma, write_set, tests obligatorios y restricciones.
+   Los agentes ejecutan microtareas de implementacion. No rediseñan arquitectura ni abren frentes amplios por su cuenta.
+
 ## Desarrollo hexagonal
 
 - `core` o `application`
@@ -79,7 +84,9 @@ Regla práctica:
 - lo nuevo debe entrar por servicio + puertos
 - `db/` no debe volver a actuar como núcleo de aplicación
 - la migración del legado se hará por fases
+- la unidad canónica de delegación a agentes es la especificación de función, no el frente amplio
 - **Módulos e Idioma:** Todos los adaptadores y aplicaciones de dominio deben utilizar nomenclatura exclusiva en **castellano**, habitualmente sufijados con `app` (P.ej. usar `tareasapp`, `sesionesapp` en vez de `taskapp` o `sessionapp`). El objetivo es erradicar completamente el inglés de los nombres de carpeta para evitar confusiones de los modelos LLM (agentes).
+- **i18n por defecto:** toda superficie nueva visible, clave pública o documento nuevo debe nacer preparada para i18n; no se admite crear funcionalidad nueva que obligue a rehacer la internacionalización después.
 
 ## Modelo actual
 
@@ -190,6 +197,25 @@ Aplicacion en Orquesta:
 
 - comandos `sesion inicio`, `sesion guardar`, `sesion continuar`
 - modelo de conector CLI como primer transporte
+
+### `oh-my-codex`
+
+- estado canónico de equipo y workers fuera del pane
+- `dispatch request` durable con transiciones `pending -> notified -> delivered/failed`
+- `inbox` y `mailbox` como verdad de trabajo, no `send-keys` ad hoc
+- guard de readiness antes de inyectar en `tmux`
+- worker protocol con `ACK` inicial, claim-safe de tarea y marcado explícito de entrega
+
+Aplicacion en Orquesta:
+
+- `tmux` se usa como transporte persistente, no como fuente de verdad
+- la entrega a agentes debe pasar por estado duradero y confirmación de consumo
+- la unidad de trabajo delegada debe ser microprogramación dirigida por especificación de función
+- el agente debe recibir una instrucción acotada y verificable, no un frente arquitectónico abierto
+
+Referencia documental asociada:
+
+- `docs/diseno_microprogramacion_dirigida_agentes.md`
 
 ## Siguiente fase recomendada
 

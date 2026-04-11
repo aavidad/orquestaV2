@@ -102,7 +102,7 @@ Regla operativa adicional:
 
 - el slug canónico de proyecto no se asume por el nombre del repositorio en disco
 - antes de filtrar `runtime`, `mailbox`, `checkpoints`, `tareas` o `propuestas` por proyecto, hay que consultar el estado vivo en Orquesta
-- a fecha de este diario, el repositorio vive en `/home/alberto/Trabajo/orquesta`, pero el proyecto activo registrado en la BD sigue siendo `orquestador`; confundir `ruta` con `slug` rompe diagnósticos y puede aparentar falsos bugs de API
+- la ruta física del repositorio puede cambiar entre máquinas o despliegues; el proyecto operativo vigente debe consultarse siempre en Orquesta y nunca deducirse de la ruta en disco
 
 ## Doctrina operativa obligatoria
 
@@ -265,6 +265,55 @@ Patron elegido como referencia:
 - handoff con contexto filtrado y resumen util
 - mensajes y ordenes duraderos con lease, ack, retry y backoff
 
+### Microprogramacion dirigida obligatoria
+
+La experiencia real del proyecto ya ha demostrado una cosa:
+
+- cuando a un agente se le entrega un frente amplio, el agente tiende a decidir arquitectura, cortes y soluciones laterales
+- eso produce deriva del roadmap, incumplimientos de hexagonalidad y reescrituras fuera del objetivo real
+
+Por tanto, la doctrina canonica cambia de forma explicita:
+
+- el orquestador define el trabajo
+- el agente implementa una unidad minima cerrada
+
+La unidad minima canónica es la `especificacion de funcion`.
+
+Debe fijar, como minimo:
+
+- archivo destino
+- firma o simbolo afectado
+- descripcion exacta del comportamiento esperado
+- precondiciones y postcondiciones
+- dependencias permitidas y dependencias prohibidas
+- tests obligatorios
+- `write_set` permitido
+
+Reglas duras:
+
+- el agente no recibe frentes de arquitectura abiertos como via normal
+- el agente no puede tocar archivos fuera del `write_set`
+- el agente no puede introducir dependencias no autorizadas
+- la entrega solo vale si pasa la validacion del contrato fijado por Orquesta
+
+Patron tomado de `oh-my-codex` y adaptado a Orquesta:
+
+- `dispatch` state-first y durable
+- `inbox` y `mailbox` como verdad del trabajo
+- `ACK` inicial del worker antes de ejecutar
+- guard de readiness antes de inyectar en `tmux`
+- marcado explicito de `notified` y `delivered`, en vez de asumir que `tmux` vivo equivale a trabajo consumido
+
+En Orquesta esto implica:
+
+- `tmux` es transporte persistente, no fuente de verdad
+- el trabajo del agente nace de una especificacion cerrada servida por la app
+- la validacion de entrega pertenece al orquestador, no al criterio del agente
+
+Referencia de diseño:
+
+- `docs/diseno_microprogramacion_dirigida_agentes.md`
+
 Regla operativa para `server_autobootstrap`:
 
 - el autobootstrap del servidor solo debe sembrar bootstrap inicial para agentes que todavia no estan operativos
@@ -282,7 +331,7 @@ Regla operativa para `server_autobootstrap`:
 - la limpieza de transcript debe absorber tambien secuencias CSI privadas del TUI (por ejemplo `ESC[<1u`); no pueden sobrevivir en `runtime_panic` ni contaminar la clasificación o la observabilidad visible
 - esa misma higiene aplica a eventos históricos leídos por API: aunque el raw viejo siga en BD, `/api/runtime-events` debe sanear ANSI/CSI residual antes de devolver `message` o `payload`
 - una pausa operativa por `runtime_panic` o `runtime_crash` no puede presentarse como agotamiento de cuota; la visibilidad canonica debe distinguir entre bloqueo presupuestario y enfriamiento operativo para no mentir al supervisor ni a la flota
-- para Codex bajo `process_pty_cli`, la entrega caliente por `stdin` solo es aceptable si la instruccion queda compactada a guidance corta y segura; si el texto sigue siendo largo en `supervisor_local`, Orquesta debe degradarlo a `mailbox_only` antes de arriesgar otro `runtime_panic` del TUI
+- para runtimes interactivos locales, `tmux_cli_session` es el driver canónico; cualquier resto `process_pty_cli`/`pty_broker` queda relegado a compatibilidad de recuperación o tests y no debe abrir trabajo nuevo ni dictar arquitectura
 - si tras limpiar ANSI/CSI queda un prefijo puntual sin semántica (`.`, `:`, `|`) justo antes del marcador de `runtime_panic`, también debe retirarse de la proyección visible
 - si un evento histórico heredado arrastra un prefijo corto sin espacios justo antes de `The application panicked (crashed).` (`s`, `[>7u`, etc.), también se considera ruido terminal y debe retirarse en la proyección visible
 - un agente no puede figurar `activo ahora` solo porque conserve una sesión abierta o un `runtime_handle.estado='activo'`; si el `runtime principal` ya está terminal o su `última actividad` está stale, la proyección visible debe ocultarlo como agente ocupado
@@ -315,15 +364,16 @@ Contrato minimo obligatorio para `runtime_orders`:
 - el mismo principio aplica a los batches del runner: un batch en ejecucion no puede quedar secuestrando su nombre para siempre tras un timeout
 - el runner debe modelar cada batch con lease y token de generacion; si la lease expira, el siguiente ciclo puede reclamar de nuevo ese batch sin depender de que el goroutine viejo termine
 - el cierre de lease de batch debe ser por token, no por nombre a secas, para que un goroutine viejo no pueda borrar la lease vigente de una ejecucion mas nueva
-- `send_instruction` no se gobierna por un unico booleano `can_send_input`; el daemon debe distinguir entre input interactivo generico y entrega caliente por supervisor local de Orquesta
-- un runtime `process_pty_cli` local y seguro con `stdin_path` y `supervisor_ref` validos puede recibir entrega caliente por el canal del supervisor aunque `can_send_input=false`
-- `session_resume` queda como fallback de continuidad, no como sustituto de la entrega caliente cuando Orquesta ya posee el proceso local y su canal de entrada
-- excepcion dura: Codex PTY/TUI no admite `send_input` interactivo generico; `can_send_input=false` sigue siendo obligatorio
-- matiz operativo obligatorio: un runtime Codex con supervisor local real (`process_pty_cli` + `stdin_path` + `supervisor_ref`) si puede aceptar entrega caliente por la via del supervisor de Orquesta; lo prohibido es el camino generico/interactivo, no la entrega supervisada y trazable
+- `send_instruction` no se gobierna por un unico booleano `can_send_input`; el daemon debe distinguir entre input interactivo genérico, continuidad por `session_resume` y acciones operativas puntuales sobre `tmux`
+- para Codex/Claude/Gemini locales, la ruta canónica es `tmux` + `manifest/status/heartbeat`; `session_resume` resuelve continuidad y `tmux send-keys` solo se usa para acciones operativas explícitas o reparación
+- cualquier resto `process_pty_cli`/`pty_broker` es deuda legacy de transición o recuperación; no puede seguir siendo el contrato principal del sistema ni generar tareas PTY-first
+- excepción dura: Codex TUI no admite `send_input` interactivo genérico; `can_send_input=false` sigue siendo obligatorio y la continuidad debe resolverse por `session_resume` o mailbox durable
 - para runtimes Codex degradados, `session_resume` no puede depender solo de la metadata persistida del `runtime_handle`; debe aceptar metadata observada por el supervisor local cuando esa observacion sea mas rica y coherente que la fila actual
 - el reconocimiento de un runtime Codex local no puede atarse a un unico campo como `driver`; debe poder reconstruirse desde `herramienta`, `conector`, `rendered_command`, `wrapped_command`, `supervisor_driver` y la observacion viva del supervisor
 - la reconciliacion stale no se decide solo por `started_at`; debe respetar la caducidad de la lease cuando exista
 - una `lease_expires_at` ya vencida se reconcilia contra `now`, no contra otro `cutoff` adicional; la lease no puede caducar dos veces
+- un agente retirado no puede volver a `habilitado=1` por `RegistrarAgente`, autobootstrap o reconciliación implícita; solo puede volver mediante la acción explícita `rehabilitar`
+- retirar un agente debe limpiar su mailbox pendiente y cancelar órdenes abiertas no terminales que ya no tienen sentido, además de liberar sus tareas
 - si un `mailbox_id` ya forma parte de una `bootstrap lease` pendiente (`lease_state=waiting_for_evidence`), ningun batch (`interactive`, `session_resume`, `coordinated_restart`) puede materializar otra `send_instruction` para ese mismo mensaje
 - mientras una `bootstrap lease` siga pendiente, el mailbox incluido en ella sigue siendo verdad de continuidad; cualquier `send_instruction` redundante para ese `mailbox_id` debe cerrarse como `superseded`, no reintentarse
 - una `send_instruction` nacida desde `runtime_mailbox` no es una segunda cola durable; es solo un intento de entrega
@@ -679,7 +729,7 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
 
 - el listener y la API deben quedar disponibles antes de disparar batches pesados del control plane.
 - el `Runner` del servidor arranca con una `startup grace` para evitar que `status` o `/api/runtime-handles` queden bloqueados por trabajo interno nada más levantar el daemon.
-- esta gracia pertenece al arranque del daemon en [servidor_unificado.go](/home/alberto/Trabajo/orquesta/cmd/servidor_unificado.go), no al constructor genérico del runner; tests y runners embebidos deben poder ejecutar batches inmediatamente.
+- esta gracia pertenece al arranque del daemon en `cmd/servidor_unificado.go`, no al constructor genérico del runner; tests y runners embebidos deben poder ejecutar batches inmediatamente.
 - `serve` y `server run` no deben abrir la BD desde el gating genérico del CLI; la apertura pertenece al arranque del servidor una vez reservado el listener.
 - los comandos server-first como `status` solo pueden caer a recuperación local cuando esta se ha pedido explícitamente; desactivar el cliente de servidor no convierte el comando en local por defecto.
 

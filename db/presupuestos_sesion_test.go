@@ -688,6 +688,100 @@ func TestGetAgenteRecuperaReanimarAtVisibleDesdeResetSemanalSiYaEstaEnfriado(t *
 	}
 }
 
+func TestGetAgenteDesbloqueaCuotaViejaCuandoElPresupuestoFrescoYaTieneSaldo(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("codex12", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	sesionID, err := IniciarSesion("codex12")
+	if err != nil {
+		t.Fatalf("IniciarSesion: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', motivo_pausa='Presupuesto agotado observado', reanimar_at=? WHERE nombre='codex12'`, time.Now().UTC().Add(24*time.Hour)); err != nil {
+		t.Fatalf("update agente: %v", err)
+	}
+	now := time.Now().UTC()
+	resetPrimary := now.Add(4 * time.Hour)
+	resetWeekly := now.Add(6 * 24 * time.Hour)
+	raw := `{"rate_limits":{"primary":{"used_percent":6,"window_minutes":300,"resets_at":` + strconv.FormatInt(resetPrimary.Unix(), 10) + `},"secondary":{"used_percent":32,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetWeekly.Unix(), 10) + `}},"account_email":"carlos@avidad.com","account_user":"Carlos Avidad"}`
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "5h",
+		BudgetSource:    "codex_profile_status",
+		RawSnapshotJSON: raw,
+		CheckedAt:       now,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion: %v", err)
+	}
+
+	agente, err := GetAgente("codex12")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if agente.EstadoCuota != "activo" {
+		t.Fatalf("deberia limpiar el bloqueo de cuota viejo cuando ya hay saldo fresco: %+v", agente)
+	}
+	if agente.ReanimarAt != nil {
+		t.Fatalf("reanimar_at no deberia persistir tras limpiar bloqueo falso: %+v", agente)
+	}
+	if strings.TrimSpace(agente.MotivoPausa) != "" {
+		t.Fatalf("motivo_pausa no deberia conservar el bloqueo de cuota viejo: %+v", agente)
+	}
+}
+
+func TestGetAgenteOllamaIgnoraCuotaLegacyYPresupuestoProveedor(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("Gemma1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente: %v", err)
+	}
+	conector, err := GetConector("ollama-cli")
+	if err != nil {
+		t.Fatalf("GetConector ollama-cli: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Gemma1",
+		ConectorID:  &conector.ID,
+		Herramienta: "ollama-cli",
+	})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto: %v", err)
+	}
+	if _, err := DB.Exec(
+		`UPDATE agentes SET estado_cuota='enfriamiento', motivo_pausa='Ventana corta agotada observada', reanimar_at=?, consumo_dia_segundos=1200, consumo_semanal_segundos=1200 WHERE nombre='Gemma1'`,
+		time.Now().UTC().Add(2*time.Hour),
+	); err != nil {
+		t.Fatalf("update agente: %v", err)
+	}
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesion.ID,
+		WindowKind:      "weekly",
+		BudgetSource:    "provider_backoff",
+		RawSnapshotJSON: `{"note":"no deberia aplicar a ollama"}`,
+		CheckedAt:       time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion: %v", err)
+	}
+
+	agente, err := GetAgente("Gemma1")
+	if err != nil {
+		t.Fatalf("GetAgente: %v", err)
+	}
+	if !agente.SinCuotaProveedor {
+		t.Fatalf("Gemma1 deberia quedar marcado sin cuota de proveedor: %+v", agente)
+	}
+	if strings.TrimSpace(agente.EstadoCuota) != "activo" {
+		t.Fatalf("Gemma1 no deberia quedar en cuota: %+v", agente)
+	}
+	if agente.ReanimarAt != nil {
+		t.Fatalf("Gemma1 no deberia conservar cooldown: %+v", agente)
+	}
+	if agente.CuotaRestantePct != nil || agente.PresupuestoSesionPct != nil || agente.PresupuestoSemanalPct != nil {
+		t.Fatalf("Gemma1 no deberia proyectar cuota visible: %+v", agente)
+	}
+}
+
 func TestGetAgenteExtraeCuentaDesdeRuntimeHandle(t *testing.T) {
 	abrirDBTemporalMemoria(t)
 
@@ -923,6 +1017,238 @@ func TestGetAgenteConservaCuotaObservadaYUsoClaudeMasReciente(t *testing.T) {
 	}
 }
 
+func TestGetAgenteConsolidaCuotaCanonicaPorCuentaCompartida(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Codex1: %v", err)
+	}
+	if err := RegistrarAgente("Codex5", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Codex5: %v", err)
+	}
+	sesion1, err := IniciarSesion("Codex1")
+	if err != nil {
+		t.Fatalf("IniciarSesion Codex1: %v", err)
+	}
+	sesion5, err := IniciarSesion("Codex5")
+	if err != nil {
+		t.Fatalf("IniciarSesion Codex5: %v", err)
+	}
+	now := time.Now().UTC()
+	resetWeekly := now.Add(5 * 24 * time.Hour)
+	rawObserved := `{"rate_limits":{"secondary":{"used_percent":100,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetWeekly.Unix(), 10) + `}},"account_email":"maritere@avidad.com","account_user":"maritere"}`
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesion5,
+		WindowKind:      "5h",
+		BudgetSource:    "codex_token_count_observed",
+		RawSnapshotJSON: rawObserved,
+		CheckedAt:       now,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion observed: %v", err)
+	}
+	zeroMessages := int64(0)
+	rawBackoff := `{"source":"runtime_order_send_instruction","account_user":"Codex1","account_email":"maritere@avidad.com"}`
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:          sesion1,
+		WindowKind:        "provider",
+		ResetAt:           &resetWeekly,
+		RemainingMessages: &zeroMessages,
+		BudgetSource:      "provider_backoff",
+		RawSnapshotJSON:   rawBackoff,
+		CheckedAt:         now.Add(time.Second),
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion backoff: %v", err)
+	}
+
+	agente1, err := GetAgente("Codex1")
+	if err != nil {
+		t.Fatalf("GetAgente Codex1: %v", err)
+	}
+	agente5, err := GetAgente("Codex5")
+	if err != nil {
+		t.Fatalf("GetAgente Codex5: %v", err)
+	}
+	if agente1.PresupuestoFuente != "codex_token_count_observed" || agente5.PresupuestoFuente != "codex_token_count_observed" {
+		t.Fatalf("la cuota canonica por cuenta deberia preferir la observacion real: a1=%s a5=%s", agente1.PresupuestoFuente, agente5.PresupuestoFuente)
+	}
+	if agente1.CuotaRestantePct == nil || agente5.CuotaRestantePct == nil || *agente1.CuotaRestantePct != *agente5.CuotaRestantePct {
+		t.Fatalf("los agentes con la misma cuenta no deberian divergir: a1=%+v a5=%+v", agente1, agente5)
+	}
+}
+
+func TestGetAgentePrefiereCodexProfileStatusComoCuotaCanonicaPorCuenta(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("Codex7", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Codex7: %v", err)
+	}
+	sesionID, err := IniciarSesion("Codex7")
+	if err != nil {
+		t.Fatalf("IniciarSesion Codex7: %v", err)
+	}
+
+	now := time.Now().UTC()
+	resetPrimary := now.Add(4 * time.Hour)
+	resetWeekly := now.Add(5 * 24 * time.Hour)
+	rawObserved := `{"rate_limits":{"primary":{"used_percent":5,"window_minutes":300,"resets_at":` + strconv.FormatInt(resetPrimary.Unix(), 10) + `},"secondary":{"used_percent":62,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetWeekly.Unix(), 10) + `}},"account_email":"alberto@avidad.com","account_user":"Alberto Qvidad","plan_type":"team"}`
+
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "5h",
+		BudgetSource:    "codex_token_count_observed",
+		RawSnapshotJSON: rawObserved,
+		CheckedAt:       now.Add(-30 * time.Minute),
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion observed: %v", err)
+	}
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "5h",
+		BudgetSource:    "codex_profile_status",
+		RawSnapshotJSON: rawObserved,
+		CheckedAt:       now,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion profile: %v", err)
+	}
+	if err := UpsertAgenteIdentidadObservada("Codex7", "alberto@avidad.com", "Alberto Qvidad", "codex_profile_status", &now); err != nil {
+		t.Fatalf("UpsertAgenteIdentidadObservada: %v", err)
+	}
+
+	agente, err := GetAgente("Codex7")
+	if err != nil {
+		t.Fatalf("GetAgente Codex7: %v", err)
+	}
+	if agente.PresupuestoFuente != "codex_profile_status" {
+		t.Fatalf("la cuota canonica deberia preferir codex_profile_status fresco: %+v", agente)
+	}
+	if agente.CuentaFuente != "codex_profile_status" {
+		t.Fatalf("la identidad canónica debería mantenerse en codex_profile_status: %+v", agente)
+	}
+	if agente.CuotaRestantePct == nil || *agente.CuotaRestantePct != 95 {
+		t.Fatalf("cuota restante inesperada: %+v", agente)
+	}
+	if agente.PresupuestoSemanalPct == nil || *agente.PresupuestoSemanalPct != 38 {
+		t.Fatalf("cuota semanal inesperada: %+v", agente)
+	}
+}
+
+func TestGetAgenteNoMezclaPresupuestoCanonicoSiSoloCoincideEmailPeroDifiereAccountID(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Codex2: %v", err)
+	}
+	if err := RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Codex3: %v", err)
+	}
+	sesion2, err := IniciarSesion("Codex2")
+	if err != nil {
+		t.Fatalf("IniciarSesion Codex2: %v", err)
+	}
+	sesion3, err := IniciarSesion("Codex3")
+	if err != nil {
+		t.Fatalf("IniciarSesion Codex3: %v", err)
+	}
+
+	now := time.Now().UTC()
+	resetShort := now.Add(4 * time.Hour)
+	resetWeek := now.Add(5 * 24 * time.Hour)
+	rawCodex2 := `{"account_id":"acct-codex2","account_email":"shared@example.com","account_user":"Codex2","rate_limits":{"primary":{"used_percent":10,"window_minutes":300,"resets_at":` + strconv.FormatInt(resetShort.Unix(), 10) + `},"secondary":{"used_percent":60,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetWeek.Unix(), 10) + `}}}`
+	rawCodex3 := `{"account_id":"acct-codex3","account_email":"shared@example.com","account_user":"Codex3","rate_limits":{"primary":{"used_percent":80,"window_minutes":300,"resets_at":` + strconv.FormatInt(resetShort.Unix(), 10) + `},"secondary":{"used_percent":90,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetWeek.Unix(), 10) + `}}}`
+
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesion2,
+		WindowKind:      "5h",
+		BudgetSource:    "codex_profile_status",
+		RawSnapshotJSON: rawCodex2,
+		CheckedAt:       now.Add(-1 * time.Minute),
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion Codex2: %v", err)
+	}
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesion3,
+		WindowKind:      "5h",
+		BudgetSource:    "codex_profile_status",
+		RawSnapshotJSON: rawCodex3,
+		CheckedAt:       now,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion Codex3: %v", err)
+	}
+
+	agente2, err := GetAgente("Codex2")
+	if err != nil {
+		t.Fatalf("GetAgente Codex2: %v", err)
+	}
+	if agente2.CuentaID != "acct-codex2" {
+		t.Fatalf("cuenta canónica inesperada: %+v", agente2)
+	}
+	if agente2.CuotaRestantePct == nil || *agente2.CuotaRestantePct != 90 {
+		t.Fatalf("Codex2 no deberia heredar la cuota de otra cuenta con mismo email: %+v", agente2)
+	}
+}
+
+func TestGetAgenteNoMezclaCuotaCanonicaSiComparteEmailPeroTieneAccountIDDistinto(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Codex2: %v", err)
+	}
+	if err := RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Codex3: %v", err)
+	}
+	sesion2, err := IniciarSesion("Codex2")
+	if err != nil {
+		t.Fatalf("IniciarSesion Codex2: %v", err)
+	}
+	sesion3, err := IniciarSesion("Codex3")
+	if err != nil {
+		t.Fatalf("IniciarSesion Codex3: %v", err)
+	}
+
+	now := time.Now().UTC()
+	reset2 := now.Add(4 * time.Hour)
+	reset3 := now.Add(2 * time.Hour)
+	raw2 := `{"account_id":"acc-codex2","account_email":"shared@example.com","account_user":"Codex2","rate_limits":{"primary":{"used_percent":15,"window_minutes":300,"resets_at":` + strconv.FormatInt(reset2.Unix(), 10) + `}}}`
+	raw3 := `{"account_id":"acc-codex3","account_email":"shared@example.com","account_user":"Codex3","rate_limits":{"primary":{"used_percent":90,"window_minutes":300,"resets_at":` + strconv.FormatInt(reset3.Unix(), 10) + `}}}`
+
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesion2,
+		WindowKind:      "5h",
+		BudgetSource:    "codex_profile_status",
+		RawSnapshotJSON: raw2,
+		CheckedAt:       now.Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion Codex2: %v", err)
+	}
+	if _, err := RegistrarPresupuestoSesion(&PresupuestoSesion{
+		SesionID:        sesion3,
+		WindowKind:      "5h",
+		BudgetSource:    "codex_profile_status",
+		RawSnapshotJSON: raw3,
+		CheckedAt:       now,
+	}); err != nil {
+		t.Fatalf("RegistrarPresupuestoSesion Codex3: %v", err)
+	}
+
+	agente2, err := GetAgente("Codex2")
+	if err != nil {
+		t.Fatalf("GetAgente Codex2: %v", err)
+	}
+	agente3, err := GetAgente("Codex3")
+	if err != nil {
+		t.Fatalf("GetAgente Codex3: %v", err)
+	}
+	if agente2.CuentaID != "acc-codex2" || agente3.CuentaID != "acc-codex3" {
+		t.Fatalf("account_id inesperado: a2=%+v a3=%+v", agente2, agente3)
+	}
+	if agente2.CuotaRestantePct == nil || *agente2.CuotaRestantePct != 85 {
+		t.Fatalf("Codex2 no deberia heredar la cuota de otra cuenta con mismo email: %+v", agente2)
+	}
+	if agente3.CuotaRestantePct == nil || *agente3.CuotaRestantePct != 10 {
+		t.Fatalf("Codex3 cuota inesperada: %+v", agente3)
+	}
+}
+
 func TestGetAgenteExtraePerfilDesdeRenderedCommandHandle(t *testing.T) {
 	abrirDBTemporalMemoria(t)
 
@@ -1007,5 +1333,27 @@ func TestUltimoPresupuestoSesionPorFuenteIgnoraFuentesPosteriores(t *testing.T) 
 	}
 	if strings.TrimSpace(ultimo.RawSnapshotJSON) != rawObserved {
 		t.Fatalf("raw snapshot inesperado: %+v", ultimo)
+	}
+}
+
+func TestPresupuestoSesionFrescoAceptaCodexStatusLive(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+	p := &PresupuestoSesion{
+		BudgetSource: "codex_status_live",
+		CheckedAt:    time.Now().UTC().Add(-10 * time.Minute),
+	}
+	if !PresupuestoSesionFresco(p) {
+		t.Fatalf("codex_status_live deberia considerarse snapshot observado fresco")
+	}
+}
+
+func TestPresupuestoSesionFrescoAceptaCodexProfileStatus(t *testing.T) {
+	abrirDBTemporalMemoria(t)
+	p := &PresupuestoSesion{
+		BudgetSource: "codex_profile_status",
+		CheckedAt:    time.Now().UTC().Add(-30 * time.Minute),
+	}
+	if !PresupuestoSesionFresco(p) {
+		t.Fatalf("codex_profile_status deberia considerarse snapshot observado fresco")
 	}
 }

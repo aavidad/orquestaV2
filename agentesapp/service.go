@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"orquesta/db"
+	"orquesta/runtimeagente"
 )
 
 type Store interface {
@@ -31,6 +33,8 @@ type Store interface {
 	SaveActiveSession(agente string, proyectoID *int64, upd db.SesionUpdate) error
 	ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance, error)
 	ListRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error)
+	ListCanonicalRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error)
+	ListRecentOperationalRuntimeHandles() (map[string]*db.RuntimeHandle, error)
 	ListRuntimeTranscript(filtro db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error)
 	ListRuntimeOrders(filtro db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error)
 	EnqueueRuntimeOrder(order *db.RuntimeOrder) (int64, error)
@@ -50,39 +54,105 @@ type Store interface {
 	PauseAgent(nombre string, minutos int, motivo string) error
 }
 
-type Service struct {
-	store Store
+type ModelPolicyProvider interface {
+	ResolveModelPolicy(input db.ResolverPoliticaInput) (*db.ResolucionModelo, error)
 }
 
-func NewService(store Store) *Service {
-	return &Service{store: store}
+type Service struct {
+	store               Store
+	modelPolicyProvider ModelPolicyProvider
+}
+
+const defaultWorkerOutputStaleSeconds = 20 * 60
+
+func NewService(store Store, modelPolicyProvider ModelPolicyProvider) *Service {
+	return &Service{store: store, modelPolicyProvider: modelPolicyProvider}
 }
 
 type Row struct {
-	Agente         *db.Agente
-	Asignacion     *db.Asignacion
-	Sesion         *db.Sesion
-	Runtime        *db.RuntimeInstance
-	Handle         *db.RuntimeHandle
-	OrdersOpen     int
-	OrdersFailed   int
-	MailboxPending int
-	MailboxTotal   int
-	Checkpoints    int
-	LastCheckpoint *db.RuntimeCheckpoint
-	OpenTasks      int
+	Agente                    *db.Agente
+	Asignacion                *db.Asignacion
+	Sesion                    *db.Sesion
+	Runtime                   *db.RuntimeInstance
+	Handle                    *db.RuntimeHandle
+	WorkerState               string
+	WorkerAlive               bool
+	WorkerReadyAt             *time.Time
+	WorkerHeartbeat           *time.Time
+	WorkerUpdatedAt           *time.Time
+	WorkerLastOutput          *time.Time
+	WorkerLastProgress        *time.Time
+	WorkerExitError           string
+	WorkerSessionRef          string
+	WorkerRuntimeRef          string
+	WorkerDriver              string
+	WorkerTransport           string
+	WorkerTMUXSession         string
+	WorkerTMUXWindow          string
+	WorkerTMUXPaneID          string
+	WorkerCanSendInput        bool
+	WorkerExternalSessionID   string
+	WorkerMailboxDeliveryMode string
+	EstadoOperativo           string
+	DetalleOperativo          string
+	OrdersOpen                int
+	OrdersFailed              int
+	ControlOrdersOpen         int
+	LastControlOrderType      string
+	LastControlOrderMoment    *time.Time
+	MailboxPending            int
+	MailboxTotal              int
+	Checkpoints               int
+	LastCheckpoint            *db.RuntimeCheckpoint
+	OpenTasks                 int
+	BlockedTasks              int
 }
 
 type Detail struct {
-	Row          Row
-	Asignaciones []*db.Asignacion
-	Sesiones     []*db.Sesion
-	Runtimes     []*db.RuntimeInstance
-	Handles      []*db.RuntimeHandle
-	Transcript   []*db.RuntimeTranscriptEntry
-	Orders       []*db.RuntimeOrder
-	Mailbox      []*db.RuntimeMailboxMessage
-	Checkpoints  []*db.RuntimeCheckpoint
+	Row          Row                          `json:"row"`
+	Entity       *AgentEntity                 `json:"entity,omitempty"`
+	Asignaciones []*db.Asignacion             `json:"asignaciones,omitempty"`
+	Sesiones     []*db.Sesion                 `json:"sesiones,omitempty"`
+	Runtimes     []*db.RuntimeInstance        `json:"runtimes,omitempty"`
+	Handles      []*db.RuntimeHandle          `json:"handles,omitempty"`
+	Transcript   []*db.RuntimeTranscriptEntry `json:"transcript,omitempty"`
+	Orders       []*db.RuntimeOrder           `json:"orders,omitempty"`
+	Mailbox      []*db.RuntimeMailboxMessage  `json:"mailbox,omitempty"`
+	Checkpoints  []*db.RuntimeCheckpoint      `json:"checkpoints,omitempty"`
+}
+
+type AgentEntity struct {
+	Name                string      `json:"name"`
+	Role                string      `json:"role,omitempty"`
+	Enabled             bool        `json:"enabled"`
+	ActiveNow           bool        `json:"active_now"`
+	AccountID           string      `json:"account_id,omitempty"`
+	AccountEmail        string      `json:"account_email,omitempty"`
+	AccountUser         string      `json:"account_user,omitempty"`
+	AssignmentProject   string      `json:"assignment_project,omitempty"`
+	RuntimeAdapter      string      `json:"runtime_adapter,omitempty"`
+	Transport           string      `json:"transport,omitempty"`
+	RuntimeState        string      `json:"runtime_state,omitempty"`
+	HandleState         string      `json:"handle_state,omitempty"`
+	WorkerState         string      `json:"worker_state,omitempty"`
+	WorkerAlive         bool        `json:"worker_alive"`
+	WorkerDriver        string      `json:"worker_driver,omitempty"`
+	WorkerTransport     string      `json:"worker_transport,omitempty"`
+	WorkerSessionRef    string      `json:"worker_session_ref,omitempty"`
+	WorkerRuntimeRef    string      `json:"worker_runtime_ref,omitempty"`
+	ExternalSessionID   string      `json:"external_session_id,omitempty"`
+	MailboxDeliveryMode string      `json:"mailbox_delivery_mode,omitempty"`
+	OperationalState    string      `json:"operational_state,omitempty"`
+	OperationalDetail   string      `json:"operational_detail,omitempty"`
+	Leases              []WorkLease `json:"leases,omitempty"`
+}
+
+type WorkLease struct {
+	TaskID    int64          `json:"task_id"`
+	Title     string         `json:"title,omitempty"`
+	State     db.EstadoTarea `json:"state"`
+	ProjectID *int64         `json:"project_id,omitempty"`
+	Module    string         `json:"module,omitempty"`
 }
 
 type InvestigationMatch struct {
@@ -152,8 +222,23 @@ func (s *Service) retireAgent(nombre string) error {
 	return s.store.RetireAgent(nombre)
 }
 
+func (s *Service) listCanonicalRuntimeHandlesWithFallback(nombre string) ([]*db.RuntimeHandle, error) {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return nil, nil
+	}
+	handles, err := s.store.ListCanonicalRuntimeHandles(&nombre)
+	if err != nil {
+		return nil, err
+	}
+	if len(handles) > 0 {
+		return handles, nil
+	}
+	return s.store.ListRuntimeHandles(&nombre)
+}
+
 func (s *Service) enqueueRetirementPauseIfNeeded(nombre string) error {
-	handles, err := s.store.ListRuntimeHandles(&nombre)
+	handles, err := s.listCanonicalRuntimeHandlesWithFallback(nombre)
 	if err != nil {
 		return err
 	}
@@ -264,10 +349,6 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 	if err != nil {
 		return nil, err
 	}
-	handles, err := s.store.ListRuntimeHandles(nil)
-	if err != nil {
-		return nil, err
-	}
 	orders, err := s.store.ListRuntimeOrders(db.FiltroRuntimeOrders{})
 	if err != nil {
 		return nil, err
@@ -317,19 +398,54 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 	}
 
 	handlePorAgente := map[string]*db.RuntimeHandle{}
-	for _, handle := range handles {
+	if hotHandles, err := s.store.ListRecentOperationalRuntimeHandles(); err == nil {
+		for _, handle := range hotHandles {
+			if handle == nil {
+				continue
+			}
+			actual := handlePorAgente[handle.Agente]
+			if actual == nil || runtimeHandleMoment(handle).After(runtimeHandleMoment(actual)) {
+				handlePorAgente[handle.Agente] = handle
+			}
+		}
+	}
+	handlesCanonicos, err := s.store.ListCanonicalRuntimeHandles(nil)
+	if err != nil {
+		return nil, err
+	}
+	for _, handle := range handlesCanonicos {
+		if handle == nil {
+			continue
+		}
+		if _, ok := handlePorAgente[handle.Agente]; ok {
+			continue
+		}
+		handlePorAgente[handle.Agente] = handle
+	}
+	handlesHistoricos, err := s.store.ListRuntimeHandles(nil)
+	if err != nil {
+		return nil, err
+	}
+	for _, handle := range handlesHistoricos {
 		if handle == nil {
 			continue
 		}
 		actual := handlePorAgente[handle.Agente]
-		if actual == nil || runtimeHandleMoment(handle).After(runtimeHandleMoment(actual)) {
+		if actual == nil {
+			handlePorAgente[handle.Agente] = handle
+			continue
+		}
+		if runtimeHandleMoment(handle).After(runtimeHandleMoment(actual)) && !runtimeHandleSostieneOperacion(actual) {
 			handlePorAgente[handle.Agente] = handle
 		}
 	}
 
 	type orderCounters struct {
-		Open   int
-		Failed int
+		Open              int
+		Failed            int
+		ControlOpen       int
+		LastControlType   string
+		LastControlMoment *time.Time
 	}
 	ordersPorAgente := map[string]orderCounters{}
 	for _, order := range orders {
@@ -340,6 +456,15 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 		switch strings.TrimSpace(order.Estado) {
 		case "pendiente", "tomada", "ejecutando":
 			stats.Open++
+			if runtimeOrderEsControl(strings.TrimSpace(order.Tipo)) {
+				stats.ControlOpen++
+				moment := runtimeOrderMoment(order)
+				if stats.LastControlMoment == nil || moment.After(*stats.LastControlMoment) {
+					ts := moment
+					stats.LastControlMoment = &ts
+					stats.LastControlType = strings.TrimSpace(order.Tipo)
+				}
+			}
 		case "fallida":
 			stats.Failed++
 		}
@@ -384,6 +509,7 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 	}
 
 	openTasksPorAgente := map[string]int{}
+	blockedTasksPorAgente := map[string]int{}
 	for _, tarea := range tareas {
 		if tarea == nil || tarea.Agente == nil {
 			continue
@@ -391,10 +517,15 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 		switch tarea.Estado {
 		case db.EstadoCompletada, db.EstadoCancelada:
 			continue
+		case db.EstadoBloqueada:
+			blockedTasksPorAgente[*tarea.Agente]++
+			continue
 		}
 		openTasksPorAgente[*tarea.Agente]++
 	}
 
+	now := time.Now().UTC()
+	staleThreshold := workerOutputStaleThreshold(s.store)
 	rows := make([]Row, 0, len(agentes))
 	for _, agente := range agentes {
 		if agente == nil {
@@ -402,20 +533,48 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 		}
 		orderStats := ordersPorAgente[agente.Nombre]
 		mailboxStats := mailboxPorAgente[agente.Nombre]
-		rows = append(rows, Row{
-			Agente:         agente,
-			Asignacion:     asignacionPorAgente[agente.Nombre],
-			Sesion:         sesionPorAgente[agente.Nombre],
-			Runtime:        runtimePorAgente[agente.Nombre],
-			Handle:         handlePorAgente[agente.Nombre],
-			OrdersOpen:     orderStats.Open,
-			OrdersFailed:   orderStats.Failed,
-			MailboxPending: mailboxStats.Pending,
-			MailboxTotal:   mailboxStats.Total,
-			Checkpoints:    checkpointTotalPorAgente[agente.Nombre],
-			LastCheckpoint: lastCheckpointPorAgente[agente.Nombre],
-			OpenTasks:      openTasksPorAgente[agente.Nombre],
-		})
+		row := Row{
+			Agente:                 agente,
+			Asignacion:             asignacionPorAgente[agente.Nombre],
+			Sesion:                 sesionPorAgente[agente.Nombre],
+			Runtime:                runtimePorAgente[agente.Nombre],
+			Handle:                 handlePorAgente[agente.Nombre],
+			OrdersOpen:             orderStats.Open,
+			OrdersFailed:           orderStats.Failed,
+			ControlOrdersOpen:      orderStats.ControlOpen,
+			LastControlOrderType:   strings.TrimSpace(orderStats.LastControlType),
+			LastControlOrderMoment: orderStats.LastControlMoment,
+			MailboxPending:         mailboxStats.Pending,
+			MailboxTotal:           mailboxStats.Total,
+			Checkpoints:            checkpointTotalPorAgente[agente.Nombre],
+			LastCheckpoint:         lastCheckpointPorAgente[agente.Nombre],
+			OpenTasks:              openTasksPorAgente[agente.Nombre],
+			BlockedTasks:           blockedTasksPorAgente[agente.Nombre],
+		}
+		if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
+			if view := structured.View(now, time.Minute); view != nil {
+				row.WorkerState = strings.TrimSpace(view.State)
+				row.WorkerAlive = view.Alive
+				row.WorkerReadyAt = view.ReadyAt
+				row.WorkerHeartbeat = view.HeartbeatAt
+				row.WorkerUpdatedAt = view.UpdatedAt
+				row.WorkerLastOutput = view.LastOutputAt
+				row.WorkerLastProgress = view.LastProgressAt
+				row.WorkerExitError = strings.TrimSpace(view.ExitError)
+				row.WorkerSessionRef = strings.TrimSpace(view.SessionRef)
+				row.WorkerRuntimeRef = strings.TrimSpace(view.RuntimeRef)
+				row.WorkerDriver = strings.TrimSpace(view.Driver)
+				row.WorkerTransport = strings.TrimSpace(view.Transport)
+				row.WorkerTMUXSession = strings.TrimSpace(view.TmuxSession)
+				row.WorkerTMUXWindow = strings.TrimSpace(view.TmuxWindow)
+				row.WorkerTMUXPaneID = strings.TrimSpace(view.TmuxPaneID)
+				row.WorkerCanSendInput = view.CanSendInput
+				row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
+				row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
+			}
+		}
+		row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, staleThreshold)
+		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool {
 		return strings.ToLower(rows[i].Agente.Nombre) < strings.ToLower(rows[j].Agente.Nombre)
@@ -473,9 +632,14 @@ func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 	if err != nil {
 		return nil, err
 	}
+	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &nombre})
+	if err != nil {
+		return nil, err
+	}
 
 	return &Detail{
 		Row:          row,
+		Entity:       buildAgentEntity(row, tareas),
 		Asignaciones: asignaciones,
 		Sesiones:     sesiones,
 		Runtimes:     runtimes,
@@ -485,6 +649,78 @@ func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 		Mailbox:      mailbox,
 		Checkpoints:  checkpoints,
 	}, nil
+}
+
+func buildAgentEntity(row Row, tareas []*db.Tarea) *AgentEntity {
+	if row.Agente == nil {
+		return nil
+	}
+	entity := &AgentEntity{
+		Name:                strings.TrimSpace(row.Agente.Nombre),
+		Role:                strings.TrimSpace(row.Agente.Rol),
+		Enabled:             row.Agente.Habilitado,
+		ActiveNow:           row.Agente.Activo,
+		AccountID:           strings.TrimSpace(row.Agente.CuentaID),
+		AccountEmail:        strings.TrimSpace(row.Agente.CuentaEmail),
+		AccountUser:         strings.TrimSpace(row.Agente.CuentaUsuario),
+		RuntimeAdapter:      strings.TrimSpace(runtimeAdapterName(row)),
+		Transport:           strings.TrimSpace(handleTransportName(row.Handle)),
+		RuntimeState:        strings.TrimSpace(row.runtimeState()),
+		HandleState:         strings.TrimSpace(row.handleState()),
+		WorkerState:         strings.TrimSpace(row.WorkerState),
+		WorkerAlive:         row.WorkerAlive,
+		WorkerDriver:        strings.TrimSpace(row.WorkerDriver),
+		WorkerTransport:     strings.TrimSpace(row.WorkerTransport),
+		WorkerSessionRef:    strings.TrimSpace(row.WorkerSessionRef),
+		WorkerRuntimeRef:    strings.TrimSpace(row.WorkerRuntimeRef),
+		ExternalSessionID:   strings.TrimSpace(row.WorkerExternalSessionID),
+		MailboxDeliveryMode: strings.TrimSpace(row.WorkerMailboxDeliveryMode),
+		OperationalState:    strings.TrimSpace(row.EstadoOperativo),
+		OperationalDetail:   strings.TrimSpace(row.DetalleOperativo),
+		Leases:              buildWorkLeases(tareas),
+	}
+	if row.Asignacion != nil {
+		entity.AssignmentProject = strings.TrimSpace(row.Asignacion.ProyectoSlug)
+	}
+	return entity
+}
+
+func buildWorkLeases(tareas []*db.Tarea) []WorkLease {
+	out := make([]WorkLease, 0, len(tareas))
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.EstadoAsignada, db.EstadoEnProgreso, db.EstadoBloqueada:
+			out = append(out, WorkLease{
+				TaskID:    tarea.ID,
+				Title:     strings.TrimSpace(tarea.Titulo),
+				State:     tarea.Estado,
+				ProjectID: tarea.ProyectoID,
+				Module:    strings.TrimSpace(tarea.Modulo),
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].TaskID < out[j].TaskID })
+	return out
+}
+
+func runtimeAdapterName(row Row) string {
+	if row.Runtime != nil && strings.TrimSpace(row.Runtime.Connector) != "" {
+		return strings.TrimSpace(row.Runtime.Connector)
+	}
+	if row.Sesion != nil && strings.TrimSpace(row.Sesion.Herramienta) != "" {
+		return strings.TrimSpace(row.Sesion.Herramienta)
+	}
+	return ""
+}
+
+func handleTransportName(handle *db.RuntimeHandle) string {
+	if handle == nil {
+		return ""
+	}
+	return strings.TrimSpace(handle.Transporte)
 }
 
 func (s *Service) Investigate(query, projectRef string, limit int) (*InvestigationReport, error) {
@@ -803,6 +1039,651 @@ func runtimeHandleMoment(handle *db.RuntimeHandle) time.Time {
 	return handle.CreatedAt
 }
 
+func runtimeHandleSostieneOperacion(handle *db.RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
+	case "activo", "pausado":
+		return true
+	default:
+		return false
+	}
+}
+
+func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold time.Duration) (string, string) {
+	agente := row.Agente
+	if agente == nil {
+		return "desconocido", ""
+	}
+	if !agente.Habilitado {
+		return "retirado", "agente retirado"
+	}
+
+	sinCuotaProveedor := db.AgenteSinCuotaProveedorEfectivo(agente)
+
+	if !sinCuotaProveedor && estadoCuotaBloqueado(agente.EstadoCuota) {
+		detalle := strings.TrimSpace(agente.MotivoPausa)
+		if detalle == "" && agente.ReanimarAt != nil && !agente.ReanimarAt.IsZero() {
+			detalle = "reanimacion " + agente.ReanimarAt.Local().Format("15:04")
+		}
+		return "bloqueado_por_cuota", detalle
+	}
+	if !sinCuotaProveedor {
+		if blocked, detalle := row.runtimeCheckpointQuotaBlocked(now); blocked {
+			return "bloqueado_por_cuota", detalle
+		}
+	}
+	if blocked, detalle := row.pendingControlOrderBlocksRuntime(now); blocked {
+		return "bloqueado_por_runtime", detalle
+	}
+
+	handleEstado := strings.ToLower(strings.TrimSpace(row.handleState()))
+	runtimeEstado := strings.ToLower(strings.TrimSpace(row.runtimeState()))
+	workerState := strings.ToLower(strings.TrimSpace(row.WorkerState))
+	recentActivity := row.hasRecentOperationalActivity(now)
+	hasActiveTask := row.OpenTasks > 0
+	hasBlockedTask := row.BlockedTasks > 0
+	pausedRuntime := estadoRuntimePausado(runtimeEstado) || estadoHandlePausado(handleEstado)
+	runtimeStale := row.runtimePrincipalStale(now)
+	workerRunningFresh := false
+	workerAnchored := row.hasOperationalAnchor()
+	if pausedRuntime {
+		detalle := firstNonEmpty(row.runtimeState(), row.handleState(), "runtime pausado")
+		return "bloqueado_por_runtime", detalle
+	}
+	if runtimeStale && !hasActiveTask {
+		return "bloqueado_por_runtime", firstNonEmpty(strings.TrimSpace(row.WorkerExitError), "runtime principal stale")
+	}
+
+	if workerState != "" {
+		switch workerState {
+		case "blocked_auth":
+			return "bloqueado_por_runtime", "worker requiere autenticacion manual"
+		case "blocked_quota":
+			if sinCuotaProveedor {
+				return "bloqueado_por_runtime", "worker local mal clasificado como cuota"
+			}
+			return "bloqueado_por_cuota", "worker bloqueado por cuota"
+		case "failed", "stopped":
+			if hasActiveTask || row.MailboxPending > 0 {
+				return "bloqueado_por_runtime", firstNonEmpty(strings.TrimSpace(row.WorkerExitError), "worker "+workerState)
+			}
+		}
+		if (hasActiveTask || row.MailboxPending > 0) && row.workerHeartbeatStale(now) {
+			return "bloqueado_por_runtime", firstNonEmpty(strings.TrimSpace(row.WorkerExitError), "heartbeat worker retrasado")
+		}
+		if row.workerHeartbeatRecent(now) && row.WorkerAlive {
+			workerRunningFresh = true
+		}
+	}
+	if hasActiveTask && row.KnownLegacyCLIWorker(now) {
+		return "bloqueado_por_runtime", "runtime CLI legacy sin tmux canónico"
+	}
+	if hasActiveTask && workerRunningFresh && row.workerProgressStale(now, workerOutputStaleThreshold) {
+		return "atascado", firstNonEmpty(row.workerLastProgressSummary(), row.workerLastOutputSummary(), "worker sin progreso reciente")
+	}
+	if hasActiveTask && workerRunningFresh && row.workerOutputStale(now, workerOutputStaleThreshold) && !row.workerProgressRecent(now, workerOutputStaleThreshold) {
+		return "atascado", firstNonEmpty(row.workerLastOutputSummary(), "worker sin salida reciente")
+	}
+	if !hasActiveTask && row.MailboxPending > 0 && row.KnownLegacyCLIWorker(now) {
+		return "bloqueado_por_runtime", "runtime CLI legacy sin tmux canónico"
+	}
+	if !hasActiveTask && row.MailboxPending > 0 && workerRunningFresh && row.workerProgressStale(now, workerOutputStaleThreshold) {
+		return "atascado", firstNonEmpty(row.workerLastProgressSummary(), row.workerLastOutputSummary(), "worker sin progreso reciente")
+	}
+	if !hasActiveTask && row.MailboxPending > 0 && workerRunningFresh && row.workerOutputStale(now, workerOutputStaleThreshold) && !row.workerProgressRecent(now, workerOutputStaleThreshold) {
+		return "atascado", firstNonEmpty(row.workerLastOutputSummary(), "worker sin salida reciente")
+	}
+	if hasActiveTask && row.MailboxPending > 0 && !workerAnchored {
+		return "bloqueado_por_runtime", "mailbox pendiente sin runtime activo"
+	}
+	if !hasActiveTask && row.MailboxPending > 0 && !workerAnchored {
+		return "bloqueado", "mailbox pendiente sin runtime activo"
+	}
+	if !hasActiveTask && row.MailboxPending > 0 && row.OrdersFailed > 0 && !workerRunningFresh {
+		return "mailbox_atascada", "mailbox pendiente con fallos de control"
+	}
+	if !hasActiveTask && row.MailboxPending > 0 && !recentActivity {
+		return "mailbox_atascada", "pendiente sin avance reciente"
+	}
+	if !hasActiveTask && workerState != "" && workerRunningFresh {
+		if row.KnownLegacyCLIWorker(now) {
+			return "bloqueado_por_runtime", "runtime CLI legacy sin tmux canónico"
+		}
+		return "disponible", firstNonEmpty(row.activitySummary(), "worker "+workerState)
+	}
+	if !hasActiveTask && (estadoRuntimeRoto(runtimeEstado) || estadoHandleRoto(handleEstado)) {
+		return "bloqueado_por_runtime", firstNonEmpty(row.runtimeState(), row.handleState(), "runtime degradado")
+	}
+
+	if hasBlockedTask && !hasActiveTask {
+		if row.MailboxPending > 0 || row.OrdersOpen > 0 || estadoRuntimeRoto(runtimeEstado) || estadoHandleRoto(handleEstado) {
+			return "bloqueado_por_runtime", firstNonEmpty(row.activitySummary(), "tareas bloqueadas")
+		}
+		return "bloqueado", "tareas bloqueadas"
+	}
+	if hasActiveTask && row.MailboxPending > 0 && row.OrdersFailed > 0 && !workerRunningFresh {
+		return "mailbox_atascada", "mailbox pendiente con fallos de control"
+	}
+	if hasActiveTask && row.MailboxPending > 0 && !recentActivity {
+		return "mailbox_atascada", "pendiente sin avance reciente"
+	}
+	if hasActiveTask && (estadoRuntimeRoto(runtimeEstado) || estadoHandleRoto(handleEstado)) {
+		return "bloqueado_por_runtime", firstNonEmpty(row.runtimeState(), row.handleState())
+	}
+	if hasActiveTask && hasBlockedTask && recentActivity {
+		return "saturado", fmt.Sprintf("%d activas, %d bloqueadas", row.OpenTasks, row.BlockedTasks)
+	}
+	if hasActiveTask && workerRunningFresh {
+		return "trabajando", firstNonEmpty(row.activitySummary(), "worker "+workerState)
+	}
+	if hasActiveTask && recentActivity {
+		return "trabajando", row.activitySummary()
+	}
+	if hasActiveTask {
+		return "caido", row.activitySummary()
+	}
+	if recentActivity {
+		return "disponible", row.activitySummary()
+	}
+	return "sin_tarea", row.activitySummary()
+}
+
+func workerOutputStaleThreshold(store Store) time.Duration {
+	if store == nil {
+		return time.Duration(defaultWorkerOutputStaleSeconds) * time.Second
+	}
+	raw, err := store.ConfigGet("runtime_worker_output_stale_seconds")
+	if err != nil {
+		return time.Duration(defaultWorkerOutputStaleSeconds) * time.Second
+	}
+	seconds, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || seconds <= 0 {
+		return time.Duration(defaultWorkerOutputStaleSeconds) * time.Second
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func (r Row) hasRecentOperationalActivity(now time.Time) bool {
+	cutoff := now.Add(-10 * time.Minute)
+	for _, ts := range []time.Time{
+		runtimeMoment(r.Runtime),
+		runtimeHandleMoment(r.Handle),
+		sesionMoment(r.Sesion),
+		checkpointMoment(r.LastCheckpoint),
+	} {
+		if !ts.IsZero() && !ts.Before(cutoff) {
+			return true
+		}
+	}
+	if r.WorkerHeartbeat != nil && !r.WorkerHeartbeat.IsZero() && !r.WorkerHeartbeat.Before(now.Add(-45*time.Second)) {
+		return true
+	}
+	if r.WorkerUpdatedAt != nil && !r.WorkerUpdatedAt.IsZero() && !r.WorkerUpdatedAt.Before(now.Add(-45*time.Second)) {
+		return true
+	}
+	if r.WorkerLastProgress != nil && !r.WorkerLastProgress.IsZero() && !r.WorkerLastProgress.Before(cutoff) {
+		return true
+	}
+	return false
+}
+
+func (r Row) runtimeState() string {
+	if r.Runtime == nil {
+		return ""
+	}
+	if value := strings.TrimSpace(r.Runtime.LogicalState); value != "" {
+		return value
+	}
+	return strings.TrimSpace(r.Runtime.ProcessState)
+}
+
+func (r Row) hasOperationalAnchor() bool {
+	if r.Runtime != nil || r.Handle != nil || r.Sesion != nil {
+		return true
+	}
+	if strings.TrimSpace(r.WorkerState) != "" {
+		return true
+	}
+	return r.WorkerHeartbeat != nil || r.WorkerUpdatedAt != nil || r.WorkerLastProgress != nil || r.WorkerLastOutput != nil
+}
+
+func (r Row) handleState() string {
+	if r.Handle == nil {
+		return ""
+	}
+	return strings.TrimSpace(r.Handle.Estado)
+}
+
+func (r Row) activitySummary() string {
+	switch {
+	case r.ControlOrdersOpen > 0 && strings.TrimSpace(r.LastControlOrderType) != "":
+		return "orden " + strings.TrimSpace(r.LastControlOrderType) + " pendiente"
+	case strings.TrimSpace(r.WorkerState) != "":
+		return "worker " + strings.TrimSpace(r.WorkerState)
+	case strings.TrimSpace(r.runtimeState()) != "":
+		return "runtime " + strings.TrimSpace(r.runtimeState())
+	case strings.TrimSpace(r.handleState()) != "":
+		return "handle " + strings.TrimSpace(r.handleState())
+	case r.Sesion != nil && strings.TrimSpace(r.Sesion.Estado) != "":
+		return "sesion " + strings.TrimSpace(r.Sesion.Estado)
+	case r.MailboxPending > 0:
+		return fmt.Sprintf("mailbox %d", r.MailboxPending)
+	case r.OrdersOpen > 0:
+		return fmt.Sprintf("orders %d", r.OrdersOpen)
+	default:
+		return ""
+	}
+}
+
+func (r Row) workerHeartbeatRecent(now time.Time) bool {
+	if r.WorkerHeartbeat != nil && !r.WorkerHeartbeat.IsZero() {
+		return !r.WorkerHeartbeat.Before(now.Add(-45 * time.Second))
+	}
+	if r.WorkerUpdatedAt != nil && !r.WorkerUpdatedAt.IsZero() {
+		return !r.WorkerUpdatedAt.Before(now.Add(-45 * time.Second))
+	}
+	return false
+}
+
+func (r Row) WorkerFresh(now time.Time) bool {
+	if !r.WorkerAlive {
+		return false
+	}
+	return r.workerHeartbeatRecent(now)
+}
+
+func (r Row) WorkerTMUXFresh(now time.Time) bool {
+	if !r.WorkerFresh(now) {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(r.WorkerDriver), "tmux_cli_session")
+}
+
+func (r Row) KnownLegacyCLIWorker(now time.Time) bool {
+	if !r.WorkerFresh(now) {
+		return false
+	}
+	if !r.RequiresStructuredTMUX() {
+		return false
+	}
+	if r.WorkerTMUXFresh(now) {
+		return false
+	}
+	for _, driver := range []string{
+		strings.TrimSpace(r.WorkerDriver),
+		r.handleDriver(),
+	} {
+		if strings.EqualFold(driver, "process_pty_cli") {
+			return true
+		}
+	}
+	return false
+}
+
+func (r Row) WorkerSupportsContinuityRecovery(now time.Time) bool {
+	if !r.WorkerFresh(now) {
+		return false
+	}
+	if r.WorkerCanSendInput {
+		return true
+	}
+	switch runtimeagente.NormalizeMailboxDeliveryMode(r.WorkerMailboxDeliveryMode) {
+	case runtimeagente.MailboxDeliveryInteractive:
+		return true
+	case runtimeagente.MailboxDeliverySessionResume:
+		return strings.TrimSpace(r.WorkerExternalSessionID) != "" || strings.TrimSpace(r.WorkerSessionRef) != ""
+	default:
+		return false
+	}
+}
+
+func (r Row) RequiresStructuredTMUX() bool {
+	if strings.EqualFold(strings.TrimSpace(r.WorkerDriver), "tmux_cli_session") {
+		return true
+	}
+	for _, value := range []string{
+		func() string {
+			if r.Sesion == nil {
+				return ""
+			}
+			return strings.TrimSpace(r.Sesion.Herramienta)
+		}(),
+		r.handleRenderedCommand(),
+		r.handleDriver(),
+	} {
+		v := strings.ToLower(strings.TrimSpace(value))
+		switch {
+		case strings.Contains(v, "codex"),
+			strings.Contains(v, "claude"),
+			strings.Contains(v, "gemini"):
+			return true
+		}
+	}
+	return false
+}
+
+func (r Row) handleDriver() string {
+	if r.Handle == nil || strings.TrimSpace(r.Handle.MetadataJSON) == "" {
+		return ""
+	}
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(r.Handle.MetadataJSON), &meta); err != nil {
+		return ""
+	}
+	value, _ := meta["driver"].(string)
+	return strings.TrimSpace(value)
+}
+
+func (r Row) handleRenderedCommand() string {
+	if r.Handle == nil || strings.TrimSpace(r.Handle.MetadataJSON) == "" {
+		return ""
+	}
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(r.Handle.MetadataJSON), &meta); err != nil {
+		return ""
+	}
+	for _, key := range []string{"rendered_command", "wrapped_command"} {
+		if value, _ := meta[key].(string); strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func (r Row) pendingControlOrderBlocksRuntime(now time.Time) (bool, string) {
+	if r.ControlOrdersOpen <= 0 {
+		return false, ""
+	}
+	tipo := strings.ToLower(strings.TrimSpace(r.LastControlOrderType))
+	switch tipo {
+	case "stop", "start", "pause", "resume":
+	default:
+		return false, ""
+	}
+	moment := time.Time{}
+	if r.LastControlOrderMoment != nil {
+		moment = r.LastControlOrderMoment.UTC()
+	}
+	if moment.IsZero() {
+		return true, "orden " + tipo + " pendiente"
+	}
+	if moment.Before(now.Add(-20 * time.Minute)) {
+		return false, ""
+	}
+	if latest := r.latestWorkerRecoveryMoment(); !latest.IsZero() && latest.After(moment) {
+		return false, ""
+	}
+	return true, "orden " + tipo + " pendiente"
+}
+
+func (r Row) latestWorkerRecoveryMoment() time.Time {
+	var latest time.Time
+	for _, ts := range []time.Time{
+		runtimeMoment(r.Runtime),
+		runtimeHandleMoment(r.Handle),
+		func() time.Time {
+			if r.WorkerHeartbeat != nil {
+				return r.WorkerHeartbeat.UTC()
+			}
+			return time.Time{}
+		}(),
+		func() time.Time {
+			if r.WorkerUpdatedAt != nil {
+				return r.WorkerUpdatedAt.UTC()
+			}
+			return time.Time{}
+		}(),
+	} {
+		if !ts.IsZero() && ts.After(latest) {
+			latest = ts
+		}
+	}
+	return latest
+}
+
+func (r Row) workerHeartbeatStale(now time.Time) bool {
+	if r.WorkerHeartbeat == nil || r.WorkerHeartbeat.IsZero() {
+		if r.WorkerUpdatedAt == nil || r.WorkerUpdatedAt.IsZero() {
+			return false
+		}
+		return r.WorkerUpdatedAt.Before(now.Add(-2 * time.Minute))
+	}
+	return r.WorkerHeartbeat.Before(now.Add(-2 * time.Minute))
+}
+
+func (r Row) workerOutputStale(now time.Time, threshold time.Duration) bool {
+	if threshold <= 0 {
+		threshold = 4 * time.Hour
+	}
+	baseline := r.workerOutputBaseline()
+	if baseline == nil || baseline.IsZero() {
+		return false
+	}
+	return baseline.Before(now.Add(-threshold))
+}
+
+func (r Row) workerProgressRecent(now time.Time, threshold time.Duration) bool {
+	if threshold <= 0 {
+		threshold = 4 * time.Hour
+	}
+	baseline := r.workerProgressBaseline()
+	if baseline == nil || baseline.IsZero() {
+		return false
+	}
+	return !baseline.Before(now.Add(-threshold))
+}
+
+func (r Row) workerProgressStale(now time.Time, threshold time.Duration) bool {
+	if threshold <= 0 {
+		threshold = 4 * time.Hour
+	}
+	baseline := r.workerProgressBaseline()
+	if baseline == nil || baseline.IsZero() {
+		return false
+	}
+	return baseline.Before(now.Add(-threshold))
+}
+
+func (r Row) runtimeCheckpointQuotaBlocked(now time.Time) (bool, string) {
+	cp := r.LastCheckpoint
+	if cp == nil {
+		return false, ""
+	}
+	moment := checkpointMoment(cp)
+	if moment.IsZero() || moment.Before(now.Add(-20*time.Minute)) {
+		return false, ""
+	}
+	kind := strings.ToLower(strings.TrimSpace(cp.CheckpointKind))
+	source := strings.ToLower(strings.TrimSpace(cp.Source))
+	resumen := strings.ToLower(strings.TrimSpace(cp.Resumen))
+	if kind != "pause" && !strings.Contains(source, ":pause") {
+		return false, ""
+	}
+	if !strings.Contains(resumen, "cuota") &&
+		!strings.Contains(resumen, "enfriamiento") &&
+		!strings.Contains(resumen, "usage limit") {
+		return false, ""
+	}
+	detalle := strings.TrimSpace(cp.Resumen)
+	if detalle == "" {
+		detalle = "runtime pausado por cuota"
+	}
+	return true, detalle
+}
+
+func (r Row) workerLastOutputSummary() string {
+	baseline := r.workerOutputBaseline()
+	if baseline == nil || baseline.IsZero() {
+		return ""
+	}
+	if r.WorkerLastOutput != nil && !r.WorkerLastOutput.IsZero() {
+		return "sin salida desde " + r.WorkerLastOutput.Local().Format("15:04")
+	}
+	return "sin salida desde listo " + baseline.Local().Format("15:04")
+}
+
+func (r Row) workerLastProgressSummary() string {
+	baseline := r.workerProgressBaseline()
+	if baseline == nil || baseline.IsZero() {
+		return ""
+	}
+	if r.WorkerLastProgress != nil && !r.WorkerLastProgress.IsZero() {
+		return "sin progreso desde " + r.WorkerLastProgress.Local().Format("15:04")
+	}
+	return "sin progreso desde listo " + baseline.Local().Format("15:04")
+}
+
+func (r Row) workerOutputBaseline() *time.Time {
+	if r.WorkerLastOutput != nil && !r.WorkerLastOutput.IsZero() {
+		return r.WorkerLastOutput
+	}
+	if r.WorkerReadyAt != nil && !r.WorkerReadyAt.IsZero() {
+		return r.WorkerReadyAt
+	}
+	return nil
+}
+
+func (r Row) workerProgressBaseline() *time.Time {
+	if r.WorkerLastProgress != nil && !r.WorkerLastProgress.IsZero() {
+		return r.WorkerLastProgress
+	}
+	if r.WorkerReadyAt != nil && !r.WorkerReadyAt.IsZero() {
+		return r.WorkerReadyAt
+	}
+	return nil
+}
+
+func (r Row) runtimePrincipalStale(now time.Time) bool {
+	if r.Runtime == nil {
+		return false
+	}
+	moment := runtimeMoment(r.Runtime)
+	if moment.IsZero() {
+		return false
+	}
+	if !moment.Before(now.Add(-10 * time.Minute)) {
+		return false
+	}
+	if strings.TrimSpace(r.WorkerState) != "" {
+		return !r.WorkerAlive || r.workerHeartbeatStale(now)
+	}
+	return true
+}
+
+func loadStructuredWorkerSnapshot(runtime *db.RuntimeInstance, handle *db.RuntimeHandle) *runtimeagente.WorkerSnapshot {
+	for _, metaJSON := range []string{
+		metadataFromHandle(handle),
+		metadataFromRuntime(runtime),
+	} {
+		snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(metaJSON)
+		if err == nil && snap != nil {
+			return snap
+		}
+	}
+	return nil
+}
+
+func metadataFromRuntime(runtime *db.RuntimeInstance) string {
+	_ = runtime
+	return ""
+}
+
+func metadataFromHandle(handle *db.RuntimeHandle) string {
+	if handle == nil {
+		return ""
+	}
+	return handle.MetadataJSON
+}
+
+func sesionMoment(sesion *db.Sesion) time.Time {
+	if sesion == nil {
+		return time.Time{}
+	}
+	if sesion.HeartbeatAt != nil && !sesion.HeartbeatAt.IsZero() {
+		return *sesion.HeartbeatAt
+	}
+	if sesion.Fin != nil && !sesion.Fin.IsZero() {
+		return *sesion.Fin
+	}
+	return sesion.Inicio
+}
+
+func checkpointMoment(cp *db.RuntimeCheckpoint) time.Time {
+	if cp == nil {
+		return time.Time{}
+	}
+	return cp.CreatedAt
+}
+
+func runtimeOrderMoment(order *db.RuntimeOrder) time.Time {
+	if order == nil {
+		return time.Time{}
+	}
+	for _, ts := range []time.Time{order.UpdatedAt, order.AvailableAt, order.CreatedAt} {
+		if !ts.IsZero() {
+			return ts
+		}
+	}
+	return time.Time{}
+}
+
+func runtimeOrderEsControl(tipo string) bool {
+	switch strings.ToLower(strings.TrimSpace(tipo)) {
+	case "start", "stop", "pause", "resume":
+		return true
+	default:
+		return false
+	}
+}
+
+func estadoCuotaBloqueado(estado string) bool {
+	estado = strings.ToLower(strings.TrimSpace(estado))
+	return estado == "agotado" || estado == "enfriamiento"
+}
+
+func estadoRuntimeRoto(estado string) bool {
+	switch strings.ToLower(strings.TrimSpace(estado)) {
+	case "fallido", "degradado", "cerrado", "finalizado":
+		return true
+	default:
+		return false
+	}
+}
+
+func estadoHandleRoto(estado string) bool {
+	switch strings.ToLower(strings.TrimSpace(estado)) {
+	case "fallido", "cerrado":
+		return true
+	default:
+		return false
+	}
+}
+
+func estadoRuntimePausado(estado string) bool {
+	switch strings.ToLower(strings.TrimSpace(estado)) {
+	case "pausado", "stopped", "stop", "paused":
+		return true
+	default:
+		return false
+	}
+}
+
+func estadoHandlePausado(estado string) bool {
+	return strings.EqualFold(strings.TrimSpace(estado), "pausado")
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func valueOrFallback(value, fallback string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -891,6 +1772,14 @@ func (Repository) ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance,
 
 func (Repository) ListRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error) {
 	return db.ListarRuntimeHandles(agente)
+}
+
+func (Repository) ListCanonicalRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error) {
+	return db.ListarRuntimeHandlesCanonicosRecientes(agente)
+}
+
+func (Repository) ListRecentOperationalRuntimeHandles() (map[string]*db.RuntimeHandle, error) {
+	return db.ListarRuntimeHandlesActivosOperativosRecientes()
 }
 
 func (Repository) ListRuntimeTranscript(filtro db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error) {

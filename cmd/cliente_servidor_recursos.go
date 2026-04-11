@@ -547,6 +547,15 @@ func fusionarProyectoPorAPI(origen, destino string, archivarOrigen bool) (*db.Fu
 	return resp.Resultado, true, nil
 }
 
+func actualizarProyectoPorAPI(ref string, req apiProyectoActualizarRequest) (*db.Proyecto, bool, error) {
+	var resp apiProyectoResponse
+	ok, err := apiPost(fmt.Sprintf("/api/proyectos/%s", url.PathEscape(strings.TrimSpace(ref))), req, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Proyecto, true, nil
+}
+
 func fabricarAppProyectoPorAPI(ref string, req apiProyectoFabricarAppRequest) (*apiProyectoFabricarAppResponse, bool, error) {
 	var resp apiProyectoFabricarAppResponse
 	ok, err := apiPost(fmt.Sprintf("/api/proyectos/%s/fabricar-app", url.PathEscape(strings.TrimSpace(ref))), req, &resp)

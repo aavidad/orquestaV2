@@ -58,3 +58,27 @@ func TestDBTestsNoIntroducenNuevasAperturasDirectas(t *testing.T) {
 		t.Fatalf("allowlist de Open() directo desactualizado.\nencontrados: %v\npermitidos: %v", encontrados, allow)
 	}
 }
+
+func TestRepoNoReintroduceDirectoriosRuntimeLegacyORedundantes(t *testing.T) {
+	t.Helper()
+
+	repoRoot := filepath.Clean(filepath.Join(".."))
+	prohibidos := []string{
+		filepath.Join(repoRoot, "controlruntimes"),
+		filepath.Join(repoRoot, "configapp"),
+		filepath.Join(repoRoot, "internal", "runtimeobs"),
+		filepath.Join(repoRoot, "internal", "localrpc"),
+	}
+	for _, ruta := range prohibidos {
+		info, err := os.Stat(ruta)
+		if err == nil {
+			t.Fatalf("directorio redundante o legacy reintroducido: %s", ruta)
+		}
+		if !os.IsNotExist(err) {
+			t.Fatalf("stat %s: %v", ruta, err)
+		}
+		if info != nil {
+			t.Fatalf("directorio redundante o legacy reintroducido: %s", ruta)
+		}
+	}
+}

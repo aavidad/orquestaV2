@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"orquesta/agentesapp"
 	"orquesta/db"
@@ -23,6 +24,7 @@ type webAgentesPanelData struct {
 	Rows        []webAgenteRow
 	Total       int
 	Activos     int
+	Trabajando  int
 	Habilitados int
 	AutoRefresh bool
 	Msg         string
@@ -31,6 +33,7 @@ type webAgentesPanelData struct {
 
 type webAgenteDetalleData struct {
 	Row          webAgenteRow
+	Entity       *agentesapp.AgentEntity
 	Proyectos    []*db.Proyecto
 	Asignaciones []*db.Asignacion
 	Sesiones     []*db.Sesion
@@ -83,8 +86,11 @@ func webHandlerAgentesPanel(w http.ResponseWriter, r *http.Request) {
 		Err:         r.URL.Query().Get("err"),
 	}
 	for _, row := range rows {
-		if row.Agente != nil && row.Agente.Activo {
+		if webAgenteCuentaComoConectado(row) {
 			data.Activos++
+		}
+		if strings.TrimSpace(row.EstadoOperativo) == "trabajando" {
+			data.Trabajando++
 		}
 		if row.Agente != nil && row.Agente.Habilitado {
 			data.Habilitados++
@@ -225,6 +231,7 @@ func construirWebAgenteDetalleData(nombre string) (*webAgenteDetalleData, error)
 	}
 	return &webAgenteDetalleData{
 		Row:          detail.Row,
+		Entity:       detail.Entity,
 		Proyectos:    proyectos,
 		Asignaciones: detail.Asignaciones,
 		Sesiones:     limitarSesiones(detail.Sesiones, 12),
@@ -314,6 +321,34 @@ func webAccionEstadoAgenteValida(accion string) bool {
 	}
 }
 
+func webAgenteCuentaComoConectado(row webAgenteRow) bool {
+	estado := strings.TrimSpace(row.EstadoOperativo)
+	if estado == "trabajando" || estado == "disponible" {
+		return true
+	}
+	now := time.Now().UTC()
+	if row.WorkerAlive {
+		for _, ts := range []*time.Time{row.WorkerHeartbeat, row.WorkerUpdatedAt} {
+			if ts != nil && !ts.IsZero() && !ts.Before(now.Add(-2*time.Minute)) {
+				return true
+			}
+		}
+	}
+	if row.Handle != nil {
+		switch strings.ToLower(strings.TrimSpace(row.Handle.Estado)) {
+		case "activo", "pausado":
+			return true
+		}
+	}
+	if row.Runtime != nil {
+		switch strings.ToLower(strings.TrimSpace(row.Runtime.LogicalState)) {
+		case "arrancando", "disponible", "esperando_io", "pausado":
+			return true
+		}
+	}
+	return false
+}
+
 func limitarSesiones(items []*db.Sesion, max int) []*db.Sesion {
 	if len(items) <= max {
 		return items
@@ -366,6 +401,7 @@ const webTplAgentesPanel = `{{define "content"}}
     <div class="stat"><div class="n">{{.Total}}</div><div class="l">{{tr "Agentes"}}</div></div>
     <div class="stat"><div class="n">{{.Habilitados}}</div><div class="l">{{tr "agentes.enabled"}}</div></div>
     <div class="stat"><div class="n">{{.Activos}}</div><div class="l">{{tr "agentes.active_now"}}</div></div>
+    <div class="stat"><div class="n">{{.Trabajando}}</div><div class="l">trabajando</div></div>
   </div>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
     <div style="font-size:.85rem;color:#64748b">
@@ -394,6 +430,7 @@ const webTplAgentesPanel = `{{define "content"}}
           <th>{{tr "Agente"}}</th>
           <th>{{tr "Rol"}}</th>
           <th>{{tr "Estado"}}</th>
+          <th>Operativo</th>
           <th>{{tr "agentes.assignment"}}</th>
           <th>{{tr "Sesión"}}</th>
           <th>{{tr "Runtime"}}</th>
@@ -423,6 +460,10 @@ const webTplAgentesPanel = `{{define "content"}}
             {{if .Agente.PresupuestoSemanalPct}}<br><small>semanal {{.Agente.PresupuestoSemanalPct}}%{{if .Agente.PresupuestoSemanalResetAt}} · reset {{.Agente.PresupuestoSemanalResetAt.Local.Format "2006-01-02 15:04"}}{{end}}</small>{{end}}
           </td>
           <td>
+            <strong>{{orDash .EstadoOperativo}}</strong>
+            {{if .DetalleOperativo}}<br><small>{{.DetalleOperativo}}</small>{{end}}
+          </td>
+          <td>
             {{if .Asignacion}}
               <strong>{{.Asignacion.ProyectoSlug}}</strong><br>
               <small>{{orDash .Asignacion.Nota}}</small>
@@ -440,6 +481,7 @@ const webTplAgentesPanel = `{{define "content"}}
               <a href="/runtimes/{{.Runtime.ID}}">#{{.Runtime.ID}}</a> · {{orDash .Runtime.LogicalState}}<br>
               <small>{{orDash .Runtime.Connector}} · {{orDash .Runtime.Model}} · pid {{pid .Runtime.PID}}</small><br>
               <small>{{ftime .Runtime.UltimaActividadAt}}</small>
+              {{if .WorkerRuntimeRef}}<br><small>worker {{orDash .WorkerState}}{{if .WorkerAlive}} · alive{{end}}</small><br><small>{{.WorkerRuntimeRef}}</small>{{end}}
             {{else}}—{{end}}
           </td>
           <td>
@@ -447,10 +489,13 @@ const webTplAgentesPanel = `{{define "content"}}
               {{orDash .Handle.Estado}}<br>
               <small>{{orDash .Handle.Transporte}} / {{orDash .Handle.HandleKind}}</small><br>
               <small>{{orDash .Handle.HandleRef}}</small>
+              {{if .WorkerSessionRef}}<br><small>sess {{.WorkerSessionRef}}</small>{{end}}
+              {{if .WorkerHeartbeat}}<br><small>hb {{ftime .WorkerHeartbeat}}</small>{{end}}
             {{else}}—{{end}}
           </td>
           <td>
             <small>{{tr "agentes.open_tasks"}}: {{.OpenTasks}}</small><br>
+            {{if gt .BlockedTasks 0}}<small>bloqueadas: {{.BlockedTasks}}</small><br>{{end}}
             <small>{{tr "agentes.orders_open"}}: {{.OrdersOpen}}</small><br>
             <small>{{tr "agentes.mailbox_pending"}}: {{.MailboxPending}} / {{.MailboxTotal}}</small>
             {{if gt .OrdersFailed 0}}<br><small>{{tr "agentes.orders_failed"}}: {{.OrdersFailed}}</small>{{end}}
@@ -508,6 +553,24 @@ const webTplAgenteDetalle = `{{define "content"}}
         <p><strong>{{tr "Reanimación"}}:</strong> {{if .Row.Agente.ReanimarAt}}{{reanimacionEn .Row.Agente.ReanimarAt}}{{else}}—{{end}}</p>
         {{if .Row.Agente.MotivoPausa}}<p><strong>{{tr "Motivo"}}:</strong> {{.Row.Agente.MotivoPausa}}</p>{{end}}
       </article>
+      {{if .Entity}}
+      <article>
+        <header><strong>Entidad canónica</strong></header>
+        <p><strong>Adapter:</strong> {{orDash .Entity.RuntimeAdapter}}</p>
+        <p><strong>Transport:</strong> {{orDash .Entity.Transport}}</p>
+        <p><strong>Worker:</strong> {{orDash .Entity.WorkerState}}{{if .Entity.WorkerAlive}} · alive{{end}}</p>
+        <p><strong>Worker sesión:</strong> {{orDash .Entity.WorkerSessionRef}}</p>
+        <p><strong>Worker runtime:</strong> {{orDash .Entity.WorkerRuntimeRef}}</p>
+        <p><strong>Sesión externa:</strong> {{orDash .Entity.ExternalSessionID}}</p>
+        <p><strong>Delivery:</strong> {{orDash .Entity.MailboxDeliveryMode}}</p>
+        <p><strong>Operativo:</strong> {{orDash .Entity.OperationalState}}{{if .Entity.OperationalDetail}} · {{.Entity.OperationalDetail}}{{end}}</p>
+        <p><strong>Leases:</strong>
+          {{if .Entity.Leases}}
+            {{range $i, $lease := .Entity.Leases}}{{if $i}}, {{end}}#{{$lease.TaskID}} {{$lease.State}}{{if $lease.Module}} · {{$lease.Module}}{{end}}{{end}}
+          {{else}}—{{end}}
+        </p>
+      </article>
+      {{end}}
       <article>
         <header><strong>{{tr "agentes.detail.control"}}</strong></header>
         <form method="POST" action="/agentes/{{.Row.Agente.Nombre}}/control" style="display:grid;gap:.6rem">

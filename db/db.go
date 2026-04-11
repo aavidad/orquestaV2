@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,6 +38,16 @@ type EventoNotificacion struct {
 
 var CanalNotificaciones = make(chan EventoNotificacion, 100)
 
+func EmitirNotificacion(ev EventoNotificacion) bool {
+	select {
+	case CanalNotificaciones <- ev:
+		return true
+	default:
+		log.Printf("orquesta/db: notificacion descartada por canal saturado tipo=%s proyecto=%d agente=%s", strings.TrimSpace(ev.Tipo), ev.ProyectoID, strings.TrimSpace(ev.Agente))
+		return false
+	}
+}
+
 // Open inicializa el sistema de persistencia de Orquesta.
 // Resuelve el backend (SQLite/otros), aplica migraciones idempotentes y
 // prepara los canales de notificación en tiempo real.
@@ -45,6 +56,8 @@ func Open() error {
 }
 
 func OpenWithOptions(opts OpenOptions) error {
+	runtimeHandleHotReset()
+	resetRuntimeOrdersHotIndex()
 	backend, cfg, err := resolveOpenConfig()
 	if err != nil {
 		return err
@@ -58,13 +71,23 @@ func OpenWithOptions(opts OpenOptions) error {
 	currentConfig = cfg
 	currentTarget = configTarget(cfg)
 	if err := backend.Prepare(db, cfg); err != nil {
-		_ = db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			log.Printf("orquesta/db: close tras prepare fallida: %v", closeErr)
+		}
+		persistenceMu.Lock()
 		currentBackend = nil
 		currentConfig = storage.Config{}
 		currentTarget = ""
+		persistenceMu.Unlock()
 		return err
 	}
-	DB = newHandle(db, backend.Name())
+	handle := newHandle(db, backend.Name())
+	persistenceMu.Lock()
+	DB = handle
+	currentBackend = backend
+	currentConfig = cfg
+	currentTarget = configTarget(cfg)
+	persistenceMu.Unlock()
 	return nil
 }
 
@@ -131,13 +154,18 @@ func envBoolEnabled(key string) bool {
 }
 
 func Close() {
-	if DB != nil {
-		_ = DB.Close()
-	}
+	persistenceMu.Lock()
+	handle := DB
 	DB = nil
 	currentBackend = nil
 	currentConfig = storage.Config{}
 	currentTarget = ""
+	persistenceMu.Unlock()
+	if handle != nil {
+		_ = handle.Close()
+	}
+	runtimeHandleHotReset()
+	resetRuntimeOrdersHotIndex()
 }
 
 // Orden de resolución de la ruta SQLite:
@@ -276,8 +304,9 @@ func consultarConReintentos[T any](fn func() (T, error)) (T, error) {
 }
 
 func esErrorPersistenciaBusy(err error) bool {
-	if currentBackend != nil {
-		return currentBackend.IsBusy(err)
+	backend, _, _ := currentPersistenceState()
+	if backend != nil {
+		return backend.IsBusy(err)
 	}
 	return false
 }
@@ -670,7 +699,9 @@ func rebuildSQLiteTable(
 		return err
 	}
 	defer func() {
-		_, _ = db.Exec(`PRAGMA foreign_keys = ON`)
+		if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+			log.Printf("orquesta/db: no se pudo reactivar foreign_keys tras rebuild de %s: %v", tableName, err)
+		}
 	}()
 
 	tx, err := db.Begin()
@@ -803,14 +834,18 @@ func Audit(agente, accion, entidad string, entidadID int64, detalle string) {
 		detalle = fmt.Sprintf("⚠️ ALERTA SEGURIDAD: %s | %s", motivo, detalle)
 		// Auto-bloqueo preventivo
 		reanimar := time.Now().Add(6 * time.Hour)
-		_, _ = DB.Exec(`UPDATE agentes SET estado_cuota = 'enfriamiento', reanimar_at = ?, motivo_pausa = ? WHERE nombre = ?`,
-			reanimar, "Intento de bypass de seguridad detectado (audit-warden)", agente)
+		if _, err := DB.Exec(`UPDATE agentes SET estado_cuota = 'enfriamiento', reanimar_at = ?, motivo_pausa = ? WHERE nombre = ?`,
+			reanimar, "Intento de bypass de seguridad detectado (audit-warden)", agente); err != nil {
+			log.Printf("orquesta/db: audit bloqueo preventivo fallido agente=%s accion=%s entidad=%s id=%d err=%v", strings.TrimSpace(agente), strings.TrimSpace(accion), strings.TrimSpace(entidad), entidadID, err)
+		}
 	}
 
-	_, _ = DB.Exec(
+	if _, err := DB.Exec(
 		`INSERT INTO audit_log (agente, accion, entidad, entidad_id, detalle) VALUES (?,?,?,?,?)`,
 		agente, accion, entidad, entidadID, detalle,
-	)
+	); err != nil {
+		log.Printf("orquesta/db: audit insert fallido agente=%s accion=%s entidad=%s id=%d err=%v detalle=%q", strings.TrimSpace(agente), strings.TrimSpace(accion), strings.TrimSpace(entidad), entidadID, err, strings.TrimSpace(detalle))
+	}
 }
 
 // ListarAuditoria recupera registros del log de auditoría.

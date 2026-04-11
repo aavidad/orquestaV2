@@ -49,6 +49,32 @@ type statusContext struct {
 	backend *serverInfo
 }
 
+func statusRegisteredAgentCount(resumen *estadoResumen) int {
+	if resumen == nil {
+		return 0
+	}
+	seen := map[string]struct{}{}
+	add := func(items []*db.Agente) {
+		for _, agente := range items {
+			if agente == nil {
+				continue
+			}
+			nombre := strings.ToLower(strings.TrimSpace(agente.Nombre))
+			if nombre != "" {
+				seen[nombre] = struct{}{}
+			}
+		}
+	}
+	add(resumen.Agentes)
+	add(resumen.AgentesActivos)
+	add(resumen.AgentesTrabajando)
+	add(resumen.AgentesSaturados)
+	add(resumen.AgentesAtascados)
+	add(resumen.AgentesAuthManual)
+	add(resumen.AgentesQuotaBlocked)
+	return len(seen)
+}
+
 func configuredServerURL() string {
 	return strings.TrimRight(strings.TrimSpace(os.Getenv(serverURLVar)), "/")
 }
@@ -170,13 +196,43 @@ func renderStatusSummary(ctx *statusContext) {
 	fmt.Printf("║           ORQUESTA — ESTADO DEL PROYECTO                 ║\n")
 	fmt.Printf("╚═══════════════════════════════════════════════════════════╝\n\n")
 
-	fmt.Printf("👥 Agentes: %d conectados", len(resumen.AgentesActivos))
+	fmt.Printf("👥 Agentes: %d activos visibles / %d registrados", len(resumen.AgentesActivos), statusRegisteredAgentCount(resumen))
 	if len(resumen.AgentesTrabajando) > 0 {
 		fmt.Printf(" · %d con trabajo activo", len(resumen.AgentesTrabajando))
 	}
+	if len(resumen.AgentesSaturados) > 0 {
+		fmt.Printf(" · %d saturados", len(resumen.AgentesSaturados))
+	}
+	if len(resumen.AgentesAtascados) > 0 {
+		fmt.Printf(" · %d atascados", len(resumen.AgentesAtascados))
+	}
+	if len(resumen.AgentesAuthManual) > 0 {
+		fmt.Printf(" · %d requieren autenticacion", len(resumen.AgentesAuthManual))
+	}
+	if len(resumen.AgentesQuotaBlocked) > 0 {
+		fmt.Printf(" · %d bloqueados por cuota", len(resumen.AgentesQuotaBlocked))
+	}
 	fmt.Println()
+	saturados := make(map[string]bool, len(resumen.AgentesSaturados))
+	for _, a := range resumen.AgentesSaturados {
+		if a != nil {
+			saturados[strings.TrimSpace(a.Nombre)] = true
+		}
+	}
+	atascados := make(map[string]bool, len(resumen.AgentesAtascados))
+	for _, a := range resumen.AgentesAtascados {
+		if a != nil {
+			atascados[strings.TrimSpace(a.Nombre)] = true
+		}
+	}
 	for _, a := range resumen.AgentesActivos {
-		fmt.Printf("   🟢 %-15s [%s]", a.Nombre, a.Rol)
+		marker := "🟢"
+		if saturados[strings.TrimSpace(a.Nombre)] {
+			marker = "🟡"
+		} else if atascados[strings.TrimSpace(a.Nombre)] {
+			marker = "🟠"
+		}
+		fmt.Printf("   %s %-15s [%s]", marker, a.Nombre, a.Rol)
 		if cuenta := resumenCuentaAgente(a); cuenta != "" {
 			fmt.Printf(" — %s", cuenta)
 		}
@@ -186,9 +242,25 @@ func renderStatusSummary(ctx *statusContext) {
 		fmt.Println()
 	}
 	if len(resumen.AgentesActivos) == 0 {
-		fmt.Printf("   — sin agentes conectados\n")
+		fmt.Printf("   — sin agentes activos visibles\n")
 	}
-	agentesEnCuota := agentesNoActivosConCuota(resumen.Agentes)
+	if len(resumen.AgentesAuthManual) > 0 {
+		fmt.Printf("   🔐 Requieren autenticación manual:\n")
+		for _, a := range resumen.AgentesAuthManual {
+			if a == nil {
+				continue
+			}
+			fmt.Printf("      %-15s [%s]", a.Nombre, a.Rol)
+			if cuenta := resumenCuentaAgente(a); cuenta != "" {
+				fmt.Printf(" — %s", cuenta)
+			}
+			if detalle := resumenCuotaAgente(a); detalle != "" {
+				fmt.Printf(" — %s", detalle)
+			}
+			fmt.Println()
+		}
+	}
+	agentesEnCuota := agentesBloqueadosPorCuotaVisibles(resumen)
 	if len(agentesEnCuota) > 0 {
 		fmt.Printf("   ⏸️  En enfriamiento/cuota:\n")
 		for _, a := range agentesEnCuota {
@@ -246,14 +318,14 @@ func renderStatusSummary(ctx *statusContext) {
 	}
 	fmt.Println()
 
-	retenidas := tareasRetenidasPorCuota(resumen.TareasActivas, resumen.Agentes)
+	retenidas := tareasRetenidasPorCuota(resumen.TareasActivas, resumen.Agentes, resumen.AgentesQuotaBlocked)
 	retenidasIDs := make(map[int64]struct{}, len(retenidas))
 	for _, t := range retenidas {
 		retenidasIDs[t.ID] = struct{}{}
 	}
 	tareasEnProgresoBase := resumen.TareasEnProgreso
 	if len(tareasEnProgresoBase) == 0 {
-		tareasEnProgresoBase = filtrarOpenClawTareasPorEstado(resumen.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada)
+		tareasEnProgresoBase = filtrarOpenClawTareasPorEstado(resumen.TareasActivas, db.TareaEnProgreso)
 	}
 	tareasEnProgresoVisibles := make([]tareaLite, 0, len(tareasEnProgresoBase))
 	for _, t := range tareasEnProgresoBase {
@@ -310,6 +382,9 @@ func renderStatusSummary(ctx *statusContext) {
 
 func resumenCuotaAgente(a *db.Agente) string {
 	if a == nil {
+		return ""
+	}
+	if db.AgenteSinCuotaProveedorEfectivo(a) {
 		return ""
 	}
 	partes := make([]string, 0, 4)
@@ -398,14 +473,7 @@ func resumenCuentaAgente(a *db.Agente) string {
 	if a == nil {
 		return ""
 	}
-	partes := make([]string, 0, 2)
-	if email := strings.TrimSpace(a.CuentaEmail); email != "" {
-		partes = append(partes, "cuenta "+email)
-	}
-	if usuario := strings.TrimSpace(a.CuentaUsuario); usuario != "" && !strings.EqualFold(usuario, strings.TrimSpace(a.CuentaEmail)) {
-		partes = append(partes, "usuario "+usuario)
-	}
-	return strings.Join(partes, " · ")
+	return resumenCuentaCanonica(a.CuentaID, a.CuentaEmail, a.CuentaUsuario)
 }
 
 func resumenDesgloseCuotaAgente(a *db.Agente) string {
@@ -446,6 +514,33 @@ func agentesNoActivosConCuota(agentes []*db.Agente) []*db.Agente {
 	return out
 }
 
+func agentesBloqueadosPorCuotaVisibles(resumen *estadoResumen) []*db.Agente {
+	if resumen == nil {
+		return nil
+	}
+	out := make([]*db.Agente, 0, len(resumen.Agentes)+len(resumen.AgentesQuotaBlocked))
+	seen := make(map[string]struct{}, len(resumen.Agentes)+len(resumen.AgentesQuotaBlocked))
+	add := func(agentes []*db.Agente) {
+		for _, agente := range agentes {
+			if agente == nil {
+				continue
+			}
+			nombre := strings.ToLower(strings.TrimSpace(agente.Nombre))
+			if nombre == "" {
+				continue
+			}
+			if _, ok := seen[nombre]; ok {
+				continue
+			}
+			seen[nombre] = struct{}{}
+			out = append(out, agente)
+		}
+	}
+	add(resumen.AgentesQuotaBlocked)
+	add(agentesNoActivosConCuota(resumen.Agentes))
+	return out
+}
+
 func agentesNoActivosEnPausaOperativa(agentes []*db.Agente) []*db.Agente {
 	out := make([]*db.Agente, 0, len(agentes))
 	for _, agente := range agentes {
@@ -463,21 +558,42 @@ func agentesNoActivosEnPausaOperativa(agentes []*db.Agente) []*db.Agente {
 	return out
 }
 
-func tareasRetenidasPorCuota(tareas []tareaLite, agentes []*db.Agente) []tareaLite {
-	if len(tareas) == 0 || len(agentes) == 0 {
+func tareasRetenidasPorCuota(tareas []tareaLite, agentes []*db.Agente, quotaBlocked []*db.Agente) []tareaLite {
+	if len(tareas) == 0 || (len(agentes) == 0 && len(quotaBlocked) == 0) {
 		return nil
 	}
-	porNombre := make(map[string]*db.Agente, len(agentes))
+	porNombre := make(map[string]*db.Agente, len(agentes)+len(quotaBlocked))
 	for _, agente := range agentes {
 		if agente == nil {
 			continue
 		}
 		porNombre[strings.TrimSpace(agente.Nombre)] = agente
 	}
+	bloqueadosPorRuntime := make(map[string]struct{}, len(quotaBlocked))
+	for _, agente := range quotaBlocked {
+		if agente == nil {
+			continue
+		}
+		nombre := strings.TrimSpace(agente.Nombre)
+		if nombre == "" {
+			continue
+		}
+		bloqueadosPorRuntime[nombre] = struct{}{}
+		if _, ok := porNombre[nombre]; !ok {
+			porNombre[nombre] = agente
+		}
+	}
 	out := make([]tareaLite, 0)
 	for _, tarea := range tareas {
 		agente := porNombre[strings.TrimSpace(tarea.Agente)]
-		if agente == nil || agente.Activo || !agenteBloqueadoPorCuotaVisible(agente) {
+		if agente == nil || agente.Activo {
+			continue
+		}
+		if _, ok := bloqueadosPorRuntime[strings.TrimSpace(tarea.Agente)]; ok {
+			out = append(out, tarea)
+			continue
+		}
+		if !agenteBloqueadoPorCuotaVisible(agente) {
 			continue
 		}
 		out = append(out, tarea)
@@ -487,6 +603,9 @@ func tareasRetenidasPorCuota(tareas []tareaLite, agentes []*db.Agente) []tareaLi
 
 func agenteBloqueadoPorCuotaVisible(a *db.Agente) bool {
 	if a == nil {
+		return false
+	}
+	if db.AgenteSinCuotaProveedorEfectivo(a) {
 		return false
 	}
 	if strings.EqualFold(strings.TrimSpace(a.EstadoCuota), "activo") {
@@ -542,6 +661,22 @@ func bloqueoCuotaEstimadoVisible(a *db.Agente) bool {
 		return false
 	}
 	if agenteMotivoPausaOperativa(a.MotivoPausa) {
+		return false
+	}
+	estadoPresupuesto := strings.ToLower(strings.TrimSpace(a.PresupuestoEstado))
+	if estadoPresupuesto != "" && estadoPresupuesto != "ok" && estadoPresupuesto != "observado_stale" {
+		return false
+	}
+	if a.RemainingCredits != nil && *a.RemainingCredits <= 0 {
+		return false
+	}
+	if a.PresupuestoSemanalPct != nil && *a.PresupuestoSemanalPct <= 0 {
+		return false
+	}
+	if a.PresupuestoSesionPct != nil && *a.PresupuestoSesionPct <= 0 {
+		return false
+	}
+	if a.PresupuestoDiarioPct != nil && *a.PresupuestoDiarioPct <= 0 {
 		return false
 	}
 	motivo := strings.ToLower(strings.TrimSpace(a.MotivoPausa))
@@ -664,6 +799,14 @@ func fetchServerInfo(baseURL string) (*serverInfo, error) {
 	return &payload, nil
 }
 
+func fetchServerOperational(baseURL string) (*serverOperationalInfo, error) {
+	var payload serverOperationalInfo
+	if err := fetchServerJSON(baseURL+"/api/server/operational", &payload); err != nil {
+		return nil, err
+	}
+	return &payload, nil
+}
+
 func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 	body, err := fetchServerText(baseURL + "/api/status")
 	if err != nil {
@@ -674,6 +817,10 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		TareasPorEstado          map[string]int  `json:"tareasPorEstado"`
 		AgentesActivos           []*db.Agente    `json:"agentesActivos"`
 		AgentesTrabajando        []*db.Agente    `json:"agentesTrabajando"`
+		AgentesSaturados         []*db.Agente    `json:"agentesSaturados"`
+		AgentesAtascados         []*db.Agente    `json:"agentesAtascados"`
+		AgentesAuthManual        []*db.Agente    `json:"agentesAuthManual"`
+		AgentesQuotaBlocked      []*db.Agente    `json:"agentesQuotaBlocked"`
 		PropuestasAbiertas       []propuestaLite `json:"propuestasAbiertas"`
 		TareasActivas            []tareaLite     `json:"tareasActivas"`
 		TareasEnProgreso         []tareaLite     `json:"tareasEnProgreso"`
@@ -690,15 +837,19 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		return nil, err
 	}
 	resumen := &estadoResumen{
-		Generado:           payload.Generado,
-		Agentes:            payload.AgentesCompat,
-		TareasPorEstado:    payload.TareasPorEstado,
-		AgentesActivos:     payload.AgentesActivos,
-		AgentesTrabajando:  payload.AgentesTrabajando,
-		PropuestasAbiertas: payload.PropuestasAbiertas,
-		TareasActivas:      payload.TareasActivas,
-		TareasEnProgreso:   payload.TareasEnProgreso,
-		TareasReservadas:   payload.TareasReservadas,
+		Generado:            payload.Generado,
+		Agentes:             payload.AgentesCompat,
+		TareasPorEstado:     payload.TareasPorEstado,
+		AgentesActivos:      payload.AgentesActivos,
+		AgentesTrabajando:   payload.AgentesTrabajando,
+		AgentesSaturados:    payload.AgentesSaturados,
+		AgentesAtascados:    payload.AgentesAtascados,
+		AgentesAuthManual:   payload.AgentesAuthManual,
+		AgentesQuotaBlocked: payload.AgentesQuotaBlocked,
+		PropuestasAbiertas:  payload.PropuestasAbiertas,
+		TareasActivas:       payload.TareasActivas,
+		TareasEnProgreso:    payload.TareasEnProgreso,
+		TareasReservadas:    payload.TareasReservadas,
 	}
 	if len(resumen.TareasPorEstado) == 0 {
 		resumen.TareasPorEstado = payload.ConteoTareasCompat
@@ -712,7 +863,7 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		resumen.AgentesTrabajando = derivarAgentesTrabajando(resumen.AgentesActivos, resumen.TareasActivas)
 	}
 	if len(resumen.TareasEnProgreso) == 0 {
-		resumen.TareasEnProgreso = filtrarOpenClawTareasPorEstado(resumen.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada)
+		resumen.TareasEnProgreso = filtrarOpenClawTareasPorEstado(resumen.TareasActivas, db.TareaEnProgreso)
 	}
 	if len(resumen.TareasReservadas) == 0 {
 		resumen.TareasReservadas = filtrarOpenClawTareasPorEstado(resumen.TareasActivas, db.TareaAsignada)

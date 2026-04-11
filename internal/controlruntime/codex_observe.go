@@ -18,19 +18,21 @@ type CodexObservedRateLimit struct {
 }
 
 type CodexObservedArtifacts struct {
-	Profile       string
-	ExternalID    string
-	SessionPath   string
-	ObservedAt    time.Time
-	ObservedScope string
-	AccountEmail  string
-	AccountUser   string
-	AccountSource string
-	Primary       CodexObservedRateLimit
-	Secondary     CodexObservedRateLimit
-	Credits       *float64
-	PlanType      string
-	RawSnapshot   string
+	ObservationSource string
+	Profile           string
+	ExternalID        string
+	SessionPath       string
+	ObservedAt        time.Time
+	ObservedScope     string
+	AccountID         string
+	AccountEmail      string
+	AccountUser       string
+	AccountSource     string
+	Primary           CodexObservedRateLimit
+	Secondary         CodexObservedRateLimit
+	Credits           *float64
+	PlanType          string
+	RawSnapshot       string
 }
 
 type codexSessionEvent struct {
@@ -88,7 +90,11 @@ func ObserveCodexArtifacts(obj ObjetivoProceso) (*CodexObservedArtifacts, error)
 		return nil, err
 	}
 	scope := "session"
-	if latestPath, latestObservedAt, latestRaw, err := readCodexLatestTokenCount(rendered, "", time.Time{}); err != nil {
+	searchAnchor := startedAt
+	if !observedAt.IsZero() {
+		searchAnchor = observedAt
+	}
+	if latestPath, latestObservedAt, latestRaw, err := readCodexLatestTokenCount(rendered, "", searchAnchor); err != nil {
 		return nil, err
 	} else if latestObservedAt.After(observedAt) {
 		sessionPath = latestPath
@@ -100,12 +106,13 @@ func ObserveCodexArtifacts(obj ObjetivoProceso) (*CodexObservedArtifacts, error)
 		return nil, nil
 	}
 	artifacts := &CodexObservedArtifacts{
-		ExternalID:    externalID,
-		SessionPath:   sessionPath,
-		ObservedAt:    observedAt,
-		ObservedScope: scope,
-		Credits:       codexObservedCredits(raw.RateLimits.Credits),
-		PlanType:      strings.TrimSpace(raw.RateLimits.PlanType),
+		ObservationSource: "codex_token_count_observed",
+		ExternalID:        externalID,
+		SessionPath:       sessionPath,
+		ObservedAt:        observedAt,
+		ObservedScope:     scope,
+		Credits:           codexObservedCredits(raw.RateLimits.Credits),
+		PlanType:          strings.TrimSpace(raw.RateLimits.PlanType),
 	}
 	if snapshot, err := json.Marshal(raw); err == nil {
 		artifacts.RawSnapshot = string(snapshot)
@@ -121,9 +128,13 @@ func ObserveCodexArtifacts(obj ObjetivoProceso) (*CodexObservedArtifacts, error)
 		ResetsAt:      parseCodexResetAt(raw.RateLimits.Secondary.ResetsAt),
 	}
 	artifacts.Profile = perfilDesdeRenderedCommand(rendered)
-	authRaw, email, user, source := readCodexAuthIdentity(rendered, artifacts.Profile)
-	if email != "" {
-		if accountPath, accountObservedAt, accountRaw, accountProfile, err := readCodexLatestTokenCountForAccount(rendered, email); err != nil {
+	authRaw, email, user, accountID, source := readCodexAuthIdentity(rendered, artifacts.Profile)
+	if email != "" || accountID != "" {
+		accountAnchor := startedAt
+		if !artifacts.ObservedAt.IsZero() {
+			accountAnchor = artifacts.ObservedAt
+		}
+		if accountPath, accountObservedAt, accountRaw, accountProfile, err := readCodexLatestTokenCountForAccount(rendered, accountID, email, accountAnchor); err != nil {
 			return nil, err
 		} else if accountObservedAt.After(observedAt) {
 			sessionPath = accountPath
@@ -157,6 +168,7 @@ func ObserveCodexArtifacts(obj ObjetivoProceso) (*CodexObservedArtifacts, error)
 		var infoMap map[string]any
 		if err := json.Unmarshal([]byte(artifacts.RawSnapshot), &infoMap); err == nil {
 			infoMap["observed_scope"] = artifacts.ObservedScope
+			infoMap["account_id"] = accountID
 			infoMap["account_email"] = email
 			infoMap["account_user"] = user
 			infoMap["account_source"] = source
@@ -175,13 +187,14 @@ func ObserveCodexArtifacts(obj ObjetivoProceso) (*CodexObservedArtifacts, error)
 			}
 		}
 	}
+	artifacts.AccountID = accountID
 	artifacts.AccountEmail = email
 	artifacts.AccountUser = user
 	artifacts.AccountSource = source
 	return artifacts, nil
 }
 
-func readCodexLatestTokenCountForAccount(renderedCommand, email string) (string, time.Time, codexTokenCountPayload, string, error) {
+func readCodexLatestTokenCountForAccount(renderedCommand, accountID, email string, startedAt time.Time) (string, time.Time, codexTokenCountPayload, string, error) {
 	baseRoot := codexProfilesBase(renderedCommand)
 	if strings.TrimSpace(baseRoot) == "" {
 		return "", time.Time{}, codexTokenCountPayload{}, "", nil
@@ -194,7 +207,8 @@ func readCodexLatestTokenCountForAccount(renderedCommand, email string) (string,
 		}
 		return "", time.Time{}, codexTokenCountPayload{}, "", err
 	}
-	want := strings.ToLower(strings.TrimSpace(email))
+	wantAccountID := strings.ToLower(strings.TrimSpace(accountID))
+	wantEmail := strings.ToLower(strings.TrimSpace(email))
 	var bestPath string
 	var bestObserved time.Time
 	var bestPayload codexTokenCountPayload
@@ -208,13 +222,22 @@ func readCodexLatestTokenCountForAccount(renderedCommand, email string) (string,
 			continue
 		}
 		authPath := filepath.Join(homesDir, profile, "auth.json")
-		raw, gotEmail, _, _ := readCodexAuthIdentityFromPath(authPath)
+		raw, gotEmail, _, gotAccountID, _ := readCodexAuthIdentityFromPath(authPath)
 		_ = raw
-		if strings.ToLower(strings.TrimSpace(gotEmail)) != want {
+		switch {
+		case wantAccountID != "":
+			if strings.ToLower(strings.TrimSpace(gotAccountID)) != wantAccountID {
+				continue
+			}
+		case wantEmail != "":
+			if strings.ToLower(strings.TrimSpace(gotEmail)) != wantEmail {
+				continue
+			}
+		default:
 			continue
 		}
 		rendered := filepath.Join(baseRoot, "bin", "codex-perfil") + " " + profile
-		path, observedAt, payload, err := readCodexLatestTokenCount(rendered, "", time.Time{})
+		path, observedAt, payload, err := readCodexLatestTokenCount(rendered, "", startedAt)
 		if err != nil {
 			return "", time.Time{}, codexTokenCountPayload{}, "", err
 		}
@@ -368,23 +391,27 @@ func perfilDesdeRenderedCommand(rendered string) string {
 	return strings.TrimSpace(tokens[1])
 }
 
-func readCodexAuthIdentity(rendered, perfil string) (string, string, string, string) {
+func readCodexAuthIdentity(rendered, perfil string) (string, string, string, string, string) {
 	authPath := codexAuthPath(rendered, perfil)
 	if authPath == "" {
-		return "", "", "", ""
+		return "", "", "", "", ""
 	}
 	return readCodexAuthIdentityFromPath(authPath)
 }
 
-func readCodexAuthIdentityFromPath(authPath string) (string, string, string, string) {
+func readCodexAuthIdentityFromPath(authPath string) (string, string, string, string, string) {
 	raw, err := os.ReadFile(authPath)
 	if err != nil {
-		return "", "", "", ""
+		return "", "", "", "", ""
 	}
 	var data map[string]any
 	if err := json.Unmarshal(raw, &data); err != nil {
-		return "", "", "", ""
+		return "", "", "", "", ""
 	}
+	accountID := strings.TrimSpace(recursiveString(data,
+		"account_id",
+		"accountId",
+	))
 	email := strings.TrimSpace(recursiveString(data,
 		"email",
 		"account_email",
@@ -407,10 +434,10 @@ func readCodexAuthIdentityFromPath(authPath string) (string, string, string, str
 			}
 		}
 	}
-	if email == "" && user == "" {
-		return string(raw), "", "", ""
+	if accountID == "" && email == "" && user == "" {
+		return string(raw), "", "", "", ""
 	}
-	return string(raw), email, user, "codex_auth"
+	return string(raw), email, user, accountID, "codex_auth"
 }
 
 func codexAuthPath(rendered, perfil string) string {

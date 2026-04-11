@@ -29,21 +29,13 @@ El directorio `~/Trabajo` es la raiz operativa.
 
 - Cada subcarpeta puede ser un proyecto independiente.
 - Puede haber carpetas grupo que contienen varios proyectos relacionados.
-- Ejemplo: `PlataformaMunicipal/` es un grupo; dentro puede convivir `ContaGrx/` y `orquestador/`.
+- Ejemplo: `PlataformaMunicipal/` es un grupo historico; hoy el repositorio operativo de Orquesta vive en `~/Trabajo/orquesta`.
 - Orquesta no depende de un proyecto concreto; actua como servicio transversal sobre todo el workspace.
 
 ### Restriccion operativa actual
 
-Aunque el objetivo final es que `orquestador` viva fisicamente en `~/Trabajo/orquestador`, a fecha `2026-03-22` sigue ubicado en `~/Trabajo/PlataformaMunicipal/orquestador`.
-
-Ese traslado no debe ejecutarse en caliente mientras existan agentes activos sobre esa ruta.
-Antes de moverlo hay que:
-
-- cerrar o pausar sesiones activas
-- guardar `external_session_id` y `resumen_continuidad`
-- verificar worktrees y ramas
-- hacer backup de la BD y del repo
-- actualizar rutas persistidas y scripts de arranque
+La referencia operativa vigente es `~/Trabajo/orquesta`.
+Las rutas legacy previas del repositorio quedan como historico documental y no deben reaparecer como supuesto tecnico en codigo, tests o runbooks.
 
 ## 3. Principios no negociables
 
@@ -68,6 +60,10 @@ Antes de moverlo hay que:
 7. Autonomia operativa segura.
    Los agentes pueden ejecutar acciones normales sin pedir permiso previo.
    Las acciones destructivas, irreversibles o de riesgo alto deben consultarse antes con Orquesta o con otro agente del mismo proyecto.
+
+8. Delegacion cerrada por especificacion.
+   El agente no recibe "arregla el nucleo" ni "cierra el runtime".
+   Recibe una especificacion de funcion o de parche minimo con archivo, firma, write_set, tests y restricciones de dependencia.
 
 ## 4. Capacidades objetivo
 
@@ -403,6 +399,34 @@ Para ello Orquesta debe imponer:
 - lectura del estado de la fase actual
 - vigilancia de presupuesto de sesion y handoff preventivo
 
+### 10.1. Continuidad no significa libertad arquitectonica
+
+La operacion continua de agentes no autoriza delegacion abierta.
+
+La experiencia real del proyecto ha demostrado que, cuando al agente se le entrega un frente amplio de arquitectura, aparecen tres problemas:
+
+- divergencia respecto al roadmap
+- violaciones de hexagonalidad
+- reescrituras laterales fuera del write set esperado
+
+Por tanto, la continuidad se aplicara sobre microtareas dirigidas, no sobre frentes amplios.
+
+### 10.2. Unidad de trabajo canónica para agentes
+
+La unidad de delegacion canonica pasa a ser la `especificacion de funcion`.
+
+Debe incluir como minimo:
+
+- archivo destino
+- firma o simbolo a implementar/modificar
+- descripcion funcional
+- precondiciones y postcondiciones
+- dependencias permitidas y prohibidas
+- tests obligatorios
+- `write_set` permitido
+
+La entrega del agente solo se considera valida si el orquestador puede verificar ese contrato.
+
 ## 11. Terminator y consola de agentes
 
 Se necesita soporte practico para operar varios agentes manuales a la vez.
@@ -653,6 +677,20 @@ A igualar:
 
 - analisis pesado
 - MCP como capa de contexto
+
+### 21.5. `oh-my-codex`
+
+A copiar:
+
+- `dispatch` durable y state-first
+- `inbox`, `mailbox` y `ACK` de worker como contrato operativo
+- `ready gate` antes de inyectar en `tmux`
+- claim-safe lifecycle de tarea
+
+Adaptacion propia en Orquesta:
+
+- añadir por encima especificacion de funcion, `write_set` y validacion de entrega
+- impedir que el worker reciba frentes amplios de arquitectura
 
 ## 22. Decisiones ya tomadas en esta linea
 

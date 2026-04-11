@@ -470,14 +470,11 @@ func TestRenderStatusSummaryMuestraCuotaAgente(t *testing.T) {
 			},
 		})
 	})
-	if !strings.Contains(out, "Agentes: 1 conectados · 1 con trabajo activo") {
+	if !strings.Contains(out, "Agentes: 1 activos visibles / 1 registrados · 1 con trabajo activo") {
 		t.Fatalf("salida sin resumen conectado/trabajando: %s", out)
 	}
-	if !strings.Contains(out, "cuenta codex2@example.com") {
+	if !strings.Contains(out, "codex2@example.com (codex2_user)") {
 		t.Fatalf("salida sin cuenta visible: %s", out)
-	}
-	if !strings.Contains(out, "usuario codex2_user") {
-		t.Fatalf("salida sin usuario visible: %s", out)
 	}
 	if !strings.Contains(out, "efectivo 18%") {
 		t.Fatalf("salida sin porcentaje de cuota: %s", out)
@@ -531,7 +528,7 @@ func TestRenderStatusSummaryMuestraAgentesEnEnfriamiento(t *testing.T) {
 	if !strings.Contains(out, "En enfriamiento/cuota") {
 		t.Fatalf("salida sin bloque de agentes pausados: %s", out)
 	}
-	if !strings.Contains(out, "Codex5") || !strings.Contains(out, "cuenta maritere@avidad.com") {
+	if !strings.Contains(out, "Codex5") || !strings.Contains(out, "maritere@avidad.com") {
 		t.Fatalf("salida sin detalle de agente pausado: %s", out)
 	}
 	if !strings.Contains(out, "cooldown hasta") {
@@ -647,6 +644,19 @@ func TestResumenCuotaAgenteMarcaBloqueoEstimadoCuandoLaCuotaSigueStale(t *testin
 	}
 }
 
+func TestResumenCuotaAgenteOcultaCuotaLegacyEnAgenteLocalSinProveedor(t *testing.T) {
+	pct := 95
+	detalle := resumenCuotaAgente(&db.Agente{
+		Nombre:             "Gemma1",
+		EstadoCuota:        "activo",
+		CuotaRestantePct:   &pct,
+		PresupuestoVentana: "weekly",
+	})
+	if detalle != "" {
+		t.Fatalf("un agente local sin cuota de proveedor no debería mostrar resumen de cuota: %s", detalle)
+	}
+}
+
 func TestRenderStatusSummaryMuestraTareasRetenidasPorCuota(t *testing.T) {
 	out := captureOutput(t, func() {
 		renderStatusSummary(&statusContext{
@@ -724,7 +734,7 @@ func TestTareasRetenidasPorCuotaIgnoraPausaNoPresupuestaria(t *testing.T) {
 			PresupuestoVentana:    "weekly",
 			PresupuestoSemanalPct: &pct,
 		},
-	})
+	}, nil)
 	if len(tareas) != 0 {
 		t.Fatalf("una pausa no presupuestaria no deberia retener tareas por cuota: %+v", tareas)
 	}
@@ -910,6 +920,108 @@ func TestFetchStatusNoCuentaComoConectadoAgenteConSemanalObservadaAgotada(t *tes
 			t.Fatalf("estado visible inesperado para Codex5: %+v", codex5)
 		}
 	})
+}
+
+func TestRenderStatusSummaryMuestraAtascadosComoConectados(t *testing.T) {
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				AgentesActivos: []*db.Agente{
+					{Nombre: "Codex11", Rol: "programador"},
+				},
+				AgentesAtascados: []*db.Agente{
+					{Nombre: "Codex11", Rol: "programador"},
+				},
+				TareasPorEstado: map[string]int{},
+			},
+		})
+	})
+	if !strings.Contains(out, "👥 Agentes: 1 activos visibles / 1 registrados · 1 atascados") {
+		t.Fatalf("deberia reflejar conectados y atascados: %s", out)
+	}
+	if !strings.Contains(out, "🟠 Codex11") {
+		t.Fatalf("deberia marcar el agente atascado en la lista: %s", out)
+	}
+}
+
+func TestRenderStatusSummaryMuestraRegistradosYConectados(t *testing.T) {
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				Agentes: []*db.Agente{
+					{Nombre: "Codex2", Rol: "programador"},
+					{Nombre: "Codex3", Rol: "programador"},
+				},
+				AgentesActivos: []*db.Agente{
+					{Nombre: "Codex2", Rol: "programador"},
+				},
+				TareasPorEstado: map[string]int{},
+			},
+		})
+	})
+	if !strings.Contains(out, "👥 Agentes: 1 activos visibles / 2 registrados") {
+		t.Fatalf("deberia reflejar registrados y conectados: %s", out)
+	}
+}
+
+func TestRenderStatusSummaryMuestraAutenticacionManualSeparada(t *testing.T) {
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				Agentes: []*db.Agente{
+					{Nombre: "Codex1", Rol: "programador"},
+					{Nombre: "Codex2", Rol: "programador"},
+				},
+				AgentesAuthManual: []*db.Agente{
+					{Nombre: "Codex1", Rol: "programador"},
+					{Nombre: "Codex2", Rol: "programador"},
+				},
+				TareasPorEstado: map[string]int{},
+			},
+		})
+	})
+	if !strings.Contains(out, "👥 Agentes: 0 activos visibles / 2 registrados · 2 requieren autenticacion") {
+		t.Fatalf("deberia reflejar auth manual en el resumen: %s", out)
+	}
+	if !strings.Contains(out, "🔐 Requieren autenticación manual:") {
+		t.Fatalf("deberia listar la seccion de autenticacion manual: %s", out)
+	}
+	if !strings.Contains(out, "Codex1") || !strings.Contains(out, "Codex2") {
+		t.Fatalf("deberia listar agentes que requieren autenticacion: %s", out)
+	}
+}
+
+func TestRenderStatusSummaryMuestraBloqueoPorCuotaOperativa(t *testing.T) {
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				Agentes: []*db.Agente{
+					{Nombre: "Codex2", Rol: "programador"},
+				},
+				AgentesQuotaBlocked: []*db.Agente{
+					{Nombre: "Codex2", Rol: "programador"},
+				},
+				TareasActivas: []tareaLite{
+					{ID: 2, Titulo: "Revisar catálogo", Estado: db.TareaAsignada, Agente: "Codex2"},
+				},
+				TareasReservadas: []tareaLite{
+					{ID: 2, Titulo: "Revisar catálogo", Estado: db.TareaAsignada, Agente: "Codex2"},
+				},
+				TareasPorEstado: map[string]int{
+					string(db.TareaAsignada): 1,
+				},
+			},
+		})
+	})
+	if !strings.Contains(out, "· 1 bloqueados por cuota") {
+		t.Fatalf("deberia reflejar bloqueo operativo por cuota en el resumen: %s", out)
+	}
+	if !strings.Contains(out, "En enfriamiento/cuota") || !strings.Contains(out, "Codex2") {
+		t.Fatalf("deberia listar el agente bloqueado por cuota: %s", out)
+	}
+	if !strings.Contains(out, "Retenidas por cuota") || !strings.Contains(out, "[2]") {
+		t.Fatalf("deberia retener las tareas reservadas del agente bloqueado por cuota: %s", out)
+	}
 }
 
 func TestFetchServerConfig(t *testing.T) {

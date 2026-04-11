@@ -35,6 +35,7 @@ type descriptorSupervisorLocal struct {
 	Ref                 string
 	Agente              string
 	Proyecto            string
+	Driver              string
 	PID                 int
 	StartedAt           time.Time
 	TraceDir            string
@@ -45,6 +46,8 @@ type descriptorSupervisorLocal struct {
 	WrappedCommand      string
 	RenderedCommand     string
 	ExternalSessionID   string
+	TmuxCommand         string
+	TmuxSession         string
 	CanSendInput        bool
 	MailboxDeliveryMode string
 }
@@ -55,6 +58,7 @@ type supervisorProcesoLocal struct {
 	ref                 string
 	agente              string
 	proyecto            string
+	driver              string
 	pid                 int
 	traceDir            string
 	stdinPath           string
@@ -64,6 +68,8 @@ type supervisorProcesoLocal struct {
 	wrappedCommand      string
 	renderedCommand     string
 	externalSessionID   string
+	tmuxCommand         string
+	tmuxSession         string
 	canSendInput        bool
 	mailboxDeliveryMode string
 	modo                string
@@ -192,13 +198,13 @@ func supervisorLocalRefDesdeMetadata(raw string) string {
 
 func supervisorLocalEsAplicable(obj ObjetivoProceso) bool {
 	meta := metadataMap(obj.MetadataJSON)
+	if supervisorLocalDriverLocalAplicable(obj, meta) {
+		return true
+	}
 	if strings.TrimSpace(supervisorLocalRefDesdeMetadata(obj.MetadataJSON)) != "" {
 		return true
 	}
 	if strings.TrimSpace(stringValueFromMetadata(meta, "supervisor_driver")) != "" {
-		return true
-	}
-	if strings.EqualFold(strings.TrimSpace(stringValueFromMetadata(meta, "driver")), "process_pty_cli") {
 		return true
 	}
 	for _, key := range []string{
@@ -211,6 +217,17 @@ func supervisorLocalEsAplicable(obj ObjetivoProceso) bool {
 	}
 	if supervisorLocalTieneManifestCandidato(meta) {
 		return true
+	}
+	return false
+}
+
+func supervisorLocalDriverLocalAplicable(obj ObjetivoProceso, meta map[string]any) bool {
+	driver := strings.ToLower(strings.TrimSpace(stringValueFromMetadata(meta, "driver")))
+	switch driver {
+	case "process_pty_cli", "tmux_cli_session":
+		if pid, ok, err := ResolverPID(obj); err == nil && ok && pid > 0 {
+			return true
+		}
 	}
 	return false
 }
@@ -230,6 +247,7 @@ func descriptorSupervisorLocalDesdeObjetivo(obj ObjetivoProceso, pid int) descri
 		Ref:                 strings.TrimSpace(supervisorLocalRefDesdeMetadata(obj.MetadataJSON)),
 		Agente:              stringValueFromMetadata(meta, "agente"),
 		Proyecto:            stringValueFromMetadata(meta, "proyecto"),
+		Driver:              stringValueFromMetadata(meta, "driver"),
 		PID:                 pid,
 		StartedAt:           metadataTime(meta, "started_at"),
 		TraceDir:            stringValueFromMetadata(meta, "trace_dir"),
@@ -240,6 +258,8 @@ func descriptorSupervisorLocalDesdeObjetivo(obj ObjetivoProceso, pid int) descri
 		WrappedCommand:      stringValueFromMetadata(meta, "wrapped_command"),
 		RenderedCommand:     stringValueFromMetadata(meta, "rendered_command"),
 		ExternalSessionID:   stringValueFromMetadata(meta, "external_session_id"),
+		TmuxCommand:         stringValueFromMetadata(meta, "tmux_command"),
+		TmuxSession:         stringValueFromMetadata(meta, "tmux_session"),
 		CanSendInput:        !metaBoolDefinedAndFalse(meta, "can_send_input"),
 		MailboxDeliveryMode: stringValueFromMetadata(meta, "mailbox_delivery_mode"),
 	}
@@ -258,14 +278,19 @@ func rehidratarDescriptorSupervisorLocalDesdeManifest(desc descriptorSupervisorL
 		return desc
 	}
 	for _, manifestPath := range manifestPathsCandidatosSupervisorLocal(desc, meta) {
+		slashCommandDebugf("supervisor_local status=rehydrate_try ref=%s manifest=%s", strings.TrimSpace(desc.Ref), strings.TrimSpace(manifestPath))
 		payload, err := loadRuntimeManifestSupervisorLocal(manifestPath)
 		if err != nil || payload == nil {
+			if err != nil {
+				slashCommandDebugf("supervisor_local status=rehydrate_skip ref=%s manifest=%s err=%v", strings.TrimSpace(desc.Ref), strings.TrimSpace(manifestPath), err)
+			}
 			continue
 		}
 		if manifestPID, ok := payload["pid"].(float64); ok && desc.PID > 0 && int(manifestPID) != desc.PID {
 			continue
 		}
 		desc = mergeDescriptorSupervisorLocalManifest(desc, payload, manifestPath)
+		slashCommandDebugf("supervisor_local status=rehydrate_merge ref=%s manifest=%s pid=%d stdin=%s log=%s", strings.TrimSpace(desc.Ref), strings.TrimSpace(manifestPath), desc.PID, strings.TrimSpace(desc.StdinPath), strings.TrimSpace(desc.LogPath))
 		if !descriptorSupervisorLocalNecesitaRehidratacion(desc) {
 			return desc
 		}
@@ -326,6 +351,16 @@ func mergeDescriptorSupervisorLocalManifest(desc descriptorSupervisorLocal, payl
 	if payload == nil {
 		return desc
 	}
+	if desc.PID <= 0 {
+		switch raw := payload["pid"].(type) {
+		case float64:
+			desc.PID = int(raw)
+		case int:
+			desc.PID = raw
+		case int64:
+			desc.PID = int(raw)
+		}
+	}
 	if strings.TrimSpace(desc.TraceDir) == "" {
 		desc.TraceDir = filepath.Dir(strings.TrimSpace(manifestPath))
 	}
@@ -340,6 +375,9 @@ func mergeDescriptorSupervisorLocalManifest(desc descriptorSupervisorLocal, payl
 	}
 	if strings.TrimSpace(desc.Proyecto) == "" {
 		desc.Proyecto = strings.TrimSpace(stringValueFromMetadata(payload, "proyecto"))
+	}
+	if strings.TrimSpace(desc.Driver) == "" {
+		desc.Driver = strings.TrimSpace(stringValueFromMetadata(payload, "driver"))
 	}
 	if desc.StartedAt.IsZero() {
 		desc.StartedAt = metadataTime(payload, "created_at")
@@ -394,15 +432,23 @@ func (r *registroSupervisoresLocales) resolver(obj ObjetivoProceso) (*supervisor
 	if err != nil {
 		return nil, true, err
 	}
-	desc := descriptorSupervisorLocal{}
-	if ok && pid > 0 {
-		desc = descriptorSupervisorLocalDesdeObjetivo(obj, pid)
+	desc := descriptorSupervisorLocalDesdeObjetivo(obj, pid)
+	if !ok || pid <= 0 {
+		if desc.PID > 0 {
+			pid = desc.PID
+			ok = true
+		}
+	}
+	if (ok && pid > 0) || strings.TrimSpace(desc.Ref) != "" {
 		if strings.TrimSpace(desc.Ref) == "" {
 			desc.Ref = construirRefSupervisorLocal(desc)
 		}
 	}
 
 	ref := strings.TrimSpace(supervisorLocalRefDesdeMetadata(obj.MetadataJSON))
+	if ref == "" {
+		ref = strings.TrimSpace(desc.Ref)
+	}
 	r.mu.RLock()
 	if ref != "" {
 		if supervisor := r.byRef[ref]; supervisor != nil {
@@ -468,6 +514,7 @@ func (r *registroSupervisoresLocales) registrar(desc descriptorSupervisorLocal, 
 		ref:                 ref,
 		agente:              strings.TrimSpace(desc.Agente),
 		proyecto:            strings.TrimSpace(desc.Proyecto),
+		driver:              strings.TrimSpace(desc.Driver),
 		pid:                 desc.PID,
 		startedAt:           desc.StartedAt,
 		traceDir:            strings.TrimSpace(desc.TraceDir),
@@ -478,6 +525,8 @@ func (r *registroSupervisoresLocales) registrar(desc descriptorSupervisorLocal, 
 		wrappedCommand:      strings.TrimSpace(desc.WrappedCommand),
 		renderedCommand:     strings.TrimSpace(desc.RenderedCommand),
 		externalSessionID:   strings.TrimSpace(desc.ExternalSessionID),
+		tmuxCommand:         strings.TrimSpace(desc.TmuxCommand),
+		tmuxSession:         strings.TrimSpace(desc.TmuxSession),
 		canSendInput:        desc.CanSendInput,
 		mailboxDeliveryMode: strings.TrimSpace(desc.MailboxDeliveryMode),
 		modo:                strings.TrimSpace(modo),
@@ -508,6 +557,9 @@ func (s *supervisorProcesoLocal) actualizar(desc descriptorSupervisorLocal, modo
 	if strings.TrimSpace(desc.Proyecto) != "" {
 		s.proyecto = strings.TrimSpace(desc.Proyecto)
 	}
+	if strings.TrimSpace(desc.Driver) != "" {
+		s.driver = strings.TrimSpace(desc.Driver)
+	}
 	if desc.PID > 0 {
 		s.pid = desc.PID
 	}
@@ -537,6 +589,12 @@ func (s *supervisorProcesoLocal) actualizar(desc descriptorSupervisorLocal, modo
 	}
 	if strings.TrimSpace(desc.ExternalSessionID) != "" {
 		s.externalSessionID = strings.TrimSpace(desc.ExternalSessionID)
+	}
+	if mismaRefCanonica || strings.TrimSpace(desc.TmuxCommand) != "" {
+		s.tmuxCommand = strings.TrimSpace(desc.TmuxCommand)
+	}
+	if mismaRefCanonica || strings.TrimSpace(desc.TmuxSession) != "" {
+		s.tmuxSession = strings.TrimSpace(desc.TmuxSession)
 	}
 	if strings.TrimSpace(desc.MailboxDeliveryMode) != "" {
 		s.mailboxDeliveryMode = strings.TrimSpace(desc.MailboxDeliveryMode)
@@ -656,6 +714,7 @@ func (s *supervisorProcesoLocal) snapshot() (int, string, map[string]any, map[st
 	s.mu.RLock()
 	agente := s.agente
 	proyecto := s.proyecto
+	driver := s.driver
 	pid := s.pid
 	modo := s.modo
 	startedAt := s.startedAt
@@ -667,6 +726,8 @@ func (s *supervisorProcesoLocal) snapshot() (int, string, map[string]any, map[st
 	wrappedCommand := s.wrappedCommand
 	renderedCommand := s.renderedCommand
 	externalSessionID := s.externalSessionID
+	tmuxCommand := s.tmuxCommand
+	tmuxSession := s.tmuxSession
 	canSendInput := s.canSendInput
 	mailboxDeliveryMode := s.mailboxDeliveryMode
 	ownerPID := s.ownerPID
@@ -711,6 +772,9 @@ func (s *supervisorProcesoLocal) snapshot() (int, string, map[string]any, map[st
 	} else {
 		aliveErr = nil
 	}
+	if aliveErr != nil || !alive {
+		slashCommandDebugf("supervisor_local status=snapshot ref=%s pid=%d alive=%t err=%v stdin=%s log=%s command=%s", strings.TrimSpace(s.ref), pid, alive, aliveErr, strings.TrimSpace(stdinPath), strings.TrimSpace(logPath), strings.TrimSpace(renderedCommand))
+	}
 
 	if externalSessionID == "" && renderedCommandLooksLikeCodexCLI(renderedCommand) {
 		if detected, err := detectCodexSessionID(renderedCommand, workingDir, startedAt, time.Now().UTC()); err == nil {
@@ -740,8 +804,13 @@ func (s *supervisorProcesoLocal) snapshot() (int, string, map[string]any, map[st
 		"wrapped_command":       wrappedCommand,
 		"rendered_command":      renderedCommand,
 		"external_session_id":   externalSessionID,
+		"tmux_command":          tmuxCommand,
+		"tmux_session":          tmuxSession,
 		"mailbox_delivery_mode": mailboxDeliveryMode,
 		"can_send_input":        canSendInput,
+	}
+	if strings.TrimSpace(driver) != "" {
+		meta["runtime_driver"] = strings.TrimSpace(driver)
 	}
 	if !startedAt.IsZero() {
 		meta["started_at"] = startedAt.Format(time.RFC3339Nano)
@@ -903,6 +972,17 @@ func (s *supervisorProcesoLocal) controlar(sig syscall.Signal, accion string) (b
 	if estado == nil {
 		return false, 0, true, nil
 	}
+	if accion == "stop" {
+		if detenido, err := detenerSesionTMUXDesdeMetadata(estado.MetadataJSON); detenido || err != nil {
+			s.mu.Lock()
+			s.lastStatusAt = time.Now().UTC()
+			s.mu.Unlock()
+			return detenido, estado.PID, true, err
+		}
+	}
+	if s.caeAModoFallbackDeControl() {
+		return false, estado.PID, false, nil
+	}
 	if !estado.Vivo || estado.PID <= 0 {
 		return false, estado.PID, true, nil
 	}
@@ -923,6 +1003,21 @@ func (s *supervisorProcesoLocal) controlar(sig syscall.Signal, accion string) (b
 	s.mu.Unlock()
 
 	return true, estado.PID, true, nil
+}
+
+func (s *supervisorProcesoLocal) caeAModoFallbackDeControl() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.process != nil {
+		return false
+	}
+	if strings.TrimSpace(s.traceDir) != "" || strings.TrimSpace(s.stdinPath) != "" || strings.TrimSpace(s.logPath) != "" {
+		return false
+	}
+	if ref := strings.TrimSpace(s.ref); ref != "" && !strings.HasPrefix(ref, "pid:") {
+		return false
+	}
+	return true
 }
 
 func (s *supervisorProcesoLocal) proceso() *os.Process {
@@ -984,8 +1079,13 @@ func validarIdentidadProcesoLocal(pid int, workingDir, renderedCommand, wrappedC
 
 func commandIdentityHints(renderedCommand, wrappedCommand string) []string {
 	seen := map[string]struct{}{}
-	add := func(raw string) {
+	normalize := func(raw string) string {
 		raw = strings.ToLower(strings.TrimSpace(raw))
+		raw = strings.Trim(raw, "'\"")
+		return strings.TrimSpace(raw)
+	}
+	add := func(raw string) {
+		raw = normalize(raw)
 		if raw == "" {
 			return
 		}
@@ -998,6 +1098,7 @@ func commandIdentityHints(renderedCommand, wrappedCommand string) []string {
 		}
 		add(raw)
 		for _, token := range strings.Fields(raw) {
+			token = strings.Trim(token, "'\"")
 			base := strings.ToLower(strings.TrimSpace(filepath.Base(token)))
 			if base != "" {
 				add(base)
@@ -1006,6 +1107,12 @@ func commandIdentityHints(renderedCommand, wrappedCommand string) []string {
 	}
 	addCommand(renderedCommand)
 	addCommand(wrappedCommand)
+	if renderedCommandLooksLikeCodexCLI(renderedCommand) || renderedCommandLooksLikeCodexCLI(wrappedCommand) {
+		add("codex")
+	}
+	if strings.Contains(strings.ToLower(renderedCommand), "claude") || strings.Contains(strings.ToLower(wrappedCommand), "claude") {
+		add("claude")
+	}
 	out := make([]string, 0, len(seen))
 	for hint := range seen {
 		out = append(out, hint)

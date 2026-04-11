@@ -13,6 +13,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"orquesta/db"
@@ -63,14 +64,17 @@ type Runner struct {
 	mu                    sync.Mutex
 	runningBatches        map[string]runningBatchState
 	batchIntervals        map[string]time.Time
+	batchWake             map[string]chan struct{}
 	nextBatchToken        uint64
+	warmLaneActive        atomic.Bool
 	wg                    sync.WaitGroup
 }
 
 type runningBatchState struct {
-	token     uint64
-	startedAt time.Time
-	expiresAt time.Time
+	token      uint64
+	startedAt  time.Time
+	expiresAt  time.Time
+	timedOutAt time.Time
 }
 
 func (r *Runner) Start(ctx context.Context) {
@@ -85,22 +89,40 @@ func (r *Runner) Start(ctx context.Context) {
 	if r.InitNotifications != nil {
 		r.InitNotifications()
 	}
+	r.StartResidentCore(ctx)
+	r.StartNonResidentWorker(ctx)
+}
 
+// StartResidentCore arranca solo el núcleo residente imprescindible del daemon.
+func (r *Runner) StartResidentCore(ctx context.Context) {
+	if r == nil || r.Automation == nil {
+		return
+	}
 	r.startLoop(ctx, "reanimaciones", r.reanimacionCada(), r.runReanimaciones)
 	r.startLoop(ctx, "salud", r.saludCada(), r.runSalud)
 	r.startLoop(ctx, "planificacion", r.planificacionCada(), r.runPlanificacion)
 	r.startLoopAfter(ctx, "control_plane_runtime_orders", r.runtimeOrdersCada(), 0, r.runControlPlaneRuntimeOrders)
-	r.startLoopAfter(ctx, "control_plane_runtime_transcript", r.runtimeTranscriptCada(), 10*time.Second, r.runControlPlaneRuntimeTranscript)
+	r.startLoopAfter(ctx, "control_plane_runtime_transcript", r.runtimeTranscriptCada(), r.runtimeTranscriptStartupDelay(), r.runControlPlaneRuntimeTranscript)
 	r.startLoopAfter(ctx, "control_plane_runtime_mailbox", r.runtimeMailboxCada(), 20*time.Second, r.runControlPlaneRuntimeMailbox)
 	r.startLoopAfter(ctx, "control_plane_runtime_budget", r.runtimeBudgetCada(), 30*time.Second, r.runControlPlaneBudget)
-	r.startLoop(ctx, "control_plane_warm", r.controlPlaneWarmCada(), r.runControlPlaneWarm)
-	r.startLoop(ctx, "control_plane_cold", r.controlPlaneColdCada(), r.runControlPlaneCold)
-	r.startLoop(ctx, "notification_retry", r.notificationRetryCada(), r.runNotificationRetry)
 	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()
 		r.loopNotificaciones(ctx)
 	}()
+}
+
+// StartNonResidentWorker arranca el trabajo periódico pesado que no forma parte
+// del núcleo residente mínimo, pero sigue viviendo bajo el mismo daemon.
+func (r *Runner) StartNonResidentWorker(ctx context.Context) {
+	if r == nil || r.Automation == nil {
+		return
+	}
+	r.debugf("runner non_resident warm=%s cold=%s notification_retry=%s",
+		r.controlPlaneWarmCada(), r.controlPlaneColdCada(), r.notificationRetryCada())
+	r.startLoop(ctx, "control_plane_warm", r.controlPlaneWarmCada(), r.runControlPlaneWarm)
+	r.startLoop(ctx, "control_plane_cold", r.controlPlaneColdCada(), r.runControlPlaneCold)
+	r.startLoop(ctx, "notification_retry", r.notificationRetryCada(), r.runNotificationRetry)
 }
 
 func (r *Runner) startLoop(ctx context.Context, name string, each time.Duration, fn func()) {
@@ -123,12 +145,14 @@ func (r *Runner) Wait() {
 }
 
 func (r *Runner) loop(ctx context.Context, name string, each time.Duration, extraDelay time.Duration, fn func()) {
+	wakeCh := r.batchWakeChannel(name)
 	if delay := r.startupGrace() + extraDelay; delay > 0 {
 		timer := time.NewTimer(delay)
 		defer timer.Stop()
 		select {
 		case <-ctx.Done():
 			return
+		case <-wakeCh:
 		case <-timer.C:
 		}
 	} else {
@@ -145,25 +169,74 @@ func (r *Runner) loop(ctx context.Context, name string, each time.Duration, extr
 		select {
 		case <-ctx.Done():
 			return
+		case <-wakeCh:
+			start := time.Now()
+			r.safeLoopCall(name, fn)
+			r.applyLoopBackpressure(ctx, name, each, start)
 		case <-ticker.C:
 			start := time.Now()
 			r.safeLoopCall(name, fn)
-			elapsed := time.Since(start)
-			if elapsed > each/2 {
-				backoff := elapsed
-				if backoff > 2*each {
-					backoff = 2 * each
-				}
-				r.debugf("runner loop=%s backpressure=%s (elapsed=%s interval=%s)", name, backoff, elapsed, each)
-				cooldown := time.NewTimer(backoff)
-				select {
-				case <-ctx.Done():
-					cooldown.Stop()
-					return
-				case <-cooldown.C:
-				}
-			}
+			r.applyLoopBackpressure(ctx, name, each, start)
 		}
+	}
+}
+
+func (r *Runner) WakeBatch(name string) bool {
+	if r == nil {
+		return false
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+	ch := r.batchWakeChannel(name)
+	select {
+	case ch <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func (r *Runner) WakeRuntimeOrders() bool {
+	return r.WakeBatch("control_plane_runtime_orders")
+}
+
+func (r *Runner) WakeRuntimeMailbox() bool {
+	return r.WakeBatch("control_plane_runtime_mailbox")
+}
+
+func (r *Runner) batchWakeChannel(name string) chan struct{} {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.batchWake == nil {
+		r.batchWake = map[string]chan struct{}{}
+	}
+	ch, ok := r.batchWake[name]
+	if ok {
+		return ch
+	}
+	ch = make(chan struct{}, 1)
+	r.batchWake[name] = ch
+	return ch
+}
+
+func (r *Runner) applyLoopBackpressure(ctx context.Context, name string, each time.Duration, start time.Time) {
+	elapsed := time.Since(start)
+	if elapsed <= each/2 {
+		return
+	}
+	backoff := elapsed
+	if backoff > 2*each {
+		backoff = 2 * each
+	}
+	r.debugf("runner loop=%s backpressure=%s (elapsed=%s interval=%s)", name, backoff, elapsed, each)
+	cooldown := time.NewTimer(backoff)
+	select {
+	case <-ctx.Done():
+		cooldown.Stop()
+		return
+	case <-cooldown.C:
 	}
 }
 
@@ -302,6 +375,10 @@ func (r *Runner) runControlPlaneHotInternal(force bool) {
 }
 
 func (r *Runner) runControlPlaneRuntimeTranscript() {
+	if r.warmLaneActive.Load() {
+		r.debugf("control_plane_runtime_transcript skipped=warm_active")
+		return
+	}
 	count := r.runControlPlaneBatch(
 		"runtime_transcript",
 		"runtime_transcript",
@@ -315,6 +392,10 @@ func (r *Runner) runControlPlaneRuntimeTranscript() {
 }
 
 func (r *Runner) runControlPlaneRuntimeMailbox() {
+	if r.warmLaneActive.Load() {
+		r.debugf("control_plane_runtime_mailbox skipped=warm_active")
+		return
+	}
 	count := r.runControlPlaneBatch(
 		"runtime_mailbox",
 		"runtime_mailbox",
@@ -341,6 +422,10 @@ func (r *Runner) runControlPlaneRuntimeOrders() {
 }
 
 func (r *Runner) runControlPlaneBudget() {
+	if r.warmLaneActive.Load() {
+		r.debugf("control_plane_runtime_budget skipped=warm_active")
+		return
+	}
 	count := r.runControlPlaneBatch(
 		"runtime_budget_observation",
 		"presupuesto_sesion",
@@ -355,6 +440,11 @@ func (r *Runner) runControlPlaneBudget() {
 
 // runControlPlaneWarm: gestión — autonomia, supervision, review, handoffs, merges, refineria.
 func (r *Runner) runControlPlaneWarm() {
+	if !r.warmLaneActive.CompareAndSwap(false, true) {
+		r.debugf("control_plane_warm skipped=already_active")
+		return
+	}
+	defer r.warmLaneActive.Store(false)
 	autonomia := r.runControlPlaneBatch(
 		"autonomia",
 		"agente",
@@ -473,15 +563,13 @@ func (r *Runner) safeLoopCall(name string, fn func()) {
 
 func (r *Runner) runControlPlaneBatch(name, entity, auditOK, auditErr, auditPanic, successFmt string, fn func() (int, error)) (count int) {
 	timeout := r.controlPlaneBatchTimeout()
-	token, running, overdue := r.beginControlPlaneBatch(name, timeout)
+	token, running, timedOut := r.beginControlPlaneBatch(name, timeout)
 	if token == 0 {
-		if overdue {
-			detail := fmt.Sprintf("batch=%s overdue timeout=%s", name, timeout)
-			r.Automation.Audit("server", auditErr, entity, 0, detail)
-			r.debugf("control_plane %s overdue=still_running timeout=%s", name, timeout)
-			return 0
-		}
 		if running {
+			if timedOut {
+				r.debugf("control_plane %s skipped=timed_out_still_running timeout=%s", name, timeout)
+				return 0
+			}
 			r.debugf("control_plane %s skipped=already_running", name)
 			return 0
 		}
@@ -528,6 +616,7 @@ func (r *Runner) runControlPlaneBatch(name, entity, auditOK, auditErr, auditPani
 		r.debugf("control_plane %s ok count=%d duration=%s", name, outcome.count, duration)
 		return outcome.count
 	case <-timer.C:
+		r.markControlPlaneBatchTimedOut(name, token)
 		detail := fmt.Sprintf("batch=%s timeout=%s", name, timeout)
 		r.Automation.Audit("server", auditErr, entity, 0, detail)
 		r.debugf("control_plane %s timeout=%s", name, timeout)
@@ -587,7 +676,7 @@ func (r *Runner) planificacionCada() time.Duration {
 
 func (r *Runner) controlPlaneCada() time.Duration {
 	if r.ControlPlaneCada <= 0 {
-		return 30 * time.Second
+		return 60 * time.Second
 	}
 	return r.ControlPlaneCada
 }
@@ -613,10 +702,20 @@ func (r *Runner) controlPlaneColdCada() time.Duration {
 }
 
 func (r *Runner) runtimeTranscriptCada() time.Duration {
+	if r.RuntimeTranscriptCada <= 0 && r.ControlPlaneCada > 0 {
+		return r.ControlPlaneCada
+	}
 	if r.RuntimeTranscriptCada <= 0 {
 		return time.Minute
 	}
 	return r.RuntimeTranscriptCada
+}
+
+func (r *Runner) runtimeTranscriptStartupDelay() time.Duration {
+	if r.RuntimeTranscriptCada > 0 || r.ControlPlaneCada > 0 {
+		return 0
+	}
+	return 10 * time.Second
 }
 
 func (r *Runner) runtimeMailboxCada() time.Duration {
@@ -678,7 +777,7 @@ func (r *Runner) startupGrace() time.Duration {
 	return r.StartupGrace
 }
 
-func (r *Runner) beginControlPlaneBatch(name string, timeout time.Duration) (token uint64, running bool, overdue bool) {
+func (r *Runner) beginControlPlaneBatch(name string, timeout time.Duration) (token uint64, running bool, timedOut bool) {
 	if r == nil {
 		return 0, false, false
 	}
@@ -689,12 +788,11 @@ func (r *Runner) beginControlPlaneBatch(name string, timeout time.Duration) (tok
 	}
 	now := time.Now()
 	if state, exists := r.runningBatches[name]; exists {
-		if state.expiresAt.IsZero() || now.Before(state.expiresAt) {
-			return 0, true, false
+		if state.timedOutAt.IsZero() && !state.expiresAt.IsZero() && !now.Before(state.expiresAt) {
+			state.timedOutAt = now
+			r.runningBatches[name] = state
 		}
-		state.expiresAt = now.Add(timeout)
-		r.runningBatches[name] = state
-		return 0, true, true
+		return 0, true, !state.timedOutAt.IsZero()
 	}
 	r.nextBatchToken++
 	r.runningBatches[name] = runningBatchState{
@@ -703,6 +801,20 @@ func (r *Runner) beginControlPlaneBatch(name string, timeout time.Duration) (tok
 		expiresAt: now.Add(timeout),
 	}
 	return r.nextBatchToken, false, false
+}
+
+func (r *Runner) markControlPlaneBatchTimedOut(name string, token uint64) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	state, ok := r.runningBatches[name]
+	if !ok || state.token != token || !state.timedOutAt.IsZero() {
+		return
+	}
+	state.timedOutAt = time.Now()
+	r.runningBatches[name] = state
 }
 
 func (r *Runner) finishControlPlaneBatch(name string, token uint64) {

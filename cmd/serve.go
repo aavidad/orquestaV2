@@ -26,6 +26,7 @@ import (
 	"orquesta/db"
 	"orquesta/i18n"
 	"orquesta/internal/a2ui"
+	"orquesta/internal/rpclocal"
 	"orquesta/notificaciones"
 	"orquesta/propuestasapp"
 	"orquesta/tareasapp"
@@ -81,6 +82,7 @@ type webOpenClawData struct {
 }
 
 type webOpenClawIntegrationInfo struct {
+	HealthzEndpoint    string
 	MCPEndpoint        string
 	Configured         bool
 	Transport          string
@@ -110,6 +112,8 @@ type webTareaRow struct {
 	Estado    string
 	Prioridad string
 	Agente    string
+	ProgresoPct int
+	ProgresoManual bool
 }
 
 type webTareasData struct {
@@ -695,7 +699,6 @@ func webHandlerDash(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	summary, _ := panelService.BuildSummary()
 	var (
 		agentes     []*db.Agente
 		counts      map[string]int
@@ -705,14 +708,19 @@ func webHandlerDash(w http.ResponseWriter, r *http.Request) {
 		resAbiertas []webPropResumen
 		ep          []webTareaRow
 	)
-	if summary != nil {
-		agentes = summary.Agents
-		counts = summary.TaskCounts
-		total = summary.TotalTasks
-		completadas = summary.DoneTasks
-		pct = summary.PercentDone
-		resAbiertas = make([]webPropResumen, 0, len(summary.OpenProps))
-		for _, item := range summary.OpenProps {
+	status, _ := statusService.FetchStatus()
+	if status.Agentes != nil || status.TareasPorEstado != nil {
+		agentes = status.Agentes
+		counts = status.TareasPorEstado
+		for _, count := range counts {
+			total += count
+		}
+		completadas = counts[string(db.EstadoCompletada)]
+		if total > 0 {
+			pct = completadas * 100 / total
+		}
+		resAbiertas = make([]webPropResumen, 0, len(status.PropuestasResumen))
+		for _, item := range status.PropuestasResumen {
 			resAbiertas = append(resAbiertas, webPropResumen{
 				Codigo:     item.Codigo,
 				Titulo:     item.Titulo,
@@ -721,29 +729,20 @@ func webHandlerDash(w http.ResponseWriter, r *http.Request) {
 				Pendiente:  item.Pendiente,
 			})
 		}
-		ep = make([]webTareaRow, 0, len(summary.ActiveTasks))
-		for _, t := range summary.ActiveTasks {
-			ep = append(ep, toWebTarea(t))
+		if len(status.TareasEnProgreso) == 0 {
+			status.TareasEnProgreso = filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada)
 		}
-	}
-	activos := true
-	runtimeTree, _ := runtimesService.BuildRuntimeTree(db.FiltroRuntimes{Activos: &activos})
-	var runtimes []webRuntimeRow
-	aplanarRuntimes(runtimeTree, 0, &runtimes)
-	checkpoints, _ := runtimesService.ListRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{Limit: 5})
-	var recentCheckpoints []webTimeTravelCheckpointRow
-	for _, cp := range checkpoints {
-		if cp == nil {
-			continue
+		ep = make([]webTareaRow, 0, len(status.TareasEnProgreso))
+		for _, t := range status.TareasEnProgreso {
+			ep = append(ep, toWebTareaLite(t))
 		}
-		recentCheckpoints = append(recentCheckpoints, runtimeCheckpointToWeb(cp))
 	}
 	notifs := notificaciones.DescribirConfiguracion()
 	notifOutbox := notificaciones.DescribirOutbox(5)
 	webRender(w, r, webTplLayout+webTplDash, webDashData{
 		Agentes: agentes, Counts: counts, Total: total,
 		Completadas: completadas, Pct: pct,
-		Abiertas: resAbiertas, EnProgreso: ep, Runtimes: runtimes, Checkpoints: recentCheckpoints,
+		Abiertas: resAbiertas, EnProgreso: ep,
 		Notificaciones: notifs,
 		NotifOutbox:    notifOutbox,
 		Generado:       time.Now().Format("2006-01-02 15:04:05"),
@@ -755,6 +754,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	supervisor := "OpenClaw"
 	status, err := buildEstadoResumenLigero()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -765,7 +765,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	review, err := buildSupervisorReviewSnapshot("")
+	review, err := buildSupervisorReviewSnapshot(supervisor)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -822,7 +822,7 @@ func webHandlerOpenClaw(w http.ResponseWriter, r *http.Request) {
 		EnCuota:           agentesNoActivosConCuota(status.Agentes),
 		MailboxPendiente:  mustOpenClawPendingMailbox(status.Agentes),
 		WorktreeDrift:     worktreeDrift,
-		Retenidas:         tareasRetenidasPorCuota(status.TareasActivas, status.Agentes),
+		Retenidas:         tareasRetenidasPorCuota(status.TareasActivas, status.Agentes, status.AgentesQuotaBlocked),
 		TareasReservadas:  filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
 		ReviewGates:       reviewGates,
 		Signals:           signals,
@@ -859,6 +859,7 @@ func mustOpenClawPendingMailbox(agentes []*db.Agente) []apiOpenClawMailboxLite {
 
 func buildWebOpenClawIntegrationInfo() webOpenClawIntegrationInfo {
 	info := webOpenClawIntegrationInfo{
+		HealthzEndpoint:   fmt.Sprintf("http://127.0.0.1:%d%s", defaultServePort, rpclocal.HealthPath),
 		MCPEndpoint:       webOpenClawDefaultEndpoint(),
 		PluginPath:        "./plugins/openclaw-orquesta-api",
 		RunbookPath:       "./plugins/openclaw-orquesta-api/RUNBOOK_TELEGRAM.md",
@@ -1052,9 +1053,10 @@ func webHandlerTareas(w http.ResponseWriter, r *http.Request) {
 		f.Estado = &e
 	}
 	tareas, _ := tareasService.List(f)
+	progressByTask := loadTaskProgressRows(tareas)
 	var wt []webTareaRow
 	for _, t := range tareas {
-		wt = append(wt, toWebTarea(t))
+		wt = append(wt, toWebTarea(t, progressByTask[t.ID]))
 	}
 	agentes, _ := tareasService.ListAgents()
 	webRender(w, r, webTplLayout+webTplTareas, webTareasData{
@@ -1102,8 +1104,9 @@ func webHandlerTareaDetalle(w http.ResponseWriter, r *http.Request, idStr string
 		return
 	}
 	agentes, _ := tareasService.ListAgents()
+	progressByTask := loadTaskProgressRows([]*db.Tarea{t})
 	webRender(w, r, webTplLayout+webTplTareaDetalle, webTareaDetalleData{
-		T:       toWebTarea(t),
+		T:       toWebTarea(t, progressByTask[t.ID]),
 		Agentes: agentes,
 		Msg:     r.URL.Query().Get("ok"),
 		Err:     r.URL.Query().Get("err"),
@@ -1168,9 +1171,9 @@ func webHandlerPropuestas(w http.ResponseWriter, r *http.Request) {
 	props, _ := propuestasService.List(estadoPtr)
 	var detalles []webPropDetalle
 	for _, p := range props {
-		detail, err := propuestasService.GetDetail(p.Codigo)
-		if err != nil {
-			continue
+		var votos []*db.Voto
+		if detail, err := propuestasService.GetDetail(p.Codigo); err == nil && detail != nil {
+			votos = detail.Votes
 		}
 		cerrada := ""
 		if p.CerradaAt != nil {
@@ -1180,7 +1183,7 @@ func webHandlerPropuestas(w http.ResponseWriter, r *http.Request) {
 			Codigo: p.Codigo, Titulo: p.Titulo, Descripcion: p.Descripcion,
 			Tipo: p.Tipo, Estado: string(p.Estado), PropuestoPor: p.PropuestoPor,
 			Fecha: p.CreatedAt.Format("2006-01-02"), CerradaFecha: cerrada,
-			Votos: detail.Votes,
+			Votos: votos,
 		})
 	}
 	webRender(w, r, webTplLayout+webTplPropuestas, webPropData{
@@ -1278,14 +1281,79 @@ func webHandlerPropuestaAccion(w http.ResponseWriter, r *http.Request, codigo st
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-func toWebTarea(t *db.Tarea) webTareaRow {
+func toWebTarea(t *db.Tarea, progress *db.TareaProgresoDetalle) webTareaRow {
 	ag := "—"
 	if t.Agente != nil {
 		ag = *t.Agente
 	}
+	progresoPct := progresoPctPorEstadoWeb(t.Estado)
+	progresoManual := false
+	if progress != nil {
+		progresoPct = int(progress.ProgresoPct + 0.5)
+		progresoManual = progress.Manual
+	}
 	return webTareaRow{
 		ID: t.ID, Titulo: t.Titulo, Modulo: t.Modulo,
 		Estado: string(t.Estado), Prioridad: string(t.Prioridad), Agente: ag,
+		ProgresoPct: progresoPct, ProgresoManual: progresoManual,
+	}
+}
+
+func toWebTareaLite(t tareaLite) webTareaRow {
+	ag := t.Agente
+	if strings.TrimSpace(ag) == "" {
+		ag = "—"
+	}
+	return webTareaRow{
+		ID: t.ID, Titulo: t.Titulo, Modulo: t.Modulo,
+		Estado: string(t.Estado), Prioridad: string(t.Prioridad), Agente: ag,
+		ProgresoPct: progresoPctPorEstadoWeb(t.Estado),
+	}
+}
+
+func loadTaskProgressRows(tareas []*db.Tarea) map[int64]*db.TareaProgresoDetalle {
+	out := make(map[int64]*db.TareaProgresoDetalle, len(tareas))
+	if len(tareas) == 0 {
+		return out
+	}
+	projectIDs := make(map[int64]struct{})
+	for _, t := range tareas {
+		if t == nil || t.ProyectoID == nil || *t.ProyectoID <= 0 {
+			continue
+		}
+		projectIDs[*t.ProyectoID] = struct{}{}
+	}
+	for projectID := range projectIDs {
+		proyecto, err := db.GetProyecto(strconv.FormatInt(projectID, 10))
+		if err != nil || proyecto == nil || strings.TrimSpace(proyecto.Slug) == "" {
+			continue
+		}
+		avances, err := db.ListarAvanceTareasProyecto(strings.TrimSpace(proyecto.Slug))
+		if err != nil {
+			continue
+		}
+		for _, avance := range avances {
+			if avance == nil || avance.Tarea == nil {
+				continue
+			}
+			out[avance.Tarea.ID] = avance
+		}
+	}
+	return out
+}
+
+func progresoPctPorEstadoWeb(estado db.EstadoTarea) int {
+	switch estado {
+	case db.TareaCompletada, db.TareaCancelada:
+		return 100
+	case db.TareaEnProgreso:
+		return 50
+	case db.TareaBloqueada:
+		return 25
+	case db.TareaAsignada:
+		return 10
+	default:
+		return 0
 	}
 }
 
@@ -2335,6 +2403,7 @@ const webTplOpenClaw = `{{define "content"}}
     <section style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.6rem;padding:1rem">
       <h3 style="margin:0 0 .7rem 0">Integración server-first</h3>
       <table style="width:100%;margin-bottom:.8rem"><tbody>
+        <tr><td style="font-weight:600">Healthz</td><td style="text-align:right"><code>{{.Integration.HealthzEndpoint}}</code></td></tr>
         <tr><td style="font-weight:600">MCP HTTP</td><td style="text-align:right"><code>{{.Integration.MCPEndpoint}}</code></td></tr>
         <tr><td style="font-weight:600">Transporte</td><td style="text-align:right"><code>{{.Integration.Transport}}</code></td></tr>
         <tr><td style="font-weight:600">Endpoint configurado</td><td style="text-align:right"><code>{{.Integration.Endpoint}}</code></td></tr>
@@ -2346,6 +2415,7 @@ const webTplOpenClaw = `{{define "content"}}
       </tbody></table>
       <div style="font-size:.78rem;color:#475569;display:grid;gap:.2rem">
         <div>Smoke: <code>{{.Integration.SmokeCommand}}</code></div>
+        <div>Healthz canónica: <code>{{.Integration.HealthzEndpoint}}</code></div>
         <div>MCP canónico: <code>/api/mcp</code>{{if not .Integration.Configured}} · preset aún no guardado en config{{end}}</div>
         <div>Gateway OpenClaw: {{if .Integration.GatewayConfigured}}configurado{{else}}sin configurar{{end}} · Telegram: {{if .Integration.TelegramConfigured}}configurado{{else}}sin configurar{{end}}</div>
       </div>
@@ -2640,13 +2710,22 @@ const webTplTareas = `{{define "content"}}
 {{if .Tareas}}
 <div style="overflow-x:auto">
 <table>
-  <thead><tr><th>#</th><th>{{tr "Estado"}}</th><th>{{tr "Prioridad"}}</th><th>{{tr "tasks.module"}}</th><th>{{tr "Agente"}}</th><th>{{tr "projects.title_label"}}</th><th></th></tr></thead>
+  <thead><tr><th>#</th><th>{{tr "Estado"}}</th><th>{{tr "Prioridad"}}</th><th>Progreso</th><th>{{tr "tasks.module"}}</th><th>{{tr "Agente"}}</th><th>{{tr "projects.title_label"}}</th><th></th></tr></thead>
   <tbody>
   {{range .Tareas}}
     <tr>
       <td style="color:#94a3b8">{{.ID}}</td>
       <td><span class="tag t-{{.Estado}}">{{tr .Estado}}</span></td>
       <td><span class="tag t-{{.Prioridad}}">{{tr .Prioridad}}</span></td>
+      <td style="min-width:180px">
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <div style="flex:1;min-width:110px;height:.55rem;background:#e5e7eb;border-radius:999px;overflow:hidden">
+            <div style="width:{{.ProgresoPct}}%;height:100%;background:{{if ge .ProgresoPct 100}}#16a34a{{else if ge .ProgresoPct 50}}#2563eb{{else if gt .ProgresoPct 0}}#f59e0b{{else}}#cbd5e1{{end}}"></div>
+          </div>
+          <strong style="font-size:.85rem">{{.ProgresoPct}}%</strong>
+          {{if .ProgresoManual}}<small style="color:#64748b">manual</small>{{end}}
+        </div>
+      </td>
       <td><code style="font-size:.8em">{{.Modulo}}</code></td>
       <td>{{.Agente}}</td>
       <td>{{.Titulo}}</td>

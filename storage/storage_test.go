@@ -27,7 +27,7 @@ func TestResolveConfigSQLitePorDefectoUsaPathDelCallback(t *testing.T) {
 	if cfg.Path != "/tmp/orquesta.db" {
 		t.Fatalf("path inesperado: %s", cfg.Path)
 	}
-	if cfg.DSN != "/tmp/orquesta.db?_journal_mode=WAL&_foreign_keys=on&_busy_timeout=5000" {
+	if cfg.DSN != "/tmp/orquesta.db?_journal_mode=WAL&_synchronous=NORMAL&_wal_autocheckpoint=100&_foreign_keys=on&_busy_timeout=5000" {
 		t.Fatalf("dsn inesperado: %s", cfg.DSN)
 	}
 	if cfg.MaxOpenConns != 1 {
@@ -122,7 +122,7 @@ func TestResolveConfigFallaSinDSNParaDriversExternos(t *testing.T) {
 
 func TestSQLiteDSNAniadeParametrosSinRomperQueryExistente(t *testing.T) {
 	got := SQLiteDSN("/tmp/orquesta.db?cache=shared")
-	want := "/tmp/orquesta.db?cache=shared&_journal_mode=WAL&_foreign_keys=on&_busy_timeout=5000"
+	want := "/tmp/orquesta.db?cache=shared&_journal_mode=WAL&_synchronous=NORMAL&_wal_autocheckpoint=100&_foreign_keys=on&_busy_timeout=5000"
 	if got != want {
 		t.Fatalf("dsn inesperado: %s", got)
 	}

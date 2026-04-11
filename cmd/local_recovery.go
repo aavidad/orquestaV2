@@ -53,6 +53,37 @@ func shouldOpenRecoveryReadOnlyDB(args []string) bool {
 }
 
 func localRecoveryCommandAllowed(args []string) bool {
+	if !localRecoveryRequested(args) {
+		return false
+	}
+	tokens := commandPathTokens(normalizedCommandArgs(args))
+	if len(tokens) == 0 {
+		return false
+	}
+	// Bloqueo explícito de comandos de escritura en modo local de recuperación.
+	switch tokens[0] {
+	case "tarea":
+		if len(tokens) > 1 {
+			switch tokens[1] {
+			case "nueva", "completar", "iniciar", "cancelar", "reasignar":
+				return false
+			}
+		}
+	case "runtime":
+		if len(tokens) > 1 {
+			switch tokens[1] {
+			case "orden-nueva", "mailbox-enviar", "nudge":
+				return false
+			}
+		}
+	case "agente":
+		if len(tokens) > 1 {
+			switch tokens[1] {
+			case "control", "ejecutar", "lanzar-plan":
+				return false
+			}
+		}
+	}
 	return shouldOpenRecoveryReadOnlyDB(args)
 }
 

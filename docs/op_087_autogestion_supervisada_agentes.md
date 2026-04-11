@@ -7,6 +7,9 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # OP-087 — Autogestión supervisada de agentes y resolución autónoma de bloqueos
 
+> Nota de vigencia 2026-04-05
+> La doctrina viva de runtime local interactivo ya no es `pty/process` como primer driver. El criterio vigente está en `docs/BIBLIA_APP_ORQUESTA.md`: `tmux` + `manifest/status/heartbeat` + continuidad por `session_resume`. Las referencias de esta OP a `pty/process` se conservan como contexto histórico y no deben abrir tareas nuevas PTY-first.
+
 ## Objetivo
 
 Decidir cómo debe evolucionar Orquesta para que los agentes no dependan de supervisión humana constante y puedan resolver problemas operativos por sí mismos antes de escalar.

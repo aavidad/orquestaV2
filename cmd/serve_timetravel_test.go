@@ -117,7 +117,7 @@ func TestWebTimeTravelPageYDetalle(t *testing.T) {
 	assertContains("/time-travel/"+itoa(cp1ID), "Checkpoint #", "analisis inicial", "Core_API", "step", "version")
 }
 
-func TestWebDashboardMuestraCheckpointsRecientes(t *testing.T) {
+func TestWebTimeTravelMuestraCheckpointsRecientes(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
 	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
@@ -149,16 +149,16 @@ func TestWebDashboardMuestraCheckpointsRecientes(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/?lang=en", nil)
-	webHandlerDash(rec, req)
+	req := httptest.NewRequest(http.MethodGet, "/time-travel?lang=en", nil)
+	webHandlerTimeTravel(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("status inesperado dashboard: %d body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("status inesperado time-travel: %d body=%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	for _, needle := range []string{"Project status", "Recent checkpoints", "preparar rollback seguro", "/time-travel/" + itoa(cpID)} {
+	for _, needle := range []string{"Time Travel", "preparar rollback seguro", "/time-travel/" + itoa(cpID)} {
 		if !strings.Contains(body, needle) {
-			t.Fatalf("dashboard sin %q: %s", needle, body)
+			t.Fatalf("time-travel sin %q: %s", needle, body)
 		}
 	}
 	if !strings.Contains(body, `<html lang="en">`) {

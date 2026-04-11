@@ -66,6 +66,7 @@ func init() {
 		agenteCmd,
 		sesionCmd,
 		conectorCmd,
+		microprogramacionCmd,
 		proyectoCmd,
 		asignacionCmd,
 		lockCmd,

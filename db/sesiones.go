@@ -12,100 +12,15 @@ import (
 	"unicode"
 )
 
-type Agente struct {
-	Nombre                    string
-	Rol                       string
-	Activo                    bool   // en sesión ahora mismo
-	Habilitado                bool   // false = retirado por Alberto
-	EstadoSesion              string // disponible | programando | esperando | votando
-	UltimaSesion              *time.Time
-	ConsumoDiaSegundos        int
-	ConsumoSemanalSegundos    int
-	LimiteDiaSegundos         int
-	LimiteSemanalSegundos     int
-	LastUsageResetAt          *time.Time
-	EstadoCuota               string
-	ReanimarAt                *time.Time
-	MotivoPausa               string
-	CuotaRestantePct          *int
-	PresupuestoEstado         string
-	PresupuestoFuente         string
-	PresupuestoCheckedAt      *time.Time
-	PresupuestoStale          bool
-	PresupuestoVentana        string
-	PresupuestoResetAt        *time.Time
-	PresupuestoSesionPct      *int
-	PresupuestoSesionResetAt  *time.Time
-	PresupuestoDiarioPct      *int
-	PresupuestoDiarioResetAt  *time.Time
-	PresupuestoSemanalPct     *int
-	PresupuestoSemanalResetAt *time.Time
-	RemainingSeconds          *int64
-	RemainingMessages         *int64
-	RemainingTokens           *int64
-	RemainingCredits          *float64
-	ObservedUsageTokens       *int64
-	ObservedUsageCostUSD      *float64
-	ObservedUsageMessages     *int
-	ObservedUsageTurns        *int
-	ObservedUsageUpdatedAt    *time.Time
-	ObservedSessionPath       string
-	CuentaUsuario             string
-	CuentaEmail               string
-	CuentaFuente              string
-	CuentaObservadaAt         *time.Time
-}
+import (
+	"orquesta/sesionesapp"
+)
 
-type Sesion struct {
-	ID                 int64
-	Agente             string
-	ConectorID         *int64
-	ConectorSlug       string
-	ConectorNombre     string
-	ProyectoID         *int64
-	ProyectoSlug       string
-	ProyectoNombre     string
-	Inicio             time.Time
-	Fin                *time.Time
-	Activa             bool
-	Estado             string
-	CWD                string
-	Herramienta        string
-	ExternalSessionID  string
-	ResumePayloadJSON  string
-	ResumenContinuidad string
-	Branch             string
-	HeartbeatAt        *time.Time
-	Host               string
-	PID                *int64
-}
-
-type SesionInicio struct {
-	Agente             string
-	ConectorID         *int64
-	ProyectoID         *int64
-	CWD                string
-	Herramienta        string
-	ExternalSessionID  string
-	ResumePayloadJSON  string
-	ResumenContinuidad string
-	Branch             string
-	Host               string
-	PID                *int64
-}
-
-type SesionUpdate struct {
-	CWD                *string
-	Herramienta        *string
-	ExternalSessionID  *string
-	ResumePayloadJSON  *string
-	ResumenContinuidad *string
-	Branch             *string
-	Host               *string
-	PID                *int64
-	Heartbeat          bool
-	Estado             *string
-}
+type Agente = sesionesapp.Agente
+type Sesion = sesionesapp.Sesion
+type SesionInicio = sesionesapp.SesionInicio
+type SesionUpdate = sesionesapp.SesionUpdate
+type FiltroSesionesInspeccion = sesionesapp.FiltroInspeccion
 
 // IniciarSesion marca al agente como activo y crea una sesión.
 func IniciarSesion(agente string) (int64, error) {
@@ -138,7 +53,9 @@ func IniciarSesionContexto(in SesionInicio) (*Sesion, error) {
 	defer tx.Rollback()
 
 	// Cerrar sesiones anteriores abiertas
-	_, _ = tx.Exec(`UPDATE sesiones SET activa=0, estado='cerrada', fin=CURRENT_TIMESTAMP WHERE agente=? AND activa=1`, agente)
+	if _, err = tx.Exec(`UPDATE sesiones SET activa=0, estado='cerrada', fin=CURRENT_TIMESTAMP WHERE agente=? AND activa=1`, agente); err != nil {
+		return nil, err
+	}
 
 	// Marcar activo y estado inicial
 	_, err = tx.Exec(`UPDATE agentes SET activo=1, estado_sesion='disponible', ultima_sesion=CURRENT_TIMESTAMP WHERE nombre=?`, agente)
@@ -602,16 +519,20 @@ func sesionEsActivaOperativaConMapas(sesion *Sesion, handlesActivos map[string]b
 		return false
 	}
 	key := runtimeHandleCacheKey(sesion.Agente, sesion.ProyectoID)
-	if runtime := ultimosRuntimes[key]; runtime != nil && !runtimeSostieneSesionOperativaConCutoff(runtime, sessionOperationalCutoff()) {
+	cutoff := sessionOperationalCutoff()
+	runtime := ultimosRuntimes[key]
+	if runtime != nil && !runtimeSostieneSesionOperativaConCutoff(runtime, cutoff) {
 		return false
 	}
+	sostieneRuntime := runtime != nil && runtimeSostieneSesionOperativaConCutoff(runtime, cutoff)
+	sostieneHandle := handlesActivos[key]
 	if sesionOperativaPorHeartbeat(sesion.Activa, sesion.HeartbeatAt, sesion.Inicio, now) {
-		if sesionInvalidadaPorUltimoHandle(sesion, ultimosHandles[key], sessionOperationalCutoff(), now) {
+		if sesionInvalidadaPorUltimoHandle(sesion, ultimosHandles[key], cutoff, now) {
 			return false
 		}
-		return true
+		return sostieneRuntime || sostieneHandle
 	}
-	return handlesActivos[key]
+	return sostieneHandle
 }
 
 func ListarSesionesActivasOperativas() ([]*Sesion, error) {
@@ -648,13 +569,22 @@ func aplicarEstadoVisibleAgente(agente *Agente, sesion *Sesion) {
 	if agente == nil {
 		return
 	}
+	if AgenteSinCuotaProveedorEfectivo(agente) {
+		normalizarAgenteSinCuotaProveedor(agente)
+	}
 	proyectarBloqueoVisibleDesdePresupuestoObservado(agente)
 	sincronizarReanimacionVisibleDesdePresupuesto(agente)
 	if !agenteBloqueadoPorCuotaOperativo(agente) && !strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "activo") {
-		agente.EstadoCuota = "activo"
-		agente.ReanimarAt = nil
-		if !agenteMotivoPausaOperativaVisible(agente.MotivoPausa) {
-			agente.MotivoPausa = ""
+		mantenerPausaVisible := agenteMotivoPausaOperativaVisible(agente.MotivoPausa)
+		if !mantenerPausaVisible && agente.ReanimarAt != nil && agente.ReanimarAt.After(time.Now().UTC()) {
+			mantenerPausaVisible = true
+		}
+		if !mantenerPausaVisible {
+			agente.EstadoCuota = "activo"
+			agente.ReanimarAt = nil
+			if !agenteMotivoPausaOperativaVisible(agente.MotivoPausa) {
+				agente.MotivoPausa = ""
+			}
 		}
 	}
 	if sesion == nil {
@@ -708,6 +638,9 @@ func agenteMotivoPausaOperativaVisible(motivo string) bool {
 
 func proyectarBloqueoVisibleDesdePresupuestoObservado(a *Agente) {
 	if a == nil {
+		return
+	}
+	if AgenteSinCuotaProveedorEfectivo(a) {
 		return
 	}
 	if !strings.EqualFold(strings.TrimSpace(a.EstadoCuota), "activo") {
@@ -769,8 +702,14 @@ func agenteBloqueadoPorCuotaOperativo(a *Agente) bool {
 	if a == nil {
 		return false
 	}
+	if AgenteSinCuotaProveedorEfectivo(a) {
+		return false
+	}
 	if strings.EqualFold(strings.TrimSpace(a.EstadoCuota), "activo") {
 		return false
+	}
+	if a.ReanimarAt != nil && !a.ReanimarAt.IsZero() && a.ReanimarAt.After(time.Now().UTC()) {
+		return true
 	}
 	if a.RemainingCredits != nil && *a.RemainingCredits <= 0 {
 		return true
@@ -800,6 +739,10 @@ func agenteBloqueadoPorCuotaOperativo(a *Agente) bool {
 
 func sincronizarReanimacionVisibleDesdePresupuesto(a *Agente) {
 	if a == nil {
+		return
+	}
+	if AgenteSinCuotaProveedorEfectivo(a) {
+		a.ReanimarAt = nil
 		return
 	}
 	if strings.EqualFold(strings.TrimSpace(a.EstadoCuota), "activo") {
@@ -891,12 +834,6 @@ func ListarAgentesConSesionesActivas(sesiones []*Sesion) ([]*Agente, error) {
 	if err != nil {
 		return nil, err
 	}
-	activosOriginales := make(map[string]bool, len(list))
-	for _, agente := range list {
-		if agente != nil {
-			activosOriginales[agente.Nombre] = agente.Activo
-		}
-	}
 	enriquecerAgentesConPresupuesto(list)
 	aplicarEstadoVisibleAgentes(list, sesiones)
 	agentesConHandleActivo, err := listarAgentesConHandleActivoOperativo()
@@ -904,7 +841,7 @@ func ListarAgentesConSesionesActivas(sesiones []*Sesion) ([]*Agente, error) {
 		return nil, err
 	}
 	for _, agente := range list {
-		if agente == nil || agente.Activo || !activosOriginales[agente.Nombre] {
+		if agente == nil || agente.Activo || !agente.Habilitado {
 			continue
 		}
 		estadoCuota := strings.TrimSpace(agente.EstadoCuota)
@@ -928,6 +865,23 @@ func ListarAgentes() ([]*Agente, error) {
 		return nil, err
 	}
 	return ListarAgentesConSesionesActivas(sesionesActivas)
+}
+
+func ListarAgentesCuentasLigero() ([]*Agente, error) {
+	list, err := listarAgentesRaw()
+	if err != nil {
+		return nil, err
+	}
+	for _, agente := range list {
+		if agente == nil {
+			continue
+		}
+		aplicarIdentidadCuentaAgente(agente, ultimaIdentidadCuentaDesdePresupuestos(agente.Nombre))
+		if strings.TrimSpace(agente.CuentaID) == "" || strings.TrimSpace(agente.CuentaEmail) == "" || strings.TrimSpace(agente.CuentaUsuario) == "" {
+			aplicarIdentidadCuentaAgente(agente, UltimaIdentidadCuentaObservadaAgente(agente.Nombre))
+		}
+	}
+	return list, nil
 }
 
 func GetAgente(nombre string) (*Agente, error) {
@@ -974,6 +928,7 @@ func GetAgente(nombre string) (*Agente, error) {
 }
 
 func enriquecerAgentesConPresupuesto(list []*Agente) {
+	enriquecerAgentesSinCuotaProveedor(list)
 	for _, agente := range list {
 		enriquecerAgenteConPresupuesto(agente)
 	}
@@ -981,6 +936,10 @@ func enriquecerAgentesConPresupuesto(list []*Agente) {
 
 func enriquecerAgenteConPresupuesto(a *Agente) {
 	if a == nil {
+		return
+	}
+	enriquecerAgenteSinCuotaProveedor(a)
+	if AgenteSinCuotaProveedorEfectivo(a) {
 		return
 	}
 	diario := presupuestoDerivadoDiarioAgente(a)
@@ -1083,21 +1042,203 @@ func enriquecerAgenteConPresupuesto(a *Agente) {
 			}
 		}
 	}
-	if strings.TrimSpace(a.CuentaEmail) == "" {
+	if strings.TrimSpace(a.CuentaID) == "" || strings.TrimSpace(a.CuentaEmail) == "" {
 		aplicarIdentidadCuentaAgente(a, ultimaIdentidadCuentaDesdePresupuestos(a.Nombre))
 	}
-	if strings.TrimSpace(a.CuentaEmail) == "" {
+	if strings.TrimSpace(a.CuentaID) == "" || strings.TrimSpace(a.CuentaEmail) == "" {
 		nombre := a.Nombre
-		if handles, err := ListarRuntimeHandles(&nombre); err == nil && len(handles) > 0 {
+		if handles, err := listarRuntimeHandlesIdentidadCuenta(&nombre); err == nil && len(handles) > 0 {
 			aplicarIdentidadCuentaAgente(a, identidadCuentaDesdeHandle(handles[0]))
 		}
 	}
-	if strings.TrimSpace(a.CuentaEmail) == "" {
+	if strings.TrimSpace(a.CuentaID) == "" || strings.TrimSpace(a.CuentaEmail) == "" {
 		aplicarIdentidadCuentaAgente(a, UltimaIdentidadCuentaObservadaAgente(a.Nombre))
 	}
+	reconciliarPresupuestoCanonicoPorCuenta(a)
 	proyectarEstadoCuotaVisibleDesdePresupuesto(a)
 	sincronizarPresupuestoEfectivoVisible(a)
+	reconciliarBloqueoPresupuestoFresco(a)
 	reconciliarBloqueoPresupuestoStale(a)
+}
+
+func listarRuntimeHandlesIdentidadCuenta(agente *string) ([]*RuntimeHandle, error) {
+	handles, err := ListarRuntimeHandlesCanonicosRecientes(agente)
+	if err != nil {
+		return nil, err
+	}
+	if mejor := mejorRuntimeHandleIdentidadCuenta(handles); mejor != nil {
+		return []*RuntimeHandle{mejor}, nil
+	}
+	q := runtimeHandleSelectBase() + ` WHERE 1=1`
+	var args []any
+	if agente != nil && strings.TrimSpace(*agente) != "" {
+		q += ` AND agente = ?`
+		args = append(args, strings.TrimSpace(*agente))
+	}
+	q += ` ORDER BY COALESCE(last_seen_at, updated_at, created_at) DESC, id DESC`
+	rows, err := DB.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*RuntimeHandle{}
+	for rows.Next() {
+		handle, err := scanRuntimeHandle(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, handle)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if mejor := mejorRuntimeHandleIdentidadCuenta(out); mejor != nil {
+		return []*RuntimeHandle{mejor}, nil
+	}
+	return out, nil
+}
+
+func mejorRuntimeHandleIdentidadCuenta(handles []*RuntimeHandle) *RuntimeHandle {
+	var mejor *RuntimeHandle
+	mejorTieneIdentidad := false
+	now := time.Now().UTC()
+	for _, handle := range handles {
+		if handle == nil {
+			continue
+		}
+		identidad := identidadCuentaDesdeHandle(handle)
+		tieneIdentidad := !identidadCuentaVacia(identidad)
+		if mejor == nil {
+			mejor = handle
+			mejorTieneIdentidad = tieneIdentidad
+			continue
+		}
+		if tieneIdentidad != mejorTieneIdentidad {
+			if tieneIdentidad {
+				mejor = handle
+				mejorTieneIdentidad = true
+			}
+			continue
+		}
+		if tieneIdentidad && identidadCuentaEsMejor(identidad, identidadCuentaDesdeHandle(mejor)) {
+			mejor = handle
+			mejorTieneIdentidad = true
+			continue
+		}
+		if runtimeHandlePreferible(handle, mejor, now) {
+			mejor = handle
+			mejorTieneIdentidad = tieneIdentidad
+		}
+	}
+	return mejor
+}
+
+func reconciliarPresupuestoCanonicoPorCuenta(a *Agente) {
+	if a == nil || (strings.TrimSpace(a.CuentaID) == "" && strings.TrimSpace(a.CuentaEmail) == "") {
+		return
+	}
+	p, _, err := UltimoPresupuestoCuentaCanonicaConCuota(strings.TrimSpace(a.CuentaID), strings.TrimSpace(a.CuentaEmail))
+	if err != nil || p == nil {
+		return
+	}
+	ev, err := EvaluarPresupuestoSesion(p)
+	if err != nil {
+		return
+	}
+	fresco := PresupuestoSesionFresco(p)
+	derivedDaily := presupuestoDerivadoDiarioAgente(a)
+	derivedWeekly := presupuestoDerivadoSemanalAgente(a)
+	derivedDailyPct := derivedDaily.pct
+	derivedDailyReset := derivedDaily.resetAt
+	derivedWeeklyPct := derivedWeekly.pct
+	derivedWeeklyReset := derivedWeekly.resetAt
+	a.PresupuestoFuente = strings.TrimSpace(p.BudgetSource)
+	a.PresupuestoCheckedAt = &p.CheckedAt
+	a.PresupuestoStale = !fresco
+	a.PresupuestoEstado = strings.TrimSpace(ev.Estado)
+	a.PresupuestoSesionResetAt = p.ResetAt
+	a.RemainingSeconds = p.RemainingSeconds
+	a.RemainingMessages = p.RemainingMessages
+	a.RemainingTokens = p.RemainingTokens
+	a.RemainingCredits = p.RemainingCredits
+	var sesion presupuestoAgenteCandidato
+	var semanal presupuestoAgenteCandidato
+	if observedPrimary, observedSecondary := presupuestosObservadosDesdeSnapshot(p); observedPrimary.pct != nil || observedSecondary.pct != nil {
+		if observedPrimary.pct != nil {
+			a.PresupuestoSesionPct = observedPrimary.pct
+			if observedPrimary.resetAt != nil {
+				a.PresupuestoSesionResetAt = observedPrimary.resetAt
+			}
+			if fresco {
+				sesion = observedPrimary
+			}
+		}
+		if observedSecondary.pct != nil {
+			a.PresupuestoSemanalPct = observedSecondary.pct
+			if observedSecondary.resetAt != nil {
+				a.PresupuestoSemanalResetAt = observedSecondary.resetAt
+			}
+			if fresco {
+				semanal = observedSecondary
+			}
+		}
+	}
+	if ev.RemainingRatio != nil && fresco && sesion.pct == nil {
+		pct := int(math.Round(*ev.RemainingRatio * 100))
+		if pct < 0 {
+			pct = 0
+		}
+		if pct > 100 {
+			pct = 100
+		}
+		a.PresupuestoSesionPct = &pct
+		sesion = presupuestoAgenteCandidato{
+			pct:        &pct,
+			windowKind: strings.TrimSpace(p.WindowKind),
+			resetAt:    p.ResetAt,
+			source:     strings.TrimSpace(p.BudgetSource),
+		}
+	} else if strings.EqualFold(strings.TrimSpace(ev.Estado), "agotado") && fresco && sesion.pct == nil && presupuestoEsVentanaCorta(strings.TrimSpace(p.WindowKind)) {
+		pct := 0
+		a.PresupuestoSesionPct = &pct
+		sesion = presupuestoAgenteCandidato{
+			pct:        &pct,
+			windowKind: strings.TrimSpace(p.WindowKind),
+			resetAt:    p.ResetAt,
+			source:     strings.TrimSpace(p.BudgetSource),
+		}
+	}
+	if a.PresupuestoStale && strings.TrimSpace(a.PresupuestoEstado) == "ok" {
+		a.PresupuestoEstado = "observado_stale"
+	}
+	if a.PresupuestoStale && strings.EqualFold(strings.TrimSpace(p.BudgetSource), "provider_backoff") {
+		a.PresupuestoEstado = "observado_stale"
+	}
+	weeklyEffective := presupuestoAgenteCandidato{
+		pct:        derivedWeeklyPct,
+		windowKind: "weekly",
+		resetAt:    derivedWeeklyReset,
+		source:     "derived_weekly",
+	}
+	if semanal.pct != nil && fresco {
+		weeklyEffective = presupuestoAgenteCandidato{
+			pct:        semanal.pct,
+			windowKind: "weekly",
+			resetAt:    firstNonNilTime(semanal.resetAt, derivedWeeklyReset),
+			source:     strings.TrimSpace(p.BudgetSource),
+		}
+	}
+	candidato := seleccionarPresupuestoEfectivo([]presupuestoAgenteCandidato{
+		sesion,
+		{
+			pct:        derivedDailyPct,
+			windowKind: "daily",
+			resetAt:    derivedDailyReset,
+			source:     "derived_daily",
+		},
+		weeklyEffective,
+	})
+	aplicarPresupuestoEfectivoAgente(a, candidato)
 }
 
 func aplicarUsoObservadoAgente(a *Agente, p *PresupuestoSesion) {
@@ -1133,6 +1274,9 @@ func aplicarUsoObservadoAgente(a *Agente, p *PresupuestoSesion) {
 
 func proyectarEstadoCuotaVisibleDesdePresupuesto(a *Agente) {
 	if a == nil {
+		return
+	}
+	if a.SinCuotaProveedor {
 		return
 	}
 	if !strings.EqualFold(strings.TrimSpace(a.EstadoCuota), "activo") {
@@ -1177,6 +1321,12 @@ func proyectarEstadoCuotaVisibleDesdePresupuesto(a *Agente) {
 
 func sincronizarPresupuestoEfectivoVisible(a *Agente) {
 	if a == nil {
+		return
+	}
+	if AgenteSinCuotaProveedorEfectivo(a) {
+		a.CuotaRestantePct = nil
+		a.PresupuestoVentana = ""
+		a.PresupuestoResetAt = nil
 		return
 	}
 	now := time.Now().UTC()
@@ -1229,6 +1379,9 @@ func reconciliarBloqueoPresupuestoStale(a *Agente) {
 	if a == nil {
 		return
 	}
+	if AgenteSinCuotaProveedorEfectivo(a) {
+		return
+	}
 	if !a.PresupuestoStale {
 		return
 	}
@@ -1254,11 +1407,60 @@ func reconciliarBloqueoPresupuestoStale(a *Agente) {
 	}
 }
 
+func reconciliarBloqueoPresupuestoFresco(a *Agente) {
+	if a == nil {
+		return
+	}
+	if AgenteSinCuotaProveedorEfectivo(a) {
+		return
+	}
+	if a.PresupuestoCheckedAt == nil || a.PresupuestoStale {
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(a.EstadoCuota), "agotado") &&
+		!strings.EqualFold(strings.TrimSpace(a.EstadoCuota), "enfriamiento") {
+		return
+	}
+	if agenteMotivoPausaOperativaVisible(a.MotivoPausa) {
+		return
+	}
+	if a.PresupuestoSemanalPct == nil || *a.PresupuestoSemanalPct <= 0 {
+		return
+	}
+	if a.CuotaRestantePct == nil || *a.CuotaRestantePct <= 0 {
+		return
+	}
+	a.EstadoCuota = "activo"
+	a.ReanimarAt = nil
+	motivo := strings.ToLower(strings.TrimSpace(a.MotivoPausa))
+	if strings.Contains(motivo, "presupuesto") ||
+		strings.Contains(motivo, "cuota") ||
+		strings.Contains(motivo, "ventana corta") ||
+		strings.Contains(motivo, "credit") ||
+		strings.Contains(motivo, "crédit") {
+		a.MotivoPausa = ""
+	}
+}
+
 type presupuestoAgenteCandidato struct {
 	pct        *int
 	windowKind string
 	resetAt    *time.Time
 	source     string
+}
+
+func firstNonNilPct(primary, fallback *int) *int {
+	if primary != nil {
+		return primary
+	}
+	return fallback
+}
+
+func firstNonNilTime(primary, fallback *time.Time) *time.Time {
+	if primary != nil {
+		return primary
+	}
+	return fallback
 }
 
 func mejorPresupuestoDerivadoAgente(a *Agente) presupuestoAgenteCandidato {
@@ -1332,6 +1534,7 @@ func aplicarPresupuestoEfectivoAgente(a *Agente, candidato presupuestoAgenteCand
 }
 
 type identidadCuentaAgente struct {
+	accountID  string
 	usuario    string
 	email      string
 	fuente     string
@@ -1341,6 +1544,28 @@ type identidadCuentaAgente struct {
 func aplicarIdentidadCuentaAgente(a *Agente, identidad identidadCuentaAgente) {
 	if a == nil {
 		return
+	}
+	identidad = normalizarIdentidadCuentaAgente(identidad)
+	if identidadCuentaVacia(identidad) {
+		return
+	}
+	actual := identidadCuentaDesdeAgente(a)
+	if strings.TrimSpace(identidad.accountID) == "" &&
+		strings.TrimSpace(identidad.email) == "" &&
+		strings.TrimSpace(identidad.usuario) != "" &&
+		identidadCuentaObservedAt(identidad).After(identidadCuentaObservedAt(actual)) {
+		a.CuentaUsuario = strings.TrimSpace(identidad.usuario)
+		if strings.TrimSpace(identidad.fuente) != "" {
+			a.CuentaFuente = strings.TrimSpace(identidad.fuente)
+		}
+		if identidad.observedAt != nil && !identidad.observedAt.IsZero() {
+			ts := identidad.observedAt.UTC()
+			a.CuentaObservadaAt = &ts
+		}
+		return
+	}
+	if strings.TrimSpace(a.CuentaID) == "" && strings.TrimSpace(identidad.accountID) != "" {
+		a.CuentaID = strings.TrimSpace(identidad.accountID)
 	}
 	if strings.TrimSpace(a.CuentaEmail) == "" && strings.TrimSpace(identidad.email) != "" {
 		a.CuentaEmail = strings.TrimSpace(identidad.email)
@@ -1358,8 +1583,147 @@ func aplicarIdentidadCuentaAgente(a *Agente, identidad identidadCuentaAgente) {
 		a.CuentaFuente = strings.TrimSpace(identidad.fuente)
 	}
 	if a.CuentaObservadaAt == nil && identidad.observedAt != nil && !identidad.observedAt.IsZero() {
-		a.CuentaObservadaAt = identidad.observedAt
+		ts := identidad.observedAt.UTC()
+		a.CuentaObservadaAt = &ts
 	}
+	if !identidadCuentaEsMejor(identidad, actual) {
+		return
+	}
+	if strings.TrimSpace(identidad.accountID) != "" {
+		a.CuentaID = strings.TrimSpace(identidad.accountID)
+	}
+	if strings.TrimSpace(identidad.email) != "" {
+		a.CuentaEmail = strings.TrimSpace(identidad.email)
+	}
+	if strings.TrimSpace(identidad.usuario) != "" {
+		incomingAt := identidadCuentaObservedAt(identidad)
+		currentAt := identidadCuentaObservedAt(actual)
+		if strings.TrimSpace(actual.usuario) == "" || !incomingAt.Before(currentAt) {
+			a.CuentaUsuario = strings.TrimSpace(identidad.usuario)
+		}
+	} else if email := strings.TrimSpace(identidad.email); email != "" {
+		if strings.TrimSpace(actual.usuario) == "" {
+			if at := strings.Index(email, "@"); at > 0 {
+				a.CuentaUsuario = email[:at]
+			}
+		}
+	}
+	if strings.TrimSpace(identidad.fuente) != "" {
+		a.CuentaFuente = strings.TrimSpace(identidad.fuente)
+	}
+	if identidad.observedAt != nil && !identidad.observedAt.IsZero() {
+		ts := identidad.observedAt.UTC()
+		a.CuentaObservadaAt = &ts
+	}
+}
+
+func identidadCuentaDesdeAgente(a *Agente) identidadCuentaAgente {
+	if a == nil {
+		return identidadCuentaAgente{}
+	}
+	return normalizarIdentidadCuentaAgente(identidadCuentaAgente{
+		accountID:  strings.TrimSpace(a.CuentaID),
+		usuario:    strings.TrimSpace(a.CuentaUsuario),
+		email:      strings.TrimSpace(a.CuentaEmail),
+		fuente:     strings.TrimSpace(a.CuentaFuente),
+		observedAt: a.CuentaObservadaAt,
+	})
+}
+
+func identidadCuentaMasReciente(actual, incoming *time.Time) bool {
+	if incoming == nil || incoming.IsZero() {
+		return false
+	}
+	if actual == nil || actual.IsZero() {
+		return true
+	}
+	return incoming.UTC().After(actual.UTC())
+}
+
+func normalizarIdentidadCuentaAgente(identidad identidadCuentaAgente) identidadCuentaAgente {
+	identidad.accountID = strings.TrimSpace(identidad.accountID)
+	identidad.usuario = strings.TrimSpace(identidad.usuario)
+	identidad.email = strings.TrimSpace(identidad.email)
+	identidad.fuente = strings.TrimSpace(identidad.fuente)
+	if identidad.usuario == "" && identidad.email != "" {
+		if at := strings.Index(identidad.email, "@"); at > 0 {
+			identidad.usuario = identidad.email[:at]
+		}
+	}
+	if identidad.observedAt != nil && !identidad.observedAt.IsZero() {
+		ts := identidad.observedAt.UTC()
+		identidad.observedAt = &ts
+	}
+	return identidad
+}
+
+func identidadCuentaVacia(identidad identidadCuentaAgente) bool {
+	return strings.TrimSpace(identidad.accountID) == "" &&
+		strings.TrimSpace(identidad.email) == "" &&
+		strings.TrimSpace(identidad.usuario) == ""
+}
+
+func identidadCuentaEsMejor(candidate, current identidadCuentaAgente) bool {
+	candidate = normalizarIdentidadCuentaAgente(candidate)
+	current = normalizarIdentidadCuentaAgente(current)
+	if identidadCuentaVacia(current) {
+		return !identidadCuentaVacia(candidate)
+	}
+	timeCandidate := identidadCuentaObservedAt(candidate)
+	timeCurrent := identidadCuentaObservedAt(current)
+	if !timeCandidate.IsZero() && !timeCurrent.IsZero() &&
+		timeCandidate.Before(timeCurrent) &&
+		strings.TrimSpace(candidate.accountID) == "" {
+		return false
+	}
+	scoreCandidate := identidadCuentaScore(candidate)
+	scoreCurrent := identidadCuentaScore(current)
+	if scoreCandidate != scoreCurrent {
+		return scoreCandidate > scoreCurrent
+	}
+	if !timeCandidate.Equal(timeCurrent) {
+		return timeCandidate.After(timeCurrent)
+	}
+	return false
+}
+
+func identidadCuentaScore(identidad identidadCuentaAgente) int {
+	score := 0
+	if strings.TrimSpace(identidad.accountID) != "" {
+		score += 1000
+	}
+	if strings.TrimSpace(identidad.email) != "" {
+		score += 200
+	}
+	if strings.TrimSpace(identidad.usuario) != "" {
+		score += 50
+	}
+	switch strings.ToLower(strings.TrimSpace(identidad.fuente)) {
+	case "codex_profile_status":
+		score += 90
+	case "codex_auth":
+		score += 80
+	case "claude_rust_session_observed":
+		score += 75
+	case "codex_token_count_observed":
+		score += 70
+	case "runtime_handle":
+		score += 60
+	case "runtime_handle_profile":
+		score += 45
+	case "manual_observed_identity":
+		score += 40
+	case "runtime_order_send_instruction":
+		score += 10
+	}
+	return score
+}
+
+func identidadCuentaObservedAt(identidad identidadCuentaAgente) time.Time {
+	if identidad.observedAt == nil || identidad.observedAt.IsZero() {
+		return time.Time{}
+	}
+	return identidad.observedAt.UTC()
 }
 
 func identidadCuentaDesdePresupuesto(p *PresupuestoSesion) identidadCuentaAgente {
@@ -1390,7 +1754,7 @@ func ultimaIdentidadCuentaDesdePresupuestos(agente string) identidadCuentaAgente
 	}
 	defer rows.Close()
 
-	var mejor identidadCuentaAgente
+	var merged identidadCuentaAgente
 	for rows.Next() {
 		var rawJSON string
 		var budgetSource string
@@ -1398,16 +1762,25 @@ func ultimaIdentidadCuentaDesdePresupuestos(agente string) identidadCuentaAgente
 		if err := rows.Scan(&rawJSON, &budgetSource, &checkedAt); err != nil {
 			return identidadCuentaAgente{}
 		}
-		identidad := identidadCuentaDesdeMapa(mapFromJSON(rawJSON), strings.TrimSpace(budgetSource), &checkedAt)
-		if strings.TrimSpace(identidad.email) != "" {
-			return identidad
+		identidad := normalizarIdentidadCuentaAgente(identidadCuentaDesdeMapa(mapFromJSON(rawJSON), strings.TrimSpace(budgetSource), &checkedAt))
+		if identidadCuentaVacia(identidad) {
+			continue
 		}
-		if (strings.TrimSpace(mejor.usuario) == "" && strings.TrimSpace(mejor.email) == "") &&
-			(strings.TrimSpace(identidad.usuario) != "" || strings.TrimSpace(identidad.email) != "") {
-			mejor = identidad
+		if identidadCuentaVacia(merged) {
+			merged = identidad
+			continue
+		}
+		if strings.TrimSpace(merged.accountID) == "" && strings.TrimSpace(identidad.accountID) != "" {
+			merged.accountID = strings.TrimSpace(identidad.accountID)
+		}
+		if strings.TrimSpace(merged.email) == "" && strings.TrimSpace(identidad.email) != "" {
+			merged.email = strings.TrimSpace(identidad.email)
+		}
+		if strings.TrimSpace(merged.usuario) == "" && strings.TrimSpace(identidad.usuario) != "" {
+			merged.usuario = strings.TrimSpace(identidad.usuario)
 		}
 	}
-	return mejor
+	return normalizarIdentidadCuentaAgente(merged)
 }
 
 func identidadCuentaDesdeHandle(handle *RuntimeHandle) identidadCuentaAgente {
@@ -1419,7 +1792,7 @@ func identidadCuentaDesdeHandle(handle *RuntimeHandle) identidadCuentaAgente {
 		"runtime_handle",
 		handle.LastSeenAt,
 	)
-	if strings.TrimSpace(identidad.usuario) != "" || strings.TrimSpace(identidad.email) != "" {
+	if strings.TrimSpace(identidad.accountID) != "" || strings.TrimSpace(identidad.usuario) != "" || strings.TrimSpace(identidad.email) != "" {
 		return identidad
 	}
 	perfil := perfilCuentaDesdeRenderedCommandHandle(handle.MetadataJSON)
@@ -1427,6 +1800,7 @@ func identidadCuentaDesdeHandle(handle *RuntimeHandle) identidadCuentaAgente {
 		return identidadCuentaAgente{}
 	}
 	return identidadCuentaAgente{
+		accountID:  strings.TrimSpace(identidad.accountID),
 		usuario:    perfil,
 		fuente:     "runtime_handle_profile",
 		observedAt: handle.LastSeenAt,
@@ -1454,10 +1828,18 @@ func identidadCuentaDesdeMapa(raw map[string]any, fuente string, observedAt *tim
 		"login",
 		"usuario",
 	)
-	if strings.TrimSpace(email) == "" && strings.TrimSpace(usuario) == "" {
+	accountID := strings.TrimSpace(buscarCadenaRecursiva(raw,
+		"account_id",
+		"accountId",
+		"acct_id",
+		"user_id",
+		"sub",
+	))
+	if accountID == "" && strings.TrimSpace(email) == "" && strings.TrimSpace(usuario) == "" {
 		return identidadCuentaAgente{}
 	}
 	return identidadCuentaAgente{
+		accountID:  accountID,
 		usuario:    strings.TrimSpace(usuario),
 		email:      strings.TrimSpace(email),
 		fuente:     strings.TrimSpace(fuente),
@@ -1636,7 +2018,6 @@ func intFromAnyWithBool(raw any) (int, bool) {
 	}
 	return 0, false
 }
-
 
 func timeFromAny(raw any) *time.Time {
 	switch v := raw.(type) {
@@ -2029,7 +2410,7 @@ func SesionActivaDeAgente(agente string) (*Sesion, error) {
 // RegistrarAgente añade un nuevo agente al sistema.
 func RegistrarAgente(nombre, rol string) error {
 	_, err := DB.Exec(
-		`INSERT INTO agentes (nombre, rol) VALUES (?,?) ON CONFLICT(nombre) DO UPDATE SET rol=excluded.rol, habilitado=1`,
+		`INSERT INTO agentes (nombre, rol) VALUES (?,?) ON CONFLICT(nombre) DO UPDATE SET rol=excluded.rol`,
 		nombre, rol,
 	)
 	return err
@@ -2105,6 +2486,36 @@ func RetirarAgente(nombre string) error {
 		    notas=COALESCE(notas,'') || ?
 		WHERE agente=? AND estado IN ('asignada','en_progreso')`,
 		anotacionRetiro, nombre,
+	); err != nil {
+		return err
+	}
+
+	if _, err = tx.Exec(`
+		UPDATE runtime_mailbox
+		SET estado='cancelado',
+		    delivered_at=COALESCE(delivered_at, CURRENT_TIMESTAMP),
+		    consumed_at=COALESCE(consumed_at, CURRENT_TIMESTAMP)
+		WHERE to_agente=? AND estado IN ('pendiente','entregado')`,
+		nombre,
+	); err != nil {
+		return err
+	}
+
+	if _, err = tx.Exec(`
+		UPDATE runtime_orders
+		SET estado='cancelada',
+		    error_text=CASE
+		    	WHEN trim(COALESCE(error_text,''))='' THEN 'agente_retirado'
+		    	ELSE error_text
+		    END,
+		    finished_at=CURRENT_TIMESTAMP,
+		    claimed_by='',
+		    lease_token='',
+		    lease_expires_at=NULL
+		WHERE agente=?
+		  AND estado IN ('pendiente','tomada','ejecutando')
+		  AND tipo NOT IN ('pause','stop')`,
+		nombre,
 	); err != nil {
 		return err
 	}

@@ -13,9 +13,10 @@ Este entorno ejecuta `codex` dentro de un contenedor, pero no monta el repo real
 ```toml
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
+network_access = true
 ```
 
-- La red queda habilitada; no hay aislamiento de red en este contenedor.
+- La red queda habilitada; `network_access = true` y no hay aislamiento de red en este contenedor.
 
 ## Uso
 

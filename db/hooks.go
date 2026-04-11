@@ -19,14 +19,11 @@ func EmitirHookCicloVida(actor string, evento EventoHook, proyectoID int64, enti
 		return
 	}
 	Audit(strings.TrimSpace(actor), "hook_"+nombreEvento, strings.TrimSpace(entidad), entidadID, strings.TrimSpace(detalle))
-	select {
-	case CanalNotificaciones <- EventoNotificacion{
+	EmitirNotificacion(EventoNotificacion{
 		Tipo:       "hook:" + nombreEvento,
 		ID:         entidadID,
 		Agente:     strings.TrimSpace(agente),
 		Texto:      strings.TrimSpace(detalle),
 		ProyectoID: proyectoID,
-	}:
-	default:
-	}
+	})
 }

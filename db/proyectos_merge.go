@@ -304,6 +304,7 @@ func FusionarProyectos(origenRef, destinoRef string, opts FusionProyectosOptions
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	runtimeHandleHotReset()
 	return resultado, nil
 }
 

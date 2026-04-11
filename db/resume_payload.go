@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+const claveResumePayloadPerfilEjecucion = "perfil_ejecucion"
+
 // ParseResumePayloadEnvelope normaliza un resume payload previo como objeto JSON.
 // Si el payload ya era un objeto, copia sus claves tal cual. Si era JSON válido
 // pero no objeto, lo conserva como resume_previo. Si era texto no JSON, lo
@@ -52,4 +54,47 @@ func MergeResumePayloadEnvelope(prev string, additions map[string]any) string {
 		return prev
 	}
 	return string(data)
+}
+
+// ResumePayloadPerfilEjecucion extrae el perfil de ejecución persistido dentro
+// del envelope de resume sin asumir ninguna forma legacy fuera de ese bloque.
+func ResumePayloadPerfilEjecucion(prev string) (string, string, string) {
+	envelope := ParseResumePayloadEnvelope(prev)
+	raw := envelope[claveResumePayloadPerfilEjecucion]
+	perfil, ok := raw.(map[string]any)
+	if !ok {
+		return "", "", ""
+	}
+	return strings.TrimSpace(stringFromAny(perfil["perfil_tarea"])),
+		strings.TrimSpace(stringFromAny(perfil["modelo"])),
+		strings.TrimSpace(stringFromAny(perfil["razonamiento"]))
+}
+
+// MergeResumePayloadPerfilEjecucion persiste el perfil de ejecución actual en
+// el resume payload para que reanudaciones y rearmes automáticos no vuelvan a
+// caer a defaults del conector si ya existía una decisión previa.
+func MergeResumePayloadPerfilEjecucion(prev, perfilTarea, modelo, razonamiento string) string {
+	perfilTarea = strings.TrimSpace(perfilTarea)
+	modelo = strings.TrimSpace(modelo)
+	razonamiento = strings.TrimSpace(razonamiento)
+	actualPerfil, actualModelo, actualRazonamiento := ResumePayloadPerfilEjecucion(prev)
+	if perfilTarea == "" {
+		perfilTarea = actualPerfil
+	}
+	if modelo == "" {
+		modelo = actualModelo
+	}
+	if razonamiento == "" {
+		razonamiento = actualRazonamiento
+	}
+	if perfilTarea == "" && modelo == "" && razonamiento == "" {
+		return strings.TrimSpace(prev)
+	}
+	return MergeResumePayloadEnvelope(prev, map[string]any{
+		claveResumePayloadPerfilEjecucion: map[string]any{
+			"perfil_tarea": perfilTarea,
+			"modelo":       modelo,
+			"razonamiento": razonamiento,
+		},
+	})
 }

@@ -3,6 +3,7 @@ package db
 import (
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func drenarNotificacionesHook() {
@@ -104,5 +105,27 @@ func TestHooksCicloVidaPersistenYAvisan(t *testing.T) {
 	}
 	if !existeAccionAuditoria(t, "hook_project_unblocked") {
 		t.Fatalf("no aparece hook_project_unblocked en auditoria")
+	}
+}
+
+func TestEmitirNotificacionNoBloqueaSiCanalEstaLleno(t *testing.T) {
+	drenarNotificacionesHook()
+	for i := 0; i < cap(CanalNotificaciones); i++ {
+		CanalNotificaciones <- EventoNotificacion{Tipo: "fill"}
+	}
+	defer drenarNotificacionesHook()
+
+	done := make(chan bool, 1)
+	go func() {
+		done <- EmitirNotificacion(EventoNotificacion{Tipo: "overflow"})
+	}()
+
+	select {
+	case delivered := <-done:
+		if delivered {
+			t.Fatalf("no deberia entregar cuando el canal esta saturado")
+		}
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("EmitirNotificacion se bloqueo con el canal lleno")
 	}
 }

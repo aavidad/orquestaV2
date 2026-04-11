@@ -236,6 +236,61 @@ func TestCrearHandoffAgenteVivoReutilizaPendienteEquivalente(t *testing.T) {
 	}
 }
 
+func TestCrearHandoffAgenteVivoToleraRuntimeDestinoStaleEnHandle(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	if _, err := IniciarSesion("Codex1"); err != nil {
+		t.Fatalf("IniciarSesion origen: %v", err)
+	}
+	sesionDestinoID, err := IniciarSesion("Codex2")
+	if err != nil {
+		t.Fatalf("IniciarSesion destino: %v", err)
+	}
+	handleDestino, err := GetRuntimeHandleBySesionID(sesionDestinoID)
+	if err != nil || handleDestino == nil {
+		t.Fatalf("get handle destino: %+v err=%v", handleDestino, err)
+	}
+	if _, err := DB.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		t.Fatalf("disable fk: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_handles SET runtime_id = ? WHERE id = ?`, int64(999999), handleDestino.ID); err != nil {
+		t.Fatalf("inject stale runtime_id: %v", err)
+	}
+	if _, err := DB.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		t.Fatalf("enable fk: %v", err)
+	}
+
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:    "Revisar handoff con runtime stale",
+		Modulo:    "orquestador",
+		Prioridad: PrioridadAlta,
+		CreadoPor: "alberto",
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("TomarTarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("IniciarTarea: %v", err)
+	}
+
+	orderID, err := CrearHandoffAgenteVivo("Codex1", "Codex2", &tareaID, "runtime stale", "Continuar", "")
+	if err != nil {
+		t.Fatalf("CrearHandoffAgenteVivo con runtime stale destino: %v", err)
+	}
+	if orderID == 0 {
+		t.Fatalf("order id inesperado: %d", orderID)
+	}
+}
+
 func TestCrearHandoffAgenteStaleConDestinoActivoProyectoEncolaReinicioBootstrap(t *testing.T) {
 	prepararDBTemporal(t)
 
@@ -282,10 +337,10 @@ func TestCrearHandoffAgenteStaleConDestinoActivoProyectoEncolaReinicioBootstrap(
 	}
 	if _, err := DB.Exec(`
 		UPDATE runtime_handles
-		SET metadata_json = ?, capabilities_json = ?
+		SET transporte = 'tmux', metadata_json = ?, capabilities_json = ?
 		WHERE id = ?`,
-		`{"driver":"process_pty_cli","rendered_command":"`+exe+`","wrapped_command":"`+exe+`","working_dir":"`+cwd+`","can_send_input":false}`,
-		`{"can_send_input":false,"can_checkpoint":true,"can_resume":true,"can_capture_pid":true,"can_track_continuity":true,"can_pause":true,"can_stop":true}`,
+		`{"driver":"tmux_cli_session","rendered_command":"`+exe+`","wrapped_command":"`+exe+`","working_dir":"`+cwd+`","tmux_session":"orq-codex2-handoff","tmux_pane_id":"%42","mailbox_delivery_mode":"bootstrap_only","can_send_input":false}`,
+		`{"can_send_input":false,"mailbox_delivery_mode":"bootstrap_only","can_checkpoint":true,"can_resume":true,"can_capture_pid":true,"can_track_continuity":true,"can_pause":true,"can_stop":true}`,
 		handleDestino.ID,
 	); err != nil {
 		t.Fatalf("actualizar handle destino: %v", err)
@@ -333,6 +388,91 @@ func TestCrearHandoffAgenteStaleConDestinoActivoProyectoEncolaReinicioBootstrap(
 	}
 	if tipos["handoff"] != 1 || tipos["stop"] != 1 || tipos["start"] != 1 {
 		t.Fatalf("tipos de orden destino inesperados: %+v", tipos)
+	}
+}
+
+func TestCrearHandoffAgenteStaleToleraRuntimeDestinoStale(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := RegistrarAgente("Codex2", "programador"); err != nil {
+		t.Fatalf("registrar Codex2: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "handoff-runtime-stale",
+		Nombre:  "handoff-runtime-stale",
+		RutaAbs: t.TempDir(),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{Agente: "Codex1", ProyectoID: &proyectoID}); err != nil {
+		t.Fatalf("IniciarSesionContexto origen: %v", err)
+	}
+	pidDestino := int64(os.Getpid())
+	sesionDestino, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex2",
+		ProyectoID:  &proyectoID,
+		Herramienta: "codex-cli",
+		PID:         &pidDestino,
+	})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto destino: %v", err)
+	}
+	handleDestino, err := GetRuntimeHandleBySesionID(sesionDestino.ID)
+	if err != nil || handleDestino == nil {
+		t.Fatalf("GetRuntimeHandleBySesionID destino: %+v err=%v", handleDestino, err)
+	}
+	staleRuntimeID := int64(999999)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET runtime_id=? WHERE id=?`, staleRuntimeID, handleDestino.ID); err != nil {
+		t.Fatalf("forzar runtime_id stale destino: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_handles SET estado='cerrado' WHERE agente=?`, "Codex1"); err != nil {
+		t.Fatalf("cerrar handles origen: %v", err)
+	}
+
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:     "Revisar handoff destino stale",
+		Modulo:     "orquestador",
+		Prioridad:  PrioridadAlta,
+		CreadoPor:  "alberto",
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("TomarTarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("IniciarTarea: %v", err)
+	}
+
+	if _, err := CrearHandoffAgenteStale("Codex1", "Codex2", &tareaID, "watchdog", "continuar", ""); err != nil {
+		t.Fatalf("CrearHandoffAgenteStale con runtime destino stale: %v", err)
+	}
+
+	agente := "Codex2"
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("ListarRuntimeOrders: %v", err)
+	}
+	if len(orders) != 3 {
+		t.Fatalf("ordenes destino inesperadas con runtime stale: %+v", orders)
+	}
+	tipos := map[string]int{}
+	for _, order := range orders {
+		if order != nil {
+			tipos[order.Tipo]++
+		}
+	}
+	if tipos["handoff"] != 1 || tipos["stop"] != 1 || tipos["start"] != 1 {
+		t.Fatalf("tipos de orden destino inesperados con runtime stale: %+v", tipos)
 	}
 }
 

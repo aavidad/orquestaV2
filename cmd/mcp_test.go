@@ -697,6 +697,29 @@ func TestMCPToolsReviewGatesYGitMergesOperanPorLaViaCanonica(t *testing.T) {
 	})
 }
 
+func TestBuildEstadoResumenLigeroPropagaAuthManual(t *testing.T) {
+	prev := statusService
+	defer func() { statusService = prev }()
+
+	statusService = stubStatusService{response: apiStatusResponse{
+		Agentes: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador"},
+		},
+		AgentesAuthManual: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador"},
+		},
+		TareasPorEstado: map[string]int{},
+	}}
+
+	resumen, err := buildEstadoResumenLigero()
+	if err != nil {
+		t.Fatalf("buildEstadoResumenLigero: %v", err)
+	}
+	if len(resumen.AgentesAuthManual) != 1 || resumen.AgentesAuthManual[0].Nombre != "Codex1" {
+		t.Fatalf("agentes auth manual inesperados: %+v", resumen.AgentesAuthManual)
+	}
+}
+
 func TestMCPToolsTareasYNudgeOperanPorLaViaCanonica(t *testing.T) {
 	withTempOrquestaDB(t, func() {
 		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
@@ -1669,6 +1692,9 @@ func TestMCPToolSupervisorAplicaSiguiente(t *testing.T) {
 		if err != nil {
 			t.Fatalf("crear tarea libre: %v", err)
 		}
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar agente: %v", err)
+		}
 
 		statusService = stubStatusService{response: apiStatusResponse{
 			AgentesActivos: []*db.Agente{
@@ -1853,6 +1879,12 @@ func TestMCPToolSupervisorReservaTareaLibre(t *testing.T) {
 		})
 		if err != nil {
 			t.Fatalf("crear tarea libre: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex3", "programador"); err != nil {
+			t.Fatalf("registrar Codex3: %v", err)
+		}
+		if err := db.RegistrarAgente("Codex4", "programador"); err != nil {
+			t.Fatalf("registrar Codex4: %v", err)
 		}
 
 		statusService = stubStatusService{response: apiStatusResponse{

@@ -42,7 +42,11 @@ func SeleccionarSupervisorAutonomiaOperativo(proyectoID int64, exclude string) (
 		if err != nil {
 			return nil, err
 		}
-		if agenteAutonomiaDisponible(agente, proyectoID) {
+		disponible, err := agenteAutonomiaDisponible(agente, proyectoID)
+		if err != nil {
+			return nil, err
+		}
+		if disponible {
 			return agente, nil
 		}
 	}
@@ -147,7 +151,11 @@ func resolverCandidatoSupervisorAutonomia(nombre string, proyectoID int64) (*Age
 	if err != nil {
 		return nil, false, err
 	}
-	if !agenteAutonomiaDisponible(agente, proyectoID) {
+	disponible, err := agenteAutonomiaDisponible(agente, proyectoID)
+	if err != nil {
+		return nil, false, err
+	}
+	if !disponible {
 		return nil, false, nil
 	}
 	activo, err := agenteAutonomiaActivoEnProyecto(strings.TrimSpace(agente.Nombre), proyectoID)
@@ -157,19 +165,23 @@ func resolverCandidatoSupervisorAutonomia(nombre string, proyectoID int64) (*Age
 	return agente, activo, nil
 }
 
-func agenteAutonomiaDisponible(agente *Agente, proyectoID int64) bool {
+func agenteAutonomiaDisponible(agente *Agente, proyectoID int64) (bool, error) {
 	if agente == nil || !agente.Habilitado || proyectoID <= 0 {
-		return false
+		return false, nil
 	}
 	estadoCuota := strings.ToLower(strings.TrimSpace(agente.EstadoCuota))
 	if estadoCuota != "" && estadoCuota != "activo" {
-		return false
+		return false, nil
 	}
 	proyectoActivoID, err := ObtenerProyectoActivoAgente(strings.TrimSpace(agente.Nombre))
 	if err != nil {
-		return false
+		return false, err
 	}
-	return proyectoActivoID == 0 || proyectoActivoID == proyectoID
+	if proyectoActivoID != 0 && proyectoActivoID != proyectoID {
+		return false, nil
+	}
+	disponible, _, err := cuentaCompartidaPermiteActivacion(agente)
+	return disponible, err
 }
 
 func agenteAutonomiaActivoEnProyecto(agente string, proyectoID int64) (bool, error) {
@@ -181,7 +193,7 @@ func agenteAutonomiaActivoEnProyecto(agente string, proyectoID int64) (bool, err
 	} else if sesion != nil {
 		return true, nil
 	}
-	if handle, err := GetRuntimeHandleActivoAgenteProyecto(agente, &proyectoID); err != nil {
+	if handle, err := runtimeHandleOperativoRecienteConFallback(agente, &proyectoID); err != nil {
 		return false, err
 	} else if handle != nil {
 		return true, nil

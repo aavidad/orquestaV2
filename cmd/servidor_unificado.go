@@ -146,10 +146,13 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 	controlCtx, cancel := context.WithCancel(context.Background())
 	runner := newControlPlaneRunner(debugLogger, debug.ControlPlane)
 	runner.StartupGrace = 5 * time.Second
+	unregisterRunner := registerActiveControlPlaneRunner(runner)
 	defer runner.Wait()
+	defer unregisterRunner()
 	defer cancel()
 	runner.Start(controlCtx)
-	launchBootstrapServerAutonomy(debugLogger)
+	launchBootstrapServerAutonomy(controlCtx, debugLogger)
+	launchWALCheckpointLoop(controlCtx, debugLogger)
 
 	server := &http.Server{
 		Addr:    advertisedAddr,
@@ -167,12 +170,50 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 	return server.ServeTLS(listener, security.TLSCert, security.TLSKey)
 }
 
-func launchBootstrapServerAutonomy(debugLogger *log.Logger) {
+func launchBootstrapServerAutonomy(ctx context.Context, debugLogger *log.Logger) {
 	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 		if err := bootstrapServerAutonomy(); err != nil {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			db.Audit("orquesta", "server_autobootstrap_error", "proyecto", 0, err.Error())
 			if debugLogger != nil {
 				debugLogger.Printf("server_autobootstrap error=%v", err)
+			}
+		}
+	}()
+}
+
+func launchWALCheckpointLoop(ctx context.Context, debugLogger *log.Logger) {
+	go func() {
+		ticker := time.NewTicker(2 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				handle := db.CurrentHandle()
+				if handle == nil {
+					continue
+				}
+				walPages, checkpointed, err := handle.WALCheckpoint()
+				if err != nil {
+					if debugLogger != nil {
+						debugLogger.Printf("wal_checkpoint error=%v", err)
+					}
+					continue
+				}
+				if debugLogger != nil && walPages > 0 {
+					debugLogger.Printf("wal_checkpoint wal_pages=%d checkpointed=%d", walPages, checkpointed)
+				}
 			}
 		}
 	}()

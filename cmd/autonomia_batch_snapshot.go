@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"orquesta/db"
 )
@@ -25,6 +26,7 @@ type autonomiaBatchSnapshot struct {
 	sesiones []*db.Sesion
 
 	agentesByName              map[string]*db.Agente
+	hotHandlesByAgentProject   map[string]*db.RuntimeHandle
 	asignacionesByAgent        map[string][]*db.Asignacion
 	asignacionesByProject      map[int64][]*db.Asignacion
 	tareasByAgentProject       map[string][]*db.Tarea
@@ -39,13 +41,23 @@ type autonomiaBatchSnapshot struct {
 }
 
 func newAutonomiaBatchSnapshot(sesiones []*db.Sesion) (*autonomiaBatchSnapshot, error) {
-	agentes, err := db.ListarAgentesConSesionesActivas(sesiones)
+	agentNames := preloadAutonomiaBatchAgentNames(sesiones)
+	preloadAgentsStart := time.Now()
+	agentesByName, err := db.ListarAgentesConSesionOperativa(agentNames, sesiones)
 	if err != nil {
 		return nil, err
 	}
+	autonomiaTickDebugf("snapshot preload_agentes agentes=%d duration=%s", len(agentesByName), time.Since(preloadAgentsStart).Round(time.Millisecond))
+	hotHandlesStart := time.Now()
+	hotHandles, err := db.ListarRuntimeHandlesActivosOperativosRecientes()
+	if err != nil {
+		return nil, err
+	}
+	autonomiaTickDebugf("snapshot preload_handles handles=%d duration=%s", len(hotHandles), time.Since(hotHandlesStart).Round(time.Millisecond))
 	snapshot := &autonomiaBatchSnapshot{
 		sesiones:                   sesiones,
-		agentesByName:              make(map[string]*db.Agente, len(agentes)),
+		agentesByName:              make(map[string]*db.Agente, len(agentesByName)),
+		hotHandlesByAgentProject:   hotHandles,
 		asignacionesByAgent:        map[string][]*db.Asignacion{},
 		asignacionesByProject:      map[int64][]*db.Asignacion{},
 		tareasByAgentProject:       map[string][]*db.Tarea{},
@@ -58,13 +70,34 @@ func newAutonomiaBatchSnapshot(sesiones []*db.Sesion) (*autonomiaBatchSnapshot, 
 		supervisorLoaded:           map[int64]struct{}{},
 		pauseByAgent:               map[string]autonomiaBudgetPauseDecision{},
 	}
-	for _, agente := range agentes {
+	for key, agente := range agentesByName {
 		if agente == nil {
 			continue
 		}
-		snapshot.agentesByName[strings.ToLower(strings.TrimSpace(agente.Nombre))] = agente
+		snapshot.agentesByName[key] = agente
 	}
 	return snapshot, nil
+}
+
+func preloadAutonomiaBatchAgentNames(sesiones []*db.Sesion) []string {
+	seen := make(map[string]struct{}, len(sesiones))
+	agentes := make([]string, 0, len(sesiones))
+	for _, sesion := range sesiones {
+		if sesion == nil {
+			continue
+		}
+		nombre := strings.TrimSpace(sesion.Agente)
+		if nombre == "" {
+			continue
+		}
+		key := strings.ToLower(nombre)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		agentes = append(agentes, nombre)
+	}
+	return agentes
 }
 
 func (s *autonomiaBatchSnapshot) invalidateAgent(agente string) {
@@ -205,6 +238,14 @@ func (s *autonomiaBatchSnapshot) budgetPause(agente string) (bool, string, error
 	}
 	if decision, ok := s.pauseByAgent[key]; ok {
 		return decision.shouldPause, decision.reason, nil
+	}
+	if cached, ok := s.agentesByName[key]; ok && cached != nil {
+		shouldPause, reason := agenteDebePausarPorPresupuestoVisible(cached)
+		s.pauseByAgent[key] = autonomiaBudgetPauseDecision{
+			shouldPause: shouldPause,
+			reason:      reason,
+		}
+		return shouldPause, reason, nil
 	}
 	shouldPause, reason, err := agenteDebePausarPorPresupuesto(strings.TrimSpace(agente))
 	if err != nil {
@@ -406,7 +447,11 @@ func (s *autonomiaBatchSnapshot) autonomiaActivoEnProyecto(agente string, proyec
 	if activo, ok := s.activeHandleByAgentProject[key]; ok {
 		return activo, nil
 	}
-	handle, err := db.GetRuntimeHandleActivoAgenteProyecto(agente, &proyectoID)
+	if handle := s.hotHandlesByAgentProject[key]; handle != nil {
+		s.activeHandleByAgentProject[key] = true
+		return true, nil
+	}
+	handle, err := db.GetRuntimeHandleOperativoRecienteAgenteProyecto(agente, &proyectoID)
 	if err != nil {
 		return false, err
 	}

@@ -8,7 +8,9 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package cmd
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -53,6 +55,10 @@ type apiStatusResponse struct {
 	TareasPorEstado     map[string]int  `json:"tareasPorEstado,omitempty"`
 	AgentesActivos      []*db.Agente    `json:"agentesActivos,omitempty"`
 	AgentesTrabajando   []*db.Agente    `json:"agentesTrabajando,omitempty"`
+	AgentesSaturados    []*db.Agente    `json:"agentesSaturados,omitempty"`
+	AgentesAtascados    []*db.Agente    `json:"agentesAtascados,omitempty"`
+	AgentesAuthManual   []*db.Agente    `json:"agentesAuthManual,omitempty"`
+	AgentesQuotaBlocked []*db.Agente    `json:"agentesQuotaBlocked,omitempty"`
 	PropuestasResumen   []propuestaLite `json:"propuestasAbiertas,omitempty"`
 	TareasActivas       []tareaLite     `json:"tareasActivas,omitempty"`
 	TareasEnProgreso    []tareaLite     `json:"tareasEnProgreso,omitempty"`
@@ -581,6 +587,7 @@ type apiRuntimeA2UIChartRow struct {
 
 func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/server", apiHandlerServer)
+	mux.HandleFunc("/api/server/operational", apiHandlerServerOperational)
 	mux.HandleFunc("/api/mcp", apiHandlerMCP)
 	mux.HandleFunc("/api/status", apiHandlerStatus)
 	mux.HandleFunc("/api/diagnostico", apiHandlerDiagnostico)
@@ -631,6 +638,8 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/progreso/tareas/", apiRouterProgresoTareas)
 	mux.HandleFunc("/api/conectores", apiHandlerConectores)
 	mux.HandleFunc("/api/conectores/", apiRouterConectores)
+	mux.HandleFunc("/api/microprogramacion/especificaciones", apiHandlerMicroprogramacionEspecificaciones)
+	mux.HandleFunc("/api/microprogramacion/especificaciones/", apiRouterMicroprogramacionEspecificaciones)
 	mux.HandleFunc("/api/asignaciones", apiHandlerAsignaciones)
 	mux.HandleFunc("/api/asignaciones/activar", apiHandlerAsignacionActivar)
 	mux.HandleFunc("/api/locks", apiHandlerLocks)
@@ -648,6 +657,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtime-handles", apiHandlerRuntimeHandles)
 	mux.HandleFunc("/api/runtime-handles/purgar", apiHandlerRuntimeHandlesPurgar)
 	mux.HandleFunc("/api/runtime-orders/purgar", apiHandlerRuntimeOrdersPurgar)
+	mux.HandleFunc("/api/runtime-orders/", apiRouterRuntimeOrders)
 	mux.HandleFunc("/api/runtime-trace", apiHandlerRuntimeTrace)
 	mux.HandleFunc("/api/runtime-events", apiHandlerRuntimeEvents)
 	mux.HandleFunc("/api/runtime-transcript", apiHandlerRuntimeTranscript)
@@ -670,6 +680,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/sesiones/presupuesto", apiHandlerSesionPresupuesto)
 	mux.HandleFunc("/api/agente/handoff", apiHandlerAgenteHandoff)
 	mux.HandleFunc("/api/agente/control", apiHandlerAgenteControl)
+	mux.HandleFunc("/api/agente/lanzar", apiHandlerAgenteLanzar)
 	mux.HandleFunc("/api/agente/investigar", apiHandlerAgenteInvestigar)
 	mux.HandleFunc("/api/agente/preparar", apiHandlerAgentePreparar)
 	mux.HandleFunc("/api/agente/adoptar-contexto", apiHandlerAgenteAdoptarContexto)
@@ -744,9 +755,22 @@ func apiHandlerServer(w http.ResponseWriter, r *http.Request) {
 			"api",
 			"runtimes",
 			"control-plane",
+			"operational-status",
 		},
 	}
 	apiWriteJSON(w, http.StatusOK, info)
+}
+
+func apiHandlerServerOperational(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	status, err := statusService.FetchStatus()
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, buildServerOperationalInfo(status))
 }
 
 func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
@@ -770,13 +794,17 @@ func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
 		"tareasPorEstado":      status.TareasPorEstado,
 		"agentesActivos":       status.AgentesActivos,
 		"agentesTrabajando":    status.AgentesTrabajando,
+		"agentesSaturados":     status.AgentesSaturados,
+		"agentesAtascados":     status.AgentesAtascados,
+		"agentesAuthManual":    status.AgentesAuthManual,
+		"agentesQuotaBlocked":  status.AgentesQuotaBlocked,
 		"propuestasAbiertas":   status.PropuestasResumen,
 		"tareasActivas":        status.TareasActivas,
 		"tareasEnProgreso":     status.TareasEnProgreso,
 		"tareasReservadas":     status.TareasReservadas,
 	}
 	if items, _ := payload["tareasEnProgreso"].([]tareaLite); len(items) == 0 {
-		payload["tareasEnProgreso"] = filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada)
+		payload["tareasEnProgreso"] = filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso)
 	}
 	if items, _ := payload["tareasReservadas"].([]tareaLite); len(items) == 0 {
 		payload["tareasReservadas"] = filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada)
@@ -980,23 +1008,32 @@ func apiHandlerAgentesPresupuesto(w http.ResponseWriter, r *http.Request) {
 	}
 	activosOnly := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("activos")), "true")
 	agenteFiltro := strings.TrimSpace(r.URL.Query().Get("agente"))
+	if agenteFiltro != "" {
+		agente, err := agentesService.GetAgent(agenteFiltro)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				apiWriteJSON(w, http.StatusOK, apiAgentesPresupuestoResponse{
+					Generado: time.Now().UTC().Format(time.RFC3339),
+					Activos:  activosOnly,
+					Agentes:  []*db.Agente{},
+				})
+				return
+			}
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		agentes := []*db.Agente{agente}
+		apiWriteJSON(w, http.StatusOK, apiAgentesPresupuestoResponse{
+			Generado: time.Now().UTC().Format(time.RFC3339),
+			Activos:  activosOnly,
+			Agentes:  agentes,
+		})
+		return
+	}
 	agentes, err := agentesService.ListAgents()
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
-	}
-	if agenteFiltro != "" {
-		filtrados := make([]*db.Agente, 0, 1)
-		for _, agente := range agentes {
-			if agente == nil {
-				continue
-			}
-			if strings.EqualFold(strings.TrimSpace(agente.Nombre), agenteFiltro) {
-				filtrados = append(filtrados, agente)
-				break
-			}
-		}
-		agentes = filtrados
 	}
 	if activosOnly {
 		nombresVisibles, err := nombresSesionesVisibles()
@@ -1045,7 +1082,7 @@ func apiHandlerAgentesPresupuestoRefrescar(w http.ResponseWriter, r *http.Reques
 
 func apiHandlerAgentesCuentas(w http.ResponseWriter, r *http.Request) {
 	activosOnly := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("activos")), "true")
-	agentes, err := agentesService.ListAgents()
+	agentes, err := db.ListarAgentesCuentasLigero()
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -1063,6 +1100,7 @@ func apiHandlerAgentesCuentas(w http.ResponseWriter, r *http.Request) {
 			Rol:               agente.Rol,
 			Activo:            agente.Activo,
 			Habilitado:        agente.Habilitado,
+			CuentaID:          strings.TrimSpace(agente.CuentaID),
 			CuentaEmail:       strings.TrimSpace(agente.CuentaEmail),
 			CuentaUsuario:     strings.TrimSpace(agente.CuentaUsuario),
 			CuentaFuente:      strings.TrimSpace(agente.CuentaFuente),
@@ -1139,17 +1177,16 @@ func cuentaPresupuestoDesdeAgente(agente *db.Agente) (string, apiCuentaPresupues
 	if agente == nil {
 		return "", item
 	}
+	cuentaID := strings.TrimSpace(agente.CuentaID)
 	email := strings.TrimSpace(agente.CuentaEmail)
 	usuario := strings.TrimSpace(agente.CuentaUsuario)
-	key := email
-	if key == "" {
-		key = usuario
-	}
+	key := strings.TrimSpace(db.CuentaClaveAgente(agente))
 	if key == "" {
 		return "", item
 	}
 	item = apiCuentaPresupuestoItem{
 		CuentaClave:           key,
+		CuentaID:              cuentaID,
 		CuentaEmail:           email,
 		CuentaUsuario:         usuario,
 		CuentaFuente:          strings.TrimSpace(agente.CuentaFuente),
@@ -1262,7 +1299,7 @@ func apiHandlerConfig(w http.ResponseWriter, r *http.Request) {
 			apiWriteJSON(w, http.StatusOK, map[string]any{"clave": clave, "valor": valor})
 			return
 		}
-		config, err := configService.All()
+		config, err := configService.List()
 		if err != nil {
 			apiError(w, http.StatusInternalServerError, err)
 			return
@@ -1338,6 +1375,8 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 			"status":               statusResumen,
 			"agentesActivos":       statusResumen.AgentesActivos,
 			"agentesTrabajando":    statusResumen.AgentesTrabajando,
+			"agentesAuthManual":    statusResumen.AgentesAuthManual,
+			"agentesQuotaBlocked":  statusResumen.AgentesQuotaBlocked,
 			"enCuota":              statusResumen.EnCuota,
 			"mailboxPendiente":     statusResumen.MailboxPendiente,
 			"retenidasPorCuota":    statusResumen.RetenidasPorCuota,
@@ -1365,19 +1404,19 @@ func apiHandlerOpenClawOperator(w http.ResponseWriter, r *http.Request) {
 		})
 	case http.MethodPost:
 		var req struct {
-			Supervisor string `json:"supervisor"`
-			Mode       string `json:"mode"`
-			Action     string `json:"action"`
-			Target     string `json:"target"`
-			Assignee   string `json:"assignee"`
-			MaxItems   int    `json:"max_items"`
-			BatchKind  string `json:"batch_kind"`
-			Proyecto   string `json:"proyecto"`
-			Name       string `json:"name"`
-			Description string `json:"description"`
-			Prompt     string `json:"prompt"`
+			Supervisor   string `json:"supervisor"`
+			Mode         string `json:"mode"`
+			Action       string `json:"action"`
+			Target       string `json:"target"`
+			Assignee     string `json:"assignee"`
+			MaxItems     int    `json:"max_items"`
+			BatchKind    string `json:"batch_kind"`
+			Proyecto     string `json:"proyecto"`
+			Name         string `json:"name"`
+			Description  string `json:"description"`
+			Prompt       string `json:"prompt"`
 			SubagentType string `json:"subagent_type"`
-			Model      string `json:"model"`
+			Model        string `json:"model"`
 		}
 		if err := apiDecodeJSON(r, &req); err != nil {
 			apiError(w, http.StatusBadRequest, err)
@@ -1449,7 +1488,9 @@ type apiOpenClawAgentLite struct {
 	Rol                string     `json:"rol,omitempty"`
 	EstadoCuota        string     `json:"estado_cuota,omitempty"`
 	ReanimarAt         *time.Time `json:"reanimar_at,omitempty"`
+	CuentaID           string     `json:"cuenta_id,omitempty"`
 	CuentaEmail        string     `json:"cuenta_email,omitempty"`
+	CuentaUsuario      string     `json:"cuenta_usuario,omitempty"`
 	PresupuestoVentana string     `json:"presupuesto_ventana,omitempty"`
 	CuotaRestantePct   *int       `json:"cuota_restante_pct,omitempty"`
 	CargaActiva        int        `json:"carga_activa,omitempty"`
@@ -1457,18 +1498,20 @@ type apiOpenClawAgentLite struct {
 }
 
 type apiOpenClawStatusLite struct {
-	Generado           string                     `json:"generado,omitempty"`
-	TareasPorEstado    map[string]int             `json:"tareasPorEstado,omitempty"`
-	AgentesActivos     []apiOpenClawAgentLite     `json:"agentesActivos,omitempty"`
-	AgentesTrabajando  []apiOpenClawAgentLite     `json:"agentesTrabajando,omitempty"`
-	EnCuota            []apiOpenClawAgentLite     `json:"enCuota,omitempty"`
-	MailboxPendiente   []apiOpenClawMailboxLite   `json:"mailboxPendiente,omitempty"`
-	RetenidasPorCuota  []tareaLite                `json:"retenidasPorCuota,omitempty"`
-	TareasActivas      []tareaLite                `json:"tareasActivas,omitempty"`
-	TareasReservadas   []tareaLite                `json:"tareasReservadas,omitempty"`
-	PropuestasAbiertas []propuestaLite            `json:"propuestasAbiertas,omitempty"`
-	CapacitySummary    apiOpenClawCapacitySummary `json:"capacity_summary,omitempty"`
-	AgentesSaturados   []apiOpenClawAgentLite     `json:"agentesSaturados,omitempty"`
+	Generado            string                     `json:"generado,omitempty"`
+	TareasPorEstado     map[string]int             `json:"tareasPorEstado,omitempty"`
+	AgentesActivos      []apiOpenClawAgentLite     `json:"agentesActivos,omitempty"`
+	AgentesTrabajando   []apiOpenClawAgentLite     `json:"agentesTrabajando,omitempty"`
+	AgentesAuthManual   []apiOpenClawAgentLite     `json:"agentesAuthManual,omitempty"`
+	AgentesQuotaBlocked []apiOpenClawAgentLite     `json:"agentesQuotaBlocked,omitempty"`
+	EnCuota             []apiOpenClawAgentLite     `json:"enCuota,omitempty"`
+	MailboxPendiente    []apiOpenClawMailboxLite   `json:"mailboxPendiente,omitempty"`
+	RetenidasPorCuota   []tareaLite                `json:"retenidasPorCuota,omitempty"`
+	TareasActivas       []tareaLite                `json:"tareasActivas,omitempty"`
+	TareasReservadas    []tareaLite                `json:"tareasReservadas,omitempty"`
+	PropuestasAbiertas  []propuestaLite            `json:"propuestasAbiertas,omitempty"`
+	CapacitySummary     apiOpenClawCapacitySummary `json:"capacity_summary,omitempty"`
+	AgentesSaturados    []apiOpenClawAgentLite     `json:"agentesSaturados,omitempty"`
 }
 
 type apiOpenClawMailboxLite struct {
@@ -1517,18 +1560,20 @@ func buildOpenClawOperatorStatus(status *estadoResumen) (apiOpenClawStatusLite, 
 		return apiOpenClawStatusLite{}, err
 	}
 	return apiOpenClawStatusLite{
-		Generado:           status.Generado,
-		TareasPorEstado:    status.TareasPorEstado,
-		AgentesActivos:     compactOpenClawAgents(status.AgentesActivos, status.TareasActivas),
-		AgentesTrabajando:  compactOpenClawAgents(status.AgentesTrabajando, status.TareasActivas),
-		EnCuota:            compactOpenClawAgents(agentesNoActivosConCuota(status.Agentes), status.TareasActivas),
-		MailboxPendiente:   mailboxPendiente,
-		RetenidasPorCuota:  tareasRetenidasPorCuota(status.TareasActivas, status.Agentes),
-		TareasActivas:      filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada),
-		TareasReservadas:   filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
-		PropuestasAbiertas: status.PropuestasAbiertas,
-		CapacitySummary:    buildOpenClawCapacitySummary(status.AgentesActivos, status.AgentesTrabajando, status.TareasActivas, status.TareasPorEstado),
-		AgentesSaturados:   buildOpenClawSaturatedAgents(status.AgentesActivos, status.TareasActivas),
+		Generado:            status.Generado,
+		TareasPorEstado:     status.TareasPorEstado,
+		AgentesActivos:      compactOpenClawAgents(status.AgentesActivos, status.TareasActivas),
+		AgentesTrabajando:   compactOpenClawAgents(status.AgentesTrabajando, status.TareasActivas),
+		AgentesAuthManual:   compactOpenClawAgents(status.AgentesAuthManual, status.TareasActivas),
+		AgentesQuotaBlocked: compactOpenClawAgents(status.AgentesQuotaBlocked, status.TareasActivas),
+		EnCuota:             compactOpenClawAgents(agentesBloqueadosPorCuotaVisibles(status), status.TareasActivas),
+		MailboxPendiente:    mailboxPendiente,
+		RetenidasPorCuota:   tareasRetenidasPorCuota(status.TareasActivas, status.Agentes, status.AgentesQuotaBlocked),
+		TareasActivas:       filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso),
+		TareasReservadas:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
+		PropuestasAbiertas:  status.PropuestasAbiertas,
+		CapacitySummary:     buildOpenClawCapacitySummary(status.AgentesActivos, status.AgentesTrabajando, status.TareasActivas, status.TareasPorEstado),
+		AgentesSaturados:    buildOpenClawSaturatedAgents(status.AgentesActivos, status.TareasActivas),
 	}, nil
 }
 
@@ -1861,7 +1906,9 @@ func compactOpenClawAgents(items []*db.Agente, tareas []tareaLite) []apiOpenClaw
 			Rol:                item.Rol,
 			EstadoCuota:        item.EstadoCuota,
 			ReanimarAt:         item.ReanimarAt,
+			CuentaID:           item.CuentaID,
 			CuentaEmail:        item.CuentaEmail,
+			CuentaUsuario:      item.CuentaUsuario,
 			PresupuestoVentana: item.PresupuestoVentana,
 			CuotaRestantePct:   item.CuotaRestantePct,
 			CargaActiva:        cargaActiva[nombre],
@@ -4164,12 +4211,22 @@ func apiRouterRuntimes(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusNotFound, err)
 		return
 	}
+	runtimeDetail, err := runtimesService.DescribeRuntime(id)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
 	samples, err := runtimesService.ListRuntimeSamples(id, 20)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
-	apiWriteJSON(w, http.StatusOK, map[string]any{"runtime": runtime, "samples": samples})
+	apiWriteJSON(w, http.StatusOK, map[string]any{
+		"runtime": runtime,
+		"handle":  runtimeDetail.Handle,
+		"worker":  runtimeDetail.Worker,
+		"samples": samples,
+	})
 }
 
 func apiRuntimeA2UIToMessages(rows []webRuntimeA2UIRow) []apiRuntimeA2UIMessage {
@@ -4517,6 +4574,32 @@ func apiHandlerRuntimeOrders(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func apiRouterRuntimeOrders(w http.ResponseWriter, r *http.Request) {
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/runtime-orders/"), "/")
+	if path == "" || strings.Contains(path, "/") {
+		http.NotFound(w, r)
+		return
+	}
+	id, err := strconv.ParseInt(path, 10, 64)
+	if err != nil || id <= 0 {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
+		return
+	}
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	order, err := runtimesService.GetRuntimeOrder(id)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if order == nil {
+		apiError(w, http.StatusNotFound, fmt.Errorf("runtime order no encontrada"))
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiRuntimeOrderResponse{Order: order})
+}
+
 func apiHandlerRuntimeOrdersPurgar(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodPost) {
 		return
@@ -4618,6 +4701,27 @@ func apiHandlerRuntimeMailbox(w http.ResponseWriter, r *http.Request) {
 func apiRouterRuntimeMailbox(w http.ResponseWriter, r *http.Request) {
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/runtime-mailbox/"), "/")
 	parts := strings.Split(path, "/")
+	if len(parts) == 1 && parts[0] != "" {
+		id, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil || id <= 0 {
+			apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
+			return
+		}
+		if !apiRequireMethod(w, r, http.MethodGet) {
+			return
+		}
+		msg, err := runtimesService.GetRuntimeMailbox(id)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if msg == nil {
+			apiError(w, http.StatusNotFound, fmt.Errorf("runtime mailbox no existe"))
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiRuntimeMailboxItemResponse{Message: msg})
+		return
+	}
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		http.NotFound(w, r)
 		return
@@ -4798,7 +4902,7 @@ func apiHandlerAgenteHandoff(w http.ResponseWriter, r *http.Request) {
 	if req.TareaID > 0 {
 		tareaID = &req.TareaID
 	}
-	id, err := db.CrearHandoffAgenteVivo(
+	id, err := runtimesService.CreateLiveAgentHandoff(
 		strings.TrimSpace(req.AgenteOrigen),
 		strings.TrimSpace(req.AgenteDestino),
 		tareaID,
@@ -5532,7 +5636,7 @@ func apiHandlerSesionPresupuesto(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		result, err := sesionesAPIService.RegisterBudget(req.SesionID, req.Agente, &db.PresupuestoSesion{
+		result, err := sesionesAPIService.RegisterBudget(req.SesionID, req.Agente, &sesionesapp.PresupuestoSesion{
 			PoolID:            req.PoolID,
 			ModelSlug:         strings.TrimSpace(req.ModelSlug),
 			WindowKind:        strings.TrimSpace(req.WindowKind),

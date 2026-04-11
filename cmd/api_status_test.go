@@ -31,6 +31,9 @@ func TestAPIHandlerStatusReturnsPayload(t *testing.T) {
 			AgentesTrabajando: []*db.Agente{
 				{Nombre: "CodexX"},
 			},
+			AgentesAuthManual: []*db.Agente{
+				{Nombre: "CodexLogin"},
+			},
 			ConteoTareas: map[string]int{
 				"asignada": 1,
 			},
@@ -63,6 +66,9 @@ func TestAPIHandlerStatusReturnsPayload(t *testing.T) {
 	}
 	if len(payload.AgentesTrabajando) != 1 || payload.AgentesTrabajando[0].Nombre != "CodexX" {
 		t.Fatalf("agentesTrabajando inesperado: %+v", payload.AgentesTrabajando)
+	}
+	if len(payload.AgentesAuthManual) != 1 || payload.AgentesAuthManual[0].Nombre != "CodexLogin" {
+		t.Fatalf("agentesAuthManual inesperado: %+v", payload.AgentesAuthManual)
 	}
 	if len(payload.TareasEnProgreso) != 1 || payload.TareasEnProgreso[0].ID != 7 {
 		t.Fatalf("tareasEnProgreso inesperadas: %+v", payload.TareasEnProgreso)

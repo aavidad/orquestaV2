@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
 
 	"orquesta/storage"
 )
@@ -22,15 +23,29 @@ var (
 	currentBackend  Backend
 	currentConfig   storage.Config
 	currentTarget   string
+	persistenceMu   sync.RWMutex
 )
 
 func IsOpen() bool {
-	return DB != nil
+	return CurrentHandle() != nil
+}
+
+func CurrentHandle() *Handle {
+	persistenceMu.RLock()
+	defer persistenceMu.RUnlock()
+	return DB
+}
+
+func currentPersistenceState() (Backend, storage.Config, string) {
+	persistenceMu.RLock()
+	defer persistenceMu.RUnlock()
+	return currentBackend, currentConfig, currentTarget
 }
 
 func CurrentDBPath() string {
-	if strings.TrimSpace(currentTarget) != "" {
-		return currentTarget
+	_, _, target := currentPersistenceState()
+	if strings.TrimSpace(target) != "" {
+		return target
 	}
 	cfg, err := storage.ResolveConfig(resolverRuta)
 	if err != nil {
@@ -40,8 +55,9 @@ func CurrentDBPath() string {
 }
 
 func CurrentStorageDisplayTarget() string {
-	if strings.TrimSpace(currentConfig.Driver) != "" {
-		return storage.DisplayTarget(currentConfig)
+	_, cfg, _ := currentPersistenceState()
+	if strings.TrimSpace(cfg.Driver) != "" {
+		return storage.DisplayTarget(cfg)
 	}
 	cfg, err := storage.ResolveConfig(resolverRuta)
 	if err != nil {
@@ -51,8 +67,9 @@ func CurrentStorageDisplayTarget() string {
 }
 
 func CurrentStorageDriver() string {
-	if strings.TrimSpace(currentConfig.Driver) != "" {
-		return normalizedDriverName(currentConfig.Driver)
+	_, cfg, _ := currentPersistenceState()
+	if strings.TrimSpace(cfg.Driver) != "" {
+		return normalizedDriverName(cfg.Driver)
 	}
 	cfg, err := storage.ResolveConfig(resolverRuta)
 	if err != nil {
@@ -62,8 +79,9 @@ func CurrentStorageDriver() string {
 }
 
 func CurrentBootstrapSchemaEnabled() bool {
-	if strings.TrimSpace(currentConfig.Driver) != "" {
-		return currentConfig.BootstrapSchema
+	_, cfg, _ := currentPersistenceState()
+	if strings.TrimSpace(cfg.Driver) != "" {
+		return cfg.BootstrapSchema
 	}
 	cfg, err := storage.ResolveConfig(resolverRuta)
 	if err != nil {
@@ -122,15 +140,17 @@ func resolveBackend() (Backend, storage.Config, error) {
 }
 
 func CurrentBackendName() string {
-	if currentBackend == nil {
+	backend, _, _ := currentPersistenceState()
+	if backend == nil {
 		return ""
 	}
-	return currentBackend.Name()
+	return backend.Name()
 }
 
 func DriverName() string {
-	if currentBackend != nil {
-		return normalizedDriverName(currentBackend.Name())
+	backend, _, _ := currentPersistenceState()
+	if backend != nil {
+		return normalizedDriverName(backend.Name())
 	}
 	return normalizedDriverName(backendName())
 }
@@ -148,31 +168,35 @@ func QueryRebindingEnabled() bool {
 }
 
 func BackupTo(path string) error {
-	if DB == nil {
+	handle := CurrentHandle()
+	if handle == nil {
 		return fmt.Errorf("la base de datos no está inicializada")
 	}
-	if currentBackend == nil {
+	backend, _, _ := currentPersistenceState()
+	if backend == nil {
 		return fmt.Errorf("backend de persistencia no inicializado")
 	}
-	return currentBackend.Backup(DB.DB, path)
+	return backend.Backup(handle.DB, path)
 }
 
 func VerificarPersistenciaActual() (*InformePersistencia, error) {
-	if DB == nil {
+	handle := CurrentHandle()
+	if handle == nil {
 		return nil, fmt.Errorf("la base de datos no está inicializada")
 	}
-	if currentBackend == nil {
+	backend, cfg, _ := currentPersistenceState()
+	if backend == nil {
 		return nil, fmt.Errorf("backend de persistencia no inicializado")
 	}
-	informe := currentBackend.Verify(DB.DB, currentConfig)
+	informe := backend.Verify(handle.DB, cfg)
 	if informe == nil {
 		return nil, fmt.Errorf("el backend de persistencia no ha devuelto informe de verificación")
 	}
 	if strings.TrimSpace(informe.Driver) == "" {
-		informe.Driver = normalizedDriverName(currentConfig.Driver)
+		informe.Driver = normalizedDriverName(cfg.Driver)
 	}
 	if strings.TrimSpace(informe.Target) == "" {
-		informe.Target = storage.DisplayTarget(currentConfig)
+		informe.Target = storage.DisplayTarget(cfg)
 	}
 	return informe, nil
 }
