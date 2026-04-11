@@ -415,7 +415,7 @@ const webTplAgentesPanel = `{{define "content"}}
     <details class="form-panel" style="margin:0;min-width:min(100%,30rem)">
       <summary>{{tr "agentes.create"}}</summary>
       <form method="POST" action="/agentes/nuevo" style="display:grid;grid-template-columns:1.1fr 1.6fr 1fr auto;gap:.6rem;align-items:end;margin-top:.8rem">
-        <div><label>{{tr "agentes.create.provider"}}</label><select name="proveedor"><option value="codex">Codex</option><option value="claude">Claude</option><option value="gemini">Gemini</option></select></div>
+        <div><label>{{tr "agentes.create.provider"}}</label><select name="proveedor"><option value="codex">Codex</option><option value="claude">Claude</option><option value="gemini">Gemini</option><option value="ollama">Ollama</option></select></div>
         <div><label>{{tr "agentes.create.name_optional"}}</label><input type="text" name="nombre" placeholder="{{tr "agentes.create.name_auto"}}"></div>
         <div><label>{{tr "Rol"}}</label><input type="text" name="rol" value="programador" required></div>
         <div><button type="submit" class="btn-sm">{{tr "agentes.create_button"}}</button></div>
@@ -455,7 +455,7 @@ const webTplAgentesPanel = `{{define "content"}}
             <small>{{tr "Cuota"}}: {{orDash .Agente.EstadoCuota}}</small><br>
             <small>{{tr "Última sesión"}}: {{ftime .Agente.UltimaSesion}}</small>
             {{if .Agente.ReanimarAt}}<br><small>{{tr "Reanimación"}}: {{reanimacionEn .Agente.ReanimarAt}}</small>{{end}}
-            {{if .Agente.CuotaRestantePct}}<br><small>efectivo {{.Agente.CuotaRestantePct}}%{{if .Agente.PresupuestoVentana}} · {{.Agente.PresupuestoVentana}}{{end}}</small>{{end}}
+            {{if .Agente.SinCuotaProveedor}}<br><small>cuota indefinida · {{if .Agente.PresupuestoFuente}}{{.Agente.PresupuestoFuente}}{{else}}local{{end}}</small>{{else if .Agente.CuotaRestantePct}}<br><small>efectivo {{.Agente.CuotaRestantePct}}%{{if .Agente.PresupuestoVentana}} · {{.Agente.PresupuestoVentana}}{{end}}</small>{{end}}
             {{if .Agente.PresupuestoDiarioPct}}<br><small>diario {{.Agente.PresupuestoDiarioPct}}%{{if .Agente.PresupuestoDiarioResetAt}} · reset {{.Agente.PresupuestoDiarioResetAt.Local.Format "2006-01-02 15:04"}}{{end}}</small>{{end}}
             {{if .Agente.PresupuestoSemanalPct}}<br><small>semanal {{.Agente.PresupuestoSemanalPct}}%{{if .Agente.PresupuestoSemanalResetAt}} · reset {{.Agente.PresupuestoSemanalResetAt.Local.Format "2006-01-02 15:04"}}{{end}}</small>{{end}}
           </td>
@@ -547,7 +547,7 @@ const webTplAgenteDetalle = `{{define "content"}}
         <p><strong>{{tr "Última sesión"}}:</strong> {{ftime .Row.Agente.UltimaSesion}}</p>
         <p><strong>Cuenta:</strong> {{orDash .Row.Agente.CuentaEmail}}</p>
         <p><strong>Usuario:</strong> {{orDash .Row.Agente.CuentaUsuario}}</p>
-        <p><strong>Cuota efectiva:</strong> {{if .Row.Agente.CuotaRestantePct}}{{.Row.Agente.CuotaRestantePct}}%{{else}}—{{end}}{{if .Row.Agente.PresupuestoVentana}} · {{.Row.Agente.PresupuestoVentana}}{{end}}</p>
+        <p><strong>Cuota efectiva:</strong> {{if .Row.Agente.SinCuotaProveedor}}indefinida · {{if .Row.Agente.PresupuestoFuente}}{{.Row.Agente.PresupuestoFuente}}{{else}}local{{end}}{{else if .Row.Agente.CuotaRestantePct}}{{.Row.Agente.CuotaRestantePct}}%{{else}}—{{end}}{{if .Row.Agente.PresupuestoVentana}} · {{.Row.Agente.PresupuestoVentana}}{{end}}</p>
         <p><strong>Cuota diaria:</strong> {{if .Row.Agente.PresupuestoDiarioPct}}{{.Row.Agente.PresupuestoDiarioPct}}%{{else}}—{{end}}{{if .Row.Agente.PresupuestoDiarioResetAt}} · reset {{.Row.Agente.PresupuestoDiarioResetAt.Local.Format "2006-01-02 15:04"}}{{end}}</p>
         <p><strong>Cuota semanal:</strong> {{if .Row.Agente.PresupuestoSemanalPct}}{{.Row.Agente.PresupuestoSemanalPct}}%{{else}}—{{end}}{{if .Row.Agente.PresupuestoSemanalResetAt}} · reset {{.Row.Agente.PresupuestoSemanalResetAt.Local.Format "2006-01-02 15:04"}}{{end}}</p>
         <p><strong>{{tr "Reanimación"}}:</strong> {{if .Row.Agente.ReanimarAt}}{{reanimacionEn .Row.Agente.ReanimarAt}}{{else}}—{{end}}</p>

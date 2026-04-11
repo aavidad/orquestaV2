@@ -663,7 +663,10 @@ func compactarInstruccionTMUXOllama(texto string) string {
 		return ""
 	}
 	texto = strings.Join(strings.Fields(texto), " ")
-	const maxChars = 720
+	maxChars := 720
+	if strings.Contains(texto, "PROTOCOLO_MICROPROGRAMACION_INLINE") || strings.Contains(texto, "MICROTAREA CERRADA") {
+		maxChars = 8192
+	}
 	if len(texto) <= maxChars {
 		return texto
 	}

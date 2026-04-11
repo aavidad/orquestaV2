@@ -32,6 +32,9 @@ func TestImportFromWebCreaSkillExternaPendiente(t *testing.T) {
 	if err := db.Open(); err != nil {
 		t.Fatalf("Open: %v", err)
 	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Codex1: %v", err)
+	}
 
 	svc := NewService(Repository{}, fakeFetcher{
 		meta: &RemoteSkill{
@@ -72,6 +75,9 @@ func TestImportFromWebDevuelveExistenteSiYaHayEquivalente(t *testing.T) {
 	}()
 	if err := db.Open(); err != nil {
 		t.Fatalf("Open: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Codex1: %v", err)
 	}
 	id, err := db.CrearSkill("Codex1", &db.Skill{
 		TipoAgente:       "programador",

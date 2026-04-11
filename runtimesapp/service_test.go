@@ -541,7 +541,7 @@ func TestDispatchMicroprogramacionInstructionEncolaSendInstructionCanonica(t *te
 	service := NewService(store)
 
 	resultado, err := service.DispatchMicroprogramacionInstruction(MicroprogramacionDispatchRequest{
-		AgenteDestino:     "Gemma1",
+		AgenteDestino:     "Codex1",
 		ProyectoID:        &projectID,
 		Mensaje:           "MICROTAREA CERRADA\nARCHIVO: tmp/x.go",
 		EspecificacionID:  31,
@@ -557,11 +557,130 @@ func TestDispatchMicroprogramacionInstructionEncolaSendInstructionCanonica(t *te
 	if resultado == nil || resultado.RuntimeOrderID != 88 {
 		t.Fatalf("resultado inesperado: %+v", resultado)
 	}
-	if store.createOrder == nil || store.createOrder.Tipo != "send_instruction" || store.createOrder.Agente != "Gemma1" {
+	if store.createOrder == nil || store.createOrder.Tipo != "send_instruction" || store.createOrder.Agente != "Codex1" {
 		t.Fatalf("runtime order inesperada: %+v", store.createOrder)
 	}
 	if !strings.Contains(store.createOrder.PayloadJSON, `"source":"microprogramacion"`) || !strings.Contains(store.createOrder.PayloadJSON, `"especificacion_id":31`) {
 		t.Fatalf("payload sin trazabilidad microprogramada: %s", store.createOrder.PayloadJSON)
+	}
+}
+
+func TestDispatchMicroprogramacionInstructionOllamaIncluyeContextoInline(t *testing.T) {
+	projectID := int64(9)
+	proyectoDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(proyectoDir, "identidad"), 0o755); err != nil {
+		t.Fatalf("mkdir identidad: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(proyectoDir, "identidad", "normalizar.go"), []byte("package identidad\n\nfunc NormalizarIdentificador(s string) string { return s }\n"), 0o644); err != nil {
+		t.Fatalf("write normalizar.go: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(proyectoDir, "identidad", "normalizar_test.go"), []byte("package identidad\n\nfunc TestNormalizarIdentificador() {}\n"), 0o644); err != nil {
+		t.Fatalf("write normalizar_test.go: %v", err)
+	}
+	store := &fakeStore{
+		createOrderID:   91,
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "proyecto", RutaAbs: proyectoDir},
+	}
+	service := NewService(store)
+
+	resultado, err := service.DispatchMicroprogramacionInstruction(MicroprogramacionDispatchRequest{
+		AgenteDestino:     "Gemma1",
+		ProyectoID:        &projectID,
+		Mensaje:           "MICROTAREA CERRADA\nARCHIVO: identidad/normalizar.go",
+		EspecificacionID:  44,
+		ArchivoObjetivo:   "identidad/normalizar.go",
+		SimboloObjetivo:   "NormalizarIdentificador",
+		WriteSet:          []string{"identidad/normalizar.go"},
+		TestsObligatorios: []string{"go test ./identidad -run TestNormalizarIdentificador"},
+		FormatoSalida:     "patch+evidencia",
+	})
+	if err != nil {
+		t.Fatalf("DispatchMicroprogramacionInstruction: %v", err)
+	}
+	if resultado == nil || resultado.RuntimeOrderID != 91 {
+		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+	if store.projectRef != "9" {
+		t.Fatalf("se esperaba lookup por proyecto ID, got=%q", store.projectRef)
+	}
+	if store.createOrder == nil {
+		t.Fatalf("runtime order no creada")
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, "PROTOCOLO_MICROPROGRAMACION_INLINE") {
+		t.Fatalf("payload sin protocolo inline: %s", store.createOrder.PayloadJSON)
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, "identidad/normalizar.go") || !strings.Contains(store.createOrder.PayloadJSON, "func NormalizarIdentificador") {
+		t.Fatalf("payload sin archivo objetivo inline: %s", store.createOrder.PayloadJSON)
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, "identidad/normalizar_test.go") || !strings.Contains(store.createOrder.PayloadJSON, "TestNormalizarIdentificador") {
+		t.Fatalf("payload sin test inline: %s", store.createOrder.PayloadJSON)
+	}
+}
+
+func TestDispatchMicroprogramacionInstructionOllamaToleraWriteSetConArchivosNuevos(t *testing.T) {
+	projectID := int64(12)
+	proyectoDir := t.TempDir()
+	store := &fakeStore{
+		createOrderID:   93,
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "proyecto", RutaAbs: proyectoDir},
+	}
+	service := NewService(store)
+
+	resultado, err := service.DispatchMicroprogramacionInstruction(MicroprogramacionDispatchRequest{
+		AgenteDestino:     "Gemma1",
+		ProyectoID:        &projectID,
+		Mensaje:           "MICROTAREA CERRADA\nARCHIVO: identidad/nuevo.go",
+		EspecificacionID:  46,
+		ArchivoObjetivo:   "identidad/nuevo.go",
+		SimboloObjetivo:   "NuevoSlice",
+		WriteSet:          []string{"identidad/nuevo.go", "identidad/nuevo_test.go"},
+		TestsObligatorios: []string{"go test ./identidad -run TestNuevoSlice"},
+		FormatoSalida:     "patch+evidencia",
+	})
+	if err != nil {
+		t.Fatalf("DispatchMicroprogramacionInstruction: %v", err)
+	}
+	if resultado == nil || resultado.RuntimeOrderID != 93 {
+		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+	if store.createOrder == nil {
+		t.Fatalf("runtime order no creada")
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, "ARCHIVO_NO_EXISTE_TODAVIA") {
+		t.Fatalf("payload sin placeholder de archivo nuevo: %s", store.createOrder.PayloadJSON)
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, "identidad/nuevo.go") || !strings.Contains(store.createOrder.PayloadJSON, "identidad/nuevo_test.go") {
+		t.Fatalf("payload sin write_set esperado: %s", store.createOrder.PayloadJSON)
+	}
+}
+
+func TestDispatchMicroprogramacionInstructionCodexNoFuerzaContextoInline(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{createOrderID: 92}
+	service := NewService(store)
+
+	_, err := service.DispatchMicroprogramacionInstruction(MicroprogramacionDispatchRequest{
+		AgenteDestino:     "Codex1",
+		ProyectoID:        &projectID,
+		Mensaje:           "MICROTAREA CERRADA\nARCHIVO: runtimeagente/driver.go",
+		EspecificacionID:  45,
+		ArchivoObjetivo:   "runtimeagente/driver.go",
+		SimboloObjetivo:   "BuildSpec",
+		WriteSet:          []string{"runtimeagente/driver.go"},
+		TestsObligatorios: []string{"go test ./runtimeagente -run TestBuildSpec"},
+		FormatoSalida:     "patch+evidencia",
+	})
+	if err != nil {
+		t.Fatalf("DispatchMicroprogramacionInstruction: %v", err)
+	}
+	if store.projectRef != "" {
+		t.Fatalf("Codex no deberia resolver proyecto para contexto inline: %q", store.projectRef)
+	}
+	if store.createOrder == nil {
+		t.Fatalf("runtime order no creada")
+	}
+	if strings.Contains(store.createOrder.PayloadJSON, "PROTOCOLO_MICROPROGRAMACION_INLINE") {
+		t.Fatalf("Codex no deberia recibir contexto inline forzado: %s", store.createOrder.PayloadJSON)
 	}
 }
 

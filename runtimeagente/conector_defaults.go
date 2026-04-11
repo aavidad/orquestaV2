@@ -13,6 +13,20 @@ func ConectorPorDefectoAgente(agente string) string {
 	}
 }
 
+func EsConectorFamiliaOllama(slug, comando string) bool {
+	slug = strings.ToLower(strings.TrimSpace(slug))
+	if slug == "ollama-cli" || slug == "ollama_pool_local" || slug == "ollama-pool-local" {
+		return true
+	}
+	comando = strings.ToLower(strings.TrimSpace(comando))
+	switch {
+	case comando == "ollama", comando == "ollama-cli", strings.HasPrefix(comando, "ollama-perfil"):
+		return true
+	default:
+		return false
+	}
+}
+
 func AplicarDefaultsConector(conector ConnectorConfig, perfilSolicitado, modeloSolicitado, razonamientoSolicitado, perfilActual, modeloActual, razonamientoActual string) (string, string, string, error) {
 	metadata, err := parseAnyMapJSON(conector.MetadataJSON)
 	if err != nil {

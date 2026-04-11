@@ -82,6 +82,74 @@ func TestRegistrarAgenteAutoUsaPrefijoCanonicoSegunProveedor(t *testing.T) {
 	}
 }
 
+func TestIniciarSesionContextoAsignaPoolCanonicoParaOllamaPoolLocal(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Gemma1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente Gemma1: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+	if _, err := GuardarPool(&PoolCapacidad{
+		Slug:                "ollama-gemma4",
+		Proveedor:           "Ollama",
+		Runtime:             "ollama",
+		Plan:                "local",
+		CapacidadTotal:      1,
+		PermiteModelosMulti: true,
+		PoliticaHandoff:     "preventivo",
+		FuenteTelemetria:    "manual",
+		MetadataJSON:        `{"conector_canonico":"ollama_pool_local","modelo_preferente":"gemma4:26b","slots_maximos":1}`,
+		Activo:              true,
+	}); err != nil {
+		t.Fatalf("GuardarPool: %v", err)
+	}
+	if _, err := GuardarPoolModelo("ollama-gemma4", &PoolModelo{ModelSlug: "gemma4:26b", Activo: true, Prioridad: 10, CosteRelativo: 1}); err != nil {
+		t.Fatalf("GuardarPoolModelo: %v", err)
+	}
+	if _, err := GuardarPoliticaModelo(&PoliticaModelo{
+		ScopeTipo:       "perfil",
+		ScopeRef:        "implementacion",
+		PerfilTarea:     "implementacion",
+		PoolSlug:        "ollama-gemma4",
+		ModelSlug:       "gemma4:26b",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("GuardarPoliticaModelo: %v", err)
+	}
+
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Gemma1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "gemma1"),
+		Herramienta: "ollama_pool_local",
+	})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto: %v", err)
+	}
+	pool, err := GetPool("ollama-gemma4")
+	if err != nil {
+		t.Fatalf("GetPool: %v", err)
+	}
+	var poolID int64
+	if err := DB.QueryRow(`SELECT pool_id FROM sesiones WHERE id = ?`, sesion.ID).Scan(&poolID); err != nil {
+		t.Fatalf("leer sesiones.pool_id: %v", err)
+	}
+	if poolID != pool.ID {
+		t.Fatalf("pool_id inesperado: got=%d want=%d", poolID, pool.ID)
+	}
+}
+
 func TestResolverAgentePorNombreCIAmbiguoSinCoincidenciaExactaFalla(t *testing.T) {
 	prepararDBTemporal(t)
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {

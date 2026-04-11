@@ -343,6 +343,34 @@ func seedInicialModelosPoolPorAPI() (bool, error) {
 	return apiPost("/api/pools/modelos/seed-inicial", map[string]any{}, nil)
 }
 
+func cargarPoolLocalCompartidoDesdeAPI(slug string) (*capacidadapp.PoolLocalCompartido, bool, error) {
+	var resp apiPoolLocalCompartidoResponse
+	ok, err := apiGet(fmt.Sprintf("/api/pools/%s/local", url.PathEscape(strings.TrimSpace(slug))), &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.PoolLocal, true, nil
+}
+
+func asegurarPoolLocalCompartidoPorAPI(entrada capacidadapp.EntradaAsegurarPoolLocalCompartido) (*capacidadapp.PoolLocalCompartido, bool, error) {
+	var resp apiPoolLocalCompartidoResponse
+	ok, err := apiPost("/api/pools/local-compartido", apiPoolLocalCompartidoSaveRequest{
+		PoolSlug:               strings.TrimSpace(entrada.PoolSlug),
+		Proveedor:              strings.TrimSpace(entrada.Proveedor),
+		Runtime:                strings.TrimSpace(entrada.Runtime),
+		ModeloPreferente:       strings.TrimSpace(entrada.ModeloPreferente),
+		SlotsMaximos:           entrada.SlotsMaximos,
+		ConectorCanonico:       strings.TrimSpace(entrada.ConectorCanonico),
+		ConectorCompatibilidad: strings.TrimSpace(entrada.ConectorCompatibilidad),
+		ExperimentalCompat:     entrada.ExperimentalCompat,
+		Perfiles:               entrada.Perfiles,
+	}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.PoolLocal, true, nil
+}
+
 func cargarPoliticasModeloDesdeAPI(scopeTipo, scopeRef string, activa *bool) ([]*db.PoliticaModelo, bool, error) {
 	var resp apiPoliticasModeloResponse
 	query := url.Values{}
@@ -905,6 +933,23 @@ func registrarConectorPorAPI(req apiConectorUpsertRequest) (int64, bool, error) 
 func registrarAgentePorAPI(nombre, rol string) (bool, error) {
 	ok, err := apiPost("/api/agentes", apiAgenteRequest{Nombre: nombre, Rol: rol}, nil)
 	return ok, err
+}
+
+func registrarAgenteAutoPorAPI(proveedor, rol string) (string, bool, error) {
+	var resp map[string]any
+	ok, err := apiPost("/api/agentes", apiAgenteRequest{
+		Proveedor: strings.TrimSpace(proveedor),
+		Rol:       strings.TrimSpace(rol),
+	}, &resp)
+	if !ok || err != nil {
+		return "", ok, err
+	}
+	nombre, _ := resp["nombre"].(string)
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return "", true, fmt.Errorf("respuesta sin nombre de agente")
+	}
+	return nombre, true, nil
 }
 
 func listarAgentesPresupuestoPorAPI(activos bool, agente string) (*apiAgentesPresupuestoResponse, bool, error) {

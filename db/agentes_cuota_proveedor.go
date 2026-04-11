@@ -231,10 +231,10 @@ func normalizarAgenteSinCuotaProveedor(a *Agente) {
 	}
 	a.CuotaRestantePct = nil
 	a.PresupuestoEstado = ""
-	a.PresupuestoFuente = ""
+	a.PresupuestoFuente = "local"
 	a.PresupuestoCheckedAt = nil
 	a.PresupuestoStale = false
-	a.PresupuestoVentana = ""
+	a.PresupuestoVentana = "indefinida"
 	a.PresupuestoResetAt = nil
 	a.PresupuestoSesionPct = nil
 	a.PresupuestoSesionResetAt = nil

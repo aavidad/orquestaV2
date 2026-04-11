@@ -104,6 +104,9 @@ func runEmbeddedTmuxMonitor(args []string) error {
 	for {
 		if spec.OwnerPID > 0 {
 			if alive, err := procesoVivoPID(spec.OwnerPID); err == nil && !alive {
+				if err := cleanupTMUXSessionOnOwnerExit(spec); err != nil {
+					_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusFailed, false, err.Error(), nil, 0, time.Now().UTC(), lastProgressAt)
+				}
 				return nil
 			}
 		}
@@ -140,6 +143,42 @@ func runEmbeddedTmuxMonitor(args []string) error {
 		_ = writeEmbeddedTmuxWorkerSnapshot(spec, state, true, "", nil, snap.PanePID, now, lastProgressAt)
 		<-ticker.C
 	}
+}
+
+func cleanupTMUXSessionOnOwnerExit(spec embeddedTmuxMonitorSpec) error {
+	if !shouldCleanupTMUXSessionOnOwnerExit(spec) {
+		return nil
+	}
+	tmuxCommand := strings.TrimSpace(spec.TmuxCommand)
+	sessionName := strings.TrimSpace(spec.SessionName)
+	if tmuxCommand == "" || sessionName == "" {
+		return nil
+	}
+	if !tmuxSessionExists(tmuxCommand, sessionName) {
+		return nil
+	}
+	if err := tmuxKillSession(tmuxCommand, sessionName); err != nil {
+		detalle := strings.ToLower(strings.TrimSpace(err.Error()))
+		if strings.Contains(detalle, "can't find session") || strings.Contains(detalle, "no server running") {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+func shouldCleanupTMUXSessionOnOwnerExit(spec embeddedTmuxMonitorSpec) bool {
+	if strings.TrimSpace(spec.ExternalSessionID) != "" {
+		return false
+	}
+	command := strings.ToLower(strings.TrimSpace(spec.Command))
+	if command == "" {
+		return false
+	}
+	return strings.HasPrefix(command, "ollama run ") ||
+		strings.HasPrefix(command, "ollama serve ") ||
+		command == "ollama" ||
+		strings.Contains(command, "/ollama run ")
 }
 
 func consultarTmuxPane(spec embeddedTmuxMonitorSpec) (*tmuxPaneSnapshot, error) {

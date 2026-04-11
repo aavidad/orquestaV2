@@ -37,6 +37,7 @@ func TestCrearPropuestaCreaVotosPendientesSinBloquear(t *testing.T) {
 
 func TestBackfillVotosPendientesRellenaPropuestasAbiertasSinVotos(t *testing.T) {
 	prepararDBTemporal(t)
+	registrarAgentesBaseDBTest(t)
 
 	if _, err := DB.Exec(`DELETE FROM votos`); err != nil {
 		t.Fatalf("delete votos: %v", err)

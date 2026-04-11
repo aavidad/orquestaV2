@@ -2067,7 +2067,7 @@ func TestProcesarRuntimeOrdersBatchCompletaSyncStatusYCheckpoint(t *testing.T) {
 	}
 }
 
-func TestEjecutarRuntimeOrderStartConsumeMailboxBootstrapSinLease(t *testing.T) {
+func TestEjecutarRuntimeOrderStartNoConsumeMailboxBootstrapSinLease(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {
@@ -2132,29 +2132,29 @@ func TestEjecutarRuntimeOrderStartConsumeMailboxBootstrapSinLease(t *testing.T) 
 	if int64FromAny(bootstrap["mailbox_count"]) != 1 {
 		t.Fatalf("mailbox_count inesperado en start result: %+v", bootstrap)
 	}
-	if int64FromAny(bootstrap["consumidos"]) != 1 {
+	if int64FromAny(bootstrap["consumidos"]) != 0 {
 		t.Fatalf("consumidos inesperado en start result: %+v", bootstrap)
 	}
 
-	estadoConsumido := "consumido"
+	estadoPendiente := "pendiente"
 	toAgente := "Codex1"
-	consumidos, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{
+	pendientes, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{
 		ToAgente:   &toAgente,
 		ProyectoID: &proyectoID,
-		Estado:     &estadoConsumido,
+		Estado:     &estadoPendiente,
 	})
 	if err != nil {
-		t.Fatalf("listar runtime mailbox consumido: %v", err)
+		t.Fatalf("listar runtime mailbox pendiente: %v", err)
 	}
 	found := false
-	for _, msg := range consumidos {
+	for _, msg := range pendientes {
 		if msg != nil && msg.ID == msgID {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("mailbox bootstrap deberia quedar consumida: %+v", consumidos)
+		t.Fatalf("mailbox bootstrap deberia quedar pendiente: %+v", pendientes)
 	}
 
 	sesion, err := GetSesionActiva("Codex1", &proyectoID)
@@ -2168,6 +2168,116 @@ func TestEjecutarRuntimeOrderStartConsumeMailboxBootstrapSinLease(t *testing.T) 
 	t.Cleanup(func() {
 		_, _, _ = controlruntime.DetenerProceso(controlruntime.ObjetivoProceso{PID: runtime.PID})
 	})
+}
+
+func TestEjecutarRuntimeOrderStartNoConsumeMailboxLigadaASendInstruction(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Ollama1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "cat-cli",
+		Nombre:     "Cat CLI",
+		Transporte: "cli",
+		Comando:    "cat",
+		Activo:     true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Ollama1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: `{"to_agente":"Ollama1","texto":"microtarea inline"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	msgID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:     "server",
+		ToAgente:       "Ollama1",
+		ProyectoID:     &proyectoID,
+		RuntimeOrderID: &sendID,
+		Kind:           "instruction",
+		PayloadJSON:    `{"texto":"microtarea inline"}`,
+	})
+	if err != nil {
+		t.Fatalf("enviar runtime mailbox: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Ollama1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"cat-cli"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStart(startOrder); err != nil {
+		t.Fatalf("ejecutar start: %v", err)
+	}
+
+	startOrder, err = GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start order final: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(startOrder.ResultadoJSON), &result); err != nil {
+		t.Fatalf("parse start result: %v", err)
+	}
+	bootstrap, _ := result["bootstrap"].(map[string]any)
+	if int64FromAny(bootstrap["mailbox_count"]) != 1 {
+		t.Fatalf("mailbox_count inesperado en start result: %+v", bootstrap)
+	}
+	if int64FromAny(bootstrap["consumidos"]) != 0 {
+		t.Fatalf("consumidos inesperado en start result: %+v", bootstrap)
+	}
+
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "pendiente" {
+		t.Fatalf("send_instruction no deberia alterarse durante start: %+v", sendOrder)
+	}
+
+	estadoPendiente := "pendiente"
+	toAgente := "Ollama1"
+	pendientes, err := ListarRuntimeMailbox(FiltroRuntimeMailbox{
+		ToAgente:   &toAgente,
+		ProyectoID: &proyectoID,
+		Estado:     &estadoPendiente,
+	})
+	if err != nil {
+		t.Fatalf("listar runtime mailbox pendiente: %v", err)
+	}
+	found := false
+	for _, msg := range pendientes {
+		if msg != nil && msg.ID == msgID && msg.RuntimeOrderID != nil && *msg.RuntimeOrderID == sendID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("mailbox ligada a send_instruction deberia seguir pendiente: %+v", pendientes)
+	}
 }
 
 func TestProcesarRuntimeOrdersBatchSyncStatusObservaProcesoLocal(t *testing.T) {
@@ -6078,6 +6188,132 @@ func TestRuntimeOrderSendInstructionMailboxBootstrapTMUXReadyMarcaMailboxEntrega
 	}
 }
 
+func TestRuntimeOrderSendInstructionMicroprogramacionTMUXInteractiveEsperaReceipt(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	fakeTmux := writeFakeTMUXDispatchScriptDB(t, tmp, "active_after_enter")
+	if err := RegistrarAgente("Ollama1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "orquestador")
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: workingDir,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Ollama1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "ollama-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	workerDir := filepath.Join(tmp, "worker-micro-ready")
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatalf("mkdir worker: %v", err)
+	}
+	manifestPath := filepath.Join(workerDir, "manifest.json")
+	statusPath := filepath.Join(workerDir, "status.json")
+	heartbeatPath := filepath.Join(workerDir, "heartbeat.json")
+	now := time.Now().UTC()
+	writeJSON := func(path string, payload map[string]any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	writeJSON(manifestPath, map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_command":          fakeTmux,
+		"tmux_session":          "orq-ollama1-micro",
+		"tmux_pane_id":          "%77",
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+		"can_send_input":        true,
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":                 "ready",
+		"alive":                 true,
+		"ready_at":              now.Format(time.RFC3339Nano),
+		"updated_at":            now.Format(time.RFC3339Nano),
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":        true,
+		"ready_at":     now.Format(time.RFC3339Nano),
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	metaJSON := fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_command":"%s","tmux_session":"orq-ollama1-micro","tmux_pane_id":"%%77","can_send_input":true,"mailbox_delivery_mode":"interactive","worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`,
+		fakeTmux, manifestPath, statusPath, heartbeatPath,
+	)
+	if _, err := DB.Exec(
+		`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-ollama1-micro/%77', capabilities_json=?, metadata_json=? WHERE id=?`,
+		`{"can_send_input":true,"mailbox_delivery_mode":"interactive"}`,
+		metaJSON,
+		handle.ID,
+	); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Ollama1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: `{"to_agente":"Ollama1","source":"microprogramacion","microprogramacion":{"especificacion_id":1,"write_set":["identidad/normalizar.go"]},"texto":"PATCH_UNIFICADO: cambia solo identidad/normalizar.go"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order: %v", err)
+	}
+	if err := ejecutarRuntimeOrderSendInstruction(sendOrder); err != nil {
+		t.Fatalf("ejecutar send_instruction: %v", err)
+	}
+	sendOrder, err = GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "pendiente" {
+		t.Fatalf("microprogramacion interactiva deberia esperar receipt: %+v", sendOrder)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"delivery_state":"notified"`) {
+		t.Fatalf("resultado sin delivery_state notified: %s", sendOrder.ResultadoJSON)
+	}
+	if !strings.Contains(sendOrder.PayloadJSON, `"mailbox_id":`) {
+		t.Fatalf("payload sin mailbox durable para receipt: %s", sendOrder.PayloadJSON)
+	}
+	msg, err := GetRuntimeMailboxByRuntimeOrderID(sendID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox por runtime_order: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "entregado" {
+		t.Fatalf("mailbox de microprogramacion deberia quedar entregado: %+v", msg)
+	}
+}
+
 func TestProcesarRuntimeOrdersBatchCompletaMailboxEntregadoConProgresoPosterior(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {
@@ -6330,6 +6566,592 @@ func TestProcesarRuntimeOrdersBatchCompletaMailboxEntregadoConSalidaPosterior(t 
 	}
 	if msg.Estado != "consumido" {
 		t.Fatalf("mailbox deberia quedar consumido: %+v", msg)
+	}
+}
+
+func TestProcesarRuntimeOrdersBatchMicroprogramacionConTranscriptBloqueoFallaOrden(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	if err := RegistrarAgente("Qwen1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "proyecto")
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "proyecto",
+		Nombre:  "Proyecto smoke",
+		RutaAbs: workingDir,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Qwen1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "ollama-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	workerDir := filepath.Join(tmp, "worker-micro-bloqueo")
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatalf("mkdir workerDir: %v", err)
+	}
+	manifestPath := filepath.Join(workerDir, "manifest.json")
+	statusPath := filepath.Join(workerDir, "status.json")
+	heartbeatPath := filepath.Join(workerDir, "heartbeat.json")
+	now := time.Now().UTC()
+	deliveredAt := now.Add(-2 * time.Minute)
+	outputAt := now.Add(-30 * time.Second)
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-qwen1-micro",
+		"tmux_pane_id":          "%88",
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+		"can_send_input":        true,
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":                 "running",
+		"alive":                 true,
+		"updated_at":            now.Format(time.RFC3339Nano),
+		"ready_at":              deliveredAt.Format(time.RFC3339Nano),
+		"last_output_at":        outputAt.Format(time.RFC3339Nano),
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":          true,
+		"heartbeat_at":   now.Format(time.RFC3339Nano),
+		"ready_at":       deliveredAt.Format(time.RFC3339Nano),
+		"last_output_at": outputAt.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON := fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_session":"orq-qwen1-micro","tmux_pane_id":"%%88","mailbox_delivery_mode":"%s","can_send_input":true,"worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`, runtimeagente.MailboxDeliveryInteractive, manifestPath, statusPath, heartbeatPath)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, `{"can_send_input":true,"mailbox_delivery_mode":"interactive"}`, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Qwen1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"source":"microprogramacion"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	if err := MarcarRuntimeMailboxEntregado(mailboxID); err != nil {
+		t.Fatalf("entregar mailbox: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_mailbox SET delivered_at=? WHERE id=?`, deliveredAt, mailboxID); err != nil {
+		t.Fatalf("backdate delivered_at: %v", err)
+	}
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Qwen1",
+		ProyectoID:  &proyectoID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Qwen1","texto":"micro","source":"microprogramacion","microprogramacion":{"especificacion_id":1,"archivo_objetivo":"identidad/normalizar.go","simbolo_objetivo":"NormalizarIdentificador","write_set":["identidad/normalizar.go"]},"mailbox_id":%d,"mailbox_kind":"instruction"}`, mailboxID),
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	runtimeID := int64(0)
+	if handle.RuntimeID != nil {
+		runtimeID = *handle.RuntimeID
+	}
+	if runtimeID <= 0 {
+		t.Fatalf("runtimeID invalido en handle: %+v", handle)
+	}
+	if _, err := RegistrarRuntimeTranscript(&RuntimeTranscriptEntry{
+		RuntimeID:      runtimeID,
+		HandleID:       &handle.ID,
+		Agente:         "Qwen1",
+		ProyectoID:     &proyectoID,
+		Stream:         "pty_out",
+		Text:           "BLOQUEO: contexto insuficiente",
+		NormalizedText: "bloqueo: contexto insuficiente",
+	}); err != nil {
+		t.Fatalf("registrar transcript bloqueo: %v", err)
+	}
+
+	processed, err := ProcesarRuntimeOrdersBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime orders: %v", err)
+	}
+	if processed < 1 {
+		t.Fatalf("se esperaba reconciliar la orden microprogramada bloqueada, got=%d", processed)
+	}
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "fallida" {
+		t.Fatalf("la orden deberia fallar por bloqueo explicito del agente: %+v", sendOrder)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"receipt_source":"transcript_blocked"`) {
+		t.Fatalf("resultado sin receipt_source transcript_blocked: %s", sendOrder.ResultadoJSON)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"blocked":true`) {
+		t.Fatalf("resultado sin blocked=true: %s", sendOrder.ResultadoJSON)
+	}
+	msg, err := GetRuntimeMailbox(mailboxID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox final: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "consumido" {
+		t.Fatalf("mailbox deberia quedar consumido tras bloqueo explicito: %+v", msg)
+	}
+}
+
+func TestProcesarRuntimeOrdersBatchMicroprogramacionConTranscriptPatchCompletaOrden(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	if err := RegistrarAgente("Qwen1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "proyecto")
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "proyecto",
+		Nombre:  "Proyecto smoke",
+		RutaAbs: workingDir,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Qwen1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "ollama-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	workerDir := filepath.Join(tmp, "worker-micro-patch")
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatalf("mkdir workerDir: %v", err)
+	}
+	manifestPath := filepath.Join(workerDir, "manifest.json")
+	statusPath := filepath.Join(workerDir, "status.json")
+	heartbeatPath := filepath.Join(workerDir, "heartbeat.json")
+	now := time.Now().UTC()
+	deliveredAt := now.Add(-2 * time.Minute)
+	outputAt := now.Add(-30 * time.Second)
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-qwen1-micro",
+		"tmux_pane_id":          "%89",
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+		"can_send_input":        true,
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":                 "running",
+		"alive":                 true,
+		"updated_at":            now.Format(time.RFC3339Nano),
+		"ready_at":              deliveredAt.Format(time.RFC3339Nano),
+		"last_output_at":        outputAt.Format(time.RFC3339Nano),
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":          true,
+		"heartbeat_at":   now.Format(time.RFC3339Nano),
+		"ready_at":       deliveredAt.Format(time.RFC3339Nano),
+		"last_output_at": outputAt.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON := fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_session":"orq-qwen1-micro","tmux_pane_id":"%%89","mailbox_delivery_mode":"%s","can_send_input":true,"worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`, runtimeagente.MailboxDeliveryInteractive, manifestPath, statusPath, heartbeatPath)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, `{"can_send_input":true,"mailbox_delivery_mode":"interactive"}`, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Qwen1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"source":"microprogramacion"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	if err := MarcarRuntimeMailboxEntregado(mailboxID); err != nil {
+		t.Fatalf("entregar mailbox: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_mailbox SET delivered_at=? WHERE id=?`, deliveredAt, mailboxID); err != nil {
+		t.Fatalf("backdate delivered_at: %v", err)
+	}
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Qwen1",
+		ProyectoID:  &proyectoID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Qwen1","texto":"micro","source":"microprogramacion","microprogramacion":{"especificacion_id":1,"archivo_objetivo":"identidad/normalizar.go","simbolo_objetivo":"NormalizarIdentificador","write_set":["identidad/normalizar.go"]},"mailbox_id":%d,"mailbox_kind":"instruction"}`, mailboxID),
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	runtimeID := int64(0)
+	if handle.RuntimeID != nil {
+		runtimeID = *handle.RuntimeID
+	}
+	if runtimeID <= 0 {
+		t.Fatalf("runtimeID invalido en handle: %+v", handle)
+	}
+	if _, err := RegistrarRuntimeTranscript(&RuntimeTranscriptEntry{
+		RuntimeID:      runtimeID,
+		HandleID:       &handle.ID,
+		Agente:         "Qwen1",
+		ProyectoID:     &proyectoID,
+		Stream:         "pty_out",
+		Text:           "PATCH_UNIFICADO:\n--- a/identidad/normalizar.go\n+++ b/identidad/normalizar.go",
+		NormalizedText: "patch_unificado diff --git",
+	}); err != nil {
+		t.Fatalf("registrar transcript patch: %v", err)
+	}
+
+	processed, err := ProcesarRuntimeOrdersBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime orders: %v", err)
+	}
+	if processed < 1 {
+		t.Fatalf("se esperaba reconciliar la orden microprogramada con patch, got=%d", processed)
+	}
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "completada" {
+		t.Fatalf("la orden deberia completarse con transcript patch: %+v", sendOrder)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"receipt_source":"transcript_patch"`) {
+		t.Fatalf("resultado sin receipt_source transcript_patch: %s", sendOrder.ResultadoJSON)
+	}
+	msg, err := GetRuntimeMailbox(mailboxID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox final: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "consumido" {
+		t.Fatalf("mailbox deberia quedar consumido tras transcript patch: %+v", msg)
+	}
+}
+
+func TestProcesarRuntimeOrdersBatchMicroprogramacionConPanePatchCompletaOrden(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	fakeTmux := writeFakeTMUXPanePatchScriptDB(t, tmp)
+	if err := RegistrarAgente("Qwen1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "proyecto")
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "proyecto",
+		Nombre:  "Proyecto smoke",
+		RutaAbs: workingDir,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Qwen1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "ollama-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	workerDir := filepath.Join(tmp, "worker-micro-pane-patch")
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatalf("mkdir workerDir: %v", err)
+	}
+	manifestPath := filepath.Join(workerDir, "manifest.json")
+	statusPath := filepath.Join(workerDir, "status.json")
+	heartbeatPath := filepath.Join(workerDir, "heartbeat.json")
+	now := time.Now().UTC()
+	deliveredAt := now.Add(-2 * time.Minute)
+	heartbeatAt := now.Add(-15 * time.Second)
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_command":          fakeTmux,
+		"tmux_session":          "orq-qwen1-pane-patch",
+		"tmux_pane_id":          "%90",
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+		"can_send_input":        true,
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":                 "running",
+		"alive":                 true,
+		"updated_at":            heartbeatAt.Format(time.RFC3339Nano),
+		"ready_at":              deliveredAt.Format(time.RFC3339Nano),
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": heartbeatAt.Format(time.RFC3339Nano),
+		"ready_at":     deliveredAt.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON := fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_command":"%s","tmux_session":"orq-qwen1-pane-patch","tmux_pane_id":"%%90","mailbox_delivery_mode":"%s","can_send_input":true,"worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`, fakeTmux, runtimeagente.MailboxDeliveryInteractive, manifestPath, statusPath, heartbeatPath)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, `{"can_send_input":true,"mailbox_delivery_mode":"interactive"}`, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Qwen1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"source":"microprogramacion"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	if err := MarcarRuntimeMailboxEntregado(mailboxID); err != nil {
+		t.Fatalf("entregar mailbox: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_mailbox SET delivered_at=? WHERE id=?`, deliveredAt, mailboxID); err != nil {
+		t.Fatalf("backdate delivered_at: %v", err)
+	}
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Qwen1",
+		ProyectoID:  &proyectoID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Qwen1","texto":"micro","source":"microprogramacion","microprogramacion":{"especificacion_id":1,"archivo_objetivo":"identidad/normalizar.go","simbolo_objetivo":"NormalizarIdentificador","write_set":["identidad/normalizar.go"]},"mailbox_id":%d,"mailbox_kind":"instruction"}`, mailboxID),
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+
+	processed, err := ProcesarRuntimeOrdersBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime orders: %v", err)
+	}
+	if processed < 1 {
+		t.Fatalf("se esperaba reconciliar la orden microprogramada con patch en pane, got=%d", processed)
+	}
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "completada" {
+		t.Fatalf("la orden deberia completarse con pane patch: %+v", sendOrder)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"receipt_source":"tmux_pane_patch"`) {
+		t.Fatalf("resultado sin receipt_source tmux_pane_patch: %s", sendOrder.ResultadoJSON)
+	}
+	msg, err := GetRuntimeMailbox(mailboxID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox final: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "consumido" {
+		t.Fatalf("mailbox deberia quedar consumido tras pane patch: %+v", msg)
+	}
+}
+
+func TestProcesarRuntimeOrdersBatchMicroprogramacionIgnoraEcoSiBloqueoYCierraSesionOllama(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	if err := RegistrarAgente("Qwen1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "demo")
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "demo",
+		Nombre:  "Demo",
+		RutaAbs: workingDir,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Qwen1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "ollama-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	workerDir := filepath.Join(tmp, "worker-micro-pane-patch-stale")
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatalf("mkdir workerDir: %v", err)
+	}
+	manifestPath := filepath.Join(workerDir, "manifest.json")
+	statusPath := filepath.Join(workerDir, "status.json")
+	heartbeatPath := filepath.Join(workerDir, "heartbeat.json")
+	invocations := filepath.Join(tmp, "tmux-qwen-autostop.log")
+	fakeTmux := writeFakeTMUXPanePatchWithKillScriptDB(t, tmp, invocations)
+	now := time.Now().UTC()
+	deliveredAt := now.Add(-2 * time.Minute)
+	staleAt := now.Add(-3 * time.Minute)
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_command":          fakeTmux,
+		"tmux_session":          "orq-qwen1-pane-stale",
+		"tmux_pane_id":          "%91",
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+		"can_send_input":        true,
+		"rendered_command":      "ollama run qwen2.5-coder:14b",
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":                 "running",
+		"alive":                 true,
+		"updated_at":            staleAt.Format(time.RFC3339Nano),
+		"ready_at":              staleAt.Format(time.RFC3339Nano),
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": staleAt.Format(time.RFC3339Nano),
+		"ready_at":     staleAt.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON := fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_command":"%s","tmux_session":"orq-qwen1-pane-stale","tmux_pane_id":"%%91","mailbox_delivery_mode":"%s","can_send_input":true,"rendered_command":"ollama run qwen2.5-coder:14b","worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`, fakeTmux, runtimeagente.MailboxDeliveryInteractive, manifestPath, statusPath, heartbeatPath)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, `{"can_send_input":true,"mailbox_delivery_mode":"interactive"}`, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Qwen1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"source":"microprogramacion"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	if err := MarcarRuntimeMailboxEntregado(mailboxID); err != nil {
+		t.Fatalf("entregar mailbox: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_mailbox SET delivered_at=? WHERE id=?`, deliveredAt, mailboxID); err != nil {
+		t.Fatalf("backdate delivered_at: %v", err)
+	}
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Qwen1",
+		ProyectoID:  &proyectoID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Qwen1","texto":"PROTOCOLO_ORQUESTA_MICRO SI_BLOQUEO=BLOQUEO: <motivo>","source":"microprogramacion","microprogramacion":{"especificacion_id":1,"archivo_objetivo":"identidad/normalizar.go","simbolo_objetivo":"NormalizarIdentificador","write_set":["identidad/normalizar.go"]},"mailbox_id":%d,"mailbox_kind":"instruction"}`, mailboxID),
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	runtimeID := int64(0)
+	if handle.RuntimeID != nil {
+		runtimeID = *handle.RuntimeID
+	}
+	if runtimeID <= 0 {
+		t.Fatalf("runtimeID invalido en handle: %+v", handle)
+	}
+	if _, err := RegistrarRuntimeTranscript(&RuntimeTranscriptEntry{
+		RuntimeID:      runtimeID,
+		HandleID:       &handle.ID,
+		Agente:         "Qwen1",
+		ProyectoID:     &proyectoID,
+		Stream:         "pty_out",
+		Text:           "PROTOCOLO_ORQUESTA_MICRO SI_BLOQUEO=BLOQUEO: <motivo concreto>",
+		NormalizedText: "protocolo_orquesta_micro si_bloqueo=bloqueo: motivo concreto",
+		CreatedAt:      now,
+	}); err != nil {
+		t.Fatalf("registrar transcript eco: %v", err)
+	}
+
+	processed, err := ProcesarRuntimeOrdersBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime orders: %v", err)
+	}
+	if processed < 1 {
+		t.Fatalf("se esperaba reconciliar la orden microprogramada con patch en pane y heartbeat stale, got=%d", processed)
+	}
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "completada" {
+		t.Fatalf("la orden deberia completarse ignorando el eco SI_BLOQUEO: %+v", sendOrder)
+	}
+	if !strings.Contains(sendOrder.ResultadoJSON, `"receipt_source":"tmux_pane_patch"`) {
+		t.Fatalf("resultado sin receipt_source tmux_pane_patch: %s", sendOrder.ResultadoJSON)
+	}
+	msg, err := GetRuntimeMailbox(mailboxID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox final: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "consumido" {
+		t.Fatalf("mailbox deberia quedar consumido tras pane patch: %+v", msg)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle final: %+v err=%v", handle, err)
+	}
+	if handle.Estado != "cerrado" {
+		t.Fatalf("el handle ollama deberia autocerrarse al terminar la microtarea: %+v", handle)
+	}
+	data, err := os.ReadFile(invocations)
+	if err != nil {
+		t.Fatalf("leer invocaciones fake tmux: %v", err)
+	}
+	if !strings.Contains(string(data), "kill-session -t orq-qwen1-pane-stale") {
+		t.Fatalf("faltaba kill-session de autocierre ollama: %s", string(data))
 	}
 }
 
@@ -7656,6 +8478,152 @@ func TestProcesarRuntimeOrdersBatchReencolaMailboxEntregadoSinReciboTrasTimeout(
 	}
 }
 
+func TestProcesarRuntimeOrdersBatchOllamaTimeoutReciboCierraSesionAntesDeReencolar(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	if err := RegistrarAgente("Qwen1", "programador"); err != nil {
+		t.Fatalf("registrar Qwen1: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "demo")
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "demo",
+		Nombre:  "Demo",
+		RutaAbs: workingDir,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Qwen1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "ollama-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	workerDir := filepath.Join(tmp, "worker-qwen-timeout")
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatalf("mkdir workerDir: %v", err)
+	}
+	manifestPath := filepath.Join(workerDir, "manifest.json")
+	statusPath := filepath.Join(workerDir, "status.json")
+	heartbeatPath := filepath.Join(workerDir, "heartbeat.json")
+	invocations := filepath.Join(tmp, "tmux-qwen-timeout.log")
+	fakeTmux := writeFakeTMUXNoPatchWithKillScriptDB(t, tmp, invocations)
+	now := time.Now().UTC()
+	deliveredAt := now.Add(-3 * time.Minute)
+	staleOutputAt := now.Add(-4 * time.Minute)
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_command":          fakeTmux,
+		"tmux_session":          "orq-qwen1-timeout",
+		"tmux_pane_id":          "%92",
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+		"can_send_input":        true,
+		"rendered_command":      "ollama run qwen2.5-coder:14b",
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":                 "running",
+		"alive":                 true,
+		"updated_at":            now.Format(time.RFC3339Nano),
+		"ready_at":              deliveredAt.Format(time.RFC3339Nano),
+		"last_output_at":        staleOutputAt.Format(time.RFC3339Nano),
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":          true,
+		"heartbeat_at":   now.Format(time.RFC3339Nano),
+		"ready_at":       deliveredAt.Format(time.RFC3339Nano),
+		"last_output_at": staleOutputAt.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON := fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_command":"%s","tmux_session":"orq-qwen1-timeout","tmux_pane_id":"%%92","mailbox_delivery_mode":"%s","can_send_input":true,"rendered_command":"ollama run qwen2.5-coder:14b","worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`, fakeTmux, runtimeagente.MailboxDeliveryInteractive, manifestPath, statusPath, heartbeatPath)
+	if _, err := DB.Exec(`UPDATE runtime_handles SET metadata_json=?, capabilities_json=? WHERE id=?`, metaJSON, `{"can_send_input":true,"mailbox_delivery_mode":"interactive"}`, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Qwen1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"source":"microprogramacion"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	if err := MarcarRuntimeMailboxEntregado(mailboxID); err != nil {
+		t.Fatalf("entregar mailbox: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_mailbox SET delivered_at=? WHERE id=?`, deliveredAt, mailboxID); err != nil {
+		t.Fatalf("backdate delivered_at: %v", err)
+	}
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Qwen1",
+		ProyectoID:  &proyectoID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: fmt.Sprintf(`{"to_agente":"Qwen1","texto":"micro","source":"microprogramacion","microprogramacion":{"especificacion_id":1,"archivo_objetivo":"identidad/normalizar.go","simbolo_objetivo":"NormalizarIdentificador","write_set":["identidad/normalizar.go"]},"mailbox_id":%d,"mailbox_kind":"instruction"}`, mailboxID),
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+
+	processed, err := ProcesarRuntimeOrdersBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime orders: %v", err)
+	}
+	if processed < 1 {
+		t.Fatalf("se esperaba reconciliar la orden entregada stale de ollama, got=%d", processed)
+	}
+	sendOrder, err := GetRuntimeOrder(sendID)
+	if err != nil {
+		t.Fatalf("get send order final: %v", err)
+	}
+	if sendOrder.Estado != "pendiente" {
+		t.Fatalf("la orden ollama deberia reencolarse pendiente tras timeout de recibo: %+v", sendOrder)
+	}
+	if !strings.Contains(sendOrder.ErrorText, "delivery receipt timeout") {
+		t.Fatalf("error_text sin timeout de recibo: %s", sendOrder.ErrorText)
+	}
+	msg, err := GetRuntimeMailbox(mailboxID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox final: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "pendiente" {
+		t.Fatalf("mailbox deberia rearmarse a pendiente: %+v", msg)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle final: %+v err=%v", handle, err)
+	}
+	if handle.Estado != "cerrado" {
+		t.Fatalf("el handle ollama deberia cerrarse antes del reintento: %+v", handle)
+	}
+	data, err := os.ReadFile(invocations)
+	if err != nil {
+		t.Fatalf("leer invocaciones fake tmux: %v", err)
+	}
+	if !strings.Contains(string(data), "kill-session -t orq-qwen1-timeout") {
+		t.Fatalf("faltaba kill-session tras timeout ollama: %s", string(data))
+	}
+}
+
 func TestProcesarRuntimeOrdersBatchReencolaMailboxEntregadoSiWorkerYaEstaParado(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {
@@ -8623,6 +9591,94 @@ func TestRuntimeOrderPauseTMUXBootstrapOnlySeSatisfaceCerrandoSesion(t *testing.
 	}
 	if !strings.Contains(string(data), "kill-session -t orq-codex1-bootstrap") {
 		t.Fatalf("faltaba kill-session para pause tmux bootstrap_only: %s", string(data))
+	}
+}
+
+func TestRuntimeOrderPauseTMUXOllamaInteractiveSeSatisfaceCerrandoSesion(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Ollama1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Ollama1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "ollama-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+
+	invocations := filepath.Join(tmp, "tmux-pause-ollama.log")
+	fakeTmux := filepath.Join(tmp, "tmux-ollama")
+	script := "#!/usr/bin/env bash\n" +
+		"printf '%s\\n' \"$*\" >> " + strconv.Quote(invocations) + "\n" +
+		"exit 0\n"
+	if err := os.WriteFile(fakeTmux, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+
+	metaJSON := fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_command":%q,"tmux_session":"orq-ollama1-interactive","mailbox_delivery_mode":"interactive","can_send_input":true,"rendered_command":"ollama run qwen2.5-coder:14b"}`, fakeTmux)
+	capsJSON := `{"can_send_input":true,"mailbox_delivery_mode":"interactive"}`
+	if _, err := DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref=?, metadata_json=?, capabilities_json=? WHERE id=?`, "orq-ollama1-interactive/%91", metaJSON, capsJSON, handle.ID); err != nil {
+		t.Fatalf("update handle tmux ollama: %v", err)
+	}
+
+	pauseID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Ollama1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   handle.RuntimeID,
+		HandleID:    &handle.ID,
+		Tipo:        "pause",
+		PayloadJSON: `{"motivo":"sin trabajo"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar pause: %v", err)
+	}
+	pauseOrder, err := GetRuntimeOrder(pauseID)
+	if err != nil || pauseOrder == nil {
+		t.Fatalf("get pause order: %+v err=%v", pauseOrder, err)
+	}
+	if err := ejecutarRuntimeOrderPause(pauseOrder); err != nil {
+		t.Fatalf("ejecutar pause ollama interactive: %v", err)
+	}
+
+	pauseOrder, err = GetRuntimeOrder(pauseID)
+	if err != nil || pauseOrder == nil {
+		t.Fatalf("get pause order final: %+v err=%v", pauseOrder, err)
+	}
+	if pauseOrder.Estado != "completada" || !strings.Contains(pauseOrder.ResultadoJSON, `"paused_via_stop":true`) {
+		t.Fatalf("pause ollama interactive deberia completarse via stop: %+v", pauseOrder)
+	}
+	handle, err = GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle final: %+v err=%v", handle, err)
+	}
+	if handle.Estado != "cerrado" {
+		t.Fatalf("el handle ollama pausado via stop deberia quedar cerrado: %+v", handle)
+	}
+
+	data, err := os.ReadFile(invocations)
+	if err != nil {
+		t.Fatalf("read fake tmux log: %v", err)
+	}
+	if !strings.Contains(string(data), "kill-session -t orq-ollama1-interactive") {
+		t.Fatalf("faltaba kill-session para pause ollama interactive: %s", string(data))
 	}
 }
 
@@ -9612,6 +10668,145 @@ func TestRuntimeOrderStartIntegraBootstrapDeHandoffMailboxYCheckpoint(t *testing
 	}
 	if len(msgsConsumidos) != 1 || msgsConsumidos[0].ID != msgID {
 		t.Fatalf("mailbox consumido inesperado tras ack: %+v", msgsConsumidos)
+	}
+}
+
+func TestRuntimeOrderStartPoolLocalReutilizaSesionActivaExistente(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/launch":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"external_session_id": "ollama-pool-1",
+				"handle_ref":          "ollama-pool-1",
+				"handle_kind":         "api",
+				"logical_state":       "ready",
+				"capabilities": map[string]any{
+					"can_send_input": true,
+					"can_stop":       true,
+				},
+			})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		}
+	}))
+	defer srv.Close()
+
+	if err := RegistrarAgente("GemmaPool1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := UpsertConector(&Conector{
+		Slug:       "ollama_pool_local",
+		Nombre:     "Ollama Pool Local",
+		Transporte: "api",
+		Comando:    srv.URL,
+		MetadataJSON: `{
+			"familia":"ollama",
+			"pool_compartido":true,
+			"default_task_profile":"implementacion",
+			"default_reasoning_effort":"high",
+			"launch_path":"/launch",
+			"input_path":"/input",
+			"stop_path":"/stop",
+			"status_path":"/status"
+		}`,
+		Activo: true,
+	}); err != nil {
+		t.Fatalf("upsert conector pool: %v", err)
+	}
+
+	sesionInicial, err := IniciarSesionContexto(SesionInicio{
+		Agente:             "GemmaPool1",
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador"),
+		Herramienta:        "ollama_pool_local",
+		ExternalSessionID:  "ollama-pool-1",
+		ResumePayloadJSON:  `{"driver":"ollama_pool_local","modelo":"gemma4:26b"}`,
+		ResumenContinuidad: "continuidad previa",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion activa: %v", err)
+	}
+
+	var sesionesAntes int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM sesiones WHERE agente=? AND proyecto_id=?`, "GemmaPool1", proyectoID).Scan(&sesionesAntes); err != nil {
+		t.Fatalf("count sesiones antes: %v", err)
+	}
+
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "GemmaPool1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: `{"proyecto":"orquestador","conector":"ollama_pool_local","modelo":"gemma4:26b","perfil_tarea":"implementacion"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar start: %v", err)
+	}
+	startOrder, err := GetRuntimeOrder(startID)
+	if err != nil {
+		t.Fatalf("get start: %v", err)
+	}
+	if err := ejecutarRuntimeOrderStart(startOrder); err != nil {
+		t.Fatalf("ejecutar start: %v", err)
+	}
+
+	sesionActiva, err := GetSesionActiva("GemmaPool1", &proyectoID)
+	if err != nil || sesionActiva == nil {
+		t.Fatalf("sesion activa: %+v err=%v", sesionActiva, err)
+	}
+	if sesionActiva.ID != sesionInicial.ID {
+		t.Fatalf("deberia reutilizar la sesion inicial, got=%d want=%d", sesionActiva.ID, sesionInicial.ID)
+	}
+	if sesionActiva.ExternalSessionID != "ollama-pool-1" {
+		t.Fatalf("external_session_id inesperado: %s", sesionActiva.ExternalSessionID)
+	}
+
+	var sesionesDespues int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM sesiones WHERE agente=? AND proyecto_id=?`, "GemmaPool1", proyectoID).Scan(&sesionesDespues); err != nil {
+		t.Fatalf("count sesiones despues: %v", err)
+	}
+	if sesionesDespues != sesionesAntes {
+		t.Fatalf("no deberia crear una sesion nueva, before=%d after=%d", sesionesAntes, sesionesDespues)
+	}
+
+	handle, err := GetRuntimeHandleBySesionID(sesionActiva.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle activo: %+v err=%v", handle, err)
+	}
+	if handle.SesionID == nil || *handle.SesionID != sesionActiva.ID {
+		t.Fatalf("handle no ligado a la sesion reutilizada: %+v", handle)
+	}
+	if strings.Contains(handle.MetadataJSON, `"supervisor_driver"`) || strings.Contains(handle.MetadataJSON, `"log_path"`) {
+		t.Fatalf("un handle remoto de pool local no debería activar supervisor local: %s", handle.MetadataJSON)
+	}
+
+	runtime, err := GetRuntimeBySesionID(sesionActiva.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	if strings.TrimSpace(runtime.LogicalState) == "" {
+		t.Fatalf("runtime deberia quedar con logical_state util: %+v", runtime)
+	}
+}
+
+func TestInferirTransporteArranqueRemoteSessionNoSeConvierteATmux(t *testing.T) {
+	got := inferirTransporteArranque(&controlruntime.ProcesoArrancado{
+		HandleKind:   "session",
+		HandleRef:    "ollama-pool-1",
+		MetadataJSON: `{"driver":"remote_http","transport":"api","handle_ref":"ollama-pool-1"}`,
+	})
+	if got != "api" {
+		t.Fatalf("transporte inesperado para session remota: %q", got)
 	}
 }
 
@@ -11031,6 +12226,122 @@ esac
 `, stateDir, mode, "%s")
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
 		t.Fatalf("write fake tmux dispatch db: %v", err)
+	}
+	return scriptPath
+}
+
+func writeFakeTMUXPanePatchScriptDB(t *testing.T, dir string) string {
+	t.Helper()
+	scriptPath := filepath.Join(dir, "fake-tmux-pane-patch")
+	patch := strings.Join([]string{
+		"```diff",
+		"--- identidad/normalizar_identificador.go",
+		"+++ identidad/normalizar_identificador.go",
+		"@@ -1,4 +1,10 @@",
+		" package identidad",
+		"+import (",
+		"+  \"regexp\"",
+		"+  \"strings\"",
+		"+)",
+		"",
+		" Evidencia:",
+		" - patch aplicado",
+	}, "\n")
+	script := fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+cmd="${1:-}"
+shift || true
+case "$cmd" in
+  has-session)
+    exit 0
+    ;;
+  capture-pane)
+    cat <<'EOF'
+%s
+EOF
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`, patch)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake tmux pane patch: %v", err)
+	}
+	return scriptPath
+}
+
+func writeFakeTMUXPanePatchWithKillScriptDB(t *testing.T, dir, invocations string) string {
+	t.Helper()
+	scriptPath := filepath.Join(dir, "fake-tmux-pane-patch-kill")
+	patch := strings.Join([]string{
+		"```diff",
+		"--- identidad/normalizar_identificador.go",
+		"+++ identidad/normalizar_identificador.go",
+		"@@ -1,4 +1,10 @@",
+		" package identidad",
+		"+import \"strings\"",
+		"+",
+		"+func NormalizarIdentificadorTecnico(input string) string {",
+		"+  return strings.ToLower(strings.TrimSpace(input))",
+		"+}",
+		"```",
+	}, "\n")
+	script := fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+cmd="${1:-}"
+shift || true
+printf "%%s %%s\n" "$cmd" "$*" >> %q
+case "$cmd" in
+  has-session)
+    exit 0
+    ;;
+  capture-pane)
+    cat <<'EOF'
+%s
+EOF
+    ;;
+  kill-session)
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`, invocations, patch)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake tmux pane patch kill: %v", err)
+	}
+	return scriptPath
+}
+
+func writeFakeTMUXNoPatchWithKillScriptDB(t *testing.T, dir, invocations string) string {
+	t.Helper()
+	scriptPath := filepath.Join(dir, "fake-tmux-no-patch-kill")
+	script := fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+cmd="${1:-}"
+shift || true
+printf "%%s %%s\n" "$cmd" "$*" >> %q
+case "$cmd" in
+  has-session)
+    exit 0
+    ;;
+  capture-pane)
+    cat <<'EOF'
+>>> Send a message (/? for help)
+EOF
+    ;;
+  kill-session)
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`, invocations)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake tmux no patch kill: %v", err)
 	}
 	return scriptPath
 }

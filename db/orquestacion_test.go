@@ -209,6 +209,25 @@ func prepararDBTemporal(t *testing.T) string {
 	return prepararDBTemporalConNombre(t, "orquesta-test.db")
 }
 
+func registrarAgentesBaseDBTest(t *testing.T) {
+	t.Helper()
+	roster := []struct {
+		nombre string
+		rol    string
+	}{
+		{nombre: "alberto", rol: "admin"},
+		{nombre: "Codex1", rol: "programador"},
+		{nombre: "Codex2", rol: "programador"},
+		{nombre: "antigravity", rol: "documentador"},
+		{nombre: "claude", rol: "programador"},
+	}
+	for _, item := range roster {
+		if err := RegistrarAgente(item.nombre, item.rol); err != nil {
+			t.Fatalf("RegistrarAgente %s: %v", item.nombre, err)
+		}
+	}
+}
+
 func TestSesionReanudableConProyectoYConector(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

@@ -92,11 +92,8 @@ func TestSchemaSeparadoEnDDLYSemillas(t *testing.T) {
 	if strings.Contains(seeds, "INSERT OR IGNORE INTO") {
 		t.Fatalf("las semillas no deberian usar INSERT OR IGNORE fijo")
 	}
-	if !strings.Contains(seeds, "INSERT INTO agentes") {
-		t.Fatalf("las semillas deberian incluir agentes iniciales")
-	}
-	if !strings.Contains(seeds, "ON CONFLICT(nombre) DO NOTHING") {
-		t.Fatalf("las semillas deberian usar conflicto por nombre para agentes")
+	if strings.Contains(seeds, "INSERT INTO agentes") {
+		t.Fatalf("las semillas no deberian incluir agentes legacy")
 	}
 	if !strings.Contains(seeds, "INSERT INTO config") {
 		t.Fatalf("las semillas deberian incluir config inicial")
@@ -302,8 +299,11 @@ func TestSchemaSeedDataForDriverMySQLUsaInsertIgnore(t *testing.T) {
 	if seeds == "" {
 		t.Fatalf("schema seeds vacio para mysql")
 	}
-	if !strings.Contains(seeds, "INSERT IGNORE INTO agentes") {
-		t.Fatalf("mysql deberia usar INSERT IGNORE para agentes")
+	if !strings.Contains(seeds, "INSERT IGNORE INTO config") {
+		t.Fatalf("mysql deberia usar INSERT IGNORE para config")
+	}
+	if strings.Contains(seeds, "INSERT IGNORE INTO agentes") {
+		t.Fatalf("mysql no deberia sembrar agentes legacy")
 	}
 	if strings.Contains(seeds, "ON CONFLICT(") {
 		t.Fatalf("mysql no deberia renderizar ON CONFLICT")

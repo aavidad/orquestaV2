@@ -198,6 +198,11 @@ func supervisorLocalRefDesdeMetadata(raw string) string {
 
 func supervisorLocalEsAplicable(obj ObjetivoProceso) bool {
 	meta := metadataMap(obj.MetadataJSON)
+	driver := strings.ToLower(strings.TrimSpace(stringValueFromMetadata(meta, "driver")))
+	transport := strings.ToLower(strings.TrimSpace(stringValueFromMetadata(meta, "transport")))
+	if driver == "remote_http" || driver == "ollama_pool_local" || transport == "api" || transport == "mcp_http" {
+		return false
+	}
 	if supervisorLocalDriverLocalAplicable(obj, meta) {
 		return true
 	}

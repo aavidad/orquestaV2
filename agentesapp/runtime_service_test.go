@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"orquesta/capacidadapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/runtimeagente"
@@ -155,5 +156,76 @@ func TestBuildPrepareRecuperaWorktreeActivaSiUltimaSesionTraeCWDObsoleto(t *test
 	}
 	if out.Plan.WorkingDir == rutaObsoleta {
 		t.Fatalf("working dir no deberia conservar la ruta obsoleta: %s", out.Plan.WorkingDir)
+	}
+}
+
+func TestBuildPreparePrefierePoolLocalCompartidoOllama(t *testing.T) {
+	prepararDBTemporalRuntimeService(t)
+	tmp := t.TempDir()
+	rutaProyecto := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(rutaProyecto, 0o755); err != nil {
+		t.Fatalf("mkdir proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Gemma1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaProyecto,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.GuardarPool(&db.PoolCapacidad{
+		Slug:           "ollama-gemma4",
+		Proveedor:      "Ollama",
+		Runtime:        "ollama",
+		Plan:           "local",
+		CapacidadTotal: 1,
+		MetadataJSON:   `{"conector_canonico":"ollama_pool_local","conector_compatibilidad":"ollama-cli","slots_maximos":1}`,
+		Activo:         true,
+	}); err != nil {
+		t.Fatalf("guardar pool: %v", err)
+	}
+	if _, err := db.GuardarPoolModelo("ollama-gemma4", &db.PoolModelo{
+		ModelSlug:     "gemma4:26b",
+		Activo:        true,
+		Prioridad:     10,
+		CosteRelativo: 1,
+	}); err != nil {
+		t.Fatalf("guardar pool modelo: %v", err)
+	}
+	if _, err := db.GuardarPoliticaModelo(&db.PoliticaModelo{
+		ScopeTipo:       "perfil",
+		ScopeRef:        "implementacion",
+		PerfilTarea:     "implementacion",
+		PoolSlug:        "ollama-gemma4",
+		ModelSlug:       "gemma4:26b",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("guardar politica: %v", err)
+	}
+
+	out, err := NewService(Repository{}, capacidadapp.Repository{}).BuildPrepare(PrepareInput{
+		Agente:   "Gemma1",
+		Proyecto: "orquestador",
+		Perfil:   "implementacion",
+	})
+	if err != nil {
+		t.Fatalf("BuildPrepare: %v", err)
+	}
+	if out.Conector.Slug != "ollama_pool_local" {
+		t.Fatalf("conector inesperado: %+v", out.Conector)
+	}
+	if out.Plan == nil || out.Plan.Transporte != "api" {
+		t.Fatalf("plan inesperado: %+v", out.Plan)
+	}
+	if out.Proyecto.ID != proyectoID {
+		t.Fatalf("proyecto inesperado: %+v", out.Proyecto)
 	}
 }

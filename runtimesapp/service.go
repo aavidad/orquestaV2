@@ -561,9 +561,9 @@ func (s *Service) DispatchMicroprogramacionInstruction(req MicroprogramacionDisp
 	if req.ProyectoID == nil || *req.ProyectoID <= 0 {
 		return nil, fmt.Errorf("proyecto obligatorio para despachar microtarea")
 	}
-	mensaje := strings.TrimSpace(req.Mensaje)
-	if mensaje == "" {
-		return nil, fmt.Errorf("mensaje de microprogramacion obligatorio")
+	mensaje, err := s.prepararMensajeMicroprogramacion(req)
+	if err != nil {
+		return nil, err
 	}
 	payload, err := json.Marshal(map[string]any{
 		"to_agente": agenteDestino,

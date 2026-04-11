@@ -80,6 +80,8 @@ func TestAPICapacidadEndpoints(t *testing.T) {
 	assertKey(http.MethodGet, "/api/pools", nil, "pools", http.StatusOK)
 	assertKey(http.MethodGet, "/api/pools/codex", nil, "detalle", http.StatusOK)
 	assertKey(http.MethodGet, "/api/pools/codex/modelos", nil, "modelos", http.StatusOK)
+	assertKey(http.MethodPost, "/api/pools/local-compartido", []byte(`{"pool_slug":"ollama-gemma4","proveedor":"Ollama","runtime":"ollama","modelo_preferente":"gemma4:26b","slots_maximos":1,"conector_canonico":"ollama_pool_local","conector_compatibilidad":"ollama-cli","experimental_compat":true}`), "pool_local", http.StatusCreated)
+	assertKey(http.MethodGet, "/api/pools/ollama-gemma4/local", nil, "pool_local", http.StatusOK)
 	assertKey(http.MethodPost, "/api/pools", []byte(`{"slug":"claude","proveedor":"Anthropic","runtime":"claude","plan":"default","es_de_pago":true,"capacidad_total":1,"capacidad_reservada":0,"permite_hijos":true,"permite_modelos_multi":true,"permite_sobrecoste":false,"politica_handoff":"preventivo","fuente_telemetria":"manual","metadata_json":"{}","activo":true}`), "id", http.StatusCreated)
 	assertKey(http.MethodPost, "/api/pools/claude/modelos", []byte(`{"model_slug":"claude-opus","activo":true,"prioridad":20,"coste_relativo":2.0,"limite_conocido_json":"{}"}`), "id", http.StatusCreated)
 	assertKey(http.MethodGet, "/api/politicas-modelo?scope_tipo=perfil&scope_ref=programador", nil, "politicas", http.StatusOK)

@@ -57,6 +57,16 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 				"rol":                "programador",
 				"governance_catalog": map[string]any{"resolucion_actual": "rol+proyecto"},
 			})
+		case r.URL.Path == "/api/agentes" && r.Method == http.MethodPost:
+			var req apiAgenteRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode agente request: %v", err)
+			}
+			nombre := strings.TrimSpace(req.Nombre)
+			if nombre == "" {
+				nombre = "Ollama1"
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "nombre": nombre, "rol": req.Rol})
 		case r.URL.Path == "/api/agentes/Codex1/reset-reanimacion" && r.Method == http.MethodPost:
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agente": "Codex1"})
 		case r.URL.Path == "/api/agentes/Codex1/eliminar" && r.Method == http.MethodPost:
@@ -134,6 +144,28 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 		t.Fatalf("salida eliminar inesperada:\n%s", outEliminar)
 	}
 
+	outRegistrar := capturarStdout(t, func() {
+		if err := agenteRegistrarCmd.RunE(agenteRegistrarCmd, []string{"Qwen1"}); err != nil {
+			t.Fatalf("agente registrar via api: %v", err)
+		}
+	})
+	if !strings.Contains(outRegistrar, "Qwen1") {
+		t.Fatalf("salida registrar inesperada:\n%s", outRegistrar)
+	}
+
+	resetCommandFlags(agenteRegistrarCmd)
+	if err := agenteRegistrarCmd.Flags().Set("proveedor", "ollama"); err != nil {
+		t.Fatalf("set proveedor registrar: %v", err)
+	}
+	outRegistrarAuto := capturarStdout(t, func() {
+		if err := agenteRegistrarCmd.RunE(agenteRegistrarCmd, nil); err != nil {
+			t.Fatalf("agente registrar auto via api: %v", err)
+		}
+	})
+	if !strings.Contains(outRegistrarAuto, "Ollama1") {
+		t.Fatalf("salida registrar auto inesperada:\n%s", outRegistrarAuto)
+	}
+
 	outControl := capturarStdout(t, func() {
 		if err := agenteControlCmd.RunE(agenteControlCmd, []string{"arrancar", "Codex1"}); err != nil {
 			t.Fatalf("agente control via api: %v", err)
@@ -196,6 +228,7 @@ func TestAgenteControlRequiereServidor(t *testing.T) {
 		},
 		{nombre: "handoff", cmd: func() *cobra.Command { return agenteHandoffCmd }, args: []string{"Codex1", "Codex2"}},
 		{nombre: "reasignar-vivo", cmd: func() *cobra.Command { return agenteReasignarVivoCmd }, args: []string{"1", "Codex1", "Codex2"}},
+		{nombre: "registrar", cmd: func() *cobra.Command { return agenteRegistrarCmd }, args: []string{"Qwen1"}},
 		{nombre: "pausar", cmd: func() *cobra.Command { return agentePausarCmd }, args: []string{"Codex1", "15", "rate", "limit"}},
 		{nombre: "eliminar", cmd: func() *cobra.Command { return agentePurgarCmd }, args: []string{"Codex1"}},
 		{nombre: "rehabilitar", cmd: func() *cobra.Command { return agenteRehabilitarCmd }, args: []string{"Codex1"}},
@@ -262,5 +295,9 @@ func TestAgenteComandosExigenServidorSalvoRecuperacionLocal(t *testing.T) {
 
 	if err := agenteReasignarVivoCmd.RunE(agenteReasignarVivoCmd, []string{"1", "Codex1", "Codex2"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
 		t.Fatalf("agente reasignar-vivo deberia exigir servidor, err=%v", err)
+	}
+
+	if err := agenteRegistrarCmd.RunE(agenteRegistrarCmd, []string{"Qwen1"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("agente registrar deberia exigir servidor, err=%v", err)
 	}
 }

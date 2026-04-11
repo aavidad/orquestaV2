@@ -219,6 +219,33 @@ func TestSQLitePrepareAplicaPostMigracionesAunqueLaRevisionYaEsteMarcada(t *test
 	}
 }
 
+func TestSQLitePrepareNoSiembraAgentesLegacyPorDefecto(t *testing.T) {
+	path := t.TempDir() + "/orquesta-clean.db"
+	cfg := storage.Config{
+		Driver:          "sqlite",
+		DSN:             storage.SQLiteDSN(path),
+		Path:            path,
+		MaxOpenConns:    1,
+		BootstrapSchema: true,
+	}
+	raw, err := storage.Open(cfg)
+	if err != nil {
+		t.Fatalf("storage.Open sqlite: %v", err)
+	}
+	defer raw.Close()
+	if err := (sqliteBackend{}).Prepare(raw, cfg); err != nil {
+		t.Fatalf("Prepare sqlite inicial: %v", err)
+	}
+
+	var total int
+	if err := raw.QueryRow(`SELECT COUNT(*) FROM agentes`).Scan(&total); err != nil {
+		t.Fatalf("count agentes: %v", err)
+	}
+	if total != 0 {
+		t.Fatalf("una BD nueva no deberia sembrar agentes legacy; obtuvo %d", total)
+	}
+}
+
 func TestSQLitePrepareRecuperaTablaEspecificacionesFuncionEnDBExistente(t *testing.T) {
 	path := t.TempDir() + "/orquesta-microprogramacion.db"
 	cfg := storage.Config{

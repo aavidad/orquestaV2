@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"orquesta/capacidadapp"
 	"orquesta/db"
 )
 
@@ -28,7 +29,6 @@ func capacidadModoRecuperacionLocalExplicito() bool {
 func capacidadErrorServerFirst() error {
 	return fmt.Errorf("este comando exige servidor/daemon de Orquesta; usa --local solo en recuperacion explicita o exporta ORQUESTA_FORCE_LOCAL_DB=1")
 }
-
 
 var poolListarCmd = &cobra.Command{
 	Use:   "listar",
@@ -155,6 +155,69 @@ var poolModeloCmd = &cobra.Command{
 	Short: "Gestion de modelos dentro de un pool",
 }
 
+var poolLocalVerCmd = &cobra.Command{
+	Use:   "local-ver <slug>",
+	Short: "Muestra la configuracion del pool local compartido",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		detalle, ok, err := cargarPoolLocalCompartidoDesdeAPI(args[0])
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return serverFirstCommandError("pool local-ver")
+		}
+		fmt.Printf("Pool local %s\n", detalle.PoolSlug)
+		fmt.Printf("  Proveedor:                %s\n", detalle.Proveedor)
+		fmt.Printf("  Runtime:                  %s\n", detalle.Runtime)
+		fmt.Printf("  Modelo preferente:        %s\n", detalle.ModeloPreferente)
+		fmt.Printf("  Slots maximos:            %d\n", detalle.SlotsMaximos)
+		fmt.Printf("  Conector canonico:        %s\n", detalle.ConectorCanonico)
+		fmt.Printf("  Conector compatibilidad:  %s\n", detalle.ConectorCompatibilidad)
+		fmt.Printf("  Compat experimental:      %t\n", detalle.ExperimentalCompat)
+		if len(detalle.Perfiles) > 0 {
+			fmt.Println("\nPerfiles:")
+			for _, perfil := range detalle.Perfiles {
+				fmt.Printf("  - %s -> %s (%s)\n", perfil.PerfilTarea, perfil.ModelSlug, perfil.ReasoningEffort)
+			}
+		}
+		return nil
+	},
+}
+
+var poolLocalAsegurarCmd = &cobra.Command{
+	Use:   "local-asegurar <slug>",
+	Short: "Crea o actualiza un pool local compartido con perfiles canonicos",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		proveedor, _ := cmd.Flags().GetString("proveedor")
+		runtime, _ := cmd.Flags().GetString("runtime")
+		modelo, _ := cmd.Flags().GetString("modelo")
+		slots, _ := cmd.Flags().GetInt("slots")
+		conectorCanonico, _ := cmd.Flags().GetString("conector-canonico")
+		conectorCompat, _ := cmd.Flags().GetString("conector-compatibilidad")
+		experimentalCompat, _ := cmd.Flags().GetBool("experimental-compat")
+		detalle, ok, err := asegurarPoolLocalCompartidoPorAPI(capacidadapp.EntradaAsegurarPoolLocalCompartido{
+			PoolSlug:               args[0],
+			Proveedor:              proveedor,
+			Runtime:                runtime,
+			ModeloPreferente:       modelo,
+			SlotsMaximos:           slots,
+			ConectorCanonico:       conectorCanonico,
+			ConectorCompatibilidad: conectorCompat,
+			ExperimentalCompat:     experimentalCompat,
+		})
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return serverFirstCommandError("pool local-asegurar")
+		}
+		fmt.Printf("✓ Pool local %s asegurado con modelo %s y %d slot(s)\n", detalle.PoolSlug, detalle.ModeloPreferente, detalle.SlotsMaximos)
+		return nil
+	},
+}
+
 var poolModeloListarCmd = &cobra.Command{
 	Use:   "listar <pool-slug>",
 	Short: "Lista modelos de un pool",
@@ -259,8 +322,15 @@ func init() {
 	poolModeloGuardarCmd.Flags().Int("prioridad", 100, "Prioridad del modelo")
 	poolModeloGuardarCmd.Flags().Float64("coste-relativo", 1.0, "Coste relativo del modelo")
 	poolModeloGuardarCmd.Flags().String("limite-json", "{}", "JSON con limite conocido")
+	poolLocalAsegurarCmd.Flags().String("proveedor", "Ollama", "Proveedor del pool local compartido")
+	poolLocalAsegurarCmd.Flags().String("runtime", "ollama", "Runtime del pool local compartido")
+	poolLocalAsegurarCmd.Flags().String("modelo", "", "Modelo preferente del pool local compartido")
+	poolLocalAsegurarCmd.Flags().Int("slots", 1, "Numero maximo de slots fisicos del pool")
+	poolLocalAsegurarCmd.Flags().String("conector-canonico", "ollama_pool_local", "Conector canonico del pool")
+	poolLocalAsegurarCmd.Flags().String("conector-compatibilidad", "ollama-cli", "Conector de compatibilidad experimental")
+	poolLocalAsegurarCmd.Flags().Bool("experimental-compat", true, "Mantener activa la via experimental compatible")
 
 	poolModeloCmd.AddCommand(poolModeloListarCmd, poolModeloGuardarCmd, poolModeloSeedCmd)
-	poolCmd.AddCommand(poolListarCmd, poolVerCmd, poolGuardarCmd, poolSeedCmd, poolModeloCmd)
+	poolCmd.AddCommand(poolListarCmd, poolVerCmd, poolGuardarCmd, poolSeedCmd, poolModeloCmd, poolLocalVerCmd, poolLocalAsegurarCmd)
 	rootCmd.AddCommand(poolCmd)
 }

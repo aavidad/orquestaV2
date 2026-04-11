@@ -141,6 +141,21 @@ func TestSeedPoolsInicialesIncluyeOllama(t *testing.T) {
 	})
 }
 
+func TestConectorSeedIncluyeOllamaPoolLocal(t *testing.T) {
+	withTempDBPools(t, func() {
+		conector, err := GetConector("ollama_pool_local")
+		if err != nil {
+			t.Fatalf("GetConector ollama_pool_local: %v", err)
+		}
+		if conector == nil {
+			t.Fatal("faltaba conector ollama_pool_local")
+		}
+		if conector.Transporte != "api" {
+			t.Fatalf("transporte inesperado en ollama_pool_local: %+v", conector)
+		}
+	})
+}
+
 func withTempDBPools(t *testing.T, fn func()) {
 	t.Helper()
 	prepararDBTemporal(t)

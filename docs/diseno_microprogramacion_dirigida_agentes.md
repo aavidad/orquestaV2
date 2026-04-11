@@ -167,6 +167,110 @@ Este frente ya existe en Orquesta como un bloque específico de microprogramacio
 - `#508` Endurecer dispatch state-first con ack, receipt y ready gate
 - `#509` Restringir a los agentes al modo microprogramacion dirigida
 - `#510` Integrar review y merge solo desde entregas validadas
+- `#516` Definir pool local Gemma4 con agentes logicos y slots canonicos
+- `#517` Implementar conector canonico `ollama_pool_local` compartido
+- `#518` Arbitrar slots de pools locales en el scheduler
+- `#519` Mantener contexto resumido por agente logico en pools locales
+- `#520` Conservar `ollama-cli/tmux` como via experimental compatible
+
+## Perfiles canonicos de evaluacion de modelos locales
+
+La evaluacion y promocion de modelos locales no se hace con nombres ad hoc de rol.
+Se hace con los perfiles canonicos de tarea ya definidos por la app.
+
+Para promocionar un modelo local como worker de microprogramacion dirigida, Orquesta debe probarlo al menos en:
+
+- `implementacion`
+- `revision`
+- `analisis`
+
+Regla de interpretacion:
+
+- `documentador` es un rol posible de agente, no un `perfil_tarea` canónico
+- si se quiere evaluar documentacion, esa prueba cae bajo `analisis` mientras no exista un perfil de tarea mas especifico aprobado por la app
+
+Resultado provisional de evaluacion local (`2026-04-11`):
+
+- `gemma4:26b`: mejor resultado global y unica opcion aprobada por ahora en la smoke canonica por la app
+- `qwen3.5:9b`: mejor candidato ligero en prompt directo, pero no aprobado todavia como worker por defecto; en la smoke canonica por la app quedo por detras de Gemma y filtro razonamiento/protocolo
+- `qwen3:14b`: utilizable, pero mas ruidoso y menos disciplinado
+- `qwen2.5-coder:14b`: no apto como worker local por defecto
+- `starcoder2:3b`: descartado para este uso
+
+Regla de promocion:
+
+- un modelo local no se considera aprobado como worker por defecto hasta pasar estas pruebas sobre microtareas cerradas, `write_set` acotado y salida validable por el orquestador
+- la smoke canonica vale mas que el prompt directo: si un modelo parece bueno en prueba manual pero falla en el flujo real de Orquesta, no se promociona
+
+Regla operativa para Ollama local:
+
+- varios agentes logicos pueden compartir un mismo pool local
+- eso no implica varios workers fisicos concurrentes
+- Orquesta debe gobernar slots por pool/modelo para evitar contencion de GPU o RAM entre modelos residentes
+
+## Estrategia local inmediata
+
+La estrategia local actual no es eliminar de golpe la via existente de Ollama.
+Es convivir con dos caminos claramente diferenciados.
+
+### 1. Via de compatibilidad y experimentacion
+
+Se conserva la via actual:
+
+- `agente` -> `ollama-cli` -> `tmux`
+
+Motivo:
+
+- ya existe y sirve para smokes, depuracion y comparativas de modelos
+- sigue siendo util para probar candidatos como Qwen sin bloquear la evolucion del diseño principal
+
+Regla:
+
+- esta via no desaparece por ahora
+- queda como compatibilidad, pruebas y rescate
+- no se promociona como arquitectura local preferente para producción del orquestador
+
+### 2. Via canónica objetivo para local
+
+La via objetivo pasa a ser:
+
+- `pool local`
+- `slots`
+- `agentes logicos`
+- `perfiles_tarea` canonicos
+- un unico modelo fisico cargado cuando sea posible
+
+Primer caso priorizado:
+
+- `pool`: `ollama-gemma4`
+- `modelo`: `gemma4:26b`
+- `slots_maximos`: `1` al inicio
+
+Motivo:
+
+- con los recursos actuales, Gemma ha sido el unico modelo local aprobado en la smoke canonica por la app
+- la carga real del host no permite tratar varios modelos pesados como si cada uno fuera un worker barato
+- el coste real esta en concurrencia, KV cache, GPU/RAM y latencia, no solo en el parametro activo del MoE
+
+### Compatibilidad entre ambas vias
+
+La nueva via debe ser compatible con la actual.
+
+Regla de diseño:
+
+- `ollama-cli/tmux` se mantiene para modelos experimentales, pruebas comparativas y recuperación
+- `ollama_pool_local` o equivalente se introduce como conector canónico nuevo
+- la selección entre una u otra vía se decide por política de modelo y pool, no por scripts laterales
+
+### Restriccion arquitectonica
+
+La implementación de esta nueva via debe seguir Bloque 2:
+
+- app-first
+- puertos claros
+- adaptadores de persistencia reducidos
+- sin volver a meter lógica nueva de negocio en `db/`
+- i18n y castellano en toda superficie nueva de la app
 
 ## Regla de transicion
 

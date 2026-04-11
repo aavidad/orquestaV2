@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"orquesta/agentesapp"
+	"orquesta/capacidadapp"
 	"orquesta/conectoresapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
@@ -302,6 +303,18 @@ type apiPoolModeloSaveRequest struct {
 	Prioridad          int     `json:"prioridad"`
 	CosteRelativo      float64 `json:"coste_relativo"`
 	LimiteConocidoJSON string  `json:"limite_conocido_json"`
+}
+
+type apiPoolLocalCompartidoSaveRequest struct {
+	PoolSlug               string                         `json:"pool_slug"`
+	Proveedor              string                         `json:"proveedor"`
+	Runtime                string                         `json:"runtime"`
+	ModeloPreferente       string                         `json:"modelo_preferente"`
+	SlotsMaximos           int                            `json:"slots_maximos"`
+	ConectorCanonico       string                         `json:"conector_canonico"`
+	ConectorCompatibilidad string                         `json:"conector_compatibilidad"`
+	ExperimentalCompat     bool                           `json:"experimental_compat"`
+	Perfiles               []capacidadapp.PerfilPoolLocal `json:"perfiles"`
 }
 
 type apiPoliticaModeloSaveRequest struct {
@@ -667,6 +680,10 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtime-checkpoints", apiHandlerRuntimeCheckpoints)
 	mux.HandleFunc("/api/runtime-checkpoints/latest", apiHandlerRuntimeCheckpointLatest)
 	mux.HandleFunc("/api/runtime-checkpoints/", apiRouterRuntimeCheckpoints)
+	mux.HandleFunc("/api/runtime/ollama-pool/launch", apiHandlerOllamaPoolLaunch)
+	mux.HandleFunc("/api/runtime/ollama-pool/input", apiHandlerOllamaPoolInput)
+	mux.HandleFunc("/api/runtime/ollama-pool/status", apiHandlerOllamaPoolStatus)
+	mux.HandleFunc("/api/runtime/ollama-pool/stop", apiHandlerOllamaPoolStop)
 	mux.HandleFunc("/api/refineria", apiHandlerRefineria)
 	mux.HandleFunc("/api/refineria/", apiRouterRefineria)
 	mux.HandleFunc("/api/memoria", apiHandlerMemoria)
@@ -3281,6 +3298,25 @@ func apiRouterPools(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if path == "local-compartido" {
+		if !apiRequireMethod(w, r, http.MethodPost) {
+			return
+		}
+		apiHandlerPoolLocalCompartidoSave(w, r)
+		return
+	}
+	if strings.HasSuffix(path, "/local") {
+		slug := strings.Trim(strings.TrimSuffix(path, "/local"), "/")
+		if slug == "" {
+			http.NotFound(w, r)
+			return
+		}
+		if !apiRequireMethod(w, r, http.MethodGet) {
+			return
+		}
+		apiHandlerPoolLocalCompartidoGet(w, r, slug)
+		return
+	}
 	if strings.HasSuffix(path, "/modelos") {
 		slug := strings.Trim(strings.TrimSuffix(path, "/modelos"), "/")
 		if slug == "" {
@@ -3299,6 +3335,39 @@ func apiRouterPools(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, apiPoolResponse{Detalle: detalle})
+}
+
+func apiHandlerPoolLocalCompartidoGet(w http.ResponseWriter, r *http.Request, slug string) {
+	detalle, err := capacidadService.DescribirPoolLocalCompartido(strings.TrimSpace(slug))
+	if err != nil {
+		apiError(w, http.StatusNotFound, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiPoolLocalCompartidoResponse{PoolLocal: detalle})
+}
+
+func apiHandlerPoolLocalCompartidoSave(w http.ResponseWriter, r *http.Request) {
+	var req apiPoolLocalCompartidoSaveRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	detalle, err := capacidadService.AsegurarPoolLocalCompartido(capacidadapp.EntradaAsegurarPoolLocalCompartido{
+		PoolSlug:               strings.TrimSpace(req.PoolSlug),
+		Proveedor:              strings.TrimSpace(req.Proveedor),
+		Runtime:                strings.TrimSpace(req.Runtime),
+		ModeloPreferente:       strings.TrimSpace(req.ModeloPreferente),
+		SlotsMaximos:           req.SlotsMaximos,
+		ConectorCanonico:       strings.TrimSpace(req.ConectorCanonico),
+		ConectorCompatibilidad: strings.TrimSpace(req.ConectorCompatibilidad),
+		ExperimentalCompat:     req.ExperimentalCompat,
+		Perfiles:               req.Perfiles,
+	})
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusCreated, apiPoolLocalCompartidoResponse{PoolLocal: detalle})
 }
 
 func apiHandlerPoolModelos(w http.ResponseWriter, r *http.Request, slug string) {

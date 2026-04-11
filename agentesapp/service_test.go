@@ -88,6 +88,10 @@ func (f *fakeStore) GetAgent(nombre string) (*db.Agente, error) {
 
 func (f *fakeStore) GetProject(ref string) (*db.Proyecto, error) { return f.project, nil }
 
+func (f *fakeStore) GetPool(slug string) (*db.PoolCapacidad, error) {
+	return nil, nil
+}
+
 func (f *fakeStore) GetConnector(ref string) (*db.Conector, error) {
 	f.lastConnectorRef = ref
 	return f.connector, nil

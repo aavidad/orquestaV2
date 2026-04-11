@@ -422,11 +422,8 @@ func isCodexCLIRequest(req LaunchRequest) bool {
 }
 
 func isOllamaCLIConnector(conector ConnectorConfig) bool {
-	if strings.EqualFold(strings.TrimSpace(conector.Slug), "ollama-cli") {
-		return true
-	}
 	comando := strings.ToLower(strings.TrimSpace(filepath.Base(strings.TrimSpace(conector.Comando))))
-	return comando == "ollama" || comando == "ollama-cli" || strings.HasPrefix(comando, "ollama-perfil")
+	return EsConectorFamiliaOllama(conector.Slug, comando)
 }
 
 func SanitizarResumeParaConector(conector ConnectorConfig, resume ResumeContext) ResumeContext {
@@ -438,13 +435,16 @@ func SanitizarResumeParaConector(conector ConnectorConfig, resume ResumeContext)
 	if conectorPermiteResume(metadata) {
 		return resume
 	}
+	preservarResumenContinuidad := boolMetadata(metadata, "pool_compartido")
 	payloadTeniaContexto := resumePayloadTieneContextoReanudable(resume.ResumePayloadJSON)
 	resume.ExternalSessionID = ""
 	resume.ResumePayloadJSON = conservarSoloPerfilEjecucionResumePayload(resume.ResumePayloadJSON)
 	if payloadTeniaContexto {
 		resume.ResumePayloadJSON = ""
 	}
-	resume.ResumenContinuidad = ""
+	if !preservarResumenContinuidad {
+		resume.ResumenContinuidad = ""
+	}
 	return resume
 }
 
@@ -673,6 +673,12 @@ func endpointFromCommand(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
 		return raw
+	}
+	if strings.EqualFold(raw, "ollama") {
+		if value := strings.TrimSpace(os.Getenv("ORQUESTA_SERVER_URL")); value != "" {
+			return strings.TrimRight(value, "/")
+		}
+		return "http://127.0.0.1:16543"
 	}
 	return ""
 }

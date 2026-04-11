@@ -309,7 +309,7 @@ func TestWebAgenteDetalleMuestraControlPlaneYDetalleOperativo(t *testing.T) {
 func TestWebAgenteNuevoAutoNombrePorProveedor(t *testing.T) {
 	prepararDBTemporalCmd(t)
 
-	form := strings.NewReader("proveedor=claude&rol=programador")
+	form := strings.NewReader("proveedor=ollama&rol=programador")
 	req := httptest.NewRequest(http.MethodPost, "/agentes/nuevo", form)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
@@ -317,7 +317,7 @@ func TestWebAgenteNuevoAutoNombrePorProveedor(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
 	}
-	if agente, err := db.GetAgente("Claude1"); err != nil || agente == nil {
+	if agente, err := db.GetAgente("Ollama1"); err != nil || agente == nil {
 		t.Fatalf("agente auto no creado: %+v err=%v", agente, err)
 	}
 }

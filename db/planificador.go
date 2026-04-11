@@ -493,14 +493,17 @@ func buscarAsignacionPausadaConTrabajo(agente string) (*Asignacion, error) {
 }
 
 type candidatoProyectoAutomatico struct {
-	Proyecto   *Proyecto
-	Operacion  *ProyectoOperacion
-	Activos    int
-	Workers    int
-	Deseados   int
-	Deficit    int
-	TieneMin   bool
-	CargaRatio int
+	Proyecto        *Proyecto
+	Operacion       *ProyectoOperacion
+	Tarea           *Tarea
+	Activos         int
+	Workers         int
+	Deseados        int
+	Deficit         int
+	TieneMin        bool
+	CargaRatio      int
+	MicroCerrada    bool
+	ContratoCerrado bool
 }
 
 func seleccionarProyectoAutomaticoDisponible(agente string) (int64, error) {
@@ -519,6 +522,7 @@ func seleccionarProyectoAutomaticoDisponible(agente string) (int64, error) {
 		return 0, err
 	}
 	var mejor *candidatoProyectoAutomatico
+	preferirMicroprogramacion := false
 	for _, proyecto := range proyectos {
 		if proyecto == nil || proyecto.ID == 0 {
 			continue
@@ -544,6 +548,20 @@ func seleccionarProyectoAutomaticoDisponible(agente string) (int64, error) {
 		if tarea == nil {
 			continue
 		}
+		if !preferirMicroprogramacion {
+			preferirMicroprogramacion, err = agentePrefiereTrabajoMicroprogramacion(agente, proyecto.ID)
+			if err != nil {
+				return 0, err
+			}
+		}
+		microCerrada := false
+		contratoCerrado := false
+		if preferirMicroprogramacion {
+			if microCerrada, err = tareaTieneEspecificacionActiva(tarea.ID); err != nil {
+				return 0, err
+			}
+			contratoCerrado = tarea.ContratoDefinido
+		}
 		op, err := GetProyectoOperacion(proyecto.ID)
 		if err != nil {
 			return 0, err
@@ -565,14 +583,17 @@ func seleccionarProyectoAutomaticoDisponible(agente string) (int64, error) {
 		}
 		deseados := cupoDeseadoProyecto(op, totalPlanificables)
 		candidato := &candidatoProyectoAutomatico{
-			Proyecto:   proyecto,
-			Operacion:  op,
-			Activos:    activos,
-			Workers:    workers,
-			Deseados:   deseados,
-			Deficit:    deseados - workers,
-			TieneMin:   workers < op.MinAgentes,
-			CargaRatio: cargaProyecto(workers, deseados),
+			Proyecto:        proyecto,
+			Operacion:       op,
+			Tarea:           tarea,
+			Activos:         activos,
+			Workers:         workers,
+			Deseados:        deseados,
+			Deficit:         deseados - workers,
+			TieneMin:        workers < op.MinAgentes,
+			CargaRatio:      cargaProyecto(workers, deseados),
+			MicroCerrada:    microCerrada,
+			ContratoCerrado: contratoCerrado,
 		}
 		if mejorProyectoAutomatico(candidato, mejor) {
 			mejor = candidato
@@ -593,6 +614,12 @@ func mejorProyectoAutomatico(candidato *candidatoProyectoAutomatico, actual *can
 	}
 	if candidato.TieneMin != actual.TieneMin {
 		return candidato.TieneMin
+	}
+	if candidato.MicroCerrada != actual.MicroCerrada {
+		return candidato.MicroCerrada
+	}
+	if candidato.ContratoCerrado != actual.ContratoCerrado {
+		return candidato.ContratoCerrado
 	}
 	if candidato.Deficit > 0 || actual.Deficit > 0 {
 		if candidato.Deficit != actual.Deficit {
@@ -810,6 +837,13 @@ func EncolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo
 			fmt.Sprintf("agente=%s proyecto=%s ocupado_por=%s motivo=%s", agente, proyecto.Slug, ocupadoPor, motivo))
 		return nil
 	}
+	if permite, poolSlug, err := PoolLocalCompartidoPermiteActivacionAgenteProyecto(agente, proyecto.Slug); err != nil {
+		return err
+	} else if !permite {
+		Audit("sistema", "auto_start_runtime_pool_local_sin_capacidad", "agente", 0,
+			fmt.Sprintf("agente=%s proyecto=%s pool=%s motivo=%s", agente, proyecto.Slug, poolSlug, motivo))
+		return nil
+	}
 	sesionActiva, err := GetSesionActiva(agente, nil)
 	if err != nil && err != sql.ErrNoRows {
 		return err
@@ -884,6 +918,139 @@ func EncolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo
 	Audit("sistema", "auto_start_runtime", "runtime_order", orderID,
 		fmt.Sprintf("agente=%s proyecto=%s motivo=%s", agente, proyecto.Slug, motivo))
 	return nil
+}
+
+func PoolLocalCompartidoPermiteActivacionAgenteProyecto(agente, proyectoSlug string) (bool, string, error) {
+	agente = strings.TrimSpace(agente)
+	proyectoSlug = strings.TrimSpace(proyectoSlug)
+	if agente == "" {
+		return true, "", nil
+	}
+	resolucion, err := ResolverPoliticaModelo(ResolverPoliticaInput{
+		AgenteNombre: &agente,
+		ProyectoSlug: proyectoSlug,
+	})
+	if err != nil {
+		return false, "", err
+	}
+	if resolucion == nil || strings.TrimSpace(resolucion.PoolSlug) == "" {
+		return true, "", nil
+	}
+	pool, err := GetPool(strings.TrimSpace(resolucion.PoolSlug))
+	if err != nil {
+		return false, "", err
+	}
+	if !poolUsaConectorPoolLocalCompartido(pool) {
+		return true, "", nil
+	}
+	resumen, err := ListarPoolsResumen(boolPtr(true))
+	if err != nil {
+		return false, "", err
+	}
+	for _, item := range resumen {
+		if item == nil || item.Pool == nil || item.Pool.ID != pool.ID {
+			continue
+		}
+		reservasPendientes, err := reservasPendientesPoolLocalCompartido(pool.ID, strings.TrimSpace(pool.Slug))
+		if err != nil {
+			return false, "", err
+		}
+		return item.CapacidadDisponible-reservasPendientes > 0, strings.TrimSpace(pool.Slug), nil
+	}
+	return true, strings.TrimSpace(pool.Slug), nil
+}
+
+func reservasPendientesPoolLocalCompartido(poolID int64, poolSlug string) (int, error) {
+	if poolID <= 0 || strings.TrimSpace(poolSlug) == "" {
+		return 0, nil
+	}
+	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{})
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now().UTC()
+	reservas := 0
+	for _, order := range orders {
+		if !runtimeOrderOcupaPoolLocalCompartido(order, poolID, strings.TrimSpace(poolSlug), now) {
+			continue
+		}
+		reservas++
+	}
+	return reservas, nil
+}
+
+func runtimeOrderOcupaPoolLocalCompartido(order *RuntimeOrder, poolID int64, poolSlug string, now time.Time) bool {
+	if order == nil || poolID <= 0 || strings.TrimSpace(poolSlug) == "" {
+		return false
+	}
+	if !runtimeOrderOcupaCapacidadCuenta(order, now) {
+		return false
+	}
+	if agenteOcupa, err := agenteTieneSesionActivaEnPoolLocalCompartido(order.Agente, poolID); err == nil && agenteOcupa {
+		return false
+	}
+	proyectoSlug := strings.TrimSpace(runtimeOrderProyectoSlug(order))
+	if proyectoSlug == "" {
+		return false
+	}
+	agente := strings.TrimSpace(order.Agente)
+	resolucion, err := ResolverPoliticaModelo(ResolverPoliticaInput{
+		AgenteNombre: &agente,
+		ProyectoSlug: proyectoSlug,
+	})
+	if err != nil || resolucion == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(resolucion.PoolSlug), strings.TrimSpace(poolSlug))
+}
+
+func agenteTieneSesionActivaEnPoolLocalCompartido(agente string, poolID int64) (bool, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || poolID <= 0 {
+		return false, nil
+	}
+	var n int
+	if err := DB.QueryRow(`
+		SELECT COUNT(*)
+		FROM sesiones
+		WHERE agente = ?
+		  AND activa = 1
+		  AND pool_id = ?`,
+		agente, poolID,
+	).Scan(&n); err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+func runtimeOrderProyectoSlug(order *RuntimeOrder) string {
+	if order == nil {
+		return ""
+	}
+	if order.ProyectoID != nil && *order.ProyectoID > 0 {
+		if proyecto, err := GetProyecto(jsonNumber(*order.ProyectoID)); err == nil && proyecto != nil {
+			return strings.TrimSpace(proyecto.Slug)
+		}
+	}
+	return strings.TrimSpace(stringFromMap(mapFromJSON(order.PayloadJSON), "proyecto", ""))
+}
+
+func poolUsaConectorPoolLocalCompartido(pool *PoolCapacidad) bool {
+	if pool == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(pool.Runtime), "ollama") {
+		return false
+	}
+	raw := strings.TrimSpace(pool.MetadataJSON)
+	if raw == "" || raw == "{}" {
+		return false
+	}
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(raw), &meta); err != nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "conector_canonico", "")), "ollama_pool_local")
 }
 
 func existeRuntimeOrderAbierta(agente string, proyectoID *int64, tipos ...string) (bool, error) {
@@ -1022,7 +1189,192 @@ func ListarAgentesPlanificables() ([]*Agente, error) {
 		}
 		list = append(list, a)
 	}
-	return list, nil
+	return priorizarAgentesPlanificables(list)
+}
+
+type candidatoPlanificable struct {
+	Agente       *Agente
+	PoolSlug     string
+	Prioridad    int
+	ProyectoID   int64
+	ProyectoSlug string
+}
+
+func priorizarAgentesPlanificables(list []*Agente) ([]*Agente, error) {
+	if len(list) <= 1 {
+		return list, nil
+	}
+	candidatos := make([]candidatoPlanificable, 0, len(list))
+	for _, agente := range list {
+		if agente == nil {
+			continue
+		}
+		candidato, err := describirCandidatoPlanificable(agente)
+		if err != nil {
+			return nil, err
+		}
+		candidatos = append(candidatos, candidato)
+	}
+	sort.SliceStable(candidatos, func(i, j int) bool {
+		a, b := candidatos[i], candidatos[j]
+		if (a.PoolSlug != "") != (b.PoolSlug != "") {
+			return a.PoolSlug != ""
+		}
+		if a.Prioridad != b.Prioridad {
+			return a.Prioridad > b.Prioridad
+		}
+		if a.ProyectoSlug != b.ProyectoSlug {
+			return a.ProyectoSlug < b.ProyectoSlug
+		}
+		return strings.ToLower(strings.TrimSpace(a.Agente.Nombre)) < strings.ToLower(strings.TrimSpace(b.Agente.Nombre))
+	})
+
+	poolsDisponibles := map[string]int{}
+	salida := make([]*Agente, 0, len(candidatos))
+	for _, candidato := range candidatos {
+		if strings.TrimSpace(candidato.PoolSlug) == "" {
+			salida = append(salida, candidato.Agente)
+			continue
+		}
+		if _, ok := poolsDisponibles[candidato.PoolSlug]; !ok {
+			disponible, err := capacidadDisponiblePoolLocalCompartido(candidato.PoolSlug)
+			if err != nil {
+				return nil, err
+			}
+			poolsDisponibles[candidato.PoolSlug] = disponible
+		}
+		if poolsDisponibles[candidato.PoolSlug] <= 0 {
+			continue
+		}
+		poolsDisponibles[candidato.PoolSlug]--
+		salida = append(salida, candidato.Agente)
+	}
+	return salida, nil
+}
+
+func describirCandidatoPlanificable(agente *Agente) (candidatoPlanificable, error) {
+	out := candidatoPlanificable{Agente: agente}
+	if agente == nil {
+		return out, nil
+	}
+	proyectoID, prioridad, err := resolverProyectoPreferentePlanificableAgenteModo(strings.TrimSpace(agente.Nombre), false)
+	if err != nil {
+		return out, err
+	}
+	out.ProyectoID = proyectoID
+	out.Prioridad = prioridad
+	if proyectoID <= 0 {
+		return out, nil
+	}
+	proyecto, err := GetProyecto(jsonNumber(proyectoID))
+	if err != nil {
+		return out, err
+	}
+	if proyecto == nil {
+		return out, nil
+	}
+	out.ProyectoSlug = strings.TrimSpace(proyecto.Slug)
+	poolSlug, err := resolverPoolLocalCompartidoAgenteProyecto(strings.TrimSpace(agente.Nombre), out.ProyectoSlug)
+	if err != nil {
+		return out, err
+	}
+	out.PoolSlug = poolSlug
+	return out, nil
+}
+
+func resolverProyectoPreferentePlanificableAgente(agente string) (int64, int, error) {
+	return resolverProyectoPreferentePlanificableAgenteModo(agente, true)
+}
+
+func resolverProyectoPreferentePlanificableAgenteModo(agente string, incluirAutomatico bool) (int64, int, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return 0, 0, nil
+	}
+	if proyectoActivoID, err := ObtenerProyectoActivoAgente(agente); err != nil {
+		return 0, 0, err
+	} else if proyectoActivoID != 0 {
+		disponible, err := ProyectoDisponibleParaAutonomia(proyectoActivoID)
+		if err != nil {
+			return 0, 0, err
+		}
+		if disponible {
+			tieneTrabajo, err := proyectoTieneTrabajoPlanificableParaAgente(agente, proyectoActivoID)
+			if err != nil {
+				return 0, 0, err
+			}
+			if tieneTrabajo {
+				return proyectoActivoID, 3, nil
+			}
+		}
+	}
+	if asignacion, err := buscarAsignacionPausadaConTrabajo(agente); err != nil {
+		return 0, 0, err
+	} else if asignacion != nil {
+		return asignacion.ProyectoID, 2, nil
+	}
+	if !incluirAutomatico {
+		return 0, 0, nil
+	}
+	if proyectoAutomaticoID, err := seleccionarProyectoAutomaticoDisponible(agente); err != nil {
+		return 0, 0, err
+	} else if proyectoAutomaticoID != 0 {
+		return proyectoAutomaticoID, 1, nil
+	}
+	return 0, 0, nil
+}
+
+func resolverPoolLocalCompartidoAgenteProyecto(agente, proyectoSlug string) (string, error) {
+	agente = strings.TrimSpace(agente)
+	proyectoSlug = strings.TrimSpace(proyectoSlug)
+	if agente == "" || proyectoSlug == "" {
+		return "", nil
+	}
+	resolucion, err := ResolverPoliticaModelo(ResolverPoliticaInput{
+		AgenteNombre: &agente,
+		ProyectoSlug: proyectoSlug,
+	})
+	if err != nil || resolucion == nil || strings.TrimSpace(resolucion.PoolSlug) == "" {
+		return "", err
+	}
+	pool, err := GetPool(strings.TrimSpace(resolucion.PoolSlug))
+	if err != nil {
+		return "", err
+	}
+	if !poolUsaConectorPoolLocalCompartido(pool) {
+		return "", nil
+	}
+	return strings.TrimSpace(pool.Slug), nil
+}
+
+func capacidadDisponiblePoolLocalCompartido(poolSlug string) (int, error) {
+	poolSlug = strings.TrimSpace(poolSlug)
+	if poolSlug == "" {
+		return 0, nil
+	}
+	pool, err := GetPool(poolSlug)
+	if err != nil {
+		return 0, err
+	}
+	resumen, err := ListarPoolsResumen(boolPtr(true))
+	if err != nil {
+		return 0, err
+	}
+	for _, item := range resumen {
+		if item == nil || item.Pool == nil || item.Pool.ID != pool.ID {
+			continue
+		}
+		reservasPendientes, err := reservasPendientesPoolLocalCompartido(pool.ID, poolSlug)
+		if err != nil {
+			return 0, err
+		}
+		disponible := item.CapacidadDisponible - reservasPendientes
+		if disponible < 0 {
+			disponible = 0
+		}
+		return disponible, nil
+	}
+	return 0, nil
 }
 
 // ListarAgentesDisponibles se mantiene por compatibilidad semántica con código
@@ -1069,6 +1421,10 @@ func buscarSiguienteTareaLibreParaAgente(agente string, proyectoID int64) (*Tare
 	if strings.TrimSpace(agente) == "" || len(list) == 1 {
 		return list[0], nil
 	}
+	preferirMicroprogramacion, err := agentePrefiereTrabajoMicroprogramacion(strings.TrimSpace(agente), proyectoID)
+	if err != nil {
+		return nil, err
+	}
 	moduloPreferido, err := moduloPreferidoAgenteProyecto(strings.TrimSpace(agente), proyectoID)
 	if err != nil {
 		return nil, err
@@ -1080,31 +1436,38 @@ func buscarSiguienteTareaLibreParaAgente(agente string, proyectoID int64) (*Tare
 	candidatas := make([]*Tarea, 0, len(list))
 	candidatas = append(candidatas, list...)
 	sort.SliceStable(candidatas, func(i, j int) bool {
-		return mejorTareaLibreParaAgente(candidatas[i], candidatas[j], moduloPreferido, modulosOcupados)
+		return mejorTareaLibreParaAgente(candidatas[i], candidatas[j], moduloPreferido, modulosOcupados, preferirMicroprogramacion)
 	})
 	return candidatas[0], nil
 }
 
-func mejorTareaLibreParaAgente(a, b *Tarea, moduloPreferido string, modulosOcupados map[string]bool) bool {
+func mejorTareaLibreParaAgente(a, b *Tarea, moduloPreferido string, modulosOcupados map[string]bool, preferirMicroprogramacion bool) bool {
 	if a == nil {
 		return false
 	}
 	if b == nil {
 		return true
 	}
-	scoreA := scoreTareaLibreParaAgente(a, moduloPreferido, modulosOcupados)
-	scoreB := scoreTareaLibreParaAgente(b, moduloPreferido, modulosOcupados)
+	scoreA := scoreTareaLibreParaAgente(a, moduloPreferido, modulosOcupados, preferirMicroprogramacion)
+	scoreB := scoreTareaLibreParaAgente(b, moduloPreferido, modulosOcupados, preferirMicroprogramacion)
 	if scoreA != scoreB {
 		return scoreA > scoreB
 	}
 	return a.ID < b.ID
 }
 
-func scoreTareaLibreParaAgente(t *Tarea, moduloPreferido string, modulosOcupados map[string]bool) int {
+func scoreTareaLibreParaAgente(t *Tarea, moduloPreferido string, modulosOcupados map[string]bool, preferirMicroprogramacion bool) int {
 	if t == nil {
 		return -1 << 30
 	}
 	score := 0
+	if preferirMicroprogramacion {
+		if tieneSpec, err := tareaTieneEspecificacionActiva(t.ID); err == nil && tieneSpec {
+			score += 2000
+		} else if t.ContratoDefinido {
+			score += 800
+		}
+	}
 	modulo := strings.TrimSpace(t.Modulo)
 	if modulo != "" && moduloPreferido != "" && strings.EqualFold(modulo, moduloPreferido) {
 		score += 1000
@@ -1121,6 +1484,37 @@ func scoreTareaLibreParaAgente(t *Tarea, moduloPreferido string, modulosOcupados
 		score += 10
 	}
 	return score
+}
+
+func agentePrefiereTrabajoMicroprogramacion(agente string, proyectoID int64) (bool, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || proyectoID <= 0 {
+		return false, nil
+	}
+	proyecto, err := GetProyecto(jsonNumber(proyectoID))
+	if err != nil {
+		return false, err
+	}
+	poolSlug, err := resolverPoolLocalCompartidoAgenteProyecto(agente, strings.TrimSpace(proyecto.Slug))
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(poolSlug) != "", nil
+}
+
+func tareaTieneEspecificacionActiva(tareaID int64) (bool, error) {
+	if tareaID <= 0 {
+		return false, nil
+	}
+	var total int
+	if err := DB.QueryRow(`
+		SELECT COUNT(*)
+		FROM especificaciones_funcion
+		WHERE tarea_id = ?
+		  AND estado = 'activa'`, tareaID).Scan(&total); err != nil {
+		return false, err
+	}
+	return total > 0, nil
 }
 
 func moduloPreferidoAgenteProyecto(agente string, proyectoID int64) (string, error) {

@@ -33,8 +33,6 @@ func TestSchemaSeSeparaEnDDLYSeeds(t *testing.T) {
 		}
 	}
 	for _, required := range []string{
-		"INSERT INTO agentes",
-		"ON CONFLICT(nombre) DO NOTHING",
 		"INSERT INTO config",
 		"ON CONFLICT(clave) DO NOTHING",
 		"INSERT INTO conectores",
@@ -58,10 +56,10 @@ func TestSchemaSeedDataForDriverMySQLUsaInsertIgnoreEnSplit(t *testing.T) {
 	if seeds == "" {
 		t.Fatalf("seeds mysql vacio")
 	}
-	if !strings.Contains(seeds, "INSERT IGNORE INTO agentes") {
-		t.Fatalf("mysql deberia usar INSERT IGNORE")
+	if strings.Contains(seeds, "INSERT IGNORE INTO agentes") {
+		t.Fatalf("mysql no deberia sembrar agentes legacy")
 	}
 	if strings.Contains(seeds, "INSERT OR IGNORE INTO agentes") {
-		t.Fatalf("mysql no deberia conservar INSERT OR IGNORE")
+		t.Fatalf("mysql no deberia conservar semillas legacy de agentes")
 	}
 }

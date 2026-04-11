@@ -385,7 +385,7 @@ func resumenCuotaAgente(a *db.Agente) string {
 		return ""
 	}
 	if db.AgenteSinCuotaProveedorEfectivo(a) {
-		return ""
+		return "cuota indefinida · local"
 	}
 	partes := make([]string, 0, 4)
 	bloqueadoPorCuota := agenteBloqueadoPorCuotaVisible(a)

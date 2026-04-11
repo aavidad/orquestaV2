@@ -115,6 +115,48 @@ func TestConsultarEstadoLocalRehidrataSupervisorDesdeManifestSinPIDInicial(t *te
 	}
 }
 
+func TestConsultarEstadoLocalIgnoraPoolRemotoAunqueExistaManifestLocal(t *testing.T) {
+	resetSupervisoresLocalesForTest(t)
+	tmp := t.TempDir()
+	workingDir := filepath.Join(tmp, "repo")
+	runDir := filepath.Join(workingDir, ".orquesta-runtime", "qwenwriter", "20260402-150000-000000001")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir run dir: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "runtime.json")
+	payload := map[string]any{
+		"agente":           "QwenWriter",
+		"proyecto":         "orquestador",
+		"working_dir":      workingDir,
+		"driver":           "process_pty_cli",
+		"pid":              os.Getpid(),
+		"supervisor_ref":   runDir,
+		"rendered_command": "ollama run qwen3.5:9b",
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal manifest: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, append(data, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	estado, observed, err := ConsultarEstadoLocal(ObjetivoProceso{
+		HandleKind:   "session",
+		HandleRef:    "ollama-pool-gemma-1",
+		MetadataJSON: `{"driver":"ollama_pool_local","transport":"api","working_dir":"` + workingDir + `","agente":"GemmaPool1","proyecto":"orquestador"}`,
+	})
+	if err != nil {
+		t.Fatalf("ConsultarEstadoLocal: %v", err)
+	}
+	if observed {
+		t.Fatalf("no deberia observar supervisor local para pool remoto: estado=%+v", estado)
+	}
+	if estado != nil {
+		t.Fatalf("estado inesperado para pool remoto: %+v", estado)
+	}
+}
+
 func TestSupervisorLocalEmiteHeartbeatYFinalizacionAlActivarse(t *testing.T) {
 	cmd := exec.Command("sleep", "1")
 	if err := cmd.Start(); err != nil {

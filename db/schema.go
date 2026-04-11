@@ -1087,14 +1087,6 @@ CREATE TABLE IF NOT EXISTS catalogo_edicion_permisos (
     UNIQUE(entidad, rol)
 );
 
--- ─── Datos iniciales ───────────────────────────────────────────────────────
-INSERT OR IGNORE INTO agentes (nombre, rol) VALUES
-    ('alberto',    'admin'),
-    ('claude',     'programador'),
-    ('Codex1',     'programador'),
-    ('Codex2',     'programador'),
-    ('antigravity','documentador');
-
 INSERT INTO config (clave, valor) VALUES
     ('distribuidor', 'claude'),
     ('version',      '1.0.0'),
@@ -1134,7 +1126,8 @@ INSERT INTO conectores (slug, nombre, transporte, comando, args_json, env_json, 
     ('claude-code', 'Claude Code', 'cli', 'claude', '[]', '{}', '{"familia":"anthropic","reanudable":true}'),
     ('codex-cli',   'Codex CLI',   'cli', '{{home}}/Trabajo/codex-perfiles/bin/codex-perfil', '["{{agent}}"]', '{"ORQUESTA_BIN":"{{orquesta_executable}}","PATH":"{{orquesta_bin_dir}}:{{host_path}}"}', '{"familia":"openai","reanudable":true,"cwd_flag":"-C","launch_prompt_positional":true,"model_flag":"--model","reasoning_config_key":"model_reasoning_effort","can_send_input":false}'),
     ('gemini-cli',  'Gemini CLI',  'cli', 'gemini', '[]', '{}', '{"familia":"google","reanudable":true}'),
-    ('ollama-cli',  'Ollama CLI',  'cli', 'ollama', '["run"]', '{}', '{"familia":"ollama","reanudable":false,"default_model":"qwen2.5-coder:7b","default_reasoning_effort":"medium","default_task_profile":"implementacion","model_positional":true,"can_send_input":true,"mailbox_delivery_mode":"interactive","launch_prompt_transport":"post_start","launch_prompt_delay_ms":1200}')
+    ('ollama-cli',  'Ollama CLI',  'cli', 'ollama', '["run"]', '{}', '{"familia":"ollama","reanudable":false,"default_model":"qwen2.5-coder:7b","default_reasoning_effort":"medium","default_task_profile":"implementacion","model_positional":true,"can_send_input":true,"mailbox_delivery_mode":"interactive","launch_prompt_transport":"post_start","launch_prompt_delay_ms":1200}'),
+    ('ollama_pool_local', 'Ollama Pool Local', 'api', 'ollama', '[]', '{}', '{"familia":"ollama","reanudable":false,"pool_compartido":true,"default_task_profile":"implementacion","default_reasoning_effort":"high"}')
 ON CONFLICT(slug) DO NOTHING;
 
 -- ─── Reglas: programador ────────────────────────────────────────────────────

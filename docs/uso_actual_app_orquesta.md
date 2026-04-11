@@ -137,8 +137,29 @@ Los agentes documentadores como `antigravity` deben usar:
 
 - la web todavía no cubre todo el modelo de proyectos, conectores y control activo de agentes
 - el arranque autónomo completo de agentes sigue en cierre progresivo aunque el control plane y el autobootstrap ya operan
+- una instalación nueva ya no debe levantar flota legacy por seed implícito: para pruebas locales de Ollama o flotas específicas, los agentes se registran explícitamente desde la app/API
 - la app de escritorio aún no existe como producto terminado
 - parte del gobierno operativo sigue pasando por CLI y scripts
+
+## Estado actual de Ollama local
+
+La política vigente para agentes locales de Ollama es dual:
+
+1. Vía experimental y de compatibilidad
+   - `agente` -> `ollama-cli` -> `tmux`
+   - útil para smokes, depuración, comparación de candidatos y rescate
+
+2. Vía canónica objetivo
+   - `pool local`
+   - `slots`
+   - agentes lógicos por `perfil_tarea`
+   - microprogramación dirigida servida por la app
+
+Regla operativa:
+
+- la vía experimental no desaparece de golpe
+- pero la promoción de modelos locales y el camino preferente de producción deben moverse al pool compartido gobernado por la app
+- con recursos actuales, `gemma4:26b` es el worker local preferente y Qwen queda en estado experimental mientras no supere la smoke canónica de Orquesta
 
 ## Política de Acceso a Persistencia (AP-077)
 

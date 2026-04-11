@@ -40,6 +40,8 @@ var runtimeBudgetObservationBackgroundGate struct {
 	expires time.Time
 }
 
+var wakeRuntimeOrdersAfterTranscript = wakeControlPlaneRuntimeOrders
+
 var runtimeMailboxReevaluationGate struct {
 	mu   sync.Mutex
 	last map[string]time.Time
@@ -589,6 +591,9 @@ func procesarRuntimeTranscriptBatch() (int, error) {
 	ingested, err := db.IngestarRuntimeTranscriptActivos()
 	if err != nil {
 		return ingested, err
+	}
+	if ingested > 0 {
+		wakeRuntimeOrdersAfterTranscript()
 	}
 	if !controlPlaneConfigBoolOrDefault("runtime_transcript_auto_guidance_enabled", true) {
 		return ingested, nil
@@ -3170,14 +3175,16 @@ func encolarSendInstructionDesdeRuntimeMailbox(msg *db.RuntimeMailboxMessage, ha
 		HandleRef:    handle.HandleRef,
 		MetadataJSON: handle.MetadataJSON,
 	}, texto)
-	payload := map[string]any{
-		"to_agente":                  strings.TrimSpace(msg.ToAgente),
-		"from_agente":                strings.TrimSpace(msg.FromAgente),
-		"texto":                      strings.TrimSpace(texto),
-		"mailbox_id":                 msg.ID,
-		"mailbox_kind":               strings.TrimSpace(msg.Kind),
-		"delivery_attempt_signature": runtimeMailboxDeliveryAttemptSignature(handle, externalSessionID),
+	payload := map[string]any{}
+	if strings.TrimSpace(msg.PayloadJSON) != "" {
+		_ = json.Unmarshal([]byte(msg.PayloadJSON), &payload)
 	}
+	payload["to_agente"] = strings.TrimSpace(msg.ToAgente)
+	payload["from_agente"] = strings.TrimSpace(msg.FromAgente)
+	payload["texto"] = strings.TrimSpace(texto)
+	payload["mailbox_id"] = msg.ID
+	payload["mailbox_kind"] = strings.TrimSpace(msg.Kind)
+	payload["delivery_attempt_signature"] = runtimeMailboxDeliveryAttemptSignature(handle, externalSessionID)
 	if strings.TrimSpace(externalSessionID) != "" {
 		payload["external_session_id"] = strings.TrimSpace(externalSessionID)
 	}
@@ -5979,6 +5986,13 @@ func reactivarAgenteTrasReanimacion(agente string) error {
 		return err
 	}
 	if proyecto == nil {
+		return nil
+	}
+	if permite, poolSlug, err := db.PoolLocalCompartidoPermiteActivacionAgenteProyecto(agente, proyecto.Slug); err != nil {
+		return err
+	} else if !permite {
+		db.Audit("orquesta", "reactivacion_pool_local_sin_capacidad", "agente", 0,
+			fmt.Sprintf("agente=%s proyecto=%s pool=%s", agente, proyecto.Slug, poolSlug))
 		return nil
 	}
 	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "resume", "start", "handoff"); err != nil {

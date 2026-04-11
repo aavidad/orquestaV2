@@ -59,11 +59,11 @@ func TestCuentaPresupuestoDesdeAgenteUsaObservedUsageCuandoNoHayCuotaReal(t *tes
 
 func TestCompactOpenClawAgentsIncluyeCuentaCanonica(t *testing.T) {
 	items := compactOpenClawAgents([]*db.Agente{{
-		Nombre:         "Codex7",
-		CuentaID:       "acc-codex-7",
-		CuentaEmail:    "shared@example.com",
-		CuentaUsuario:  "Codex7",
-		EstadoCuota:    "activo",
+		Nombre:        "Codex7",
+		CuentaID:      "acc-codex-7",
+		CuentaEmail:   "shared@example.com",
+		CuentaUsuario: "Codex7",
+		EstadoCuota:   "activo",
 	}}, nil)
 	if len(items) != 1 {
 		t.Fatalf("items inesperados: %+v", items)
@@ -546,7 +546,25 @@ func prepararDBTemporalCmd(t *testing.T) string {
 	if err := db.EnsureCapacidadModeloBaseCodex(); err != nil {
 		t.Fatalf("seed capacidad/modelo base cmd: %v", err)
 	}
+	registrarRosterBaseCmdTest(t)
 	return tmp
+}
+
+func registrarRosterBaseCmdTest(t *testing.T) {
+	t.Helper()
+	roster := []struct {
+		nombre string
+		rol    string
+	}{
+		{nombre: "alberto", rol: "admin"},
+		{nombre: "Codex1", rol: "programador"},
+		{nombre: "Codex2", rol: "programador"},
+	}
+	for _, item := range roster {
+		if err := agentesService.RegisterAgent(item.nombre, item.rol); err != nil {
+			t.Fatalf("registrar agente base %s: %v", item.nombre, err)
+		}
+	}
 }
 
 func TestAPIAgentesListaJSON(t *testing.T) {

@@ -104,6 +104,29 @@ func TMUXSessionExistsMetadata(raw string) (bool, bool) {
 	return true, tmuxSessionExists(tmuxCommand, sessionName)
 }
 
+func CaptureTMUXPaneMetadata(raw string) (bool, string, error) {
+	payload := metadataMap(raw)
+	if payload == nil || !metadataLooksLikeTMUXRuntime(payload) {
+		return false, "", nil
+	}
+	tmuxCommand := strings.TrimSpace(stringValueFromMetadata(payload, "tmux_command"))
+	paneID := strings.TrimSpace(stringValueFromMetadata(payload, "tmux_pane_id"))
+	if tmuxCommand == "" {
+		path, err := exec.LookPath("tmux")
+		if err == nil {
+			tmuxCommand = path
+		}
+	}
+	if tmuxCommand == "" || paneID == "" {
+		return true, "", nil
+	}
+	captured, err := captureTMUXPane(tmuxCommand, paneID)
+	if err != nil {
+		return true, "", err
+	}
+	return true, captured, nil
+}
+
 func controlarProceso(obj ObjetivoProceso, sig syscall.Signal, accion string) (bool, int, error) {
 	if aplicado, pid, observed, err := controlarProcesoLocalSupervisado(obj, sig, accion); observed {
 		if accion == "stop" && err == nil {

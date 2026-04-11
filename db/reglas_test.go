@@ -94,6 +94,7 @@ func TestGuardarYListarSkills(t *testing.T) {
 
 func TestSkillsOrdenadasPorPrioridadYEscenarioYConVersionado(t *testing.T) {
 	prepararDBTemporal(t)
+	registrarAgentesBaseDBTest(t)
 
 	idBusq, err := CrearSkill("Codex2", &Skill{
 		TipoAgente:       "programador",
@@ -173,6 +174,7 @@ func TestSkillsOrdenadasPorPrioridadYEscenarioYConVersionado(t *testing.T) {
 
 func TestCrearSkillRechazaDuplicadoEquivalente(t *testing.T) {
 	prepararDBTemporal(t)
+	registrarAgentesBaseDBTest(t)
 
 	if _, err := CrearSkill("Codex2", &Skill{
 		TipoAgente:       "programador",
@@ -209,6 +211,7 @@ func TestCrearSkillRechazaDuplicadoEquivalente(t *testing.T) {
 
 func TestSkillExternaQuedaPendienteYSoloAdminLaActiva(t *testing.T) {
 	prepararDBTemporal(t)
+	registrarAgentesBaseDBTest(t)
 
 	id, err := CrearSkill("Codex2", &Skill{
 		TipoAgente:       "programador",
@@ -257,6 +260,7 @@ func TestSkillExternaQuedaPendienteYSoloAdminLaActiva(t *testing.T) {
 
 func TestCrearSkillNotificaRefreshAMailboxDeAgentesActivosDelRol(t *testing.T) {
 	prepararDBTemporal(t)
+	registrarAgentesBaseDBTest(t)
 	if _, err := IniciarSesion("Codex1"); err != nil {
 		t.Fatalf("IniciarSesion Codex1: %v", err)
 	}
@@ -309,6 +313,7 @@ func TestCrearSkillNotificaRefreshAMailboxDeAgentesActivosDelRol(t *testing.T) {
 
 func TestCrearReglaNotificaGovernanceRefreshAMailboxDeAgentesActivosDelRol(t *testing.T) {
 	prepararDBTemporal(t)
+	registrarAgentesBaseDBTest(t)
 	if _, err := IniciarSesion("Codex1"); err != nil {
 		t.Fatalf("IniciarSesion Codex1: %v", err)
 	}

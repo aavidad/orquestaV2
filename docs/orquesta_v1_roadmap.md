@@ -78,10 +78,15 @@ Tambien exige cambiar el modelo de delegacion: Orquesta debe mandar microtareas 
 - servicios de aplicacion para propuestas, tareas, sesiones y proyectos
 - puertos de persistencia claros
 - adaptadores SQLite reducidos a persistencia
+- BD base neutra: sin siembra de agentes legacy; la flota se registra explícitamente por la app
+- `server_autobootstrap` desactivado por defecto y activable solo de forma explícita para flotas oficiales
 - modelo canónico de `especificacion de funcion`
 - validacion de entregas por `write_set`, firma, imports y tests
 - protocolo de worker por `inbox + ACK + claim-safe`
 - planificador de microprogramacion dirigida sobre funciones y no sobre frentes amplios
+- matriz de evaluacion de modelos locales por perfil canónico (`implementacion`, `revision`, `analisis`)
+- regla de promocion: ningun modelo local se aprueba como worker por defecto sin pasar esas pruebas dentro del flujo canonico de microprogramacion
+- control de capacidad por `pool` y `slots` para workers locales de Ollama, separando agentes logicos de workers fisicos concurrentes
 
 Frente abierto en Orquesta para esta decision:
 
@@ -91,6 +96,11 @@ Frente abierto en Orquesta para esta decision:
 - `#508` Endurecer dispatch state-first con ack, receipt y ready gate
 - `#509` Restringir a los agentes al modo microprogramacion dirigida
 - `#510` Integrar review y merge solo desde entregas validadas
+- `#516` Definir pool local Gemma4 con agentes logicos y slots canonicos
+- `#517` Implementar conector canonico `ollama_pool_local` compartido
+- `#518` Arbitrar slots de pools locales en el scheduler
+- `#519` Mantener contexto resumido por agente logico en pools locales
+- `#520` Conservar `ollama-cli/tmux` como via experimental compatible
 
 ## Bloque 3 — Memoria y conocimiento
 

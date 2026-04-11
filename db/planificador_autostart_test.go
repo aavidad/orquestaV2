@@ -1,6 +1,7 @@
 package db
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -49,6 +50,32 @@ func TestMejorProyectoAutomaticoPriorizaDeficitRealAntesQueCargaBruta(t *testing
 	}
 	if !mejorProyectoAutomatico(candidatoA, candidatoB) {
 		t.Fatalf("deberia priorizar mayor deficit real frente a prioridad/carga")
+	}
+}
+
+func TestMejorProyectoAutomaticoPriorizaTrabajoMicrodirigidoEnPoolCompartido(t *testing.T) {
+	candidatoA := &candidatoProyectoAutomatico{
+		Proyecto:        &Proyecto{ID: 1},
+		Operacion:       &ProyectoOperacion{Prioridad: 100},
+		Activos:         1,
+		Deseados:        2,
+		Deficit:         1,
+		CargaRatio:      cargaProyecto(1, 2),
+		MicroCerrada:    true,
+		ContratoCerrado: true,
+	}
+	candidatoB := &candidatoProyectoAutomatico{
+		Proyecto:        &Proyecto{ID: 2},
+		Operacion:       &ProyectoOperacion{Prioridad: 200},
+		Activos:         0,
+		Deseados:        3,
+		Deficit:         3,
+		CargaRatio:      cargaProyecto(0, 3),
+		MicroCerrada:    false,
+		ContratoCerrado: false,
+	}
+	if !mejorProyectoAutomatico(candidatoA, candidatoB) {
+		t.Fatalf("deberia priorizar trabajo microdirigido antes que deficit bruto cuando hay pool compartido")
 	}
 }
 
@@ -185,6 +212,321 @@ func TestListarAgentesPlanificablesAgrupaAgentesDeLaMismaCuenta(t *testing.T) {
 	}
 }
 
+func TestListarAgentesPlanificablesPriorizaAfinidadEnPoolLocalCompartido(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "GemmaA", "GemmaB")
+
+	if err := RegistrarAgente("GemmaA", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente GemmaA: %v", err)
+	}
+	if err := RegistrarAgente("GemmaB", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente GemmaB: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible', estado_cuota='activo' WHERE nombre IN ('GemmaA','GemmaB')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+	if _, err := GuardarPool(&PoolCapacidad{
+		Slug:                "ollama-gemma4",
+		Proveedor:           "Ollama",
+		Runtime:             "ollama",
+		Plan:                "local",
+		CapacidadTotal:      1,
+		PermiteModelosMulti: true,
+		PoliticaHandoff:     "preventivo",
+		FuenteTelemetria:    "manual",
+		MetadataJSON:        `{"conector_canonico":"ollama_pool_local","modelo_preferente":"gemma4:26b","slots_maximos":1}`,
+		Activo:              true,
+	}); err != nil {
+		t.Fatalf("GuardarPool: %v", err)
+	}
+	if _, err := GuardarPoolModelo("ollama-gemma4", &PoolModelo{ModelSlug: "gemma4:26b", Activo: true, Prioridad: 10, CosteRelativo: 1}); err != nil {
+		t.Fatalf("GuardarPoolModelo: %v", err)
+	}
+	if _, err := GuardarPoliticaModelo(&PoliticaModelo{
+		ScopeTipo:       "perfil",
+		ScopeRef:        "implementacion",
+		PerfilTarea:     "implementacion",
+		PoolSlug:        "ollama-gemma4",
+		ModelSlug:       "gemma4:26b",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("GuardarPoliticaModelo: %v", err)
+	}
+	if err := ActivarAsignacion("GemmaA", proyectoID, "afinidad_activa"); err != nil {
+		t.Fatalf("ActivarAsignacion GemmaA: %v", err)
+	}
+	if _, err := DB.Exec(`INSERT INTO asignaciones (agente, proyecto_id, estado, nota) VALUES (?,?,?,?)`, "GemmaB", proyectoID, "pausada", "afinidad_pausada"); err != nil {
+		t.Fatalf("insert asignacion pausada GemmaB: %v", err)
+	}
+	if _, err := CrearTarea(&Tarea{
+		Titulo:      "Trabajo libre pool local",
+		Descripcion: "Debe favorecer al agente con afinidad activa",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	}); err != nil {
+		t.Fatalf("CrearTarea: %v", err)
+	}
+
+	agentes, err := ListarAgentesPlanificables()
+	if err != nil {
+		t.Fatalf("ListarAgentesPlanificables: %v", err)
+	}
+	if len(agentes) != 1 {
+		t.Fatalf("deberia quedar un unico planificable por slot efectivo, got=%d (%+v)", len(agentes), agentes)
+	}
+	if strings.TrimSpace(agentes[0].Nombre) != "GemmaA" {
+		t.Fatalf("deberia priorizar GemmaA por afinidad activa, got=%+v", agentes[0])
+	}
+}
+
+func TestBuscarSiguienteTareaLibreParaAgentePoolLocalPriorizaMicroprogramacion(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "GemmaA")
+	if err := RegistrarAgente("GemmaA", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente GemmaA: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible', estado_cuota='activo' WHERE nombre='GemmaA'`); err != nil {
+		t.Fatalf("marcar agente disponible: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto: %v", err)
+	}
+	if _, err := GuardarPool(&PoolCapacidad{
+		Slug:                "ollama-gemma4",
+		Proveedor:           "Ollama",
+		Runtime:             "ollama",
+		Plan:                "local",
+		CapacidadTotal:      1,
+		PermiteModelosMulti: true,
+		PoliticaHandoff:     "preventivo",
+		FuenteTelemetria:    "manual",
+		MetadataJSON:        `{"conector_canonico":"ollama_pool_local","modelo_preferente":"gemma4:26b","slots_maximos":1}`,
+		Activo:              true,
+	}); err != nil {
+		t.Fatalf("GuardarPool: %v", err)
+	}
+	if _, err := GuardarPoolModelo("ollama-gemma4", &PoolModelo{ModelSlug: "gemma4:26b", Activo: true, Prioridad: 10, CosteRelativo: 1}); err != nil {
+		t.Fatalf("GuardarPoolModelo: %v", err)
+	}
+	if _, err := GuardarPoliticaModelo(&PoliticaModelo{
+		ScopeTipo:       "perfil",
+		ScopeRef:        "implementacion",
+		PerfilTarea:     "implementacion",
+		PoolSlug:        "ollama-gemma4",
+		ModelSlug:       "gemma4:26b",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("GuardarPoliticaModelo: %v", err)
+	}
+	if err := ActivarAsignacion("GemmaA", proyectoID, "afinidad_activa"); err != nil {
+		t.Fatalf("ActivarAsignacion GemmaA: %v", err)
+	}
+	tareaLibreID, err := CrearTarea(&Tarea{
+		Titulo:      "Tarea libre sin contrato",
+		Descripcion: "Deberia perder frente a microprogramacion",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea libre: %v", err)
+	}
+	tareaMicroID, err := CrearTarea(&Tarea{
+		Titulo:      "Tarea microprogramada",
+		Descripcion: "Debe ganar por especificacion activa",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   PrioridadMedia,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea micro: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE tareas SET contrato_definido=1 WHERE id=?`, tareaMicroID); err != nil {
+		t.Fatalf("marcar contrato definido: %v", err)
+	}
+	if _, err := DB.Exec(`
+		INSERT INTO especificaciones_funcion (
+			tarea_id, proyecto_id, titulo, archivo_objetivo, simbolo_objetivo, descripcion,
+			tests_obligatorios_json, write_set_json, estado, creado_por
+		) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		tareaMicroID, proyectoID, "Spec micro", "identidad/normalizar.go", "NormalizarIdentificador", "Solo microprogramacion",
+		`["go test ./identidad -run TestNormalizarIdentificador -count=1"]`,
+		`["identidad/normalizar.go"]`,
+		"activa", "alberto",
+	); err != nil {
+		t.Fatalf("insert especificacion activa: %v", err)
+	}
+
+	tarea, err := buscarSiguienteTareaLibreParaAgente("GemmaA", proyectoID)
+	if err != nil {
+		t.Fatalf("buscarSiguienteTareaLibreParaAgente: %v", err)
+	}
+	if tarea == nil || tarea.ID != tareaMicroID {
+		t.Fatalf("deberia priorizar tarea microprogramada, got=%+v want=%d libre=%d", tarea, tareaMicroID, tareaLibreID)
+	}
+}
+
+func TestSeleccionarProyectoAutomaticoDisponiblePoolLocalPriorizaProyectoConMicroprogramacion(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	restringirPlanificadorATestAgentes(t, "GemmaA")
+	if err := RegistrarAgente("GemmaA", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente GemmaA: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible', estado_cuota='activo' WHERE nombre='GemmaA'`); err != nil {
+		t.Fatalf("marcar agente disponible: %v", err)
+	}
+	if _, err := GuardarPool(&PoolCapacidad{
+		Slug:                "ollama-gemma4",
+		Proveedor:           "Ollama",
+		Runtime:             "ollama",
+		Plan:                "local",
+		CapacidadTotal:      1,
+		PermiteModelosMulti: true,
+		PoliticaHandoff:     "preventivo",
+		FuenteTelemetria:    "manual",
+		MetadataJSON:        `{"conector_canonico":"ollama_pool_local","modelo_preferente":"gemma4:26b","slots_maximos":1}`,
+		Activo:              true,
+	}); err != nil {
+		t.Fatalf("GuardarPool: %v", err)
+	}
+	if _, err := GuardarPoolModelo("ollama-gemma4", &PoolModelo{ModelSlug: "gemma4:26b", Activo: true, Prioridad: 10, CosteRelativo: 1}); err != nil {
+		t.Fatalf("GuardarPoolModelo: %v", err)
+	}
+	if _, err := GuardarPoliticaModelo(&PoliticaModelo{
+		ScopeTipo:       "perfil",
+		ScopeRef:        "implementacion",
+		PerfilTarea:     "implementacion",
+		PoolSlug:        "ollama-gemma4",
+		ModelSlug:       "gemma4:26b",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("GuardarPoliticaModelo: %v", err)
+	}
+	proyectoMicroID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto micro: %v", err)
+	}
+	proyectoAbiertoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "secundario",
+		Nombre:  "Secundario",
+		RutaAbs: filepath.Join(tmp, "secundario"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertProyecto abierto: %v", err)
+	}
+	if err := ActivarAsignacion("GemmaA", proyectoAbiertoID, "arranque sobre proyecto abierto"); err != nil {
+		t.Fatalf("ActivarAsignacion proyecto abierto: %v", err)
+	}
+	if _, err := DB.Exec(`INSERT INTO asignaciones (agente, proyecto_id, estado, nota) VALUES (?,?,?,?)`, "GemmaA", proyectoMicroID, "pausada", "reactivable micro"); err != nil {
+		t.Fatalf("insert asignacion pausada proyecto micro: %v", err)
+	}
+	if _, err := GuardarPoliticaModelo(&PoliticaModelo{
+		ScopeTipo:       "proyecto",
+		ScopeRef:        "secundario",
+		PerfilTarea:     "implementacion",
+		PoolSlug:        "ollama-gemma4",
+		ModelSlug:       "gemma4:26b",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("GuardarPoliticaModelo secundario: %v", err)
+	}
+	if _, err := GuardarPoliticaModelo(&PoliticaModelo{
+		ScopeTipo:       "proyecto",
+		ScopeRef:        "orquestador",
+		PerfilTarea:     "implementacion",
+		PoolSlug:        "ollama-gemma4",
+		ModelSlug:       "gemma4:26b",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("GuardarPoliticaModelo orquestador: %v", err)
+	}
+	tareaAbiertaID, err := CrearTarea(&Tarea{
+		Titulo:      "Trabajo abierto",
+		Descripcion: "No deberia ganar frente a microprogramacion",
+		ProyectoID:  &proyectoAbiertoID,
+		Modulo:      "core",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea abierta: %v", err)
+	}
+	_ = tareaAbiertaID
+	tareaMicroID, err := CrearTarea(&Tarea{
+		Titulo:      "Trabajo microprogramado",
+		Descripcion: "Debe priorizarse por ser acotado",
+		ProyectoID:  &proyectoMicroID,
+		Modulo:      "core",
+		Prioridad:   PrioridadMedia,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("CrearTarea micro: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE tareas SET contrato_definido=1 WHERE id=?`, tareaMicroID); err != nil {
+		t.Fatalf("marcar contrato definido: %v", err)
+	}
+	if _, err := DB.Exec(`
+		INSERT INTO especificaciones_funcion (
+			tarea_id, proyecto_id, titulo, archivo_objetivo, simbolo_objetivo, descripcion,
+			tests_obligatorios_json, write_set_json, estado, creado_por
+		) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		tareaMicroID, proyectoMicroID, "Spec micro", "identidad/normalizar.go", "NormalizarIdentificador", "Solo microprogramacion",
+		`["go test ./identidad -run TestNormalizarIdentificador -count=1"]`,
+		`["identidad/normalizar.go"]`,
+		"activa", "alberto",
+	); err != nil {
+		t.Fatalf("insert especificacion activa: %v", err)
+	}
+
+	proyectoID, err := seleccionarProyectoAutomaticoDisponible("GemmaA")
+	if err != nil {
+		t.Fatalf("seleccionarProyectoAutomaticoDisponible: %v", err)
+	}
+	if proyectoID != proyectoMicroID {
+		t.Fatalf("deberia priorizar proyecto con microprogramacion: got=%d want=%d", proyectoID, proyectoMicroID)
+	}
+}
+
 func TestEncolarStartAutomaticoSiHaceFaltaRetieneCuentaCompartidaOcupada(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	restringirPlanificadorATestAgentes(t, "CodexActivo", "CodexNuevo")
@@ -238,6 +580,184 @@ func TestEncolarStartAutomaticoSiHaceFaltaRetieneCuentaCompartidaOcupada(t *test
 	}
 	if len(orders) != 0 {
 		t.Fatalf("no deberia encolar start si la cuenta compartida ya está ocupada: %+v", orders)
+	}
+}
+
+func TestEncolarStartAutomaticoSiHaceFaltaOmitePoolLocalCompartidoSinCapacidad(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	configurarPoolAutobootstrapTest(t, "orquestador", "GemmaBusy", "GemmaNuevo")
+
+	if err := RegistrarAgente("GemmaBusy", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente GemmaBusy: %v", err)
+	}
+	if err := RegistrarAgente("GemmaNuevo", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente GemmaNuevo: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre IN ('GemmaBusy','GemmaNuevo')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	proyecto, err := GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("GetProyecto: %v", err)
+	}
+	if _, err := GuardarPool(&PoolCapacidad{
+		Slug:                "ollama-gemma4",
+		Proveedor:           "Ollama",
+		Runtime:             "ollama",
+		Plan:                "local",
+		CapacidadTotal:      1,
+		CapacidadReservada:  0,
+		PermiteModelosMulti: true,
+		PoliticaHandoff:     "preventivo",
+		FuenteTelemetria:    "manual",
+		MetadataJSON:        `{"conector_canonico":"ollama_pool_local","modelo_preferente":"gemma4:26b","slots_maximos":1}`,
+		Activo:              true,
+	}); err != nil {
+		t.Fatalf("GuardarPool: %v", err)
+	}
+	if _, err := GuardarPoolModelo("ollama-gemma4", &PoolModelo{ModelSlug: "gemma4:26b", Activo: true, Prioridad: 10, CosteRelativo: 1}); err != nil {
+		t.Fatalf("GuardarPoolModelo: %v", err)
+	}
+	if _, err := GuardarPoliticaModelo(&PoliticaModelo{
+		ScopeTipo:       "perfil",
+		ScopeRef:        "implementacion",
+		PerfilTarea:     "implementacion",
+		PoolSlug:        "ollama-gemma4",
+		ModelSlug:       "gemma4:26b",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("GuardarPoliticaModelo: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "GemmaBusy",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "gemma-busy"),
+		Herramienta: "ollama_pool_local",
+	})
+	if err != nil {
+		t.Fatalf("IniciarSesionContexto GemmaBusy: %v", err)
+	}
+	pool, err := GetPool("ollama-gemma4")
+	if err != nil {
+		t.Fatalf("GetPool: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE sesiones SET pool_id = ? WHERE id = ?`, pool.ID, sesion.ID); err != nil {
+		t.Fatalf("update sesiones.pool_id: %v", err)
+	}
+
+	if err := EncolarStartAutomaticoSiHaceFalta("GemmaNuevo", proyecto, "pool_local_sin_capacidad"); err != nil {
+		t.Fatalf("EncolarStartAutomaticoSiHaceFalta: %v", err)
+	}
+
+	agente := "GemmaNuevo"
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{Agente: &agente, Estado: &estado})
+	if err != nil {
+		t.Fatalf("ListarRuntimeOrdersVivas: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar start si el pool local compartido no tiene slots: %+v", orders)
+	}
+}
+
+func TestEncolarStartAutomaticoSiHaceFaltaOmitePoolLocalCompartidoConReservaPendiente(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	configurarPoolAutobootstrapTest(t, "orquestador", "GemmaA", "GemmaB")
+
+	if err := RegistrarAgente("GemmaA", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente GemmaA: %v", err)
+	}
+	if err := RegistrarAgente("GemmaB", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente GemmaB: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre IN ('GemmaA','GemmaB')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	proyecto, err := GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("GetProyecto: %v", err)
+	}
+	if _, err := GuardarPool(&PoolCapacidad{
+		Slug:                "ollama-gemma4",
+		Proveedor:           "Ollama",
+		Runtime:             "ollama",
+		Plan:                "local",
+		CapacidadTotal:      1,
+		PermiteModelosMulti: true,
+		PoliticaHandoff:     "preventivo",
+		FuenteTelemetria:    "manual",
+		MetadataJSON:        `{"conector_canonico":"ollama_pool_local","modelo_preferente":"gemma4:26b","slots_maximos":1}`,
+		Activo:              true,
+	}); err != nil {
+		t.Fatalf("GuardarPool: %v", err)
+	}
+	if _, err := GuardarPoolModelo("ollama-gemma4", &PoolModelo{ModelSlug: "gemma4:26b", Activo: true, Prioridad: 10, CosteRelativo: 1}); err != nil {
+		t.Fatalf("GuardarPoolModelo: %v", err)
+	}
+	if _, err := GuardarPoliticaModelo(&PoliticaModelo{
+		ScopeTipo:       "perfil",
+		ScopeRef:        "implementacion",
+		PerfilTarea:     "implementacion",
+		PoolSlug:        "ollama-gemma4",
+		ModelSlug:       "gemma4:26b",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("GuardarPoliticaModelo: %v", err)
+	}
+	payloadJSON, err := json.Marshal(map[string]any{
+		"accion":   "start",
+		"proyecto": "orquestador",
+		"motivo":   "reserva_previa",
+		"por":      "test",
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	if _, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "GemmaA",
+		ProyectoID:  &proyectoID,
+		Tipo:        "start",
+		PayloadJSON: string(payloadJSON),
+	}); err != nil {
+		t.Fatalf("EncolarRuntimeOrder GemmaA: %v", err)
+	}
+
+	if err := EncolarStartAutomaticoSiHaceFalta("GemmaB", proyecto, "pool_local_reserva_pendiente"); err != nil {
+		t.Fatalf("EncolarStartAutomaticoSiHaceFalta: %v", err)
+	}
+
+	agente := "GemmaB"
+	estado := "pendiente"
+	orders, err := ListarRuntimeOrdersVivas(FiltroRuntimeOrders{Agente: &agente, Estado: &estado})
+	if err != nil {
+		t.Fatalf("ListarRuntimeOrdersVivas: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar start si otro agente ya reservo el slot del pool: %+v", orders)
 	}
 }
 

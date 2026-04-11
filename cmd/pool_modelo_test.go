@@ -82,6 +82,40 @@ func TestCapacidadUsaAPI(t *testing.T) {
 			http.Error(w, "metodo no soportado", http.StatusMethodNotAllowed)
 		}
 	})
+	mux.HandleFunc("/api/pools/local-compartido", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiPoolLocalCompartidoResponse{
+			PoolLocal: &capacidadapp.PoolLocalCompartido{
+				PoolSlug:               "ollama-gemma4",
+				Proveedor:              "Ollama",
+				Runtime:                "ollama",
+				ModeloPreferente:       "gemma4:26b",
+				SlotsMaximos:           1,
+				ConectorCanonico:       "ollama_pool_local",
+				ConectorCompatibilidad: "ollama-cli",
+				ExperimentalCompat:     true,
+				Perfiles: []capacidadapp.PerfilPoolLocal{
+					{PerfilTarea: "implementacion", ModelSlug: "gemma4:26b", ReasoningEffort: "high"},
+				},
+			},
+		})
+	})
+	mux.HandleFunc("/api/pools/ollama-gemma4/local", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(apiPoolLocalCompartidoResponse{
+			PoolLocal: &capacidadapp.PoolLocalCompartido{
+				PoolSlug:               "ollama-gemma4",
+				Proveedor:              "Ollama",
+				Runtime:                "ollama",
+				ModeloPreferente:       "gemma4:26b",
+				SlotsMaximos:           1,
+				ConectorCanonico:       "ollama_pool_local",
+				ConectorCompatibilidad: "ollama-cli",
+				ExperimentalCompat:     true,
+				Perfiles: []capacidadapp.PerfilPoolLocal{
+					{PerfilTarea: "implementacion", ModelSlug: "gemma4:26b", ReasoningEffort: "high"},
+				},
+			},
+		})
+	})
 	mux.HandleFunc("/api/pools/seed-inicial", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
@@ -159,6 +193,29 @@ func TestCapacidadUsaAPI(t *testing.T) {
 	})
 	if !strings.Contains(outGuardar, "(id: 7)") {
 		t.Fatalf("salida pool guardar sin id remoto:\n%s", outGuardar)
+	}
+
+	outLocalAsegurar := capturarStdout(t, func() {
+		if err := poolLocalAsegurarCmd.Flags().Set("modelo", "gemma4:26b"); err != nil {
+			t.Fatalf("set modelo local: %v", err)
+		}
+		if err := poolLocalAsegurarCmd.RunE(poolLocalAsegurarCmd, []string{"ollama-gemma4"}); err != nil {
+			t.Fatalf("pool local asegurar via api: %v", err)
+		}
+	})
+	if !strings.Contains(outLocalAsegurar, "ollama-gemma4") || !strings.Contains(outLocalAsegurar, "gemma4:26b") {
+		t.Fatalf("salida pool local asegurar inesperada:\n%s", outLocalAsegurar)
+	}
+
+	outLocalVer := capturarStdout(t, func() {
+		if err := poolLocalVerCmd.RunE(poolLocalVerCmd, []string{"ollama-gemma4"}); err != nil {
+			t.Fatalf("pool local ver via api: %v", err)
+		}
+	})
+	for _, token := range []string{"Pool local ollama-gemma4", "gemma4:26b", "implementacion"} {
+		if !strings.Contains(outLocalVer, token) {
+			t.Fatalf("salida pool local ver sin %q:\n%s", token, outLocalVer)
+		}
 	}
 
 	outPoliticas := capturarStdout(t, func() {

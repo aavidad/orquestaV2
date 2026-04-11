@@ -48,6 +48,52 @@ func TestPrepareCLISinResumeNativoDevuelvePromptContinuidad(t *testing.T) {
 	}
 }
 
+func TestEsConectorFamiliaOllamaReconocePoolLocal(t *testing.T) {
+	if !EsConectorFamiliaOllama("ollama_pool_local", "") {
+		t.Fatal("ollama_pool_local deberia pertenecer a la familia ollama")
+	}
+	if !EsConectorFamiliaOllama("", "ollama") {
+		t.Fatal("comando ollama deberia pertenecer a la familia ollama")
+	}
+	if EsConectorFamiliaOllama("codex-cli", "codex") {
+		t.Fatal("codex-cli no deberia pertenecer a la familia ollama")
+	}
+}
+
+func TestPreparePoolLocalOllamaGeneraPlanRemotoAPI(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Gemma1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Modelo:       "gemma4:26b",
+		PerfilTarea:  "implementacion",
+		Conector: ConnectorConfig{
+			Slug:         "ollama_pool_local",
+			Transporte:   "api",
+			Comando:      "ollama",
+			MetadataJSON: `{"endpoint":"http://127.0.0.1:18081","launch_path":"/api/runtime/ollama-pool/launch","input_path":"/api/runtime/ollama-pool/input","status_path":"/api/runtime/ollama-pool/status","stop_path":"/api/runtime/ollama-pool/stop","default_task_profile":"implementacion","default_reasoning_effort":"high"}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare pool local ollama: %v", err)
+	}
+	if plan.Transporte != "api" || plan.Driver != "api" {
+		t.Fatalf("transporte/driver inesperado: %+v", plan)
+	}
+	if plan.Modo != "launch" {
+		t.Fatalf("modo inesperado: %+v", plan)
+	}
+	if plan.RemoteConfigJSON == "" {
+		t.Fatalf("faltaba remote_config_json: %+v", plan)
+	}
+	if !strings.Contains(plan.RemoteConfigJSON, `"endpoint":"http://127.0.0.1:18081"`) {
+		t.Fatalf("remote_config_json inesperado: %s", plan.RemoteConfigJSON)
+	}
+	if plan.PerfilTarea != "implementacion" || plan.Razonamiento != "high" {
+		t.Fatalf("perfil/razonamiento inesperados: %+v", plan)
+	}
+}
+
 func TestPrepareCLISinResumeNativoCompactaResumePayloadEnPrompt(t *testing.T) {
 	plan, err := DefaultRegistry().Prepare(LaunchRequest{
 		Agente:       "Codex2",
@@ -168,6 +214,28 @@ func TestSanitizarResumeParaConectorNoBorraPayloadPersistido(t *testing.T) {
 	})
 	if resume.ExternalSessionID != "" || resume.ResumenContinuidad != "" {
 		t.Fatalf("el conector no reanudable debe limpiar continuidad de proveedor: %+v", resume)
+	}
+	if !strings.Contains(resume.ResumePayloadJSON, "gemma4:26b") {
+		t.Fatalf("el payload persistido no deberia perderse: %s", resume.ResumePayloadJSON)
+	}
+}
+
+func TestSanitizarResumeParaConectorPoolCompartidoConservaResumenBreve(t *testing.T) {
+	resume := SanitizarResumeParaConector(ConnectorConfig{
+		Slug:         "ollama_pool_local",
+		Transporte:   "api",
+		Comando:      "ollama",
+		MetadataJSON: `{"reanudable":false,"pool_compartido":true}`,
+	}, ResumeContext{
+		ExternalSessionID:  "sess-1",
+		ResumenContinuidad: "seguir con helper ya extraido",
+		ResumePayloadJSON:  `{"perfil_ejecucion":{"modelo":"gemma4:26b","perfil_tarea":"implementacion"}}`,
+	})
+	if resume.ExternalSessionID != "" {
+		t.Fatalf("el pool compartido no debe conservar continuidad de proveedor: %+v", resume)
+	}
+	if got := resume.ResumenContinuidad; got != "seguir con helper ya extraido" {
+		t.Fatalf("el pool compartido debe conservar resumen breve: %+v", resume)
 	}
 	if !strings.Contains(resume.ResumePayloadJSON, "gemma4:26b") {
 		t.Fatalf("el payload persistido no deberia perderse: %s", resume.ResumePayloadJSON)

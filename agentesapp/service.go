@@ -24,6 +24,7 @@ type Store interface {
 	Audit(agente, accion, entidad string, entidadID int64, detalle string)
 	GetAgent(nombre string) (*db.Agente, error)
 	GetProject(ref string) (*db.Proyecto, error)
+	GetPool(slug string) (*db.PoolCapacidad, error)
 	GetConnector(ref string) (*db.Conector, error)
 	ListAgents() ([]*db.Agente, error)
 	ListAssignments(filtro db.FiltroAsignaciones) ([]*db.Asignacion, error)
@@ -1736,6 +1737,10 @@ func (Repository) GetAgent(nombre string) (*db.Agente, error) {
 
 func (Repository) GetProject(ref string) (*db.Proyecto, error) {
 	return db.GetProyecto(ref)
+}
+
+func (Repository) GetPool(slug string) (*db.PoolCapacidad, error) {
+	return db.GetPool(slug)
 }
 
 func (Repository) GetConnector(ref string) (*db.Conector, error) {

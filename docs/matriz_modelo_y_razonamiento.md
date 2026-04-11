@@ -88,6 +88,35 @@ Elegirlo por:
 4. Si el presupuesto restante no permite terminar bien, forzar `handoff`.
 5. Las revisiones importantes deben evitar el mismo perfil exacto que el autor cuando sea posible.
 
+## Regla de evaluacion para modelos locales
+
+Los modelos locales que aspiren a trabajar como agentes programadores no se promocionan por impresion subjetiva.
+Se evalúan por perfiles canonicos de tarea.
+
+Minimo obligatorio:
+
+- `implementacion`
+- `revision`
+- `analisis`
+
+Regla de interpretacion:
+
+- `documentador` es un rol posible de agente o de roster, no un `perfil_tarea` canonico
+- la documentacion tecnica acotada se evalua dentro de `analisis` mientras la app no apruebe otro perfil de tarea especifico
+
+Resultado provisional de evaluacion local (`2026-04-11`):
+
+- `gemma4:26b`: mejor resultado global y unica opcion aprobada por ahora en la smoke canonica servida por Orquesta
+- `qwen3.5:9b`: mejor candidato ligero en prompt directo, pero todavia no aprobado como worker local por defecto
+- `qwen3:14b`: utilizable, pero menos disciplinado
+- `qwen2.5-coder:14b`: no promover como worker local por defecto
+- `starcoder2:3b`: descartar para este uso
+
+Regla operativa adicional:
+
+- la promocion final de un modelo local se decide por la smoke canonica de la app, no por prompts manuales aislados
+- si el host comparte GPU o RAM limitada, la politica de modelo debe contemplar `slots` de pool para evitar cargar varios modelos pesados a la vez
+
 ## Ejemplos
 
 ### Orquesta núcleo

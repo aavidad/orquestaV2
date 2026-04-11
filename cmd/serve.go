@@ -1918,7 +1918,11 @@ const webTplDash = `{{define "content"}}
           {{else}}
             <div style="font-size:.72rem;color:#94a3b8">{{tr .Rol}}</div>
           {{end}}
-          {{if .CuotaRestantePct}}
+          {{if .SinCuotaProveedor}}
+            <div style="font-size:.66rem;color:#0f766e">
+              cuota indefinida · {{if .PresupuestoFuente}}{{.PresupuestoFuente}}{{else}}local{{end}}
+            </div>
+          {{else if .CuotaRestantePct}}
             <div style="font-size:.66rem;color:#0f766e">
               efectivo {{.CuotaRestantePct}}%{{if .PresupuestoVentana}} · {{.PresupuestoVentana}}{{end}}{{if .PresupuestoResetAt}} · reset {{.PresupuestoResetAt.Local.Format "2006-01-02 15:04"}}{{end}}
             </div>

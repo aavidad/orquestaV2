@@ -85,6 +85,44 @@ func TestEnsureTMUXMonitorFromMetadataJSONReattachesDeadMonitor(t *testing.T) {
 	}
 }
 
+func TestCleanupTMUXSessionOnOwnerExitKillsSesionOllama(t *testing.T) {
+	dir := t.TempDir()
+	fakeTmux := writeLiveFakeTmuxScript(t, dir)
+	if err := cleanupTMUXSessionOnOwnerExit(embeddedTmuxMonitorSpec{
+		TmuxCommand: fakeTmux,
+		SessionName: "orq-ollama1-local",
+		Command:     "ollama run qwen2.5-coder:14b",
+	}); err != nil {
+		t.Fatalf("cleanupTMUXSessionOnOwnerExit: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "fake-tmux-state-live", "invocations.log"))
+	if err != nil {
+		t.Fatalf("read invocations: %v", err)
+	}
+	if !strings.Contains(string(data), "kill-session -t orq-ollama1-local") {
+		t.Fatalf("faltaba kill-session para cleanup ollama: %s", string(data))
+	}
+}
+
+func TestCleanupTMUXSessionOnOwnerExitNoMataSesionNoOllama(t *testing.T) {
+	dir := t.TempDir()
+	fakeTmux := writeLiveFakeTmuxScript(t, dir)
+	if err := cleanupTMUXSessionOnOwnerExit(embeddedTmuxMonitorSpec{
+		TmuxCommand: fakeTmux,
+		SessionName: "orq-codex1-local",
+		Command:     "codex resume 123",
+	}); err != nil {
+		t.Fatalf("cleanupTMUXSessionOnOwnerExit codex: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "fake-tmux-state-live", "invocations.log"))
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("read invocations: %v", err)
+	}
+	if strings.Contains(string(data), "kill-session -t orq-codex1-local") {
+		t.Fatalf("no deberia matar sesion no-ollama: %s", string(data))
+	}
+}
+
 func waitFileStat(t *testing.T, path string) os.FileInfo {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)

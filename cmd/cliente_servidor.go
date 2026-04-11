@@ -115,6 +115,10 @@ type apiPoolSaveResponse struct {
 	ID int64 `json:"id"`
 }
 
+type apiPoolLocalCompartidoResponse struct {
+	PoolLocal *capacidadapp.PoolLocalCompartido `json:"pool_local"`
+}
+
 type apiPoliticasModeloResponse struct {
 	Politicas []*db.PoliticaModelo `json:"politicas"`
 }

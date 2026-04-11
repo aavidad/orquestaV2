@@ -2,6 +2,7 @@ package agentesapp
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -192,6 +193,7 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 	modeloSolicitado := strings.TrimSpace(input.Modelo)
 	razonamientoSolicitado := strings.TrimSpace(input.Razonamiento)
 	perfilSolicitado := strings.TrimSpace(input.Perfil)
+	var resolucionModelo *db.ResolucionModelo
 
 	if s.modelPolicyProvider != nil && (modeloSolicitado == "" || razonamientoSolicitado == "") {
 		resolucion, err := s.modelPolicyProvider.ResolveModelPolicy(db.ResolverPoliticaInput{
@@ -199,6 +201,7 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 			PerfilTarea:  perfilSolicitado,
 		})
 		if err == nil && resolucion != nil {
+			resolucionModelo = resolucion
 			if modeloSolicitado == "" {
 				modeloSolicitado = resolucion.ModelSlug
 			}
@@ -208,6 +211,12 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 			if perfilSolicitado == "" {
 				perfilSolicitado = resolucion.PerfilTarea
 			}
+		}
+	}
+	if ref := s.preferirConectorPoolLocalCompartido(agenteNombre, strings.TrimSpace(input.Conector), ultima, resolucionModelo); ref != "" {
+		conector, err = s.store.GetConnector(ref)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -345,6 +354,73 @@ func (s *Service) resolvePrepareConnector(agente, conectorRef string, ultima *db
 		return nil, err
 	}
 	return conector, nil
+}
+
+func (s *Service) preferirConectorPoolLocalCompartido(agente, conectorRef string, ultima *db.Sesion, resolucion *db.ResolucionModelo) string {
+	if strings.TrimSpace(conectorRef) != "" {
+		return ""
+	}
+	if ultima != nil && strings.TrimSpace(ultima.ConectorSlug) != "" {
+		return ""
+	}
+	if resolucion == nil || strings.TrimSpace(resolucion.PoolSlug) == "" {
+		return ""
+	}
+	pool, err := s.store.GetPool(strings.TrimSpace(resolucion.PoolSlug))
+	if err != nil || pool == nil {
+		return ""
+	}
+	meta := mapFromJSON(strings.TrimSpace(pool.MetadataJSON))
+	if !strings.EqualFold(strings.TrimSpace(pool.Runtime), "ollama") {
+		return ""
+	}
+	if !metadataBoolDefault(meta, "experimental_compat", true) && strings.TrimSpace(metadataString(meta, "conector_canonico")) == "" {
+		return ""
+	}
+	if strings.EqualFold(strings.TrimSpace(metadataString(meta, "conector_canonico")), "ollama_pool_local") {
+		return "ollama_pool_local"
+	}
+	if runtimeagente.EsConectorFamiliaOllama(runtimeagente.ConectorPorDefectoAgente(agente), "") &&
+		strings.EqualFold(strings.TrimSpace(pool.Plan), "local") {
+		return "ollama_pool_local"
+	}
+	return ""
+}
+
+func mapFromJSON(raw string) map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return map[string]any{}
+	}
+	out := map[string]any{}
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return map[string]any{}
+	}
+	return out
+}
+
+func metadataString(meta map[string]any, key string) string {
+	if meta == nil {
+		return ""
+	}
+	if value, ok := meta[strings.TrimSpace(key)].(string); ok {
+		return strings.TrimSpace(value)
+	}
+	return ""
+}
+
+func metadataBoolDefault(meta map[string]any, key string, fallback bool) bool {
+	if meta == nil {
+		return fallback
+	}
+	value, ok := meta[strings.TrimSpace(key)]
+	if !ok {
+		return fallback
+	}
+	if b, ok := value.(bool); ok {
+		return b
+	}
+	return fallback
 }
 
 func (s *Service) loadPolicy() Policy {

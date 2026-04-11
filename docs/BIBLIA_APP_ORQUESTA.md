@@ -314,8 +314,61 @@ Referencia de diseño:
 
 - `docs/diseno_microprogramacion_dirigida_agentes.md`
 
+Regla canonica para promocion de modelos locales:
+
+- la evaluacion de workers locales se hace por `perfil_tarea`, no por nombres libres de rol
+- los perfiles minimos obligatorios para promocion son:
+  - `implementacion`
+  - `revision`
+  - `analisis`
+- `documentador` puede seguir existiendo como rol de agente, pero no sustituye a `perfil_tarea`
+- un modelo local no se aprueba como worker por defecto si no pasa pruebas reales de microprogramacion dirigida en esos perfiles
+
+Resultado provisional de evaluacion local (`2026-04-11`):
+
+- `gemma4:26b` es la opcion local preferente y la unica aprobada por ahora en la smoke canonica servida por Orquesta
+- `qwen3.5:9b` es el mejor candidato ligero visto en prompt directo, pero no queda aprobado todavia como worker por defecto
+- `qwen3:14b` queda como opcion secundaria, util pero mas ruidosa
+- `qwen2.5-coder:14b` y `starcoder2:3b` no se promocionan como workers locales por defecto
+
+Regla operativa derivada:
+
+- cuando Orquesta pruebe o promueva modelos locales, debe hacerlo siempre sobre microtareas cerradas, `write_set` explicito y validacion de entrega desde la app
+- no se acepta una promocion basada solo en “parece responder bien” o en prompts manuales fuera del flujo canonico
+- si un modelo local pasa pruebas manuales pero filtra razonamiento, incumple formato o degrada calidad en la smoke canonica por la app, no se promociona
+
+Regla de capacidad para pools locales:
+
+- los agentes locales de Ollama se gobiernan por `pool` y `slots`
+- puede haber varios agentes logicos apuntando al mismo pool local
+- no se deben arrancar a la vez varios modelos pesados si el host no tiene capacidad real para sostenerlos
+- Orquesta debe arbitrar esos slots antes de lanzar un runtime local nuevo
+
+Regla de convivencia entre vias locales:
+
+- la via actual `ollama-cli + tmux` no se elimina de golpe
+- se conserva como compatibilidad, depuracion, pruebas comparativas y rescate
+- la via canónica nueva para local debe ser un pool compartido gobernado por la app, no una granja de terminales por agente
+
+Decision operativa vigente (`2026-04-11`):
+
+- se prioriza `gemma4:26b` como worker local principal
+- los perfiles canónicos a virtualizar sobre ese modelo son:
+  - `implementacion`
+  - `revision`
+  - `analisis`
+- Qwen y otros modelos locales siguen siendo compatibles por la via actual de `ollama-cli/tmux`, pero quedan en estado experimental mientras no superen la smoke canonica por la app
+
+Restriccion de implementacion:
+
+- esta transicion debe hacerse por servicios de aplicación y puertos claros
+- no se acepta resolverlo añadiendo mas decision de negocio dentro de `db/`
+- toda superficie nueva de app, CLI, API o web debe salir ya en castellano e i18n
+
 Regla operativa para `server_autobootstrap`:
 
+- una BD nueva no debe sembrar agentes legacy por defecto; los agentes se registran desde la app/API y la flota oficial se declara de forma explícita
+- `server_autobootstrap_enabled` debe nacer desactivado por defecto; encenderlo sin configuración explícita vuelve a introducir deriva y ruido operativo en smokes locales
 - el autobootstrap del servidor solo debe sembrar bootstrap inicial para agentes que todavia no estan operativos
 - si un agente ya tiene sesion activa, handle activo o mailbox bootstrap durable pendiente para ese proyecto, el daemon no debe reenviarle otro bootstrap al reiniciar
 - reiniciar el servidor no puede equivaler a “volver a arrancar” a todos los workers ni a reinyectar el mismo `esperar_o_pedir_tarea`

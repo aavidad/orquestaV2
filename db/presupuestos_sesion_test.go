@@ -780,6 +780,9 @@ func TestGetAgenteOllamaIgnoraCuotaLegacyYPresupuestoProveedor(t *testing.T) {
 	if agente.CuotaRestantePct != nil || agente.PresupuestoSesionPct != nil || agente.PresupuestoSemanalPct != nil {
 		t.Fatalf("Gemma1 no deberia proyectar cuota visible: %+v", agente)
 	}
+	if strings.TrimSpace(agente.PresupuestoVentana) != "indefinida" || strings.TrimSpace(agente.PresupuestoFuente) != "local" {
+		t.Fatalf("Gemma1 deberia indicar cuota local indefinida: %+v", agente)
+	}
 }
 
 func TestGetAgenteExtraeCuentaDesdeRuntimeHandle(t *testing.T) {

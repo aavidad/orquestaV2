@@ -212,6 +212,18 @@ func TestShouldBypassLocalDBConServidorLocalDescubierto(t *testing.T) {
 	}
 }
 
+func TestResumenCuotaAgenteLocalIndicaCuotaIndefinida(t *testing.T) {
+	detalle := resumenCuotaAgente(&db.Agente{
+		Nombre:            "Gemma1",
+		SinCuotaProveedor: true,
+		PresupuestoFuente: "local",
+		PresupuestoVentana:"indefinida",
+	})
+	if !strings.Contains(detalle, "cuota indefinida") || !strings.Contains(detalle, "local") {
+		t.Fatalf("detalle de cuota local inesperado: %q", detalle)
+	}
+}
+
 func TestShouldBypassLocalDBCaeADefaultSiEnvNoResponde(t *testing.T) {
 	t.Setenv(serverURLVar, "http://remote.invalid:9999")
 	setServerHTTPClientForTest(t, func(req *http.Request) (*http.Response, error) {
@@ -647,13 +659,16 @@ func TestResumenCuotaAgenteMarcaBloqueoEstimadoCuandoLaCuotaSigueStale(t *testin
 func TestResumenCuotaAgenteOcultaCuotaLegacyEnAgenteLocalSinProveedor(t *testing.T) {
 	pct := 95
 	detalle := resumenCuotaAgente(&db.Agente{
-		Nombre:             "Gemma1",
-		EstadoCuota:        "activo",
-		CuotaRestantePct:   &pct,
-		PresupuestoVentana: "weekly",
+		Nombre:               "Gemma1",
+		EstadoCuota:          "activo",
+		CuotaRestantePct:     &pct,
+		PresupuestoVentana:   "weekly",
+		SinCuotaProveedor:    true,
+		PresupuestoFuente:    "local",
+		PresupuestoCheckedAt: &time.Time{},
 	})
-	if detalle != "" {
-		t.Fatalf("un agente local sin cuota de proveedor no debería mostrar resumen de cuota: %s", detalle)
+	if detalle != "cuota indefinida · local" {
+		t.Fatalf("un agente local sin cuota de proveedor debería mostrar cuota indefinida: %s", detalle)
 	}
 }
 

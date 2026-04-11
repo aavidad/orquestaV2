@@ -19,9 +19,14 @@ type PhaseProvider interface {
 	GetActivePhase(proyecto string) (string, error)
 }
 
+type PoolLocalProvider interface {
+	DescribirPoolLocalCompartido(slug string) (*TelemetriaPoolLocal, error)
+}
+
 type Service struct {
-	store         Store
-	phaseProvider PhaseProvider
+	store             Store
+	phaseProvider     PhaseProvider
+	poolLocalProvider PoolLocalProvider
 }
 
 type PoolDetail struct {
@@ -37,6 +42,10 @@ func NewService(store Store) *Service {
 
 func (s *Service) SetPhaseProvider(provider PhaseProvider) {
 	s.phaseProvider = provider
+}
+
+func (s *Service) SetPoolLocalProvider(provider PoolLocalProvider) {
+	s.poolLocalProvider = provider
 }
 
 func (s *Service) ListPoolsSummary(activo *bool) ([]*db.PoolCapacidadResumen, error) {

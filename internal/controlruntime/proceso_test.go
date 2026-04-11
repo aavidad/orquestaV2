@@ -224,6 +224,52 @@ func TestNormalizarInstruccionProcesoCompactaTMUXParaOllamaLocal(t *testing.T) {
 	}
 }
 
+func TestNormalizarInstruccionProcesoTMUXOllamaConMicroprogramacionNoTruncaObjetivoNiTests(t *testing.T) {
+	pid := int64(os.Getpid())
+	obj := ObjetivoProceso{
+		PID:          &pid,
+		MetadataJSON: `{"driver":"tmux_cli_session","transport":"tmux","rendered_command":"ollama run qwen2.5-coder:14b","tmux_session":"orq-ollama-micro"}`,
+	}
+	texto := strings.Join([]string{
+		"PROTOCOLO_MICROPROGRAMACION_INLINE",
+		"MODO: sin herramientas y sin acceso a filesystem o shell.",
+		"MICROTAREA_ORIGINAL:",
+		"MICROTAREA CERRADA",
+		"SIMBOLO: NormalizarIdentificadorTecnico",
+		"ARCHIVO: identidad/normalizar_identificador.go",
+		"OBJETIVO: Implementa solo la funcion para normalizar identificadores tecnicos: trim, lowercase, reemplazar separadores no alfanumericos por un solo guion, colapsar guiones repetidos y recortar guiones extremos.",
+		"WRITE_SET: identidad/normalizar_identificador.go",
+		"TESTS: go test ./identidad -run TestNormalizarIdentificadorTecnico -count=1",
+		"CONTEXTO_INLINE:",
+		"=== WRITE_SET: identidad/normalizar_identificador.go ===",
+		"```",
+		"package identidad",
+		"",
+		"func NormalizarIdentificadorTecnico(raw string) string {",
+		"\treturn raw",
+		"}",
+		"```",
+	}, "\n")
+	got := NormalizarInstruccionProceso(obj, texto)
+	if got == "" {
+		t.Fatal("la instruccion de microprogramacion ollama no deberia quedar vacia")
+	}
+	if strings.Contains(got, "\n") {
+		t.Fatalf("ollama tmux deberia seguir recibiendo una sola linea, got=%q", got)
+	}
+	for _, fragment := range []string{
+		"PROTOCOLO_MICROPROGRAMACION_INLINE",
+		"OBJETIVO: Implementa solo la funcion para normalizar identificadores tecnicos",
+		"colapsar guiones repetidos y recortar guiones extremos",
+		"TESTS: go test ./identidad -run TestNormalizarIdentificadorTecnico -count=1",
+		"func NormalizarIdentificadorTecnico(raw string) string",
+	} {
+		if !strings.Contains(got, fragment) {
+			t.Fatalf("faltan datos relevantes tras compactar microprogramacion ollama: %q", got)
+		}
+	}
+}
+
 func TestNormalizarInstruccionProcesoPreservaMultilineaTMUXNoOllama(t *testing.T) {
 	pid := int64(os.Getpid())
 	obj := ObjetivoProceso{

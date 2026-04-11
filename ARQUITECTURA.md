@@ -85,6 +85,9 @@ Regla práctica:
 - `db/` no debe volver a actuar como núcleo de aplicación
 - la migración del legado se hará por fases
 - la unidad canónica de delegación a agentes es la especificación de función, no el frente amplio
+- una base nueva debe nacer neutra en agentes: la persistencia puede sembrar catálogo y conectores base, pero no debe registrar flotas legacy por defecto
+- el alta de agentes y la composición de flota se hacen de forma explícita desde la app/API; no desde seeds ocultas del esquema
+- `server_autobootstrap` es opt-in explícito y no puede activarse por defecto en una instalación nueva
 - **Módulos e Idioma:** Todos los adaptadores y aplicaciones de dominio deben utilizar nomenclatura exclusiva en **castellano**, habitualmente sufijados con `app` (P.ej. usar `tareasapp`, `sesionesapp` en vez de `taskapp` o `sessionapp`). El objetivo es erradicar completamente el inglés de los nombres de carpeta para evitar confusiones de los modelos LLM (agentes).
 - **i18n por defecto:** toda superficie nueva visible, clave pública o documento nuevo debe nacer preparada para i18n; no se admite crear funcionalidad nueva que obligue a rehacer la internacionalización después.
 

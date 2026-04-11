@@ -3829,6 +3829,103 @@ func TestResetReanimacionEncolaStartSiHandlePausadoTMUXBootstrapOnly(t *testing.
 	}
 }
 
+func TestReactivarAgenteTrasReanimacionOmitePoolLocalCompartidoSinCapacidad(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("GemmaBusy", "programador"); err != nil {
+		t.Fatalf("registrar agente ocupado: %v", err)
+	}
+	if err := db.RegistrarAgente("GemmaNuevo", "programador"); err != nil {
+		t.Fatalf("registrar agente nuevo: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.GuardarPool(&db.PoolCapacidad{
+		Slug:                "ollama-gemma4",
+		Proveedor:           "Ollama",
+		Runtime:             "ollama",
+		Plan:                "local",
+		CapacidadTotal:      1,
+		PermiteModelosMulti: true,
+		PoliticaHandoff:     "preventivo",
+		FuenteTelemetria:    "manual",
+		MetadataJSON:        `{"conector_canonico":"ollama_pool_local","modelo_preferente":"gemma4:26b","slots_maximos":1}`,
+		Activo:              true,
+	}); err != nil {
+		t.Fatalf("guardar pool: %v", err)
+	}
+	if _, err := db.GuardarPoolModelo("ollama-gemma4", &db.PoolModelo{ModelSlug: "gemma4:26b", Activo: true, Prioridad: 10, CosteRelativo: 1}); err != nil {
+		t.Fatalf("guardar pool modelo: %v", err)
+	}
+	if _, err := db.GuardarPoliticaModelo(&db.PoliticaModelo{
+		ScopeTipo:       "perfil",
+		ScopeRef:        "implementacion",
+		PerfilTarea:     "implementacion",
+		PoolSlug:        "ollama-gemma4",
+		ModelSlug:       "gemma4:26b",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("guardar politica modelo: %v", err)
+	}
+	sesionBusy, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "GemmaBusy",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "gemma-busy"),
+		Herramienta: "ollama_pool_local",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion busy: %v", err)
+	}
+	pool, err := db.GetPool("ollama-gemma4")
+	if err != nil {
+		t.Fatalf("get pool: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE sesiones SET pool_id = ? WHERE id = ?`, pool.ID, sesionBusy.ID); err != nil {
+		t.Fatalf("asignar pool a sesion busy: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Reactivar GemmaNuevo",
+		Descripcion: "Debe esperar slot libre del pool local compartido",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "GemmaNuevo"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "GemmaNuevo"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	if err := reactivarAgenteTrasReanimacion("GemmaNuevo"); err != nil {
+		t.Fatalf("reactivar agente: %v", err)
+	}
+
+	agente := "GemmaNuevo"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar start si el pool local compartido ya no tiene slots: %+v", orders)
+	}
+}
+
 func TestProcesarRuntimeMailboxInteractivoBatchOmiteHandlesSinInputInteractivo(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -4530,6 +4627,85 @@ func TestProcesarRuntimeMailboxBatchEncolaSendInstructionParaTMUXBootstrapOnlyRe
 	}
 	if len(mailboxConsumido) != 1 || mailboxConsumido[0].ID != msgViejo {
 		t.Fatalf("mailbox consumida inesperada: %+v", mailboxConsumido)
+	}
+}
+
+func TestEncolarSendInstructionDesdeRuntimeMailboxConservaMetadataMicroprogramacion(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Ollama1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Ollama1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "ollama-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(
+		`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-ollama1/%4', metadata_json='{"driver":"tmux_cli_session","tmux_session":"orq-ollama1","tmux_pane_id":"%4","can_send_input":true,"mailbox_delivery_mode":"interactive"}', capabilities_json='{"can_send_input":true,"mailbox_delivery_mode":"interactive"}' WHERE id=?`,
+		handle.ID,
+	); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	handle, err = db.GetRuntimeHandle(handle.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle: %+v err=%v", handle, err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente: "server",
+		ToAgente:   "Ollama1",
+		ProyectoID: &proyectoID,
+		Kind:       "instruction",
+		PayloadJSON: `{"source":"microprogramacion","microprogramacion":{"especificacion_id":7,"write_set":["identidad/normalizar.go"]},"texto":"PATCH_UNIFICADO: cambia solo identidad/normalizar.go"}`,
+	})
+	if err != nil {
+		t.Fatalf("enviar runtime mailbox: %v", err)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+
+	orderID, err := encolarSendInstructionDesdeRuntimeMailbox(msg, handle, "PATCH_UNIFICADO: cambia solo identidad/normalizar.go", "")
+	if err != nil {
+		t.Fatalf("encolar send_instruction desde mailbox: %v", err)
+	}
+	order, err := db.GetRuntimeOrder(orderID)
+	if err != nil || order == nil {
+		t.Fatalf("get order: %+v err=%v", order, err)
+	}
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(order.PayloadJSON), &payload); err != nil {
+		t.Fatalf("decode payload order: %v", err)
+	}
+	if got := strings.TrimSpace(stringMapValue(payload, "source")); got != "microprogramacion" {
+		t.Fatalf("source perdida en materializacion: %q payload=%s", got, order.PayloadJSON)
+	}
+	micro, _ := payload["microprogramacion"].(map[string]any)
+	if id, ok := micro["especificacion_id"].(float64); !ok || int64(id) != 7 {
+		t.Fatalf("metadata microprogramacion perdida: %+v payload=%s", micro, order.PayloadJSON)
+	}
+	if id, ok := payload["mailbox_id"].(float64); !ok || int64(id) != msgID {
+		t.Fatalf("mailbox_id inesperado: %s", order.PayloadJSON)
 	}
 }
 

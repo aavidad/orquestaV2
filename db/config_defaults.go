@@ -42,7 +42,7 @@ func defaultConfigEntries() []configDefaultEntry {
 		{Clave: "autonomia_nudge_cooldown_seconds", Valor: "60"},
 		{Clave: "autonomia_supervision_interval_seconds", Valor: "300"},
 		{Clave: "autonomia_review_interval_seconds", Valor: "300"},
-		{Clave: "server_autobootstrap_enabled", Valor: "true"},
+		{Clave: "server_autobootstrap_enabled", Valor: "false"},
 		{Clave: "server_autobootstrap_project_slug", Valor: "orquestador"},
 		{Clave: "server_autobootstrap_project_name", Valor: "Orquestador"},
 		{Clave: "server_autobootstrap_supervisor_agent", Valor: "Codex1"},
