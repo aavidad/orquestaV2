@@ -13,6 +13,12 @@ certs/
 .codex-docker-home/
 .codex-sandbox-workspace/
 tmp/
+.cache/
+\*\*claw-code-dev-rust/
+\*\*claw-code-main/
+\*\*oh-my-codex-main/
+orquesta.db*.bak-relpaths-*
+reporte_bloqueo_agentes.md
 logs/
 server.log
 server_new.log
