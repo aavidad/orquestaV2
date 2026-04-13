@@ -50,9 +50,22 @@ const (
 	tmuxReadyInitialBackoff              = 150 * time.Millisecond
 	tmuxReadyMaxBackoff                  = 2 * time.Second
 	tmuxReadyTimeout                     = 15 * time.Second
-	tmuxStartReadyTimeout                = 60 * time.Second
 	tmuxSemanticDetectionTailBytes       = 8192
 )
+
+func tmuxStartReadyTimeout() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("ORQUESTA_TMUX_START_READY_TIMEOUT")); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+		if n, err := strconv.Atoi(v); err == nil {
+			return time.Duration(n) * time.Second
+		}
+	}
+	return 60 * time.Second
+}
+
+var tmuxMonitorGitCommand = "git"
 
 func MaybeRunEmbeddedTmuxMonitor(args []string) bool {
 	if len(args) == 0 || strings.TrimSpace(args[0]) != "__tmux_monitor" {
@@ -94,18 +107,20 @@ func runEmbeddedTmuxMonitor(args []string) error {
 		return fmt.Errorf("tmux monitor sin rutas de status/heartbeat")
 	}
 
-	_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusStarting, true, "", nil, spec.ChildPID, time.Now().UTC(), time.Time{})
+	_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusStarting, true, "", nil, spec.ChildPID, time.Now().UTC(), time.Time{}, time.Time{})
 
 	ticker := time.NewTicker(embeddedTmuxMonitorHeartbeatInterval)
 	defer ticker.Stop()
 
 	var lastProgressAt time.Time
+	var lastOutputAt time.Time
 	var lastProgressProbe time.Time
+	lastCaptureSignature := ""
 	for {
 		if spec.OwnerPID > 0 {
 			if alive, err := procesoVivoPID(spec.OwnerPID); err == nil && !alive {
 				if err := cleanupTMUXSessionOnOwnerExit(spec); err != nil {
-					_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusFailed, false, err.Error(), nil, 0, time.Now().UTC(), lastProgressAt)
+					_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusFailed, false, err.Error(), nil, 0, time.Now().UTC(), lastOutputAt, lastProgressAt)
 				}
 				return nil
 			}
@@ -113,11 +128,11 @@ func runEmbeddedTmuxMonitor(args []string) error {
 		snap, err := consultarTmuxPane(spec)
 		now := time.Now().UTC()
 		if err != nil {
-			_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusFailed, false, err.Error(), nil, 0, now, lastProgressAt)
+			_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusFailed, false, err.Error(), nil, 0, now, lastOutputAt, lastProgressAt)
 			return nil
 		}
 		if snap.PaneDead || snap.PanePID <= 0 {
-			_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusStopped, false, "tmux pane finalizado", nil, snap.PanePID, now, lastProgressAt)
+			_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusStopped, false, "tmux pane finalizado", nil, snap.PanePID, now, lastOutputAt, lastProgressAt)
 			return nil
 		}
 		if spec.ChildPID <= 0 {
@@ -125,8 +140,11 @@ func runEmbeddedTmuxMonitor(args []string) error {
 		}
 		state, stateErr := currentTMUXWorkerState(strings.TrimSpace(spec.TmuxCommand), strings.TrimSpace(spec.PaneID))
 		if stateErr != nil {
-			_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusFailed, false, stateErr.Error(), nil, snap.PanePID, now, lastProgressAt)
+			_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusFailed, false, stateErr.Error(), nil, snap.PanePID, now, lastOutputAt, lastProgressAt)
 			return nil
+		}
+		if captured, captureErr := captureTMUXPane(strings.TrimSpace(spec.TmuxCommand), strings.TrimSpace(spec.PaneID)); captureErr == nil {
+			lastCaptureSignature, lastOutputAt = tmuxTrackOutputMoment(lastCaptureSignature, captured, now, lastOutputAt)
 		}
 		if lastProgressProbe.IsZero() || now.Sub(lastProgressProbe) >= embeddedTmuxProgressProbeInterval {
 			startedAt := time.Time{}
@@ -140,7 +158,7 @@ func runEmbeddedTmuxMonitor(args []string) error {
 			}
 			lastProgressProbe = now
 		}
-		_ = writeEmbeddedTmuxWorkerSnapshot(spec, state, true, "", nil, snap.PanePID, now, lastProgressAt)
+		_ = writeEmbeddedTmuxWorkerSnapshot(spec, state, true, "", nil, snap.PanePID, now, lastOutputAt, lastProgressAt)
 		<-ticker.C
 	}
 }
@@ -204,10 +222,17 @@ func consultarTmuxPane(spec embeddedTmuxMonitorSpec) (*tmuxPaneSnapshot, error) 
 	}, nil
 }
 
-func writeEmbeddedTmuxWorkerSnapshot(spec embeddedTmuxMonitorSpec, state string, alive bool, exitError string, exitCode *int, childPID int, now time.Time, lastProgressAt time.Time) error {
-	lastOutputAt := ""
+func writeEmbeddedTmuxWorkerSnapshot(spec embeddedTmuxMonitorSpec, state string, alive bool, exitError string, exitCode *int, childPID int, now, observedLastOutputAt, lastProgressAt time.Time) error {
+	lastOutputAt := time.Time{}
 	if info, err := os.Stat(strings.TrimSpace(spec.LogPath)); err == nil {
-		lastOutputAt = info.ModTime().UTC().Format(time.RFC3339Nano)
+		lastOutputAt = info.ModTime().UTC()
+	}
+	if !observedLastOutputAt.IsZero() && observedLastOutputAt.After(lastOutputAt) {
+		lastOutputAt = observedLastOutputAt.UTC()
+	}
+	lastOutput := ""
+	if !lastOutputAt.IsZero() {
+		lastOutput = lastOutputAt.Format(time.RFC3339Nano)
 	}
 	lastProgress := ""
 	if !lastProgressAt.IsZero() {
@@ -243,7 +268,7 @@ func writeEmbeddedTmuxWorkerSnapshot(spec embeddedTmuxMonitorSpec, state string,
 		ExternalSessionID:   strings.TrimSpace(spec.ExternalSessionID),
 		MailboxDeliveryMode: strings.TrimSpace(spec.MailboxDeliveryMode),
 		ReadyAt:             readyAt,
-		LastOutputAt:        lastOutputAt,
+		LastOutputAt:        lastOutput,
 		LastProgressAt:      lastProgress,
 		ExitCode:            exitCode,
 		ExitError:           strings.TrimSpace(exitError),
@@ -257,7 +282,7 @@ func writeEmbeddedTmuxWorkerSnapshot(spec embeddedTmuxMonitorSpec, state string,
 		Project:           strings.TrimSpace(spec.Project),
 		ExternalSessionID: strings.TrimSpace(spec.ExternalSessionID),
 		ReadyAt:           readyAt,
-		LastOutputAt:      lastOutputAt,
+		LastOutputAt:      lastOutput,
 		LastProgressAt:    lastProgress,
 		ExitCode:          exitCode,
 		ExitError:         strings.TrimSpace(exitError),
@@ -274,12 +299,27 @@ func writeEmbeddedTmuxWorkerSnapshot(spec embeddedTmuxMonitorSpec, state string,
 	return writeWorkerHeartbeatFile(strings.TrimSpace(spec.HeartbeatPath), heartbeat)
 }
 
+func tmuxTrackOutputMoment(previousSignature, captured string, now, previousMoment time.Time) (string, time.Time) {
+	signature := tmuxSemanticTail(captured)
+	if signature == "" {
+		return "", previousMoment
+	}
+	if signature != previousSignature {
+		return signature, now.UTC()
+	}
+	return signature, previousMoment
+}
+
 func latestTMUXWorktreeProgressMoment(workingDir string, baseline, fallback time.Time) (time.Time, error) {
 	workingDir = strings.TrimSpace(workingDir)
 	if workingDir == "" {
 		return time.Time{}, nil
 	}
-	cmd := exec.Command("git", "-C", workingDir, "status", "--porcelain", "--untracked-files=all")
+	repoRoot, err := tmuxMonitorRepoRoot(workingDir)
+	if err != nil || strings.TrimSpace(repoRoot) == "" {
+		return time.Time{}, err
+	}
+	cmd := exec.Command(tmuxMonitorGitCommand, "-C", workingDir, "status", "--porcelain", "--untracked-files=all")
 	out, err := cmd.Output()
 	if err != nil {
 		return time.Time{}, err
@@ -318,7 +358,7 @@ func latestTMUXWorktreeProgressMoment(workingDir string, baseline, fallback time
 	if !latest.IsZero() {
 		return latest, nil
 	}
-	if info, err := os.Stat(filepath.Join(workingDir, ".git", "index")); err == nil {
+	if info, err := os.Stat(filepath.Join(repoRoot, ".git", "index")); err == nil {
 		modAt := info.ModTime().UTC()
 		if baseline.IsZero() || !modAt.Before(baseline) {
 			return modAt, nil
@@ -331,6 +371,23 @@ func latestTMUXWorktreeProgressMoment(workingDir string, baseline, fallback time
 		return fallback.UTC(), nil
 	}
 	return time.Time{}, nil
+}
+
+func tmuxMonitorRepoRoot(workingDir string) (string, error) {
+	workingDir = strings.TrimSpace(workingDir)
+	if workingDir == "" {
+		return "", nil
+	}
+	cmd := exec.Command(tmuxMonitorGitCommand, "-C", workingDir, "rev-parse", "--show-toplevel")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", nil
+	}
+	root := filepath.Clean(strings.TrimSpace(string(out)))
+	if root == "" || root == string(os.PathSeparator) {
+		return "", nil
+	}
+	return root, nil
 }
 
 func tmuxWorktreePathCountsAsProgress(path string) bool {
@@ -390,7 +447,7 @@ func currentTMUXWorkerState(tmuxCommand, paneID string) (string, error) {
 	if err != nil {
 		return workerStatusRunning, nil
 	}
-	dismissed, err := dismissTMUXTrustPromptIfPresent(tmuxCommand, paneID, captured)
+	dismissed, err := dismissTMUXBootstrapPromptIfPresent(tmuxCommand, paneID, captured)
 	if err != nil {
 		return "", err
 	}
@@ -416,12 +473,12 @@ func waitForTMUXPaneReady(tmuxCommand, paneID string, timeout time.Duration) (bo
 		if err != nil {
 			return false, err
 		}
-		dismissed, err := dismissTMUXTrustPromptIfPresent(tmuxCommand, paneID, captured)
+		dismissed, err := dismissTMUXBootstrapPromptIfPresent(tmuxCommand, paneID, captured)
 		if err != nil {
 			return false, err
 		}
 		state := tmuxClassifyPaneState(captured)
-		if state == workerStatusBlockedAuth || state == workerStatusBlockedQuota {
+		if state == workerStatusBlockedTrust || state == workerStatusBlockedAuth || state == workerStatusBlockedQuota {
 			return false, nil
 		}
 		if !dismissed && state == workerStatusReady {
@@ -451,6 +508,12 @@ func waitForTMUXPaneReady(tmuxCommand, paneID string, timeout time.Duration) (bo
 
 func tmuxClassifyPaneState(captured string) string {
 	switch {
+	case tmuxPaneHasTrustPrompt(captured), tmuxPaneHasUntrustedFolderWarning(captured):
+		return workerStatusBlockedTrust
+	case tmuxPaneHasGeminiAuthPrompt(captured):
+		return workerStatusBlockedAuth
+	case tmuxPaneHasClaudeAuthPrompt(captured):
+		return workerStatusBlockedAuth
 	case tmuxPaneHasCodexAuthPrompt(captured):
 		return workerStatusBlockedAuth
 	case tmuxPaneHasUsageLimitPrompt(captured):
@@ -477,18 +540,49 @@ func captureTMUXPane(tmuxCommand, paneID string) (string, error) {
 	return string(out), nil
 }
 
-func dismissTMUXTrustPromptIfPresent(tmuxCommand, paneID, captured string) (bool, error) {
-	if !tmuxPaneHasTrustPrompt(captured) {
+func dismissTMUXBootstrapPromptIfPresent(tmuxCommand, paneID, captured string) (bool, error) {
+	keys, ok := tmuxBootstrapPromptDismissKeys(captured)
+	if !ok {
 		return false, nil
 	}
-	if err := sendTMUXKey(tmuxCommand, paneID, "C-m"); err != nil {
-		return true, err
-	}
-	time.Sleep(120 * time.Millisecond)
-	if err := sendTMUXKey(tmuxCommand, paneID, "C-m"); err != nil {
-		return true, err
+	for idx, key := range keys {
+		if err := sendTMUXKey(tmuxCommand, paneID, key); err != nil {
+			return true, err
+		}
+		if idx < len(keys)-1 {
+			time.Sleep(120 * time.Millisecond)
+		}
 	}
 	return true, nil
+}
+
+func tmuxBootstrapPromptDismissKeys(captured string) ([]string, bool) {
+	switch {
+	case tmuxPaneHasTrustPrompt(captured):
+		return tmuxTrustPromptDismissKeys(captured), true
+	case tmuxPaneHasBypassPermissionsPrompt(captured):
+		return []string{"2", "C-m"}, true
+	case tmuxPaneHasActionRequiredPrompt(captured):
+		return []string{"2", "C-m"}, true
+	default:
+		return nil, false
+	}
+}
+
+func tmuxTrustPromptDismissKeys(captured string) []string {
+	normalized := tmuxSemanticTail(captured)
+	switch {
+	case strings.Contains(normalized, "trust folder ("),
+		strings.Contains(normalized, "trust parent folder ("),
+		strings.Contains(normalized, "do you trust the files in this folder"),
+		strings.Contains(normalized, "skipping project agents due to untrusted folder"):
+		return []string{"1", "C-m"}
+	case strings.Contains(normalized, "yes, i trust this folder"),
+		strings.Contains(normalized, "enter to confirm"):
+		return []string{"C-m"}
+	default:
+		return []string{"C-m", "C-m"}
+	}
 }
 
 func sendTMUXKey(tmuxCommand, paneID, key string) error {
@@ -518,11 +612,18 @@ func tmuxPaneHasTrustPrompt(captured string) bool {
 	hasChoices := false
 	for _, line := range tail {
 		trimmed := strings.ToLower(strings.TrimSpace(line))
-		if strings.Contains(trimmed, "do you trust the contents of this directory?") {
+		if strings.Contains(trimmed, "do you trust the contents of this directory?") ||
+			strings.Contains(trimmed, "do you trust the files in this folder?") ||
+			strings.Contains(trimmed, "quick safety check:") {
 			hasQuestion = true
 		}
 		if strings.Contains(trimmed, "yes, continue") ||
+			strings.Contains(trimmed, "yes, i trust this folder") ||
+			strings.Contains(trimmed, "trust folder (") ||
+			strings.Contains(trimmed, "trust parent folder (") ||
 			strings.Contains(trimmed, "no, quit") ||
+			strings.Contains(trimmed, "no, exit") ||
+			strings.Contains(trimmed, "enter to confirm") ||
 			strings.Contains(trimmed, "press enter to continue") {
 			hasChoices = true
 		}
@@ -530,9 +631,49 @@ func tmuxPaneHasTrustPrompt(captured string) bool {
 	return hasQuestion && hasChoices
 }
 
+func tmuxPaneHasUntrustedFolderWarning(captured string) bool {
+	normalized := tmuxSemanticTail(captured)
+	if normalized == "" {
+		return false
+	}
+	return strings.Contains(normalized, "skipping project agents due to untrusted folder") ||
+		strings.Contains(normalized, "ensure that the project root is trusted")
+}
+
+func tmuxPaneHasBypassPermissionsPrompt(captured string) bool {
+	normalized := tmuxSemanticTail(captured)
+	if normalized == "" {
+		return false
+	}
+	return strings.Contains(normalized, "warning: claude code running in bypass permissions mode") &&
+		strings.Contains(normalized, "1. no, exit") &&
+		strings.Contains(normalized, "2. yes, i accept")
+}
+
+func tmuxPaneHasActionRequiredPrompt(captured string) bool {
+	normalized := tmuxSemanticTail(captured)
+	if normalized == "" {
+		return false
+	}
+	if !strings.Contains(normalized, "action required") {
+		return false
+	}
+	if !strings.Contains(normalized, "1. allow once") || !strings.Contains(normalized, "2. allow for this session") {
+		return false
+	}
+	return strings.Contains(normalized, "allow execution of:") ||
+		strings.Contains(normalized, "allow execution") ||
+		strings.Contains(normalized, "writefile") ||
+		strings.Contains(normalized, "edit ") ||
+		strings.Contains(normalized, "bash ")
+}
+
 func tmuxPaneLooksReady(captured string) bool {
 	captured = tmuxTailCapture(captured, 4096)
-	if tmuxPaneHasCodexAuthPrompt(captured) {
+	if tmuxPaneHasTrustPrompt(captured) || tmuxPaneHasUntrustedFolderWarning(captured) || tmuxPaneHasBypassPermissionsPrompt(captured) || tmuxPaneHasActionRequiredPrompt(captured) {
+		return false
+	}
+	if tmuxPaneHasGeminiAuthPrompt(captured) || tmuxPaneHasClaudeAuthPrompt(captured) || tmuxPaneHasCodexAuthPrompt(captured) {
 		return false
 	}
 	if tmuxPaneHasUsageLimitPrompt(captured) {
@@ -543,6 +684,14 @@ func tmuxPaneLooksReady(captured string) bool {
 	}
 	lines := tmuxNormalizePaneLines(captured)
 	if len(lines) == 0 || tmuxPaneIsBootstrapping(lines) {
+		return false
+	}
+	return tmuxPaneHasRecentTextInputPrompt(captured)
+}
+
+func tmuxPaneHasRecentTextInputPrompt(captured string) bool {
+	lines := tmuxNormalizePaneLines(tmuxTailCapture(captured, 4096))
+	if len(lines) == 0 {
 		return false
 	}
 	tail := lines
@@ -575,6 +724,12 @@ func tmuxPaneHasPendingSubmit(captured string) bool {
 
 func tmuxPaneHasActiveTask(captured string) bool {
 	captured = tmuxTailCapture(captured, 4096)
+	semantic := strings.ToLower(tmuxSemanticTail(captured))
+	if semantic != "" {
+		if strings.Contains(semantic, "transfiguring") {
+			return true
+		}
+	}
 	lines := tmuxNormalizePaneLines(captured)
 	if len(lines) > 40 {
 		lines = lines[len(lines)-40:]
@@ -603,6 +758,28 @@ func tmuxPaneHasCodexAuthPrompt(captured string) bool {
 		return true
 	}
 	return hasWelcome && hasSignin
+}
+
+func tmuxPaneHasClaudeAuthPrompt(captured string) bool {
+	normalized := tmuxSemanticTail(captured)
+	if normalized == "" {
+		return false
+	}
+	return (strings.Contains(normalized, "not logged in") && strings.Contains(normalized, "/login")) ||
+		strings.Contains(normalized, "please run /login") ||
+		strings.Contains(normalized, "run /login")
+}
+
+func tmuxPaneHasGeminiAuthPrompt(captured string) bool {
+	if tmuxPaneHasGeminiAcceptEditsPrompt(captured) || tmuxPaneHasRecentTextInputPrompt(captured) {
+		return false
+	}
+	normalized := tmuxSemanticTail(captured)
+	if normalized == "" {
+		return false
+	}
+	return strings.Contains(normalized, "waiting for authentication") ||
+		(strings.Contains(normalized, "signed in with google") && strings.Contains(normalized, "waiting for authentication"))
 }
 
 func tmuxPaneHasUsageLimitPrompt(captured string) bool {

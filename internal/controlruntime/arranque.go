@@ -13,7 +13,8 @@ import (
 type SolicitudArranque struct {
 	Agente   string
 	Proyecto string
-	Plan     *runtimeagente.LaunchPlan
+	Plan         *runtimeagente.LaunchPlan
+	TimeoutReady time.Duration
 }
 
 type ProcesoArrancado struct {
@@ -113,10 +114,12 @@ func renderedCommandLooksLikeTMUXPreferredCLI(rendered string) bool {
 	base := filepath.Base(first)
 	switch {
 	case strings.Contains(lower, "claude-perfil"),
+		strings.Contains(lower, "claude-code"),
 		strings.Contains(lower, "/claude"),
 		lower == "claude",
 		strings.HasPrefix(lower, "claude "),
 		base == "claude",
+		base == "claude-code",
 		strings.Contains(lower, "gemini-perfil"),
 		strings.Contains(lower, "/gemini"),
 		lower == "gemini",

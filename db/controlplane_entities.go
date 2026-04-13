@@ -3363,6 +3363,9 @@ func runtimeOrderControlEstadoDeseadoSatisfecho(order *RuntimeOrder, runtime *Ru
 				return false, ""
 			}
 		}
+		if runtimeHandleActivoAPICompartido(handle, runtime) {
+			return true, "runtime_handle_api_active"
+		}
 		if runtimeWorkerSnapshotSatisfaceControlActual(orderType, handle, runtimeWorkerSnapshot(handle, runtime), now) {
 			return true, "runtime_worker_already_running"
 		}
@@ -3389,6 +3392,29 @@ func runtimeOrderControlEstadoDeseadoSatisfecho(order *RuntimeOrder, runtime *Ru
 		}
 	}
 	return false, ""
+}
+
+func runtimeHandleActivoAPICompartido(handle *RuntimeHandle, runtime *RuntimeInstance) bool {
+	if handle == nil || runtime == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(handle.Estado), "activo") {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(handle.Transporte), "api") {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(runtime.LogicalState)) {
+	case "", "disponible", "working", "esperando_io":
+	default:
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(runtime.ProcessState)) {
+	case "", "running", "desconocido":
+	default:
+		return false
+	}
+	return true
 }
 
 func runtimeHandleSesionTMUXAusente(handle *RuntimeHandle) bool {
@@ -4653,9 +4679,10 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) (err error) {
 		return fmt.Errorf("%s %s (%s)", detalle, conector.Slug, strings.TrimSpace(op.Motivo))
 	}
 	arranque, err := controlruntime.ArrancarPlan(controlruntime.SolicitudArranque{
-		Agente:   order.Agente,
-		Proyecto: proyecto.Slug,
-		Plan:     plan,
+		Agente:       order.Agente,
+		Proyecto:     proyecto.Slug,
+		Plan:         plan,
+		TimeoutReady: timeoutParaArranqueDurable(order),
 	})
 	if err != nil {
 		return err
@@ -4856,10 +4883,25 @@ func ackBootstrapRuntimeSinLeaseEnStart(startOrder *RuntimeOrder, bootstrap *boo
 	if len(bootstrap.Mailbox) == 0 {
 		return nil
 	}
+	var sesionID int64
+	if sesion != nil {
+		sesionID = sesion.ID
+	}
 	if startOrder != nil && startOrder.ID > 0 {
-		var sesionID int64
-		if sesion != nil {
-			sesionID = sesion.ID
+		if strings.EqualFold(strings.TrimSpace(startOrder.Estado), "ejecutando") {
+			resultado := mergeRuntimeOrderResultJSON(startOrder.ResultadoJSON, map[string]any{
+				"ok":            true,
+				"lease_state":   "waiting_for_evidence",
+				"mailbox_count": len(bootstrap.Mailbox),
+				"mailbox_ids":   runtimeMailboxIDs(bootstrap.Mailbox),
+				"sesion_id":     sesionID,
+				"ack_mode":      "runtime_transcript_or_tick",
+				"continuidad":   true,
+				"order_tipo":    "start",
+			})
+			if err := MarcarRuntimeOrderEstado(startOrder.ID, startOrder.Estado, resultado, startOrder.ErrorText); err != nil {
+				return err
+			}
 		}
 		Audit("orquesta", "runtime_bootstrap_start_ack", "runtime_order", startOrder.ID,
 			fmt.Sprintf("sesion_id=%d mailbox_count=%d ack_mode=start_success_no_mailbox_ack", sesionID, len(bootstrap.Mailbox)))
@@ -4869,6 +4911,9 @@ func ackBootstrapRuntimeSinLeaseEnStart(startOrder *RuntimeOrder, bootstrap *boo
 
 func inyectarPromptArranque(handle *RuntimeHandle, runtime *RuntimeInstance, plan *runtimeagente.LaunchPlan, order *RuntimeOrder) error {
 	if handle == nil || runtime == nil || plan == nil {
+		return nil
+	}
+	if runtimeHandleOmitePromptArranqueInteractivo(handle, runtime, plan) {
 		return nil
 	}
 	if plan.LaunchPromptEmbedded && plan.CanSendInput != nil && !*plan.CanSendInput {
@@ -4884,10 +4929,36 @@ func inyectarPromptArranque(handle *RuntimeHandle, runtime *RuntimeInstance, pla
 	}
 	aplicado, _, err := controlruntime.EnviarInstruccionProceso(obj, texto)
 	if err != nil {
+		if runtimeOrderPromptArranqueDebeDiferirse(handle, err) {
+			return encolarPromptArranqueEnMailbox(order, texto)
+		}
 		return err
 	}
 	if aplicado {
 		return RegistrarRuntimeTranscriptInput(handle, runtime, texto)
+	}
+	return encolarPromptArranqueEnMailbox(order, texto)
+}
+
+func runtimeOrderPromptArranqueDebeDiferirse(handle *RuntimeHandle, runtimeErr error) bool {
+	if handle == nil || runtimeErr == nil {
+		return false
+	}
+	reason, ok := runtimeOrderSendInstructionDiferirPorErrorTMUX(handle, runtimeErr)
+	if !ok {
+		return false
+	}
+	switch strings.TrimSpace(reason) {
+	case "worker_not_ready", "worker_blocked_trust", "worker_blocked_auth", "worker_blocked_quota", "worker_starting":
+		return true
+	default:
+		return false
+	}
+}
+
+func encolarPromptArranqueEnMailbox(order *RuntimeOrder, texto string) error {
+	if order == nil || strings.TrimSpace(texto) == "" {
+		return nil
 	}
 	payloadJSON, _ := json.Marshal(map[string]any{
 		"texto":       texto,
@@ -4895,7 +4966,7 @@ func inyectarPromptArranque(handle *RuntimeHandle, runtime *RuntimeInstance, pla
 		"from_agente": "orquesta",
 		"motivo":      "launch_prompt_start",
 	})
-	_, err = EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+	_, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
 		FromAgente:  "orquesta",
 		ToAgente:    strings.TrimSpace(order.Agente),
 		ProyectoID:  order.ProyectoID,
@@ -4903,6 +4974,33 @@ func inyectarPromptArranque(handle *RuntimeHandle, runtime *RuntimeInstance, pla
 		PayloadJSON: string(payloadJSON),
 	})
 	return err
+}
+
+func runtimeHandleOmitePromptArranqueInteractivo(handle *RuntimeHandle, runtime *RuntimeInstance, plan *runtimeagente.LaunchPlan) bool {
+	if handle == nil || runtime == nil || plan == nil {
+		return false
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "driver", "")), "tmux_cli_session") {
+		rendered := strings.TrimSpace(stringFromMap(meta, "rendered_command", ""))
+		if rendered == "" {
+			rendered = runtimeagente.RenderCommand(plan)
+		}
+		if controlruntime.RenderedCommandLooksLikeTMUXPreferredCLI(rendered) &&
+			!strings.Contains(strings.ToLower(strings.TrimSpace(rendered)), "ollama") {
+			return true
+		}
+	}
+	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "api") {
+		driver := strings.TrimSpace(stringFromMap(meta, "driver", ""))
+		if strings.EqualFold(driver, "ollama_pool_local") {
+			return true
+		}
+	}
+	if strings.EqualFold(strings.TrimSpace(runtime.Connector), "ollama_pool_local") {
+		return true
+	}
+	return false
 }
 
 func ejecutarRuntimeOrderPause(order *RuntimeOrder) error {
@@ -5152,6 +5250,9 @@ func ejecutarRuntimeOrderStop(order *RuntimeOrder) error {
 			}
 		}
 	}
+	if err := cancelarPendientesRuntimeAlDetener(order); err != nil {
+		return err
+	}
 	result := map[string]any{
 		"ok":            true,
 		"runtime_id":    runtime.ID,
@@ -5171,6 +5272,51 @@ func ejecutarRuntimeOrderStop(order *RuntimeOrder) error {
 	}
 	data, _ := json.Marshal(result)
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+}
+
+func cancelarPendientesRuntimeAlDetener(order *RuntimeOrder) error {
+	if order == nil || strings.TrimSpace(order.Agente) == "" {
+		return nil
+	}
+	argsMailbox := []any{strings.TrimSpace(order.Agente)}
+	sqlMailbox := `
+		UPDATE runtime_mailbox
+		SET estado='cancelado',
+		    delivered_at=COALESCE(delivered_at, CURRENT_TIMESTAMP),
+		    consumed_at=COALESCE(consumed_at, CURRENT_TIMESTAMP)
+		WHERE to_agente=? AND estado IN ('pendiente','entregado')`
+	if order.ProyectoID != nil && *order.ProyectoID > 0 {
+		sqlMailbox += ` AND proyecto_id=?`
+		argsMailbox = append(argsMailbox, *order.ProyectoID)
+	}
+	if _, err := DB.Exec(sqlMailbox, argsMailbox...); err != nil {
+		return err
+	}
+
+	argsOrders := []any{strings.TrimSpace(order.Agente), order.ID}
+	sqlOrders := `
+		UPDATE runtime_orders
+		SET estado='cancelada',
+		    error_text=CASE
+		    	WHEN trim(COALESCE(error_text,''))='' THEN 'runtime_stop_cancelled_pending_work'
+		    	ELSE error_text
+		    END,
+		    finished_at=CURRENT_TIMESTAMP,
+		    claimed_by='',
+		    lease_token='',
+		    lease_expires_at=NULL
+		WHERE agente=?
+		  AND id<>?
+		  AND estado IN ('pendiente','tomada','ejecutando')
+		  AND tipo NOT IN ('pause','stop')`
+	if order.ProyectoID != nil && *order.ProyectoID > 0 {
+		sqlOrders += ` AND proyecto_id=?`
+		argsOrders = append(argsOrders, *order.ProyectoID)
+	}
+	if _, err := DB.Exec(sqlOrders, argsOrders...); err != nil {
+		return err
+	}
+	return nil
 }
 
 func ejecutarRuntimeOrderRestart(order *RuntimeOrder) error {
@@ -5215,6 +5361,17 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 			return err
 		}
 		if msg != nil {
+			if confirmed, receiptSource, receiptAt, err := runtimeOrderSendInstructionReceiptEvidence(order, payload, msg); err != nil {
+				return err
+			} else if confirmed {
+				if err := MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+					return err
+				}
+				if err := MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+					return err
+				}
+				return completarRuntimeOrderSendInstructionEntregadaPorReceipt(order, payload, receiptSource, receiptAt)
+			}
 			switch strings.ToLower(strings.TrimSpace(msg.Estado)) {
 			case "consumido", "cancelado", "expirado":
 				return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "mailbox ya "+strings.TrimSpace(msg.Estado))
@@ -5401,6 +5558,11 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 		}
 	}
 	if aplicado {
+		if deliveryPath == "session_resume" {
+			if err := reconciliarRuntimeSendInstructionSessionResume(order, runtime, handle); err != nil {
+				return err
+			}
+		}
 		if err := RegistrarRuntimeTranscriptInput(handle, runtime, texto); err != nil {
 			return err
 		}
@@ -5492,8 +5654,40 @@ func ejecutarRuntimeOrderSendInstruction(order *RuntimeOrder) error {
 	return completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "runtime no disponible para entrega inmediata")
 }
 
+func reconciliarRuntimeSendInstructionSessionResume(order *RuntimeOrder, runtime *RuntimeInstance, handle *RuntimeHandle) error {
+	if runtime != nil && strings.EqualFold(strings.TrimSpace(runtime.LogicalState), "pausado") {
+		if _, err := DB.Exec(`
+		UPDATE runtime_instances
+		SET logical_state='activo',
+		    process_state=CASE
+		    	WHEN trim(COALESCE(process_state,''))='' OR lower(trim(process_state))='stopped' THEN 'corriendo'
+		    	ELSE process_state
+		    END,
+		    updated_at=CURRENT_TIMESTAMP
+		WHERE id=?`, runtime.ID); err != nil {
+			return err
+		}
+	}
+	if handle != nil && strings.EqualFold(strings.TrimSpace(handle.Estado), "pausado") {
+		if _, err := DB.Exec(`
+		UPDATE runtime_handles
+		SET estado='activo',
+		    last_seen_at=CURRENT_TIMESTAMP
+		WHERE id=?`, handle.ID); err != nil {
+			return err
+		}
+		runtimeHandleHotReset()
+	}
+	if order != nil {
+		if err := actualizarEstadoSesionParaOrden(order, "activa"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func runtimeOrderSendInstructionDebeRetenerSinRuntimeActivo(order *RuntimeOrder, payload map[string]any) bool {
-	if order == nil || !runtimeOrderSendInstructionProvieneMailbox(payload) {
+	if order == nil {
 		return false
 	}
 	return runtimeagente.EsConectorFamiliaOllama(runtimeagente.ConectorPorDefectoAgente(order.Agente), "")
@@ -5654,6 +5848,18 @@ func resolverDestinoRuntimeOrderSendInstruction(order *RuntimeOrder, runtime *Ru
 			}
 		}
 	}
+	if resolvedHandle == nil && order != nil {
+		sesionRuntime, sesionHandle, sesionErr := resolverDestinoRuntimeOrderSendInstructionSesionActiva(order)
+		if sesionErr != nil {
+			return nil, nil, sesionErr
+		}
+		if sesionHandle != nil {
+			if err := refrescarRuntimeOrderDestinoCanonico(order, sesionRuntime, sesionHandle); err != nil {
+				return nil, nil, err
+			}
+			return sesionRuntime, sesionHandle, nil
+		}
+	}
 	if resolvedHandle != nil || resolvedRuntime != nil {
 		if runtimeOrderSendInstructionDebePreferirHandleExplicito(explicitHandle, resolvedHandle) {
 			if explicitRuntime == nil && explicitHandle != nil {
@@ -5676,6 +5882,35 @@ func resolverDestinoRuntimeOrderSendInstruction(order *RuntimeOrder, runtime *Ru
 		}
 	}
 	return explicitRuntime, explicitHandle, nil
+}
+
+func resolverDestinoRuntimeOrderSendInstructionSesionActiva(order *RuntimeOrder) (*RuntimeInstance, *RuntimeHandle, error) {
+	if order == nil {
+		return nil, nil, nil
+	}
+	sesion, err := GetSesionActiva(strings.TrimSpace(order.Agente), order.ProyectoID)
+	if err == sql.ErrNoRows || sesion == nil {
+		return nil, nil, nil
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(sesion.Herramienta), "ollama_pool_local") &&
+		!strings.EqualFold(strings.TrimSpace(sesion.ConectorSlug), "ollama_pool_local") {
+		return nil, nil, nil
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, nil, err
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, nil, err
+	}
+	if handle == nil {
+		return runtime, nil, nil
+	}
+	return runtime, handle, nil
 }
 
 func runtimeOrderSendInstructionDebePreferirHandleExplicito(explicitHandle, resolvedHandle *RuntimeHandle) bool {
@@ -5859,6 +6094,10 @@ func runtimeOrderSendInstructionDiferirPorErrorTMUX(handle *RuntimeHandle, runti
 	switch {
 	case strings.Contains(raw, "tmux pane no listo para send-keys"):
 		return "worker_not_ready", true
+	case strings.Contains(raw, "tmux pane requiere carpeta de confianza"),
+		strings.Contains(raw, "tmux pane requiere trust"),
+		strings.Contains(raw, "untrusted folder"):
+		return "worker_blocked_trust", true
 	case strings.Contains(raw, "tmux pane requiere autenticacion manual"):
 		return "worker_blocked_auth", true
 	case strings.Contains(raw, "tmux pane bloqueado por cuota"):
@@ -5925,23 +6164,27 @@ func runtimeOrderSendInstructionReceiptEvidence(order *RuntimeOrder, payload map
 	if err != nil || handle == nil {
 		return false, "", time.Time{}, err
 	}
-	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
-	if err != nil || snap == nil {
-		return false, "", time.Time{}, err
-	}
 	baseline := runtimeOrderSendInstructionNotifiedAt(order, msg)
 	if baseline.IsZero() {
 		baseline = msg.CreatedAt.UTC()
 	}
 	if runtimeOrderSendInstructionEsMicroprogramacion(payload) {
-		confirmed, receiptSource, receiptAt, err := runtimeOrderSendInstructionTranscriptPatchEvidence(runtime, handle, baseline)
-		if err != nil {
-			return false, "", time.Time{}, err
+		if runtimeOrderSendInstructionPermiteReceiptTranscriptPatch(payload) {
+			confirmed, receiptSource, receiptAt, err := runtimeOrderSendInstructionTranscriptPatchEvidence(runtime, handle, baseline)
+			if err != nil {
+				return false, "", time.Time{}, err
+			}
+			if confirmed {
+				return true, receiptSource, receiptAt, nil
+			}
 		}
-		if confirmed {
-			return true, receiptSource, receiptAt, nil
-		}
-		confirmed, receiptSource, receiptAt, err = runtimeOrderSendInstructionTMUXPanePatchEvidence(handle, snap, baseline)
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
+	if err != nil || snap == nil {
+		return false, "", time.Time{}, err
+	}
+	if runtimeOrderSendInstructionEsMicroprogramacion(payload) {
+		confirmed, receiptSource, receiptAt, err := runtimeOrderSendInstructionTMUXPanePatchEvidence(handle, snap, baseline)
 		if err != nil {
 			return false, "", time.Time{}, err
 		}
@@ -5949,22 +6192,136 @@ func runtimeOrderSendInstructionReceiptEvidence(order *RuntimeOrder, payload map
 			return true, receiptSource, receiptAt, nil
 		}
 	}
-	if progress := snap.LastProgressTime(); progress != nil {
-		progressAt := progress.UTC()
-		if progressAt.After(baseline) {
-			return true, "last_progress", progressAt, nil
+	if runtimeOrderSendInstructionPermiteReceiptLastProgress(payload) {
+		if progress := snap.LastProgressTime(); progress != nil {
+			progressAt := progress.UTC()
+			if progressAt.After(baseline) {
+				return true, "last_progress", progressAt, nil
+			}
 		}
 	}
 	if runtimeOrderSendInstructionEsMicroprogramacion(payload) {
 		return false, "", time.Time{}, nil
 	}
-	if output := snap.LastOutputTime(); output != nil {
+	if confirmed, receiptSource, receiptAt, err := runtimeOrderSendInstructionPremiumTMUXActivityEvidence(handle, snap, payload, baseline); err != nil {
+		return false, "", time.Time{}, err
+	} else if confirmed {
+		return true, receiptSource, receiptAt, nil
+	}
+	if output := snap.LastOutputTime(); output != nil && runtimeOrderSendInstructionPermiteReceiptLastOutput(handle, snap, payload) {
 		outputAt := output.UTC()
 		if outputAt.After(baseline) {
 			return true, "last_output", outputAt, nil
 		}
 	}
 	return false, "", time.Time{}, nil
+}
+
+func runtimeOrderSendInstructionPermiteReceiptLastOutput(handle *RuntimeHandle, snap *runtimeagente.WorkerSnapshot, payload map[string]any) bool {
+	if handle == nil || snap == nil {
+		return false
+	}
+	if RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryInteractive {
+		return true
+	}
+	if runtimeOrderSendInstructionEsPipelinePremium(payload) {
+		return false
+	}
+	view := snap.View(time.Now().UTC(), time.Minute)
+	if view == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(view.State)) {
+	case "ready", "running":
+		return true
+	default:
+		return false
+	}
+}
+
+func runtimeOrderSendInstructionPremiumTMUXActivityEvidence(handle *RuntimeHandle, snap *runtimeagente.WorkerSnapshot, payload map[string]any, baseline time.Time) (bool, string, time.Time, error) {
+	if handle == nil || snap == nil || !runtimeOrderSendInstructionEsPipelinePremium(payload) {
+		return false, "", time.Time{}, nil
+	}
+	if !RuntimeHandlePermiteSendInputInteractivo(handle) {
+		return false, "", time.Time{}, nil
+	}
+	known, captured, err := controlruntime.CaptureTMUXPaneMetadata(strings.TrimSpace(handle.MetadataJSON))
+	if err != nil {
+		return false, "", time.Time{}, err
+	}
+	if !known || !runtimeTMUXPaneShowsInteractiveWork(captured) {
+		return false, "", time.Time{}, nil
+	}
+	for _, candidate := range []*time.Time{
+		snap.LastProgressTime(),
+		snap.LastOutputTime(),
+		snap.HeartbeatTime(),
+		snap.UpdatedTime(),
+		snap.ReadyTime(),
+	} {
+		if candidate == nil || candidate.IsZero() {
+			continue
+		}
+		receiptAt := candidate.UTC()
+		if runtimeOrderSendInstructionReceiptAtOrAfter(receiptAt, baseline) {
+			return true, "tmux_pane_activity", receiptAt, nil
+		}
+	}
+	return true, "tmux_pane_activity", time.Now().UTC(), nil
+}
+
+func runtimeTMUXPaneShowsInteractiveWork(captured string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(normalizarTextoTranscript(captured)))
+	if normalized == "" {
+		return false
+	}
+	return strings.Contains(normalized, "esc to interrupt") ||
+		strings.Contains(normalized, "background terminal running") ||
+		strings.Contains(normalized, "shift+tab to accept edits")
+}
+
+func runtimeOrderSendInstructionEsPipelinePremium(payload map[string]any) bool {
+	if payload == nil {
+		return false
+	}
+	kind := strings.TrimSpace(strings.ToLower(anyToString(payload["mailbox_kind"])))
+	return kind == "pipeline_local"
+}
+
+func runtimeOrderSendInstructionPermiteReceiptLastProgress(payload map[string]any) bool {
+	if payload == nil {
+		return false
+	}
+	kind := strings.TrimSpace(strings.ToLower(anyToString(payload["mailbox_kind"])))
+	switch kind {
+	case MailboxKindGovernanceRefresh, MailboxKindSkillsRefresh:
+		return true
+	default:
+		return false
+	}
+}
+
+func anyToString(v any) string {
+	switch vv := v.(type) {
+	case string:
+		return vv
+	default:
+		return ""
+	}
+}
+
+func runtimeOrderSendInstructionPermiteReceiptTranscriptPatch(payload map[string]any) bool {
+	if payload == nil || !runtimeOrderSendInstructionEsMicroprogramacion(payload) {
+		return true
+	}
+	micro, _ := payload["microprogramacion"].(map[string]any)
+	formato := strings.TrimSpace(stringFromMap(micro, "formato_salida", ""))
+	if formato == "" {
+		return true
+	}
+	formato = strings.ToLower(formato)
+	return strings.Contains(formato, "git_worktree")
 }
 
 func runtimeOrderSendInstructionReceiptBlocked(order *RuntimeOrder, payload map[string]any, msg *RuntimeMailboxMessage, now time.Time) (bool, string, error) {
@@ -5985,6 +6342,9 @@ func runtimeOrderSendInstructionReceiptBlocked(order *RuntimeOrder, payload map[
 	}
 	if handle == nil {
 		return true, "worker_missing_after_notified_dispatch", nil
+	}
+	if runtimeOrderSendInstructionReceiptBloqueoIgnoraSnapshot(handle) {
+		return false, "", nil
 	}
 	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
 	if err != nil {
@@ -6011,6 +6371,19 @@ func runtimeOrderSendInstructionReceiptBlocked(order *RuntimeOrder, payload map[
 	}
 }
 
+func runtimeOrderSendInstructionReceiptBloqueoIgnoraSnapshot(handle *RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	driver := strings.TrimSpace(stringFromMap(meta, "driver", ""))
+	transport := strings.TrimSpace(handle.Transporte)
+	if strings.EqualFold(driver, "ollama_pool_local") {
+		return true
+	}
+	return strings.EqualFold(transport, "api") && boolFromMap(meta, "pool_local")
+}
+
 func runtimeOrderSendInstructionTranscriptPatchEvidence(runtime *RuntimeInstance, handle *RuntimeHandle, baseline time.Time) (bool, string, time.Time, error) {
 	if runtime == nil || handle == nil {
 		return false, "", time.Time{}, nil
@@ -6026,7 +6399,7 @@ func runtimeOrderSendInstructionTranscriptPatchEvidence(runtime *RuntimeInstance
 	}
 	for idx := len(entries) - 1; idx >= 0; idx-- {
 		entry := entries[idx]
-		if entry == nil || !entry.CreatedAt.UTC().After(baseline) {
+		if entry == nil || !runtimeOrderSendInstructionReceiptAtOrAfter(entry.CreatedAt.UTC(), baseline) {
 			continue
 		}
 		if !runtimeTranscriptLooksLikeMicroprogramacionPatch(entry) {
@@ -6038,7 +6411,7 @@ func runtimeOrderSendInstructionTranscriptPatchEvidence(runtime *RuntimeInstance
 	var latestAt time.Time
 	for idx := len(entries) - 1; idx >= 0; idx-- {
 		entry := entries[idx]
-		if entry == nil || !entry.CreatedAt.UTC().After(baseline) {
+		if entry == nil || !runtimeOrderSendInstructionReceiptAtOrAfter(entry.CreatedAt.UTC(), baseline) {
 			continue
 		}
 		if strings.TrimSpace(entry.Text) == "" {
@@ -6105,7 +6478,7 @@ func runtimeOrderSendInstructionTranscriptBlockedByAgent(runtime *RuntimeInstanc
 	}
 	for idx := len(entries) - 1; idx >= 0; idx-- {
 		entry := entries[idx]
-		if entry == nil || !entry.CreatedAt.UTC().After(baseline) {
+		if entry == nil || !runtimeOrderSendInstructionReceiptAtOrAfter(entry.CreatedAt.UTC(), baseline) {
 			continue
 		}
 		if !runtimeTranscriptLooksLikeMicroprogramacionBlockedResponse(entry.Text, entry.NormalizedText) {
@@ -6114,6 +6487,16 @@ func runtimeOrderSendInstructionTranscriptBlockedByAgent(runtime *RuntimeInstanc
 		return true, strings.TrimSpace(entry.Text), entry.CreatedAt.UTC(), nil
 	}
 	return false, "", time.Time{}, nil
+}
+
+func runtimeOrderSendInstructionReceiptAtOrAfter(candidate, baseline time.Time) bool {
+	if candidate.IsZero() {
+		return false
+	}
+	if baseline.IsZero() {
+		return true
+	}
+	return !candidate.UTC().Before(baseline.UTC())
 }
 
 func runtimeTranscriptLooksLikeMicroprogramacionPatch(entry *RuntimeTranscriptEntry) bool {
@@ -6133,6 +6516,8 @@ func runtimeMicroprogramacionPatchDetected(text, normalized string) bool {
 	}
 	switch {
 	case strings.Contains(normalized, "patch_unificado"):
+		return true
+	case strings.Contains(normalized, "// file:"):
 		return true
 	case strings.Contains(normalized, "diff --git"):
 		return true
@@ -6274,13 +6659,19 @@ func runtimeOrderSendInstructionDebeEsperarReceiptInteractivo(order *RuntimeOrde
 	if order == nil || handle == nil || !RuntimeHandlePermiteSendInputInteractivo(handle) {
 		return false
 	}
-	if !runtimeOrderSendInstructionEsMicroprogramacion(payload) {
+	if !runtimeOrderSendInstructionEsMicroprogramacion(payload) && !runtimeOrderSendInstructionEsPipelinePremium(payload) {
 		return false
 	}
 	meta := mapFromJSON(handle.MetadataJSON)
 	driver := strings.TrimSpace(stringFromMap(meta, "driver", ""))
 	transport := strings.TrimSpace(handle.Transporte)
-	return strings.EqualFold(driver, "tmux_cli_session") || strings.EqualFold(transport, "tmux")
+	if strings.EqualFold(driver, "tmux_cli_session") || strings.EqualFold(transport, "tmux") {
+		return true
+	}
+	if strings.EqualFold(driver, "ollama_pool_local") {
+		return true
+	}
+	return strings.EqualFold(transport, "api") && boolFromMap(meta, "pool_local")
 }
 
 func runtimeOrderSendInstructionMailboxID(payload map[string]any) int64 {
@@ -6318,12 +6709,15 @@ func objetivoProcesoSendInstruction(order *RuntimeOrder, handle *RuntimeHandle, 
 		obj.HandleRef = handle.HandleRef
 		obj.MetadataJSON = handle.MetadataJSON
 	}
-	if strings.TrimSpace(workingDir) != "" {
+	if strings.TrimSpace(workingDir) != "" || (order != nil && order.ID > 0) {
 		meta := mapFromJSON(obj.MetadataJSON)
 		if meta == nil {
 			meta = map[string]any{}
 		}
 		meta["working_dir"] = strings.TrimSpace(workingDir)
+		if order != nil && order.ID > 0 {
+			meta["runtime_order_id"] = order.ID
+		}
 		if metaJSON, marshalErr := json.Marshal(meta); marshalErr == nil {
 			obj.MetadataJSON = string(metaJSON)
 		}
@@ -6462,6 +6856,7 @@ func reencolarRuntimeOrderSendInstructionAt(order *RuntimeOrder, payload map[str
 		nextAttempt = time.Now().UTC().Add(runtimeOrderSendInstructionRetryDelay())
 	}
 	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
+		"dispatch_state":       "pending",
 		"ok":                   false,
 		"deferred":             true,
 		"mailbox_id":           runtimeOrderSendInstructionMailboxID(payload),
@@ -6487,7 +6882,8 @@ func reencolarRuntimeOrderSendInstructionAt(order *RuntimeOrder, payload map[str
 		    lease_expires_at = NULL,
 		    available_at = ?,
 		    updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?`,
+		WHERE id = ?
+		  AND estado NOT IN ('completada','fallida','cancelada','expirada')`,
 		resultado,
 		reason,
 		reason,
@@ -6528,6 +6924,7 @@ func retenerRuntimeOrderSendInstructionDiferidaAMailbox(order *RuntimeOrder, pay
 	}
 	nextAttempt := time.Now().UTC().Add(runtimeOrderSendInstructionRetryDelay())
 	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
+		"dispatch_state":  "pending",
 		"ok":              false,
 		"mailbox_id":      mailboxID,
 		"deferred":        true,
@@ -6570,6 +6967,10 @@ func retenerRuntimeOrderSendInstructionNotificada(order *RuntimeOrder, payload m
 	if order == nil {
 		return nil
 	}
+	actual, err := GetRuntimeOrder(order.ID)
+	if err == nil && runtimeOrderYaTieneEntregaValida(actual) {
+		return nil
+	}
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
 		reason = "mailbox notificado pendiente de recibo"
@@ -6579,6 +6980,7 @@ func retenerRuntimeOrderSendInstructionNotificada(order *RuntimeOrder, payload m
 	}
 	nextAttempt := time.Now().UTC().Add(runtimeOrderSendInstructionRetryDelay())
 	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
+		"dispatch_state":       "notified",
 		"ok":                   false,
 		"mailbox_id":           runtimeOrderSendInstructionMailboxID(payload),
 		"deferred":             true,
@@ -6590,7 +6992,7 @@ func retenerRuntimeOrderSendInstructionNotificada(order *RuntimeOrder, payload m
 		"receipt_source":       "",
 		"retry_after":          nextAttempt.Format(time.RFC3339Nano),
 	})
-	_, err := DB.Exec(`
+	_, err = DB.Exec(`
 		UPDATE runtime_orders
 		SET estado = 'pendiente',
 		    resultado_json = ?,
@@ -6618,6 +7020,27 @@ func retenerRuntimeOrderSendInstructionNotificada(order *RuntimeOrder, payload m
 	return runtimeOrdersHotIndexSyncByID(order.ID)
 }
 
+func runtimeOrderYaTieneEntregaValida(order *RuntimeOrder) bool {
+	if order == nil {
+		return false
+	}
+	switch strings.TrimSpace(strings.ToLower(order.Estado)) {
+	case "completada", "fallida", "cancelada", "expirada":
+		return true
+	}
+	result := mapFromJSON(order.ResultadoJSON)
+	if result == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(stringFromMap(result, "delivery_state", "")), "delivered") {
+		return true
+	}
+	if strings.TrimSpace(stringFromMap(result, "receipt_source", "")) != "" {
+		return true
+	}
+	return false
+}
+
 func completarRuntimeOrderSendInstructionEntregadaPorReceipt(order *RuntimeOrder, payload map[string]any, receiptSource string, receiptAt time.Time) error {
 	if order == nil {
 		return nil
@@ -6627,6 +7050,7 @@ func completarRuntimeOrderSendInstructionEntregadaPorReceipt(order *RuntimeOrder
 	}
 	receiptSource = strings.TrimSpace(receiptSource)
 	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
+		"dispatch_state":      "delivered",
 		"ok":                  true,
 		"mailbox_id":          runtimeOrderSendInstructionMailboxID(payload),
 		"mailbox_only":        true,
@@ -6653,6 +7077,7 @@ func fallarRuntimeOrderSendInstructionPorBloqueoAgente(order *RuntimeOrder, payl
 		blockedAt = time.Now().UTC()
 	}
 	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
+		"dispatch_state":      "failed",
 		"ok":                  false,
 		"mailbox_id":          runtimeOrderSendInstructionMailboxID(payload),
 		"delivery_state":      "blocked",
@@ -6754,6 +7179,7 @@ func completarRuntimeOrderSendInstructionDiferidaAMailbox(order *RuntimeOrder, p
 		}
 	}
 	resultado := mergeRuntimeOrderResultJSON(order.ResultadoJSON, map[string]any{
+		"dispatch_state":  "delivered",
 		"ok":              true,
 		"mailbox_id":      mailboxID,
 		"deferred":        true,
@@ -7329,17 +7755,23 @@ func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int
 		perfilSolicitado = perfilPersistido
 		perfilTarea = perfilPersistido
 	}
-	if modeloSolicitado == "" {
-		if !strings.Contains(modeloPersistido, "gpt-5") {
-			modeloSolicitado = modeloPersistido
-			modelo = modeloPersistido
-		}
+	modeloPersistidoCompatible := runtimeagente.ModeloCompatibleConConector(runtimeagente.ConnectorConfig{
+		Slug:         strings.TrimSpace(conector.Slug),
+		Nombre:       strings.TrimSpace(conector.Nombre),
+		Transporte:   strings.TrimSpace(conector.Transporte),
+		Comando:      strings.TrimSpace(conector.Comando),
+		ArgsJSON:     strings.TrimSpace(conector.ArgsJSON),
+		EnvJSON:      strings.TrimSpace(conector.EnvJSON),
+		MetadataJSON: strings.TrimSpace(conector.MetadataJSON),
+		Activo:       conector.Activo,
+	}, modeloPersistido)
+	if modeloSolicitado == "" && modeloPersistidoCompatible {
+		modeloSolicitado = modeloPersistido
+		modelo = modeloPersistido
 	}
-	if razonamientoSolicitado == "" {
-		if !strings.Contains(modeloPersistido, "gpt-5") {
-			razonamientoSolicitado = razonamientoPersistido
-			razonamiento = razonamientoPersistido
-		}
+	if razonamientoSolicitado == "" && modeloPersistidoCompatible {
+		razonamientoSolicitado = razonamientoPersistido
+		razonamiento = razonamientoPersistido
 	}
 	perfilTarea, modelo, razonamiento, err = ResolverPerfilEjecucionLanzamiento(
 		&agenteRef,
@@ -7371,6 +7803,33 @@ func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int
 	)
 	if err != nil {
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, fmt.Errorf("metadata_json inválido para '%s': %w", strings.TrimSpace(conector.Slug), err)
+	}
+	conectorRuntime := runtimeagente.ConnectorConfig{
+		Slug:         strings.TrimSpace(conector.Slug),
+		Nombre:       strings.TrimSpace(conector.Nombre),
+		Transporte:   strings.TrimSpace(conector.Transporte),
+		Comando:      strings.TrimSpace(conector.Comando),
+		ArgsJSON:     strings.TrimSpace(conector.ArgsJSON),
+		EnvJSON:      strings.TrimSpace(conector.EnvJSON),
+		MetadataJSON: strings.TrimSpace(conector.MetadataJSON),
+		Activo:       conector.Activo,
+	}
+	if !runtimeagente.ModeloCompatibleConConector(conectorRuntime, modelo) {
+		modelo = ""
+		if modeloSolicitado == "" {
+			perfilTarea, modelo, razonamiento, err = runtimeagente.AplicarDefaultsConector(
+				conectorRuntime,
+				perfilSolicitado,
+				"",
+				razonamientoSolicitado,
+				perfilTarea,
+				"",
+				razonamiento,
+			)
+			if err != nil {
+				return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, fmt.Errorf("metadata_json inválido para '%s': %w", strings.TrimSpace(conector.Slug), err)
+			}
+		}
 	}
 	resume, bootstrap, err := prepararResumeBootstrapRuntime(strings.TrimSpace(agenteRef), proyecto, resume, excludeOrderID)
 	if err != nil {
@@ -7468,15 +7927,19 @@ func nombreAgenteRuntime(preferido, almacenado string) string {
 func resolverConectorRuntimeOrder(agenteNombre, proyectoSlug, conectorRef string, ultima *Sesion) (*Conector, error) {
 	ref := strings.TrimSpace(conectorRef)
 	if ref == "" && ultima != nil {
-		if strings.TrimSpace(ultima.ConectorSlug) != "" {
+		if strings.TrimSpace(ultima.ConectorSlug) != "" &&
+			runtimeagente.ConectorCompatibleConAgente(agenteNombre, strings.TrimSpace(ultima.ConectorSlug), "") {
 			ref = strings.TrimSpace(ultima.ConectorSlug)
-		} else if ultima.ConectorID != nil && *ultima.ConectorID > 0 {
+		} else if ultima.ConectorID != nil && *ultima.ConectorID > 0 &&
+			runtimeagente.ConectorCompatibleConAgente(agenteNombre, "", strings.TrimSpace(ultima.Herramienta)) {
 			ref = jsonNumber(*ultima.ConectorID)
 		}
 	}
 	if ref == "" {
-		if preferido, err := resolverConectorPoolLocalCompartido(agenteNombre, proyectoSlug, ""); err == nil && strings.TrimSpace(preferido) != "" {
-			ref = preferido
+		if runtimeagente.EsConectorFamiliaOllama(runtimeagente.ConectorPorDefectoAgente(agenteNombre), "") {
+			if preferido, err := resolverConectorPoolLocalCompartido(agenteNombre, proyectoSlug, ""); err == nil && strings.TrimSpace(preferido) != "" {
+				ref = preferido
+			}
 		}
 	}
 	if ref == "" {
@@ -7649,6 +8112,19 @@ func revertBootstrapRuntimePreparation(bootstrap *bootstrapRuntimeData) error {
 		return err
 	}
 	return runtimeOrdersHotIndexSyncByID(bootstrap.Order.ID)
+}
+
+func timeoutParaArranqueDurable(order *RuntimeOrder) time.Duration {
+	if order == nil {
+		return 0
+	}
+	por := strings.ToLower(strings.TrimSpace(order.Por))
+	if por == "orquesta" || por == "sistema" || por == "autonomia" {
+		// En orchestración autónoma, no bloqueamos el runner esperando el Ready del prompt.
+		// El buzón ya estará lleno y el agente lo consumirá en cuanto esté listo.
+		return 1500 * time.Millisecond
+	}
+	return 0 // Usa el default del conector (usualmente 60s o configurable via env)
 }
 
 func marcarRuntimeMailboxConsumidoPorIDs(ids []int64) error {
@@ -8036,6 +8512,7 @@ func bootstrapRuntimeLeaseEvidence(handle *RuntimeHandle, runtime *RuntimeInstan
 		return bootstrapLeaseEvidence{}
 	}
 	baseline := runtimeBootstrapLeaseBaseline(order, startOrder)
+	state := strings.ToLower(strings.TrimSpace(snap.EffectiveState()))
 	deliveredAt := time.Time{}
 	if readyAt := snap.ReadyTime(); readyAt != nil {
 		deliveredAt = readyAt.UTC()
@@ -8043,7 +8520,7 @@ func bootstrapRuntimeLeaseEvidence(handle *RuntimeHandle, runtime *RuntimeInstan
 		deliveredAt = hb.UTC()
 	} else if updated := snap.UpdatedTime(); updated != nil {
 		deliveredAt = updated.UTC()
-	} else if state := strings.ToLower(strings.TrimSpace(snap.EffectiveState())); state == "ready" || state == "running" || state == "starting" {
+	} else if state == "ready" || state == "running" || state == "starting" {
 		if hb := snap.HeartbeatTime(); hb != nil {
 			deliveredAt = hb.UTC()
 		} else if updated := snap.UpdatedTime(); updated != nil {
@@ -8065,6 +8542,8 @@ func bootstrapRuntimeLeaseEvidence(handle *RuntimeHandle, runtime *RuntimeInstan
 		if baseline.IsZero() || progress.After(baseline) {
 			evidence.consumed = true
 		}
+	} else if state == "running" && (baseline.IsZero() || deliveredAt.After(baseline) || deliveredAt.Equal(baseline)) {
+		evidence.consumed = true
 	}
 	return evidence
 }
@@ -8188,8 +8667,8 @@ func resolverBootstrapRuntimeLeasePendiente(handle *RuntimeHandle, runtime *Runt
 		return nil, 0, nil, 0, nil
 	}
 
-	candidates := make([]*RuntimeOrder, 0, 4)
-	for _, estado := range []string{"ejecutando", "tomada"} {
+	candidates := make([]*RuntimeOrder, 0, 8)
+	for _, estado := range []string{"ejecutando", "tomada", "pendiente"} {
 		estado := estado
 		orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{
 			Agente:     &agente,
@@ -8204,7 +8683,13 @@ func resolverBootstrapRuntimeLeasePendiente(handle *RuntimeHandle, runtime *Runt
 				continue
 			}
 			switch strings.TrimSpace(order.Tipo) {
-			case "handoff", "resume":
+			case "handoff", "resume", "start":
+				if strings.TrimSpace(order.Estado) == "pendiente" {
+					res := mapFromJSON(order.ResultadoJSON)
+					if !boolFromAny(res["deferred"]) && stringFromMap(res, "estado_dispatch", "") == "" {
+						continue
+					}
+				}
 				candidates = append(candidates, order)
 			}
 		}
@@ -8817,6 +9302,9 @@ func sesionIfExists(sesionID *int64) (*Sesion, error) {
 	if sesionID == nil || *sesionID <= 0 {
 		return nil, nil
 	}
+	if DB == nil {
+		return nil, nil
+	}
 	sesion, err := GetSesionByID(*sesionID)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -9041,6 +9529,39 @@ func reconciliarRuntimeOrderStale(id int64, tipo string, now, cutoff time.Time) 
 	order, err := GetRuntimeOrder(id)
 	if err != nil {
 		return false, err
+	}
+	if order != nil {
+		switch strings.TrimSpace(order.Tipo) {
+		case "start", "resume", "stop":
+			runtime, handle, err := resolverDestinoRuntimeOrderCanonico(order, nil, nil)
+			if err != nil {
+				return false, err
+			}
+			reason := ""
+			if satisfied, satisfiedReason := runtimeOrderControlEstadoDeseadoSatisfecho(order, runtime, handle); satisfied {
+				reason = satisfiedReason
+			} else if runtimeOrderControlObsoletaPorWorkerRecuperado(order, runtime, handle) {
+				reason = "runtime_worker_recovered_after_order"
+			}
+			if strings.TrimSpace(reason) != "" {
+				resultado := map[string]any{
+					"ok":       true,
+					"obsoleta": true,
+					"reason":   reason,
+				}
+				if runtime != nil && runtime.ID > 0 {
+					resultado["runtime_id"] = runtime.ID
+				}
+				if handle != nil && handle.ID > 0 {
+					resultado["handle_id"] = handle.ID
+				}
+				data, _ := json.Marshal(resultado)
+				if err := MarcarRuntimeOrderEstado(id, "completada", string(data), ""); err != nil {
+					return false, err
+				}
+				return true, nil
+			}
+		}
 	}
 	if covered, resultado, detalle, coveredErr := runtimeOrderBootstrapStaleCoveredByFollowup(order); coveredErr != nil {
 		return false, coveredErr
@@ -9296,6 +9817,9 @@ func inferirCapabilitiesSesion(s *Sesion) string {
 		"can_capture_pid":      s.PID != nil && *s.PID > 0,
 		"can_track_continuity": true,
 	}
+	for key, value := range extraerCapacidadesResumeSesion(s) {
+		caps[key] = value
+	}
 	data, _ := json.Marshal(caps)
 	return string(data)
 }
@@ -9310,8 +9834,91 @@ func inferirMetadataSesion(s *Sesion) string {
 		"branch":              strings.TrimSpace(s.Branch),
 		"cwd":                 strings.TrimSpace(s.CWD),
 	}
+	for key, value := range extraerMetadataResumeSesion(s) {
+		meta[key] = value
+	}
 	data, _ := json.Marshal(meta)
 	return string(data)
+}
+
+func extraerMetadataResumeSesion(s *Sesion) map[string]any {
+	if s == nil {
+		return nil
+	}
+	envelope := ParseResumePayloadEnvelope(strings.TrimSpace(s.ResumePayloadJSON))
+	if len(envelope) == 0 {
+		return nil
+	}
+	out := map[string]any{}
+	for _, key := range []string{
+		"driver",
+		"transport",
+		"endpoint",
+		"launch_path",
+		"resume_path",
+		"input_path",
+		"status_path",
+		"pause_path",
+		"continue_path",
+		"stop_path",
+		"auth_header",
+		"auth_token_env",
+		"auth_mode",
+		"mailbox_delivery_mode",
+		"pool_compartido",
+		"can_send_input",
+	} {
+		if value, ok := envelope[key]; ok {
+			out[key] = value
+		}
+	}
+	if perfil, ok := envelope["perfil_ejecucion"].(map[string]any); ok {
+		for _, key := range []string{
+			"driver",
+			"transport",
+			"endpoint",
+			"launch_path",
+			"resume_path",
+			"input_path",
+			"status_path",
+			"pause_path",
+			"continue_path",
+			"stop_path",
+			"mailbox_delivery_mode",
+			"pool_slug",
+			"modelo",
+			"perfil_tarea",
+			"razonamiento",
+			"can_send_input",
+		} {
+			if value, ok := perfil[key]; ok {
+				out[key] = value
+			}
+		}
+	}
+	return out
+}
+
+func extraerCapacidadesResumeSesion(s *Sesion) map[string]any {
+	meta := extraerMetadataResumeSesion(s)
+	if len(meta) == 0 {
+		return nil
+	}
+	out := map[string]any{}
+	for _, key := range []string{
+		"can_send_input",
+		"can_pause",
+		"can_stop",
+		"can_resume",
+		"can_track_continuity",
+		"can_stop_without_reauth",
+		"mailbox_delivery_mode",
+	} {
+		if value, ok := meta[key]; ok {
+			out[key] = value
+		}
+	}
+	return out
 }
 
 func defaultRuntimeOrderEstado(v string) string {
@@ -9459,6 +10066,11 @@ func RuntimeHandleMailboxDeliveryMode(handle *RuntimeHandle) string {
 	legacyTMUXPreferredCLI := runtimeHandleUsaLegacyCLITMUXPreferred(meta)
 	externalSessionReady := runtimeHandleTieneExternalSessionID(handle, nil)
 	localCLIBrokerNoInteractive := runtimeHandleUsaTMUXPreferredCLI(meta) && !RuntimeHandlePermiteSendInputInteractivo(handle)
+	tmuxSessionResumeReady := strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "driver", "")), "tmux_cli_session") &&
+		strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
+		strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") &&
+		!RuntimeHandlePermiteSendInputInteractivo(handle) &&
+		externalSessionReady
 	normalizeMode := func(raw string) string {
 		mode := runtimeagente.NormalizeMailboxDeliveryMode(raw)
 		if mode == "" {
@@ -9466,6 +10078,9 @@ func RuntimeHandleMailboxDeliveryMode(handle *RuntimeHandle) string {
 		}
 		if mode == runtimeagente.MailboxDeliverySessionResume && !externalSessionReady {
 			return runtimeagente.MailboxDeliveryBootstrapOnly
+		}
+		if mode == runtimeagente.MailboxDeliveryBootstrapOnly && tmuxSessionResumeReady {
+			return runtimeagente.MailboxDeliverySessionResume
 		}
 		if legacyTMUXPreferredCLI && mode == runtimeagente.MailboxDeliveryInteractive {
 			return runtimeagente.MailboxDeliveryBootstrapOnly

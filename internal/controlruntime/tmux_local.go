@@ -152,13 +152,19 @@ func arrancarPlanLocalTMUX(req SolicitudArranque) (*ProcesoArrancado, error) {
 		_ = tmuxKillSession(tmuxCommand, sessionName)
 		return nil, err
 	}
-	ready, readyErr := waitForTMUXPaneReady(tmuxCommand, paneInfo.PaneID, tmuxStartReadyTimeout)
-	if readyErr != nil {
-		_ = tmuxKillSession(tmuxCommand, sessionName)
-		return nil, readyErr
-	}
-	if ready {
-		_ = writeEmbeddedTmuxWorkerSnapshot(monitorSpec, workerStatusReady, true, "", nil, paneInfo.PanePID, time.Now().UTC(), time.Time{})
+	if tmuxStartShouldWaitForReady(rendered) {
+		timeout := req.TimeoutReady
+		if timeout <= 0 {
+			timeout = tmuxStartReadyTimeout()
+		}
+		ready, readyErr := waitForTMUXPaneReady(tmuxCommand, paneInfo.PaneID, timeout)
+		if readyErr != nil {
+			_ = tmuxKillSession(tmuxCommand, sessionName)
+			return nil, readyErr
+		}
+		if ready {
+			_ = writeEmbeddedTmuxWorkerSnapshot(monitorSpec, workerStatusReady, true, "", nil, paneInfo.PanePID, time.Now().UTC(), time.Time{}, time.Time{})
+		}
 	}
 
 	metaJSON, _ := json.Marshal(map[string]any{
@@ -221,6 +227,36 @@ func arrancarPlanLocalTMUX(req SolicitudArranque) (*ProcesoArrancado, error) {
 		MetadataJSON:      string(metaJSON),
 		CapabilitiesJSON:  string(capsJSON),
 	}, nil
+}
+
+func tmuxStartShouldWaitForReady(rendered string) bool {
+	lower := strings.ToLower(strings.TrimSpace(rendered))
+	if lower == "" {
+		return true
+	}
+	if renderedCommandLooksLikeCodexCLI(rendered) {
+		return false
+	}
+	first := lower
+	if fields := strings.Fields(lower); len(fields) > 0 {
+		first = strings.Trim(fields[0], "'\"")
+	}
+	base := filepath.Base(first)
+	switch {
+	case strings.Contains(lower, "claude-perfil"),
+		strings.Contains(lower, "claude-code"),
+		lower == "claude",
+		strings.HasPrefix(lower, "claude "),
+		base == "claude",
+		base == "claude-code",
+		strings.Contains(lower, "gemini-perfil"),
+		lower == "gemini",
+		strings.HasPrefix(lower, "gemini "),
+		base == "gemini":
+		return false
+	default:
+		return true
+	}
 }
 
 func tmuxSessionHandleRef(sessionName, paneID string) string {
