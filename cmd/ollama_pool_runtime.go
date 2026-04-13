@@ -6,16 +6,37 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"orquesta/capacidadapp"
 	"orquesta/db"
 	"orquesta/internal/ollamapool"
+	"orquesta/microprogramacionapp"
 	"orquesta/runtimeagente"
 	"orquesta/sesionesapp"
 )
 
-var ollamaPoolManager = ollamapool.NuevoGestor(endpointOllamaLocal(), nil)
+var ollamaPoolManager = ollamapool.NuevoGestor(endpointOllamaLocal(), clienteHTTPOllamaLocal())
+
+func clienteHTTPOllamaLocal() *http.Client {
+	return &http.Client{Timeout: timeoutClienteOllamaLocal()}
+}
+
+func timeoutClienteOllamaLocal() time.Duration {
+	timeout := ollamapool.TimeoutClienteDefecto
+	if raw := strings.TrimSpace(os.Getenv("ORQUESTA_OLLAMA_TIMEOUT_MS")); raw != "" {
+		if ms, err := strconv.ParseInt(raw, 10, 64); err == nil && ms > 0 {
+			timeout = time.Duration(ms) * time.Millisecond
+		}
+	}
+	return timeout
+}
+
+func timeoutClienteOllamaLocalMS() int64 {
+	return timeoutClienteOllamaLocal().Milliseconds()
+}
 
 func newTestOllamaPoolManager(endpoint string) *ollamapool.Gestor {
 	return ollamapool.NuevoGestor(endpoint, nil)
@@ -45,8 +66,8 @@ func init() {
 }
 
 type apiOllamaPoolLaunchRequest struct {
-	Agente   string `json:"agente"`
-	Proyecto string `json:"proyecto"`
+	Agente   string                   `json:"agente"`
+	Proyecto string                   `json:"proyecto"`
 	Plan     runtimeagente.LaunchPlan `json:"plan"`
 }
 
@@ -62,6 +83,7 @@ type apiOllamaPoolHandleRequest struct {
 	HandleRef         string `json:"handle_ref"`
 	ExternalSessionID string `json:"external_session_id"`
 	Texto             string `json:"texto"`
+	RuntimeOrderID    int64  `json:"runtime_order_id"`
 }
 
 func endpointOllamaLocal() string {
@@ -108,29 +130,42 @@ func apiHandlerOllamaPoolLaunch(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
+	worktree := resolverWorktreeSesionPoolLocalCompartido(strings.TrimSpace(req.Agente), strings.TrimSpace(req.Proyecto))
+	aplicarWorktreeSesionPoolLocalCompartido(sesion, worktree)
 	if err := asegurarSesionActivaPoolLocalCompartido(strings.TrimSpace(req.Agente), strings.TrimSpace(req.Proyecto), sesion); err != nil {
 		_ = ollamaPoolManager.Detener(sesion.HandleRef)
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
+	serverURL := endpointServidorDesdeRequest(r)
 	apiWriteJSON(w, http.StatusOK, apiOllamaPoolLaunchResponse{
 		ExternalSessionID: sesion.ID,
 		HandleRef:         sesion.HandleRef,
 		HandleKind:        "session",
 		Metadata: map[string]any{
-			"driver":              "ollama_pool_local",
-			"transport":           "api",
-			"timeout_ms":          180000,
-			"pool_local":          true,
-			"pool_slug":           sesion.PoolSlug,
-			"modelo":              sesion.Modelo,
-			"perfil_tarea":        sesion.PerfilTarea,
-			"ollama_endpoint":     endpointOllamaLocal(),
-			"external_session_id": sesion.ID,
-			"handle_ref":          sesion.HandleRef,
+			"driver":                "ollama_pool_local",
+			"transport":             "api",
+			"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+			"endpoint":              serverURL,
+			"input_path":            "/api/runtime/ollama-pool/input",
+			"status_path":           "/api/runtime/ollama-pool/status",
+			"stop_path":             "/api/runtime/ollama-pool/stop",
+			"timeout_ms":            timeoutClienteOllamaLocalMS(),
+			"pool_local":            true,
+			"pool_slug":             sesion.PoolSlug,
+			"modelo":                sesion.Modelo,
+			"perfil_tarea":          sesion.PerfilTarea,
+			"ollama_endpoint":       endpointOllamaLocal(),
+			"external_session_id":   sesion.ID,
+			"handle_ref":            sesion.HandleRef,
+			"worktree_id":           valorIDWorktreePoolLocal(worktree),
+			"ruta_worktree":         valorRutaWorktreePoolLocal(worktree),
+			"branch_worktree":       valorBranchWorktreePoolLocal(worktree),
+			"base_ref_worktree":     valorBaseRefWorktreePoolLocal(worktree),
 		},
 		Capabilities: map[string]any{
 			"can_send_input":          true,
+			"mailbox_delivery_mode":   runtimeagente.MailboxDeliveryInteractive,
 			"can_pause":               false,
 			"can_stop":                true,
 			"can_checkpoint":          false,
@@ -154,21 +189,81 @@ func apiHandlerOllamaPoolInput(w http.ResponseWriter, r *http.Request) {
 	if handleRef == "" {
 		handleRef = strings.TrimSpace(req.ExternalSessionID)
 	}
-	result, err := ollamaPoolManager.Enviar(context.Background(), handleRef, strings.TrimSpace(req.Texto))
+	runtimeOrderID := req.RuntimeOrderID
+	sesionBase, err := asegurarSesionPoolLocalCompartidoEnMemoria(handleRef)
 	if err != nil {
+		if runtimeOrderID > 0 {
+			_ = runtimesService.MarcarRuntimeOrderDispatchFallido(runtimeOrderID, err.Error())
+		}
 		apiError(w, http.StatusBadRequest, err)
 		return
 	}
-	if result != nil && result.Sesion != nil {
-		if err := actualizarSesionActivaPoolLocalCompartido(result.Sesion); err != nil {
+	sesionWorking, err := ollamaPoolManager.EnviarAsincrono(context.Background(), handleRef, strings.TrimSpace(req.Texto), func(result *ollamapool.ResultadoEntrada, err error) {
+		defer func() {
+			if recover() != nil {
+				wakeControlPlaneRuntimeOrders()
+			}
+		}()
+		if result != nil && result.Sesion != nil {
+			_ = actualizarSesionActivaPoolLocalCompartido(result.Sesion)
+		}
+		if err != nil {
+			if runtimeOrderID > 0 {
+				_ = runtimesService.MarcarRuntimeOrderDispatchFallido(runtimeOrderID, err.Error())
+			}
+			wakeControlPlaneRuntimeOrders()
+			return
+		}
+		if result == nil || result.Sesion == nil || strings.TrimSpace(result.Respuesta) == "" {
+			wakeControlPlaneRuntimeOrders()
+			return
+		}
+		proyectoID, resolveErr := sesionesAPIService.ResolveProjectID(strings.TrimSpace(result.Sesion.Proyecto))
+		if resolveErr != nil {
+			wakeControlPlaneRuntimeOrders()
+			return
+		}
+		if _, transcriptErr := runtimesService.RegistrarSalidaObservada(strings.TrimSpace(result.Sesion.Agente), proyectoID, strings.TrimSpace(result.Respuesta)); transcriptErr != nil {
+			wakeControlPlaneRuntimeOrders()
+			return
+		}
+		_, _, entregaCompletada := procesarEntregaMicroprogramacionPoolLocal(result.Sesion.Agente, result.Sesion.Proyecto, result.Respuesta)
+		if !entregaCompletada {
+			wakeControlPlaneRuntimeOrders()
+		}
+	})
+	if err != nil {
+		if runtimeOrderID > 0 {
+			_ = runtimesService.MarcarRuntimeOrderDispatchFallido(runtimeOrderID, err.Error())
+		}
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	if sesionWorking != nil {
+		if err := actualizarSesionActivaPoolLocalCompartido(sesionWorking); err != nil {
+			if runtimeOrderID > 0 {
+				_ = runtimesService.MarcarRuntimeOrderDispatchFallido(runtimeOrderID, err.Error())
+			}
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+	}
+	if runtimeOrderID > 0 {
+		if err := runtimesService.MarcarRuntimeOrderDispatchNotificado(runtimeOrderID, "worker notificado"); err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{
-		"ok":         true,
-		"handle_ref": handleRef,
-		"respuesta":  result.Respuesta,
+		"ok":                      true,
+		"handle_ref":              handleRef,
+		"external_session":        strings.TrimSpace(sesionBase.ID),
+		"runtime_order_id":        runtimeOrderID,
+		"delivery_state":          "notified",
+		"delivery_async":          true,
+		"respuesta":               "",
+		"ficheros_materializados": nil,
+		"entrega_git":             nil,
 	})
 }
 
@@ -185,7 +280,7 @@ func apiHandlerOllamaPoolStatus(w http.ResponseWriter, r *http.Request) {
 	if handleRef == "" {
 		handleRef = strings.TrimSpace(req.ExternalSessionID)
 	}
-	sesion, err := ollamaPoolManager.Estado(handleRef)
+	sesion, err := asegurarSesionPoolLocalCompartidoEnMemoria(handleRef)
 	if err != nil {
 		apiError(w, http.StatusNotFound, err)
 		return
@@ -196,27 +291,54 @@ func apiHandlerOllamaPoolStatus(w http.ResponseWriter, r *http.Request) {
 	} else if sesion.Estado == "failed" {
 		estadoHandle = "failed"
 	}
+	serverURL := endpointServidorDesdeRequest(r)
+	worktree := resolverWorktreeSesionPoolLocalCompartido(strings.TrimSpace(sesion.Agente), strings.TrimSpace(sesion.Proyecto))
+	aplicarWorktreeSesionPoolLocalCompartido(sesion, worktree)
 	apiWriteJSON(w, http.StatusOK, map[string]any{
 		"handle_state":  estadoHandle,
 		"logical_state": sesion.Estado,
 		"metadata": map[string]any{
-			"driver":              "ollama_pool_local",
-			"transport":           "api",
-			"timeout_ms":          180000,
-			"pool_local":          true,
-			"pool_slug":           sesion.PoolSlug,
-			"modelo":              sesion.Modelo,
-			"perfil_tarea":        sesion.PerfilTarea,
-			"resumen_continuidad": sesion.ResumenContinuidad,
-			"error_ultimo":        sesion.ErrorUltimo,
-			"mensajes_totales":    len(sesion.Mensajes),
+			"driver":                "ollama_pool_local",
+			"transport":             "api",
+			"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+			"endpoint":              serverURL,
+			"input_path":            "/api/runtime/ollama-pool/input",
+			"status_path":           "/api/runtime/ollama-pool/status",
+			"stop_path":             "/api/runtime/ollama-pool/stop",
+			"timeout_ms":            timeoutClienteOllamaLocalMS(),
+			"pool_local":            true,
+			"pool_slug":             sesion.PoolSlug,
+			"modelo":                sesion.Modelo,
+			"perfil_tarea":          sesion.PerfilTarea,
+			"resumen_continuidad":   sesion.ResumenContinuidad,
+			"error_ultimo":          sesion.ErrorUltimo,
+			"mensajes_totales":      len(sesion.Mensajes),
+			"worktree_id":           valorIDWorktreePoolLocal(worktree),
+			"ruta_worktree":         valorRutaWorktreePoolLocal(worktree),
+			"branch_worktree":       valorBranchWorktreePoolLocal(worktree),
+			"base_ref_worktree":     valorBaseRefWorktreePoolLocal(worktree),
 		},
 		"capabilities": map[string]any{
-			"can_send_input": true,
-			"can_stop":       true,
-			"can_pause":      false,
+			"can_send_input":        true,
+			"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+			"can_stop":              true,
+			"can_pause":             false,
 		},
 	})
+}
+
+func endpointServidorDesdeRequest(r *http.Request) string {
+	if r == nil || strings.TrimSpace(r.Host) == "" {
+		return strings.TrimSpace(os.Getenv("ORQUESTA_SERVER_URL"))
+	}
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); forwarded != "" {
+		scheme = strings.ToLower(forwarded)
+	}
+	return scheme + "://" + strings.TrimSpace(r.Host)
 }
 
 func apiHandlerOllamaPoolStop(w http.ResponseWriter, r *http.Request) {
@@ -236,7 +358,7 @@ func apiHandlerOllamaPoolStop(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, fmt.Errorf("handle_ref obligatorio"))
 		return
 	}
-	sesion, err := ollamaPoolManager.Estado(handleRef)
+	sesion, err := asegurarSesionPoolLocalCompartidoEnMemoria(handleRef)
 	if err != nil {
 		apiError(w, http.StatusBadRequest, err)
 		return
@@ -408,22 +530,280 @@ func resolverResumenContinuidadPoolLocalCompartido(agente, proyecto string) stri
 	return ""
 }
 
+func asegurarSesionPoolLocalCompartidoEnMemoria(handleRef string) (*ollamapool.Sesion, error) {
+	handleRef = strings.TrimSpace(handleRef)
+	if handleRef == "" {
+		return nil, fmt.Errorf("handle_ref obligatorio")
+	}
+	sesion, err := ollamaPoolManager.Estado(handleRef)
+	if err == nil && sesion != nil {
+		return sesion, nil
+	}
+	activa, err := sesionesAPIService.FindActiveSessionByExternalSessionID(handleRef)
+	if err != nil {
+		return nil, err
+	}
+	return ollamaPoolManager.RegistrarSesion(sesionPoolLocalCompartidoPersistida(activa))
+}
+
+func sesionPoolLocalCompartidoPersistida(activa *sesionesapp.Sesion) *ollamapool.Sesion {
+	if activa == nil {
+		return nil
+	}
+	modelo, perfilTarea, razonamiento, poolSlug, worktreeID, rutaWorktree, branchWorktree, baseRefWorktree := perfilSesionPoolLocalCompartidoPersistido(activa.ResumePayloadJSON)
+	handleRef := strings.TrimSpace(activa.ExternalSessionID)
+	if handleRef == "" {
+		handleRef = fmt.Sprintf("ollama-pool-%d", activa.ID)
+	}
+	estado := "ready"
+	if !activa.Activa || strings.EqualFold(strings.TrimSpace(activa.Estado), "cerrada") {
+		estado = "stopped"
+	}
+	actualizadoEn := activa.Inicio.UTC()
+	if activa.HeartbeatAt != nil && !activa.HeartbeatAt.IsZero() {
+		actualizadoEn = activa.HeartbeatAt.UTC()
+	}
+	return &ollamapool.Sesion{
+		ID:                  handleRef,
+		HandleRef:           handleRef,
+		Agente:              strings.TrimSpace(activa.Agente),
+		Proyecto:            strings.TrimSpace(activa.ProyectoSlug),
+		PoolSlug:            poolSlug,
+		Modelo:              modelo,
+		PerfilTarea:         perfilTarea,
+		Razonamiento:        razonamiento,
+		WorktreeID:          worktreeID,
+		RutaWorktree:        rutaWorktree,
+		BranchWorktree:      branchWorktree,
+		BaseRefWorktree:     baseRefWorktree,
+		MaxMensajesContexto: 6,
+		Estado:              estado,
+		ResumenContinuidad:  strings.TrimSpace(activa.ResumenContinuidad),
+		CreadoEn:            activa.Inicio.UTC(),
+		ActualizadoEn:       actualizadoEn,
+	}
+}
+
+func perfilSesionPoolLocalCompartidoPersistido(resumePayload string) (string, string, string, string, int64, string, string, string) {
+	envelope := db.ParseResumePayloadEnvelope(strings.TrimSpace(resumePayload))
+	perfilMap, _ := envelope["perfil_ejecucion"].(map[string]any)
+	modelo := strings.TrimSpace(stringDesdeAny(perfilMap["modelo"]))
+	perfilTarea := strings.TrimSpace(stringDesdeAny(perfilMap["perfil_tarea"]))
+	razonamiento := strings.TrimSpace(stringDesdeAny(perfilMap["razonamiento"]))
+	poolSlug := strings.TrimSpace(stringDesdeAny(perfilMap["pool_slug"]))
+	worktreeMap, _ := envelope["worktree"].(map[string]any)
+	worktreeID := int64DesdeAny(worktreeMap["id"])
+	rutaWorktree := strings.TrimSpace(stringDesdeAny(worktreeMap["ruta"]))
+	branchWorktree := strings.TrimSpace(stringDesdeAny(worktreeMap["branch"]))
+	baseRefWorktree := strings.TrimSpace(stringDesdeAny(worktreeMap["base_ref"]))
+	if poolSlug == "" {
+		poolSlug = strings.TrimSpace(stringDesdeAny(envelope["pool_slug"]))
+	}
+	return modelo, perfilTarea, razonamiento, poolSlug, worktreeID, rutaWorktree, branchWorktree, baseRefWorktree
+}
+
+func stringDesdeAny(v any) string {
+	switch typed := v.(type) {
+	case string:
+		return typed
+	default:
+		return ""
+	}
+}
+
+func int64DesdeAny(v any) int64 {
+	switch typed := v.(type) {
+	case int64:
+		return typed
+	case int:
+		return int64(typed)
+	case float64:
+		return int64(typed)
+	case json.Number:
+		if parsed, err := typed.Int64(); err == nil {
+			return parsed
+		}
+	case string:
+		if parsed, err := strconv.ParseInt(strings.TrimSpace(typed), 10, 64); err == nil {
+			return parsed
+		}
+	}
+	return 0
+}
+
 func resumePayloadSesionPoolLocalCompartido(sesion *ollamapool.Sesion) string {
 	if sesion == nil {
 		return ""
 	}
 	envelope := map[string]any{
+		"driver":                "ollama_pool_local",
+		"transport":             "api",
+		"endpoint":              endpointServidorPoolLocalCompartido(),
+		"input_path":            "/api/runtime/ollama-pool/input",
+		"status_path":           "/api/runtime/ollama-pool/status",
+		"stop_path":             "/api/runtime/ollama-pool/stop",
+		"can_send_input":        true,
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+		"pool_compartido":       true,
 		"perfil_ejecucion": map[string]any{
-			"perfil_tarea": strings.TrimSpace(sesion.PerfilTarea),
-			"modelo":       strings.TrimSpace(sesion.Modelo),
-			"razonamiento": strings.TrimSpace(sesion.Razonamiento),
-			"driver":       "ollama_pool_local",
-			"pool_slug":    strings.TrimSpace(sesion.PoolSlug),
+			"perfil_tarea":          strings.TrimSpace(sesion.PerfilTarea),
+			"modelo":                strings.TrimSpace(sesion.Modelo),
+			"razonamiento":          strings.TrimSpace(sesion.Razonamiento),
+			"driver":                "ollama_pool_local",
+			"transport":             "api",
+			"endpoint":              endpointServidorPoolLocalCompartido(),
+			"input_path":            "/api/runtime/ollama-pool/input",
+			"status_path":           "/api/runtime/ollama-pool/status",
+			"stop_path":             "/api/runtime/ollama-pool/stop",
+			"can_send_input":        true,
+			"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
+			"pool_slug":             strings.TrimSpace(sesion.PoolSlug),
 		},
+	}
+	if sesion.WorktreeID > 0 || strings.TrimSpace(sesion.RutaWorktree) != "" || strings.TrimSpace(sesion.BranchWorktree) != "" || strings.TrimSpace(sesion.BaseRefWorktree) != "" {
+		envelope["worktree"] = map[string]any{
+			"id":       sesion.WorktreeID,
+			"ruta":     strings.TrimSpace(sesion.RutaWorktree),
+			"branch":   strings.TrimSpace(sesion.BranchWorktree),
+			"base_ref": strings.TrimSpace(sesion.BaseRefWorktree),
+		}
 	}
 	data, err := json.Marshal(envelope)
 	if err != nil {
 		return ""
 	}
 	return string(data)
+}
+
+func endpointServidorPoolLocalCompartido() string {
+	if endpoint := strings.TrimSpace(os.Getenv("ORQUESTA_SERVER_URL")); endpoint != "" {
+		return endpoint
+	}
+	return "http://127.0.0.1:16543"
+}
+
+func resolverWorktreeSesionPoolLocalCompartido(agente, proyecto string) *db.Worktree {
+	agente = strings.TrimSpace(agente)
+	proyecto = strings.TrimSpace(proyecto)
+	if agente == "" || proyecto == "" {
+		return nil
+	}
+	item, err := gitService.ResolveActiveWorktree(proyecto, agente)
+	if err != nil || item == nil {
+		return nil
+	}
+	return item
+}
+
+func aplicarWorktreeSesionPoolLocalCompartido(sesion *ollamapool.Sesion, worktree *db.Worktree) {
+	if sesion == nil || worktree == nil {
+		return
+	}
+	sesion.WorktreeID = worktree.ID
+	sesion.RutaWorktree = strings.TrimSpace(worktree.RutaAbs)
+	sesion.BranchWorktree = strings.TrimSpace(worktree.Branch)
+	sesion.BaseRefWorktree = strings.TrimSpace(worktree.BaseRef)
+}
+
+func valorIDWorktreePoolLocal(worktree *db.Worktree) any {
+	if worktree == nil || worktree.ID <= 0 {
+		return nil
+	}
+	return worktree.ID
+}
+
+func valorRutaWorktreePoolLocal(worktree *db.Worktree) any {
+	if worktree == nil || strings.TrimSpace(worktree.RutaAbs) == "" {
+		return nil
+	}
+	return strings.TrimSpace(worktree.RutaAbs)
+}
+
+func valorBranchWorktreePoolLocal(worktree *db.Worktree) any {
+	if worktree == nil || strings.TrimSpace(worktree.Branch) == "" {
+		return nil
+	}
+	return strings.TrimSpace(worktree.Branch)
+}
+
+func valorBaseRefWorktreePoolLocal(worktree *db.Worktree) any {
+	if worktree == nil || strings.TrimSpace(worktree.BaseRef) == "" {
+		return nil
+	}
+	return strings.TrimSpace(worktree.BaseRef)
+}
+
+func procesarEntregaMicroprogramacionPoolLocal(agente, proyectoRef, respuesta string) ([]string, map[string]any, bool) {
+	agente = strings.TrimSpace(agente)
+	proyectoRef = strings.TrimSpace(proyectoRef)
+	respuesta = strings.TrimSpace(respuesta)
+	if agente == "" || proyectoRef == "" || respuesta == "" {
+		return nil, nil, false
+	}
+	if runtimeTranscriptTextoEsBootstrapPoolLocal(respuesta, "") {
+		return nil, nil, false
+	}
+	proyectoID, err := sesionesAPIService.ResolveProjectID(proyectoRef)
+	if err != nil {
+		return nil, nil, false
+	}
+	ctx, err := runtimesService.ResolverContextoEntregaMicroprogramacionParaRespuesta(agente, proyectoID, respuesta)
+	if err != nil || ctx == nil || ctx.EspecificacionID <= 0 {
+		return nil, nil, false
+	}
+	if microprogramacionapp.FormatoSalidaUsaGitWorktree(ctx.FormatoSalida) {
+		registro, err := runtimesService.RegistrarEntregaGitMicroprogramacionActiva(
+			agente,
+			proyectoID,
+			proyectoRef,
+			fmt.Sprintf("runtime_order=%d transcript=ollama_pool_local", ctx.RuntimeOrderID),
+			"orquesta",
+		)
+		if err != nil || registro == nil || registro.Entrega == nil {
+			return nil, nil, false
+		}
+		resultado := registro.Entrega
+		return nil, map[string]any{
+			"git_merge_id":        resultado.GitMergeID,
+			"worktree_id":         resultado.WorktreeID,
+			"ruta_worktree":       resultado.RutaWorktree,
+			"source_branch":       resultado.SourceBranch,
+			"target_branch":       resultado.TargetBranch,
+			"head_commit":         resultado.HeadCommit,
+			"archivos_entregados": resultado.ArchivosEntregados,
+		}, true
+	}
+	resultado, err := runtimesService.MaterializarEntregaMicroprogramacionActivaDesdeRespuesta(
+		agente,
+		proyectoID,
+		proyectoRef,
+		respuesta,
+		fmt.Sprintf("runtime_order=%d transcript=ollama_pool_local", ctx.RuntimeOrderID),
+		"ollama_pool_local_materializada",
+	)
+	if err != nil {
+		if respuestaPareceIntentoEntregaMicroprogramacion(respuesta) {
+			_, _ = runtimesService.ReencolarCorreccionEntregaMicroprogramacion(ctx.RuntimeOrderID, err.Error())
+		}
+		return nil, nil, false
+	}
+	if resultado == nil {
+		return nil, nil, false
+	}
+	return resultado.ArchivosMaterializados, nil, true
+}
+
+func respuestaPareceIntentoEntregaMicroprogramacion(respuesta string) bool {
+	respuesta = strings.TrimSpace(respuesta)
+	if respuesta == "" {
+		return false
+	}
+	if len(microprogramacionapp.ExtraerArchivosEntrega(respuesta)) > 0 {
+		return true
+	}
+	texto := strings.ToLower(respuesta)
+	return strings.Contains(texto, "patch_unificado") ||
+		strings.Contains(texto, "diff --git") ||
+		strings.HasPrefix(texto, "--- ") ||
+		strings.Contains(texto, "\n--- ")
 }

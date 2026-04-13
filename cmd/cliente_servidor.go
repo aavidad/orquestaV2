@@ -131,6 +131,27 @@ type apiResolucionModeloResponse struct {
 	Resolucion *db.ResolucionModelo `json:"resolucion"`
 }
 
+type apiPipelineLocalDeterministaResponse struct {
+	Pipeline *capacidadapp.PipelineLocalDeterminista `json:"pipeline"`
+}
+
+type apiPasoPipelineLocalDeterministaResponse struct {
+	Paso *capacidadapp.PasoPipelineLocalDeterminista `json:"paso"`
+}
+
+type apiEjecutarPasoPipelineLocalDeterministaResponse struct {
+	Resultado *capacidadapp.ResultadoEjecucionPasoPipelineLocal `json:"resultado"`
+}
+
+type apiModelosRuntimeActivosResponse struct {
+	Modelos []capacidadapp.ModeloRuntimeActivo `json:"modelos"`
+}
+
+type apiModelosRuntimeDescargarResponse struct {
+	OK          bool     `json:"ok"`
+	Descargados []string `json:"descargados"`
+}
+
 type apiReglasResponse struct {
 	Reglas []*db.Regla `json:"reglas"`
 }
@@ -441,7 +462,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "listar", "ver", "handles", "purgar-handles", "purgar-ordenes", "traza", "transcript", "diagnostico", "ordenes", "orden-nueva", "nudge", "discordia", "checkpoints", "checkpoint-nuevo", "checkpoint-ver", "mailbox", "mailbox-enviar", "mailbox-entregar", "mailbox-consumir":
+		case "listar", "ver", "handles", "purgar-handles", "purgar-ordenes", "despertar", "limpiar-pruebas", "traza", "transcript", "diagnostico", "ordenes", "orden-nueva", "nudge", "discordia", "checkpoints", "checkpoint-nuevo", "checkpoint-ver", "mailbox", "mailbox-enviar", "mailbox-entregar", "mailbox-consumir", "mailbox-limpiar":
 			return true
 		default:
 			return false
@@ -451,7 +472,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "listar", "ver", "descubrir", "fusionar":
+		case "listar", "ver", "descubrir", "fusionar", "microciclo":
 			return true
 		default:
 			return false
@@ -485,7 +506,7 @@ func commandSupportsServerMode(args []string) bool {
 	case "politica-modelo":
 		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "guardar" || tokens[1] == "seed-inicial")
 	case "modelo":
-		return len(tokens) > 1 && tokens[1] == "resolver"
+		return len(tokens) > 1 && (tokens[1] == "resolver" || tokens[1] == "pipeline-local" || tokens[1] == "pipeline-paso" || tokens[1] == "pipeline-ejecutar" || tokens[1] == "pipeline-despachar" || tokens[1] == "runtime-activos" || tokens[1] == "runtime-descargar")
 	case "reglas":
 		return len(tokens) > 1 && (tokens[1] == "listar" || tokens[1] == "crear" || tokens[1] == "editar" || tokens[1] == "activar" || tokens[1] == "desactivar" || tokens[1] == "versiones")
 	case "skills":

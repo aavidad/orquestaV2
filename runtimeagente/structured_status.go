@@ -474,6 +474,8 @@ func (s *WorkerSnapshot) ReadyForTextDispatch(now time.Time, heartbeatThreshold 
 	switch strings.ToLower(strings.TrimSpace(view.State)) {
 	case "ready", "idle":
 		return true, ""
+	case "blocked_trust":
+		return false, "worker_blocked_trust"
 	case "blocked_auth":
 		return false, "worker_blocked_auth"
 	case "blocked_quota":

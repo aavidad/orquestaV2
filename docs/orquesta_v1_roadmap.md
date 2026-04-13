@@ -101,6 +101,56 @@ Frente abierto en Orquesta para esta decision:
 - `#518` Arbitrar slots de pools locales en el scheduler
 - `#519` Mantener contexto resumido por agente logico en pools locales
 - `#520` Conservar `ollama-cli/tmux` como via experimental compatible
+- `#521` Entrega canonica de microprogramacion por `git/worktree`
+- `#522` Unificar subagentes programadores bajo entrega `git/worktree`
+- `#523` Reutilizar OpenClaw y `supervisor_subagents` con integracion git sin rutas paralelas
+- `#524` Definir pipeline canonico por fases (`especificacion`, `implementacion`, `revision`, `correccion`, `integracion`)
+- `#525` Introducir scheduler multi-modelo local por `perfil_tarea`, `pool`, `slot`, `keep_alive` y `timeout`
+- `#526` Promover Orquesta como orquestador determinista y reducir el LLM de supervisor a excepcion
+- `#527` Integrar `Qwen3.5 27B` como worker de especificacion y replanificacion
+- `#528` Integrar `Qwen2.5 Coder 32B` como worker canonico de implementacion
+- `#529` Integrar `DeepSeek Coder V2` como worker canonico de revision y deteccion de regresiones
+- `#530` Mantener `Gemma4 26B MoE` como solver alternativo y fallback controlado
+- `#531` Orquestar carga y descarga de modelos pesados de Ollama por fase sin residencia concurrente innecesaria
+- `#532` Introducir revision escalonada multi-modelo con segunda opinion opcional (`premium` o alternativa local)
+- `#533` Adoptar `dispatch` durable canonico (`pending/notified/delivered/failed`) en la app
+- `#534` Desacoplar `send_instruction` de `receipt` y cerrar por entrega valida
+- `#535` Introducir `ready gate` canonico antes de inyectar a workers interactivos
+- `#536` Unificar `receipt` asíncrono desde transcript, git y materialización validada
+- `#537` Persistir y observar la deuda de dispatch/notify/delivery en `status`, web y API
+- `#538` Integrar el patrón operativo de `oh-my-codex` en Ollama, Codex, Claude y OpenClaw sin rutas paralelas
+- `#539` Reforzar worktree/git como única entrega canónica para agentes programadores
+- `#540` Incorporar benchmark continuo de patrones externos (`oh-my-codex`, `mission-control`, `automaker`, `Maestro`, `Aperant`)
+- `#541` Introducir contrato canónico de `dispatch_state` en `runtimesapp`
+- `#542` Marcar `notified` y `failed` desde la app antes del cierre por entrega
+- `#543` Reescribir el runner de `send_instruction` para que no bloquee esperando el resultado del modelo
+- `#544` Adoptar `ready gate` canónico inspirado en `oh-my-codex` para conectores interactivos
+- `#545` Proyectar deuda de dispatch (`pending/notified/failed`) en `status`, cockpit y web
+- `#546` Alinear Ollama, Codex, Claude y OpenClaw con el mismo contrato de dispatch
+- `#547` Mantener benchmark vivo de referencias externas y retirar soluciones propias superadas
+- `#548` Introducir puerto hexagonal de gestion de modelos runtime (`listar`, `activar`, `detener`, `descargar`)
+- `#549` Implementar adaptador Ollama para gestion de modelos runtime
+- `#550` Preparar adaptador futuro `vllm` sin tocar el nucleo
+
+Decision adicional de este bloque:
+
+- `dispatch/mailbox/ACK` siguen siendo la capa de control del worker
+- `git/worktree` pasa a ser la capa canónica de entrega de codigo
+- los formatos `// FILE:` y `PATCH_UNIFICADO` quedan como compatibilidad o rescate, no como objetivo final
+- el orquestador principal no pasa a ser otro LLM: el orquestador principal sigue siendo Orquesta
+- los LLM pasan a ser workers especializados por fase y no deciden la arquitectura por su cuenta
+- el pipeline canónico debe declarar explícitamente su `carril` por fase:
+  - `microprogramacion_local` para workers locales/mini con contrato rígido
+  - `premium_worktree` para implementación/especificación/corrección premium con `write_set` y worktree aislada
+  - `revision_diff` para revisores que trabajan sobre diff, tests y hallazgos estructurados
+  - `determinista_app` para pasos resueltos por la propia app sin delegar en un modelo
+- la promocion de agentes premium a trabajo real del repo no se hace por disponibilidad del CLI ni por una sola smoke:
+  - `Gemini` solo pasa a especificacion real cuando deje diff util y repetible por `premium_worktree`
+  - `Codex` solo pasa a implementacion/correccion real cuando mantenga cierre estable del carril premium
+  - `Claude` solo pasa a revision real cuando entregue hallazgos estructurados repetibles por `revision_diff`
+- con hardware local pesado, la regla por defecto es `un modelo grande activo cada vez`; la concurrencia lógica no autoriza residencia física simultánea de varios modelos pesados
+- la fase de `revision` puede usar varios revisores, pero en cadena y con hallazgos estructurados; nunca como debate libre ni como mayoria informal
+- se copian sin complejos los patrones operativos mejores de productos externos cuando resuelven mejor el mismo problema; la originalidad no es objetivo de arquitectura
 
 ## Bloque 3 — Memoria y conocimiento
 

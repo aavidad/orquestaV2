@@ -3,6 +3,7 @@ package controlruntime
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestTMUXPaneLooksReadyIgnoraSpinnerANSI(t *testing.T) {
@@ -65,6 +66,205 @@ func TestTMUXPaneHasCodexAuthPromptDetectaPantallaDeLogin(t *testing.T) {
 	}
 	if tmuxPaneLooksReady(captured) {
 		t.Fatal("la pantalla de login de Codex no deberia marcarse como ready")
+	}
+}
+
+func TestTMUXPaneHasTrustPromptDetectaPantallaRealGemini(t *testing.T) {
+	captured := "" +
+		"Gemini CLI v0.37.1\n" +
+		"Do you trust the files in this folder?\n" +
+		"> 1. Trust folder (geminiproj)\n" +
+		"2. Trust parent folder (/tmp)\n" +
+		"3. Don't trust\n"
+	if !tmuxPaneHasTrustPrompt(captured) {
+		t.Fatal("la pantalla real de trust de Gemini deberia detectarse como trust prompt")
+	}
+	if got := tmuxClassifyPaneState(captured); got != workerStatusBlockedTrust {
+		t.Fatalf("estado de pane inesperado: got=%q want=%q", got, workerStatusBlockedTrust)
+	}
+	if tmuxPaneLooksReady(captured) {
+		t.Fatal("la pantalla de trust de Gemini no deberia marcarse como ready")
+	}
+}
+
+func TestTMUXPaneHasTrustPromptDetectaPantallaRealClaude(t *testing.T) {
+	captured := "" +
+		"Accessing workspace:\n" +
+		"/var/lib/snapd/void\n" +
+		"Quick safety check: Is this a project you created or one you trust?\n" +
+		"Claude Code'll be able to read, edit, and execute files here.\n" +
+		"❯ 1. Yes, I trust this folder\n" +
+		"2. No, exit\n" +
+		"Enter to confirm · Esc to cancel\n"
+	if !tmuxPaneHasTrustPrompt(captured) {
+		t.Fatal("la pantalla real de trust de Claude deberia detectarse como trust prompt")
+	}
+	if got := tmuxClassifyPaneState(captured); got != workerStatusBlockedTrust {
+		t.Fatalf("estado de pane inesperado: got=%q want=%q", got, workerStatusBlockedTrust)
+	}
+	if tmuxPaneLooksReady(captured) {
+		t.Fatal("la pantalla de trust de Claude no deberia marcarse como ready")
+	}
+}
+
+func TestTMUXPaneHasUntrustedFolderWarningDetectaGeminiPostBootstrap(t *testing.T) {
+	captured := "" +
+		"We're making changes to Gemini CLI that may impact your workflow.\n" +
+		"Skipping project agents due to untrusted folder. To enable\n" +
+		"ensure that the project root is trusted.\n"
+	if !tmuxPaneHasUntrustedFolderWarning(captured) {
+		t.Fatal("la advertencia de carpeta no confiable de Gemini deberia detectarse")
+	}
+	if got := tmuxClassifyPaneState(captured); got != workerStatusBlockedTrust {
+		t.Fatalf("estado de pane inesperado: got=%q want=%q", got, workerStatusBlockedTrust)
+	}
+}
+
+func TestTMUXTrustPromptDismissKeysGeminiYClaude(t *testing.T) {
+	gemini := "" +
+		"Do you trust the files in this folder?\n" +
+		"1. Trust folder (gproj)\n" +
+		"2. Trust parent folder (/tmp)\n"
+	if got := tmuxTrustPromptDismissKeys(gemini); len(got) != 2 || got[0] != "1" || got[1] != "C-m" {
+		t.Fatalf("dismiss keys Gemini inesperadas: %+v", got)
+	}
+
+	claude := "" +
+		"Quick safety check: Is this a project you created or one you trust?\n" +
+		"❯ 1. Yes, I trust this folder\n" +
+		"2. No, exit\n" +
+		"Enter to confirm\n"
+	if got := tmuxTrustPromptDismissKeys(claude); len(got) != 1 || got[0] != "C-m" {
+		t.Fatalf("dismiss keys Claude inesperadas: %+v", got)
+	}
+}
+
+func TestTMUXPaneHasBypassPermissionsPromptDetectaClaude(t *testing.T) {
+	captured := "" +
+		"WARNING: Claude Code running in Bypass Permissions mode\n" +
+		"1. No, exit\n" +
+		"2. Yes, I accept\n" +
+		"Enter to confirm\n"
+	if !tmuxPaneHasBypassPermissionsPrompt(captured) {
+		t.Fatal("la advertencia de bypass permissions de Claude deberia detectarse")
+	}
+	if tmuxPaneLooksReady(captured) {
+		t.Fatal("la advertencia de bypass permissions de Claude no deberia marcar ready")
+	}
+	if keys, ok := tmuxBootstrapPromptDismissKeys(captured); !ok || len(keys) != 2 || keys[0] != "2" || keys[1] != "C-m" {
+		t.Fatalf("dismiss keys Claude bypass inesperadas: ok=%v keys=%+v", ok, keys)
+	}
+}
+
+func TestTMUXPaneHasActionRequiredPromptDetectaGemini(t *testing.T) {
+	captured := "" +
+		"Action Required\n" +
+		"Shell make build && ./orquesta tarea listar\n" +
+		"Allow execution of: 'make, ./orquesta'?\n" +
+		"1. Allow once\n" +
+		"2. Allow for this session\n" +
+		"3. No, suggest changes (esc)\n"
+	if !tmuxPaneHasActionRequiredPrompt(captured) {
+		t.Fatal("la pantalla Action Required de Gemini deberia detectarse")
+	}
+	if tmuxPaneLooksReady(captured) {
+		t.Fatal("la pantalla Action Required de Gemini no deberia marcarse como ready")
+	}
+	if keys, ok := tmuxBootstrapPromptDismissKeys(captured); !ok || len(keys) != 2 || keys[0] != "2" || keys[1] != "C-m" {
+		t.Fatalf("dismiss keys Gemini action required inesperadas: ok=%v keys=%+v", ok, keys)
+	}
+}
+
+func TestTMUXPaneHasActionRequiredPromptDetectaGeminiWriteFile(t *testing.T) {
+	captured := "" +
+		"Action Required\n" +
+		"WriteFile Writing to internal/.../smoke_helper.go\n" +
+		"Apply this change?\n" +
+		"1. Allow once\n" +
+		"2. Allow for this session\n" +
+		"3. Modify with external editor\n" +
+		"4. No, suggest changes (esc)\n"
+	if !tmuxPaneHasActionRequiredPrompt(captured) {
+		t.Fatal("la pantalla Action Required de Gemini con WriteFile deberia detectarse")
+	}
+	if tmuxPaneLooksReady(captured) {
+		t.Fatal("la pantalla Action Required de Gemini con WriteFile no deberia marcarse como ready")
+	}
+	if keys, ok := tmuxBootstrapPromptDismissKeys(captured); !ok || len(keys) != 2 || keys[0] != "2" || keys[1] != "C-m" {
+		t.Fatalf("dismiss keys Gemini WriteFile inesperadas: ok=%v keys=%+v", ok, keys)
+	}
+}
+
+func TestTMUXPaneHasActiveTaskDetectaGeminiAcceptEdits(t *testing.T) {
+	captured := "" +
+		"Refactoring Control Plane Logic\n" +
+		"Consolidation\n" +
+		"> Type your message or @path/to/file\n" +
+		"Shift+Tab to accept edits\n"
+	if tmuxPaneHasActiveTask(captured) {
+		t.Fatal("Gemini con accept edits y prompt activo no deberia contar como tarea ocupada")
+	}
+	if got := tmuxClassifyPaneState(captured); got != workerStatusReady {
+		t.Fatalf("estado de pane inesperado: got=%q want=%q", got, workerStatusReady)
+	}
+}
+
+func TestTMUXPaneHasActiveTaskDetectaClaudeTransfiguring(t *testing.T) {
+	captured := "" +
+		"●\n" +
+		"Transfiguring…\n" +
+		"Micro-refactor control plane cyclically\n"
+	if !tmuxPaneHasActiveTask(captured) {
+		t.Fatal("Claude con estado Transfiguring deberia detectarse como tarea activa")
+	}
+	if got := tmuxClassifyPaneState(captured); got != workerStatusRunning {
+		t.Fatalf("estado de pane inesperado: got=%q want=%q", got, workerStatusRunning)
+	}
+}
+
+func TestTMUXPaneHasClaudeAuthPromptDetectaLoginRequerido(t *testing.T) {
+	captured := "" +
+		"Orquesta: continua el trabajo acotado\n" +
+		"Not logged in. Please run /login\n" +
+		"⏵⏵ bypass permissions on\n"
+	if !tmuxPaneHasClaudeAuthPrompt(captured) {
+		t.Fatal("Claude deberia detectarse como auth requerida")
+	}
+	if got := tmuxClassifyPaneState(captured); got != workerStatusBlockedAuth {
+		t.Fatalf("estado de pane inesperado: got=%q want=%q", got, workerStatusBlockedAuth)
+	}
+	if tmuxPaneLooksReady(captured) {
+		t.Fatal("una sesion de Claude pidiendo login no deberia marcar ready")
+	}
+}
+
+func TestTMUXPaneHasGeminiAuthPromptDetectaEsperaDeAutenticacion(t *testing.T) {
+	captured := "" +
+		"Gemini CLI v0.37.1\n" +
+		"Signed in with Google /auth\n" +
+		"Plan: Gemini Code Assist in Google One AI Pro /upgrade\n" +
+		"Waiting for authentication... (Press Esc or Ctrl+C to cancel)\n"
+	if !tmuxPaneHasGeminiAuthPrompt(captured) {
+		t.Fatal("Gemini deberia detectarse como auth requerida")
+	}
+	if got := tmuxClassifyPaneState(captured); got != workerStatusBlockedAuth {
+		t.Fatalf("estado de pane inesperado: got=%q want=%q", got, workerStatusBlockedAuth)
+	}
+	if tmuxPaneLooksReady(captured) {
+		t.Fatal("una sesion de Gemini esperando autenticacion no deberia marcarse como ready")
+	}
+}
+
+func TestTMUXPaneHasGeminiAuthPromptIgnoraSpinnerViejoSiYaHayPromptActivo(t *testing.T) {
+	captured := "" +
+		"Waiting for authentication... (Press Esc or Ctrl+C to cancel)\n" +
+		"Shift+Tab to accept edits\n" +
+		"> Type your message or @path/to/file\n"
+	if tmuxPaneHasGeminiAuthPrompt(captured) {
+		t.Fatal("Gemini no deberia seguir en auth si ya hay prompt activo")
+	}
+	if got := tmuxClassifyPaneState(captured); got != workerStatusReady {
+		t.Fatalf("estado de pane inesperado: got=%q want=%q", got, workerStatusReady)
 	}
 }
 
@@ -133,6 +333,32 @@ func TestTMUXPaneLooksReadyNoAceptaComposerPendienteDeEnvio(t *testing.T) {
 	}
 	if got := tmuxClassifyPaneState(captured); got != workerStatusStarting {
 		t.Fatalf("estado de pane inesperado: got=%q want=%q", got, workerStatusStarting)
+	}
+}
+
+func TestTMUXTrackOutputMomentActualizaCuandoCambiaElTail(t *testing.T) {
+	now := time.Date(2026, 4, 13, 14, 30, 0, 0, time.UTC)
+	prev := now.Add(-10 * time.Minute)
+
+	sig, at := tmuxTrackOutputMoment("", "estado inicial\n> \n", now, prev)
+	if sig == "" {
+		t.Fatal("deberia generar firma semantica no vacia")
+	}
+	if !at.Equal(now) {
+		t.Fatalf("last output inesperado tras primer cambio: got=%s want=%s", at, now)
+	}
+
+	sig2, at2 := tmuxTrackOutputMoment(sig, "estado inicial\n> \n", now.Add(2*time.Minute), at)
+	if sig2 != sig {
+		t.Fatalf("firma semantica inesperada: got=%q want=%q", sig2, sig)
+	}
+	if !at2.Equal(at) {
+		t.Fatalf("no deberia mover last output sin cambio de tail: got=%s want=%s", at2, at)
+	}
+
+	_, at3 := tmuxTrackOutputMoment(sig, "estado inicial\npatch aplicado\n> \n", now.Add(3*time.Minute), at)
+	if !at3.Equal(now.Add(3 * time.Minute)) {
+		t.Fatalf("deberia mover last output al cambiar el tail: got=%s want=%s", at3, now.Add(3*time.Minute))
 	}
 }
 

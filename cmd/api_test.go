@@ -25,6 +25,7 @@ import (
 	"orquesta/internal/a2ui"
 	"orquesta/reviewapp"
 	"orquesta/supervisionapp"
+	"orquesta/tareasapp"
 )
 
 func TestCuentaPresupuestoDesdeAgenteUsaObservedUsageCuandoNoHayCuotaReal(t *testing.T) {
@@ -2423,6 +2424,305 @@ func TestAPIProyectoAutonomiaGetPostYCiclos(t *testing.T) {
 	}
 	if len(cyclesResp.Cycles) != 1 || cyclesResp.Cycles[0].Kind != "supervision" {
 		t.Fatalf("ciclos inesperados: %+v", cyclesResp.Cycles)
+	}
+}
+
+func TestAPIProyectoMicrocicloActivaOperacionAutonomiaYTarea(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquesta",
+		Nombre:  "Orquesta",
+		RutaAbs: filepath.Join(tmp, "orquesta"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoAPIID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "api",
+		Nombre:  "api",
+		RutaAbs: filepath.Join(tmp, "api"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto api: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoAPIID, "frente previo"); err != nil {
+		t.Fatalf("activar asignacion previa: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	body, _ := json.Marshal(apiProyectoMicrocicloRequest{
+		Agente: "Codex1",
+		Notas:  "slice=transcript",
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/proyectos/orquesta/autonomia/microciclo", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status microciclo inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp apiProyectoMicrocicloResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode microciclo: %v", err)
+	}
+	if resp.Resultado == nil || resp.Resultado.Policy == nil || resp.Resultado.Tarea == nil || resp.Resultado.Fase == nil {
+		t.Fatalf("resultado incompleto: %+v", resp.Resultado)
+	}
+	if resp.Resultado.Dispatch == nil {
+		t.Fatalf("dispatch inesperado: %+v", resp.Resultado)
+	}
+	if resp.Resultado.Policy.SupervisorAgente != "Codex1" || !resp.Resultado.Policy.Enabled {
+		t.Fatalf("policy inesperada: %+v", resp.Resultado.Policy)
+	}
+	if resp.Resultado.Fase.Nombre != "implementacion" || !strings.EqualFold(resp.Resultado.Fase.Estado, "activa") {
+		t.Fatalf("fase inesperada: %+v", resp.Resultado.Fase)
+	}
+	if !strings.Contains(resp.Resultado.Tarea.Notas, microcicloRefactorNotasTag) {
+		t.Fatalf("tarea semilla sin tag: %+v", resp.Resultado.Tarea)
+	}
+	op, err := db.GetProyectoOperacion(resp.Resultado.Proyecto.ID)
+	if err != nil {
+		t.Fatalf("get operacion: %v", err)
+	}
+	if op.EstadoOperativo != db.ProyectoOperativoActivo || !op.ResumeAutomatico || op.MaxAgentes != 1 {
+		t.Fatalf("operacion inesperada: %+v", op)
+	}
+	asignacion, err := db.GetAsignacionActivaAgente("Codex1")
+	if err != nil {
+		t.Fatalf("get asignacion activa: %v", err)
+	}
+	if asignacion.ProyectoSlug != "orquesta" {
+		t.Fatalf("el microciclo deberia fijar la asignacion activa sobre el proyecto objetivo: %+v", asignacion)
+	}
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/api/proyectos/orquesta/autonomia/microciclo", bytes.NewReader(body))
+	req2.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("status microciclo segundo intento inesperado: %d body=%s", rec2.Code, rec2.Body.String())
+	}
+	var resp2 apiProyectoMicrocicloResponse
+	if err := json.Unmarshal(rec2.Body.Bytes(), &resp2); err != nil {
+		t.Fatalf("decode microciclo 2: %v", err)
+	}
+	if resp2.Resultado == nil || !resp2.Resultado.TareaReutilizada || resp2.Resultado.Tarea.ID != resp.Resultado.Tarea.ID {
+		t.Fatalf("la tarea semilla no se reutilizo: first=%+v second=%+v", resp.Resultado, resp2.Resultado)
+	}
+}
+
+func TestAPIProyectoMicrocicloLimpiaPruebasAntesDeActivar(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquesta",
+		Nombre:  "Orquesta",
+		RutaAbs: tmp,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	tareaID, err := tareasService.Create(tareasapp.CreateTaskInput{
+		Titulo:      "Tarea vieja de prueba",
+		Descripcion: "Debe ir a backlog antes del nuevo microciclo",
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "tester",
+		Agente:      "Codex1",
+		Proyecto:    "orquesta",
+		Notas:       "tmp",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea vieja: %v", err)
+	}
+	if err := tareasService.Start(tareaID, "Codex1"); err != nil {
+		t.Fatalf("start tarea vieja: %v", err)
+	}
+	proyecto, err := db.GetProyecto("orquesta")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyecto.ID,
+		CWD:         tmp,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='fallido' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("fallar handle: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyecto.ID,
+		Kind:        "nudge",
+		PayloadJSON: `{"texto":"ruido viejo"}`,
+	}); err != nil {
+		t.Fatalf("mailbox vieja: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+	body, _ := json.Marshal(apiProyectoMicrocicloRequest{
+		Agente:         "Codex1",
+		LimpiarPruebas: true,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/proyectos/orquesta/autonomia/microciclo", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status microciclo limpio inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	tareaVieja, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea vieja: %v", err)
+	}
+	if tareaVieja.Estado != db.EstadoBacklog {
+		t.Fatalf("la tarea vieja deberia pasar a backlog: %+v", tareaVieja)
+	}
+	pendiente := "pendiente"
+	mailbox, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: strPtr("Codex1"), ProyectoID: &proyecto.ID, Estado: &pendiente})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	for _, msg := range mailbox {
+		if msg != nil && strings.Contains(msg.PayloadJSON, "ruido viejo") {
+			t.Fatalf("la mailbox vieja deberia quedar consumida: %+v", msg)
+		}
+	}
+	handles, err := db.ListarRuntimeHandles(strPtr("Codex1"))
+	if err != nil {
+		t.Fatalf("listar handles: %v", err)
+	}
+	for _, item := range handles {
+		if item != nil && item.ID == handle.ID {
+			t.Fatalf("el handle fallido viejo deberia purgarse: %+v", item)
+		}
+	}
+}
+
+func TestAPIProyectoMicrocicloEncolaStartSiAgenteNoTieneRuntime(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquesta",
+		Nombre:  "Orquesta",
+		RutaAbs: tmp,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+	body, _ := json.Marshal(apiProyectoMicrocicloRequest{
+		Agente: "Claude1",
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/proyectos/orquesta/autonomia/microciclo", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status microciclo inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp apiProyectoMicrocicloResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode microciclo: %v", err)
+	}
+	if resp.Resultado == nil || resp.Resultado.Policy == nil || resp.Resultado.Tarea == nil {
+		t.Fatalf("resultado microciclo inesperado: %+v", resp.Resultado)
+	}
+	if !strings.EqualFold(resp.Resultado.Policy.SupervisorAgente, "Claude1") {
+		t.Fatalf("el microciclo deberia fijar a Claude1 como supervisor: %+v", resp.Resultado.Policy)
+	}
+	if resp.Resultado.Tarea.ID <= 0 {
+		t.Fatalf("el microciclo deberia dejar una tarea semilla usable: %+v", resp.Resultado.Tarea)
+	}
+}
+
+func TestAPIRuntimeCanonicalizaNombreAgenteEnMailboxYPurgas(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	if err := db.RegistrarAgente("claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: t.TempDir(),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "claude1",
+		ProyectoID:  &proyectoID,
+		Kind:        "nudge",
+		PayloadJSON: `{"texto":"hola"}`,
+	}); err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	reqList := httptest.NewRequest(http.MethodGet, "/api/runtime-mailbox?to_agente=Claude1&estado=pendiente", nil)
+	recList := httptest.NewRecorder()
+	mux.ServeHTTP(recList, reqList)
+	if recList.Code != http.StatusOK {
+		t.Fatalf("listar mailbox status=%d body=%s", recList.Code, recList.Body.String())
+	}
+	var listed struct {
+		Mailbox []*db.RuntimeMailboxMessage `json:"mailbox"`
+	}
+	if err := json.Unmarshal(recList.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode listar mailbox: %v", err)
+	}
+	if len(listed.Mailbox) != 1 || listed.Mailbox[0] == nil || listed.Mailbox[0].ToAgente != "claude1" {
+		t.Fatalf("mailbox canonicalizada inesperada: %+v", listed.Mailbox)
+	}
+
+	body, _ := json.Marshal(apiRuntimeMailboxClearRequest{ToAgente: "Claude1", Estados: []string{"pendiente"}})
+	reqClear := httptest.NewRequest(http.MethodPost, "/api/runtime-mailbox/limpiar", bytes.NewReader(body))
+	reqClear.Header.Set("Content-Type", "application/json")
+	recClear := httptest.NewRecorder()
+	mux.ServeHTTP(recClear, reqClear)
+	if recClear.Code != http.StatusOK {
+		t.Fatalf("limpiar mailbox status=%d body=%s", recClear.Code, recClear.Body.String())
+	}
+	var cleared apiRuntimeMailboxClearResponse
+	if err := json.Unmarshal(recClear.Body.Bytes(), &cleared); err != nil {
+		t.Fatalf("decode limpiar mailbox: %v", err)
+	}
+	if cleared.Cleared != 1 {
+		t.Fatalf("mailbox limpiada inesperada: %+v", cleared)
 	}
 }
 

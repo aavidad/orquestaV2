@@ -167,6 +167,9 @@ func enviarInstruccionRemota(obj ObjetivoProceso, instruccion string) (bool, int
 		"external_session_id": externalSessionIDFromMetadata(obj.MetadataJSON),
 		"texto":               strings.TrimRight(instruccion, "\n"),
 	}
+	if runtimeOrderID := extractRemoteInt(metadataMap(obj.MetadataJSON), "runtime_order_id"); runtimeOrderID > 0 {
+		payload["runtime_order_id"] = runtimeOrderID
+	}
 	_, err := remoteJSONRequest(cfg, cfg.InputPath, payload, remoteNoRetryPolicy())
 	if err != nil {
 		return true, 0, err

@@ -1,6 +1,7 @@
 package microprogramacionapp
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -17,9 +18,34 @@ type Despachador interface {
 	DespacharMicrotarea(solicitud SolicitudDespachoMicrotarea) (*MicrotareaDespachada, error)
 }
 
+type RecolectorEntregaGit interface {
+	CapturarEntregaGit(agente string, proyectoID *int64, proyectoSlug string) (*EntregaGitCapturada, error)
+}
+
+type RecolectorEntregaGitPreferente interface {
+	CapturarEntregaGitPreferente(agente string, proyectoID *int64, proyectoSlug string, entrada EntradaRegistrarEntregaGit) (*EntregaGitCapturada, error)
+}
+
+type IntegradorGit interface {
+	RegistrarSolicitudMerge(entrada SolicitudMergeMicroprogramacion) (int64, error)
+}
+
+type SolicitudMergeMicroprogramacion struct {
+	ProyectoSlug  string
+	SourceBranch  string
+	TargetBranch  string
+	SolicitadoPor string
+	CommitOrigen  string
+	Notas         string
+	MetadataJSON  string
+}
+
 type Servicio struct {
-	repositorio Repositorio
-	despachador Despachador
+	repositorio   Repositorio
+	despachador   Despachador
+	escritor      EscritorArchivos
+	recolectorGit RecolectorEntregaGit
+	integradorGit IntegradorGit
 }
 
 func NewService(repositorio Repositorio) *Servicio {
@@ -31,6 +57,27 @@ func (s *Servicio) SetDespachador(despachador Despachador) {
 		return
 	}
 	s.despachador = despachador
+}
+
+func (s *Servicio) SetEscritorArchivos(escritor EscritorArchivos) {
+	if s == nil {
+		return
+	}
+	s.escritor = escritor
+}
+
+func (s *Servicio) SetRecolectorEntregaGit(recolector RecolectorEntregaGit) {
+	if s == nil {
+		return
+	}
+	s.recolectorGit = recolector
+}
+
+func (s *Servicio) SetIntegradorGit(integrador IntegradorGit) {
+	if s == nil {
+		return
+	}
+	s.integradorGit = integrador
 }
 
 func (s *Servicio) Crear(entrada EntradaCrearEspecificacion) (int64, error) {
@@ -173,6 +220,148 @@ func (s *Servicio) ValidarEntrega(id int64, entrada EntradaValidarEntrega) (*Res
 	return resultado, nil
 }
 
+func (s *Servicio) MaterializarEntrega(id int64, entrada EntradaMaterializarEntrega) (*ResultadoMaterializarEntrega, error) {
+	item, err := s.repositorio.ObtenerEspecificacionFuncion(id)
+	if err != nil {
+		return nil, err
+	}
+	if item == nil {
+		return nil, fmt.Errorf("especificacion no encontrada")
+	}
+	if s.escritor == nil {
+		return nil, fmt.Errorf("escritor de archivos no configurado")
+	}
+	if strings.TrimSpace(entrada.Evidencia) == "" {
+		return nil, fmt.Errorf("evidencia obligatoria para materializar entrega")
+	}
+	if strings.TrimSpace(entrada.RaizProyecto) == "" {
+		return nil, fmt.Errorf("raiz de proyecto obligatoria")
+	}
+	archivos, rutasEntregadas, err := normalizarArchivosEntrega(item, entrada.Archivos)
+	if err != nil {
+		return nil, err
+	}
+	if err := validarArchivosMaterializables(item, archivos); err != nil {
+		return nil, err
+	}
+	escritos, err := s.escritor.Escribir(entrada.RaizProyecto, archivos)
+	if err != nil {
+		return nil, err
+	}
+	if !slices.Equal(escritos, rutasEntregadas) {
+		// Mantener el conjunto final escrito aunque el escritor reordene.
+		rutasEntregadas = escritos
+	}
+	return &ResultadoMaterializarEntrega{
+		EspecificacionID:       item.ID,
+		ArchivoObjetivo:        item.ArchivoObjetivo,
+		WriteSetPermitido:      slices.Clone(item.WriteSet),
+		ArchivosMaterializados: rutasEntregadas,
+	}, nil
+}
+
+func (s *Servicio) MaterializarEntregaDesdeRespuesta(id int64, raizProyecto, respuesta, evidencia string) (*ResultadoMaterializarEntrega, error) {
+	return s.MaterializarEntrega(id, EntradaMaterializarEntrega{
+		RaizProyecto: strings.TrimSpace(raizProyecto),
+		Archivos:     ExtraerArchivosEntrega(respuesta),
+		Evidencia:    strings.TrimSpace(evidencia),
+	})
+}
+
+func (s *Servicio) RegistrarEntregaGit(id int64, entrada EntradaRegistrarEntregaGit) (*ResultadoRegistrarEntregaGit, error) {
+	item, err := s.repositorio.ObtenerEspecificacionFuncion(id)
+	if err != nil {
+		return nil, err
+	}
+	if item == nil {
+		return nil, fmt.Errorf("especificacion no encontrada")
+	}
+	if s.recolectorGit == nil {
+		return nil, fmt.Errorf("recolector de entrega git no configurado")
+	}
+	if s.integradorGit == nil {
+		return nil, fmt.Errorf("integrador git no configurado")
+	}
+	agente := strings.TrimSpace(entrada.Agente)
+	if agente == "" {
+		return nil, fmt.Errorf("agente obligatorio")
+	}
+	var captura *EntregaGitCapturada
+	var errCaptura error
+	if recolectorPreferente, ok := s.recolectorGit.(RecolectorEntregaGitPreferente); ok {
+		captura, errCaptura = recolectorPreferente.CapturarEntregaGitPreferente(agente, entrada.ProyectoID, strings.TrimSpace(entrada.ProyectoSlug), entrada)
+	} else {
+		captura, errCaptura = s.recolectorGit.CapturarEntregaGit(agente, entrada.ProyectoID, strings.TrimSpace(entrada.ProyectoSlug))
+	}
+	if errCaptura != nil {
+		return nil, errCaptura
+	}
+	if captura == nil {
+		return nil, fmt.Errorf("no existe entrega git capturada")
+	}
+	if strings.TrimSpace(captura.ProyectoSlug) == "" {
+		return nil, fmt.Errorf("proyecto slug obligatorio en entrega git")
+	}
+	if strings.TrimSpace(captura.Branch) == "" {
+		return nil, fmt.Errorf("branch de entrega obligatoria")
+	}
+	if strings.TrimSpace(captura.RutaWorktree) == "" {
+		return nil, fmt.Errorf("ruta de worktree obligatoria")
+	}
+	archivosEntregados, err := normalizarWriteSetEntregado(captura.ArchivosModificados)
+	if err != nil {
+		return nil, err
+	}
+	if len(archivosEntregados) == 0 {
+		return nil, fmt.Errorf("la entrega git no contiene archivos modificados")
+	}
+	if !slices.Contains(archivosEntregados, item.ArchivoObjetivo) {
+		return nil, fmt.Errorf("la entrega git no incluye el archivo objetivo %q", item.ArchivoObjetivo)
+	}
+	for _, ruta := range archivosEntregados {
+		if !slices.Contains(item.WriteSet, ruta) {
+			return nil, fmt.Errorf("el archivo %q queda fuera del write_set permitido", ruta)
+		}
+	}
+	targetBranch := normalizarTargetBranchGit(captura.BaseRef)
+	if targetBranch == "" {
+		targetBranch = "main"
+	}
+	solicitadoPor := strings.TrimSpace(entrada.SolicitadoPor)
+	if solicitadoPor == "" {
+		solicitadoPor = agente
+	}
+	notas := fmt.Sprintf("Entrega de microprogramacion registrada desde worktree %s.", strings.TrimSpace(captura.RutaWorktree))
+	if evidencia := strings.TrimSpace(entrada.Evidencia); evidencia != "" {
+		notas = notas + "\n" + evidencia
+	}
+	metadataJSON := buildGitMetadataMicroprogramacion(item.ID, captura, item)
+	mergeID, err := s.integradorGit.RegistrarSolicitudMerge(SolicitudMergeMicroprogramacion{
+		ProyectoSlug:  strings.TrimSpace(captura.ProyectoSlug),
+		SourceBranch:  strings.TrimSpace(captura.Branch),
+		TargetBranch:  targetBranch,
+		SolicitadoPor: solicitadoPor,
+		CommitOrigen:  strings.TrimSpace(captura.HeadCommit),
+		Notas:         notas,
+		MetadataJSON:  metadataJSON,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &ResultadoRegistrarEntregaGit{
+		EspecificacionID:   item.ID,
+		ArchivoObjetivo:    item.ArchivoObjetivo,
+		WriteSetPermitido:  slices.Clone(item.WriteSet),
+		WorktreeID:         captura.WorktreeID,
+		RutaWorktree:       strings.TrimSpace(captura.RutaWorktree),
+		SourceBranch:       strings.TrimSpace(captura.Branch),
+		TargetBranch:       targetBranch,
+		HeadCommit:         strings.TrimSpace(captura.HeadCommit),
+		ArchivosEntregados: archivosEntregados,
+		GitMergeID:         mergeID,
+	}, nil
+}
+
 func normalizarEntradaCrearEspecificacion(entrada EntradaCrearEspecificacion) (*EspecificacionFuncion, error) {
 	archivoObjetivo, err := normalizarRutaRelativa(entrada.ArchivoObjetivo)
 	if err != nil {
@@ -268,6 +457,74 @@ func normalizarWriteSetEntregado(writeSet []string) ([]string, error) {
 		}
 	}
 	return resultado, nil
+}
+
+func normalizarTargetBranchGit(baseRef string) string {
+	baseRef = strings.TrimSpace(baseRef)
+	baseRef = strings.TrimPrefix(baseRef, "refs/heads/")
+	baseRef = strings.TrimPrefix(baseRef, "origin/")
+	baseRef = strings.TrimPrefix(baseRef, "refs/remotes/")
+	baseRef = strings.TrimPrefix(baseRef, "HEAD -> ")
+	baseRef = strings.TrimSpace(baseRef)
+	switch baseRef {
+	case "", "HEAD":
+		return ""
+	default:
+		return baseRef
+	}
+}
+
+func buildGitMetadataMicroprogramacion(especificacionID int64, captura *EntregaGitCapturada, item *EspecificacionFuncion) string {
+	payload := map[string]any{
+		"source":            "microprogramacion_git",
+		"especificacion_id": especificacionID,
+		"archivo_objetivo":  strings.TrimSpace(item.ArchivoObjetivo),
+		"simbolo_objetivo":  strings.TrimSpace(item.SimboloObjetivo),
+		"write_set":         slices.Clone(item.WriteSet),
+		"worktree_id":       captura.WorktreeID,
+		"worktree_path":     strings.TrimSpace(captura.RutaWorktree),
+		"head_commit":       strings.TrimSpace(captura.HeadCommit),
+		"archivos":          slices.Clone(captura.ArchivosModificados),
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return "{}"
+	}
+	return string(raw)
+}
+
+func normalizarArchivosEntrega(item *EspecificacionFuncion, archivos []ArchivoEntrega) ([]ArchivoEntrega, []string, error) {
+	if item == nil {
+		return nil, nil, fmt.Errorf("especificacion obligatoria")
+	}
+	if len(archivos) == 0 {
+		return nil, nil, fmt.Errorf("la entrega no contiene ficheros materializables")
+	}
+	resultado := make([]ArchivoEntrega, 0, len(archivos))
+	rutas := make([]string, 0, len(archivos))
+	for _, archivo := range archivos {
+		ruta, err := normalizarRutaRelativa(archivo.RutaRelativa)
+		if err != nil {
+			return nil, nil, fmt.Errorf("ruta de entrega invalida: %w", err)
+		}
+		if !slices.Contains(item.WriteSet, ruta) {
+			return nil, nil, fmt.Errorf("el archivo %q queda fuera del write_set permitido", ruta)
+		}
+		if strings.TrimSpace(archivo.Contenido) == "" {
+			return nil, nil, fmt.Errorf("contenido vacio para %q", ruta)
+		}
+		if !slices.Contains(rutas, ruta) {
+			rutas = append(rutas, ruta)
+			resultado = append(resultado, ArchivoEntrega{
+				RutaRelativa: ruta,
+				Contenido:    archivo.Contenido,
+			})
+		}
+	}
+	if !slices.Contains(rutas, item.ArchivoObjetivo) {
+		return nil, nil, fmt.Errorf("la entrega debe incluir el archivo objetivo %q", item.ArchivoObjetivo)
+	}
+	return resultado, rutas, nil
 }
 
 func normalizarRutaRelativa(valor string) (string, error) {
@@ -377,6 +634,12 @@ func construirMicrotareaEmitida(item *EspecificacionFuncion, entrada EntradaEmit
 		"SALIDA: "+item.FormatoSalida,
 		"SI_BLOQUEO: responde solo 'BLOQUEO: <motivo concreto>'.",
 	)
+	if FormatoSalidaUsaGitWorktree(item.FormatoSalida) {
+		partes = append(partes,
+			"ENTREGA_GIT: trabaja dentro de tu worktree activa; no pegues el codigo completo en la respuesta.",
+			"RESPUESTA_ESPERADA: resume breve, tests ejecutados y estado del diff/branch para que Orquesta recoja la entrega por git.",
+		)
+	}
 	if contexto := strings.TrimSpace(entrada.Contexto); contexto != "" {
 		partes = append(partes, "CONTEXTO: "+contexto)
 	}
@@ -390,6 +653,11 @@ func construirMicrotareaEmitida(item *EspecificacionFuncion, entrada EntradaEmit
 		FormatoSalida:     item.FormatoSalida,
 		Mensaje:           strings.Join(partes, "\n"),
 	}
+}
+
+func FormatoSalidaUsaGitWorktree(formato string) bool {
+	formato = strings.TrimSpace(strings.ToLower(formato))
+	return strings.Contains(formato, "git") || strings.Contains(formato, "worktree")
 }
 
 func idOZero(item *EspecificacionFuncion) int64 {

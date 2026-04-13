@@ -10,6 +10,7 @@ package runtimeagente
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -94,6 +95,39 @@ func TestPreparePoolLocalOllamaGeneraPlanRemotoAPI(t *testing.T) {
 	}
 }
 
+func TestPreparePoolLocalOllamaUsaRutasCanonicasPorDefecto(t *testing.T) {
+	t.Setenv("ORQUESTA_SERVER_URL", "http://127.0.0.1:17669")
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Gemma1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Modelo:       "gemma4:26b",
+		PerfilTarea:  "implementacion",
+		Conector: ConnectorConfig{
+			Slug:         "ollama_pool_local",
+			Transporte:   "api",
+			Comando:      "ollama",
+			MetadataJSON: `{"pool_compartido":true,"default_task_profile":"implementacion","default_reasoning_effort":"high"}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare pool local ollama por defecto: %v", err)
+	}
+	if !strings.Contains(plan.RemoteConfigJSON, `"endpoint":"http://127.0.0.1:17669"`) {
+		t.Fatalf("endpoint inesperado: %s", plan.RemoteConfigJSON)
+	}
+	for _, expected := range []string{
+		`"launch_path":"/api/runtime/ollama-pool/launch"`,
+		`"input_path":"/api/runtime/ollama-pool/input"`,
+		`"status_path":"/api/runtime/ollama-pool/status"`,
+		`"stop_path":"/api/runtime/ollama-pool/stop"`,
+	} {
+		if !strings.Contains(plan.RemoteConfigJSON, expected) {
+			t.Fatalf("remote_config_json sin %s: %s", expected, plan.RemoteConfigJSON)
+		}
+	}
+}
+
 func TestPrepareCLISinResumeNativoCompactaResumePayloadEnPrompt(t *testing.T) {
 	plan, err := DefaultRegistry().Prepare(LaunchRequest{
 		Agente:       "Codex2",
@@ -109,7 +143,10 @@ func TestPrepareCLISinResumeNativoCompactaResumePayloadEnPrompt(t *testing.T) {
 			ResumePayloadJSON: `{
 				"bootstrap_prompt":"Bootstrap de Orquesta para Codex2.",
 				"checkpoint":{"id":9,"kind":"stop"},
-				"mailbox":[{"id":1},{"id":2}],
+				"mailbox":[
+					{"id":1,"kind":"instruction","payload":{"texto":"revisa el gate y sigue"}},
+					{"id":2}
+				],
 				"project_context":{"proyecto":{"slug":"orquestador"}},
 				"governance_catalog":{"hash":"abc123"},
 				"persist":"ok"
@@ -127,6 +164,9 @@ func TestPrepareCLISinResumeNativoCompactaResumePayloadEnPrompt(t *testing.T) {
 			t.Fatalf("falta resumen de resume payload %s en: %s", token, plan.ContinuityPrompt)
 		}
 	}
+	if !strings.Contains(plan.ContinuityPrompt, "[instruction") {
+		t.Fatalf("falta resumen compacto de mailbox en continuity prompt: %s", plan.ContinuityPrompt)
+	}
 }
 
 func TestPrepareCLICodexCompactaContinuityPromptParaRuntimeNoInteractivo(t *testing.T) {
@@ -142,7 +182,7 @@ func TestPrepareCLICodexCompactaContinuityPromptParaRuntimeNoInteractivo(t *test
 		Resume: ResumeContext{
 			ResumenContinuidad: "texto largo que no deberia pasar completo al prompt de lanzamiento",
 			Branch:             "orq-orquestador-codex7",
-			ResumePayloadJSON:  `{"checkpoint":{"id":33155,"kind":"stop"},"mailbox":[{"id":1}],"project_context":{},"governance_catalog":{}}`,
+			ResumePayloadJSON:  `{"checkpoint":{"id":33155,"kind":"stop"},"mailbox":[{"id":1,"kind":"nudge","payload":{"accion":"continuar_trabajo","tarea_id":411,"texto":"toma tarea asignada y sigue"}}],"project_context":{},"governance_catalog":{}}`,
 		},
 	})
 	if err != nil {
@@ -151,7 +191,7 @@ func TestPrepareCLICodexCompactaContinuityPromptParaRuntimeNoInteractivo(t *test
 	if strings.Contains(plan.ContinuityPrompt, "texto largo que no deberia pasar completo") {
 		t.Fatalf("continuity prompt demasiado verboso: %s", plan.ContinuityPrompt)
 	}
-	for _, token := range []string{"Retoma el trabajo actual desde Orquesta.", "Proyecto: orquestador.", "Rama: orq-orquestador-codex7.", "checkpoint#33155", "mailbox=1"} {
+	for _, token := range []string{"Retoma el trabajo actual desde Orquesta.", "Proyecto: orquestador.", "Rama: orq-orquestador-codex7.", "checkpoint#33155", "mailbox=1", "accion=continuar_trabajo", "tarea#411", "toma tarea asignada y sigue"} {
 		if !strings.Contains(plan.ContinuityPrompt, token) {
 			t.Fatalf("falta %q en continuity prompt: %s", token, plan.ContinuityPrompt)
 		}
@@ -162,6 +202,32 @@ func TestPrepareCLICodexCompactaContinuityPromptParaRuntimeNoInteractivo(t *test
 	} {
 		if !strings.Contains(plan.ContinuityPrompt, token) {
 			t.Fatalf("falta %q en continuity prompt endurecido: %s", token, plan.ContinuityPrompt)
+		}
+	}
+}
+
+func TestPrepareCLIGenericoResumePayloadResumeMailboxCompacto(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Claude7",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:       "claude-code",
+			Transporte: "cli",
+			Comando:    "claude-code",
+		},
+		Resume: ResumeContext{
+			ResumenContinuidad: "seguir trabajo actual",
+			Branch:             "orq-orquestador-claude7",
+			ResumePayloadJSON:  `{"mailbox":[{"id":2,"kind":"instruction","payload":{"tarea_id":528,"texto":"cambia solo internal/controlruntime/tmux_monitor.go"}}]}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	for _, token := range []string{"Resume payload:", "mailbox=1", "instruction", "tarea#528", "cambia solo internal/controlruntime/tmux_monitor.go"} {
+		if !strings.Contains(plan.ContinuityPrompt, token) {
+			t.Fatalf("falta %q en continuity prompt generico: %s", token, plan.ContinuityPrompt)
 		}
 	}
 }
@@ -239,6 +305,98 @@ func TestSanitizarResumeParaConectorPoolCompartidoConservaResumenBreve(t *testin
 	}
 	if !strings.Contains(resume.ResumePayloadJSON, "gemma4:26b") {
 		t.Fatalf("el payload persistido no deberia perderse: %s", resume.ResumePayloadJSON)
+	}
+}
+
+func TestModeloCompatibleConConectorPremiumNoAceptaModeloLocal(t *testing.T) {
+	cases := []struct {
+		name     string
+		conector ConnectorConfig
+		modelo   string
+		want     bool
+	}{
+		{
+			name: "codex rechaza qwen local",
+			conector: ConnectorConfig{
+				Slug:         "codex-cli",
+				Transporte:   "cli",
+				Comando:      "codex",
+				MetadataJSON: `{"familia":"openai"}`,
+			},
+			modelo: "qwen2.5-coder:14b",
+			want:   false,
+		},
+		{
+			name: "codex acepta gpt",
+			conector: ConnectorConfig{
+				Slug:         "codex-cli",
+				Transporte:   "cli",
+				Comando:      "codex",
+				MetadataJSON: `{"familia":"openai"}`,
+			},
+			modelo: "gpt-5.4",
+			want:   true,
+		},
+		{
+			name: "claude rechaza gemma",
+			conector: ConnectorConfig{
+				Slug:         "claude-code",
+				Transporte:   "cli",
+				Comando:      "claude-code",
+				MetadataJSON: `{"familia":"anthropic"}`,
+			},
+			modelo: "gemma4:26b",
+			want:   false,
+		},
+		{
+			name: "claude sin metadata familia rechaza qwen por comando",
+			conector: ConnectorConfig{
+				Slug:       "claude-code",
+				Transporte: "cli",
+				Comando:    "claude-code",
+			},
+			modelo: "qwen2.5-coder:14b",
+			want:   false,
+		},
+		{
+			name: "gemini acepta gemini",
+			conector: ConnectorConfig{
+				Slug:         "gemini-cli",
+				Transporte:   "cli",
+				Comando:      "gemini",
+				MetadataJSON: `{"familia":"google"}`,
+			},
+			modelo: "gemini-2.5-pro",
+			want:   true,
+		},
+		{
+			name: "gemini sin metadata familia rechaza qwen por comando",
+			conector: ConnectorConfig{
+				Slug:       "gemini-cli",
+				Transporte: "cli",
+				Comando:    "gemini",
+			},
+			modelo: "qwen2.5-coder:14b",
+			want:   false,
+		},
+		{
+			name: "ollama conserva modelo local",
+			conector: ConnectorConfig{
+				Slug:       "ollama-cli",
+				Transporte: "cli",
+				Comando:    "ollama",
+			},
+			modelo: "qwen2.5-coder:14b",
+			want:   true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ModeloCompatibleConConector(tc.conector, tc.modelo)
+			if got != tc.want {
+				t.Fatalf("ModeloCompatibleConConector(%q)=%t want=%t", tc.modelo, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -399,7 +557,8 @@ func TestPrepareCLIExpandePlaceholdersDeConector(t *testing.T) {
 	if plan.Env["ORQUESTA_BIN"] != exe {
 		t.Fatalf("orquesta bin inesperado: %+v", plan.Env)
 	}
-	if !strings.Contains(plan.Env["PATH"], os.Getenv("PATH")) || !strings.HasPrefix(plan.Env["PATH"], filepath.Dir(exe)+":") {
+	wantPathPrefix := filepath.Dir(plan.Comando) + string(os.PathListSeparator)
+	if !strings.Contains(plan.Env["PATH"], os.Getenv("PATH")) || !strings.HasPrefix(plan.Env["PATH"], wantPathPrefix) {
 		t.Fatalf("PATH expandido inesperado: %+v", plan.Env)
 	}
 }
@@ -473,6 +632,7 @@ func TestAplicarDefaultsConectorNoPisaPoliticaResuelta(t *testing.T) {
 }
 
 func TestPrepareCLICodexSimpleUsaWrapperCanonicoYPerfil(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_USE_PROFILE_WRAPPER", "1")
 	tmp := t.TempDir()
 	projectPath := filepath.Join(tmp, "orquesta")
 	wrapperPath := filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil")
@@ -503,6 +663,34 @@ func TestPrepareCLICodexSimpleUsaWrapperCanonicoYPerfil(t *testing.T) {
 	}
 	if plan.Args[0] != "Codex8" {
 		t.Fatalf("el wrapper codex debe recibir el perfil como primer argumento: %+v", plan.Args)
+	}
+}
+
+func TestPrepareCLICodexSimpleUsaCodexGlobalPorDefecto(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_USE_PROFILE_WRAPPER", "")
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "CodexGlobal1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:       "codex-cli",
+			Transporte: "cli",
+			Comando:    "codex",
+			ArgsJSON:   `[]`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	want := "codex"
+	if resolved, err := exec.LookPath("codex"); err == nil && strings.TrimSpace(resolved) != "" {
+		want = resolved
+	}
+	if got := plan.Comando; got != want {
+		t.Fatalf("comando inesperado: got=%q want=%q", got, want)
+	}
+	if len(plan.Args) > 0 && plan.Args[0] == "CodexGlobal1" {
+		t.Fatalf("codex global no deberia recibir perfil como primer argumento: %+v", plan.Args)
 	}
 }
 
@@ -715,7 +903,7 @@ func TestPrepareCLICodexDesactivaSendInputInteractivoPorDefecto(t *testing.T) {
 	}
 }
 
-func TestPrepareCLICodexResumeMantieneBootstrapOnlyAunqueTengaSesionExterna(t *testing.T) {
+func TestPrepareCLICodexResumeUsaSessionResumeCuandoTieneSesionExterna(t *testing.T) {
 	plan, err := DefaultRegistry().Prepare(LaunchRequest{
 		Agente:       "Codex7",
 		ProyectoSlug: "orquestador",
@@ -738,8 +926,122 @@ func TestPrepareCLICodexResumeMantieneBootstrapOnlyAunqueTengaSesionExterna(t *t
 	if plan.CanSendInput == nil || *plan.CanSendInput {
 		t.Fatalf("codex-cli deberia seguir sin input interactivo en resume: %+v", plan)
 	}
+	if plan.MailboxDeliveryMode != MailboxDeliverySessionResume {
+		t.Fatalf("codex-cli resume deberia usar session_resume: %+v", plan)
+	}
+}
+
+func TestPrepareCLIGeminiEmbebePromptInteractivo(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Gemini1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:         "gemini-cli",
+			Transporte:   "cli",
+			Comando:      "gemini",
+			ArgsJSON:     `["--yolo"]`,
+			MetadataJSON: `{"familia":"google","reanudable":true,"launch_prompt_flag":"--prompt-interactive","can_send_input":false}`,
+		},
+		Resume: ResumeContext{
+			ResumenContinuidad: "Tarea activa: corregir merge helper",
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if err := ApplyLaunchPromptMetadata(plan, `{"launch_prompt_flag":"--prompt-interactive","can_send_input":false}`); err != nil {
+		t.Fatalf("apply launch prompt metadata: %v", err)
+	}
+	if plan.CanSendInput == nil || *plan.CanSendInput {
+		t.Fatalf("gemini-cli deberia quedar sin input interactivo directo: %+v", plan)
+	}
 	if plan.MailboxDeliveryMode != MailboxDeliveryBootstrapOnly {
-		t.Fatalf("codex-cli resume deberia seguir en bootstrap_only: %+v", plan)
+		t.Fatalf("gemini-cli deberia usar bootstrap_only: %+v", plan)
+	}
+	if !plan.LaunchPromptEmbedded {
+		t.Fatalf("gemini-cli deberia embeber el prompt inicial: %+v", plan)
+	}
+	rendered := RenderCommand(plan)
+	if !strings.Contains(rendered, "'--prompt-interactive'") {
+		t.Fatalf("gemini-cli deberia usar --prompt-interactive: %s", rendered)
+	}
+	if !strings.Contains(rendered, "Tarea activa: corregir merge helper") {
+		t.Fatalf("gemini-cli deberia incluir continuidad en el prompt: %s", rendered)
+	}
+}
+
+func TestPrepareCLIGeminiPrependaDirectorioDelComandoAlPATH(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/bin")
+	geminiBin := filepath.Join(home, ".nvm", "versions", "node", "v99.0.0", "bin")
+	if err := os.MkdirAll(geminiBin, 0o755); err != nil {
+		t.Fatalf("mkdir gemini bin: %v", err)
+	}
+	geminiPath := filepath.Join(geminiBin, "gemini")
+	if err := os.WriteFile(geminiPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write gemini stub: %v", err)
+	}
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Gemini1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:       "gemini-cli",
+			Transporte: "cli",
+			Comando:    "gemini",
+			ArgsJSON:   `["--yolo"]`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if got, want := plan.Comando, geminiPath; got != want {
+		t.Fatalf("comando resuelto inesperado: got=%q want=%q", got, want)
+	}
+	if got := plan.Env["PATH"]; !strings.HasPrefix(got, geminiBin+string(os.PathListSeparator)) {
+		t.Fatalf("PATH deberia comenzar por el directorio del comando resuelto: %q", got)
+	}
+}
+
+func TestPrepareCLIClaudeEmbebePromptPosicional(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Claude1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:         "claude-code",
+			Transporte:   "cli",
+			Comando:      "claude-code",
+			ArgsJSON:     `["--dangerously-skip-permissions","--permission-mode","bypassPermissions","--add-dir","{{working_dir}}","--session-id","{{session_uuid}}"]`,
+			MetadataJSON: `{"familia":"anthropic","reanudable":true,"launch_prompt_positional":true,"can_send_input":false}`,
+		},
+		Resume: ResumeContext{
+			ResumenContinuidad: "Tarea activa: corregir merge helper",
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if err := ApplyLaunchPromptMetadata(plan, `{"launch_prompt_positional":true,"can_send_input":false}`); err != nil {
+		t.Fatalf("apply launch prompt metadata: %v", err)
+	}
+	if plan.CanSendInput == nil || *plan.CanSendInput {
+		t.Fatalf("claude-code deberia quedar sin input interactivo directo: %+v", plan)
+	}
+	if plan.MailboxDeliveryMode != MailboxDeliveryBootstrapOnly {
+		t.Fatalf("claude-code deberia usar bootstrap_only: %+v", plan)
+	}
+	if !plan.LaunchPromptEmbedded {
+		t.Fatalf("claude-code deberia embeber el prompt inicial: %+v", plan)
+	}
+	rendered := RenderCommand(plan)
+	if !strings.Contains(rendered, "Tarea activa: corregir merge helper") {
+		t.Fatalf("claude-code deberia incluir continuidad en el prompt: %s", rendered)
+	}
+	if strings.Contains(rendered, "'--bare'") {
+		t.Fatalf("claude-code no deberia usar --bare cuando dependemos de OAuth/keychain: %s", rendered)
 	}
 }
 

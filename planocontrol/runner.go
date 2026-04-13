@@ -27,6 +27,7 @@ type AutomationService interface {
 	PlanificarTareasAutomaticamente() error
 	ProcesarPresupuestoSesionObservadoBatch() (int, error)
 	ProcesarAutonomiaAgentesBatch() (int, error)
+	ProcesarPipelineLocalBatch() (int, error)
 	ProcesarRuntimeSupervisionBatch() (int, error)
 	ProcesarSupervisionAutonomaBatch() (int, error)
 	ProcesarReviewGatesBatch() (int, error)
@@ -63,7 +64,7 @@ type Runner struct {
 	BatchTimeout          time.Duration
 	mu                    sync.Mutex
 	runningBatches        map[string]runningBatchState
-	batchIntervals        map[string]time.Time
+	batchIntervals        *Throttler
 	batchWake             map[string]chan struct{}
 	nextBatchToken        uint64
 	warmLaneActive        atomic.Bool
@@ -454,6 +455,15 @@ func (r *Runner) runControlPlaneWarm() {
 		"Decisiones autónomas procesadas: %d",
 		r.Automation.ProcesarAutonomiaAgentesBatch,
 	)
+	pipelineLocal := r.runControlPlaneBatch(
+		"pipeline_local",
+		"proyecto",
+		"pipeline_local_batch",
+		"pipeline_local_batch_error",
+		"pipeline_local_batch_panic",
+		"Pasos de pipeline local procesados: %d",
+		r.Automation.ProcesarPipelineLocalBatch,
+	)
 	supervision := r.runControlPlaneBatch(
 		"runtime_supervision",
 		"runtime_handle",
@@ -508,8 +518,12 @@ func (r *Runner) runControlPlaneWarm() {
 		"Handoffs automáticos procesados: %d",
 		r.Automation.ProcesarHandoffsBatch,
 	)
-	r.debugf("control_plane_warm autonomia=%d runtime_supervision=%d supervision=%d review=%d git_merges=%d refineria=%d handoffs=%d",
-		autonomia, supervision, supervisionAutonoma, review, merged, refined, handoffs)
+	r.debugf("control_plane_warm autonomia=%d pipeline_local=%d runtime_supervision=%d supervision=%d review=%d git_merges=%d refineria=%d handoffs=%d",
+		autonomia, pipelineLocal, supervision, supervisionAutonoma, review, merged, refined, handoffs)
+	if autonomia > 0 || pipelineLocal > 0 || supervision > 0 || supervisionAutonoma > 0 || review > 0 || merged > 0 || refined > 0 || handoffs > 0 {
+		r.WakeRuntimeMailbox()
+		r.WakeRuntimeOrders()
+	}
 }
 
 // runControlPlaneCold: limpieza — stale handles, stale orders, hygiene.
@@ -720,7 +734,7 @@ func (r *Runner) runtimeTranscriptStartupDelay() time.Duration {
 
 func (r *Runner) runtimeMailboxCada() time.Duration {
 	if r.RuntimeMailboxCada <= 0 {
-		return time.Minute
+		return 10 * time.Second
 	}
 	return r.RuntimeMailboxCada
 }
@@ -743,18 +757,16 @@ func (r *Runner) allowIntervalBatch(name string, each time.Duration, now time.Ti
 	if each <= 0 {
 		return true
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	if r.batchIntervals == nil {
-		r.batchIntervals = map[string]time.Time{}
+		r.mu.Lock()
+		if r.batchIntervals == nil {
+			r.batchIntervals = NewThrottler()
+		}
+		r.mu.Unlock()
 	}
-	last := r.batchIntervals[name]
-	if !last.IsZero() && now.Sub(last) < each {
-		return false
-	}
-	r.batchIntervals[name] = now
-	return true
+	return r.batchIntervals.Allow(name, each)
 }
+
 
 func (r *Runner) notificationRetryCada() time.Duration {
 	if r.NotificationRetryCada <= 0 {

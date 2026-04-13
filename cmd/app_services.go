@@ -6,6 +6,7 @@ import (
 	"orquesta/conectoresapp"
 	"orquesta/configuracionapp"
 	"orquesta/db"
+	"orquesta/gitaplicacion"
 	"orquesta/gobernanzaapp"
 	"orquesta/lenguajeapp"
 	"orquesta/microprogramacionapp"
@@ -18,6 +19,7 @@ var capacidadService = capacidadapp.NewService(capacidadapp.Repository{})
 var agentesService = agentesapp.NewService(agentesapp.Repository{}, capacidadService)
 var configService = configuracionapp.NewService(configuracionapp.Repository{})
 var conectoresService = conectoresapp.NewService(conectoresapp.Repository{})
+var gitService = gitaplicacion.NewService(db.GitGovRepository{})
 var gobernanzaService = gobernanzaapp.NewService(gobernanzaapp.Repository{})
 var lenguajeService = lenguajeapp.NewService(lenguajeapp.Repository{})
 var microprogramacionService = microprogramacionapp.NewService(db.SqliteMicroprogramacionRepo{})
@@ -27,4 +29,19 @@ var supervisionService = supervisionapp.NewService(supervisionapp.NewRepository(
 
 func init() {
 	capacidadService.SetPhaseProvider(progresoService)
+	capacidadService.SetReviewGateProvider(reviewService)
+	capacidadService.SetReviewGateManager(reviewService)
+	capacidadService.SetRuntimeModelManager(nuevoGestorRuntimeModelosOllama(endpointOllamaLocal(), clienteHTTPOllamaLocal()))
+	capacidadService.SetTaskProvider(capacidadapp.Repository{})
+	capacidadService.SetTaskActionProvider(capacidadapp.Repository{})
+	capacidadService.SetPhaseControlProvider(capacidadapp.Repository{})
+	capacidadService.SetAgentResolver(resolvedorAgentePipelineOperativo{rowsProvider: agentesService})
+	capacidadService.SetPipelineDispatcher(despachadorPipelineOperativo{})
+	microprogramacionService.SetEscritorArchivos(microprogramacionapp.EscritorArchivosDisco{})
+	microprogramacionService.SetRecolectorEntregaGit(microprogramacionRecolectorGit{})
+	microprogramacionService.SetIntegradorGit(microprogramacionIntegradorGit{})
+	runtimesService.SetRegistradorEntregaGit(microprogramacionService)
+	runtimesService.SetMaterializadorEntregaMicroprogramacion(microprogramacionService)
+	runtimesService.SetResolvedorWorktreeActiva(worktreeRuntimeService{})
+	runtimesService.SetAseguradorWorktreeActiva(worktreeRuntimeService{})
 }

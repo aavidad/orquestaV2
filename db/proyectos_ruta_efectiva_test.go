@@ -213,6 +213,44 @@ func TestRutaProyectoEfectivaNoSobrescribeRaizSiLaSesionYaEstaEnWorktreeActiva(t
 	}
 }
 
+func TestRutaTrabajoPreferidaAgenteProyectoPrefiereWorktreeActivaSobreRaizRepo(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	rutaBase := filepath.Join(tmp, "orquesta")
+	rutaWorktree := filepath.Join(rutaBase, ".orquesta-worktrees", "orq-gemini1")
+	if err := os.MkdirAll(rutaWorktree, 0o755); err != nil {
+		t.Fatalf("mkdir ruta worktree: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaBase, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod base: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaWorktree, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod worktree: %v", err)
+	}
+	if err := RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaBase,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := DB.Exec(`
+		INSERT INTO worktrees (proyecto_id, agente, nombre, ruta_abs, branch, base_ref, estado, motivo)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		proyectoID, "Gemini1", "orq-gemini1", rutaWorktree, "orq/orquestador/gemini1", "HEAD", "activa", "test",
+	); err != nil {
+		t.Fatalf("crear worktree activa: %v", err)
+	}
+	if got := RutaTrabajoPreferidaAgenteProyecto("Gemini1", &Proyecto{ID: proyectoID, RutaAbs: rutaBase, Slug: "orquestador"}, rutaBase); got != rutaWorktree {
+		t.Fatalf("deberia preferir la worktree activa sobre la raiz del repo: got=%s want=%s", got, rutaWorktree)
+	}
+}
+
 func TestListarWorktreesOcultaActivasEnRutaHistoricaSiElProyectoYaSeMovio(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	rutaHistorica := filepath.Join(tmp, "historico", "orquestador")

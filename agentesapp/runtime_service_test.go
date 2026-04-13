@@ -229,3 +229,67 @@ func TestBuildPreparePrefierePoolLocalCompartidoOllama(t *testing.T) {
 		t.Fatalf("proyecto inesperado: %+v", out.Proyecto)
 	}
 }
+
+func TestBuildPreparePremiumIgnoraModeloLocalIncompatible(t *testing.T) {
+	prepararDBTemporalRuntimeService(t)
+	tmp := t.TempDir()
+	rutaProyecto := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(rutaProyecto, 0o755); err != nil {
+		t.Fatalf("mkdir proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexPremium", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaProyecto,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertConector(&db.Conector{
+		Slug:         "codex-cli",
+		Nombre:       "Codex CLI",
+		Transporte:   "cli",
+		Comando:      "codex",
+		MetadataJSON: `{"familia":"openai","model_flag":"--model"}`,
+		Activo:       true,
+	}); err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	if _, err := db.GuardarPoliticaModelo(&db.PoliticaModelo{
+		ScopeTipo:       "perfil",
+		ScopeRef:        "implementacion",
+		PerfilTarea:     "implementacion",
+		ModelSlug:       "qwen2.5-coder:14b",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("guardar politica: %v", err)
+	}
+
+	out, err := NewService(Repository{}, nil).BuildPrepare(PrepareInput{
+		Agente:   "CodexPremium",
+		Proyecto: "orquestador",
+		Conector: "codex-cli",
+		Perfil:   "implementacion",
+	})
+	if err != nil {
+		t.Fatalf("BuildPrepare: %v", err)
+	}
+	if out == nil || out.Plan == nil {
+		t.Fatalf("prepare inesperado: %+v", out)
+	}
+	if out.Plan.Modelo == "qwen2.5-coder:14b" {
+		t.Fatalf("el premium no deberia heredar modelo local incompatible: %+v", out.Plan)
+	}
+	if rendered := runtimeagente.RenderCommand(out.Plan); strings.Contains(rendered, "qwen2.5-coder:14b") {
+		t.Fatalf("rendered command no deberia incluir modelo local incompatible: %s", rendered)
+	}
+	if out.Plan.Modelo != "gpt-5.4" {
+		t.Fatalf("deberia caer al modelo premium compatible por defecto: %+v", out.Plan)
+	}
+}

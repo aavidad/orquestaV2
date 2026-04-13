@@ -2664,11 +2664,37 @@ func resolverCompletarTareaDesdeSignalTranscript(item *db.RuntimeTranscriptEntry
 	if tareaID == nil || *tareaID <= 0 {
 		return "task_completed_ignorado:sin_tarea_id", true, nil
 	}
-	if err := db.CompletarTarea(*tareaID, "finalizada_por_agente_autonomamente"); err != nil {
+	if err := db.CompletarTarea(*tareaID, item.Agente, "autonomo:signal_transcript"); err != nil {
 		return "", false, err
 	}
-	db.Audit("server", "task_completed_autonomo", "tarea", *tareaID, "por_agente", item.Agente)
+	db.Audit("server", "task_completed_autonomo", "tarea", *tareaID, "agente: "+item.Agente)
 	return "task_completed_autonomo", true, nil
+}
+
+func int64PtrFromMap(m map[string]any, key string) *int64 {
+	if m == nil {
+		return nil
+	}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return nil
+	}
+	switch val := v.(type) {
+	case int:
+		i := int64(val)
+		return &i
+	case int64:
+		return &val
+	case float64:
+		i := int64(val)
+		return &i
+	case string:
+		i, err := strconv.ParseInt(strings.TrimSpace(val), 10, 64)
+		if err == nil && i != 0 {
+			return &i
+		}
+	}
+	return nil
 }
 
 func prepararFindingsReviewSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {

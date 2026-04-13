@@ -62,14 +62,14 @@ type EntradaEmitirMicrotarea struct {
 }
 
 type MicrotareaEmitida struct {
-	EspecificacionID  int64
-	Titulo            string
-	ArchivoObjetivo   string
-	SimboloObjetivo   string
-	WriteSet          []string
-	TestsObligatorios []string
-	FormatoSalida     string
-	Mensaje           string
+	EspecificacionID  int64    `json:"especificacion_id"`
+	Titulo            string   `json:"titulo"`
+	ArchivoObjetivo   string   `json:"archivo_objetivo"`
+	SimboloObjetivo   string   `json:"simbolo_objetivo"`
+	WriteSet          []string `json:"write_set"`
+	TestsObligatorios []string `json:"tests_obligatorios"`
+	FormatoSalida     string   `json:"formato_salida"`
+	Mensaje           string   `json:"mensaje"`
 }
 
 type EntradaDespacharMicrotarea struct {
@@ -86,11 +86,11 @@ type SolicitudDespachoMicrotarea struct {
 }
 
 type MicrotareaDespachada struct {
-	EspecificacionID int64
-	ProyectoID       *int64
-	AgenteDestino    string
-	RuntimeOrderID   int64
-	Microtarea       *MicrotareaEmitida
+	EspecificacionID int64              `json:"especificacion_id"`
+	ProyectoID       *int64             `json:"proyecto_id,omitempty"`
+	AgenteDestino    string             `json:"agente_destino"`
+	RuntimeOrderID   int64              `json:"runtime_order_id"`
+	Microtarea       *MicrotareaEmitida `json:"microtarea,omitempty"`
 }
 
 type EntradaValidarEntrega struct {
@@ -100,6 +100,60 @@ type EntradaValidarEntrega struct {
 	TestsEjecutados    []string
 	TestsFallidos      []string
 	Evidencia          string
+}
+
+type ArchivoEntrega struct {
+	RutaRelativa string
+	Contenido    string
+}
+
+type EntradaMaterializarEntrega struct {
+	RaizProyecto string
+	Archivos     []ArchivoEntrega
+	Evidencia    string
+}
+
+type ResultadoMaterializarEntrega struct {
+	EspecificacionID       int64
+	ArchivoObjetivo        string
+	WriteSetPermitido      []string
+	ArchivosMaterializados []string
+}
+
+type EntregaGitCapturada struct {
+	ProyectoSlug        string
+	WorktreeID          int64
+	RutaWorktree        string
+	Branch              string
+	BaseRef             string
+	HeadCommit          string
+	ArchivosModificados []string
+	Diff                string
+}
+
+type EntradaRegistrarEntregaGit struct {
+	Agente                  string
+	ProyectoID              *int64
+	ProyectoSlug            string
+	SolicitadoPor           string
+	Evidencia               string
+	PreferenciaWorktreeID   *int64
+	PreferenciaRutaWorktree string
+	PreferenciaBranch       string
+	PreferenciaBaseRef      string
+}
+
+type ResultadoRegistrarEntregaGit struct {
+	EspecificacionID   int64
+	ArchivoObjetivo    string
+	WriteSetPermitido  []string
+	WorktreeID         int64
+	RutaWorktree       string
+	SourceBranch       string
+	TargetBranch       string
+	HeadCommit         string
+	ArchivosEntregados []string
+	GitMergeID         int64
 }
 
 type HallazgoValidacionEntrega struct {

@@ -770,6 +770,19 @@ func (s *supervisorProcesoLocal) snapshot() (int, string, map[string]any, map[st
 				lastStatusAt = nowUTC()
 			}
 		} else {
+			if supervisorTMUXPersistenteSigueVivo(modo, driver, tmuxCommand, tmuxSession, renderedCommand) {
+				alive = true
+				aliveErr = nil
+				if exitedAt != nil {
+					s.rehabilitarSalidaExterna(nowUTC())
+					exitedAt = nil
+					exitCode = nil
+					exitError = ""
+					lastStatusAt = nowUTC()
+				}
+			}
+		}
+		if !alive {
 			s.marcarSalidaExterna(aliveErr)
 		}
 	} else if exitedAt == nil && pid <= 0 {
@@ -843,6 +856,20 @@ func (s *supervisorProcesoLocal) snapshot() (int, string, map[string]any, map[st
 		"mailbox_delivery_mode": mailboxDeliveryMode,
 	}
 	return pid, modo, meta, caps, alive, aliveErr
+}
+
+func supervisorTMUXPersistenteSigueVivo(modo, driver, tmuxCommand, tmuxSession, renderedCommand string) bool {
+	modo = strings.ToLower(strings.TrimSpace(modo))
+	driver = strings.ToLower(strings.TrimSpace(driver))
+	renderedCommand = strings.TrimSpace(renderedCommand)
+	switch {
+	case modo == "tmux_cli_session",
+		driver == "tmux_cli_session",
+		renderedCommandLooksLikeTMUXPreferredCLI(renderedCommand):
+	default:
+		return false
+	}
+	return tmuxSessionExists(tmuxCommand, tmuxSession)
 }
 
 func nowUTC() time.Time {

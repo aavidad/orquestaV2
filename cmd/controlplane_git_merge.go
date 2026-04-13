@@ -9,6 +9,7 @@ import (
 	"orquesta/db"
 	"orquesta/gitgobernanza"
 	"orquesta/gitoperaciones"
+	"orquesta/progresoapp"
 )
 
 func (dbAutomationService) ProcesarGitMergesBatch() (int, error) {
@@ -96,6 +97,9 @@ func procesarGitMergeAutonomo(svc *gitgobernanza.Service, merge *db.GitMerge) (b
 	if err := cerrarWorktreeTrasMerge(meta.WorktreeID, "merge_fusionado_automaticamente"); err != nil {
 		return false, err
 	}
+	if err := reflejarCierreIntegracionTrasMerge(proyecto, policy); err != nil {
+		return false, err
+	}
 	return true, nil
 }
 
@@ -163,6 +167,40 @@ func cerrarWorktreeTrasMerge(worktreeID *int64, motivo string) error {
 	}
 	_, err = svc.CloseWorktree(*worktreeID, true, motivo)
 	return err
+}
+
+func reflejarCierreIntegracionTrasMerge(proyecto *db.Proyecto, policy *db.ProyectoAutonomia) error {
+	if proyecto == nil {
+		return nil
+	}
+	fases, err := progresoService.ListPhases(strings.TrimSpace(proyecto.Slug))
+	if err != nil {
+		return err
+	}
+	for _, fase := range fases {
+		if fase == nil || !strings.EqualFold(strings.TrimSpace(fase.Nombre), "integracion") {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(fase.Estado), "completada") {
+			break
+		}
+		estado := "completada"
+		if _, err := progresoService.UpdatePhase(progresoapp.UpdatePhaseInput{
+			ID:     fase.ID,
+			Estado: &estado,
+		}); err != nil {
+			return err
+		}
+		break
+	}
+	if policy == nil || !policy.Enabled || !policy.AutoCloseProject {
+		return nil
+	}
+	terminado, _, err := proyectoTerminadoAutonomamente(proyecto)
+	if err != nil || !terminado {
+		return err
+	}
+	return persistirEstadoProyectoAutonomia(policy, db.AutonomiaProyectoCerrando)
 }
 
 func appendNotaGitMerge(prev, next string) string {

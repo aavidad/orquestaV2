@@ -1,6 +1,7 @@
 package runtimeagente
 
 import (
+	"path/filepath"
 	"strings"
 )
 
@@ -8,9 +9,27 @@ func ConectorPorDefectoAgente(agente string) string {
 	switch familiaAgente(agente) {
 	case "ollama":
 		return "ollama-cli"
+	case "claude":
+		return "claude-code"
+	case "gemini":
+		return "gemini-cli"
+	case "codex":
+		return "codex-cli"
 	default:
 		return "codex-cli"
 	}
+}
+
+func ConectorCompatibleConAgente(agente, slug, comando string) bool {
+	familia := familiaAgente(agente)
+	if familia == "" {
+		return true
+	}
+	familiaConector := familiaConector(slug, comando)
+	if familiaConector == "" {
+		return true
+	}
+	return familia == familiaConector
 }
 
 func EsConectorFamiliaOllama(slug, comando string) bool {
@@ -24,6 +43,23 @@ func EsConectorFamiliaOllama(slug, comando string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func familiaConector(slug, comando string) string {
+	slug = strings.ToLower(strings.TrimSpace(slug))
+	comandoBase := strings.ToLower(strings.TrimSpace(filepath.Base(strings.TrimSpace(comando))))
+	switch {
+	case EsConectorFamiliaOllama(slug, comando):
+		return "ollama"
+	case slug == "codex-cli", comandoBase == "codex", comandoBase == "codex-cli", strings.HasPrefix(comandoBase, "codex-perfil"):
+		return "codex"
+	case slug == "claude-code", comandoBase == "claude", comandoBase == "claude-code":
+		return "claude"
+	case slug == "gemini-cli", comandoBase == "gemini":
+		return "gemini"
+	default:
+		return ""
 	}
 }
 

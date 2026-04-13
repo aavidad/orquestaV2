@@ -12,6 +12,7 @@ import (
 
 type stubAutomationService struct {
 	autonomyCount    int
+	pipelineCount    int
 	runtimeSupCount  int
 	supervisionCount int
 	reviewCount      int
@@ -34,6 +35,7 @@ type stubAutomationService struct {
 	refinedErr       error
 	handoffErr       error
 	autonomyErr      error
+	pipelineErr      error
 	runtimeSupErr    error
 	supervisionErr   error
 	reviewErr        error
@@ -59,6 +61,9 @@ func (s *stubAutomationService) GarantizarSaludAgentes() error          { return
 func (s *stubAutomationService) PlanificarTareasAutomaticamente() error { return nil }
 func (s *stubAutomationService) ProcesarAutonomiaAgentesBatch() (int, error) {
 	return s.autonomyCount, s.autonomyErr
+}
+func (s *stubAutomationService) ProcesarPipelineLocalBatch() (int, error) {
+	return s.pipelineCount, s.pipelineErr
 }
 func (s *stubAutomationService) ProcesarPresupuestoSesionObservadoBatch() (int, error) {
 	return 0, nil
@@ -114,6 +119,7 @@ func (s *stubAutomationService) Audit(agente, accion, entidad string, entidadID 
 func TestRunnerRunControlPlaneAuditaTrabajoProcesado(t *testing.T) {
 	service := &stubAutomationService{
 		autonomyCount:    1,
+		pipelineCount:    1,
 		runtimeSupCount:  1,
 		supervisionCount: 1,
 		reviewCount:      1,
@@ -130,8 +136,8 @@ func TestRunnerRunControlPlaneAuditaTrabajoProcesado(t *testing.T) {
 	r := &Runner{Automation: service}
 	r.runControlPlane()
 
-	if len(service.audits) != 13 {
-		t.Fatalf("esperaba 13 auditorias, got=%d", len(service.audits))
+	if len(service.audits) != 14 {
+		t.Fatalf("esperaba 14 auditorias, got=%d", len(service.audits))
 	}
 }
 
@@ -187,6 +193,7 @@ func TestRunnerRunReanimacionesAuditaErrorSinMentirExito(t *testing.T) {
 func TestRunnerRunControlPlaneAuditaErrores(t *testing.T) {
 	service := &stubAutomationService{
 		autonomyErr:    assertErr("fallo autonomia"),
+		pipelineErr:    assertErr("fallo pipeline"),
 		runtimeSupErr:  assertErr("fallo runtime supervision"),
 		supervisionErr: assertErr("fallo supervision"),
 		reviewErr:      assertErr("fallo review"),
@@ -203,14 +210,15 @@ func TestRunnerRunControlPlaneAuditaErrores(t *testing.T) {
 	r := &Runner{Automation: service}
 	r.runControlPlane()
 
-	if len(service.audits) != 13 {
-		t.Fatalf("esperaba 13 auditorias de error, got=%d", len(service.audits))
+	if len(service.audits) != 14 {
+		t.Fatalf("esperaba 14 auditorias de error, got=%d", len(service.audits))
 	}
 }
 
 func TestRunnerRunControlPlaneEmiteDebug(t *testing.T) {
 	service := &stubAutomationService{
 		autonomyCount:    1,
+		pipelineCount:    2,
 		runtimeSupCount:  2,
 		supervisionCount: 2,
 		reviewCount:      3,
@@ -243,7 +251,7 @@ func TestRunnerRunControlPlaneEmiteDebug(t *testing.T) {
 		if strings.Contains(tr, "control_plane_hot transcript=%d mailbox=%d runtime_orders=%d") {
 			hasHot = true
 		}
-		if strings.Contains(tr, "control_plane_warm autonomia=%d runtime_supervision=%d supervision=%d review=%d") {
+		if strings.Contains(tr, "control_plane_warm autonomia=%d pipeline_local=%d runtime_supervision=%d supervision=%d review=%d") {
 			hasWarm = true
 		}
 		if strings.Contains(tr, "control_plane_cold handles_stale=%d orders_stale=%d runtime_hygiene=%d") {
@@ -252,6 +260,37 @@ func TestRunnerRunControlPlaneEmiteDebug(t *testing.T) {
 	}
 	if !hasHot || !hasWarm || !hasCold {
 		t.Fatalf("faltan trazas de carriles hot=%v warm=%v cold=%v: %+v", hasHot, hasWarm, hasCold, traces)
+	}
+}
+
+func TestRunnerRunControlPlaneWarmDrenaCarrilHotSiGeneraTrabajo(t *testing.T) {
+	service := &stubAutomationService{
+		autonomyCount:  1,
+		pipelineCount:  1,
+		mailboxCount:   2,
+		processedCount: 3,
+	}
+	r := &Runner{Automation: service}
+
+	r.runControlPlaneWarm()
+
+	if ch := r.batchWakeChannel("control_plane_runtime_mailbox"); ch == nil {
+		t.Fatalf("faltaba canal de wake para runtime_mailbox")
+	} else {
+		select {
+		case <-ch:
+		default:
+			t.Fatalf("warm deberia despertar runtime_mailbox cuando genera trabajo")
+		}
+	}
+	if ch := r.batchWakeChannel("control_plane_runtime_orders"); ch == nil {
+		t.Fatalf("faltaba canal de wake para runtime_orders")
+	} else {
+		select {
+		case <-ch:
+		default:
+			t.Fatalf("warm deberia despertar runtime_orders cuando genera trabajo")
+		}
 	}
 }
 

@@ -1,6 +1,11 @@
 package gitaplicacion
 
-import "orquesta/db"
+import (
+	"fmt"
+	"strings"
+
+	"orquesta/db"
+)
 
 type Store interface {
 	ListWorktrees(estado, agente string) ([]*db.Worktree, error)
@@ -58,4 +63,25 @@ func (s *Service) CreateMerge(input CreateMergeInput) (int64, error) {
 		Notas:        input.Notas,
 		MetadataJSON: input.MetadataJSON,
 	})
+}
+
+func (s *Service) ResolveActiveWorktree(proyectoSlug, agente string) (*db.Worktree, error) {
+	worktrees, err := s.store.ListWorktrees("activa", strings.TrimSpace(agente))
+	if err != nil {
+		return nil, err
+	}
+	proyectoSlug = strings.TrimSpace(proyectoSlug)
+	for _, item := range worktrees {
+		if item == nil {
+			continue
+		}
+		if proyectoSlug != "" && !strings.EqualFold(strings.TrimSpace(item.ProyectoSlug), proyectoSlug) {
+			continue
+		}
+		return item, nil
+	}
+	if proyectoSlug != "" {
+		return nil, fmt.Errorf("no existe worktree activa para agente=%s proyecto=%s", strings.TrimSpace(agente), proyectoSlug)
+	}
+	return nil, fmt.Errorf("no existe worktree activa para agente=%s", strings.TrimSpace(agente))
 }

@@ -309,6 +309,32 @@ func TestResolverConectorAgenteOllamaUsaDefaultOllama(t *testing.T) {
 	}
 }
 
+func TestResolverConectorIgnoraSesionContaminadaIncompatible(t *testing.T) {
+	prepararDBTemporalLanzamiento(t)
+
+	if _, err := db.UpsertConector(&db.Conector{
+		Slug:         "claude-code",
+		Nombre:       "Claude Code",
+		Transporte:   "cli",
+		Comando:      "claude-code",
+		MetadataJSON: `{"familia":"anthropic"}`,
+		Activo:       true,
+	}); err != nil {
+		t.Fatalf("upsert conector claude: %v", err)
+	}
+
+	conector, err := ResolverConector("Claude1", "", &db.Sesion{
+		ConectorSlug: "ollama_pool_local",
+		Herramienta:  "ollama_pool_local",
+	})
+	if err != nil {
+		t.Fatalf("ResolverConector: %v", err)
+	}
+	if conector == nil || conector.Slug != "claude-code" {
+		t.Fatalf("conector inesperado: %+v", conector)
+	}
+}
+
 func TestPrepararDesdeDatosOllamaNoPisaPoliticaResueltaConDefaultsDelConector(t *testing.T) {
 	prepararDBTemporalLanzamiento(t)
 	tmp := t.TempDir()

@@ -16,6 +16,9 @@ func init() {
 	runtimesService.SetAfterCreateRuntimeMailboxHook(func(msg *db.RuntimeMailboxMessage, mailboxID int64) {
 		wakeControlPlaneRuntimeMailbox()
 	})
+	runtimesService.SetAfterRegisterRuntimeTranscriptHook(func(entry *db.RuntimeTranscriptEntry, transcriptID int64) {
+		wakeControlPlaneRuntimeOrders()
+	})
 }
 
 func registerActiveControlPlaneRunner(runner *planocontrol.Runner) func() {
@@ -39,4 +42,12 @@ func wakeControlPlaneRuntimeMailbox() bool {
 		return false
 	}
 	return runner.WakeRuntimeMailbox()
+}
+
+func wakeControlPlaneWarm() bool {
+	runner := activeControlPlaneRunner.Load()
+	if runner == nil {
+		return false
+	}
+	return runner.WakeBatch("control_plane_warm")
 }

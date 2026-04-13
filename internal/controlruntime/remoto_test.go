@@ -184,6 +184,38 @@ func TestEnviarInstruccionRemotaNoReintentaParaEvitarDuplicados(t *testing.T) {
 	}
 }
 
+func TestEnviarInstruccionRemotaPropagaRuntimeOrderIDDesdeMetadata(t *testing.T) {
+	var body map[string]any
+	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/input" {
+			t.Fatalf("ruta inesperada: %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	meta := map[string]any{
+		"endpoint":         srv.URL,
+		"input_path":       "/input",
+		"runtime_order_id": 87,
+	}
+	metaJSON, _ := json.Marshal(meta)
+	aplicado, _, err := EnviarInstruccionProceso(ObjetivoProceso{
+		HandleKind:   "session",
+		HandleRef:    "remote-handle-1",
+		MetadataJSON: string(metaJSON),
+	}, "hola")
+	if err != nil || !aplicado {
+		t.Fatalf("send remoto: aplicado=%t err=%v", aplicado, err)
+	}
+	if got, _ := body["runtime_order_id"].(float64); int64(got) != 87 {
+		t.Fatalf("runtime_order_id inesperado en payload: %+v", body)
+	}
+}
+
 func TestArrancarPlanRemotoRespetaCapacidadesDesactivadas(t *testing.T) {
 	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

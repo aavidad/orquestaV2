@@ -94,6 +94,33 @@ func prepararDesdeDatosConWorkspace(agente *db.Agente, proyecto *db.Proyecto, co
 	if err != nil {
 		return nil, fmt.Errorf("metadata_json inválido para '%s': %w", strings.TrimSpace(conector.Slug), err)
 	}
+	conectorRuntime := runtimeagente.ConnectorConfig{
+		Slug:         strings.TrimSpace(conector.Slug),
+		Nombre:       strings.TrimSpace(conector.Nombre),
+		Transporte:   strings.TrimSpace(conector.Transporte),
+		Comando:      strings.TrimSpace(conector.Comando),
+		ArgsJSON:     strings.TrimSpace(conector.ArgsJSON),
+		EnvJSON:      strings.TrimSpace(conector.EnvJSON),
+		MetadataJSON: strings.TrimSpace(conector.MetadataJSON),
+		Activo:       conector.Activo,
+	}
+	if !runtimeagente.ModeloCompatibleConConector(conectorRuntime, modelo) {
+		modelo = ""
+		if modeloSolicitado == "" {
+			perfilTarea, modelo, razonamiento, err = runtimeagente.AplicarDefaultsConector(
+				conectorRuntime,
+				perfilSolicitado,
+				"",
+				razonamientoSolicitado,
+				perfilTarea,
+				"",
+				razonamiento,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("metadata_json inválido para '%s': %w", strings.TrimSpace(conector.Slug), err)
+			}
+		}
+	}
 	prepareRuntimeDebugf("PrepararDesdeDatos step=resolver_perfil duration=%s", time.Since(stepStart).Round(time.Millisecond))
 
 	stepStart = time.Now()
@@ -136,16 +163,7 @@ func prepararDesdeDatosConWorkspace(agente *db.Agente, proyecto *db.Proyecto, co
 		Modelo:       strings.TrimSpace(modelo),
 		Razonamiento: strings.TrimSpace(razonamiento),
 		PerfilTarea:  strings.TrimSpace(perfilTarea),
-		Conector: runtimeagente.ConnectorConfig{
-			Slug:         strings.TrimSpace(conector.Slug),
-			Nombre:       strings.TrimSpace(conector.Nombre),
-			Transporte:   strings.TrimSpace(conector.Transporte),
-			Comando:      strings.TrimSpace(conector.Comando),
-			ArgsJSON:     strings.TrimSpace(conector.ArgsJSON),
-			EnvJSON:      strings.TrimSpace(conector.EnvJSON),
-			MetadataJSON: strings.TrimSpace(conector.MetadataJSON),
-			Activo:       conector.Activo,
-		},
+		Conector: conectorRuntime,
 		Resume: resume,
 	}
 	stepStart = time.Now()
@@ -260,9 +278,11 @@ func strPtr(v string) *string {
 func ResolverConector(agente, conectorRef string, ultima *db.Sesion) (*db.Conector, error) {
 	ref := strings.TrimSpace(conectorRef)
 	if ref == "" && ultima != nil {
-		if strings.TrimSpace(ultima.ConectorSlug) != "" {
+		if strings.TrimSpace(ultima.ConectorSlug) != "" &&
+			runtimeagente.ConectorCompatibleConAgente(agente, strings.TrimSpace(ultima.ConectorSlug), "") {
 			ref = strings.TrimSpace(ultima.ConectorSlug)
-		} else if ultima.ConectorID != nil && *ultima.ConectorID > 0 {
+		} else if ultima.ConectorID != nil && *ultima.ConectorID > 0 &&
+			runtimeagente.ConectorCompatibleConAgente(agente, "", strings.TrimSpace(ultima.Herramienta)) {
 			ref = fmt.Sprintf("%d", *ultima.ConectorID)
 		}
 	}

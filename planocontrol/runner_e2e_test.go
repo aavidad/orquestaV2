@@ -31,6 +31,9 @@ func (dbAutomationServiceTest) ProcesarPresupuestoSesionObservadoBatch() (int, e
 func (dbAutomationServiceTest) ProcesarAutonomiaAgentesBatch() (int, error) {
 	return 0, nil
 }
+func (dbAutomationServiceTest) ProcesarPipelineLocalBatch() (int, error) {
+	return 0, nil
+}
 func (dbAutomationServiceTest) ProcesarRuntimeSupervisionBatch() (int, error) {
 	return db.ProcesarRuntimeSupervisionBatch()
 }

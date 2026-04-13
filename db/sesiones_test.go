@@ -82,6 +82,29 @@ func TestRegistrarAgenteAutoUsaPrefijoCanonicoSegunProveedor(t *testing.T) {
 	}
 }
 
+func TestRegistrarAgenteRehabilitaExistenteRetirado(t *testing.T) {
+	prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente inicial: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET habilitado=0 WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("retirar manualmente agente: %v", err)
+	}
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("RegistrarAgente rehabilitando: %v", err)
+	}
+
+	var habilitado int
+	if err := DB.QueryRow(`SELECT habilitado FROM agentes WHERE nombre='Codex1'`).Scan(&habilitado); err != nil {
+		t.Fatalf("leer habilitado: %v", err)
+	}
+	if habilitado != 1 {
+		t.Fatalf("el agente deberia quedar rehabilitado, got=%d", habilitado)
+	}
+}
+
 func TestIniciarSesionContextoAsignaPoolCanonicoParaOllamaPoolLocal(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

@@ -219,6 +219,30 @@ func (s *Service) GetActiveSession(agente, proyectoRef string) (*Sesion, error) 
 	return s.store.GetActiveSession(strings.TrimSpace(agente), proyectoID)
 }
 
+func (s *Service) FindActiveSessionByExternalSessionID(externalSessionID string) (*Sesion, error) {
+	externalSessionID = strings.TrimSpace(externalSessionID)
+	if externalSessionID == "" {
+		return nil, fmt.Errorf("external_session_id obligatorio")
+	}
+	activa := true
+	sesiones, err := s.store.ListInspectionSessions(FiltroInspeccion{Activa: &activa, Limit: 200})
+	if err != nil {
+		return nil, err
+	}
+	for _, sesion := range sesiones {
+		if sesion == nil {
+			continue
+		}
+		if !sesion.Activa {
+			continue
+		}
+		if strings.TrimSpace(sesion.ExternalSessionID) == externalSessionID {
+			return sesion, nil
+		}
+	}
+	return nil, sql.ErrNoRows
+}
+
 func (s *Service) ResolveBudgetSession(sesionID int64, agente string) (*Sesion, error) {
 	if sesionID > 0 {
 		return s.store.GetSessionByID(sesionID)
@@ -430,4 +454,3 @@ func parseWorkflowSteps(raw string) []string {
 	}
 	return pasos
 }
-

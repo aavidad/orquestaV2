@@ -11,10 +11,60 @@ type fakeRepositorio struct {
 	byID        map[int64]*EspecificacionFuncion
 }
 
+type fakeEscritorArchivos struct {
+	raiz     string
+	archivos []ArchivoEntrega
+}
+
+func (f *fakeEscritorArchivos) Escribir(raizProyecto string, archivos []ArchivoEntrega) ([]string, error) {
+	f.raiz = raizProyecto
+	f.archivos = append([]ArchivoEntrega(nil), archivos...)
+	rutas := make([]string, 0, len(archivos))
+	for _, archivo := range archivos {
+		rutas = append(rutas, archivo.RutaRelativa)
+	}
+	return rutas, nil
+}
+
 type fakeDespachador struct {
 	lastSolicitud *SolicitudDespachoMicrotarea
 	resultado     *MicrotareaDespachada
 	err           error
+}
+
+type fakeRecolectorEntregaGit struct {
+	entradaAgente      string
+	entradaProyectoID  *int64
+	entradaProyectoSlug string
+	resultado          *EntregaGitCapturada
+	err                error
+}
+
+func (f *fakeRecolectorEntregaGit) CapturarEntregaGit(agente string, proyectoID *int64, proyectoSlug string) (*EntregaGitCapturada, error) {
+	f.entradaAgente = agente
+	f.entradaProyectoID = proyectoID
+	f.entradaProyectoSlug = proyectoSlug
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.resultado, nil
+}
+
+type fakeIntegradorGit struct {
+	entrada SolicitudMergeMicroprogramacion
+	id      int64
+	err     error
+}
+
+func (f *fakeIntegradorGit) RegistrarSolicitudMerge(entrada SolicitudMergeMicroprogramacion) (int64, error) {
+	f.entrada = entrada
+	if f.err != nil {
+		return 0, f.err
+	}
+	if f.id == 0 {
+		f.id = 81
+	}
+	return f.id, nil
 }
 
 func (f *fakeRepositorio) CrearEspecificacionFuncion(spec *EspecificacionFuncion) (int64, error) {
@@ -174,6 +224,36 @@ func TestServicioEmitirConstruyeMicrotareaCerrada(t *testing.T) {
 	}
 }
 
+func TestServicioEmitirConstruyeMicrotareaGitWorktree(t *testing.T) {
+	repo := &fakeRepositorio{
+		byID: map[int64]*EspecificacionFuncion{
+			32: {
+				ID:                32,
+				Titulo:            "microprogramacionapp/service.go::RegistrarEntregaGit",
+				ArchivoObjetivo:   "microprogramacionapp/service.go",
+				SimboloObjetivo:   "RegistrarEntregaGit",
+				Descripcion:       "Registrar la entrega canonica por git",
+				TestsObligatorios: []string{"go test ./microprogramacionapp -run TestServicioRegistrarEntregaGitValidaWriteSetYRegistraMerge -count=1"},
+				WriteSet:          []string{"microprogramacionapp/service.go", "microprogramacionapp/service_test.go"},
+				FormatoSalida:     "git_worktree+evidencia",
+			},
+		},
+	}
+	service := NewService(repo)
+	salida, err := service.Emitir(32, EntradaEmitirMicrotarea{})
+	if err != nil {
+		t.Fatalf("Emitir: %v", err)
+	}
+	for _, token := range []string{
+		"ENTREGA_GIT: trabaja dentro de tu worktree activa",
+		"RESPUESTA_ESPERADA: resume breve, tests ejecutados y estado del diff/branch",
+	} {
+		if !strings.Contains(salida.Mensaje, token) {
+			t.Fatalf("mensaje sin %q:\n%s", token, salida.Mensaje)
+		}
+	}
+}
+
 func TestServicioEmitirYDespacharUsaDespachadorCanonico(t *testing.T) {
 	proyectoID := int64(99)
 	repo := &fakeRepositorio{
@@ -325,6 +405,211 @@ func TestServicioValidarEntregaDetectaDeriva(t *testing.T) {
 		if !containsHallazgoCode(resultado.Hallazgos, code) {
 			t.Fatalf("faltaba hallazgo %q en %+v", code, resultado.Hallazgos)
 		}
+	}
+}
+
+func TestServicioMaterializarEntregaValidaWriteSetYArchivoObjetivo(t *testing.T) {
+	repo := &fakeRepositorio{
+		byID: map[int64]*EspecificacionFuncion{
+			71: {
+				ID:              71,
+				ArchivoObjetivo: "microprogramacionapp/service.go",
+				SimboloObjetivo: "ResolveControlHandle",
+				WriteSet:        []string{"microprogramacionapp/service.go", "microprogramacionapp/service_test.go"},
+			},
+		},
+	}
+	escritor := &fakeEscritorArchivos{}
+	service := NewService(repo)
+	service.SetEscritorArchivos(escritor)
+
+	resultado, err := service.MaterializarEntrega(71, EntradaMaterializarEntrega{
+		RaizProyecto: "/tmp/demo",
+		Evidencia:    "transcript#123",
+		Archivos: []ArchivoEntrega{
+			{RutaRelativa: "microprogramacionapp/service.go", Contenido: "package microprogramacionapp\n\nfunc ResolveControlHandle() {}\n"},
+			{RutaRelativa: "microprogramacionapp/service_test.go", Contenido: "package microprogramacionapp\n"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("MaterializarEntrega: %v", err)
+	}
+	if resultado == nil || len(resultado.ArchivosMaterializados) != 2 {
+		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+	if escritor.raiz != "/tmp/demo" || len(escritor.archivos) != 2 {
+		t.Fatalf("escritor inesperado: raiz=%q archivos=%+v", escritor.raiz, escritor.archivos)
+	}
+}
+
+func TestServicioMaterializarEntregaRechazaFueraDeWriteSet(t *testing.T) {
+	repo := &fakeRepositorio{
+		byID: map[int64]*EspecificacionFuncion{
+			72: {
+				ID:              72,
+				ArchivoObjetivo: "microprogramacionapp/service.go",
+				WriteSet:        []string{"microprogramacionapp/service.go"},
+			},
+		},
+	}
+	service := NewService(repo)
+	service.SetEscritorArchivos(&fakeEscritorArchivos{})
+
+	_, err := service.MaterializarEntrega(72, EntradaMaterializarEntrega{
+		RaizProyecto: "/tmp/demo",
+		Evidencia:    "transcript#124",
+		Archivos: []ArchivoEntrega{
+			{RutaRelativa: "cmd/api.go", Contenido: "package cmd\n"},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "fuera del write_set") {
+		t.Fatalf("se esperaba rechazo por write_set, got=%v", err)
+	}
+}
+
+func TestServicioMaterializarEntregaRechazaGoInvalido(t *testing.T) {
+	repo := &fakeRepositorio{
+		byID: map[int64]*EspecificacionFuncion{
+			73: {
+				ID:              73,
+				ArchivoObjetivo: "microprogramacionapp/service.go",
+				SimboloObjetivo: "ResolveControlHandle",
+				WriteSet:        []string{"microprogramacionapp/service.go"},
+			},
+		},
+	}
+	escritor := &fakeEscritorArchivos{}
+	service := NewService(repo)
+	service.SetEscritorArchivos(escritor)
+
+	_, err := service.MaterializarEntrega(73, EntradaMaterializarEntrega{
+		RaizProyecto: "/tmp/demo",
+		Evidencia:    "transcript#125",
+		Archivos: []ArchivoEntrega{
+			{RutaRelativa: "microprogramacionapp/service.go", Contenido: "package microprogramacionapp\n\nfunc ResolveControlHandle( {}\n"},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "contenido go invalido") {
+		t.Fatalf("se esperaba rechazo por sintaxis Go, got=%v", err)
+	}
+	if len(escritor.archivos) != 0 {
+		t.Fatalf("no deberia escribir archivos invalidos: %+v", escritor.archivos)
+	}
+}
+
+func TestServicioMaterializarEntregaRechazaSiFaltaSimboloObjetivo(t *testing.T) {
+	repo := &fakeRepositorio{
+		byID: map[int64]*EspecificacionFuncion{
+			74: {
+				ID:              74,
+				ArchivoObjetivo: "microprogramacionapp/service.go",
+				SimboloObjetivo: "ResolveControlHandle",
+				WriteSet:        []string{"microprogramacionapp/service.go"},
+			},
+		},
+	}
+	escritor := &fakeEscritorArchivos{}
+	service := NewService(repo)
+	service.SetEscritorArchivos(escritor)
+
+	_, err := service.MaterializarEntrega(74, EntradaMaterializarEntrega{
+		RaizProyecto: "/tmp/demo",
+		Evidencia:    "transcript#126",
+		Archivos: []ArchivoEntrega{
+			{RutaRelativa: "microprogramacionapp/service.go", Contenido: "package microprogramacionapp\n\ntype Otro struct{}\n"},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "no declara el simbolo") {
+		t.Fatalf("se esperaba rechazo por simbolo ausente, got=%v", err)
+	}
+	if len(escritor.archivos) != 0 {
+		t.Fatalf("no deberia escribir archivos sin simbolo objetivo: %+v", escritor.archivos)
+	}
+}
+
+func TestServicioRegistrarEntregaGitValidaWriteSetYRegistraMerge(t *testing.T) {
+	proyectoID := int64(22)
+	repo := &fakeRepositorio{
+		byID: map[int64]*EspecificacionFuncion{
+			91: {
+				ID:                91,
+				ProyectoID:        &proyectoID,
+				ArchivoObjetivo:   "microprogramacionapp/service.go",
+				SimboloObjetivo:   "RegistrarEntregaGit",
+				WriteSet:          []string{"microprogramacionapp/service.go", "microprogramacionapp/service_test.go"},
+				TestsObligatorios: []string{"go test ./microprogramacionapp -run TestServicioRegistrarEntregaGitValidaWriteSetYRegistraMerge -count=1"},
+			},
+		},
+	}
+	recolector := &fakeRecolectorEntregaGit{
+		resultado: &EntregaGitCapturada{
+			ProyectoSlug:       "orquestador",
+			WorktreeID:         14,
+			RutaWorktree:       "/tmp/wt-gemma1",
+			Branch:             "orq/orquestador/gemma1/t91",
+			BaseRef:            "origin/main",
+			HeadCommit:         "abc123",
+			ArchivosModificados: []string{"microprogramacionapp/service.go"},
+			Diff:               "diff --git a/microprogramacionapp/service.go b/microprogramacionapp/service.go",
+		},
+	}
+	integrador := &fakeIntegradorGit{}
+	service := NewService(repo)
+	service.SetRecolectorEntregaGit(recolector)
+	service.SetIntegradorGit(integrador)
+
+	resultado, err := service.RegistrarEntregaGit(91, EntradaRegistrarEntregaGit{
+		Agente:       "Gemma1",
+		ProyectoID:   &proyectoID,
+		ProyectoSlug: "orquestador",
+		SolicitadoPor: "orquesta",
+		Evidencia:    "go test ./microprogramacionapp ... => ok",
+	})
+	if err != nil {
+		t.Fatalf("RegistrarEntregaGit: %v", err)
+	}
+	if resultado == nil || resultado.GitMergeID != 81 {
+		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+	if integrador.entrada.TargetBranch != "main" {
+		t.Fatalf("target branch inesperada: %+v", integrador.entrada)
+	}
+	if integrador.entrada.SourceBranch != "orq/orquestador/gemma1/t91" {
+		t.Fatalf("source branch inesperada: %+v", integrador.entrada)
+	}
+	if !strings.Contains(integrador.entrada.MetadataJSON, `"especificacion_id":91`) {
+		t.Fatalf("metadata sin especificacion: %s", integrador.entrada.MetadataJSON)
+	}
+}
+
+func TestServicioRegistrarEntregaGitRechazaFueraDeWriteSet(t *testing.T) {
+	repo := &fakeRepositorio{
+		byID: map[int64]*EspecificacionFuncion{
+			92: {
+				ID:              92,
+				ArchivoObjetivo: "microprogramacionapp/service.go",
+				SimboloObjetivo: "RegistrarEntregaGit",
+				WriteSet:        []string{"microprogramacionapp/service.go"},
+			},
+		},
+	}
+	recolector := &fakeRecolectorEntregaGit{
+		resultado: &EntregaGitCapturada{
+			ProyectoSlug:       "orquestador",
+			WorktreeID:         14,
+			RutaWorktree:       "/tmp/wt-gemma1",
+			Branch:             "orq/orquestador/gemma1/t92",
+			BaseRef:            "main",
+			HeadCommit:         "abc123",
+			ArchivosModificados: []string{"cmd/api.go"},
+		},
+	}
+	service := NewService(repo)
+	service.SetRecolectorEntregaGit(recolector)
+	service.SetIntegradorGit(&fakeIntegradorGit{})
+
+	if _, err := service.RegistrarEntregaGit(92, EntradaRegistrarEntregaGit{Agente: "Gemma1", ProyectoSlug: "orquestador"}); err == nil {
+		t.Fatal("debería rechazar entrega git fuera de write_set")
 	}
 }
 

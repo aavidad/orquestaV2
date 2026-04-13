@@ -15,6 +15,25 @@ import (
 	"time"
 )
 
+func boolFromAny(v any) bool {
+	if v == nil {
+		return false
+	}
+	switch val := v.(type) {
+	case bool:
+		return val
+	case string:
+		return strings.ToLower(val) == "true" || val == "1"
+	case int:
+		return val != 0
+	case int64:
+		return val != 0
+	case float64:
+		return val != 0
+	}
+	return false
+}
+
 type RuntimeHandle struct {
 	ID               int64      `json:"id"`
 	Agente           string     `json:"agente"`
@@ -3127,21 +3146,17 @@ func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
 			}
 			idleLimit := time.Duration(configIntOrDefault("runtime_autonomo_idle_timeout_seconds", 300)) * time.Second
 			if time.Since(*lastSeen) > idleLimit {
-				if abierta, _ := existeRuntimeOrderAbiertaAgenteProyecto(strings.TrimSpace(handle.Agente), handle.ProyectoID, 0, "stop"); abierta {
-					continue
-				}
 				order := &RuntimeOrder{
-					Agente:     strings.TrimSpace(handle.Agente),
-					ProyectoID: handle.ProyectoID,
-					Prompt:     "stop",
-					Reason:     "higiene_autonoma:tarea_finalizada",
-					Source:     "server",
-					State:      "pending",
+					Agente:      strings.TrimSpace(handle.Agente),
+					ProyectoID:  handle.ProyectoID,
+					Tipo:        "stop",
+					PayloadJSON: `{"reason": "higiene_autonoma:tarea_finalizada", "source": "server"}`,
+					Estado:      "pending",
 				}
-				if _, err := RegistrarRuntimeOrder(order); err != nil {
+				if _, err := EncolarRuntimeOrder(order); err != nil {
 					return processed, err
 				}
-				Audit("server", "runtime_higiene_autonomo_stop_encolado", "handle", handle.ID, "tarea", tareaID, "agente", handle.Agente)
+				Audit("server", "runtime_higiene_autonomo_stop_encolado", "handle", handle.ID, "agente: "+handle.Agente)
 				processed++
 			}
 		}
@@ -8192,7 +8207,8 @@ func timeoutParaArranqueDurable(order *RuntimeOrder) time.Duration {
 	if order == nil {
 		return 0
 	}
-	por := strings.ToLower(strings.TrimSpace(order.Por))
+	payload := mapFromJSON(order.PayloadJSON)
+	por := strings.ToLower(strings.TrimSpace(stringFromMap(payload, "por", "")))
 	if por == "orquesta" || por == "sistema" || por == "autonomia" {
 		// En orchestración autónoma, no bloqueamos el runner esperando el Ready del prompt.
 		// El buzón ya estará lleno y el agente lo consumirá en cuanto esté listo.

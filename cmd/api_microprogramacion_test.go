@@ -203,6 +203,9 @@ func TestAPIMicroprogramacionDespacharCreaRuntimeOrder(t *testing.T) {
 	if !strings.Contains(orden.PayloadJSON, `"source":"microprogramacion"`) || !strings.Contains(orden.PayloadJSON, `"especificacion_id":`) {
 		t.Fatalf("payload sin trazabilidad microprogramada: %s", orden.PayloadJSON)
 	}
+	if !strings.Contains(rec.Body.String(), `"runtime_order_id":`) || strings.Contains(rec.Body.String(), `"RuntimeOrderID"`) {
+		t.Fatalf("respuesta API sin contrato snake_case: %s", rec.Body.String())
+	}
 }
 
 func TestAPIMicroprogramacionValidarEntregaDevuelveHallazgos(t *testing.T) {

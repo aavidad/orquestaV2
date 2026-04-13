@@ -13,20 +13,7 @@ import (
 // Busca agentes planificables y les asigna tareas libres de sus proyectos activos,
 // además de liberar tareas del backlog cuyas dependencias ya se han cumplido.
 func PlanificarTareasAutomaticamente() error {
-	// 1. Liberar tareas del backlog que ya no tienen dependencias pendientes
-	if err := liberarBacklog(); err != nil {
-		return err
-	}
-
-	// 1.a Liberar tareas no iniciadas retenidas por agentes pausados por cuota
-	// para que el planificador pueda redistribuirlas sin tocar trabajo en progreso.
-	if err := reconciliarTareasAsignadasPorCuota(); err != nil {
-		return err
-	}
-
-	// 1.b Recuperar tareas huérfanas que siguen asignadas a agentes sin
-	// continuidad viva ni runtime activo para ese proyecto.
-	if err := reconciliarTareasHuerfanas(); err != nil {
+	if err := PrepararPlanificacionAutomatica(); err != nil {
 		return err
 	}
 
@@ -44,6 +31,30 @@ func PlanificarTareasAutomaticamente() error {
 		}
 	}
 
+	return nil
+}
+
+// PrepararPlanificacionAutomatica deja el estado del backlog y de las tareas
+// asignadas listo para un scheduler superior, sin autoasignar trabajo nuevo a
+// agentes concretos. Se usa en el loop determinista de Orquesta para convivir
+// con el pipeline nuevo sin duplicar asignaciones legacy.
+func PrepararPlanificacionAutomatica() error {
+	// 1. Liberar tareas del backlog que ya no tienen dependencias pendientes
+	if err := liberarBacklog(); err != nil {
+		return err
+	}
+
+	// 1.a Liberar tareas no iniciadas retenidas por agentes pausados por cuota
+	// para que el planificador pueda redistribuirlas sin tocar trabajo en progreso.
+	if err := reconciliarTareasAsignadasPorCuota(); err != nil {
+		return err
+	}
+
+	// 1.b Recuperar tareas huérfanas que siguen asignadas a agentes sin
+	// continuidad viva ni runtime activo para ese proyecto.
+	if err := reconciliarTareasHuerfanas(); err != nil {
+		return err
+	}
 	return nil
 }
 

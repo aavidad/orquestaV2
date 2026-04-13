@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"orquesta/capacidadapp"
 	"orquesta/db"
 	"orquesta/internal/rpclocal"
 	"orquesta/propuestasapp"
@@ -289,6 +290,44 @@ func renderStatusSummary(ctx *statusContext) {
 		}
 	}
 	fmt.Println()
+
+	if len(resumen.PoolsLocales) > 0 {
+		fmt.Printf("🧠 Pools locales compartidos:\n")
+		for _, pool := range resumen.PoolsLocales {
+			if pool == nil {
+				continue
+			}
+			modelo := strings.TrimSpace(pool.ModeloPreferente)
+			if modelo == "" {
+				modelo = "—"
+			}
+			slotsActivos := 0
+			ready := 0
+			working := 0
+			failed := 0
+			if pool.Telemetria != nil {
+				slotsActivos = pool.Telemetria.SlotsActivos
+				ready = pool.Telemetria.SesionesReady
+				working = pool.Telemetria.SesionesWorking
+				failed = pool.Telemetria.SesionesFailed
+			}
+			fmt.Printf("   %-18s modelo %-18s slots %d/%d · ready %d · working %d", pool.PoolSlug, modelo, slotsActivos, pool.SlotsMaximos, ready, working)
+			if failed > 0 {
+				fmt.Printf(" · failed %d", failed)
+			}
+			fmt.Println()
+		}
+		fmt.Println()
+	}
+
+	if resumen.DeudaDispatch.Total > 0 {
+		fmt.Printf("📮 Dispatch durable: %d total · pending %d · notified %d · failed %d\n\n",
+			resumen.DeudaDispatch.Total,
+			resumen.DeudaDispatch.Pendientes,
+			resumen.DeudaDispatch.Notificadas,
+			resumen.DeudaDispatch.Fallidas,
+		)
+	}
 
 	totalTareas := 0
 	completadasN := 0
@@ -813,21 +852,23 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		return nil, err
 	}
 	var payload struct {
-		Generado                 string          `json:"generado"`
-		TareasPorEstado          map[string]int  `json:"tareasPorEstado"`
-		AgentesActivos           []*db.Agente    `json:"agentesActivos"`
-		AgentesTrabajando        []*db.Agente    `json:"agentesTrabajando"`
-		AgentesSaturados         []*db.Agente    `json:"agentesSaturados"`
-		AgentesAtascados         []*db.Agente    `json:"agentesAtascados"`
-		AgentesAuthManual        []*db.Agente    `json:"agentesAuthManual"`
-		AgentesQuotaBlocked      []*db.Agente    `json:"agentesQuotaBlocked"`
-		PropuestasAbiertas       []propuestaLite `json:"propuestasAbiertas"`
-		TareasActivas            []tareaLite     `json:"tareasActivas"`
-		TareasEnProgreso         []tareaLite     `json:"tareasEnProgreso"`
-		TareasReservadas         []tareaLite     `json:"tareasReservadas"`
-		AgentesCompat            []*db.Agente    `json:"agentes"`
-		ConteoTareasCompat       map[string]int  `json:"conteo_tareas"`
-		PropuestasCompatAbiertas []*db.Propuesta `json:"propuestas_abiertas"`
+		Generado                 string                              `json:"generado"`
+		TareasPorEstado          map[string]int                      `json:"tareasPorEstado"`
+		AgentesActivos           []*db.Agente                        `json:"agentesActivos"`
+		AgentesTrabajando        []*db.Agente                        `json:"agentesTrabajando"`
+		AgentesSaturados         []*db.Agente                        `json:"agentesSaturados"`
+		AgentesAtascados         []*db.Agente                        `json:"agentesAtascados"`
+		AgentesAuthManual        []*db.Agente                        `json:"agentesAuthManual"`
+		AgentesQuotaBlocked      []*db.Agente                        `json:"agentesQuotaBlocked"`
+		PropuestasAbiertas       []propuestaLite                     `json:"propuestasAbiertas"`
+		TareasActivas            []tareaLite                         `json:"tareasActivas"`
+		TareasEnProgreso         []tareaLite                         `json:"tareasEnProgreso"`
+		TareasReservadas         []tareaLite                         `json:"tareasReservadas"`
+		PoolsLocales             []*capacidadapp.PoolLocalCompartido `json:"poolsLocales"`
+		DeudaDispatch            deudaDispatchResumen                `json:"deudaDispatch"`
+		AgentesCompat            []*db.Agente                        `json:"agentes"`
+		ConteoTareasCompat       map[string]int                      `json:"conteo_tareas"`
+		PropuestasCompatAbiertas []*db.Propuesta                     `json:"propuestas_abiertas"`
 	}
 	if err := json.Unmarshal([]byte(body), &payload); err != nil {
 		return nil, err
@@ -850,6 +891,8 @@ func fetchServerStatus(baseURL string) (*estadoResumen, error) {
 		TareasActivas:       payload.TareasActivas,
 		TareasEnProgreso:    payload.TareasEnProgreso,
 		TareasReservadas:    payload.TareasReservadas,
+		PoolsLocales:        payload.PoolsLocales,
+		DeudaDispatch:       payload.DeudaDispatch,
 	}
 	if len(resumen.TareasPorEstado) == 0 {
 		resumen.TareasPorEstado = payload.ConteoTareasCompat

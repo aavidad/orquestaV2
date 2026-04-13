@@ -45,25 +45,27 @@ type apiErrorResponse struct {
 }
 
 type apiStatusResponse struct {
-	Agentes             []*db.Agente    `json:"agentes"`
-	ConteoTareas        map[string]int  `json:"conteo_tareas"`
-	ResumenTareas       map[string]int  `json:"resumenTareas,omitempty"`
-	Proyectos           []*db.Proyecto  `json:"proyectos"`
-	AsignacionesActivas map[int64]int   `json:"asignaciones_activas"`
-	SesionesActivas     map[int64]int   `json:"sesiones_activas"`
-	PropuestasAbiertas  []*db.Propuesta `json:"propuestas_abiertas"`
-	Generado            string          `json:"generado,omitempty"`
-	TareasPorEstado     map[string]int  `json:"tareasPorEstado,omitempty"`
-	AgentesActivos      []*db.Agente    `json:"agentesActivos,omitempty"`
-	AgentesTrabajando   []*db.Agente    `json:"agentesTrabajando,omitempty"`
-	AgentesSaturados    []*db.Agente    `json:"agentesSaturados,omitempty"`
-	AgentesAtascados    []*db.Agente    `json:"agentesAtascados,omitempty"`
-	AgentesAuthManual   []*db.Agente    `json:"agentesAuthManual,omitempty"`
-	AgentesQuotaBlocked []*db.Agente    `json:"agentesQuotaBlocked,omitempty"`
-	PropuestasResumen   []propuestaLite `json:"propuestasAbiertas,omitempty"`
-	TareasActivas       []tareaLite     `json:"tareasActivas,omitempty"`
-	TareasEnProgreso    []tareaLite     `json:"tareasEnProgreso,omitempty"`
-	TareasReservadas    []tareaLite     `json:"tareasReservadas,omitempty"`
+	Agentes             []*db.Agente                        `json:"agentes"`
+	ConteoTareas        map[string]int                      `json:"conteo_tareas"`
+	ResumenTareas       map[string]int                      `json:"resumenTareas,omitempty"`
+	Proyectos           []*db.Proyecto                      `json:"proyectos"`
+	AsignacionesActivas map[int64]int                       `json:"asignaciones_activas"`
+	SesionesActivas     map[int64]int                       `json:"sesiones_activas"`
+	PropuestasAbiertas  []*db.Propuesta                     `json:"propuestas_abiertas"`
+	Generado            string                              `json:"generado,omitempty"`
+	TareasPorEstado     map[string]int                      `json:"tareasPorEstado,omitempty"`
+	AgentesActivos      []*db.Agente                        `json:"agentesActivos,omitempty"`
+	AgentesTrabajando   []*db.Agente                        `json:"agentesTrabajando,omitempty"`
+	AgentesSaturados    []*db.Agente                        `json:"agentesSaturados,omitempty"`
+	AgentesAtascados    []*db.Agente                        `json:"agentesAtascados,omitempty"`
+	AgentesAuthManual   []*db.Agente                        `json:"agentesAuthManual,omitempty"`
+	AgentesQuotaBlocked []*db.Agente                        `json:"agentesQuotaBlocked,omitempty"`
+	PropuestasResumen   []propuestaLite                     `json:"propuestasAbiertas,omitempty"`
+	TareasActivas       []tareaLite                         `json:"tareasActivas,omitempty"`
+	TareasEnProgreso    []tareaLite                         `json:"tareasEnProgreso,omitempty"`
+	TareasReservadas    []tareaLite                         `json:"tareasReservadas,omitempty"`
+	PoolsLocales        []*capacidadapp.PoolLocalCompartido `json:"poolsLocales,omitempty"`
+	DeudaDispatch       deudaDispatchResumen                `json:"deudaDispatch,omitempty"`
 }
 
 type apiProyectoOverviewResponse struct {
@@ -118,6 +120,21 @@ type apiProyectoAutonomiaSaveRequest struct {
 type apiProyectoAutonomiaResponse struct {
 	Policy *db.ProyectoAutonomia `json:"policy"`
 	Cycles []*db.AutonomiaCiclo  `json:"cycles,omitempty"`
+}
+
+type apiProyectoMicrocicloRequest struct {
+	Agente               string `json:"agente"`
+	ObjetivoGeneral      string `json:"objetivo_general"`
+	DefinitionOfDoneJSON string `json:"definition_of_done_json"`
+	Titulo               string `json:"titulo"`
+	Descripcion          string `json:"descripcion"`
+	Modulo               string `json:"modulo"`
+	Notas                string `json:"notas"`
+	LimpiarPruebas       bool   `json:"limpiar_pruebas"`
+}
+
+type apiProyectoMicrocicloResponse struct {
+	Resultado *proyectoMicrocicloResult `json:"resultado"`
 }
 
 type apiReviewGateCreateRequest struct {
@@ -253,6 +270,17 @@ type apiTareaAccionRequest struct {
 	Resolucion  string `json:"resolucion"`
 	Nota        string `json:"nota"`
 	NuevoAgente string `json:"nuevo_agente"`
+}
+
+type apiTareaLimpiarFrenteRequest struct {
+	Agente   string  `json:"agente"`
+	Proyecto string  `json:"proyecto"`
+	KeepIDs  []int64 `json:"keep_ids"`
+}
+
+type apiTareaLimpiarFrenteResponse struct {
+	OK        bool                              `json:"ok"`
+	Resultado *tareasapp.CleanActiveFrontResult `json:"resultado"`
 }
 
 type apiProgresoFaseRegistrarRequest struct {
@@ -500,6 +528,32 @@ type apiRuntimeMailboxCreateRequest struct {
 	Payload        string `json:"payload"`
 }
 
+type apiRuntimeWakeRequest struct {
+	Orders  bool `json:"orders"`
+	Mailbox bool `json:"mailbox"`
+	Warm    bool `json:"warm"`
+}
+
+type apiRuntimeWakeResponse struct {
+	Orders  bool `json:"orders"`
+	Mailbox bool `json:"mailbox"`
+	Warm    bool `json:"warm"`
+}
+
+type apiRuntimeMailboxClearRequest struct {
+	ToAgente   string   `json:"to_agente"`
+	FromAgente string   `json:"from_agente"`
+	Proyecto   string   `json:"proyecto"`
+	Estados    []string `json:"estados"`
+	Kinds      []string `json:"kinds"`
+}
+
+type apiRuntimeMailboxClearResponse struct {
+	OK         bool    `json:"ok"`
+	Cleared    int     `json:"cleared"`
+	ClearedIDs []int64 `json:"cleared_ids"`
+}
+
 type apiRuntimeCheckpointCreateRequest struct {
 	Agente         string `json:"agente"`
 	Proyecto       string `json:"proyecto"`
@@ -645,6 +699,12 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/politicas-modelo", apiHandlerPoliticasModelo)
 	mux.HandleFunc("/api/politicas-modelo/seed-inicial", apiHandlerPoliticasModeloSeedInicial)
 	mux.HandleFunc("/api/modelo/resolver", apiHandlerModeloResolver)
+	mux.HandleFunc("/api/modelo/pipeline-local", apiHandlerModeloPipelineLocal)
+	mux.HandleFunc("/api/modelo/pipeline-local/paso", apiHandlerModeloPipelineLocalPaso)
+	mux.HandleFunc("/api/modelo/pipeline-local/ejecutar", apiHandlerModeloPipelineLocalEjecutar)
+	mux.HandleFunc("/api/modelo/pipeline-local/despachar", apiHandlerModeloPipelineLocalDespachar)
+	mux.HandleFunc("/api/modelo/runtime-activos", apiHandlerModeloRuntimeActivos)
+	mux.HandleFunc("/api/modelo/runtime-descargar", apiHandlerModeloRuntimeDescargar)
 	mux.HandleFunc("/api/progreso", apiHandlerProgreso)
 	mux.HandleFunc("/api/progreso/fases", apiHandlerProgresoFases)
 	mux.HandleFunc("/api/progreso/fases/", apiRouterProgresoFases)
@@ -676,10 +736,12 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtime-transcript", apiHandlerRuntimeTranscript)
 	mux.HandleFunc("/api/runtime-orders", apiHandlerRuntimeOrders)
 	mux.HandleFunc("/api/runtime-mailbox", apiHandlerRuntimeMailbox)
+	mux.HandleFunc("/api/runtime-mailbox/limpiar", apiHandlerRuntimeMailboxClear)
 	mux.HandleFunc("/api/runtime-mailbox/", apiRouterRuntimeMailbox)
 	mux.HandleFunc("/api/runtime-checkpoints", apiHandlerRuntimeCheckpoints)
 	mux.HandleFunc("/api/runtime-checkpoints/latest", apiHandlerRuntimeCheckpointLatest)
 	mux.HandleFunc("/api/runtime-checkpoints/", apiRouterRuntimeCheckpoints)
+	mux.HandleFunc("/api/runtime/wake", apiHandlerRuntimeWake)
 	mux.HandleFunc("/api/runtime/ollama-pool/launch", apiHandlerOllamaPoolLaunch)
 	mux.HandleFunc("/api/runtime/ollama-pool/input", apiHandlerOllamaPoolInput)
 	mux.HandleFunc("/api/runtime/ollama-pool/status", apiHandlerOllamaPoolStatus)
@@ -819,6 +881,8 @@ func apiHandlerStatus(w http.ResponseWriter, r *http.Request) {
 		"tareasActivas":        status.TareasActivas,
 		"tareasEnProgreso":     status.TareasEnProgreso,
 		"tareasReservadas":     status.TareasReservadas,
+		"poolsLocales":         status.PoolsLocales,
+		"deudaDispatch":        status.DeudaDispatch,
 	}
 	if items, _ := payload["tareasEnProgreso"].([]tareaLite); len(items) == 0 {
 		payload["tareasEnProgreso"] = filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso)
@@ -2747,6 +2811,8 @@ func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {
 		apiHandlerProyectoAutonomia(w, r, ref)
 	case len(parts) == 2 && parts[1] == "autonomia" && r.Method == http.MethodPost:
 		apiHandlerProyectoAutonomiaGuardar(w, r, ref)
+	case len(parts) == 3 && parts[1] == "autonomia" && parts[2] == "microciclo" && r.Method == http.MethodPost:
+		apiHandlerProyectoMicrociclo(w, r, ref)
 	case len(parts) == 3 && parts[1] == "autonomia" && parts[2] == "ciclos" && r.Method == http.MethodGet:
 		apiHandlerProyectoAutonomiaCiclos(w, r, ref)
 	case len(parts) == 2 && parts[1] == "fabricar-app" && r.Method == http.MethodPost:
@@ -3146,6 +3212,29 @@ func apiHandlerProyectoAutonomiaCiclos(w http.ResponseWriter, r *http.Request, r
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{"cycles": cycles})
+}
+
+func apiHandlerProyectoMicrociclo(w http.ResponseWriter, r *http.Request, ref string) {
+	var req apiProyectoMicrocicloRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	resultado, err := activarMicrocicloProyecto(strings.TrimSpace(ref), proyectoMicrocicloRequest{
+		Agente:               strings.TrimSpace(req.Agente),
+		ObjetivoGeneral:      strings.TrimSpace(req.ObjetivoGeneral),
+		DefinitionOfDoneJSON: strings.TrimSpace(req.DefinitionOfDoneJSON),
+		Titulo:               strings.TrimSpace(req.Titulo),
+		Descripcion:          strings.TrimSpace(req.Descripcion),
+		Modulo:               strings.TrimSpace(req.Modulo),
+		Notas:                strings.TrimSpace(req.Notas),
+		LimpiarPruebas:       req.LimpiarPruebas,
+	})
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiProyectoMicrocicloResponse{Resultado: resultado})
 }
 
 func apiHandlerReviewGates(w http.ResponseWriter, r *http.Request) {
@@ -3556,6 +3645,81 @@ func apiHandlerModeloResolver(w http.ResponseWriter, r *http.Request) {
 	apiWriteJSON(w, http.StatusOK, apiResolucionModeloResponse{Resolucion: resolucion})
 }
 
+func apiHandlerModeloPipelineLocal(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	pipeline, err := capacidadService.ConstruirPipelineLocalDeterminista(strings.TrimSpace(r.URL.Query().Get("proyecto")))
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiPipelineLocalDeterministaResponse{Pipeline: pipeline})
+}
+
+func apiHandlerModeloPipelineLocalPaso(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	paso, err := capacidadService.CalcularSiguientePasoPipelineLocalDeterminista(strings.TrimSpace(r.URL.Query().Get("proyecto")))
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiPasoPipelineLocalDeterministaResponse{Paso: paso})
+}
+
+func apiHandlerModeloPipelineLocalEjecutar(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	resultado, err := capacidadService.EjecutarSiguientePasoPipelineLocalDeterminista(strings.TrimSpace(r.URL.Query().Get("proyecto")))
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiEjecutarPasoPipelineLocalDeterministaResponse{Resultado: resultado})
+}
+
+func apiHandlerModeloPipelineLocalDespachar(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	resultado, err := capacidadService.EjecutarYDespacharSiguientePasoPipelineLocalDeterminista(strings.TrimSpace(r.URL.Query().Get("proyecto")))
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiEjecutarPasoPipelineLocalDeterministaResponse{Resultado: resultado})
+}
+
+func apiHandlerModeloRuntimeActivos(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodGet) {
+		return
+	}
+	items, err := capacidadService.ListarModelosRuntimeActivos()
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiModelosRuntimeActivosResponse{Modelos: items})
+}
+
+func apiHandlerModeloRuntimeDescargar(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	descargados, err := capacidadService.DescargarModelosRuntimeActivos()
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	if descargados == nil {
+		descargados = []string{}
+	}
+	apiWriteJSON(w, http.StatusOK, apiModelosRuntimeDescargarResponse{OK: true, Descargados: descargados})
+}
+
 func apiHandlerConectores(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -3809,6 +3973,27 @@ func apiHandlerTareas(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func apiHandlerTareasLimpiarFrente(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiTareaLimpiarFrenteRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	resultado, err := tareasService.CleanActiveFront(tareasapp.CleanActiveFrontInput{
+		Agente:   req.Agente,
+		Proyecto: req.Proyecto,
+		KeepIDs:  req.KeepIDs,
+	})
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiTareaLimpiarFrenteResponse{OK: true, Resultado: resultado})
+}
+
 func apiHandlerTareasListar(w http.ResponseWriter, r *http.Request) {
 	filtro := db.FiltroTareas{}
 	if agente := strings.TrimSpace(r.URL.Query().Get("agente")); agente != "" {
@@ -3938,6 +4123,10 @@ func apiRouterTareas(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/tareas/"), "/"), "/")
 	if len(parts) == 0 || parts[0] == "" {
 		http.NotFound(w, r)
+		return
+	}
+	if len(parts) == 1 && parts[0] == "limpiar-frente" {
+		apiHandlerTareasLimpiarFrente(w, r)
 		return
 	}
 	if len(parts) == 1 && r.Method == http.MethodGet {
@@ -4357,11 +4546,23 @@ func cloneStringMatrix(src [][]string) [][]string {
 	return out
 }
 
+func apiNombreAgenteCanonico(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	agente, err := db.GetAgente(raw)
+	if err == nil && agente != nil && strings.TrimSpace(agente.Nombre) != "" {
+		return strings.TrimSpace(agente.Nombre)
+	}
+	return raw
+}
+
 func apiHandlerRuntimeHandles(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodGet) {
 		return
 	}
-	agente := strings.TrimSpace(r.URL.Query().Get("agente"))
+	agente := apiNombreAgenteCanonico(r.URL.Query().Get("agente"))
 	var filtro *string
 	if agente != "" {
 		filtro = &agente
@@ -4391,7 +4592,7 @@ func apiHandlerRuntimeHandlesPurgar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resultado, err := runtimesService.PurgeInactiveRuntimeHandles(runtimesapp.RuntimeHandlePurgeRequest{
-		Agente:   strings.TrimSpace(req.Agente),
+		Agente:   apiNombreAgenteCanonico(req.Agente),
 		Proyecto: strings.TrimSpace(req.Proyecto),
 		Estados:  req.Estados,
 		Actor:    strings.TrimSpace(req.Actor),
@@ -4414,6 +4615,7 @@ func apiHandlerRuntimeEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	filter := db.FiltroRuntimeEvents{}
 	if agente := strings.TrimSpace(r.URL.Query().Get("agente")); agente != "" {
+		agente = apiNombreAgenteCanonico(agente)
 		filter.Agente = &agente
 	}
 	if proyecto := strings.TrimSpace(r.URL.Query().Get("proyecto")); proyecto != "" {
@@ -4519,6 +4721,7 @@ func apiHandlerRuntimeTranscript(w http.ResponseWriter, r *http.Request) {
 	}
 	filter := db.FiltroRuntimeTranscript{}
 	if agente := strings.TrimSpace(r.URL.Query().Get("agente")); agente != "" {
+		agente = apiNombreAgenteCanonico(agente)
 		filter.Agente = &agente
 	}
 	if stream := strings.TrimSpace(r.URL.Query().Get("stream")); stream != "" {
@@ -4581,6 +4784,7 @@ func apiHandlerRuntimeOrders(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		filter := db.FiltroRuntimeOrders{}
 		if agente := strings.TrimSpace(r.URL.Query().Get("agente")); agente != "" {
+			agente = apiNombreAgenteCanonico(agente)
 			filter.Agente = &agente
 		}
 		if estado := strings.TrimSpace(r.URL.Query().Get("estado")); estado != "" {
@@ -4628,7 +4832,7 @@ func apiHandlerRuntimeOrders(w http.ResponseWriter, r *http.Request) {
 			proyectoID = &p.ID
 		}
 		id, err := runtimesService.EnqueueRuntimeOrder(&db.RuntimeOrder{
-			Agente:      strings.TrimSpace(req.Agente),
+			Agente:      apiNombreAgenteCanonico(req.Agente),
 			ProyectoID:  proyectoID,
 			Tipo:        strings.TrimSpace(req.Tipo),
 			PayloadJSON: payload,
@@ -4679,7 +4883,7 @@ func apiHandlerRuntimeOrdersPurgar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resultado, err := runtimesService.PurgeTerminalRuntimeOrders(runtimesapp.RuntimeOrderPurgeRequest{
-		Agente:           strings.TrimSpace(req.Agente),
+		Agente:           apiNombreAgenteCanonico(req.Agente),
 		Proyecto:         strings.TrimSpace(req.Proyecto),
 		Estados:          req.Estados,
 		Tipos:            req.Tipos,
@@ -4704,9 +4908,11 @@ func apiHandlerRuntimeMailbox(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		filter := db.FiltroRuntimeMailbox{}
 		if toAgente := strings.TrimSpace(r.URL.Query().Get("to_agente")); toAgente != "" {
+			toAgente = apiNombreAgenteCanonico(toAgente)
 			filter.ToAgente = &toAgente
 		}
 		if fromAgente := strings.TrimSpace(r.URL.Query().Get("from_agente")); fromAgente != "" {
+			fromAgente = apiNombreAgenteCanonico(fromAgente)
 			filter.FromAgente = &fromAgente
 		}
 		if estado := strings.TrimSpace(r.URL.Query().Get("estado")); estado != "" {
@@ -4750,8 +4956,8 @@ func apiHandlerRuntimeMailbox(w http.ResponseWriter, r *http.Request) {
 			runtimeOrderID = &req.RuntimeOrderID
 		}
 		id, err := runtimesService.SendRuntimeMailbox(&db.RuntimeMailboxMessage{
-			FromAgente:     strings.TrimSpace(req.FromAgente),
-			ToAgente:       strings.TrimSpace(req.ToAgente),
+			FromAgente:     apiNombreAgenteCanonico(req.FromAgente),
+			ToAgente:       apiNombreAgenteCanonico(req.ToAgente),
 			ProyectoID:     proyectoID,
 			RuntimeOrderID: runtimeOrderID,
 			Kind:           strings.TrimSpace(req.Kind),
@@ -4819,6 +5025,98 @@ func apiRouterRuntimeMailbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+}
+
+func apiHandlerRuntimeWake(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiRuntimeWakeRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	resp := apiRuntimeWakeResponse{}
+	if req.Orders {
+		resp.Orders = wakeControlPlaneRuntimeOrders()
+	}
+	if req.Mailbox {
+		resp.Mailbox = wakeControlPlaneRuntimeMailbox()
+	}
+	if req.Warm {
+		resp.Warm = wakeControlPlaneWarm()
+	}
+	apiWriteJSON(w, http.StatusOK, resp)
+}
+
+func apiHandlerRuntimeMailboxClear(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiRuntimeMailboxClearRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	filter := db.FiltroRuntimeMailbox{}
+	if toAgente := strings.TrimSpace(req.ToAgente); toAgente != "" {
+		toAgente = apiNombreAgenteCanonico(toAgente)
+		filter.ToAgente = &toAgente
+	}
+	if fromAgente := strings.TrimSpace(req.FromAgente); fromAgente != "" {
+		fromAgente = apiNombreAgenteCanonico(fromAgente)
+		filter.FromAgente = &fromAgente
+	}
+	if proyecto := strings.TrimSpace(req.Proyecto); proyecto != "" {
+		p, err := runtimesService.GetProject(proyecto)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		filter.ProyectoID = &p.ID
+	}
+	estados := normalizarSliceFlags(req.Estados)
+	if len(estados) == 0 {
+		estados = []string{"pendiente"}
+	}
+	kinds := normalizarSliceFlags(req.Kinds)
+	ids := make([]int64, 0)
+	for _, estado := range estados {
+		estadoLocal := estado
+		filter.Estado = &estadoLocal
+		items, err := runtimesService.ListRuntimeMailbox(filter)
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		for _, item := range items {
+			if item == nil || item.ID <= 0 {
+				continue
+			}
+			if len(kinds) > 0 {
+				match := false
+				for _, kind := range kinds {
+					if strings.EqualFold(strings.TrimSpace(item.Kind), kind) {
+						match = true
+						break
+					}
+				}
+				if !match {
+					continue
+				}
+			}
+			if err := runtimesService.MarkRuntimeMailboxConsumed(item.ID); err != nil {
+				apiError(w, http.StatusInternalServerError, err)
+				return
+			}
+			ids = append(ids, item.ID)
+		}
+	}
+	apiWriteJSON(w, http.StatusOK, apiRuntimeMailboxClearResponse{
+		OK:         true,
+		Cleared:    len(ids),
+		ClearedIDs: ids,
+	})
 }
 
 func apiHandlerRuntimeCheckpoints(w http.ResponseWriter, r *http.Request) {

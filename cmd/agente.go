@@ -28,6 +28,12 @@ import (
 	"orquesta/runtimeagente"
 )
 
+type agenteBootstrapAck struct {
+	StartOrderID     int64
+	BootstrapOrderID int64
+	MailboxIDs       []int64
+}
+
 var agenteCmd = &cobra.Command{
 	Use:   "agente",
 	Short: "Operaciones de orquestación para agentes",
@@ -149,6 +155,57 @@ type agenteTickOutput struct {
 	ReanimarAt           *time.Time     `json:"reanimar_at,omitempty"`
 	MotivoPausa          string         `json:"motivo_pausa,omitempty"`
 	CuotaPct             int            `json:"cuota_pct,omitempty"`
+}
+
+type decisionTickAutonomiaInput struct {
+	AsignadoAProyecto      bool
+	ProyectoAsignado       string
+	EsSupervisorOperativo  bool
+	SupervisorOperativo    *db.Agente
+	PropuestasPendientes   int
+	TieneBloqueos          bool
+	TieneTrabajo           bool
+	PausarPorPresupuesto   bool
+	MotivoPresupuesto      string
+	EstadoCuota            string
+	ReanimarAt             *time.Time
+	MotivoPausa            string
+	AgenteNombre           string
+}
+
+func resolverAccionTickAutonomia(in decisionTickAutonomiaInput) (accion string, debePausar bool, motivo string) {
+	switch {
+	case in.PausarPorPresupuesto:
+		return "pausar_por_cuota", true, strings.TrimSpace(in.MotivoPresupuesto)
+	case strings.TrimSpace(in.EstadoCuota) != "" && strings.TrimSpace(in.EstadoCuota) != "activo":
+		prefijo := "Cuota agotada"
+		if agenteMotivoPausaOperativa(in.MotivoPausa) {
+			prefijo = "Pausa operativa"
+		}
+		if in.ReanimarAt != nil {
+			return "pausar_por_cuota", true, fmt.Sprintf("%s (%s). Reanimación programada para: %s. Motivo: %s",
+				prefijo, in.EstadoCuota, in.ReanimarAt.Format("15:04:05"), in.MotivoPausa)
+		}
+		if agenteMotivoPausaOperativa(in.MotivoPausa) {
+			return "pausar_por_cuota", true, "Pausa operativa o modo enfriamiento activo."
+		}
+		return "pausar_por_cuota", true, "Cuota agotada o modo enfriamiento activo."
+	case !in.AsignadoAProyecto && strings.TrimSpace(in.ProyectoAsignado) != "":
+		return "pausar_y_reasignar", true, "La asignación activa del agente ha cambiado al proyecto " + strings.TrimSpace(in.ProyectoAsignado)
+	case in.EsSupervisorOperativo:
+		if in.SupervisorOperativo != nil && !strings.EqualFold(strings.TrimSpace(in.SupervisorOperativo.Nombre), strings.TrimSpace(in.AgenteNombre)) {
+			return "supervisar_proyecto", false, "Debes asumir el relevo temporal de la orquestación del proyecto."
+		}
+		return "supervisar_proyecto", false, "Eres el supervisor operativo del proyecto y debes coordinar el siguiente frente útil."
+	case in.PropuestasPendientes > 0:
+		return "votar_propuestas_pendientes", false, fmt.Sprintf("Hay %d propuestas pendientes de voto para este proyecto", in.PropuestasPendientes)
+	case in.TieneBloqueos:
+		return "pedir_intervencion", false, "Hay tareas bloqueadas que requieren resolución"
+	case in.TieneTrabajo:
+		return "continuar_trabajo", false, "Sigue trabajando hasta completar la tarea o detectar una duda real"
+	default:
+		return "esperar_o_pedir_tarea", false, "No hay tarea activa asignada en este proyecto"
+	}
 }
 
 func construirAgenteTickOutput(agenteNombre string, proyecto *db.Proyecto, sesionActiva *db.Sesion, cuotaPct int) (agenteTickOutput, error) {
@@ -292,52 +349,21 @@ func construirAgenteTickOutputConSnapshot(agenteNombre string, proyecto *db.Proy
 	}
 	logStep("presupuesto_visible", stepStart)
 
-	switch {
-	case pausarPorPresupuesto:
-		out.AccionRecomendada = "pausar_por_cuota"
-		out.DebePausar = true
-		out.Motivo = motivoPresupuesto
-	case agente.EstadoCuota != "activo":
-		out.AccionRecomendada = "pausar_por_cuota"
-		out.DebePausar = true
-		prefijo := "Cuota agotada"
-		if agenteMotivoPausaOperativa(agente.MotivoPausa) {
-			prefijo = "Pausa operativa"
-		}
-		if agente.ReanimarAt != nil {
-			out.Motivo = fmt.Sprintf("%s (%s). Reanimación programada para: %s. Motivo: %s",
-				prefijo, agente.EstadoCuota, agente.ReanimarAt.Format("15:04:05"), agente.MotivoPausa)
-		} else {
-			if agenteMotivoPausaOperativa(agente.MotivoPausa) {
-				out.Motivo = "Pausa operativa o modo enfriamiento activo."
-			} else {
-				out.Motivo = "Cuota agotada o modo enfriamiento activo."
-			}
-		}
-	case !asignadoAProyecto && proyectoAsignado != "":
-		out.AccionRecomendada = "pausar_y_reasignar"
-		out.DebePausar = true
-		out.Motivo = "La asignación activa del agente ha cambiado al proyecto " + proyectoAsignado
-	case esSupervisorOperativo:
-		out.AccionRecomendada = "supervisar_proyecto"
-		if supervisorOperativo != nil && !strings.EqualFold(strings.TrimSpace(supervisorOperativo.Nombre), strings.TrimSpace(agenteNombre)) {
-			out.Motivo = "Debes asumir el relevo temporal de la orquestación del proyecto."
-		} else {
-			out.Motivo = "Eres el supervisor operativo del proyecto y debes coordinar el siguiente frente útil."
-		}
-	case len(propuestasPendientes) > 0:
-		out.AccionRecomendada = "votar_propuestas_pendientes"
-		out.Motivo = fmt.Sprintf("Hay %d propuestas pendientes de voto para este proyecto", len(propuestasPendientes))
-	case tieneBloqueos:
-		out.AccionRecomendada = "pedir_intervencion"
-		out.Motivo = "Hay tareas bloqueadas que requieren resolución"
-	case tieneTrabajo:
-		out.AccionRecomendada = "continuar_trabajo"
-		out.Motivo = "Sigue trabajando hasta completar la tarea o detectar una duda real"
-	default:
-		out.AccionRecomendada = "esperar_o_pedir_tarea"
-		out.Motivo = "No hay tarea activa asignada en este proyecto"
-	}
+	out.AccionRecomendada, out.DebePausar, out.Motivo = resolverAccionTickAutonomia(decisionTickAutonomiaInput{
+		AsignadoAProyecto:     asignadoAProyecto,
+		ProyectoAsignado:      proyectoAsignado,
+		EsSupervisorOperativo: esSupervisorOperativo,
+		SupervisorOperativo:   supervisorOperativo,
+		PropuestasPendientes:  len(propuestasPendientes),
+		TieneBloqueos:         tieneBloqueos,
+		TieneTrabajo:          tieneTrabajo,
+		PausarPorPresupuesto:  pausarPorPresupuesto,
+		MotivoPresupuesto:     motivoPresupuesto,
+		EstadoCuota:           agente.EstadoCuota,
+		ReanimarAt:            agente.ReanimarAt,
+		MotivoPausa:           agente.MotivoPausa,
+		AgenteNombre:          agenteNombre,
+	})
 	if autonomiaTickDebugEnabled() {
 		duration := time.Since(start).Round(time.Millisecond)
 		if duration >= 250*time.Millisecond {
@@ -622,6 +648,15 @@ var agenteEjecutarCmd = &cobra.Command{
 				return fmt.Errorf("error arrancando proceso: %w", err)
 			}
 
+			if err := iniciarSesionActivaAgenteEjecutor(prep, agente, proyecto, proc.Process.Pid); err != nil {
+				_ = proc.Process.Kill()
+				return fmt.Errorf("error registrando sesión activa: %w", err)
+			}
+			if err := ackBootstrapAgenteEjecutor(prep, agente, proyecto, proc.Process.Pid); err != nil {
+				_ = proc.Process.Kill()
+				return fmt.Errorf("error confirmando bootstrap runtime: %w", err)
+			}
+
 			stopRefresh := make(chan struct{})
 			refreshDone := vigilarRefreshRuntimeMailbox(stopRefresh, agente, proyecto)
 
@@ -691,6 +726,7 @@ var agenteEjecutarCmd = &cobra.Command{
 			}()
 
 			_ = proc.Wait()
+			_ = finalizarSesionActivaAgenteEjecutor(agente)
 			close(stopRefresh)
 			pw.Close()
 			<-done
@@ -700,6 +736,95 @@ var agenteEjecutarCmd = &cobra.Command{
 			time.Sleep(60 * time.Second)
 		}
 	},
+}
+
+func hostLocalAgenteEjecutor() string {
+	host, err := os.Hostname()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(host)
+}
+
+func extraerAckBootstrapAgente(prep agentePrepararOutput) agenteBootstrapAck {
+	var ack agenteBootstrapAck
+	if prep.Bootstrap == nil {
+		return ack
+	}
+	if prep.Bootstrap.Order != nil {
+		ack.BootstrapOrderID = prep.Bootstrap.Order.ID
+		var result map[string]any
+		if err := json.Unmarshal([]byte(strings.TrimSpace(prep.Bootstrap.Order.ResultadoJSON)), &result); err == nil {
+			if raw, ok := result["start_order_id"]; ok {
+				switch v := raw.(type) {
+				case float64:
+					ack.StartOrderID = int64(v)
+				case int64:
+					ack.StartOrderID = v
+				case int:
+					ack.StartOrderID = int64(v)
+				}
+			}
+		}
+	}
+	for _, msg := range prep.Bootstrap.Mailbox {
+		if msg == nil || msg.ID <= 0 {
+			continue
+		}
+		ack.MailboxIDs = append(ack.MailboxIDs, msg.ID)
+	}
+	return ack
+}
+
+func iniciarSesionActivaAgenteEjecutor(prep agentePrepararOutput, agente, proyecto string, pid int) error {
+	if prep.Plan == nil {
+		return nil
+	}
+	req := apiSesionInicioRequest{
+		Agente:      strings.TrimSpace(agente),
+		Conector:    strings.TrimSpace(prep.Conector.Slug),
+		Proyecto:    strings.TrimSpace(proyecto),
+		CWD:         strings.TrimSpace(prep.Plan.WorkingDir),
+		Herramienta: strings.TrimSpace(prep.Conector.Slug),
+		Branch:      strings.TrimSpace(prep.Plan.Branch),
+		Host:        hostLocalAgenteEjecutor(),
+		PID:         int64(pid),
+	}
+	var resp apiSesionInicioResponse
+	ok, err := apiPost("/api/sesiones/inicio", req, &resp)
+	if !ok {
+		return serverFirstCommandError("agente ejecutar")
+	}
+	return err
+}
+
+func ackBootstrapAgenteEjecutor(prep agentePrepararOutput, agente, proyecto string, pid int) error {
+	ack := extraerAckBootstrapAgente(prep)
+	if ack.StartOrderID <= 0 && ack.BootstrapOrderID <= 0 && len(ack.MailboxIDs) == 0 {
+		return nil
+	}
+	var out agenteTickOutput
+	ok, err := apiPost("/api/agente/tick", map[string]any{
+		"agente":                 strings.TrimSpace(agente),
+		"proyecto":               strings.TrimSpace(proyecto),
+		"host":                   hostLocalAgenteEjecutor(),
+		"pid":                    int64(pid),
+		"ack_start_order_id":     ack.StartOrderID,
+		"ack_bootstrap_order_id": ack.BootstrapOrderID,
+		"ack_mailbox_ids":        ack.MailboxIDs,
+	}, &out)
+	if !ok {
+		return serverFirstCommandError("agente ejecutar")
+	}
+	return err
+}
+
+func finalizarSesionActivaAgenteEjecutor(agente string) error {
+	ok, err := apiPost("/api/sesiones/fin", apiSesionFinRequest{Agente: strings.TrimSpace(agente)}, &map[string]any{})
+	if !ok {
+		return serverFirstCommandError("agente ejecutar")
+	}
+	return err
 }
 
 var agenteHandoffCmd = &cobra.Command{

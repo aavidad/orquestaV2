@@ -25,6 +25,10 @@ type Sesion struct {
 	Modelo              string    `json:"modelo"`
 	PerfilTarea         string    `json:"perfil_tarea,omitempty"`
 	Razonamiento        string    `json:"razonamiento,omitempty"`
+	WorktreeID          int64     `json:"worktree_id,omitempty"`
+	RutaWorktree        string    `json:"ruta_worktree,omitempty"`
+	BranchWorktree      string    `json:"branch_worktree,omitempty"`
+	BaseRefWorktree     string    `json:"base_ref_worktree,omitempty"`
 	MaxMensajesContexto int       `json:"max_mensajes_contexto,omitempty"`
 	Estado              string    `json:"estado"`
 	ErrorUltimo         string    `json:"error_ultimo,omitempty"`
@@ -52,6 +56,8 @@ type ResultadoEntrada struct {
 	Respuesta string  `json:"respuesta"`
 }
 
+type CallbackResultadoEntrada func(*ResultadoEntrada, error)
+
 type TelemetriaPool struct {
 	PoolSlug               string    `json:"pool_slug"`
 	SlotsActivos           int       `json:"slots_activos"`
@@ -70,10 +76,14 @@ type Gestor struct {
 	sesiones map[string]*Sesion
 }
 
+// TimeoutClienteDefecto es el timeout HTTP por defecto para llamadas a Ollama.
+// El bootstrap de cmd/ lo sobreescribe via ORQUESTA_OLLAMA_TIMEOUT_MS si está definida.
+const TimeoutClienteDefecto = 10 * time.Minute
+
 func NuevoGestor(endpoint string, client *http.Client) *Gestor {
 	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
 	if client == nil {
-		client = &http.Client{Timeout: 2 * time.Minute}
+		client = &http.Client{Timeout: TimeoutClienteDefecto}
 	}
 	return &Gestor{
 		endpoint: endpoint,
@@ -188,16 +198,91 @@ func (g *Gestor) Estado(handleRef string) (*Sesion, error) {
 	return clonSesion(sesion), nil
 }
 
-func (g *Gestor) Detener(handleRef string) error {
+func (g *Gestor) RegistrarSesion(sesion *Sesion) (*Sesion, error) {
+	if g == nil {
+		return nil, fmt.Errorf("gestor de pool no disponible")
+	}
+	if sesion == nil {
+		return nil, fmt.Errorf("sesion obligatoria")
+	}
+	handleRef := strings.TrimSpace(sesion.HandleRef)
+	if handleRef == "" {
+		handleRef = strings.TrimSpace(sesion.ID)
+	}
+	if handleRef == "" {
+		return nil, fmt.Errorf("handle_ref obligatorio")
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	sesion, ok := g.sesiones[strings.TrimSpace(handleRef)]
+	if existente := g.sesiones[handleRef]; existente != nil {
+		return clonSesion(existente), nil
+	}
+	copia := clonSesion(sesion)
+	copia.HandleRef = handleRef
+	if strings.TrimSpace(copia.ID) == "" {
+		copia.ID = handleRef
+	}
+	if copia.CreadoEn.IsZero() {
+		copia.CreadoEn = time.Now().UTC()
+	}
+	if copia.ActualizadoEn.IsZero() {
+		copia.ActualizadoEn = copia.CreadoEn
+	}
+	if copia.MaxMensajesContexto <= 0 {
+		copia.MaxMensajesContexto = normalizarMaxMensajesContexto(copia.MaxMensajesContexto)
+	}
+	copia.Estado = strings.TrimSpace(copia.Estado)
+	if copia.Estado == "" {
+		copia.Estado = "ready"
+	}
+	if resumen := strings.TrimSpace(copia.ResumenContinuidad); resumen != "" && len(copia.Mensajes) == 0 {
+		copia.Mensajes = append(copia.Mensajes, Mensaje{Rol: "system", Contenido: "CONTINUIDAD BREVE: " + resumen})
+	}
+	g.sesiones[handleRef] = copia
+	return clonSesion(copia), nil
+}
+
+func (g *Gestor) Detener(handleRef string) error {
+	handleRef = strings.TrimSpace(handleRef)
+	if handleRef == "" {
+		return fmt.Errorf("handle_ref obligatorio")
+	}
+	g.mu.Lock()
+	sesion, ok := g.sesiones[handleRef]
 	if !ok {
+		g.mu.Unlock()
 		return fmt.Errorf("sesion %q no encontrada", handleRef)
 	}
 	sesion.Estado = "stopped"
 	sesion.ActualizadoEn = time.Now().UTC()
+	modelo := strings.TrimSpace(sesion.Modelo)
+	descargarModelo := modelo != "" && !g.modeloTieneSesionesActivasBloqueado(modelo, handleRef)
+	g.mu.Unlock()
+	if descargarModelo {
+		g.solicitarDescargaModelo(context.Background(), modelo)
+	}
 	return nil
+}
+
+func (g *Gestor) modeloTieneSesionesActivasBloqueado(modelo, exceptHandleRef string) bool {
+	modelo = strings.TrimSpace(modelo)
+	exceptHandleRef = strings.TrimSpace(exceptHandleRef)
+	if modelo == "" {
+		return false
+	}
+	for handleRef, sesion := range g.sesiones {
+		if sesion == nil || strings.TrimSpace(handleRef) == exceptHandleRef {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(sesion.Modelo), modelo) {
+			continue
+		}
+		switch strings.TrimSpace(sesion.Estado) {
+		case "", "ready", "working":
+			return true
+		}
+	}
+	return false
 }
 
 func (g *Gestor) DescribirPool(poolSlug string) *TelemetriaPool {
@@ -289,6 +374,77 @@ func (g *Gestor) Enviar(ctx context.Context, handleRef, texto string) (*Resultad
 	}, nil
 }
 
+func (g *Gestor) EnviarAsincrono(ctx context.Context, handleRef, texto string, callback CallbackResultadoEntrada) (*Sesion, error) {
+	handleRef = strings.TrimSpace(handleRef)
+	texto = strings.TrimSpace(texto)
+	if handleRef == "" {
+		return nil, fmt.Errorf("handle_ref obligatorio")
+	}
+	if texto == "" {
+		return nil, fmt.Errorf("texto obligatorio")
+	}
+
+	g.mu.Lock()
+	sesion, ok := g.sesiones[handleRef]
+	if !ok {
+		g.mu.Unlock()
+		return nil, fmt.Errorf("sesion %q no encontrada", handleRef)
+	}
+	if sesion.Estado == "stopped" {
+		g.mu.Unlock()
+		return nil, fmt.Errorf("sesion %q detenida", handleRef)
+	}
+	sesion.Estado = "working"
+	sesion.ErrorUltimo = ""
+	sesion.ActualizadoEn = time.Now().UTC()
+	sesion.Mensajes = append(sesion.Mensajes, Mensaje{Rol: "user", Contenido: texto})
+	modelo := sesion.Modelo
+	mensajes := append([]Mensaje(nil), sesion.Mensajes...)
+	snapshot := clonSesion(sesion)
+	g.mu.Unlock()
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	go func() {
+		respuesta, err := g.chat(ctx, modelo, mensajes)
+
+		g.mu.Lock()
+		sesion := g.sesiones[handleRef]
+		if sesion == nil {
+			g.mu.Unlock()
+			if callback != nil {
+				callback(nil, fmt.Errorf("sesion %q no encontrada tras enviar", handleRef))
+			}
+			return
+		}
+		sesion.ActualizadoEn = time.Now().UTC()
+		if err != nil {
+			sesion.Estado = "failed"
+			sesion.ErrorUltimo = err.Error()
+			resultado := &ResultadoEntrada{Sesion: clonSesion(sesion)}
+			g.mu.Unlock()
+			if callback != nil {
+				callback(resultado, err)
+			}
+			return
+		}
+		sesion.Estado = "ready"
+		sesion.Mensajes = append(sesion.Mensajes, Mensaje{Rol: "assistant", Contenido: respuesta})
+		compactarSesion(sesion, sesion.MaxMensajesContexto)
+		resultado := &ResultadoEntrada{
+			Sesion:    clonSesion(sesion),
+			Respuesta: respuesta,
+		}
+		g.mu.Unlock()
+		if callback != nil {
+			callback(resultado, nil)
+		}
+	}()
+
+	return snapshot, nil
+}
+
 func (g *Gestor) chat(ctx context.Context, modelo string, mensajes []Mensaje) (string, error) {
 	if g == nil || strings.TrimSpace(g.endpoint) == "" {
 		return "", fmt.Errorf("endpoint de ollama no configurado")
@@ -317,14 +473,61 @@ func (g *Gestor) chat(ctx context.Context, modelo string, mensajes []Mensaje) (s
 	}
 	var decoded struct {
 		Message struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
+			Role     string `json:"role"`
+			Content  string `json:"content"`
+			Thinking string `json:"thinking"`
 		} `json:"message"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(decoded.Message.Content), nil
+	return resolverContenidoRespuestaOllama(decoded.Message.Content, decoded.Message.Thinking), nil
+}
+
+func (g *Gestor) solicitarDescargaModelo(ctx context.Context, modelo string) {
+	modelo = strings.TrimSpace(modelo)
+	if g == nil || modelo == "" || strings.TrimSpace(g.endpoint) == "" || g.client == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	payload := map[string]any{
+		"model":      modelo,
+		"prompt":     "",
+		"stream":     false,
+		"keep_alive": 0,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, g.endpoint+"/api/generate", bytes.NewReader(body))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+}
+
+func resolverContenidoRespuestaOllama(contenido, thinking string) string {
+	contenido = strings.TrimSpace(contenido)
+	if contenido != "" {
+		return contenido
+	}
+	thinking = strings.TrimSpace(thinking)
+	if thinking == "" {
+		return ""
+	}
+	thinkingNormalizado := strings.ToLower(strings.TrimSpace(thinking))
+	if strings.Contains(thinkingNormalizado, "patch_unificado") || strings.Contains(thinkingNormalizado, "bloqueo:") {
+		return thinking
+	}
+	return ""
 }
 
 func clonSesion(in *Sesion) *Sesion {

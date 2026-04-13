@@ -95,7 +95,7 @@ func (despachadorPipelineOperativo) DespacharPipeline(entrada capacidadapp.Solic
 				Motivo: "microprogramacion_local requiere una tarea_objetivo_id valida",
 			}, nil
 		}
-		specs, err := microprogramacionService.List(microprogramacionapp.FiltroEspecificaciones{
+		specs, err := microprogramacionService.Listar(microprogramacionapp.FiltroEspecificaciones{
 			TareaID: &despacho.TareaObjetivoID,
 		})
 		if err != nil {
@@ -103,7 +103,7 @@ func (despachadorPipelineOperativo) DespacharPipeline(entrada capacidadapp.Solic
 		}
 		var spec *microprogramacionapp.EspecificacionFuncion
 		for _, s := range specs {
-			if s != nil && strings.EqualFold(strings.TrimSpace(s.Estado), microprogramacionapp.EstadoEspecificacionActiva) {
+			if s != nil && strings.EqualFold(strings.TrimSpace(string(s.Estado)), string(microprogramacionapp.EstadoEspecificacionActiva)) {
 				spec = s
 				break
 			}

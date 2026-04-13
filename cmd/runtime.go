@@ -166,6 +166,40 @@ var runtimePurgarOrdenesCmd = &cobra.Command{
 	},
 }
 
+var runtimeDespertarCmd = &cobra.Command{
+	Use:   "despertar",
+	Short: "Despierta batches del runner para runtime mailbox/orders/warm",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		orders, _ := cmd.Flags().GetBool("orders")
+		mailbox, _ := cmd.Flags().GetBool("mailbox")
+		warm, _ := cmd.Flags().GetBool("warm")
+		if !orders && !mailbox && !warm {
+			orders = true
+			mailbox = true
+			warm = true
+		}
+		resp, ok, err := despertarRuntimePorAPI(orders, mailbox, warm)
+		if !ok {
+			return serverFirstCommandError("runtime despertar")
+		}
+		if err != nil {
+			return err
+		}
+		fmt.Printf("✓ Runner despertado")
+		if orders {
+			fmt.Printf(" orders=%t", resp.Orders)
+		}
+		if mailbox {
+			fmt.Printf(" mailbox=%t", resp.Mailbox)
+		}
+		if warm {
+			fmt.Printf(" warm=%t", resp.Warm)
+		}
+		fmt.Println()
+		return nil
+	},
+}
+
 var runtimeTranscriptCmd = &cobra.Command{
 	Use:   "transcript",
 	Short: "Lista o busca transcript persistido de runtimes",
@@ -802,6 +836,156 @@ var runtimeMailboxConsumirCmd = &cobra.Command{
 		}
 		return serverFirstCommandError("runtime mailbox-consumir")
 	},
+}
+
+var runtimeMailboxLimpiarCmd = &cobra.Command{
+	Use:   "mailbox-limpiar",
+	Short: "Marca como consumidos mensajes pendientes antiguos del runtime mailbox",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		toAgente, _ := cmd.Flags().GetString("to")
+		fromAgente, _ := cmd.Flags().GetString("from")
+		proyectoRef, _ := cmd.Flags().GetString("proyecto")
+		estados, _ := cmd.Flags().GetStringSlice("estado")
+		kinds, _ := cmd.Flags().GetStringSlice("kind")
+		resp, ok, err := limpiarRuntimeMailboxPorAPI(toAgente, fromAgente, proyectoRef, normalizarSliceFlags(estados), normalizarSliceFlags(kinds))
+		if !ok {
+			return serverFirstCommandError("runtime mailbox-limpiar")
+		}
+		if err != nil {
+			return err
+		}
+		fmt.Printf("✓ Mailbox limpiado: %d", resp.Cleared)
+		if len(resp.ClearedIDs) > 0 {
+			fmt.Printf(" %v", resp.ClearedIDs)
+		}
+		fmt.Println()
+		return nil
+	},
+}
+
+var runtimeLimpiarPruebasCmd = &cobra.Command{
+	Use:   "limpiar-pruebas",
+	Short: "Limpia frente y runtime residual de una prueba sin borrar historial real",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agente, _ := cmd.Flags().GetString("agente")
+		proyecto, _ := cmd.Flags().GetString("proyecto")
+		mantener, _ := cmd.Flags().GetString("mantener-tareas")
+		kinds, _ := cmd.Flags().GetStringSlice("kind")
+		keepIDs, err := parseInt64CSV(mantener)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(agente) == "" && strings.TrimSpace(proyecto) == "" {
+			return fmt.Errorf("debes indicar --agente o --proyecto")
+		}
+		if err := detenerRuntimeActivoDePruebas(strings.TrimSpace(agente), strings.TrimSpace(proyecto)); err != nil {
+			return err
+		}
+		if strings.TrimSpace(proyecto) != "" {
+			var resp apiTareaLimpiarFrenteResponse
+			if ok, err := apiPost("/api/tareas/limpiar-frente", apiTareaLimpiarFrenteRequest{
+				Agente:   strings.TrimSpace(agente),
+				Proyecto: strings.TrimSpace(proyecto),
+				KeepIDs:  keepIDs,
+			}, &resp); err != nil {
+				return err
+			} else if !ok {
+				return serverFirstCommandError("runtime limpiar-pruebas")
+			}
+		}
+		if _, ok, err := limpiarRuntimeMailboxPorAPI(strings.TrimSpace(agente), "", strings.TrimSpace(proyecto), []string{"pendiente"}, normalizarSliceFlags(kinds)); err != nil {
+			return err
+		} else if !ok {
+			return serverFirstCommandError("runtime limpiar-pruebas")
+		}
+		if _, ok, err := purgarRuntimeOrdersDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), []string{"completada", "fallida", "expirada", "cancelada"}, nil, 0, "runtime limpiar-pruebas"); err != nil {
+			return err
+		} else if !ok {
+			return serverFirstCommandError("runtime limpiar-pruebas")
+		}
+		if _, ok, err := purgarRuntimeHandlesDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), []string{"cerrado", "fallido"}, "runtime limpiar-pruebas"); err != nil {
+			return err
+		} else if !ok {
+			return serverFirstCommandError("runtime limpiar-pruebas")
+		}
+		fmt.Printf("✓ Entorno de prueba limpiado")
+		if strings.TrimSpace(proyecto) != "" {
+			fmt.Printf(" proyecto=%s", strings.TrimSpace(proyecto))
+		}
+		if strings.TrimSpace(agente) != "" {
+			fmt.Printf(" agente=%s", strings.TrimSpace(agente))
+		}
+		fmt.Println()
+		return nil
+	},
+}
+
+func detenerRuntimeActivoDePruebas(agente, proyecto string) error {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil
+	}
+	data, ok, err := cargarRuntimeDiagnosticoDesdeAPI(agente, "", 3)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return serverFirstCommandError("runtime limpiar-pruebas")
+	}
+	if !runtimeDiagnosticoTieneActividadViva(data) {
+		return nil
+	}
+	if _, _, ok, err := encolarControlAgentePorAPI(apiAgenteControlRequest{
+		Agente:   agente,
+		Accion:   "stop",
+		Motivo:   "runtime limpiar-pruebas",
+		Por:      "orquesta",
+	}); err != nil {
+		return err
+	} else if !ok {
+		return serverFirstCommandError("runtime limpiar-pruebas")
+	}
+	if _, ok, err := despertarRuntimePorAPI(true, false, true); err != nil {
+		return err
+	} else if !ok {
+		return serverFirstCommandError("runtime limpiar-pruebas")
+	}
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(250 * time.Millisecond)
+		data, ok, err := cargarRuntimeDiagnosticoDesdeAPI(agente, "", 3)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return serverFirstCommandError("runtime limpiar-pruebas")
+		}
+		if !runtimeDiagnosticoTieneActividadViva(data) {
+			return nil
+		}
+	}
+	return fmt.Errorf("timeout esperando parada de runtime de prueba para %s", agente)
+}
+
+func runtimeDiagnosticoTieneActividadViva(data *runtimeDiagnosticoData) bool {
+	if data == nil {
+		return false
+	}
+	for _, handle := range data.Handles {
+		if handle == nil {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
+		case "activo", "pausado":
+			return true
+		}
+	}
+	for _, worker := range data.Workers {
+		if worker.Alive {
+			return true
+		}
+	}
+	return false
 }
 
 func imprimirRuntimeCheckpoint(cp *db.RuntimeCheckpoint) error {
@@ -1512,9 +1696,21 @@ func init() {
 	runtimeMailboxCmd.Flags().String("from", "", "Filtrar mensajes por agente origen")
 	runtimeMailboxCmd.Flags().String("estado", "", "Filtrar mensajes por estado")
 	runtimeMailboxCmd.Flags().String("proyecto", "", "Filtrar mensajes por proyecto")
+	runtimeMailboxLimpiarCmd.Flags().String("to", "", "Limpiar mensajes por agente destino")
+	runtimeMailboxLimpiarCmd.Flags().String("from", "", "Limpiar mensajes por agente origen")
+	runtimeMailboxLimpiarCmd.Flags().String("proyecto", "", "Limpiar mensajes por proyecto")
+	runtimeMailboxLimpiarCmd.Flags().StringSlice("estado", []string{"pendiente"}, "Estados a limpiar")
+	runtimeMailboxLimpiarCmd.Flags().StringSlice("kind", nil, "Kinds a limpiar")
+	runtimeLimpiarPruebasCmd.Flags().String("agente", "", "Agente del frente de prueba")
+	runtimeLimpiarPruebasCmd.Flags().String("proyecto", "", "Proyecto del frente de prueba")
+	runtimeLimpiarPruebasCmd.Flags().String("mantener-tareas", "", "IDs de tareas a conservar fuera de backlog (csv)")
+	runtimeLimpiarPruebasCmd.Flags().StringSlice("kind", nil, "Kinds de mailbox a limpiar")
 	runtimeMailboxEnviarCmd.Flags().String("proyecto", "", "Proyecto asociado al mensaje")
 	runtimeMailboxEnviarCmd.Flags().String("payload", "{}", "Payload JSON del mensaje")
 	runtimeMailboxEnviarCmd.Flags().Int64("runtime-order-id", 0, "Orden runtime asociada al mensaje")
-	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimePurgarOrdenesCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenVerCmd, runtimeOrdenNuevaCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxVerCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd)
+	runtimeDespertarCmd.Flags().Bool("orders", false, "Despierta el batch de runtime orders")
+	runtimeDespertarCmd.Flags().Bool("mailbox", false, "Despierta el batch de runtime mailbox")
+	runtimeDespertarCmd.Flags().Bool("warm", false, "Despierta el carril caliente general")
+	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimePurgarOrdenesCmd, runtimeDespertarCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenVerCmd, runtimeOrdenNuevaCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxVerCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd, runtimeMailboxLimpiarCmd, runtimeLimpiarPruebasCmd)
 	rootCmd.AddCommand(runtimeCmd)
 }

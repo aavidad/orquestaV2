@@ -36,6 +36,7 @@ func postMigrationStatements() []string {
 		`ALTER TABLE runtime_orders ADD COLUMN lease_token TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE runtime_orders ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE runtime_orders ADD COLUMN lease_expires_at DATETIME`,
+		`ALTER TABLE agentes ADD COLUMN retirado INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE agentes ADD COLUMN consumo_dia_segundos INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE agentes ADD COLUMN consumo_semanal_segundos INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE agentes ADD COLUMN limite_dia_segundos INTEGER NOT NULL DEFAULT 14400`,

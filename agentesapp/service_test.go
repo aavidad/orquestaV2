@@ -2055,3 +2055,31 @@ func TestResolvePrepareConnectorOllamaUsaConectorPorDefectoDelAgente(t *testing.
 func ptr(value string) *string {
 	return &value
 }
+
+func TestResolvePrepareConnectorIgnoraSesionContaminadaIncompatible(t *testing.T) {
+	store := &fakeStore{
+		connector: &db.Conector{
+			ID:           71,
+			Slug:         "claude-code",
+			Nombre:       "Claude Code",
+			Transporte:   "cli",
+			Comando:      "claude-code",
+			MetadataJSON: `{"familia":"anthropic"}`,
+			Activo:       true,
+		},
+	}
+
+	conector, err := NewService(store, nil).resolvePrepareConnector("Claude1", "", &db.Sesion{
+		ConectorSlug: "ollama_pool_local",
+		Herramienta:  "ollama_pool_local",
+	})
+	if err != nil {
+		t.Fatalf("resolvePrepareConnector: %v", err)
+	}
+	if store.lastConnectorRef != "claude-code" {
+		t.Fatalf("conector resuelto=%q; want claude-code", store.lastConnectorRef)
+	}
+	if conector == nil || conector.Slug != "claude-code" {
+		t.Fatalf("conector inesperado: %+v", conector)
+	}
+}

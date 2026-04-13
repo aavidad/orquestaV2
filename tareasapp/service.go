@@ -47,6 +47,17 @@ type CreateTaskInput struct {
 	Notas           string
 }
 
+type CleanActiveFrontInput struct {
+	Agente   string
+	Proyecto string
+	KeepIDs  []int64
+}
+
+type CleanActiveFrontResult struct {
+	Total    int     `json:"total"`
+	MovedIDs []int64 `json:"moved_ids"`
+}
+
 func NewService(store Store) *Service {
 	return &Service{store: store}
 }
@@ -154,6 +165,68 @@ func (s *Service) MoveToBacklog(id int64) error {
 
 func (s *Service) Reassign(id int64, nuevoAgente string) error {
 	return s.store.ReassignTask(id, strings.TrimSpace(nuevoAgente))
+}
+
+func (s *Service) CleanActiveFront(input CleanActiveFrontInput) (*CleanActiveFrontResult, error) {
+	agente := strings.TrimSpace(input.Agente)
+	proyecto := strings.TrimSpace(input.Proyecto)
+	if agente == "" && proyecto == "" {
+		return nil, fmt.Errorf("agente o proyecto es obligatorio")
+	}
+	var proyectoID *int64
+	if proyecto != "" {
+		id, err := s.ResolveProjectID(proyecto)
+		if err != nil {
+			return nil, err
+		}
+		proyectoID = id
+	}
+	keep := map[int64]struct{}{}
+	for _, id := range input.KeepIDs {
+		if id > 0 {
+			keep[id] = struct{}{}
+		}
+	}
+	result := &CleanActiveFrontResult{MovedIDs: make([]int64, 0)}
+	states := []db.EstadoTarea{
+		db.EstadoLibre,
+		db.EstadoAsignada,
+		db.EstadoEnProgreso,
+		db.EstadoBloqueada,
+	}
+	seen := map[int64]struct{}{}
+	for _, state := range states {
+		stateCopy := state
+		filtro := db.FiltroTareas{Estado: &stateCopy}
+		if agente != "" {
+			filtro.Agente = &agente
+		}
+		if proyectoID != nil {
+			filtro.ProyectoID = proyectoID
+		}
+		tareas, err := s.store.ListTasks(filtro)
+		if err != nil {
+			return nil, err
+		}
+		for _, tarea := range tareas {
+			if tarea == nil || tarea.ID <= 0 {
+				continue
+			}
+			if _, ok := seen[tarea.ID]; ok {
+				continue
+			}
+			seen[tarea.ID] = struct{}{}
+			if _, ok := keep[tarea.ID]; ok {
+				continue
+			}
+			if err := s.store.MoveTaskToBacklog(tarea.ID); err != nil {
+				return nil, err
+			}
+			result.MovedIDs = append(result.MovedIDs, tarea.ID)
+		}
+	}
+	result.Total = len(result.MovedIDs)
+	return result, nil
 }
 
 type Repository struct{}

@@ -213,6 +213,19 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 			}
 		}
 	}
+	conectorRuntime := runtimeagente.ConnectorConfig{
+		Slug:         strings.TrimSpace(conector.Slug),
+		Nombre:       strings.TrimSpace(conector.Nombre),
+		Transporte:   strings.TrimSpace(conector.Transporte),
+		Comando:      strings.TrimSpace(conector.Comando),
+		ArgsJSON:     strings.TrimSpace(conector.ArgsJSON),
+		EnvJSON:      strings.TrimSpace(conector.EnvJSON),
+		MetadataJSON: strings.TrimSpace(conector.MetadataJSON),
+		Activo:       conector.Activo,
+	}
+	if !runtimeagente.ModeloCompatibleConConector(conectorRuntime, modeloSolicitado) {
+		modeloSolicitado = ""
+	}
 	if ref := s.preferirConectorPoolLocalCompartido(agenteNombre, strings.TrimSpace(input.Conector), ultima, resolucionModelo); ref != "" {
 		conector, err = s.store.GetConnector(ref)
 		if err != nil {
@@ -337,9 +350,11 @@ func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
 func (s *Service) resolvePrepareConnector(agente, conectorRef string, ultima *db.Sesion) (*db.Conector, error) {
 	ref := strings.TrimSpace(conectorRef)
 	if ref == "" && ultima != nil {
-		if strings.TrimSpace(ultima.ConectorSlug) != "" {
+		if strings.TrimSpace(ultima.ConectorSlug) != "" &&
+			runtimeagente.ConectorCompatibleConAgente(agente, strings.TrimSpace(ultima.ConectorSlug), "") {
 			ref = strings.TrimSpace(ultima.ConectorSlug)
-		} else if ultima.ConectorID != nil && *ultima.ConectorID > 0 {
+		} else if ultima.ConectorID != nil && *ultima.ConectorID > 0 &&
+			runtimeagente.ConectorCompatibleConAgente(agente, "", strings.TrimSpace(ultima.Herramienta)) {
 			ref = strconv.FormatInt(*ultima.ConectorID, 10)
 		}
 	}
@@ -357,6 +372,9 @@ func (s *Service) resolvePrepareConnector(agente, conectorRef string, ultima *db
 }
 
 func (s *Service) preferirConectorPoolLocalCompartido(agente, conectorRef string, ultima *db.Sesion, resolucion *db.ResolucionModelo) string {
+	if !runtimeagente.EsConectorFamiliaOllama(runtimeagente.ConectorPorDefectoAgente(agente), "") {
+		return ""
+	}
 	if strings.TrimSpace(conectorRef) != "" {
 		return ""
 	}
@@ -380,8 +398,7 @@ func (s *Service) preferirConectorPoolLocalCompartido(agente, conectorRef string
 	if strings.EqualFold(strings.TrimSpace(metadataString(meta, "conector_canonico")), "ollama_pool_local") {
 		return "ollama_pool_local"
 	}
-	if runtimeagente.EsConectorFamiliaOllama(runtimeagente.ConectorPorDefectoAgente(agente), "") &&
-		strings.EqualFold(strings.TrimSpace(pool.Plan), "local") {
+	if strings.EqualFold(strings.TrimSpace(pool.Plan), "local") {
 		return "ollama_pool_local"
 	}
 	return ""

@@ -136,6 +136,7 @@ func arrancarServidorUnificado(listenAddr, kind string, anunciar bool, debug ser
 	} else {
 		fmt.Printf("Servidor local de Orquesta en %s\n", rpclocal.BaseURL(advertisedAddr))
 	}
+	_ = os.Setenv("ORQUESTA_SERVER_URL", rpclocal.BaseURL(advertisedAddr))
 
 	var debugLogger *log.Logger
 	if debug.Enabled {

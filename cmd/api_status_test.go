@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"orquesta/capacidadapp"
 	"orquesta/db"
 )
 
@@ -46,6 +47,10 @@ func TestAPIHandlerStatusReturnsPayload(t *testing.T) {
 			TareasReservadas: []tareaLite{
 				{ID: 8, Titulo: "Reservada", Estado: db.TareaAsignada, Agente: "CodexX"},
 			},
+			PoolsLocales: []*capacidadapp.PoolLocalCompartido{
+				{PoolSlug: "ollama-gemma4", ModeloPreferente: "gemma4:26b", SlotsMaximos: 1},
+			},
+			DeudaDispatch: deudaDispatchResumen{Total: 4, Pendientes: 1, Notificadas: 2, Fallidas: 1},
 		},
 	}
 	rec := httptest.NewRecorder()
@@ -75,6 +80,12 @@ func TestAPIHandlerStatusReturnsPayload(t *testing.T) {
 	}
 	if len(payload.TareasReservadas) != 1 || payload.TareasReservadas[0].ID != 8 {
 		t.Fatalf("tareasReservadas inesperadas: %+v", payload.TareasReservadas)
+	}
+	if len(payload.PoolsLocales) != 1 || payload.PoolsLocales[0].PoolSlug != "ollama-gemma4" {
+		t.Fatalf("poolsLocales inesperados: %+v", payload.PoolsLocales)
+	}
+	if payload.DeudaDispatch.Total != 4 || payload.DeudaDispatch.Pendientes != 1 || payload.DeudaDispatch.Notificadas != 2 || payload.DeudaDispatch.Fallidas != 1 {
+		t.Fatalf("deudaDispatch inesperada: %+v", payload.DeudaDispatch)
 	}
 }
 

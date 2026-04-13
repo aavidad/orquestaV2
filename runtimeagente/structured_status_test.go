@@ -240,4 +240,17 @@ func TestWorkerSnapshotReadyForTextDispatch(t *testing.T) {
 			t.Fatalf("dispatch blocked_quota inesperado: ok=%t reason=%q", ok, reason)
 		}
 	})
+
+	t.Run("blocked_trust", func(t *testing.T) {
+		snap := *base
+		snap.Status = &WorkerStatus{
+			State:     "blocked_trust",
+			Alive:     true,
+			UpdatedAt: now.Format(time.RFC3339),
+		}
+		ok, reason := snap.ReadyForTextDispatch(now, time.Minute)
+		if ok || reason != "worker_blocked_trust" {
+			t.Fatalf("dispatch blocked_trust inesperado: ok=%t reason=%q", ok, reason)
+		}
+	})
 }

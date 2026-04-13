@@ -9,10 +9,11 @@ import (
 type fakeStore struct {
 	projectID int64
 	merge     *db.GitMergeRequest
+	worktrees []*db.Worktree
 }
 
 func (f *fakeStore) ListWorktrees(estado, agente string) ([]*db.Worktree, error) {
-	return nil, nil
+	return f.worktrees, nil
 }
 
 func (f *fakeStore) ListLocks(estado, agente string) ([]*db.Lock, error) {
@@ -51,5 +52,24 @@ func TestCreateMergeResuelveProyecto(t *testing.T) {
 	}
 	if store.merge == nil || store.merge.ProyectoID != 7 || store.merge.SourceBranch != "feat-a" {
 		t.Fatalf("merge inesperado: %+v", store.merge)
+	}
+}
+
+func TestResolveActiveWorktreeFiltraPorProyecto(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{
+		worktrees: []*db.Worktree{
+			{ID: 1, ProyectoSlug: "otro", Agente: "Gemma1", Estado: "activa"},
+			{ID: 2, ProyectoSlug: "orquestador", Agente: "Gemma1", Estado: "activa", RutaAbs: "/tmp/wt"},
+		},
+	}
+	svc := NewService(store)
+	item, err := svc.ResolveActiveWorktree("orquestador", "Gemma1")
+	if err != nil {
+		t.Fatalf("ResolveActiveWorktree: %v", err)
+	}
+	if item == nil || item.ID != 2 {
+		t.Fatalf("worktree inesperada: %+v", item)
 	}
 }

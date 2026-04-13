@@ -222,6 +222,12 @@ func TestRuntimeArtifactsRunDirOrdenaPorAgenteYFecha(t *testing.T) {
 	}
 }
 
+func TestRenderedCommandLooksLikeTMUXPreferredCLIReconoceClaudeCode(t *testing.T) {
+	if !RenderedCommandLooksLikeTMUXPreferredCLI("claude-code --print \"hola\"") {
+		t.Fatalf("claude-code deberia preferir backend tmux")
+	}
+}
+
 func TestArrancarPlanLocalRespetaOverrideCanSendInput(t *testing.T) {
 	if _, err := exec.LookPath("script"); err != nil {
 		t.Skip("script no disponible en el entorno")
@@ -740,6 +746,26 @@ func TestEnviarInstruccionTMUXVerificadaDejaPendienteSiPaneSigueIgual(t *testing
 	}
 }
 
+func TestEnviarInstruccionTMUXVerificadaAceptaEditsGeminiYActivaTrabajo(t *testing.T) {
+	dir := t.TempDir()
+	fakeTmux := writeFakeTmuxDispatchScript(t, dir, "gemini_accept_edits")
+
+	result, err := EnviarInstruccionTMUXVerificada(ObjetivoProceso{
+		HandleKind:   "process",
+		HandleRef:    "0",
+		MetadataJSON: fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_command":"%s","tmux_pane_id":"%%77"}`, fakeTmux),
+	}, "haz refresh corto")
+	if err != nil {
+		t.Fatalf("EnviarInstruccionTMUXVerificada: %v", err)
+	}
+	if !result.Attempted || !result.Delivered || !result.ActiveTask {
+		t.Fatalf("resultado tmux verificado inesperado: %+v", result)
+	}
+	if result.Reason != "active_task" {
+		t.Fatalf("reason inesperado: %+v", result)
+	}
+}
+
 func TestDetenerProcesoTMUXUsaKillSession(t *testing.T) {
 	dir := t.TempDir()
 	fakeTmux := writeFakeTmuxScript(t, dir)
@@ -874,6 +900,49 @@ func TestLatestTMUXWorktreeProgressMomentCuentaCambiosNuevosTrasArranque(t *test
 	}
 }
 
+func TestLatestTMUXWorktreeProgressMomentIgnoraRepoRaizDelSistema(t *testing.T) {
+	dir := t.TempDir()
+	gitPath := filepath.Join(dir, "git")
+	statePath := filepath.Join(dir, "git-state")
+	script := fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+printf '%%s\n' "$*" >> %q
+if [[ "${*: -2}" == "rev-parse --show-toplevel" ]]; then
+  printf '/\n'
+  exit 0
+fi
+printf 'git status no deberia ejecutarse\n' >&2
+exit 91
+`, statePath)
+	if err := os.WriteFile(gitPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake git: %v", err)
+	}
+
+	prev := tmuxMonitorGitCommand
+	tmuxMonitorGitCommand = gitPath
+	t.Cleanup(func() { tmuxMonitorGitCommand = prev })
+
+	progressAt, err := latestTMUXWorktreeProgressMoment("/tmp/orquesta-sin-repo", time.Now().UTC(), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("latestTMUXWorktreeProgressMoment: %v", err)
+	}
+	if !progressAt.IsZero() {
+		t.Fatalf("no deberia reportar progreso para repo raiz del sistema: %s", progressAt)
+	}
+
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("leer estado fake git: %v", err)
+	}
+	log := string(data)
+	if strings.Contains(log, "status --porcelain --untracked-files=all") {
+		t.Fatalf("no deberia invocar git status cuando rev-parse devuelve '/': %s", log)
+	}
+	if !strings.Contains(log, "rev-parse --show-toplevel") {
+		t.Fatalf("faltaba invocacion a rev-parse: %s", log)
+	}
+}
+
 func writeFakeTmuxScript(t *testing.T, dir string) string {
 	t.Helper()
 	scriptPath := filepath.Join(dir, "fake-tmux")
@@ -965,6 +1034,10 @@ case "$cmd" in
       draft)
         printf '%%s\n' "> $prompt"
         ;;
+      gemini_draft)
+        printf '%%s\n' "> $prompt"
+        printf '%%s\n' 'Shift+Tab to accept edits'
+        ;;
       active)
         printf '%%s\n' 'Esc to interrupt'
         ;;
@@ -985,18 +1058,33 @@ case "$cmd" in
         exit 0
       fi
       printf '%%s' "$*" > "$prompt_file"
-      printf 'draft\n' > "$pane_state_file"
+      if [[ "$mode" == "gemini_accept_edits" ]]; then
+        printf 'gemini_draft\n' > "$pane_state_file"
+      else
+        printf 'draft\n' > "$pane_state_file"
+      fi
       exit 0
     fi
     key="${1:-}"
     if [[ "$key" == "Enter" || "$key" == "C-m" ]]; then
       if [[ "$mode" == "active_after_enter" ]]; then
         printf 'active\n' > "$pane_state_file"
+      elif [[ "$mode" == "gemini_accept_edits" ]]; then
+        pane_state="$(cat "$pane_state_file" 2>/dev/null || printf 'ready')"
+        if [[ "$pane_state" == "gemini_draft" ]]; then
+          printf 'gemini_draft\n' > "$pane_state_file"
+        else
+          printf 'active\n' > "$pane_state_file"
+        fi
       elif [[ "$mode" == "ready_unchanged" ]]; then
         printf 'ready\n' > "$pane_state_file"
       else
         printf 'draft\n' > "$pane_state_file"
       fi
+      exit 0
+    fi
+    if [[ "$key" == "BTab" && "$mode" == "gemini_accept_edits" ]]; then
+      printf 'ready\n' > "$pane_state_file"
       exit 0
     fi
     exit 0

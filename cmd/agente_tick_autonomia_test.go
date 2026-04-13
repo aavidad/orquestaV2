@@ -202,3 +202,44 @@ func TestConstruirAgenteTickOutputDescribePausaOperativaPorRuntimePanic(t *testi
 		t.Fatalf("no deberia mentir con cuota agotada: %q", out.Motivo)
 	}
 }
+
+func TestResolverAccionTickAutonomiaPrioridades(t *testing.T) {
+	t.Run("presupuesto manda sobre trabajo", func(t *testing.T) {
+		accion, pausar, motivo := resolverAccionTickAutonomia(decisionTickAutonomiaInput{
+			PausarPorPresupuesto: true,
+			MotivoPresupuesto:    "presupuesto crítico",
+			TieneTrabajo:         true,
+		})
+		if accion != "pausar_por_cuota" || !pausar || motivo != "presupuesto crítico" {
+			t.Fatalf("decision inesperada: accion=%s pausar=%v motivo=%q", accion, pausar, motivo)
+		}
+	})
+
+	t.Run("supervision manda sobre propuestas", func(t *testing.T) {
+		accion, pausar, motivo := resolverAccionTickAutonomia(decisionTickAutonomiaInput{
+			EsSupervisorOperativo: true,
+			AgenteNombre:          "Codex1",
+			PropuestasPendientes:  3,
+		})
+		if accion != "supervisar_proyecto" || pausar {
+			t.Fatalf("decision inesperada: accion=%s pausar=%v motivo=%q", accion, pausar, motivo)
+		}
+	})
+
+	t.Run("bloqueos mandan sobre continuar trabajo", func(t *testing.T) {
+		accion, pausar, motivo := resolverAccionTickAutonomia(decisionTickAutonomiaInput{
+			TieneBloqueos: true,
+			TieneTrabajo:  true,
+		})
+		if accion != "pedir_intervencion" || pausar || !strings.Contains(strings.ToLower(motivo), "bloqueadas") {
+			t.Fatalf("decision inesperada: accion=%s pausar=%v motivo=%q", accion, pausar, motivo)
+		}
+	})
+
+	t.Run("sin trabajo cae a esperar_o_pedir_tarea", func(t *testing.T) {
+		accion, pausar, motivo := resolverAccionTickAutonomia(decisionTickAutonomiaInput{})
+		if accion != "esperar_o_pedir_tarea" || pausar || !strings.Contains(strings.ToLower(motivo), "no hay tarea activa") {
+			t.Fatalf("decision inesperada: accion=%s pausar=%v motivo=%q", accion, pausar, motivo)
+		}
+	})
+}

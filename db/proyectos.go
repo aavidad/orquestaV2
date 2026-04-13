@@ -316,12 +316,10 @@ func RutaTrabajoPreferidaAgenteProyecto(agente string, proyecto *Proyecto, cwd s
 		return cwd
 	}
 	if ruta := rutaWorktreeActivaAgenteProyecto(proyecto.ID, agente); ruta != "" {
-		if ruta == cwd {
+		if ruta == cwd || rutaDentroDe(ruta, cwd) {
 			return cwd
 		}
-		if cwd == "" || !rutaTrabajoPerteneceAProyectoAgente(proyecto, agente, cwd) {
-			return ruta
-		}
+		return ruta
 	}
 	if rutaTrabajoPerteneceAProyectoAgente(proyecto, agente, cwd) {
 		return cwd

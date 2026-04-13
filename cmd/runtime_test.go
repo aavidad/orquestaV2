@@ -23,11 +23,34 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	var transcriptHandleID string
 	var ordersProjectQuery string
 	var ordersLimitQuery string
+	var wakeReq map[string]any
+	var clearMailboxReq map[string]any
+	var clearTasksReq map[string]any
 	var purgeOrdersReq map[string]any
+	var purgeHandlesReq map[string]any
+	var agentControlReq map[string]any
+	runtimeActive := true
 	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/api/status":
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		case r.URL.Path == "/api/runtimes/tree" && r.Method == http.MethodGet:
+			runtimes := []map[string]any{}
+			if runtimeActive {
+				runtimes = append(runtimes, map[string]any{
+					"runtime": map[string]any{
+						"id":            7,
+						"agente":        "Codex2",
+						"proyecto_slug": "orquestador",
+						"provider_slug": "openai",
+						"connector_slug":"codex-cli",
+						"logical_state": "activo",
+						"pid":           1234,
+						"last_event_at": "2026-03-23T10:00:00Z",
+					},
+				})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"runtimes": runtimes})
 		case r.URL.Path == "/api/runtime-transcript" && r.Method == http.MethodGet:
 			transcriptQuery = r.URL.Query().Get("q")
 			transcriptRuntimeID = r.URL.Query().Get("runtime_id")
@@ -46,19 +69,22 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 				}},
 			})
 		case r.URL.Path == "/api/runtime-handles":
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"handles": []map[string]any{{
+			handles := []map[string]any{}
+			if runtimeActive {
+				handles = append(handles, map[string]any{
 					"id":          7,
-					"agente":      "Codex1",
+					"agente":      "Codex2",
 					"transporte":  "cli",
 					"handle_kind": "session",
 					"handle_ref":  "sess-001",
 					"estado":      "activo",
 					"created_at":  "2026-03-23T10:00:00Z",
 					"updated_at":  "2026-03-23T10:00:00Z",
-				}},
-			})
+				})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"handles": handles})
 		case r.URL.Path == "/api/runtime-handles/purgar" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&purgeHandlesReq)
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"ok":          true,
 				"deleted":     2,
@@ -175,6 +201,21 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": 21})
 		case r.URL.Path == "/api/runtime-mailbox/21/consumir" && r.Method == http.MethodPost:
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": 21})
+		case r.URL.Path == "/api/runtime-mailbox/limpiar" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&clearMailboxReq)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "cleared": 1, "cleared_ids": []int64{21}})
+		case r.URL.Path == "/api/agente/control" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&agentControlReq)
+			if accion, _ := agentControlReq["accion"].(string); strings.TrimSpace(accion) == "stop" {
+				runtimeActive = false
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": 99, "agente": "Codex2", "accion": "stop"})
+		case r.URL.Path == "/api/tareas/limpiar-frente" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&clearTasksReq)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "resultado": map[string]any{"total": 2, "moved_ids": []int64{44, 45}}})
+		case r.URL.Path == "/api/runtime/wake" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&wakeReq)
+			_ = json.NewEncoder(w).Encode(map[string]any{"orders": true, "mailbox": true, "warm": false})
 		case r.URL.Path == "/api/runtime-checkpoints/latest":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"checkpoint": map[string]any{
@@ -247,6 +288,87 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	}
 	if got, ok := purgeOrdersReq["older_than_minutes"].(float64); !ok || int(got) != 60 {
 		t.Fatalf("older_than_minutes inesperado en request: %+v", purgeOrdersReq)
+	}
+
+	if err := runtimeDespertarCmd.Flags().Set("orders", "true"); err != nil {
+		t.Fatalf("set orders despertar: %v", err)
+	}
+	if err := runtimeDespertarCmd.Flags().Set("mailbox", "true"); err != nil {
+		t.Fatalf("set mailbox despertar: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = runtimeDespertarCmd.Flags().Set("orders", "false")
+		_ = runtimeDespertarCmd.Flags().Set("mailbox", "false")
+		_ = runtimeDespertarCmd.Flags().Set("warm", "false")
+	})
+	outWake := capturarStdout(t, func() {
+		if err := runtimeDespertarCmd.RunE(runtimeDespertarCmd, nil); err != nil {
+			t.Fatalf("runtime despertar via api: %v", err)
+		}
+	})
+	for _, token := range []string{"orders=true", "mailbox=true"} {
+		if !strings.Contains(outWake, token) {
+			t.Fatalf("salida runtime despertar sin %q:\n%s", token, outWake)
+		}
+	}
+	if got, _ := wakeReq["orders"].(bool); !got {
+		t.Fatalf("request wake sin orders=true: %+v", wakeReq)
+	}
+	if got, _ := wakeReq["mailbox"].(bool); !got {
+		t.Fatalf("request wake sin mailbox=true: %+v", wakeReq)
+	}
+
+	if err := runtimeMailboxLimpiarCmd.Flags().Set("to", "Codex2"); err != nil {
+		t.Fatalf("set to mailbox limpiar: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = runtimeMailboxLimpiarCmd.Flags().Set("to", "")
+	})
+	outMailboxClear := capturarStdout(t, func() {
+		if err := runtimeMailboxLimpiarCmd.RunE(runtimeMailboxLimpiarCmd, nil); err != nil {
+			t.Fatalf("runtime mailbox-limpiar via api: %v", err)
+		}
+	})
+	if !strings.Contains(outMailboxClear, "Mailbox limpiado: 1") {
+		t.Fatalf("salida runtime mailbox-limpiar inesperada:\n%s", outMailboxClear)
+	}
+	if got, _ := clearMailboxReq["to_agente"].(string); got != "Codex2" {
+		t.Fatalf("request mailbox limpiar sin to_agente esperado: %+v", clearMailboxReq)
+	}
+
+	if err := runtimeLimpiarPruebasCmd.Flags().Set("agente", "Codex2"); err != nil {
+		t.Fatalf("set agente limpiar-pruebas: %v", err)
+	}
+	if err := runtimeLimpiarPruebasCmd.Flags().Set("proyecto", "orquestador"); err != nil {
+		t.Fatalf("set proyecto limpiar-pruebas: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = runtimeLimpiarPruebasCmd.Flags().Set("agente", "")
+		_ = runtimeLimpiarPruebasCmd.Flags().Set("proyecto", "")
+		_ = runtimeLimpiarPruebasCmd.Flags().Set("mantener-tareas", "")
+	})
+	outClean := capturarStdout(t, func() {
+		if err := runtimeLimpiarPruebasCmd.RunE(runtimeLimpiarPruebasCmd, nil); err != nil {
+			t.Fatalf("runtime limpiar-pruebas via api: %v", err)
+		}
+	})
+	if !strings.Contains(outClean, "Entorno de prueba limpiado proyecto=orquestador agente=Codex2") {
+		t.Fatalf("salida runtime limpiar-pruebas inesperada:\n%s", outClean)
+	}
+	if got, _ := clearTasksReq["agente"].(string); got != "Codex2" {
+		t.Fatalf("request limpiar-frente sin agente esperado: %+v", clearTasksReq)
+	}
+	if got, _ := clearTasksReq["proyecto"].(string); got != "orquestador" {
+		t.Fatalf("request limpiar-frente sin proyecto esperado: %+v", clearTasksReq)
+	}
+	if got, _ := purgeHandlesReq["agente"].(string); got != "Codex2" {
+		t.Fatalf("request purgar-handles sin agente esperado: %+v", purgeHandlesReq)
+	}
+	if got, _ := agentControlReq["agente"].(string); got != "Codex2" {
+		t.Fatalf("request agente control sin agente esperado: %+v", agentControlReq)
+	}
+	if got, _ := agentControlReq["accion"].(string); got != "stop" {
+		t.Fatalf("request agente control sin stop esperado: %+v", agentControlReq)
 	}
 
 	if err := runtimeTrazaCmd.Flags().Set("agente", "Codex1"); err != nil {

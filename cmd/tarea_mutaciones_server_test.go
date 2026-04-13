@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"orquesta/db"
+	"orquesta/tareasapp"
 )
 
 func TestTareaMutacionesBasicasUsanAPI(t *testing.T) {
@@ -146,6 +147,56 @@ func TestTareaMutacionesBasicasUsanAPI(t *testing.T) {
 	})
 	if !strings.Contains(outContrato, "Contrato definido") {
 		t.Fatalf("salida contrato inesperada:\n%s", outContrato)
+	}
+}
+
+func TestTareaLimpiarFrenteUsaAPI(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/tareas/limpiar-frente", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "metodo no soportado", http.StatusMethodNotAllowed)
+			return
+		}
+		var req apiTareaLimpiarFrenteRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode limpiar-frente: %v", err)
+		}
+		if req.Agente != "Codex1" || req.Proyecto != "orquestador" || len(req.KeepIDs) != 1 || req.KeepIDs[0] != 529 {
+			t.Fatalf("payload limpiar-frente inesperado: %+v", req)
+		}
+		_ = json.NewEncoder(w).Encode(apiTareaLimpiarFrenteResponse{
+			OK: true,
+			Resultado: &tareasapp.CleanActiveFrontResult{
+				Total:    2,
+				MovedIDs: []int64{421, 530},
+			},
+		})
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	resetCommandFlags(tareaLimpiarFrenteCmd)
+	_ = tareaLimpiarFrenteCmd.Flags().Set("agente", "Codex1")
+	_ = tareaLimpiarFrenteCmd.Flags().Set("proyecto", "orquestador")
+	_ = tareaLimpiarFrenteCmd.Flags().Set("mantener", "529")
+
+	out := capturarStdout(t, func() {
+		if err := tareaLimpiarFrenteCmd.RunE(tareaLimpiarFrenteCmd, nil); err != nil {
+			t.Fatalf("tarea limpiar-frente via api: %v", err)
+		}
+	})
+	for _, token := range []string{"Frente limpiado", "proyecto=orquestador", "agente=Codex1", "Movidas a backlog: 2", "421,530"} {
+		if !strings.Contains(out, token) {
+			t.Fatalf("salida limpiar-frente sin %q:\n%s", token, out)
+		}
 	}
 }
 

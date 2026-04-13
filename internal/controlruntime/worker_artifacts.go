@@ -12,6 +12,7 @@ const (
 	workerStatusStarting     = "starting"
 	workerStatusReady        = "ready"
 	workerStatusRunning      = "running"
+	workerStatusBlockedTrust = "blocked_trust"
 	workerStatusBlockedAuth  = "blocked_auth"
 	workerStatusBlockedQuota = "blocked_quota"
 	workerStatusStopped      = "stopped"

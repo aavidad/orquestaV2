@@ -35,6 +35,7 @@ type apiAgenteControlRequest struct {
 	Perfil       string `json:"perfil"`
 	Motivo       string `json:"motivo"`
 	Por          string `json:"por"`
+	TareaID      *int64 `json:"tarea_id,omitempty"`
 }
 
 type apiAgenteControlResponse struct {
@@ -57,6 +58,12 @@ var agenteControlCmd = &cobra.Command{
 		motivo, _ := cmd.Flags().GetString("motivo")
 		por, _ := cmd.Flags().GetString("por")
 
+		tareaID, _ := cmd.Flags().GetInt64("tarea-id")
+		var tareaIDPtr *int64
+		if tareaID > 0 {
+			tareaIDPtr = &tareaID
+		}
+
 		req := apiAgenteControlRequest{
 			Agente:       strings.TrimSpace(args[1]),
 			Proyecto:     strings.TrimSpace(proyecto),
@@ -67,6 +74,7 @@ var agenteControlCmd = &cobra.Command{
 			Perfil:       strings.TrimSpace(perfil),
 			Motivo:       strings.TrimSpace(motivo),
 			Por:          strings.TrimSpace(por),
+			TareaID:      tareaIDPtr,
 		}
 
 		orderID, accion, ok, err := encolarControlAgentePorAPI(req)
@@ -90,6 +98,7 @@ func init() {
 	agenteControlCmd.Flags().String("perfil", "", "Perfil de tarea del agente")
 	agenteControlCmd.Flags().String("motivo", "", "Motivo operativo de la orden")
 	agenteControlCmd.Flags().String("por", "orquesta", "Actor que solicita la orden")
+	agenteControlCmd.Flags().Int64("tarea-id", 0, "ID de la tarea vinculada")
 	agenteCmd.AddCommand(agenteControlCmd)
 }
 
@@ -135,6 +144,7 @@ func encolarControlAgenteLocal(req apiAgenteControlRequest) (int64, string, erro
 		Perfil:       strings.TrimSpace(req.Perfil),
 		Motivo:       strings.TrimSpace(req.Motivo),
 		Por:          strings.TrimSpace(req.Por),
+		TareaID:      req.TareaID,
 	})
 	if err != nil {
 		return 0, "", err

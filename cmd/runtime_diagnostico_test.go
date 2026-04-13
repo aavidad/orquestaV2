@@ -14,6 +14,7 @@ import (
 
 func TestRuntimeDiagnosticoUsaAPI(t *testing.T) {
 	now := time.Date(2026, 3, 24, 20, 0, 0, 0, time.UTC)
+	sesionID := int64(21)
 	runtime := &db.RuntimeInstance{
 		ID:              7,
 		Agente:          "Codex1",
@@ -32,6 +33,7 @@ func TestRuntimeDiagnosticoUsaAPI(t *testing.T) {
 		HandleRef:  "sess-runtime-api",
 		Estado:     "vivo",
 		LastSeenAt: &now,
+		SesionID:   &sesionID,
 	}
 	order := &db.RuntimeOrder{
 		ID:        11,
@@ -538,6 +540,36 @@ func TestRuntimeDiagnosticoIssuesDetectaSessionResumeBlocked(t *testing.T) {
 	}
 	if issues[0].Code != "session_resume_blocked" {
 		t.Fatalf("issue inesperado: %+v", issues)
+	}
+}
+
+func TestRuntimeDiagnosticoIssuesNoMarcaProgressStaleSiHaySalidaReciente(t *testing.T) {
+	now := time.Date(2026, 4, 13, 14, 30, 0, 0, time.UTC)
+	runtimeDiagnosticoNow = func() time.Time { return now }
+	t.Cleanup(func() {
+		runtimeDiagnosticoNow = func() time.Time { return time.Now().UTC() }
+	})
+
+	lastProgress := now.Add(-2 * runtimeDiagnosticoWorkerProgressThreshold)
+	lastOutput := now.Add(-5 * time.Minute)
+	rows := []runtimeDiagnosticoWorkerRow{{
+		HandleID:            852,
+		Agent:               "Codex1",
+		Alive:               true,
+		Driver:              "tmux_cli_session",
+		Transport:           "tmux",
+		RuntimeRef:          "orq-codex1/%3",
+		State:               "ready",
+		LastProgressAt:      &lastProgress,
+		LastOutputAt:        &lastOutput,
+		MailboxDeliveryMode: "session_resume",
+		TmuxSession:         "orq-codex1-140134",
+	}}
+	issues := runtimeDiagnosticoIssues(rows, nil, nil, nil)
+	for _, issue := range issues {
+		if issue.Code == "worker_progress_stale" {
+			t.Fatalf("no deberia marcar worker_progress_stale con salida reciente: %+v", issues)
+		}
 	}
 }
 

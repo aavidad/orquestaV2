@@ -903,6 +903,8 @@ func enviarInstruccionTMUXDesdeMetadata(raw, texto string) (bool, error) {
 	if !ready {
 		if captured, captureErr := captureTMUXPane(tmuxCommand, paneID); captureErr == nil {
 			switch {
+			case tmuxPaneHasTrustPrompt(captured), tmuxPaneHasUntrustedFolderWarning(captured):
+				return true, fmt.Errorf("tmux pane requiere carpeta de confianza")
 			case tmuxPaneHasCodexAuthPrompt(captured):
 				return true, fmt.Errorf("tmux pane requiere autenticacion manual")
 			case tmuxPaneHasUsageLimitPrompt(captured):
@@ -951,6 +953,8 @@ func enviarInstruccionTMUXVerificadaDesdeMetadata(raw, texto string) (TMUXDispat
 	if !ready {
 		if captured, captureErr := captureTMUXPane(tmuxCommand, paneID); captureErr == nil {
 			switch {
+			case tmuxPaneHasTrustPrompt(captured), tmuxPaneHasUntrustedFolderWarning(captured):
+				result.Reason = "trust_required"
 			case tmuxPaneHasCodexAuthPrompt(captured):
 				result.Reason = "auth_required"
 			case tmuxPaneHasUsageLimitPrompt(captured):
@@ -988,6 +992,29 @@ func enviarInstruccionTMUXVerificadaDesdeMetadata(raw, texto string) (TMUXDispat
 				result.Reason = "consumed"
 				return result, nil
 			}
+			if tmuxPaneHasGeminiAcceptEditsPrompt(captured) {
+				if err := sendTMUXKey(tmuxCommand, paneID, "BTab"); err != nil {
+					return result, err
+				}
+				time.Sleep(180 * time.Millisecond)
+				if err := sendTMUXKey(tmuxCommand, paneID, "Enter"); err != nil {
+					return result, err
+				}
+				time.Sleep(250 * time.Millisecond)
+				if recaptured, err := captureTMUXPane(tmuxCommand, paneID); err == nil {
+					if tmuxPaneHasActiveTask(recaptured) {
+						result.Delivered = true
+						result.ActiveTask = true
+						result.Reason = "active_task"
+						return result, nil
+					}
+					if tmuxPaneDispatchConsumed(beforeCapture, recaptured, texto) {
+						result.Delivered = true
+						result.Reason = "consumed"
+						return result, nil
+					}
+				}
+			}
 		}
 		if err := sendTMUXKey(tmuxCommand, paneID, "Enter"); err != nil {
 			return result, err
@@ -1008,6 +1035,14 @@ func tmuxPaneDispatchConsumed(before, after, trigger string) bool {
 		return false
 	}
 	return true
+}
+
+func tmuxPaneHasGeminiAcceptEditsPrompt(captured string) bool {
+	normalized := strings.ToLower(tmuxNormalizeCapture(captured))
+	if normalized == "" {
+		return false
+	}
+	return strings.Contains(normalized, "shift+tab to accept edits")
 }
 
 func sendTMUXLiteral(tmuxCommand, paneID, texto string) error {

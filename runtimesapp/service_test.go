@@ -1,7 +1,9 @@
 package runtimesapp
 
 import (
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +11,7 @@ import (
 	"time"
 
 	"orquesta/db"
+	"orquesta/microprogramacionapp"
 )
 
 type fakeStore struct {
@@ -31,6 +34,7 @@ type fakeStore struct {
 	primaryProjRuntimeAgent  string
 	primaryProjRuntimeID     *int64
 	primaryProjRuntimeResp   *db.RuntimeInstance
+	primaryProjRuntimeErr    error
 	handleID                 int64
 	handleByIDResp           *db.RuntimeHandle
 	handlesFilter            *string
@@ -49,15 +53,20 @@ type fakeStore struct {
 	handleProjAgent          string
 	handleProjID             *int64
 	handleProjResp           *db.RuntimeHandle
+	handleProjErr            error
 	operationalHandleAgent   string
 	operationalHandleResp    *db.RuntimeHandle
+	operationalHandleErr     error
 	operationalProjAgent     string
 	operationalProjID        *int64
 	operationalProjResp      *db.RuntimeHandle
+	operationalProjErr       error
 	eventsFilter             db.FiltroRuntimeEvents
 	eventsResp               []*db.RuntimeEvent
 	transcriptFilter         db.FiltroRuntimeTranscript
 	transcriptResp           []*db.RuntimeTranscriptEntry
+	transcriptRegistrado     *db.RuntimeTranscriptEntry
+	transcriptRegistradoID   int64
 	samplesID                int64
 	samplesLimit             int
 	samplesResponse          []*db.RuntimeTelemetrySample
@@ -66,6 +75,11 @@ type fakeStore struct {
 	orderID                  int64
 	ordersFilter             db.FiltroRuntimeOrders
 	ordersResponse           []*db.RuntimeOrder
+	markOrderStateID         int64
+	markOrderStateEstado     string
+	markOrderStateResultado  string
+	markOrderStateError      string
+	markedOrderStates        []int64
 	handoffOrigen            string
 	handoffDestino           string
 	handoffTareaID           *int64
@@ -103,10 +117,101 @@ type fakeStore struct {
 	auditDetail              string
 }
 
+type fakeRegistradorEntregaGit struct {
+	id        int64
+	entrada   microprogramacionapp.EntradaRegistrarEntregaGit
+	resultado *microprogramacionapp.ResultadoRegistrarEntregaGit
+	err       error
+}
+
+type fakeMaterializadorEntrega struct {
+	id        int64
+	raiz      string
+	respuesta string
+	evidencia string
+	resultado *microprogramacionapp.ResultadoMaterializarEntrega
+	err       error
+}
+
+type fakeResolvedorWorktree struct {
+	proyectoSlug string
+	agente       string
+	resultado    *db.Worktree
+	err          error
+}
+
+type fakeAseguradorWorktree struct {
+	proyectoSlug string
+	agente       string
+	resultado    *db.Worktree
+	err          error
+}
+
 func (f *fakeStore) GetProject(ref string) (*db.Proyecto, error) {
 	f.projectRef = ref
 	return f.projectResponse, nil
 }
+
+func (f *fakeRegistradorEntregaGit) RegistrarEntregaGit(id int64, entrada microprogramacionapp.EntradaRegistrarEntregaGit) (*microprogramacionapp.ResultadoRegistrarEntregaGit, error) {
+	f.id = id
+	f.entrada = entrada
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.resultado != nil {
+		return f.resultado, nil
+	}
+	return &microprogramacionapp.ResultadoRegistrarEntregaGit{
+		EspecificacionID:   id,
+		ArchivoObjetivo:    "microprogramacionapp/service.go",
+		WriteSetPermitido:  []string{"microprogramacionapp/service.go"},
+		WorktreeID:         1,
+		RutaWorktree:       "/tmp/worktree",
+		SourceBranch:       "orq/test",
+		TargetBranch:       "main",
+		HeadCommit:         "abc123",
+		ArchivosEntregados: []string{"microprogramacionapp/service.go"},
+		GitMergeID:         55,
+	}, nil
+}
+
+func (f *fakeMaterializadorEntrega) MaterializarEntregaDesdeRespuesta(id int64, raizProyecto, respuesta, evidencia string) (*microprogramacionapp.ResultadoMaterializarEntrega, error) {
+	f.id = id
+	f.raiz = raizProyecto
+	f.respuesta = respuesta
+	f.evidencia = evidencia
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.resultado != nil {
+		return f.resultado, nil
+	}
+	return &microprogramacionapp.ResultadoMaterializarEntrega{
+		EspecificacionID:       id,
+		ArchivoObjetivo:        "microprogramacionapp/extractor_entrega.go",
+		ArchivosMaterializados: []string{"microprogramacionapp/extractor_entrega.go"},
+		WriteSetPermitido:      []string{"microprogramacionapp/extractor_entrega.go"},
+	}, nil
+}
+
+func (f *fakeResolvedorWorktree) ResolveActiveWorktree(proyectoSlug, agente string) (*db.Worktree, error) {
+	f.proyectoSlug = proyectoSlug
+	f.agente = agente
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.resultado, nil
+}
+
+func (f *fakeAseguradorWorktree) EnsureActiveWorktree(proyectoSlug, agente string) (*db.Worktree, error) {
+	f.proyectoSlug = proyectoSlug
+	f.agente = agente
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.resultado, nil
+}
+
 func (f *fakeStore) GetAgent(nombre string) (*db.Agente, error) {
 	f.agentName = nombre
 	return f.agentResponse, nil
@@ -140,6 +245,9 @@ func (f *fakeStore) GetPrimaryRuntime(agente string) (*db.RuntimeInstance, error
 func (f *fakeStore) GetPrimaryRuntimeForProject(agente string, proyectoID *int64) (*db.RuntimeInstance, error) {
 	f.primaryProjRuntimeAgent = agente
 	f.primaryProjRuntimeID = proyectoID
+	if f.primaryProjRuntimeErr != nil {
+		return nil, f.primaryProjRuntimeErr
+	}
 	return f.primaryProjRuntimeResp, nil
 }
 func (f *fakeStore) GetRuntimeHandle(id int64) (*db.RuntimeHandle, error) {
@@ -177,15 +285,24 @@ func (f *fakeStore) GetActiveRuntimeHandle(agente string) (*db.RuntimeHandle, er
 func (f *fakeStore) GetActiveRuntimeHandleForProject(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
 	f.handleProjAgent = agente
 	f.handleProjID = proyectoID
+	if f.handleProjErr != nil {
+		return nil, f.handleProjErr
+	}
 	return f.handleProjResp, nil
 }
 func (f *fakeStore) GetOperationalRuntimeHandle(agente string) (*db.RuntimeHandle, error) {
 	f.operationalHandleAgent = agente
+	if f.operationalHandleErr != nil {
+		return nil, f.operationalHandleErr
+	}
 	return f.operationalHandleResp, nil
 }
 func (f *fakeStore) GetOperationalRuntimeHandleForProject(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
 	f.operationalProjAgent = agente
 	f.operationalProjID = proyectoID
+	if f.operationalProjErr != nil {
+		return nil, f.operationalProjErr
+	}
 	return f.operationalProjResp, nil
 }
 func (f *fakeStore) ListRuntimeEvents(filter db.FiltroRuntimeEvents) ([]*db.RuntimeEvent, error) {
@@ -195,6 +312,10 @@ func (f *fakeStore) ListRuntimeEvents(filter db.FiltroRuntimeEvents) ([]*db.Runt
 func (f *fakeStore) ListRuntimeTranscript(filter db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error) {
 	f.transcriptFilter = filter
 	return f.transcriptResp, nil
+}
+func (f *fakeStore) RegisterRuntimeTranscript(entry *db.RuntimeTranscriptEntry) (int64, error) {
+	f.transcriptRegistrado = entry
+	return f.transcriptRegistradoID, nil
 }
 func (f *fakeStore) ListRuntimeSamples(runtimeID int64, limit int) ([]*db.RuntimeTelemetrySample, error) {
 	f.samplesID = runtimeID
@@ -215,6 +336,14 @@ func (f *fakeStore) GetRuntimeOrder(id int64) (*db.RuntimeOrder, error) {
 func (f *fakeStore) ListRuntimeOrders(filter db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error) {
 	f.ordersFilter = filter
 	return f.ordersResponse, nil
+}
+func (f *fakeStore) MarkRuntimeOrderState(id int64, estado, resultadoJSON, errorText string) error {
+	f.markOrderStateID = id
+	f.markOrderStateEstado = estado
+	f.markOrderStateResultado = resultadoJSON
+	f.markOrderStateError = errorText
+	f.markedOrderStates = append(f.markedOrderStates, id)
+	return nil
 }
 func (f *fakeStore) CreateLiveAgentHandoff(origen, destino string, tareaID *int64, motivo, resumenContinuidad, externalSessionID string) (int64, error) {
 	f.handoffOrigen = origen
@@ -509,6 +638,55 @@ func TestCreateRuntimeOrderInvocaHookTrasEncolar(t *testing.T) {
 	}
 }
 
+func TestMarcarRuntimeOrderDispatchNotificadoPersisteContratoCanonico(t *testing.T) {
+	store := &fakeStore{
+		orderID:        41,
+		ordersResponse: nil,
+	}
+	store.orderID = 41
+	store.ordersResponse = []*db.RuntimeOrder{{ID: 41, Agente: "Gemma1", Tipo: "send_instruction", ResultadoJSON: `{"delivery_state":"queued"}`}}
+	service := NewService(store)
+
+	if err := service.MarcarRuntimeOrderDispatchNotificado(41, "worker notificado"); err != nil {
+		t.Fatalf("MarcarRuntimeOrderDispatchNotificado: %v", err)
+	}
+	if store.markOrderStateID != 41 || store.markOrderStateEstado != "pendiente" {
+		t.Fatalf("marca inesperada: id=%d estado=%q", store.markOrderStateID, store.markOrderStateEstado)
+	}
+	for _, token := range []string{
+		`"dispatch_state":"notified"`,
+		`"delivery_state":"notified"`,
+		`"deferred_reason":"worker notificado"`,
+	} {
+		if !strings.Contains(store.markOrderStateResultado, token) {
+			t.Fatalf("resultado sin token %q: %s", token, store.markOrderStateResultado)
+		}
+	}
+}
+
+func TestMarcarRuntimeOrderDispatchFallidoPersisteContratoCanonico(t *testing.T) {
+	store := &fakeStore{}
+	store.orderID = 42
+	store.ordersResponse = []*db.RuntimeOrder{{ID: 42, Agente: "Gemma1", Tipo: "send_instruction", ResultadoJSON: `{"delivery_state":"queued"}`}}
+	service := NewService(store)
+
+	if err := service.MarcarRuntimeOrderDispatchFallido(42, "pane no listo"); err != nil {
+		t.Fatalf("MarcarRuntimeOrderDispatchFallido: %v", err)
+	}
+	if store.markOrderStateID != 42 || store.markOrderStateEstado != "fallida" {
+		t.Fatalf("marca inesperada: id=%d estado=%q", store.markOrderStateID, store.markOrderStateEstado)
+	}
+	for _, token := range []string{
+		`"dispatch_state":"failed"`,
+		`"delivery_state":"failed"`,
+		`"last_reason":"pane no listo"`,
+	} {
+		if !strings.Contains(store.markOrderStateResultado, token) {
+			t.Fatalf("resultado sin token %q: %s", token, store.markOrderStateResultado)
+		}
+	}
+}
+
 func TestSendRuntimeMailboxInvocaHookTrasCrear(t *testing.T) {
 	store := &fakeStore{createMailboxID: 35}
 	service := NewService(store)
@@ -549,7 +727,7 @@ func TestDispatchMicroprogramacionInstructionEncolaSendInstructionCanonica(t *te
 		SimboloObjetivo:   "Normalizar",
 		WriteSet:          []string{"tmp/x.go"},
 		TestsObligatorios: []string{"go test ./tmp -count=1"},
-		FormatoSalida:     "patch+evidencia",
+		FormatoSalida:     "ficheros+evidencia",
 	})
 	if err != nil {
 		t.Fatalf("DispatchMicroprogramacionInstruction: %v", err)
@@ -562,6 +740,274 @@ func TestDispatchMicroprogramacionInstructionEncolaSendInstructionCanonica(t *te
 	}
 	if !strings.Contains(store.createOrder.PayloadJSON, `"source":"microprogramacion"`) || !strings.Contains(store.createOrder.PayloadJSON, `"especificacion_id":31`) {
 		t.Fatalf("payload sin trazabilidad microprogramada: %s", store.createOrder.PayloadJSON)
+	}
+}
+
+func TestEnqueueAgentNudgeEncolaOrdenCanonica(t *testing.T) {
+	runtimeID := int64(21)
+	projectID := int64(9)
+	store := &fakeStore{
+		projectResponse:      &db.Proyecto{ID: projectID, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: "/tmp/orquestador"},
+		operationalProjResp:  &db.RuntimeHandle{ID: 14, Agente: "Codex1", Estado: "activo", RuntimeID: &runtimeID},
+		runtimeResponse:      &db.RuntimeInstance{ID: runtimeID, Agente: "Codex1", ProyectoID: &projectID},
+		handleByIDResp:       &db.RuntimeHandle{ID: 14, Agente: "Codex1", Estado: "activo", RuntimeID: &runtimeID},
+		createOrderID:        77,
+	}
+	service := NewService(store)
+
+	resultado, err := service.EnqueueAgentNudge(AgentNudgeRequest{
+		Agente:      "Codex1",
+		Proyecto:    "orquestador",
+		Accion:      "implementar",
+		Motivo:      "seguir tarea",
+		Instruction: "TAREA: #31 corregir parser",
+		Actor:       "orquesta",
+		Metadata: map[string]any{
+			"source": "pipeline_local",
+		},
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAgentNudge: %v", err)
+	}
+	if resultado == nil || resultado.RuntimeOrderID <= 0 {
+		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+	if store.createOrder == nil || store.createOrder.Tipo != "nudge" {
+		t.Fatalf("orden encolada inesperada: %+v", store.createOrder)
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, `"accion":"implementar"`) || !strings.Contains(store.createOrder.PayloadJSON, `"source":"pipeline_local"`) {
+		t.Fatalf("payload nudge inesperado: %s", store.createOrder.PayloadJSON)
+	}
+	if store.createOrder.HandleID == nil || *store.createOrder.HandleID != 14 {
+		t.Fatalf("handle no propagado: %+v", store.createOrder)
+	}
+}
+
+func TestDispatchMicroprogramacionInstructionIncluyeWorktreeActivaEnPayload(t *testing.T) {
+	projectID := int64(10)
+	store := &fakeStore{
+		createOrderID:   89,
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador", RutaAbs: "/tmp/orquestador"},
+	}
+	resolvedor := &fakeResolvedorWorktree{
+		resultado: &db.Worktree{
+			ID:           71,
+			ProyectoSlug: "orquestador",
+			RutaAbs:      "/tmp/orquestador/.orquesta-worktrees/orq-codex1",
+			Branch:       "orq/orquestador/codex1",
+			BaseRef:      "main",
+		},
+	}
+	service := NewService(store)
+	service.SetResolvedorWorktreeActiva(resolvedor)
+
+	_, err := service.DispatchMicroprogramacionInstruction(MicroprogramacionDispatchRequest{
+		AgenteDestino:     "Codex1",
+		ProyectoID:        &projectID,
+		Mensaje:           "MICROTAREA CERRADA\nARCHIVO: microprogramacionapp/service.go",
+		EspecificacionID:  32,
+		ArchivoObjetivo:   "microprogramacionapp/service.go",
+		SimboloObjetivo:   "RegistrarEntregaGit",
+		WriteSet:          []string{"microprogramacionapp/service.go"},
+		TestsObligatorios: []string{"go test ./microprogramacionapp -count=1"},
+		FormatoSalida:     "git_worktree+evidencia",
+	})
+	if err != nil {
+		t.Fatalf("DispatchMicroprogramacionInstruction: %v", err)
+	}
+	if resolvedor.proyectoSlug != "orquestador" || resolvedor.agente != "Codex1" {
+		t.Fatalf("resolvedor worktree inesperado: proyecto=%q agente=%q", resolvedor.proyectoSlug, resolvedor.agente)
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, `"worktree_id":71`) {
+		t.Fatalf("payload sin worktree_id: %s", store.createOrder.PayloadJSON)
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, `"ruta_worktree":"/tmp/orquestador/.orquesta-worktrees/orq-codex1"`) {
+		t.Fatalf("payload sin ruta_worktree: %s", store.createOrder.PayloadJSON)
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, `"branch_worktree":"orq/orquestador/codex1"`) {
+		t.Fatalf("payload sin branch_worktree: %s", store.createOrder.PayloadJSON)
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, `"base_ref_worktree":"main"`) {
+		t.Fatalf("payload sin base_ref_worktree: %s", store.createOrder.PayloadJSON)
+	}
+}
+
+func TestDispatchMicroprogramacionInstructionAseguraWorktreeGitSiNoExisteActiva(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{
+		createOrderID:   90,
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador", RutaAbs: "/tmp/orquestador"},
+	}
+	resolvedor := &fakeResolvedorWorktree{err: fmt.Errorf("no existe worktree activa")}
+	asegurador := &fakeAseguradorWorktree{
+		resultado: &db.Worktree{
+			ID:           72,
+			ProyectoSlug: "orquestador",
+			RutaAbs:      "/tmp/orquestador/.orquesta-worktrees/orq-codex1",
+			Branch:       "orq/orquestador/codex1",
+			BaseRef:      "HEAD",
+		},
+	}
+	service := NewService(store)
+	service.SetResolvedorWorktreeActiva(resolvedor)
+	service.SetAseguradorWorktreeActiva(asegurador)
+
+	_, err := service.DispatchMicroprogramacionInstruction(MicroprogramacionDispatchRequest{
+		AgenteDestino:     "Codex1",
+		ProyectoID:        &projectID,
+		Mensaje:           "MICROTAREA CERRADA\nARCHIVO: cabeceras/merge_headers.go",
+		EspecificacionID:  33,
+		ArchivoObjetivo:   "cabeceras/merge_headers.go",
+		SimboloObjetivo:   "FusionarCabecerasCanonicas",
+		WriteSet:          []string{"cabeceras/merge_headers.go"},
+		TestsObligatorios: []string{"go test ./cabeceras -run TestFusionarCabecerasCanonicas -count=1"},
+		FormatoSalida:     "git_worktree+evidencia",
+	})
+	if err != nil {
+		t.Fatalf("DispatchMicroprogramacionInstruction: %v", err)
+	}
+	if resolvedor.proyectoSlug != "orquestador" || asegurador.proyectoSlug != "orquestador" {
+		t.Fatalf("proyecto inesperado en resolvedor/asegurador: %q / %q", resolvedor.proyectoSlug, asegurador.proyectoSlug)
+	}
+	if asegurador.agente != "Codex1" {
+		t.Fatalf("asegurador sin agente esperado: %q", asegurador.agente)
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, `"worktree_id":72`) || !strings.Contains(store.createOrder.PayloadJSON, `"branch_worktree":"orq/orquestador/codex1"`) {
+		t.Fatalf("payload sin worktree asegurada: %s", store.createOrder.PayloadJSON)
+	}
+}
+
+func TestDispatchMicroprogramacionInstructionOllamaGitSeDegradaAFicheros(t *testing.T) {
+	projectID := int64(12)
+	proyectoDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(proyectoDir, "cabeceras"), 0o755); err != nil {
+		t.Fatalf("mkdir cabeceras: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(proyectoDir, "cabeceras", "merge_headers.go"), []byte("package cabeceras\n\nfunc FusionarCabecerasCanonicas(izquierda, derecha []string) []string {\n\treturn nil\n}\n"), 0o644); err != nil {
+		t.Fatalf("write merge_headers.go: %v", err)
+	}
+	store := &fakeStore{
+		createOrderID:   94,
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "proyecto", RutaAbs: proyectoDir},
+	}
+	service := NewService(store)
+
+	resultado, err := service.DispatchMicroprogramacionInstruction(MicroprogramacionDispatchRequest{
+		AgenteDestino:     "Gemma1",
+		ProyectoID:        &projectID,
+		Mensaje:           "MICROTAREA CERRADA\nARCHIVO: cabeceras/merge_headers.go",
+		EspecificacionID:  47,
+		ArchivoObjetivo:   "cabeceras/merge_headers.go",
+		SimboloObjetivo:   "FusionarCabecerasCanonicas",
+		WriteSet:          []string{"cabeceras/merge_headers.go"},
+		TestsObligatorios: []string{"go test ./cabeceras -run TestFusionarCabecerasCanonicas -count=1"},
+		FormatoSalida:     "git_worktree+evidencia",
+	})
+	if err != nil {
+		t.Fatalf("DispatchMicroprogramacionInstruction: %v", err)
+	}
+	if resultado == nil || resultado.RuntimeOrderID != 94 {
+		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+	if store.createOrder == nil {
+		t.Fatalf("runtime order no creada")
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, `"formato_salida":"ficheros+evidencia"`) {
+		t.Fatalf("payload sin degradacion a ficheros+evidencia: %s", store.createOrder.PayloadJSON)
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, "FICHEROS: devuelve uno o varios bloques") {
+		t.Fatalf("payload degradado sin contrato de ficheros: %s", store.createOrder.PayloadJSON)
+	}
+	if strings.Contains(store.createOrder.PayloadJSON, "ENTREGA_GIT:") {
+		t.Fatalf("payload degradado no deberia seguir pidiendo entrega git: %s", store.createOrder.PayloadJSON)
+	}
+	if strings.Contains(store.createOrder.PayloadJSON, "git_worktree+evidencia") {
+		t.Fatalf("payload degradado no deberia seguir mencionando git_worktree: %s", store.createOrder.PayloadJSON)
+	}
+}
+
+func TestDispatchMicroprogramacionInstructionOllamaPatchSeDegradaAFicheros(t *testing.T) {
+	projectID := int64(120)
+	proyectoDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(proyectoDir, "capacidadapp"), 0o755); err != nil {
+		t.Fatalf("mkdir capacidadapp: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(proyectoDir, "capacidadapp", "pool_local_compartido.go"), []byte("package capacidadapp\n"), 0o644); err != nil {
+		t.Fatalf("write pool_local_compartido.go: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(proyectoDir, "capacidadapp", "service_test.go"), []byte("package capacidadapp\n"), 0o644); err != nil {
+		t.Fatalf("write service_test.go: %v", err)
+	}
+	store := &fakeStore{
+		createOrderID:   121,
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "proyecto", RutaAbs: proyectoDir},
+	}
+	service := NewService(store)
+
+	resultado, err := service.DispatchMicroprogramacionInstruction(MicroprogramacionDispatchRequest{
+		AgenteDestino:     "Gemma1",
+		ProyectoID:        &projectID,
+		Mensaje:           "MICROTAREA CERRADA\nARCHIVO: capacidadapp/pool_local_compartido.go\nSALIDA: patch+evidencia",
+		EspecificacionID:  49,
+		ArchivoObjetivo:   "capacidadapp/pool_local_compartido.go",
+		SimboloObjetivo:   "DescribirPoolLocalCompartido",
+		WriteSet:          []string{"capacidadapp/pool_local_compartido.go", "capacidadapp/service_test.go"},
+		TestsObligatorios: []string{"go test ./capacidadapp -run TestDescribirPoolLocalCompartidoLeeMetadataYPoliticas -count=1"},
+		FormatoSalida:     "patch+evidencia",
+	})
+	if err != nil {
+		t.Fatalf("DispatchMicroprogramacionInstruction: %v", err)
+	}
+	if resultado == nil || resultado.RuntimeOrderID != 121 {
+		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, `"formato_salida":"ficheros+evidencia"`) {
+		t.Fatalf("payload sin degradacion a ficheros+evidencia: %s", store.createOrder.PayloadJSON)
+	}
+	if strings.Contains(store.createOrder.PayloadJSON, "PATCH_UNIFICADO:") {
+		t.Fatalf("payload degradado no deberia seguir pidiendo patch unificado: %s", store.createOrder.PayloadJSON)
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, "FICHEROS: devuelve uno o varios bloques") {
+		t.Fatalf("payload degradado sin contrato de ficheros: %s", store.createOrder.PayloadJSON)
+	}
+}
+
+func TestDispatchMicroprogramacionInstructionOllamaPoolLocalConservaGit(t *testing.T) {
+	projectID := int64(13)
+	proyectoDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(proyectoDir, "pkg", "hola"), 0o755); err != nil {
+		t.Fatalf("mkdir pkg/hola: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(proyectoDir, "pkg", "hola", "hola.go"), []byte("package hola\n\nfunc Hola() string { return \"hola\" }\n"), 0o644); err != nil {
+		t.Fatalf("write hola.go: %v", err)
+	}
+	store := &fakeStore{
+		createOrderID:          95,
+		projectResponse:        &db.Proyecto{ID: projectID, Slug: "proyecto", RutaAbs: proyectoDir},
+		primaryProjRuntimeID:   &projectID,
+		primaryProjRuntimeResp: &db.RuntimeInstance{Agente: "Gemma1", ProyectoID: &projectID, Connector: "ollama_pool_local"},
+	}
+	service := NewService(store)
+
+	resultado, err := service.DispatchMicroprogramacionInstruction(MicroprogramacionDispatchRequest{
+		AgenteDestino:     "Gemma1",
+		ProyectoID:        &projectID,
+		Mensaje:           "MICROTAREA CERRADA\nARCHIVO: pkg/hola/hola.go\nSALIDA: git_worktree+evidencia\nENTREGA_GIT: usa tu worktree",
+		EspecificacionID:  48,
+		ArchivoObjetivo:   "pkg/hola/hola.go",
+		SimboloObjetivo:   "Hola",
+		WriteSet:          []string{"pkg/hola/hola.go"},
+		TestsObligatorios: []string{"go test ./pkg/hola -count=1"},
+		FormatoSalida:     "git_worktree+evidencia",
+	})
+	if err != nil {
+		t.Fatalf("DispatchMicroprogramacionInstruction: %v", err)
+	}
+	if resultado == nil || resultado.RuntimeOrderID != 95 {
+		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, `"formato_salida":"git_worktree+evidencia"`) {
+		t.Fatalf("payload de pool local no deberia degradarse: %s", store.createOrder.PayloadJSON)
 	}
 }
 
@@ -592,7 +1038,7 @@ func TestDispatchMicroprogramacionInstructionOllamaIncluyeContextoInline(t *test
 		SimboloObjetivo:   "NormalizarIdentificador",
 		WriteSet:          []string{"identidad/normalizar.go"},
 		TestsObligatorios: []string{"go test ./identidad -run TestNormalizarIdentificador"},
-		FormatoSalida:     "patch+evidencia",
+		FormatoSalida:     "ficheros+evidencia",
 	})
 	if err != nil {
 		t.Fatalf("DispatchMicroprogramacionInstruction: %v", err)
@@ -608,6 +1054,9 @@ func TestDispatchMicroprogramacionInstructionOllamaIncluyeContextoInline(t *test
 	}
 	if !strings.Contains(store.createOrder.PayloadJSON, "PROTOCOLO_MICROPROGRAMACION_INLINE") {
 		t.Fatalf("payload sin protocolo inline: %s", store.createOrder.PayloadJSON)
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, "FICHEROS: devuelve uno o varios bloques") {
+		t.Fatalf("payload sin contrato de ficheros inline: %s", store.createOrder.PayloadJSON)
 	}
 	if !strings.Contains(store.createOrder.PayloadJSON, "identidad/normalizar.go") || !strings.Contains(store.createOrder.PayloadJSON, "func NormalizarIdentificador") {
 		t.Fatalf("payload sin archivo objetivo inline: %s", store.createOrder.PayloadJSON)
@@ -635,7 +1084,7 @@ func TestDispatchMicroprogramacionInstructionOllamaToleraWriteSetConArchivosNuev
 		SimboloObjetivo:   "NuevoSlice",
 		WriteSet:          []string{"identidad/nuevo.go", "identidad/nuevo_test.go"},
 		TestsObligatorios: []string{"go test ./identidad -run TestNuevoSlice"},
-		FormatoSalida:     "patch+evidencia",
+		FormatoSalida:     "ficheros+evidencia",
 	})
 	if err != nil {
 		t.Fatalf("DispatchMicroprogramacionInstruction: %v", err)
@@ -649,8 +1098,51 @@ func TestDispatchMicroprogramacionInstructionOllamaToleraWriteSetConArchivosNuev
 	if !strings.Contains(store.createOrder.PayloadJSON, "ARCHIVO_NO_EXISTE_TODAVIA") {
 		t.Fatalf("payload sin placeholder de archivo nuevo: %s", store.createOrder.PayloadJSON)
 	}
+	if !strings.Contains(store.createOrder.PayloadJSON, "FICHEROS: devuelve uno o varios bloques") {
+		t.Fatalf("payload sin contrato de ficheros inline: %s", store.createOrder.PayloadJSON)
+	}
 	if !strings.Contains(store.createOrder.PayloadJSON, "identidad/nuevo.go") || !strings.Contains(store.createOrder.PayloadJSON, "identidad/nuevo_test.go") {
 		t.Fatalf("payload sin write_set esperado: %s", store.createOrder.PayloadJSON)
+	}
+}
+
+func TestDispatchMicroprogramacionInstructionOllamaDetectaFormatoFileBlocks(t *testing.T) {
+	projectID := int64(13)
+	proyectoDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(proyectoDir, "cabeceras"), 0o755); err != nil {
+		t.Fatalf("mkdir cabeceras: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(proyectoDir, "cabeceras", "merge_headers.go"), []byte("package cabeceras\n\nfunc FusionarCabecerasCanonicas(izquierda, derecha []string) []string {\n\treturn nil\n}\n"), 0o644); err != nil {
+		t.Fatalf("write merge_headers.go: %v", err)
+	}
+	store := &fakeStore{
+		createOrderID:   94,
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "proyecto", RutaAbs: proyectoDir},
+	}
+	service := NewService(store)
+
+	_, err := service.DispatchMicroprogramacionInstruction(MicroprogramacionDispatchRequest{
+		AgenteDestino:     "Gemma1",
+		ProyectoID:        &projectID,
+		Mensaje:           "MICROTAREA CERRADA\nARCHIVO: cabeceras/merge_headers.go",
+		EspecificacionID:  47,
+		ArchivoObjetivo:   "cabeceras/merge_headers.go",
+		SimboloObjetivo:   "FusionarCabecerasCanonicas",
+		WriteSet:          []string{"cabeceras/merge_headers.go"},
+		TestsObligatorios: []string{"go test ./cabeceras -run TestFusionarCabecerasCanonicas -count=1"},
+		FormatoSalida:     "Responde solo con bloques // FILE: ruta seguidos del contenido completo del fichero.",
+	})
+	if err != nil {
+		t.Fatalf("DispatchMicroprogramacionInstruction: %v", err)
+	}
+	if store.createOrder == nil {
+		t.Fatalf("runtime order no creada")
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, "FICHEROS: devuelve uno o varios bloques") {
+		t.Fatalf("payload sin contrato de ficheros inline: %s", store.createOrder.PayloadJSON)
+	}
+	if strings.Contains(store.createOrder.PayloadJSON, "EVIDENCIA:") {
+		t.Fatalf("payload no deberia pedir evidencia para bloques FILE: %s", store.createOrder.PayloadJSON)
 	}
 }
 
@@ -681,6 +1173,467 @@ func TestDispatchMicroprogramacionInstructionCodexNoFuerzaContextoInline(t *test
 	}
 	if strings.Contains(store.createOrder.PayloadJSON, "PROTOCOLO_MICROPROGRAMACION_INLINE") {
 		t.Fatalf("Codex no deberia recibir contexto inline forzado: %s", store.createOrder.PayloadJSON)
+	}
+}
+
+func TestResolverContextoEntregaMicroprogramacionLeePayloadCanonico(t *testing.T) {
+	projectID := int64(11)
+	agent := "Gemma1"
+	store := &fakeStore{
+		ordersResponse: []*db.RuntimeOrder{
+			{
+				ID:          101,
+				Agente:      agent,
+				ProyectoID:  &projectID,
+				Tipo:        "send_instruction",
+				PayloadJSON: `{"source":"microprogramacion","microprogramacion":{"especificacion_id":44,"archivo_objetivo":"microprogramacionapp/service.go","simbolo_objetivo":"ResolveControlHandle","write_set":["microprogramacionapp/service.go","microprogramacionapp/service_test.go"]}}`,
+			},
+		},
+	}
+	service := NewService(store)
+
+	ctx, err := service.ResolverContextoEntregaMicroprogramacion(agent, &projectID)
+	if err != nil {
+		t.Fatalf("ResolverContextoEntregaMicroprogramacion: %v", err)
+	}
+	if ctx == nil || ctx.EspecificacionID != 44 || ctx.RuntimeOrderID != 101 {
+		t.Fatalf("contexto inesperado: %+v", ctx)
+	}
+	if len(ctx.WriteSet) != 2 || ctx.ArchivoObjetivo != "microprogramacionapp/service.go" {
+		t.Fatalf("contexto incompleto: %+v", ctx)
+	}
+}
+
+func TestResolverContextoEntregaMicroprogramacionParaRespuestaPrefiereWriteSetCoincidente(t *testing.T) {
+	projectID := int64(11)
+	agent := "Gemma1"
+	store := &fakeStore{
+		ordersResponse: []*db.RuntimeOrder{
+			{
+				ID:          101,
+				Agente:      agent,
+				ProyectoID:  &projectID,
+				Tipo:        "send_instruction",
+				PayloadJSON: `{"source":"microprogramacion","microprogramacion":{"especificacion_id":1,"archivo_objetivo":"tmp/ollama_smoke_eval/normalizar_identificador.go","simbolo_objetivo":"NormalizarIdentificadorTecnico","write_set":["tmp/ollama_smoke_eval/normalizar_identificador.go"]}}`,
+			},
+			{
+				ID:          102,
+				Agente:      agent,
+				ProyectoID:  &projectID,
+				Tipo:        "send_instruction",
+				PayloadJSON: `{"source":"microprogramacion","microprogramacion":{"especificacion_id":14,"archivo_objetivo":"cabeceras/merge_headers.go","simbolo_objetivo":"FusionarCabecerasCanonicas","write_set":["cabeceras/merge_headers.go"]}}`,
+			},
+		},
+	}
+	service := NewService(store)
+
+	ctx, err := service.ResolverContextoEntregaMicroprogramacionParaRespuesta(agent, &projectID, `// FILE: cabeceras/merge_headers.go
+package cabeceras
+`)
+	if err != nil {
+		t.Fatalf("ResolverContextoEntregaMicroprogramacionParaRespuesta: %v", err)
+	}
+	if ctx == nil || ctx.RuntimeOrderID != 102 || ctx.EspecificacionID != 14 {
+		t.Fatalf("contexto inesperado: %+v", ctx)
+	}
+}
+
+func TestCompletarEntregaMicroprogramacionCierraOrdenYConsumeMailbox(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{
+		orderID:        201,
+		createOrderID:  0,
+		handleByIDResp: nil,
+	}
+	store.ordersResponse = []*db.RuntimeOrder{
+		{
+			ID:            201,
+			Agente:        "Gemma1",
+			ProyectoID:    &projectID,
+			Tipo:          "send_instruction",
+			PayloadJSON:   `{"source":"microprogramacion","mailbox_id":77,"microprogramacion":{"especificacion_id":44}}`,
+			ResultadoJSON: `{"delivery_state":"queued"}`,
+		},
+	}
+	service := NewService(store)
+
+	err := service.CompletarEntregaMicroprogramacion(201, "ollama_pool_local_materializada")
+	if err != nil {
+		t.Fatalf("CompletarEntregaMicroprogramacion: %v", err)
+	}
+	if store.consumedID != 77 {
+		t.Fatalf("mailbox consumida inesperada: %d", store.consumedID)
+	}
+	if store.markOrderStateID != 201 || store.markOrderStateEstado != "completada" {
+		t.Fatalf("mark order inesperado: id=%d estado=%q", store.markOrderStateID, store.markOrderStateEstado)
+	}
+	if !strings.Contains(store.markOrderStateResultado, `"receipt_source":"ollama_pool_local_materializada"`) {
+		t.Fatalf("resultado sin receipt_source esperado: %s", store.markOrderStateResultado)
+	}
+}
+
+func TestCompletarEntregasMicroprogramacionParaRespuestaCierraReintentosCoincidentes(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{
+		orderID:        202,
+		createOrderID:  0,
+		handleByIDResp: nil,
+	}
+	store.ordersResponse = []*db.RuntimeOrder{
+		{
+			ID:            201,
+			Agente:        "Gemma1",
+			ProyectoID:    &projectID,
+			Tipo:          "send_instruction",
+			PayloadJSON:   `{"source":"microprogramacion","mailbox_id":77,"microprogramacion":{"especificacion_id":44,"archivo_objetivo":"cabeceras/merge_headers.go","simbolo_objetivo":"FusionarCabecerasCanonicas","write_set":["cabeceras/merge_headers.go"]}}`,
+			ResultadoJSON: `{"delivery_state":"queued"}`,
+		},
+		{
+			ID:            202,
+			Agente:        "Gemma1",
+			ProyectoID:    &projectID,
+			Tipo:          "send_instruction",
+			PayloadJSON:   `{"source":"microprogramacion","mailbox_id":78,"microprogramacion":{"especificacion_id":44,"archivo_objetivo":"cabeceras/merge_headers.go","simbolo_objetivo":"FusionarCabecerasCanonicas","write_set":["cabeceras/merge_headers.go"]}}`,
+			ResultadoJSON: `{"delivery_state":"queued"}`,
+		},
+	}
+	service := NewService(store)
+
+	n, err := service.CompletarEntregasMicroprogramacionParaRespuesta("Gemma1", &projectID, `// FILE: cabeceras/merge_headers.go
+package cabeceras
+`, "ollama_pool_local_materializada")
+	if err != nil {
+		t.Fatalf("CompletarEntregasMicroprogramacionParaRespuesta: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("se esperaban 2 ordenes completadas, got=%d", n)
+	}
+	if len(store.markedOrderStates) != 2 {
+		t.Fatalf("marcas de orden inesperadas: %+v", store.markedOrderStates)
+	}
+}
+
+func TestMaterializarEntregaMicroprogramacionActivaDesdeRespuestaUsaMaterializadorYCompletaOrdenes(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador", RutaAbs: "/tmp/orquestador"},
+		ordersResponse: []*db.RuntimeOrder{
+			{
+				ID:            211,
+				Agente:        "Gemma1",
+				ProyectoID:    &projectID,
+				Tipo:          "send_instruction",
+				PayloadJSON:   `{"source":"microprogramacion","mailbox_id":77,"microprogramacion":{"especificacion_id":44,"archivo_objetivo":"microprogramacionapp/extractor_entrega.go","simbolo_objetivo":"recortarSeccionEvidencia","write_set":["microprogramacionapp/extractor_entrega.go","microprogramacionapp/extractor_entrega_test.go"],"formato_salida":"ficheros+evidencia"}}`,
+				ResultadoJSON: `{"delivery_state":"queued"}`,
+			},
+		},
+	}
+	materializador := &fakeMaterializadorEntrega{}
+	service := NewService(store)
+	service.SetMaterializadorEntregaMicroprogramacion(materializador)
+
+	resultado, err := service.MaterializarEntregaMicroprogramacionActivaDesdeRespuesta(
+		"Gemma1",
+		&projectID,
+		"orquestador",
+		"// FILE: microprogramacionapp/extractor_entrega.go\npackage microprogramacionapp\n",
+		"runtime_transcript_id=23",
+		"ollama_pool_local_materializada",
+	)
+	if err != nil {
+		t.Fatalf("MaterializarEntregaMicroprogramacionActivaDesdeRespuesta: %v", err)
+	}
+	if resultado == nil {
+		t.Fatalf("resultado nulo")
+	}
+	if materializador.id != 44 || materializador.raiz != "/tmp/orquestador" {
+		t.Fatalf("materializador inesperado: id=%d raiz=%q", materializador.id, materializador.raiz)
+	}
+	if store.consumedID != 77 || store.markOrderStateID != 211 || store.markOrderStateEstado != "completada" {
+		t.Fatalf("orden no completada correctamente: consumed=%d id=%d estado=%q", store.consumedID, store.markOrderStateID, store.markOrderStateEstado)
+	}
+	if !strings.Contains(store.markOrderStateResultado, `"receipt_source":"ollama_pool_local_materializada"`) {
+		t.Fatalf("resultado sin receipt esperado: %s", store.markOrderStateResultado)
+	}
+}
+
+func TestMaterializarEntregaMicroprogramacionActivaDesdeRespuestaIgnoraFormatoGit(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador", RutaAbs: "/tmp/orquestador"},
+		ordersResponse: []*db.RuntimeOrder{
+			{
+				ID:          212,
+				Agente:      "Gemma1",
+				ProyectoID:  &projectID,
+				Tipo:        "send_instruction",
+				PayloadJSON: `{"source":"microprogramacion","microprogramacion":{"especificacion_id":45,"archivo_objetivo":"microprogramacionapp/service.go","simbolo_objetivo":"RegistrarEntregaGit","write_set":["microprogramacionapp/service.go"],"formato_salida":"git_worktree+evidencia"}}`,
+			},
+		},
+	}
+	materializador := &fakeMaterializadorEntrega{}
+	service := NewService(store)
+	service.SetMaterializadorEntregaMicroprogramacion(materializador)
+
+	resultado, err := service.MaterializarEntregaMicroprogramacionActivaDesdeRespuesta(
+		"Gemma1",
+		&projectID,
+		"orquestador",
+		"// FILE: microprogramacionapp/service.go\npackage microprogramacionapp\n",
+		"runtime_transcript_id=24",
+		"ollama_pool_local_materializada",
+	)
+	if err != nil {
+		t.Fatalf("MaterializarEntregaMicroprogramacionActivaDesdeRespuesta: %v", err)
+	}
+	if resultado != nil {
+		t.Fatalf("no deberia materializar formato git: %+v", resultado)
+	}
+	if materializador.id != 0 || store.markOrderStateID != 0 {
+		t.Fatalf("no deberia tocar materializador ni orden: materializador=%d order=%d", materializador.id, store.markOrderStateID)
+	}
+}
+
+func TestReencolarCorreccionEntregaMicroprogramacionSupersedeYCreaNuevaOrden(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{
+		createOrderID: 901,
+		ordersResponse: []*db.RuntimeOrder{
+			{
+				ID:          450,
+				Agente:      "Gemma1",
+				ProyectoID:  &projectID,
+				Tipo:        "send_instruction",
+				Estado:      "pendiente",
+				PayloadJSON: `{"to_agente":"Gemma1","texto":"MICROTAREA_BASE","source":"microprogramacion","mailbox_id":77,"microprogramacion":{"especificacion_id":44,"archivo_objetivo":"microprogramacionapp/extractor_entrega.go","simbolo_objetivo":"recortarSeccionEvidencia","write_set":["microprogramacionapp/extractor_entrega.go","microprogramacionapp/extractor_entrega_test.go"],"formato_salida":"ficheros+evidencia"}}`,
+			},
+		},
+		orderID: 450,
+	}
+	service := NewService(store)
+
+	orderID, err := service.ReencolarCorreccionEntregaMicroprogramacion(450, "go invalido: expected declaration")
+	if err != nil {
+		t.Fatalf("ReencolarCorreccionEntregaMicroprogramacion: %v", err)
+	}
+	if orderID != 901 {
+		t.Fatalf("orderID inesperado: got=%d want=901", orderID)
+	}
+	if store.markOrderStateID != 450 || store.markOrderStateEstado != "cancelada" {
+		t.Fatalf("orden previa no supersedida: id=%d estado=%q", store.markOrderStateID, store.markOrderStateEstado)
+	}
+	if store.consumedID != 77 {
+		t.Fatalf("mailbox previa no consumida: %d", store.consumedID)
+	}
+	if store.createOrder == nil || strings.TrimSpace(store.createOrder.Agente) != "Gemma1" {
+		t.Fatalf("orden nueva no creada correctamente: %+v", store.createOrder)
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, "CORRECCION_OBLIGATORIA") {
+		t.Fatalf("payload sin correccion obligatoria: %s", store.createOrder.PayloadJSON)
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, "go invalido: expected declaration") {
+		t.Fatalf("payload sin error exacto: %s", store.createOrder.PayloadJSON)
+	}
+	if !strings.Contains(store.createOrder.PayloadJSON, `"correccion_intento":1`) {
+		t.Fatalf("payload sin correccion_intento: %s", store.createOrder.PayloadJSON)
+	}
+	if strings.Contains(store.createOrder.PayloadJSON, `"mailbox_id":77`) {
+		t.Fatalf("la correccion no deberia reutilizar mailbox consumida: %s", store.createOrder.PayloadJSON)
+	}
+}
+
+func TestRegistrarEntregaGitMicroprogramacionActivaUsaRegistradorYCompletaOrden(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{
+		ordersResponse: []*db.RuntimeOrder{
+			{
+				ID:            301,
+				Agente:        "Gemma1",
+				ProyectoID:    &projectID,
+				Tipo:          "send_instruction",
+				PayloadJSON:   `{"source":"microprogramacion","mailbox_id":77,"microprogramacion":{"especificacion_id":44,"archivo_objetivo":"microprogramacionapp/service.go","simbolo_objetivo":"RegistrarEntregaGit","write_set":["microprogramacionapp/service.go"],"formato_salida":"git_worktree+evidencia"}}`,
+				ResultadoJSON: `{"delivery_state":"queued"}`,
+			},
+		},
+	}
+	registrador := &fakeRegistradorEntregaGit{}
+	service := NewService(store)
+	service.SetRegistradorEntregaGit(registrador)
+
+	resultado, err := service.RegistrarEntregaGitMicroprogramacionActiva("Gemma1", &projectID, "orquestador", "diff listo", "OpenClaw")
+	if err != nil {
+		t.Fatalf("RegistrarEntregaGitMicroprogramacionActiva: %v", err)
+	}
+	if resultado == nil || resultado.Contexto == nil || resultado.Contexto.RuntimeOrderID != 301 {
+		t.Fatalf("resultado/contexto inesperado: %+v", resultado)
+	}
+	if registrador.id != 44 {
+		t.Fatalf("especificacion enviada al registrador inesperada: %d", registrador.id)
+	}
+	if registrador.entrada.ProyectoSlug != "orquestador" || registrador.entrada.SolicitadoPor != "OpenClaw" {
+		t.Fatalf("entrada al registrador inesperada: %+v", registrador.entrada)
+	}
+	if store.consumedID != 77 || store.markOrderStateID != 301 || store.markOrderStateEstado != "completada" {
+		t.Fatalf("orden no completada correctamente: consumed=%d id=%d estado=%q", store.consumedID, store.markOrderStateID, store.markOrderStateEstado)
+	}
+	if !strings.Contains(store.markOrderStateResultado, `"receipt_source":"git_worktree"`) {
+		t.Fatalf("resultado sin receipt git: %s", store.markOrderStateResultado)
+	}
+}
+
+func TestSupersederMicroprogramacionAbiertaEquivalenteCancelaOrdenVieja(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{
+		ordersResponse: []*db.RuntimeOrder{
+			{
+				ID:          305,
+				Agente:      "Gemma1",
+				ProyectoID:  &projectID,
+				Tipo:        "send_instruction",
+				Estado:      "ejecutando",
+				PayloadJSON: `{"source":"microprogramacion","mailbox_id":88,"microprogramacion":{"especificacion_id":44,"archivo_objetivo":"microprogramacionapp/extractor_entrega.go","simbolo_objetivo":"recortarSeccionEvidencia","write_set":["microprogramacionapp/extractor_entrega.go","microprogramacionapp/extractor_entrega_test.go"],"formato_salida":"ficheros+evidencia"}}`,
+			},
+		},
+	}
+	service := NewService(store)
+
+	err := service.supersederMicroprogramacionAbiertaEquivalente("Gemma1", &projectID, map[string]any{
+		"especificacion_id": 45,
+		"archivo_objetivo":  "microprogramacionapp/extractor_entrega.go",
+		"simbolo_objetivo":  "recortarSeccionEvidencia",
+		"write_set":         []string{"microprogramacionapp/extractor_entrega.go", "microprogramacionapp/extractor_entrega_test.go"},
+	})
+	if err != nil {
+		t.Fatalf("supersederMicroprogramacionAbiertaEquivalente: %v", err)
+	}
+	if store.markOrderStateID != 305 || store.markOrderStateEstado != "cancelada" {
+		t.Fatalf("orden vieja no supersedida: id=%d estado=%q", store.markOrderStateID, store.markOrderStateEstado)
+	}
+	if !strings.Contains(store.markOrderStateResultado, `"delivery_state":"superseded"`) {
+		t.Fatalf("resultado de supersede inesperado: %s", store.markOrderStateResultado)
+	}
+}
+
+func TestRegistrarEntregaGitMicroprogramacionActivaIgnoraFormatoNoGit(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{
+		ordersResponse: []*db.RuntimeOrder{
+			{
+				ID:          302,
+				Agente:      "Gemma1",
+				ProyectoID:  &projectID,
+				Tipo:        "send_instruction",
+				PayloadJSON: `{"source":"microprogramacion","microprogramacion":{"especificacion_id":45,"archivo_objetivo":"microprogramacionapp/service.go","simbolo_objetivo":"MaterializarEntrega","write_set":["microprogramacionapp/service.go"],"formato_salida":"patch+evidencia"}}`,
+			},
+		},
+	}
+	registrador := &fakeRegistradorEntregaGit{}
+	service := NewService(store)
+	service.SetRegistradorEntregaGit(registrador)
+
+	resultado, err := service.RegistrarEntregaGitMicroprogramacionActiva("Gemma1", &projectID, "orquestador", "diff listo", "OpenClaw")
+	if err != nil {
+		t.Fatalf("RegistrarEntregaGitMicroprogramacionActiva: %v", err)
+	}
+	if resultado != nil {
+		t.Fatalf("no deberia registrar entrega git para formato no git: %+v", resultado)
+	}
+	if registrador.id != 0 || store.markOrderStateID != 0 {
+		t.Fatalf("no deberia tocar registrador ni orden: registrador=%d order=%d", registrador.id, store.markOrderStateID)
+	}
+}
+
+func TestIntentarRegistrarEntregaGitMicroprogramacionActivaToleraSinCambios(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{
+		ordersResponse: []*db.RuntimeOrder{
+			{
+				ID:          303,
+				Agente:      "Gemma1",
+				ProyectoID:  &projectID,
+				Tipo:        "send_instruction",
+				PayloadJSON: `{"source":"microprogramacion","microprogramacion":{"especificacion_id":46,"archivo_objetivo":"microprogramacionapp/service.go","simbolo_objetivo":"RegistrarEntregaGit","write_set":["microprogramacionapp/service.go"],"formato_salida":"git_worktree+evidencia"}}`,
+			},
+		},
+	}
+	registrador := &fakeRegistradorEntregaGit{err: fmt.Errorf("la entrega git no contiene archivos modificados")}
+	service := NewService(store)
+	service.SetRegistradorEntregaGit(registrador)
+
+	resultado, err := service.IntentarRegistrarEntregaGitMicroprogramacionActiva("Gemma1", &projectID, "orquestador", "sin cambios", "OpenClaw")
+	if err != nil {
+		t.Fatalf("IntentarRegistrarEntregaGitMicroprogramacionActiva: %v", err)
+	}
+	if resultado != nil || store.markOrderStateID != 0 {
+		t.Fatalf("no deberia completar orden sin cambios: %+v order=%d", resultado, store.markOrderStateID)
+	}
+}
+
+func TestRegistrarEntregaGitMicroprogramacionActivaPreferentePropagaWorktree(t *testing.T) {
+	store := &fakeStore{
+		ordersResponse: []*db.RuntimeOrder{{
+			ID:          303,
+			Agente:      "ClaudeSub1",
+			Tipo:        "send_instruction",
+			Estado:      "pendiente",
+			PayloadJSON: `{"source":"microprogramacion","microprogramacion":{"especificacion_id":49,"archivo_objetivo":"microprogramacionapp/service.go","simbolo_objetivo":"RegistrarEntregaGit","write_set":["microprogramacionapp/service.go"],"formato_salida":"git_worktree+evidencia"}}`,
+		}},
+	}
+	registrador := &fakeRegistradorEntregaGit{}
+	service := NewService(store)
+	service.SetRegistradorEntregaGit(registrador)
+
+	worktreeID := int64(77)
+	resultado, err := service.RegistrarEntregaGitMicroprogramacionActivaPreferente(
+		"ClaudeSub1",
+		nil,
+		"orquestador",
+		"thread_id=sub-1",
+		"OpenClaw",
+		microprogramacionapp.EntradaRegistrarEntregaGit{
+			PreferenciaWorktreeID:   &worktreeID,
+			PreferenciaRutaWorktree: "/tmp/orquesta-worktree-sub1",
+			PreferenciaBranch:       "orq/orquestador/claude-sub1",
+			PreferenciaBaseRef:      "main",
+		},
+	)
+	if err != nil {
+		t.Fatalf("RegistrarEntregaGitMicroprogramacionActivaPreferente: %v", err)
+	}
+	if resultado == nil || resultado.Entrega == nil {
+		t.Fatalf("resultado vacío: %+v", resultado)
+	}
+	if registrador.entrada.PreferenciaWorktreeID == nil || *registrador.entrada.PreferenciaWorktreeID != worktreeID {
+		t.Fatalf("preferencia worktree no propagada: %+v", registrador.entrada)
+	}
+	if registrador.entrada.PreferenciaRutaWorktree != "/tmp/orquesta-worktree-sub1" {
+		t.Fatalf("ruta worktree no propagada: %+v", registrador.entrada)
+	}
+}
+
+func TestRegistrarEntregaGitMicroprogramacionActivaUsaWorktreeDelPayload(t *testing.T) {
+	store := &fakeStore{
+		ordersResponse: []*db.RuntimeOrder{{
+			ID:          304,
+			Agente:      "Codex1",
+			Tipo:        "send_instruction",
+			Estado:      "pendiente",
+			PayloadJSON: `{"source":"microprogramacion","microprogramacion":{"especificacion_id":50,"archivo_objetivo":"microprogramacionapp/service.go","simbolo_objetivo":"RegistrarEntregaGit","write_set":["microprogramacionapp/service.go"],"formato_salida":"git_worktree+evidencia","worktree_id":81,"ruta_worktree":"/tmp/orq-wt","branch_worktree":"orq/orquestador/codex1","base_ref_worktree":"main"}}`,
+		}},
+	}
+	registrador := &fakeRegistradorEntregaGit{}
+	service := NewService(store)
+	service.SetRegistradorEntregaGit(registrador)
+
+	_, err := service.RegistrarEntregaGitMicroprogramacionActiva("Codex1", nil, "orquestador", "diff listo", "OpenClaw")
+	if err != nil {
+		t.Fatalf("RegistrarEntregaGitMicroprogramacionActiva: %v", err)
+	}
+	if registrador.entrada.PreferenciaWorktreeID == nil || *registrador.entrada.PreferenciaWorktreeID != 81 {
+		t.Fatalf("worktree payload no propagada: %+v", registrador.entrada)
+	}
+	if registrador.entrada.PreferenciaRutaWorktree != "/tmp/orq-wt" || registrador.entrada.PreferenciaBranch != "orq/orquestador/codex1" || registrador.entrada.PreferenciaBaseRef != "main" {
+		t.Fatalf("preferencias de payload inesperadas: %+v", registrador.entrada)
 	}
 }
 
@@ -784,6 +1737,59 @@ func TestResolveTranscriptDeliveryHandleUsaHandleDelTranscript(t *testing.T) {
 	}
 	if handle == nil || handle.ID != 33 {
 		t.Fatalf("debería devolver el handle del transcript: %+v", handle)
+	}
+}
+
+func TestRegistrarSalidaObservadaUsaHandleYRuntimeActivos(t *testing.T) {
+	projectID := int64(7)
+	store := &fakeStore{
+		operationalProjResp:    &db.RuntimeHandle{ID: 18, Agente: "Gemma1", ProyectoID: &projectID, RuntimeID: apuntarInt64(31), Estado: "activo"},
+		handleByIDResp:         &db.RuntimeHandle{ID: 18, Agente: "Gemma1", ProyectoID: &projectID, RuntimeID: apuntarInt64(31), Estado: "activo"},
+		runtimeResponse:        &db.RuntimeInstance{ID: 31, Agente: "Gemma1", ProyectoID: &projectID},
+		transcriptRegistradoID: 44,
+	}
+	service := NewService(store)
+	id, err := service.RegistrarSalidaObservada("Gemma1", &projectID, "PATCH_UNIFICADO:\n--- a/a.go\n+++ b/a.go")
+	if err != nil {
+		t.Fatalf("RegistrarSalidaObservada: %v", err)
+	}
+	if id != 44 {
+		t.Fatalf("id transcript inesperado: %d", id)
+	}
+	if store.transcriptRegistrado == nil {
+		t.Fatal("faltaba transcript registrado")
+	}
+	if store.transcriptRegistrado.RuntimeID != 31 || store.transcriptRegistrado.HandleID == nil || *store.transcriptRegistrado.HandleID != 18 {
+		t.Fatalf("transcript registrado inesperado: %+v", store.transcriptRegistrado)
+	}
+	if store.transcriptRegistrado.Stream != "pty_out" || !strings.Contains(store.transcriptRegistrado.Text, "PATCH_UNIFICADO") {
+		t.Fatalf("transcript registrado inesperado: %+v", store.transcriptRegistrado)
+	}
+}
+
+func TestRegistrarSalidaObservadaInvocaHookTrasRegistrarTranscript(t *testing.T) {
+	projectID := int64(7)
+	store := &fakeStore{
+		operationalProjResp:    &db.RuntimeHandle{ID: 18, Agente: "Gemma1", ProyectoID: &projectID, RuntimeID: apuntarInt64(31), Estado: "activo"},
+		handleByIDResp:         &db.RuntimeHandle{ID: 18, Agente: "Gemma1", ProyectoID: &projectID, RuntimeID: apuntarInt64(31), Estado: "activo"},
+		runtimeResponse:        &db.RuntimeInstance{ID: 31, Agente: "Gemma1", ProyectoID: &projectID},
+		transcriptRegistradoID: 45,
+	}
+	service := NewService(store)
+	var hookID int64
+	var hookEntry *db.RuntimeTranscriptEntry
+	service.SetAfterRegisterRuntimeTranscriptHook(func(entry *db.RuntimeTranscriptEntry, transcriptID int64) {
+		hookID = transcriptID
+		hookEntry = entry
+	})
+	if _, err := service.RegistrarSalidaObservada("Gemma1", &projectID, "salida útil"); err != nil {
+		t.Fatalf("RegistrarSalidaObservada: %v", err)
+	}
+	if hookID != 45 {
+		t.Fatalf("hook transcript id inesperado: %d", hookID)
+	}
+	if hookEntry == nil || hookEntry.RuntimeID != 31 || hookEntry.HandleID == nil || *hookEntry.HandleID != 18 {
+		t.Fatalf("hook transcript entry inesperada: %+v", hookEntry)
 	}
 }
 
@@ -1189,6 +2195,43 @@ func TestEnqueueAgentControlRechazaStartSiCuentaCompartidaEstaOcupada(t *testing
 	}
 }
 
+func TestEnqueueAgentControlStartToleraSinHandleNiRuntimePrevios(t *testing.T) {
+	projectID := int64(9)
+	store := &fakeStore{
+		projectResponse:      &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		agentResponse:        &db.Agente{Nombre: "GemmaProgramador4", Rol: "programador"},
+		operationalProjErr:   sql.ErrNoRows,
+		handleProjErr:        sql.ErrNoRows,
+		operationalHandleErr: sql.ErrNoRows,
+		createOrderID:        88,
+	}
+	service := NewService(store)
+
+	orderID, accion, err := service.EnqueueAgentControl(AgentControlRequest{
+		Agente:       "GemmaProgramador4",
+		Proyecto:     "orquestador",
+		Accion:       "arrancar",
+		Conector:     "ollama_pool_local",
+		Modelo:       "gemma4:26b",
+		Razonamiento: "high",
+		Perfil:       "implementacion",
+		Motivo:       "arranque inicial limpio",
+		Por:          "test",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAgentControl start limpio: %v", err)
+	}
+	if orderID != 88 || accion != "start" {
+		t.Fatalf("orderID=%d accion=%s", orderID, accion)
+	}
+	if store.createOrder == nil {
+		t.Fatalf("createOrder nil")
+	}
+	if store.createOrder.HandleID != nil || store.createOrder.RuntimeID != nil {
+		t.Fatalf("no deberia reutilizar handle/runtime inexistentes: %+v", store.createOrder)
+	}
+}
+
 func TestEnqueueAgentControlStartSupersedesPausedHandleConStopPendiente(t *testing.T) {
 	projectID := int64(9)
 	runtimeID := int64(12)
@@ -1265,6 +2308,39 @@ func TestEnqueueAgentControlResumeUsaRuntimePrincipalCanonicoSobreHandleViejo(t 
 	}
 	if store.createOrder.HandleID == nil || *store.createOrder.HandleID != 10 {
 		t.Fatalf("resume deberia conservar el handle activo: %+v", store.createOrder)
+	}
+}
+
+func TestEnqueueAgentControlResumeDegradaAStartParaCodexTMUXNoInteractivo(t *testing.T) {
+	projectID := int64(9)
+	runtimeID := int64(12)
+	store := &fakeStore{
+		projectResponse:        &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		agentResponse:          &db.Agente{Nombre: "Codex8", Rol: "programador"},
+		handleProjResp:         &db.RuntimeHandle{ID: 10, RuntimeID: &runtimeID, Estado: "activo", Transporte: "tmux", HandleKind: "session", MetadataJSON: `{"driver":"tmux_cli_session","mailbox_delivery_mode":"bootstrap_only","can_send_input":false}`, CapabilitiesJSON: `{"mailbox_delivery_mode":"bootstrap_only","can_send_input":false}`},
+		primaryProjRuntimeResp: &db.RuntimeInstance{ID: runtimeID, LogicalState: "esperando_io", ProcessState: "running"},
+		createOrderID:          96,
+	}
+	service := NewService(store)
+
+	orderID, accion, err := service.EnqueueAgentControl(AgentControlRequest{
+		Agente:   "Codex8",
+		Proyecto: "orquestador",
+		Accion:   "reanudar",
+		Motivo:   "microciclo",
+		Por:      "test",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAgentControl resume->start codex tmux: %v", err)
+	}
+	if orderID != 96 || accion != "start" {
+		t.Fatalf("orderID=%d accion=%s", orderID, accion)
+	}
+	if store.createOrder == nil || store.createOrder.Tipo != "start" {
+		t.Fatalf("createOrder inesperado: %+v", store.createOrder)
+	}
+	if store.createOrder.HandleID != nil || store.createOrder.RuntimeID != nil {
+		t.Fatalf("resume degradado a start no deberia atarse al handle viejo: %+v", store.createOrder)
 	}
 }
 
@@ -1752,4 +2828,8 @@ func TestServiceReadRuntimeTracePorAgenteProyecto(t *testing.T) {
 	if !strings.Contains(trace.RawTail, "ance\nfin\n") {
 		t.Fatalf("tail inesperado: %q", trace.RawTail)
 	}
+}
+
+func apuntarInt64(v int64) *int64 {
+	return &v
 }

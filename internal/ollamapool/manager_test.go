@@ -11,8 +11,25 @@ import (
 )
 
 func TestGestorLanzarEnviarYDetener(t *testing.T) {
+	var descargaSolicitada bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/chat" {
+		switch r.URL.Path {
+		case "/api/chat":
+		case "/api/generate":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode payload descarga: %v", err)
+			}
+			if got := payload["model"]; got != "gemma4:26b" {
+				t.Fatalf("modelo descarga inesperado: %+v", got)
+			}
+			if got := payload["keep_alive"]; got != float64(0) && got != 0 {
+				t.Fatalf("keep_alive descarga inesperado: %+v", got)
+			}
+			descargaSolicitada = true
+			_ = json.NewEncoder(w).Encode(map[string]any{"done": true})
+			return
+		default:
 			t.Fatalf("ruta inesperada: %s", r.URL.Path)
 		}
 		var payload map[string]any
@@ -71,6 +88,57 @@ func TestGestorLanzarEnviarYDetener(t *testing.T) {
 	if estado.Estado != "stopped" {
 		t.Fatalf("estado tras detener inesperado: %+v", estado)
 	}
+	if !descargaSolicitada {
+		t.Fatal("deberia haber solicitado descarga del modelo")
+	}
+}
+
+func TestGestorNoDescargaModeloSiQuedaOtraSesionActiva(t *testing.T) {
+	var descargaSolicitada bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/chat":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"message": map[string]any{
+					"role":    "assistant",
+					"content": "PATCH: listo",
+				},
+			})
+		case "/api/generate":
+			descargaSolicitada = true
+			_ = json.NewEncoder(w).Encode(map[string]any{"done": true})
+		default:
+			t.Fatalf("ruta inesperada: %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	gestor := NuevoGestor(srv.URL, nil)
+	s1, err := gestor.Lanzar(context.Background(), EntradaLanzamiento{
+		Agente:       "Gemma1",
+		Proyecto:     "orquestador",
+		PoolSlug:     "ollama-gemma4",
+		SlotsMaximos: 2,
+		Modelo:       "gemma4:26b",
+	})
+	if err != nil {
+		t.Fatalf("launch 1: %v", err)
+	}
+	if _, err := gestor.Lanzar(context.Background(), EntradaLanzamiento{
+		Agente:       "Gemma2",
+		Proyecto:     "orquestador",
+		PoolSlug:     "ollama-gemma4",
+		SlotsMaximos: 2,
+		Modelo:       "gemma4:26b",
+	}); err != nil {
+		t.Fatalf("launch 2: %v", err)
+	}
+	if err := gestor.Detener(s1.HandleRef); err != nil {
+		t.Fatalf("detener: %v", err)
+	}
+	if descargaSolicitada {
+		t.Fatal("no deberia descargar modelo si queda otra sesion activa")
+	}
 }
 
 func TestGestorMarcaFalloSiOllamaFalla(t *testing.T) {
@@ -98,6 +166,47 @@ func TestGestorMarcaFalloSiOllamaFalla(t *testing.T) {
 	}
 	if estado.Estado != "failed" || estado.ErrorUltimo == "" {
 		t.Fatalf("estado fallido inesperado: %+v", estado)
+	}
+}
+
+func TestGestorUsaThinkingComoFallbackSoloParaPatchOBloqueo(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"message": map[string]any{
+				"role":     "assistant",
+				"content":  "",
+				"thinking": "PATCH_UNIFICADO:\n--- a/a.go\n+++ b/a.go\n@@ -1 +1 @@\n-package a\n+package b",
+			},
+		})
+	}))
+	defer srv.Close()
+
+	gestor := NuevoGestor(srv.URL, nil)
+	sesion, err := gestor.Lanzar(context.Background(), EntradaLanzamiento{
+		Agente:       "Gemma1",
+		Proyecto:     "orquestador",
+		PoolSlug:     "ollama-gemma4",
+		SlotsMaximos: 1,
+		Modelo:       "gemma4:26b",
+	})
+	if err != nil {
+		t.Fatalf("lanzar: %v", err)
+	}
+	resultado, err := gestor.Enviar(context.Background(), sesion.HandleRef, "devuelve patch")
+	if err != nil {
+		t.Fatalf("enviar: %v", err)
+	}
+	if !strings.Contains(resultado.Respuesta, "PATCH_UNIFICADO") {
+		t.Fatalf("deberia haber usado thinking como fallback: %+v", resultado)
+	}
+}
+
+func TestResolverContenidoRespuestaOllamaIgnoraThinkingSinSalidaValida(t *testing.T) {
+	if got := resolverContenidoRespuestaOllama("", "razonamiento interno sin patch"); got != "" {
+		t.Fatalf("no deberia filtrar thinking generico: %q", got)
+	}
+	if got := resolverContenidoRespuestaOllama("PATCH_UNIFICADO: ok", "PATCH_UNIFICADO: thinking"); got != "PATCH_UNIFICADO: ok" {
+		t.Fatalf("deberia priorizar content: %q", got)
 	}
 }
 

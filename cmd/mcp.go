@@ -21,6 +21,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"orquesta/agentesapp"
+	"orquesta/capacidadapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/gitgobernanza"
@@ -3044,26 +3045,28 @@ func callMCPTool(name string, args map[string]any) (map[string]any, error) {
 }
 
 type estadoResumen struct {
-	Generado            string           `json:"generado"`
-	Agentes             []*db.Agente     `json:"agentes,omitempty"`
-	TareasPorEstado     map[string]int   `json:"tareasPorEstado"`
-	AgentesActivos      []*db.Agente     `json:"agentesActivos"`
-	AgentesTrabajando   []*db.Agente     `json:"agentesTrabajando,omitempty"`
-	AgentesSaturados    []*db.Agente     `json:"agentesSaturados,omitempty"`
-	AgentesAtascados    []*db.Agente     `json:"agentesAtascados,omitempty"`
-	AgentesAuthManual   []*db.Agente     `json:"agentesAuthManual,omitempty"`
-	AgentesQuotaBlocked []*db.Agente     `json:"agentesQuotaBlocked,omitempty"`
-	Proyectos           []map[string]any `json:"proyectos"`
-	Pools               []map[string]any `json:"pools"`
-	Asignaciones        []map[string]any `json:"asignaciones"`
-	PropuestasAbiertas  []propuestaLite  `json:"propuestasAbiertas"`
-	TareasActivas       []tareaLite      `json:"tareasActivas"`
-	TareasEnProgreso    []tareaLite      `json:"tareasEnProgreso,omitempty"`
-	TareasReservadas    []tareaLite      `json:"tareasReservadas,omitempty"`
-	WorktreesActivas    []map[string]any `json:"worktreesActivas"`
-	LocksActivos        []map[string]any `json:"locksActivos"`
-	SesionesActivas     []map[string]any `json:"sesionesActivas"`
-	Conectores          []map[string]any `json:"conectores"`
+	Generado            string                              `json:"generado"`
+	Agentes             []*db.Agente                        `json:"agentes,omitempty"`
+	TareasPorEstado     map[string]int                      `json:"tareasPorEstado"`
+	AgentesActivos      []*db.Agente                        `json:"agentesActivos"`
+	AgentesTrabajando   []*db.Agente                        `json:"agentesTrabajando,omitempty"`
+	AgentesSaturados    []*db.Agente                        `json:"agentesSaturados,omitempty"`
+	AgentesAtascados    []*db.Agente                        `json:"agentesAtascados,omitempty"`
+	AgentesAuthManual   []*db.Agente                        `json:"agentesAuthManual,omitempty"`
+	AgentesQuotaBlocked []*db.Agente                        `json:"agentesQuotaBlocked,omitempty"`
+	Proyectos           []map[string]any                    `json:"proyectos"`
+	Pools               []map[string]any                    `json:"pools"`
+	Asignaciones        []map[string]any                    `json:"asignaciones"`
+	PropuestasAbiertas  []propuestaLite                     `json:"propuestasAbiertas"`
+	TareasActivas       []tareaLite                         `json:"tareasActivas"`
+	TareasEnProgreso    []tareaLite                         `json:"tareasEnProgreso,omitempty"`
+	TareasReservadas    []tareaLite                         `json:"tareasReservadas,omitempty"`
+	PoolsLocales        []*capacidadapp.PoolLocalCompartido `json:"poolsLocales,omitempty"`
+	DeudaDispatch       deudaDispatchResumen                `json:"deudaDispatch,omitempty"`
+	WorktreesActivas    []map[string]any                    `json:"worktreesActivas"`
+	LocksActivos        []map[string]any                    `json:"locksActivos"`
+	SesionesActivas     []map[string]any                    `json:"sesionesActivas"`
+	Conectores          []map[string]any                    `json:"conectores"`
 }
 
 type propuestaLite struct {
@@ -3139,6 +3142,7 @@ func buildEstadoResumen() (*estadoResumen, error) {
 		TareasActivas:       status.TareasActivas,
 		TareasEnProgreso:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada),
 		TareasReservadas:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
+		PoolsLocales:        status.PoolsLocales,
 		WorktreesActivas:    worktrees,
 		LocksActivos:        locks,
 		SesionesActivas:     sesiones,
@@ -3165,6 +3169,7 @@ func buildEstadoResumenLigero() (*estadoResumen, error) {
 		TareasActivas:       status.TareasActivas,
 		TareasEnProgreso:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaEnProgreso, db.TareaBloqueada),
 		TareasReservadas:    filtrarOpenClawTareasPorEstado(status.TareasActivas, db.TareaAsignada),
+		PoolsLocales:        status.PoolsLocales,
 	}, nil
 }
 
@@ -4848,12 +4853,17 @@ func applySupervisorRecommendedAction(supervisor, actionName, target, assignee s
 		if item == nil {
 			return nil, fmt.Errorf("subagente #%d no encontrado", subagentID)
 		}
+		entregaGit, err := recogerResultadoGitSubagente(item)
+		if err != nil {
+			return nil, err
+		}
 		return map[string]any{
-			"ok":         true,
-			"supervisor": supervisor,
-			"action":     selected,
-			"assignee":   worker,
-			"subagente":  item,
+			"ok":          true,
+			"supervisor":  supervisor,
+			"action":      selected,
+			"assignee":    worker,
+			"subagente":   item,
+			"entrega_git": entregaGit,
 		}, nil
 	case "refrescar_store_subagentes":
 		result, err := refreshSupervisorSubagentsFromStore(supervisor, "")

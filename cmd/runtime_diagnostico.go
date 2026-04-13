@@ -460,6 +460,14 @@ func runtimeWorkerRows(handles []*db.RuntimeHandle, limit int) []runtimeDiagnost
 				exitError = "heartbeat_lag"
 			}
 		}
+		mailboxDeliveryMode := snap.MailboxDeliveryMode()
+		effectiveMailboxDeliveryMode := db.RuntimeHandleMailboxDeliveryMode(handle)
+		if strings.TrimSpace(mailboxDeliveryMode) == "" {
+			mailboxDeliveryMode = effectiveMailboxDeliveryMode
+		} else if strings.TrimSpace(mailboxDeliveryMode) == runtimeagente.MailboxDeliveryBootstrapOnly &&
+			strings.TrimSpace(effectiveMailboxDeliveryMode) == runtimeagente.MailboxDeliverySessionResume {
+			mailboxDeliveryMode = effectiveMailboxDeliveryMode
+		}
 		rows = append(rows, runtimeDiagnosticoWorkerRow{
 			HandleID:            handle.ID,
 			Agent:               handle.Agente,
@@ -474,8 +482,8 @@ func runtimeWorkerRows(handles []*db.RuntimeHandle, limit int) []runtimeDiagnost
 			LastOutputAt:        snap.LastOutputTime(),
 			LastProgressAt:      snap.LastProgressTime(),
 			SessionRef:          snap.SessionRef(),
-			ExternalSessionID:   snap.ExternalSessionID(),
-			MailboxDeliveryMode: snap.MailboxDeliveryMode(),
+			ExternalSessionID:   valorVacioNoVacio(snap.ExternalSessionID(), sessionExternalIDForHandle(handle)),
+			MailboxDeliveryMode: mailboxDeliveryMode,
 			ExitError:           exitError,
 			ManifestPath:        snap.ManifestPath,
 			StatusPath:          snap.StatusPath,
@@ -485,6 +493,27 @@ func runtimeWorkerRows(handles []*db.RuntimeHandle, limit int) []runtimeDiagnost
 		})
 	}
 	return rows
+}
+
+func sessionExternalIDForHandle(handle *db.RuntimeHandle) string {
+	if handle == nil || handle.SesionID == nil || *handle.SesionID <= 0 {
+		return ""
+	}
+	if db.DB == nil {
+		return ""
+	}
+	sesion, err := db.GetSesionByID(*handle.SesionID)
+	if err != nil || sesion == nil {
+		return ""
+	}
+	return strings.TrimSpace(sesion.ExternalSessionID)
+}
+
+func valorVacioNoVacio(primary, fallback string) string {
+	if strings.TrimSpace(primary) != "" {
+		return strings.TrimSpace(primary)
+	}
+	return strings.TrimSpace(fallback)
 }
 
 func workerSnapshotManifestTMUXField(snap *runtimeagente.WorkerSnapshot, wantSession bool) string {
@@ -539,7 +568,7 @@ func runtimeDiagnosticoIssues(rows []runtimeDiagnosticoWorkerRow, orders []*db.R
 				Message:  fmt.Sprintf("%s handle=%d heartbeat atrasado (%s)", valorVacio(row.Agent), row.HandleID, valorVacio(row.RuntimeRef)),
 			})
 		}
-		if row.Alive && row.LastProgressAt != nil && !row.LastProgressAt.IsZero() && time.Since(row.LastProgressAt.UTC()) > runtimeDiagnosticoWorkerProgressThreshold {
+		if row.Alive && runtimeDiagnosticoWorkerProgressStale(row, now) {
 			issues = append(issues, runtimeDiagnosticoIssue{
 				Severity: "warn",
 				Code:     "worker_progress_stale",
@@ -572,6 +601,25 @@ func runtimeDiagnosticoIssues(rows []runtimeDiagnosticoWorkerRow, orders []*db.R
 	issues = append(issues, runtimeDiagnosticoResumeIssues(now, aliveByAgent, orders, mailbox)...)
 	issues = append(issues, runtimeDiagnosticoRestartLoopIssues(now, checkpoints)...)
 	return issues
+}
+
+func runtimeDiagnosticoWorkerProgressStale(row runtimeDiagnosticoWorkerRow, now time.Time) bool {
+	if !row.Alive {
+		return false
+	}
+	if row.LastProgressAt == nil || row.LastProgressAt.IsZero() {
+		return false
+	}
+	if now.Sub(row.LastProgressAt.UTC()) <= runtimeDiagnosticoWorkerProgressThreshold {
+		return false
+	}
+	if row.LastOutputAt != nil && !row.LastOutputAt.IsZero() && now.Sub(row.LastOutputAt.UTC()) <= runtimeDiagnosticoWorkerProgressThreshold {
+		return false
+	}
+	if row.UpdatedAt != nil && !row.UpdatedAt.IsZero() && now.Sub(row.UpdatedAt.UTC()) <= runtimeDiagnosticoWorkerProgressThreshold {
+		return false
+	}
+	return true
 }
 
 func runtimeDiagnosticoResumeIssues(now time.Time, aliveByAgent map[string][]runtimeDiagnosticoWorkerRow, orders []*db.RuntimeOrder, mailbox []*db.RuntimeMailboxMessage) []runtimeDiagnosticoIssue {

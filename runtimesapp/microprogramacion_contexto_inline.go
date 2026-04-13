@@ -1,15 +1,22 @@
 package runtimesapp
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/printer"
+	"go/token"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
+	"orquesta/microprogramacionapp"
 	"orquesta/runtimeagente"
 )
 
@@ -55,14 +62,29 @@ func construirMensajeMicroprogramacionInline(rutaProyecto string, req Microprogr
 	if err != nil {
 		return "", err
 	}
+	mensajeBase = normalizarMensajeBaseMicroprogramacion(mensajeBase, req.FormatoSalida)
+	usaBloquesArchivo := formatoSalidaUsaBloquesArchivo(req.FormatoSalida)
+	usaGitWorktree := microprogramacionapp.FormatoSalidaUsaGitWorktree(req.FormatoSalida)
+	salidaObligatoria := "PATCH_UNIFICADO: devuelve solo un diff unificado que toque unicamente archivos del WRITE_SET."
+	if usaBloquesArchivo {
+		salidaObligatoria = "FICHEROS: devuelve uno o varios bloques `// FILE: ruta/relativa` seguidos del contenido completo de cada fichero dentro del WRITE_SET."
+	} else if usaGitWorktree {
+		salidaObligatoria = "ENTREGA_GIT: trabaja dentro de tu worktree activa; modifica solo el WRITE_SET; ejecuta los tests obligatorios; responde solo con resumen breve, tests ejecutados y estado del diff/branch."
+	}
+	modo := "MODO: sin herramientas y sin acceso a filesystem o shell."
+	reglas := "REGLAS: trabaja solo con el contexto inline; no inventes archivos ocultos; no propongas refactors laterales; no cambies nada fuera del WRITE_SET."
+	if usaGitWorktree {
+		modo = "MODO: usa tu worktree Git activa local; puedes editar archivos del WRITE_SET y ejecutar solo los tests obligatorios."
+		reglas = "REGLAS: trabaja solo dentro de tu worktree activa; no inventes archivos ocultos; no propongas refactors laterales; no cambies nada fuera del WRITE_SET."
+	}
 	partes := []string{
 		"PROTOCOLO_MICROPROGRAMACION_INLINE",
-		"MODO: sin herramientas y sin acceso a filesystem o shell.",
-		"REGLAS: trabaja solo con el contexto inline; no inventes archivos ocultos; no propongas refactors laterales; no cambies nada fuera del WRITE_SET.",
+		modo,
+		reglas,
+		"RUTA_LITERAL_OBLIGATORIA: en cada bloque `// FILE:` usa exactamente una ruta del WRITE_SET, sin renombrarla, traducirla ni alterarla.",
 		"SI_FALTA_CONTEXTO: responde solo `BLOQUEO: <motivo concreto>`.",
 		"SALIDA_OBLIGATORIA:",
-		"PATCH_UNIFICADO: devuelve solo un diff unificado que toque unicamente archivos del WRITE_SET.",
-		"EVIDENCIA: añade al final una seccion breve con 1-3 lineas maximo indicando que cambiaste y que test objetivo quedaria cubierto.",
+		salidaObligatoria,
 		"",
 		"MICROTAREA_ORIGINAL:",
 		strings.TrimSpace(mensajeBase),
@@ -81,33 +103,267 @@ func construirMensajeMicroprogramacionInline(rutaProyecto string, req Microprogr
 	return strings.Join(partes, "\n"), nil
 }
 
+func normalizarMensajeBaseMicroprogramacion(mensajeBase, formatoSalida string) string {
+	mensajeBase = strings.TrimSpace(mensajeBase)
+	if mensajeBase == "" {
+		return mensajeBase
+	}
+	lineas := strings.Split(mensajeBase, "\n")
+	resultado := make([]string, 0, len(lineas))
+	formatoSalida = strings.TrimSpace(formatoSalida)
+	usaGitWorktree := microprogramacionapp.FormatoSalidaUsaGitWorktree(formatoSalida)
+	for _, linea := range lineas {
+		trimmed := strings.TrimSpace(linea)
+		switch {
+		case strings.HasPrefix(trimmed, "SALIDA:"):
+			resultado = append(resultado, "SALIDA: "+formatoSalida)
+		case !usaGitWorktree && strings.HasPrefix(trimmed, "ENTREGA_GIT:"):
+			continue
+		case !usaGitWorktree && strings.HasPrefix(trimmed, "RESPUESTA_ESPERADA:") && strings.Contains(strings.ToLower(trimmed), "git"):
+			continue
+		default:
+			resultado = append(resultado, linea)
+		}
+	}
+	return strings.Join(resultado, "\n")
+}
+
+func formatoSalidaUsaBloquesArchivo(formato string) bool {
+	formato = strings.TrimSpace(strings.ToLower(formato))
+	if formato == "" {
+		return false
+	}
+	if strings.Contains(formato, "ficheros") || strings.Contains(formato, "// file:") || strings.Contains(formato, "bloques // file") {
+		return true
+	}
+	return false
+}
+
 func cargarArchivosContextoInline(rutaProyecto string, req MicroprogramacionDispatchRequest) ([]archivoContextoInline, error) {
 	writeSet := normalizarWriteSetContexto(req.ArchivoObjetivo, req.WriteSet)
 	if len(writeSet) == 0 {
 		return nil, fmt.Errorf("write_set vacio para microprogramacion inline")
 	}
+	testsObjetivo := descubrirTestsObjetivoInline(req.TestsObligatorios)
 	contexto := make([]archivoContextoInline, 0, len(writeSet)+2)
 	vistos := map[string]struct{}{}
+	incluyeTestExplicito := false
 	for _, rutaRel := range writeSet {
 		archivo, err := leerArchivoContextoInline(rutaProyecto, rutaRel, "WRITE_SET")
 		if err != nil {
 			return nil, err
 		}
+		if rutaRel == filepath.ToSlash(filepath.Clean(strings.TrimSpace(req.ArchivoObjetivo))) {
+			archivo = recortarArchivoObjetivoInline(archivo, strings.TrimSpace(req.SimboloObjetivo))
+		} else if strings.HasSuffix(strings.ToLower(rutaRel), "_test.go") {
+			archivo = recortarArchivoTestsInline(archivo, testsObjetivo)
+		}
 		contexto = append(contexto, archivo)
 		vistos[rutaRel] = struct{}{}
+		if strings.HasSuffix(strings.ToLower(rutaRel), "_test.go") {
+			incluyeTestExplicito = true
+		}
 	}
-	for _, rutaRel := range descubrirTestsRelacionados(rutaProyecto, req.ArchivoObjetivo) {
-		if _, ok := vistos[rutaRel]; ok {
-			continue
+	if !incluyeTestExplicito {
+		for _, rutaRel := range descubrirTestsRelacionados(rutaProyecto, req.ArchivoObjetivo) {
+			if _, ok := vistos[rutaRel]; ok {
+				continue
+			}
+			archivo, err := leerArchivoContextoInline(rutaProyecto, rutaRel, "TEST_REFERENCIA")
+			if err != nil {
+				return nil, err
+			}
+			contexto = append(contexto, archivo)
+			vistos[rutaRel] = struct{}{}
 		}
-		archivo, err := leerArchivoContextoInline(rutaProyecto, rutaRel, "TEST_REFERENCIA")
-		if err != nil {
-			return nil, err
-		}
-		contexto = append(contexto, archivo)
-		vistos[rutaRel] = struct{}{}
 	}
 	return contexto, nil
+}
+
+func descubrirTestsObjetivoInline(tests []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(tests))
+	re := regexp.MustCompile(`(?:^|[\s=])(-run)\s+([A-Za-z0-9_]+)|(?:^|[\s=])-run=([A-Za-z0-9_]+)`)
+	for _, raw := range tests {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		matches := re.FindAllStringSubmatch(raw, -1)
+		for _, match := range matches {
+			candidato := ""
+			if len(match) >= 4 {
+				switch {
+				case strings.TrimSpace(match[2]) != "":
+					candidato = strings.TrimSpace(match[2])
+				case strings.TrimSpace(match[3]) != "":
+					candidato = strings.TrimSpace(match[3])
+				}
+			}
+			if !strings.HasPrefix(candidato, "Test") {
+				continue
+			}
+			if _, ok := seen[candidato]; ok {
+				continue
+			}
+			seen[candidato] = struct{}{}
+			out = append(out, candidato)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func recortarArchivoObjetivoInline(archivo archivoContextoInline, simbolo string) archivoContextoInline {
+	simbolo = strings.TrimSpace(simbolo)
+	if simbolo == "" || !strings.HasSuffix(strings.ToLower(strings.TrimSpace(archivo.Ruta)), ".go") {
+		return archivo
+	}
+	recortado, ok := extraerContextoSimboloGo(archivo.Contenido, simbolo)
+	if !ok {
+		return archivo
+	}
+	recortado = strings.TrimSpace(recortado)
+	if recortado == "" || len(recortado) >= len(archivo.Contenido) {
+		return archivo
+	}
+	archivo.Contenido = recortado
+	return archivo
+}
+
+func recortarArchivoTestsInline(archivo archivoContextoInline, testsObjetivo []string) archivoContextoInline {
+	if len(testsObjetivo) == 0 || !strings.HasSuffix(strings.ToLower(strings.TrimSpace(archivo.Ruta)), "_test.go") {
+		return archivo
+	}
+	recortado, ok := extraerContextoTestsGo(archivo.Contenido, testsObjetivo)
+	if !ok {
+		return archivo
+	}
+	recortado = strings.TrimSpace(recortado)
+	if recortado == "" || len(recortado) >= len(archivo.Contenido) {
+		return archivo
+	}
+	archivo.Contenido = recortado
+	return archivo
+}
+
+func extraerContextoSimboloGo(contenido, simbolo string) (string, bool) {
+	fs := token.NewFileSet()
+	archivo, err := parser.ParseFile(fs, "inline.go", contenido, parser.ParseComments)
+	if err != nil || archivo == nil {
+		return "", false
+	}
+	var declaracion ast.Decl
+	for _, decl := range archivo.Decls {
+		switch typed := decl.(type) {
+		case *ast.FuncDecl:
+			if typed != nil && typed.Name != nil && strings.EqualFold(strings.TrimSpace(typed.Name.Name), simbolo) {
+				declaracion = typed
+			}
+		case *ast.GenDecl:
+			for _, spec := range typed.Specs {
+				switch item := spec.(type) {
+				case *ast.TypeSpec:
+					if item != nil && item.Name != nil && strings.EqualFold(strings.TrimSpace(item.Name.Name), simbolo) {
+						declaracion = typed
+					}
+				case *ast.ValueSpec:
+					for _, nombre := range item.Names {
+						if nombre != nil && strings.EqualFold(strings.TrimSpace(nombre.Name), simbolo) {
+							declaracion = typed
+							break
+						}
+					}
+				}
+				if declaracion != nil {
+					break
+				}
+			}
+		}
+		if declaracion != nil {
+			break
+		}
+	}
+	if declaracion == nil {
+		return "", false
+	}
+	var out bytes.Buffer
+	out.WriteString("package ")
+	out.WriteString(strings.TrimSpace(archivo.Name.Name))
+	out.WriteString("\n\n")
+	if len(archivo.Imports) > 0 {
+		var imports bytes.Buffer
+		gen := &ast.GenDecl{Tok: token.IMPORT}
+		for _, imp := range archivo.Imports {
+			gen.Specs = append(gen.Specs, imp)
+		}
+		if err := printer.Fprint(&imports, fs, gen); err == nil {
+			out.WriteString(strings.TrimSpace(imports.String()))
+			out.WriteString("\n\n")
+		}
+	}
+	if err := printer.Fprint(&out, fs, declaracion); err != nil {
+		return "", false
+	}
+	return out.String(), true
+}
+
+func extraerContextoTestsGo(contenido string, testsObjetivo []string) (string, bool) {
+	if len(testsObjetivo) == 0 {
+		return "", false
+	}
+	lookup := make(map[string]struct{}, len(testsObjetivo))
+	for _, test := range testsObjetivo {
+		test = strings.TrimSpace(test)
+		if test != "" {
+			lookup[test] = struct{}{}
+		}
+	}
+	if len(lookup) == 0 {
+		return "", false
+	}
+	fs := token.NewFileSet()
+	archivo, err := parser.ParseFile(fs, "inline_test.go", contenido, parser.ParseComments)
+	if err != nil || archivo == nil {
+		return "", false
+	}
+	var declaraciones []ast.Decl
+	for _, decl := range archivo.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn == nil || fn.Name == nil {
+			continue
+		}
+		if _, ok := lookup[strings.TrimSpace(fn.Name.Name)]; ok {
+			declaraciones = append(declaraciones, decl)
+		}
+	}
+	if len(declaraciones) == 0 {
+		return "", false
+	}
+	var out bytes.Buffer
+	out.WriteString("package ")
+	out.WriteString(strings.TrimSpace(archivo.Name.Name))
+	out.WriteString("\n\n")
+	if len(archivo.Imports) > 0 {
+		var imports bytes.Buffer
+		gen := &ast.GenDecl{Tok: token.IMPORT}
+		for _, imp := range archivo.Imports {
+			gen.Specs = append(gen.Specs, imp)
+		}
+		if err := printer.Fprint(&imports, fs, gen); err == nil {
+			out.WriteString(strings.TrimSpace(imports.String()))
+			out.WriteString("\n\n")
+		}
+	}
+	for idx, decl := range declaraciones {
+		if idx > 0 {
+			out.WriteString("\n\n")
+		}
+		if err := printer.Fprint(&out, fs, decl); err != nil {
+			return "", false
+		}
+	}
+	return out.String(), true
 }
 
 func normalizarWriteSetContexto(archivoObjetivo string, writeSet []string) []string {

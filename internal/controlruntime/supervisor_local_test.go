@@ -389,6 +389,44 @@ func TestSupervisorLocalEstadoRehabilitaSalidaExternaSiPIDSigueVivo(t *testing.T
 	}
 }
 
+func TestSupervisorLocalEstadoRehabilitaTMUXPersistenteAunqueCaigaWrapper(t *testing.T) {
+	tmp := t.TempDir()
+	fakeTmux := filepath.Join(tmp, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte("#!/usr/bin/env bash\nset -euo pipefail\nif [[ \"$1\" == \"has-session\" && \"$2\" == \"-t\" && \"$3\" == \"orq-claude1\" ]]; then\n  exit 0\nfi\nexit 1\n"), 0o755); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	now := time.Now().UTC()
+	s := &supervisorProcesoLocal{
+		ref:                 "rehabilita-tmux-test",
+		agente:              "Claude1",
+		proyecto:            "orquestador",
+		pid:                 999999,
+		modo:                "tmux_cli_session",
+		driver:              "tmux_cli_session",
+		tmuxCommand:         fakeTmux,
+		tmuxSession:         "orq-claude1",
+		renderedCommand:     "claude-code",
+		wrappedCommand:      mustExecutableTest(t),
+		workingDir:          mustGetwdTest(t),
+		traceDir:            mustGetwdTest(t),
+		stdinPath:           filepath.Join(tmp, "pty.stdin"),
+		mailboxDeliveryMode: "interactive",
+		exitedAt:            ptrTime(now.Add(-time.Minute)),
+		exitError:           "process identity mismatch",
+	}
+
+	estado := s.estado()
+	if estado == nil {
+		t.Fatal("faltaba estado")
+	}
+	if !estado.Vivo {
+		t.Fatalf("la sesion tmux persistente deberia rehabilitarse como viva: %+v", estado)
+	}
+	if estado.HandleEstado != "activo" {
+		t.Fatalf("handle_state inesperado tras rehabilitar tmux persistente: %+v", estado)
+	}
+}
+
 func mustGetwdTest(t *testing.T) string {
 	t.Helper()
 	wd, err := os.Getwd()

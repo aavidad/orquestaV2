@@ -14,11 +14,14 @@ import (
 	"time"
 
 	"orquesta/agentesapp"
+	"orquesta/capacidadapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/internal/controlruntime"
+	"orquesta/microprogramacionapp"
 	"orquesta/reviewapp"
 	"orquesta/runtimeagente"
+	"orquesta/runtimesapp"
 )
 
 func timePtr(v time.Time) *time.Time { return &v }
@@ -130,6 +133,20 @@ func TestRevalidarYVerificarAgenteDisponibleParaTrabajoNoCaeAStatusSiFaltaEnBD(t
 	}
 	if !strings.Contains(err.Error(), "no encontrado") {
 		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
+func TestConstruirInstruccionMailboxInteractivoAceptaPipelineLocal(t *testing.T) {
+	msg := &db.RuntimeMailboxMessage{
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"instruction":"haz el siguiente slice pequeño","texto":"fallback"}`,
+	}
+	got, ok := construirInstruccionMailboxInteractivo(msg)
+	if !ok {
+		t.Fatal("pipeline_local deberia producir instruccion interactiva")
+	}
+	if got != "fallback" && got != "haz el siguiente slice pequeño" {
+		t.Fatalf("instruccion pipeline_local inesperada: %q", got)
 	}
 }
 
@@ -3245,6 +3262,103 @@ func TestProcesarAutonomiaAgentesBatchEncolaNudgePorPropuestasPendientes(t *test
 	}
 }
 
+func TestProcesarCierreProyectoAutonomiaSinSesionCierraProyectoYAutonomia(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	repo := prepararRepoGitAutonomia(t, filepath.Join(tmp, "orquestador"))
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: repo,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		ReviewRequired:       true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoCerrando,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Ultimo frente",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.CompletarTarea(tareaID, "Codex1", "abc123"); err != nil {
+		t.Fatalf("completar tarea: %v", err)
+	}
+	now := time.Now().UTC()
+	if _, err := db.CrearReviewGate(&db.ReviewGate{
+		ProyectoID:  &proyectoID,
+		RequestedBy: "orquesta",
+		Estado:      db.ReviewGateAprobado,
+		ResolvedAt:  &now,
+	}); err != nil {
+		t.Fatalf("crear review gate aprobado: %v", err)
+	}
+	if _, err := db.GuardarGitMerge(&db.GitMerge{
+		ProyectoID:   proyectoID,
+		SourceBranch: "feature/x",
+		TargetBranch: "master",
+		RequestedBy:  "orquesta",
+		Estado:       "fusionado",
+		CommitMerge:  "def456",
+		MetadataJSON: `{"auto_created":true,"source":"review_gate_approved"}`,
+	}); err != nil {
+		t.Fatalf("guardar git merge fusionado: %v", err)
+	}
+
+	proyecto, err := db.GetProyecto(strconv.FormatInt(proyectoID, 10))
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	ok, err := procesarCierreProyectoAutonomiaSinSesion(proyecto)
+	if err != nil {
+		t.Fatalf("procesar cierre proyecto sin sesion: %v", err)
+	}
+	if !ok {
+		t.Fatal("debería cerrar el proyecto sin sesión activa")
+	}
+	op, err := db.GetProyectoOperacion(proyectoID)
+	if err != nil {
+		t.Fatalf("get proyecto operacion: %v", err)
+	}
+	if op.EstadoOperativo != db.ProyectoOperativoCerrado {
+		t.Fatalf("proyecto no cerrado: %+v", op)
+	}
+	policy, err := supervisionService.GetProjectPolicy("orquestador")
+	if err != nil {
+		t.Fatalf("get project policy: %v", err)
+	}
+	if policy == nil {
+		t.Fatal("debería existir policy")
+	}
+	if policy.EstadoAutonomia != db.AutonomiaProyectoCerrado {
+		t.Fatalf("estado autonomia inesperado: got=%q want=%q", policy.EstadoAutonomia, db.AutonomiaProyectoCerrado)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchNoEncolaNudgePorContinuarTrabajoEnSesionActiva(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -3470,9 +3584,7 @@ func TestProcesarAutonomiaAgentesBatchAutoasignaTrabajoASesionActivaIdle(t *test
 
 func TestAutonomiaIdleAutoassignShouldAttemptThrottle(t *testing.T) {
 	prepararDBTemporalCmd(t)
-	autonomiaIdleAutoassignGate.mu.Lock()
-	autonomiaIdleAutoassignGate.last = nil
-	autonomiaIdleAutoassignGate.mu.Unlock()
+	autonomiaIdleAutoassignGate.Reset()
 
 	if !autonomiaIdleAutoassignShouldAttempt("Codex1", 1) {
 		t.Fatalf("primer intento deberia permitirse")
@@ -3746,11 +3858,15 @@ func TestResetReanimacionEncolaResumeCuandoHayHandlePausado(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listar orders: %v", err)
 	}
-	if len(orders) != 1 || orders[0].Tipo != "resume" {
-		t.Fatalf("resume no encolado: %+v", orders)
+	if len(orders) != 1 {
+		t.Fatalf("reactivacion no encolada: %+v", orders)
 	}
-	if !strings.Contains(orders[0].PayloadJSON, `"accion":"resume"`) {
-		t.Fatalf("payload resume inesperado: %s", orders[0].PayloadJSON)
+	if orders[0].Tipo != "resume" && orders[0].Tipo != "start" {
+		t.Fatalf("tipo de reactivacion inesperado: %+v", orders[0])
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"accion":"resume"`) &&
+		!strings.Contains(orders[0].PayloadJSON, `"accion":"start"`) {
+		t.Fatalf("payload de reactivacion inesperado: %s", orders[0].PayloadJSON)
 	}
 }
 
@@ -3823,6 +3939,67 @@ func TestResetReanimacionEncolaStartSiHandlePausadoTMUXBootstrapOnly(t *testing.
 		handleReactivacion, _ := resolverHandleReactivacionAgente("Codex1", &proyectoID)
 		todas, _ := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
 		t.Fatalf("start no encolado para tmux bootstrap_only pausado: open_before=%t pendientes=%+v todas=%+v handle=%+v", pendienteAntes, orders, todas, handleReactivacion)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"accion":"start"`) {
+		t.Fatalf("payload start inesperado: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestResetReanimacionEncolaStartSiHandleFallidoConMailboxPendiente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Gemini1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "gemini-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"tmux_cli_session","tmux_session":"orq-gemini1-restart","mailbox_delivery_mode":"interactive","can_send_input":true}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='fallido', metadata_json=? WHERE id=?`, metaJSON, handle.ID); err != nil {
+		t.Fatalf("fallar handle: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente: "server",
+		ToAgente:   "Gemini1",
+		ProyectoID: &proyectoID,
+		Kind:       "nudge",
+		PayloadJSON: `{"texto":"reanuda trabajo premium"}`,
+	}); err != nil {
+		t.Fatalf("mailbox pendiente: %v", err)
+	}
+
+	if err := reactivarAgenteTrasReanimacion("Gemini1"); err != nil {
+		t.Fatalf("reactivar agente: %v", err)
+	}
+
+	agente := "Gemini1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "start" {
+		t.Fatalf("start no encolado para handle fallido con mailbox pendiente: %+v", orders)
 	}
 	if !strings.Contains(orders[0].PayloadJSON, `"accion":"start"`) {
 		t.Fatalf("payload start inesperado: %s", orders[0].PayloadJSON)
@@ -4474,6 +4651,18 @@ func TestRuntimeHandleRequiereCoordinatedRestartMailboxAceptaTMUXCanonicoBootstr
 	}
 }
 
+func TestRuntimeHandleRequiereCoordinatedRestartMailboxNoAplicaSiTMUXYaTieneSesionExterna(t *testing.T) {
+	handle := &db.RuntimeHandle{
+		Transporte:       "tmux",
+		HandleKind:       "session",
+		MetadataJSON:     `{"driver":"tmux_cli_session","mailbox_delivery_mode":"bootstrap_only","external_session_id":"sess-live-tmux"}`,
+		CapabilitiesJSON: `{"can_send_input":false,"mailbox_delivery_mode":"bootstrap_only"}`,
+	}
+	if runtimeHandleRequiereCoordinatedRestartMailbox(handle) {
+		t.Fatalf("un worker tmux con external_session_id ya no deberia coordinar restart")
+	}
+}
+
 func TestProcesarRuntimeMailboxBatchEncolaSendInstructionParaTMUXBootstrapOnlyReady(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -4671,10 +4860,10 @@ func TestEncolarSendInstructionDesdeRuntimeMailboxConservaMetadataMicroprogramac
 	}
 
 	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
-		FromAgente: "server",
-		ToAgente:   "Ollama1",
-		ProyectoID: &proyectoID,
-		Kind:       "instruction",
+		FromAgente:  "server",
+		ToAgente:    "Ollama1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
 		PayloadJSON: `{"source":"microprogramacion","microprogramacion":{"especificacion_id":7,"write_set":["identidad/normalizar.go"]},"texto":"PATCH_UNIFICADO: cambia solo identidad/normalizar.go"}`,
 	})
 	if err != nil {
@@ -4706,6 +4895,71 @@ func TestEncolarSendInstructionDesdeRuntimeMailboxConservaMetadataMicroprogramac
 	}
 	if id, ok := payload["mailbox_id"].(float64); !ok || int64(id) != msgID {
 		t.Fatalf("mailbox_id inesperado: %s", order.PayloadJSON)
+	}
+}
+
+func TestEncolarSendInstructionDesdeRuntimeMailboxDespiertaRuntimeOrders(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Gemini1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "gemini-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Gemini1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"accion":"continuar_trabajo","motivo":"slice de prueba"}`,
+	})
+	if err != nil {
+		t.Fatalf("enviar runtime mailbox: %v", err)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+	previousWake := wakeRuntimeOrdersAfterMailbox
+	wakeCalls := 0
+	wakeRuntimeOrdersAfterMailbox = func() bool {
+		wakeCalls++
+		return true
+	}
+	defer func() {
+		wakeRuntimeOrdersAfterMailbox = previousWake
+	}()
+
+	orderID, err := encolarSendInstructionDesdeRuntimeMailbox(msg, handle, "continua trabajo actual", "")
+	if err != nil {
+		t.Fatalf("encolar send_instruction desde mailbox: %v", err)
+	}
+	if orderID <= 0 {
+		t.Fatalf("order id inesperado: %d", orderID)
+	}
+	if wakeCalls != 1 {
+		t.Fatalf("runtime_orders deberia despertarse exactamente una vez, got=%d", wakeCalls)
 	}
 }
 
@@ -4792,6 +5046,80 @@ func TestProcesarRuntimeMailboxSessionResumeBatchEncolaSendInstructionSinConsumi
 	}
 	if len(mailboxPendiente) != 1 || mailboxPendiente[0].ID != msgID {
 		t.Fatalf("la mailbox debe seguir pendiente hasta entregar de verdad: %+v", mailboxPendiente)
+	}
+}
+
+func TestExisteRuntimeOrderAbiertaPorHandleEnSnapshotIgnoraEjecutandoConLeaseCaducado(t *testing.T) {
+	proyectoID := int64(7)
+	handleID := int64(33)
+	expired := time.Now().UTC().Add(-time.Minute)
+	msg := &db.RuntimeMailboxMessage{
+		ID:         41,
+		ToAgente:   "GemmaProgramador4",
+		ProyectoID: &proyectoID,
+	}
+	snapshot := &runtimeMailboxBatchSnapshot{
+		ordersByAgentProject: map[string][]*db.RuntimeOrder{
+			runtimeMailboxBatchKey("GemmaProgramador4", &proyectoID): {
+				{
+					ID:             99,
+					Agente:         "GemmaProgramador4",
+					ProyectoID:     &proyectoID,
+					Tipo:           "send_instruction",
+					Estado:         "ejecutando",
+					HandleID:       &handleID,
+					LeaseExpiresAt: &expired,
+				},
+			},
+		},
+		ordersLoaded: map[string]struct{}{
+			runtimeMailboxBatchKey("GemmaProgramador4", &proyectoID): {},
+		},
+	}
+	got, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handleID, "send_instruction")
+	if err != nil {
+		t.Fatalf("existeRuntimeOrderAbiertaPorHandleEnSnapshot: %v", err)
+	}
+	if got {
+		t.Fatalf("una orden ejecutando con lease caducado no deberia bloquear la mailbox")
+	}
+}
+
+func TestExisteIntentoSendInstructionMailboxParaHandleEnSnapshotIgnoraEjecutandoConLeaseCaducado(t *testing.T) {
+	proyectoID := int64(7)
+	handleID := int64(33)
+	expired := time.Now().UTC().Add(-time.Minute)
+	msg := &db.RuntimeMailboxMessage{
+		ID:         41,
+		ToAgente:   "GemmaProgramador4",
+		ProyectoID: &proyectoID,
+	}
+	handle := &db.RuntimeHandle{ID: handleID}
+	snapshot := &runtimeMailboxBatchSnapshot{
+		ordersByAgentProject: map[string][]*db.RuntimeOrder{
+			runtimeMailboxBatchKey("GemmaProgramador4", &proyectoID): {
+				{
+					ID:             99,
+					Agente:         "GemmaProgramador4",
+					ProyectoID:     &proyectoID,
+					Tipo:           "send_instruction",
+					Estado:         "ejecutando",
+					HandleID:       &handleID,
+					LeaseExpiresAt: &expired,
+					PayloadJSON:    `{"mailbox_id":41}`,
+				},
+			},
+		},
+		ordersLoaded: map[string]struct{}{
+			runtimeMailboxBatchKey("GemmaProgramador4", &proyectoID): {},
+		},
+	}
+	got, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, "")
+	if err != nil {
+		t.Fatalf("existeIntentoSendInstructionMailboxParaHandleEnSnapshot: %v", err)
+	}
+	if got {
+		t.Fatalf("una send_instruction ejecutando con lease caducado no deberia deduplicar el reintento limpio")
 	}
 }
 
@@ -5830,6 +6158,233 @@ func TestProcesarRuntimeMailboxBatchNoConsumeAgenteSinHandlePeroConTrabajo(t *te
 	}
 }
 
+func TestProcesarRuntimeMailboxBatchReabrePoolLocalCompartidoSinHandle(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("GemmaMailbox", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := capacidadService.AsegurarPoolLocalCompartido(capacidadapp.EntradaAsegurarPoolLocalCompartido{
+		PoolSlug:               "ollama-gemma4",
+		Proveedor:              "Ollama",
+		Runtime:                "ollama",
+		ModeloPreferente:       "gemma4:26b",
+		SlotsMaximos:           1,
+		ConectorCanonico:       "ollama_pool_local",
+		ConectorCompatibilidad: "ollama-cli",
+		ExperimentalCompat:     true,
+	}); err != nil {
+		t.Fatalf("guardar pool: %v", err)
+	}
+	if _, err := db.GuardarPoolModelo("ollama-gemma4", &db.PoolModelo{ModelSlug: "gemma4:26b", Activo: true, Prioridad: 10, CosteRelativo: 1}); err != nil {
+		t.Fatalf("guardar pool modelo: %v", err)
+	}
+	if _, err := db.GuardarPoliticaModelo(&db.PoliticaModelo{
+		ScopeTipo:       "perfil",
+		ScopeRef:        "implementacion",
+		PerfilTarea:     "implementacion",
+		PoolSlug:        "ollama-gemma4",
+		ModelSlug:       "gemma4:26b",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("guardar politica modelo: %v", err)
+	}
+	if err := db.ActivarAsignacion("GemmaMailbox", proyectoID, "frente activo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "GemmaMailbox",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "ollama_pool_local",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion pool local: %v", err)
+	}
+	if err := db.FinSesion("GemmaMailbox"); err != nil {
+		t.Fatalf("cerrar sesion pool local: %v", err)
+	}
+	if sesion == nil {
+		t.Fatal("sesion pool local nula")
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "GemmaMailbox",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"continua la microtarea"}`,
+	}); err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime mailbox: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia reactivar pool local compartido, got=%d", n)
+	}
+
+	agente := "GemmaMailbox"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != agenteControlAccionStart {
+		t.Fatalf("deberia encolar start para reabrir el pool local: %+v", orders)
+	}
+	mailboxEstado := "pendiente"
+	mailbox, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &agente, ProyectoID: &proyectoID, Estado: &mailboxEstado})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	if len(mailbox) != 1 {
+		t.Fatalf("la mailbox debe seguir pendiente tras reactivar el pool: %+v", mailbox)
+	}
+}
+
+func TestProcesarRuntimeMailboxBatchReactivaPremiumSinHandleActivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "frente premium"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Gemini1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "gemini-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"tmux_cli_session","tmux_session":"orq-gemini1-restart","mailbox_delivery_mode":"interactive","can_send_input":true}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='fallido', metadata_json=? WHERE id=?`, metaJSON, handle.ID); err != nil {
+		t.Fatalf("fallar handle: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Gemini1",
+		ProyectoID:  &proyectoID,
+		Kind:        "nudge",
+		PayloadJSON: `{"texto":"reanuda trabajo premium"}`,
+	}); err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime mailbox: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia reactivar runtime premium sin handle activo, got=%d", n)
+	}
+
+	agente := "Gemini1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != agenteControlAccionStart {
+		t.Fatalf("deberia encolar start para reactivar premium: %+v", orders)
+	}
+}
+
+func TestProcesarRuntimeMailboxBatchReactivaPremiumSinProyectoEnMailbox(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "frente premium"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Gemini1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "gemini-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"tmux_cli_session","tmux_session":"orq-gemini1-restart","mailbox_delivery_mode":"interactive","can_send_input":true}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='fallido', metadata_json=? WHERE id=?`, metaJSON, handle.ID); err != nil {
+		t.Fatalf("fallar handle: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Gemini1",
+		Kind:        "nudge",
+		PayloadJSON: `{"texto":"reanuda trabajo premium"}`,
+	}); err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime mailbox: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia reactivar runtime premium aunque el mailbox no traiga proyecto, got=%d", n)
+	}
+
+	agente := "Gemini1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != agenteControlAccionStart {
+		t.Fatalf("deberia encolar start premium inferido desde contexto del agente: %+v", orders)
+	}
+}
+
 func TestProcesarRuntimeMailboxBatchConsumeAgenteFueraDeFlotaConAsignacionAutomatica(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -6710,6 +7265,275 @@ func TestResetReanimacionEncolaStartCuandoNoHayRuntimePeroSiTrabajo(t *testing.T
 	}
 }
 
+func TestEncolarContinuacionTareaReasignadaIncluyePayloadCanonico(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	proyecto, err := db.GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+
+	encolada, err := encolarContinuacionTareaReasignada(
+		"Codex1",
+		proyecto,
+		77,
+		"Gemma1",
+		"worker_degradado",
+		"continúa con la tarea reasignada y deja evidencia de avance",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("encolar continuacion: %v", err)
+	}
+	if !encolada {
+		t.Fatal("debería encolar nudge")
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("runtime orders inesperadas: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"accion":"continuar_trabajo"`) ||
+		!strings.Contains(orders[0].PayloadJSON, `"tarea_id":77`) ||
+		!strings.Contains(orders[0].PayloadJSON, `"reasignada_desde":"Gemma1"`) ||
+		!strings.Contains(orders[0].PayloadJSON, `"motivo":"worker_degradado"`) {
+		t.Fatalf("payload inesperado: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestEncolarContinuacionTareaReasignadaPreservaExtras(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	proyecto, err := db.GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+
+	encolada, err := encolarContinuacionTareaReasignada(
+		"Codex1",
+		proyecto,
+		88,
+		"Claude1",
+		"sobrecarga_operativa",
+		"continúa con la tarea redistribuida y deja evidencia de avance",
+		map[string]any{"redistribuida_desde": "Claude1"},
+	)
+	if err != nil {
+		t.Fatalf("encolar continuacion: %v", err)
+	}
+	if !encolada {
+		t.Fatal("debería encolar nudge")
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("runtime orders inesperadas: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"redistribuida_desde":"Claude1"`) {
+		t.Fatalf("payload extras inesperado: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestEncolarContinuacionTareaReasignadaSiCorrespondeEvitaDuplicadoPendiente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	proyecto, err := db.GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	if _, err := encolarContinuacionTareaReasignada("Codex1", proyecto, 99, "Gemma1", "worker_degradado", "continúa", nil); err != nil {
+		t.Fatalf("encolar continuacion inicial: %v", err)
+	}
+
+	if err := encolarContinuacionTareaReasignadaSiCorresponde("Codex1", &proyectoID, 99, "Gemma1", "worker_degradado", "continúa", nil); err != nil {
+		t.Fatalf("encolar continuacion condicionada: %v", err)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("no deberia duplicar nudge pendiente: %+v", orders)
+	}
+}
+
+func TestReasignarYArrancarTareaAutonomiaReasignaIniciaYAnota(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemma1", "programador"); err != nil {
+		t.Fatalf("registrar agente origen: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente relevo: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{Slug: "orquestador", Nombre: "Orquestador", RutaAbs: filepath.Join(t.TempDir(), "orquestador"), Tipo: db.ProyectoRepo, Activo: true})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{Titulo: "Frente degradado", ProyectoID: &proyectoID, Prioridad: db.PrioridadAlta, CreadoPor: "tester"})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Gemma1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+
+	if err := reasignarYArrancarTareaAutonomia(tareaID, "Codex1", "Reasignada automáticamente por degradación"); err != nil {
+		t.Fatalf("reasignarYArrancarTareaAutonomia: %v", err)
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Agente == nil || *tarea.Agente != "Codex1" || tarea.Estado != db.TareaEnProgreso {
+		t.Fatalf("tarea inesperada: %+v", tarea)
+	}
+	if !strings.Contains(tarea.Notas, "Reasignada automáticamente por degradación") {
+		t.Fatalf("nota inesperada: %+v", tarea)
+	}
+}
+
+func TestBloquearTareaAutonomiaSinRelevoBloqueaYAnota(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemma1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{Slug: "orquestador", Nombre: "Orquestador", RutaAbs: filepath.Join(t.TempDir(), "orquestador"), Tipo: db.ProyectoRepo, Activo: true})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{Titulo: "Frente sin relevo", ProyectoID: &proyectoID, Prioridad: db.PrioridadAlta, CreadoPor: "tester"})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Gemma1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Gemma1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	if err := bloquearTareaAutonomiaSinRelevo(tareaID, "Gemma1", "Sobrecarga operativa: sin relevo sano disponible", "Bloqueada automáticamente por sobrecarga"); err != nil {
+		t.Fatalf("bloquearTareaAutonomiaSinRelevo: %v", err)
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Estado != db.TareaBloqueada {
+		t.Fatalf("tarea no bloqueada: %+v", tarea)
+	}
+	if !strings.Contains(tarea.Notas, "Bloqueada automáticamente por sobrecarga") {
+		t.Fatalf("nota inesperada: %+v", tarea)
+	}
+}
+
+func TestProcesarTareasActivasFueraDeOrquestacionBatchBloqueaYAnota(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-fuera-flota",
+		Nombre:  "Orquestador Fuera Flota",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Tarea huerfana",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE tareas SET agente='CodexFantasma', estado=? WHERE id=?`, db.EstadoEnProgreso, tareaID); err != nil {
+		t.Fatalf("forzar tarea huerfana: %v", err)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+
+	procesadas, err := procesarTareasActivasFueraDeOrquestacionBatch(map[string][]*db.Tarea{"CodexFantasma": {tarea}}, map[string]agentesapp.Row{})
+	if err != nil {
+		t.Fatalf("procesar tareas fuera de orquestacion: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia bloquear exactamente una tarea, got=%d", procesadas)
+	}
+
+	tarea, err = db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea tras procesado: %v", err)
+	}
+	if tarea.Estado != db.EstadoBloqueada {
+		t.Fatalf("la tarea deberia quedar bloqueada, got=%s", tarea.Estado)
+	}
+	if !strings.Contains(strings.ToLower(tarea.Notas), "fuera de orquestación") {
+		t.Fatalf("nota inesperada: %+v", tarea)
+	}
+}
+
 func TestResetReanimacionEncolaStartSiProyectoTieneBacklogRecuperable(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -7037,9 +7861,7 @@ func TestPresupuestoAgenteNoRevalidaAntesDeTiempo(t *testing.T) {
 }
 
 func TestPresupuestoPrimerUsoSesionGate(t *testing.T) {
-	presupuestoPrimerUsoSesionGate.mu.Lock()
-	presupuestoPrimerUsoSesionGate.seen = nil
-	presupuestoPrimerUsoSesionGate.mu.Unlock()
+	presupuestoPrimerUsoSesionGate.Reset()
 
 	if !presupuestoPrimerUsoSesion("Codex3") {
 		t.Fatalf("el primer uso de la sesion deberia forzar refresh")
@@ -8088,6 +8910,109 @@ func TestProcesarAutonomiaAgentesBatchRecuperaRuntimeRemotoDegradadoSinSesionExt
 	}
 }
 
+func TestProcesarAutonomiaAgentesBatchRecuperaOllamaPoolLocalDegradadoConStart(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("GemmaPool1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("GemmaPool1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	conectorID, err := db.UpsertConector(&db.Conector{
+		Slug:       "ollama_pool_local",
+		Nombre:     "Ollama Pool Local",
+		Transporte: "api",
+		Comando:    "http://127.0.0.1:17731",
+		Activo:     true,
+	})
+	if err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:            "GemmaPool1",
+		ConectorID:        &conectorID,
+		ProyectoID:        &proyectoID,
+		CWD:               filepath.Join(tmp, "orquestador"),
+		Herramienta:       "ollama_pool_local",
+		ExternalSessionID: "ollama-pool-1",
+		ResumePayloadJSON: `{"driver":"ollama_pool_local","transport":"api","endpoint":"http://127.0.0.1:17731","input_path":"/api/runtime/ollama-pool/input","status_path":"/api/runtime/ollama-pool/status","stop_path":"/api/runtime/ollama-pool/stop","mailbox_delivery_mode":"interactive","can_send_input":true}`,
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`
+		UPDATE runtime_handles
+		SET transporte='api',
+		    handle_kind='session',
+		    handle_ref='ollama-pool-1',
+		    estado='fallido',
+		    metadata_json='{"driver":"ollama_pool_local","transport":"api","pool_local":true,"external_session_id":"ollama-pool-1"}'
+		WHERE id = ?`, handle.ID); err != nil {
+		t.Fatalf("degradar handle: %v", err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("get runtime: %+v err=%v", runtime, err)
+	}
+	if _, err := db.DB.Exec(`
+		UPDATE runtime_instances
+		SET logical_state='degradado', process_state='remote_status_error'
+		WHERE id = ?`, runtime.ID); err != nil {
+		t.Fatalf("degradar runtime: %v", err)
+	}
+
+	sesionActual, err := db.GetSesionByID(sesion.ID)
+	if err != nil || sesionActual == nil {
+		t.Fatalf("get sesion actual: %+v err=%v", sesionActual, err)
+	}
+	n, err := procesarRecuperacionRuntimeDegradadoSesion(sesionActual)
+	if err != nil {
+		t.Fatalf("procesar recuperacion degradada: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("esperaba 2 decisiones autonomas (checkpoint + start), got=%d", n)
+	}
+
+	agente := "GemmaPool1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var checkpointFound, startFound, resumeFound bool
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch order.Tipo {
+		case "checkpoint":
+			checkpointFound = strings.Contains(order.PayloadJSON, "remote_runtime_degraded")
+		case "start":
+			startFound = strings.Contains(order.PayloadJSON, `"motivo":"remote_runtime_degraded"`)
+		case "resume":
+			resumeFound = true
+		}
+	}
+	if !checkpointFound || !startFound || resumeFound {
+		t.Fatalf("recuperacion ollama pool local inesperada: %+v", orders)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchRecuperaRuntimeLocalFallidoRelanzaStart(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -9073,6 +9998,39 @@ func TestProcesarRuntimeTranscriptBatchDespiertaReviewerPorReadyForReview(t *tes
 	}
 }
 
+func TestSignalTranscriptDebeIgnorarseAutoGuiaBootstrapPoolLocal(t *testing.T) {
+	cases := []string{
+		"**Bootstrap de Orquesta completado.**\n**Estado de sesión:** Activa.",
+		"**Bootstrap de sesión GemmaSeniorAuto procesado.**\n\n**Estado del Agente:** listo.",
+		"Bootstrap aceptado. **GemmaProgramador1** inicializado y operativo en `/tmp/proyecto`.\n\n**Estado de la sesión:**\n* **Rol:** Programador.\n\n**Quedo a la espera de la asignación de una tarea o una propuesta OP para iniciar la ejecución.**",
+		"Bootstrap de GemmaApp 3 completado.\n\n**Estado de la sesión:**\n* **Agente:** GemmaApp3\n* **Perfil:** `implementacion`\n* **Estado de tareas:** Sin tareas asignadas actualmente.\n\n**Acciones inmediatas:**\nMe encuentro en estado **IDLE**.\n\nQuedo a la espera de una asignación.",
+		"Bootstrap de Orquesta para GemmaApp7 procesado correctamente.\n\nEstado Operativo:\nTareas: No se detectan tareas activas.\nSesión: Confirmada como activa\nAcción: En modo Standby",
+	}
+	for _, texto := range cases {
+		item := &db.RuntimeTranscriptEntry{
+			Classification: "waiting_human",
+			Text:           texto,
+		}
+		if !signalTranscriptDebeIgnorarseAutoGuia(item) {
+			t.Fatalf("el bootstrap del pool local no deberia generar auto-guia waiting_human: %q", texto)
+		}
+	}
+}
+
+func TestControlPlaneBatchTimeoutEfectivoRespetaTimeoutOllama(t *testing.T) {
+	prev := os.Getenv("ORQUESTA_OLLAMA_TIMEOUT_MS")
+	if err := os.Setenv("ORQUESTA_OLLAMA_TIMEOUT_MS", "600000"); err != nil {
+		t.Fatalf("setenv: %v", err)
+	}
+	defer func() {
+		_ = os.Setenv("ORQUESTA_OLLAMA_TIMEOUT_MS", prev)
+	}()
+	got := controlPlaneBatchTimeoutEfectivo()
+	if got < 10*time.Minute {
+		t.Fatalf("timeout efectivo demasiado corto: %s", got)
+	}
+}
+
 func TestProcesarRuntimeTranscriptBatchNeedsReplanAbreTareaYDespiertaSupervisor(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -9432,6 +10390,678 @@ func TestProcesarRuntimeTranscriptBatchResuelveReviewGateDesdeReviewer(t *testin
 	}
 }
 
+func TestProcesarRuntimeTranscriptBatchRegistraEntregaGitActiva(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	repoDir := filepath.Join(tmp, "repo-git-transcript")
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	runGitCmdTest(t, repoDir, "init", "-b", "main")
+	runGitCmdTest(t, repoDir, "config", "user.email", "test@example.com")
+	runGitCmdTest(t, repoDir, "config", "user.name", "Test User")
+	if err := os.MkdirAll(filepath.Join(repoDir, "modulo"), 0o755); err != nil {
+		t.Fatalf("mkdir modulo: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "modulo", "worker.go"), []byte("package modulo\n\nfunc Worker() string { return \"old\" }\n"), 0o644); err != nil {
+		t.Fatalf("write worker: %v", err)
+	}
+	runGitCmdTest(t, repoDir, "add", ".")
+	runGitCmdTest(t, repoDir, "commit", "-m", "init")
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	projectID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: repoDir,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	worktree, err := newCoordinationService().PrepareWorktree(coordinacion.PrepareWorktreeInput{
+		ProjectRef: "orquestador",
+		Agent:      "Codex1",
+		Name:       "wt-codex1-git-transcript",
+		Branch:     "orq/orquestador/codex1-git-transcript",
+		BaseRef:    "main",
+		Reason:     "test_runtime_transcript_git",
+	})
+	if err != nil {
+		t.Fatalf("prepare worktree: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &projectID,
+		CWD:         worktree.Path,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	if err := os.WriteFile(filepath.Join(worktree.Path, "modulo", "worker.go"), []byte("package modulo\n\nfunc Worker() string { return \"new\" }\n"), 0o644); err != nil {
+		t.Fatalf("write worker in worktree: %v", err)
+	}
+
+	specID, err := microprogramacionService.Crear(microprogramacionapp.EntradaCrearEspecificacion{
+		ProyectoID:        &projectID,
+		Titulo:            "modulo/worker.go::Worker",
+		ArchivoObjetivo:   "modulo/worker.go",
+		SimboloObjetivo:   "Worker",
+		Descripcion:       "Actualiza Worker por git",
+		WriteSet:          []string{"modulo/worker.go"},
+		TestsObligatorios: []string{"go test ./... -count=1"},
+		FormatoSalida:     "git_worktree+evidencia",
+		CreadoPor:         "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear especificacion: %v", err)
+	}
+	despacho, err := runtimesService.DispatchMicroprogramacionInstruction(runtimesapp.MicroprogramacionDispatchRequest{
+		AgenteDestino:     "Codex1",
+		ProyectoID:        &projectID,
+		Mensaje:           "Implementa Worker por git",
+		EspecificacionID:  specID,
+		ArchivoObjetivo:   "modulo/worker.go",
+		SimboloObjetivo:   "Worker",
+		WriteSet:          []string{"modulo/worker.go"},
+		TestsObligatorios: []string{"go test ./... -count=1"},
+		FormatoSalida:     "git_worktree+evidencia",
+	})
+	if err != nil {
+		t.Fatalf("dispatch microprogramacion: %v", err)
+	}
+	if _, err := runtimesService.RegistrarSalidaObservada("Codex1", &projectID, "he terminado la microtarea"); err != nil {
+		t.Fatalf("registrar salida observada: %v", err)
+	}
+
+	n, err := procesarRuntimeTranscriptBatch()
+	if err != nil {
+		t.Fatalf("procesarRuntimeTranscriptBatch: %v", err)
+	}
+	if n < 1 {
+		t.Fatalf("se esperaba al menos una entrega registrada, got=%d", n)
+	}
+	order, err := runtimesService.GetRuntimeOrder(despacho.RuntimeOrderID)
+	if err != nil || order == nil {
+		t.Fatalf("get runtime order: %+v err=%v", order, err)
+	}
+	if order.Estado != "completada" || !strings.Contains(order.ResultadoJSON, `"receipt_source":"git_worktree"`) {
+		t.Fatalf("runtime order sin cierre git: %+v", order)
+	}
+	merges, err := db.ListarGitMerges(&projectID, "pendiente")
+	if err != nil || len(merges) == 0 {
+		t.Fatalf("listar merges: %+v err=%v", merges, err)
+	}
+	if merges[0].SourceBranch != worktree.Branch || merges[0].TargetBranch != "main" {
+		t.Fatalf("merge inesperado: %+v", merges[0])
+	}
+	if handle.ID <= 0 {
+		t.Fatalf("handle invalido: %+v", handle)
+	}
+}
+
+func TestProcesarRuntimeTranscriptBatchIgnoraBootstrapPoolLocalEnEntregas(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("GemmaAppTest", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	projectID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	specID, err := microprogramacionService.Crear(microprogramacionapp.EntradaCrearEspecificacion{
+		ProyectoID:        &projectID,
+		Titulo:            "microprogramacionapp/extractor_entrega.go::recortarSeccionEvidencia",
+		ArchivoObjetivo:   "microprogramacionapp/extractor_entrega.go",
+		SimboloObjetivo:   "recortarSeccionEvidencia",
+		Descripcion:       "No debe procesar bootstrap como entrega",
+		WriteSet:          []string{"microprogramacionapp/extractor_entrega.go", "microprogramacionapp/extractor_entrega_test.go"},
+		TestsObligatorios: []string{"go test ./microprogramacionapp -run TestExtraerArchivosEntregaRecortaSeccionEvidenciaConEspacios -count=1"},
+		FormatoSalida:     "ficheros+evidencia",
+		CreadoPor:         "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear especificacion: %v", err)
+	}
+	despacho, err := runtimesService.DispatchMicroprogramacionInstruction(runtimesapp.MicroprogramacionDispatchRequest{
+		AgenteDestino:     "GemmaAppTest",
+		ProyectoID:        &projectID,
+		Mensaje:           "Implementa la correccion pedida",
+		EspecificacionID:  specID,
+		ArchivoObjetivo:   "microprogramacionapp/extractor_entrega.go",
+		SimboloObjetivo:   "recortarSeccionEvidencia",
+		WriteSet:          []string{"microprogramacionapp/extractor_entrega.go", "microprogramacionapp/extractor_entrega_test.go"},
+		TestsObligatorios: []string{"go test ./microprogramacionapp -run TestExtraerArchivosEntregaRecortaSeccionEvidenciaConEspacios -count=1"},
+		FormatoSalida:     "ficheros+evidencia",
+	})
+	if err != nil {
+		t.Fatalf("dispatch microprogramacion: %v", err)
+	}
+	runtimeID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:       "GemmaAppTest",
+		ProyectoID:   &projectID,
+		LogicalState: "disponible",
+		ProcessState: "running",
+	})
+	if err != nil {
+		t.Fatalf("registrar runtime: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"driver":    "remote_http",
+		"transport": "api",
+		"connector": "ollama_pool_local",
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo', ?, CURRENT_TIMESTAMP)`,
+		"GemmaAppTest", projectID, runtimeID, "api", "session", "ollama-pool-gemmaapptest", string(metaJSON)); err != nil {
+		t.Fatalf("insert handle: %v", err)
+	}
+	bootstrap := "Bootstrap de Orquesta para GemmaAppTest procesado correctamente.\n\nEstado Operativo:\nTareas: No se detectan tareas activas.\nSesión: Confirmada como activa\nAcción: En modo Standby"
+	if _, err := runtimesService.RegistrarSalidaObservada("GemmaAppTest", &projectID, bootstrap); err != nil {
+		t.Fatalf("registrar salida observada: %v", err)
+	}
+
+	n, err := procesarRuntimeTranscriptBatch()
+	if err != nil {
+		t.Fatalf("procesarRuntimeTranscriptBatch: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("bootstrap no deberia registrar entrega, got=%d", n)
+	}
+	order, err := runtimesService.GetRuntimeOrder(despacho.RuntimeOrderID)
+	if err != nil || order == nil {
+		t.Fatalf("get runtime order: %+v err=%v", order, err)
+	}
+	if order.Estado != "pendiente" {
+		t.Fatalf("la orden no deberia cambiar por bootstrap, got=%s", order.Estado)
+	}
+	estadoCancelada := "cancelada"
+	otras, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &order.Agente, ProyectoID: &projectID, Estado: &estadoCancelada})
+	if err != nil {
+		t.Fatalf("listar runtime orders canceladas: %v", err)
+	}
+	if len(otras) != 0 {
+		t.Fatalf("bootstrap no deberia superseder ni cancelar ordenes: %+v", otras)
+	}
+}
+
+func TestProcesarRuntimeTranscriptBatchIgnoraStdinComoEntrega(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("GemmaAppStdin", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	projectID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	specID, err := microprogramacionService.Crear(microprogramacionapp.EntradaCrearEspecificacion{
+		ProyectoID:        &projectID,
+		Titulo:            "microprogramacionapp/extractor_entrega.go::recortarSeccionEvidencia",
+		ArchivoObjetivo:   "microprogramacionapp/extractor_entrega.go",
+		SimboloObjetivo:   "recortarSeccionEvidencia",
+		Descripcion:       "No debe procesar stdin como entrega",
+		WriteSet:          []string{"microprogramacionapp/extractor_entrega.go", "microprogramacionapp/extractor_entrega_test.go"},
+		TestsObligatorios: []string{"go test ./microprogramacionapp -run TestExtraerArchivosEntregaRecortaSeccionEvidenciaConEspacios -count=1"},
+		FormatoSalida:     "ficheros+evidencia",
+		CreadoPor:         "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear especificacion: %v", err)
+	}
+	despacho, err := runtimesService.DispatchMicroprogramacionInstruction(runtimesapp.MicroprogramacionDispatchRequest{
+		AgenteDestino:     "GemmaAppStdin",
+		ProyectoID:        &projectID,
+		Mensaje:           "Implementa la correccion pedida",
+		EspecificacionID:  specID,
+		ArchivoObjetivo:   "microprogramacionapp/extractor_entrega.go",
+		SimboloObjetivo:   "recortarSeccionEvidencia",
+		WriteSet:          []string{"microprogramacionapp/extractor_entrega.go", "microprogramacionapp/extractor_entrega_test.go"},
+		TestsObligatorios: []string{"go test ./microprogramacionapp -run TestExtraerArchivosEntregaRecortaSeccionEvidenciaConEspacios -count=1"},
+		FormatoSalida:     "ficheros+evidencia",
+	})
+	if err != nil {
+		t.Fatalf("dispatch microprogramacion: %v", err)
+	}
+	runtimeID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:       "GemmaAppStdin",
+		ProyectoID:   &projectID,
+		LogicalState: "disponible",
+		ProcessState: "running",
+	})
+	if err != nil {
+		t.Fatalf("registrar runtime: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"driver":    "remote_http",
+		"transport": "api",
+		"connector": "ollama_pool_local",
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo', ?, CURRENT_TIMESTAMP)`,
+		"GemmaAppStdin", projectID, runtimeID, "api", "session", "ollama-pool-gemmaappstdin", string(metaJSON)); err != nil {
+		t.Fatalf("insert handle: %v", err)
+	}
+	stdinTexto := "PROTOCOLO_MICROPROGRAMACION_INLINE\n// FILE: microprogramacionapp/extractor_entrega.go\npackage roto"
+	if _, err := runtimesService.RegistrarSalidaObservada("GemmaAppStdin", &projectID, stdinTexto); err != nil {
+		t.Fatalf("registrar salida observada: %v", err)
+	}
+	items, err := db.ListarRuntimeTranscript(db.FiltroRuntimeTranscript{Agente: stringPtr("GemmaAppStdin"), ProyectoID: &projectID, Limit: 10})
+	if err != nil {
+		t.Fatalf("listar transcript: %v", err)
+	}
+	if len(items) == 0 {
+		t.Fatal("se esperaba transcript")
+	}
+	items[0].Stream = "stdin"
+	if _, err := db.DB.Exec(`UPDATE runtime_transcript SET stream='stdin' WHERE id=?`, items[0].ID); err != nil {
+		t.Fatalf("forzar stream stdin: %v", err)
+	}
+
+	n, err := procesarRuntimeTranscriptBatch()
+	if err != nil {
+		t.Fatalf("procesarRuntimeTranscriptBatch: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("stdin no deberia registrarse como entrega, got=%d", n)
+	}
+	order, err := runtimesService.GetRuntimeOrder(despacho.RuntimeOrderID)
+	if err != nil || order == nil {
+		t.Fatalf("get runtime order: %+v err=%v", order, err)
+	}
+	if order.Estado != "pendiente" {
+		t.Fatalf("la orden no deberia cambiar por transcript stdin, got=%s", order.Estado)
+	}
+}
+
+func TestProcesarRuntimeTranscriptBatchReencolaCorreccionSiEntregaEsInvalida(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("GemmaAppCorreccion", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	projectID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmp, "orquestador", "microprogramacionapp"), 0o755); err != nil {
+		t.Fatalf("mkdir proyecto: %v", err)
+	}
+	specID, err := microprogramacionService.Crear(microprogramacionapp.EntradaCrearEspecificacion{
+		ProyectoID:        &projectID,
+		Titulo:            "microprogramacionapp/extractor_entrega.go::recortarSeccionEvidencia",
+		ArchivoObjetivo:   "microprogramacionapp/extractor_entrega.go",
+		SimboloObjetivo:   "recortarSeccionEvidencia",
+		Descripcion:       "Debe corregir salida invalida",
+		WriteSet:          []string{"microprogramacionapp/extractor_entrega.go", "microprogramacionapp/extractor_entrega_test.go"},
+		TestsObligatorios: []string{"go test ./microprogramacionapp -run TestExtraerArchivosEntregaRecortaSeccionEvidenciaConEspacios -count=1"},
+		FormatoSalida:     "ficheros+evidencia",
+		CreadoPor:         "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear especificacion: %v", err)
+	}
+	despacho, err := runtimesService.DispatchMicroprogramacionInstruction(runtimesapp.MicroprogramacionDispatchRequest{
+		AgenteDestino:     "GemmaAppCorreccion",
+		ProyectoID:        &projectID,
+		Mensaje:           "Implementa la correccion pedida",
+		EspecificacionID:  specID,
+		ArchivoObjetivo:   "microprogramacionapp/extractor_entrega.go",
+		SimboloObjetivo:   "recortarSeccionEvidencia",
+		WriteSet:          []string{"microprogramacionapp/extractor_entrega.go", "microprogramacionapp/extractor_entrega_test.go"},
+		TestsObligatorios: []string{"go test ./microprogramacionapp -run TestExtraerArchivosEntregaRecortaSeccionEvidenciaConEspacios -count=1"},
+		FormatoSalida:     "ficheros+evidencia",
+	})
+	if err != nil {
+		t.Fatalf("dispatch microprogramacion: %v", err)
+	}
+	runtimeID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:       "GemmaAppCorreccion",
+		ProyectoID:   &projectID,
+		LogicalState: "disponible",
+		ProcessState: "running",
+	})
+	if err != nil {
+		t.Fatalf("registrar runtime: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"driver":    "remote_http",
+		"transport": "api",
+		"connector": "ollama_pool_local",
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo', ?, CURRENT_TIMESTAMP)`,
+		"GemmaAppCorreccion", projectID, runtimeID, "api", "session", "ollama-pool-gemmaappcorreccion", string(metaJSON)); err != nil {
+		t.Fatalf("insert handle: %v", err)
+	}
+
+	respuestaInvalida := `// FILE: microprogramacionapp/extractor_entrega.go
+package microprogramacionapp
+
+func recortarSeccionEvidencia(contenido string) string {
+	return
+`
+	if _, err := runtimesService.RegistrarSalidaObservada("GemmaAppCorreccion", &projectID, respuestaInvalida); err != nil {
+		t.Fatalf("registrar salida observada: %v", err)
+	}
+
+	n, err := procesarRuntimeTranscriptBatch()
+	if err != nil {
+		t.Fatalf("procesarRuntimeTranscriptBatch: %v", err)
+	}
+	if n < 1 {
+		t.Fatalf("deberia contabilizar la reencolacion de correccion, got=%d", n)
+	}
+	order, err := runtimesService.GetRuntimeOrder(despacho.RuntimeOrderID)
+	if err != nil || order == nil {
+		t.Fatalf("get runtime order: %+v err=%v", order, err)
+	}
+	if order.Estado != "cancelada" {
+		t.Fatalf("la orden original deberia quedar cancelada tras la correccion, got=%s", order.Estado)
+	}
+	estadoPendiente := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: stringPtr("GemmaAppCorreccion"), ProyectoID: &projectID, Estado: &estadoPendiente})
+	if err != nil {
+		t.Fatalf("listar runtime orders pendientes: %v", err)
+	}
+	if len(orders) == 0 {
+		t.Fatal("se esperaba una runtime order de correccion pendiente")
+	}
+	var encontrada bool
+	for _, item := range orders {
+		if item == nil || item.ID == despacho.RuntimeOrderID || item.Tipo != "send_instruction" {
+			continue
+		}
+		if !strings.Contains(item.PayloadJSON, "CORRECCION_OBLIGATORIA") {
+			t.Fatalf("payload de correccion inesperado: %s", item.PayloadJSON)
+		}
+		encontrada = true
+	}
+	if !encontrada {
+		t.Fatal("no se encontro la runtime order de correccion esperada")
+	}
+}
+
+type fakeResolvedorPipelineControlPlane struct {
+	agente string
+}
+
+func (f fakeResolvedorPipelineControlPlane) ResolverAgentePipeline(capacidadapp.EntradaResolverAgentePipeline) (string, error) {
+	return strings.TrimSpace(f.agente), nil
+}
+
+type fakeDespachadorPipelineControlPlane struct {
+	llamadas int
+	ultimas  []capacidadapp.SolicitudDespachoPipeline
+}
+
+func (f *fakeDespachadorPipelineControlPlane) DespacharPipeline(entrada capacidadapp.SolicitudDespachoPipeline) (*capacidadapp.ResultadoDespachoPipeline, error) {
+	f.llamadas++
+	f.ultimas = append(f.ultimas, entrada)
+	startID := int64(1000 + f.llamadas)
+	runtimeOrderID := int64(2000 + f.llamadas)
+	return &capacidadapp.ResultadoDespachoPipeline{
+		Estado:         "encolado",
+		Motivo:         "fake",
+		StartOrderID:   &startID,
+		RuntimeOrderID: &runtimeOrderID,
+	}, nil
+}
+
+func TestProcesarPipelineLocalBatchDespachaProyectoActivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetPipelineLocalDispatchGate()
+	capacidadService.SetAgentResolver(fakeResolvedorPipelineControlPlane{agente: "Codex1"})
+	dispatcher := &fakeDespachadorPipelineControlPlane{}
+	capacidadService.SetPipelineDispatcher(dispatcher)
+	t.Cleanup(func() {
+		resetPipelineLocalDispatchGate()
+		capacidadService.SetAgentResolver(resolvedorAgentePipelineOperativo{rowsProvider: agentesService})
+		capacidadService.SetPipelineDispatcher(despachadorPipelineOperativo{})
+	})
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Implementar pipeline premium",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+
+	procesadas, err := procesarPipelineLocalBatch()
+	if err != nil {
+		t.Fatalf("procesarPipelineLocalBatch: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("procesadas=%d, want=1", procesadas)
+	}
+	if dispatcher.llamadas != 1 {
+		t.Fatalf("dispatcher.llamadas=%d, want=1", dispatcher.llamadas)
+	}
+	if len(dispatcher.ultimas) != 1 || dispatcher.ultimas[0].Despacho == nil {
+		t.Fatalf("despacho no registrado: %+v", dispatcher.ultimas)
+	}
+	if dispatcher.ultimas[0].ProyectoSlug != "orquestador" {
+		t.Fatalf("proyecto inesperado: %+v", dispatcher.ultimas[0])
+	}
+	if strings.TrimSpace(dispatcher.ultimas[0].Despacho.AgenteSugerido) != "Codex1" {
+		t.Fatalf("agente sugerido inesperado: %+v", dispatcher.ultimas[0].Despacho)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Estado != db.TareaEnProgreso {
+		t.Fatalf("estado de tarea inesperado: %+v", tarea)
+	}
+}
+
+func TestProcesarPipelineLocalBatchRespetaCooldownDeDespacho(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetPipelineLocalDispatchGate()
+	capacidadService.SetAgentResolver(fakeResolvedorPipelineControlPlane{agente: "Codex1"})
+	dispatcher := &fakeDespachadorPipelineControlPlane{}
+	capacidadService.SetPipelineDispatcher(dispatcher)
+	t.Cleanup(func() {
+		resetPipelineLocalDispatchGate()
+		capacidadService.SetAgentResolver(resolvedorAgentePipelineOperativo{rowsProvider: agentesService})
+		capacidadService.SetPipelineDispatcher(despachadorPipelineOperativo{})
+	})
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Implementar pipeline premium",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "tester",
+	}); err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+
+	procesadas, err := procesarPipelineLocalBatch()
+	if err != nil {
+		t.Fatalf("primer procesarPipelineLocalBatch: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("primer procesadas=%d, want=1", procesadas)
+	}
+	procesadas, err = procesarPipelineLocalBatch()
+	if err != nil {
+		t.Fatalf("segundo procesarPipelineLocalBatch: %v", err)
+	}
+	if procesadas != 0 {
+		t.Fatalf("segundo procesadas=%d, want=0", procesadas)
+	}
+	if dispatcher.llamadas != 1 {
+		t.Fatalf("dispatcher.llamadas=%d, want=1", dispatcher.llamadas)
+	}
+}
+
+func TestProcesarPipelineLocalBatchCierraProyectoEnEstadoCerrandoSinSesion(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetPipelineLocalDispatchGate()
+	dispatcher := &fakeDespachadorPipelineControlPlane{}
+	capacidadService.SetPipelineDispatcher(dispatcher)
+	t.Cleanup(func() {
+		resetPipelineLocalDispatchGate()
+		capacidadService.SetPipelineDispatcher(despachadorPipelineOperativo{})
+	})
+
+	repo := prepararRepoGitAutonomia(t, filepath.Join(tmp, "orquestador"))
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: repo,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"done":true}`,
+		ReviewRequired:       true,
+		AutoCloseProject:     true,
+		EstadoAutonomia:      db.AutonomiaProyectoCerrando,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:     "Ultimo frente",
+		ProyectoID: &proyectoID,
+		Prioridad:  db.PrioridadAlta,
+		CreadoPor:  "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.CompletarTarea(tareaID, "Codex1", "abc123"); err != nil {
+		t.Fatalf("completar tarea: %v", err)
+	}
+	now := time.Now().UTC()
+	if _, err := db.CrearReviewGate(&db.ReviewGate{
+		ProyectoID:  &proyectoID,
+		RequestedBy: "orquesta",
+		Estado:      db.ReviewGateAprobado,
+		ResolvedAt:  &now,
+	}); err != nil {
+		t.Fatalf("crear review gate aprobado: %v", err)
+	}
+	if _, err := db.GuardarGitMerge(&db.GitMerge{
+		ProyectoID:   proyectoID,
+		SourceBranch: "feature/x",
+		TargetBranch: "master",
+		RequestedBy:  "orquesta",
+		Estado:       "fusionado",
+		CommitMerge:  "def456",
+		MetadataJSON: `{"auto_created":true,"source":"review_gate_approved"}`,
+	}); err != nil {
+		t.Fatalf("guardar git merge fusionado: %v", err)
+	}
+
+	procesadas, err := procesarPipelineLocalBatch()
+	if err != nil {
+		t.Fatalf("procesarPipelineLocalBatch: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("procesadas=%d, want=1", procesadas)
+	}
+	if dispatcher.llamadas != 0 {
+		t.Fatalf("dispatcher no debería llamarse al cerrar proyecto, got=%d", dispatcher.llamadas)
+	}
+	op, err := db.GetProyectoOperacion(proyectoID)
+	if err != nil {
+		t.Fatalf("get proyecto operacion: %v", err)
+	}
+	if op.EstadoOperativo != db.ProyectoOperativoCerrado {
+		t.Fatalf("proyecto no cerrado: %+v", op)
+	}
+	policy, err := supervisionService.GetProjectPolicy("orquestador")
+	if err != nil {
+		t.Fatalf("get project policy: %v", err)
+	}
+	if policy == nil || policy.EstadoAutonomia != db.AutonomiaProyectoCerrado {
+		t.Fatalf("estado autonomia inesperado: %+v", policy)
+	}
+}
+
 func TestAsegurarTareaReplanAutonomiaSignalCreaFrenteParaSupervisor(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -9590,6 +11220,15 @@ func TestProcesarGitMergesBatchFusionaCierraWorktreeYCompletaTarea(t *testing.T)
 	}); err != nil {
 		t.Fatalf("upsert proyecto autonomia: %v", err)
 	}
+	if _, err := db.RegistrarFaseProyecto(&db.FaseProyecto{
+		Proyecto: "orquestador",
+		Nombre:   "integracion",
+		Orden:    90,
+		Peso:     1,
+		Estado:   "activa",
+	}); err != nil {
+		t.Fatalf("registrar fase integracion: %v", err)
+	}
 	tareaID, err := db.CrearTarea(&db.Tarea{
 		Titulo:     "Integrar cambio",
 		ProyectoID: &proyectoID,
@@ -9604,6 +11243,16 @@ func TestProcesarGitMergesBatchFusionaCierraWorktreeYCompletaTarea(t *testing.T)
 	}
 	if err := db.IniciarTarea(tareaID, "CodexReviewer"); err != nil {
 		t.Fatalf("iniciar tarea: %v", err)
+	}
+	now := time.Now().UTC()
+	if _, err := db.CrearReviewGate(&db.ReviewGate{
+		ProyectoID:  &proyectoID,
+		TareaID:     &tareaID,
+		RequestedBy: "orquesta",
+		Estado:      db.ReviewGateAprobado,
+		ResolvedAt:  &now,
+	}); err != nil {
+		t.Fatalf("crear review gate aprobado: %v", err)
 	}
 	worktree, err := newCoordinationService().PrepareWorktree(coordinacion.PrepareWorktreeInput{
 		ProjectRef: "orquestador",
@@ -9681,6 +11330,33 @@ func TestProcesarGitMergesBatchFusionaCierraWorktreeYCompletaTarea(t *testing.T)
 	}
 	if _, err := os.Stat(filepath.Join(repo, "feature.txt")); err != nil {
 		t.Fatalf("feature.txt debería quedar fusionado en repo base: %v", err)
+	}
+	fases, err := db.ListarFasesProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("listar fases: %v", err)
+	}
+	var integracion *db.FaseProyecto
+	for _, fase := range fases {
+		if fase != nil && strings.EqualFold(strings.TrimSpace(fase.Nombre), "integracion") {
+			integracion = fase
+			break
+		}
+	}
+	if integracion == nil {
+		t.Fatal("debería existir la fase integracion")
+	}
+	if !strings.EqualFold(strings.TrimSpace(integracion.Estado), "completada") {
+		t.Fatalf("integracion debería quedar completada: %+v", integracion)
+	}
+	policy, err := supervisionService.GetProjectPolicy("orquestador")
+	if err != nil {
+		t.Fatalf("get project policy: %v", err)
+	}
+	if policy == nil {
+		t.Fatal("debería existir policy de autonomia")
+	}
+	if policy.EstadoAutonomia != db.AutonomiaProyectoCerrando {
+		t.Fatalf("estado autonomia inesperado: got=%q want=%q", policy.EstadoAutonomia, db.AutonomiaProyectoCerrando)
 	}
 }
 
@@ -10230,9 +11906,7 @@ func cmdGitAutonomia(t *testing.T, dir string, args ...string) string {
 
 func TestProcesarAgentesDegradadosAutonomiaBatchReasignaATrabajadorSano(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
-	autonomiaDegradedTaskGate.mu.Lock()
-	autonomiaDegradedTaskGate.last = nil
-	autonomiaDegradedTaskGate.mu.Unlock()
+	autonomiaDegradedTaskGate.Reset()
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
 		Slug:    "orquestador",
 		Nombre:  "Orquestador",
@@ -10298,12 +11972,7 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReasignaATrabajadorSano(t *testi
 	if err := db.IniciarTarea(tareaID, "CodexBloqueado"); err != nil {
 		t.Fatalf("iniciar tarea: %v", err)
 	}
-	autonomiaDegradedTaskGate.mu.Lock()
-	if autonomiaDegradedTaskGate.last == nil {
-		autonomiaDegradedTaskGate.last = map[int64]time.Time{}
-	}
-	autonomiaDegradedTaskGate.last[tareaID] = time.Now().UTC().Add(-autonomiaDegradedTaskCooldown - time.Minute)
-	autonomiaDegradedTaskGate.mu.Unlock()
+	autonomiaDegradedTaskGate.Set(strconv.FormatInt(tareaID, 10), time.Now().UTC().Add(-autonomiaDegradedTaskCooldown-time.Minute))
 
 	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
 	if err != nil {
@@ -10323,9 +11992,7 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReasignaATrabajadorSano(t *testi
 
 func TestProcesarAgentesDegradadosAutonomiaBatchBloqueaSinRelevoSano(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
-	autonomiaDegradedTaskGate.mu.Lock()
-	autonomiaDegradedTaskGate.last = nil
-	autonomiaDegradedTaskGate.mu.Unlock()
+	autonomiaDegradedTaskGate.Reset()
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
 		Slug:    "orquestador-bloqueado",
 		Nombre:  "Orquestador Bloqueado",
@@ -10396,9 +12063,7 @@ func TestProcesarAgentesDegradadosAutonomiaBatchBloqueaSinRelevoSano(t *testing.
 
 func TestProcesarAgentesDegradadosAutonomiaBatchBloqueaSinRelevoSiAgenteBloqueadoPorCuota(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
-	autonomiaDegradedTaskGate.mu.Lock()
-	autonomiaDegradedTaskGate.last = nil
-	autonomiaDegradedTaskGate.mu.Unlock()
+	autonomiaDegradedTaskGate.Reset()
 
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
 		Slug:    "orquestador-cuota-bloqueada",
@@ -10454,9 +12119,7 @@ func TestProcesarAgentesDegradadosAutonomiaBatchBloqueaSinRelevoSiAgenteBloquead
 
 func TestProcesarAgentesDegradadosAutonomiaBatchNoSaturaUnicoRelevoSano(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
-	autonomiaDegradedTaskGate.mu.Lock()
-	autonomiaDegradedTaskGate.last = nil
-	autonomiaDegradedTaskGate.mu.Unlock()
+	autonomiaDegradedTaskGate.Reset()
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
 		Slug:    "orquestador-capacidad",
 		Nombre:  "Orquestador Capacidad",
@@ -10559,9 +12222,7 @@ func TestProcesarAgentesDegradadosAutonomiaBatchNoSaturaUnicoRelevoSano(t *testi
 
 func TestProcesarAgentesDegradadosAutonomiaBatchPriorizaAgenteConMasTareasBloqueadas(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
-	autonomiaDegradedTaskGate.mu.Lock()
-	autonomiaDegradedTaskGate.last = nil
-	autonomiaDegradedTaskGate.mu.Unlock()
+	autonomiaDegradedTaskGate.Reset()
 
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
 		Slug:    "orquestador-prioridad-bloqueadas",
@@ -10695,9 +12356,7 @@ func TestProcesarAgentesDegradadosAutonomiaBatchPriorizaAgenteConMasTareasBloque
 
 func TestProcesarAgentesDegradadosAutonomiaBatchRespetaCooldownReasignacionAutomatica(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
-	autonomiaDegradedTaskGate.mu.Lock()
-	autonomiaDegradedTaskGate.last = nil
-	autonomiaDegradedTaskGate.mu.Unlock()
+	autonomiaDegradedTaskGate.Reset()
 
 	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
 		Slug:    "orquestador-cooldown",

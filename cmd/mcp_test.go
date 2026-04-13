@@ -24,8 +24,10 @@ import (
 	"orquesta/agentesapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
+	"orquesta/microprogramacionapp"
 	"orquesta/propuestasapp"
 	"orquesta/reviewapp"
+	"orquesta/runtimesapp"
 )
 
 func TestMCPHandleInitializeNegociaVersion(t *testing.T) {
@@ -1567,6 +1569,201 @@ printf 'ok\n'
 		}
 		if len(items) != 1 || items[0].ThreadID != "agent-test-001" || items[0].Status != "running" {
 			t.Fatalf("subagentes inesperados tras launch: %+v", items)
+		}
+	})
+}
+
+func TestMCPSubagentesSupervisorRecogeEntregaGitDesdeWorktree(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		repoDir := t.TempDir()
+		runGitCmdTest(t, repoDir, "init", "-b", "main")
+		runGitCmdTest(t, repoDir, "config", "user.email", "test@example.com")
+		runGitCmdTest(t, repoDir, "config", "user.name", "Test User")
+		if err := os.MkdirAll(filepath.Join(repoDir, "modulo"), 0o755); err != nil {
+			t.Fatalf("mkdir modulo: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(repoDir, "modulo", "worker.go"), []byte("package modulo\n\nfunc Worker() string { return \"old\" }\n"), 0o644); err != nil {
+			t.Fatalf("write worker: %v", err)
+		}
+		runGitCmdTest(t, repoDir, "add", ".")
+		runGitCmdTest(t, repoDir, "commit", "-m", "init")
+
+		projectID := insertTestProyecto(t, "orquestador", "orquestador", repoDir)
+		agente := "OpenClaw-Implementa-1"
+		if err := agentesService.RegisterAgent(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente: %v", err)
+		}
+		worktree, err := newCoordinationService().PrepareWorktree(coordinacion.PrepareWorktreeInput{
+			ProjectRef: "orquestador",
+			Agent:      agente,
+			Name:       "wt-openclaw-impl-1",
+			Branch:     "orq/orquestador/openclaw-impl-1",
+			BaseRef:    "main",
+			Reason:     "test_subagente_git",
+		})
+		if err != nil {
+			t.Fatalf("prepare worktree: %v", err)
+		}
+		specID, err := microprogramacionService.Crear(microprogramacionapp.EntradaCrearEspecificacion{
+			ProyectoID:        &projectID,
+			Titulo:            "modulo/worker.go::Worker",
+			ArchivoObjetivo:   "modulo/worker.go",
+			SimboloObjetivo:   "Worker",
+			Descripcion:       "Actualiza Worker por git",
+			WriteSet:          []string{"modulo/worker.go"},
+			TestsObligatorios: []string{"go test ./... -count=1"},
+			FormatoSalida:     "git_worktree+evidencia",
+			CreadoPor:         "alberto",
+		})
+		if err != nil {
+			t.Fatalf("crear especificacion: %v", err)
+		}
+		despacho, err := runtimesService.DispatchMicroprogramacionInstruction(runtimesapp.MicroprogramacionDispatchRequest{
+			AgenteDestino:     agente,
+			ProyectoID:        &projectID,
+			Mensaje:           "Implementa Worker por git",
+			EspecificacionID:  specID,
+			ArchivoObjetivo:   "modulo/worker.go",
+			SimboloObjetivo:   "Worker",
+			WriteSet:          []string{"modulo/worker.go"},
+			TestsObligatorios: []string{"go test ./... -count=1"},
+			FormatoSalida:     "git_worktree+evidencia",
+		})
+		if err != nil {
+			t.Fatalf("dispatch microprogramacion: %v", err)
+		}
+		if despacho.RuntimeOrderID <= 0 {
+			t.Fatalf("runtime order invalida: %+v", despacho)
+		}
+
+		if err := os.WriteFile(filepath.Join(worktree.Path, "modulo", "worker.go"), []byte("package modulo\n\nfunc Worker() string { return \"new\" }\n"), 0o644); err != nil {
+			t.Fatalf("write worker in worktree: %v", err)
+		}
+
+		subagente, err := db.UpsertSupervisorSubagent(db.UpsertSupervisorSubagentInput{
+			Supervisor:   "OpenClaw",
+			ProyectoSlug: "orquestador",
+			SessionID:    "sess-openclaw-1",
+			ThreadID:     "sub-done-git-1",
+			SubagentName: agente,
+			SubagentType: "general-purpose",
+			Status:       "completed",
+			OutputPath:   filepath.Join(worktree.Path, "resultado.md"),
+		})
+		if err != nil {
+			t.Fatalf("crear subagente completado: %v", err)
+		}
+
+		result, err := applySupervisorRecommendedAction("OpenClaw", "recoger_resultado_subagente", fmt.Sprintf("subagente:%d", subagente.ID), "OpenClaw")
+		if err != nil {
+			t.Fatalf("aplicar recoger_resultado_subagente: %v", err)
+		}
+		entregaGit, _ := result["entrega_git"].(map[string]any)
+		if entregaGit == nil {
+			t.Fatalf("entrega git inesperada: %#v", result["entrega_git"])
+		}
+		mergeID, ok := entregaGit["git_merge_id"].(int64)
+		if !ok || mergeID <= 0 {
+			t.Fatalf("entrega git inesperada: %#v", result["entrega_git"])
+		}
+		order, err := runtimesService.GetRuntimeOrder(despacho.RuntimeOrderID)
+		if err != nil || order == nil {
+			t.Fatalf("get runtime order: %+v err=%v", order, err)
+		}
+		if order.Estado != "completada" || !strings.Contains(order.ResultadoJSON, `"receipt_source":"git_worktree"`) {
+			t.Fatalf("runtime order sin cierre git: %+v", order)
+		}
+		merges, err := db.ListarGitMerges(&projectID, "pendiente")
+		if err != nil || len(merges) == 0 {
+			t.Fatalf("listar merges: %+v err=%v", merges, err)
+		}
+		if merges[0].SourceBranch != worktree.Branch || merges[0].TargetBranch != "main" {
+			t.Fatalf("merge inesperado: %+v", merges[0])
+		}
+	})
+}
+
+func TestLaunchClaudeSubagentExternalPreparaWorktreeYExponeEntornoGit(t *testing.T) {
+	withTempOrquestaDB(t, func() {
+		repoDir := t.TempDir()
+		runGitCmdTest(t, repoDir, "init", "-b", "main")
+		runGitCmdTest(t, repoDir, "config", "user.email", "test@example.com")
+		runGitCmdTest(t, repoDir, "config", "user.name", "Test User")
+		if err := os.WriteFile(filepath.Join(repoDir, "README.md"), []byte("# repo\n"), 0o644); err != nil {
+			t.Fatalf("write readme: %v", err)
+		}
+		runGitCmdTest(t, repoDir, "add", ".")
+		runGitCmdTest(t, repoDir, "commit", "-m", "init")
+
+		insertTestProyecto(t, "orquestador", "orquestador", repoDir)
+		storeDir := t.TempDir()
+		t.Setenv("CLAWD_AGENT_STORE", storeDir)
+		launcherPath := filepath.Join(t.TempDir(), "launcher.sh")
+		script := `#!/usr/bin/env bash
+set -euo pipefail
+id="agent-test-git-001"
+manifest="${ORQUESTA_SUBAGENT_STORE}/${id}.json"
+output="${ORQUESTA_SUBAGENT_STORE}/${id}.md"
+mkdir -p "${ORQUESTA_SUBAGENT_STORE}"
+printf 'cwd=%s\nbranch=%s\nworktree=%s\n' "$PWD" "${ORQUESTA_SUBAGENT_BRANCH}" "${ORQUESTA_SUBAGENT_WORKTREE}" > "${output}"
+cat > "${manifest}" <<JSON
+{"agentId":"${id}","name":"${ORQUESTA_SUBAGENT_NAME}","description":"${ORQUESTA_SUBAGENT_DESCRIPTION}","subagentType":"${ORQUESTA_SUBAGENT_TYPE}","model":"${ORQUESTA_SUBAGENT_MODEL}","status":"running","outputFile":"${output}","manifestFile":"${manifest}","createdAt":"2026-04-02T12:00:00Z","startedAt":"2026-04-02T12:00:00Z"}
+JSON
+printf 'ok\n'
+`
+		if err := os.WriteFile(launcherPath, []byte(script), 0o755); err != nil {
+			t.Fatalf("write launcher: %v", err)
+		}
+		t.Setenv("ORQUESTA_CLAUDE_SUBAGENT_LAUNCHER", launcherPath)
+
+		resultado, err := launchClaudeSubagentExternal(supervisorSubagentLaunchRequest{
+			Supervisor:   "OpenClaw",
+			Proyecto:     "orquestador",
+			Name:         "OpenClaw-Explore-Git-1",
+			Description:  "explora modulo",
+			Prompt:       "revisa el modulo y entrega por git",
+			SubagentType: "explore",
+			Model:        "claude-opus-4-6",
+		})
+		if err != nil {
+			t.Fatalf("launchClaudeSubagentExternal: %v", err)
+		}
+		if resultado == nil || resultado.Worktree == nil {
+			t.Fatalf("resultado sin worktree: %+v", resultado)
+		}
+		rutaWorktree, _ := resultado.Worktree["path"].(string)
+		branch, _ := resultado.Worktree["branch"].(string)
+		if strings.TrimSpace(rutaWorktree) == "" || strings.TrimSpace(branch) == "" {
+			t.Fatalf("worktree incompleta: %+v", resultado.Worktree)
+		}
+		if _, err := os.Stat(rutaWorktree); err != nil {
+			t.Fatalf("worktree no creada: %v", err)
+		}
+		outputPath := filepath.Join(storeDir, "agent-test-git-001.md")
+		raw, err := os.ReadFile(outputPath)
+		if err != nil {
+			t.Fatalf("read output: %v", err)
+		}
+		texto := string(raw)
+		if !strings.Contains(texto, "cwd="+rutaWorktree) || !strings.Contains(texto, "worktree="+rutaWorktree) {
+			t.Fatalf("launcher no uso worktree esperada:\n%s", texto)
+		}
+		if !strings.Contains(texto, "branch="+branch) {
+			t.Fatalf("launcher sin branch esperada:\n%s", texto)
+		}
+		items, err := db.ListarSupervisorSubagents(db.FiltroSupervisorSubagents{
+			Supervisor:   "OpenClaw",
+			ProyectoSlug: "orquestador",
+			Limit:        10,
+		})
+		if err != nil {
+			t.Fatalf("listar subagentes: %v", err)
+		}
+		if len(items) != 1 || items[0].SubagentName != "OpenClaw-Explore-Git-1" {
+			t.Fatalf("subagentes inesperados: %+v", items)
+		}
+		if !strings.Contains(items[0].MetadataJSON, `"worktree_id"`) || !strings.Contains(items[0].MetadataJSON, rutaWorktree) {
+			t.Fatalf("metadata del subagente sin worktree persistida: %s", items[0].MetadataJSON)
 		}
 	})
 }

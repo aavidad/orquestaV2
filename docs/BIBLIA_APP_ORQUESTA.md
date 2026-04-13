@@ -258,6 +258,28 @@ Regla dura:
 - no se sustituye el nucleo de Orquesta por otro framework
 - el servidor de Orquesta sigue siendo el unico plano de control oficial
 
+### Regla de copia pragmática
+
+Orquesta no tiene obligación de ser original.
+Tiene obligación de funcionar bien.
+
+Regla operativa:
+
+- si otra app resuelve mejor un problema equivalente, se copia su patrón útil
+- la copia se hace sobre la arquitectura hexagonal de Orquesta
+- no se aceptan reimplementaciones “creativas” de un patrón ya probado sin una razón técnica concreta
+
+Referencias activas:
+
+- `oh-my-codex` para dispatch durable, `ack`, readiness y separación entre transporte y estado
+- `mission-control` para observabilidad y gobierno operativo
+- `automaker`, `Maestro` y `Aperant` para pipeline por fases y workers especializados
+- `OpenClaw` como gateway y supervisor integrado, nunca como plano de control alternativo
+
+Documento asociado:
+
+- `docs/benchmark_orquestadores_externos_2026-04-12.md`
+
 Patron elegido como referencia:
 
 - arquitectura tipo supervisor/manager event-driven
@@ -337,12 +359,102 @@ Regla operativa derivada:
 - no se acepta una promocion basada solo en “parece responder bien” o en prompts manuales fuera del flujo canonico
 - si un modelo local pasa pruebas manuales pero filtra razonamiento, incumple formato o degrada calidad en la smoke canonica por la app, no se promociona
 
+Regla operativa para agentes premium:
+
+- `Codex`, `Claude` y `Gemini` no se promocionan a trabajo real del repo solo por arrancar o por dejar transcript
+- la promocion minima exige:
+  - arranque limpio y `ready` estable
+  - diff util en worktree aislada
+  - respeto del alcance de tarea
+  - cierre correcto por el carril canonico de Orquesta
+  - repetibilidad en mas de una smoke
+- mientras no cumplan eso, permanecen integrados pero no promocionados como workers de produccion
+- la prioridad actual por fase es:
+  - `Gemini` para `especificacion`
+  - `Codex` para `implementacion` y `correccion`
+  - `Claude` para `revision`
+
 Regla de capacidad para pools locales:
 
 - los agentes locales de Ollama se gobiernan por `pool` y `slots`
 - puede haber varios agentes logicos apuntando al mismo pool local
 - no se deben arrancar a la vez varios modelos pesados si el host no tiene capacidad real para sostenerlos
 - Orquesta debe arbitrar esos slots antes de lanzar un runtime local nuevo
+
+Decision operativa nueva (`2026-04-12`):
+
+- el orquestador principal no va a ser otro LLM
+- el orquestador principal sigue siendo Orquesta, con reglas deterministas, colas, validadores, `git/worktree`, tests y gates
+- los modelos pasan a ser workers especializados por fase
+
+Pipeline local objetivo:
+
+- `especificacion` y replanificacion: `Qwen3.5 27B`
+- `implementacion`: `Qwen2.5 Coder 32B`
+- `revision`: `DeepSeek Coder V2`
+- `solver alternativo` o segunda opinion: `Gemma4 26B MoE`
+
+Regla de ejecucion:
+
+- no se busca tener todos los modelos pesados residentes a la vez
+- la regla por defecto es `un modelo grande activo cada vez`
+- Orquesta debe cargar, usar y descargar modelos por fase cuando el host lo exija
+- esa gestion de modelos vive tras un puerto hexagonal de app; Ollama es un adaptador y no el contrato del nucleo
+- la concurrencia lógica entre agentes no autoriza multiplicar residencia física de modelos pesados
+
+Carriles canónicos de ejecucion:
+
+- `microprogramacion_local`
+  - reservado para workers locales o mini
+  - contrato rígido
+  - `write_set` estricto
+  - salida estructurada y validación fuerte
+- `premium_worktree`
+  - reservado para especificación, implementación o corrección con agentes premium
+  - worktree aislada
+  - `write_set` estricto
+  - entrega canónica por `git/worktree`
+- `revision_diff`
+  - reservado para revisión sobre diff/tests/evidencia
+  - salida obligatoria en hallazgos estructurados
+  - nunca como chat libre del modelo
+- `determinista_app`
+  - pasos resueltos por la propia app
+  - sin delegación a un modelo
+
+Regla específica de revision:
+
+- la fase de `revision` puede encadenar mas de un revisor
+- la regla no es “mas modelos a la vez”, sino “segunda o tercera opinion secuencial cuando el gate lo pida”
+- siempre se revisa la misma entrega Git, el mismo `write_set` y los mismos tests obligatorios
+- cada revisor devuelve hallazgos estructurados, no texto libre sin contrato
+- la decision final sigue siendo de Orquesta
+
+Orden recomendado de revision:
+
+- revisor local base: `DeepSeek Coder V2`
+- segunda opinion local o alternativa: `Qwen3.5 27B` o `Gemma4 26B MoE`
+- segunda opinion premium opcional: `gpt-5.4` o `Claude`, solo si el gate lo exige
+
+Cuándo abrir segunda opinion:
+
+- diff grande
+- zona critica del control plane
+- seguridad, concurrencia o persistencia
+- hallazgos contradictorios
+- correcciones repetidas sin cerrar
+- entrega con riesgo alto y coste de error elevado
+
+Regla dura:
+
+- no se fusiona por mayoria simple entre modelos
+- Orquesta consolida hallazgos y decide `aceptar`, `corregir` o `escalar`
+
+Motivo:
+
+- con `4090 + 128GB RAM`, el cuello real no es solo el peso en disco o el parametro activo del MoE
+- el cuello real es VRAM, KV cache, latencia y contencion entre modelos residentes
+- por tanto, la autonomia buena no es una granja libre de modelos pesados; es un pipeline de workers especializados gobernado por Orquesta
 
 Regla de convivencia entre vias locales:
 
@@ -358,6 +470,13 @@ Decision operativa vigente (`2026-04-11`):
   - `revision`
   - `analisis`
 - Qwen y otros modelos locales siguen siendo compatibles por la via actual de `ollama-cli/tmux`, pero quedan en estado experimental mientras no superen la smoke canonica por la app
+
+Decision de transicion actual (`2026-04-12`):
+
+- mientras `Qwen3.5 27B`, `Qwen2.5 Coder 32B` y `DeepSeek` no esten descargados y validados por la smoke canonica de Orquesta, `gemma4:26b` sigue siendo el baseline local operativo
+- esa transicion no invalida lo ya construido para `ollama_pool_local`; lo generaliza
+- `ollama_pool_local` deja de pensarse como “pool de Gemma” y pasa a pensarse como base de scheduler local multi-modelo por fase
+- la compatibilidad `ollama-cli/tmux` se mantiene para rescate, comparativas y experimentacion
 
 Restriccion de implementacion:
 
@@ -1362,6 +1481,12 @@ Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean
     - `Revisar fallo`
     - `Limpiar`
   - no se acepta esconder esa operativa solo en la cola o en MCP si la propia web del supervisor ya renderiza el subagente
+- La entrega de codigo de subagentes programadores no debe apoyarse en transcript como fuente principal:
+  - `mailbox`, `dispatch` y `ACK` siguen siendo control operativo del worker
+  - el codigo que Orquesta revisa e integra debe salir de `git/worktree`
+  - el `transcript` puede conservarse como evidencia o fallback, pero no sustituye el diff real del worktree
+  - la validacion del `write_set` y el registro de merge deben caer por servicios de app, no por handlers que escriban ficheros directamente
+  - OpenClaw, Claude, Codex y Ollama deben converger en este contrato: cambia el conector, no el nucleo de entrega
 - El store `.clawd-agents` del launcher Rust de Claude puede alimentar Orquesta, pero no sustituye la BD:
   - Orquesta debe poder inspeccionar ese store e importar sus `manifest/output` al modelo canónico `supervisor_subagents`
   - la ruta del store debe resolverse por:

@@ -438,6 +438,84 @@ func resolverModeloPorAPI(input db.ResolverPoliticaInput) (*db.ResolucionModelo,
 	return resp.Resolucion, true, nil
 }
 
+func cargarPipelineLocalDeterministaDesdeAPI(proyecto string) (*capacidadapp.PipelineLocalDeterminista, bool, error) {
+	var resp apiPipelineLocalDeterministaResponse
+	query := url.Values{}
+	if strings.TrimSpace(proyecto) != "" {
+		query.Set("proyecto", strings.TrimSpace(proyecto))
+	}
+	ok, err := apiGetQuery("/api/modelo/pipeline-local", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Pipeline, true, nil
+}
+
+func calcularSiguientePasoPipelineLocalDeterministaDesdeAPI(proyecto string) (*capacidadapp.PasoPipelineLocalDeterminista, bool, error) {
+	var resp apiPasoPipelineLocalDeterministaResponse
+	query := url.Values{}
+	if strings.TrimSpace(proyecto) != "" {
+		query.Set("proyecto", strings.TrimSpace(proyecto))
+	}
+	ok, err := apiGetQuery("/api/modelo/pipeline-local/paso", query, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Paso, true, nil
+}
+
+func ejecutarSiguientePasoPipelineLocalDeterministaDesdeAPI(proyecto string) (*capacidadapp.ResultadoEjecucionPasoPipelineLocal, bool, error) {
+	var resp apiEjecutarPasoPipelineLocalDeterministaResponse
+	query := url.Values{}
+	if strings.TrimSpace(proyecto) != "" {
+		query.Set("proyecto", strings.TrimSpace(proyecto))
+	}
+	path := "/api/modelo/pipeline-local/ejecutar"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	ok, err := apiPost(path, map[string]any{}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Resultado, true, nil
+}
+
+func despacharSiguientePasoPipelineLocalDeterministaDesdeAPI(proyecto string) (*capacidadapp.ResultadoEjecucionPasoPipelineLocal, bool, error) {
+	var resp apiEjecutarPasoPipelineLocalDeterministaResponse
+	query := url.Values{}
+	if strings.TrimSpace(proyecto) != "" {
+		query.Set("proyecto", strings.TrimSpace(proyecto))
+	}
+	path := "/api/modelo/pipeline-local/despachar"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	ok, err := apiPost(path, map[string]any{}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Resultado, true, nil
+}
+
+func cargarModelosRuntimeActivosDesdeAPI() ([]capacidadapp.ModeloRuntimeActivo, bool, error) {
+	var resp apiModelosRuntimeActivosResponse
+	ok, err := apiGet("/api/modelo/runtime-activos", &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Modelos, true, nil
+}
+
+func descargarModelosRuntimeActivosPorAPI() ([]string, bool, error) {
+	var resp apiModelosRuntimeDescargarResponse
+	ok, err := apiPost("/api/modelo/runtime-descargar", map[string]any{}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Descargados, true, nil
+}
+
 func cargarResumenProgresoDesdeAPI(proyecto string) (*db.ResumenProgresoProyecto, bool, error) {
 	var resp apiProgresoResumenResponse
 	query := url.Values{}
@@ -582,6 +660,15 @@ func actualizarProyectoPorAPI(ref string, req apiProyectoActualizarRequest) (*db
 		return nil, ok, err
 	}
 	return resp.Proyecto, true, nil
+}
+
+func activarMicrocicloProyectoPorAPI(ref string, req apiProyectoMicrocicloRequest) (*proyectoMicrocicloResult, bool, error) {
+	var resp apiProyectoMicrocicloResponse
+	ok, err := apiPost(fmt.Sprintf("/api/proyectos/%s/autonomia/microciclo", url.PathEscape(strings.TrimSpace(ref))), req, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return resp.Resultado, true, nil
 }
 
 func fabricarAppProyectoPorAPI(ref string, req apiProyectoFabricarAppRequest) (*apiProyectoFabricarAppResponse, bool, error) {
@@ -1172,6 +1259,34 @@ func marcarRuntimeMailboxEntregadoPorAPI(id int64) (bool, error) {
 func marcarRuntimeMailboxConsumidoPorAPI(id int64) (bool, error) {
 	ok, err := apiPost(fmt.Sprintf("/api/runtime-mailbox/%d/consumir", id), map[string]any{}, nil)
 	return ok, err
+}
+
+func limpiarRuntimeMailboxPorAPI(toAgente, fromAgente, proyecto string, estados, kinds []string) (*apiRuntimeMailboxClearResponse, bool, error) {
+	var resp apiRuntimeMailboxClearResponse
+	ok, err := apiPost("/api/runtime-mailbox/limpiar", apiRuntimeMailboxClearRequest{
+		ToAgente:   strings.TrimSpace(toAgente),
+		FromAgente: strings.TrimSpace(fromAgente),
+		Proyecto:   strings.TrimSpace(proyecto),
+		Estados:    estados,
+		Kinds:      kinds,
+	}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
+func despertarRuntimePorAPI(orders, mailbox, warm bool) (*apiRuntimeWakeResponse, bool, error) {
+	var resp apiRuntimeWakeResponse
+	ok, err := apiPost("/api/runtime/wake", apiRuntimeWakeRequest{
+		Orders:  orders,
+		Mailbox: mailbox,
+		Warm:    warm,
+	}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
 }
 
 func cargarAsignacionesDesdeAPI(query url.Values) ([]*db.Asignacion, bool, error) {

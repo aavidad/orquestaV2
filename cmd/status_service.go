@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"orquesta/agentesapp"
+	"orquesta/capacidadapp"
 	"orquesta/db"
 )
 
@@ -34,6 +35,49 @@ var (
 )
 
 type dbStatusService struct{}
+
+type deudaDispatchResumen struct {
+	Total       int `json:"total"`
+	Pendientes  int `json:"pending"`
+	Notificadas int `json:"notified"`
+	Fallidas    int `json:"failed"`
+}
+
+func listarDeudaDispatchEstado() (deudaDispatchResumen, error) {
+	out := deudaDispatchResumen{}
+	estados := []string{"pendiente", "ejecutando", "fallida"}
+	for _, estado := range estados {
+		estadoFiltro := estado
+		orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Estado: &estadoFiltro, Limit: 500})
+		if err != nil {
+			return out, err
+		}
+		for _, order := range orders {
+			if order == nil || strings.TrimSpace(order.Tipo) != "send_instruction" {
+				continue
+			}
+			out.Total++
+			result := mapFromJSON(order.ResultadoJSON)
+			dispatchState := ""
+			deliveryState := ""
+			if raw, ok := result["dispatch_state"].(string); ok {
+				dispatchState = strings.ToLower(strings.TrimSpace(raw))
+			}
+			if raw, ok := result["delivery_state"].(string); ok {
+				deliveryState = strings.ToLower(strings.TrimSpace(raw))
+			}
+			switch {
+			case strings.TrimSpace(order.Estado) == "fallida" || dispatchState == "failed" || deliveryState == "failed":
+				out.Fallidas++
+			case dispatchState == "notified" || deliveryState == "notified":
+				out.Notificadas++
+			default:
+				out.Pendientes++
+			}
+		}
+	}
+	return out, nil
+}
 
 func agenteTieneActividadRecienteVisible(agente *db.Agente) bool {
 	if agente == nil || agente.UltimaSesion == nil || agente.UltimaSesion.IsZero() {
@@ -183,6 +227,43 @@ func rowCountsAsConnected(row agentesapp.Row) bool {
 	default:
 		return true
 	}
+}
+
+func listarPoolsLocalesCompartidosEstado() ([]*capacidadapp.PoolLocalCompartido, error) {
+	resumen, err := capacidadService.ListPoolsSummary(nil)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*capacidadapp.PoolLocalCompartido, 0, len(resumen))
+	for _, item := range resumen {
+		if item == nil || item.Pool == nil {
+			continue
+		}
+		pool := item.Pool
+		proveedor := strings.ToLower(strings.TrimSpace(pool.Proveedor))
+		runtime := strings.ToLower(strings.TrimSpace(pool.Runtime))
+		meta := strings.ToLower(strings.TrimSpace(pool.MetadataJSON))
+		if proveedor != "local" {
+			continue
+		}
+		if !strings.Contains(runtime, "ollama") && !strings.Contains(meta, "ollama_pool_local") {
+			continue
+		}
+		detalle, err := capacidadService.DescribirPoolLocalCompartido(strings.TrimSpace(pool.Slug))
+		if err != nil {
+			out = append(out, &capacidadapp.PoolLocalCompartido{
+				PoolSlug:         strings.TrimSpace(pool.Slug),
+				Proveedor:        strings.TrimSpace(pool.Proveedor),
+				Runtime:          strings.TrimSpace(pool.Runtime),
+				SlotsMaximos:     pool.CapacidadTotal,
+				ConectorCanonico: "ollama_pool_local",
+				Pool:             pool,
+			})
+			continue
+		}
+		out = append(out, detalle)
+	}
+	return out, nil
 }
 
 func agentesVisiblesPorEstadoOperativo(agentes []*db.Agente) ([]*db.Agente, []*db.Agente, bool) {
@@ -391,27 +472,31 @@ func fetchStatusFastFallback() (apiStatusResponse, error) {
 	var agentesAtascados []*db.Agente
 	var agentesAuthManual []*db.Agente
 	var agentesQuotaBlocked []*db.Agente
+	poolsLocales, _ := listarPoolsLocalesCompartidosEstado()
+	deudaDispatch, _ := listarDeudaDispatchEstado()
 	if rows, err := agentRowsForStatus(); err == nil {
 		aplicarVisibilidadOperativaAgentes(agentes, rows)
 		agentesActivos, agentesTrabajando, agentesSaturados, agentesAtascados, agentesAuthManual, agentesQuotaBlocked, _ = agentesVisiblesPorEstadoOperativoRows(agentes, rows)
 	}
 	return apiStatusResponse{
-		Agentes:            agentes,
-		ConteoTareas:       cuentas,
-		ResumenTareas:      cuentas,
-		Generado:           statusNowFunc().UTC().Format(time.RFC3339),
-		TareasPorEstado:    cuentas,
-		AgentesActivos:     agentesActivos,
-		AgentesTrabajando:  agentesTrabajando,
-		AgentesSaturados:   agentesSaturados,
-		AgentesAtascados:   agentesAtascados,
-		AgentesAuthManual:  agentesAuthManual,
+		Agentes:             agentes,
+		ConteoTareas:        cuentas,
+		ResumenTareas:       cuentas,
+		Generado:            statusNowFunc().UTC().Format(time.RFC3339),
+		TareasPorEstado:     cuentas,
+		AgentesActivos:      agentesActivos,
+		AgentesTrabajando:   agentesTrabajando,
+		AgentesSaturados:    agentesSaturados,
+		AgentesAtascados:    agentesAtascados,
+		AgentesAuthManual:   agentesAuthManual,
 		AgentesQuotaBlocked: agentesQuotaBlocked,
-		PropuestasResumen:  propuestasResumen,
-		TareasActivas:      tareasActivas,
-		TareasEnProgreso:   tareasEnProgreso,
-		TareasReservadas:   tareasReservadas,
-		PropuestasAbiertas: abiertas,
+		PropuestasResumen:   propuestasResumen,
+		TareasActivas:       tareasActivas,
+		TareasEnProgreso:    tareasEnProgreso,
+		TareasReservadas:    tareasReservadas,
+		PropuestasAbiertas:  abiertas,
+		PoolsLocales:        poolsLocales,
+		DeudaDispatch:       deudaDispatch,
 	}, nil
 }
 
@@ -552,6 +637,8 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 	agentesAtascados := make([]*db.Agente, 0)
 	agentesAuthManual := make([]*db.Agente, 0)
 	agentesQuotaBlocked := make([]*db.Agente, 0)
+	poolsLocales, _ := listarPoolsLocalesCompartidosEstado()
+	deudaDispatch, _ := listarDeudaDispatchEstado()
 	for _, agente := range agentesActivos {
 		if agente == nil {
 			continue
@@ -592,6 +679,8 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 		AgentesQuotaBlocked: agentesQuotaBlocked,
 		PropuestasResumen:   propuestasResumen,
 		TareasActivas:       tareasActivas,
+		PoolsLocales:        poolsLocales,
+		DeudaDispatch:       deudaDispatch,
 	}, nil
 }
 

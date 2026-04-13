@@ -2448,7 +2448,9 @@ func SesionActivaDeAgente(agente string) (*Sesion, error) {
 // RegistrarAgente añade un nuevo agente al sistema.
 func RegistrarAgente(nombre, rol string) error {
 	_, err := DB.Exec(
-		`INSERT INTO agentes (nombre, rol) VALUES (?,?) ON CONFLICT(nombre) DO UPDATE SET rol=excluded.rol`,
+		`INSERT INTO agentes (nombre, rol, habilitado, retirado) VALUES (?,?,1,0)
+		 ON CONFLICT(nombre) DO UPDATE SET rol=excluded.rol,
+		   habilitado=CASE WHEN agentes.retirado=1 THEN 0 ELSE 1 END`,
 		nombre, rol,
 	)
 	return err
@@ -2558,9 +2560,9 @@ func RetirarAgente(nombre string) error {
 		return err
 	}
 
-	// Deshabilitar + cerrar sesión activa
+	// Deshabilitar + marcar retirado + cerrar sesión activa
 	if _, err = tx.Exec(
-		`UPDATE agentes SET habilitado=0, activo=0, estado_sesion='' WHERE nombre=?`, nombre); err != nil {
+		`UPDATE agentes SET habilitado=0, retirado=1, activo=0, estado_sesion='' WHERE nombre=?`, nombre); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(
@@ -2583,7 +2585,7 @@ func RetirarAgente(nombre string) error {
 
 // RehabilitarAgente reactiva a un agente retirado.
 func RehabilitarAgente(nombre string) error {
-	res, err := DB.Exec(`UPDATE agentes SET habilitado=1 WHERE nombre=?`, nombre)
+	res, err := DB.Exec(`UPDATE agentes SET habilitado=1, retirado=0 WHERE nombre=?`, nombre)
 	if err != nil {
 		return err
 	}

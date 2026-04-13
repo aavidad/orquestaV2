@@ -1,0 +1,522 @@
+package cmd
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"orquesta/capacidadapp"
+	"orquesta/db"
+	"orquesta/progresoapp"
+	"orquesta/runtimesapp"
+	"orquesta/supervisionapp"
+	"orquesta/tareasapp"
+)
+
+const (
+	microcicloRefactorTituloDefault = "Micro-refactorización cíclica del control plane"
+	microcicloRefactorNotasTag      = "autonomia:microrefactor_loop"
+)
+
+type proyectoMicrocicloRequest struct {
+	Agente               string `json:"agente"`
+	ObjetivoGeneral      string `json:"objetivo_general"`
+	DefinitionOfDoneJSON string `json:"definition_of_done_json"`
+	Titulo               string `json:"titulo"`
+	Descripcion          string `json:"descripcion"`
+	Modulo               string `json:"modulo"`
+	Notas                string `json:"notas"`
+	LimpiarPruebas       bool   `json:"limpiar_pruebas"`
+}
+
+type proyectoMicrocicloResult struct {
+	Proyecto            *db.Proyecto                                      `json:"proyecto"`
+	Operacion           *db.ProyectoOperacion                             `json:"operacion"`
+	Policy              *db.ProyectoAutonomia                             `json:"policy"`
+	Fase                *db.FaseProyecto                                  `json:"fase"`
+	Tarea               *db.Tarea                                         `json:"tarea"`
+	Dispatch            *capacidadapp.ResultadoEjecucionPasoPipelineLocal `json:"dispatch,omitempty"`
+	NudgeRuntimeOrderID int64                                             `json:"nudge_runtime_order_id,omitempty"`
+	TareaReutilizada    bool                                              `json:"tarea_reutilizada"`
+	RunnerMailboxWake   bool                                              `json:"runner_mailbox_wake"`
+	RunnerOrdersWake    bool                                              `json:"runner_orders_wake"`
+	RunnerWarmWake      bool                                              `json:"runner_warm_wake"`
+}
+
+func activarMicrocicloProyecto(ref string, req proyectoMicrocicloRequest) (*proyectoMicrocicloResult, error) {
+	proyecto, err := db.GetProyecto(strings.TrimSpace(ref))
+	if err != nil {
+		return nil, err
+	}
+	agente, err := validarAgenteMicrociclo(req.Agente)
+	if err != nil {
+		return nil, err
+	}
+	if req.LimpiarPruebas {
+		if err := limpiarEntornoPruebaMicrociclo(proyecto, agente); err != nil {
+			return nil, err
+		}
+	}
+	if err := asegurarAsignacionExclusivaMicrociclo(proyecto, agente); err != nil {
+		return nil, err
+	}
+	operacion, err := activarOperacionMicrociclo(proyecto.ID)
+	if err != nil {
+		return nil, err
+	}
+	policy, err := activarPoliticaMicrociclo(proyecto.Slug, agente, req)
+	if err != nil {
+		return nil, err
+	}
+	fase, err := activarFaseImplementacionMicrociclo(proyecto.Slug)
+	if err != nil {
+		return nil, err
+	}
+	tarea, reutilizada, err := asegurarTareaMicrociclo(proyecto, agente, req)
+	if err != nil {
+		return nil, err
+	}
+	dispatch, dispatchErr := capacidadService.EjecutarSiguientePasoPipelineLocalDeterminista(proyecto.Slug)
+	if dispatchErr != nil {
+		db.Audit("orquesta", "microrefactor_loop_dispatch_error", "proyecto", proyecto.ID, dispatchErr.Error())
+		dispatch = nil
+	} else if dispatch, dispatchErr = asegurarDespachoMicrociclo(proyecto, agente, tarea, dispatch); dispatchErr != nil {
+		db.Audit("orquesta", "microrefactor_loop_dispatch_error", "proyecto", proyecto.ID, dispatchErr.Error())
+		dispatch = nil
+	}
+	_, _ = db.RegistrarAutonomiaCiclo(&db.AutonomiaCiclo{
+		ProyectoID:   proyecto.ID,
+		Kind:         "microrefactor_loop_activation",
+		Agente:       agente,
+		InputJSON:    fmt.Sprintf(`{"agente":%q,"fase":"implementacion","tarea_id":%d}`, agente, tarea.ID),
+		DecisionJSON: `{"modo":"microrefactor_loop","dispatch":"pipeline_local"}`,
+		Resultado:    "activado",
+	})
+	return &proyectoMicrocicloResult{
+		Proyecto:            proyecto,
+		Operacion:           operacion,
+		Policy:              policy,
+		Fase:                fase,
+		Tarea:               tarea,
+		Dispatch:            dispatch,
+		NudgeRuntimeOrderID: runtimeOrderIDFromDispatch(dispatch),
+		TareaReutilizada:    reutilizada,
+		RunnerMailboxWake:   wakeControlPlaneRuntimeMailbox(),
+		RunnerOrdersWake:    wakeControlPlaneRuntimeOrders(),
+		RunnerWarmWake:      wakeControlPlaneWarm(),
+	}, nil
+}
+
+func limpiarEntornoPruebaMicrociclo(proyecto *db.Proyecto, agente string) error {
+	if proyecto == nil {
+		return fmt.Errorf("proyecto obligatorio")
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return fmt.Errorf("agente obligatorio")
+	}
+	if _, err := tareasService.CleanActiveFront(tareasapp.CleanActiveFrontInput{
+		Agente:   agente,
+		Proyecto: proyecto.Slug,
+	}); err != nil {
+		return err
+	}
+	if err := detenerRuntimeActivoMicrociclo(agente); err != nil {
+		return err
+	}
+	pendiente := "pendiente"
+	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente:   &agente,
+		ProyectoID: &proyecto.ID,
+		Estado:     &pendiente,
+	})
+	if err != nil {
+		return err
+	}
+	for _, msg := range mailbox {
+		if msg == nil || msg.ID <= 0 {
+			continue
+		}
+		if err := runtimesService.MarkRuntimeMailboxConsumed(msg.ID); err != nil {
+			return err
+		}
+	}
+	if _, err := runtimesService.PurgeTerminalRuntimeOrders(runtimesapp.RuntimeOrderPurgeRequest{
+		Agente:           agente,
+		Proyecto:         proyecto.Slug,
+		Estados:          []string{"completada", "fallida", "expirada", "cancelada"},
+		OlderThanMinutes: 0,
+		Actor:            "microciclo limpio",
+	}); err != nil {
+		return err
+	}
+	if _, err := runtimesService.PurgeInactiveRuntimeHandles(runtimesapp.RuntimeHandlePurgeRequest{
+		Agente:   agente,
+		Proyecto: proyecto.Slug,
+		Estados:  []string{"cerrado", "fallido"},
+		Actor:    "microciclo limpio",
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func detenerRuntimeActivoMicrociclo(agente string) error {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return fmt.Errorf("agente obligatorio")
+	}
+	handle, err := runtimesService.ResolveControlHandle(agente, nil)
+	if err != nil {
+		return err
+	}
+	if handle == nil {
+		return db.AparcarSesionActiva(agente, nil)
+	}
+	if _, _, err := runtimesService.EnqueueAgentControl(runtimesapp.AgentControlRequest{
+		Agente: agente,
+		Accion: agenteControlAccionStop,
+		Motivo: "microciclo limpio",
+		Por:    "orquesta",
+	}); err != nil {
+		return err
+	}
+	_ = wakeControlPlaneRuntimeOrders()
+	_ = wakeControlPlaneWarm()
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(250 * time.Millisecond)
+		handle, err := runtimesService.ResolveControlHandle(agente, nil)
+		if err != nil {
+			return err
+		}
+		if handle == nil {
+			return db.AparcarSesionActiva(agente, nil)
+		}
+	}
+	if err := db.AparcarSesionActiva(agente, nil); err != nil {
+		return err
+	}
+	return fmt.Errorf("timeout esperando parada de runtime activo para %s", agente)
+}
+
+func asegurarAsignacionExclusivaMicrociclo(proyecto *db.Proyecto, agente string) error {
+	if proyecto == nil {
+		return fmt.Errorf("proyecto obligatorio")
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return fmt.Errorf("agente obligatorio")
+	}
+	return db.ActivarAsignacion(agente, proyecto.ID, "microciclo_exclusivo")
+}
+
+func asegurarRuntimeAgenteMicrociclo(proyecto *db.Proyecto, agente string) error {
+	if proyecto == nil {
+		return fmt.Errorf("proyecto obligatorio")
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return fmt.Errorf("agente obligatorio")
+	}
+	if handle, err := runtimesService.GetOperationalRuntimeHandleAgentProject(agente, &proyecto.ID); err != nil {
+		return err
+	} else if handle != nil {
+		return nil
+	}
+	if handle, err := runtimesService.GetActiveRuntimeHandleAgentProject(agente, &proyecto.ID); err != nil {
+		return err
+	} else if handle != nil {
+		return nil
+	}
+	return encolarControlAutonomiaProyecto(agente, proyecto, agenteControlAccionStart, "microciclo_activation")
+}
+
+func validarAgenteMicrociclo(raw string) (string, error) {
+	agente := strings.TrimSpace(raw)
+	if agente == "" {
+		agente = "Codex1"
+	}
+	info, err := db.GetAgente(agente)
+	if err != nil {
+		return "", err
+	}
+	if info == nil {
+		return "", fmt.Errorf("agente %s no encontrado", agente)
+	}
+	if !info.Habilitado {
+		return "", fmt.Errorf("agente %s está retirado o deshabilitado", agente)
+	}
+	return strings.TrimSpace(info.Nombre), nil
+}
+
+func activarOperacionMicrociclo(proyectoID int64) (*db.ProyectoOperacion, error) {
+	op, err := db.GetProyectoOperacion(proyectoID)
+	if err != nil {
+		return nil, err
+	}
+	op.EstadoOperativo = db.ProyectoOperativoActivo
+	op.Motivo = "microrefactor_loop"
+	op.MinAgentes = 1
+	op.MaxAgentes = 1
+	op.ResumeAutomatico = true
+	if op.ObjetivoPct <= 0 {
+		op.ObjetivoPct = 100
+	}
+	if err := db.UpsertProyectoOperacion(op); err != nil {
+		return nil, err
+	}
+	return db.GetProyectoOperacion(proyectoID)
+}
+
+func activarPoliticaMicrociclo(proyectoSlug, agente string, req proyectoMicrocicloRequest) (*db.ProyectoAutonomia, error) {
+	return supervisionService.UpsertProjectPolicy(proyectoSlug, supervisionapp.PolicyInput{
+		Enabled:              true,
+		ObjetivoGeneral:      firstNonEmpty(strings.TrimSpace(req.ObjetivoGeneral), objetivoGeneralMicrocicloDefault()),
+		DefinitionOfDoneJSON: firstNonEmpty(strings.TrimSpace(req.DefinitionOfDoneJSON), definitionOfDoneMicrocicloDefault()),
+		MaxWorkers:           1,
+		SupervisorAgente:     agente,
+		ReviewerAgente:       "",
+		ReserveReviewer:      false,
+		ReserveSupervisor:    false,
+		ReviewRequired:       false,
+		AutoCreateTasks:      false,
+		AutoCloseProject:     false,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	})
+}
+
+func activarFaseImplementacionMicrociclo(proyectoSlug string) (*db.FaseProyecto, error) {
+	fases, err := progresoService.ListPhases(proyectoSlug)
+	if err != nil {
+		return nil, err
+	}
+	var implementacion *db.FaseProyecto
+	for _, fase := range fases {
+		if fase == nil {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(fase.Nombre), "implementacion") {
+			implementacion = fase
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(fase.Estado), "activa") {
+			estado := "pendiente"
+			if _, err := progresoService.UpdatePhase(progresoapp.UpdatePhaseInput{ID: fase.ID, Estado: &estado}); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if implementacion == nil {
+		_, fase, err := progresoService.RegisterPhase(progresoapp.RegisterPhaseInput{
+			Proyecto:    proyectoSlug,
+			Nombre:      "implementacion",
+			Descripcion: "Micro-refactorizacion ciclica guiada por Orquesta",
+			Orden:       2,
+			Peso:        35,
+			Estado:      "activa",
+		})
+		return fase, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(implementacion.Estado), "activa") {
+		estado := "activa"
+		return progresoService.UpdatePhase(progresoapp.UpdatePhaseInput{ID: implementacion.ID, Estado: &estado})
+	}
+	return implementacion, nil
+}
+
+func asegurarTareaMicrociclo(proyecto *db.Proyecto, agente string, req proyectoMicrocicloRequest) (*db.Tarea, bool, error) {
+	tarea, err := buscarTareaMicrocicloAbierta(proyecto.ID)
+	if err != nil {
+		return nil, false, err
+	}
+	if tarea != nil {
+		actual := ""
+		if tarea.Agente != nil {
+			actual = strings.TrimSpace(*tarea.Agente)
+		}
+		if actual != agente {
+			if err := tareasService.Reassign(tarea.ID, agente); err != nil {
+				return nil, true, err
+			}
+		}
+		if strings.TrimSpace(string(tarea.Estado)) != string(db.TareaEnProgreso) {
+			if err := tareasService.Start(tarea.ID, agente); err != nil {
+				return nil, true, err
+			}
+		}
+		recargada, err := tareasService.Get(tarea.ID)
+		return recargada, true, err
+	}
+	id, err := tareasService.Create(tareasapp.CreateTaskInput{
+		Titulo:      firstNonEmpty(strings.TrimSpace(req.Titulo), microcicloRefactorTituloDefault),
+		Descripcion: firstNonEmpty(strings.TrimSpace(req.Descripcion), descripcionMicrocicloDefault(proyecto)),
+		Modulo:      firstNonEmpty(strings.TrimSpace(req.Modulo), "controlplane"),
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Agente:      agente,
+		Proyecto:    proyecto.Slug,
+		Notas:       notasMicrociclo(req.Notas),
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	if err := tareasService.Start(id, agente); err != nil {
+		return nil, false, err
+	}
+	tarea, err = tareasService.Get(id)
+	return tarea, false, err
+}
+
+func buscarTareaMicrocicloAbierta(proyectoID int64) (*db.Tarea, error) {
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		return nil, err
+	}
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaCompletada, db.TareaCancelada:
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(tarea.Titulo), microcicloRefactorTituloDefault) || strings.Contains(strings.TrimSpace(tarea.Notas), microcicloRefactorNotasTag) {
+			return tarea, nil
+		}
+	}
+	return nil, nil
+}
+
+func objetivoGeneralMicrocicloDefault() string {
+	return "Micro-refactorizar de forma ciclica el control plane de Orquesta sobre codigo real, reduciendo mezcla inline y deuda estructural sin cambiar el comportamiento observable."
+}
+
+func definitionOfDoneMicrocicloDefault() string {
+	return `{"estado":"microrefactor_loop_activo","criterios":["siguiente frente pequeno y util","sin cambiar semantica observable","tests afectados en verde","sin abrir carriles paralelos"]}`
+}
+
+func descripcionMicrocicloDefault(proyecto *db.Proyecto) string {
+	partes := []string{
+		"Trabaja en bucle sobre la micro-refactorizacion que esta en curso.",
+		"Ataca el siguiente frente pequeno y util del control plane, dejando el codigo mas modular y con menos mezcla inline.",
+		"No abras arquitectura nueva ni cambies comportamiento observable salvo bug claro con prueba.",
+		"Antes de cerrar, deja tests del slice en verde.",
+	}
+	if proyecto != nil && strings.TrimSpace(proyecto.RutaAbs) != "" {
+		partes = append(partes, "Proyecto: "+strings.TrimSpace(proyecto.RutaAbs)+".")
+	}
+	return strings.Join(partes, " ")
+}
+
+func notasMicrociclo(extra string) string {
+	extra = strings.TrimSpace(extra)
+	if extra == "" {
+		return microcicloRefactorNotasTag
+	}
+	return microcicloRefactorNotasTag + ";" + extra
+}
+
+func runtimeOrderIDFromDispatch(resultado *capacidadapp.ResultadoEjecucionPasoPipelineLocal) int64 {
+	if resultado == nil || resultado.DispatchRuntime == nil || resultado.DispatchRuntime.RuntimeOrderID == nil {
+		return 0
+	}
+	return *resultado.DispatchRuntime.RuntimeOrderID
+}
+
+func asegurarDespachoMicrociclo(proyecto *db.Proyecto, agente string, tarea *db.Tarea, resultado *capacidadapp.ResultadoEjecucionPasoPipelineLocal) (*capacidadapp.ResultadoEjecucionPasoPipelineLocal, error) {
+	if proyecto == nil || tarea == nil {
+		return resultado, nil
+	}
+	if resultado == nil {
+		resultado = &capacidadapp.ResultadoEjecucionPasoPipelineLocal{}
+	}
+	if resultado.Despacho == nil {
+		resultado.Despacho = &capacidadapp.DespachoPipelineLocal{
+			ProyectoSlug:     strings.TrimSpace(proyecto.Slug),
+			Fase:             "implementacion",
+			AccionTarea:      "continuar_trabajo",
+			PerfilTarea:      "implementacion",
+			ModoEjecucion:    "premium_worktree",
+			Carril:           "premium_worktree",
+			EntregaCanonica:  "git_worktree",
+			RequiereWorktree: true,
+			RequiereModelo:   true,
+			TareaObjetivoID:  tarea.ID,
+			TareaObjetivo:    strings.TrimSpace(tarea.Titulo),
+			AgenteTarea:      strings.TrimSpace(agente),
+			AgenteSugerido:   strings.TrimSpace(agente),
+			Motivo:           "microrefactor_loop",
+		}
+	}
+	if resultado.DispatchRuntime != nil {
+		return resultado, nil
+	}
+	dispatchRuntime, err := (despachadorPipelineOperativo{}).DespacharPipeline(capacidadapp.SolicitudDespachoPipeline{
+		ProyectoSlug: strings.TrimSpace(proyecto.Slug),
+		Despacho:     resultado.Despacho,
+	})
+	if err != nil {
+		return resultado, err
+	}
+	resultado.DispatchRuntime = dispatchRuntime
+	return resultado, nil
+}
+
+func resolverProyectoMicrocicloPorAPI(ref string) (*db.Proyecto, bool, error) {
+	ref = strings.TrimSpace(ref)
+	if ref != "" {
+		return cargarProyectoDesdeAPI(ref)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, false, err
+	}
+	cwd, err = filepath.Abs(cwd)
+	if err != nil {
+		return nil, false, err
+	}
+	if proyecto, ok, err := cargarProyectoDesdeAPI(cwd); ok && err == nil && proyecto != nil {
+		return proyecto, ok, nil
+	}
+	proyectos, ok, err := descubrirProyectosPorAPI(cwd)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	for _, proyecto := range proyectos {
+		if proyecto != nil && strings.EqualFold(filepath.Clean(strings.TrimSpace(proyecto.RutaAbs)), filepath.Clean(cwd)) {
+			return proyecto, true, nil
+		}
+	}
+	return nil, true, fmt.Errorf("no se pudo resolver el proyecto actual desde %s", cwd)
+}
+
+func resolverProyectoMicrocicloLocal(ref string) (*db.Proyecto, error) {
+	ref = strings.TrimSpace(ref)
+	if ref != "" {
+		return db.GetProyecto(ref)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	cwd, err = filepath.Abs(cwd)
+	if err != nil {
+		return nil, err
+	}
+	if proyecto, err := db.GetProyecto(cwd); err == nil && proyecto != nil {
+		return proyecto, nil
+	}
+	proyectos, err := db.DescubrirProyectos(cwd)
+	if err != nil {
+		return nil, err
+	}
+	for _, proyecto := range proyectos {
+		if proyecto != nil && strings.EqualFold(filepath.Clean(strings.TrimSpace(proyecto.RutaAbs)), filepath.Clean(cwd)) {
+			return proyecto, nil
+		}
+	}
+	return nil, fmt.Errorf("no se pudo resolver el proyecto actual desde %s", cwd)
+}

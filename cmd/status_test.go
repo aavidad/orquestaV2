@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/capacidadapp"
 	"orquesta/db"
 )
 
@@ -214,13 +215,65 @@ func TestShouldBypassLocalDBConServidorLocalDescubierto(t *testing.T) {
 
 func TestResumenCuotaAgenteLocalIndicaCuotaIndefinida(t *testing.T) {
 	detalle := resumenCuotaAgente(&db.Agente{
-		Nombre:            "Gemma1",
-		SinCuotaProveedor: true,
-		PresupuestoFuente: "local",
-		PresupuestoVentana:"indefinida",
+		Nombre:             "Gemma1",
+		SinCuotaProveedor:  true,
+		PresupuestoFuente:  "local",
+		PresupuestoVentana: "indefinida",
 	})
 	if !strings.Contains(detalle, "cuota indefinida") || !strings.Contains(detalle, "local") {
 		t.Fatalf("detalle de cuota local inesperado: %q", detalle)
+	}
+}
+
+func TestRenderStatusSummaryMuestraPoolsLocalesCompartidos(t *testing.T) {
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				Agentes:         []*db.Agente{},
+				AgentesActivos:  []*db.Agente{},
+				TareasPorEstado: map[string]int{},
+				PoolsLocales: []*capacidadapp.PoolLocalCompartido{
+					{
+						PoolSlug:         "ollama-gemma4",
+						ModeloPreferente: "gemma4:26b",
+						SlotsMaximos:     1,
+						Telemetria: &capacidadapp.TelemetriaPoolLocal{
+							SlotsActivos:    1,
+							SesionesReady:   0,
+							SesionesWorking: 1,
+							SesionesFailed:  0,
+						},
+					},
+				},
+			},
+		})
+	})
+	if !strings.Contains(out, "🧠 Pools locales compartidos:") {
+		t.Fatalf("salida sin bloque de pools locales: %s", out)
+	}
+	if !strings.Contains(out, "ollama-gemma4") || !strings.Contains(out, "gemma4:26b") || !strings.Contains(out, "slots 1/1 · ready 0 · working 1") {
+		t.Fatalf("salida sin detalle de pool local: %s", out)
+	}
+}
+
+func TestRenderStatusSummaryMuestraDeudaDispatch(t *testing.T) {
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				Agentes:         []*db.Agente{},
+				AgentesActivos:  []*db.Agente{},
+				TareasPorEstado: map[string]int{},
+				DeudaDispatch: deudaDispatchResumen{
+					Total:       4,
+					Pendientes:  1,
+					Notificadas: 2,
+					Fallidas:    1,
+				},
+			},
+		})
+	})
+	if !strings.Contains(out, "📮 Dispatch durable: 4 total · pending 1 · notified 2 · failed 1") {
+		t.Fatalf("salida sin resumen de deuda dispatch: %s", out)
 	}
 }
 
@@ -328,7 +381,7 @@ func TestFetchServerInfoAndStatus(t *testing.T) {
 			case "/api/server":
 				return newJSONResponse(http.StatusOK, `{"name":"orquesta","version":"v1","storageMode":"single-process","storageDriver":"sqlite","sqlPlaceholder":"?","bootstrapSchema":true,"queryRebinding":true,"capabilities":["status","api"]}`), nil
 			case "/api/status":
-				return newJSONResponse(http.StatusOK, `{"generado":"2026-03-22T18:00:00Z","tareasPorEstado":{"completada":2,"en_progreso":1},"propuestasAbiertas":[{"codigo":"OP-080","titulo":"Servidor unico","acuerdo":3,"pendiente":1}],"tareasActivas":[{"id":7,"titulo":"Mover status a cliente HTTP","agente":"Codex2"}]}`), nil
+				return newJSONResponse(http.StatusOK, `{"generado":"2026-03-22T18:00:00Z","tareasPorEstado":{"completada":2,"en_progreso":1},"propuestasAbiertas":[{"codigo":"OP-080","titulo":"Servidor unico","acuerdo":3,"pendiente":1}],"tareasActivas":[{"id":7,"titulo":"Mover status a cliente HTTP","agente":"Codex2"}],"poolsLocales":[{"pool_slug":"ollama-gemma4","modelo_preferente":"gemma4:26b","slots_maximos":1,"telemetria":{"slots_activos":1,"sesiones_working":1}}]}`), nil
 			default:
 				return newJSONResponse(http.StatusNotFound, `{"error":"not found"}`), nil
 			}
@@ -361,6 +414,9 @@ func TestFetchServerInfoAndStatus(t *testing.T) {
 	}
 	if len(status.PropuestasAbiertas) != 1 || status.PropuestasAbiertas[0].Codigo != "OP-080" {
 		t.Fatalf("propuestas inesperadas: %+v", status.PropuestasAbiertas)
+	}
+	if len(status.PoolsLocales) != 1 || status.PoolsLocales[0].PoolSlug != "ollama-gemma4" {
+		t.Fatalf("poolsLocales inesperados: %+v", status.PoolsLocales)
 	}
 }
 

@@ -389,6 +389,43 @@ var tareaBacklogCmd = &cobra.Command{
 	},
 }
 
+var tareaLimpiarFrenteCmd = &cobra.Command{
+	Use:   "limpiar-frente",
+	Short: "Mueve a backlog las tareas activas de un frente de prueba sin borrar historial",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agente, _ := cmd.Flags().GetString("agente")
+		proyecto, _ := cmd.Flags().GetString("proyecto")
+		mantener, _ := cmd.Flags().GetString("mantener")
+		keepIDs, err := parseInt64CSV(mantener)
+		if err != nil {
+			return err
+		}
+		var resp apiTareaLimpiarFrenteResponse
+		if ok, err := apiPost("/api/tareas/limpiar-frente", apiTareaLimpiarFrenteRequest{
+			Agente:   strings.TrimSpace(agente),
+			Proyecto: strings.TrimSpace(proyecto),
+			KeepIDs:  keepIDs,
+		}, &resp); err != nil {
+			return err
+		} else if !ok {
+			return serverFirstCommandError("tarea limpiar-frente")
+		}
+		fmt.Printf("✓ Frente limpiado")
+		if strings.TrimSpace(proyecto) != "" {
+			fmt.Printf(" proyecto=%s", strings.TrimSpace(proyecto))
+		}
+		if strings.TrimSpace(agente) != "" {
+			fmt.Printf(" agente=%s", strings.TrimSpace(agente))
+		}
+		fmt.Printf("\n")
+		fmt.Printf("  Movidas a backlog: %d\n", resp.Resultado.Total)
+		if len(resp.Resultado.MovedIDs) > 0 {
+			fmt.Printf("  IDs: %s\n", joinInt64(resp.Resultado.MovedIDs))
+		}
+		return nil
+	},
+}
+
 var tareaRefineriaCmd = &cobra.Command{
 	Use:   "refineria <id> <agente>",
 	Short: "Envía una tarea a la Refinería para validación de tests antes de completarla (OP-093)",
@@ -485,13 +522,16 @@ func init() {
 	tareaRefineriaCmd.Flags().String("rama", "", "Rama o worktree con los cambios")
 	tareaRefineriaCmd.Flags().String("dir", "", "Directorio de trabajo donde ejecutar los tests")
 	tareaRefineriaCmd.Flags().String("cmd", "go test ./...", "Comando de tests a ejecutar")
+	tareaLimpiarFrenteCmd.Flags().String("agente", "", "Agente cuyo frente activo limpiar")
+	tareaLimpiarFrenteCmd.Flags().String("proyecto", "", "Proyecto cuyo frente activo limpiar")
+	tareaLimpiarFrenteCmd.Flags().String("mantener", "", "IDs separados por coma que deben conservarse")
 
 	tareaCmd.AddCommand(
 		tareaListarCmd, tareaVerCmd, tareaNuevaCmd,
 		tareaTomar, tareaIniciarCmd, tareaCompletarCmd,
 		tareaBloquearCmd, tareaNotaCmd, tareaNotasCmd,
 		tareaReasignarCmd, tareaDesbloquearCmd, tareaBacklogCmd,
-		tareaContratoCmd, tareaCancelarCmd, tareaRefineriaCmd,
+		tareaContratoCmd, tareaCancelarCmd, tareaRefineriaCmd, tareaLimpiarFrenteCmd,
 	)
 }
 
@@ -592,4 +632,31 @@ func rawRepeatedFlagValues(args []string, flagName string) []string {
 		}
 	}
 	return out
+}
+
+func parseInt64CSV(raw string) ([]int64, error) {
+	items := splitCSV(raw)
+	out := make([]int64, 0, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(item) == "" {
+			continue
+		}
+		id, err := strconv.ParseInt(strings.TrimSpace(item), 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("id inválido en --mantener: %s", item)
+		}
+		out = append(out, id)
+	}
+	return out, nil
+}
+
+func joinInt64(ids []int64) string {
+	if len(ids) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(ids))
+	for _, id := range ids {
+		parts = append(parts, strconv.FormatInt(id, 10))
+	}
+	return strings.Join(parts, ",")
 }

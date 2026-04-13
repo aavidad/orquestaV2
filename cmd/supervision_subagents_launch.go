@@ -1,11 +1,15 @@
 package cmd
 
 import (
+	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
+	"orquesta/coordinacion"
 	"orquesta/db"
 )
 
@@ -20,12 +24,13 @@ type supervisorSubagentLaunchRequest struct {
 }
 
 type supervisorSubagentLaunchResult struct {
-	Supervisor string                           `json:"supervisor"`
-	Proyecto   string                           `json:"proyecto,omitempty"`
-	Launcher   string                           `json:"launcher"`
-	Store      supervisorSubagentStoreSummary   `json:"store"`
+	Supervisor string                                `json:"supervisor"`
+	Proyecto   string                                `json:"proyecto,omitempty"`
+	Launcher   string                                `json:"launcher"`
+	Store      supervisorSubagentStoreSummary        `json:"store"`
 	Refresh    *supervisorSubagentStoreRefreshResult `json:"refresh,omitempty"`
-	Stdout     string                           `json:"stdout,omitempty"`
+	Stdout     string                                `json:"stdout,omitempty"`
+	Worktree   map[string]any                        `json:"worktree,omitempty"`
 }
 
 func resolveClaudeSubagentLauncher() string {
@@ -47,9 +52,26 @@ func launchClaudeSubagentExternal(req supervisorSubagentLaunchRequest) (*supervi
 		return nil, fmt.Errorf("prompt obligatorio")
 	}
 	supervisor := resolveSupervisorName(req.Supervisor)
+	req.Name = resolverNombreSubagenteLaunch(req)
 	storePath := resolveClaudeSubagentStorePath()
 	cmd := exec.Command("bash", "-lc", launcher)
 	cmd.Dir = mustCurrentWorkingDir()
+	var worktreeInfo map[string]any
+	if strings.TrimSpace(req.Proyecto) != "" && strings.TrimSpace(req.Name) != "" {
+		worktree, err := prepararWorktreeSubagente(strings.TrimSpace(req.Proyecto), strings.TrimSpace(req.Name))
+		if err != nil {
+			worktree = nil
+		}
+		if worktree != nil {
+			cmd.Dir = strings.TrimSpace(worktree.Path)
+			worktreeInfo = map[string]any{
+				"id":       worktree.ID,
+				"path":     strings.TrimSpace(worktree.Path),
+				"branch":   strings.TrimSpace(worktree.Branch),
+				"base_ref": strings.TrimSpace(worktree.BaseRef),
+			}
+		}
+	}
 	cmd.Env = append(os.Environ(),
 		"ORQUESTA_SUBAGENT_SUPERVISOR="+supervisor,
 		"ORQUESTA_SUBAGENT_PROJECT="+strings.TrimSpace(req.Proyecto),
@@ -61,6 +83,13 @@ func launchClaudeSubagentExternal(req supervisorSubagentLaunchRequest) (*supervi
 		"ORQUESTA_SUBAGENT_STORE="+storePath,
 		"CLAWD_AGENT_STORE="+storePath,
 	)
+	if worktreeInfo != nil {
+		cmd.Env = append(cmd.Env,
+			"ORQUESTA_SUBAGENT_WORKTREE="+stringFromAnyLaunch(worktreeInfo["path"]),
+			"ORQUESTA_SUBAGENT_PROJECT_PATH="+stringFromAnyLaunch(worktreeInfo["path"]),
+			"ORQUESTA_SUBAGENT_BRANCH="+stringFromAnyLaunch(worktreeInfo["branch"]),
+		)
+	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("launcher de subagente falló: %w: %s", err, strings.TrimSpace(string(out)))
@@ -69,6 +98,9 @@ func launchClaudeSubagentExternal(req supervisorSubagentLaunchRequest) (*supervi
 	if err != nil {
 		return nil, err
 	}
+	if worktreeInfo != nil {
+		refresh.Subagents = persistirWorktreeEnSubagenteLanzado(refresh.Subagents, supervisor, strings.TrimSpace(req.Proyecto), strings.TrimSpace(req.Name), worktreeInfo)
+	}
 	return &supervisorSubagentLaunchResult{
 		Supervisor: supervisor,
 		Proyecto:   strings.TrimSpace(req.Proyecto),
@@ -76,7 +108,133 @@ func launchClaudeSubagentExternal(req supervisorSubagentLaunchRequest) (*supervi
 		Store:      refresh.Store,
 		Refresh:    refresh,
 		Stdout:     strings.TrimSpace(string(out)),
+		Worktree:   worktreeInfo,
 	}, nil
+}
+
+func persistirWorktreeEnSubagenteLanzado(items []*db.SupervisorSubagent, supervisor, proyectoSlug, nombre string, worktreeInfo map[string]any) []*db.SupervisorSubagent {
+	if len(items) == 0 || strings.TrimSpace(nombre) == "" || worktreeInfo == nil {
+		return items
+	}
+	objetivo := seleccionarSubagentePersistenciaWorktree(items, strings.TrimSpace(nombre))
+	if objetivo == nil {
+		return items
+	}
+	metadataJSON := mergeSupervisorSubagentMetadata(objetivo.MetadataJSON, worktreeInfo)
+	actualizado, err := db.UpsertSupervisorSubagent(db.UpsertSupervisorSubagentInput{
+		Supervisor:      strings.TrimSpace(supervisor),
+		ProyectoSlug:    strings.TrimSpace(proyectoSlug),
+		SessionID:       strings.TrimSpace(objetivo.SessionID),
+		ParentThreadID:  strings.TrimSpace(objetivo.ParentThreadID),
+		ThreadID:        strings.TrimSpace(objetivo.ThreadID),
+		SubagentName:    strings.TrimSpace(objetivo.SubagentName),
+		SubagentType:    strings.TrimSpace(objetivo.SubagentType),
+		ToolProfileJSON: strings.TrimSpace(objetivo.ToolProfileJSON),
+		Status:          strings.TrimSpace(objetivo.Status),
+		ManifestPath:    strings.TrimSpace(objetivo.ManifestPath),
+		OutputPath:      strings.TrimSpace(objetivo.OutputPath),
+		ErrorMessage:    strings.TrimSpace(objetivo.ErrorMessage),
+		MetadataJSON:    metadataJSON,
+		CreatedAt:       &objetivo.CreatedAt,
+		StartedAt:       &objetivo.StartedAt,
+		CompletedAt:     objetivo.CompletedAt,
+	})
+	if err != nil || actualizado == nil {
+		return items
+	}
+	out := append([]*db.SupervisorSubagent(nil), items...)
+	for i, item := range out {
+		if item != nil && item.ID == actualizado.ID {
+			out[i] = actualizado
+			break
+		}
+	}
+	return out
+}
+
+func seleccionarSubagentePersistenciaWorktree(items []*db.SupervisorSubagent, nombre string) *db.SupervisorSubagent {
+	var elegido *db.SupervisorSubagent
+	for _, item := range items {
+		if item == nil || !strings.EqualFold(strings.TrimSpace(item.SubagentName), strings.TrimSpace(nombre)) {
+			continue
+		}
+		if elegido == nil || item.UpdatedAt.After(elegido.UpdatedAt) {
+			elegido = item
+		}
+	}
+	return elegido
+}
+
+func mergeSupervisorSubagentMetadata(base string, worktreeInfo map[string]any) string {
+	payload := map[string]any{}
+	if strings.TrimSpace(base) != "" {
+		_ = json.Unmarshal([]byte(base), &payload)
+	}
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	if id, ok := worktreeInfo["id"]; ok {
+		payload["worktree_id"] = id
+	}
+	if path := stringFromAnyLaunch(worktreeInfo["path"]); path != "" {
+		payload["ruta_worktree"] = path
+	}
+	if branch := stringFromAnyLaunch(worktreeInfo["branch"]); branch != "" {
+		payload["branch_worktree"] = branch
+	}
+	if baseRef := stringFromAnyLaunch(worktreeInfo["base_ref"]); baseRef != "" {
+		payload["base_ref_worktree"] = baseRef
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return strings.TrimSpace(base)
+	}
+	return string(raw)
+}
+
+func resolverNombreSubagenteLaunch(req supervisorSubagentLaunchRequest) string {
+	if nombre := strings.TrimSpace(req.Name); nombre != "" {
+		return nombre
+	}
+	supervisor := strings.TrimSpace(req.Supervisor)
+	if supervisor == "" {
+		supervisor = "OpenClaw"
+	}
+	tipo := db.NormalizeSupervisorSubagentType(req.SubagentType)
+	tipo = strings.ReplaceAll(tipo, "general-purpose", "general")
+	tipo = strings.ReplaceAll(tipo, "-", "_")
+	return fmt.Sprintf("%s-%s-%d", supervisor, tipo, time.Now().UTC().Unix())
+}
+
+func prepararWorktreeSubagente(proyectoRef, agente string) (*coordinacion.Worktree, error) {
+	svc := newCoordinationService()
+	worktree, err := svc.PrepareWorktree(coordinacion.PrepareWorktreeInput{
+		ProjectRef: strings.TrimSpace(proyectoRef),
+		Agent:      strings.TrimSpace(agente),
+		Reason:     "launch_subagente_externo",
+		BaseRef:    "HEAD",
+	})
+	if err == nil {
+		return worktree, nil
+	}
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	texto := strings.ToLower(strings.TrimSpace(err.Error()))
+	switch {
+	case strings.Contains(texto, "not a git repository"):
+		return nil, nil
+	case strings.Contains(texto, "git worktree add"):
+		return nil, nil
+	case strings.Contains(texto, "cannot lock ref"):
+		return nil, nil
+	}
+	return nil, err
+}
+
+func stringFromAnyLaunch(v any) string {
+	s, _ := v.(string)
+	return strings.TrimSpace(s)
 }
 
 func mustCurrentWorkingDir() string {
