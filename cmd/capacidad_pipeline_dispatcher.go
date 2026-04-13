@@ -75,6 +75,7 @@ func (despachadorPipelineOperativo) DespacharPipeline(entrada capacidadapp.Solic
 			Por:          "orquesta",
 			Motivo:       strings.TrimSpace(despacho.Motivo),
 			Razonamiento: razonamientoPorCarril(strings.TrimSpace(despacho.Carril)),
+			TareaID:      &despacho.TareaObjetivoID,
 		})
 		if err != nil {
 			return nil, err
@@ -165,6 +166,7 @@ func (despachadorPipelineOperativo) DespacharPipeline(entrada capacidadapp.Solic
 			Por:          "orquesta",
 			Motivo:       "microprogramacion: " + spec.Titulo,
 			Razonamiento: "high",
+			TareaID:      &despacho.TareaObjetivoID,
 		})
 		if err != nil {
 			return nil, err

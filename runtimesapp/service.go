@@ -8,13 +8,18 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package runtimesapp
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"orquesta/db"
 	"orquesta/internal/controlruntime"
+	"orquesta/microprogramacionapp"
 	"orquesta/runtimeagente"
 )
 
@@ -39,10 +44,12 @@ type Store interface {
 	GetOperationalRuntimeHandleForProject(agente string, proyectoID *int64) (*db.RuntimeHandle, error)
 	ListRuntimeEvents(filtro db.FiltroRuntimeEvents) ([]*db.RuntimeEvent, error)
 	ListRuntimeTranscript(filtro db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error)
+	RegisterRuntimeTranscript(entry *db.RuntimeTranscriptEntry) (int64, error)
 	ListRuntimeSamples(runtimeID int64, limit int) ([]*db.RuntimeTelemetrySample, error)
 	CreateRuntimeOrder(order *db.RuntimeOrder) (int64, error)
 	GetRuntimeOrder(id int64) (*db.RuntimeOrder, error)
 	ListRuntimeOrders(filtro db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error)
+	MarkRuntimeOrderState(id int64, estado, resultadoJSON, errorText string) error
 	CreateLiveAgentHandoff(origen, destino string, tareaID *int64, motivo, resumenContinuidad, externalSessionID string) (int64, error)
 	CreateRuntimeMailbox(msg *db.RuntimeMailboxMessage) (int64, error)
 	GetRuntimeMailbox(id int64) (*db.RuntimeMailboxMessage, error)
@@ -60,9 +67,14 @@ type Store interface {
 }
 
 type Service struct {
-	store                  Store
-	afterEnqueueOrderHook  func(order *db.RuntimeOrder, orderID int64)
-	afterCreateMailboxHook func(msg *db.RuntimeMailboxMessage, mailboxID int64)
+	store                       Store
+	afterEnqueueOrderHook       func(order *db.RuntimeOrder, orderID int64)
+	afterCreateMailboxHook      func(msg *db.RuntimeMailboxMessage, mailboxID int64)
+	afterRegisterTranscriptHook func(entry *db.RuntimeTranscriptEntry, transcriptID int64)
+	registradorEntregaGit       RegistradorEntregaGit
+	materializadorEntrega       MaterializadorEntregaMicroprogramacion
+	resolvedorWorktree          ResolvedorWorktreeActiva
+	aseguradorWorktree          AseguradorWorktreeActiva
 }
 
 type RuntimeDescription struct {
@@ -89,6 +101,57 @@ func (s *Service) SetAfterCreateRuntimeMailboxHook(hook func(msg *db.RuntimeMail
 	s.afterCreateMailboxHook = hook
 }
 
+func (s *Service) SetAfterRegisterRuntimeTranscriptHook(hook func(entry *db.RuntimeTranscriptEntry, transcriptID int64)) {
+	if s == nil {
+		return
+	}
+	s.afterRegisterTranscriptHook = hook
+}
+
+type RegistradorEntregaGit interface {
+	RegistrarEntregaGit(id int64, entrada microprogramacionapp.EntradaRegistrarEntregaGit) (*microprogramacionapp.ResultadoRegistrarEntregaGit, error)
+}
+
+type MaterializadorEntregaMicroprogramacion interface {
+	MaterializarEntregaDesdeRespuesta(id int64, raizProyecto, respuesta, evidencia string) (*microprogramacionapp.ResultadoMaterializarEntrega, error)
+}
+
+type ResolvedorWorktreeActiva interface {
+	ResolveActiveWorktree(proyectoSlug, agente string) (*db.Worktree, error)
+}
+
+type AseguradorWorktreeActiva interface {
+	EnsureActiveWorktree(proyectoSlug, agente string) (*db.Worktree, error)
+}
+
+func (s *Service) SetRegistradorEntregaGit(registrador RegistradorEntregaGit) {
+	if s == nil {
+		return
+	}
+	s.registradorEntregaGit = registrador
+}
+
+func (s *Service) SetMaterializadorEntregaMicroprogramacion(materializador MaterializadorEntregaMicroprogramacion) {
+	if s == nil {
+		return
+	}
+	s.materializadorEntrega = materializador
+}
+
+func (s *Service) SetResolvedorWorktreeActiva(resolvedor ResolvedorWorktreeActiva) {
+	if s == nil {
+		return
+	}
+	s.resolvedorWorktree = resolvedor
+}
+
+func (s *Service) SetAseguradorWorktreeActiva(asegurador AseguradorWorktreeActiva) {
+	if s == nil {
+		return
+	}
+	s.aseguradorWorktree = asegurador
+}
+
 type AgentControlRequest struct {
 	Agente       string
 	Proyecto     string
@@ -99,6 +162,7 @@ type AgentControlRequest struct {
 	Perfil       string
 	Motivo       string
 	Por          string
+	TareaID      *int64
 }
 
 type AgentControlPayload struct {
@@ -110,6 +174,7 @@ type AgentControlPayload struct {
 	Perfil       string `json:"perfil,omitempty"`
 	Motivo       string `json:"motivo,omitempty"`
 	Por          string `json:"por,omitempty"`
+	TareaID      *int64 `json:"tarea_id,omitempty"`
 }
 
 type RuntimeHandlePurgeRequest struct {
@@ -142,6 +207,38 @@ type MicroprogramacionDispatchRequest struct {
 
 type MicroprogramacionDispatchResult struct {
 	RuntimeOrderID int64
+}
+
+type AgentNudgeRequest struct {
+	Agente      string
+	Proyecto    string
+	Accion      string
+	Motivo      string
+	Instruction string
+	Actor       string
+	Metadata    map[string]any
+}
+
+type AgentNudgeResult struct {
+	RuntimeOrderID int64
+}
+
+type ResultadoEntregaGitMicroprogramacionActiva struct {
+	Contexto *ContextoEntregaMicroprogramacion
+	Entrega  *microprogramacionapp.ResultadoRegistrarEntregaGit
+}
+
+type ContextoEntregaMicroprogramacion struct {
+	RuntimeOrderID   int64
+	EspecificacionID int64
+	ArchivoObjetivo  string
+	SimboloObjetivo  string
+	WriteSet         []string
+	FormatoSalida    string
+	WorktreeID       *int64
+	RutaWorktree     string
+	BranchWorktree   string
+	BaseRefWorktree  string
 }
 
 func (s *Service) GetProject(ref string) (*db.Proyecto, error) {
@@ -511,6 +608,47 @@ func (s *Service) ListRuntimeTranscript(filtro db.FiltroRuntimeTranscript) ([]*d
 	return s.store.ListRuntimeTranscript(filtro)
 }
 
+func (s *Service) RegistrarSalidaObservada(agente string, proyectoID *int64, texto string) (int64, error) {
+	agente = strings.TrimSpace(agente)
+	texto = strings.TrimSpace(texto)
+	if agente == "" {
+		return 0, fmt.Errorf("agente obligatorio")
+	}
+	if texto == "" {
+		return 0, fmt.Errorf("texto obligatorio")
+	}
+	handle, err := s.ResolveDeliveryHandle(agente, proyectoID)
+	if err != nil {
+		return 0, err
+	}
+	if handle == nil {
+		return 0, fmt.Errorf("sin handle entregable para %s", agente)
+	}
+	runtime, err := s.runtimeForHandle(agente, proyectoID, handle)
+	if err != nil {
+		return 0, err
+	}
+	if runtime == nil {
+		return 0, fmt.Errorf("sin runtime activo para %s", agente)
+	}
+	entry := &db.RuntimeTranscriptEntry{
+		RuntimeID:  runtime.ID,
+		HandleID:   &handle.ID,
+		Agente:     agente,
+		ProyectoID: proyectoID,
+		Stream:     "pty_out",
+		Text:       texto,
+	}
+	id, err := s.store.RegisterRuntimeTranscript(entry)
+	if err != nil {
+		return 0, err
+	}
+	if s.afterRegisterTranscriptHook != nil {
+		s.afterRegisterTranscriptHook(entry, id)
+	}
+	return id, nil
+}
+
 func (s *Service) ListRuntimeSamples(runtimeID int64, limit int) ([]*db.RuntimeTelemetrySample, error) {
 	return s.store.ListRuntimeSamples(runtimeID, limit)
 }
@@ -524,6 +662,56 @@ func (s *Service) CreateRuntimeOrder(order *db.RuntimeOrder) (int64, error) {
 		s.afterEnqueueOrderHook(order, orderID)
 	}
 	return orderID, nil
+}
+
+func (s *Service) MarcarRuntimeOrderDispatchNotificado(runtimeOrderID int64, detalle string) error {
+	order, err := s.store.GetRuntimeOrder(runtimeOrderID)
+	if err != nil {
+		return err
+	}
+	if order == nil {
+		return fmt.Errorf("runtime order no encontrada")
+	}
+	reason := strings.TrimSpace(detalle)
+	if reason == "" {
+		reason = "dispatch notificado pendiente de entrega"
+	}
+	resultadoJSON := fusionarResultadoDispatchDurable(order.ResultadoJSON, EntradaResultadoDispatchDurable{
+		EstadoDispatch: DispatchNotificada,
+		EstadoEntrega:  "notified",
+		UltimaRazon:    reason,
+	})
+	resultadoJSON = mergeRuntimeOrderResultJSONApp(resultadoJSON, map[string]any{
+		"ok":                   false,
+		"deferred":             true,
+		"deferred_reason":      reason,
+		"delivery_notified_at": time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	return s.store.MarkRuntimeOrderState(runtimeOrderID, "pendiente", resultadoJSON, reason)
+}
+
+func (s *Service) MarcarRuntimeOrderDispatchFallido(runtimeOrderID int64, detalle string) error {
+	order, err := s.store.GetRuntimeOrder(runtimeOrderID)
+	if err != nil {
+		return err
+	}
+	if order == nil {
+		return fmt.Errorf("runtime order no encontrada")
+	}
+	reason := strings.TrimSpace(detalle)
+	if reason == "" {
+		reason = "dispatch fallido"
+	}
+	resultadoJSON := fusionarResultadoDispatchDurable(order.ResultadoJSON, EntradaResultadoDispatchDurable{
+		EstadoDispatch: DispatchFallida,
+		EstadoEntrega:  "failed",
+		UltimaRazon:    reason,
+	})
+	resultadoJSON = mergeRuntimeOrderResultJSONApp(resultadoJSON, map[string]any{
+		"ok":                 false,
+		"delivery_failed_at": time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	return s.store.MarkRuntimeOrderState(runtimeOrderID, "fallida", resultadoJSON, reason)
 }
 
 func (s *Service) EnqueueRuntimeOrder(order *db.RuntimeOrder) (int64, error) {
@@ -553,33 +741,119 @@ func (s *Service) CreateRuntimeMailbox(msg *db.RuntimeMailboxMessage) (int64, er
 	return s.store.CreateRuntimeMailbox(msg)
 }
 
+func (s *Service) EnqueueAgentNudge(req AgentNudgeRequest) (*AgentNudgeResult, error) {
+	agente := strings.TrimSpace(req.Agente)
+	if agente == "" {
+		return nil, fmt.Errorf("agente obligatorio")
+	}
+	proyectoRef := strings.TrimSpace(req.Proyecto)
+	if proyectoRef == "" {
+		return nil, fmt.Errorf("proyecto obligatorio")
+	}
+	proyecto, err := s.store.GetProject(proyectoRef)
+	if err != nil {
+		return nil, err
+	}
+	if proyecto == nil {
+		return nil, fmt.Errorf("proyecto no encontrado")
+	}
+	accion := strings.TrimSpace(req.Accion)
+	if accion == "" {
+		return nil, fmt.Errorf("accion obligatoria")
+	}
+	var (
+		handleID  *int64
+		runtimeID *int64
+	)
+	handle, err := s.ResolveDeliveryHandle(agente, &proyecto.ID)
+	if err != nil {
+		return nil, err
+	}
+	if handle != nil {
+		handleID = &handle.ID
+		if runtime, err := s.runtimeForHandle(agente, &proyecto.ID, handle); err != nil {
+			return nil, err
+		} else if runtime != nil && runtime.ID > 0 {
+			runtimeID = &runtime.ID
+		} else if handle.RuntimeID != nil {
+			runtimeID = handle.RuntimeID
+		}
+	}
+	payload := map[string]any{
+		"from_agente": "server",
+		"to_agente":   agente,
+		"kind":        "pipeline_local",
+		"accion":      accion,
+		"texto":       strings.TrimSpace(req.Motivo),
+	}
+	if instruction := strings.TrimSpace(req.Instruction); instruction != "" {
+		payload["instruction"] = instruction
+	}
+	for key, value := range req.Metadata {
+		payload[strings.TrimSpace(key)] = value
+	}
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	orderID, err := s.EnqueueRuntimeOrder(&db.RuntimeOrder{
+		Agente:      agente,
+		ProyectoID:  &proyecto.ID,
+		RuntimeID:   runtimeID,
+		HandleID:    handleID,
+		Tipo:        "nudge",
+		PayloadJSON: string(payloadJSON),
+	})
+	if err != nil {
+		return nil, err
+	}
+	actor := strings.TrimSpace(req.Actor)
+	if actor == "" {
+		actor = "orquesta"
+	}
+	s.store.Audit(actor, "pipeline_nudge", "runtime_order", orderID, fmt.Sprintf("agente=%s proyecto=%s accion=%s", agente, proyecto.Slug, accion))
+	return &AgentNudgeResult{RuntimeOrderID: orderID}, nil
+}
+
 func (s *Service) DispatchMicroprogramacionInstruction(req MicroprogramacionDispatchRequest) (*MicroprogramacionDispatchResult, error) {
 	agenteDestino := strings.TrimSpace(req.AgenteDestino)
 	if agenteDestino == "" {
 		return nil, fmt.Errorf("agente destino obligatorio")
 	}
+	formatoSalida := s.resolverFormatoSalidaEfectivoMicroprogramacion(req)
 	if req.ProyectoID == nil || *req.ProyectoID <= 0 {
 		return nil, fmt.Errorf("proyecto obligatorio para despachar microtarea")
 	}
+	req.FormatoSalida = formatoSalida
 	mensaje, err := s.prepararMensajeMicroprogramacion(req)
 	if err != nil {
 		return nil, err
 	}
+	microprogramacion := map[string]any{
+		"especificacion_id": req.EspecificacionID,
+		"archivo_objetivo":  strings.TrimSpace(req.ArchivoObjetivo),
+		"simbolo_objetivo":  strings.TrimSpace(req.SimboloObjetivo),
+		"write_set":         req.WriteSet,
+		"tests":             req.TestsObligatorios,
+		"formato_salida":    strings.TrimSpace(formatoSalida),
+	}
+	if worktree := s.resolveWorktreePayloadMicroprogramacion(req); worktree != nil {
+		microprogramacion["worktree_id"] = worktree.ID
+		microprogramacion["ruta_worktree"] = strings.TrimSpace(worktree.RutaAbs)
+		microprogramacion["branch_worktree"] = strings.TrimSpace(worktree.Branch)
+		microprogramacion["base_ref_worktree"] = strings.TrimSpace(worktree.BaseRef)
+	}
 	payload, err := json.Marshal(map[string]any{
-		"to_agente": agenteDestino,
-		"texto":     mensaje,
-		"source":    "microprogramacion",
-		"microprogramacion": map[string]any{
-			"especificacion_id": req.EspecificacionID,
-			"archivo_objetivo":  strings.TrimSpace(req.ArchivoObjetivo),
-			"simbolo_objetivo":  strings.TrimSpace(req.SimboloObjetivo),
-			"write_set":         req.WriteSet,
-			"tests":             req.TestsObligatorios,
-			"formato_salida":    strings.TrimSpace(req.FormatoSalida),
-		},
+		"to_agente":         agenteDestino,
+		"texto":             mensaje,
+		"source":            "microprogramacion",
+		"microprogramacion": microprogramacion,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("serializando payload de microprogramacion: %w", err)
+	}
+	if err := s.supersederMicroprogramacionAbiertaEquivalente(agenteDestino, req.ProyectoID, microprogramacion); err != nil {
+		return nil, err
 	}
 	orderID, err := s.CreateRuntimeOrder(&db.RuntimeOrder{
 		Agente:      agenteDestino,
@@ -591,6 +865,472 @@ func (s *Service) DispatchMicroprogramacionInstruction(req MicroprogramacionDisp
 		return nil, err
 	}
 	return &MicroprogramacionDispatchResult{RuntimeOrderID: orderID}, nil
+}
+
+func (s *Service) supersederMicroprogramacionAbiertaEquivalente(agente string, proyectoID *int64, micro map[string]any) error {
+	if s == nil {
+		return nil
+	}
+	orders, err := s.store.ListRuntimeOrders(db.FiltroRuntimeOrders{
+		Agente:     &agente,
+		ProyectoID: proyectoID,
+		Limit:      50,
+	})
+	if err != nil {
+		return err
+	}
+	for _, order := range orders {
+		if !runtimeOrderMicroprogramacionEquivalente(order, micro) {
+			continue
+		}
+		payload, err := decodePayloadMicroprogramacion(order.PayloadJSON)
+		if err != nil {
+			return err
+		}
+		if mailboxID := int64Any(payload["mailbox_id"]); mailboxID > 0 {
+			if err := s.store.MarkRuntimeMailboxConsumed(mailboxID); err != nil {
+				return err
+			}
+		}
+		resultadoJSON := mergeRuntimeOrderResultJSONApp(order.ResultadoJSON, map[string]any{
+			"ok":                false,
+			"superseded":        true,
+			"superseded_by_new": true,
+			"mailbox_id":        int64Any(payload["mailbox_id"]),
+			"archivo_objetivo":  strings.TrimSpace(stringAny(micro["archivo_objetivo"])),
+			"simbolo_objetivo":  strings.TrimSpace(stringAny(micro["simbolo_objetivo"])),
+			"delivery_state":    "superseded",
+			"superseded_at":     time.Now().UTC().Format(time.RFC3339Nano),
+			"write_set":         stringSliceAny(micro["write_set"]),
+			"especificacion_id": int64Any(micro["especificacion_id"]),
+		})
+		if err := s.store.MarkRuntimeOrderState(order.ID, "cancelada", resultadoJSON, "microprogramacion supersedida por una orden nueva equivalente"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runtimeOrderMicroprogramacionEquivalente(order *db.RuntimeOrder, micro map[string]any) bool {
+	if order == nil || strings.TrimSpace(order.Tipo) != "send_instruction" {
+		return false
+	}
+	switch strings.TrimSpace(strings.ToLower(order.Estado)) {
+	case "completada", "fallida", "cancelada", "expirada":
+		return false
+	}
+	payload, err := decodePayloadMicroprogramacion(order.PayloadJSON)
+	if err != nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(stringAny(payload["source"])), "microprogramacion") {
+		return false
+	}
+	actual, _ := payload["microprogramacion"].(map[string]any)
+	if actual == nil {
+		return false
+	}
+	if strings.TrimSpace(stringAny(actual["archivo_objetivo"])) != strings.TrimSpace(stringAny(micro["archivo_objetivo"])) {
+		return false
+	}
+	if strings.TrimSpace(stringAny(actual["simbolo_objetivo"])) != strings.TrimSpace(stringAny(micro["simbolo_objetivo"])) {
+		return false
+	}
+	return runtimeOrderMicroprogramacionMismoWriteSet(stringSliceAny(actual["write_set"]), stringSliceAny(micro["write_set"]))
+}
+
+func runtimeOrderMicroprogramacionMismoWriteSet(actual, esperado []string) bool {
+	if len(actual) != len(esperado) {
+		return false
+	}
+	normalizar := func(items []string) []string {
+		out := make([]string, 0, len(items))
+		for _, item := range items {
+			if ruta := strings.TrimSpace(item); ruta != "" {
+				out = append(out, ruta)
+			}
+		}
+		sort.Strings(out)
+		return out
+	}
+	a := normalizar(actual)
+	b := normalizar(esperado)
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Service) resolverFormatoSalidaEfectivoMicroprogramacion(req MicroprogramacionDispatchRequest) string {
+	formato := strings.TrimSpace(req.FormatoSalida)
+	if formato == "" {
+		return formato
+	}
+	if agenteUsaMicroprogramacionInline(req.AgenteDestino) {
+		if microprogramacionapp.FormatoSalidaUsaGitWorktree(formato) &&
+			!s.agenteUsaPoolLocalCompartido(req.AgenteDestino, req.ProyectoID) {
+			return "ficheros+evidencia"
+		}
+		if !microprogramacionapp.FormatoSalidaUsaGitWorktree(formato) && !formatoSalidaUsaBloquesArchivo(formato) {
+			return "ficheros+evidencia"
+		}
+	}
+	return formato
+}
+
+func (s *Service) agenteUsaPoolLocalCompartido(agente string, proyectoID *int64) bool {
+	if s == nil {
+		return false
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return false
+	}
+	if proyectoID != nil && *proyectoID > 0 {
+		runtime, err := s.store.GetPrimaryRuntimeForProject(agente, proyectoID)
+		if err == nil && runtimeConectorEsPoolLocalCompartido(runtime) {
+			return true
+		}
+	}
+	runtime, err := s.store.GetPrimaryRuntime(agente)
+	if err != nil {
+		return false
+	}
+	return runtimeConectorEsPoolLocalCompartido(runtime)
+}
+
+func runtimeConectorEsPoolLocalCompartido(runtime *db.RuntimeInstance) bool {
+	if runtime == nil {
+		return false
+	}
+	conector := strings.ToLower(strings.TrimSpace(runtime.Connector))
+	return conector == "ollama_pool_local" || conector == "ollama-pool-local"
+}
+
+func (s *Service) resolveWorktreePayloadMicroprogramacion(req MicroprogramacionDispatchRequest) *db.Worktree {
+	if s == nil || req.ProyectoID == nil || *req.ProyectoID <= 0 || !microprogramacionapp.FormatoSalidaUsaGitWorktree(strings.TrimSpace(req.FormatoSalida)) {
+		return nil
+	}
+	proyecto, err := s.store.GetProject(fmt.Sprintf("%d", *req.ProyectoID))
+	if err != nil || proyecto == nil || strings.TrimSpace(proyecto.Slug) == "" {
+		return nil
+	}
+	proyectoSlug := strings.TrimSpace(proyecto.Slug)
+	agente := strings.TrimSpace(req.AgenteDestino)
+	if s.resolvedorWorktree != nil {
+		worktree, err := s.resolvedorWorktree.ResolveActiveWorktree(proyectoSlug, agente)
+		if err == nil && worktree != nil {
+			return worktree
+		}
+	}
+	if s.aseguradorWorktree != nil {
+		worktree, err := s.aseguradorWorktree.EnsureActiveWorktree(proyectoSlug, agente)
+		if err == nil && worktree != nil {
+			return worktree
+		}
+	}
+	return nil
+}
+
+func (s *Service) ResolverContextoEntregaMicroprogramacion(agente string, proyectoID *int64) (*ContextoEntregaMicroprogramacion, error) {
+	contextos, err := s.resolverContextosEntregaMicroprogramacion(agente, proyectoID, nil)
+	if err != nil || len(contextos) == 0 {
+		return nil, err
+	}
+	return contextos[0], nil
+}
+
+func (s *Service) ResolverContextoEntregaMicroprogramacionParaRespuesta(agente string, proyectoID *int64, respuesta string) (*ContextoEntregaMicroprogramacion, error) {
+	archivos := microprogramacionapp.ExtraerArchivosEntrega(respuesta)
+	contextos, err := s.resolverContextosEntregaMicroprogramacion(agente, proyectoID, archivos)
+	if err != nil || len(contextos) == 0 {
+		return nil, err
+	}
+	return contextos[0], nil
+}
+
+func (s *Service) resolverContextosEntregaMicroprogramacion(agente string, proyectoID *int64, archivos []microprogramacionapp.ArchivoEntrega) ([]*ContextoEntregaMicroprogramacion, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil, fmt.Errorf("agente obligatorio")
+	}
+	orders, err := s.store.ListRuntimeOrders(db.FiltroRuntimeOrders{
+		Agente:     &agente,
+		ProyectoID: proyectoID,
+		Limit:      50,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var candidatos []*ContextoEntregaMicroprogramacion
+	for _, order := range orders {
+		ctx, err := contextoEntregaMicroprogramacionDesdeOrder(order)
+		if err != nil {
+			return nil, err
+		}
+		if ctx == nil {
+			continue
+		}
+		if !contextoEntregaMicroprogramacionCoincideArchivos(ctx, archivos) {
+			continue
+		}
+		candidatos = append(candidatos, ctx)
+	}
+	sort.Slice(candidatos, func(i, j int) bool {
+		return candidatos[i].RuntimeOrderID > candidatos[j].RuntimeOrderID
+	})
+	return candidatos, nil
+}
+
+func (s *Service) CompletarEntregasMicroprogramacionParaRespuesta(agente string, proyectoID *int64, respuesta, receiptSource string) (int, error) {
+	contextos, err := s.resolverContextosEntregaMicroprogramacion(strings.TrimSpace(agente), proyectoID, microprogramacionapp.ExtraerArchivosEntrega(respuesta))
+	if err != nil {
+		return 0, err
+	}
+	completadas := 0
+	vistos := map[int64]struct{}{}
+	for _, ctx := range contextos {
+		if ctx == nil || ctx.RuntimeOrderID <= 0 {
+			continue
+		}
+		if _, ok := vistos[ctx.RuntimeOrderID]; ok {
+			continue
+		}
+		vistos[ctx.RuntimeOrderID] = struct{}{}
+		if err := s.CompletarEntregaMicroprogramacion(ctx.RuntimeOrderID, receiptSource); err != nil {
+			return completadas, err
+		}
+		completadas++
+	}
+	return completadas, nil
+}
+
+func (s *Service) MaterializarEntregaMicroprogramacionActivaDesdeRespuesta(agente string, proyectoID *int64, proyectoSlug, respuesta, evidencia, receiptSource string) (*microprogramacionapp.ResultadoMaterializarEntrega, error) {
+	if s.materializadorEntrega == nil {
+		return nil, fmt.Errorf("materializador de entrega no configurado")
+	}
+	ctx, err := s.ResolverContextoEntregaMicroprogramacionParaRespuesta(strings.TrimSpace(agente), proyectoID, respuesta)
+	if err != nil {
+		return nil, err
+	}
+	if ctx == nil || ctx.EspecificacionID <= 0 {
+		return nil, nil
+	}
+	if microprogramacionapp.FormatoSalidaUsaGitWorktree(ctx.FormatoSalida) {
+		return nil, nil
+	}
+	proyectoRef := strings.TrimSpace(proyectoSlug)
+	if proyectoRef == "" && proyectoID != nil && *proyectoID > 0 {
+		proyectoRef = strconv.FormatInt(*proyectoID, 10)
+	}
+	if strings.TrimSpace(proyectoRef) == "" {
+		return nil, fmt.Errorf("proyecto obligatorio para materializar entrega")
+	}
+	proyecto, err := s.store.GetProject(proyectoRef)
+	if err != nil {
+		return nil, err
+	}
+	if proyecto == nil || strings.TrimSpace(proyecto.RutaAbs) == "" {
+		return nil, fmt.Errorf("proyecto sin ruta absoluta para materializar entrega")
+	}
+	resultado, err := s.materializadorEntrega.MaterializarEntregaDesdeRespuesta(
+		ctx.EspecificacionID,
+		strings.TrimSpace(proyecto.RutaAbs),
+		respuesta,
+		strings.TrimSpace(evidencia),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.CompletarEntregasMicroprogramacionParaRespuesta(agente, proyectoID, respuesta, strings.TrimSpace(receiptSource)); err != nil {
+		return nil, err
+	}
+	return resultado, nil
+}
+
+func (s *Service) ReencolarCorreccionEntregaMicroprogramacion(runtimeOrderID int64, detalle string) (int64, error) {
+	if runtimeOrderID <= 0 {
+		return 0, fmt.Errorf("runtime order obligatoria")
+	}
+	order, err := s.store.GetRuntimeOrder(runtimeOrderID)
+	if err != nil {
+		return 0, err
+	}
+	if order == nil {
+		return 0, fmt.Errorf("runtime order no encontrada")
+	}
+	if strings.TrimSpace(order.Tipo) != "send_instruction" {
+		return 0, fmt.Errorf("runtime order %d no es send_instruction", runtimeOrderID)
+	}
+	payload, err := decodePayloadMicroprogramacion(order.PayloadJSON)
+	if err != nil {
+		return 0, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(stringAny(payload["source"])), "microprogramacion") {
+		return 0, fmt.Errorf("runtime order %d no es de microprogramacion", runtimeOrderID)
+	}
+	micro, _ := payload["microprogramacion"].(map[string]any)
+	if micro == nil {
+		return 0, fmt.Errorf("runtime order %d sin metadata de microprogramacion", runtimeOrderID)
+	}
+	intentoCorreccion := int64Any(payload["correccion_intento"])
+	if intentoCorreccion >= 1 {
+		return 0, nil
+	}
+	motivo := strings.TrimSpace(detalle)
+	if motivo == "" {
+		motivo = "entrega invalida rechazada por Orquesta"
+	}
+	textoBase := strings.TrimSpace(stringAny(payload["texto"]))
+	if textoBase == "" {
+		return 0, fmt.Errorf("runtime order %d sin texto base", runtimeOrderID)
+	}
+	textoCorreccion := strings.TrimSpace(textoBase + "\n\nCORRECCION_OBLIGATORIA:\nLa entrega anterior fue rechazada por Orquesta.\nERROR_EXACTO: " + motivo + "\nReescribe solo los ficheros del WRITE_SET. Devuelve de nuevo una entrega completa valida que compile.")
+	nuevoPayload := map[string]any{}
+	for key, value := range payload {
+		nuevoPayload[key] = value
+	}
+	delete(nuevoPayload, "mailbox_id")
+	delete(nuevoPayload, "mailbox_kind")
+	nuevoPayload["texto"] = textoCorreccion
+	nuevoPayload["correccion_intento"] = intentoCorreccion + 1
+	nuevoPayload["correccion_motivo"] = motivo
+	if err := s.supersederMicroprogramacionAbiertaEquivalente(strings.TrimSpace(order.Agente), order.ProyectoID, micro); err != nil {
+		return 0, err
+	}
+	raw, err := json.Marshal(nuevoPayload)
+	if err != nil {
+		return 0, fmt.Errorf("serializando payload de correccion: %w", err)
+	}
+	orderID, err := s.CreateRuntimeOrder(&db.RuntimeOrder{
+		Agente:      strings.TrimSpace(order.Agente),
+		ProyectoID:  order.ProyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: string(raw),
+	})
+	if err != nil {
+		return 0, err
+	}
+	return orderID, nil
+}
+
+func (s *Service) CompletarEntregaMicroprogramacion(runtimeOrderID int64, receiptSource string) error {
+	if runtimeOrderID <= 0 {
+		return fmt.Errorf("runtime order obligatoria")
+	}
+	order, err := s.store.GetRuntimeOrder(runtimeOrderID)
+	if err != nil {
+		return err
+	}
+	if order == nil {
+		return fmt.Errorf("runtime order no encontrada")
+	}
+	if strings.TrimSpace(order.Tipo) != "send_instruction" {
+		return fmt.Errorf("runtime order %d no es send_instruction", runtimeOrderID)
+	}
+	payload, err := decodePayloadMicroprogramacion(order.PayloadJSON)
+	if err != nil {
+		return err
+	}
+	if mailboxID := int64Any(payload["mailbox_id"]); mailboxID > 0 {
+		if err := s.store.MarkRuntimeMailboxConsumed(mailboxID); err != nil {
+			return err
+		}
+	}
+	resultadoJSON := mergeRuntimeOrderResultJSONApp(order.ResultadoJSON, map[string]any{
+		"ok":                  true,
+		"mailbox_id":          int64Any(payload["mailbox_id"]),
+		"mailbox_only":        int64Any(payload["mailbox_id"]) > 0,
+		"delivery_receipt_at": time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	resultadoJSON = fusionarResultadoDispatchDurable(resultadoJSON, EntradaResultadoDispatchDurable{
+		EstadoDispatch: DispatchEntregada,
+		EstadoEntrega:  "delivered",
+		ReceiptSource:  strings.TrimSpace(receiptSource),
+		UltimaRazon:    "entrega valida confirmada por la app",
+	})
+	return s.store.MarkRuntimeOrderState(runtimeOrderID, "completada", resultadoJSON, "")
+}
+
+func (s *Service) RegistrarEntregaGitMicroprogramacionActiva(agente string, proyectoID *int64, proyectoSlug, evidencia, solicitadoPor string) (*ResultadoEntregaGitMicroprogramacionActiva, error) {
+	return s.registrarEntregaGitMicroprogramacionActiva(agente, proyectoID, proyectoSlug, evidencia, solicitadoPor, microprogramacionapp.EntradaRegistrarEntregaGit{})
+}
+
+func (s *Service) RegistrarEntregaGitMicroprogramacionActivaPreferente(agente string, proyectoID *int64, proyectoSlug, evidencia, solicitadoPor string, entrada microprogramacionapp.EntradaRegistrarEntregaGit) (*ResultadoEntregaGitMicroprogramacionActiva, error) {
+	return s.registrarEntregaGitMicroprogramacionActiva(agente, proyectoID, proyectoSlug, evidencia, solicitadoPor, entrada)
+}
+
+func (s *Service) registrarEntregaGitMicroprogramacionActiva(agente string, proyectoID *int64, proyectoSlug, evidencia, solicitadoPor string, entrada microprogramacionapp.EntradaRegistrarEntregaGit) (*ResultadoEntregaGitMicroprogramacionActiva, error) {
+	if s.registradorEntregaGit == nil {
+		return nil, fmt.Errorf("registrador de entrega git no configurado")
+	}
+	ctx, err := s.ResolverContextoEntregaMicroprogramacion(strings.TrimSpace(agente), proyectoID)
+	if err != nil {
+		return nil, err
+	}
+	if ctx == nil || !microprogramacionapp.FormatoSalidaUsaGitWorktree(ctx.FormatoSalida) {
+		return nil, nil
+	}
+	entrada.Agente = strings.TrimSpace(agente)
+	entrada.ProyectoID = proyectoID
+	entrada.ProyectoSlug = strings.TrimSpace(proyectoSlug)
+	entrada.Evidencia = strings.TrimSpace(evidencia)
+	entrada.SolicitadoPor = strings.TrimSpace(solicitadoPor)
+	if entrada.PreferenciaWorktreeID == nil && ctx.WorktreeID != nil && *ctx.WorktreeID > 0 {
+		entrada.PreferenciaWorktreeID = ctx.WorktreeID
+	}
+	if strings.TrimSpace(entrada.PreferenciaRutaWorktree) == "" {
+		entrada.PreferenciaRutaWorktree = strings.TrimSpace(ctx.RutaWorktree)
+	}
+	if strings.TrimSpace(entrada.PreferenciaBranch) == "" {
+		entrada.PreferenciaBranch = strings.TrimSpace(ctx.BranchWorktree)
+	}
+	if strings.TrimSpace(entrada.PreferenciaBaseRef) == "" {
+		entrada.PreferenciaBaseRef = strings.TrimSpace(ctx.BaseRefWorktree)
+	}
+	resultado, err := s.registradorEntregaGit.RegistrarEntregaGit(ctx.EspecificacionID, entrada)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.CompletarEntregaMicroprogramacion(ctx.RuntimeOrderID, "git_worktree"); err != nil {
+		return nil, err
+	}
+	return &ResultadoEntregaGitMicroprogramacionActiva{
+		Contexto: ctx,
+		Entrega:  resultado,
+	}, nil
+}
+
+func (s *Service) IntentarRegistrarEntregaGitMicroprogramacionActiva(agente string, proyectoID *int64, proyectoSlug, evidencia, solicitadoPor string) (*ResultadoEntregaGitMicroprogramacionActiva, error) {
+	resultado, err := s.RegistrarEntregaGitMicroprogramacionActiva(agente, proyectoID, proyectoSlug, evidencia, solicitadoPor)
+	if err == nil || resultado != nil {
+		return resultado, err
+	}
+	if entregaGitSinCambios(err) {
+		return nil, nil
+	}
+	return nil, err
+}
+
+func entregaGitSinCambios(err error) bool {
+	if err == nil {
+		return false
+	}
+	texto := strings.ToLower(strings.TrimSpace(err.Error()))
+	switch {
+	case strings.Contains(texto, "no existe entrega git capturada"):
+		return true
+	case strings.Contains(texto, "no contiene archivos modificados"):
+		return true
+	case strings.Contains(texto, "no incluye el archivo objetivo"):
+		return true
+	}
+	return false
 }
 
 func (s *Service) SendRuntimeMailbox(msg *db.RuntimeMailboxMessage) (int64, error) {
@@ -608,6 +1348,146 @@ func (s *Service) ListRuntimeMailbox(filtro db.FiltroRuntimeMailbox) ([]*db.Runt
 	return s.store.ListRuntimeMailbox(filtro)
 }
 
+func contextoEntregaMicroprogramacionDesdeOrder(order *db.RuntimeOrder) (*ContextoEntregaMicroprogramacion, error) {
+	if order == nil || strings.TrimSpace(order.Tipo) != "send_instruction" || strings.TrimSpace(order.PayloadJSON) == "" {
+		return nil, nil
+	}
+	payload, err := decodePayloadMicroprogramacion(order.PayloadJSON)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(stringMapValue(payload, "source")) != "microprogramacion" {
+		return nil, nil
+	}
+	micro, _ := payload["microprogramacion"].(map[string]any)
+	if micro == nil {
+		return nil, nil
+	}
+	especificacionID := int64Any(micro["especificacion_id"])
+	if especificacionID <= 0 {
+		return nil, nil
+	}
+	ctx := &ContextoEntregaMicroprogramacion{
+		RuntimeOrderID:   order.ID,
+		EspecificacionID: especificacionID,
+		ArchivoObjetivo:  strings.TrimSpace(stringAny(micro["archivo_objetivo"])),
+		SimboloObjetivo:  strings.TrimSpace(stringAny(micro["simbolo_objetivo"])),
+		WriteSet:         stringSliceAny(micro["write_set"]),
+		FormatoSalida:    strings.TrimSpace(stringAny(micro["formato_salida"])),
+		RutaWorktree:     strings.TrimSpace(stringAny(micro["ruta_worktree"])),
+		BranchWorktree:   strings.TrimSpace(stringAny(micro["branch_worktree"])),
+		BaseRefWorktree:  strings.TrimSpace(stringAny(micro["base_ref_worktree"])),
+	}
+	if worktreeID := int64Any(micro["worktree_id"]); worktreeID > 0 {
+		ctx.WorktreeID = &worktreeID
+	}
+	return ctx, nil
+}
+
+func decodePayloadMicroprogramacion(raw string) (map[string]any, error) {
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return nil, fmt.Errorf("payload_json inválido: %w", err)
+	}
+	return payload, nil
+}
+
+func stringMapValue(payload map[string]any, key string) string {
+	if payload == nil {
+		return ""
+	}
+	return stringAny(payload[key])
+}
+
+func stringAny(v any) string {
+	s, _ := v.(string)
+	return s
+}
+
+func int64Any(v any) int64 {
+	switch value := v.(type) {
+	case float64:
+		return int64(value)
+	case int64:
+		return value
+	case int:
+		return int64(value)
+	default:
+		return 0
+	}
+}
+
+func stringSliceAny(v any) []string {
+	switch typed := v.(type) {
+	case []string:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if s := strings.TrimSpace(item); s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	items, _ := v.([]any)
+	if len(items) == 0 {
+		return nil
+	}
+	resultado := make([]string, 0, len(items))
+	for _, item := range items {
+		if s := strings.TrimSpace(stringAny(item)); s != "" {
+			resultado = append(resultado, s)
+		}
+	}
+	return resultado
+}
+
+func contextoEntregaMicroprogramacionCoincideArchivos(ctx *ContextoEntregaMicroprogramacion, archivos []microprogramacionapp.ArchivoEntrega) bool {
+	if ctx == nil {
+		return false
+	}
+	if len(archivos) == 0 {
+		return true
+	}
+	if len(ctx.WriteSet) == 0 {
+		return false
+	}
+	writeSet := make(map[string]struct{}, len(ctx.WriteSet))
+	for _, ruta := range ctx.WriteSet {
+		ruta = strings.TrimSpace(ruta)
+		if ruta != "" {
+			writeSet[ruta] = struct{}{}
+		}
+	}
+	if len(writeSet) == 0 {
+		return false
+	}
+	for _, archivo := range archivos {
+		ruta := strings.TrimSpace(archivo.RutaRelativa)
+		if ruta == "" {
+			continue
+		}
+		if _, ok := writeSet[ruta]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func mergeRuntimeOrderResultJSONApp(base string, values map[string]any) string {
+	resultado := map[string]any{}
+	if strings.TrimSpace(base) != "" {
+		_ = json.Unmarshal([]byte(base), &resultado)
+	}
+	for key, value := range values {
+		resultado[key] = value
+	}
+	raw, err := json.Marshal(resultado)
+	if err != nil {
+		return strings.TrimSpace(base)
+	}
+	return string(raw)
+}
+
 func (s *Service) GetRuntimeMailbox(id int64) (*db.RuntimeMailboxMessage, error) {
 	return s.store.GetRuntimeMailbox(id)
 }
@@ -618,6 +1498,24 @@ func (s *Service) MarkRuntimeMailboxDelivered(id int64) error {
 
 func (s *Service) MarkRuntimeMailboxConsumed(id int64) error {
 	return s.store.MarkRuntimeMailboxConsumed(id)
+}
+
+func (s *Service) ClearRuntimeMailbox(filter db.FiltroRuntimeMailbox) ([]int64, error) {
+	items, err := s.store.ListRuntimeMailbox(filter)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int64, 0, len(items))
+	for _, item := range items {
+		if item == nil || item.ID <= 0 {
+			continue
+		}
+		if err := s.store.MarkRuntimeMailboxConsumed(item.ID); err != nil {
+			return ids, err
+		}
+		ids = append(ids, item.ID)
+	}
+	return ids, nil
 }
 
 func (s *Service) CreateRuntimeCheckpoint(checkpoint *db.RuntimeCheckpoint) (int64, error) {
@@ -725,6 +1623,13 @@ func (s *Service) EnqueueAgentControl(req AgentControlRequest) (int64, string, e
 		} else if handle.RuntimeID != nil {
 			runtimeID = handle.RuntimeID
 		}
+		if accion == "resume" && agentControlResumeRequiresFreshStart(handle) {
+			accion = "start"
+			handleID = nil
+			runtimeID = nil
+		}
+	} else if accion == "resume" {
+		accion = "start"
 	}
 
 	payloadJSON, err := json.Marshal(AgentControlPayload{
@@ -736,6 +1641,7 @@ func (s *Service) EnqueueAgentControl(req AgentControlRequest) (int64, string, e
 		Perfil:       strings.TrimSpace(req.Perfil),
 		Motivo:       strings.TrimSpace(req.Motivo),
 		Por:          valueOrFallback(strings.TrimSpace(req.Por), "orquesta"),
+		TareaID:      req.TareaID,
 	})
 	if err != nil {
 		return 0, "", err
@@ -759,6 +1665,21 @@ func (s *Service) EnqueueAgentControl(req AgentControlRequest) (int64, string, e
 	}
 	s.store.Audit(valueOrFallback(strings.TrimSpace(req.Por), "orquesta"), "control_agente_"+accion, "runtime_order", orderID, detalle)
 	return orderID, accion, nil
+}
+
+func agentControlResumeRequiresFreshStart(handle *db.RuntimeHandle) bool {
+	if handle == nil {
+		return true
+	}
+	if db.RuntimeHandlePauseRequiresFreshStart(handle) {
+		return true
+	}
+	meta := mapFromJSONRuntimeHandle(handle.MetadataJSON)
+	if strings.EqualFold(mapStringValueRuntimeHandle(meta, "driver"), "tmux_cli_session") &&
+		!db.RuntimeHandlePermiteSendInputInteractivo(handle) {
+		return true
+	}
+	return false
 }
 
 type Repository struct{}
@@ -844,6 +1765,10 @@ func (Repository) ListRuntimeTranscript(filtro db.FiltroRuntimeTranscript) ([]*d
 	return db.ListarRuntimeTranscript(filtro)
 }
 
+func (Repository) RegisterRuntimeTranscript(entry *db.RuntimeTranscriptEntry) (int64, error) {
+	return db.RegistrarRuntimeTranscript(entry)
+}
+
 func (Repository) ListRuntimeSamples(runtimeID int64, limit int) ([]*db.RuntimeTelemetrySample, error) {
 	return db.ListarMuestrasRuntime(runtimeID, limit)
 }
@@ -862,6 +1787,10 @@ func (Repository) ListRuntimeOrders(filtro db.FiltroRuntimeOrders) ([]*db.Runtim
 
 func (Repository) GetRuntimeOrder(id int64) (*db.RuntimeOrder, error) {
 	return db.GetRuntimeOrder(id)
+}
+
+func (Repository) MarkRuntimeOrderState(id int64, estado, resultadoJSON, errorText string) error {
+	return db.MarcarRuntimeOrderEstado(id, estado, resultadoJSON, errorText)
 }
 
 func (Repository) CreateRuntimeMailbox(msg *db.RuntimeMailboxMessage) (int64, error) {
@@ -1081,14 +2010,14 @@ func (s *Service) ResolveTranscriptDeliveryHandle(item *db.RuntimeTranscriptEntr
 func (s *Service) resolveAgentControlHandle(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
 	if proyectoID != nil {
 		handle, err := s.store.GetOperationalRuntimeHandleForProject(agente, proyectoID)
-		if err != nil {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
 		if handle != nil {
 			return handle, nil
 		}
 		handle, err = s.store.GetActiveRuntimeHandleForProject(agente, proyectoID)
-		if err != nil {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
 		if handle != nil {
@@ -1096,13 +2025,17 @@ func (s *Service) resolveAgentControlHandle(agente string, proyectoID *int64) (*
 		}
 	}
 	handle, err := s.store.GetOperationalRuntimeHandle(agente)
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
 	if handle != nil {
 		return handle, nil
 	}
-	return s.store.GetActiveRuntimeHandle(agente)
+	handle, err = s.store.GetActiveRuntimeHandle(agente)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	return handle, nil
 }
 
 func (s *Service) canSupersedeStartHandle(agente string, proyectoID *int64, handle *db.RuntimeHandle) (bool, error) {
@@ -1149,19 +2082,19 @@ func (s *Service) runtimeForHandle(agente string, proyectoID *int64, handle *db.
 	)
 	if proyectoID != nil {
 		runtime, err = s.store.GetPrimaryRuntimeForProject(agente, proyectoID)
-		if err != nil {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
 	}
 	if runtime == nil {
 		runtime, err = s.store.GetPrimaryRuntime(agente)
-		if err != nil {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
 	}
 	if runtime == nil && handle != nil && handle.RuntimeID != nil && *handle.RuntimeID > 0 {
 		runtime, err = s.store.GetRuntime(*handle.RuntimeID)
-		if err != nil {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
 	}

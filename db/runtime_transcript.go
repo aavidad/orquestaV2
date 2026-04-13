@@ -835,10 +835,30 @@ func clasificarTextoTranscript(normalized string) string {
 		"sigsegv",
 		"traceback (most recent call last):",
 		"uncaught exception",
+		"unexpected error",
 	}
 	for _, phrase := range panicPhrases {
 		if strings.Contains(normalized, phrase) {
 			return "runtime_panic"
+		}
+	}
+	donePhrases := []string{
+		"<done/>",
+		"<done>",
+		"<completado/>",
+		"<terminado/>",
+		"tarea terminada",
+		"tarea completada",
+		"tarea finalizada",
+		"proceso terminado",
+		"pipeline step finished",
+		"he terminado la tarea",
+		"he terminado mi trabajo",
+		"acabo de terminar",
+	}
+	for _, phrase := range donePhrases {
+		if strings.Contains(normalized, phrase) {
+			return "task_completed"
 		}
 	}
 	crashPhrases := []string{

@@ -3077,6 +3077,78 @@ func ProcesarRuntimeOrdersBatch() (int, error) {
 	deferred, err := procesarRuntimeOrdersBatchTipos(runtimeOrderTiposDiferibles())
 	return reconciled + controlObsoletas + processed + promoted + deferred, err
 }
+func ProcesarHigieneRuntimesAutonomosBatch() (int, error) {
+	limit := configIntOrDefault("runtime_hygiene_autonomo_batch_size", 10)
+	if limit <= 0 {
+		limit = 10
+	}
+	rows, err := DB.Query(runtimeHandleSelectBase() + `
+		WHERE estado = 'activo'
+		  AND metadata_json LIKE '%"tarea_id":%'
+		ORDER BY COALESCE(last_seen_at, updated_at, created_at) ASC
+		LIMIT ?`, limit)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	handles := make([]*RuntimeHandle, 0, limit)
+	for rows.Next() {
+		handle, err := scanRuntimeHandle(rows)
+		if err != nil {
+			return 0, err
+		}
+		if handle != nil {
+			handles = append(handles, handle)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	processed := 0
+	for _, handle := range handles {
+		if handle == nil {
+			continue
+		}
+		meta := mapFromJSON(handle.MetadataJSON)
+		tareaID := int64FromMap(meta, "tarea_id")
+		if tareaID <= 0 {
+			continue
+		}
+		tarea, err := GetTarea(tareaID)
+		if err != nil || tarea == nil {
+			continue
+		}
+		if tarea.Estado == TareaCompletada || tarea.Estado == TareaCancelada {
+			lastSeen := handle.LastSeenAt
+			if lastSeen == nil {
+				lastSeen = &handle.UpdatedAt
+			}
+			idleLimit := time.Duration(configIntOrDefault("runtime_autonomo_idle_timeout_seconds", 300)) * time.Second
+			if time.Since(*lastSeen) > idleLimit {
+				if abierta, _ := existeRuntimeOrderAbiertaAgenteProyecto(strings.TrimSpace(handle.Agente), handle.ProyectoID, 0, "stop"); abierta {
+					continue
+				}
+				order := &RuntimeOrder{
+					Agente:     strings.TrimSpace(handle.Agente),
+					ProyectoID: handle.ProyectoID,
+					Prompt:     "stop",
+					Reason:     "higiene_autonoma:tarea_finalizada",
+					Source:     "server",
+					State:      "pending",
+				}
+				if _, err := RegistrarRuntimeOrder(order); err != nil {
+					return processed, err
+				}
+				Audit("server", "runtime_higiene_autonomo_stop_encolado", "handle", handle.ID, "tarea", tareaID, "agente", handle.Agente)
+				processed++
+			}
+		}
+	}
+	return processed, nil
+}
+
 
 func ProcesarRuntimeSupervisionBatch() (int, error) {
 	limit := configIntOrDefault("runtime_supervision_batch_size", 10)
@@ -4659,6 +4731,7 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) (err error) {
 		stringFromMap(payload, "modelo", ""),
 		stringFromMap(payload, "razonamiento", ""),
 		stringFromMap(payload, "perfil", ""),
+		int64PtrFromMap(payload, "tarea_id"),
 	)
 	if err != nil {
 		return err
@@ -7719,7 +7792,7 @@ func inferirTransporteArranque(arranque *controlruntime.ProcesoArrancado) string
 	return "cli"
 }
 
-func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int64, conectorRef, modelo, razonamiento, perfilTarea string) (*Agente, *Proyecto, *Conector, *Sesion, runtimeagente.ResumeContext, *bootstrapRuntimeData, *runtimeagente.LaunchPlan, error) {
+func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int64, conectorRef, modelo, razonamiento, perfilTarea string, tareaID *int64) (*Agente, *Proyecto, *Conector, *Sesion, runtimeagente.ResumeContext, *bootstrapRuntimeData, *runtimeagente.LaunchPlan, error) {
 	agente, err := GetAgente(strings.TrimSpace(agenteRef))
 	if err != nil {
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
@@ -7881,6 +7954,7 @@ func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int
 			Activo:       conector.Activo,
 		},
 		Resume: resume,
+		TareaID: tareaID,
 	})
 	if err != nil {
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
@@ -9995,6 +10069,35 @@ func intFromMap(m map[string]any, key string) int {
 		}
 	}
 	return 0
+}
+
+func int64PtrFromMap(m map[string]any, key string) *int64 {
+	if m == nil {
+		return nil
+	}
+	switch v := m[key].(type) {
+	case int:
+		val := int64(v)
+		return &val
+	case int64:
+		return &v
+	case float64:
+		val := int64(v)
+		return &val
+	case json.Number:
+		if n, err := v.Int64(); err == nil {
+			return &n
+		}
+	case string:
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return nil
+		}
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return &n
+		}
+	}
+	return nil
 }
 
 func stringFromMap(m map[string]any, key, fallback string) string {

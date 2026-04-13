@@ -8,9 +8,11 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package runtimeagente
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -53,6 +55,7 @@ type LaunchRequest struct {
 	PerfilTarea  string
 	Conector     ConnectorConfig
 	Resume       ResumeContext
+	TareaID      *int64
 }
 
 type LaunchPlan struct {
@@ -63,6 +66,8 @@ type LaunchPlan struct {
 	Args                 []string          `json:"args"`
 	Env                  map[string]string `json:"env"`
 	WorkingDir           string            `json:"working_dir"`
+	Branch               string            `json:"branch,omitempty"`
+	WorktreePath         string            `json:"worktree_path,omitempty"`
 	Modelo               string            `json:"modelo,omitempty"`
 	Razonamiento         string            `json:"razonamiento,omitempty"`
 	PerfilTarea          string            `json:"perfil_tarea,omitempty"`
@@ -76,6 +81,7 @@ type LaunchPlan struct {
 	MailboxDeliveryMode  string            `json:"mailbox_delivery_mode,omitempty"`
 	RemoteConfigJSON     string            `json:"remote_config_json,omitempty"`
 	Notas                []string          `json:"notas,omitempty"`
+	TareaID              *int64            `json:"tarea_id,omitempty"`
 }
 
 type Driver interface {
@@ -157,9 +163,12 @@ func (d commandDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 		Transporte:   d.transport,
 		Modo:         "launch",
 		WorkingDir:   workingDir,
+		Branch:       strings.TrimSpace(resume.Branch),
+		WorktreePath: inferWorktreePath(workingDir),
 		Modelo:       strings.TrimSpace(req.Modelo),
 		Razonamiento: strings.TrimSpace(req.Razonamiento),
 		PerfilTarea:  strings.TrimSpace(req.PerfilTarea),
+		TareaID:      req.TareaID,
 	}
 	applyExecutionProfile(plan, metadata)
 
@@ -177,6 +186,7 @@ func (d commandDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 	plan.Comando = comando
 	plan.Args = expandedArgs
 	plan.Env = expandConnectorEnv(env, vars)
+	asegurarPathParaComando(plan.Env, plan.Comando)
 	if applyLocalControlHints(plan, metadata) {
 		plan.Notas = append(plan.Notas, "El conector aporta capacidades locales de control desde metadata_json.")
 	}
@@ -188,6 +198,7 @@ func (d commandDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 	if resumeActivaModoLocal(resume) {
 		plan.Modo = "resume"
 		plan.NativeResume = applyResumeHints(plan, metadata, resume)
+		applyResumeDeliveryHints(plan, req)
 		if !plan.NativeResume {
 			plan.ContinuityPrompt = construirPromptContinuidad(req)
 			plan.Notas = append(plan.Notas, "El conector no declara estrategia nativa de reanudación; se devuelve prompt de continuidad.")
@@ -225,9 +236,12 @@ func (d remoteDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 		Comando:      req.Conector.Comando,
 		Env:          env,
 		WorkingDir:   strings.TrimSpace(req.ProyectoRuta),
+		Branch:       strings.TrimSpace(resume.Branch),
+		WorktreePath: inferWorktreePath(strings.TrimSpace(req.ProyectoRuta)),
 		Modelo:       strings.TrimSpace(req.Modelo),
 		Razonamiento: strings.TrimSpace(req.Razonamiento),
 		PerfilTarea:  strings.TrimSpace(req.PerfilTarea),
+		TareaID:      req.TareaID,
 		Notas: []string{
 			"El transporte remoto requiere un adaptador externo que consuma este plan.",
 		},
@@ -245,6 +259,18 @@ func (d remoteDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 	return plan, nil
 }
 
+func inferWorktreePath(workingDir string) string {
+	workingDir = strings.TrimSpace(workingDir)
+	if workingDir == "" {
+		return ""
+	}
+	normalized := filepath.ToSlash(workingDir)
+	if strings.Contains(normalized, "/.orquesta-worktrees/") {
+		return workingDir
+	}
+	return ""
+}
+
 func resolveConnectorCommandPath(command, projectPath string) string {
 	command = strings.TrimSpace(command)
 	if command == "" {
@@ -254,6 +280,12 @@ func resolveConnectorCommandPath(command, projectPath string) string {
 		return filepath.Clean(command)
 	}
 	if !strings.Contains(command, string(os.PathSeparator)) && !strings.Contains(command, "/") {
+		if resolved, err := exec.LookPath(command); err == nil && strings.TrimSpace(resolved) != "" {
+			return filepath.Clean(resolved)
+		}
+		if resolved := resolveConnectorCommandPathFromUserHome(command); resolved != "" {
+			return resolved
+		}
 		return command
 	}
 	projectPath = strings.TrimSpace(projectPath)
@@ -271,9 +303,74 @@ func resolveConnectorCommandPath(command, projectPath string) string {
 	return filepath.Clean(filepath.Join(projectPath, command))
 }
 
+func resolveConnectorCommandPathFromUserHome(command string) string {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return ""
+	}
+	candidates := []string{
+		filepath.Join(home, ".local", "bin", command),
+		filepath.Join(home, ".cargo", "bin", command),
+	}
+	if matches, err := filepath.Glob(filepath.Join(home, ".nvm", "versions", "node", "*", "bin", command)); err == nil && len(matches) > 0 {
+		sort.Strings(matches)
+		for i := len(matches) - 1; i >= 0; i-- {
+			candidates = append(candidates, matches[i])
+		}
+	}
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return filepath.Clean(candidate)
+		}
+	}
+	return ""
+}
+
+func asegurarPathParaComando(env map[string]string, command string) {
+	command = strings.TrimSpace(command)
+	if !filepath.IsAbs(command) {
+		return
+	}
+	dir := strings.TrimSpace(filepath.Dir(command))
+	if dir == "" || dir == "." || dir == string(os.PathSeparator) {
+		return
+	}
+	current := ""
+	if env != nil {
+		current = strings.TrimSpace(env["PATH"])
+	}
+	if current == "" {
+		current = strings.TrimSpace(os.Getenv("PATH"))
+	}
+	parts := strings.Split(current, string(os.PathListSeparator))
+	for _, part := range parts {
+		if filepath.Clean(strings.TrimSpace(part)) == filepath.Clean(dir) {
+			if env != nil {
+				env["PATH"] = current
+			}
+			return
+		}
+	}
+	if env == nil {
+		return
+	}
+	if current == "" {
+		env["PATH"] = dir
+		return
+	}
+	env["PATH"] = dir + string(os.PathListSeparator) + current
+}
+
 func canonicalCodexProfileWrapper(req LaunchRequest, resolvedCommand string) string {
 	resolvedCommand = strings.TrimSpace(resolvedCommand)
 	if filepath.Base(resolvedCommand) == "codex-perfil" {
+		return resolvedCommand
+	}
+	if !codexDebeUsarWrapperPerfiles() {
 		return resolvedCommand
 	}
 	if wrapper := codexProfileWrapperPath(strings.TrimSpace(req.ProyectoRuta)); wrapper != "" {
@@ -283,6 +380,9 @@ func canonicalCodexProfileWrapper(req LaunchRequest, resolvedCommand string) str
 }
 
 func canonicalCodexProfileArgs(req LaunchRequest, args []string) []string {
+	if !codexDebeUsarWrapperPerfiles() {
+		return args
+	}
 	profile := strings.TrimSpace(req.Agente)
 	if profile == "" {
 		return args
@@ -294,6 +394,11 @@ func canonicalCodexProfileArgs(req LaunchRequest, args []string) []string {
 	out = append(out, profile)
 	out = append(out, args...)
 	return out
+}
+
+func codexDebeUsarWrapperPerfiles() bool {
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_USE_PROFILE_WRAPPER")))
+	return raw == "1" || raw == "true" || raw == "yes"
 }
 
 func codexProfileWrapperPath(projectPath string) string {
@@ -426,6 +531,60 @@ func isOllamaCLIConnector(conector ConnectorConfig) bool {
 	return EsConectorFamiliaOllama(conector.Slug, comando)
 }
 
+func ModeloCompatibleConConector(conector ConnectorConfig, modelo string) bool {
+	modelo = strings.ToLower(strings.TrimSpace(modelo))
+	if modelo == "" {
+		return true
+	}
+	if isOllamaCLIConnector(conector) {
+		return true
+	}
+	familia := ""
+	metadata, err := parseAnyMapJSON(conector.MetadataJSON)
+	if err == nil {
+		metadata = normalizeConnectorMetadata(conector, metadata)
+		familia = strings.ToLower(strings.TrimSpace(stringMetadata(metadata, "familia")))
+	}
+	if familia == "" {
+		switch {
+		case isCodexCLIConnector(conector):
+			familia = "openai"
+		default:
+			comando := strings.ToLower(strings.TrimSpace(filepath.Base(strings.TrimSpace(conector.Comando))))
+			switch comando {
+			case "claude", "claude-code":
+				familia = "anthropic"
+			case "gemini":
+				familia = "google"
+			}
+		}
+	}
+	switch familia {
+	case "openai":
+		return modeloCompatibleFamiliaOpenAI(modelo)
+	case "anthropic":
+		return strings.HasPrefix(modelo, "claude")
+	case "google":
+		return strings.HasPrefix(modelo, "gemini")
+	}
+	return true
+}
+
+func modeloCompatibleFamiliaOpenAI(modelo string) bool {
+	for _, prefix := range []string{
+		"gpt-",
+		"o1",
+		"o3",
+		"o4",
+		"codex",
+	} {
+		if strings.HasPrefix(modelo, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func SanitizarResumeParaConector(conector ConnectorConfig, resume ResumeContext) ResumeContext {
 	metadata, err := parseAnyMapJSON(conector.MetadataJSON)
 	if err != nil {
@@ -533,15 +692,18 @@ func buildRemoteConfigJSON(req LaunchRequest, metadata map[string]any) string {
 	if timeoutMS := intMetadata(metadata, "timeout_ms"); timeoutMS > 0 {
 		cfg["timeout_ms"] = timeoutMS
 	}
-	cfg["launch_path"] = metadataStringOrDefault(metadata, "launch_path", "/launch")
-	cfg["resume_path"] = metadataStringOrDefault(metadata, "resume_path", "/resume")
+	launchPathDefault, resumePathDefault, statusPathDefault, pausePathDefault, continuePathDefault, stopPathDefault, inputPathDefault := resolverRutasRemotasPorDefectoConector(req.Conector, metadata)
+	cfg["launch_path"] = metadataStringOrDefault(metadata, "launch_path", launchPathDefault)
+	cfg["resume_path"] = metadataStringOrDefault(metadata, "resume_path", resumePathDefault)
 	if statusPath, ok := metadataString(metadata, "status_path"); ok && strings.TrimSpace(statusPath) != "" {
 		cfg["status_path"] = statusPath
+	} else if strings.TrimSpace(statusPathDefault) != "" {
+		cfg["status_path"] = statusPathDefault
 	}
-	cfg["pause_path"] = metadataStringOrDefault(metadata, "pause_path", "/pause")
-	cfg["continue_path"] = metadataStringOrDefault(metadata, "continue_path", "/continue")
-	cfg["stop_path"] = metadataStringOrDefault(metadata, "stop_path", "/stop")
-	cfg["input_path"] = metadataStringOrDefault(metadata, "input_path", "/input")
+	cfg["pause_path"] = metadataStringOrDefault(metadata, "pause_path", pausePathDefault)
+	cfg["continue_path"] = metadataStringOrDefault(metadata, "continue_path", continuePathDefault)
+	cfg["stop_path"] = metadataStringOrDefault(metadata, "stop_path", stopPathDefault)
+	cfg["input_path"] = metadataStringOrDefault(metadata, "input_path", inputPathDefault)
 	cfg["session_id_field"] = metadataStringOrDefault(metadata, "session_id_field", "external_session_id")
 	cfg["handle_ref_field"] = metadataStringOrDefault(metadata, "handle_ref_field", "handle_ref")
 	if hasMetadataKey(metadata, "can_send_input") {
@@ -580,6 +742,28 @@ func buildRemoteConfigJSON(req LaunchRequest, metadata map[string]any) string {
 	return string(data)
 }
 
+func resolverRutasRemotasPorDefectoConector(conector ConnectorConfig, metadata map[string]any) (launchPath, resumePath, statusPath, pausePath, continuePath, stopPath, inputPath string) {
+	launchPath = "/launch"
+	resumePath = "/resume"
+	statusPath = ""
+	pausePath = "/pause"
+	continuePath = "/continue"
+	stopPath = "/stop"
+	inputPath = "/input"
+
+	slug := strings.ToLower(strings.TrimSpace(conector.Slug))
+	if slug == "ollama_pool_local" || slug == "ollama-pool-local" || boolMetadata(metadata, "pool_compartido") {
+		return "/api/runtime/ollama-pool/launch",
+			"/resume",
+			"/api/runtime/ollama-pool/status",
+			"/pause",
+			"/continue",
+			"/api/runtime/ollama-pool/stop",
+			"/api/runtime/ollama-pool/input"
+	}
+	return launchPath, resumePath, statusPath, pausePath, continuePath, stopPath, inputPath
+}
+
 func applyLocalControlHints(plan *LaunchPlan, metadata map[string]any) bool {
 	if plan == nil {
 		return false
@@ -598,6 +782,25 @@ func applyLocalControlHints(plan *LaunchPlan, metadata map[string]any) bool {
 		plan.MailboxDeliveryMode = defaultMailboxDeliveryMode(plan.CanSendInput)
 	}
 	return applied
+}
+
+func applyResumeDeliveryHints(plan *LaunchPlan, req LaunchRequest) {
+	if plan == nil {
+		return
+	}
+	if !isCodexCLIRequest(req) {
+		return
+	}
+	if strings.TrimSpace(req.Resume.ExternalSessionID) == "" {
+		return
+	}
+	if plan.CanSendInput != nil && *plan.CanSendInput {
+		return
+	}
+	switch NormalizeMailboxDeliveryMode(plan.MailboxDeliveryMode) {
+	case "", MailboxDeliveryBootstrapOnly:
+		plan.MailboxDeliveryMode = MailboxDeliverySessionResume
+	}
 }
 
 func NormalizeMailboxDeliveryMode(raw string) string {
@@ -697,6 +900,7 @@ func connectorTemplateVars(req LaunchRequest, workingDir string) map[string]stri
 	if orquestaExecutable != "" {
 		orquestaBinDir = filepath.Dir(orquestaExecutable)
 	}
+	sessionUUID := generateConnectorSessionUUID()
 	return map[string]string{
 		"agent":               strings.TrimSpace(req.Agente),
 		"role":                strings.TrimSpace(req.Rol),
@@ -713,7 +917,24 @@ func connectorTemplateVars(req LaunchRequest, workingDir string) map[string]stri
 		"orquesta_bin_dir":    strings.TrimSpace(orquestaBinDir),
 		"host_path":           strings.TrimSpace(os.Getenv("PATH")),
 		"home":                strings.TrimSpace(os.Getenv("HOME")),
+		"session_uuid":        sessionUUID,
 	}
+}
+
+func generateConnectorSessionUUID() string {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return ""
+	}
+	raw[6] = (raw[6] & 0x0f) | 0x40
+	raw[8] = (raw[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		raw[0:4],
+		raw[4:6],
+		raw[6:8],
+		raw[8:10],
+		raw[10:16],
+	)
 }
 
 func expandConnectorTemplate(raw string, vars map[string]string) string {
@@ -1178,7 +1399,11 @@ func resumirResumePayloadCodex(raw string) string {
 		delete(obj, "checkpoint")
 	}
 	if mailbox, ok := obj["mailbox"].([]any); ok {
-		partes = append(partes, fmt.Sprintf("mailbox=%d", len(mailbox)))
+		label := fmt.Sprintf("mailbox=%d", len(mailbox))
+		if resumen := resumirMailboxPayload(mailbox); resumen != "" {
+			label += " " + resumen
+		}
+		partes = append(partes, label)
 		delete(obj, "mailbox")
 	}
 	if projectContext, ok := obj["project_context"]; ok {
@@ -1299,7 +1524,11 @@ func resumirResumePayload(raw string) string {
 		delete(obj, "checkpoint")
 	}
 	if mailbox, ok := obj["mailbox"].([]any); ok {
-		partes = append(partes, fmt.Sprintf("mailbox=%d", len(mailbox)))
+		label := fmt.Sprintf("mailbox=%d", len(mailbox))
+		if resumen := resumirMailboxPayload(mailbox); resumen != "" {
+			label += " " + resumen
+		}
+		partes = append(partes, label)
 		delete(obj, "mailbox")
 	}
 	for _, key := range []string{"project_context", "governance_catalog", "adopted_context"} {
@@ -1322,6 +1551,62 @@ func resumirResumePayload(raw string) string {
 		return "Resume payload disponible"
 	}
 	return "Resume payload: " + strings.Join(partes, ", ")
+}
+
+func resumirMailboxPayload(items []any) string {
+	if len(items) == 0 {
+		return ""
+	}
+	first, ok := items[0].(map[string]any)
+	if !ok {
+		return ""
+	}
+	kind := strings.TrimSpace(stringFromAny(first["kind"]))
+	payload, _ := first["payload"].(map[string]any)
+	if payload == nil {
+		return ""
+	}
+	partes := make([]string, 0, 4)
+	if kind != "" {
+		partes = append(partes, kind)
+	}
+	if accion := strings.TrimSpace(stringFromAny(payload["accion"])); accion != "" {
+		partes = append(partes, "accion="+accion)
+	}
+	if tareaID := int64FromAny(payload["tarea_id"]); tareaID > 0 {
+		partes = append(partes, fmt.Sprintf("tarea#%d", tareaID))
+	}
+	if micro, ok := payload["microprogramacion"].(map[string]any); ok {
+		if especID := int64FromAny(micro["especificacion_id"]); especID > 0 {
+			partes = append(partes, fmt.Sprintf("micro#%d", especID))
+		}
+	}
+	texto := strings.TrimSpace(stringFromAny(payload["instruction"]))
+	if texto == "" {
+		texto = strings.TrimSpace(stringFromAny(payload["texto"]))
+	}
+	if texto != "" {
+		partes = append(partes, truncarResumenMailbox(texto, 72))
+	}
+	if len(partes) == 0 {
+		return ""
+	}
+	return "[" + strings.Join(partes, " | ") + "]"
+}
+
+func truncarResumenMailbox(raw string, max int) string {
+	raw = strings.Join(strings.Fields(strings.TrimSpace(raw)), " ")
+	if raw == "" || max <= 0 {
+		return ""
+	}
+	runes := []rune(raw)
+	if len(runes) <= max {
+		return raw
+	}
+	if max <= 1 {
+		return string(runes[:max])
+	}
+	return string(runes[:max-1]) + "…"
 }
 
 func stringFromAny(v any) string {

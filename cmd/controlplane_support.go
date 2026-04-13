@@ -17,10 +17,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"orquesta/agentesapp"
+	"orquesta/capacidadapp"
 	"orquesta/db"
 	"orquesta/gitgobernanza"
 	"orquesta/internal/controlruntime"
@@ -28,6 +28,7 @@ import (
 	"orquesta/planocontrol"
 	"orquesta/reviewapp"
 	"orquesta/runtimeagente"
+	"orquesta/runtimesapp"
 	"orquesta/tareasapp"
 )
 
@@ -35,17 +36,12 @@ type dbAutomationService struct{}
 
 const autonomiaReplanTaskTitle = "Autonomía: replanificar backlog y abrir siguiente frente útil"
 
-var runtimeBudgetObservationBackgroundGate struct {
-	mu      sync.Mutex
-	expires time.Time
-}
+var runtimeBudgetObservationBackgroundGate = planocontrol.NewGate()
 
 var wakeRuntimeOrdersAfterTranscript = wakeControlPlaneRuntimeOrders
+var wakeRuntimeOrdersAfterMailbox = wakeControlPlaneRuntimeOrders
 
-var runtimeMailboxReevaluationGate struct {
-	mu   sync.Mutex
-	last map[string]time.Time
-}
+var runtimeMailboxReevaluationGate = planocontrol.NewThrottler()
 
 func runtimeMailboxReevaluationInterval() time.Duration {
 	return 2 * time.Minute
@@ -60,58 +56,34 @@ func runtimeMailboxShouldReevaluate(lane string, msgID, handleID int64) bool {
 		scope = "global"
 	}
 	key := scope + "|" + strings.TrimSpace(lane) + "|" + strconv.FormatInt(msgID, 10) + "|" + strconv.FormatInt(handleID, 10)
-	now := time.Now().UTC()
-	interval := runtimeMailboxReevaluationInterval()
-	runtimeMailboxReevaluationGate.mu.Lock()
-	defer runtimeMailboxReevaluationGate.mu.Unlock()
-	if runtimeMailboxReevaluationGate.last == nil {
-		runtimeMailboxReevaluationGate.last = map[string]time.Time{}
-	}
-	if last, ok := runtimeMailboxReevaluationGate.last[key]; ok && now.Sub(last) < interval {
-		return false
-	}
-	runtimeMailboxReevaluationGate.last[key] = now
-	return true
+	return runtimeMailboxReevaluationGate.Allow(key, runtimeMailboxReevaluationInterval())
 }
 
 func resetRuntimeMailboxReevaluationGate() {
-	runtimeMailboxReevaluationGate.mu.Lock()
-	defer runtimeMailboxReevaluationGate.mu.Unlock()
-	runtimeMailboxReevaluationGate.last = nil
+	runtimeMailboxReevaluationGate.Reset()
 }
 
 func resetAutonomiaIdleAutoassignGate() {
-	autonomiaIdleAutoassignGate.mu.Lock()
-	defer autonomiaIdleAutoassignGate.mu.Unlock()
-	autonomiaIdleAutoassignGate.last = nil
+	autonomiaIdleAutoassignGate.Reset()
 }
 
 func resetAutonomiaDegradedTaskGate() {
-	autonomiaDegradedTaskGate.mu.Lock()
-	defer autonomiaDegradedTaskGate.mu.Unlock()
-	autonomiaDegradedTaskGate.last = nil
+	autonomiaDegradedTaskGate.Reset()
 }
 
 func resetPresupuestoPrimerUsoSesionGate() {
-	presupuestoPrimerUsoSesionGate.mu.Lock()
-	defer presupuestoPrimerUsoSesionGate.mu.Unlock()
-	presupuestoPrimerUsoSesionGate.seen = nil
+	presupuestoPrimerUsoSesionGate.Reset()
 }
 
-var autonomiaActiveSessionsGate struct {
-	mu      sync.Mutex
-	expires time.Time
+func resetPipelineLocalDispatchGate() {
+	pipelineLocalDispatchGate.Reset()
 }
 
-var autonomiaIdleAutoassignGate struct {
-	mu   sync.Mutex
-	last map[string]time.Time
-}
+var autonomiaActiveSessionsGate = planocontrol.NewGate()
 
-var autonomiaDegradedTaskGate struct {
-	mu   sync.Mutex
-	last map[int64]time.Time
-}
+var autonomiaIdleAutoassignGate = planocontrol.NewThrottler()
+
+var autonomiaDegradedTaskGate = planocontrol.NewThrottler()
 
 const (
 	autonomiaDegradedTaskCooldown                = 12 * time.Minute
@@ -124,10 +96,7 @@ const (
 	autonomiaStuckRestartEscalationCountDefault  = 2
 )
 
-var presupuestoPrimerUsoSesionGate struct {
-	mu   sync.Mutex
-	seen map[string]time.Time
-}
+var presupuestoPrimerUsoSesionGate = planocontrol.NewThrottler()
 
 func autonomiaIdleAutoassignInterval() time.Duration {
 	seconds := controlPlaneConfigIntOrDefault("autonomia_idle_autoassign_interval_seconds", 300)
@@ -135,6 +104,48 @@ func autonomiaIdleAutoassignInterval() time.Duration {
 		seconds = 300
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+func pipelineLocalDispatchInterval() time.Duration {
+	seconds := controlPlaneConfigIntOrDefault("pipeline_local_dispatch_interval_seconds", 180)
+	if seconds <= 0 {
+		seconds = 180
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+var pipelineLocalDispatchGate = planocontrol.NewThrottler()
+
+func pipelineLocalDispatchShouldAttempt(key string) bool {
+	return pipelineLocalDispatchGate.Allow(key, pipelineLocalDispatchInterval())
+}
+
+
+func pipelineLocalDispatchKey(proyecto string, despacho *capacidadapp.DespachoPipelineLocal) string {
+	if despacho == nil {
+		return strings.TrimSpace(proyecto)
+	}
+	partes := []string{
+		strings.TrimSpace(proyecto),
+		strings.ToLower(strings.TrimSpace(despacho.Fase)),
+		strings.ToLower(strings.TrimSpace(despacho.Carril)),
+		strings.ToLower(strings.TrimSpace(despacho.AccionTarea)),
+		strconv.FormatInt(despacho.TareaObjetivoID, 10),
+		strings.ToLower(strings.TrimSpace(despacho.AgenteSugerido)),
+	}
+	return strings.Join(partes, "|")
+}
+
+func despachoPipelineRequiereRuntime(despacho *capacidadapp.DespachoPipelineLocal) bool {
+	if despacho == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(despacho.Carril)) {
+	case "premium_worktree", "revision_diff", "microprogramacion_local":
+		return true
+	default:
+		return false
+	}
 }
 
 func autonomiaCuentaCompartidaDisponible(agente string) (bool, string, error) {
@@ -147,18 +158,7 @@ func autonomiaIdleAutoassignShouldAttempt(agente string, proyectoID int64) bool 
 		return false
 	}
 	key := agente + "|" + strconv.FormatInt(proyectoID, 10)
-	now := time.Now().UTC()
-	interval := autonomiaIdleAutoassignInterval()
-	autonomiaIdleAutoassignGate.mu.Lock()
-	defer autonomiaIdleAutoassignGate.mu.Unlock()
-	if autonomiaIdleAutoassignGate.last == nil {
-		autonomiaIdleAutoassignGate.last = map[string]time.Time{}
-	}
-	if last, ok := autonomiaIdleAutoassignGate.last[key]; ok && now.Sub(last) < interval {
-		return false
-	}
-	autonomiaIdleAutoassignGate.last[key] = now
-	return true
+	return autonomiaIdleAutoassignGate.Allow(key, autonomiaIdleAutoassignInterval())
 }
 
 func presupuestoPrimerUsoSesion(nombre string) bool {
@@ -166,17 +166,9 @@ func presupuestoPrimerUsoSesion(nombre string) bool {
 	if nombre == "" {
 		return false
 	}
-	presupuestoPrimerUsoSesionGate.mu.Lock()
-	defer presupuestoPrimerUsoSesionGate.mu.Unlock()
-	if presupuestoPrimerUsoSesionGate.seen == nil {
-		presupuestoPrimerUsoSesionGate.seen = map[string]time.Time{}
-	}
-	if _, ok := presupuestoPrimerUsoSesionGate.seen[nombre]; ok {
-		return false
-	}
-	presupuestoPrimerUsoSesionGate.seen[nombre] = time.Now().UTC()
-	return true
+	return presupuestoPrimerUsoSesionGate.Allow(nombre, 365*24*time.Hour)
 }
+
 
 func controlPlaneHasOperationalHandles() bool {
 	handles, err := db.ListarRuntimeHandlesActivosOperativosRecientes()
@@ -304,36 +296,22 @@ func autonomiaActiveSessionsInterval() time.Duration {
 }
 
 func allowRuntimeBudgetBackgroundObservation(now time.Time) bool {
-	runtimeBudgetObservationBackgroundGate.mu.Lock()
-	defer runtimeBudgetObservationBackgroundGate.mu.Unlock()
-	if !runtimeBudgetObservationBackgroundGate.expires.IsZero() && now.Before(runtimeBudgetObservationBackgroundGate.expires) {
-		return false
-	}
-	runtimeBudgetObservationBackgroundGate.expires = now.Add(runtimeBudgetBackgroundObservationInterval())
-	return true
+	return runtimeBudgetObservationBackgroundGate.AllowAt(runtimeBudgetBackgroundObservationInterval(), now)
 }
 
 func allowAutonomiaActiveSessionsObservation(now time.Time) bool {
-	autonomiaActiveSessionsGate.mu.Lock()
-	defer autonomiaActiveSessionsGate.mu.Unlock()
-	if !autonomiaActiveSessionsGate.expires.IsZero() && now.Before(autonomiaActiveSessionsGate.expires) {
-		return false
-	}
-	autonomiaActiveSessionsGate.expires = now.Add(autonomiaActiveSessionsInterval())
-	return true
+	return autonomiaActiveSessionsGate.AllowAt(autonomiaActiveSessionsInterval(), now)
 }
 
+
 func resetRuntimeBudgetObservationBackgroundGate() {
-	runtimeBudgetObservationBackgroundGate.mu.Lock()
-	defer runtimeBudgetObservationBackgroundGate.mu.Unlock()
-	runtimeBudgetObservationBackgroundGate.expires = time.Time{}
+	runtimeBudgetObservationBackgroundGate.Reset()
 }
 
 func resetAutonomiaActiveSessionsObservationGate() {
-	autonomiaActiveSessionsGate.mu.Lock()
-	defer autonomiaActiveSessionsGate.mu.Unlock()
-	autonomiaActiveSessionsGate.expires = time.Time{}
+	autonomiaActiveSessionsGate.Reset()
 }
+
 
 func presupuestoAgenteDebeRevalidarseAhora(a *db.Agente, minAge time.Duration, soloBloqueadosOStale bool) bool {
 	if a == nil {
@@ -507,7 +485,11 @@ func (dbAutomationService) PlanificarTareasAutomaticamente() error {
 	if _, err := revalidarPresupuestoPlanificacionBatch(); err != nil {
 		return err
 	}
-	return db.PlanificarTareasAutomaticamente()
+	return db.PrepararPlanificacionAutomatica()
+}
+
+func (dbAutomationService) ProcesarPipelineLocalBatch() (int, error) {
+	return procesarPipelineLocalBatch()
 }
 
 func (dbAutomationService) ProcesarRuntimeSupervisionBatch() (int, error) {
@@ -539,7 +521,8 @@ func (dbAutomationService) ProcesarRuntimeOrdersBatch() (int, error) {
 }
 
 func (dbAutomationService) ProcesarRuntimeHygieneBatch() (int, error) {
-	total := 0
+	reclamados, _ := db.ProcesarHigieneRuntimesAutonomosBatch()
+	total := reclamados
 	resultado, err := db.PurgarRuntimeHistorico()
 	if err != nil {
 		return 0, err
@@ -580,6 +563,7 @@ func newControlPlaneRunner(debugLogger *log.Logger, debugControlPlane bool) *pla
 		Notifier: func() notificaciones.Notificador {
 			return notificaciones.GlobalNotificador
 		},
+		BatchTimeout: controlPlaneBatchTimeoutEfectivo(),
 	}
 	if debugControlPlane && debugLogger != nil {
 		runner.Debugf = debugLogger.Printf
@@ -587,42 +571,228 @@ func newControlPlaneRunner(debugLogger *log.Logger, debugControlPlane bool) *pla
 	return runner
 }
 
+func controlPlaneBatchTimeoutEfectivo() time.Duration {
+	timeout := 3 * time.Minute
+	if raw := strings.TrimSpace(os.Getenv("ORQUESTA_OLLAMA_TIMEOUT_MS")); raw != "" {
+		if ms, err := strconv.Atoi(raw); err == nil && ms > 0 {
+			candidato := time.Duration(ms) * time.Millisecond
+			if candidato > timeout {
+				timeout = candidato + 30*time.Second
+			}
+		}
+	}
+	if timeout < 45*time.Second {
+		return 45 * time.Second
+	}
+	return timeout
+}
+
 func procesarRuntimeTranscriptBatch() (int, error) {
 	ingested, err := db.IngestarRuntimeTranscriptActivos()
 	if err != nil {
 		return ingested, err
 	}
-	if ingested > 0 {
-		wakeRuntimeOrdersAfterTranscript()
-	}
-	if !controlPlaneConfigBoolOrDefault("runtime_transcript_auto_guidance_enabled", true) {
-		return ingested, nil
-	}
-	signals, err := db.ListarRuntimeTranscript(db.FiltroRuntimeTranscript{
-		SoloSenalesPend: true,
-		Limit:           50,
-	})
+	despertarRuntimeOrdersTrasTranscript(ingested)
+	registradas, err := procesarEntregasDesdeRuntimeTranscript()
 	if err != nil {
 		return ingested, err
 	}
-	processedSignals := 0
-	for i := len(signals) - 1; i >= 0; i-- {
-		item := signals[i]
-		if item == nil || strings.TrimSpace(item.Classification) == "" {
-			continue
-		}
-		note, err := procesarSignalTranscript(item)
-		if err != nil {
-			return ingested + processedSignals, err
-		}
-		if strings.TrimSpace(note) != "" {
-			if err := db.MarcarRuntimeTranscriptManejado(item.ID, note); err != nil {
-				return ingested + processedSignals, err
-			}
-		}
-		processedSignals++
+	despertarRuntimeOrdersTrasTranscript(registradas)
+	ingested += registradas
+	if !controlPlaneConfigBoolOrDefault("runtime_transcript_auto_guidance_enabled", true) {
+		return ingested, nil
+	}
+	processedSignals, err := procesarSignalsPendientesRuntimeTranscript()
+	if err != nil {
+		return ingested + processedSignals, err
 	}
 	return ingested + processedSignals, nil
+}
+
+func despertarRuntimeOrdersTrasTranscript(cantidad int) {
+	if cantidad > 0 {
+		wakeRuntimeOrdersAfterTranscript()
+	}
+}
+
+func procesarSignalsPendientesRuntimeTranscript() (int, error) {
+	signals, err := listarSignalsPendientesRuntimeTranscript()
+	if err != nil {
+		return 0, err
+	}
+	processedSignals := 0
+	for i := len(signals) - 1; i >= 0; i-- {
+		processed, err := procesarSignalPendienteRuntimeTranscript(signals[i])
+		if err != nil {
+			return processedSignals, err
+		}
+		if processed {
+			processedSignals++
+		}
+	}
+	return processedSignals, nil
+}
+
+func listarSignalsPendientesRuntimeTranscript() ([]*db.RuntimeTranscriptEntry, error) {
+	return db.ListarRuntimeTranscript(db.FiltroRuntimeTranscript{
+		SoloSenalesPend: true,
+		Limit:           50,
+	})
+}
+
+func procesarSignalPendienteRuntimeTranscript(item *db.RuntimeTranscriptEntry) (bool, error) {
+	if item == nil || clasificacionSignalTranscript(item) == "" {
+		return false, nil
+	}
+	note, err := procesarSignalTranscript(item)
+	if err != nil {
+		return false, err
+	}
+	if err := marcarSignalTranscriptManejado(item, note); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func marcarSignalTranscriptManejado(item *db.RuntimeTranscriptEntry, note string) error {
+	if item == nil || strings.TrimSpace(note) == "" {
+		return nil
+	}
+	return db.MarcarRuntimeTranscriptManejado(item.ID, note)
+}
+
+func procesarEntregasDesdeRuntimeTranscript() (int, error) {
+	items, err := runtimesService.ListRuntimeTranscript(db.FiltroRuntimeTranscript{Limit: 50})
+	if err != nil {
+		return 0, err
+	}
+	vistos := map[string]struct{}{}
+	procesadas := 0
+	for _, item := range items {
+		if !runtimeTranscriptEntregaElegible(item) {
+			continue
+		}
+		agente := agenteSignalTranscript(item)
+		k, ok := claveEntregaRuntimeTranscript(item, agente)
+		if !ok {
+			continue
+		}
+		if _, ok := vistos[k]; ok {
+			continue
+		}
+		vistos[k] = struct{}{}
+		procesada, err := procesarEntregaRuntimeTranscript(item, agente)
+		if err != nil {
+			return procesadas, err
+		}
+		if procesada {
+			procesadas++
+		}
+	}
+	return procesadas, nil
+}
+
+func runtimeTranscriptEntregaElegible(item *db.RuntimeTranscriptEntry) bool {
+	if item == nil || item.ProyectoID == nil || *item.ProyectoID <= 0 {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(item.Stream)) {
+	case "pty_out", "stdout", "stderr", "assistant":
+	default:
+		return false
+	}
+	return !runtimeTranscriptTextoEsBootstrapPoolLocal(item.Text, item.NormalizedText)
+}
+
+func claveEntregaRuntimeTranscript(item *db.RuntimeTranscriptEntry, agente string) (string, bool) {
+	if strings.TrimSpace(agente) == "" || item == nil || item.ProyectoID == nil {
+		return "", false
+	}
+	return fmt.Sprintf("%s:%d", strings.TrimSpace(agente), *item.ProyectoID), true
+}
+
+func procesarEntregaRuntimeTranscript(item *db.RuntimeTranscriptEntry, agente string) (bool, error) {
+	proyecto, err := resolverProyectoEntregaRuntimeTranscript(item)
+	if err != nil || proyecto == nil {
+		return false, nil
+	}
+	materializada, err := materializarEntregaRuntimeTranscript(item, agente, proyecto)
+	if err != nil {
+		return false, err
+	}
+	if materializada {
+		return true, nil
+	}
+	return registrarEntregaGitRuntimeTranscript(item, agente, proyecto)
+}
+
+func resolverProyectoEntregaRuntimeTranscript(item *db.RuntimeTranscriptEntry) (*db.Proyecto, error) {
+	return runtimesService.GetProject(strconv.FormatInt(*item.ProyectoID, 10))
+}
+
+func textoEntregaRuntimeTranscript(item *db.RuntimeTranscriptEntry) string {
+	return textoSignalTranscript(item)
+}
+
+func etiquetaEntregaRuntimeTranscript(item *db.RuntimeTranscriptEntry) string {
+	return etiquetaSignalTranscript(item)
+}
+
+func materializarEntregaRuntimeTranscript(item *db.RuntimeTranscriptEntry, agente string, proyecto *db.Proyecto) (bool, error) {
+	resultadoMaterializado, err := runtimesService.MaterializarEntregaMicroprogramacionActivaDesdeRespuesta(
+		agente,
+		item.ProyectoID,
+		proyecto.Slug,
+		textoEntregaRuntimeTranscript(item),
+		etiquetaEntregaRuntimeTranscript(item),
+		"runtime_transcript_materializada",
+	)
+	if err != nil {
+		return resolverFalloMaterializacionRuntimeTranscript(item, agente, err)
+	}
+	return resultadoMaterializado != nil, nil
+}
+
+func resolverFalloMaterializacionRuntimeTranscript(item *db.RuntimeTranscriptEntry, agente string, causa error) (bool, error) {
+	if ordenCorreccionID, correccionErr := reencolarCorreccionMicroprogramacionDesdeTranscript(agente, item.ProyectoID, textoEntregaRuntimeTranscript(item), causa); correccionErr != nil {
+		return false, correccionErr
+	} else if ordenCorreccionID > 0 {
+		return true, nil
+	}
+	return false, causa
+}
+
+func registrarEntregaGitRuntimeTranscript(item *db.RuntimeTranscriptEntry, agente string, proyecto *db.Proyecto) (bool, error) {
+	resultado, err := runtimesService.IntentarRegistrarEntregaGitMicroprogramacionActiva(
+		agente,
+		item.ProyectoID,
+		slugProyectoEntregaRuntimeTranscript(proyecto),
+		etiquetaEntregaRuntimeTranscript(item),
+		"orquesta",
+	)
+	if err != nil {
+		return false, err
+	}
+	return resultado != nil, nil
+}
+
+func slugProyectoEntregaRuntimeTranscript(proyecto *db.Proyecto) string {
+	return slugProyectoAutonomia(proyecto)
+}
+
+func reencolarCorreccionMicroprogramacionDesdeTranscript(agente string, proyectoID *int64, respuesta string, causa error) (int64, error) {
+	if causa == nil {
+		return 0, nil
+	}
+	ctx, err := resolverContextoCorreccionMicroprogramacionDesdeTranscript(agente, proyectoID, respuesta)
+	if err != nil || ctx == nil || ctx.RuntimeOrderID <= 0 {
+		return 0, err
+	}
+	return runtimesService.ReencolarCorreccionEntregaMicroprogramacion(ctx.RuntimeOrderID, causa.Error())
+}
+
+func resolverContextoCorreccionMicroprogramacionDesdeTranscript(agente string, proyectoID *int64, respuesta string) (*runtimesapp.ContextoEntregaMicroprogramacion, error) {
+	return runtimesService.ResolverContextoEntregaMicroprogramacionParaRespuesta(strings.TrimSpace(agente), proyectoID, strings.TrimSpace(respuesta))
 }
 
 func procesarPresupuestoSesionObservadoBatch() (int, error) {
@@ -2138,8 +2308,8 @@ func enfriarAgentePorRuntimePanic(agente string, item *db.RuntimeTranscriptEntry
 		return strings.Join(notes, ";"), nil
 	}
 	motivo := "Auto-pausa por runtime_panic"
-	if item != nil && item.ID > 0 {
-		motivo = fmt.Sprintf("Auto-pausa por runtime_panic: transcript=%d", item.ID)
+	if idSignalTranscript(item) > 0 {
+		motivo = fmt.Sprintf("Auto-pausa por runtime_panic: transcript=%d", idSignalTranscript(item))
 	}
 	if err := db.PausarAgenteHasta(agente, reanimarAt, motivo); err != nil {
 		return "", err
@@ -2154,48 +2324,89 @@ func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 	if item == nil {
 		return "", nil
 	}
-	agente := strings.TrimSpace(item.Agente)
-	if agente == "" {
-		return "signal_sin_agente", nil
-	}
-	handle, err := resolverHandleEntregaTranscript(item)
+	agente, handle, note, handled, err := prepararDecisionSignalTranscript(item)
 	if err != nil {
 		return "", err
 	}
-	if handle == nil {
-		return "sin_runtime_activo", nil
-	}
-	if note, handled, err := resolverReviewGateDesdeSignalTranscript(item); err != nil {
-		return "", err
-	} else if handled {
+	if handled {
 		return note, nil
 	}
 	if esSignalFalloRuntime(item) {
-		notes := make([]string, 0, 3)
-		if cooldownNote, err := enfriarAgentePorRuntimePanic(agente, item); err != nil {
-			return "", err
-		} else if strings.TrimSpace(cooldownNote) != "" {
-			notes = append(notes, strings.TrimSpace(cooldownNote))
-		}
-		if supervisorNote, err := notificarSupervisorSignalTranscript(item); err != nil {
-			return "", err
-		} else if strings.TrimSpace(supervisorNote) != "" {
-			notes = append(notes, strings.TrimSpace(supervisorNote))
-		}
-		notes = append(notes, "runtime_failure_signal")
-		return strings.Join(notes, ";"), nil
+		return procesarSignalFalloRuntime(item, agente)
 	}
-	payload := map[string]any{
-		"to_agente":      agente,
-		"from_agente":    "orquesta",
-		"texto":          construirRespuestaSignalTranscript(item),
-		"classification": strings.TrimSpace(item.Classification),
-		"transcript_id":  item.ID,
-		"kind":           "instruction",
+	return procesarSignalAutoGuidance(item, agente, handle)
+}
+
+func prepararDecisionSignalTranscript(item *db.RuntimeTranscriptEntry) (string, *db.RuntimeHandle, string, bool, error) {
+	if signalTranscriptDebeIgnorarseAutoGuia(item) {
+		return "", nil, "signal_bootstrap_pool_local_ignorado", true, nil
 	}
-	raw, err := json.Marshal(payload)
+	return prepararSignalTranscript(item)
+}
+
+func prepararSignalTranscript(item *db.RuntimeTranscriptEntry) (string, *db.RuntimeHandle, string, bool, error) {
+	agente := agenteSignalTranscript(item)
+	if agente == "" {
+		return "", nil, "signal_sin_agente", true, nil
+	}
+	handle, err := resolverHandleEntregaTranscript(item)
+	if err != nil {
+		return "", nil, "", false, err
+	}
+	if handle == nil {
+		return "", nil, "sin_runtime_activo", true, nil
+	}
+	if note, handled, err := resolverReviewGateDesdeSignalTranscript(item); err != nil {
+		return "", nil, "", false, err
+	} else if handled {
+		return "", nil, note, true, nil
+	}
+	if note, handled, err := resolverCompletarTareaDesdeSignalTranscript(item, handle); err != nil {
+		return "", nil, "", false, err
+	} else if handled {
+		return "", nil, note, true, nil
+	}
+	return agente, handle, "", false, nil
+}
+
+func procesarSignalFalloRuntime(item *db.RuntimeTranscriptEntry, agente string) (string, error) {
+	notes := make([]string, 0, 3)
+	if cooldownNote, err := resolverCooldownRuntimePanicSignal(agente, item); err != nil {
+		return "", err
+	} else {
+		notes = acumularNotaAutonomia(notes, cooldownNote)
+	}
+	if supervisorNote, err := resolverSupervisionFalloRuntimeSignal(item); err != nil {
+		return "", err
+	} else {
+		notes = acumularNotaAutonomia(notes, supervisorNote)
+	}
+	notes = acumularNotaAutonomia(notes, "runtime_failure_signal")
+	return resumenNotasAutonomia(notes), nil
+}
+
+func resolverCooldownRuntimePanicSignal(agente string, item *db.RuntimeTranscriptEntry) (string, error) {
+	return enfriarAgentePorRuntimePanic(agente, item)
+}
+
+func resolverSupervisionFalloRuntimeSignal(item *db.RuntimeTranscriptEntry) (string, error) {
+	return notificarSupervisorSignalTranscript(item)
+}
+
+func procesarSignalAutoGuidance(item *db.RuntimeTranscriptEntry, agente string, handle *db.RuntimeHandle) (string, error) {
+	payload := construirPayloadAutoGuidanceSignalTranscript(agente, item)
+	orderID, orderType, err := encolarAutoGuidanceSignalTranscript(item, agente, handle, payload)
 	if err != nil {
 		return "", err
+	}
+	registrarAutoGuidanceSignalTranscript(orderID, orderType, agente, item, payload)
+	return completarAutoGuidanceSignalTranscript(item, orderID)
+}
+
+func encolarAutoGuidanceSignalTranscript(item *db.RuntimeTranscriptEntry, agente string, handle *db.RuntimeHandle, payload map[string]any) (int64, string, error) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return 0, "", err
 	}
 	order := &db.RuntimeOrder{
 		Agente:      agente,
@@ -2214,17 +2425,82 @@ func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 	}
 	orderID, err := db.EncolarRuntimeOrder(order)
 	if err != nil {
-		return "", err
+		return 0, "", err
 	}
-	detail := fmt.Sprintf("transcript_id=%d agente=%s signal=%s", item.ID, agente, strings.TrimSpace(item.Classification))
-	db.Audit("orquesta", "runtime_transcript_signal", "runtime_order", orderID, detail)
-	payloadEvent, _ := json.Marshal(construirPayloadEventoAutoGuidance(item, orderID, order.Tipo, payload))
-	eventPayload := construirPayloadEventoAutoGuidance(item, orderID, order.Tipo, payload)
+	return orderID, order.Tipo, nil
+}
+
+func registrarAutoGuidanceSignalTranscript(orderID int64, orderType, agente string, item *db.RuntimeTranscriptEntry, payload map[string]any) {
+	db.Audit("orquesta", "runtime_transcript_signal", "runtime_order", orderID, detalleAutoGuidanceSignalTranscript(item, agente))
+	emitirAutoGuidanceSignalTranscript(orderID, orderType, agente, item, payload)
+}
+
+func completarAutoGuidanceSignalTranscript(item *db.RuntimeTranscriptEntry, orderID int64) (string, error) {
+	notes := []string{fmt.Sprintf("auto_guidance_order:%d", orderID)}
+	if supervisorNote, err := notificarSupervisorSignalTranscript(item); err != nil {
+		return "", err
+	} else {
+		notes = acumularNotaAutonomia(notes, supervisorNote)
+	}
+	return resumenNotasAutonomia(notes), nil
+}
+
+func signalTranscriptDebeIgnorarseAutoGuia(item *db.RuntimeTranscriptEntry) bool {
+	if item == nil {
+		return false
+	}
+	if !strings.EqualFold(clasificacionSignalTranscript(item), "waiting_human") {
+		return false
+	}
+	return runtimeTranscriptTextoEsBootstrapPoolLocal(item.Text, item.NormalizedText)
+}
+
+func acumularNotaAutonomia(notes []string, note string) []string {
+	note = strings.TrimSpace(note)
+	if note == "" {
+		return notes
+	}
+	return append(notes, note)
+}
+
+func resumenNotasAutonomia(notes []string) string {
+	if len(notes) == 0 {
+		return ""
+	}
+	return strings.Join(notes, ";")
+}
+
+func agregarNotaAutonomia(notes []string, note string) []string {
+	return acumularNotaAutonomia(notes, note)
+}
+
+func construirPayloadAutoGuidanceSignalTranscript(agente string, item *db.RuntimeTranscriptEntry) map[string]any {
+	return map[string]any{
+		"to_agente":      strings.TrimSpace(agente),
+		"from_agente":    "orquesta",
+		"texto":          construirRespuestaSignalTranscript(item),
+		"classification": clasificacionSignalTranscript(item),
+		"transcript_id":  idSignalTranscript(item),
+		"kind":           "instruction",
+	}
+}
+
+func detalleAutoGuidanceSignalTranscript(item *db.RuntimeTranscriptEntry, agente string) string {
+	return fmt.Sprintf("transcript_id=%d agente=%s signal=%s", idSignalTranscript(item), strings.TrimSpace(agente), clasificacionSignalTranscript(item))
+}
+
+func mensajeEventoAutoGuidanceSignalTranscript(agente string, item *db.RuntimeTranscriptEntry) string {
+	return fmt.Sprintf("Orquesta envió guía automática a %s tras %s", strings.TrimSpace(agente), clasificacionSignalTranscript(item))
+}
+
+func emitirAutoGuidanceSignalTranscript(orderID int64, orderType, agente string, item *db.RuntimeTranscriptEntry, instruction map[string]any) {
+	eventPayload := construirPayloadEventoAutoGuidance(item, orderID, orderType, instruction)
+	payloadEvent, _ := json.Marshal(eventPayload)
 	_, _ = db.RegistrarRuntimeEvent(&db.RuntimeEvent{
 		RuntimeID:   item.RuntimeID,
 		Kind:        "auto_guidance_sent",
 		Level:       "info",
-		Message:     fmt.Sprintf("Orquesta envió guía automática a %s tras %s", agente, strings.TrimSpace(item.Classification)),
+		Message:     mensajeEventoAutoGuidanceSignalTranscript(agente, item),
 		PayloadJSON: string(payloadEvent),
 	})
 	select {
@@ -2238,13 +2514,67 @@ func procesarSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 	}:
 	default:
 	}
-	notes := []string{fmt.Sprintf("auto_guidance_order:%d", orderID)}
-	if supervisorNote, err := notificarSupervisorSignalTranscript(item); err != nil {
-		return "", err
-	} else if strings.TrimSpace(supervisorNote) != "" {
-		notes = append(notes, strings.TrimSpace(supervisorNote))
+}
+
+func runtimeTranscriptTextoEsBootstrapPoolLocal(texto, normalizado string) bool {
+	texto = strings.ToLower(strings.TrimSpace(texto))
+	if texto == "" {
+		texto = strings.ToLower(strings.TrimSpace(normalizado))
 	}
-	return strings.Join(notes, ";"), nil
+	if texto == "" {
+		return false
+	}
+	if strings.Contains(texto, "bootstrap") {
+		tieneEstado := strings.Contains(texto, "estado de sesión") ||
+			strings.Contains(texto, "estado de sesion") ||
+			strings.Contains(texto, "estado de la sesión") ||
+			strings.Contains(texto, "estado de la sesion") ||
+			strings.Contains(texto, "estado operativo") ||
+			strings.Contains(texto, "estado de tareas") ||
+			strings.Contains(texto, "estado del agente") ||
+			strings.Contains(texto, "estado del runtime")
+		tieneStandby := strings.Contains(texto, "en modo standby") ||
+			strings.Contains(texto, "modo standby") ||
+			strings.Contains(texto, "quedo a la espera") ||
+			strings.Contains(texto, "quedo a la espera de") ||
+			strings.Contains(texto, "sin tareas asignadas actualmente") ||
+			strings.Contains(texto, "no se detectan tareas activas") ||
+			strings.Contains(texto, "sesión: confirmada como activa") ||
+			strings.Contains(texto, "sesion: confirmada como activa")
+		if tieneEstado && tieneStandby {
+			return true
+		}
+	}
+	if strings.Contains(texto, "bootstrap de orquesta completado") {
+		return strings.Contains(texto, "estado de sesión") || strings.Contains(texto, "estado de sesion")
+	}
+	if strings.Contains(texto, "bootstrap de sesión") {
+		return strings.Contains(texto, "estado del agente") || strings.Contains(texto, "estado del runtime")
+	}
+	if strings.Contains(texto, "bootstrap aceptado") {
+		if strings.Contains(texto, "inicializado y operativo") {
+			return strings.Contains(texto, "estado de la sesión") || strings.Contains(texto, "estado de la sesion")
+		}
+	}
+	if strings.Contains(texto, "bootstrap de gemmaapp") || strings.Contains(texto, "bootstrap completado para") {
+		tieneEstadoSesion := strings.Contains(texto, "estado de la sesión") ||
+			strings.Contains(texto, "estado de la sesion") ||
+			strings.Contains(texto, "estado operativo") ||
+			strings.Contains(texto, "estado de tareas")
+		if !tieneEstadoSesion && !strings.Contains(texto, "estado del agente") && !strings.Contains(texto, "estado del runtime") {
+			return false
+		}
+		return strings.Contains(texto, "sin tareas asignadas actualmente") ||
+			strings.Contains(texto, "no se detectan tareas activas") ||
+			strings.Contains(texto, "me encuentro en estado **idle**") ||
+			strings.Contains(texto, "sesión: confirmada como activa") ||
+			strings.Contains(texto, "sesion: confirmada como activa") ||
+			strings.Contains(texto, "en modo standby") ||
+			strings.Contains(texto, "quedo a la espera de") ||
+			strings.Contains(texto, "quedo a la espera") ||
+			strings.Contains(texto, "quedo a la espera de instrucciones")
+	}
+	return false
 }
 
 func construirPayloadEventoAutoGuidance(item *db.RuntimeTranscriptEntry, orderID int64, orderType string, instruction map[string]any) map[string]any {
@@ -2259,13 +2589,13 @@ func construirPayloadEventoAutoGuidance(item *db.RuntimeTranscriptEntry, orderID
 		return payload
 	}
 	payload := map[string]any{
-		"agente":             strings.TrimSpace(item.Agente),
-		"classification":     strings.TrimSpace(item.Classification),
+		"agente":             agenteSignalTranscript(item),
+		"classification":     clasificacionSignalTranscript(item),
 		"runtime_id":         item.RuntimeID,
 		"runtime_order_id":   orderID,
 		"runtime_order_type": strings.TrimSpace(orderType),
-		"signal_text":        strings.TrimSpace(item.Text),
-		"transcript_id":      item.ID,
+		"signal_text":        textoSignalTranscript(item),
+		"transcript_id":      idSignalTranscript(item),
 	}
 	if item.ProyectoID != nil && *item.ProyectoID > 0 {
 		payload["proyecto_id"] = *item.ProyectoID
@@ -2283,12 +2613,12 @@ func construirMensajeNotificacionAutoGuidance(item *db.RuntimeTranscriptEntry) s
 	if item == nil {
 		return "Orquesta envió guía automática a un agente"
 	}
-	agente := strings.TrimSpace(item.Agente)
-	classification := strings.TrimSpace(item.Classification)
+	agente := agenteSignalTranscript(item)
+	classification := clasificacionSignalTranscript(item)
 	if agente == "" {
 		agente = "agente-desconocido"
 	}
-	texto := strings.TrimSpace(item.Text)
+	texto := textoSignalTranscript(item)
 	if texto == "" {
 		return fmt.Sprintf("Orquesta envió guía automática a %s tras %s", agente, classification)
 	}
@@ -2306,61 +2636,120 @@ func resolverReviewGateDesdeSignalTranscript(item *db.RuntimeTranscriptEntry) (s
 	if item == nil || item.ProyectoID == nil || *item.ProyectoID <= 0 {
 		return "", false, nil
 	}
-	var estado string
-	switch strings.TrimSpace(item.Classification) {
-	case "review_approved":
-		estado = reviewapp.GateStateApproved
-	case "review_changes_requested":
-		estado = reviewapp.GateStateChangesAsked
-	case "review_blocked":
-		estado = reviewapp.GateStateBlocked
-	default:
+	estado, ok := estadoReviewGateDesdeSignalTranscript(item)
+	if !ok {
 		return "", false, nil
 	}
+	gate, err := resolverGateAbiertaSignalTranscript(item)
+	if err != nil || gate == nil {
+		return "", false, err
+	}
+	findingsJSON, err := prepararFindingsReviewSignalTranscript(item)
+	if err != nil {
+		return "", false, err
+	}
+	note, err := resolverEstadoGateSignalTranscript(gate, estado, item, findingsJSON)
+	if err != nil {
+		return "", false, err
+	}
+	return note, true, nil
+}
+
+func resolverCompletarTareaDesdeSignalTranscript(item *db.RuntimeTranscriptEntry, handle *db.RuntimeHandle) (string, bool, error) {
+	if item == nil || handle == nil || item.Classification != "task_completed" {
+		return "", false, nil
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	tareaID := int64PtrFromMap(meta, "tarea_id")
+	if tareaID == nil || *tareaID <= 0 {
+		return "task_completed_ignorado:sin_tarea_id", true, nil
+	}
+	if err := db.CompletarTarea(*tareaID, "finalizada_por_agente_autonomamente"); err != nil {
+		return "", false, err
+	}
+	db.Audit("server", "task_completed_autonomo", "tarea", *tareaID, "por_agente", item.Agente)
+	return "task_completed_autonomo", true, nil
+}
+
+func prepararFindingsReviewSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
+	return construirFindingsReviewTranscript(item)
+}
+
+func resolverGateAbiertaSignalTranscript(item *db.RuntimeTranscriptEntry) (*reviewapp.Gate, error) {
+	proyectoRef, err := proyectoRefSignalTranscript(item)
+	if err != nil || strings.TrimSpace(proyectoRef) == "" {
+		return nil, err
+	}
+	gates, err := reviewService.List(construirReviewListInputSignalTranscript(item, proyectoRef))
+	if err != nil {
+		return nil, err
+	}
+	return firstOpenGate(gates), nil
+}
+
+func proyectoRefSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
 	proyecto, err := proyectoIfExists(strconv.FormatInt(*item.ProyectoID, 10))
 	if err != nil || proyecto == nil {
-		return "", false, err
+		return "", err
 	}
-	gates, err := reviewService.List(reviewapp.ListInput{
-		ProyectoRef:    proyecto.Slug,
-		ReviewerAgente: strings.TrimSpace(item.Agente),
+	return slugProyectoAutonomia(proyecto), nil
+}
+
+func construirReviewListInputSignalTranscript(item *db.RuntimeTranscriptEntry, proyectoRef string) reviewapp.ListInput {
+	return reviewapp.ListInput{
+		ProyectoRef:    strings.TrimSpace(proyectoRef),
+		ReviewerAgente: reviewerAgenteSignalTranscript(item),
 		Limit:          20,
-	})
+	}
+}
+
+func estadoReviewGateDesdeSignalTranscript(item *db.RuntimeTranscriptEntry) (string, bool) {
+	switch clasificacionSignalTranscript(item) {
+	case "review_approved":
+		return reviewapp.GateStateApproved, true
+	case "review_changes_requested":
+		return reviewapp.GateStateChangesAsked, true
+	case "review_blocked":
+		return reviewapp.GateStateBlocked, true
+	default:
+		return "", false
+	}
+}
+
+func resolverEstadoGateSignalTranscript(gate *reviewapp.Gate, estado string, item *db.RuntimeTranscriptEntry, findingsJSON string) (string, error) {
+	resolved, err := reviewService.Resolve(construirResolveGateInputSignalTranscript(gate, estado, item, findingsJSON))
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
-	gate := firstOpenGate(gates)
-	if gate == nil {
-		return "", false, nil
-	}
-	findingsJSON, err := construirFindingsReviewTranscript(item)
-	if err != nil {
-		return "", false, err
-	}
-	resolved, err := reviewService.Resolve(reviewapp.ResolveGateInput{
+	detail := auditarResolucionGateSignalTranscript(resolved.ID, item, estado)
+	return "review_gate_resolved:" + detail, nil
+}
+
+func construirResolveGateInputSignalTranscript(gate *reviewapp.Gate, estado string, item *db.RuntimeTranscriptEntry, findingsJSON string) reviewapp.ResolveGateInput {
+	return reviewapp.ResolveGateInput{
 		ID:             gate.ID,
 		Estado:         estado,
-		ReviewerAgente: strings.TrimSpace(item.Agente),
+		ReviewerAgente: reviewerAgenteSignalTranscript(item),
 		FindingsJSON:   findingsJSON,
-	})
-	if err != nil {
-		return "", false, err
 	}
-	detail := fmt.Sprintf("gate=%d transcript=%d estado=%s", resolved.ID, item.ID, strings.TrimSpace(estado))
-	db.Audit("orquesta", "runtime_transcript_review_resolution", "review_gate", resolved.ID, detail)
-	return "review_gate_resolved:" + detail, true, nil
+}
+
+func reviewerAgenteSignalTranscript(item *db.RuntimeTranscriptEntry) string {
+	return agenteSignalTranscript(item)
+}
+
+func detalleResolucionGateSignalTranscript(gateID int64, item *db.RuntimeTranscriptEntry, estado string) string {
+	return fmt.Sprintf("gate=%d transcript=%d estado=%s", gateID, idSignalTranscript(item), strings.TrimSpace(estado))
+}
+
+func auditarResolucionGateSignalTranscript(gateID int64, item *db.RuntimeTranscriptEntry, estado string) string {
+	detail := detalleResolucionGateSignalTranscript(gateID, item, estado)
+	db.Audit("orquesta", "runtime_transcript_review_resolution", "review_gate", gateID, detail)
+	return detail
 }
 
 func construirFindingsReviewTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
-	payload := []map[string]any{{
-		"source":         "runtime_transcript",
-		"transcript_id":  item.ID,
-		"classification": strings.TrimSpace(item.Classification),
-		"agente":         strings.TrimSpace(item.Agente),
-		"text":           strings.TrimSpace(item.Text),
-		"runtime_id":     item.RuntimeID,
-		"handle_id":      item.HandleID,
-	}}
+	payload := construirPayloadFindingsReviewSignalTranscript(item)
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
@@ -2368,11 +2757,23 @@ func construirFindingsReviewTranscript(item *db.RuntimeTranscriptEntry) (string,
 	return string(raw), nil
 }
 
+func construirPayloadFindingsReviewSignalTranscript(item *db.RuntimeTranscriptEntry) []map[string]any {
+	return []map[string]any{{
+		"source":         "runtime_transcript",
+		"transcript_id":  idSignalTranscript(item),
+		"classification": clasificacionSignalTranscript(item),
+		"agente":         agenteSignalTranscript(item),
+		"text":           textoSignalTranscript(item),
+		"runtime_id":     item.RuntimeID,
+		"handle_id":      item.HandleID,
+	}}
+}
+
 func esSignalFalloRuntime(item *db.RuntimeTranscriptEntry) bool {
 	if item == nil {
 		return false
 	}
-	switch strings.TrimSpace(item.Classification) {
+	switch clasificacionSignalTranscript(item) {
 	case "runtime_panic", "runtime_crash":
 		return true
 	default:
@@ -2383,21 +2784,13 @@ func esSignalFalloRuntime(item *db.RuntimeTranscriptEntry) bool {
 func construirRespuestaSignalTranscript(item *db.RuntimeTranscriptEntry) string {
 	base := "Orquesta: continua de forma autonoma dentro de la gobernanza efectiva del proyecto. Usa API/servicios para el flujo normal, no BD local salvo diagnostico o recuperacion, y mantén tests coherentes y eficientes. Si el cambio es delicado, crea checkpoint y sigue."
 	normalized := normalizarSignalTranscriptTexto(item)
-	politicaPermisos := construirPoliticaPermisosSignalTranscript(strings.TrimSpace(item.Classification), normalized)
-	switch strings.TrimSpace(item.Classification) {
-	case "approval_request":
-		return base + " " + politicaPermisos + " Si dudas entre varias opciones seguras, elige la mas alineada con el proyecto y continua sin detenerte."
-	case "waiting_human":
-		return base + " " + politicaPermisos + " No te quedes esperando respuesta: formula el siguiente paso razonable, ejecuta y documenta los supuestos."
-	case "ready_for_review":
-		return base + " Deja un resumen breve, asegurate de que el frente queda verificable y sigue disponible para que Orquesta relance review si procede."
-	case "needs_replan":
-		return base + " Si no ves el siguiente paso, revisa backlog, tareas, propuestas y ultimo checkpoint, y continua por el frente mas util disponible."
-	case "blocked":
-		return base + " Si el bloqueo es de contexto, reevalua tareas, propuestas y estado del proyecto y avanza por el mejor siguiente paso disponible."
-	default:
+	clasificacion := clasificacionSignalTranscript(item)
+	politicaPermisos := construirPoliticaPermisosSignalTranscript(clasificacion, normalized)
+	coletilla := coletillaRespuestaSignalTranscript(clasificacion, politicaPermisos)
+	if strings.TrimSpace(coletilla) == "" {
 		return base
 	}
+	return base + " " + strings.TrimSpace(coletilla)
 }
 
 func normalizarSignalTranscriptTexto(item *db.RuntimeTranscriptEntry) string {
@@ -2411,6 +2804,110 @@ func normalizarSignalTranscriptTexto(item *db.RuntimeTranscriptEntry) string {
 	texto = strings.ReplaceAll(texto, "\n", " ")
 	texto = strings.ReplaceAll(texto, "\r", " ")
 	return strings.TrimSpace(texto)
+}
+
+func clasificacionSignalTranscript(item *db.RuntimeTranscriptEntry) string {
+	if item == nil {
+		return ""
+	}
+	return strings.TrimSpace(item.Classification)
+}
+
+func agenteSignalTranscript(item *db.RuntimeTranscriptEntry) string {
+	if item == nil {
+		return ""
+	}
+	return strings.TrimSpace(item.Agente)
+}
+
+func textoSignalTranscript(item *db.RuntimeTranscriptEntry) string {
+	if item == nil {
+		return ""
+	}
+	return strings.TrimSpace(item.Text)
+}
+
+func nombreAgenteAutonomia(agente *db.Agente) string {
+	if agente == nil {
+		return ""
+	}
+	return strings.TrimSpace(agente.Nombre)
+}
+
+func slugProyectoAutonomia(proyecto *db.Proyecto) string {
+	if proyecto == nil {
+		return ""
+	}
+	return strings.TrimSpace(proyecto.Slug)
+}
+
+func runtimeTranscriptTieneProyecto(item *db.RuntimeTranscriptEntry) bool {
+	return item != nil && item.ProyectoID != nil && *item.ProyectoID > 0
+}
+
+func contextoSignalTranscriptActivo(item *db.RuntimeTranscriptEntry, policy *db.ProyectoAutonomia, proyecto *db.Proyecto) bool {
+	return item != nil && policy != nil && proyecto != nil && policy.Enabled
+}
+
+func resolverContextoSignalTranscript(item *db.RuntimeTranscriptEntry) (*db.ProyectoAutonomia, *db.Proyecto, error) {
+	if !runtimeTranscriptTieneProyecto(item) {
+		return nil, nil, nil
+	}
+	policy, err := db.GetProyectoAutonomia(*item.ProyectoID)
+	if err != nil || policy == nil || !policy.Enabled {
+		return policy, nil, err
+	}
+	proyecto, err := proyectoIfExists(strconv.FormatInt(*item.ProyectoID, 10))
+	if err != nil || proyecto == nil {
+		return policy, proyecto, err
+	}
+	return policy, proyecto, nil
+}
+
+func objetivoGeneralAutonomia(policy *db.ProyectoAutonomia) string {
+	if policy == nil {
+		return ""
+	}
+	return strings.TrimSpace(policy.ObjetivoGeneral)
+}
+
+func definitionOfDoneAutonomia(policy *db.ProyectoAutonomia) string {
+	if policy == nil {
+		return ""
+	}
+	dod := strings.TrimSpace(policy.DefinitionOfDoneJSON)
+	if dod == "{}" {
+		return ""
+	}
+	return dod
+}
+
+func idSignalTranscript(item *db.RuntimeTranscriptEntry) int64 {
+	if item == nil {
+		return 0
+	}
+	return item.ID
+}
+
+func etiquetaSignalTranscript(item *db.RuntimeTranscriptEntry) string {
+	return fmt.Sprintf("runtime_transcript_id=%d", idSignalTranscript(item))
+}
+
+func coletillaRespuestaSignalTranscript(clasificacion, politicaPermisos string) string {
+	switch strings.TrimSpace(clasificacion) {
+	case "approval_request":
+		return strings.TrimSpace(politicaPermisos) + " Si dudas entre varias opciones seguras, elige la mas alineada con el proyecto y continua sin detenerte."
+	case "waiting_human":
+		return strings.TrimSpace(politicaPermisos) + " No te quedes esperando respuesta: formula el siguiente paso razonable, ejecuta y documenta los supuestos."
+	case "ready_for_review":
+		return "Deja un resumen breve, asegurate de que el frente queda verificable y sigue disponible para que Orquesta relance review si procede."
+	case "needs_replan":
+		return "Si no ves el siguiente paso, revisa backlog, tareas, propuestas y ultimo checkpoint, y continua por el frente mas util disponible."
+	case "blocked":
+		return "Si el bloqueo es de contexto, reevalua tareas, propuestas y estado del proyecto y avanza por el mejor siguiente paso disponible."
+	default:
+		return ""
+	}
 }
 
 func construirPoliticaPermisosSignalTranscript(classification, normalized string) string {
@@ -2520,90 +3017,136 @@ func textoPareceDependenciaExterna(normalized string) bool {
 }
 
 func notificarSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry) (string, error) {
-	if item == nil || item.ProyectoID == nil || *item.ProyectoID <= 0 {
-		return "", nil
-	}
-	policy, err := db.GetProyectoAutonomia(*item.ProyectoID)
-	if err != nil || policy == nil || !policy.Enabled {
+	policy, proyecto, err := resolverContextoSignalTranscript(item)
+	if err != nil || !contextoSignalTranscriptActivo(item, policy, proyecto) {
 		return "", err
 	}
-	proyecto, err := proyectoIfExists(strconv.FormatInt(*item.ProyectoID, 10))
-	if err != nil || proyecto == nil {
+	if note, handled, err := intentarDerivarReviewSignalTranscript(item, policy, proyecto); err != nil {
 		return "", err
+	} else if handled {
+		return note, nil
 	}
-	if strings.TrimSpace(item.Classification) == "ready_for_review" {
-		if note, err := notificarReviewerSignalTranscript(item, policy, proyecto); err != nil {
-			return "", err
-		} else if strings.TrimSpace(note) != "" {
-			return note, nil
-		}
+	return ejecutarPlanSupervisorSignalTranscript(item, policy, proyecto)
+}
+
+func intentarDerivarReviewSignalTranscript(item *db.RuntimeTranscriptEntry, policy *db.ProyectoAutonomia, proyecto *db.Proyecto) (string, bool, error) {
+	if clasificacionSignalTranscript(item) != "ready_for_review" {
+		return "", false, nil
 	}
+	note, err := notificarReviewerSignalTranscript(item, policy, proyecto)
+	if err != nil {
+		return "", false, err
+	}
+	if strings.TrimSpace(note) == "" {
+		return "", false, nil
+	}
+	return note, true, nil
+}
+
+func ejecutarPlanSupervisorSignalTranscript(item *db.RuntimeTranscriptEntry, policy *db.ProyectoAutonomia, proyecto *db.Proyecto) (string, error) {
 	notes := make([]string, 0, 3)
-	supervisor, activado, err := resolverSupervisorAutonomiaOperativo(proyecto.ID, policy, "supervision_transcript_signal", strings.TrimSpace(item.Agente))
+	supervisor, activado, err := resolverAgenteSupervisorSignalTranscript(proyecto.ID, policy, agenteSignalTranscript(item))
 	if err != nil {
 		return "", err
-	}
-	if activado {
-		notes = append(notes, "supervisor_start")
 	}
 	if note, err := asegurarTareaReplanAutonomiaSignal(item, policy, proyecto, supervisor); err != nil {
 		return "", err
-	} else if strings.TrimSpace(note) != "" {
-		notes = append(notes, note)
+	} else {
+		notes = agregarNotaAutonomia(notes, note)
 	}
-	if supervisor == nil || strings.EqualFold(strings.TrimSpace(supervisor.Nombre), strings.TrimSpace(item.Agente)) {
-		return strings.Join(notes, ";"), nil
-	}
-	if pendiente, err := existeRuntimeOrderAutonomiaPendiente(supervisor.Nombre, &proyecto.ID, "nudge", "inspeccionar_transcript_signal"); err != nil {
+	if note, err := resolverEstadoAgenteObjetivoSignalTranscript(supervisor, activado, agenteSignalTranscript(item), proyecto, "inspeccionar_transcript_signal", construirInstruccionSupervisionSignalTranscript(policy, proyecto, nombreAgenteAutonomia(supervisor), item), item, "supervisor", "supervisor_start"); err != nil {
 		return "", err
-	} else if pendiente {
-		notes = append(notes, "supervisor_nudge_pendiente")
-		return strings.Join(notes, ";"), nil
+	} else {
+		notes = agregarNotaAutonomia(notes, note)
 	}
-	resumen := fmt.Sprintf("agente=%s signal=%s transcript=%d", strings.TrimSpace(item.Agente), strings.TrimSpace(item.Classification), item.ID)
-	if encolada, err := encolarNudgeAutonomiaDetallado(supervisor.Nombre, proyecto, "inspeccionar_transcript_signal", resumen, construirInstruccionSupervisionSignalTranscript(policy, proyecto, supervisor.Nombre, item), map[string]any{
-		"signal_classification": strings.TrimSpace(item.Classification),
-		"signal_transcript_id":  item.ID,
-		"signal_agente":         strings.TrimSpace(item.Agente),
-		"signal_text":           strings.TrimSpace(item.Text),
-	}); err != nil {
-		return "", err
-	} else if !encolada {
-		notes = append(notes, "supervisor_nudge_omitido")
-		return strings.Join(notes, ";"), nil
+	return resumenNotasAutonomia(notes), nil
+}
+
+func resolverAgenteSupervisorSignalTranscript(proyectoID int64, policy *db.ProyectoAutonomia, agenteOrigen string) (*db.Agente, bool, error) {
+	if policy == nil {
+		return nil, false, nil
 	}
-	notes = append(notes, "supervisor_nudged")
-	return strings.Join(notes, ";"), nil
+	return resolverSupervisorAutonomiaOperativo(proyectoID, policy, "supervision_transcript_signal", strings.TrimSpace(agenteOrigen))
+}
+
+func resolverAgenteReviewSignalTranscript(proyectoID int64, reviewerPreferido, agenteOrigen string) (*db.Agente, bool, error) {
+	return resolverAgentePreferidoOActivoSignalTranscript(
+		proyectoID,
+		reviewerPreferido,
+		"review_transcript_signal",
+		[]string{"revisor", "reviewer", "supervisor", "orquestador", "admin", "programador"},
+		agenteOrigen,
+	)
+}
+
+func resolverAgentePreferidoOActivoSignalTranscript(proyectoID int64, preferido, contexto string, roles []string, agenteOrigen string) (*db.Agente, bool, error) {
+	agente, activado, err := prepararAgentePreferidoAutonomia(proyectoID, strings.TrimSpace(preferido), strings.TrimSpace(contexto))
+	if err != nil || activado || agente != nil {
+		return agente, activado, err
+	}
+	agente, err = seleccionarAgenteActivoProyectoPreferido(
+		proyectoID,
+		strings.TrimSpace(preferido),
+		roles,
+		strings.TrimSpace(agenteOrigen),
+	)
+	return agente, false, err
 }
 
 func asegurarTareaReplanAutonomiaSignal(item *db.RuntimeTranscriptEntry, policy *db.ProyectoAutonomia, proyecto *db.Proyecto, supervisor *db.Agente) (string, error) {
-	if item == nil || policy == nil || proyecto == nil || !policy.Enabled {
+	if !contextoSignalTranscriptActivo(item, policy, proyecto) {
 		return "", nil
 	}
-	if strings.TrimSpace(item.Classification) != "needs_replan" {
+	return ejecutarPlanReplanSignalTranscript(item, policy, proyecto, supervisor)
+}
+
+func ejecutarPlanReplanSignalTranscript(item *db.RuntimeTranscriptEntry, policy *db.ProyectoAutonomia, proyecto *db.Proyecto, supervisor *db.Agente) (string, error) {
+	if clasificacionSignalTranscript(item) != "needs_replan" {
 		return "", nil
 	}
-	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyecto.ID})
+	existe, err := existeTareaReplanAutonomiaPendiente(proyecto.ID)
 	if err != nil {
 		return "", err
 	}
-	for _, tarea := range tareas {
-		if tarea == nil {
-			continue
-		}
-		switch tarea.Estado {
-		case db.TareaCompletada, db.TareaCancelada:
-			continue
-		}
-		if strings.EqualFold(strings.TrimSpace(tarea.Titulo), autonomiaReplanTaskTitle) || strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:needs_replan") {
-			return "replan_task_exists", nil
-		}
+	if existe {
+		return "replan_task_exists", nil
 	}
-	target := ""
-	if supervisor != nil && !strings.EqualFold(strings.TrimSpace(supervisor.Nombre), strings.TrimSpace(item.Agente)) {
-		target = strings.TrimSpace(supervisor.Nombre)
-	} else if preferred := strings.TrimSpace(policy.SupervisorAgente); preferred != "" && !strings.EqualFold(preferred, strings.TrimSpace(item.Agente)) {
-		target = preferred
+	target := resolverAgenteObjetivoReplanAutonomiaSignal(policy, supervisor, agenteSignalTranscript(item))
+	id, err := crearTareaReplanAutonomiaSignal(policy, proyecto, item, target)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("replan_task_created:%d", id), nil
+}
+
+func resolverAgenteObjetivoReplanAutonomiaSignal(policy *db.ProyectoAutonomia, supervisor *db.Agente, agenteOrigen string) string {
+	agenteOrigen = strings.TrimSpace(agenteOrigen)
+	if supervisor != nil && !strings.EqualFold(nombreAgenteAutonomia(supervisor), agenteOrigen) {
+		return nombreAgenteAutonomia(supervisor)
+	}
+	if preferred := supervisorPreferidoAutonomia(policy); preferred != "" && !strings.EqualFold(preferred, agenteOrigen) {
+		return preferred
+	}
+	return ""
+}
+
+func supervisorPreferidoAutonomia(policy *db.ProyectoAutonomia) string {
+	if policy == nil {
+		return ""
+	}
+	return strings.TrimSpace(policy.SupervisorAgente)
+}
+
+func reviewerPreferidoAutonomia(policy *db.ProyectoAutonomia) string {
+	if policy == nil {
+		return ""
+	}
+	return strings.TrimSpace(policy.ReviewerAgente)
+}
+
+func crearTareaReplanAutonomiaSignal(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, item *db.RuntimeTranscriptEntry, target string) (int64, error) {
+	if policy == nil || proyecto == nil || item == nil {
+		return 0, nil
 	}
 	id, err := tareasService.Create(tareasapp.CreateTaskInput{
 		Titulo:      autonomiaReplanTaskTitle,
@@ -2613,17 +3156,55 @@ func asegurarTareaReplanAutonomiaSignal(item *db.RuntimeTranscriptEntry, policy 
 		CreadoPor:   "orquesta",
 		Agente:      target,
 		Proyecto:    proyecto.Slug,
-		Notas:       fmt.Sprintf("autonomia:needs_replan;transcript:%d;agente_origen:%s", item.ID, strings.TrimSpace(item.Agente)),
+		Notas:       construirNotasTareaReplanAutonomiaSignal(item),
 	})
 	if err != nil {
-		return "", err
+		return 0, err
 	}
-	if strings.TrimSpace(target) != "" {
-		if err := tareasService.Start(id, target); err != nil {
-			return "", err
+	if err := arrancarTareaAutonomiaSiAsignada(id, target); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func existeTareaReplanAutonomiaPendiente(proyectoID int64) (bool, error) {
+	if proyectoID <= 0 {
+		return false, nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		return false, err
+	}
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaCompletada, db.TareaCancelada:
+			continue
+		}
+		if esTareaReplanAutonomia(tarea) {
+			return true, nil
 		}
 	}
-	return fmt.Sprintf("replan_task_created:%d", id), nil
+	return false, nil
+}
+
+func construirNotasTareaReplanAutonomiaSignal(item *db.RuntimeTranscriptEntry) string {
+	if item == nil {
+		return "autonomia:needs_replan"
+	}
+	return fmt.Sprintf("autonomia:needs_replan;transcript:%d;agente_origen:%s", idSignalTranscript(item), agenteSignalTranscript(item))
+}
+
+func esTareaReplanAutonomia(tarea *db.Tarea) bool {
+	if tarea == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(tarea.Titulo), autonomiaReplanTaskTitle) {
+		return true
+	}
+	return strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:needs_replan")
 }
 
 func construirDescripcionTareaReplanAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, item *db.RuntimeTranscriptEntry) string {
@@ -2631,61 +3212,47 @@ func construirDescripcionTareaReplanAutonomia(policy *db.ProyectoAutonomia, proy
 		"Orquesta ha detectado en el transcript una señal de needs_replan: el agente no tiene claro el siguiente paso útil.",
 		"Replanifica backlog, prioridades, propuestas, worktrees y checkpoints para abrir o reforzar el siguiente frente útil sin intervención humana.",
 	}
-	if proyecto != nil && strings.TrimSpace(proyecto.Slug) != "" {
-		partes = append(partes, "Proyecto: "+strings.TrimSpace(proyecto.Slug)+".")
+	if slugProyectoAutonomia(proyecto) != "" {
+		partes = append(partes, "Proyecto: "+slugProyectoAutonomia(proyecto)+".")
 	}
-	if item != nil && strings.TrimSpace(item.Agente) != "" {
-		partes = append(partes, "Agente origen: "+strings.TrimSpace(item.Agente)+".")
+	if item != nil && agenteSignalTranscript(item) != "" {
+		partes = append(partes, "Agente origen: "+agenteSignalTranscript(item)+".")
 	}
-	if item != nil && strings.TrimSpace(item.Text) != "" {
-		partes = append(partes, "Señal transcript: "+strings.TrimSpace(item.Text)+".")
+	if item != nil && textoSignalTranscript(item) != "" {
+		partes = append(partes, "Señal transcript: "+textoSignalTranscript(item)+".")
 	}
-	if policy != nil && strings.TrimSpace(policy.ObjetivoGeneral) != "" {
-		partes = append(partes, "Objetivo general: "+strings.TrimSpace(policy.ObjetivoGeneral)+".")
+	if objetivoGeneralAutonomia(policy) != "" {
+		partes = append(partes, "Objetivo general: "+objetivoGeneralAutonomia(policy)+".")
 	}
-	if policy != nil && strings.TrimSpace(policy.DefinitionOfDoneJSON) != "" && strings.TrimSpace(policy.DefinitionOfDoneJSON) != "{}" {
-		partes = append(partes, "Definition of done: "+strings.TrimSpace(policy.DefinitionOfDoneJSON)+".")
+	if definitionOfDoneAutonomia(policy) != "" {
+		partes = append(partes, "Definition of done: "+definitionOfDoneAutonomia(policy)+".")
 	}
 	return strings.Join(partes, " ")
 }
 
 func notificarReviewerSignalTranscript(item *db.RuntimeTranscriptEntry, policy *db.ProyectoAutonomia, proyecto *db.Proyecto) (string, error) {
-	if item == nil || proyecto == nil || policy == nil || !policy.Enabled {
+	if !contextoSignalTranscriptActivo(item, policy, proyecto) {
 		return "", nil
 	}
-	reviewer, activado, err := prepararAgentePreferidoAutonomia(proyecto.ID, strings.TrimSpace(policy.ReviewerAgente), "review_transcript_signal")
+	return ejecutarPlanReviewerSignalTranscript(item, policy, proyecto)
+}
+
+func ejecutarPlanReviewerSignalTranscript(item *db.RuntimeTranscriptEntry, policy *db.ProyectoAutonomia, proyecto *db.Proyecto) (string, error) {
+	reviewer, activado, err := resolverAgenteReviewSignalTranscript(proyecto.ID, reviewerPreferidoAutonomia(policy), agenteSignalTranscript(item))
 	if err != nil {
 		return "", err
 	}
+	return resolverEstadoAgenteObjetivoSignalTranscript(reviewer, activado, agenteSignalTranscript(item), proyecto, "inspeccionar_ready_for_review", construirInstruccionReviewSignalTranscript(policy, proyecto, nombreAgenteAutonomia(reviewer), item), item, "reviewer", "reviewer_start")
+}
+
+func resolverEstadoAgenteObjetivoSignalTranscript(agente *db.Agente, activado bool, agenteOrigen string, proyecto *db.Proyecto, accion, instruccion string, item *db.RuntimeTranscriptEntry, prefijoEstado, notaArranque string) (string, error) {
 	if activado {
-		return "reviewer_start", nil
+		return strings.TrimSpace(notaArranque), nil
 	}
-	if reviewer == nil {
-		reviewer, err = seleccionarAgenteActivoProyectoPreferido(proyecto.ID, strings.TrimSpace(policy.ReviewerAgente), []string{"revisor", "reviewer", "supervisor", "orquestador", "admin", "programador"}, strings.TrimSpace(item.Agente))
-		if err != nil {
-			return "", err
-		}
-	}
-	if reviewer == nil || strings.EqualFold(strings.TrimSpace(reviewer.Nombre), strings.TrimSpace(item.Agente)) {
+	if agente == nil || strings.EqualFold(nombreAgenteAutonomia(agente), strings.TrimSpace(agenteOrigen)) {
 		return "", nil
 	}
-	if pendiente, err := existeRuntimeOrderAutonomiaPendiente(reviewer.Nombre, &proyecto.ID, "nudge", "inspeccionar_ready_for_review"); err != nil {
-		return "", err
-	} else if pendiente {
-		return "reviewer_nudge_pendiente", nil
-	}
-	resumen := fmt.Sprintf("agente=%s signal=%s transcript=%d", strings.TrimSpace(item.Agente), strings.TrimSpace(item.Classification), item.ID)
-	if encolada, err := encolarNudgeAutonomiaDetallado(reviewer.Nombre, proyecto, "inspeccionar_ready_for_review", resumen, construirInstruccionReviewSignalTranscript(policy, proyecto, reviewer.Nombre, item), map[string]any{
-		"signal_classification": strings.TrimSpace(item.Classification),
-		"signal_transcript_id":  item.ID,
-		"signal_agente":         strings.TrimSpace(item.Agente),
-		"signal_text":           strings.TrimSpace(item.Text),
-	}); err != nil {
-		return "", err
-	} else if !encolada {
-		return "reviewer_nudge_omitido", nil
-	}
-	return "reviewer_nudged", nil
+	return encolarNudgeSignalTranscriptAutonomia(nombreAgenteAutonomia(agente), proyecto, accion, instruccion, item, prefijoEstado)
 }
 
 func construirInstruccionSupervisionSignalTranscript(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, supervisor string, item *db.RuntimeTranscriptEntry) string {
@@ -2693,25 +3260,25 @@ func construirInstruccionSupervisionSignalTranscript(policy *db.ProyectoAutonomi
 		"Orquesta: un agente del proyecto ha emitido una señal de duda, espera o bloqueo en su transcript.",
 		"Supervisa el frente ahora mismo: revisa el transcript, el contexto del proyecto, las tareas y propuestas activas, y decide el siguiente paso sin escalar a humano salvo que falten credenciales, secretos o un recurso externo real.",
 	}
-	if proyecto != nil {
-		parts = append(parts, fmt.Sprintf("Proyecto: %s.", strings.TrimSpace(proyecto.Slug)))
+	if slugProyectoAutonomia(proyecto) != "" {
+		parts = append(parts, fmt.Sprintf("Proyecto: %s.", slugProyectoAutonomia(proyecto)))
 	}
 	if strings.TrimSpace(supervisor) != "" {
 		parts = append(parts, "Supervisor responsable: "+strings.TrimSpace(supervisor)+".")
 	}
 	if item != nil {
-		if strings.TrimSpace(item.Agente) != "" {
-			parts = append(parts, "Agente origen: "+strings.TrimSpace(item.Agente)+".")
+		if agenteSignalTranscript(item) != "" {
+			parts = append(parts, "Agente origen: "+agenteSignalTranscript(item)+".")
 		}
-		if strings.TrimSpace(item.Classification) != "" {
-			parts = append(parts, "Clasificación: "+strings.TrimSpace(item.Classification)+".")
+		if clasificacionSignalTranscript(item) != "" {
+			parts = append(parts, "Clasificación: "+clasificacionSignalTranscript(item)+".")
 		}
-		if strings.TrimSpace(item.Text) != "" {
-			parts = append(parts, "Fragmento detectado: "+strings.TrimSpace(item.Text)+".")
+		if textoSignalTranscript(item) != "" {
+			parts = append(parts, "Fragmento detectado: "+textoSignalTranscript(item)+".")
 		}
 	}
-	if policy != nil && strings.TrimSpace(policy.ObjetivoGeneral) != "" {
-		parts = append(parts, "Objetivo general: "+strings.TrimSpace(policy.ObjetivoGeneral)+".")
+	if objetivoGeneralAutonomia(policy) != "" {
+		parts = append(parts, "Objetivo general: "+objetivoGeneralAutonomia(policy)+".")
 	}
 	if policy != nil && policy.AutoCreateTasks {
 		parts = append(parts, "Si basta con una instrucción, emítela; si hace falta, crea o reajusta tareas, propuestas o handoff para que el proyecto no se quede parado.")
@@ -2726,22 +3293,22 @@ func construirInstruccionReviewSignalTranscript(policy *db.ProyectoAutonomia, pr
 		"Orquesta: un agente del proyecto ha indicado en su transcript que el frente está listo para revisión.",
 		"Valida el estado real del código, la definición de terminado, tests, arquitectura e i18n; si el frente está maduro, impulsa o ejecuta la revisión, y si no, pide cambios concretos sin bloquear el proyecto más de lo necesario.",
 	}
-	if proyecto != nil {
-		parts = append(parts, fmt.Sprintf("Proyecto: %s.", strings.TrimSpace(proyecto.Slug)))
+	if slugProyectoAutonomia(proyecto) != "" {
+		parts = append(parts, fmt.Sprintf("Proyecto: %s.", slugProyectoAutonomia(proyecto)))
 	}
 	if strings.TrimSpace(reviewer) != "" {
 		parts = append(parts, "Reviewer responsable: "+strings.TrimSpace(reviewer)+".")
 	}
 	if item != nil {
-		if strings.TrimSpace(item.Agente) != "" {
-			parts = append(parts, "Agente origen: "+strings.TrimSpace(item.Agente)+".")
+		if agenteSignalTranscript(item) != "" {
+			parts = append(parts, "Agente origen: "+agenteSignalTranscript(item)+".")
 		}
-		if strings.TrimSpace(item.Text) != "" {
-			parts = append(parts, "Fragmento detectado: "+strings.TrimSpace(item.Text)+".")
+		if textoSignalTranscript(item) != "" {
+			parts = append(parts, "Fragmento detectado: "+textoSignalTranscript(item)+".")
 		}
 	}
-	if policy != nil && strings.TrimSpace(policy.ObjetivoGeneral) != "" {
-		parts = append(parts, "Objetivo general: "+strings.TrimSpace(policy.ObjetivoGeneral)+".")
+	if objetivoGeneralAutonomia(policy) != "" {
+		parts = append(parts, "Objetivo general: "+objetivoGeneralAutonomia(policy)+".")
 	}
 	parts = append(parts, "Si aún falta trabajo, conviértelo en feedback accionable; si está listo, deja trazabilidad de revisión sin pedir intervención humana por defecto.")
 	return strings.Join(parts, " ")
@@ -2795,6 +3362,13 @@ func procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox []*db.RuntimeMailb
 			return total, err
 		}
 		if handle == nil {
+			reactivado, err := intentarReactivarRuntimeMailboxSinHandle(msg, snapshot)
+			if err != nil {
+				return total, err
+			}
+			if reactivado {
+				total++
+			}
 			continue
 		}
 		if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "interactive", time.Now().UTC()); err != nil {
@@ -2843,6 +3417,121 @@ func procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox []*db.RuntimeMailb
 		total++
 	}
 	return total, nil
+}
+
+func intentarReactivarRuntimeMailboxPoolLocalSinHandle(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
+	proyecto, err := resolverProyectoRuntimeMailboxReactivacion(msg, snapshot)
+	if msg == nil || proyecto == nil {
+		return false, nil
+	}
+	agente := strings.TrimSpace(msg.ToAgente)
+	if agente == "" {
+		return false, nil
+	}
+	poolLocalSesion := agenteUsaSesionPoolLocalCompartido(agente, strings.TrimSpace(proyecto.Slug))
+	permite, poolSlug, err := db.PoolLocalCompartidoPermiteActivacionAgenteProyecto(agente, strings.TrimSpace(proyecto.Slug))
+	if err != nil {
+		return false, err
+	}
+	if strings.TrimSpace(poolSlug) == "" && !poolLocalSesion {
+		return false, nil
+	}
+	if strings.TrimSpace(poolSlug) != "" && !permite {
+		db.Audit("orquesta", "runtime_mailbox_pool_local_sin_capacidad", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("agente=%s proyecto=%s pool=%s kind=%s", agente, strings.TrimSpace(proyecto.Slug), strings.TrimSpace(poolSlug), strings.TrimSpace(msg.Kind)))
+		return false, nil
+	}
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "start", "resume", "handoff"); err != nil {
+		return false, err
+	} else if pendiente {
+		return false, nil
+	}
+	if err := encolarControlAutonomiaProyecto(agente, proyecto, agenteControlAccionStart, "runtime_mailbox_pool_local_sin_handle"); err != nil {
+		return false, err
+	}
+	db.Audit("orquesta", "runtime_mailbox_pool_local_reactivacion", "runtime_mailbox", msg.ID,
+		fmt.Sprintf("agente=%s proyecto=%s pool=%s kind=%s", agente, strings.TrimSpace(proyecto.Slug), strings.TrimSpace(poolSlug), strings.TrimSpace(msg.Kind)))
+	return true, nil
+}
+
+func intentarReactivarRuntimeMailboxSinHandle(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
+	proyecto, err := resolverProyectoRuntimeMailboxReactivacion(msg, snapshot)
+	if err != nil {
+		return false, err
+	}
+	if msg == nil || proyecto == nil {
+		return false, nil
+	}
+	if reactivado, err := intentarReactivarRuntimeMailboxPoolLocalSinHandle(msg, snapshot); err != nil || reactivado {
+		return reactivado, err
+	}
+	agente := strings.TrimSpace(msg.ToAgente)
+	if agente == "" {
+		return false, nil
+	}
+	switch strings.TrimSpace(msg.Kind) {
+	case db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh, "watchdog":
+		return false, nil
+	}
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "start", "resume", "handoff"); err != nil {
+		return false, err
+	} else if pendiente {
+		return false, nil
+	}
+	if err := reactivarAgenteTrasReanimacion(agente); err != nil {
+		return false, err
+	}
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "start", "resume", "handoff"); err != nil {
+		return false, err
+	} else if !pendiente {
+		return false, nil
+	}
+	db.Audit("orquesta", "runtime_mailbox_reactivacion_sin_handle", "runtime_mailbox", msg.ID,
+		fmt.Sprintf("agente=%s proyecto_id=%d kind=%s", agente, proyecto.ID, strings.TrimSpace(msg.Kind)))
+	return true, nil
+}
+
+func resolverProyectoRuntimeMailboxReactivacion(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) (*db.Proyecto, error) {
+	if msg == nil {
+		return nil, nil
+	}
+	if msg.ProyectoID != nil && *msg.ProyectoID > 0 {
+		if snapshot != nil {
+			return snapshot.project(*msg.ProyectoID)
+		}
+		return runtimesService.GetProject(strconv.FormatInt(*msg.ProyectoID, 10))
+	}
+	agente := strings.TrimSpace(msg.ToAgente)
+	if agente == "" {
+		return nil, nil
+	}
+	return resolverProyectoReactivacionAgente(agente)
+}
+
+func agenteUsaSesionPoolLocalCompartido(agente, proyecto string) bool {
+	agente = strings.TrimSpace(agente)
+	proyecto = strings.TrimSpace(proyecto)
+	if agente == "" || proyecto == "" {
+		return false
+	}
+	if activa, err := sesionesAPIService.GetActiveSession(agente, proyecto); err == nil && sesionUsaPoolLocalCompartido(activa) {
+		return true
+	}
+	if ultima, err := sesionesAPIService.GetLastSession(agente, proyecto); err == nil && sesionUsaPoolLocalCompartido(ultima) {
+		return true
+	}
+	return false
+}
+
+func sesionUsaPoolLocalCompartido(sesion *db.Sesion) bool {
+	if sesion == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(sesion.Herramienta), "ollama_pool_local") ||
+		strings.EqualFold(strings.TrimSpace(sesion.ConectorSlug), "ollama_pool_local") {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(stringFromMetadataJSON(sesion.ResumePayloadJSON, "driver")), "ollama_pool_local")
 }
 
 func procesarRuntimeMailboxSupervisorLocalBatch() (int, error) {
@@ -2989,6 +3678,13 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 			return total, err
 		}
 		if handle == nil {
+			reactivado, err := intentarReactivarRuntimeMailboxSinHandle(msg, snapshot)
+			if err != nil {
+				return total, err
+			}
+			if reactivado {
+				total++
+			}
 			continue
 		}
 		if !runtimeMailboxShouldReevaluate("session_resume", msg.ID, handle.ID) {
@@ -3076,6 +3772,13 @@ func procesarRuntimeMailboxBootstrapTMUXBatchConMailbox(mailbox []*db.RuntimeMai
 			return total, err
 		}
 		if handle == nil {
+			reactivado, err := intentarReactivarRuntimeMailboxSinHandle(msg, snapshot)
+			if err != nil {
+				return total, err
+			}
+			if reactivado {
+				total++
+			}
 			continue
 		}
 		if !runtimeMailboxShouldReevaluate("bootstrap_tmux", msg.ID, handle.ID) {
@@ -3208,7 +3911,12 @@ func encolarSendInstructionDesdeRuntimeMailbox(msg *db.RuntimeMailboxMessage, ha
 		order.RuntimeID = handle.RuntimeID
 	}
 	order.HandleID = &handle.ID
-	return db.EncolarRuntimeOrder(order)
+	orderID, err := db.EncolarRuntimeOrder(order)
+	if err != nil {
+		return 0, err
+	}
+	wakeRuntimeOrdersAfterMailbox()
+	return orderID, nil
 }
 
 func compactarInstruccionMailboxEntrega(texto string) string {
@@ -3315,6 +4023,9 @@ func existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot *runtimeMa
 		}
 		switch strings.TrimSpace(order.Estado) {
 		case "pendiente", "tomada", "ejecutando":
+			if !runtimeOrderSigueBloqueandoMailbox(order, time.Now().UTC()) {
+				continue
+			}
 			return true, nil
 		case "completada":
 			if !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) {
@@ -3677,6 +4388,9 @@ func existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot *runtimeMailboxBatchS
 		}
 		switch strings.TrimSpace(order.Estado) {
 		case "pendiente", "tomada", "ejecutando":
+			if !runtimeOrderSigueBloqueandoMailbox(order, time.Now().UTC()) {
+				continue
+			}
 		default:
 			continue
 		}
@@ -3685,6 +4399,23 @@ func existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot *runtimeMailboxBatchS
 		}
 	}
 	return false, nil
+}
+
+func runtimeOrderSigueBloqueandoMailbox(order *db.RuntimeOrder, now time.Time) bool {
+	if order == nil {
+		return false
+	}
+	switch strings.TrimSpace(order.Estado) {
+	case "pendiente":
+		return true
+	case "tomada", "ejecutando":
+		if order.LeaseExpiresAt != nil && !order.LeaseExpiresAt.IsZero() && !order.LeaseExpiresAt.UTC().After(now.UTC()) {
+			return false
+		}
+		return true
+	default:
+		return false
+	}
 }
 
 func construirInstruccionMailboxInteractivo(msg *db.RuntimeMailboxMessage) (string, bool) {
@@ -3696,7 +4427,7 @@ func construirInstruccionMailboxInteractivo(msg *db.RuntimeMailboxMessage) (stri
 		_ = json.Unmarshal([]byte(msg.PayloadJSON), &payload)
 	}
 	switch strings.TrimSpace(msg.Kind) {
-	case "instruction":
+	case "instruction", "pipeline_local":
 		texto := stringMapValue(payload, "texto")
 		if texto == "" {
 			texto = stringMapValue(payload, "instruction")
@@ -3741,6 +4472,195 @@ func construirInstruccionMailboxInteractivo(msg *db.RuntimeMailboxMessage) (stri
 	default:
 		return "", false
 	}
+}
+
+func procesarPipelineLocalBatch() (int, error) {
+	proyectos, err := db.ListarProyectosActivos()
+	if err != nil {
+		return 0, err
+	}
+	procesados := 0
+	for _, proyecto := range proyectos {
+		slug, ok := pipelineLocalProyectoElegible(proyecto)
+		if !ok {
+			continue
+		}
+		proyectoProcesado, err := procesarProyectoPipelineLocal(proyecto, slug)
+		if err != nil {
+			continue
+		}
+		if proyectoProcesado {
+			procesados++
+		}
+	}
+	if procesados > 0 {
+		resetStatusSnapshotCache()
+	}
+	return procesados, nil
+}
+
+func pipelineLocalProyectoElegible(proyecto *db.Proyecto) (string, bool) {
+	if proyecto == nil || !proyecto.Activo || proyecto.Tipo != db.ProyectoRepo {
+		return "", false
+	}
+	slug := strings.TrimSpace(proyecto.Slug)
+	if slug == "" {
+		return "", false
+	}
+	return slug, true
+}
+
+func procesarProyectoPipelineLocal(proyecto *db.Proyecto, slug string) (bool, error) {
+	if cerrado, handled := intentarCerrarProyectoPipelineLocal(proyecto, slug); handled {
+		return cerrado, nil
+	}
+	resultado, handled := ejecutarPasoProyectoPipelineLocal(proyecto, slug)
+	if !handled {
+		return false, nil
+	}
+	return procesarResultadoPipelineLocal(proyecto, slug, resultado)
+}
+
+func intentarCerrarProyectoPipelineLocal(proyecto *db.Proyecto, slug string) (bool, bool) {
+	cerrado, err := procesarCierreProyectoAutonomiaSinSesion(proyecto)
+	if err != nil {
+		auditarPipelineLocalProyectoError("pipeline_local_project_close_error", proyecto, slug, err)
+		return false, true
+	}
+	if !cerrado {
+		return false, false
+	}
+	auditarPipelineLocalProyecto("pipeline_local_project_closed", proyecto, slug)
+	return true, true
+}
+
+func ejecutarPasoProyectoPipelineLocal(proyecto *db.Proyecto, slug string) (*capacidadapp.ResultadoEjecucionPasoPipelineLocal, bool) {
+	resultado, err := capacidadService.EjecutarSiguientePasoPipelineLocalDeterminista(slug)
+	if err != nil {
+		auditarPipelineLocalProyectoError("pipeline_local_error", proyecto, slug, err)
+		return nil, false
+	}
+	return resultado, true
+}
+
+func procesarResultadoPipelineLocal(proyecto *db.Proyecto, slug string, resultado *capacidadapp.ResultadoEjecucionPasoPipelineLocal) (bool, error) {
+	if resultado == nil {
+		return false, nil
+	}
+	proyectoProcesado := resultado.FaseActivada != nil || resultado.TareaActualizada != nil
+	despachoProcesado, err := procesarDespachoPipelineLocal(proyecto, slug, resultado)
+	if err != nil {
+		return false, err
+	}
+	return proyectoProcesado || despachoProcesado, nil
+}
+
+func procesarDespachoPipelineLocal(proyecto *db.Proyecto, slug string, resultado *capacidadapp.ResultadoEjecucionPasoPipelineLocal) (bool, error) {
+	if proyecto == nil || resultado == nil || !despachoPipelineRequiereRuntime(resultado.Despacho) {
+		return false, nil
+	}
+	key := pipelineLocalDispatchKey(slug, resultado.Despacho)
+	if !pipelineLocalDispatchShouldAttempt(key) {
+		return false, nil
+	}
+	dispatchRuntime, err := capacidadService.DespacharPipelineLocal(slug, resultado.Despacho)
+	if err != nil {
+		auditarPipelineLocalProyectoError("pipeline_local_dispatch_error", proyecto, slug, err)
+		return false, nil
+	}
+	resultado.DispatchRuntime = dispatchRuntime
+	if !pipelineLocalDispatchEncolado(dispatchRuntime) {
+		return false, nil
+	}
+	auditarPipelineLocalDispatch(proyecto.ID, slug, resultado.Despacho, dispatchRuntime)
+	return true, nil
+}
+
+func pipelineLocalDispatchEncolado(resultado *capacidadapp.ResultadoDespachoPipeline) bool {
+	return resultado != nil && strings.EqualFold(strings.TrimSpace(resultado.Estado), "encolado")
+}
+
+func auditarPipelineLocalProyecto(accion string, proyecto *db.Proyecto, slug string) {
+	db.Audit("server", strings.TrimSpace(accion), "proyecto", valorProyectoIDDesdePipelineLocal(proyecto), detalleProyectoPipelineLocal(slug, nil))
+}
+
+func auditarPipelineLocalProyectoError(accion string, proyecto *db.Proyecto, slug string, err error) {
+	if err == nil {
+		return
+	}
+	db.Audit("server", strings.TrimSpace(accion), "proyecto", valorProyectoIDDesdePipelineLocal(proyecto), detalleProyectoPipelineLocal(slug, err))
+}
+
+func valorProyectoIDDesdePipelineLocal(proyecto *db.Proyecto) int64 {
+	if proyecto == nil {
+		return 0
+	}
+	return proyecto.ID
+}
+
+func detalleProyectoPipelineLocal(slug string, err error) string {
+	detalle := fmt.Sprintf("proyecto=%s", strings.TrimSpace(slug))
+	if err == nil {
+		return detalle
+	}
+	return detalle + " error=" + err.Error()
+}
+
+func auditarPipelineLocalDispatch(proyectoID int64, slug string, despacho *capacidadapp.DespachoPipelineLocal, dispatchRuntime *capacidadapp.ResultadoDespachoPipeline) {
+	if despacho == nil || dispatchRuntime == nil {
+		return
+	}
+	db.Audit("server", "pipeline_local_dispatch", "proyecto", proyectoID,
+		fmt.Sprintf("proyecto=%s fase=%s carril=%s agente=%s tarea_id=%d start_order_id=%d runtime_order_id=%d",
+			slug,
+			strings.TrimSpace(despacho.Fase),
+			strings.TrimSpace(despacho.Carril),
+			strings.TrimSpace(despacho.AgenteSugerido),
+			despacho.TareaObjetivoID,
+			valorID(dispatchRuntime.StartOrderID),
+			valorID(dispatchRuntime.RuntimeOrderID),
+		))
+}
+
+func procesarCierreProyectoAutonomiaSinSesion(proyecto *db.Proyecto) (bool, error) {
+	if proyecto == nil || proyecto.ID <= 0 {
+		return false, nil
+	}
+	policy, err := supervisionService.GetProjectPolicy(strings.TrimSpace(proyecto.Slug))
+	if err != nil {
+		return false, err
+	}
+	if policy == nil || !policy.Enabled || !policy.AutoCloseProject || policy.EstadoAutonomia != db.AutonomiaProyectoCerrando {
+		return false, nil
+	}
+	activa := true
+	proyectoID := proyecto.ID
+	sesiones, err := sesionesAPIService.ListInspectionSessions(db.FiltroSesionesInspeccion{
+		ProyectoID: &proyectoID,
+		Activa:     &activa,
+		Limit:      10,
+	})
+	if err != nil {
+		return false, err
+	}
+	if len(sesiones) > 0 {
+		return false, nil
+	}
+	terminado, motivo, err := proyectoTerminadoAutonomamente(proyecto)
+	if err != nil || !terminado {
+		return false, err
+	}
+	if err := cerrarProyectoAutonomia(proyecto.ID, motivo, db.AutonomiaProyectoCerrado, policy); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func valorID(id *int64) int64 {
+	if id == nil {
+		return 0
+	}
+	return *id
 }
 
 func procesarAutonomiaAgentesBatch() (int, error) {
@@ -3930,31 +4850,17 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 					continue
 				}
 				resolucion := fmt.Sprintf("reasignación automática por sobrecarga desde %s", agente)
-				if err := tareasService.Unblock(actual.ID, "orquesta", resolucion); err != nil {
+				if err := desbloquearYReasignarTareaAutonomia(actual.ID, resolucion, relevo, fmt.Sprintf("Reasignada automáticamente desde %s a %s tras bloqueo por sobrecarga", agente, relevo)); err != nil {
 					return procesadas, err
 				}
-				if err := tareasService.Reassign(actual.ID, relevo); err != nil {
-					return procesadas, err
-				}
-				if err := tareasService.Start(actual.ID, relevo); err != nil {
-					return procesadas, err
-				}
-				_ = tareasService.Note(actual.ID, "orquesta", fmt.Sprintf("Reasignada automáticamente desde %s a %s tras bloqueo por sobrecarga", agente, relevo))
 				openTasksProjected[relevo]++
 				procesadas++
 				continue
 			}
 			resolucion := fmt.Sprintf("recuperación automática tras %s (%s)", row.EstadoOperativo, firstNonEmpty(strings.TrimSpace(row.DetalleOperativo), "worker recuperado"))
-			if err := tareasService.Unblock(actual.ID, "orquesta", resolucion); err != nil {
+			if err := desbloquearYReactivarTareaAutonomia(actual.ID, resolucion, agente, fmt.Sprintf("Reactivada automáticamente en %s tras recuperar estado operativo", agente)); err != nil {
 				return procesadas, err
 			}
-			if err := tareasService.Take(actual.ID, agente); err != nil {
-				return procesadas, err
-			}
-			if err := tareasService.Start(actual.ID, agente); err != nil {
-				return procesadas, err
-			}
-			_ = tareasService.Note(actual.ID, "orquesta", fmt.Sprintf("Reactivada automáticamente en %s tras recuperar estado operativo", agente))
 			openTasksProjected[agente]++
 			procesadas++
 		}
@@ -4000,7 +4906,7 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 			motivo := construirMotivoAutonomiaAgenteDegradado(row)
 			relevo := seleccionarRelevoAutonomia(rows, openTasksProjected, actual, agente)
 			if relevo == "" {
-				if err := tareasService.Block(actual.ID, agente, motivo); err != nil {
+				if err := bloquearTareaAutonomiaSinRelevo(actual.ID, agente, motivo, "Bloqueada automáticamente por degradación operativa sin relevo sano"); err != nil {
 					return procesadas, err
 				}
 				procesadas++
@@ -4010,37 +4916,17 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 				continue
 			}
 
-			if err := tareasService.Reassign(actual.ID, relevo); err != nil {
+			if err := reasignarYArrancarTareaAutonomia(actual.ID, relevo, fmt.Sprintf("Reasignada automáticamente desde %s a %s: %s", agente, relevo, motivo)); err != nil {
 				return procesadas, err
 			}
-			if err := tareasService.Start(actual.ID, relevo); err != nil {
-				return procesadas, err
-			}
-			_ = tareasService.Note(actual.ID, "orquesta", fmt.Sprintf("Reasignada automáticamente desde %s a %s: %s", agente, relevo, motivo))
 			if openTasksProjected[agente] > 0 {
 				openTasksProjected[agente]--
 			}
 			openTasksProjected[relevo]++
 			procesadas++
 
-			if actual.ProyectoID != nil {
-				proyecto, err := runtimesService.GetProject(strconv.FormatInt(*actual.ProyectoID, 10))
-				if err == nil && proyecto != nil {
-					if pendiente, err := existeRuntimeOrderAutonomiaPendiente(relevo, &proyecto.ID, "nudge", "continuar_trabajo"); err == nil && !pendiente {
-						_, _ = encolarNudgeAutonomiaDetallado(
-							relevo,
-							proyecto,
-							"continuar_trabajo",
-							fmt.Sprintf("Tarea #%d reasignada automáticamente", actual.ID),
-							"continúa con la tarea reasignada y deja evidencia de avance",
-							map[string]any{
-								"tarea_id":         actual.ID,
-								"reasignada_desde": agente,
-								"motivo":           row.EstadoOperativo,
-							},
-						)
-					}
-				}
+			if err := encolarContinuacionTareaReasignadaSiCorresponde(relevo, actual.ProyectoID, actual.ID, agente, row.EstadoOperativo, "continúa con la tarea reasignada y deja evidencia de avance", nil); err != nil {
+				return procesadas, err
 			}
 		}
 	}
@@ -4093,37 +4979,14 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 
 			motivo := construirMotivoAutonomiaAgenteDegradado(row)
 			resolucion := fmt.Sprintf("reasignación automática desde %s tras %s (%s)", agente, row.EstadoOperativo, firstNonEmpty(strings.TrimSpace(row.DetalleOperativo), "worker degradado"))
-			if err := tareasService.Unblock(actual.ID, "orquesta", resolucion); err != nil {
+			if err := desbloquearYReasignarTareaAutonomia(actual.ID, resolucion, relevo, fmt.Sprintf("Reasignada automáticamente desde %s a %s: %s", agente, relevo, motivo)); err != nil {
 				return procesadas, err
 			}
-			if err := tareasService.Reassign(actual.ID, relevo); err != nil {
-				return procesadas, err
-			}
-			if err := tareasService.Start(actual.ID, relevo); err != nil {
-				return procesadas, err
-			}
-			_ = tareasService.Note(actual.ID, "orquesta", fmt.Sprintf("Reasignada automáticamente desde %s a %s: %s", agente, relevo, motivo))
 			openTasksProjected[relevo]++
 			procesadas++
 
-			if actual.ProyectoID != nil {
-				proyecto, err := runtimesService.GetProject(strconv.FormatInt(*actual.ProyectoID, 10))
-				if err == nil && proyecto != nil {
-					if pendiente, err := existeRuntimeOrderAutonomiaPendiente(relevo, &proyecto.ID, "nudge", "continuar_trabajo"); err == nil && !pendiente {
-						_, _ = encolarNudgeAutonomiaDetallado(
-							relevo,
-							proyecto,
-							"continuar_trabajo",
-							fmt.Sprintf("Tarea #%d reasignada automáticamente", actual.ID),
-							"continúa con la tarea reasignada y deja evidencia de avance",
-							map[string]any{
-								"tarea_id":         actual.ID,
-								"reasignada_desde": agente,
-								"motivo":           row.EstadoOperativo,
-							},
-						)
-					}
-				}
+			if err := encolarContinuacionTareaReasignadaSiCorresponde(relevo, actual.ProyectoID, actual.ID, agente, row.EstadoOperativo, "continúa con la tarea reasignada y deja evidencia de avance", nil); err != nil {
+				return procesadas, err
 			}
 		}
 	}
@@ -4161,10 +5024,9 @@ func procesarTareasActivasFueraDeOrquestacionBatch(tareasActivasPorAgente map[st
 			if actual.Estado != db.EstadoAsignada && actual.Estado != db.EstadoEnProgreso {
 				continue
 			}
-			if err := tareasService.Block(actual.ID, strings.TrimSpace(agente), motivo); err != nil {
+			if err := bloquearTareaAutonomiaSinRelevo(actual.ID, strings.TrimSpace(agente), motivo, fmt.Sprintf("Bloqueada automáticamente: %s", motivo)); err != nil {
 				return procesadas, err
 			}
-			_ = tareasService.Note(actual.ID, "orquesta", fmt.Sprintf("Bloqueada automáticamente: %s", motivo))
 			procesadas++
 		}
 	}
@@ -4459,23 +5321,18 @@ func escalarTareasWorkerAtascado(row agentesapp.Row, rows []agentesapp.Row, now 
 		}
 		relevo := seleccionarRelevoAutonomia(rows, openTasksProjected, actual, agente)
 		if relevo == "" {
-			if err := tareasService.Block(actual.ID, agente, motivo); err != nil {
+			if err := bloquearTareaAutonomiaSinRelevo(actual.ID, agente, motivo, fmt.Sprintf("Bloqueada automáticamente en %s por atasco persistente tras reinicios recientes", agente)); err != nil {
 				return procesadas, err
 			}
-			_ = tareasService.Note(actual.ID, "orquesta", fmt.Sprintf("Bloqueada automáticamente en %s por atasco persistente tras reinicios recientes", agente))
 			if openTasksProjected[agente] > 0 {
 				openTasksProjected[agente]--
 			}
 			procesadas++
 			continue
 		}
-		if err := tareasService.Reassign(actual.ID, relevo); err != nil {
+		if err := reasignarYArrancarTareaAutonomia(actual.ID, relevo, fmt.Sprintf("Reasignada automáticamente desde %s a %s por atasco persistente tras reinicios recientes", agente, relevo)); err != nil {
 			return procesadas, err
 		}
-		if err := tareasService.Start(actual.ID, relevo); err != nil {
-			return procesadas, err
-		}
-		_ = tareasService.Note(actual.ID, "orquesta", fmt.Sprintf("Reasignada automáticamente desde %s a %s por atasco persistente tras reinicios recientes", agente, relevo))
 		if openTasksProjected[agente] > 0 {
 			openTasksProjected[agente]--
 		}
@@ -4595,47 +5452,26 @@ func procesarSobrecargaAgentesAutonomiaBatch(rows []agentesapp.Row, tareasActiva
 			}
 			relevo := seleccionarRelevoAutonomiaConLimite(rows, openTasksProjected, actual, agente, autonomiaWorkerOpenTasksCeiling)
 			if relevo == "" {
-				if err := tareasService.Block(actual.ID, agente, "Sobrecarga operativa: sin relevo sano disponible"); err != nil {
+				if err := bloquearTareaAutonomiaSinRelevo(actual.ID, agente, "Sobrecarga operativa: sin relevo sano disponible", fmt.Sprintf("Bloqueada automáticamente en %s por sobrecarga operativa sin relevo sano", agente)); err != nil {
 					return procesadas, err
 				}
-				_ = tareasService.Note(actual.ID, "orquesta", fmt.Sprintf("Bloqueada automáticamente en %s por sobrecarga operativa sin relevo sano", agente))
 				if openTasksProjected[agente] > 0 {
 					openTasksProjected[agente]--
 				}
 				procesadas++
 				continue
 			}
-			if err := tareasService.Reassign(actual.ID, relevo); err != nil {
+			if err := reasignarYArrancarTareaAutonomia(actual.ID, relevo, fmt.Sprintf("Redistribuida automáticamente desde %s a %s por sobrecarga operativa", agente, relevo)); err != nil {
 				return procesadas, err
 			}
-			if err := tareasService.Start(actual.ID, relevo); err != nil {
-				return procesadas, err
-			}
-			_ = tareasService.Note(actual.ID, "orquesta", fmt.Sprintf("Redistribuida automáticamente desde %s a %s por sobrecarga operativa", agente, relevo))
 			if openTasksProjected[agente] > 0 {
 				openTasksProjected[agente]--
 			}
 			openTasksProjected[relevo]++
 			procesadas++
 
-			if actual.ProyectoID != nil {
-				proyecto, err := runtimesService.GetProject(strconv.FormatInt(*actual.ProyectoID, 10))
-				if err == nil && proyecto != nil {
-					if pendiente, err := existeRuntimeOrderAutonomiaPendiente(relevo, &proyecto.ID, "nudge", "continuar_trabajo"); err == nil && !pendiente {
-						_, _ = encolarNudgeAutonomiaDetallado(
-							relevo,
-							proyecto,
-							"continuar_trabajo",
-							fmt.Sprintf("Tarea #%d redistribuida automáticamente", actual.ID),
-							"continúa con la tarea redistribuida y deja evidencia de avance",
-							map[string]any{
-								"tarea_id":            actual.ID,
-								"redistribuida_desde": agente,
-								"motivo":              "sobrecarga_operativa",
-							},
-						)
-					}
-				}
+			if err := encolarContinuacionTareaReasignadaSiCorresponde(relevo, actual.ProyectoID, actual.ID, agente, "sobrecarga_operativa", "continúa con la tarea redistribuida y deja evidencia de avance", map[string]any{"redistribuida_desde": agente}); err != nil {
+				return procesadas, err
 			}
 		}
 	}
@@ -4982,17 +5818,10 @@ func degradedTaskShouldIntervene(tarea *db.Tarea, now time.Time) bool {
 	if info, ok := latestAutoReassignmentInfo(taskNotes(tarea)); ok && now.Sub(info.At) < autonomiaDegradedTaskCooldown {
 		return false
 	}
-	autonomiaDegradedTaskGate.mu.Lock()
-	defer autonomiaDegradedTaskGate.mu.Unlock()
-	if autonomiaDegradedTaskGate.last == nil {
-		autonomiaDegradedTaskGate.last = map[int64]time.Time{}
-	}
-	if last, ok := autonomiaDegradedTaskGate.last[tarea.ID]; ok && now.Sub(last) < autonomiaDegradedTaskCooldown {
-		return false
-	}
-	autonomiaDegradedTaskGate.last[tarea.ID] = now
-	return true
+	return autonomiaDegradedTaskGate.AllowAt(strconv.FormatInt(tarea.ID, 10), autonomiaDegradedTaskCooldown, now)
 }
+
+
 
 func degradedTaskRecentlyAutoReassigned(tarea *db.Tarea, now time.Time) bool {
 	if tarea == nil {
@@ -5166,32 +5995,7 @@ func procesarAutonomiaSesionActivaConSnapshot(sesion *db.Sesion, snapshot *auton
 	if sesion == nil || sesion.ProyectoID == nil {
 		return 0, nil
 	}
-	if n, err := procesarCierreProyectoSesion(sesion); err != nil || n > 0 {
-		if n > 0 && snapshot != nil {
-			snapshot.invalidateAgent(sesion.Agente)
-			snapshot.invalidateProject(*sesion.ProyectoID)
-		}
-		return n, err
-	}
-	if n, err := procesarReanudacionAutonomaSesion(sesion, snapshot); err != nil || n > 0 {
-		if n > 0 && snapshot != nil {
-			snapshot.invalidateAgent(sesion.Agente)
-			snapshot.invalidateProject(*sesion.ProyectoID)
-		}
-		return n, err
-	}
-	if n, err := procesarAparcadoAutonomoSesion(sesion, snapshot); err != nil || n > 0 {
-		if n > 0 && snapshot != nil {
-			snapshot.invalidateAgent(sesion.Agente)
-			snapshot.invalidateProject(*sesion.ProyectoID)
-		}
-		return n, err
-	}
-	if n, err := procesarRecuperacionRuntimeDegradadoSesion(sesion); err != nil || n > 0 {
-		if n > 0 && snapshot != nil {
-			snapshot.invalidateAgent(sesion.Agente)
-			snapshot.invalidateProject(*sesion.ProyectoID)
-		}
+	if n, err := procesarPrechecksAutonomiaSesionActiva(sesion, snapshot); err != nil || n > 0 {
 		return n, err
 	}
 	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
@@ -5204,94 +6008,111 @@ func procesarAutonomiaSesionActivaConSnapshot(sesion *db.Sesion, snapshot *auton
 	}
 	switch strings.TrimSpace(out.AccionRecomendada) {
 	case "pausar_por_cuota", "pausar_y_reasignar":
-		if satisfecha, err := pausaAutonomiaYaSatisfecha(sesion.Agente, &proyecto.ID, sesion); err != nil {
-			return 0, err
-		} else if satisfecha {
-			return 0, nil
-		}
-		if strings.TrimSpace(out.AccionRecomendada) == "pausar_por_cuota" {
-			if err := persistirPausaPorCuotaAutonomia(sesion.Agente, out.Motivo); err != nil {
-				return 0, err
-			}
-		}
-		if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
-			Agente:   sesion.Agente,
-			Proyecto: proyecto.Slug,
-			Accion:   agenteControlAccionPause,
-			Motivo:   out.Motivo,
-			Por:      "orquesta",
-		}); err != nil {
-			return 0, err
-		}
-		if snapshot != nil {
-			snapshot.invalidateAgent(sesion.Agente)
-			snapshot.invalidateProject(proyecto.ID)
-		}
-		return 1, nil
+		return procesarDecisionPausaSesionActivaAutonomia(sesion, proyecto, out, snapshot)
 	case "supervisar_proyecto":
 		// La supervisión rica del proyecto ya tiene su propio batch y señales
 		// dedicadas. Repetir un nudge genérico por cada tick de una sesión viva
 		// solo reinyecta guidance redundante sobre un runtime ya activo.
 		return 0, nil
 	case "votar_propuestas_pendientes", "pedir_intervencion":
-		if pendiente, err := existeRuntimeOrderAutonomiaPendiente(sesion.Agente, &proyecto.ID, "nudge", strings.TrimSpace(out.AccionRecomendada)); err != nil {
-			return 0, err
-		} else if pendiente {
-			return 0, nil
-		}
-		if encolada, err := encolarNudgeAutonomia(sesion.Agente, proyecto, out.AccionRecomendada, out.Motivo); err != nil {
-			return 0, err
-		} else if !encolada {
-			return 0, nil
-		}
-		if snapshot != nil {
-			snapshot.invalidateAgent(sesion.Agente)
-			snapshot.invalidateProject(proyecto.ID)
-		}
-		return 1, nil
+		return procesarDecisionNudgeSesionActivaAutonomia(sesion, proyecto, out, snapshot)
 	case "continuar_trabajo", "esperar_o_pedir_tarea":
-		// Una sesión ya activa no debe recibir recordatorios periódicos vacíos.
-		// Pero si el agente está idle y acaba de autoasignarse una tarea real,
-		// sí hay que empujarle ese nuevo frente sin esperar a reinicios o handoff.
-		if strings.TrimSpace(out.AccionRecomendada) != "esperar_o_pedir_tarea" {
-			return 0, nil
-		}
-		if !autonomiaIdleAutoassignShouldAttempt(sesion.Agente, proyecto.ID) {
-			return 0, nil
-		}
-		if err := revalidarYVerificarAgenteDisponibleParaTrabajo(sesion.Agente); err != nil {
-			return 0, nil
-		}
-		tarea, err := db.IntentarAutoasignarTareaAgente(sesion.Agente, proyecto.ID)
-		if err != nil || tarea == nil {
-			return 0, err
-		}
-		motivo := fmt.Sprintf("Tarea #%d asignada automáticamente", tarea.ID)
-		if pendiente, err := existeRuntimeOrderAutonomiaPendiente(sesion.Agente, &proyecto.ID, "nudge", "continuar_trabajo"); err != nil {
-			return 0, err
-		} else if pendiente {
-			return 0, nil
-		}
-		if encolada, err := encolarNudgeAutonomiaDetallado(
-			sesion.Agente,
-			proyecto,
-			"continuar_trabajo",
-			motivo,
-			"toma tarea asignada y sigue",
-			map[string]any{"tarea_id": tarea.ID, "motivo_autoasignacion": "sesion_activa_idle"},
-		); err != nil {
-			return 0, err
-		} else if encolada {
-			if snapshot != nil {
-				snapshot.invalidateAgent(sesion.Agente)
-				snapshot.invalidateProject(proyecto.ID)
-			}
-			return 1, nil
-		}
-		return 0, nil
+		return procesarDecisionContinuacionSesionActivaAutonomia(sesion, proyecto, out, snapshot)
 	default:
 		return 0, nil
 	}
+}
+
+func procesarPrechecksAutonomiaSesionActiva(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {
+	if sesion == nil || sesion.ProyectoID == nil {
+		return 0, nil
+	}
+	checks := []func() (int, error){
+		func() (int, error) { return procesarCierreProyectoSesion(sesion) },
+		func() (int, error) { return procesarReanudacionAutonomaSesion(sesion, snapshot) },
+		func() (int, error) { return procesarAparcadoAutonomoSesion(sesion, snapshot) },
+		func() (int, error) { return procesarRecuperacionRuntimeDegradadoSesion(sesion) },
+	}
+	for _, check := range checks {
+		n, err := check()
+		if err != nil || n > 0 {
+			if n > 0 {
+				invalidarSnapshotAutonomiaProyecto(snapshot, sesion.Agente, valorProyectoID(sesion.ProyectoID))
+			}
+			return n, err
+		}
+	}
+	return 0, nil
+}
+
+func procesarDecisionPausaSesionActivaAutonomia(sesion *db.Sesion, proyecto *db.Proyecto, out agenteTickOutput, snapshot *autonomiaBatchSnapshot) (int, error) {
+	if sesion == nil || proyecto == nil {
+		return 0, nil
+	}
+	if satisfecha, err := pausaAutonomiaYaSatisfecha(sesion.Agente, &proyecto.ID, sesion); err != nil {
+		return 0, err
+	} else if satisfecha {
+		return 0, nil
+	}
+	if strings.TrimSpace(out.AccionRecomendada) == "pausar_por_cuota" {
+		if err := persistirPausaPorCuotaAutonomia(sesion.Agente, out.Motivo); err != nil {
+			return 0, err
+		}
+	}
+	if err := encolarControlAutonomiaProyecto(sesion.Agente, proyecto, agenteControlAccionPause, out.Motivo); err != nil {
+		return 0, err
+	}
+	invalidarSnapshotAutonomiaProyecto(snapshot, sesion.Agente, proyecto.ID)
+	return 1, nil
+}
+
+func procesarDecisionNudgeSesionActivaAutonomia(sesion *db.Sesion, proyecto *db.Proyecto, out agenteTickOutput, snapshot *autonomiaBatchSnapshot) (int, error) {
+	if sesion == nil || proyecto == nil {
+		return 0, nil
+	}
+	if ok, err := encolarNudgeAutonomiaConInvalidacion(snapshot, sesion.Agente, proyecto, strings.TrimSpace(out.AccionRecomendada), out.Motivo, "", nil); err != nil {
+		return 0, err
+	} else if !ok {
+		return 0, nil
+	}
+	return 1, nil
+}
+
+func procesarDecisionContinuacionSesionActivaAutonomia(sesion *db.Sesion, proyecto *db.Proyecto, out agenteTickOutput, snapshot *autonomiaBatchSnapshot) (int, error) {
+	if sesion == nil || proyecto == nil {
+		return 0, nil
+	}
+	// Una sesión ya activa no debe recibir recordatorios periódicos vacíos.
+	// Pero si el agente está idle y acaba de autoasignarse una tarea real,
+	// sí hay que empujarle ese nuevo frente sin esperar a reinicios o handoff.
+	if strings.TrimSpace(out.AccionRecomendada) != "esperar_o_pedir_tarea" {
+		return 0, nil
+	}
+	if !autonomiaIdleAutoassignShouldAttempt(sesion.Agente, proyecto.ID) {
+		return 0, nil
+	}
+	if err := revalidarYVerificarAgenteDisponibleParaTrabajo(sesion.Agente); err != nil {
+		return 0, nil
+	}
+	tarea, err := capacidadService.IntentarAutoasignarTareaPipelineLocal(proyecto.Slug, sesion.Agente)
+	if err != nil || tarea == nil {
+		return 0, err
+	}
+	motivo := fmt.Sprintf("Tarea #%d asignada automáticamente", tarea.ID)
+	if ok, err := encolarNudgeAutonomiaConInvalidacion(
+		snapshot,
+		sesion.Agente,
+		proyecto,
+		"continuar_trabajo",
+		motivo,
+		"toma tarea asignada y sigue",
+		map[string]any{"tarea_id": tarea.ID, "motivo_autoasignacion": "sesion_activa_idle"},
+	); err != nil {
+		return 0, err
+	} else if ok {
+		return 1, nil
+	}
+	return 0, nil
 }
 
 func persistirPausaPorCuotaAutonomia(agente, motivo string) error {
@@ -5328,43 +6149,21 @@ func procesarCierreProyectoSesion(sesion *db.Sesion) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if policy, err := supervisionService.GetProjectPolicy(proyecto.Slug); err != nil {
+	policy, err := supervisionService.GetProjectPolicy(proyecto.Slug)
+	if err != nil {
 		return 0, err
-	} else if policy == nil || !policy.Enabled || !policy.AutoCloseProject {
+	}
+	if policy == nil || !policy.Enabled || !policy.AutoCloseProject {
 		return 0, nil
 	}
 	terminado, motivo, err := proyectoTerminadoAutonomamente(proyecto)
 	if err != nil || !terminado {
 		return 0, err
 	}
-	if err := db.MarcarProyectoCerrado(proyecto.ID, motivo); err != nil {
+	if err := cerrarProyectoAutonomia(proyecto.ID, motivo, db.AutonomiaProyectoCerrado, policy); err != nil {
 		return 0, err
 	}
-	estadoSesion := strings.ToLower(strings.TrimSpace(sesion.Estado))
-	if estadoSesion == "pausada" {
-		if err := db.AparcarSesionActiva(sesion.Agente, sesion.ProyectoID); err != nil {
-			return 0, err
-		}
-		if err := db.PausarAsignacion(sesion.Agente, proyecto.ID, "proyecto_terminado:"+motivo); err != nil {
-			return 0, err
-		}
-		return 1, nil
-	}
-	if satisfecha, err := pausaAutonomiaYaSatisfecha(sesion.Agente, &proyecto.ID, sesion); err != nil {
-		return 0, err
-	} else if satisfecha {
-		return 0, nil
-	}
-	if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
-		Agente:   sesion.Agente,
-		Proyecto: proyecto.Slug,
-		Accion:   agenteControlAccionPause,
-		Motivo:   "proyecto_terminado:" + motivo,
-		Por:      "orquesta",
-	}); err != nil {
-		return 0, err
-	}
-	return 1, nil
+	return pausarSesionAutonomiaPorMotivo(sesion, proyecto, "proyecto_terminado:"+motivo)
 }
 
 func procesarReanudacionAutonomaSesion(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {
@@ -5507,31 +6306,7 @@ func procesarAparcadoAutonomoSesion(sesion *db.Sesion, snapshot *autonomiaBatchS
 	if err != nil {
 		return 0, err
 	}
-	estadoSesion := strings.ToLower(strings.TrimSpace(sesion.Estado))
-	if estadoSesion == "pausada" {
-		if err := db.AparcarSesionActiva(sesion.Agente, sesion.ProyectoID); err != nil {
-			return 0, err
-		}
-		if err := db.PausarAsignacion(sesion.Agente, *sesion.ProyectoID, "bloqueo_humano:"+motivo); err != nil {
-			return 0, err
-		}
-		return 1, nil
-	}
-	if satisfecha, err := pausaAutonomiaYaSatisfecha(sesion.Agente, sesion.ProyectoID, sesion); err != nil {
-		return 0, err
-	} else if satisfecha {
-		return 0, nil
-	}
-	if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
-		Agente:   sesion.Agente,
-		Proyecto: proyecto.Slug,
-		Accion:   agenteControlAccionPause,
-		Motivo:   "bloqueo_humano:" + motivo,
-		Por:      "orquesta",
-	}); err != nil {
-		return 0, err
-	}
-	return 1, nil
+	return pausarSesionAutonomiaPorMotivo(sesion, proyecto, "bloqueo_humano:"+motivo)
 }
 
 func sesionTieneTrabajoArrancableAutonomia(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (bool, error) {
@@ -5604,13 +6379,7 @@ func reactivarSesionAutonomiaPorTrabajo(sesion *db.Sesion) (int, error) {
 			}
 		}
 	}
-	if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
-		Agente:   strings.TrimSpace(sesion.Agente),
-		Proyecto: proyecto.Slug,
-		Accion:   accion,
-		Motivo:   "desbloqueo_humano_auto",
-		Por:      "orquesta",
-	}); err != nil {
+	if err := encolarControlAutonomiaProyecto(strings.TrimSpace(sesion.Agente), proyecto, accion, "desbloqueo_humano_auto"); err != nil {
 		return 0, err
 	}
 	return 1, nil
@@ -5692,7 +6461,7 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 			razonamientoPersistido = ""
 		}
 
-		if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
+		if err := encolarControlAutonomiaProyectoDetallado(apiAgenteControlRequest{
 			Agente:       strings.TrimSpace(sesion.Agente),
 			Proyecto:     proyecto.Slug,
 			Accion:       agenteControlAccionStart,
@@ -5732,13 +6501,7 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 			} else if satisfecha {
 				return 1, nil
 			}
-			if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
-				Agente:   strings.TrimSpace(sesion.Agente),
-				Proyecto: proyecto.Slug,
-				Accion:   agenteControlAccionPause,
-				Motivo:   motivo,
-				Por:      "orquesta",
-			}); err != nil {
+			if err := encolarControlAutonomiaProyecto(strings.TrimSpace(sesion.Agente), proyecto, agenteControlAccionPause, motivo); err != nil {
 				return 0, err
 			}
 			return 1, nil
@@ -5780,13 +6543,7 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 	if runtimeRemotoReanudable(sesion, handle) {
 		accion = agenteControlAccionResume
 	}
-	if _, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
-		Agente:   strings.TrimSpace(sesion.Agente),
-		Proyecto: proyecto.Slug,
-		Accion:   accion,
-		Motivo:   "remote_runtime_degraded",
-		Por:      "orquesta",
-	}); err != nil {
+	if err := encolarControlAutonomiaProyecto(strings.TrimSpace(sesion.Agente), proyecto, accion, "remote_runtime_degraded"); err != nil {
 		return 0, err
 	}
 	return 2, nil
@@ -5955,6 +6712,11 @@ func runtimeRemotoReanudable(sesion *db.Sesion, handle *db.RuntimeHandle) bool {
 	if !esTransporteRemotoAutonomia(handle.Transporte) {
 		return false
 	}
+	if strings.EqualFold(strings.TrimSpace(sesion.Herramienta), "ollama_pool_local") ||
+		strings.EqualFold(strings.TrimSpace(sesion.ConectorSlug), "ollama_pool_local") ||
+		strings.EqualFold(strings.TrimSpace(stringFromMetadataJSON(handle.MetadataJSON, "driver")), "ollama_pool_local") {
+		return false
+	}
 	if strings.TrimSpace(handle.HandleKind) == "process" {
 		return false
 	}
@@ -6004,19 +6766,17 @@ func reactivarAgenteTrasReanimacion(agente string) error {
 	if err != nil {
 		return err
 	}
-	if handle != nil && strings.TrimSpace(handle.Estado) == "pausado" {
-		accion := agenteControlAccionResume
-		if db.RuntimeHandlePauseRequiresFreshStart(handle) {
-			accion = agenteControlAccionStart
+	if handle != nil {
+		switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
+		case "pausado":
+			accion := agenteControlAccionResume
+			if db.RuntimeHandlePauseRequiresFreshStart(handle) {
+				accion = agenteControlAccionStart
+			}
+			return encolarControlAutonomiaProyecto(agente, proyecto, accion, "reanimacion_automatica")
+		case "fallido":
+			return encolarControlAutonomiaProyecto(agente, proyecto, agenteControlAccionStart, "reanimacion_automatica")
 		}
-		_, _, err := encolarControlAgenteLocal(apiAgenteControlRequest{
-			Agente:   agente,
-			Proyecto: proyecto.Slug,
-			Accion:   accion,
-			Motivo:   "reanimacion_automatica",
-			Por:      "orquesta",
-		})
-		return err
 	}
 	tieneTrabajo, err := dbAgenteTieneTrabajoArrancable(agente, proyecto.ID)
 	if err != nil {
@@ -6031,14 +6791,7 @@ func reactivarAgenteTrasReanimacion(agente string) error {
 			return nil
 		}
 	}
-	_, _, err = encolarControlAgenteLocal(apiAgenteControlRequest{
-		Agente:   agente,
-		Proyecto: proyecto.Slug,
-		Accion:   agenteControlAccionStart,
-		Motivo:   "reanimacion_automatica",
-		Por:      "orquesta",
-	})
-	return err
+	return encolarControlAutonomiaProyecto(agente, proyecto, agenteControlAccionStart, "reanimacion_automatica")
 }
 
 func resolverProyectoReactivacionAgente(agente string) (*db.Proyecto, error) {
@@ -6052,6 +6805,11 @@ func resolverProyectoReactivacionAgente(agente string) (*db.Proyecto, error) {
 		return runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
 	}
 	if proyectoID, err := proyectoReactivacionDesdeTareas(agente); err != nil {
+		return nil, err
+	} else if proyectoID > 0 {
+		return runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
+	}
+	if proyectoID, err := proyectoReactivacionDesdeMailbox(agente); err != nil {
 		return nil, err
 	} else if proyectoID > 0 {
 		return runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
@@ -6107,6 +6865,29 @@ func proyectoReactivacionDesdeTareas(agente string) (int64, error) {
 			bestProjectID = *tarea.ProyectoID
 			bestRank = rank
 			bestID = tarea.ID
+		}
+	}
+	return bestProjectID, nil
+}
+
+func proyectoReactivacionDesdeMailbox(agente string) (int64, error) {
+	estado := "pendiente"
+	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente: &agente,
+		Estado:   &estado,
+	})
+	if err != nil {
+		return 0, err
+	}
+	bestProjectID := int64(0)
+	bestID := int64(0)
+	for _, msg := range mailbox {
+		if msg == nil || msg.ProyectoID == nil || *msg.ProyectoID <= 0 {
+			continue
+		}
+		if bestProjectID == 0 || msg.ID > bestID {
+			bestProjectID = *msg.ProyectoID
+			bestID = msg.ID
 		}
 	}
 	return bestProjectID, nil
@@ -6381,6 +7162,33 @@ func encolarNudgeAutonomia(agente string, proyecto *db.Proyecto, accion, motivo 
 	return encolarNudgeAutonomiaDetallado(agente, proyecto, accion, motivo, "", nil)
 }
 
+func invalidarSnapshotAutonomiaProyecto(snapshot *autonomiaBatchSnapshot, agente string, proyectoID int64) {
+	if snapshot == nil {
+		return
+	}
+	snapshot.invalidateAgent(strings.TrimSpace(agente))
+	if proyectoID > 0 {
+		snapshot.invalidateProject(proyectoID)
+	}
+}
+
+func encolarNudgeAutonomiaConInvalidacion(snapshot *autonomiaBatchSnapshot, agente string, proyecto *db.Proyecto, accion, motivo, instruction string, extras map[string]any) (bool, error) {
+	if proyecto == nil {
+		return false, nil
+	}
+	if pendiente, err := existeRuntimeOrderAutonomiaPendiente(strings.TrimSpace(agente), &proyecto.ID, "nudge", strings.TrimSpace(accion)); err != nil {
+		return false, err
+	} else if pendiente {
+		return false, nil
+	}
+	encolada, err := encolarNudgeAutonomiaDetallado(strings.TrimSpace(agente), proyecto, strings.TrimSpace(accion), motivo, instruction, extras)
+	if err != nil || !encolada {
+		return encolada, err
+	}
+	invalidarSnapshotAutonomiaProyecto(snapshot, strings.TrimSpace(agente), proyecto.ID)
+	return true, nil
+}
+
 func encolarNudgeAutonomiaDetallado(agente string, proyecto *db.Proyecto, accion, motivo, instruction string, extras map[string]any) (bool, error) {
 	if proyecto == nil {
 		return false, nil
@@ -6452,6 +7260,225 @@ func encolarNudgeAutonomiaDetallado(agente string, proyecto *db.Proyecto, accion
 	db.Audit("orquesta", "autonomia_nudge", "runtime_order", orderID,
 		fmt.Sprintf("agente=%s proyecto=%s accion=%s", agente, proyecto.Slug, accion))
 	return true, nil
+}
+
+func encolarContinuacionTareaReasignada(agente string, proyecto *db.Proyecto, tareaID int64, origen, motivo, instruction string, extras map[string]any) (bool, error) {
+	if tareaID <= 0 {
+		return false, nil
+	}
+	payloadExtras := map[string]any{
+		"tarea_id": tareaID,
+	}
+	origen = strings.TrimSpace(origen)
+	if origen != "" {
+		payloadExtras["reasignada_desde"] = origen
+	}
+	motivo = strings.TrimSpace(motivo)
+	if motivo != "" {
+		payloadExtras["motivo"] = motivo
+	}
+	for k, v := range extras {
+		payloadExtras[k] = v
+	}
+	return encolarNudgeAutonomiaDetallado(
+		agente,
+		proyecto,
+		"continuar_trabajo",
+		fmt.Sprintf("Tarea #%d reasignada automáticamente", tareaID),
+		instruction,
+		payloadExtras,
+	)
+}
+
+func encolarContinuacionTareaReasignadaSiCorresponde(agente string, proyectoID *int64, tareaID int64, origen, motivo, instruction string, extras map[string]any) error {
+	if strings.TrimSpace(agente) == "" || proyectoID == nil || *proyectoID <= 0 || tareaID <= 0 {
+		return nil
+	}
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*proyectoID, 10))
+	if err != nil || proyecto == nil {
+		return err
+	}
+	pendiente, err := existeRuntimeOrderAutonomiaPendiente(strings.TrimSpace(agente), &proyecto.ID, "nudge", "continuar_trabajo")
+	if err != nil || pendiente {
+		return err
+	}
+	_, err = encolarContinuacionTareaReasignada(strings.TrimSpace(agente), proyecto, tareaID, origen, motivo, instruction, extras)
+	return err
+}
+
+func encolarNudgeSignalTranscriptAutonomia(agente string, proyecto *db.Proyecto, accion, instruction string, item *db.RuntimeTranscriptEntry, prefijoEstado string) (string, error) {
+	if strings.TrimSpace(agente) == "" || proyecto == nil || item == nil {
+		return "", nil
+	}
+	if pendiente, err := existeRuntimeOrderAutonomiaPendiente(strings.TrimSpace(agente), &proyecto.ID, "nudge", strings.TrimSpace(accion)); err != nil {
+		return "", err
+	} else if pendiente {
+		return estadoNudgeSignalTranscript(prefijoEstado, "pendiente"), nil
+	}
+	if encolada, err := encolarNudgeAutonomiaDetallado(strings.TrimSpace(agente), proyecto, strings.TrimSpace(accion), resumenSignalTranscriptAutonomia(item), instruction, payloadSignalTranscriptAutonomia(item)); err != nil {
+		return "", err
+	} else if !encolada {
+		return estadoNudgeSignalTranscript(prefijoEstado, "omitido"), nil
+	}
+	return estadoNudgeSignalTranscript(prefijoEstado, "nudged"), nil
+}
+
+func payloadSignalTranscriptAutonomia(item *db.RuntimeTranscriptEntry) map[string]any {
+	if item == nil {
+		return nil
+	}
+	return map[string]any{
+		"signal_classification": clasificacionSignalTranscript(item),
+		"signal_transcript_id":  idSignalTranscript(item),
+		"signal_agente":         agenteSignalTranscript(item),
+		"signal_text":           textoSignalTranscript(item),
+	}
+}
+
+func resumenSignalTranscriptAutonomia(item *db.RuntimeTranscriptEntry) string {
+	if item == nil {
+		return ""
+	}
+	return fmt.Sprintf("agente=%s signal=%s transcript=%d", agenteSignalTranscript(item), clasificacionSignalTranscript(item), idSignalTranscript(item))
+}
+
+func estadoNudgeSignalTranscript(prefijoEstado, sufijo string) string {
+	prefijoEstado = strings.TrimSpace(prefijoEstado)
+	sufijo = strings.TrimSpace(sufijo)
+	if prefijoEstado == "" {
+		return sufijo
+	}
+	if sufijo == "" {
+		return prefijoEstado
+	}
+	if sufijo == "nudged" {
+		return prefijoEstado + "_" + sufijo
+	}
+	return prefijoEstado + "_nudge_" + sufijo
+}
+
+func arrancarTareaAutonomiaSiAsignada(tareaID int64, agente string) error {
+	if tareaID <= 0 || strings.TrimSpace(agente) == "" {
+		return nil
+	}
+	return tareasService.Start(tareaID, strings.TrimSpace(agente))
+}
+
+func reasignarYArrancarTareaAutonomia(tareaID int64, relevo, nota string) error {
+	if tareaID <= 0 || strings.TrimSpace(relevo) == "" {
+		return nil
+	}
+	if err := tareasService.Reassign(tareaID, strings.TrimSpace(relevo)); err != nil {
+		return err
+	}
+	if err := arrancarTareaAutonomiaSiAsignada(tareaID, strings.TrimSpace(relevo)); err != nil {
+		return err
+	}
+	if strings.TrimSpace(nota) != "" {
+		_ = tareasService.Note(tareaID, "orquesta", strings.TrimSpace(nota))
+	}
+	return nil
+}
+
+func bloquearTareaAutonomiaSinRelevo(tareaID int64, agente, motivo, nota string) error {
+	if tareaID <= 0 || strings.TrimSpace(agente) == "" || strings.TrimSpace(motivo) == "" {
+		return nil
+	}
+	if err := tareasService.Block(tareaID, strings.TrimSpace(agente), strings.TrimSpace(motivo)); err != nil {
+		return err
+	}
+	if strings.TrimSpace(nota) != "" {
+		_ = tareasService.Note(tareaID, "orquesta", strings.TrimSpace(nota))
+	}
+	return nil
+}
+
+func desbloquearYReasignarTareaAutonomia(tareaID int64, resolucion, relevo, nota string) error {
+	if tareaID <= 0 || strings.TrimSpace(relevo) == "" {
+		return nil
+	}
+	if err := tareasService.Unblock(tareaID, "orquesta", strings.TrimSpace(resolucion)); err != nil {
+		return err
+	}
+	return reasignarYArrancarTareaAutonomia(tareaID, strings.TrimSpace(relevo), strings.TrimSpace(nota))
+}
+
+func desbloquearYReactivarTareaAutonomia(tareaID int64, resolucion, agente, nota string) error {
+	if tareaID <= 0 || strings.TrimSpace(agente) == "" {
+		return nil
+	}
+	if err := tareasService.Unblock(tareaID, "orquesta", strings.TrimSpace(resolucion)); err != nil {
+		return err
+	}
+	if err := tareasService.Take(tareaID, strings.TrimSpace(agente)); err != nil {
+		return err
+	}
+	if err := arrancarTareaAutonomiaSiAsignada(tareaID, strings.TrimSpace(agente)); err != nil {
+		return err
+	}
+	if strings.TrimSpace(nota) != "" {
+		_ = tareasService.Note(tareaID, "orquesta", strings.TrimSpace(nota))
+	}
+	return nil
+}
+
+func cerrarProyectoAutonomia(proyectoID int64, motivo string, estadoAutonomia db.EstadoAutonomiaProyecto, policy *db.ProyectoAutonomia) error {
+	if proyectoID <= 0 {
+		return nil
+	}
+	if err := db.MarcarProyectoCerrado(proyectoID, strings.TrimSpace(motivo)); err != nil {
+		return err
+	}
+	if policy != nil && strings.TrimSpace(string(estadoAutonomia)) != "" {
+		return persistirEstadoProyectoAutonomia(policy, estadoAutonomia)
+	}
+	return nil
+}
+
+func pausarSesionAutonomiaPorMotivo(sesion *db.Sesion, proyecto *db.Proyecto, motivo string) (int, error) {
+	if sesion == nil || sesion.ProyectoID == nil || proyecto == nil {
+		return 0, nil
+	}
+	motivo = strings.TrimSpace(motivo)
+	if motivo == "" {
+		return 0, nil
+	}
+	if strings.EqualFold(strings.TrimSpace(sesion.Estado), "pausada") {
+		if err := db.AparcarSesionActiva(sesion.Agente, sesion.ProyectoID); err != nil {
+			return 0, err
+		}
+		if err := db.PausarAsignacion(sesion.Agente, proyecto.ID, motivo); err != nil {
+			return 0, err
+		}
+		return 1, nil
+	}
+	if satisfecha, err := pausaAutonomiaYaSatisfecha(sesion.Agente, &proyecto.ID, sesion); err != nil {
+		return 0, err
+	} else if satisfecha {
+		return 0, nil
+	}
+	if err := encolarControlAutonomiaProyecto(sesion.Agente, proyecto, agenteControlAccionPause, motivo); err != nil {
+		return 0, err
+	}
+	return 1, nil
+}
+
+func encolarControlAutonomiaProyecto(agente string, proyecto *db.Proyecto, accion, motivo string) error {
+	if proyecto == nil {
+		return nil
+	}
+	return encolarControlAutonomiaProyectoDetallado(apiAgenteControlRequest{
+		Agente:   strings.TrimSpace(agente),
+		Proyecto: strings.TrimSpace(proyecto.Slug),
+		Accion:   accion,
+		Motivo:   motivo,
+		Por:      "orquesta",
+	})
+}
+
+func encolarControlAutonomiaProyectoDetallado(req apiAgenteControlRequest) error {
+	_, _, err := encolarControlAgenteLocal(req)
+	return err
 }
 
 func existeRuntimeMailboxAutonomiaPendiente(agente string, proyectoID *int64, accion string) (bool, error) {
