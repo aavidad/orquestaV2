@@ -3154,8 +3154,11 @@ func TestConstruirInboxMicrocicloMarkdownImpulsaSiguienteCasoAdyacente(t *testin
 	if !strings.Contains(inbox, "Primer paso obligatorio") {
 		t.Fatalf("la inbox debe forzar un primer patch pequeno antes del broad scan: %s", inbox)
 	}
-	if !strings.Contains(inbox, "Primer movimiento recomendado") {
-		t.Fatalf("la inbox debe sugerir la primera inspeccion exacta del slice: %s", inbox)
+	if !strings.Contains(inbox, "Primer movimiento obligatorio") {
+		t.Fatalf("la inbox debe forzar una primera accion directa de patch: %s", inbox)
+	}
+	if !strings.Contains(inbox, "Si el simbolo exacto no esta claro tras leer la inbox, usa entonces: rg -n") {
+		t.Fatalf("la inbox debe dejar rg solo como fallback despues de intentar el primer patch: %s", inbox)
 	}
 	if !strings.Contains(inbox, "No gastes el primer ciclo en git diff, git status") {
 		t.Fatalf("la inbox debe prohibir perder el primer ciclo en git diff/status: %s", inbox)
