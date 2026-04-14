@@ -53,6 +53,9 @@ func TestDBNoIntroduceDependenciasInternasFueraDeLaFronteraPermitida(t *testing.
 			"sqlwrap.go":                   {},
 			"verificacion_persistencia.go": {},
 		},
+		"orquesta/gobernanzapolicy": {
+			"reglas.go": {},
+		},
 		"orquesta/tareaspolicy": {
 			"tareas.go": {},
 		},

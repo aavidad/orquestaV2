@@ -8,12 +8,11 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package db
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
+
+	"orquesta/gobernanzapolicy"
 )
 
 // Regla representa una regla de comportamiento para un tipo de agente.
@@ -74,40 +73,7 @@ func ResolveGovernanceCatalog(tipoAgente string, proyectoID *int64) (*Governance
 }
 
 func governanceCatalogHash(catalogo *GovernanceCatalog) string {
-	if catalogo == nil {
-		return ""
-	}
-	input := struct {
-		TipoAgente       string   `json:"tipo_agente"`
-		ResolucionActual string   `json:"resolucion_actual"`
-		Reglas           []string `json:"reglas"`
-		Skills           []string `json:"skills"`
-		Workflows        []string `json:"workflows"`
-	}{
-		TipoAgente:       catalogo.TipoAgente,
-		ResolucionActual: strings.TrimSpace(catalogo.ResolucionActual),
-	}
-	for _, regla := range catalogo.Reglas {
-		if regla == nil {
-			continue
-		}
-		input.Reglas = append(input.Reglas, fmt.Sprintf("%d|%s|%s|%s", regla.ID, regla.Categoria, regla.Titulo, regla.Descripcion))
-	}
-	for _, skill := range catalogo.Skills {
-		if skill == nil {
-			continue
-		}
-		input.Skills = append(input.Skills, fmt.Sprintf("%d|%s|%s|%s|%d", skill.ID, skill.Nombre, skill.Descripcion, skill.CuandoUsar, skill.Prioridad))
-	}
-	for _, workflow := range catalogo.Workflows {
-		if workflow == nil {
-			continue
-		}
-		input.Workflows = append(input.Workflows, fmt.Sprintf("%d|%s|%s|%s", workflow.ID, workflow.Nombre, workflow.Descripcion, workflow.Pasos))
-	}
-	data, _ := json.Marshal(input)
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:12])
+	return gobernanzapolicy.HashCatalog(governanceCatalogSnapshot(catalogo))
 }
 
 func BuildGovernanceContextSummary(tipoAgente string, proyectoID *int64) (map[string]any, string) {
@@ -115,28 +81,7 @@ func BuildGovernanceContextSummary(tipoAgente string, proyectoID *int64) (map[st
 }
 
 func BuildGovernanceContextSummaryFromCatalog(catalogo *GovernanceCatalog) (map[string]any, string) {
-	if catalogo == nil {
-		return nil, ""
-	}
-	contexto := map[string]any{
-		"tipo_agente":       strings.TrimSpace(catalogo.TipoAgente),
-		"hash":              strings.TrimSpace(catalogo.Hash),
-		"reglas":            len(catalogo.Reglas),
-		"skills":            len(catalogo.Skills),
-		"workflows":         len(catalogo.Workflows),
-		"resolucion_actual": strings.TrimSpace(catalogo.ResolucionActual),
-	}
-	if catalogo.ProyectoID != nil {
-		contexto["proyecto_id"] = *catalogo.ProyectoID
-	}
-	resumen := fmt.Sprintf(
-		"Catálogo efectivo %s (%d reglas, %d skills, %d workflows)",
-		strings.TrimSpace(catalogo.Hash),
-		len(catalogo.Reglas),
-		len(catalogo.Skills),
-		len(catalogo.Workflows),
-	)
-	return contexto, resumen
+	return gobernanzapolicy.BuildContextSummaryFromCatalog(governanceCatalogSnapshot(catalogo))
 }
 
 func BuildGovernanceContextSummaryForContext(tipoAgente string, proyectoID *int64, agente string) (map[string]any, string) {
@@ -154,6 +99,56 @@ func AppendGovernanceCatalogPayload(prev string, contexto map[string]any) string
 	return MergeResumePayloadEnvelope(prev, map[string]any{
 		"governance_catalog": contexto,
 	})
+}
+
+func governanceCatalogSnapshot(catalogo *GovernanceCatalog) *gobernanzapolicy.CatalogSnapshot {
+	if catalogo == nil {
+		return nil
+	}
+	snapshot := &gobernanzapolicy.CatalogSnapshot{
+		AgentType:  catalogo.TipoAgente,
+		ProjectID:  catalogo.ProyectoID,
+		Resolution: catalogo.ResolucionActual,
+		Hash:       catalogo.Hash,
+		Rules:      make([]gobernanzapolicy.RuleSnapshot, 0, len(catalogo.Reglas)),
+		Skills:     make([]gobernanzapolicy.SkillSnapshot, 0, len(catalogo.Skills)),
+		Workflows:  make([]gobernanzapolicy.WorkflowSnapshot, 0, len(catalogo.Workflows)),
+	}
+	for _, regla := range catalogo.Reglas {
+		if regla == nil {
+			continue
+		}
+		snapshot.Rules = append(snapshot.Rules, gobernanzapolicy.RuleSnapshot{
+			ID:          regla.ID,
+			Category:    regla.Categoria,
+			Title:       regla.Titulo,
+			Description: regla.Descripcion,
+		})
+	}
+	for _, skill := range catalogo.Skills {
+		if skill == nil {
+			continue
+		}
+		snapshot.Skills = append(snapshot.Skills, gobernanzapolicy.SkillSnapshot{
+			ID:          skill.ID,
+			Name:        skill.Nombre,
+			Description: skill.Descripcion,
+			WhenToUse:   skill.CuandoUsar,
+			Priority:    skill.Prioridad,
+		})
+	}
+	for _, workflow := range catalogo.Workflows {
+		if workflow == nil {
+			continue
+		}
+		snapshot.Workflows = append(snapshot.Workflows, gobernanzapolicy.WorkflowSnapshot{
+			ID:          workflow.ID,
+			Name:        workflow.Nombre,
+			Description: workflow.Descripcion,
+			Steps:       workflow.Pasos,
+		})
+	}
+	return snapshot
 }
 
 // GetReglasAgente devuelve las reglas activas para el rol de un agente.
