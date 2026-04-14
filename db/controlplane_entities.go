@@ -9043,6 +9043,18 @@ func runtimeBootstrapLeaseFromOrder(order *RuntimeOrder) (startOrderID int64, ma
 	return startOrderID, mailboxIDs, sesionID
 }
 
+func runtimeBootstrapLeaseMailboxIDs(order, startOrder *RuntimeOrder) []int64 {
+	_, mailboxIDs, _ := runtimeBootstrapLeaseFromOrder(order)
+	if len(mailboxIDs) > 0 {
+		return mailboxIDs
+	}
+	if startOrder == nil {
+		return nil
+	}
+	_, mailboxIDs, _ = runtimeBootstrapLeaseFromOrder(startOrder)
+	return mailboxIDs
+}
+
 func runtimeBootstrapLeaseSesionID(order, startOrder *RuntimeOrder) int64 {
 	if order == nil {
 		return 0
@@ -9527,6 +9539,16 @@ func runtimeBootstrapLeaseTieneReceiptUtil(result map[string]any) bool {
 	return strings.EqualFold(strings.TrimSpace(stringFromMap(result, "delivery_state", "")), "delivered")
 }
 
+func runtimeBootstrapLeaseTieneCoberturaDeclarada(result map[string]any) bool {
+	if len(result) == 0 {
+		return false
+	}
+	if len(int64SliceFromAny(result["mailbox_ids"])) > 0 {
+		return true
+	}
+	return int64FromAny(result["start_order_id"]) > 0
+}
+
 func runtimeBootstrapLeaseStateBlocksMailbox(result map[string]any) bool {
 	if len(result) == 0 {
 		return false
@@ -9541,7 +9563,7 @@ func runtimeOrderMantieneBootstrapLeasePendiente(result map[string]any) bool {
 	if len(result) == 0 {
 		return false
 	}
-	if len(int64SliceFromAny(result["mailbox_ids"])) == 0 {
+	if !runtimeBootstrapLeaseTieneCoberturaDeclarada(result) {
 		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(stringFromMap(result, "lease_state", ""))) {
@@ -9618,6 +9640,7 @@ func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHand
 				orderSesionID = runtimeBootstrapLeaseSesionID(order, startOrder)
 			}
 		}
+		mailboxIDs = runtimeBootstrapLeaseMailboxIDs(order, startOrder)
 		vigentes, vigentesErr := runtimeBootstrapLeaseMailboxIDsVigentes(mailboxIDs)
 		if vigentesErr != nil {
 			return nil, 0, nil, 0, vigentesErr
@@ -9730,7 +9753,7 @@ func runtimeOrderCalificaComoBootstrapLeaseCandidata(order *RuntimeOrder, observ
 	res := mapFromJSON(order.ResultadoJSON)
 	switch strings.TrimSpace(order.Estado) {
 	case "pendiente":
-		if observed && runtimeBootstrapLeaseTieneReceiptUtil(res) && len(int64SliceFromAny(res["mailbox_ids"])) > 0 {
+		if observed && runtimeBootstrapLeaseTieneReceiptUtil(res) && runtimeBootstrapLeaseTieneCoberturaDeclarada(res) {
 			return true
 		}
 		if !runtimeOrderMantieneBootstrapLeasePendiente(res) &&
@@ -9743,7 +9766,7 @@ func runtimeOrderCalificaComoBootstrapLeaseCandidata(order *RuntimeOrder, observ
 		if leaseState != "waiting_for_evidence" && leaseState != "delivered" {
 			return false
 		}
-		if len(int64SliceFromAny(res["mailbox_ids"])) == 0 {
+		if !runtimeBootstrapLeaseTieneCoberturaDeclarada(res) {
 			return false
 		}
 	}
