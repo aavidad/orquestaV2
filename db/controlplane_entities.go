@@ -3497,6 +3497,9 @@ func reconciliarRuntimeOrdersPendientesControlObsoletas() (int, error) {
 			}
 			reason = "runtime_worker_recovered_after_order"
 		}
+		if err := runtimeOrderPromoverEstadoObservadoSiSatisfecha(order, runtime, handle); err != nil {
+			return processed, err
+		}
 		resultado := map[string]any{
 			"ok":       true,
 			"obsoleta": true,
@@ -3573,6 +3576,46 @@ func runtimeOrderControlEstadoDeseadoSatisfecho(order *RuntimeOrder, runtime *Ru
 		}
 	}
 	return false, ""
+}
+
+func runtimeOrderPromoverEstadoObservadoSiSatisfecha(order *RuntimeOrder, runtime *RuntimeInstance, handle *RuntimeHandle) error {
+	if order == nil || runtime == nil {
+		return nil
+	}
+	switch strings.ToLower(strings.TrimSpace(order.Tipo)) {
+	case "start", "resume":
+	default:
+		return nil
+	}
+	logicalState := strings.TrimSpace(runtime.LogicalState)
+	processState := strings.TrimSpace(runtime.ProcessState)
+	if workerLogicalState, workerProcessState, ok := runtimeObservedLogicalStateFromStructuredWorker(handle); ok {
+		logicalState = workerLogicalState
+		if strings.TrimSpace(workerProcessState) != "" {
+			processState = workerProcessState
+		}
+	} else if runtimeHandleActivoAPICompartido(handle, runtime) {
+		if logicalState == "" || strings.EqualFold(logicalState, "esperando_io") || strings.EqualFold(logicalState, "disponible") {
+			logicalState = "activo"
+		}
+		if processState == "" || strings.EqualFold(processState, "desconocido") {
+			processState = "running"
+		}
+	}
+	if logicalState == "" {
+		return nil
+	}
+	if processState == "" {
+		processState = "running"
+	}
+	_, err := DB.Exec(`
+		UPDATE runtime_instances
+		SET logical_state = ?,
+		    process_state = ?,
+		    last_event_at = CURRENT_TIMESTAMP,
+		    last_heartbeat_at = CURRENT_TIMESTAMP
+		WHERE id = ?`, logicalState, processState, runtime.ID)
+	return err
 }
 
 func runtimeHandleActivoAPICompartido(handle *RuntimeHandle, runtime *RuntimeInstance) bool {
@@ -10531,6 +10574,9 @@ func reconciliarRuntimeOrderStale(id int64, tipo string, now, cutoff time.Time) 
 				reason = "runtime_worker_recovered_after_order"
 			}
 			if strings.TrimSpace(reason) != "" {
+				if err := runtimeOrderPromoverEstadoObservadoSiSatisfecha(order, runtime, handle); err != nil {
+					return false, err
+				}
 				resultado := map[string]any{
 					"ok":       true,
 					"obsoleta": true,

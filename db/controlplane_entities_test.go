@@ -11740,6 +11740,16 @@ func TestReconciliarRuntimeOrdersPendientesControlObsoletasCompletaStartSiWorker
 		!strings.Contains(order.ResultadoJSON, `"reason":"runtime_worker_recovered_after_order"`) {
 		t.Fatalf("resultado sin reason de worker activo: %s", order.ResultadoJSON)
 	}
+	runtime, err = GetRuntime(runtime.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("get runtime final: %+v err=%v", runtime, err)
+	}
+	if runtime.LogicalState != "activo" {
+		t.Fatalf("el runtime deberia promoverse a activo cuando el worker ya esta running: %+v", runtime)
+	}
+	if runtime.ProcessState != "running" {
+		t.Fatalf("process_state final inesperado: %+v", runtime)
+	}
 }
 
 func TestReconciliarRuntimeOrdersPendientesControlObsoletasCompletaStopSiYaNoHayRuntimeActivo(t *testing.T) {
