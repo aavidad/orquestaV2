@@ -37,6 +37,11 @@ type PlannableAgentCandidateSnapshot struct {
 	ProjectSlug string
 }
 
+type PreferredProjectResolution struct {
+	ProjectID int64
+	Priority  int
+}
+
 func DesiredProjectQuota(op *ProjectOperationSnapshot, totalAgents int) int {
 	if totalAgents <= 0 {
 		totalAgents = 1
@@ -225,4 +230,17 @@ func PrioritizePlannableCandidates(candidates []PlannableAgentCandidateSnapshot,
 		out = append(out, item.AgentName)
 	}
 	return out
+}
+
+func ResolvePreferredProject(activeProjectID int64, activeHasWork bool, pausedProjectID int64, automaticProjectID int64, includeAutomatic bool) PreferredProjectResolution {
+	if activeProjectID > 0 && activeHasWork {
+		return PreferredProjectResolution{ProjectID: activeProjectID, Priority: 3}
+	}
+	if pausedProjectID > 0 {
+		return PreferredProjectResolution{ProjectID: pausedProjectID, Priority: 2}
+	}
+	if includeAutomatic && automaticProjectID > 0 {
+		return PreferredProjectResolution{ProjectID: automaticProjectID, Priority: 1}
+	}
+	return PreferredProjectResolution{}
 }

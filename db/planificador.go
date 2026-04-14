@@ -1252,7 +1252,14 @@ func resolverProyectoPreferentePlanificableAgenteModo(agente string, incluirAuto
 	if agente == "" {
 		return 0, 0, nil
 	}
-	if proyectoActivoID, err := ObtenerProyectoActivoAgente(agente); err != nil {
+	var (
+		proyectoActivoID      int64
+		proyectoActivoTrabajo bool
+		proyectoPausadoID     int64
+		proyectoAutomaticoID  int64
+	)
+	var err error
+	if proyectoActivoID, err = ObtenerProyectoActivoAgente(agente); err != nil {
 		return 0, 0, err
 	} else if proyectoActivoID != 0 {
 		disponible, err := ProyectoDisponibleParaAutonomia(proyectoActivoID)
@@ -1264,25 +1271,27 @@ func resolverProyectoPreferentePlanificableAgenteModo(agente string, incluirAuto
 			if err != nil {
 				return 0, 0, err
 			}
-			if tieneTrabajo {
-				return proyectoActivoID, 3, nil
-			}
+			proyectoActivoTrabajo = tieneTrabajo
 		}
 	}
 	if asignacion, err := buscarAsignacionPausadaConTrabajo(agente); err != nil {
 		return 0, 0, err
 	} else if asignacion != nil {
-		return asignacion.ProyectoID, 2, nil
+		proyectoPausadoID = asignacion.ProyectoID
 	}
-	if !incluirAutomatico {
-		return 0, 0, nil
+	if incluirAutomatico {
+		if proyectoAutomaticoID, err = seleccionarProyectoAutomaticoDisponible(agente); err != nil {
+			return 0, 0, err
+		}
 	}
-	if proyectoAutomaticoID, err := seleccionarProyectoAutomaticoDisponible(agente); err != nil {
-		return 0, 0, err
-	} else if proyectoAutomaticoID != 0 {
-		return proyectoAutomaticoID, 1, nil
-	}
-	return 0, 0, nil
+	resolution := planificadorpolicy.ResolvePreferredProject(
+		proyectoActivoID,
+		proyectoActivoTrabajo,
+		proyectoPausadoID,
+		proyectoAutomaticoID,
+		incluirAutomatico,
+	)
+	return resolution.ProjectID, resolution.Priority, nil
 }
 
 func resolverPoolLocalCompartidoAgenteProyecto(agente, proyectoSlug string) (string, error) {

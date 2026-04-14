@@ -14,6 +14,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte adicional en planner: mover la policy de filtro de agentes permitidos en autobootstrap a `planificadorpolicy`
 - corte adicional en planner: mover la heurística pura de scoring/selección de tarea libre a `planificadorpolicy`
 - corte adicional en planner: mover la priorización de agentes planificables y el consumo de capacidad por pool a `planificadorpolicy`
+- corte adicional en planner: mover la resolución pura de proyecto preferente (activo/pausado/automático) a `planificadorpolicy`
 
 Estado del frente seguro:
 
@@ -35,6 +36,7 @@ Estado del frente seguro:
 - policy de pertenencia al pool de autobootstrap del planner movida a `planificadorpolicy`
 - policy pura de scoring/ordenación de tarea libre del planner movida a `planificadorpolicy`
 - policy de ranking final de agentes planificables movida a `planificadorpolicy`
+- policy de resolución de proyecto preferente del planner movida a `planificadorpolicy` (`activo > pausado > automático`)
 - policy de gobernanza movida a `gobernanzapolicy` para catálogo, validación de overrides y precedencia por capas
 - policy de skills movida a `skillspolicy`
 
@@ -48,7 +50,7 @@ Estado del frente seguro:
 ### 3. Todavía No Hexagonal
 
 - [db/controlplane_entities.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities.go) sigue siendo el hotspot principal y mezcla persistencia con policy de runtime/bootstrap/receipt/mailbox
-- [db/planificador.go](/home/alberto/Trabajo/orquesta/db/planificador.go) sigue cargando demasiada decisión de trabajo/autonomía, aunque la parte pura de cupo/carga/priorización de proyecto ya salió fuera
+- [db/planificador.go](/home/alberto/Trabajo/orquesta/db/planificador.go) sigue cargando demasiada decisión de trabajo/autonomía, aunque varias heurísticas puras de cupo/carga/priorización de proyecto ya salieron fuera
 - [db/autonomia_proyecto.go](/home/alberto/Trabajo/orquesta/db/autonomia_proyecto.go) y [db/autonomia_supervisor_operativo.go](/home/alberto/Trabajo/orquesta/db/autonomia_supervisor_operativo.go) siguen siendo parte del frente no saneado
 - [db/runtimes.go](/home/alberto/Trabajo/orquesta/db/runtimes.go), [db/runtime_bootstrap_prompt.go](/home/alberto/Trabajo/orquesta/db/runtime_bootstrap_prompt.go) y [db/runtime_transcript.go](/home/alberto/Trabajo/orquesta/db/runtime_transcript.go) todavía forman parte del frente runtime no vaciado
 - [db/tareas.go](/home/alberto/Trabajo/orquesta/db/tareas.go) y [db/asignaciones.go](/home/alberto/Trabajo/orquesta/db/asignaciones.go) han mejorado, pero no están completamente reducidos a persistencia pura

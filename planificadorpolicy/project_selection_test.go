@@ -121,3 +121,18 @@ func TestPrioritizePlannableCandidates(t *testing.T) {
 		t.Fatalf("unexpected prioritized agents: %#v", got)
 	}
 }
+
+func TestResolvePreferredProject(t *testing.T) {
+	if got := ResolvePreferredProject(10, true, 20, 30, true); got.ProjectID != 10 || got.Priority != 3 {
+		t.Fatalf("unexpected active resolution: %+v", got)
+	}
+	if got := ResolvePreferredProject(10, false, 20, 30, true); got.ProjectID != 20 || got.Priority != 2 {
+		t.Fatalf("unexpected paused resolution: %+v", got)
+	}
+	if got := ResolvePreferredProject(0, false, 0, 30, true); got.ProjectID != 30 || got.Priority != 1 {
+		t.Fatalf("unexpected automatic resolution: %+v", got)
+	}
+	if got := ResolvePreferredProject(0, false, 0, 30, false); got.ProjectID != 0 || got.Priority != 0 {
+		t.Fatalf("unexpected empty resolution: %+v", got)
+	}
+}
