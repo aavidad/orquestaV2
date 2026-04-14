@@ -1525,16 +1525,22 @@ func resumirResumePayloadCodex(raw string) string {
 		partes = append(partes, label)
 		delete(obj, "mailbox")
 	}
-	if projectContext, ok := obj["project_context"]; ok && !pipelineLocalPriorizado {
-		partes = append(partes, resumirProjectContextCodex(projectContext))
+	if projectContext, ok := obj["project_context"]; ok {
+		if !pipelineLocalPriorizado {
+			partes = append(partes, resumirProjectContextCodex(projectContext))
+		}
 		delete(obj, "project_context")
 	}
-	if governanceCatalog, ok := obj["governance_catalog"]; ok && !pipelineLocalPriorizado {
-		partes = append(partes, resumirGovernanceCatalogCodex(governanceCatalog))
+	if governanceCatalog, ok := obj["governance_catalog"]; ok {
+		if !pipelineLocalPriorizado {
+			partes = append(partes, resumirGovernanceCatalogCodex(governanceCatalog))
+		}
 		delete(obj, "governance_catalog")
 	}
-	if _, ok := obj["adopted_context"]; ok && !pipelineLocalPriorizado {
-		partes = append(partes, "adopted_context")
+	if _, ok := obj["adopted_context"]; ok {
+		if !pipelineLocalPriorizado {
+			partes = append(partes, "adopted_context")
+		}
 		delete(obj, "adopted_context")
 	}
 	ignored := map[string]struct{}{
