@@ -88,6 +88,9 @@ func (despachadorPipelineOperativo) DespacharPipeline(entrada capacidadapp.Solic
 				Motivo: detalle,
 			}, nil
 		}
+		if err := asegurarOwnershipTareaDespachoPremium(despacho.TareaObjetivoID, agente); err != nil {
+			return nil, err
+		}
 		payload := map[string]any{
 			"from_agente":       "server",
 			"to_agente":         agente,
@@ -318,6 +321,60 @@ func (despachadorPipelineOperativo) DespacharPipeline(entrada capacidadapp.Solic
 			Motivo: fmt.Sprintf("carril %q no soportado por el despachador operativo", strings.TrimSpace(despacho.Carril)),
 		}, nil
 	}
+}
+
+func asegurarOwnershipTareaDespachoPremium(tareaID int64, agente string) error {
+	agente = strings.TrimSpace(agente)
+	if tareaID <= 0 || agente == "" {
+		return nil
+	}
+	tarea, err := tareasService.Get(tareaID)
+	if err != nil {
+		if err == sql.ErrNoRows || strings.Contains(strings.ToLower(err.Error()), "no rows") {
+			return nil
+		}
+		return err
+	}
+	if tarea == nil {
+		return nil
+	}
+	actual := ""
+	if tarea.Agente != nil {
+		actual = strings.TrimSpace(*tarea.Agente)
+	}
+	estado := strings.ToLower(strings.TrimSpace(string(tarea.Estado)))
+	if !strings.EqualFold(actual, agente) {
+		switch estado {
+		case string(db.TareaBacklog), string(db.TareaLibre):
+			if err := tareasService.Take(tareaID, agente); err != nil {
+				return err
+			}
+		default:
+			if err := tareasService.Reassign(tareaID, agente); err != nil {
+				return err
+			}
+		}
+	}
+	tarea, err = tareasService.Get(tareaID)
+	if err != nil {
+		if err == sql.ErrNoRows || strings.Contains(strings.ToLower(err.Error()), "no rows") {
+			return nil
+		}
+		return err
+	}
+	if tarea == nil {
+		return nil
+	}
+	if tarea.Estado != db.TareaEnProgreso {
+		nombreAgente := agente
+		if tarea.Agente != nil && strings.TrimSpace(*tarea.Agente) != "" {
+			nombreAgente = strings.TrimSpace(*tarea.Agente)
+		}
+		if err := tareasService.Start(tareaID, nombreAgente); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func jsonMarshalPipelinePayload(payload map[string]any) (string, error) {

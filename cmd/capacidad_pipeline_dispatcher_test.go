@@ -326,6 +326,69 @@ func TestDespachadorPipelineOperativoIncluyeWriteSetEnMailboxPremium(t *testing.
 	}
 }
 
+func TestDespachadorPipelineOperativoAseguraOwnershipDeTareaPremium(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: t.TempDir(),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Micro-refactorización cíclica del control plane",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       "autonomia:microrefactor_loop",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "orquesta"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "orquesta"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	resultado, err := (despachadorPipelineOperativo{}).DespacharPipeline(capacidadapp.SolicitudDespachoPipeline{
+		ProyectoSlug: "orquestador",
+		Despacho: &capacidadapp.DespachoPipelineLocal{
+			Fase:            "implementacion",
+			Carril:          "premium_worktree",
+			PerfilTarea:     "implementacion",
+			AgenteSugerido:  "Codex1",
+			TareaObjetivoID: tareaID,
+			TareaObjetivo:   "Micro-refactorización cíclica del control plane",
+			Motivo:          "microrefactor_loop",
+		},
+	})
+	if err != nil {
+		t.Fatalf("DespacharPipeline: %v", err)
+	}
+	if resultado == nil {
+		t.Fatalf("resultado nil")
+	}
+	tarea, err := tareasService.Get(tareaID)
+	if err != nil || tarea == nil {
+		t.Fatalf("get tarea: %+v err=%v", tarea, err)
+	}
+	if tarea.Agente == nil || strings.TrimSpace(*tarea.Agente) != "Codex1" {
+		t.Fatalf("ownership de tarea inesperado: %+v", tarea)
+	}
+	if tarea.Estado != db.TareaEnProgreso {
+		t.Fatalf("estado de tarea inesperado: %+v", tarea)
+	}
+}
+
 func TestDespachadorPipelineOperativoNoSobrecargaAgenteEnOtroProyecto(t *testing.T) {
 	prepararDBTemporalCmd(t)
 	proyectoActualID, err := db.UpsertProyecto(&db.Proyecto{
