@@ -47,6 +47,11 @@ func RegistrarMuestraGenericProcess(runtimeID int64, runtimeInst *RuntimeInstanc
 	if err != nil {
 		return nil, err
 	}
+	observedProcessState := ""
+	if logicalState, processState, ok := runtimeObservedStateForGenericProcess(runtimeInst); ok {
+		snap.LogicalState = logicalState
+		observedProcessState = processState
+	}
 	sampleJSON, _ := json.Marshal(snap)
 	sample := &RuntimeTelemetrySample{
 		CPUPct:       0,
@@ -75,6 +80,9 @@ func RegistrarMuestraGenericProcess(runtimeID int64, runtimeInst *RuntimeInstanc
 	if strings.TrimSpace(rawProcessState) == "" {
 		rawProcessState = "desconocido"
 	}
+	if strings.TrimSpace(observedProcessState) != "" {
+		rawProcessState = observedProcessState
+	}
 	if _, err := tx.Exec(`
 		UPDATE runtime_instances
 		SET pid = COALESCE(?, pid),
@@ -95,6 +103,17 @@ func RegistrarMuestraGenericProcess(runtimeID int64, runtimeInst *RuntimeInstanc
 		return nil, err
 	}
 	return sample, nil
+}
+
+func runtimeObservedStateForGenericProcess(runtimeInst *RuntimeInstance) (string, string, bool) {
+	if runtimeInst == nil || runtimeInst.SesionID == nil || *runtimeInst.SesionID <= 0 {
+		return "", "", false
+	}
+	handle, err := GetRuntimeHandleBySesionID(*runtimeInst.SesionID)
+	if err != nil || handle == nil {
+		return "", "", false
+	}
+	return runtimeObservedLogicalStateFromStructuredWorker(handle)
 }
 
 func leerGenericProcessSnapshot(runtimeInst *RuntimeInstance) (*GenericProcessSnapshot, error) {
