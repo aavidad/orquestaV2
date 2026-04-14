@@ -255,6 +255,22 @@ func TestPrepareCLICodexPriorizaSliceEjecutableEnPipelineLocalContinuityPrompt(t
 	if strings.Contains(plan.ContinuityPrompt, `"write_set"`) {
 		t.Fatalf("el prompt no deberia incrustar JSON bruto: %s", plan.ContinuityPrompt)
 	}
+	for _, token := range []string{"project_context", "governance_catalog", "adopted_context"} {
+		if strings.Contains(plan.ContinuityPrompt, token) {
+			t.Fatalf("el continuity prompt priorizado no deberia duplicar %q: %s", token, plan.ContinuityPrompt)
+		}
+	}
+	for _, token := range []string{
+		"Proyecto: orquestador.",
+		"Rama: orq-orquestador-codex9.",
+		"Ignora cualquier conversación vieja que no coincida con la tarea activa o el mailbox actual.",
+		"No abras frentes nuevos ni reescribas código fuera del alcance inmediato.",
+		"Empieza por la tarea asignada y consulta Orquesta antes de desviarte.",
+	} {
+		if strings.Contains(plan.ContinuityPrompt, token) {
+			t.Fatalf("el continuity prompt priorizado no deberia duplicar guardrail %q: %s", token, plan.ContinuityPrompt)
+		}
+	}
 }
 
 func TestPrepareCLIGenericoResumePayloadResumeMailboxCompacto(t *testing.T) {

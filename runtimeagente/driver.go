@@ -1389,10 +1389,11 @@ func construirPromptContinuidad(req LaunchRequest) string {
 	}
 	if isCodexCLIRequest(req) {
 		partes := []string{"Retoma el trabajo actual desde Orquesta."}
-		if strings.TrimSpace(req.ProyectoSlug) != "" {
+		pipelineLocalPriorizado := resumePayloadCodexEsPipelineLocalPriorizado(req.Resume.ResumePayloadJSON)
+		if strings.TrimSpace(req.ProyectoSlug) != "" && !pipelineLocalPriorizado {
 			partes = append(partes, "Proyecto: "+strings.TrimSpace(req.ProyectoSlug)+".")
 		}
-		if strings.TrimSpace(req.Resume.Branch) != "" {
+		if strings.TrimSpace(req.Resume.Branch) != "" && !pipelineLocalPriorizado {
 			partes = append(partes, "Rama: "+strings.TrimSpace(req.Resume.Branch)+".")
 		}
 		if resumen := resumirContinuidadCodex(req.Resume.ResumenContinuidad); resumen != "" {
@@ -1401,9 +1402,11 @@ func construirPromptContinuidad(req LaunchRequest) string {
 		if resumenPayload := resumirResumePayloadCodex(req.Resume.ResumePayloadJSON); resumenPayload != "" {
 			partes = append(partes, resumenPayload+".")
 		}
-		partes = append(partes, "Ignora cualquier conversación vieja que no coincida con la tarea activa o el mailbox actual.")
-		partes = append(partes, "No abras frentes nuevos ni reescribas código fuera del alcance inmediato.")
-		partes = append(partes, "Empieza por la tarea asignada y consulta Orquesta antes de desviarte.")
+		if !pipelineLocalPriorizado {
+			partes = append(partes, "Ignora cualquier conversación vieja que no coincida con la tarea activa o el mailbox actual.")
+			partes = append(partes, "No abras frentes nuevos ni reescribas código fuera del alcance inmediato.")
+			partes = append(partes, "Empieza por la tarea asignada y consulta Orquesta antes de desviarte.")
+		}
 		return strings.Join(partes, " ")
 	}
 
@@ -1491,6 +1494,7 @@ func resumirResumePayloadCodex(raw string) string {
 		return ""
 	}
 	partes := make([]string, 0, 8)
+	pipelineLocalPriorizado := false
 	if order, ok := obj["runtime_order"].(map[string]any); ok {
 		label := "runtime_order"
 		if tipo := strings.TrimSpace(stringFromAny(order["tipo"])); tipo != "" {
@@ -1512,21 +1516,24 @@ func resumirResumePayloadCodex(raw string) string {
 	}
 	if mailbox, ok := obj["mailbox"].([]any); ok {
 		label := fmt.Sprintf("mailbox=%d", len(mailbox))
+		if mailboxPayloadEsPipelineLocalCodex(mailbox) {
+			pipelineLocalPriorizado = true
+		}
 		if resumen := resumirMailboxPayloadCodex(mailbox); resumen != "" {
 			label += " " + resumen
 		}
 		partes = append(partes, label)
 		delete(obj, "mailbox")
 	}
-	if projectContext, ok := obj["project_context"]; ok {
+	if projectContext, ok := obj["project_context"]; ok && !pipelineLocalPriorizado {
 		partes = append(partes, resumirProjectContextCodex(projectContext))
 		delete(obj, "project_context")
 	}
-	if governanceCatalog, ok := obj["governance_catalog"]; ok {
+	if governanceCatalog, ok := obj["governance_catalog"]; ok && !pipelineLocalPriorizado {
 		partes = append(partes, resumirGovernanceCatalogCodex(governanceCatalog))
 		delete(obj, "governance_catalog")
 	}
-	if _, ok := obj["adopted_context"]; ok {
+	if _, ok := obj["adopted_context"]; ok && !pipelineLocalPriorizado {
 		partes = append(partes, "adopted_context")
 		delete(obj, "adopted_context")
 	}
@@ -1551,6 +1558,43 @@ func resumirResumePayloadCodex(raw string) string {
 		return ""
 	}
 	return strings.Join(partes, ", ")
+}
+
+func resumePayloadCodexEsPipelineLocalPriorizado(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false
+	}
+	var parsed any
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return false
+	}
+	obj, ok := parsed.(map[string]any)
+	if !ok {
+		return false
+	}
+	mailbox, ok := obj["mailbox"].([]any)
+	if !ok {
+		return false
+	}
+	return mailboxPayloadEsPipelineLocalCodex(mailbox)
+}
+
+func mailboxPayloadEsPipelineLocalCodex(items []any) bool {
+	if len(items) == 0 {
+		return false
+	}
+	first, ok := items[0].(map[string]any)
+	if !ok {
+		return false
+	}
+	kind := strings.TrimSpace(stringFromAny(first["kind"]))
+	payload, _ := first["payload"].(map[string]any)
+	if payload == nil {
+		return false
+	}
+	source := strings.TrimSpace(stringFromAny(payload["source"]))
+	return strings.EqualFold(kind, "pipeline_local") || strings.EqualFold(source, "pipeline_local")
 }
 
 func resumirMailboxPayloadCodex(items []any) string {
