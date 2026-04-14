@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"orquesta/coordinacion"
 )
 
 func BuildProjectContextSummary(agente string, proyecto *Proyecto) (map[string]any, string) {
@@ -47,7 +49,7 @@ func BuildProjectContextSummary(agente string, proyecto *Proyecto) (map[string]a
 	projectContextDebugf("BuildProjectContextSummary step=operacion duration=%s", time.Since(stepStart).Round(time.Millisecond))
 
 	stepStart = time.Now()
-	if worktree := getActiveWorktreeSummary(strings.TrimSpace(agente), proyecto.ID); worktree != nil {
+	if worktree := getActiveWorktreeSummary(strings.TrimSpace(agente), proyecto); worktree != nil {
 		contexto["worktree_activa"] = worktree
 		if branch, _ := worktree["branch"].(string); strings.TrimSpace(branch) != "" {
 			resumen = append(resumen, "Worktree activa en "+strings.TrimSpace(branch))
@@ -99,8 +101,8 @@ func AppendProjectContextPayload(prev string, contexto map[string]any) string {
 	})
 }
 
-func getActiveWorktreeSummary(agente string, proyectoID int64) map[string]any {
-	if strings.TrimSpace(agente) == "" || proyectoID == 0 {
+func getActiveWorktreeSummary(agente string, proyecto *Proyecto) map[string]any {
+	if strings.TrimSpace(agente) == "" || proyecto == nil || proyecto.ID == 0 {
 		return nil
 	}
 	row := DB.QueryRow(`
@@ -109,7 +111,7 @@ func getActiveWorktreeSummary(agente string, proyectoID int64) map[string]any {
 		WHERE proyecto_id = ? AND agente = ? AND estado = 'activa'
 		ORDER BY id DESC
 		LIMIT 1`,
-		proyectoID, strings.TrimSpace(agente),
+		proyecto.ID, strings.TrimSpace(agente),
 	)
 	var (
 		id      int64
@@ -122,7 +124,7 @@ func getActiveWorktreeSummary(agente string, proyectoID int64) map[string]any {
 	if err := row.Scan(&id, &nombre, &ruta, &branch, &baseRef, &motivo); err != nil {
 		return nil
 	}
-	if !WorktreeActivaCoherente(proyectoID, ruta.String) {
+	if strings.TrimSpace(proyecto.RutaAbs) != "" && !coordinacion.ActiveWorktreePathCoherent(ruta.String, proyecto.RutaAbs) {
 		return nil
 	}
 	return map[string]any{

@@ -325,6 +325,10 @@ func rutaWorktreeActivaAgenteProyecto(proyectoID int64, agente string) string {
 	if proyectoID <= 0 || DB == nil {
 		return ""
 	}
+	rutaProyectoEfectiva := ""
+	if proyecto, err := GetProyecto(jsonNumber(proyectoID)); err == nil && proyecto != nil {
+		rutaProyectoEfectiva = RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, "")
+	}
 	estado := coordinacion.WorktreeActive
 	filter := coordinacion.WorktreeFilter{
 		ProjectID: &proyectoID,
@@ -343,7 +347,7 @@ func rutaWorktreeActivaAgenteProyecto(proyectoID int64, agente string) string {
 			continue
 		}
 		ruta := normalizarRutaProyecto(worktree.Path)
-		if ruta == "" || !WorktreeActivaCoherente(proyectoID, ruta) || !coordinacion.WorktreePathUsable(ruta) {
+		if ruta == "" || (rutaProyectoEfectiva != "" && !coordinacion.ActiveWorktreePathCoherent(ruta, rutaProyectoEfectiva)) || !coordinacion.WorktreePathUsable(ruta) {
 			continue
 		}
 		return ruta

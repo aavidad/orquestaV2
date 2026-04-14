@@ -122,8 +122,13 @@ func (CoordinationWorktreeSQLRepository) List(filter coordinacion.WorktreeFilter
 	}
 	filtradas := make([]*coordinacion.Worktree, 0, len(out))
 	for _, worktree := range out {
-		if worktree != nil && worktree.State == coordinacion.WorktreeActive && !WorktreeActivaCoherente(worktree.ProjectID, worktree.Path) {
-			continue
+		if worktree != nil && worktree.State == coordinacion.WorktreeActive {
+			if proyecto, getErr := GetProyecto(jsonNumber(worktree.ProjectID)); getErr == nil && proyecto != nil {
+				rutaProyectoEfectiva := RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, "")
+				if rutaProyectoEfectiva != "" && !coordinacion.ActiveWorktreePathCoherent(worktree.Path, rutaProyectoEfectiva) {
+					continue
+				}
+			}
 		}
 		filtradas = append(filtradas, worktree)
 	}
