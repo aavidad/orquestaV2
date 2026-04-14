@@ -4806,6 +4806,160 @@ func TestProcesarAutonomiaAgentesBatchAutoasignaTrabajoASesionActivaIdle(t *test
 	}
 }
 
+func TestProcesarAutonomiaAgentesBatchSesionActivaIdleAbreFrentePremiumMayorSiMicrocicloAgotado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.ConfigSet("server_autobootstrap_project_slug", "orquestador"); err != nil {
+		t.Fatalf("config project slug: %v", err)
+	}
+	if err := db.ConfigSet("server_autobootstrap_worker_agents", "Codex1"); err != nil {
+		t.Fatalf("config worker agents: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.RegistrarAgente("QwenCoder2", "programador"); err != nil {
+		t.Fatalf("registrar agente ajeno: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.UpsertProyectoOperacion(&db.ProyectoOperacion{
+		ProyectoID:       proyectoID,
+		EstadoOperativo:  db.ProyectoOperativoActivo,
+		Motivo:           "microrefactor_loop",
+		ObjetivoPct:      100,
+		MinAgentes:       1,
+		MaxAgentes:       3,
+		Prioridad:        100,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:        proyectoID,
+		Enabled:           true,
+		MaxWorkers:        1,
+		SupervisorAgente:  "CodexSupervisor",
+		ReserveSupervisor: true,
+		EstadoAutonomia:   db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion worker: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSupervisor",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion supervisor: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "cat-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion worker: %v", err)
+	}
+	tareaMicroID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      microcicloRefactorTituloDefault,
+		Descripcion: "Microfrente premium agotado",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea microciclo agotada: %v", err)
+	}
+	if err := db.TomarTarea(tareaMicroID, "CodexSupervisor"); err != nil {
+		t.Fatalf("tomar tarea microciclo agotada: %v", err)
+	}
+	if err := db.IniciarTarea(tareaMicroID, "CodexSupervisor"); err != nil {
+		t.Fatalf("iniciar tarea microciclo agotada: %v", err)
+	}
+	if err := db.CompletarTarea(tareaMicroID, "CodexSupervisor", "agotado"); err != nil {
+		t.Fatalf("completar tarea microciclo agotada: %v", err)
+	}
+	tareaAjenaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Trabajo ajeno sigue abierto",
+		Descripcion: "No debe bloquear abrir siguiente frente premium mayor",
+		ProyectoID:  &proyectoID,
+		Modulo:      "otro-modulo",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea ajena: %v", err)
+	}
+	if err := db.TomarTarea(tareaAjenaID, "QwenCoder2"); err != nil {
+		t.Fatalf("tomar tarea ajena: %v", err)
+	}
+	if err := db.IniciarTarea(tareaAjenaID, "QwenCoder2"); err != nil {
+		t.Fatalf("iniciar tarea ajena: %v", err)
+	}
+
+	n, err := procesarAutonomiaSesionActiva(sesion)
+	if err != nil {
+		t.Fatalf("procesar autonomia: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia abrir frente premium mayor y encolar continuidad, got=%d", n)
+	}
+
+	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas: %v", err)
+	}
+	var abierta *db.Tarea
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.ID == tareaMicroID || tarea.ID == tareaAjenaID {
+			continue
+		}
+		if tarea.Estado == db.TareaEnProgreso && tarea.Agente != nil && strings.TrimSpace(*tarea.Agente) == "Codex1" {
+			abierta = tarea
+			break
+		}
+	}
+	if abierta == nil {
+		t.Fatalf("deberia abrir una nueva tarea premium mayor para Codex1, tareas=%+v", tareas)
+	}
+	if !strings.Contains(strings.TrimSpace(abierta.Notas), "autonomia:premium_frontier") {
+		t.Fatalf("la tarea nueva deberia quedar marcada como premium_frontier: %+v", abierta)
+	}
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "nudge" {
+		t.Fatalf("deberia encolar un nudge útil tras abrir frente premium mayor: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"accion":"continuar_trabajo"`) || !strings.Contains(orders[0].PayloadJSON, `"tarea_id":`+strconv.FormatInt(abierta.ID, 10)) {
+		t.Fatalf("payload nudge inesperado: %s", orders[0].PayloadJSON)
+	}
+}
+
 func TestAutonomiaIdleAutoassignShouldAttemptThrottle(t *testing.T) {
 	prepararDBTemporalCmd(t)
 	autonomiaIdleAutoassignGate.Reset()

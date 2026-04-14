@@ -7227,7 +7227,13 @@ func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, 
 	}
 	tarea, err := capacidadService.IntentarAutoasignarTareaPipelineLocal(proyecto.Slug, sesion.Agente)
 	if err != nil || tarea == nil {
-		return 0, err
+		if err != nil {
+			return 0, err
+		}
+		tarea, err = asegurarFrentePremiumSesionActivaIdle(sesion, proyecto)
+		if err != nil || tarea == nil {
+			return 0, err
+		}
 	}
 	motivo := fmt.Sprintf("Tarea #%d asignada automáticamente", tarea.ID)
 	if ok, err := encolarNudgeAutonomiaConInvalidacion(
@@ -7244,6 +7250,44 @@ func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, 
 		return 1, nil
 	}
 	return 0, nil
+}
+
+func asegurarFrentePremiumSesionActivaIdle(sesion *db.Sesion, proyecto *db.Proyecto) (*capacidadapp.TareaPipelineLocal, error) {
+	if sesion == nil || proyecto == nil {
+		return nil, nil
+	}
+	policy, err := supervisionService.GetProjectPolicy(strings.TrimSpace(proyecto.Slug))
+	if err != nil || policy == nil || !policy.Enabled {
+		return nil, err
+	}
+	agente, err := agenteIfExists(strings.TrimSpace(sesion.Agente))
+	if err != nil || agente == nil {
+		return nil, err
+	}
+	res, err := asegurarTrabajoContinuoPremium(policy, proyecto, agente)
+	if err != nil || res.SeedTaskID <= 0 {
+		return nil, err
+	}
+	tarea, err := tareasService.Get(res.SeedTaskID)
+	if err != nil || tarea == nil {
+		return nil, err
+	}
+	out := &capacidadapp.TareaPipelineLocal{
+		ID:           tarea.ID,
+		Titulo:       strings.TrimSpace(tarea.Titulo),
+		Descripcion:  strings.TrimSpace(tarea.Descripcion),
+		Notas:        strings.TrimSpace(tarea.Notas),
+		WriteSet:     capacidadapp.ExtraerWriteSetTextoPipelineLocal(strings.TrimSpace(tarea.Descripcion + "\n" + tarea.Notas)),
+		SimbolosFoco: capacidadapp.ExtraerSimbolosFocoTextoPipelineLocal(strings.TrimSpace(tarea.Descripcion + "\n" + tarea.Notas)),
+		TestsMinimos: capacidadapp.ExtraerTestsMinimosTextoPipelineLocal(strings.TrimSpace(tarea.Descripcion + "\n" + tarea.Notas)),
+		Estado:       strings.TrimSpace(string(tarea.Estado)),
+		Modulo:       strings.TrimSpace(tarea.Modulo),
+		Prioridad:    strings.TrimSpace(string(tarea.Prioridad)),
+	}
+	if tarea.Agente != nil {
+		out.Agente = strings.TrimSpace(*tarea.Agente)
+	}
+	return out, nil
 }
 
 func sesionActivaDebeRecibirNudgeContinuacion(sesion *db.Sesion, proyecto *db.Proyecto) (int64, bool, error) {
