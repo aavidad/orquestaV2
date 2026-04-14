@@ -13,6 +13,24 @@ import (
 	"orquesta/runtimeagente"
 )
 
+func mustGetwdRuntimeHandleTest(t *testing.T) string {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	return wd
+}
+
+func mustExecutableRuntimeHandleTest(t *testing.T) string {
+	t.Helper()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("executable: %v", err)
+	}
+	return exe
+}
+
 func TestGetRuntimeHandleActivoAgenteProyectoIgnoraFantasmaMasReciente(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
@@ -988,6 +1006,81 @@ func TestSincronizarRuntimeHandleSupervisadoNormalizaTMUXDesdeSnapshotEstructura
 	}
 	if got := strings.TrimSpace(refreshed.HandleRef); got != "orq-codextmuxsnap-1/%8" {
 		t.Fatalf("handle_ref canonico esperado, got=%q", got)
+	}
+}
+
+func TestSincronizarRuntimeHandleSupervisadoMarcaTMUXAusenteComoFallido(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("ClaudeTMUXMissing", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	fakeTmux := filepath.Join(tmp, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte("#!/usr/bin/env bash\nset -euo pipefail\nexit 1\n"), 0o755); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+
+	pid := int64(os.Getpid())
+	runtimeID, err := RegistrarRuntimeInstance(&RuntimeInstance{
+		Agente:       "ClaudeTMUXMissing",
+		ProyectoID:   &proyectoID,
+		LogicalState: "esperando_io",
+		ProcessState: "running",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("crear runtime: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_command":          fakeTmux,
+		"tmux_session":          "orq-claude-missing",
+		"working_dir":           mustGetwdRuntimeHandleTest(t),
+		"rendered_command":      "claude-code",
+		"wrapped_command":       mustExecutableRuntimeHandleTest(t),
+		"mailbox_delivery_mode": "interactive",
+	})
+	res, err := DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo', ?, ?)`,
+		"ClaudeTMUXMissing", proyectoID, runtimeID, "tmux", "session", "orq-claude-missing/%1", string(metaJSON), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("insert handle tmux: %v", err)
+	}
+	handleID, _ := res.LastInsertId()
+	handle, err := GetRuntimeHandle(handleID)
+	if err != nil {
+		t.Fatalf("get handle inicial: %v", err)
+	}
+
+	refreshed, refreshedRuntime, _, err := SincronizarRuntimeHandleSupervisado(handle, nil, "test_sync_tmux_missing")
+	if err != nil {
+		t.Fatalf("sincronizar handle tmux ausente: %v", err)
+	}
+	if refreshed == nil || strings.TrimSpace(refreshed.Estado) != "fallido" {
+		t.Fatalf("el handle tmux ausente deberia quedar fallido: %+v", refreshed)
+	}
+	if refreshedRuntime == nil {
+		var getErr error
+		refreshedRuntime, getErr = GetRuntime(runtimeID)
+		if getErr != nil {
+			t.Fatalf("get runtime: %v", getErr)
+		}
+	}
+	if refreshedRuntime == nil || strings.TrimSpace(refreshedRuntime.LogicalState) != "degradado" || strings.TrimSpace(refreshedRuntime.ProcessState) != "missing" {
+		t.Fatalf("runtime no degradado tras tmux ausente: %+v", refreshedRuntime)
 	}
 }
 

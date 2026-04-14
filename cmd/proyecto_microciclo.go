@@ -81,9 +81,10 @@ func activarMicrocicloProyecto(ref string, req proyectoMicrocicloRequest) (*proy
 	dispatch, dispatchErr := capacidadService.EjecutarSiguientePasoPipelineLocalDeterminista(proyecto.Slug)
 	if dispatchErr != nil {
 		db.Audit("orquesta", "microrefactor_loop_dispatch_error", "proyecto", proyecto.ID, dispatchErr.Error())
-		dispatch = nil
-	} else if dispatch, dispatchErr = asegurarDespachoMicrociclo(proyecto, agente, tarea, dispatch); dispatchErr != nil {
-		db.Audit("orquesta", "microrefactor_loop_dispatch_error", "proyecto", proyecto.ID, dispatchErr.Error())
+	}
+	dispatch, ensureErr := asegurarDespachoMicrociclo(proyecto, agente, tarea, dispatch)
+	if ensureErr != nil {
+		db.Audit("orquesta", "microrefactor_loop_dispatch_error", "proyecto", proyecto.ID, ensureErr.Error())
 		dispatch = nil
 	}
 	_, _ = db.RegistrarAutonomiaCiclo(&db.AutonomiaCiclo{
@@ -430,6 +431,7 @@ func asegurarDespachoMicrociclo(proyecto *db.Proyecto, agente string, tarea *db.
 	if proyecto == nil || tarea == nil {
 		return resultado, nil
 	}
+	agente = strings.TrimSpace(agente)
 	if resultado == nil {
 		resultado = &capacidadapp.ResultadoEjecucionPasoPipelineLocal{}
 	}
@@ -446,12 +448,25 @@ func asegurarDespachoMicrociclo(proyecto *db.Proyecto, agente string, tarea *db.
 			RequiereModelo:   true,
 			TareaObjetivoID:  tarea.ID,
 			TareaObjetivo:    strings.TrimSpace(tarea.Titulo),
-			AgenteTarea:      strings.TrimSpace(agente),
-			AgenteSugerido:   strings.TrimSpace(agente),
+			AgenteTarea:      agente,
+			AgenteSugerido:   agente,
 			Motivo:           "microrefactor_loop",
 		}
+	} else {
+		if resultado.Despacho.TareaObjetivoID <= 0 {
+			resultado.Despacho.TareaObjetivoID = tarea.ID
+		}
+		if strings.TrimSpace(resultado.Despacho.TareaObjetivo) == "" {
+			resultado.Despacho.TareaObjetivo = strings.TrimSpace(tarea.Titulo)
+		}
+		if strings.TrimSpace(resultado.Despacho.AgenteTarea) == "" {
+			resultado.Despacho.AgenteTarea = agente
+		}
+		if debeForzarAgenteMicrociclo(resultado.Despacho, agente) {
+			resultado.Despacho.AgenteSugerido = agente
+		}
 	}
-	if resultado.DispatchRuntime != nil {
+	if resultado.DispatchRuntime != nil && !strings.EqualFold(strings.TrimSpace(resultado.DispatchRuntime.Estado), "sin_agente") {
 		return resultado, nil
 	}
 	dispatchRuntime, err := (despachadorPipelineOperativo{}).DespacharPipeline(capacidadapp.SolicitudDespachoPipeline{
@@ -463,6 +478,22 @@ func asegurarDespachoMicrociclo(proyecto *db.Proyecto, agente string, tarea *db.
 	}
 	resultado.DispatchRuntime = dispatchRuntime
 	return resultado, nil
+}
+
+func debeForzarAgenteMicrociclo(despacho *capacidadapp.DespachoPipelineLocal, agente string) bool {
+	if despacho == nil || strings.TrimSpace(agente) == "" {
+		return false
+	}
+	sugerido := strings.TrimSpace(despacho.AgenteSugerido)
+	if sugerido == "" {
+		return true
+	}
+	switch strings.ToLower(sugerido) {
+	case "worker_premium", "worker_revisor", "worker_local_mini":
+		return true
+	default:
+		return false
+	}
 }
 
 func resolverProyectoMicrocicloPorAPI(ref string) (*db.Proyecto, bool, error) {

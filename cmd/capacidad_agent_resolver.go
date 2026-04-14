@@ -47,10 +47,22 @@ func (r resolvedorAgentePipelineOperativo) ResolverAgentePipeline(entrada capaci
 	if len(disponibles) > 0 {
 		return agentePreferidoPorCarrilYFase(disponibles, entrada), nil
 	}
+	if carrilPipelineExigeAgenteLibre(entrada.Carril) {
+		return "", nil
+	}
 	if len(trabajando) > 0 {
 		return agentePreferidoPorCarrilYFase(trabajando, entrada), nil
 	}
 	return "", nil
+}
+
+func carrilPipelineExigeAgenteLibre(carril string) bool {
+	switch strings.ToLower(strings.TrimSpace(carril)) {
+	case "premium_worktree", "revision_diff":
+		return true
+	default:
+		return false
+	}
 }
 
 func agentePreferidoPorCarrilYFase(candidatos []string, entrada capacidadapp.EntradaResolverAgentePipeline) string {

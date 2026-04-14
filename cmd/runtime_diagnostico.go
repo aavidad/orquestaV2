@@ -431,7 +431,7 @@ func runtimeWorkerRows(handles []*db.RuntimeHandle, limit int) []runtimeDiagnost
 		}
 		if repaired, restarted, err := controlruntime.EnsureTMUXMonitorFromMetadataJSON(handle.MetadataJSON); err == nil && strings.TrimSpace(repaired) != "" && strings.TrimSpace(repaired) != strings.TrimSpace(handle.MetadataJSON) {
 			handle.MetadataJSON = repaired
-			if restarted {
+			if restarted && db.DB != nil {
 				_ = db.ActualizarMetadataRuntimeHandle(handle.ID, repaired)
 			}
 		}

@@ -248,7 +248,7 @@ func TestRunnerRunControlPlaneEmiteDebug(t *testing.T) {
 	hasWarm := false
 	hasCold := false
 	for _, tr := range traces {
-		if strings.Contains(tr, "control_plane_hot transcript=%d mailbox=%d runtime_orders=%d") {
+		if strings.Contains(tr, "control_plane_runtime_orders count=%d") {
 			hasHot = true
 		}
 		if strings.Contains(tr, "control_plane_warm autonomia=%d pipeline_local=%d runtime_supervision=%d supervision=%d review=%d") {

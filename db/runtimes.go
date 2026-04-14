@@ -185,7 +185,11 @@ func MarcarRuntimesCerradosPorAgente(agente string) error {
 func GetRuntime(id int64) (*RuntimeInstance, error) {
 	return consultarConReintentos(func() (*RuntimeInstance, error) {
 		row := DB.QueryRow(runtimeSelectBase()+` WHERE r.id = ?`, id)
-		return escanearRuntime(row)
+		runtime, err := escanearRuntime(row)
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return runtime, err
 	})
 }
 

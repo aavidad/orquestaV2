@@ -427,6 +427,78 @@ func TestSupervisorLocalEstadoRehabilitaTMUXPersistenteAunqueCaigaWrapper(t *tes
 	}
 }
 
+func TestSupervisorLocalEstadoMarcaTMUXComoCaidoSiFaltaSesion(t *testing.T) {
+	tmp := t.TempDir()
+	fakeTmux := filepath.Join(tmp, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte("#!/usr/bin/env bash\nset -euo pipefail\nexit 1\n"), 0o755); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	s := &supervisorProcesoLocal{
+		ref:                 "tmux-missing-test",
+		agente:              "Claude1",
+		proyecto:            "orquestador",
+		pid:                 os.Getpid(),
+		modo:                "tmux_cli_session",
+		driver:              "tmux_cli_session",
+		tmuxCommand:         fakeTmux,
+		tmuxSession:         "orq-claude1",
+		renderedCommand:     "claude-code",
+		wrappedCommand:      mustExecutableTest(t),
+		workingDir:          mustGetwdTest(t),
+		traceDir:            mustGetwdTest(t),
+		stdinPath:           filepath.Join(tmp, "pty.stdin"),
+		mailboxDeliveryMode: "interactive",
+	}
+
+	estado := s.estado()
+	if estado == nil {
+		t.Fatal("faltaba estado")
+	}
+	if estado.Vivo {
+		t.Fatalf("la sesion tmux ausente no deberia seguir viva: %+v", estado)
+	}
+	if estado.HandleEstado != "fallido" {
+		t.Fatalf("handle_state inesperado para tmux ausente: %+v", estado)
+	}
+	if estado.ProcessState != "missing" {
+		t.Fatalf("process_state inesperado para tmux ausente: %+v", estado)
+	}
+	meta := metadataMap(estado.MetadataJSON)
+	if got := stringValueFromMetadata(meta, "exit_error"); !strings.Contains(got, "tmux session missing") {
+		t.Fatalf("faltaba exit_error de tmux ausente: %q meta=%+v", got, meta)
+	}
+}
+
+func TestSupervisorLocalEstadoNoExigeTMUXParaProcessPTYCLI(t *testing.T) {
+	tmp := t.TempDir()
+	s := &supervisorProcesoLocal{
+		ref:                 "pty-no-tmux-test",
+		agente:              "Codex1",
+		proyecto:            "orquestador",
+		pid:                 os.Getpid(),
+		modo:                "attached",
+		driver:              "process_pty_cli",
+		renderedCommand:     "codex-perfil Codex1",
+		wrappedCommand:      mustExecutableTest(t),
+		workingDir:          mustGetwdTest(t),
+		traceDir:            mustGetwdTest(t),
+		stdinPath:           filepath.Join(tmp, "pty.stdin"),
+		mailboxDeliveryMode: "bootstrap_only",
+	}
+
+	estado := s.estado()
+	if estado == nil {
+		t.Fatal("faltaba estado")
+	}
+	if !estado.Vivo {
+		t.Fatalf("process_pty_cli no deberia caer por ausencia de tmux: %+v", estado)
+	}
+	meta := metadataMap(estado.MetadataJSON)
+	if got := stringValueFromMetadata(meta, "exit_error"); strings.Contains(got, "tmux session missing") {
+		t.Fatalf("process_pty_cli no deberia heredar error de tmux: %q meta=%+v", got, meta)
+	}
+}
+
 func mustGetwdTest(t *testing.T) string {
 	t.Helper()
 	wd, err := os.Getwd()

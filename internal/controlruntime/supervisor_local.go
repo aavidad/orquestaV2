@@ -790,6 +790,17 @@ func (s *supervisorProcesoLocal) snapshot() (int, string, map[string]any, map[st
 	} else {
 		aliveErr = nil
 	}
+	if alive && supervisorTMUXPersistenteRequiereSesion(modo, driver, renderedCommand) {
+		if !tmuxSessionExists(tmuxCommand, tmuxSession) {
+			alive = false
+			aliveErr = fmt.Errorf("tmux session missing")
+			s.marcarSalidaExterna(aliveErr)
+			now := nowUTC()
+			exitedAt = &now
+			exitError = strings.TrimSpace(aliveErr.Error())
+			lastStatusAt = now
+		}
+	}
 	if aliveErr != nil || !alive {
 		slashCommandDebugf("supervisor_local status=snapshot ref=%s pid=%d alive=%t err=%v stdin=%s log=%s command=%s", strings.TrimSpace(s.ref), pid, alive, aliveErr, strings.TrimSpace(stdinPath), strings.TrimSpace(logPath), strings.TrimSpace(renderedCommand))
 	}
@@ -859,17 +870,24 @@ func (s *supervisorProcesoLocal) snapshot() (int, string, map[string]any, map[st
 }
 
 func supervisorTMUXPersistenteSigueVivo(modo, driver, tmuxCommand, tmuxSession, renderedCommand string) bool {
+	if !supervisorTMUXPersistenteRequiereSesion(modo, driver, renderedCommand) {
+		return false
+	}
+	return tmuxSessionExists(tmuxCommand, tmuxSession)
+}
+
+func supervisorTMUXPersistenteRequiereSesion(modo, driver, renderedCommand string) bool {
 	modo = strings.ToLower(strings.TrimSpace(modo))
 	driver = strings.ToLower(strings.TrimSpace(driver))
 	renderedCommand = strings.TrimSpace(renderedCommand)
 	switch {
 	case modo == "tmux_cli_session",
-		driver == "tmux_cli_session",
-		renderedCommandLooksLikeTMUXPreferredCLI(renderedCommand):
-	default:
-		return false
+		driver == "tmux_cli_session":
+		return true
+	case modo == "" && driver == "" && renderedCommandLooksLikeTMUXPreferredCLI(renderedCommand):
+		return true
 	}
-	return tmuxSessionExists(tmuxCommand, tmuxSession)
+	return false
 }
 
 func nowUTC() time.Time {

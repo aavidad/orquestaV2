@@ -925,6 +925,9 @@ func ListarAgentesCuentasLigero() ([]*Agente, error) {
 func GetAgente(nombre string) (*Agente, error) {
 	nombreCanonico, _, _, err := resolverAgentePorNombreCI(strings.TrimSpace(nombre))
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
 		return nil, err
 	}
 	row := DB.QueryRow(`
@@ -944,6 +947,9 @@ func GetAgente(nombre string) (*Agente, error) {
 		&a.LimiteSemanalSegundos, &lastReset, &a.EstadoCuota,
 		&reanimar, &motivo,
 	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
 		return nil, err
 	}
 	if ultima.Valid {
@@ -2251,6 +2257,31 @@ func CheckReanimaciones() ([]*Agente, error) {
 func ResetReanimacion(nombre string) error {
 	_, err := DB.Exec(`UPDATE agentes SET reanimar_at = NULL, motivo_pausa = NULL, estado_cuota = 'activo' WHERE nombre = ?`, nombre)
 	return err
+}
+
+// LimpiarContinuidadAgente borra la continuidad persistida que puede contaminar
+// un arranque manual posterior.
+func LimpiarContinuidadAgente(nombre string) error {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return nil
+	}
+	if _, err := DB.Exec(`
+		UPDATE sesiones
+		SET external_session_id = '',
+		    resume_payload_json = '',
+		    resumen_continuidad = ''
+		WHERE agente = ?`, nombre); err != nil {
+		return err
+	}
+	if _, err := DB.Exec(`
+		UPDATE runtime_instances
+		SET external_session_id = ''
+		WHERE agente = ?`, nombre); err != nil {
+		return err
+	}
+	Audit("server", "limpiar_continuidad_agente", "agente", 0, nombre)
+	return nil
 }
 
 // EliminarAgente borra físicamente un agente de la base de datos.

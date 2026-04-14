@@ -186,6 +186,9 @@ func (d commandDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 	plan.Comando = comando
 	plan.Args = expandedArgs
 	plan.Env = expandConnectorEnv(env, vars)
+	if filepath.Base(strings.TrimSpace(plan.Comando)) == "codex-perfil" {
+		ensureCodexProfileWrapperEnv(plan.Env)
+	}
 	asegurarPathParaComando(plan.Env, plan.Comando)
 	if applyLocalControlHints(plan, metadata) {
 		plan.Notas = append(plan.Notas, "El conector aporta capacidades locales de control desde metadata_json.")
@@ -429,6 +432,64 @@ func codexProfileWrapperPath(projectPath string) string {
 		return filepath.Join(home, "Trabajo", "codex-perfiles", "bin", "codex-perfil")
 	}
 	return "codex-perfil"
+}
+
+func ensureCodexProfileWrapperEnv(env map[string]string) {
+	if env == nil {
+		return
+	}
+	if strings.TrimSpace(env["ORQUESTA_TERMINAL_BACKEND"]) == "" {
+		env["ORQUESTA_TERMINAL_BACKEND"] = "pty"
+	}
+	if codexBin := strings.TrimSpace(env["CODEX_BIN"]); codexBin != "" {
+		asegurarPathParaComando(env, codexBin)
+		return
+	}
+	codexBin := strings.TrimSpace(resolveCodexBinaryPath())
+	if codexBin == "" {
+		return
+	}
+	env["CODEX_BIN"] = codexBin
+	asegurarPathParaComando(env, codexBin)
+}
+
+func resolveCodexBinaryPath() string {
+	if resolved, err := exec.LookPath("codex"); err == nil && strings.TrimSpace(resolved) != "" {
+		return resolved
+	}
+	candidates := make([]string, 0, 8)
+	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+		candidates = append(candidates,
+			filepath.Join(home, ".local", "bin", "codex"),
+			filepath.Join(home, "bin", "codex"),
+			filepath.Join(home, ".npm-global", "bin", "codex"),
+		)
+		if matches, err := filepath.Glob(filepath.Join(home, ".nvm", "versions", "node", "*", "bin", "codex")); err == nil {
+			sort.Strings(matches)
+			for i := len(matches) - 1; i >= 0; i-- {
+				candidates = append(candidates, matches[i])
+			}
+		}
+	}
+	candidates = append(candidates,
+		"/usr/local/bin/codex",
+		"/usr/bin/codex",
+	)
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		info, err := os.Stat(candidate)
+		if err != nil || info.IsDir() {
+			continue
+		}
+		if info.Mode()&0o111 == 0 {
+			continue
+		}
+		return filepath.Clean(candidate)
+	}
+	return ""
 }
 
 func normalizeConnectorMetadata(conector ConnectorConfig, metadata map[string]any) map[string]any {

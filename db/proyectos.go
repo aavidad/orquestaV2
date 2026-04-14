@@ -163,7 +163,11 @@ func GetProyecto(ref string) (*Proyecto, error) {
 	}
 
 	return consultarConReintentos(func() (*Proyecto, error) {
-		return escanearProyecto(DB.QueryRow(q, args...))
+		p, err := escanearProyecto(DB.QueryRow(q, args...))
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return p, err
 	})
 }
 
@@ -321,7 +325,7 @@ func RutaTrabajoPreferidaAgenteProyecto(agente string, proyecto *Proyecto, cwd s
 		}
 		return ruta
 	}
-	if rutaTrabajoPerteneceAProyectoAgente(proyecto, agente, cwd) {
+	if ruta := normalizarRutaProyecto(RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, "")); ruta != "" && cwd == ruta {
 		return cwd
 	}
 	if ruta := normalizarRutaProyecto(RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, "")); ruta != "" {

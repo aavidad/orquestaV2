@@ -10,6 +10,8 @@ package cmd
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -729,5 +731,152 @@ func TestImprimirRuntimeTranscriptRawMantieneRuidoOperativo(t *testing.T) {
 	})
 	if !strings.Contains(out, "Perfil activo") {
 		t.Fatalf("salida transcript raw sin banner:\n%s", out)
+	}
+}
+
+func TestListarRuntimeHandlesSaneaPremiumContaminadoPorOllamaPool(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	pid := int64(os.Getpid())
+	runtimeID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:       "Claude1",
+		ProyectoID:   &proyectoID,
+		LogicalState: "pausado",
+		ProcessState: "idle",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("registrar runtime: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-claude1-legacy",
+		"tmux_pane_id":          "%1",
+		"rendered_command":      "claude-code",
+		"external_session_id":   "ollama-pool-claude1-legacy-1",
+		"mailbox_delivery_mode": "session_resume",
+	})
+	if _, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, capabilities_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'pausado', ?, ?, CURRENT_TIMESTAMP)`,
+		"Claude1", proyectoID, runtimeID, "tmux", "session", "orq-claude1-legacy/%1", string(metaJSON), `{"mailbox_delivery_mode":"session_resume"}`); err != nil {
+		t.Fatalf("insert runtime handle: %v", err)
+	}
+
+	agente := "Claude1"
+	handles, err := db.ListarRuntimeHandles(&agente)
+	if err != nil {
+		t.Fatalf("listar runtime handles: %v", err)
+	}
+	if len(handles) != 1 {
+		t.Fatalf("handles inesperados: %+v", handles)
+	}
+	if got := strings.TrimSpace(handles[0].Estado); got != "fallido" {
+		t.Fatalf("el handle contaminado deberia quedar fallido, got=%q handle=%+v", got, handles[0])
+	}
+	runtime, err := db.GetRuntime(runtimeID)
+	if err != nil {
+		t.Fatalf("get runtime: %v", err)
+	}
+	if runtime == nil || strings.TrimSpace(runtime.LogicalState) != "degradado" || strings.TrimSpace(runtime.ProcessState) != "missing" {
+		t.Fatalf("runtime no degradado tras sanear handle contaminado: %+v", runtime)
+	}
+}
+
+func TestSincronizarRuntimeHandleSupervisadoNoReanimaPremiumConCanalRoto(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	fakeTmux := filepath.Join(tmp, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte("#!/usr/bin/env bash\nset -euo pipefail\nif [[ \"$1\" == \"has-session\" ]]; then exit 0; fi\nexit 1\n"), 0o755); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	workingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("executable: %v", err)
+	}
+	pid := int64(os.Getpid())
+	runtimeID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:       "Claude1",
+		ProyectoID:   &proyectoID,
+		LogicalState: "pausado",
+		ProcessState: "idle",
+		PID:          &pid,
+	})
+	if err != nil {
+		t.Fatalf("registrar runtime: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                      "tmux_cli_session",
+		"transport":                   "tmux",
+		"tmux_command":                fakeTmux,
+		"tmux_session":                "orq-claude1-live",
+		"tmux_pane_id":                "%1",
+		"working_dir":                 workingDir,
+		"rendered_command":            "claude-code",
+		"wrapped_command":             exe,
+		"external_session_id":         "ollama-pool-claude1-legacy-1",
+		"mailbox_delivery_mode":       "session_resume",
+		"pty_last_broken_pipe_error":  "external_session_id incompatible with tmux premium runtime",
+		"pty_last_broken_pipe_at":     time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	res, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, capabilities_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo', ?, ?, CURRENT_TIMESTAMP)`,
+		"Claude1", proyectoID, runtimeID, "tmux", "session", "orq-claude1-live/%1", string(metaJSON), `{"mailbox_delivery_mode":"session_resume"}`)
+	if err != nil {
+		t.Fatalf("insert runtime handle: %v", err)
+	}
+	handleID, _ := res.LastInsertId()
+	handle, err := db.GetRuntimeHandle(handleID)
+	if err != nil {
+		t.Fatalf("get runtime handle: %v", err)
+	}
+
+	refreshed, runtime, _, err := db.SincronizarRuntimeHandleSupervisado(handle, nil, "test_broken_channel")
+	if err != nil {
+		t.Fatalf("sincronizar runtime handle: %v", err)
+	}
+	if refreshed == nil || strings.TrimSpace(refreshed.Estado) != "fallido" {
+		t.Fatalf("el handle con canal roto no deberia reanimarse: %+v", refreshed)
+	}
+	if runtime == nil {
+		runtime, err = db.GetRuntime(runtimeID)
+		if err != nil {
+			t.Fatalf("get runtime: %v", err)
+		}
+	}
+	if runtime == nil || strings.TrimSpace(runtime.LogicalState) != "degradado" || strings.TrimSpace(runtime.ProcessState) != "missing" {
+		t.Fatalf("runtime no degradado tras canal roto: %+v", runtime)
 	}
 }

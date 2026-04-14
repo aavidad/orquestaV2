@@ -726,6 +726,39 @@ func (s *Service) GetRuntimeOrder(id int64) (*db.RuntimeOrder, error) {
 	return s.store.GetRuntimeOrder(id)
 }
 
+func (s *Service) CancelRuntimeOrder(id int64, actor, motivo string) error {
+	order, err := s.store.GetRuntimeOrder(id)
+	if err != nil {
+		return err
+	}
+	if order == nil {
+		return fmt.Errorf("runtime order no encontrada")
+	}
+	switch strings.ToLower(strings.TrimSpace(order.Estado)) {
+	case "completada", "fallida", "cancelada", "expirada":
+		return nil
+	}
+	actor = strings.TrimSpace(actor)
+	if actor == "" {
+		actor = "orquesta"
+	}
+	motivo = strings.TrimSpace(motivo)
+	if motivo == "" {
+		motivo = "cancelada manualmente"
+	}
+	resultadoJSON := mergeRuntimeOrderResultJSONApp(order.ResultadoJSON, map[string]any{
+		"ok":           false,
+		"cancelled_at": time.Now().UTC().Format(time.RFC3339Nano),
+		"cancelled_by": actor,
+		"reason":       motivo,
+	})
+	if err := s.store.MarkRuntimeOrderState(id, "cancelada", resultadoJSON, motivo); err != nil {
+		return err
+	}
+	s.store.Audit(actor, "cancelar_runtime_order", "runtime_order", id, motivo)
+	return nil
+}
+
 func (s *Service) CreateLiveAgentHandoff(origen, destino string, tareaID *int64, motivo, resumenContinuidad, externalSessionID string) (int64, error) {
 	return s.store.CreateLiveAgentHandoff(
 		strings.TrimSpace(origen),

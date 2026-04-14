@@ -345,6 +345,33 @@ func (f *fakeStore) MarkRuntimeOrderState(id int64, estado, resultadoJSON, error
 	f.markedOrderStates = append(f.markedOrderStates, id)
 	return nil
 }
+
+func TestCancelRuntimeOrderMarcaCanceladaYAudita(t *testing.T) {
+	store := &fakeStore{
+		ordersResponse: []*db.RuntimeOrder{{
+			ID:            87,
+			Agente:        "Codex1",
+			Tipo:          "send_instruction",
+			Estado:        "pendiente",
+			ResultadoJSON: `{}`,
+		}},
+	}
+	svc := NewService(store)
+
+	if err := svc.CancelRuntimeOrder(87, "Codex1", "limpieza de prueba"); err != nil {
+		t.Fatalf("CancelRuntimeOrder: %v", err)
+	}
+	if store.markOrderStateID != 87 || store.markOrderStateEstado != "cancelada" {
+		t.Fatalf("orden no cancelada: id=%d estado=%q", store.markOrderStateID, store.markOrderStateEstado)
+	}
+	if !strings.Contains(store.markOrderStateResultado, `"cancelled_by":"Codex1"`) || !strings.Contains(store.markOrderStateResultado, `"reason":"limpieza de prueba"`) {
+		t.Fatalf("resultado cancelado sin trazabilidad: %s", store.markOrderStateResultado)
+	}
+	if store.auditAction != "cancelar_runtime_order" || store.auditEntityID != 87 {
+		t.Fatalf("audit inesperada: action=%q entity_id=%d", store.auditAction, store.auditEntityID)
+	}
+}
+
 func (f *fakeStore) CreateLiveAgentHandoff(origen, destino string, tareaID *int64, motivo, resumenContinuidad, externalSessionID string) (int64, error) {
 	f.handoffOrigen = origen
 	f.handoffDestino = destino
@@ -747,11 +774,11 @@ func TestEnqueueAgentNudgeEncolaOrdenCanonica(t *testing.T) {
 	runtimeID := int64(21)
 	projectID := int64(9)
 	store := &fakeStore{
-		projectResponse:      &db.Proyecto{ID: projectID, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: "/tmp/orquestador"},
-		operationalProjResp:  &db.RuntimeHandle{ID: 14, Agente: "Codex1", Estado: "activo", RuntimeID: &runtimeID},
-		runtimeResponse:      &db.RuntimeInstance{ID: runtimeID, Agente: "Codex1", ProyectoID: &projectID},
-		handleByIDResp:       &db.RuntimeHandle{ID: 14, Agente: "Codex1", Estado: "activo", RuntimeID: &runtimeID},
-		createOrderID:        77,
+		projectResponse:     &db.Proyecto{ID: projectID, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: "/tmp/orquestador"},
+		operationalProjResp: &db.RuntimeHandle{ID: 14, Agente: "Codex1", Estado: "activo", RuntimeID: &runtimeID},
+		runtimeResponse:     &db.RuntimeInstance{ID: runtimeID, Agente: "Codex1", ProyectoID: &projectID},
+		handleByIDResp:      &db.RuntimeHandle{ID: 14, Agente: "Codex1", Estado: "activo", RuntimeID: &runtimeID},
+		createOrderID:       77,
 	}
 	service := NewService(store)
 

@@ -528,6 +528,28 @@ var runtimeOrdenNuevaCmd = &cobra.Command{
 	},
 }
 
+var runtimeOrdenCancelarCmd = &cobra.Command{
+	Use:   "orden-cancelar <id>",
+	Short: "Cancela una orden runtime viva",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := strconv.ParseInt(args[0], 10, 64)
+		if err != nil || id <= 0 {
+			return fmt.Errorf("id inválido")
+		}
+		actor, _ := cmd.Flags().GetString("por")
+		motivo, _ := cmd.Flags().GetString("motivo")
+		if ok, err := cancelarRuntimeOrderDesdeAPI(id, actor, motivo); ok {
+			if err != nil {
+				return err
+			}
+			fmt.Printf("✓ Orden runtime #%d cancelada\n", id)
+			return nil
+		}
+		return serverFirstCommandError("runtime orden-cancelar")
+	},
+}
+
 var runtimeNudgeCmd = &cobra.Command{
 	Use:   "nudge <to_agente> <texto>",
 	Short: "Encola un nudge para un agente a través del control plane",
@@ -936,10 +958,10 @@ func detenerRuntimeActivoDePruebas(agente, proyecto string) error {
 		return nil
 	}
 	if _, _, ok, err := encolarControlAgentePorAPI(apiAgenteControlRequest{
-		Agente:   agente,
-		Accion:   "stop",
-		Motivo:   "runtime limpiar-pruebas",
-		Por:      "orquesta",
+		Agente: agente,
+		Accion: "stop",
+		Motivo: "runtime limpiar-pruebas",
+		Por:    "orquesta",
 	}); err != nil {
 		return err
 	} else if !ok {
@@ -1215,6 +1237,19 @@ func cargarRuntimeOrderPorIDDesdeAPI(id int64) (*db.RuntimeOrder, bool, error) {
 		return nil, ok, err
 	}
 	return resp.Order, true, nil
+}
+
+func cancelarRuntimeOrderDesdeAPI(id int64, actor, motivo string) (bool, error) {
+	var resp struct {
+		OK bool  `json:"ok"`
+		ID int64 `json:"id"`
+	}
+	ok, err := apiPost("/api/runtime-orders/cancelar", map[string]any{
+		"id":     id,
+		"actor":  strings.TrimSpace(actor),
+		"motivo": strings.TrimSpace(motivo),
+	}, &resp)
+	return ok, err
 }
 
 func crearRuntimeOrderDesdeAPI(agente, tipo, proyecto, payload string) (int64, bool, error) {
@@ -1672,6 +1707,8 @@ func init() {
 	runtimeOrdenesCmd.Flags().Int("limit", 0, "Limitar órdenes devueltas")
 	runtimeOrdenNuevaCmd.Flags().String("proyecto", "", "Proyecto asociado a la orden")
 	runtimeOrdenNuevaCmd.Flags().String("payload", "{}", "Payload JSON de la orden")
+	runtimeOrdenCancelarCmd.Flags().String("por", "orquesta", "Actor que cancela la orden")
+	runtimeOrdenCancelarCmd.Flags().String("motivo", "", "Motivo de cancelación")
 	runtimeNudgeCmd.Flags().String("from", "server", "Agente o actor que emite el nudge")
 	runtimeNudgeCmd.Flags().String("proyecto", "", "Proyecto asociado al nudge")
 	runtimeNudgeCmd.Flags().String("kind", "nudge", "Kind del mensaje mailbox generado")
@@ -1711,6 +1748,6 @@ func init() {
 	runtimeDespertarCmd.Flags().Bool("orders", false, "Despierta el batch de runtime orders")
 	runtimeDespertarCmd.Flags().Bool("mailbox", false, "Despierta el batch de runtime mailbox")
 	runtimeDespertarCmd.Flags().Bool("warm", false, "Despierta el carril caliente general")
-	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimePurgarOrdenesCmd, runtimeDespertarCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenVerCmd, runtimeOrdenNuevaCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxVerCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd, runtimeMailboxLimpiarCmd, runtimeLimpiarPruebasCmd)
+	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimePurgarOrdenesCmd, runtimeDespertarCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenVerCmd, runtimeOrdenNuevaCmd, runtimeOrdenCancelarCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxVerCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd, runtimeMailboxLimpiarCmd, runtimeLimpiarPruebasCmd)
 	rootCmd.AddCommand(runtimeCmd)
 }

@@ -173,6 +173,9 @@ func (s *Service) List(input ListInput) ([]*Gate, error) {
 		if err != nil {
 			return nil, err
 		}
+		if proyecto == nil {
+			return []*Gate{}, nil
+		}
 		filter.ProyectoID = &proyecto.ID
 	}
 	if estado := strings.TrimSpace(input.Estado); estado != "" {

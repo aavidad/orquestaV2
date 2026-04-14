@@ -3760,8 +3760,8 @@ func TestRuntimeHandleMailboxDeliveryModeRespetaCapacidadesYFallbacks(t *testing
 		HandleKind:       "process",
 		CapabilitiesJSON: `{"mailbox_delivery_mode":"bootstrap_only","can_send_input":false}`,
 		MetadataJSON:     `{"driver":"process_pty_cli","stdin_path":"/tmp/pty.stdin","supervisor_ref":"/tmp/ref","rendered_command":"codex-perfil Codex2","external_session_id":"sess-live-2","modo_plan":"resume"}`,
-	}); got != runtimeagente.MailboxDeliveryBootstrapOnly {
-		t.Fatalf("codex supervisado con bootstrap_only explicito no deberia elevarse a session_resume: %s", got)
+	}); got != runtimeagente.MailboxDeliverySessionResume {
+		t.Fatalf("codex supervisado con external_session_id deberia elevarse a session_resume: %s", got)
 	}
 	if got := RuntimeHandleMailboxDeliveryMode(&RuntimeHandle{
 		Transporte:   "cli",
@@ -7749,6 +7749,33 @@ func TestRuntimeOrderSendInstructionDebeEsperarReceiptInteractivoIncluyePipeline
 	}
 }
 
+func TestRuntimeOrderSendInstructionPermiteReceiptLastOutputNoAceptaPipelinePremiumBootstrapOnly(t *testing.T) {
+	handle := &RuntimeHandle{
+		Transporte:       "tmux",
+		CapabilitiesJSON: `{"can_send_input":false,"mailbox_delivery_mode":"bootstrap_only"}`,
+		MetadataJSON:     `{"driver":"tmux_cli_session","mailbox_delivery_mode":"bootstrap_only"}`,
+	}
+	snap := &runtimeagente.WorkerSnapshot{
+		Manifest: &runtimeagente.WorkerManifest{
+			Driver:              "tmux_cli_session",
+			Transport:           "tmux",
+			MailboxDeliveryMode: runtimeagente.MailboxDeliveryBootstrapOnly,
+		},
+		Status: &runtimeagente.WorkerStatus{
+			State: "ready",
+			Alive: true,
+		},
+		Heartbeat: &runtimeagente.WorkerHeartbeat{
+			Alive: true,
+		},
+	}
+	if runtimeOrderSendInstructionPermiteReceiptLastOutput(handle, snap, map[string]any{
+		"mailbox_kind": "pipeline_local",
+	}) {
+		t.Fatal("pipeline_local premium no deberia aceptar last_output aunque el handle siga bootstrap_only")
+	}
+}
+
 func TestProcesarRuntimeOrdersBatchMicroprogramacionConTranscriptPatchCompletaOrden(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	if err := RegistrarAgente("Qwen1", "programador"); err != nil {
@@ -8136,7 +8163,7 @@ func TestProcesarRuntimeOrdersBatchPipelinePremiumAceptaActividadTMUXComoReceipt
 	fakeTmux := writeFakeTMUXGeminiAcceptEditsScriptDB(t, tmp)
 	now := time.Now().UTC()
 	deliveredAt := now.Add(-30 * time.Second)
-	heartbeatAt := now.Add(-5 * time.Second)
+	activityAt := now.Add(-5 * time.Second)
 	manifestRaw, _ := json.Marshal(map[string]any{
 		"driver":                "tmux_cli_session",
 		"transport":             "tmux",
@@ -8147,14 +8174,18 @@ func TestProcesarRuntimeOrdersBatchPipelinePremiumAceptaActividadTMUXComoReceipt
 		"can_send_input":        true,
 	})
 	statusRaw, _ := json.Marshal(map[string]any{
-		"state":                 "starting",
+		"state":                 "ready",
 		"alive":                 true,
-		"updated_at":            heartbeatAt.Format(time.RFC3339Nano),
+		"updated_at":            activityAt.Format(time.RFC3339Nano),
+		"last_output_at":        activityAt.Format(time.RFC3339Nano),
+		"last_progress_at":      activityAt.Format(time.RFC3339Nano),
 		"mailbox_delivery_mode": runtimeagente.MailboxDeliveryInteractive,
 	})
 	heartbeatRaw, _ := json.Marshal(map[string]any{
-		"alive":        true,
-		"heartbeat_at": heartbeatAt.Format(time.RFC3339Nano),
+		"alive":            true,
+		"heartbeat_at":     activityAt.Format(time.RFC3339Nano),
+		"last_output_at":   activityAt.Format(time.RFC3339Nano),
+		"last_progress_at": activityAt.Format(time.RFC3339Nano),
 	})
 	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
 		t.Fatalf("write manifest: %v", err)
@@ -8220,6 +8251,72 @@ func TestProcesarRuntimeOrdersBatchPipelinePremiumAceptaActividadTMUXComoReceipt
 	}
 	if msg.Estado != "consumido" {
 		t.Fatalf("mailbox deberia quedar consumido tras actividad de pane: %+v", msg)
+	}
+}
+
+func TestRuntimeHandleListaParaDispatchInteractivoTMUXRequiereSnapshot(t *testing.T) {
+	handle := &RuntimeHandle{
+		Transporte:   "tmux",
+		MetadataJSON: `{"driver":"tmux_cli_session","tmux_session":"orq-gemini1-missing","tmux_pane_id":"%93","mailbox_delivery_mode":"interactive"}`,
+	}
+	ready, reason := runtimeHandleListaParaDispatchInteractivo(handle, time.Now().UTC())
+	if ready {
+		t.Fatalf("tmux interactivo sin snapshot no deberia estar listo")
+	}
+	if reason != "worker_snapshot_missing" {
+		t.Fatalf("motivo inesperado: %q", reason)
+	}
+}
+
+func TestCompletarRuntimeOrderSendInstructionDiferidaAMailboxPipelinePremiumRetienePendiente(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sendID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Gemini1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "send_instruction",
+		PayloadJSON: `{"to_agente":"Gemini1","texto":"continua trabajo actual","mailbox_kind":"pipeline_local"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar send_instruction: %v", err)
+	}
+	order, err := GetRuntimeOrder(sendID)
+	if err != nil || order == nil {
+		t.Fatalf("get order: %+v err=%v", order, err)
+	}
+	payload := map[string]any{
+		"to_agente":    "Gemini1",
+		"texto":        "continua trabajo actual",
+		"mailbox_kind": "pipeline_local",
+	}
+	if err := completarRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, "runtime no disponible para entrega inmediata"); err != nil {
+		t.Fatalf("completar diferida mailbox: %v", err)
+	}
+	order, err = GetRuntimeOrder(sendID)
+	if err != nil || order == nil {
+		t.Fatalf("get order final: %+v err=%v", order, err)
+	}
+	if order.Estado != "pendiente" {
+		t.Fatalf("pipeline_local premium no deberia quedar completada por mailbox durable: %+v", order)
+	}
+	if !strings.Contains(order.ResultadoJSON, `"delivery_state":"queued"`) {
+		t.Fatalf("resultado sin delivery_state queued: %s", order.ResultadoJSON)
+	}
+	if strings.Contains(order.ResultadoJSON, `"dispatch_state":"delivered"`) {
+		t.Fatalf("pipeline_local premium no deberia marcarse delivered por mailbox durable: %s", order.ResultadoJSON)
 	}
 }
 

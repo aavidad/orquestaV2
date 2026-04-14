@@ -83,6 +83,9 @@ var proyectoVerCmd = &cobra.Command{
 		if !ok {
 			return serverFirstCommandError("proyecto ver")
 		}
+		if p == nil {
+			return fmt.Errorf("proyecto no encontrado: %s", strings.TrimSpace(args[0]))
+		}
 		fmt.Printf("Proyecto #%d — %s\n", p.ID, p.Nombre)
 		fmt.Printf("  Slug:      %s\n", p.Slug)
 		fmt.Printf("  Tipo:      %s\n", p.Tipo)

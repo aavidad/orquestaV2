@@ -120,7 +120,6 @@ func pipelineLocalDispatchShouldAttempt(key string) bool {
 	return pipelineLocalDispatchGate.Allow(key, pipelineLocalDispatchInterval())
 }
 
-
 func pipelineLocalDispatchKey(proyecto string, despacho *capacidadapp.DespachoPipelineLocal) string {
 	if despacho == nil {
 		return strings.TrimSpace(proyecto)
@@ -169,7 +168,6 @@ func presupuestoPrimerUsoSesion(nombre string) bool {
 	return presupuestoPrimerUsoSesionGate.Allow(nombre, 365*24*time.Hour)
 }
 
-
 func controlPlaneHasOperationalHandles() bool {
 	handles, err := db.ListarRuntimeHandlesActivosOperativosRecientes()
 	if err != nil {
@@ -197,13 +195,85 @@ func (dbAutomationService) ResetReanimacion(nombre string) error {
 	if bloqueado {
 		return nil
 	}
-	if err := reactivarAgenteTrasReanimacion(nombre); err != nil {
+	if err := cancelarBootstrapObsoletoReanimacion(nombre); err != nil {
+		return err
+	}
+	if err := registrarCheckpointRehabilitacionManual(nombre); err != nil {
+		return err
+	}
+	if err := reactivarAgenteTrasReanimacionConMotivo(nombre, "manual_rehabilitation"); err != nil {
 		return err
 	}
 	if err := db.ResetReanimacion(nombre); err != nil {
 		return err
 	}
 	resetStatusSnapshotCache()
+	return nil
+}
+
+func cancelarBootstrapObsoletoReanimacion(agente string) error {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil
+	}
+	estados := []string{"pendiente", "tomada", "ejecutando"}
+	for _, estado := range estados {
+		estado := estado
+		orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
+			Agente: &agente,
+			Estado: &estado,
+		})
+		if err != nil {
+			return err
+		}
+		for _, order := range orders {
+			if order == nil {
+				continue
+			}
+			tipo := strings.ToLower(strings.TrimSpace(order.Tipo))
+			if tipo != "handoff" && tipo != "resume" {
+				continue
+			}
+			resultado := `{"ok":false,"dispatch_state":"cancelled","bootstrap_stale":true,"superseded_reason":"manual_rehabilitation"}`
+			detalle := "rehabilitacion manual del agente"
+			if err := db.MarcarRuntimeOrderEstado(order.ID, "cancelada", resultado, detalle); err != nil {
+				return err
+			}
+			db.Audit("orquesta", "rehabilitar_agente_cancela_bootstrap_obsoleto", "runtime_order", order.ID,
+				fmt.Sprintf("agente=%s tipo=%s estado_previo=%s", agente, strings.TrimSpace(order.Tipo), estado))
+		}
+	}
+	if err := db.LimpiarContinuidadAgente(agente); err != nil {
+		return err
+	}
+	return nil
+}
+
+func registrarCheckpointRehabilitacionManual(agente string) error {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil
+	}
+	proyecto, err := resolverProyectoReactivacionAgente(agente)
+	if err != nil {
+		return err
+	}
+	if proyecto == nil {
+		return nil
+	}
+	if _, err := runtimesService.CreateRuntimeCheckpoint(&db.RuntimeCheckpoint{
+		Agente:         agente,
+		ProyectoID:     &proyecto.ID,
+		CheckpointKind: "manual_rehabilitation",
+		Resumen:        "Corte de continuidad tras rehabilitación manual",
+		PayloadJSON:    "{}",
+		ResumeStrategy: "resumen_y_payload",
+		Source:         "manual_rehabilitation",
+	}); err != nil {
+		return err
+	}
+	db.Audit("orquesta", "checkpoint_rehabilitacion_manual", "agente", 0,
+		fmt.Sprintf("agente=%s proyecto=%s", agente, strings.TrimSpace(proyecto.Slug)))
 	return nil
 }
 
@@ -303,7 +373,6 @@ func allowAutonomiaActiveSessionsObservation(now time.Time) bool {
 	return autonomiaActiveSessionsGate.AllowAt(autonomiaActiveSessionsInterval(), now)
 }
 
-
 func resetRuntimeBudgetObservationBackgroundGate() {
 	runtimeBudgetObservationBackgroundGate.Reset()
 }
@@ -311,7 +380,6 @@ func resetRuntimeBudgetObservationBackgroundGate() {
 func resetAutonomiaActiveSessionsObservationGate() {
 	autonomiaActiveSessionsGate.Reset()
 }
-
 
 func presupuestoAgenteDebeRevalidarseAhora(a *db.Agente, minAge time.Duration, soloBloqueadosOStale bool) bool {
 	if a == nil {
@@ -1936,37 +2004,138 @@ func procesarRuntimeMailboxBatch() (int, error) {
 	}
 	consumed := map[int64]struct{}{}
 	snapshot := newRuntimeMailboxBatchSnapshot()
+	quotaPipelineReconciled, err := reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox, consumed, snapshot)
+	if err != nil {
+		return quotaPipelineReconciled, err
+	}
 	reconciled, err := reconciliarRuntimeMailboxAgenteSinVidaBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return reconciled, err
+		return quotaPipelineReconciled + reconciled, err
 	}
 	refreshCooldownReconciled, err := reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return reconciled + refreshCooldownReconciled, err
+		return quotaPipelineReconciled + reconciled + refreshCooldownReconciled, err
 	}
 	reconciled += refreshCooldownReconciled
 	watchdogReconciled, err := reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return reconciled + watchdogReconciled, err
+		return quotaPipelineReconciled + reconciled + watchdogReconciled, err
 	}
 	reconciled += watchdogReconciled
 	interactive, err := procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return reconciled + interactive, err
+		return quotaPipelineReconciled + reconciled + interactive, err
 	}
 	sessionResume, err := procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return reconciled + interactive + sessionResume, err
+		return quotaPipelineReconciled + reconciled + interactive + sessionResume, err
 	}
 	bootstrapTMUX, err := procesarRuntimeMailboxBootstrapTMUXBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return reconciled + interactive + sessionResume + bootstrapTMUX, err
+		return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX, err
 	}
 	restarts, err := procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return reconciled + interactive + sessionResume + bootstrapTMUX + restarts, err
+		return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + restarts, err
 	}
-	return reconciled + interactive + sessionResume + bootstrapTMUX + restarts, nil
+	return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + restarts, nil
+}
+
+func reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
+	type clave struct {
+		agente   string
+		proyecto int64
+	}
+	newestByKey := map[clave]int64{}
+	for _, msg := range mailbox {
+		if msg == nil || !strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") {
+			continue
+		}
+		agente := strings.TrimSpace(msg.ToAgente)
+		if agente == "" {
+			continue
+		}
+		proyectoID := int64(0)
+		if msg.ProyectoID != nil && *msg.ProyectoID > 0 {
+			proyectoID = *msg.ProyectoID
+		}
+		k := clave{agente: agente, proyecto: proyectoID}
+		if newestByKey[k] == 0 || msg.ID > newestByKey[k] {
+			newestByKey[k] = msg.ID
+		}
+	}
+	total := 0
+	for _, msg := range mailbox {
+		if msg == nil || !strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") {
+			continue
+		}
+		if _, skip := consumed[msg.ID]; skip {
+			continue
+		}
+		agente := strings.TrimSpace(msg.ToAgente)
+		if agente == "" {
+			continue
+		}
+		compactar, err := runtimeMailboxPipelineDebeCompactarseEnBatch(agente, msg.ProyectoID, snapshot)
+		if err != nil {
+			return total, err
+		}
+		if !compactar {
+			continue
+		}
+		proyectoID := int64(0)
+		if msg.ProyectoID != nil && *msg.ProyectoID > 0 {
+			proyectoID = *msg.ProyectoID
+		}
+		k := clave{agente: agente, proyecto: proyectoID}
+		if newestByKey[k] == msg.ID {
+			continue
+		}
+		if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+			return total, err
+		} else if !canConsume {
+			continue
+		}
+		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+			return total, err
+		}
+		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return total, err
+		}
+		db.Audit("orquesta", "runtime_mailbox_pipeline_en_cuota_dedupe", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("agente=%s proyecto_id=%s pipeline_local duplicado consumido por cuota", agente, runtimeMailboxProyectoDetalle(msg.ProyectoID)))
+		consumed[msg.ID] = struct{}{}
+		total++
+	}
+	return total, nil
+}
+
+func runtimeMailboxPipelineDebeCompactarseEnBatch(agente string, proyectoID *int64, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
+	if snapshot == nil {
+		return false, nil
+	}
+	ok, err := snapshot.quotaMatches(agente, "enfriamiento")
+	if err != nil {
+		return false, err
+	}
+	if ok {
+		return true, nil
+	}
+	ok, err = snapshot.quotaMatches(agente, "agotado")
+	if err != nil {
+		return false, err
+	}
+	if ok {
+		return true, nil
+	}
+	handle, err := snapshot.activeHandle(agente, proyectoID)
+	if err != nil {
+		return false, err
+	}
+	if runtimeHandleEstadoEsPausado(handle) {
+		return true, nil
+	}
+	return false, nil
 }
 
 func reconciliarRuntimeMailboxRefreshEnfriamientoBatch() (int, error) {
@@ -2662,8 +2831,23 @@ func resolverCompletarTareaDesdeSignalTranscript(item *db.RuntimeTranscriptEntry
 	meta := mapFromJSON(handle.MetadataJSON)
 	tareaID := int64PtrFromMap(meta, "tarea_id")
 	if tareaID == nil || *tareaID <= 0 {
+		id, _ := db.GetTareaActivaIDPorAgenteProyecto(item.Agente, item.ProyectoID)
+		if id > 0 {
+			tareaID = &id
+		}
+	}
+	if tareaID == nil || *tareaID <= 0 {
 		return "task_completed_ignorado:sin_tarea_id", true, nil
 	}
+	// Verificar si la tarea ya está completada para evitar errores por señales duplicadas
+	tareaActual, err := db.GetTarea(*tareaID)
+	if err != nil {
+		return "", false, err
+	}
+	if tareaActual != nil && (tareaActual.Estado != db.TareaEnProgreso && tareaActual.Estado != db.TareaAsignada) {
+		return "task_completed_ignorado:ya_completada", true, nil
+	}
+
 	if err := db.CompletarTarea(*tareaID, item.Agente, "autonomo:signal_transcript"); err != nil {
 		return "", false, err
 	}
@@ -5847,8 +6031,6 @@ func degradedTaskShouldIntervene(tarea *db.Tarea, now time.Time) bool {
 	return autonomiaDegradedTaskGate.AllowAt(strconv.FormatInt(tarea.ID, 10), autonomiaDegradedTaskCooldown, now)
 }
 
-
-
 func degradedTaskRecentlyAutoReassigned(tarea *db.Tarea, now time.Time) bool {
 	if tarea == nil {
 		return false
@@ -6760,9 +6942,17 @@ func runtimeRemotoReanudable(sesion *db.Sesion, handle *db.RuntimeHandle) bool {
 }
 
 func reactivarAgenteTrasReanimacion(agente string) error {
+	return reactivarAgenteTrasReanimacionConMotivo(agente, "reanimacion_automatica")
+}
+
+func reactivarAgenteTrasReanimacionConMotivo(agente, motivo string) error {
 	agente = strings.TrimSpace(agente)
 	if agente == "" {
 		return nil
+	}
+	motivo = strings.TrimSpace(motivo)
+	if motivo == "" {
+		motivo = "reanimacion_automatica"
 	}
 	if disponible, _, err := autonomiaCuentaCompartidaDisponible(agente); err != nil {
 		return err
@@ -6799,9 +6989,9 @@ func reactivarAgenteTrasReanimacion(agente string) error {
 			if db.RuntimeHandlePauseRequiresFreshStart(handle) {
 				accion = agenteControlAccionStart
 			}
-			return encolarControlAutonomiaProyecto(agente, proyecto, accion, "reanimacion_automatica")
+			return encolarControlAutonomiaProyecto(agente, proyecto, accion, motivo)
 		case "fallido":
-			return encolarControlAutonomiaProyecto(agente, proyecto, agenteControlAccionStart, "reanimacion_automatica")
+			return encolarControlAutonomiaProyecto(agente, proyecto, agenteControlAccionStart, motivo)
 		}
 	}
 	tieneTrabajo, err := dbAgenteTieneTrabajoArrancable(agente, proyecto.ID)
@@ -6817,7 +7007,7 @@ func reactivarAgenteTrasReanimacion(agente string) error {
 			return nil
 		}
 	}
-	return encolarControlAutonomiaProyecto(agente, proyecto, agenteControlAccionStart, "reanimacion_automatica")
+	return encolarControlAutonomiaProyecto(agente, proyecto, agenteControlAccionStart, motivo)
 }
 
 func resolverProyectoReactivacionAgente(agente string) (*db.Proyecto, error) {
@@ -6828,34 +7018,48 @@ func resolverProyectoReactivacionAgente(agente string) (*db.Proyecto, error) {
 	if proyectoID, err := db.ObtenerProyectoActivoAgente(agente); err != nil {
 		return nil, err
 	} else if proyectoID > 0 {
-		return runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
+		return resolverProyectoReactivacionPorID(agente, proyectoID, "asignacion_activa")
 	}
 	if proyectoID, err := proyectoReactivacionDesdeTareas(agente); err != nil {
 		return nil, err
 	} else if proyectoID > 0 {
-		return runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
+		return resolverProyectoReactivacionPorID(agente, proyectoID, "tarea")
 	}
 	if proyectoID, err := proyectoReactivacionDesdeMailbox(agente); err != nil {
 		return nil, err
 	} else if proyectoID > 0 {
-		return runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
+		return resolverProyectoReactivacionPorID(agente, proyectoID, "mailbox")
 	}
 	if sesion, err := db.GetSesionAbierta(agente, nil); err != nil && err != sql.ErrNoRows {
 		return nil, err
 	} else if sesion != nil && sesion.ProyectoID != nil && *sesion.ProyectoID > 0 {
-		return runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+		return resolverProyectoReactivacionPorID(agente, *sesion.ProyectoID, "sesion_abierta")
 	}
 	if sesion, err := db.ObtenerUltimaSesion(agente, nil); err != nil && err != sql.ErrNoRows {
 		return nil, err
 	} else if sesion != nil && sesion.ProyectoID != nil && *sesion.ProyectoID > 0 {
-		return runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+		return resolverProyectoReactivacionPorID(agente, *sesion.ProyectoID, "ultima_sesion")
 	}
 	if handle, err := resolverHandleReactivacionAgente(agente, nil); err != nil {
 		return nil, err
 	} else if handle != nil && handle.ProyectoID != nil && *handle.ProyectoID > 0 {
-		return runtimesService.GetProject(strconv.FormatInt(*handle.ProyectoID, 10))
+		return resolverProyectoReactivacionPorID(agente, *handle.ProyectoID, "runtime_handle")
 	}
 	return nil, nil
+}
+
+func resolverProyectoReactivacionPorID(agente string, proyectoID int64, origen string) (*db.Proyecto, error) {
+	if proyectoID <= 0 {
+		return nil, nil
+	}
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
+	if err != nil {
+		return nil, err
+	}
+	if proyecto == nil {
+		return nil, fmt.Errorf("agente %s con proyecto de reactivacion inconsistente (%s=%d)", strings.TrimSpace(agente), strings.TrimSpace(origen), proyectoID)
+	}
+	return proyecto, nil
 }
 
 func proyectoReactivacionDesdeTareas(agente string) (int64, error) {

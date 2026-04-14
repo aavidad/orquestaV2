@@ -78,6 +78,10 @@ func EnviarInstruccionSesionResume(obj ObjetivoProceso, externalSessionID, instr
 	if len(argv) == 0 {
 		return false, 0, nil
 	}
+	argv, err = codexResumeWrapPseudoTTY(argv)
+	if err != nil {
+		return true, 0, err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), codexResumeTimeout(meta))
 	defer cancel()
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
@@ -95,6 +99,31 @@ func EnviarInstruccionSesionResume(obj ObjetivoProceso, externalSessionID, instr
 		return true, 0, fmt.Errorf("session_resume fallo: %w", err)
 	}
 	return true, 0, nil
+}
+
+func codexResumeWrapPseudoTTY(argv []string) ([]string, error) {
+	if len(argv) == 0 {
+		return argv, nil
+	}
+	base := filepath.Base(strings.TrimSpace(argv[0]))
+	switch base {
+	case "codex", "codex-perfil":
+	default:
+		return argv, nil
+	}
+	if len(argv) >= 4 && strings.TrimSpace(argv[1]) == "exec" && strings.TrimSpace(argv[2]) == "resume" {
+		return argv, nil
+	}
+	scriptBin, err := exec.LookPath("script")
+	if err != nil {
+		return argv, nil
+	}
+	return []string{
+		scriptBin,
+		"-qefc",
+		strings.TrimSpace(shellJoinQuoted(argv)),
+		"/dev/null",
+	}, nil
 }
 
 func codexResumeExecArgv(meta map[string]any, externalSessionID, instruccion string) ([]string, error) {

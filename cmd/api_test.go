@@ -2196,6 +2196,83 @@ func TestAPIProyectoFusionar(t *testing.T) {
 	}
 }
 
+func TestAPIAgenteResetReanimacionLimpiaContinuidadYCancelaBootstrap(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "orquestador",
+		RutaAbs: "/tmp/orquestador",
+		Tipo:    db.ProyectoRaiz,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("crear proyecto: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:              "Codex1",
+		ProyectoID:          &proyectoID,
+		CWD:                 "/tmp/orquestador",
+		Herramienta:         "codex-cli",
+		ExternalSessionID:   "sess-old",
+		ResumePayloadJSON:   `{"runtime_order":{"id":109242},"checkpoint":{"id":40275}}`,
+		ResumenContinuidad:  "Continuidad vieja",
+		Branch:              "feature/old",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	orderID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "handoff",
+		Estado:      "pendiente",
+		PayloadJSON: `{"motivo":"cambio de turno"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear handoff: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/agentes/Codex1/reset-reanimacion", bytes.NewReader([]byte(`{}`)))
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status reset inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	order, err := db.GetRuntimeOrder(orderID)
+	if err != nil {
+		t.Fatalf("runtime order: %v", err)
+	}
+	if order == nil || order.Estado != "cancelada" {
+		t.Fatalf("handoff no cancelado: %+v", order)
+	}
+	sesion, err := db.ObtenerUltimaSesion("Codex1", &proyectoID)
+	if err != nil {
+		t.Fatalf("ultima sesion: %v", err)
+	}
+	if sesion == nil {
+		t.Fatalf("sesion no encontrada")
+	}
+	if strings.TrimSpace(sesion.ExternalSessionID) != "" ||
+		strings.TrimSpace(sesion.ResumePayloadJSON) != "" ||
+		strings.TrimSpace(sesion.ResumenContinuidad) != "" {
+		t.Fatalf("continuidad no limpiada: %+v", sesion)
+	}
+	checkpoint, err := db.UltimoRuntimeCheckpoint("Codex1", &proyectoID)
+	if err != nil {
+		t.Fatalf("ultimo checkpoint: %v", err)
+	}
+	if checkpoint == nil || checkpoint.CheckpointKind != "manual_rehabilitation" {
+		t.Fatalf("checkpoint de rehabilitacion no creado: %+v", checkpoint)
+	}
+}
+
 func TestAPIProyectoFusionarRechazaDesactivarArchivoOrigen(t *testing.T) {
 	prepararDBTemporalCmd(t)
 
@@ -2662,6 +2739,15 @@ func TestAPIProyectoMicrocicloEncolaStartSiAgenteNoTieneRuntime(t *testing.T) {
 	}
 	if resp.Resultado.Tarea.ID <= 0 {
 		t.Fatalf("el microciclo deberia dejar una tarea semilla usable: %+v", resp.Resultado.Tarea)
+	}
+	if resp.Resultado.Dispatch == nil || resp.Resultado.Dispatch.Despacho == nil {
+		t.Fatalf("el microciclo deberia construir un despacho usable: %+v", resp.Resultado.Dispatch)
+	}
+	if !strings.EqualFold(strings.TrimSpace(resp.Resultado.Dispatch.Despacho.AgenteSugerido), "Claude1") {
+		t.Fatalf("el microciclo deberia forzar Claude1 como agente sugerido: %+v", resp.Resultado.Dispatch.Despacho)
+	}
+	if resp.Resultado.Dispatch.DispatchRuntime == nil || strings.EqualFold(strings.TrimSpace(resp.Resultado.Dispatch.DispatchRuntime.Estado), "sin_agente") {
+		t.Fatalf("el microciclo no deberia quedarse sin agente en el dispatch runtime: %+v", resp.Resultado.Dispatch.DispatchRuntime)
 	}
 }
 

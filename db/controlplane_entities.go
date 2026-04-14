@@ -1740,6 +1740,9 @@ func ListarRuntimeHandles(agente *string) ([]*RuntimeHandle, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := reconciliarRuntimeHandlesInvalidosEnLista(handles); err != nil {
+		return nil, err
+	}
 	if err := reconciliarRuntimeHandlesDuplicadosEnLista(handles); err != nil {
 		return nil, err
 	}
@@ -1841,6 +1844,33 @@ func reconciliarRuntimeHandlesDuplicadosEnLista(handles []*RuntimeHandle) error 
 			ts := now
 			handle.LastSeenAt = &ts
 		}
+	}
+	return nil
+}
+
+func reconciliarRuntimeHandlesInvalidosEnLista(handles []*RuntimeHandle) error {
+	if len(handles) == 0 {
+		return nil
+	}
+	now := time.Now().UTC()
+	for _, handle := range handles {
+		if handle == nil {
+			continue
+		}
+		switch strings.TrimSpace(handle.Estado) {
+		case "activo", "pausado":
+		default:
+			continue
+		}
+		if !runtimeHandleExternalSessionIncompatible(handle) {
+			continue
+		}
+		if err := MarcarRuntimeHandleCanalRoto(handle, nil, "external_session_id incompatible with tmux premium runtime"); err != nil {
+			return err
+		}
+		handle.Estado = "fallido"
+		ts := now
+		handle.LastSeenAt = &ts
 	}
 	return nil
 }
@@ -4056,11 +4086,37 @@ func observarProcesoLocalRuntime(handle *RuntimeHandle, runtime *RuntimeInstance
 			"process_superseded": true,
 		}, nil
 	}
+	if runtimeHandleBloqueaReactivacionPorCanalRoto(handle) {
+		if err := marcarProcesoLocalNoDisponible(handle, runtime); err != nil {
+			return true, map[string]any{
+				"process_alive": vivo,
+				"process_error": strings.TrimSpace(err.Error()),
+			}, err
+		}
+		return true, map[string]any{
+			"process_alive":  false,
+			"observed_local": true,
+			"process_error":  "runtime handle blocked by broken channel",
+		}, nil
+	}
 	if err := aplicarEstadoLocalObservado(handle, estado); err != nil {
 		return true, map[string]any{
 			"process_alive": vivo,
 			"process_error": strings.TrimSpace(err.Error()),
 		}, err
+	}
+	if runtimeHandleBloqueaReactivacionPorCanalRoto(handle) {
+		if err := marcarProcesoLocalNoDisponible(handle, runtime); err != nil {
+			return true, map[string]any{
+				"process_alive": vivo,
+				"process_error": strings.TrimSpace(err.Error()),
+			}, err
+		}
+		return true, map[string]any{
+			"process_alive":  false,
+			"observed_local": true,
+			"process_error":  "runtime handle blocked by broken channel",
+		}, nil
 	}
 	if !vivo {
 		if err := marcarProcesoLocalNoDisponible(handle, runtime); err != nil {
@@ -4165,7 +4221,9 @@ func aplicarEstadoLocalObservado(handle *RuntimeHandle, estado *controlruntime.E
 		caps = strings.TrimSpace(estado.CapabilitiesJSON)
 	}
 	estadoHandle := strings.TrimSpace(handle.Estado)
-	if rawEstado := strings.TrimSpace(estado.HandleEstado); rawEstado != "" {
+	if runtimeHandleBloqueaReactivacionPorCanalRoto(handle) {
+		estadoHandle = "fallido"
+	} else if rawEstado := strings.TrimSpace(estado.HandleEstado); rawEstado != "" {
 		estadoHandle = normalizarEstadoHandleObservado(rawEstado, estadoHandle)
 	}
 	_, err := DB.Exec(`
@@ -4246,6 +4304,21 @@ func MarcarRuntimeHandleCanalRoto(handle *RuntimeHandle, runtime *RuntimeInstanc
 	}
 	Audit("orquesta", "runtime_handle_broken_pipe", "runtime_handle", handle.ID, reason)
 	return nil
+}
+
+func runtimeHandleBloqueaReactivacionPorCanalRoto(handle *RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	rawMeta := strings.ToLower(strings.TrimSpace(handle.MetadataJSON))
+	if strings.Contains(rawMeta, "external_session_id incompatible with tmux premium runtime") {
+		return true
+	}
+	reason := strings.ToLower(strings.TrimSpace(stringFromMap(mapFromJSON(handle.MetadataJSON), "pty_last_broken_pipe_error", "")))
+	if reason == "" {
+		return false
+	}
+	return strings.Contains(reason, "external_session_id incompatible")
 }
 
 func aplicarEstadoRemotoObservado(handle *RuntimeHandle, runtime *RuntimeInstance, estado *controlruntime.EstadoRemoto) error {
@@ -4738,6 +4811,7 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) (err error) {
 		return fmt.Errorf("start sin proyecto")
 	}
 
+	skipBootstrap := runtimeOrderStartDebeIgnorarBootstrap(payload)
 	agente, proyecto, conector, ultima, resume, bootstrap, plan, err := prepararStartRuntimeOrder(
 		order.Agente,
 		proyectoRef,
@@ -4747,6 +4821,7 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) (err error) {
 		stringFromMap(payload, "razonamiento", ""),
 		stringFromMap(payload, "perfil", ""),
 		int64PtrFromMap(payload, "tarea_id"),
+		skipBootstrap,
 	)
 	if err != nil {
 		return err
@@ -4914,6 +4989,13 @@ func ejecutarRuntimeOrderStart(order *RuntimeOrder) (err error) {
 	}
 	data, _ := json.Marshal(result)
 	return MarcarRuntimeOrderEstado(order.ID, "completada", string(data), "")
+}
+
+func runtimeOrderStartDebeIgnorarBootstrap(payload map[string]any) bool {
+	motivo := strings.ToLower(strings.TrimSpace(stringFromMap(payload, "motivo", "")))
+	return strings.Contains(motivo, "manual_rehabilitation") ||
+		strings.Contains(motivo, "reanimacion_manual") ||
+		strings.Contains(motivo, "rehabilitacion_manual")
 }
 
 func reutilizarSesionArranquePoolLocal(agente string, proyectoID *int64, conector *Conector, externalSessionID string, plan *runtimeagente.LaunchPlan, resume runtimeagente.ResumeContext, ultima *Sesion, host string, pid *int64) (*Sesion, bool, error) {
@@ -6155,12 +6237,22 @@ func runtimeHandleListaParaDispatchInteractivo(handle *RuntimeHandle, now time.T
 	if handle == nil {
 		return false, "worker_missing"
 	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	driver := strings.TrimSpace(stringFromMap(meta, "driver", ""))
+	transport := strings.TrimSpace(handle.Transporte)
+	isTMUX := strings.EqualFold(driver, "tmux_cli_session") || strings.EqualFold(transport, "tmux")
 	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
 	if err != nil || snap == nil {
+		if isTMUX {
+			return false, "worker_snapshot_missing"
+		}
 		return true, ""
 	}
 	view := snap.View(now, time.Minute)
 	if view == nil {
+		if isTMUX {
+			return false, "worker_view_missing"
+		}
 		return true, ""
 	}
 	if !strings.EqualFold(strings.TrimSpace(view.Driver), "tmux_cli_session") &&
@@ -6309,11 +6401,11 @@ func runtimeOrderSendInstructionPermiteReceiptLastOutput(handle *RuntimeHandle, 
 	if handle == nil || snap == nil {
 		return false
 	}
-	if RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryInteractive {
-		return true
-	}
 	if runtimeOrderSendInstructionEsPipelinePremium(payload) {
 		return false
+	}
+	if RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryInteractive {
+		return true
 	}
 	view := snap.View(time.Now().UTC(), time.Minute)
 	if view == nil {
@@ -6334,6 +6426,15 @@ func runtimeOrderSendInstructionPremiumTMUXActivityEvidence(handle *RuntimeHandl
 	if !RuntimeHandlePermiteSendInputInteractivo(handle) {
 		return false, "", time.Time{}, nil
 	}
+	view := snap.View(time.Now().UTC(), time.Minute)
+	if view == nil || view.HeartbeatStale || !view.Alive {
+		return false, "", time.Time{}, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(view.State)) {
+	case "ready", "idle", "running":
+	default:
+		return false, "", time.Time{}, nil
+	}
 	known, captured, err := controlruntime.CaptureTMUXPaneMetadata(strings.TrimSpace(handle.MetadataJSON))
 	if err != nil {
 		return false, "", time.Time{}, err
@@ -6344,9 +6445,6 @@ func runtimeOrderSendInstructionPremiumTMUXActivityEvidence(handle *RuntimeHandl
 	for _, candidate := range []*time.Time{
 		snap.LastProgressTime(),
 		snap.LastOutputTime(),
-		snap.HeartbeatTime(),
-		snap.UpdatedTime(),
-		snap.ReadyTime(),
 	} {
 		if candidate == nil || candidate.IsZero() {
 			continue
@@ -6356,7 +6454,7 @@ func runtimeOrderSendInstructionPremiumTMUXActivityEvidence(handle *RuntimeHandl
 			return true, "tmux_pane_activity", receiptAt, nil
 		}
 	}
-	return true, "tmux_pane_activity", time.Now().UTC(), nil
+	return false, "", time.Time{}, nil
 }
 
 func runtimeTMUXPaneShowsInteractiveWork(captured string) bool {
@@ -7237,6 +7335,9 @@ func completarRuntimeOrderSendInstructionDiferidaAMailbox(order *RuntimeOrder, p
 	if order == nil {
 		return nil
 	}
+	if runtimeOrderSendInstructionEsMicroprogramacion(payload) || runtimeOrderSendInstructionEsPipelinePremium(payload) {
+		return retenerRuntimeOrderSendInstructionDiferidaAMailbox(order, payload, reason)
+	}
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
 		reason = "mailbox retenido hasta runtime entregable"
@@ -7807,7 +7908,7 @@ func inferirTransporteArranque(arranque *controlruntime.ProcesoArrancado) string
 	return "cli"
 }
 
-func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int64, conectorRef, modelo, razonamiento, perfilTarea string, tareaID *int64) (*Agente, *Proyecto, *Conector, *Sesion, runtimeagente.ResumeContext, *bootstrapRuntimeData, *runtimeagente.LaunchPlan, error) {
+func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int64, conectorRef, modelo, razonamiento, perfilTarea string, tareaID *int64, skipBootstrap bool) (*Agente, *Proyecto, *Conector, *Sesion, runtimeagente.ResumeContext, *bootstrapRuntimeData, *runtimeagente.LaunchPlan, error) {
 	agente, err := GetAgente(strings.TrimSpace(agenteRef))
 	if err != nil {
 		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
@@ -7919,9 +8020,22 @@ func prepararStartRuntimeOrder(agenteRef, proyectoRef string, excludeOrderID int
 			}
 		}
 	}
-	resume, bootstrap, err := prepararResumeBootstrapRuntime(strings.TrimSpace(agenteRef), proyecto, resume, excludeOrderID)
-	if err != nil {
-		return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
+	var bootstrap *bootstrapRuntimeData
+	if skipBootstrap {
+		resume = runtimeagente.ResumeContext{
+			Branch: strings.TrimSpace(resume.Branch),
+			CWD:    strings.TrimSpace(resume.CWD),
+		}
+		resume = SanitizeResumeContextForProject(resume, proyecto)
+		resume.CWD = RutaTrabajoPreferidaAgenteProyecto(strings.TrimSpace(agenteRef), proyecto, strings.TrimSpace(resume.CWD))
+		if strings.TrimSpace(resume.CWD) == "" {
+			resume.CWD = strings.TrimSpace(proyecto.RutaAbs)
+		}
+	} else {
+		resume, bootstrap, err = prepararResumeBootstrapRuntime(strings.TrimSpace(agenteRef), proyecto, resume, excludeOrderID)
+		if err != nil {
+			return nil, nil, nil, nil, runtimeagente.ResumeContext{}, nil, nil, err
+		}
 	}
 	resume.ResumePayloadJSON = MergeResumePayloadPerfilEjecucion(
 		resume.ResumePayloadJSON,
@@ -10190,6 +10304,12 @@ func RuntimeHandleMailboxDeliveryMode(handle *RuntimeHandle) string {
 		strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") &&
 		!RuntimeHandlePermiteSendInputInteractivo(handle) &&
 		externalSessionReady
+	processSessionResumeReady := runtimeHandleUsaCodexTTYInestable(meta) &&
+		strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "driver", "")), "process_pty_cli") &&
+		strings.EqualFold(strings.TrimSpace(handle.Transporte), "cli") &&
+		strings.EqualFold(strings.TrimSpace(handle.HandleKind), "process") &&
+		!RuntimeHandlePermiteSendInputInteractivo(handle) &&
+		externalSessionReady
 	normalizeMode := func(raw string) string {
 		mode := runtimeagente.NormalizeMailboxDeliveryMode(raw)
 		if mode == "" {
@@ -10198,7 +10318,7 @@ func RuntimeHandleMailboxDeliveryMode(handle *RuntimeHandle) string {
 		if mode == runtimeagente.MailboxDeliverySessionResume && !externalSessionReady {
 			return runtimeagente.MailboxDeliveryBootstrapOnly
 		}
-		if mode == runtimeagente.MailboxDeliveryBootstrapOnly && tmuxSessionResumeReady {
+		if mode == runtimeagente.MailboxDeliveryBootstrapOnly && (tmuxSessionResumeReady || processSessionResumeReady) {
 			return runtimeagente.MailboxDeliverySessionResume
 		}
 		if legacyTMUXPreferredCLI && mode == runtimeagente.MailboxDeliveryInteractive {
@@ -10568,6 +10688,21 @@ func SincronizarRuntimeHandleSupervisado(handle *RuntimeHandle, runtime *Runtime
 			return nil, nil, "", err
 		}
 	}
+	if runtimeHandleBloqueaReactivacionPorCanalRoto(handle) {
+		if err := marcarProcesoLocalNoDisponible(handle, runtime); err != nil {
+			return nil, nil, "", err
+		}
+		fresh, err := GetRuntimeHandle(handle.ID)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		if runtime != nil && runtime.ID > 0 {
+			if refreshedRuntime, err := GetRuntime(runtime.ID); err == nil && refreshedRuntime != nil {
+				runtime = refreshedRuntime
+			}
+		}
+		return fresh, runtime, "", nil
+	}
 	if observed, _, err := observarProcesoLocalRuntime(handle, runtime, source); err != nil {
 		return nil, nil, "", err
 	} else if observed {
@@ -10754,6 +10889,46 @@ func runtimeHandleEffectiveExternalSessionID(handle *RuntimeHandle, runtime *Run
 	}
 	obj := objetivoProcesoDesdeHandleRuntime(handle, runtime)
 	return controlruntime.DetectExternalSessionID(obj)
+}
+
+func runtimeHandleExternalSessionIncompatible(handle *RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	driver := strings.ToLower(strings.TrimSpace(stringFromMap(meta, "driver", "")))
+	if driver != "tmux_cli_session" &&
+		!strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
+		!strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") {
+		return false
+	}
+	externalSessionID := strings.ToLower(strings.TrimSpace(stringFromMap(meta, "external_session_id", "")))
+	if externalSessionID == "" {
+		if effective, err := runtimeHandleEffectiveExternalSessionID(handle, nil); err == nil {
+			externalSessionID = strings.ToLower(strings.TrimSpace(effective))
+		}
+	}
+	if !strings.HasPrefix(externalSessionID, "ollama-pool-") {
+		return false
+	}
+	commandHints := strings.ToLower(strings.Join([]string{
+		strings.TrimSpace(handle.HandleRef),
+		strings.TrimSpace(stringFromMap(meta, "rendered_command", "")),
+		strings.TrimSpace(stringFromMap(meta, "wrapped_command", "")),
+		strings.TrimSpace(stringFromMap(meta, "command", "")),
+		strings.TrimSpace(stringFromMap(meta, "herramienta", "")),
+		strings.TrimSpace(stringFromMap(meta, "connector", "")),
+		strings.TrimSpace(stringFromMap(meta, "conector", "")),
+	}, " "))
+	if strings.Contains(commandHints, "ollama run ") || strings.Contains(commandHints, "ollama serve") || strings.Contains(commandHints, "ollama_pool_local") {
+		return false
+	}
+	for _, token := range []string{"claude", "gemini", "codex"} {
+		if strings.Contains(commandHints, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func asegurarCheckpointCambioContexto(order *RuntimeOrder, suffix, fallbackSummary string) (int64, error) {

@@ -730,6 +730,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtime-handles", apiHandlerRuntimeHandles)
 	mux.HandleFunc("/api/runtime-handles/purgar", apiHandlerRuntimeHandlesPurgar)
 	mux.HandleFunc("/api/runtime-orders/purgar", apiHandlerRuntimeOrdersPurgar)
+	mux.HandleFunc("/api/runtime-orders/cancelar", apiHandlerRuntimeOrdersCancelar)
 	mux.HandleFunc("/api/runtime-orders/", apiRouterRuntimeOrders)
 	mux.HandleFunc("/api/runtime-trace", apiHandlerRuntimeTrace)
 	mux.HandleFunc("/api/runtime-events", apiHandlerRuntimeEvents)
@@ -1024,6 +1025,10 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
+		if err := (dbAutomationService{}).ResetReanimacion(nombre); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
 	case "eliminar":
 		var req struct {
 			Actor string `json:"actor"`
@@ -1072,7 +1077,7 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	case "reset-reanimacion":
-		if err := agentesService.ApplyStateAction(nombre, "reset-reanimacion"); err != nil {
+		if err := (dbAutomationService{}).ResetReanimacion(nombre); err != nil {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
@@ -2788,6 +2793,10 @@ func apiRouterProyectos(w http.ResponseWriter, r *http.Request) {
 		proyecto, err := db.GetProyectoConRutaEfectiva(ref, "")
 		if err != nil {
 			apiError(w, http.StatusNotFound, err)
+			return
+		}
+		if proyecto == nil {
+			apiError(w, http.StatusNotFound, fmt.Errorf("proyecto no encontrado: %s", ref))
 			return
 		}
 		apiWriteJSON(w, http.StatusOK, map[string]any{"proyecto": proyecto})
@@ -4901,6 +4910,30 @@ func apiHandlerRuntimeOrdersPurgar(w http.ResponseWriter, r *http.Request) {
 		Estados:    resultado.Estados,
 		Tipos:      resultado.Tipos,
 	})
+}
+
+func apiHandlerRuntimeOrdersCancelar(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req struct {
+		ID     int64  `json:"id"`
+		Actor  string `json:"actor"`
+		Motivo string `json:"motivo"`
+	}
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	if req.ID <= 0 {
+		apiError(w, http.StatusBadRequest, fmt.Errorf("id inválido"))
+		return
+	}
+	if err := runtimesService.CancelRuntimeOrder(req.ID, strings.TrimSpace(req.Actor), strings.TrimSpace(req.Motivo)); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "id": req.ID})
 }
 
 func apiHandlerRuntimeMailbox(w http.ResponseWriter, r *http.Request) {

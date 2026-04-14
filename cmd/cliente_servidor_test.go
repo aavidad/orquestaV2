@@ -85,6 +85,7 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "runtime transcript", args: []string{"runtime", "transcript", "--agente", "Codex1"}, want: true},
 		{nombre: "runtime ordenes", args: []string{"runtime", "ordenes"}, want: true},
 		{nombre: "runtime orden nueva", args: []string{"runtime", "orden-nueva", "Codex1", "checkpoint"}, want: true},
+		{nombre: "runtime orden cancelar", args: []string{"runtime", "orden-cancelar", "15"}, want: true},
 		{nombre: "runtime nudge", args: []string{"runtime", "nudge", "Codex1", "retoma", "el", "bloqueo"}, want: true},
 		{nombre: "runtime discordia", args: []string{"runtime", "discordia", "alberto", "Codex2", "hay", "desacuerdo"}, want: true},
 		{nombre: "runtime checkpoints", args: []string{"runtime", "checkpoints", "--agente", "Codex1"}, want: true},

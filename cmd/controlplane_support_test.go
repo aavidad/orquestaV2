@@ -3979,10 +3979,10 @@ func TestResetReanimacionEncolaStartSiHandleFallidoConMailboxPendiente(t *testin
 		t.Fatalf("fallar handle: %v", err)
 	}
 	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
-		FromAgente: "server",
-		ToAgente:   "Gemini1",
-		ProyectoID: &proyectoID,
-		Kind:       "nudge",
+		FromAgente:  "server",
+		ToAgente:    "Gemini1",
+		ProyectoID:  &proyectoID,
+		Kind:        "nudge",
 		PayloadJSON: `{"texto":"reanuda trabajo premium"}`,
 	}); err != nil {
 		t.Fatalf("mailbox pendiente: %v", err)
@@ -6636,6 +6636,149 @@ func TestProcesarRuntimeMailboxBatchConsumeGovernanceRefreshEnEnfriamiento(t *te
 	}
 }
 
+func TestProcesarRuntimeMailboxBatchDeduplicaPipelineLocalEnCuota(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Claude1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "claude-code",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='pausado' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("pausar handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', motivo_pausa='cuota' WHERE nombre='Claude1'`); err != nil {
+		t.Fatalf("marcar enfriamiento: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+			FromAgente:  "server",
+			ToAgente:    "Claude1",
+			ProyectoID:  &proyectoID,
+			Kind:        "pipeline_local",
+			PayloadJSON: fmt.Sprintf(`{"accion":"continuar_trabajo","seq":%d}`, i),
+		}); err != nil {
+			t.Fatalf("mailbox pipeline_local %d: %v", i, err)
+		}
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox: %v", err)
+	}
+	if n < 2 {
+		t.Fatalf("deberia reconciliar al menos dos duplicados en cuota, got=%d", n)
+	}
+
+	pendiente := "pendiente"
+	toAgente := "Claude1"
+	pendientes, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente:   &toAgente,
+		ProyectoID: &proyectoID,
+		Estado:     &pendiente,
+	})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	if len(pendientes) != 1 {
+		t.Fatalf("deberia quedar un solo pipeline_local pendiente, got=%d %+v", len(pendientes), pendientes)
+	}
+	if pendientes[0] == nil || !strings.EqualFold(strings.TrimSpace(pendientes[0].Kind), "pipeline_local") {
+		t.Fatalf("mailbox restante inesperado: %+v", pendientes)
+	}
+}
+
+func TestProcesarRuntimeMailboxBatchDeduplicaPipelineLocalConHandlePausado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Claude1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "claude-code",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='pausado' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("pausar handle: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+			FromAgente:  "server",
+			ToAgente:    "Claude1",
+			ProyectoID:  &proyectoID,
+			Kind:        "pipeline_local",
+			PayloadJSON: fmt.Sprintf(`{"accion":"continuar_trabajo","seq":%d}`, i),
+		}); err != nil {
+			t.Fatalf("mailbox pipeline_local %d: %v", i, err)
+		}
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox: %v", err)
+	}
+	if n < 2 {
+		t.Fatalf("deberia reconciliar al menos dos duplicados con handle pausado, got=%d", n)
+	}
+
+	pendiente := "pendiente"
+	toAgente := "Claude1"
+	pendientes, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente:   &toAgente,
+		ProyectoID: &proyectoID,
+		Estado:     &pendiente,
+	})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	if len(pendientes) != 1 {
+		t.Fatalf("deberia quedar un solo pipeline_local pendiente, got=%d %+v", len(pendientes), pendientes)
+	}
+	if pendientes[0] == nil || !strings.EqualFold(strings.TrimSpace(pendientes[0].Kind), "pipeline_local") {
+		t.Fatalf("mailbox restante inesperado: %+v", pendientes)
+	}
+}
+
 func TestProcesarRuntimeMailboxInteractivoBatchNoDuplicaSendInstructionAbierta(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -7262,6 +7405,84 @@ func TestResetReanimacionEncolaStartCuandoNoHayRuntimePeroSiTrabajo(t *testing.T
 	}
 	if !strings.Contains(orders[0].PayloadJSON, `"accion":"start"`) {
 		t.Fatalf("payload start inesperado: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestResetReanimacionCancelaHandoffObsoletoAntesDeArrancar(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Retomar con handoff viejo",
+		Descripcion: "Trabajo asignado",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	handoffID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "handoff",
+		PayloadJSON: `{"resumen_continuidad":"handoff obsoleto"}`,
+	})
+	if err != nil {
+		t.Fatalf("encolar handoff: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET reanimar_at=CURRENT_TIMESTAMP, estado_cuota='enfriamiento', motivo_pausa='cuota' WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("marcar reanimacion: %v", err)
+	}
+
+	if err := (dbAutomationService{}).ResetReanimacion("Codex1"); err != nil {
+		t.Fatalf("reset reanimacion: %v", err)
+	}
+
+	handoff, err := db.GetRuntimeOrder(handoffID)
+	if err != nil || handoff == nil {
+		t.Fatalf("get handoff: %+v err=%v", handoff, err)
+	}
+	if handoff.Estado != "cancelada" {
+		t.Fatalf("el handoff obsoleto deberia quedar cancelado: %+v", handoff)
+	}
+	if !strings.Contains(handoff.ResultadoJSON, `"superseded_reason":"manual_rehabilitation"`) {
+		t.Fatalf("resultado handoff sin superseded_reason esperado: %s", handoff.ResultadoJSON)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var starts int
+	for _, order := range orders {
+		if order != nil && order.Tipo == "start" {
+			starts++
+		}
+	}
+	if starts != 1 {
+		t.Fatalf("deberia encolar un unico start nuevo tras cancelar handoff obsoleto: %+v", orders)
 	}
 }
 

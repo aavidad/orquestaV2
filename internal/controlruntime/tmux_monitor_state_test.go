@@ -222,6 +222,23 @@ func TestTMUXPaneHasActiveTaskDetectaClaudeTransfiguring(t *testing.T) {
 	}
 }
 
+func TestTMUXPaneHasUsageLimitPromptDetectaClaudeResetHorario(t *testing.T) {
+	captured := "" +
+		"You've hit your limit · resets 2am (Europe/Madrid)\n" +
+		"/rate-limit-options\n" +
+		"1. Stop and wait for limit to reset\n" +
+		"2. Upgrade your plan\n"
+	if !tmuxPaneHasUsageLimitPrompt(captured) {
+		t.Fatal("la pantalla de cuota de Claude deberia detectarse")
+	}
+	if got := tmuxClassifyPaneState(captured); got != workerStatusBlockedQuota {
+		t.Fatalf("estado de pane inesperado: got=%q want=%q", got, workerStatusBlockedQuota)
+	}
+	if tmuxPaneLooksReady(captured) {
+		t.Fatal("la pantalla de cuota de Claude no deberia marcar ready")
+	}
+}
+
 func TestTMUXPaneHasClaudeAuthPromptDetectaLoginRequerido(t *testing.T) {
 	captured := "" +
 		"Orquesta: continua el trabajo acotado\n" +

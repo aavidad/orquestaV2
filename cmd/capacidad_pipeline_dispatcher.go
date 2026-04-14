@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"orquesta/db"
 	"orquesta/gitaplicacion"
 	"orquesta/microprogramacionapp"
+	"orquesta/runtimeagente"
 	"orquesta/runtimesapp"
 )
 
@@ -38,18 +40,66 @@ func (despachadorPipelineOperativo) DespacharPipeline(entrada capacidadapp.Solic
 		if proyecto == nil {
 			return nil, fmt.Errorf("proyecto no encontrado: %s", strings.TrimSpace(entrada.ProyectoSlug))
 		}
+		if bloqueado, estadoCuota, err := agenteBloqueadoPorCuotaPipeline(agente); err != nil {
+			return nil, err
+		} else if bloqueado {
+			if pendiente, err := existeRuntimeMailboxPipelinePendiente(agente, &proyecto.ID); err != nil {
+				return nil, err
+			} else if pendiente {
+				return &capacidadapp.ResultadoDespachoPipeline{
+					Estado: "cuota_bloqueada_con_mailbox_pendiente",
+					Motivo: fmt.Sprintf("agente %s en cuota (%s) con pipeline_local ya pendiente", agente, estadoCuota),
+				}, nil
+			}
+			return &capacidadapp.ResultadoDespachoPipeline{
+				Estado: "cuota_bloqueada",
+				Motivo: fmt.Sprintf("agente %s en cuota (%s); no se encola trabajo nuevo", agente, estadoCuota),
+			}, nil
+		}
+		if pendiente, err := existeRuntimeMailboxPipelinePendiente(agente, &proyecto.ID); err != nil {
+			return nil, err
+		} else if pendiente {
+			return &capacidadapp.ResultadoDespachoPipeline{
+				Estado: "mailbox_ya_pendiente",
+				Motivo: "ya existe pipeline_local pendiente para el agente y proyecto",
+			}, nil
+		}
+		if ambiguo, detalle, err := agenteTieneRuntimeAmbiguoPipeline(agente); err != nil {
+			return nil, err
+		} else if ambiguo {
+			return &capacidadapp.ResultadoDespachoPipeline{
+				Estado: "runtime_ambiguo",
+				Motivo: detalle,
+			}, nil
+		}
+		if pendienteOtro, detalle, err := existeRuntimeMailboxPipelinePendienteEnOtroProyecto(agente, proyecto.ID); err != nil {
+			return nil, err
+		} else if pendienteOtro {
+			return &capacidadapp.ResultadoDespachoPipeline{
+				Estado: "agente_ocupado_otro_proyecto",
+				Motivo: detalle,
+			}, nil
+		}
+		if ocupado, detalle, err := agenteOcupadoEnOtroProyectoPipeline(agente, proyecto.ID); err != nil {
+			return nil, err
+		} else if ocupado {
+			return &capacidadapp.ResultadoDespachoPipeline{
+				Estado: "agente_ocupado_otro_proyecto",
+				Motivo: detalle,
+			}, nil
+		}
 		payload := map[string]any{
-			"from_agente": "server",
-			"to_agente":   agente,
-			"kind":        "pipeline_local",
-			"accion":      firstNonEmpty(strings.TrimSpace(despacho.AccionTarea), "continuar_trabajo"),
-			"texto":       strings.TrimSpace(despacho.Motivo),
-			"instruction": construirInstructionPipeline(*despacho),
-			"source":      "pipeline_local",
-			"fase":        strings.TrimSpace(despacho.Fase),
-			"perfil_tarea": strings.TrimSpace(despacho.PerfilTarea),
-			"carril":           strings.TrimSpace(despacho.Carril),
-			"entrega_canonica": strings.TrimSpace(despacho.EntregaCanonica),
+			"from_agente":       "server",
+			"to_agente":         agente,
+			"kind":              "pipeline_local",
+			"accion":            firstNonEmpty(strings.TrimSpace(despacho.AccionTarea), "continuar_trabajo"),
+			"texto":             strings.TrimSpace(despacho.Motivo),
+			"instruction":       construirInstructionPipeline(*despacho),
+			"source":            "pipeline_local",
+			"fase":              strings.TrimSpace(despacho.Fase),
+			"perfil_tarea":      strings.TrimSpace(despacho.PerfilTarea),
+			"carril":            strings.TrimSpace(despacho.Carril),
+			"entrega_canonica":  strings.TrimSpace(despacho.EntregaCanonica),
 			"tarea_objetivo_id": despacho.TareaObjetivoID,
 			"tarea_objetivo":    strings.TrimSpace(despacho.TareaObjetivo),
 		}
@@ -66,11 +116,21 @@ func (despachadorPipelineOperativo) DespacharPipeline(entrada capacidadapp.Solic
 		}); err != nil {
 			return nil, err
 		}
+		if activo, err := existeRuntimeHandleActivoPipeline(agente, &proyecto.ID); err != nil {
+			return nil, err
+		} else if activo {
+			return &capacidadapp.ResultadoDespachoPipeline{
+				Estado: "mailbox_encolado_runtime_existente",
+				Motivo: "pipeline_local encolado; ya existe un runtime activo para el agente y proyecto",
+			}, nil
+		}
+		conectorStart, modeloStart := resolverConectorYModeloStartPipeline(agente, strings.TrimSpace(despacho.ObjetivoModelo))
 		startID, _, err := runtimesService.EnqueueAgentControl(runtimesapp.AgentControlRequest{
 			Agente:       agente,
 			Proyecto:     strings.TrimSpace(entrada.ProyectoSlug),
 			Accion:       "start",
-			Modelo:       strings.TrimSpace(despacho.ObjetivoModelo),
+			Conector:     conectorStart,
+			Modelo:       modeloStart,
 			Perfil:       strings.TrimSpace(despacho.PerfilTarea),
 			Por:          "orquesta",
 			Motivo:       strings.TrimSpace(despacho.Motivo),
@@ -157,11 +217,21 @@ func (despachadorPipelineOperativo) DespacharPipeline(entrada capacidadapp.Solic
 		}); err != nil {
 			return nil, err
 		}
+		if activo, err := existeRuntimeHandleActivoPipeline(agente, &proyecto.ID); err != nil {
+			return nil, err
+		} else if activo {
+			return &capacidadapp.ResultadoDespachoPipeline{
+				Estado: "mailbox_encolado_runtime_existente",
+				Motivo: fmt.Sprintf("microprogramacion spec #%d encolada sobre runtime ya activo", spec.ID),
+			}, nil
+		}
+		conectorStart, modeloStart := resolverConectorYModeloStartPipeline(agente, strings.TrimSpace(despacho.ObjetivoModelo))
 		startID, _, err := runtimesService.EnqueueAgentControl(runtimesapp.AgentControlRequest{
 			Agente:       agente,
 			Proyecto:     strings.TrimSpace(entrada.ProyectoSlug),
 			Accion:       "start",
-			Modelo:       strings.TrimSpace(despacho.ObjetivoModelo),
+			Conector:     conectorStart,
+			Modelo:       modeloStart,
 			Perfil:       strings.TrimSpace(despacho.PerfilTarea),
 			Por:          "orquesta",
 			Motivo:       "microprogramacion: " + spec.Titulo,
@@ -285,4 +355,161 @@ func razonamientoPorCarril(carril string) string {
 	default:
 		return ""
 	}
+}
+
+func resolverConectorYModeloStartPipeline(agente, modelo string) (string, string) {
+	conector := strings.TrimSpace(runtimeagente.ConectorPorDefectoAgente(strings.TrimSpace(agente)))
+	modelo = strings.TrimSpace(modelo)
+	if conector == "" {
+		return "", modelo
+	}
+	if !runtimeagente.ModeloCompatibleConConector(runtimeagente.ConnectorConfig{
+		Slug:    conector,
+		Comando: comandoCanonicoConectorPipeline(conector),
+	}, modelo) {
+		modelo = ""
+	}
+	return conector, modelo
+}
+
+func comandoCanonicoConectorPipeline(conector string) string {
+	switch strings.ToLower(strings.TrimSpace(conector)) {
+	case "gemini-cli":
+		return "gemini"
+	case "claude-code":
+		return "claude-code"
+	case "codex-cli":
+		return "codex"
+	case "ollama-cli", "ollama_pool_local", "ollama-pool-local":
+		return "ollama"
+	default:
+		return strings.TrimSpace(conector)
+	}
+}
+
+func existeRuntimeMailboxPipelinePendiente(agente string, proyectoID *int64) (bool, error) {
+	estado := "pendiente"
+	agente = strings.TrimSpace(agente)
+	items, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente:   &agente,
+		ProyectoID: proyectoID,
+		Estado:     &estado,
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, item := range items {
+		if item == nil || !strings.EqualFold(strings.TrimSpace(item.Kind), "pipeline_local") {
+			continue
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+func existeRuntimeMailboxPipelinePendienteEnOtroProyecto(agente string, proyectoID int64) (bool, string, error) {
+	estado := "pendiente"
+	agente = strings.TrimSpace(agente)
+	items, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente: &agente,
+		Estado:   &estado,
+	})
+	if err != nil {
+		return false, "", err
+	}
+	for _, item := range items {
+		if item == nil || !strings.EqualFold(strings.TrimSpace(item.Kind), "pipeline_local") {
+			continue
+		}
+		if item.ProyectoID == nil || *item.ProyectoID <= 0 || *item.ProyectoID == proyectoID {
+			continue
+		}
+		return true, fmt.Sprintf("agente %s ya tiene pipeline_local pendiente en proyecto_id=%d", agente, *item.ProyectoID), nil
+	}
+	return false, "", nil
+}
+
+func agenteBloqueadoPorCuotaPipeline(agente string) (bool, string, error) {
+	estado, err := db.GetPersistedAgentQuotaState(strings.TrimSpace(agente))
+	if err != nil {
+		return false, "", err
+	}
+	estado = strings.TrimSpace(strings.ToLower(estado))
+	switch estado {
+	case "enfriamiento", "agotado":
+		return true, estado, nil
+	default:
+		return false, estado, nil
+	}
+}
+
+func agenteOcupadoEnOtroProyectoPipeline(agente string, proyectoID int64) (bool, string, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || proyectoID <= 0 {
+		return false, "", nil
+	}
+	asignacion, err := db.GetAsignacionActivaAgente(agente)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, "", nil
+		}
+		return false, "", err
+	}
+	if asignacion == nil || asignacion.ProyectoID == proyectoID {
+		return false, "", nil
+	}
+	return true, fmt.Sprintf("agente %s ya tiene asignacion activa en proyecto %s (%d)", agente, strings.TrimSpace(asignacion.ProyectoSlug), asignacion.ProyectoID), nil
+}
+
+func existeRuntimeHandleActivoPipeline(agente string, proyectoID *int64) (bool, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return false, nil
+	}
+	handle, err := runtimesService.GetOperationalRuntimeHandleAgentProject(agente, proyectoID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	if handle != nil && handle.ID > 0 {
+		return true, nil
+	}
+	handle, err = runtimesService.GetActiveRuntimeHandleAgentProject(agente, proyectoID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	return handle != nil && handle.ID > 0, nil
+}
+
+func agenteTieneRuntimeAmbiguoPipeline(agente string) (bool, string, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return false, "", nil
+	}
+	handles, err := db.ListarRuntimeHandles(&agente)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, "", nil
+		}
+		return false, "", err
+	}
+	vivos := 0
+	for _, handle := range handles {
+		if handle == nil {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
+		case "activo", "pausado":
+			vivos++
+		}
+		if vivos > 1 {
+			return true, fmt.Sprintf("agente %s tiene %d runtime handles vivos; requiere saneamiento antes de despachar", agente, vivos), nil
+		}
+	}
+	return false, "", nil
 }

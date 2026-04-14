@@ -51,6 +51,8 @@ func arrancarPlanLocal(req SolicitudArranque) (*ProcesoArrancado, error) {
 	switch backend {
 	case "tmux":
 		return arrancarPlanLocalTMUX(req)
+	case "pty":
+		return arrancarPlanLocalPTY(req)
 	}
 	if localTerminalRuntimeRequiresTMUX(req) {
 		return nil, fmt.Errorf("runtime local process_pty_cli deshabilitado para este agente; requiere tmux")

@@ -303,3 +303,32 @@ func TestListarWorktreesOcultaActivasEnRutaHistoricaSiElProyectoYaSeMovio(t *tes
 		t.Fatalf("la worktree historica deberia ocultarse al listar activas: %+v", worktrees)
 	}
 }
+
+func TestRutaTrabajoPreferidaAgenteProyectoNoReutilizaSubdirectorioViejoSinWorktreeActiva(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	rutaBase := filepath.Join(tmp, "repo", "orquestador")
+	rutaVieja := filepath.Join(rutaBase, "claw-code-dev-rust", "rust", "crates", "api")
+	if err := os.MkdirAll(rutaVieja, 0o755); err != nil {
+		t.Fatalf("mkdir ruta vieja: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaBase, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod base: %v", err)
+	}
+	if err := RegistrarAgente("Claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaBase,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	got := RutaTrabajoPreferidaAgenteProyecto("Claude1", &Proyecto{ID: proyectoID, RutaAbs: rutaBase, Slug: "orquestador"}, rutaVieja)
+	if got != rutaBase {
+		t.Fatalf("sin worktree activa deberia volver a la raiz del proyecto: got=%s want=%s", got, rutaBase)
+	}
+}

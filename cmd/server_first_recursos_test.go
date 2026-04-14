@@ -376,6 +376,31 @@ func TestProyectoVerViaAPINoDependeDeDBParaElPadre(t *testing.T) {
 	}
 }
 
+func TestProyectoVerViaAPIDevuelveErrorSiProyectoNoExiste(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+	mux.HandleFunc("/api/proyectos/orquestador", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":"proyecto no encontrado: orquestador"}`, http.StatusNotFound)
+	})
+
+	srv := newTestHTTPServerOrSkip(t, mux)
+	defer srv.Close()
+
+	defer cambiarEnv(t, "ORQUESTA_SERVER_URL", srv.URL)()
+	defer cambiarEnv(t, "ORQUESTA_FORCE_LOCAL_DB", "")()
+	defer cambiarEnv(t, "ORQUESTA_DISABLE_SERVER_CLIENT", "")()
+
+	err := proyectoVerCmd.RunE(proyectoVerCmd, []string{"orquestador"})
+	if err == nil {
+		t.Fatalf("se esperaba error al no existir el proyecto")
+	}
+	if !strings.Contains(err.Error(), "proyecto no encontrado: orquestador") {
+		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
 func TestAsignacionUsaAPI(t *testing.T) {
 	asignacion := &db.Asignacion{
 		ID:           14,

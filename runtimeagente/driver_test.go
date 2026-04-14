@@ -581,6 +581,59 @@ func TestPrepareCLIResuelveComandoRelativoContraProyecto(t *testing.T) {
 	if got, want := plan.Comando, "/srv/codex-perfiles/bin/codex-perfil"; got != want {
 		t.Fatalf("comando relativo inesperado: got=%s want=%s", got, want)
 	}
+	if got := plan.Env["ORQUESTA_TERMINAL_BACKEND"]; got != "pty" {
+		t.Fatalf("backend codex-perfil inesperado: %+v", plan.Env)
+	}
+}
+
+func TestPrepareCLICodexWrapperInyectaCODEXBINConPathPobre(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_USE_PROFILE_WRAPPER", "1")
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin")
+
+	projectPath := filepath.Join(tmp, "srv", "orquesta")
+	wrapperPath := filepath.Join(tmp, "srv", "codex-perfiles", "bin", "codex-perfil")
+	if err := os.MkdirAll(filepath.Dir(wrapperPath), 0o755); err != nil {
+		t.Fatalf("mkdir wrapper: %v", err)
+	}
+	if err := os.WriteFile(wrapperPath, []byte("#!/usr/bin/env bash\n"), 0o755); err != nil {
+		t.Fatalf("write wrapper: %v", err)
+	}
+	codexPath := filepath.Join(home, ".nvm", "versions", "node", "v20.19.2", "bin", "codex")
+	if err := os.MkdirAll(filepath.Dir(codexPath), 0o755); err != nil {
+		t.Fatalf("mkdir codex: %v", err)
+	}
+	if err := os.WriteFile(codexPath, []byte("#!/usr/bin/env bash\n"), 0o755); err != nil {
+		t.Fatalf("write codex: %v", err)
+	}
+
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Codex1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: projectPath,
+		Conector: ConnectorConfig{
+			Slug:       "codex-cli",
+			Transporte: "cli",
+			Comando:    "codex",
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if got, want := plan.Comando, wrapperPath; got != want {
+		t.Fatalf("wrapper inesperado: got=%q want=%q", got, want)
+	}
+	if got, want := strings.TrimSpace(plan.Env["CODEX_BIN"]), codexPath; got != want {
+		t.Fatalf("CODEX_BIN inesperado: got=%q want=%q env=%+v", got, want, plan.Env)
+	}
+	if !strings.Contains(plan.Env["PATH"], filepath.Dir(codexPath)) {
+		t.Fatalf("PATH deberia incluir el binario de codex: %+v", plan.Env)
+	}
+	if got := strings.TrimSpace(plan.Env["ORQUESTA_TERMINAL_BACKEND"]); got != "pty" {
+		t.Fatalf("backend inesperado para codex-perfil: %+v", plan.Env)
+	}
 }
 
 func TestPrepareCLIOllamaUsaModeloPosicional(t *testing.T) {

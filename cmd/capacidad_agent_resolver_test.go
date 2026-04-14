@@ -79,6 +79,45 @@ func TestResolvedorAgentePipelineOperativoPrefiereClaudeParaRevision(t *testing.
 	}
 }
 
+func TestResolvedorAgentePipelineOperativoNoReusaPremiumTrabajando(t *testing.T) {
+	resolvedor := resolvedorAgentePipelineOperativo{
+		rowsProvider: fakeRowsProvider{rows: []agentesapp.Row{
+			{Agente: &db.Agente{Nombre: "Claude1", Habilitado: true}, EstadoOperativo: "trabajando"},
+			{Agente: &db.Agente{Nombre: "Codex1", Habilitado: true}, EstadoOperativo: "trabajando"},
+		}},
+	}
+
+	agente, err := resolvedor.ResolverAgentePipeline(capacidadapp.EntradaResolverAgentePipeline{
+		Carril: "premium_worktree",
+		Fase:   "implementacion",
+	})
+	if err != nil {
+		t.Fatalf("ResolverAgentePipeline: %v", err)
+	}
+	if agente != "" {
+		t.Fatalf("no deberia reutilizar premium trabajando, got=%q", agente)
+	}
+}
+
+func TestResolvedorAgentePipelineOperativoNoReusaReviewerTrabajando(t *testing.T) {
+	resolvedor := resolvedorAgentePipelineOperativo{
+		rowsProvider: fakeRowsProvider{rows: []agentesapp.Row{
+			{Agente: &db.Agente{Nombre: "Claude1", Habilitado: true}, EstadoOperativo: "trabajando"},
+		}},
+	}
+
+	agente, err := resolvedor.ResolverAgentePipeline(capacidadapp.EntradaResolverAgentePipeline{
+		Carril: "revision_diff",
+		Fase:   "revision",
+	})
+	if err != nil {
+		t.Fatalf("ResolverAgentePipeline: %v", err)
+	}
+	if agente != "" {
+		t.Fatalf("no deberia reutilizar reviewer trabajando, got=%q", agente)
+	}
+}
+
 func TestResolvedorAgentePipelineOperativoPrefiereLocalParaMicroprogramacion(t *testing.T) {
 	resolvedor := resolvedorAgentePipelineOperativo{
 		rowsProvider: fakeRowsProvider{rows: []agentesapp.Row{

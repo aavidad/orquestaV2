@@ -605,10 +605,18 @@ func resolverRuntimeTranscript(handle *RuntimeHandle, runtime *RuntimeInstance) 
 		return nil, nil
 	}
 	if handle.RuntimeID != nil && *handle.RuntimeID > 0 {
-		return GetRuntime(*handle.RuntimeID)
+		r, err := GetRuntime(*handle.RuntimeID)
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return r, err
 	}
 	if handle.SesionID != nil && *handle.SesionID > 0 {
-		return GetRuntimeBySesionID(*handle.SesionID)
+		r, err := GetRuntimeBySesionID(*handle.SesionID)
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return r, err
 	}
 	return nil, nil
 }

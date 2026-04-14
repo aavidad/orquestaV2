@@ -788,11 +788,16 @@ func tmuxPaneHasUsageLimitPrompt(captured string) bool {
 		return false
 	}
 	hasUsageLimit := strings.Contains(normalized, "you've hit your usage limit") ||
+		strings.Contains(normalized, "you've hit your limit") ||
 		strings.Contains(normalized, "you have hit your usage limit") ||
-		strings.Contains(normalized, "usage limit")
+		strings.Contains(normalized, "you have hit your limit") ||
+		strings.Contains(normalized, "usage limit") ||
+		strings.Contains(normalized, "rate-limit-options")
 	hasRetryHint := strings.Contains(normalized, "send a request to your admin") ||
 		strings.Contains(normalized, "try again at") ||
-		strings.Contains(normalized, "try again later")
+		strings.Contains(normalized, "try again later") ||
+		strings.Contains(normalized, "resets 2am") ||
+		strings.Contains(normalized, "resets ")
 	return hasUsageLimit && hasRetryHint
 }
 

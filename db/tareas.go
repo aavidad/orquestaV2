@@ -99,6 +99,37 @@ func CrearTarea(t *Tarea) (int64, error) {
 	return id, nil
 }
 
+// GetTareaActivaIDPorAgente devuelve el ID de la tarea que el agente tiene actualmente en curso.
+// Busca prioritariamente en_progreso y luego asignada, devolviendo la más reciente.
+func GetTareaActivaIDPorAgente(agente string) (int64, error) {
+	return GetTareaActivaIDPorAgenteProyecto(agente, nil)
+}
+
+// GetTareaActivaIDPorAgenteProyecto devuelve la tarea activa más reciente del
+// agente, opcionalmente acotada al proyecto.
+func GetTareaActivaIDPorAgenteProyecto(agente string, proyectoID *int64) (int64, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return 0, nil
+	}
+	args := []any{agente}
+	q := `
+		SELECT id FROM tareas
+		WHERE agente = ? AND estado IN ('en_progreso','asignada')`
+	if proyectoID != nil && *proyectoID > 0 {
+		q += ` AND proyecto_id = ?`
+		args = append(args, *proyectoID)
+	}
+	q += `
+		ORDER BY CASE WHEN estado = 'en_progreso' THEN 1 ELSE 2 END, updated_at DESC LIMIT 1`
+	var id int64
+	err := DB.QueryRow(q, args...).Scan(&id)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return id, err
+}
+
 // GetTareaIDBlueprintKey devuelve el ID de una tarea por proyecto_id + blueprint_key.
 // Devuelve 0 si no existe.
 func GetTareaIDBlueprintKey(proyectoID int64, key string) int64 {

@@ -593,6 +593,33 @@ func TestArrancarPlanCodexCLIRequiereTMUXPorDefecto(t *testing.T) {
 	}
 }
 
+func TestArrancarPlanCodexCLIPermitePTYPorOverrideExplicito(t *testing.T) {
+	dir := t.TempDir()
+	fakeCodex := filepath.Join(dir, "codex-perfil")
+	if err := os.WriteFile(fakeCodex, []byte("#!/usr/bin/env bash\nprintf 'hola codex pty\\n'\nsleep 1\n"), 0o755); err != nil {
+		t.Fatalf("write fake codex: %v", err)
+	}
+
+	arranque, err := ArrancarPlan(SolicitudArranque{
+		Agente:   "CodexPTY",
+		Proyecto: "orquestador",
+		Plan: &runtimeagente.LaunchPlan{
+			Comando:    fakeCodex,
+			Args:       []string{"CodexPTY"},
+			WorkingDir: dir,
+			Env: map[string]string{
+				"ORQUESTA_TERMINAL_BACKEND": "pty",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("arrancar plan codex pty: %v", err)
+	}
+	if filepath.Base(arranque.LogPath) != "pty.log" {
+		t.Fatalf("deberia usar pty por override explicito: %s", arranque.LogPath)
+	}
+}
+
 func TestArrancarPlanPrefiereTMUXPorDefectoParaOllamaCLI(t *testing.T) {
 	dir := t.TempDir()
 	fakeTmux := writeFakeTmuxScript(t, dir)

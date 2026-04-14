@@ -64,7 +64,6 @@ type Runner struct {
 	BatchTimeout          time.Duration
 	mu                    sync.Mutex
 	runningBatches        map[string]runningBatchState
-	batchIntervals        *Throttler
 	batchWake             map[string]chan struct{}
 	nextBatchToken        uint64
 	warmLaneActive        atomic.Bool
@@ -318,61 +317,12 @@ func (r *Runner) runPlanificacion() {
 
 // runControlPlane ejecuta todos los batches (compat para tests existentes).
 func (r *Runner) runControlPlane() {
-	r.runControlPlaneHotNow()
+	r.runControlPlaneRuntimeTranscript()
+	r.runControlPlaneRuntimeMailbox()
+	r.runControlPlaneRuntimeOrders()
 	r.runControlPlaneBudget()
 	r.runControlPlaneWarm()
 	r.runControlPlaneCold()
-}
-
-// runControlPlaneHot: path caliente — runtime orders, mailbox, transcript.
-func (r *Runner) runControlPlaneHot() {
-	r.runControlPlaneHotInternal(false)
-}
-
-func (r *Runner) runControlPlaneHotNow() {
-	r.runControlPlaneHotInternal(true)
-}
-
-func (r *Runner) runControlPlaneHotInternal(force bool) {
-	now := time.Now()
-	transcript := 0
-	if force || r.allowIntervalBatch("runtime_transcript_interval", r.runtimeTranscriptCada(), now) {
-		transcript = r.runControlPlaneBatch(
-			"runtime_transcript",
-			"runtime_transcript",
-			"runtime_transcript_batch",
-			"runtime_transcript_batch_error",
-			"runtime_transcript_batch_panic",
-			"Conversación/runtime transcript procesado: %d",
-			r.Automation.ProcesarRuntimeTranscriptBatch,
-		)
-	}
-	mailbox := 0
-	if force || r.allowIntervalBatch("runtime_mailbox_interval", r.runtimeMailboxCada(), now) {
-		mailbox = r.runControlPlaneBatch(
-			"runtime_mailbox",
-			"runtime_mailbox",
-			"runtime_mailbox_batch",
-			"runtime_mailbox_batch_error",
-			"runtime_mailbox_batch_panic",
-			"Mailbox runtime procesado: %d",
-			r.Automation.ProcesarRuntimeMailboxBatch,
-		)
-	}
-	processed := 0
-	if force || r.allowIntervalBatch("runtime_orders_interval", r.runtimeOrdersCada(), now) {
-		processed = r.runControlPlaneBatch(
-			"runtime_orders",
-			"runtime_order",
-			"runtime_orders_batch",
-			"runtime_orders_batch_error",
-			"runtime_orders_batch_panic",
-			"Órdenes procesadas en batch: %d",
-			r.Automation.ProcesarRuntimeOrdersBatch,
-		)
-	}
-	r.debugf("control_plane_hot transcript=%d mailbox=%d runtime_orders=%d",
-		transcript, mailbox, processed)
 }
 
 func (r *Runner) runControlPlaneRuntimeTranscript() {
@@ -752,21 +702,6 @@ func (r *Runner) runtimeBudgetCada() time.Duration {
 	}
 	return r.RuntimeBudgetCada
 }
-
-func (r *Runner) allowIntervalBatch(name string, each time.Duration, now time.Time) bool {
-	if each <= 0 {
-		return true
-	}
-	if r.batchIntervals == nil {
-		r.mu.Lock()
-		if r.batchIntervals == nil {
-			r.batchIntervals = NewThrottler()
-		}
-		r.mu.Unlock()
-	}
-	return r.batchIntervals.Allow(name, each)
-}
-
 
 func (r *Runner) notificationRetryCada() time.Duration {
 	if r.NotificationRetryCada <= 0 {

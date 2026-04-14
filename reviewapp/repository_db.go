@@ -1,6 +1,7 @@
 package reviewapp
 
 import (
+	"database/sql"
 	"strings"
 	"time"
 
@@ -12,6 +13,9 @@ func init() {
 		proyecto, err := db.GetProyecto(strings.TrimSpace(ref))
 		if err != nil {
 			return nil, err
+		}
+		if proyecto == nil {
+			return nil, sql.ErrNoRows
 		}
 		return &ProjectRef{ID: proyecto.ID, Slug: strings.TrimSpace(proyecto.Slug)}, nil
 	}
