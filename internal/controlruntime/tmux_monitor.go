@@ -748,6 +748,13 @@ func tmuxPaneHasCodexAuthPrompt(captured string) bool {
 	if normalized == "" {
 		return false
 	}
+	if strings.Contains(normalized, "mcp startup incomplete") {
+		if strings.Contains(normalized, "provided authentication token is expired") ||
+			strings.Contains(normalized, "token_expired") ||
+			strings.Contains(normalized, "status 401") {
+			return true
+		}
+	}
 	hasWelcome := strings.Contains(normalized, "welcome to codex")
 	hasSignin := strings.Contains(normalized, "sign in with chatgpt") ||
 		strings.Contains(normalized, "sign in with device code") ||

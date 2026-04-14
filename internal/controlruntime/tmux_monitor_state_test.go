@@ -394,6 +394,25 @@ func TestTMUXClassifyPaneStatePriorizaAuthSobrePromptViejo(t *testing.T) {
 	}
 }
 
+func TestTMUXPaneHasCodexAuthPromptDetectaTokenExpiradoEnMCP(t *testing.T) {
+	captured := "" +
+		"Bootstrap de Orquesta para Codex1.\n" +
+		"Booting MCP server: codex_apps\n" +
+		"MCP startup incomplete (failed: codex_apps)\n" +
+		"Provided authentication token is expired. Please try signing in again.\n" +
+		"token_expired\n" +
+		"status 401\n"
+	if !tmuxPaneHasCodexAuthPrompt(captured) {
+		t.Fatal("Codex deberia detectar auth expirada en MCP como bloqueo de autenticacion")
+	}
+	if got := tmuxClassifyPaneState(captured); got != workerStatusBlockedAuth {
+		t.Fatalf("estado de pane inesperado: got=%q want=%q", got, workerStatusBlockedAuth)
+	}
+	if tmuxPaneLooksReady(captured) {
+		t.Fatal("una sesion de Codex con token expirado en MCP no deberia marcarse como ready")
+	}
+}
+
 func TestTMUXLineLooksPromptNoConfundeMenuNumerado(t *testing.T) {
 	if tmuxLineLooksPrompt("> 1. Sign in with ChatGPT") {
 		t.Fatal("una opcion numerada de menu no deberia detectarse como prompt listo")
