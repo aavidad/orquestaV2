@@ -21,6 +21,17 @@ type BudgetQuotaSnapshot struct {
 	Source            string
 	RawSnapshotJSON   string
 	CheckedAt         time.Time
+	WindowStartedAt   *time.Time
+	ResetAt           *time.Time
+}
+
+type BudgetEvaluation struct {
+	Status           string
+	ShouldHandoff    bool
+	Reason           string
+	ThresholdSeconds int64
+	ThresholdRatio   float64
+	RemainingRatio   *float64
 }
 
 func SelectEffectiveBudget(candidates []BudgetCandidate) BudgetCandidate {
@@ -158,6 +169,9 @@ func budgetSnapshotFloat64(raw any) (float64, bool) {
 	case json.Number:
 		f, err := v.Float64()
 		return f, err == nil
+	case string:
+		f, err := json.Number(strings.TrimSpace(v)).Float64()
+		return f, err == nil
 	default:
 		return 0, false
 	}
@@ -199,4 +213,108 @@ func BudgetAccountCandidateScore(snapshot BudgetQuotaSnapshot, now time.Time) in
 	}
 	score += snapshot.CheckedAt.UTC().Unix()
 	return score
+}
+
+func EvaluateBudgetSnapshot(snapshot BudgetQuotaSnapshot, thresholdSeconds int64, thresholdRatio float64) BudgetEvaluation {
+	evaluation := BudgetEvaluation{
+		Status:           "ok",
+		ThresholdSeconds: thresholdSeconds,
+		ThresholdRatio:   thresholdRatio,
+	}
+	evaluation.RemainingRatio = budgetRemainingRatio(snapshot)
+	if budgetExhaustedByCount(snapshot) {
+		evaluation.Status = "agotado"
+		evaluation.ShouldHandoff = true
+		evaluation.Reason = "presupuesto agotado"
+		return evaluation
+	}
+	if snapshot.RemainingSeconds != nil && *snapshot.RemainingSeconds <= thresholdSeconds {
+		evaluation.Status = "handoff_preventivo"
+		evaluation.ShouldHandoff = true
+		evaluation.Reason = "threshold_seconds"
+		return evaluation
+	}
+	if evaluation.RemainingRatio != nil {
+		if *evaluation.RemainingRatio <= thresholdRatio {
+			evaluation.Status = "handoff_preventivo"
+			evaluation.ShouldHandoff = true
+			evaluation.Reason = "threshold_ratio"
+			return evaluation
+		}
+		evaluation.Reason = "ratio_ok"
+		return evaluation
+	}
+	if snapshot.RemainingSeconds != nil {
+		evaluation.Reason = "remaining_seconds_only"
+		return evaluation
+	}
+	evaluation.Status = "sin_datos"
+	evaluation.Reason = "sin telemetría suficiente para decidir handoff"
+	return evaluation
+}
+
+func budgetExhaustedByCount(snapshot BudgetQuotaSnapshot) bool {
+	return int64PtrLTEZero(snapshot.RemainingSeconds) ||
+		int64PtrLTEZero(snapshot.RemainingMessages) ||
+		int64PtrLTEZero(snapshot.RemainingTokens) ||
+		float64PtrLTEZero(snapshot.RemainingCredits) ||
+		budgetSnapshotRateLimitExhausted(snapshot)
+}
+
+func int64PtrLTEZero(v *int64) bool {
+	return v != nil && *v <= 0
+}
+
+func float64PtrLTEZero(v *float64) bool {
+	return v != nil && *v <= 0
+}
+
+func budgetRemainingRatio(snapshot BudgetQuotaSnapshot) *float64 {
+	if budgetExhaustedByCount(snapshot) {
+		ratio := 0.0
+		return &ratio
+	}
+	if snapshot.RemainingSeconds != nil && snapshot.WindowStartedAt != nil && snapshot.ResetAt != nil {
+		total := snapshot.ResetAt.Sub(*snapshot.WindowStartedAt).Seconds()
+		if total > 0 {
+			ratio := float64(*snapshot.RemainingSeconds) / total
+			if ratio < 0 {
+				ratio = 0
+			}
+			return &ratio
+		}
+	}
+	return budgetSnapshotRemainingRatio(snapshot)
+}
+
+func budgetSnapshotRemainingRatio(snapshot BudgetQuotaSnapshot) *float64 {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(snapshot.RawSnapshotJSON), &raw); err != nil || raw == nil {
+		return nil
+	}
+	rateLimits, _ := raw["rate_limits"].(map[string]any)
+	if rateLimits == nil {
+		return nil
+	}
+	primary, _ := rateLimits["primary"].(map[string]any)
+	if primary == nil {
+		return nil
+	}
+	used, ok := budgetSnapshotFloat64(primary["used_percent"])
+	if !ok {
+		return nil
+	}
+	ratio := 1 - (used / 100)
+	if ratio < 0 {
+		ratio = 0
+	}
+	if ratio > 1 {
+		ratio = 1
+	}
+	return &ratio
+}
+
+func budgetSnapshotRateLimitExhausted(snapshot BudgetQuotaSnapshot) bool {
+	ratio := budgetSnapshotRemainingRatio(snapshot)
+	return ratio != nil && *ratio <= 0
 }

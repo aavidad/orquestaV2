@@ -103,3 +103,25 @@ func TestBudgetAccountCandidateScorePrefersFresherAndStrongerSource(t *testing.T
 		t.Fatalf("snapshot fresco deberia puntuar por encima de uno mas viejo: observed=%d stale=%d", observed, stale)
 	}
 }
+
+func TestEvaluateBudgetSnapshotAgotadoPorConteo(t *testing.T) {
+	remaining := int64(0)
+	evaluation := EvaluateBudgetSnapshot(BudgetQuotaSnapshot{
+		RemainingSeconds: &remaining,
+	}, 1800, 0.10)
+	if !evaluation.ShouldHandoff || evaluation.Status != "agotado" {
+		t.Fatalf("evaluacion inesperada: %+v", evaluation)
+	}
+}
+
+func TestEvaluateBudgetSnapshotUsaRatioDelSnapshot(t *testing.T) {
+	evaluation := EvaluateBudgetSnapshot(BudgetQuotaSnapshot{
+		RawSnapshotJSON: `{"rate_limits":{"primary":{"used_percent":95}}}`,
+	}, 1800, 0.10)
+	if !evaluation.ShouldHandoff || evaluation.Status != "handoff_preventivo" {
+		t.Fatalf("evaluacion inesperada: %+v", evaluation)
+	}
+	if evaluation.RemainingRatio == nil || *evaluation.RemainingRatio > 0.10 {
+		t.Fatalf("ratio inesperado: %+v", evaluation.RemainingRatio)
+	}
+}

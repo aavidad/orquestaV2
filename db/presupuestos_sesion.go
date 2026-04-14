@@ -9,7 +9,6 @@ package db
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"orquesta/sesionesapp"
 	"strconv"
@@ -375,46 +374,37 @@ func EvaluarPresupuestoSesion(p *PresupuestoSesion) (*EvaluacionPresupuesto, err
 	}
 	thresholdSeconds := configInt64Fallback("pool_handoff_threshold_seconds", 1800)
 	thresholdRatio := configFloat64Fallback("pool_handoff_threshold_ratio", 0.10)
+	evaluation := sesionesapp.EvaluateBudgetSnapshot(sesionesapp.BudgetQuotaSnapshot{
+		RemainingSeconds:  p.RemainingSeconds,
+		RemainingMessages: p.RemainingMessages,
+		RemainingTokens:   p.RemainingTokens,
+		RemainingCredits:  p.RemainingCredits,
+		Source:            p.BudgetSource,
+		RawSnapshotJSON:   p.RawSnapshotJSON,
+		CheckedAt:         p.CheckedAt,
+		WindowStartedAt:   p.WindowStartedAt,
+		ResetAt:           p.ResetAt,
+	}, thresholdSeconds, thresholdRatio)
 
 	ev := &EvaluacionPresupuesto{
-		Estado:           "ok",
-		ThresholdSeconds: thresholdSeconds,
-		ThresholdRatio:   thresholdRatio,
+		Estado:           evaluation.Status,
+		DebeHandoff:      evaluation.ShouldHandoff,
+		ThresholdSeconds: evaluation.ThresholdSeconds,
+		ThresholdRatio:   evaluation.ThresholdRatio,
+		RemainingRatio:   evaluation.RemainingRatio,
 	}
-	ev.RemainingRatio = remainingRatio(p)
-
-	if agotadoPorConteo(p) {
-		ev.Estado = "agotado"
-		ev.DebeHandoff = true
-		ev.Motivo = "presupuesto agotado"
-		return ev, nil
-	}
-
-	if p.RemainingSeconds != nil && *p.RemainingSeconds <= thresholdSeconds {
-		ev.Estado = "handoff_preventivo"
-		ev.DebeHandoff = true
+	switch evaluation.Reason {
+	case "threshold_seconds":
 		ev.Motivo = fmt.Sprintf("quedan %d s, umbral=%d s", *p.RemainingSeconds, thresholdSeconds)
-		return ev, nil
-	}
-
-	if ev.RemainingRatio != nil {
-		if *ev.RemainingRatio <= thresholdRatio {
-			ev.Estado = "handoff_preventivo"
-			ev.DebeHandoff = true
-			ev.Motivo = fmt.Sprintf("ratio restante %.2f <= %.2f", *ev.RemainingRatio, thresholdRatio)
-			return ev, nil
-		}
+	case "threshold_ratio":
+		ev.Motivo = fmt.Sprintf("ratio restante %.2f <= %.2f", *ev.RemainingRatio, thresholdRatio)
+	case "ratio_ok":
 		ev.Motivo = fmt.Sprintf("ratio restante %.2f", *ev.RemainingRatio)
-		return ev, nil
-	}
-
-	if p.RemainingSeconds != nil {
+	case "remaining_seconds_only":
 		ev.Motivo = fmt.Sprintf("quedan %d s", *p.RemainingSeconds)
-		return ev, nil
+	default:
+		ev.Motivo = evaluation.Reason
 	}
-
-	ev.Estado = "sin_datos"
-	ev.Motivo = "sin telemetría suficiente para decidir handoff"
 	return ev, nil
 }
 
@@ -516,98 +506,4 @@ func nullableFloat64(v *float64) any {
 		return nil
 	}
 	return *v
-}
-
-func agotadoPorConteo(p *PresupuestoSesion) bool {
-	return int64PtrLTEZero(p.RemainingSeconds) ||
-		int64PtrLTEZero(p.RemainingMessages) ||
-		int64PtrLTEZero(p.RemainingTokens) ||
-		float64PtrLTEZero(p.RemainingCredits) ||
-		snapshotRateLimitAgotado(p)
-}
-
-func int64PtrLTEZero(v *int64) bool {
-	return v != nil && *v <= 0
-}
-
-func float64PtrLTEZero(v *float64) bool {
-	return v != nil && *v <= 0
-}
-
-func remainingRatio(p *PresupuestoSesion) *float64 {
-	if agotadoPorConteo(p) {
-		ratio := 0.0
-		return &ratio
-	}
-	if p != nil && p.RemainingSeconds != nil && p.WindowStartedAt != nil && p.ResetAt != nil {
-		total := p.ResetAt.Sub(*p.WindowStartedAt).Seconds()
-		if total > 0 {
-			ratio := float64(*p.RemainingSeconds) / total
-			if ratio < 0 {
-				ratio = 0
-			}
-			return &ratio
-		}
-	}
-	if ratio := snapshotRemainingRatio(p); ratio != nil {
-		return ratio
-	}
-	return nil
-}
-
-func snapshotRemainingRatio(p *PresupuestoSesion) *float64 {
-	if p == nil {
-		return nil
-	}
-	raw := mapFromJSON(p.RawSnapshotJSON)
-	if raw == nil {
-		return nil
-	}
-	rateLimits, _ := raw["rate_limits"].(map[string]any)
-	if rateLimits == nil {
-		return nil
-	}
-	primary, _ := rateLimits["primary"].(map[string]any)
-	if primary == nil {
-		return nil
-	}
-	used, ok := snapshotFloat64(primary["used_percent"])
-	if !ok {
-		return nil
-	}
-	ratio := 1 - (used / 100)
-	if ratio < 0 {
-		ratio = 0
-	}
-	if ratio > 1 {
-		ratio = 1
-	}
-	return &ratio
-}
-
-func snapshotRateLimitAgotado(p *PresupuestoSesion) bool {
-	ratio := snapshotRemainingRatio(p)
-	return ratio != nil && *ratio <= 0
-}
-
-func snapshotFloat64(raw any) (float64, bool) {
-	switch v := raw.(type) {
-	case float64:
-		return v, true
-	case int:
-		return float64(v), true
-	case int64:
-		return float64(v), true
-	case json.Number:
-		out, err := v.Float64()
-		if err == nil {
-			return out, true
-		}
-	case string:
-		out, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
-		if err == nil {
-			return out, true
-		}
-	}
-	return 0, false
 }

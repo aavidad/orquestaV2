@@ -8,13 +8,15 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - `cbe90e9` mueve la precedencia/capas de overrides (`rol -> proyecto -> agente`) a `gobernanzapolicy`
 - `058dba9` mueve la policy de frescura TTL de presupuestos a `sesionesapp`
 - `0d1f30b` mueve la detección de snapshots que aportan cuota a `sesionesapp`
-- último corte de esta tanda: mover el scoring puro de candidatos de presupuesto canónico a `sesionesapp`
+- `a8778d4` mueve el scoring puro de candidatos de presupuesto canónico a `sesionesapp`
+- último corte de esta tanda: mover la evaluación pura de presupuesto y ratio/handoff a `sesionesapp`
 
 Estado del frente seguro:
 
 - `db/controlplane_entities.go` sigue siendo hotspot ajeno y no debe tocarse sin reasignación
 - `db/asignaciones.go` no ofrece ya un seam pequeño con buen ratio valor/riesgo
 - el frente `presupuestos/governanza` ha permitido sacar policy pura fuera de `db` sin tocar `cmd/`
+- en `presupuestos`, `db` ya conserva sobre todo carga/configuración/persistencia; la policy de TTL, cuota, scoring y evaluación efectiva vive fuera
 
 ## Objetivo
 
