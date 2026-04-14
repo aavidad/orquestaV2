@@ -6247,6 +6247,9 @@ func runtimeHandleSolicitaSessionResume(handle *RuntimeHandle, deliveryMode stri
 	if handle == nil {
 		return false
 	}
+	if runtimeagente.NormalizeMailboxDeliveryMode(deliveryMode) == runtimeagente.MailboxDeliverySessionResume {
+		return true
+	}
 	meta := mapFromJSON(handle.MetadataJSON)
 	caps := mapFromJSON(handle.CapabilitiesJSON)
 	explicitBootstrapOnly := false
@@ -6263,9 +6266,6 @@ func runtimeHandleSolicitaSessionResume(handle *RuntimeHandle, deliveryMode stri
 	}
 	if explicitBootstrapOnly {
 		return false
-	}
-	if runtimeagente.NormalizeMailboxDeliveryMode(deliveryMode) == runtimeagente.MailboxDeliverySessionResume {
-		return true
 	}
 	return false
 }

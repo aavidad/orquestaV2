@@ -3895,6 +3895,19 @@ func TestRuntimeHandleMailboxDeliveryModeRespetaCapacidadesYFallbacks(t *testing
 	}
 }
 
+func TestRuntimeHandleSolicitaSessionResumeRespetaModoDerivado(t *testing.T) {
+	handle := &RuntimeHandle{
+		CapabilitiesJSON: `{"mailbox_delivery_mode":"bootstrap_only","can_send_input":false}`,
+		MetadataJSON:     `{"driver":"tmux_cli_session","transport":"tmux","handle_kind":"session","mailbox_delivery_mode":"bootstrap_only","can_send_input":false}`,
+	}
+	if !runtimeHandleSolicitaSessionResume(handle, runtimeagente.MailboxDeliverySessionResume) {
+		t.Fatal("el modo derivado session_resume debe prevalecer aunque la metadata vieja siga en bootstrap_only")
+	}
+	if runtimeHandleSolicitaSessionResume(handle, runtimeagente.MailboxDeliveryBootstrapOnly) {
+		t.Fatal("sin modo derivado session_resume no deberia solicitarse session_resume")
+	}
+}
+
 func TestRuntimeOrderSendInstructionHaceFallbackAMailboxCuandoHandleNoAdmiteInputInteractivo(t *testing.T) {
 	enableLegacyPTYLocalRuntimeForTest(t)
 	tmp := prepararDBTemporal(t)
