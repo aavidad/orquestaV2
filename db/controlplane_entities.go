@@ -4238,6 +4238,24 @@ func observarProcesoLocalRuntime(handle *RuntimeHandle, runtime *RuntimeInstance
 			processState = "running"
 		}
 	}
+	if workerLogicalState, workerProcessState, ok := runtimeObservedLogicalStateFromStructuredWorker(handle); ok {
+		logicalState = workerLogicalState
+		if strings.TrimSpace(workerProcessState) != "" {
+			processState = workerProcessState
+		}
+	}
+	if runtime != nil {
+		if _, err := DB.Exec(`
+			UPDATE runtime_instances
+			SET pid = ?,
+			    logical_state = ?,
+			    process_state = ?,
+			    last_event_at = CURRENT_TIMESTAMP,
+			    last_heartbeat_at = CURRENT_TIMESTAMP
+			WHERE id = ?`, pid64, logicalState, processState, runtime.ID); err != nil {
+			return true, nil, err
+		}
+	}
 	if handle != nil {
 		syncedHandle, _, err := SincronizarRuntimeHandleExternalSessionID(handle, runtime)
 		if err != nil {
@@ -4260,6 +4278,32 @@ func observarProcesoLocalRuntime(handle *RuntimeHandle, runtime *RuntimeInstance
 		"logical_state":  logicalState,
 		"observed_local": true,
 	}, nil
+}
+
+func runtimeObservedLogicalStateFromStructuredWorker(handle *RuntimeHandle) (string, string, bool) {
+	if handle == nil {
+		return "", "", false
+	}
+	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
+	driver := strings.TrimSpace(stringFromMap(meta, "driver", ""))
+	transport := strings.TrimSpace(handle.Transporte)
+	if !strings.EqualFold(driver, "tmux_cli_session") && !strings.EqualFold(transport, "tmux") {
+		return "", "", false
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
+	if err != nil || snap == nil {
+		return "", "", false
+	}
+	view := snap.View(time.Now().UTC(), time.Minute)
+	if view == nil || view.HeartbeatStale || !view.Alive {
+		return "", "", false
+	}
+	switch strings.ToLower(strings.TrimSpace(view.State)) {
+	case "ready", "running", "idle":
+		return "activo", "running", true
+	default:
+		return "", "", false
+	}
 }
 
 func aplicarEstadoLocalObservado(handle *RuntimeHandle, estado *controlruntime.EstadoLocal) error {
@@ -8982,6 +9026,18 @@ func runtimeBootstrapLeaseLinkedToStart(order *RuntimeOrder, startOrder *Runtime
 	return int64FromAny(result["start_order_id"]) == startOrder.ID
 }
 
+func runtimeBootstrapLeaseResumeDerivadoPrefiereStart(order *RuntimeOrder, startOrder *RuntimeOrder) bool {
+	return order != nil &&
+		strings.EqualFold(strings.TrimSpace(order.Tipo), "resume") &&
+		runtimeBootstrapLeaseLinkedToStart(order, startOrder)
+}
+
+func runtimeBootstrapLeaseFuenteLigadaPrefiereSobreStart(order *RuntimeOrder, startOrder *RuntimeOrder) bool {
+	return order != nil &&
+		!strings.EqualFold(strings.TrimSpace(order.Tipo), "resume") &&
+		runtimeBootstrapLeaseLinkedToStart(order, startOrder)
+}
+
 func runtimeBootstrapLeaseMailboxIDsVigentes(mailboxIDs []int64) ([]int64, error) {
 	if len(mailboxIDs) == 0 {
 		return nil, nil
@@ -9504,12 +9560,14 @@ func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHand
 			continue
 		}
 		if score == selectedScore {
-			orderLinkedToSelectedStart := runtimeBootstrapLeaseLinkedToStart(order, selectedOrder)
-			selectedLinkedToOrderStart := runtimeBootstrapLeaseLinkedToStart(selectedOrder, order)
 			switch {
-			case orderLinkedToSelectedStart && !selectedLinkedToOrderStart:
+			case runtimeBootstrapLeaseResumeDerivadoPrefiereStart(order, selectedOrder):
+				continue
+			case runtimeBootstrapLeaseResumeDerivadoPrefiereStart(selectedOrder, order):
+				// Prefiere la start fuente frente al resume derivado.
+			case runtimeBootstrapLeaseFuenteLigadaPrefiereSobreStart(order, selectedOrder):
 				// Prefiere la bootstrap fuente cuando está enlazada a la start derivada.
-			case selectedLinkedToOrderStart && !orderLinkedToSelectedStart:
+			case runtimeBootstrapLeaseFuenteLigadaPrefiereSobreStart(selectedOrder, order):
 				continue
 			default:
 				if order.ID < selectedOrder.ID {
