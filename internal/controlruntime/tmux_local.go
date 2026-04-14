@@ -58,6 +58,10 @@ func arrancarPlanLocalTMUX(req SolicitudArranque) (*ProcesoArrancado, error) {
 		_ = tmuxKillSession(tmuxCommand, sessionName)
 		return nil, err
 	}
+	if err := tmuxSeedLogFromPaneIfEmpty(tmuxCommand, paneInfo.PaneID, logPath); err != nil {
+		_ = tmuxKillSession(tmuxCommand, sessionName)
+		return nil, err
+	}
 
 	canSendInput, canSendInputSource := localPTYInputPolicy(req.Plan)
 	mailboxDeliveryMode := localPTYMailboxDeliveryMode(req.Plan, canSendInput)
@@ -334,6 +338,38 @@ func tmuxPipePane(tmuxCommand, paneID, logPath string) error {
 	command := fmt.Sprintf("cat >> %s", shellQuoteSimple(strings.TrimSpace(logPath)))
 	cmd := exec.Command(tmuxCommand, "pipe-pane", "-O", "-t", strings.TrimSpace(paneID), command)
 	return cmd.Run()
+}
+
+func tmuxSeedLogFromPaneIfEmpty(tmuxCommand, paneID, logPath string) error {
+	info, err := os.Stat(strings.TrimSpace(logPath))
+	if err == nil && info != nil && info.Size() > 0 {
+		return nil
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	cmd := exec.Command(strings.TrimSpace(tmuxCommand), "capture-pane", "-t", strings.TrimSpace(paneID), "-p")
+	out, err := cmd.Output()
+	if err != nil {
+		return err
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	fd, err := os.OpenFile(strings.TrimSpace(logPath), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return err
+	}
+	defer fd.Close()
+	if _, err := fd.Write(out); err != nil {
+		return err
+	}
+	if out[len(out)-1] != '\n' {
+		if _, err := fd.Write([]byte("\n")); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func tmuxKillSession(tmuxCommand, sessionName string) error {

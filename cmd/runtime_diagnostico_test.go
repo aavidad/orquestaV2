@@ -170,6 +170,26 @@ func TestRuntimeDiagnosticoRecortaRuntimesYHandlesSegunLimit(t *testing.T) {
 	}
 }
 
+func TestRuntimeHandlesRelevantesPriorizaHandleActivoMasReciente(t *testing.T) {
+	now := time.Now().UTC()
+	oldSeen := now.Add(-2 * time.Minute)
+	newSeen := now.Add(-10 * time.Second)
+
+	handles := runtimeHandlesRelevantes([]*db.RuntimeHandle{
+		{ID: 1151, Agente: "Codex1", Estado: "fallido", LastSeenAt: &oldSeen},
+		{ID: 1152, Agente: "Codex1", Estado: "activo", LastSeenAt: &newSeen},
+	}, 5)
+	if len(handles) != 2 {
+		t.Fatalf("handles inesperados: %+v", handles)
+	}
+	if handles[0] == nil || handles[0].ID != 1152 {
+		t.Fatalf("el handle activo y mas reciente deberia ir primero: %+v", handles)
+	}
+	if handles[1] == nil || handles[1].ID != 1151 {
+		t.Fatalf("el handle viejo/fallido deberia quedar detras: %+v", handles)
+	}
+}
+
 func TestRuntimeDiagnosticoMuestraWorkerEstructurado(t *testing.T) {
 	tmp := t.TempDir()
 	now := time.Now().UTC()

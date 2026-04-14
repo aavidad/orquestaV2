@@ -41,6 +41,7 @@ func init() {
 	microprogramacionService.SetRecolectorEntregaGit(microprogramacionRecolectorGit{})
 	microprogramacionService.SetIntegradorGit(microprogramacionIntegradorGit{})
 	runtimesService.SetRegistradorEntregaGit(microprogramacionService)
+	runtimesService.SetRegistradorEntregaGitPremium(premiumRuntimeGitService{git: gitService})
 	runtimesService.SetMaterializadorEntregaMicroprogramacion(microprogramacionService)
 	runtimesService.SetResolvedorWorktreeActiva(worktreeRuntimeService{})
 	runtimesService.SetAseguradorWorktreeActiva(worktreeRuntimeService{})

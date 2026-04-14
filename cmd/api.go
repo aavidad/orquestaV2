@@ -4560,7 +4560,7 @@ func apiNombreAgenteCanonico(raw string) string {
 	if raw == "" {
 		return ""
 	}
-	agente, err := db.GetAgente(raw)
+	agente, err := agentesService.GetAgent(raw)
 	if err == nil && agente != nil && strings.TrimSpace(agente.Nombre) != "" {
 		return strings.TrimSpace(agente.Nombre)
 	}

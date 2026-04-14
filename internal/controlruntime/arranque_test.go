@@ -494,6 +494,13 @@ func TestArrancarPlanTMUXEscribeArtefactosWorker(t *testing.T) {
 	if !strings.Contains(logText, "new-session") || !strings.Contains(logText, "pipe-pane") {
 		t.Fatalf("fake tmux no recibio comandos esperados: %s", logText)
 	}
+	logData, err := os.ReadFile(arranque.LogPath)
+	if err != nil {
+		t.Fatalf("leer tmux.log: %v", err)
+	}
+	if !strings.Contains(string(logData), "> ready") {
+		t.Fatalf("tmux.log deberia sembrarse con el pane inicial: %q", string(logData))
+	}
 }
 
 func TestArrancarPlanPrefiereTMUXPorDefectoParaCodexCLI(t *testing.T) {

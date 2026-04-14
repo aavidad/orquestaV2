@@ -777,7 +777,15 @@ func enviarInstruccionProcesoLocalSupervisado(obj ObjetivoProceso, instruccion s
 		return false, 0, observed, err
 	}
 	if estado == nil {
+		if metadataLooksLikeTMUXRuntime(metadataMap(obj.MetadataJSON)) {
+			return false, 0, false, nil
+		}
 		return false, 0, true, nil
+	}
+	if metadataLooksLikeTMUXRuntime(metadataMap(obj.MetadataJSON)) ||
+		metadataLooksLikeTMUXRuntime(metadataMap(estado.MetadataJSON)) {
+		aplicado, pid, err := enviarInstruccionProcesoBase(obj, instruccion)
+		return aplicado, pid, true, err
 	}
 	if !estado.Vivo || estado.PID <= 0 {
 		return false, estado.PID, true, nil

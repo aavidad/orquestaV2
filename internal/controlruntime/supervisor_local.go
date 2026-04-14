@@ -174,7 +174,7 @@ func controlarProcesoLocalSupervisado(obj ObjetivoProceso, sig syscall.Signal, a
 		return false, 0, observed, err
 	}
 	if supervisor == nil {
-		return false, 0, true, nil
+		return false, 0, false, nil
 	}
 	return supervisor.controlar(sig, accion)
 }
@@ -232,6 +232,14 @@ func supervisorLocalDriverLocalAplicable(obj ObjetivoProceso, meta map[string]an
 	case "process_pty_cli", "tmux_cli_session":
 		if pid, ok, err := ResolverPID(obj); err == nil && ok && pid > 0 {
 			return true
+		}
+		if driver == "tmux_cli_session" {
+			if strings.TrimSpace(stringValueFromMetadata(meta, "tmux_session")) != "" {
+				return true
+			}
+			if strings.TrimSpace(stringValueFromMetadata(meta, "tmux_pane_id")) != "" {
+				return true
+			}
 		}
 	}
 	return false

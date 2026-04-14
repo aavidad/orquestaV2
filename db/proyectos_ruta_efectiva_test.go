@@ -332,3 +332,32 @@ func TestRutaTrabajoPreferidaAgenteProyectoNoReutilizaSubdirectorioViejoSinWorkt
 		t.Fatalf("sin worktree activa deberia volver a la raiz del proyecto: got=%s want=%s", got, rutaBase)
 	}
 }
+
+func TestRutaTrabajoPreferidaAgenteProyectoConservaWorktreeSesionBajoRaizWorktrees(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	rutaBase := filepath.Join(tmp, "repo", "orquestador")
+	rutaSesion := filepath.Join(rutaBase, ".orquesta-worktrees", "orq-ollama1")
+	if err := os.MkdirAll(rutaSesion, 0o755); err != nil {
+		t.Fatalf("mkdir ruta sesion: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaBase, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod base: %v", err)
+	}
+	if err := RegistrarAgente("Ollama1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaBase,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	got := RutaTrabajoPreferidaAgenteProyecto("Ollama1", &Proyecto{ID: proyectoID, RutaAbs: rutaBase, Slug: "orquestador"}, rutaSesion)
+	if got != rutaSesion {
+		t.Fatalf("la worktree de sesion bajo .orquesta-worktrees debe conservarse: got=%s want=%s", got, rutaSesion)
+	}
+}

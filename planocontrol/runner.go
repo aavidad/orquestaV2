@@ -326,10 +326,6 @@ func (r *Runner) runControlPlane() {
 }
 
 func (r *Runner) runControlPlaneRuntimeTranscript() {
-	if r.warmLaneActive.Load() {
-		r.debugf("control_plane_runtime_transcript skipped=warm_active")
-		return
-	}
 	count := r.runControlPlaneBatch(
 		"runtime_transcript",
 		"runtime_transcript",
@@ -343,10 +339,6 @@ func (r *Runner) runControlPlaneRuntimeTranscript() {
 }
 
 func (r *Runner) runControlPlaneRuntimeMailbox() {
-	if r.warmLaneActive.Load() {
-		r.debugf("control_plane_runtime_mailbox skipped=warm_active")
-		return
-	}
 	count := r.runControlPlaneBatch(
 		"runtime_mailbox",
 		"runtime_mailbox",

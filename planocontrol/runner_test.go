@@ -41,6 +41,7 @@ type stubAutomationService struct {
 	reviewErr        error
 	transcriptPanic  bool
 	processedBlock   <-chan struct{}
+	transcriptCalls  int
 	processedCalls   int
 	mailboxCalls     int
 	audits           []string
@@ -84,6 +85,7 @@ func (s *stubAutomationService) ReconciliarRuntimeOrdersStale() (int, error) {
 	return s.staleOrdersCount, s.staleOrdersErr
 }
 func (s *stubAutomationService) ProcesarRuntimeTranscriptBatch() (int, error) {
+	s.transcriptCalls++
 	if s.transcriptPanic {
 		panic("boom transcript")
 	}
@@ -421,6 +423,30 @@ func TestRunnerWakeBatchDespiertaRuntimeMailboxSinEsperarIntervaloNiGrace(t *tes
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("runtime_mailbox no se despertó con wake explícito: calls=%d audits=%v", service.mailboxCalls, service.audits)
+}
+
+func TestRunnerRunControlPlaneRuntimeMailboxNoSeBloqueaPorWarmActive(t *testing.T) {
+	service := &stubAutomationService{mailboxCount: 1}
+	r := &Runner{Automation: service}
+	r.warmLaneActive.Store(true)
+
+	r.runControlPlaneRuntimeMailbox()
+
+	if service.mailboxCalls != 1 {
+		t.Fatalf("runtime_mailbox deberia ejecutarse aunque warm este activo: calls=%d audits=%v", service.mailboxCalls, service.audits)
+	}
+}
+
+func TestRunnerRunControlPlaneRuntimeTranscriptNoSeBloqueaPorWarmActive(t *testing.T) {
+	service := &stubAutomationService{transcriptCount: 1}
+	r := &Runner{Automation: service}
+	r.warmLaneActive.Store(true)
+
+	r.runControlPlaneRuntimeTranscript()
+
+	if service.transcriptCalls != 1 {
+		t.Fatalf("runtime_transcript deberia ejecutarse aunque warm este activo: calls=%d audits=%v", service.transcriptCalls, service.audits)
+	}
 }
 
 func TestRunnerStartNonResidentWorkerNoLanzaNucleoResidente(t *testing.T) {

@@ -96,7 +96,7 @@ func TestPrepararStartRuntimeOrderSaneaContinuidadDeProyectoAjeno(t *testing.T) 
 		t.Fatalf("iniciar sesion: %v", err)
 	}
 
-	_, proyecto, _, _, resume, _, plan, err := prepararStartRuntimeOrder("Codex4", slugActual, 0, "cat-cli", "", "", "")
+	_, proyecto, _, _, resume, _, plan, err := prepararStartRuntimeOrder("Codex4", slugActual, 0, "cat-cli", "", "", "", nil, false)
 	if err != nil {
 		t.Fatalf("prepararStartRuntimeOrder: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestPrepararStartRuntimeOrderAplicaXHighPorDefectoEnImplementacion(t *testi
 		t.Fatalf("crear tarea: %v", err)
 	}
 
-	_, _, _, _, _, _, plan, err := prepararStartRuntimeOrder("Codex5", slugActual, 0, "codex-cli", "", "", "")
+	_, _, _, _, _, _, plan, err := prepararStartRuntimeOrder("Codex5", slugActual, 0, "codex-cli", "", "", "", nil, false)
 	if err != nil {
 		t.Fatalf("prepararStartRuntimeOrder: %v", err)
 	}
@@ -237,7 +237,7 @@ func TestPrepararStartRuntimeOrderOllamaNoReanudaSesionNoReanudable(t *testing.T
 		t.Fatalf("iniciar sesion: %v", err)
 	}
 
-	_, proyecto, _, _, resume, _, plan, err := prepararStartRuntimeOrder("Ollama1", "orquestador", 0, "ollama-cli", "", "", "")
+	_, proyecto, _, _, resume, _, plan, err := prepararStartRuntimeOrder("Ollama1", "orquestador", 0, "ollama-cli", "", "", "", nil, false)
 	if err != nil {
 		t.Fatalf("prepararStartRuntimeOrder: %v", err)
 	}
@@ -262,8 +262,16 @@ func TestPrepararStartRuntimeOrderOllamaNoReanudaSesionNoReanudable(t *testing.T
 	if strings.TrimSpace(plan.ContinuityPrompt) != "" {
 		t.Fatalf("plan ollama no deberia llevar continuity prompt: %q", plan.ContinuityPrompt)
 	}
-	if !strings.Contains(plan.BootstrapPrompt, "PROTOCOLO_ORQUESTA_MICRO") {
-		t.Fatalf("bootstrap ollama deberia ser compacto: %s", plan.BootstrapPrompt)
+	for _, token := range []string{
+		"PROTOCOLO_ORQUESTA_MICRO",
+		"NO_INTERPRETAR_COMO_PREGUNTA",
+		"SALIDA_INMEDIATA=ACK-ESPERA",
+		"ESPERA_MICROTAREA_CERRADA",
+		"EJECUTA_SOLO_WRITE_SET",
+	} {
+		if !strings.Contains(plan.BootstrapPrompt, token) {
+			t.Fatalf("bootstrap ollama deberia usar el protocolo micro compacto; falta %q en %s", token, plan.BootstrapPrompt)
+		}
 	}
 	if plan.WorkingDir != rutaSesion {
 		t.Fatalf("working dir inesperado: %s", plan.WorkingDir)
@@ -335,7 +343,7 @@ func TestPrepararStartRuntimeOrderRecuperaWorktreeActivaSiResumeCWDInvalido(t *t
 		t.Fatalf("iniciar sesion: %v", err)
 	}
 
-	_, proyecto, _, _, resume, _, plan, err := prepararStartRuntimeOrder("Codex1", "orquestador", 0, "cat-cli", "", "", "")
+	_, proyecto, _, _, resume, _, plan, err := prepararStartRuntimeOrder("Codex1", "orquestador", 0, "cat-cli", "", "", "", nil, false)
 	if err != nil {
 		t.Fatalf("prepararStartRuntimeOrder: %v", err)
 	}

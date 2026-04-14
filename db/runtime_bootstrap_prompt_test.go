@@ -120,16 +120,22 @@ func TestBuildLaunchBootstrapPromptCompactaArranqueBootstrapOnly(t *testing.T) {
 		CanSendInput:        &canSendInput,
 		MailboxDeliveryMode: runtimeagente.MailboxDeliveryBootstrapOnly,
 	}
-	tareas := []*Tarea{{ID: 483, Estado: TareaEnProgreso, Titulo: "Extraer trabajo no residente del núcleo"}}
+	tareas := []*Tarea{{ID: 483, Estado: TareaEnProgreso, Titulo: "Extraer trabajo no residente del núcleo", Descripcion: "Write-set exclusivo: runtimeagente/driver.go y tests asociados."}}
 
 	prompt := BuildLaunchBootstrapPrompt(agente, proyecto, plan, nil, nil, tareas, nil, "contexto muy largo que no debería entrar", "gobernanza muy larga")
 	if strings.Contains(prompt, "Gobernanza efectiva:") || strings.Contains(prompt, "Reglas efectivas:") || strings.Contains(prompt, "Skills relevantes:") {
 		t.Fatalf("prompt compacto no deberia incluir bloques largos:\n%s", prompt)
 	}
-	for _, token := range []string{"Bootstrap de Orquesta para Codex7.", "Rol: programador. Proyecto: orquestador.", "Tarea activa: #483 [en_progreso] Extraer trabajo no residente del núcleo."} {
+	for _, token := range []string{"Bootstrap de Orquesta para Codex7.", "Rol: programador. Proyecto: orquestador.", "Tarea activa: #483 [en_progreso] Extraer trabajo no residente del núcleo.", "Alcance inmediato: Write-set exclusivo: runtimeagente/driver.go y tests asociados."} {
 		if !strings.Contains(prompt, token) {
 			t.Fatalf("falta %q en prompt compacto:\n%s", token, prompt)
 		}
+	}
+	if !strings.Contains(prompt, "Si existe `.orquesta-inbox.md` en el directorio de trabajo, leelo como contrato operativo vigente antes de tocar codigo.") {
+		t.Fatalf("faltaba referencia al inbox durable en prompt compacto:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "Si la tarea activa ya fija frente, simbolos y tests, ejecuta ese slice y no releas doctrina adicional salvo bloqueo real.") {
+		t.Fatalf("faltaba instruccion de no reexplorar doctrina en prompt compacto:\n%s", prompt)
 	}
 }
 
@@ -154,7 +160,7 @@ func TestBuildLaunchBootstrapPromptCompactaAgenteCLIOrquestadoAunqueNoSeaBootstr
 		CanSendInput:        &canSendInput,
 		MailboxDeliveryMode: runtimeagente.MailboxDeliverySessionResume,
 	}
-	tareas := []*Tarea{{ID: 492, Estado: TareaEnProgreso, Titulo: "Adaptador Codex broker-first sin control por PTY"}}
+	tareas := []*Tarea{{ID: 492, Estado: TareaEnProgreso, Titulo: "Adaptador Codex broker-first sin control por PTY", Descripcion: "Simbolos foco: procesarRuntimeMailboxSessionResumeBatchConMailbox y resolverBootstrapRuntimeLeasePendiente."}}
 
 	prompt := BuildLaunchBootstrapPrompt(agente, proyecto, plan, nil, nil, tareas, nil, "contexto muy largo que no debería entrar", "gobernanza muy larga")
 	if strings.Contains(prompt, "Gobernanza efectiva:") || strings.Contains(prompt, "Reglas efectivas:") || strings.Contains(prompt, "Skills relevantes:") {
@@ -162,9 +168,12 @@ func TestBuildLaunchBootstrapPromptCompactaAgenteCLIOrquestadoAunqueNoSeaBootstr
 	}
 	for _, token := range []string{
 		"Trabaja solo dentro del alcance de la tarea activa y del mailbox actual.",
+		"Si existe `.orquesta-inbox.md` en el directorio de trabajo, leelo como contrato operativo vigente antes de tocar codigo.",
 		"Si el contexto visible de la sesión no coincide con la tarea activa o el mailbox actual, ignóralo.",
 		"No reabras frentes viejos ni reescribas módulos fuera del alcance inmediato.",
+		"Si la tarea activa ya fija frente, simbolos y tests, ejecuta ese slice y no releas doctrina adicional salvo bloqueo real.",
 		"Tarea activa: #492 [en_progreso] Adaptador Codex broker-first sin control por PTY.",
+		"Alcance inmediato: Simbolos foco: procesarRuntimeMailboxSessionResumeBatchConMailbox y resolverBootstrapRuntimeLeasePendiente.",
 	} {
 		if !strings.Contains(prompt, token) {
 			t.Fatalf("falta %q en prompt compacto orquestado:\n%s", token, prompt)

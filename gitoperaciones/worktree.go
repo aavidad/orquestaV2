@@ -57,3 +57,12 @@ func (WorktreeManager) RemoveWorktree(repoPath, worktreePath string) error {
 	}
 	return nil
 }
+
+func (WorktreeManager) PruneWorktrees(repoPath string) error {
+	cmd := exec.Command("git", "-C", repoPath, "worktree", "prune")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git worktree prune: %w: %s", err, string(out))
+	}
+	return nil
+}

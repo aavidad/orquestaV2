@@ -274,7 +274,7 @@ func TestAPIControlPlaneOrquestacionEndToEnd(t *testing.T) {
 	if prepHandoff.Plan == nil || prepHandoff.Plan.Modo != "resume" {
 		t.Fatalf("plan bootstrap handoff inesperado: %+v", prepHandoff.Plan)
 	}
-	if prepHandoff.Plan.WorkingDir != filepath.Join(tmp, "orquestador", "checkpoint-codex2") {
+	if prepHandoff.Plan.WorkingDir != filepath.Join(tmp, "orquestador") {
 		t.Fatalf("working dir bootstrap inesperado: %s", prepHandoff.Plan.WorkingDir)
 	}
 	if !strings.Contains(prepHandoff.Plan.ContinuityPrompt, "handoff completo hacia Codex2") {

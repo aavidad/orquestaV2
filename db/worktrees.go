@@ -41,7 +41,38 @@ func (CoordinationWorktreeSQLRepository) Create(worktree *coordinacion.Worktree)
 		worktree.Branch, worktree.BaseRef, string(worktree.State), worktree.Reason,
 	)
 	if err != nil {
-		return nil, err
+		if !strings.Contains(strings.ToLower(err.Error()), "worktrees.ruta_abs") {
+			return nil, err
+		}
+		existente, getErr := getCoordinationWorktreeByPath(strings.TrimSpace(worktree.Path))
+		if getErr != nil {
+			return nil, getErr
+		}
+		if existente == nil {
+			return nil, err
+		}
+		if existente.State == coordinacion.WorktreeActive {
+			return nil, err
+		}
+		if _, updateErr := DB.Exec(`
+			UPDATE worktrees
+			SET proyecto_id = ?,
+			    tarea_id = ?,
+			    lock_id = ?,
+			    agente = ?,
+			    nombre = ?,
+			    branch = ?,
+			    base_ref = ?,
+			    estado = ?,
+			    motivo = ?,
+			    cerrada_at = NULL
+			WHERE id = ?`,
+			worktree.ProjectID, worktree.TaskID, worktree.LockID, worktree.Agent, worktree.Name,
+			worktree.Branch, worktree.BaseRef, string(worktree.State), worktree.Reason, existente.ID,
+		); updateErr != nil {
+			return nil, updateErr
+		}
+		return (CoordinationWorktreeSQLRepository{}).GetByID(existente.ID)
 	}
 	id, _ := res.LastInsertId()
 	return (CoordinationWorktreeSQLRepository{}).GetByID(id)
@@ -63,6 +94,20 @@ func (CoordinationWorktreeSQLRepository) GetActiveByPath(path string) (*coordina
 		FROM worktrees
 		WHERE ruta_abs = ? AND estado = 'activa'
 		ORDER BY id DESC LIMIT 1`, path)
+	worktree, err := scanCoordinationWorktree(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return worktree, err
+}
+
+func getCoordinationWorktreeByPath(path string) (*coordinacion.Worktree, error) {
+	row := DB.QueryRow(`
+		SELECT id, proyecto_id, tarea_id, lock_id, agente, nombre, ruta_abs, branch, base_ref, estado,
+		       motivo, created_at, updated_at, cerrada_at
+		FROM worktrees
+		WHERE ruta_abs = ?
+		ORDER BY id DESC LIMIT 1`, strings.TrimSpace(path))
 	worktree, err := scanCoordinationWorktree(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -151,6 +196,9 @@ func (CoordinationProjectSQLRepository) GetByRef(ref string) (*coordinacion.Proj
 	project, err := GetProyecto(ref)
 	if err != nil {
 		return nil, err
+	}
+	if project == nil {
+		return nil, sql.ErrNoRows
 	}
 	project = ProyectoConRutaEfectiva(project, "")
 	return &coordinacion.Project{

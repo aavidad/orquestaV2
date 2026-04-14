@@ -124,6 +124,12 @@ type fakeRegistradorEntregaGit struct {
 	err       error
 }
 
+type fakeRegistradorEntregaGitPremium struct {
+	entrada   EntradaRegistrarEntregaGitPremium
+	resultado *ResultadoRegistrarEntregaGitPremium
+	err       error
+}
+
 type fakeMaterializadorEntrega struct {
 	id        int64
 	raiz      string
@@ -172,6 +178,25 @@ func (f *fakeRegistradorEntregaGit) RegistrarEntregaGit(id int64, entrada microp
 		HeadCommit:         "abc123",
 		ArchivosEntregados: []string{"microprogramacionapp/service.go"},
 		GitMergeID:         55,
+	}, nil
+}
+
+func (f *fakeRegistradorEntregaGitPremium) RegistrarEntregaGitPremium(entrada EntradaRegistrarEntregaGitPremium) (*ResultadoRegistrarEntregaGitPremium, error) {
+	f.entrada = entrada
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.resultado != nil {
+		return f.resultado, nil
+	}
+	return &ResultadoRegistrarEntregaGitPremium{
+		WorktreeID:         81,
+		RutaWorktree:       "/tmp/orq-premium",
+		SourceBranch:       "orq/orquestador/codex1",
+		TargetBranch:       "main",
+		HeadCommit:         "abc123",
+		ArchivosEntregados: []string{"cmd/controlplane_support.go"},
+		GitMergeID:         77,
 	}, nil
 }
 
@@ -636,6 +661,68 @@ func TestServiceDelegatesRuntimeQueries(t *testing.T) {
 	}
 	if store.memoryName != "decision" || store.memoryProjectID == nil || *store.memoryProjectID != 7 {
 		t.Fatalf("memory entity name=%q project=%v", store.memoryName, store.memoryProjectID)
+	}
+}
+
+func TestRuntimeHandleShouldSupersedeStartNoDevuelveTrueConWorkerEstructuradoStarting(t *testing.T) {
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+
+	write := func(path string, payload any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	now := time.Now().UTC()
+	write(manifestPath, map[string]any{
+		"driver":       "tmux_cli_session",
+		"transport":    "tmux",
+		"tmux_session": "orq-codex1-101500",
+		"tmux_pane_id": "%9",
+	})
+	write(statusPath, map[string]any{
+		"state":      "starting",
+		"alive":      true,
+		"updated_at": now.Format(time.RFC3339),
+	})
+	write(heartbeatPath, map[string]any{
+		"alive":            true,
+		"heartbeat_at":     now.Format(time.RFC3339),
+		"last_progress_at": now.Format(time.RFC3339),
+	})
+
+	meta, err := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex1-101500",
+		"tmux_pane_id":          "%9",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+
+	handle := &db.RuntimeHandle{
+		Estado:       "activo",
+		MetadataJSON: string(meta),
+	}
+	runtime := &db.RuntimeInstance{
+		LogicalState: "disponible",
+		ProcessState: "running",
+	}
+
+	if got := runtimeHandleShouldSupersedeStart(handle, runtime); got {
+		t.Fatalf("runtimeHandleShouldSupersedeStart() = true, want false with structured worker starting")
 	}
 }
 
@@ -1664,6 +1751,136 @@ func TestRegistrarEntregaGitMicroprogramacionActivaUsaWorktreeDelPayload(t *test
 	}
 }
 
+func TestRegistrarEntregaGitMicroprogramacionActivaFallbackPremiumUsaRegistradorYCompletaOrden(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{
+		ordersResponse: []*db.RuntimeOrder{{
+			ID:            405,
+			Agente:        "Codex1",
+			ProyectoID:    &projectID,
+			Tipo:          "send_instruction",
+			Estado:        "ejecutando",
+			PayloadJSON:   `{"source":"pipeline_local","mailbox_id":91,"carril":"premium_worktree","tarea_objetivo_id":530,"write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"],"worktree_id":81,"ruta_worktree":"/tmp/orq-premium","branch_worktree":"orq/orquestador/codex1","base_ref_worktree":"main"}`,
+			ResultadoJSON: `{"delivery_state":"queued"}`,
+		}},
+	}
+	registrador := &fakeRegistradorEntregaGitPremium{}
+	service := NewService(store)
+	service.SetRegistradorEntregaGitPremium(registrador)
+
+	resultado, err := service.RegistrarEntregaGitMicroprogramacionActiva("Codex1", &projectID, "orquestador", "diff listo", "OpenClaw")
+	if err != nil {
+		t.Fatalf("RegistrarEntregaGitMicroprogramacionActiva fallback premium: %v", err)
+	}
+	if resultado == nil || resultado.ContextoPremium == nil || resultado.ContextoPremium.RuntimeOrderID != 405 {
+		t.Fatalf("resultado/contexto premium inesperado: %+v", resultado)
+	}
+	if resultado.EntregaPremium == nil || resultado.EntregaPremium.GitMergeID != 77 {
+		t.Fatalf("entrega premium inesperada: %+v", resultado)
+	}
+	if registrador.entrada.Carril != "premium_worktree" || registrador.entrada.TareaObjetivoID != 530 {
+		t.Fatalf("payload premium no propagado: %+v", registrador.entrada)
+	}
+	if registrador.entrada.PreferenciaWorktreeID == nil || *registrador.entrada.PreferenciaWorktreeID != 81 {
+		t.Fatalf("worktree premium no propagada: %+v", registrador.entrada)
+	}
+	if len(registrador.entrada.WriteSet) != 2 || registrador.entrada.WriteSet[0] != "cmd/controlplane_support.go" {
+		t.Fatalf("write_set premium no propagado: %+v", registrador.entrada)
+	}
+	if store.consumedID != 91 || store.markOrderStateID != 405 || store.markOrderStateEstado != "completada" {
+		t.Fatalf("orden premium no completada correctamente: consumed=%d id=%d estado=%q", store.consumedID, store.markOrderStateID, store.markOrderStateEstado)
+	}
+	if !strings.Contains(store.markOrderStateResultado, `"receipt_source":"git_worktree"`) {
+		t.Fatalf("resultado premium sin receipt git: %s", store.markOrderStateResultado)
+	}
+}
+
+func TestResolverContextoEntregaGitPremiumDesdeBootstrapLease(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{
+		ordersResponse: []*db.RuntimeOrder{{
+			ID:            406,
+			Agente:        "Codex1",
+			ProyectoID:    &projectID,
+			Tipo:          "start",
+			Estado:        "completada",
+			ResultadoJSON: `{"lease_state":"delivered","mailbox_ids":[91],"sesion_id":12}`,
+		}},
+		mailboxResponse: []*db.RuntimeMailboxMessage{{
+			ID:          91,
+			ToAgente:    "Codex1",
+			ProyectoID:  &projectID,
+			Kind:        "pipeline_local",
+			PayloadJSON: `{"source":"pipeline_local","carril":"premium_worktree","tarea_objetivo_id":530,"write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"],"worktree_id":81,"ruta_worktree":"/tmp/orq-premium","branch_worktree":"orq/orquestador/codex1","base_ref_worktree":"main"}`,
+		}},
+	}
+	service := NewService(store)
+
+	ctx, err := service.ResolverContextoEntregaGitPremium("Codex1", &projectID)
+	if err != nil {
+		t.Fatalf("ResolverContextoEntregaGitPremium: %v", err)
+	}
+	if ctx == nil {
+		t.Fatal("deberia resolver contexto premium desde bootstrap lease")
+	}
+	if ctx.RuntimeOrderID != 406 || ctx.Carril != "premium_worktree" || ctx.TareaObjetivoID != 530 {
+		t.Fatalf("contexto premium inesperado: %+v", ctx)
+	}
+	if ctx.WorktreeID == nil || *ctx.WorktreeID != 81 {
+		t.Fatalf("worktree premium inesperada: %+v", ctx)
+	}
+	if len(ctx.WriteSet) != 2 || ctx.WriteSet[1] != "db/controlplane_entities.go" {
+		t.Fatalf("write_set premium inesperado: %+v", ctx)
+	}
+}
+
+func TestRegistrarEntregaGitMicroprogramacionActivaFallbackPremiumBootstrapLeaseUsaRegistradorYCompletaOrden(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{
+		ordersResponse: []*db.RuntimeOrder{{
+			ID:            406,
+			Agente:        "Codex1",
+			ProyectoID:    &projectID,
+			Tipo:          "start",
+			Estado:        "completada",
+			ResultadoJSON: `{"lease_state":"delivered","mailbox_ids":[91],"sesion_id":12,"delivery_state":"delivered"}`,
+		}},
+		mailboxResponse: []*db.RuntimeMailboxMessage{{
+			ID:          91,
+			ToAgente:    "Codex1",
+			ProyectoID:  &projectID,
+			Kind:        "pipeline_local",
+			PayloadJSON: `{"source":"pipeline_local","carril":"premium_worktree","tarea_objetivo_id":530,"write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"],"worktree_id":81,"ruta_worktree":"/tmp/orq-premium","branch_worktree":"orq/orquestador/codex1","base_ref_worktree":"main"}`,
+		}},
+	}
+	registrador := &fakeRegistradorEntregaGitPremium{}
+	service := NewService(store)
+	service.SetRegistradorEntregaGitPremium(registrador)
+
+	resultado, err := service.RegistrarEntregaGitMicroprogramacionActiva("Codex1", &projectID, "orquestador", "diff listo", "OpenClaw")
+	if err != nil {
+		t.Fatalf("RegistrarEntregaGitMicroprogramacionActiva fallback premium bootstrap: %v", err)
+	}
+	if resultado == nil || resultado.ContextoPremium == nil || resultado.ContextoPremium.RuntimeOrderID != 406 {
+		t.Fatalf("resultado/contexto premium inesperado: %+v", resultado)
+	}
+	if resultado.EntregaPremium == nil || resultado.EntregaPremium.GitMergeID != 77 {
+		t.Fatalf("entrega premium inesperada: %+v", resultado)
+	}
+	if registrador.entrada.PreferenciaWorktreeID == nil || *registrador.entrada.PreferenciaWorktreeID != 81 {
+		t.Fatalf("worktree premium no propagada: %+v", registrador.entrada)
+	}
+	if len(registrador.entrada.WriteSet) != 2 || registrador.entrada.WriteSet[0] != "cmd/controlplane_support.go" {
+		t.Fatalf("write_set premium bootstrap no propagado: %+v", registrador.entrada)
+	}
+	if store.consumedID != 91 || store.markOrderStateID != 406 || store.markOrderStateEstado != "completada" {
+		t.Fatalf("bootstrap premium no completado correctamente: consumed=%d id=%d estado=%q", store.consumedID, store.markOrderStateID, store.markOrderStateEstado)
+	}
+	if !strings.Contains(store.markOrderStateResultado, `"receipt_source":"git_worktree"`) {
+		t.Fatalf("resultado premium bootstrap sin receipt git: %s", store.markOrderStateResultado)
+	}
+}
+
 func TestCreateLiveAgentHandoffDelegates(t *testing.T) {
 	tareaID := int64(41)
 	store := &fakeStore{handoffID: 88}
@@ -2368,6 +2585,56 @@ func TestEnqueueAgentControlResumeDegradaAStartParaCodexTMUXNoInteractivo(t *tes
 	}
 	if store.createOrder.HandleID != nil || store.createOrder.RuntimeID != nil {
 		t.Fatalf("resume degradado a start no deberia atarse al handle viejo: %+v", store.createOrder)
+	}
+}
+
+func TestEnqueueAgentControlResumeRecuperaHandleCanonicoDegradadoConSesionExterna(t *testing.T) {
+	projectID := int64(9)
+	runtimeID := int64(12)
+	handleID := int64(10)
+	store := &fakeStore{
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		agentResponse:   &db.Agente{Nombre: "Codex8", Rol: "programador"},
+		canonicalHandlesResponse: []*db.RuntimeHandle{{
+			ID:           handleID,
+			Agente:       "Codex8",
+			ProyectoID:   &projectID,
+			RuntimeID:    &runtimeID,
+			Transporte:   "api",
+			HandleKind:   "session",
+			HandleRef:    "sess-remote-codex8",
+			Estado:       "fallido",
+			MetadataJSON: `{"external_session_id":"sess-remote-codex8"}`,
+		}},
+		primaryProjRuntimeResp: &db.RuntimeInstance{ID: runtimeID, LogicalState: "degradado", ProcessState: "remote_status_error"},
+		createOrderID:          97,
+	}
+	service := NewService(store)
+
+	orderID, accion, err := service.EnqueueAgentControl(AgentControlRequest{
+		Agente:   "Codex8",
+		Proyecto: "orquestador",
+		Accion:   "reanudar",
+		Motivo:   "remote_runtime_degraded",
+		Por:      "test",
+	})
+	if err != nil {
+		t.Fatalf("EnqueueAgentControl resume degraded canonical: %v", err)
+	}
+	if orderID != 97 || accion != "resume" {
+		t.Fatalf("orderID=%d accion=%s", orderID, accion)
+	}
+	if store.canonicalHandlesFilter == nil || *store.canonicalHandlesFilter != "Codex8" {
+		t.Fatalf("deberia consultar handles canónicos del agente: %+v", store.canonicalHandlesFilter)
+	}
+	if store.createOrder == nil || store.createOrder.Tipo != "resume" {
+		t.Fatalf("createOrder inesperado: %+v", store.createOrder)
+	}
+	if store.createOrder.HandleID == nil || *store.createOrder.HandleID != handleID {
+		t.Fatalf("resume remoto deberia conservar el handle canónico degradado: %+v", store.createOrder)
+	}
+	if store.createOrder.RuntimeID == nil || *store.createOrder.RuntimeID != runtimeID {
+		t.Fatalf("resume remoto deberia apuntar al runtime canónico: %+v", store.createOrder)
 	}
 }
 

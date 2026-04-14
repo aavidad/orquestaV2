@@ -301,8 +301,44 @@ func runtimeHandlesRelevantes(handles []*db.RuntimeHandle, limit int) []*db.Runt
 	if limit <= 0 {
 		limit = 5
 	}
-	if len(handles) <= limit {
-		return handles
+	ordered := append([]*db.RuntimeHandle(nil), handles...)
+	slices.SortFunc(ordered, func(a, b *db.RuntimeHandle) int {
+		if a == nil && b == nil {
+			return 0
+		}
+		if a == nil {
+			return 1
+		}
+		if b == nil {
+			return -1
+		}
+		aTerminal := runtimeEstadoTerminal(strings.TrimSpace(a.Estado))
+		bTerminal := runtimeEstadoTerminal(strings.TrimSpace(b.Estado))
+		if aTerminal != bTerminal {
+			if aTerminal {
+				return 1
+			}
+			return -1
+		}
+		aSeen := runtimeHandleOrdenTiempo(a)
+		bSeen := runtimeHandleOrdenTiempo(b)
+		if !aSeen.Equal(bSeen) {
+			if aSeen.After(bSeen) {
+				return -1
+			}
+			return 1
+		}
+		switch {
+		case a.ID > b.ID:
+			return -1
+		case a.ID < b.ID:
+			return 1
+		default:
+			return 0
+		}
+	})
+	if len(ordered) <= limit {
+		return ordered
 	}
 	pick := make([]*db.RuntimeHandle, 0, limit)
 	seen := map[int64]struct{}{}
@@ -317,7 +353,7 @@ func runtimeHandlesRelevantes(handles []*db.RuntimeHandle, limit int) []*db.Runt
 		pick = append(pick, handle)
 		return len(pick) >= limit
 	}
-	for _, handle := range handles {
+	for _, handle := range ordered {
 		if handle == nil || runtimeEstadoTerminal(strings.TrimSpace(handle.Estado)) {
 			continue
 		}
@@ -325,7 +361,7 @@ func runtimeHandlesRelevantes(handles []*db.RuntimeHandle, limit int) []*db.Runt
 			return pick
 		}
 	}
-	for _, handle := range handles {
+	for _, handle := range ordered {
 		if handle == nil || !runtimeEstadoTerminal(strings.TrimSpace(handle.Estado)) {
 			continue
 		}
@@ -334,6 +370,19 @@ func runtimeHandlesRelevantes(handles []*db.RuntimeHandle, limit int) []*db.Runt
 		}
 	}
 	return pick
+}
+
+func runtimeHandleOrdenTiempo(handle *db.RuntimeHandle) time.Time {
+	if handle == nil {
+		return time.Time{}
+	}
+	if handle.LastSeenAt != nil && !handle.LastSeenAt.IsZero() {
+		return handle.LastSeenAt.UTC()
+	}
+	if !handle.UpdatedAt.IsZero() {
+		return handle.UpdatedAt.UTC()
+	}
+	return handle.CreatedAt.UTC()
 }
 
 func runtimeEstadoTerminal(estado string) bool {

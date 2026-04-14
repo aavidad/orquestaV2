@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -147,6 +148,7 @@ func buildCompactLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan 
 		fmt.Sprintf("Rol: %s. Proyecto: %s.", strings.TrimSpace(agente.Rol), strings.TrimSpace(proyecto.Slug)),
 		fmt.Sprintf("Directorio: %s.", workingDir),
 		"Doctrina: " + RutaDoctrinaCanonica + ".",
+		"Si existe `.orquesta-inbox.md` en el directorio de trabajo, leelo como contrato operativo vigente antes de tocar codigo.",
 		"Fuente de verdad operativa: daemon/API de Orquesta.",
 		"Unidad de trabajo: microtarea cerrada.",
 		"Trabaja solo dentro del alcance de la tarea activa y del mailbox actual.",
@@ -154,6 +156,7 @@ func buildCompactLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan 
 		"Si el contexto visible de la sesión no coincide con la tarea activa o el mailbox actual, ignóralo.",
 		"No propongas arquitectura, roadmap ni refactors globales salvo que la microtarea lo pida de forma explicita.",
 		"No reabras frentes viejos ni reescribas módulos fuera del alcance inmediato.",
+		"Si la tarea activa ya fija frente, simbolos y tests, ejecuta ese slice y no releas doctrina adicional salvo bloqueo real.",
 		"No expliques planes largos ni reabras decisiones de diseño ya tomadas.",
 		"Si todavía no tienes una microtarea cerrada, responde solo ACK-ESPERA y espera.",
 		"Cuando llegue una microtarea, ejecuta solo ese cambio y devuelve evidencia breve; no hagas trabajo adicional.",
@@ -188,10 +191,27 @@ func resumirTareasBootstrapCompacto(tareas []*Tarea) string {
 		}
 		switch tarea.Estado {
 		case TareaAsignada, TareaEnProgreso, TareaBloqueada:
-			return fmt.Sprintf("Tarea activa: #%d [%s] %s.", tarea.ID, tarea.Estado, strings.TrimSpace(tarea.Titulo))
+			partes := []string{fmt.Sprintf("Tarea activa: #%d [%s] %s.", tarea.ID, tarea.Estado, strings.TrimSpace(tarea.Titulo))}
+			if descripcion := resumirDescripcionTareaBootstrapCompacto(strings.TrimSpace(tarea.Descripcion)); descripcion != "" {
+				partes = append(partes, "Alcance inmediato: "+descripcion+".")
+			}
+			return strings.Join(partes, " ")
 		}
 	}
 	return "No hay una tarea activa única; consulta Orquesta antes de desviarte."
+}
+
+func resumirDescripcionTareaBootstrapCompacto(raw string) string {
+	raw = strings.Join(strings.Fields(strings.TrimSpace(raw)), " ")
+	if raw == "" {
+		return ""
+	}
+	raw = strings.TrimSpace(strings.TrimRight(raw, ".;"))
+	runes := []rune(raw)
+	if len(runes) <= 220 {
+		return raw
+	}
+	return string(runes[:219]) + "…"
 }
 
 func planLooksLikeOrchestratedAgentCLI(plan *runtimeagente.LaunchPlan) bool {
@@ -212,13 +232,17 @@ func planLooksLikeOrchestratedAgentCLI(plan *runtimeagente.LaunchPlan) bool {
 		}
 	}
 	for _, part := range parts {
-		if strings.Contains(part, "codex-perfil") || strings.Contains(part, "claude-perfil") || strings.Contains(part, "gemini-perfil") {
+		base := strings.ToLower(strings.TrimSpace(filepath.Base(part)))
+		if strings.Contains(part, "codex-perfil") || strings.Contains(part, "claude-perfil") || strings.Contains(part, "gemini-perfil") ||
+			strings.Contains(base, "codex-perfil") || strings.Contains(base, "claude-perfil") || strings.Contains(base, "gemini-perfil") {
 			return true
 		}
-		if part == "codex" || part == "claude" || part == "gemini" || part == "ollama" {
+		if part == "codex" || part == "claude" || part == "gemini" || part == "ollama" ||
+			base == "codex" || base == "claude" || base == "gemini" || base == "ollama" {
 			return true
 		}
-		if strings.Contains(part, "ollama-cli") || strings.Contains(part, "ollama-perfil") {
+		if strings.Contains(part, "ollama-cli") || strings.Contains(part, "ollama-perfil") ||
+			strings.Contains(base, "ollama-cli") || strings.Contains(base, "ollama-perfil") {
 			return true
 		}
 	}
@@ -226,7 +250,7 @@ func planLooksLikeOrchestratedAgentCLI(plan *runtimeagente.LaunchPlan) bool {
 }
 
 func planLooksLikeOllamaCLI(plan *runtimeagente.LaunchPlan) bool {
-	if plan == nil || !strings.EqualFold(strings.TrimSpace(plan.Driver), "cli") {
+	if plan == nil {
 		return false
 	}
 	parts := make([]string, 0, 1+len(plan.Args))
@@ -240,9 +264,15 @@ func planLooksLikeOllamaCLI(plan *runtimeagente.LaunchPlan) bool {
 		}
 	}
 	for _, part := range parts {
-		if part == "ollama" || strings.Contains(part, "ollama-cli") || strings.Contains(part, "ollama-perfil") {
+		base := strings.ToLower(strings.TrimSpace(filepath.Base(part)))
+		if part == "ollama" || base == "ollama" ||
+			strings.Contains(part, "ollama-cli") || strings.Contains(part, "ollama-perfil") ||
+			strings.Contains(base, "ollama-cli") || strings.Contains(base, "ollama-perfil") {
 			return true
 		}
+	}
+	if strings.Contains(strings.ToLower(strings.TrimSpace(plan.RemoteConfigJSON)), "ollama") {
+		return true
 	}
 	return false
 }

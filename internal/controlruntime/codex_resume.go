@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -88,6 +89,7 @@ func EnviarInstruccionSesionResume(obj ObjetivoProceso, externalSessionID, instr
 	if dir := strings.TrimSpace(stringValueFromMetadata(meta, "working_dir")); dir != "" {
 		cmd.Dir = dir
 	}
+	cmd.Env = codexResumeCommandEnv(meta)
 	out, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
 		return true, 0, fmt.Errorf("session_resume timeout: %s", trimmedCommandOutput(out))
@@ -99,6 +101,82 @@ func EnviarInstruccionSesionResume(obj ObjetivoProceso, externalSessionID, instr
 		return true, 0, fmt.Errorf("session_resume fallo: %w", err)
 	}
 	return true, 0, nil
+}
+
+func codexResumeCommandEnv(meta map[string]any) []string {
+	envMap := map[string]string{}
+	for _, entry := range os.Environ() {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		envMap[key] = value
+	}
+	if codexBin := strings.TrimSpace(resolveCodexBinaryPathForResume(meta)); codexBin != "" {
+		envMap["CODEX_BIN"] = codexBin
+		dir := filepath.Dir(codexBin)
+		if dir != "" {
+			current := strings.TrimSpace(envMap["PATH"])
+			switch {
+			case current == "":
+				envMap["PATH"] = dir
+			case !pathListContains(current, dir):
+				envMap["PATH"] = dir + string(os.PathListSeparator) + current
+			}
+		}
+	}
+	out := make([]string, 0, len(envMap))
+	for key, value := range envMap {
+		out = append(out, key+"="+value)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func resolveCodexBinaryPathForResume(meta map[string]any) string {
+	if meta != nil {
+		if v := strings.TrimSpace(stringValueFromMetadata(meta, "codex_bin")); v != "" {
+			return v
+		}
+		if v := strings.TrimSpace(stringValueFromMetadata(meta, "CODEX_BIN")); v != "" {
+			return v
+		}
+	}
+	if resolved, err := exec.LookPath("codex"); err == nil && strings.TrimSpace(resolved) != "" {
+		return filepath.Clean(resolved)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return ""
+	}
+	candidates := []string{
+		filepath.Join(home, ".local", "bin", "codex"),
+		filepath.Join(home, "bin", "codex"),
+		filepath.Join(home, ".npm-global", "bin", "codex"),
+		filepath.Join("/usr/local", "bin", "codex"),
+		filepath.Join("/usr", "bin", "codex"),
+	}
+	if matches, err := filepath.Glob(filepath.Join(home, ".nvm", "versions", "node", "*", "bin", "codex")); err == nil && len(matches) > 0 {
+		sort.Strings(matches)
+		for i := len(matches) - 1; i >= 0; i-- {
+			candidates = append([]string{matches[i]}, candidates...)
+		}
+	}
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return filepath.Clean(candidate)
+		}
+	}
+	return ""
+}
+
+func pathListContains(list, dir string) bool {
+	for _, item := range filepath.SplitList(list) {
+		if strings.TrimSpace(item) == strings.TrimSpace(dir) {
+			return true
+		}
+	}
+	return false
 }
 
 func codexResumeWrapPseudoTTY(argv []string) ([]string, error) {

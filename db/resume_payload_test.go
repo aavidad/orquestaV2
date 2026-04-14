@@ -70,7 +70,7 @@ func TestPrepararStartRuntimeOrderReutilizaPerfilPersistidoEnResume(t *testing.T
 		t.Fatalf("iniciar sesion: %v", err)
 	}
 
-	_, _, _, _, resume, _, plan, err := prepararStartRuntimeOrder("Gemma1", "orquestador", 0, "", "", "", "")
+	_, _, _, _, resume, _, plan, err := prepararStartRuntimeOrder("Gemma1", "orquestador", 0, "", "", "", "", nil, false)
 	if err != nil {
 		t.Fatalf("prepararStartRuntimeOrder: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestPrepararStartRuntimeOrderPrefiereConectorPoolLocalCompartidoOllama(t *t
 		t.Fatalf("iniciar sesion: %v", err)
 	}
 
-	_, _, conector, _, _, _, plan, err := prepararStartRuntimeOrder("Gemma1", "orquestador", 0, "", "", "", "implementacion")
+	_, _, conector, _, _, _, plan, err := prepararStartRuntimeOrder("Gemma1", "orquestador", 0, "", "", "", "implementacion", nil, false)
 	if err != nil {
 		t.Fatalf("prepararStartRuntimeOrder: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestPrepararStartRuntimeOrderPoolLocalConservaResumenContinuidadPersistido(
 		t.Fatalf("iniciar sesion: %v", err)
 	}
 
-	_, _, _, _, resume, _, _, err := prepararStartRuntimeOrder("Gemma1", "orquestador", 0, "", "", "", "implementacion")
+	_, _, _, _, resume, _, _, err := prepararStartRuntimeOrder("Gemma1", "orquestador", 0, "", "", "", "implementacion", nil, false)
 	if err != nil {
 		t.Fatalf("prepararStartRuntimeOrder: %v", err)
 	}

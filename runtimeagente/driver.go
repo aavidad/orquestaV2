@@ -186,9 +186,11 @@ func (d commandDriver) Prepare(req LaunchRequest) (*LaunchPlan, error) {
 	plan.Comando = comando
 	plan.Args = expandedArgs
 	plan.Env = expandConnectorEnv(env, vars)
+	asegurarEntornoBaseOrquesta(plan.Env, vars)
 	if filepath.Base(strings.TrimSpace(plan.Comando)) == "codex-perfil" {
 		ensureCodexProfileWrapperEnv(plan.Env)
 	}
+	asegurarPathHerramientasBase(plan.Env, "go", "git", "rg")
 	asegurarPathParaComando(plan.Env, plan.Comando)
 	if applyLocalControlHints(plan, metadata) {
 		plan.Notas = append(plan.Notas, "El conector aporta capacidades locales de control desde metadata_json.")
@@ -319,6 +321,23 @@ func resolveConnectorCommandPathFromUserHome(command string) string {
 		filepath.Join(home, ".local", "bin", command),
 		filepath.Join(home, ".cargo", "bin", command),
 	}
+	switch command {
+	case "go":
+		candidates = append(candidates,
+			"/usr/local/go/bin/go",
+			"/usr/lib/go/bin/go",
+		)
+	case "git":
+		candidates = append(candidates,
+			"/usr/bin/git",
+			"/usr/local/bin/git",
+		)
+	case "rg":
+		candidates = append(candidates,
+			"/usr/bin/rg",
+			"/usr/local/bin/rg",
+		)
+	}
 	if matches, err := filepath.Glob(filepath.Join(home, ".nvm", "versions", "node", "*", "bin", command)); err == nil && len(matches) > 0 {
 		sort.Strings(matches)
 		for i := len(matches) - 1; i >= 0; i-- {
@@ -366,6 +385,38 @@ func asegurarPathParaComando(env map[string]string, command string) {
 		return
 	}
 	env["PATH"] = dir + string(os.PathListSeparator) + current
+}
+
+func asegurarPathHerramientasBase(env map[string]string, commands ...string) {
+	for _, command := range commands {
+		command = strings.TrimSpace(command)
+		if command == "" {
+			continue
+		}
+		if resolved, err := exec.LookPath(command); err == nil && strings.TrimSpace(resolved) != "" {
+			asegurarPathParaComando(env, resolved)
+			continue
+		}
+		if resolved := resolveConnectorCommandPathFromUserHome(command); resolved != "" {
+			asegurarPathParaComando(env, resolved)
+		}
+	}
+}
+
+func asegurarEntornoBaseOrquesta(env map[string]string, vars map[string]string) {
+	if env == nil {
+		return
+	}
+	if strings.TrimSpace(env["ORQUESTA_SERVER_URL"]) == "" {
+		if value := strings.TrimSpace(os.Getenv("ORQUESTA_SERVER_URL")); value != "" {
+			env["ORQUESTA_SERVER_URL"] = value
+		}
+	}
+	if strings.TrimSpace(env["ORQUESTA_BIN"]) == "" {
+		if value := strings.TrimSpace(vars["orquesta_executable"]); value != "" {
+			env["ORQUESTA_BIN"] = value
+		}
+	}
 }
 
 func canonicalCodexProfileWrapper(req LaunchRequest, resolvedCommand string) string {
@@ -439,7 +490,7 @@ func ensureCodexProfileWrapperEnv(env map[string]string) {
 		return
 	}
 	if strings.TrimSpace(env["ORQUESTA_TERMINAL_BACKEND"]) == "" {
-		env["ORQUESTA_TERMINAL_BACKEND"] = "pty"
+		env["ORQUESTA_TERMINAL_BACKEND"] = "tmux"
 	}
 	if codexBin := strings.TrimSpace(env["CODEX_BIN"]); codexBin != "" {
 		asegurarPathParaComando(env, codexBin)

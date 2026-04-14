@@ -102,6 +102,7 @@ func (despachadorPipelineOperativo) DespacharPipeline(entrada capacidadapp.Solic
 			"entrega_canonica":  strings.TrimSpace(despacho.EntregaCanonica),
 			"tarea_objetivo_id": despacho.TareaObjetivoID,
 			"tarea_objetivo":    strings.TrimSpace(despacho.TareaObjetivo),
+			"write_set":         append([]string(nil), despacho.WriteSet...),
 		}
 		payloadJSON, err := jsonMarshalPipelinePayload(payload)
 		if err != nil {
@@ -338,6 +339,9 @@ func construirInstructionPipeline(despacho capacidadapp.DespachoPipelineLocal) s
 	}
 	if strings.TrimSpace(despacho.PerfilTarea) != "" {
 		lineas = append(lineas, "PERFIL: "+strings.TrimSpace(despacho.PerfilTarea))
+	}
+	if len(despacho.WriteSet) > 0 {
+		lineas = append(lineas, "WRITE_SET: "+strings.Join(despacho.WriteSet, ", "))
 	}
 	lineas = append(lineas,
 		"REGLA: no cambies nada fuera del alcance de la tarea",

@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"orquesta/capacidadapp"
+	"orquesta/coordinacion"
 	"orquesta/db"
+	"orquesta/gitoperaciones"
 	"orquesta/progresoapp"
 	"orquesta/runtimesapp"
 	"orquesta/supervisionapp"
@@ -16,7 +18,7 @@ import (
 )
 
 const (
-	microcicloRefactorTituloDefault = "Micro-refactorización cíclica del control plane"
+	microcicloRefactorTituloDefault = "Micro-refactorización cíclica del control plane: runtime mailbox/session_resume"
 	microcicloRefactorNotasTag      = "autonomia:microrefactor_loop"
 )
 
@@ -74,8 +76,11 @@ func activarMicrocicloProyecto(ref string, req proyectoMicrocicloRequest) (*proy
 	if err != nil {
 		return nil, err
 	}
-	tarea, reutilizada, err := asegurarTareaMicrociclo(proyecto, agente, req)
+	tarea, reutilizada, err := asegurarTareaMicrociclo(proyecto, agente, req, !req.LimpiarPruebas)
 	if err != nil {
+		return nil, err
+	}
+	if err := escribirInboxMicrociclo(proyecto, agente, tarea); err != nil {
 		return nil, err
 	}
 	dispatch, dispatchErr := capacidadService.EjecutarSiguientePasoPipelineLocalDeterminista(proyecto.Slug)
@@ -161,7 +166,117 @@ func limpiarEntornoPruebaMicrociclo(proyecto *db.Proyecto, agente string) error 
 	}); err != nil {
 		return err
 	}
+	if err := limpiarWorktreesActivasMicrociclo(proyecto, agente); err != nil {
+		return err
+	}
+	if err := prepararWorktreeFrescaMicrociclo(proyecto, agente); err != nil {
+		return err
+	}
 	return nil
+}
+
+func limpiarWorktreesActivasMicrociclo(proyecto *db.Proyecto, agente string) error {
+	if proyecto == nil {
+		return fmt.Errorf("proyecto obligatorio")
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return fmt.Errorf("agente obligatorio")
+	}
+	svc := newCoordinationService()
+	state := coordinacion.WorktreeActive
+	worktrees, err := svc.ListWorktrees(coordinacion.WorktreeFilter{
+		ProjectID: &proyecto.ID,
+		Agent:     &agente,
+		State:     &state,
+	})
+	if err != nil {
+		return err
+	}
+	for _, worktree := range worktrees {
+		if worktree == nil || worktree.ID <= 0 {
+			continue
+		}
+		if _, err := svc.CloseWorktree(worktree.ID, true, "microciclo_limpio"); err != nil {
+			if _, fallbackErr := svc.CloseWorktree(worktree.ID, false, "microciclo_limpio"); fallbackErr != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func prepararWorktreeFrescaMicrociclo(proyecto *db.Proyecto, agente string) error {
+	if proyecto == nil {
+		return fmt.Errorf("proyecto obligatorio")
+	}
+	if err := eliminarColisionWorktreeMicrociclo(proyecto, agente); err != nil {
+		return err
+	}
+	if !proyectoPareceRepoGit(proyecto.RutaAbs) {
+		return nil
+	}
+	worktree, err := (worktreeRuntimeService{}).EnsureActiveWorktree(strings.TrimSpace(proyecto.Slug), strings.TrimSpace(agente))
+	if err != nil || worktree == nil {
+		return err
+	}
+	if err := sincronizarWorkspaceProyectoEnWorktree(proyecto, worktree); err != nil {
+		return err
+	}
+	return nil
+}
+
+func eliminarColisionWorktreeMicrociclo(proyecto *db.Proyecto, agente string) error {
+	if proyecto == nil {
+		return fmt.Errorf("proyecto obligatorio")
+	}
+	ruta := rutaEsperadaWorktreeMicrociclo(proyecto.RutaAbs, proyecto.Slug, agente)
+	if ruta != "" {
+		if _, err := os.Stat(ruta); err == nil {
+			if removeErr := os.RemoveAll(ruta); removeErr != nil {
+				return removeErr
+			}
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	if proyectoPareceRepoGit(proyecto.RutaAbs) {
+		if err := (gitoperaciones.WorktreeManager{}).PruneWorktrees(strings.TrimSpace(proyecto.RutaAbs)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rutaEsperadaWorktreeMicrociclo(rutaProyecto, slugProyecto, agente string) string {
+	rutaProyecto = strings.TrimSpace(rutaProyecto)
+	if rutaProyecto == "" {
+		return ""
+	}
+	return filepath.Join(rutaProyecto, ".orquesta-worktrees", nombreWorktreeMicrociclo(slugProyecto, agente))
+}
+
+func nombreWorktreeMicrociclo(slugProyecto, agente string) string {
+	replacer := strings.NewReplacer(" ", "-", "_", "-", "/", "-", "\\", "-", ":", "-", "@", "-", "..", "-")
+	base := strings.TrimSpace(strings.ToLower(strings.TrimSpace(slugProyecto) + "-" + strings.TrimSpace(agente)))
+	base = replacer.Replace(base)
+	base = strings.Trim(base, "-")
+	if base == "" {
+		return "work"
+	}
+	return base
+}
+
+func proyectoPareceRepoGit(ruta string) bool {
+	ruta = strings.TrimSpace(ruta)
+	if ruta == "" {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(ruta, ".git"))
+	if err != nil {
+		return false
+	}
+	return info != nil
 }
 
 func detenerRuntimeActivoMicrociclo(agente string) error {
@@ -328,28 +443,38 @@ func activarFaseImplementacionMicrociclo(proyectoSlug string) (*db.FaseProyecto,
 	return implementacion, nil
 }
 
-func asegurarTareaMicrociclo(proyecto *db.Proyecto, agente string, req proyectoMicrocicloRequest) (*db.Tarea, bool, error) {
-	tarea, err := buscarTareaMicrocicloAbierta(proyecto.ID)
-	if err != nil {
-		return nil, false, err
-	}
-	if tarea != nil {
-		actual := ""
-		if tarea.Agente != nil {
-			actual = strings.TrimSpace(*tarea.Agente)
+func asegurarTareaMicrociclo(proyecto *db.Proyecto, agente string, req proyectoMicrocicloRequest, reutilizarExistente bool) (*db.Tarea, bool, error) {
+	if reutilizarExistente {
+		tarea, err := buscarTareaMicrocicloAbierta(proyecto.ID)
+		if err != nil {
+			return nil, false, err
 		}
-		if actual != agente {
-			if err := tareasService.Reassign(tarea.ID, agente); err != nil {
-				return nil, true, err
+		if tarea != nil {
+			actual := ""
+			if tarea.Agente != nil {
+				actual = strings.TrimSpace(*tarea.Agente)
 			}
-		}
-		if strings.TrimSpace(string(tarea.Estado)) != string(db.TareaEnProgreso) {
-			if err := tareasService.Start(tarea.ID, agente); err != nil {
-				return nil, true, err
+			estado := strings.TrimSpace(string(tarea.Estado))
+			if actual != agente {
+				switch strings.ToLower(estado) {
+				case string(db.TareaBacklog), string(db.TareaLibre):
+					if err := tareasService.Take(tarea.ID, agente); err != nil {
+						return nil, true, err
+					}
+				default:
+					if err := tareasService.Reassign(tarea.ID, agente); err != nil {
+						return nil, true, err
+					}
+				}
 			}
+			if strings.ToLower(estado) != string(db.TareaEnProgreso) {
+				if err := tareasService.Start(tarea.ID, agente); err != nil {
+					return nil, true, err
+				}
+			}
+			recargada, err := tareasService.Get(tarea.ID)
+			return recargada, true, err
 		}
-		recargada, err := tareasService.Get(tarea.ID)
-		return recargada, true, err
 	}
 	id, err := tareasService.Create(tareasapp.CreateTaskInput{
 		Titulo:      firstNonEmpty(strings.TrimSpace(req.Titulo), microcicloRefactorTituloDefault),
@@ -367,7 +492,7 @@ func asegurarTareaMicrociclo(proyecto *db.Proyecto, agente string, req proyectoM
 	if err := tareasService.Start(id, agente); err != nil {
 		return nil, false, err
 	}
-	tarea, err = tareasService.Get(id)
+	tarea, err := tareasService.Get(id)
 	return tarea, false, err
 }
 
@@ -401,15 +526,76 @@ func definitionOfDoneMicrocicloDefault() string {
 
 func descripcionMicrocicloDefault(proyecto *db.Proyecto) string {
 	partes := []string{
-		"Trabaja en bucle sobre la micro-refactorizacion que esta en curso.",
-		"Ataca el siguiente frente pequeno y util del control plane, dejando el codigo mas modular y con menos mezcla inline.",
+		"Frente actual: cerrar el carril premium runtime mailbox/session_resume del control plane.",
+		"Objetivo inmediato: seguir eliminando huecos entre bootstrap, mailbox y recibo util para workers premium sin cambiar semantica observable fuera de ese carril.",
+		"Objetivo exacto de este frente: endurecer el primer ciclo premium para que bootstrap, mailbox inicial y receipt no diverjan.",
+		"Regla arquitectonica de este frente: para runtimes interactivos premium el carril canonico es tmux_cli_session; process_pty_cli/pty_broker quedan relegados a legado de recuperacion o tests y no deben abrir trabajo nuevo ni dictar arquitectura.",
+		"Simbolos foco: procesarRuntimeMailboxSessionResumeBatchConMailbox, resolverBootstrapRuntimeLeasePendiente y helpers inmediatos del mismo slice.",
+		"Write-set exclusivo: cmd/controlplane_support.go, cmd/controlplane_support_test.go, db/controlplane_entities.go, db/controlplane_entities_test.go, runtimeagente/driver.go y runtimeagente/driver_test.go. Trabaja solo dentro de ese write_set; si el slice exigiera tocar algo fuera, para y reporta BLOQUEO.",
+		"Tests minimos del slice: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*' -count=1 y go test ./db -run 'TestResolverBootstrapRuntimeLeasePendiente.*' -count=1.",
+		"Trabaja en un slice pequeno y verificable dentro de ese frente; no abras otro carril ni inventes una arquitectura nueva.",
 		"No abras arquitectura nueva ni cambies comportamiento observable salvo bug claro con prueba.",
+		"No reabras ni refuerces process_pty_cli, pty_broker ni fallbacks PTY-first en este frente salvo bug de compatibilidad ya existente y acotado por prueba.",
+		"No abras shims de compatibilidad, firmas variadicas ni helpers genericos para cubrir call-sites hipoteticos; solo hazlo si un rg del arbol activo demuestra el uso real y actual.",
+		"No ensanches firmas ni APIs del nucleo para tapar deuda ajena al frente actual. Si no hay call-site real en este arbol, no es un bloqueo valido.",
 		"Antes de cerrar, deja tests del slice en verde.",
 	}
 	if proyecto != nil && strings.TrimSpace(proyecto.RutaAbs) != "" {
 		partes = append(partes, "Proyecto: "+strings.TrimSpace(proyecto.RutaAbs)+".")
 	}
 	return strings.Join(partes, " ")
+}
+
+func escribirInboxMicrociclo(proyecto *db.Proyecto, agente string, tarea *db.Tarea) error {
+	if proyecto == nil || tarea == nil {
+		return nil
+	}
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil
+	}
+	base := strings.TrimSpace(proyecto.RutaAbs)
+	worktree, err := (worktreeRuntimeService{}).ResolveActiveWorktree(strings.TrimSpace(proyecto.Slug), agente)
+	if err == nil && worktree != nil && strings.TrimSpace(worktree.RutaAbs) != "" {
+		base = strings.TrimSpace(worktree.RutaAbs)
+	}
+	if base == "" {
+		return nil
+	}
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(base, ".orquesta-inbox.md")
+	return os.WriteFile(path, []byte(construirInboxMicrocicloMarkdown(proyecto, tarea)), 0o644)
+}
+
+func construirInboxMicrocicloMarkdown(proyecto *db.Proyecto, tarea *db.Tarea) string {
+	if tarea == nil {
+		return ""
+	}
+	lines := []string{
+		"# Microtarea Activa de Orquesta",
+		"",
+		fmt.Sprintf("- Proyecto: `%s`", strings.TrimSpace(func() string {
+			if proyecto == nil {
+				return ""
+			}
+			return proyecto.Slug
+		}())),
+		fmt.Sprintf("- Tarea: `#%d %s`", tarea.ID, strings.TrimSpace(tarea.Titulo)),
+		"- Regla: trabaja solo dentro de este frente y de este write-set.",
+		"",
+		"## Alcance",
+		strings.TrimSpace(tarea.Descripcion),
+		"",
+		"## Ejecucion",
+		"- Aplica un unico slice pequeno y verificable.",
+		"- No reabras doctrina ni otros frentes si aqui ya esta el contrato operativo.",
+		"- Mantente en TMUX como carril canonico premium; no abras ni refuerces process_pty_cli ni PTY-first en este frente.",
+		"- No abras shims de compatibilidad ni ensanches firmas del nucleo salvo que exista un call-site real en este arbol y lo hayas comprobado antes.",
+		"- Antes de terminar, deja en verde los tests minimos del slice.",
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n")) + "\n"
 }
 
 func notasMicrociclo(extra string) string {
@@ -435,6 +621,7 @@ func asegurarDespachoMicrociclo(proyecto *db.Proyecto, agente string, tarea *db.
 	if resultado == nil {
 		resultado = &capacidadapp.ResultadoEjecucionPasoPipelineLocal{}
 	}
+	writeSet := capacidadapp.ExtraerWriteSetTextoPipelineLocal(strings.TrimSpace(tarea.Descripcion))
 	if resultado.Despacho == nil {
 		resultado.Despacho = &capacidadapp.DespachoPipelineLocal{
 			ProyectoSlug:     strings.TrimSpace(proyecto.Slug),
@@ -449,6 +636,7 @@ func asegurarDespachoMicrociclo(proyecto *db.Proyecto, agente string, tarea *db.
 			TareaObjetivoID:  tarea.ID,
 			TareaObjetivo:    strings.TrimSpace(tarea.Titulo),
 			AgenteTarea:      agente,
+			WriteSet:         append([]string(nil), writeSet...),
 			AgenteSugerido:   agente,
 			Motivo:           "microrefactor_loop",
 		}
@@ -461,6 +649,9 @@ func asegurarDespachoMicrociclo(proyecto *db.Proyecto, agente string, tarea *db.
 		}
 		if strings.TrimSpace(resultado.Despacho.AgenteTarea) == "" {
 			resultado.Despacho.AgenteTarea = agente
+		}
+		if len(resultado.Despacho.WriteSet) == 0 && len(writeSet) > 0 {
+			resultado.Despacho.WriteSet = append([]string(nil), writeSet...)
 		}
 		if debeForzarAgenteMicrociclo(resultado.Despacho, agente) {
 			resultado.Despacho.AgenteSugerido = agente

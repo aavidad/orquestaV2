@@ -581,7 +581,7 @@ func TestPrepareCLIResuelveComandoRelativoContraProyecto(t *testing.T) {
 	if got, want := plan.Comando, "/srv/codex-perfiles/bin/codex-perfil"; got != want {
 		t.Fatalf("comando relativo inesperado: got=%s want=%s", got, want)
 	}
-	if got := plan.Env["ORQUESTA_TERMINAL_BACKEND"]; got != "pty" {
+	if got := plan.Env["ORQUESTA_TERMINAL_BACKEND"]; got != "tmux" {
 		t.Fatalf("backend codex-perfil inesperado: %+v", plan.Env)
 	}
 }
@@ -631,7 +631,7 @@ func TestPrepareCLICodexWrapperInyectaCODEXBINConPathPobre(t *testing.T) {
 	if !strings.Contains(plan.Env["PATH"], filepath.Dir(codexPath)) {
 		t.Fatalf("PATH deberia incluir el binario de codex: %+v", plan.Env)
 	}
-	if got := strings.TrimSpace(plan.Env["ORQUESTA_TERMINAL_BACKEND"]); got != "pty" {
+	if got := strings.TrimSpace(plan.Env["ORQUESTA_TERMINAL_BACKEND"]); got != "tmux" {
 		t.Fatalf("backend inesperado para codex-perfil: %+v", plan.Env)
 	}
 }
@@ -1055,6 +1055,62 @@ func TestPrepareCLIGeminiPrependaDirectorioDelComandoAlPATH(t *testing.T) {
 	}
 	if got := plan.Env["PATH"]; !strings.HasPrefix(got, geminiBin+string(os.PathListSeparator)) {
 		t.Fatalf("PATH deberia comenzar por el directorio del comando resuelto: %q", got)
+	}
+}
+
+func TestPrepareCLICodexInyectaHerramientasBaseEnPATH(t *testing.T) {
+	goPath := "/usr/local/go/bin/go"
+	if _, err := os.Stat(goPath); err != nil {
+		t.Skip("go no disponible en la ruta canonica esperada")
+	}
+	t.Setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/bin")
+	projectPath := t.TempDir()
+	wrapperDir := filepath.Join(projectPath, "..", "codex-perfiles", "bin")
+	wrapperPath := filepath.Join(wrapperDir, "codex-perfil")
+	if err := os.MkdirAll(wrapperDir, 0o755); err != nil {
+		t.Fatalf("mkdir wrapper: %v", err)
+	}
+	if err := os.WriteFile(wrapperPath, []byte("#!/usr/bin/env bash\n"), 0o755); err != nil {
+		t.Fatalf("write wrapper: %v", err)
+	}
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Codex1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: projectPath,
+		Conector: ConnectorConfig{
+			Slug:       "codex-cli",
+			Transporte: "cli",
+			Comando:    wrapperPath,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if got := plan.Env["PATH"]; !strings.Contains(got, filepath.Dir(goPath)) {
+		t.Fatalf("PATH deberia incluir la toolchain de go: %q", got)
+	}
+}
+
+func TestPrepareCLIInyectaEntornoBaseOrquesta(t *testing.T) {
+	t.Setenv("ORQUESTA_SERVER_URL", "http://127.0.0.1:17669")
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Codex1",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: t.TempDir(),
+		Conector: ConnectorConfig{
+			Slug:       "codex-cli",
+			Transporte: "cli",
+			Comando:    "/tmp/codex-perfil",
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if got := strings.TrimSpace(plan.Env["ORQUESTA_SERVER_URL"]); got != "http://127.0.0.1:17669" {
+		t.Fatalf("ORQUESTA_SERVER_URL inesperado: %+v", plan.Env)
+	}
+	if got := strings.TrimSpace(plan.Env["ORQUESTA_BIN"]); got == "" {
+		t.Fatalf("ORQUESTA_BIN deberia inyectarse por defecto: %+v", plan.Env)
 	}
 }
 

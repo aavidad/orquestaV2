@@ -117,6 +117,26 @@ func TestCodexResumeTimeoutDefaultYOverride(t *testing.T) {
 	}
 }
 
+func TestCodexResumeCommandEnvInyectaCODEXBINYPATH(t *testing.T) {
+	tmp := t.TempDir()
+	codexBin := filepath.Join(tmp, "bin", "codex")
+	if err := os.MkdirAll(filepath.Dir(codexBin), 0o755); err != nil {
+		t.Fatalf("mkdir codex bin: %v", err)
+	}
+	if err := os.WriteFile(codexBin, []byte("#!/usr/bin/env bash\n"), 0o755); err != nil {
+		t.Fatalf("write codex bin: %v", err)
+	}
+
+	env := codexResumeCommandEnv(map[string]any{"codex_bin": codexBin})
+	joined := strings.Join(env, "\n")
+	if !strings.Contains(joined, "CODEX_BIN="+codexBin) {
+		t.Fatalf("faltaba CODEX_BIN en env: %s", joined)
+	}
+	if !strings.Contains(joined, "PATH="+filepath.Dir(codexBin)) && !strings.Contains(joined, "PATH="+filepath.Dir(codexBin)+string(os.PathListSeparator)) {
+		t.Fatalf("faltaba PATH enriquecido en env: %s", joined)
+	}
+}
+
 func TestTrimmedCommandOutputPrefiereErrorRelevanteAlBanner(t *testing.T) {
 	raw := []byte("Perfil activo: Codex2\nCODEX_HOME: /tmp/codex\nConsejo: login\nERROR: You've hit your usage limit. Try again at Apr 4th, 2026 11:20 AM.\n")
 	got := trimmedCommandOutput(raw)

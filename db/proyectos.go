@@ -325,6 +325,9 @@ func RutaTrabajoPreferidaAgenteProyecto(agente string, proyecto *Proyecto, cwd s
 		}
 		return ruta
 	}
+	if rutaSesionWorktreeProyecto(proyecto, cwd) {
+		return cwd
+	}
 	if ruta := normalizarRutaProyecto(RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, "")); ruta != "" && cwd == ruta {
 		return cwd
 	}
@@ -332,6 +335,19 @@ func RutaTrabajoPreferidaAgenteProyecto(agente string, proyecto *Proyecto, cwd s
 		return ruta
 	}
 	return cwd
+}
+
+func rutaSesionWorktreeProyecto(proyecto *Proyecto, cwd string) bool {
+	cwd = normalizarRutaProyecto(cwd)
+	if proyecto == nil || cwd == "" {
+		return false
+	}
+	rutaBase := normalizarRutaProyecto(RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, ""))
+	if rutaBase == "" {
+		return false
+	}
+	rutaRaizWorktrees := filepath.Join(rutaBase, ".orquesta-worktrees")
+	return rutaDentroDe(rutaRaizWorktrees, cwd)
 }
 
 func rutaTrabajoPerteneceAProyectoAgente(proyecto *Proyecto, agente, cwd string) bool {
@@ -371,7 +387,7 @@ func rutaWorktreeActivaAgenteProyecto(proyectoID int64, agente string) string {
 			continue
 		}
 		ruta := normalizarRutaProyecto(worktree.Path)
-		if ruta == "" || !WorktreeActivaCoherente(proyectoID, ruta) {
+		if ruta == "" || !WorktreeActivaCoherente(proyectoID, ruta) || !rutaWorktreeUtilizable(ruta) {
 			continue
 		}
 		return ruta
@@ -404,6 +420,9 @@ func rutaSesionPerteneceAWorktreeActiva(proyectoID int64, agente, cwd string) bo
 		if err := rows.Scan(&worktreePath); err != nil {
 			return false
 		}
+		if !rutaWorktreeUtilizable(worktreePath) {
+			continue
+		}
 		if rutaDentroDe(worktreePath, cwd) {
 			return true
 		}
@@ -421,11 +440,23 @@ func rutaSesionPerteneceAWorktreeActivaBatch(agente, cwd string, worktrees []pro
 		if agente != "" && strings.TrimSpace(worktree.agente) != agente {
 			continue
 		}
+		if !rutaWorktreeUtilizable(worktree.rutaAbs) {
+			continue
+		}
 		if rutaDentroDe(worktree.rutaAbs, cwd) {
 			return true
 		}
 	}
 	return false
+}
+
+func rutaWorktreeUtilizable(path string) bool {
+	path = normalizarRutaProyecto(path)
+	if path == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && info != nil && info.IsDir()
 }
 
 func rutaDentroDe(base, path string) bool {

@@ -2,6 +2,10 @@ package cmd
 
 import (
 	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"orquesta/capacidadapp"
@@ -35,6 +39,31 @@ func (f *fakeGitStorePipelineDispatcher) SaveMerge(item *db.GitMergeRequest) (in
 
 func (f *fakeGitStorePipelineDispatcher) ResolveProjectID(slug string) (*int64, error) {
 	return &f.projectID, nil
+}
+
+func prepararWorktreeGitDispatcherTest(t *testing.T) string {
+	t.Helper()
+	repo := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, string(out))
+		}
+	}
+	run("init")
+	run("config", "user.name", "Orquesta Test")
+	run("config", "user.email", "orquesta@example.com")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("base\n"), 0o644); err != nil {
+		t.Fatalf("write README base: %v", err)
+	}
+	run("add", "README.md")
+	run("commit", "-m", "base")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatalf("write README dirty: %v", err)
+	}
+	return repo
 }
 
 func TestResolverConectorYModeloStartPipelinePremium(t *testing.T) {
@@ -164,6 +193,57 @@ func TestDespachadorPipelineOperativoRespetaBloqueoCuota(t *testing.T) {
 	}
 	if resultado == nil || resultado.Estado != "cuota_bloqueada" {
 		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+}
+
+func TestDespachadorPipelineOperativoIncluyeWriteSetEnMailboxPremium(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: t.TempDir(),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	resultado, err := (despachadorPipelineOperativo{}).DespacharPipeline(capacidadapp.SolicitudDespachoPipeline{
+		ProyectoSlug: "orquestador",
+		Despacho: &capacidadapp.DespachoPipelineLocal{
+			Fase:            "implementacion",
+			Carril:          "premium_worktree",
+			PerfilTarea:     "implementacion",
+			AgenteSugerido:  "Codex1",
+			TareaObjetivoID: 530,
+			TareaObjetivo:   "Micro-refactorización cíclica del control plane",
+			WriteSet:        []string{"cmd/controlplane_support.go", "db/controlplane_entities.go"},
+			Motivo:          "microrefactor_loop",
+		},
+	})
+	if err != nil {
+		t.Fatalf("DespacharPipeline: %v", err)
+	}
+	if resultado == nil {
+		t.Fatalf("resultado nil")
+	}
+	pendiente := "pendiente"
+	toAgente := "Codex1"
+	items, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &toAgente, ProyectoID: &proyectoID, Estado: &pendiente})
+	if err != nil {
+		t.Fatalf("listar mailbox: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("mailbox inesperada: %+v", items)
+	}
+	if !strings.Contains(items[0].PayloadJSON, `"write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"]`) {
+		t.Fatalf("payload sin write_set: %s", items[0].PayloadJSON)
+	}
+	if !strings.Contains(items[0].PayloadJSON, `WRITE_SET: cmd/controlplane_support.go, db/controlplane_entities.go`) {
+		t.Fatalf("instruction sin write_set: %s", items[0].PayloadJSON)
 	}
 }
 
@@ -413,6 +493,7 @@ func TestDespachadorPipelineOperativoBloqueaRuntimeAmbiguo(t *testing.T) {
 }
 
 func TestDespachadorPipelineOperativoSolicitaMergeEnIntegracion(t *testing.T) {
+	rutaWorktree := prepararWorktreeGitDispatcherTest(t)
 	store := &fakeGitStorePipelineDispatcher{
 		projectID: 9,
 		worktrees: []*db.Worktree{{
@@ -420,6 +501,7 @@ func TestDespachadorPipelineOperativoSolicitaMergeEnIntegracion(t *testing.T) {
 			ProyectoID:   9,
 			ProyectoSlug: "orquestador",
 			Agente:       "Codex1",
+			RutaAbs:      rutaWorktree,
 			Branch:       "orq/orquestador/codex1",
 			BaseRef:      "main",
 			Estado:       "activa",
@@ -454,6 +536,7 @@ func TestDespachadorPipelineOperativoSolicitaMergeEnIntegracion(t *testing.T) {
 }
 
 func TestDespachadorPipelineOperativoReutilizaMergePendienteEnIntegracion(t *testing.T) {
+	rutaWorktree := prepararWorktreeGitDispatcherTest(t)
 	store := &fakeGitStorePipelineDispatcher{
 		projectID: 9,
 		worktrees: []*db.Worktree{{
@@ -461,6 +544,7 @@ func TestDespachadorPipelineOperativoReutilizaMergePendienteEnIntegracion(t *tes
 			ProyectoID:   9,
 			ProyectoSlug: "orquestador",
 			Agente:       "Codex1",
+			RutaAbs:      rutaWorktree,
 			Branch:       "orq/orquestador/codex1",
 			BaseRef:      "main",
 			Estado:       "activa",

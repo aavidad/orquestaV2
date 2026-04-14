@@ -28,12 +28,15 @@ type PasoPipelineLocalDeterminista struct {
 }
 
 type TareaPipelineLocal struct {
-	ID        int64  `json:"id"`
-	Titulo    string `json:"titulo"`
-	Estado    string `json:"estado"`
-	Agente    string `json:"agente,omitempty"`
-	Modulo    string `json:"modulo,omitempty"`
-	Prioridad string `json:"prioridad,omitempty"`
+	ID          int64    `json:"id"`
+	Titulo      string   `json:"titulo"`
+	Descripcion string   `json:"descripcion,omitempty"`
+	Notas       string   `json:"notas,omitempty"`
+	WriteSet    []string `json:"write_set,omitempty"`
+	Estado      string   `json:"estado"`
+	Agente      string   `json:"agente,omitempty"`
+	Modulo      string   `json:"modulo,omitempty"`
+	Prioridad   string   `json:"prioridad,omitempty"`
 }
 
 func (s *Service) SetReviewGateProvider(provider ReviewGateProvider) {
@@ -268,16 +271,80 @@ func tareaPipelineLocalDesdeDB(tarea *db.Tarea) *TareaPipelineLocal {
 		return nil
 	}
 	out := &TareaPipelineLocal{
-		ID:        tarea.ID,
-		Titulo:    strings.TrimSpace(tarea.Titulo),
-		Estado:    strings.TrimSpace(string(tarea.Estado)),
-		Modulo:    strings.TrimSpace(tarea.Modulo),
-		Prioridad: strings.TrimSpace(string(tarea.Prioridad)),
+		ID:          tarea.ID,
+		Titulo:      strings.TrimSpace(tarea.Titulo),
+		Descripcion: strings.TrimSpace(tarea.Descripcion),
+		Notas:       strings.TrimSpace(tarea.Notas),
+		WriteSet:    extraerWriteSetTareaPipelineLocal(tarea.Descripcion, tarea.Notas),
+		Estado:      strings.TrimSpace(string(tarea.Estado)),
+		Modulo:      strings.TrimSpace(tarea.Modulo),
+		Prioridad:   strings.TrimSpace(string(tarea.Prioridad)),
 	}
 	if tarea.Agente != nil {
 		out.Agente = strings.TrimSpace(*tarea.Agente)
 	}
 	return out
+}
+
+func extraerWriteSetTareaPipelineLocal(descripcion, notas string) []string {
+	for _, raw := range []string{descripcion, notas} {
+		writeSet := ExtraerWriteSetTextoPipelineLocal(raw)
+		if len(writeSet) > 0 {
+			return writeSet
+		}
+	}
+	return nil
+}
+
+func ExtraerWriteSetTextoPipelineLocal(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	lineas := strings.FieldsFunc(raw, func(r rune) bool { return r == '\n' || r == '\r' })
+	for _, linea := range lineas {
+		linea = strings.TrimSpace(linea)
+		if linea == "" {
+			continue
+		}
+		lower := strings.ToLower(linea)
+		idx := strings.Index(lower, "write-set")
+		if idx < 0 {
+			idx = strings.Index(lower, "write_set")
+		}
+		if idx < 0 {
+			continue
+		}
+		if colon := strings.Index(linea[idx:], ":"); colon >= 0 {
+			linea = strings.TrimSpace(linea[idx+colon+1:])
+		} else {
+			continue
+		}
+		if end := strings.Index(linea, ". "); end >= 0 {
+			linea = strings.TrimSpace(linea[:end])
+		}
+		linea = strings.TrimSuffix(linea, ".")
+		linea = strings.ReplaceAll(linea, " y ", ", ")
+		linea = strings.ReplaceAll(linea, ";", ",")
+		partes := strings.Split(linea, ",")
+		writeSet := make([]string, 0, len(partes))
+		seen := map[string]struct{}{}
+		for _, parte := range partes {
+			ruta := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(parte), "."))
+			if ruta == "" {
+				continue
+			}
+			if _, ok := seen[ruta]; ok {
+				continue
+			}
+			seen[ruta] = struct{}{}
+			writeSet = append(writeSet, ruta)
+		}
+		if len(writeSet) > 0 {
+			return writeSet
+		}
+	}
+	return nil
 }
 
 func (s *Service) resolverGateBloqueantePipelineLocal(proyectoSlug string) (*reviewapp.Gate, string, bool, error) {

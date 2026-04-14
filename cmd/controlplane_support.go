@@ -44,7 +44,11 @@ var wakeRuntimeOrdersAfterMailbox = wakeControlPlaneRuntimeOrders
 var runtimeMailboxReevaluationGate = planocontrol.NewThrottler()
 
 func runtimeMailboxReevaluationInterval() time.Duration {
-	return 2 * time.Minute
+	seconds := controlPlaneConfigIntOrDefault("runtime_mailbox_reevaluation_interval_seconds", 10)
+	if seconds <= 0 {
+		seconds = 10
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func runtimeMailboxShouldReevaluate(lane string, msgID, handleID int64) bool {
@@ -97,9 +101,18 @@ const (
 )
 
 var presupuestoPrimerUsoSesionGate = planocontrol.NewThrottler()
+var autonomiaContinueNudgeGate = planocontrol.NewThrottler()
 
 func autonomiaIdleAutoassignInterval() time.Duration {
 	seconds := controlPlaneConfigIntOrDefault("autonomia_idle_autoassign_interval_seconds", 300)
+	if seconds <= 0 {
+		seconds = 300
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func autonomiaContinueNudgeInterval() time.Duration {
+	seconds := controlPlaneConfigIntOrDefault("autonomia_continue_nudge_interval_seconds", 300)
 	if seconds <= 0 {
 		seconds = 300
 	}
@@ -158,6 +171,15 @@ func autonomiaIdleAutoassignShouldAttempt(agente string, proyectoID int64) bool 
 	}
 	key := agente + "|" + strconv.FormatInt(proyectoID, 10)
 	return autonomiaIdleAutoassignGate.Allow(key, autonomiaIdleAutoassignInterval())
+}
+
+func autonomiaContinueNudgeShouldAttempt(agente string, proyectoID, tareaID int64) bool {
+	agente = strings.ToLower(strings.TrimSpace(agente))
+	if agente == "" || proyectoID <= 0 || tareaID <= 0 {
+		return false
+	}
+	key := agente + "|" + strconv.FormatInt(proyectoID, 10) + "|" + strconv.FormatInt(tareaID, 10)
+	return autonomiaContinueNudgeGate.Allow(key, autonomiaContinueNudgeInterval())
 }
 
 func presupuestoPrimerUsoSesion(nombre string) bool {
@@ -667,6 +689,12 @@ func procesarRuntimeTranscriptBatch() (int, error) {
 	}
 	despertarRuntimeOrdersTrasTranscript(registradas)
 	ingested += registradas
+	premiumRegistradas, err := procesarEntregasGitPremiumActivas()
+	if err != nil {
+		return ingested, err
+	}
+	despertarRuntimeOrdersTrasTranscript(premiumRegistradas)
+	ingested += premiumRegistradas
 	if !controlPlaneConfigBoolOrDefault("runtime_transcript_auto_guidance_enabled", true) {
 		return ingested, nil
 	}
@@ -675,6 +703,118 @@ func procesarRuntimeTranscriptBatch() (int, error) {
 		return ingested + processedSignals, err
 	}
 	return ingested + processedSignals, nil
+}
+
+func procesarEntregasGitPremiumActivas() (int, error) {
+	orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{Limit: 50})
+	if err != nil {
+		return 0, err
+	}
+	vistos := map[string]struct{}{}
+	procesadas := 0
+	for _, order := range orders {
+		if !runtimeOrderEntregaGitPremiumActiva(order) {
+			continue
+		}
+		proyectoID := int64(0)
+		if order.ProyectoID != nil && *order.ProyectoID > 0 {
+			proyectoID = *order.ProyectoID
+		}
+		if proyectoID <= 0 {
+			continue
+		}
+		agente := strings.TrimSpace(order.Agente)
+		if agente == "" {
+			continue
+		}
+		key := fmt.Sprintf("%s:%d", agente, proyectoID)
+		if _, ok := vistos[key]; ok {
+			continue
+		}
+		vistos[key] = struct{}{}
+		proyecto, err := runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
+		if err != nil || proyecto == nil {
+			if err != nil {
+				return procesadas, err
+			}
+			continue
+		}
+		resultado, err := runtimesService.IntentarRegistrarEntregaGitMicroprogramacionActiva(
+			agente,
+			order.ProyectoID,
+			proyecto.Slug,
+			"runtime_premium_git_reconcile",
+			"orquesta",
+		)
+		if err != nil {
+			return procesadas, err
+		}
+		if resultado != nil {
+			procesadas++
+		}
+	}
+	return procesadas, nil
+}
+
+func runtimeOrderEntregaGitPremiumActiva(order *db.RuntimeOrder) bool {
+	if order == nil || order.ProyectoID == nil || *order.ProyectoID <= 0 {
+		return false
+	}
+	switch strings.TrimSpace(order.Tipo) {
+	case "send_instruction":
+		return runtimeOrderEntregaGitPremiumDesdeSendInstruction(order)
+	case "start", "resume", "handoff":
+		return runtimeOrderEntregaGitPremiumDesdeBootstrapLease(order)
+	default:
+		return false
+	}
+}
+
+func runtimeOrderEntregaGitPremiumDesdeSendInstruction(order *db.RuntimeOrder) bool {
+	if order == nil {
+		return false
+	}
+	switch strings.TrimSpace(order.Estado) {
+	case "pendiente", "encolada", "ejecutando":
+	default:
+		return false
+	}
+	if strings.TrimSpace(order.PayloadJSON) == "" {
+		return false
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(order.PayloadJSON), &payload); err != nil {
+		return false
+	}
+	if strings.TrimSpace(stringMapValue(payload, "source")) != "pipeline_local" {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(stringMapValue(payload, "carril"))) {
+	case "premium_worktree", "revision_diff":
+		return true
+	default:
+		return false
+	}
+}
+
+func runtimeOrderEntregaGitPremiumDesdeBootstrapLease(order *db.RuntimeOrder) bool {
+	if order == nil || strings.TrimSpace(order.ResultadoJSON) == "" {
+		return false
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(order.ResultadoJSON), &result); err != nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(stringMapValue(result, "receipt_source")), "git_worktree") {
+		return false
+	}
+	switch strings.TrimSpace(stringMapValue(result, "lease_state")) {
+	case "waiting_for_evidence", "delivered", "acked":
+	default:
+		return false
+	}
+	mailboxIDs, _ := result["mailbox_ids"].([]any)
+	return len(mailboxIDs) > 0
 }
 
 func despertarRuntimeOrdersTrasTranscript(cantidad int) {
@@ -3581,6 +3721,11 @@ func procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox []*db.RuntimeMailb
 			}
 			continue
 		}
+		if refreshed, _, _, err := snapshot.supervisedHandle(handle); err != nil {
+			return total, err
+		} else if refreshed != nil {
+			handle = refreshed
+		}
 		if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "interactive", time.Now().UTC()); err != nil {
 			return total, err
 		} else if obsoleta {
@@ -3679,9 +3824,17 @@ func intentarReactivarRuntimeMailboxSinHandle(msg *db.RuntimeMailboxMessage, sna
 	if agente == "" {
 		return false, nil
 	}
-	switch strings.TrimSpace(msg.Kind) {
+	kind := strings.TrimSpace(msg.Kind)
+	switch kind {
 	case db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh, "watchdog":
 		return false, nil
+	}
+	if kind != "pipeline_local" && kind != "microprogramacion" {
+		if tieneTrabajo, err := dbAgenteTieneTrabajoArrancable(agente, proyecto.ID); err != nil {
+			return false, err
+		} else if tieneTrabajo {
+			return false, nil
+		}
 	}
 	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "start", "resume", "handoff"); err != nil {
 		return false, err
@@ -3900,15 +4053,82 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 		if !runtimeMailboxShouldReevaluate("session_resume", msg.ID, handle.ID) {
 			continue
 		}
-		runtime, err := runtimeCanonicoDesdeHandleAgenteProyecto(handle, strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+		var runtimeInstance *db.RuntimeInstance
+		if supervisedHandle, supervisedRuntime, _, err := snapshot.supervisedHandle(handle); err != nil {
+			return total, err
+		} else {
+			if supervisedHandle != nil {
+				handle = supervisedHandle
+			}
+			runtimeInstance = supervisedRuntime
+		}
+		if runtimeInstance == nil {
+			runtimeInstance, err = runtimeCanonicoDesdeHandleAgenteProyecto(handle, strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+			if err != nil {
+				return total, err
+			}
+		}
+		handle, externalSessionID, err := snapshot.externalSessionHandle(handle, runtimeInstance)
 		if err != nil {
 			return total, err
 		}
-		handle, externalSessionID, err := snapshot.externalSessionHandle(handle, runtime)
-		if err != nil {
-			return total, err
+		if handle == nil {
+			continue
 		}
-		if handle == nil || strings.TrimSpace(externalSessionID) == "" {
+		if strings.TrimSpace(externalSessionID) == "" {
+			if !runtimeHandleAdmiteFallbackInteractivoTransitorio(handle) {
+				continue
+			}
+			if !runtimeHandleListaParaDispatchInteractivo(handle) {
+				continue
+			}
+			if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "interactive_transitory", time.Now().UTC()); err != nil {
+				return total, err
+			} else if obsoleta {
+				consumed[msg.ID] = struct{}{}
+				total++
+				continue
+			}
+			if observada, err := consumirRuntimeMailboxBootstrapObservadoSiProcede(msg, handle, runtimeInstance, "interactive_transitory"); err != nil {
+				return total, err
+			} else if observada {
+				consumed[msg.ID] = struct{}{}
+				total++
+				continue
+			}
+			if covered, _, _, err := db.RuntimeMailboxCubiertoPorBootstrapPendiente(msg.ID, handle, runtimeInstance); err != nil {
+				return total, err
+			} else if covered {
+				continue
+			}
+			if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
+				return total, err
+			} else if abierta {
+				continue
+			}
+			if dedupe, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, ""); err != nil {
+				return total, err
+			} else if dedupe {
+				continue
+			}
+			orderID, err := encolarSendInstructionDesdeRuntimeMailbox(msg, handle, texto, "")
+			if err != nil {
+				return total, err
+			}
+			if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) {
+				superseded, err := db.ConsumirRuntimeMailboxPendienteSupersedido(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, strings.TrimSpace(msg.Kind), msg.ID)
+				if err != nil {
+					return total, err
+				}
+				if superseded > 0 {
+					db.Audit("orquesta", "runtime_mailbox_session_resume_interactive_supersede", "runtime_mailbox", msg.ID,
+						fmt.Sprintf("agente=%s kind=%s superseded=%d", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), superseded))
+				}
+			}
+			db.Audit("orquesta", "runtime_mailbox_session_resume_interactive_fallback", "runtime_order", orderID,
+				fmt.Sprintf("mailbox_id=%d agente=%s kind=%s", msg.ID, strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
+			consumed[msg.ID] = struct{}{}
+			total++
 			continue
 		}
 		if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "session_resume", time.Now().UTC()); err != nil {
@@ -3918,7 +4138,14 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 			total++
 			continue
 		}
-		if covered, _, _, err := db.RuntimeMailboxCubiertoPorBootstrapPendiente(msg.ID, handle, runtime); err != nil {
+		if observada, err := consumirRuntimeMailboxBootstrapObservadoSiProcede(msg, handle, runtimeInstance, "session_resume"); err != nil {
+			return total, err
+		} else if observada {
+			consumed[msg.ID] = struct{}{}
+			total++
+			continue
+		}
+		if covered, _, _, err := db.RuntimeMailboxCubiertoPorBootstrapPendiente(msg.ID, handle, runtimeInstance); err != nil {
 			return total, err
 		} else if covered {
 			continue
@@ -3956,6 +4183,42 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 		total++
 	}
 	return total, nil
+}
+
+func runtimeHandleAdmiteFallbackInteractivoTransitorio(handle *db.RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	switch db.RuntimeHandleMailboxDeliveryMode(handle) {
+	case runtimeagente.MailboxDeliveryCoordinatedRestart, runtimeagente.MailboxDeliveryBootstrapOnly:
+		return false
+	}
+	if db.RuntimeHandleMailboxDeliveryMode(handle) == runtimeagente.MailboxDeliveryInteractive {
+		return true
+	}
+	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
+	value := func(key string) string {
+		if meta == nil {
+			return ""
+		}
+		raw, _ := meta[key].(string)
+		return strings.TrimSpace(raw)
+	}
+	if !strings.EqualFold(value("driver"), "process_pty_cli") {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(handle.Transporte), "cli") || !strings.EqualFold(strings.TrimSpace(handle.HandleKind), "process") {
+		return false
+	}
+	if value("external_session_id") != "" {
+		return false
+	}
+	for _, key := range []string{"supervisor_ref", "stdin_path", "stdin_raw_path"} {
+		if value(key) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func procesarRuntimeMailboxBootstrapTMUXBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
@@ -4165,37 +4428,14 @@ func existeIntentoSendInstructionMailboxParaHandle(msg *db.RuntimeMailboxMessage
 	currentSessionID := strings.TrimSpace(externalSessionID)
 	currentSignature := runtimeMailboxDeliveryAttemptSignature(handle, externalSessionID)
 	for _, order := range orders {
-		if order == nil || strings.TrimSpace(order.Tipo) != "send_instruction" {
-			continue
-		}
-		if runtimeOrderMailboxIDFromJSON(order.PayloadJSON) != msg.ID {
-			continue
-		}
-		if order.HandleID != nil && *order.HandleID != handle.ID {
+		if !runtimeOrderMatchesMailboxSendInstructionAttempt(order, msg.ID, handle.ID) {
 			continue
 		}
 		switch strings.TrimSpace(order.Estado) {
 		case "pendiente", "tomada", "ejecutando":
 			return true, nil
 		case "completada":
-			if !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) {
-				continue
-			}
-			if runtimeOrderMailboxOnlyExpired(order) {
-				continue
-			}
-			orderSignature := runtimeOrderDeliveryAttemptSignature(order.PayloadJSON)
-			if currentSignature != "" {
-				if orderSignature == "" {
-					continue
-				}
-				if currentSignature != orderSignature {
-					continue
-				}
-				return true, nil
-			}
-			orderSessionID := strings.TrimSpace(runtimeOrderExternalSessionIDFromJSON(order.PayloadJSON))
-			if currentSessionID != "" && orderSessionID != "" && currentSessionID != orderSessionID {
+			if !runtimeOrderCompletedMailboxAttemptStillBlocks(order, currentSessionID, currentSignature) {
 				continue
 			}
 			return true, nil
@@ -4222,13 +4462,7 @@ func existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot *runtimeMa
 	currentSessionID := strings.TrimSpace(externalSessionID)
 	currentSignature := runtimeMailboxDeliveryAttemptSignature(handle, externalSessionID)
 	for _, order := range orders {
-		if order == nil || strings.TrimSpace(order.Tipo) != "send_instruction" {
-			continue
-		}
-		if runtimeOrderMailboxIDFromJSON(order.PayloadJSON) != msg.ID {
-			continue
-		}
-		if order.HandleID != nil && *order.HandleID != handle.ID {
+		if !runtimeOrderMatchesMailboxSendInstructionAttempt(order, msg.ID, handle.ID) {
 			continue
 		}
 		switch strings.TrimSpace(order.Estado) {
@@ -4238,30 +4472,38 @@ func existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot *runtimeMa
 			}
 			return true, nil
 		case "completada":
-			if !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) {
-				continue
-			}
-			if runtimeOrderMailboxOnlyExpired(order) {
-				continue
-			}
-			orderSignature := runtimeOrderDeliveryAttemptSignature(order.PayloadJSON)
-			if currentSignature != "" {
-				if orderSignature == "" {
-					continue
-				}
-				if currentSignature != orderSignature {
-					continue
-				}
-				return true, nil
-			}
-			orderSessionID := strings.TrimSpace(runtimeOrderExternalSessionIDFromJSON(order.PayloadJSON))
-			if currentSessionID != "" && orderSessionID != "" && currentSessionID != orderSessionID {
+			if !runtimeOrderCompletedMailboxAttemptStillBlocks(order, currentSessionID, currentSignature) {
 				continue
 			}
 			return true, nil
 		}
 	}
 	return false, nil
+}
+
+func runtimeOrderMatchesMailboxSendInstructionAttempt(order *db.RuntimeOrder, mailboxID, handleID int64) bool {
+	if order == nil || strings.TrimSpace(order.Tipo) != "send_instruction" || mailboxID <= 0 || handleID <= 0 {
+		return false
+	}
+	if runtimeOrderMailboxIDFromJSON(order.PayloadJSON) != mailboxID {
+		return false
+	}
+	if order.HandleID != nil && *order.HandleID != handleID {
+		return false
+	}
+	return true
+}
+
+func runtimeOrderCompletedMailboxAttemptStillBlocks(order *db.RuntimeOrder, currentSessionID, currentSignature string) bool {
+	if order == nil || !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) || runtimeOrderMailboxOnlyExpired(order) {
+		return false
+	}
+	orderSignature := runtimeOrderDeliveryAttemptSignature(order.PayloadJSON)
+	if currentSignature != "" {
+		return orderSignature != "" && currentSignature == orderSignature
+	}
+	orderSessionID := strings.TrimSpace(runtimeOrderExternalSessionIDFromJSON(order.PayloadJSON))
+	return !(currentSessionID != "" && orderSessionID != "" && currentSessionID != orderSessionID)
 }
 
 func runtimeOrderMailboxOnlyExpired(order *db.RuntimeOrder) bool {
@@ -4305,8 +4547,8 @@ func runtimeMailboxOnlyDedupeTTL() time.Duration {
 }
 
 func runtimeOrderMailboxIDFromJSON(raw string) int64 {
-	payload := map[string]any{}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &payload); err != nil {
+	payload := mapFromJSON(raw)
+	if payload == nil {
 		return 0
 	}
 	value, _ := payload["mailbox_id"]
@@ -4323,8 +4565,8 @@ func runtimeOrderMailboxIDFromJSON(raw string) int64 {
 }
 
 func runtimeOrderExternalSessionIDFromJSON(raw string) string {
-	payload := map[string]any{}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &payload); err != nil {
+	payload := mapFromJSON(raw)
+	if payload == nil {
 		return ""
 	}
 	value, _ := payload["external_session_id"]
@@ -4335,8 +4577,8 @@ func runtimeOrderExternalSessionIDFromJSON(raw string) string {
 }
 
 func runtimeOrderDeliveryAttemptSignature(raw string) string {
-	payload := map[string]any{}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &payload); err != nil {
+	payload := mapFromJSON(raw)
+	if payload == nil {
 		return ""
 	}
 	if text, ok := payload["delivery_attempt_signature"].(string); ok {
@@ -4346,8 +4588,8 @@ func runtimeOrderDeliveryAttemptSignature(raw string) string {
 }
 
 func runtimeOrderMailboxKindFromJSON(raw string) string {
-	payload := map[string]any{}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &payload); err != nil {
+	payload := mapFromJSON(raw)
+	if payload == nil {
 		return ""
 	}
 	if text, ok := payload["mailbox_kind"].(string); ok {
@@ -4368,8 +4610,8 @@ func runtimeMailboxDeliveryAttemptSignature(handle *db.RuntimeHandle, externalSe
 }
 
 func runtimeOrderMailboxOnlyResult(raw string) bool {
-	payload := map[string]any{}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &payload); err != nil {
+	payload := mapFromJSON(raw)
+	if payload == nil {
 		return false
 	}
 	value, _ := payload["mailbox_only"]
@@ -4378,8 +4620,8 @@ func runtimeOrderMailboxOnlyResult(raw string) bool {
 }
 
 func runtimeOrderDeferredReason(raw string) string {
-	payload := map[string]any{}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &payload); err != nil {
+	payload := mapFromJSON(raw)
+	if payload == nil {
 		return ""
 	}
 	if text, ok := payload["deferred_reason"].(string); ok {
@@ -4486,6 +4728,25 @@ func consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg *db.RuntimeMailboxMess
 	return true, nil
 }
 
+func consumirRuntimeMailboxBootstrapObservadoSiProcede(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, runtime *db.RuntimeInstance, lane string) (bool, error) {
+	if msg == nil {
+		return false, nil
+	}
+	observado, bootstrapOrderID, startOrderID, err := db.RuntimeMailboxEntregadoPorBootstrapObservado(msg.ID, handle, runtime)
+	if err != nil || !observado {
+		return false, err
+	}
+	if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+		return false, err
+	}
+	if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+		return false, err
+	}
+	db.Audit("orquesta", "runtime_mailbox_bootstrap_receipt_consumed", "runtime_mailbox", msg.ID,
+		fmt.Sprintf("lane=%s agente=%s kind=%s bootstrap_order_id=%d start_order_id=%d", strings.TrimSpace(lane), strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), bootstrapOrderID, startOrderID))
+	return true, nil
+}
+
 func runtimeMailboxPuedeConsumirseFueraDeOrden(msg *db.RuntimeMailboxMessage) (bool, error) {
 	if msg == nil || msg.RuntimeOrderID == nil || *msg.RuntimeOrderID <= 0 {
 		return true, nil
@@ -4515,13 +4776,7 @@ func runtimeHandleRequiereCoordinatedRestartMailbox(handle *db.RuntimeHandle) bo
 		strings.EqualFold(driver, "tmux_cli_session")
 	switch db.RuntimeHandleMailboxDeliveryMode(handle) {
 	case runtimeagente.MailboxDeliveryCoordinatedRestart:
-		if tmuxLike {
-			return true
-		}
-		if strings.TrimSpace(handle.Transporte) != "cli" || strings.TrimSpace(handle.HandleKind) != "process" {
-			return false
-		}
-		return !runtimeHandleEsCandidatoLegacyATMUX(handle)
+		return tmuxLike
 	case runtimeagente.MailboxDeliveryBootstrapOnly:
 		return tmuxLike
 	default:
@@ -4639,7 +4894,12 @@ func construirInstruccionMailboxInteractivo(msg *db.RuntimeMailboxMessage) (stri
 	switch strings.TrimSpace(msg.Kind) {
 	case "instruction", "pipeline_local":
 		texto := stringMapValue(payload, "texto")
-		if texto == "" {
+		if strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") {
+			texto = stringMapValue(payload, "instruction")
+			if texto == "" {
+				texto = stringMapValue(payload, "texto")
+			}
+		} else if texto == "" {
 			texto = stringMapValue(payload, "instruction")
 		}
 		return texto, strings.TrimSpace(texto) != ""
@@ -6290,10 +6550,42 @@ func procesarDecisionContinuacionSesionActivaAutonomia(sesion *db.Sesion, proyec
 	if sesion == nil || proyecto == nil {
 		return 0, nil
 	}
-	// Una sesión ya activa no debe recibir recordatorios periódicos vacíos.
-	// Pero si el agente está idle y acaba de autoasignarse una tarea real,
-	// sí hay que empujarle ese nuevo frente sin esperar a reinicios o handoff.
-	if strings.TrimSpace(out.AccionRecomendada) != "esperar_o_pedir_tarea" {
+	switch strings.TrimSpace(out.AccionRecomendada) {
+	case "continuar_trabajo":
+		return procesarDecisionContinuarTrabajoSesionActivaAutonomia(sesion, proyecto, out, snapshot)
+	case "esperar_o_pedir_tarea":
+		return procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion, proyecto, snapshot)
+	default:
+		return 0, nil
+	}
+}
+
+func procesarDecisionContinuarTrabajoSesionActivaAutonomia(sesion *db.Sesion, proyecto *db.Proyecto, out agenteTickOutput, snapshot *autonomiaBatchSnapshot) (int, error) {
+	if sesion == nil || proyecto == nil || sesion.ProyectoID == nil {
+		return 0, nil
+	}
+	tareaID, debe, err := sesionActivaDebeRecibirNudgeContinuacion(sesion, proyecto)
+	if err != nil || !debe {
+		return 0, err
+	}
+	if ok, err := encolarNudgeAutonomiaConInvalidacion(
+		snapshot,
+		sesion.Agente,
+		proyecto,
+		"continuar_trabajo",
+		out.Motivo,
+		"Sigue con la tarea activa y cierra el siguiente slice útil del frente actual dentro del write-set y tests definidos.",
+		map[string]any{"tarea_id": tareaID, "motivo_autoasignacion": "sesion_activa_stale"},
+	); err != nil {
+		return 0, err
+	} else if ok {
+		return 1, nil
+	}
+	return 0, nil
+}
+
+func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, proyecto *db.Proyecto, snapshot *autonomiaBatchSnapshot) (int, error) {
+	if sesion == nil || proyecto == nil {
 		return 0, nil
 	}
 	if !autonomiaIdleAutoassignShouldAttempt(sesion.Agente, proyecto.ID) {
@@ -6321,6 +6613,58 @@ func procesarDecisionContinuacionSesionActivaAutonomia(sesion *db.Sesion, proyec
 		return 1, nil
 	}
 	return 0, nil
+}
+
+func sesionActivaDebeRecibirNudgeContinuacion(sesion *db.Sesion, proyecto *db.Proyecto) (int64, bool, error) {
+	if sesion == nil || proyecto == nil || sesion.ProyectoID == nil {
+		return 0, false, nil
+	}
+	tareaID, err := db.GetTareaActivaIDPorAgenteProyecto(sesion.Agente, sesion.ProyectoID)
+	if err != nil || tareaID <= 0 {
+		return 0, false, err
+	}
+	if !autonomiaContinueNudgeShouldAttempt(sesion.Agente, proyecto.ID, tareaID) {
+		return tareaID, false, nil
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		return tareaID, false, err
+	}
+	if !sesionActivaTMUXStaleParaContinuacion(handle, time.Now().UTC(), autonomiaContinueNudgeInterval()) {
+		return tareaID, false, nil
+	}
+	return tareaID, true, nil
+}
+
+func sesionActivaTMUXStaleParaContinuacion(handle *db.RuntimeHandle, now time.Time, staleAfter time.Duration) bool {
+	if handle == nil {
+		return false
+	}
+	_, view := runtimeHandleTMUXWorkerView(handle, now.UTC())
+	if view == nil || !view.Alive || view.HeartbeatStale {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(view.State)) {
+	case "running", "ready", "idle", "waiting_input":
+	default:
+		return false
+	}
+	if staleAfter <= 0 {
+		staleAfter = 5 * time.Minute
+	}
+	lastActivity := time.Time{}
+	switch {
+	case view.LastProgressAt != nil && !view.LastProgressAt.IsZero():
+		lastActivity = view.LastProgressAt.UTC()
+	case view.LastOutputAt != nil && !view.LastOutputAt.IsZero():
+		lastActivity = view.LastOutputAt.UTC()
+	case view.ReadyAt != nil && !view.ReadyAt.IsZero():
+		lastActivity = view.ReadyAt.UTC()
+	}
+	if lastActivity.IsZero() {
+		return false
+	}
+	return !lastActivity.After(now.UTC().Add(-staleAfter))
 }
 
 func persistirPausaPorCuotaAutonomia(agente, motivo string) error {
@@ -6630,6 +6974,9 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 	} else if !disponible {
 		return 0, nil
 	}
+	if runtimeOperativoRecienteDistintoDeSesion(sesion) {
+		return 0, nil
+	}
 	handle, runtime, err := runtimeRecuperacionSesionObjetivo(sesion)
 	if err != nil {
 		return 0, err
@@ -6638,6 +6985,9 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 		return 0, nil
 	}
 	if !esTransporteRemotoAutonomia(handle.Transporte) {
+		if runtimeTMUXRecienteDebeSuplantarRecuperacionSesion(sesion, handle) {
+			return 0, nil
+		}
 		handle, runtime, _, err = db.SincronizarRuntimeHandleSupervisado(handle, runtime, "autonomia_runtime_recovery")
 		if err != nil {
 			return 0, err
@@ -6751,10 +7101,58 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 	if runtimeRemotoReanudable(sesion, handle) {
 		accion = agenteControlAccionResume
 	}
+	if accion == agenteControlAccionResume {
+		payload, err := json.Marshal(map[string]any{
+			"accion":   agenteControlAccionResume,
+			"motivo":   "remote_runtime_degraded",
+			"por":      "orquesta",
+			"proyecto": strings.TrimSpace(proyecto.Slug),
+		})
+		if err != nil {
+			return 0, err
+		}
+		if _, err := runtimesService.EnqueueRuntimeOrder(&db.RuntimeOrder{
+			Agente:     strings.TrimSpace(sesion.Agente),
+			ProyectoID: sesion.ProyectoID,
+			RuntimeID: func() *int64 {
+				if runtime != nil && runtime.ID > 0 {
+					return &runtime.ID
+				}
+				return handle.RuntimeID
+			}(),
+			HandleID:    &handle.ID,
+			Tipo:        agenteControlAccionResume,
+			PayloadJSON: string(payload),
+		}); err != nil {
+			return 0, err
+		}
+		return 2, nil
+	}
 	if err := encolarControlAutonomiaProyecto(strings.TrimSpace(sesion.Agente), proyecto, accion, "remote_runtime_degraded"); err != nil {
 		return 0, err
 	}
 	return 2, nil
+}
+
+func runtimeTMUXRecienteDebeSuplantarRecuperacionSesion(sesion *db.Sesion, handle *db.RuntimeHandle) bool {
+	if sesion == nil || handle == nil {
+		return false
+	}
+	if handle.SesionID == nil || *handle.SesionID == sesion.ID {
+		return false
+	}
+	if !db.RuntimeHandleSnapshotIsFresh(handle, time.Minute) {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
+		strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") {
+		return true
+	}
+	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
+	if strings.EqualFold(strings.TrimSpace(mapStringValue(meta, "driver")), "tmux_cli_session") {
+		return true
+	}
+	return strings.TrimSpace(mapStringValue(meta, "tmux_session")) != ""
 }
 
 func runtimeRecuperacionSesionObjetivo(sesion *db.Sesion) (*db.RuntimeHandle, *db.RuntimeInstance, error) {
@@ -6775,8 +7173,12 @@ func runtimeRecuperacionSesionObjetivo(sesion *db.Sesion) (*db.RuntimeHandle, *d
 			return nil, nil, err
 		}
 		handle = sesionHandle
+		runtime, err = db.GetRuntimeBySesionID(sesion.ID)
+		if err != nil && err != sql.ErrNoRows {
+			return nil, nil, err
+		}
 	}
-	if agente != "" {
+	if handle == nil && agente != "" {
 		var candidate *db.RuntimeHandle
 		if proyectoID != nil && *proyectoID > 0 {
 			candidate, err = db.GetRuntimeHandleOperativoRecienteAgenteProyecto(agente, proyectoID)
@@ -6786,13 +7188,27 @@ func runtimeRecuperacionSesionObjetivo(sesion *db.Sesion) (*db.RuntimeHandle, *d
 		if err != nil {
 			return nil, nil, err
 		}
-		if candidate != nil && (sesionHandle == nil || candidate.ID != sesionHandle.ID) {
+		if candidate != nil {
 			handle = candidate
 		}
 	}
-	runtime, err = runtimeCanonicoDesdeHandleAgenteProyecto(handle, agente, proyectoID)
-	if err != nil {
-		return nil, nil, err
+	if agente != "" {
+		canonical, err := db.GetRuntimeHandleCanonicoRecienteAgenteProyecto(agente, proyectoID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if runtimeHandlePreferibleParaRecuperacion(canonical, handle) {
+			handle = canonical
+		}
+	}
+	if handle != nil && sesionHandle != nil && handle.ID != sesionHandle.ID {
+		runtime = nil
+	}
+	if runtime == nil {
+		runtime, err = runtimeCanonicoDesdeHandleAgenteProyecto(handle, agente, proyectoID)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 	if runtime == nil && agente != "" {
 		runtime, err = db.GetRuntimePrincipalAgenteProyecto(agente, proyectoID)
@@ -6807,6 +7223,57 @@ func runtimeRecuperacionSesionObjetivo(sesion *db.Sesion) (*db.RuntimeHandle, *d
 		}
 	}
 	return handle, runtime, nil
+}
+
+func runtimeHandlePreferibleParaRecuperacion(candidate, current *db.RuntimeHandle) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	candidateTMUX := runtimeHandleTMUXRecienteParaRecuperacion(candidate)
+	currentTMUX := runtimeHandleTMUXRecienteParaRecuperacion(current)
+	if candidateTMUX != currentTMUX {
+		return candidateTMUX
+	}
+	candidateFresh := db.RuntimeHandleSnapshotIsFresh(candidate, time.Minute)
+	currentFresh := db.RuntimeHandleSnapshotIsFresh(current, time.Minute)
+	if candidateFresh != currentFresh {
+		return candidateFresh
+	}
+	return runtimeHandleRecencyAutonomia(candidate).After(runtimeHandleRecencyAutonomia(current))
+}
+
+func runtimeHandleTMUXRecienteParaRecuperacion(handle *db.RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	if !db.RuntimeHandleSnapshotIsFresh(handle, time.Minute) {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
+		strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") {
+		return true
+	}
+	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
+	if strings.EqualFold(strings.TrimSpace(mapStringValue(meta, "driver")), "tmux_cli_session") {
+		return true
+	}
+	return strings.TrimSpace(mapStringValue(meta, "tmux_session")) != ""
+}
+
+func runtimeHandleRecencyAutonomia(handle *db.RuntimeHandle) time.Time {
+	if handle == nil {
+		return time.Time{}
+	}
+	if handle.LastSeenAt != nil && !handle.LastSeenAt.IsZero() {
+		return handle.LastSeenAt.UTC()
+	}
+	if !handle.UpdatedAt.IsZero() {
+		return handle.UpdatedAt.UTC()
+	}
+	return handle.CreatedAt.UTC()
 }
 
 func runtimeCanonicoDesdeHandleAgenteProyecto(handle *db.RuntimeHandle, agente string, proyectoID *int64) (*db.RuntimeInstance, error) {
@@ -6925,20 +7392,38 @@ func runtimeRemotoReanudable(sesion *db.Sesion, handle *db.RuntimeHandle) bool {
 		strings.EqualFold(strings.TrimSpace(stringFromMetadataJSON(handle.MetadataJSON, "driver")), "ollama_pool_local") {
 		return false
 	}
-	if strings.TrimSpace(handle.HandleKind) == "process" {
-		return false
-	}
 	if ext := strings.TrimSpace(sesion.ExternalSessionID); ext != "" {
 		return true
 	}
 	if ext := strings.TrimSpace(stringFromMetadataJSON(handle.MetadataJSON, "external_session_id")); ext != "" {
 		return true
 	}
+	if strings.TrimSpace(handle.HandleKind) == "process" {
+		return false
+	}
 	ref := strings.TrimSpace(handle.HandleRef)
 	if ref == "" {
 		return false
 	}
 	return ref != strconv.FormatInt(sesion.ID, 10)
+}
+
+func runtimeOperativoRecienteDistintoDeSesion(sesion *db.Sesion) bool {
+	if sesion == nil || sesion.ProyectoID == nil {
+		return false
+	}
+	handle, err := db.GetRuntimeHandleOperativoRecienteAgenteProyecto(strings.TrimSpace(sesion.Agente), sesion.ProyectoID)
+	if err != nil || handle == nil {
+		return false
+	}
+	if handle.SesionID != nil && sesion.ID > 0 && *handle.SesionID == sesion.ID {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(handle.Estado), "activo") {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") ||
+		strings.EqualFold(strings.TrimSpace(stringFromMetadataJSON(handle.MetadataJSON, "driver")), "tmux_cli_session")
 }
 
 func reactivarAgenteTrasReanimacion(agente string) error {

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -2213,14 +2214,14 @@ func TestAPIAgenteResetReanimacionLimpiaContinuidadYCancelaBootstrap(t *testing.
 		t.Fatalf("crear proyecto: %v", err)
 	}
 	if _, err := db.IniciarSesionContexto(db.SesionInicio{
-		Agente:              "Codex1",
-		ProyectoID:          &proyectoID,
-		CWD:                 "/tmp/orquestador",
-		Herramienta:         "codex-cli",
-		ExternalSessionID:   "sess-old",
-		ResumePayloadJSON:   `{"runtime_order":{"id":109242},"checkpoint":{"id":40275}}`,
-		ResumenContinuidad:  "Continuidad vieja",
-		Branch:              "feature/old",
+		Agente:             "Codex1",
+		ProyectoID:         &proyectoID,
+		CWD:                "/tmp/orquestador",
+		Herramienta:        "codex-cli",
+		ExternalSessionID:  "sess-old",
+		ResumePayloadJSON:  `{"runtime_order":{"id":109242},"checkpoint":{"id":40275}}`,
+		ResumenContinuidad: "Continuidad vieja",
+		Branch:             "feature/old",
 	}); err != nil {
 		t.Fatalf("iniciar sesion: %v", err)
 	}
@@ -2566,6 +2567,12 @@ func TestAPIProyectoMicrocicloActivaOperacionAutonomiaYTarea(t *testing.T) {
 	if !strings.Contains(resp.Resultado.Tarea.Notas, microcicloRefactorNotasTag) {
 		t.Fatalf("tarea semilla sin tag: %+v", resp.Resultado.Tarea)
 	}
+	if !strings.Contains(resp.Resultado.Tarea.Descripcion, "No abras shims de compatibilidad") {
+		t.Fatalf("la tarea semilla debe prohibir shims de compatibilidad fuera del frente: %+v", resp.Resultado.Tarea)
+	}
+	if !strings.Contains(resp.Resultado.Tarea.Descripcion, "tmux_cli_session") || !strings.Contains(resp.Resultado.Tarea.Descripcion, "process_pty_cli") {
+		t.Fatalf("la tarea semilla debe fijar TMUX como carril canonico premium y relegar PTY legacy: %+v", resp.Resultado.Tarea)
+	}
 	op, err := db.GetProyectoOperacion(resp.Resultado.Proyecto.ID)
 	if err != nil {
 		t.Fatalf("get operacion: %v", err)
@@ -2656,6 +2663,26 @@ func TestAPIProyectoMicrocicloLimpiaPruebasAntesDeActivar(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("mailbox vieja: %v", err)
 	}
+	rutaWorktreeVieja := filepath.Join(tmp, ".orquesta-worktrees", "wt-codex1")
+	if err := os.MkdirAll(rutaWorktreeVieja, 0o755); err != nil {
+		t.Fatalf("mkdir worktree vieja: %v", err)
+	}
+	resWT, err := db.DB.Exec(`
+		INSERT INTO worktrees (proyecto_id, agente, nombre, ruta_abs, branch, base_ref, estado, motivo)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		proyecto.ID,
+		"Codex1",
+		"wt-codex1",
+		rutaWorktreeVieja,
+		"orq/orquesta/codex1",
+		"HEAD",
+		"activa",
+		"prueba_vieja",
+	)
+	if err != nil {
+		t.Fatalf("crear worktree vieja: %v", err)
+	}
+	worktreeViejaID, _ := resWT.LastInsertId()
 
 	mux := http.NewServeMux()
 	registerAPIRoutes(mux)
@@ -2696,6 +2723,192 @@ func TestAPIProyectoMicrocicloLimpiaPruebasAntesDeActivar(t *testing.T) {
 		if item != nil && item.ID == handle.ID {
 			t.Fatalf("el handle fallido viejo deberia purgarse: %+v", item)
 		}
+	}
+	worktreeVieja, err := db.CoordinationWorktreeRepository().GetByID(worktreeViejaID)
+	if err != nil {
+		t.Fatalf("get worktree vieja: %v", err)
+	}
+	if worktreeVieja == nil || worktreeVieja.State != coordinacion.WorktreeClosed {
+		t.Fatalf("la worktree vieja deberia quedar cerrada: %+v", worktreeVieja)
+	}
+}
+
+func TestAPIProyectoMicrocicloCreaTareaNuevaTrasLimpiarPruebas(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquesta",
+		Nombre:  "Orquesta",
+		RutaAbs: tmp,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	body, _ := json.Marshal(apiProyectoMicrocicloRequest{Agente: "Codex1"})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/proyectos/orquesta/autonomia/microciclo", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status microciclo inicial inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp apiProyectoMicrocicloResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode microciclo inicial: %v", err)
+	}
+	if resp.Resultado == nil || resp.Resultado.Tarea == nil {
+		t.Fatalf("resultado inicial inesperado: %+v", resp.Resultado)
+	}
+
+	bodyLimpio, _ := json.Marshal(apiProyectoMicrocicloRequest{
+		Agente:         "Codex1",
+		LimpiarPruebas: true,
+	})
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/api/proyectos/orquesta/autonomia/microciclo", bytes.NewReader(bodyLimpio))
+	req2.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("status microciclo limpio inesperado: %d body=%s", rec2.Code, rec2.Body.String())
+	}
+	var resp2 apiProyectoMicrocicloResponse
+	if err := json.Unmarshal(rec2.Body.Bytes(), &resp2); err != nil {
+		t.Fatalf("decode microciclo limpio: %v", err)
+	}
+	if resp2.Resultado == nil || resp2.Resultado.Tarea == nil {
+		t.Fatalf("resultado limpio inesperado: %+v", resp2.Resultado)
+	}
+	if resp2.Resultado.TareaReutilizada || resp2.Resultado.Tarea.ID == resp.Resultado.Tarea.ID {
+		t.Fatalf("deberia crear una tarea semilla nueva tras limpiar pruebas: inicial=%+v limpio=%+v", resp.Resultado, resp2.Resultado)
+	}
+	if resp2.Resultado.Tarea.Estado != db.TareaEnProgreso {
+		t.Fatalf("la tarea semilla deberia volver a en_progreso: %+v", resp2.Resultado.Tarea)
+	}
+}
+
+func TestAPIProyectoMicrocicloSincronizaDirtyWorkspaceEnWorktreeActiva(t *testing.T) {
+	t.Setenv("ORQUESTA_SYNC_DIRTY_WORKSPACE_TO_WORKTREE", "true")
+
+	tmp := prepararDBTemporalCmd(t)
+	repo := filepath.Join(tmp, "repo-sync")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	runGitCmdAPITest(t, repo, "init")
+	runGitCmdAPITest(t, repo, "config", "user.name", "Orquesta Test")
+	runGitCmdAPITest(t, repo, "config", "user.email", "orquesta@example.com")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("base\n"), 0o644); err != nil {
+		t.Fatalf("write base: %v", err)
+	}
+	runGitCmdAPITest(t, repo, "add", "README.md")
+	runGitCmdAPITest(t, repo, "commit", "-m", "base")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("dirty-local\n"), 0o644); err != nil {
+		t.Fatalf("write dirty: %v", err)
+	}
+
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquesta",
+		Nombre:  "Orquesta",
+		RutaAbs: repo,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+	body, _ := json.Marshal(apiProyectoMicrocicloRequest{
+		Agente:         "Codex1",
+		LimpiarPruebas: true,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/proyectos/orquesta/autonomia/microciclo", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status microciclo sync inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	worktree, err := gitService.ResolveActiveWorktree("orquesta", "Codex1")
+	if err != nil {
+		t.Fatalf("ResolveActiveWorktree: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(worktree.RutaAbs, "README.md"))
+	if err != nil {
+		t.Fatalf("leer README sincronizado: %v", err)
+	}
+	if string(raw) != "dirty-local\n" {
+		t.Fatalf("la worktree deberia heredar el dirty workspace local, got=%q", string(raw))
+	}
+}
+
+func TestAPIProyectoMicrocicloNoSincronizaDirtyWorkspacePorDefecto(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	repo := filepath.Join(tmp, "repo-clean")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	runGitCmdAPITest(t, repo, "init")
+	runGitCmdAPITest(t, repo, "config", "user.name", "Orquesta Test")
+	runGitCmdAPITest(t, repo, "config", "user.email", "orquesta@example.com")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("base\n"), 0o644); err != nil {
+		t.Fatalf("write base: %v", err)
+	}
+	runGitCmdAPITest(t, repo, "add", "README.md")
+	runGitCmdAPITest(t, repo, "commit", "-m", "base")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("dirty-local\n"), 0o644); err != nil {
+		t.Fatalf("write dirty: %v", err)
+	}
+
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquesta",
+		Nombre:  "Orquesta",
+		RutaAbs: repo,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+	body, _ := json.Marshal(apiProyectoMicrocicloRequest{
+		Agente:         "Codex1",
+		LimpiarPruebas: true,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/proyectos/orquesta/autonomia/microciclo", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status microciclo clean inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	worktree, err := gitService.ResolveActiveWorktree("orquesta", "Codex1")
+	if err != nil {
+		t.Fatalf("ResolveActiveWorktree: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(worktree.RutaAbs, "README.md"))
+	if err != nil {
+		t.Fatalf("leer README worktree: %v", err)
+	}
+	if string(raw) != "base\n" {
+		t.Fatalf("la worktree premium deberia arrancar limpia por defecto, got=%q", string(raw))
 	}
 }
 
@@ -2740,6 +2953,15 @@ func TestAPIProyectoMicrocicloEncolaStartSiAgenteNoTieneRuntime(t *testing.T) {
 	if resp.Resultado.Tarea.ID <= 0 {
 		t.Fatalf("el microciclo deberia dejar una tarea semilla usable: %+v", resp.Resultado.Tarea)
 	}
+	if !strings.Contains(resp.Resultado.Tarea.Descripcion, "Write-set exclusivo:") {
+		t.Fatalf("el microciclo deberia acotar el frente con write-set: %+v", resp.Resultado.Tarea)
+	}
+	if !strings.Contains(resp.Resultado.Tarea.Descripcion, "Trabaja solo dentro de ese write_set") {
+		t.Fatalf("el microciclo deberia dejar el write_set como contrato exclusivo: %+v", resp.Resultado.Tarea)
+	}
+	if !strings.Contains(resp.Resultado.Tarea.Descripcion, "No ensanches firmas ni APIs del nucleo") {
+		t.Fatalf("el microciclo deberia bloquear ensanches de API fuera del frente: %+v", resp.Resultado.Tarea)
+	}
 	if resp.Resultado.Dispatch == nil || resp.Resultado.Dispatch.Despacho == nil {
 		t.Fatalf("el microciclo deberia construir un despacho usable: %+v", resp.Resultado.Dispatch)
 	}
@@ -2748,6 +2970,15 @@ func TestAPIProyectoMicrocicloEncolaStartSiAgenteNoTieneRuntime(t *testing.T) {
 	}
 	if resp.Resultado.Dispatch.DispatchRuntime == nil || strings.EqualFold(strings.TrimSpace(resp.Resultado.Dispatch.DispatchRuntime.Estado), "sin_agente") {
 		t.Fatalf("el microciclo no deberia quedarse sin agente en el dispatch runtime: %+v", resp.Resultado.Dispatch.DispatchRuntime)
+	}
+}
+
+func runGitCmdAPITest(t *testing.T, repo string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v output=%s", args, err, string(out))
 	}
 }
 
@@ -3306,6 +3537,9 @@ func TestAPIAgentePrepararIntegraBootstrapRuntime(t *testing.T) {
 	); err != nil {
 		t.Fatalf("crear worktree: %v", err)
 	}
+	if err := os.MkdirAll(filepath.Join(tmp, "orquestador", ".orquesta-worktrees", "wt-codex1"), 0o755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
 	if _, err := db.CrearPropuesta(&db.Propuesta{
 		Codigo:       "OP-901",
 		Titulo:       "Revisar autenticacion",
@@ -3389,7 +3623,7 @@ func TestAPIAgentePrepararIntegraBootstrapRuntime(t *testing.T) {
 	if strings.TrimSpace(out.BootstrapPrompt) == "" || out.Plan.BootstrapPrompt != out.BootstrapPrompt {
 		t.Fatalf("bootstrap prompt inesperado: top=%q plan=%q", out.BootstrapPrompt, out.Plan.BootstrapPrompt)
 	}
-	if out.Plan.WorkingDir != filepath.Join(tmp, "orquestador", "sesion-previa") {
+	if out.Plan.WorkingDir != filepath.Join(tmp, "orquestador", ".orquesta-worktrees", "wt-codex1") {
 		t.Fatalf("working_dir inesperado: %s", out.Plan.WorkingDir)
 	}
 	if !strings.Contains(out.Plan.ContinuityPrompt, "handoff listo") {

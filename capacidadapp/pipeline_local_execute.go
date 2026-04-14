@@ -17,24 +17,25 @@ type ResultadoEjecucionPasoPipelineLocal struct {
 }
 
 type DespachoPipelineLocal struct {
-	ProyectoSlug      string               `json:"proyecto_slug,omitempty"`
-	Fase              string               `json:"fase"`
-	AccionTarea       string               `json:"accion_tarea,omitempty"`
-	PerfilTarea       string               `json:"perfil_tarea,omitempty"`
-	ModoEjecucion     string               `json:"modo_ejecucion,omitempty"`
-	Carril            string               `json:"carril,omitempty"`
-	EntregaCanonica   string               `json:"entrega_canonica,omitempty"`
-	RequiereWorktree  bool                 `json:"requiere_worktree"`
-	UsaMicroprograma  bool                 `json:"usa_microprogramacion"`
-	RequiereModelo    bool                 `json:"requiere_modelo"`
-	ObjetivoModelo    string               `json:"objetivo_modelo,omitempty"`
-	ModeloFallback    string               `json:"modelo_fallback,omitempty"`
-	ResolucionActual  *db.ResolucionModelo `json:"resolucion_actual,omitempty"`
-	TareaObjetivoID   int64                `json:"tarea_objetivo_id,omitempty"`
-	TareaObjetivo     string               `json:"tarea_objetivo,omitempty"`
-	AgenteTarea       string               `json:"agente_tarea,omitempty"`
-	AgenteSugerido    string               `json:"agente_sugerido,omitempty"`
-	Motivo            string               `json:"motivo,omitempty"`
+	ProyectoSlug     string               `json:"proyecto_slug,omitempty"`
+	Fase             string               `json:"fase"`
+	AccionTarea      string               `json:"accion_tarea,omitempty"`
+	PerfilTarea      string               `json:"perfil_tarea,omitempty"`
+	ModoEjecucion    string               `json:"modo_ejecucion,omitempty"`
+	Carril           string               `json:"carril,omitempty"`
+	EntregaCanonica  string               `json:"entrega_canonica,omitempty"`
+	RequiereWorktree bool                 `json:"requiere_worktree"`
+	UsaMicroprograma bool                 `json:"usa_microprogramacion"`
+	RequiereModelo   bool                 `json:"requiere_modelo"`
+	ObjetivoModelo   string               `json:"objetivo_modelo,omitempty"`
+	ModeloFallback   string               `json:"modelo_fallback,omitempty"`
+	ResolucionActual *db.ResolucionModelo `json:"resolucion_actual,omitempty"`
+	TareaObjetivoID  int64                `json:"tarea_objetivo_id,omitempty"`
+	TareaObjetivo    string               `json:"tarea_objetivo,omitempty"`
+	AgenteTarea      string               `json:"agente_tarea,omitempty"`
+	WriteSet         []string             `json:"write_set,omitempty"`
+	AgenteSugerido   string               `json:"agente_sugerido,omitempty"`
+	Motivo           string               `json:"motivo,omitempty"`
 }
 
 func (s *Service) EjecutarSiguientePasoPipelineLocalDeterminista(proyectoSlug string) (*ResultadoEjecucionPasoPipelineLocal, error) {
@@ -112,6 +113,7 @@ func (s *Service) construirDespachoPipelineLocal(paso *PasoPipelineLocalDetermin
 		out.TareaObjetivoID = tarea.ID
 		out.TareaObjetivo = strings.TrimSpace(tarea.Titulo)
 		out.AgenteTarea = strings.TrimSpace(tarea.Agente)
+		out.WriteSet = append([]string(nil), tarea.WriteSet...)
 	}
 	return out
 }

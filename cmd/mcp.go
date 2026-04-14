@@ -4916,6 +4916,9 @@ func requestSupervisorWorktreeCheckpoint(agente string, item apiOpenClawWorktree
 	if err != nil {
 		return false, "", err
 	}
+	if proyecto == nil {
+		return false, "", nil
+	}
 	instruction := buildSupervisorWorktreeCheckpointInstruction(item)
 	enqueued, err := encolarNudgeAutonomiaDetallado(
 		agente,

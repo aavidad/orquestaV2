@@ -7,7 +7,7 @@ import (
 	"orquesta/reviewapp"
 )
 
-func ptrInt64(v int64) *int64 { return &v }
+func ptrInt64(v int64) *int64    { return &v }
 func ptrString(v string) *string { return &v }
 
 type fakeStore struct{}
@@ -704,6 +704,58 @@ func TestConstruirDespachoPipelineLocalUsaCarrilRevision(t *testing.T) {
 	}
 	if despacho.TareaObjetivoID != 22 || despacho.TareaObjetivo != "Revisar control plane" {
 		t.Fatalf("tarea revision inesperada: %+v", despacho)
+	}
+}
+
+func TestConstruirDespachoPipelineLocalPropagaWriteSetDeLaTarea(t *testing.T) {
+	paso := &PasoPipelineLocalDeterminista{
+		ProyectoSlug: "orquestador",
+		AccionTarea:  "implementar",
+		Motivo:       "frente activo",
+		EtapaObjetivo: &EtapaPipelineLocal{
+			Fase:             "implementacion",
+			PerfilTarea:      "implementacion",
+			ModoEjecucion:    "worker_modelo",
+			Carril:           "premium_worktree",
+			EntregaCanonica:  "git_worktree",
+			RequiereWorktree: true,
+		},
+		TareaObjetivo: &TareaPipelineLocal{
+			ID:          33,
+			Titulo:      "Cerrar runtime mailbox",
+			Descripcion: "Write-set exclusivo: cmd/controlplane_support.go, db/controlplane_entities.go y db/controlplane_entities_test.go.",
+			WriteSet:    []string{"cmd/controlplane_support.go", "db/controlplane_entities.go", "db/controlplane_entities_test.go"},
+		},
+	}
+
+	service := NewService(fakeStore{})
+	despacho := service.construirDespachoPipelineLocal(paso, nil)
+	if despacho == nil {
+		t.Fatalf("despacho nil")
+	}
+	if len(despacho.WriteSet) != 3 {
+		t.Fatalf("write_set inesperado: %+v", despacho)
+	}
+	if despacho.WriteSet[0] != "cmd/controlplane_support.go" || despacho.WriteSet[2] != "db/controlplane_entities_test.go" {
+		t.Fatalf("write_set propagado inesperado: %+v", despacho.WriteSet)
+	}
+}
+
+func TestTareaPipelineLocalDesdeDBExtraeWriteSetDeDescripcion(t *testing.T) {
+	tarea := tareaPipelineLocalDesdeDB(&db.Tarea{
+		ID:          77,
+		Titulo:      "Cerrar mailbox premium",
+		Descripcion: "Frente actual. Write-set exclusivo: cmd/controlplane_support.go, db/controlplane_entities.go y db/controlplane_entities_test.go. Trabaja solo dentro de ese write_set. Tests minimos del slice: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*' -count=1.",
+		Estado:      db.TareaEnProgreso,
+	})
+	if tarea == nil {
+		t.Fatalf("tarea nil")
+	}
+	if len(tarea.WriteSet) != 3 {
+		t.Fatalf("write_set inesperado: %+v", tarea)
+	}
+	if tarea.WriteSet[0] != "cmd/controlplane_support.go" || tarea.WriteSet[2] != "db/controlplane_entities_test.go" {
+		t.Fatalf("write_set extraido inesperado: %+v", tarea.WriteSet)
 	}
 }
 
