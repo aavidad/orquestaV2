@@ -780,40 +780,12 @@ func agentePertenecePoolAutobootstrapProyecto(agente string, proyecto *Proyecto)
 		return true
 	}
 	projectSlug := strings.TrimSpace(configOrDefault("server_autobootstrap_project_slug", "orquestador"))
-	if projectSlug == "" || !strings.EqualFold(strings.TrimSpace(proyecto.Slug), projectSlug) {
-		return true
-	}
 	permitidos := splitConfigAgentList(configOrDefault("server_autobootstrap_worker_agents", "Codex2,Codex3,Codex4,Codex5"))
-	if len(permitidos) == 0 {
-		return true
-	}
-	for _, nombre := range permitidos {
-		if strings.EqualFold(agente, nombre) {
-			return true
-		}
-	}
-	return false
+	return planificadorpolicy.AgentAllowedForAutobootstrapProject(agente, strings.TrimSpace(proyecto.Slug), projectSlug, permitidos)
 }
 
 func splitConfigAgentList(raw string) []string {
-	parts := strings.FieldsFunc(raw, func(r rune) bool {
-		return r == ',' || r == ';' || r == '\n'
-	})
-	seen := make(map[string]struct{}, len(parts))
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		key := strings.ToLower(part)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, part)
-	}
-	return out
+	return planificadorpolicy.SplitAgentList(raw)
 }
 
 func EncolarStartAutomaticoSiHaceFalta(agente string, proyecto *Proyecto, motivo string) error {

@@ -11,6 +11,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - `a8778d4` mueve el scoring puro de candidatos de presupuesto canónico a `sesionesapp`
 - último corte de esta tanda: mover la evaluación pura de presupuesto y ratio/handoff a `sesionesapp`
 - corte nuevo en planner: mover la policy pura de cupo/carga/selección de proyecto automático a `planificadorpolicy`
+- corte adicional en planner: mover la policy de filtro de agentes permitidos en autobootstrap a `planificadorpolicy`
 
 Estado del frente seguro:
 
@@ -29,6 +30,7 @@ Estado del frente seguro:
 - policy de presupuesto movida a `sesionesapp`: TTL, detección de cuota, scoring canónico y evaluación de handoff
 - policy de dependencias de tareas movida a `tareaspolicy`
 - policy pura de selección de proyecto automático del planner movida a `planificadorpolicy`
+- policy de pertenencia al pool de autobootstrap del planner movida a `planificadorpolicy`
 - policy de gobernanza movida a `gobernanzapolicy` para catálogo, validación de overrides y precedencia por capas
 - policy de skills movida a `skillspolicy`
 

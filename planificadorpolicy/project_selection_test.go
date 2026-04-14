@@ -53,3 +53,23 @@ func TestPreferAutomaticProjectCandidatePrioritizesMicroClosedWork(t *testing.T)
 		t.Fatal("should prioritize micro-directed work before raw deficit")
 	}
 }
+
+func TestSplitAgentListDeduplicatesAndTrims(t *testing.T) {
+	got := SplitAgentList(" Codex2, codex2 ; Codex3\nCodex4 ")
+	if len(got) != 3 || got[0] != "Codex2" || got[1] != "Codex3" || got[2] != "Codex4" {
+		t.Fatalf("unexpected list: %#v", got)
+	}
+}
+
+func TestAgentAllowedForAutobootstrapProject(t *testing.T) {
+	allowed := SplitAgentList("Codex2,Codex3")
+	if !AgentAllowedForAutobootstrapProject("Codex2", "orquestador", "orquestador", allowed) {
+		t.Fatal("Codex2 should be allowed")
+	}
+	if AgentAllowedForAutobootstrapProject("Codex9", "orquestador", "orquestador", allowed) {
+		t.Fatal("Codex9 should not be allowed")
+	}
+	if !AgentAllowedForAutobootstrapProject("Codex9", "otro", "orquestador", allowed) {
+		t.Fatal("other projects should not be restricted")
+	}
+}

@@ -1,5 +1,7 @@
 package planificadorpolicy
 
+import "strings"
+
 type ProjectOperationSnapshot struct {
 	ObjectivePct int
 	MinAgents    int
@@ -79,4 +81,46 @@ func PreferAutomaticProjectCandidate(candidate *AutomaticProjectCandidateSnapsho
 		return candidate.Operation.Priority > current.Operation.Priority
 	}
 	return candidate.ProjectID < current.ProjectID
+}
+
+func SplitAgentList(raw string) []string {
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n'
+	})
+	seen := make(map[string]struct{}, len(parts))
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		key := strings.ToLower(part)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, part)
+	}
+	return out
+}
+
+func AgentAllowedForAutobootstrapProject(agent, projectSlug, configuredProjectSlug string, allowedAgents []string) bool {
+	agent = strings.TrimSpace(agent)
+	projectSlug = strings.TrimSpace(projectSlug)
+	configuredProjectSlug = strings.TrimSpace(configuredProjectSlug)
+	if agent == "" {
+		return true
+	}
+	if projectSlug == "" || configuredProjectSlug == "" || !strings.EqualFold(projectSlug, configuredProjectSlug) {
+		return true
+	}
+	if len(allowedAgents) == 0 {
+		return true
+	}
+	for _, name := range allowedAgents {
+		if strings.EqualFold(agent, name) {
+			return true
+		}
+	}
+	return false
 }
