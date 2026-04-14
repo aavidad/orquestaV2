@@ -244,14 +244,13 @@ func candidataRutaProyectoEfectivaConWorktrees(proyectoID int64, agente, cwd str
 	if cwd == "" {
 		return ""
 	}
+	sesionEnWorktreeActiva := false
 	if len(worktrees) > 0 {
-		if rutaSesionPerteneceAWorktreeActivaBatch(agente, cwd, worktrees) {
-			return ""
-		}
-	} else if rutaSesionPerteneceAWorktreeActiva(proyectoID, agente, cwd) {
-		return ""
+		sesionEnWorktreeActiva = rutaSesionPerteneceAWorktreeActivaBatch(agente, cwd, worktrees)
+	} else {
+		sesionEnWorktreeActiva = rutaSesionPerteneceAWorktreeActiva(proyectoID, agente, cwd)
 	}
-	return resolverRaizTrabajo(cwd)
+	return coordinacion.CandidateEffectiveProjectPath(cwd, sesionEnWorktreeActiva, tieneMarcadoresRepo)
 }
 
 func ultimaRutaSesionProyecto(proyectoID int64) (string, string, bool) {
@@ -290,28 +289,7 @@ func resolverRaizTrabajo(path string) string {
 }
 
 func resolverRaizTrabajoConMarcadores(path string) (string, bool) {
-	path = normalizarRutaProyecto(path)
-	if path == "" {
-		return "", false
-	}
-	if info, err := os.Stat(path); err == nil && !info.IsDir() {
-		path = filepath.Dir(path)
-	}
-	actual := path
-	for {
-		ok, err := tieneMarcadoresRepo(actual)
-		if err == nil && ok {
-			if filepath.Dir(actual) == actual {
-				return "", false
-			}
-			return actual, true
-		}
-		siguiente := filepath.Dir(actual)
-		if siguiente == actual {
-			return "", false
-		}
-		actual = siguiente
-	}
+	return coordinacion.ResolveWorkRoot(path, tieneMarcadoresRepo)
 }
 
 func RutaTrabajoPreferidaAgenteProyecto(agente string, proyecto *Proyecto, cwd string) string {
@@ -340,13 +318,7 @@ func rutaTrabajoPerteneceAProyectoAgente(proyecto *Proyecto, agente, cwd string)
 		return false
 	}
 	rutaBase := normalizarRutaProyecto(RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, ""))
-	if rutaBase != "" && coordinacion.PathWithin(rutaBase, cwd) {
-		return true
-	}
-	if ruta := rutaWorktreeActivaAgenteProyecto(proyecto.ID, agente); ruta != "" && coordinacion.PathWithin(ruta, cwd) {
-		return true
-	}
-	return false
+	return coordinacion.WorkPathBelongsToProject(cwd, rutaBase, rutaWorktreeActivaAgenteProyecto(proyecto.ID, agente))
 }
 
 func rutaWorktreeActivaAgenteProyecto(proyectoID int64, agente string) string {
