@@ -206,12 +206,33 @@ func tareaPipelineLocalDebeAcotarseAntesDePremium(tarea *TareaPipelineLocal) boo
 	if tarea == nil || tareaPipelineLocalTieneContratoPremium(tarea) {
 		return false
 	}
-	contexto := strings.TrimSpace(strings.Join([]string{
+	contexto := strings.ToLower(strings.TrimSpace(strings.Join([]string{
 		strings.TrimSpace(tarea.Titulo),
 		strings.TrimSpace(tarea.Descripcion),
 		strings.TrimSpace(tarea.Notas),
-	}, "\n"))
-	return len(contexto) >= 48
+	}, "\n")))
+	if len(contexto) >= 120 {
+		return true
+	}
+	marcasAmplias := []string{
+		"auditoria",
+		"audit",
+		"server-first",
+		"cli/api/web",
+		"checkpoints",
+		"estado real del código",
+		"estado real del codigo",
+		"frente mayor",
+		"app completa",
+		"proyecto completo",
+		"backlog",
+	}
+	for _, marca := range marcasAmplias {
+		if strings.Contains(contexto, marca) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) SetPhaseControlProvider(provider PhaseControlProvider) {
