@@ -408,6 +408,20 @@ func activarOperacionMicrociclo(proyectoID int64) (*db.ProyectoOperacion, error)
 	return db.GetProyectoOperacion(proyectoID)
 }
 
+func proyectoUsaContinuidadMicrocicloPremium(proyectoID int64) bool {
+	if proyectoID <= 0 {
+		return false
+	}
+	op, err := db.GetProyectoOperacion(proyectoID)
+	if err != nil || op == nil {
+		return false
+	}
+	if op.EstadoOperativo != db.ProyectoOperativoActivo {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(op.Motivo), "microrefactor_loop")
+}
+
 func activarPoliticaMicrociclo(proyectoSlug, agente string, req proyectoMicrocicloRequest) (*db.ProyectoAutonomia, error) {
 	return supervisionService.UpsertProjectPolicy(proyectoSlug, supervisionapp.PolicyInput{
 		Enabled:              true,

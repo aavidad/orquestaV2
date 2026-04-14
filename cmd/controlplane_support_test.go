@@ -2047,6 +2047,115 @@ func TestProcesarSupervisionAutonomaBatchNoCreaTareaSemillaSiAutoCreateTasksDesa
 	}
 }
 
+func TestProcesarSupervisionAutonomaBatchReabreFrentePremiumContinuoConAutoCreateTasksDesactivado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		DefinitionOfDoneJSON: `{"estado":"microrefactor_loop_activo"}`,
+		SupervisorAgente:     "CodexSupervisor",
+		ReviewRequired:       false,
+		AutoCreateTasks:      false,
+		AutoCloseProject:     false,
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	if err := db.UpsertProyectoOperacion(&db.ProyectoOperacion{
+		ProyectoID:       proyectoID,
+		EstadoOperativo:  db.ProyectoOperativoActivo,
+		Motivo:           "microrefactor_loop",
+		ObjetivoPct:      100,
+		MinAgentes:       1,
+		MaxAgentes:       1,
+		Prioridad:        100,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      microcicloRefactorTituloDefault,
+		Descripcion: "Frente premium anterior",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea historica: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexSupervisor"); err != nil {
+		t.Fatalf("tomar tarea historica: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexSupervisor"); err != nil {
+		t.Fatalf("iniciar tarea historica: %v", err)
+	}
+	if err := db.CompletarTarea(tareaID, "CodexSupervisor", "hecho"); err != nil {
+		t.Fatalf("completar tarea historica: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSupervisor",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	n, err := procesarSupervisionAutonomaBatch()
+	if err != nil {
+		t.Fatalf("procesar supervision: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 supervision con continuidad premium, got=%d", n)
+	}
+
+	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas: %v", err)
+	}
+	if len(tareas) != 2 {
+		t.Fatalf("deberia conservar historico y abrir un frente premium nuevo, tareas=%+v", tareas)
+	}
+	var abierta *db.Tarea
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.ID == tareaID {
+			continue
+		}
+		if tarea.Estado == db.TareaEnProgreso {
+			abierta = tarea
+		}
+	}
+	if abierta == nil {
+		t.Fatalf("deberia abrir una nueva tarea premium en progreso, tareas=%+v", tareas)
+	}
+	if !strings.Contains(strings.TrimSpace(abierta.Notas), microcicloRefactorNotasTag) {
+		t.Fatalf("la nueva tarea premium deberia conservar el tag del carril, tarea=%+v", abierta)
+	}
+	if abierta.Agente == nil || strings.TrimSpace(*abierta.Agente) != "CodexSupervisor" {
+		t.Fatalf("la nueva tarea premium deberia quedar asignada al supervisor, tarea=%+v", abierta)
+	}
+}
+
 func TestProcesarReviewGatesBatchCreaGateYEncolaRevision(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

@@ -154,7 +154,7 @@ type autonomiaAutoCreateResult struct {
 
 func asegurarTrabajoAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, agente *db.Agente) (autonomiaAutoCreateResult, error) {
 	var zero autonomiaAutoCreateResult
-	if policy == nil || !policy.Enabled || !policy.AutoCreateTasks || proyecto == nil || agente == nil {
+	if policy == nil || !policy.Enabled || proyecto == nil || agente == nil {
 		return zero, nil
 	}
 	terminado, _, err := proyectoTerminadoAutonomamente(proyecto)
@@ -191,6 +191,14 @@ func asegurarTrabajoAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyect
 		return zero, err
 	}
 	if firstOpenGate(gates) != nil {
+		return zero, nil
+	}
+	if res, err := asegurarTrabajoContinuoPremium(policy, proyecto, agente); err != nil {
+		return zero, err
+	} else if res.Created {
+		return res, nil
+	}
+	if !policy.AutoCreateTasks {
 		return zero, nil
 	}
 	if !hasAnyTask {
@@ -233,6 +241,27 @@ func asegurarTrabajoAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyect
 	return autonomiaAutoCreateResult{
 		Created:    true,
 		SeedTaskID: id,
+	}, nil
+}
+
+func asegurarTrabajoContinuoPremium(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, agente *db.Agente) (autonomiaAutoCreateResult, error) {
+	var zero autonomiaAutoCreateResult
+	if policy == nil || proyecto == nil || agente == nil {
+		return zero, nil
+	}
+	if !proyectoUsaContinuidadMicrocicloPremium(proyecto.ID) {
+		return zero, nil
+	}
+	tarea, reutilizada, err := asegurarTareaMicrociclo(proyecto, strings.TrimSpace(agente.Nombre), proyectoMicrocicloRequest{}, true)
+	if err != nil {
+		return zero, err
+	}
+	if tarea == nil || tarea.ID <= 0 {
+		return zero, nil
+	}
+	return autonomiaAutoCreateResult{
+		Created:    !reutilizada,
+		SeedTaskID: tarea.ID,
 	}, nil
 }
 
