@@ -74,3 +74,33 @@ func ApplyEffectiveBudget(agent *Agente, candidate BudgetCandidate) {
 		agent.PresupuestoFuente = candidate.Source
 	}
 }
+
+func BudgetSnapshotFresh(checkedAt time.Time, source string, now time.Time, observedMaxAgeSeconds, defaultMaxAgeSeconds int64) bool {
+	if checkedAt.IsZero() {
+		return false
+	}
+	maxAge := time.Duration(BudgetSnapshotMaxAgeSeconds(source, observedMaxAgeSeconds, defaultMaxAgeSeconds)) * time.Second
+	if maxAge <= 0 {
+		maxAge = 5 * time.Minute
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	return now.Sub(checkedAt) <= maxAge
+}
+
+func BudgetSnapshotMaxAgeSeconds(source string, observedMaxAgeSeconds, defaultMaxAgeSeconds int64) int64 {
+	if budgetSourceUsesObservedFreshness(source) && observedMaxAgeSeconds > 0 {
+		return observedMaxAgeSeconds
+	}
+	return defaultMaxAgeSeconds
+}
+
+func budgetSourceUsesObservedFreshness(source string) bool {
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case "codex_token_count_observed", "codex_status_live", "codex_profile_status", "claude_rust_session_observed":
+		return true
+	default:
+		return false
+	}
+}

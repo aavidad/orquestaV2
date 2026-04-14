@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"orquesta/sesionesapp"
 	"strconv"
 	"strings"
 	"time"
@@ -155,26 +156,13 @@ func PresupuestoSesionFresco(p *PresupuestoSesion) bool {
 	if p == nil {
 		return false
 	}
-	maxAge := time.Duration(presupuestoSnapshotMaxAgeSeconds(p)) * time.Second
-	if maxAge <= 0 {
-		maxAge = 5 * time.Minute
-	}
-	if p.CheckedAt.IsZero() {
-		return false
-	}
-	return time.Since(p.CheckedAt) <= maxAge
-}
-
-func presupuestoSnapshotMaxAgeSeconds(p *PresupuestoSesion) int64 {
-	if p != nil && (strings.EqualFold(strings.TrimSpace(p.BudgetSource), "codex_token_count_observed") ||
-		strings.EqualFold(strings.TrimSpace(p.BudgetSource), "codex_status_live") ||
-		strings.EqualFold(strings.TrimSpace(p.BudgetSource), "codex_profile_status") ||
-		strings.EqualFold(strings.TrimSpace(p.BudgetSource), "claude_rust_session_observed")) {
-		if observed := configInt64Fallback("pool_budget_snapshot_observed_max_age_seconds", 3600); observed > 0 {
-			return observed
-		}
-	}
-	return configInt64Fallback("pool_budget_snapshot_max_age_seconds", 300)
+	return sesionesapp.BudgetSnapshotFresh(
+		p.CheckedAt,
+		p.BudgetSource,
+		time.Now().UTC(),
+		configInt64Fallback("pool_budget_snapshot_observed_max_age_seconds", 3600),
+		configInt64Fallback("pool_budget_snapshot_max_age_seconds", 300),
+	)
 }
 
 func PresupuestoSesionAportaCuota(p *PresupuestoSesion) bool {

@@ -41,6 +41,7 @@ func TestDBNoIntroduceDependenciasInternasFueraDeLaFronteraPermitida(t *testing.
 			"runtime_bootstrap_prompt.go": {},
 		},
 		"orquesta/sesionesapp": {
+			"presupuestos_sesion.go": {},
 			"sesiones.go":            {},
 			"sesionesapp_adapter.go": {},
 		},
