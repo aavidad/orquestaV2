@@ -59,3 +59,20 @@ func SessionPathInsideActiveWorktree(agent, cwd string, worktrees []WorktreePath
 	}
 	return false
 }
+
+func SelectUsableActiveWorktreePath(worktrees []WorktreePathRef, effectiveProjectPath string) string {
+	for _, worktree := range worktrees {
+		path := normalizeRouteSelectorPath(worktree.Path)
+		if path == "" {
+			continue
+		}
+		if effectiveProjectPath != "" && !ActiveWorktreePathCoherent(path, effectiveProjectPath) {
+			continue
+		}
+		if !WorktreePathUsable(path) {
+			continue
+		}
+		return path
+	}
+	return ""
+}

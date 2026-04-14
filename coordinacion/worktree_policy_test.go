@@ -44,6 +44,26 @@ func TestSessionPathInsideActiveWorktree(t *testing.T) {
 	}
 }
 
+func TestSelectUsableActiveWorktreePath(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "repo", "orquestador")
+	worktree := filepath.Join(root, ".orquesta-worktrees", "orq-codex1")
+	legacy := filepath.Join(t.TempDir(), "legacy", "orquestador", ".orquesta-worktrees", "orq-codex1")
+	if err := ensureDir(worktree); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
+	if err := ensureDir(legacy); err != nil {
+		t.Fatalf("mkdir legacy: %v", err)
+	}
+
+	got := SelectUsableActiveWorktreePath([]WorktreePathRef{
+		{Agent: "Codex1", Path: legacy},
+		{Agent: "Codex1", Path: worktree},
+	}, root)
+	if got != worktree {
+		t.Fatalf("ruta de worktree utilizable inesperada: got=%s want=%s", got, worktree)
+	}
+}
+
 func ensureDir(path string) error {
 	return os.MkdirAll(path, 0o755)
 }

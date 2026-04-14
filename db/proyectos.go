@@ -342,17 +342,17 @@ func rutaWorktreeActivaAgenteProyecto(proyectoID int64, agente string) string {
 	if err != nil {
 		return ""
 	}
+	refs := make([]coordinacion.WorktreePathRef, 0, len(worktrees))
 	for _, worktree := range worktrees {
 		if worktree == nil {
 			continue
 		}
-		ruta := normalizarRutaProyecto(worktree.Path)
-		if ruta == "" || (rutaProyectoEfectiva != "" && !coordinacion.ActiveWorktreePathCoherent(ruta, rutaProyectoEfectiva)) || !coordinacion.WorktreePathUsable(ruta) {
-			continue
-		}
-		return ruta
+		refs = append(refs, coordinacion.WorktreePathRef{
+			Agent: strings.TrimSpace(worktree.Agent),
+			Path:  strings.TrimSpace(worktree.Path),
+		})
 	}
-	return ""
+	return coordinacion.SelectUsableActiveWorktreePath(refs, rutaProyectoEfectiva)
 }
 
 func rutaSesionPerteneceAWorktreeActiva(proyectoID int64, agente, cwd string) bool {
