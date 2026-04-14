@@ -540,6 +540,7 @@ func descripcionMicrocicloDefault(proyecto *db.Proyecto) string {
 		"Write-set exclusivo: cmd/controlplane_support.go, cmd/controlplane_support_test.go, db/controlplane_entities.go, db/controlplane_entities_test.go, runtimeagente/driver.go y runtimeagente/driver_test.go. Trabaja solo dentro de ese write_set; si el slice exigiera tocar algo fuera, para y reporta BLOQUEO.",
 		"Tests minimos del slice: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*' -count=1 y go test ./db -run 'TestResolverBootstrapRuntimeLeasePendiente.*' -count=1.",
 		"Antes de ampliar validacion, producir broad scans o correr tests colindantes, intenta primero el patch mas pequeno y seguro dentro de simbolos foco y write-set.",
+		"Si el slice actual ya queda verde dentro del write-set, no esperes una microtarea nueva: identifica y ejecuta el siguiente caso adyacente mas pequeno y verificable del mismo slice usando codigo real, tests colindantes o un hueco defensible en simbolos foco.",
 		"Trabaja en un slice pequeno y verificable dentro de ese frente; no abras otro carril ni inventes una arquitectura nueva.",
 		"No abras arquitectura nueva ni cambies comportamiento observable salvo bug claro con prueba.",
 		"No reabras ni refuerces process_pty_cli, pty_broker ni fallbacks PTY-first en este frente salvo bug de compatibilidad ya existente y acotado por prueba.",
@@ -598,9 +599,11 @@ func construirInboxMicrocicloMarkdown(proyecto *db.Proyecto, tarea *db.Tarea) st
 		"## Ejecucion",
 		"- Aplica un unico slice pequeno y verificable.",
 		"- No amplíes validación ni búsquedas laterales antes del primer patch pequeño dentro del write-set.",
+		"- Si este slice ya queda verde, no esperes otra microtarea: encuentra el siguiente caso adyacente mas pequeno y verificable dentro del mismo write-set y siguelo de inmediato.",
 		"- No reabras doctrina ni otros frentes si aqui ya esta el contrato operativo.",
 		"- Mantente en TMUX como carril canonico premium; no abras ni refuerces process_pty_cli ni PTY-first en este frente.",
 		"- No abras shims de compatibilidad ni ensanches firmas del nucleo salvo que exista un call-site real en este arbol y lo hayas comprobado antes.",
+		"- No cierres diciendo que esperas otra microtarea si aun queda un hueco verificable dentro de simbolos foco y write-set.",
 		"- Antes de terminar, deja en verde los tests minimos del slice.",
 	}
 	return strings.TrimSpace(strings.Join(lines, "\n")) + "\n"

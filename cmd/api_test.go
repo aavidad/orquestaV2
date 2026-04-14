@@ -3029,6 +3029,9 @@ func TestAPIProyectoMicrocicloEncolaStartSiAgenteNoTieneRuntime(t *testing.T) {
 	if !strings.Contains(resp.Resultado.Tarea.Descripcion, "Antes de ampliar validacion") {
 		t.Fatalf("el microciclo deberia forzar patch pequeno antes de ensanchar validacion: %+v", resp.Resultado.Tarea)
 	}
+	if !strings.Contains(resp.Resultado.Tarea.Descripcion, "no esperes una microtarea nueva") {
+		t.Fatalf("el microciclo deberia forzar continuidad sobre el siguiente caso adyacente dentro del mismo write-set: %+v", resp.Resultado.Tarea)
+	}
 	if resp.Resultado.Dispatch == nil || resp.Resultado.Dispatch.Despacho == nil {
 		t.Fatalf("el microciclo deberia construir un despacho usable: %+v", resp.Resultado.Dispatch)
 	}
@@ -3037,6 +3040,23 @@ func TestAPIProyectoMicrocicloEncolaStartSiAgenteNoTieneRuntime(t *testing.T) {
 	}
 	if resp.Resultado.Dispatch.DispatchRuntime == nil || strings.EqualFold(strings.TrimSpace(resp.Resultado.Dispatch.DispatchRuntime.Estado), "sin_agente") {
 		t.Fatalf("el microciclo no deberia quedarse sin agente en el dispatch runtime: %+v", resp.Resultado.Dispatch.DispatchRuntime)
+	}
+}
+
+func TestConstruirInboxMicrocicloMarkdownImpulsaSiguienteCasoAdyacente(t *testing.T) {
+	inbox := construirInboxMicrocicloMarkdown(&db.Proyecto{Slug: "orquesta"}, &db.Tarea{
+		ID:          1,
+		Titulo:      "Slice premium",
+		Descripcion: "Descripcion de prueba",
+	})
+	if !strings.Contains(inbox, "no esperes otra microtarea") {
+		t.Fatalf("la inbox debe impedir que el agente espere otra microtarea: %s", inbox)
+	}
+	if !strings.Contains(inbox, "siguiente caso adyacente mas pequeno y verificable") {
+		t.Fatalf("la inbox debe empujar el siguiente caso adyacente dentro del write-set: %s", inbox)
+	}
+	if !strings.Contains(inbox, "No cierres diciendo que esperas otra microtarea") {
+		t.Fatalf("la inbox debe prohibir cerrar esperando otra microtarea: %s", inbox)
 	}
 }
 
