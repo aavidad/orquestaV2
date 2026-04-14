@@ -20,6 +20,7 @@ func TestDBNoIntroduceDependenciasInternasFueraDeLaFronteraPermitida(t *testing.
 			"diagnostico.go":          {},
 			"locks.go":                {},
 			"proyectos.go":            {},
+			"worktree_coherence.go":   {},
 			"worktrees.go":            {},
 		},
 		"orquesta/i18n": {
