@@ -9060,6 +9060,34 @@ func runtimeBootstrapLeaseMailboxIDs(order, startOrder *RuntimeOrder) []int64 {
 	return mailboxIDs
 }
 
+func runtimeBootstrapLeaseMailboxIDsConFallbackFuente(order, startOrder *RuntimeOrder) [][]int64 {
+	candidates := make([][]int64, 0, 2)
+	mailboxIDs := runtimeBootstrapLeaseMailboxIDs(order, startOrder)
+	if len(mailboxIDs) > 0 {
+		candidates = append(candidates, mailboxIDs)
+	}
+	if startOrder == nil || !runtimeBootstrapLeaseLinkedToStart(order, startOrder) {
+		return candidates
+	}
+	sourceMailboxIDs := runtimeBootstrapLeaseMailboxIDs(startOrder, nil)
+	if len(sourceMailboxIDs) == 0 {
+		return candidates
+	}
+	same := len(mailboxIDs) == len(sourceMailboxIDs)
+	if same {
+		for i := range mailboxIDs {
+			if mailboxIDs[i] != sourceMailboxIDs[i] {
+				same = false
+				break
+			}
+		}
+	}
+	if !same {
+		candidates = append(candidates, sourceMailboxIDs)
+	}
+	return candidates
+}
+
 func runtimeBootstrapLeaseSesionID(order, startOrder *RuntimeOrder) int64 {
 	if order == nil {
 		return 0
@@ -9658,12 +9686,18 @@ func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHand
 				orderSesionID = runtimeBootstrapLeaseSesionID(order, startOrder)
 			}
 		}
-		mailboxIDs = runtimeBootstrapLeaseMailboxIDs(order, startOrder)
-		vigentes, vigentesErr := runtimeBootstrapLeaseMailboxIDsVigentes(mailboxIDs)
-		if vigentesErr != nil {
-			return nil, 0, nil, 0, vigentesErr
+		mailboxIDs = nil
+		for _, candidateMailboxIDs := range runtimeBootstrapLeaseMailboxIDsConFallbackFuente(order, startOrder) {
+			vigentes, vigentesErr := runtimeBootstrapLeaseMailboxIDsVigentes(candidateMailboxIDs)
+			if vigentesErr != nil {
+				return nil, 0, nil, 0, vigentesErr
+			}
+			if len(vigentes) == 0 {
+				continue
+			}
+			mailboxIDs = vigentes
+			break
 		}
-		mailboxIDs = vigentes
 		if len(mailboxIDs) == 0 {
 			continue
 		}
