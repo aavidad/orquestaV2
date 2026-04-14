@@ -14043,6 +14043,86 @@ func TestProcesarRuntimeTranscriptBatchRegistraEntregaGitPremiumActivaSinTranscr
 	}
 }
 
+func TestProcesarRuntimeTranscriptBatchRegistraEntregaGitPremiumActivaSinTranscriptConMailboxKindPipelineLocal(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	repoDir := filepath.Join(tmp, "repo-git-transcript-premium-no-transcript-mailbox-kind")
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	runGitCmdTest(t, repoDir, "init", "-b", "main")
+	runGitCmdTest(t, repoDir, "config", "user.email", "test@example.com")
+	runGitCmdTest(t, repoDir, "config", "user.name", "Test User")
+	if err := os.MkdirAll(filepath.Join(repoDir, "cmd"), 0o755); err != nil {
+		t.Fatalf("mkdir cmd: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "cmd", "controlplane_support.go"), []byte("package cmd\n\nfunc premiumWorkerNoTranscriptMailboxKind() string { return \"old\" }\n"), 0o644); err != nil {
+		t.Fatalf("write worker: %v", err)
+	}
+	runGitCmdTest(t, repoDir, "add", ".")
+	runGitCmdTest(t, repoDir, "commit", "-m", "init")
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	projectID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: repoDir,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	worktree, err := newCoordinationService().PrepareWorktree(coordinacion.PrepareWorktreeInput{
+		ProjectRef: "orquestador",
+		Agent:      "Codex1",
+		Name:       "wt-codex1-git-transcript-premium-no-transcript-mailbox-kind",
+		Branch:     "orq/orquestador/codex1-git-transcript-premium-no-transcript-mailbox-kind",
+		BaseRef:    "main",
+		Reason:     "test_runtime_transcript_git_premium_no_transcript_mailbox_kind",
+	})
+	if err != nil {
+		t.Fatalf("prepare worktree: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(worktree.Path, "cmd", "controlplane_support.go"), []byte("package cmd\n\nfunc premiumWorkerNoTranscriptMailboxKind() string { return \"new\" }\n"), 0o644); err != nil {
+		t.Fatalf("write worker in worktree: %v", err)
+	}
+	rawPayload := `{"kind":"pipeline_local","mailbox_kind":"pipeline_local","carril":"premium_worktree","tarea_objetivo_id":542,"write_set":["cmd/controlplane_support.go"],"worktree_id":` + strconv.FormatInt(worktree.ID, 10) + `,"ruta_worktree":"` + worktree.Path + `","branch_worktree":"` + worktree.Branch + `","base_ref_worktree":"main"}`
+	orderID, err := runtimesService.CreateRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &projectID,
+		Tipo:        "send_instruction",
+		Estado:      "pendiente",
+		PayloadJSON: rawPayload,
+	})
+	if err != nil {
+		t.Fatalf("create runtime order premium mailbox kind: %v", err)
+	}
+
+	n, err := procesarRuntimeTranscriptBatch()
+	if err != nil {
+		t.Fatalf("procesarRuntimeTranscriptBatch premium mailbox kind: %v", err)
+	}
+	if n < 1 {
+		t.Fatalf("se esperaba al menos una entrega premium registrada sin transcript usando mailbox_kind, got=%d", n)
+	}
+	order, err := runtimesService.GetRuntimeOrder(orderID)
+	if err != nil || order == nil {
+		t.Fatalf("get runtime order premium mailbox kind: %+v err=%v", order, err)
+	}
+	if order.Estado != "completada" || !strings.Contains(order.ResultadoJSON, `"receipt_source":"git_worktree"`) {
+		t.Fatalf("runtime order premium mailbox kind sin cierre git: %+v", order)
+	}
+	merges, err := db.ListarGitMerges(&projectID, "pendiente")
+	if err != nil || len(merges) == 0 {
+		t.Fatalf("listar merges premium mailbox kind: %+v err=%v", merges, err)
+	}
+	if merges[0].SourceBranch != worktree.Branch || merges[0].TargetBranch != "main" {
+		t.Fatalf("merge premium mailbox kind inesperado: %+v", merges[0])
+	}
+}
+
 func TestProcesarRuntimeTranscriptBatchRegistraEntregaGitPremiumDesdeBootstrapLease(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	repoDir := filepath.Join(tmp, "repo-git-transcript-premium-bootstrap")

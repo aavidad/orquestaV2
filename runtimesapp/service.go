@@ -1764,7 +1764,10 @@ func (s *Service) contextoEntregaGitPremiumDesdeBootstrapOrder(order *db.Runtime
 }
 
 func contextoEntregaGitPremiumDesdePayload(runtimeOrderID int64, payload map[string]any) *ContextoEntregaGitPremium {
-	if strings.TrimSpace(stringMapValue(payload, "source")) != "pipeline_local" {
+	isPipelineLocal := strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "source")), "pipeline_local") ||
+		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "kind")), "pipeline_local") ||
+		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "mailbox_kind")), "pipeline_local")
+	if !isPipelineLocal {
 		return nil
 	}
 	carril := strings.ToLower(strings.TrimSpace(stringMapValue(payload, "carril")))

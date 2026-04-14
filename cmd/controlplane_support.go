@@ -871,7 +871,10 @@ func runtimeOrderEntregaGitPremiumDesdeSendInstruction(order *db.RuntimeOrder) b
 	if err := json.Unmarshal([]byte(order.PayloadJSON), &payload); err != nil {
 		return false
 	}
-	if strings.TrimSpace(stringMapValue(payload, "source")) != "pipeline_local" {
+	isPipelineLocal := strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "source")), "pipeline_local") ||
+		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "kind")), "pipeline_local") ||
+		strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "mailbox_kind")), "pipeline_local")
+	if !isPipelineLocal {
 		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(stringMapValue(payload, "carril"))) {

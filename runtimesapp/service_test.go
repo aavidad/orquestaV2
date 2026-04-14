@@ -1809,6 +1809,44 @@ func TestRegistrarEntregaGitMicroprogramacionActivaFallbackPremiumUsaRegistrador
 	}
 }
 
+func TestRegistrarEntregaGitMicroprogramacionActivaFallbackPremiumUsaMailboxKindPipelineLocal(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{
+		ordersResponse: []*db.RuntimeOrder{{
+			ID:            405,
+			Agente:        "Codex1",
+			ProyectoID:    &projectID,
+			Tipo:          "send_instruction",
+			Estado:        "ejecutando",
+			PayloadJSON:   `{"kind":"pipeline_local","mailbox_kind":"pipeline_local","mailbox_id":91,"carril":"premium_worktree","tarea_objetivo_id":530,"write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"],"worktree_id":81,"ruta_worktree":"/tmp/orq-premium","branch_worktree":"orq/orquestador/codex1","base_ref_worktree":"main"}`,
+			ResultadoJSON: `{"delivery_state":"queued"}`,
+		}},
+	}
+	registrador := &fakeRegistradorEntregaGitPremium{}
+	service := NewService(store)
+	service.SetRegistradorEntregaGitPremium(registrador)
+
+	resultado, err := service.RegistrarEntregaGitMicroprogramacionActiva("Codex1", &projectID, "orquestador", "diff listo", "OpenClaw")
+	if err != nil {
+		t.Fatalf("RegistrarEntregaGitMicroprogramacionActiva fallback premium mailbox kind: %v", err)
+	}
+	if resultado == nil || resultado.ContextoPremium == nil || resultado.ContextoPremium.RuntimeOrderID != 405 {
+		t.Fatalf("resultado/contexto premium inesperado: %+v", resultado)
+	}
+	if resultado.EntregaPremium == nil || resultado.EntregaPremium.GitMergeID != 77 {
+		t.Fatalf("entrega premium inesperada: %+v", resultado)
+	}
+	if registrador.entrada.Carril != "premium_worktree" || registrador.entrada.TareaObjetivoID != 530 {
+		t.Fatalf("payload premium no propagado: %+v", registrador.entrada)
+	}
+	if store.consumedID != 91 || store.markOrderStateID != 405 || store.markOrderStateEstado != "completada" {
+		t.Fatalf("orden premium no completada correctamente: consumed=%d id=%d estado=%q", store.consumedID, store.markOrderStateID, store.markOrderStateEstado)
+	}
+	if !strings.Contains(store.markOrderStateResultado, `"receipt_source":"git_worktree"`) {
+		t.Fatalf("resultado premium sin receipt git: %s", store.markOrderStateResultado)
+	}
+}
+
 func TestResolverContextoEntregaGitPremiumDesdeBootstrapLease(t *testing.T) {
 	projectID := int64(11)
 	store := &fakeStore{
@@ -1845,6 +1883,36 @@ func TestResolverContextoEntregaGitPremiumDesdeBootstrapLease(t *testing.T) {
 	}
 	if len(ctx.WriteSet) != 2 || ctx.WriteSet[1] != "db/controlplane_entities.go" {
 		t.Fatalf("write_set premium inesperado: %+v", ctx)
+	}
+}
+
+func TestResolverContextoEntregaGitPremiumDesdeMailboxKindPipelineLocal(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{
+		ordersResponse: []*db.RuntimeOrder{{
+			ID:            406,
+			Agente:        "Codex1",
+			ProyectoID:    &projectID,
+			Tipo:          "send_instruction",
+			Estado:        "completada",
+			PayloadJSON:   `{"kind":"pipeline_local","mailbox_kind":"pipeline_local","carril":"premium_worktree","tarea_objetivo_id":530,"write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"],"worktree_id":81,"ruta_worktree":"/tmp/orq-premium","branch_worktree":"orq/orquestador/codex1","base_ref_worktree":"main"}`,
+			ResultadoJSON: `{"delivery_state":"notified"}`,
+		}},
+	}
+	service := NewService(store)
+
+	ctx, err := service.ResolverContextoEntregaGitPremium("Codex1", &projectID)
+	if err != nil {
+		t.Fatalf("ResolverContextoEntregaGitPremium mailbox kind: %v", err)
+	}
+	if ctx == nil {
+		t.Fatal("deberia resolver contexto premium desde mailbox_kind pipeline_local")
+	}
+	if ctx.RuntimeOrderID != 406 || ctx.Carril != "premium_worktree" || ctx.TareaObjetivoID != 530 {
+		t.Fatalf("contexto premium inesperado: %+v", ctx)
+	}
+	if ctx.WorktreeID == nil || *ctx.WorktreeID != 81 {
+		t.Fatalf("worktree premium inesperada: %+v", ctx)
 	}
 }
 
