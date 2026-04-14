@@ -7255,10 +7255,93 @@ func sesionActivaDebeRecibirNudgeContinuacion(sesion *db.Sesion, proyecto *db.Pr
 	if err != nil || handle == nil {
 		return tareaID, false, err
 	}
+	if vigente, err := sesionActivaTieneContinuidadDurableVigente(sesion, handle); err != nil {
+		return tareaID, false, err
+	} else if vigente {
+		return tareaID, false, nil
+	}
 	if !sesionActivaTMUXStaleParaContinuacion(handle, time.Now().UTC(), autonomiaContinueNudgeInterval()) {
 		return tareaID, false, nil
 	}
 	return tareaID, true, nil
+}
+
+func sesionActivaTieneContinuidadDurableVigente(sesion *db.Sesion, handle *db.RuntimeHandle) (bool, error) {
+	if sesion == nil || handle == nil || sesion.ProyectoID == nil || *sesion.ProyectoID <= 0 {
+		return false, nil
+	}
+	if !runtimeMailboxGuidanceDurableUsaInbox(handle) {
+		return false, nil
+	}
+	currentSessionID, err := runtimeMailboxGuidanceDurableExternalSessionID(handle)
+	if err != nil {
+		return false, err
+	}
+	currentSignature := runtimeMailboxDeliveryAttemptSignature(handle, currentSessionID)
+	agente := strings.TrimSpace(sesion.Agente)
+	if agente == "" {
+		return false, nil
+	}
+	orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
+		Agente:     stringPtr(agente),
+		ProyectoID: sesion.ProyectoID,
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, order := range orders {
+		if sesionActivaRuntimeOrderEsContinuidadDurableVigente(order, handle, currentSessionID, currentSignature) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func sesionActivaRuntimeOrderEsContinuidadDurableVigente(order *db.RuntimeOrder, handle *db.RuntimeHandle, currentSessionID, currentSignature string) bool {
+	if order == nil || handle == nil || strings.TrimSpace(order.Tipo) != "send_instruction" {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(runtimeOrderMailboxKindFromJSON(order.PayloadJSON)), "autonomia") {
+		return false
+	}
+	payload := mapFromJSON(order.PayloadJSON)
+	if !strings.EqualFold(strings.TrimSpace(stringMapValue(payload, "accion")), "continuar_trabajo") {
+		return false
+	}
+	if !runtimeOrderMatchesCurrentHandleOSessionAttempt(order, handle.ID, currentSessionID, currentSignature) {
+		return false
+	}
+	switch strings.TrimSpace(order.Estado) {
+	case "pendiente", "tomada", "ejecutando":
+		return runtimeOrderSigueBloqueandoMailbox(order, time.Now().UTC())
+	case "completada":
+		return runtimeOrderMailboxOnlyResult(order.ResultadoJSON) &&
+			runtimeOrderMatchesCurrentMailboxDeliveryAttempt(order, currentSessionID, currentSignature)
+	default:
+		return false
+	}
+}
+
+func runtimeOrderMatchesCurrentHandleOSessionAttempt(order *db.RuntimeOrder, handleID int64, currentSessionID, currentSignature string) bool {
+	if order == nil {
+		return false
+	}
+	if order.HandleID != nil && handleID > 0 && *order.HandleID == handleID {
+		return true
+	}
+	if currentSignature != "" {
+		orderSignature := runtimeOrderDeliveryAttemptSignature(order.PayloadJSON)
+		if orderSignature != "" && currentSignature == orderSignature {
+			return true
+		}
+	}
+	if currentSessionID != "" {
+		orderSessionID := strings.TrimSpace(runtimeOrderExternalSessionIDFromJSON(order.PayloadJSON))
+		if orderSessionID != "" && currentSessionID == orderSessionID {
+			return true
+		}
+	}
+	return false
 }
 
 func sesionActivaTMUXStaleParaContinuacion(handle *db.RuntimeHandle, now time.Time, staleAfter time.Duration) bool {

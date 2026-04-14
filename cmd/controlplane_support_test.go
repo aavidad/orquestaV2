@@ -4401,6 +4401,254 @@ func TestSesionActivaDebeRecibirNudgeContinuacionUsaHandleCanonicoNoEnlazado(t *
 	}
 }
 
+func TestSesionActivaDebeRecibirNudgeContinuacionIgnoraGuidanceDurableMailboxOnlyVigente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex11Guidance", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-guidance-vigente",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex11Guidance",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Continuidad guidance durable",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex11Guidance"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex11Guidance"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	traceDir := filepath.Join(tmp, "runtime", "codex11guidance")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	now := time.Now().UTC()
+	readyAt := now.Add(-10 * time.Minute)
+	manifestPath := filepath.Join(traceDir, "manifest.json")
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex11Guidance","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex11guidance","tmux_pane_id":"%36","created_at":"`+now.Format(time.RFC3339Nano)+`","started_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"ready","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`","ready_at":"`+readyAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now.Format(time.RFC3339Nano)+`","ready_at":"`+readyAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex11guidance",
+		"tmux_pane_id":          "%36",
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliverySessionResume,
+		"can_send_input":        false,
+		"external_session_id":   "sess-codex11guidance",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	capsJSON, err := json.Marshal(map[string]any{
+		"can_send_input":        false,
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliverySessionResume,
+	})
+	if err != nil {
+		t.Fatalf("marshal caps: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex11guidance/%36', metadata_json=?, capabilities_json=?, estado='activo' WHERE id=?`, string(metaJSON), string(capsJSON), handle.ID); err != nil {
+		t.Fatalf("activar handle tmux: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+	handle, err = db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle: %+v err=%v", handle, err)
+	}
+	if !sesionActivaTMUXStaleParaContinuacion(handle, now, 5*time.Minute) {
+		t.Fatal("precondicion rota: la sesion deberia considerarse stale")
+	}
+
+	signature := runtimeMailboxDeliveryAttemptSignature(handle, "sess-codex11guidance")
+	payloadJSON := fmt.Sprintf(`{"to_agente":"Codex11Guidance","accion":"continuar_trabajo","texto":"sigue con el siguiente slice util","mailbox_kind":"autonomia","external_session_id":"sess-codex11guidance","delivery_attempt_signature":"%s"}`, signature)
+	resultadoJSON := `{"mailbox_only":true,"delivery_state":"delivered","deferred_reason":"runtime_handle_session_resume_mailbox_only:autonomia"}`
+	if _, err := runtimesService.CreateRuntimeOrder(&db.RuntimeOrder{
+		Agente:        "Codex11Guidance",
+		ProyectoID:    &proyectoID,
+		RuntimeID:     handle.RuntimeID,
+		HandleID:      &handle.ID,
+		Tipo:          "send_instruction",
+		PayloadJSON:   payloadJSON,
+		ResultadoJSON: resultadoJSON,
+		Estado:        "completada",
+		FinishedAt:    &now,
+		UpdatedAt:     now,
+	}); err != nil {
+		t.Fatalf("crear send_instruction mailbox_only: %v", err)
+	}
+
+	_, debe, err := sesionActivaDebeRecibirNudgeContinuacion(sesion, &db.Proyecto{ID: proyectoID})
+	if err != nil {
+		t.Fatalf("evaluar continuidad: %v", err)
+	}
+	if debe {
+		t.Fatal("no deberia pedir nudge si ya existe guidance durable mailbox_only vigente")
+	}
+}
+
+func TestSesionActivaDebeRecibirNudgeContinuacionIgnoraSendInstructionAbiertaVigente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex11GuidanceOpen", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-guidance-open",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex11GuidanceOpen",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Continuidad guidance abierta",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex11GuidanceOpen"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex11GuidanceOpen"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	traceDir := filepath.Join(tmp, "runtime", "codex11guidanceopen")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	now := time.Now().UTC()
+	readyAt := now.Add(-10 * time.Minute)
+	manifestPath := filepath.Join(traceDir, "manifest.json")
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex11GuidanceOpen","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex11guidanceopen","tmux_pane_id":"%37","created_at":"`+now.Format(time.RFC3339Nano)+`","started_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"ready","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`","ready_at":"`+readyAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now.Format(time.RFC3339Nano)+`","ready_at":"`+readyAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex11guidanceopen",
+		"tmux_pane_id":          "%37",
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliverySessionResume,
+		"can_send_input":        false,
+		"external_session_id":   "sess-codex11guidanceopen",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	capsJSON, err := json.Marshal(map[string]any{
+		"can_send_input":        false,
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliverySessionResume,
+	})
+	if err != nil {
+		t.Fatalf("marshal caps: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex11guidanceopen/%37', metadata_json=?, capabilities_json=?, estado='activo' WHERE id=?`, string(metaJSON), string(capsJSON), handle.ID); err != nil {
+		t.Fatalf("activar handle tmux: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+	handle, err = db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle: %+v err=%v", handle, err)
+	}
+	if !sesionActivaTMUXStaleParaContinuacion(handle, now, 5*time.Minute) {
+		t.Fatal("precondicion rota: la sesion deberia considerarse stale")
+	}
+
+	signature := runtimeMailboxDeliveryAttemptSignature(handle, "sess-codex11guidanceopen")
+	payloadJSON := fmt.Sprintf(`{"to_agente":"Codex11GuidanceOpen","accion":"continuar_trabajo","texto":"sigue con el siguiente slice util","mailbox_kind":"autonomia","external_session_id":"sess-codex11guidanceopen","delivery_attempt_signature":"%s"}`, signature)
+	if _, err := runtimesService.CreateRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "Codex11GuidanceOpen",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   handle.RuntimeID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: payloadJSON,
+		Estado:      "ejecutando",
+		StartedAt:   &now,
+		UpdatedAt:   now,
+	}); err != nil {
+		t.Fatalf("crear send_instruction abierta: %v", err)
+	}
+
+	_, debe, err := sesionActivaDebeRecibirNudgeContinuacion(sesion, &db.Proyecto{ID: proyectoID})
+	if err != nil {
+		t.Fatalf("evaluar continuidad: %v", err)
+	}
+	if debe {
+		t.Fatal("no deberia pedir nudge si ya existe una send_instruction de continuidad abierta para la misma sesion")
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchNoEncolaNudgePorEsperarOPedirTareaEnSesionActiva(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
