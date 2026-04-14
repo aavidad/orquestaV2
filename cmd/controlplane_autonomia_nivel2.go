@@ -252,6 +252,21 @@ func asegurarTrabajoContinuoPremium(policy *db.ProyectoAutonomia, proyecto *db.P
 	if !proyectoUsaContinuidadMicrocicloPremium(proyecto.ID) {
 		return zero, nil
 	}
+	if agotado, err := microcicloPremiumAgotado(proyecto.ID); err != nil {
+		return zero, err
+	} else if agotado {
+		id, err := crearTareaFrentePremiumMayorAutonomia(policy, proyecto, strings.TrimSpace(agente.Nombre))
+		if err != nil {
+			return zero, err
+		}
+		if id <= 0 {
+			return zero, nil
+		}
+		return autonomiaAutoCreateResult{
+			Created:    true,
+			SeedTaskID: id,
+		}, nil
+	}
 	tarea, reutilizada, err := asegurarTareaMicrociclo(proyecto, strings.TrimSpace(agente.Nombre), proyectoMicrocicloRequest{}, true)
 	if err != nil {
 		return zero, err
@@ -263,6 +278,73 @@ func asegurarTrabajoContinuoPremium(policy *db.ProyectoAutonomia, proyecto *db.P
 		Created:    !reutilizada,
 		SeedTaskID: tarea.ID,
 	}, nil
+}
+
+func microcicloPremiumAgotado(proyectoID int64) (bool, error) {
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		return false, err
+	}
+	for _, tarea := range tareas {
+		if tarea == nil || !esTareaMicrocicloPremium(tarea) {
+			continue
+		}
+		if tarea.Estado == db.TareaCompletada {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func esTareaMicrocicloPremium(tarea *db.Tarea) bool {
+	if tarea == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(tarea.Titulo), microcicloRefactorTituloDefault) ||
+		strings.Contains(strings.TrimSpace(tarea.Notas), microcicloRefactorNotasTag)
+}
+
+func crearTareaFrentePremiumMayorAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto, agente string) (int64, error) {
+	agente = strings.TrimSpace(agente)
+	if proyecto == nil || agente == "" {
+		return 0, nil
+	}
+	id, err := tareasService.Create(tareasapp.CreateTaskInput{
+		Titulo:      "Autonomía premium: abrir siguiente frente mayor útil",
+		Descripcion: construirDescripcionFrentePremiumMayorAutonomia(policy, proyecto),
+		Modulo:      "autonomia",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Agente:      agente,
+		Proyecto:    proyecto.Slug,
+		Notas:       "autonomia:premium_frontier",
+	})
+	if err != nil {
+		return 0, err
+	}
+	if err := tareasService.Start(id, agente); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func construirDescripcionFrentePremiumMayorAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto) string {
+	partes := []string{
+		"Tarea creada automáticamente por Orquesta porque ya no quedan microfrentes premium abiertos y el siguiente paso útil debe ser un frente mayor acotado.",
+		"Objetivo: revisar backlog, propuestas, checkpoints y estado real del código para tomar o abrir el siguiente frente premium útil sin volver a reciclar una microtarea cerrada.",
+		"Regla: el siguiente frente debe seguir siendo acotado, con write_set, tests mínimos y carril premium_worktree/revision_diff según corresponda; no abras una deriva arquitectónica amplia.",
+	}
+	if proyecto != nil && strings.TrimSpace(proyecto.Slug) != "" {
+		partes = append(partes, "Proyecto: "+strings.TrimSpace(proyecto.Slug)+".")
+	}
+	if policy != nil && strings.TrimSpace(policy.ObjetivoGeneral) != "" {
+		partes = append(partes, "Objetivo general: "+strings.TrimSpace(policy.ObjetivoGeneral)+".")
+	}
+	if policy != nil && strings.TrimSpace(policy.DefinitionOfDoneJSON) != "" && strings.TrimSpace(policy.DefinitionOfDoneJSON) != "{}" {
+		partes = append(partes, "Definition of done: "+strings.TrimSpace(policy.DefinitionOfDoneJSON)+".")
+	}
+	partes = append(partes, "Si el proyecto ya está realmente terminado, deja trazabilidad y permite el cierre autónomo en vez de abrir trabajo artificial.")
+	return strings.Join(partes, " ")
 }
 
 func construirSpecFactoryAutonomia(policy *db.ProyectoAutonomia, proyecto *db.Proyecto) fabricaapp.AppSpec {
