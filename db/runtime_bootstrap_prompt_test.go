@@ -191,6 +191,15 @@ func TestBuildLaunchBootstrapPromptCompactaAgenteCLIOrquestadoAunqueNoSeaBootstr
 			t.Fatalf("falta %q en prompt compacto orquestado:\n%s", token, prompt)
 		}
 	}
+	for _, token := range []string{
+		"SALIDA_INMEDIATA=ACK-ESPERA",
+		"Si todavía no tienes una microtarea cerrada, responde solo ACK-ESPERA y espera.",
+		"Cuando llegue una microtarea, ejecuta solo ese cambio y devuelve evidencia breve; no hagas trabajo adicional.",
+	} {
+		if strings.Contains(prompt, token) {
+			t.Fatalf("el prompt compacto con tarea activa no deberia invitar a ACK-ESPERA: %q\n%s", token, prompt)
+		}
+	}
 }
 
 func TestBuildLaunchBootstrapPromptCompactaPriorizaSliceEjecutableDelFrente(t *testing.T) {

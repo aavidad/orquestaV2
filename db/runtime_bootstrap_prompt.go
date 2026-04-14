@@ -161,8 +161,12 @@ func buildCompactLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan 
 		"Si existe `.orquesta-inbox.md`, no releas doctrina ni busques otros frentes antes del primer patch pequeno verificable.",
 		"Consulta solo el fragmento minimo de doctrina que necesites si aparece un bloqueo real o falta contrato operativo en la inbox/tarea.",
 		"No expliques planes largos ni reabras decisiones de diseño ya tomadas.",
-		"Si todavía no tienes una microtarea cerrada, responde solo ACK-ESPERA y espera.",
-		"Cuando llegue una microtarea, ejecuta solo ese cambio y devuelve evidencia breve; no hagas trabajo adicional.",
+	}
+	if !bootstrapCompactoTieneTareaActiva(tareas) {
+		lines = append(lines,
+			"Si todavía no tienes una microtarea cerrada, responde solo ACK-ESPERA y espera.",
+			"Cuando llegue una microtarea, ejecuta solo ese cambio y devuelve evidencia breve; no hagas trabajo adicional.",
+		)
 	}
 	if resumenTareas := resumirTareasBootstrapCompacto(tareas); resumenTareas != "" {
 		lines = append(lines, resumenTareas)
@@ -170,6 +174,19 @@ func buildCompactLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan 
 	lines = append(lines, "Empieza por la tarea asignada y evita tocar BD local salvo diagnóstico o recuperación.")
 	lines = append(lines, "Si la acción es destructiva, irreversible o de riesgo alto, consulta antes.")
 	return strings.Join(lines, "\n")
+}
+
+func bootstrapCompactoTieneTareaActiva(tareas []*Tarea) bool {
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case TareaAsignada, TareaEnProgreso, TareaBloqueada:
+			return true
+		}
+	}
+	return false
 }
 
 func buildCompactLaunchBootstrapPromptOllama(agente *Agente, proyecto *Proyecto, workingDir string, tareas []*Tarea) string {
