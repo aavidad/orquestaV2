@@ -17,6 +17,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte adicional en planner: mover la resolución pura de proyecto preferente (activo/pausado/automático) a `planificadorpolicy`
 - corte adicional en planner: mover la detección de operador manual fuera de flota a `planificadorpolicy`
 - corte adicional en planner: mover la detección de pool local compartido a `planificadorpolicy`
+- corte adicional en planner: mover la ventana de gracia de recuperación de tarea huérfana a `planificadorpolicy`
 
 Estado del frente seguro:
 
@@ -41,6 +42,7 @@ Estado del frente seguro:
 - policy de resolución de proyecto preferente del planner movida a `planificadorpolicy` (`activo > pausado > automático`)
 - policy de detección de operador manual fuera de flota del planner movida a `planificadorpolicy`
 - policy de detección de pool local compartido del planner movida a `planificadorpolicy`
+- policy de ventana de gracia de recuperación de tarea huérfana movida a `planificadorpolicy`
 - policy de gobernanza movida a `gobernanzapolicy` para catálogo, validación de overrides y precedencia por capas
 - policy de skills movida a `skillspolicy`
 

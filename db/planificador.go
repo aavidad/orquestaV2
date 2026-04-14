@@ -292,7 +292,9 @@ func agentePareceOperadorManualFueraDeFlota(nombre string) bool {
 }
 
 func ventanaGraciaRecuperacionTareaHuerfana() time.Duration {
-	return time.Duration(configIntOrDefault("orphan_task_recovery_grace_seconds", 300)) * time.Second
+	return planificadorpolicy.OrphanTaskRecoveryGraceWindow(
+		configIntOrDefault("orphan_task_recovery_grace_seconds", 300),
+	)
 }
 
 func planificarAgenteAutomaticamente(ag *Agente) error {

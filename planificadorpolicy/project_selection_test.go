@@ -179,3 +179,15 @@ func TestPoolUsesSharedLocalConnector(t *testing.T) {
 		}
 	}
 }
+
+func TestOrphanTaskRecoveryGraceWindow(t *testing.T) {
+	if got := OrphanTaskRecoveryGraceWindow(90); got.Seconds() != 90 {
+		t.Fatalf("unexpected explicit grace window: %v", got)
+	}
+	if got := OrphanTaskRecoveryGraceWindow(0); got.Seconds() != 0 {
+		t.Fatalf("unexpected zero grace window: %v", got)
+	}
+	if got := OrphanTaskRecoveryGraceWindow(-5); got.Seconds() != -5 {
+		t.Fatalf("unexpected negative grace window: %v", got)
+	}
+}

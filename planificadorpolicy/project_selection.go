@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
+	"time"
 )
 
 type ProjectOperationSnapshot struct {
@@ -155,6 +156,10 @@ func PoolUsesSharedLocalConnector(runtime string, metadataJSON string) bool {
 	}
 	value, _ := meta["conector_canonico"].(string)
 	return strings.EqualFold(strings.TrimSpace(value), "ollama_pool_local")
+}
+
+func OrphanTaskRecoveryGraceWindow(seconds int) time.Duration {
+	return time.Duration(seconds) * time.Second
 }
 
 func AgentAllowedForAutobootstrapProject(agent, projectSlug, configuredProjectSlug string, allowedAgents []string) bool {
