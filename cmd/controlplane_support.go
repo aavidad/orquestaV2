@@ -41,6 +41,7 @@ const autonomiaReplanTaskTitle = "Autonomía: replanificar backlog y abrir sigui
 var runtimeBudgetObservationBackgroundGate = planocontrol.NewGate()
 
 var wakeRuntimeOrdersAfterTranscript = wakeControlPlaneRuntimeOrders
+var wakeRuntimeMailboxAfterTranscript = wakeControlPlaneRuntimeMailbox
 var wakeRuntimeOrdersAfterMailbox = wakeControlPlaneRuntimeOrders
 
 var runtimeMailboxReevaluationGate = planocontrol.NewThrottler()
@@ -697,12 +698,14 @@ func procesarRuntimeTranscriptBatch() (int, error) {
 		return ingested, err
 	}
 	despertarRuntimeOrdersTrasTranscript(registradas)
+	despertarRuntimeMailboxTrasTranscript(registradas)
 	ingested += registradas
 	premiumRegistradas, err := procesarEntregasGitPremiumActivas()
 	if err != nil {
 		return ingested, err
 	}
 	despertarRuntimeOrdersTrasTranscript(premiumRegistradas)
+	despertarRuntimeMailboxTrasTranscript(premiumRegistradas)
 	ingested += premiumRegistradas
 	if !controlPlaneConfigBoolOrDefault("runtime_transcript_auto_guidance_enabled", true) {
 		return ingested, nil
@@ -829,6 +832,12 @@ func runtimeOrderEntregaGitPremiumDesdeBootstrapLease(order *db.RuntimeOrder) bo
 func despertarRuntimeOrdersTrasTranscript(cantidad int) {
 	if cantidad > 0 {
 		wakeRuntimeOrdersAfterTranscript()
+	}
+}
+
+func despertarRuntimeMailboxTrasTranscript(cantidad int) {
+	if cantidad > 0 {
+		wakeRuntimeMailboxAfterTranscript()
 	}
 }
 
