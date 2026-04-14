@@ -239,6 +239,18 @@ func tareaPipelineLocalEsMicrociclo(tarea *db.Tarea) bool {
 	return strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:microrefactor_loop")
 }
 
+func tareaPipelineLocalMicrocicloPrioritario(tarea *db.Tarea) bool {
+	if !tareaPipelineLocalEsMicrociclo(tarea) {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(string(tarea.Estado))) {
+	case string(db.TareaEnProgreso), string(db.TareaBloqueada):
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Service) seleccionarTareaPipelineLocal(proyectoSlug, fase string) *TareaPipelineLocal {
 	if s == nil || s.taskProvider == nil || strings.TrimSpace(proyectoSlug) == "" {
 		return nil
@@ -251,8 +263,8 @@ func (s *Service) seleccionarTareaPipelineLocal(proyectoSlug, fase string) *Tare
 	mejor := -1
 	for _, tarea := range tareas {
 		if candidata != nil {
-			actualMicrociclo := tareaPipelineLocalEsMicrociclo(candidata)
-			nuevaMicrociclo := tareaPipelineLocalEsMicrociclo(tarea)
+			actualMicrociclo := tareaPipelineLocalMicrocicloPrioritario(candidata)
+			nuevaMicrociclo := tareaPipelineLocalMicrocicloPrioritario(tarea)
 			if nuevaMicrociclo != actualMicrociclo {
 				if nuevaMicrociclo {
 					candidata = tarea
@@ -262,7 +274,7 @@ func (s *Service) seleccionarTareaPipelineLocal(proyectoSlug, fase string) *Tare
 			}
 		}
 		score := puntuarTareaPipelineLocal(tarea, fase)
-		if score > mejor {
+		if score > mejor || (score == mejor && candidata != nil && tarea.ID > candidata.ID) {
 			mejor = score
 			candidata = tarea
 		}

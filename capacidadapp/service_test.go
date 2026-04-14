@@ -542,12 +542,12 @@ func TestCalcularSiguientePasoPipelineLocalDeterministaPriorizaTrabajoAbiertoSob
 	}
 }
 
-func TestCalcularSiguientePasoPipelineLocalDeterministaPriorizaFrenteMicrocicloSobreTrabajoAjeno(t *testing.T) {
+func TestCalcularSiguientePasoPipelineLocalDeterministaPriorizaMicrocicloActivoSobreTrabajoAjeno(t *testing.T) {
 	service := NewService(fakeStore{})
 	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
 	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
 		{ID: 40, Titulo: "Trabajo ajeno", Estado: db.TareaEnProgreso, Prioridad: db.PrioridadAlta},
-		{ID: 41, Titulo: "Frente premium activo", Estado: db.TareaLibre, Prioridad: db.PrioridadAlta, Notas: "autonomia:microrefactor_loop"},
+		{ID: 41, Titulo: "Frente premium activo", Estado: db.TareaEnProgreso, Prioridad: db.PrioridadAlta, Notas: "autonomia:microrefactor_loop"},
 	}})
 
 	paso, err := service.CalcularSiguientePasoPipelineLocalDeterminista("orquestador")
@@ -559,6 +559,26 @@ func TestCalcularSiguientePasoPipelineLocalDeterministaPriorizaFrenteMicrocicloS
 	}
 	if paso.TareaObjetivo.ID != 41 || paso.AccionTarea != "implementar" {
 		t.Fatalf("deberia priorizar el frente microciclo activo sobre trabajo ajeno: %+v", paso)
+	}
+}
+
+func TestCalcularSiguientePasoPipelineLocalDeterministaNoPriorizaMicrocicloLibreSobreFrenteMayorActivo(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{ID: 40, Titulo: "Frente mayor activo", Estado: db.TareaEnProgreso, Prioridad: db.PrioridadAlta, Notas: "autonomia:premium_frontier"},
+		{ID: 41, Titulo: "Microciclo libre viejo", Estado: db.TareaLibre, Prioridad: db.PrioridadAlta, Notas: "autonomia:microrefactor_loop"},
+	}})
+
+	paso, err := service.CalcularSiguientePasoPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("CalcularSiguientePasoPipelineLocalDeterminista: %v", err)
+	}
+	if paso == nil || paso.TareaObjetivo == nil {
+		t.Fatalf("paso inesperado: %+v", paso)
+	}
+	if paso.TareaObjetivo.ID != 40 || paso.AccionTarea != "implementar" {
+		t.Fatalf("un microciclo libre no deberia secuestrar el carril frente a un frente mayor activo: %+v", paso)
 	}
 }
 
