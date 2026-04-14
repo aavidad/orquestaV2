@@ -157,6 +157,13 @@ type fakeAseguradorWorktree struct {
 	err          error
 }
 
+type fakeTaskCompleter struct {
+	id     int64
+	agente string
+	commit string
+	err    error
+}
+
 func (f *fakeStore) GetProject(ref string) (*db.Proyecto, error) {
 	f.projectRef = ref
 	return f.projectResponse, nil
@@ -239,6 +246,13 @@ func (f *fakeAseguradorWorktree) EnsureActiveWorktree(proyectoSlug, agente strin
 		return nil, f.err
 	}
 	return f.resultado, nil
+}
+
+func (f *fakeTaskCompleter) Complete(id int64, agente, commit string) error {
+	f.id = id
+	f.agente = agente
+	f.commit = commit
+	return f.err
 }
 
 func (f *fakeStore) GetAgent(nombre string) (*db.Agente, error) {
@@ -1779,8 +1793,10 @@ func TestRegistrarEntregaGitMicroprogramacionActivaFallbackPremiumUsaRegistrador
 		}},
 	}
 	registrador := &fakeRegistradorEntregaGitPremium{}
+	completer := &fakeTaskCompleter{}
 	service := NewService(store)
 	service.SetRegistradorEntregaGitPremium(registrador)
+	service.SetTaskCompleter(completer)
 
 	resultado, err := service.RegistrarEntregaGitMicroprogramacionActiva("Codex1", &projectID, "orquestador", "diff listo", "OpenClaw")
 	if err != nil {
@@ -1800,6 +1816,9 @@ func TestRegistrarEntregaGitMicroprogramacionActivaFallbackPremiumUsaRegistrador
 	}
 	if len(registrador.entrada.WriteSet) != 2 || registrador.entrada.WriteSet[0] != "cmd/controlplane_support.go" {
 		t.Fatalf("write_set premium no propagado: %+v", registrador.entrada)
+	}
+	if completer.id != 530 || completer.agente != "Codex1" || completer.commit != "abc123" {
+		t.Fatalf("tarea premium no completada via app: %+v", completer)
 	}
 	if store.consumedID != 91 || store.markOrderStateID != 405 || store.markOrderStateEstado != "completada" {
 		t.Fatalf("orden premium no completada correctamente: consumed=%d id=%d estado=%q", store.consumedID, store.markOrderStateID, store.markOrderStateEstado)
@@ -1969,8 +1988,10 @@ func TestRegistrarEntregaGitMicroprogramacionActivaFallbackPremiumBootstrapLease
 		}},
 	}
 	registrador := &fakeRegistradorEntregaGitPremium{}
+	completer := &fakeTaskCompleter{}
 	service := NewService(store)
 	service.SetRegistradorEntregaGitPremium(registrador)
+	service.SetTaskCompleter(completer)
 
 	resultado, err := service.RegistrarEntregaGitMicroprogramacionActiva("Codex1", &projectID, "orquestador", "diff listo", "OpenClaw")
 	if err != nil {
@@ -1987,6 +2008,9 @@ func TestRegistrarEntregaGitMicroprogramacionActivaFallbackPremiumBootstrapLease
 	}
 	if len(registrador.entrada.WriteSet) != 2 || registrador.entrada.WriteSet[0] != "cmd/controlplane_support.go" {
 		t.Fatalf("write_set premium bootstrap no propagado: %+v", registrador.entrada)
+	}
+	if completer.id != 530 || completer.agente != "Codex1" || completer.commit != "abc123" {
+		t.Fatalf("tarea premium bootstrap no completada via app: %+v", completer)
 	}
 	if store.consumedID != 91 || store.markOrderStateID != 406 || store.markOrderStateEstado != "completada" {
 		t.Fatalf("bootstrap premium no completado correctamente: consumed=%d id=%d estado=%q", store.consumedID, store.markOrderStateID, store.markOrderStateEstado)

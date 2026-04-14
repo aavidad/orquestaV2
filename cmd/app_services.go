@@ -45,4 +45,5 @@ func init() {
 	runtimesService.SetMaterializadorEntregaMicroprogramacion(microprogramacionService)
 	runtimesService.SetResolvedorWorktreeActiva(worktreeRuntimeService{})
 	runtimesService.SetAseguradorWorktreeActiva(worktreeRuntimeService{})
+	runtimesService.SetTaskCompleter(tareasService)
 }

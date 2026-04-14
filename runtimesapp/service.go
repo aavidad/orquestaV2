@@ -78,6 +78,7 @@ type Service struct {
 	materializadorEntrega        MaterializadorEntregaMicroprogramacion
 	resolvedorWorktree           ResolvedorWorktreeActiva
 	aseguradorWorktree           AseguradorWorktreeActiva
+	taskCompleter                TaskCompleter
 }
 
 type RuntimeDescription struct {
@@ -131,6 +132,10 @@ type AseguradorWorktreeActiva interface {
 	EnsureActiveWorktree(proyectoSlug, agente string) (*db.Worktree, error)
 }
 
+type TaskCompleter interface {
+	Complete(id int64, agente, commit string) error
+}
+
 func (s *Service) SetRegistradorEntregaGit(registrador RegistradorEntregaGit) {
 	if s == nil {
 		return
@@ -164,6 +169,13 @@ func (s *Service) SetAseguradorWorktreeActiva(asegurador AseguradorWorktreeActiv
 		return
 	}
 	s.aseguradorWorktree = asegurador
+}
+
+func (s *Service) SetTaskCompleter(completer TaskCompleter) {
+	if s == nil {
+		return
+	}
+	s.taskCompleter = completer
 }
 
 type AgentControlRequest struct {
@@ -1608,6 +1620,9 @@ func (s *Service) registrarEntregaGitPremiumActiva(agente string, proyectoID *in
 	if resultado == nil {
 		return nil, nil
 	}
+	if err := s.completarTareaEntregaGitPremiumSiCorresponde(ctx, strings.TrimSpace(agente), resultado); err != nil {
+		return nil, err
+	}
 	if err := s.CompletarEntregaMicroprogramacion(ctx.RuntimeOrderID, "git_worktree"); err != nil {
 		return nil, err
 	}
@@ -1615,6 +1630,27 @@ func (s *Service) registrarEntregaGitPremiumActiva(agente string, proyectoID *in
 		ContextoPremium: ctx,
 		EntregaPremium:  resultado,
 	}, nil
+}
+
+func (s *Service) completarTareaEntregaGitPremiumSiCorresponde(ctx *ContextoEntregaGitPremium, agente string, resultado *ResultadoRegistrarEntregaGitPremium) error {
+	if s == nil || s.taskCompleter == nil || ctx == nil || ctx.TareaObjetivoID <= 0 {
+		return nil
+	}
+	if err := s.taskCompleter.Complete(ctx.TareaObjetivoID, strings.TrimSpace(agente), strings.TrimSpace(resultado.HeadCommit)); err != nil {
+		if tareaNoEncontrada(err) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+func tareaNoEncontrada(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(strings.TrimSpace(err.Error())), "tarea #") &&
+		strings.Contains(strings.ToLower(strings.TrimSpace(err.Error())), "no encontrada")
 }
 
 func entregaGitSinCambios(err error) bool {
