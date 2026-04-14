@@ -3584,7 +3584,14 @@ func runtimeOrderPromoverEstadoObservadoSiSatisfecha(order *RuntimeOrder, runtim
 	}
 	switch strings.ToLower(strings.TrimSpace(order.Tipo)) {
 	case "start", "resume":
+		return runtimePromoverEstadoObservadoDesdeHandle(handle, runtime)
 	default:
+		return nil
+	}
+}
+
+func runtimePromoverEstadoObservadoDesdeHandle(handle *RuntimeHandle, runtime *RuntimeInstance) error {
+	if runtime == nil {
 		return nil
 	}
 	logicalState := strings.TrimSpace(runtime.LogicalState)
@@ -9456,6 +9463,9 @@ func AckBootstrapRuntimeLeaseByEvidence(handle *RuntimeHandle, runtime *RuntimeI
 	evidence := bootstrapRuntimeLeaseEvidence(handle, runtime, order, startOrder)
 	if !evidence.delivered {
 		return nil
+	}
+	if err := runtimePromoverEstadoObservadoDesdeHandle(handle, runtime); err != nil {
+		return err
 	}
 	if evidence.consumed {
 		if err := marcarBootstrapRuntimeLeaseEntregado(startOrderID, order.ID, mailboxIDs, sesionID, ackSource, evidence.deliveredAt); err != nil {

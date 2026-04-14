@@ -6412,6 +6412,13 @@ func TestAckBootstrapRuntimeLeaseByEvidenceConsumeBootstrapTMUXConOutputFrescoSi
 	if len(msgsConsumidos) != 1 || msgsConsumidos[0].ID != mailboxID {
 		t.Fatalf("mailbox deberia consumirse con output fresco de tmux premium: %+v", msgsConsumidos)
 	}
+	runtime, err = GetRuntime(runtime.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("get runtime final: %+v err=%v", runtime, err)
+	}
+	if runtime.LogicalState != "activo" || runtime.ProcessState != "running" {
+		t.Fatalf("el ack bootstrap deberia promover el runtime tmux observado: %+v", runtime)
+	}
 }
 
 func TestAckBootstrapRuntimeLeaseActualizaStartCompletadaConLeaseAcked(t *testing.T) {
