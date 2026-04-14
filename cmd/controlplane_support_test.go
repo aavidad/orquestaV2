@@ -3948,6 +3948,13 @@ func TestProcesarAutonomiaAgentesBatchNoEncolaNudgePorEsperarOPedirTareaEnSesion
 	}
 }
 
+func TestAutonomiaContinueNudgeIntervalDefault(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	if got := autonomiaContinueNudgeInterval(); got != time.Minute {
+		t.Fatalf("autonomiaContinueNudgeInterval default inesperado: %s", got)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchAutoasignaTrabajoASesionActivaIdle(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

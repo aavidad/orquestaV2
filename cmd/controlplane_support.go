@@ -115,9 +115,9 @@ func autonomiaIdleAutoassignInterval() time.Duration {
 }
 
 func autonomiaContinueNudgeInterval() time.Duration {
-	seconds := controlPlaneConfigIntOrDefault("autonomia_continue_nudge_interval_seconds", 300)
+	seconds := controlPlaneConfigIntOrDefault("autonomia_continue_nudge_interval_seconds", 60)
 	if seconds <= 0 {
-		seconds = 300
+		seconds = 60
 	}
 	return time.Duration(seconds) * time.Second
 }
