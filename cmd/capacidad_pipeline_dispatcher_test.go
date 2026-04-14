@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"orquesta/capacidadapp"
 	"orquesta/db"
@@ -193,6 +194,70 @@ func TestDespachadorPipelineOperativoRespetaBloqueoCuota(t *testing.T) {
 	}
 	if resultado == nil || resultado.Estado != "cuota_bloqueada" {
 		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+}
+
+func TestDespachadorPipelineOperativoNoBloqueaCuotaVisibleFrescaAunqueEstadoPersistidoSeaAgotado(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: t.TempDir(),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         t.TempDir(),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='agotado', motivo_pausa='Cuota diaria agotada' WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("set estado_cuota legacy: %v", err)
+	}
+	remaining := int64(7200)
+	reset := time.Now().UTC().Add(3 * time.Hour)
+	if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+		SesionID:         sesion.ID,
+		WindowKind:       "5h",
+		ResetAt:          &reset,
+		RemainingSeconds: &remaining,
+		BudgetSource:     "codex_profile_status",
+		RawSnapshotJSON:  `{"session_usage":{"remaining_seconds":7200},"rate_limits":{"primary":{"used_percent":39}}}`,
+		CheckedAt:        time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("registrar presupuesto visible: %v", err)
+	}
+
+	resultado, err := (despachadorPipelineOperativo{}).DespacharPipeline(capacidadapp.SolicitudDespachoPipeline{
+		ProyectoSlug: "orquestador",
+		Despacho: &capacidadapp.DespachoPipelineLocal{
+			Fase:            "implementacion",
+			Carril:          "premium_worktree",
+			PerfilTarea:     "implementacion",
+			AgenteSugerido:  "Codex1",
+			TareaObjetivoID: 530,
+			TareaObjetivo:   "Micro-refactorización cíclica del control plane",
+			Motivo:          "microrefactor_loop",
+		},
+	})
+	if err != nil {
+		t.Fatalf("DespacharPipeline: %v", err)
+	}
+	if resultado == nil {
+		t.Fatalf("resultado nil")
+	}
+	if resultado.Estado == "cuota_bloqueada" || resultado.Estado == "cuota_bloqueada_con_mailbox_pendiente" {
+		t.Fatalf("no deberia bloquear por cuota visible fresca: %+v", resultado)
 	}
 }
 

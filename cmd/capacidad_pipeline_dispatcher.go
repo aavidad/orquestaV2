@@ -442,7 +442,35 @@ func existeRuntimeMailboxPipelinePendienteEnOtroProyecto(agente string, proyecto
 }
 
 func agenteBloqueadoPorCuotaPipeline(agente string) (bool, string, error) {
-	estado, err := db.GetPersistedAgentQuotaState(strings.TrimSpace(agente))
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return false, "", nil
+	}
+	info, err := db.GetAgente(agente)
+	if err != nil && err != sql.ErrNoRows {
+		return false, "", err
+	}
+	if info != nil {
+		if shouldPause, _ := agenteDebePausarPorPresupuestoVisible(info); shouldPause {
+			estadoVisible := strings.TrimSpace(strings.ToLower(info.PresupuestoEstado))
+			if estadoVisible == "" {
+				estadoVisible = strings.TrimSpace(strings.ToLower(info.EstadoCuota))
+			}
+			return true, firstNonEmpty(estadoVisible, "cuota_visible"), nil
+		}
+		if info.PresupuestoCheckedAt != nil && !info.PresupuestoStale {
+			if info.CuotaRestantePct != nil && *info.CuotaRestantePct > 0 {
+				return false, strings.TrimSpace(strings.ToLower(info.EstadoCuota)), nil
+			}
+			if strings.EqualFold(strings.TrimSpace(info.PresupuestoEstado), "ok") {
+				return false, strings.TrimSpace(strings.ToLower(info.EstadoCuota)), nil
+			}
+			if db.AgenteSinCuotaProveedorEfectivo(info) {
+				return false, strings.TrimSpace(strings.ToLower(info.EstadoCuota)), nil
+			}
+		}
+	}
+	estado, err := db.GetPersistedAgentQuotaState(agente)
 	if err != nil {
 		return false, "", err
 	}

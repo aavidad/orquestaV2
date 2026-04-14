@@ -2858,6 +2858,105 @@ func TestAPIProyectoMicrocicloLimpioReutilizaTareaSiAgenteEstaEnCuota(t *testing
 	}
 }
 
+func TestAPIProyectoMicrocicloLimpioNoReutilizaTareaSiCuotaVisibleEstaVigente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	proyectoDir := filepath.Join(tmp, "repo-microciclo-visible")
+	if err := os.MkdirAll(proyectoDir, 0o755); err != nil {
+		t.Fatalf("mkdir proyecto: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquesta",
+		Nombre:  "Orquesta",
+		RutaAbs: proyectoDir,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	body, _ := json.Marshal(apiProyectoMicrocicloRequest{Agente: "Codex1"})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/proyectos/orquesta/autonomia/microciclo", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status microciclo inicial inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp apiProyectoMicrocicloResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode microciclo inicial: %v", err)
+	}
+	if resp.Resultado == nil || resp.Resultado.Tarea == nil {
+		t.Fatalf("resultado inicial inesperado: %+v", resp.Resultado)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='agotado', motivo_pausa='Cuota diaria agotada' WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("set estado_cuota legacy: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         proyectoDir,
+		Herramienta: "codex-cli",
+	})
+	if err != nil || sesion == nil {
+		t.Fatalf("iniciar sesion visible: %+v err=%v", sesion, err)
+	}
+	remaining := int64(7200)
+	reset := time.Now().UTC().Add(3 * time.Hour)
+	if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+		SesionID:         sesion.ID,
+		WindowKind:       "5h",
+		ResetAt:          &reset,
+		RemainingSeconds: &remaining,
+		BudgetSource:     "codex_profile_status",
+		RawSnapshotJSON:  `{"session_usage":{"remaining_seconds":7200},"rate_limits":{"primary":{"used_percent":39}}}`,
+		CheckedAt:        time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("registrar presupuesto visible: %v", err)
+	}
+	if err := db.MarcarRuntimesCerradosPorAgente("Codex1"); err != nil {
+		t.Fatalf("cerrar runtimes sinteticos: %v", err)
+	}
+	if err := db.MarcarRuntimeHandlesCerradosPorAgente("Codex1"); err != nil {
+		t.Fatalf("cerrar handles sinteticos: %v", err)
+	}
+	if err := db.AparcarSesionActiva("Codex1", nil); err != nil {
+		t.Fatalf("aparcar sesion activa sintetica: %v", err)
+	}
+
+	bodyLimpio, _ := json.Marshal(apiProyectoMicrocicloRequest{
+		Agente:         "Codex1",
+		LimpiarPruebas: true,
+	})
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/api/proyectos/orquesta/autonomia/microciclo", bytes.NewReader(bodyLimpio))
+	req2.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("status microciclo limpio con cuota visible inesperado: %d body=%s", rec2.Code, rec2.Body.String())
+	}
+	var resp2 apiProyectoMicrocicloResponse
+	if err := json.Unmarshal(rec2.Body.Bytes(), &resp2); err != nil {
+		t.Fatalf("decode microciclo limpio con cuota visible: %v", err)
+	}
+	if resp2.Resultado == nil || resp2.Resultado.Tarea == nil {
+		t.Fatalf("resultado limpio con cuota visible inesperado: %+v", resp2.Resultado)
+	}
+	if resp2.Resultado.TareaReutilizada || resp2.Resultado.Tarea.ID == resp.Resultado.Tarea.ID {
+		t.Fatalf("no deberia reutilizar la tarea semilla vieja si la cuota visible ya esta vigente: inicial=%+v limpio=%+v", resp.Resultado, resp2.Resultado)
+	}
+	if resp2.Resultado.Dispatch == nil || resp2.Resultado.Dispatch.DispatchRuntime == nil || strings.HasPrefix(resp2.Resultado.Dispatch.DispatchRuntime.Estado, "cuota_bloqueada") {
+		t.Fatalf("el microciclo no deberia quedar bloqueado por cuota legacy con presupuesto visible fresco: %+v", resp2.Resultado.Dispatch)
+	}
+}
+
 func TestAPIProyectoMicrocicloSincronizaDirtyWorkspaceEnWorktreeActiva(t *testing.T) {
 	t.Setenv("ORQUESTA_SYNC_DIRTY_WORKSPACE_TO_WORKTREE", "true")
 
