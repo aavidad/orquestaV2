@@ -109,3 +109,15 @@ func TestPreferFreeTaskCandidatePrefersFreePreferredModule(t *testing.T) {
 		t.Fatal("preferred free module should win")
 	}
 }
+
+func TestPrioritizePlannableCandidates(t *testing.T) {
+	candidates := []PlannableAgentCandidateSnapshot{
+		{AgentName: "Codex2", PoolSlug: "", Priority: 1, ProjectSlug: "zzz"},
+		{AgentName: "GemmaB", PoolSlug: "ollama", Priority: 1, ProjectSlug: "bbb"},
+		{AgentName: "GemmaA", PoolSlug: "ollama", Priority: 3, ProjectSlug: "aaa"},
+	}
+	got := PrioritizePlannableCandidates(candidates, map[string]int{"ollama": 1})
+	if len(got) != 2 || got[0] != "GemmaA" || got[1] != "Codex2" {
+		t.Fatalf("unexpected prioritized agents: %#v", got)
+	}
+}

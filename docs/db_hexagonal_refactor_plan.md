@@ -13,6 +13,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte nuevo en planner: mover la policy pura de cupo/carga/selección de proyecto automático a `planificadorpolicy`
 - corte adicional en planner: mover la policy de filtro de agentes permitidos en autobootstrap a `planificadorpolicy`
 - corte adicional en planner: mover la heurística pura de scoring/selección de tarea libre a `planificadorpolicy`
+- corte adicional en planner: mover la priorización de agentes planificables y el consumo de capacidad por pool a `planificadorpolicy`
 
 Estado del frente seguro:
 
@@ -33,6 +34,7 @@ Estado del frente seguro:
 - policy pura de selección de proyecto automático del planner movida a `planificadorpolicy`
 - policy de pertenencia al pool de autobootstrap del planner movida a `planificadorpolicy`
 - policy pura de scoring/ordenación de tarea libre del planner movida a `planificadorpolicy`
+- policy de ranking final de agentes planificables movida a `planificadorpolicy`
 - policy de gobernanza movida a `gobernanzapolicy` para catálogo, validación de overrides y precedencia por capas
 - policy de skills movida a `skillspolicy`
 

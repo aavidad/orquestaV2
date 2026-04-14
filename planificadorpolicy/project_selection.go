@@ -1,6 +1,9 @@
 package planificadorpolicy
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 type ProjectOperationSnapshot struct {
 	ObjectivePct int
@@ -25,6 +28,13 @@ type FreeTaskCandidateSnapshot struct {
 	Priority        string
 	ContractDefined bool
 	HasActiveSpec   bool
+}
+
+type PlannableAgentCandidateSnapshot struct {
+	AgentName   string
+	PoolSlug    string
+	Priority    int
+	ProjectSlug string
 }
 
 func DesiredProjectQuota(op *ProjectOperationSnapshot, totalAgents int) int {
@@ -176,4 +186,43 @@ func PreferFreeTaskCandidate(candidate *FreeTaskCandidateSnapshot, current *Free
 		return scoreCandidate > scoreCurrent
 	}
 	return candidate.ID < current.ID
+}
+
+func PrioritizePlannableCandidates(candidates []PlannableAgentCandidateSnapshot, poolCapacities map[string]int) []string {
+	if len(candidates) == 0 {
+		return nil
+	}
+	items := append([]PlannableAgentCandidateSnapshot(nil), candidates...)
+	sort.SliceStable(items, func(i, j int) bool {
+		a, b := items[i], items[j]
+		if (a.PoolSlug != "") != (b.PoolSlug != "") {
+			return a.PoolSlug != ""
+		}
+		if a.Priority != b.Priority {
+			return a.Priority > b.Priority
+		}
+		if a.ProjectSlug != b.ProjectSlug {
+			return a.ProjectSlug < b.ProjectSlug
+		}
+		return strings.ToLower(strings.TrimSpace(a.AgentName)) < strings.ToLower(strings.TrimSpace(b.AgentName))
+	})
+
+	remainingByPool := make(map[string]int, len(poolCapacities))
+	for key, value := range poolCapacities {
+		remainingByPool[strings.TrimSpace(key)] = value
+	}
+
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(item.PoolSlug) == "" {
+			out = append(out, item.AgentName)
+			continue
+		}
+		if remainingByPool[item.PoolSlug] <= 0 {
+			continue
+		}
+		remainingByPool[item.PoolSlug]--
+		out = append(out, item.AgentName)
+	}
+	return out
 }

@@ -1167,49 +1167,48 @@ func priorizarAgentesPlanificables(list []*Agente) ([]*Agente, error) {
 		return list, nil
 	}
 	candidatos := make([]candidatoPlanificable, 0, len(list))
+	snapshots := make([]planificadorpolicy.PlannableAgentCandidateSnapshot, 0, len(list))
+	agentesByName := make(map[string]*Agente, len(list))
 	for _, agente := range list {
 		if agente == nil {
 			continue
 		}
+		agentesByName[strings.ToLower(strings.TrimSpace(agente.Nombre))] = agente
 		candidato, err := describirCandidatoPlanificable(agente)
 		if err != nil {
 			return nil, err
 		}
 		candidatos = append(candidatos, candidato)
+		snapshots = append(snapshots, planificadorpolicy.PlannableAgentCandidateSnapshot{
+			AgentName:   strings.TrimSpace(agente.Nombre),
+			PoolSlug:    strings.TrimSpace(candidato.PoolSlug),
+			Priority:    candidato.Prioridad,
+			ProjectSlug: strings.TrimSpace(candidato.ProyectoSlug),
+		})
 	}
-	sort.SliceStable(candidatos, func(i, j int) bool {
-		a, b := candidatos[i], candidatos[j]
-		if (a.PoolSlug != "") != (b.PoolSlug != "") {
-			return a.PoolSlug != ""
-		}
-		if a.Prioridad != b.Prioridad {
-			return a.Prioridad > b.Prioridad
-		}
-		if a.ProyectoSlug != b.ProyectoSlug {
-			return a.ProyectoSlug < b.ProyectoSlug
-		}
-		return strings.ToLower(strings.TrimSpace(a.Agente.Nombre)) < strings.ToLower(strings.TrimSpace(b.Agente.Nombre))
-	})
 
 	poolsDisponibles := map[string]int{}
-	salida := make([]*Agente, 0, len(candidatos))
 	for _, candidato := range candidatos {
-		if strings.TrimSpace(candidato.PoolSlug) == "" {
-			salida = append(salida, candidato.Agente)
-			continue
-		}
-		if _, ok := poolsDisponibles[candidato.PoolSlug]; !ok {
+		if strings.TrimSpace(candidato.PoolSlug) != "" {
+			if _, ok := poolsDisponibles[candidato.PoolSlug]; ok {
+				continue
+			}
 			disponible, err := capacidadDisponiblePoolLocalCompartido(candidato.PoolSlug)
 			if err != nil {
 				return nil, err
 			}
 			poolsDisponibles[candidato.PoolSlug] = disponible
 		}
-		if poolsDisponibles[candidato.PoolSlug] <= 0 {
+	}
+
+	orderedNames := planificadorpolicy.PrioritizePlannableCandidates(snapshots, poolsDisponibles)
+	salida := make([]*Agente, 0, len(orderedNames))
+	for _, name := range orderedNames {
+		agente := agentesByName[strings.ToLower(strings.TrimSpace(name))]
+		if agente == nil {
 			continue
 		}
-		poolsDisponibles[candidato.PoolSlug]--
-		salida = append(salida, candidato.Agente)
+		salida = append(salida, agente)
 	}
 	return salida, nil
 }
