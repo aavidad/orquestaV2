@@ -3556,6 +3556,136 @@ func TestProcesarDecisionContinuacionSesionActivaAutonomiaEncolaNudgeTMUXStale(t
 	}
 }
 
+func TestProcesarDecisionContinuacionSesionActivaAutonomiaEncolaNudgeTMUXStaleConHandleCanonicoNoEnlazado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex9Canon", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-stale-continue-canon",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex9Canon", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	proyecto, err := db.GetProyecto(strconv.FormatInt(proyectoID, 10))
+	if err != nil || proyecto == nil {
+		t.Fatalf("get proyecto: %+v err=%v", proyecto, err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Seguir implementando en stale tmux canonico",
+		Descripcion: "Trabajo activo",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex9Canon"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex9Canon"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex9Canon",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handleEnlazado, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handleEnlazado == nil {
+		t.Fatalf("handle enlazado: %+v err=%v", handleEnlazado, err)
+	}
+	if _, err := db.DB.Exec(`DELETE FROM runtime_handles WHERE id=?`, handleEnlazado.ID); err != nil {
+		t.Fatalf("delete linked handle: %v", err)
+	}
+
+	traceDir := filepath.Join(tmp, "runtime", "codex9canon")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	now := time.Now().UTC()
+	staleAt := now.Add(-10 * time.Minute)
+	manifestPath := filepath.Join(traceDir, "manifest.json")
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex9Canon","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex9canon-continue","tmux_pane_id":"%36","created_at":"`+now.Format(time.RFC3339Nano)+`","started_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"ready","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`","ready_at":"`+staleAt.Format(time.RFC3339Nano)+`","last_output_at":"`+staleAt.Format(time.RFC3339Nano)+`","last_progress_at":"`+staleAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now.Format(time.RFC3339Nano)+`","ready_at":"`+staleAt.Format(time.RFC3339Nano)+`","last_output_at":"`+staleAt.Format(time.RFC3339Nano)+`","last_progress_at":"`+staleAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex9canon-continue",
+		"tmux_pane_id":          "%36",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	capsJSON, err := json.Marshal(map[string]any{
+		"can_send_input":        false,
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliverySessionResume,
+	})
+	if err != nil {
+		t.Fatalf("marshal caps: %v", err)
+	}
+	if _, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, transporte, handle_kind, handle_ref, estado, metadata_json, capabilities_json, last_seen_at
+	) VALUES (?,?,?,?,?,'activo',?,?,CURRENT_TIMESTAMP)`,
+		"Codex9Canon", proyectoID, "tmux", "session", "orq-codex9canon-continue/%36", string(metaJSON), string(capsJSON)); err != nil {
+		t.Fatalf("insert canonical handle: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	n, err := procesarDecisionContinuacionSesionActivaAutonomia(sesion, proyecto, agenteTickOutput{
+		AccionRecomendada: "continuar_trabajo",
+		Motivo:            "Sigue trabajando hasta completar la tarea o detectar una duda real",
+	}, nil)
+	if err != nil {
+		t.Fatalf("procesarDecisionContinuacionSesionActivaAutonomia: %v", err)
+	}
+	if n == 0 {
+		t.Fatal("deberia producir una accion autonoma usando el handle canónico no enlazado")
+	}
+
+	agente := "Codex9Canon"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("deberia crear un nudge, got=%d", len(orders))
+	}
+	if orders[0].Tipo != "nudge" || !strings.Contains(orders[0].PayloadJSON, `"accion":"continuar_trabajo"`) {
+		t.Fatalf("order inesperada: %+v", orders[0])
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"tarea_id":`+strconv.FormatInt(tareaID, 10)) {
+		t.Fatalf("deberia incluir tarea activa en payload: %s", orders[0].PayloadJSON)
+	}
+}
+
 func TestProcesarDecisionContinuacionSesionActivaAutonomiaNoEncolaNudgeTMUXFresco(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
