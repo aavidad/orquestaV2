@@ -73,3 +73,39 @@ func TestAgentAllowedForAutobootstrapProject(t *testing.T) {
 		t.Fatal("other projects should not be restricted")
 	}
 }
+
+func TestPreferFreeTaskCandidatePrioritizesMicroprogramming(t *testing.T) {
+	a := &FreeTaskCandidateSnapshot{
+		ID:              1,
+		Module:          "core",
+		Priority:        "media",
+		ContractDefined: true,
+		HasActiveSpec:   true,
+	}
+	b := &FreeTaskCandidateSnapshot{
+		ID:              2,
+		Module:          "core",
+		Priority:        "alta",
+		ContractDefined: false,
+	}
+	if !PreferFreeTaskCandidate(a, b, "", map[string]bool{}, true) {
+		t.Fatal("microprogrammed task should win")
+	}
+}
+
+func TestPreferFreeTaskCandidatePrefersFreePreferredModule(t *testing.T) {
+	a := &FreeTaskCandidateSnapshot{
+		ID:       1,
+		Module:   "web",
+		Priority: "alta",
+	}
+	b := &FreeTaskCandidateSnapshot{
+		ID:       2,
+		Module:   "runtime",
+		Priority: "alta",
+	}
+	occupied := map[string]bool{"runtime": true}
+	if !PreferFreeTaskCandidate(a, b, "web", occupied, false) {
+		t.Fatal("preferred free module should win")
+	}
+}

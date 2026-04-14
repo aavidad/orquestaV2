@@ -12,6 +12,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - último corte de esta tanda: mover la evaluación pura de presupuesto y ratio/handoff a `sesionesapp`
 - corte nuevo en planner: mover la policy pura de cupo/carga/selección de proyecto automático a `planificadorpolicy`
 - corte adicional en planner: mover la policy de filtro de agentes permitidos en autobootstrap a `planificadorpolicy`
+- corte adicional en planner: mover la heurística pura de scoring/selección de tarea libre a `planificadorpolicy`
 
 Estado del frente seguro:
 
@@ -31,6 +32,7 @@ Estado del frente seguro:
 - policy de dependencias de tareas movida a `tareaspolicy`
 - policy pura de selección de proyecto automático del planner movida a `planificadorpolicy`
 - policy de pertenencia al pool de autobootstrap del planner movida a `planificadorpolicy`
+- policy pura de scoring/ordenación de tarea libre del planner movida a `planificadorpolicy`
 - policy de gobernanza movida a `gobernanzapolicy` para catálogo, validación de overrides y precedencia por capas
 - policy de skills movida a `skillspolicy`
 

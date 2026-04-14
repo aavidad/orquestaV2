@@ -1404,48 +1404,38 @@ func buscarSiguienteTareaLibreParaAgente(agente string, proyectoID int64) (*Tare
 }
 
 func mejorTareaLibreParaAgente(a, b *Tarea, moduloPreferido string, modulosOcupados map[string]bool, preferirMicroprogramacion bool) bool {
-	if a == nil {
-		return false
-	}
-	if b == nil {
-		return true
-	}
-	scoreA := scoreTareaLibreParaAgente(a, moduloPreferido, modulosOcupados, preferirMicroprogramacion)
-	scoreB := scoreTareaLibreParaAgente(b, moduloPreferido, modulosOcupados, preferirMicroprogramacion)
-	if scoreA != scoreB {
-		return scoreA > scoreB
-	}
-	return a.ID < b.ID
+	return planificadorpolicy.PreferFreeTaskCandidate(
+		freeTaskCandidateSnapshot(a),
+		freeTaskCandidateSnapshot(b),
+		moduloPreferido,
+		modulosOcupados,
+		preferirMicroprogramacion,
+	)
 }
 
 func scoreTareaLibreParaAgente(t *Tarea, moduloPreferido string, modulosOcupados map[string]bool, preferirMicroprogramacion bool) int {
-	if t == nil {
-		return -1 << 30
+	return planificadorpolicy.ScoreFreeTaskCandidate(
+		freeTaskCandidateSnapshot(t),
+		moduloPreferido,
+		modulosOcupados,
+		preferirMicroprogramacion,
+	)
+}
+
+func freeTaskCandidateSnapshot(task *Tarea) *planificadorpolicy.FreeTaskCandidateSnapshot {
+	if task == nil {
+		return nil
 	}
-	score := 0
-	if preferirMicroprogramacion {
-		if tieneSpec, err := tareaTieneEspecificacionActiva(t.ID); err == nil && tieneSpec {
-			score += 2000
-		} else if t.ContratoDefinido {
-			score += 800
-		}
+	snapshot := &planificadorpolicy.FreeTaskCandidateSnapshot{
+		ID:              task.ID,
+		Module:          task.Modulo,
+		Priority:        string(task.Prioridad),
+		ContractDefined: task.ContratoDefinido,
 	}
-	modulo := strings.TrimSpace(t.Modulo)
-	if modulo != "" && moduloPreferido != "" && strings.EqualFold(modulo, moduloPreferido) {
-		score += 1000
+	if hasSpec, err := tareaTieneEspecificacionActiva(task.ID); err == nil {
+		snapshot.HasActiveSpec = hasSpec
 	}
-	if modulo != "" && !modulosOcupados[strings.ToLower(modulo)] {
-		score += 200
-	}
-	switch t.Prioridad {
-	case PrioridadAlta:
-		score += 30
-	case PrioridadMedia:
-		score += 20
-	default:
-		score += 10
-	}
-	return score
+	return snapshot
 }
 
 func agentePrefiereTrabajoMicroprogramacion(agente string, proyectoID int64) (bool, error) {

@@ -19,6 +19,14 @@ type AutomaticProjectCandidateSnapshot struct {
 	ContractClosed bool
 }
 
+type FreeTaskCandidateSnapshot struct {
+	ID              int64
+	Module          string
+	Priority        string
+	ContractDefined bool
+	HasActiveSpec   bool
+}
+
 func DesiredProjectQuota(op *ProjectOperationSnapshot, totalAgents int) int {
 	if totalAgents <= 0 {
 		totalAgents = 1
@@ -123,4 +131,49 @@ func AgentAllowedForAutobootstrapProject(agent, projectSlug, configuredProjectSl
 		}
 	}
 	return false
+}
+
+func ScoreFreeTaskCandidate(task *FreeTaskCandidateSnapshot, preferredModule string, occupiedModules map[string]bool, preferMicroprogramming bool) int {
+	if task == nil {
+		return -1 << 30
+	}
+	score := 0
+	if preferMicroprogramming {
+		if task.HasActiveSpec {
+			score += 2000
+		} else if task.ContractDefined {
+			score += 800
+		}
+	}
+	module := strings.TrimSpace(task.Module)
+	if module != "" && preferredModule != "" && strings.EqualFold(module, preferredModule) {
+		score += 1000
+	}
+	if module != "" && !occupiedModules[strings.ToLower(module)] {
+		score += 200
+	}
+	switch strings.ToLower(strings.TrimSpace(task.Priority)) {
+	case "alta":
+		score += 30
+	case "media":
+		score += 20
+	default:
+		score += 10
+	}
+	return score
+}
+
+func PreferFreeTaskCandidate(candidate *FreeTaskCandidateSnapshot, current *FreeTaskCandidateSnapshot, preferredModule string, occupiedModules map[string]bool, preferMicroprogramming bool) bool {
+	if candidate == nil {
+		return false
+	}
+	if current == nil {
+		return true
+	}
+	scoreCandidate := ScoreFreeTaskCandidate(candidate, preferredModule, occupiedModules, preferMicroprogramming)
+	scoreCurrent := ScoreFreeTaskCandidate(current, preferredModule, occupiedModules, preferMicroprogramming)
+	if scoreCandidate != scoreCurrent {
+		return scoreCandidate > scoreCurrent
+	}
+	return candidate.ID < current.ID
 }
