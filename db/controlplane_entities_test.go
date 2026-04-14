@@ -12197,6 +12197,99 @@ func TestRuntimeObservedLogicalStateFromStructuredWorkerPromueveTMUXReadyARuntim
 	}
 }
 
+func TestAplicarEstadoLocalObservadoActualizaHandleEnMemoriaParaPromocionTMUX(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	workdir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workdir, 0o755); err != nil {
+		t.Fatalf("mkdir workdir: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         workdir,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+
+	statusPath := filepath.Join(tmp, "worker-local-observed-status.json")
+	heartbeatPath := filepath.Join(tmp, "worker-local-observed-heartbeat.json")
+	now := time.Now().UTC()
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":      "ready",
+		"alive":      true,
+		"updated_at": now.Format(time.RFC3339Nano),
+		"ready_at":   now.Format(time.RFC3339Nano),
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+		"ready_at":     now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	if _, err := DB.Exec(`
+		UPDATE runtime_handles
+		SET transporte='tmux',
+		    handle_kind='session'
+		WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("update handle transport: %v", err)
+	}
+	handle.Transporte = "tmux"
+	handle.HandleKind = "session"
+
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	estado := &controlruntime.EstadoLocal{
+		Vivo:             true,
+		PID:              1234,
+		HandleEstado:     "activo",
+		LogicalState:     "disponible",
+		ProcessState:     "running",
+		MetadataJSON:     string(metaJSON),
+		CapabilitiesJSON: `{}`,
+	}
+
+	if err := aplicarEstadoLocalObservado(handle, estado); err != nil {
+		t.Fatalf("aplicarEstadoLocalObservado: %v", err)
+	}
+	logicalState, processState, ok := runtimeObservedLogicalStateFromStructuredWorker(handle)
+	if !ok {
+		t.Fatal("deberia observar el worker TMUX desde el handle actualizado en memoria")
+	}
+	if logicalState != "activo" {
+		t.Fatalf("logicalState inesperado: %s", logicalState)
+	}
+	if processState != "running" {
+		t.Fatalf("processState inesperado: %s", processState)
+	}
+}
+
 func TestRevivirRuntimeHandlePromueveRuntimeTMUXReadyARuntimeActivo(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	if err := RegistrarAgente("Codex1", "programador"); err != nil {

@@ -4393,6 +4393,11 @@ func aplicarEstadoLocalObservado(handle *RuntimeHandle, estado *controlruntime.E
 		WHERE id = ?`,
 		estadoHandle, string(metaJSON), caps, handle.ID,
 	)
+	if err == nil {
+		handle.Estado = estadoHandle
+		handle.MetadataJSON = string(metaJSON)
+		handle.CapabilitiesJSON = caps
+	}
 	return runtimeHandleHotResetOnSuccess(err)
 }
 
