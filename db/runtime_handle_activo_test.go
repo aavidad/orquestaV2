@@ -734,7 +734,7 @@ func TestGetRuntimeHandleActivoAgenteProyectoRecuperaFallidoDesdeWorkerTMUXFresc
 	if err != nil {
 		t.Fatalf("get runtime: %v", err)
 	}
-	if runtime == nil || strings.TrimSpace(runtime.LogicalState) != "esperando_io" || strings.TrimSpace(runtime.ProcessState) != "running" {
+	if runtime == nil || strings.TrimSpace(runtime.LogicalState) != "activo" || strings.TrimSpace(runtime.ProcessState) != "running" {
 		t.Fatalf("runtime no rehidratado desde worker fresco: %+v", runtime)
 	}
 }

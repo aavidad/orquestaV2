@@ -1438,6 +1438,12 @@ func revivirRuntimeHandle(handle *RuntimeHandle, estado string, pid *int64) (*Ru
 		if strings.TrimSpace(logicalState) == "" || strings.EqualFold(strings.TrimSpace(logicalState), "fallido") {
 			logicalState = "esperando_io"
 		}
+		if workerLogicalState, workerProcessState, ok := runtimeObservedLogicalStateFromStructuredWorker(handle); ok {
+			logicalState = workerLogicalState
+			if strings.TrimSpace(workerProcessState) != "" {
+				processState = workerProcessState
+			}
+		}
 		if estado == "pausado" {
 			processState = "stopped"
 			logicalState = "pausado"
@@ -9317,6 +9323,9 @@ func runtimeWorkerSnapshot(handle *RuntimeHandle, runtime *RuntimeInstance) *run
 }
 
 func runtimeBootstrapLeaseBaseline(order, startOrder *RuntimeOrder) time.Time {
+	if runtimeBootstrapLeaseLinkedToStart(order, startOrder) {
+		return runtimeBootstrapLeaseBaselineStartOrder(startOrder)
+	}
 	latest := time.Time{}
 	for _, candidate := range []time.Time{
 		func() time.Time {
@@ -9352,6 +9361,19 @@ func runtimeBootstrapLeaseBaseline(order, startOrder *RuntimeOrder) time.Time {
 		}
 	}
 	return latest
+}
+
+func runtimeBootstrapLeaseBaselineStartOrder(startOrder *RuntimeOrder) time.Time {
+	if startOrder == nil {
+		return time.Time{}
+	}
+	if startOrder.StartedAt != nil && !startOrder.StartedAt.IsZero() {
+		return startOrder.StartedAt.UTC()
+	}
+	if !startOrder.CreatedAt.IsZero() {
+		return startOrder.CreatedAt.UTC()
+	}
+	return time.Time{}
 }
 
 func AckBootstrapRuntimeLeaseByEvidence(handle *RuntimeHandle, runtime *RuntimeInstance, ackSource string) error {
