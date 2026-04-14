@@ -136,3 +136,24 @@ func TestResolvePreferredProject(t *testing.T) {
 		t.Fatalf("unexpected empty resolution: %+v", got)
 	}
 }
+
+func TestLooksLikeManualOperatorOutsideFleet(t *testing.T) {
+	cases := []struct {
+		name string
+		want bool
+	}{
+		{name: "", want: false},
+		{name: "codex-worker", want: false},
+		{name: " Claude-op ", want: false},
+		{name: "gemini-runtime", want: false},
+		{name: "ollama-local", want: false},
+		{name: "antigravity-bot", want: false},
+		{name: "alberto", want: true},
+		{name: "manual-supervisor", want: true},
+	}
+	for _, tc := range cases {
+		if got := LooksLikeManualOperatorOutsideFleet(tc.name); got != tc.want {
+			t.Fatalf("LooksLikeManualOperatorOutsideFleet(%q) = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

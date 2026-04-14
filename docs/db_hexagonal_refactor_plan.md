@@ -15,6 +15,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte adicional en planner: mover la heurística pura de scoring/selección de tarea libre a `planificadorpolicy`
 - corte adicional en planner: mover la priorización de agentes planificables y el consumo de capacidad por pool a `planificadorpolicy`
 - corte adicional en planner: mover la resolución pura de proyecto preferente (activo/pausado/automático) a `planificadorpolicy`
+- corte adicional en planner: mover la detección de operador manual fuera de flota a `planificadorpolicy`
 
 Estado del frente seguro:
 
@@ -37,6 +38,7 @@ Estado del frente seguro:
 - policy pura de scoring/ordenación de tarea libre del planner movida a `planificadorpolicy`
 - policy de ranking final de agentes planificables movida a `planificadorpolicy`
 - policy de resolución de proyecto preferente del planner movida a `planificadorpolicy` (`activo > pausado > automático`)
+- policy de detección de operador manual fuera de flota del planner movida a `planificadorpolicy`
 - policy de gobernanza movida a `gobernanzapolicy` para catálogo, validación de overrides y precedencia por capas
 - policy de skills movida a `skillspolicy`
 

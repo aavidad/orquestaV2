@@ -127,6 +127,19 @@ func SplitAgentList(raw string) []string {
 	return out
 }
 
+func LooksLikeManualOperatorOutsideFleet(name string) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		return false
+	}
+	for _, prefix := range []string{"codex", "claude", "gemini", "ollama", "antigravity"} {
+		if strings.HasPrefix(name, prefix) {
+			return false
+		}
+	}
+	return true
+}
+
 func AgentAllowedForAutobootstrapProject(agent, projectSlug, configuredProjectSlug string, allowedAgents []string) bool {
 	agent = strings.TrimSpace(agent)
 	projectSlug = strings.TrimSpace(projectSlug)

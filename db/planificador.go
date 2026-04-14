@@ -288,16 +288,7 @@ func tareaHuerfanaRecuperable(agente string, proyectoID int64) (bool, error) {
 }
 
 func agentePareceOperadorManualFueraDeFlota(nombre string) bool {
-	nombre = strings.ToLower(strings.TrimSpace(nombre))
-	if nombre == "" {
-		return false
-	}
-	for _, prefix := range []string{"codex", "claude", "gemini", "ollama", "antigravity"} {
-		if strings.HasPrefix(nombre, prefix) {
-			return false
-		}
-	}
-	return true
+	return planificadorpolicy.LooksLikeManualOperatorOutsideFleet(nombre)
 }
 
 func ventanaGraciaRecuperacionTareaHuerfana() time.Duration {
