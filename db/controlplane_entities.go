@@ -8993,7 +8993,21 @@ func runtimeBootstrapLeaseFromOrder(order *RuntimeOrder) (startOrderID int64, ma
 	return startOrderID, mailboxIDs, sesionID
 }
 
-func runtimeBootstrapLeaseAffinityScore(order *RuntimeOrder, handle *RuntimeHandle, runtime *RuntimeInstance, sesionID int64) int {
+func runtimeBootstrapLeaseSesionID(order, startOrder *RuntimeOrder) int64 {
+	if order == nil {
+		return 0
+	}
+	result := mapFromJSON(order.ResultadoJSON)
+	if sesionID := int64FromAny(result["sesion_id"]); sesionID > 0 {
+		return sesionID
+	}
+	if startOrder == nil {
+		return 0
+	}
+	return int64FromAny(mapFromJSON(startOrder.ResultadoJSON)["sesion_id"])
+}
+
+func runtimeBootstrapLeaseAffinityScore(order, startOrder *RuntimeOrder, handle *RuntimeHandle, runtime *RuntimeInstance, sesionID int64) int {
 	if order == nil {
 		return 0
 	}
@@ -9005,6 +9019,10 @@ func runtimeBootstrapLeaseAffinityScore(order *RuntimeOrder, handle *RuntimeHand
 			score += 8
 		case int64FromAny(result["handle_id"]) == handle.ID:
 			score += 8
+		case startOrder != nil && startOrder.HandleID != nil && *startOrder.HandleID == handle.ID:
+			score += 8
+		case startOrder != nil && int64FromAny(mapFromJSON(startOrder.ResultadoJSON)["handle_id"]) == handle.ID:
+			score += 8
 		}
 	}
 	if runtime != nil && runtime.ID > 0 {
@@ -9013,9 +9031,13 @@ func runtimeBootstrapLeaseAffinityScore(order *RuntimeOrder, handle *RuntimeHand
 			score += 4
 		case int64FromAny(result["runtime_id"]) == runtime.ID:
 			score += 4
+		case startOrder != nil && startOrder.RuntimeID != nil && *startOrder.RuntimeID == runtime.ID:
+			score += 4
+		case startOrder != nil && int64FromAny(mapFromJSON(startOrder.ResultadoJSON)["runtime_id"]) == runtime.ID:
+			score += 4
 		}
 	}
-	if sesionID > 0 && int64FromAny(result["sesion_id"]) == sesionID {
+	if sesionID > 0 && runtimeBootstrapLeaseSesionID(order, startOrder) == sesionID {
 		score += 2
 	}
 	return score
@@ -9533,6 +9555,16 @@ func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHand
 	)
 	for _, order := range candidates {
 		startOrderID, mailboxIDs, orderSesionID := runtimeBootstrapLeaseFromOrder(order)
+		var startOrder *RuntimeOrder
+		if startOrderID > 0 && startOrderID != order.ID {
+			startOrder, err = GetRuntimeOrder(startOrderID)
+			if err != nil {
+				return nil, 0, nil, 0, err
+			}
+			if orderSesionID <= 0 {
+				orderSesionID = runtimeBootstrapLeaseSesionID(order, startOrder)
+			}
+		}
 		vigentes, vigentesErr := runtimeBootstrapLeaseMailboxIDsVigentes(mailboxIDs)
 		if vigentesErr != nil {
 			return nil, 0, nil, 0, vigentesErr
@@ -9557,7 +9589,7 @@ func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHand
 			continue
 		}
 		orderMatchesTargetSession := targetSesionID > 0 && orderSesionID == targetSesionID
-		score := runtimeBootstrapLeaseAffinityScore(order, handle, runtime, targetSesionID)
+		score := runtimeBootstrapLeaseAffinityScore(order, startOrder, handle, runtime, targetSesionID)
 		if selectedOrder == nil {
 			selectedOrder = order
 			selectedStartOrderID = startOrderID
