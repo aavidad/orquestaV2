@@ -226,12 +226,16 @@ func buildWorktreeName(projectSlug, agent string, taskID *int64) string {
 	return fmt.Sprintf("%s-t%d", base, *taskID)
 }
 
+func buildBranchBase(projectSlug, agent string) string {
+	return sanitizeName("orq/" + projectSlug + "/" + agent)
+}
+
 func buildBranchName(projectSlug, agent string, taskID *int64) string {
-	base := sanitizeName("orq/" + projectSlug + "/" + agent)
+	base := buildBranchBase(projectSlug, agent)
 	if taskID == nil {
 		return base
 	}
-	return fmt.Sprintf("%s/t%d", base, *taskID)
+	return fmt.Sprintf("%s-t%d", base, *taskID)
 }
 
 func sanitizeName(s string) string {

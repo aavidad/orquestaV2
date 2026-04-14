@@ -8,6 +8,7 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 package gitoperaciones
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -63,6 +64,34 @@ func (WorktreeManager) PruneWorktrees(repoPath string) error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git worktree prune: %w: %s", err, string(out))
+	}
+	return nil
+}
+
+func (WorktreeManager) DeleteBranchDescendants(repoPath, branch string) error {
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return nil
+	}
+	cmd := exec.Command("git", "-C", repoPath, "for-each-ref", "--format=%(refname:short)", "refs/heads/"+branch+"/")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git for-each-ref descendants: %w: %s", err, string(out))
+	}
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		ref := strings.TrimSpace(scanner.Text())
+		if ref == "" {
+			continue
+		}
+		deleteCmd := exec.Command("git", "-C", repoPath, "branch", "-D", ref)
+		deleteOut, deleteErr := deleteCmd.CombinedOutput()
+		if deleteErr != nil {
+			return fmt.Errorf("git branch -D %s: %w: %s", ref, deleteErr, string(deleteOut))
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return err
 	}
 	return nil
 }

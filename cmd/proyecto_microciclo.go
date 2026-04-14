@@ -247,6 +247,10 @@ func eliminarColisionWorktreeMicrociclo(proyecto *db.Proyecto, agente string) er
 		}
 	}
 	if proyectoPareceRepoGit(proyecto.RutaAbs) {
+		branchBase := branchBaseMicrociclo(proyecto.Slug, agente)
+		if err := (gitoperaciones.WorktreeManager{}).DeleteBranchDescendants(strings.TrimSpace(proyecto.RutaAbs), branchBase); err != nil {
+			return err
+		}
 		if err := (gitoperaciones.WorktreeManager{}).PruneWorktrees(strings.TrimSpace(proyecto.RutaAbs)); err != nil {
 			return err
 		}
@@ -265,6 +269,17 @@ func rutaEsperadaWorktreeMicrociclo(rutaProyecto, slugProyecto, agente string) s
 func nombreWorktreeMicrociclo(slugProyecto, agente string) string {
 	replacer := strings.NewReplacer(" ", "-", "_", "-", "/", "-", "\\", "-", ":", "-", "@", "-", "..", "-")
 	base := strings.TrimSpace(strings.ToLower(strings.TrimSpace(slugProyecto) + "-" + strings.TrimSpace(agente)))
+	base = replacer.Replace(base)
+	base = strings.Trim(base, "-")
+	if base == "" {
+		return "work"
+	}
+	return base
+}
+
+func branchBaseMicrociclo(slugProyecto, agente string) string {
+	replacer := strings.NewReplacer(" ", "-", "_", "-", "/", "-", "\\", "-", ":", "-", "@", "-", "..", "-")
+	base := strings.TrimSpace(strings.ToLower("orq/" + strings.TrimSpace(slugProyecto) + "/" + strings.TrimSpace(agente)))
 	base = replacer.Replace(base)
 	base = strings.Trim(base, "-")
 	if base == "" {
