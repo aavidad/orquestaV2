@@ -297,12 +297,23 @@ type apiRuntimeHandlesPurgeResponse struct {
 	Estados    []string `json:"estados"`
 }
 
+type apiRuntimeHandleResidualCloseResponse struct {
+	OK     bool `json:"ok"`
+	Closed bool `json:"closed"`
+}
+
 type apiRuntimeOrdersPurgeResponse struct {
 	OK         bool     `json:"ok"`
 	Deleted    int      `json:"deleted"`
 	DeletedIDs []int64  `json:"deleted_ids"`
 	Estados    []string `json:"estados"`
 	Tipos      []string `json:"tipos,omitempty"`
+}
+
+type apiRuntimeResidualCloseResponse struct {
+	OK        bool    `json:"ok"`
+	Closed    int     `json:"closed"`
+	ClosedIDs []int64 `json:"closed_ids"`
 }
 
 type apiRuntimeTranscriptResponse struct {

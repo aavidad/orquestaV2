@@ -1722,6 +1722,74 @@ func TestMarcarRuntimeHandlesCerradosPorAgenteRespetaSesionActivaMasNueva(t *tes
 	}
 }
 
+func TestMarcarRuntimeHandlesCerradosRespetaProyecto(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoAID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto A: %v", err)
+	}
+	proyectoBID, err := UpsertProyecto(&Proyecto{
+		Slug:    "otro",
+		Nombre:  "Otro",
+		RutaAbs: filepath.Join(tmp, "otro"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto B: %v", err)
+	}
+
+	sA, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoAID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion A: %v", err)
+	}
+	sB, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoBID,
+		CWD:         filepath.Join(tmp, "otro"),
+		Herramienta: "codex-cli",
+		Branch:      "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion B: %v", err)
+	}
+
+	if err := MarcarRuntimeHandlesCerrados("Codex1", &proyectoAID); err != nil {
+		t.Fatalf("marcar handles cerrados por proyecto: %v", err)
+	}
+
+	handleA, err := GetRuntimeHandleBySesionID(sA.ID)
+	if err != nil {
+		t.Fatalf("handleA: %v", err)
+	}
+	handleB, err := GetRuntimeHandleBySesionID(sB.ID)
+	if err != nil {
+		t.Fatalf("handleB: %v", err)
+	}
+	if handleA == nil || handleA.Estado != "cerrado" {
+		t.Fatalf("handleA no cerrado: %+v", handleA)
+	}
+	if handleB == nil || handleB.Estado != "activo" {
+		t.Fatalf("handleB no deberia cerrarse: %+v", handleB)
+	}
+}
+
 func TestReconciliarRuntimeHandlesStaleMarcaHandleFallido(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

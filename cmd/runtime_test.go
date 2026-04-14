@@ -30,6 +30,8 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	var clearTasksReq map[string]any
 	var purgeOrdersReq map[string]any
 	var purgeHandlesReq map[string]any
+	var closeHandlesReq map[string]any
+	var closeRuntimesReq map[string]any
 	var agentControlReq map[string]any
 	runtimeActive := true
 	srv := newTestHTTPServerOrSkip(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -92,6 +94,19 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 				"deleted":     2,
 				"deleted_ids": []int64{48, 39},
 				"estados":     []string{"cerrado", "fallido"},
+			})
+		case r.URL.Path == "/api/runtime-handles/cerrar" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&closeHandlesReq)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":     true,
+				"closed": true,
+			})
+		case r.URL.Path == "/api/runtimes/cerrar" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&closeRuntimesReq)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok":         true,
+				"closed":     1,
+				"closed_ids": []int64{7},
 			})
 		case r.URL.Path == "/api/runtime-orders/purgar" && r.Method == http.MethodPost:
 			_ = json.NewDecoder(r.Body).Decode(&purgeOrdersReq)
@@ -365,6 +380,18 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	}
 	if got, _ := purgeHandlesReq["agente"].(string); got != "Codex2" {
 		t.Fatalf("request purgar-handles sin agente esperado: %+v", purgeHandlesReq)
+	}
+	if got, _ := closeHandlesReq["agente"].(string); got != "Codex2" {
+		t.Fatalf("request cerrar-handles sin agente esperado: %+v", closeHandlesReq)
+	}
+	if got, _ := closeHandlesReq["proyecto"].(string); got != "orquestador" {
+		t.Fatalf("request cerrar-handles sin proyecto esperado: %+v", closeHandlesReq)
+	}
+	if got, _ := closeRuntimesReq["agente"].(string); got != "Codex2" {
+		t.Fatalf("request cerrar-runtimes sin agente esperado: %+v", closeRuntimesReq)
+	}
+	if got, _ := closeRuntimesReq["proyecto"].(string); got != "orquestador" {
+		t.Fatalf("request cerrar-runtimes sin proyecto esperado: %+v", closeRuntimesReq)
 	}
 	if got, _ := agentControlReq["agente"].(string); got != "Codex2" {
 		t.Fatalf("request agente control sin agente esperado: %+v", agentControlReq)

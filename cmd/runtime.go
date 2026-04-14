@@ -925,7 +925,17 @@ var runtimeLimpiarPruebasCmd = &cobra.Command{
 		} else if !ok {
 			return serverFirstCommandError("runtime limpiar-pruebas")
 		}
+		if _, ok, err := cerrarRuntimeHandlesResidualDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), "runtime limpiar-pruebas"); err != nil {
+			return err
+		} else if !ok {
+			return serverFirstCommandError("runtime limpiar-pruebas")
+		}
 		if _, ok, err := purgarRuntimeHandlesDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), []string{"cerrado", "fallido"}, "runtime limpiar-pruebas"); err != nil {
+			return err
+		} else if !ok {
+			return serverFirstCommandError("runtime limpiar-pruebas")
+		}
+		if _, ok, err := cerrarRuntimesResidualDesdeAPI(strings.TrimSpace(agente), strings.TrimSpace(proyecto), "runtime limpiar-pruebas"); err != nil {
 			return err
 		} else if !ok {
 			return serverFirstCommandError("runtime limpiar-pruebas")
@@ -1178,6 +1188,19 @@ func purgarRuntimeHandlesDesdeAPI(agente, proyecto string, estados []string, act
 	return &resp, true, nil
 }
 
+func cerrarRuntimeHandlesResidualDesdeAPI(agente, proyecto, actor string) (*apiRuntimeHandleResidualCloseResponse, bool, error) {
+	var resp apiRuntimeHandleResidualCloseResponse
+	ok, err := apiPost("/api/runtime-handles/cerrar", map[string]any{
+		"agente":   strings.TrimSpace(agente),
+		"proyecto": strings.TrimSpace(proyecto),
+		"actor":    strings.TrimSpace(actor),
+	}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
 func purgarRuntimeOrdersDesdeAPI(agente, proyecto string, estados, tipos []string, olderThanMinutes int, actor string) (*apiRuntimeOrdersPurgeResponse, bool, error) {
 	var resp apiRuntimeOrdersPurgeResponse
 	ok, err := apiPost("/api/runtime-orders/purgar", map[string]any{
@@ -1187,6 +1210,19 @@ func purgarRuntimeOrdersDesdeAPI(agente, proyecto string, estados, tipos []strin
 		"tipos":              tipos,
 		"older_than_minutes": olderThanMinutes,
 		"actor":              strings.TrimSpace(actor),
+	}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
+func cerrarRuntimesResidualDesdeAPI(agente, proyecto, actor string) (*apiRuntimeResidualCloseResponse, bool, error) {
+	var resp apiRuntimeResidualCloseResponse
+	ok, err := apiPost("/api/runtimes/cerrar", map[string]any{
+		"agente":   strings.TrimSpace(agente),
+		"proyecto": strings.TrimSpace(proyecto),
+		"actor":    strings.TrimSpace(actor),
 	}, &resp)
 	if !ok || err != nil {
 		return nil, ok, err

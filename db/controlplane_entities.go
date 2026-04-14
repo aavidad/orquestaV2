@@ -439,6 +439,32 @@ func MarcarRuntimeHandlesCerradosPorAgente(agente string) error {
 	return err
 }
 
+func MarcarRuntimeHandlesCerrados(agente string, proyectoID *int64) error {
+	agente = strings.TrimSpace(agente)
+	if agente == "" && proyectoID == nil {
+		return nil
+	}
+	query := `
+		UPDATE runtime_handles
+		SET estado='cerrado',
+		    last_seen_at=CURRENT_TIMESTAMP
+		WHERE estado IN ('activo','pausado')`
+	args := make([]any, 0, 3)
+	if agente != "" {
+		query += ` AND agente = ?`
+		args = append(args, agente)
+	}
+	if proyectoID != nil {
+		query += ` AND proyecto_id = ?`
+		args = append(args, *proyectoID)
+	}
+	_, err := DB.Exec(query, args...)
+	if err == nil {
+		runtimeHandleHotReset()
+	}
+	return err
+}
+
 func PurgarRuntimeHandlesInactivos(filtro FiltroPurgadoRuntimeHandles) (*PurgaRuntimeHandlesResultado, error) {
 	if filtro.Agente == nil && filtro.ProyectoID == nil {
 		return nil, fmt.Errorf("debes indicar agente o proyecto para purgar runtime handles")

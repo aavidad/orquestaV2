@@ -272,6 +272,7 @@ func TestAPIRuntimeControlPlaneEndpoints(t *testing.T) {
 	}
 	assertKey(http.MethodGet, "/api/runtime-orders?agente=Codex1", nil, "orders", http.StatusOK)
 	assertKey(http.MethodPost, "/api/runtime-orders/purgar", []byte(`{"agente":"Codex1","estados":["completada","fallida"],"tipos":["send_instruction"],"actor":"Codex1"}`), "deleted", http.StatusOK)
+	assertKey(http.MethodPost, "/api/runtimes/cerrar", []byte(`{"agente":"Codex1","proyecto":"orquestador","actor":"Codex1"}`), "closed", http.StatusOK)
 	assertKey(http.MethodGet, "/api/runtime-mailbox?to_agente=Codex2&proyecto=orquestador", nil, "mailbox", http.StatusOK)
 	assertKey(http.MethodGet, "/api/runtime-checkpoints/latest?agente=Codex1&proyecto=orquestador", nil, "checkpoint", http.StatusOK)
 	assertKey(http.MethodPost, "/api/runtime-orders", []byte(`{"agente":"Codex1","tipo":"checkpoint","proyecto":"orquestador","payload":"{}"}`), "id", http.StatusCreated)
@@ -289,6 +290,68 @@ func TestAPIRuntimeControlPlaneEndpoints(t *testing.T) {
 	assertKey(http.MethodPost, "/api/runtime-mailbox", []byte(`{"from_agente":"Codex1","to_agente":"Codex2","kind":"handoff","proyecto":"orquestador","payload":"{}"}`), "id", http.StatusCreated)
 	assertKey(http.MethodPost, "/api/runtime-mailbox/"+itoa(mailID)+"/entregar", []byte(`{}`), "id", http.StatusOK)
 	assertKey(http.MethodPost, "/api/runtime-mailbox/"+itoa(mailID)+"/consumir", []byte(`{}`), "id", http.StatusOK)
+}
+
+func TestAPIRuntimeHandlesCerrarResiduals(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Codex1",
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador"),
+		Herramienta:        "codex-cli",
+		ExternalSessionID:  "sess-close-runtime-handle",
+		ResumenContinuidad: "test cierre handle residual",
+		Branch:             "main",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get runtime handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("activar handle: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/runtime-handles/cerrar", strings.NewReader(`{"agente":"Codex1","proyecto":"orquestador","actor":"Codex1"}`))
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado runtime-handles/cerrar: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode runtime-handles/cerrar: %v", err)
+	}
+	if closed, _ := payload["closed"].(bool); !closed {
+		t.Fatalf("respuesta sin closed=true: %s", rec.Body.String())
+	}
+	handles, err := db.ListarRuntimeHandles(nil)
+	if err != nil {
+		t.Fatalf("listar handles: %v", err)
+	}
+	if len(handles) != 1 || handles[0] == nil || handles[0].Estado != "cerrado" {
+		t.Fatalf("handles cerrados inesperados: %+v", handles)
+	}
 }
 
 func TestAPIRuntimeDetailIncluyeWorkerEstructurado(t *testing.T) {

@@ -32,6 +32,8 @@ type Store interface {
 	GetRuntime(id int64) (*db.RuntimeInstance, error)
 	GetPrimaryRuntime(agente string) (*db.RuntimeInstance, error)
 	GetPrimaryRuntimeForProject(agente string, proyectoID *int64) (*db.RuntimeInstance, error)
+	CloseRuntime(id int64) error
+	CloseRuntimeHandles(agente string, proyectoID *int64) error
 	GetRuntimeHandle(id int64) (*db.RuntimeHandle, error)
 	ListRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error)
 	ListCanonicalRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error)
@@ -196,6 +198,16 @@ type RuntimeHandlePurgeRequest struct {
 	Actor    string
 }
 
+type RuntimeHandleResidualCloseRequest struct {
+	Agente   string
+	Proyecto string
+	Actor    string
+}
+
+type RuntimeHandleResidualCloseResult struct {
+	Closed bool
+}
+
 type RuntimeOrderPurgeRequest struct {
 	Agente           string
 	Proyecto         string
@@ -203,6 +215,17 @@ type RuntimeOrderPurgeRequest struct {
 	Tipos            []string
 	OlderThanMinutes int
 	Actor            string
+}
+
+type RuntimeResidualCloseRequest struct {
+	Agente   string
+	Proyecto string
+	Actor    string
+}
+
+type RuntimeResidualCloseResult struct {
+	Closed    int
+	ClosedIDs []int64
 }
 
 type MicroprogramacionDispatchRequest struct {
@@ -570,6 +593,37 @@ func (s *Service) PurgeInactiveRuntimeHandles(req RuntimeHandlePurgeRequest) (*d
 	return resultado, nil
 }
 
+func (s *Service) CloseResidualRuntimeHandles(req RuntimeHandleResidualCloseRequest) (*RuntimeHandleResidualCloseResult, error) {
+	agente := strings.TrimSpace(req.Agente)
+	proyectoRef := strings.TrimSpace(req.Proyecto)
+	actor := strings.TrimSpace(req.Actor)
+	if actor == "" {
+		actor = "orquesta"
+	}
+	if agente == "" && proyectoRef == "" {
+		return nil, fmt.Errorf("agente o proyecto son obligatorios")
+	}
+	var proyectoID *int64
+	if agente != "" {
+		if _, err := s.store.GetAgent(agente); err != nil {
+			return nil, err
+		}
+	}
+	if proyectoRef != "" {
+		proyecto, err := s.store.GetProject(proyectoRef)
+		if err != nil {
+			return nil, err
+		}
+		proyectoID = &proyecto.ID
+	}
+	if err := s.store.CloseRuntimeHandles(agente, proyectoID); err != nil {
+		return nil, err
+	}
+	detalle := fmt.Sprintf("agente=%s proyecto=%s", valueOrFallback(agente, "*"), valueOrFallback(proyectoRef, "*"))
+	s.store.Audit(actor, "cerrar_runtime_handles_residuales", "runtime_handle", 0, detalle)
+	return &RuntimeHandleResidualCloseResult{Closed: true}, nil
+}
+
 func (s *Service) PurgeTerminalRuntimeOrders(req RuntimeOrderPurgeRequest) (*db.PurgaRuntimeOrdersResultado, error) {
 	agente := strings.TrimSpace(req.Agente)
 	proyectoRef := strings.TrimSpace(req.Proyecto)
@@ -615,6 +669,59 @@ func (s *Service) PurgeTerminalRuntimeOrders(req RuntimeOrderPurgeRequest) (*db.
 	}
 	detalle := fmt.Sprintf("agente=%s proyecto=%s deleted=%d estados=%s tipos=%s older_than_minutes=%d", valueOrFallback(agente, "*"), valueOrFallback(proyectoRef, "*"), resultado.Deleted, strings.Join(resultado.Estados, ","), strings.Join(resultado.Tipos, ","), req.OlderThanMinutes)
 	s.store.Audit(actor, "purgar_runtime_orders", "runtime_order", 0, detalle)
+	return resultado, nil
+}
+
+func (s *Service) CloseResidualRuntimes(req RuntimeResidualCloseRequest) (*RuntimeResidualCloseResult, error) {
+	agente := strings.TrimSpace(req.Agente)
+	proyectoRef := strings.TrimSpace(req.Proyecto)
+	actor := strings.TrimSpace(req.Actor)
+	if actor == "" {
+		actor = "orquesta"
+	}
+	if agente == "" && proyectoRef == "" {
+		return nil, fmt.Errorf("agente o proyecto son obligatorios")
+	}
+
+	var (
+		filtroAgente *string
+		proyectoID   *int64
+		activos      = true
+	)
+	if agente != "" {
+		if _, err := s.store.GetAgent(agente); err != nil {
+			return nil, err
+		}
+		filtroAgente = &agente
+	}
+	if proyectoRef != "" {
+		proyecto, err := s.store.GetProject(proyectoRef)
+		if err != nil {
+			return nil, err
+		}
+		proyectoID = &proyecto.ID
+	}
+	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{
+		Agente:     filtroAgente,
+		ProyectoID: proyectoID,
+		Activos:    &activos,
+	})
+	if err != nil {
+		return nil, err
+	}
+	resultado := &RuntimeResidualCloseResult{}
+	for _, runtime := range runtimes {
+		if runtime == nil || runtime.ID <= 0 || strings.EqualFold(strings.TrimSpace(runtime.LogicalState), "cerrado") {
+			continue
+		}
+		if err := s.store.CloseRuntime(runtime.ID); err != nil {
+			return nil, err
+		}
+		resultado.Closed++
+		resultado.ClosedIDs = append(resultado.ClosedIDs, runtime.ID)
+	}
+	detalle := fmt.Sprintf("agente=%s proyecto=%s closed=%d ids=%v", valueOrFallback(agente, "*"), valueOrFallback(proyectoRef, "*"), resultado.Closed, resultado.ClosedIDs)
+	s.store.Audit(actor, "cerrar_runtimes_residuales", "runtime_instance", 0, detalle)
 	return resultado, nil
 }
 
@@ -2049,6 +2156,14 @@ func (Repository) GetPrimaryRuntime(agente string) (*db.RuntimeInstance, error) 
 
 func (Repository) GetPrimaryRuntimeForProject(agente string, proyectoID *int64) (*db.RuntimeInstance, error) {
 	return db.GetRuntimePrincipalAgenteProyecto(agente, proyectoID)
+}
+
+func (Repository) CloseRuntime(id int64) error {
+	return db.MarcarRuntimeCerrado(id)
+}
+
+func (Repository) CloseRuntimeHandles(agente string, proyectoID *int64) error {
+	return db.MarcarRuntimeHandlesCerrados(agente, proyectoID)
 }
 
 func (Repository) GetRuntimeHandle(id int64) (*db.RuntimeHandle, error) {

@@ -35,6 +35,10 @@ type fakeStore struct {
 	primaryProjRuntimeID     *int64
 	primaryProjRuntimeResp   *db.RuntimeInstance
 	primaryProjRuntimeErr    error
+	closedRuntimeID          int64
+	closedRuntimeIDs         []int64
+	closeHandlesAgent        string
+	closeHandlesProjectID    *int64
 	handleID                 int64
 	handleByIDResp           *db.RuntimeHandle
 	handlesFilter            *string
@@ -274,6 +278,16 @@ func (f *fakeStore) GetPrimaryRuntimeForProject(agente string, proyectoID *int64
 		return nil, f.primaryProjRuntimeErr
 	}
 	return f.primaryProjRuntimeResp, nil
+}
+func (f *fakeStore) CloseRuntime(id int64) error {
+	f.closedRuntimeID = id
+	f.closedRuntimeIDs = append(f.closedRuntimeIDs, id)
+	return nil
+}
+func (f *fakeStore) CloseRuntimeHandles(agente string, proyectoID *int64) error {
+	f.closeHandlesAgent = agente
+	f.closeHandlesProjectID = proyectoID
+	return nil
 }
 func (f *fakeStore) GetRuntimeHandle(id int64) (*db.RuntimeHandle, error) {
 	f.handleID = id
@@ -2954,6 +2968,77 @@ func TestPurgeInactiveRuntimeHandlesDelegatesAndAudits(t *testing.T) {
 		t.Fatalf("purgeFilter estados=%v", store.purgeFilter.Estados)
 	}
 	if store.auditAction != "purgar_runtime_handles" || store.auditAgent != "Codex1" {
+		t.Fatalf("audit inesperado agente=%q accion=%q detalle=%q", store.auditAgent, store.auditAction, store.auditDetail)
+	}
+}
+
+func TestCloseResidualRuntimeHandlesDelegatesAndAudits(t *testing.T) {
+	projectID := int64(9)
+	store := &fakeStore{
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		agentResponse:   &db.Agente{Nombre: "Codex5", Rol: "programador"},
+	}
+	service := NewService(store)
+
+	resultado, err := service.CloseResidualRuntimeHandles(RuntimeHandleResidualCloseRequest{
+		Agente:   "Codex5",
+		Proyecto: "orquestador",
+		Actor:    "Codex1",
+	})
+	if err != nil {
+		t.Fatalf("CloseResidualRuntimeHandles: %v", err)
+	}
+	if resultado == nil || !resultado.Closed {
+		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+	if store.closeHandlesAgent != "Codex5" {
+		t.Fatalf("closeHandlesAgent=%q", store.closeHandlesAgent)
+	}
+	if store.closeHandlesProjectID == nil || *store.closeHandlesProjectID != projectID {
+		t.Fatalf("closeHandlesProjectID=%v", store.closeHandlesProjectID)
+	}
+	if store.auditAction != "cerrar_runtime_handles_residuales" || store.auditAgent != "Codex1" {
+		t.Fatalf("audit inesperado agente=%q accion=%q detalle=%q", store.auditAgent, store.auditAction, store.auditDetail)
+	}
+}
+
+func TestCloseResidualRuntimesDelegatesAndAudits(t *testing.T) {
+	projectID := int64(9)
+	store := &fakeStore{
+		projectResponse: &db.Proyecto{ID: projectID, Slug: "orquestador"},
+		agentResponse:   &db.Agente{Nombre: "Codex5", Rol: "programador"},
+		runtimesResponse: []*db.RuntimeInstance{
+			{ID: 21, Agente: "Codex5", ProyectoID: &projectID, LogicalState: "activo"},
+			{ID: 22, Agente: "Codex5", ProyectoID: &projectID, LogicalState: "esperando_io"},
+			{ID: 23, Agente: "Codex5", ProyectoID: &projectID, LogicalState: "cerrado"},
+		},
+	}
+	service := NewService(store)
+
+	resultado, err := service.CloseResidualRuntimes(RuntimeResidualCloseRequest{
+		Agente:   "Codex5",
+		Proyecto: "orquestador",
+		Actor:    "Codex1",
+	})
+	if err != nil {
+		t.Fatalf("CloseResidualRuntimes: %v", err)
+	}
+	if resultado == nil || resultado.Closed != 2 {
+		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+	if len(store.closedRuntimeIDs) != 2 || store.closedRuntimeIDs[0] != 21 || store.closedRuntimeIDs[1] != 22 {
+		t.Fatalf("closedRuntimeIDs=%v", store.closedRuntimeIDs)
+	}
+	if store.runtimesFilter.Agente == nil || *store.runtimesFilter.Agente != "Codex5" {
+		t.Fatalf("runtimesFilter agente=%v", store.runtimesFilter.Agente)
+	}
+	if store.runtimesFilter.ProyectoID == nil || *store.runtimesFilter.ProyectoID != projectID {
+		t.Fatalf("runtimesFilter proyecto=%v", store.runtimesFilter.ProyectoID)
+	}
+	if store.runtimesFilter.Activos == nil || !*store.runtimesFilter.Activos {
+		t.Fatalf("runtimesFilter activos=%v", store.runtimesFilter.Activos)
+	}
+	if store.auditAction != "cerrar_runtimes_residuales" || store.auditAgent != "Codex1" || !strings.Contains(store.auditDetail, "closed=2") {
 		t.Fatalf("audit inesperado agente=%q accion=%q detalle=%q", store.auditAgent, store.auditAction, store.auditDetail)
 	}
 }

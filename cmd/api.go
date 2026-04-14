@@ -519,6 +519,12 @@ type apiRuntimeOrdersPurgeRequest struct {
 	Actor            string   `json:"actor"`
 }
 
+type apiRuntimeResidualCloseRequest struct {
+	Agente   string `json:"agente"`
+	Proyecto string `json:"proyecto"`
+	Actor    string `json:"actor"`
+}
+
 type apiRuntimeMailboxCreateRequest struct {
 	FromAgente     string `json:"from_agente"`
 	ToAgente       string `json:"to_agente"`
@@ -728,7 +734,9 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtimes/tree", apiHandlerRuntimesTree)
 	mux.HandleFunc("/api/runtimes/", apiRouterRuntimes)
 	mux.HandleFunc("/api/runtime-handles", apiHandlerRuntimeHandles)
+	mux.HandleFunc("/api/runtime-handles/cerrar", apiHandlerRuntimeHandlesCerrar)
 	mux.HandleFunc("/api/runtime-handles/purgar", apiHandlerRuntimeHandlesPurgar)
+	mux.HandleFunc("/api/runtimes/cerrar", apiHandlerRuntimesCerrar)
 	mux.HandleFunc("/api/runtime-orders/purgar", apiHandlerRuntimeOrdersPurgar)
 	mux.HandleFunc("/api/runtime-orders/cancelar", apiHandlerRuntimeOrdersCancelar)
 	mux.HandleFunc("/api/runtime-orders/", apiRouterRuntimeOrders)
@@ -4591,6 +4599,12 @@ type apiRuntimeHandlesPurgeRequest struct {
 	Actor    string   `json:"actor"`
 }
 
+type apiRuntimeHandleResidualCloseRequest struct {
+	Agente   string `json:"agente"`
+	Proyecto string `json:"proyecto"`
+	Actor    string `json:"actor"`
+}
+
 func apiHandlerRuntimeHandlesPurgar(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodPost) {
 		return
@@ -4615,6 +4629,55 @@ func apiHandlerRuntimeHandlesPurgar(w http.ResponseWriter, r *http.Request) {
 		Deleted:    resultado.Deleted,
 		DeletedIDs: resultado.DeletedIDs,
 		Estados:    resultado.Estados,
+	})
+}
+
+func apiHandlerRuntimeHandlesCerrar(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiRuntimeHandleResidualCloseRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	resultado, err := runtimesService.CloseResidualRuntimeHandles(runtimesapp.RuntimeHandleResidualCloseRequest{
+		Agente:   apiNombreAgenteCanonico(req.Agente),
+		Proyecto: strings.TrimSpace(req.Proyecto),
+		Actor:    strings.TrimSpace(req.Actor),
+	})
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiRuntimeHandleResidualCloseResponse{
+		OK:     true,
+		Closed: resultado.Closed,
+	})
+}
+
+func apiHandlerRuntimesCerrar(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiRuntimeResidualCloseRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	resultado, err := runtimesService.CloseResidualRuntimes(runtimesapp.RuntimeResidualCloseRequest{
+		Agente:   apiNombreAgenteCanonico(req.Agente),
+		Proyecto: strings.TrimSpace(req.Proyecto),
+		Actor:    strings.TrimSpace(req.Actor),
+	})
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiRuntimeResidualCloseResponse{
+		OK:        true,
+		Closed:    resultado.Closed,
+		ClosedIDs: resultado.ClosedIDs,
 	})
 }
 

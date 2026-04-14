@@ -182,6 +182,19 @@ func MarcarRuntimesCerradosPorAgente(agente string) error {
 	return err
 }
 
+func MarcarRuntimeCerrado(id int64) error {
+	if id <= 0 {
+		return nil
+	}
+	_, err := DB.Exec(`
+		UPDATE runtime_instances
+		SET logical_state='cerrado',
+		    process_state='finalizado',
+		    last_event_at=CURRENT_TIMESTAMP
+		WHERE id = ? AND logical_state <> 'cerrado'`, id)
+	return err
+}
+
 func GetRuntime(id int64) (*RuntimeInstance, error) {
 	return consultarConReintentos(func() (*RuntimeInstance, error) {
 		row := DB.QueryRow(runtimeSelectBase()+` WHERE r.id = ?`, id)
