@@ -77,3 +77,29 @@ func TestBudgetSnapshotContributesQuota(t *testing.T) {
 		t.Fatal("sin used_percent no deberia aportar cuota")
 	}
 }
+
+func TestBudgetAccountCandidateScorePrefersFresherAndStrongerSource(t *testing.T) {
+	now := time.Now().UTC()
+	remaining := int64(30)
+	live := BudgetAccountCandidateScore(BudgetQuotaSnapshot{
+		RemainingSeconds: &remaining,
+		Source:           "codex_status_live",
+		CheckedAt:        now.Add(-10 * time.Minute),
+	}, now)
+	observed := BudgetAccountCandidateScore(BudgetQuotaSnapshot{
+		RemainingSeconds: &remaining,
+		Source:           "codex_token_count_observed",
+		CheckedAt:        now.Add(-10 * time.Minute),
+	}, now)
+	stale := BudgetAccountCandidateScore(BudgetQuotaSnapshot{
+		RemainingSeconds: &remaining,
+		Source:           "codex_status_live",
+		CheckedAt:        now.Add(-8 * time.Hour),
+	}, now)
+	if live <= observed {
+		t.Fatalf("codex_status_live deberia puntuar por encima de observed: live=%d observed=%d", live, observed)
+	}
+	if observed <= stale {
+		t.Fatalf("snapshot fresco deberia puntuar por encima de uno mas viejo: observed=%d stale=%d", observed, stale)
+	}
+}

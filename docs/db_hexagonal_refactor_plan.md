@@ -1,5 +1,21 @@
 # Plan De Refactor De `db` Hacia Hexagonalidad
 
+## Estado 2026-04-14
+
+Progreso ya aterrizado en commits pequeños para no pisarse:
+
+- `c3b3541` mueve la validación y normalización de overrides de gobernanza a `gobernanzapolicy`
+- `cbe90e9` mueve la precedencia/capas de overrides (`rol -> proyecto -> agente`) a `gobernanzapolicy`
+- `058dba9` mueve la policy de frescura TTL de presupuestos a `sesionesapp`
+- `0d1f30b` mueve la detección de snapshots que aportan cuota a `sesionesapp`
+- último corte de esta tanda: mover el scoring puro de candidatos de presupuesto canónico a `sesionesapp`
+
+Estado del frente seguro:
+
+- `db/controlplane_entities.go` sigue siendo hotspot ajeno y no debe tocarse sin reasignación
+- `db/asignaciones.go` no ofrece ya un seam pequeño con buen ratio valor/riesgo
+- el frente `presupuestos/governanza` ha permitido sacar policy pura fuera de `db` sin tocar `cmd/`
+
 ## Objetivo
 
 Convertir `db/` en una capa de persistencia y soporte transaccional, no en una capa de decisión de negocio u orquestación.
@@ -410,4 +426,3 @@ Se considerará que `db` está razonablemente arreglada cuando:
 - los hotspots estén troceados por dominio
 - la mayor parte de la lógica de orquestación viva fuera
 - los tests de arquitectura impidan volver atrás
-

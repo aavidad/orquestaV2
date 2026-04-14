@@ -20,6 +20,7 @@ type BudgetQuotaSnapshot struct {
 	RemainingCredits  *float64
 	Source            string
 	RawSnapshotJSON   string
+	CheckedAt         time.Time
 }
 
 func SelectEffectiveBudget(candidates []BudgetCandidate) BudgetCandidate {
@@ -160,4 +161,42 @@ func budgetSnapshotFloat64(raw any) (float64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func BudgetAccountCandidateScore(snapshot BudgetQuotaSnapshot, now time.Time) int64 {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if snapshot.CheckedAt.IsZero() {
+		return -1
+	}
+	var score int64
+	if BudgetSnapshotContributesQuota(snapshot) {
+		score += 1_000_000_000
+	}
+	age := now.Sub(snapshot.CheckedAt.UTC())
+	switch {
+	case age <= 15*time.Minute:
+		score += 100_000_000
+	case age <= time.Hour:
+		score += 75_000_000
+	case age <= 6*time.Hour:
+		score += 50_000_000
+	case age <= 24*time.Hour:
+		score += 25_000_000
+	}
+	switch strings.ToLower(strings.TrimSpace(snapshot.Source)) {
+	case "codex_status_live", "claude_status_live":
+		score += 70_000_000
+	case "codex_profile_status":
+		score += 65_000_000
+	case "codex_token_count_observed", "claude_rust_session_observed":
+		score += 60_000_000
+	case "provider_backoff":
+		score += 10_000_000
+	default:
+		score += 5_000_000
+	}
+	score += snapshot.CheckedAt.UTC().Unix()
+	return score
 }

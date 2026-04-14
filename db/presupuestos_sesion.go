@@ -294,37 +294,15 @@ func scorePresupuestoCuentaCanonico(p *PresupuestoSesion) int64 {
 	if p == nil {
 		return -1
 	}
-	var score int64
-	if PresupuestoSesionAportaCuota(p) {
-		score += 1_000_000_000
-	}
-	if !p.CheckedAt.IsZero() {
-		age := time.Since(p.CheckedAt.UTC())
-		switch {
-		case age <= 15*time.Minute:
-			score += 100_000_000
-		case age <= time.Hour:
-			score += 75_000_000
-		case age <= 6*time.Hour:
-			score += 50_000_000
-		case age <= 24*time.Hour:
-			score += 25_000_000
-		}
-	}
-	switch strings.ToLower(strings.TrimSpace(p.BudgetSource)) {
-	case "codex_status_live", "claude_status_live":
-		score += 70_000_000
-	case "codex_profile_status":
-		score += 65_000_000
-	case "codex_token_count_observed", "claude_rust_session_observed":
-		score += 60_000_000
-	case "provider_backoff":
-		score += 10_000_000
-	default:
-		score += 5_000_000
-	}
-	score += p.CheckedAt.UTC().Unix()
-	return score
+	return sesionesapp.BudgetAccountCandidateScore(sesionesapp.BudgetQuotaSnapshot{
+		RemainingSeconds:  p.RemainingSeconds,
+		RemainingMessages: p.RemainingMessages,
+		RemainingTokens:   p.RemainingTokens,
+		RemainingCredits:  p.RemainingCredits,
+		Source:            p.BudgetSource,
+		RawSnapshotJSON:   p.RawSnapshotJSON,
+		CheckedAt:         p.CheckedAt,
+	}, time.Now().UTC())
 }
 
 func scanPresupuestoAgenteConSesion(s scanner) (*PresupuestoSesion, *Sesion, error) {
