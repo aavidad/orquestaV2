@@ -9686,6 +9686,9 @@ func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHand
 				orderSesionID = runtimeBootstrapLeaseSesionID(order, startOrder)
 			}
 		}
+		if !observed && startOrder != nil && runtimeBootstrapLeaseTieneReceiptUtil(mapFromJSON(startOrder.ResultadoJSON)) {
+			continue
+		}
 		mailboxIDs = nil
 		for _, candidateMailboxIDs := range runtimeBootstrapLeaseMailboxIDsConFallbackFuente(order, startOrder) {
 			vigentes, vigentesErr := runtimeBootstrapLeaseMailboxIDsVigentes(candidateMailboxIDs)

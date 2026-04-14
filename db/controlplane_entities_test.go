@@ -6770,6 +6770,100 @@ func TestRuntimeMailboxCubiertoPorBootstrapPendienteIgnoraLeaseDerivadaObservada
 	}
 }
 
+func TestResolverBootstrapRuntimeLeasePendienteIgnoraLeaseDerivadaSiStartFuenteYaFueObservada(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir workdir: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"bootstrap observado fuente"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	sourceStartID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		Estado:     "completada",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","delivery_state":"delivered","delivery_receipt_at":"2026-04-14T12:37:01Z","receipt_source":"git_worktree","mailbox_ids":[%d],"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			mailboxID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start fuente observada: %v", err)
+	}
+
+	resumeID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "resume",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","start_order_id":%d,"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			sourceStartID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar resume derivada: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, resumeID); err != nil {
+		t.Fatalf("marcar resume derivada ejecutando: %v", err)
+	}
+
+	order, startOrderID, mailboxIDs, sesionID, err := resolverBootstrapRuntimeLeasePendiente(handle, runtime)
+	if err != nil {
+		t.Fatalf("resolverBootstrapRuntimeLeasePendiente: %v", err)
+	}
+	if order != nil || startOrderID != 0 || len(mailboxIDs) != 0 {
+		t.Fatalf("no deberia exponer una lease pendiente si la start fuente ya fue observada: order=%+v start=%d mailbox=%+v", order, startOrderID, mailboxIDs)
+	}
+	if sesionID != sesion.ID {
+		t.Fatalf("sesion_id inesperado: got=%d want=%d", sesionID, sesion.ID)
+	}
+}
+
 func TestRuntimeMailboxEntregadoPorBootstrapObservadoReconoceLeaseDerivadaSinReceiptPropio(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
