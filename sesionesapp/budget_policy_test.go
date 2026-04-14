@@ -61,3 +61,19 @@ func TestBudgetSnapshotFreshUsesDefaultTTL(t *testing.T) {
 		t.Fatal("manual no deberia seguir fresco con TTL por defecto")
 	}
 }
+
+func TestBudgetSnapshotContributesQuota(t *testing.T) {
+	remaining := int64(42)
+	if !BudgetSnapshotContributesQuota(BudgetQuotaSnapshot{RemainingSeconds: &remaining}) {
+		t.Fatal("remaining_seconds deberia aportar cuota")
+	}
+	if !BudgetSnapshotContributesQuota(BudgetQuotaSnapshot{Source: "provider_backoff"}) {
+		t.Fatal("provider_backoff deberia aportar cuota")
+	}
+	if !BudgetSnapshotContributesQuota(BudgetQuotaSnapshot{RawSnapshotJSON: `{"rate_limits":{"primary":{"used_percent":12}}}`}) {
+		t.Fatal("used_percent deberia aportar cuota")
+	}
+	if BudgetSnapshotContributesQuota(BudgetQuotaSnapshot{RawSnapshotJSON: `{"rate_limits":{"primary":{"window_minutes":300}}}`}) {
+		t.Fatal("sin used_percent no deberia aportar cuota")
+	}
+}

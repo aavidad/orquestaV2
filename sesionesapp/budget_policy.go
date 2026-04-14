@@ -1,6 +1,7 @@
 package sesionesapp
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 )
@@ -10,6 +11,15 @@ type BudgetCandidate struct {
 	WindowKind   string
 	ResetAt      *time.Time
 	Source       string
+}
+
+type BudgetQuotaSnapshot struct {
+	RemainingSeconds  *int64
+	RemainingMessages *int64
+	RemainingTokens   *int64
+	RemainingCredits  *float64
+	Source            string
+	RawSnapshotJSON   string
 }
 
 func SelectEffectiveBudget(candidates []BudgetCandidate) BudgetCandidate {
@@ -102,5 +112,52 @@ func budgetSourceUsesObservedFreshness(source string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func BudgetSnapshotContributesQuota(snapshot BudgetQuotaSnapshot) bool {
+	if snapshot.RemainingSeconds != nil || snapshot.RemainingMessages != nil || snapshot.RemainingTokens != nil || snapshot.RemainingCredits != nil {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(snapshot.Source), "provider_backoff") {
+		return true
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(snapshot.RawSnapshotJSON), &raw); err != nil || raw == nil {
+		return false
+	}
+	rateLimits, _ := raw["rate_limits"].(map[string]any)
+	if rateLimits == nil {
+		return false
+	}
+	for _, key := range []string{"primary", "secondary"} {
+		window, _ := rateLimits[key].(map[string]any)
+		if window == nil {
+			continue
+		}
+		if _, ok := budgetSnapshotFloat64(window["used_percent"]); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func budgetSnapshotFloat64(raw any) (float64, bool) {
+	switch v := raw.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case int32:
+		return float64(v), true
+	case json.Number:
+		f, err := v.Float64()
+		return f, err == nil
+	default:
+		return 0, false
 	}
 }

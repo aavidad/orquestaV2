@@ -169,30 +169,14 @@ func PresupuestoSesionAportaCuota(p *PresupuestoSesion) bool {
 	if p == nil {
 		return false
 	}
-	if p.RemainingSeconds != nil || p.RemainingMessages != nil || p.RemainingTokens != nil || p.RemainingCredits != nil {
-		return true
-	}
-	if strings.EqualFold(strings.TrimSpace(p.BudgetSource), "provider_backoff") {
-		return true
-	}
-	raw := mapFromJSON(p.RawSnapshotJSON)
-	if raw == nil {
-		return false
-	}
-	rateLimits, _ := raw["rate_limits"].(map[string]any)
-	if rateLimits == nil {
-		return false
-	}
-	for _, key := range []string{"primary", "secondary"} {
-		window, _ := rateLimits[key].(map[string]any)
-		if window == nil {
-			continue
-		}
-		if _, ok := snapshotFloat64(window["used_percent"]); ok {
-			return true
-		}
-	}
-	return false
+	return sesionesapp.BudgetSnapshotContributesQuota(sesionesapp.BudgetQuotaSnapshot{
+		RemainingSeconds:  p.RemainingSeconds,
+		RemainingMessages: p.RemainingMessages,
+		RemainingTokens:   p.RemainingTokens,
+		RemainingCredits:  p.RemainingCredits,
+		Source:            p.BudgetSource,
+		RawSnapshotJSON:   p.RawSnapshotJSON,
+	})
 }
 
 func UltimoPresupuestoAgenteConCuota(agente string) (*PresupuestoSesion, *Sesion, error) {
