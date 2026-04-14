@@ -910,7 +910,7 @@ func applyResumeDeliveryHints(plan *LaunchPlan, req LaunchRequest) {
 		return
 	}
 	switch NormalizeMailboxDeliveryMode(plan.MailboxDeliveryMode) {
-	case "", MailboxDeliveryBootstrapOnly, MailboxDeliveryInteractive:
+	case "", MailboxDeliveryBootstrapOnly, MailboxDeliveryInteractive, MailboxDeliveryCoordinatedRestart:
 		plan.MailboxDeliveryMode = MailboxDeliverySessionResume
 	}
 }
