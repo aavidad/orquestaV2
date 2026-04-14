@@ -1487,66 +1487,39 @@ func mejorPresupuestoDerivadoAgente(a *Agente) presupuestoAgenteCandidato {
 }
 
 func seleccionarPresupuestoEfectivo(candidatos []presupuestoAgenteCandidato) presupuestoAgenteCandidato {
-	var weekly presupuestoAgenteCandidato
-	var short presupuestoAgenteCandidato
-	var fallback presupuestoAgenteCandidato
+	adaptados := make([]sesionesapp.BudgetCandidate, 0, len(candidatos))
 	for _, item := range candidatos {
-		if item.pct == nil {
-			continue
-		}
-		if presupuestoEsVentanaSemanal(item.windowKind) {
-			weekly = item
-			continue
-		}
-		if short.pct == nil && presupuestoEsVentanaCorta(item.windowKind) {
-			short = item
-			continue
-		}
-		if fallback.pct == nil {
-			fallback = item
-		}
+		adaptados = append(adaptados, sesionesapp.BudgetCandidate{
+			RemainingPct: item.pct,
+			WindowKind:   item.windowKind,
+			ResetAt:      item.resetAt,
+			Source:       item.source,
+		})
 	}
-	if weekly.pct != nil {
-		if *weekly.pct <= 0 {
-			return weekly
-		}
-		if short.pct != nil {
-			return short
-		}
-		return weekly
+	seleccion := sesionesapp.SelectEffectiveBudget(adaptados)
+	return presupuestoAgenteCandidato{
+		pct:        seleccion.RemainingPct,
+		windowKind: seleccion.WindowKind,
+		resetAt:    seleccion.ResetAt,
+		source:     seleccion.Source,
 	}
-	if short.pct != nil {
-		return short
-	}
-	if fallback.pct != nil {
-		return fallback
-	}
-	return presupuestoAgenteCandidato{}
 }
 
 func presupuestoEsVentanaSemanal(windowKind string) bool {
-	return strings.EqualFold(strings.TrimSpace(windowKind), "weekly")
+	return sesionesapp.BudgetWindowIsWeekly(windowKind)
 }
 
 func presupuestoEsVentanaCorta(windowKind string) bool {
-	windowKind = strings.ToLower(strings.TrimSpace(windowKind))
-	switch windowKind {
-	case "5h", "session", "provider":
-		return true
-	}
-	return strings.HasSuffix(windowKind, "m")
+	return sesionesapp.BudgetWindowIsShort(windowKind)
 }
 
 func aplicarPresupuestoEfectivoAgente(a *Agente, candidato presupuestoAgenteCandidato) {
-	if a == nil || candidato.pct == nil {
-		return
-	}
-	a.CuotaRestantePct = candidato.pct
-	a.PresupuestoVentana = candidato.windowKind
-	a.PresupuestoResetAt = candidato.resetAt
-	if strings.TrimSpace(a.PresupuestoFuente) == "" {
-		a.PresupuestoFuente = candidato.source
-	}
+	sesionesapp.ApplyEffectiveBudget(a, sesionesapp.BudgetCandidate{
+		RemainingPct: candidato.pct,
+		WindowKind:   candidato.windowKind,
+		ResetAt:      candidato.resetAt,
+		Source:       candidato.source,
+	})
 }
 
 type identidadCuentaAgente struct {
