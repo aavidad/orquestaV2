@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"orquesta/planificadorpolicy"
 	"sort"
 	"strings"
 	"time"
@@ -617,33 +618,10 @@ func seleccionarProyectoAutomaticoDisponible(agente string) (int64, error) {
 }
 
 func mejorProyectoAutomatico(candidato *candidatoProyectoAutomatico, actual *candidatoProyectoAutomatico) bool {
-	if candidato == nil || candidato.Proyecto == nil {
-		return false
-	}
-	if actual == nil || actual.Proyecto == nil {
-		return true
-	}
-	if candidato.TieneMin != actual.TieneMin {
-		return candidato.TieneMin
-	}
-	if candidato.MicroCerrada != actual.MicroCerrada {
-		return candidato.MicroCerrada
-	}
-	if candidato.ContratoCerrado != actual.ContratoCerrado {
-		return candidato.ContratoCerrado
-	}
-	if candidato.Deficit > 0 || actual.Deficit > 0 {
-		if candidato.Deficit != actual.Deficit {
-			return candidato.Deficit > actual.Deficit
-		}
-	}
-	if candidato.CargaRatio != actual.CargaRatio {
-		return candidato.CargaRatio < actual.CargaRatio
-	}
-	if candidato.Operacion != nil && actual.Operacion != nil && candidato.Operacion.Prioridad != actual.Operacion.Prioridad {
-		return candidato.Operacion.Prioridad > actual.Operacion.Prioridad
-	}
-	return candidato.Proyecto.ID < actual.Proyecto.ID
+	return planificadorpolicy.PreferAutomaticProjectCandidate(
+		automaticProjectCandidateSnapshot(candidato),
+		automaticProjectCandidateSnapshot(actual),
+	)
 }
 
 func contarAgentesPlanificables() (int, error) {
@@ -658,37 +636,38 @@ func contarAgentesPlanificables() (int, error) {
 }
 
 func cupoDeseadoProyecto(op *ProyectoOperacion, totalAgentes int) int {
-	if totalAgentes <= 0 {
-		totalAgentes = 1
-	}
-	if op == nil {
-		return 1
-	}
-	objetivo := op.ObjetivoPct
-	if objetivo <= 0 {
-		objetivo = 100
-	}
-	deseados := (totalAgentes*objetivo + 99) / 100
-	if deseados <= 0 {
-		deseados = 1
-	}
-	if op.MinAgentes > deseados {
-		deseados = op.MinAgentes
-	}
-	if op.MaxAgentes > 0 && deseados > op.MaxAgentes {
-		deseados = op.MaxAgentes
-	}
-	if deseados <= 0 {
-		return 1
-	}
-	return deseados
+	return planificadorpolicy.DesiredProjectQuota(projectOperationSnapshot(op), totalAgentes)
 }
 
 func cargaProyecto(activos, deseados int) int {
-	if deseados <= 0 {
-		deseados = 1
+	return planificadorpolicy.ProjectLoad(activos, deseados)
+}
+
+func projectOperationSnapshot(op *ProyectoOperacion) *planificadorpolicy.ProjectOperationSnapshot {
+	if op == nil {
+		return nil
 	}
-	return (activos * 10000) / deseados
+	return &planificadorpolicy.ProjectOperationSnapshot{
+		ObjectivePct: op.ObjetivoPct,
+		MinAgents:    op.MinAgentes,
+		MaxAgents:    op.MaxAgentes,
+		Priority:     op.Prioridad,
+	}
+}
+
+func automaticProjectCandidateSnapshot(candidate *candidatoProyectoAutomatico) *planificadorpolicy.AutomaticProjectCandidateSnapshot {
+	if candidate == nil || candidate.Proyecto == nil {
+		return nil
+	}
+	return &planificadorpolicy.AutomaticProjectCandidateSnapshot{
+		ProjectID:      candidate.Proyecto.ID,
+		Operation:      projectOperationSnapshot(candidate.Operacion),
+		Deficit:        candidate.Deficit,
+		HasMin:         candidate.TieneMin,
+		LoadRatio:      candidate.CargaRatio,
+		MicroClosed:    candidate.MicroCerrada,
+		ContractClosed: candidate.ContratoCerrado,
+	}
 }
 
 func agenteReservadoAutonomiaProyecto(agente string, proyectoID int64) (bool, string, error) {

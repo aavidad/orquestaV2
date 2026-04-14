@@ -10,6 +10,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - `0d1f30b` mueve la detección de snapshots que aportan cuota a `sesionesapp`
 - `a8778d4` mueve el scoring puro de candidatos de presupuesto canónico a `sesionesapp`
 - último corte de esta tanda: mover la evaluación pura de presupuesto y ratio/handoff a `sesionesapp`
+- corte nuevo en planner: mover la policy pura de cupo/carga/selección de proyecto automático a `planificadorpolicy`
 
 Estado del frente seguro:
 
@@ -27,6 +28,7 @@ Estado del frente seguro:
 - policy de sesiones extraída a `sesionesapp` para asignación de pool y presupuesto efectivo
 - policy de presupuesto movida a `sesionesapp`: TTL, detección de cuota, scoring canónico y evaluación de handoff
 - policy de dependencias de tareas movida a `tareaspolicy`
+- policy pura de selección de proyecto automático del planner movida a `planificadorpolicy`
 - policy de gobernanza movida a `gobernanzapolicy` para catálogo, validación de overrides y precedencia por capas
 - policy de skills movida a `skillspolicy`
 
@@ -40,7 +42,7 @@ Estado del frente seguro:
 ### 3. Todavía No Hexagonal
 
 - [db/controlplane_entities.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities.go) sigue siendo el hotspot principal y mezcla persistencia con policy de runtime/bootstrap/receipt/mailbox
-- [db/planificador.go](/home/alberto/Trabajo/orquesta/db/planificador.go) sigue cargando demasiada decisión de trabajo/autonomía
+- [db/planificador.go](/home/alberto/Trabajo/orquesta/db/planificador.go) sigue cargando demasiada decisión de trabajo/autonomía, aunque la parte pura de cupo/carga/priorización de proyecto ya salió fuera
 - [db/autonomia_proyecto.go](/home/alberto/Trabajo/orquesta/db/autonomia_proyecto.go) y [db/autonomia_supervisor_operativo.go](/home/alberto/Trabajo/orquesta/db/autonomia_supervisor_operativo.go) siguen siendo parte del frente no saneado
 - [db/runtimes.go](/home/alberto/Trabajo/orquesta/db/runtimes.go), [db/runtime_bootstrap_prompt.go](/home/alberto/Trabajo/orquesta/db/runtime_bootstrap_prompt.go) y [db/runtime_transcript.go](/home/alberto/Trabajo/orquesta/db/runtime_transcript.go) todavía forman parte del frente runtime no vaciado
 - [db/tareas.go](/home/alberto/Trabajo/orquesta/db/tareas.go) y [db/asignaciones.go](/home/alberto/Trabajo/orquesta/db/asignaciones.go) han mejorado, pero no están completamente reducidos a persistencia pura
