@@ -131,11 +131,14 @@ func TestBuildLaunchBootstrapPromptCompactaArranqueBootstrapOnly(t *testing.T) {
 			t.Fatalf("falta %q en prompt compacto:\n%s", token, prompt)
 		}
 	}
-	if !strings.Contains(prompt, "Si existe `.orquesta-inbox.md` en el directorio de trabajo, leelo como contrato operativo vigente antes de tocar codigo.") {
+	if !strings.Contains(prompt, "Primero lee `.orquesta-inbox.md` si existe; usalo como contrato operativo vigente antes de tocar codigo.") {
 		t.Fatalf("faltaba referencia al inbox durable en prompt compacto:\n%s", prompt)
 	}
-	if !strings.Contains(prompt, "Si la tarea activa ya fija frente, simbolos y tests, ejecuta ese slice y no releas doctrina adicional salvo bloqueo real.") {
+	if !strings.Contains(prompt, "Si la tarea activa o la inbox ya fijan frente, simbolos, write-set y tests, ejecuta ese slice y no releas la BIBLIA completa.") {
 		t.Fatalf("faltaba instruccion de no reexplorar doctrina en prompt compacto:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "Consulta solo el fragmento minimo de doctrina que necesites si aparece un bloqueo real o falta contrato operativo en la inbox/tarea.") {
+		t.Fatalf("faltaba instruccion de consulta minima de doctrina en prompt compacto:\n%s", prompt)
 	}
 }
 
@@ -168,10 +171,11 @@ func TestBuildLaunchBootstrapPromptCompactaAgenteCLIOrquestadoAunqueNoSeaBootstr
 	}
 	for _, token := range []string{
 		"Trabaja solo dentro del alcance de la tarea activa y del mailbox actual.",
-		"Si existe `.orquesta-inbox.md` en el directorio de trabajo, leelo como contrato operativo vigente antes de tocar codigo.",
+		"Primero lee `.orquesta-inbox.md` si existe; usalo como contrato operativo vigente antes de tocar codigo.",
 		"Si el contexto visible de la sesión no coincide con la tarea activa o el mailbox actual, ignóralo.",
 		"No reabras frentes viejos ni reescribas módulos fuera del alcance inmediato.",
-		"Si la tarea activa ya fija frente, simbolos y tests, ejecuta ese slice y no releas doctrina adicional salvo bloqueo real.",
+		"Si la tarea activa o la inbox ya fijan frente, simbolos, write-set y tests, ejecuta ese slice y no releas la BIBLIA completa.",
+		"Consulta solo el fragmento minimo de doctrina que necesites si aparece un bloqueo real o falta contrato operativo en la inbox/tarea.",
 		"Tarea activa: #492 [en_progreso] Adaptador Codex broker-first sin control por PTY.",
 		"Alcance inmediato: Simbolos foco: procesarRuntimeMailboxSessionResumeBatchConMailbox y resolverBootstrapRuntimeLeasePendiente.",
 	} {
