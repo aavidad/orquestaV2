@@ -56,14 +56,15 @@ func (s *Service) EjecutarSiguientePasoPipelineLocalDeterminista(proyectoSlug st
 			out.FaseActivada = &activada
 		}
 	}
+	agenteSugerido := s.resolverAgenteSugeridoPipeline(paso, paso.EtapaObjetivo)
 	if tarea := paso.TareaObjetivo; tarea != nil && paso.AccionTarea != "" {
-		actualizada, err := s.ejecutarAccionTareaPipelineLocal(tarea.ID, paso.AccionTarea)
+		actualizada, err := s.ejecutarAccionTareaPipelineLocal(tarea.ID, paso.AccionTarea, agenteSugerido)
 		if err != nil {
 			return nil, err
 		}
 		out.TareaActualizada = actualizada
 	}
-	out.Despacho = s.construirDespachoPipelineLocal(paso, out.TareaActualizada)
+	out.Despacho = s.construirDespachoPipelineLocalConAgente(paso, out.TareaActualizada, agenteSugerido)
 	if err := s.asegurarReviewGatePipelineLocal(strings.TrimSpace(proyectoSlug), out.Despacho); err != nil {
 		return nil, err
 	}
@@ -87,10 +88,17 @@ func (s *Service) EjecutarYDespacharSiguientePasoPipelineLocalDeterminista(proye
 }
 
 func (s *Service) construirDespachoPipelineLocal(paso *PasoPipelineLocalDeterminista, tarea *TareaPipelineLocal) *DespachoPipelineLocal {
+	return s.construirDespachoPipelineLocalConAgente(paso, tarea, "")
+}
+
+func (s *Service) construirDespachoPipelineLocalConAgente(paso *PasoPipelineLocalDeterminista, tarea *TareaPipelineLocal, agenteSugerido string) *DespachoPipelineLocal {
 	if paso == nil || paso.EtapaObjetivo == nil {
 		return nil
 	}
 	etapa := paso.EtapaObjetivo
+	if strings.TrimSpace(agenteSugerido) == "" {
+		agenteSugerido = s.resolverAgenteSugeridoPipeline(paso, etapa)
+	}
 	out := &DespachoPipelineLocal{
 		ProyectoSlug:     strings.TrimSpace(paso.ProyectoSlug),
 		Fase:             strings.TrimSpace(etapa.Fase),
@@ -106,7 +114,7 @@ func (s *Service) construirDespachoPipelineLocal(paso *PasoPipelineLocalDetermin
 		ModeloFallback:   strings.TrimSpace(etapa.ModeloFallback),
 		ResolucionActual: etapa.ResolucionActual,
 		Motivo:           strings.TrimSpace(paso.Motivo),
-		AgenteSugerido:   s.resolverAgenteSugeridoPipeline(paso, etapa),
+		AgenteSugerido:   strings.TrimSpace(agenteSugerido),
 	}
 	if tarea == nil {
 		tarea = paso.TareaObjetivo
@@ -241,7 +249,7 @@ func (s *Service) activarFasePipelineLocal(proyectoSlug, faseObjetivo string) (s
 	return "", nil
 }
 
-func (s *Service) ejecutarAccionTareaPipelineLocal(tareaID int64, accion string) (*TareaPipelineLocal, error) {
+func (s *Service) ejecutarAccionTareaPipelineLocal(tareaID int64, accion, agenteSugerido string) (*TareaPipelineLocal, error) {
 	if s == nil || s.taskActionProvider == nil || tareaID <= 0 {
 		return nil, nil
 	}
@@ -252,10 +260,19 @@ func (s *Service) ejecutarAccionTareaPipelineLocal(tareaID int64, accion string)
 	if actual == nil {
 		return nil, fmt.Errorf("tarea no encontrada: %d", tareaID)
 	}
-	agente := "orquesta"
+	agente := strings.TrimSpace(agenteSugerido)
+	if agente == "" {
+		agente = "orquesta"
+	}
 	cambioReal := false
 	switch strings.ToLower(strings.TrimSpace(accion)) {
 	case "especificar", "implementar", "corregir", "revisar":
+		if tareaPipelineLocalEsMicrociclo(actual) && actual.Agente != nil && strings.TrimSpace(*actual.Agente) != "" && !strings.EqualFold(strings.TrimSpace(*actual.Agente), agente) {
+			if err := s.taskActionProvider.ReassignTask(tareaID, agente); err != nil {
+				return nil, err
+			}
+			cambioReal = true
+		}
 		switch actual.Estado {
 		case db.TareaLibre, db.TareaBacklog:
 			if err := s.taskActionProvider.TakeTask(tareaID, agente); err != nil {

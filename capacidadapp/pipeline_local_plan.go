@@ -130,6 +130,23 @@ func (s *Service) CalcularSiguientePasoPipelineLocalDeterminista(proyectoSlug st
 		}, nil
 	}
 	tareaActual := s.seleccionarTareaPipelineLocal(strings.TrimSpace(proyectoSlug), etapa.Fase)
+	tareaAbiertaImplementacion := s.seleccionarTareaPipelineLocal(strings.TrimSpace(proyectoSlug), "implementacion")
+	if (strings.EqualFold(etapa.Fase, "revision") || strings.EqualFold(etapa.Fase, "integracion")) && tareaPipelineLocalAbierta(tareaAbiertaImplementacion) {
+		etapaImplementacion := buscarEtapaPipelineLocal(pipeline, "implementacion")
+		if etapaImplementacion != nil {
+			return &PasoPipelineLocalDeterminista{
+				ProyectoSlug:  strings.TrimSpace(proyectoSlug),
+				Accion:        "reconciliar_fase",
+				AccionTarea:   accionTareaParaFase("implementacion"),
+				Motivo:        "hay trabajo abierto pendiente; el pipeline debe volver a implementación antes de seguir revisión o integración histórica",
+				FaseActual:    faseActual,
+				FaseObjetivo:  "implementacion",
+				EtapaObjetivo: etapaImplementacion,
+				TareaObjetivo: tareaAbiertaImplementacion,
+				Pipeline:      pipeline,
+			}, nil
+		}
+	}
 	if strings.EqualFold(etapa.Fase, "implementacion") || strings.EqualFold(etapa.Fase, "correccion") {
 		if tareaActual != nil && strings.EqualFold(strings.TrimSpace(tareaActual.Estado), string(db.TareaCompletada)) {
 			etapaRevision := buscarEtapaPipelineLocal(pipeline, "revision")
@@ -203,6 +220,25 @@ func accionTareaParaFase(fase string) string {
 	}
 }
 
+func tareaPipelineLocalAbierta(tarea *TareaPipelineLocal) bool {
+	if tarea == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(tarea.Estado)) {
+	case string(db.TareaEnProgreso), string(db.TareaAsignada), string(db.TareaLibre), string(db.TareaBacklog):
+		return true
+	default:
+		return false
+	}
+}
+
+func tareaPipelineLocalEsMicrociclo(tarea *db.Tarea) bool {
+	if tarea == nil {
+		return false
+	}
+	return strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:microrefactor_loop")
+}
+
 func (s *Service) seleccionarTareaPipelineLocal(proyectoSlug, fase string) *TareaPipelineLocal {
 	if s == nil || s.taskProvider == nil || strings.TrimSpace(proyectoSlug) == "" {
 		return nil
@@ -214,6 +250,17 @@ func (s *Service) seleccionarTareaPipelineLocal(proyectoSlug, fase string) *Tare
 	var candidata *db.Tarea
 	mejor := -1
 	for _, tarea := range tareas {
+		if candidata != nil {
+			actualMicrociclo := tareaPipelineLocalEsMicrociclo(candidata)
+			nuevaMicrociclo := tareaPipelineLocalEsMicrociclo(tarea)
+			if nuevaMicrociclo != actualMicrociclo {
+				if nuevaMicrociclo {
+					candidata = tarea
+					mejor = puntuarTareaPipelineLocal(tarea, fase)
+				}
+				continue
+			}
+		}
 		score := puntuarTareaPipelineLocal(tarea, fase)
 		if score > mejor {
 			mejor = score
@@ -234,15 +281,15 @@ func puntuarTareaPipelineLocal(tarea *db.Tarea, fase string) int {
 	switch strings.ToLower(strings.TrimSpace(fase)) {
 	case "especificacion", "implementacion", "correccion":
 		switch estado {
-		case string(db.TareaCompletada):
-			return 50
 		case string(db.TareaEnProgreso):
-			return 40
-		case string(db.TareaAsignada):
-			return 30
+			return 50
 		case string(db.TareaLibre):
-			return 20
+			return 40
 		case string(db.TareaBacklog):
+			return 30
+		case string(db.TareaAsignada):
+			return 20
+		case string(db.TareaCompletada):
 			return 10
 		default:
 			return -1

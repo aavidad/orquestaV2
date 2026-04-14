@@ -35,6 +35,7 @@ type TaskProvider interface {
 type TaskActionProvider interface {
 	GetTask(id int64) (*db.Tarea, error)
 	TakeTask(id int64, agente string) error
+	ReassignTask(id int64, agente string) error
 	StartTask(id int64, agente string) error
 }
 
@@ -341,6 +342,10 @@ func (Repository) GetTask(id int64) (*db.Tarea, error) {
 
 func (Repository) TakeTask(id int64, agente string) error {
 	return db.TomarTarea(id, agente)
+}
+
+func (Repository) ReassignTask(id int64, agente string) error {
+	return db.ReasignarTarea(id, agente)
 }
 
 func (Repository) StartTask(id int64, agente string) error {

@@ -94,6 +94,15 @@ func (f *fakeTaskActionProvider) TakeTask(id int64, agente string) error {
 	return nil
 }
 
+func (f *fakeTaskActionProvider) ReassignTask(id int64, agente string) error {
+	item := f.tareas[id]
+	if item == nil {
+		return nil
+	}
+	item.Agente = &agente
+	return nil
+}
+
 func (f *fakeTaskActionProvider) StartTask(id int64, agente string) error {
 	item := f.tareas[id]
 	if item == nil {
@@ -513,6 +522,66 @@ func TestCalcularSiguientePasoPipelineLocalDeterministaSeleccionaTareaEnProgreso
 	}
 }
 
+func TestCalcularSiguientePasoPipelineLocalDeterministaPriorizaTrabajoAbiertoSobreHistoricoCompletado(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{ID: 12, Titulo: "Historico completado", Estado: db.TareaCompletada, Prioridad: db.PrioridadAlta},
+		{ID: 13, Titulo: "Siguiente frente libre", Estado: db.TareaLibre, Prioridad: db.PrioridadAlta},
+	}})
+
+	paso, err := service.CalcularSiguientePasoPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("CalcularSiguientePasoPipelineLocalDeterminista: %v", err)
+	}
+	if paso == nil || paso.TareaObjetivo == nil {
+		t.Fatalf("paso inesperado: %+v", paso)
+	}
+	if paso.TareaObjetivo.ID != 13 || paso.Accion != "ejecutar_fase" || paso.AccionTarea != "implementar" {
+		t.Fatalf("deberia priorizar el frente abierto antes que historico completado: %+v", paso)
+	}
+}
+
+func TestCalcularSiguientePasoPipelineLocalDeterministaPriorizaFrenteMicrocicloSobreTrabajoAjeno(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{ID: 40, Titulo: "Trabajo ajeno", Estado: db.TareaEnProgreso, Prioridad: db.PrioridadAlta},
+		{ID: 41, Titulo: "Frente premium activo", Estado: db.TareaLibre, Prioridad: db.PrioridadAlta, Notas: "autonomia:microrefactor_loop"},
+	}})
+
+	paso, err := service.CalcularSiguientePasoPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("CalcularSiguientePasoPipelineLocalDeterminista: %v", err)
+	}
+	if paso == nil || paso.TareaObjetivo == nil {
+		t.Fatalf("paso inesperado: %+v", paso)
+	}
+	if paso.TareaObjetivo.ID != 41 || paso.AccionTarea != "implementar" {
+		t.Fatalf("deberia priorizar el frente microciclo activo sobre trabajo ajeno: %+v", paso)
+	}
+}
+
+func TestCalcularSiguientePasoPipelineLocalDeterministaPriorizaLibreSobreAsignadaAjena(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{ID: 50, Titulo: "Reservada por otro agente", Estado: db.TareaAsignada, Agente: ptrString("Claude2"), Prioridad: db.PrioridadAlta, Notas: "autonomia:microrefactor_loop"},
+		{ID: 51, Titulo: "Frente libre util", Estado: db.TareaLibre, Prioridad: db.PrioridadAlta, Notas: "autonomia:microrefactor_loop"},
+	}})
+
+	paso, err := service.CalcularSiguientePasoPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("CalcularSiguientePasoPipelineLocalDeterminista: %v", err)
+	}
+	if paso == nil || paso.TareaObjetivo == nil {
+		t.Fatalf("paso inesperado: %+v", paso)
+	}
+	if paso.TareaObjetivo.ID != 51 || paso.AccionTarea != "implementar" {
+		t.Fatalf("deberia priorizar tarea libre sobre asignada ajena: %+v", paso)
+	}
+}
+
 func TestCalcularSiguientePasoPipelineLocalDeterministaSeleccionaTareaCompletadaParaIntegracion(t *testing.T) {
 	service := NewService(fakeStore{})
 	service.SetPhaseProvider(fakePhaseProvider{fase: "integracion"})
@@ -530,7 +599,7 @@ func TestCalcularSiguientePasoPipelineLocalDeterministaSeleccionaTareaCompletada
 	}
 }
 
-func TestCalcularSiguientePasoPipelineLocalDeterministaPriorizaTareaCompletadaParaRevision(t *testing.T) {
+func TestCalcularSiguientePasoPipelineLocalDeterministaNoSigueRevisionHistoricaSiHayTrabajoAbierto(t *testing.T) {
 	service := NewService(fakeStore{})
 	service.SetPhaseProvider(fakePhaseProvider{fase: "revision"})
 	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
@@ -542,8 +611,11 @@ func TestCalcularSiguientePasoPipelineLocalDeterministaPriorizaTareaCompletadaPa
 	if err != nil {
 		t.Fatalf("CalcularSiguientePasoPipelineLocalDeterminista: %v", err)
 	}
-	if paso.TareaObjetivo == nil || paso.TareaObjetivo.ID != 6 || paso.AccionTarea != "revisar" {
-		t.Fatalf("seleccion de tarea revision inesperada: %+v", paso)
+	if paso == nil || paso.TareaObjetivo == nil {
+		t.Fatalf("paso inesperado: %+v", paso)
+	}
+	if paso.Accion != "reconciliar_fase" || paso.FaseObjetivo != "implementacion" || paso.TareaObjetivo.ID != 5 || paso.AccionTarea != "implementar" {
+		t.Fatalf("si hay trabajo abierto el pipeline no deberia seguir revision historica: %+v", paso)
 	}
 }
 
@@ -579,6 +651,29 @@ func TestCalcularSiguientePasoPipelineLocalDeterministaAvanzaAIntegracionConGate
 	}
 	if paso == nil || paso.Accion != "avanzar_fase" || paso.FaseObjetivo != "integracion" {
 		t.Fatalf("paso inesperado: %+v", paso)
+	}
+}
+
+func TestCalcularSiguientePasoPipelineLocalDeterministaVuelveAImplementacionSiRevisionTieneTrabajoAbierto(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "revision"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{ID: 30, Titulo: "Siguiente frente libre", Estado: db.TareaLibre, Prioridad: db.PrioridadAlta},
+		{ID: 31, Titulo: "Revision historica", Estado: db.TareaCompletada, Prioridad: db.PrioridadMedia},
+	}})
+
+	paso, err := service.CalcularSiguientePasoPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("CalcularSiguientePasoPipelineLocalDeterminista: %v", err)
+	}
+	if paso == nil {
+		t.Fatalf("paso nil")
+	}
+	if paso.Accion != "reconciliar_fase" || paso.FaseObjetivo != "implementacion" {
+		t.Fatalf("deberia volver a implementacion si hay trabajo abierto: %+v", paso)
+	}
+	if paso.TareaObjetivo == nil || paso.TareaObjetivo.ID != 30 || paso.AccionTarea != "implementar" {
+		t.Fatalf("tarea objetivo inesperada al volver a implementacion: %+v", paso)
 	}
 }
 
@@ -621,8 +716,36 @@ func TestEjecutarSiguientePasoPipelineLocalDeterministaActivaFaseYArrancaTarea(t
 	if resultado.Despacho.TareaObjetivoID != 11 || resultado.Despacho.TareaObjetivo != "Preparar backlog" {
 		t.Fatalf("tarea de despacho inesperada: %+v", resultado.Despacho)
 	}
-	if resultado.Despacho.AgenteTarea != "orquesta" {
+	if resultado.Despacho.AgenteTarea != "Codex1" {
 		t.Fatalf("agente tarea inesperado: %+v", resultado.Despacho)
+	}
+}
+
+func TestEjecutarSiguientePasoPipelineLocalDeterministaReasignaFrenteMicrocicloAlAgenteSugerido(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{ID: 61, Titulo: "Frente microciclo", Estado: db.TareaEnProgreso, Agente: ptrString("Claude2"), Prioridad: db.PrioridadAlta, Notas: "autonomia:microrefactor_loop"},
+	}})
+	service.SetTaskActionProvider(&fakeTaskActionProvider{
+		tareas: map[int64]*db.Tarea{
+			61: {ID: 61, Titulo: "Frente microciclo", Estado: db.TareaEnProgreso, Agente: ptrString("Claude2"), Prioridad: db.PrioridadAlta, Notas: "autonomia:microrefactor_loop"},
+		},
+	})
+	service.SetAgentResolver(fakeAgentResolver{agente: "Codex1"})
+
+	resultado, err := service.EjecutarSiguientePasoPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("EjecutarSiguientePasoPipelineLocalDeterminista: %v", err)
+	}
+	if resultado == nil || resultado.TareaActualizada == nil || resultado.Despacho == nil {
+		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+	if resultado.TareaActualizada.Agente != "Codex1" || resultado.TareaActualizada.Estado != string(db.TareaEnProgreso) {
+		t.Fatalf("deberia reasignar el frente microciclo al agente sugerido: %+v", resultado.TareaActualizada)
+	}
+	if resultado.Despacho.AgenteSugerido != "Codex1" || resultado.Despacho.AgenteTarea != "Codex1" {
+		t.Fatalf("despacho deberia reflejar la reasignacion al agente sugerido: %+v", resultado.Despacho)
 	}
 }
 
