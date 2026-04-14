@@ -332,7 +332,9 @@ func construirDescripcionFrentePremiumMayorAutonomia(policy *db.ProyectoAutonomi
 	partes := []string{
 		"Tarea semilla creada automáticamente por Orquesta porque ya no quedan microfrentes premium abiertos y el siguiente paso útil debe ser seleccionar o abrir un frente premium mayor pero acotado.",
 		"Objetivo: revisar backlog, propuestas, checkpoints y estado real del código para tomar o abrir exactamente un siguiente frente premium útil, sin volver a reciclar una microtarea cerrada ni abrir varios caminos a la vez.",
-		"Regla dura: esta tarea no autoriza programar un frente amplio de arquitectura. Debe terminar dejando un único frente mayor acotado, con write_set, tests mínimos y carril premium_worktree/revision_diff según corresponda.",
+		"Regla dura: esta tarea no autoriza programar un frente amplio de arquitectura. Debe terminar dejando un único frente mayor acotado, con WRITE_SET, símbolos foco, tests mínimos y carril premium_worktree/revision_diff según corresponda.",
+		"Secuencia obligatoria: 1) si ya existe una tarea premium acotada con WRITE_SET y tests mínimos, tómala o reanúdala y cierra esta semilla; 2) si no existe, crea exactamente una tarea nueva con ese contrato explícito antes de programar; 3) no abras varios frentes ni edites código fuera del frente acotado.",
+		"Usa la app/CLI de Orquesta para abrir o tomar la tarea derivada. Esta semilla solo es válida como puente hacia un frente premium programable y verificable.",
 	}
 	if proyecto != nil && strings.TrimSpace(proyecto.Slug) != "" {
 		partes = append(partes, "Proyecto: "+strings.TrimSpace(proyecto.Slug)+".")

@@ -2230,6 +2230,9 @@ func TestProcesarSupervisionAutonomaBatchEscalaAFrentePremiumMayorTrasAgotarMicr
 	if !strings.Contains(strings.TrimSpace(abierta.Titulo), "siguiente frente mayor útil") {
 		t.Fatalf("la tarea nueva deberia reflejar escalado a frente mayor, tarea=%+v", abierta)
 	}
+	if !strings.Contains(abierta.Descripcion, "WRITE_SET") || !strings.Contains(abierta.Descripcion, "crea exactamente una tarea nueva") {
+		t.Fatalf("la semilla premium deberia exigir contrato explicito y secuencia operativa, tarea=%+v", abierta)
+	}
 	if abierta.Agente == nil || strings.TrimSpace(*abierta.Agente) != "CodexSupervisor" {
 		t.Fatalf("la nueva tarea premium deberia quedar asignada al supervisor, tarea=%+v", abierta)
 	}
@@ -4945,6 +4948,9 @@ func TestProcesarAutonomiaAgentesBatchSesionActivaIdleAbreFrentePremiumMayorSiMi
 	}
 	if !strings.Contains(strings.TrimSpace(abierta.Notas), "autonomia:premium_frontier") {
 		t.Fatalf("la tarea nueva deberia quedar marcada como premium_frontier: %+v", abierta)
+	}
+	if !strings.Contains(abierta.Descripcion, "tómala o reanúdala") || !strings.Contains(abierta.Descripcion, "no abras varios frentes") {
+		t.Fatalf("la descripcion del frente premium deberia imponer la secuencia canónica: %+v", abierta)
 	}
 	agente := "Codex1"
 	estado := "pendiente"
