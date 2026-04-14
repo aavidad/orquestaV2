@@ -9739,7 +9739,7 @@ func runtimeOrderCalificaComoBootstrapLeaseCandidata(order *RuntimeOrder, observ
 			return false
 		}
 	case "completada":
-		leaseState := strings.TrimSpace(stringFromMap(res, "lease_state", ""))
+		leaseState := strings.ToLower(strings.TrimSpace(stringFromMap(res, "lease_state", "")))
 		if leaseState != "waiting_for_evidence" && leaseState != "delivered" {
 			return false
 		}
