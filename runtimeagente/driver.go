@@ -1512,7 +1512,7 @@ func resumirResumePayloadCodex(raw string) string {
 	}
 	if mailbox, ok := obj["mailbox"].([]any); ok {
 		label := fmt.Sprintf("mailbox=%d", len(mailbox))
-		if resumen := resumirMailboxPayload(mailbox); resumen != "" {
+		if resumen := resumirMailboxPayloadCodex(mailbox); resumen != "" {
 			label += " " + resumen
 		}
 		partes = append(partes, label)
@@ -1551,6 +1551,172 @@ func resumirResumePayloadCodex(raw string) string {
 		return ""
 	}
 	return strings.Join(partes, ", ")
+}
+
+func resumirMailboxPayloadCodex(items []any) string {
+	if len(items) == 0 {
+		return ""
+	}
+	first, ok := items[0].(map[string]any)
+	if !ok {
+		return ""
+	}
+	kind := strings.TrimSpace(stringFromAny(first["kind"]))
+	payload, _ := first["payload"].(map[string]any)
+	if payload == nil {
+		return ""
+	}
+	source := strings.TrimSpace(stringFromAny(payload["source"]))
+	if !strings.EqualFold(kind, "pipeline_local") && !strings.EqualFold(source, "pipeline_local") {
+		return resumirMailboxPayload(items)
+	}
+	return resumirMailboxPipelineLocalCodex(kind, payload)
+}
+
+func resumirMailboxPipelineLocalCodex(kind string, payload map[string]any) string {
+	partes := make([]string, 0, 8)
+	if kind = strings.TrimSpace(kind); kind != "" {
+		partes = append(partes, kind)
+	}
+	if accion := strings.TrimSpace(stringFromAny(payload["accion"])); accion != "" {
+		partes = append(partes, "accion="+accion)
+	}
+	tareaID := int64FromAny(payload["tarea_id"])
+	if tareaID <= 0 {
+		tareaID = int64FromAny(payload["tarea_objetivo_id"])
+	}
+	if tareaID > 0 {
+		partes = append(partes, fmt.Sprintf("tarea#%d", tareaID))
+	}
+	if carril := strings.TrimSpace(stringFromAny(payload["carril"])); carril != "" {
+		partes = append(partes, "carril="+carril)
+	}
+	writeSetSummary := resumirWriteSetMailboxCodex(payload["write_set"], 3)
+	if writeSetSummary != "" {
+		partes = append(partes, "write_set="+writeSetSummary)
+	}
+	texto := strings.TrimSpace(stringFromAny(payload["instruction"]))
+	if texto == "" {
+		texto = strings.TrimSpace(stringFromAny(payload["texto"]))
+	}
+	if resumen := resumirInstructionMailboxCodex(texto, writeSetSummary == ""); resumen != "" {
+		partes = append(partes, resumen)
+	}
+	if len(partes) == 0 {
+		return ""
+	}
+	return "[" + strings.Join(partes, " | ") + "]"
+}
+
+func resumirWriteSetMailboxCodex(raw any, maxItems int) string {
+	items := stringSliceFromAny(raw)
+	if len(items) == 0 {
+		return ""
+	}
+	if maxItems <= 0 || len(items) <= maxItems {
+		return strings.Join(items, ", ")
+	}
+	return strings.Join(items[:maxItems], ", ") + "…"
+}
+
+func resumirInstructionMailboxCodex(raw string, includeWriteSet bool) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	clauses := splitOperationalClausesCodex(raw)
+	if len(clauses) == 0 {
+		return truncarResumenMailbox(raw, 120)
+	}
+	matchers := []string{
+		"simbolos foco:",
+	}
+	if includeWriteSet {
+		matchers = append(matchers, "write-set", "write_set", "write set:", "write_set:")
+	}
+	matchers = append(matchers,
+		"tests minimos",
+		"tests mínimos",
+		"tests:",
+		"tarea:",
+		"fase:",
+		"accion:",
+		"carril:",
+		"entrega:",
+	)
+	selected := make([]string, 0, len(matchers))
+	seen := map[string]struct{}{}
+	appendIfFits := func(clause string) bool {
+		clause = compactarOperationalClauseCodex(clause)
+		if clause == "" {
+			return false
+		}
+		if _, ok := seen[clause]; ok {
+			return true
+		}
+		candidate := clause
+		if len(selected) > 0 {
+			candidate = strings.Join(append(append([]string(nil), selected...), clause), ". ")
+		}
+		const maxRunes = 260
+		if len([]rune(candidate)) > maxRunes {
+			return false
+		}
+		selected = append(selected, clause)
+		seen[clause] = struct{}{}
+		return true
+	}
+	for _, matcher := range matchers {
+		for _, clause := range clauses {
+			lower := strings.ToLower(strings.TrimSpace(clause))
+			if !strings.Contains(lower, matcher) {
+				continue
+			}
+			if !appendIfFits(clause) {
+				break
+			}
+		}
+	}
+	if len(selected) == 0 {
+		return truncarResumenMailbox(raw, 120)
+	}
+	return strings.Join(selected, ". ")
+}
+
+func splitOperationalClausesCodex(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	raw = strings.ReplaceAll(raw, "\n", ". ")
+	parts := strings.Split(raw, ". ")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(strings.TrimRight(part, ".;"))
+		if part == "" {
+			continue
+		}
+		out = append(out, part)
+	}
+	return out
+}
+
+func compactarOperationalClauseCodex(clause string) string {
+	clause = strings.TrimSpace(strings.TrimRight(clause, ".;"))
+	if clause == "" {
+		return ""
+	}
+	lower := strings.ToLower(clause)
+	if strings.HasPrefix(lower, "tests minimos") || strings.HasPrefix(lower, "tests mínimos") {
+		clause = strings.Replace(clause, "Tests minimos del slice:", "Tests minimos:", 1)
+		clause = strings.Replace(clause, "Tests mínimos del slice:", "Tests mínimos:", 1)
+		clause = strings.ReplaceAll(clause, " -count=1", "")
+		clause = strings.ReplaceAll(clause, " y go test ", " ; go test ")
+	}
+	if len([]rune(clause)) > 120 {
+		clause = truncarResumenMailbox(clause, 120)
+	}
+	return strings.Join(strings.Fields(clause), " ")
 }
 
 func resumirProjectContextCodex(raw any) string {
@@ -1704,6 +1870,33 @@ func resumirMailboxPayload(items []any) string {
 		return ""
 	}
 	return "[" + strings.Join(partes, " | ") + "]"
+}
+
+func stringSliceFromAny(raw any) []string {
+	switch items := raw.(type) {
+	case []string:
+		out := make([]string, 0, len(items))
+		for _, item := range items {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			out = append(out, item)
+		}
+		return out
+	case []any:
+		out := make([]string, 0, len(items))
+		for _, item := range items {
+			texto := strings.TrimSpace(stringFromAny(item))
+			if texto == "" {
+				continue
+			}
+			out = append(out, texto)
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 func truncarResumenMailbox(raw string, max int) string {

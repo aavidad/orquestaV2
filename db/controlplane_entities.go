@@ -8929,14 +8929,6 @@ func runtimeBootstrapLeaseAffinityScore(order *RuntimeOrder, handle *RuntimeHand
 	}
 	result := mapFromJSON(order.ResultadoJSON)
 	score := 0
-	switch strings.ToLower(strings.TrimSpace(order.Tipo)) {
-	case "handoff":
-		score += 16
-	case "resume":
-		score += 8
-	case "start":
-		score += 4
-	}
 	if handle != nil && handle.ID > 0 {
 		switch {
 		case order.HandleID != nil && *order.HandleID == handle.ID:

@@ -707,7 +707,7 @@ func TestConstruirDespachoPipelineLocalUsaCarrilRevision(t *testing.T) {
 	}
 }
 
-func TestConstruirDespachoPipelineLocalPropagaWriteSetDeLaTarea(t *testing.T) {
+func TestConstruirDespachoPipelineLocalPropagaContratoDelFrente(t *testing.T) {
 	paso := &PasoPipelineLocalDeterminista{
 		ProyectoSlug: "orquestador",
 		AccionTarea:  "implementar",
@@ -721,10 +721,12 @@ func TestConstruirDespachoPipelineLocalPropagaWriteSetDeLaTarea(t *testing.T) {
 			RequiereWorktree: true,
 		},
 		TareaObjetivo: &TareaPipelineLocal{
-			ID:          33,
-			Titulo:      "Cerrar runtime mailbox",
-			Descripcion: "Write-set exclusivo: cmd/controlplane_support.go, db/controlplane_entities.go y db/controlplane_entities_test.go.",
-			WriteSet:    []string{"cmd/controlplane_support.go", "db/controlplane_entities.go", "db/controlplane_entities_test.go"},
+			ID:           33,
+			Titulo:       "Cerrar runtime mailbox",
+			Descripcion:  "Write-set exclusivo: cmd/controlplane_support.go, db/controlplane_entities.go y db/controlplane_entities_test.go.",
+			WriteSet:     []string{"cmd/controlplane_support.go", "db/controlplane_entities.go", "db/controlplane_entities_test.go"},
+			SimbolosFoco: "procesarRuntimeMailboxSessionResumeBatchConMailbox, resolverBootstrapRuntimeLeasePendiente",
+			TestsMinimos: "go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'",
 		},
 	}
 
@@ -739,13 +741,19 @@ func TestConstruirDespachoPipelineLocalPropagaWriteSetDeLaTarea(t *testing.T) {
 	if despacho.WriteSet[0] != "cmd/controlplane_support.go" || despacho.WriteSet[2] != "db/controlplane_entities_test.go" {
 		t.Fatalf("write_set propagado inesperado: %+v", despacho.WriteSet)
 	}
+	if despacho.SimbolosFoco != "procesarRuntimeMailboxSessionResumeBatchConMailbox, resolverBootstrapRuntimeLeasePendiente" {
+		t.Fatalf("simbolos foco inesperados: %+v", despacho)
+	}
+	if despacho.TestsMinimos != "go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'" {
+		t.Fatalf("tests minimos inesperados: %+v", despacho)
+	}
 }
 
-func TestTareaPipelineLocalDesdeDBExtraeWriteSetDeDescripcion(t *testing.T) {
+func TestTareaPipelineLocalDesdeDBExtraeContratoDelFrente(t *testing.T) {
 	tarea := tareaPipelineLocalDesdeDB(&db.Tarea{
 		ID:          77,
 		Titulo:      "Cerrar mailbox premium",
-		Descripcion: "Frente actual. Write-set exclusivo: cmd/controlplane_support.go, db/controlplane_entities.go y db/controlplane_entities_test.go. Trabaja solo dentro de ese write_set. Tests minimos del slice: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*' -count=1.",
+		Descripcion: "Frente actual. Simbolos foco: procesarRuntimeMailboxSessionResumeBatchConMailbox y resolverBootstrapRuntimeLeasePendiente. Write-set exclusivo: cmd/controlplane_support.go, db/controlplane_entities.go y db/controlplane_entities_test.go. Trabaja solo dentro de ese write_set. Tests minimos del slice: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*' -count=1.",
 		Estado:      db.TareaEnProgreso,
 	})
 	if tarea == nil {
@@ -756,6 +764,12 @@ func TestTareaPipelineLocalDesdeDBExtraeWriteSetDeDescripcion(t *testing.T) {
 	}
 	if tarea.WriteSet[0] != "cmd/controlplane_support.go" || tarea.WriteSet[2] != "db/controlplane_entities_test.go" {
 		t.Fatalf("write_set extraido inesperado: %+v", tarea.WriteSet)
+	}
+	if tarea.SimbolosFoco != "procesarRuntimeMailboxSessionResumeBatchConMailbox y resolverBootstrapRuntimeLeasePendiente" {
+		t.Fatalf("simbolos foco extraidos inesperados: %+v", tarea)
+	}
+	if tarea.TestsMinimos != "go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'" {
+		t.Fatalf("tests minimos extraidos inesperados: %+v", tarea)
 	}
 }
 

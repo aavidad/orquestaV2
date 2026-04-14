@@ -103,6 +103,8 @@ func (despachadorPipelineOperativo) DespacharPipeline(entrada capacidadapp.Solic
 			"tarea_objetivo_id": despacho.TareaObjetivoID,
 			"tarea_objetivo":    strings.TrimSpace(despacho.TareaObjetivo),
 			"write_set":         append([]string(nil), despacho.WriteSet...),
+			"simbolos_foco":     strings.TrimSpace(despacho.SimbolosFoco),
+			"tests_minimos":     strings.TrimSpace(despacho.TestsMinimos),
 		}
 		payloadJSON, err := jsonMarshalPipelinePayload(payload)
 		if err != nil {
@@ -342,6 +344,12 @@ func construirInstructionPipeline(despacho capacidadapp.DespachoPipelineLocal) s
 	}
 	if len(despacho.WriteSet) > 0 {
 		lineas = append(lineas, "WRITE_SET: "+strings.Join(despacho.WriteSet, ", "))
+	}
+	if strings.TrimSpace(despacho.SimbolosFoco) != "" {
+		lineas = append(lineas, "Simbolos foco: "+strings.TrimSpace(despacho.SimbolosFoco))
+	}
+	if strings.TrimSpace(despacho.TestsMinimos) != "" {
+		lineas = append(lineas, "Tests minimos: "+strings.TrimSpace(despacho.TestsMinimos))
 	}
 	lineas = append(lineas,
 		"REGLA: no cambies nada fuera del alcance de la tarea",

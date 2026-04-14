@@ -221,6 +221,8 @@ func TestDespachadorPipelineOperativoIncluyeWriteSetEnMailboxPremium(t *testing.
 			TareaObjetivoID: 530,
 			TareaObjetivo:   "Micro-refactorización cíclica del control plane",
 			WriteSet:        []string{"cmd/controlplane_support.go", "db/controlplane_entities.go"},
+			SimbolosFoco:    "procesarRuntimeMailboxSessionResumeBatchConMailbox, resolverBootstrapRuntimeLeasePendiente",
+			TestsMinimos:    "go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'",
 			Motivo:          "microrefactor_loop",
 		},
 	})
@@ -242,8 +244,20 @@ func TestDespachadorPipelineOperativoIncluyeWriteSetEnMailboxPremium(t *testing.
 	if !strings.Contains(items[0].PayloadJSON, `"write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"]`) {
 		t.Fatalf("payload sin write_set: %s", items[0].PayloadJSON)
 	}
+	if !strings.Contains(items[0].PayloadJSON, `"simbolos_foco":"procesarRuntimeMailboxSessionResumeBatchConMailbox, resolverBootstrapRuntimeLeasePendiente"`) {
+		t.Fatalf("payload sin simbolos_foco: %s", items[0].PayloadJSON)
+	}
+	if !strings.Contains(items[0].PayloadJSON, `"tests_minimos":"go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'"`) {
+		t.Fatalf("payload sin tests_minimos: %s", items[0].PayloadJSON)
+	}
 	if !strings.Contains(items[0].PayloadJSON, `WRITE_SET: cmd/controlplane_support.go, db/controlplane_entities.go`) {
 		t.Fatalf("instruction sin write_set: %s", items[0].PayloadJSON)
+	}
+	if !strings.Contains(items[0].PayloadJSON, `Simbolos foco: procesarRuntimeMailboxSessionResumeBatchConMailbox, resolverBootstrapRuntimeLeasePendiente`) {
+		t.Fatalf("instruction sin simbolos foco: %s", items[0].PayloadJSON)
+	}
+	if !strings.Contains(items[0].PayloadJSON, `Tests minimos: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'`) {
+		t.Fatalf("instruction sin tests minimos: %s", items[0].PayloadJSON)
 	}
 }
 

@@ -207,11 +207,110 @@ func resumirDescripcionTareaBootstrapCompacto(raw string) string {
 		return ""
 	}
 	raw = strings.TrimSpace(strings.TrimRight(raw, ".;"))
+	const maxRunes = 360
+	prioritized := resumirDescripcionTareaBootstrapPrioritaria(raw, maxRunes)
+	if prioritized != "" {
+		return prioritized
+	}
 	runes := []rune(raw)
-	if len(runes) <= 220 {
+	if len(runes) <= maxRunes {
 		return raw
 	}
-	return string(runes[:219]) + "…"
+	return string(runes[:maxRunes-1]) + "…"
+}
+
+func resumirDescripcionTareaBootstrapPrioritaria(raw string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	clauses := splitBootstrapTaskClauses(raw)
+	if len(clauses) == 0 {
+		return ""
+	}
+	priorityMatchers := []string{
+		"simbolos foco:",
+		"write-set",
+		"write_set",
+		"tests minimos",
+		"tests mínimos",
+		"regla arquitectonica de este frente:",
+		"regla arquitectónica de este frente:",
+	}
+	seen := map[string]struct{}{}
+	selected := make([]string, 0, len(clauses))
+	appendIfFits := func(clause string) bool {
+		clause = compactarBootstrapTaskClause(strings.TrimSpace(strings.TrimRight(clause, ".;")))
+		if clause == "" {
+			return false
+		}
+		if _, ok := seen[clause]; ok {
+			return true
+		}
+		candidate := clause
+		if len(selected) > 0 {
+			candidate = strings.Join(append(append([]string(nil), selected...), clause), ". ")
+		}
+		if len([]rune(candidate)) > maxRunes {
+			return false
+		}
+		selected = append(selected, clause)
+		seen[clause] = struct{}{}
+		return true
+	}
+	for _, matcher := range priorityMatchers {
+		for _, clause := range clauses {
+			lower := strings.ToLower(strings.TrimSpace(clause))
+			if !strings.Contains(lower, matcher) {
+				continue
+			}
+			if !appendIfFits(clause) {
+				break
+			}
+		}
+	}
+	if len(selected) == 0 {
+		return ""
+	}
+	resumen := strings.Join(selected, ". ")
+	resumen = strings.TrimSpace(strings.TrimRight(resumen, ".;"))
+	if resumen == "" {
+		return ""
+	}
+	return resumen
+}
+
+func compactarBootstrapTaskClause(clause string) string {
+	clause = strings.TrimSpace(strings.TrimRight(clause, ".;"))
+	if clause == "" {
+		return ""
+	}
+	lower := strings.ToLower(clause)
+	if strings.HasPrefix(lower, "tests minimos") || strings.HasPrefix(lower, "tests mínimos") {
+		clause = strings.Replace(clause, "Tests minimos del slice:", "Tests minimos:", 1)
+		clause = strings.Replace(clause, "Tests mínimos del slice:", "Tests mínimos:", 1)
+		clause = strings.ReplaceAll(clause, " -count=1", "")
+		clause = strings.ReplaceAll(clause, " y go test ", " ; go test ")
+		clause = strings.Join(strings.Fields(clause), " ")
+	}
+	return clause
+}
+
+func splitBootstrapTaskClauses(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	raw = strings.ReplaceAll(raw, "\n", ". ")
+	partes := strings.Split(raw, ". ")
+	out := make([]string, 0, len(partes))
+	for _, parte := range partes {
+		parte = strings.TrimSpace(strings.TrimRight(parte, ".;"))
+		if parte == "" {
+			continue
+		}
+		out = append(out, parte)
+	}
+	return out
 }
 
 func planLooksLikeOrchestratedAgentCLI(plan *runtimeagente.LaunchPlan) bool {

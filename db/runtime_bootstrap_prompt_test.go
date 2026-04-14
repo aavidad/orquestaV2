@@ -181,6 +181,54 @@ func TestBuildLaunchBootstrapPromptCompactaAgenteCLIOrquestadoAunqueNoSeaBootstr
 	}
 }
 
+func TestBuildLaunchBootstrapPromptCompactaPriorizaSliceEjecutableDelFrente(t *testing.T) {
+	prepararDBTemporal(t)
+
+	proyecto := &Proyecto{
+		ID:      1,
+		Slug:    "orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "repo"),
+	}
+	agente := &Agente{
+		Nombre: "Codex9",
+		Rol:    "programador",
+	}
+	canSendInput := true
+	plan := &runtimeagente.LaunchPlan{
+		Driver:              "cli",
+		Comando:             "/tmp/codex-perfiles/bin/codex-perfil",
+		Args:                []string{"Codex9"},
+		WorkingDir:          proyecto.RutaAbs,
+		CanSendInput:        &canSendInput,
+		MailboxDeliveryMode: runtimeagente.MailboxDeliverySessionResume,
+	}
+	tareas := []*Tarea{{
+		ID:     584,
+		Estado: TareaEnProgreso,
+		Titulo: "Micro-refactorización cíclica del control plane: runtime mailbox/session_resume",
+		Descripcion: "Frente actual: cerrar el carril premium runtime mailbox/session_resume del control plane. " +
+			"Objetivo inmediato: seguir eliminando huecos entre bootstrap, mailbox y recibo util para workers premium sin cambiar semantica observable fuera de ese carril. " +
+			"Objetivo exacto de este frente: endurecer el primer ciclo premium para que bootstrap, mailbox inicial y receipt no diverjan. " +
+			"Regla arquitectonica de este frente: para runtimes interactivos premium el carril canonico es tmux_cli_session. " +
+			"Simbolos foco: procesarRuntimeMailboxSessionResumeBatchConMailbox y resolverBootstrapRuntimeLeasePendiente. " +
+			"Write-set exclusivo: cmd/controlplane_support.go, db/controlplane_entities.go y db/controlplane_entities_test.go. " +
+			"Tests minimos del slice: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*' -count=1 y go test ./db -run 'TestResolverBootstrapRuntimeLeasePendiente.*' -count=1.",
+	}}
+
+	prompt := BuildLaunchBootstrapPrompt(agente, proyecto, plan, nil, nil, tareas, nil, "", "")
+	for _, token := range []string{
+		"Alcance inmediato: Simbolos foco: procesarRuntimeMailboxSessionResumeBatchConMailbox y resolverBootstrapRuntimeLeasePendiente.",
+		"Write-set exclusivo: cmd/controlplane_support.go, db/controlplane_entities.go y db/controlplane_entities_test.go.",
+	} {
+		if !strings.Contains(prompt, token) {
+			t.Fatalf("faltaba %q en prompt compacto priorizado:\n%s", token, prompt)
+		}
+	}
+	if strings.Contains(prompt, "Frente actual: cerrar el carril premium runtime mailbox/session_resume del control plane.") {
+		t.Fatalf("el prompt compacto priorizado no deberia gastar el resumen en narrativa general:\n%s", prompt)
+	}
+}
+
 func TestBuildLaunchBootstrapPromptCompactaOllamaConInstruccionesMicro(t *testing.T) {
 	prepararDBTemporal(t)
 

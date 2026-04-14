@@ -34,6 +34,8 @@ type DespachoPipelineLocal struct {
 	TareaObjetivo    string               `json:"tarea_objetivo,omitempty"`
 	AgenteTarea      string               `json:"agente_tarea,omitempty"`
 	WriteSet         []string             `json:"write_set,omitempty"`
+	SimbolosFoco     string               `json:"simbolos_foco,omitempty"`
+	TestsMinimos     string               `json:"tests_minimos,omitempty"`
 	AgenteSugerido   string               `json:"agente_sugerido,omitempty"`
 	Motivo           string               `json:"motivo,omitempty"`
 }
@@ -114,6 +116,8 @@ func (s *Service) construirDespachoPipelineLocal(paso *PasoPipelineLocalDetermin
 		out.TareaObjetivo = strings.TrimSpace(tarea.Titulo)
 		out.AgenteTarea = strings.TrimSpace(tarea.Agente)
 		out.WriteSet = append([]string(nil), tarea.WriteSet...)
+		out.SimbolosFoco = strings.TrimSpace(tarea.SimbolosFoco)
+		out.TestsMinimos = strings.TrimSpace(tarea.TestsMinimos)
 	}
 	return out
 }

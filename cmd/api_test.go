@@ -2962,6 +2962,9 @@ func TestAPIProyectoMicrocicloEncolaStartSiAgenteNoTieneRuntime(t *testing.T) {
 	if !strings.Contains(resp.Resultado.Tarea.Descripcion, "No ensanches firmas ni APIs del nucleo") {
 		t.Fatalf("el microciclo deberia bloquear ensanches de API fuera del frente: %+v", resp.Resultado.Tarea)
 	}
+	if !strings.Contains(resp.Resultado.Tarea.Descripcion, "Antes de ampliar validacion") {
+		t.Fatalf("el microciclo deberia forzar patch pequeno antes de ensanchar validacion: %+v", resp.Resultado.Tarea)
+	}
 	if resp.Resultado.Dispatch == nil || resp.Resultado.Dispatch.Despacho == nil {
 		t.Fatalf("el microciclo deberia construir un despacho usable: %+v", resp.Resultado.Dispatch)
 	}

@@ -206,6 +206,57 @@ func TestPrepareCLICodexCompactaContinuityPromptParaRuntimeNoInteractivo(t *test
 	}
 }
 
+func TestPrepareCLICodexPriorizaSliceEjecutableEnPipelineLocalContinuityPrompt(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Codex9",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:       "codex-cli",
+			Transporte: "cli",
+			Comando:    "codex",
+		},
+		Resume: ResumeContext{
+			ResumenContinuidad: "seguir frente activo",
+			Branch:             "orq-orquestador-codex9",
+			ResumePayloadJSON: `{
+				"mailbox":[
+					{
+						"id":1,
+						"kind":"pipeline_local",
+						"payload":{
+							"source":"pipeline_local",
+							"accion":"continuar_trabajo",
+							"tarea_objetivo_id":585,
+							"carril":"premium_worktree",
+							"write_set":["cmd/controlplane_support.go","db/controlplane_entities.go","runtimeagente/driver.go"],
+							"instruction":"FASE: implementacion\nACCION: continuar_trabajo\nTAREA: #585 Micro-refactorización cíclica del control plane\nSimbolos foco: procesarRuntimeMailboxSessionResumeBatchConMailbox, resolverBootstrapRuntimeLeasePendiente y helpers inmediatos del mismo slice.\nTests minimos del slice: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*' -count=1"
+						}
+					}
+				]
+			}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	for _, token := range []string{
+		"mailbox=1",
+		"tarea#585",
+		"carril=premium_worktree",
+		"write_set=cmd/controlplane_support.go, db/controlplane_entities.go, runtimeagente/driver.go",
+		"Simbolos foco: procesarRuntimeMailboxSessionResumeBatchConMailbox, resolverBootstrapRuntimeLeasePendiente",
+		"Tests minimos: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'",
+	} {
+		if !strings.Contains(plan.ContinuityPrompt, token) {
+			t.Fatalf("falta %q en continuity prompt priorizado: %s", token, plan.ContinuityPrompt)
+		}
+	}
+	if strings.Contains(plan.ContinuityPrompt, `"write_set"`) {
+		t.Fatalf("el prompt no deberia incrustar JSON bruto: %s", plan.ContinuityPrompt)
+	}
+}
+
 func TestPrepareCLIGenericoResumePayloadResumeMailboxCompacto(t *testing.T) {
 	plan, err := DefaultRegistry().Prepare(LaunchRequest{
 		Agente:       "Claude7",

@@ -28,15 +28,17 @@ type PasoPipelineLocalDeterminista struct {
 }
 
 type TareaPipelineLocal struct {
-	ID          int64    `json:"id"`
-	Titulo      string   `json:"titulo"`
-	Descripcion string   `json:"descripcion,omitempty"`
-	Notas       string   `json:"notas,omitempty"`
-	WriteSet    []string `json:"write_set,omitempty"`
-	Estado      string   `json:"estado"`
-	Agente      string   `json:"agente,omitempty"`
-	Modulo      string   `json:"modulo,omitempty"`
-	Prioridad   string   `json:"prioridad,omitempty"`
+	ID           int64    `json:"id"`
+	Titulo       string   `json:"titulo"`
+	Descripcion  string   `json:"descripcion,omitempty"`
+	Notas        string   `json:"notas,omitempty"`
+	WriteSet     []string `json:"write_set,omitempty"`
+	SimbolosFoco string   `json:"simbolos_foco,omitempty"`
+	TestsMinimos string   `json:"tests_minimos,omitempty"`
+	Estado       string   `json:"estado"`
+	Agente       string   `json:"agente,omitempty"`
+	Modulo       string   `json:"modulo,omitempty"`
+	Prioridad    string   `json:"prioridad,omitempty"`
 }
 
 func (s *Service) SetReviewGateProvider(provider ReviewGateProvider) {
@@ -271,14 +273,16 @@ func tareaPipelineLocalDesdeDB(tarea *db.Tarea) *TareaPipelineLocal {
 		return nil
 	}
 	out := &TareaPipelineLocal{
-		ID:          tarea.ID,
-		Titulo:      strings.TrimSpace(tarea.Titulo),
-		Descripcion: strings.TrimSpace(tarea.Descripcion),
-		Notas:       strings.TrimSpace(tarea.Notas),
-		WriteSet:    extraerWriteSetTareaPipelineLocal(tarea.Descripcion, tarea.Notas),
-		Estado:      strings.TrimSpace(string(tarea.Estado)),
-		Modulo:      strings.TrimSpace(tarea.Modulo),
-		Prioridad:   strings.TrimSpace(string(tarea.Prioridad)),
+		ID:           tarea.ID,
+		Titulo:       strings.TrimSpace(tarea.Titulo),
+		Descripcion:  strings.TrimSpace(tarea.Descripcion),
+		Notas:        strings.TrimSpace(tarea.Notas),
+		WriteSet:     extraerWriteSetTareaPipelineLocal(tarea.Descripcion, tarea.Notas),
+		SimbolosFoco: extraerSimbolosFocoTareaPipelineLocal(tarea.Descripcion, tarea.Notas),
+		TestsMinimos: extraerTestsMinimosTareaPipelineLocal(tarea.Descripcion, tarea.Notas),
+		Estado:       strings.TrimSpace(string(tarea.Estado)),
+		Modulo:       strings.TrimSpace(tarea.Modulo),
+		Prioridad:    strings.TrimSpace(string(tarea.Prioridad)),
 	}
 	if tarea.Agente != nil {
 		out.Agente = strings.TrimSpace(*tarea.Agente)
@@ -294,6 +298,24 @@ func extraerWriteSetTareaPipelineLocal(descripcion, notas string) []string {
 		}
 	}
 	return nil
+}
+
+func extraerSimbolosFocoTareaPipelineLocal(descripcion, notas string) string {
+	for _, raw := range []string{descripcion, notas} {
+		if simbolos := ExtraerSimbolosFocoTextoPipelineLocal(raw); simbolos != "" {
+			return simbolos
+		}
+	}
+	return ""
+}
+
+func extraerTestsMinimosTareaPipelineLocal(descripcion, notas string) string {
+	for _, raw := range []string{descripcion, notas} {
+		if tests := ExtraerTestsMinimosTextoPipelineLocal(raw); tests != "" {
+			return tests
+		}
+	}
+	return ""
 }
 
 func ExtraerWriteSetTextoPipelineLocal(raw string) []string {
@@ -345,6 +367,58 @@ func ExtraerWriteSetTextoPipelineLocal(raw string) []string {
 		}
 	}
 	return nil
+}
+
+func ExtraerSimbolosFocoTextoPipelineLocal(raw string) string {
+	return extraerClauseTextoPipelineLocal(raw, "simbolos foco")
+}
+
+func ExtraerTestsMinimosTextoPipelineLocal(raw string) string {
+	return extraerClauseTextoPipelineLocal(raw, "tests minimos", "tests mínimos")
+}
+
+func extraerClauseTextoPipelineLocal(raw string, marcadores ...string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	lineas := strings.FieldsFunc(raw, func(r rune) bool { return r == '\n' || r == '\r' })
+	for _, linea := range lineas {
+		linea = strings.TrimSpace(linea)
+		if linea == "" {
+			continue
+		}
+		lower := strings.ToLower(linea)
+		for _, marcador := range marcadores {
+			marcador = strings.ToLower(strings.TrimSpace(marcador))
+			if marcador == "" {
+				continue
+			}
+			idx := strings.Index(lower, marcador)
+			if idx < 0 {
+				continue
+			}
+			segmento := linea[idx:]
+			if colon := strings.Index(segmento, ":"); colon >= 0 {
+				segmento = strings.TrimSpace(segmento[colon+1:])
+			} else {
+				continue
+			}
+			if end := strings.Index(segmento, ". "); end >= 0 {
+				segmento = strings.TrimSpace(segmento[:end])
+			}
+			segmento = strings.TrimSpace(strings.TrimSuffix(segmento, "."))
+			if segmento == "" {
+				continue
+			}
+			if strings.Contains(marcador, "tests minimos") || strings.Contains(marcador, "tests mínimos") {
+				segmento = strings.ReplaceAll(segmento, " -count=1", "")
+				segmento = strings.ReplaceAll(segmento, " y go test ", " ; go test ")
+			}
+			return strings.Join(strings.Fields(segmento), " ")
+		}
+	}
+	return ""
 }
 
 func (s *Service) resolverGateBloqueantePipelineLocal(proyectoSlug string) (*reviewapp.Gate, string, bool, error) {
