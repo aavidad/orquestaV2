@@ -3075,6 +3075,72 @@ func TestAPIProyectoMicrocicloNoSincronizaDirtyWorkspacePorDefecto(t *testing.T)
 	}
 }
 
+func TestAPIProyectoMicrocicloEscribeInboxEnWorktreeActiva(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	repo := filepath.Join(tmp, "repo-inbox")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	runGitCmdAPITest(t, repo, "init")
+	runGitCmdAPITest(t, repo, "config", "user.name", "Orquesta Test")
+	runGitCmdAPITest(t, repo, "config", "user.email", "orquesta@example.com")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("base\n"), 0o644); err != nil {
+		t.Fatalf("write base: %v", err)
+	}
+	runGitCmdAPITest(t, repo, "add", "README.md")
+	runGitCmdAPITest(t, repo, "commit", "-m", "base")
+
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquesta",
+		Nombre:  "Orquesta",
+		RutaAbs: repo,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+	body, _ := json.Marshal(apiProyectoMicrocicloRequest{
+		Agente:         "Codex1",
+		LimpiarPruebas: true,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/proyectos/orquesta/autonomia/microciclo", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status microciclo inbox inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp apiProyectoMicrocicloResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode microciclo inbox: %v", err)
+	}
+	if resp.Resultado == nil || resp.Resultado.Tarea == nil {
+		t.Fatalf("resultado microciclo inbox inesperado: %+v", resp.Resultado)
+	}
+
+	worktree, err := gitService.ResolveActiveWorktree("orquesta", "Codex1")
+	if err != nil {
+		t.Fatalf("ResolveActiveWorktree: %v", err)
+	}
+	rawInbox, err := os.ReadFile(filepath.Join(worktree.RutaAbs, ".orquesta-inbox.md"))
+	if err != nil {
+		t.Fatalf("leer inbox worktree: %v", err)
+	}
+	if !strings.Contains(string(rawInbox), "# Microtarea Activa de Orquesta") {
+		t.Fatalf("la inbox deberia materializarse en la worktree activa: %s", string(rawInbox))
+	}
+	if !strings.Contains(string(rawInbox), fmt.Sprintf("`#%d %s`", resp.Resultado.Tarea.ID, resp.Resultado.Tarea.Titulo)) {
+		t.Fatalf("la inbox deberia reflejar la tarea activa: %s", string(rawInbox))
+	}
+}
+
 func TestAPIProyectoMicrocicloEncolaStartSiAgenteNoTieneRuntime(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
