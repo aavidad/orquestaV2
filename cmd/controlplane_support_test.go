@@ -3747,6 +3747,127 @@ func TestProcesarDecisionContinuacionSesionActivaAutonomiaEncolaNudgeTMUXStale(t
 	}
 }
 
+func TestProcesarDecisionContinuacionSesionActivaAutonomiaUsaInstructionEspecificaParaSemillaPremium(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex9Seed", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-seed-continue",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex9Seed", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	proyecto, err := db.GetProyecto(strconv.FormatInt(proyectoID, 10))
+	if err != nil || proyecto == nil {
+		t.Fatalf("get proyecto: %+v err=%v", proyecto, err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Autonomía premium: abrir siguiente frente mayor útil",
+		Descripcion: "Semilla premium activa",
+		ProyectoID:  &proyectoID,
+		Modulo:      "autonomia",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       "autonomia:premium_frontier",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex9Seed"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex9Seed"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex9Seed",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	runtimeInst, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtimeInst == nil {
+		t.Fatalf("runtime: %+v err=%v", runtimeInst, err)
+	}
+	traceDir := filepath.Join(tmp, "runtime", "codex9seed")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	now := time.Now().UTC()
+	staleAt := now.Add(-10 * time.Minute)
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	manifestPath := filepath.Join(traceDir, "manifest.json")
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex9Seed","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex9-seed","tmux_pane_id":"%31","created_at":"`+now.Format(time.RFC3339Nano)+`","started_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"ready","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`","last_output_at":"`+staleAt.Format(time.RFC3339Nano)+`","last_progress_at":"`+staleAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write worker status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now.Format(time.RFC3339Nano)+`","last_output_at":"`+staleAt.Format(time.RFC3339Nano)+`","last_progress_at":"`+staleAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex9-seed",
+		"tmux_pane_id":          "%31",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex9-seed/%31', metadata_json=?, estado='activo' WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("activar handle tmux: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='activo', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtimeInst.ID); err != nil {
+		t.Fatalf("activar runtime: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	n, err := procesarDecisionContinuacionSesionActivaAutonomia(sesion, proyecto, agenteTickOutput{
+		AccionRecomendada: "continuar_trabajo",
+		Motivo:            "Sigue trabajando hasta completar la tarea o detectar una duda real",
+	}, nil)
+	if err != nil {
+		t.Fatalf("procesarDecisionContinuacionSesionActivaAutonomia: %v", err)
+	}
+	if n == 0 {
+		t.Fatal("deberia producir un nudge útil para la semilla premium activa")
+	}
+
+	agente := "Codex9Seed"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("deberia crear un nudge, got=%d", len(orders))
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"instruction":"Esta semilla premium no autoriza programar un frente amplio.`) {
+		t.Fatalf("deberia usar instruction específica para la semilla premium: %s", orders[0].PayloadJSON)
+	}
+}
+
 func TestProcesarDecisionContinuacionSesionActivaAutonomiaEncolaNudgeTMUXStaleConHandleCanonicoNoEnlazado(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

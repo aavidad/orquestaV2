@@ -7236,13 +7236,14 @@ func procesarDecisionContinuarTrabajoSesionActivaAutonomia(sesion *db.Sesion, pr
 	if !autonomiaContinueNudgeShouldAttempt(sesion.Agente, proyecto.ID, tareaID) {
 		return 0, nil
 	}
+	instruction := instruccionContinuacionSesionActivaAutonomia(tareaID)
 	if ok, err := encolarNudgeAutonomiaConInvalidacion(
 		snapshot,
 		sesion.Agente,
 		proyecto,
 		"continuar_trabajo",
 		out.Motivo,
-		"Sigue con la tarea activa y cierra el siguiente slice útil del frente actual dentro del write-set y tests definidos.",
+		instruction,
 		map[string]any{"tarea_id": tareaID, "motivo_autoasignacion": "sesion_activa_stale"},
 	); err != nil {
 		if throttleKey != "" {
@@ -7256,6 +7257,20 @@ func procesarDecisionContinuarTrabajoSesionActivaAutonomia(sesion *db.Sesion, pr
 		autonomiaContinueNudgeGate.Forget(throttleKey)
 	}
 	return 0, nil
+}
+
+func instruccionContinuacionSesionActivaAutonomia(tareaID int64) string {
+	if tareaID <= 0 {
+		return "Sigue con la tarea activa y cierra el siguiente slice útil del frente actual dentro del write-set y tests definidos."
+	}
+	tarea, err := tareasService.Get(tareaID)
+	if err != nil || tarea == nil {
+		return "Sigue con la tarea activa y cierra el siguiente slice útil del frente actual dentro del write-set y tests definidos."
+	}
+	if strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:premium_frontier") {
+		return "Esta semilla premium no autoriza programar un frente amplio. Toma o reanuda exactamente una tarea premium acotada con WRITE_SET y tests mínimos; si no existe, créala por la app/CLI de Orquesta y continúa sobre ese frente derivado."
+	}
+	return "Sigue con la tarea activa y cierra el siguiente slice útil del frente actual dentro del write-set y tests definidos."
 }
 
 func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, proyecto *db.Proyecto, snapshot *autonomiaBatchSnapshot) (int, error) {
