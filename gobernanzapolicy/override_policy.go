@@ -23,6 +23,11 @@ type OverrideSpec struct {
 	Action    string
 }
 
+type OverrideLayer struct {
+	ScopeType string
+	ScopeRef  string
+}
+
 func NormalizeOverrideSpec(scopeType, entity, action string) (OverrideSpec, error) {
 	spec := OverrideSpec{
 		ScopeType: strings.TrimSpace(scopeType),
@@ -39,6 +44,29 @@ func NormalizeOverrideSpec(scopeType, entity, action string) (OverrideSpec, erro
 		return OverrideSpec{}, fmt.Errorf("accion invalida: %s", spec.Action)
 	}
 	return spec, nil
+}
+
+func ResolveOverrideLayers(projectScopeRef, agentScopeRef string) ([]OverrideLayer, string) {
+	layers := make([]OverrideLayer, 0, 2)
+	if projectScopeRef = strings.TrimSpace(projectScopeRef); projectScopeRef != "" {
+		layers = append(layers, OverrideLayer{ScopeType: ScopeProject, ScopeRef: projectScopeRef})
+	}
+	if agentScopeRef = strings.TrimSpace(agentScopeRef); agentScopeRef != "" {
+		layers = append(layers, OverrideLayer{ScopeType: ScopeAgent, ScopeRef: agentScopeRef})
+	}
+	return layers, "rol"
+}
+
+func AppendResolutionScope(resolution, scopeType string) string {
+	resolution = strings.TrimSpace(resolution)
+	if resolution == "" {
+		resolution = "rol"
+	}
+	scopeType = strings.TrimSpace(scopeType)
+	if scopeType == "" || strings.Contains(resolution, scopeType) {
+		return resolution
+	}
+	return resolution + "+" + scopeType
 }
 
 func validScope(scope string) bool {

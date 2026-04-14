@@ -201,21 +201,20 @@ func ResolveGovernanceCatalogForContext(tipoAgente string, proyectoID *int64, ag
 		}
 	}
 
-	layers, resolucion, err := governanceLayers(proyectoID, agente)
+	projectScopeRef, agentScopeRef, err := governanceLayerRefs(proyectoID, agente)
 	if err != nil {
 		return nil, err
 	}
+	layers, resolucion := gobernanzapolicy.ResolveOverrideLayers(projectScopeRef, agentScopeRef)
 	for _, layer := range layers {
-		overrides, err := ListarGovernanceOverrides(layer.scopeTipo, layer.scopeRef, tipoAgente, "")
+		overrides, err := ListarGovernanceOverrides(layer.ScopeType, layer.ScopeRef, tipoAgente, "")
 		if err != nil {
 			return nil, err
 		}
 		if len(overrides) == 0 {
 			continue
 		}
-		if !strings.Contains(resolucion, layer.scopeTipo) {
-			resolucion += "+" + layer.scopeTipo
-		}
+		resolucion = gobernanzapolicy.AppendResolutionScope(resolucion, layer.ScopeType)
 		for _, item := range overrides {
 			if err := applyGovernanceOverride(item, reglasMap, skillsMap, workflowsMap); err != nil {
 				return nil, err
@@ -270,27 +269,18 @@ func governanceOverrideSchemaExists() (bool, error) {
 	return SchemaObjectExists("table", "governance_overrides")
 }
 
-type governanceLayer struct {
-	scopeTipo string
-	scopeRef  string
-}
-
-func governanceLayers(proyectoID *int64, agente string) ([]governanceLayer, string, error) {
-	layers := make([]governanceLayer, 0, 2)
-	resolucion := "rol"
+func governanceLayerRefs(proyectoID *int64, agente string) (string, string, error) {
+	projectScopeRef := ""
 	if proyectoID != nil && *proyectoID > 0 {
 		proyecto, err := GetProyecto(strconv.FormatInt(*proyectoID, 10))
 		if err != nil && err != sql.ErrNoRows {
-			return nil, "", err
+			return "", "", err
 		}
 		if proyecto != nil && strings.TrimSpace(proyecto.Slug) != "" {
-			layers = append(layers, governanceLayer{scopeTipo: GovernanceScopeProyecto, scopeRef: strings.TrimSpace(proyecto.Slug)})
+			projectScopeRef = strings.TrimSpace(proyecto.Slug)
 		}
 	}
-	if agente = strings.TrimSpace(agente); agente != "" {
-		layers = append(layers, governanceLayer{scopeTipo: GovernanceScopeAgente, scopeRef: agente})
-	}
-	return layers, resolucion, nil
+	return projectScopeRef, strings.TrimSpace(agente), nil
 }
 
 func applyGovernanceOverride(item *GovernanceOverride, reglas map[int64]*Regla, skills map[int64]*Skill, workflows map[int64]*Workflow) error {
