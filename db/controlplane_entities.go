@@ -9730,6 +9730,9 @@ func runtimeOrderCalificaComoBootstrapLeaseCandidata(order *RuntimeOrder, observ
 	res := mapFromJSON(order.ResultadoJSON)
 	switch strings.TrimSpace(order.Estado) {
 	case "pendiente":
+		if observed && runtimeBootstrapLeaseTieneReceiptUtil(res) && len(int64SliceFromAny(res["mailbox_ids"])) > 0 {
+			return true
+		}
 		if !runtimeOrderMantieneBootstrapLeasePendiente(res) &&
 			!boolFromAny(res["deferred"]) &&
 			stringFromMap(res, "estado_dispatch", "") == "" {
