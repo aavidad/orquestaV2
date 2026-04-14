@@ -3157,6 +3157,9 @@ func TestConstruirInboxMicrocicloMarkdownImpulsaSiguienteCasoAdyacente(t *testin
 	if !strings.Contains(inbox, "Primer movimiento recomendado") {
 		t.Fatalf("la inbox debe sugerir la primera inspeccion exacta del slice: %s", inbox)
 	}
+	if !strings.Contains(inbox, "No gastes el primer ciclo en git diff, git status") {
+		t.Fatalf("la inbox debe prohibir perder el primer ciclo en git diff/status: %s", inbox)
+	}
 	if !strings.Contains(inbox, "siguiente caso adyacente mas pequeno y verificable") {
 		t.Fatalf("la inbox debe empujar el siguiente caso adyacente dentro del write-set: %s", inbox)
 	}

@@ -614,6 +614,7 @@ func construirInboxMicrocicloMarkdown(proyecto *db.Proyecto, tarea *db.Tarea) st
 		"## Ejecucion",
 		"- Primer paso obligatorio: abre solo los archivos del write-set o simbolos foco y aplica el patch mas pequeno antes de cualquier broad scan.",
 		"- Primer movimiento recomendado: rg -n 'procesarRuntimeMailboxSessionResumeBatchConMailbox|resolverBootstrapRuntimeLeasePendiente' cmd/controlplane_support.go db/controlplane_entities.go runtimeagente/driver.go",
+		"- No gastes el primer ciclo en git diff, git status ni comprobaciones equivalentes del write-set si no hay cambios locales visibles; entra directo al simbolo foco y al patch pequeno.",
 		"- Aplica un unico slice pequeno y verificable.",
 		"- No amplíes validación ni búsquedas laterales antes del primer patch pequeño dentro del write-set.",
 		"- Si este slice ya queda verde, no esperes otra microtarea: encuentra el siguiente caso adyacente mas pequeno y verificable dentro del mismo write-set y siguelo de inmediato.",
