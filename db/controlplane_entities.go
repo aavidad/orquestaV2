@@ -9504,7 +9504,17 @@ func RuntimeMailboxCubiertoPorBootstrapPendiente(mailboxID int64, handle *Runtim
 	if err != nil || order == nil {
 		return false, 0, 0, err
 	}
-	if !runtimeBootstrapLeaseStateBlocksMailbox(mapFromJSON(order.ResultadoJSON)) {
+	var inherited map[string]any
+	if startOrderID > 0 {
+		startOrder, err := GetRuntimeOrder(startOrderID)
+		if err != nil {
+			return false, 0, 0, err
+		}
+		if startOrder != nil {
+			inherited = mapFromJSON(startOrder.ResultadoJSON)
+		}
+	}
+	if !runtimeBootstrapLeaseStateBlocksMailbox(mapFromJSON(order.ResultadoJSON), inherited) {
 		return false, 0, 0, nil
 	}
 	for _, id := range mailboxIDs {
@@ -9554,11 +9564,14 @@ func runtimeBootstrapLeaseTieneCoberturaDeclarada(result map[string]any) bool {
 	return int64FromAny(result["start_order_id"]) > 0
 }
 
-func runtimeBootstrapLeaseStateBlocksMailbox(result map[string]any) bool {
+func runtimeBootstrapLeaseStateBlocksMailbox(result map[string]any, inherited map[string]any) bool {
 	if len(result) == 0 {
 		return false
 	}
 	if runtimeBootstrapLeaseTieneReceiptUtil(result) {
+		return false
+	}
+	if runtimeBootstrapLeaseTieneReceiptUtil(inherited) {
 		return false
 	}
 	return strings.EqualFold(strings.TrimSpace(stringFromMap(result, "lease_state", "")), "waiting_for_evidence")
