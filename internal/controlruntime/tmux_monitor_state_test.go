@@ -222,6 +222,23 @@ func TestTMUXPaneHasActiveTaskDetectaClaudeTransfiguring(t *testing.T) {
 	}
 }
 
+func TestTMUXPaneHasActiveTaskDetectaGeminiThinkingConBusquedaReal(t *testing.T) {
+	captured := "" +
+		"│ Found 94 matches                                                         │\n" +
+		"✦ tmux_cli_session is a staple in my tests. I'm moving on to\n" +
+		"  cmd/controlplane_support.go to examine construirInstruccionMailboxInteractivo.\n" +
+		"⠼ Thinking... (esc to cancel, 38s)                             ? for shortcuts\n" +
+		"workspace (/directory)         branch                        sandbox\n" +
+		"~/.../orquestador-gemini1      orq-orquestador-gemini1       no sandbox\n" +
+		"*   Type your message or @path/to/file\n"
+	if !tmuxPaneHasActiveTask(captured) {
+		t.Fatal("Gemini pensando y ejecutando búsqueda real debería detectarse como tarea activa")
+	}
+	if got := tmuxClassifyPaneState(captured); got != workerStatusRunning {
+		t.Fatalf("estado de pane inesperado: got=%q want=%q", got, workerStatusRunning)
+	}
+}
+
 func TestTMUXPaneHasUsageLimitPromptDetectaClaudeResetHorario(t *testing.T) {
 	captured := "" +
 		"You've hit your limit · resets 2am (Europe/Madrid)\n" +

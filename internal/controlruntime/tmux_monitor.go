@@ -729,6 +729,12 @@ func tmuxPaneHasActiveTask(captured string) bool {
 		if strings.Contains(semantic, "transfiguring") {
 			return true
 		}
+		if strings.Contains(semantic, "thinking...") || strings.Contains(semantic, "thinking…") {
+			return true
+		}
+		if strings.Contains(semantic, "esc to cancel") {
+			return true
+		}
 	}
 	lines := tmuxNormalizePaneLines(captured)
 	if len(lines) > 40 {
