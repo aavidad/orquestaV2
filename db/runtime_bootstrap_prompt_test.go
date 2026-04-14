@@ -137,6 +137,12 @@ func TestBuildLaunchBootstrapPromptCompactaArranqueBootstrapOnly(t *testing.T) {
 	if !strings.Contains(prompt, "Si la tarea activa o la inbox ya fijan frente, simbolos, write-set y tests, ejecuta ese slice y no releas la BIBLIA completa.") {
 		t.Fatalf("faltaba instruccion de no reexplorar doctrina en prompt compacto:\n%s", prompt)
 	}
+	if !strings.Contains(prompt, "No hagas rg global, broad scans ni recorridos del repo entero antes del primer patch pequeno dentro del write-set.") {
+		t.Fatalf("faltaba instruccion de no hacer broad scans antes del primer patch:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "Si existe `.orquesta-inbox.md`, no releas doctrina ni busques otros frentes antes del primer patch pequeno verificable.") {
+		t.Fatalf("faltaba instruccion de no releer doctrina antes del primer patch:\n%s", prompt)
+	}
 	if !strings.Contains(prompt, "Consulta solo el fragmento minimo de doctrina que necesites si aparece un bloqueo real o falta contrato operativo en la inbox/tarea.") {
 		t.Fatalf("faltaba instruccion de consulta minima de doctrina en prompt compacto:\n%s", prompt)
 	}
@@ -175,6 +181,8 @@ func TestBuildLaunchBootstrapPromptCompactaAgenteCLIOrquestadoAunqueNoSeaBootstr
 		"Si el contexto visible de la sesión no coincide con la tarea activa o el mailbox actual, ignóralo.",
 		"No reabras frentes viejos ni reescribas módulos fuera del alcance inmediato.",
 		"Si la tarea activa o la inbox ya fijan frente, simbolos, write-set y tests, ejecuta ese slice y no releas la BIBLIA completa.",
+		"No hagas rg global, broad scans ni recorridos del repo entero antes del primer patch pequeno dentro del write-set.",
+		"Si existe `.orquesta-inbox.md`, no releas doctrina ni busques otros frentes antes del primer patch pequeno verificable.",
 		"Consulta solo el fragmento minimo de doctrina que necesites si aparece un bloqueo real o falta contrato operativo en la inbox/tarea.",
 		"Tarea activa: #492 [en_progreso] Adaptador Codex broker-first sin control por PTY.",
 		"Alcance inmediato: Simbolos foco: procesarRuntimeMailboxSessionResumeBatchConMailbox y resolverBootstrapRuntimeLeasePendiente.",

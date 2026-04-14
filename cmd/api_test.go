@@ -3151,6 +3151,9 @@ func TestConstruirInboxMicrocicloMarkdownImpulsaSiguienteCasoAdyacente(t *testin
 	if !strings.Contains(inbox, "no esperes otra microtarea") {
 		t.Fatalf("la inbox debe impedir que el agente espere otra microtarea: %s", inbox)
 	}
+	if !strings.Contains(inbox, "Primer paso obligatorio") {
+		t.Fatalf("la inbox debe forzar un primer patch pequeno antes del broad scan: %s", inbox)
+	}
 	if !strings.Contains(inbox, "siguiente caso adyacente mas pequeno y verificable") {
 		t.Fatalf("la inbox debe empujar el siguiente caso adyacente dentro del write-set: %s", inbox)
 	}

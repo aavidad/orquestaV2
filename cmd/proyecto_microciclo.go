@@ -612,6 +612,7 @@ func construirInboxMicrocicloMarkdown(proyecto *db.Proyecto, tarea *db.Tarea) st
 		strings.TrimSpace(tarea.Descripcion),
 		"",
 		"## Ejecucion",
+		"- Primer paso obligatorio: abre solo los archivos del write-set o simbolos foco y aplica el patch mas pequeno antes de cualquier broad scan.",
 		"- Aplica un unico slice pequeno y verificable.",
 		"- No amplíes validación ni búsquedas laterales antes del primer patch pequeño dentro del write-set.",
 		"- Si este slice ya queda verde, no esperes otra microtarea: encuentra el siguiente caso adyacente mas pequeno y verificable dentro del mismo write-set y siguelo de inmediato.",
