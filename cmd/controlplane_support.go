@@ -4194,6 +4194,9 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 		if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliverySessionResume {
 			continue
 		}
+		if !runtimeHandleListaParaDispatchSessionResumeTMUX(handle) {
+			continue
+		}
 		dispatch, err := encolarRuntimeMailboxSessionResumeSiCorresponde(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID, "runtime_mailbox_session_resume", "runtime_mailbox_session_resume_supersede")
 		if err != nil {
 			return total, err
@@ -4650,6 +4653,26 @@ func construirInboxRuntimeMailboxDurableMarkdown(proyecto *db.Proyecto, tarea *d
 
 func runtimeHandleListaParaDispatchInteractivo(handle *db.RuntimeHandle) bool {
 	if handle == nil || !db.RuntimeHandlePermiteSendInputInteractivo(handle) {
+		return false
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON))
+	if err != nil || snap == nil {
+		return true
+	}
+	view := snap.View(time.Now().UTC(), time.Minute)
+	if view == nil {
+		return true
+	}
+	if !strings.EqualFold(strings.TrimSpace(view.Driver), "tmux_cli_session") &&
+		!strings.EqualFold(strings.TrimSpace(view.Transport), "tmux") {
+		return true
+	}
+	ready, _ := snap.ReadyForTextDispatch(time.Now().UTC(), time.Minute)
+	return ready
+}
+
+func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle) bool {
+	if handle == nil {
 		return false
 	}
 	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON))

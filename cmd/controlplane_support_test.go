@@ -6264,6 +6264,130 @@ func TestProcesarRuntimeMailboxSessionResumeBatchConsumeMailboxBootstrapObservad
 	}
 }
 
+func TestProcesarRuntimeMailboxSessionResumeBatchTMUXSessionResumeEsperaReadyAntesDeEncolar(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+
+	runDir := filepath.Join(tmp, "runtime", "Codex1", "session-resume-running")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir run dir: %v", err)
+	}
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	writeJSON := func(path string, payload map[string]any) {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	writeJSON(manifestPath, map[string]any{
+		"version":        1,
+		"agent":          "Codex1",
+		"driver":         "tmux_cli_session",
+		"transport":      "tmux",
+		"tmux_session":   "orq-codex1-session-resume",
+		"tmux_pane_id":   "%33",
+		"status_path":    statusPath,
+		"heartbeat_path": heartbeatPath,
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":      "running",
+		"updated_at": now,
+		"alive":      true,
+		"child_pid":  os.Getpid(),
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":        true,
+		"heartbeat_at": now,
+		"started_at":   now,
+		"child_pid":    os.Getpid(),
+	})
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex1-session-resume",
+		"tmux_pane_id":          "%33",
+		"external_session_id":   "sess-codex1-running",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle tmux: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"instruction":"haz una micro refactorizacion concreta","texto":"continua trabajo actual"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia encolar send_instruction si el worker tmux aun esta running y no ready, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			t.Fatalf("no deberia existir send_instruction antes de ready: %+v", order)
+		}
+	}
+
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("mailbox final: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "pendiente" {
+		t.Fatalf("la mailbox deberia seguir pendiente hasta que tmux este ready: %+v", msg)
+	}
+}
+
 func TestProcesarRuntimeMailboxSessionResumeBatchConsumeMailboxBootstrapObservadoPendiente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetRuntimeMailboxReevaluationGate()
