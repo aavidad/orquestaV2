@@ -52,6 +52,9 @@ func TestDBNoIntroduceDependenciasInternasFueraDeLaFronteraPermitida(t *testing.
 			"sqlwrap.go":                   {},
 			"verificacion_persistencia.go": {},
 		},
+		"orquesta/tareaspolicy": {
+			"tareas.go": {},
+		},
 	}
 
 	entries, err := os.ReadDir(".")

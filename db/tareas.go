@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"orquesta/tareaspolicy"
 )
 
 type EstadoTarea string
@@ -209,34 +211,28 @@ func ListarTareas(f FiltroTareas) ([]*Tarea, error) {
 // ValidarDependencias comprueba que todas las dependencias previas de una tarea
 // estén completadas y tengan contrato/interfaz definido. Implementa OP-069.
 func ValidarDependencias(t *Tarea) error {
-	for _, depID := range t.Dependencias {
+	if t == nil {
+		return nil
+	}
+	return tareaspolicy.ValidateDependencies(&tareaspolicy.TaskSnapshot{
+		ID:            t.ID,
+		Title:         t.Titulo,
+		DependencyIDs: t.Dependencias,
+	}, func(depID int64) (*tareaspolicy.TaskSnapshot, error) {
 		dep, err := GetTarea(depID)
 		if err != nil {
-			return fmt.Errorf("dependencia #%d no encontrada", depID)
+			return nil, err
 		}
-		if !dep.ContratoDefinido && dep.Estado != TareaCompletada {
-			return fmt.Errorf(
-				"la tarea #%d depende de #%d ('%s') que aún no tiene contrato/interfaz definido ni está completada (OP-069): "+
-					"usa 'orquesta tarea contrato %d' y completa la tarea previa antes de tomarla",
-				t.ID, depID, dep.Titulo, depID,
-			)
+		if dep == nil {
+			return nil, nil
 		}
-		if !dep.ContratoDefinido {
-			return fmt.Errorf(
-				"la tarea #%d depende de #%d ('%s') que aún no tiene contrato/interfaz definido (OP-069): "+
-					"usa 'orquesta tarea contrato %d' para registrarlo primero",
-				t.ID, depID, dep.Titulo, depID,
-			)
-		}
-		if dep.Estado != TareaCompletada {
-			return fmt.Errorf(
-				"la tarea #%d depende de #%d ('%s') que aún no está completada (OP-069): "+
-					"espera a que termine antes de tomar esta tarea",
-				t.ID, depID, dep.Titulo,
-			)
-		}
-	}
-	return nil
+		return &tareaspolicy.TaskSnapshot{
+			ID:              dep.ID,
+			Title:           dep.Titulo,
+			Status:          string(dep.Estado),
+			ContractDefined: dep.ContratoDefinido,
+		}, nil
+	})
 }
 
 // TomarTarea asigna una tarea libre (o backlog) a un agente.
