@@ -582,6 +582,32 @@ func TestCalcularSiguientePasoPipelineLocalDeterministaNoPriorizaMicrocicloLibre
 	}
 }
 
+func TestCalcularSiguientePasoPipelineLocalDeterministaPriorizaFrenteAcotadoSobreSemillaPremiumActiva(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{ID: 40, Titulo: "Autonomía premium: abrir siguiente frente mayor útil", Estado: db.TareaEnProgreso, Prioridad: db.PrioridadAlta, Notas: "autonomia:premium_frontier"},
+		{
+			ID:          41,
+			Titulo:      "Cerrar reconcile de mailbox premium",
+			Estado:      db.TareaLibre,
+			Prioridad:   db.PrioridadAlta,
+			Descripcion: "Cerrar el siguiente frente premium util.\nWRITE_SET: cmd/controlplane_support.go, cmd/controlplane_support_test.go\nTests minimos: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'",
+		},
+	}})
+
+	paso, err := service.CalcularSiguientePasoPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("CalcularSiguientePasoPipelineLocalDeterminista: %v", err)
+	}
+	if paso == nil || paso.TareaObjetivo == nil {
+		t.Fatalf("paso inesperado: %+v", paso)
+	}
+	if paso.TareaObjetivo.ID != 41 || paso.AccionTarea != "implementar" {
+		t.Fatalf("el frente premium acotado deberia ganar sobre la semilla premium activa: %+v", paso)
+	}
+}
+
 func TestCalcularSiguientePasoPipelineLocalDeterministaPriorizaLibreSobreAsignadaAjena(t *testing.T) {
 	service := NewService(fakeStore{})
 	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})

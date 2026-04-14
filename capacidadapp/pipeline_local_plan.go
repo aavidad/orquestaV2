@@ -251,6 +251,27 @@ func tareaPipelineLocalMicrocicloPrioritario(tarea *db.Tarea) bool {
 	}
 }
 
+func tareaPipelineLocalEsFrentePremiumSemilla(tarea *db.Tarea) bool {
+	if tarea == nil {
+		return false
+	}
+	if strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:premium_frontier") {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(tarea.Titulo), "Autonomía premium: abrir siguiente frente mayor útil")
+}
+
+func tareaPipelineLocalTieneContratoPremiumReal(tarea *db.Tarea) bool {
+	if tarea == nil {
+		return false
+	}
+	writeSet := extraerWriteSetTareaPipelineLocal(tarea.Descripcion, tarea.Notas)
+	if len(writeSet) == 0 {
+		return false
+	}
+	return strings.TrimSpace(extraerTestsMinimosTareaPipelineLocal(tarea.Descripcion, tarea.Notas)) != ""
+}
+
 func (s *Service) seleccionarTareaPipelineLocal(proyectoSlug, fase string) *TareaPipelineLocal {
 	if s == nil || s.taskProvider == nil || strings.TrimSpace(proyectoSlug) == "" {
 		return nil
@@ -263,6 +284,20 @@ func (s *Service) seleccionarTareaPipelineLocal(proyectoSlug, fase string) *Tare
 	mejor := -1
 	for _, tarea := range tareas {
 		if candidata != nil {
+			candidataSemilla := tareaPipelineLocalEsFrentePremiumSemilla(candidata)
+			nuevaSemilla := tareaPipelineLocalEsFrentePremiumSemilla(tarea)
+			candidataContratoReal := tareaPipelineLocalTieneContratoPremiumReal(candidata)
+			nuevaContratoReal := tareaPipelineLocalTieneContratoPremiumReal(tarea)
+			if candidataSemilla != nuevaSemilla && candidataContratoReal != nuevaContratoReal {
+				if candidataSemilla && nuevaContratoReal {
+					candidata = tarea
+					mejor = puntuarTareaPipelineLocal(tarea, fase)
+					continue
+				}
+				if nuevaSemilla && candidataContratoReal {
+					continue
+				}
+			}
 			actualMicrociclo := tareaPipelineLocalMicrocicloPrioritario(candidata)
 			nuevaMicrociclo := tareaPipelineLocalMicrocicloPrioritario(tarea)
 			if nuevaMicrociclo != actualMicrociclo {
