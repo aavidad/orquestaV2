@@ -6447,12 +6447,12 @@ func TestReconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailboxMarcaEntr
 	signature := runtimeMailboxDeliveryAttemptSignature(handle, "sess-inbox-durable")
 	payloadJSON := fmt.Sprintf(`{"mailbox_id":%d,"mailbox_kind":"autonomia","external_session_id":"sess-inbox-durable","delivery_attempt_signature":"%s","to_agente":"Codex1"}`, msgID, signature)
 	orderID, err := runtimesService.CreateRuntimeOrder(&db.RuntimeOrder{
-		Agente:       "Codex1",
-		ProyectoID:   &proyectoID,
-		RuntimeID:    handle.RuntimeID,
-		HandleID:     &handle.ID,
-		Tipo:         "send_instruction",
-		PayloadJSON:  payloadJSON,
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   handle.RuntimeID,
+		HandleID:    &handle.ID,
+		Tipo:        "send_instruction",
+		PayloadJSON: payloadJSON,
 	})
 	if err != nil {
 		t.Fatalf("create send_instruction mailbox_only: %v", err)
@@ -12636,6 +12636,98 @@ func TestProcesarRuntimeTranscriptBatchRegistraEntregaGitPremiumDesdeBootstrapLe
 	}
 	if merges[0].SourceBranch != worktree.Branch || merges[0].TargetBranch != "main" {
 		t.Fatalf("merge premium bootstrap inesperado: %+v", merges[0])
+	}
+}
+
+func TestProcesarRuntimeTranscriptBatchRegistraEntregaGitPremiumDesdeBootstrapLeaseCaseInsensitive(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	repoDir := filepath.Join(tmp, "repo-git-transcript-premium-bootstrap-case")
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	runGitCmdTest(t, repoDir, "init", "-b", "main")
+	runGitCmdTest(t, repoDir, "config", "user.email", "test@example.com")
+	runGitCmdTest(t, repoDir, "config", "user.name", "Test User")
+	if err := os.MkdirAll(filepath.Join(repoDir, "cmd"), 0o755); err != nil {
+		t.Fatalf("mkdir cmd: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "cmd", "controlplane_support.go"), []byte("package cmd\n\nfunc premiumWorkerBootstrapCase() string { return \"old\" }\n"), 0o644); err != nil {
+		t.Fatalf("write worker: %v", err)
+	}
+	runGitCmdTest(t, repoDir, "add", ".")
+	runGitCmdTest(t, repoDir, "commit", "-m", "init")
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	projectID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: repoDir,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	worktree, err := newCoordinationService().PrepareWorktree(coordinacion.PrepareWorktreeInput{
+		ProjectRef: "orquestador",
+		Agent:      "Codex1",
+		Name:       "wt-codex1-git-transcript-premium-bootstrap-case",
+		Branch:     "orq/orquestador/codex1-git-transcript-premium-bootstrap-case",
+		BaseRef:    "main",
+		Reason:     "test_runtime_transcript_git_premium_bootstrap_case",
+	})
+	if err != nil {
+		t.Fatalf("prepare worktree: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(worktree.Path, "cmd", "controlplane_support.go"), []byte("package cmd\n\nfunc premiumWorkerBootstrapCase() string { return \"new\" }\n"), 0o644); err != nil {
+		t.Fatalf("write worker in worktree: %v", err)
+	}
+	msgID, err := runtimesService.SendRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &projectID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"source":"pipeline_local","carril":"premium_worktree","tarea_objetivo_id":561,"write_set":["cmd/controlplane_support.go"],"worktree_id":` + strconv.FormatInt(worktree.ID, 10) + `,"ruta_worktree":"` + worktree.Path + `","branch_worktree":"` + worktree.Branch + `","base_ref_worktree":"main"}`,
+	})
+	if err != nil {
+		t.Fatalf("create runtime mailbox premium bootstrap case: %v", err)
+	}
+	if err := runtimesService.MarkRuntimeMailboxDelivered(msgID); err != nil {
+		t.Fatalf("mark mailbox delivered: %v", err)
+	}
+	orderID, err := runtimesService.CreateRuntimeOrder(&db.RuntimeOrder{
+		Agente:        "Codex1",
+		ProyectoID:    &projectID,
+		Tipo:          "start",
+		Estado:        "completada",
+		ResultadoJSON: fmt.Sprintf(`{"lease_state":"Delivered","mailbox_ids":[%d],"sesion_id":12}`, msgID),
+	})
+	if err != nil {
+		t.Fatalf("create runtime order premium bootstrap case: %v", err)
+	}
+
+	n, err := procesarRuntimeTranscriptBatch()
+	if err != nil {
+		t.Fatalf("procesarRuntimeTranscriptBatch premium bootstrap case: %v", err)
+	}
+	if n < 1 {
+		t.Fatalf("se esperaba al menos una entrega premium bootstrap case registrada, got=%d", n)
+	}
+	order, err := runtimesService.GetRuntimeOrder(orderID)
+	if err != nil || order == nil {
+		t.Fatalf("get runtime order premium bootstrap case: %+v err=%v", order, err)
+	}
+	if order.Estado != "completada" || !strings.Contains(order.ResultadoJSON, `"receipt_source":"git_worktree"`) {
+		t.Fatalf("runtime order premium bootstrap case sin cierre git: %+v", order)
+	}
+	msg, err := runtimesService.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox premium bootstrap case: %+v err=%v", msg, err)
+	}
+	if msg.Estado != "consumido" {
+		t.Fatalf("mailbox premium bootstrap case deberia quedar consumido: %+v", msg)
 	}
 }
 

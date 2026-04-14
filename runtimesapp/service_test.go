@@ -1834,6 +1834,39 @@ func TestResolverContextoEntregaGitPremiumDesdeBootstrapLease(t *testing.T) {
 	}
 }
 
+func TestResolverContextoEntregaGitPremiumDesdeBootstrapLeaseCaseInsensitive(t *testing.T) {
+	projectID := int64(11)
+	store := &fakeStore{
+		ordersResponse: []*db.RuntimeOrder{{
+			ID:            406,
+			Agente:        "Codex1",
+			ProyectoID:    &projectID,
+			Tipo:          "start",
+			Estado:        "completada",
+			ResultadoJSON: `{"lease_state":"Delivered","mailbox_ids":[91],"sesion_id":12}`,
+		}},
+		mailboxResponse: []*db.RuntimeMailboxMessage{{
+			ID:          91,
+			ToAgente:    "Codex1",
+			ProyectoID:  &projectID,
+			Kind:        "pipeline_local",
+			PayloadJSON: `{"source":"pipeline_local","carril":"premium_worktree","tarea_objetivo_id":530,"write_set":["cmd/controlplane_support.go","db/controlplane_entities.go"],"worktree_id":81,"ruta_worktree":"/tmp/orq-premium","branch_worktree":"orq/orquestador/codex1","base_ref_worktree":"main"}`,
+		}},
+	}
+	service := NewService(store)
+
+	ctx, err := service.ResolverContextoEntregaGitPremium("Codex1", &projectID)
+	if err != nil {
+		t.Fatalf("ResolverContextoEntregaGitPremium: %v", err)
+	}
+	if ctx == nil {
+		t.Fatal("deberia resolver contexto premium desde bootstrap lease con lease_state case-insensitive")
+	}
+	if ctx.RuntimeOrderID != 406 || ctx.Carril != "premium_worktree" || ctx.TareaObjetivoID != 530 {
+		t.Fatalf("contexto premium inesperado: %+v", ctx)
+	}
+}
+
 func TestRegistrarEntregaGitMicroprogramacionActivaFallbackPremiumBootstrapLeaseUsaRegistradorYCompletaOrden(t *testing.T) {
 	projectID := int64(11)
 	store := &fakeStore{

@@ -1686,7 +1686,7 @@ func mailboxIDsBootstrapLeaseApp(raw string) ([]int64, bool) {
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &payload); err != nil {
 		return nil, false
 	}
-	leaseState := strings.TrimSpace(stringMapValue(payload, "lease_state"))
+	leaseState := strings.ToLower(strings.TrimSpace(stringMapValue(payload, "lease_state")))
 	switch leaseState {
 	case "waiting_for_evidence", "delivered", "acked":
 	default:

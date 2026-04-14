@@ -817,7 +817,7 @@ func runtimeOrderEntregaGitPremiumDesdeBootstrapLease(order *db.RuntimeOrder) bo
 	if strings.EqualFold(strings.TrimSpace(stringMapValue(result, "receipt_source")), "git_worktree") {
 		return false
 	}
-	switch strings.TrimSpace(stringMapValue(result, "lease_state")) {
+	switch strings.ToLower(strings.TrimSpace(stringMapValue(result, "lease_state"))) {
 	case "waiting_for_evidence", "delivered", "acked":
 	default:
 		return false
