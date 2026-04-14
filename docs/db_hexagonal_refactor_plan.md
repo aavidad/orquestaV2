@@ -18,6 +18,39 @@ Estado del frente seguro:
 - el frente `presupuestos/governanza` ha permitido sacar policy pura fuera de `db` sin tocar `cmd/`
 - en `presupuestos`, `db` ya conserva sobre todo carga/configuración/persistencia; la policy de TTL, cuota, scoring y evaluación efectiva vive fuera
 
+## Inventario Actual
+
+### 1. Ya Saneado
+
+- tests de frontera de `db` y allowlist de imports internos en [db/test_architecture_dependencies_test.go](/home/alberto/Trabajo/orquesta/db/test_architecture_dependencies_test.go)
+- selección de ruta/worktree y coherencia operativa movida en buena parte a `coordinacion`
+- policy de sesiones extraída a `sesionesapp` para asignación de pool y presupuesto efectivo
+- policy de presupuesto movida a `sesionesapp`: TTL, detección de cuota, scoring canónico y evaluación de handoff
+- policy de dependencias de tareas movida a `tareaspolicy`
+- policy de gobernanza movida a `gobernanzapolicy` para catálogo, validación de overrides y precedencia por capas
+- policy de skills movida a `skillspolicy`
+
+### 2. Aceptable Con Wrappers
+
+- [db/presupuestos_sesion.go](/home/alberto/Trabajo/orquesta/db/presupuestos_sesion.go) sigue exponiendo API pública de `db`, pero ya actúa sobre todo como wrapper de carga/configuración y adaptación de tipos
+- [db/governance_overrides.go](/home/alberto/Trabajo/orquesta/db/governance_overrides.go) mantiene repositorio, consultas y aplicación de overrides cargados, con validación y capas ya delegadas fuera
+- [db/reglas.go](/home/alberto/Trabajo/orquesta/db/reglas.go) conserva wrappers y CRUD de catálogo; la parte puramente funcional ya está bastante fuera, pero aún no es repositorio mínimo
+- [db/proyectos.go](/home/alberto/Trabajo/orquesta/db/proyectos.go), [db/worktrees.go](/home/alberto/Trabajo/orquesta/db/worktrees.go) y [db/project_context.go](/home/alberto/Trabajo/orquesta/db/project_context.go) están más delgados, pero siguen combinando queries con algo de ensamblaje operativo
+
+### 3. Todavía No Hexagonal
+
+- [db/controlplane_entities.go](/home/alberto/Trabajo/orquesta/db/controlplane_entities.go) sigue siendo el hotspot principal y mezcla persistencia con policy de runtime/bootstrap/receipt/mailbox
+- [db/planificador.go](/home/alberto/Trabajo/orquesta/db/planificador.go) sigue cargando demasiada decisión de trabajo/autonomía
+- [db/autonomia_proyecto.go](/home/alberto/Trabajo/orquesta/db/autonomia_proyecto.go) y [db/autonomia_supervisor_operativo.go](/home/alberto/Trabajo/orquesta/db/autonomia_supervisor_operativo.go) siguen siendo parte del frente no saneado
+- [db/runtimes.go](/home/alberto/Trabajo/orquesta/db/runtimes.go), [db/runtime_bootstrap_prompt.go](/home/alberto/Trabajo/orquesta/db/runtime_bootstrap_prompt.go) y [db/runtime_transcript.go](/home/alberto/Trabajo/orquesta/db/runtime_transcript.go) todavía forman parte del frente runtime no vaciado
+- [db/tareas.go](/home/alberto/Trabajo/orquesta/db/tareas.go) y [db/asignaciones.go](/home/alberto/Trabajo/orquesta/db/asignaciones.go) han mejorado, pero no están completamente reducidos a persistencia pura
+
+### Conclusión Operativa
+
+- no puede decirse aún que `db` sea completamente hexagonal
+- sí puede decirse que varios slices ya están claramente encaminados y protegidos por frontera arquitectónica
+- el siguiente salto real ya no es seguir raspando seams pequeños, sino vaciar `runtime/controlplane` y `planner`
+
 ## Objetivo
 
 Convertir `db/` en una capa de persistencia y soporte transaccional, no en una capa de decisión de negocio u orquestación.
