@@ -918,16 +918,193 @@ func procesarEntregasDesdeRuntimeTranscript() (int, error) {
 	return procesadas, nil
 }
 
-func runtimeTranscriptEntregaElegible(item *db.RuntimeTranscriptEntry) bool {
+type runtimeTranscriptEntregaEscenario string
+
+const (
+	runtimeTranscriptEntregaEscenarioDescartar    runtimeTranscriptEntregaEscenario = "descartar"
+	runtimeTranscriptEntregaEscenarioCodigoPatch  runtimeTranscriptEntregaEscenario = "codigo_patch"
+	runtimeTranscriptEntregaEscenarioFinalizacion runtimeTranscriptEntregaEscenario = "finalizacion"
+	runtimeTranscriptEntregaEscenarioConsulta     runtimeTranscriptEntregaEscenario = "consulta"
+	runtimeTranscriptEntregaEscenarioPlan         runtimeTranscriptEntregaEscenario = "plan"
+	runtimeTranscriptEntregaEscenarioRuido        runtimeTranscriptEntregaEscenario = "ruido"
+)
+
+type runtimeTranscriptEntregaPolitica struct {
+	Escenario           runtimeTranscriptEntregaEscenario
+	PermiteMaterializar bool
+	PermiteRegistrarGit bool
+}
+
+func resolverPoliticaEntregaRuntimeTranscript(item *db.RuntimeTranscriptEntry) runtimeTranscriptEntregaPolitica {
 	if item == nil || item.ProyectoID == nil || *item.ProyectoID <= 0 {
-		return false
+		return runtimeTranscriptEntregaPolitica{Escenario: runtimeTranscriptEntregaEscenarioDescartar}
 	}
 	switch strings.ToLower(strings.TrimSpace(item.Stream)) {
 	case "pty_out", "stdout", "stderr", "assistant":
 	default:
+		return runtimeTranscriptEntregaPolitica{Escenario: runtimeTranscriptEntregaEscenarioDescartar}
+	}
+	texto := textoEntregaRuntimeTranscript(item)
+	normalized := normalizedEntregaRuntimeTranscript(item)
+	if runtimeTranscriptTextoEsBootstrapPoolLocal(texto, normalized) {
+		return runtimeTranscriptEntregaPolitica{Escenario: runtimeTranscriptEntregaEscenarioDescartar}
+	}
+	classification := clasificacionEntregaRuntimeTranscript(item)
+	switch classification {
+	case "approval_request", "waiting_human", "blocked", "needs_replan",
+		"ready_for_review", "review_approved", "review_changes_requested", "review_blocked",
+		"runtime_panic", "runtime_crash", "runtime_failure_signal":
+		return runtimeTranscriptEntregaPolitica{Escenario: runtimeTranscriptEntregaEscenarioConsulta}
+	}
+	if runtimeTranscriptTextoPareceCodigoOPatch(texto, normalized) {
+		return runtimeTranscriptEntregaPolitica{
+			Escenario:           runtimeTranscriptEntregaEscenarioCodigoPatch,
+			PermiteMaterializar: true,
+			PermiteRegistrarGit: true,
+		}
+	}
+	if runtimeTranscriptTextoPareceFinalizacion(normalized, classification) {
+		return runtimeTranscriptEntregaPolitica{
+			Escenario:           runtimeTranscriptEntregaEscenarioFinalizacion,
+			PermiteRegistrarGit: true,
+		}
+	}
+	if runtimeTranscriptTextoPareceConsultaCLI(normalized, classification) {
+		return runtimeTranscriptEntregaPolitica{Escenario: runtimeTranscriptEntregaEscenarioConsulta}
+	}
+	if runtimeTranscriptTextoParecePlanTrabajo(normalized) {
+		return runtimeTranscriptEntregaPolitica{Escenario: runtimeTranscriptEntregaEscenarioPlan}
+	}
+	if strings.TrimSpace(normalized) == "" {
+		return runtimeTranscriptEntregaPolitica{Escenario: runtimeTranscriptEntregaEscenarioRuido}
+	}
+	return runtimeTranscriptEntregaPolitica{Escenario: runtimeTranscriptEntregaEscenarioRuido}
+}
+
+func clasificacionEntregaRuntimeTranscript(item *db.RuntimeTranscriptEntry) string {
+	if item == nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(item.Classification))
+}
+
+func normalizedEntregaRuntimeTranscript(item *db.RuntimeTranscriptEntry) string {
+	if item == nil {
+		return ""
+	}
+	normalized := strings.ToLower(strings.TrimSpace(item.NormalizedText))
+	if normalized != "" {
+		return normalized
+	}
+	return strings.ToLower(strings.Join(strings.Fields(textoEntregaRuntimeTranscript(item)), " "))
+}
+
+func runtimeTranscriptTextoPareceCodigoOPatch(texto, normalized string) bool {
+	texto = strings.TrimSpace(texto)
+	normalized = strings.TrimSpace(strings.ToLower(normalized))
+	if texto == "" && normalized == "" {
 		return false
 	}
-	return !runtimeTranscriptTextoEsBootstrapPoolLocal(item.Text, item.NormalizedText)
+	patchMarkers := []string{
+		"diff --git",
+		"*** begin patch",
+		"@@",
+		"// file:",
+	}
+	for _, marker := range patchMarkers {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	switch {
+	case strings.HasPrefix(texto, "--- "), strings.HasPrefix(texto, "+++ "):
+		return true
+	case strings.Contains(texto, "\n--- "), strings.Contains(texto, "\n+++ "):
+		return true
+	}
+	codeMarkers := []string{
+		"```go", "```ts", "```tsx", "```js", "```jsx", "```py", "```rs", "```java",
+		"package ", "func ", "type ", "struct {", "interface {", "const ", "var ",
+		"import (", "if err :=", "return err", "class ", "def ", "public ", "private ",
+	}
+	for _, marker := range codeMarkers {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeTranscriptTextoPareceFinalizacion(normalized, classification string) bool {
+	switch classification {
+	case "task_completed":
+		return true
+	}
+	markers := []string{
+		"he terminado",
+		"he completado",
+		"acabo de terminar",
+		"tarea terminada",
+		"tarea completada",
+		"task completed",
+		"finished the task",
+		"completed the task",
+	}
+	for _, marker := range markers {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeTranscriptTextoPareceConsultaCLI(normalized, classification string) bool {
+	switch classification {
+	case "approval_request", "waiting_human", "blocked", "needs_replan":
+		return true
+	}
+	markers := []string{
+		"puedo ",
+		"quieres que",
+		"te parece bien si",
+		"debo ",
+		"can i ",
+		"should i ",
+		"do you want me to",
+		"what should i do next",
+		"qué hago ahora",
+		"que hago ahora",
+	}
+	for _, marker := range markers {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeTranscriptTextoParecePlanTrabajo(normalized string) bool {
+	markers := []string{
+		"voy a ",
+		"primero ",
+		"después ",
+		"despues ",
+		"plan:",
+		"i will ",
+		"next i will",
+		"first i will",
+	}
+	for _, marker := range markers {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeTranscriptEntregaElegible(item *db.RuntimeTranscriptEntry) bool {
+	politica := resolverPoliticaEntregaRuntimeTranscript(item)
+	return politica.PermiteMaterializar || politica.PermiteRegistrarGit
 }
 
 func claveEntregaRuntimeTranscript(item *db.RuntimeTranscriptEntry, agente string) (string, bool) {
@@ -938,16 +1115,25 @@ func claveEntregaRuntimeTranscript(item *db.RuntimeTranscriptEntry, agente strin
 }
 
 func procesarEntregaRuntimeTranscript(item *db.RuntimeTranscriptEntry, agente string) (bool, error) {
+	politica := resolverPoliticaEntregaRuntimeTranscript(item)
+	if !politica.PermiteMaterializar && !politica.PermiteRegistrarGit {
+		return false, nil
+	}
 	proyecto, err := resolverProyectoEntregaRuntimeTranscript(item)
 	if err != nil || proyecto == nil {
 		return false, nil
 	}
-	materializada, err := materializarEntregaRuntimeTranscript(item, agente, proyecto)
-	if err != nil {
-		return false, err
+	if politica.PermiteMaterializar {
+		materializada, err := materializarEntregaRuntimeTranscript(item, agente, proyecto)
+		if err != nil {
+			return false, err
+		}
+		if materializada {
+			return true, nil
+		}
 	}
-	if materializada {
-		return true, nil
+	if !politica.PermiteRegistrarGit {
+		return false, nil
 	}
 	return registrarEntregaGitRuntimeTranscript(item, agente, proyecto)
 }

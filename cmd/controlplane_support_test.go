@@ -13259,6 +13259,179 @@ func TestProcesarRuntimeTranscriptBatchRegistraEntregaGitPremiumActiva(t *testin
 	}
 }
 
+func TestResolverPoliticaEntregaRuntimeTranscriptClasificaEscenarios(t *testing.T) {
+	projectID := int64(42)
+	cases := []struct {
+		name         string
+		entry        *db.RuntimeTranscriptEntry
+		wantScenario runtimeTranscriptEntregaEscenario
+		wantMaterial bool
+		wantGit      bool
+	}{
+		{
+			name: "codigo_patch",
+			entry: &db.RuntimeTranscriptEntry{
+				ProyectoID:     &projectID,
+				Stream:         "assistant",
+				Text:           "*** Begin Patch\n*** Update File: cmd/x.go\n@@\n-fail\n+ok\n*** End Patch\n",
+				NormalizedText: "*** begin patch *** update file: cmd/x.go @@ -fail +ok *** end patch",
+			},
+			wantScenario: runtimeTranscriptEntregaEscenarioCodigoPatch,
+			wantMaterial: true,
+			wantGit:      true,
+		},
+		{
+			name: "consulta_cli",
+			entry: &db.RuntimeTranscriptEntry{
+				ProyectoID:     &projectID,
+				Stream:         "assistant",
+				Text:           "¿Puedo seguir con otro archivo o prefieres que espere?",
+				NormalizedText: "¿puedo seguir con otro archivo o prefieres que espere?",
+				Classification: "approval_request",
+			},
+			wantScenario: runtimeTranscriptEntregaEscenarioConsulta,
+		},
+		{
+			name: "plan",
+			entry: &db.RuntimeTranscriptEntry{
+				ProyectoID:     &projectID,
+				Stream:         "assistant",
+				Text:           "Primero voy a revisar el modulo y luego ajustar los tests.",
+				NormalizedText: "primero voy a revisar el modulo y luego ajustar los tests.",
+			},
+			wantScenario: runtimeTranscriptEntregaEscenarioPlan,
+		},
+		{
+			name: "finalizacion",
+			entry: &db.RuntimeTranscriptEntry{
+				ProyectoID:     &projectID,
+				Stream:         "assistant",
+				Text:           "He terminado la microtarea",
+				NormalizedText: "he terminado la microtarea",
+			},
+			wantScenario: runtimeTranscriptEntregaEscenarioFinalizacion,
+			wantGit:      true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := resolverPoliticaEntregaRuntimeTranscript(tc.entry)
+			if got.Escenario != tc.wantScenario {
+				t.Fatalf("escenario inesperado: got=%s want=%s", got.Escenario, tc.wantScenario)
+			}
+			if got.PermiteMaterializar != tc.wantMaterial {
+				t.Fatalf("PermiteMaterializar inesperado: got=%t want=%t", got.PermiteMaterializar, tc.wantMaterial)
+			}
+			if got.PermiteRegistrarGit != tc.wantGit {
+				t.Fatalf("PermiteRegistrarGit inesperado: got=%t want=%t", got.PermiteRegistrarGit, tc.wantGit)
+			}
+		})
+	}
+}
+
+func TestProcesarEntregasDesdeRuntimeTranscriptIgnoraConsultaDelAgente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	if err := db.RegistrarAgente("GemmaConsulta", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	projectID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: tmp,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	specID, err := microprogramacionService.Crear(microprogramacionapp.EntradaCrearEspecificacion{
+		ProyectoID:      &projectID,
+		Titulo:          "modulo/worker.go::Worker",
+		ArchivoObjetivo: "modulo/worker.go",
+		SimboloObjetivo: "Worker",
+		Descripcion:     "No debe tratar una consulta como entrega",
+		WriteSet:        []string{"modulo/worker.go"},
+		TestsObligatorios: []string{
+			"go test ./modulo -count=1",
+		},
+		FormatoSalida: "ficheros+evidencia",
+		CreadoPor:     "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear especificacion: %v", err)
+	}
+	despacho, err := runtimesService.DispatchMicroprogramacionInstruction(runtimesapp.MicroprogramacionDispatchRequest{
+		AgenteDestino:    "GemmaConsulta",
+		ProyectoID:       &projectID,
+		Mensaje:          "Implementa el slice",
+		EspecificacionID: specID,
+		ArchivoObjetivo:  "modulo/worker.go",
+		SimboloObjetivo:  "Worker",
+		WriteSet:         []string{"modulo/worker.go"},
+		TestsObligatorios: []string{
+			"go test ./modulo -count=1",
+		},
+		FormatoSalida: "ficheros+evidencia",
+	})
+	if err != nil {
+		t.Fatalf("dispatch microprogramacion: %v", err)
+	}
+	runtimeID, err := db.RegistrarRuntimeInstance(&db.RuntimeInstance{
+		Agente:       "GemmaConsulta",
+		ProyectoID:   &projectID,
+		LogicalState: "disponible",
+		ProcessState: "running",
+	})
+	if err != nil {
+		t.Fatalf("registrar runtime: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"driver":    "remote_http",
+		"transport": "api",
+		"connector": "ollama_pool_local",
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at
+	) VALUES (?,?,?,?,?,?, 'activo', ?, CURRENT_TIMESTAMP)`,
+		"GemmaConsulta", projectID, runtimeID, "api", "session", "ollama-pool-gemmaconsulta", string(metaJSON)); err != nil {
+		t.Fatalf("insert handle: %v", err)
+	}
+	if _, err := runtimesService.RegistrarSalidaObservada("GemmaConsulta", &projectID, "¿Puedo seguir con otro archivo o prefieres que espere?"); err != nil {
+		t.Fatalf("registrar salida observada: %v", err)
+	}
+
+	n, err := procesarEntregasDesdeRuntimeTranscript()
+	if err != nil {
+		t.Fatalf("procesarEntregasDesdeRuntimeTranscript: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia registrar entrega para una consulta, got=%d", n)
+	}
+	order, err := runtimesService.GetRuntimeOrder(despacho.RuntimeOrderID)
+	if err != nil || order == nil {
+		t.Fatalf("get runtime order: %+v err=%v", order, err)
+	}
+	if order.Estado == "cancelada" || order.Estado == "completada" {
+		t.Fatalf("la consulta no deberia cerrar ni cancelar la orden original: %+v", order)
+	}
+	estadoPendiente := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: stringPtr("GemmaConsulta"), ProyectoID: &projectID, Estado: &estadoPendiente})
+	if err != nil {
+		t.Fatalf("listar runtime orders pendientes: %v", err)
+	}
+	for _, item := range orders {
+		if item == nil || item.ID == despacho.RuntimeOrderID || item.Tipo != "send_instruction" {
+			continue
+		}
+		if strings.Contains(item.PayloadJSON, "CORRECCION_OBLIGATORIA") {
+			t.Fatalf("no deberia abrir correccion por una consulta: %s", item.PayloadJSON)
+		}
+	}
+}
+
 func TestProcesarRuntimeTranscriptBatchRegistraEntregaGitPremiumActivaSinTranscript(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	repoDir := filepath.Join(tmp, "repo-git-transcript-premium-no-transcript")
