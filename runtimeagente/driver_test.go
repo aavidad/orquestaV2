@@ -1109,6 +1109,35 @@ func TestPrepareCLICodexResumeCorrigeCoordinatedRestartASessionResumeSinSendInpu
 	}
 }
 
+func TestPrepareCLICodexResumeCorrigeBootstrapOnlyASessionResumeSinSendInput(t *testing.T) {
+	plan, err := DefaultRegistry().Prepare(LaunchRequest{
+		Agente:       "Codex7",
+		ProyectoSlug: "orquestador",
+		ProyectoRuta: "/tmp/orquestador",
+		Conector: ConnectorConfig{
+			Slug:         "codex-cli",
+			Transporte:   "cli",
+			Comando:      "codex",
+			MetadataJSON: `{"can_send_input":false,"mailbox_delivery_mode":"bootstrap_only"}`,
+		},
+		Resume: ResumeContext{
+			ExternalSessionID: "sess-codex-7",
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if plan.Modo != "resume" {
+		t.Fatalf("modo inesperado: %+v", plan)
+	}
+	if plan.CanSendInput == nil || *plan.CanSendInput {
+		t.Fatalf("codex-cli resume no deberia habilitar input interactivo aqui: %+v", plan)
+	}
+	if plan.MailboxDeliveryMode != MailboxDeliverySessionResume {
+		t.Fatalf("codex-cli resume deberia corregir bootstrap_only a session_resume cuando hay sesion externa sin send_input: %+v", plan)
+	}
+}
+
 func TestPrepareCLIGeminiEmbebePromptInteractivo(t *testing.T) {
 	plan, err := DefaultRegistry().Prepare(LaunchRequest{
 		Agente:       "Gemini1",
