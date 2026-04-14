@@ -4675,6 +4675,11 @@ func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle) b
 	if handle == nil {
 		return false
 	}
+	if handle.SesionID == nil && handle.RuntimeID == nil {
+		// A fresh canonical handle can still route session_resume via the
+		// runtime/session external session even before the local link is hydrated.
+		return true
+	}
 	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON))
 	if err != nil || snap == nil {
 		return true
