@@ -157,3 +157,25 @@ func TestLooksLikeManualOperatorOutsideFleet(t *testing.T) {
 		}
 	}
 }
+
+func TestPoolUsesSharedLocalConnector(t *testing.T) {
+	cases := []struct {
+		name     string
+		runtime  string
+		metadata string
+		want     bool
+	}{
+		{name: "nil runtime", runtime: "", metadata: `{"conector_canonico":"ollama_pool_local"}`, want: false},
+		{name: "wrong runtime", runtime: "openai", metadata: `{"conector_canonico":"ollama_pool_local"}`, want: false},
+		{name: "empty metadata", runtime: "ollama", metadata: "", want: false},
+		{name: "empty json", runtime: "ollama", metadata: "{}", want: false},
+		{name: "invalid json", runtime: "ollama", metadata: "{", want: false},
+		{name: "wrong connector", runtime: "ollama", metadata: `{"conector_canonico":"otro"}`, want: false},
+		{name: "matching connector", runtime: "ollama", metadata: `{"conector_canonico":"ollama_pool_local"}`, want: true},
+	}
+	for _, tc := range cases {
+		if got := PoolUsesSharedLocalConnector(tc.runtime, tc.metadata); got != tc.want {
+			t.Fatalf("%s: PoolUsesSharedLocalConnector(%q, %q) = %v, want %v", tc.name, tc.runtime, tc.metadata, got, tc.want)
+		}
+	}
+}

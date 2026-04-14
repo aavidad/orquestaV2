@@ -992,18 +992,7 @@ func poolUsaConectorPoolLocalCompartido(pool *PoolCapacidad) bool {
 	if pool == nil {
 		return false
 	}
-	if !strings.EqualFold(strings.TrimSpace(pool.Runtime), "ollama") {
-		return false
-	}
-	raw := strings.TrimSpace(pool.MetadataJSON)
-	if raw == "" || raw == "{}" {
-		return false
-	}
-	var meta map[string]any
-	if err := json.Unmarshal([]byte(raw), &meta); err != nil {
-		return false
-	}
-	return strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "conector_canonico", "")), "ollama_pool_local")
+	return planificadorpolicy.PoolUsesSharedLocalConnector(pool.Runtime, pool.MetadataJSON)
 }
 
 func existeRuntimeOrderAbierta(agente string, proyectoID *int64, tipos ...string) (bool, error) {

@@ -1,6 +1,7 @@
 package planificadorpolicy
 
 import (
+	"encoding/json"
 	"sort"
 	"strings"
 )
@@ -138,6 +139,22 @@ func LooksLikeManualOperatorOutsideFleet(name string) bool {
 		}
 	}
 	return true
+}
+
+func PoolUsesSharedLocalConnector(runtime string, metadataJSON string) bool {
+	if !strings.EqualFold(strings.TrimSpace(runtime), "ollama") {
+		return false
+	}
+	raw := strings.TrimSpace(metadataJSON)
+	if raw == "" || raw == "{}" {
+		return false
+	}
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(raw), &meta); err != nil {
+		return false
+	}
+	value, _ := meta["conector_canonico"].(string)
+	return strings.EqualFold(strings.TrimSpace(value), "ollama_pool_local")
 }
 
 func AgentAllowedForAutobootstrapProject(agent, projectSlug, configuredProjectSlug string, allowedAgents []string) bool {
