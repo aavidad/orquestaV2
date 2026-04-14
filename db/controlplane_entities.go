@@ -9636,6 +9636,24 @@ func resolverBootstrapRuntimeLeasePendienteParaMailbox(mailboxID int64, handle *
 	return resolverBootstrapRuntimeLeaseConFiltro(mailboxID, handle, runtime, false)
 }
 
+type bootstrapRuntimeLeaseSelection struct {
+	order        *RuntimeOrder
+	startOrderID int64
+	mailboxIDs   []int64
+	sesionID     int64
+	score        int
+}
+
+func newBootstrapRuntimeLeaseSelection(order *RuntimeOrder, startOrderID int64, mailboxIDs []int64, sesionID int64, score int) bootstrapRuntimeLeaseSelection {
+	return bootstrapRuntimeLeaseSelection{
+		order:        order,
+		startOrderID: startOrderID,
+		mailboxIDs:   append([]int64(nil), mailboxIDs...),
+		sesionID:     sesionID,
+		score:        score,
+	}
+}
+
 func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHandle, runtime *RuntimeInstance, observed bool) (*RuntimeOrder, int64, []int64, int64, error) {
 	agente := ""
 	var proyectoID *int64
@@ -9667,13 +9685,7 @@ func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHand
 	if err != nil {
 		return nil, 0, nil, 0, err
 	}
-	var (
-		selectedOrder        *RuntimeOrder
-		selectedStartOrderID int64
-		selectedMailboxIDs   []int64
-		selectedSesionID     int64
-		selectedScore        int
-	)
+	var selected *bootstrapRuntimeLeaseSelection
 	for _, order := range candidates {
 		startOrderID, mailboxIDs, orderSesionID := runtimeBootstrapLeaseFromOrder(order)
 		var startOrder *RuntimeOrder
@@ -9721,58 +9733,49 @@ func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHand
 		}
 		orderMatchesTargetSession := targetSesionID > 0 && orderSesionID == targetSesionID
 		score := runtimeBootstrapLeaseAffinityScore(order, startOrder, handle, runtime, targetSesionID)
-		if selectedOrder == nil {
-			selectedOrder = order
-			selectedStartOrderID = startOrderID
-			selectedMailboxIDs = mailboxIDs
-			selectedSesionID = orderSesionID
-			selectedScore = score
+		if selected == nil {
+			candidate := newBootstrapRuntimeLeaseSelection(order, startOrderID, mailboxIDs, orderSesionID, score)
+			selected = &candidate
 			continue
 		}
-		selectedMatchesTargetSession := targetSesionID > 0 && selectedSesionID == targetSesionID
+		selectedMatchesTargetSession := targetSesionID > 0 && selected.sesionID == targetSesionID
 		if orderMatchesTargetSession != selectedMatchesTargetSession {
 			if !orderMatchesTargetSession {
 				continue
 			}
-			selectedOrder = order
-			selectedStartOrderID = startOrderID
-			selectedMailboxIDs = mailboxIDs
-			selectedSesionID = orderSesionID
-			selectedScore = score
+			candidate := newBootstrapRuntimeLeaseSelection(order, startOrderID, mailboxIDs, orderSesionID, score)
+			selected = &candidate
 			continue
 		}
-		if score < selectedScore {
+		if score < selected.score {
 			continue
 		}
-		if score == selectedScore {
+		if score == selected.score {
 			switch {
-			case runtimeBootstrapLeaseResumeDerivadoPrefiereStart(order, selectedOrder):
+			case runtimeBootstrapLeaseResumeDerivadoPrefiereStart(order, selected.order):
 				continue
-			case runtimeBootstrapLeaseResumeDerivadoPrefiereStart(selectedOrder, order):
+			case runtimeBootstrapLeaseResumeDerivadoPrefiereStart(selected.order, order):
 				// Prefiere la start fuente frente al resume derivado.
-			case runtimeBootstrapLeaseFuenteLigadaPrefiereSobreStart(order, selectedOrder):
+			case runtimeBootstrapLeaseFuenteLigadaPrefiereSobreStart(order, selected.order):
 				// Prefiere la bootstrap fuente cuando está enlazada a la start derivada.
-			case runtimeBootstrapLeaseFuenteLigadaPrefiereSobreStart(selectedOrder, order):
+			case runtimeBootstrapLeaseFuenteLigadaPrefiereSobreStart(selected.order, order):
 				continue
 			default:
-				if order.ID < selectedOrder.ID {
+				if order.ID < selected.order.ID {
 					continue
 				}
 			}
 		}
-		selectedOrder = order
-		selectedStartOrderID = startOrderID
-		selectedMailboxIDs = mailboxIDs
-		selectedSesionID = orderSesionID
-		selectedScore = score
+		candidate := newBootstrapRuntimeLeaseSelection(order, startOrderID, mailboxIDs, orderSesionID, score)
+		selected = &candidate
 	}
-	if selectedOrder == nil {
+	if selected == nil {
 		return nil, 0, nil, sesionID, nil
 	}
 	if targetSesionID <= 0 {
-		targetSesionID = selectedSesionID
+		targetSesionID = selected.sesionID
 	}
-	return selectedOrder, selectedStartOrderID, selectedMailboxIDs, targetSesionID, nil
+	return selected.order, selected.startOrderID, append([]int64(nil), selected.mailboxIDs...), targetSesionID, nil
 }
 
 func listarRuntimeOrdersBootstrapLeaseCandidatas(agente string, proyectoID *int64, observed bool) ([]*RuntimeOrder, error) {

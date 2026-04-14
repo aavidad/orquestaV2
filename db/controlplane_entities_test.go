@@ -4776,6 +4776,92 @@ func TestResolverBootstrapRuntimeLeasePendienteReconoceStartConMailbox(t *testin
 	}
 }
 
+func TestResolverBootstrapRuntimeLeasePendienteDevuelveMailboxIDsIndependientes(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	workingDir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir workdir: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Claude1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "claude-code",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Claude1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"microciclo premium"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Claude1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","mailbox_ids":[%d],"sesion_id":%d}`,
+			mailboxID, sesion.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start lease: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, startID); err != nil {
+		t.Fatalf("marcar start ejecutando: %v", err)
+	}
+
+	_, _, mailboxIDs, _, err := resolverBootstrapRuntimeLeasePendiente(handle, runtime)
+	if err != nil {
+		t.Fatalf("resolverBootstrapRuntimeLeasePendiente primer ciclo: %v", err)
+	}
+	if len(mailboxIDs) != 1 || mailboxIDs[0] != mailboxID {
+		t.Fatalf("mailbox_ids iniciales inesperados: %+v", mailboxIDs)
+	}
+
+	mailboxIDs[0] = 0
+
+	_, _, mailboxIDsAgain, _, err := resolverBootstrapRuntimeLeasePendiente(handle, runtime)
+	if err != nil {
+		t.Fatalf("resolverBootstrapRuntimeLeasePendiente segundo ciclo: %v", err)
+	}
+	if len(mailboxIDsAgain) != 1 || mailboxIDsAgain[0] != mailboxID {
+		t.Fatalf("mailbox_ids deberian recalcularse sin aliasing: %+v", mailboxIDsAgain)
+	}
+}
+
 func TestResolverBootstrapRuntimeLeasePendienteReconoceStartPendienteConLeaseVigente(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
