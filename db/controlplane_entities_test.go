@@ -6610,25 +6610,22 @@ func TestRuntimeOrderSendInstructionNudgeTMUXRetieneNotificadaSiSessionResumeTim
 	if err != nil {
 		t.Fatalf("get send order final: %v", err)
 	}
-	if sendOrder.Estado != "pendiente" {
-		t.Fatalf("nudge tmux session_resume deberia quedar pendiente/notificada tras timeout: %+v", sendOrder)
+	if sendOrder.Estado != "completada" {
+		t.Fatalf("nudge codex tmux deberia degradarse a mailbox durable: %+v", sendOrder)
 	}
-	if !strings.Contains(sendOrder.ResultadoJSON, `"dispatch_state":"notified"`) {
-		t.Fatalf("resultado sin dispatch_state notified: %s", sendOrder.ResultadoJSON)
+	if !strings.Contains(sendOrder.ResultadoJSON, `"mailbox_only":true`) {
+		t.Fatalf("resultado sin degradacion mailbox_only: %s", sendOrder.ResultadoJSON)
 	}
-	if !strings.Contains(sendOrder.ResultadoJSON, `"delivery_state":"notified"`) {
-		t.Fatalf("resultado sin delivery_state notified: %s", sendOrder.ResultadoJSON)
-	}
-	if !strings.Contains(sendOrder.ResultadoJSON, `session_resume dispatch pending receipt`) {
-		t.Fatalf("resultado sin razon de pending receipt: %s", sendOrder.ResultadoJSON)
+	if !strings.Contains(sendOrder.ResultadoJSON, `runtime_handle_session_resume_mailbox_only:nudge`) {
+		t.Fatalf("resultado sin razon mailbox_only:nudge: %s", sendOrder.ResultadoJSON)
 	}
 
 	msg, err := GetRuntimeMailbox(mailboxID)
 	if err != nil || msg == nil {
 		t.Fatalf("get mailbox final: %+v err=%v", msg, err)
 	}
-	if !strings.EqualFold(strings.TrimSpace(msg.Estado), "entregado") {
-		t.Fatalf("mailbox nudge deberia quedar entregado mientras espera receipt: %+v", msg)
+	if !strings.EqualFold(strings.TrimSpace(msg.Estado), "pendiente") {
+		t.Fatalf("mailbox nudge deberia quedar pendiente para conciliacion durable: %+v", msg)
 	}
 }
 
@@ -6744,7 +6741,9 @@ func TestRuntimeOrderSendInstructionAutonomiaTimeoutDegradaAMailboxDurable(t *te
 	if !strings.Contains(sendOrder.ResultadoJSON, `"mailbox_only":true`) || !strings.Contains(sendOrder.ResultadoJSON, `"deferred":true`) {
 		t.Fatalf("resultado sin marca mailbox_only: %s", sendOrder.ResultadoJSON)
 	}
-	if !strings.Contains(sendOrder.ResultadoJSON, `codex_long_text_mailbox_only:autonomia`) {
+	if !strings.Contains(sendOrder.ResultadoJSON, `runtime_handle_bootstrap_only_mailbox_only:autonomia`) &&
+		!strings.Contains(sendOrder.ResultadoJSON, `runtime_handle_session_resume_mailbox_only:autonomia`) &&
+		!strings.Contains(sendOrder.ResultadoJSON, `codex_long_text_mailbox_only:autonomia`) {
 		t.Fatalf("resultado sin degradacion durable esperada: %s", sendOrder.ResultadoJSON)
 	}
 
@@ -7091,11 +7090,11 @@ func TestRuntimeOrderSendInstructionNudgeTMUXSessionResumeNoQuedaMailboxOnly(t *
 	if sendOrder.Estado != "completada" {
 		t.Fatalf("send_instruction session_resume tmux deberia completarse: %+v", sendOrder)
 	}
-	if strings.Contains(sendOrder.ResultadoJSON, `"mailbox_only":true`) {
-		t.Fatalf("tmux session_resume no deberia degradar nudge a mailbox_only: %s", sendOrder.ResultadoJSON)
+	if !strings.Contains(sendOrder.ResultadoJSON, `"mailbox_only":true`) {
+		t.Fatalf("tmux session_resume codex deberia degradar nudge a mailbox_only: %s", sendOrder.ResultadoJSON)
 	}
-	if strings.Contains(sendOrder.ResultadoJSON, `runtime_handle_session_resume_mailbox_only:nudge`) {
-		t.Fatalf("tmux session_resume no deberia marcar reason mailbox_only:nudge: %s", sendOrder.ResultadoJSON)
+	if !strings.Contains(sendOrder.ResultadoJSON, `runtime_handle_session_resume_mailbox_only:nudge`) {
+		t.Fatalf("tmux session_resume codex deberia marcar reason mailbox_only:nudge: %s", sendOrder.ResultadoJSON)
 	}
 }
 

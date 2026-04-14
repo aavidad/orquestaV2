@@ -2794,6 +2794,70 @@ func TestAPIProyectoMicrocicloCreaTareaNuevaTrasLimpiarPruebas(t *testing.T) {
 	}
 }
 
+func TestAPIProyectoMicrocicloLimpioReutilizaTareaSiAgenteEstaEnCuota(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if _, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquesta",
+		Nombre:  "Orquesta",
+		RutaAbs: tmp,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	body, _ := json.Marshal(apiProyectoMicrocicloRequest{Agente: "Codex1"})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/proyectos/orquesta/autonomia/microciclo", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status microciclo inicial inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp apiProyectoMicrocicloResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode microciclo inicial: %v", err)
+	}
+	if resp.Resultado == nil || resp.Resultado.Tarea == nil {
+		t.Fatalf("resultado inicial inesperado: %+v", resp.Resultado)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', motivo_pausa='cuota' WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("set estado_cuota: %v", err)
+	}
+
+	bodyLimpio, _ := json.Marshal(apiProyectoMicrocicloRequest{
+		Agente:         "Codex1",
+		LimpiarPruebas: true,
+	})
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/api/proyectos/orquesta/autonomia/microciclo", bytes.NewReader(bodyLimpio))
+	req2.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("status microciclo limpio en cuota inesperado: %d body=%s", rec2.Code, rec2.Body.String())
+	}
+	var resp2 apiProyectoMicrocicloResponse
+	if err := json.Unmarshal(rec2.Body.Bytes(), &resp2); err != nil {
+		t.Fatalf("decode microciclo limpio en cuota: %v", err)
+	}
+	if resp2.Resultado == nil || resp2.Resultado.Tarea == nil {
+		t.Fatalf("resultado limpio en cuota inesperado: %+v", resp2.Resultado)
+	}
+	if !resp2.Resultado.TareaReutilizada || resp2.Resultado.Tarea.ID != resp.Resultado.Tarea.ID {
+		t.Fatalf("deberia reutilizar la tarea semilla existente bajo cuota: inicial=%+v limpio=%+v", resp.Resultado, resp2.Resultado)
+	}
+	if resp2.Resultado.Dispatch == nil || resp2.Resultado.Dispatch.DispatchRuntime == nil || resp2.Resultado.Dispatch.DispatchRuntime.Estado != "cuota_bloqueada" {
+		t.Fatalf("el microciclo en cuota deberia devolver dispatch bloqueado: %+v", resp2.Resultado.Dispatch)
+	}
+}
+
 func TestAPIProyectoMicrocicloSincronizaDirtyWorkspaceEnWorktreeActiva(t *testing.T) {
 	t.Setenv("ORQUESTA_SYNC_DIRTY_WORKSPACE_TO_WORKTREE", "true")
 

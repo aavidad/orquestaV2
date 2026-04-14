@@ -65,6 +65,17 @@ func (t *Throttler) Set(key string, at time.Time) {
 	t.last[key] = at.UTC()
 }
 
+// Forget elimina la marca temporal de una clave. Se usa cuando un intento
+// optimista no llegó a materializar trabajo real y no debe consumir cooldown.
+func (t *Throttler) Forget(key string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.last == nil {
+		return
+	}
+	delete(t.last, key)
+}
+
 // Gate permite limitar la frecuencia de una acción global basada en una expiración.
 type Gate struct {
 	mu      sync.Mutex

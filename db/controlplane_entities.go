@@ -6032,6 +6032,10 @@ func runtimeOrderSendInstructionDurableOnlyReason(handle *RuntimeHandle, payload
 	if handle == nil {
 		return "", false
 	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if runtimeHandleUsaCodexTTYInestable(meta) && runtimeOrderSendInstructionEsGuidanceDurableServidor(payload) {
+		return runtimeOrderSendInstructionMailboxOnlyReason(deliveryMode, payload), true
+	}
 	if reason := runtimeOrderSendInstructionLongTextReason(handle, payload, texto); reason != "" {
 		return reason, true
 	}
@@ -6050,6 +6054,10 @@ func runtimeOrderSendInstructionDurableOnlyReason(handle *RuntimeHandle, payload
 
 func runtimeOrderSendInstructionDebeIntentarSessionResume(handle *RuntimeHandle, runtime *RuntimeInstance, payload map[string]any, texto, externalSessionID, deliveryMode string, reboundToCanonical bool) bool {
 	if handle == nil || RuntimeHandlePermiteSendInputInteractivo(handle) {
+		return false
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if runtimeHandleUsaCodexTTYInestable(meta) && runtimeOrderSendInstructionEsGuidanceDurableServidor(payload) {
 		return false
 	}
 	if strings.TrimSpace(externalSessionID) == "" {
@@ -6077,6 +6085,18 @@ func runtimeOrderSendInstructionDebeIntentarSessionResume(handle *RuntimeHandle,
 		return false
 	}
 	return sessionResumeRequested && externalSessionKnown
+}
+
+func runtimeOrderSendInstructionEsGuidanceDurableServidor(payload map[string]any) bool {
+	if !runtimeOrderSendInstructionProvieneMailbox(payload) {
+		return false
+	}
+	switch strings.TrimSpace(stringFromMap(payload, "mailbox_kind", "")) {
+	case "nudge", "autonomia", "watchdog", MailboxKindGovernanceRefresh, MailboxKindSkillsRefresh:
+		return true
+	default:
+		return false
+	}
 }
 
 func runtimeHandlePermiteSessionResumeDirecto(handle *RuntimeHandle, sessionResumeRequested bool) bool {
@@ -8951,6 +8971,17 @@ func runtimeBootstrapLeaseAffinityScore(order *RuntimeOrder, handle *RuntimeHand
 	return score
 }
 
+func runtimeBootstrapLeaseLinkedToStart(order *RuntimeOrder, startOrder *RuntimeOrder) bool {
+	if order == nil || startOrder == nil {
+		return false
+	}
+	if strings.TrimSpace(startOrder.Tipo) != "start" {
+		return false
+	}
+	result := mapFromJSON(order.ResultadoJSON)
+	return int64FromAny(result["start_order_id"]) == startOrder.ID
+}
+
 func runtimeBootstrapLeaseMailboxIDsVigentes(mailboxIDs []int64) ([]int64, error) {
 	if len(mailboxIDs) == 0 {
 		return nil, nil
@@ -9411,46 +9442,9 @@ func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHand
 	}
 
 	targetSesionID := sesionID
-	candidates := make([]*RuntimeOrder, 0, 8)
-	for _, estado := range []string{"ejecutando", "tomada", "pendiente", "completada"} {
-		estado := estado
-		orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{
-			Agente:     &agente,
-			ProyectoID: proyectoID,
-			Estado:     &estado,
-		})
-		if err != nil {
-			return nil, 0, nil, 0, err
-		}
-		for _, order := range orders {
-			if order == nil {
-				continue
-			}
-			switch strings.TrimSpace(order.Tipo) {
-			case "handoff", "resume", "start":
-				res := mapFromJSON(order.ResultadoJSON)
-				if strings.TrimSpace(order.Estado) == "pendiente" {
-					if !runtimeOrderMantieneBootstrapLeasePendiente(res) &&
-						!boolFromAny(res["deferred"]) &&
-						stringFromMap(res, "estado_dispatch", "") == "" {
-						continue
-					}
-				}
-				if strings.TrimSpace(order.Estado) == "completada" {
-					leaseState := strings.TrimSpace(stringFromMap(res, "lease_state", ""))
-					if leaseState != "waiting_for_evidence" && leaseState != "delivered" {
-						continue
-					}
-					if len(int64SliceFromAny(res["mailbox_ids"])) == 0 {
-						continue
-					}
-				}
-				if runtimeBootstrapLeaseTieneReceiptUtil(res) != observed {
-					continue
-				}
-				candidates = append(candidates, order)
-			}
-		}
+	candidates, err := listarRuntimeOrdersBootstrapLeaseCandidatas(agente, proyectoID, observed)
+	if err != nil {
+		return nil, 0, nil, 0, err
 	}
 	var (
 		selectedOrder        *RuntimeOrder
@@ -9509,8 +9503,19 @@ func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHand
 		if score < selectedScore {
 			continue
 		}
-		if score == selectedScore && order.ID < selectedOrder.ID {
-			continue
+		if score == selectedScore {
+			orderLinkedToSelectedStart := runtimeBootstrapLeaseLinkedToStart(order, selectedOrder)
+			selectedLinkedToOrderStart := runtimeBootstrapLeaseLinkedToStart(selectedOrder, order)
+			switch {
+			case orderLinkedToSelectedStart && !selectedLinkedToOrderStart:
+				// Prefiere la bootstrap fuente cuando está enlazada a la start derivada.
+			case selectedLinkedToOrderStart && !orderLinkedToSelectedStart:
+				continue
+			default:
+				if order.ID < selectedOrder.ID {
+					continue
+				}
+			}
 		}
 		selectedOrder = order
 		selectedStartOrderID = startOrderID
@@ -9525,6 +9530,56 @@ func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHand
 		targetSesionID = selectedSesionID
 	}
 	return selectedOrder, selectedStartOrderID, selectedMailboxIDs, targetSesionID, nil
+}
+
+func listarRuntimeOrdersBootstrapLeaseCandidatas(agente string, proyectoID *int64, observed bool) ([]*RuntimeOrder, error) {
+	candidates := make([]*RuntimeOrder, 0, 8)
+	for _, estado := range []string{"ejecutando", "tomada", "pendiente", "completada"} {
+		estado := estado
+		orders, err := ListarRuntimeOrders(FiltroRuntimeOrders{
+			Agente:     &agente,
+			ProyectoID: proyectoID,
+			Estado:     &estado,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, order := range orders {
+			if runtimeOrderCalificaComoBootstrapLeaseCandidata(order, observed) {
+				candidates = append(candidates, order)
+			}
+		}
+	}
+	return candidates, nil
+}
+
+func runtimeOrderCalificaComoBootstrapLeaseCandidata(order *RuntimeOrder, observed bool) bool {
+	if order == nil {
+		return false
+	}
+	switch strings.TrimSpace(order.Tipo) {
+	case "handoff", "resume", "start":
+	default:
+		return false
+	}
+	res := mapFromJSON(order.ResultadoJSON)
+	switch strings.TrimSpace(order.Estado) {
+	case "pendiente":
+		if !runtimeOrderMantieneBootstrapLeasePendiente(res) &&
+			!boolFromAny(res["deferred"]) &&
+			stringFromMap(res, "estado_dispatch", "") == "" {
+			return false
+		}
+	case "completada":
+		leaseState := strings.TrimSpace(stringFromMap(res, "lease_state", ""))
+		if leaseState != "waiting_for_evidence" && leaseState != "delivered" {
+			return false
+		}
+		if len(int64SliceFromAny(res["mailbox_ids"])) == 0 {
+			return false
+		}
+	}
+	return runtimeBootstrapLeaseTieneReceiptUtil(res) == observed
 }
 
 func enriquecerResumeConContextoProyectoDB(resume *runtimeagente.ResumeContext, agente string, proyecto *Proyecto) {

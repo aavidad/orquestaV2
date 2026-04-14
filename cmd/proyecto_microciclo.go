@@ -76,7 +76,13 @@ func activarMicrocicloProyecto(ref string, req proyectoMicrocicloRequest) (*proy
 	if err != nil {
 		return nil, err
 	}
-	tarea, reutilizada, err := asegurarTareaMicrociclo(proyecto, agente, req, !req.LimpiarPruebas)
+	reutilizarTarea := !req.LimpiarPruebas
+	if bloqueado, _, err := agenteBloqueadoPorCuotaPipeline(agente); err != nil {
+		return nil, err
+	} else if bloqueado {
+		reutilizarTarea = true
+	}
+	tarea, reutilizada, err := asegurarTareaMicrociclo(proyecto, agente, req, reutilizarTarea)
 	if err != nil {
 		return nil, err
 	}

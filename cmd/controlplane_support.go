@@ -14,6 +14,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ import (
 
 	"orquesta/agentesapp"
 	"orquesta/capacidadapp"
+	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/gitgobernanza"
 	"orquesta/internal/controlruntime"
@@ -174,12 +176,19 @@ func autonomiaIdleAutoassignShouldAttempt(agente string, proyectoID int64) bool 
 }
 
 func autonomiaContinueNudgeShouldAttempt(agente string, proyectoID, tareaID int64) bool {
-	agente = strings.ToLower(strings.TrimSpace(agente))
-	if agente == "" || proyectoID <= 0 || tareaID <= 0 {
+	key := autonomiaContinueNudgeThrottleKey(agente, proyectoID, tareaID)
+	if key == "" {
 		return false
 	}
-	key := agente + "|" + strconv.FormatInt(proyectoID, 10) + "|" + strconv.FormatInt(tareaID, 10)
 	return autonomiaContinueNudgeGate.Allow(key, autonomiaContinueNudgeInterval())
+}
+
+func autonomiaContinueNudgeThrottleKey(agente string, proyectoID, tareaID int64) string {
+	agente = strings.ToLower(strings.TrimSpace(agente))
+	if agente == "" || proyectoID <= 0 || tareaID <= 0 {
+		return ""
+	}
+	return agente + "|" + strconv.FormatInt(proyectoID, 10) + "|" + strconv.FormatInt(tareaID, 10)
 }
 
 func presupuestoPrimerUsoSesion(nombre string) bool {
@@ -2157,6 +2166,11 @@ func procesarRuntimeMailboxBatch() (int, error) {
 		return quotaPipelineReconciled + reconciled + refreshCooldownReconciled, err
 	}
 	reconciled += refreshCooldownReconciled
+	instructionCooldownReconciled, err := reconciliarRuntimeMailboxInstructionEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
+	if err != nil {
+		return quotaPipelineReconciled + reconciled + instructionCooldownReconciled, err
+	}
+	reconciled += instructionCooldownReconciled
 	watchdogReconciled, err := reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
 		return quotaPipelineReconciled + reconciled + watchdogReconciled, err
@@ -2174,11 +2188,15 @@ func procesarRuntimeMailboxBatch() (int, error) {
 	if err != nil {
 		return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX, err
 	}
+	guidanceInbox, err := reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox, consumed, snapshot)
+	if err != nil {
+		return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + guidanceInbox, err
+	}
 	restarts, err := procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + restarts, err
+		return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + guidanceInbox + restarts, err
 	}
-	return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + restarts, nil
+	return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + guidanceInbox + restarts, nil
 }
 
 func reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
@@ -2360,6 +2378,35 @@ func reconciliarRuntimeMailboxAgenteSinVidaBatchConMailbox(mailbox []*db.Runtime
 	return total, nil
 }
 
+func reconciliarRuntimeMailboxInstructionEnfriamientoBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
+	total := 0
+	for _, msg := range mailbox {
+		if msg == nil || !runtimeMailboxInstructionPuedeConsumirsePorEnfriamiento(msg, snapshot) {
+			continue
+		}
+		if _, skip := consumed[msg.ID]; skip {
+			continue
+		}
+		if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+			return total, err
+		} else if !canConsume {
+			continue
+		}
+		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+			return total, err
+		}
+		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return total, err
+		}
+		db.Audit("orquesta", "runtime_mailbox_instruction_enfriamiento", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("agente=%s kind=%s instruction consumida por agente en enfriamiento",
+				strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
+		consumed[msg.ID] = struct{}{}
+		total++
+	}
+	return total, nil
+}
+
 func reconciliarRuntimeMailboxWatchdogSinHandleBatch() (int, error) {
 	estado := "pendiente"
 	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &estado})
@@ -2445,6 +2492,17 @@ func runtimeMailboxRefreshPuedeConsumirsePorEnfriamiento(msg *db.RuntimeMailboxM
 	switch strings.TrimSpace(msg.Kind) {
 	case db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
 	default:
+		return false
+	}
+	ok, err := snapshot.quotaMatches(strings.TrimSpace(msg.ToAgente), "enfriamiento")
+	if err != nil {
+		return false
+	}
+	return ok
+}
+
+func runtimeMailboxInstructionPuedeConsumirsePorEnfriamiento(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) bool {
+	if msg == nil || !strings.EqualFold(strings.TrimSpace(msg.Kind), "instruction") {
 		return false
 	}
 	ok, err := snapshot.quotaMatches(strings.TrimSpace(msg.ToAgente), "enfriamiento")
@@ -4096,39 +4154,13 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 				total++
 				continue
 			}
-			if covered, _, _, err := db.RuntimeMailboxCubiertoPorBootstrapPendiente(msg.ID, handle, runtimeInstance); err != nil {
-				return total, err
-			} else if covered {
-				continue
-			}
-			if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
-				return total, err
-			} else if abierta {
-				continue
-			}
-			if dedupe, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, ""); err != nil {
-				return total, err
-			} else if dedupe {
-				continue
-			}
-			orderID, err := encolarSendInstructionDesdeRuntimeMailbox(msg, handle, texto, "")
+			dispatch, err := encolarRuntimeMailboxSessionResumeSiCorresponde(msg, consumed, snapshot, handle, runtimeInstance, texto, "", "runtime_mailbox_session_resume_interactive_fallback", "runtime_mailbox_session_resume_interactive_supersede")
 			if err != nil {
 				return total, err
 			}
-			if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) {
-				superseded, err := db.ConsumirRuntimeMailboxPendienteSupersedido(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, strings.TrimSpace(msg.Kind), msg.ID)
-				if err != nil {
-					return total, err
-				}
-				if superseded > 0 {
-					db.Audit("orquesta", "runtime_mailbox_session_resume_interactive_supersede", "runtime_mailbox", msg.ID,
-						fmt.Sprintf("agente=%s kind=%s superseded=%d", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), superseded))
-				}
+			if dispatch {
+				total++
 			}
-			db.Audit("orquesta", "runtime_mailbox_session_resume_interactive_fallback", "runtime_order", orderID,
-				fmt.Sprintf("mailbox_id=%d agente=%s kind=%s", msg.ID, strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
-			consumed[msg.ID] = struct{}{}
-			total++
 			continue
 		}
 		if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "session_resume", time.Now().UTC()); err != nil {
@@ -4153,36 +4185,51 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 		if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliverySessionResume {
 			continue
 		}
-		if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
-			return total, err
-		} else if abierta {
-			continue
-		}
-		if dedupe, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, externalSessionID); err != nil {
-			return total, err
-		} else if dedupe {
-			continue
-		}
-		orderID, err := encolarSendInstructionDesdeRuntimeMailbox(msg, handle, texto, externalSessionID)
+		dispatch, err := encolarRuntimeMailboxSessionResumeSiCorresponde(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID, "runtime_mailbox_session_resume", "runtime_mailbox_session_resume_supersede")
 		if err != nil {
 			return total, err
 		}
-		if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) {
-			superseded, err := db.ConsumirRuntimeMailboxPendienteSupersedido(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, strings.TrimSpace(msg.Kind), msg.ID)
-			if err != nil {
-				return total, err
-			}
-			if superseded > 0 {
-				db.Audit("orquesta", "runtime_mailbox_session_resume_supersede", "runtime_mailbox", msg.ID,
-					fmt.Sprintf("agente=%s kind=%s superseded=%d", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), superseded))
-			}
+		if dispatch {
+			total++
 		}
-		db.Audit("orquesta", "runtime_mailbox_session_resume", "runtime_order", orderID,
-			fmt.Sprintf("mailbox_id=%d agente=%s kind=%s", msg.ID, strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
-		consumed[msg.ID] = struct{}{}
-		total++
 	}
 	return total, nil
+}
+
+func encolarRuntimeMailboxSessionResumeSiCorresponde(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, texto, externalSessionID, auditAction, supersedeAction string) (bool, error) {
+	if covered, _, _, err := db.RuntimeMailboxCubiertoPorBootstrapPendiente(msg.ID, handle, runtimeInstance); err != nil {
+		return false, err
+	} else if covered {
+		return false, nil
+	}
+	if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
+		return false, err
+	} else if abierta {
+		return false, nil
+	}
+	if dedupe, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, externalSessionID); err != nil {
+		return false, err
+	} else if dedupe {
+		return false, nil
+	}
+	orderID, err := encolarSendInstructionDesdeRuntimeMailbox(msg, handle, texto, externalSessionID)
+	if err != nil {
+		return false, err
+	}
+	if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) {
+		superseded, err := db.ConsumirRuntimeMailboxPendienteSupersedido(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, strings.TrimSpace(msg.Kind), msg.ID)
+		if err != nil {
+			return false, err
+		}
+		if superseded > 0 {
+			db.Audit("orquesta", strings.TrimSpace(supersedeAction), "runtime_mailbox", msg.ID,
+				fmt.Sprintf("agente=%s kind=%s superseded=%d", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), superseded))
+		}
+	}
+	db.Audit("orquesta", strings.TrimSpace(auditAction), "runtime_order", orderID,
+		fmt.Sprintf("mailbox_id=%d agente=%s kind=%s", msg.ID, strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
+	consumed[msg.ID] = struct{}{}
+	return true, nil
 }
 
 func runtimeHandleAdmiteFallbackInteractivoTransitorio(handle *db.RuntimeHandle) bool {
@@ -4302,6 +4349,58 @@ func procesarRuntimeMailboxBootstrapTMUXBatchConMailbox(mailbox []*db.RuntimeMai
 	return total, nil
 }
 
+func reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
+	total := 0
+	for _, msg := range mailbox {
+		if msg == nil || !runtimeMailboxGuidanceDurablePersistibleEnInbox(msg) {
+			continue
+		}
+		if _, skip := consumed[msg.ID]; skip {
+			continue
+		}
+		handle, err := snapshot.activeHandle(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+		if err != nil {
+			return total, err
+		}
+		if handle == nil {
+			continue
+		}
+		if !runtimeMailboxGuidanceDurableUsaInbox(handle) {
+			continue
+		}
+		if ok, err := runtimeMailboxGuidanceDurableTieneEntregaMailboxOnly(snapshot, msg, handle); err != nil {
+			return total, err
+		} else if !ok {
+			continue
+		}
+		if msg.ProyectoID == nil || *msg.ProyectoID <= 0 {
+			continue
+		}
+		proyecto, err := snapshot.project(*msg.ProyectoID)
+		if err != nil {
+			return total, err
+		}
+		if proyecto == nil {
+			continue
+		}
+		tarea, err := tareaActivaAutonomiaProyectoAgente(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+		if err != nil {
+			return total, err
+		}
+		if err := escribirInboxRuntimeMailboxDurable(proyecto, strings.TrimSpace(msg.ToAgente), tarea, msg, handle); err != nil {
+			return total, err
+		}
+		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+			return total, err
+		}
+		db.Audit("orquesta", "runtime_mailbox_guidance_durable_inbox", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("agente=%s proyecto=%s kind=%s", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(proyecto.Slug), strings.TrimSpace(msg.Kind)))
+		consumed[msg.ID] = struct{}{}
+		total++
+	}
+	return total, nil
+}
+
 func runtimeHandleListaParaDispatchBootstrapTMUX(handle *db.RuntimeHandle) bool {
 	if handle == nil {
 		return false
@@ -4319,6 +4418,225 @@ func runtimeHandleListaParaDispatchBootstrapTMUX(handle *db.RuntimeHandle) bool 
 	}
 	ready, _ := snap.ReadyForTextDispatch(time.Now().UTC(), time.Minute)
 	return ready
+}
+
+func runtimeMailboxGuidanceDurablePersistibleEnInbox(msg *db.RuntimeMailboxMessage) bool {
+	if msg == nil {
+		return false
+	}
+	switch strings.TrimSpace(msg.Kind) {
+	case "autonomia", "nudge", "watchdog", db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
+		return true
+	default:
+		return false
+	}
+}
+
+func runtimeMailboxGuidanceDurableUsaInbox(handle *db.RuntimeHandle) bool {
+	if handle == nil || db.RuntimeHandlePermiteSendInputInteractivo(handle) {
+		return false
+	}
+	meta := mapFromJSON(strings.TrimSpace(handle.MetadataJSON))
+	driver := strings.TrimSpace(stringMapValue(meta, "driver"))
+	return strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
+		strings.EqualFold(driver, "tmux_cli_session")
+}
+
+func runtimeMailboxGuidanceDurableTieneEntregaMailboxOnly(snapshot *runtimeMailboxBatchSnapshot, msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle) (bool, error) {
+	if snapshot == nil || msg == nil || handle == nil {
+		return false, nil
+	}
+	agente := strings.TrimSpace(msg.ToAgente)
+	if agente == "" {
+		return false, nil
+	}
+	currentSessionID, err := runtimeMailboxGuidanceDurableExternalSessionID(handle)
+	if err != nil {
+		return false, err
+	}
+	currentSignature := runtimeMailboxDeliveryAttemptSignature(handle, currentSessionID)
+	orders, err := snapshot.ordersForAgentProject(agente, msg.ProyectoID)
+	if err != nil {
+		return false, err
+	}
+	for _, order := range orders {
+		if !runtimeOrderMatchesMailboxSendInstructionAttempt(order, msg.ID, handle.ID) {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(order.Estado), "completada") &&
+			runtimeOrderMailboxOnlyResult(order.ResultadoJSON) &&
+			runtimeOrderMatchesCurrentMailboxDeliveryAttempt(order, currentSessionID, currentSignature) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func runtimeMailboxGuidanceDurableExternalSessionID(handle *db.RuntimeHandle) (string, error) {
+	if handle == nil {
+		return "", nil
+	}
+	if ext := strings.TrimSpace(stringFromMetadataJSON(handle.MetadataJSON, "external_session_id")); ext != "" {
+		return ext, nil
+	}
+	if handle.SesionID != nil && *handle.SesionID > 0 {
+		sesion, err := db.GetSesionByID(*handle.SesionID)
+		if err != nil {
+			return "", err
+		}
+		if sesion != nil && strings.TrimSpace(sesion.ExternalSessionID) != "" {
+			return strings.TrimSpace(sesion.ExternalSessionID), nil
+		}
+	}
+	return "", nil
+}
+
+func runtimeOrderMatchesCurrentMailboxDeliveryAttempt(order *db.RuntimeOrder, currentSessionID, currentSignature string) bool {
+	if order == nil || !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) {
+		return false
+	}
+	orderSignature := runtimeOrderDeliveryAttemptSignature(order.PayloadJSON)
+	if currentSignature != "" && orderSignature != "" && currentSignature == orderSignature {
+		return true
+	}
+	orderSessionID := strings.TrimSpace(runtimeOrderExternalSessionIDFromJSON(order.PayloadJSON))
+	if currentSessionID != "" && orderSessionID != "" && currentSessionID == orderSessionID {
+		return true
+	}
+	if currentSignature != "" {
+		return false
+	}
+	return runtimeOrderCompletedMailboxAttemptStillBlocks(order, currentSessionID, currentSignature)
+}
+
+func tareaActivaAutonomiaProyectoAgente(agente string, proyectoID *int64) (*db.Tarea, error) {
+	if strings.TrimSpace(agente) == "" || proyectoID == nil || *proyectoID <= 0 {
+		return nil, nil
+	}
+	tareaID, err := db.GetTareaActivaIDPorAgenteProyecto(strings.TrimSpace(agente), proyectoID)
+	if err != nil || tareaID <= 0 {
+		return nil, err
+	}
+	return db.GetTarea(tareaID)
+}
+
+func escribirInboxRuntimeMailboxDurable(proyecto *db.Proyecto, agente string, tarea *db.Tarea, msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle) error {
+	if proyecto == nil || msg == nil {
+		return nil
+	}
+	agente = strings.TrimSpace(agente)
+	base := strings.TrimSpace(proyecto.RutaAbs)
+	if ruta, err := resolverRutaInboxRuntimeMailboxDurable(proyecto, agente, handle); err != nil {
+		return err
+	} else if strings.TrimSpace(ruta) != "" {
+		base = strings.TrimSpace(ruta)
+	}
+	if base == "" {
+		return nil
+	}
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(base, ".orquesta-inbox.md")
+	return os.WriteFile(path, []byte(construirInboxRuntimeMailboxDurableMarkdown(proyecto, tarea, msg)), 0o644)
+}
+
+func resolverRutaInboxRuntimeMailboxDurable(proyecto *db.Proyecto, agente string, handle *db.RuntimeHandle) (string, error) {
+	if proyecto == nil {
+		return "", nil
+	}
+	agente = strings.TrimSpace(agente)
+	if ruta, err := runtimeMailboxGuidanceDurableWorkingDir(handle); err != nil {
+		return "", err
+	} else if strings.TrimSpace(ruta) != "" {
+		return strings.TrimSpace(ruta), nil
+	}
+	if worktree, err := (worktreeRuntimeService{}).ResolveActiveWorktree(strings.TrimSpace(proyecto.Slug), agente); err == nil && worktree != nil && strings.TrimSpace(worktree.RutaAbs) != "" {
+		return strings.TrimSpace(worktree.RutaAbs), nil
+	}
+	estado := coordinacion.WorktreeActive
+	filter := coordinacion.WorktreeFilter{ProjectID: &proyecto.ID, State: &estado}
+	if agente != "" {
+		filter.Agent = &agente
+	}
+	worktrees, err := db.ListarWorktreesCoordRaw(filter)
+	if err != nil {
+		return "", err
+	}
+	for _, item := range worktrees {
+		if item == nil {
+			continue
+		}
+		ruta := strings.TrimSpace(item.Path)
+		if ruta == "" {
+			continue
+		}
+		info, err := os.Stat(ruta)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		return ruta, nil
+	}
+	return strings.TrimSpace(proyecto.RutaAbs), nil
+}
+
+func runtimeMailboxGuidanceDurableWorkingDir(handle *db.RuntimeHandle) (string, error) {
+	if handle == nil {
+		return "", nil
+	}
+	if handle.SesionID != nil && *handle.SesionID > 0 {
+		sesion, err := db.GetSesionByID(*handle.SesionID)
+		if err != nil {
+			return "", err
+		}
+		if sesion != nil {
+			cwd := strings.TrimSpace(sesion.CWD)
+			if cwd != "" {
+				if info, err := os.Stat(cwd); err == nil && info.IsDir() {
+					return cwd, nil
+				}
+			}
+		}
+	}
+	if cwd := strings.TrimSpace(stringFromMetadataJSON(handle.MetadataJSON, "working_dir")); cwd != "" {
+		if info, err := os.Stat(cwd); err == nil && info.IsDir() {
+			return cwd, nil
+		}
+	}
+	return "", nil
+}
+
+func construirInboxRuntimeMailboxDurableMarkdown(proyecto *db.Proyecto, tarea *db.Tarea, msg *db.RuntimeMailboxMessage) string {
+	base := strings.TrimSpace(construirInboxMicrocicloMarkdown(proyecto, tarea))
+	if base == "" {
+		base = "# Inbox Activa de Orquesta\n"
+	}
+	payload := map[string]any{}
+	if strings.TrimSpace(msg.PayloadJSON) != "" {
+		_ = json.Unmarshal([]byte(msg.PayloadJSON), &payload)
+	}
+	lineas := []string{
+		strings.TrimRight(base, "\n"),
+		"",
+		"## Guidance Durable",
+		fmt.Sprintf("- Mailbox: `%d`", msg.ID),
+		fmt.Sprintf("- Kind: `%s`", strings.TrimSpace(msg.Kind)),
+	}
+	if accion := strings.TrimSpace(stringMapValue(payload, "accion")); accion != "" {
+		lineas = append(lineas, fmt.Sprintf("- Accion: `%s`", accion))
+	}
+	if instruction := strings.TrimSpace(stringMapValue(payload, "instruction")); instruction != "" {
+		lineas = append(lineas, "", "### Instruccion vigente", instruction)
+	} else if texto := strings.TrimSpace(stringMapValue(payload, "texto")); texto != "" {
+		lineas = append(lineas, "", "### Contexto", texto)
+	}
+	lineas = append(lineas,
+		"",
+		"## Regla de lectura",
+		"- Esta inbox durable sustituye guidance repetida en caliente para este runtime.",
+		"- Si retomas trabajo tras quedar idle o tras reinicio, vuelve a leer esta inbox antes de tocar codigo.",
+	)
+	return strings.TrimSpace(strings.Join(lineas, "\n")) + "\n"
 }
 
 func runtimeHandleListaParaDispatchInteractivo(handle *db.RuntimeHandle) bool {
@@ -6568,6 +6886,10 @@ func procesarDecisionContinuarTrabajoSesionActivaAutonomia(sesion *db.Sesion, pr
 	if err != nil || !debe {
 		return 0, err
 	}
+	throttleKey := autonomiaContinueNudgeThrottleKey(sesion.Agente, proyecto.ID, tareaID)
+	if !autonomiaContinueNudgeShouldAttempt(sesion.Agente, proyecto.ID, tareaID) {
+		return 0, nil
+	}
 	if ok, err := encolarNudgeAutonomiaConInvalidacion(
 		snapshot,
 		sesion.Agente,
@@ -6577,9 +6899,15 @@ func procesarDecisionContinuarTrabajoSesionActivaAutonomia(sesion *db.Sesion, pr
 		"Sigue con la tarea activa y cierra el siguiente slice útil del frente actual dentro del write-set y tests definidos.",
 		map[string]any{"tarea_id": tareaID, "motivo_autoasignacion": "sesion_activa_stale"},
 	); err != nil {
+		if throttleKey != "" {
+			autonomiaContinueNudgeGate.Forget(throttleKey)
+		}
 		return 0, err
 	} else if ok {
 		return 1, nil
+	}
+	if throttleKey != "" {
+		autonomiaContinueNudgeGate.Forget(throttleKey)
 	}
 	return 0, nil
 }
@@ -6622,9 +6950,6 @@ func sesionActivaDebeRecibirNudgeContinuacion(sesion *db.Sesion, proyecto *db.Pr
 	tareaID, err := db.GetTareaActivaIDPorAgenteProyecto(sesion.Agente, sesion.ProyectoID)
 	if err != nil || tareaID <= 0 {
 		return 0, false, err
-	}
-	if !autonomiaContinueNudgeShouldAttempt(sesion.Agente, proyecto.ID, tareaID) {
-		return tareaID, false, nil
 	}
 	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
 	if err != nil || handle == nil {
