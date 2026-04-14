@@ -4447,7 +4447,7 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 		}
 		if covered, _, _, err := db.RuntimeMailboxCubiertoPorBootstrapPendiente(msg.ID, handle, runtimeInstance); err != nil {
 			return total, err
-		} else if covered {
+		} else if covered && !runtimeMailboxBootstrapPendientePermiteGuidanceDurable(msg, handle) {
 			continue
 		}
 		if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliverySessionResume {
@@ -4470,7 +4470,7 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 func encolarRuntimeMailboxSessionResumeSiCorresponde(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, texto, externalSessionID, auditAction, supersedeAction string) (bool, error) {
 	if covered, _, _, err := db.RuntimeMailboxCubiertoPorBootstrapPendiente(msg.ID, handle, runtimeInstance); err != nil {
 		return false, err
-	} else if covered {
+	} else if covered && !runtimeMailboxBootstrapPendientePermiteGuidanceDurable(msg, handle) {
 		return false, nil
 	}
 	if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
@@ -4670,6 +4670,10 @@ func reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox []*d
 		total++
 	}
 	return total, nil
+}
+
+func runtimeMailboxBootstrapPendientePermiteGuidanceDurable(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle) bool {
+	return runtimeMailboxGuidanceDurablePersistibleEnInbox(msg) && runtimeMailboxGuidanceDurableUsaInbox(handle)
 }
 
 func runtimeHandleListaParaDispatchBootstrapTMUX(handle *db.RuntimeHandle) bool {
