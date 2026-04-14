@@ -54,7 +54,8 @@ func TestDBNoIntroduceDependenciasInternasFueraDeLaFronteraPermitida(t *testing.
 			"verificacion_persistencia.go": {},
 		},
 		"orquesta/gobernanzapolicy": {
-			"reglas.go": {},
+			"governance_overrides.go": {},
+			"reglas.go":               {},
 		},
 		"orquesta/skillspolicy": {
 			"skills_catalog.go": {},

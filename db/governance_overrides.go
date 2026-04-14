@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"orquesta/gobernanzapolicy"
 	"sort"
 	"strconv"
 	"strings"
@@ -11,15 +12,15 @@ import (
 )
 
 const (
-	GovernanceScopeProyecto = "proyecto"
-	GovernanceScopeAgente   = "agente"
+	GovernanceScopeProyecto = gobernanzapolicy.ScopeProject
+	GovernanceScopeAgente   = gobernanzapolicy.ScopeAgent
 
-	GovernanceEntityRegla    = "regla"
-	GovernanceEntitySkill    = "skill"
-	GovernanceEntityWorkflow = "workflow"
+	GovernanceEntityRegla    = gobernanzapolicy.EntityRule
+	GovernanceEntitySkill    = gobernanzapolicy.EntitySkill
+	GovernanceEntityWorkflow = gobernanzapolicy.EntityWorkflow
 
-	GovernanceActionEnable  = "enable"
-	GovernanceActionDisable = "disable"
+	GovernanceActionEnable  = gobernanzapolicy.ActionEnable
+	GovernanceActionDisable = gobernanzapolicy.ActionDisable
 )
 
 type GovernanceOverride struct {
@@ -41,23 +42,17 @@ func GuardarGovernanceOverride(actor string, item *GovernanceOverride) (int64, e
 	if item == nil {
 		return 0, fmt.Errorf("override obligatorio")
 	}
-	item.ScopeTipo = strings.TrimSpace(item.ScopeTipo)
-	item.ScopeRef = strings.TrimSpace(item.ScopeRef)
-	item.Entidad = strings.TrimSpace(item.Entidad)
-	item.Accion = strings.TrimSpace(item.Accion)
-	item.TipoAgente = strings.TrimSpace(item.TipoAgente)
-
-	if !governanceScopeValido(item.ScopeTipo) {
-		return 0, fmt.Errorf("scope_tipo invalido: %s", item.ScopeTipo)
+	spec, err := gobernanzapolicy.NormalizeOverrideSpec(item.ScopeTipo, item.Entidad, item.Accion)
+	if err != nil {
+		return 0, err
 	}
+	item.ScopeTipo = spec.ScopeType
+	item.ScopeRef = strings.TrimSpace(item.ScopeRef)
+	item.Entidad = spec.Entity
+	item.Accion = spec.Action
+	item.TipoAgente = strings.TrimSpace(item.TipoAgente)
 	if item.ScopeRef == "" {
 		return 0, fmt.Errorf("scope_ref obligatorio")
-	}
-	if !governanceEntidadValida(item.Entidad) {
-		return 0, fmt.Errorf("entidad invalida: %s", item.Entidad)
-	}
-	if !governanceAccionValida(item.Accion) {
-		return 0, fmt.Errorf("accion invalida: %s", item.Accion)
 	}
 	if item.EntidadID <= 0 {
 		return 0, fmt.Errorf("entidad_id obligatorio")
@@ -413,33 +408,6 @@ func governanceEntidadTipoAgente(entidad string, entidadID int64) (string, error
 		return item.TipoAgente, nil
 	default:
 		return "", fmt.Errorf("entidad invalida: %s", entidad)
-	}
-}
-
-func governanceScopeValido(scope string) bool {
-	switch strings.TrimSpace(scope) {
-	case GovernanceScopeProyecto, GovernanceScopeAgente:
-		return true
-	default:
-		return false
-	}
-}
-
-func governanceEntidadValida(entidad string) bool {
-	switch strings.TrimSpace(entidad) {
-	case GovernanceEntityRegla, GovernanceEntitySkill, GovernanceEntityWorkflow:
-		return true
-	default:
-		return false
-	}
-}
-
-func governanceAccionValida(accion string) bool {
-	switch strings.TrimSpace(accion) {
-	case GovernanceActionEnable, GovernanceActionDisable:
-		return true
-	default:
-		return false
 	}
 }
 
