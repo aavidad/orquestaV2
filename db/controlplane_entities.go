@@ -9492,8 +9492,21 @@ func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHand
 		if targetSesionID > 0 && orderSesionID > 0 && orderSesionID != targetSesionID {
 			continue
 		}
+		orderMatchesTargetSession := targetSesionID > 0 && orderSesionID == targetSesionID
 		score := runtimeBootstrapLeaseAffinityScore(order, handle, runtime, targetSesionID)
 		if selectedOrder == nil {
+			selectedOrder = order
+			selectedStartOrderID = startOrderID
+			selectedMailboxIDs = mailboxIDs
+			selectedSesionID = orderSesionID
+			selectedScore = score
+			continue
+		}
+		selectedMatchesTargetSession := targetSesionID > 0 && selectedSesionID == targetSesionID
+		if orderMatchesTargetSession != selectedMatchesTargetSession {
+			if !orderMatchesTargetSession {
+				continue
+			}
 			selectedOrder = order
 			selectedStartOrderID = startOrderID
 			selectedMailboxIDs = mailboxIDs

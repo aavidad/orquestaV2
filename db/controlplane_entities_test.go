@@ -5337,6 +5337,117 @@ func TestResolverBootstrapRuntimeLeasePendientePrefiereLeaseLigadaAlHandleActual
 	}
 }
 
+func TestResolverBootstrapRuntimeLeasePendientePrefiereLeaseDeSesionActualSobreLeaseSinSesion(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	workingDir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir workdir: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Claude1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "claude-code",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	sessionMailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Claude1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"bootstrap de la sesion actual"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox actual: %v", err)
+	}
+	sessionStartID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Claude1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","mailbox_ids":[%d],"sesion_id":%d}`,
+			sessionMailboxID, sesion.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start actual: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, sessionStartID); err != nil {
+		t.Fatalf("marcar start actual ejecutando: %v", err)
+	}
+
+	sessionlessMailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Claude1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"lease vieja sin sesion"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox sin sesion: %v", err)
+	}
+	sessionlessResumeID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Claude1",
+		ProyectoID: &proyectoID,
+		Tipo:       "resume",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","mailbox_ids":[%d]}`,
+			sessionlessMailboxID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar resume sin sesion: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, sessionlessResumeID); err != nil {
+		t.Fatalf("marcar resume sin sesion ejecutando: %v", err)
+	}
+
+	order, startOrderID, mailboxIDs, sesionID, err := resolverBootstrapRuntimeLeasePendiente(handle, runtime)
+	if err != nil {
+		t.Fatalf("resolverBootstrapRuntimeLeasePendiente: %v", err)
+	}
+	if order == nil || order.ID != sessionStartID {
+		t.Fatalf("deberia priorizar la lease ligada a la sesion actual: %+v", order)
+	}
+	if startOrderID != 0 {
+		t.Fatalf("start_order_id inesperado para start bootstrap: %d", startOrderID)
+	}
+	if sesionID != sesion.ID {
+		t.Fatalf("sesion_id inesperado: got=%d want=%d", sesionID, sesion.ID)
+	}
+	if len(mailboxIDs) != 1 || mailboxIDs[0] != sessionMailboxID {
+		t.Fatalf("mailbox_ids inesperados: %+v", mailboxIDs)
+	}
+}
+
 func TestResolverBootstrapRuntimeLeasePendienteIgnoraLeaseConMailboxConsumida(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
