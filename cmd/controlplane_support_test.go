@@ -4966,6 +4966,122 @@ func TestProcesarAutonomiaAgentesBatchSesionActivaIdleAbreFrentePremiumMayorSiMi
 	}
 }
 
+func TestProcesarAutonomiaAgentesBatchSesionActivaIdleCierraSemillaPremiumSiTomaFrenteAcotado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	autonomiaIdleAutoassignGate.Reset()
+
+	if err := db.ConfigSet("server_autobootstrap_project_slug", "orquestador"); err != nil {
+		t.Fatalf("config project slug: %v", err)
+	}
+	if err := db.ConfigSet("server_autobootstrap_worker_agents", "Codex1"); err != nil {
+		t.Fatalf("config worker agents: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:        proyectoID,
+		Enabled:           true,
+		MaxWorkers:        1,
+		SupervisorAgente:  "CodexSupervisor",
+		ReserveSupervisor: true,
+		EstadoAutonomia:   db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSupervisor",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion supervisor: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "cat-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	semillaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Autonomía premium: abrir siguiente frente mayor útil",
+		Descripcion: "Semilla premium activa",
+		ProyectoID:  &proyectoID,
+		Modulo:      "autonomia",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       "autonomia:premium_frontier",
+	})
+	if err != nil {
+		t.Fatalf("crear semilla premium: %v", err)
+	}
+	if err := db.TomarTarea(semillaID, "Codex1"); err != nil {
+		t.Fatalf("tomar semilla premium: %v", err)
+	}
+	if err := db.IniciarTarea(semillaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar semilla premium: %v", err)
+	}
+
+	tareaAcotadaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Cerrar continuidad premium TMUX",
+		Descripcion: "Frente premium acotado.\nWRITE_SET: cmd/controlplane_support.go, cmd/controlplane_support_test.go\nTests minimos: go test ./cmd -run 'TestProcesarAutonomiaAgentesBatch.*'",
+		ProyectoID:  &proyectoID,
+		Modulo:      "autonomia",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea acotada: %v", err)
+	}
+
+	n, err := procesarAutonomiaSesionActiva(sesion)
+	if err != nil {
+		t.Fatalf("procesar autonomia: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia autoasignar el frente acotado y encolar continuidad, got=%d", n)
+	}
+
+	semilla, err := db.GetTarea(semillaID)
+	if err != nil {
+		t.Fatalf("get semilla premium: %v", err)
+	}
+	if semilla.Estado != db.TareaCompletada {
+		t.Fatalf("la semilla premium deberia quedar completada tras derivar a un frente real: %+v", semilla)
+	}
+
+	tareaAcotada, err := db.GetTarea(tareaAcotadaID)
+	if err != nil {
+		t.Fatalf("get tarea acotada: %v", err)
+	}
+	if tareaAcotada.Agente == nil || strings.TrimSpace(*tareaAcotada.Agente) != "Codex1" || tareaAcotada.Estado != db.TareaAsignada {
+		t.Fatalf("el frente acotado deberia quedar asignado al agente activo: %+v", tareaAcotada)
+	}
+}
+
 func TestAutonomiaIdleAutoassignShouldAttemptThrottle(t *testing.T) {
 	prepararDBTemporalCmd(t)
 	autonomiaIdleAutoassignGate.Reset()

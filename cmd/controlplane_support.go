@@ -7121,6 +7121,7 @@ func procesarPrechecksAutonomiaSesionActiva(sesion *db.Sesion, snapshot *autonom
 		func() (int, error) { return procesarReanudacionAutonomaSesion(sesion, snapshot) },
 		func() (int, error) { return procesarAparcadoAutonomoSesion(sesion, snapshot) },
 		func() (int, error) { return procesarRecuperacionRuntimeDegradadoSesion(sesion) },
+		func() (int, error) { return procesarDerivacionSemillaPremiumSesionActiva(sesion, snapshot) },
 	}
 	for _, check := range checks {
 		n, err := check()
@@ -7130,6 +7131,48 @@ func procesarPrechecksAutonomiaSesionActiva(sesion *db.Sesion, snapshot *autonom
 			}
 			return n, err
 		}
+	}
+	return 0, nil
+}
+
+func procesarDerivacionSemillaPremiumSesionActiva(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {
+	if sesion == nil || sesion.ProyectoID == nil {
+		return 0, nil
+	}
+	tareaID, err := db.GetTareaActivaIDPorAgenteProyecto(sesion.Agente, sesion.ProyectoID)
+	if err != nil || tareaID <= 0 {
+		return 0, err
+	}
+	tareaActual, err := tareasService.Get(tareaID)
+	if err != nil || tareaActual == nil {
+		return 0, err
+	}
+	if !strings.Contains(strings.TrimSpace(tareaActual.Notas), "autonomia:premium_frontier") {
+		return 0, nil
+	}
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	if err != nil || proyecto == nil {
+		return 0, err
+	}
+	tareaNueva, err := capacidadService.IntentarAutoasignarTareaPipelineLocal(proyecto.Slug, sesion.Agente)
+	if err != nil || tareaNueva == nil {
+		return 0, err
+	}
+	if err := cerrarSemillaPremiumSiDerivaAFrenteAcotado(sesion.Agente, proyecto.ID, tareaNueva); err != nil {
+		return 0, err
+	}
+	if ok, err := encolarNudgeAutonomiaConInvalidacion(
+		snapshot,
+		sesion.Agente,
+		proyecto,
+		"continuar_trabajo",
+		fmt.Sprintf("Tarea #%d asignada automáticamente", tareaNueva.ID),
+		"toma tarea asignada y sigue",
+		map[string]any{"tarea_id": tareaNueva.ID, "motivo_autoasignacion": "semilla_premium_derivada"},
+	); err != nil {
+		return 0, err
+	} else if ok {
+		return 1, nil
 	}
 	return 0, nil
 }
@@ -7235,6 +7278,9 @@ func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, 
 			return 0, err
 		}
 	}
+	if err := cerrarSemillaPremiumSiDerivaAFrenteAcotado(sesion.Agente, proyecto.ID, tarea); err != nil {
+		return 0, err
+	}
 	motivo := fmt.Sprintf("Tarea #%d asignada automáticamente", tarea.ID)
 	if ok, err := encolarNudgeAutonomiaConInvalidacion(
 		snapshot,
@@ -7250,6 +7296,45 @@ func procesarDecisionEsperarOPedirTareaSesionActivaAutonomia(sesion *db.Sesion, 
 		return 1, nil
 	}
 	return 0, nil
+}
+
+func cerrarSemillaPremiumSiDerivaAFrenteAcotado(agente string, proyectoID int64, tarea *capacidadapp.TareaPipelineLocal) error {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || proyectoID <= 0 || tarea == nil {
+		return nil
+	}
+	if strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:premium_frontier") {
+		return nil
+	}
+	if len(tarea.WriteSet) == 0 || strings.TrimSpace(tarea.TestsMinimos) == "" {
+		return nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		return err
+	}
+	for _, actual := range tareas {
+		if actual == nil || actual.ID <= 0 || actual.ID == tarea.ID {
+			continue
+		}
+		if actual.Agente == nil || !strings.EqualFold(strings.TrimSpace(*actual.Agente), agente) {
+			continue
+		}
+		if !strings.Contains(strings.TrimSpace(actual.Notas), "autonomia:premium_frontier") {
+			continue
+		}
+		switch actual.Estado {
+		case db.TareaEnProgreso:
+			if err := tareasService.Complete(actual.ID, agente, fmt.Sprintf("semilla satisfecha por tarea #%d", tarea.ID)); err != nil {
+				return err
+			}
+		case db.TareaAsignada, db.TareaLibre, db.TareaBacklog:
+			if err := tareasService.MoveToBacklog(actual.ID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func asegurarFrentePremiumSesionActivaIdle(sesion *db.Sesion, proyecto *db.Proyecto) (*capacidadapp.TareaPipelineLocal, error) {
