@@ -3901,6 +3901,188 @@ func TestSesionActivaTMUXStaleParaContinuacionPrefiereProgressSobreOutput(t *tes
 	}
 }
 
+func TestSesionActivaTMUXStaleParaContinuacionPrefiereReadySobreOutputSinProgress(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex11Ready", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-ready-priority",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex11Ready",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+
+	traceDir := filepath.Join(tmp, "runtime", "codex11ready")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	now := time.Now().UTC()
+	readyAt := now.Add(-10 * time.Minute)
+	outputAt := now.Add(-30 * time.Second)
+	manifestPath := filepath.Join(traceDir, "manifest.json")
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex11Ready","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex11ready","tmux_pane_id":"%34","created_at":"`+now.Format(time.RFC3339Nano)+`","started_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"ready","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`","ready_at":"`+readyAt.Format(time.RFC3339Nano)+`","last_output_at":"`+outputAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now.Format(time.RFC3339Nano)+`","ready_at":"`+readyAt.Format(time.RFC3339Nano)+`","last_output_at":"`+outputAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex11ready",
+		"tmux_pane_id":          "%34",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', handle_ref='orq-codex11ready/%34', metadata_json=?, estado='activo' WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("activar handle tmux: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+	handle, err = db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("reload handle: %+v err=%v", handle, err)
+	}
+
+	if !sesionActivaTMUXStaleParaContinuacion(handle, now, 5*time.Minute) {
+		t.Fatal("deberia considerar stale una sesion con output fresco pero ready antiguo sin progreso")
+	}
+}
+
+func TestSesionActivaDebeRecibirNudgeContinuacionUsaHandleCanonicoNoEnlazado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex11Canon", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-canonico-stale",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex11Canon",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	linkHandle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || linkHandle == nil {
+		t.Fatalf("handle enlazado: %+v err=%v", linkHandle, err)
+	}
+	if _, err := db.DB.Exec(`DELETE FROM runtime_handles WHERE id=?`, linkHandle.ID); err != nil {
+		t.Fatalf("delete linked handle: %v", err)
+	}
+
+	traceDir := filepath.Join(tmp, "runtime", "codex11canon")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	now := time.Now().UTC()
+	readyAt := now.Add(-10 * time.Minute)
+	manifestPath := filepath.Join(traceDir, "manifest.json")
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex11Canon","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex11canon","tmux_pane_id":"%35","created_at":"`+now.Format(time.RFC3339Nano)+`","started_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"ready","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`","ready_at":"`+readyAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now.Format(time.RFC3339Nano)+`","ready_at":"`+readyAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-codex11canon",
+		"tmux_pane_id":          "%35",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	capsJSON, err := json.Marshal(map[string]any{
+		"can_send_input":        false,
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliverySessionResume,
+	})
+	if err != nil {
+		t.Fatalf("marshal caps: %v", err)
+	}
+	if _, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, transporte, handle_kind, handle_ref, estado, metadata_json, capabilities_json, last_seen_at
+	) VALUES (?,?,?,?,?,'activo',?,?,CURRENT_TIMESTAMP)`,
+		"Codex11Canon", proyectoID, "tmux", "session", "orq-codex11canon", string(metaJSON), string(capsJSON)); err != nil {
+		t.Fatalf("insert canonical handle: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Continuar trabajo con handle canonico",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex11Canon"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex11Canon"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	gotTaskID, debe, err := sesionActivaDebeRecibirNudgeContinuacion(sesion, &db.Proyecto{ID: proyectoID, Slug: "orquestador-canonico-stale"})
+	if err != nil {
+		t.Fatalf("sesionActivaDebeRecibirNudgeContinuacion: %v", err)
+	}
+	if !debe {
+		t.Fatal("deberia detectar stale usando handle canónico no enlazado")
+	}
+	if gotTaskID != tareaID {
+		t.Fatalf("tarea objetivo inesperada: got=%d want=%d", gotTaskID, tareaID)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchNoEncolaNudgePorEsperarOPedirTareaEnSesionActiva(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

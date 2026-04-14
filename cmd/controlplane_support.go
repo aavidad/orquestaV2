@@ -6988,7 +6988,7 @@ func sesionActivaDebeRecibirNudgeContinuacion(sesion *db.Sesion, proyecto *db.Pr
 	if err != nil || tareaID <= 0 {
 		return 0, false, err
 	}
-	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	handle, err := runtimeHandleSesionActivaParaContinuacion(sesion)
 	if err != nil || handle == nil {
 		return tareaID, false, err
 	}
@@ -7018,15 +7018,38 @@ func sesionActivaTMUXStaleParaContinuacion(handle *db.RuntimeHandle, now time.Ti
 	switch {
 	case view.LastProgressAt != nil && !view.LastProgressAt.IsZero():
 		lastActivity = view.LastProgressAt.UTC()
-	case view.LastOutputAt != nil && !view.LastOutputAt.IsZero():
-		lastActivity = view.LastOutputAt.UTC()
 	case view.ReadyAt != nil && !view.ReadyAt.IsZero():
 		lastActivity = view.ReadyAt.UTC()
+	case view.LastOutputAt != nil && !view.LastOutputAt.IsZero():
+		lastActivity = view.LastOutputAt.UTC()
 	}
 	if lastActivity.IsZero() {
 		return false
 	}
 	return !lastActivity.After(now.UTC().Add(-staleAfter))
+}
+
+func runtimeHandleSesionActivaParaContinuacion(sesion *db.Sesion) (*db.RuntimeHandle, error) {
+	if sesion == nil {
+		return nil, nil
+	}
+	if sesion.ID > 0 {
+		handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+		if err != nil {
+			return nil, err
+		}
+		if handle != nil {
+			return handle, nil
+		}
+	}
+	agente := strings.TrimSpace(sesion.Agente)
+	if agente == "" {
+		return nil, nil
+	}
+	if sesion.ProyectoID != nil && *sesion.ProyectoID > 0 {
+		return db.GetRuntimeHandleCanonicoRecienteAgenteProyecto(agente, sesion.ProyectoID)
+	}
+	return db.GetRuntimeHandleCanonicoRecienteAgente(agente)
 }
 
 func persistirPausaPorCuotaAutonomia(agente, motivo string) error {
