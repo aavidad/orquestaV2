@@ -814,6 +814,48 @@ func TestIntentarAutoasignarTareaPipelineLocalNoReasignaTrabajoAjeno(t *testing.
 	}
 }
 
+func TestIntentarAutoasignarTareaPipelineLocalIgnoraFrentePremiumSinContrato(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{ID: 53, Titulo: "Auditoria server-first CLI/API/web y transporte real", Estado: db.TareaLibre, Prioridad: db.PrioridadAlta},
+	}})
+	service.SetTaskActionProvider(&fakeTaskActionProvider{
+		tareas: map[int64]*db.Tarea{
+			53: {ID: 53, Titulo: "Auditoria server-first CLI/API/web y transporte real", Estado: db.TareaLibre, Prioridad: db.PrioridadAlta},
+		},
+	})
+
+	tarea, err := service.IntentarAutoasignarTareaPipelineLocal("orquestador", "Codex1")
+	if err != nil {
+		t.Fatalf("IntentarAutoasignarTareaPipelineLocal: %v", err)
+	}
+	if tarea != nil {
+		t.Fatalf("no deberia autoasignar un frente premium amplio sin write_set/tests: %+v", tarea)
+	}
+}
+
+func TestIntentarAutoasignarTareaPipelineLocalPermitePremiumFrontierCanonico(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{ID: 54, Titulo: "Autonomía premium: abrir siguiente frente mayor útil", Estado: db.TareaLibre, Prioridad: db.PrioridadAlta, Notas: "autonomia:premium_frontier"},
+	}})
+	service.SetTaskActionProvider(&fakeTaskActionProvider{
+		tareas: map[int64]*db.Tarea{
+			54: {ID: 54, Titulo: "Autonomía premium: abrir siguiente frente mayor útil", Estado: db.TareaLibre, Prioridad: db.PrioridadAlta, Notas: "autonomia:premium_frontier"},
+		},
+	})
+
+	tarea, err := service.IntentarAutoasignarTareaPipelineLocal("orquestador", "Codex1")
+	if err != nil {
+		t.Fatalf("IntentarAutoasignarTareaPipelineLocal: %v", err)
+	}
+	if tarea == nil || tarea.ID != 54 || tarea.Estado != string(db.TareaAsignada) || tarea.Agente != "Codex1" {
+		t.Fatalf("deberia permitir el frente premium canónico acotador: %+v", tarea)
+	}
+}
+
 func TestConstruirDespachoPipelineLocalUsaCarrilRevision(t *testing.T) {
 	paso := &PasoPipelineLocalDeterminista{
 		ProyectoSlug: "orquestador",

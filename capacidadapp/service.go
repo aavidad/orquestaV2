@@ -140,6 +140,11 @@ func (s *Service) IntentarAutoasignarTareaPipelineLocal(proyectoSlug, agente str
 	if err != nil || paso == nil || paso.TareaObjetivo == nil {
 		return nil, err
 	}
+	if paso.EtapaObjetivo != nil &&
+		tareaPipelineLocalRequiereContratoPremium(strings.TrimSpace(paso.EtapaObjetivo.Carril)) &&
+		tareaPipelineLocalDebeAcotarseAntesDePremium(paso.TareaObjetivo) {
+		return nil, nil
+	}
 	switch strings.ToLower(strings.TrimSpace(paso.AccionTarea)) {
 	case "especificar", "implementar", "corregir", "revisar":
 	default:
@@ -175,6 +180,38 @@ func (s *Service) IntentarAutoasignarTareaPipelineLocal(proyectoSlug, agente str
 		return nil, err
 	}
 	return tareaPipelineLocalDesdeDB(actual), nil
+}
+
+func tareaPipelineLocalRequiereContratoPremium(carril string) bool {
+	switch strings.ToLower(strings.TrimSpace(carril)) {
+	case "premium_worktree", "revision_diff":
+		return true
+	default:
+		return false
+	}
+}
+
+func tareaPipelineLocalTieneContratoPremium(tarea *TareaPipelineLocal) bool {
+	if tarea == nil {
+		return false
+	}
+	notas := strings.TrimSpace(tarea.Notas)
+	if strings.Contains(notas, "autonomia:microrefactor_loop") || strings.Contains(notas, "autonomia:premium_frontier") {
+		return true
+	}
+	return len(tarea.WriteSet) > 0 && strings.TrimSpace(tarea.TestsMinimos) != ""
+}
+
+func tareaPipelineLocalDebeAcotarseAntesDePremium(tarea *TareaPipelineLocal) bool {
+	if tarea == nil || tareaPipelineLocalTieneContratoPremium(tarea) {
+		return false
+	}
+	contexto := strings.TrimSpace(strings.Join([]string{
+		strings.TrimSpace(tarea.Titulo),
+		strings.TrimSpace(tarea.Descripcion),
+		strings.TrimSpace(tarea.Notas),
+	}, "\n"))
+	return len(contexto) >= 48
 }
 
 func (s *Service) SetPhaseControlProvider(provider PhaseControlProvider) {
