@@ -447,10 +447,66 @@ func (s *Service) StartContext(input StartContextInput) (*StartContextResult, er
 	return result, nil
 }
 
+func (s *Service) AssignCanonicalPoolForSession(sesion *Sesion) error {
+	if s == nil || s.store == nil || sesion == nil {
+		return nil
+	}
+	herramienta := strings.TrimSpace(sesion.Herramienta)
+	conector := strings.TrimSpace(sesion.ConectorSlug)
+	if !strings.EqualFold(herramienta, "ollama_pool_local") && !strings.EqualFold(conector, "ollama_pool_local") {
+		return nil
+	}
+	proyectoSlug := strings.TrimSpace(sesion.ProyectoSlug)
+	if proyectoSlug == "" || sesion.ID <= 0 {
+		return nil
+	}
+	agente := strings.TrimSpace(sesion.Agente)
+	input := ModelPolicyInput{
+		ProjectSlug: proyectoSlug,
+	}
+	if agente != "" {
+		input.AgentName = &agente
+	}
+	resolucion, err := s.store.ResolveModelPolicy(input)
+	if err != nil {
+		return err
+	}
+	if resolucion == nil || strings.TrimSpace(resolucion.PoolSlug) == "" {
+		return nil
+	}
+	pool, err := s.store.GetCapacityPool(strings.TrimSpace(resolucion.PoolSlug))
+	if err != nil {
+		return err
+	}
+	if !poolUsesSharedLocalConnector(pool) {
+		return nil
+	}
+	return s.store.AssignSessionPool(sesion.ID, pool.ID)
+}
+
 func parseWorkflowSteps(raw string) []string {
 	var pasos []string
 	if err := json.Unmarshal([]byte(raw), &pasos); err != nil {
 		return nil
 	}
 	return pasos
+}
+
+func poolUsesSharedLocalConnector(pool *CapacityPool) bool {
+	if pool == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(pool.Runtime), "ollama") {
+		return false
+	}
+	raw := strings.TrimSpace(pool.MetadataJSON)
+	if raw == "" || raw == "{}" {
+		return false
+	}
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(raw), &meta); err != nil {
+		return false
+	}
+	value, _ := meta["conector_canonico"].(string)
+	return strings.EqualFold(strings.TrimSpace(value), "ollama_pool_local")
 }

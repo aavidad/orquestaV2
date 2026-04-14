@@ -136,10 +136,24 @@ func (s *Service) Create(input CreateTaskInput) (int64, error) {
 }
 
 func (s *Service) Take(id int64, agente string) error {
+	tarea, err := s.store.GetTask(id)
+	if err != nil {
+		return err
+	}
+	if err := validateTaskDependencies(s.store, tarea); err != nil {
+		return err
+	}
 	return s.store.TakeTask(id, strings.TrimSpace(agente))
 }
 
 func (s *Service) Start(id int64, agente string) error {
+	tarea, err := s.store.GetTask(id)
+	if err != nil {
+		return err
+	}
+	if err := validateTaskDependencies(s.store, tarea); err != nil {
+		return err
+	}
 	return s.store.StartTask(id, strings.TrimSpace(agente))
 }
 

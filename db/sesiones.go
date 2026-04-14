@@ -133,35 +133,7 @@ func asignarPoolCanonicoSesion(sesion *Sesion) error {
 	if sesion == nil {
 		return nil
 	}
-	herramienta := strings.TrimSpace(sesion.Herramienta)
-	conector := strings.TrimSpace(sesion.ConectorSlug)
-	if !strings.EqualFold(herramienta, "ollama_pool_local") && !strings.EqualFold(conector, "ollama_pool_local") {
-		return nil
-	}
-	proyectoSlug := strings.TrimSpace(sesion.ProyectoSlug)
-	if proyectoSlug == "" {
-		return nil
-	}
-	agente := strings.TrimSpace(sesion.Agente)
-	resolucion, err := ResolverPoliticaModelo(ResolverPoliticaInput{
-		AgenteNombre: &agente,
-		ProyectoSlug: proyectoSlug,
-	})
-	if err != nil {
-		return err
-	}
-	if resolucion == nil || strings.TrimSpace(resolucion.PoolSlug) == "" {
-		return nil
-	}
-	pool, err := GetPool(strings.TrimSpace(resolucion.PoolSlug))
-	if err != nil {
-		return err
-	}
-	if !poolUsaConectorPoolLocalCompartido(pool) {
-		return nil
-	}
-	_, err = DB.Exec(`UPDATE sesiones SET pool_id = ? WHERE id = ?`, pool.ID, sesion.ID)
-	return err
+	return sesionesapp.NewService(SqliteSesionesRepo{}).AssignCanonicalPoolForSession(sesion)
 }
 
 func GetSesionByID(id int64) (*Sesion, error) {

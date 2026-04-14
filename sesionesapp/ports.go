@@ -38,22 +38,43 @@ type Conector struct {
 	CreatedAt              time.Time
 }
 
+type ModelPolicyInput struct {
+	AgentName   *string
+	TaskID      *int64
+	ProjectSlug string
+	Phase       string
+	TaskProfile string
+}
+
+type ModelPolicyResolution struct {
+	TaskProfile     string
+	PoolSlug        string
+	ModelSlug       string
+	ReasoningEffort string
+}
+
+type CapacityPool struct {
+	ID           int64
+	Runtime      string
+	MetadataJSON string
+}
+
 type Propuesta struct {
-	ID                int64
-	Codigo            string
-	Tipo              string
-	Titulo            string
-	Descripcion       string
-	Estado            string
-	ProyectoSlug      string
-	PropuestoPor      string
-	DistribuidorPor   string
-	VotosRequeridos   int
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-	ResolucionVotos   string
-	CerradoPor        string
-	CerradoAt         *time.Time
+	ID              int64
+	Codigo          string
+	Tipo            string
+	Titulo          string
+	Descripcion     string
+	Estado          string
+	ProyectoSlug    string
+	PropuestoPor    string
+	DistribuidorPor string
+	VotosRequeridos int
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	ResolucionVotos string
+	CerradoPor      string
+	CerradoAt       *time.Time
 }
 
 type Regla struct {
@@ -160,4 +181,7 @@ type Store interface {
 	ListSkills(rol string) ([]*Skill, error)
 	GetWorkflow(rol, nombre string) (*Workflow, error)
 	ListWorkflows(rol string) ([]*Workflow, error)
+	ResolveModelPolicy(input ModelPolicyInput) (*ModelPolicyResolution, error)
+	GetCapacityPool(slug string) (*CapacityPool, error)
+	AssignSessionPool(sessionID, poolID int64) error
 }

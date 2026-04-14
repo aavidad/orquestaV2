@@ -19,7 +19,13 @@ type stubStore struct {
 	registered     *PresupuestoSesion
 	registeredID   int64
 	startedContext *SesionInicio
-	saved          struct {
+	modelPolicy    *ModelPolicyResolution
+	capacityPool   *CapacityPool
+	assignedPool   struct {
+		sessionID int64
+		poolID    int64
+	}
+	saved struct {
 		agente     string
 		proyectoID *int64
 		upd        SesionUpdate
@@ -95,9 +101,9 @@ func (s *stubStore) ResolveGovernanceCatalog(rol string, proyectoID *int64) (*Go
 	skills, _ := s.ListSkills(rol)
 	workflows, _ := s.ListWorkflows(rol)
 	return &GovernanceCatalog{
-		Reglas:     reglas,
-		Skills:     skills,
-		Workflows:  workflows,
+		Reglas:    reglas,
+		Skills:    skills,
+		Workflows: workflows,
 	}, nil
 }
 func (s *stubStore) ResolveGovernanceCatalogForContext(rol string, proyectoID *int64, agente string) (*GovernanceCatalog, error) {
@@ -117,6 +123,17 @@ func (s *stubStore) GetWorkflow(rol, nombre string) (*Workflow, error) {
 }
 func (s *stubStore) ListWorkflows(rol string) ([]*Workflow, error) {
 	return []*Workflow{{Nombre: "inicio-sesion"}, {Nombre: "fin-sesion"}}, nil
+}
+func (s *stubStore) ResolveModelPolicy(input ModelPolicyInput) (*ModelPolicyResolution, error) {
+	return s.modelPolicy, nil
+}
+func (s *stubStore) GetCapacityPool(slug string) (*CapacityPool, error) {
+	return s.capacityPool, nil
+}
+func (s *stubStore) AssignSessionPool(sessionID, poolID int64) error {
+	s.assignedPool.sessionID = sessionID
+	s.assignedPool.poolID = poolID
+	return nil
 }
 
 func TestStartConstruyeBriefing(t *testing.T) {
@@ -295,5 +312,47 @@ func TestStartContextArranqueLimpioLimpiaContinuidadYOmiteSesionPrevia(t *testin
 	}
 	if store.startedContext.ExternalSessionID != "" || store.startedContext.ResumePayloadJSON != "" || store.startedContext.ResumenContinuidad != "" {
 		t.Fatalf("continuidad no limpiada: %+v", store.startedContext)
+	}
+}
+
+func TestAssignCanonicalPoolForSessionDelegatesPolicyOutsideDB(t *testing.T) {
+	store := &stubStore{
+		modelPolicy:  &ModelPolicyResolution{PoolSlug: "ollama-gemma4"},
+		capacityPool: &CapacityPool{ID: 9, Runtime: "ollama", MetadataJSON: `{"conector_canonico":"ollama_pool_local"}`},
+	}
+	service := NewService(store)
+
+	err := service.AssignCanonicalPoolForSession(&Sesion{
+		ID:           77,
+		Agente:       "Gemma1",
+		ProyectoSlug: "orquestador",
+		Herramienta:  "ollama_pool_local",
+	})
+	if err != nil {
+		t.Fatalf("AssignCanonicalPoolForSession: %v", err)
+	}
+	if store.assignedPool.sessionID != 77 || store.assignedPool.poolID != 9 {
+		t.Fatalf("pool asignado inesperado: %+v", store.assignedPool)
+	}
+}
+
+func TestAssignCanonicalPoolForSessionSkipsNonSharedPoolRuntime(t *testing.T) {
+	store := &stubStore{
+		modelPolicy:  &ModelPolicyResolution{PoolSlug: "codex"},
+		capacityPool: &CapacityPool{ID: 4, Runtime: "codex", MetadataJSON: `{"conector_canonico":"codex-cli"}`},
+	}
+	service := NewService(store)
+
+	err := service.AssignCanonicalPoolForSession(&Sesion{
+		ID:           80,
+		Agente:       "Codex2",
+		ProyectoSlug: "orquestador",
+		Herramienta:  "ollama_pool_local",
+	})
+	if err != nil {
+		t.Fatalf("AssignCanonicalPoolForSession: %v", err)
+	}
+	if store.assignedPool.sessionID != 0 || store.assignedPool.poolID != 0 {
+		t.Fatalf("no deberia asignar pool: %+v", store.assignedPool)
 	}
 }

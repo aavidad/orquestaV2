@@ -315,26 +315,15 @@ func resolverRaizTrabajoConMarcadores(path string) (string, bool) {
 }
 
 func RutaTrabajoPreferidaAgenteProyecto(agente string, proyecto *Proyecto, cwd string) string {
-	cwd = normalizarRutaProyecto(cwd)
 	if proyecto == nil {
-		return cwd
+		return normalizarRutaProyecto(cwd)
 	}
-	if ruta := rutaWorktreeActivaAgenteProyecto(proyecto.ID, agente); ruta != "" {
-		if ruta == cwd || rutaDentroDe(ruta, cwd) {
-			return cwd
-		}
-		return ruta
-	}
-	if rutaSesionWorktreeProyecto(proyecto, cwd) {
-		return cwd
-	}
-	if ruta := normalizarRutaProyecto(RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, "")); ruta != "" && cwd == ruta {
-		return cwd
-	}
-	if ruta := normalizarRutaProyecto(RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, "")); ruta != "" {
-		return ruta
-	}
-	return cwd
+	return coordinacion.PreferredWorkPath(
+		cwd,
+		rutaWorktreeActivaAgenteProyecto(proyecto.ID, agente),
+		RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, ""),
+		rutaSesionWorktreeProyecto(proyecto, cwd),
+	)
 }
 
 func rutaSesionWorktreeProyecto(proyecto *Proyecto, cwd string) bool {
@@ -342,12 +331,7 @@ func rutaSesionWorktreeProyecto(proyecto *Proyecto, cwd string) bool {
 	if proyecto == nil || cwd == "" {
 		return false
 	}
-	rutaBase := normalizarRutaProyecto(RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, ""))
-	if rutaBase == "" {
-		return false
-	}
-	rutaRaizWorktrees := filepath.Join(rutaBase, ".orquesta-worktrees")
-	return rutaDentroDe(rutaRaizWorktrees, cwd)
+	return coordinacion.CurrentPathInsideProjectWorktree(cwd, RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, ""))
 }
 
 func rutaTrabajoPerteneceAProyectoAgente(proyecto *Proyecto, agente, cwd string) bool {
@@ -356,10 +340,10 @@ func rutaTrabajoPerteneceAProyectoAgente(proyecto *Proyecto, agente, cwd string)
 		return false
 	}
 	rutaBase := normalizarRutaProyecto(RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, ""))
-	if rutaBase != "" && rutaDentroDe(rutaBase, cwd) {
+	if rutaBase != "" && coordinacion.PathWithin(rutaBase, cwd) {
 		return true
 	}
-	if ruta := rutaWorktreeActivaAgenteProyecto(proyecto.ID, agente); ruta != "" && rutaDentroDe(ruta, cwd) {
+	if ruta := rutaWorktreeActivaAgenteProyecto(proyecto.ID, agente); ruta != "" && coordinacion.PathWithin(ruta, cwd) {
 		return true
 	}
 	return false
@@ -387,7 +371,7 @@ func rutaWorktreeActivaAgenteProyecto(proyectoID int64, agente string) string {
 			continue
 		}
 		ruta := normalizarRutaProyecto(worktree.Path)
-		if ruta == "" || !WorktreeActivaCoherente(proyectoID, ruta) || !rutaWorktreeUtilizable(ruta) {
+		if ruta == "" || !WorktreeActivaCoherente(proyectoID, ruta) || !coordinacion.WorktreePathUsable(ruta) {
 			continue
 		}
 		return ruta
@@ -414,69 +398,29 @@ func rutaSesionPerteneceAWorktreeActiva(proyectoID int64, agente, cwd string) bo
 		return false
 	}
 	defer rows.Close()
-	cwd = normalizarRutaProyecto(cwd)
+	worktrees := make([]coordinacion.WorktreePathRef, 0)
 	for rows.Next() {
 		var worktreePath string
 		if err := rows.Scan(&worktreePath); err != nil {
 			return false
 		}
-		if !rutaWorktreeUtilizable(worktreePath) {
-			continue
-		}
-		if rutaDentroDe(worktreePath, cwd) {
-			return true
-		}
+		worktrees = append(worktrees, coordinacion.WorktreePathRef{
+			Agent: strings.TrimSpace(agente),
+			Path:  strings.TrimSpace(worktreePath),
+		})
 	}
-	return false
+	return coordinacion.SessionPathInsideActiveWorktree(agente, cwd, worktrees)
 }
 
 func rutaSesionPerteneceAWorktreeActivaBatch(agente, cwd string, worktrees []proyectoRutaWorktree) bool {
-	cwd = normalizarRutaProyecto(cwd)
-	if cwd == "" {
-		return false
-	}
-	agente = strings.TrimSpace(agente)
+	refs := make([]coordinacion.WorktreePathRef, 0, len(worktrees))
 	for _, worktree := range worktrees {
-		if agente != "" && strings.TrimSpace(worktree.agente) != agente {
-			continue
-		}
-		if !rutaWorktreeUtilizable(worktree.rutaAbs) {
-			continue
-		}
-		if rutaDentroDe(worktree.rutaAbs, cwd) {
-			return true
-		}
+		refs = append(refs, coordinacion.WorktreePathRef{
+			Agent: strings.TrimSpace(worktree.agente),
+			Path:  strings.TrimSpace(worktree.rutaAbs),
+		})
 	}
-	return false
-}
-
-func rutaWorktreeUtilizable(path string) bool {
-	path = normalizarRutaProyecto(path)
-	if path == "" {
-		return false
-	}
-	info, err := os.Stat(path)
-	return err == nil && info != nil && info.IsDir()
-}
-
-func rutaDentroDe(base, path string) bool {
-	base = normalizarRutaProyecto(base)
-	path = normalizarRutaProyecto(path)
-	if base == "" || path == "" {
-		return false
-	}
-	if base == path {
-		return true
-	}
-	rel, err := filepath.Rel(base, path)
-	if err != nil {
-		return false
-	}
-	if rel == "." {
-		return true
-	}
-	prefijoFuera := ".." + string(os.PathSeparator)
-	return rel != ".." && !strings.HasPrefix(rel, prefijoFuera)
+	return coordinacion.SessionPathInsideActiveWorktree(agente, cwd, refs)
 }
 
 func WorktreeActivaCoherente(projectID int64, path string) bool {
@@ -495,7 +439,7 @@ func WorktreeActivaCoherente(projectID int64, path string) bool {
 	if rutaBase == "" {
 		return true
 	}
-	return rutaDentroDe(rutaBase, path)
+	return coordinacion.ActiveWorktreePathCoherent(path, rutaBase)
 }
 
 func ResolveProyectoIDBySlug(slug string) (*int64, error) {

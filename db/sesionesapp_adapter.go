@@ -161,10 +161,10 @@ func mapEvaluacionToApp(ev *EvaluacionPresupuesto) *sesionesapp.EvaluacionPresup
 		return nil
 	}
 	return &sesionesapp.EvaluacionPresupuesto{
-		Estado:           ev.Estado,
-		DebeHandoff:      ev.DebeHandoff,
-		Motivo:           ev.Motivo,
-		RemainingRatio:   ev.RemainingRatio,
+		Estado:         ev.Estado,
+		DebeHandoff:    ev.DebeHandoff,
+		Motivo:         ev.Motivo,
+		RemainingRatio: ev.RemainingRatio,
 	}
 }
 
@@ -216,6 +216,42 @@ func (SqliteSesionesRepo) ListAgents() ([]*sesionesapp.Agente, error) {
 		list = append(list, &sesionesapp.Agente{Nombre: a.Nombre, Rol: a.Rol})
 	}
 	return list, err
+}
+
+func (SqliteSesionesRepo) ResolveModelPolicy(input sesionesapp.ModelPolicyInput) (*sesionesapp.ModelPolicyResolution, error) {
+	resolucion, err := ResolverPoliticaModelo(ResolverPoliticaInput{
+		AgenteNombre: input.AgentName,
+		TareaID:      input.TaskID,
+		ProyectoSlug: input.ProjectSlug,
+		Fase:         input.Phase,
+		PerfilTarea:  input.TaskProfile,
+	})
+	if err != nil || resolucion == nil {
+		return nil, err
+	}
+	return &sesionesapp.ModelPolicyResolution{
+		TaskProfile:     resolucion.PerfilTarea,
+		PoolSlug:        resolucion.PoolSlug,
+		ModelSlug:       resolucion.ModelSlug,
+		ReasoningEffort: resolucion.ReasoningEffort,
+	}, nil
+}
+
+func (SqliteSesionesRepo) GetCapacityPool(slug string) (*sesionesapp.CapacityPool, error) {
+	pool, err := GetPool(slug)
+	if err != nil || pool == nil {
+		return nil, err
+	}
+	return &sesionesapp.CapacityPool{
+		ID:           pool.ID,
+		Runtime:      pool.Runtime,
+		MetadataJSON: pool.MetadataJSON,
+	}, nil
+}
+
+func (SqliteSesionesRepo) AssignSessionPool(sessionID, poolID int64) error {
+	_, err := DB.Exec(`UPDATE sesiones SET pool_id = ? WHERE id = ?`, poolID, sessionID)
+	return err
 }
 
 func (SqliteSesionesRepo) ListPendingProposals(agente string) ([]*sesionesapp.Propuesta, error) {

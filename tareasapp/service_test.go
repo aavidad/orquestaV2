@@ -14,7 +14,12 @@ type stubStore struct {
 	created  *db.Tarea
 	tasks    []*db.Tarea
 	moved    []int64
-	taken    struct {
+	byID     map[int64]*db.Tarea
+	started  struct {
+		id     int64
+		agente string
+	}
+	taken struct {
 		id     int64
 		agente string
 	}
@@ -45,6 +50,11 @@ func (s *stubStore) ListTasks(filtro db.FiltroTareas) ([]*db.Tarea, error) {
 }
 
 func (s *stubStore) GetTask(id int64) (*db.Tarea, error) {
+	if s.byID != nil {
+		if tarea, ok := s.byID[id]; ok {
+			return tarea, nil
+		}
+	}
 	return &db.Tarea{ID: id, Titulo: "demo"}, nil
 }
 
@@ -59,7 +69,11 @@ func (s *stubStore) TakeTask(id int64, agente string) error {
 	return nil
 }
 
-func (s *stubStore) StartTask(id int64, agente string) error               { return nil }
+func (s *stubStore) StartTask(id int64, agente string) error {
+	s.started.id = id
+	s.started.agente = agente
+	return nil
+}
 func (s *stubStore) CompleteTask(id int64, agente, commit string) error    { return nil }
 func (s *stubStore) BlockTask(id int64, agente, motivo string) error       { return nil }
 func (s *stubStore) UnblockTask(id int64, agente, resolucion string) error { return nil }
@@ -68,8 +82,8 @@ func (s *stubStore) MoveTaskToBacklog(id int64) error {
 	s.moved = append(s.moved, id)
 	return nil
 }
-func (s *stubStore) ReassignTask(id int64, nuevoAgente string) error       { return nil }
-func (s *stubStore) ListAgents() ([]*db.Agente, error)                     { return nil, nil }
+func (s *stubStore) ReassignTask(id int64, nuevoAgente string) error { return nil }
+func (s *stubStore) ListAgents() ([]*db.Agente, error)               { return nil, nil }
 func (s *stubStore) GetProject(ref string) (*db.Proyecto, error) {
 	if s.project == nil {
 		return nil, errors.New("not found")
@@ -160,5 +174,40 @@ func TestCleanActiveFrontRequiresAgentOrProject(t *testing.T) {
 	service := NewService(&stubStore{})
 	if _, err := service.CleanActiveFront(CleanActiveFrontInput{}); err == nil {
 		t.Fatal("se esperaba error sin agente ni proyecto")
+	}
+}
+
+func TestTakeValidatesDependenciesBeforeDelegating(t *testing.T) {
+	store := &stubStore{
+		byID: map[int64]*db.Tarea{
+			7: {ID: 7, Titulo: "dependiente", Dependencias: []int64{3}},
+			3: {ID: 3, Titulo: "dep", Estado: db.TareaAsignada, ContratoDefinido: true},
+		},
+	}
+	service := NewService(store)
+
+	err := service.Take(7, "Codex2")
+	if err == nil {
+		t.Fatal("se esperaba error por dependencia no completada")
+	}
+	if store.taken.id != 0 {
+		t.Fatalf("no deberia delegar TakeTask si falla la policy: %+v", store.taken)
+	}
+}
+
+func TestStartValidatesDependenciesBeforeDelegating(t *testing.T) {
+	store := &stubStore{
+		byID: map[int64]*db.Tarea{
+			8: {ID: 8, Titulo: "dependiente", Dependencias: []int64{4}},
+			4: {ID: 4, Titulo: "dep", Estado: db.TareaCompletada, ContratoDefinido: true},
+		},
+	}
+	service := NewService(store)
+
+	if err := service.Start(8, "Codex2"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if store.started.id != 8 || store.started.agente != "Codex2" {
+		t.Fatalf("delegacion start inesperada: %+v", store.started)
 	}
 }
