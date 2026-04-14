@@ -4292,12 +4292,24 @@ func apiHandlerTareaAccion(w http.ResponseWriter, r *http.Request, idStr string)
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
+	if tareaAccionDebeDespertarWarm(req.Accion) {
+		wakeControlPlaneWarm()
+	}
 	tarea, err := tareasService.Get(id)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "tarea": tarea})
+}
+
+func tareaAccionDebeDespertarWarm(accion string) bool {
+	switch strings.ToLower(strings.TrimSpace(accion)) {
+	case "tomar", "iniciar", "completar", "bloquear", "desbloquear", "backlog", "cancelar", "reasignar":
+		return true
+	default:
+		return false
+	}
 }
 
 func apiHandlerPropuestas(w http.ResponseWriter, r *http.Request) {

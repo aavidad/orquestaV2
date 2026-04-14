@@ -313,6 +313,10 @@ func (dbAutomationService) GarantizarSaludAgentes() error {
 	return db.GarantizarSaludAgentes()
 }
 
+func (dbAutomationService) TieneTrabajoOrquestablePendiente() (bool, string, error) {
+	return tieneTrabajoOrquestablePendiente()
+}
+
 func (dbAutomationService) ProcesarAutonomiaAgentesBatch() (int, error) {
 	if !allowAutonomiaActiveSessionsObservation(time.Now().UTC()) {
 		return 0, nil
@@ -454,6 +458,75 @@ func revalidarPresupuestoAgenteSiCorresponde(nombre string, minAge time.Duration
 		return 0, nil
 	}
 	return refrescarPresupuestoSesionObservadoAgente(nombre)
+}
+
+func tieneTrabajoOrquestablePendiente() (bool, string, error) {
+	proyectos, err := db.ListarProyectosActivos()
+	if err != nil {
+		return false, "", err
+	}
+	for _, proyecto := range proyectos {
+		if _, ok := pipelineLocalProyectoElegible(proyecto); !ok {
+			continue
+		}
+		if pending, detail, err := proyectoTieneTrabajoOrquestablePendiente(proyecto); err != nil {
+			return false, "", err
+		} else if pending {
+			return true, detail, nil
+		}
+	}
+	return false, "", nil
+}
+
+func proyectoTieneTrabajoOrquestablePendiente(proyecto *db.Proyecto) (bool, string, error) {
+	if proyecto == nil || proyecto.ID <= 0 {
+		return false, "", nil
+	}
+	if pending, detail, err := proyectoTieneRuntimePendiente(proyecto.ID, strings.TrimSpace(proyecto.Slug)); err != nil {
+		return false, "", err
+	} else if pending {
+		return true, detail, nil
+	}
+	for _, estado := range []db.EstadoTarea{
+		db.TareaEnProgreso,
+		db.TareaAsignada,
+		db.TareaBloqueada,
+		db.TareaLibre,
+		db.TareaBacklog,
+	} {
+		tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyecto.ID, Estado: &estado})
+		if err != nil {
+			return false, "", err
+		}
+		if len(tareas) > 0 {
+			return true, fmt.Sprintf("proyecto=%s tareas=%s count=%d", strings.TrimSpace(proyecto.Slug), string(estado), len(tareas)), nil
+		}
+	}
+	return false, "", nil
+}
+
+func proyectoTieneRuntimePendiente(proyectoID int64, slug string) (bool, string, error) {
+	for _, estado := range []string{"pendiente", "entregado"} {
+		estado := estado
+		items, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ProyectoID: &proyectoID, Estado: &estado})
+		if err != nil {
+			return false, "", err
+		}
+		if len(items) > 0 {
+			return true, fmt.Sprintf("proyecto=%s mailbox=%s count=%d", strings.TrimSpace(slug), estado, len(items)), nil
+		}
+	}
+	for _, estado := range []string{"pendiente", "tomada", "ejecutando"} {
+		estado := estado
+		orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{ProyectoID: &proyectoID, Estado: &estado})
+		if err != nil {
+			return false, "", err
+		}
+		if len(orders) > 0 {
+			return true, fmt.Sprintf("proyecto=%s runtime_orders=%s count=%d", strings.TrimSpace(slug), estado, len(orders)), nil
+		}
+	}
+	return false, "", nil
 }
 
 func revalidarPresupuestoBloqueadoBatch() (int, error) {

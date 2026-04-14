@@ -25,6 +25,7 @@ type AutomationService interface {
 	ResetReanimacion(nombre string) error
 	GarantizarSaludAgentes() error
 	PlanificarTareasAutomaticamente() error
+	TieneTrabajoOrquestablePendiente() (bool, string, error)
 	ProcesarPresupuestoSesionObservadoBatch() (int, error)
 	ProcesarAutonomiaAgentesBatch() (int, error)
 	ProcesarPipelineLocalBatch() (int, error)
@@ -44,30 +45,32 @@ type AutomationService interface {
 }
 
 type Runner struct {
-	Automation            AutomationService
-	NotificationFeed      <-chan db.EventoNotificacion
-	InitNotifications     func()
-	Notifier              func() notificaciones.Notificador
-	Debugf                func(format string, args ...any)
-	StartupGrace          time.Duration
-	ReanimacionCada       time.Duration
-	SaludCada             time.Duration
-	PlanificacionCada     time.Duration
-	ControlPlaneCada      time.Duration
-	ControlPlaneWarmCada  time.Duration
-	ControlPlaneColdCada  time.Duration
-	RuntimeTranscriptCada time.Duration
-	RuntimeMailboxCada    time.Duration
-	RuntimeOrdersCada     time.Duration
-	RuntimeBudgetCada     time.Duration
-	NotificationRetryCada time.Duration
-	BatchTimeout          time.Duration
-	mu                    sync.Mutex
-	runningBatches        map[string]runningBatchState
-	batchWake             map[string]chan struct{}
-	nextBatchToken        uint64
-	warmLaneActive        atomic.Bool
-	wg                    sync.WaitGroup
+	Automation                  AutomationService
+	NotificationFeed            <-chan db.EventoNotificacion
+	InitNotifications           func()
+	Notifier                    func() notificaciones.Notificador
+	Debugf                      func(format string, args ...any)
+	StartupGrace                time.Duration
+	ReanimacionCada             time.Duration
+	SaludCada                   time.Duration
+	PlanificacionCada           time.Duration
+	ControlPlaneCada            time.Duration
+	ControlPlaneWarmCada        time.Duration
+	ControlPlaneWarmRequeueCada time.Duration
+	ControlPlaneColdCada        time.Duration
+	RuntimeTranscriptCada       time.Duration
+	RuntimeMailboxCada          time.Duration
+	RuntimeOrdersCada           time.Duration
+	RuntimeBudgetCada           time.Duration
+	NotificationRetryCada       time.Duration
+	BatchTimeout                time.Duration
+	mu                          sync.Mutex
+	runningBatches              map[string]runningBatchState
+	batchWake                   map[string]chan struct{}
+	nextBatchToken              uint64
+	warmLaneActive              atomic.Bool
+	warmRequeue                 *Throttler
+	wg                          sync.WaitGroup
 }
 
 type runningBatchState struct {
@@ -466,6 +469,7 @@ func (r *Runner) runControlPlaneWarm() {
 		r.WakeRuntimeMailbox()
 		r.WakeRuntimeOrders()
 	}
+	r.scheduleWarmFollowUpIfPending()
 }
 
 // runControlPlaneCold: limpieza — stale handles, stale orders, hygiene.
@@ -647,6 +651,13 @@ func (r *Runner) controlPlaneWarmCada() time.Duration {
 	return r.ControlPlaneWarmCada
 }
 
+func (r *Runner) controlPlaneWarmRequeueCada() time.Duration {
+	if r.ControlPlaneWarmRequeueCada <= 0 {
+		return 10 * time.Second
+	}
+	return r.ControlPlaneWarmRequeueCada
+}
+
 func (r *Runner) controlPlaneColdCada() time.Duration {
 	if r.ControlPlaneColdCada <= 0 && r.ControlPlaneCada > 0 {
 		return r.ControlPlaneCada
@@ -707,6 +718,37 @@ func (r *Runner) controlPlaneBatchTimeout() time.Duration {
 		return 45 * time.Second
 	}
 	return r.BatchTimeout
+}
+
+func (r *Runner) warmRequeueGate() *Throttler {
+	if r == nil {
+		return NewThrottler()
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.warmRequeue == nil {
+		r.warmRequeue = NewThrottler()
+	}
+	return r.warmRequeue
+}
+
+func (r *Runner) scheduleWarmFollowUpIfPending() {
+	if r == nil || r.Automation == nil {
+		return
+	}
+	pending, detail, err := r.Automation.TieneTrabajoOrquestablePendiente()
+	if err != nil {
+		r.debugf("control_plane_warm pending_check_error=%v", err)
+		return
+	}
+	if !pending {
+		return
+	}
+	if !r.warmRequeueGate().Allow("control_plane_warm", r.controlPlaneWarmRequeueCada()) {
+		return
+	}
+	r.debugf("control_plane_warm follow_up_pending=%s", strings.TrimSpace(detail))
+	r.WakeBatch("control_plane_warm")
 }
 
 func (r *Runner) startupGrace() time.Duration {

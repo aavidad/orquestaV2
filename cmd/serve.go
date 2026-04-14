@@ -106,13 +106,13 @@ type webPropResumen struct {
 }
 
 type webTareaRow struct {
-	ID        int64
-	Titulo    string
-	Modulo    string
-	Estado    string
-	Prioridad string
-	Agente    string
-	ProgresoPct int
+	ID             int64
+	Titulo         string
+	Modulo         string
+	Estado         string
+	Prioridad      string
+	Agente         string
+	ProgresoPct    int
 	ProgresoManual bool
 }
 
@@ -1152,6 +1152,9 @@ func webHandlerTareaAccion(w http.ResponseWriter, r *http.Request, idStr string)
 	if err != nil {
 		http.Redirect(w, r, back+"?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 		return
+	}
+	if tareaAccionDebeDespertarWarm(accion) {
+		wakeControlPlaneWarm()
 	}
 	http.Redirect(w, r, back+"?ok="+url.QueryEscape(webTranslateRequestf(r, "tasks.flash.action_applied", accion)), http.StatusSeeOther)
 }

@@ -25,6 +25,9 @@ func (dbAutomationServiceTest) GarantizarSaludAgentes() error { return db.Garant
 func (dbAutomationServiceTest) PlanificarTareasAutomaticamente() error {
 	return db.PlanificarTareasAutomaticamente()
 }
+func (dbAutomationServiceTest) TieneTrabajoOrquestablePendiente() (bool, string, error) {
+	return false, "", nil
+}
 func (dbAutomationServiceTest) ProcesarPresupuestoSesionObservadoBatch() (int, error) {
 	return 0, nil
 }

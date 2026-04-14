@@ -11,44 +11,47 @@ import (
 )
 
 type stubAutomationService struct {
-	autonomyCount    int
-	pipelineCount    int
-	runtimeSupCount  int
-	supervisionCount int
-	reviewCount      int
-	staleCount       int
-	staleOrdersCount int
-	transcriptCount  int
-	mailboxCount     int
-	processedCount   int
-	hygieneCount     int
-	mergedCount      int
-	refinedCount     int
-	handoffCount     int
-	staleErr         error
-	staleOrdersErr   error
-	transcriptErr    error
-	mailboxErr       error
-	processedErr     error
-	hygieneErr       error
-	mergedErr        error
-	refinedErr       error
-	handoffErr       error
-	autonomyErr      error
-	pipelineErr      error
-	runtimeSupErr    error
-	supervisionErr   error
-	reviewErr        error
-	transcriptPanic  bool
-	processedBlock   <-chan struct{}
-	transcriptCalls  int
-	processedCalls   int
-	mailboxCalls     int
-	audits           []string
-	reanimar         []*db.Agente
-	reanimarErr      error
-	resetCalls       []string
-	resetErr         error
+	autonomyCount     int
+	pipelineCount     int
+	runtimeSupCount   int
+	supervisionCount  int
+	reviewCount       int
+	staleCount        int
+	staleOrdersCount  int
+	transcriptCount   int
+	mailboxCount      int
+	processedCount    int
+	hygieneCount      int
+	mergedCount       int
+	refinedCount      int
+	handoffCount      int
+	staleErr          error
+	staleOrdersErr    error
+	transcriptErr     error
+	mailboxErr        error
+	processedErr      error
+	hygieneErr        error
+	mergedErr         error
+	refinedErr        error
+	handoffErr        error
+	autonomyErr       error
+	pipelineErr       error
+	runtimeSupErr     error
+	supervisionErr    error
+	reviewErr         error
+	transcriptPanic   bool
+	processedBlock    <-chan struct{}
+	transcriptCalls   int
+	processedCalls    int
+	mailboxCalls      int
+	audits            []string
+	reanimar          []*db.Agente
+	reanimarErr       error
+	resetCalls        []string
+	resetErr          error
+	pendingWork       bool
+	pendingWorkDetail string
+	pendingWorkErr    error
 }
 
 func (s *stubAutomationService) CheckReanimaciones() ([]*db.Agente, error) {
@@ -60,6 +63,9 @@ func (s *stubAutomationService) ResetReanimacion(nombre string) error {
 }
 func (s *stubAutomationService) GarantizarSaludAgentes() error          { return nil }
 func (s *stubAutomationService) PlanificarTareasAutomaticamente() error { return nil }
+func (s *stubAutomationService) TieneTrabajoOrquestablePendiente() (bool, string, error) {
+	return s.pendingWork, s.pendingWorkDetail, s.pendingWorkErr
+}
 func (s *stubAutomationService) ProcesarAutonomiaAgentesBatch() (int, error) {
 	return s.autonomyCount, s.autonomyErr
 }
@@ -293,6 +299,37 @@ func TestRunnerRunControlPlaneWarmDrenaCarrilHotSiGeneraTrabajo(t *testing.T) {
 		default:
 			t.Fatalf("warm deberia despertar runtime_orders cuando genera trabajo")
 		}
+	}
+}
+
+func TestRunnerRunControlPlaneWarmSeReinyectaSiQuedaTrabajoPendiente(t *testing.T) {
+	service := &stubAutomationService{
+		pendingWork:       true,
+		pendingWorkDetail: "proyecto=orquestador tareas=libre",
+	}
+	r := &Runner{
+		Automation:                  service,
+		ControlPlaneWarmRequeueCada: time.Millisecond,
+	}
+	r.runControlPlaneWarm()
+	select {
+	case <-r.batchWakeChannel("control_plane_warm"):
+	default:
+		t.Fatal("deberia reinyectar control_plane_warm cuando queda trabajo orquestable")
+	}
+}
+
+func TestRunnerRunControlPlaneWarmNoSeReinyectaSinTrabajoPendiente(t *testing.T) {
+	service := &stubAutomationService{}
+	r := &Runner{
+		Automation:                  service,
+		ControlPlaneWarmRequeueCada: time.Millisecond,
+	}
+	r.runControlPlaneWarm()
+	select {
+	case <-r.batchWakeChannel("control_plane_warm"):
+		t.Fatal("no deberia reinyectar control_plane_warm sin trabajo pendiente")
+	default:
 	}
 }
 
