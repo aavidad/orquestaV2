@@ -2475,6 +2475,11 @@ func procesarRuntimeMailboxBatchConFiltro(filter db.FiltroRuntimeMailbox) (int, 
 	if err != nil {
 		return quotaPipelineReconciled + reconciled, err
 	}
+	pipelineCooldownReconciled, err := reconciliarRuntimeMailboxPipelineEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
+	if err != nil {
+		return quotaPipelineReconciled + reconciled + pipelineCooldownReconciled, err
+	}
+	reconciled += pipelineCooldownReconciled
 	refreshCooldownReconciled, err := reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
 		return quotaPipelineReconciled + reconciled + refreshCooldownReconciled, err
@@ -2608,6 +2613,53 @@ func runtimeMailboxPipelineDebeCompactarseEnBatch(agente string, proyectoID *int
 		return true, nil
 	}
 	return false, nil
+}
+
+func reconciliarRuntimeMailboxPipelineEnfriamientoBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
+	total := 0
+	for _, msg := range mailbox {
+		if msg == nil || !runtimeMailboxPipelinePuedeConsumirsePorEnfriamiento(msg, snapshot) {
+			continue
+		}
+		if _, skip := consumed[msg.ID]; skip {
+			continue
+		}
+		if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+			return total, err
+		} else if !canConsume {
+			continue
+		}
+		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+			return total, err
+		}
+		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return total, err
+		}
+		db.Audit("orquesta", "runtime_mailbox_pipeline_enfriamiento", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("agente=%s kind=%s pipeline_local consumido por agente en enfriamiento",
+				strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
+		consumed[msg.ID] = struct{}{}
+		total++
+	}
+	return total, nil
+}
+
+func runtimeMailboxPipelinePuedeConsumirsePorEnfriamiento(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) bool {
+	if msg == nil || !strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") {
+		return false
+	}
+	ok, err := snapshot.quotaMatches(strings.TrimSpace(msg.ToAgente), "enfriamiento")
+	if err != nil {
+		return false
+	}
+	if ok {
+		return true
+	}
+	ok, err = snapshot.quotaMatches(strings.TrimSpace(msg.ToAgente), "agotado")
+	if err != nil {
+		return false
+	}
+	return ok
 }
 
 func reconciliarRuntimeMailboxRefreshEnfriamientoBatch() (int, error) {
@@ -2786,17 +2838,27 @@ func reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox []*db.Run
 }
 
 func watchdogPuedeConsumirsePorEnfriamiento(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, snapshot *runtimeMailboxBatchSnapshot) bool {
-	if msg == nil || handle == nil {
-		return false
-	}
-	if !strings.EqualFold(strings.TrimSpace(handle.Estado), "pausado") {
+	if msg == nil || snapshot == nil {
 		return false
 	}
 	ok, err := snapshot.quotaMatches(strings.TrimSpace(msg.ToAgente), "enfriamiento")
 	if err != nil {
 		return false
 	}
-	return ok
+	if ok {
+		return true
+	}
+	ok, err = snapshot.quotaMatches(strings.TrimSpace(msg.ToAgente), "agotado")
+	if err != nil {
+		return false
+	}
+	if ok {
+		return true
+	}
+	if handle == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(handle.Estado), "pausado")
 }
 
 func runtimeMailboxRefreshPuedeConsumirsePorEnfriamiento(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) bool {

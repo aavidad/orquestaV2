@@ -12180,6 +12180,104 @@ func TestProcesarRuntimeMailboxBatchConsumeInstructionEnEnfriamiento(t *testing.
 	}
 }
 
+func TestProcesarRuntimeMailboxBatchConsumePipelineLocalEnEnfriamiento(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='pausado' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("pausar handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', motivo_pausa='cuota' WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("marcar enfriamiento: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"accion":"implementar","texto":"no deberia quedar pendiente en enfriamiento"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox pipeline_local: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia reconciliar exactamente una pipeline_local en enfriamiento, got=%d", n)
+	}
+
+	pendiente := "pendiente"
+	toAgente := "Codex1"
+	pendientes, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente:   &toAgente,
+		ProyectoID: &proyectoID,
+		Estado:     &pendiente,
+	})
+	if err != nil {
+		t.Fatalf("listar mailbox pendiente: %v", err)
+	}
+	if len(pendientes) != 0 {
+		t.Fatalf("no deberia quedar pipeline_local pendiente en enfriamiento: %+v", pendientes)
+	}
+
+	consumido := "consumido"
+	consumidos, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{
+		ToAgente:   &toAgente,
+		ProyectoID: &proyectoID,
+		Estado:     &consumido,
+	})
+	if err != nil {
+		t.Fatalf("listar mailbox consumido: %v", err)
+	}
+	if len(consumidos) != 1 || consumidos[0].ID != msgID {
+		t.Fatalf("pipeline_local consumida inesperada: %+v", consumidos)
+	}
+
+	logs, err := db.ListarAuditoria(db.FiltroAuditoria{Limite: 200})
+	if err != nil {
+		t.Fatalf("listar auditoria: %v", err)
+	}
+	found := false
+	for _, item := range logs {
+		if item != nil && item.Accion == "runtime_mailbox_pipeline_enfriamiento" && item.EntidadID == msgID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("faltaba auditoria de pipeline_local en enfriamiento")
+	}
+}
+
 func TestProcesarRuntimeMailboxBatchDeduplicaPipelineLocalEnCuota(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
