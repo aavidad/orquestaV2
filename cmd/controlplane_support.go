@@ -4465,9 +4465,6 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 			}
 			continue
 		}
-		if !runtimeMailboxShouldReevaluate("session_resume", msg.ID, handle.ID) {
-			continue
-		}
 		var runtimeInstance *db.RuntimeInstance
 		if supervisedHandle, supervisedRuntime, _, err := snapshot.supervisedHandle(handle); err != nil {
 			return total, err
@@ -4537,6 +4534,9 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 		if blocked, err := runtimeMailboxBloqueadaPorBootstrapPendiente(msg, handle, runtimeInstance); err != nil {
 			return total, err
 		} else if blocked {
+			continue
+		}
+		if !runtimeMailboxShouldReevaluate("session_resume", msg.ID, handle.ID) {
 			continue
 		}
 		if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliverySessionResume {
@@ -4661,14 +4661,19 @@ func procesarRuntimeMailboxBootstrapTMUXBatchConMailbox(mailbox []*db.RuntimeMai
 			}
 			continue
 		}
-		if !runtimeMailboxShouldReevaluate("bootstrap_tmux", msg.ID, handle.ID) {
-			continue
+		if supervisedHandle, _, _, err := snapshot.supervisedHandle(handle); err != nil {
+			return total, err
+		} else if supervisedHandle != nil {
+			handle = supervisedHandle
 		}
 		if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "bootstrap_tmux", time.Now().UTC()); err != nil {
 			return total, err
 		} else if obsoleta {
 			consumed[msg.ID] = struct{}{}
 			total++
+			continue
+		}
+		if !runtimeMailboxShouldReevaluate("bootstrap_tmux", msg.ID, handle.ID) {
 			continue
 		}
 		if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryBootstrapOnly {
@@ -5509,11 +5514,6 @@ func consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg *db.RuntimeMailboxMess
 	if view == nil || !view.Alive || view.HeartbeatStale {
 		return false, nil
 	}
-	switch strings.ToLower(strings.TrimSpace(view.State)) {
-	case "running", "idle", "waiting_input":
-	default:
-		return false, nil
-	}
 	if view.StartedAt == nil || view.StartedAt.IsZero() {
 		return false, nil
 	}
@@ -5527,6 +5527,11 @@ func consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg *db.RuntimeMailboxMess
 		db.Audit("orquesta", "runtime_mailbox_obsoleta_progress", "runtime_mailbox", msg.ID,
 			fmt.Sprintf("lane=%s agente=%s kind=%s %s", strings.TrimSpace(lane), strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), strings.TrimSpace(detalle)))
 		return true, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(view.State)) {
+	case "running", "idle", "waiting_input":
+	default:
+		return false, nil
 	}
 	startedAt := view.StartedAt.UTC()
 	if !msg.CreatedAt.UTC().Before(startedAt) {
