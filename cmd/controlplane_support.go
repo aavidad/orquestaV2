@@ -9042,9 +9042,59 @@ func persistirPausaPorCuotaAutonomia(agente, motivo string) error {
 		return err
 	}
 	if err == nil && p != nil && db.PresupuestoSesionFresco(p) && p.ResetAt != nil && p.ResetAt.After(time.Now().UTC()) {
-		return db.PausarAgenteHasta(agente, p.ResetAt.UTC(), motivo)
+		if err := db.PausarAgenteHasta(agente, p.ResetAt.UTC(), motivo); err != nil {
+			return err
+		}
+		return bloquearTareasActivasPorCuotaAutonomia(agente, motivo)
 	}
-	return db.PausarAgente(agente, 60, motivo)
+	if err := db.PausarAgente(agente, 60, motivo); err != nil {
+		return err
+	}
+	return bloquearTareasActivasPorCuotaAutonomia(agente, motivo)
+}
+
+func bloquearTareasActivasPorCuotaAutonomia(agente, motivo string) error {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{Agente: &agente})
+	if err != nil {
+		return err
+	}
+	motivoBloqueo := construirMotivoBloqueoCuotaAutonomia(agente, motivo)
+	nota := fmt.Sprintf("Bloqueada automáticamente en %s por cuota sin relevo sano", agente)
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.ID <= 0 {
+			continue
+		}
+		actual, err := db.GetTarea(tarea.ID)
+		if err != nil {
+			return err
+		}
+		if actual == nil || actual.Agente == nil || !strings.EqualFold(strings.TrimSpace(*actual.Agente), agente) {
+			continue
+		}
+		if actual.Estado != db.TareaAsignada && actual.Estado != db.TareaEnProgreso {
+			continue
+		}
+		if err := bloquearTareaAutonomiaSinRelevo(actual.ID, agente, motivoBloqueo, nota); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func construirMotivoBloqueoCuotaAutonomia(agente, motivo string) string {
+	agente = strings.TrimSpace(agente)
+	motivo = strings.TrimSpace(motivo)
+	if strings.Contains(strings.ToLower(motivo), "bloqueado_por_cuota") {
+		return motivo
+	}
+	if motivo == "" {
+		motivo = "worker bloqueado por cuota"
+	}
+	return fmt.Sprintf("Agente %s en estado bloqueado_por_cuota: %s", agente, motivo)
 }
 
 func procesarCierreProyectoSesion(sesion *db.Sesion) (int, error) {
