@@ -247,7 +247,17 @@ var runtimeProcesarDegradadosCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Printf("✓ Degradados aceptado accepted=%t running=%t count=%d\n", resp.Accepted, resp.Running, resp.Count)
+		fmt.Printf("✓ Degradados aceptado accepted=%t running=%t count=%d", resp.Accepted, resp.Running, resp.Count)
+		if resp.GhostAssignmentsCompacted > 0 {
+			fmt.Printf(" ghost_compacted=%d", resp.GhostAssignmentsCompacted)
+		}
+		if resp.ReactivatedWithoutRuntime > 0 {
+			fmt.Printf(" reactivated_without_runtime=%d", resp.ReactivatedWithoutRuntime)
+		}
+		if resp.IdleAutoassigned > 0 {
+			fmt.Printf(" idle_autoassigned=%d", resp.IdleAutoassigned)
+		}
+		fmt.Println()
 		return nil
 	},
 }

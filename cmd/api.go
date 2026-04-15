@@ -555,10 +555,13 @@ type apiRuntimeProcessMailboxResponse struct {
 }
 
 type apiRuntimeProcessAutonomiaResponse struct {
-	OK       bool `json:"ok"`
-	Count    int  `json:"count"`
-	Accepted bool `json:"accepted,omitempty"`
-	Running  bool `json:"running,omitempty"`
+	OK                        bool `json:"ok"`
+	Count                     int  `json:"count"`
+	Accepted                  bool `json:"accepted,omitempty"`
+	Running                   bool `json:"running,omitempty"`
+	GhostAssignmentsCompacted int  `json:"ghost_assignments_compacted,omitempty"`
+	ReactivatedWithoutRuntime int  `json:"reactivated_without_runtime,omitempty"`
+	IdleAutoassigned          int  `json:"idle_autoassigned,omitempty"`
 }
 
 type apiRuntimeProcessAutonomiaRequest struct {
@@ -582,6 +585,10 @@ var runtimeProcessAutonomiaBatch = func() (int, error) {
 
 var runtimeProcessDegradadosBatch = func() (int, error) {
 	return procesarAgentesDegradadosAutonomiaBatchFn()
+}
+
+var runtimeProcessDegradadosBatchDetailed = func() (runtimeProcessDegradadosSummary, error) {
+	return procesarAgentesDegradadosAutonomiaBatchDetallado()
 }
 
 type apiAgenteResetReanimacionResponse struct {
@@ -5334,15 +5341,18 @@ func apiHandlerRuntimeProcessDegradados(w http.ResponseWriter, r *http.Request) 
 	}
 	resetAutonomiaDegradedTaskGate()
 	if req.Wait {
-		count, err := runtimeProcessDegradadosBatch()
+		resumen, err := runtimeProcessDegradadosBatchDetailed()
 		if err != nil {
 			db.Audit("server", "runtime_process_degradados_error", "runtime", 0, err.Error())
 			apiError(w, http.StatusInternalServerError, err)
 			return
 		}
 		apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
-			OK:    true,
-			Count: count,
+			OK:                        true,
+			Count:                     resumen.Count,
+			GhostAssignmentsCompacted: resumen.GhostAssignmentsCompacted,
+			ReactivatedWithoutRuntime: resumen.ReactivatedWithoutRuntime,
+			IdleAutoassigned:          resumen.IdleAutoassigned,
 		})
 		return
 	}

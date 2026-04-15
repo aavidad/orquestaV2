@@ -6576,11 +6576,26 @@ func ejecutarPasoAutonomiaConTimeout(etiqueta string, timeout time.Duration, fn 
 	}
 }
 
+type runtimeProcessDegradadosSummary struct {
+	Count                     int
+	GhostAssignmentsCompacted int
+	ReactivatedWithoutRuntime int
+	IdleAutoassigned          int
+}
+
 func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
+	resumen, err := procesarAgentesDegradadosAutonomiaBatchDetallado()
+	if err != nil {
+		return 0, err
+	}
+	return resumen.Count, nil
+}
+
+func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradadosSummary, error) {
 	db.ResetRuntimeHandlesHotCache()
 	rows, err := agentesService.BuildPanelRows()
 	if err != nil {
-		return 0, err
+		return runtimeProcessDegradadosSummary{}, err
 	}
 	rowsPorAgente := map[string]agentesapp.Row{}
 	for _, row := range rows {
@@ -6595,7 +6610,7 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 	}
 	tareasActivasPorAgente, tareasBloqueadasPorAgente, bloqueosPorTarea, err := cargarTareasYBloqueosAutonomiaPorAgente()
 	if err != nil {
-		return 0, err
+		return runtimeProcessDegradadosSummary{}, err
 	}
 	openTasksProjected := map[string]int{}
 	for _, row := range rows {
@@ -6605,17 +6620,18 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 		openTasksProjected[row.Agente.Nombre] = row.OpenTasks
 	}
 
-	procesadas := 0
+	resumen := runtimeProcessDegradadosSummary{}
 	now := time.Now().UTC()
 	asignacionesFantasma, err := procesarAsignacionesPremiumFantasmaBatch(rows, tareasActivasPorAgente, tareasBloqueadasPorAgente)
 	if err != nil {
-		return 0, err
+		return resumen, err
 	}
-	procesadas += asignacionesFantasma
+	resumen.GhostAssignmentsCompacted = asignacionesFantasma
+	resumen.Count += asignacionesFantasma
 	if asignacionesFantasma > 0 {
 		rows, err = agentesService.BuildPanelRows()
 		if err != nil {
-			return procesadas, err
+			return resumen, err
 		}
 		rowsPorAgente = map[string]agentesapp.Row{}
 		for _, row := range rows {
@@ -6632,62 +6648,63 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 	}
 	migradas, err := procesarMigracionRuntimeLegacyTMUXBatch(rows, now)
 	if err != nil {
-		return 0, err
+		return resumen, err
 	}
-	procesadas += migradas
+	resumen.Count += migradas
 	if migradas > 0 {
 		rows, err = agentesService.BuildPanelRows()
 		if err != nil {
-			return procesadas, err
+			return resumen, err
 		}
 		openTasksProjected = openTasksProjectedFromRows(rows)
 	}
 	huerfanasTMUX, err := procesarSesionesTMUXHuerfanasAutonomiaBatch(now)
 	if err != nil {
-		return procesadas, err
+		return resumen, err
 	}
-	procesadas += huerfanasTMUX
+	resumen.Count += huerfanasTMUX
 	reiniciosAtascados, err := procesarWorkersAtascadosAutonomiaBatch(rows, now)
 	if err != nil {
-		return procesadas, err
+		return resumen, err
 	}
-	procesadas += reiniciosAtascados
+	resumen.Count += reiniciosAtascados
 	if reiniciosAtascados > 0 {
 		rows, err = agentesService.BuildPanelRows()
 		if err != nil {
-			return procesadas, err
+			return resumen, err
 		}
 		openTasksProjected = openTasksProjectedFromRows(rows)
 	}
 	limpiadasFuera, err := procesarTareasActivasFueraDeOrquestacionBatch(tareasActivasPorAgente, rowsPorAgente)
 	if err != nil {
-		return procesadas, err
+		return resumen, err
 	}
-	procesadas += limpiadasFuera
+	resumen.Count += limpiadasFuera
 	compactadasExclusivas, err := procesarCompactacionExclusividadPremiumBatch(rows, tareasActivasPorAgente)
 	if err != nil {
-		return procesadas, err
+		return resumen, err
 	}
-	procesadas += compactadasExclusivas
+	resumen.Count += compactadasExclusivas
 	runtimesFueraAsignacion, err := procesarRuntimesFueraDeAsignacionActivaBatch(rows, now)
 	if err != nil {
-		return procesadas, err
+		return resumen, err
 	}
-	procesadas += runtimesFueraAsignacion
+	resumen.Count += runtimesFueraAsignacion
 	redistribuidas, err := procesarSobrecargaAgentesAutonomiaBatch(rows, tareasActivasPorAgente, openTasksProjected, now)
 	if err != nil {
-		return procesadas, err
+		return resumen, err
 	}
-	procesadas += redistribuidas
+	resumen.Count += redistribuidas
 	reactivadosSinRuntime, err := procesarReactivacionAgentesSinRuntimeBatch(rows, tareasActivasPorAgente, tareasBloqueadasPorAgente)
 	if err != nil {
-		return procesadas, err
+		return resumen, err
 	}
-	procesadas += reactivadosSinRuntime
+	resumen.ReactivatedWithoutRuntime = reactivadosSinRuntime
+	resumen.Count += reactivadosSinRuntime
 	if reactivadosSinRuntime > 0 {
 		rows, err = agentesService.BuildPanelRows()
 		if err != nil {
-			return procesadas, err
+			return resumen, err
 		}
 		rowsPorAgente = map[string]agentesapp.Row{}
 		for _, row := range rows {
@@ -6702,15 +6719,16 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 		}
 		tareasActivasPorAgente, tareasBloqueadasPorAgente, bloqueosPorTarea, err = cargarTareasYBloqueosAutonomiaPorAgente()
 		if err != nil {
-			return procesadas, err
+			return resumen, err
 		}
 		openTasksProjected = openTasksProjectedFromRows(rows)
 	}
 	autoasignadosPremiumSinSesion, err := procesarAutoasignacionPremiumSinSesionBatch(rows, tareasActivasPorAgente)
 	if err != nil {
-		return procesadas, err
+		return resumen, err
 	}
-	procesadas += autoasignadosPremiumSinSesion
+	resumen.IdleAutoassigned = autoasignadosPremiumSinSesion
+	resumen.Count += autoasignadosPremiumSinSesion
 	for _, row := range rows {
 		if row.Agente == nil || !rowPermiteAutoRecuperacion(row, now) {
 			continue
@@ -6726,7 +6744,7 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 			}
 			actual, err := db.GetTarea(tarea.ID)
 			if err != nil {
-				return procesadas, err
+				return resumen, err
 			}
 			if actual == nil || actual.Agente == nil || actual.Estado != db.EstadoBloqueada {
 				continue
@@ -6745,18 +6763,18 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 				}
 				resolucion := fmt.Sprintf("reasignación automática por sobrecarga desde %s", agente)
 				if err := desbloquearYReasignarTareaAutonomia(actual.ID, resolucion, relevo, fmt.Sprintf("Reasignada automáticamente desde %s a %s tras bloqueo por sobrecarga", agente, relevo)); err != nil {
-					return procesadas, err
+					return resumen, err
 				}
 				openTasksProjected[relevo]++
-				procesadas++
+				resumen.Count++
 				continue
 			}
 			resolucion := fmt.Sprintf("recuperación automática tras %s (%s)", row.EstadoOperativo, firstNonEmpty(strings.TrimSpace(row.DetalleOperativo), "worker recuperado"))
 			if err := desbloquearYReactivarTareaAutonomia(actual.ID, resolucion, agente, fmt.Sprintf("Reactivada automáticamente en %s tras recuperar estado operativo", agente)); err != nil {
-				return procesadas, err
+				return resumen, err
 			}
 			openTasksProjected[agente]++
-			procesadas++
+			resumen.Count++
 		}
 	}
 	for _, row := range rows {
@@ -6779,7 +6797,7 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 			}
 			actual, err := db.GetTarea(tarea.ID)
 			if err != nil {
-				return procesadas, err
+				return resumen, err
 			}
 			if actual == nil || actual.Agente == nil {
 				continue
@@ -6801,9 +6819,9 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 			relevo := seleccionarRelevoAutonomia(rows, openTasksProjected, actual, agente)
 			if relevo == "" {
 				if err := bloquearTareaAutonomiaSinRelevo(actual.ID, agente, motivo, construirNotaBloqueoAutonomiaSinRelevo(row, agente)); err != nil {
-					return procesadas, err
+					return resumen, err
 				}
-				procesadas++
+				resumen.Count++
 				if openTasksProjected[agente] > 0 {
 					openTasksProjected[agente]--
 				}
@@ -6811,16 +6829,16 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 			}
 
 			if err := reasignarYArrancarTareaAutonomia(actual.ID, relevo, fmt.Sprintf("Reasignada automáticamente desde %s a %s: %s", agente, relevo, motivo)); err != nil {
-				return procesadas, err
+				return resumen, err
 			}
 			if openTasksProjected[agente] > 0 {
 				openTasksProjected[agente]--
 			}
 			openTasksProjected[relevo]++
-			procesadas++
+			resumen.Count++
 
 			if err := encolarContinuacionTareaReasignadaSiCorresponde(relevo, actual.ProyectoID, actual.ID, agente, row.EstadoOperativo, "continúa con la tarea reasignada y deja evidencia de avance", nil); err != nil {
-				return procesadas, err
+				return resumen, err
 			}
 		}
 	}
@@ -6844,7 +6862,7 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 			}
 			actual, err := db.GetTarea(tarea.ID)
 			if err != nil {
-				return procesadas, err
+				return resumen, err
 			}
 			if actual == nil || actual.Agente == nil {
 				continue
@@ -6874,20 +6892,29 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 			motivo := construirMotivoAutonomiaAgenteDegradado(row)
 			resolucion := fmt.Sprintf("reasignación automática desde %s tras %s (%s)", agente, row.EstadoOperativo, firstNonEmpty(strings.TrimSpace(row.DetalleOperativo), "worker degradado"))
 			if err := desbloquearYReasignarTareaAutonomia(actual.ID, resolucion, relevo, fmt.Sprintf("Reasignada automáticamente desde %s a %s: %s", agente, relevo, motivo)); err != nil {
-				return procesadas, err
+				return resumen, err
 			}
 			openTasksProjected[relevo]++
-			procesadas++
+			resumen.Count++
 
 			if err := encolarContinuacionTareaReasignadaSiCorresponde(relevo, actual.ProyectoID, actual.ID, agente, row.EstadoOperativo, "continúa con la tarea reasignada y deja evidencia de avance", nil); err != nil {
-				return procesadas, err
+				return resumen, err
 			}
 		}
 	}
-	if procesadas > 0 {
+	if resumen.Count > 0 {
 		resetStatusSnapshotCache()
 	}
-	return procesadas, nil
+	return resumen, nil
+}
+
+func asignacionPausadaPremiumAutoasignable(nota string) bool {
+	switch strings.TrimSpace(nota) {
+	case "sin_trabajo_reactivacion_automatica", "sin_trabajo_espera_automatica":
+		return true
+	default:
+		return false
+	}
 }
 
 func cargarTareasYBloqueosAutonomiaPorAgente() (map[string][]*db.Tarea, map[string][]*db.Tarea, map[int64]db.ResumenBloqueo, error) {
@@ -6992,19 +7019,28 @@ func resolverProyectoAutoasignacionPremiumSinSesion(agente string, row agentesap
 	if proyectoID := rowProyectoIDPreferido(row); proyectoID != nil && *proyectoID > 0 {
 		return runtimesService.GetProject(strconv.FormatInt(*proyectoID, 10))
 	}
+	if proyecto, err := resolverProyectoAutoasignacionDesdeAsignacionPausada(agente); err != nil {
+		return nil, err
+	} else if proyecto != nil {
+		return proyecto, nil
+	}
 	if proyecto, err := resolverProyectoReactivacionAgente(agente); err != nil {
 		return nil, err
 	} else if proyecto != nil {
 		return proyecto, nil
 	}
+	return nil, nil
+}
+
+func resolverProyectoAutoasignacionDesdeAsignacionPausada(agente string) (*db.Proyecto, error) {
 	asignaciones, err := db.ListarAsignaciones(db.FiltroAsignaciones{Agente: &agente})
 	if err != nil {
 		return nil, err
 	}
 	var (
-		best           *db.Asignacion
-		bestProyecto   *db.Proyecto
-		bestScore      = -1
+		best         *db.Asignacion
+		bestProyecto *db.Proyecto
+		bestScore    = -1
 	)
 	for _, asignacion := range asignaciones {
 		if asignacion == nil || asignacion.ProyectoID <= 0 {
