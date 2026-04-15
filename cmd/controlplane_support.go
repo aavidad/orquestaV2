@@ -6597,31 +6597,16 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 	if err != nil {
 		return runtimeProcessDegradadosSummary{}, err
 	}
-	rowsPorAgente := map[string]agentesapp.Row{}
-	for _, row := range rows {
-		if row.Agente == nil {
-			continue
-		}
-		nombre := strings.ToLower(strings.TrimSpace(row.Agente.Nombre))
-		if nombre == "" {
-			continue
-		}
-		rowsPorAgente[nombre] = row
-	}
 	tareasActivasPorAgente, tareasBloqueadasPorAgente, bloqueosPorTarea, err := cargarTareasYBloqueosAutonomiaPorAgente()
 	if err != nil {
 		return runtimeProcessDegradadosSummary{}, err
 	}
-	openTasksProjected := map[string]int{}
-	for _, row := range rows {
-		if row.Agente == nil {
-			continue
-		}
-		openTasksProjected[row.Agente.Nombre] = row.OpenTasks
-	}
+	rowsPorAgente := rowsPorAgenteMap(rows)
+	openTasksProjected := openTasksProjectedFromRows(rows)
 
 	resumen := runtimeProcessDegradadosSummary{}
 	now := time.Now().UTC()
+	agentesFantasma := agentesAsignacionFantasmaCompactable(rows, tareasActivasPorAgente, tareasBloqueadasPorAgente)
 	asignacionesFantasma, err := procesarAsignacionesPremiumFantasmaBatch(rows, tareasActivasPorAgente, tareasBloqueadasPorAgente)
 	if err != nil {
 		return resumen, err
@@ -6629,21 +6614,11 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 	resumen.GhostAssignmentsCompacted = asignacionesFantasma
 	resumen.Count += asignacionesFantasma
 	if asignacionesFantasma > 0 {
-		rows, err = agentesService.BuildPanelRows()
+		rows, err = refrescarRowsCompactPorAgente(rows, agentesFantasma)
 		if err != nil {
 			return resumen, err
 		}
-		rowsPorAgente = map[string]agentesapp.Row{}
-		for _, row := range rows {
-			if row.Agente == nil {
-				continue
-			}
-			nombre := strings.ToLower(strings.TrimSpace(row.Agente.Nombre))
-			if nombre == "" {
-				continue
-			}
-			rowsPorAgente[nombre] = row
-		}
+		rowsPorAgente = rowsPorAgenteMap(rows)
 		openTasksProjected = openTasksProjectedFromRows(rows)
 	}
 	migradas, err := procesarMigracionRuntimeLegacyTMUXBatch(rows, now)
@@ -6651,28 +6626,23 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 		return resumen, err
 	}
 	resumen.Count += migradas
-	if migradas > 0 {
-		rows, err = agentesService.BuildPanelRows()
-		if err != nil {
-			return resumen, err
-		}
-		openTasksProjected = openTasksProjectedFromRows(rows)
-	}
 	huerfanasTMUX, err := procesarSesionesTMUXHuerfanasAutonomiaBatch(now)
 	if err != nil {
 		return resumen, err
 	}
 	resumen.Count += huerfanasTMUX
+	agentesAtascados := agentesWorkersAtascadosRecuperables(rows, now)
 	reiniciosAtascados, err := procesarWorkersAtascadosAutonomiaBatch(rows, now)
 	if err != nil {
 		return resumen, err
 	}
 	resumen.Count += reiniciosAtascados
 	if reiniciosAtascados > 0 {
-		rows, err = agentesService.BuildPanelRows()
+		rows, err = refrescarRowsCompactPorAgente(rows, agentesAtascados)
 		if err != nil {
 			return resumen, err
 		}
+		rowsPorAgente = rowsPorAgenteMap(rows)
 		openTasksProjected = openTasksProjectedFromRows(rows)
 	}
 	limpiadasFuera, err := procesarTareasActivasFueraDeOrquestacionBatch(tareasActivasPorAgente, rowsPorAgente)
@@ -6695,6 +6665,7 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 		return resumen, err
 	}
 	resumen.Count += redistribuidas
+	agentesSinRuntime := agentesSinRuntimeReactivables(rows, tareasActivasPorAgente, tareasBloqueadasPorAgente)
 	reactivadosSinRuntime, err := procesarReactivacionAgentesSinRuntimeBatch(rows, tareasActivasPorAgente, tareasBloqueadasPorAgente)
 	if err != nil {
 		return resumen, err
@@ -6702,21 +6673,11 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 	resumen.ReactivatedWithoutRuntime = reactivadosSinRuntime
 	resumen.Count += reactivadosSinRuntime
 	if reactivadosSinRuntime > 0 {
-		rows, err = agentesService.BuildPanelRows()
+		rows, err = refrescarRowsCompactPorAgente(rows, agentesSinRuntime)
 		if err != nil {
 			return resumen, err
 		}
-		rowsPorAgente = map[string]agentesapp.Row{}
-		for _, row := range rows {
-			if row.Agente == nil {
-				continue
-			}
-			nombre := strings.ToLower(strings.TrimSpace(row.Agente.Nombre))
-			if nombre == "" {
-				continue
-			}
-			rowsPorAgente[nombre] = row
-		}
+		rowsPorAgente = rowsPorAgenteMap(rows)
 		tareasActivasPorAgente, tareasBloqueadasPorAgente, bloqueosPorTarea, err = cargarTareasYBloqueosAutonomiaPorAgente()
 		if err != nil {
 			return resumen, err
@@ -6906,6 +6867,114 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 		resetStatusSnapshotCache()
 	}
 	return resumen, nil
+}
+
+func rowsPorAgenteMap(rows []agentesapp.Row) map[string]agentesapp.Row {
+	out := map[string]agentesapp.Row{}
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		nombre := strings.ToLower(strings.TrimSpace(row.Agente.Nombre))
+		if nombre == "" {
+			continue
+		}
+		out[nombre] = row
+	}
+	return out
+}
+
+func refrescarRowsCompactPorAgente(rows []agentesapp.Row, agentes map[string]struct{}) ([]agentesapp.Row, error) {
+	if len(agentes) == 0 {
+		return rows, nil
+	}
+	out := append([]agentesapp.Row(nil), rows...)
+	for i, row := range out {
+		if row.Agente == nil {
+			continue
+		}
+		nombre := strings.TrimSpace(row.Agente.Nombre)
+		if nombre == "" {
+			continue
+		}
+		if _, ok := agentes[strings.ToLower(nombre)]; !ok {
+			continue
+		}
+		detail, err := agentesService.BuildDetailCompact(nombre)
+		if err != nil {
+			return nil, err
+		}
+		if detail == nil || detail.Row.Agente == nil {
+			continue
+		}
+		out[i] = detail.Row
+	}
+	return out, nil
+}
+
+func agentesAsignacionFantasmaCompactable(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea, tareasBloqueadasPorAgente map[string][]*db.Tarea) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, row := range rows {
+		if row.Agente == nil || row.Asignacion == nil || row.Asignacion.Estado != db.AsignacionActiva {
+			continue
+		}
+		agente := strings.TrimSpace(row.Agente.Nombre)
+		if agente == "" || !asignacionPremiumFantasmaCompactable(row.Asignacion.Nota) {
+			continue
+		}
+		if rowTieneRuntimeOHandleOperativo(row) || row.MailboxPending > 0 || row.OpenTasks > 0 || row.BlockedTasks > 0 {
+			continue
+		}
+		if len(tareasActivasPorAgente[agente]) > 0 || len(tareasBloqueadasPorAgente[agente]) > 0 {
+			continue
+		}
+		out[strings.ToLower(agente)] = struct{}{}
+	}
+	return out
+}
+
+func agentesWorkersAtascadosRecuperables(rows []agentesapp.Row, now time.Time) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, row := range rows {
+		if row.Agente == nil || strings.TrimSpace(row.EstadoOperativo) != "atascado" {
+			continue
+		}
+		if !row.WorkerFresh(now) || row.OpenTasks <= 0 || row.MailboxPending > 0 {
+			continue
+		}
+		handle := row.Handle
+		if handle == nil || !rowHasFreshTMUXWorkerForRecovery(row, now) {
+			continue
+		}
+		out[strings.ToLower(strings.TrimSpace(row.Agente.Nombre))] = struct{}{}
+	}
+	return out
+}
+
+func agentesSinRuntimeReactivables(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea, tareasBloqueadasPorAgente map[string][]*db.Tarea) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		switch strings.TrimSpace(row.EstadoOperativo) {
+		case "bloqueado_por_runtime", "caido":
+		default:
+			continue
+		}
+		if rowTieneRuntimeOHandleOperativo(row) {
+			continue
+		}
+		agente := strings.TrimSpace(row.Agente.Nombre)
+		if agente == "" {
+			continue
+		}
+		if row.MailboxPending <= 0 && len(tareasActivasPorAgente[agente]) == 0 && len(tareasBloqueadasPorAgente[agente]) == 0 {
+			continue
+		}
+		out[strings.ToLower(agente)] = struct{}{}
+	}
+	return out
 }
 
 func asignacionPausadaPremiumAutoasignable(nota string) bool {
