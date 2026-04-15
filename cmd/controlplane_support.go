@@ -5418,6 +5418,17 @@ func consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg *db.RuntimeMailboxMess
 	if view.StartedAt == nil || view.StartedAt.IsZero() {
 		return false, nil
 	}
+	if detalle, obsoleta := runtimeMailboxObsoletaPorProgresoTareaActual(msg, view); obsoleta {
+		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+			return false, err
+		}
+		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return false, err
+		}
+		db.Audit("orquesta", "runtime_mailbox_obsoleta_progress", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("lane=%s agente=%s kind=%s %s", strings.TrimSpace(lane), strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), strings.TrimSpace(detalle)))
+		return true, nil
+	}
 	startedAt := view.StartedAt.UTC()
 	if !msg.CreatedAt.UTC().Before(startedAt) {
 		return false, nil
@@ -5431,6 +5442,25 @@ func consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg *db.RuntimeMailboxMess
 	db.Audit("orquesta", "runtime_mailbox_obsoleta_worker", "runtime_mailbox", msg.ID,
 		fmt.Sprintf("lane=%s agente=%s kind=%s created_at=%s worker_started_at=%s handle_id=%d", strings.TrimSpace(lane), strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), msg.CreatedAt.UTC().Format(time.RFC3339Nano), startedAt.Format(time.RFC3339Nano), handle.ID))
 	return true, nil
+}
+
+func runtimeMailboxObsoletaPorProgresoTareaActual(msg *db.RuntimeMailboxMessage, view *runtimeagente.WorkerStatusView) (string, bool) {
+	if msg == nil || view == nil || view.LastProgressAt == nil || view.LastProgressAt.IsZero() {
+		return "", false
+	}
+	payload := mapFromJSON(strings.TrimSpace(msg.PayloadJSON))
+	tareaID := int64PtrFromMap(payload, "tarea_id")
+	if tareaID == nil || *tareaID <= 0 || msg.ProyectoID == nil {
+		return "", false
+	}
+	actualID, err := db.GetTareaActivaIDPorAgenteProyecto(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	if err != nil || actualID <= 0 || actualID != *tareaID {
+		return "", false
+	}
+	if !view.LastProgressAt.UTC().After(msg.CreatedAt.UTC()) {
+		return "", false
+	}
+	return fmt.Sprintf("task_id=%d progress_at=%s created_at=%s", *tareaID, view.LastProgressAt.UTC().Format(time.RFC3339Nano), msg.CreatedAt.UTC().Format(time.RFC3339Nano)), true
 }
 
 func runtimeMailboxObsoletaPorTareaActivaActual(msg *db.RuntimeMailboxMessage) (string, bool, error) {
