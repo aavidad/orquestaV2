@@ -2021,6 +2021,24 @@ func TestBuildReanimationScheduleFiltraVencidasYExponeLeases(t *testing.T) {
 	if len(activeRows) != 1 || activeRows[0].Name != "Codex1" {
 		t.Fatalf("active rows inesperadas: %+v", activeRows)
 	}
+
+	store.agents[1].Habilitado = true
+	store.agents = append(store.agents, &db.Agente{
+		Nombre:      "CodexHist",
+		Rol:         "programador",
+		Activo:      false,
+		Habilitado:  true,
+		EstadoCuota: "enfriamiento",
+		MotivoPausa: "worker bloqueado por cuota",
+		ReanimarAt:  timePtr(now.Add(10 * time.Minute)),
+	})
+	activeRows, err = NewService(store, nil).BuildReanimationSchedule(true, true)
+	if err != nil {
+		t.Fatalf("BuildReanimationSchedule(true,true) con historico: %v", err)
+	}
+	if len(activeRows) != 2 {
+		t.Fatalf("active rows con historico=%d, want 2", len(activeRows))
+	}
 }
 
 func TestInvestigateAgrupaContextoYEvidencia(t *testing.T) {

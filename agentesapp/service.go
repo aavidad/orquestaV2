@@ -675,7 +675,28 @@ func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 }
 
 func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]ReanimationCandidate, error) {
-	rows, err := s.BuildPanelRows()
+	agentes, err := s.ListAgents()
+	if err != nil {
+		return nil, err
+	}
+	asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{})
+	if err != nil {
+		return nil, err
+	}
+	activa := true
+	sesiones, err := s.store.ListInspectionSessions(db.FiltroSesionesInspeccion{Activa: &activa})
+	if err != nil {
+		return nil, err
+	}
+	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{})
+	if err != nil {
+		return nil, err
+	}
+	handlesCanonicos, err := s.store.ListCanonicalRuntimeHandles(nil)
+	if err != nil {
+		return nil, err
+	}
+	handlesHistoricos, err := s.store.ListRuntimeHandles(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -688,12 +709,124 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 		return nil, err
 	}
 
-	rowByAgent := map[string]Row{}
-	for _, row := range rows {
-		if row.Agente == nil {
+	asignacionPorAgente := map[string]*db.Asignacion{}
+	for _, asignacion := range asignaciones {
+		if asignacion == nil || asignacion.Estado != db.AsignacionActiva {
 			continue
 		}
-		rowByAgent[strings.TrimSpace(row.Agente.Nombre)] = row
+		if _, ok := asignacionPorAgente[asignacion.Agente]; !ok {
+			asignacionPorAgente[asignacion.Agente] = asignacion
+		}
+	}
+	sesionPorAgente := map[string]*db.Sesion{}
+	for _, sesion := range sesiones {
+		if sesion == nil {
+			continue
+		}
+		if _, ok := sesionPorAgente[sesion.Agente]; !ok {
+			sesionPorAgente[sesion.Agente] = sesion
+		}
+	}
+	runtimePorAgente := map[string]*db.RuntimeInstance{}
+	for _, runtime := range runtimes {
+		if runtime == nil {
+			continue
+		}
+		actual := runtimePorAgente[runtime.Agente]
+		if actual == nil || runtimeMoment(runtime).After(runtimeMoment(actual)) {
+			runtimePorAgente[runtime.Agente] = runtime
+		}
+	}
+	handlePorAgente := map[string]*db.RuntimeHandle{}
+	if hotHandles, err := s.store.ListRecentOperationalRuntimeHandles(); err == nil {
+		for _, handle := range hotHandles {
+			if handle == nil {
+				continue
+			}
+			actual := handlePorAgente[handle.Agente]
+			if actual == nil || runtimeHandleMoment(handle).After(runtimeHandleMoment(actual)) {
+				handlePorAgente[handle.Agente] = handle
+			}
+		}
+	}
+	for _, handle := range handlesCanonicos {
+		if handle == nil {
+			continue
+		}
+		if _, ok := handlePorAgente[handle.Agente]; ok {
+			continue
+		}
+		handlePorAgente[handle.Agente] = handle
+	}
+	for _, handle := range handlesHistoricos {
+		if handle == nil {
+			continue
+		}
+		actual := handlePorAgente[handle.Agente]
+		if actual == nil {
+			handlePorAgente[handle.Agente] = handle
+			continue
+		}
+		if runtimeHandleMoment(handle).After(runtimeHandleMoment(actual)) && !runtimeHandleSostieneOperacion(actual) {
+			handlePorAgente[handle.Agente] = handle
+		}
+	}
+	openTasksPorAgente := map[string]int{}
+	blockedTasksPorAgente := map[string]int{}
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.Agente == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.EstadoCompletada, db.EstadoCancelada:
+			continue
+		case db.EstadoBloqueada:
+			blockedTasksPorAgente[*tarea.Agente]++
+			continue
+		}
+		openTasksPorAgente[*tarea.Agente]++
+	}
+
+	now := time.Now().UTC()
+	staleThreshold := workerOutputStaleThreshold(s.store)
+	rowByAgent := map[string]Row{}
+	for _, agente := range agentes {
+		if agente == nil {
+			continue
+		}
+		row := Row{
+			Agente:       agente,
+			Asignacion:   asignacionPorAgente[agente.Nombre],
+			Sesion:       sesionPorAgente[agente.Nombre],
+			Runtime:      runtimePorAgente[agente.Nombre],
+			Handle:       handlePorAgente[agente.Nombre],
+			OpenTasks:    openTasksPorAgente[agente.Nombre],
+			BlockedTasks: blockedTasksPorAgente[agente.Nombre],
+		}
+		if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
+			if view := structured.View(now, time.Minute); view != nil {
+				row.WorkerState = strings.TrimSpace(view.State)
+				row.WorkerAlive = view.Alive
+				row.WorkerReadyAt = view.ReadyAt
+				row.WorkerHeartbeat = view.HeartbeatAt
+				row.WorkerUpdatedAt = view.UpdatedAt
+				row.WorkerLastOutput = view.LastOutputAt
+				row.WorkerLastProgress = view.LastProgressAt
+				row.WorkerExitError = strings.TrimSpace(view.ExitError)
+				row.WorkerSessionRef = strings.TrimSpace(view.SessionRef)
+				row.WorkerRuntimeRef = strings.TrimSpace(view.RuntimeRef)
+				row.WorkerDriver = strings.TrimSpace(view.Driver)
+				row.WorkerTransport = strings.TrimSpace(view.Transport)
+				row.WorkerTMUXSession = strings.TrimSpace(view.TmuxSession)
+				row.WorkerTMUXWindow = strings.TrimSpace(view.TmuxWindow)
+				row.WorkerTMUXPaneID = strings.TrimSpace(view.TmuxPaneID)
+				row.WorkerCanSendInput = view.CanSendInput
+				row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
+				row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
+			}
+		}
+		row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, staleThreshold)
+		rowByAgent[strings.TrimSpace(agente.Nombre)] = row
 	}
 	leasesByAgent := map[string][]WorkLease{}
 	for _, tarea := range tareas {
@@ -720,10 +853,9 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 		leasesByAgent[agente] = leases
 	}
 
-	now := time.Now().UTC()
-	out := make([]ReanimationCandidate, 0, len(rows)+len(dueAgents))
+	out := make([]ReanimationCandidate, 0, len(rowByAgent)+len(dueAgents))
 	candidates := map[string]ReanimationCandidate{}
-	for _, row := range rows {
+	for _, row := range rowByAgent {
 		if row.Agente == nil || row.Agente.ReanimarAt == nil {
 			continue
 		}
@@ -817,6 +949,21 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 		candidates[name] = item
 	}
 	for _, item := range candidates {
+		if mailbox, err := s.listMailboxForAgent(item.Name); err == nil {
+			pendientes := 0
+			for _, msg := range mailbox {
+				if msg == nil {
+					continue
+				}
+				if strings.EqualFold(strings.TrimSpace(msg.Estado), "pendiente") {
+					pendientes++
+				}
+			}
+			item.MailboxPending = pendientes
+		}
+		if activeOnly && strings.TrimSpace(item.AssignmentProject) == "" && len(item.Leases) == 0 && !item.ActiveNow {
+			continue
+		}
 		out = append(out, item)
 	}
 
