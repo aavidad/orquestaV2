@@ -195,14 +195,14 @@ func cargarRuntimeDiagnosticoRecuperacionLocal(agente, proyecto string, limit in
 
 	workers := runtimeWorkerRows(handles, limit)
 	data := &runtimeDiagnosticoData{
-		Agente:           agente,
-		Proyecto:         proyecto,
-		Fuente:           "local",
-		Runtimes:         runtimeDiagnosticoAlinearRuntimesConWorkers(agente, aplanarArbolLocal(tree), workers),
-		Handles:          handles,
-		Workers:          workers,
-		Orders:           orders,
-		Checkpoints:      checkpoints,
+		Agente:      agente,
+		Proyecto:    proyecto,
+		Fuente:      "local",
+		Runtimes:    runtimeDiagnosticoAlinearRuntimesConWorkers(agente, aplanarArbolLocal(tree), workers),
+		Handles:     handles,
+		Workers:     workers,
+		Orders:      orders,
+		Checkpoints: checkpoints,
 	}
 	data.MailboxPendiente, data.MailboxCubierta = runtimeDiagnosticoSepararMailboxPendiente(mailbox, orders)
 	data.Issues = runtimeDiagnosticoIssues(data.Workers, data.Orders, data.MailboxPendiente, data.Checkpoints)
@@ -851,6 +851,9 @@ func runtimeDiagnosticoRestartLoopIssues(now time.Time, aliveByAgent map[string]
 		if runtimeDiagnosticoHasHealthyWorker(aliveByAgent[strings.TrimSpace(agente)], now) {
 			continue
 		}
+		if runtimeDiagnosticoHasRecentQuotaPause(strings.TrimSpace(agente), checkpoints, now) {
+			continue
+		}
 		issues = append(issues, runtimeDiagnosticoIssue{
 			Severity: "warn",
 			Code:     "restart_loop",
@@ -866,7 +869,7 @@ func runtimeDiagnosticoHasHealthyWorker(rows []runtimeDiagnosticoWorkerRow, now 
 			continue
 		}
 		switch strings.ToLower(strings.TrimSpace(row.State)) {
-		case "ready", "running", "working":
+		case "ready", "running", "working", "blocked_quota":
 		default:
 			continue
 		}
@@ -874,6 +877,29 @@ func runtimeDiagnosticoHasHealthyWorker(rows []runtimeDiagnosticoWorkerRow, now 
 			return true
 		}
 		if row.UpdatedAt != nil && !row.UpdatedAt.IsZero() && now.Sub(row.UpdatedAt.UTC()) <= runtimeDiagnosticoWorkerHeartbeatThreshold {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeDiagnosticoHasRecentQuotaPause(agente string, checkpoints []*db.RuntimeCheckpoint, now time.Time) bool {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return false
+	}
+	for _, cp := range checkpoints {
+		if cp == nil || !strings.EqualFold(strings.TrimSpace(cp.Agente), agente) {
+			continue
+		}
+		if now.Sub(cp.CreatedAt.UTC()) > runtimeDiagnosticoRestartLoopWindow {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(cp.CheckpointKind), "pause") {
+			continue
+		}
+		text := strings.ToLower(strings.TrimSpace(cp.Resumen + " " + cp.Source))
+		if strings.Contains(text, "bloqueado por cuota") || strings.Contains(text, "blocked_quota") {
 			return true
 		}
 	}

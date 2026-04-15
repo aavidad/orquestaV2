@@ -310,12 +310,12 @@ func TestRuntimeDiagnosticoSeparaMailboxCubiertaDePendienteReal(t *testing.T) {
 		CreatedAt:  now,
 	}
 	orderCubierta := &db.RuntimeOrder{
-		ID:        77,
-		Agente:    "Codex1",
-		Tipo:      "send_instruction",
-		Estado:    "completada",
-		CreatedAt: now,
-		PayloadJSON: `{"to_agente":"Codex1","mailbox_id":41,"mailbox_kind":"autonomia"}`,
+		ID:            77,
+		Agente:        "Codex1",
+		Tipo:          "send_instruction",
+		Estado:        "completada",
+		CreatedAt:     now,
+		PayloadJSON:   `{"to_agente":"Codex1","mailbox_id":41,"mailbox_kind":"autonomia"}`,
 		ResultadoJSON: `{"mailbox_only":true,"delivery_state":"delivered"}`,
 	}
 
@@ -775,6 +775,87 @@ func TestRuntimeDiagnosticoOcultaRestartLoopSiWorkerActualEstaSano(t *testing.T)
 	for _, issue := range issues {
 		if issue.Code == "restart_loop" {
 			t.Fatalf("no deberia alertar restart_loop si el worker actual esta sano: %+v", issues)
+		}
+	}
+}
+
+func TestRuntimeDiagnosticoOcultaRestartLoopSiWorkerActualEstaBloqueadoPorCuota(t *testing.T) {
+	now := time.Date(2026, 4, 6, 22, 40, 0, 0, time.UTC)
+	runtimeDiagnosticoNow = func() time.Time { return now }
+	defer func() { runtimeDiagnosticoNow = func() time.Time { return time.Now().UTC() } }()
+
+	rows := []runtimeDiagnosticoWorkerRow{
+		{
+			Agent:       "Gemini1",
+			State:       "blocked_quota",
+			Alive:       true,
+			HeartbeatAt: diagTimePtr(now.Add(-10 * time.Second)),
+			UpdatedAt:   diagTimePtr(now.Add(-10 * time.Second)),
+		},
+	}
+	checkpoints := []*db.RuntimeCheckpoint{
+		{
+			ID:             35149,
+			Agente:         "Gemini1",
+			CheckpointKind: "stop",
+			CreatedAt:      now.Add(-4 * time.Hour),
+			Resumen:        "worker_atascado",
+			Source:         "runtime_order:84350",
+		},
+		{
+			ID:             35154,
+			Agente:         "Gemini1",
+			CheckpointKind: "stop",
+			CreatedAt:      now.Add(-30 * time.Minute),
+			Resumen:        "worker_atascado",
+			Source:         "runtime_order:84379",
+		},
+	}
+
+	issues := runtimeDiagnosticoIssues(rows, nil, nil, checkpoints)
+	for _, issue := range issues {
+		if issue.Code == "restart_loop" {
+			t.Fatalf("no deberia alertar restart_loop si el worker actual esta bloqueado por cuota: %+v", issues)
+		}
+	}
+}
+
+func TestRuntimeDiagnosticoOcultaRestartLoopSiElCheckpointRecienteEsPausaPorCuota(t *testing.T) {
+	now := time.Date(2026, 4, 6, 22, 40, 0, 0, time.UTC)
+	runtimeDiagnosticoNow = func() time.Time { return now }
+	defer func() { runtimeDiagnosticoNow = func() time.Time { return time.Now().UTC() } }()
+
+	checkpoints := []*db.RuntimeCheckpoint{
+		{
+			ID:             35149,
+			Agente:         "Gemini1",
+			CheckpointKind: "stop",
+			CreatedAt:      now.Add(-4 * time.Hour),
+			Resumen:        "worker_atascado",
+			Source:         "runtime_order:84350",
+		},
+		{
+			ID:             35154,
+			Agente:         "Gemini1",
+			CheckpointKind: "stop",
+			CreatedAt:      now.Add(-30 * time.Minute),
+			Resumen:        "worker_atascado",
+			Source:         "runtime_order:84379",
+		},
+		{
+			ID:             35155,
+			Agente:         "Gemini1",
+			CheckpointKind: "pause",
+			CreatedAt:      now.Add(-10 * time.Minute),
+			Resumen:        "worker bloqueado por cuota",
+			Source:         "runtime_order:84380",
+		},
+	}
+
+	issues := runtimeDiagnosticoIssues(nil, nil, nil, checkpoints)
+	for _, issue := range issues {
+		if issue.Code == "restart_loop" {
+			t.Fatalf("no deberia alertar restart_loop si el ultimo estado estable es pausa por cuota: %+v", issues)
 		}
 	}
 }
