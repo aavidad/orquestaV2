@@ -928,20 +928,13 @@ func (s *Service) buildOperationalRowForAgent(nombre string, now time.Time) (Row
 	}
 	row.Runtime = latestRuntimeForAgent(runtimes)
 
-	if hotHandles, err := s.store.ListRecentOperationalRuntimeHandles(); err == nil {
-		if handle := hotHandles[nombre]; handle != nil {
-			row.Handle = handle
-		}
+	handles, err := s.store.ListCanonicalRuntimeHandles(&nombre)
+	if err != nil {
+		return Row{}, err
 	}
+	row.Handle = latestHandleForAgent(handles)
 	if row.Handle == nil {
-		handles, err := s.store.ListCanonicalRuntimeHandles(&nombre)
-		if err != nil {
-			return Row{}, err
-		}
-		row.Handle = latestHandleForAgent(handles)
-	}
-	if row.Handle == nil {
-		handles, err := s.store.ListRuntimeHandles(&nombre)
+		handles, err = s.store.ListPassiveRuntimeHandles(&nombre)
 		if err != nil {
 			return Row{}, err
 		}

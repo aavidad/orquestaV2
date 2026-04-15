@@ -43,6 +43,7 @@ type fakeStore struct {
 	listSessionsCalls  int
 	getActiveCalls     int
 	getLastCalls       int
+	hotHandlesCalls    int
 	pendingVotesCalls  int
 	openProposalsCalls int
 	pausedAgent        string
@@ -214,6 +215,7 @@ func (f *fakeStore) ListCanonicalRuntimeHandles(agent *string) ([]*db.RuntimeHan
 }
 
 func (f *fakeStore) ListRecentOperationalRuntimeHandles() (map[string]*db.RuntimeHandle, error) {
+	f.hotHandlesCalls++
 	if f.hotHandles == nil {
 		return nil, nil
 	}
@@ -2108,6 +2110,9 @@ func TestBuildDetailCompactEvitaResumenPesadoDeMailbox(t *testing.T) {
 	}
 	if len(store.lastMailboxFilter) != 0 {
 		t.Fatalf("compact no deberia consultar mailbox: filters=%d", len(store.lastMailboxFilter))
+	}
+	if store.hotHandlesCalls != 0 {
+		t.Fatalf("compact no deberia barrer handles operativos globales: hotHandlesCalls=%d", store.hotHandlesCalls)
 	}
 	if store.listSessionsCalls != 0 || store.getActiveCalls == 0 {
 		t.Fatalf("compact deberia evitar listar sesiones y usar acceso directo: list=%d active=%d last=%d", store.listSessionsCalls, store.getActiveCalls, store.getLastCalls)
