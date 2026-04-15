@@ -6265,7 +6265,7 @@ func procesarMigracionRuntimeLegacyTMUXBatch(rows []agentesapp.Row, now time.Tim
 			fmt.Sprintf("agente=%s proyecto_id=%s stop_order_id=%d start_order_id=%d", agente, detalleProyecto, stopOrderID, startOrderID))
 		total++
 	}
-return total, nil
+	return total, nil
 }
 
 func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea) (int, error) {
@@ -7247,6 +7247,7 @@ func procesarPrechecksAutonomiaSesionActiva(sesion *db.Sesion, snapshot *autonom
 		func() (int, error) { return procesarAparcadoAutonomoSesion(sesion, snapshot) },
 		func() (int, error) { return procesarRecuperacionRuntimeDegradadoSesion(sesion) },
 		func() (int, error) { return procesarRecuperacionTareasBloqueadasSesionActiva(sesion, snapshot) },
+		func() (int, error) { return procesarCompactacionFrentesPremiumSesionActiva(sesion, snapshot) },
 		func() (int, error) { return procesarDerivacionSemillaPremiumSesionActiva(sesion, snapshot) },
 	}
 	for _, check := range checks {
@@ -7337,6 +7338,128 @@ func procesarRecuperacionTareasBloqueadasSesionActiva(sesion *db.Sesion, snapsho
 		invalidarSnapshotAutonomiaProyecto(snapshot, agente, *sesion.ProyectoID)
 	}
 	return procesadas, nil
+}
+
+func procesarCompactacionFrentesPremiumSesionActiva(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {
+	if sesion == nil || sesion.ProyectoID == nil {
+		return 0, nil
+	}
+	agente := strings.TrimSpace(sesion.Agente)
+	if agente == "" {
+		return 0, nil
+	}
+	var (
+		tareas []*db.Tarea
+		err    error
+	)
+	if snapshot != nil {
+		tareas, err = snapshot.tasks(agente, *sesion.ProyectoID)
+	} else {
+		tareas, err = tareasService.List(db.FiltroTareas{Agente: &agente, ProyectoID: sesion.ProyectoID})
+	}
+	if err != nil || len(tareas) <= 1 {
+		return 0, err
+	}
+	candidatas := make([]*db.Tarea, 0, len(tareas))
+	enProgreso := 0
+	for _, tarea := range tareas {
+		if !tareaEsFrentePremiumActivoCompactable(tarea, agente) {
+			continue
+		}
+		candidatas = append(candidatas, tarea)
+		if tarea.Estado == db.TareaEnProgreso {
+			enProgreso++
+		}
+	}
+	if len(candidatas) <= 1 || enProgreso > 1 {
+		return 0, nil
+	}
+	keep := seleccionarFrentePremiumCanonicSesionActiva(candidatas)
+	if keep == nil {
+		return 0, nil
+	}
+	procesadas := 0
+	for _, tarea := range candidatas {
+		if tarea == nil || tarea.ID == keep.ID || tarea.Estado != db.TareaAsignada {
+			continue
+		}
+		if err := tareasService.MoveToBacklog(tarea.ID); err != nil {
+			return procesadas, err
+		}
+		procesadas++
+	}
+	if procesadas > 0 {
+		resetStatusSnapshotCache()
+		invalidarSnapshotAutonomiaProyecto(snapshot, agente, *sesion.ProyectoID)
+	}
+	return procesadas, nil
+}
+
+func tareaEsFrentePremiumActivoCompactable(tarea *db.Tarea, agente string) bool {
+	if tarea == nil || tarea.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(agente)) {
+		return false
+	}
+	switch tarea.Estado {
+	case db.TareaAsignada, db.TareaEnProgreso:
+	default:
+		return false
+	}
+	if strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:premium_frontier") {
+		return false
+	}
+	return tareaPipelineLocalTieneContratoPremiumCmd(tareaPipelineLocalDesdeTareaDB(tarea))
+}
+
+func seleccionarFrentePremiumCanonicSesionActiva(tareas []*db.Tarea) *db.Tarea {
+	var (
+		mejor      *db.Tarea
+		mejorScore = -1
+	)
+	for _, tarea := range tareas {
+		score := puntuarFrentePremiumCanonicSesionActiva(tarea)
+		if score < 0 {
+			continue
+		}
+		if mejor == nil || score > mejorScore || (score == mejorScore && tarea.ID > mejor.ID) {
+			mejor = tarea
+			mejorScore = score
+		}
+	}
+	return mejor
+}
+
+func puntuarFrentePremiumCanonicSesionActiva(tarea *db.Tarea) int {
+	if tarea == nil {
+		return -1
+	}
+	score := 0
+	switch tarea.Estado {
+	case db.TareaEnProgreso:
+		score += 1000
+	case db.TareaAsignada:
+		score += 500
+	default:
+		return -1
+	}
+	tareaPipeline := tareaPipelineLocalDesdeTareaDB(tarea)
+	if len(tareaPipeline.WriteSet) > 0 && strings.TrimSpace(tareaPipeline.TestsMinimos) != "" {
+		score += 200
+	}
+	if strings.Contains(strings.TrimSpace(tarea.Notas), microcicloRefactorNotasTag) {
+		score += 100
+	}
+	return score
+}
+
+func tareaPipelineLocalTieneContratoPremiumCmd(tarea *capacidadapp.TareaPipelineLocal) bool {
+	if tarea == nil {
+		return false
+	}
+	notas := strings.TrimSpace(tarea.Notas)
+	if strings.Contains(notas, microcicloRefactorNotasTag) || strings.Contains(notas, "autonomia:premium_frontier") {
+		return true
+	}
+	return len(tarea.WriteSet) > 0 && strings.TrimSpace(tarea.TestsMinimos) != ""
 }
 
 func procesarDerivacionSemillaPremiumSesionActiva(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {

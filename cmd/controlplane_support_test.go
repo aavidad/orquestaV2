@@ -5560,6 +5560,92 @@ func TestAutonomiaIdleAutoassignShouldAttemptThrottle(t *testing.T) {
 	}
 }
 
+func TestProcesarAutonomiaSesionActivaCompactaFrentesPremiumAsignadosDuplicados(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("claude1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "claude1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "claude-code",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	tareaGeneralID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Micro-refactorización cíclica del control plane",
+		Descripcion: "Frente general del control plane.",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea general: %v", err)
+	}
+	if err := db.TomarTarea(tareaGeneralID, "claude1"); err != nil {
+		t.Fatalf("tomar tarea general: %v", err)
+	}
+
+	tareaAcotadaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Micro-refactorización cíclica del control plane: runtime mailbox/session_resume",
+		Descripcion: "Frente premium acotado.\nWrite-set preferente: cmd/controlplane_support.go, cmd/controlplane_support_test.go\nTests minimos: go test ./cmd -run 'TestProcesarAutonomiaSesionActivaCompactaFrentesPremiumAsignadosDuplicados$'",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea acotada: %v", err)
+	}
+	if err := db.TomarTarea(tareaAcotadaID, "claude1"); err != nil {
+		t.Fatalf("tomar tarea acotada: %v", err)
+	}
+
+	n, err := procesarAutonomiaSesionActiva(sesion)
+	if err != nil {
+		t.Fatalf("procesar autonomia: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia compactar el frente premium duplicado, got=%d", n)
+	}
+
+	tareaGeneral, err := db.GetTarea(tareaGeneralID)
+	if err != nil {
+		t.Fatalf("get tarea general: %v", err)
+	}
+	if tareaGeneral.Estado != db.TareaBacklog || tareaGeneral.Agente != nil {
+		t.Fatalf("la tarea general deberia volver a backlog al compactar duplicados: %+v", tareaGeneral)
+	}
+
+	tareaAcotada, err := db.GetTarea(tareaAcotadaID)
+	if err != nil {
+		t.Fatalf("get tarea acotada: %v", err)
+	}
+	if tareaAcotada.Estado != db.TareaAsignada || tareaAcotada.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tareaAcotada.Agente), "claude1") {
+		t.Fatalf("la tarea acotada deberia quedar como frente canónico: %+v", tareaAcotada)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchNoEncolaNudgePorSupervisarProyectoEnSesionActiva(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -9815,6 +9901,102 @@ func TestProcesarRuntimeMailboxSessionResumeBatchCoalesceNudgeAunqueHayaOrdenAbi
 	}
 }
 
+func TestProcesarRuntimeMailboxSessionResumeBatchPermiteReentregaEnNuevaSesionConFirmaDistinta(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	// Handle activo con external_session_id=sess-b (sesión nueva)
+	metaJSON := `{"driver":"process_pty_cli","rendered_command":"codex-perfil Codex1","working_dir":"` + filepath.Join(tmp, "orquestador") + `","external_session_id":"sess-b","can_send_input":false}`
+	capsJSON := `{"can_send_input":false,"mailbox_delivery_mode":"` + runtimeagente.MailboxDeliverySessionResume + `"}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET capabilities_json=?, metadata_json=? WHERE id=?`, capsJSON, metaJSON, handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "instruction",
+		PayloadJSON: `{"texto":"instruccion en nueva sesion"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+
+	// Orden previa de sess-a (firma diferente a la actual sess-b), reciente (no caducada)
+	oldSignature := fmt.Sprintf("session_resume|handle:%d|session:sess-a", handle.ID)
+	payload := fmt.Sprintf(`{"to_agente":"Codex1","from_agente":"server","texto":"instruccion en nueva sesion","mailbox_id":%d,"mailbox_kind":"instruction","external_session_id":"sess-a","delivery_attempt_signature":"%s"}`, msgID, oldSignature)
+	resultado := fmt.Sprintf(`{"ok":true,"mailbox_id":%d,"deferred":true,"deferred_reason":"runtime no disponible para entrega inmediata","mailbox_only":true}`, msgID)
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:        "Codex1",
+		ProyectoID:    &proyectoID,
+		RuntimeID:     handle.RuntimeID,
+		HandleID:      &handle.ID,
+		Tipo:          "send_instruction",
+		PayloadJSON:   payload,
+		ResultadoJSON: resultado,
+		Estado:        "completada",
+	}); err != nil {
+		t.Fatalf("encolar send_instruction sesion anterior: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxSessionResumeBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox session resume: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia permitir reentrega en sesion nueva aunque haya mailbox_only reciente de sesion anterior, got=%d", n)
+	}
+
+	agente := "Codex1"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	var sendCount int
+	var newest *db.RuntimeOrder
+	for _, order := range orders {
+		if order != nil && order.Tipo == "send_instruction" {
+			sendCount++
+			if newest == nil || order.ID > newest.ID {
+				newest = order
+			}
+		}
+	}
+	if sendCount != 2 {
+		t.Fatalf("deberia crear una nueva send_instruction para la sesion nueva, got=%d", sendCount)
+	}
+	newSignature := fmt.Sprintf("session_resume|handle:%d|session:sess-b", handle.ID)
+	if newest == nil || !strings.Contains(newest.PayloadJSON, newSignature) {
+		t.Fatalf("la orden nueva deberia tener la firma de la sesion actual: %+v", newest)
+	}
+}
+
 func TestProcesarRuntimeMailboxBatchConsumeWatchdogSinHandleActivo(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -14045,10 +14227,10 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReactivaPremiumSinRuntimeNiHandl
 		t.Fatalf("arrancar tarea: %v", err)
 	}
 	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
-		FromAgente: "server",
-		ToAgente:   "QwenCoder1",
-		ProyectoID: &proyectoID,
-		Kind:       "autonomia",
+		FromAgente:  "server",
+		ToAgente:    "QwenCoder1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
 		PayloadJSON: `{"accion":"esperar_o_pedir_tarea","bootstrap":true,"texto":"arranque_autonomo_servidor"}`,
 	}); err != nil {
 		t.Fatalf("mailbox autonomia: %v", err)
@@ -18711,11 +18893,11 @@ func TestProcesarAgentesDegradadosAutonomiaBatchRecuperaTareaBloqueadaConTMUXBoo
 		t.Fatalf("write heartbeat: %v", err)
 	}
 	metaJSON, err := json.Marshal(map[string]any{
-		"worker_status_path":     statusPath,
-		"worker_heartbeat_path":  heartbeatPath,
-		"driver":                 "tmux_cli_session",
-		"tmux_session":           "orq-gemini1-bootstrap",
-		"mailbox_delivery_mode":  string(runtimeagente.MailboxDeliveryBootstrapOnly),
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-gemini1-bootstrap",
+		"mailbox_delivery_mode": string(runtimeagente.MailboxDeliveryBootstrapOnly),
 	})
 	if err != nil {
 		t.Fatalf("marshal metadata: %v", err)
