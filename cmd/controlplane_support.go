@@ -6082,8 +6082,8 @@ func filtrarSesionesAutonomiaRelevantes(sesiones []*db.Sesion) []*db.Sesion {
 		return nil
 	}
 	type clave struct {
-		agente    string
-		proyecto  int64
+		agente   string
+		proyecto int64
 	}
 	mejores := map[clave]*db.Sesion{}
 	for _, sesion := range sesiones {
@@ -8203,13 +8203,14 @@ func procesarCompactacionFrentesPremiumSesionActiva(sesion *db.Sesion, snapshot 
 			enProgreso++
 		}
 	}
-	if len(candidatas) <= 1 || enProgreso > 1 {
+	if len(candidatas) <= 1 {
 		return 0, nil
 	}
 	keep := seleccionarFrentePremiumCanonicSesionActiva(candidatas)
 	if keep == nil {
 		return 0, nil
 	}
+	multiplesEnProgreso := enProgreso > 1
 	procesadas := 0
 	for _, tarea := range candidatas {
 		if tarea == nil || tarea.ID == keep.ID {
@@ -8217,6 +8218,10 @@ func procesarCompactacionFrentesPremiumSesionActiva(sesion *db.Sesion, snapshot 
 		}
 		switch tarea.Estado {
 		case db.TareaAsignada, db.TareaBloqueada:
+		case db.TareaEnProgreso:
+			if !multiplesEnProgreso {
+				continue
+			}
 		default:
 			continue
 		}

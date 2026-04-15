@@ -159,21 +159,21 @@ type agenteTickOutput struct {
 }
 
 type decisionTickAutonomiaInput struct {
-	AsignadoAProyecto      bool
-	ProyectoAsignado       string
-	EsSupervisorOperativo  bool
-	SupervisorOperativo    *db.Agente
-	PropuestasPendientes   int
-	TieneBloqueos          bool
-	TieneTrabajo           bool
-	PausarPorPresupuesto   bool
-	MotivoPresupuesto      string
-	EstadoCuota            string
-	BloqueadoPorCuota      bool
-	MotivoBloqueoCuota     string
-	ReanimarAt             *time.Time
-	MotivoPausa            string
-	AgenteNombre           string
+	AsignadoAProyecto     bool
+	ProyectoAsignado      string
+	EsSupervisorOperativo bool
+	SupervisorOperativo   *db.Agente
+	PropuestasPendientes  int
+	TieneBloqueos         bool
+	TieneTrabajo          bool
+	PausarPorPresupuesto  bool
+	MotivoPresupuesto     string
+	EstadoCuota           string
+	BloqueadoPorCuota     bool
+	MotivoBloqueoCuota    string
+	ReanimarAt            *time.Time
+	MotivoPausa           string
+	AgenteNombre          string
 }
 
 func resolverAccionTickAutonomia(in decisionTickAutonomiaInput) (accion string, debePausar bool, motivo string) {
@@ -572,6 +572,26 @@ var agenteTickCmd = &cobra.Command{
 	},
 }
 
+var agenteOverviewCmd = &cobra.Command{
+	Use:   "overview <agente>",
+	Short: "Muestra el contexto operativo completo de un agente desde la app",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agenteNombre := args[0]
+		jsonOut, _ := cmd.Flags().GetBool("json")
+
+		var out apiAgenteOverviewResponse
+		if ok, err := apiGet(fmt.Sprintf("/api/agentes/%s/overview", url.PathEscape(agenteNombre)), &out); err != nil {
+			return err
+		} else if ok {
+			return imprimirAgenteOverview(out, jsonOut)
+		} else if !agenteModoRecuperacionLocalExplicito() {
+			return agenteErrorServerFirst()
+		}
+		return serverFirstCommandError("agente overview")
+	},
+}
+
 func init() {
 	agentePrepararCmd.Flags().String("proyecto", "", "Proyecto cuyo bundle se quiere preparar")
 	agentePrepararCmd.Flags().String("conector", "", "Conector a usar; si se omite se usa el de la última sesión del proyecto")
@@ -588,6 +608,7 @@ func init() {
 	agenteTickCmd.Flags().Bool("finalizado", false, "Marca que el turno actual del agente ha finalizado")
 	agenteTickCmd.Flags().String("motivo", "", "Motivo del estado actual")
 	agenteTickCmd.Flags().Bool("json", false, "Salida JSON")
+	agenteOverviewCmd.Flags().Bool("json", false, "Salida JSON")
 
 	agenteEjecutarCmd.Flags().StringP("proyecto", "p", "", "Proyecto en el que ejecutar")
 	agenteEjecutarCmd.Flags().StringP("conector", "c", "", "Conector a usar")
@@ -616,6 +637,7 @@ func init() {
 	agenteCmd.AddCommand(
 		agentePrepararCmd,
 		agenteTickCmd,
+		agenteOverviewCmd,
 		agenteAdoptarContextoCmd,
 		agentePurgarCmd,
 		agentePausarCmd,
@@ -1227,4 +1249,70 @@ func imprimirAgenteTick(out agenteTickOutput, jsonOut bool) error {
 	}
 	fmt.Printf("Tareas activas: %d  Propuestas pendientes: %d  Propuestas abiertas: %d\n", len(out.TareasActivas), len(out.PropuestasPendientes), len(out.PropuestasAbiertas))
 	return nil
+}
+
+func imprimirAgenteOverview(out apiAgenteOverviewResponse, jsonOut bool) error {
+	if jsonOut {
+		return imprimirJSON(out)
+	}
+	if out.Detail == nil {
+		return fmt.Errorf("overview vacio")
+	}
+	detail := out.Detail
+	row := detail.Row
+	fmt.Printf("Agente:    %s\n", strings.TrimSpace(detail.Entity.Name))
+	if detail.Entity != nil && strings.TrimSpace(detail.Entity.Role) != "" {
+		fmt.Printf("Rol:       %s\n", strings.TrimSpace(detail.Entity.Role))
+	}
+	fmt.Printf("Operativo: %s", strings.TrimSpace(row.EstadoOperativo))
+	if strings.TrimSpace(row.DetalleOperativo) != "" {
+		fmt.Printf(" — %s", strings.TrimSpace(row.DetalleOperativo))
+	}
+	fmt.Println()
+	if row.Asignacion != nil {
+		fmt.Printf("Asignado:  %s [%s] nota=%s\n",
+			strings.TrimSpace(row.Asignacion.ProyectoSlug),
+			strings.TrimSpace(string(row.Asignacion.Estado)),
+			strings.TrimSpace(row.Asignacion.Nota))
+	}
+	if row.Sesion != nil {
+		fmt.Printf("Sesión:    #%d %s %s\n", row.Sesion.ID, strings.TrimSpace(row.Sesion.Estado), strings.TrimSpace(row.Sesion.Herramienta))
+	}
+	if row.Runtime != nil {
+		fmt.Printf("Runtime:   #%d %s\n", row.Runtime.ID, strings.TrimSpace(row.Runtime.LogicalState))
+	}
+	if row.Handle != nil {
+		fmt.Printf("Handle:    #%d %s %s\n", row.Handle.ID, strings.TrimSpace(row.Handle.Estado), strings.TrimSpace(row.Handle.Transporte))
+	}
+	fmt.Printf("Mailbox:   %d pendiente(s) / %d total\n", contarMailboxPendiente(detail.Mailbox), len(detail.Mailbox))
+	fmt.Printf("Tareas:    %d lease(s) abiertas\n", len(detail.Entity.Leases))
+	for _, lease := range detail.Entity.Leases {
+		fmt.Printf("  - #%d [%s] %s\n", lease.TaskID, strings.TrimSpace(string(lease.State)), strings.TrimSpace(lease.Title))
+	}
+	if len(detail.Asignaciones) > 0 {
+		fmt.Printf("Asignaciones recientes: %d\n", len(detail.Asignaciones))
+		for _, asignacion := range detail.Asignaciones {
+			if asignacion == nil {
+				continue
+			}
+			fmt.Printf("  - proyecto=%s estado=%s nota=%s\n",
+				strings.TrimSpace(asignacion.ProyectoSlug),
+				strings.TrimSpace(string(asignacion.Estado)),
+				strings.TrimSpace(asignacion.Nota))
+		}
+	}
+	return nil
+}
+
+func contarMailboxPendiente(items []*db.RuntimeMailboxMessage) int {
+	total := 0
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(item.Estado), "pendiente") {
+			total++
+		}
+	}
+	return total
 }

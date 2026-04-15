@@ -270,6 +270,10 @@ func TestAgenteComandosExigenServidorSalvoRecuperacionLocal(t *testing.T) {
 		t.Fatalf("agente tick deberia exigir servidor, err=%v", err)
 	}
 
+	if err := agenteOverviewCmd.RunE(agenteOverviewCmd, []string{"Codex1"}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "servidor") {
+		t.Fatalf("agente overview deberia exigir servidor, err=%v", err)
+	}
+
 	resetCommandFlags(agenteAdoptarContextoCmd)
 	agenteAdoptarContextoCmd.Flags().Set("proyecto", "orquestador")
 	agenteAdoptarContextoCmd.Flags().Set("cwd", "/tmp/orquestador")

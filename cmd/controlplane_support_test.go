@@ -5946,6 +5946,95 @@ func TestProcesarCompactacionFrentesPremiumSesionActivaCompactaBloqueadasDuplica
 	}
 }
 
+func TestProcesarCompactacionFrentesPremiumSesionActivaCompactaEnProgresoNoCanonica(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "microciclo_exclusivo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Gemini1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "gemini-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	legacyID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Micro-refactorización cíclica del control plane",
+		Descripcion: "Frente legacy sin contrato bounded explícito",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear legacy: %v", err)
+	}
+	if err := db.TomarTarea(legacyID, "Gemini1"); err != nil {
+		t.Fatalf("tomar legacy: %v", err)
+	}
+	if err := db.IniciarTarea(legacyID, "Gemini1"); err != nil {
+		t.Fatalf("iniciar legacy: %v", err)
+	}
+
+	keepID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente premium bounded canónico",
+		Descripcion: "WRITE_SET: cmd/controlplane_support.go, cmd/controlplane_support_test.go\nTests minimos: go test ./cmd -run 'TestProcesarCompactacionFrentesPremiumSesionActivaCompactaEnProgresoNoCanonica$' -count=1",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear keep: %v", err)
+	}
+	if err := db.TomarTarea(keepID, "Gemini1"); err != nil {
+		t.Fatalf("tomar keep: %v", err)
+	}
+	if err := db.IniciarTarea(keepID, "Gemini1"); err != nil {
+		t.Fatalf("iniciar keep: %v", err)
+	}
+
+	n, err := procesarCompactacionFrentesPremiumSesionActiva(sesion, nil)
+	if err != nil {
+		t.Fatalf("compactar frentes: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia compactar el en_progreso no canónico, got=%d", n)
+	}
+
+	legacy, err := db.GetTarea(legacyID)
+	if err != nil {
+		t.Fatalf("get legacy: %v", err)
+	}
+	if legacy.Estado != db.TareaBacklog || legacy.Agente != nil {
+		t.Fatalf("la tarea legacy deberia volver a backlog sin agente: %+v", legacy)
+	}
+	keep, err := db.GetTarea(keepID)
+	if err != nil {
+		t.Fatalf("get keep: %v", err)
+	}
+	if keep.Estado != db.TareaEnProgreso || keep.Agente == nil || !strings.EqualFold(strings.TrimSpace(*keep.Agente), "Gemini1") {
+		t.Fatalf("el frente canónico debería mantenerse en progreso en Gemini1: %+v", keep)
+	}
+}
+
 func TestProcesarCompactacionExclusividadPremiumBatchMueveRestosSinSesionViva(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -15513,7 +15602,6 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReactivaPremiumConTareaBloqueada
 		t.Fatalf("la tarea bloqueada deberia reactivarse al reponer runtime: %+v", actual)
 	}
 }
-
 
 func TestDesbloquearTareasBloqueadasRecuperablesSinRuntimeReabreBloqueoSinRelevoSano(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
