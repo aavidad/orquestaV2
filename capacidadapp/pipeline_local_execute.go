@@ -261,6 +261,9 @@ func (s *Service) ejecutarAccionTareaPipelineLocal(tareaID int64, accion, agente
 		return nil, fmt.Errorf("tarea no encontrada: %d", tareaID)
 	}
 	agente := strings.TrimSpace(agenteSugerido)
+	if agente == "" && actual.Agente != nil && strings.TrimSpace(*actual.Agente) != "" {
+		agente = strings.TrimSpace(*actual.Agente)
+	}
 	if agente == "" {
 		agente = "orquesta"
 	}

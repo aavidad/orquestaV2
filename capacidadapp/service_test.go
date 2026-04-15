@@ -795,6 +795,34 @@ func TestEjecutarSiguientePasoPipelineLocalDeterministaReasignaFrenteMicrocicloA
 	}
 }
 
+func TestEjecutarSiguientePasoPipelineLocalDeterministaConservaAgenteAsignadoSiNoHaySugerencia(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{ID: 62, Titulo: "Frente premium", Estado: db.TareaAsignada, Agente: ptrString("Gemini1"), Prioridad: db.PrioridadAlta, Notas: "autonomia:premium_frontier"},
+	}})
+	service.SetTaskActionProvider(&fakeTaskActionProvider{
+		tareas: map[int64]*db.Tarea{
+			62: {ID: 62, Titulo: "Frente premium", Estado: db.TareaAsignada, Agente: ptrString("Gemini1"), Prioridad: db.PrioridadAlta, Notas: "autonomia:premium_frontier"},
+		},
+	})
+	service.SetAgentResolver(fakeAgentResolver{})
+
+	resultado, err := service.EjecutarSiguientePasoPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("EjecutarSiguientePasoPipelineLocalDeterminista: %v", err)
+	}
+	if resultado == nil || resultado.TareaActualizada == nil || resultado.Despacho == nil {
+		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+	if resultado.TareaActualizada.Agente != "Gemini1" || resultado.TareaActualizada.Estado != string(db.TareaEnProgreso) {
+		t.Fatalf("deberia conservar el agente asignado al arrancar la tarea: %+v", resultado.TareaActualizada)
+	}
+	if resultado.Despacho.AgenteTarea != "Gemini1" {
+		t.Fatalf("despacho deberia reflejar el agente actual de la tarea: %+v", resultado.Despacho)
+	}
+}
+
 func TestIntentarAutoasignarTareaPipelineLocalAsignaAAgenteConcreto(t *testing.T) {
 	service := NewService(fakeStore{})
 	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
