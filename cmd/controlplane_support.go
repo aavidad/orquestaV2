@@ -5931,7 +5931,7 @@ func consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg *db.RuntimeMailboxMess
 }
 
 func runtimeMailboxObsoletaPorProgresoTareaActual(msg *db.RuntimeMailboxMessage, view *runtimeagente.WorkerStatusView) (string, bool) {
-	if msg == nil || view == nil || view.LastProgressAt == nil || view.LastProgressAt.IsZero() {
+	if msg == nil || view == nil {
 		return "", false
 	}
 	payload := mapFromJSON(strings.TrimSpace(msg.PayloadJSON))
@@ -5943,10 +5943,17 @@ func runtimeMailboxObsoletaPorProgresoTareaActual(msg *db.RuntimeMailboxMessage,
 	if err != nil || actualID <= 0 || actualID != *tareaID {
 		return "", false
 	}
-	if !view.LastProgressAt.UTC().After(msg.CreatedAt.UTC()) {
-		return "", false
+	if view.LastProgressAt != nil && !view.LastProgressAt.IsZero() {
+		if progressAt := view.LastProgressAt.UTC(); progressAt.After(msg.CreatedAt.UTC()) {
+			return fmt.Sprintf("task_id=%d progress_at=%s created_at=%s", *tareaID, progressAt.Format(time.RFC3339Nano), msg.CreatedAt.UTC().Format(time.RFC3339Nano)), true
+		}
 	}
-	return fmt.Sprintf("task_id=%d progress_at=%s created_at=%s", *tareaID, view.LastProgressAt.UTC().Format(time.RFC3339Nano), msg.CreatedAt.UTC().Format(time.RFC3339Nano)), true
+	if view.LastOutputAt != nil && !view.LastOutputAt.IsZero() {
+		if outputAt := view.LastOutputAt.UTC(); outputAt.After(msg.CreatedAt.UTC()) {
+			return fmt.Sprintf("task_id=%d output_at=%s created_at=%s", *tareaID, outputAt.Format(time.RFC3339Nano), msg.CreatedAt.UTC().Format(time.RFC3339Nano)), true
+		}
+	}
+	return "", false
 }
 
 func runtimeMailboxObsoletaPorProgresoEfimero(msg *db.RuntimeMailboxMessage, view *runtimeagente.WorkerStatusView) (string, bool) {
