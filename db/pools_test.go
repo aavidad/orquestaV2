@@ -138,6 +138,20 @@ func TestSeedPoolsInicialesIncluyeOllama(t *testing.T) {
 		if len(modelos) == 0 || modelos[0].ModelSlug != "qwen2.5-coder:7b" {
 			t.Fatalf("modelos ollama inesperados: %+v", modelos)
 		}
+		poolGoogle, err := GetPool("google")
+		if err != nil {
+			t.Fatalf("GetPool google: %v", err)
+		}
+		if poolGoogle.Runtime != "gemini" {
+			t.Fatalf("pool google inesperado: %+v", poolGoogle)
+		}
+		modelosGoogle, err := ListarModelosPool("google")
+		if err != nil {
+			t.Fatalf("ListarModelosPool google: %v", err)
+		}
+		if len(modelosGoogle) == 0 || modelosGoogle[0].ModelSlug != "gemini-2.5-flash-lite" {
+			t.Fatalf("modelos google inesperados: %+v", modelosGoogle)
+		}
 	})
 }
 

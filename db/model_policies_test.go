@@ -52,6 +52,52 @@ func TestGuardarYListarPoliticasModelo(t *testing.T) {
 	})
 }
 
+func TestGuardarPoliticaModeloAceptaScopeAgente(t *testing.T) {
+	withTempDBPools(t, func() {
+		if _, err := GuardarPool(&PoolCapacidad{
+			Slug:                "google",
+			Proveedor:           "Google",
+			Runtime:             "gemini",
+			Plan:                "default",
+			EsDePago:            true,
+			CapacidadTotal:      1,
+			CapacidadReservada:  0,
+			PermiteHijos:        true,
+			PermiteModelosMulti: true,
+			PermiteSobrecoste:   false,
+			PoliticaHandoff:     "preventivo",
+			FuenteTelemetria:    "manual",
+			MetadataJSON:        "{}",
+			Activo:              true,
+		}); err != nil {
+			t.Fatalf("GuardarPool google: %v", err)
+		}
+		id, err := GuardarPoliticaModelo(&PoliticaModelo{
+			ScopeTipo:       "agente",
+			ScopeRef:        "Gemini1",
+			PerfilTarea:     "implementacion",
+			PoolSlug:        "google",
+			ModelSlug:       "gemini-2.5-flash-lite",
+			ReasoningEffort: "medium",
+			Prioridad:       5,
+			Activa:          true,
+		})
+		if err != nil {
+			t.Fatalf("GuardarPoliticaModelo agente: %v", err)
+		}
+		if id == 0 {
+			t.Fatalf("id inesperado: %d", id)
+		}
+		items, err := ListarPoliticasModelo("agente", "Gemini1", boolPtr(true))
+		if err != nil {
+			t.Fatalf("ListarPoliticasModelo agente: %v", err)
+		}
+		if len(items) != 1 || items[0].ModelSlug != "gemini-2.5-flash-lite" {
+			t.Fatalf("politica agente inesperada: %+v", items)
+		}
+	})
+}
+
 func TestResolverPoliticaModeloConOverridesPorProyectoYTarea(t *testing.T) {
 	withTempDBPools(t, func() {
 		insertPoolsYModelosTest(t)

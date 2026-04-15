@@ -17,6 +17,18 @@ import (
 func strPtr(v string) *string { return &v }
 func int64Ptr(v int64) *int64 { return &v }
 
+type stubModelPolicyProvider struct {
+	input      *db.ResolverPoliticaInput
+	resolution *db.ResolucionModelo
+	err        error
+}
+
+func (s *stubModelPolicyProvider) ResolveModelPolicy(input db.ResolverPoliticaInput) (*db.ResolucionModelo, error) {
+	copyInput := input
+	s.input = &copyInput
+	return s.resolution, s.err
+}
+
 func prepararDBTemporalRuntimeService(t *testing.T) {
 	t.Helper()
 	db.Close()
@@ -456,6 +468,55 @@ func TestBuildPreparePremiumIgnoraModeloLocalIncompatible(t *testing.T) {
 	}
 	if out.Plan.Modelo != "gpt-5.4" {
 		t.Fatalf("deberia caer al modelo premium compatible por defecto: %+v", out.Plan)
+	}
+}
+
+func TestBuildPreparePasaAgenteANivelDePoliticaModelo(t *testing.T) {
+	prepararDBTemporalRuntimeService(t)
+	tmp := t.TempDir()
+	rutaBase := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(rutaBase, 0o755); err != nil {
+		t.Fatalf("mkdir proyecto: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaBase, "go.mod"), []byte("module orquestador\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "orquestador",
+		RutaAbs: rutaBase,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("crear proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "reactivacion_automatica_trabajo_activo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	provider := &stubModelPolicyProvider{
+		resolution: &db.ResolucionModelo{
+			PerfilTarea:     "implementacion",
+			ModelSlug:       "gemini-2.5-flash-lite",
+			ReasoningEffort: "medium",
+		},
+	}
+	out, err := NewService(Repository{}, provider).BuildPrepare(PrepareInput{
+		Agente:   "Gemini1",
+		Proyecto: "orquestador",
+		Perfil:   "implementacion",
+	})
+	if err != nil {
+		t.Fatalf("BuildPrepare: %v", err)
+	}
+	if provider.input == nil || provider.input.AgenteNombre == nil || *provider.input.AgenteNombre != "Gemini1" {
+		t.Fatalf("el resolver de politica deberia recibir el agente: %+v", provider.input)
+	}
+	if out.Plan == nil || out.Plan.Modelo != "gemini-2.5-flash-lite" {
+		t.Fatalf("modelo resuelto inesperado: %+v", out.Plan)
 	}
 }
 

@@ -198,7 +198,9 @@ func (s *Service) BuildPrepare(input PrepareInput) (*PrepareOutput, error) {
 	var resolucionModelo *db.ResolucionModelo
 
 	if s.modelPolicyProvider != nil && (modeloSolicitado == "" || razonamientoSolicitado == "") {
+		agentePolicy := agenteNombre
 		resolucion, err := s.modelPolicyProvider.ResolveModelPolicy(db.ResolverPoliticaInput{
+			AgenteNombre: &agentePolicy,
 			ProyectoSlug: proyecto.Slug,
 			PerfilTarea:  perfilSolicitado,
 		})

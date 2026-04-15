@@ -322,6 +322,9 @@ func esErrorMigracionIgnorable(err error) bool {
 }
 
 func prepararSchemaLegacy(db *sql.DB) error {
+	if err := reconstruirPoliticasModeloLegacy(db); err != nil {
+		return err
+	}
 	if err := reconstruirRuntimeHandlesLegacy(db); err != nil {
 		return err
 	}
@@ -335,6 +338,65 @@ func prepararSchemaLegacy(db *sql.DB) error {
 		return err
 	}
 	return nil
+}
+
+func reconstruirPoliticasModeloLegacy(db *sql.DB) error {
+	const tableName = "politicas_modelo"
+	existe, err := tablaExiste(db, tableName)
+	if err != nil || !existe {
+		return err
+	}
+	sqlText, err := tablaSQL(db, tableName)
+	if err != nil {
+		return err
+	}
+	if strings.Contains(strings.ToLower(sqlText), "'agente'") {
+		return nil
+	}
+	return rebuildSQLiteTable(
+		db,
+		tableName,
+		nil,
+		`CREATE TABLE politicas_modelo (
+			id                INTEGER PRIMARY KEY AUTOINCREMENT,
+			scope_tipo        TEXT    NOT NULL
+			                         CHECK (scope_tipo IN ('global','perfil','proyecto','fase','agente','tarea')),
+			scope_ref         TEXT    NOT NULL DEFAULT '',
+			perfil_tarea      TEXT    NOT NULL DEFAULT '*',
+			pool_slug         TEXT    NOT NULL DEFAULT '',
+			model_slug        TEXT    NOT NULL DEFAULT '',
+			reasoning_effort  TEXT    NOT NULL DEFAULT '',
+			prioridad         INTEGER NOT NULL DEFAULT 100,
+			activa            INTEGER NOT NULL DEFAULT 1,
+			metadata_json     TEXT    NOT NULL DEFAULT '{}',
+			created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		nil,
+		func(legacy string, legacyCols map[string]bool) (string, []any) {
+			insertCols := []string{
+				"id", "scope_tipo", "scope_ref", "perfil_tarea", "pool_slug",
+				"model_slug", "reasoning_effort", "prioridad", "activa",
+				"metadata_json", "created_at", "updated_at",
+			}
+			selectExprs := []string{
+				runtimeLegacyExpr(legacyCols, "id", "NULL"),
+				runtimeLegacyExpr(legacyCols, "scope_tipo", "'global'"),
+				runtimeLegacyExpr(legacyCols, "scope_ref", "''"),
+				runtimeLegacyExpr(legacyCols, "perfil_tarea", "'*'"),
+				runtimeLegacyExpr(legacyCols, "pool_slug", "''"),
+				runtimeLegacyExpr(legacyCols, "model_slug", "''"),
+				runtimeLegacyExpr(legacyCols, "reasoning_effort", "''"),
+				runtimeLegacyExpr(legacyCols, "prioridad", "100"),
+				runtimeLegacyExpr(legacyCols, "activa", "1"),
+				runtimeLegacyExpr(legacyCols, "metadata_json", "'{}'"),
+				runtimeLegacyExpr(legacyCols, "created_at", "CURRENT_TIMESTAMP"),
+				runtimeLegacyExpr(legacyCols, "updated_at", runtimeLegacyExpr(legacyCols, "created_at", "CURRENT_TIMESTAMP")),
+			}
+			return `INSERT INTO politicas_modelo (` + strings.Join(insertCols, ", ") + `)
+				SELECT ` + strings.Join(selectExprs, ", ") + ` FROM ` + legacy, nil
+		},
+	)
 }
 
 func tablaExiste(db *sql.DB, nombre string) (bool, error) {

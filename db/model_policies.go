@@ -549,7 +549,7 @@ func configOrDefault(clave, fallback string) string {
 
 func scopeTipoPoliticaValido(scope string) bool {
 	switch scope {
-	case "global", "perfil", "proyecto", "fase", "tarea":
+	case "global", "perfil", "proyecto", "fase", "agente", "tarea":
 		return true
 	default:
 		return false

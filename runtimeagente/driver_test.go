@@ -1148,8 +1148,9 @@ func TestPrepareCLIGeminiEmbebePromptInteractivo(t *testing.T) {
 			Transporte:   "cli",
 			Comando:      "gemini",
 			ArgsJSON:     `["--yolo"]`,
-			MetadataJSON: `{"familia":"google","reanudable":true,"launch_prompt_flag":"--prompt-interactive","can_send_input":false}`,
+			MetadataJSON: `{"familia":"google","reanudable":true,"launch_prompt_flag":"--prompt-interactive","model_flag":"--model","can_send_input":false}`,
 		},
+		Modelo: "gemini-2.5-flash-lite",
 		Resume: ResumeContext{
 			ResumenContinuidad: "Tarea activa: corregir merge helper",
 		},
@@ -1157,7 +1158,7 @@ func TestPrepareCLIGeminiEmbebePromptInteractivo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepare: %v", err)
 	}
-	if err := ApplyLaunchPromptMetadata(plan, `{"launch_prompt_flag":"--prompt-interactive","can_send_input":false}`); err != nil {
+	if err := ApplyLaunchPromptMetadata(plan, `{"launch_prompt_flag":"--prompt-interactive","model_flag":"--model","can_send_input":false}`); err != nil {
 		t.Fatalf("apply launch prompt metadata: %v", err)
 	}
 	if plan.CanSendInput == nil || *plan.CanSendInput {
@@ -1170,6 +1171,9 @@ func TestPrepareCLIGeminiEmbebePromptInteractivo(t *testing.T) {
 		t.Fatalf("gemini-cli deberia embeber el prompt inicial: %+v", plan)
 	}
 	rendered := RenderCommand(plan)
+	if !strings.Contains(rendered, "'--model' 'gemini-2.5-flash-lite'") {
+		t.Fatalf("gemini-cli deberia propagar --model: %s", rendered)
+	}
 	if !strings.Contains(rendered, "'--prompt-interactive'") {
 		t.Fatalf("gemini-cli deberia usar --prompt-interactive: %s", rendered)
 	}
