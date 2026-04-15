@@ -373,6 +373,26 @@ func TestTMUXPaneHasUsageLimitPromptDetectaCapturaRealCodex2(t *testing.T) {
 	}
 }
 
+func TestTMUXWorkerStateOnPaneFinalizedPreservaQuota(t *testing.T) {
+	state, exitErr := tmuxWorkerStateOnPaneFinalized(workerStatusBlockedQuota)
+	if state != workerStatusBlockedQuota {
+		t.Fatalf("estado de pane inesperado: got=%q want=%q", state, workerStatusBlockedQuota)
+	}
+	if !strings.Contains(strings.ToLower(exitErr), "cuota") {
+		t.Fatalf("exit error inesperado: %q", exitErr)
+	}
+}
+
+func TestTMUXWorkerStateOnPaneFinalizedUsaStoppedPorDefecto(t *testing.T) {
+	state, exitErr := tmuxWorkerStateOnPaneFinalized(workerStatusRunning)
+	if state != workerStatusStopped {
+		t.Fatalf("estado de pane inesperado: got=%q want=%q", state, workerStatusStopped)
+	}
+	if exitErr != "tmux pane finalizado" {
+		t.Fatalf("exit error inesperado: %q", exitErr)
+	}
+}
+
 func TestTMUXPaneLooksReadyNoAceptaComposerPendienteDeEnvio(t *testing.T) {
 	captured := "" +
 		">>> SI_BLOQUEO=BLOQUEO: <motivo concreto>\n" +

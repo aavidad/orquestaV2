@@ -115,6 +115,7 @@ func runEmbeddedTmuxMonitor(args []string) error {
 	var lastProgressAt time.Time
 	var lastOutputAt time.Time
 	var lastProgressProbe time.Time
+	lastState := workerStatusStarting
 	lastCaptureSignature := ""
 	for {
 		if spec.OwnerPID > 0 {
@@ -132,7 +133,8 @@ func runEmbeddedTmuxMonitor(args []string) error {
 			return nil
 		}
 		if snap.PaneDead || snap.PanePID <= 0 {
-			_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusStopped, false, "tmux pane finalizado", nil, snap.PanePID, now, lastOutputAt, lastProgressAt)
+			state, exitErr := tmuxWorkerStateOnPaneFinalized(lastState)
+			_ = writeEmbeddedTmuxWorkerSnapshot(spec, state, false, exitErr, nil, snap.PanePID, now, lastOutputAt, lastProgressAt)
 			return nil
 		}
 		if spec.ChildPID <= 0 {
@@ -143,6 +145,7 @@ func runEmbeddedTmuxMonitor(args []string) error {
 			_ = writeEmbeddedTmuxWorkerSnapshot(spec, workerStatusFailed, false, stateErr.Error(), nil, snap.PanePID, now, lastOutputAt, lastProgressAt)
 			return nil
 		}
+		lastState = state
 		if captured, captureErr := captureTMUXPane(strings.TrimSpace(spec.TmuxCommand), strings.TrimSpace(spec.PaneID)); captureErr == nil {
 			lastCaptureSignature, lastOutputAt = tmuxTrackOutputMoment(lastCaptureSignature, captured, now, lastOutputAt)
 		}
@@ -160,6 +163,15 @@ func runEmbeddedTmuxMonitor(args []string) error {
 		}
 		_ = writeEmbeddedTmuxWorkerSnapshot(spec, state, true, "", nil, snap.PanePID, now, lastOutputAt, lastProgressAt)
 		<-ticker.C
+	}
+}
+
+func tmuxWorkerStateOnPaneFinalized(previousState string) (string, string) {
+	switch strings.ToLower(strings.TrimSpace(previousState)) {
+	case workerStatusBlockedQuota:
+		return workerStatusBlockedQuota, "tmux pane finalizado tras bloqueo por cuota"
+	default:
+		return workerStatusStopped, "tmux pane finalizado"
 	}
 }
 
