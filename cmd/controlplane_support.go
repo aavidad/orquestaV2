@@ -9165,14 +9165,64 @@ func sesionTieneTrabajoArrancableAutonomia(sesion *db.Sesion, snapshot *autonomi
 			if tarea == nil {
 				continue
 			}
-			switch tarea.Estado {
-			case db.TareaAsignada, db.TareaEnProgreso:
+			arrancable, err := tareaAutonomiaArrancableParaSesion(agente, tarea)
+			if err != nil {
+				return false, err
+			}
+			if arrancable {
 				return true, nil
 			}
 		}
 		return false, nil
 	}
 	return dbAgenteTieneTrabajoArrancable(agente, *sesion.ProyectoID)
+}
+
+func tareaAutonomiaArrancableParaSesion(agente string, tarea *db.Tarea) (bool, error) {
+	if tarea == nil {
+		return false, nil
+	}
+	switch tarea.Estado {
+	case db.TareaAsignada, db.TareaEnProgreso:
+		return true, nil
+	case db.TareaBloqueada:
+		return tareaBloqueadaRecuperableParaReanimacion(tarea.ID)
+	default:
+		return false, nil
+	}
+}
+
+func reactivarTareasBloqueadasRecuperablesAutonomia(agente string, proyectoID int64, nota string) (int, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || proyectoID <= 0 {
+		return 0, nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{
+		Agente:     &agente,
+		ProyectoID: &proyectoID,
+	})
+	if err != nil {
+		return 0, err
+	}
+	procesadas := 0
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.Estado != db.TareaBloqueada || tarea.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), agente) {
+			continue
+		}
+		recuperable, err := tareaBloqueadaRecuperableParaReanimacion(tarea.ID)
+		if err != nil {
+			return procesadas, err
+		}
+		if !recuperable {
+			continue
+		}
+		resolucion := "reactivación automática al salir de cuota o enfriamiento"
+		if err := desbloquearYReactivarTareaAutonomia(tarea.ID, resolucion, agente, strings.TrimSpace(nota)); err != nil {
+			return procesadas, err
+		}
+		procesadas++
+	}
+	return procesadas, nil
 }
 
 func reactivarSesionAutonomiaPorTrabajo(sesion *db.Sesion) (int, error) {
@@ -9198,30 +9248,46 @@ func reactivarSesionAutonomiaPorTrabajo(sesion *db.Sesion) (int, error) {
 	}); err != nil {
 		return 0, err
 	}
-	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(strings.TrimSpace(sesion.Agente), sesion.ProyectoID, "resume", "start", "pause", "handoff", "checkpoint"); err != nil {
-		return 0, err
-	} else if pendiente {
-		return 0, nil
-	}
-	handle, err := resolverHandleReactivacionAgente(strings.TrimSpace(sesion.Agente), sesion.ProyectoID)
+	reactivadas, err := reactivarTareasBloqueadasRecuperablesAutonomia(
+		strings.TrimSpace(sesion.Agente),
+		*sesion.ProyectoID,
+		fmt.Sprintf("Reactivada automáticamente en %s al salir de cuota o enfriamiento", strings.TrimSpace(sesion.Agente)),
+	)
 	if err != nil {
 		return 0, err
 	}
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(strings.TrimSpace(sesion.Agente), sesion.ProyectoID, "resume", "start", "pause", "handoff", "checkpoint"); err != nil {
+		return 0, err
+	} else if pendiente {
+		return reactivadas, nil
+	}
+	handle, err := resolverHandleReactivacionAgente(strings.TrimSpace(sesion.Agente), sesion.ProyectoID)
+	if err != nil {
+		return reactivadas, err
+	}
 	accion := agenteControlAccionStart
 	if handle != nil {
-		switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
-		case "activo":
-			accion = agenteControlAccionResume
-		case "pausado":
-			if !db.RuntimeHandlePauseRequiresFreshStart(handle) {
+		runtimeCanonico, err := runtimeCanonicoDesdeHandleAgenteProyecto(handle, strings.TrimSpace(sesion.Agente), sesion.ProyectoID)
+		if err != nil {
+			return reactivadas, err
+		}
+		if runtimeLocalFallido(handle, runtimeCanonico) || runtimeRemotoDegradado(handle, runtimeCanonico) {
+			accion = agenteControlAccionStart
+		} else {
+			switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
+			case "activo":
 				accion = agenteControlAccionResume
+			case "pausado":
+				if !db.RuntimeHandlePauseRequiresFreshStart(handle) {
+					accion = agenteControlAccionResume
+				}
 			}
 		}
 	}
 	if err := encolarControlAutonomiaProyecto(strings.TrimSpace(sesion.Agente), proyecto, accion, "desbloqueo_humano_auto"); err != nil {
-		return 0, err
+		return reactivadas, err
 	}
-	return 1, nil
+	return 1 + reactivadas, nil
 }
 
 func resolverHandleReactivacionAgente(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
@@ -9233,7 +9299,10 @@ func resolverHandleReactivacionAgente(agente string, proyectoID *int64) (*db.Run
 	if err != nil {
 		return nil, err
 	}
-	var fallback *db.RuntimeHandle
+	var (
+		fallback    *db.RuntimeHandle
+		porProyecto *db.RuntimeHandle
+	)
 	for _, handle := range handles {
 		if handle == nil || runtimeHandleEsCandidatoLegacyATMUX(handle) {
 			continue
@@ -9243,11 +9312,17 @@ func resolverHandleReactivacionAgente(agente string, proyectoID *int64) (*db.Run
 			continue
 		}
 		if proyectoID != nil && *proyectoID > 0 && handle.ProyectoID != nil && *handle.ProyectoID == *proyectoID {
-			return handle, nil
+			if runtimeHandlePreferibleParaRecuperacion(handle, porProyecto) {
+				porProyecto = handle
+			}
+			continue
 		}
-		if fallback == nil {
+		if runtimeHandlePreferibleParaRecuperacion(handle, fallback) {
 			fallback = handle
 		}
+	}
+	if porProyecto != nil {
+		return porProyecto, nil
 	}
 	return fallback, nil
 }
