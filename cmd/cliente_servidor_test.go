@@ -82,6 +82,7 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "runtime despertar", args: []string{"runtime", "despertar"}, want: true},
 		{nombre: "runtime procesar mailbox", args: []string{"runtime", "procesar-mailbox"}, want: true},
 		{nombre: "runtime procesar autonomia", args: []string{"runtime", "procesar-autonomia"}, want: true},
+		{nombre: "runtime procesar reanimaciones", args: []string{"runtime", "procesar-reanimaciones"}, want: true},
 		{nombre: "runtime limpiar pruebas", args: []string{"runtime", "limpiar-pruebas", "--agente", "Codex1"}, want: true},
 		{nombre: "runtime traza", args: []string{"runtime", "traza", "--agente", "Codex1"}, want: true},
 		{nombre: "runtime transcript", args: []string{"runtime", "transcript", "--agente", "Codex1"}, want: true},
@@ -183,6 +184,7 @@ func TestRuntimeMutacionesCriticasSoportanServerMode(t *testing.T) {
 		{"runtime", "purgar-handles", "--agente", "Codex6"},
 		{"runtime", "purgar-ordenes", "--agente", "Codex6"},
 		{"runtime", "despertar", "--mailbox"},
+		{"runtime", "procesar-reanimaciones"},
 		{"runtime", "limpiar-pruebas", "--agente", "Codex1"},
 	}
 	for _, args := range cases {

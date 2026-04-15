@@ -29,6 +29,7 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	var wakeReq map[string]any
 	var processMailboxReq map[string]any
 	var processAutonomiaReq map[string]any
+	var processReanimationsReq map[string]any
 	var clearMailboxReq map[string]any
 	var clearTasksReq map[string]any
 	var purgeOrdersReq map[string]any
@@ -46,14 +47,14 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 			if runtimeActive {
 				runtimes = append(runtimes, map[string]any{
 					"runtime": map[string]any{
-						"id":            7,
-						"agente":        "Codex2",
-						"proyecto_slug": "orquestador",
-						"provider_slug": "openai",
-						"connector_slug":"codex-cli",
-						"logical_state": "activo",
-						"pid":           1234,
-						"last_event_at": "2026-03-23T10:00:00Z",
+						"id":             7,
+						"agente":         "Codex2",
+						"proyecto_slug":  "orquestador",
+						"provider_slug":  "openai",
+						"connector_slug": "codex-cli",
+						"logical_state":  "activo",
+						"pid":            1234,
+						"last_event_at":  "2026-03-23T10:00:00Z",
 					},
 				})
 			}
@@ -242,6 +243,9 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 		case r.URL.Path == "/api/runtime/process-autonomia" && r.Method == http.MethodPost:
 			_ = json.NewDecoder(r.Body).Decode(&processAutonomiaReq)
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 0, "accepted": true, "running": true})
+		case r.URL.Path == "/api/runtime/process-reanimations" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&processReanimationsReq)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 0, "accepted": true, "running": true})
 		case r.URL.Path == "/api/runtime-checkpoints/latest":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"checkpoint": map[string]any{
@@ -380,6 +384,20 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	}
 	if len(processAutonomiaReq) != 0 {
 		t.Fatalf("request process autonomia deberia ser vacia: %+v", processAutonomiaReq)
+	}
+
+	outProcessReanimations := capturarStdout(t, func() {
+		if err := runtimeProcesarReanimacionesCmd.RunE(runtimeProcesarReanimacionesCmd, nil); err != nil {
+			t.Fatalf("runtime procesar-reanimaciones via api: %v", err)
+		}
+	})
+	for _, token := range []string{"accepted=true", "running=true", "count=0"} {
+		if !strings.Contains(outProcessReanimations, token) {
+			t.Fatalf("salida runtime procesar-reanimaciones sin %q:\n%s", token, outProcessReanimations)
+		}
+	}
+	if len(processReanimationsReq) != 0 {
+		t.Fatalf("request process reanimations deberia ser vacia: %+v", processReanimationsReq)
 	}
 
 	if err := runtimeMailboxLimpiarCmd.Flags().Set("to", "Codex2"); err != nil {
@@ -931,18 +949,18 @@ func TestSincronizarRuntimeHandleSupervisadoNoReanimaPremiumConCanalRoto(t *test
 		t.Fatalf("registrar runtime: %v", err)
 	}
 	metaJSON, _ := json.Marshal(map[string]any{
-		"driver":                      "tmux_cli_session",
-		"transport":                   "tmux",
-		"tmux_command":                fakeTmux,
-		"tmux_session":                "orq-claude1-live",
-		"tmux_pane_id":                "%1",
-		"working_dir":                 workingDir,
-		"rendered_command":            "claude-code",
-		"wrapped_command":             exe,
-		"external_session_id":         "ollama-pool-claude1-legacy-1",
-		"mailbox_delivery_mode":       "session_resume",
-		"pty_last_broken_pipe_error":  "external_session_id incompatible with tmux premium runtime",
-		"pty_last_broken_pipe_at":     time.Now().UTC().Format(time.RFC3339Nano),
+		"driver":                     "tmux_cli_session",
+		"transport":                  "tmux",
+		"tmux_command":               fakeTmux,
+		"tmux_session":               "orq-claude1-live",
+		"tmux_pane_id":               "%1",
+		"working_dir":                workingDir,
+		"rendered_command":           "claude-code",
+		"wrapped_command":            exe,
+		"external_session_id":        "ollama-pool-claude1-legacy-1",
+		"mailbox_delivery_mode":      "session_resume",
+		"pty_last_broken_pipe_error": "external_session_id incompatible with tmux premium runtime",
+		"pty_last_broken_pipe_at":    time.Now().UTC().Format(time.RFC3339Nano),
 	})
 	res, err := db.DB.Exec(`INSERT INTO runtime_handles (
 		agente, proyecto_id, runtime_id, transporte, handle_kind, handle_ref, estado, metadata_json, capabilities_json, last_seen_at

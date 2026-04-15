@@ -1314,6 +1314,15 @@ func procesarAutonomiaPorAPI() (*apiRuntimeProcessAutonomiaResponse, bool, error
 	return &resp, true, nil
 }
 
+func procesarReanimacionesPorAPI() (*apiRuntimeProcessAutonomiaResponse, bool, error) {
+	var resp apiRuntimeProcessAutonomiaResponse
+	ok, err := apiPost("/api/runtime/process-reanimations", map[string]any{}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
 func cargarAsignacionesDesdeAPI(query url.Values) ([]*db.Asignacion, bool, error) {
 	var resp apiAsignacionesResponse
 	ok, err := apiGetQuery("/api/asignaciones", query, &resp)

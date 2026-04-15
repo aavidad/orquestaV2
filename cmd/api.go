@@ -560,6 +560,7 @@ type apiRuntimeProcessAutonomiaResponse struct {
 }
 
 var runtimeProcessAutonomiaEnCurso atomic.Bool
+var runtimeProcessReanimacionesEnCurso atomic.Bool
 
 type apiRuntimeProcessMailboxRequest struct {
 	ToAgente string `json:"to_agente,omitempty"`
@@ -773,6 +774,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtime/wake", apiHandlerRuntimeWake)
 	mux.HandleFunc("/api/runtime/process-mailbox", apiHandlerRuntimeProcessMailbox)
 	mux.HandleFunc("/api/runtime/process-autonomia", apiHandlerRuntimeProcessAutonomia)
+	mux.HandleFunc("/api/runtime/process-reanimations", apiHandlerRuntimeProcessReanimaciones)
 	mux.HandleFunc("/api/runtime/ollama-pool/launch", apiHandlerOllamaPoolLaunch)
 	mux.HandleFunc("/api/runtime/ollama-pool/input", apiHandlerOllamaPoolInput)
 	mux.HandleFunc("/api/runtime/ollama-pool/status", apiHandlerOllamaPoolStatus)
@@ -5249,6 +5251,41 @@ func apiHandlerRuntimeProcessAutonomia(w http.ResponseWriter, r *http.Request) {
 		Count:    0,
 		Accepted: started,
 		Running:  runtimeProcessAutonomiaEnCurso.Load(),
+	})
+}
+
+func apiHandlerRuntimeProcessReanimaciones(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	started := runtimeProcessReanimacionesEnCurso.CompareAndSwap(false, true)
+	if started {
+		go func() {
+			defer runtimeProcessReanimacionesEnCurso.Store(false)
+			reanimar, err := (dbAutomationService{}).CheckReanimaciones()
+			if err != nil {
+				db.Audit("server", "runtime_process_reanimaciones_error", "runtime", 0, err.Error())
+				return
+			}
+			total := 0
+			for _, agente := range reanimar {
+				if agente == nil || strings.TrimSpace(agente.Nombre) == "" {
+					continue
+				}
+				if err := (dbAutomationService{}).ResetReanimacion(agente.Nombre); err != nil {
+					db.Audit("server", "runtime_process_reanimaciones_reset_error", "agente", 0, fmt.Sprintf("agente=%s err=%v", strings.TrimSpace(agente.Nombre), err))
+					continue
+				}
+				total++
+			}
+			db.Audit("server", "runtime_process_reanimaciones", "runtime", 0, fmt.Sprintf("count=%d", total))
+		}()
+	}
+	apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
+		OK:       true,
+		Count:    0,
+		Accepted: started,
+		Running:  runtimeProcessReanimacionesEnCurso.Load(),
 	})
 }
 
