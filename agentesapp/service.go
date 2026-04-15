@@ -822,6 +822,102 @@ func (s *Service) buildRowForAgentWithMailbox(nombre string, mailbox []*db.Runti
 	return row, nil
 }
 
+func (s *Service) buildOperationalRowForAgent(nombre string, now time.Time) (Row, error) {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return Row{}, fmt.Errorf("agente obligatorio")
+	}
+
+	agente, err := s.store.GetAgent(nombre)
+	if err != nil {
+		return Row{}, err
+	}
+	if agente == nil {
+		return Row{}, fmt.Errorf("agente no encontrado: %s", nombre)
+	}
+
+	row := Row{Agente: agente}
+
+	asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{Agente: &nombre})
+	if err != nil {
+		return Row{}, err
+	}
+	for _, asignacion := range asignaciones {
+		if asignacion != nil && asignacion.Estado == db.AsignacionActiva {
+			row.Asignacion = asignacion
+			break
+		}
+	}
+
+	sesiones, err := s.store.ListInspectionSessions(db.FiltroSesionesInspeccion{Agente: &nombre})
+	if err != nil {
+		return Row{}, err
+	}
+	row.Sesion = latestSessionForAgent(sesiones)
+
+	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{Agente: &nombre})
+	if err != nil {
+		return Row{}, err
+	}
+	row.Runtime = latestRuntimeForAgent(runtimes)
+
+	handles, err := s.store.ListCanonicalRuntimeHandles(&nombre)
+	if err != nil {
+		return Row{}, err
+	}
+	row.Handle = latestHandleForAgent(handles)
+	if row.Handle == nil {
+		handles, err = s.store.ListRuntimeHandles(&nombre)
+		if err != nil {
+			return Row{}, err
+		}
+		row.Handle = latestHandleForAgent(handles)
+	}
+	if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
+		if view := structured.View(now, time.Minute); view != nil {
+			row.WorkerState = strings.TrimSpace(view.State)
+			row.WorkerAlive = view.Alive
+			row.WorkerReadyAt = view.ReadyAt
+			row.WorkerHeartbeat = view.HeartbeatAt
+			row.WorkerUpdatedAt = view.UpdatedAt
+			row.WorkerLastOutput = view.LastOutputAt
+			row.WorkerLastProgress = view.LastProgressAt
+			row.WorkerExitError = strings.TrimSpace(view.ExitError)
+			row.WorkerSessionRef = strings.TrimSpace(view.SessionRef)
+			row.WorkerRuntimeRef = strings.TrimSpace(view.RuntimeRef)
+			row.WorkerDriver = strings.TrimSpace(view.Driver)
+			row.WorkerTransport = strings.TrimSpace(view.Transport)
+			row.WorkerTMUXSession = strings.TrimSpace(view.TmuxSession)
+			row.WorkerTMUXWindow = strings.TrimSpace(view.TmuxWindow)
+			row.WorkerTMUXPaneID = strings.TrimSpace(view.TmuxPaneID)
+			row.WorkerCanSendInput = view.CanSendInput
+			row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
+			row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
+		}
+	}
+
+	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &nombre})
+	if err != nil {
+		return Row{}, err
+	}
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.EstadoCompletada, db.EstadoCancelada, db.EstadoBacklog:
+			continue
+		case db.EstadoBloqueada:
+			row.BlockedTasks++
+		default:
+			row.OpenTasks++
+		}
+	}
+
+	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
+	return row, nil
+}
+
 func latestAssignmentForAgent(items []*db.Asignacion) *db.Asignacion {
 	var best *db.Asignacion
 	for _, item := range items {

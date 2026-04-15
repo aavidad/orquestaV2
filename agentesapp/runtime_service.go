@@ -707,17 +707,11 @@ func estadoOperativoBloqueaContinuidad(estado string) bool {
 }
 
 func (s *Service) liveOperationalState(agenteNombre string) (string, string, error) {
-	return resolveLiveOperationalState(
-		func() ([]Row, error) {
-			row, err := s.buildRowForAgent(agenteNombre)
-			if err != nil {
-				return nil, err
-			}
-			return []Row{row}, nil
-		},
-		agenteNombre,
-		liveOperationalStateTimeout,
-	)
+	row, err := s.buildOperationalRowForAgent(agenteNombre, time.Now().UTC())
+	if err != nil {
+		return "", "", err
+	}
+	return strings.TrimSpace(row.EstadoOperativo), strings.TrimSpace(row.DetalleOperativo), nil
 }
 
 func resolveLiveOperationalState(loadRows func() ([]Row, error), agenteNombre string, timeout time.Duration) (string, string, error) {
