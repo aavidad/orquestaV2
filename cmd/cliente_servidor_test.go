@@ -80,6 +80,7 @@ func TestCommandSupportsServerMode(t *testing.T) {
 		{nombre: "runtime ver", args: []string{"runtime", "ver", "12"}, want: true},
 		{nombre: "runtime handles", args: []string{"runtime", "handles"}, want: true},
 		{nombre: "runtime despertar", args: []string{"runtime", "despertar"}, want: true},
+		{nombre: "runtime procesar mailbox", args: []string{"runtime", "procesar-mailbox"}, want: true},
 		{nombre: "runtime limpiar pruebas", args: []string{"runtime", "limpiar-pruebas", "--agente", "Codex1"}, want: true},
 		{nombre: "runtime traza", args: []string{"runtime", "traza", "--agente", "Codex1"}, want: true},
 		{nombre: "runtime transcript", args: []string{"runtime", "transcript", "--agente", "Codex1"}, want: true},

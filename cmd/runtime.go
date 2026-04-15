@@ -200,6 +200,24 @@ var runtimeDespertarCmd = &cobra.Command{
 	},
 }
 
+var runtimeProcesarMailboxCmd = &cobra.Command{
+	Use:   "procesar-mailbox",
+	Short: "Ejecuta una pasada inmediata del batch de runtime mailbox",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agente, _ := cmd.Flags().GetString("agente")
+		proyecto, _ := cmd.Flags().GetString("proyecto")
+		resp, ok, err := procesarRuntimeMailboxPorAPI(agente, proyecto)
+		if !ok {
+			return serverFirstCommandError("runtime procesar-mailbox")
+		}
+		if err != nil {
+			return err
+		}
+		fmt.Printf("✓ Runtime mailbox procesado count=%d\n", resp.Count)
+		return nil
+	},
+}
+
 var runtimeTranscriptCmd = &cobra.Command{
 	Use:   "transcript",
 	Short: "Lista o busca transcript persistido de runtimes",
@@ -1784,6 +1802,8 @@ func init() {
 	runtimeDespertarCmd.Flags().Bool("orders", false, "Despierta el batch de runtime orders")
 	runtimeDespertarCmd.Flags().Bool("mailbox", false, "Despierta el batch de runtime mailbox")
 	runtimeDespertarCmd.Flags().Bool("warm", false, "Despierta el carril caliente general")
-	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimePurgarOrdenesCmd, runtimeDespertarCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenVerCmd, runtimeOrdenNuevaCmd, runtimeOrdenCancelarCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxVerCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd, runtimeMailboxLimpiarCmd, runtimeLimpiarPruebasCmd)
+	runtimeProcesarMailboxCmd.Flags().String("agente", "", "Procesar solo mailbox de un agente destino")
+	runtimeProcesarMailboxCmd.Flags().String("proyecto", "", "Procesar solo mailbox de un proyecto")
+	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimePurgarOrdenesCmd, runtimeDespertarCmd, runtimeProcesarMailboxCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenVerCmd, runtimeOrdenNuevaCmd, runtimeOrdenCancelarCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxVerCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd, runtimeMailboxLimpiarCmd, runtimeLimpiarPruebasCmd)
 	rootCmd.AddCommand(runtimeCmd)
 }

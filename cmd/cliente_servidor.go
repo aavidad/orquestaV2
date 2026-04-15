@@ -473,7 +473,7 @@ func commandSupportsServerMode(args []string) bool {
 			return false
 		}
 		switch tokens[1] {
-		case "listar", "ver", "handles", "purgar-handles", "purgar-ordenes", "despertar", "limpiar-pruebas", "traza", "transcript", "diagnostico", "ordenes", "orden-nueva", "orden-cancelar", "nudge", "discordia", "checkpoints", "checkpoint-nuevo", "checkpoint-ver", "mailbox", "mailbox-enviar", "mailbox-entregar", "mailbox-consumir", "mailbox-limpiar":
+		case "listar", "ver", "handles", "purgar-handles", "purgar-ordenes", "despertar", "procesar-mailbox", "limpiar-pruebas", "traza", "transcript", "diagnostico", "ordenes", "orden-nueva", "orden-cancelar", "nudge", "discordia", "checkpoints", "checkpoint-nuevo", "checkpoint-ver", "mailbox", "mailbox-enviar", "mailbox-entregar", "mailbox-consumir", "mailbox-limpiar":
 			return true
 		default:
 			return false

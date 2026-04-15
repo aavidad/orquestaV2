@@ -2277,6 +2277,9 @@ func (s *runtimeMailboxBatchSnapshot) activeHandle(agente string, proyectoID *in
 		if err != nil {
 			return nil, err
 		}
+		if !runtimeHandleCuentaComoActivoEnMailboxBatch(fresh) {
+			return nil, nil
+		}
 		return fresh, nil
 	}
 	if handle := runtimeMailboxHotHandleLookup(s.hotHandles, agente, proyectoID); handle != nil && db.RuntimeHandleSnapshotIsFresh(handle, 2*time.Minute) {
@@ -2319,9 +2322,19 @@ func (s *runtimeMailboxBatchSnapshot) activeHandle(agente string, proyectoID *in
 			return nil, err
 		}
 	}
+	if !runtimeHandleCuentaComoActivoEnMailboxBatch(handle) {
+		handle = nil
+	}
 	s.activeHandleLoaded[key] = struct{}{}
 	s.activeHandles[key] = handle
 	return handle, nil
+}
+
+func runtimeHandleCuentaComoActivoEnMailboxBatch(handle *db.RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(handle.Estado), "activo")
 }
 
 func (s *runtimeMailboxBatchSnapshot) ordersForAgentProject(agente string, proyectoID *int64) ([]*db.RuntimeOrder, error) {
@@ -2418,7 +2431,11 @@ func (s *runtimeMailboxBatchSnapshot) externalSessionHandle(handle *db.RuntimeHa
 
 func procesarRuntimeMailboxBatch() (int, error) {
 	estado := "pendiente"
-	mailbox, err := runtimesService.ListRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &estado})
+	return procesarRuntimeMailboxBatchConFiltro(db.FiltroRuntimeMailbox{Estado: &estado})
+}
+
+func procesarRuntimeMailboxBatchConFiltro(filter db.FiltroRuntimeMailbox) (int, error) {
+	mailbox, err := runtimesService.ListRuntimeMailbox(filter)
 	if err != nil {
 		return 0, err
 	}
@@ -4112,6 +4129,9 @@ func intentarReactivarRuntimeMailboxPoolLocalSinHandle(msg *db.RuntimeMailboxMes
 	if agente == "" {
 		return false, nil
 	}
+	if !agenteUsaPoolLocalCompartidoParaReactivacion(agente, proyecto) {
+		return false, nil
+	}
 	poolLocalSesion := agenteUsaSesionPoolLocalCompartido(agente, strings.TrimSpace(proyecto.Slug))
 	permite, poolSlug, err := db.PoolLocalCompartidoPermiteActivacionAgenteProyecto(agente, strings.TrimSpace(proyecto.Slug))
 	if err != nil {
@@ -4212,6 +4232,35 @@ func agenteUsaSesionPoolLocalCompartido(agente, proyecto string) bool {
 		return true
 	}
 	return false
+}
+
+func agenteUsaPoolLocalCompartidoParaReactivacion(agente string, proyecto *db.Proyecto) bool {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return false
+	}
+	if proyecto != nil && agenteUsaSesionPoolLocalCompartido(agente, strings.TrimSpace(proyecto.Slug)) {
+		return true
+	}
+	if proyecto != nil {
+		if handle, err := resolverHandleReactivacionAgente(agente, &proyecto.ID); err == nil && runtimeHandleUsaPoolLocalCompartido(handle) {
+			return true
+		}
+	}
+	return runtimeagente.EsConectorFamiliaOllama(runtimeagente.ConectorPorDefectoAgente(agente), "")
+}
+
+func runtimeHandleUsaPoolLocalCompartido(handle *db.RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "remote_http") {
+		return true
+	}
+	meta := strings.TrimSpace(handle.MetadataJSON)
+	return strings.EqualFold(strings.TrimSpace(stringFromMetadataJSON(meta, "driver")), "ollama_pool_local") ||
+		strings.EqualFold(strings.TrimSpace(stringFromMetadataJSON(meta, "conector_canonico")), "ollama_pool_local") ||
+		strings.EqualFold(strings.TrimSpace(stringFromMetadataJSON(meta, "connector")), "ollama_pool_local")
 }
 
 func sesionUsaPoolLocalCompartido(sesion *db.Sesion) bool {
@@ -8492,12 +8541,14 @@ func encolarReactivacionAgenteProyectoSiProcede(agente string, proyecto *db.Proy
 	if agente == "" || proyecto == nil || proyecto.ID <= 0 {
 		return false, nil
 	}
-	if permite, poolSlug, err := db.PoolLocalCompartidoPermiteActivacionAgenteProyecto(agente, proyecto.Slug); err != nil {
-		return false, err
-	} else if !permite {
-		db.Audit("orquesta", "reactivacion_pool_local_sin_capacidad", "agente", 0,
-			fmt.Sprintf("agente=%s proyecto=%s pool=%s", agente, proyecto.Slug, poolSlug))
-		return false, nil
+	if agenteUsaPoolLocalCompartidoParaReactivacion(agente, proyecto) {
+		if permite, poolSlug, err := db.PoolLocalCompartidoPermiteActivacionAgenteProyecto(agente, proyecto.Slug); err != nil {
+			return false, err
+		} else if !permite {
+			db.Audit("orquesta", "reactivacion_pool_local_sin_capacidad", "agente", 0,
+				fmt.Sprintf("agente=%s proyecto=%s pool=%s", agente, proyecto.Slug, poolSlug))
+			return false, nil
+		}
 	}
 	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "resume", "start", "handoff"); err != nil {
 		return false, err

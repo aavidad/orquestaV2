@@ -27,6 +27,7 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	var ordersProjectQuery string
 	var ordersLimitQuery string
 	var wakeReq map[string]any
+	var processMailboxReq map[string]any
 	var clearMailboxReq map[string]any
 	var clearTasksReq map[string]any
 	var purgeOrdersReq map[string]any
@@ -234,6 +235,9 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 		case r.URL.Path == "/api/runtime/wake" && r.Method == http.MethodPost:
 			_ = json.NewDecoder(r.Body).Decode(&wakeReq)
 			_ = json.NewEncoder(w).Encode(map[string]any{"orders": true, "mailbox": true, "warm": false})
+		case r.URL.Path == "/api/runtime/process-mailbox" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&processMailboxReq)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 3})
 		case r.URL.Path == "/api/runtime-checkpoints/latest":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"checkpoint": map[string]any{
@@ -334,6 +338,30 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	}
 	if got, _ := wakeReq["mailbox"].(bool); !got {
 		t.Fatalf("request wake sin mailbox=true: %+v", wakeReq)
+	}
+	if err := runtimeProcesarMailboxCmd.Flags().Set("agente", "Codex2"); err != nil {
+		t.Fatalf("set agente procesar-mailbox: %v", err)
+	}
+	if err := runtimeProcesarMailboxCmd.Flags().Set("proyecto", "orquestador"); err != nil {
+		t.Fatalf("set proyecto procesar-mailbox: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = runtimeProcesarMailboxCmd.Flags().Set("agente", "")
+		_ = runtimeProcesarMailboxCmd.Flags().Set("proyecto", "")
+	})
+	outProcessMailbox := capturarStdout(t, func() {
+		if err := runtimeProcesarMailboxCmd.RunE(runtimeProcesarMailboxCmd, nil); err != nil {
+			t.Fatalf("runtime procesar-mailbox via api: %v", err)
+		}
+	})
+	if !strings.Contains(outProcessMailbox, "count=3") {
+		t.Fatalf("salida runtime procesar-mailbox inesperada:\n%s", outProcessMailbox)
+	}
+	if got, _ := processMailboxReq["to_agente"].(string); got != "Codex2" {
+		t.Fatalf("request process mailbox sin to_agente esperado: %+v", processMailboxReq)
+	}
+	if got, _ := processMailboxReq["proyecto"].(string); got != "orquestador" {
+		t.Fatalf("request process mailbox sin proyecto esperado: %+v", processMailboxReq)
 	}
 
 	if err := runtimeMailboxLimpiarCmd.Flags().Set("to", "Codex2"); err != nil {

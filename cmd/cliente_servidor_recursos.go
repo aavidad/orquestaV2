@@ -1289,6 +1289,18 @@ func despertarRuntimePorAPI(orders, mailbox, warm bool) (*apiRuntimeWakeResponse
 	return &resp, true, nil
 }
 
+func procesarRuntimeMailboxPorAPI(toAgente, proyecto string) (*apiRuntimeProcessMailboxResponse, bool, error) {
+	var resp apiRuntimeProcessMailboxResponse
+	ok, err := apiPost("/api/runtime/process-mailbox", apiRuntimeProcessMailboxRequest{
+		ToAgente: strings.TrimSpace(toAgente),
+		Proyecto: strings.TrimSpace(proyecto),
+	}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
 func cargarAsignacionesDesdeAPI(query url.Values) ([]*db.Asignacion, bool, error) {
 	var resp apiAsignacionesResponse
 	ok, err := apiGetQuery("/api/asignaciones", query, &resp)

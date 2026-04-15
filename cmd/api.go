@@ -546,6 +546,16 @@ type apiRuntimeWakeResponse struct {
 	Warm    bool `json:"warm"`
 }
 
+type apiRuntimeProcessMailboxResponse struct {
+	OK    bool `json:"ok"`
+	Count int  `json:"count"`
+}
+
+type apiRuntimeProcessMailboxRequest struct {
+	ToAgente string `json:"to_agente,omitempty"`
+	Proyecto string `json:"proyecto,omitempty"`
+}
+
 type apiRuntimeMailboxClearRequest struct {
 	ToAgente   string   `json:"to_agente"`
 	FromAgente string   `json:"from_agente"`
@@ -751,6 +761,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtime-checkpoints/latest", apiHandlerRuntimeCheckpointLatest)
 	mux.HandleFunc("/api/runtime-checkpoints/", apiRouterRuntimeCheckpoints)
 	mux.HandleFunc("/api/runtime/wake", apiHandlerRuntimeWake)
+	mux.HandleFunc("/api/runtime/process-mailbox", apiHandlerRuntimeProcessMailbox)
 	mux.HandleFunc("/api/runtime/ollama-pool/launch", apiHandlerOllamaPoolLaunch)
 	mux.HandleFunc("/api/runtime/ollama-pool/input", apiHandlerOllamaPoolInput)
 	mux.HandleFunc("/api/runtime/ollama-pool/status", apiHandlerOllamaPoolStatus)
@@ -5155,6 +5166,40 @@ func apiHandlerRuntimeWake(w http.ResponseWriter, r *http.Request) {
 		resp.Warm = wakeControlPlaneWarm()
 	}
 	apiWriteJSON(w, http.StatusOK, resp)
+}
+
+func apiHandlerRuntimeProcessMailbox(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiRuntimeProcessMailboxRequest
+	if err := apiDecodeJSON(r, &req); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	}
+	estado := "pendiente"
+	filter := db.FiltroRuntimeMailbox{Estado: &estado}
+	if toAgente := strings.TrimSpace(req.ToAgente); toAgente != "" {
+		toAgente = apiNombreAgenteCanonico(toAgente)
+		filter.ToAgente = &toAgente
+	}
+	if proyecto := strings.TrimSpace(req.Proyecto); proyecto != "" {
+		p, err := runtimesService.GetProject(proyecto)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+		filter.ProyectoID = &p.ID
+	}
+	count, err := procesarRuntimeMailboxBatchConFiltro(filter)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiRuntimeProcessMailboxResponse{
+		OK:    true,
+		Count: count,
+	})
 }
 
 func apiHandlerRuntimeMailboxClear(w http.ResponseWriter, r *http.Request) {

@@ -9984,6 +9984,193 @@ func TestProcesarRuntimeMailboxBatchReactivaPremiumAutonomiaSinHandleConTrabajoA
 	}
 }
 
+func TestProcesarRuntimeMailboxBatchReactivaPremiumAutonomiaSinHandleIgnoraCapacidadPoolLocal(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente premium: %v", err)
+	}
+	if err := db.RegistrarAgente("GemmaBusy", "programador"); err != nil {
+		t.Fatalf("registrar agente pool busy: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.GuardarPool(&db.PoolCapacidad{
+		Slug:                "ollama-gemma4",
+		Proveedor:           "Ollama",
+		Runtime:             "ollama",
+		Plan:                "local",
+		CapacidadTotal:      1,
+		PermiteModelosMulti: true,
+		PoliticaHandoff:     "preventivo",
+		FuenteTelemetria:    "manual",
+		MetadataJSON:        `{"conector_canonico":"ollama_pool_local","modelo_preferente":"gemma4:26b","slots_maximos":1}`,
+		Activo:              true,
+	}); err != nil {
+		t.Fatalf("guardar pool: %v", err)
+	}
+	if _, err := db.GuardarPoolModelo("ollama-gemma4", &db.PoolModelo{ModelSlug: "gemma4:26b", Activo: true, Prioridad: 10, CosteRelativo: 1}); err != nil {
+		t.Fatalf("guardar pool modelo: %v", err)
+	}
+	if _, err := db.GuardarPoliticaModelo(&db.PoliticaModelo{
+		ScopeTipo:       "perfil",
+		ScopeRef:        "implementacion",
+		PerfilTarea:     "implementacion",
+		PoolSlug:        "ollama-gemma4",
+		ModelSlug:       "gemma4:26b",
+		ReasoningEffort: "high",
+		Prioridad:       10,
+		Activa:          true,
+	}); err != nil {
+		t.Fatalf("guardar politica modelo: %v", err)
+	}
+	sesionBusy, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "GemmaBusy",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "gemma-busy"),
+		Herramienta: "ollama_pool_local",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion busy: %v", err)
+	}
+	pool, err := db.GetPool("ollama-gemma4")
+	if err != nil {
+		t.Fatalf("get pool: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE sesiones SET pool_id = ? WHERE id = ?`, pool.ID, sesionBusy.ID); err != nil {
+		t.Fatalf("asignar pool a sesion busy: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "frente premium"); err != nil {
+		t.Fatalf("activar asignacion premium: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Retomar continuidad premium con pool ocupado",
+		Descripcion: "Trabajo premium ya asignado",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Gemini1"); err != nil {
+		t.Fatalf("tomar tarea premium: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Gemini1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","texto":"reanuda el frente premium asignado"}`,
+	}); err != nil {
+		t.Fatalf("mailbox autonomia: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime mailbox: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia reactivar premium aunque el pool local este ocupado, got=%d", n)
+	}
+
+	agente := "Gemini1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != agenteControlAccionStart {
+		t.Fatalf("deberia encolar start para premium aunque la politica de modelo use pool local: %+v", orders)
+	}
+}
+
+func TestProcesarRuntimeMailboxBatchReactivaPremiumSiHandleCanonicoRecienteNoEstaActivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "frente premium"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Retomar continuidad premium con handle residual",
+		Descripcion: "Trabajo premium ya asignado",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Gemini1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Gemini1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "gemini-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON := `{"driver":"tmux_cli_session","tmux_session":"orq-gemini1-stale","mailbox_delivery_mode":"interactive","can_send_input":true}`
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='fallido', metadata_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`, metaJSON, handle.ID); err != nil {
+		t.Fatalf("dejar handle residual: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Gemini1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","texto":"reanuda el frente premium asignado"}`,
+	}); err != nil {
+		t.Fatalf("mailbox autonomia: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime mailbox: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia reactivar premium aunque exista handle canonico reciente no activo, got=%d", n)
+	}
+
+	agente := "Gemini1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != agenteControlAccionStart {
+		t.Fatalf("deberia encolar start para reactivar premium con handle residual: %+v", orders)
+	}
+}
+
 func TestProcesarRuntimeMailboxBatchReactivaPremiumSinProyectoEnMailbox(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
