@@ -238,7 +238,33 @@ func (dbAutomationService) CheckReanimaciones() ([]*db.Agente, error) {
 	if _, err := revalidarPresupuestoBloqueadoBatch(); err != nil {
 		return nil, err
 	}
-	return db.CheckReanimaciones()
+	candidatos, err := db.CheckReanimaciones()
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	filtrados := make([]*db.Agente, 0, len(candidatos))
+	for _, agente := range candidatos {
+		if !agenteDebeEntrarEnReanimacionAutomatica(agente, now) {
+			continue
+		}
+		filtrados = append(filtrados, agente)
+	}
+	return filtrados, nil
+}
+
+func agenteDebeEntrarEnReanimacionAutomatica(agente *db.Agente, now time.Time) bool {
+	if agente == nil || strings.TrimSpace(agente.Nombre) == "" || !agente.Habilitado {
+		return false
+	}
+	if agente.ReanimarAt == nil || agente.ReanimarAt.IsZero() || agente.ReanimarAt.After(now) {
+		return false
+	}
+	if agenteMotivoPausaOperativa(agente.MotivoPausa) {
+		return true
+	}
+	estadoCuota := strings.ToLower(strings.TrimSpace(agente.EstadoCuota))
+	return estadoCuota == "enfriamiento" || estadoCuota == "agotado"
 }
 
 func (dbAutomationService) ResetReanimacion(nombre string) error {

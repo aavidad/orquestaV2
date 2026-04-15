@@ -13800,6 +13800,54 @@ func TestResetReanimacionNoArrancaSiLaCuentaCompartidaYaEstaOcupada(t *testing.T
 	}
 }
 
+func TestCheckReanimacionesFiltraSoloBloqueosReales(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	now := time.Now().UTC().Add(-time.Minute)
+
+	for _, nombre := range []string{"CodexActivo", "CodexQuota", "GeminiPanic", "ClaudeDisabled"} {
+		if err := db.RegistrarAgente(nombre, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", nombre, err)
+		}
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='activo', reanimar_at=? WHERE nombre='CodexActivo'`, now); err != nil {
+		t.Fatalf("actualizar CodexActivo: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', reanimar_at=?, motivo_pausa='cuota visible agotada', habilitado=1 WHERE nombre='CodexQuota'`, now); err != nil {
+		t.Fatalf("actualizar CodexQuota: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', reanimar_at=?, motivo_pausa='Auto-pausa por runtime_panic: transcript=42', habilitado=1 WHERE nombre='GeminiPanic'`, now); err != nil {
+		t.Fatalf("actualizar GeminiPanic: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', reanimar_at=?, motivo_pausa='cuota visible agotada', habilitado=0 WHERE nombre='ClaudeDisabled'`, now); err != nil {
+		t.Fatalf("actualizar ClaudeDisabled: %v", err)
+	}
+
+	got, err := (dbAutomationService{}).CheckReanimaciones()
+	if err != nil {
+		t.Fatalf("check reanimaciones: %v", err)
+	}
+
+	nombres := map[string]bool{}
+	for _, agente := range got {
+		if agente != nil {
+			nombres[strings.TrimSpace(agente.Nombre)] = true
+		}
+	}
+	if !nombres["CodexQuota"] {
+		t.Fatalf("deberia incluir cuota visible agotada: %+v", nombres)
+	}
+	if !nombres["GeminiPanic"] {
+		t.Fatalf("deberia incluir pausa operativa recuperable: %+v", nombres)
+	}
+	if nombres["CodexActivo"] {
+		t.Fatalf("no deberia incluir agente activo sin bloqueo real: %+v", nombres)
+	}
+	if nombres["ClaudeDisabled"] {
+		t.Fatalf("no deberia incluir agente deshabilitado: %+v", nombres)
+	}
+}
+
 func TestPresupuestoAgenteDebeRevalidarseAhoraParaBloqueadoStale(t *testing.T) {
 	checkedAt := time.Now().UTC().Add(-2 * time.Hour)
 	if !presupuestoAgenteDebeRevalidarseAhora(&db.Agente{
