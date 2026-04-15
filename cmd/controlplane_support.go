@@ -8459,6 +8459,8 @@ func procesarCompactacionExclusividadPremiumSesionActiva(sesion *db.Sesion, snap
 	if agente == "" {
 		return 0, nil
 	}
+	// La compactación de exclusividad debe ver todas las tareas reales del agente.
+	// Un snapshot resumido puede ocultar frentes heredados que justamente queremos aparcar.
 	tareas, err := tareasService.List(db.FiltroTareas{Agente: &agente})
 	if err != nil {
 		return 0, err
@@ -9648,6 +9650,10 @@ func reactivarSesionAutonomiaPorTrabajo(sesion *db.Sesion) (int, error) {
 	if err := db.ActivarAsignacion(strings.TrimSpace(sesion.Agente), *sesion.ProyectoID, "reactivacion_automatica_trabajo_activo"); err != nil {
 		return 0, err
 	}
+	compactadas, err := compactarFrentesExclusividadPremiumAgenteProyecto(strings.TrimSpace(sesion.Agente), *sesion.ProyectoID)
+	if err != nil {
+		return 0, err
+	}
 	estadoActiva := "activa"
 	if err := db.GuardarSesionActiva(strings.TrimSpace(sesion.Agente), sesion.ProyectoID, db.SesionUpdate{
 		Estado:    &estadoActiva,
@@ -9692,9 +9698,34 @@ func reactivarSesionAutonomiaPorTrabajo(sesion *db.Sesion) (int, error) {
 		}
 	}
 	if err := encolarControlAutonomiaProyecto(strings.TrimSpace(sesion.Agente), proyecto, accion, "desbloqueo_humano_auto"); err != nil {
-		return reactivadas, err
+		return compactadas + reactivadas, err
 	}
-	return 1 + reactivadas, nil
+	return 1 + reactivadas + compactadas, nil
+}
+
+func compactarFrentesExclusividadPremiumAgenteProyecto(agente string, proyectoID int64) (int, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || proyectoID <= 0 {
+		return 0, nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{Agente: &agente})
+	if err != nil {
+		return 0, err
+	}
+	procesadas := 0
+	for _, tarea := range tareas {
+		if !tareaDebeCompactarsePorExclusividadPremium(tarea, proyectoID, agente) {
+			continue
+		}
+		if err := tareasService.MoveToBacklog(tarea.ID); err != nil {
+			return procesadas, err
+		}
+		procesadas++
+	}
+	if procesadas > 0 {
+		resetStatusSnapshotCache()
+	}
+	return procesadas, nil
 }
 
 func resolverHandleReactivacionAgente(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
