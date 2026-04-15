@@ -1170,9 +1170,15 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 		if agente == nil {
 			continue
 		}
-		row, err := s.buildReanimationRowForAgent(agente, asignacionPorAgente[name], openTasksPorAgente[name], blockedTasksPorAgente[name], now, staleThreshold)
-		if err != nil {
-			return nil, err
+		var row Row
+		if activeOnly {
+			row = buildLightOperationalRow(agente, asignacionPorAgente[name], openTasksPorAgente[name], blockedTasksPorAgente[name], now, staleThreshold)
+		} else {
+			var err error
+			row, err = s.buildReanimationRowForAgent(agente, asignacionPorAgente[name], openTasksPorAgente[name], blockedTasksPorAgente[name], now, staleThreshold)
+			if err != nil {
+				return nil, err
+			}
 		}
 		rowByAgent[name] = row
 	}
@@ -1230,9 +1236,13 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 		row, ok := rowByAgent[name]
 		item := candidates[name]
 		if !ok {
-			row, err = s.buildReanimationRowForAgent(agente, asignacionPorAgente[name], openTasksPorAgente[name], blockedTasksPorAgente[name], now, staleThreshold)
-			if err != nil {
-				return nil, err
+			if activeOnly {
+				row = buildLightOperationalRow(agente, asignacionPorAgente[name], openTasksPorAgente[name], blockedTasksPorAgente[name], now, staleThreshold)
+			} else {
+				row, err = s.buildReanimationRowForAgent(agente, asignacionPorAgente[name], openTasksPorAgente[name], blockedTasksPorAgente[name], now, staleThreshold)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 		item.Name = name
@@ -1345,6 +1355,17 @@ func (s *Service) buildReanimationRowForAgent(agente *db.Agente, asignacion *db.
 
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, staleThreshold)
 	return row, nil
+}
+
+func buildLightOperationalRow(agente *db.Agente, asignacion *db.Asignacion, openTasks, blockedTasks int, now time.Time, staleThreshold time.Duration) Row {
+	row := Row{
+		Agente:       agente,
+		Asignacion:   asignacion,
+		OpenTasks:    openTasks,
+		BlockedTasks: blockedTasks,
+	}
+	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, staleThreshold)
+	return row
 }
 
 func reanimationCandidateHasCanonicalWork(item ReanimationCandidate) bool {
