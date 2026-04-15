@@ -1284,7 +1284,12 @@ func imprimirAgenteOverview(out apiAgenteOverviewResponse, jsonOut bool) error {
 	if row.Handle != nil {
 		fmt.Printf("Handle:    #%d %s %s\n", row.Handle.ID, strings.TrimSpace(row.Handle.Estado), strings.TrimSpace(row.Handle.Transporte))
 	}
-	fmt.Printf("Mailbox:   %d pendiente(s) / %d total\n", contarMailboxPendiente(detail.Mailbox), len(detail.Mailbox))
+	pendientes, cubiertas := resumirMailboxOverview(detail.Mailbox, row.Handle, row.Runtime)
+	fmt.Printf("Mailbox:   %d pendiente(s)", pendientes)
+	if cubiertas > 0 {
+		fmt.Printf(" · %d cubierta(s)", cubiertas)
+	}
+	fmt.Printf(" / %d total\n", len(detail.Mailbox))
 	fmt.Printf("Tareas:    %d lease(s) abiertas\n", len(detail.Entity.Leases))
 	for _, lease := range detail.Entity.Leases {
 		fmt.Printf("  - #%d [%s] %s\n", lease.TaskID, strings.TrimSpace(string(lease.State)), strings.TrimSpace(lease.Title))
@@ -1304,15 +1309,20 @@ func imprimirAgenteOverview(out apiAgenteOverviewResponse, jsonOut bool) error {
 	return nil
 }
 
-func contarMailboxPendiente(items []*db.RuntimeMailboxMessage) int {
-	total := 0
+func resumirMailboxOverview(items []*db.RuntimeMailboxMessage, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (pendientes int, cubiertas int) {
 	for _, item := range items {
 		if item == nil {
 			continue
 		}
-		if strings.EqualFold(strings.TrimSpace(item.Estado), "pendiente") {
-			total++
+		if !strings.EqualFold(strings.TrimSpace(item.Estado), "pendiente") {
+			continue
 		}
+		covered, _, _, err := db.RuntimeMailboxCubiertoPorBootstrapPendiente(item.ID, handle, runtime)
+		if err == nil && covered {
+			cubiertas++
+			continue
+		}
+		pendientes++
 	}
-	return total
+	return pendientes, cubiertas
 }
