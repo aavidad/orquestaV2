@@ -5956,6 +5956,7 @@ func procesarAutonomiaAgentesBatch() (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	sesiones = filtrarSesionesAutonomiaRelevantes(sesiones)
 	autonomiaTickDebugf("listar_sesiones sesiones=%d duration=%s", len(sesiones), time.Since(sessionsStart).Round(time.Millisecond))
 	snapshotStart := time.Now()
 	snapshot, err := newAutonomiaBatchSnapshot(sesiones)
@@ -6008,6 +6009,79 @@ func procesarAutonomiaAgentesBatch() (int, error) {
 		resetStatusSnapshotCache()
 	}
 	return procesadas, nil
+}
+
+func filtrarSesionesAutonomiaRelevantes(sesiones []*db.Sesion) []*db.Sesion {
+	if len(sesiones) == 0 {
+		return nil
+	}
+	type clave struct {
+		agente    string
+		proyecto  int64
+	}
+	mejores := map[clave]*db.Sesion{}
+	for _, sesion := range sesiones {
+		if !sesionAutonomiaRelevante(sesion) {
+			continue
+		}
+		key := clave{
+			agente:   strings.ToLower(strings.TrimSpace(sesion.Agente)),
+			proyecto: valorProyectoID(sesion.ProyectoID),
+		}
+		actual := mejores[key]
+		if actual == nil || sesionAutonomiaMasReciente(sesion, actual) {
+			mejores[key] = sesion
+		}
+	}
+	out := make([]*db.Sesion, 0, len(mejores))
+	for _, sesion := range mejores {
+		out = append(out, sesion)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		ai := strings.ToLower(strings.TrimSpace(out[i].Agente))
+		aj := strings.ToLower(strings.TrimSpace(out[j].Agente))
+		if ai != aj {
+			return ai < aj
+		}
+		pi := valorProyectoID(out[i].ProyectoID)
+		pj := valorProyectoID(out[j].ProyectoID)
+		if pi != pj {
+			return pi < pj
+		}
+		if !out[i].Inicio.Equal(out[j].Inicio) {
+			return out[i].Inicio.After(out[j].Inicio)
+		}
+		return out[i].ID > out[j].ID
+	})
+	return out
+}
+
+func sesionAutonomiaRelevante(sesion *db.Sesion) bool {
+	if sesion == nil || !sesion.Activa || sesion.ProyectoID == nil || *sesion.ProyectoID <= 0 {
+		return false
+	}
+	if strings.TrimSpace(sesion.Agente) == "" {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(sesion.Estado)) {
+	case "", "activa", "active", "pausada", "paused":
+		return true
+	default:
+		return false
+	}
+}
+
+func sesionAutonomiaMasReciente(candidata, actual *db.Sesion) bool {
+	if actual == nil {
+		return true
+	}
+	if candidata == nil {
+		return false
+	}
+	if !candidata.Inicio.Equal(actual.Inicio) {
+		return candidata.Inicio.After(actual.Inicio)
+	}
+	return candidata.ID > actual.ID
 }
 
 func ejecutarPasoAutonomiaConTimeout(etiqueta string, timeout time.Duration, fn func() (int, error)) (int, error) {
@@ -6805,7 +6879,9 @@ func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasAct
 		if row.Agente == nil {
 			continue
 		}
-		if strings.TrimSpace(row.EstadoOperativo) != "bloqueado_por_runtime" {
+		switch strings.TrimSpace(row.EstadoOperativo) {
+		case "bloqueado_por_runtime", "caido":
+		default:
 			continue
 		}
 		if rowTieneRuntimeOHandleOperativo(row) {

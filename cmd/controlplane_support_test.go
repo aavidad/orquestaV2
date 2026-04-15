@@ -6268,6 +6268,34 @@ func TestProcesarAutonomiaAgentesBatchTimeoutSesionNoBloqueaDegradados(t *testin
 	}
 }
 
+func TestFiltrarSesionesAutonomiaRelevantesDescartaSesionesNoActivasRealesYDeduplica(t *testing.T) {
+	proyectoID := int64(3)
+	base := time.Date(2026, 4, 15, 9, 0, 0, 0, time.UTC)
+	sesiones := []*db.Sesion{
+		{ID: 1, Agente: "Codex1", ProyectoID: &proyectoID, Activa: true, Estado: "activa", Inicio: base},
+		{ID: 2, Agente: "Codex1", ProyectoID: &proyectoID, Activa: true, Estado: "activa", Inicio: base.Add(1 * time.Minute)},
+		{ID: 3, Agente: "Codex1", ProyectoID: &proyectoID, Activa: true, Estado: "cerrada", Inicio: base.Add(2 * time.Minute)},
+		{ID: 4, Agente: "Gemini1", ProyectoID: &proyectoID, Activa: true, Estado: "fallida", Inicio: base.Add(3 * time.Minute)},
+		{ID: 5, Agente: "claude1", ProyectoID: &proyectoID, Activa: true, Estado: "pausada", Inicio: base.Add(4 * time.Minute)},
+		{ID: 6, Agente: "sinproyecto", Activa: true, Estado: "activa", Inicio: base.Add(5 * time.Minute)},
+	}
+
+	filtradas := filtrarSesionesAutonomiaRelevantes(sesiones)
+	if len(filtradas) != 2 {
+		t.Fatalf("deberia conservar solo sesiones relevantes deduplicadas, got=%d", len(filtradas))
+	}
+	ids := map[string]int64{}
+	for _, sesion := range filtradas {
+		ids[sesion.Agente] = sesion.ID
+	}
+	if ids["Codex1"] != 2 {
+		t.Fatalf("deberia quedarse con la sesion mas reciente por agente/proyecto para Codex1: %+v", filtradas)
+	}
+	if ids["claude1"] != 5 {
+		t.Fatalf("deberia conservar la sesion pausada relevante de claude1: %+v", filtradas)
+	}
+}
+
 func TestRowProyectoIDPreferidoPriorizaAsignacionActivaSobreRuntimeViejo(t *testing.T) {
 	asignado := int64(10)
 	runtimeViejo := int64(20)
@@ -15137,6 +15165,7 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReactivaPremiumConTareaBloqueada
 		t.Fatalf("la tarea bloqueada deberia reactivarse al reponer runtime: %+v", actual)
 	}
 }
+
 
 func TestDesbloquearTareasBloqueadasRecuperablesSinRuntimeReabreBloqueoSinRelevoSano(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
