@@ -13928,6 +13928,87 @@ func TestProcesarAutonomiaAgentesBatchNoRecuperaSesionViejaSiYaHayTMUXOperativoR
 	}
 }
 
+func TestProcesarAutonomiaAgentesBatchRecuperaSesionActivaSinHandleConTrabajoArrancable(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "frente premium"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Retomar continuidad premium",
+		Descripcion: "Trabajo premium ya asignado",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Gemini1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	conector, err := db.GetConector("gemini-cli")
+	if err != nil || conector == nil {
+		t.Fatalf("get conector gemini-cli: %+v err=%v", conector, err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "Gemini1",
+		ConectorID:         &conector.ID,
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador"),
+		Herramienta:        "gemini-cli",
+		ResumenContinuidad: "continuidad activa",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`DELETE FROM runtime_handles WHERE id = ?`, handle.ID); err != nil {
+		t.Fatalf("borrar handle: %v", err)
+	}
+
+	sesionActual, err := db.GetSesionByID(sesion.ID)
+	if err != nil || sesionActual == nil {
+		t.Fatalf("get sesion actual: %+v err=%v", sesionActual, err)
+	}
+	n, err := procesarRecuperacionRuntimeDegradadoSesion(sesionActual)
+	if err != nil {
+		t.Fatalf("procesar recuperacion sin handle: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("esperaba 1 decision autonoma (start), got=%d", n)
+	}
+
+	agente := "Gemini1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "start" {
+		t.Fatalf("recuperacion autonoma sin handle inesperada: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"motivo":"local_runtime_missing"`) {
+		t.Fatalf("start de recuperacion sin handle sin motivo esperado: %s", orders[0].PayloadJSON)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchBloqueaProyectoPorCircuitoAbiertoConector(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

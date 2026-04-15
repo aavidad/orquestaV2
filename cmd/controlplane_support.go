@@ -8171,6 +8171,17 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 		return 0, err
 	}
 	if handle == nil {
+		proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+		if err != nil {
+			return 0, err
+		}
+		reactivado, err := encolarReactivacionAgenteProyectoSiProcede(strings.TrimSpace(sesion.Agente), proyecto, "local_runtime_missing")
+		if err != nil {
+			return 0, err
+		}
+		if reactivado {
+			return 1, nil
+		}
 		return 0, nil
 	}
 	if !esTransporteRemotoAutonomia(handle.Transporte) {
