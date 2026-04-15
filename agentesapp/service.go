@@ -27,6 +27,7 @@ type Store interface {
 	GetPool(slug string) (*db.PoolCapacidad, error)
 	GetConnector(ref string) (*db.Conector, error)
 	ListAgents() ([]*db.Agente, error)
+	CheckReanimations() ([]*db.Agente, error)
 	ListAssignments(filtro db.FiltroAsignaciones) ([]*db.Asignacion, error)
 	ListInspectionSessions(filtro db.FiltroSesionesInspeccion) ([]*db.Sesion, error)
 	GetLastSession(agente string, proyectoID *int64) (*db.Sesion, error)
@@ -120,6 +121,27 @@ type Detail struct {
 	Orders       []*db.RuntimeOrder           `json:"orders,omitempty"`
 	Mailbox      []*db.RuntimeMailboxMessage  `json:"mailbox,omitempty"`
 	Checkpoints  []*db.RuntimeCheckpoint      `json:"checkpoints,omitempty"`
+}
+
+type ReanimationCandidate struct {
+	Name              string      `json:"name"`
+	Role              string      `json:"role,omitempty"`
+	Enabled           bool        `json:"enabled"`
+	ActiveNow         bool        `json:"active_now"`
+	AssignmentProject string      `json:"assignment_project,omitempty"`
+	EstadoCuota       string      `json:"estado_cuota,omitempty"`
+	MotivoPausa       string      `json:"motivo_pausa,omitempty"`
+	ReanimarAt        *time.Time  `json:"reanimar_at,omitempty"`
+	Due               bool        `json:"due"`
+	RuntimeState      string      `json:"runtime_state,omitempty"`
+	HandleState       string      `json:"handle_state,omitempty"`
+	WorkerState       string      `json:"worker_state,omitempty"`
+	OperationalState  string      `json:"operational_state,omitempty"`
+	OperationalDetail string      `json:"operational_detail,omitempty"`
+	MailboxPending    int         `json:"mailbox_pending"`
+	OpenTasks         int         `json:"open_tasks"`
+	BlockedTasks      int         `json:"blocked_tasks"`
+	Leases            []WorkLease `json:"leases,omitempty"`
 }
 
 type AgentEntity struct {
@@ -650,6 +672,169 @@ func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 		Mailbox:      mailbox,
 		Checkpoints:  checkpoints,
 	}, nil
+}
+
+func (s *Service) BuildReanimationSchedule(includeFuture bool) ([]ReanimationCandidate, error) {
+	rows, err := s.BuildPanelRows()
+	if err != nil {
+		return nil, err
+	}
+	dueAgents, err := s.store.CheckReanimations()
+	if err != nil {
+		return nil, err
+	}
+	tareas, err := s.store.ListTasks(db.FiltroTareas{})
+	if err != nil {
+		return nil, err
+	}
+
+	rowByAgent := map[string]Row{}
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		rowByAgent[strings.TrimSpace(row.Agente.Nombre)] = row
+	}
+	leasesByAgent := map[string][]WorkLease{}
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.Agente == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.EstadoAsignada, db.EstadoEnProgreso, db.EstadoBloqueada:
+			agente := strings.TrimSpace(*tarea.Agente)
+			if agente == "" {
+				continue
+			}
+			leasesByAgent[agente] = append(leasesByAgent[agente], WorkLease{
+				TaskID:    tarea.ID,
+				Title:     strings.TrimSpace(tarea.Titulo),
+				State:     tarea.Estado,
+				ProjectID: tarea.ProyectoID,
+				Module:    strings.TrimSpace(tarea.Modulo),
+			})
+		}
+	}
+	for agente, leases := range leasesByAgent {
+		sort.Slice(leases, func(i, j int) bool { return leases[i].TaskID < leases[j].TaskID })
+		leasesByAgent[agente] = leases
+	}
+
+	now := time.Now().UTC()
+	out := make([]ReanimationCandidate, 0, len(rows)+len(dueAgents))
+	candidates := map[string]ReanimationCandidate{}
+	for _, row := range rows {
+		if row.Agente == nil || row.Agente.ReanimarAt == nil {
+			continue
+		}
+		due := !row.Agente.ReanimarAt.After(now)
+		if !includeFuture && !due {
+			continue
+		}
+		name := strings.TrimSpace(row.Agente.Nombre)
+		candidates[name] = ReanimationCandidate{
+			Name:              strings.TrimSpace(row.Agente.Nombre),
+			Role:              strings.TrimSpace(row.Agente.Rol),
+			Enabled:           row.Agente.Habilitado,
+			ActiveNow:         row.Agente.Activo,
+			EstadoCuota:       strings.TrimSpace(row.Agente.EstadoCuota),
+			MotivoPausa:       strings.TrimSpace(row.Agente.MotivoPausa),
+			ReanimarAt:        row.Agente.ReanimarAt,
+			Due:               due,
+			RuntimeState:      strings.TrimSpace(row.runtimeState()),
+			HandleState:       strings.TrimSpace(row.handleState()),
+			WorkerState:       strings.TrimSpace(row.WorkerState),
+			OperationalState:  strings.TrimSpace(row.EstadoOperativo),
+			OperationalDetail: strings.TrimSpace(row.DetalleOperativo),
+			MailboxPending:    row.MailboxPending,
+			OpenTasks:         row.OpenTasks,
+			BlockedTasks:      row.BlockedTasks,
+			Leases:            leasesByAgent[name],
+		}
+		if row.Asignacion != nil {
+			item := candidates[name]
+			item.AssignmentProject = strings.TrimSpace(row.Asignacion.ProyectoSlug)
+			candidates[name] = item
+		}
+	}
+	for _, agente := range dueAgents {
+		if agente == nil {
+			continue
+		}
+		name := strings.TrimSpace(agente.Nombre)
+		if name == "" {
+			continue
+		}
+		row, ok := rowByAgent[name]
+		item := candidates[name]
+		if !ok {
+			row = Row{Agente: agente}
+		}
+		item.Name = name
+		item.Role = firstNonEmpty(strings.TrimSpace(agente.Rol), item.Role)
+		item.Enabled = agente.Habilitado
+		item.ActiveNow = agente.Activo
+		item.EstadoCuota = firstNonEmpty(strings.TrimSpace(agente.EstadoCuota), item.EstadoCuota)
+		item.MotivoPausa = firstNonEmpty(strings.TrimSpace(agente.MotivoPausa), item.MotivoPausa)
+		item.ReanimarAt = agente.ReanimarAt
+		item.Due = true
+		if item.AssignmentProject == "" && row.Asignacion != nil {
+			item.AssignmentProject = strings.TrimSpace(row.Asignacion.ProyectoSlug)
+		}
+		if item.RuntimeState == "" {
+			item.RuntimeState = strings.TrimSpace(row.runtimeState())
+		}
+		if item.HandleState == "" {
+			item.HandleState = strings.TrimSpace(row.handleState())
+		}
+		if item.WorkerState == "" {
+			item.WorkerState = strings.TrimSpace(row.WorkerState)
+		}
+		if item.OperationalState == "" {
+			item.OperationalState = strings.TrimSpace(row.EstadoOperativo)
+		}
+		if item.OperationalDetail == "" {
+			item.OperationalDetail = strings.TrimSpace(row.DetalleOperativo)
+		}
+		if item.MailboxPending == 0 {
+			item.MailboxPending = row.MailboxPending
+		}
+		if item.OpenTasks == 0 {
+			item.OpenTasks = row.OpenTasks
+		}
+		if item.BlockedTasks == 0 {
+			item.BlockedTasks = row.BlockedTasks
+		}
+		if len(item.Leases) == 0 {
+			item.Leases = leasesByAgent[name]
+		}
+		candidates[name] = item
+	}
+	for _, item := range candidates {
+		out = append(out, item)
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		leftDue, rightDue := out[i].Due, out[j].Due
+		if leftDue != rightDue {
+			return leftDue
+		}
+		leftAt, rightAt := out[i].ReanimarAt, out[j].ReanimarAt
+		switch {
+		case leftAt == nil && rightAt == nil:
+			return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
+		case leftAt == nil:
+			return false
+		case rightAt == nil:
+			return true
+		case !leftAt.Equal(*rightAt):
+			return leftAt.Before(*rightAt)
+		default:
+			return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
+		}
+	})
+
+	return out, nil
 }
 
 func buildAgentEntity(row Row, tareas []*db.Tarea) *AgentEntity {
@@ -1759,6 +1944,10 @@ func (Repository) GetConnector(ref string) (*db.Conector, error) {
 
 func (Repository) ListAgents() ([]*db.Agente, error) {
 	return db.ListarAgentes()
+}
+
+func (Repository) CheckReanimations() ([]*db.Agente, error) {
+	return db.CheckReanimaciones()
 }
 
 func (Repository) ListAssignments(filtro db.FiltroAsignaciones) ([]*db.Asignacion, error) {

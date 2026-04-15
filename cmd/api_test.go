@@ -2371,6 +2371,110 @@ func TestAPIAgenteResetReanimacionReabreFrenteBloqueadoRecuperable(t *testing.T)
 	}
 }
 
+func TestAPIAgentesReanimacionesListaVencidasYFuturas(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	if err := db.RegistrarAgente("Claude1", "programador"); err != nil {
+		t.Fatalf("registrar Claude1: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "orquestador",
+		RutaAbs: "/tmp/orquestador",
+		Tipo:    db.ProyectoRaiz,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("crear proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "microciclo_exclusivo"); err != nil {
+		t.Fatalf("activar asignacion codex: %v", err)
+	}
+	if err := db.ActivarAsignacion("Claude1", proyectoID, "microciclo_exclusivo"); err != nil {
+		t.Fatalf("activar asignacion claude: %v", err)
+	}
+	tareaCodex, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Reactivar Codex",
+		Descripcion: "frente vencido",
+		ProyectoID:  &proyectoID,
+		Modulo:      "cmd",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea codex: %v", err)
+	}
+	if err := db.TomarTarea(tareaCodex, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea codex: %v", err)
+	}
+	if err := db.BloquearTarea(tareaCodex, "Codex1", "worker bloqueado por cuota"); err != nil {
+		t.Fatalf("bloquear tarea codex: %v", err)
+	}
+	tareaClaude, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Reactivar Claude",
+		Descripcion: "frente futuro",
+		ProyectoID:  &proyectoID,
+		Modulo:      "db",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea claude: %v", err)
+	}
+	if err := db.TomarTarea(tareaClaude, "Claude1"); err != nil {
+		t.Fatalf("tomar tarea claude: %v", err)
+	}
+	if err := db.BloquearTarea(tareaClaude, "Claude1", "worker bloqueado por cuota"); err != nil {
+		t.Fatalf("bloquear tarea claude: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', motivo_pausa='runtime_panic', reanimar_at=datetime('now','-5 minutes') WHERE nombre='Codex1'`); err != nil {
+		t.Fatalf("actualizar codex: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', motivo_pausa='runtime_panic', reanimar_at=datetime('now','+30 minutes') WHERE nombre='Claude1'`); err != nil {
+		t.Fatalf("actualizar claude: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	recDue := httptest.NewRecorder()
+	reqDue := httptest.NewRequest(http.MethodGet, "/api/agentes/reanimaciones", nil)
+	mux.ServeHTTP(recDue, reqDue)
+	if recDue.Code != http.StatusOK {
+		t.Fatalf("status due inesperado: %d body=%s", recDue.Code, recDue.Body.String())
+	}
+	var dueResp apiAgenteReanimationsResponse
+	if err := json.Unmarshal(recDue.Body.Bytes(), &dueResp); err != nil {
+		t.Fatalf("decode due: %v", err)
+	}
+	if len(dueResp.Rows) != 1 || dueResp.Rows[0].Name != "Codex1" || !dueResp.Rows[0].Due {
+		t.Fatalf("rows due inesperadas: %+v", dueResp.Rows)
+	}
+	if len(dueResp.Rows[0].Leases) != 1 || dueResp.Rows[0].Leases[0].TaskID != tareaCodex {
+		t.Fatalf("leases due inesperadas: %+v", dueResp.Rows[0].Leases)
+	}
+
+	recAll := httptest.NewRecorder()
+	reqAll := httptest.NewRequest(http.MethodGet, "/api/agentes/reanimaciones?all=true", nil)
+	mux.ServeHTTP(recAll, reqAll)
+	if recAll.Code != http.StatusOK {
+		t.Fatalf("status all inesperado: %d body=%s", recAll.Code, recAll.Body.String())
+	}
+	var allResp apiAgenteReanimationsResponse
+	if err := json.Unmarshal(recAll.Body.Bytes(), &allResp); err != nil {
+		t.Fatalf("decode all: %v", err)
+	}
+	if len(allResp.Rows) != 2 {
+		t.Fatalf("rows all=%d, want 2", len(allResp.Rows))
+	}
+	if !allResp.Rows[0].Due || allResp.Rows[1].Due {
+		t.Fatalf("orden due/future inesperado: %+v", allResp.Rows)
+	}
+}
+
 func TestAPIProyectoFusionarRechazaDesactivarArchivoOrigen(t *testing.T) {
 	prepararDBTemporalCmd(t)
 

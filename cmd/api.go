@@ -1010,6 +1010,10 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 			apiHandlerAgentesRankingCuentas(w, r)
 			return
 		}
+		if len(parts) == 1 && parts[0] == "reanimaciones" {
+			apiHandlerAgentesReanimaciones(w, r)
+			return
+		}
 		if len(parts) == 2 && parts[1] == "overview" {
 			detail, err := agentesService.BuildDetail(parts[0])
 			if err != nil {
@@ -1116,6 +1120,16 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "agente": nombre})
+}
+
+func apiHandlerAgentesReanimaciones(w http.ResponseWriter, r *http.Request) {
+	includeFuture := parseBoolDebug(r.URL.Query().Get("all"), false)
+	rows, err := agentesService.BuildReanimationSchedule(includeFuture)
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiAgenteReanimationsResponse{Rows: rows})
 }
 
 func apiHandlerAgentesPresupuesto(w http.ResponseWriter, r *http.Request) {

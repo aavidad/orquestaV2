@@ -99,6 +99,20 @@ func (f *fakeStore) GetConnector(ref string) (*db.Conector, error) {
 
 func (f *fakeStore) ListAgents() ([]*db.Agente, error) { return f.agents, nil }
 
+func (f *fakeStore) CheckReanimations() ([]*db.Agente, error) {
+	now := time.Now().UTC()
+	var out []*db.Agente
+	for _, item := range f.agents {
+		if item == nil || item.ReanimarAt == nil {
+			continue
+		}
+		if !item.ReanimarAt.After(now) {
+			out = append(out, item)
+		}
+	}
+	return out, nil
+}
+
 func (f *fakeStore) ListAssignments(filter db.FiltroAsignaciones) ([]*db.Asignacion, error) {
 	if filter.Agente == nil {
 		return f.assignments, nil
@@ -1950,6 +1964,53 @@ func TestBuildDetailMergesMailboxWithoutDuplicates(t *testing.T) {
 	}
 	if store.lastMailboxFilter[2].FromAgente == nil || *store.lastMailboxFilter[2].FromAgente != "Codex2" {
 		t.Fatalf("detail outbox filter=%+v", store.lastMailboxFilter[2])
+	}
+}
+
+func TestBuildReanimationScheduleFiltraVencidasYExponeLeases(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(7)
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "enfriamiento", MotivoPausa: "worker bloqueado por cuota", ReanimarAt: timePtr(now.Add(-2 * time.Minute))},
+			{Nombre: "Claude1", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "enfriamiento", MotivoPausa: "worker bloqueado por cuota", ReanimarAt: timePtr(now.Add(30 * time.Minute))},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex1", ProyectoSlug: "orquestador", Estado: db.AsignacionActiva, Nota: "microciclo_exclusivo"},
+			{Agente: "Claude1", ProyectoSlug: "orquestador", Estado: db.AsignacionActiva, Nota: "microciclo_exclusivo"},
+		},
+		tasks: []*db.Tarea{
+			{ID: 41, Titulo: "Frente Codex", Estado: db.EstadoBloqueada, ProyectoID: &proyectoID, Agente: ptr("Codex1"), Modulo: "cmd"},
+			{ID: 42, Titulo: "Frente Claude", Estado: db.EstadoBloqueada, ProyectoID: &proyectoID, Agente: ptr("Claude1"), Modulo: "db"},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildReanimationSchedule(false)
+	if err != nil {
+		t.Fatalf("BuildReanimationSchedule(false): %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows due = %d, want 1", len(rows))
+	}
+	if rows[0].Name != "Codex1" || !rows[0].Due {
+		t.Fatalf("due row inesperada: %+v", rows[0])
+	}
+	if rows[0].AssignmentProject != "orquestador" {
+		t.Fatalf("assignment project inesperado: %+v", rows[0])
+	}
+	if len(rows[0].Leases) != 1 || rows[0].Leases[0].TaskID != 41 {
+		t.Fatalf("leases inesperadas: %+v", rows[0].Leases)
+	}
+
+	allRows, err := NewService(store, nil).BuildReanimationSchedule(true)
+	if err != nil {
+		t.Fatalf("BuildReanimationSchedule(true): %v", err)
+	}
+	if len(allRows) != 2 {
+		t.Fatalf("all rows = %d, want 2", len(allRows))
+	}
+	if !allRows[0].Due || allRows[1].Due {
+		t.Fatalf("orden due/future inesperado: %+v", allRows)
 	}
 }
 

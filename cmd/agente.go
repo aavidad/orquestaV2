@@ -592,6 +592,29 @@ var agenteOverviewCmd = &cobra.Command{
 	},
 }
 
+var agenteReanimacionesCmd = &cobra.Command{
+	Use:   "reanimaciones",
+	Short: "Lista reanimaciones automáticas visibles por la app",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		jsonOut, _ := cmd.Flags().GetBool("json")
+		includeFuture, _ := cmd.Flags().GetBool("all")
+
+		var out apiAgenteReanimationsResponse
+		path := "/api/agentes/reanimaciones"
+		if includeFuture {
+			path += "?all=true"
+		}
+		if ok, err := apiGet(path, &out); err != nil {
+			return err
+		} else if ok {
+			return imprimirAgenteReanimaciones(out, jsonOut)
+		} else if !agenteModoRecuperacionLocalExplicito() {
+			return agenteErrorServerFirst()
+		}
+		return serverFirstCommandError("agente reanimaciones")
+	},
+}
+
 func init() {
 	agentePrepararCmd.Flags().String("proyecto", "", "Proyecto cuyo bundle se quiere preparar")
 	agentePrepararCmd.Flags().String("conector", "", "Conector a usar; si se omite se usa el de la última sesión del proyecto")
@@ -609,6 +632,8 @@ func init() {
 	agenteTickCmd.Flags().String("motivo", "", "Motivo del estado actual")
 	agenteTickCmd.Flags().Bool("json", false, "Salida JSON")
 	agenteOverviewCmd.Flags().Bool("json", false, "Salida JSON")
+	agenteReanimacionesCmd.Flags().Bool("all", false, "Incluir reanimaciones futuras además de las vencidas")
+	agenteReanimacionesCmd.Flags().Bool("json", false, "Salida JSON")
 
 	agenteEjecutarCmd.Flags().StringP("proyecto", "p", "", "Proyecto en el que ejecutar")
 	agenteEjecutarCmd.Flags().StringP("conector", "c", "", "Conector a usar")
@@ -638,6 +663,7 @@ func init() {
 		agentePrepararCmd,
 		agenteTickCmd,
 		agenteOverviewCmd,
+		agenteReanimacionesCmd,
 		agenteAdoptarContextoCmd,
 		agentePurgarCmd,
 		agentePausarCmd,
@@ -1305,6 +1331,53 @@ func imprimirAgenteOverview(out apiAgenteOverviewResponse, jsonOut bool) error {
 				strings.TrimSpace(string(asignacion.Estado)),
 				strings.TrimSpace(asignacion.Nota))
 		}
+	}
+	return nil
+}
+
+func imprimirAgenteReanimaciones(out apiAgenteReanimationsResponse, jsonOut bool) error {
+	if jsonOut {
+		return imprimirJSON(out)
+	}
+	if len(out.Rows) == 0 {
+		fmt.Println("Sin reanimaciones visibles.")
+		return nil
+	}
+	fmt.Printf("Reanimaciones: %d\n", len(out.Rows))
+	for _, row := range out.Rows {
+		estado := "programada"
+		if row.Due {
+			estado = "vencida"
+		}
+		fmt.Printf("- %s [%s] %s", strings.TrimSpace(row.Name), estado, strings.TrimSpace(row.EstadoCuota))
+		if row.ReanimarAt != nil {
+			fmt.Printf(" @ %s", row.ReanimarAt.Local().Format("2006-01-02 15:04:05"))
+		}
+		fmt.Println()
+		if strings.TrimSpace(row.AssignmentProject) != "" {
+			fmt.Printf("  proyecto=%s", strings.TrimSpace(row.AssignmentProject))
+			if len(row.Leases) > 0 {
+				fmt.Printf(" lease=#%d", row.Leases[0].TaskID)
+			}
+			fmt.Println()
+		}
+		if strings.TrimSpace(row.OperationalState) != "" {
+			fmt.Printf("  operativo=%s", strings.TrimSpace(row.OperationalState))
+			if strings.TrimSpace(row.OperationalDetail) != "" {
+				fmt.Printf(" — %s", strings.TrimSpace(row.OperationalDetail))
+			}
+			fmt.Println()
+		}
+		if strings.TrimSpace(row.MotivoPausa) != "" {
+			fmt.Printf("  motivo=%s\n", strings.TrimSpace(row.MotivoPausa))
+		}
+		fmt.Printf("  runtime=%s handle=%s worker=%s mailbox=%d abiertas=%d bloqueadas=%d\n",
+			strings.TrimSpace(row.RuntimeState),
+			strings.TrimSpace(row.HandleState),
+			strings.TrimSpace(row.WorkerState),
+			row.MailboxPending,
+			row.OpenTasks,
+			row.BlockedTasks)
 	}
 	return nil
 }

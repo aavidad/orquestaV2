@@ -64,6 +64,10 @@ type apiAgenteOverviewResponse struct {
 	Detail *agentesapp.Detail `json:"detail"`
 }
 
+type apiAgenteReanimationsResponse struct {
+	Rows []agentesapp.ReanimationCandidate `json:"rows"`
+}
+
 type apiAgenteInvestigacionResponse struct {
 	Investigacion *agentesapp.InvestigationReport `json:"investigacion"`
 }
