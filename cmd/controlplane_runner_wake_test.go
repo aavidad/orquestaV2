@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 
 	"orquesta/coordinacion"
 	"orquesta/db"
+	"orquesta/planocontrol"
 )
 
 func TestProcesarRuntimeTranscriptBatchDespiertaRuntimeOrdersSiIngresaSalida(t *testing.T) {
@@ -188,5 +190,26 @@ func TestProcesarRuntimeTranscriptBatchDespiertaRuntimeMailboxTrasEntregaGitPrem
 	}
 	if order.Estado != "completada" {
 		t.Fatalf("runtime order premium bootstrap inesperada: %+v", order)
+	}
+}
+
+func TestWakeControlPlaneWarmReseteaGateAutonomiaSesionesActivas(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	resetAutonomiaActiveSessionsObservationGate()
+	if !allowAutonomiaActiveSessionsObservation(time.Now().UTC()) {
+		t.Fatalf("primer acceso al gate deberia permitirse")
+	}
+	if allowAutonomiaActiveSessionsObservation(time.Now().UTC()) {
+		t.Fatalf("segundo acceso inmediato no deberia permitirse sin reset")
+	}
+	runner := &planocontrol.Runner{}
+	unregister := registerActiveControlPlaneRunner(runner)
+	defer unregister()
+
+	if !wakeControlPlaneWarm() {
+		t.Fatalf("wakeControlPlaneWarm deberia despertar el carril warm")
+	}
+	if !allowAutonomiaActiveSessionsObservation(time.Now().UTC()) {
+		t.Fatalf("el wake warm deberia resetear la observacion de sesiones activas")
 	}
 }

@@ -50,5 +50,6 @@ func wakeControlPlaneWarm() bool {
 	if runner == nil {
 		return false
 	}
+	resetAutonomiaActiveSessionsObservationGate()
 	return runner.WakeBatch("control_plane_warm")
 }
