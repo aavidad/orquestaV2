@@ -5219,6 +5219,8 @@ func apiHandlerRuntimeProcessAutonomia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resetAutonomiaActiveSessionsObservationGate()
+	resetAutonomiaIdleAutoassignGate()
+	resetAutonomiaDegradedTaskGate()
 	started := runtimeProcessAutonomiaEnCurso.CompareAndSwap(false, true)
 	if started {
 		go func() {

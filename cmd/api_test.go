@@ -4279,3 +4279,36 @@ func TestAPIRuntimeProcessMailboxReseteaThrottleDeReevaluacion(t *testing.T) {
 		t.Fatalf("el handler process-mailbox deberia limpiar el throttle para reevaluar de inmediato")
 	}
 }
+
+func TestAPIRuntimeProcessAutonomiaReseteaThrottlesDeAutoasignacionYDegradados(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	resetAutonomiaIdleAutoassignGate()
+	resetAutonomiaDegradedTaskGate()
+
+	if !autonomiaIdleAutoassignShouldAttempt("Codex1", 3) {
+		t.Fatalf("primer intento idle deberia permitirse")
+	}
+	if autonomiaIdleAutoassignShouldAttempt("Codex1", 3) {
+		t.Fatalf("segundo intento idle inmediato deberia quedar throttled")
+	}
+	if !autonomiaDegradedTaskGate.AllowAt("41", autonomiaDegradedTaskCooldown, time.Now().UTC()) {
+		t.Fatalf("primer intento de degradado deberia permitirse")
+	}
+	if autonomiaDegradedTaskGate.AllowAt("41", autonomiaDegradedTaskCooldown, time.Now().UTC()) {
+		t.Fatalf("segundo intento degradado inmediato deberia quedar throttled")
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/runtime/process-autonomia", bytes.NewReader([]byte(`{}`)))
+	rec := httptest.NewRecorder()
+	apiHandlerRuntimeProcessAutonomia(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status process-autonomia inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	if !autonomiaIdleAutoassignShouldAttempt("Codex1", 3) {
+		t.Fatalf("process-autonomia deberia limpiar el throttle de autoasignacion idle")
+	}
+	if !autonomiaDegradedTaskGate.AllowAt("41", autonomiaDegradedTaskCooldown, time.Now().UTC()) {
+		t.Fatalf("process-autonomia deberia limpiar el throttle de degradados")
+	}
+}
