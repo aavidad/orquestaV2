@@ -311,6 +311,17 @@ func TestResolverAccionTickAutonomiaPrioridades(t *testing.T) {
 			t.Fatalf("decision inesperada: accion=%s pausar=%v motivo=%q", accion, pausar, motivo)
 		}
 	})
+
+	t.Run("runtime caido manda sobre continuar trabajo", func(t *testing.T) {
+		accion, pausar, motivo := resolverAccionTickAutonomia(decisionTickAutonomiaInput{
+			TieneTrabajo:         true,
+			BloqueadoPorRuntime:  true,
+			MotivoBloqueoRuntime: "tmux pane finalizado",
+		})
+		if accion != "esperar_recuperacion_runtime" || pausar || !strings.Contains(strings.ToLower(motivo), "tmux") {
+			t.Fatalf("decision inesperada: accion=%s pausar=%v motivo=%q", accion, pausar, motivo)
+		}
+	})
 }
 
 func TestConstruirAgenteTickOutputNoPideIntervencionPorBloqueoAutorecuperableConSesionActiva(t *testing.T) {
@@ -422,5 +433,74 @@ func TestConstruirAgenteTickOutputNoPideIntervencionPorBloqueoSinRelevoSanoConAs
 	}
 	if out.AccionRecomendada == "pedir_intervencion" {
 		t.Fatalf("no deberia pedir intervencion humana por bloqueo recuperable sin relevo sano: %+v", out)
+	}
+}
+
+func TestConstruirAgenteTickOutputNoContinuaSiRuntimeBloqueado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "microciclo_exclusivo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente caído Codex",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	proyecto, err := db.GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	agenteRef := "Codex1"
+	snapshot := &autonomiaBatchSnapshot{
+		agentesByName:              map[string]*db.Agente{"codex1": {Nombre: "Codex1", Rol: "programador", EstadoCuota: "activo", Habilitado: true, Activo: true}},
+		asignacionesByAgent:        map[string][]*db.Asignacion{"codex1": {{Agente: "Codex1", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva}}},
+		tareasByAgentProject:       map[string][]*db.Tarea{agentProjectCacheKey("Codex1", proyectoID): {{ID: tareaID, Titulo: "Frente caído Codex", Estado: db.TareaEnProgreso, ProyectoID: &proyectoID, Agente: &agenteRef}}},
+		pendingVotesByAgentProject: map[string][]*db.Propuesta{},
+		openProposalsByProject:     map[int64][]*db.Propuesta{},
+		politicasByProject:         map[int64]*db.ProyectoAutonomia{},
+		activeProjectByAgent:       map[string]int64{},
+		activeHandleByAgentProject: map[string]bool{},
+		supervisorByProject:        map[int64]*db.Agente{},
+		supervisorLoaded:           map[int64]struct{}{},
+		pauseByAgent:               map[string]autonomiaBudgetPauseDecision{},
+		operationalStateByAgent:    map[string]string{"codex1": "bloqueado_por_runtime"},
+		operationalDetailByAgent:   map[string]string{"codex1": "tmux pane finalizado"},
+		operationalStateLoaded:     true,
+	}
+	out, err := construirAgenteTickOutputConSnapshot("Codex1", proyecto, nil, 0, snapshot)
+	if err != nil {
+		t.Fatalf("construir tick: %v", err)
+	}
+	if out.AccionRecomendada != "esperar_recuperacion_runtime" || out.DebePausar {
+		t.Fatalf("deberia esperar recuperación del runtime: %+v", out)
+	}
+	if !strings.Contains(strings.ToLower(out.Motivo), "tmux") {
+		t.Fatalf("motivo inesperado: %q", out.Motivo)
 	}
 }

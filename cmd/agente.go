@@ -166,6 +166,8 @@ type decisionTickAutonomiaInput struct {
 	PropuestasPendientes  int
 	TieneBloqueos         bool
 	TieneTrabajo          bool
+	BloqueadoPorRuntime   bool
+	MotivoBloqueoRuntime  string
 	PausarPorPresupuesto  bool
 	MotivoPresupuesto     string
 	EstadoCuota           string
@@ -182,6 +184,9 @@ func resolverAccionTickAutonomia(in decisionTickAutonomiaInput) (accion string, 
 		return "pausar_por_cuota", true, strings.TrimSpace(in.MotivoPresupuesto)
 	case in.BloqueadoPorCuota:
 		motivo = strings.TrimSpace(in.MotivoBloqueoCuota)
+		if motivo != "" && agenteMotivoPausaOperativa(motivo) {
+			return "pausar_por_cuota", true, "Pausa operativa: " + motivo
+		}
 		if motivo == "" {
 			motivo = "Worker bloqueado por cuota o enfriamiento activo."
 		}
@@ -199,6 +204,12 @@ func resolverAccionTickAutonomia(in decisionTickAutonomiaInput) (accion string, 
 			return "pausar_por_cuota", true, "Pausa operativa o modo enfriamiento activo."
 		}
 		return "pausar_por_cuota", true, "Cuota agotada o modo enfriamiento activo."
+	case in.TieneTrabajo && in.BloqueadoPorRuntime:
+		motivo = strings.TrimSpace(in.MotivoBloqueoRuntime)
+		if motivo == "" {
+			motivo = "Runtime no disponible; esperando recuperación automática"
+		}
+		return "esperar_recuperacion_runtime", false, motivo
 	case !in.AsignadoAProyecto && strings.TrimSpace(in.ProyectoAsignado) != "":
 		return "pausar_y_reasignar", true, "La asignación activa del agente ha cambiado al proyecto " + strings.TrimSpace(in.ProyectoAsignado)
 	case in.EsSupervisorOperativo:
@@ -214,6 +225,15 @@ func resolverAccionTickAutonomia(in decisionTickAutonomiaInput) (accion string, 
 		return "continuar_trabajo", false, "Sigue trabajando hasta completar la tarea o detectar una duda real"
 	default:
 		return "esperar_o_pedir_tarea", false, "No hay tarea activa asignada en este proyecto"
+	}
+}
+
+func estadoOperativoBloqueaContinuidad(estado string) bool {
+	switch strings.TrimSpace(estado) {
+	case "bloqueado_por_runtime", "mailbox_atascada", "caido", "atascado":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -380,6 +400,8 @@ func construirAgenteTickOutputConSnapshot(agenteNombre string, proyecto *db.Proy
 		PropuestasPendientes:  len(propuestasPendientes),
 		TieneBloqueos:         tieneBloqueos,
 		TieneTrabajo:          tieneTrabajo,
+		BloqueadoPorRuntime:   estadoOperativoBloqueaContinuidad(estadoOperativo),
+		MotivoBloqueoRuntime:  detalleOperativo,
 		PausarPorPresupuesto:  pausarPorPresupuesto,
 		MotivoPresupuesto:     motivoPresupuesto,
 		EstadoCuota:           agente.EstadoCuota,

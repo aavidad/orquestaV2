@@ -324,6 +324,14 @@ func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
 	if err == sql.ErrNoRows {
 		sesionActiva = nil
 	}
+	runtimeBloqueadoAntes := false
+	detalleRuntimeBloqueado := ""
+	if sesionActiva != nil {
+		runtimeBloqueadoAntes, detalleRuntimeBloqueado, err = s.runtimeBlockedFallback(agenteNombre, proyecto.ID)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if sesionActiva != nil {
 		upd := db.SesionUpdate{Heartbeat: true}
 		if host := strings.TrimSpace(input.Host); host != "" {
@@ -348,7 +356,28 @@ func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
 			return nil, err
 		}
 	}
-	return s.buildTickOutput(agenteNombre, proyecto, sesionActiva, input.CuotaPct)
+	out, err := s.buildTickOutput(agenteNombre, proyecto, sesionActiva, input.CuotaPct)
+	if err != nil {
+		return nil, err
+	}
+	if out != nil && out.AccionRecomendada == "continuar_trabajo" && len(out.TareasActivas) > 0 {
+		if runtimeBloqueadoAntes {
+			out.AccionRecomendada = "esperar_recuperacion_runtime"
+			out.Motivo = firstNonEmpty(strings.TrimSpace(detalleRuntimeBloqueado), "Runtime no disponible; esperando recuperación automática")
+			out.DebePausar = false
+			return out, nil
+		}
+		bloqueado, detalle, err := s.runtimeBlockedFallback(agenteNombre, proyecto.ID)
+		if err != nil {
+			return nil, err
+		}
+		if bloqueado {
+			out.AccionRecomendada = "esperar_recuperacion_runtime"
+			out.Motivo = firstNonEmpty(strings.TrimSpace(detalle), "Runtime no disponible; esperando recuperación automática")
+			out.DebePausar = false
+		}
+	}
+	return out, nil
 }
 
 func (s *Service) resolvePrepareConnector(agente, conectorRef string, ultima *db.Sesion) (*db.Conector, error) {
@@ -541,6 +570,18 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 	if err != nil {
 		return nil, err
 	}
+	runtimeBloqueado := estadoOperativoBloqueaContinuidad(estadoOperativo)
+	if tieneTrabajo && !runtimeBloqueado {
+		bloqueado, detalle, err := s.runtimeBlockedFallback(agenteNombre, proyecto.ID)
+		if err != nil {
+			return nil, err
+		}
+		if bloqueado {
+			runtimeBloqueado = true
+			estadoOperativo = "bloqueado_por_runtime"
+			detalleOperativo = firstNonEmpty(strings.TrimSpace(detalle), strings.TrimSpace(detalleOperativo))
+		}
+	}
 
 	out := &TickOutput{
 		Agente: agenteNombre,
@@ -584,6 +625,9 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		} else {
 			out.Motivo = "Cuota agotada o modo enfriamiento activo."
 		}
+	case tieneTrabajo && runtimeBloqueado:
+		out.AccionRecomendada = "esperar_recuperacion_runtime"
+		out.Motivo = firstNonEmpty(strings.TrimSpace(detalleOperativo), "Runtime no disponible; esperando recuperación automática")
 	case !asignadoAProyecto && proyectoAsignado != "":
 		out.AccionRecomendada = "pausar_y_reasignar"
 		out.DebePausar = true
@@ -604,9 +648,73 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 	return out, nil
 }
 
+func (s *Service) runtimeBlockedFallback(agenteNombre string, proyectoID int64) (bool, string, error) {
+	agenteNombre = strings.TrimSpace(agenteNombre)
+	if agenteNombre == "" || proyectoID <= 0 {
+		return false, "", nil
+	}
+	handleFilter := agenteNombre
+	handles, err := s.store.ListPassiveRuntimeHandles(&handleFilter)
+	if err != nil {
+		return false, "", err
+	}
+	var latestHandle *db.RuntimeHandle
+	for _, handle := range handles {
+		if handle == nil || handle.ProyectoID == nil || *handle.ProyectoID != proyectoID {
+			continue
+		}
+		if latestHandle == nil || runtimeHandleMoment(handle).After(runtimeHandleMoment(latestHandle)) {
+			latestHandle = handle
+		}
+		switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
+		case "activo", "active", "pausado", "paused":
+			return false, "", nil
+		}
+	}
+	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{Agente: &agenteNombre})
+	if err != nil {
+		return false, "", err
+	}
+	var latestRuntime *db.RuntimeInstance
+	for _, runtime := range runtimes {
+		if runtime == nil || runtime.ProyectoID == nil || *runtime.ProyectoID != proyectoID {
+			continue
+		}
+		if latestRuntime == nil || runtimeMoment(runtime).After(runtimeMoment(latestRuntime)) {
+			latestRuntime = runtime
+		}
+		switch strings.ToLower(strings.TrimSpace(runtime.LogicalState)) {
+		case "activo", "active", "running", "iniciando", "starting", "esperando_io", "waiting_io", "pausado", "paused":
+			return false, "", nil
+		}
+	}
+	if latestHandle != nil {
+		return true, firstNonEmpty(strings.TrimSpace(latestHandle.Estado), "handle no operativo"), nil
+	}
+	if latestRuntime != nil {
+		return true, firstNonEmpty(strings.TrimSpace(latestRuntime.LogicalState), strings.TrimSpace(latestRuntime.ProcessState), "runtime no operativo"), nil
+	}
+	return false, "", nil
+}
+
+func estadoOperativoBloqueaContinuidad(estado string) bool {
+	switch strings.TrimSpace(estado) {
+	case "bloqueado_por_runtime", "mailbox_atascada", "caido", "atascado":
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Service) liveOperationalState(agenteNombre string) (string, string, error) {
 	return resolveLiveOperationalState(
-		func() ([]Row, error) { return s.BuildPanelRows() },
+		func() ([]Row, error) {
+			row, err := s.buildRowForAgent(agenteNombre)
+			if err != nil {
+				return nil, err
+			}
+			return []Row{row}, nil
+		},
 		agenteNombre,
 		liveOperationalStateTimeout,
 	)

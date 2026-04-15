@@ -184,6 +184,10 @@ func (f *fakeStore) ListRuntimeHandles(agent *string) ([]*db.RuntimeHandle, erro
 	return out, nil
 }
 
+func (f *fakeStore) ListPassiveRuntimeHandles(agent *string) ([]*db.RuntimeHandle, error) {
+	return f.ListRuntimeHandles(agent)
+}
+
 func (f *fakeStore) ListCanonicalRuntimeHandles(agent *string) ([]*db.RuntimeHandle, error) {
 	source := f.canonicalHandles
 	if source == nil {

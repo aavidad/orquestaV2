@@ -35,6 +35,7 @@ type Store interface {
 	SaveActiveSession(agente string, proyectoID *int64, upd db.SesionUpdate) error
 	ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance, error)
 	ListRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error)
+	ListPassiveRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error)
 	ListCanonicalRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error)
 	ListRecentOperationalRuntimeHandles() (map[string]*db.RuntimeHandle, error)
 	ListRuntimeTranscript(filtro db.FiltroRuntimeTranscript) ([]*db.RuntimeTranscriptEntry, error)
@@ -112,18 +113,18 @@ type Row struct {
 }
 
 type Detail struct {
-	Row                      Row                          `json:"row"`
-	Entity                   *AgentEntity                 `json:"entity,omitempty"`
-	Asignaciones             []*db.Asignacion             `json:"asignaciones,omitempty"`
-	Sesiones                 []*db.Sesion                 `json:"sesiones,omitempty"`
-	Runtimes                 []*db.RuntimeInstance        `json:"runtimes,omitempty"`
-	Handles                  []*db.RuntimeHandle          `json:"handles,omitempty"`
-	Transcript               []*db.RuntimeTranscriptEntry `json:"transcript,omitempty"`
-	Orders                   []*db.RuntimeOrder           `json:"orders,omitempty"`
-	Mailbox                  []*db.RuntimeMailboxMessage  `json:"mailbox,omitempty"`
-	MailboxPendingVisible    int                          `json:"mailbox_pending_visible"`
-	MailboxCoveredBootstrap  int                          `json:"mailbox_covered_bootstrap"`
-	Checkpoints              []*db.RuntimeCheckpoint      `json:"checkpoints,omitempty"`
+	Row                     Row                          `json:"row"`
+	Entity                  *AgentEntity                 `json:"entity,omitempty"`
+	Asignaciones            []*db.Asignacion             `json:"asignaciones,omitempty"`
+	Sesiones                []*db.Sesion                 `json:"sesiones,omitempty"`
+	Runtimes                []*db.RuntimeInstance        `json:"runtimes,omitempty"`
+	Handles                 []*db.RuntimeHandle          `json:"handles,omitempty"`
+	Transcript              []*db.RuntimeTranscriptEntry `json:"transcript,omitempty"`
+	Orders                  []*db.RuntimeOrder           `json:"orders,omitempty"`
+	Mailbox                 []*db.RuntimeMailboxMessage  `json:"mailbox,omitempty"`
+	MailboxPendingVisible   int                          `json:"mailbox_pending_visible"`
+	MailboxCoveredBootstrap int                          `json:"mailbox_covered_bootstrap"`
+	Checkpoints             []*db.RuntimeCheckpoint      `json:"checkpoints,omitempty"`
 }
 
 type ReanimationCandidate struct {
@@ -610,20 +611,9 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 
 func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 	nombre = strings.TrimSpace(nombre)
-	agente, err := s.store.GetAgent(nombre)
+	row, err := s.buildRowForAgent(nombre)
 	if err != nil {
 		return nil, err
-	}
-	rows, err := s.BuildPanelRows()
-	if err != nil {
-		return nil, err
-	}
-	row := Row{Agente: agente}
-	for _, item := range rows {
-		if item.Agente != nil && item.Agente.Nombre == nombre {
-			row = item
-			break
-		}
 	}
 
 	asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{Agente: &nombre})
@@ -668,19 +658,241 @@ func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 	}
 
 	return &Detail{
-		Row:          row,
-		Entity:       buildAgentEntity(row, tareas),
-		Asignaciones: asignaciones,
-		Sesiones:     sesiones,
-		Runtimes:     runtimes,
-		Handles:      handles,
-		Transcript:   transcript,
-		Orders:       orders,
-		Mailbox:      mailbox,
+		Row:                     row,
+		Entity:                  buildAgentEntity(row, tareas),
+		Asignaciones:            asignaciones,
+		Sesiones:                sesiones,
+		Runtimes:                runtimes,
+		Handles:                 handles,
+		Transcript:              transcript,
+		Orders:                  orders,
+		Mailbox:                 mailbox,
 		MailboxPendingVisible:   mailboxPendingVisible,
 		MailboxCoveredBootstrap: mailboxCoveredBootstrap,
-		Checkpoints:  checkpoints,
+		Checkpoints:             checkpoints,
 	}, nil
+}
+
+func (s *Service) buildRowForAgent(nombre string) (Row, error) {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return Row{}, fmt.Errorf("agente obligatorio")
+	}
+	agente, err := s.store.GetAgent(nombre)
+	if err != nil {
+		return Row{}, err
+	}
+	row := Row{Agente: agente}
+
+	asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{Agente: &nombre})
+	if err != nil {
+		return Row{}, err
+	}
+	row.Asignacion = latestAssignmentForAgent(asignaciones)
+
+	sesiones, err := s.store.ListInspectionSessions(db.FiltroSesionesInspeccion{Agente: &nombre})
+	if err != nil {
+		return Row{}, err
+	}
+	row.Sesion = latestSessionForAgent(sesiones)
+
+	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{Agente: &nombre})
+	if err != nil {
+		return Row{}, err
+	}
+	row.Runtime = latestRuntimeForAgent(runtimes)
+
+	if hotHandles, err := s.store.ListRecentOperationalRuntimeHandles(); err == nil {
+		if handle := hotHandles[nombre]; handle != nil {
+			row.Handle = handle
+		}
+	}
+	if row.Handle == nil {
+		if handles, err := s.store.ListCanonicalRuntimeHandles(&nombre); err != nil {
+			return Row{}, err
+		} else {
+			row.Handle = latestHandleForAgent(handles)
+		}
+	}
+	if row.Handle == nil {
+		if handles, err := s.store.ListRuntimeHandles(&nombre); err != nil {
+			return Row{}, err
+		} else {
+			row.Handle = latestHandleForAgent(handles)
+		}
+	}
+
+	orders, err := s.store.ListRuntimeOrders(db.FiltroRuntimeOrders{Agente: &nombre})
+	if err != nil {
+		return Row{}, err
+	}
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		switch strings.TrimSpace(order.Estado) {
+		case "pendiente", "tomada", "ejecutando":
+			row.OrdersOpen++
+			if runtimeOrderEsControl(strings.TrimSpace(order.Tipo)) {
+				row.ControlOrdersOpen++
+				moment := runtimeOrderMoment(order)
+				if row.LastControlOrderMoment == nil || moment.After(*row.LastControlOrderMoment) {
+					ts := moment
+					row.LastControlOrderMoment = &ts
+					row.LastControlOrderType = strings.TrimSpace(order.Tipo)
+				}
+			}
+		case "fallida":
+			row.OrdersFailed++
+		}
+		if strings.TrimSpace(order.ErrorText) != "" {
+			row.OrdersFailed++
+		}
+	}
+
+	mailbox, err := s.listMailboxForAgent(nombre)
+	if err != nil {
+		return Row{}, err
+	}
+	for _, msg := range mailbox {
+		if msg == nil {
+			continue
+		}
+		row.MailboxTotal++
+		if strings.EqualFold(strings.TrimSpace(msg.Estado), "pendiente") {
+			row.MailboxPending++
+		}
+	}
+
+	checkpoints, err := s.store.ListRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{Agente: &nombre, Limit: 5})
+	if err != nil {
+		return Row{}, err
+	}
+	row.Checkpoints = len(checkpoints)
+	if len(checkpoints) > 0 {
+		row.LastCheckpoint = checkpoints[0]
+	}
+
+	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &nombre})
+	if err != nil {
+		return Row{}, err
+	}
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.Agente == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.EstadoCompletada, db.EstadoCancelada:
+			continue
+		case db.EstadoBloqueada:
+			row.BlockedTasks++
+		default:
+			row.OpenTasks++
+		}
+	}
+
+	now := time.Now().UTC()
+	if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
+		if view := structured.View(now, time.Minute); view != nil {
+			row.WorkerState = strings.TrimSpace(view.State)
+			row.WorkerAlive = view.Alive
+			row.WorkerReadyAt = view.ReadyAt
+			row.WorkerHeartbeat = view.HeartbeatAt
+			row.WorkerUpdatedAt = view.UpdatedAt
+			row.WorkerLastOutput = view.LastOutputAt
+			row.WorkerLastProgress = view.LastProgressAt
+			row.WorkerExitError = strings.TrimSpace(view.ExitError)
+			row.WorkerSessionRef = strings.TrimSpace(view.SessionRef)
+			row.WorkerRuntimeRef = strings.TrimSpace(view.RuntimeRef)
+			row.WorkerDriver = strings.TrimSpace(view.Driver)
+			row.WorkerTransport = strings.TrimSpace(view.Transport)
+			row.WorkerTMUXSession = strings.TrimSpace(view.TmuxSession)
+			row.WorkerTMUXWindow = strings.TrimSpace(view.TmuxWindow)
+			row.WorkerTMUXPaneID = strings.TrimSpace(view.TmuxPaneID)
+			row.WorkerCanSendInput = view.CanSendInput
+			row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
+			row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
+		}
+	}
+	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
+	return row, nil
+}
+
+func latestAssignmentForAgent(items []*db.Asignacion) *db.Asignacion {
+	var best *db.Asignacion
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		if best == nil {
+			best = item
+			continue
+		}
+		bestActive := best.Estado == db.AsignacionActiva
+		itemActive := item.Estado == db.AsignacionActiva
+		if itemActive != bestActive {
+			if itemActive {
+				best = item
+			}
+			continue
+		}
+		if item.UpdatedAt.After(best.UpdatedAt) || (item.UpdatedAt.Equal(best.UpdatedAt) && item.ID > best.ID) {
+			best = item
+		}
+	}
+	return best
+}
+
+func latestSessionForAgent(items []*db.Sesion) *db.Sesion {
+	var best *db.Sesion
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		if best == nil || latestSessionCandidate(item, best) {
+			best = item
+		}
+	}
+	return best
+}
+
+func latestSessionCandidate(candidate, current *db.Sesion) bool {
+	if current == nil {
+		return true
+	}
+	if candidate == nil {
+		return false
+	}
+	if !candidate.Inicio.Equal(current.Inicio) {
+		return candidate.Inicio.After(current.Inicio)
+	}
+	return candidate.ID > current.ID
+}
+
+func latestRuntimeForAgent(items []*db.RuntimeInstance) *db.RuntimeInstance {
+	var best *db.RuntimeInstance
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		if best == nil || runtimeMoment(item).After(runtimeMoment(best)) {
+			best = item
+		}
+	}
+	return best
+}
+
+func latestHandleForAgent(items []*db.RuntimeHandle) *db.RuntimeHandle {
+	var best *db.RuntimeHandle
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		if best == nil || runtimeHandleMoment(item).After(runtimeHandleMoment(best)) {
+			best = item
+		}
+	}
+	return best
 }
 
 func (s *Service) summarizeMailboxOverview(items []*db.RuntimeMailboxMessage, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (pendingVisible int, coveredBootstrap int, err error) {
@@ -2266,6 +2478,10 @@ func (Repository) ListRuntimes(filtro db.FiltroRuntimes) ([]*db.RuntimeInstance,
 
 func (Repository) ListRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error) {
 	return db.ListarRuntimeHandles(agente)
+}
+
+func (Repository) ListPassiveRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error) {
+	return db.ListarRuntimeHandlesPasivos(agente)
 }
 
 func (Repository) ListCanonicalRuntimeHandles(agente *string) ([]*db.RuntimeHandle, error) {

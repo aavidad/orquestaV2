@@ -2128,6 +2128,13 @@ func TestAPIProyectoDescubrirYGestionAgentes(t *testing.T) {
 	if recRehabilitar.Code != http.StatusOK {
 		t.Fatalf("status rehabilitar inesperado: %d body=%s", recRehabilitar.Code, recRehabilitar.Body.String())
 	}
+	var rehabResp apiAgenteResetReanimacionResponse
+	if err := json.Unmarshal(recRehabilitar.Body.Bytes(), &rehabResp); err != nil {
+		t.Fatalf("decode rehabilitar: %v", err)
+	}
+	if !rehabResp.OK || rehabResp.Agente != "temporal" || !rehabResp.Running {
+		t.Fatalf("respuesta rehabilitar inesperada: %+v", rehabResp)
+	}
 }
 
 func TestAPIProyectoFusionar(t *testing.T) {
@@ -2246,33 +2253,39 @@ func TestAPIAgenteResetReanimacionLimpiaContinuidadYCancelaBootstrap(t *testing.
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status reset inesperado: %d body=%s", rec.Code, rec.Body.String())
 	}
+	var resp apiAgenteResetReanimacionResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !resp.OK || resp.Agente != "Codex1" || !resp.Running {
+		t.Fatalf("respuesta reset inesperada: %+v", resp)
+	}
 
-	order, err := db.GetRuntimeOrder(orderID)
-	if err != nil {
-		t.Fatalf("runtime order: %v", err)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		order, err := db.GetRuntimeOrder(orderID)
+		if err != nil {
+			t.Fatalf("runtime order: %v", err)
+		}
+		sesion, err := db.ObtenerUltimaSesion("Codex1", &proyectoID)
+		if err != nil {
+			t.Fatalf("ultima sesion: %v", err)
+		}
+		checkpoint, err := db.UltimoRuntimeCheckpoint("Codex1", &proyectoID)
+		if err != nil {
+			t.Fatalf("ultimo checkpoint: %v", err)
+		}
+		if order != nil && order.Estado == "cancelada" &&
+			sesion != nil &&
+			strings.TrimSpace(sesion.ExternalSessionID) == "" &&
+			strings.TrimSpace(sesion.ResumePayloadJSON) == "" &&
+			strings.TrimSpace(sesion.ResumenContinuidad) == "" &&
+			checkpoint != nil && checkpoint.CheckpointKind == "manual_rehabilitation" {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
-	if order == nil || order.Estado != "cancelada" {
-		t.Fatalf("handoff no cancelado: %+v", order)
-	}
-	sesion, err := db.ObtenerUltimaSesion("Codex1", &proyectoID)
-	if err != nil {
-		t.Fatalf("ultima sesion: %v", err)
-	}
-	if sesion == nil {
-		t.Fatalf("sesion no encontrada")
-	}
-	if strings.TrimSpace(sesion.ExternalSessionID) != "" ||
-		strings.TrimSpace(sesion.ResumePayloadJSON) != "" ||
-		strings.TrimSpace(sesion.ResumenContinuidad) != "" {
-		t.Fatalf("continuidad no limpiada: %+v", sesion)
-	}
-	checkpoint, err := db.UltimoRuntimeCheckpoint("Codex1", &proyectoID)
-	if err != nil {
-		t.Fatalf("ultimo checkpoint: %v", err)
-	}
-	if checkpoint == nil || checkpoint.CheckpointKind != "manual_rehabilitation" {
-		t.Fatalf("checkpoint de rehabilitacion no creado: %+v", checkpoint)
-	}
+	t.Fatalf("reset-reanimacion no aplico los efectos esperados a tiempo")
 }
 
 func TestAPIAgenteResetReanimacionReabreFrenteBloqueadoRecuperable(t *testing.T) {
@@ -2353,23 +2366,32 @@ func TestAPIAgenteResetReanimacionReabreFrenteBloqueadoRecuperable(t *testing.T)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status reset inesperado: %d body=%s", rec.Code, rec.Body.String())
 	}
+	var resp apiAgenteResetReanimacionResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !resp.OK || resp.Agente != "Gemini1" || !resp.Running {
+		t.Fatalf("respuesta reset inesperada: %+v", resp)
+	}
 
-	tarea, err := db.GetTarea(tareaID)
-	if err != nil {
-		t.Fatalf("get tarea: %v", err)
-	}
-	if tarea == nil || tarea.Estado != db.TareaEnProgreso {
-		t.Fatalf("la tarea deberia quedar reabierta: %+v", tarea)
-	}
 	agente := "Gemini1"
 	estado := "pendiente"
-	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
-	if err != nil {
-		t.Fatalf("listar orders: %v", err)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		tarea, err := db.GetTarea(tareaID)
+		if err != nil {
+			t.Fatalf("get tarea: %v", err)
+		}
+		orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+		if err != nil {
+			t.Fatalf("listar orders: %v", err)
+		}
+		if tarea != nil && tarea.Estado == db.TareaEnProgreso && len(orders) > 0 {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
-	if len(orders) == 0 {
-		t.Fatalf("deberia encolar control de reactivacion")
-	}
+	t.Fatalf("deberia reabrir el frente y encolar control de reactivacion")
 }
 
 func TestAPIAgentesReanimacionesListaVencidasYFuturas(t *testing.T) {

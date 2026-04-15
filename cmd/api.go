@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -570,8 +571,16 @@ type apiRuntimeProcessReanimationsResponse struct {
 	Errors            int  `json:"errors,omitempty"`
 }
 
+type apiAgenteResetReanimacionResponse struct {
+	OK       bool   `json:"ok"`
+	Agente   string `json:"agente"`
+	Accepted bool   `json:"accepted,omitempty"`
+	Running  bool   `json:"running,omitempty"`
+}
+
 var runtimeProcessAutonomiaEnCurso atomic.Bool
 var runtimeProcessReanimacionesEnCurso atomic.Bool
+var apiAgentResetReanimacionEnCurso sync.Map
 
 type apiRuntimeProcessMailboxRequest struct {
 	ToAgente string `json:"to_agente,omitempty"`
@@ -1072,10 +1081,8 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, err)
 			return
 		}
-		if err := (dbAutomationService{}).ResetReanimacion(nombre); err != nil {
-			apiError(w, http.StatusBadRequest, err)
-			return
-		}
+		apiWriteJSON(w, http.StatusOK, launchAgentResetReanimation(nombre))
+		return
 	case "eliminar":
 		var req struct {
 			Actor string `json:"actor"`
@@ -1124,10 +1131,8 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	case "reset-reanimacion":
-		if err := (dbAutomationService{}).ResetReanimacion(nombre); err != nil {
-			apiError(w, http.StatusBadRequest, err)
-			return
-		}
+		apiWriteJSON(w, http.StatusOK, launchAgentResetReanimation(nombre))
+		return
 	default:
 		http.NotFound(w, r)
 		return
@@ -5320,6 +5325,52 @@ func ejecutarRuntimeProcessReanimationsBatch() apiRuntimeProcessReanimationsResp
 	db.Audit("server", "runtime_process_reanimaciones", "runtime", 0,
 		fmt.Sprintf("candidates=%d reactivated=%d cooldown_sustained=%d errors=%d", resp.Candidates, resp.Reactivated, resp.CooldownSustained, resp.Errors))
 	return resp
+}
+
+func launchAgentResetReanimation(nombre string) apiAgenteResetReanimacionResponse {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return apiAgenteResetReanimacionResponse{OK: true}
+	}
+	flag := agentResetReanimationFlag(nombre)
+	started := flag.CompareAndSwap(false, true)
+	if started {
+		go func(agent string, running *atomic.Bool) {
+			defer running.Store(false)
+			resultado, err := (dbAutomationService{}).ResetReanimacionResultado(agent)
+			if err != nil {
+				db.Audit("server", "agente_reset_reanimacion_error", "agente", 0,
+					fmt.Sprintf("agente=%s err=%v", strings.TrimSpace(agent), err))
+				return
+			}
+			db.Audit("server", "agente_reset_reanimacion", "agente", 0,
+				fmt.Sprintf("agente=%s resultado=%s", strings.TrimSpace(agent), string(resultado)))
+		}(nombre, flag)
+	}
+	return apiAgenteResetReanimacionResponse{
+		OK:       true,
+		Agente:   nombre,
+		Accepted: started,
+		Running:  flag.Load(),
+	}
+}
+
+func agentResetReanimationFlag(nombre string) *atomic.Bool {
+	key := strings.ToLower(strings.TrimSpace(nombre))
+	if key == "" {
+		return &atomic.Bool{}
+	}
+	if existing, ok := apiAgentResetReanimacionEnCurso.Load(key); ok {
+		if flag, ok := existing.(*atomic.Bool); ok && flag != nil {
+			return flag
+		}
+	}
+	flag := &atomic.Bool{}
+	actual, _ := apiAgentResetReanimacionEnCurso.LoadOrStore(key, flag)
+	if resolved, ok := actual.(*atomic.Bool); ok && resolved != nil {
+		return resolved
+	}
+	return flag
 }
 
 func apiHandlerRuntimeMailboxClear(w http.ResponseWriter, r *http.Request) {

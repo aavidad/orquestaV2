@@ -336,6 +336,39 @@ func TestBuildTickOutputNoCuentaBloqueadasComoTareasActivas(t *testing.T) {
 	}
 }
 
+func TestBuildTickOutputNoContinuaSiRuntimeBloqueado(t *testing.T) {
+	now := time.Now().UTC()
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex1", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		tasks: []*db.Tarea{
+			{ID: 42, Agente: strPtr("Codex1"), ProyectoID: int64Ptr(7), Estado: db.EstadoEnProgreso, Titulo: "Frente acotado Codex"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 52, Agente: "Codex1", ProyectoID: int64Ptr(7), LogicalState: "cerrado", ProcessState: "stopped", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 62, Agente: "Codex1", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(52), Estado: "fallido", UpdatedAt: now},
+		},
+	}
+	svc := NewService(store, nil)
+	proyecto := &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()}
+	out, err := svc.buildTickOutput("Codex1", proyecto, nil, 0)
+	if err != nil {
+		t.Fatalf("buildTickOutput: %v", err)
+	}
+	if out.AccionRecomendada != "esperar_recuperacion_runtime" || out.DebePausar {
+		t.Fatalf("salida inesperada: %+v", out)
+	}
+	if strings.TrimSpace(out.Motivo) == "" {
+		t.Fatalf("motivo inesperado: %q", out.Motivo)
+	}
+}
+
 func TestBuildPreparePrefierePoolLocalCompartidoOllama(t *testing.T) {
 	prepararDBTemporalRuntimeService(t)
 	tmp := t.TempDir()
