@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"orquesta/db"
+	"orquesta/planocontrol"
 )
 
 func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
@@ -609,6 +610,26 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	})
 	if !strings.Contains(outMailboxConsumir, "consumido") {
 		t.Fatalf("salida mailbox-consumir inesperada:\n%s", outMailboxConsumir)
+	}
+}
+
+func TestWakeControlPlaneRuntimeMailboxReseteaThrottleDeReevaluacion(t *testing.T) {
+	resetRuntimeMailboxReevaluationGate()
+	runner := &planocontrol.Runner{}
+	unregister := registerActiveControlPlaneRunner(runner)
+	defer unregister()
+
+	if !runtimeMailboxShouldReevaluate("session_resume", 41, 33) {
+		t.Fatalf("primer intento deberia permitirse")
+	}
+	if runtimeMailboxShouldReevaluate("session_resume", 41, 33) {
+		t.Fatalf("segundo intento inmediato deberia quedar throttled")
+	}
+	if !wakeControlPlaneRuntimeMailbox() {
+		t.Fatalf("el wake del carril mailbox deberia aceptarse")
+	}
+	if !runtimeMailboxShouldReevaluate("session_resume", 41, 33) {
+		t.Fatalf("el wake mailbox deberia limpiar el throttle para reevaluar de inmediato")
 	}
 }
 

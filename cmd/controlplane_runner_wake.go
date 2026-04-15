@@ -41,6 +41,7 @@ func wakeControlPlaneRuntimeMailbox() bool {
 	if runner == nil {
 		return false
 	}
+	resetRuntimeMailboxReevaluationGate()
 	return runner.WakeRuntimeMailbox()
 }
 
