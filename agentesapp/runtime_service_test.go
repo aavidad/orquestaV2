@@ -14,8 +14,8 @@ import (
 	"orquesta/runtimeagente"
 )
 
-func strPtr(v string) *string   { return &v }
-func int64Ptr(v int64) *int64   { return &v }
+func strPtr(v string) *string { return &v }
+func int64Ptr(v int64) *int64 { return &v }
 
 func prepararDBTemporalRuntimeService(t *testing.T) {
 	t.Helper()
@@ -82,6 +82,34 @@ func TestBuildBootstrapPromptIncluyeGobernanzaYTarea(t *testing.T) {
 		if !strings.Contains(prompt, token) {
 			t.Fatalf("bootstrap prompt sin %q:\n%s", token, prompt)
 		}
+	}
+}
+
+func TestResolveLiveOperationalStateDevuelveFilaDelAgente(t *testing.T) {
+	estado, detalle, err := resolveLiveOperationalState(func() ([]Row, error) {
+		return []Row{
+			{Agente: &db.Agente{Nombre: "Otro"}, EstadoOperativo: "disponible"},
+			{Agente: &db.Agente{Nombre: "Codex1"}, EstadoOperativo: "bloqueado_por_cuota", DetalleOperativo: "worker bloqueado por cuota"},
+		}, nil
+	}, "Codex1", 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("resolve live state: %v", err)
+	}
+	if estado != "bloqueado_por_cuota" || detalle != "worker bloqueado por cuota" {
+		t.Fatalf("estado/detalle inesperados: %q / %q", estado, detalle)
+	}
+}
+
+func TestResolveLiveOperationalStateHaceTimeoutSeguro(t *testing.T) {
+	estado, detalle, err := resolveLiveOperationalState(func() ([]Row, error) {
+		time.Sleep(50 * time.Millisecond)
+		return []Row{{Agente: &db.Agente{Nombre: "Codex1"}, EstadoOperativo: "bloqueado_por_cuota"}}, nil
+	}, "Codex1", 5*time.Millisecond)
+	if err != nil {
+		t.Fatalf("resolve live state timeout no deberia fallar: %v", err)
+	}
+	if estado != "" || detalle != "" {
+		t.Fatalf("con timeout deberia degradar a vacio, got estado=%q detalle=%q", estado, detalle)
 	}
 }
 

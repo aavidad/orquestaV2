@@ -16,6 +16,8 @@ import (
 	"orquesta/runtimeagente"
 )
 
+const liveOperationalStateTimeout = 750 * time.Millisecond
+
 type ProjectBundle struct {
 	ID      int64  `json:"id"`
 	Slug    string `json:"slug"`
@@ -601,17 +603,45 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 }
 
 func (s *Service) liveOperationalState(agenteNombre string) (string, string, error) {
-	rows, err := s.BuildPanelRows()
-	if err != nil {
-		return "", "", err
+	return resolveLiveOperationalState(
+		func() ([]Row, error) { return s.BuildPanelRows() },
+		agenteNombre,
+		liveOperationalStateTimeout,
+	)
+}
+
+func resolveLiveOperationalState(loadRows func() ([]Row, error), agenteNombre string, timeout time.Duration) (string, string, error) {
+	agenteNombre = strings.TrimSpace(agenteNombre)
+	if agenteNombre == "" || loadRows == nil {
+		return "", "", nil
 	}
-	for _, row := range rows {
-		if row.Agente == nil || !strings.EqualFold(strings.TrimSpace(row.Agente.Nombre), strings.TrimSpace(agenteNombre)) {
-			continue
+	if timeout <= 0 {
+		timeout = liveOperationalStateTimeout
+	}
+	type result struct {
+		rows []Row
+		err  error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		rows, err := loadRows()
+		ch <- result{rows: rows, err: err}
+	}()
+	select {
+	case res := <-ch:
+		if res.err != nil {
+			return "", "", res.err
 		}
-		return strings.TrimSpace(row.EstadoOperativo), strings.TrimSpace(row.DetalleOperativo), nil
+		for _, row := range res.rows {
+			if row.Agente == nil || !strings.EqualFold(strings.TrimSpace(row.Agente.Nombre), agenteNombre) {
+				continue
+			}
+			return strings.TrimSpace(row.EstadoOperativo), strings.TrimSpace(row.DetalleOperativo), nil
+		}
+		return "", "", nil
+	case <-time.After(timeout):
+		return "", "", nil
 	}
-	return "", "", nil
 }
 
 func (s *Service) blockedTaskNeedsIntervention(agenteNombre string, proyectoID int64, sesionActiva *db.Sesion, tarea *db.Tarea) (bool, error) {
