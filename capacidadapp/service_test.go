@@ -889,6 +889,41 @@ func TestIntentarAutoasignarTareaPipelineLocalNoReasignaTrabajoAjeno(t *testing.
 	}
 }
 
+func TestIntentarAutoasignarTareaPipelineLocalRecuperaFrentePremiumEnOrquesta(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{
+			ID:          56,
+			Titulo:      "Runtime mailbox/session_resume",
+			Estado:      db.TareaEnProgreso,
+			Agente:      ptrString("orquesta"),
+			Prioridad:   db.PrioridadAlta,
+			Descripcion: "Write-set exclusivo: cmd/controlplane_support.go\nTests minimos: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*' -count=1",
+		},
+	}})
+	service.SetTaskActionProvider(&fakeTaskActionProvider{
+		tareas: map[int64]*db.Tarea{
+			56: {
+				ID:          56,
+				Titulo:      "Runtime mailbox/session_resume",
+				Estado:      db.TareaEnProgreso,
+				Agente:      ptrString("orquesta"),
+				Prioridad:   db.PrioridadAlta,
+				Descripcion: "Write-set exclusivo: cmd/controlplane_support.go\nTests minimos: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*' -count=1",
+			},
+		},
+	})
+
+	tarea, err := service.IntentarAutoasignarTareaPipelineLocal("orquestador", "Gemini1")
+	if err != nil {
+		t.Fatalf("IntentarAutoasignarTareaPipelineLocal: %v", err)
+	}
+	if tarea == nil || tarea.ID != 56 || tarea.Estado != string(db.TareaEnProgreso) || tarea.Agente != "Gemini1" {
+		t.Fatalf("deberia recuperar el frente premium acotado desde orquesta: %+v", tarea)
+	}
+}
+
 func TestIntentarAutoasignarTareaPipelineLocalIgnoraFrentePremiumSinContrato(t *testing.T) {
 	service := NewService(fakeStore{})
 	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})

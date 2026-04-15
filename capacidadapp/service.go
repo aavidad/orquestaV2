@@ -164,6 +164,13 @@ func (s *Service) IntentarAutoasignarTareaPipelineLocal(proyectoSlug, agente str
 			return nil, err
 		}
 		cambioReal = true
+	case db.TareaAsignada, db.TareaEnProgreso:
+		if tareaPipelineLocalPuedeRecuperarseDesdeOrquesta(tareaPipelineLocalDesdeDB(actual)) {
+			if err := s.taskActionProvider.ReassignTask(actual.ID, agente); err != nil {
+				return nil, err
+			}
+			cambioReal = true
+		}
 	}
 	actual, err = s.taskActionProvider.GetTask(actual.ID)
 	if err != nil {
@@ -206,6 +213,21 @@ func tareaPipelineLocalTieneContratoPremium(tarea *TareaPipelineLocal) bool {
 		return true
 	}
 	return len(tarea.WriteSet) > 0 && strings.TrimSpace(tarea.TestsMinimos) != ""
+}
+
+func tareaPipelineLocalPuedeRecuperarseDesdeOrquesta(tarea *TareaPipelineLocal) bool {
+	if tarea == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(tarea.Agente), "orquesta") {
+		return false
+	}
+	switch strings.TrimSpace(tarea.Estado) {
+	case string(db.TareaAsignada), string(db.TareaEnProgreso):
+	default:
+		return false
+	}
+	return tareaPipelineLocalTieneContratoPremium(tarea)
 }
 
 func tareaPipelineLocalDebeAcotarseAntesDePremium(tarea *TareaPipelineLocal) bool {
