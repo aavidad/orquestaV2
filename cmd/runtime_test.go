@@ -241,7 +241,7 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 3})
 		case r.URL.Path == "/api/runtime/process-autonomia" && r.Method == http.MethodPost:
 			_ = json.NewDecoder(r.Body).Decode(&processAutonomiaReq)
-			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 5})
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 0, "accepted": true, "running": true})
 		case r.URL.Path == "/api/runtime-checkpoints/latest":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"checkpoint": map[string]any{
@@ -373,8 +373,10 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 			t.Fatalf("runtime procesar-autonomia via api: %v", err)
 		}
 	})
-	if !strings.Contains(outProcessAutonomia, "count=5") {
-		t.Fatalf("salida runtime procesar-autonomia inesperada:\n%s", outProcessAutonomia)
+	for _, token := range []string{"accepted=true", "running=true", "count=0"} {
+		if !strings.Contains(outProcessAutonomia, token) {
+			t.Fatalf("salida runtime procesar-autonomia sin %q:\n%s", token, outProcessAutonomia)
+		}
 	}
 	if len(processAutonomiaReq) != 0 {
 		t.Fatalf("request process autonomia deberia ser vacia: %+v", processAutonomiaReq)

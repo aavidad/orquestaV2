@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"orquesta/agentesapp"
@@ -552,9 +553,13 @@ type apiRuntimeProcessMailboxResponse struct {
 }
 
 type apiRuntimeProcessAutonomiaResponse struct {
-	OK    bool `json:"ok"`
-	Count int  `json:"count"`
+	OK       bool `json:"ok"`
+	Count    int  `json:"count"`
+	Accepted bool `json:"accepted,omitempty"`
+	Running  bool `json:"running,omitempty"`
 }
+
+var runtimeProcessAutonomiaEnCurso atomic.Bool
 
 type apiRuntimeProcessMailboxRequest struct {
 	ToAgente string `json:"to_agente,omitempty"`
@@ -5214,14 +5219,20 @@ func apiHandlerRuntimeProcessAutonomia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resetAutonomiaActiveSessionsObservationGate()
-	count, err := (dbAutomationService{}).ProcesarAutonomiaAgentesBatch()
-	if err != nil {
-		apiError(w, http.StatusInternalServerError, err)
-		return
+	started := runtimeProcessAutonomiaEnCurso.CompareAndSwap(false, true)
+	if started {
+		go func() {
+			defer runtimeProcessAutonomiaEnCurso.Store(false)
+			if _, err := (dbAutomationService{}).ProcesarAutonomiaAgentesBatch(); err != nil {
+				db.Audit("server", "runtime_process_autonomia_error", "runtime", 0, err.Error())
+			}
+		}()
 	}
 	apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
-		OK:    true,
-		Count: count,
+		OK:       true,
+		Count:    0,
+		Accepted: started,
+		Running:  runtimeProcessAutonomiaEnCurso.Load(),
 	})
 }
 

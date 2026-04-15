@@ -229,7 +229,7 @@ var runtimeProcesarAutonomiaCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Printf("✓ Autonomía procesada count=%d\n", resp.Count)
+		fmt.Printf("✓ Autonomía aceptada accepted=%t running=%t count=%d\n", resp.Accepted, resp.Running, resp.Count)
 		return nil
 	},
 }
