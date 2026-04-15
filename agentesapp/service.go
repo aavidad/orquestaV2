@@ -684,13 +684,13 @@ func (s *Service) BuildDetailCompact(nombre string) (*Detail, error) {
 func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 	nombre = strings.TrimSpace(nombre)
 	if compact {
-		row, asignaciones, err := s.buildOperationalRowContextForAgentCompact(nombre, time.Now().UTC())
+		row, asignaciones, tareas, err := s.buildOperationalRowContextForAgentCompact(nombre, time.Now().UTC())
 		if err != nil {
 			return nil, err
 		}
 		return &Detail{
 			Row:                     row,
-			Entity:                  buildAgentEntity(row, nil),
+			Entity:                  buildAgentEntity(row, tareas),
 			Asignaciones:            asignaciones,
 			MailboxTotalCount:       row.MailboxTotal,
 			MailboxPendingVisible:   row.MailboxPending,
@@ -929,25 +929,25 @@ func (s *Service) buildOperationalRowForAgent(nombre string, now time.Time) (Row
 	return row, err
 }
 
-func (s *Service) buildOperationalRowContextForAgentCompact(nombre string, now time.Time) (Row, []*db.Asignacion, error) {
+func (s *Service) buildOperationalRowContextForAgentCompact(nombre string, now time.Time) (Row, []*db.Asignacion, []*db.Tarea, error) {
 	nombre = strings.TrimSpace(nombre)
 	if nombre == "" {
-		return Row{}, nil, fmt.Errorf("agente obligatorio")
+		return Row{}, nil, nil, fmt.Errorf("agente obligatorio")
 	}
 
 	agente, err := s.store.GetAgent(nombre)
 	if err != nil {
-		return Row{}, nil, err
+		return Row{}, nil, nil, err
 	}
 	if agente == nil {
-		return Row{}, nil, fmt.Errorf("agente no encontrado: %s", nombre)
+		return Row{}, nil, nil, fmt.Errorf("agente no encontrado: %s", nombre)
 	}
 
 	row := Row{Agente: agente}
 
 	asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{Agente: &nombre})
 	if err != nil {
-		return Row{}, nil, err
+		return Row{}, nil, nil, err
 	}
 	for _, asignacion := range asignaciones {
 		if asignacion != nil && asignacion.Estado == db.AsignacionActiva {
@@ -961,24 +961,24 @@ func (s *Service) buildOperationalRowContextForAgentCompact(nombre string, now t
 	case err == nil:
 		row.Sesion = sesion
 	case err != sql.ErrNoRows:
-		return Row{}, nil, err
+		return Row{}, nil, nil, err
 	}
 
 	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{Agente: &nombre})
 	if err != nil {
-		return Row{}, nil, err
+		return Row{}, nil, nil, err
 	}
 	row.Runtime = latestRuntimeForAgent(runtimes)
 
 	handles, err := s.store.ListCanonicalRuntimeHandles(&nombre)
 	if err != nil {
-		return Row{}, nil, err
+		return Row{}, nil, nil, err
 	}
 	row.Handle = latestHandleForAgent(handles)
 	if row.Handle == nil {
 		handles, err = s.store.ListPassiveRuntimeHandles(&nombre)
 		if err != nil {
-			return Row{}, nil, err
+			return Row{}, nil, nil, err
 		}
 		row.Handle = latestHandleForAgent(handles)
 	}
@@ -1007,7 +1007,7 @@ func (s *Service) buildOperationalRowContextForAgentCompact(nombre string, now t
 
 	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &nombre})
 	if err != nil {
-		return Row{}, nil, err
+		return Row{}, nil, nil, err
 	}
 	for _, tarea := range tareas {
 		if tarea == nil {
@@ -1024,7 +1024,7 @@ func (s *Service) buildOperationalRowContextForAgentCompact(nombre string, now t
 	}
 
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
-	return row, asignaciones, nil
+	return row, asignaciones, tareas, nil
 }
 
 func (s *Service) buildOperationalRowContextForAgent(nombre string, now time.Time) (Row, []*db.Asignacion, []*db.Tarea, error) {

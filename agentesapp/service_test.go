@@ -2115,6 +2115,9 @@ func TestBuildDetailCompactEvitaResumenPesadoDeMailbox(t *testing.T) {
 	if detail.MailboxPendingVisible != 0 || detail.MailboxCoveredBootstrap != 0 {
 		t.Fatalf("mailbox compacto inesperado: pending=%d covered=%d", detail.MailboxPendingVisible, detail.MailboxCoveredBootstrap)
 	}
+	if detail.Entity == nil || len(detail.Entity.Leases) != 1 || detail.Entity.Leases[0].TaskID != 200 {
+		t.Fatalf("leases compactas inesperadas: %+v", detail.Entity)
+	}
 	if len(detail.Mailbox) != 0 {
 		t.Fatalf("compact no deberia cargar mailbox completa: %+v", detail.Mailbox)
 	}
