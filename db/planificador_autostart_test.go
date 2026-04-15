@@ -1078,6 +1078,79 @@ func TestPlanificarTareasAutomaticamenteNoLiberaFrentePremiumAcotadoHuerfano(t *
 	}
 }
 
+func TestPlanificarTareasAutomaticamenteNoRecuperaTareaHuerfanaSiElAgenteTieneAsignacionActivaEnOtroProyecto(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar Codex1: %v", err)
+	}
+	orquestadorID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto orquestador: %v", err)
+	}
+	multiAppID, err := UpsertProyecto(&Proyecto{
+		Slug:    "multi-app",
+		Nombre:  "Multi App",
+		RutaAbs: filepath.Join(tmp, "multi-app"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto multi-app: %v", err)
+	}
+	if err := ActivarAsignacion("Codex1", orquestadorID, "microciclo_exclusivo"); err != nil {
+		t.Fatalf("activar asignacion exclusiva: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Frente huérfano ajeno",
+		Descripcion: "No debe recuperarse si Codex1 ya está asignado a otro proyecto",
+		ProyectoID:  &multiAppID,
+		Modulo:      "collector",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE tareas SET updated_at=? WHERE id=?`, time.Now().UTC().Add(-10*time.Minute), tareaID); err != nil {
+		t.Fatalf("forzar updated_at antiguo: %v", err)
+	}
+
+	if err := PlanificarTareasAutomaticamente(); err != nil {
+		t.Fatalf("planificar: %v", err)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "Codex1" {
+		got := "<nil>"
+		if tarea.Agente != nil {
+			got = *tarea.Agente
+		}
+		t.Fatalf("la tarea huérfana de otro proyecto no deberia recuperarse, agente=%s estado=%s notas=%q", got, tarea.Estado, tarea.Notas)
+	}
+	if tarea.Estado != TareaEnProgreso {
+		t.Fatalf("la tarea debería seguir en progreso, estado=%s notas=%q", tarea.Estado, tarea.Notas)
+	}
+	if strings.Contains(strings.ToLower(tarea.Notas), "continuidad huérfana") || strings.Contains(strings.ToLower(tarea.Notas), "continuidad huerfana") {
+		t.Fatalf("no deberia anotar recuperación de continuidad huérfana: %q", tarea.Notas)
+	}
+}
+
 func TestBuscarSiguienteTareaLibreParaAgentePrefiereAfinidadDeModuloSinSolape(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

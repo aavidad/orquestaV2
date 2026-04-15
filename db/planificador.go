@@ -276,6 +276,11 @@ func tareaHuerfanaRecuperable(agente string, proyectoID int64) (bool, error) {
 	if agentePareceOperadorManualFueraDeFlota(agente) {
 		return false, nil
 	}
+	if asignacion, err := GetAsignacionActivaAgente(agente); err != nil && err != sql.ErrNoRows {
+		return false, err
+	} else if asignacion != nil && asignacion.ProyectoID != proyectoID {
+		return false, nil
+	}
 	if sesion, err := GetSesionActiva(agente, &proyectoID); err != nil && err != sql.ErrNoRows {
 		return false, err
 	} else if sesion != nil {
