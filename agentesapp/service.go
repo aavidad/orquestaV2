@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"orquesta/db"
@@ -67,12 +68,48 @@ type ModelPolicyProvider interface {
 type Service struct {
 	store               Store
 	modelPolicyProvider ModelPolicyProvider
+	cacheMu             sync.Mutex
+	compactDetailCache  map[string]cachedCompactDetail
+	compactDetailFlight map[string]*compactDetailFlight
+	reanimCache         map[string]cachedReanimationSchedule
+	reanimFlight        map[string]*reanimationScheduleFlight
 }
 
 const defaultWorkerOutputStaleSeconds = 20 * 60
+const compactDetailCacheTTL = 2 * time.Second
+const activeReanimationScheduleCacheTTL = 2 * time.Second
 
 func NewService(store Store, modelPolicyProvider ModelPolicyProvider) *Service {
-	return &Service{store: store, modelPolicyProvider: modelPolicyProvider}
+	return &Service{
+		store:               store,
+		modelPolicyProvider: modelPolicyProvider,
+		compactDetailCache:  map[string]cachedCompactDetail{},
+		compactDetailFlight: map[string]*compactDetailFlight{},
+		reanimCache:         map[string]cachedReanimationSchedule{},
+		reanimFlight:        map[string]*reanimationScheduleFlight{},
+	}
+}
+
+type cachedCompactDetail struct {
+	detail  *Detail
+	expires time.Time
+}
+
+type compactDetailFlight struct {
+	done   chan struct{}
+	detail *Detail
+	err    error
+}
+
+type cachedReanimationSchedule struct {
+	rows    []ReanimationCandidate
+	expires time.Time
+}
+
+type reanimationScheduleFlight struct {
+	done chan struct{}
+	rows []ReanimationCandidate
+	err  error
 }
 
 type Row struct {
@@ -635,7 +672,13 @@ func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 }
 
 func (s *Service) BuildDetailCompact(nombre string) (*Detail, error) {
-	return s.buildDetail(nombre, true)
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return s.buildDetail(nombre, true)
+	}
+	return s.getOrBuildCompactDetail(nombre, func() (*Detail, error) {
+		return s.buildDetail(nombre, true)
+	})
 }
 
 func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
@@ -1179,6 +1222,16 @@ func (s *Service) summarizeMailboxOverview(items []*db.RuntimeMailboxMessage, ha
 }
 
 func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]ReanimationCandidate, error) {
+	if activeOnly {
+		key := fmt.Sprintf("active:%t:future:%t", activeOnly, includeFuture)
+		return s.getOrBuildActiveReanimationSchedule(key, func() ([]ReanimationCandidate, error) {
+			return s.buildReanimationSchedule(includeFuture, activeOnly)
+		})
+	}
+	return s.buildReanimationSchedule(includeFuture, activeOnly)
+}
+
+func (s *Service) buildReanimationSchedule(includeFuture, activeOnly bool) ([]ReanimationCandidate, error) {
 	agentes, err := s.ListAgents()
 	if err != nil {
 		return nil, err
@@ -1649,6 +1702,101 @@ func buildLightOperationalRow(agente *db.Agente, asignacion *db.Asignacion, open
 	}
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, staleThreshold)
 	return row
+}
+
+func cloneCompactDetail(detail *Detail) *Detail {
+	if detail == nil {
+		return nil
+	}
+	clone := *detail
+	if len(detail.Asignaciones) > 0 {
+		clone.Asignaciones = append([]*db.Asignacion(nil), detail.Asignaciones...)
+	}
+	return &clone
+}
+
+func cloneReanimationCandidates(rows []ReanimationCandidate) []ReanimationCandidate {
+	if len(rows) == 0 {
+		return nil
+	}
+	out := make([]ReanimationCandidate, len(rows))
+	copy(out, rows)
+	for i := range out {
+		if len(out[i].Leases) > 0 {
+			out[i].Leases = append([]WorkLease(nil), out[i].Leases...)
+		}
+	}
+	return out
+}
+
+func (s *Service) getOrBuildCompactDetail(nombre string, fn func() (*Detail, error)) (*Detail, error) {
+	now := time.Now().UTC()
+	s.cacheMu.Lock()
+	if cached, ok := s.compactDetailCache[nombre]; ok && cached.detail != nil && now.Before(cached.expires) {
+		detail := cloneCompactDetail(cached.detail)
+		s.cacheMu.Unlock()
+		return detail, nil
+	}
+	if flight, ok := s.compactDetailFlight[nombre]; ok {
+		done := flight.done
+		s.cacheMu.Unlock()
+		<-done
+		return cloneCompactDetail(flight.detail), flight.err
+	}
+	flight := &compactDetailFlight{done: make(chan struct{})}
+	s.compactDetailFlight[nombre] = flight
+	s.cacheMu.Unlock()
+
+	detail, err := fn()
+
+	s.cacheMu.Lock()
+	if err == nil && detail != nil {
+		s.compactDetailCache[nombre] = cachedCompactDetail{
+			detail:  cloneCompactDetail(detail),
+			expires: now.Add(compactDetailCacheTTL),
+		}
+	}
+	flight.detail = cloneCompactDetail(detail)
+	flight.err = err
+	delete(s.compactDetailFlight, nombre)
+	close(flight.done)
+	s.cacheMu.Unlock()
+	return cloneCompactDetail(detail), err
+}
+
+func (s *Service) getOrBuildActiveReanimationSchedule(key string, fn func() ([]ReanimationCandidate, error)) ([]ReanimationCandidate, error) {
+	now := time.Now().UTC()
+	s.cacheMu.Lock()
+	if cached, ok := s.reanimCache[key]; ok && now.Before(cached.expires) {
+		rows := cloneReanimationCandidates(cached.rows)
+		s.cacheMu.Unlock()
+		return rows, nil
+	}
+	if flight, ok := s.reanimFlight[key]; ok {
+		done := flight.done
+		s.cacheMu.Unlock()
+		<-done
+		return cloneReanimationCandidates(flight.rows), flight.err
+	}
+	flight := &reanimationScheduleFlight{done: make(chan struct{})}
+	s.reanimFlight[key] = flight
+	s.cacheMu.Unlock()
+
+	rows, err := fn()
+
+	s.cacheMu.Lock()
+	if err == nil {
+		s.reanimCache[key] = cachedReanimationSchedule{
+			rows:    cloneReanimationCandidates(rows),
+			expires: now.Add(activeReanimationScheduleCacheTTL),
+		}
+	}
+	flight.rows = cloneReanimationCandidates(rows)
+	flight.err = err
+	delete(s.reanimFlight, key)
+	close(flight.done)
+	s.cacheMu.Unlock()
+	return cloneReanimationCandidates(rows), err
 }
 
 func (s *Service) currentOrLastSessionForAgent(nombre string) (*db.Sesion, error) {

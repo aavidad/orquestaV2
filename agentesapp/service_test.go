@@ -46,6 +46,8 @@ type fakeStore struct {
 	hotHandlesCalls    int
 	listAssignmentsCalls int
 	listTasksCalls       int
+	listAgentsCalls      int
+	checkReanimationsCalls int
 	pendingVotesCalls  int
 	openProposalsCalls int
 	pausedAgent        string
@@ -106,9 +108,13 @@ func (f *fakeStore) GetConnector(ref string) (*db.Conector, error) {
 	return f.connector, nil
 }
 
-func (f *fakeStore) ListAgents() ([]*db.Agente, error) { return f.agents, nil }
+func (f *fakeStore) ListAgents() ([]*db.Agente, error) {
+	f.listAgentsCalls++
+	return f.agents, nil
+}
 
 func (f *fakeStore) CheckReanimations() ([]*db.Agente, error) {
+	f.checkReanimationsCalls++
 	now := time.Now().UTC()
 	var out []*db.Agente
 	for _, item := range f.agents {
@@ -2235,6 +2241,57 @@ func TestBuildReanimationScheduleActivosDescartaAsignacionesResidualesSinTrabajo
 	}
 	if store.listAssignmentsCalls != 1 || store.listTasksCalls != 1 {
 		t.Fatalf("activeOnly deberia usar cargas bulk unicas: assignments=%d tasks=%d", store.listAssignmentsCalls, store.listTasksCalls)
+	}
+}
+
+func TestBuildDetailCompactReutilizaCacheCorta(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(42)
+	store := &fakeStore{
+		agents: []*db.Agente{{Nombre: "Codex2", Rol: "programador", Activo: true, Habilitado: true}},
+		assignments: []*db.Asignacion{{Agente: "Codex2", ProyectoSlug: "orquestador", Estado: db.AsignacionActiva, Nota: "microciclo_exclusivo"}},
+		sessions: []*db.Sesion{{ID: 9, Agente: "Codex2", ProyectoID: &proyectoID, Activa: true, Estado: "activa", Inicio: now}},
+		runtimes: []*db.RuntimeInstance{{ID: 7, Agente: "Codex2", LogicalState: "activo"}},
+		canonicalHandles: []*db.RuntimeHandle{{ID: 7, Agente: "Codex2", Estado: "activo", Transporte: "tmux", HandleKind: "session"}},
+		tasks: []*db.Tarea{{ID: 41, Titulo: "Frente Codex", Estado: db.EstadoEnProgreso, ProyectoID: &proyectoID, Agente: ptr("Codex2"), Modulo: "cmd"}},
+	}
+	svc := NewService(store, nil)
+
+	if _, err := svc.BuildDetailCompact("Codex2"); err != nil {
+		t.Fatalf("BuildDetailCompact #1: %v", err)
+	}
+	if _, err := svc.BuildDetailCompact("Codex2"); err != nil {
+		t.Fatalf("BuildDetailCompact #2: %v", err)
+	}
+	if store.listAssignmentsCalls != 1 || store.listTasksCalls != 1 || store.getActiveCalls != 1 {
+		t.Fatalf("cache compacta no aplicada: assignments=%d tasks=%d active=%d", store.listAssignmentsCalls, store.listTasksCalls, store.getActiveCalls)
+	}
+}
+
+func TestBuildReanimationScheduleActivosReutilizaCacheCorta(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(7)
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "enfriamiento", MotivoPausa: "worker bloqueado por cuota", ReanimarAt: timePtr(now.Add(-2 * time.Minute))},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex1", ProyectoSlug: "orquestador", Estado: db.AsignacionActiva, Nota: "microciclo_exclusivo"},
+		},
+		tasks: []*db.Tarea{
+			{ID: 41, Titulo: "Frente Codex", Estado: db.EstadoBloqueada, ProyectoID: &proyectoID, Agente: ptr("Codex1"), Modulo: "cmd"},
+		},
+	}
+	svc := NewService(store, nil)
+
+	if _, err := svc.BuildReanimationSchedule(true, true); err != nil {
+		t.Fatalf("BuildReanimationSchedule #1: %v", err)
+	}
+	if _, err := svc.BuildReanimationSchedule(true, true); err != nil {
+		t.Fatalf("BuildReanimationSchedule #2: %v", err)
+	}
+	if store.listAgentsCalls != 1 || store.checkReanimationsCalls != 1 || store.listAssignmentsCalls != 1 || store.listTasksCalls != 1 {
+		t.Fatalf("cache reanimaciones no aplicada: agents=%d due=%d assignments=%d tasks=%d", store.listAgentsCalls, store.checkReanimationsCalls, store.listAssignmentsCalls, store.listTasksCalls)
 	}
 }
 
