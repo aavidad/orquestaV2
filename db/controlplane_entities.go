@@ -9680,7 +9680,7 @@ func newBootstrapRuntimeLeaseSelection(order *RuntimeOrder, startOrderID int64, 
 	}
 }
 
-func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHandle, runtime *RuntimeInstance, observed bool) (*RuntimeOrder, int64, []int64, int64, error) {
+func runtimeBootstrapLeaseResolverTarget(handle *RuntimeHandle, runtime *RuntimeInstance) (string, *int64, int64) {
 	agente := ""
 	var proyectoID *int64
 	var sesionID int64
@@ -9702,6 +9702,97 @@ func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHand
 			sesionID = *runtime.SesionID
 		}
 	}
+	return agente, proyectoID, sesionID
+}
+
+func runtimeBootstrapLeaseSelectionCandidate(order *RuntimeOrder, mailboxID, targetSesionID int64, handle *RuntimeHandle, runtime *RuntimeInstance, observed bool) (*bootstrapRuntimeLeaseSelection, error) {
+	startOrderID, mailboxIDs, orderSesionID := runtimeBootstrapLeaseFromOrder(order)
+	startOrder, err := runtimeBootstrapLeaseStartOrder(order, startOrderID)
+	if err != nil {
+		return nil, err
+	}
+	if orderSesionID <= 0 {
+		orderSesionID = runtimeBootstrapLeaseSesionID(order, startOrder)
+	}
+	if !observed && startOrder != nil && runtimeBootstrapLeaseTieneReceiptUtil(mapFromJSON(startOrder.ResultadoJSON)) {
+		return nil, nil
+	}
+	mailboxIDs, err = runtimeBootstrapLeaseMailboxIDsVigentesParaSeleccion(order, startOrder)
+	if err != nil {
+		return nil, err
+	}
+	if len(mailboxIDs) == 0 || !runtimeBootstrapLeaseIncluyeMailbox(mailboxIDs, mailboxID) {
+		return nil, nil
+	}
+	if targetSesionID > 0 && orderSesionID > 0 && orderSesionID != targetSesionID {
+		return nil, nil
+	}
+	score := runtimeBootstrapLeaseAffinityScore(order, startOrder, handle, runtime, targetSesionID)
+	candidate := newBootstrapRuntimeLeaseSelection(order, startOrderID, mailboxIDs, orderSesionID, score)
+	return &candidate, nil
+}
+
+func runtimeBootstrapLeaseStartOrder(order *RuntimeOrder, startOrderID int64) (*RuntimeOrder, error) {
+	if startOrderID <= 0 || order == nil || startOrderID == order.ID {
+		return nil, nil
+	}
+	return GetRuntimeOrder(startOrderID)
+}
+
+func runtimeBootstrapLeaseMailboxIDsVigentesParaSeleccion(order *RuntimeOrder, startOrder *RuntimeOrder) ([]int64, error) {
+	for _, candidateMailboxIDs := range runtimeBootstrapLeaseMailboxIDsConFallbackFuente(order, startOrder) {
+		vigentes, err := runtimeBootstrapLeaseMailboxIDsVigentes(candidateMailboxIDs)
+		if err != nil {
+			return nil, err
+		}
+		if len(vigentes) > 0 {
+			return vigentes, nil
+		}
+	}
+	return nil, nil
+}
+
+func runtimeBootstrapLeaseIncluyeMailbox(mailboxIDs []int64, mailboxID int64) bool {
+	if mailboxID <= 0 {
+		return true
+	}
+	for _, candidateMailboxID := range mailboxIDs {
+		if candidateMailboxID == mailboxID {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeBootstrapLeaseSelectionMejora(candidate, selected bootstrapRuntimeLeaseSelection, targetSesionID int64) bool {
+	candidateMatchesTargetSession := runtimeBootstrapLeaseSelectionMatchesTargetSession(candidate, targetSesionID)
+	selectedMatchesTargetSession := runtimeBootstrapLeaseSelectionMatchesTargetSession(selected, targetSesionID)
+	if candidateMatchesTargetSession != selectedMatchesTargetSession {
+		return candidateMatchesTargetSession
+	}
+	if candidate.score != selected.score {
+		return candidate.score > selected.score
+	}
+	switch {
+	case runtimeBootstrapLeaseResumeDerivadoPrefiereStart(candidate.order, selected.order):
+		return false
+	case runtimeBootstrapLeaseResumeDerivadoPrefiereStart(selected.order, candidate.order):
+		return true
+	case runtimeBootstrapLeaseFuenteLigadaPrefiereSobreStart(candidate.order, selected.order):
+		return true
+	case runtimeBootstrapLeaseFuenteLigadaPrefiereSobreStart(selected.order, candidate.order):
+		return false
+	default:
+		return candidate.order.ID >= selected.order.ID
+	}
+}
+
+func runtimeBootstrapLeaseSelectionMatchesTargetSession(selection bootstrapRuntimeLeaseSelection, targetSesionID int64) bool {
+	return targetSesionID > 0 && selection.sesionID == targetSesionID
+}
+
+func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHandle, runtime *RuntimeInstance, observed bool) (*RuntimeOrder, int64, []int64, int64, error) {
+	agente, proyectoID, sesionID := runtimeBootstrapLeaseResolverTarget(handle, runtime)
 	if agente == "" {
 		return nil, 0, nil, 0, nil
 	}
@@ -9713,87 +9804,21 @@ func resolverBootstrapRuntimeLeaseConFiltro(mailboxID int64, handle *RuntimeHand
 	}
 	var selected *bootstrapRuntimeLeaseSelection
 	for _, order := range candidates {
-		startOrderID, mailboxIDs, orderSesionID := runtimeBootstrapLeaseFromOrder(order)
-		var startOrder *RuntimeOrder
-		if startOrderID > 0 && startOrderID != order.ID {
-			startOrder, err = GetRuntimeOrder(startOrderID)
-			if err != nil {
-				return nil, 0, nil, 0, err
-			}
-			if orderSesionID <= 0 {
-				orderSesionID = runtimeBootstrapLeaseSesionID(order, startOrder)
-			}
+		candidate, candidateErr := runtimeBootstrapLeaseSelectionCandidate(order, mailboxID, targetSesionID, handle, runtime, observed)
+		if candidateErr != nil {
+			return nil, 0, nil, 0, candidateErr
 		}
-		if !observed && startOrder != nil && runtimeBootstrapLeaseTieneReceiptUtil(mapFromJSON(startOrder.ResultadoJSON)) {
+		if candidate == nil {
 			continue
 		}
-		mailboxIDs = nil
-		for _, candidateMailboxIDs := range runtimeBootstrapLeaseMailboxIDsConFallbackFuente(order, startOrder) {
-			vigentes, vigentesErr := runtimeBootstrapLeaseMailboxIDsVigentes(candidateMailboxIDs)
-			if vigentesErr != nil {
-				return nil, 0, nil, 0, vigentesErr
-			}
-			if len(vigentes) == 0 {
-				continue
-			}
-			mailboxIDs = vigentes
-			break
-		}
-		if len(mailboxIDs) == 0 {
-			continue
-		}
-		if mailboxID > 0 {
-			match := false
-			for _, candidateMailboxID := range mailboxIDs {
-				if candidateMailboxID == mailboxID {
-					match = true
-					break
-				}
-			}
-			if !match {
-				continue
-			}
-		}
-		if targetSesionID > 0 && orderSesionID > 0 && orderSesionID != targetSesionID {
-			continue
-		}
-		orderMatchesTargetSession := targetSesionID > 0 && orderSesionID == targetSesionID
-		score := runtimeBootstrapLeaseAffinityScore(order, startOrder, handle, runtime, targetSesionID)
 		if selected == nil {
-			candidate := newBootstrapRuntimeLeaseSelection(order, startOrderID, mailboxIDs, orderSesionID, score)
-			selected = &candidate
+			selected = candidate
 			continue
 		}
-		selectedMatchesTargetSession := targetSesionID > 0 && selected.sesionID == targetSesionID
-		if orderMatchesTargetSession != selectedMatchesTargetSession {
-			if !orderMatchesTargetSession {
-				continue
-			}
-			candidate := newBootstrapRuntimeLeaseSelection(order, startOrderID, mailboxIDs, orderSesionID, score)
-			selected = &candidate
+		if !runtimeBootstrapLeaseSelectionMejora(*candidate, *selected, targetSesionID) {
 			continue
 		}
-		if score < selected.score {
-			continue
-		}
-		if score == selected.score {
-			switch {
-			case runtimeBootstrapLeaseResumeDerivadoPrefiereStart(order, selected.order):
-				continue
-			case runtimeBootstrapLeaseResumeDerivadoPrefiereStart(selected.order, order):
-				// Prefiere la start fuente frente al resume derivado.
-			case runtimeBootstrapLeaseFuenteLigadaPrefiereSobreStart(order, selected.order):
-				// Prefiere la bootstrap fuente cuando está enlazada a la start derivada.
-			case runtimeBootstrapLeaseFuenteLigadaPrefiereSobreStart(selected.order, order):
-				continue
-			default:
-				if order.ID < selected.order.ID {
-					continue
-				}
-			}
-		}
-		candidate := newBootstrapRuntimeLeaseSelection(order, startOrderID, mailboxIDs, orderSesionID, score)
-		selected = &candidate
+		selected = candidate
 	}
 	if selected == nil {
 		return nil, 0, nil, sesionID, nil

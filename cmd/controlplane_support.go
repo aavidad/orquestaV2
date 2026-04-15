@@ -4534,15 +4534,15 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 			total++
 			continue
 		}
-		if covered, _, _, err := db.RuntimeMailboxCubiertoPorBootstrapPendiente(msg.ID, handle, runtimeInstance); err != nil {
+		if blocked, err := runtimeMailboxBloqueadaPorBootstrapPendiente(msg, handle, runtimeInstance); err != nil {
 			return total, err
-		} else if covered && !runtimeMailboxBootstrapPendientePermiteGuidanceDurable(msg, handle) {
+		} else if blocked {
 			continue
 		}
 		if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliverySessionResume {
 			continue
 		}
-		if !runtimeHandleListaParaDispatchSessionResumeTMUX(handle) {
+		if !runtimeHandleListaParaDispatchSessionResumeTMUX(handle, runtimeInstance) {
 			continue
 		}
 		dispatch, err := encolarRuntimeMailboxSessionResumeSiCorresponde(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID, "runtime_mailbox_session_resume", "runtime_mailbox_session_resume_supersede")
@@ -4557,9 +4557,9 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 }
 
 func encolarRuntimeMailboxSessionResumeSiCorresponde(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, texto, externalSessionID, auditAction, supersedeAction string) (bool, error) {
-	if covered, _, _, err := db.RuntimeMailboxCubiertoPorBootstrapPendiente(msg.ID, handle, runtimeInstance); err != nil {
+	if blocked, err := runtimeMailboxBloqueadaPorBootstrapPendiente(msg, handle, runtimeInstance); err != nil {
 		return false, err
-	} else if covered && !runtimeMailboxBootstrapPendientePermiteGuidanceDurable(msg, handle) {
+	} else if blocked {
 		return false, nil
 	}
 	if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
@@ -4763,6 +4763,23 @@ func reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox []*d
 
 func runtimeMailboxBootstrapPendientePermiteGuidanceDurable(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle) bool {
 	return runtimeMailboxGuidanceDurablePersistibleEnInbox(msg) && runtimeMailboxGuidanceDurableUsaInbox(handle)
+}
+
+func runtimeMailboxBloqueadaPorBootstrapPendiente(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance) (bool, error) {
+	if msg == nil {
+		return false, nil
+	}
+	covered, _, _, err := db.RuntimeMailboxCubiertoPorBootstrapPendiente(msg.ID, handle, runtimeInstance)
+	if err != nil {
+		return false, err
+	}
+	if !covered || runtimeMailboxBootstrapPendientePermiteGuidanceDurable(msg, handle) {
+		return false, nil
+	}
+	if runtimeTMUXSessionResumeWorkerReady(handle) {
+		return false, nil
+	}
+	return true, nil
 }
 
 func runtimeHandleListaParaDispatchBootstrapTMUX(handle *db.RuntimeHandle) bool {
@@ -5046,7 +5063,7 @@ func runtimeHandleListaParaDispatchInteractivo(handle *db.RuntimeHandle) bool {
 	return ready
 }
 
-func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle) bool {
+func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle, runtime *db.RuntimeInstance) bool {
 	if handle == nil {
 		return false
 	}
@@ -5068,7 +5085,51 @@ func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle) b
 		return true
 	}
 	ready, _ := snap.ReadyForTextDispatch(time.Now().UTC(), time.Minute)
+	if !ready &&
+		strings.EqualFold(strings.TrimSpace(view.State), "running") &&
+		runtimeTMUXSessionResumePuedeDespacharPorRuntimeCanonico(runtime) {
+		return true
+	}
 	return ready
+}
+
+func runtimeTMUXSessionResumeWorkerReady(handle *db.RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON))
+	if err != nil || snap == nil {
+		return false
+	}
+	view := snap.View(time.Now().UTC(), time.Minute)
+	if view == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(view.Driver), "tmux_cli_session") &&
+		!strings.EqualFold(strings.TrimSpace(view.Transport), "tmux") {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(view.State)) {
+	case "ready", "idle":
+		return true
+	default:
+		return false
+	}
+}
+
+func runtimeTMUXSessionResumePuedeDespacharPorRuntimeCanonico(runtime *db.RuntimeInstance) bool {
+	if runtime == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(runtime.ProcessState), "running") {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(runtime.LogicalState)) {
+	case "esperando_io", "waiting_io":
+		return true
+	default:
+		return false
+	}
 }
 
 func encolarSendInstructionDesdeRuntimeMailbox(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, texto, externalSessionID string) (int64, error) {
