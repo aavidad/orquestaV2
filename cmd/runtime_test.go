@@ -28,6 +28,7 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	var ordersLimitQuery string
 	var wakeReq map[string]any
 	var processMailboxReq map[string]any
+	var processAutonomiaReq map[string]any
 	var clearMailboxReq map[string]any
 	var clearTasksReq map[string]any
 	var purgeOrdersReq map[string]any
@@ -238,6 +239,9 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 		case r.URL.Path == "/api/runtime/process-mailbox" && r.Method == http.MethodPost:
 			_ = json.NewDecoder(r.Body).Decode(&processMailboxReq)
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 3})
+		case r.URL.Path == "/api/runtime/process-autonomia" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&processAutonomiaReq)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 5})
 		case r.URL.Path == "/api/runtime-checkpoints/latest":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"checkpoint": map[string]any{
@@ -362,6 +366,18 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	}
 	if got, _ := processMailboxReq["proyecto"].(string); got != "orquestador" {
 		t.Fatalf("request process mailbox sin proyecto esperado: %+v", processMailboxReq)
+	}
+
+	outProcessAutonomia := capturarStdout(t, func() {
+		if err := runtimeProcesarAutonomiaCmd.RunE(runtimeProcesarAutonomiaCmd, nil); err != nil {
+			t.Fatalf("runtime procesar-autonomia via api: %v", err)
+		}
+	})
+	if !strings.Contains(outProcessAutonomia, "count=5") {
+		t.Fatalf("salida runtime procesar-autonomia inesperada:\n%s", outProcessAutonomia)
+	}
+	if len(processAutonomiaReq) != 0 {
+		t.Fatalf("request process autonomia deberia ser vacia: %+v", processAutonomiaReq)
 	}
 
 	if err := runtimeMailboxLimpiarCmd.Flags().Set("to", "Codex2"); err != nil {

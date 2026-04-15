@@ -2577,8 +2577,11 @@ func TestAPIProyectoMicrocicloActivaOperacionAutonomiaYTarea(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get operacion: %v", err)
 	}
-	if op.EstadoOperativo != db.ProyectoOperativoActivo || !op.ResumeAutomatico || op.MaxAgentes != 1 {
+	if op.EstadoOperativo != db.ProyectoOperativoActivo || !op.ResumeAutomatico || op.MaxAgentes != 3 {
 		t.Fatalf("operacion inesperada: %+v", op)
+	}
+	if resp.Resultado.Policy.MaxWorkers != 3 {
+		t.Fatalf("policy max_workers inesperado: %+v", resp.Resultado.Policy)
 	}
 	asignacion, err := db.GetAsignacionActivaAgente("Codex1")
 	if err != nil {
@@ -4250,5 +4253,29 @@ func TestAPIProyectoCockpitAlineaAgentesActivosConStatusVisible(t *testing.T) {
 	}
 	if len(resp.Cockpit.AgentesActivos) != 1 || resp.Cockpit.AgentesActivos[0].Nombre != "Codex3" {
 		t.Fatalf("cockpit deberia alinear agentes visibles con status: %+v", resp.Cockpit.AgentesActivos)
+	}
+}
+
+func TestAPIRuntimeProcessMailboxReseteaThrottleDeReevaluacion(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	resetRuntimeMailboxReevaluationGate()
+
+	if !runtimeMailboxShouldReevaluate("session_resume", 41, 33) {
+		t.Fatalf("primer intento deberia permitirse")
+	}
+	if runtimeMailboxShouldReevaluate("session_resume", 41, 33) {
+		t.Fatalf("segundo intento inmediato deberia quedar throttled")
+	}
+
+	body := bytes.NewReader([]byte(`{"to_agente":"claude1"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/runtime/process-mailbox", body)
+	rec := httptest.NewRecorder()
+	apiHandlerRuntimeProcessMailbox(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status process-mailbox inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	if !runtimeMailboxShouldReevaluate("session_resume", 41, 33) {
+		t.Fatalf("el handler process-mailbox deberia limpiar el throttle para reevaluar de inmediato")
 	}
 }

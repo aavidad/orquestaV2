@@ -64,11 +64,11 @@ func activarMicrocicloProyecto(ref string, req proyectoMicrocicloRequest) (*proy
 	if err := asegurarAsignacionExclusivaMicrociclo(proyecto, agente); err != nil {
 		return nil, err
 	}
-	operacion, err := activarOperacionMicrociclo(proyecto.ID)
+	policy, err := activarPoliticaMicrociclo(proyecto.Slug, agente, req)
 	if err != nil {
 		return nil, err
 	}
-	policy, err := activarPoliticaMicrociclo(proyecto.Slug, agente, req)
+	operacion, err := activarOperacionMicrociclo(proyecto.ID, microcicloMaxAgentes(policy))
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +389,7 @@ func validarAgenteMicrociclo(raw string) (string, error) {
 	return strings.TrimSpace(info.Nombre), nil
 }
 
-func activarOperacionMicrociclo(proyectoID int64) (*db.ProyectoOperacion, error) {
+func activarOperacionMicrociclo(proyectoID int64, maxAgentes int) (*db.ProyectoOperacion, error) {
 	op, err := db.GetProyectoOperacion(proyectoID)
 	if err != nil {
 		return nil, err
@@ -397,7 +397,7 @@ func activarOperacionMicrociclo(proyectoID int64) (*db.ProyectoOperacion, error)
 	op.EstadoOperativo = db.ProyectoOperativoActivo
 	op.Motivo = "microrefactor_loop"
 	op.MinAgentes = 1
-	op.MaxAgentes = 1
+	op.MaxAgentes = maxAgentes
 	op.ResumeAutomatico = true
 	if op.ObjetivoPct <= 0 {
 		op.ObjetivoPct = 100
@@ -406,6 +406,20 @@ func activarOperacionMicrociclo(proyectoID int64) (*db.ProyectoOperacion, error)
 		return nil, err
 	}
 	return db.GetProyectoOperacion(proyectoID)
+}
+
+func microcicloMaxAgentes(policy *db.ProyectoAutonomia) int {
+	maxAgentes := controlPlaneConfigIntOrDefault("microciclo_premium_max_agents", 3)
+	if maxAgentes <= 0 {
+		maxAgentes = 3
+	}
+	if policy != nil && policy.MaxWorkers > 0 && policy.MaxWorkers < maxAgentes {
+		maxAgentes = policy.MaxWorkers
+	}
+	if maxAgentes <= 0 {
+		maxAgentes = 1
+	}
+	return maxAgentes
 }
 
 func proyectoUsaContinuidadMicrocicloPremium(proyectoID int64) bool {
@@ -427,7 +441,7 @@ func activarPoliticaMicrociclo(proyectoSlug, agente string, req proyectoMicrocic
 		Enabled:              true,
 		ObjetivoGeneral:      firstNonEmpty(strings.TrimSpace(req.ObjetivoGeneral), objetivoGeneralMicrocicloDefault()),
 		DefinitionOfDoneJSON: firstNonEmpty(strings.TrimSpace(req.DefinitionOfDoneJSON), definitionOfDoneMicrocicloDefault()),
-		MaxWorkers:           1,
+		MaxWorkers:           microcicloMaxAgentes(nil),
 		SupervisorAgente:     agente,
 		ReviewerAgente:       "",
 		ReserveReviewer:      false,

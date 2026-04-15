@@ -137,62 +137,122 @@ func (s *Service) IntentarAutoasignarTareaPipelineLocal(proyectoSlug, agente str
 		return nil, nil
 	}
 	paso, err := s.CalcularSiguientePasoPipelineLocalDeterminista(proyectoSlug)
-	if err != nil || paso == nil || paso.TareaObjetivo == nil {
+	if err != nil {
 		return nil, err
+	}
+	if tarea, ok, err := s.autoasignarPasoPipelineLocalDeterminista(paso, agente); err != nil {
+		return nil, err
+	} else if ok {
+		return tarea, nil
+	}
+	return s.autoasignarTareaPremiumAcotadaLibre(proyectoSlug, agente)
+}
+
+func (s *Service) autoasignarPasoPipelineLocalDeterminista(paso *PasoPipelineLocalDeterminista, agente string) (*TareaPipelineLocal, bool, error) {
+	if paso == nil || paso.TareaObjetivo == nil {
+		return nil, false, nil
 	}
 	if paso.EtapaObjetivo != nil &&
 		tareaPipelineLocalRequiereContratoPremium(strings.TrimSpace(paso.EtapaObjetivo.Carril)) &&
 		tareaPipelineLocalDebeAcotarseAntesDePremium(paso.TareaObjetivo) {
-		return nil, nil
+		return nil, false, nil
 	}
 	switch strings.ToLower(strings.TrimSpace(paso.AccionTarea)) {
 	case "especificar", "implementar", "corregir", "revisar":
 	default:
+		return nil, false, nil
+	}
+	return s.autoasignarTareaPipelineLocalObjetivo(paso.TareaObjetivo.ID, agente)
+}
+
+func (s *Service) autoasignarTareaPremiumAcotadaLibre(proyectoSlug, agente string) (*TareaPipelineLocal, error) {
+	if s == nil || s.taskProvider == nil {
 		return nil, nil
 	}
-	actual, err := s.taskActionProvider.GetTask(paso.TareaObjetivo.ID)
+	tareas, err := s.taskProvider.ListProjectTasks(strings.TrimSpace(proyectoSlug))
 	if err != nil {
 		return nil, err
 	}
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		candidato := tareaPipelineLocalDesdeDB(tarea)
+		if !tareaPipelineLocalTieneContratoPremium(candidato) || tareaPipelineLocalEsFrontierPremium(candidato) {
+			continue
+		}
+		if tareaPipelineLocalDebeAcotarseAntesDePremium(candidato) {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaLibre, db.TareaBacklog:
+		case db.TareaAsignada, db.TareaEnProgreso:
+			if tarea.Agente == nil {
+				continue
+			}
+			actual := strings.TrimSpace(*tarea.Agente)
+			if !strings.EqualFold(actual, agente) && !strings.EqualFold(actual, "orquesta") {
+				continue
+			}
+		default:
+			continue
+		}
+		if actualizada, ok, err := s.autoasignarTareaPipelineLocalObjetivo(tarea.ID, agente); err != nil {
+			return nil, err
+		} else if ok {
+			return actualizada, nil
+		}
+	}
+	return nil, nil
+}
+
+func (s *Service) autoasignarTareaPipelineLocalObjetivo(tareaID int64, agente string) (*TareaPipelineLocal, bool, error) {
+	if tareaID <= 0 {
+		return nil, false, nil
+	}
+	actual, err := s.taskActionProvider.GetTask(tareaID)
+	if err != nil {
+		return nil, false, err
+	}
 	if actual == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 	cambioReal := false
 	switch actual.Estado {
 	case db.TareaLibre, db.TareaBacklog:
 		if err := s.taskActionProvider.TakeTask(actual.ID, agente); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		cambioReal = true
 	case db.TareaAsignada, db.TareaEnProgreso:
 		if tareaPipelineLocalPuedeRecuperarseDesdeOrquesta(tareaPipelineLocalDesdeDB(actual)) {
 			if err := s.taskActionProvider.ReassignTask(actual.ID, agente); err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			cambioReal = true
 		}
 	}
 	actual, err = s.taskActionProvider.GetTask(actual.ID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if actual == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 	if actual.Estado != db.TareaEnProgreso && actual.Agente != nil && strings.EqualFold(strings.TrimSpace(*actual.Agente), agente) {
 		if err := s.taskActionProvider.StartTask(actual.ID, strings.TrimSpace(*actual.Agente)); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		cambioReal = true
 	}
 	actual, err = s.taskActionProvider.GetTask(actual.ID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if !cambioReal {
-		return nil, nil
+		return nil, false, nil
 	}
-	return tareaPipelineLocalDesdeDB(actual), nil
+	return tareaPipelineLocalDesdeDB(actual), true, nil
 }
 
 func tareaPipelineLocalRequiereContratoPremium(carril string) bool {
@@ -213,6 +273,13 @@ func tareaPipelineLocalTieneContratoPremium(tarea *TareaPipelineLocal) bool {
 		return true
 	}
 	return len(tarea.WriteSet) > 0 && strings.TrimSpace(tarea.TestsMinimos) != ""
+}
+
+func tareaPipelineLocalEsFrontierPremium(tarea *TareaPipelineLocal) bool {
+	if tarea == nil {
+		return false
+	}
+	return strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:premium_frontier")
 }
 
 func tareaPipelineLocalPuedeRecuperarseDesdeOrquesta(tarea *TareaPipelineLocal) bool {

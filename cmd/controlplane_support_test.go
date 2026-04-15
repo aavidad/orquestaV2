@@ -981,6 +981,23 @@ func TestRowDebeMigrarRuntimeLegacyATMUXNoMigraTMUXNiCuotaBloqueada(t *testing.T
 	}
 }
 
+func TestErrorMigracionRuntimeLegacyTMUXIgnorable(t *testing.T) {
+	casosTrue := []error{
+		nil,
+		fmt.Errorf("tmux kill-session: can't find session: orq-claude2-083122"),
+		fmt.Errorf("tmux kill-session: no server running on /tmp/tmux-1000/default"),
+		fmt.Errorf("failed to connect to server"),
+	}
+	for _, err := range casosTrue {
+		if !errorMigracionRuntimeLegacyTMUXIgnorable(err) {
+			t.Fatalf("deberia ignorar error=%v", err)
+		}
+	}
+	if errorMigracionRuntimeLegacyTMUXIgnorable(fmt.Errorf("permiso denegado")) {
+		t.Fatal("no deberia ignorar errores no relacionados con tmux obsoleto")
+	}
+}
+
 func TestOrdenarHandlesParaPresupuestoVivoPrefiereTMUXSobreLegacy(t *testing.T) {
 	legacy := &db.RuntimeHandle{
 		ID:           1,
@@ -10405,6 +10422,66 @@ func TestProcesarRuntimeMailboxBatchReactivaPremiumAutonomiaSinHandleConTrabajoA
 	}
 }
 
+func TestProcesarRuntimeMailboxBatchConsumeAutonomiaDeAgenteRetirado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexRetirado", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexRetirado", proyectoID, "microciclo_exclusivo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if err := db.RetirarAgente("CodexRetirado"); err != nil {
+		t.Fatalf("retirar agente: %v", err)
+	}
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "CodexRetirado",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","texto":"retoma el frente"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox autonomia: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime mailbox: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia consumir mailbox de agente retirado, got=%d", n)
+	}
+
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil {
+		t.Fatalf("get runtime mailbox: %v", err)
+	}
+	if msg == nil || !strings.EqualFold(strings.TrimSpace(msg.Estado), "consumido") {
+		t.Fatalf("mailbox deberia quedar consumido: %+v", msg)
+	}
+
+	agente := "CodexRetirado"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar start para agente retirado: %+v", orders)
+	}
+}
+
 func TestProcesarRuntimeMailboxBatchReactivaPremiumAutonomiaSinHandleIgnoraCapacidadPoolLocal(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -14255,6 +14332,191 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReactivaPremiumSinRuntimeNiHandl
 	}
 	if !strings.Contains(orders[0].PayloadJSON, `"motivo":"agente_sin_runtime_activo"`) {
 		t.Fatalf("start sin motivo esperado: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchAutoasignaPremiumLibreSinSesion(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.UpsertProyectoOperacion(&db.ProyectoOperacion{
+		ProyectoID:       proyectoID,
+		EstadoOperativo:  db.ProyectoOperativoActivo,
+		Motivo:           "microrefactor_loop",
+		ObjetivoPct:      100,
+		MinAgentes:       1,
+		MaxAgentes:       3,
+		Prioridad:        100,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "frente premium"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		INSERT INTO runtime_handles (agente, proyecto_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at)
+		VALUES ('Gemini1', ?, 'tmux', 'session', 'orq-gemini1-fallida', 'fallido', '{"driver":"tmux_cli_session"}', CURRENT_TIMESTAMP)
+	`, proyectoID); err != nil {
+		t.Fatalf("insert handle fallido: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      microcicloRefactorTituloDefault,
+		Descripcion: descripcionMicrocicloDefault(&db.Proyecto{Slug: "orquestador", RutaAbs: filepath.Join(tmp, "orquestador")}),
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea libre: %v", err)
+	}
+
+	n, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if n < 1 {
+		t.Fatalf("deberia autoasignar premium libre sin sesion y encolar start, got=%d", n)
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Agente == nil || strings.TrimSpace(*tarea.Agente) != "Gemini1" || tarea.Estado != db.TareaEnProgreso {
+		t.Fatalf("la tarea libre deberia quedar tomada y arrancada en Gemini1: %+v", tarea)
+	}
+
+	agente := "Gemini1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "start" {
+		t.Fatalf("deberia encolar start para premium idle sin sesion: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"motivo":"premium_idle_autoassigned"`) {
+		t.Fatalf("start sin motivo esperado: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchAbreFrentePremiumSiNoHayLibreDeterminista(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente actual: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.UpsertProyectoOperacion(&db.ProyectoOperacion{
+		ProyectoID:       proyectoID,
+		EstadoOperativo:  db.ProyectoOperativoActivo,
+		Motivo:           "microrefactor_loop",
+		ObjetivoPct:      100,
+		MinAgentes:       1,
+		MaxAgentes:       3,
+		Prioridad:        100,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:       proyectoID,
+		Enabled:          true,
+		MaxWorkers:       3,
+		SupervisorAgente: "orquesta",
+		EstadoAutonomia:  db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "frente premium"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		INSERT INTO runtime_handles (agente, proyecto_id, transporte, handle_kind, handle_ref, estado, metadata_json, last_seen_at)
+		VALUES ('Gemini1', ?, 'tmux', 'session', 'orq-gemini1-fallida', 'fallido', '{"driver":"tmux_cli_session"}', CURRENT_TIMESTAMP)
+	`, proyectoID); err != nil {
+		t.Fatalf("insert handle fallido: %v", err)
+	}
+	tareaActualID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Trabajo premium ya en progreso",
+		Descripcion: "WRITE_SET: cmd/controlplane_support.go\nTests minimos: go test ./cmd -run 'TestProcesarAutonomiaAgentesBatch.*'",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea actual: %v", err)
+	}
+	if err := db.TomarTarea(tareaActualID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea actual: %v", err)
+	}
+	if err := db.IniciarTarea(tareaActualID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea actual: %v", err)
+	}
+
+	n, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if n < 1 {
+		t.Fatalf("deberia abrir o reutilizar un frente premium y encolar start, got=%d", n)
+	}
+
+	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas: %v", err)
+	}
+	var abierta *db.Tarea
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.ID == tareaActualID {
+			continue
+		}
+		if tarea.Agente != nil && strings.TrimSpace(*tarea.Agente) == "Gemini1" &&
+			(tarea.Estado == db.TareaAsignada || tarea.Estado == db.TareaEnProgreso) {
+			abierta = tarea
+			break
+		}
+	}
+	if abierta == nil {
+		t.Fatalf("deberia dejar un frente premium activo para Gemini1, tareas=%+v", tareas)
+	}
+
+	agente := "Gemini1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "start" {
+		t.Fatalf("deberia encolar start para premium idle con frente derivado: %+v", orders)
 	}
 }
 

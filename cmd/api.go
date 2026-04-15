@@ -551,6 +551,11 @@ type apiRuntimeProcessMailboxResponse struct {
 	Count int  `json:"count"`
 }
 
+type apiRuntimeProcessAutonomiaResponse struct {
+	OK    bool `json:"ok"`
+	Count int  `json:"count"`
+}
+
 type apiRuntimeProcessMailboxRequest struct {
 	ToAgente string `json:"to_agente,omitempty"`
 	Proyecto string `json:"proyecto,omitempty"`
@@ -762,6 +767,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtime-checkpoints/", apiRouterRuntimeCheckpoints)
 	mux.HandleFunc("/api/runtime/wake", apiHandlerRuntimeWake)
 	mux.HandleFunc("/api/runtime/process-mailbox", apiHandlerRuntimeProcessMailbox)
+	mux.HandleFunc("/api/runtime/process-autonomia", apiHandlerRuntimeProcessAutonomia)
 	mux.HandleFunc("/api/runtime/ollama-pool/launch", apiHandlerOllamaPoolLaunch)
 	mux.HandleFunc("/api/runtime/ollama-pool/input", apiHandlerOllamaPoolInput)
 	mux.HandleFunc("/api/runtime/ollama-pool/status", apiHandlerOllamaPoolStatus)
@@ -5191,12 +5197,29 @@ func apiHandlerRuntimeProcessMailbox(w http.ResponseWriter, r *http.Request) {
 		}
 		filter.ProyectoID = &p.ID
 	}
+	resetRuntimeMailboxReevaluationGate()
 	count, err := procesarRuntimeMailboxBatchConFiltro(filter)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
 	}
 	apiWriteJSON(w, http.StatusOK, apiRuntimeProcessMailboxResponse{
+		OK:    true,
+		Count: count,
+	})
+}
+
+func apiHandlerRuntimeProcessAutonomia(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	resetAutonomiaActiveSessionsObservationGate()
+	count, err := (dbAutomationService{}).ProcesarAutonomiaAgentesBatch()
+	if err != nil {
+		apiError(w, http.StatusInternalServerError, err)
+		return
+	}
+	apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
 		OK:    true,
 		Count: count,
 	})

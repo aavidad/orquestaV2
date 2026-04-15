@@ -1301,6 +1301,15 @@ func procesarRuntimeMailboxPorAPI(toAgente, proyecto string) (*apiRuntimeProcess
 	return &resp, true, nil
 }
 
+func procesarAutonomiaPorAPI() (*apiRuntimeProcessAutonomiaResponse, bool, error) {
+	var resp apiRuntimeProcessAutonomiaResponse
+	ok, err := apiPost("/api/runtime/process-autonomia", map[string]any{}, &resp)
+	if !ok || err != nil {
+		return nil, ok, err
+	}
+	return &resp, true, nil
+}
+
 func cargarAsignacionesDesdeAPI(query url.Values) ([]*db.Asignacion, bool, error) {
 	var resp apiAsignacionesResponse
 	ok, err := apiGetQuery("/api/asignaciones", query, &resp)

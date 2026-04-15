@@ -966,6 +966,43 @@ func TestIntentarAutoasignarTareaPipelineLocalPermitePremiumFrontierCanonico(t *
 	}
 }
 
+func TestIntentarAutoasignarTareaPipelineLocalRecuperaMicrofrenteLibreSiElPasoGlobalNoAplica(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{ID: 70, Titulo: "Auditoria server-first CLI/API/web y transporte real", Estado: db.TareaLibre, Prioridad: db.PrioridadAlta},
+		{
+			ID:          71,
+			Titulo:      "Runtime mailbox/session_resume",
+			Estado:      db.TareaLibre,
+			Prioridad:   db.PrioridadAlta,
+			Descripcion: "Write-set exclusivo: cmd/controlplane_support.go\nTests minimos: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*' -count=1",
+			Notas:       "autonomia:microrefactor_loop",
+		},
+	}})
+	service.SetTaskActionProvider(&fakeTaskActionProvider{
+		tareas: map[int64]*db.Tarea{
+			70: {ID: 70, Titulo: "Auditoria server-first CLI/API/web y transporte real", Estado: db.TareaLibre, Prioridad: db.PrioridadAlta},
+			71: {
+				ID:          71,
+				Titulo:      "Runtime mailbox/session_resume",
+				Estado:      db.TareaLibre,
+				Prioridad:   db.PrioridadAlta,
+				Descripcion: "Write-set exclusivo: cmd/controlplane_support.go\nTests minimos: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*' -count=1",
+				Notas:       "autonomia:microrefactor_loop",
+			},
+		},
+	})
+
+	tarea, err := service.IntentarAutoasignarTareaPipelineLocal("orquestador", "Gemini1")
+	if err != nil {
+		t.Fatalf("IntentarAutoasignarTareaPipelineLocal: %v", err)
+	}
+	if tarea == nil || tarea.ID != 71 || tarea.Estado != string(db.TareaEnProgreso) || tarea.Agente != "Gemini1" {
+		t.Fatalf("deberia tomar el microfrente premium acotado libre cuando el paso global no aplica: %+v", tarea)
+	}
+}
+
 func TestConstruirDespachoPipelineLocalUsaCarrilRevision(t *testing.T) {
 	paso := &PasoPipelineLocalDeterminista{
 		ProyectoSlug: "orquestador",

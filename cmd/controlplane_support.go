@@ -4173,6 +4173,18 @@ func intentarReactivarRuntimeMailboxSinHandle(msg *db.RuntimeMailboxMessage, sna
 	if agente == "" {
 		return false, nil
 	}
+	infoAgente, err := agenteIfExists(agente)
+	if err != nil {
+		return false, err
+	}
+	if infoAgente == nil || !infoAgente.Habilitado {
+		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return false, err
+		}
+		db.Audit("orquesta", "runtime_mailbox_consumida_agente_retirado", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("agente=%s proyecto_id=%d kind=%s", agente, proyecto.ID, strings.TrimSpace(msg.Kind)))
+		return true, nil
+	}
 	kind := strings.TrimSpace(msg.Kind)
 	switch kind {
 	case db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh, "watchdog":
@@ -6069,6 +6081,11 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 		return procesadas, err
 	}
 	procesadas += reactivadosSinRuntime
+	autoasignadosPremiumSinSesion, err := procesarAutoasignacionPremiumSinSesionBatch(rows, tareasActivasPorAgente)
+	if err != nil {
+		return procesadas, err
+	}
+	procesadas += autoasignadosPremiumSinSesion
 	for _, row := range rows {
 		if row.Agente == nil || !rowPermiteAutoRecuperacion(row, now) {
 			continue
@@ -6248,6 +6265,102 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 	return procesadas, nil
 }
 
+func procesarAutoasignacionPremiumSinSesionBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea) (int, error) {
+	procesadas := 0
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		agente := strings.TrimSpace(row.Agente.Nombre)
+		if agente == "" || row.OpenTasks > 0 || row.MailboxPending > 0 || len(tareasActivasPorAgente[agente]) > 0 {
+			continue
+		}
+		if !proyectoUsaContinuidadMicrocicloPremium(valorProyectoID(rowProyectoIDPreferido(row))) {
+			continue
+		}
+		if rowTieneRuntimeUtilParaAutoasignacionPremium(row) {
+			continue
+		}
+		if disponible, _, err := autonomiaCuentaCompartidaDisponible(agente); err != nil {
+			return procesadas, err
+		} else if !disponible {
+			continue
+		}
+		proyectoID := rowProyectoIDPreferido(row)
+		if proyectoID == nil || *proyectoID <= 0 {
+			continue
+		}
+		proyecto, err := runtimesService.GetProject(strconv.FormatInt(*proyectoID, 10))
+		if err != nil {
+			return procesadas, err
+		}
+		if proyecto == nil {
+			continue
+		}
+		tarea, err := capacidadService.IntentarAutoasignarTareaPipelineLocal(proyecto.Slug, agente)
+		if err != nil {
+			return procesadas, err
+		}
+		if tarea == nil {
+			tarea, err = asegurarFrentePremiumAgenteIdle(row.Agente, proyecto)
+			if err != nil {
+				return procesadas, err
+			}
+		}
+		if tarea == nil {
+			continue
+		}
+		if err := cerrarSemillaPremiumSiDerivaAFrenteAcotado(agente, proyecto.ID, tarea); err != nil {
+			return procesadas, err
+		}
+		reactivado, err := encolarReactivacionAgenteProyectoSiProcede(agente, proyecto, "premium_idle_autoassigned")
+		if err != nil {
+			return procesadas, err
+		}
+		if !reactivado {
+			continue
+		}
+		db.Audit("orquesta", "autonomia_premium_idle_autoassigned", "proyecto", proyecto.ID,
+			fmt.Sprintf("agente=%s tarea_id=%d detalle=%s", agente, tarea.ID, strings.TrimSpace(row.DetalleOperativo)))
+		procesadas++
+	}
+	return procesadas, nil
+}
+
+func rowTieneRuntimeUtilParaAutoasignacionPremium(row agentesapp.Row) bool {
+	if row.Runtime != nil {
+		return true
+	}
+	if row.Handle == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(row.Handle.Estado)) {
+	case "activo", "active", "pausado", "paused":
+		return true
+	default:
+		return false
+	}
+}
+
+func asegurarFrentePremiumAgenteIdle(agente *db.Agente, proyecto *db.Proyecto) (*capacidadapp.TareaPipelineLocal, error) {
+	if agente == nil || proyecto == nil {
+		return nil, nil
+	}
+	policy, err := supervisionService.GetProjectPolicy(strings.TrimSpace(proyecto.Slug))
+	if err != nil || policy == nil || !policy.Enabled {
+		return nil, err
+	}
+	res, err := asegurarTrabajoContinuoPremium(policy, proyecto, agente)
+	if err != nil || res.SeedTaskID <= 0 {
+		return nil, err
+	}
+	tarea, err := tareasService.Get(res.SeedTaskID)
+	if err != nil || tarea == nil {
+		return nil, err
+	}
+	return tareaPipelineLocalDesdeTareaDB(tarea), nil
+}
+
 func procesarTareasActivasFueraDeOrquestacionBatch(tareasActivasPorAgente map[string][]*db.Tarea, rowsPorAgente map[string]agentesapp.Row) (int, error) {
 	procesadas := 0
 	for agente, tareas := range tareasActivasPorAgente {
@@ -6337,6 +6450,9 @@ func procesarMigracionRuntimeLegacyTMUXBatch(rows []agentesapp.Row, now time.Tim
 		}
 		stopOrderID, startOrderID, err := db.EncolarReinicioCoordinadoRuntimeHandle(handle, proyectoID, "migrar a tmux", "orquesta")
 		if err != nil {
+			if errorMigracionRuntimeLegacyTMUXIgnorable(err) {
+				continue
+			}
 			return total, err
 		}
 		detalleProyecto := "-"
@@ -6348,6 +6464,25 @@ func procesarMigracionRuntimeLegacyTMUXBatch(rows []agentesapp.Row, now time.Tim
 		total++
 	}
 	return total, nil
+}
+
+func errorMigracionRuntimeLegacyTMUXIgnorable(err error) bool {
+	if err == nil {
+		return true
+	}
+	raw := strings.ToLower(strings.TrimSpace(err.Error()))
+	switch {
+	case raw == "":
+		return true
+	case strings.Contains(raw, "can't find session"):
+		return true
+	case strings.Contains(raw, "no server running"):
+		return true
+	case strings.Contains(raw, "failed to connect to server"):
+		return true
+	default:
+		return false
+	}
 }
 
 func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea) (int, error) {
@@ -6504,6 +6639,9 @@ func procesarSesionesTMUXHuerfanasAutonomiaBatch(now time.Time) (int, error) {
 		seenSessions[sessionName] = true
 		aplicado, err := controlruntime.DetenerSesionTMUXMetadata(handle.MetadataJSON)
 		if err != nil {
+			if errorMigracionRuntimeLegacyTMUXIgnorable(err) {
+				continue
+			}
 			return procesadas, err
 		}
 		if !aplicado {
