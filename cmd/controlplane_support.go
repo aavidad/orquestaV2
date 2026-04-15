@@ -7462,11 +7462,30 @@ func sesionActivaRuntimeOrderEsContinuidadDurableVigente(order *db.RuntimeOrder,
 	case "pendiente", "tomada", "ejecutando":
 		return runtimeOrderSigueBloqueandoMailbox(order, time.Now().UTC())
 	case "completada":
-		return runtimeOrderMailboxOnlyResult(order.ResultadoJSON) &&
-			runtimeOrderMatchesCurrentMailboxDeliveryAttempt(order, currentSessionID, currentSignature)
+		return runtimeOrderCompletedMailboxAttemptStillBlocksSesionActiva(order, currentSessionID, currentSignature)
 	default:
 		return false
 	}
+}
+
+func runtimeOrderCompletedMailboxAttemptStillBlocksSesionActiva(order *db.RuntimeOrder, currentSessionID, currentSignature string) bool {
+	if order == nil || !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) {
+		return false
+	}
+	if !runtimeOrderMatchesCurrentMailboxDeliveryAttempt(order, currentSessionID, currentSignature) {
+		return false
+	}
+	reference := order.UpdatedAt
+	if order.FinishedAt != nil && !order.FinishedAt.IsZero() {
+		reference = order.FinishedAt.UTC()
+	}
+	if reference.IsZero() {
+		reference = order.CreatedAt
+	}
+	if reference.IsZero() {
+		return false
+	}
+	return time.Since(reference.UTC()) <= autonomiaContinueNudgeInterval()
 }
 
 func runtimeOrderMatchesCurrentHandleOSessionAttempt(order *db.RuntimeOrder, handleID int64, currentSessionID, currentSignature string) bool {
