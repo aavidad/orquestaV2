@@ -738,6 +738,47 @@ func TestRuntimeDiagnosticoIssuesDetectaResumeOrderPendingYRestartLoop(t *testin
 	}
 }
 
+func TestRuntimeDiagnosticoOcultaRestartLoopSiWorkerActualEstaSano(t *testing.T) {
+	now := time.Date(2026, 4, 6, 22, 40, 0, 0, time.UTC)
+	runtimeDiagnosticoNow = func() time.Time { return now }
+	defer func() { runtimeDiagnosticoNow = func() time.Time { return time.Now().UTC() } }()
+
+	rows := []runtimeDiagnosticoWorkerRow{
+		{
+			Agent:       "Gemini1",
+			State:       "ready",
+			Alive:       true,
+			HeartbeatAt: diagTimePtr(now.Add(-10 * time.Second)),
+			UpdatedAt:   diagTimePtr(now.Add(-10 * time.Second)),
+		},
+	}
+	checkpoints := []*db.RuntimeCheckpoint{
+		{
+			ID:             35149,
+			Agente:         "Gemini1",
+			CheckpointKind: "stop",
+			CreatedAt:      now.Add(-4 * time.Hour),
+			Resumen:        "worker_atascado",
+			Source:         "runtime_order:84350",
+		},
+		{
+			ID:             35154,
+			Agente:         "Gemini1",
+			CheckpointKind: "stop",
+			CreatedAt:      now.Add(-30 * time.Minute),
+			Resumen:        "worker_atascado",
+			Source:         "runtime_order:84379",
+		},
+	}
+
+	issues := runtimeDiagnosticoIssues(rows, nil, nil, checkpoints)
+	for _, issue := range issues {
+		if issue.Code == "restart_loop" {
+			t.Fatalf("no deberia alertar restart_loop si el worker actual esta sano: %+v", issues)
+		}
+	}
+}
+
 func diagTimePtr(ts time.Time) *time.Time {
 	return &ts
 }

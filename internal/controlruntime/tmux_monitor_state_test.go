@@ -239,6 +239,26 @@ func TestTMUXPaneHasActiveTaskDetectaGeminiThinkingConBusquedaReal(t *testing.T)
 	}
 }
 
+func TestTMUXPaneLooksReadyDetectaPromptRealGeminiTrasRespuesta(t *testing.T) {
+	captured := "" +
+		"  cierre del turno anterior y resumen del cambio aplicado.\n" +
+		"\n" +
+		"                                                                ? for shortcuts\n" +
+		"────────────────────────────────────────────────────────────────────────────────\n" +
+		" YOLO Ctrl+Y                                                   1 GEMINI.md file\n" +
+		"▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀\n" +
+		" *   Type your message or @path/to/file\n" +
+		"▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄\n" +
+		" workspace (/directory)         branch                        sandbox\n" +
+		" ~/.../orquestador-gemini1      orq-orquestador-gemini1       no sandbox      …\n"
+	if !tmuxPaneLooksReady(captured) {
+		t.Fatal("el prompt real de Gemini tras responder deberia marcar ready")
+	}
+	if got := tmuxClassifyPaneState(captured); got != workerStatusReady {
+		t.Fatalf("estado de pane inesperado: got=%q want=%q", got, workerStatusReady)
+	}
+}
+
 func TestTMUXPaneHasUsageLimitPromptDetectaClaudeResetHorario(t *testing.T) {
 	captured := "" +
 		"You've hit your limit · resets 2am (Europe/Madrid)\n" +

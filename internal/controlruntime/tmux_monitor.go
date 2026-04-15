@@ -707,11 +707,22 @@ func tmuxPaneHasRecentTextInputPrompt(captured string) bool {
 		if tmuxLineLooksPrompt(trimmed) {
 			return true
 		}
+		if tmuxLineLooksGeminiTextInputPrompt(trimmed) {
+			return true
+		}
 		if strings.Contains(strings.ToLower(trimmed), "how can i help") {
 			return true
 		}
 	}
 	return false
+}
+
+func tmuxLineLooksGeminiTextInputPrompt(line string) bool {
+	line = strings.ToLower(strings.TrimSpace(line))
+	if line == "" {
+		return false
+	}
+	return strings.Contains(line, "type your message or @path/to/file")
 }
 
 func tmuxPaneHasPendingSubmit(captured string) bool {

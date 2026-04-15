@@ -745,7 +745,7 @@ func runtimeDiagnosticoIssues(rows []runtimeDiagnosticoWorkerRow, orders []*db.R
 		}
 	}
 	issues = append(issues, runtimeDiagnosticoResumeIssues(now, aliveByAgent, orders, mailbox)...)
-	issues = append(issues, runtimeDiagnosticoRestartLoopIssues(now, checkpoints)...)
+	issues = append(issues, runtimeDiagnosticoRestartLoopIssues(now, aliveByAgent, checkpoints)...)
 	return issues
 }
 
@@ -825,7 +825,7 @@ func runtimeDiagnosticoResumeIssues(now time.Time, aliveByAgent map[string][]run
 	return issues
 }
 
-func runtimeDiagnosticoRestartLoopIssues(now time.Time, checkpoints []*db.RuntimeCheckpoint) []runtimeDiagnosticoIssue {
+func runtimeDiagnosticoRestartLoopIssues(now time.Time, aliveByAgent map[string][]runtimeDiagnosticoWorkerRow, checkpoints []*db.RuntimeCheckpoint) []runtimeDiagnosticoIssue {
 	issues := make([]runtimeDiagnosticoIssue, 0)
 	counts := map[string]int{}
 	for _, cp := range checkpoints {
@@ -848,6 +848,9 @@ func runtimeDiagnosticoRestartLoopIssues(now time.Time, checkpoints []*db.Runtim
 		if count < runtimeDiagnosticoRestartLoopCount {
 			continue
 		}
+		if runtimeDiagnosticoHasHealthyWorker(aliveByAgent[strings.TrimSpace(agente)], now) {
+			continue
+		}
 		issues = append(issues, runtimeDiagnosticoIssue{
 			Severity: "warn",
 			Code:     "restart_loop",
@@ -855,6 +858,26 @@ func runtimeDiagnosticoRestartLoopIssues(now time.Time, checkpoints []*db.Runtim
 		})
 	}
 	return issues
+}
+
+func runtimeDiagnosticoHasHealthyWorker(rows []runtimeDiagnosticoWorkerRow, now time.Time) bool {
+	for _, row := range rows {
+		if !row.Alive {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(row.State)) {
+		case "ready", "running", "working":
+		default:
+			continue
+		}
+		if row.HeartbeatAt != nil && !row.HeartbeatAt.IsZero() && now.Sub(row.HeartbeatAt.UTC()) <= runtimeDiagnosticoWorkerHeartbeatThreshold {
+			return true
+		}
+		if row.UpdatedAt != nil && !row.UpdatedAt.IsZero() && now.Sub(row.UpdatedAt.UTC()) <= runtimeDiagnosticoWorkerHeartbeatThreshold {
+			return true
+		}
+	}
+	return false
 }
 
 func runtimeDiagnosticoHasSessionResumeWorker(rows []runtimeDiagnosticoWorkerRow) bool {
