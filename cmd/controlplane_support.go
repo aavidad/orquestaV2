@@ -7368,12 +7368,20 @@ func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasAct
 			continue
 		}
 		proyectoID := rowProyectoIDPreferido(row)
-		if proyectoID == nil || *proyectoID <= 0 {
-			continue
+		var proyecto *db.Proyecto
+		if proyectoID != nil && *proyectoID > 0 {
+			proyecto, err = runtimesService.GetProject(strconv.FormatInt(*proyectoID, 10))
+			if err != nil {
+				return procesadas, err
+			}
+		} else {
+			proyecto, err = resolverProyectoReactivacionAgente(agente)
+			if err != nil {
+				return procesadas, err
+			}
 		}
-		proyecto, err := runtimesService.GetProject(strconv.FormatInt(*proyectoID, 10))
-		if err != nil {
-			return procesadas, err
+		if proyecto == nil || proyecto.ID <= 0 {
+			continue
 		}
 		reactivado, err := encolarReactivacionAgenteProyectoSiProcede(agente, proyecto, "agente_sin_runtime_activo")
 		if err != nil {
