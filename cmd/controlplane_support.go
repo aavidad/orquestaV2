@@ -6910,9 +6910,6 @@ func procesarAutoasignacionPremiumSinSesionBatch(rows []agentesapp.Row, tareasAc
 		if agente == "" || row.OpenTasks > 0 || row.MailboxPending > 0 || len(tareasActivasPorAgente[agente]) > 0 {
 			continue
 		}
-		if !proyectoUsaContinuidadMicrocicloPremium(valorProyectoID(rowProyectoIDPreferido(row))) {
-			continue
-		}
 		if rowTieneRuntimeUtilParaAutoasignacionPremium(row) {
 			continue
 		}
@@ -6921,15 +6918,14 @@ func procesarAutoasignacionPremiumSinSesionBatch(rows []agentesapp.Row, tareasAc
 		} else if !disponible {
 			continue
 		}
-		proyectoID := rowProyectoIDPreferido(row)
-		if proyectoID == nil || *proyectoID <= 0 {
-			continue
-		}
-		proyecto, err := runtimesService.GetProject(strconv.FormatInt(*proyectoID, 10))
+		proyecto, err := resolverProyectoAutoasignacionPremiumSinSesion(agente, row)
 		if err != nil {
 			return procesadas, err
 		}
-		if proyecto == nil {
+		if proyecto == nil || proyecto.ID <= 0 {
+			continue
+		}
+		if !proyectoUsaContinuidadMicrocicloPremium(proyecto.ID) {
 			continue
 		}
 		tarea, err := capacidadService.IntentarAutoasignarTareaPipelineLocal(proyecto.Slug, agente)
@@ -6960,6 +6956,42 @@ func procesarAutoasignacionPremiumSinSesionBatch(rows []agentesapp.Row, tareasAc
 		procesadas++
 	}
 	return procesadas, nil
+}
+
+func resolverProyectoAutoasignacionPremiumSinSesion(agente string, row agentesapp.Row) (*db.Proyecto, error) {
+	if proyectoID := rowProyectoIDPreferido(row); proyectoID != nil && *proyectoID > 0 {
+		return runtimesService.GetProject(strconv.FormatInt(*proyectoID, 10))
+	}
+	if proyecto, err := resolverProyectoReactivacionAgente(agente); err != nil {
+		return nil, err
+	} else if proyecto != nil {
+		return proyecto, nil
+	}
+	asignaciones, err := db.ListarAsignaciones(db.FiltroAsignaciones{Agente: &agente})
+	if err != nil {
+		return nil, err
+	}
+	var best *db.Asignacion
+	for _, asignacion := range asignaciones {
+		if asignacion == nil || asignacion.ProyectoID <= 0 {
+			continue
+		}
+		if asignacion.Estado != db.AsignacionPausada {
+			continue
+		}
+		switch strings.TrimSpace(asignacion.Nota) {
+		case "sin_trabajo_reactivacion_automatica", "sin_trabajo_espera_automatica":
+		default:
+			continue
+		}
+		if best == nil || asignacion.ID > best.ID {
+			best = asignacion
+		}
+	}
+	if best == nil {
+		return nil, nil
+	}
+	return runtimesService.GetProject(strconv.FormatInt(best.ProyectoID, 10))
 }
 
 func rowTieneRuntimeUtilParaAutoasignacionPremium(row agentesapp.Row) bool {
