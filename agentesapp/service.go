@@ -611,7 +611,11 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 
 func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 	nombre = strings.TrimSpace(nombre)
-	row, err := s.buildRowForAgent(nombre)
+	mailbox, err := s.listMailboxForAgent(nombre)
+	if err != nil {
+		return nil, err
+	}
+	row, err := s.buildRowForAgentWithMailbox(nombre, mailbox)
 	if err != nil {
 		return nil, err
 	}
@@ -637,10 +641,6 @@ func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 		return nil, err
 	}
 	transcript, err := s.store.ListRuntimeTranscript(db.FiltroRuntimeTranscript{Agente: &nombre, Limit: 80})
-	if err != nil {
-		return nil, err
-	}
-	mailbox, err := s.listMailboxForAgent(nombre)
 	if err != nil {
 		return nil, err
 	}
@@ -674,6 +674,14 @@ func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 }
 
 func (s *Service) buildRowForAgent(nombre string) (Row, error) {
+	mailbox, err := s.listMailboxForAgent(strings.TrimSpace(nombre))
+	if err != nil {
+		return Row{}, err
+	}
+	return s.buildRowForAgentWithMailbox(nombre, mailbox)
+}
+
+func (s *Service) buildRowForAgentWithMailbox(nombre string, mailbox []*db.RuntimeMailboxMessage) (Row, error) {
 	nombre = strings.TrimSpace(nombre)
 	if nombre == "" {
 		return Row{}, fmt.Errorf("agente obligatorio")
@@ -750,10 +758,6 @@ func (s *Service) buildRowForAgent(nombre string) (Row, error) {
 		}
 	}
 
-	mailbox, err := s.listMailboxForAgent(nombre)
-	if err != nil {
-		return Row{}, err
-	}
 	for _, msg := range mailbox {
 		if msg == nil {
 			continue
@@ -925,23 +929,6 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 	if err != nil {
 		return nil, err
 	}
-	activa := true
-	sesiones, err := s.store.ListInspectionSessions(db.FiltroSesionesInspeccion{Activa: &activa})
-	if err != nil {
-		return nil, err
-	}
-	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{})
-	if err != nil {
-		return nil, err
-	}
-	handlesCanonicos, err := s.store.ListCanonicalRuntimeHandles(nil)
-	if err != nil {
-		return nil, err
-	}
-	handlesHistoricos, err := s.store.ListRuntimeHandles(nil)
-	if err != nil {
-		return nil, err
-	}
 	dueAgents, err := s.store.CheckReanimations()
 	if err != nil {
 		return nil, err
@@ -960,61 +947,9 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 			asignacionPorAgente[asignacion.Agente] = asignacion
 		}
 	}
-	sesionPorAgente := map[string]*db.Sesion{}
-	for _, sesion := range sesiones {
-		if sesion == nil {
-			continue
-		}
-		if _, ok := sesionPorAgente[sesion.Agente]; !ok {
-			sesionPorAgente[sesion.Agente] = sesion
-		}
-	}
-	runtimePorAgente := map[string]*db.RuntimeInstance{}
-	for _, runtime := range runtimes {
-		if runtime == nil {
-			continue
-		}
-		actual := runtimePorAgente[runtime.Agente]
-		if actual == nil || runtimeMoment(runtime).After(runtimeMoment(actual)) {
-			runtimePorAgente[runtime.Agente] = runtime
-		}
-	}
-	handlePorAgente := map[string]*db.RuntimeHandle{}
-	if hotHandles, err := s.store.ListRecentOperationalRuntimeHandles(); err == nil {
-		for _, handle := range hotHandles {
-			if handle == nil {
-				continue
-			}
-			actual := handlePorAgente[handle.Agente]
-			if actual == nil || runtimeHandleMoment(handle).After(runtimeHandleMoment(actual)) {
-				handlePorAgente[handle.Agente] = handle
-			}
-		}
-	}
-	for _, handle := range handlesCanonicos {
-		if handle == nil {
-			continue
-		}
-		if _, ok := handlePorAgente[handle.Agente]; ok {
-			continue
-		}
-		handlePorAgente[handle.Agente] = handle
-	}
-	for _, handle := range handlesHistoricos {
-		if handle == nil {
-			continue
-		}
-		actual := handlePorAgente[handle.Agente]
-		if actual == nil {
-			handlePorAgente[handle.Agente] = handle
-			continue
-		}
-		if runtimeHandleMoment(handle).After(runtimeHandleMoment(actual)) && !runtimeHandleSostieneOperacion(actual) {
-			handlePorAgente[handle.Agente] = handle
-		}
-	}
 	openTasksPorAgente := map[string]int{}
 	blockedTasksPorAgente := map[string]int{}
+	leasesByAgent := map[string][]WorkLease{}
 	for _, tarea := range tareas {
 		if tarea == nil || tarea.Agente == nil {
 			continue
@@ -1024,59 +959,9 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 			continue
 		case db.EstadoBloqueada:
 			blockedTasksPorAgente[*tarea.Agente]++
-			continue
+		default:
+			openTasksPorAgente[*tarea.Agente]++
 		}
-		openTasksPorAgente[*tarea.Agente]++
-	}
-
-	now := time.Now().UTC()
-	staleThreshold := workerOutputStaleThreshold(s.store)
-	rowByAgent := map[string]Row{}
-	for _, agente := range agentes {
-		if agente == nil {
-			continue
-		}
-		row := Row{
-			Agente:       agente,
-			Asignacion:   asignacionPorAgente[agente.Nombre],
-			Sesion:       sesionPorAgente[agente.Nombre],
-			Runtime:      runtimePorAgente[agente.Nombre],
-			Handle:       handlePorAgente[agente.Nombre],
-			OpenTasks:    openTasksPorAgente[agente.Nombre],
-			BlockedTasks: blockedTasksPorAgente[agente.Nombre],
-		}
-		if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
-			if view := structured.View(now, time.Minute); view != nil {
-				row.WorkerState = strings.TrimSpace(view.State)
-				row.WorkerAlive = view.Alive
-				row.WorkerReadyAt = view.ReadyAt
-				row.WorkerHeartbeat = view.HeartbeatAt
-				row.WorkerUpdatedAt = view.UpdatedAt
-				row.WorkerLastOutput = view.LastOutputAt
-				row.WorkerLastProgress = view.LastProgressAt
-				row.WorkerExitError = strings.TrimSpace(view.ExitError)
-				row.WorkerSessionRef = strings.TrimSpace(view.SessionRef)
-				row.WorkerRuntimeRef = strings.TrimSpace(view.RuntimeRef)
-				row.WorkerDriver = strings.TrimSpace(view.Driver)
-				row.WorkerTransport = strings.TrimSpace(view.Transport)
-				row.WorkerTMUXSession = strings.TrimSpace(view.TmuxSession)
-				row.WorkerTMUXWindow = strings.TrimSpace(view.TmuxWindow)
-				row.WorkerTMUXPaneID = strings.TrimSpace(view.TmuxPaneID)
-				row.WorkerCanSendInput = view.CanSendInput
-				row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
-				row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
-			}
-		}
-		row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, staleThreshold)
-		rowByAgent[strings.TrimSpace(agente.Nombre)] = row
-	}
-	leasesByAgent := map[string][]WorkLease{}
-	taskByID := map[int64]*db.Tarea{}
-	for _, tarea := range tareas {
-		if tarea == nil || tarea.Agente == nil {
-			continue
-		}
-		taskByID[tarea.ID] = tarea
 		switch tarea.Estado {
 		case db.EstadoAsignada, db.EstadoEnProgreso, db.EstadoBloqueada:
 			agente := strings.TrimSpace(*tarea.Agente)
@@ -1095,6 +980,75 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 	for agente, leases := range leasesByAgent {
 		sort.Slice(leases, func(i, j int) bool { return leases[i].TaskID < leases[j].TaskID })
 		leasesByAgent[agente] = leases
+	}
+
+	now := time.Now().UTC()
+	staleThreshold := workerOutputStaleThreshold(s.store)
+	agenteByName := map[string]*db.Agente{}
+	candidateNames := map[string]struct{}{}
+	for _, agente := range agentes {
+		if agente == nil {
+			continue
+		}
+		name := strings.TrimSpace(agente.Nombre)
+		if name == "" {
+			continue
+		}
+		agenteByName[name] = agente
+		if agente.ReanimarAt == nil {
+			continue
+		}
+		if activeOnly && !agente.Habilitado {
+			continue
+		}
+		due := !agente.ReanimarAt.After(now)
+		if !includeFuture && !due {
+			continue
+		}
+		if activeOnly && !reanimationCandidateHasCanonicalWork(ReanimationCandidate{
+			OpenTasks:    openTasksPorAgente[name],
+			BlockedTasks: blockedTasksPorAgente[name],
+			Leases:       leasesByAgent[name],
+		}) {
+			continue
+		}
+		candidateNames[name] = struct{}{}
+	}
+	for _, agente := range dueAgents {
+		if agente == nil {
+			continue
+		}
+		name := strings.TrimSpace(agente.Nombre)
+		if name == "" {
+			continue
+		}
+		if activeOnly && !agente.Habilitado {
+			continue
+		}
+		if activeOnly && !reanimationCandidateHasCanonicalWork(ReanimationCandidate{
+			OpenTasks:    openTasksPorAgente[name],
+			BlockedTasks: blockedTasksPorAgente[name],
+			Leases:       leasesByAgent[name],
+		}) {
+			continue
+		}
+		candidateNames[name] = struct{}{}
+		if _, ok := agenteByName[name]; !ok {
+			agenteByName[name] = agente
+		}
+	}
+
+	rowByAgent := map[string]Row{}
+	for name := range candidateNames {
+		agente := agenteByName[name]
+		if agente == nil {
+			continue
+		}
+		row, err := s.buildReanimationRowForAgent(agente, asignacionPorAgente[name], openTasksPorAgente[name], blockedTasksPorAgente[name], now, staleThreshold)
+		if err != nil {
+			return nil, err
+		}
+		rowByAgent[name] = row
 	}
 
 	out := make([]ReanimationCandidate, 0, len(rowByAgent)+len(dueAgents))
@@ -1150,7 +1104,10 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 		row, ok := rowByAgent[name]
 		item := candidates[name]
 		if !ok {
-			row = Row{Agente: agente}
+			row, err = s.buildReanimationRowForAgent(agente, asignacionPorAgente[name], openTasksPorAgente[name], blockedTasksPorAgente[name], now, staleThreshold)
+			if err != nil {
+				return nil, err
+			}
 		}
 		item.Name = name
 		item.Role = firstNonEmpty(strings.TrimSpace(agente.Rol), item.Role)
@@ -1193,13 +1150,6 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 		candidates[name] = item
 	}
 	for _, item := range candidates {
-		row := rowByAgent[item.Name]
-		if mailbox, err := s.listMailboxForAgent(item.Name); err == nil {
-			pendientes, err := s.countActionableMailboxPendingForReanimation(mailbox, row.Handle, row.Runtime, taskByID, item.Name)
-			if err == nil {
-				item.MailboxPending = pendientes
-			}
-		}
 		if activeOnly && !reanimationCandidateHasCanonicalWork(item) {
 			continue
 		}
@@ -1227,6 +1177,48 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 	})
 
 	return out, nil
+}
+
+func (s *Service) buildReanimationRowForAgent(agente *db.Agente, asignacion *db.Asignacion, openTasks, blockedTasks int, now time.Time, staleThreshold time.Duration) (Row, error) {
+	if agente == nil {
+		return Row{}, nil
+	}
+	nombre := strings.TrimSpace(agente.Nombre)
+	row := Row{
+			Agente:       agente,
+			Asignacion:   asignacion,
+			OpenTasks:    openTasks,
+			BlockedTasks: blockedTasks,
+	}
+
+	sesiones, err := s.store.ListInspectionSessions(db.FiltroSesionesInspeccion{Agente: &nombre})
+	if err != nil {
+		return Row{}, err
+	}
+	row.Sesion = latestSessionForAgent(sesiones)
+
+	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{Agente: &nombre})
+	if err != nil {
+		return Row{}, err
+	}
+	row.Runtime = latestRuntimeForAgent(runtimes)
+
+	handles, err := s.store.ListCanonicalRuntimeHandles(&nombre)
+	if err != nil {
+		return Row{}, err
+	}
+	row.Handle = latestHandleForAgent(handles)
+
+	if row.Handle == nil {
+		handles, err = s.store.ListRuntimeHandles(&nombre)
+		if err != nil {
+			return Row{}, err
+		}
+		row.Handle = latestHandleForAgent(handles)
+	}
+
+	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, staleThreshold)
+	return row, nil
 }
 
 func reanimationCandidateHasCanonicalWork(item ReanimationCandidate) bool {

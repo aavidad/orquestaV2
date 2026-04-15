@@ -1972,14 +1972,14 @@ func TestBuildDetailMergesMailboxWithoutDuplicates(t *testing.T) {
 	if detail.MailboxPendingVisible != 0 || detail.MailboxCoveredBootstrap != 1 {
 		t.Fatalf("mailbox resumen inesperado: pending=%d covered=%d", detail.MailboxPendingVisible, detail.MailboxCoveredBootstrap)
 	}
-	if len(store.lastMailboxFilter) != 3 {
-		t.Fatalf("mailbox filters=%d, want 3", len(store.lastMailboxFilter))
+	if len(store.lastMailboxFilter) != 2 {
+		t.Fatalf("mailbox filters=%d, want 2", len(store.lastMailboxFilter))
 	}
-	if store.lastMailboxFilter[1].ToAgente == nil || *store.lastMailboxFilter[1].ToAgente != "Codex2" {
-		t.Fatalf("detail inbox filter=%+v", store.lastMailboxFilter[1])
+	if store.lastMailboxFilter[0].ToAgente == nil || *store.lastMailboxFilter[0].ToAgente != "Codex2" {
+		t.Fatalf("detail inbox filter=%+v", store.lastMailboxFilter[0])
 	}
-	if store.lastMailboxFilter[2].FromAgente == nil || *store.lastMailboxFilter[2].FromAgente != "Codex2" {
-		t.Fatalf("detail outbox filter=%+v", store.lastMailboxFilter[2])
+	if store.lastMailboxFilter[1].FromAgente == nil || *store.lastMailboxFilter[1].FromAgente != "Codex2" {
+		t.Fatalf("detail outbox filter=%+v", store.lastMailboxFilter[1])
 	}
 }
 
