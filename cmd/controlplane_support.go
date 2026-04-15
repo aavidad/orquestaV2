@@ -6593,41 +6593,9 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 		}
 		rowsPorAgente[nombre] = row
 	}
-	tareas, err := db.ListarTareas(db.FiltroTareas{})
+	tareasActivasPorAgente, tareasBloqueadasPorAgente, bloqueosPorTarea, err := cargarTareasYBloqueosAutonomiaPorAgente()
 	if err != nil {
 		return 0, err
-	}
-	tareasActivasPorAgente := map[string][]*db.Tarea{}
-	tareasBloqueadasPorAgente := map[string][]*db.Tarea{}
-	for _, tarea := range tareas {
-		if tarea == nil || tarea.Agente == nil {
-			continue
-		}
-		switch tarea.Estado {
-		case db.EstadoAsignada, db.EstadoEnProgreso:
-			agente := strings.TrimSpace(*tarea.Agente)
-			if agente != "" {
-				tareasActivasPorAgente[agente] = append(tareasActivasPorAgente[agente], tarea)
-			}
-		case db.EstadoBloqueada:
-			agente := strings.TrimSpace(*tarea.Agente)
-			if agente != "" {
-				tareasBloqueadasPorAgente[agente] = append(tareasBloqueadasPorAgente[agente], tarea)
-			}
-		}
-	}
-	resumenBloqueos, err := db.ListarResumenBloqueos()
-	if err != nil {
-		return 0, err
-	}
-	bloqueosPorTarea := map[int64]db.ResumenBloqueo{}
-	for _, bloqueo := range resumenBloqueos {
-		if bloqueo.ID <= 0 {
-			continue
-		}
-		if _, ok := bloqueosPorTarea[bloqueo.ID]; !ok {
-			bloqueosPorTarea[bloqueo.ID] = bloqueo
-		}
 	}
 	openTasksProjected := map[string]int{}
 	for _, row := range rows {
@@ -6716,6 +6684,28 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 		return procesadas, err
 	}
 	procesadas += reactivadosSinRuntime
+	if reactivadosSinRuntime > 0 {
+		rows, err = agentesService.BuildPanelRows()
+		if err != nil {
+			return procesadas, err
+		}
+		rowsPorAgente = map[string]agentesapp.Row{}
+		for _, row := range rows {
+			if row.Agente == nil {
+				continue
+			}
+			nombre := strings.ToLower(strings.TrimSpace(row.Agente.Nombre))
+			if nombre == "" {
+				continue
+			}
+			rowsPorAgente[nombre] = row
+		}
+		tareasActivasPorAgente, tareasBloqueadasPorAgente, bloqueosPorTarea, err = cargarTareasYBloqueosAutonomiaPorAgente()
+		if err != nil {
+			return procesadas, err
+		}
+		openTasksProjected = openTasksProjectedFromRows(rows)
+	}
 	autoasignadosPremiumSinSesion, err := procesarAutoasignacionPremiumSinSesionBatch(rows, tareasActivasPorAgente)
 	if err != nil {
 		return procesadas, err
@@ -6898,6 +6888,46 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 		resetStatusSnapshotCache()
 	}
 	return procesadas, nil
+}
+
+func cargarTareasYBloqueosAutonomiaPorAgente() (map[string][]*db.Tarea, map[string][]*db.Tarea, map[int64]db.ResumenBloqueo, error) {
+	tareas, err := db.ListarTareas(db.FiltroTareas{})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	tareasActivasPorAgente := map[string][]*db.Tarea{}
+	tareasBloqueadasPorAgente := map[string][]*db.Tarea{}
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.Agente == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.EstadoAsignada, db.EstadoEnProgreso:
+			agente := strings.TrimSpace(*tarea.Agente)
+			if agente != "" {
+				tareasActivasPorAgente[agente] = append(tareasActivasPorAgente[agente], tarea)
+			}
+		case db.EstadoBloqueada:
+			agente := strings.TrimSpace(*tarea.Agente)
+			if agente != "" {
+				tareasBloqueadasPorAgente[agente] = append(tareasBloqueadasPorAgente[agente], tarea)
+			}
+		}
+	}
+	resumenBloqueos, err := db.ListarResumenBloqueos()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	bloqueosPorTarea := map[int64]db.ResumenBloqueo{}
+	for _, bloqueo := range resumenBloqueos {
+		if bloqueo.ID <= 0 {
+			continue
+		}
+		if _, ok := bloqueosPorTarea[bloqueo.ID]; !ok {
+			bloqueosPorTarea[bloqueo.ID] = bloqueo
+		}
+	}
+	return tareasActivasPorAgente, tareasBloqueadasPorAgente, bloqueosPorTarea, nil
 }
 
 func procesarAutoasignacionPremiumSinSesionBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea) (int, error) {
