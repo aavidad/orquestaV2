@@ -5384,6 +5384,19 @@ func consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg *db.RuntimeMailboxMess
 	if msg == nil || handle == nil || !runtimeMailboxKindEphemeral(strings.TrimSpace(msg.Kind)) {
 		return false, nil
 	}
+	if detalle, obsoleta, err := runtimeMailboxObsoletaPorTareaActivaActual(msg); err != nil {
+		return false, err
+	} else if obsoleta {
+		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+			return false, err
+		}
+		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return false, err
+		}
+		db.Audit("orquesta", "runtime_mailbox_obsoleta_tarea", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("lane=%s agente=%s kind=%s %s", strings.TrimSpace(lane), strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), strings.TrimSpace(detalle)))
+		return true, nil
+	}
 	if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
 		return false, err
 	} else if !canConsume {
@@ -5418,6 +5431,45 @@ func consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg *db.RuntimeMailboxMess
 	db.Audit("orquesta", "runtime_mailbox_obsoleta_worker", "runtime_mailbox", msg.ID,
 		fmt.Sprintf("lane=%s agente=%s kind=%s created_at=%s worker_started_at=%s handle_id=%d", strings.TrimSpace(lane), strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), msg.CreatedAt.UTC().Format(time.RFC3339Nano), startedAt.Format(time.RFC3339Nano), handle.ID))
 	return true, nil
+}
+
+func runtimeMailboxObsoletaPorTareaActivaActual(msg *db.RuntimeMailboxMessage) (string, bool, error) {
+	if msg == nil || msg.ProyectoID == nil {
+		return "", false, nil
+	}
+	payload := mapFromJSON(strings.TrimSpace(msg.PayloadJSON))
+	tareaID := int64PtrFromMap(payload, "tarea_id")
+	if tareaID == nil || *tareaID <= 0 {
+		return "", false, nil
+	}
+	tareaObjetivo, err := tareasService.Get(*tareaID)
+	if err != nil {
+		return "", false, err
+	}
+	agente := strings.TrimSpace(msg.ToAgente)
+	if tareaObjetivo == nil || tareaObjetivo.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tareaObjetivo.Agente), agente) {
+		return fmt.Sprintf("task_id=%d target_task_invalida=true proyecto_id=%d", *tareaID, *msg.ProyectoID), true, nil
+	}
+	switch tareaObjetivo.Estado {
+	case db.TareaAsignada, db.TareaEnProgreso:
+	default:
+		return fmt.Sprintf("task_id=%d target_task_estado=%s proyecto_id=%d", *tareaID, strings.TrimSpace(string(tareaObjetivo.Estado)), *msg.ProyectoID), true, nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{Agente: &agente, ProyectoID: msg.ProyectoID})
+	if err != nil {
+		return "", false, err
+	}
+	candidatas := make([]*db.Tarea, 0, len(tareas))
+	for _, tarea := range tareas {
+		if tareaEsFrentePremiumActivoCompactable(tarea, agente) {
+			candidatas = append(candidatas, tarea)
+		}
+	}
+	canonica := seleccionarFrentePremiumCanonicSesionActiva(candidatas)
+	if canonica == nil || canonica.ID == *tareaID {
+		return "", false, nil
+	}
+	return fmt.Sprintf("task_id=%d active_task_id=%d proyecto_id=%d", *tareaID, canonica.ID, *msg.ProyectoID), true, nil
 }
 
 func consumirRuntimeMailboxBootstrapObservadoSiProcede(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, runtime *db.RuntimeInstance, lane string) (bool, error) {

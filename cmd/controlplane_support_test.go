@@ -19933,6 +19933,130 @@ func TestConsumirRuntimeMailboxObsoletaPorWorkerSiProcedeConsumeNudgePrevioAStar
 	}
 }
 
+func TestConsumirRuntimeMailboxObsoletaPorWorkerSiProcedeConsumeAutonomiaDeTareaYaNoActiva(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	runDir := filepath.Join(tmp, "tmux-mailbox-obsoleta-tarea")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatalf("mkdir runDir: %v", err)
+	}
+	startedAt := time.Now().UTC().Add(-30 * time.Minute)
+	startedRaw := startedAt.Format(time.RFC3339Nano)
+	manifestPath := filepath.Join(runDir, "manifest.json")
+	statusPath := filepath.Join(runDir, "status.json")
+	heartbeatPath := filepath.Join(runDir, "heartbeat.json")
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"claude1","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-claude1-obsoleta","tmux_pane_id":"%33","started_at":"`+startedRaw+`","status_path":"`+statusPath+`","heartbeat_path":"`+heartbeatPath+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","updated_at":"`+startedRaw+`","alive":true,"last_output_at":"`+startedRaw+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+startedRaw+`","started_at":"`+startedRaw+`","last_output_at":"`+startedRaw+`"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-claude1-obsoleta",
+		"tmux_pane_id":          "%33",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	res, err := db.DB.Exec(`INSERT INTO runtime_handles (
+		agente, proyecto_id, transporte, handle_kind, handle_ref, estado, metadata_json, capabilities_json, last_seen_at
+	) VALUES (?,?,?,?,?,?,?, '{}', CURRENT_TIMESTAMP)`,
+		"claude1", proyectoID, "tmux", "session", "orq-claude1-obsoleta/%33", "activo", string(metaJSON))
+	if err != nil {
+		t.Fatalf("insert handle: %v", err)
+	}
+	handleID, _ := res.LastInsertId()
+	handle, err := db.GetRuntimeHandle(handleID)
+	if err != nil {
+		t.Fatalf("get handle: %v", err)
+	}
+
+	tareaViejaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Micro-refactorización cíclica del control plane",
+		Descripcion: "Frente general del control plane.",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea vieja: %v", err)
+	}
+	if err := db.TomarTarea(tareaViejaID, "claude1"); err != nil {
+		t.Fatalf("tomar tarea vieja: %v", err)
+	}
+
+	tareaActualID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Micro-refactorización cíclica del control plane: runtime mailbox/session_resume",
+		Descripcion: "Frente premium acotado.\nWrite-set preferente: cmd/controlplane_support.go, cmd/controlplane_support_test.go\nTests minimos: go test ./cmd -run 'TestConsumirRuntimeMailboxObsoletaPorWorkerSiProcedeConsumeAutonomiaDeTareaYaNoActiva$'",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea actual: %v", err)
+	}
+	if err := db.TomarTarea(tareaActualID, "claude1"); err != nil {
+		t.Fatalf("tomar tarea actual: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente: "server",
+		ToAgente:   "claude1",
+		ProyectoID: &proyectoID,
+		Kind:       "autonomia",
+		PayloadJSON: fmt.Sprintf(
+			`{"accion":"continuar_trabajo","kind":"autonomia","tarea_id":%d,"texto":"sigue"}`,
+			tareaViejaID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("enviar mailbox: %v", err)
+	}
+	msgs, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: strPtr("claude1"), Estado: strPtr("pendiente")})
+	if err != nil || len(msgs) == 0 {
+		t.Fatalf("listar mailbox: %v len=%d", err, len(msgs))
+	}
+
+	consumida, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msgs[0], handle, "bootstrap_tmux", time.Now().UTC())
+	if err != nil {
+		t.Fatalf("consumir mailbox obsoleta por tarea: %v", err)
+	}
+	if !consumida {
+		t.Fatalf("deberia consumir la autonomia que apunta a una tarea ya no activa")
+	}
+
+	estado := "consumido"
+	consumidos, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: strPtr("claude1"), Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar consumidos: %v", err)
+	}
+	if len(consumidos) != 1 || consumidos[0].ID != msgID {
+		t.Fatalf("la mailbox deberia quedar consumida, got=%+v", consumidos)
+	}
+}
+
 func TestConsumirRuntimeMailboxObsoletaPorWorkerSiProcedeNoConsumeInstructionDurable(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
