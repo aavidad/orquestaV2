@@ -285,15 +285,21 @@ func microcicloPremiumAgotado(proyectoID int64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	completada := false
 	for _, tarea := range tareas {
 		if tarea == nil || !esTareaMicrocicloPremium(tarea) {
 			continue
 		}
-		if tarea.Estado == db.TareaCompletada {
-			return true, nil
+		switch tarea.Estado {
+		case db.TareaCompletada:
+			completada = true
+		case db.TareaCancelada:
+			continue
+		default:
+			return false, nil
 		}
 	}
-	return false, nil
+	return completada, nil
 }
 
 func esTareaMicrocicloPremium(tarea *db.Tarea) bool {

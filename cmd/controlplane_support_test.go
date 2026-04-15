@@ -5194,6 +5194,121 @@ func TestProcesarAutonomiaAgentesBatchSesionActivaIdleAbreFrentePremiumMayorSiMi
 	}
 }
 
+func TestAsegurarTrabajoContinuoPremiumNoDeclaraAgotadoSiQuedaMicrocicloAbierto(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.UpsertProyectoOperacion(&db.ProyectoOperacion{
+		ProyectoID:       proyectoID,
+		EstadoOperativo:  db.ProyectoOperativoActivo,
+		Motivo:           "microrefactor_loop",
+		ObjetivoPct:      100,
+		MinAgentes:       1,
+		MaxAgentes:       1,
+		Prioridad:        100,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:       proyectoID,
+		Enabled:          true,
+		MaxWorkers:       1,
+		SupervisorAgente: "Codex1",
+		EstadoAutonomia:  db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	policy, err := db.GetProyectoAutonomia(proyectoID)
+	if err != nil {
+		t.Fatalf("get autonomia: %v", err)
+	}
+	proyecto, err := db.GetProyecto(strconv.FormatInt(proyectoID, 10))
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	agente, err := db.GetAgente("Codex1")
+	if err != nil {
+		t.Fatalf("get agente: %v", err)
+	}
+
+	tareaHistoricaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      microcicloRefactorTituloDefault,
+		Descripcion: "Microfrente premium historico",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea historica: %v", err)
+	}
+	if err := db.TomarTarea(tareaHistoricaID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea historica: %v", err)
+	}
+	if err := db.IniciarTarea(tareaHistoricaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar tarea historica: %v", err)
+	}
+	if err := db.CompletarTarea(tareaHistoricaID, "Codex1", "hecho"); err != nil {
+		t.Fatalf("completar tarea historica: %v", err)
+	}
+
+	tareaAbiertaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      microcicloRefactorTituloDefault,
+		Descripcion: descripcionMicrocicloDefault(proyecto),
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea abierta: %v", err)
+	}
+
+	res, err := asegurarTrabajoContinuoPremium(policy, proyecto, agente)
+	if err != nil {
+		t.Fatalf("asegurar trabajo continuo premium: %v", err)
+	}
+	if res.Created || res.SeedTaskID != tareaAbiertaID {
+		t.Fatalf("deberia reutilizar la microtarea abierta en vez de abrir semilla premium: %+v", res)
+	}
+
+	tareaAbierta, err := db.GetTarea(tareaAbiertaID)
+	if err != nil {
+		t.Fatalf("get tarea abierta: %v", err)
+	}
+	if tareaAbierta.Estado != db.TareaEnProgreso || tareaAbierta.Agente == nil || strings.TrimSpace(*tareaAbierta.Agente) != "Codex1" {
+		t.Fatalf("la microtarea abierta deberia quedar tomada y en progreso: %+v", tareaAbierta)
+	}
+
+	tareas, err := db.ListarTareas(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar tareas: %v", err)
+	}
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.ID == tareaHistoricaID || tarea.ID == tareaAbiertaID {
+			continue
+		}
+		if strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:premium_frontier") {
+			t.Fatalf("no deberia abrir una semilla premium nueva si queda microciclo abierto: %+v", tarea)
+		}
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchSesionActivaIdleCierraSemillaPremiumSiTomaFrenteAcotado(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	autonomiaIdleAutoassignGate.Reset()
@@ -5307,6 +5422,123 @@ func TestProcesarAutonomiaAgentesBatchSesionActivaIdleCierraSemillaPremiumSiToma
 	}
 	if tareaAcotada.Agente == nil || strings.TrimSpace(*tareaAcotada.Agente) != "Codex1" || tareaAcotada.Estado != db.TareaAsignada {
 		t.Fatalf("el frente acotado deberia quedar asignado al agente activo: %+v", tareaAcotada)
+	}
+}
+
+func TestProcesarAutonomiaAgentesBatchSesionActivaIdleCierraSemillaPremiumSiTomaMicrocicloLibre(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	autonomiaIdleAutoassignGate.Reset()
+
+	if err := db.ConfigSet("server_autobootstrap_project_slug", "orquestador"); err != nil {
+		t.Fatalf("config project slug: %v", err)
+	}
+	if err := db.ConfigSet("server_autobootstrap_worker_agents", "Codex1"); err != nil {
+		t.Fatalf("config worker agents: %v", err)
+	}
+	if err := db.RegistrarAgente("CodexSupervisor", "admin"); err != nil {
+		t.Fatalf("registrar supervisor: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:        proyectoID,
+		Enabled:           true,
+		MaxWorkers:        1,
+		SupervisorAgente:  "CodexSupervisor",
+		ReserveSupervisor: true,
+		EstadoAutonomia:   db.AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexSupervisor", proyectoID, "supervision"); err != nil {
+		t.Fatalf("activar asignacion supervisor: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSupervisor",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion supervisor: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "cat-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	semillaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Autonomía premium: abrir siguiente frente mayor útil",
+		Descripcion: "Semilla premium activa",
+		ProyectoID:  &proyectoID,
+		Modulo:      "autonomia",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       "autonomia:premium_frontier",
+	})
+	if err != nil {
+		t.Fatalf("crear semilla premium: %v", err)
+	}
+	if err := db.TomarTarea(semillaID, "Codex1"); err != nil {
+		t.Fatalf("tomar semilla premium: %v", err)
+	}
+	if err := db.IniciarTarea(semillaID, "Codex1"); err != nil {
+		t.Fatalf("iniciar semilla premium: %v", err)
+	}
+
+	tareaMicroID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      microcicloRefactorTituloDefault,
+		Descripcion: descripcionMicrocicloDefault(&db.Proyecto{Slug: "orquestador", RutaAbs: filepath.Join(tmp, "orquestador")}),
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear microtarea libre: %v", err)
+	}
+
+	n, err := procesarAutonomiaSesionActiva(sesion)
+	if err != nil {
+		t.Fatalf("procesar autonomia: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia autoasignar la microtarea libre y encolar continuidad, got=%d", n)
+	}
+
+	semilla, err := db.GetTarea(semillaID)
+	if err != nil {
+		t.Fatalf("get semilla premium: %v", err)
+	}
+	if semilla.Estado != db.TareaCompletada {
+		t.Fatalf("la semilla premium deberia quedar completada tras derivar a una microtarea real: %+v", semilla)
+	}
+
+	tareaMicro, err := db.GetTarea(tareaMicroID)
+	if err != nil {
+		t.Fatalf("get microtarea: %v", err)
+	}
+	if tareaMicro.Agente == nil || strings.TrimSpace(*tareaMicro.Agente) != "Codex1" || tareaMicro.Estado != db.TareaAsignada {
+		t.Fatalf("la microtarea deberia quedar asignada al agente activo: %+v", tareaMicro)
 	}
 }
 
