@@ -2643,15 +2643,19 @@ func procesarRuntimeMailboxBatchConFiltro(filter db.FiltroRuntimeMailbox) (int, 
 	if err != nil {
 		return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX, err
 	}
+	bootstrapPipelineObserved, err := reconciliarRuntimeMailboxPipelineBootstrapActivaBatchConMailbox(mailbox, consumed, snapshot)
+	if err != nil {
+		return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + bootstrapPipelineObserved, err
+	}
 	guidanceInbox, err := reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + guidanceInbox, err
+		return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + bootstrapPipelineObserved + guidanceInbox, err
 	}
 	restarts, err := procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox, consumed, snapshot)
 	if err != nil {
-		return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + guidanceInbox + restarts, err
+		return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + bootstrapPipelineObserved + guidanceInbox + restarts, err
 	}
-	return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + guidanceInbox + restarts, nil
+	return quotaPipelineReconciled + reconciled + interactive + sessionResume + bootstrapTMUX + bootstrapPipelineObserved + guidanceInbox + restarts, nil
 }
 
 func reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
@@ -5047,6 +5051,175 @@ func runtimeMailboxGuidanceDurableUsaInbox(handle *db.RuntimeHandle) bool {
 	driver := strings.TrimSpace(stringMapValue(meta, "driver"))
 	return strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
 		strings.EqualFold(driver, "tmux_cli_session")
+}
+
+func reconciliarRuntimeMailboxPipelineBootstrapActivaBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
+	total := 0
+	now := time.Now().UTC()
+	for _, msg := range mailbox {
+		if msg == nil || !strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") {
+			continue
+		}
+		if _, skip := consumed[msg.ID]; skip {
+			continue
+		}
+		reconciled, err := reconciliarRuntimeMailboxPipelineBootstrapActivaSiProcede(msg, snapshot, now)
+		if err != nil {
+			return total, err
+		}
+		if reconciled {
+			consumed[msg.ID] = struct{}{}
+			total++
+		}
+	}
+	return total, nil
+}
+
+func reconciliarRuntimeMailboxPipelineBootstrapActivaSiProcede(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot, now time.Time) (bool, error) {
+	if msg == nil || snapshot == nil || !strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") {
+		return false, nil
+	}
+	handle, err := snapshot.activeHandle(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	if err != nil || handle == nil {
+		return false, err
+	}
+	if supervisedHandle, _, _, err := snapshot.supervisedHandle(handle); err != nil {
+		return false, err
+	} else if supervisedHandle != nil {
+		handle = supervisedHandle
+	}
+	if !runtimeMailboxGuidanceDurableUsaInbox(handle) {
+		return false, nil
+	}
+	order, err := runtimeMailboxPipelineBootstrapPendingOrder(snapshot, msg, handle.ID)
+	if err != nil || order == nil {
+		return false, err
+	}
+	receiptAt, ok, err := runtimeMailboxPipelineBootstrapReceiptAt(msg, handle, now)
+	if err != nil || !ok {
+		return false, err
+	}
+	if err := completarRuntimeOrderMailboxBootstrapObservada(order, receiptAt); err != nil {
+		return false, err
+	}
+	if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+		return false, err
+	}
+	if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+		return false, err
+	}
+	db.Audit("orquesta", "runtime_mailbox_pipeline_bootstrap_progress", "runtime_mailbox", msg.ID,
+		fmt.Sprintf("agente=%s handle_id=%d receipt_at=%s", strings.TrimSpace(msg.ToAgente), handle.ID, receiptAt.UTC().Format(time.RFC3339Nano)))
+	return true, nil
+}
+
+func runtimeMailboxPipelineBootstrapReceiptAt(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, now time.Time) (time.Time, bool, error) {
+	if msg == nil || handle == nil {
+		return time.Time{}, false, nil
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON))
+	if err != nil || snap == nil {
+		return time.Time{}, false, err
+	}
+	view := snap.View(now.UTC(), 90*time.Second)
+	if view == nil || !view.Alive || view.HeartbeatStale {
+		return time.Time{}, false, nil
+	}
+	payload := mapFromJSON(strings.TrimSpace(msg.PayloadJSON))
+	targetTaskID := int64PtrFromMap(payload, "tarea_objetivo_id")
+	if targetTaskID == nil || *targetTaskID <= 0 {
+		targetTaskID = int64PtrFromMap(payload, "tarea_id")
+	}
+	if msg.ProyectoID == nil || targetTaskID == nil || *targetTaskID <= 0 {
+		return time.Time{}, false, nil
+	}
+	activeTaskID, err := db.GetTareaActivaIDPorAgenteProyecto(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	if err != nil || activeTaskID <= 0 || activeTaskID != *targetTaskID {
+		return time.Time{}, false, err
+	}
+	if view.LastProgressAt != nil && !view.LastProgressAt.IsZero() {
+		receiptAt := view.LastProgressAt.UTC()
+		if receiptAt.After(msg.CreatedAt.UTC()) {
+			return receiptAt, true, nil
+		}
+	}
+	if view.LastOutputAt != nil && !view.LastOutputAt.IsZero() {
+		receiptAt := view.LastOutputAt.UTC()
+		if receiptAt.After(msg.CreatedAt.UTC()) {
+			return receiptAt, true, nil
+		}
+	}
+	return time.Time{}, false, nil
+}
+
+func runtimeMailboxPipelineBootstrapPendingOrder(snapshot *runtimeMailboxBatchSnapshot, msg *db.RuntimeMailboxMessage, handleID int64) (*db.RuntimeOrder, error) {
+	if snapshot == nil || msg == nil || handleID <= 0 {
+		return nil, nil
+	}
+	orders, err := snapshot.ordersForAgentProject(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	if err != nil {
+		return nil, err
+	}
+	var fallback *db.RuntimeOrder
+	for _, order := range orders {
+		if !runtimeOrderMatchesMailboxSendInstructionAttempt(order, msg.ID, handleID) {
+			if runtimeOrderMatchesMailboxSendInstructionByMailbox(order, msg.ID) && fallback == nil {
+				fallback = order
+			}
+			continue
+		}
+		if !runtimeOrderPendienteBootstrapMailboxOnly(order) {
+			continue
+		}
+		return order, nil
+	}
+	if runtimeOrderPendienteBootstrapMailboxOnly(fallback) {
+		return fallback, nil
+	}
+	return nil, nil
+}
+
+func runtimeOrderMatchesMailboxSendInstructionByMailbox(order *db.RuntimeOrder, mailboxID int64) bool {
+	if order == nil || strings.TrimSpace(order.Tipo) != "send_instruction" || mailboxID <= 0 {
+		return false
+	}
+	return runtimeOrderMailboxIDFromJSON(order.PayloadJSON) == mailboxID
+}
+
+func runtimeOrderPendienteBootstrapMailboxOnly(order *db.RuntimeOrder) bool {
+	if order == nil {
+		return false
+	}
+	switch strings.TrimSpace(order.Estado) {
+	case "pendiente", "tomada", "ejecutando":
+	default:
+		return false
+	}
+	reason := runtimeOrderDeferredReason(order.ResultadoJSON)
+	return strings.HasPrefix(strings.TrimSpace(reason), "runtime_handle_bootstrap_only_mailbox_only")
+}
+
+func completarRuntimeOrderMailboxBootstrapObservada(order *db.RuntimeOrder, receiptAt time.Time) error {
+	if order == nil {
+		return nil
+	}
+	result := mapFromJSON(strings.TrimSpace(order.ResultadoJSON))
+	if result == nil {
+		result = map[string]any{}
+	}
+	result["ok"] = true
+	result["deferred"] = false
+	result["mailbox_only"] = true
+	result["delivery_state"] = "delivered"
+	result["dispatch_state"] = "delivered"
+	result["receipt_source"] = "tmux_worker_progress"
+	result["delivery_receipt_at"] = receiptAt.UTC().Format(time.RFC3339Nano)
+	result["deferred_reason"] = "tmux_worker_progress"
+	raw, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	return db.MarcarRuntimeOrderEstado(order.ID, "completada", string(raw), "")
 }
 
 func runtimeMailboxGuidanceDurableTieneEntregaMailboxOnly(snapshot *runtimeMailboxBatchSnapshot, msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle) (bool, error) {
