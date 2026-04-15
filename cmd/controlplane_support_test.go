@@ -18749,6 +18749,16 @@ func TestProcesarAgentesDegradadosAutonomiaBatchBloqueaSinRelevoSiAgenteBloquead
 	if tarea.Estado != db.EstadoBloqueada {
 		t.Fatalf("la tarea deberia quedar bloqueada, got=%s", tarea.Estado)
 	}
+	motivo, err := db.MotivoBloqueoActivoTarea(tareaID)
+	if err != nil {
+		t.Fatalf("motivo bloqueo: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(motivo), "bloqueado_por_cuota") {
+		t.Fatalf("el motivo de bloqueo deberia conservar la causa de cuota, got=%q", motivo)
+	}
+	if !strings.Contains(strings.ToLower(tarea.Notas), "cuota sin relevo sano") {
+		t.Fatalf("la nota deberia reflejar el bloqueo por cuota sin relevo sano: %q", tarea.Notas)
+	}
 }
 
 func TestProcesarAgentesDegradadosAutonomiaBatchReasignaSiAgenteBloqueadoPorCuotaTieneRelevoSano(t *testing.T) {

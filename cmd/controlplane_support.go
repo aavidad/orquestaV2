@@ -6319,7 +6319,7 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 			motivo := construirMotivoAutonomiaAgenteDegradado(row)
 			relevo := seleccionarRelevoAutonomia(rows, openTasksProjected, actual, agente)
 			if relevo == "" {
-				if err := bloquearTareaAutonomiaSinRelevo(actual.ID, agente, motivo, "Bloqueada automáticamente por degradación operativa sin relevo sano"); err != nil {
+				if err := bloquearTareaAutonomiaSinRelevo(actual.ID, agente, motivo, construirNotaBloqueoAutonomiaSinRelevo(row, agente)); err != nil {
 					return procesadas, err
 				}
 				procesadas++
@@ -7558,6 +7558,24 @@ func construirMotivoAutonomiaAgenteDegradado(row agentesapp.Row) string {
 		base += ": " + detalle
 	}
 	return base
+}
+
+func construirNotaBloqueoAutonomiaSinRelevo(row agentesapp.Row, agente string) string {
+	agente = strings.TrimSpace(agente)
+	switch strings.TrimSpace(row.EstadoOperativo) {
+	case "bloqueado_por_cuota":
+		if agente != "" {
+			return fmt.Sprintf("Bloqueada automáticamente en %s por cuota sin relevo sano", agente)
+		}
+		return "Bloqueada automáticamente por cuota sin relevo sano"
+	case "mailbox_atascada":
+		if agente != "" {
+			return fmt.Sprintf("Bloqueada automáticamente en %s por mailbox atascada sin relevo sano", agente)
+		}
+		return "Bloqueada automáticamente por mailbox atascada sin relevo sano"
+	default:
+		return "Bloqueada automáticamente por degradación operativa sin relevo sano"
+	}
 }
 
 func esBloqueoAutonomiaAgenteRecuperable(agente, bloqueadoPor, motivo string) bool {
