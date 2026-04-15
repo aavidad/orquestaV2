@@ -372,6 +372,30 @@ var httpClientOrquesta = &http.Client{
 	},
 }
 
+var httpClientOrquestaRuntimeHeavy = &http.Client{
+	Timeout: 45 * time.Second,
+	Transport: &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           (&net.Dialer{Timeout: 250 * time.Millisecond, KeepAlive: 30 * time.Second}).DialContext,
+		ResponseHeaderTimeout: 30 * time.Second,
+		DisableKeepAlives:     true,
+	},
+}
+
+func apiHTTPClientForPath(method, path string) *http.Client {
+	method = strings.ToUpper(strings.TrimSpace(method))
+	path = strings.TrimSpace(path)
+	if method == http.MethodPost {
+		switch {
+		case strings.HasPrefix(path, "/api/runtime-orders"),
+			strings.HasPrefix(path, "/api/runtime/process-"),
+			path == "/api/agente/tick":
+			return httpClientOrquestaRuntimeHeavy
+		}
+	}
+	return httpClientOrquesta
+}
+
 func shouldPreferAPIClient(args []string) bool {
 	if forceLocalMode(args) {
 		return false
@@ -783,7 +807,8 @@ func apiPost(path string, payload any, dst any) (bool, error) {
 		return true, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := httpClientOrquesta.Do(req)
+	client := apiHTTPClientForPath(http.MethodPost, path)
+	resp, err := client.Do(req)
 	if err != nil {
 		if !serverURLConfiguredExplicitly() {
 			resetServerDiscovery()
@@ -791,7 +816,7 @@ func apiPost(path string, payload any, dst any) (bool, error) {
 				reqRetry, reqErr := http.NewRequest(http.MethodPost, retryBase+path, bytes.NewReader(body))
 				if reqErr == nil {
 					reqRetry.Header.Set("Content-Type", "application/json")
-					if retryResp, retryErr := httpClientOrquesta.Do(reqRetry); retryErr == nil {
+					if retryResp, retryErr := client.Do(reqRetry); retryErr == nil {
 						defer retryResp.Body.Close()
 						if retryResp.StatusCode >= http.StatusOK && retryResp.StatusCode < http.StatusMultipleChoices {
 							if dst == nil {
