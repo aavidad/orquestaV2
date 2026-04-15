@@ -44,6 +44,8 @@ type fakeStore struct {
 	getActiveCalls     int
 	getLastCalls       int
 	hotHandlesCalls    int
+	listAssignmentsCalls int
+	listTasksCalls       int
 	pendingVotesCalls  int
 	openProposalsCalls int
 	pausedAgent        string
@@ -121,6 +123,7 @@ func (f *fakeStore) CheckReanimations() ([]*db.Agente, error) {
 }
 
 func (f *fakeStore) ListAssignments(filter db.FiltroAsignaciones) ([]*db.Asignacion, error) {
+	f.listAssignmentsCalls++
 	if filter.Agente == nil {
 		return f.assignments, nil
 	}
@@ -318,6 +321,7 @@ func (f *fakeStore) ListRuntimeCheckpoints(filter db.FiltroRuntimeCheckpoints) (
 }
 
 func (f *fakeStore) ListTasks(filter db.FiltroTareas) ([]*db.Tarea, error) {
+	f.listTasksCalls++
 	var out []*db.Tarea
 	for _, item := range f.tasks {
 		if item == nil {
@@ -2114,8 +2118,8 @@ func TestBuildDetailCompactEvitaResumenPesadoDeMailbox(t *testing.T) {
 	if store.hotHandlesCalls != 0 {
 		t.Fatalf("compact no deberia barrer handles operativos globales: hotHandlesCalls=%d", store.hotHandlesCalls)
 	}
-	if store.listSessionsCalls != 0 || store.getActiveCalls == 0 {
-		t.Fatalf("compact deberia evitar listar sesiones y usar acceso directo: list=%d active=%d last=%d", store.listSessionsCalls, store.getActiveCalls, store.getLastCalls)
+	if store.listSessionsCalls != 0 || store.getActiveCalls == 0 || store.getLastCalls != 0 {
+		t.Fatalf("compact deberia evitar listar sesiones historicas y usar solo activa: list=%d active=%d last=%d", store.listSessionsCalls, store.getActiveCalls, store.getLastCalls)
 	}
 }
 
@@ -2228,6 +2232,9 @@ func TestBuildReanimationScheduleActivosDescartaAsignacionesResidualesSinTrabajo
 	}
 	if rows[0].Name != "Gemini1" {
 		t.Fatalf("row activa inesperada: %+v", rows[0])
+	}
+	if store.listAssignmentsCalls != 1 || store.listTasksCalls != 1 {
+		t.Fatalf("activeOnly deberia usar cargas bulk unicas: assignments=%d tasks=%d", store.listAssignmentsCalls, store.listTasksCalls)
 	}
 }
 

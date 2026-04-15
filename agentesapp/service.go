@@ -641,13 +641,13 @@ func (s *Service) BuildDetailCompact(nombre string) (*Detail, error) {
 func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 	nombre = strings.TrimSpace(nombre)
 	if compact {
-		row, asignaciones, tareas, err := s.buildOperationalRowContextForAgent(nombre, time.Now().UTC())
+		row, asignaciones, err := s.buildOperationalRowContextForAgentCompact(nombre, time.Now().UTC())
 		if err != nil {
 			return nil, err
 		}
 		return &Detail{
 			Row:                     row,
-			Entity:                  buildAgentEntity(row, tareas),
+			Entity:                  buildAgentEntity(row, nil),
 			Asignaciones:            asignaciones,
 			MailboxTotalCount:       row.MailboxTotal,
 			MailboxPendingVisible:   row.MailboxPending,
@@ -886,6 +886,104 @@ func (s *Service) buildOperationalRowForAgent(nombre string, now time.Time) (Row
 	return row, err
 }
 
+func (s *Service) buildOperationalRowContextForAgentCompact(nombre string, now time.Time) (Row, []*db.Asignacion, error) {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return Row{}, nil, fmt.Errorf("agente obligatorio")
+	}
+
+	agente, err := s.store.GetAgent(nombre)
+	if err != nil {
+		return Row{}, nil, err
+	}
+	if agente == nil {
+		return Row{}, nil, fmt.Errorf("agente no encontrado: %s", nombre)
+	}
+
+	row := Row{Agente: agente}
+
+	asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{Agente: &nombre})
+	if err != nil {
+		return Row{}, nil, err
+	}
+	for _, asignacion := range asignaciones {
+		if asignacion != nil && asignacion.Estado == db.AsignacionActiva {
+			row.Asignacion = asignacion
+			break
+		}
+	}
+
+	sesion, err := s.store.GetActiveSession(nombre, nil)
+	switch {
+	case err == nil:
+		row.Sesion = sesion
+	case err != sql.ErrNoRows:
+		return Row{}, nil, err
+	}
+
+	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{Agente: &nombre})
+	if err != nil {
+		return Row{}, nil, err
+	}
+	row.Runtime = latestRuntimeForAgent(runtimes)
+
+	handles, err := s.store.ListCanonicalRuntimeHandles(&nombre)
+	if err != nil {
+		return Row{}, nil, err
+	}
+	row.Handle = latestHandleForAgent(handles)
+	if row.Handle == nil {
+		handles, err = s.store.ListPassiveRuntimeHandles(&nombre)
+		if err != nil {
+			return Row{}, nil, err
+		}
+		row.Handle = latestHandleForAgent(handles)
+	}
+	if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
+		if view := structured.View(now, time.Minute); view != nil {
+			row.WorkerState = strings.TrimSpace(view.State)
+			row.WorkerAlive = view.Alive
+			row.WorkerReadyAt = view.ReadyAt
+			row.WorkerHeartbeat = view.HeartbeatAt
+			row.WorkerUpdatedAt = view.UpdatedAt
+			row.WorkerLastOutput = view.LastOutputAt
+			row.WorkerLastProgress = view.LastProgressAt
+			row.WorkerExitError = strings.TrimSpace(view.ExitError)
+			row.WorkerSessionRef = strings.TrimSpace(view.SessionRef)
+			row.WorkerRuntimeRef = strings.TrimSpace(view.RuntimeRef)
+			row.WorkerDriver = strings.TrimSpace(view.Driver)
+			row.WorkerTransport = strings.TrimSpace(view.Transport)
+			row.WorkerTMUXSession = strings.TrimSpace(view.TmuxSession)
+			row.WorkerTMUXWindow = strings.TrimSpace(view.TmuxWindow)
+			row.WorkerTMUXPaneID = strings.TrimSpace(view.TmuxPaneID)
+			row.WorkerCanSendInput = view.CanSendInput
+			row.WorkerExternalSessionID = strings.TrimSpace(view.ExternalSessionID)
+			row.WorkerMailboxDeliveryMode = strings.TrimSpace(view.MailboxDeliveryMode)
+		}
+	}
+
+	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &nombre})
+	if err != nil {
+		return Row{}, nil, err
+	}
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		switch tarea.Estado {
+		case db.EstadoCompletada, db.EstadoCancelada, db.EstadoBacklog:
+			continue
+		case db.EstadoBloqueada:
+			row.BlockedTasks++
+		default:
+			row.OpenTasks++
+		}
+	}
+
+	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, workerOutputStaleThreshold(s.store))
+	return row, asignaciones, nil
+}
+
 func (s *Service) buildOperationalRowContextForAgent(nombre string, now time.Time) (Row, []*db.Asignacion, []*db.Tarea, error) {
 	nombre = strings.TrimSpace(nombre)
 	if nombre == "" {
@@ -1084,9 +1182,6 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 	agentes, err := s.ListAgents()
 	if err != nil {
 		return nil, err
-	}
-	if activeOnly {
-		return s.buildActiveReanimationSchedule(agentes, includeFuture)
 	}
 	asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{})
 	if err != nil {
