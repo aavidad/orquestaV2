@@ -18751,6 +18751,76 @@ func TestProcesarAgentesDegradadosAutonomiaBatchBloqueaSinRelevoSiAgenteBloquead
 	}
 }
 
+func TestProcesarAgentesDegradadosAutonomiaBatchReasignaSiAgenteBloqueadoPorCuotaTieneRelevoSano(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	autonomiaDegradedTaskGate.Reset()
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-cuota-con-relevo",
+		Nombre:  "Orquestador Cuota con Relevo",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"CodexBloqueado", "CodexLibre"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente bounded"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', motivo_pausa='cuota visible agotada', reanimar_at=datetime('now','+2 hours') WHERE nombre='CodexBloqueado'`); err != nil {
+		t.Fatalf("marcar cuota agotada: %v", err)
+	}
+	sesionLibre, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexLibre",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion relevo: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesionLibre); err != nil {
+		t.Fatalf("upsert handle relevo: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Reasignar por cuota con relevo",
+		Descripcion: "Frente premium acotado.\nWRITE_SET: cmd/controlplane_support.go\nTests minimos: go test ./cmd -run 'TestProcesarAgentesDegradadosAutonomiaBatchReasignaSiAgenteBloqueadoPorCuotaTieneRelevoSano$'",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexBloqueado"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexBloqueado"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia reasignar la tarea bloqueada por cuota al relevo sano, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != db.EstadoEnProgreso || tarea.Agente == nil || *tarea.Agente != "CodexLibre" {
+		t.Fatalf("la tarea deberia quedar reasignada al relevo sano: %+v", tarea)
+	}
+}
+
 func TestProcesarAgentesDegradadosAutonomiaBatchNoSaturaUnicoRelevoSano(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	autonomiaDegradedTaskGate.Reset()
