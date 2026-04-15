@@ -40,6 +40,9 @@ type fakeStore struct {
 	lastConnectorRef   string
 	lastMailboxFilter  []db.FiltroRuntimeMailbox
 	lastTranscript     db.FiltroRuntimeTranscript
+	listSessionsCalls  int
+	getActiveCalls     int
+	getLastCalls       int
 	pendingVotesCalls  int
 	openProposalsCalls int
 	pausedAgent        string
@@ -130,6 +133,7 @@ func (f *fakeStore) ListAssignments(filter db.FiltroAsignaciones) ([]*db.Asignac
 }
 
 func (f *fakeStore) ListInspectionSessions(filter db.FiltroSesionesInspeccion) ([]*db.Sesion, error) {
+	f.listSessionsCalls++
 	if filter.Agente == nil {
 		return f.sessions, nil
 	}
@@ -143,6 +147,7 @@ func (f *fakeStore) ListInspectionSessions(filter db.FiltroSesionesInspeccion) (
 }
 
 func (f *fakeStore) GetLastSession(agente string, proyectoID *int64) (*db.Sesion, error) {
+	f.getLastCalls++
 	if len(f.sessions) == 0 {
 		return nil, sql.ErrNoRows
 	}
@@ -150,6 +155,7 @@ func (f *fakeStore) GetLastSession(agente string, proyectoID *int64) (*db.Sesion
 }
 
 func (f *fakeStore) GetActiveSession(agente string, proyectoID *int64) (*db.Sesion, error) {
+	f.getActiveCalls++
 	if len(f.sessions) == 0 {
 		return nil, sql.ErrNoRows
 	}
@@ -2078,6 +2084,9 @@ func TestBuildDetailMergesMailboxWithoutDuplicates(t *testing.T) {
 func TestBuildDetailCompactEvitaResumenPesadoDeMailbox(t *testing.T) {
 	store := &fakeStore{
 		agents: []*db.Agente{{Nombre: "Codex2", Rol: "programador"}},
+		sessions: []*db.Sesion{
+			{ID: 10, Agente: "Codex2", Estado: "activa"},
+		},
 		tasks: []*db.Tarea{
 			{ID: 200, Titulo: "lease activa", Agente: ptr("Codex2"), Estado: db.EstadoEnProgreso, Modulo: "runtime"},
 		},
@@ -2099,6 +2108,9 @@ func TestBuildDetailCompactEvitaResumenPesadoDeMailbox(t *testing.T) {
 	}
 	if len(store.lastMailboxFilter) != 0 {
 		t.Fatalf("compact no deberia consultar mailbox: filters=%d", len(store.lastMailboxFilter))
+	}
+	if store.listSessionsCalls != 0 || store.getActiveCalls == 0 {
+		t.Fatalf("compact deberia evitar listar sesiones y usar acceso directo: list=%d active=%d last=%d", store.listSessionsCalls, store.getActiveCalls, store.getLastCalls)
 	}
 }
 

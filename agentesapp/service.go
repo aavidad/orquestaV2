@@ -1,6 +1,7 @@
 package agentesapp
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -752,11 +753,11 @@ func (s *Service) buildRowForAgentWithMailbox(nombre string, mailbox []*db.Runti
 	}
 	row.Asignacion = latestAssignmentForAgent(asignaciones)
 
-	sesiones, err := s.store.ListInspectionSessions(db.FiltroSesionesInspeccion{Agente: &nombre})
+	sesion, err := s.currentOrLastSessionForAgent(nombre)
 	if err != nil {
 		return Row{}, err
 	}
-	row.Sesion = latestSessionForAgent(sesiones)
+	row.Sesion = sesion
 
 	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{Agente: &nombre})
 	if err != nil {
@@ -915,11 +916,11 @@ func (s *Service) buildOperationalRowForAgent(nombre string, now time.Time) (Row
 		}
 	}
 
-	sesiones, err := s.store.ListInspectionSessions(db.FiltroSesionesInspeccion{Agente: &nombre})
+	sesion, err := s.currentOrLastSessionForAgent(nombre)
 	if err != nil {
 		return Row{}, err
 	}
-	row.Sesion = latestSessionForAgent(sesiones)
+	row.Sesion = sesion
 
 	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{Agente: &nombre})
 	if err != nil {
@@ -927,13 +928,20 @@ func (s *Service) buildOperationalRowForAgent(nombre string, now time.Time) (Row
 	}
 	row.Runtime = latestRuntimeForAgent(runtimes)
 
-	handles, err := s.store.ListCanonicalRuntimeHandles(&nombre)
-	if err != nil {
-		return Row{}, err
+	if hotHandles, err := s.store.ListRecentOperationalRuntimeHandles(); err == nil {
+		if handle := hotHandles[nombre]; handle != nil {
+			row.Handle = handle
+		}
 	}
-	row.Handle = latestHandleForAgent(handles)
 	if row.Handle == nil {
-		handles, err = s.store.ListRuntimeHandles(&nombre)
+		handles, err := s.store.ListCanonicalRuntimeHandles(&nombre)
+		if err != nil {
+			return Row{}, err
+		}
+		row.Handle = latestHandleForAgent(handles)
+	}
+	if row.Handle == nil {
+		handles, err := s.store.ListRuntimeHandles(&nombre)
 		if err != nil {
 			return Row{}, err
 		}
@@ -1511,11 +1519,11 @@ func (s *Service) buildReanimationRowForAgent(agente *db.Agente, asignacion *db.
 		BlockedTasks: blockedTasks,
 	}
 
-	sesiones, err := s.store.ListInspectionSessions(db.FiltroSesionesInspeccion{Agente: &nombre})
+	sesion, err := s.currentOrLastSessionForAgent(nombre)
 	if err != nil {
 		return Row{}, err
 	}
-	row.Sesion = latestSessionForAgent(sesiones)
+	row.Sesion = sesion
 
 	runtimes, err := s.store.ListRuntimes(db.FiltroRuntimes{Agente: &nombre})
 	if err != nil {
@@ -1523,14 +1531,20 @@ func (s *Service) buildReanimationRowForAgent(agente *db.Agente, asignacion *db.
 	}
 	row.Runtime = latestRuntimeForAgent(runtimes)
 
-	handles, err := s.store.ListCanonicalRuntimeHandles(&nombre)
-	if err != nil {
-		return Row{}, err
+	if hotHandles, err := s.store.ListRecentOperationalRuntimeHandles(); err == nil {
+		if handle := hotHandles[nombre]; handle != nil {
+			row.Handle = handle
+		}
 	}
-	row.Handle = latestHandleForAgent(handles)
-
 	if row.Handle == nil {
-		handles, err = s.store.ListRuntimeHandles(&nombre)
+		handles, err := s.store.ListCanonicalRuntimeHandles(&nombre)
+		if err != nil {
+			return Row{}, err
+		}
+		row.Handle = latestHandleForAgent(handles)
+	}
+	if row.Handle == nil {
+		handles, err := s.store.ListRuntimeHandles(&nombre)
 		if err != nil {
 			return Row{}, err
 		}
@@ -1550,6 +1564,27 @@ func buildLightOperationalRow(agente *db.Agente, asignacion *db.Asignacion, open
 	}
 	row.EstadoOperativo, row.DetalleOperativo = deriveOperationalState(row, now, staleThreshold)
 	return row
+}
+
+func (s *Service) currentOrLastSessionForAgent(nombre string) (*db.Sesion, error) {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return nil, nil
+	}
+	sesion, err := s.store.GetActiveSession(nombre, nil)
+	switch {
+	case err == nil:
+		if sesion != nil {
+			return sesion, nil
+		}
+	case err != sql.ErrNoRows:
+		return nil, err
+	}
+	sesion, err = s.store.GetLastSession(nombre, nil)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return sesion, err
 }
 
 func reanimationCandidateHasCanonicalWork(item ReanimationCandidate) bool {
