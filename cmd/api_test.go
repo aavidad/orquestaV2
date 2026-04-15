@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -4605,4 +4606,63 @@ func TestAPIRuntimeProcessReanimacionesReabreFrenteVencido(t *testing.T) {
 		t.Fatalf("get tarea final: %v", err)
 	}
 	t.Fatalf("la tarea deberia quedar reabierta y con orden pendiente: %+v", tarea)
+}
+
+func TestAPIRuntimeProcessReanimacionesDistingueCooldownSostenidoPorCuota(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	sesionID, err := db.IniciarSesion("Claude1")
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	now := time.Now().UTC()
+	resetPrimary := now.Add(6 * time.Hour)
+	resetSecondary := now.Add(72 * time.Hour)
+	raw := `{"rate_limits":{"primary":{"used_percent":0,"window_minutes":360,"resets_at":` + strconv.FormatInt(resetPrimary.Unix(), 10) + `},"secondary":{"used_percent":100,"window_minutes":10080,"resets_at":` + strconv.FormatInt(resetSecondary.Unix(), 10) + `}}}`
+	if _, err := db.RegistrarPresupuestoSesion(&db.PresupuestoSesion{
+		SesionID:        sesionID,
+		WindowKind:      "6h",
+		BudgetSource:    "codex_token_count_observed",
+		RawSnapshotJSON: raw,
+		CheckedAt:       now,
+	}); err != nil {
+		t.Fatalf("registrar presupuesto visible: %v", err)
+	}
+	if _, err := db.DB.Exec(`
+		UPDATE agentes
+		SET reanimar_at=CURRENT_TIMESTAMP,
+		    estado_cuota='enfriamiento',
+		    motivo_pausa='worker bloqueado por cuota'
+		WHERE nombre='Claude1'
+	`); err != nil {
+		t.Fatalf("marcar cuota visible agotada: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/runtime/process-reanimations", bytes.NewReader([]byte(`{}`)))
+	rec := httptest.NewRecorder()
+	apiHandlerRuntimeProcessReanimaciones(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status process-reanimations inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp apiRuntimeProcessReanimationsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !resp.Accepted || resp.Running {
+		t.Fatalf("respuesta inesperada: %+v", resp)
+	}
+	if resp.Candidates != 1 || resp.Reactivated != 0 || resp.CooldownSustained != 1 || resp.Errors != 0 || resp.Count != 0 {
+		t.Fatalf("contadores inesperados: %+v", resp)
+	}
+	agente, err := db.GetAgente("Claude1")
+	if err != nil {
+		t.Fatalf("get agente: %v", err)
+	}
+	if agente == nil || agente.ReanimarAt == nil || agente.PresupuestoResetAt == nil || !agente.ReanimarAt.Equal(agente.PresupuestoResetAt.UTC()) {
+		t.Fatalf("el cooldown deberia sostenerse hasta el reset visible: %+v", agente)
+	}
 }

@@ -49,6 +49,7 @@ type stubAutomationService struct {
 	reanimarErr       error
 	resetCalls        []string
 	resetErr          error
+	resetOutcome      string
 	pendingWork       bool
 	pendingWorkDetail string
 	pendingWorkErr    error
@@ -60,6 +61,16 @@ func (s *stubAutomationService) CheckReanimaciones() ([]*db.Agente, error) {
 func (s *stubAutomationService) ResetReanimacion(nombre string) error {
 	s.resetCalls = append(s.resetCalls, nombre)
 	return s.resetErr
+}
+func (s *stubAutomationService) ResetReanimacionOutcome(nombre string) (string, error) {
+	s.resetCalls = append(s.resetCalls, nombre)
+	if s.resetErr != nil {
+		return "", s.resetErr
+	}
+	if strings.TrimSpace(s.resetOutcome) == "" {
+		return "reactivado", nil
+	}
+	return s.resetOutcome, nil
 }
 func (s *stubAutomationService) GarantizarSaludAgentes() error          { return nil }
 func (s *stubAutomationService) PlanificarTareasAutomaticamente() error { return nil }
@@ -195,6 +206,26 @@ func TestRunnerRunReanimacionesAuditaErrorSinMentirExito(t *testing.T) {
 	}
 	if strings.Contains(service.audits[0], "reanimar_agente|") {
 		t.Fatalf("no deberia auditar exito si falla la reanimacion: %+v", service.audits)
+	}
+}
+
+func TestRunnerRunReanimacionesAuditaCooldownSostenidoSinMentirExito(t *testing.T) {
+	service := &stubAutomationService{
+		reanimar:     []*db.Agente{{Nombre: "Claude1", MotivoPausa: "worker bloqueado por cuota"}},
+		resetOutcome: "cooldown_sostenido",
+	}
+	r := &Runner{Automation: service}
+
+	r.runReanimaciones()
+
+	if len(service.resetCalls) != 1 || service.resetCalls[0] != "Claude1" {
+		t.Fatalf("reset calls inesperadas: %+v", service.resetCalls)
+	}
+	if len(service.audits) != 1 || !strings.Contains(service.audits[0], "reanimar_agente_cooldown_sostenido|") {
+		t.Fatalf("auditoria inesperada: %+v", service.audits)
+	}
+	if strings.Contains(service.audits[0], "reanimar_agente|") {
+		t.Fatalf("no deberia auditar reanimacion real si el cooldown sigue sostenido: %+v", service.audits)
 	}
 }
 

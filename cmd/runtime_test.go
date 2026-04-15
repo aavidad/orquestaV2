@@ -245,7 +245,7 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 0, "accepted": true, "running": true})
 		case r.URL.Path == "/api/runtime/process-reanimations" && r.Method == http.MethodPost:
 			_ = json.NewDecoder(r.Body).Decode(&processReanimationsReq)
-			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 0, "accepted": true, "running": true})
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 1, "accepted": true, "running": false, "candidates": 2, "reactivated": 1, "cooldown_sustained": 1, "errors": 0})
 		case r.URL.Path == "/api/runtime-checkpoints/latest":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"checkpoint": map[string]any{
@@ -391,7 +391,7 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 			t.Fatalf("runtime procesar-reanimaciones via api: %v", err)
 		}
 	})
-	for _, token := range []string{"accepted=true", "running=true", "count=0"} {
+	for _, token := range []string{"accepted=true", "running=false", "count=1", "candidates=2", "reactivated=1", "cooldown_sustained=1", "errors=0"} {
 		if !strings.Contains(outProcessReanimations, token) {
 			t.Fatalf("salida runtime procesar-reanimaciones sin %q:\n%s", token, outProcessReanimations)
 		}

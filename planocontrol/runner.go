@@ -44,6 +44,10 @@ type AutomationService interface {
 	Audit(agente, accion, entidad string, entidadID int64, detalle string)
 }
 
+type automationResetReanimationReporter interface {
+	ResetReanimacionOutcome(nombre string) (string, error)
+}
+
 type Runner struct {
 	Automation                  AutomationService
 	NotificationFeed            <-chan db.EventoNotificacion
@@ -291,9 +295,24 @@ func (r *Runner) runReanimaciones() {
 	}
 	r.debugf("reanimaciones candidatos=%d", len(reanimar))
 	for _, a := range reanimar {
-		if err := r.Automation.ResetReanimacion(a.Nombre); err != nil {
+		resultado := "reactivado"
+		if reporter, ok := r.Automation.(automationResetReanimationReporter); ok {
+			valor, err := reporter.ResetReanimacionOutcome(a.Nombre)
+			if err != nil {
+				r.debugf("reanimacion agente=%s error=%v", a.Nombre, err)
+				r.Automation.Audit("server", "reanimar_agente_error", "agente", 0, fmt.Sprintf("Agente %s no pudo reanimarse tras pausa: %v", a.Nombre, err))
+				continue
+			}
+			if strings.TrimSpace(valor) != "" {
+				resultado = strings.TrimSpace(valor)
+			}
+		} else if err := r.Automation.ResetReanimacion(a.Nombre); err != nil {
 			r.debugf("reanimacion agente=%s error=%v", a.Nombre, err)
 			r.Automation.Audit("server", "reanimar_agente_error", "agente", 0, fmt.Sprintf("Agente %s no pudo reanimarse tras pausa: %v", a.Nombre, err))
+			continue
+		}
+		if strings.EqualFold(resultado, "cooldown_sostenido") {
+			r.Automation.Audit("server", "reanimar_agente_cooldown_sostenido", "agente", 0, fmt.Sprintf("Agente %s sigue bloqueado por cuota visible: %s", a.Nombre, a.MotivoPausa))
 			continue
 		}
 		r.Automation.Audit("server", "reanimar_agente", "agente", 0, fmt.Sprintf("Agente %s reanimado tras pausa: %s", a.Nombre, a.MotivoPausa))

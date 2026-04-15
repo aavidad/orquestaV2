@@ -253,6 +253,13 @@ func (dbAutomationService) CheckReanimaciones() ([]*db.Agente, error) {
 	return filtrados, nil
 }
 
+type resetReanimacionResultado string
+
+const (
+	resetReanimacionResultadoReactivado        resetReanimacionResultado = "reactivado"
+	resetReanimacionResultadoCooldownSostenido resetReanimacionResultado = "cooldown_sostenido"
+)
+
 func agenteDebeEntrarEnReanimacionAutomatica(agente *db.Agente, now time.Time) bool {
 	if agente == nil || strings.TrimSpace(agente.Nombre) == "" || !agente.Habilitado {
 		return false
@@ -268,31 +275,41 @@ func agenteDebeEntrarEnReanimacionAutomatica(agente *db.Agente, now time.Time) b
 }
 
 func (dbAutomationService) ResetReanimacion(nombre string) error {
+	_, err := (dbAutomationService{}).ResetReanimacionResultado(nombre)
+	return err
+}
+
+func (dbAutomationService) ResetReanimacionOutcome(nombre string) (string, error) {
+	resultado, err := (dbAutomationService{}).ResetReanimacionResultado(nombre)
+	return string(resultado), err
+}
+
+func (dbAutomationService) ResetReanimacionResultado(nombre string) (resetReanimacionResultado, error) {
 	nombre = strings.TrimSpace(nombre)
 	if _, err := revalidarPresupuestoAgenteSiCorresponde(nombre, presupuestoPreflightRevalidationAge(), true); err != nil {
-		return err
+		return "", err
 	}
 	bloqueado, err := sostenerCooldownSiLaCuotaVisibleSigueBloqueada(nombre)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if bloqueado {
-		return nil
+		return resetReanimacionResultadoCooldownSostenido, nil
 	}
 	if err := cancelarBootstrapObsoletoReanimacion(nombre); err != nil {
-		return err
+		return "", err
 	}
 	if err := registrarCheckpointRehabilitacionManual(nombre); err != nil {
-		return err
+		return "", err
 	}
 	if err := reactivarAgenteTrasReanimacionConMotivo(nombre, "manual_rehabilitation"); err != nil {
-		return err
+		return "", err
 	}
 	if err := db.ResetReanimacion(nombre); err != nil {
-		return err
+		return "", err
 	}
 	resetStatusSnapshotCache()
-	return nil
+	return resetReanimacionResultadoReactivado, nil
 }
 
 func cancelarBootstrapObsoletoReanimacion(agente string) error {

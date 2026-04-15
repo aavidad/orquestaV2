@@ -1314,8 +1314,8 @@ func procesarAutonomiaPorAPI() (*apiRuntimeProcessAutonomiaResponse, bool, error
 	return &resp, true, nil
 }
 
-func procesarReanimacionesPorAPI() (*apiRuntimeProcessAutonomiaResponse, bool, error) {
-	var resp apiRuntimeProcessAutonomiaResponse
+func procesarReanimacionesPorAPI() (*apiRuntimeProcessReanimationsResponse, bool, error) {
+	var resp apiRuntimeProcessReanimationsResponse
 	ok, err := apiPost("/api/runtime/process-reanimations", map[string]any{}, &resp)
 	if !ok || err != nil {
 		return nil, ok, err

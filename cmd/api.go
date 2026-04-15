@@ -559,6 +559,17 @@ type apiRuntimeProcessAutonomiaResponse struct {
 	Running  bool `json:"running,omitempty"`
 }
 
+type apiRuntimeProcessReanimationsResponse struct {
+	OK                bool `json:"ok"`
+	Count             int  `json:"count"`
+	Accepted          bool `json:"accepted,omitempty"`
+	Running           bool `json:"running,omitempty"`
+	Candidates        int  `json:"candidates,omitempty"`
+	Reactivated       int  `json:"reactivated,omitempty"`
+	CooldownSustained int  `json:"cooldown_sustained,omitempty"`
+	Errors            int  `json:"errors,omitempty"`
+}
+
 var runtimeProcessAutonomiaEnCurso atomic.Bool
 var runtimeProcessReanimacionesEnCurso atomic.Bool
 
@@ -5260,34 +5271,48 @@ func apiHandlerRuntimeProcessReanimaciones(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	started := runtimeProcessReanimacionesEnCurso.CompareAndSwap(false, true)
-	if started {
-		go func() {
-			defer runtimeProcessReanimacionesEnCurso.Store(false)
-			reanimar, err := (dbAutomationService{}).CheckReanimaciones()
-			if err != nil {
-				db.Audit("server", "runtime_process_reanimaciones_error", "runtime", 0, err.Error())
-				return
-			}
-			total := 0
-			for _, agente := range reanimar {
-				if agente == nil || strings.TrimSpace(agente.Nombre) == "" {
-					continue
-				}
-				if err := (dbAutomationService{}).ResetReanimacion(agente.Nombre); err != nil {
-					db.Audit("server", "runtime_process_reanimaciones_reset_error", "agente", 0, fmt.Sprintf("agente=%s err=%v", strings.TrimSpace(agente.Nombre), err))
-					continue
-				}
-				total++
-			}
-			db.Audit("server", "runtime_process_reanimaciones", "runtime", 0, fmt.Sprintf("count=%d", total))
-		}()
-	}
-	apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
+	resp := apiRuntimeProcessReanimationsResponse{
 		OK:       true,
-		Count:    0,
 		Accepted: started,
 		Running:  runtimeProcessReanimacionesEnCurso.Load(),
-	})
+	}
+	if !started {
+		apiWriteJSON(w, http.StatusOK, resp)
+		return
+	}
+	defer runtimeProcessReanimacionesEnCurso.Store(false)
+
+	reanimar, err := (dbAutomationService{}).CheckReanimaciones()
+	if err != nil {
+		db.Audit("server", "runtime_process_reanimaciones_error", "runtime", 0, err.Error())
+		resp.Running = false
+		apiWriteJSON(w, http.StatusOK, resp)
+		return
+	}
+	resp.Candidates = len(reanimar)
+	for _, agente := range reanimar {
+		if agente == nil || strings.TrimSpace(agente.Nombre) == "" {
+			continue
+		}
+		resultado, err := (dbAutomationService{}).ResetReanimacionResultado(agente.Nombre)
+		if err != nil {
+			resp.Errors++
+			db.Audit("server", "runtime_process_reanimaciones_reset_error", "agente", 0, fmt.Sprintf("agente=%s err=%v", strings.TrimSpace(agente.Nombre), err))
+			continue
+		}
+		switch resultado {
+		case resetReanimacionResultadoCooldownSostenido:
+			resp.CooldownSustained++
+			db.Audit("server", "runtime_process_reanimaciones_cooldown_sustained", "agente", 0, fmt.Sprintf("agente=%s motivo=%s", strings.TrimSpace(agente.Nombre), strings.TrimSpace(agente.MotivoPausa)))
+		case resetReanimacionResultadoReactivado:
+			resp.Reactivated++
+		}
+	}
+	resp.Count = resp.Reactivated
+	db.Audit("server", "runtime_process_reanimaciones", "runtime", 0,
+		fmt.Sprintf("candidates=%d reactivated=%d cooldown_sustained=%d errors=%d", resp.Candidates, resp.Reactivated, resp.CooldownSustained, resp.Errors))
+	resp.Running = false
+	apiWriteJSON(w, http.StatusOK, resp)
 }
 
 func apiHandlerRuntimeMailboxClear(w http.ResponseWriter, r *http.Request) {
