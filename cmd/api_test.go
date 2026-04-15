@@ -2274,6 +2274,103 @@ func TestAPIAgenteResetReanimacionLimpiaContinuidadYCancelaBootstrap(t *testing.
 	}
 }
 
+func TestAPIAgenteResetReanimacionReabreFrenteBloqueadoRecuperable(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRaiz,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("crear proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "microciclo_exclusivo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Reabrir frente al salir de cuota",
+		Descripcion: "Trabajo premium recuperable",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Gemini1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Gemini1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "Gemini1", "Agente Gemini1 en estado bloqueado_por_cuota: worker bloqueado por cuota"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Gemini1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "gemini-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	runtimeActual, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtimeActual == nil {
+		t.Fatalf("runtime: %+v err=%v", runtimeActual, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE sesiones SET estado='pausada' WHERE id=?`, sesion.ID); err != nil {
+		t.Fatalf("pausar sesion: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='fallido' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("fallar handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='degradado', process_state='fallido' WHERE id=?`, runtimeActual.ID); err != nil {
+		t.Fatalf("degradar runtime: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET reanimar_at=CURRENT_TIMESTAMP, estado_cuota='activo', motivo_pausa='' WHERE nombre='Gemini1'`); err != nil {
+		t.Fatalf("marcar reanimacion: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/agentes/Gemini1/reset-reanimacion", bytes.NewReader([]byte(`{}`)))
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status reset inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea == nil || tarea.Estado != db.TareaEnProgreso {
+		t.Fatalf("la tarea deberia quedar reabierta: %+v", tarea)
+	}
+	agente := "Gemini1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) == 0 {
+		t.Fatalf("deberia encolar control de reactivacion")
+	}
+}
+
 func TestAPIProyectoFusionarRechazaDesactivarArchivoOrigen(t *testing.T) {
 	prepararDBTemporalCmd(t)
 
