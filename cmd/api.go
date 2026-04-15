@@ -1126,7 +1126,8 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 
 func apiHandlerAgentesReanimaciones(w http.ResponseWriter, r *http.Request) {
 	includeFuture := parseBoolDebug(r.URL.Query().Get("all"), false)
-	rows, err := agentesService.BuildReanimationSchedule(includeFuture)
+	activeOnly := parseBoolDebug(r.URL.Query().Get("activos"), false)
+	rows, err := agentesService.BuildReanimationSchedule(includeFuture, activeOnly)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return

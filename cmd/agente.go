@@ -598,11 +598,19 @@ var agenteReanimacionesCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jsonOut, _ := cmd.Flags().GetBool("json")
 		includeFuture, _ := cmd.Flags().GetBool("all")
+		activeOnly, _ := cmd.Flags().GetBool("activos")
 
 		var out apiAgenteReanimationsResponse
 		path := "/api/agentes/reanimaciones"
+		params := url.Values{}
 		if includeFuture {
-			path += "?all=true"
+			params.Set("all", "true")
+		}
+		if activeOnly {
+			params.Set("activos", "true")
+		}
+		if len(params) > 0 {
+			path += "?" + params.Encode()
 		}
 		if ok, err := apiGet(path, &out); err != nil {
 			return err
@@ -633,6 +641,7 @@ func init() {
 	agenteTickCmd.Flags().Bool("json", false, "Salida JSON")
 	agenteOverviewCmd.Flags().Bool("json", false, "Salida JSON")
 	agenteReanimacionesCmd.Flags().Bool("all", false, "Incluir reanimaciones futuras además de las vencidas")
+	agenteReanimacionesCmd.Flags().Bool("activos", false, "Limitar a agentes habilitados")
 	agenteReanimacionesCmd.Flags().Bool("json", false, "Salida JSON")
 
 	agenteEjecutarCmd.Flags().StringP("proyecto", "p", "", "Proyecto en el que ejecutar")

@@ -1985,7 +1985,7 @@ func TestBuildReanimationScheduleFiltraVencidasYExponeLeases(t *testing.T) {
 		},
 	}
 
-	rows, err := NewService(store, nil).BuildReanimationSchedule(false)
+	rows, err := NewService(store, nil).BuildReanimationSchedule(false, false)
 	if err != nil {
 		t.Fatalf("BuildReanimationSchedule(false): %v", err)
 	}
@@ -2002,7 +2002,7 @@ func TestBuildReanimationScheduleFiltraVencidasYExponeLeases(t *testing.T) {
 		t.Fatalf("leases inesperadas: %+v", rows[0].Leases)
 	}
 
-	allRows, err := NewService(store, nil).BuildReanimationSchedule(true)
+	allRows, err := NewService(store, nil).BuildReanimationSchedule(true, false)
 	if err != nil {
 		t.Fatalf("BuildReanimationSchedule(true): %v", err)
 	}
@@ -2011,6 +2011,15 @@ func TestBuildReanimationScheduleFiltraVencidasYExponeLeases(t *testing.T) {
 	}
 	if !allRows[0].Due || allRows[1].Due {
 		t.Fatalf("orden due/future inesperado: %+v", allRows)
+	}
+
+	store.agents[1].Habilitado = false
+	activeRows, err := NewService(store, nil).BuildReanimationSchedule(true, true)
+	if err != nil {
+		t.Fatalf("BuildReanimationSchedule(true,true): %v", err)
+	}
+	if len(activeRows) != 1 || activeRows[0].Name != "Codex1" {
+		t.Fatalf("active rows inesperadas: %+v", activeRows)
 	}
 }
 

@@ -2473,6 +2473,23 @@ func TestAPIAgentesReanimacionesListaVencidasYFuturas(t *testing.T) {
 	if !allResp.Rows[0].Due || allResp.Rows[1].Due {
 		t.Fatalf("orden due/future inesperado: %+v", allResp.Rows)
 	}
+
+	if _, err := db.DB.Exec(`UPDATE agentes SET habilitado=0 WHERE nombre='Claude1'`); err != nil {
+		t.Fatalf("deshabilitar claude: %v", err)
+	}
+	recActive := httptest.NewRecorder()
+	reqActive := httptest.NewRequest(http.MethodGet, "/api/agentes/reanimaciones?all=true&activos=true", nil)
+	mux.ServeHTTP(recActive, reqActive)
+	if recActive.Code != http.StatusOK {
+		t.Fatalf("status active inesperado: %d body=%s", recActive.Code, recActive.Body.String())
+	}
+	var activeResp apiAgenteReanimationsResponse
+	if err := json.Unmarshal(recActive.Body.Bytes(), &activeResp); err != nil {
+		t.Fatalf("decode active: %v", err)
+	}
+	if len(activeResp.Rows) != 1 || activeResp.Rows[0].Name != "Codex1" {
+		t.Fatalf("rows active inesperadas: %+v", activeResp.Rows)
+	}
 }
 
 func TestAPIProyectoFusionarRechazaDesactivarArchivoOrigen(t *testing.T) {

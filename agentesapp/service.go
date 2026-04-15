@@ -674,7 +674,7 @@ func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 	}, nil
 }
 
-func (s *Service) BuildReanimationSchedule(includeFuture bool) ([]ReanimationCandidate, error) {
+func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]ReanimationCandidate, error) {
 	rows, err := s.BuildPanelRows()
 	if err != nil {
 		return nil, err
@@ -727,6 +727,9 @@ func (s *Service) BuildReanimationSchedule(includeFuture bool) ([]ReanimationCan
 		if row.Agente == nil || row.Agente.ReanimarAt == nil {
 			continue
 		}
+		if activeOnly && !row.Agente.Habilitado {
+			continue
+		}
 		due := !row.Agente.ReanimarAt.After(now)
 		if !includeFuture && !due {
 			continue
@@ -763,6 +766,9 @@ func (s *Service) BuildReanimationSchedule(includeFuture bool) ([]ReanimationCan
 		}
 		name := strings.TrimSpace(agente.Nombre)
 		if name == "" {
+			continue
+		}
+		if activeOnly && !agente.Habilitado {
 			continue
 		}
 		row, ok := rowByAgent[name]
