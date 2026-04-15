@@ -26,6 +26,9 @@ type autonomiaBatchSnapshot struct {
 	sesiones []*db.Sesion
 
 	agentesByName              map[string]*db.Agente
+	operationalStateByAgent    map[string]string
+	operationalDetailByAgent   map[string]string
+	operationalStateLoaded     bool
 	hotHandlesByAgentProject   map[string]*db.RuntimeHandle
 	asignacionesByAgent        map[string][]*db.Asignacion
 	asignacionesByProject      map[int64][]*db.Asignacion
@@ -57,6 +60,8 @@ func newAutonomiaBatchSnapshot(sesiones []*db.Sesion) (*autonomiaBatchSnapshot, 
 	snapshot := &autonomiaBatchSnapshot{
 		sesiones:                   sesiones,
 		agentesByName:              make(map[string]*db.Agente, len(agentesByName)),
+		operationalStateByAgent:    map[string]string{},
+		operationalDetailByAgent:   map[string]string{},
 		hotHandlesByAgentProject:   hotHandles,
 		asignacionesByAgent:        map[string][]*db.Asignacion{},
 		asignacionesByProject:      map[int64][]*db.Asignacion{},
@@ -106,6 +111,8 @@ func (s *autonomiaBatchSnapshot) invalidateAgent(agente string) {
 		return
 	}
 	delete(s.agentesByName, key)
+	delete(s.operationalStateByAgent, key)
+	delete(s.operationalDetailByAgent, key)
 	delete(s.asignacionesByAgent, key)
 	delete(s.activeProjectByAgent, key)
 	delete(s.pauseByAgent, key)
@@ -256,6 +263,32 @@ func (s *autonomiaBatchSnapshot) budgetPause(agente string) (bool, string, error
 		reason:      reason,
 	}
 	return shouldPause, reason, nil
+}
+
+func (s *autonomiaBatchSnapshot) operationalState(agente string) (string, string, error) {
+	key := strings.ToLower(strings.TrimSpace(agente))
+	if key == "" {
+		return "", "", nil
+	}
+	if !s.operationalStateLoaded {
+		rows, err := agentesService.BuildPanelRows()
+		if err != nil {
+			return "", "", err
+		}
+		for _, row := range rows {
+			if row.Agente == nil {
+				continue
+			}
+			rowKey := strings.ToLower(strings.TrimSpace(row.Agente.Nombre))
+			if rowKey == "" {
+				continue
+			}
+			s.operationalStateByAgent[rowKey] = strings.TrimSpace(row.EstadoOperativo)
+			s.operationalDetailByAgent[rowKey] = strings.TrimSpace(row.DetalleOperativo)
+		}
+		s.operationalStateLoaded = true
+	}
+	return s.operationalStateByAgent[key], s.operationalDetailByAgent[key], nil
 }
 
 func (s *autonomiaBatchSnapshot) supervisorOperativo(proyectoID int64, agente string) (bool, *db.Agente, error) {

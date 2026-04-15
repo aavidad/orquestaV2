@@ -1,16 +1,21 @@
 package agentesapp
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"orquesta/capacidadapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/runtimeagente"
 )
+
+func strPtr(v string) *string   { return &v }
+func int64Ptr(v int64) *int64   { return &v }
 
 func prepararDBTemporalRuntimeService(t *testing.T) {
 	t.Helper()
@@ -156,6 +161,79 @@ func TestBuildPrepareRecuperaWorktreeActivaSiUltimaSesionTraeCWDObsoleto(t *test
 	}
 	if out.Plan.WorkingDir == rutaObsoleta {
 		t.Fatalf("working dir no deberia conservar la ruta obsoleta: %s", out.Plan.WorkingDir)
+	}
+}
+
+func TestBuildTickOutputPausaPorCuotaSiWorkerTMUXBloqueado(t *testing.T) {
+	now := time.Now().UTC()
+	tmp := t.TempDir()
+	manifestPath := filepath.Join(tmp, "manifest.json")
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	writeJSON := func(path string, payload any) {
+		t.Helper()
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	writeJSON(manifestPath, map[string]any{
+		"agent":        "Claude1",
+		"driver":       "tmux_cli_session",
+		"transport":    "tmux",
+		"tmux_session": "orq-claude1-1",
+		"tmux_pane_id": "%9",
+	})
+	writeJSON(statusPath, map[string]any{
+		"state":      "blocked_quota",
+		"updated_at": now.Format(time.RFC3339Nano),
+		"alive":      true,
+	})
+	writeJSON(heartbeatPath, map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	metaJSON, err := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Claude1", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Claude1", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		tasks: []*db.Tarea{
+			{ID: 42, Agente: strPtr("Claude1"), ProyectoID: int64Ptr(7), Estado: db.EstadoEnProgreso, Titulo: "Frente acotado Claude"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 52, Agente: "Claude1", ProyectoID: int64Ptr(7), LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 62, Agente: "Claude1", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(52), Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+	}
+	svc := NewService(store, nil)
+	proyecto := &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: filepath.Join(tmp, "orquestador")}
+	out, err := svc.buildTickOutput("Claude1", proyecto, nil, 100)
+	if err != nil {
+		t.Fatalf("buildTickOutput: %v", err)
+	}
+	if out.AccionRecomendada != "pausar_por_cuota" || !out.DebePausar {
+		t.Fatalf("salida inesperada: %+v", out)
+	}
+	if !strings.Contains(strings.ToLower(out.Motivo), "cuota") {
+		t.Fatalf("motivo inesperado: %q", out.Motivo)
 	}
 }
 

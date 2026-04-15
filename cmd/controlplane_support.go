@@ -8111,7 +8111,7 @@ func procesarCompactacionFrentesPremiumSesionActiva(sesion *db.Sesion, snapshot 
 	candidatas := make([]*db.Tarea, 0, len(tareas))
 	enProgreso := 0
 	for _, tarea := range tareas {
-		if !tareaEsFrentePremiumActivoCompactable(tarea, agente) {
+		if !tareaEsFrentePremiumCompactable(tarea, agente) {
 			continue
 		}
 		candidatas = append(candidatas, tarea)
@@ -8128,7 +8128,12 @@ func procesarCompactacionFrentesPremiumSesionActiva(sesion *db.Sesion, snapshot 
 	}
 	procesadas := 0
 	for _, tarea := range candidatas {
-		if tarea == nil || tarea.ID == keep.ID || tarea.Estado != db.TareaAsignada {
+		if tarea == nil || tarea.ID == keep.ID {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaAsignada, db.TareaBloqueada:
+		default:
 			continue
 		}
 		if err := tareasService.MoveToBacklog(tarea.ID); err != nil {
@@ -8144,11 +8149,15 @@ func procesarCompactacionFrentesPremiumSesionActiva(sesion *db.Sesion, snapshot 
 }
 
 func tareaEsFrentePremiumActivoCompactable(tarea *db.Tarea, agente string) bool {
+	return tareaEsFrentePremiumCompactable(tarea, agente) && tarea.Estado != db.TareaBloqueada
+}
+
+func tareaEsFrentePremiumCompactable(tarea *db.Tarea, agente string) bool {
 	if tarea == nil || tarea.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(agente)) {
 		return false
 	}
 	switch tarea.Estado {
-	case db.TareaAsignada, db.TareaEnProgreso:
+	case db.TareaAsignada, db.TareaEnProgreso, db.TareaBloqueada:
 	default:
 		return false
 	}
@@ -8186,6 +8195,8 @@ func puntuarFrentePremiumCanonicSesionActiva(tarea *db.Tarea) int {
 		score += 1000
 	case db.TareaAsignada:
 		score += 500
+	case db.TareaBloqueada:
+		score += 250
 	default:
 		return -1
 	}

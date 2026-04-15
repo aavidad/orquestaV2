@@ -169,6 +169,8 @@ type decisionTickAutonomiaInput struct {
 	PausarPorPresupuesto   bool
 	MotivoPresupuesto      string
 	EstadoCuota            string
+	BloqueadoPorCuota      bool
+	MotivoBloqueoCuota     string
 	ReanimarAt             *time.Time
 	MotivoPausa            string
 	AgenteNombre           string
@@ -178,6 +180,12 @@ func resolverAccionTickAutonomia(in decisionTickAutonomiaInput) (accion string, 
 	switch {
 	case in.PausarPorPresupuesto:
 		return "pausar_por_cuota", true, strings.TrimSpace(in.MotivoPresupuesto)
+	case in.BloqueadoPorCuota:
+		motivo = strings.TrimSpace(in.MotivoBloqueoCuota)
+		if motivo == "" {
+			motivo = "Worker bloqueado por cuota o enfriamiento activo."
+		}
+		return "pausar_por_cuota", true, motivo
 	case strings.TrimSpace(in.EstadoCuota) != "" && strings.TrimSpace(in.EstadoCuota) != "activo":
 		prefijo := "Cuota agotada"
 		if agenteMotivoPausaOperativa(in.MotivoPausa) {
@@ -231,6 +239,8 @@ func construirAgenteTickOutputConSnapshot(agenteNombre string, proyecto *db.Proy
 			supervisorLoaded:           map[int64]struct{}{},
 			pauseByAgent:               map[string]autonomiaBudgetPauseDecision{},
 			agentesByName:              map[string]*db.Agente{},
+			operationalStateByAgent:    map[string]string{},
+			operationalDetailByAgent:   map[string]string{},
 		}
 	}
 	start := time.Now()
@@ -355,6 +365,12 @@ func construirAgenteTickOutputConSnapshot(agenteNombre string, proyecto *db.Proy
 		return out, err
 	}
 	logStep("presupuesto_visible", stepStart)
+	stepStart = time.Now()
+	estadoOperativo, detalleOperativo, err := snapshot.operationalState(agenteNombre)
+	if err != nil {
+		return out, err
+	}
+	logStep("estado_operativo", stepStart)
 
 	out.AccionRecomendada, out.DebePausar, out.Motivo = resolverAccionTickAutonomia(decisionTickAutonomiaInput{
 		AsignadoAProyecto:     asignadoAProyecto,
@@ -367,6 +383,8 @@ func construirAgenteTickOutputConSnapshot(agenteNombre string, proyecto *db.Proy
 		PausarPorPresupuesto:  pausarPorPresupuesto,
 		MotivoPresupuesto:     motivoPresupuesto,
 		EstadoCuota:           agente.EstadoCuota,
+		BloqueadoPorCuota:     strings.EqualFold(strings.TrimSpace(estadoOperativo), "bloqueado_por_cuota"),
+		MotivoBloqueoCuota:    detalleOperativo,
 		ReanimarAt:            agente.ReanimarAt,
 		MotivoPausa:           agente.MotivoPausa,
 		AgenteNombre:          agenteNombre,

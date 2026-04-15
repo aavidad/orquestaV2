@@ -203,6 +203,75 @@ func TestConstruirAgenteTickOutputDescribePausaOperativaPorRuntimePanic(t *testi
 	}
 }
 
+func TestConstruirAgenteTickOutputPausaPorCuotaSiWorkerTMUXBloqueado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Claude1", "programador"); err != nil {
+		t.Fatalf("registrar Claude1: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Claude1", proyectoID, "microciclo_exclusivo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente acotado Claude",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Claude1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Claude1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	proyecto, err := db.GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	agenteRef := "Claude1"
+	snapshot := &autonomiaBatchSnapshot{
+		agentesByName:              map[string]*db.Agente{"claude1": {Nombre: "Claude1", Rol: "programador", EstadoCuota: "activo", Habilitado: true, Activo: true}},
+		asignacionesByAgent:        map[string][]*db.Asignacion{"claude1": {{Agente: "Claude1", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva}}},
+		tareasByAgentProject:       map[string][]*db.Tarea{agentProjectCacheKey("Claude1", proyectoID): {{ID: tareaID, Titulo: "Frente acotado Claude", Estado: db.TareaEnProgreso, ProyectoID: &proyectoID, Agente: &agenteRef}}},
+		pendingVotesByAgentProject: map[string][]*db.Propuesta{},
+		openProposalsByProject:     map[int64][]*db.Propuesta{},
+		politicasByProject:         map[int64]*db.ProyectoAutonomia{},
+		activeProjectByAgent:       map[string]int64{},
+		activeHandleByAgentProject: map[string]bool{},
+		supervisorByProject:        map[int64]*db.Agente{},
+		supervisorLoaded:           map[int64]struct{}{},
+		pauseByAgent:               map[string]autonomiaBudgetPauseDecision{},
+		operationalStateByAgent:    map[string]string{"claude1": "bloqueado_por_cuota"},
+		operationalDetailByAgent:   map[string]string{"claude1": "worker bloqueado por cuota"},
+		operationalStateLoaded:     true,
+	}
+	out, err := construirAgenteTickOutputConSnapshot("Claude1", proyecto, nil, 100, snapshot)
+	if err != nil {
+		t.Fatalf("construir tick: %v", err)
+	}
+	if out.AccionRecomendada != "pausar_por_cuota" || !out.DebePausar {
+		t.Fatalf("deberia pausar por worker TMUX bloqueado por cuota: %+v", out)
+	}
+	if !strings.Contains(strings.ToLower(out.Motivo), "cuota") {
+		t.Fatalf("motivo inesperado: %q", out.Motivo)
+	}
+}
+
 func TestResolverAccionTickAutonomiaPrioridades(t *testing.T) {
 	t.Run("presupuesto manda sobre trabajo", func(t *testing.T) {
 		accion, pausar, motivo := resolverAccionTickAutonomia(decisionTickAutonomiaInput{

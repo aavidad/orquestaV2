@@ -532,6 +532,10 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 	if err != nil {
 		return nil, err
 	}
+	estadoOperativo, detalleOperativo, err := s.liveOperationalState(agenteNombre)
+	if err != nil {
+		return nil, err
+	}
 
 	out := &TickOutput{
 		Agente: agenteNombre,
@@ -563,6 +567,10 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		out.AccionRecomendada = "pausar_por_cuota"
 		out.DebePausar = true
 		out.Motivo = motivoPresupuesto
+	case strings.EqualFold(strings.TrimSpace(estadoOperativo), "bloqueado_por_cuota"):
+		out.AccionRecomendada = "pausar_por_cuota"
+		out.DebePausar = true
+		out.Motivo = firstNonEmpty(strings.TrimSpace(detalleOperativo), "Worker bloqueado por cuota o enfriamiento activo.")
 	case strings.TrimSpace(agente.EstadoCuota) != "" && agente.EstadoCuota != "activo":
 		out.AccionRecomendada = "pausar_por_cuota"
 		out.DebePausar = true
@@ -589,6 +597,20 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		out.Motivo = "No hay tarea activa asignada en este proyecto"
 	}
 	return out, nil
+}
+
+func (s *Service) liveOperationalState(agenteNombre string) (string, string, error) {
+	rows, err := s.BuildPanelRows()
+	if err != nil {
+		return "", "", err
+	}
+	for _, row := range rows {
+		if row.Agente == nil || !strings.EqualFold(strings.TrimSpace(row.Agente.Nombre), strings.TrimSpace(agenteNombre)) {
+			continue
+		}
+		return strings.TrimSpace(row.EstadoOperativo), strings.TrimSpace(row.DetalleOperativo), nil
+	}
+	return "", "", nil
 }
 
 func (s *Service) blockedTaskNeedsIntervention(agenteNombre string, proyectoID int64, sesionActiva *db.Sesion, tarea *db.Tarea) (bool, error) {

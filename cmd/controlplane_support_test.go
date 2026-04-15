@@ -5851,6 +5851,101 @@ func TestProcesarCompactacionExclusividadPremiumSesionActivaRespetaSemillaYManua
 	}
 }
 
+func TestProcesarCompactacionFrentesPremiumSesionActivaCompactaBloqueadasDuplicadas(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "claude1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "claude-code",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	keepID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente premium bloqueado canónico",
+		Descripcion: "WRITE_SET: cmd/controlplane_support.go\nTests minimos: go test ./cmd -run 'TestProcesarCompactacionFrentesPremiumSesionActivaCompactaBloqueadasDuplicadas$'",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear keep: %v", err)
+	}
+	if err := db.TomarTarea(keepID, "claude1"); err != nil {
+		t.Fatalf("tomar keep: %v", err)
+	}
+	if err := db.BloquearTarea(keepID, "orquesta", "Bloqueada automáticamente por degradación operativa sin relevo sano"); err != nil {
+		t.Fatalf("bloquear keep: %v", err)
+	}
+
+	dupID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente premium bloqueado duplicado",
+		Descripcion: "WRITE_SET: cmd/controlplane_support.go\nTests minimos: go test ./cmd -run 'TestProcesarCompactacionFrentesPremiumSesionActivaCompactaBloqueadasDuplicadas$'",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear dup: %v", err)
+	}
+	if err := db.TomarTarea(dupID, "claude1"); err != nil {
+		t.Fatalf("tomar dup: %v", err)
+	}
+	if err := db.BloquearTarea(dupID, "orquesta", "Bloqueada automáticamente por degradación operativa sin relevo sano"); err != nil {
+		t.Fatalf("bloquear dup: %v", err)
+	}
+
+	n, err := procesarCompactacionFrentesPremiumSesionActiva(sesion, nil)
+	if err != nil {
+		t.Fatalf("compactar frentes: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia compactar una bloqueada duplicada, got=%d", n)
+	}
+
+	keep, _ := db.GetTarea(keepID)
+	dup, _ := db.GetTarea(dupID)
+	mantenidas := 0
+	backlog := 0
+	for _, tarea := range []*db.Tarea{keep, dup} {
+		switch tarea.Estado {
+		case db.TareaBloqueada:
+			if tarea.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), "claude1") {
+				t.Fatalf("la bloqueada retenida debe seguir asignada a claude1: %+v", tarea)
+			}
+			mantenidas++
+		case db.TareaBacklog:
+			if tarea.Agente != nil {
+				t.Fatalf("la duplicada compactada debe volver a backlog sin agente: %+v", tarea)
+			}
+			backlog++
+		default:
+			t.Fatalf("estado inesperado tras compactar: %+v", tarea)
+		}
+	}
+	if mantenidas != 1 || backlog != 1 {
+		t.Fatalf("debería quedar exactamente una bloqueada y una en backlog, mantenidas=%d backlog=%d", mantenidas, backlog)
+	}
+}
+
 func TestProcesarCompactacionExclusividadPremiumBatchMueveRestosSinSesionViva(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
