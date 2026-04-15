@@ -364,6 +364,9 @@ func (r *Runner) runControlPlaneRuntimeOrders() {
 		"Órdenes procesadas en batch: %d",
 		r.Automation.ProcesarRuntimeOrdersBatch,
 	)
+	if count > 0 {
+		r.WakeRuntimeMailbox()
+	}
 	r.debugf("control_plane_runtime_orders count=%d", count)
 }
 

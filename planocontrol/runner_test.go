@@ -425,6 +425,43 @@ func TestRunnerWakeBatchDespiertaRuntimeOrdersSinEsperarIntervaloNiGrace(t *test
 	t.Fatalf("runtime_orders no se despertó con wake explícito: calls=%d audits=%v", service.processedCalls, service.audits)
 }
 
+func TestRunnerWakeRuntimeOrdersDespiertaRuntimeMailboxSiProcesaTrabajo(t *testing.T) {
+	service := &stubAutomationService{processedCount: 1, mailboxCount: 1}
+	r := &Runner{
+		Automation:            service,
+		StartupGrace:          time.Hour,
+		ReanimacionCada:       time.Hour,
+		SaludCada:             time.Hour,
+		PlanificacionCada:     time.Hour,
+		RuntimeTranscriptCada: time.Hour,
+		RuntimeMailboxCada:    time.Hour,
+		RuntimeBudgetCada:     time.Hour,
+		RuntimeOrdersCada:     time.Hour,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r.StartResidentCore(ctx)
+	defer func() {
+		cancel()
+		r.Wait()
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+	if service.processedCalls != 0 || service.mailboxCalls != 0 {
+		t.Fatalf("runtime resident no debería ejecutarse antes del wake explícito: orders=%d mailbox=%d", service.processedCalls, service.mailboxCalls)
+	}
+	if !r.WakeRuntimeOrders() {
+		t.Fatalf("el wake explícito debería aceptarse")
+	}
+	deadline := time.Now().Add(400 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if service.processedCalls > 0 && service.mailboxCalls > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("runtime_orders debería despertar runtime_mailbox cuando procesa trabajo: orders=%d mailbox=%d audits=%v", service.processedCalls, service.mailboxCalls, service.audits)
+}
+
 func TestRunnerWakeBatchDespiertaRuntimeMailboxSinEsperarIntervaloNiGrace(t *testing.T) {
 	service := &stubAutomationService{mailboxCount: 1}
 	r := &Runner{
