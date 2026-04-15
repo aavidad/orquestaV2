@@ -105,6 +105,8 @@ type Row struct {
 	LastControlOrderType      string
 	LastControlOrderMoment    *time.Time
 	MailboxPending            int
+	MailboxActionablePending  int
+	MailboxContinuityPending  int
 	MailboxTotal              int
 	Checkpoints               int
 	LastCheckpoint            *db.RuntimeCheckpoint
@@ -502,27 +504,12 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 	}
 
 	type mailboxCounters struct {
-		Pending int
-		Total   int
+		Pending           int
+		ActionablePending int
+		ContinuityPending int
+		Total             int
 	}
 	mailboxPorAgente := map[string]mailboxCounters{}
-	for _, msg := range mailbox {
-		if msg == nil {
-			continue
-		}
-		for _, agente := range []string{msg.ToAgente, msg.FromAgente} {
-			if strings.TrimSpace(agente) == "" {
-				continue
-			}
-			stats := mailboxPorAgente[agente]
-			stats.Total++
-			if strings.TrimSpace(msg.Estado) == "pendiente" {
-				stats.Pending++
-			}
-			mailboxPorAgente[agente] = stats
-		}
-	}
-
 	checkpointTotalPorAgente := map[string]int{}
 	lastCheckpointPorAgente := map[string]*db.RuntimeCheckpoint{}
 	for _, checkpoint := range checkpoints {
@@ -537,10 +524,12 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 
 	openTasksPorAgente := map[string]int{}
 	blockedTasksPorAgente := map[string]int{}
+	taskByID := map[int64]*db.Tarea{}
 	for _, tarea := range tareas {
 		if tarea == nil || tarea.Agente == nil {
 			continue
 		}
+		taskByID[tarea.ID] = tarea
 		switch tarea.Estado {
 		case db.EstadoCompletada, db.EstadoCancelada:
 			continue
@@ -549,6 +538,33 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 			continue
 		}
 		openTasksPorAgente[*tarea.Agente]++
+	}
+	for _, msg := range mailbox {
+		if msg == nil {
+			continue
+		}
+		for _, agente := range []string{msg.ToAgente, msg.FromAgente} {
+			agente = strings.TrimSpace(agente)
+			if agente == "" {
+				continue
+			}
+			stats := mailboxPorAgente[agente]
+			stats.Total++
+			if !strings.EqualFold(strings.TrimSpace(msg.Estado), "pendiente") {
+				mailboxPorAgente[agente] = stats
+				continue
+			}
+			stats.Pending++
+			if strings.EqualFold(strings.TrimSpace(msg.ToAgente), agente) {
+				if runtimeMailboxCuentaComoTrabajoCanonico(msg, taskByID, agente) {
+					stats.ActionablePending++
+				}
+				if runtimeMailboxEsContinuidadPendiente(msg, taskByID, agente) {
+					stats.ContinuityPending++
+				}
+			}
+			mailboxPorAgente[agente] = stats
+		}
 	}
 
 	now := time.Now().UTC()
@@ -561,22 +577,24 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 		orderStats := ordersPorAgente[agente.Nombre]
 		mailboxStats := mailboxPorAgente[agente.Nombre]
 		row := Row{
-			Agente:                 agente,
-			Asignacion:             asignacionPorAgente[agente.Nombre],
-			Sesion:                 sesionPorAgente[agente.Nombre],
-			Runtime:                runtimePorAgente[agente.Nombre],
-			Handle:                 handlePorAgente[agente.Nombre],
-			OrdersOpen:             orderStats.Open,
-			OrdersFailed:           orderStats.Failed,
-			ControlOrdersOpen:      orderStats.ControlOpen,
-			LastControlOrderType:   strings.TrimSpace(orderStats.LastControlType),
-			LastControlOrderMoment: orderStats.LastControlMoment,
-			MailboxPending:         mailboxStats.Pending,
-			MailboxTotal:           mailboxStats.Total,
-			Checkpoints:            checkpointTotalPorAgente[agente.Nombre],
-			LastCheckpoint:         lastCheckpointPorAgente[agente.Nombre],
-			OpenTasks:              openTasksPorAgente[agente.Nombre],
-			BlockedTasks:           blockedTasksPorAgente[agente.Nombre],
+			Agente:                   agente,
+			Asignacion:               asignacionPorAgente[agente.Nombre],
+			Sesion:                   sesionPorAgente[agente.Nombre],
+			Runtime:                  runtimePorAgente[agente.Nombre],
+			Handle:                   handlePorAgente[agente.Nombre],
+			OrdersOpen:               orderStats.Open,
+			OrdersFailed:             orderStats.Failed,
+			ControlOrdersOpen:        orderStats.ControlOpen,
+			LastControlOrderType:     strings.TrimSpace(orderStats.LastControlType),
+			LastControlOrderMoment:   orderStats.LastControlMoment,
+			MailboxPending:           mailboxStats.Pending,
+			MailboxActionablePending: mailboxStats.ActionablePending,
+			MailboxContinuityPending: mailboxStats.ContinuityPending,
+			MailboxTotal:             mailboxStats.Total,
+			Checkpoints:              checkpointTotalPorAgente[agente.Nombre],
+			LastCheckpoint:           lastCheckpointPorAgente[agente.Nombre],
+			OpenTasks:                openTasksPorAgente[agente.Nombre],
+			BlockedTasks:             blockedTasksPorAgente[agente.Nombre],
 		}
 		if structured := loadStructuredWorkerSnapshot(row.Runtime, row.Handle); structured != nil {
 			if view := structured.View(now, time.Minute); view != nil {
@@ -758,13 +776,43 @@ func (s *Service) buildRowForAgentWithMailbox(nombre string, mailbox []*db.Runti
 		}
 	}
 
+	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &nombre})
+	if err != nil {
+		return Row{}, err
+	}
+	taskByID := map[int64]*db.Tarea{}
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.Agente == nil {
+			continue
+		}
+		taskByID[tarea.ID] = tarea
+		switch tarea.Estado {
+		case db.EstadoCompletada, db.EstadoCancelada:
+			continue
+		case db.EstadoBloqueada:
+			row.BlockedTasks++
+		default:
+			row.OpenTasks++
+		}
+	}
+
 	for _, msg := range mailbox {
 		if msg == nil {
 			continue
 		}
 		row.MailboxTotal++
-		if strings.EqualFold(strings.TrimSpace(msg.Estado), "pendiente") {
-			row.MailboxPending++
+		if !strings.EqualFold(strings.TrimSpace(msg.Estado), "pendiente") {
+			continue
+		}
+		row.MailboxPending++
+		if !strings.EqualFold(strings.TrimSpace(msg.ToAgente), nombre) {
+			continue
+		}
+		if runtimeMailboxCuentaComoTrabajoCanonico(msg, taskByID, nombre) {
+			row.MailboxActionablePending++
+		}
+		if runtimeMailboxEsContinuidadPendiente(msg, taskByID, nombre) {
+			row.MailboxContinuityPending++
 		}
 	}
 
@@ -775,24 +823,6 @@ func (s *Service) buildRowForAgentWithMailbox(nombre string, mailbox []*db.Runti
 	row.Checkpoints = len(checkpoints)
 	if len(checkpoints) > 0 {
 		row.LastCheckpoint = checkpoints[0]
-	}
-
-	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &nombre})
-	if err != nil {
-		return Row{}, err
-	}
-	for _, tarea := range tareas {
-		if tarea == nil || tarea.Agente == nil {
-			continue
-		}
-		switch tarea.Estado {
-		case db.EstadoCompletada, db.EstadoCancelada:
-			continue
-		case db.EstadoBloqueada:
-			row.BlockedTasks++
-		default:
-			row.OpenTasks++
-		}
 	}
 
 	now := time.Now().UTC()
@@ -1281,10 +1311,10 @@ func (s *Service) buildReanimationRowForAgent(agente *db.Agente, asignacion *db.
 	}
 	nombre := strings.TrimSpace(agente.Nombre)
 	row := Row{
-			Agente:       agente,
-			Asignacion:   asignacion,
-			OpenTasks:    openTasks,
-			BlockedTasks: blockedTasks,
+		Agente:       agente,
+		Asignacion:   asignacion,
+		OpenTasks:    openTasks,
+		BlockedTasks: blockedTasks,
 	}
 
 	sesiones, err := s.store.ListInspectionSessions(db.FiltroSesionesInspeccion{Agente: &nombre})
@@ -1371,6 +1401,30 @@ func runtimeMailboxCuentaComoTrabajoCanonico(msg *db.RuntimeMailboxMessage, task
 		}
 	default:
 		return true
+	}
+}
+
+func runtimeMailboxEsContinuidadPendiente(msg *db.RuntimeMailboxMessage, taskByID map[int64]*db.Tarea, agente string) bool {
+	if msg == nil || !strings.EqualFold(strings.TrimSpace(msg.Kind), "autonomia") {
+		return false
+	}
+	payload := runtimeMailboxPayloadMap(msg.PayloadJSON)
+	if !strings.EqualFold(strings.TrimSpace(stringFromRuntimeMailboxPayload(payload, "accion")), "continuar_trabajo") {
+		return false
+	}
+	tareaID := int64FromRuntimeMailboxPayload(payload, "tarea_id")
+	if tareaID <= 0 {
+		return false
+	}
+	tarea := taskByID[tareaID]
+	if tarea == nil || tarea.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(agente)) {
+		return false
+	}
+	switch tarea.Estado {
+	case db.EstadoAsignada, db.EstadoEnProgreso:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -1895,6 +1949,11 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 	}
 	if hasActiveTask && row.KnownLegacyCLIWorker(now) {
 		return "bloqueado_por_runtime", "runtime CLI legacy sin tmux canónico"
+	}
+	if hasActiveTask && row.MailboxContinuityPending == 1 &&
+		(row.WorkerSupportsContinuityRecovery(now) ||
+			(row.workerHeartbeatRecent(now) && strings.EqualFold(strings.TrimSpace(row.handleDriver()), "tmux_cli_session"))) {
+		return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad pendiente útil")
 	}
 	if hasActiveTask && workerRunningFresh && row.workerProgressStale(now, workerOutputStaleThreshold) {
 		return "atascado", firstNonEmpty(row.workerLastProgressSummary(), row.workerLastOutputSummary(), "worker sin progreso reciente")

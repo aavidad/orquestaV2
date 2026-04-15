@@ -1940,6 +1940,75 @@ func TestBuildPanelRowsNoMarcaDisponibleUnRuntimeRotoSinTareas(t *testing.T) {
 	}
 }
 
+func TestBuildPanelRowsNoMarcaAtascadoConContinuidadPendienteUtil(t *testing.T) {
+	now := time.Now().UTC()
+	stale := now.Add(-14 * time.Hour)
+	tmp := t.TempDir()
+	statusPath := filepath.Join(tmp, "status.json")
+	heartbeatPath := filepath.Join(tmp, "heartbeat.json")
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":                 "running",
+		"updated_at":            now.Format(time.RFC3339Nano),
+		"alive":                 true,
+		"last_output_at":        stale.Format(time.RFC3339Nano),
+		"last_progress_at":      stale.Format(time.RFC3339Nano),
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-codex15-120000",
+		"mailbox_delivery_mode": "bootstrap_only",
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":                 true,
+		"heartbeat_at":          now.Format(time.RFC3339Nano),
+		"last_output_at":        stale.Format(time.RFC3339Nano),
+		"last_progress_at":      stale.Format(time.RFC3339Nano),
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-codex15-120000",
+		"mailbox_delivery_mode": "bootstrap_only",
+	})
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-codex15-120000",
+		"mailbox_delivery_mode": "bootstrap_only",
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex15", Rol: "programador", Activo: true, Habilitado: true},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 25, Agente: "Codex15", LogicalState: "esperando_io", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 35, Agente: "Codex15", Estado: "activo", UpdatedAt: now, MetadataJSON: string(metaJSON)},
+		},
+		tasks: []*db.Tarea{
+			{ID: 75, Agente: ptr("Codex15"), Estado: db.EstadoEnProgreso},
+		},
+		mailbox: []*db.RuntimeMailboxMessage{
+			{ID: 95, ToAgente: "Codex15", Kind: "autonomia", Estado: "pendiente", PayloadJSON: `{"accion":"continuar_trabajo","tarea_id":75}`},
+		},
+	}
+
+	rows, err := NewService(store, nil).BuildPanelRows()
+	if err != nil {
+		t.Fatalf("BuildPanelRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d, want 1", len(rows))
+	}
+	if rows[0].EstadoOperativo == "atascado" {
+		t.Fatalf("estado operativo no deberia quedar atascado con continuidad util: %+v", rows[0])
+	}
+}
+
 func TestBuildDetailMergesMailboxWithoutDuplicates(t *testing.T) {
 	store := &fakeStore{
 		agents: []*db.Agente{{Nombre: "Codex2", Rol: "programador"}},
