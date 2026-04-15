@@ -2053,6 +2053,44 @@ func TestBuildReanimationScheduleFiltraVencidasYExponeLeases(t *testing.T) {
 	}
 }
 
+func TestBuildReanimationScheduleActivosDescartaAsignacionesResidualesSinTrabajoCanonico(t *testing.T) {
+	now := time.Now().UTC()
+	proyectoID := int64(7)
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Gemini1", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "enfriamiento", MotivoPausa: "worker bloqueado por cuota", ReanimarAt: timePtr(now.Add(15 * time.Minute))},
+			{Nombre: "Codex12", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "enfriamiento", MotivoPausa: "worker bloqueado por cuota", ReanimarAt: timePtr(now.Add(15 * time.Minute))},
+			{Nombre: "Codex11", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "enfriamiento", MotivoPausa: "worker bloqueado por cuota", ReanimarAt: timePtr(now.Add(15 * time.Minute))},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Gemini1", ProyectoSlug: "orquestador", Estado: db.AsignacionActiva, Nota: "reactivacion_automatica_trabajo_activo"},
+			{Agente: "Codex12", ProyectoSlug: "orquestador", Estado: db.AsignacionActiva, Nota: "handoff_recibido_desde_QwenCoder2"},
+			{Agente: "Codex11", ProyectoSlug: "orquestador", Estado: db.AsignacionActiva, Nota: "handoff_recibido_desde_QwenCoder1"},
+		},
+		tasks: []*db.Tarea{
+			{ID: 548, Titulo: "Frente Gemini", Estado: db.EstadoBloqueada, ProyectoID: &proyectoID, Agente: ptr("Gemini1"), Modulo: "cmd"},
+			{ID: 625, Titulo: "Frente completado", Estado: db.EstadoCompletada, ProyectoID: &proyectoID, Agente: ptr("claude1"), Modulo: "autonomia"},
+		},
+		mailbox: []*db.RuntimeMailboxMessage{
+			{ID: 91, ToAgente: "Codex12", Estado: "pendiente"},
+			{ID: 92, ToAgente: "Codex11", Kind: "autonomia", Estado: "pendiente", PayloadJSON: `{"accion":"continuar_trabajo","tarea_id":625}`},
+			{ID: 93, ToAgente: "Codex12", Kind: "autonomia", Estado: "pendiente", PayloadJSON: `{"accion":"pedir_intervencion"}`},
+		},
+		mailboxCovered: map[int64]bool{91: true},
+	}
+
+	rows, err := NewService(store, nil).BuildReanimationSchedule(true, true)
+	if err != nil {
+		t.Fatalf("BuildReanimationSchedule(true,true): %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows activas=%d, want 1", len(rows))
+	}
+	if rows[0].Name != "Gemini1" {
+		t.Fatalf("row activa inesperada: %+v", rows[0])
+	}
+}
+
 func TestInvestigateAgrupaContextoYEvidencia(t *testing.T) {
 	proyectoID := int64(42)
 	handleID := int64(77)

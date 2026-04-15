@@ -859,10 +859,12 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 		rowByAgent[strings.TrimSpace(agente.Nombre)] = row
 	}
 	leasesByAgent := map[string][]WorkLease{}
+	taskByID := map[int64]*db.Tarea{}
 	for _, tarea := range tareas {
 		if tarea == nil || tarea.Agente == nil {
 			continue
 		}
+		taskByID[tarea.ID] = tarea
 		switch tarea.Estado {
 		case db.EstadoAsignada, db.EstadoEnProgreso, db.EstadoBloqueada:
 			agente := strings.TrimSpace(*tarea.Agente)
@@ -979,19 +981,14 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 		candidates[name] = item
 	}
 	for _, item := range candidates {
+		row := rowByAgent[item.Name]
 		if mailbox, err := s.listMailboxForAgent(item.Name); err == nil {
-			pendientes := 0
-			for _, msg := range mailbox {
-				if msg == nil {
-					continue
-				}
-				if strings.EqualFold(strings.TrimSpace(msg.Estado), "pendiente") {
-					pendientes++
-				}
+			pendientes, err := s.countActionableMailboxPendingForReanimation(mailbox, row.Handle, row.Runtime, taskByID, item.Name)
+			if err == nil {
+				item.MailboxPending = pendientes
 			}
-			item.MailboxPending = pendientes
 		}
-		if activeOnly && strings.TrimSpace(item.AssignmentProject) == "" && len(item.Leases) == 0 && !item.ActiveNow {
+		if activeOnly && !reanimationCandidateHasCanonicalWork(item) {
 			continue
 		}
 		out = append(out, item)
@@ -1018,6 +1015,116 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 	})
 
 	return out, nil
+}
+
+func reanimationCandidateHasCanonicalWork(item ReanimationCandidate) bool {
+	if item.OpenTasks > 0 || item.BlockedTasks > 0 || len(item.Leases) > 0 {
+		return true
+	}
+	return false
+}
+
+func (s *Service) countActionableMailboxPendingForReanimation(items []*db.RuntimeMailboxMessage, handle *db.RuntimeHandle, runtime *db.RuntimeInstance, taskByID map[int64]*db.Tarea, agente string) (int, error) {
+	count := 0
+	for _, item := range items {
+		if item == nil || !strings.EqualFold(strings.TrimSpace(item.Estado), "pendiente") {
+			continue
+		}
+		covered := false
+		if coveredValue, _, _, err := s.store.RuntimeMailboxCoveredByBootstrapPending(item.ID, handle, runtime); err == nil {
+			covered = coveredValue
+		}
+		if covered || !runtimeMailboxCuentaComoTrabajoCanonico(item, taskByID, agente) {
+			continue
+		}
+		count++
+	}
+	return count, nil
+}
+
+func runtimeMailboxCuentaComoTrabajoCanonico(msg *db.RuntimeMailboxMessage, taskByID map[int64]*db.Tarea, agente string) bool {
+	if msg == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(msg.Kind), "autonomia") {
+		return true
+	}
+	payload := runtimeMailboxPayloadMap(msg.PayloadJSON)
+	accion := strings.ToLower(strings.TrimSpace(stringFromRuntimeMailboxPayload(payload, "accion")))
+	switch accion {
+	case "pedir_intervencion":
+		return false
+	case "continuar_trabajo":
+		tareaID := int64FromRuntimeMailboxPayload(payload, "tarea_id")
+		if tareaID <= 0 {
+			return false
+		}
+		tarea := taskByID[tareaID]
+		if tarea == nil || tarea.Agente == nil || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(agente)) {
+			return false
+		}
+		switch tarea.Estado {
+		case db.EstadoAsignada, db.EstadoEnProgreso, db.EstadoBloqueada:
+			return true
+		default:
+			return false
+		}
+	default:
+		return true
+	}
+}
+
+func runtimeMailboxPayloadMap(raw string) map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return map[string]any{}
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(raw), &out); err != nil || out == nil {
+		return map[string]any{}
+	}
+	return out
+}
+
+func stringFromRuntimeMailboxPayload(payload map[string]any, key string) string {
+	if payload == nil {
+		return ""
+	}
+	value, ok := payload[key]
+	if !ok {
+		return ""
+	}
+	text, ok := value.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(text)
+}
+
+func int64FromRuntimeMailboxPayload(payload map[string]any, key string) int64 {
+	if payload == nil {
+		return 0
+	}
+	value, ok := payload[key]
+	if !ok {
+		return 0
+	}
+	switch v := value.(type) {
+	case float64:
+		return int64(v)
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case json.Number:
+		out, _ := v.Int64()
+		return out
+	case string:
+		out, _ := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+		return out
+	default:
+		return 0
+	}
 }
 
 func buildAgentEntity(row Row, tareas []*db.Tarea) *AgentEntity {
