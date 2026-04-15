@@ -6779,6 +6779,110 @@ func TestProcesarRuntimeMailboxBatchEncolaSendInstructionParaTMUXBootstrapOnlyRe
 	}
 }
 
+func TestProcesarRuntimeMailboxBatchNoCoordinaRestartParaTMUXBootstrapOnlyRunning(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Gemini1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "gemini-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	workerDir := filepath.Join(tmp, "worker-running")
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatalf("mkdir workerDir: %v", err)
+	}
+	manifestPath := filepath.Join(workerDir, "manifest.json")
+	statusPath := filepath.Join(workerDir, "status.json")
+	heartbeatPath := filepath.Join(workerDir, "heartbeat.json")
+	now := time.Now().UTC()
+	manifestRaw, _ := json.Marshal(map[string]any{
+		"driver":                "tmux_cli_session",
+		"transport":             "tmux",
+		"tmux_session":          "orq-gemini1-running",
+		"tmux_pane_id":          "%1",
+		"mailbox_delivery_mode": "bootstrap_only",
+		"can_send_input":        false,
+	})
+	statusRaw, _ := json.Marshal(map[string]any{
+		"state":                 "running",
+		"alive":                 true,
+		"updated_at":            now.Format(time.RFC3339Nano),
+		"mailbox_delivery_mode": "bootstrap_only",
+	})
+	heartbeatRaw, _ := json.Marshal(map[string]any{
+		"alive":        true,
+		"heartbeat_at": now.Format(time.RFC3339Nano),
+	})
+	if err := os.WriteFile(manifestPath, append(manifestRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, append(statusRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, append(heartbeatRaw, '\n'), 0o600); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON := fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_session":"orq-gemini1-running","tmux_pane_id":"%%1","can_send_input":false,"mailbox_delivery_mode":"bootstrap_only","worker_manifest_path":"%s","worker_status_path":"%s","worker_heartbeat_path":"%s"}`, manifestPath, statusPath, heartbeatPath)
+	if _, err := db.DB.Exec(
+		`UPDATE runtime_handles SET transporte='tmux', handle_kind='session', capabilities_json=?, metadata_json=? WHERE id=?`,
+		`{"can_send_input":false,"mailbox_delivery_mode":"bootstrap_only"}`,
+		metaJSON,
+		handle.ID,
+	); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Gemini1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","motivo":"mensaje nuevo"}`,
+	}); err != nil {
+		t.Fatalf("mailbox nueva: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar mailbox batch: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("un worker tmux bootstrap_only running no deberia coordinar restart, got=%d", n)
+	}
+
+	agente := "Gemini1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	for _, order := range orders {
+		if order != nil && (order.Tipo == "stop" || order.Tipo == "start") {
+			t.Fatalf("no deberia crear stop/start coordinados cuando el worker tmux esta running: %+v", orders)
+		}
+	}
+}
+
 func TestEncolarSendInstructionDesdeRuntimeMailboxConservaMetadataMicroprogramacion(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

@@ -4746,6 +4746,29 @@ func runtimeHandleListaParaDispatchBootstrapTMUX(handle *db.RuntimeHandle) bool 
 	return ready
 }
 
+func runtimeHandleBootstrapTMUXActivo(handle *db.RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON))
+	if err != nil || snap == nil {
+		return false
+	}
+	view := snap.View(time.Now().UTC(), time.Minute)
+	if view == nil || view.HeartbeatStale || !view.Alive {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(view.Driver), "tmux_cli_session") {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(view.State)) {
+	case "running", "ready", "working":
+		return true
+	default:
+		return false
+	}
+}
+
 func runtimeMailboxGuidanceDurablePersistibleEnInbox(msg *db.RuntimeMailboxMessage) bool {
 	if msg == nil {
 		return false
@@ -5460,6 +5483,9 @@ func runtimeMailboxDebeCoordinarReinicio(kind string, handle *db.RuntimeHandle) 
 	kind = strings.TrimSpace(kind)
 	switch db.RuntimeHandleMailboxDeliveryMode(handle) {
 	case runtimeagente.MailboxDeliveryBootstrapOnly:
+		if runtimeHandleBootstrapTMUXActivo(handle) {
+			return false
+		}
 		switch kind {
 		case "instruction", "autonomia", "nudge", "watchdog", db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh:
 			return true
