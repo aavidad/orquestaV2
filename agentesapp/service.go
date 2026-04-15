@@ -77,8 +77,11 @@ type Service struct {
 }
 
 const defaultWorkerOutputStaleSeconds = 20 * 60
-const compactDetailCacheTTL = 2 * time.Second
-const activeReanimationScheduleCacheTTL = 2 * time.Second
+
+var compactDetailCacheTTL = 2 * time.Second
+var compactDetailStaleWhileRevalidateTTL = 15 * time.Second
+var activeReanimationScheduleCacheTTL = 2 * time.Second
+var activeReanimationScheduleStaleWhileRevalidateTTL = 15 * time.Second
 
 func NewService(store Store, modelPolicyProvider ModelPolicyProvider) *Service {
 	return &Service{
@@ -1736,28 +1739,90 @@ func cloneReanimationCandidates(rows []ReanimationCandidate) []ReanimationCandid
 func (s *Service) getOrBuildCompactDetail(nombre string, fn func() (*Detail, error)) (*Detail, error) {
 	now := time.Now().UTC()
 	s.cacheMu.Lock()
-	if cached, ok := s.compactDetailCache[nombre]; ok && cached.detail != nil && now.Before(cached.expires) {
+	cached, cachedOK := s.compactDetailCache[nombre]
+	if cachedOK && cached.detail != nil && now.Before(cached.expires) {
 		detail := cloneCompactDetail(cached.detail)
 		s.cacheMu.Unlock()
 		return detail, nil
 	}
 	if flight, ok := s.compactDetailFlight[nombre]; ok {
+		if cachedOK && cached.detail != nil && staleCacheStillUsable(now, cached.expires, compactDetailStaleWhileRevalidateTTL) {
+			detail := cloneCompactDetail(cached.detail)
+			s.cacheMu.Unlock()
+			return detail, nil
+		}
 		done := flight.done
 		s.cacheMu.Unlock()
 		<-done
 		return cloneCompactDetail(flight.detail), flight.err
 	}
+	if cachedOK && cached.detail != nil && staleCacheStillUsable(now, cached.expires, compactDetailStaleWhileRevalidateTTL) {
+		flight := &compactDetailFlight{done: make(chan struct{})}
+		s.compactDetailFlight[nombre] = flight
+		detail := cloneCompactDetail(cached.detail)
+		s.cacheMu.Unlock()
+		go s.refreshCompactDetail(nombre, flight, fn)
+		return detail, nil
+	}
 	flight := &compactDetailFlight{done: make(chan struct{})}
 	s.compactDetailFlight[nombre] = flight
 	s.cacheMu.Unlock()
+	return s.runCompactDetailRefresh(nombre, flight, fn)
+}
 
+func (s *Service) getOrBuildActiveReanimationSchedule(key string, fn func() ([]ReanimationCandidate, error)) ([]ReanimationCandidate, error) {
+	now := time.Now().UTC()
+	s.cacheMu.Lock()
+	cached, cachedOK := s.reanimCache[key]
+	if cachedOK && now.Before(cached.expires) {
+		rows := cloneReanimationCandidates(cached.rows)
+		s.cacheMu.Unlock()
+		return rows, nil
+	}
+	if flight, ok := s.reanimFlight[key]; ok {
+		if cachedOK && staleCacheStillUsable(now, cached.expires, activeReanimationScheduleStaleWhileRevalidateTTL) {
+			rows := cloneReanimationCandidates(cached.rows)
+			s.cacheMu.Unlock()
+			return rows, nil
+		}
+		done := flight.done
+		s.cacheMu.Unlock()
+		<-done
+		return cloneReanimationCandidates(flight.rows), flight.err
+	}
+	if cachedOK && staleCacheStillUsable(now, cached.expires, activeReanimationScheduleStaleWhileRevalidateTTL) {
+		flight := &reanimationScheduleFlight{done: make(chan struct{})}
+		s.reanimFlight[key] = flight
+		rows := cloneReanimationCandidates(cached.rows)
+		s.cacheMu.Unlock()
+		go s.refreshActiveReanimationSchedule(key, flight, fn)
+		return rows, nil
+	}
+	flight := &reanimationScheduleFlight{done: make(chan struct{})}
+	s.reanimFlight[key] = flight
+	s.cacheMu.Unlock()
+	return s.runActiveReanimationScheduleRefresh(key, flight, fn)
+}
+
+func staleCacheStillUsable(now, expires time.Time, grace time.Duration) bool {
+	if grace <= 0 || expires.IsZero() {
+		return false
+	}
+	return now.Before(expires.Add(grace))
+}
+
+func (s *Service) refreshCompactDetail(nombre string, flight *compactDetailFlight, fn func() (*Detail, error)) {
+	_, _ = s.runCompactDetailRefresh(nombre, flight, fn)
+}
+
+func (s *Service) runCompactDetailRefresh(nombre string, flight *compactDetailFlight, fn func() (*Detail, error)) (*Detail, error) {
 	detail, err := fn()
 
 	s.cacheMu.Lock()
 	if err == nil && detail != nil {
 		s.compactDetailCache[nombre] = cachedCompactDetail{
 			detail:  cloneCompactDetail(detail),
-			expires: now.Add(compactDetailCacheTTL),
+			expires: time.Now().UTC().Add(compactDetailCacheTTL),
 		}
 	}
 	flight.detail = cloneCompactDetail(detail)
@@ -1768,31 +1833,18 @@ func (s *Service) getOrBuildCompactDetail(nombre string, fn func() (*Detail, err
 	return cloneCompactDetail(detail), err
 }
 
-func (s *Service) getOrBuildActiveReanimationSchedule(key string, fn func() ([]ReanimationCandidate, error)) ([]ReanimationCandidate, error) {
-	now := time.Now().UTC()
-	s.cacheMu.Lock()
-	if cached, ok := s.reanimCache[key]; ok && now.Before(cached.expires) {
-		rows := cloneReanimationCandidates(cached.rows)
-		s.cacheMu.Unlock()
-		return rows, nil
-	}
-	if flight, ok := s.reanimFlight[key]; ok {
-		done := flight.done
-		s.cacheMu.Unlock()
-		<-done
-		return cloneReanimationCandidates(flight.rows), flight.err
-	}
-	flight := &reanimationScheduleFlight{done: make(chan struct{})}
-	s.reanimFlight[key] = flight
-	s.cacheMu.Unlock()
+func (s *Service) refreshActiveReanimationSchedule(key string, flight *reanimationScheduleFlight, fn func() ([]ReanimationCandidate, error)) {
+	_, _ = s.runActiveReanimationScheduleRefresh(key, flight, fn)
+}
 
+func (s *Service) runActiveReanimationScheduleRefresh(key string, flight *reanimationScheduleFlight, fn func() ([]ReanimationCandidate, error)) ([]ReanimationCandidate, error) {
 	rows, err := fn()
 
 	s.cacheMu.Lock()
 	if err == nil {
 		s.reanimCache[key] = cachedReanimationSchedule{
 			rows:    cloneReanimationCandidates(rows),
-			expires: now.Add(activeReanimationScheduleCacheTTL),
+			expires: time.Now().UTC().Add(activeReanimationScheduleCacheTTL),
 		}
 	}
 	flight.rows = cloneReanimationCandidates(rows)
