@@ -143,12 +143,13 @@ func cargarRuntimeDiagnosticoDesdeAPI(agente, proyecto string, limit int) (*runt
 	}
 	workers := runtimeWorkerRows(handles, limit)
 	mailboxPendiente, mailboxCubierta := runtimeDiagnosticoSepararMailboxPendiente(mailbox, orders)
+	runtimes := runtimeDiagnosticoAlinearRuntimesConWorkers(agente, aplanarArbolAPI(tree), workers)
 
 	return &runtimeDiagnosticoData{
 		Agente:           agente,
 		Proyecto:         proyecto,
 		Fuente:           "api",
-		Runtimes:         aplanarArbolAPI(tree),
+		Runtimes:         runtimes,
 		Handles:          handles,
 		Workers:          workers,
 		Orders:           orders,
@@ -192,19 +193,71 @@ func cargarRuntimeDiagnosticoRecuperacionLocal(agente, proyecto string, limit in
 		return nil, err
 	}
 
+	workers := runtimeWorkerRows(handles, limit)
 	data := &runtimeDiagnosticoData{
 		Agente:           agente,
 		Proyecto:         proyecto,
 		Fuente:           "local",
-		Runtimes:         aplanarArbolLocal(tree),
+		Runtimes:         runtimeDiagnosticoAlinearRuntimesConWorkers(agente, aplanarArbolLocal(tree), workers),
 		Handles:          handles,
-		Workers:          runtimeWorkerRows(handles, limit),
+		Workers:          workers,
 		Orders:           orders,
 		Checkpoints:      checkpoints,
 	}
 	data.MailboxPendiente, data.MailboxCubierta = runtimeDiagnosticoSepararMailboxPendiente(mailbox, orders)
 	data.Issues = runtimeDiagnosticoIssues(data.Workers, data.Orders, data.MailboxPendiente, data.Checkpoints)
 	return data, nil
+}
+
+func runtimeDiagnosticoAlinearRuntimesConWorkers(agente string, runtimes []runtimeRow, workers []runtimeDiagnosticoWorkerRow) []runtimeRow {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || len(runtimes) == 0 || len(workers) == 0 {
+		return runtimes
+	}
+	workerState := runtimeDiagnosticoEstadoWorkerEfectivo(agente, workers)
+	if workerState == "" {
+		return runtimes
+	}
+	out := make([]runtimeRow, len(runtimes))
+	copy(out, runtimes)
+	for i := range out {
+		if !strings.EqualFold(strings.TrimSpace(out[i].Agente), agente) {
+			continue
+		}
+		if runtimeDiagnosticoDebePromoverEstadoRuntime(out[i].Estado, workerState) {
+			out[i].Estado = workerState
+		}
+	}
+	return out
+}
+
+func runtimeDiagnosticoEstadoWorkerEfectivo(agente string, workers []runtimeDiagnosticoWorkerRow) string {
+	for _, worker := range workers {
+		if !strings.EqualFold(strings.TrimSpace(worker.Agent), strings.TrimSpace(agente)) || !worker.Alive {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(worker.State)) {
+		case "running", "ready", "working":
+			return "activo"
+		case "paused":
+			return "pausado"
+		}
+	}
+	return ""
+}
+
+func runtimeDiagnosticoDebePromoverEstadoRuntime(actual, objetivo string) bool {
+	actual = strings.ToLower(strings.TrimSpace(actual))
+	objetivo = strings.ToLower(strings.TrimSpace(objetivo))
+	if objetivo == "" || actual == objetivo {
+		return false
+	}
+	switch actual {
+	case "", "disponible", "esperando_io", "pensando", "working":
+		return objetivo == "activo" || objetivo == "pausado"
+	default:
+		return false
+	}
 }
 
 func renderRuntimeDiagnostico(data *runtimeDiagnosticoData, limit int) {

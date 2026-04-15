@@ -170,6 +170,38 @@ func TestRuntimeDiagnosticoRecortaRuntimesYHandlesSegunLimit(t *testing.T) {
 	}
 }
 
+func TestRuntimeDiagnosticoAlineaRuntimeConWorkerActivo(t *testing.T) {
+	runtimes := []runtimeRow{
+		{ID: 1198, Agente: "Gemini1", Estado: "esperando_io"},
+		{ID: 1199, Agente: "Otro", Estado: "esperando_io"},
+	}
+	workers := []runtimeDiagnosticoWorkerRow{
+		{HandleID: 1194, Agent: "Gemini1", State: "running", Alive: true},
+	}
+
+	got := runtimeDiagnosticoAlinearRuntimesConWorkers("Gemini1", runtimes, workers)
+	if got[0].Estado != "activo" {
+		t.Fatalf("runtime del agente deberia promocionarse a activo, got=%q", got[0].Estado)
+	}
+	if got[1].Estado != "esperando_io" {
+		t.Fatalf("runtime ajeno no deberia cambiar, got=%q", got[1].Estado)
+	}
+}
+
+func TestRuntimeDiagnosticoNoPromueveRuntimeTerminalConWorkerActivo(t *testing.T) {
+	runtimes := []runtimeRow{
+		{ID: 1200, Agente: "Gemini1", Estado: "fallido"},
+	}
+	workers := []runtimeDiagnosticoWorkerRow{
+		{HandleID: 1194, Agent: "Gemini1", State: "running", Alive: true},
+	}
+
+	got := runtimeDiagnosticoAlinearRuntimesConWorkers("Gemini1", runtimes, workers)
+	if got[0].Estado != "fallido" {
+		t.Fatalf("runtime terminal no deberia maquillarse, got=%q", got[0].Estado)
+	}
+}
+
 func TestRuntimeHandlesRelevantesPriorizaHandleActivoMasReciente(t *testing.T) {
 	now := time.Now().UTC()
 	oldSeen := now.Add(-2 * time.Minute)
