@@ -237,6 +237,65 @@ func TestBuildTickOutputPausaPorCuotaSiWorkerTMUXBloqueado(t *testing.T) {
 	}
 }
 
+func TestBuildTickOutputNoCuentaBloqueadasComoTareasActivas(t *testing.T) {
+	prepararDBTemporalRuntimeService(t)
+	tmp := t.TempDir()
+	if err := db.RegistrarAgente("Claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Claude1", proyectoID, "microciclo_exclusivo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente bloqueado Claude",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Claude1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Claude1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "Claude1", "Agente Claude1 en estado bloqueado_por_cuota: worker bloqueado por cuota"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', motivo_pausa='worker bloqueado por cuota', reanimar_at=datetime('now','+1 hour') WHERE nombre='Claude1'`); err != nil {
+		t.Fatalf("actualizar cuota: %v", err)
+	}
+
+	svc := NewService(Repository{}, nil)
+	proyecto, err := db.GetProyecto("orquestador")
+	if err != nil || proyecto == nil {
+		t.Fatalf("get proyecto: %+v err=%v", proyecto, err)
+	}
+	out, err := svc.buildTickOutput("Claude1", proyecto, nil, 100)
+	if err != nil {
+		t.Fatalf("buildTickOutput: %v", err)
+	}
+	if len(out.TareasActivas) != 0 {
+		t.Fatalf("las tareas bloqueadas no deberian contarse como activas: %+v", out.TareasActivas)
+	}
+	if out.AccionRecomendada != "pausar_por_cuota" || !out.DebePausar {
+		t.Fatalf("salida inesperada: %+v", out)
+	}
+}
+
 func TestBuildPreparePrefierePoolLocalCompartidoOllama(t *testing.T) {
 	prepararDBTemporalRuntimeService(t)
 	tmp := t.TempDir()

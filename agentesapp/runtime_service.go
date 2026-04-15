@@ -484,7 +484,6 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		if tarea == nil || tarea.Estado == db.TareaCompletada || tarea.Estado == db.TareaCancelada || tarea.Estado == db.TareaBacklog {
 			continue
 		}
-		tareasActivas = append(tareasActivas, LightItem{ID: tarea.ID, Titulo: tarea.Titulo, Estado: string(tarea.Estado)})
 		if tarea.Estado == db.TareaBloqueada {
 			requiereIntervencion, err := s.blockedTaskNeedsIntervention(agenteNombre, proyecto.ID, sesionActiva, tarea)
 			if err != nil {
@@ -493,7 +492,9 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 			if requiereIntervencion {
 				tieneBloqueos = true
 			}
+			continue
 		}
+		tareasActivas = append(tareasActivas, LightItem{ID: tarea.ID, Titulo: tarea.Titulo, Estado: string(tarea.Estado)})
 		if tarea.Estado == db.TareaAsignada || tarea.Estado == db.TareaEnProgreso {
 			tieneTrabajo = true
 		}
