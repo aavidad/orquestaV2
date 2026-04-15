@@ -1037,7 +1037,14 @@ func apiRouterAgentes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if len(parts) == 2 && parts[1] == "overview" {
-			detail, err := agentesService.BuildDetail(parts[0])
+			compact := parseBoolDebug(r.URL.Query().Get("compact"), false)
+			var detail *agentesapp.Detail
+			var err error
+			if compact {
+				detail, err = agentesService.BuildDetailCompact(parts[0])
+			} else {
+				detail, err = agentesService.BuildDetail(parts[0])
+			}
 			if err != nil {
 				apiError(w, http.StatusNotFound, err)
 				return

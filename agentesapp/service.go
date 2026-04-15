@@ -125,6 +125,7 @@ type Detail struct {
 	Transcript              []*db.RuntimeTranscriptEntry `json:"transcript,omitempty"`
 	Orders                  []*db.RuntimeOrder           `json:"orders,omitempty"`
 	Mailbox                 []*db.RuntimeMailboxMessage  `json:"mailbox,omitempty"`
+	MailboxTotalCount       int                          `json:"mailbox_total_count"`
 	MailboxPendingVisible   int                          `json:"mailbox_pending_visible"`
 	MailboxCoveredBootstrap int                          `json:"mailbox_covered_bootstrap"`
 	Checkpoints             []*db.RuntimeCheckpoint      `json:"checkpoints,omitempty"`
@@ -629,6 +630,14 @@ func (s *Service) BuildPanelRows() ([]Row, error) {
 }
 
 func (s *Service) BuildDetail(nombre string) (*Detail, error) {
+	return s.buildDetail(nombre, false)
+}
+
+func (s *Service) BuildDetailCompact(nombre string) (*Detail, error) {
+	return s.buildDetail(nombre, true)
+}
+
+func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 	nombre = strings.TrimSpace(nombre)
 	mailbox, err := s.listMailboxForAgent(nombre)
 	if err != nil {
@@ -643,6 +652,27 @@ func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 	if err != nil {
 		return nil, err
 	}
+	mailboxPendingVisible, mailboxCoveredBootstrap, err := s.summarizeMailboxOverview(mailbox, row.Handle, row.Runtime)
+	if err != nil {
+		return nil, err
+	}
+	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &nombre})
+	if err != nil {
+		return nil, err
+	}
+
+	detail := &Detail{
+		Row:                     row,
+		Entity:                  buildAgentEntity(row, tareas),
+		Asignaciones:            asignaciones,
+		MailboxTotalCount:       len(mailbox),
+		MailboxPendingVisible:   mailboxPendingVisible,
+		MailboxCoveredBootstrap: mailboxCoveredBootstrap,
+	}
+	if compact {
+		return detail, nil
+	}
+
 	sesiones, err := s.store.ListInspectionSessions(db.FiltroSesionesInspeccion{Agente: &nombre})
 	if err != nil {
 		return nil, err
@@ -663,33 +693,19 @@ func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 	if err != nil {
 		return nil, err
 	}
-	mailboxPendingVisible, mailboxCoveredBootstrap, err := s.summarizeMailboxOverview(mailbox, row.Handle, row.Runtime)
-	if err != nil {
-		return nil, err
-	}
 	checkpoints, err := s.store.ListRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{Agente: &nombre, Limit: 20})
 	if err != nil {
 		return nil, err
 	}
-	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &nombre})
-	if err != nil {
-		return nil, err
-	}
 
-	return &Detail{
-		Row:                     row,
-		Entity:                  buildAgentEntity(row, tareas),
-		Asignaciones:            asignaciones,
-		Sesiones:                sesiones,
-		Runtimes:                runtimes,
-		Handles:                 handles,
-		Transcript:              transcript,
-		Orders:                  orders,
-		Mailbox:                 mailbox,
-		MailboxPendingVisible:   mailboxPendingVisible,
-		MailboxCoveredBootstrap: mailboxCoveredBootstrap,
-		Checkpoints:             checkpoints,
-	}, nil
+	detail.Sesiones = sesiones
+	detail.Runtimes = runtimes
+	detail.Handles = handles
+	detail.Transcript = transcript
+	detail.Orders = orders
+	detail.Mailbox = mailbox
+	detail.Checkpoints = checkpoints
+	return detail, nil
 }
 
 func (s *Service) buildRowForAgent(nombre string) (Row, error) {

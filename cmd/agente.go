@@ -603,7 +603,7 @@ var agenteOverviewCmd = &cobra.Command{
 		jsonOut, _ := cmd.Flags().GetBool("json")
 
 		var out apiAgenteOverviewResponse
-		if ok, err := apiGet(fmt.Sprintf("/api/agentes/%s/overview", url.PathEscape(agenteNombre)), &out); err != nil {
+		if ok, err := apiGet(fmt.Sprintf("/api/agentes/%s/overview?compact=true", url.PathEscape(agenteNombre)), &out); err != nil {
 			return err
 		} else if ok {
 			return imprimirAgenteOverview(out, jsonOut)
@@ -1342,11 +1342,15 @@ func imprimirAgenteOverview(out apiAgenteOverviewResponse, jsonOut bool) error {
 		fmt.Printf("Handle:    #%d %s %s\n", row.Handle.ID, strings.TrimSpace(row.Handle.Estado), strings.TrimSpace(row.Handle.Transporte))
 	}
 	pendientes, cubiertas := detail.MailboxPendingVisible, detail.MailboxCoveredBootstrap
+	totalMailbox := detail.MailboxTotalCount
+	if totalMailbox == 0 && len(detail.Mailbox) > 0 {
+		totalMailbox = len(detail.Mailbox)
+	}
 	fmt.Printf("Mailbox:   %d pendiente(s)", pendientes)
 	if cubiertas > 0 {
 		fmt.Printf(" · %d cubierta(s)", cubiertas)
 	}
-	fmt.Printf(" / %d total\n", len(detail.Mailbox))
+	fmt.Printf(" / %d total\n", totalMailbox)
 	abiertas, bloqueadas := resumirLeasesOverview(detail.Entity.Leases)
 	fmt.Printf("Tareas:    %d lease(s)", len(detail.Entity.Leases))
 	if abiertas > 0 || bloqueadas > 0 {
