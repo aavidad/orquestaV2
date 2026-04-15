@@ -5851,6 +5851,197 @@ func TestProcesarCompactacionExclusividadPremiumSesionActivaRespetaSemillaYManua
 	}
 }
 
+func TestProcesarCompactacionExclusividadPremiumBatchMueveRestosSinSesionViva(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	orqID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto orquestador: %v", err)
+	}
+	otroID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "api",
+		Nombre:  "API",
+		RutaAbs: filepath.Join(tmp, "api"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto api: %v", err)
+	}
+	if err := db.ActivarAsignacion("claude1", orqID, "microciclo_exclusivo"); err != nil {
+		t.Fatalf("activar asignacion exclusiva: %v", err)
+	}
+
+	keepID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente premium acotado",
+		Descripcion: "WRITE_SET: cmd/controlplane_support.go\nTests minimos: go test ./cmd -run 'TestProcesarCompactacionExclusividadPremiumBatchMueveRestosSinSesionViva$'",
+		ProyectoID:  &orqID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea keep: %v", err)
+	}
+	if err := db.TomarTarea(keepID, "claude1"); err != nil {
+		t.Fatalf("tomar keep: %v", err)
+	}
+
+	legacyID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Tarea legacy",
+		Descripcion: "Sin contrato acotado",
+		ProyectoID:  &orqID,
+		Modulo:      "legacy",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea legacy: %v", err)
+	}
+	if err := db.TomarTarea(legacyID, "claude1"); err != nil {
+		t.Fatalf("tomar legacy: %v", err)
+	}
+
+	ajenaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Tarea ajena",
+		Descripcion: "No debe seguir en un premium exclusivo ajeno",
+		ProyectoID:  &otroID,
+		Modulo:      "api",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea ajena: %v", err)
+	}
+	if err := db.TomarTarea(ajenaID, "claude1"); err != nil {
+		t.Fatalf("tomar ajena: %v", err)
+	}
+
+	rows := []agentesapp.Row{{
+		Agente:          &db.Agente{Nombre: "claude1"},
+		Asignacion:      &db.Asignacion{Agente: "claude1", ProyectoID: orqID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva, Nota: "microciclo_exclusivo"},
+		EstadoOperativo: "bloqueado_por_runtime",
+	}}
+	tareasActivasPorAgente := map[string][]*db.Tarea{
+		"claude1": {
+			{ID: keepID, Agente: ptrString("claude1"), Estado: db.TareaAsignada},
+			{ID: legacyID, Agente: ptrString("claude1"), Estado: db.TareaAsignada},
+			{ID: ajenaID, Agente: ptrString("claude1"), Estado: db.TareaAsignada},
+		},
+	}
+
+	n, err := procesarCompactacionExclusividadPremiumBatch(rows, tareasActivasPorAgente)
+	if err != nil {
+		t.Fatalf("compactar batch: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("deberia mover dos restos a backlog, got=%d", n)
+	}
+
+	keep, _ := db.GetTarea(keepID)
+	if keep.Estado != db.TareaAsignada || keep.Agente == nil || !strings.EqualFold(strings.TrimSpace(*keep.Agente), "claude1") {
+		t.Fatalf("el frente bounded deberia mantenerse: %+v", keep)
+	}
+	legacy, _ := db.GetTarea(legacyID)
+	if legacy.Estado != db.TareaBacklog || legacy.Agente != nil {
+		t.Fatalf("la legacy deberia volver a backlog: %+v", legacy)
+	}
+	ajena, _ := db.GetTarea(ajenaID)
+	if ajena.Estado != db.TareaBacklog || ajena.Agente != nil {
+		t.Fatalf("la ajena deberia volver a backlog: %+v", ajena)
+	}
+}
+
+func TestProcesarDecisionPausaSesionActivaAutonomiaUsaStopCuandoLaAsignacionCambioDeProyecto(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "multi-app",
+		Nombre:  "Multi App",
+		RutaAbs: filepath.Join(tmp, "multi-app"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	proyecto, err := db.GetProyecto("multi-app")
+	if err != nil || proyecto == nil {
+		t.Fatalf("get proyecto: %+v err=%v", proyecto, err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "multi-app"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	n, err := procesarDecisionPausaSesionActivaAutonomia(sesion, proyecto, agenteTickOutput{
+		AccionRecomendada: "pausar_y_reasignar",
+		Motivo:            "La asignación activa del agente ha cambiado al proyecto orquestador",
+	}, nil)
+	if err != nil {
+		t.Fatalf("procesar decision pausa: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("deberia encolar una orden de control, got=%d", n)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != agenteControlAccionStop {
+		t.Fatalf("deberia encolar stop al cambiar la asignacion de proyecto: %+v", orders)
+	}
+}
+
+func TestRowProyectoIDPreferidoPriorizaAsignacionActivaSobreRuntimeViejo(t *testing.T) {
+	asignado := int64(10)
+	runtimeViejo := int64(20)
+	row := agentesapp.Row{
+		Asignacion: &db.Asignacion{ProyectoID: asignado, Estado: db.AsignacionActiva},
+		Runtime:    &db.RuntimeInstance{ProyectoID: &runtimeViejo},
+		Handle:     &db.RuntimeHandle{ProyectoID: &runtimeViejo},
+	}
+
+	proyectoID := rowProyectoIDPreferido(row)
+	if proyectoID == nil || *proyectoID != asignado {
+		t.Fatalf("deberia priorizar el proyecto de la asignacion activa, got=%v", proyectoID)
+	}
+}
+
+func TestRowProyectoIDPreferidoUsaRuntimeSiNoHayAsignacion(t *testing.T) {
+	runtimeID := int64(20)
+	row := agentesapp.Row{
+		Runtime: &db.RuntimeInstance{ProyectoID: &runtimeID},
+		Handle:  &db.RuntimeHandle{ProyectoID: &runtimeID},
+	}
+
+	proyectoID := rowProyectoIDPreferido(row)
+	if proyectoID == nil || *proyectoID != runtimeID {
+		t.Fatalf("deberia usar el runtime si no hay asignacion, got=%v", proyectoID)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchNoEncolaNudgePorSupervisarProyectoEnSesionActiva(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -14520,6 +14711,169 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReactivaPremiumSinRuntimeNiHandl
 	}
 	if !strings.Contains(orders[0].PayloadJSON, `"motivo":"agente_sin_runtime_activo"`) {
 		t.Fatalf("start sin motivo esperado: %s", orders[0].PayloadJSON)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchReactivaPremiumConHandleFallidoYRuntimeDegradado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "microciclo_exclusivo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Retomar frente con runtime degradado",
+		Descripcion: "Trabajo premium ya asignado",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Gemini1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Gemini1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Gemini1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "gemini-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	runtimeActual, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtimeActual == nil {
+		t.Fatalf("get runtime: %+v err=%v", runtimeActual, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='fallido' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("degradar handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='fallido', process_state='fallido' WHERE id=?`, runtimeActual.ID); err != nil {
+		t.Fatalf("degradar runtime: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	n, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if n < 1 {
+		t.Fatalf("deberia reactivar premium con handle fallido/runtime degradado, got=%d", n)
+	}
+
+	agente := "Gemini1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) == 0 || orders[0].Tipo != "start" {
+		t.Fatalf("deberia encolar start para runtime degradado: %+v", orders)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchReactivaPremiumConTareaBloqueadaYRuntimeCaido(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "microciclo_exclusivo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Retomar frente bloqueado",
+		Descripcion: "Trabajo premium bloqueado por degradacion operativa",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Gemini1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Gemini1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "Gemini1", "Agente Gemini1 en estado bloqueado_por_runtime: runtime principal stale"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Gemini1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "gemini-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	runtimeActual, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtimeActual == nil {
+		t.Fatalf("get runtime: %+v err=%v", runtimeActual, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='fallido' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("degradar handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='fallido', process_state='fallido' WHERE id=?`, runtimeActual.ID); err != nil {
+		t.Fatalf("degradar runtime: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	n, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if n < 1 {
+		t.Fatalf("deberia reactivar premium con tarea bloqueada y runtime caido, got=%d", n)
+	}
+
+	agente := "Gemini1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) == 0 || orders[0].Tipo != "start" {
+		t.Fatalf("deberia encolar start para tarea bloqueada recuperable: %+v", orders)
 	}
 }
 

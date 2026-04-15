@@ -6071,12 +6071,17 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 		return procesadas, err
 	}
 	procesadas += limpiadasFuera
+	compactadasExclusivas, err := procesarCompactacionExclusividadPremiumBatch(rows, tareasActivasPorAgente)
+	if err != nil {
+		return procesadas, err
+	}
+	procesadas += compactadasExclusivas
 	redistribuidas, err := procesarSobrecargaAgentesAutonomiaBatch(rows, tareasActivasPorAgente, openTasksProjected, now)
 	if err != nil {
 		return procesadas, err
 	}
 	procesadas += redistribuidas
-	reactivadosSinRuntime, err := procesarReactivacionAgentesSinRuntimeBatch(rows, tareasActivasPorAgente)
+	reactivadosSinRuntime, err := procesarReactivacionAgentesSinRuntimeBatch(rows, tareasActivasPorAgente, tareasBloqueadasPorAgente)
 	if err != nil {
 		return procesadas, err
 	}
@@ -6398,6 +6403,42 @@ func procesarTareasActivasFueraDeOrquestacionBatch(tareasActivasPorAgente map[st
 	return procesadas, nil
 }
 
+func procesarCompactacionExclusividadPremiumBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea) (int, error) {
+	procesadas := 0
+	for _, row := range rows {
+		if row.Agente == nil || row.Asignacion == nil {
+			continue
+		}
+		if row.Asignacion.Estado != db.AsignacionActiva || !strings.EqualFold(strings.TrimSpace(row.Asignacion.Nota), "microciclo_exclusivo") {
+			continue
+		}
+		agente := strings.TrimSpace(row.Agente.Nombre)
+		if agente == "" {
+			continue
+		}
+		for _, tarea := range tareasActivasPorAgente[agente] {
+			if tarea == nil {
+				continue
+			}
+			actual, err := db.GetTarea(tarea.ID)
+			if err != nil {
+				return procesadas, err
+			}
+			if !tareaDebeCompactarsePorExclusividadPremium(actual, row.Asignacion.ProyectoID, agente) {
+				continue
+			}
+			if err := tareasService.MoveToBacklog(actual.ID); err != nil {
+				return procesadas, err
+			}
+			procesadas++
+		}
+	}
+	if procesadas > 0 {
+		resetStatusSnapshotCache()
+	}
+	return procesadas, nil
+}
+
 func agentePareceOperadorManualFueraDeFlota(nombre string) bool {
 	lower := strings.ToLower(strings.TrimSpace(nombre))
 	if lower == "" {
@@ -6485,7 +6526,7 @@ func errorMigracionRuntimeLegacyTMUXIgnorable(err error) bool {
 	}
 }
 
-func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea) (int, error) {
+func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea, tareasBloqueadasPorAgente map[string][]*db.Tarea) (int, error) {
 	procesadas := 0
 	for _, row := range rows {
 		if row.Agente == nil {
@@ -6494,14 +6535,14 @@ func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasAct
 		if strings.TrimSpace(row.EstadoOperativo) != "bloqueado_por_runtime" {
 			continue
 		}
-		if row.Handle != nil || row.Runtime != nil {
+		if rowTieneRuntimeOHandleOperativo(row) {
 			continue
 		}
 		agente := strings.TrimSpace(row.Agente.Nombre)
 		if agente == "" {
 			continue
 		}
-		if row.MailboxPending <= 0 && len(tareasActivasPorAgente[agente]) == 0 {
+		if row.MailboxPending <= 0 && len(tareasActivasPorAgente[agente]) == 0 && len(tareasBloqueadasPorAgente[agente]) == 0 {
 			continue
 		}
 		if disponible, _, err := autonomiaCuentaCompartidaDisponible(agente); err != nil {
@@ -6525,10 +6566,26 @@ func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasAct
 			continue
 		}
 		db.Audit("orquesta", "autonomia_agente_sin_runtime_reactivado", "proyecto", proyecto.ID,
-			fmt.Sprintf("agente=%s detalle=%s mailbox_pending=%d open_tasks=%d", agente, strings.TrimSpace(row.DetalleOperativo), row.MailboxPending, len(tareasActivasPorAgente[agente])))
+			fmt.Sprintf("agente=%s detalle=%s mailbox_pending=%d open_tasks=%d blocked_tasks=%d", agente, strings.TrimSpace(row.DetalleOperativo), row.MailboxPending, len(tareasActivasPorAgente[agente]), len(tareasBloqueadasPorAgente[agente])))
 		procesadas++
 	}
 	return procesadas, nil
+}
+
+func rowTieneRuntimeOHandleOperativo(row agentesapp.Row) bool {
+	if row.Handle != nil {
+		switch strings.ToLower(strings.TrimSpace(row.Handle.Estado)) {
+		case "activo", "active", "pausado", "paused":
+			return true
+		}
+	}
+	if row.Runtime != nil {
+		switch strings.ToLower(strings.TrimSpace(row.Runtime.LogicalState)) {
+		case "activo", "active", "running", "iniciando", "starting", "esperando_io", "waiting_io", "pausado", "paused":
+			return true
+		}
+	}
+	return false
 }
 
 func procesarWorkersAtascadosAutonomiaBatch(rows []agentesapp.Row, now time.Time) (int, error) {
@@ -6984,10 +7041,10 @@ func runtimeHandleEsLegacyControlPlane(handle *db.RuntimeHandle) bool {
 
 func rowProyectoIDPreferido(row agentesapp.Row) *int64 {
 	for _, id := range []*int64{
+		rowAsignacionProyectoID(row.Asignacion),
 		rowHandleProyectoID(row.Handle),
 		rowRuntimeProyectoID(row.Runtime),
 		rowSesionProyectoID(row.Sesion),
-		rowAsignacionProyectoID(row.Asignacion),
 	} {
 		if id != nil && *id > 0 {
 			return id
@@ -7974,7 +8031,11 @@ func procesarDecisionPausaSesionActivaAutonomia(sesion *db.Sesion, proyecto *db.
 			return 0, err
 		}
 	}
-	if err := encolarControlAutonomiaProyecto(sesion.Agente, proyecto, agenteControlAccionPause, out.Motivo); err != nil {
+	accion := agenteControlAccionPause
+	if strings.TrimSpace(out.AccionRecomendada) == "pausar_y_reasignar" {
+		accion = agenteControlAccionStop
+	}
+	if err := encolarControlAutonomiaProyecto(sesion.Agente, proyecto, accion, out.Motivo); err != nil {
 		return 0, err
 	}
 	invalidarSnapshotAutonomiaProyecto(snapshot, sesion.Agente, proyecto.ID)
