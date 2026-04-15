@@ -31,6 +31,7 @@ type runtimeDiagnosticoData struct {
 	Issues           []runtimeDiagnosticoIssue
 	Orders           []*db.RuntimeOrder
 	MailboxPendiente []*db.RuntimeMailboxMessage
+	MailboxCubierta  []*db.RuntimeMailboxMessage
 	Checkpoints      []*db.RuntimeCheckpoint
 }
 
@@ -141,6 +142,7 @@ func cargarRuntimeDiagnosticoDesdeAPI(agente, proyecto string, limit int) (*runt
 		return nil, ok, err
 	}
 	workers := runtimeWorkerRows(handles, limit)
+	mailboxPendiente, mailboxCubierta := runtimeDiagnosticoSepararMailboxPendiente(mailbox, orders)
 
 	return &runtimeDiagnosticoData{
 		Agente:           agente,
@@ -150,9 +152,10 @@ func cargarRuntimeDiagnosticoDesdeAPI(agente, proyecto string, limit int) (*runt
 		Handles:          handles,
 		Workers:          workers,
 		Orders:           orders,
-		MailboxPendiente: mailbox,
+		MailboxPendiente: mailboxPendiente,
+		MailboxCubierta:  mailboxCubierta,
 		Checkpoints:      checkpoints,
-		Issues:           runtimeDiagnosticoIssues(workers, orders, mailbox, checkpoints),
+		Issues:           runtimeDiagnosticoIssues(workers, orders, mailboxPendiente, checkpoints),
 	}, true, nil
 }
 
@@ -197,9 +200,9 @@ func cargarRuntimeDiagnosticoRecuperacionLocal(agente, proyecto string, limit in
 		Handles:          handles,
 		Workers:          runtimeWorkerRows(handles, limit),
 		Orders:           orders,
-		MailboxPendiente: mailbox,
 		Checkpoints:      checkpoints,
 	}
+	data.MailboxPendiente, data.MailboxCubierta = runtimeDiagnosticoSepararMailboxPendiente(mailbox, orders)
 	data.Issues = runtimeDiagnosticoIssues(data.Workers, data.Orders, data.MailboxPendiente, data.Checkpoints)
 	return data, nil
 }
@@ -220,7 +223,11 @@ func renderRuntimeDiagnostico(data *runtimeDiagnosticoData, limit int) {
 	fmt.Printf("Runtimes:   %d\n", len(data.Runtimes))
 	fmt.Printf("Handles:    %d\n", len(data.Handles))
 	fmt.Printf("Órdenes:    %d total (%s)\n", len(data.Orders), resumirEstadosRuntimeOrders(data.Orders))
-	fmt.Printf("Mailbox:    %d pendiente(s)\n", len(data.MailboxPendiente))
+	fmt.Printf("Mailbox:    %d pendiente(s)", len(data.MailboxPendiente))
+	if len(data.MailboxCubierta) > 0 {
+		fmt.Printf(" · %d cubierta(s)", len(data.MailboxCubierta))
+	}
+	fmt.Printf("\n")
 	fmt.Printf("Checkpoints:%d recientes\n", len(data.Checkpoints))
 
 	runtimes := runtimeRowsRelevantes(data.Runtimes, limit)
@@ -250,10 +257,47 @@ func renderRuntimeDiagnostico(data *runtimeDiagnosticoData, limit int) {
 		fmt.Println("\nMailbox pendiente")
 		_ = imprimirRuntimeMailbox(data.MailboxPendiente)
 	}
+	if len(data.MailboxCubierta) > 0 {
+		fmt.Println("\nMailbox cubierta")
+		_ = imprimirRuntimeMailbox(data.MailboxCubierta)
+	}
 	if len(data.Checkpoints) > 0 {
 		fmt.Println("\nCheckpoints recientes")
 		_ = imprimirRuntimeDiagnosticoCheckpoints(data.Checkpoints)
 	}
+}
+
+func runtimeDiagnosticoSepararMailboxPendiente(mailbox []*db.RuntimeMailboxMessage, orders []*db.RuntimeOrder) ([]*db.RuntimeMailboxMessage, []*db.RuntimeMailboxMessage) {
+	if len(mailbox) == 0 {
+		return nil, nil
+	}
+	cubiertaIDs := map[int64]struct{}{}
+	for _, order := range orders {
+		if order == nil || !strings.EqualFold(strings.TrimSpace(order.Tipo), "send_instruction") {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(order.Estado), "completada") || !runtimeOrderMailboxOnlyResult(order.ResultadoJSON) {
+			continue
+		}
+		mailboxID := runtimeOrderMailboxIDFromJSON(order.PayloadJSON)
+		if mailboxID <= 0 {
+			continue
+		}
+		cubiertaIDs[mailboxID] = struct{}{}
+	}
+	pendiente := make([]*db.RuntimeMailboxMessage, 0, len(mailbox))
+	cubierta := make([]*db.RuntimeMailboxMessage, 0)
+	for _, msg := range mailbox {
+		if msg == nil || !strings.EqualFold(strings.TrimSpace(msg.Estado), "pendiente") {
+			continue
+		}
+		if _, ok := cubiertaIDs[msg.ID]; ok {
+			cubierta = append(cubierta, msg)
+			continue
+		}
+		pendiente = append(pendiente, msg)
+	}
+	return pendiente, cubierta
 }
 
 func runtimeRowsRelevantes(rows []runtimeRow, limit int) []runtimeRow {

@@ -259,6 +259,62 @@ func TestRuntimeDiagnosticoMuestraWorkerEstructurado(t *testing.T) {
 	}
 }
 
+func TestRuntimeDiagnosticoSeparaMailboxCubiertaDePendienteReal(t *testing.T) {
+	now := time.Now().UTC()
+	mailboxPendiente := &db.RuntimeMailboxMessage{
+		ID:         41,
+		FromAgente: "server",
+		ToAgente:   "Codex1",
+		Kind:       "autonomia",
+		Estado:     "pendiente",
+		CreatedAt:  now,
+	}
+	mailboxReal := &db.RuntimeMailboxMessage{
+		ID:         42,
+		FromAgente: "server",
+		ToAgente:   "Codex1",
+		Kind:       "autonomia",
+		Estado:     "pendiente",
+		CreatedAt:  now,
+	}
+	orderCubierta := &db.RuntimeOrder{
+		ID:        77,
+		Agente:    "Codex1",
+		Tipo:      "send_instruction",
+		Estado:    "completada",
+		CreatedAt: now,
+		PayloadJSON: `{"to_agente":"Codex1","mailbox_id":41,"mailbox_kind":"autonomia"}`,
+		ResultadoJSON: `{"mailbox_only":true,"delivery_state":"delivered"}`,
+	}
+
+	pendiente, cubierta := runtimeDiagnosticoSepararMailboxPendiente(
+		[]*db.RuntimeMailboxMessage{mailboxPendiente, mailboxReal},
+		[]*db.RuntimeOrder{orderCubierta},
+	)
+	if len(pendiente) != 1 || pendiente[0] == nil || pendiente[0].ID != 42 {
+		t.Fatalf("mailbox pendiente inesperada: %+v", pendiente)
+	}
+	if len(cubierta) != 1 || cubierta[0] == nil || cubierta[0].ID != 41 {
+		t.Fatalf("mailbox cubierta inesperada: %+v", cubierta)
+	}
+
+	data := &runtimeDiagnosticoData{
+		Agente:           "Codex1",
+		Fuente:           "api",
+		Orders:           []*db.RuntimeOrder{orderCubierta},
+		MailboxPendiente: pendiente,
+		MailboxCubierta:  cubierta,
+	}
+	out := capturarStdout(t, func() {
+		renderRuntimeDiagnostico(data, 5)
+	})
+	for _, token := range []string{"Mailbox:    1 pendiente(s) · 1 cubierta(s)", "Mailbox cubierta", "41"} {
+		if !strings.Contains(out, token) {
+			t.Fatalf("salida sin %q:\n%s", token, out)
+		}
+	}
+}
+
 func TestRuntimeDiagnosticoMarcaWorkerStaleSiElHandleYaEsTerminal(t *testing.T) {
 	tmp := t.TempDir()
 	manifestPath := filepath.Join(tmp, "manifest.json")
