@@ -7001,7 +7001,11 @@ func resolverProyectoAutoasignacionPremiumSinSesion(agente string, row agentesap
 	if err != nil {
 		return nil, err
 	}
-	var best *db.Asignacion
+	var (
+		best           *db.Asignacion
+		bestProyecto   *db.Proyecto
+		bestScore      = -1
+	)
 	for _, asignacion := range asignaciones {
 		if asignacion == nil || asignacion.ProyectoID <= 0 {
 			continue
@@ -7014,14 +7018,30 @@ func resolverProyectoAutoasignacionPremiumSinSesion(agente string, row agentesap
 		default:
 			continue
 		}
-		if best == nil || asignacion.ID > best.ID {
+		proyecto, err := runtimesService.GetProject(strconv.FormatInt(asignacion.ProyectoID, 10))
+		if err != nil {
+			return nil, err
+		}
+		if proyecto == nil {
+			continue
+		}
+		score := 0
+		if proyectoUsaContinuidadMicrocicloPremium(proyecto.ID) {
+			score += 100
+		}
+		if strings.EqualFold(strings.TrimSpace(asignacion.Nota), "sin_trabajo_reactivacion_automatica") {
+			score += 10
+		}
+		if best == nil || score > bestScore || (score == bestScore && asignacion.ID > best.ID) {
 			best = asignacion
+			bestProyecto = proyecto
+			bestScore = score
 		}
 	}
 	if best == nil {
 		return nil, nil
 	}
-	return runtimesService.GetProject(strconv.FormatInt(best.ProyectoID, 10))
+	return bestProyecto, nil
 }
 
 func rowTieneRuntimeUtilParaAutoasignacionPremium(row agentesapp.Row) bool {

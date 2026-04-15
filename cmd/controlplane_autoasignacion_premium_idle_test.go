@@ -168,3 +168,65 @@ func TestProcesarAutoasignacionPremiumSinSesionBatchUsaAsignacionActivaSinRuntim
 		t.Fatalf("start sin motivo esperado: %s", orders[0].PayloadJSON)
 	}
 }
+
+func TestResolverProyectoAutoasignacionPremiumSinSesionPrefiereProyectoPremiumSobrePausaMasReciente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoPremiumID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto premium: %v", err)
+	}
+	if err := db.UpsertProyectoOperacion(&db.ProyectoOperacion{
+		ProyectoID:       proyectoPremiumID,
+		EstadoOperativo:  db.ProyectoOperativoActivo,
+		Motivo:           "microrefactor_loop",
+		ObjetivoPct:      100,
+		MinAgentes:       1,
+		MaxAgentes:       3,
+		ResumeAutomatico: true,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion premium: %v", err)
+	}
+	proyectoAPIID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "api",
+		Nombre:  "API",
+		RutaAbs: filepath.Join(tmp, "api"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto api: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoPremiumID, "reactivacion_automatica_trabajo_activo"); err != nil {
+		t.Fatalf("activar asignacion premium: %v", err)
+	}
+	if err := db.PausarAsignacion("Gemini1", proyectoPremiumID, "sin_trabajo_reactivacion_automatica"); err != nil {
+		t.Fatalf("pausar asignacion premium: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoAPIID, "reactivacion_automatica_trabajo_activo"); err != nil {
+		t.Fatalf("activar asignacion api: %v", err)
+	}
+	if err := db.PausarAsignacion("Gemini1", proyectoAPIID, "sin_trabajo_espera_automatica"); err != nil {
+		t.Fatalf("pausar asignacion api: %v", err)
+	}
+
+	proyecto, err := resolverProyectoAutoasignacionPremiumSinSesion("Gemini1", agentesapp.Row{
+		Agente:          &db.Agente{Nombre: "Gemini1"},
+		EstadoOperativo: "sin_tarea",
+	})
+	if err != nil {
+		t.Fatalf("resolverProyectoAutoasignacionPremiumSinSesion: %v", err)
+	}
+	if proyecto == nil || proyecto.ID != proyectoPremiumID {
+		t.Fatalf("deberia preferir el proyecto premium con continuidad frente a la pausa mas reciente: %+v", proyecto)
+	}
+}
