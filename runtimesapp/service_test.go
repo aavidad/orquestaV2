@@ -43,9 +43,12 @@ type fakeStore struct {
 	handleByIDResp           *db.RuntimeHandle
 	handlesFilter            *string
 	handlesResponse          []*db.RuntimeHandle
+	passiveHandlesFilter     *string
+	passiveHandlesResponse   []*db.RuntimeHandle
 	canonicalHandlesFilter   *string
 	canonicalHandlesResponse []*db.RuntimeHandle
 	syncHandleInput          *db.RuntimeHandle
+	syncHandleCalls          int
 	syncHandleSource         string
 	syncHandleResp           *db.RuntimeHandle
 	purgeFilter              db.FiltroPurgadoRuntimeHandles
@@ -311,12 +314,20 @@ func (f *fakeStore) ListRuntimeHandles(filter *string) ([]*db.RuntimeHandle, err
 	f.handlesFilter = filter
 	return f.handlesResponse, nil
 }
+func (f *fakeStore) ListPassiveRuntimeHandles(filter *string) ([]*db.RuntimeHandle, error) {
+	f.passiveHandlesFilter = filter
+	if f.passiveHandlesResponse != nil {
+		return f.passiveHandlesResponse, nil
+	}
+	return f.handlesResponse, nil
+}
 func (f *fakeStore) ListCanonicalRuntimeHandles(filter *string) ([]*db.RuntimeHandle, error) {
 	f.canonicalHandlesFilter = filter
 	return f.canonicalHandlesResponse, nil
 }
 func (f *fakeStore) SyncSupervisedRuntimeHandle(handle *db.RuntimeHandle, source string) (*db.RuntimeHandle, error) {
 	f.syncHandleInput = handle
+	f.syncHandleCalls++
 	f.syncHandleSource = source
 	if f.syncHandleResp != nil {
 		return f.syncHandleResp, nil
@@ -689,6 +700,50 @@ func TestServiceDelegatesRuntimeQueries(t *testing.T) {
 	}
 	if store.memoryName != "decision" || store.memoryProjectID == nil || *store.memoryProjectID != 7 {
 		t.Fatalf("memory entity name=%q project=%v", store.memoryName, store.memoryProjectID)
+	}
+}
+
+func TestListRuntimeHandlesSincronizaSoloSubsetOperativo(t *testing.T) {
+	agent := "Codex2"
+	store := &fakeStore{
+		handlesResponse: []*db.RuntimeHandle{
+			{ID: 11, Agente: agent, Estado: "activo"},
+			{ID: 12, Agente: agent, Estado: "ready"},
+			{ID: 13, Agente: agent, Estado: "cerrado"},
+		},
+	}
+	service := NewService(store)
+
+	if _, err := service.ListRuntimeHandles(&agent); err != nil {
+		t.Fatalf("ListRuntimeHandles: %v", err)
+	}
+	if store.syncHandleCalls != 2 {
+		t.Fatalf("syncHandleCalls=%d", store.syncHandleCalls)
+	}
+	if store.syncHandleInput == nil || store.syncHandleInput.ID != 12 {
+		t.Fatalf("ultimo handle sincronizado=%+v", store.syncHandleInput)
+	}
+}
+
+func TestListRuntimeHandlesCompactPrefiereCanonicosSinSincronizar(t *testing.T) {
+	agent := "Codex2"
+	store := &fakeStore{
+		passiveHandlesResponse: []*db.RuntimeHandle{{ID: 21, Agente: agent, Estado: "activo"}},
+	}
+	service := NewService(store)
+
+	handles, err := service.ListRuntimeHandlesCompact(&agent)
+	if err != nil {
+		t.Fatalf("ListRuntimeHandlesCompact: %v", err)
+	}
+	if len(handles) != 1 || handles[0] == nil || handles[0].ID != 21 {
+		t.Fatalf("handles=%+v", handles)
+	}
+	if store.passiveHandlesFilter == nil || *store.passiveHandlesFilter != agent {
+		t.Fatalf("passiveHandlesFilter=%v", store.passiveHandlesFilter)
+	}
+	if store.syncHandleCalls != 0 {
+		t.Fatalf("syncHandleCalls=%d", store.syncHandleCalls)
 	}
 }
 

@@ -292,6 +292,53 @@ func TestAPIRuntimeControlPlaneEndpoints(t *testing.T) {
 	assertKey(http.MethodPost, "/api/runtime-mailbox/"+itoa(mailID)+"/consumir", []byte(`{}`), "id", http.StatusOK)
 }
 
+func TestAPIRuntimeOrdersAplicaLimitPorDefecto(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for i := 0; i < 60; i++ {
+		if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+			Agente:      "Codex1",
+			ProyectoID:  &proyectoID,
+			Tipo:        "checkpoint",
+			PayloadJSON: `{"n":1}`,
+		}); err != nil {
+			t.Fatalf("encolar runtime order %d: %v", i, err)
+		}
+	}
+
+	mux := http.NewServeMux()
+	registerAPIRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/runtime-orders?agente=Codex1&proyecto=orquestador", nil)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status inesperado: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode json: %v", err)
+	}
+	orders, _ := payload["orders"].([]any)
+	if len(orders) != 50 {
+		t.Fatalf("orders esperadas=50 obtenidas=%d", len(orders))
+	}
+}
+
 func TestAPIRuntimeHandlesCerrarResiduals(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

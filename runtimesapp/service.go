@@ -36,6 +36,7 @@ type Store interface {
 	CloseRuntimeHandles(agente string, proyectoID *int64) error
 	GetRuntimeHandle(id int64) (*db.RuntimeHandle, error)
 	ListRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error)
+	ListPassiveRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error)
 	ListCanonicalRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error)
 	SyncSupervisedRuntimeHandle(handle *db.RuntimeHandle, source string) (*db.RuntimeHandle, error)
 	PurgeInactiveRuntimeHandles(filtro db.FiltroPurgadoRuntimeHandles) (*db.PurgaRuntimeHandlesResultado, error)
@@ -374,15 +375,46 @@ func (s *Service) ListRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error
 	if filtro == nil || strings.TrimSpace(*filtro) == "" {
 		return handles, nil
 	}
+	synced := 0
 	for i, handle := range handles {
 		if handle == nil {
+			continue
+		}
+		if synced >= 1 && !runtimeHandleNeedsFreshSync(handle) {
 			continue
 		}
 		if refreshed, err := s.store.SyncSupervisedRuntimeHandle(handle, "runtimesapp_list_runtime_handles"); err == nil && refreshed != nil {
 			handles[i] = refreshed
 		}
+		synced++
 	}
 	return handles, nil
+}
+
+func (s *Service) ListRuntimeHandlesCompact(filtro *string) ([]*db.RuntimeHandle, error) {
+	if filtro == nil || strings.TrimSpace(*filtro) == "" {
+		return s.store.ListRuntimeHandles(filtro)
+	}
+	handles, err := s.store.ListPassiveRuntimeHandles(filtro)
+	if err != nil {
+		return nil, err
+	}
+	if len(handles) > 0 {
+		return handles, nil
+	}
+	return s.ListRuntimeHandles(filtro)
+}
+
+func runtimeHandleNeedsFreshSync(handle *db.RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
+	case "activo", "running", "ready", "starting", "paused", "fallido", "degradado":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) resolveRuntimeStructuredWorker(runtime *db.RuntimeInstance) (*db.RuntimeHandle, *runtimeagente.WorkerStatusView, error) {
@@ -2211,6 +2243,10 @@ func (Repository) GetRuntimeHandle(id int64) (*db.RuntimeHandle, error) {
 
 func (Repository) ListRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error) {
 	return db.ListarRuntimeHandles(filtro)
+}
+
+func (Repository) ListPassiveRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error) {
+	return db.ListarRuntimeHandlesPasivos(filtro)
 }
 
 func (Repository) ListCanonicalRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error) {

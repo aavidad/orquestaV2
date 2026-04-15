@@ -4658,7 +4658,7 @@ func apiHandlerRuntimeHandles(w http.ResponseWriter, r *http.Request) {
 	if agente != "" {
 		filtro = &agente
 	}
-	handles, err := runtimesService.ListRuntimeHandles(filtro)
+	handles, err := runtimesService.ListRuntimeHandlesCompact(filtro)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err)
 		return
@@ -4951,6 +4951,8 @@ func apiHandlerRuntimeOrders(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			filter.Limit = limit
+		} else {
+			filter.Limit = 50
 		}
 		orders, err := runtimesService.ListRuntimeOrders(filter)
 		if err != nil {
