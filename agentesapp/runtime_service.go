@@ -324,14 +324,6 @@ func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
 	if err == sql.ErrNoRows {
 		sesionActiva = nil
 	}
-	runtimeBloqueadoAntes := false
-	detalleRuntimeBloqueado := ""
-	if sesionActiva != nil {
-		runtimeBloqueadoAntes, detalleRuntimeBloqueado, err = s.runtimeBlockedFallback(agenteNombre, proyecto.ID)
-		if err != nil {
-			return nil, err
-		}
-	}
 	if sesionActiva != nil {
 		upd := db.SesionUpdate{Heartbeat: true}
 		if host := strings.TrimSpace(input.Host); host != "" {
@@ -359,23 +351,6 @@ func (s *Service) ProcessTick(input TickInput) (*TickOutput, error) {
 	out, err := s.buildTickOutput(agenteNombre, proyecto, sesionActiva, input.CuotaPct)
 	if err != nil {
 		return nil, err
-	}
-	if out != nil && out.AccionRecomendada == "continuar_trabajo" && len(out.TareasActivas) > 0 {
-		if runtimeBloqueadoAntes {
-			out.AccionRecomendada = "esperar_recuperacion_runtime"
-			out.Motivo = firstNonEmpty(strings.TrimSpace(detalleRuntimeBloqueado), "Runtime no disponible; esperando recuperación automática")
-			out.DebePausar = false
-			return out, nil
-		}
-		bloqueado, detalle, err := s.runtimeBlockedFallback(agenteNombre, proyecto.ID)
-		if err != nil {
-			return nil, err
-		}
-		if bloqueado {
-			out.AccionRecomendada = "esperar_recuperacion_runtime"
-			out.Motivo = firstNonEmpty(strings.TrimSpace(detalle), "Runtime no disponible; esperando recuperación automática")
-			out.DebePausar = false
-		}
 	}
 	return out, nil
 }
