@@ -2071,6 +2071,33 @@ func TestBuildDetailMergesMailboxWithoutDuplicates(t *testing.T) {
 	}
 }
 
+func TestBuildDetailCompactEvitaResumenPesadoDeMailbox(t *testing.T) {
+	store := &fakeStore{
+		agents: []*db.Agente{{Nombre: "Codex2", Rol: "programador"}},
+		tasks: []*db.Tarea{
+			{ID: 200, Titulo: "lease activa", Agente: ptr("Codex2"), Estado: db.EstadoEnProgreso, Modulo: "runtime"},
+		},
+		mailbox: []*db.RuntimeMailboxMessage{
+			{ID: 100, FromAgente: "Supervisor", ToAgente: "Codex2", Estado: "pendiente"},
+		},
+		mailboxCovered: map[int64]bool{100: true},
+	}
+
+	detail, err := NewService(store, nil).BuildDetailCompact("Codex2")
+	if err != nil {
+		t.Fatalf("BuildDetailCompact: %v", err)
+	}
+	if detail.MailboxPendingVisible != 1 || detail.MailboxCoveredBootstrap != 0 {
+		t.Fatalf("mailbox compacto inesperado: pending=%d covered=%d", detail.MailboxPendingVisible, detail.MailboxCoveredBootstrap)
+	}
+	if len(detail.Mailbox) != 0 {
+		t.Fatalf("compact no deberia cargar mailbox completa: %+v", detail.Mailbox)
+	}
+	if len(store.lastMailboxFilter) != 2 {
+		t.Fatalf("mailbox filters=%d, want 2", len(store.lastMailboxFilter))
+	}
+}
+
 func TestBuildReanimationScheduleFiltraVencidasYExponeLeases(t *testing.T) {
 	now := time.Now().UTC()
 	proyectoID := int64(7)

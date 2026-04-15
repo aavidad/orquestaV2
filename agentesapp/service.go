@@ -652,13 +652,16 @@ func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 	if err != nil {
 		return nil, err
 	}
-	mailboxPendingVisible, mailboxCoveredBootstrap, err := s.summarizeMailboxOverview(mailbox, row.Handle, row.Runtime)
-	if err != nil {
-		return nil, err
-	}
 	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &nombre})
 	if err != nil {
 		return nil, err
+	}
+	mailboxPendingVisible, mailboxCoveredBootstrap := row.MailboxPending, 0
+	if !compact {
+		mailboxPendingVisible, mailboxCoveredBootstrap, err = s.summarizeMailboxOverview(mailbox, row.Handle, row.Runtime)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	detail := &Detail{
