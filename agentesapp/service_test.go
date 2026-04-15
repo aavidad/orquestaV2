@@ -37,6 +37,10 @@ type fakeStore struct {
 	workflows          []*db.Workflow
 	memory             []*db.EntidadMemoria
 	config             map[string]string
+	accountAvailable   map[string]struct {
+		ok        bool
+		occupiedBy string
+	}
 	lastConnectorRef   string
 	lastMailboxFilter  []db.FiltroRuntimeMailbox
 	lastTranscript     db.FiltroRuntimeTranscript
@@ -254,7 +258,15 @@ func (f *fakeStore) ListRuntimeTranscript(filter db.FiltroRuntimeTranscript) ([]
 }
 
 func TestBuildAgentEntityIncluyeCuentaID(t *testing.T) {
-	entity := buildAgentEntity(Row{
+	store := &fakeStore{
+		accountAvailable: map[string]struct {
+			ok         bool
+			occupiedBy string
+		}{
+			"Codex7": {ok: true},
+		},
+	}
+	entity := buildAgentEntity(store, Row{
 		Agente: &db.Agente{
 			Nombre:        "Codex7",
 			CuentaID:      "acc-codex-7",
@@ -265,7 +277,7 @@ func TestBuildAgentEntityIncluyeCuentaID(t *testing.T) {
 	if entity == nil {
 		t.Fatal("entity nil")
 	}
-	if entity.AccountID != "acc-codex-7" || entity.AccountEmail != "shared@example.com" || entity.AccountUser != "Codex7" {
+	if entity.AccountID != "acc-codex-7" || entity.AccountEmail != "shared@example.com" || entity.AccountUser != "Codex7" || entity.AccountKey != "acc-codex-7" || !entity.AccountAvailable {
 		t.Fatalf("cuenta inesperada: %+v", entity)
 	}
 }
@@ -392,6 +404,15 @@ func (f *fakeStore) ListWorkflows(rol string) ([]*db.Workflow, error) { return f
 
 func (f *fakeStore) ListMemoryEntities(filtro db.FiltroEntidadesMemoria) ([]*db.EntidadMemoria, error) {
 	return f.memory, nil
+}
+
+func (f *fakeStore) SharedAccountAllowsActivation(nombre string) (bool, string, error) {
+	if f.accountAvailable != nil {
+		if item, ok := f.accountAvailable[nombre]; ok {
+			return item.ok, item.occupiedBy, nil
+		}
+	}
+	return true, "", nil
 }
 
 func (f *fakeStore) ConfigGet(clave string) (string, error) {
@@ -2095,7 +2116,13 @@ func TestBuildDetailMergesMailboxWithoutDuplicates(t *testing.T) {
 
 func TestBuildDetailCompactEvitaResumenPesadoDeMailbox(t *testing.T) {
 	store := &fakeStore{
-		agents: []*db.Agente{{Nombre: "Codex2", Rol: "programador"}},
+		agents: []*db.Agente{{Nombre: "Codex2", Rol: "programador", CuentaEmail: "codex2@example.com"}},
+		accountAvailable: map[string]struct {
+			ok         bool
+			occupiedBy string
+		}{
+			"Codex2": {ok: false, occupiedBy: "Codex1"},
+		},
 		sessions: []*db.Sesion{
 			{ID: 10, Agente: "Codex2", Estado: "activa"},
 		},
@@ -2117,6 +2144,9 @@ func TestBuildDetailCompactEvitaResumenPesadoDeMailbox(t *testing.T) {
 	}
 	if detail.Entity == nil || len(detail.Entity.Leases) != 1 || detail.Entity.Leases[0].TaskID != 200 {
 		t.Fatalf("leases compactas inesperadas: %+v", detail.Entity)
+	}
+	if detail.Entity == nil || detail.Entity.AccountKey != "codex2@example.com" || detail.Entity.AccountAvailable || detail.Entity.AccountOccupiedBy != "Codex1" {
+		t.Fatalf("estado de cuenta inesperado: %+v", detail.Entity)
 	}
 	if len(detail.Mailbox) != 0 {
 		t.Fatalf("compact no deberia cargar mailbox completa: %+v", detail.Mailbox)

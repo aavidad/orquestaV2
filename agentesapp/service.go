@@ -57,6 +57,7 @@ type Store interface {
 	ListSkills(rol string) ([]*db.Skill, error)
 	ListWorkflows(rol string) ([]*db.Workflow, error)
 	ListMemoryEntities(filtro db.FiltroEntidadesMemoria) ([]*db.EntidadMemoria, error)
+	SharedAccountAllowsActivation(nombre string) (bool, string, error)
 	ConfigGet(clave string) (string, error)
 	PauseAgent(nombre string, minutos int, motivo string) error
 }
@@ -198,6 +199,9 @@ type AgentEntity struct {
 	AccountID           string      `json:"account_id,omitempty"`
 	AccountEmail        string      `json:"account_email,omitempty"`
 	AccountUser         string      `json:"account_user,omitempty"`
+	AccountKey          string      `json:"account_key,omitempty"`
+	AccountAvailable    bool        `json:"account_available"`
+	AccountOccupiedBy   string      `json:"account_occupied_by,omitempty"`
 	AssignmentProject   string      `json:"assignment_project,omitempty"`
 	RuntimeAdapter      string      `json:"runtime_adapter,omitempty"`
 	Transport           string      `json:"transport,omitempty"`
@@ -690,7 +694,7 @@ func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 		}
 		return &Detail{
 			Row:                     row,
-			Entity:                  buildAgentEntity(row, tareas),
+			Entity:                  buildAgentEntity(s.store, row, tareas),
 			Asignaciones:            asignaciones,
 			MailboxTotalCount:       row.MailboxTotal,
 			MailboxPendingVisible:   row.MailboxPending,
@@ -721,7 +725,7 @@ func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 
 	detail := &Detail{
 		Row:                     row,
-		Entity:                  buildAgentEntity(row, tareas),
+		Entity:                  buildAgentEntity(s.store, row, tareas),
 		Asignaciones:            asignaciones,
 		MailboxTotalCount:       len(mailbox),
 		MailboxPendingVisible:   mailboxPendingVisible,
@@ -1954,9 +1958,17 @@ func int64FromRuntimeMailboxPayload(payload map[string]any, key string) int64 {
 	}
 }
 
-func buildAgentEntity(row Row, tareas []*db.Tarea) *AgentEntity {
+func buildAgentEntity(store Store, row Row, tareas []*db.Tarea) *AgentEntity {
 	if row.Agente == nil {
 		return nil
+	}
+	accountAvailable := true
+	accountOccupiedBy := ""
+	if store != nil {
+		if ok, ocupadoPor, err := store.SharedAccountAllowsActivation(strings.TrimSpace(row.Agente.Nombre)); err == nil {
+			accountAvailable = ok
+			accountOccupiedBy = strings.TrimSpace(ocupadoPor)
+		}
 	}
 	entity := &AgentEntity{
 		Name:                strings.TrimSpace(row.Agente.Nombre),
@@ -1966,6 +1978,9 @@ func buildAgentEntity(row Row, tareas []*db.Tarea) *AgentEntity {
 		AccountID:           strings.TrimSpace(row.Agente.CuentaID),
 		AccountEmail:        strings.TrimSpace(row.Agente.CuentaEmail),
 		AccountUser:         strings.TrimSpace(row.Agente.CuentaUsuario),
+		AccountKey:          strings.TrimSpace(db.CuentaClaveAgente(row.Agente)),
+		AccountAvailable:    accountAvailable,
+		AccountOccupiedBy:   accountOccupiedBy,
 		RuntimeAdapter:      strings.TrimSpace(runtimeAdapterName(row)),
 		Transport:           strings.TrimSpace(handleTransportName(row.Handle)),
 		RuntimeState:        strings.TrimSpace(row.runtimeState()),
@@ -3175,6 +3190,10 @@ func (Repository) ListWorkflows(rol string) ([]*db.Workflow, error) {
 
 func (Repository) ListMemoryEntities(filtro db.FiltroEntidadesMemoria) ([]*db.EntidadMemoria, error) {
 	return db.ListarEntidadesMemoria(filtro)
+}
+
+func (Repository) SharedAccountAllowsActivation(nombre string) (bool, string, error) {
+	return db.CuentaCompartidaPermiteActivacionAgente(nombre)
 }
 
 func (Repository) ConfigGet(clave string) (string, error) {

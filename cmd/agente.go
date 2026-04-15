@@ -1321,6 +1321,17 @@ func imprimirAgenteOverview(out apiAgenteOverviewResponse, jsonOut bool) error {
 	if detail.Entity != nil && strings.TrimSpace(detail.Entity.Role) != "" {
 		fmt.Printf("Rol:       %s\n", strings.TrimSpace(detail.Entity.Role))
 	}
+	if detail.Entity != nil && strings.TrimSpace(detail.Entity.AccountKey) != "" {
+		fmt.Printf("Cuenta:    %s", strings.TrimSpace(detail.Entity.AccountKey))
+		if detail.Entity.AccountAvailable {
+			fmt.Printf(" · libre")
+		} else if strings.TrimSpace(detail.Entity.AccountOccupiedBy) != "" {
+			fmt.Printf(" · ocupada por %s", strings.TrimSpace(detail.Entity.AccountOccupiedBy))
+		} else {
+			fmt.Printf(" · ocupada")
+		}
+		fmt.Println()
+	}
 	fmt.Printf("Operativo: %s", strings.TrimSpace(row.EstadoOperativo))
 	if strings.TrimSpace(row.DetalleOperativo) != "" {
 		fmt.Printf(" — %s", strings.TrimSpace(row.DetalleOperativo))
