@@ -591,6 +591,8 @@ var runtimeProcessDegradadosBatchDetailed = func() (runtimeProcessDegradadosSumm
 	return procesarAgentesDegradadosAutonomiaBatchDetallado()
 }
 
+var runtimeProcessDegradadosWaitTimeout = 3 * time.Second
+
 type apiAgenteResetReanimacionResponse struct {
 	OK       bool   `json:"ok"`
 	Agente   string `json:"agente"`
@@ -5341,19 +5343,50 @@ func apiHandlerRuntimeProcessDegradados(w http.ResponseWriter, r *http.Request) 
 	}
 	resetAutonomiaDegradedTaskGate()
 	if req.Wait {
-		resumen, err := runtimeProcessDegradadosBatchDetailed()
-		if err != nil {
-			db.Audit("server", "runtime_process_degradados_error", "runtime", 0, err.Error())
-			apiError(w, http.StatusInternalServerError, err)
+		started := runtimeProcessDegradadosEnCurso.CompareAndSwap(false, true)
+		if !started {
+			apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
+				OK:       true,
+				Count:    0,
+				Accepted: false,
+				Running:  true,
+			})
 			return
 		}
-		apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
-			OK:                        true,
-			Count:                     resumen.Count,
-			GhostAssignmentsCompacted: resumen.GhostAssignmentsCompacted,
-			ReactivatedWithoutRuntime: resumen.ReactivatedWithoutRuntime,
-			IdleAutoassigned:          resumen.IdleAutoassigned,
-		})
+		type result struct {
+			summary runtimeProcessDegradadosSummary
+			err     error
+		}
+		done := make(chan result, 1)
+		go func() {
+			defer runtimeProcessDegradadosEnCurso.Store(false)
+			summary, err := runtimeProcessDegradadosBatchDetailed()
+			if err != nil {
+				db.Audit("server", "runtime_process_degradados_error", "runtime", 0, err.Error())
+			}
+			done <- result{summary: summary, err: err}
+		}()
+		select {
+		case out := <-done:
+			if out.err != nil {
+				apiError(w, http.StatusInternalServerError, out.err)
+				return
+			}
+			apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
+				OK:                        true,
+				Count:                     out.summary.Count,
+				GhostAssignmentsCompacted: out.summary.GhostAssignmentsCompacted,
+				ReactivatedWithoutRuntime: out.summary.ReactivatedWithoutRuntime,
+				IdleAutoassigned:          out.summary.IdleAutoassigned,
+			})
+		case <-time.After(runtimeProcessDegradadosWaitTimeout):
+			apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
+				OK:       true,
+				Count:    0,
+				Accepted: true,
+				Running:  true,
+			})
+		}
 		return
 	}
 	started := runtimeProcessDegradadosEnCurso.CompareAndSwap(false, true)
