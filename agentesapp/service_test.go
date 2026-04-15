@@ -15,36 +15,38 @@ import (
 func timePtr(v time.Time) *time.Time { return &v }
 
 type fakeStore struct {
-	agents            []*db.Agente
-	project           *db.Proyecto
-	connector         *db.Conector
-	assignments       []*db.Asignacion
-	sessions          []*db.Sesion
-	runtimes          []*db.RuntimeInstance
-	handles           []*db.RuntimeHandle
-	canonicalHandles  []*db.RuntimeHandle
-	hotHandles        map[string]*db.RuntimeHandle
-	transcript        []*db.RuntimeTranscriptEntry
-	orders            []*db.RuntimeOrder
-	mailbox           []*db.RuntimeMailboxMessage
-	mailboxCovered    map[int64]bool
-	checkpoints       []*db.RuntimeCheckpoint
-	tasks             []*db.Tarea
-	proposals         []*db.Propuesta
-	latestBudget      *db.PresupuestoSesion
-	rules             []*db.Regla
-	skills            []*db.Skill
-	workflows         []*db.Workflow
-	memory            []*db.EntidadMemoria
-	config            map[string]string
-	lastConnectorRef  string
-	lastMailboxFilter []db.FiltroRuntimeMailbox
-	lastTranscript    db.FiltroRuntimeTranscript
-	pausedAgent       string
-	pausedMinutes     int
-	pausedReason      string
-	retiredAgent      string
-	observedIdentity  struct {
+	agents             []*db.Agente
+	project            *db.Proyecto
+	connector          *db.Conector
+	assignments        []*db.Asignacion
+	sessions           []*db.Sesion
+	runtimes           []*db.RuntimeInstance
+	handles            []*db.RuntimeHandle
+	canonicalHandles   []*db.RuntimeHandle
+	hotHandles         map[string]*db.RuntimeHandle
+	transcript         []*db.RuntimeTranscriptEntry
+	orders             []*db.RuntimeOrder
+	mailbox            []*db.RuntimeMailboxMessage
+	mailboxCovered     map[int64]bool
+	checkpoints        []*db.RuntimeCheckpoint
+	tasks              []*db.Tarea
+	proposals          []*db.Propuesta
+	latestBudget       *db.PresupuestoSesion
+	rules              []*db.Regla
+	skills             []*db.Skill
+	workflows          []*db.Workflow
+	memory             []*db.EntidadMemoria
+	config             map[string]string
+	lastConnectorRef   string
+	lastMailboxFilter  []db.FiltroRuntimeMailbox
+	lastTranscript     db.FiltroRuntimeTranscript
+	pendingVotesCalls  int
+	openProposalsCalls int
+	pausedAgent        string
+	pausedMinutes      int
+	pausedReason       string
+	retiredAgent       string
+	observedIdentity   struct {
 		nombre string
 		email  string
 		user   string
@@ -329,10 +331,12 @@ func (f *fakeStore) ListTasks(filter db.FiltroTareas) ([]*db.Tarea, error) {
 }
 
 func (f *fakeStore) ListProjectPendingVotes(agente string, proyectoID int64) ([]*db.Propuesta, error) {
+	f.pendingVotesCalls++
 	return f.proposals, nil
 }
 
 func (f *fakeStore) ListProjectOpenProposals(proyectoID int64) ([]*db.Propuesta, error) {
+	f.openProposalsCalls++
 	return f.proposals, nil
 }
 
@@ -2087,14 +2091,14 @@ func TestBuildDetailCompactEvitaResumenPesadoDeMailbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildDetailCompact: %v", err)
 	}
-	if detail.MailboxPendingVisible != 1 || detail.MailboxCoveredBootstrap != 0 {
+	if detail.MailboxPendingVisible != 0 || detail.MailboxCoveredBootstrap != 0 {
 		t.Fatalf("mailbox compacto inesperado: pending=%d covered=%d", detail.MailboxPendingVisible, detail.MailboxCoveredBootstrap)
 	}
 	if len(detail.Mailbox) != 0 {
 		t.Fatalf("compact no deberia cargar mailbox completa: %+v", detail.Mailbox)
 	}
-	if len(store.lastMailboxFilter) != 2 {
-		t.Fatalf("mailbox filters=%d, want 2", len(store.lastMailboxFilter))
+	if len(store.lastMailboxFilter) != 0 {
+		t.Fatalf("compact no deberia consultar mailbox: filters=%d", len(store.lastMailboxFilter))
 	}
 }
 

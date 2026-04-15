@@ -532,32 +532,6 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 			tieneTrabajo = true
 		}
 	}
-	pendientes, err := s.store.ListProjectPendingVotes(agenteNombre, proyecto.ID)
-	if err != nil {
-		return nil, err
-	}
-	var propuestasPendientes []LightItem
-	for _, propuesta := range pendientes {
-		propuestasPendientes = append(propuestasPendientes, LightItem{
-			ID:     propuesta.ID,
-			Codigo: propuesta.Codigo,
-			Titulo: propuesta.Titulo,
-			Estado: string(propuesta.Estado),
-		})
-	}
-	abiertas, err := s.store.ListProjectOpenProposals(proyecto.ID)
-	if err != nil {
-		return nil, err
-	}
-	var propuestasAbiertas []LightItem
-	for _, propuesta := range abiertas {
-		propuestasAbiertas = append(propuestasAbiertas, LightItem{
-			ID:     propuesta.ID,
-			Codigo: propuesta.Codigo,
-			Titulo: propuesta.Titulo,
-			Estado: string(propuesta.Estado),
-		})
-	}
 	agente, err := s.store.GetAgent(agenteNombre)
 	if err != nil {
 		return nil, err
@@ -591,18 +565,16 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 			Nombre:  proyecto.Nombre,
 			RutaAbs: proyecto.RutaAbs,
 		},
-		Politica:             politica,
-		AsignadoAProyecto:    asignadoAProyecto,
-		ProyectoAsignado:     proyectoAsignado,
-		TareasActivas:        tareasActivas,
-		PropuestasPendientes: propuestasPendientes,
-		PropuestasAbiertas:   propuestasAbiertas,
-		ConsumoDia:           agente.ConsumoDiaSegundos,
-		LimiteDia:            agente.LimiteDiaSegundos,
-		EstadoCuota:          agente.EstadoCuota,
-		ReanimarAt:           agente.ReanimarAt,
-		MotivoPausa:          agente.MotivoPausa,
-		CuotaPct:             cuotaPct,
+		Politica:          politica,
+		AsignadoAProyecto: asignadoAProyecto,
+		ProyectoAsignado:  proyectoAsignado,
+		TareasActivas:     tareasActivas,
+		ConsumoDia:        agente.ConsumoDiaSegundos,
+		LimiteDia:         agente.LimiteDiaSegundos,
+		EstadoCuota:       agente.EstadoCuota,
+		ReanimarAt:        agente.ReanimarAt,
+		MotivoPausa:       agente.MotivoPausa,
+		CuotaPct:          cuotaPct,
 	}
 	if sesionActiva != nil {
 		out.SesionActiva = summarizeSession(sesionActiva)
@@ -632,9 +604,6 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		out.AccionRecomendada = "pausar_y_reasignar"
 		out.DebePausar = true
 		out.Motivo = "La asignación activa del agente ha cambiado al proyecto " + proyectoAsignado
-	case len(propuestasPendientes) > 0:
-		out.AccionRecomendada = "votar_propuestas_pendientes"
-		out.Motivo = fmt.Sprintf("Hay %d propuestas pendientes de voto para este proyecto", len(propuestasPendientes))
 	case tieneBloqueos:
 		out.AccionRecomendada = "pedir_intervencion"
 		out.Motivo = "Hay tareas bloqueadas que requieren resolución"
@@ -642,6 +611,39 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		out.AccionRecomendada = "continuar_trabajo"
 		out.Motivo = "Sigue trabajando hasta completar la tarea o detectar una duda real"
 	default:
+		pendientes, err := s.store.ListProjectPendingVotes(agenteNombre, proyecto.ID)
+		if err != nil {
+			return nil, err
+		}
+		var propuestasPendientes []LightItem
+		for _, propuesta := range pendientes {
+			propuestasPendientes = append(propuestasPendientes, LightItem{
+				ID:     propuesta.ID,
+				Codigo: propuesta.Codigo,
+				Titulo: propuesta.Titulo,
+				Estado: string(propuesta.Estado),
+			})
+		}
+		out.PropuestasPendientes = propuestasPendientes
+		if len(propuestasPendientes) > 0 {
+			out.AccionRecomendada = "votar_propuestas_pendientes"
+			out.Motivo = fmt.Sprintf("Hay %d propuestas pendientes de voto para este proyecto", len(propuestasPendientes))
+			return out, nil
+		}
+		abiertas, err := s.store.ListProjectOpenProposals(proyecto.ID)
+		if err != nil {
+			return nil, err
+		}
+		var propuestasAbiertas []LightItem
+		for _, propuesta := range abiertas {
+			propuestasAbiertas = append(propuestasAbiertas, LightItem{
+				ID:     propuesta.ID,
+				Codigo: propuesta.Codigo,
+				Titulo: propuesta.Titulo,
+				Estado: string(propuesta.Estado),
+			})
+		}
+		out.PropuestasAbiertas = propuestasAbiertas
 		out.AccionRecomendada = "esperar_o_pedir_tarea"
 		out.Motivo = "No hay tarea activa asignada en este proyecto"
 	}

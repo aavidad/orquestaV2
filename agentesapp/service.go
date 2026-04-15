@@ -639,6 +639,28 @@ func (s *Service) BuildDetailCompact(nombre string) (*Detail, error) {
 
 func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 	nombre = strings.TrimSpace(nombre)
+	if compact {
+		row, err := s.buildOperationalRowForAgent(nombre, time.Now().UTC())
+		if err != nil {
+			return nil, err
+		}
+		asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{Agente: &nombre})
+		if err != nil {
+			return nil, err
+		}
+		tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &nombre})
+		if err != nil {
+			return nil, err
+		}
+		return &Detail{
+			Row:                     row,
+			Entity:                  buildAgentEntity(row, tareas),
+			Asignaciones:            asignaciones,
+			MailboxTotalCount:       row.MailboxTotal,
+			MailboxPendingVisible:   row.MailboxPending,
+			MailboxCoveredBootstrap: 0,
+		}, nil
+	}
 	mailbox, err := s.listMailboxForAgent(nombre)
 	if err != nil {
 		return nil, err
@@ -656,12 +678,9 @@ func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 	if err != nil {
 		return nil, err
 	}
-	mailboxPendingVisible, mailboxCoveredBootstrap := row.MailboxPending, 0
-	if !compact {
-		mailboxPendingVisible, mailboxCoveredBootstrap, err = s.summarizeMailboxOverview(mailbox, row.Handle, row.Runtime)
-		if err != nil {
-			return nil, err
-		}
+	mailboxPendingVisible, mailboxCoveredBootstrap, err := s.summarizeMailboxOverview(mailbox, row.Handle, row.Runtime)
+	if err != nil {
+		return nil, err
 	}
 
 	detail := &Detail{
@@ -671,9 +690,6 @@ func (s *Service) buildDetail(nombre string, compact bool) (*Detail, error) {
 		MailboxTotalCount:       len(mailbox),
 		MailboxPendingVisible:   mailboxPendingVisible,
 		MailboxCoveredBootstrap: mailboxCoveredBootstrap,
-	}
-	if compact {
-		return detail, nil
 	}
 
 	sesiones, err := s.store.ListInspectionSessions(db.FiltroSesionesInspeccion{Agente: &nombre})

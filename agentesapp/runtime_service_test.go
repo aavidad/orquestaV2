@@ -369,6 +369,43 @@ func TestBuildTickOutputNoContinuaSiRuntimeBloqueado(t *testing.T) {
 	}
 }
 
+func TestBuildTickOutputConTrabajoActivoNoConsultaPropuestas(t *testing.T) {
+	now := time.Now().UTC()
+	store := &fakeStore{
+		agents: []*db.Agente{
+			{Nombre: "Codex1", Rol: "programador", Activo: true, Habilitado: true, EstadoCuota: "activo"},
+		},
+		assignments: []*db.Asignacion{
+			{Agente: "Codex1", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		},
+		tasks: []*db.Tarea{
+			{ID: 42, Agente: strPtr("Codex1"), ProyectoID: int64Ptr(7), Estado: db.EstadoEnProgreso, Titulo: "Frente activo Codex"},
+		},
+		runtimes: []*db.RuntimeInstance{
+			{ID: 52, Agente: "Codex1", ProyectoID: int64Ptr(7), LogicalState: "activo", ProcessState: "running", UpdatedAt: now},
+		},
+		handles: []*db.RuntimeHandle{
+			{ID: 62, Agente: "Codex1", ProyectoID: int64Ptr(7), RuntimeID: int64Ptr(52), Estado: "activo", UpdatedAt: now},
+		},
+		proposals: []*db.Propuesta{
+			{ID: 99, Codigo: "OP-99", Titulo: "No deberia consultarse", Estado: db.PropuestaAbierta},
+		},
+	}
+	svc := NewService(store, nil)
+	proyecto := &db.Proyecto{ID: 7, Slug: "orquestador", Nombre: "Orquestador", RutaAbs: t.TempDir()}
+
+	out, err := svc.buildTickOutput("Codex1", proyecto, nil, 100)
+	if err != nil {
+		t.Fatalf("buildTickOutput: %v", err)
+	}
+	if out.AccionRecomendada != "continuar_trabajo" {
+		t.Fatalf("salida inesperada: %+v", out)
+	}
+	if store.pendingVotesCalls != 0 || store.openProposalsCalls != 0 {
+		t.Fatalf("el hot path con trabajo activo no deberia consultar propuestas: pending=%d open=%d", store.pendingVotesCalls, store.openProposalsCalls)
+	}
+}
+
 func TestBuildPreparePrefierePoolLocalCompartidoOllama(t *testing.T) {
 	prepararDBTemporalRuntimeService(t)
 	tmp := t.TempDir()
