@@ -5616,6 +5616,17 @@ func consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg *db.RuntimeMailboxMess
 			fmt.Sprintf("lane=%s agente=%s kind=%s %s", strings.TrimSpace(lane), strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), strings.TrimSpace(detalle)))
 		return true, nil
 	}
+	if detalle, obsoleta := runtimeMailboxObsoletaPorProgresoEfimero(msg, view); obsoleta {
+		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+			return false, err
+		}
+		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return false, err
+		}
+		db.Audit("orquesta", "runtime_mailbox_obsoleta_progress_ephemeral", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("lane=%s agente=%s kind=%s %s", strings.TrimSpace(lane), strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), strings.TrimSpace(detalle)))
+		return true, nil
+	}
 	switch strings.ToLower(strings.TrimSpace(view.State)) {
 	case "running", "idle", "waiting_input":
 	default:
@@ -5653,6 +5664,19 @@ func runtimeMailboxObsoletaPorProgresoTareaActual(msg *db.RuntimeMailboxMessage,
 		return "", false
 	}
 	return fmt.Sprintf("task_id=%d progress_at=%s created_at=%s", *tareaID, view.LastProgressAt.UTC().Format(time.RFC3339Nano), msg.CreatedAt.UTC().Format(time.RFC3339Nano)), true
+}
+
+func runtimeMailboxObsoletaPorProgresoEfimero(msg *db.RuntimeMailboxMessage, view *runtimeagente.WorkerStatusView) (string, bool) {
+	if msg == nil || view == nil || view.LastProgressAt == nil || view.LastProgressAt.IsZero() {
+		return "", false
+	}
+	if !strings.EqualFold(strings.TrimSpace(msg.Kind), "nudge") {
+		return "", false
+	}
+	if !view.LastProgressAt.UTC().After(msg.CreatedAt.UTC()) {
+		return "", false
+	}
+	return fmt.Sprintf("progress_at=%s created_at=%s", view.LastProgressAt.UTC().Format(time.RFC3339Nano), msg.CreatedAt.UTC().Format(time.RFC3339Nano)), true
 }
 
 func runtimeMailboxObsoletaPorTareaActivaActual(msg *db.RuntimeMailboxMessage) (string, bool, error) {
