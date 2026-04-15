@@ -1017,6 +1017,67 @@ func TestPlanificarTareasAutomaticamenteNoRecuperaTareaManualFueraDeFlota(t *tes
 	}
 }
 
+func TestPlanificarTareasAutomaticamenteNoLiberaFrentePremiumAcotadoHuerfano(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("claude", "programador"); err != nil {
+		t.Fatalf("registrar claude: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := CrearTarea(&Tarea{
+		Titulo:      "Micro-refactorización cíclica del control plane",
+		Descripcion: "Write-set exclusivo: cmd/controlplane_support.go\nTests mínimos: go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*' -count=1",
+		ProyectoID:  &proyectoID,
+		Modulo:      "controlplane",
+		Prioridad:   PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       "autonomia:microrefactor_loop",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := TomarTarea(tareaID, "claude"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := IniciarTarea(tareaID, "claude"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE tareas SET updated_at=? WHERE id=?`, time.Now().UTC().Add(-10*time.Minute), tareaID); err != nil {
+		t.Fatalf("forzar updated_at antiguo: %v", err)
+	}
+
+	if err := PlanificarTareasAutomaticamente(); err != nil {
+		t.Fatalf("planificar: %v", err)
+	}
+
+	tarea, err := GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "claude" {
+		got := "<nil>"
+		if tarea.Agente != nil {
+			got = *tarea.Agente
+		}
+		t.Fatalf("el frente premium acotado no deberia liberarse, agente=%s estado=%s notas=%q", got, tarea.Estado, tarea.Notas)
+	}
+	if tarea.Estado != TareaEnProgreso {
+		t.Fatalf("el frente premium acotado deberia seguir en progreso, estado=%s notas=%q", tarea.Estado, tarea.Notas)
+	}
+	if strings.Contains(strings.ToLower(tarea.Notas), "continuidad huérfana") || strings.Contains(strings.ToLower(tarea.Notas), "continuidad huerfana") {
+		t.Fatalf("no deberia anotar recuperación de continuidad huérfana: %q", tarea.Notas)
+	}
+}
+
 func TestBuscarSiguienteTareaLibreParaAgentePrefiereAfinidadDeModuloSinSolape(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 

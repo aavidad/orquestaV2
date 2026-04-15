@@ -221,6 +221,13 @@ func reconciliarTareasHuerfanas() error {
 		if !recuperable {
 			continue
 		}
+		tarea, err := GetTarea(item.id)
+		if err != nil {
+			return err
+		}
+		if tareaHuerfanaDebeConservarFrenteAcotado(tarea) {
+			continue
+		}
 		anotacion := formatearAnotacionTarea("server", "tarea recuperada automáticamente por continuidad huérfana de "+strings.TrimSpace(item.agente), time.Now().UTC())
 		if _, err := DB.Exec(`
 			UPDATE tareas
@@ -240,6 +247,25 @@ func reconciliarTareasHuerfanas() error {
 	}
 
 	return nil
+}
+
+func tareaHuerfanaDebeConservarFrenteAcotado(tarea *Tarea) bool {
+	if tarea == nil {
+		return false
+	}
+	contexto := strings.ToLower(strings.TrimSpace(strings.Join([]string{
+		strings.TrimSpace(tarea.Titulo),
+		strings.TrimSpace(tarea.Descripcion),
+		strings.TrimSpace(tarea.Notas),
+	}, "\n")))
+	if contexto == "" {
+		return false
+	}
+	if strings.Contains(contexto, "autonomia:microrefactor_loop") || strings.Contains(contexto, "autonomia:premium_frontier") {
+		return true
+	}
+	return (strings.Contains(contexto, "write-set exclusivo:") || strings.Contains(contexto, "write_set")) &&
+		(strings.Contains(contexto, "tests minimos:") || strings.Contains(contexto, "tests mínimos:"))
 }
 
 func tareaHuerfanaRecuperable(agente string, proyectoID int64) (bool, error) {
