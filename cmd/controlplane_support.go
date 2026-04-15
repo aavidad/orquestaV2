@@ -7016,7 +7016,7 @@ func procesarCompactacionExclusividadPremiumBatch(rows []agentesapp.Row, tareasA
 		if row.Agente == nil || row.Asignacion == nil {
 			continue
 		}
-		if row.Asignacion.Estado != db.AsignacionActiva || !strings.EqualFold(strings.TrimSpace(row.Asignacion.Nota), "microciclo_exclusivo") {
+		if row.Asignacion.Estado != db.AsignacionActiva || !asignacionMantieneExclusividadPremium(row.Asignacion.Nota) {
 			continue
 		}
 		agente := strings.TrimSpace(row.Agente.Nombre)
@@ -8452,7 +8452,7 @@ func procesarCompactacionExclusividadPremiumSesionActiva(sesion *db.Sesion, snap
 	if err != nil || asignacion == nil {
 		return 0, err
 	}
-	if asignacion.ProyectoID != *sesion.ProyectoID || !strings.EqualFold(strings.TrimSpace(asignacion.Nota), "microciclo_exclusivo") {
+	if asignacion.ProyectoID != *sesion.ProyectoID || !asignacionMantieneExclusividadPremium(asignacion.Nota) {
 		return 0, nil
 	}
 	agente := strings.TrimSpace(sesion.Agente)
@@ -8502,6 +8502,15 @@ func tareaDebeCompactarsePorExclusividadPremium(tarea *db.Tarea, proyectoID int6
 		return false
 	}
 	return !tareaDBTieneContratoPremiumAcotado(tarea)
+}
+
+func asignacionMantieneExclusividadPremium(nota string) bool {
+	switch strings.ToLower(strings.TrimSpace(nota)) {
+	case "microciclo_exclusivo", "reactivacion_automatica_trabajo_activo":
+		return true
+	default:
+		return false
+	}
 }
 
 func procesarRecuperacionTareasBloqueadasSesionActiva(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {
