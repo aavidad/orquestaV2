@@ -172,12 +172,18 @@ func (s *Service) IntentarAutoasignarTareaPipelineLocal(proyectoSlug, agente str
 	if actual == nil {
 		return nil, nil
 	}
-	if !cambioReal {
-		return nil, nil
+	if actual.Estado != db.TareaEnProgreso && actual.Agente != nil && strings.EqualFold(strings.TrimSpace(*actual.Agente), agente) {
+		if err := s.taskActionProvider.StartTask(actual.ID, strings.TrimSpace(*actual.Agente)); err != nil {
+			return nil, err
+		}
+		cambioReal = true
 	}
 	actual, err = s.taskActionProvider.GetTask(actual.ID)
 	if err != nil {
 		return nil, err
+	}
+	if !cambioReal {
+		return nil, nil
 	}
 	return tareaPipelineLocalDesdeDB(actual), nil
 }

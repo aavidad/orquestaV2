@@ -811,11 +811,32 @@ func TestIntentarAutoasignarTareaPipelineLocalAsignaAAgenteConcreto(t *testing.T
 	if err != nil {
 		t.Fatalf("IntentarAutoasignarTareaPipelineLocal: %v", err)
 	}
-	if tarea == nil || tarea.ID != 51 || tarea.Estado != string(db.TareaAsignada) {
+	if tarea == nil || tarea.ID != 51 || tarea.Estado != string(db.TareaEnProgreso) {
 		t.Fatalf("tarea autoasignada inesperada: %+v", tarea)
 	}
 	if tarea.Agente != "Codex1" {
 		t.Fatalf("agente autoasignado inesperado: %+v", tarea)
+	}
+}
+
+func TestIntentarAutoasignarTareaPipelineLocalPromueveAsignadaDelMismoAgente(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{ID: 55, Titulo: "Implementar promotion runtime", Estado: db.TareaAsignada, Agente: ptrString("Codex1"), Prioridad: db.PrioridadAlta},
+	}})
+	service.SetTaskActionProvider(&fakeTaskActionProvider{
+		tareas: map[int64]*db.Tarea{
+			55: {ID: 55, Titulo: "Implementar promotion runtime", Estado: db.TareaAsignada, Agente: ptrString("Codex1"), Prioridad: db.PrioridadAlta},
+		},
+	})
+
+	tarea, err := service.IntentarAutoasignarTareaPipelineLocal("orquestador", "Codex1")
+	if err != nil {
+		t.Fatalf("IntentarAutoasignarTareaPipelineLocal: %v", err)
+	}
+	if tarea == nil || tarea.ID != 55 || tarea.Estado != string(db.TareaEnProgreso) || tarea.Agente != "Codex1" {
+		t.Fatalf("deberia promover la tarea ya asignada al mismo agente: %+v", tarea)
 	}
 }
 
@@ -877,7 +898,7 @@ func TestIntentarAutoasignarTareaPipelineLocalPermitePremiumFrontierCanonico(t *
 	if err != nil {
 		t.Fatalf("IntentarAutoasignarTareaPipelineLocal: %v", err)
 	}
-	if tarea == nil || tarea.ID != 54 || tarea.Estado != string(db.TareaAsignada) || tarea.Agente != "Codex1" {
+	if tarea == nil || tarea.ID != 54 || tarea.Estado != string(db.TareaEnProgreso) || tarea.Agente != "Codex1" {
 		t.Fatalf("deberia permitir el frente premium canónico acotador: %+v", tarea)
 	}
 }
