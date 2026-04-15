@@ -5663,6 +5663,194 @@ func TestProcesarAutonomiaSesionActivaCompactaFrentesPremiumAsignadosDuplicados(
 	}
 }
 
+func TestProcesarCompactacionExclusividadPremiumSesionActivaMueveRestosALaBacklog(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("claude1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	orqID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto orquestador: %v", err)
+	}
+	otroID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "multi-app",
+		Nombre:  "Multi App",
+		RutaAbs: filepath.Join(tmp, "multi-app"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto otro: %v", err)
+	}
+	if err := db.ActivarAsignacion("claude1", orqID, "microciclo_exclusivo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "claude1",
+		ProyectoID:  &orqID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "claude-code",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	keepID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente premium acotado",
+		Descripcion: "WRITE_SET: cmd/controlplane_support.go\nTests minimos: go test ./cmd -run 'TestProcesarCompactacionExclusividadPremiumSesionActivaMueveRestosALaBacklog$'",
+		ProyectoID:  &orqID,
+		Modulo:      "controlplane",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       microcicloRefactorNotasTag,
+	})
+	if err != nil {
+		t.Fatalf("crear frente premium: %v", err)
+	}
+	if err := db.TomarTarea(keepID, "claude1"); err != nil {
+		t.Fatalf("tomar frente premium: %v", err)
+	}
+
+	legacyID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Tarea legacy",
+		Descripcion: "Tarea amplia sin contrato bounded",
+		ProyectoID:  &orqID,
+		Modulo:      "legacy",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea legacy: %v", err)
+	}
+	if err := db.TomarTarea(legacyID, "claude1"); err != nil {
+		t.Fatalf("tomar tarea legacy: %v", err)
+	}
+
+	ajenaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Tarea ajena",
+		Descripcion: "No debe seguir en un premium exclusivo de otro proyecto",
+		ProyectoID:  &otroID,
+		Modulo:      "api",
+		Prioridad:   db.PrioridadMedia,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea ajena: %v", err)
+	}
+	if err := db.TomarTarea(ajenaID, "claude1"); err != nil {
+		t.Fatalf("tomar tarea ajena: %v", err)
+	}
+
+	n, err := procesarCompactacionExclusividadPremiumSesionActiva(sesion, nil)
+	if err != nil {
+		t.Fatalf("compactar exclusividad: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("deberia mover dos restos a backlog, got=%d", n)
+	}
+
+	keep, err := db.GetTarea(keepID)
+	if err != nil {
+		t.Fatalf("get keep: %v", err)
+	}
+	if keep.Estado != db.TareaAsignada || keep.Agente == nil || !strings.EqualFold(strings.TrimSpace(*keep.Agente), "claude1") {
+		t.Fatalf("el frente premium bounded deberia conservarse: %+v", keep)
+	}
+
+	legacy, err := db.GetTarea(legacyID)
+	if err != nil {
+		t.Fatalf("get legacy: %v", err)
+	}
+	if legacy.Estado != db.TareaBacklog || legacy.Agente != nil {
+		t.Fatalf("la tarea legacy del mismo proyecto deberia volver a backlog: %+v", legacy)
+	}
+
+	ajena, err := db.GetTarea(ajenaID)
+	if err != nil {
+		t.Fatalf("get ajena: %v", err)
+	}
+	if ajena.Estado != db.TareaBacklog || ajena.Agente != nil {
+		t.Fatalf("la tarea de otro proyecto deberia volver a backlog: %+v", ajena)
+	}
+}
+
+func TestProcesarCompactacionExclusividadPremiumSesionActivaRespetaSemillaYManualTakeover(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "microciclo_exclusivo"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	frontierID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Semilla premium",
+		Descripcion: "Abrir siguiente frente premium útil",
+		ProyectoID:  &proyectoID,
+		Modulo:      "autonomia",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+		Notas:       "autonomia:premium_frontier",
+	})
+	if err != nil {
+		t.Fatalf("crear semilla: %v", err)
+	}
+	if err := db.TomarTarea(frontierID, "Codex1"); err != nil {
+		t.Fatalf("tomar semilla: %v", err)
+	}
+
+	manualID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Tarea manual",
+		Descripcion: "Trabajo fuera de flota automatizada",
+		ProyectoID:  &proyectoID,
+		Modulo:      "manual",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+		Notas:       "Asumida manualmente fuera de la flota automatizada",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea manual: %v", err)
+	}
+	if err := db.TomarTarea(manualID, "Codex1"); err != nil {
+		t.Fatalf("tomar tarea manual: %v", err)
+	}
+
+	n, err := procesarCompactacionExclusividadPremiumSesionActiva(sesion, nil)
+	if err != nil {
+		t.Fatalf("compactar exclusividad: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia mover ni semilla ni takeover manual, got=%d", n)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchNoEncolaNudgePorSupervisarProyectoEnSesionActiva(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -18149,6 +18337,85 @@ func TestSeleccionarRelevoAutonomiaDescartaPremiumConTrabajoAbiertoSiLaTareaEsAc
 	relevo := seleccionarRelevoAutonomia(rows, map[string]int{"CodexOcupado": 1, "CodexLibre": 0}, tarea, "CodexBloqueado")
 	if relevo != "CodexLibre" {
 		t.Fatalf("deberia preferir el premium sin trabajo abierto para un frente acotado, got=%q", relevo)
+	}
+}
+
+func TestSeleccionarRelevoAutonomiaDescartaPremiumExclusivoConTrabajoAbiertoParaTareaNoAcotada(t *testing.T) {
+	proyectoID := int64(42)
+	tarea := &db.Tarea{
+		ID:         89,
+		ProyectoID: &proyectoID,
+		Titulo:     "Tarea legacy amplia",
+	}
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexExclusivo"},
+			Asignacion:      &db.Asignacion{Agente: "CodexExclusivo", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva, Nota: "microciclo_exclusivo"},
+			EstadoOperativo: "disponible",
+			OpenTasks:       1,
+		},
+		{
+			Agente:          &db.Agente{Nombre: "CodexLibre"},
+			Asignacion:      &db.Asignacion{Agente: "CodexLibre", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+			EstadoOperativo: "disponible",
+			OpenTasks:       0,
+		},
+	}
+
+	relevo := seleccionarRelevoAutonomia(rows, map[string]int{"CodexExclusivo": 1, "CodexLibre": 0}, tarea, "CodexBloqueado")
+	if relevo != "CodexLibre" {
+		t.Fatalf("deberia descartar al premium exclusivo ocupado para tarea no acotada, got=%q", relevo)
+	}
+}
+
+func TestSeleccionarRelevoAutonomiaDescartaPremiumExclusivoConTrabajoAbiertoParaOtroProyecto(t *testing.T) {
+	proyectoAsignado := int64(42)
+	proyectoAjeno := int64(77)
+	tarea := &db.Tarea{
+		ID:          90,
+		ProyectoID:  &proyectoAjeno,
+		Descripcion: "Frente premium acotado.\nWRITE_SET: cmd/controlplane_support.go\nTests minimos: go test ./cmd -run 'TestSeleccionarRelevoAutonomiaDescartaPremiumExclusivoConTrabajoAbiertoParaOtroProyecto$'",
+	}
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexExclusivo"},
+			Asignacion:      &db.Asignacion{Agente: "CodexExclusivo", ProyectoID: proyectoAsignado, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva, Nota: "microciclo_exclusivo"},
+			EstadoOperativo: "disponible",
+			OpenTasks:       1,
+		},
+		{
+			Agente:          &db.Agente{Nombre: "CodexLibre"},
+			Asignacion:      &db.Asignacion{Agente: "CodexLibre", ProyectoID: proyectoAjeno, ProyectoSlug: "multi-app", Estado: db.AsignacionActiva},
+			EstadoOperativo: "disponible",
+			OpenTasks:       0,
+		},
+	}
+
+	relevo := seleccionarRelevoAutonomia(rows, map[string]int{"CodexExclusivo": 1, "CodexLibre": 0}, tarea, "CodexBloqueado")
+	if relevo != "CodexLibre" {
+		t.Fatalf("deberia descartar al premium exclusivo ocupado para otro proyecto, got=%q", relevo)
+	}
+}
+
+func TestSeleccionarRelevoAutonomiaPermitePremiumExclusivoLibreParaFrenteAcotadoDelMismoProyecto(t *testing.T) {
+	proyectoID := int64(42)
+	tarea := &db.Tarea{
+		ID:          91,
+		ProyectoID:  &proyectoID,
+		Descripcion: "Frente premium acotado.\nWRITE_SET: cmd/controlplane_support.go\nTests minimos: go test ./cmd -run 'TestSeleccionarRelevoAutonomiaPermitePremiumExclusivoLibreParaFrenteAcotadoDelMismoProyecto$'",
+	}
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexExclusivo"},
+			Asignacion:      &db.Asignacion{Agente: "CodexExclusivo", ProyectoID: proyectoID, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva, Nota: "microciclo_exclusivo"},
+			EstadoOperativo: "disponible",
+			OpenTasks:       0,
+		},
+	}
+
+	relevo := seleccionarRelevoAutonomia(rows, map[string]int{"CodexExclusivo": 0}, tarea, "CodexBloqueado")
+	if relevo != "CodexExclusivo" {
+		t.Fatalf("deberia permitir al premium exclusivo libre en su propio carril acotado, got=%q", relevo)
 	}
 }
 

@@ -7220,6 +7220,9 @@ func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjecte
 		if tareaPremiumAcotada && openTasks > 0 {
 			continue
 		}
+		if relevoPremiumExclusivoDebeOmitirse(row, tarea, openTasks) {
+			continue
+		}
 		if candidateCeiling > 0 && openTasks >= candidateCeiling {
 			continue
 		}
@@ -7246,6 +7249,25 @@ func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjecte
 		return ""
 	}
 	return candidates[0].agente
+}
+
+func relevoPremiumExclusivoDebeOmitirse(row agentesapp.Row, tarea *db.Tarea, openTasks int) bool {
+	if openTasks <= 0 || row.Asignacion == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(row.Asignacion.Nota), "microciclo_exclusivo") {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(row.Asignacion.ProyectoSlug), "orquestador") {
+		return false
+	}
+	if tarea == nil {
+		return true
+	}
+	if tarea.ProyectoID == nil || *tarea.ProyectoID != row.Asignacion.ProyectoID {
+		return true
+	}
+	return !tareaDBTieneContratoPremiumAcotado(tarea)
 }
 
 func degradedTaskShouldIntervene(tarea *db.Tarea, now time.Time) bool {
@@ -7470,6 +7492,7 @@ func procesarPrechecksAutonomiaSesionActiva(sesion *db.Sesion, snapshot *autonom
 		func() (int, error) { return procesarReanudacionAutonomaSesion(sesion, snapshot) },
 		func() (int, error) { return procesarAparcadoAutonomoSesion(sesion, snapshot) },
 		func() (int, error) { return procesarRecuperacionRuntimeDegradadoSesion(sesion) },
+		func() (int, error) { return procesarCompactacionExclusividadPremiumSesionActiva(sesion, snapshot) },
 		func() (int, error) { return procesarRecuperacionTareasBloqueadasSesionActiva(sesion, snapshot) },
 		func() (int, error) { return procesarCompactacionFrentesPremiumSesionActiva(sesion, snapshot) },
 		func() (int, error) { return procesarDerivacionSemillaPremiumSesionActiva(sesion, snapshot) },
@@ -7484,6 +7507,66 @@ func procesarPrechecksAutonomiaSesionActiva(sesion *db.Sesion, snapshot *autonom
 		}
 	}
 	return 0, nil
+}
+
+func procesarCompactacionExclusividadPremiumSesionActiva(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {
+	if sesion == nil || sesion.ProyectoID == nil {
+		return 0, nil
+	}
+	asignacion, err := db.GetAsignacionActivaAgente(strings.TrimSpace(sesion.Agente))
+	if err != nil || asignacion == nil {
+		return 0, err
+	}
+	if asignacion.ProyectoID != *sesion.ProyectoID || !strings.EqualFold(strings.TrimSpace(asignacion.Nota), "microciclo_exclusivo") {
+		return 0, nil
+	}
+	agente := strings.TrimSpace(sesion.Agente)
+	if agente == "" {
+		return 0, nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{Agente: &agente})
+	if err != nil {
+		return 0, err
+	}
+	procesadas := 0
+	for _, tarea := range tareas {
+		if !tareaDebeCompactarsePorExclusividadPremium(tarea, asignacion.ProyectoID, agente) {
+			continue
+		}
+		if err := tareasService.MoveToBacklog(tarea.ID); err != nil {
+			return procesadas, err
+		}
+		procesadas++
+	}
+	if procesadas > 0 {
+		resetStatusSnapshotCache()
+		invalidarSnapshotAutonomiaProyecto(snapshot, agente, *sesion.ProyectoID)
+	}
+	return procesadas, nil
+}
+
+func tareaDebeCompactarsePorExclusividadPremium(tarea *db.Tarea, proyectoID int64, agente string) bool {
+	if tarea == nil || tarea.ID <= 0 || tarea.Agente == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(agente)) {
+		return false
+	}
+	switch tarea.Estado {
+	case db.TareaAsignada, db.TareaEnProgreso:
+	default:
+		return false
+	}
+	if taskManualTakeover(tarea) {
+		return false
+	}
+	if tarea.ProyectoID == nil || *tarea.ProyectoID != proyectoID {
+		return true
+	}
+	if strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:premium_frontier") {
+		return false
+	}
+	return !tareaDBTieneContratoPremiumAcotado(tarea)
 }
 
 func procesarRecuperacionTareasBloqueadasSesionActiva(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {
