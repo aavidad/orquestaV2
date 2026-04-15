@@ -5982,6 +5982,11 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 		return procesadas, err
 	}
 	procesadas += redistribuidas
+	reactivadosSinRuntime, err := procesarReactivacionAgentesSinRuntimeBatch(rows, tareasActivasPorAgente)
+	if err != nil {
+		return procesadas, err
+	}
+	procesadas += reactivadosSinRuntime
 	for _, row := range rows {
 		if row.Agente == nil || !rowPermiteAutoRecuperacion(row, now) {
 			continue
@@ -6260,7 +6265,53 @@ func procesarMigracionRuntimeLegacyTMUXBatch(rows []agentesapp.Row, now time.Tim
 			fmt.Sprintf("agente=%s proyecto_id=%s stop_order_id=%d start_order_id=%d", agente, detalleProyecto, stopOrderID, startOrderID))
 		total++
 	}
-	return total, nil
+return total, nil
+}
+
+func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea) (int, error) {
+	procesadas := 0
+	for _, row := range rows {
+		if row.Agente == nil {
+			continue
+		}
+		if strings.TrimSpace(row.EstadoOperativo) != "bloqueado_por_runtime" {
+			continue
+		}
+		if row.Handle != nil || row.Runtime != nil {
+			continue
+		}
+		agente := strings.TrimSpace(row.Agente.Nombre)
+		if agente == "" {
+			continue
+		}
+		if row.MailboxPending <= 0 && len(tareasActivasPorAgente[agente]) == 0 {
+			continue
+		}
+		if disponible, _, err := autonomiaCuentaCompartidaDisponible(agente); err != nil {
+			return procesadas, err
+		} else if !disponible {
+			continue
+		}
+		proyectoID := rowProyectoIDPreferido(row)
+		if proyectoID == nil || *proyectoID <= 0 {
+			continue
+		}
+		proyecto, err := runtimesService.GetProject(strconv.FormatInt(*proyectoID, 10))
+		if err != nil {
+			return procesadas, err
+		}
+		reactivado, err := encolarReactivacionAgenteProyectoSiProcede(agente, proyecto, "agente_sin_runtime_activo")
+		if err != nil {
+			return procesadas, err
+		}
+		if !reactivado {
+			continue
+		}
+		db.Audit("orquesta", "autonomia_agente_sin_runtime_reactivado", "proyecto", proyecto.ID,
+			fmt.Sprintf("agente=%s detalle=%s mailbox_pending=%d open_tasks=%d", agente, strings.TrimSpace(row.DetalleOperativo), row.MailboxPending, len(tareasActivasPorAgente[agente])))
+		procesadas++
+	}
+	return procesadas, nil
 }
 
 func procesarWorkersAtascadosAutonomiaBatch(rows []agentesapp.Row, now time.Time) (int, error) {

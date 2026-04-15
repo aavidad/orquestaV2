@@ -14009,6 +14009,73 @@ func TestProcesarAutonomiaAgentesBatchRecuperaSesionActivaSinHandleConTrabajoArr
 	}
 }
 
+func TestProcesarAgentesDegradadosAutonomiaBatchReactivaPremiumSinRuntimeNiHandle(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("QwenCoder1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("QwenCoder1", proyectoID, "frente premium"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Retomar continuidad premium",
+		Descripcion: "Trabajo premium ya asignado",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "orquesta",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "QwenCoder1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "QwenCoder1"); err != nil {
+		t.Fatalf("arrancar tarea: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente: "server",
+		ToAgente:   "QwenCoder1",
+		ProyectoID: &proyectoID,
+		Kind:       "autonomia",
+		PayloadJSON: `{"accion":"esperar_o_pedir_tarea","bootstrap":true,"texto":"arranque_autonomo_servidor"}`,
+	}); err != nil {
+		t.Fatalf("mailbox autonomia: %v", err)
+	}
+
+	n, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if n < 1 {
+		t.Fatalf("deberia reactivar premium sin runtime/handle, got=%d", n)
+	}
+
+	agente := "QwenCoder1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0].Tipo != "start" {
+		t.Fatalf("deberia encolar start para premium sin runtime/handle: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"motivo":"agente_sin_runtime_activo"`) {
+		t.Fatalf("start sin motivo esperado: %s", orders[0].PayloadJSON)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchBloqueaProyectoPorCircuitoAbiertoConector(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
