@@ -1305,9 +1305,9 @@ func procesarRuntimeMailboxPorAPI(toAgente, proyecto string) (*apiRuntimeProcess
 	return &resp, true, nil
 }
 
-func procesarAutonomiaPorAPI() (*apiRuntimeProcessAutonomiaResponse, bool, error) {
+func procesarAutonomiaPorAPI(wait bool) (*apiRuntimeProcessAutonomiaResponse, bool, error) {
 	var resp apiRuntimeProcessAutonomiaResponse
-	ok, err := apiPost("/api/runtime/process-autonomia", map[string]any{}, &resp)
+	ok, err := apiPost("/api/runtime/process-autonomia", map[string]any{"wait": wait}, &resp)
 	if !ok || err != nil {
 		return nil, ok, err
 	}

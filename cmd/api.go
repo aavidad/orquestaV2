@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"path/filepath"
 	"sort"
@@ -560,6 +561,10 @@ type apiRuntimeProcessAutonomiaResponse struct {
 	Running  bool `json:"running,omitempty"`
 }
 
+type apiRuntimeProcessAutonomiaRequest struct {
+	Wait bool `json:"wait"`
+}
+
 type apiRuntimeProcessReanimationsResponse struct {
 	OK                bool `json:"ok"`
 	Count             int  `json:"count"`
@@ -569,6 +574,10 @@ type apiRuntimeProcessReanimationsResponse struct {
 	Reactivated       int  `json:"reactivated,omitempty"`
 	CooldownSustained int  `json:"cooldown_sustained,omitempty"`
 	Errors            int  `json:"errors,omitempty"`
+}
+
+var runtimeProcessAutonomiaBatch = func() (int, error) {
+	return (dbAutomationService{}).ProcesarAutonomiaAgentesBatch()
 }
 
 type apiAgenteResetReanimacionResponse struct {
@@ -5260,14 +5269,37 @@ func apiHandlerRuntimeProcessAutonomia(w http.ResponseWriter, r *http.Request) {
 	if !apiRequireMethod(w, r, http.MethodPost) {
 		return
 	}
+	var req apiRuntimeProcessAutonomiaRequest
+	if payload, err := io.ReadAll(r.Body); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	} else if raw := strings.TrimSpace(string(payload)); raw != "" {
+		if err := json.Unmarshal(payload, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+	}
 	resetAutonomiaActiveSessionsObservationGate()
 	resetAutonomiaIdleAutoassignGate()
 	resetAutonomiaDegradedTaskGate()
+	if req.Wait {
+		count, err := runtimeProcessAutonomiaBatch()
+		if err != nil {
+			db.Audit("server", "runtime_process_autonomia_error", "runtime", 0, err.Error())
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
+			OK:    true,
+			Count: count,
+		})
+		return
+	}
 	started := runtimeProcessAutonomiaEnCurso.CompareAndSwap(false, true)
 	if started {
 		go func() {
 			defer runtimeProcessAutonomiaEnCurso.Store(false)
-			if _, err := (dbAutomationService{}).ProcesarAutonomiaAgentesBatch(); err != nil {
+			if _, err := runtimeProcessAutonomiaBatch(); err != nil {
 				db.Audit("server", "runtime_process_autonomia_error", "runtime", 0, err.Error())
 			}
 		}()

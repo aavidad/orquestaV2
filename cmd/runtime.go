@@ -222,7 +222,8 @@ var runtimeProcesarAutonomiaCmd = &cobra.Command{
 	Use:   "procesar-autonomia",
 	Short: "Ejecuta una pasada inmediata del batch de autonomía",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		resp, ok, err := procesarAutonomiaPorAPI()
+		wait, _ := cmd.Flags().GetBool("wait")
+		resp, ok, err := procesarAutonomiaPorAPI(wait)
 		if !ok {
 			return serverFirstCommandError("runtime procesar-autonomia")
 		}
@@ -1837,6 +1838,7 @@ func init() {
 	runtimeDespertarCmd.Flags().Bool("warm", false, "Despierta el carril caliente general")
 	runtimeProcesarMailboxCmd.Flags().String("agente", "", "Procesar solo mailbox de un agente destino")
 	runtimeProcesarMailboxCmd.Flags().String("proyecto", "", "Procesar solo mailbox de un proyecto")
+	runtimeProcesarAutonomiaCmd.Flags().Bool("wait", false, "Ejecuta la pasada en primer plano y devuelve el recuento real")
 	runtimeCmd.AddCommand(runtimeListarCmd, runtimeVerCmd, runtimeHandlesCmd, runtimePurgarHandlesCmd, runtimePurgarOrdenesCmd, runtimeDespertarCmd, runtimeProcesarMailboxCmd, runtimeProcesarAutonomiaCmd, runtimeProcesarReanimacionesCmd, runtimeTranscriptCmd, runtimeOrdenesCmd, runtimeOrdenVerCmd, runtimeOrdenNuevaCmd, runtimeOrdenCancelarCmd, runtimeNudgeCmd, runtimeDiscordiaCmd, runtimeCheckpointsCmd, runtimeCheckpointNuevoCmd, runtimeCheckpointVerCmd, runtimeMailboxCmd, runtimeMailboxVerCmd, runtimeMailboxEnviarCmd, runtimeMailboxEntregarCmd, runtimeMailboxConsumirCmd, runtimeMailboxLimpiarCmd, runtimeLimpiarPruebasCmd)
 	rootCmd.AddCommand(runtimeCmd)
 }

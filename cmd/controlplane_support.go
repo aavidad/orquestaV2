@@ -6673,6 +6673,11 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 		return procesadas, err
 	}
 	procesadas += limpiadasFuera
+	asignacionesFantasma, err := procesarAsignacionesPremiumFantasmaBatch(rows, tareasActivasPorAgente, tareasBloqueadasPorAgente)
+	if err != nil {
+		return procesadas, err
+	}
+	procesadas += asignacionesFantasma
 	compactadasExclusivas, err := procesarCompactacionExclusividadPremiumBatch(rows, tareasActivasPorAgente)
 	if err != nil {
 		return procesadas, err
@@ -7329,6 +7334,44 @@ func errorMigracionRuntimeLegacyTMUXIgnorable(err error) bool {
 	default:
 		return false
 	}
+}
+
+func procesarAsignacionesPremiumFantasmaBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea, tareasBloqueadasPorAgente map[string][]*db.Tarea) (int, error) {
+	procesadas := 0
+	for _, row := range rows {
+		if row.Agente == nil || row.Asignacion == nil {
+			continue
+		}
+		if row.Asignacion.Estado != db.AsignacionActiva {
+			continue
+		}
+		agente := strings.TrimSpace(row.Agente.Nombre)
+		if agente == "" {
+			continue
+		}
+		if !asignacionMantieneExclusividadPremium(row.Asignacion.Nota) {
+			continue
+		}
+		if rowTieneRuntimeOHandleOperativo(row) || row.MailboxPending > 0 {
+			continue
+		}
+		if row.OpenTasks > 0 || row.BlockedTasks > 0 {
+			continue
+		}
+		if len(tareasActivasPorAgente[agente]) > 0 || len(tareasBloqueadasPorAgente[agente]) > 0 {
+			continue
+		}
+		if row.Asignacion.ProyectoID <= 0 {
+			continue
+		}
+		if err := db.PausarAsignacion(agente, row.Asignacion.ProyectoID, "sin_trabajo_reactivacion_automatica"); err != nil {
+			return procesadas, err
+		}
+		db.Audit("orquesta", "autonomia_compacta_asignacion_premium_fantasma", "proyecto", row.Asignacion.ProyectoID,
+			fmt.Sprintf("agente=%s nota=%s estado_operativo=%s", agente, strings.TrimSpace(row.Asignacion.Nota), strings.TrimSpace(row.EstadoOperativo)))
+		procesadas++
+	}
+	return procesadas, nil
 }
 
 func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea, tareasBloqueadasPorAgente map[string][]*db.Tarea) (int, error) {
