@@ -29,6 +29,7 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	var wakeReq map[string]any
 	var processMailboxReq map[string]any
 	var processAutonomiaReq map[string]any
+	var processDegradadosReq map[string]any
 	var processReanimationsReq map[string]any
 	var clearMailboxReq map[string]any
 	var clearTasksReq map[string]any
@@ -243,6 +244,9 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 		case r.URL.Path == "/api/runtime/process-autonomia" && r.Method == http.MethodPost:
 			_ = json.NewDecoder(r.Body).Decode(&processAutonomiaReq)
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 0, "accepted": true, "running": true})
+		case r.URL.Path == "/api/runtime/process-degradados" && r.Method == http.MethodPost:
+			_ = json.NewDecoder(r.Body).Decode(&processDegradadosReq)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 2, "accepted": true, "running": false})
 		case r.URL.Path == "/api/runtime/process-reanimations" && r.Method == http.MethodPost:
 			_ = json.NewDecoder(r.Body).Decode(&processReanimationsReq)
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "count": 1, "accepted": true, "running": false, "candidates": 2, "reactivated": 1, "cooldown_sustained": 1, "errors": 0})
@@ -382,8 +386,22 @@ func TestRuntimeControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 			t.Fatalf("salida runtime procesar-autonomia sin %q:\n%s", token, outProcessAutonomia)
 		}
 	}
-	if len(processAutonomiaReq) != 0 {
-		t.Fatalf("request process autonomia deberia ser vacia: %+v", processAutonomiaReq)
+	if got, ok := processAutonomiaReq["wait"].(bool); !ok || got {
+		t.Fatalf("request process autonomia deberia enviar wait=false: %+v", processAutonomiaReq)
+	}
+
+	outProcessDegradados := capturarStdout(t, func() {
+		if err := runtimeProcesarDegradadosCmd.RunE(runtimeProcesarDegradadosCmd, nil); err != nil {
+			t.Fatalf("runtime procesar-degradados via api: %v", err)
+		}
+	})
+	for _, token := range []string{"accepted=true", "running=false", "count=2"} {
+		if !strings.Contains(outProcessDegradados, token) {
+			t.Fatalf("salida runtime procesar-degradados sin %q:\n%s", token, outProcessDegradados)
+		}
+	}
+	if got, ok := processDegradadosReq["wait"].(bool); !ok || got {
+		t.Fatalf("request process degradados deberia enviar wait=false: %+v", processDegradadosReq)
 	}
 
 	outProcessReanimations := capturarStdout(t, func() {

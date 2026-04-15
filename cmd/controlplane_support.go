@@ -6639,6 +6639,29 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 
 	procesadas := 0
 	now := time.Now().UTC()
+	asignacionesFantasma, err := procesarAsignacionesPremiumFantasmaBatch(rows, tareasActivasPorAgente, tareasBloqueadasPorAgente)
+	if err != nil {
+		return 0, err
+	}
+	procesadas += asignacionesFantasma
+	if asignacionesFantasma > 0 {
+		rows, err = agentesService.BuildPanelRows()
+		if err != nil {
+			return procesadas, err
+		}
+		rowsPorAgente = map[string]agentesapp.Row{}
+		for _, row := range rows {
+			if row.Agente == nil {
+				continue
+			}
+			nombre := strings.ToLower(strings.TrimSpace(row.Agente.Nombre))
+			if nombre == "" {
+				continue
+			}
+			rowsPorAgente[nombre] = row
+		}
+		openTasksProjected = openTasksProjectedFromRows(rows)
+	}
 	migradas, err := procesarMigracionRuntimeLegacyTMUXBatch(rows, now)
 	if err != nil {
 		return 0, err
@@ -6673,11 +6696,6 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 		return procesadas, err
 	}
 	procesadas += limpiadasFuera
-	asignacionesFantasma, err := procesarAsignacionesPremiumFantasmaBatch(rows, tareasActivasPorAgente, tareasBloqueadasPorAgente)
-	if err != nil {
-		return procesadas, err
-	}
-	procesadas += asignacionesFantasma
 	compactadasExclusivas, err := procesarCompactacionExclusividadPremiumBatch(rows, tareasActivasPorAgente)
 	if err != nil {
 		return procesadas, err
@@ -7349,7 +7367,7 @@ func procesarAsignacionesPremiumFantasmaBatch(rows []agentesapp.Row, tareasActiv
 		if agente == "" {
 			continue
 		}
-		if !asignacionMantieneExclusividadPremium(row.Asignacion.Nota) {
+		if !asignacionPremiumFantasmaCompactable(row.Asignacion.Nota) {
 			continue
 		}
 		if rowTieneRuntimeOHandleOperativo(row) || row.MailboxPending > 0 {
@@ -7372,6 +7390,15 @@ func procesarAsignacionesPremiumFantasmaBatch(rows []agentesapp.Row, tareasActiv
 		procesadas++
 	}
 	return procesadas, nil
+}
+
+func asignacionPremiumFantasmaCompactable(nota string) bool {
+	switch strings.ToLower(strings.TrimSpace(nota)) {
+	case "microciclo_exclusivo", "reactivacion_automatica_trabajo_activo", "reactivacion_automatica":
+		return true
+	default:
+		return false
+	}
 }
 
 func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea, tareasBloqueadasPorAgente map[string][]*db.Tarea) (int, error) {

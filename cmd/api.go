@@ -580,6 +580,10 @@ var runtimeProcessAutonomiaBatch = func() (int, error) {
 	return (dbAutomationService{}).ProcesarAutonomiaAgentesBatch()
 }
 
+var runtimeProcessDegradadosBatch = func() (int, error) {
+	return procesarAgentesDegradadosAutonomiaBatchFn()
+}
+
 type apiAgenteResetReanimacionResponse struct {
 	OK       bool   `json:"ok"`
 	Agente   string `json:"agente"`
@@ -588,6 +592,7 @@ type apiAgenteResetReanimacionResponse struct {
 }
 
 var runtimeProcessAutonomiaEnCurso atomic.Bool
+var runtimeProcessDegradadosEnCurso atomic.Bool
 var runtimeProcessReanimacionesEnCurso atomic.Bool
 var apiAgentResetReanimacionEnCurso sync.Map
 
@@ -803,6 +808,7 @@ func registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/runtime/wake", apiHandlerRuntimeWake)
 	mux.HandleFunc("/api/runtime/process-mailbox", apiHandlerRuntimeProcessMailbox)
 	mux.HandleFunc("/api/runtime/process-autonomia", apiHandlerRuntimeProcessAutonomia)
+	mux.HandleFunc("/api/runtime/process-degradados", apiHandlerRuntimeProcessDegradados)
 	mux.HandleFunc("/api/runtime/process-reanimations", apiHandlerRuntimeProcessReanimaciones)
 	mux.HandleFunc("/api/runtime/ollama-pool/launch", apiHandlerOllamaPoolLaunch)
 	mux.HandleFunc("/api/runtime/ollama-pool/input", apiHandlerOllamaPoolInput)
@@ -5309,6 +5315,51 @@ func apiHandlerRuntimeProcessAutonomia(w http.ResponseWriter, r *http.Request) {
 		Count:    0,
 		Accepted: started,
 		Running:  runtimeProcessAutonomiaEnCurso.Load(),
+	})
+}
+
+func apiHandlerRuntimeProcessDegradados(w http.ResponseWriter, r *http.Request) {
+	if !apiRequireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var req apiRuntimeProcessAutonomiaRequest
+	if payload, err := io.ReadAll(r.Body); err != nil {
+		apiError(w, http.StatusBadRequest, err)
+		return
+	} else if raw := strings.TrimSpace(string(payload)); raw != "" {
+		if err := json.Unmarshal(payload, &req); err != nil {
+			apiError(w, http.StatusBadRequest, err)
+			return
+		}
+	}
+	resetAutonomiaDegradedTaskGate()
+	if req.Wait {
+		count, err := runtimeProcessDegradadosBatch()
+		if err != nil {
+			db.Audit("server", "runtime_process_degradados_error", "runtime", 0, err.Error())
+			apiError(w, http.StatusInternalServerError, err)
+			return
+		}
+		apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
+			OK:    true,
+			Count: count,
+		})
+		return
+	}
+	started := runtimeProcessDegradadosEnCurso.CompareAndSwap(false, true)
+	if started {
+		go func() {
+			defer runtimeProcessDegradadosEnCurso.Store(false)
+			if _, err := runtimeProcessDegradadosBatch(); err != nil {
+				db.Audit("server", "runtime_process_degradados_error", "runtime", 0, err.Error())
+			}
+		}()
+	}
+	apiWriteJSON(w, http.StatusOK, apiRuntimeProcessAutonomiaResponse{
+		OK:       true,
+		Count:    0,
+		Accepted: started,
+		Running:  runtimeProcessDegradadosEnCurso.Load(),
 	})
 }
 
