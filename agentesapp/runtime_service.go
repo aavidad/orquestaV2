@@ -486,7 +486,13 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		}
 		tareasActivas = append(tareasActivas, LightItem{ID: tarea.ID, Titulo: tarea.Titulo, Estado: string(tarea.Estado)})
 		if tarea.Estado == db.TareaBloqueada {
-			tieneBloqueos = true
+			requiereIntervencion, err := s.blockedTaskNeedsIntervention(agenteNombre, proyecto.ID, sesionActiva, tarea)
+			if err != nil {
+				return nil, err
+			}
+			if requiereIntervencion {
+				tieneBloqueos = true
+			}
 		}
 		if tarea.Estado == db.TareaAsignada || tarea.Estado == db.TareaEnProgreso {
 			tieneTrabajo = true
@@ -583,6 +589,44 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 		out.Motivo = "No hay tarea activa asignada en este proyecto"
 	}
 	return out, nil
+}
+
+func (s *Service) blockedTaskNeedsIntervention(agenteNombre string, proyectoID int64, sesionActiva *db.Sesion, tarea *db.Tarea) (bool, error) {
+	if tarea == nil || tarea.Estado != db.TareaBloqueada {
+		return false, nil
+	}
+	motivo, err := db.MotivoBloqueoActivoTarea(tarea.ID)
+	if err != nil {
+		return true, err
+	}
+	activoEnProyecto := sesionActiva != nil &&
+		sesionActiva.ProyectoID != nil &&
+		*sesionActiva.ProyectoID == proyectoID &&
+		strings.EqualFold(strings.TrimSpace(sesionActiva.Agente), strings.TrimSpace(agenteNombre))
+	if activoEnProyecto && bloqueoAutonomiaAgenteRecuperable(agenteNombre, agenteNombre, strings.TrimSpace(motivo)) {
+		return false, nil
+	}
+	return true, nil
+}
+
+func bloqueoAutonomiaAgenteRecuperable(agente, bloqueadoPor, motivo string) bool {
+	agente = strings.TrimSpace(agente)
+	bloqueadoPor = strings.TrimSpace(bloqueadoPor)
+	motivo = strings.TrimSpace(motivo)
+	if agente == "" || motivo == "" {
+		return false
+	}
+	if strings.HasPrefix(motivo, "Agente "+agente+" en estado ") {
+		return true
+	}
+	if strings.EqualFold(bloqueadoPor, agente) && strings.HasPrefix(motivo, "Agente degradado:") {
+		return true
+	}
+	motivoLower := strings.ToLower(motivo)
+	if strings.EqualFold(bloqueadoPor, agente) && strings.HasPrefix(motivoLower, strings.ToLower("Sobrecarga operativa:")) {
+		return true
+	}
+	return false
 }
 
 func (s *Service) shouldPauseByFreshBudget(agente string) (bool, string, error) {

@@ -5016,8 +5016,8 @@ func TestProcesarAutonomiaAgentesBatchAutoasignaTrabajoASesionActivaIdle(t *test
 	if err != nil {
 		t.Fatalf("get tarea: %v", err)
 	}
-	if tarea.Agente == nil || *tarea.Agente != "Codex1" || tarea.Estado != db.TareaAsignada {
-		t.Fatalf("la tarea deberia quedar autoasignada a la sesion viva: %+v", tarea)
+	if tarea.Agente == nil || *tarea.Agente != "Codex1" || tarea.Estado != db.TareaEnProgreso {
+		t.Fatalf("la tarea deberia quedar autoasignada y arrancada en la sesion viva: %+v", tarea)
 	}
 
 	agente := "Codex1"
@@ -12315,6 +12315,24 @@ func TestRowPermiteAutoRecuperacionRechazaWorkerSinContinuidadConSoloBloqueadas(
 	}
 }
 
+func TestRowPermiteAutoRecuperacionAceptaTMUXBootstrapOnlyFrescoConSoloBloqueadas(t *testing.T) {
+	now := time.Now().UTC()
+	row := agentesapp.Row{
+		EstadoOperativo:           "bloqueado",
+		OpenTasks:                 0,
+		BlockedTasks:              2,
+		WorkerState:               "starting",
+		WorkerAlive:               true,
+		WorkerHeartbeat:           &now,
+		WorkerDriver:              "tmux_cli_session",
+		WorkerTMUXSession:         "orq-gemini1-053508",
+		WorkerMailboxDeliveryMode: runtimeagente.MailboxDeliveryBootstrapOnly,
+	}
+	if !rowPermiteAutoRecuperacion(row, now) {
+		t.Fatalf("un worker tmux bootstrap_only fresco deberia reactivar backlog bloqueado")
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchEncolaPausePorBloqueoHumano(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -18505,6 +18523,215 @@ func TestProcesarAgentesDegradadosAutonomiaBatchRecuperaTareaBloqueadaSiElWorker
 	}
 	if procesadas != 1 {
 		t.Fatalf("deberia reactivar una tarea de worker vivo aunque siga pausado, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != db.EstadoEnProgreso {
+		t.Fatalf("la tarea deberia volver a en_progreso, got=%s", tarea.Estado)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchRecuperaTareaBloqueadaConTMUXBootstrapOnlyFresco(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	traceDir := filepath.Join(tmp, "runtime", "gemini1")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	now := time.Now().UTC()
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	if err := os.WriteFile(statusPath, []byte(`{"state":"starting","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"state":"starting","alive":true,"timestamp":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"worker_status_path":     statusPath,
+		"worker_heartbeat_path":  heartbeatPath,
+		"driver":                 "tmux_cli_session",
+		"tmux_session":           "orq-gemini1-bootstrap",
+		"mailbox_delivery_mode":  string(runtimeagente.MailboxDeliveryBootstrapOnly),
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "frente recuperable"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Gemini1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "gemini-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo', metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='esperando_io', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtime.ID); err != nil {
+		t.Fatalf("update runtime: %v", err)
+	}
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Recuperar tarea bloqueada de TMUX bootstrap",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Gemini1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Gemini1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "Gemini1", "Agente Gemini1 en estado bloqueado_por_runtime: worker recuperado"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia reactivar una tarea bloqueada con tmux bootstrap_only fresco, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != db.EstadoEnProgreso {
+		t.Fatalf("la tarea deberia volver a en_progreso, got=%s", tarea.Estado)
+	}
+	if tarea.Agente == nil || *tarea.Agente != "Gemini1" {
+		t.Fatalf("la tarea deberia seguir en Gemini1: %+v", tarea)
+	}
+}
+
+func TestProcesarAutonomiaSesionActivaRecuperaTareaBloqueadaConTMUXBootstrapOnlyFresco(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	traceDir := filepath.Join(tmp, "runtime", "gemini1-sesion")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	now := time.Now().UTC()
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	if err := os.WriteFile(statusPath, []byte(`{"state":"starting","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"state":"starting","alive":true,"timestamp":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+		"driver":                "tmux_cli_session",
+		"tmux_session":          "orq-gemini1-bootstrap",
+		"mailbox_delivery_mode": string(runtimeagente.MailboxDeliveryBootstrapOnly),
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "frente recuperable"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Gemini1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "gemini-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo', metadata_json=? WHERE id=?`, string(metaJSON), handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='esperando_io', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtime.ID); err != nil {
+		t.Fatalf("update runtime: %v", err)
+	}
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Recuperar tarea bloqueada desde sesion activa",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Gemini1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Gemini1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "Gemini1", "Agente Gemini1 en estado bloqueado_por_runtime: worker recuperado"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	procesadas, err := procesarAutonomiaSesionActiva(sesion)
+	if err != nil {
+		t.Fatalf("procesar autonomia sesion activa: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia reactivar una tarea bloqueada desde la sesion activa, got=%d", procesadas)
 	}
 	tarea, err := db.GetTarea(tareaID)
 	if err != nil {

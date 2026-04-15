@@ -7195,6 +7195,7 @@ func procesarPrechecksAutonomiaSesionActiva(sesion *db.Sesion, snapshot *autonom
 		func() (int, error) { return procesarReanudacionAutonomaSesion(sesion, snapshot) },
 		func() (int, error) { return procesarAparcadoAutonomoSesion(sesion, snapshot) },
 		func() (int, error) { return procesarRecuperacionRuntimeDegradadoSesion(sesion) },
+		func() (int, error) { return procesarRecuperacionTareasBloqueadasSesionActiva(sesion, snapshot) },
 		func() (int, error) { return procesarDerivacionSemillaPremiumSesionActiva(sesion, snapshot) },
 	}
 	for _, check := range checks {
@@ -7207,6 +7208,84 @@ func procesarPrechecksAutonomiaSesionActiva(sesion *db.Sesion, snapshot *autonom
 		}
 	}
 	return 0, nil
+}
+
+func procesarRecuperacionTareasBloqueadasSesionActiva(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {
+	if sesion == nil || sesion.ProyectoID == nil {
+		return 0, nil
+	}
+	agente := strings.TrimSpace(sesion.Agente)
+	if agente == "" {
+		return 0, nil
+	}
+	rows, err := agentesService.BuildPanelRows()
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now().UTC()
+	var row *agentesapp.Row
+	for i := range rows {
+		candidato := rows[i]
+		if candidato.Agente == nil || !strings.EqualFold(strings.TrimSpace(candidato.Agente.Nombre), agente) {
+			continue
+		}
+		if proyectoID := rowProyectoIDPreferido(candidato); proyectoID != nil && *proyectoID == *sesion.ProyectoID {
+			row = &candidato
+			break
+		}
+		if row == nil {
+			row = &candidato
+		}
+	}
+	if row == nil || !rowPermiteAutoRecuperacion(*row, now) {
+		return 0, nil
+	}
+	var tareas []*db.Tarea
+	if snapshot != nil {
+		tareas, err = snapshot.tasks(agente, *sesion.ProyectoID)
+		if err != nil {
+			return 0, err
+		}
+	} else {
+		tareas, err = tareasService.List(db.FiltroTareas{Agente: &agente, ProyectoID: sesion.ProyectoID})
+		if err != nil {
+			return 0, err
+		}
+	}
+	if len(tareas) == 0 {
+		return 0, nil
+	}
+	resumenBloqueos, err := db.ListarResumenBloqueos()
+	if err != nil {
+		return 0, err
+	}
+	bloqueosPorTarea := map[int64]db.ResumenBloqueo{}
+	for _, bloqueo := range resumenBloqueos {
+		bloqueosPorTarea[bloqueo.ID] = bloqueo
+	}
+	procesadas := 0
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.Estado != db.TareaBloqueada || tarea.Agente == nil {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(*tarea.Agente), agente) {
+			continue
+		}
+		bloqueo, ok := bloqueosPorTarea[tarea.ID]
+		if !ok || !esBloqueoAutonomiaAgenteRecuperable(agente, strings.TrimSpace(bloqueo.Agente), strings.TrimSpace(bloqueo.Motivo)) {
+			continue
+		}
+		resolucion := fmt.Sprintf("recuperación automática de sesión activa (%s)", firstNonEmpty(strings.TrimSpace(row.EstadoOperativo), "worker recuperado"))
+		if err := desbloquearYReactivarTareaAutonomia(tarea.ID, resolucion, agente, fmt.Sprintf("Reactivada automáticamente en %s desde la sesión activa", agente)); err != nil {
+			return procesadas, err
+		}
+		procesadas++
+	}
+	if procesadas > 0 {
+		resetStatusSnapshotCache()
+		invalidarSnapshotAutonomiaProyecto(snapshot, agente, *sesion.ProyectoID)
+	}
+	return procesadas, nil
 }
 
 func procesarDerivacionSemillaPremiumSesionActiva(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {

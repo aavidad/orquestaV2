@@ -1335,6 +1335,16 @@ func (r Row) WorkerSupportsContinuityRecovery(now time.Time) bool {
 		return true
 	case runtimeagente.MailboxDeliverySessionResume:
 		return strings.TrimSpace(r.WorkerExternalSessionID) != "" || strings.TrimSpace(r.WorkerSessionRef) != ""
+	case runtimeagente.MailboxDeliveryBootstrapOnly:
+		if !r.WorkerTMUXFresh(now) || strings.TrimSpace(r.WorkerTMUXSession) == "" {
+			return false
+		}
+		switch strings.ToLower(strings.TrimSpace(r.WorkerState)) {
+		case "starting", "running", "ready", "working":
+			return true
+		default:
+			return false
+		}
 	default:
 		return false
 	}

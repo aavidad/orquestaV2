@@ -293,3 +293,69 @@ func TestBuildPreparePremiumIgnoraModeloLocalIncompatible(t *testing.T) {
 		t.Fatalf("deberia caer al modelo premium compatible por defecto: %+v", out.Plan)
 	}
 }
+
+func TestProcessTickNoPideIntervencionPorBloqueoAutorecuperableConSesionActiva(t *testing.T) {
+	prepararDBTemporalRuntimeService(t)
+	tmp := t.TempDir()
+	rutaProyecto := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(rutaProyecto, 0o755); err != nil {
+		t.Fatalf("mkdir proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Gemini1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaProyecto,
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Gemini1", proyectoID, "worker"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	if _, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Gemini1",
+		ProyectoID:  &proyectoID,
+		CWD:         rutaProyecto,
+		Herramienta: "gemini-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Frente bloqueado autorecuperable",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "tester",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Gemini1"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Gemini1"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	if err := db.BloquearTarea(tareaID, "Gemini1", "Agente Gemini1 en estado bloqueado_por_runtime: tmux pane finalizado"); err != nil {
+		t.Fatalf("bloquear tarea: %v", err)
+	}
+
+	out, err := NewService(Repository{}, nil).ProcessTick(TickInput{
+		Agente:   "Gemini1",
+		Proyecto: "orquestador",
+	})
+	if err != nil {
+		t.Fatalf("ProcessTick: %v", err)
+	}
+	if out == nil {
+		t.Fatal("tick output nil")
+	}
+	if out.AccionRecomendada == "pedir_intervencion" {
+		t.Fatalf("no deberia pedir intervencion por bloqueo autorecuperable con sesion activa: %+v", out)
+	}
+}

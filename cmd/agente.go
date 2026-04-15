@@ -253,6 +253,13 @@ func construirAgenteTickOutputConSnapshot(agenteNombre string, proyecto *db.Proy
 	logStep("resolver_asignacion", stepStart)
 
 	stepStart = time.Now()
+	agente, err := snapshot.agent(agenteNombre)
+	if err != nil {
+		return out, err
+	}
+	logStep("get_agente", stepStart)
+
+	stepStart = time.Now()
 	tareas, err := snapshot.tasks(agenteNombre, proyecto.ID)
 	if err != nil {
 		return out, err
@@ -271,7 +278,13 @@ func construirAgenteTickOutputConSnapshot(agenteNombre string, proyecto *db.Proy
 			Estado: string(tarea.Estado),
 		})
 		if tarea.Estado == db.TareaBloqueada {
-			tieneBloqueos = true
+			requiereIntervencion, err := tareaBloqueadaRequiereIntervencion(snapshot, agenteNombre, proyecto.ID, agente, tarea)
+			if err != nil {
+				return out, err
+			}
+			if requiereIntervencion {
+				tieneBloqueos = true
+			}
 		}
 		if tarea.Estado == db.TareaAsignada || tarea.Estado == db.TareaEnProgreso {
 			tieneTrabajo = true
@@ -309,13 +322,6 @@ func construirAgenteTickOutputConSnapshot(agenteNombre string, proyecto *db.Proy
 			Estado: string(propuesta.Estado),
 		})
 	}
-
-	stepStart = time.Now()
-	agente, err := snapshot.agent(agenteNombre)
-	if err != nil {
-		return out, err
-	}
-	logStep("get_agente", stepStart)
 
 	out = agenteTickOutput{
 		Agente:               agenteNombre,
@@ -372,6 +378,27 @@ func construirAgenteTickOutputConSnapshot(agenteNombre string, proyecto *db.Proy
 	}
 
 	return out, nil
+}
+
+func tareaBloqueadaRequiereIntervencion(snapshot *autonomiaBatchSnapshot, agenteNombre string, proyectoID int64, agente *db.Agente, tarea *db.Tarea) (bool, error) {
+	if tarea == nil || tarea.Estado != db.TareaBloqueada {
+		return false, nil
+	}
+	motivo, err := db.MotivoBloqueoActivoTarea(tarea.ID)
+	if err != nil {
+		return true, err
+	}
+	activoEnProyecto := false
+	if snapshot != nil && strings.TrimSpace(agenteNombre) != "" && proyectoID > 0 {
+		activoEnProyecto, err = snapshot.autonomiaActivoEnProyecto(agenteNombre, proyectoID, agente)
+		if err != nil {
+			return true, err
+		}
+	}
+	if activoEnProyecto && esBloqueoAutonomiaAgenteRecuperable(agenteNombre, agenteNombre, strings.TrimSpace(motivo)) {
+		return false, nil
+	}
+	return true, nil
 }
 
 func autonomiaTickDebugEnabled() bool {
