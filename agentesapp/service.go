@@ -3,6 +3,7 @@ package agentesapp
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strconv"
 	"strings"
@@ -1051,6 +1052,9 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 	if err != nil {
 		return nil, err
 	}
+	if activeOnly {
+		return s.buildActiveReanimationSchedule(agentes, includeFuture)
+	}
 	asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{})
 	if err != nil {
 		return nil, err
@@ -1311,6 +1315,151 @@ func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]Re
 			return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
 		}
 	})
+
+	return out, nil
+}
+
+func (s *Service) buildActiveReanimationSchedule(agentes []*db.Agente, includeFuture bool) ([]ReanimationCandidate, error) {
+	started := time.Now()
+	dueAgents, err := s.store.CheckReanimations()
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	staleThreshold := workerOutputStaleThreshold(s.store)
+	agenteByName := map[string]*db.Agente{}
+	candidateNames := map[string]struct{}{}
+	for _, agente := range agentes {
+		if agente == nil || !agente.Habilitado {
+			continue
+		}
+		name := strings.TrimSpace(agente.Nombre)
+		if name == "" {
+			continue
+		}
+		agenteByName[name] = agente
+		if agente.ReanimarAt == nil {
+			continue
+		}
+		due := !agente.ReanimarAt.After(now)
+		if !includeFuture && !due {
+			continue
+		}
+		candidateNames[name] = struct{}{}
+	}
+	for _, agente := range dueAgents {
+		if agente == nil || !agente.Habilitado {
+			continue
+		}
+		name := strings.TrimSpace(agente.Nombre)
+		if name == "" {
+			continue
+		}
+		candidateNames[name] = struct{}{}
+		if _, ok := agenteByName[name]; !ok {
+			agenteByName[name] = agente
+		}
+	}
+
+	out := make([]ReanimationCandidate, 0, len(candidateNames))
+	for name := range candidateNames {
+		agente := agenteByName[name]
+		if agente == nil || agente.ReanimarAt == nil {
+			continue
+		}
+
+		asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{Agente: &name})
+		if err != nil {
+			return nil, err
+		}
+		asignacion := latestAssignmentForAgent(asignaciones)
+
+		tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &name})
+		if err != nil {
+			return nil, err
+		}
+		openTasks := 0
+		blockedTasks := 0
+		leases := make([]WorkLease, 0, len(tareas))
+		for _, tarea := range tareas {
+			if tarea == nil || tarea.Agente == nil {
+				continue
+			}
+			switch tarea.Estado {
+			case db.EstadoCompletada, db.EstadoCancelada:
+				continue
+			case db.EstadoBloqueada:
+				blockedTasks++
+			default:
+				openTasks++
+			}
+			switch tarea.Estado {
+			case db.EstadoAsignada, db.EstadoEnProgreso, db.EstadoBloqueada:
+				leases = append(leases, WorkLease{
+					TaskID:    tarea.ID,
+					Title:     strings.TrimSpace(tarea.Titulo),
+					State:     tarea.Estado,
+					ProjectID: tarea.ProyectoID,
+					Module:    strings.TrimSpace(tarea.Modulo),
+				})
+			}
+		}
+		sort.Slice(leases, func(i, j int) bool { return leases[i].TaskID < leases[j].TaskID })
+
+		item := ReanimationCandidate{
+			Name:         name,
+			Role:         strings.TrimSpace(agente.Rol),
+			Enabled:      agente.Habilitado,
+			ActiveNow:    agente.Activo,
+			EstadoCuota:  strings.TrimSpace(agente.EstadoCuota),
+			MotivoPausa:  strings.TrimSpace(agente.MotivoPausa),
+			ReanimarAt:   agente.ReanimarAt,
+			Due:          !agente.ReanimarAt.After(now),
+			OpenTasks:    openTasks,
+			BlockedTasks: blockedTasks,
+			Leases:       leases,
+		}
+		if asignacion != nil {
+			item.AssignmentProject = strings.TrimSpace(asignacion.ProyectoSlug)
+		}
+		if !reanimationCandidateHasCanonicalWork(item) {
+			continue
+		}
+
+		row := buildLightOperationalRow(agente, asignacion, openTasks, blockedTasks, now, staleThreshold)
+		item.RuntimeState = strings.TrimSpace(row.runtimeState())
+		item.HandleState = strings.TrimSpace(row.handleState())
+		item.WorkerState = strings.TrimSpace(row.WorkerState)
+		item.OperationalState = strings.TrimSpace(row.EstadoOperativo)
+		item.OperationalDetail = strings.TrimSpace(row.DetalleOperativo)
+		out = append(out, item)
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		leftDue, rightDue := out[i].Due, out[j].Due
+		if leftDue != rightDue {
+			return leftDue
+		}
+		leftAt, rightAt := out[i].ReanimarAt, out[j].ReanimarAt
+		switch {
+		case leftAt == nil && rightAt == nil:
+			return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
+		case leftAt == nil:
+			return false
+		case rightAt == nil:
+			return true
+		case !leftAt.Equal(*rightAt):
+			return leftAt.Before(*rightAt)
+		default:
+			return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
+		}
+	})
+
+	if elapsed := time.Since(started); elapsed > time.Second {
+		log.Printf("orquesta[reanimaciones] active_only include_future=%t agentes=%d due=%d candidates=%d out=%d elapsed=%s",
+			includeFuture, len(agentes), len(dueAgents), len(candidateNames), len(out), elapsed.Round(time.Millisecond))
+	}
 
 	return out, nil
 }

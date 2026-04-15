@@ -307,7 +307,26 @@ func (f *fakeStore) ListRuntimeCheckpoints(filter db.FiltroRuntimeCheckpoints) (
 	return out, nil
 }
 
-func (f *fakeStore) ListTasks(filter db.FiltroTareas) ([]*db.Tarea, error) { return f.tasks, nil }
+func (f *fakeStore) ListTasks(filter db.FiltroTareas) ([]*db.Tarea, error) {
+	var out []*db.Tarea
+	for _, item := range f.tasks {
+		if item == nil {
+			continue
+		}
+		if filter.Agente != nil {
+			if item.Agente == nil || !strings.EqualFold(strings.TrimSpace(*item.Agente), strings.TrimSpace(*filter.Agente)) {
+				continue
+			}
+		}
+		if filter.ProyectoID != nil {
+			if item.ProyectoID == nil || *item.ProyectoID != *filter.ProyectoID {
+				continue
+			}
+		}
+		out = append(out, item)
+	}
+	return out, nil
+}
 
 func (f *fakeStore) ListProjectPendingVotes(agente string, proyectoID int64) ([]*db.Propuesta, error) {
 	return f.proposals, nil
