@@ -243,14 +243,84 @@ func (dbAutomationService) CheckReanimaciones() ([]*db.Agente, error) {
 		return nil, err
 	}
 	now := time.Now().UTC()
-	filtrados := make([]*db.Agente, 0, len(candidatos))
+	porNombre := map[string]*db.Agente{}
 	for _, agente := range candidatos {
+		if agente == nil {
+			continue
+		}
+		porNombre[strings.ToLower(strings.TrimSpace(agente.Nombre))] = agente
+	}
+	tempranos, err := listarReanimacionesTempranasPorCuotaVisible(now)
+	if err != nil {
+		return nil, err
+	}
+	for _, agente := range tempranos {
+		if agente == nil {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(agente.Nombre))
+		if key == "" {
+			continue
+		}
+		if _, ok := porNombre[key]; !ok {
+			porNombre[key] = agente
+		}
+	}
+	filtrados := make([]*db.Agente, 0, len(porNombre))
+	for _, agente := range porNombre {
 		if !agenteDebeEntrarEnReanimacionAutomatica(agente, now) {
 			continue
 		}
 		filtrados = append(filtrados, agente)
 	}
+	sort.SliceStable(filtrados, func(i, j int) bool {
+		return strings.ToLower(strings.TrimSpace(filtrados[i].Nombre)) < strings.ToLower(strings.TrimSpace(filtrados[j].Nombre))
+	})
 	return filtrados, nil
+}
+
+func listarReanimacionesTempranasPorCuotaVisible(now time.Time) ([]*db.Agente, error) {
+	rows, err := agentesService.BuildReanimationSchedule(true, true)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	agentes, err := agentesService.ListAgents()
+	if err != nil {
+		return nil, err
+	}
+	porNombre := make(map[string]*db.Agente, len(agentes))
+	for _, agente := range agentes {
+		if agente == nil {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(agente.Nombre))
+		if key == "" {
+			continue
+		}
+		porNombre[key] = agente
+	}
+	candidatos := make([]*db.Agente, 0, len(rows))
+	for _, row := range rows {
+		if row.Due {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(row.Name))
+		agente := porNombre[key]
+		if agente == nil {
+			continue
+		}
+		if agente.ReanimarAt == nil || agente.ReanimarAt.IsZero() || !agente.ReanimarAt.After(now) {
+			continue
+		}
+		if !agentePuedeReanimarseAntesPorCuotaVisible(agente) {
+			continue
+		}
+		candidatos = append(candidatos, agente)
+	}
+	return candidatos, nil
 }
 
 type resetReanimacionResultado string
@@ -264,7 +334,9 @@ func agenteDebeEntrarEnReanimacionAutomatica(agente *db.Agente, now time.Time) b
 	if agente == nil || strings.TrimSpace(agente.Nombre) == "" || !agente.Habilitado {
 		return false
 	}
-	if agente.ReanimarAt == nil || agente.ReanimarAt.IsZero() || agente.ReanimarAt.After(now) {
+	reanimacionVencida := agente.ReanimarAt != nil && !agente.ReanimarAt.IsZero() && !agente.ReanimarAt.After(now)
+	reanimacionRecuperadaPorCuota := agentePuedeReanimarseAntesPorCuotaVisible(agente)
+	if !reanimacionVencida && !reanimacionRecuperadaPorCuota {
 		return false
 	}
 	if agenteMotivoPausaOperativa(agente.MotivoPausa) {
@@ -272,6 +344,27 @@ func agenteDebeEntrarEnReanimacionAutomatica(agente *db.Agente, now time.Time) b
 	}
 	estadoCuota := strings.ToLower(strings.TrimSpace(agente.EstadoCuota))
 	return estadoCuota == "enfriamiento" || estadoCuota == "agotado"
+}
+
+func agentePuedeReanimarseAntesPorCuotaVisible(agente *db.Agente) bool {
+	if agente == nil || db.AgenteSinCuotaProveedorEfectivo(agente) {
+		return false
+	}
+	estadoCuota := strings.ToLower(strings.TrimSpace(agente.EstadoCuota))
+	if estadoCuota != "enfriamiento" && estadoCuota != "agotado" {
+		return false
+	}
+	if agente.PresupuestoStale {
+		return false
+	}
+	shouldPause, _ := agenteDebePausarPorPresupuestoVisible(agente)
+	if shouldPause {
+		return false
+	}
+	if agente.CuotaRestantePct != nil && *agente.CuotaRestantePct > 0 {
+		return true
+	}
+	return strings.TrimSpace(agente.PresupuestoEstado) == "ok"
 }
 
 func (dbAutomationService) ResetReanimacion(nombre string) error {

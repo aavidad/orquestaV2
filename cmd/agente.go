@@ -1325,7 +1325,12 @@ func imprimirAgenteOverview(out apiAgenteOverviewResponse, jsonOut bool) error {
 		fmt.Printf(" · %d cubierta(s)", cubiertas)
 	}
 	fmt.Printf(" / %d total\n", len(detail.Mailbox))
-	fmt.Printf("Tareas:    %d lease(s) abiertas\n", len(detail.Entity.Leases))
+	abiertas, bloqueadas := resumirLeasesOverview(detail.Entity.Leases)
+	fmt.Printf("Tareas:    %d lease(s)", len(detail.Entity.Leases))
+	if abiertas > 0 || bloqueadas > 0 {
+		fmt.Printf(" · abiertas=%d bloqueadas=%d", abiertas, bloqueadas)
+	}
+	fmt.Println()
 	for _, lease := range detail.Entity.Leases {
 		fmt.Printf("  - #%d [%s] %s\n", lease.TaskID, strings.TrimSpace(string(lease.State)), strings.TrimSpace(lease.Title))
 	}
@@ -1342,6 +1347,18 @@ func imprimirAgenteOverview(out apiAgenteOverviewResponse, jsonOut bool) error {
 		}
 	}
 	return nil
+}
+
+func resumirLeasesOverview(leases []agentesapp.WorkLease) (abiertas, bloqueadas int) {
+	for _, lease := range leases {
+		switch lease.State {
+		case db.EstadoBloqueada:
+			bloqueadas++
+		case db.EstadoAsignada, db.EstadoEnProgreso:
+			abiertas++
+		}
+	}
+	return abiertas, bloqueadas
 }
 
 func imprimirAgenteReanimaciones(out apiAgenteReanimationsResponse, jsonOut bool) error {

@@ -4652,17 +4652,26 @@ func TestAPIRuntimeProcessReanimacionesDistingueCooldownSostenidoPorCuota(t *tes
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if !resp.Accepted || resp.Running {
+	if !resp.Accepted || !resp.Running {
 		t.Fatalf("respuesta inesperada: %+v", resp)
 	}
-	if resp.Candidates != 1 || resp.Reactivated != 0 || resp.CooldownSustained != 1 || resp.Errors != 0 || resp.Count != 0 {
+	if resp.Candidates != 0 || resp.Reactivated != 0 || resp.CooldownSustained != 0 || resp.Errors != 0 || resp.Count != 0 {
 		t.Fatalf("contadores inesperados: %+v", resp)
 	}
 	agente, err := db.GetAgente("Claude1")
 	if err != nil {
 		t.Fatalf("get agente: %v", err)
 	}
-	if agente == nil || agente.ReanimarAt == nil || agente.PresupuestoResetAt == nil || !agente.ReanimarAt.Equal(agente.PresupuestoResetAt.UTC()) {
-		t.Fatalf("el cooldown deberia sostenerse hasta el reset visible: %+v", agente)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		agente, err = db.GetAgente("Claude1")
+		if err != nil {
+			t.Fatalf("get agente: %v", err)
+		}
+		if agente != nil && agente.ReanimarAt != nil && agente.PresupuestoResetAt != nil && agente.ReanimarAt.Equal(agente.PresupuestoResetAt.UTC()) {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
+	t.Fatalf("el cooldown deberia sostenerse hasta el reset visible: %+v", agente)
 }

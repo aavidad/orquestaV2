@@ -57,8 +57,8 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 							"nota":          "microciclo_exclusivo",
 						},
 						"sesion": map[string]any{
-							"id":         1809,
-							"estado":     "activa",
+							"id":          1809,
+							"estado":      "activa",
 							"herramienta": "codex-cli",
 						},
 						"runtime": map[string]any{
@@ -80,7 +80,7 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 							"state":   "en_progreso",
 						}},
 					},
-					"mailbox":                    []map[string]any{{"id": 99, "estado": "pendiente"}},
+					"mailbox":                   []map[string]any{{"id": 99, "estado": "pendiente"}},
 					"mailbox_pending_visible":   0,
 					"mailbox_covered_bootstrap": 1,
 				},
@@ -213,6 +213,9 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	})
 	if !strings.Contains(outOverview, "Mailbox:   0 pendiente(s) · 1 cubierta(s) / 1 total") {
 		t.Fatalf("salida overview inesperada:\n%s", outOverview)
+	}
+	if !strings.Contains(outOverview, "Tareas:    1 lease(s) · abiertas=1 bloqueadas=0") {
+		t.Fatalf("salida overview sin resumen de leases:\n%s", outOverview)
 	}
 
 	outControl := capturarStdout(t, func() {

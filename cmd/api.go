@@ -5271,23 +5271,31 @@ func apiHandlerRuntimeProcessReanimaciones(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	started := runtimeProcessReanimacionesEnCurso.CompareAndSwap(false, true)
-	resp := apiRuntimeProcessReanimationsResponse{
+	if started {
+		go func() {
+			defer runtimeProcessReanimacionesEnCurso.Store(false)
+			resp := ejecutarRuntimeProcessReanimationsBatch()
+			if resp.Errors > 0 {
+				db.Audit("server", "runtime_process_reanimaciones_background_errors", "runtime", 0,
+					fmt.Sprintf("candidates=%d reactivated=%d cooldown_sustained=%d errors=%d", resp.Candidates, resp.Reactivated, resp.CooldownSustained, resp.Errors))
+			}
+		}()
+	}
+	apiWriteJSON(w, http.StatusOK, apiRuntimeProcessReanimationsResponse{
 		OK:       true,
+		Count:    0,
 		Accepted: started,
 		Running:  runtimeProcessReanimacionesEnCurso.Load(),
-	}
-	if !started {
-		apiWriteJSON(w, http.StatusOK, resp)
-		return
-	}
-	defer runtimeProcessReanimacionesEnCurso.Store(false)
+	})
+}
 
+func ejecutarRuntimeProcessReanimationsBatch() apiRuntimeProcessReanimationsResponse {
+	resp := apiRuntimeProcessReanimationsResponse{OK: true}
 	reanimar, err := (dbAutomationService{}).CheckReanimaciones()
 	if err != nil {
 		db.Audit("server", "runtime_process_reanimaciones_error", "runtime", 0, err.Error())
-		resp.Running = false
-		apiWriteJSON(w, http.StatusOK, resp)
-		return
+		resp.Errors++
+		return resp
 	}
 	resp.Candidates = len(reanimar)
 	for _, agente := range reanimar {
@@ -5311,8 +5319,7 @@ func apiHandlerRuntimeProcessReanimaciones(w http.ResponseWriter, r *http.Reques
 	resp.Count = resp.Reactivated
 	db.Audit("server", "runtime_process_reanimaciones", "runtime", 0,
 		fmt.Sprintf("candidates=%d reactivated=%d cooldown_sustained=%d errors=%d", resp.Candidates, resp.Reactivated, resp.CooldownSustained, resp.Errors))
-	resp.Running = false
-	apiWriteJSON(w, http.StatusOK, resp)
+	return resp
 }
 
 func apiHandlerRuntimeMailboxClear(w http.ResponseWriter, r *http.Request) {
