@@ -7154,7 +7154,15 @@ func procesarDerivacionSemillaPremiumSesionActiva(sesion *db.Sesion, snapshot *a
 	if err != nil || proyecto == nil {
 		return 0, err
 	}
-	tareaNueva, err := capacidadService.IntentarAutoasignarTareaPipelineLocal(proyecto.Slug, sesion.Agente)
+	var tareaNueva *capacidadapp.TareaPipelineLocal
+	if tareaDerivada, err := derivarFrentePremiumAcotadoDesdeSemilla(proyecto.ID, sesion.Agente, tareaActual.ID); err != nil {
+		return 0, err
+	} else if tareaDerivada != nil {
+		tareaNueva = tareaPipelineLocalDesdeTareaDB(tareaDerivada)
+	}
+	if tareaNueva == nil {
+		tareaNueva, err = capacidadService.IntentarAutoasignarTareaPipelineLocal(proyecto.Slug, sesion.Agente)
+	}
 	if err != nil || tareaNueva == nil {
 		return 0, err
 	}
@@ -7175,6 +7183,137 @@ func procesarDerivacionSemillaPremiumSesionActiva(sesion *db.Sesion, snapshot *a
 		return 1, nil
 	}
 	return 0, nil
+}
+
+func tareaPipelineLocalDesdeTareaDB(tarea *db.Tarea) *capacidadapp.TareaPipelineLocal {
+	if tarea == nil {
+		return nil
+	}
+	out := &capacidadapp.TareaPipelineLocal{
+		ID:           tarea.ID,
+		Titulo:       strings.TrimSpace(tarea.Titulo),
+		Descripcion:  strings.TrimSpace(tarea.Descripcion),
+		Notas:        strings.TrimSpace(tarea.Notas),
+		WriteSet:     capacidadapp.ExtraerWriteSetTextoPipelineLocal(strings.TrimSpace(tarea.Descripcion + "\n" + tarea.Notas)),
+		SimbolosFoco: capacidadapp.ExtraerSimbolosFocoTextoPipelineLocal(strings.TrimSpace(tarea.Descripcion + "\n" + tarea.Notas)),
+		TestsMinimos: capacidadapp.ExtraerTestsMinimosTextoPipelineLocal(strings.TrimSpace(tarea.Descripcion + "\n" + tarea.Notas)),
+		Estado:       strings.TrimSpace(string(tarea.Estado)),
+		Modulo:       strings.TrimSpace(tarea.Modulo),
+		Prioridad:    strings.TrimSpace(string(tarea.Prioridad)),
+	}
+	if tarea.Agente != nil {
+		out.Agente = strings.TrimSpace(*tarea.Agente)
+	}
+	return out
+}
+
+func derivarFrentePremiumAcotadoDesdeSemilla(proyectoID int64, agente string, excluirTaskID int64) (*db.Tarea, error) {
+	agente = strings.TrimSpace(agente)
+	if proyectoID <= 0 || agente == "" {
+		return nil, nil
+	}
+	tareas, err := tareasService.List(db.FiltroTareas{ProyectoID: &proyectoID})
+	if err != nil {
+		return nil, err
+	}
+	var candidata *db.Tarea
+	mejor := -1
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.ID == excluirTaskID {
+			continue
+		}
+		if !tareaEsFrentePremiumAcotadoReutilizable(tarea) {
+			continue
+		}
+		score := puntuarFrentePremiumAcotadoReutilizable(tarea, agente)
+		if score < 0 {
+			continue
+		}
+		if candidata == nil || score > mejor || (score == mejor && tarea.ID > candidata.ID) {
+			candidata = tarea
+			mejor = score
+		}
+	}
+	if candidata == nil {
+		return nil, nil
+	}
+	if candidata.Agente == nil || strings.TrimSpace(*candidata.Agente) == "" {
+		switch candidata.Estado {
+		case db.TareaLibre, db.TareaBacklog:
+			if err := tareasService.Take(candidata.ID, agente); err != nil {
+				return nil, err
+			}
+			return tareasService.Get(candidata.ID)
+		}
+	}
+	actual := ""
+	if candidata.Agente != nil {
+		actual = strings.TrimSpace(*candidata.Agente)
+	}
+	if actual != "" && !strings.EqualFold(actual, agente) {
+		return nil, nil
+	}
+	switch candidata.Estado {
+	case db.TareaLibre, db.TareaBacklog:
+		if err := tareasService.Take(candidata.ID, agente); err != nil {
+			return nil, err
+		}
+		return tareasService.Get(candidata.ID)
+	case db.TareaAsignada, db.TareaEnProgreso:
+		return candidata, nil
+	default:
+		return nil, nil
+	}
+}
+
+func tareaEsFrentePremiumAcotadoReutilizable(tarea *db.Tarea) bool {
+	if tarea == nil {
+		return false
+	}
+	if strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:premium_frontier") {
+		return false
+	}
+	switch tarea.Estado {
+	case db.TareaCompletada, db.TareaCancelada, db.TareaBloqueada:
+		return false
+	}
+	if strings.Contains(strings.TrimSpace(tarea.Notas), microcicloRefactorNotasTag) {
+		return true
+	}
+	contexto := strings.TrimSpace(tarea.Descripcion + "\n" + tarea.Notas)
+	return len(capacidadapp.ExtraerWriteSetTextoPipelineLocal(contexto)) > 0 &&
+		strings.TrimSpace(capacidadapp.ExtraerTestsMinimosTextoPipelineLocal(contexto)) != ""
+}
+
+func puntuarFrentePremiumAcotadoReutilizable(tarea *db.Tarea, agente string) int {
+	if tarea == nil {
+		return -1
+	}
+	actual := ""
+	if tarea.Agente != nil {
+		actual = strings.TrimSpace(*tarea.Agente)
+	}
+	switch tarea.Estado {
+	case db.TareaEnProgreso:
+		if strings.EqualFold(actual, agente) {
+			return 40
+		}
+		return -1
+	case db.TareaAsignada:
+		if strings.EqualFold(actual, agente) {
+			return 35
+		}
+		if actual == "" {
+			return 25
+		}
+		return -1
+	case db.TareaLibre:
+		return 30
+	case db.TareaBacklog:
+		return 20
+	default:
+		return -1
+	}
 }
 
 func procesarDecisionPausaSesionActivaAutonomia(sesion *db.Sesion, proyecto *db.Proyecto, out agenteTickOutput, snapshot *autonomiaBatchSnapshot) (int, error) {
