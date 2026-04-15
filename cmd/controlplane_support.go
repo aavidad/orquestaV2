@@ -7694,11 +7694,11 @@ func procesarWorkersAtascadosAutonomiaBatch(rows []agentesapp.Row, now time.Time
 		} else if pendiente {
 			continue
 		}
-		stopReciente, err := existeRuntimeOrderAutonomiaReciente(agente, proyectoID, "stop", "stop", cooldown)
+		stopReciente, err := runtimeOrderAutonomiaRecienteBloqueaRecuperacion(row, proyectoID, "stop", "stop", cooldown)
 		if err != nil {
 			return total, err
 		}
-		startReciente, err := existeRuntimeOrderAutonomiaReciente(agente, proyectoID, "start", "start", cooldown)
+		startReciente, err := runtimeOrderAutonomiaRecienteBloqueaRecuperacion(row, proyectoID, "start", "start", cooldown)
 		if err != nil {
 			return total, err
 		}
@@ -10761,7 +10761,7 @@ func runtimeHandleEstadoEsPausado(handle *db.RuntimeHandle) bool {
 }
 
 func existeRuntimeOrderAutonomiaReciente(agente string, proyectoID *int64, tipo string, accion string, within time.Duration) (bool, error) {
-	n, err := contarRuntimeOrdersRecientes(agente, proyectoID, tipo, accion, within)
+	_, n, err := runtimeOrderAutonomiaRecienteMaxTimestamp(agente, proyectoID, tipo, accion, within)
 	if err != nil {
 		return false, err
 	}
@@ -10769,18 +10769,41 @@ func existeRuntimeOrderAutonomiaReciente(agente string, proyectoID *int64, tipo 
 }
 
 func contarRuntimeOrdersRecientes(agente string, proyectoID *int64, tipo string, accion string, within time.Duration) (int, error) {
+	_, total, err := runtimeOrderAutonomiaRecienteMaxTimestamp(agente, proyectoID, tipo, accion, within)
+	return total, err
+}
+
+func runtimeOrderAutonomiaRecienteBloqueaRecuperacion(row agentesapp.Row, proyectoID *int64, tipo string, accion string, within time.Duration) (bool, error) {
+	if row.Agente == nil {
+		return false, nil
+	}
+	momento, total, err := runtimeOrderAutonomiaRecienteMaxTimestamp(strings.TrimSpace(row.Agente.Nombre), proyectoID, tipo, accion, within)
+	if err != nil || total == 0 {
+		return false, err
+	}
+	if row.WorkerHeartbeat != nil && !row.WorkerHeartbeat.IsZero() && row.WorkerHeartbeat.UTC().After(momento) {
+		return false, nil
+	}
+	if row.WorkerUpdatedAt != nil && !row.WorkerUpdatedAt.IsZero() && row.WorkerUpdatedAt.UTC().After(momento) {
+		return false, nil
+	}
+	return true, nil
+}
+
+func runtimeOrderAutonomiaRecienteMaxTimestamp(agente string, proyectoID *int64, tipo string, accion string, within time.Duration) (time.Time, int, error) {
 	if within <= 0 {
-		return 0, nil
+		return time.Time{}, 0, nil
 	}
 	orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
 		Agente:     &agente,
 		ProyectoID: proyectoID,
 	})
 	if err != nil {
-		return 0, err
+		return time.Time{}, 0, err
 	}
 	cutoff := time.Now().UTC().Add(-within)
 	total := 0
+	latest := time.Time{}
 	for _, order := range orders {
 		if order == nil || strings.TrimSpace(order.Tipo) != strings.TrimSpace(tipo) {
 			continue
@@ -10788,12 +10811,16 @@ func contarRuntimeOrdersRecientes(agente string, proyectoID *int64, tipo string,
 		if accion != "" && !runtimeOrderTieneAccion(order, accion) {
 			continue
 		}
-		if runtimeOrderTimestamp(order).Before(cutoff) {
+		moment := runtimeOrderTimestamp(order)
+		if moment.Before(cutoff) {
 			continue
 		}
 		total++
+		if moment.After(latest) {
+			latest = moment
+		}
 	}
-	return total, nil
+	return latest, total, nil
 }
 
 func runtimeOrderTieneAccion(order *db.RuntimeOrder, accion string) bool {
