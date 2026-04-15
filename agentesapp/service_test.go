@@ -27,6 +27,7 @@ type fakeStore struct {
 	transcript        []*db.RuntimeTranscriptEntry
 	orders            []*db.RuntimeOrder
 	mailbox           []*db.RuntimeMailboxMessage
+	mailboxCovered    map[int64]bool
 	checkpoints       []*db.RuntimeCheckpoint
 	tasks             []*db.Tarea
 	proposals         []*db.Propuesta
@@ -280,6 +281,13 @@ func (f *fakeStore) ListRuntimeMailbox(filter db.FiltroRuntimeMailbox) ([]*db.Ru
 		out = append(out, item)
 	}
 	return out, nil
+}
+
+func (f *fakeStore) RuntimeMailboxCoveredByBootstrapPending(mailboxID int64, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (bool, int64, int64, error) {
+	if f.mailboxCovered == nil {
+		return false, 0, 0, nil
+	}
+	return f.mailboxCovered[mailboxID], 0, 0, nil
 }
 
 func (f *fakeStore) ListRuntimeCheckpoints(filter db.FiltroRuntimeCheckpoints) ([]*db.RuntimeCheckpoint, error) {
@@ -1935,9 +1943,10 @@ func TestBuildDetailMergesMailboxWithoutDuplicates(t *testing.T) {
 			{ID: 200, Titulo: "lease activa", Agente: ptr("Codex2"), Estado: db.EstadoEnProgreso, Modulo: "runtime"},
 		},
 		mailbox: []*db.RuntimeMailboxMessage{
-			{ID: 100, FromAgente: "Supervisor", ToAgente: "Codex2"},
+			{ID: 100, FromAgente: "Supervisor", ToAgente: "Codex2", Estado: "pendiente"},
 			{ID: 101, FromAgente: "Codex2", ToAgente: "Codex1"},
 		},
+		mailboxCovered: map[int64]bool{100: true},
 	}
 
 	detail, err := NewService(store, nil).BuildDetail("Codex2")
@@ -1955,6 +1964,9 @@ func TestBuildDetailMergesMailboxWithoutDuplicates(t *testing.T) {
 	}
 	if len(detail.Mailbox) != 2 {
 		t.Fatalf("mailbox len=%d, want 2", len(detail.Mailbox))
+	}
+	if detail.MailboxPendingVisible != 0 || detail.MailboxCoveredBootstrap != 1 {
+		t.Fatalf("mailbox resumen inesperado: pending=%d covered=%d", detail.MailboxPendingVisible, detail.MailboxCoveredBootstrap)
 	}
 	if len(store.lastMailboxFilter) != 3 {
 		t.Fatalf("mailbox filters=%d, want 3", len(store.lastMailboxFilter))

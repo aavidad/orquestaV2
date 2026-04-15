@@ -45,6 +45,46 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 					}},
 				},
 			})
+		case r.URL.Path == "/api/agentes/Codex1/overview" && r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"detail": map[string]any{
+					"row": map[string]any{
+						"estado_operativo":  "trabajando",
+						"detalle_operativo": "worker ready",
+						"asignacion": map[string]any{
+							"proyecto_slug": "orquestador",
+							"estado":        "activa",
+							"nota":          "microciclo_exclusivo",
+						},
+						"sesion": map[string]any{
+							"id":         1809,
+							"estado":     "activa",
+							"herramienta": "codex-cli",
+						},
+						"runtime": map[string]any{
+							"id":            1708,
+							"logical_state": "activo",
+						},
+						"handle": map[string]any{
+							"id":         1702,
+							"estado":     "activo",
+							"transporte": "tmux",
+						},
+					},
+					"entity": map[string]any{
+						"name": "Codex1",
+						"role": "programador",
+						"leases": []map[string]any{{
+							"task_id": 558,
+							"title":   "frente activo",
+							"state":   "en_progreso",
+						}},
+					},
+					"mailbox":                    []map[string]any{{"id": 99, "estado": "pendiente"}},
+					"mailbox_pending_visible":   0,
+					"mailbox_covered_bootstrap": 1,
+				},
+			})
 		case r.URL.Path == "/api/agente/pausar" && r.Method == http.MethodPost:
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "agente": "Codex1"})
 		case r.URL.Path == "/api/agente/handoff" && r.Method == http.MethodPost:
@@ -164,6 +204,15 @@ func TestAgenteControlPlaneUsaAPICuandoHayServidor(t *testing.T) {
 	})
 	if !strings.Contains(outRegistrarAuto, "Ollama1") {
 		t.Fatalf("salida registrar auto inesperada:\n%s", outRegistrarAuto)
+	}
+
+	outOverview := capturarStdout(t, func() {
+		if err := agenteOverviewCmd.RunE(agenteOverviewCmd, []string{"Codex1"}); err != nil {
+			t.Fatalf("agente overview via api: %v", err)
+		}
+	})
+	if !strings.Contains(outOverview, "Mailbox:   0 pendiente(s) · 1 cubierta(s) / 1 total") {
+		t.Fatalf("salida overview inesperada:\n%s", outOverview)
 	}
 
 	outControl := capturarStdout(t, func() {

@@ -41,6 +41,7 @@ type Store interface {
 	ListRuntimeOrders(filtro db.FiltroRuntimeOrders) ([]*db.RuntimeOrder, error)
 	EnqueueRuntimeOrder(order *db.RuntimeOrder) (int64, error)
 	ListRuntimeMailbox(filtro db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error)
+	RuntimeMailboxCoveredByBootstrapPending(mailboxID int64, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (bool, int64, int64, error)
 	ListRuntimeCheckpoints(filtro db.FiltroRuntimeCheckpoints) ([]*db.RuntimeCheckpoint, error)
 	ListTasks(filtro db.FiltroTareas) ([]*db.Tarea, error)
 	ListProjectPendingVotes(agente string, proyectoID int64) ([]*db.Propuesta, error)
@@ -111,16 +112,18 @@ type Row struct {
 }
 
 type Detail struct {
-	Row          Row                          `json:"row"`
-	Entity       *AgentEntity                 `json:"entity,omitempty"`
-	Asignaciones []*db.Asignacion             `json:"asignaciones,omitempty"`
-	Sesiones     []*db.Sesion                 `json:"sesiones,omitempty"`
-	Runtimes     []*db.RuntimeInstance        `json:"runtimes,omitempty"`
-	Handles      []*db.RuntimeHandle          `json:"handles,omitempty"`
-	Transcript   []*db.RuntimeTranscriptEntry `json:"transcript,omitempty"`
-	Orders       []*db.RuntimeOrder           `json:"orders,omitempty"`
-	Mailbox      []*db.RuntimeMailboxMessage  `json:"mailbox,omitempty"`
-	Checkpoints  []*db.RuntimeCheckpoint      `json:"checkpoints,omitempty"`
+	Row                      Row                          `json:"row"`
+	Entity                   *AgentEntity                 `json:"entity,omitempty"`
+	Asignaciones             []*db.Asignacion             `json:"asignaciones,omitempty"`
+	Sesiones                 []*db.Sesion                 `json:"sesiones,omitempty"`
+	Runtimes                 []*db.RuntimeInstance        `json:"runtimes,omitempty"`
+	Handles                  []*db.RuntimeHandle          `json:"handles,omitempty"`
+	Transcript               []*db.RuntimeTranscriptEntry `json:"transcript,omitempty"`
+	Orders                   []*db.RuntimeOrder           `json:"orders,omitempty"`
+	Mailbox                  []*db.RuntimeMailboxMessage  `json:"mailbox,omitempty"`
+	MailboxPendingVisible    int                          `json:"mailbox_pending_visible"`
+	MailboxCoveredBootstrap  int                          `json:"mailbox_covered_bootstrap"`
+	Checkpoints              []*db.RuntimeCheckpoint      `json:"checkpoints,omitempty"`
 }
 
 type ReanimationCandidate struct {
@@ -651,6 +654,10 @@ func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 	if err != nil {
 		return nil, err
 	}
+	mailboxPendingVisible, mailboxCoveredBootstrap, err := s.summarizeMailboxOverview(mailbox, row.Handle, row.Runtime)
+	if err != nil {
+		return nil, err
+	}
 	checkpoints, err := s.store.ListRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{Agente: &nombre, Limit: 20})
 	if err != nil {
 		return nil, err
@@ -670,8 +677,31 @@ func (s *Service) BuildDetail(nombre string) (*Detail, error) {
 		Transcript:   transcript,
 		Orders:       orders,
 		Mailbox:      mailbox,
+		MailboxPendingVisible:   mailboxPendingVisible,
+		MailboxCoveredBootstrap: mailboxCoveredBootstrap,
 		Checkpoints:  checkpoints,
 	}, nil
+}
+
+func (s *Service) summarizeMailboxOverview(items []*db.RuntimeMailboxMessage, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (pendingVisible int, coveredBootstrap int, err error) {
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(item.Estado), "pendiente") {
+			continue
+		}
+		covered, _, _, coverErr := s.store.RuntimeMailboxCoveredByBootstrapPending(item.ID, handle, runtime)
+		if coverErr != nil {
+			return 0, 0, coverErr
+		}
+		if covered {
+			coveredBootstrap++
+			continue
+		}
+		pendingVisible++
+	}
+	return pendingVisible, coveredBootstrap, nil
 }
 
 func (s *Service) BuildReanimationSchedule(includeFuture, activeOnly bool) ([]ReanimationCandidate, error) {
@@ -2153,6 +2183,10 @@ func (Repository) EnqueueRuntimeOrder(order *db.RuntimeOrder) (int64, error) {
 
 func (Repository) ListRuntimeMailbox(filtro db.FiltroRuntimeMailbox) ([]*db.RuntimeMailboxMessage, error) {
 	return db.ListarRuntimeMailbox(filtro)
+}
+
+func (Repository) RuntimeMailboxCoveredByBootstrapPending(mailboxID int64, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (bool, int64, int64, error) {
+	return db.RuntimeMailboxCubiertoPorBootstrapPendiente(mailboxID, handle, runtime)
 }
 
 func (Repository) ListRuntimeCheckpoints(filtro db.FiltroRuntimeCheckpoints) ([]*db.RuntimeCheckpoint, error) {

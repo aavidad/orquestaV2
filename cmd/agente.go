@@ -1319,7 +1319,7 @@ func imprimirAgenteOverview(out apiAgenteOverviewResponse, jsonOut bool) error {
 	if row.Handle != nil {
 		fmt.Printf("Handle:    #%d %s %s\n", row.Handle.ID, strings.TrimSpace(row.Handle.Estado), strings.TrimSpace(row.Handle.Transporte))
 	}
-	pendientes, cubiertas := resumirMailboxOverview(detail.Mailbox, row.Handle, row.Runtime)
+	pendientes, cubiertas := detail.MailboxPendingVisible, detail.MailboxCoveredBootstrap
 	fmt.Printf("Mailbox:   %d pendiente(s)", pendientes)
 	if cubiertas > 0 {
 		fmt.Printf(" · %d cubierta(s)", cubiertas)
@@ -1389,22 +1389,4 @@ func imprimirAgenteReanimaciones(out apiAgenteReanimationsResponse, jsonOut bool
 			row.BlockedTasks)
 	}
 	return nil
-}
-
-func resumirMailboxOverview(items []*db.RuntimeMailboxMessage, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (pendientes int, cubiertas int) {
-	for _, item := range items {
-		if item == nil {
-			continue
-		}
-		if !strings.EqualFold(strings.TrimSpace(item.Estado), "pendiente") {
-			continue
-		}
-		covered, _, _, err := db.RuntimeMailboxCubiertoPorBootstrapPendiente(item.ID, handle, runtime)
-		if err == nil && covered {
-			cubiertas++
-			continue
-		}
-		pendientes++
-	}
-	return pendientes, cubiertas
 }
