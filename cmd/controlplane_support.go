@@ -4158,7 +4158,7 @@ func intentarReactivarRuntimeMailboxSinHandle(msg *db.RuntimeMailboxMessage, sna
 	case db.MailboxKindGovernanceRefresh, db.MailboxKindSkillsRefresh, "watchdog":
 		return false, nil
 	}
-	if kind != "pipeline_local" && kind != "microprogramacion" {
+	if kind != "pipeline_local" && kind != "microprogramacion" && kind != "autonomia" && kind != "nudge" {
 		if tieneTrabajo, err := dbAgenteTieneTrabajoArrancable(agente, proyecto.ID); err != nil {
 			return false, err
 		} else if tieneTrabajo {
@@ -4170,12 +4170,11 @@ func intentarReactivarRuntimeMailboxSinHandle(msg *db.RuntimeMailboxMessage, sna
 	} else if pendiente {
 		return false, nil
 	}
-	if err := reactivarAgenteTrasReanimacion(agente); err != nil {
+	reactivado, err := encolarReactivacionAgenteProyectoSiProcede(agente, proyecto, "runtime_mailbox_sin_handle")
+	if err != nil {
 		return false, err
 	}
-	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "start", "resume", "handoff"); err != nil {
-		return false, err
-	} else if !pendiente {
+	if !reactivado {
 		return false, nil
 	}
 	db.Audit("orquesta", "runtime_mailbox_reactivacion_sin_handle", "runtime_mailbox", msg.ID,
@@ -8484,24 +8483,30 @@ func reactivarAgenteTrasReanimacionConMotivo(agente, motivo string) error {
 	if err != nil {
 		return err
 	}
-	if proyecto == nil {
-		return nil
+	_, err = encolarReactivacionAgenteProyectoSiProcede(agente, proyecto, motivo)
+	return err
+}
+
+func encolarReactivacionAgenteProyectoSiProcede(agente string, proyecto *db.Proyecto, motivo string) (bool, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || proyecto == nil || proyecto.ID <= 0 {
+		return false, nil
 	}
 	if permite, poolSlug, err := db.PoolLocalCompartidoPermiteActivacionAgenteProyecto(agente, proyecto.Slug); err != nil {
-		return err
+		return false, err
 	} else if !permite {
 		db.Audit("orquesta", "reactivacion_pool_local_sin_capacidad", "agente", 0,
 			fmt.Sprintf("agente=%s proyecto=%s pool=%s", agente, proyecto.Slug, poolSlug))
-		return nil
+		return false, nil
 	}
 	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "resume", "start", "handoff"); err != nil {
-		return err
+		return false, err
 	} else if pendiente {
-		return nil
+		return false, nil
 	}
 	handle, err := resolverHandleReactivacionAgente(agente, &proyecto.ID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if handle != nil {
 		switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
@@ -8510,25 +8515,34 @@ func reactivarAgenteTrasReanimacionConMotivo(agente, motivo string) error {
 			if db.RuntimeHandlePauseRequiresFreshStart(handle) {
 				accion = agenteControlAccionStart
 			}
-			return encolarControlAutonomiaProyecto(agente, proyecto, accion, motivo)
+			if err := encolarControlAutonomiaProyecto(agente, proyecto, accion, motivo); err != nil {
+				return false, err
+			}
+			return true, nil
 		case "fallido":
-			return encolarControlAutonomiaProyecto(agente, proyecto, agenteControlAccionStart, motivo)
+			if err := encolarControlAutonomiaProyecto(agente, proyecto, agenteControlAccionStart, motivo); err != nil {
+				return false, err
+			}
+			return true, nil
 		}
 	}
 	tieneTrabajo, err := dbAgenteTieneTrabajoArrancable(agente, proyecto.ID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !tieneTrabajo {
 		tieneBacklog, err := dbProyectoTieneBacklogReactivable(proyecto.ID)
 		if err != nil {
-			return err
+			return false, err
 		}
 		if !tieneBacklog {
-			return nil
+			return false, nil
 		}
 	}
-	return encolarControlAutonomiaProyecto(agente, proyecto, agenteControlAccionStart, motivo)
+	if err := encolarControlAutonomiaProyecto(agente, proyecto, agenteControlAccionStart, motivo); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func resolverProyectoReactivacionAgente(agente string) (*db.Proyecto, error) {
