@@ -474,15 +474,16 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 	if proyecto == nil {
 		return nil, fmt.Errorf("proyecto obligatorio")
 	}
+	now := time.Now().UTC()
 	politica := s.loadPolicy()
-	asignadoAProyecto, proyectoAsignado, err := s.resolveActiveAssignment(agenteNombre, proyecto.ID)
+	row, asignaciones, tareas, err := s.buildOperationalRowContextForAgentCompact(agenteNombre, now)
 	if err != nil {
 		return nil, err
 	}
-	tareas, err := s.store.ListTasks(db.FiltroTareas{Agente: &agenteNombre, ProyectoID: &proyecto.ID})
-	if err != nil {
-		return nil, err
+	if sesionActiva == nil {
+		sesionActiva = row.Sesion
 	}
+	asignadoAProyecto, proyectoAsignado := resolveActiveAssignmentFromAssignments(asignaciones, proyecto.ID)
 	var (
 		tareasActivas []LightItem
 		tieneBloqueos bool
@@ -507,18 +508,13 @@ func (s *Service) buildTickOutput(agenteNombre string, proyecto *db.Proyecto, se
 			tieneTrabajo = true
 		}
 	}
-	agente, err := s.store.GetAgent(agenteNombre)
-	if err != nil {
-		return nil, err
-	}
+	agente := row.Agente
 	pausarPorPresupuesto, motivoPresupuesto, err := s.shouldPauseByFreshBudget(agenteNombre)
 	if err != nil {
 		return nil, err
 	}
-	estadoOperativo, detalleOperativo, err := s.liveOperationalState(agenteNombre)
-	if err != nil {
-		return nil, err
-	}
+	estadoOperativo := strings.TrimSpace(row.EstadoOperativo)
+	detalleOperativo := strings.TrimSpace(row.DetalleOperativo)
 	runtimeBloqueado := estadoOperativoBloqueaContinuidad(estadoOperativo)
 	if tieneTrabajo && !runtimeBloqueado {
 		bloqueado, detalle, err := s.runtimeBlockedFallback(agenteNombre, proyecto.ID)
@@ -841,15 +837,26 @@ func (s *Service) resolveActiveAssignment(agente string, proyectoID int64) (bool
 	if err != nil {
 		return false, "", err
 	}
+	asignadoAProyecto, proyectoAsignado := resolveActiveAssignmentFromAssignments(asignaciones, proyectoID)
+	return asignadoAProyecto, proyectoAsignado, nil
+}
+
+func resolveActiveAssignmentFromAssignments(asignaciones []*db.Asignacion, proyectoID int64) (bool, string) {
 	if len(asignaciones) == 0 {
-		return false, "", nil
+		return false, ""
 	}
 	for _, asignacion := range asignaciones {
-		if asignacion != nil && asignacion.ProyectoID == proyectoID {
-			return true, asignacion.ProyectoSlug, nil
+		if asignacion != nil && asignacion.Estado == db.AsignacionActiva && asignacion.ProyectoID == proyectoID {
+			return true, strings.TrimSpace(asignacion.ProyectoSlug)
 		}
 	}
-	return false, asignaciones[0].ProyectoSlug, nil
+	for _, asignacion := range asignaciones {
+		if asignacion == nil || asignacion.Estado != db.AsignacionActiva {
+			continue
+		}
+		return false, strings.TrimSpace(asignacion.ProyectoSlug)
+	}
+	return false, ""
 }
 
 func shouldAutoPauseForBudget(cuotaPct int, motivo string) bool {

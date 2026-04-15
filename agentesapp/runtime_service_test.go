@@ -125,6 +125,24 @@ func TestResolveLiveOperationalStateHaceTimeoutSeguro(t *testing.T) {
 	}
 }
 
+func TestResolveActiveAssignmentFromAssignmentsPrefiereActivaDelProyecto(t *testing.T) {
+	asignaciones := []*db.Asignacion{
+		{Agente: "Codex1", ProyectoID: 9, ProyectoSlug: "otro", Estado: db.AsignacionActiva},
+		{Agente: "Codex1", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionActiva},
+		{Agente: "Codex1", ProyectoID: 7, ProyectoSlug: "orquestador", Estado: db.AsignacionPausada},
+	}
+
+	asignado, slug := resolveActiveAssignmentFromAssignments(asignaciones, 7)
+	if !asignado || slug != "orquestador" {
+		t.Fatalf("resolucion inesperada: asignado=%t slug=%q", asignado, slug)
+	}
+
+	asignado, slug = resolveActiveAssignmentFromAssignments(asignaciones, 3)
+	if asignado || slug != "otro" {
+		t.Fatalf("fallback inesperado fuera de proyecto: asignado=%t slug=%q", asignado, slug)
+	}
+}
+
 func TestBuildPrepareRecuperaWorktreeActivaSiUltimaSesionTraeCWDObsoleto(t *testing.T) {
 	prepararDBTemporalRuntimeService(t)
 	tmp := t.TempDir()
