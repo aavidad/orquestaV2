@@ -9821,6 +9821,15 @@ func reactivarAgenteTrasReanimacionConMotivo(agente, motivo string) error {
 	if err != nil {
 		return err
 	}
+	if proyecto != nil && proyecto.ID > 0 {
+		if _, err := reactivarTareasBloqueadasRecuperablesAutonomia(
+			agente,
+			proyecto.ID,
+			fmt.Sprintf("Reactivada automáticamente en %s al salir de cuota o enfriamiento", agente),
+		); err != nil {
+			return err
+		}
+	}
 	_, err = encolarReactivacionAgenteProyectoSiProcede(agente, proyecto, motivo)
 	return err
 }
