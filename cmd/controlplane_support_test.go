@@ -17862,6 +17862,34 @@ func TestSeleccionarRelevoAutonomiaPermiteHistorialDeFallosSiElEstadoActualEsDis
 	}
 }
 
+func TestSeleccionarRelevoAutonomiaDescartaPremiumConTrabajoAbiertoSiLaTareaEsAcotada(t *testing.T) {
+	proyectoID := int64(42)
+	tarea := &db.Tarea{
+		ID:          88,
+		ProyectoID:  &proyectoID,
+		Descripcion: "Frente premium acotado.\nWRITE_SET: cmd/controlplane_support.go\nTests minimos: go test ./cmd -run 'TestSeleccionarRelevoAutonomiaDescartaPremiumConTrabajoAbiertoSiLaTareaEsAcotada$'",
+	}
+	rows := []agentesapp.Row{
+		{
+			Agente:          &db.Agente{Nombre: "CodexOcupado"},
+			Asignacion:      &db.Asignacion{Agente: "CodexOcupado", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+			EstadoOperativo: "disponible",
+			OpenTasks:       1,
+		},
+		{
+			Agente:          &db.Agente{Nombre: "CodexLibre"},
+			Asignacion:      &db.Asignacion{Agente: "CodexLibre", ProyectoID: proyectoID, Estado: db.AsignacionActiva},
+			EstadoOperativo: "disponible",
+			OpenTasks:       0,
+		},
+	}
+
+	relevo := seleccionarRelevoAutonomia(rows, map[string]int{"CodexOcupado": 1, "CodexLibre": 0}, tarea, "CodexBloqueado")
+	if relevo != "CodexLibre" {
+		t.Fatalf("deberia preferir el premium sin trabajo abierto para un frente acotado, got=%q", relevo)
+	}
+}
+
 func TestProcesarAgentesDegradadosAutonomiaBatchRedistribuyeSobrecargaWorkerSano(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	resetStatusSnapshotCache()

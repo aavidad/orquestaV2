@@ -7008,6 +7008,7 @@ func seleccionarRelevoAutonomiaConLimite(rows []agentesapp.Row, openTasksProject
 func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjected map[string]int, tarea *db.Tarea, agenteBloqueado string, ceilingFn func(agentesapp.Row, time.Time) int) string {
 	now := time.Now().UTC()
 	lastReassign, hasLastReassign := latestAutoReassignmentInfo(taskNotes(tarea))
+	tareaPremiumAcotada := tareaDBTieneContratoPremiumAcotado(tarea)
 	type candidate struct {
 		agente        string
 		mismoProyecto bool
@@ -7048,6 +7049,9 @@ func seleccionarRelevoAutonomiaConTecho(rows []agentesapp.Row, openTasksProjecte
 			mismoProyecto = true
 		}
 		openTasks := openTasksProjected[agente]
+		if tareaPremiumAcotada && openTasks > 0 {
+			continue
+		}
 		if candidateCeiling > 0 && openTasks >= candidateCeiling {
 			continue
 		}
@@ -7512,6 +7516,16 @@ func tareaPipelineLocalTieneContratoPremiumCmd(tarea *capacidadapp.TareaPipeline
 		return true
 	}
 	return len(tarea.WriteSet) > 0 && strings.TrimSpace(tarea.TestsMinimos) != ""
+}
+
+func tareaDBTieneContratoPremiumAcotado(tarea *db.Tarea) bool {
+	if tarea == nil {
+		return false
+	}
+	if strings.Contains(strings.TrimSpace(tarea.Notas), "autonomia:premium_frontier") {
+		return false
+	}
+	return tareaPipelineLocalTieneContratoPremiumCmd(tareaPipelineLocalDesdeTareaDB(tarea))
 }
 
 func procesarDerivacionSemillaPremiumSesionActiva(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {
