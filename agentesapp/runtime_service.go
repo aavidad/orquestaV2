@@ -599,14 +599,22 @@ func (s *Service) blockedTaskNeedsIntervention(agenteNombre string, proyectoID i
 	if err != nil {
 		return true, err
 	}
-	activoEnProyecto := sesionActiva != nil &&
-		sesionActiva.ProyectoID != nil &&
-		*sesionActiva.ProyectoID == proyectoID &&
-		strings.EqualFold(strings.TrimSpace(sesionActiva.Agente), strings.TrimSpace(agenteNombre))
-	if activoEnProyecto && bloqueoAutonomiaAgenteRecuperable(agenteNombre, agenteNombre, strings.TrimSpace(motivo)) {
-		return false, nil
+	agente, err := s.store.GetAgent(agenteNombre)
+	if err != nil {
+		return true, err
 	}
-	return true, nil
+	asignaciones, err := s.store.ListAssignments(db.FiltroAsignaciones{Agente: &agenteNombre, ProyectoID: &proyectoID})
+	if err != nil {
+		return true, err
+	}
+	asignadoAProyecto := false
+	for _, asignacion := range asignaciones {
+		if asignacion != nil && asignacion.Estado == db.AsignacionActiva && asignacion.ProyectoID == proyectoID {
+			asignadoAProyecto = true
+			break
+		}
+	}
+	return BloqueoAutonomiaRequiereIntervencion(agenteNombre, proyectoID, asignadoAProyecto, sesionActiva, agente, strings.TrimSpace(motivo)), nil
 }
 
 func bloqueoAutonomiaAgenteRecuperable(agente, bloqueadoPor, motivo string) bool {
@@ -627,6 +635,45 @@ func bloqueoAutonomiaAgenteRecuperable(agente, bloqueadoPor, motivo string) bool
 		return true
 	}
 	return false
+}
+
+func BloqueoAutonomiaRequiereIntervencion(agenteNombre string, proyectoID int64, asignadoAProyecto bool, sesionActiva *db.Sesion, agente *db.Agente, motivo string) bool {
+	motivo = strings.TrimSpace(motivo)
+	if motivo == "" {
+		return true
+	}
+	if sesionActiva != nil &&
+		sesionActiva.ProyectoID != nil &&
+		*sesionActiva.ProyectoID == proyectoID &&
+		strings.EqualFold(strings.TrimSpace(sesionActiva.Agente), strings.TrimSpace(agenteNombre)) &&
+		bloqueoAutonomiaAgenteRecuperable(agenteNombre, agenteNombre, motivo) {
+		return false
+	}
+	if !asignadoAProyecto || !bloqueoAutonomiaRecuperableSinSesionActiva(agenteNombre, motivo) {
+		return true
+	}
+	if agente != nil {
+		estadoCuota := strings.ToLower(strings.TrimSpace(agente.EstadoCuota))
+		if estadoCuota != "" && estadoCuota != "activo" {
+			return false
+		}
+	}
+	return false
+}
+
+func bloqueoAutonomiaRecuperableSinSesionActiva(agente, motivo string) bool {
+	if bloqueoAutonomiaAgenteRecuperable(agente, agente, motivo) {
+		return true
+	}
+	motivoLower := strings.ToLower(strings.TrimSpace(motivo))
+	switch {
+	case strings.Contains(motivoLower, "degradación operativa sin relevo sano"):
+		return true
+	case strings.Contains(motivoLower, "degradacion operativa sin relevo sano"):
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) shouldPauseByFreshBudget(agente string) (bool, string, error) {

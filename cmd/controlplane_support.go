@@ -87,6 +87,10 @@ func resetPipelineLocalDispatchGate() {
 }
 
 var autonomiaActiveSessionsGate = planocontrol.NewGate()
+var procesarAutonomiaSesionActivaBatchFn = procesarAutonomiaSesionActivaConSnapshot
+var procesarAgentesDegradadosAutonomiaBatchFn = procesarAgentesDegradadosAutonomiaBatch
+var autonomiaSessionStepTimeoutOverride time.Duration
+var autonomiaDegradedBatchTimeoutOverride time.Duration
 
 var autonomiaIdleAutoassignGate = planocontrol.NewThrottler()
 
@@ -118,6 +122,28 @@ func autonomiaContinueNudgeInterval() time.Duration {
 	seconds := controlPlaneConfigIntOrDefault("autonomia_continue_nudge_interval_seconds", 60)
 	if seconds <= 0 {
 		seconds = 60
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func autonomiaSessionStepTimeout() time.Duration {
+	if autonomiaSessionStepTimeoutOverride > 0 {
+		return autonomiaSessionStepTimeoutOverride
+	}
+	seconds := controlPlaneConfigIntOrDefault("autonomia_session_step_timeout_seconds", 20)
+	if seconds <= 0 {
+		seconds = 20
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func autonomiaDegradedBatchTimeout() time.Duration {
+	if autonomiaDegradedBatchTimeoutOverride > 0 {
+		return autonomiaDegradedBatchTimeoutOverride
+	}
+	seconds := controlPlaneConfigIntOrDefault("autonomia_degraded_batch_timeout_seconds", 20)
+	if seconds <= 0 {
+		seconds = 20
 	}
 	return time.Duration(seconds) * time.Second
 }
@@ -5938,7 +5964,7 @@ func procesarAutonomiaAgentesBatch() (int, error) {
 	}
 	autonomiaTickDebugf("snapshot agentes=%d duration=%s", len(snapshot.agentesByName), time.Since(snapshotStart).Round(time.Millisecond))
 	procesadas := 0
-	vistas := map[string]struct{}{}
+	sesionesProcesadas := 0
 	for _, sesion := range sesiones {
 		if sesion == nil {
 			continue
@@ -5947,31 +5973,65 @@ func procesarAutonomiaAgentesBatch() (int, error) {
 		if agente == "" {
 			continue
 		}
-		if _, ok := vistas[agente]; ok {
-			continue
-		}
-		vistas[agente] = struct{}{}
 		sesionStart := time.Now()
-		n, err := procesarAutonomiaSesionActivaConSnapshot(sesion, snapshot)
+		n, err := ejecutarPasoAutonomiaConTimeout(
+			fmt.Sprintf("sesion_activa:%s:%d", agente, valorProyectoID(sesion.ProyectoID)),
+			autonomiaSessionStepTimeout(),
+			func() (int, error) { return procesarAutonomiaSesionActivaBatchFn(sesion, snapshot) },
+		)
 		if err != nil {
 			db.Audit("server", "autonomia_agente_error", "agente", 0, fmt.Sprintf("agente=%s error=%s", agente, err.Error()))
 			continue
 		}
 		procesadas += n
+		sesionesProcesadas++
 		autonomiaTickDebugf("agente=%s proyecto_id=%d duration=%s procesadas=%d", agente, valorProyectoID(sesion.ProyectoID), time.Since(sesionStart).Round(time.Millisecond), n)
 	}
 	degradadosStart := time.Now()
-	n, err := procesarAgentesDegradadosAutonomiaBatch()
+	n, err := ejecutarPasoAutonomiaConTimeout(
+		"agentes_degradados",
+		autonomiaDegradedBatchTimeout(),
+		func() (int, error) { return procesarAgentesDegradadosAutonomiaBatchFn() },
+	)
 	if err != nil {
-		return procesadas, err
+		db.Audit("server", "autonomia_agentes_degradados_error", "runtime", 0, err.Error())
+		autonomiaTickDebugf("agentes_degradados duration=%s procesadas=%d", time.Since(degradadosStart).Round(time.Millisecond), 0)
+		if procesadas > 0 {
+			resetStatusSnapshotCache()
+		}
+		return procesadas, nil
 	}
 	procesadas += n
 	autonomiaTickDebugf("agentes_degradados duration=%s procesadas=%d", time.Since(degradadosStart).Round(time.Millisecond), n)
-	autonomiaTickDebugf("batch sesiones=%d agentes=%d duration=%s procesadas=%d", len(sesiones), len(vistas), time.Since(start).Round(time.Millisecond), procesadas)
+	autonomiaTickDebugf("batch sesiones=%d procesadas=%d duration=%s acciones=%d", len(sesiones), sesionesProcesadas, time.Since(start).Round(time.Millisecond), procesadas)
 	if procesadas > 0 {
 		resetStatusSnapshotCache()
 	}
 	return procesadas, nil
+}
+
+func ejecutarPasoAutonomiaConTimeout(etiqueta string, timeout time.Duration, fn func() (int, error)) (int, error) {
+	if fn == nil {
+		return 0, nil
+	}
+	if timeout <= 0 {
+		return fn()
+	}
+	type resultado struct {
+		count int
+		err   error
+	}
+	done := make(chan resultado, 1)
+	go func() {
+		count, err := fn()
+		done <- resultado{count: count, err: err}
+	}()
+	select {
+	case out := <-done:
+		return out.count, out.err
+	case <-time.After(timeout):
+		return 0, fmt.Errorf("%s timeout tras %s", strings.TrimSpace(etiqueta), timeout)
+	}
 }
 
 func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
@@ -6076,6 +6136,11 @@ func procesarAgentesDegradadosAutonomiaBatch() (int, error) {
 		return procesadas, err
 	}
 	procesadas += compactadasExclusivas
+	runtimesFueraAsignacion, err := procesarRuntimesFueraDeAsignacionActivaBatch(rows, now)
+	if err != nil {
+		return procesadas, err
+	}
+	procesadas += runtimesFueraAsignacion
 	redistribuidas, err := procesarSobrecargaAgentesAutonomiaBatch(rows, tareasActivasPorAgente, openTasksProjected, now)
 	if err != nil {
 		return procesadas, err
@@ -6439,6 +6504,204 @@ func procesarCompactacionExclusividadPremiumBatch(rows []agentesapp.Row, tareasA
 	return procesadas, nil
 }
 
+func procesarRuntimesFueraDeAsignacionActivaBatch(rows []agentesapp.Row, now time.Time) (int, error) {
+	procesadas := 0
+	for _, row := range rows {
+		if !rowRuntimeFueraDeAsignacionActivaDebePararse(row, now) {
+			continue
+		}
+		agente := strings.TrimSpace(row.Agente.Nombre)
+		proyectoActual := rowProyectoIDActual(row)
+		if agente == "" || proyectoActual == nil || *proyectoActual <= 0 {
+			continue
+		}
+		if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, proyectoActual, "stop", "pause", "restart", "resume"); err != nil {
+			return procesadas, err
+		} else if pendiente {
+			continue
+		}
+		if reciente, err := existeRuntimeOrderAutonomiaReciente(agente, proyectoActual, "stop", "stop", 10*time.Minute); err != nil {
+			return procesadas, err
+		} else if reciente {
+			continue
+		}
+		proyecto, err := runtimesService.GetProject(strconv.FormatInt(*proyectoActual, 10))
+		if err != nil {
+			return procesadas, err
+		}
+		if proyecto == nil {
+			continue
+		}
+		motivo := fmt.Sprintf("La asignación activa del agente ha cambiado al proyecto %s", strings.TrimSpace(row.Asignacion.ProyectoSlug))
+		if err := encolarControlAutonomiaProyecto(agente, proyecto, agenteControlAccionStop, motivo); err != nil {
+			return procesadas, err
+		}
+		procesadas++
+	}
+	adicionales, err := procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch()
+	if err != nil {
+		return procesadas, err
+	}
+	return procesadas + adicionales, nil
+}
+
+func procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch() (int, error) {
+	estado := db.AsignacionActiva
+	asignaciones, err := db.ListarAsignaciones(db.FiltroAsignaciones{Estado: &estado})
+	if err != nil {
+		return 0, err
+	}
+	procesadas := 0
+	dedup := map[string]struct{}{}
+	for _, asignacion := range asignaciones {
+		if asignacion == nil || asignacion.ProyectoID <= 0 {
+			continue
+		}
+		agente := strings.TrimSpace(asignacion.Agente)
+		if agente == "" {
+			continue
+		}
+		runtimes, err := db.ListarRuntimes(db.FiltroRuntimes{Agente: &agente})
+		if err != nil {
+			return procesadas, err
+		}
+		for _, runtime := range runtimes {
+			if runtime == nil || runtime.ProyectoID == nil || *runtime.ProyectoID <= 0 || *runtime.ProyectoID == asignacion.ProyectoID {
+				continue
+			}
+			if !runtimeEstaOperativoParaLimpieza(runtime) {
+				continue
+			}
+			key := strings.ToLower(agente) + "|" + strconv.FormatInt(*runtime.ProyectoID, 10)
+			if _, ok := dedup[key]; ok {
+				continue
+			}
+			ok, err := encolarStopRuntimeFueraDeAsignacionActiva(agente, *runtime.ProyectoID, strings.TrimSpace(asignacion.ProyectoSlug))
+			if err != nil {
+				return procesadas, err
+			}
+			if ok {
+				dedup[key] = struct{}{}
+				procesadas++
+			}
+		}
+		handles, err := db.ListarRuntimeHandles(&agente)
+		if err != nil {
+			return procesadas, err
+		}
+		for _, handle := range handles {
+			if handle == nil || handle.ProyectoID == nil || *handle.ProyectoID <= 0 || *handle.ProyectoID == asignacion.ProyectoID {
+				continue
+			}
+			if !handleEstaOperativoParaLimpieza(handle) {
+				continue
+			}
+			key := strings.ToLower(agente) + "|" + strconv.FormatInt(*handle.ProyectoID, 10)
+			if _, ok := dedup[key]; ok {
+				continue
+			}
+			ok, err := encolarStopRuntimeFueraDeAsignacionActiva(agente, *handle.ProyectoID, strings.TrimSpace(asignacion.ProyectoSlug))
+			if err != nil {
+				return procesadas, err
+			}
+			if ok {
+				dedup[key] = struct{}{}
+				procesadas++
+			}
+		}
+	}
+	return procesadas, nil
+}
+
+func encolarStopRuntimeFueraDeAsignacionActiva(agente string, proyectoID int64, proyectoAsignado string) (bool, error) {
+	if agente == "" || proyectoID <= 0 {
+		return false, nil
+	}
+	proyectoIDPtr := proyectoID
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyectoIDPtr, "stop", "pause", "restart", "resume"); err != nil {
+		return false, err
+	} else if pendiente {
+		return false, nil
+	}
+	if reciente, err := existeRuntimeOrderAutonomiaReciente(agente, &proyectoIDPtr, "stop", "stop", 10*time.Minute); err != nil {
+		return false, err
+	} else if reciente {
+		return false, nil
+	}
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
+	if err != nil {
+		return false, err
+	}
+	if proyecto == nil {
+		return false, nil
+	}
+	motivo := fmt.Sprintf("La asignación activa del agente ha cambiado al proyecto %s", strings.TrimSpace(proyectoAsignado))
+	if err := encolarControlAutonomiaProyecto(agente, proyecto, agenteControlAccionStop, motivo); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func runtimeEstaOperativoParaLimpieza(runtime *db.RuntimeInstance) bool {
+	if runtime == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(runtime.LogicalState)) {
+	case "activo", "active", "running", "iniciando", "starting", "esperando_io", "waiting_io", "pausado", "paused":
+		return true
+	default:
+		return false
+	}
+}
+
+func handleEstaOperativoParaLimpieza(handle *db.RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
+	case "activo", "active", "pausado", "paused":
+		return true
+	default:
+		return false
+	}
+}
+
+func rowRuntimeFueraDeAsignacionActivaDebePararse(row agentesapp.Row, now time.Time) bool {
+	if row.Agente == nil || row.Asignacion == nil || row.Asignacion.Estado != db.AsignacionActiva {
+		return false
+	}
+	proyectoActual := rowProyectoIDActual(row)
+	if proyectoActual == nil || *proyectoActual <= 0 || *proyectoActual == row.Asignacion.ProyectoID {
+		return false
+	}
+	if row.Handle != nil {
+		switch strings.ToLower(strings.TrimSpace(row.Handle.Estado)) {
+		case "activo", "active", "pausado", "paused":
+			return true
+		}
+	}
+	if row.Runtime != nil {
+		switch strings.ToLower(strings.TrimSpace(row.Runtime.LogicalState)) {
+		case "activo", "active", "running", "iniciando", "starting", "esperando_io", "waiting_io", "pausado", "paused":
+			return true
+		}
+	}
+	return row.WorkerFresh(now)
+}
+
+func rowProyectoIDActual(row agentesapp.Row) *int64 {
+	for _, id := range []*int64{
+		rowHandleProyectoID(row.Handle),
+		rowRuntimeProyectoID(row.Runtime),
+		rowSesionProyectoID(row.Sesion),
+	} {
+		if id != nil && *id > 0 {
+			return id
+		}
+	}
+	return nil
+}
+
 func agentePareceOperadorManualFueraDeFlota(nombre string) bool {
 	lower := strings.ToLower(strings.TrimSpace(nombre))
 	if lower == "" {
@@ -6527,6 +6790,16 @@ func errorMigracionRuntimeLegacyTMUXIgnorable(err error) bool {
 }
 
 func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea, tareasBloqueadasPorAgente map[string][]*db.Tarea) (int, error) {
+	resumenBloqueos, err := db.ListarResumenBloqueos()
+	if err != nil {
+		return 0, err
+	}
+	bloqueosPorTarea := map[int64]db.ResumenBloqueo{}
+	for _, bloqueo := range resumenBloqueos {
+		if bloqueo.ID > 0 {
+			bloqueosPorTarea[bloqueo.ID] = bloqueo
+		}
+	}
 	procesadas := 0
 	for _, row := range rows {
 		if row.Agente == nil {
@@ -6565,9 +6838,44 @@ func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasAct
 		if !reactivado {
 			continue
 		}
+		desbloqueadas, err := desbloquearTareasBloqueadasRecuperablesSinRuntime(agente, proyecto.ID, tareasBloqueadasPorAgente[agente], bloqueosPorTarea)
+		if err != nil {
+			return procesadas, err
+		}
 		db.Audit("orquesta", "autonomia_agente_sin_runtime_reactivado", "proyecto", proyecto.ID,
 			fmt.Sprintf("agente=%s detalle=%s mailbox_pending=%d open_tasks=%d blocked_tasks=%d", agente, strings.TrimSpace(row.DetalleOperativo), row.MailboxPending, len(tareasActivasPorAgente[agente]), len(tareasBloqueadasPorAgente[agente])))
-		procesadas++
+		procesadas += 1 + desbloqueadas
+	}
+	return procesadas, nil
+}
+
+func desbloquearTareasBloqueadasRecuperablesSinRuntime(agente string, proyectoID int64, tareas []*db.Tarea, bloqueosPorTarea map[int64]db.ResumenBloqueo) (int, error) {
+	procesadas := 0
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.ID <= 0 {
+			continue
+		}
+		actual, err := db.GetTarea(tarea.ID)
+		if err != nil {
+			return procesadas, err
+		}
+		if actual == nil || actual.Agente == nil || actual.ProyectoID == nil {
+			continue
+		}
+		if actual.Estado != db.EstadoBloqueada || *actual.ProyectoID != proyectoID || !strings.EqualFold(strings.TrimSpace(*actual.Agente), agente) {
+			continue
+		}
+		bloqueo, ok := bloqueosPorTarea[actual.ID]
+		if !ok {
+			continue
+		}
+		if !agentesapp.BloqueoAutonomiaRequiereIntervencion(agente, proyectoID, true, nil, nil, strings.TrimSpace(bloqueo.Motivo)) {
+			resolucion := "reactivación automática al reponer runtime premium"
+			if err := desbloquearYReactivarTareaAutonomia(actual.ID, resolucion, agente, fmt.Sprintf("Reactivada automáticamente en %s al reponer runtime premium", agente)); err != nil {
+				return procesadas, err
+			}
+			procesadas++
+		}
 	}
 	return procesadas, nil
 }

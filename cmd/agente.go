@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"orquesta/agentesapp"
 	"orquesta/db"
 	"orquesta/internal/lanzamientoruntime"
 	"orquesta/runtimeagente"
@@ -278,7 +279,7 @@ func construirAgenteTickOutputConSnapshot(agenteNombre string, proyecto *db.Proy
 			Estado: string(tarea.Estado),
 		})
 		if tarea.Estado == db.TareaBloqueada {
-			requiereIntervencion, err := tareaBloqueadaRequiereIntervencion(snapshot, agenteNombre, proyecto.ID, agente, tarea)
+			requiereIntervencion, err := tareaBloqueadaRequiereIntervencion(snapshot, agenteNombre, proyecto.ID, agente, tarea, asignadoAProyecto)
 			if err != nil {
 				return out, err
 			}
@@ -380,7 +381,7 @@ func construirAgenteTickOutputConSnapshot(agenteNombre string, proyecto *db.Proy
 	return out, nil
 }
 
-func tareaBloqueadaRequiereIntervencion(snapshot *autonomiaBatchSnapshot, agenteNombre string, proyectoID int64, agente *db.Agente, tarea *db.Tarea) (bool, error) {
+func tareaBloqueadaRequiereIntervencion(snapshot *autonomiaBatchSnapshot, agenteNombre string, proyectoID int64, agente *db.Agente, tarea *db.Tarea, asignadoAProyecto bool) (bool, error) {
 	if tarea == nil || tarea.Estado != db.TareaBloqueada {
 		return false, nil
 	}
@@ -395,10 +396,10 @@ func tareaBloqueadaRequiereIntervencion(snapshot *autonomiaBatchSnapshot, agente
 			return true, err
 		}
 	}
-	if activoEnProyecto && esBloqueoAutonomiaAgenteRecuperable(agenteNombre, agenteNombre, strings.TrimSpace(motivo)) {
-		return false, nil
+	if activoEnProyecto {
+		asignadoAProyecto = true
 	}
-	return true, nil
+	return agentesapp.BloqueoAutonomiaRequiereIntervencion(agenteNombre, proyectoID, asignadoAProyecto, nil, agente, strings.TrimSpace(motivo)), nil
 }
 
 func autonomiaTickDebugEnabled() bool {
