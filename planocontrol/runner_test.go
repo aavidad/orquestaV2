@@ -364,6 +364,13 @@ func TestRunnerRunControlPlaneWarmNoSeReinyectaSinTrabajoPendiente(t *testing.T)
 	}
 }
 
+func TestRunnerControlPlaneWarmRequeueCadaUsaDefaultMenosAgresivo(t *testing.T) {
+	r := &Runner{}
+	if got := r.controlPlaneWarmRequeueCada(); got != 30*time.Second {
+		t.Fatalf("warm requeue default=%s, want %s", got, 30*time.Second)
+	}
+}
+
 func TestRunnerStartRespetaStartupGrace(t *testing.T) {
 	service := &stubAutomationService{autonomyCount: 1}
 	r := &Runner{

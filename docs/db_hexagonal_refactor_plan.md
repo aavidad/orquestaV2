@@ -68,6 +68,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: el resolvedor de carriles operativos ya no propone `claude/gemini/gemma/ollama`; la política viva queda alineada a `solo Codex` también en selección de agente, no solo en bootstrap/allowed-agents
 - corte operativo adicional fuera de `db`: `status` ya oculta de la vista operativa agentes y tareas fuera de la flota oficial `Codex*`; si quedan legados habilitados en BD no deben seguir contaminando progreso/cuota visible
 - corte operativo adicional fuera de `db`: el snapshot de autonomía ya no resuelve `operationalState` cargando `BuildPanelRows()` completo; cachea por agente con lectura compacta y reduce calor del daemon en ticks de autonomía
+- corte operativo adicional fuera de `db`: el `control_plane_warm` conserva wakes explícitos, pero su requeue automático por “trabajo pendiente” baja de 10s a 30s por defecto para evitar bucles calientes sin perder capacidad de reacción
 
 Estado del frente seguro:
 

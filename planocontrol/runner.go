@@ -675,7 +675,7 @@ func (r *Runner) controlPlaneWarmCada() time.Duration {
 
 func (r *Runner) controlPlaneWarmRequeueCada() time.Duration {
 	if r.ControlPlaneWarmRequeueCada <= 0 {
-		return 10 * time.Second
+		return 30 * time.Second
 	}
 	return r.ControlPlaneWarmRequeueCada
 }
