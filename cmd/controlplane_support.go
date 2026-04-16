@@ -10535,6 +10535,7 @@ func runtimeRecuperacionSesionObjetivo(sesion *db.Sesion) (*db.RuntimeHandle, *d
 		handle       *db.RuntimeHandle
 		sesionHandle *db.RuntimeHandle
 		runtime      *db.RuntimeInstance
+		runtimeCargado bool
 		err          error
 	)
 	if sesion.ID > 0 {
@@ -10547,6 +10548,7 @@ func runtimeRecuperacionSesionObjetivo(sesion *db.Sesion) (*db.RuntimeHandle, *d
 		if err != nil && err != sql.ErrNoRows {
 			return nil, nil, err
 		}
+		runtimeCargado = true
 	}
 	if handle == nil && agente != "" {
 		var candidate *db.RuntimeHandle
@@ -10586,7 +10588,7 @@ func runtimeRecuperacionSesionObjetivo(sesion *db.Sesion) (*db.RuntimeHandle, *d
 			return nil, nil, err
 		}
 	}
-	if runtime == nil && sesion.ID > 0 {
+	if runtime == nil && sesion.ID > 0 && !runtimeCargado {
 		runtime, err = db.GetRuntimeBySesionID(sesion.ID)
 		if err != nil {
 			return nil, nil, err
@@ -10834,11 +10836,22 @@ func reactivarAgenteTrasReanimacionConMotivo(agente, motivo string) error {
 			return err
 		}
 	}
-	_, err = encolarReactivacionAgenteProyectoSiProcede(agente, proyecto, motivo)
+	var handle *db.RuntimeHandle
+	if proyecto != nil && proyecto.ID > 0 {
+		handle, err = resolverHandleReactivacionAgente(agente, &proyecto.ID)
+		if err != nil {
+			return err
+		}
+	}
+	_, err = encolarReactivacionAgenteProyectoConHandleSiProcede(agente, proyecto, motivo, handle)
 	return err
 }
 
 func encolarReactivacionAgenteProyectoSiProcede(agente string, proyecto *db.Proyecto, motivo string) (bool, error) {
+	return encolarReactivacionAgenteProyectoConHandleSiProcede(agente, proyecto, motivo, nil)
+}
+
+func encolarReactivacionAgenteProyectoConHandleSiProcede(agente string, proyecto *db.Proyecto, motivo string, handle *db.RuntimeHandle) (bool, error) {
 	agente = strings.TrimSpace(agente)
 	if agente == "" || proyecto == nil || proyecto.ID <= 0 {
 		return false, nil
@@ -10857,9 +10870,12 @@ func encolarReactivacionAgenteProyectoSiProcede(agente string, proyecto *db.Proy
 	} else if pendiente {
 		return false, nil
 	}
-	handle, err := resolverHandleReactivacionAgente(agente, &proyecto.ID)
-	if err != nil {
-		return false, err
+	if handle == nil {
+		var err error
+		handle, err = resolverHandleReactivacionAgente(agente, &proyecto.ID)
+		if err != nil {
+			return false, err
+		}
 	}
 	if handle != nil {
 		switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
