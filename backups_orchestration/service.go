@@ -1,3 +1,6 @@
+//go:build ignore
+// +build ignore
+
 /*
 Software libre bajo licencia GNU GPL v3
 Proyecto: PlataformaMunicipal — Orquesta
