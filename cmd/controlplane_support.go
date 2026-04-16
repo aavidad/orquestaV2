@@ -4643,58 +4643,7 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 		if _, skip := consumed[msg.ID]; skip {
 			continue
 		}
-		texto, ok := construirInstruccionMailboxInteractivo(msg)
-		if !ok {
-			continue
-		}
-		if err := coalescerRuntimeMailboxPendiente(msg); err != nil {
-			return total, err
-		}
-		if !runtimeMailboxSiguePendiente(msg.ID) {
-			continue
-		}
-		handle, err := snapshot.activeHandle(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
-		if err != nil {
-			return total, err
-		}
-		if handle == nil {
-			reactivado, err := intentarReactivarRuntimeMailboxSinHandle(msg, snapshot)
-			if err != nil {
-				return total, err
-			}
-			if reactivado {
-				total++
-			}
-			continue
-		}
-		var runtimeInstance *db.RuntimeInstance
-		if supervisedHandle, supervisedRuntime, _, err := snapshot.supervisedHandle(handle); err != nil {
-			return total, err
-		} else {
-			if supervisedHandle != nil {
-				handle = supervisedHandle
-			}
-			runtimeInstance = supervisedRuntime
-		}
-		if runtimeInstance == nil {
-			runtimeInstance, err = runtimeCanonicoDesdeHandleAgenteProyecto(handle, strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
-			if err != nil {
-				return total, err
-			}
-		}
-		handle, externalSessionID, err := snapshot.externalSessionHandle(handle, runtimeInstance)
-		if err != nil {
-			return total, err
-		}
-		if handle == nil {
-			continue
-		}
-		var dispatched bool
-		if strings.TrimSpace(externalSessionID) == "" {
-			dispatched, err = procesarRuntimeMailboxSessionResumeFallbackInteractivo(msg, consumed, snapshot, handle, runtimeInstance, texto)
-		} else {
-			dispatched, err = procesarRuntimeMailboxSessionResumeConSesion(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID)
-		}
+		dispatched, err := procesarRuntimeMailboxSessionResumeMensaje(msg, consumed, snapshot)
 		if err != nil {
 			return total, err
 		}
@@ -4703,6 +4652,55 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 		}
 	}
 	return total, nil
+}
+
+// procesarRuntimeMailboxSessionResumeMensaje resuelve handle y runtime para un mensaje
+// session_resume y lo despacha por el canal que corresponda (con sesión o fallback interactivo).
+// Retorna true si el mensaje fue procesado (encolado, reactivado u obsoleto consumido).
+func procesarRuntimeMailboxSessionResumeMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
+	texto, ok := construirInstruccionMailboxInteractivo(msg)
+	if !ok {
+		return false, nil
+	}
+	if err := coalescerRuntimeMailboxPendiente(msg); err != nil {
+		return false, err
+	}
+	if !runtimeMailboxSiguePendiente(msg.ID) {
+		return false, nil
+	}
+	handle, err := snapshot.activeHandle(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	if err != nil {
+		return false, err
+	}
+	if handle == nil {
+		return intentarReactivarRuntimeMailboxSinHandle(msg, snapshot)
+	}
+	var runtimeInstance *db.RuntimeInstance
+	if supervisedHandle, supervisedRuntime, _, err := snapshot.supervisedHandle(handle); err != nil {
+		return false, err
+	} else {
+		if supervisedHandle != nil {
+			handle = supervisedHandle
+		}
+		runtimeInstance = supervisedRuntime
+	}
+	if runtimeInstance == nil {
+		runtimeInstance, err = runtimeCanonicoDesdeHandleAgenteProyecto(handle, strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+		if err != nil {
+			return false, err
+		}
+	}
+	handle, externalSessionID, err := snapshot.externalSessionHandle(handle, runtimeInstance)
+	if err != nil {
+		return false, err
+	}
+	if handle == nil {
+		return false, nil
+	}
+	if strings.TrimSpace(externalSessionID) == "" {
+		return procesarRuntimeMailboxSessionResumeFallbackInteractivo(msg, consumed, snapshot, handle, runtimeInstance, texto)
+	}
+	return procesarRuntimeMailboxSessionResumeConSesion(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID)
 }
 
 // procesarRuntimeMailboxSessionResumeFallbackInteractivo gestiona mensajes de resume
@@ -4871,52 +4869,63 @@ func procesarRuntimeMailboxBootstrapTMUXBatchConMailbox(mailbox []*db.RuntimeMai
 		} else if supervisedHandle != nil {
 			handle = supervisedHandle
 		}
-		if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "bootstrap_tmux", time.Now().UTC()); err != nil {
-			return total, err
-		} else if obsoleta {
-			consumed[msg.ID] = struct{}{}
-			total++
-			continue
-		}
-		if !runtimeMailboxShouldReevaluate("bootstrap_tmux", msg.ID, handle.ID) {
-			continue
-		}
-		if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryBootstrapOnly {
-			continue
-		}
-		if !runtimeHandleListaParaDispatchBootstrapTMUX(handle) {
-			continue
-		}
-		if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
-			return total, err
-		} else if abierta {
-			continue
-		}
-		if dedupe, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, ""); err != nil {
-			return total, err
-		} else if dedupe {
-			continue
-		}
-		orderID, err := encolarSendInstructionDesdeRuntimeMailbox(msg, handle, texto, "")
+		dispatched, err := procesarRuntimeMailboxBootstrapTMUXMensaje(msg, consumed, snapshot, handle, texto)
 		if err != nil {
 			return total, err
 		}
-		if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) {
-			superseded, err := db.ConsumirRuntimeMailboxPendienteSupersedido(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, strings.TrimSpace(msg.Kind), msg.ID)
-			if err != nil {
-				return total, err
-			}
-			if superseded > 0 {
-				db.Audit("orquesta", "runtime_mailbox_bootstrap_tmux_supersede", "runtime_mailbox", msg.ID,
-					fmt.Sprintf("agente=%s kind=%s superseded=%d", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), superseded))
-			}
+		if dispatched {
+			total++
 		}
-		db.Audit("orquesta", "runtime_mailbox_bootstrap_tmux", "runtime_order", orderID,
-			fmt.Sprintf("mailbox_id=%d agente=%s kind=%s", msg.ID, strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
-		consumed[msg.ID] = struct{}{}
-		total++
 	}
 	return total, nil
+}
+
+// procesarRuntimeMailboxBootstrapTMUXMensaje valida y despacha un mensaje bootstrap_tmux
+// para un handle ya resuelto. Retorna true si el mensaje fue procesado (encolado u obsoleto).
+func procesarRuntimeMailboxBootstrapTMUXMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, texto string) (bool, error) {
+	if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "bootstrap_tmux", time.Now().UTC()); err != nil {
+		return false, err
+	} else if obsoleta {
+		consumed[msg.ID] = struct{}{}
+		return true, nil
+	}
+	if !runtimeMailboxShouldReevaluate("bootstrap_tmux", msg.ID, handle.ID) {
+		return false, nil
+	}
+	if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryBootstrapOnly {
+		return false, nil
+	}
+	if !runtimeHandleListaParaDispatchBootstrapTMUX(handle) {
+		return false, nil
+	}
+	if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
+		return false, err
+	} else if abierta {
+		return false, nil
+	}
+	if dedupe, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, ""); err != nil {
+		return false, err
+	} else if dedupe {
+		return false, nil
+	}
+	orderID, err := encolarSendInstructionDesdeRuntimeMailbox(msg, handle, texto, "")
+	if err != nil {
+		return false, err
+	}
+	if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) {
+		superseded, err := db.ConsumirRuntimeMailboxPendienteSupersedido(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, strings.TrimSpace(msg.Kind), msg.ID)
+		if err != nil {
+			return false, err
+		}
+		if superseded > 0 {
+			db.Audit("orquesta", "runtime_mailbox_bootstrap_tmux_supersede", "runtime_mailbox", msg.ID,
+				fmt.Sprintf("agente=%s kind=%s superseded=%d", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), superseded))
+		}
+	}
+	db.Audit("orquesta", "runtime_mailbox_bootstrap_tmux", "runtime_order", orderID,
+		fmt.Sprintf("mailbox_id=%d agente=%s kind=%s", msg.ID, strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
+	consumed[msg.ID] = struct{}{}
+	return true, nil
 }
 
 func reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
