@@ -1170,6 +1170,9 @@ func TestRenderStatusSummaryOcultaAgenteFueraDeFlotaOficial(t *testing.T) {
 	if !strings.Contains(out, "Codex1") || !strings.Contains(out, "[548]") {
 		t.Fatalf("deberia mantener la flota codex visible: %s", out)
 	}
+	if strings.Contains(out, "bloqueados por cuota") {
+		t.Fatalf("la cuota fuera de flota no deberia contaminar el contador visible: %s", out)
+	}
 }
 
 func TestFetchServerConfig(t *testing.T) {

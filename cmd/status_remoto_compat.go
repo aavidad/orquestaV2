@@ -212,6 +212,7 @@ func renderStatusSummary(ctx *statusContext) {
 	fmt.Printf("╚═══════════════════════════════════════════════════════════╝\n\n")
 
 	fmt.Printf("👥 Agentes: %d activos visibles / %d registrados", len(resumen.AgentesActivos), statusRegisteredAgentCount(resumen))
+	agentesEnCuota := agentesBloqueadosPorCuotaVisibles(resumen)
 	if len(resumen.AgentesTrabajando) > 0 {
 		fmt.Printf(" · %d con trabajo activo", len(resumen.AgentesTrabajando))
 	}
@@ -224,8 +225,8 @@ func renderStatusSummary(ctx *statusContext) {
 	if len(resumen.AgentesAuthManual) > 0 {
 		fmt.Printf(" · %d requieren autenticacion", len(resumen.AgentesAuthManual))
 	}
-	if len(resumen.AgentesQuotaBlocked) > 0 {
-		fmt.Printf(" · %d bloqueados por cuota", len(resumen.AgentesQuotaBlocked))
+	if len(agentesEnCuota) > 0 {
+		fmt.Printf(" · %d bloqueados por cuota", len(agentesEnCuota))
 	}
 	fmt.Println()
 	saturados := make(map[string]bool, len(resumen.AgentesSaturados))
@@ -275,7 +276,6 @@ func renderStatusSummary(ctx *statusContext) {
 			fmt.Println()
 		}
 	}
-	agentesEnCuota := agentesBloqueadosPorCuotaVisibles(resumen)
 	if len(agentesEnCuota) > 0 {
 		fmt.Printf("   ⏸️  En enfriamiento/cuota:\n")
 		for _, a := range agentesEnCuota {
