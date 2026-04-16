@@ -191,3 +191,25 @@ func TestOrphanTaskRecoveryGraceWindow(t *testing.T) {
 		t.Fatalf("unexpected negative grace window: %v", got)
 	}
 }
+
+func TestShouldPreserveOrphanTaskForFocusedFront(t *testing.T) {
+	if got := ShouldPreserveOrphanTaskForFocusedFront(&OrphanTaskContextSnapshot{
+		Title:       "Tarea de ejemplo",
+		Description: "Autonomia:microrefactor_loop",
+	}); !got {
+		t.Fatal("expected microrefactor marker to be preserved")
+	}
+	if got := ShouldPreserveOrphanTaskForFocusedFront(&OrphanTaskContextSnapshot{
+		Notes: "write_set: operativo\nTests mínimos: t1, t2",
+	}); !got {
+		t.Fatal("expected write-set with tests markers to be preserved")
+	}
+	if got := ShouldPreserveOrphanTaskForFocusedFront(&OrphanTaskContextSnapshot{
+		Title: "Tarea normal",
+	}); got {
+		t.Fatal("expected normal task to not be preserved")
+	}
+	if got := ShouldPreserveOrphanTaskForFocusedFront(nil); got {
+		t.Fatal("expected nil context to not be preserved")
+	}
+}

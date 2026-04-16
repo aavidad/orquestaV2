@@ -44,6 +44,12 @@ type PreferredProjectResolution struct {
 	Priority  int
 }
 
+type OrphanTaskContextSnapshot struct {
+	Title       string
+	Description string
+	Notes       string
+}
+
 func DesiredProjectQuota(op *ProjectOperationSnapshot, totalAgents int) int {
 	if totalAgents <= 0 {
 		totalAgents = 1
@@ -160,6 +166,25 @@ func PoolUsesSharedLocalConnector(runtime string, metadataJSON string) bool {
 
 func OrphanTaskRecoveryGraceWindow(seconds int) time.Duration {
 	return time.Duration(seconds) * time.Second
+}
+
+func ShouldPreserveOrphanTaskForFocusedFront(context *OrphanTaskContextSnapshot) bool {
+	if context == nil {
+		return false
+	}
+	contexto := strings.ToLower(strings.TrimSpace(strings.Join([]string{
+		strings.TrimSpace(context.Title),
+		strings.TrimSpace(context.Description),
+		strings.TrimSpace(context.Notes),
+	}, "\n")))
+	if contexto == "" {
+		return false
+	}
+	if strings.Contains(contexto, "autonomia:microrefactor_loop") || strings.Contains(contexto, "autonomia:premium_frontier") {
+		return true
+	}
+	return (strings.Contains(contexto, "write-set exclusivo:") || strings.Contains(contexto, "write_set")) &&
+		(strings.Contains(contexto, "tests minimos:") || strings.Contains(contexto, "tests mínimos:"))
 }
 
 func AgentAllowedForAutobootstrapProject(agent, projectSlug, configuredProjectSlug string, allowedAgents []string) bool {

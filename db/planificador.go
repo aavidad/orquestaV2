@@ -253,19 +253,11 @@ func tareaHuerfanaDebeConservarFrenteAcotado(tarea *Tarea) bool {
 	if tarea == nil {
 		return false
 	}
-	contexto := strings.ToLower(strings.TrimSpace(strings.Join([]string{
-		strings.TrimSpace(tarea.Titulo),
-		strings.TrimSpace(tarea.Descripcion),
-		strings.TrimSpace(tarea.Notas),
-	}, "\n")))
-	if contexto == "" {
-		return false
-	}
-	if strings.Contains(contexto, "autonomia:microrefactor_loop") || strings.Contains(contexto, "autonomia:premium_frontier") {
-		return true
-	}
-	return (strings.Contains(contexto, "write-set exclusivo:") || strings.Contains(contexto, "write_set")) &&
-		(strings.Contains(contexto, "tests minimos:") || strings.Contains(contexto, "tests mínimos:"))
+	return planificadorpolicy.ShouldPreserveOrphanTaskForFocusedFront(&planificadorpolicy.OrphanTaskContextSnapshot{
+		Title:       strings.TrimSpace(tarea.Titulo),
+		Description: strings.TrimSpace(tarea.Descripcion),
+		Notes:       strings.TrimSpace(tarea.Notas),
+	})
 }
 
 func tareaHuerfanaRecuperable(agente string, proyectoID int64) (bool, error) {
