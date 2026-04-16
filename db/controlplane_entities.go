@@ -9404,54 +9404,19 @@ func RuntimeMailboxEntregadoPorBootstrapObservado(mailboxID int64, handle *Runti
 }
 
 func runtimeBootstrapLeaseTieneReceiptUtil(result map[string]any) bool {
-	if len(result) == 0 {
-		return false
-	}
-	if strings.TrimSpace(stringFromMap(result, "receipt_source", "")) != "" {
-		return true
-	}
-	if strings.TrimSpace(stringFromMap(result, "delivery_receipt_at", "")) != "" {
-		return true
-	}
-	return strings.EqualFold(strings.TrimSpace(stringFromMap(result, "delivery_state", "")), "delivered")
+	return runtimepolicy.RuntimeBootstrapLeaseHasUsefulReceipt(result)
 }
 
 func runtimeBootstrapLeaseTieneCoberturaDeclarada(result map[string]any) bool {
-	if len(result) == 0 {
-		return false
-	}
-	if len(int64SliceFromAny(result["mailbox_ids"])) > 0 {
-		return true
-	}
-	return int64FromAny(result["start_order_id"]) > 0
+	return runtimepolicy.RuntimeBootstrapLeaseHasDeclaredCoverage(result)
 }
 
 func runtimeBootstrapLeaseStateBlocksMailbox(result map[string]any, inherited map[string]any) bool {
-	if len(result) == 0 {
-		return false
-	}
-	if runtimeBootstrapLeaseTieneReceiptUtil(result) {
-		return false
-	}
-	if runtimeBootstrapLeaseTieneReceiptUtil(inherited) {
-		return false
-	}
-	return strings.EqualFold(strings.TrimSpace(stringFromMap(result, "lease_state", "")), "waiting_for_evidence")
+	return runtimepolicy.RuntimeBootstrapLeaseStateBlocksMailbox(result, inherited)
 }
 
 func runtimeOrderMantieneBootstrapLeasePendiente(result map[string]any) bool {
-	if len(result) == 0 {
-		return false
-	}
-	if !runtimeBootstrapLeaseTieneCoberturaDeclarada(result) {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(stringFromMap(result, "lease_state", ""))) {
-	case "waiting_for_evidence", "delivered":
-		return true
-	default:
-		return false
-	}
+	return runtimepolicy.RuntimeOrderKeepsBootstrapLeasePending(result)
 }
 
 func resolverBootstrapRuntimeLeaseObservada(handle *RuntimeHandle, runtime *RuntimeInstance) (*RuntimeOrder, int64, []int64, int64, error) {
