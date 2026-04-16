@@ -4271,81 +4271,86 @@ func procesarRuntimeMailboxInteractivoBatchConMailbox(mailbox []*db.RuntimeMailb
 		if _, skip := consumed[msg.ID]; skip {
 			continue
 		}
-		texto, ok := construirInstruccionMailboxInteractivo(msg)
-		if !ok {
-			continue
-		}
-		if err := coalescerRuntimeMailboxPendiente(msg); err != nil {
-			return total, err
-		}
-		if !runtimeMailboxSiguePendiente(msg.ID) {
-			continue
-		}
-		handle, err := snapshot.activeHandle(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+		dispatched, err := procesarRuntimeMailboxInteractivoMensaje(msg, consumed, snapshot)
 		if err != nil {
 			return total, err
 		}
-		if handle == nil {
-			reactivado, err := intentarReactivarRuntimeMailboxSinHandle(msg, snapshot)
-			if err != nil {
-				return total, err
-			}
-			if reactivado {
-				total++
-			}
-			continue
-		}
-		if refreshed, _, _, err := snapshot.supervisedHandle(handle); err != nil {
-			return total, err
-		} else if refreshed != nil {
-			handle = refreshed
-		}
-		if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "interactive", time.Now().UTC()); err != nil {
-			return total, err
-		} else if obsoleta {
-			consumed[msg.ID] = struct{}{}
+		if dispatched {
 			total++
-			continue
 		}
-		if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryInteractive {
-			continue
-		}
-		if !runtimeHandleListaParaDispatchInteractivo(handle) {
-			continue
-		}
-		if !runtimeMailboxShouldReevaluate("interactive", msg.ID, handle.ID) {
-			continue
-		}
-		if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
-			return total, err
-		} else if abierta {
-			continue
-		}
-		if dedupe, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, ""); err != nil {
-			return total, err
-		} else if dedupe {
-			continue
-		}
-		orderID, err := encolarSendInstructionDesdeRuntimeMailbox(msg, handle, texto, "")
-		if err != nil {
-			return total, err
-		}
-		if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) {
-			superseded, err := db.ConsumirRuntimeMailboxPendienteSupersedido(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, strings.TrimSpace(msg.Kind), msg.ID)
-			if err != nil {
-				return total, err
-			}
-			if superseded > 0 {
-				db.Audit("orquesta", "runtime_mailbox_interactivo_supersede", "runtime_mailbox", msg.ID,
-					fmt.Sprintf("agente=%s kind=%s superseded=%d", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), superseded))
-			}
-		}
-		db.Audit("orquesta", "runtime_mailbox_interactivo", "runtime_order", orderID,
-			fmt.Sprintf("mailbox_id=%d agente=%s kind=%s", msg.ID, strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
-		consumed[msg.ID] = struct{}{}
-		total++
 	}
 	return total, nil
+}
+
+// procesarRuntimeMailboxInteractivoMensaje valida y despacha un mensaje de tipo
+// interactivo para el handle activo del agente destino.
+// Retorna true si el mensaje fue procesado (encolado, reactivado u obsoleto consumido).
+func procesarRuntimeMailboxInteractivoMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
+	texto, ok := construirInstruccionMailboxInteractivo(msg)
+	if !ok {
+		return false, nil
+	}
+	if err := coalescerRuntimeMailboxPendiente(msg); err != nil {
+		return false, err
+	}
+	if !runtimeMailboxSiguePendiente(msg.ID) {
+		return false, nil
+	}
+	handle, err := snapshot.activeHandle(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	if err != nil {
+		return false, err
+	}
+	if handle == nil {
+		return intentarReactivarRuntimeMailboxSinHandle(msg, snapshot)
+	}
+	if refreshed, _, _, err := snapshot.supervisedHandle(handle); err != nil {
+		return false, err
+	} else if refreshed != nil {
+		handle = refreshed
+	}
+	if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "interactive", time.Now().UTC()); err != nil {
+		return false, err
+	} else if obsoleta {
+		consumed[msg.ID] = struct{}{}
+		return true, nil
+	}
+	if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliveryInteractive {
+		return false, nil
+	}
+	if !runtimeHandleListaParaDispatchInteractivo(handle) {
+		return false, nil
+	}
+	if !runtimeMailboxShouldReevaluate("interactive", msg.ID, handle.ID) {
+		return false, nil
+	}
+	if abierta, err := existeRuntimeOrderAbiertaPorHandleEnSnapshot(snapshot, msg, handle.ID, "send_instruction"); err != nil {
+		return false, err
+	} else if abierta {
+		return false, nil
+	}
+	if dedupe, err := existeIntentoSendInstructionMailboxParaHandleEnSnapshot(snapshot, msg, handle, ""); err != nil {
+		return false, err
+	} else if dedupe {
+		return false, nil
+	}
+	orderID, err := encolarSendInstructionDesdeRuntimeMailbox(msg, handle, texto, "")
+	if err != nil {
+		return false, err
+	}
+	if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) {
+		superseded, err := db.ConsumirRuntimeMailboxPendienteSupersedido(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, strings.TrimSpace(msg.Kind), msg.ID)
+		if err != nil {
+			return false, err
+		}
+		if superseded > 0 {
+			db.Audit("orquesta", "runtime_mailbox_interactivo_supersede", "runtime_mailbox", msg.ID,
+				fmt.Sprintf("agente=%s kind=%s superseded=%d", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), superseded))
+		}
+	}
+	db.Audit("orquesta", "runtime_mailbox_interactivo", "runtime_order", orderID,
+		fmt.Sprintf("mailbox_id=%d agente=%s kind=%s", msg.ID, strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
+	consumed[msg.ID] = struct{}{}
+	return true, nil
 }
 
 func intentarReactivarRuntimeMailboxPoolLocalSinHandle(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
