@@ -132,7 +132,7 @@ func (CoordinationWorktreeSQLRepository) List(filter coordinacion.WorktreeFilter
 
 func deberiaIncluirWorktree(worktree *coordinacion.Worktree) bool {
 	if worktree == nil {
-		return false
+		return true
 	}
 	if worktree.State != coordinacion.WorktreeActive {
 		return true
