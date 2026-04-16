@@ -7408,6 +7408,16 @@ func procesarCompactacionExclusividadPremiumBatch(rows []agentesapp.Row, tareasA
 		if agente == "" {
 			continue
 		}
+		frentesActivos := 0
+		for _, tarea := range tareasActivasPorAgente[agente] {
+			if !tareaCuentaComoFrenteActivoCompactable(tarea, row.Asignacion.ProyectoID, agente) {
+				continue
+			}
+			frentesActivos++
+		}
+		if frentesActivos <= 1 {
+			continue
+		}
 		for _, tarea := range tareasActivasPorAgente[agente] {
 			if tarea == nil {
 				continue
@@ -8586,6 +8596,9 @@ func estadoOperativoAutoRecuperacion(estado string) bool {
 }
 
 func rowPermiteAutoRecuperacion(row agentesapp.Row, now time.Time) bool {
+	if agenteBloqueadoPorCuotaVisible(row.Agente) {
+		return false
+	}
 	if estadoOperativoAutoRecuperacion(row.EstadoOperativo) {
 		return true
 	}
@@ -9090,6 +9103,16 @@ func procesarCompactacionExclusividadPremiumSesionActiva(sesion *db.Sesion, snap
 	tareas, err := tareasService.List(db.FiltroTareas{Agente: &agente})
 	if err != nil {
 		return 0, err
+	}
+	frentesActivos := 0
+	for _, tarea := range tareas {
+		if !tareaCuentaComoFrenteActivoCompactable(tarea, asignacion.ProyectoID, agente) {
+			continue
+		}
+		frentesActivos++
+	}
+	if frentesActivos <= 1 {
+		return 0, nil
 	}
 	procesadas := 0
 	for _, tarea := range tareas {
@@ -10455,6 +10478,16 @@ func compactarFrentesExclusividadPremiumAgenteProyecto(agente string, proyectoID
 	if err != nil {
 		return 0, err
 	}
+	frentesActivos := 0
+	for _, tarea := range tareas {
+		if !tareaCuentaComoFrenteActivoCompactable(tarea, proyectoID, agente) {
+			continue
+		}
+		frentesActivos++
+	}
+	if frentesActivos <= 1 {
+		return 0, nil
+	}
 	procesadas := 0
 	for _, tarea := range tareas {
 		if !tareaDebeCompactarsePorExclusividadPremium(tarea, proyectoID, agente) {
@@ -10469,6 +10502,24 @@ func compactarFrentesExclusividadPremiumAgenteProyecto(agente string, proyectoID
 		resetStatusSnapshotCache()
 	}
 	return procesadas, nil
+}
+
+func tareaCuentaComoFrenteActivoCompactable(tarea *db.Tarea, proyectoID int64, agente string) bool {
+	if tarea == nil || tarea.ID <= 0 || tarea.Agente == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(agente)) {
+		return false
+	}
+	if tarea.ProyectoID == nil || *tarea.ProyectoID != proyectoID {
+		return false
+	}
+	switch tarea.Estado {
+	case db.TareaAsignada, db.TareaEnProgreso, db.TareaBloqueada:
+		return true
+	default:
+		return false
+	}
 }
 
 func resolverHandleReactivacionAgente(agente string, proyectoID *int64) (*db.RuntimeHandle, error) {
