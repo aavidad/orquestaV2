@@ -79,6 +79,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: la limpieza de runtimes fuera de asignación activa ahora también cachea la resolución de proyecto por `proyectoID`, evitando repetir `GetProject` cuando varios artefactos huérfanos apuntan al mismo proyecto dentro del mismo batch
 - corte operativo adicional fuera de `db`: el barrido principal de runtimes fuera de asignación activa también cachea proyecto por `proyectoID` al recorrer `rows`, evitando resolver el mismo proyecto repetidamente cuando varias filas apuntan al mismo runtime/proyecto stale
 - corte operativo adicional fuera de `db`: la resolución de autoasignación desde asignaciones pausadas ya no carga proyecto por cada candidata; decide el mejor `proyectoID` primero y solo resuelve el proyecto ganador una vez
+- corte operativo adicional fuera de `db`: esa misma resolución de autoasignación acota también la lectura de asignaciones a estado `pausada`, evitando cargar asignaciones activas/terminales para filtrarlas después en memoria
 - corte operativo adicional fuera de `db`: la reactivación de agentes sin runtime cachea proyecto por `proyectoID` dentro del batch para no repetir `GetProject` cuando varios agentes degradados convergen en el mismo proyecto
 - corte operativo adicional fuera de `db`: la recuperación de tareas bloqueadas desde sesión activa reutiliza directamente el mapa cacheado de `ListarResumenBloqueos()` y deja de copiarlo entero por cada sesión procesada
 

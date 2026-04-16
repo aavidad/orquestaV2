@@ -7280,7 +7280,8 @@ func resolverProyectoAutoasignacionPremiumSinSesion(agente string, row agentesap
 }
 
 func resolverProyectoAutoasignacionDesdeAsignacionPausada(agente string) (*db.Proyecto, error) {
-	asignaciones, err := db.ListarAsignaciones(db.FiltroAsignaciones{Agente: &agente})
+	estado := db.AsignacionPausada
+	asignaciones, err := db.ListarAsignaciones(db.FiltroAsignaciones{Agente: &agente, Estado: &estado})
 	if err != nil {
 		return nil, err
 	}
@@ -7290,9 +7291,6 @@ func resolverProyectoAutoasignacionDesdeAsignacionPausada(agente string) (*db.Pr
 	)
 	for _, asignacion := range asignaciones {
 		if asignacion == nil || asignacion.ProyectoID <= 0 {
-			continue
-		}
-		if asignacion.Estado != db.AsignacionPausada {
 			continue
 		}
 		switch strings.TrimSpace(asignacion.Nota) {
