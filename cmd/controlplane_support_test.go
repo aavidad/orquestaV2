@@ -22550,6 +22550,21 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReasignaBloqueoPorSobrecargaASiH
 	if tarea.Estado != db.EstadoEnProgreso || tarea.Agente == nil || *tarea.Agente != "CodexLibre" {
 		t.Fatalf("la tarea deberia reasignarse al relevo sano: %+v", tarea)
 	}
+	agente := "CodexLibre"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders relevo: %v", err)
+	}
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "nudge" {
+		t.Fatalf("deberia encolar un nudge de continuidad para el relevo: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"accion":"continuar_trabajo"`) {
+		t.Fatalf("payload nudge inesperado: %s", orders[0].PayloadJSON)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"redistribuida_desde":"CodexCargado"`) {
+		t.Fatalf("payload nudge sin origen redistribuido: %s", orders[0].PayloadJSON)
+	}
 }
 
 func TestSeleccionarRelevoAutonomiaConLimiteDescartaWorkerTrabajandoConDosTareas(t *testing.T) {

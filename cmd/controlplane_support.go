@@ -7053,6 +7053,9 @@ func procesarRecuperacionTareasBloqueadasSobrecargaBatch(rows []agentesapp.Row, 
 					return count, err
 				}
 				openTasksProjected[relevo]++
+				if err := encolarContinuacionTareaReasignadaSiCorresponde(relevo, actual.ProyectoID, actual.ID, agente, "sobrecarga_operativa", "continúa con la tarea reasignada tras bloqueo por sobrecarga y deja evidencia de avance", map[string]any{"redistribuida_desde": agente}); err != nil {
+					return count, err
+				}
 				count++
 				continue
 			}
