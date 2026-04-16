@@ -4,6 +4,12 @@
 
 Nota de corte: **7.8/10**. La frontera está más sólida en runtime y gobernanza, pero aún faltan cortes seguros de alto valor en `controlplane_entities`, sesiones/proyecto/worktree y wrappers de transición.
 
+Regla operativa vigente para agentes/runtime:
+
+- `xhigh` queda reservado a arquitectura/planteamiento, seguridad o bugs sutiles y refactors de alto riesgo
+- implementación normal y orquestación rutinaria deben quedarse en `high`
+- la reducción de tokens se hace por contexto mínimo, salida mínima y write-set cerrado, no bajando el listón técnico
+
 Progreso ya aterrizado en commits pequeños para no pisarse:
 
 - `c3b3541` mueve la validación y normalización de overrides de gobernanza a `gobernanzapolicy`
@@ -66,6 +72,7 @@ Siguiente corte recomendado para Orquesta (orden):
 - [ ] 4) Bloquear regresión de transición con test de equivalencia de `CrearSkillNotificaRefreshAMailboxDeAgentesDelRol` (fixture estable, startup de coordinadores por defecto)
 - [ ] 5) Cerrar seam de transición final en `db/tareas.go` + `db/asignaciones.go` migrando reglas funcionales remanentes a `tareasapp`
 - [ ] 6) Reforzar frontera en `db/test_architecture_dependencies_test.go` para imports y wrappers tras cada corte
+- [ ] 7) Vigilar que políticas y prompts no reintroduzcan `xhigh` por defecto fuera de los tres casos permitidos
 
 ## Inventario Actual
 

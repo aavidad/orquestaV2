@@ -218,6 +218,8 @@ El orquestador debe poder fijar por tarea o fase:
 Ejemplo:
 
 - arquitectura del orquestador: modelo frontier con razonamiento `xhigh`
+- implementacion normal bien acotada: razonamiento `high`
+- bug de seguridad o concurrencia dificil: razonamiento `xhigh`
 - script simple: razonamiento `medium` o `low`
 
 ### 6.2. Conectores forge

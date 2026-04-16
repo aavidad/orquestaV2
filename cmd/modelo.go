@@ -402,7 +402,7 @@ func init() {
 	politicaModeloGuardarCmd.Flags().String("perfil", "*", "Perfil de tarea afectado")
 	politicaModeloGuardarCmd.Flags().String("pool", "", "Pool preferido")
 	politicaModeloGuardarCmd.Flags().String("modelo", "", "Modelo preferido")
-	politicaModeloGuardarCmd.Flags().String("reasoning", "", "Reasoning effort: low|medium|high|xhigh")
+	politicaModeloGuardarCmd.Flags().String("reasoning", "", "Reasoning effort: low|medium|high (xhigh solo para arquitectura, seguridad o riesgo alto)")
 	politicaModeloGuardarCmd.Flags().Int("prioridad", 100, "Prioridad de la politica")
 	politicaModeloGuardarCmd.Flags().String("metadata-json", "{}", "Metadata JSON")
 	politicaModeloGuardarCmd.Flags().Bool("activa", true, "Si la politica queda activa")

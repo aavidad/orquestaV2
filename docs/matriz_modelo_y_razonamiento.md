@@ -42,14 +42,14 @@ Elegirlo por:
 
 - uso: arquitectura, coordinación, decisiones estructurales
 - modelo: frontier del pool
-- razonamiento: `xhigh`
+- razonamiento: `high` por defecto; `xhigh` solo si la tarea es de arquitectura/planteamiento, seguridad o bug sutil, o refactor de alto riesgo
 - coste permitido: alto
 
 ### `analisis`
 
 - uso: investigación, lectura grande, comparación de opciones
 - modelo: contexto amplio
-- razonamiento: `high` o `xhigh`
+- razonamiento: `high`; subir a `xhigh` solo si el análisis decide arquitectura, seguridad o riesgo alto
 - coste permitido: medio/alto
 
 ### `implementacion`
@@ -63,7 +63,7 @@ Elegirlo por:
 
 - uso: shell, utilidades, glue code, tareas pequeñas
 - modelo: económico del pool
-- razonamiento: `medium`
+- razonamiento: `medium` por defecto; `low` para glue trivial y tareas muy mecánicas
 - coste permitido: bajo
 
 ### `revision`
@@ -82,11 +82,12 @@ Elegirlo por:
 
 ## Reglas recomendadas
 
-1. Si la tarea es de `orquestacion`, usar el mejor modelo disponible del pool con `xhigh`.
-2. Si la tarea es de `script`, evitar `xhigh` salvo excepción explícita.
-3. Si el presupuesto restante del pool baja de umbral, degradar primero el razonamiento antes de cambiar de pool.
-4. Si el presupuesto restante no permite terminar bien, forzar `handoff`.
-5. Las revisiones importantes deben evitar el mismo perfil exacto que el autor cuando sea posible.
+1. Si la tarea es de `orquestacion`, usar por defecto el mejor modelo disponible del pool con `high`.
+2. Reservar `xhigh` a arquitectura/planteamiento, seguridad o bugs sutiles y refactors de alto riesgo.
+3. Si la tarea es de `script`, evitar `xhigh` salvo excepción explícita.
+4. Si el presupuesto restante del pool baja de umbral, degradar primero el razonamiento antes de cambiar de pool.
+5. Si el presupuesto restante no permite terminar bien, forzar `handoff`.
+6. Las revisiones importantes deben evitar el mismo perfil exacto que el autor cuando sea posible.
 
 ## Regla de evaluacion para modelos locales
 
@@ -126,6 +127,13 @@ Regla operativa adicional:
 - modelo: frontier
 - razonamiento: `xhigh`
 
+### Bug de seguridad
+
+- tarea: aislar una fuga de permisos o una escalada de privilegios
+- perfil: `revision` o `analisis`
+- modelo: frontier o revisor fuerte
+- razonamiento: `xhigh`
+
 ### Script de Terminator
 
 - tarea: ajustar wrapper bash
@@ -138,7 +146,7 @@ Regla operativa adicional:
 - tarea: diseñar resources/prompts/tools
 - perfil: `analisis` o `orquestacion`
 - modelo: frontier
-- razonamiento: `high` o `xhigh`
+- razonamiento: `high` por defecto; `xhigh` solo si define arquitectura o una frontera de seguridad delicada
 
 ### Refactor local
 
