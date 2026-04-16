@@ -3266,7 +3266,7 @@ func TestConstruirInstruccionSupervisionRespetaAutoCreateTasks(t *testing.T) {
 	}
 }
 
-func TestProcesarAutonomiaAgentesBatchEncolaPausePorReasignacion(t *testing.T) {
+func TestProcesarAutonomiaAgentesBatchEncolaStopPorReasignacion(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
 	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
@@ -3318,11 +3318,11 @@ func TestProcesarAutonomiaAgentesBatchEncolaPausePorReasignacion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listar orders: %v", err)
 	}
-	if len(orders) != 1 || orders[0].Tipo != "pause" {
-		t.Fatalf("pause no encolada: %+v", orders)
+	if len(orders) != 1 || orders[0].Tipo != agenteControlAccionStop {
+		t.Fatalf("stop no encolado: %+v", orders)
 	}
-	if !strings.Contains(orders[0].PayloadJSON, `"accion":"pause"`) {
-		t.Fatalf("payload pause inesperado: %s", orders[0].PayloadJSON)
+	if !strings.Contains(orders[0].PayloadJSON, `"accion":"stop"`) {
+		t.Fatalf("payload stop inesperado: %s", orders[0].PayloadJSON)
 	}
 }
 
@@ -4675,10 +4675,10 @@ func TestProcesarDerivacionSemillaPremiumSesionActivaConSnapshotUsaTareaActivaIn
 		t.Fatalf("upsert proyecto: %v", err)
 	}
 	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
-		ProyectoID:       proyectoID,
-		Enabled:          true,
-		ObjetivoGeneral:  "Terminar la app",
-		EstadoAutonomia:  db.AutonomiaProyectoActiva,
+		ProyectoID:           proyectoID,
+		Enabled:              true,
+		ObjetivoGeneral:      "Terminar la app",
+		EstadoAutonomia:      db.AutonomiaProyectoActiva,
 		DefinitionOfDoneJSON: `{"ok":true}`,
 	}); err != nil {
 		t.Fatalf("upsert proyecto autonomia: %v", err)
