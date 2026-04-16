@@ -4590,7 +4590,7 @@ func intentarReactivarRuntimeMailboxPoolLocalSinHandle(msg *db.RuntimeMailboxMes
 			fmt.Sprintf("agente=%s proyecto=%s pool=%s kind=%s", agente, strings.TrimSpace(proyecto.Slug), strings.TrimSpace(poolSlug), strings.TrimSpace(msg.Kind)))
 		return false, nil
 	}
-	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "start", "resume", "handoff"); err != nil {
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
 		return false, err
 	} else if pendiente {
 		return false, nil
@@ -4642,7 +4642,7 @@ func intentarReactivarRuntimeMailboxSinHandle(msg *db.RuntimeMailboxMessage, sna
 			return false, nil
 		}
 	}
-	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "start", "resume", "handoff"); err != nil {
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(agente, &proyecto.ID, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
 		return false, err
 	} else if pendiente {
 		return false, nil

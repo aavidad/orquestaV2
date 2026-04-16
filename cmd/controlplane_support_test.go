@@ -13000,6 +13000,87 @@ func TestProcesarRuntimeMailboxBatchNoConsumeAgenteSinHandlePeroConTrabajo(t *te
 	}
 }
 
+func TestProcesarRuntimeMailboxBatchNoReactivaSinHandleSiHayPausePendiente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexMailboxPause", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-mailbox-pause",
+		Nombre:  "Orquestador Mailbox Pause",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexMailboxPause", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Mailbox sin handle con pause pendiente",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexMailboxPause"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexMailboxPause"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "CodexMailboxPause",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","texto":"seguir"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "CodexMailboxPause",
+		ProyectoID:  &proyectoID,
+		Tipo:        "pause",
+		PayloadJSON: `{"accion":"pause","motivo":"bloqueo_humano","por":"orquesta"}`,
+	}); err != nil {
+		t.Fatalf("encolar pause: %v", err)
+	}
+
+	n, err := procesarRuntimeMailboxBatch()
+	if err != nil {
+		t.Fatalf("procesar runtime mailbox: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia reactivar ni consumir mailbox con pause pendiente, got=%d", n)
+	}
+
+	agente := "CodexMailboxPause"
+	estadoOrden := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estadoOrden})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "pause" {
+		t.Fatalf("solo deberia existir la pause pendiente: %+v", orders)
+	}
+	estadoMailbox := "pendiente"
+	mensajes, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{ToAgente: &agente, ProyectoID: &proyectoID, Estado: &estadoMailbox})
+	if err != nil {
+		t.Fatalf("listar mailbox: %v", err)
+	}
+	if len(mensajes) != 1 || mensajes[0] == nil || mensajes[0].ID != msgID {
+		t.Fatalf("la mailbox deberia seguir pendiente: %+v", mensajes)
+	}
+}
+
 func TestProcesarRuntimeMailboxBatchReabrePoolLocalCompartidoSinHandle(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
