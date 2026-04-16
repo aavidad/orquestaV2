@@ -342,6 +342,79 @@ func TestRuntimeHandleDriver(t *testing.T) {
 	}
 }
 
+func TestRuntimeHandleEstadoScore(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		estado string
+		want   int
+	}{
+		{"activo", "activo", 100},
+		{"pausado", "pausado", 80},
+		{"degradado", "degradado", 30},
+		{"fallido", "fallido", -100},
+		{"cerrado", "cerrado", -100},
+		{"otro", "otro", 0},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RuntimeHandleEstadoScore(tc.estado); got != tc.want {
+				t.Fatalf("RuntimeHandleEstadoScore(%q) = %d; want %d", tc.estado, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRuntimeHandleDriverScore(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		driver string
+		want   int
+	}{
+		{"tmux", "tmux_cli_session", 300},
+		{"process", "process_pty_cli", -150},
+		{"otro", "bash", 0},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RuntimeHandleDriverScore(tc.driver); got != tc.want {
+				t.Fatalf("RuntimeHandleDriverScore(%q) = %d; want %d", tc.driver, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRuntimeHandleObservedWorkerSnapshotScore(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		driver string
+		alive  bool
+		state  string
+		want   int
+	}{
+		{"tmux alive running", "tmux_cli_session", true, "running", 240},
+		{"tmux dead", "tmux_cli_session", false, "running", 180},
+		{"other alive running", "process_pty_cli", true, "running", 40},
+		{"other alive stopped", "process_pty_cli", true, "stopped", 0},
+		{"other dead", "process_pty_cli", false, "stopped", -20},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RuntimeHandleObservedWorkerSnapshotScore(tc.driver, tc.alive, tc.state); got != tc.want {
+				t.Fatalf("RuntimeHandleObservedWorkerSnapshotScore(%q, %v, %q) = %d; want %d", tc.driver, tc.alive, tc.state, got, tc.want)
+			}
+		})
+	}
+}
+
 func ptrInt64(v int64) *int64 {
 	return &v
 }

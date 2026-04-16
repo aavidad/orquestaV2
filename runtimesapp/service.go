@@ -520,37 +520,15 @@ func runtimeHandleScore(runtime *db.RuntimeInstance, handle *db.RuntimeHandle) i
 	if runtime.SesionID != nil && handle.SesionID != nil && *handle.SesionID == *runtime.SesionID {
 		score += 500
 	}
-	switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
-	case "activo":
-		score += 100
-	case "pausado":
-		score += 80
-	case "degradado":
-		score += 30
-	case "fallido", "cerrado":
-		score -= 100
-	}
+	score += runtimepolicy.RuntimeHandleEstadoScore(handle.Estado)
 	if handle.LastSeenAt != nil && !handle.LastSeenAt.IsZero() {
 		score += 10
 	}
-	switch strings.ToLower(strings.TrimSpace(runtimepolicy.RuntimeHandleDriver(handle.MetadataJSON))) {
-	case "tmux_cli_session":
-		score += 300
-	case "process_pty_cli":
-		score -= 150
-	}
+	score += runtimepolicy.RuntimeHandleDriverScore(runtimepolicy.RuntimeHandleDriver(handle.MetadataJSON))
 	if snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON); err == nil && snap != nil {
 		view := snap.View(time.Now().UTC(), time.Minute)
 		if view != nil {
-			if strings.EqualFold(strings.TrimSpace(view.Driver), "tmux_cli_session") {
-				score += 200
-			}
-			if view.Alive && strings.EqualFold(strings.TrimSpace(view.State), "running") {
-				score += 40
-			}
-			if !view.Alive {
-				score -= 20
-			}
+			score += runtimepolicy.RuntimeHandleObservedWorkerSnapshotScore(view.Driver, view.Alive, view.State)
 		}
 	}
 	return score

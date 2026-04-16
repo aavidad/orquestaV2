@@ -125,6 +125,46 @@ func RuntimeHandleNeedsFreshSync(estado string) bool {
 	}
 }
 
+func RuntimeHandleEstadoScore(estado string) int {
+	switch strings.ToLower(strings.TrimSpace(estado)) {
+	case "activo":
+		return 100
+	case "pausado":
+		return 80
+	case "degradado":
+		return 30
+	case "fallido", "cerrado":
+		return -100
+	default:
+		return 0
+	}
+}
+
+func RuntimeHandleDriverScore(driver string) int {
+	switch strings.ToLower(strings.TrimSpace(driver)) {
+	case "tmux_cli_session":
+		return 300
+	case "process_pty_cli":
+		return -150
+	default:
+		return 0
+	}
+}
+
+func RuntimeHandleObservedWorkerSnapshotScore(driver string, alive bool, state string) int {
+	score := 0
+	if strings.EqualFold(strings.TrimSpace(driver), "tmux_cli_session") {
+		score += 200
+	}
+	if alive && strings.EqualFold(strings.TrimSpace(state), "running") {
+		score += 40
+	}
+	if !alive {
+		score -= 20
+	}
+	return score
+}
+
 func RuntimeHandleDriver(metadataJSON string) string {
 	metadataJSON = strings.TrimSpace(metadataJSON)
 	if metadataJSON == "" {
