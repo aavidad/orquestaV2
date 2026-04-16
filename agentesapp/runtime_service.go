@@ -687,6 +687,10 @@ func (s *Service) liveOperationalState(agenteNombre string) (string, string, err
 	return strings.TrimSpace(row.EstadoOperativo), strings.TrimSpace(row.DetalleOperativo), nil
 }
 
+func (s *Service) OperationalStateForAgent(agenteNombre string) (string, string, error) {
+	return s.liveOperationalState(agenteNombre)
+}
+
 func resolveLiveOperationalState(loadRows func() ([]Row, error), agenteNombre string, timeout time.Duration) (string, string, error) {
 	agenteNombre = strings.TrimSpace(agenteNombre)
 	if agenteNombre == "" || loadRows == nil {

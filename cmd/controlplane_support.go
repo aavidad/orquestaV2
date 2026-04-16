@@ -828,31 +828,25 @@ func validarAgenteDisponibleParaTrabajo(nombre string, agente *db.Agente) error 
 }
 
 func validarEstadoOperativoAgenteParaTrabajo(nombre string) error {
-	rows, err := agentesService.BuildPanelRows()
+	estado, detalle, err := agentesService.OperationalStateForAgent(nombre)
 	if err != nil {
 		return err
 	}
-	for _, row := range rows {
-		if row.Agente == nil || !strings.EqualFold(strings.TrimSpace(row.Agente.Nombre), strings.TrimSpace(nombre)) {
-			continue
+	estado = strings.TrimSpace(estado)
+	switch estado {
+	case "", "disponible", "sin_tarea":
+		return nil
+	case "trabajando":
+		return nil
+	case "bloqueado_por_cuota", "bloqueado_por_runtime", "mailbox_atascada", "atascado", "saturado":
+		detalle = strings.TrimSpace(detalle)
+		if detalle != "" {
+			return fmt.Errorf("agente %s no disponible para trabajo: %s (%s)", nombre, estado, detalle)
 		}
-		estado := strings.TrimSpace(row.EstadoOperativo)
-		switch estado {
-		case "", "disponible", "sin_tarea":
-			return nil
-		case "trabajando":
-			return nil
-		case "bloqueado_por_cuota", "bloqueado_por_runtime", "mailbox_atascada", "atascado", "saturado":
-			detalle := strings.TrimSpace(row.DetalleOperativo)
-			if detalle != "" {
-				return fmt.Errorf("agente %s no disponible para trabajo: %s (%s)", nombre, estado, detalle)
-			}
-			return fmt.Errorf("agente %s no disponible para trabajo: %s", nombre, estado)
-		default:
-			return nil
-		}
+		return fmt.Errorf("agente %s no disponible para trabajo: %s", nombre, estado)
+	default:
+		return nil
 	}
-	return nil
 }
 
 func (dbAutomationService) PlanificarTareasAutomaticamente() error {

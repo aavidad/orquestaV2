@@ -125,6 +125,26 @@ func TestResolveLiveOperationalStateHaceTimeoutSeguro(t *testing.T) {
 	}
 }
 
+func TestOperationalStateForAgentEvitaPanelCompleto(t *testing.T) {
+	now := time.Now().UTC()
+	store := &fakeStore{
+		agents:   []*db.Agente{{Nombre: "Codex1", Rol: "programador", Activo: true, Habilitado: true}},
+		sessions: []*db.Sesion{{ID: 9, Agente: "Codex1", Estado: "activa", Inicio: now}},
+		tasks:    []*db.Tarea{{ID: 41, Agente: strPtr("Codex1"), Estado: db.EstadoEnProgreso}},
+	}
+
+	estado, detalle, err := NewService(store, nil).OperationalStateForAgent("Codex1")
+	if err != nil {
+		t.Fatalf("OperationalStateForAgent: %v", err)
+	}
+	if estado != "trabajando" {
+		t.Fatalf("estado=%q detalle=%q", estado, detalle)
+	}
+	if store.listAgentsCalls != 0 {
+		t.Fatalf("no deberia listar todos los agentes para resolver uno solo: calls=%d", store.listAgentsCalls)
+	}
+}
+
 func TestResolveActiveAssignmentFromAssignmentsPrefiereActivaDelProyecto(t *testing.T) {
 	asignaciones := []*db.Asignacion{
 		{Agente: "Codex1", ProyectoID: 9, ProyectoSlug: "otro", Estado: db.AsignacionActiva},
