@@ -1,6 +1,6 @@
 # Plan De Refactor De `db` Hacia Hexagonalidad
 
-## Estado 2026-04-14
+## Estado 2026-04-16
 
 Progreso ya aterrizado en commits pequeños para no pisarse:
 
@@ -20,6 +20,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte adicional en planner: mover la ventana de gracia de recuperación de tarea huérfana a `planificadorpolicy`
 - corte adicional en planner: mover la política de preservación de tarea huérfana enfocada (frente acotado) a `planificadorpolicy`
 - corte adicional en runtime: mover la compactación de transcript pending a `runtimepolicy`
+- corte adicional en runtime: mover compactación/síntesis de metadata de `runtime_handle` en `runtimepolicy` (`CompactRuntimeHandleMetadata`)
 - corte adicional en autonomia: mover la política pura de score de rol de supervisor operativo a `autonomiapolicy`
 
 Estado del frente seguro:
@@ -48,6 +49,7 @@ Estado del frente seguro:
 - policy de ventana de gracia de recuperación de tarea huérfana movida a `planificadorpolicy`
 - policy de preservación de tarea huérfana para frente acotado movida a `planificadorpolicy`
 - policy de gobernanza movida a `gobernanzapolicy` para catálogo, validación de overrides y precedencia por capas
+- policy de compactación/síntesis de metadata de `runtime_handle` movida a `runtimepolicy` (`CompactRuntimeHandleMetadata`) para minimizar policy en `db/controlplane_entities.go`
 - policy de skills movida a `skillspolicy`
 - policy de compactación de texto pendiente de transcript en runtime movida a `runtimepolicy`
 - policy de ordenación por rol en selección de supervisores operativos movida a `autonomiapolicy`
