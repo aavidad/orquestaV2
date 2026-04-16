@@ -205,3 +205,31 @@ func TestRuntimeHandleUsaLegacyProcessPTY(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeHandleIsLegacyControlPlane(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		estado     string
+		transporte string
+		handleKind string
+		meta       map[string]any
+		want       bool
+	}{
+		{"activo cli process process_pty_cli", "activo", "cli", "process", map[string]any{"driver": "process_pty_cli"}, true},
+		{"pausado cli process process_pty_cli", "pausado", "cli", "process", map[string]any{"driver": "process_pty_cli"}, true},
+		{"activo cli process otro driver", "activo", "cli", "process", map[string]any{"driver": "tmux_cli_session"}, false},
+		{"activo tmux process process_pty_cli", "activo", "tmux", "process", map[string]any{"driver": "process_pty_cli"}, false},
+		{"activo cli session process_pty_cli", "activo", "cli", "session", map[string]any{"driver": "process_pty_cli"}, false},
+		{"caido cli process process_pty_cli", "cerrado", "cli", "process", map[string]any{"driver": "process_pty_cli"}, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RuntimeHandleIsLegacyControlPlane(tc.estado, tc.transporte, tc.handleKind, tc.meta); got != tc.want {
+				t.Fatalf("RuntimeHandleIsLegacyControlPlane(%q, %q, %q, %v) = %v; want %v", tc.estado, tc.transporte, tc.handleKind, tc.meta, got, tc.want)
+			}
+		})
+	}
+}

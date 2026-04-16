@@ -103,6 +103,18 @@ func RuntimeHandleTMUXSessionRef(meta map[string]any, transporte, handleKind, ha
 	}
 }
 
+func RuntimeHandleIsLegacyControlPlane(estado, transporte, handleKind string, meta map[string]any) bool {
+	switch strings.ToLower(strings.TrimSpace(estado)) {
+	case "activo", "pausado":
+	default:
+		return false
+	}
+	if strings.TrimSpace(transporte) != "cli" || strings.TrimSpace(handleKind) != "process" {
+		return false
+	}
+	return strings.EqualFold(mapValueString(meta, "driver", ""), "process_pty_cli")
+}
+
 func RuntimeHandleUsaLegacyCLITMUXPreferred(meta map[string]any) bool {
 	if !RuntimeHandleUsaLegacyProcessPTY(meta) {
 		return false

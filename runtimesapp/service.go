@@ -2765,41 +2765,14 @@ func runtimeHandleCanonicoParaControl(handle *db.RuntimeHandle) bool {
 }
 
 func runtimeHandleEsCandidatoLegacyATMUX(handle *db.RuntimeHandle) bool {
-	if !runtimeHandleEsLegacyControlPlane(handle) {
-		return false
-	}
-	meta := mapFromJSONRuntimeHandle(handle.MetadataJSON)
-	for _, candidate := range []string{
-		mapStringValueRuntimeHandle(meta, "rendered_command"),
-		mapStringValueRuntimeHandle(meta, "wrapped_command"),
-		mapStringValueRuntimeHandle(meta, "herramienta"),
-		mapStringValueRuntimeHandle(meta, "conector"),
-		mapStringValueRuntimeHandle(meta, "profile_status_wrapper"),
-	} {
-		if controlruntime.RenderedCommandLooksLikeTMUXPreferredCLI(candidate) {
-			return true
-		}
-	}
-	return false
-}
-
-func runtimeHandleEsLegacyControlPlane(handle *db.RuntimeHandle) bool {
 	if handle == nil {
 		return false
 	}
-	if strings.TrimSpace(handle.Transporte) != "cli" || strings.TrimSpace(handle.HandleKind) != "process" {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
-	case "activo", "pausado":
-	default:
-		return false
-	}
 	meta := mapFromJSONRuntimeHandle(handle.MetadataJSON)
-	if !strings.EqualFold(strings.TrimSpace(mapStringValueRuntimeHandle(meta, "driver")), "process_pty_cli") {
+	if !runtimepolicy.RuntimeHandleIsLegacyControlPlane(handle.Estado, handle.Transporte, handle.HandleKind, meta) {
 		return false
 	}
-	return true
+	return runtimepolicy.RuntimeHandleUsaLegacyCLITMUXPreferred(meta)
 }
 
 func mapFromJSONRuntimeHandle(raw string) map[string]any {
