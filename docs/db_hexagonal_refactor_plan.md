@@ -61,6 +61,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: `status` ya filtra tareas y agentes deshabilitados del pool visible; un agente retirado no debe seguir apareciendo en `En progreso ahora mismo`, `Retenidas por cuota` ni en el bloque visible de cuota solo por arrastre de snapshot
 - corte operativo adicional fuera de `db`: la entrada de reactivación automática ahora vuelve a comprobar `habilitado` antes de encolar `start/resume/handoff`, evitando reanimaciones residuales de agentes retirados aunque la llamada llegue por una ruta tardía
 - corte operativo adicional fuera de `db`: `server preparar-sesion` y el bootstrap de servidor filtran la flota oficial a agentes `Codex*`; una config contaminada ya no debe conservar `antigravity`/`claude`/otros perfiles fuera de política en la flota permitida
+- corte operativo adicional fuera de `db`: el monitor TMUX ya autoacepta el prompt interactivo de Codex `Approaching rate limits` eligiendo el modelo alternativo ofrecido, evitando que la sesión quede bloqueada por espera humana en ese menú
 
 Estado del frente seguro:
 

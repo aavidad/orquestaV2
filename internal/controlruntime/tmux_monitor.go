@@ -578,6 +578,8 @@ func tmuxBootstrapPromptDismissKeys(captured string) ([]string, bool) {
 		return []string{"2", "C-m"}, true
 	case tmuxPaneHasActionRequiredPrompt(captured):
 		return []string{"2", "C-m"}, true
+	case tmuxPaneHasApproachingRateLimitPrompt(captured):
+		return []string{"1", "C-m"}, true
 	default:
 		return nil, false
 	}

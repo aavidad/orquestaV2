@@ -394,6 +394,9 @@ func TestTMUXPaneHasApproachingRateLimitPromptDetectaCambioInteractivoDeModelo(t
 	if got := tmuxClassifyPaneState(captured); got != workerStatusBlockedQuota {
 		t.Fatalf("estado de pane inesperado: got=%q want=%q", got, workerStatusBlockedQuota)
 	}
+	if keys, ok := tmuxBootstrapPromptDismissKeys(captured); !ok || len(keys) != 2 || keys[0] != "1" || keys[1] != "C-m" {
+		t.Fatalf("dismiss keys approaching rate limits inesperadas: ok=%v keys=%+v", ok, keys)
+	}
 }
 
 func TestTMUXWorkerStateOnPaneFinalizedPreservaQuota(t *testing.T) {
