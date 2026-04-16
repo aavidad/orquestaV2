@@ -53,11 +53,6 @@ type proyectoRutaSesion struct {
 	cwd    string
 }
 
-type proyectoRutaWorktree struct {
-	agente  string
-	rutaAbs string
-}
-
 func UpsertProyecto(p *Proyecto) (int64, error) {
 	if p == nil {
 		return 0, fmt.Errorf("proyecto nil")
@@ -205,7 +200,7 @@ func ProyectosConRutaEfectiva(proyectos []*Proyecto, cwdHint string) []*Proyecto
 	return out
 }
 
-func proyectoConRutaEfectivaConContexto(proyecto *Proyecto, cwdHint string, sesion *proyectoRutaSesion, worktrees []proyectoRutaWorktree) *Proyecto {
+func proyectoConRutaEfectivaConContexto(proyecto *Proyecto, cwdHint string, sesion *proyectoRutaSesion, worktrees []coordinacion.WorktreePathRef) *Proyecto {
 	if proyecto == nil {
 		return nil
 	}
@@ -218,7 +213,7 @@ func RutaProyectoEfectiva(proyectoID int64, fallback, cwdHint string) string {
 	return rutaProyectoEfectivaConContexto(proyectoID, fallback, cwdHint, nil, nil)
 }
 
-func rutaProyectoEfectivaConContexto(proyectoID int64, fallback, cwdHint string, sesion *proyectoRutaSesion, worktrees []proyectoRutaWorktree) string {
+func rutaProyectoEfectivaConContexto(proyectoID int64, fallback, cwdHint string, sesion *proyectoRutaSesion, worktrees []coordinacion.WorktreePathRef) string {
 	fallback = normalizarRutaProyecto(fallback)
 	sessionCWD := ""
 	sessionInsideActiveWorktree := false
@@ -254,7 +249,7 @@ func candidataRutaProyectoEfectiva(proyectoID int64, agente, cwd string) string 
 	)
 }
 
-func candidataRutaProyectoEfectivaConWorktrees(proyectoID int64, agente, cwd string, worktrees []proyectoRutaWorktree) string {
+func candidataRutaProyectoEfectivaConWorktrees(proyectoID int64, agente, cwd string, worktrees []coordinacion.WorktreePathRef) string {
 	cwd = normalizarRutaProyecto(cwd)
 	if cwd == "" {
 		return ""
@@ -404,22 +399,11 @@ func rutaSesionPerteneceAWorktreeActiva(proyectoID int64, agente, cwd string) bo
 	return coordinacion.SessionPathInsideActiveWorktree(agente, cwd, worktrees)
 }
 
-func rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID int64, agente, cwd string, worktrees []proyectoRutaWorktree) bool {
+func rutaSesionPerteneceAWorktreeActivaConContexto(proyectoID int64, agente, cwd string, worktrees []coordinacion.WorktreePathRef) bool {
 	if len(worktrees) > 0 {
-		return rutaSesionPerteneceAWorktreeActivaBatch(agente, cwd, worktrees)
+		return coordinacion.SessionPathInsideActiveWorktree(agente, cwd, worktrees)
 	}
 	return rutaSesionPerteneceAWorktreeActiva(proyectoID, agente, cwd)
-}
-
-func rutaSesionPerteneceAWorktreeActivaBatch(agente, cwd string, worktrees []proyectoRutaWorktree) bool {
-	refs := make([]coordinacion.WorktreePathRef, 0, len(worktrees))
-	for _, worktree := range worktrees {
-		refs = append(refs, coordinacion.WorktreePathRef{
-			Agent: strings.TrimSpace(worktree.agente),
-			Path:  strings.TrimSpace(worktree.rutaAbs),
-		})
-	}
-	return coordinacion.SessionPathInsideActiveWorktree(agente, cwd, refs)
 }
 
 func ResolveProyectoIDBySlug(slug string) (*int64, error) {
@@ -482,9 +466,9 @@ func ListarProyectosConRutaEfectiva(f FiltroProyectos, cwdHint string) ([]*Proye
 	return ProyectosConRutaEfectiva(proyectos, cwdHint), nil
 }
 
-func cargarContextoRutaProyectos(proyectos []*Proyecto) (map[int64]*proyectoRutaSesion, map[int64][]proyectoRutaWorktree) {
+func cargarContextoRutaProyectos(proyectos []*Proyecto) (map[int64]*proyectoRutaSesion, map[int64][]coordinacion.WorktreePathRef) {
 	sesionesPorProyecto := map[int64]*proyectoRutaSesion{}
-	worktreesPorProyecto := map[int64][]proyectoRutaWorktree{}
+	worktreesPorProyecto := map[int64][]coordinacion.WorktreePathRef{}
 	if len(proyectos) == 0 || DB == nil {
 		return sesionesPorProyecto, worktreesPorProyecto
 	}
@@ -554,9 +538,9 @@ func cargarContextoRutaProyectos(proyectos []*Proyecto) (map[int64]*proyectoRuta
 			if scanErr := worktreeRows.Scan(&proyectoID, &agente, &rutaAbs); scanErr != nil {
 				break
 			}
-			worktreesPorProyecto[proyectoID] = append(worktreesPorProyecto[proyectoID], proyectoRutaWorktree{
-				agente:  strings.TrimSpace(agente),
-				rutaAbs: strings.TrimSpace(rutaAbs),
+			worktreesPorProyecto[proyectoID] = append(worktreesPorProyecto[proyectoID], coordinacion.WorktreePathRef{
+				Agent: strings.TrimSpace(agente),
+				Path:  strings.TrimSpace(rutaAbs),
 			})
 		}
 	}
