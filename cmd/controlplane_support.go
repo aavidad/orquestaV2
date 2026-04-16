@@ -2935,46 +2935,58 @@ func reconciliarRuntimeMailboxWatchdogSinHandleBatchConMailbox(mailbox []*db.Run
 		if err != nil {
 			return total, err
 		}
-		if watchdogPuedeConsumirsePorEnfriamiento(msg, handle, snapshot) {
-			if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
-				return total, err
-			} else if !canConsume {
-				continue
-			}
-			if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
-				return total, err
-			}
-			if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
-				return total, err
-			}
-			db.Audit("orquesta", "runtime_mailbox_watchdog_enfriamiento", "runtime_mailbox", msg.ID,
-				fmt.Sprintf("agente=%s proyecto_id=%s watchdog consumido por agente en enfriamiento",
-					strings.TrimSpace(msg.ToAgente), runtimeMailboxProyectoDetalle(msg.ProyectoID)))
-			consumed[msg.ID] = struct{}{}
+		dispatched, err := reconciliarRuntimeMailboxWatchdogSinHandleMensaje(msg, consumed, snapshot, handle)
+		if err != nil {
+			return total, err
+		}
+		if dispatched {
 			total++
-			continue
 		}
-		if handle != nil {
-			continue
-		}
-		if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
-			return total, err
-		} else if !canConsume {
-			continue
-		}
-		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
-			return total, err
-		}
-		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
-			return total, err
-		}
-		db.Audit("orquesta", "runtime_mailbox_watchdog_sin_handle", "runtime_mailbox", msg.ID,
-			fmt.Sprintf("agente=%s proyecto_id=%s watchdog consumido por ausencia de handle activo",
-				strings.TrimSpace(msg.ToAgente), runtimeMailboxProyectoDetalle(msg.ProyectoID)))
-		consumed[msg.ID] = struct{}{}
-		total++
 	}
 	return total, nil
+}
+
+// reconciliarRuntimeMailboxWatchdogSinHandleMensaje consume un mensaje watchdog
+// cuando el agente está en enfriamiento/agotado/pausado o no tiene handle activo.
+// Retorna true si el mensaje fue consumido.
+func reconciliarRuntimeMailboxWatchdogSinHandleMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle) (bool, error) {
+	if watchdogPuedeConsumirsePorEnfriamiento(msg, handle, snapshot) {
+		if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+			return false, err
+		} else if !canConsume {
+			return false, nil
+		}
+		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+			return false, err
+		}
+		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+			return false, err
+		}
+		db.Audit("orquesta", "runtime_mailbox_watchdog_enfriamiento", "runtime_mailbox", msg.ID,
+			fmt.Sprintf("agente=%s proyecto_id=%s watchdog consumido por agente en enfriamiento",
+				strings.TrimSpace(msg.ToAgente), runtimeMailboxProyectoDetalle(msg.ProyectoID)))
+		consumed[msg.ID] = struct{}{}
+		return true, nil
+	}
+	if handle != nil {
+		return false, nil
+	}
+	if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+		return false, err
+	} else if !canConsume {
+		return false, nil
+	}
+	if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+		return false, err
+	}
+	if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+		return false, err
+	}
+	db.Audit("orquesta", "runtime_mailbox_watchdog_sin_handle", "runtime_mailbox", msg.ID,
+		fmt.Sprintf("agente=%s proyecto_id=%s watchdog consumido por ausencia de handle activo",
+			strings.TrimSpace(msg.ToAgente), runtimeMailboxProyectoDetalle(msg.ProyectoID)))
+	consumed[msg.ID] = struct{}{}
+	return true, nil
 }
 
 func watchdogPuedeConsumirsePorEnfriamiento(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle, snapshot *runtimeMailboxBatchSnapshot) bool {
