@@ -6690,6 +6690,31 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 	}
 	resumen.IdleAutoassigned = autoasignadosPremiumSinSesion
 	resumen.Count += autoasignadosPremiumSinSesion
+	recuperadasSobrecarga, err := procesarRecuperacionTareasBloqueadasSobrecargaBatch(rows, tareasBloqueadasPorAgente, bloqueosPorTarea, openTasksProjected, now)
+	if err != nil {
+		return resumen, err
+	}
+	resumen.Count += recuperadasSobrecarga
+	intervencionActivas, err := procesarIntervencionTareasActivasDegradadasBatch(rows, tareasActivasPorAgente, openTasksProjected, now)
+	if err != nil {
+		return resumen, err
+	}
+	resumen.Count += intervencionActivas
+	intervencionBloqueadas, err := procesarIntervencionTareasBloqueadasDegradadasBatch(rows, tareasBloqueadasPorAgente, bloqueosPorTarea, openTasksProjected, now)
+	if err != nil {
+		return resumen, err
+	}
+	resumen.Count += intervencionBloqueadas
+	if resumen.Count > 0 {
+		resetStatusSnapshotCache()
+	}
+	return resumen, nil
+}
+
+// procesarRecuperacionTareasBloqueadasSobrecargaBatch reactivca o reasigna tareas bloqueadas
+// de agentes que ya están operativos pero tenían bloqueos por sobrecarga.
+func procesarRecuperacionTareasBloqueadasSobrecargaBatch(rows []agentesapp.Row, tareasBloqueadasPorAgente map[string][]*db.Tarea, bloqueosPorTarea map[int64]db.ResumenBloqueo, openTasksProjected map[string]int, now time.Time) (int, error) {
+	count := 0
 	for _, row := range rows {
 		if row.Agente == nil || !rowPermiteAutoRecuperacion(row, now) {
 			continue
@@ -6705,7 +6730,7 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 			}
 			actual, err := db.GetTarea(tarea.ID)
 			if err != nil {
-				return resumen, err
+				return count, err
 			}
 			if actual == nil || actual.Agente == nil || actual.Estado != db.EstadoBloqueada {
 				continue
@@ -6724,20 +6749,27 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 				}
 				resolucion := fmt.Sprintf("reasignación automática por sobrecarga desde %s", agente)
 				if err := desbloquearYReasignarTareaAutonomia(actual.ID, resolucion, relevo, fmt.Sprintf("Reasignada automáticamente desde %s a %s tras bloqueo por sobrecarga", agente, relevo)); err != nil {
-					return resumen, err
+					return count, err
 				}
 				openTasksProjected[relevo]++
-				resumen.Count++
+				count++
 				continue
 			}
 			resolucion := fmt.Sprintf("recuperación automática tras %s (%s)", row.EstadoOperativo, firstNonEmpty(strings.TrimSpace(row.DetalleOperativo), "worker recuperado"))
 			if err := desbloquearYReactivarTareaAutonomia(actual.ID, resolucion, agente, fmt.Sprintf("Reactivada automáticamente en %s tras recuperar estado operativo", agente)); err != nil {
-				return resumen, err
+				return count, err
 			}
 			openTasksProjected[agente]++
-			resumen.Count++
+			count++
 		}
 	}
+	return count, nil
+}
+
+// procesarIntervencionTareasActivasDegradadasBatch reasigna o bloquea tareas activas
+// cuyo agente está en un estado operativo que requiere intervención automática.
+func procesarIntervencionTareasActivasDegradadasBatch(rows []agentesapp.Row, tareasActivasPorAgente map[string][]*db.Tarea, openTasksProjected map[string]int, now time.Time) (int, error) {
+	count := 0
 	for _, row := range rows {
 		if row.Agente == nil || !estadoOperativoAutoIntervencion(row.EstadoOperativo) {
 			continue
@@ -6758,7 +6790,7 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 			}
 			actual, err := db.GetTarea(tarea.ID)
 			if err != nil {
-				return resumen, err
+				return count, err
 			}
 			if actual == nil || actual.Agente == nil {
 				continue
@@ -6780,9 +6812,9 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 			relevo := seleccionarRelevoAutonomia(rows, openTasksProjected, actual, agente)
 			if relevo == "" {
 				if err := bloquearTareaAutonomiaSinRelevo(actual.ID, agente, motivo, construirNotaBloqueoAutonomiaSinRelevo(row, agente)); err != nil {
-					return resumen, err
+					return count, err
 				}
-				resumen.Count++
+				count++
 				if openTasksProjected[agente] > 0 {
 					openTasksProjected[agente]--
 				}
@@ -6790,19 +6822,26 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 			}
 
 			if err := reasignarYArrancarTareaAutonomia(actual.ID, relevo, fmt.Sprintf("Reasignada automáticamente desde %s a %s: %s", agente, relevo, motivo)); err != nil {
-				return resumen, err
+				return count, err
 			}
 			if openTasksProjected[agente] > 0 {
 				openTasksProjected[agente]--
 			}
 			openTasksProjected[relevo]++
-			resumen.Count++
+			count++
 
 			if err := encolarContinuacionTareaReasignadaSiCorresponde(relevo, actual.ProyectoID, actual.ID, agente, row.EstadoOperativo, "continúa con la tarea reasignada y deja evidencia de avance", nil); err != nil {
-				return resumen, err
+				return count, err
 			}
 		}
 	}
+	return count, nil
+}
+
+// procesarIntervencionTareasBloqueadasDegradadasBatch reasigna tareas bloqueadas
+// cuyo agente está degradado y hay un relevo disponible.
+func procesarIntervencionTareasBloqueadasDegradadasBatch(rows []agentesapp.Row, tareasBloqueadasPorAgente map[string][]*db.Tarea, bloqueosPorTarea map[int64]db.ResumenBloqueo, openTasksProjected map[string]int, now time.Time) (int, error) {
+	count := 0
 	for _, row := range priorizarRowsAutonomiaBloqueadas(rows, tareasBloqueadasPorAgente) {
 		if row.Agente == nil || !estadoOperativoAutoIntervencion(row.EstadoOperativo) {
 			continue
@@ -6823,7 +6862,7 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 			}
 			actual, err := db.GetTarea(tarea.ID)
 			if err != nil {
-				return resumen, err
+				return count, err
 			}
 			if actual == nil || actual.Agente == nil {
 				continue
@@ -6853,20 +6892,17 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 			motivo := construirMotivoAutonomiaAgenteDegradado(row)
 			resolucion := fmt.Sprintf("reasignación automática desde %s tras %s (%s)", agente, row.EstadoOperativo, firstNonEmpty(strings.TrimSpace(row.DetalleOperativo), "worker degradado"))
 			if err := desbloquearYReasignarTareaAutonomia(actual.ID, resolucion, relevo, fmt.Sprintf("Reasignada automáticamente desde %s a %s: %s", agente, relevo, motivo)); err != nil {
-				return resumen, err
+				return count, err
 			}
 			openTasksProjected[relevo]++
-			resumen.Count++
+			count++
 
 			if err := encolarContinuacionTareaReasignadaSiCorresponde(relevo, actual.ProyectoID, actual.ID, agente, row.EstadoOperativo, "continúa con la tarea reasignada y deja evidencia de avance", nil); err != nil {
-				return resumen, err
+				return count, err
 			}
 		}
 	}
-	if resumen.Count > 0 {
-		resetStatusSnapshotCache()
-	}
-	return resumen, nil
+	return count, nil
 }
 
 func rowsPorAgenteMap(rows []agentesapp.Row) map[string]agentesapp.Row {
