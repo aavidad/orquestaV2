@@ -124,7 +124,7 @@ func getActiveWorktreeSummary(agente string, proyecto *Proyecto) map[string]any 
 	if err := row.Scan(&id, &nombre, &ruta, &branch, &baseRef, &motivo); err != nil {
 		return nil
 	}
-	if strings.TrimSpace(proyecto.RutaAbs) != "" && !coordinacion.ActiveWorktreePathCoherent(ruta.String, proyecto.RutaAbs) {
+	if !esWorktreeActivaCoherenteConProyecto(proyecto, ruta.String) {
 		return nil
 	}
 	return map[string]any{
@@ -135,6 +135,17 @@ func getActiveWorktreeSummary(agente string, proyecto *Proyecto) map[string]any 
 		"base_ref": strings.TrimSpace(baseRef.String),
 		"motivo":   strings.TrimSpace(motivo.String),
 	}
+}
+
+func esWorktreeActivaCoherenteConProyecto(proyecto *Proyecto, worktreePath string) bool {
+	if proyecto == nil {
+		return false
+	}
+	rutaProyecto := strings.TrimSpace(proyecto.RutaAbs)
+	if rutaProyecto == "" {
+		return false
+	}
+	return coordinacion.ActiveWorktreePathCoherent(worktreePath, rutaProyecto)
 }
 
 func getActiveTaskSummaries(agente string, proyectoID int64) []map[string]any {
