@@ -92,6 +92,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: la compactación de exclusividad premium en sesión activa reaprovecha las asignaciones activas cacheadas por agente dentro del `autonomiaBatchSnapshot`, evitando otra consulta aislada por sesión
 - corte operativo adicional fuera de `db`: la reanimación ya no resuelve dos veces el mismo `runtime_handle` cuando proyecto y handle ya están disponibles en la misma secuencia, y `runtimeRecuperacionSesionObjetivo` evita reintentar `GetRuntimeBySesionID` si ya se leyó al principio
 - corte operativo adicional fuera de `db`: la decisión de `continuar_trabajo` en sesión activa puede derivar el `tarea_id` desde `snapshot.tasks(...)` cuando existe una única tarea activa inequívoca, dejando la query canónica como fallback para casos ambiguos
+- corte operativo adicional fuera de `db`: la recuperación de tareas bloqueadas en sesión activa sale antes cuando el `snapshot` ya demuestra que no hay ninguna `TareaBloqueada` para ese agente/proyecto, evitando `BuildDetailCompact` y la carga de bloqueos en ese caso vacío
 
 Estado del frente seguro:
 

@@ -9049,6 +9049,26 @@ func procesarRecuperacionTareasBloqueadasSesionActiva(sesion *db.Sesion, snapsho
 	if agente == "" {
 		return 0, nil
 	}
+	var (
+		tareas []*db.Tarea
+		err    error
+	)
+	if snapshot != nil {
+		tareas, err = snapshot.tasks(agente, *sesion.ProyectoID)
+		if err != nil {
+			return 0, err
+		}
+		tieneBloqueadas := false
+		for _, tarea := range tareas {
+			if tarea != nil && tarea.Estado == db.TareaBloqueada && tarea.Agente != nil && strings.EqualFold(strings.TrimSpace(*tarea.Agente), agente) {
+				tieneBloqueadas = true
+				break
+			}
+		}
+		if !tieneBloqueadas {
+			return 0, nil
+		}
+	}
 	detail, err := agentesService.BuildDetailCompact(agente)
 	if err != nil {
 		return 0, err
@@ -9064,12 +9084,7 @@ func procesarRecuperacionTareasBloqueadasSesionActiva(sesion *db.Sesion, snapsho
 	if !rowPermiteAutoRecuperacion(row, now) {
 		return 0, nil
 	}
-	var tareas []*db.Tarea
 	if snapshot != nil {
-		tareas, err = snapshot.tasks(agente, *sesion.ProyectoID)
-		if err != nil {
-			return 0, err
-		}
 	} else {
 		tareas, err = tareasService.List(db.FiltroTareas{Agente: &agente, ProyectoID: sesion.ProyectoID})
 		if err != nil {

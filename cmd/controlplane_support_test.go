@@ -4612,6 +4612,52 @@ func TestSesionActivaDebeRecibirNudgeContinuacionConSnapshotUsaTareaActivaInequi
 	}
 }
 
+func TestProcesarRecuperacionTareasBloqueadasSesionActivaConSnapshotSaleSiNoHayBloqueadas(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexNoBlocked", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-no-blocked",
+		Nombre:  "Orquestador No Blocked",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexNoBlocked",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+
+	snapshot := &autonomiaBatchSnapshot{
+		tareasByAgentProject: map[string][]*db.Tarea{
+			agentProjectCacheKey("CodexNoBlocked", proyectoID): {{
+				ID:         88,
+				ProyectoID: &proyectoID,
+				Agente:     strPtr("CodexNoBlocked"),
+				Estado:     db.TareaEnProgreso,
+			}},
+		},
+	}
+
+	n, err := procesarRecuperacionTareasBloqueadasSesionActiva(sesion, snapshot)
+	if err != nil {
+		t.Fatalf("procesarRecuperacionTareasBloqueadasSesionActiva: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia actuar si snapshot no trae bloqueadas, got=%d", n)
+	}
+}
+
 func TestSesionActivaDebeRecibirNudgeContinuacionIgnoraGuidanceDurableMailboxOnlyVigente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
