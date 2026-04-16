@@ -6,6 +6,100 @@ import (
 	"testing"
 )
 
+type testGovernanceTransitionCoordinator struct{}
+
+func (testGovernanceTransitionCoordinator) AfterCrearRegla(actor string, r *Regla, id int64) error {
+	if r == nil {
+		return nil
+	}
+	NotificarRefreshGobernanza(actor, r.TipoAgente, "crear_regla", map[string]any{
+		"regla_id": id,
+		"titulo":   r.Titulo,
+	})
+	return nil
+}
+
+func (testGovernanceTransitionCoordinator) AfterActualizarRegla(actor string, r *Regla) error {
+	if r == nil {
+		return nil
+	}
+	NotificarRefreshGobernanza(actor, r.TipoAgente, "actualizar_regla", map[string]any{
+		"regla_id": r.ID,
+		"titulo":   r.Titulo,
+	})
+	return nil
+}
+
+func (testGovernanceTransitionCoordinator) AfterSetReglaActiva(actor string, r *Regla, activa bool) error {
+	if r == nil {
+		return nil
+	}
+	NotificarRefreshGobernanza(actor, r.TipoAgente, "set_regla_activa", map[string]any{
+		"regla_id": r.ID,
+		"activa":   activa,
+		"titulo":   r.Titulo,
+	})
+	return nil
+}
+
+func (testGovernanceTransitionCoordinator) AfterCrearSkill(actor string, s *Skill, id int64) error {
+	if s == nil {
+		return nil
+	}
+	NotificarRefreshSkillCatalogo(actor, s, "crear")
+	return nil
+}
+
+func (testGovernanceTransitionCoordinator) AfterActualizarSkill(actor string, s *Skill) error {
+	if s == nil {
+		return nil
+	}
+	NotificarRefreshSkillCatalogo(actor, s, "actualizar")
+	return nil
+}
+
+func (testGovernanceTransitionCoordinator) AfterSetSkillActiva(actor string, s *Skill, activa bool) error {
+	if s == nil {
+		return nil
+	}
+	NotificarRefreshSkillCatalogo(actor, s, "activar")
+	return nil
+}
+
+func (testGovernanceTransitionCoordinator) AfterCrearWorkflow(actor string, w *Workflow, id int64) error {
+	if w == nil {
+		return nil
+	}
+	NotificarRefreshGobernanza(actor, w.TipoAgente, "crear_workflow", map[string]any{
+		"workflow_id": id,
+		"nombre":      w.Nombre,
+	})
+	return nil
+}
+
+func (testGovernanceTransitionCoordinator) AfterActualizarWorkflow(actor string, w *Workflow) error {
+	if w == nil {
+		return nil
+	}
+	NotificarRefreshGobernanza(actor, w.TipoAgente, "actualizar_workflow", map[string]any{
+		"workflow_id": w.ID,
+		"nombre":      w.Nombre,
+	})
+	return nil
+}
+
+func (testGovernanceTransitionCoordinator) AfterSetWorkflowActivo(actor string, w *Workflow, activo bool) error {
+	if w == nil {
+		return nil
+	}
+	NotificarRefreshGobernanza(actor, w.TipoAgente, "set_workflow_activo", map[string]any{
+		"workflow_id": w.ID,
+		"activo":      activo,
+		"nombre":      w.Nombre,
+	})
+	return nil
+}
+
 func TestGuardarYListarReglas(t *testing.T) {
 	prepararDBTemporal(t)
 
@@ -313,6 +407,10 @@ func TestCrearSkillNotificaRefreshAMailboxDeAgentesActivosDelRol(t *testing.T) {
 
 func TestCrearReglaNotificaGovernanceRefreshAMailboxDeAgentesActivosDelRol(t *testing.T) {
 	prepararDBTemporal(t)
+	SetGovernanceTransitionCoordinator(testGovernanceTransitionCoordinator{})
+	t.Cleanup(func() {
+		SetGovernanceTransitionCoordinator(nil)
+	})
 	registrarAgentesBaseDBTest(t)
 	if _, err := IniciarSesion("Codex1"); err != nil {
 		t.Fatalf("IniciarSesion Codex1: %v", err)

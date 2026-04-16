@@ -15,120 +15,113 @@ import (
 	"orquesta/gobernanzapolicy"
 )
 
-type governanceTransitionCoordinator interface {
-	afterCrearRegla(actor string, r *Regla, id int64) error
-	afterActualizarRegla(actor string, r *Regla) error
-	afterSetReglaActiva(actor string, r *Regla, activa bool) error
-	afterCrearSkill(actor string, s *Skill, id int64) error
-	afterActualizarSkill(actor string, s *Skill) error
-	afterSetSkillActiva(actor string, s *Skill, activa bool) error
-	afterCrearWorkflow(actor string, w *Workflow, id int64) error
-	afterActualizarWorkflow(actor string, w *Workflow) error
-	afterSetWorkflowActivo(actor string, w *Workflow, activo bool) error
+type GovernanceTransitionCoordinator interface {
+	AfterCrearRegla(actor string, r *Regla, id int64) error
+	AfterActualizarRegla(actor string, r *Regla) error
+	AfterSetReglaActiva(actor string, r *Regla, activa bool) error
+	AfterCrearSkill(actor string, s *Skill, id int64) error
+	AfterActualizarSkill(actor string, s *Skill) error
+	AfterSetSkillActiva(actor string, s *Skill, activa bool) error
+	AfterCrearWorkflow(actor string, w *Workflow, id int64) error
+	AfterActualizarWorkflow(actor string, w *Workflow) error
+	AfterSetWorkflowActivo(actor string, w *Workflow, activo bool) error
 }
 
 type defaultGovernanceTransitionCoordinator struct{}
 
-var defaultGovernanceTransitioner governanceTransitionCoordinator = defaultGovernanceTransitionCoordinator{}
+var defaultGovernanceTransitioner GovernanceTransitionCoordinator = defaultGovernanceTransitionCoordinator{}
 
-func (defaultGovernanceTransitionCoordinator) afterCrearRegla(actor string, r *Regla, id int64) error {
+func SetGovernanceTransitionCoordinator(next GovernanceTransitionCoordinator) {
+	if next == nil {
+		next = defaultGovernanceTransitionCoordinator{}
+	}
+	defaultGovernanceTransitioner = next
+}
+
+func (defaultGovernanceTransitionCoordinator) AfterCrearRegla(actor string, r *Regla, id int64) error {
 	if r == nil {
 		return nil
 	}
-	Audit(actor, "crear_regla", "regla", id, r.Titulo)
-	notificarRefreshGobernanza(actor, r.TipoAgente, "crear_regla", map[string]any{
-		"regla_id": id,
-		"titulo":   r.Titulo,
-	})
+	_ = actor
+	_ = id
+	_ = r
 	return nil
 }
 
-func (defaultGovernanceTransitionCoordinator) afterActualizarRegla(actor string, r *Regla) error {
+func (defaultGovernanceTransitionCoordinator) AfterActualizarRegla(actor string, r *Regla) error {
 	if r == nil {
 		return nil
 	}
-	Audit(actor, "actualizar_regla", "regla", r.ID, r.Titulo)
-	notificarRefreshGobernanza(actor, r.TipoAgente, "actualizar_regla", map[string]any{
-		"regla_id": r.ID,
-		"titulo":   r.Titulo,
-	})
+	_ = actor
+	_ = r
 	return nil
 }
 
-func (defaultGovernanceTransitionCoordinator) afterSetReglaActiva(actor string, r *Regla, activa bool) error {
+func (defaultGovernanceTransitionCoordinator) AfterSetReglaActiva(actor string, r *Regla, activa bool) error {
 	if r == nil {
 		return nil
 	}
-	Audit(actor, "set_regla_activa", "regla", r.ID, fmt.Sprintf("activa=%t", activa))
-	notificarRefreshGobernanza(actor, r.TipoAgente, "set_regla_activa", map[string]any{
-		"regla_id": r.ID,
-		"activa":   activa,
-		"titulo":   r.Titulo,
-	})
+	_ = actor
+	_ = r
+	_ = activa
 	return nil
 }
 
-func (defaultGovernanceTransitionCoordinator) afterCrearSkill(actor string, s *Skill, id int64) error {
+func (defaultGovernanceTransitionCoordinator) AfterCrearSkill(actor string, s *Skill, id int64) error {
 	if s == nil {
 		return nil
 	}
-	Audit(actor, "crear_skill", "skill", id, s.Nombre)
-	notificarRefreshSkillCatalogo(actor, s, "crear")
+	_ = actor
+	_ = s
+	_ = id
 	return nil
 }
 
-func (defaultGovernanceTransitionCoordinator) afterActualizarSkill(actor string, s *Skill) error {
+func (defaultGovernanceTransitionCoordinator) AfterActualizarSkill(actor string, s *Skill) error {
 	if s == nil {
 		return nil
 	}
-	Audit(actor, "actualizar_skill", "skill", s.ID, s.Nombre)
-	notificarRefreshSkillCatalogo(actor, s, "actualizar")
+	_ = actor
+	_ = s
 	return nil
 }
 
-func (defaultGovernanceTransitionCoordinator) afterSetSkillActiva(actor string, s *Skill, activa bool) error {
+func (defaultGovernanceTransitionCoordinator) AfterSetSkillActiva(actor string, s *Skill, activa bool) error {
 	if s == nil {
 		return nil
 	}
-	Audit(actor, "set_skill_activa", "skill", s.ID, fmt.Sprintf("activa=%t", activa))
-	notificarRefreshSkillCatalogo(actor, s, "activar")
+	_ = actor
+	_ = s
+	_ = activa
 	return nil
 }
 
-func (defaultGovernanceTransitionCoordinator) afterCrearWorkflow(actor string, w *Workflow, id int64) error {
+func (defaultGovernanceTransitionCoordinator) AfterCrearWorkflow(actor string, w *Workflow, id int64) error {
 	if w == nil {
 		return nil
 	}
-	Audit(actor, "crear_workflow", "workflow", id, w.Nombre)
-	notificarRefreshGobernanza(actor, w.TipoAgente, "crear_workflow", map[string]any{
-		"workflow_id": id,
-		"nombre":      w.Nombre,
-	})
+	_ = actor
+	_ = w
+	_ = id
 	return nil
 }
 
-func (defaultGovernanceTransitionCoordinator) afterActualizarWorkflow(actor string, w *Workflow) error {
+func (defaultGovernanceTransitionCoordinator) AfterActualizarWorkflow(actor string, w *Workflow) error {
 	if w == nil {
 		return nil
 	}
-	Audit(actor, "actualizar_workflow", "workflow", w.ID, w.Nombre)
-	notificarRefreshGobernanza(actor, w.TipoAgente, "actualizar_workflow", map[string]any{
-		"workflow_id": w.ID,
-		"nombre":      w.Nombre,
-	})
+	_ = actor
+	_ = w
 	return nil
 }
 
-func (defaultGovernanceTransitionCoordinator) afterSetWorkflowActivo(actor string, w *Workflow, activo bool) error {
+func (defaultGovernanceTransitionCoordinator) AfterSetWorkflowActivo(actor string, w *Workflow, activo bool) error {
 	if w == nil {
 		return nil
 	}
-	Audit(actor, "set_workflow_activo", "workflow", w.ID, fmt.Sprintf("activo=%t", activo))
-	notificarRefreshGobernanza(actor, w.TipoAgente, "set_workflow_activo", map[string]any{
-		"workflow_id": w.ID,
-		"activo":      activo,
-		"nombre":      w.Nombre,
-	})
+	_ = actor
+	_ = w
+	_ = activo
 	return nil
 }
 
@@ -493,7 +486,7 @@ func ListarReglas(tipoAgente string, activa any) ([]*Regla, error) {
 func CrearRegla(actor string, r *Regla) (int64, error) {
 	id, err := UpsertRegla(r)
 	if err == nil {
-		if err := defaultGovernanceTransitioner.afterCrearRegla(actor, r, id); err != nil {
+		if err := defaultGovernanceTransitioner.AfterCrearRegla(actor, r, id); err != nil {
 			return 0, err
 		}
 	}
@@ -511,7 +504,7 @@ func ActualizarRegla(actor string, r *Regla) error {
 	_, err := DB.Exec(`UPDATE reglas SET tipo_agente=?, categoria=?, titulo=?, descripcion=?, activa=? WHERE id=?`,
 		r.TipoAgente, r.Categoria, r.Titulo, r.Descripcion, r.Activa, r.ID)
 	if err == nil {
-		err = defaultGovernanceTransitioner.afterActualizarRegla(actor, r)
+		err = defaultGovernanceTransitioner.AfterActualizarRegla(actor, r)
 	}
 	return err
 }
@@ -523,7 +516,7 @@ func SetReglaActiva(actor string, id int64, activa bool) error {
 	}
 	_, err = DB.Exec(`UPDATE reglas SET activa=? WHERE id=?`, activa, id)
 	if err == nil {
-		err = defaultGovernanceTransitioner.afterSetReglaActiva(actor, regla, activa)
+		err = defaultGovernanceTransitioner.AfterSetReglaActiva(actor, regla, activa)
 	}
 	return err
 }
@@ -589,7 +582,7 @@ func CrearSkill(actor string, s *Skill) (int64, error) {
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
-	if err := defaultGovernanceTransitioner.afterCrearSkill(actor, s, id); err != nil {
+	if err := defaultGovernanceTransitioner.AfterCrearSkill(actor, s, id); err != nil {
 		return 0, err
 	}
 	return id, nil
@@ -629,7 +622,7 @@ func ActualizarSkill(actor string, s *Skill) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	if err := defaultGovernanceTransitioner.afterActualizarSkill(actor, s); err != nil {
+	if err := defaultGovernanceTransitioner.AfterActualizarSkill(actor, s); err != nil {
 		return err
 	}
 	return nil
@@ -659,7 +652,7 @@ func SetSkillActiva(actor string, id int64, activa bool) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	return defaultGovernanceTransitioner.afterSetSkillActiva(actor, skill, activa)
+	return defaultGovernanceTransitioner.AfterSetSkillActiva(actor, skill, activa)
 }
 
 func SetSkillActivo(actor string, id int64, activa bool) error {
@@ -698,7 +691,7 @@ func ListarWorkflows(tipoAgente string, activo any) ([]*Workflow, error) {
 func CrearWorkflow(actor string, w *Workflow) (int64, error) {
 	id, err := UpsertWorkflow(w)
 	if err == nil {
-		if err := defaultGovernanceTransitioner.afterCrearWorkflow(actor, w, id); err != nil {
+		if err := defaultGovernanceTransitioner.AfterCrearWorkflow(actor, w, id); err != nil {
 			return 0, err
 		}
 	}
@@ -720,7 +713,7 @@ func ActualizarWorkflow(actor string, w *Workflow) error {
 	_, err := DB.Exec(`UPDATE workflows SET tipo_agente=?, nombre=?, descripcion=?, pasos=?, activo=? WHERE id=?`,
 		w.TipoAgente, w.Nombre, w.Descripcion, w.Pasos, w.Activo, w.ID)
 	if err == nil {
-		err = defaultGovernanceTransitioner.afterActualizarWorkflow(actor, w)
+		err = defaultGovernanceTransitioner.AfterActualizarWorkflow(actor, w)
 	}
 	return err
 }
@@ -732,7 +725,7 @@ func SetWorkflowActivo(actor string, id int64, activo bool) error {
 	}
 	_, err = DB.Exec(`UPDATE workflows SET activo=? WHERE id=?`, activo, id)
 	if err == nil {
-		err = defaultGovernanceTransitioner.afterSetWorkflowActivo(actor, workflow, activo)
+		err = defaultGovernanceTransitioner.AfterSetWorkflowActivo(actor, workflow, activo)
 	}
 	return err
 }

@@ -5,22 +5,33 @@ import (
 	"time"
 )
 
-type asignacionTransitionCoordinator interface {
-	afterActivarAsignacion(agente string, proyectoID int64, nota string) error
-	afterPausarAsignacion(agente string, proyectoID int64, nota string) error
+type AsignacionTransitionCoordinator interface {
+	AfterActivarAsignacion(agente string, proyectoID int64, nota string) error
+	AfterPausarAsignacion(agente string, proyectoID int64, nota string) error
 }
 
 type defaultAsignacionTransitionCoordinator struct{}
 
-var defaultAsignacionTransitioner asignacionTransitionCoordinator = defaultAsignacionTransitionCoordinator{}
+var defaultAsignacionTransitioner AsignacionTransitionCoordinator = defaultAsignacionTransitionCoordinator{}
 
-func (defaultAsignacionTransitionCoordinator) afterActivarAsignacion(agente string, proyectoID int64, nota string) error {
-	Audit(agente, "activar_asignacion", "proyecto", proyectoID, nota)
+func SetAsignacionTransitionCoordinator(next AsignacionTransitionCoordinator) {
+	if next == nil {
+		next = defaultAsignacionTransitionCoordinator{}
+	}
+	defaultAsignacionTransitioner = next
+}
+
+func (defaultAsignacionTransitionCoordinator) AfterActivarAsignacion(agente string, proyectoID int64, nota string) error {
+	_ = agente
+	_ = proyectoID
+	_ = nota
 	return nil
 }
 
-func (defaultAsignacionTransitionCoordinator) afterPausarAsignacion(agente string, proyectoID int64, nota string) error {
-	Audit(agente, "pausar_asignacion", "proyecto", proyectoID, nota)
+func (defaultAsignacionTransitionCoordinator) AfterPausarAsignacion(agente string, proyectoID int64, nota string) error {
+	_ = agente
+	_ = proyectoID
+	_ = nota
 	return nil
 }
 
@@ -66,7 +77,7 @@ func ActivarAsignacion(agente string, proyectoID int64, nota string) error {
 	if err = tx.Commit(); err != nil {
 		return err
 	}
-	if err = defaultAsignacionTransitioner.afterActivarAsignacion(agente, proyectoID, nota); err != nil {
+	if err = defaultAsignacionTransitioner.AfterActivarAsignacion(agente, proyectoID, nota); err != nil {
 		return err
 	}
 	return nil
@@ -89,7 +100,7 @@ func PausarAsignacion(agente string, proyectoID int64, nota string) error {
 	if err = tx.Commit(); err != nil {
 		return err
 	}
-	if err = defaultAsignacionTransitioner.afterPausarAsignacion(agente, proyectoID, nota); err != nil {
+	if err = defaultAsignacionTransitioner.AfterPausarAsignacion(agente, proyectoID, nota); err != nil {
 		return err
 	}
 	return nil
