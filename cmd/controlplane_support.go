@@ -6803,14 +6803,19 @@ func procesarAgentesDegradadosAutonomiaBatchDetallado() (runtimeProcessDegradado
 	}
 	resumen.Count += redistribuidas
 	agentesSinRuntime := agentesSinRuntimeReactivables(rows, tareasActivasPorAgente, tareasBloqueadasPorAgente)
-	reactivadosSinRuntime, err := procesarReactivacionAgentesSinRuntimeBatch(rows, tareasActivasPorAgente, tareasBloqueadasPorAgente)
+	reactivadosSinRuntime, err := procesarReactivacionAgentesSinRuntimeBatch(
+		rows,
+		filtrarTareasActivasReactivacionSinRuntimeBatch(tareasActivasPorAgente),
+		filtrarTareasBloqueadasReactivacionSinRuntimeBatch(rows, tareasBloqueadasPorAgente, openTasksProjected),
+	)
 	if err != nil {
 		return resumen, err
 	}
 	resumen.ReactivatedWithoutRuntime = reactivadosSinRuntime
 	resumen.Count += reactivadosSinRuntime
 	if reactivadosSinRuntime > 0 {
-		rows, err = refrescarRowsCompactPorAgente(rows, agentesSinRuntime)
+		_ = agentesSinRuntime
+		rows, err = agentesService.BuildPanelRows()
 		if err != nil {
 			return resumen, err
 		}
@@ -7838,6 +7843,7 @@ func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasAct
 	}
 	procesadas := 0
 	proyectosByID := map[int64]*db.Proyecto{}
+	now := time.Now().UTC()
 	for _, row := range rows {
 		if row.Agente == nil {
 			continue
@@ -7854,7 +7860,7 @@ func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasAct
 		if agente == "" {
 			continue
 		}
-		if row.MailboxPending <= 0 && len(tareasActivasPorAgente[agente]) == 0 && len(tareasBloqueadasPorAgente[agente]) == 0 {
+		if !rowTieneTrabajoReactivableSinRuntime(row, tareasActivasPorAgente[agente], tareasBloqueadasPorAgente[agente], bloqueosPorTarea, now) {
 			continue
 		}
 		if disponible, _, err := autonomiaCuentaCompartidaDisponible(agente); err != nil {
@@ -7900,6 +7906,100 @@ func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasAct
 		procesadas += 1 + desbloqueadas
 	}
 	return procesadas, nil
+}
+
+func filtrarTareasActivasReactivacionSinRuntimeBatch(tareasActivasPorAgente map[string][]*db.Tarea) map[string][]*db.Tarea {
+	if len(tareasActivasPorAgente) == 0 {
+		return tareasActivasPorAgente
+	}
+	out := make(map[string][]*db.Tarea, len(tareasActivasPorAgente))
+	for agente, tareas := range tareasActivasPorAgente {
+		for _, tarea := range tareas {
+			if tarea == nil || !tareaDBTieneContratoPremiumAcotado(tarea) {
+				continue
+			}
+			out[agente] = append(out[agente], tarea)
+		}
+	}
+	return out
+}
+
+func filtrarTareasBloqueadasReactivacionSinRuntimeBatch(rows []agentesapp.Row, tareasBloqueadasPorAgente map[string][]*db.Tarea, openTasksProjected map[string]int) map[string][]*db.Tarea {
+	if len(tareasBloqueadasPorAgente) == 0 {
+		return tareasBloqueadasPorAgente
+	}
+	out := make(map[string][]*db.Tarea, len(tareasBloqueadasPorAgente))
+	for agente, tareas := range tareasBloqueadasPorAgente {
+		for _, tarea := range tareas {
+			if tarea == nil {
+				continue
+			}
+			actual, err := db.GetTarea(tarea.ID)
+			if err != nil || actual == nil || actual.Agente == nil {
+				continue
+			}
+			if !strings.EqualFold(strings.TrimSpace(*actual.Agente), agente) || actual.Estado != db.EstadoBloqueada {
+				continue
+			}
+			if relevo := seleccionarRelevoAutonomiaBloqueada(rows, openTasksProjected, actual, agente); relevo != "" {
+				continue
+			}
+			out[agente] = append(out[agente], tarea)
+		}
+	}
+	return out
+}
+
+func rowTieneTrabajoReactivableSinRuntime(row agentesapp.Row, tareasActivas []*db.Tarea, tareasBloqueadas []*db.Tarea, bloqueosPorTarea map[int64]db.ResumenBloqueo, now time.Time) bool {
+	if row.MailboxPending > 0 {
+		return true
+	}
+	agente := ""
+	if row.Agente != nil {
+		agente = strings.TrimSpace(row.Agente.Nombre)
+	}
+	proyectoID := valorProyectoID(rowProyectoIDPreferido(row))
+	for _, tarea := range tareasActivas {
+		if tareaTieneTrabajoReactivableSinRuntime(tarea, agente, proyectoID, false, bloqueosPorTarea, now) {
+			return true
+		}
+	}
+	for _, tarea := range tareasBloqueadas {
+		if tareaTieneTrabajoReactivableSinRuntime(tarea, agente, proyectoID, true, bloqueosPorTarea, now) {
+			return true
+		}
+	}
+	return false
+}
+
+func tareaTieneTrabajoReactivableSinRuntime(tarea *db.Tarea, agente string, proyectoID int64, blocked bool, bloqueosPorTarea map[int64]db.ResumenBloqueo, now time.Time) bool {
+	if tarea == nil || tarea.ID <= 0 {
+		return false
+	}
+	actual, err := db.GetTarea(tarea.ID)
+	if err != nil || actual == nil || actual.Agente == nil {
+		return false
+	}
+	if agente != "" && !strings.EqualFold(strings.TrimSpace(*actual.Agente), agente) {
+		return false
+	}
+	if proyectoID > 0 && valorProyectoID(actual.ProyectoID) != proyectoID {
+		return false
+	}
+	if degradedTaskRecentlyAutoReassigned(actual, now) {
+		return false
+	}
+	if blocked {
+		if actual.Estado != db.EstadoBloqueada {
+			return false
+		}
+		bloqueo, ok := bloqueosPorTarea[actual.ID]
+		if !ok {
+			return false
+		}
+		return !agentesapp.BloqueoAutonomiaRequiereIntervencion(agente, proyectoID, true, nil, nil, strings.TrimSpace(bloqueo.Motivo))
+	}
+	return actual.Estado == db.EstadoAsignada || actual.Estado == db.EstadoEnProgreso
 }
 
 func desbloquearTareasBloqueadasRecuperablesSinRuntime(agente string, proyectoID int64, tareas []*db.Tarea, bloqueosPorTarea map[int64]db.ResumenBloqueo) (int, error) {
@@ -10614,11 +10714,11 @@ func runtimeRecuperacionSesionObjetivo(sesion *db.Sesion) (*db.RuntimeHandle, *d
 	agente := strings.TrimSpace(sesion.Agente)
 	proyectoID := sesion.ProyectoID
 	var (
-		handle       *db.RuntimeHandle
-		sesionHandle *db.RuntimeHandle
-		runtime      *db.RuntimeInstance
+		handle         *db.RuntimeHandle
+		sesionHandle   *db.RuntimeHandle
+		runtime        *db.RuntimeInstance
 		runtimeCargado bool
-		err          error
+		err            error
 	)
 	if sesion.ID > 0 {
 		sesionHandle, err = db.GetRuntimeHandleBySesionID(sesion.ID)
