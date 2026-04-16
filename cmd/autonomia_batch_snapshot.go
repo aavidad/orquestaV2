@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"orquesta/autonomiapolicy"
 	"orquesta/db"
 )
 
@@ -353,7 +354,7 @@ func (s *autonomiaBatchSnapshot) selectSupervisor(proyectoID int64) (*db.Agente,
 			agente:    agente,
 			preferred: preferred != "" && strings.EqualFold(strings.TrimSpace(agente.Nombre), preferred),
 			activo:    activo,
-			score:     autonomiaSupervisorRoleScoreLocal(agente.Rol),
+			score:     autonomiapolicy.SupervisorRoleScore(agente.Rol),
 		})
 		return nil
 	}
@@ -491,21 +492,6 @@ func (s *autonomiaBatchSnapshot) autonomiaActivoEnProyecto(agente string, proyec
 	activo := handle != nil
 	s.activeHandleByAgentProject[key] = activo
 	return activo, nil
-}
-
-func autonomiaSupervisorRoleScoreLocal(role string) int {
-	switch strings.ToLower(strings.TrimSpace(role)) {
-	case "supervisor", "orquestador":
-		return 0
-	case "admin":
-		return 1
-	case "programador":
-		return 2
-	case "revisor", "reviewer":
-		return 3
-	default:
-		return 4
-	}
 }
 
 func agentProjectCacheKey(agente string, proyectoID int64) string {
