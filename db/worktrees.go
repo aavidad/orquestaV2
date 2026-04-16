@@ -126,13 +126,12 @@ func (CoordinationWorktreeSQLRepository) List(filter coordinacion.WorktreeFilter
 			filtradas = append(filtradas, worktree)
 			continue
 		}
-		proyecto, getErr := GetProyecto(jsonNumber(worktree.ProjectID))
+		proyecto, getErr := GetProyectoConRutaEfectiva(jsonNumber(worktree.ProjectID), "")
 		if getErr != nil || proyecto == nil {
 			filtradas = append(filtradas, worktree)
 			continue
 		}
-		rutaProyectoEfectiva := RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, "")
-		if coordinacion.ShouldIncludeWorktreeForListing(worktree.State, worktree.Path, rutaProyectoEfectiva) {
+		if coordinacion.ShouldIncludeWorktreeForListing(worktree.State, worktree.Path, proyecto.RutaAbs) {
 			filtradas = append(filtradas, worktree)
 		}
 	}
