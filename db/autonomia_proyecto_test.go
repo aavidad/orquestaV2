@@ -175,6 +175,67 @@ func TestAutonomiaProyectoReservaYCapacidad(t *testing.T) {
 	if admite {
 		t.Fatalf("max_workers=1 deberia bloquear un worker adicional")
 	}
+
+	proyectoPropioID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador-propio",
+		Nombre:  "Orquestador Propio",
+		RutaAbs: filepath.Join(tmp, "orquestador-propio"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto propio: %v", err)
+	}
+	if _, err := UpsertProyectoAutonomia(&ProyectoAutonomia{
+		ProyectoID:      proyectoPropioID,
+		Enabled:         true,
+		MaxWorkers:      1,
+		EstadoAutonomia: AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia propio: %v", err)
+	}
+	if err := ActivarAsignacion("Codex3", proyectoPropioID, "worker propio"); err != nil {
+		t.Fatalf("activar worker propio: %v", err)
+	}
+	admite, err = proyectoAdmiteWorkerAutonomiaParaAgente(proyectoPropioID, "Codex3")
+	if err != nil {
+		t.Fatalf("proyectoAdmiteWorkerAutonomiaParaAgente propio: %v", err)
+	}
+	if !admite {
+		t.Fatalf("la propia asignacion activa no deberia contarse dos veces")
+	}
+
+	proyectoLlenoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador-lleno",
+		Nombre:  "Orquestador Lleno",
+		RutaAbs: filepath.Join(tmp, "orquestador-lleno"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto lleno: %v", err)
+	}
+	if _, err := UpsertProyectoAutonomia(&ProyectoAutonomia{
+		ProyectoID:      proyectoLlenoID,
+		Enabled:         true,
+		MaxWorkers:      1,
+		EstadoAutonomia: AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia lleno: %v", err)
+	}
+	if err := ActivarAsignacion("Codex3", proyectoLlenoID, "worker propio lleno"); err != nil {
+		t.Fatalf("activar worker propio lleno: %v", err)
+	}
+	if err := ActivarAsignacion("Codex4", proyectoLlenoID, "worker extra lleno"); err != nil {
+		t.Fatalf("activar worker extra lleno: %v", err)
+	}
+	admite, err = proyectoAdmiteWorkerAutonomiaParaAgente(proyectoLlenoID, "Codex3")
+	if err != nil {
+		t.Fatalf("proyectoAdmiteWorkerAutonomiaParaAgente lleno: %v", err)
+	}
+	if admite {
+		t.Fatalf("proyecto lleno deberia bloquear aunque el agente ya tenga asignacion activa")
+	}
 }
 
 func TestProyectoAutonomiaUpsertPreservaTimestampsOperativosSiNoSeInforman(t *testing.T) {

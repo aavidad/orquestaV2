@@ -115,6 +115,7 @@ func TestDBNoIntroduceDependenciasInternasFueraDeLaFronteraPermitida(t *testing.
 		"orquesta/autonomiapolicy": {
 			required: true,
 			files: map[string]struct{}{
+				"autonomia_proyecto.go":             {},
 				"autonomia_supervisor_operativo.go": {},
 			},
 		},

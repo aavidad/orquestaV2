@@ -32,6 +32,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - `3b6d513` completo el grupo previo en runtime (`runtimepolicy`) para decisiones de `runtime_handle` de borde
 - `de6239a` completa el corte de policy legacy TMUX (`RuntimeHandleUsaLegacyCLITMUXPreferred`, `RuntimeHandleUsaLegacyProcessPTY`) en `runtimepolicy`
 - `a935629` consolida la compactación de transcript/prompt bootstrap en `runtimepolicy` y ajusta wrappers para mantener comportamiento en frontera existente
+- `b33a3ec` instala coordinadores de transición de tarea/asignación por defecto en startup (`cmd`) para estabilizar el flujo de coordinadores y facilitar extracción con wrappers finos
 - corte adicional en runtime: dejar `runtimesapp` con wrapper fino en `runtimeHandleEsCandidatoLegacyATMUX` delegando en `runtimepolicy.RuntimeHandleIsLegacyControlPlane`
 - corte adicional en runtime: mover la regla de estados que requieren `SyncSupervisedRuntimeHandle` fresca a `runtimepolicy.RuntimeHandleNeedsFreshSync`, dejando `runtimesapp` como delegador
 - corte adicional en runtime: mover la detección de falta de sesión tmux válida (`TMUXSessionExistsMetadata`) a `runtimepolicy.RuntimeHandleTMUXSessionMissing`
@@ -47,14 +48,24 @@ Estado del frente seguro:
 - `db/asignaciones.go` fue endurecido con seam de transición más finito, pero aún conserva decisiones funcionales asociadas a transición de tareas
 - el frente `presupuestos/governanza` ha permitido sacar policy pura fuera de `db` sin tocar `cmd/`
 - en `presupuestos`, `db` ya conserva sobre todo carga/configuración/persistencia; la policy de TTL, cuota, scoring y evaluación efectiva vive fuera
+- `db/runtime_transcript.go`, `db/runtime_bootstrap_prompt.go` y `db/runtimes.go` contienen menos decisiones tras las extracciones a `runtimepolicy`, pero aún dependen de reglas de persistencia+orquestación cruzadas en `controlplane_entities.go`
+
+Riesgos abiertos:
+
+- Riesgo de regresión funcional por separación de coordinadores si el arranque no queda protegido para todos los bins/entrypoints.
+- Riesgo de semantic leakage si `runtimepolicy` empieza a replicar estado de control (más que policy pura) en futuras extracciones.
+- Riesgo de estabilidad de transición en `controlplane_entities.go` por contratos implícitos con `runtimesapp` y `db` en `session_resume`/`mailbox` durante cambios concurrentes.
+- Riesgo de backlog de pruebas: faltan tests de equivalencia específicos para ruta de `CrearSkillNotificaRefreshAMailboxDeAgentesDelRol` en escenarios con coordinadores instalados por defecto.
+- Riesgo de coordinación: `controlplane_entities.go` y `db/asignaciones.go` siguen siendo los puntos de mayor fricción para merge si se pisan fronteras de escritura.
 
 Siguiente corte recomendado para Orquesta (orden):
 
 - [ ] 1) Congelar fronteras y activar la regla de no regresión en `runtimepolicy` vs `db/controlplane_entities.go` para los casos `bootstrap/resume/session_resume`
-- [ ] 2) Cerrar el primer tramo de `sesiones.go`, `proyectos.go`, `worktrees.go`, `project_query_helpers.go` mediante seam mínimo: carga/persistencia en `db`, selección efectiva en `coordinacion`
-- [ ] 3) Validar `db/reglas_test.go` y fixtures con test de equivalencia en rutas de `CrearSkillNotificaRefreshAMailboxDeAgentesDelRol`
-- [ ] 4) Repartir los cambios de `db/tareas.go` y `db/asignaciones.go` en wrappers finos y mover transición funcional restante a `tareasapp`
-- [ ] 5) Cerrar un ciclo de smoke en runtime/transcript + bootstrap con test de frontera de imports (`db/test_architecture_dependencies_test.go`) y estado de fallback
+- [ ] 2) Cerrar un bloque `db/controlplane_entities.go` de runtime/bootstrap (mailbox/session_resume/receipt) con wrappers explícitos y sin política nueva en capa db
+- [ ] 3) Cerrar `sesiones.go`, `proyectos.go`, `worktrees.go`, `project_query_helpers.go` con seam mínimo: selección efectiva fuera de `db`
+- [ ] 4) Bloquear regresión de transición con test de equivalencia de `CrearSkillNotificaRefreshAMailboxDeAgentesDelRol` (fixture estable, startup de coordinadores por defecto)
+- [ ] 5) Cerrar seam de transición final en `db/tareas.go` + `db/asignaciones.go` migrando reglas funcionales remanentes a `tareasapp`
+- [ ] 6) Reforzar frontera en `db/test_architecture_dependencies_test.go` para imports y wrappers tras cada corte
 
 ## Inventario Actual
 

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -127,7 +126,7 @@ func BuildLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan *runtim
 }
 
 func buildCompactLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan *runtimeagente.LaunchPlan, workingDir string, tareas []*Tarea) string {
-	if planLooksLikeOllamaCLI(plan) {
+	if runtimepolicy.RuntimeLaunchBootstrapPromptLooksLikeOllamaCLI(plan) {
 		return buildCompactLaunchBootstrapPromptOllama(agente, proyecto, workingDir, tareas)
 	}
 	lines := []string{
@@ -155,12 +154,31 @@ func buildCompactLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan 
 			"Cuando llegue una microtarea, ejecuta solo ese cambio y devuelve evidencia breve; no hagas trabajo adicional.",
 		)
 	}
-	if resumenTareas := resumirTareasBootstrapCompacto(tareas); resumenTareas != "" {
+	if resumenTareas := runtimepolicy.RuntimeLaunchBootstrapPromptCompactTaskSummary(runtimeBootstrapCompactTasks(tareas)); resumenTareas != "" {
 		lines = append(lines, resumenTareas)
 	}
 	lines = append(lines, "Empieza por la tarea asignada y evita tocar BD local salvo diagnóstico o recuperación.")
 	lines = append(lines, "Si la acción es destructiva, irreversible o de riesgo alto, consulta antes.")
 	return strings.Join(lines, "\n")
+}
+
+func runtimeBootstrapCompactTasks(tareas []*Tarea) []runtimepolicy.RuntimeLaunchBootstrapTask {
+	if len(tareas) == 0 {
+		return nil
+	}
+	states := make([]runtimepolicy.RuntimeLaunchBootstrapTask, 0, len(tareas))
+	for _, tarea := range tareas {
+		if tarea == nil {
+			continue
+		}
+		states = append(states, runtimepolicy.RuntimeLaunchBootstrapTask{
+			ID:          tarea.ID,
+			Estado:      strings.TrimSpace(string(tarea.Estado)),
+			Titulo:      strings.TrimSpace(tarea.Titulo),
+			Descripcion: strings.TrimSpace(tarea.Descripcion),
+		})
+	}
+	return states
 }
 
 func runtimeBootstrapCompactTaskStates(tareas []*Tarea) []string {
@@ -187,201 +205,6 @@ func buildCompactLaunchBootstrapPromptOllama(agente *Agente, proyecto *Proyecto,
 		"SI_BLOQUEO=BLOQUEO: <motivo concreto>",
 	}
 	return strings.Join(lines, "\n")
-}
-
-func resumirTareasBootstrapCompacto(tareas []*Tarea) string {
-	if len(tareas) == 0 {
-		return "No hay una tarea activa única; consulta Orquesta antes de desviarte."
-	}
-	for _, tarea := range tareas {
-		if tarea == nil {
-			continue
-		}
-		switch tarea.Estado {
-		case TareaAsignada, TareaEnProgreso, TareaBloqueada:
-			partes := []string{fmt.Sprintf("Tarea activa: #%d [%s] %s.", tarea.ID, tarea.Estado, strings.TrimSpace(tarea.Titulo))}
-			if descripcion := resumirDescripcionTareaBootstrapCompacto(strings.TrimSpace(tarea.Descripcion)); descripcion != "" {
-				partes = append(partes, "Alcance inmediato: "+descripcion+".")
-			}
-			return strings.Join(partes, " ")
-		}
-	}
-	return "No hay una tarea activa única; consulta Orquesta antes de desviarte."
-}
-
-func resumirDescripcionTareaBootstrapCompacto(raw string) string {
-	raw = strings.Join(strings.Fields(strings.TrimSpace(raw)), " ")
-	if raw == "" {
-		return ""
-	}
-	raw = strings.TrimSpace(strings.TrimRight(raw, ".;"))
-	const maxRunes = 360
-	prioritized := resumirDescripcionTareaBootstrapPrioritaria(raw, maxRunes)
-	if prioritized != "" {
-		return prioritized
-	}
-	runes := []rune(raw)
-	if len(runes) <= maxRunes {
-		return raw
-	}
-	return string(runes[:maxRunes-1]) + "…"
-}
-
-func resumirDescripcionTareaBootstrapPrioritaria(raw string, maxRunes int) string {
-	if maxRunes <= 0 {
-		return ""
-	}
-	clauses := splitBootstrapTaskClauses(raw)
-	if len(clauses) == 0 {
-		return ""
-	}
-	priorityMatchers := []string{
-		"simbolos foco:",
-		"write-set",
-		"write_set",
-		"tests minimos",
-		"tests mínimos",
-		"regla arquitectonica de este frente:",
-		"regla arquitectónica de este frente:",
-	}
-	seen := map[string]struct{}{}
-	selected := make([]string, 0, len(clauses))
-	appendIfFits := func(clause string) bool {
-		clause = compactarBootstrapTaskClause(strings.TrimSpace(strings.TrimRight(clause, ".;")))
-		if clause == "" {
-			return false
-		}
-		if _, ok := seen[clause]; ok {
-			return true
-		}
-		candidate := clause
-		if len(selected) > 0 {
-			candidate = strings.Join(append(append([]string(nil), selected...), clause), ". ")
-		}
-		if len([]rune(candidate)) > maxRunes {
-			return false
-		}
-		selected = append(selected, clause)
-		seen[clause] = struct{}{}
-		return true
-	}
-	for _, matcher := range priorityMatchers {
-		for _, clause := range clauses {
-			lower := strings.ToLower(strings.TrimSpace(clause))
-			if !strings.Contains(lower, matcher) {
-				continue
-			}
-			if !appendIfFits(clause) {
-				break
-			}
-		}
-	}
-	if len(selected) == 0 {
-		return ""
-	}
-	resumen := strings.Join(selected, ". ")
-	resumen = strings.TrimSpace(strings.TrimRight(resumen, ".;"))
-	if resumen == "" {
-		return ""
-	}
-	return resumen
-}
-
-func compactarBootstrapTaskClause(clause string) string {
-	clause = strings.TrimSpace(strings.TrimRight(clause, ".;"))
-	if clause == "" {
-		return ""
-	}
-	lower := strings.ToLower(clause)
-	if strings.HasPrefix(lower, "tests minimos") || strings.HasPrefix(lower, "tests mínimos") {
-		clause = strings.Replace(clause, "Tests minimos del slice:", "Tests minimos:", 1)
-		clause = strings.Replace(clause, "Tests mínimos del slice:", "Tests mínimos:", 1)
-		clause = strings.ReplaceAll(clause, " -count=1", "")
-		clause = strings.ReplaceAll(clause, " y go test ", " ; go test ")
-		clause = strings.Join(strings.Fields(clause), " ")
-	}
-	return clause
-}
-
-func splitBootstrapTaskClauses(raw string) []string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-	raw = strings.ReplaceAll(raw, "\n", ". ")
-	partes := strings.Split(raw, ". ")
-	out := make([]string, 0, len(partes))
-	for _, parte := range partes {
-		parte = strings.TrimSpace(strings.TrimRight(parte, ".;"))
-		if parte == "" {
-			continue
-		}
-		out = append(out, parte)
-	}
-	return out
-}
-
-func planLooksLikeOrchestratedAgentCLI(plan *runtimeagente.LaunchPlan) bool {
-	if plan == nil {
-		return false
-	}
-	if !strings.EqualFold(strings.TrimSpace(plan.Driver), "cli") {
-		return false
-	}
-	parts := make([]string, 0, 1+len(plan.Args))
-	if cmd := strings.ToLower(strings.TrimSpace(plan.Comando)); cmd != "" {
-		parts = append(parts, cmd)
-	}
-	for _, arg := range plan.Args {
-		arg = strings.ToLower(strings.TrimSpace(arg))
-		if arg != "" {
-			parts = append(parts, arg)
-		}
-	}
-	for _, part := range parts {
-		base := strings.ToLower(strings.TrimSpace(filepath.Base(part)))
-		if strings.Contains(part, "codex-perfil") || strings.Contains(part, "claude-perfil") || strings.Contains(part, "gemini-perfil") ||
-			strings.Contains(base, "codex-perfil") || strings.Contains(base, "claude-perfil") || strings.Contains(base, "gemini-perfil") {
-			return true
-		}
-		if part == "codex" || part == "claude" || part == "gemini" || part == "ollama" ||
-			base == "codex" || base == "claude" || base == "gemini" || base == "ollama" {
-			return true
-		}
-		if strings.Contains(part, "ollama-cli") || strings.Contains(part, "ollama-perfil") ||
-			strings.Contains(base, "ollama-cli") || strings.Contains(base, "ollama-perfil") {
-			return true
-		}
-	}
-	return false
-}
-
-func planLooksLikeOllamaCLI(plan *runtimeagente.LaunchPlan) bool {
-	if plan == nil {
-		return false
-	}
-	parts := make([]string, 0, 1+len(plan.Args))
-	if cmd := strings.ToLower(strings.TrimSpace(plan.Comando)); cmd != "" {
-		parts = append(parts, cmd)
-	}
-	for _, arg := range plan.Args {
-		arg = strings.ToLower(strings.TrimSpace(arg))
-		if arg != "" {
-			parts = append(parts, arg)
-		}
-	}
-	for _, part := range parts {
-		base := strings.ToLower(strings.TrimSpace(filepath.Base(part)))
-		if part == "ollama" || base == "ollama" ||
-			strings.Contains(part, "ollama-cli") || strings.Contains(part, "ollama-perfil") ||
-			strings.Contains(base, "ollama-cli") || strings.Contains(base, "ollama-perfil") {
-			return true
-		}
-	}
-	if strings.Contains(strings.ToLower(strings.TrimSpace(plan.RemoteConfigJSON)), "ollama") {
-		return true
-	}
-	return false
 }
 
 func bootstrapPromptDebugf(format string, args ...any) {

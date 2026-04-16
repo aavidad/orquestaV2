@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"orquesta/autonomiapolicy"
 	"orquesta/planificadorpolicy"
 	"strings"
 	"time"
@@ -573,6 +574,8 @@ func proyectoAdmiteWorkerAutonomiaParaAgente(proyectoID int64, agente string) (b
 	if err != nil {
 		return false, err
 	}
+	selfHasActiveAssignment := false
+	selfIsReserved := false
 	agente = strings.TrimSpace(agente)
 	if agente != "" {
 		estado := AsignacionActiva
@@ -585,16 +588,21 @@ func proyectoAdmiteWorkerAutonomiaParaAgente(proyectoID int64, agente string) (b
 			return false, err
 		}
 		if len(asignaciones) > 0 {
+			selfHasActiveAssignment = true
 			reservado, _, err := agenteReservadoAutonomiaProyecto(agente, proyectoID)
 			if err != nil {
 				return false, err
 			}
-			if !reservado && workers > 0 {
-				workers--
-			}
+			selfIsReserved = reservado
 		}
 	}
-	return workers < policy.MaxWorkers, nil
+	return autonomiapolicy.ProjectAdmitsWorkerAutonomy(
+		policy.Enabled,
+		policy.MaxWorkers,
+		workers,
+		selfHasActiveAssignment,
+		selfIsReserved,
+	), nil
 }
 
 func proyectoAdmiteWorkerAutonomia(proyectoID int64) (bool, error) {
