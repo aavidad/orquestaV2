@@ -10691,6 +10691,13 @@ func reactivarAgenteTrasReanimacionConMotivo(agente, motivo string) error {
 	if agente == "" {
 		return nil
 	}
+	infoAgente, err := db.GetAgente(agente)
+	if err != nil {
+		return err
+	}
+	if infoAgente == nil || !infoAgente.Habilitado {
+		return nil
+	}
 	motivo = strings.TrimSpace(motivo)
 	if motivo == "" {
 		motivo = "reanimacion_automatica"

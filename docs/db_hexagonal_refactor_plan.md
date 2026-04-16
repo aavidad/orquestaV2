@@ -59,6 +59,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: la autonomía trata una `pause` reciente ya completada como estado satisfecho para no reencolar pausas duplicadas en loops de cuota y reducir calor innecesario del daemon
 - corte operativo adicional fuera de `db`: cuando una reanimación sigue bloqueada por cuota visible, Orquesta cancela `start/resume/handoff` vivos asociados a esa reanimación para evitar relanzamientos en bucle
 - corte operativo adicional fuera de `db`: `status` ya filtra tareas y agentes deshabilitados del pool visible; un agente retirado no debe seguir apareciendo en `En progreso ahora mismo`, `Retenidas por cuota` ni en el bloque visible de cuota solo por arrastre de snapshot
+- corte operativo adicional fuera de `db`: la entrada de reactivación automática ahora vuelve a comprobar `habilitado` antes de encolar `start/resume/handoff`, evitando reanimaciones residuales de agentes retirados aunque la llamada llegue por una ruta tardía
 
 Estado del frente seguro:
 

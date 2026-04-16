@@ -7011,6 +7011,57 @@ func TestReactivarAgenteTrasReanimacionOmitePoolLocalCompartidoSinCapacidad(t *t
 	}
 }
 
+func TestReactivarAgenteTrasReanimacionOmiteAgenteRetirado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("ClaudeRetirado", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if err := db.AgenteSetHabilitado("ClaudeRetirado", false); err != nil {
+		t.Fatalf("retirar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "No reactivar retirado",
+		Descripcion: "No debe encolar runtime orders",
+		ProyectoID:  &proyectoID,
+		Modulo:      "core",
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "ClaudeRetirado"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "ClaudeRetirado"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	if err := reactivarAgenteTrasReanimacion("ClaudeRetirado"); err != nil {
+		t.Fatalf("reactivar agente retirado: %v", err)
+	}
+
+	agente := "ClaudeRetirado"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar runtime orders para un agente retirado: %+v", orders)
+	}
+}
+
 func TestProcesarRuntimeMailboxInteractivoBatchOmiteHandlesSinInputInteractivo(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
@@ -12161,9 +12212,9 @@ func TestRuntimeMailboxObsoletaPorProgresoTareaActual(t *testing.T) {
 	before := base.Add(-time.Minute)
 
 	msgSinTareaID := &db.RuntimeMailboxMessage{
-		Kind:      "pipeline_local",
-		CreatedAt: base,
-		ToAgente:  "Codex1",
+		Kind:        "pipeline_local",
+		CreatedAt:   base,
+		ToAgente:    "Codex1",
 		PayloadJSON: `{}`,
 	}
 	msgConTareaID := &db.RuntimeMailboxMessage{
@@ -20289,10 +20340,10 @@ func TestPausaAutonomiaYaSatisfechaReconocePauseRecienteCompletada(t *testing.T)
 		t.Fatalf("marcar cuota: %v", err)
 	}
 	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
-		Agente:     "CodexPause",
-		ProyectoID: &proyectoID,
-		Tipo:       "pause",
-		Estado:     "completada",
+		Agente:      "CodexPause",
+		ProyectoID:  &proyectoID,
+		Tipo:        "pause",
+		Estado:      "completada",
 		PayloadJSON: `{"accion":"pause","motivo":"Cuota diaria agotada","por":"orquesta","proyecto":"orquestador"}`,
 	}); err != nil {
 		t.Fatalf("encolar pause: %v", err)
