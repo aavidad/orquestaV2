@@ -8,7 +8,6 @@ import (
 	"orquesta/runtimeagente"
 	"orquesta/runtimepolicy"
 	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -11286,7 +11285,7 @@ func runtimeHandleUsaCodexTTYInestable(meta map[string]any) bool {
 		stringFromMap(meta, "conector", ""),
 		stringFromMap(meta, "profile_status_wrapper", ""),
 	} {
-		if runtimeHandleLooksLikeCodexCLIRef(candidate) {
+		if runtimepolicy.RuntimeHandleLooksLikeCodexCLIRef(candidate) {
 			return true
 		}
 	}
@@ -11294,41 +11293,11 @@ func runtimeHandleUsaCodexTTYInestable(meta map[string]any) bool {
 		stringFromMap(meta, "rendered_command", ""),
 		stringFromMap(meta, "wrapped_command", ""),
 	} {
-		if runtimeHandleLooksLikeCodexCommand(candidate) {
+		if runtimepolicy.RuntimeHandleLooksLikeCodexCommand(candidate) {
 			return true
 		}
 	}
 	return false
-}
-
-func runtimeHandleLooksLikeCodexCLIRef(ref string) bool {
-	lower := strings.ToLower(strings.TrimSpace(ref))
-	if lower == "" {
-		return false
-	}
-	switch lower {
-	case "codex", "codex-cli":
-		return true
-	}
-	base := filepath.Base(strings.Trim(lower, "'\""))
-	return strings.HasPrefix(base, "codex-perfil")
-}
-
-func runtimeHandleLooksLikeCodexCommand(rendered string) bool {
-	lower := strings.ToLower(strings.TrimSpace(rendered))
-	if lower == "" {
-		return false
-	}
-	if lower == "codex" || strings.HasPrefix(lower, "codex ") || strings.Contains(lower, "codex-perfil") {
-		return true
-	}
-	first := lower
-	if fields := strings.Fields(lower); len(fields) > 0 {
-		first = fields[0]
-	}
-	first = strings.Trim(first, "'\"")
-	base := filepath.Base(first)
-	return base == "codex" || base == "codex-cli" || strings.HasPrefix(base, "codex-perfil")
 }
 
 func runtimeOrderBloqueaFallbackPID(order *RuntimeOrder, runtime *RuntimeInstance, handle *RuntimeHandle) bool {

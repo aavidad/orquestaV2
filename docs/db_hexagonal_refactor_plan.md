@@ -21,6 +21,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte adicional en planner: mover la política de preservación de tarea huérfana enfocada (frente acotado) a `planificadorpolicy`
 - corte adicional en runtime: mover la compactación de transcript pending a `runtimepolicy`
 - corte adicional en runtime: mover compactación/síntesis de metadata de `runtime_handle` en `runtimepolicy` (`CompactRuntimeHandleMetadata`)
+- corte adicional en runtime: mover heurísticas `runtimeHandleLooksLikeCodexCLIRef` y `runtimeHandleLooksLikeCodexCommand` a `runtimepolicy`
 - corte adicional en autonomia: mover la política pura de score de rol de supervisor operativo a `autonomiapolicy`
 
 Estado del frente seguro:
