@@ -7481,11 +7481,17 @@ func procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch() (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	type agenteAsignacionesActivas struct {
+		proyectos map[int64]struct{}
+		agente    string
+		slug      string
+	}
 	procesadas := 0
 	dedup := map[string]struct{}{}
 	runtimesByAgent := map[string][]*db.RuntimeInstance{}
 	handlesByAgent := map[string][]*db.RuntimeHandle{}
 	proyectosByID := map[int64]*db.Proyecto{}
+	asignacionesPorAgente := map[string]*agenteAsignacionesActivas{}
 	for _, asignacion := range asignaciones {
 		if asignacion == nil || asignacion.ProyectoID <= 0 {
 			continue
@@ -7495,6 +7501,27 @@ func procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch() (int, error) {
 			continue
 		}
 		agentKey := strings.ToLower(agente)
+		info := asignacionesPorAgente[agentKey]
+		if info == nil {
+			info = &agenteAsignacionesActivas{proyectos: map[int64]struct{}{}}
+			asignacionesPorAgente[agentKey] = info
+		}
+		if info.agente == "" {
+			info.agente = agente
+		}
+		info.proyectos[asignacion.ProyectoID] = struct{}{}
+		if info.slug == "" {
+			info.slug = strings.TrimSpace(asignacion.ProyectoSlug)
+		}
+	}
+	for agentKey, info := range asignacionesPorAgente {
+		if info == nil || len(info.proyectos) == 0 {
+			continue
+		}
+		agente := strings.TrimSpace(info.agente)
+		if agente == "" {
+			continue
+		}
 		runtimes, ok := runtimesByAgent[agentKey]
 		if !ok {
 			runtimes, err = db.ListarRuntimes(db.FiltroRuntimes{Agente: &agente})
@@ -7504,7 +7531,10 @@ func procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch() (int, error) {
 			runtimesByAgent[agentKey] = runtimes
 		}
 		for _, runtime := range runtimes {
-			if runtime == nil || runtime.ProyectoID == nil || *runtime.ProyectoID <= 0 || *runtime.ProyectoID == asignacion.ProyectoID {
+			if runtime == nil || runtime.ProyectoID == nil || *runtime.ProyectoID <= 0 {
+				continue
+			}
+			if _, assigned := info.proyectos[*runtime.ProyectoID]; assigned {
 				continue
 			}
 			if !runtimeEstaOperativoParaLimpieza(runtime) {
@@ -7514,7 +7544,7 @@ func procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch() (int, error) {
 			if _, ok := dedup[key]; ok {
 				continue
 			}
-			ok, err := encolarStopRuntimeFueraDeAsignacionActivaConCache(agente, *runtime.ProyectoID, strings.TrimSpace(asignacion.ProyectoSlug), proyectosByID)
+			ok, err := encolarStopRuntimeFueraDeAsignacionActivaConCache(agente, *runtime.ProyectoID, info.slug, proyectosByID)
 			if err != nil {
 				return procesadas, err
 			}
@@ -7532,7 +7562,10 @@ func procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch() (int, error) {
 			handlesByAgent[agentKey] = handles
 		}
 		for _, handle := range handles {
-			if handle == nil || handle.ProyectoID == nil || *handle.ProyectoID <= 0 || *handle.ProyectoID == asignacion.ProyectoID {
+			if handle == nil || handle.ProyectoID == nil || *handle.ProyectoID <= 0 {
+				continue
+			}
+			if _, assigned := info.proyectos[*handle.ProyectoID]; assigned {
 				continue
 			}
 			if !handleEstaOperativoParaLimpieza(handle) {
@@ -7542,7 +7575,7 @@ func procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch() (int, error) {
 			if _, ok := dedup[key]; ok {
 				continue
 			}
-			ok, err := encolarStopRuntimeFueraDeAsignacionActivaConCache(agente, *handle.ProyectoID, strings.TrimSpace(asignacion.ProyectoSlug), proyectosByID)
+			ok, err := encolarStopRuntimeFueraDeAsignacionActivaConCache(agente, *handle.ProyectoID, info.slug, proyectosByID)
 			if err != nil {
 				return procesadas, err
 			}

@@ -6476,6 +6476,83 @@ func TestProcesarRuntimesFueraDeAsignacionActivaPorAsignacionBatchDeduplicaLectu
 	}
 }
 
+func TestProcesarRuntimesFueraDeAsignacionActivaPorAsignacionBatchRespetaTodosLosProyectosActivosDelAgente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoAID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "proyecto-a",
+		Nombre:  "Proyecto A",
+		RutaAbs: filepath.Join(tmp, "proyecto-a"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto a: %v", err)
+	}
+	proyectoBID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "proyecto-b",
+		Nombre:  "Proyecto B",
+		RutaAbs: filepath.Join(tmp, "proyecto-b"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto b: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoAID, "activa-a"); err != nil {
+		t.Fatalf("activar asignacion a: %v", err)
+	}
+	if _, err := db.DB.Exec(`INSERT INTO asignaciones (agente, proyecto_id, estado, nota) VALUES (?,?,?,?)`,
+		"Codex1", proyectoBID, db.AsignacionActiva, "activa-b",
+	); err != nil {
+		t.Fatalf("insert asignacion b: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoBID,
+		CWD:         filepath.Join(tmp, "proyecto-b"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	runtimeActual, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtimeActual == nil {
+		t.Fatalf("get runtime: %+v err=%v", runtimeActual, err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='activo', process_state='running' WHERE id=?`, runtimeActual.ID); err != nil {
+		t.Fatalf("activar runtime: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("activar handle: %v", err)
+	}
+
+	n, err := procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch()
+	if err != nil {
+		t.Fatalf("procesar runtimes fuera de asignacion por asignacion: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia parar runtime/handle de un segundo proyecto tambien activo, got=%d", n)
+	}
+
+	agente := "Codex1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoBID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 0 {
+		t.Fatalf("no deberia encolar stop sobre un proyecto activo adicional: %+v", orders)
+	}
+}
+
 func TestResolverProyectoAutoasignacionDesdeAsignacionPausadaPrefierePremiumReactivable(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
