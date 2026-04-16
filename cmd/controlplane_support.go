@@ -7160,25 +7160,30 @@ func asignacionPausadaPremiumAutoasignable(nota string) bool {
 }
 
 func cargarTareasYBloqueosAutonomiaPorAgente() (map[string][]*db.Tarea, map[string][]*db.Tarea, map[int64]db.ResumenBloqueo, error) {
-	tareas, err := db.ListarTareas(db.FiltroTareas{})
-	if err != nil {
-		return nil, nil, nil, err
+	estadosActivos := []db.EstadoTarea{
+		db.EstadoAsignada,
+		db.EstadoEnProgreso,
+		db.EstadoBloqueada,
 	}
 	tareasActivasPorAgente := map[string][]*db.Tarea{}
 	tareasBloqueadasPorAgente := map[string][]*db.Tarea{}
-	for _, tarea := range tareas {
-		if tarea == nil || tarea.Agente == nil {
-			continue
+	for _, estado := range estadosActivos {
+		tareas, err := db.ListarTareas(db.FiltroTareas{Estado: &estado})
+		if err != nil {
+			return nil, nil, nil, err
 		}
-		switch tarea.Estado {
-		case db.EstadoAsignada, db.EstadoEnProgreso:
-			agente := strings.TrimSpace(*tarea.Agente)
-			if agente != "" {
-				tareasActivasPorAgente[agente] = append(tareasActivasPorAgente[agente], tarea)
+		for _, tarea := range tareas {
+			if tarea == nil || tarea.Agente == nil {
+				continue
 			}
-		case db.EstadoBloqueada:
 			agente := strings.TrimSpace(*tarea.Agente)
-			if agente != "" {
+			if agente == "" {
+				continue
+			}
+			switch tarea.Estado {
+			case db.EstadoAsignada, db.EstadoEnProgreso:
+				tareasActivasPorAgente[agente] = append(tareasActivasPorAgente[agente], tarea)
+			case db.EstadoBloqueada:
 				tareasBloqueadasPorAgente[agente] = append(tareasBloqueadasPorAgente[agente], tarea)
 			}
 		}
