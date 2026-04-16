@@ -10105,6 +10105,11 @@ func sesionActivaDebeRecibirNudgeContinuacionConSnapshot(sesion *db.Sesion, proy
 	if err != nil || handle == nil {
 		return tareaID, false, err
 	}
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(strings.TrimSpace(sesion.Agente), sesion.ProyectoID, "pause", "checkpoint", "resume", "start", "handoff"); err != nil {
+		return tareaID, false, err
+	} else if pendiente {
+		return tareaID, false, nil
+	}
 	if vigente, err := sesionActivaTieneContinuidadDurableVigente(sesion, handle); err != nil {
 		return tareaID, false, err
 	} else if vigente {
