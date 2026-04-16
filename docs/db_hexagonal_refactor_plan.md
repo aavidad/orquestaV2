@@ -47,6 +47,9 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - `9f51a8f` mueve resolución de ruta/proyecto/worktree hacia `coordinacion` y reduce ensamblaje en `db`
 - `e1aa278` preserva el comportamiento de filtrado de `worktrees` al trasladar parte de la coherencia a `coordinacion`
 - `71bdf8e` extrae side effects de transición de tareas/asignaciones a coordinadores internos de `db` para wrappers más finos
+- `f81c290` baja el razonamiento por defecto de implementación/orquestación rutinaria a `high` y fuerza salida mínima en continuidad/microtareas
+- `7d03d7e` alinea la doctrina de modelo/razonamiento y la regla operativa de `xhigh` reservado a casos excepcionales de alto riesgo
+- `27788af` añade guardarraíl de tests para que los perfiles semilla no reintroduzcan `xhigh` por defecto
 
 Estado del frente seguro:
 
