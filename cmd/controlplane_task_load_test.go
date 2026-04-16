@@ -61,3 +61,49 @@ func TestCargarTareasYBloqueosAutonomiaPorAgenteIgnoraEstadosTerminales(t *testi
 		t.Fatalf("bloqueadas visibles=%d, want 1", got)
 	}
 }
+
+func TestCargarTareasYBloqueosAutonomiaPorAgenteNoCargaBloqueosSiNoHayTareasBloqueadas(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	agente := "Codex1"
+	for _, estado := range []db.EstadoTarea{db.EstadoAsignada, db.EstadoEnProgreso} {
+		id, err := db.CrearTarea(&db.Tarea{
+			Titulo:     string(estado),
+			ProyectoID: &proyectoID,
+			CreadoPor:  "test",
+			Prioridad:  db.PrioridadMedia,
+		})
+		if err != nil {
+			t.Fatalf("crear tarea %s: %v", estado, err)
+		}
+		if _, err := db.DB.Exec(`UPDATE tareas SET agente=?, estado=? WHERE id=?`, agente, estado, id); err != nil {
+			t.Fatalf("update tarea %s: %v", estado, err)
+		}
+	}
+
+	activos, bloqueadas, bloqueos, err := cargarTareasYBloqueosAutonomiaPorAgente()
+	if err != nil {
+		t.Fatalf("cargar tareas y bloqueos: %v", err)
+	}
+	if got := len(activos[agente]); got != 2 {
+		t.Fatalf("activas visibles=%d, want 2", got)
+	}
+	if got := len(bloqueadas[agente]); got != 0 {
+		t.Fatalf("bloqueadas visibles=%d, want 0", got)
+	}
+	if len(bloqueos) != 0 {
+		t.Fatalf("no deberia cargar resumen de bloqueos si no hay tareas bloqueadas: %+v", bloqueos)
+	}
+}

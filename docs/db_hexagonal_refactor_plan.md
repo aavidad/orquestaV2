@@ -82,6 +82,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: esa misma resolución de autoasignación acota también la lectura de asignaciones a estado `pausada`, evitando cargar asignaciones activas/terminales para filtrarlas después en memoria
 - corte operativo adicional fuera de `db`: la reactivación de agentes sin runtime cachea proyecto por `proyectoID` dentro del batch para no repetir `GetProject` cuando varios agentes degradados convergen en el mismo proyecto
 - corte operativo adicional fuera de `db`: la recuperación de tareas bloqueadas desde sesión activa reutiliza directamente el mapa cacheado de `ListarResumenBloqueos()` y deja de copiarlo entero por cada sesión procesada
+- corte operativo adicional fuera de `db`: la carga de tareas para autonomía degradada ya no consulta `ListarResumenBloqueos()` cuando en el batch no existe ninguna tarea bloqueada, evitando una lectura global sobrante
 
 Estado del frente seguro:
 

@@ -7188,6 +7188,9 @@ func cargarTareasYBloqueosAutonomiaPorAgente() (map[string][]*db.Tarea, map[stri
 			}
 		}
 	}
+	if len(tareasBloqueadasPorAgente) == 0 {
+		return tareasActivasPorAgente, tareasBloqueadasPorAgente, map[int64]db.ResumenBloqueo{}, nil
+	}
 	resumenBloqueos, err := db.ListarResumenBloqueos()
 	if err != nil {
 		return nil, nil, nil, err
