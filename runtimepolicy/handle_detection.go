@@ -74,6 +74,35 @@ func RuntimeOrderUsaCLITMUXPreferred(refs ...string) bool {
 	return false
 }
 
+func RuntimeHandleEsTMUXCanonico(meta map[string]any, transporte string) bool {
+	if strings.EqualFold(strings.TrimSpace(transporte), "tmux") {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(mapValueString(meta, "driver", "")), "tmux_cli_session") {
+		return true
+	}
+	return strings.TrimSpace(mapValueString(meta, "tmux_session", "")) != "" ||
+		strings.TrimSpace(mapValueString(meta, "tmux_pane_id", "")) != ""
+}
+
+func RuntimeHandleTMUXSessionRef(meta map[string]any, transporte, handleKind, handleRef string) string {
+	session := strings.TrimSpace(mapValueString(meta, "tmux_session", ""))
+	pane := strings.TrimSpace(mapValueString(meta, "tmux_pane_id", ""))
+	switch {
+	case session != "" && pane != "":
+		return session + "/" + pane
+	case session != "":
+		return session
+	case pane != "":
+		return pane
+	case strings.EqualFold(strings.TrimSpace(transporte), "tmux") ||
+		strings.EqualFold(strings.TrimSpace(handleKind), "session"):
+		return strings.TrimSpace(handleRef)
+	default:
+		return ""
+	}
+}
+
 func runtimeHandleUsaLegacyCLITMUXPreferred(meta map[string]any) bool {
 	if !runtimeHandleUsaLegacyProcessPTY(meta) {
 		return false

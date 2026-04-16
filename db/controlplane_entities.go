@@ -265,15 +265,8 @@ func runtimeHandleEsTMUXCanonico(handle *RuntimeHandle) bool {
 	if handle == nil {
 		return false
 	}
-	if strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") {
-		return true
-	}
 	meta := mapFromJSON(handle.MetadataJSON)
-	if strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "driver", "")), "tmux_cli_session") {
-		return true
-	}
-	return strings.TrimSpace(stringFromMap(meta, "tmux_session", "")) != "" ||
-		strings.TrimSpace(stringFromMap(meta, "tmux_pane_id", "")) != ""
+	return runtimepolicy.RuntimeHandleEsTMUXCanonico(meta, handle.Transporte)
 }
 
 func runtimeHandleTMUXSessionRef(handle *RuntimeHandle) string {
@@ -281,21 +274,7 @@ func runtimeHandleTMUXSessionRef(handle *RuntimeHandle) string {
 		return ""
 	}
 	meta := mapFromJSON(handle.MetadataJSON)
-	session := strings.TrimSpace(stringFromMap(meta, "tmux_session", ""))
-	pane := strings.TrimSpace(stringFromMap(meta, "tmux_pane_id", ""))
-	switch {
-	case session != "" && pane != "":
-		return session + "/" + pane
-	case session != "":
-		return session
-	case pane != "":
-		return pane
-	case strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") ||
-		strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session"):
-		return strings.TrimSpace(handle.HandleRef)
-	default:
-		return ""
-	}
+	return runtimepolicy.RuntimeHandleTMUXSessionRef(meta, handle.Transporte, handle.HandleKind, handle.HandleRef)
 }
 
 func runtimeHandleTMUXSessionRefObserved(handle *RuntimeHandle) string {
@@ -6402,42 +6381,9 @@ func runtimeOrderSendInstructionDebePreferirHandleExplicito(explicitHandle, reso
 	if explicitHandle.ID == resolvedHandle.ID {
 		return explicitScore > resolvedScore
 	}
-	return explicitScore > resolvedScore && runtimeHandleTieneContextoEntrega(explicitHandle) && !runtimeHandleTieneContextoEntrega(resolvedHandle)
-}
-
-func runtimeHandleTieneContextoEntrega(handle *RuntimeHandle) bool {
-	return runtimeHandleContextoEntregaScore(handle) > 0
-}
-
-func runtimeHandleContextoEntregaScore(handle *RuntimeHandle) int {
-	if handle == nil {
-		return 0
-	}
-	score := 0
-	meta := mapFromJSON(handle.MetadataJSON)
-	caps := mapFromJSON(handle.CapabilitiesJSON)
-	for _, key := range []string{
-		"driver",
-		"rendered_command",
-		"wrapped_command",
-		"working_dir",
-		"external_session_id",
-		"stdin_path",
-		"supervisor_ref",
-		"tmux_command",
-		"tmux_session",
-		"mailbox_delivery_mode",
-	} {
-		if strings.TrimSpace(stringFromMap(meta, key, "")) != "" {
-			score++
-		}
-	}
-	for _, key := range []string{"mailbox_delivery_mode"} {
-		if _, ok := caps[key]; ok {
-			score++
-		}
-	}
-	return score
+	return explicitScore > resolvedScore &&
+		runtimeHandleTieneContextoEntrega(explicitHandle) &&
+		!runtimeHandleTieneContextoEntrega(resolvedHandle)
 }
 
 func runtimeOrderSendInstructionConservaHandleExplicito(order *RuntimeOrder, handle *RuntimeHandle) bool {
@@ -6451,6 +6397,26 @@ func runtimeOrderSendInstructionConservaHandleExplicito(order *RuntimeOrder, han
 		return true
 	}
 	return false
+}
+
+func runtimeHandleTieneContextoEntrega(handle *RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	return runtimepolicy.RuntimeHandleHasDeliveryContext(
+		strings.TrimSpace(handle.MetadataJSON),
+		strings.TrimSpace(handle.CapabilitiesJSON),
+	)
+}
+
+func runtimeHandleContextoEntregaScore(handle *RuntimeHandle) int {
+	if handle == nil {
+		return 0
+	}
+	return runtimepolicy.RuntimeHandleDeliveryContextScore(
+		strings.TrimSpace(handle.MetadataJSON),
+		strings.TrimSpace(handle.CapabilitiesJSON),
+	)
 }
 
 func actualizarRuntimeOrderDestino(orderID int64, runtime *RuntimeInstance, handle *RuntimeHandle) error {

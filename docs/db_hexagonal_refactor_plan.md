@@ -22,6 +22,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte adicional en runtime: mover la compactación de transcript pending a `runtimepolicy`
 - corte adicional en runtime: mover compactación/síntesis de metadata de `runtime_handle` en `runtimepolicy` (`CompactRuntimeHandleMetadata`)
 - corte adicional en runtime: mover heurísticas `runtimeHandleLooksLikeCodexCLIRef` y `runtimeHandleLooksLikeCodexCommand` a `runtimepolicy`
+- corte adicional en runtime: mover scoring de contexto de entrega de `runtime_handle` (`RuntimeHandleDeliveryContextScore`) a `runtimepolicy`
 - corte adicional en autonomia: mover la política pura de score de rol de supervisor operativo a `autonomiapolicy`
 
 Estado del frente seguro:
@@ -51,6 +52,7 @@ Estado del frente seguro:
 - policy de preservación de tarea huérfana para frente acotado movida a `planificadorpolicy`
 - policy de gobernanza movida a `gobernanzapolicy` para catálogo, validación de overrides y precedencia por capas
 - policy de compactación/síntesis de metadata de `runtime_handle` movida a `runtimepolicy` (`CompactRuntimeHandleMetadata`) para minimizar policy en `db/controlplane_entities.go`
+- policy de scoring de contexto de entrega de `runtime_handle` movida a `runtimepolicy` para selector explícito de `runtime_order`
 - policy de skills movida a `skillspolicy`
 - policy de compactación de texto pendiente de transcript en runtime movida a `runtimepolicy`
 - policy de ordenación por rol en selección de supervisores operativos movida a `autonomiapolicy`

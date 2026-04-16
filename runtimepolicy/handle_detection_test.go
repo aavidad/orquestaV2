@@ -105,3 +105,57 @@ func TestRuntimeOrderUsaCLITMUXPreferred(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeHandleEsTMUXCanonico(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		meta       map[string]any
+		transporte string
+		want       bool
+	}{
+		{"nil transport", nil, "", false},
+		{"transport tmux", nil, "tmux", true},
+		{"driver tmux_cli_session", map[string]any{"driver": "tmux_cli_session"}, "", true},
+		{"tmux_session", map[string]any{"tmux_session": "s1"}, "", true},
+		{"tmux_pane_id", map[string]any{"tmux_pane_id": "p1"}, "", true},
+		{"sin match", map[string]any{"driver": "process_pty_cli"}, "", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RuntimeHandleEsTMUXCanonico(tc.meta, tc.transporte); got != tc.want {
+				t.Fatalf("RuntimeHandleEsTMUXCanonico(%v, %q) = %v; want %v", tc.meta, tc.transporte, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRuntimeHandleTMUXSessionRef(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		meta       map[string]any
+		transporte string
+		handleKind string
+		handleRef  string
+		want       string
+	}{
+		{"ambos campos", map[string]any{"tmux_session": "sess", "tmux_pane_id": "pane"}, "", "", "", "sess/pane"},
+		{"solo session", map[string]any{"tmux_session": "sess"}, "", "", "", "sess"},
+		{"solo pane", map[string]any{"tmux_pane_id": "pane"}, "", "", "", "pane"},
+		{"canonico tmux session", map[string]any{}, "tmux", "process", "  /tmp/ref ", "/tmp/ref"},
+		{"canonico session kind", map[string]any{}, "", "session", "ref-session", "ref-session"},
+		{"ninguno", map[string]any{}, "", "", "process", ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RuntimeHandleTMUXSessionRef(tc.meta, tc.transporte, tc.handleKind, tc.handleRef); got != tc.want {
+				t.Fatalf("RuntimeHandleTMUXSessionRef(%v, %q, %q, %q) = %q; want %q", tc.meta, tc.transporte, tc.handleKind, tc.handleRef, got, tc.want)
+			}
+		})
+	}
+}
