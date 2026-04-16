@@ -258,7 +258,7 @@ func TestConstruirAgenteTickOutputPausaPorCuotaSiWorkerTMUXBloqueado(t *testing.
 		pauseByAgent:               map[string]autonomiaBudgetPauseDecision{},
 		operationalStateByAgent:    map[string]string{"claude1": "bloqueado_por_cuota"},
 		operationalDetailByAgent:   map[string]string{"claude1": "worker bloqueado por cuota"},
-		operationalStateLoaded:     true,
+		operationalStateResolved:   map[string]struct{}{"claude1": {}},
 	}
 	out, err := construirAgenteTickOutputConSnapshot("Claude1", proyecto, nil, 100, snapshot)
 	if err != nil {
@@ -491,7 +491,7 @@ func TestConstruirAgenteTickOutputNoContinuaSiRuntimeBloqueado(t *testing.T) {
 		pauseByAgent:               map[string]autonomiaBudgetPauseDecision{},
 		operationalStateByAgent:    map[string]string{"codex1": "bloqueado_por_runtime"},
 		operationalDetailByAgent:   map[string]string{"codex1": "tmux pane finalizado"},
-		operationalStateLoaded:     true,
+		operationalStateResolved:   map[string]struct{}{"codex1": {}},
 	}
 	out, err := construirAgenteTickOutputConSnapshot("Codex1", proyecto, nil, 0, snapshot)
 	if err != nil {

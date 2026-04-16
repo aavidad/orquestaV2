@@ -29,7 +29,7 @@ type autonomiaBatchSnapshot struct {
 	agentesByName              map[string]*db.Agente
 	operationalStateByAgent    map[string]string
 	operationalDetailByAgent   map[string]string
-	operationalStateLoaded     bool
+	operationalStateResolved   map[string]struct{}
 	hotHandlesByAgentProject   map[string]*db.RuntimeHandle
 	asignacionesByAgent        map[string][]*db.Asignacion
 	asignacionesByProject      map[int64][]*db.Asignacion
@@ -42,6 +42,10 @@ type autonomiaBatchSnapshot struct {
 	supervisorByProject        map[int64]*db.Agente
 	supervisorLoaded           map[int64]struct{}
 	pauseByAgent               map[string]autonomiaBudgetPauseDecision
+}
+
+var autonomiaOperationalStateResolver = func(agente string) (string, string, error) {
+	return agentesService.OperationalStateForAgent(agente)
 }
 
 func newAutonomiaBatchSnapshot(sesiones []*db.Sesion) (*autonomiaBatchSnapshot, error) {
@@ -63,6 +67,7 @@ func newAutonomiaBatchSnapshot(sesiones []*db.Sesion) (*autonomiaBatchSnapshot, 
 		agentesByName:              make(map[string]*db.Agente, len(agentesByName)),
 		operationalStateByAgent:    map[string]string{},
 		operationalDetailByAgent:   map[string]string{},
+		operationalStateResolved:   map[string]struct{}{},
 		hotHandlesByAgentProject:   hotHandles,
 		asignacionesByAgent:        map[string][]*db.Asignacion{},
 		asignacionesByProject:      map[int64][]*db.Asignacion{},
@@ -114,6 +119,7 @@ func (s *autonomiaBatchSnapshot) invalidateAgent(agente string) {
 	delete(s.agentesByName, key)
 	delete(s.operationalStateByAgent, key)
 	delete(s.operationalDetailByAgent, key)
+	delete(s.operationalStateResolved, key)
 	delete(s.asignacionesByAgent, key)
 	delete(s.activeProjectByAgent, key)
 	delete(s.pauseByAgent, key)
@@ -271,24 +277,25 @@ func (s *autonomiaBatchSnapshot) operationalState(agente string) (string, string
 	if key == "" {
 		return "", "", nil
 	}
-	if !s.operationalStateLoaded {
-		rows, err := agentesService.BuildPanelRows()
-		if err != nil {
-			return "", "", err
-		}
-		for _, row := range rows {
-			if row.Agente == nil {
-				continue
-			}
-			rowKey := strings.ToLower(strings.TrimSpace(row.Agente.Nombre))
-			if rowKey == "" {
-				continue
-			}
-			s.operationalStateByAgent[rowKey] = strings.TrimSpace(row.EstadoOperativo)
-			s.operationalDetailByAgent[rowKey] = strings.TrimSpace(row.DetalleOperativo)
-		}
-		s.operationalStateLoaded = true
+	if s.operationalStateByAgent == nil {
+		s.operationalStateByAgent = map[string]string{}
 	}
+	if s.operationalDetailByAgent == nil {
+		s.operationalDetailByAgent = map[string]string{}
+	}
+	if s.operationalStateResolved == nil {
+		s.operationalStateResolved = map[string]struct{}{}
+	}
+	if _, ok := s.operationalStateResolved[key]; ok {
+		return s.operationalStateByAgent[key], s.operationalDetailByAgent[key], nil
+	}
+	estado, detalle, err := autonomiaOperationalStateResolver(strings.TrimSpace(agente))
+	if err != nil {
+		return "", "", err
+	}
+	s.operationalStateByAgent[key] = strings.TrimSpace(estado)
+	s.operationalDetailByAgent[key] = strings.TrimSpace(detalle)
+	s.operationalStateResolved[key] = struct{}{}
 	return s.operationalStateByAgent[key], s.operationalDetailByAgent[key], nil
 }
 
