@@ -9,10 +9,8 @@ import (
 )
 
 type autonomiaSupervisorCandidato struct {
-	agente    *Agente
-	preferred bool
-	activo    bool
-	score     int
+	agente   *Agente
+	snapshot autonomiapolicy.SupervisorCandidateSnapshot
 }
 
 func SeleccionarSupervisorAutonomiaOperativo(proyectoID int64, exclude string) (*Agente, error) {
@@ -73,10 +71,13 @@ func SeleccionarSupervisorAutonomiaOperativo(proyectoID int64, exclude string) (
 		}
 		seen[key] = struct{}{}
 		candidatos = append(candidatos, autonomiaSupervisorCandidato{
-			agente:    agente,
-			preferred: preferred != "" && strings.EqualFold(strings.TrimSpace(agente.Nombre), preferred),
-			activo:    activo,
-			score:     autonomiapolicy.SupervisorRoleScore(agente.Rol),
+			agente: agente,
+			snapshot: autonomiapolicy.SupervisorCandidateSnapshot{
+				AgentName: strings.TrimSpace(agente.Nombre),
+				Preferred: preferred != "" && strings.EqualFold(strings.TrimSpace(agente.Nombre), preferred),
+				Active:    activo,
+				RoleScore: autonomiapolicy.SupervisorRoleScore(agente.Rol),
+			},
 		})
 		return nil
 	}
@@ -116,16 +117,10 @@ func SeleccionarSupervisorAutonomiaOperativo(proyectoID int64, exclude string) (
 	}
 
 	sort.Slice(candidatos, func(i, j int) bool {
-		if candidatos[i].preferred != candidatos[j].preferred {
-			return candidatos[i].preferred
-		}
-		if candidatos[i].activo != candidatos[j].activo {
-			return candidatos[i].activo
-		}
-		if candidatos[i].score != candidatos[j].score {
-			return candidatos[i].score < candidatos[j].score
-		}
-		return strings.TrimSpace(candidatos[i].agente.Nombre) < strings.TrimSpace(candidatos[j].agente.Nombre)
+		return autonomiapolicy.PreferSupervisorCandidate(
+			&candidatos[i].snapshot,
+			&candidatos[j].snapshot,
+		)
 	})
 	if len(candidatos) == 0 {
 		return nil, nil
