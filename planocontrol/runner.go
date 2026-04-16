@@ -709,7 +709,7 @@ func (r *Runner) runtimeTranscriptStartupDelay() time.Duration {
 
 func (r *Runner) runtimeMailboxCada() time.Duration {
 	if r.RuntimeMailboxCada <= 0 {
-		return 10 * time.Second
+		return 30 * time.Second
 	}
 	return r.RuntimeMailboxCada
 }

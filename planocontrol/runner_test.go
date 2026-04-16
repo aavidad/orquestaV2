@@ -371,6 +371,13 @@ func TestRunnerControlPlaneWarmRequeueCadaUsaDefaultMenosAgresivo(t *testing.T) 
 	}
 }
 
+func TestRunnerRuntimeMailboxCadaUsaDefaultMenosAgresivo(t *testing.T) {
+	r := &Runner{}
+	if got := r.runtimeMailboxCada(); got != 30*time.Second {
+		t.Fatalf("runtime mailbox default=%s, want %s", got, 30*time.Second)
+	}
+}
+
 func TestRunnerStartRespetaStartupGrace(t *testing.T) {
 	service := &stubAutomationService{autonomyCount: 1}
 	r := &Runner{

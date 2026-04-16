@@ -69,6 +69,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: `status` ya oculta de la vista operativa agentes y tareas fuera de la flota oficial `Codex*`; si quedan legados habilitados en BD no deben seguir contaminando progreso/cuota visible
 - corte operativo adicional fuera de `db`: el snapshot de autonomía ya no resuelve `operationalState` cargando `BuildPanelRows()` completo; cachea por agente con lectura compacta y reduce calor del daemon en ticks de autonomía
 - corte operativo adicional fuera de `db`: el `control_plane_warm` conserva wakes explícitos, pero su requeue automático por “trabajo pendiente” baja de 10s a 30s por defecto para evitar bucles calientes sin perder capacidad de reacción
+- corte operativo adicional fuera de `db`: el polling base del `runtime mailbox` sube de 10s a 30s por defecto; los wakes explícitos siguen cubriendo la respuesta rápida cuando realmente entra trabajo
 
 Estado del frente seguro:
 
