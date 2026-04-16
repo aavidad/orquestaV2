@@ -76,6 +76,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: la carga de tareas para autonomía degradada ya no barre todas las tareas del sistema; limita las lecturas a estados vivos (`asignada`, `en_progreso`, `bloqueada`) y reduce volumen por tick caliente
 - corte operativo adicional fuera de `db`: el snapshot de autonomía ahora cachea `ListarResumenBloqueos()` y la recuperación de tareas bloqueadas desde sesión activa deja de repetir esa consulta por cada sesión
 - corte operativo adicional fuera de `db`: la limpieza de runtimes fuera de asignación activa ya deduplica lecturas de runtimes/handles por agente cuando existen asignaciones activas anómalas duplicadas, evitando trabajo repetido sobre la misma flota sucia
+- corte operativo adicional fuera de `db`: la limpieza de runtimes fuera de asignación activa ahora también cachea la resolución de proyecto por `proyectoID`, evitando repetir `GetProject` cuando varios artefactos huérfanos apuntan al mismo proyecto dentro del mismo batch
 
 Estado del frente seguro:
 

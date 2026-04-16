@@ -7485,6 +7485,7 @@ func procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch() (int, error) {
 	dedup := map[string]struct{}{}
 	runtimesByAgent := map[string][]*db.RuntimeInstance{}
 	handlesByAgent := map[string][]*db.RuntimeHandle{}
+	proyectosByID := map[int64]*db.Proyecto{}
 	for _, asignacion := range asignaciones {
 		if asignacion == nil || asignacion.ProyectoID <= 0 {
 			continue
@@ -7513,7 +7514,7 @@ func procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch() (int, error) {
 			if _, ok := dedup[key]; ok {
 				continue
 			}
-			ok, err := encolarStopRuntimeFueraDeAsignacionActiva(agente, *runtime.ProyectoID, strings.TrimSpace(asignacion.ProyectoSlug))
+			ok, err := encolarStopRuntimeFueraDeAsignacionActivaConCache(agente, *runtime.ProyectoID, strings.TrimSpace(asignacion.ProyectoSlug), proyectosByID)
 			if err != nil {
 				return procesadas, err
 			}
@@ -7541,7 +7542,7 @@ func procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch() (int, error) {
 			if _, ok := dedup[key]; ok {
 				continue
 			}
-			ok, err := encolarStopRuntimeFueraDeAsignacionActiva(agente, *handle.ProyectoID, strings.TrimSpace(asignacion.ProyectoSlug))
+			ok, err := encolarStopRuntimeFueraDeAsignacionActivaConCache(agente, *handle.ProyectoID, strings.TrimSpace(asignacion.ProyectoSlug), proyectosByID)
 			if err != nil {
 				return procesadas, err
 			}
@@ -7555,6 +7556,10 @@ func procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch() (int, error) {
 }
 
 func encolarStopRuntimeFueraDeAsignacionActiva(agente string, proyectoID int64, proyectoAsignado string) (bool, error) {
+	return encolarStopRuntimeFueraDeAsignacionActivaConCache(agente, proyectoID, proyectoAsignado, nil)
+}
+
+func encolarStopRuntimeFueraDeAsignacionActivaConCache(agente string, proyectoID int64, proyectoAsignado string, proyectosByID map[int64]*db.Proyecto) (bool, error) {
 	if agente == "" || proyectoID <= 0 {
 		return false, nil
 	}
@@ -7569,9 +7574,19 @@ func encolarStopRuntimeFueraDeAsignacionActiva(agente string, proyectoID int64, 
 	} else if reciente {
 		return false, nil
 	}
-	proyecto, err := runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
-	if err != nil {
-		return false, err
+	var proyecto *db.Proyecto
+	if proyectosByID != nil {
+		proyecto = proyectosByID[proyectoID]
+	}
+	if proyecto == nil {
+		var err error
+		proyecto, err = runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
+		if err != nil {
+			return false, err
+		}
+		if proyectosByID != nil && proyecto != nil {
+			proyectosByID[proyectoID] = proyecto
+		}
 	}
 	if proyecto == nil {
 		return false, nil
