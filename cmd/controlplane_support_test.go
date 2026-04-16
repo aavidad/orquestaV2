@@ -14666,6 +14666,7 @@ func TestResetReanimacionReabreTareaBloqueadaRecuperableYEncolaControl(t *testin
 		t.Fatalf("listar orders: %v", err)
 	}
 	foundControl := false
+	foundNudge := false
 	for _, order := range orders {
 		if order == nil {
 			continue
@@ -14673,9 +14674,15 @@ func TestResetReanimacionReabreTareaBloqueadaRecuperableYEncolaControl(t *testin
 		if order.Tipo == "start" || order.Tipo == "resume" {
 			foundControl = true
 		}
+		if order.Tipo == "nudge" && strings.Contains(order.PayloadJSON, `"accion":"continuar_trabajo"`) {
+			foundNudge = true
+		}
 	}
 	if !foundControl {
 		t.Fatalf("deberia encolar reactivacion canonica: %+v", orders)
+	}
+	if !foundNudge {
+		t.Fatalf("deberia encolar continuidad al reactivar tarea recuperable: %+v", orders)
 	}
 }
 
@@ -21526,6 +21533,18 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReasignaSiAgenteBloqueadoPorCuot
 	}
 	if tarea.Estado != db.EstadoEnProgreso || tarea.Agente == nil || *tarea.Agente != "CodexLibre" {
 		t.Fatalf("la tarea deberia quedar reasignada al relevo sano: %+v", tarea)
+	}
+	agente := "CodexLibre"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders relevo: %v", err)
+	}
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "nudge" {
+		t.Fatalf("deberia encolar continuidad al relevo por cuota: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"accion":"continuar_trabajo"`) {
+		t.Fatalf("payload nudge inesperado: %s", orders[0].PayloadJSON)
 	}
 }
 
