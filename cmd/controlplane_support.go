@@ -10065,7 +10065,12 @@ func procesarAparcadoAutonomoSesion(sesion *db.Sesion, snapshot *autonomiaBatchS
 		autonomiaTickDebugf("agente=%s proyecto_id=%d skip_aparcado trabajo_activo=true motivo=%s", strings.TrimSpace(sesion.Agente), valorProyectoID(sesion.ProyectoID), motivo)
 		return 0, nil
 	}
-	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	var proyecto *db.Proyecto
+	if snapshot != nil {
+		proyecto, err = snapshot.project(*sesion.ProyectoID)
+	} else {
+		proyecto, err = runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	}
 	if err != nil {
 		return 0, err
 	}
