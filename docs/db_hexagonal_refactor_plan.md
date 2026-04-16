@@ -84,6 +84,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: la reactivación de agentes sin runtime cachea proyecto por `proyectoID` dentro del batch para no repetir `GetProject` cuando varios agentes degradados convergen en el mismo proyecto
 - corte operativo adicional fuera de `db`: la recuperación de tareas bloqueadas desde sesión activa reutiliza directamente el mapa cacheado de `ListarResumenBloqueos()` y deja de copiarlo entero por cada sesión procesada
 - corte operativo adicional fuera de `db`: la carga de tareas para autonomía degradada ya no consulta `ListarResumenBloqueos()` cuando en el batch no existe ninguna tarea bloqueada, evitando una lectura global sobrante
+- corte operativo adicional fuera de `db`: `autonomiaBatchSnapshot` cachea también proyectos por `proyectoID`, de modo que la ruta de sesión activa y derivación premium no vuelven a resolver el mismo proyecto repetidamente dentro del mismo batch
 
 Estado del frente seguro:
 

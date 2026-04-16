@@ -8894,7 +8894,15 @@ func procesarAutonomiaSesionActivaConSnapshot(sesion *db.Sesion, snapshot *auton
 	if n, err := procesarPrechecksAutonomiaSesionActiva(sesion, snapshot); err != nil || n > 0 {
 		return n, err
 	}
-	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	var (
+		proyecto *db.Proyecto
+		err      error
+	)
+	if snapshot != nil {
+		proyecto, err = snapshot.project(*sesion.ProyectoID)
+	} else {
+		proyecto, err = runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -9258,7 +9266,12 @@ func procesarDerivacionSemillaPremiumSesionActiva(sesion *db.Sesion, snapshot *a
 	if !strings.Contains(strings.TrimSpace(tareaActual.Notas), "autonomia:premium_frontier") {
 		return 0, nil
 	}
-	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	var proyecto *db.Proyecto
+	if snapshot != nil {
+		proyecto, err = snapshot.project(*sesion.ProyectoID)
+	} else {
+		proyecto, err = runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	}
 	if err != nil || proyecto == nil {
 		return 0, err
 	}

@@ -1,6 +1,11 @@
 package cmd
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+
+	"orquesta/db"
+)
 
 func TestAutonomiaBatchSnapshotOperationalStateCacheaPorAgente(t *testing.T) {
 	prev := autonomiaOperationalStateResolver
@@ -37,5 +42,42 @@ func TestAutonomiaBatchSnapshotOperationalStateCacheaPorAgente(t *testing.T) {
 	}
 	if llamadas != 1 {
 		t.Fatalf("resolver deberia llamarse una sola vez, got=%d", llamadas)
+	}
+}
+
+func TestAutonomiaBatchSnapshotProjectCacheaPorProyecto(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+
+	snapshot := &autonomiaBatchSnapshot{
+		proyectosByID:   map[int64]*db.Proyecto{},
+		proyectosLoaded: map[int64]struct{}{},
+	}
+
+	proyecto, err := snapshot.project(proyectoID)
+	if err != nil {
+		t.Fatalf("project first: %v", err)
+	}
+	if proyecto == nil || proyecto.ID != proyectoID {
+		t.Fatalf("proyecto inesperado: %+v", proyecto)
+	}
+	if _, err := db.DB.Exec(`DELETE FROM proyectos WHERE id=?`, proyectoID); err != nil {
+		t.Fatalf("delete proyecto para forzar cache: %v", err)
+	}
+	proyecto, err = snapshot.project(proyectoID)
+	if err != nil {
+		t.Fatalf("project second: %v", err)
+	}
+	if proyecto == nil || proyecto.ID != proyectoID {
+		t.Fatalf("deberia reutilizar proyecto cacheado: %+v", proyecto)
 	}
 }

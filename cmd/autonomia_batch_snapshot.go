@@ -37,6 +37,8 @@ type autonomiaBatchSnapshot struct {
 	pendingVotesByAgentProject map[string][]*db.Propuesta
 	openProposalsByProject     map[int64][]*db.Propuesta
 	politicasByProject         map[int64]*db.ProyectoAutonomia
+	proyectosByID             map[int64]*db.Proyecto
+	proyectosLoaded           map[int64]struct{}
 	activeProjectByAgent       map[string]int64
 	activeHandleByAgentProject map[string]bool
 	supervisorByProject        map[int64]*db.Agente
@@ -77,6 +79,8 @@ func newAutonomiaBatchSnapshot(sesiones []*db.Sesion) (*autonomiaBatchSnapshot, 
 		pendingVotesByAgentProject: map[string][]*db.Propuesta{},
 		openProposalsByProject:     map[int64][]*db.Propuesta{},
 		politicasByProject:         map[int64]*db.ProyectoAutonomia{},
+		proyectosByID:              map[int64]*db.Proyecto{},
+		proyectosLoaded:            map[int64]struct{}{},
 		activeProjectByAgent:       map[string]int64{},
 		activeHandleByAgentProject: map[string]bool{},
 		supervisorByProject:        map[int64]*db.Agente{},
@@ -145,6 +149,8 @@ func (s *autonomiaBatchSnapshot) invalidateProject(proyectoID int64) {
 	delete(s.asignacionesByProject, proyectoID)
 	delete(s.openProposalsByProject, proyectoID)
 	delete(s.politicasByProject, proyectoID)
+	delete(s.proyectosByID, proyectoID)
+	delete(s.proyectosLoaded, proyectoID)
 	delete(s.supervisorByProject, proyectoID)
 	delete(s.supervisorLoaded, proyectoID)
 	for cacheKey := range s.tareasByAgentProject {
@@ -424,6 +430,22 @@ func (s *autonomiaBatchSnapshot) projectPolicy(proyectoID int64) (*db.ProyectoAu
 	}
 	s.politicasByProject[proyectoID] = policy
 	return policy, nil
+}
+
+func (s *autonomiaBatchSnapshot) project(proyectoID int64) (*db.Proyecto, error) {
+	if s == nil || proyectoID <= 0 {
+		return nil, nil
+	}
+	if _, ok := s.proyectosLoaded[proyectoID]; ok {
+		return s.proyectosByID[proyectoID], nil
+	}
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(proyectoID, 10))
+	if err != nil {
+		return nil, err
+	}
+	s.proyectosByID[proyectoID] = proyecto
+	s.proyectosLoaded[proyectoID] = struct{}{}
+	return proyecto, nil
 }
 
 func (s *autonomiaBatchSnapshot) projectAssignments(proyectoID int64) ([]*db.Asignacion, error) {
