@@ -99,6 +99,84 @@ func TestAutonomiaCyclesRegistrarYFiltrar(t *testing.T) {
 	}
 }
 
+func TestAutonomiaProyectoReservaYCapacidad(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex3", "programador"); err != nil {
+		t.Fatalf("registrar Codex3: %v", err)
+	}
+	if err := RegistrarAgente("Codex4", "programador"); err != nil {
+		t.Fatalf("registrar Codex4: %v", err)
+	}
+	if err := RegistrarAgente("Codex5", "programador"); err != nil {
+		t.Fatalf("registrar Codex5: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE agentes SET estado_sesion='disponible' WHERE nombre IN ('Codex3','Codex4','Codex5')`); err != nil {
+		t.Fatalf("marcar agentes disponibles: %v", err)
+	}
+
+	proyectoReservaID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador-reserva"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto reserva: %v", err)
+	}
+	if _, err := UpsertProyectoAutonomia(&ProyectoAutonomia{
+		ProyectoID:        proyectoReservaID,
+		Enabled:           true,
+		SupervisorAgente:  "Codex3",
+		ReviewerAgente:    "Codex4",
+		ReserveSupervisor: true,
+		ReserveReviewer:   true,
+		EstadoAutonomia:   AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia reserva: %v", err)
+	}
+
+	if reservado, rol, err := agenteReservadoAutonomiaProyecto("Codex3", proyectoReservaID); err != nil || !reservado || rol != "supervisor" {
+		t.Fatalf("reserva supervisor inesperada: reservado=%v rol=%q err=%v", reservado, rol, err)
+	}
+	if reservado, rol, err := agenteReservadoAutonomiaProyecto("Codex4", proyectoReservaID); err != nil || !reservado || rol != "reviewer" {
+		t.Fatalf("reserva reviewer inesperada: reservado=%v rol=%q err=%v", reservado, rol, err)
+	}
+	if reservado, rol, err := agenteReservadoAutonomiaProyecto("Codex5", proyectoReservaID); err != nil || reservado || rol != "" {
+		t.Fatalf("agente no reservado inesperado: reservado=%v rol=%q err=%v", reservado, rol, err)
+	}
+
+	proyectoCapacidadID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador-capacidad",
+		Nombre:  "Orquestador Capacidad",
+		RutaAbs: filepath.Join(tmp, "orquestador-capacidad"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto capacidad: %v", err)
+	}
+	if _, err := UpsertProyectoAutonomia(&ProyectoAutonomia{
+		ProyectoID:      proyectoCapacidadID,
+		Enabled:         true,
+		MaxWorkers:      1,
+		EstadoAutonomia: AutonomiaProyectoActiva,
+	}); err != nil {
+		t.Fatalf("upsert autonomia capacidad: %v", err)
+	}
+	if err := ActivarAsignacion("Codex3", proyectoCapacidadID, "worker ocupado"); err != nil {
+		t.Fatalf("activar worker ocupado: %v", err)
+	}
+	admite, err := proyectoAdmiteWorkerAutonomiaParaAgente(proyectoCapacidadID, "Codex2")
+	if err != nil {
+		t.Fatalf("proyectoAdmiteWorkerAutonomiaParaAgente: %v", err)
+	}
+	if admite {
+		t.Fatalf("max_workers=1 deberia bloquear un worker adicional")
+	}
+}
+
 func TestProyectoAutonomiaUpsertPreservaTimestampsOperativosSiNoSeInforman(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 	proyectoID, err := UpsertProyecto(&Proyecto{

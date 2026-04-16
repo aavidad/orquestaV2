@@ -330,6 +330,106 @@ func scanAutonomiaCiclo(scanner interface{ Scan(dest ...any) error }) (*Autonomi
 	return &item, nil
 }
 
+func agenteReservadoAutonomiaProyecto(agente string, proyectoID int64) (bool, string, error) {
+	agente = strings.TrimSpace(agente)
+	if agente == "" || proyectoID <= 0 {
+		return false, "", nil
+	}
+	policy, err := GetProyectoAutonomia(proyectoID)
+	if err != nil || policy == nil || !policy.Enabled {
+		return false, "", err
+	}
+	if policy.ReserveSupervisor && strings.EqualFold(agente, strings.TrimSpace(policy.SupervisorAgente)) {
+		return true, "supervisor", nil
+	}
+	if policy.ReserveReviewer && strings.EqualFold(agente, strings.TrimSpace(policy.ReviewerAgente)) {
+		return true, "reviewer", nil
+	}
+	return false, "", nil
+}
+
+func contarWorkersActivosProyecto(proyectoID int64) (int, error) {
+	proyecto, err := GetProyecto(jsonNumber(proyectoID))
+	if err != nil {
+		return 0, err
+	}
+	estado := AsignacionActiva
+	asignaciones, err := ListarAsignaciones(FiltroAsignaciones{
+		ProyectoID: &proyectoID,
+		Estado:     &estado,
+	})
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, asignacion := range asignaciones {
+		if asignacion == nil {
+			continue
+		}
+		reservado, _, err := agenteReservadoAutonomiaProyecto(asignacion.Agente, proyectoID)
+		if err != nil {
+			return 0, err
+		}
+		if reservado {
+			continue
+		}
+		infoAgente, err := GetAgente(asignacion.Agente)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				continue
+			}
+			return 0, err
+		}
+		if infoAgente == nil {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(infoAgente.EstadoCuota), "activo") {
+			continue
+		}
+		if !agentePertenecePoolAutobootstrapProyecto(asignacion.Agente, proyecto) {
+			continue
+		}
+		total++
+	}
+	return total, nil
+}
+
+func proyectoAdmiteWorkerAutonomiaParaAgente(proyectoID int64, agente string) (bool, error) {
+	if proyectoID <= 0 {
+		return true, nil
+	}
+	policy, err := GetProyectoAutonomia(proyectoID)
+	if err != nil || policy == nil || !policy.Enabled || policy.MaxWorkers <= 0 {
+		return true, err
+	}
+	workers, err := contarWorkersActivosProyecto(proyectoID)
+	if err != nil {
+		return false, err
+	}
+	agente = strings.TrimSpace(agente)
+	if agente != "" {
+		estado := AsignacionActiva
+		asignaciones, err := ListarAsignaciones(FiltroAsignaciones{
+			Agente:     &agente,
+			ProyectoID: &proyectoID,
+			Estado:     &estado,
+		})
+		if err != nil {
+			return false, err
+		}
+		if len(asignaciones) > 0 {
+			reservado, _, err := agenteReservadoAutonomiaProyecto(agente, proyectoID)
+			if err != nil {
+				return false, err
+			}
+			if !reservado && workers > 0 {
+				workers--
+			}
+		}
+	}
+	return workers < policy.MaxWorkers, nil
+}
+
 func boolToIntAutonomia(v bool) int {
 	if v {
 		return 1
