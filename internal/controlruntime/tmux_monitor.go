@@ -848,7 +848,9 @@ func tmuxPaneHasApproachingRateLimitPrompt(captured string) bool {
 	}
 	hasBanner := strings.Contains(normalized, "approaching rate limits") ||
 		strings.Contains(normalized, "approaching usage limits")
-	hasMenu := strings.Contains(normalized, "switch to gpt-5.1-codex-mini") ||
+	hasSwitchOption := strings.Contains(normalized, "switch to ") &&
+		(strings.Contains(normalized, "1. switch to ") || strings.Contains(normalized, "› 1. switch to "))
+	hasMenu := hasSwitchOption ||
 		strings.Contains(normalized, "keep current model") ||
 		strings.Contains(normalized, "never show again")
 	return hasBanner && hasMenu
