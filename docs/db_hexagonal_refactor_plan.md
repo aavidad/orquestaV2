@@ -62,6 +62,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: la entrada de reactivación automática ahora vuelve a comprobar `habilitado` antes de encolar `start/resume/handoff`, evitando reanimaciones residuales de agentes retirados aunque la llamada llegue por una ruta tardía
 - corte operativo adicional fuera de `db`: `server preparar-sesion` y el bootstrap de servidor filtran la flota oficial a agentes `Codex*`; una config contaminada ya no debe conservar `antigravity`/`claude`/otros perfiles fuera de política en la flota permitida
 - corte operativo adicional fuera de `db`: el monitor TMUX ya autoacepta el prompt interactivo de Codex `Approaching rate limits` eligiendo el modelo alternativo ofrecido, evitando que la sesión quede bloqueada por espera humana en ese menú
+- corte operativo adicional fuera de `db`: tras aceptar el menú de cambio de modelo por rate limit, `waitForTMUXPaneReady` recaptura la pane y permite continuar con el dispatch; evita falsos `quota_blocked` justo después del auto-switch
 
 Estado del frente seguro:
 

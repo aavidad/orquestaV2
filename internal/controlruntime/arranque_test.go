@@ -734,6 +734,31 @@ func TestEnviarInstruccionTMUXVerificadaConfirmaTareaActiva(t *testing.T) {
 	}
 }
 
+func TestEnviarInstruccionTMUXVerificadaAceptaCambioDeModeloPorRateLimit(t *testing.T) {
+	dir := t.TempDir()
+	fakeTmux := writeFakeTmuxDispatchScript(t, dir, "rate_limit_switch")
+
+	result, err := EnviarInstruccionTMUXVerificada(ObjetivoProceso{
+		HandleKind:   "process",
+		HandleRef:    "0",
+		MetadataJSON: fmt.Sprintf(`{"driver":"tmux_cli_session","tmux_command":"%s","tmux_pane_id":"%%77"}`, fakeTmux),
+	}, "haz refresh corto")
+	if err != nil {
+		t.Fatalf("EnviarInstruccionTMUXVerificada: %v", err)
+	}
+	if !result.Attempted || !result.Delivered {
+		t.Fatalf("deberia desbloquear el cambio de modelo y entregar la instruccion: %+v", result)
+	}
+	invocations, err := os.ReadFile(filepath.Join(dir, "fake-tmux-dispatch-state", "invocations.log"))
+	if err != nil {
+		t.Fatalf("leer invocations fake tmux: %v", err)
+	}
+	logText := string(invocations)
+	if !strings.Contains(logText, "send-keys -t %77 1") || !strings.Contains(logText, "send-keys -t %77 C-m") {
+		t.Fatalf("deberia aceptar el menu de cambio de modelo antes del dispatch: %s", logText)
+	}
+}
+
 func TestEnviarInstruccionTMUXVerificadaDejaPendienteSiNoConfirmaConsumo(t *testing.T) {
 	dir := t.TempDir()
 	fakeTmux := writeFakeTmuxDispatchScript(t, dir, "draft_persists")
@@ -1052,7 +1077,11 @@ shift || true
 pane_state_file="$state_dir/pane_state"
 prompt_file="$state_dir/prompt"
 if [[ ! -f "$pane_state_file" ]]; then
-  printf 'ready\n' > "$pane_state_file"
+  if [[ "$mode" == "rate_limit_switch" ]]; then
+    printf 'rate_limit_switch\n' > "$pane_state_file"
+  else
+    printf 'ready\n' > "$pane_state_file"
+  fi
 fi
 case "$cmd" in
   display-message)
@@ -1064,6 +1093,12 @@ case "$cmd" in
     case "$pane_state" in
       ready)
         printf '%%s\n' '> ready'
+        ;;
+      rate_limit_switch)
+        printf '%%s\n' 'Approaching rate limits'
+        printf '%%s\n' 'Switch to gpt-5.4-mini for lower credit usage?'
+        printf '%%s\n' '› 1. Switch to gpt-5.4-mini'
+        printf '%%s\n' '  2. Keep current model'
         ;;
       draft)
         printf '%%s\n' "> $prompt"
@@ -1091,6 +1126,14 @@ case "$cmd" in
         : > "$prompt_file"
         exit 0
       fi
+      if [[ "$mode" == "rate_limit_switch" ]]; then
+        pane_state="$(cat "$pane_state_file" 2>/dev/null || printf 'ready')"
+        printf '%%s' "$*" > "$prompt_file"
+        if [[ "$pane_state" == "ready" ]]; then
+          printf 'draft\n' > "$pane_state_file"
+        fi
+        exit 0
+      fi
       printf '%%s' "$*" > "$prompt_file"
       if [[ "$mode" == "gemini_accept_edits" ]]; then
         printf 'gemini_draft\n' > "$pane_state_file"
@@ -1103,6 +1146,15 @@ case "$cmd" in
     if [[ "$key" == "Enter" || "$key" == "C-m" ]]; then
       if [[ "$mode" == "active_after_enter" ]]; then
         printf 'active\n' > "$pane_state_file"
+      elif [[ "$mode" == "rate_limit_switch" ]]; then
+        pane_state="$(cat "$pane_state_file" 2>/dev/null || printf 'ready')"
+        if [[ "$pane_state" == "rate_limit_switch" ]]; then
+          printf 'ready\n' > "$pane_state_file"
+        elif [[ "$pane_state" == "draft" ]]; then
+          printf 'active\n' > "$pane_state_file"
+        else
+          printf 'draft\n' > "$pane_state_file"
+        fi
       elif [[ "$mode" == "gemini_accept_edits" ]]; then
         pane_state="$(cat "$pane_state_file" 2>/dev/null || printf 'ready')"
         if [[ "$pane_state" == "gemini_draft" ]]; then
@@ -1115,6 +1167,10 @@ case "$cmd" in
       else
         printf 'draft\n' > "$pane_state_file"
       fi
+      exit 0
+    fi
+    if [[ "$mode" == "rate_limit_switch" && "$key" == "1" ]]; then
+      printf 'rate_limit_switch\n' > "$pane_state_file"
       exit 0
     fi
     if [[ "$key" == "BTab" && "$mode" == "gemini_accept_edits" ]]; then

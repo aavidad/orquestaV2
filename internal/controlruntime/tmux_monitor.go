@@ -489,6 +489,14 @@ func waitForTMUXPaneReady(tmuxCommand, paneID string, timeout time.Duration) (bo
 		if err != nil {
 			return false, err
 		}
+		if dismissed {
+			time.Sleep(120 * time.Millisecond)
+			if updated, captureErr := captureTMUXPane(tmuxCommand, paneID); captureErr == nil {
+				captured = updated
+			} else {
+				return false, nil
+			}
+		}
 		state := tmuxClassifyPaneState(captured)
 		if state == workerStatusBlockedTrust || state == workerStatusBlockedAuth || state == workerStatusBlockedQuota {
 			return false, nil
