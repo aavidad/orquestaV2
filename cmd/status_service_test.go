@@ -332,6 +332,27 @@ func TestAgentesVisiblesPorEstadoOperativoRowsUsaEstadoOperativoCanónico(t *tes
 	}
 }
 
+func TestAgentesVisiblesPorEstadoOperativoRowsNoCuentaArrancandoComoTrabajando(t *testing.T) {
+	agente := &db.Agente{Nombre: "CodexStart", Rol: "programador"}
+	rows := []agentesapp.Row{
+		{Agente: agente, EstadoOperativo: "arrancando"},
+	}
+
+	activos, trabajando, saturados, atascados, authManual, quotaBlocked, ok := agentesVisiblesPorEstadoOperativoRows([]*db.Agente{agente}, rows)
+	if !ok {
+		t.Fatalf("debería resolver filas operativas")
+	}
+	if len(activos) != 1 || activos[0].Nombre != "CodexStart" {
+		t.Fatalf("activos inesperados: %+v", activos)
+	}
+	if len(trabajando) != 0 {
+		t.Fatalf("arrancando no deberia contar como trabajando: %+v", trabajando)
+	}
+	if len(saturados) != 0 || len(atascados) != 0 || len(authManual) != 0 || len(quotaBlocked) != 0 {
+		t.Fatalf("listas inesperadas: saturados=%+v atascados=%+v auth=%+v quota=%+v", saturados, atascados, authManual, quotaBlocked)
+	}
+}
+
 func TestAgentesVisiblesPorEstadoOperativoRowsCuentaAtascadoSoloSiTieneRuntimeUtil(t *testing.T) {
 	agente := &db.Agente{Nombre: "Codex11", Rol: "programador"}
 	rows := []agentesapp.Row{

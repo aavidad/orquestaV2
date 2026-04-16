@@ -55,6 +55,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - `aa13fa1` reutiliza `GetProyectoConRutaEfectiva` en el filtrado de `worktrees`, reduciendo ensamblaje repetido en `db/worktrees.go`
 - `d3c36c6` reutiliza la búsqueda de proyecto con ruta efectiva al resolver la worktree activa por agente/proyecto
 - `1cd664d` centraliza la reutilización de ruta efectiva del proyecto en helpers de `db/proyectos.go` para evitar recomputación y seams duplicados
+- corte operativo adicional fuera de `db`: `worker starting` ya no cuenta como `trabajando`; pasa a `arrancando` en `agentesapp/status`, reduciendo sobreconteo de ocupación sin empujar lógica a persistencia
 
 Estado del frente seguro:
 
@@ -83,6 +84,7 @@ Siguiente corte recomendado para Orquesta (orden):
 - [ ] 6) Reforzar frontera en `db/test_architecture_dependencies_test.go` para imports y wrappers tras cada corte
 - [ ] 7) Vigilar que políticas y prompts no reintroduzcan `xhigh` por defecto fuera de los tres casos permitidos
 - [ ] 8) Diseñar e implementar `orquesta reload`: recarga en caliente de configuración/bootstrap/prompts/skills provisionadas sin reinicio completo del daemon y sin romper agentes activos
+- [ ] 9) Cerrar la clasificación operativa y enforcement de perfiles permitidos fuera de `db`: no contar `starting` como trabajo útil y evitar relanzamiento de perfiles fuera de política (`solo Codex`, etc.)
 
 ## Inventario Actual
 

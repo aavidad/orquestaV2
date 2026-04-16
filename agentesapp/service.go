@@ -2495,6 +2495,9 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 			(row.workerHeartbeatRecent(now) && strings.EqualFold(strings.TrimSpace(row.handleDriver()), "tmux_cli_session"))) {
 		return "trabajando", firstNonEmpty(row.activitySummary(), "continuidad pendiente útil")
 	}
+	if hasActiveTask && workerRunningFresh && workerState == "starting" {
+		return "arrancando", firstNonEmpty(row.activitySummary(), "worker starting")
+	}
 	if hasActiveTask && workerRunningFresh && row.workerProgressStale(now, workerOutputStaleThreshold) {
 		return "atascado", firstNonEmpty(row.workerLastProgressSummary(), row.workerLastOutputSummary(), "worker sin progreso reciente")
 	}
