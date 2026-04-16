@@ -8957,9 +8957,26 @@ func procesarCompactacionExclusividadPremiumSesionActiva(sesion *db.Sesion, snap
 	if sesion == nil || sesion.ProyectoID == nil {
 		return 0, nil
 	}
-	asignacion, err := db.GetAsignacionActivaAgente(strings.TrimSpace(sesion.Agente))
-	if err != nil || asignacion == nil {
-		return 0, err
+	var (
+		asignacion *db.Asignacion
+		err        error
+	)
+	if snapshot != nil {
+		asignaciones, err := snapshot.activeAssignmentsByAgent(strings.TrimSpace(sesion.Agente))
+		if err != nil {
+			return 0, err
+		}
+		if len(asignaciones) > 0 {
+			asignacion = asignaciones[0]
+		}
+	} else {
+		asignacion, err = db.GetAsignacionActivaAgente(strings.TrimSpace(sesion.Agente))
+		if err != nil {
+			return 0, err
+		}
+	}
+	if asignacion == nil {
+		return 0, nil
 	}
 	if asignacion.ProyectoID != *sesion.ProyectoID || !asignacionMantieneExclusividadPremium(asignacion.Nota) {
 		return 0, nil

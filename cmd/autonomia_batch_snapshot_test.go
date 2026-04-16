@@ -81,3 +81,45 @@ func TestAutonomiaBatchSnapshotProjectCacheaPorProyecto(t *testing.T) {
 		t.Fatalf("deberia reutilizar proyecto cacheado: %+v", proyecto)
 	}
 }
+
+func TestAutonomiaBatchSnapshotActiveAssignmentsByAgentCacheaPorAgente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("Codex1", proyectoID, "frente"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+
+	snapshot := &autonomiaBatchSnapshot{
+		asignacionesByAgent: map[string][]*db.Asignacion{},
+	}
+
+	asignaciones, err := snapshot.activeAssignmentsByAgent("Codex1")
+	if err != nil {
+		t.Fatalf("activeAssignmentsByAgent first: %v", err)
+	}
+	if len(asignaciones) != 1 || asignaciones[0] == nil || asignaciones[0].ProyectoID != proyectoID {
+		t.Fatalf("asignaciones inesperadas: %+v", asignaciones)
+	}
+	if _, err := db.DB.Exec(`DELETE FROM asignaciones WHERE agente=?`, "Codex1"); err != nil {
+		t.Fatalf("delete asignaciones para forzar cache: %v", err)
+	}
+	asignaciones, err = snapshot.activeAssignmentsByAgent("Codex1")
+	if err != nil {
+		t.Fatalf("activeAssignmentsByAgent second: %v", err)
+	}
+	if len(asignaciones) != 1 || asignaciones[0] == nil || asignaciones[0].ProyectoID != proyectoID {
+		t.Fatalf("deberia reutilizar asignaciones cacheadas: %+v", asignaciones)
+	}
+}

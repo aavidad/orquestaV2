@@ -173,22 +173,9 @@ func (s *autonomiaBatchSnapshot) invalidateProject(proyectoID int64) {
 }
 
 func (s *autonomiaBatchSnapshot) assignment(agente string, proyectoID int64) (bool, string, error) {
-	key := strings.ToLower(strings.TrimSpace(agente))
-	if key == "" {
-		return false, "", nil
-	}
-	asignaciones, ok := s.asignacionesByAgent[key]
-	if !ok {
-		estado := db.AsignacionActiva
-		list, err := db.ListarAsignaciones(db.FiltroAsignaciones{
-			Agente: &agente,
-			Estado: &estado,
-		})
-		if err != nil {
-			return false, "", err
-		}
-		asignaciones = list
-		s.asignacionesByAgent[key] = list
+	asignaciones, err := s.activeAssignmentsByAgent(agente)
+	if err != nil {
+		return false, "", err
 	}
 	if len(asignaciones) == 0 {
 		return false, "", nil
@@ -199,6 +186,27 @@ func (s *autonomiaBatchSnapshot) assignment(agente string, proyectoID int64) (bo
 		}
 	}
 	return false, asignaciones[0].ProyectoSlug, nil
+}
+
+func (s *autonomiaBatchSnapshot) activeAssignmentsByAgent(agente string) ([]*db.Asignacion, error) {
+	key := strings.ToLower(strings.TrimSpace(agente))
+	if key == "" {
+		return nil, nil
+	}
+	asignaciones, ok := s.asignacionesByAgent[key]
+	if !ok {
+		estado := db.AsignacionActiva
+		list, err := db.ListarAsignaciones(db.FiltroAsignaciones{
+			Agente: &agente,
+			Estado: &estado,
+		})
+		if err != nil {
+			return nil, err
+		}
+		asignaciones = list
+		s.asignacionesByAgent[key] = list
+	}
+	return asignaciones, nil
 }
 
 func (s *autonomiaBatchSnapshot) tasks(agente string, proyectoID int64) ([]*db.Tarea, error) {
