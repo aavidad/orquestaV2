@@ -7803,6 +7803,7 @@ func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasAct
 		}
 	}
 	procesadas := 0
+	proyectosByID := map[int64]*db.Proyecto{}
 	for _, row := range rows {
 		if row.Agente == nil {
 			continue
@@ -7830,9 +7831,15 @@ func procesarReactivacionAgentesSinRuntimeBatch(rows []agentesapp.Row, tareasAct
 		proyectoID := rowProyectoIDPreferido(row)
 		var proyecto *db.Proyecto
 		if proyectoID != nil && *proyectoID > 0 {
-			proyecto, err = runtimesService.GetProject(strconv.FormatInt(*proyectoID, 10))
-			if err != nil {
-				return procesadas, err
+			proyecto = proyectosByID[*proyectoID]
+			if proyecto == nil {
+				proyecto, err = runtimesService.GetProject(strconv.FormatInt(*proyectoID, 10))
+				if err != nil {
+					return procesadas, err
+				}
+				if proyecto != nil {
+					proyectosByID[*proyectoID] = proyecto
+				}
 			}
 		} else {
 			proyecto, err = resolverProyectoReactivacionAgente(agente)
