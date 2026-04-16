@@ -234,6 +234,9 @@ func runtimeOrderHotAgentProjectKey(agente string, proyectoID *int64) string {
 }
 
 func listarRuntimeOrdersVivasDesdeDB() ([]*RuntimeOrder, error) {
+	if DB == nil || DB.DB == nil {
+		return []*RuntimeOrder{}, nil
+	}
 	rows, err := DB.Query(runtimeOrderSelectBase() + `
 		WHERE estado IN ('pendiente','tomada','ejecutando')
 		ORDER BY id DESC`)

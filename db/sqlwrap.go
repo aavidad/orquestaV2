@@ -3,6 +3,10 @@ package db
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
+	"fmt"
+	"log"
+	"sync"
 	"time"
 
 	"orquesta/storage"
@@ -11,6 +15,50 @@ import (
 type Handle struct {
 	*sql.DB
 	driver string
+}
+
+type noopResult struct{}
+
+func (noopResult) LastInsertId() (int64, error) { return 0, nil }
+func (noopResult) RowsAffected() (int64, error) { return 0, nil }
+
+var (
+	noDBFallbackOnce sync.Once
+	noDBFallback     *sql.DB
+)
+
+func noDBFallbackDB() *sql.DB {
+	noDBFallbackOnce.Do(func() {
+		db, err := sql.Open("sqlite", ":memory:")
+		if err != nil {
+			log.Printf("orquesta/db: no se pudo abrir fallback sqlite memoria para consultas sin DB: %v", err)
+			return
+		}
+		if _, err := db.Exec("CREATE TABLE IF NOT EXISTS _orquesta_noop (id INTEGER)"); err != nil {
+			log.Printf("orquesta/db: no se pudo preparar fallback sqlite memoria para consultas sin DB: %v", err)
+			_ = db.Close()
+			return
+		}
+		noDBFallback = db
+	})
+	return noDBFallback
+}
+
+func noDBFallbackRows() (*sql.Rows, error) {
+	db := noDBFallbackDB()
+	if db == nil {
+		return nil, fmt.Errorf("persistencia no disponible")
+	}
+	rows, err := db.Query("SELECT 1 WHERE 0")
+	return rows, err
+}
+
+func noDBFallbackQueryRow() *sql.Row {
+	db := noDBFallbackDB()
+	if db == nil {
+		return &sql.Row{}
+	}
+	return db.QueryRow("SELECT 1 WHERE 0")
 }
 
 type Tx struct {
@@ -24,6 +72,9 @@ func newHandle(inner *sql.DB, driver string) *Handle {
 }
 
 func (h *Handle) Exec(query string, args ...any) (sql.Result, error) {
+	if h == nil || h.DB == nil {
+		return noopResult{}, nil
+	}
 	var (
 		res sql.Result
 		err error
@@ -39,6 +90,9 @@ func (h *Handle) Exec(query string, args ...any) (sql.Result, error) {
 }
 
 func (h *Handle) Query(query string, args ...any) (*sql.Rows, error) {
+	if h == nil || h.DB == nil {
+		return noDBFallbackRows()
+	}
 	var (
 		rows *sql.Rows
 		err  error
@@ -51,6 +105,9 @@ func (h *Handle) Query(query string, args ...any) (*sql.Rows, error) {
 }
 
 func (h *Handle) QueryRow(query string, args ...any) *sql.Row {
+	if h == nil || h.DB == nil {
+		return noDBFallbackQueryRow()
+	}
 	return h.DB.QueryRow(storage.RebindQuery(h.driver, query), args...)
 }
 
@@ -60,6 +117,9 @@ func (h *Handle) QueryRow(query string, args ...any) *sql.Row {
 // páginas volcadas y las que quedaron pendientes. En drivers que no son SQLite
 // es un no-op.
 func (h *Handle) WALCheckpoint() (walPages, checkpointedPages int, err error) {
+	if h == nil || h.DB == nil {
+		return 0, 0, nil
+	}
 	if h == nil || normalizedDriverName(h.driver) != "sqlite" {
 		return 0, 0, nil
 	}
@@ -70,6 +130,9 @@ func (h *Handle) WALCheckpoint() (walPages, checkpointedPages int, err error) {
 }
 
 func (h *Handle) Begin() (*Tx, error) {
+	if h == nil || h.DB == nil {
+		return nil, driver.ErrBadConn
+	}
 	var (
 		tx  *sql.Tx
 		err error
@@ -85,6 +148,9 @@ func (h *Handle) Begin() (*Tx, error) {
 }
 
 func (h *Handle) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
+	if h == nil || h.DB == nil {
+		return nil, driver.ErrBadConn
+	}
 	var (
 		tx  *sql.Tx
 		err error

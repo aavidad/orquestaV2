@@ -101,6 +101,9 @@ func RegistrarPresupuestoSesion(p *PresupuestoSesion) (int64, error) {
 }
 
 func UltimoPresupuestoSesion(sesionID int64) (*PresupuestoSesion, error) {
+	if DB == nil || DB.DB == nil {
+		return nil, sql.ErrNoRows
+	}
 	row := DB.QueryRow(`
 		SELECT id, sesion_id, pool_id, model_slug, window_kind, window_started_at, reset_at,
 		       remaining_seconds, remaining_messages, remaining_tokens, remaining_credits,
@@ -113,6 +116,9 @@ func UltimoPresupuestoSesion(sesionID int64) (*PresupuestoSesion, error) {
 }
 
 func UltimoPresupuestoSesionPorFuente(sesionID int64, budgetSource string) (*PresupuestoSesion, error) {
+	if DB == nil || DB.DB == nil {
+		return nil, sql.ErrNoRows
+	}
 	row := DB.QueryRow(`
 		SELECT id, sesion_id, pool_id, model_slug, window_kind, window_started_at, reset_at,
 		       remaining_seconds, remaining_messages, remaining_tokens, remaining_credits,
@@ -125,6 +131,9 @@ func UltimoPresupuestoSesionPorFuente(sesionID int64, budgetSource string) (*Pre
 }
 
 func UltimoPresupuestoAgente(agente string) (*PresupuestoSesion, *Sesion, error) {
+	if DB == nil || DB.DB == nil {
+		return nil, nil, sql.ErrNoRows
+	}
 	sesion, err := GetSesionActiva(agente, nil)
 	if err != nil {
 		if err != sql.ErrNoRows {
@@ -181,6 +190,9 @@ func PresupuestoSesionAportaCuota(p *PresupuestoSesion) bool {
 func UltimoPresupuestoAgenteConCuota(agente string) (*PresupuestoSesion, *Sesion, error) {
 	agente = strings.TrimSpace(agente)
 	if agente == "" {
+		return nil, nil, sql.ErrNoRows
+	}
+	if DB == nil || DB.DB == nil {
 		return nil, nil, sql.ErrNoRows
 	}
 	rows, err := DB.Query(`

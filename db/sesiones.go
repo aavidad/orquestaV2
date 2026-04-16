@@ -902,7 +902,11 @@ func GetAgente(nombre string) (*Agente, error) {
 		}
 		return nil, err
 	}
-	row := DB.QueryRow(`
+	dbHandle := DB
+	if dbHandle == nil || dbHandle.DB == nil {
+		return nil, nil
+	}
+	row := dbHandle.QueryRow(`
 		SELECT nombre, rol, activo, habilitado, COALESCE(estado_sesion,''), ultima_sesion,
 		       consumo_dia_segundos, consumo_semanal_segundos, limite_dia_segundos,
 		       limite_semanal_segundos, last_usage_reset_at, estado_cuota,
@@ -934,6 +938,9 @@ func GetAgente(nombre string) (*Agente, error) {
 		a.ReanimarAt = &reanimar.Time
 	}
 	a.MotivoPausa = motivo.String
+	if dbHandle == nil || dbHandle.DB == nil || DB == nil || DB.DB == nil {
+		return a, nil
+	}
 	enriquecerAgenteConPresupuesto(a)
 	sesionActiva, err := GetSesionActivaOperativa(a.Nombre, nil)
 	if err != nil && err != sql.ErrNoRows {
@@ -952,6 +959,9 @@ func enriquecerAgentesConPresupuesto(list []*Agente) {
 
 func enriquecerAgenteConPresupuesto(a *Agente) {
 	if a == nil {
+		return
+	}
+	if DB == nil || DB.DB == nil {
 		return
 	}
 	enriquecerAgenteSinCuotaProveedor(a)
@@ -2113,6 +2123,9 @@ func resolverAgentePorNombreCI(nombre string) (string, string, bool, error) {
 	if nombre == "" {
 		return "", "", false, sql.ErrNoRows
 	}
+	if DB == nil || DB.DB == nil {
+		return "", "", false, sql.ErrNoRows
+	}
 	var (
 		nombreCanonico string
 		rol            string
@@ -2200,6 +2213,10 @@ func CheckReanimaciones() ([]*Agente, error) {
 
 // ResetReanimacion limpia los campos de reanimación de un agente.
 func ResetReanimacion(nombre string) error {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" || DB == nil || DB.DB == nil {
+		return nil
+	}
 	_, err := DB.Exec(`UPDATE agentes SET reanimar_at = NULL, motivo_pausa = NULL, estado_cuota = 'activo' WHERE nombre = ?`, nombre)
 	return err
 }
@@ -2209,6 +2226,9 @@ func ResetReanimacion(nombre string) error {
 func LimpiarContinuidadAgente(nombre string) error {
 	nombre = strings.TrimSpace(nombre)
 	if nombre == "" {
+		return nil
+	}
+	if DB == nil || DB.DB == nil {
 		return nil
 	}
 	if _, err := DB.Exec(`

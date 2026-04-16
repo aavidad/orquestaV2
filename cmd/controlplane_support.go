@@ -328,6 +328,7 @@ type resetReanimacionResultado string
 const (
 	resetReanimacionResultadoReactivado        resetReanimacionResultado = "reactivado"
 	resetReanimacionResultadoCooldownSostenido resetReanimacionResultado = "cooldown_sostenido"
+	resetReanimacionResultadoDbNoLista         resetReanimacionResultado = "db_no_disponible"
 )
 
 func agenteDebeEntrarEnReanimacionAutomatica(agente *db.Agente, now time.Time) bool {
@@ -379,27 +380,51 @@ func (dbAutomationService) ResetReanimacionOutcome(nombre string) (string, error
 
 func (dbAutomationService) ResetReanimacionResultado(nombre string) (resetReanimacionResultado, error) {
 	nombre = strings.TrimSpace(nombre)
+	if db.DB == nil || db.DB.DB == nil {
+		return resetReanimacionResultadoDbNoLista, nil
+	}
+	dbDisponible := func() bool {
+		return db.DB != nil && db.DB.DB != nil
+	}
 	if _, err := revalidarPresupuestoAgenteSiCorresponde(nombre, presupuestoPreflightRevalidationAge(), true); err != nil {
 		return "", err
+	}
+	if !dbDisponible() {
+		return resetReanimacionResultadoDbNoLista, nil
 	}
 	bloqueado, err := sostenerCooldownSiLaCuotaVisibleSigueBloqueada(nombre)
 	if err != nil {
 		return "", err
 	}
 	if bloqueado {
+		if !dbDisponible() {
+			return resetReanimacionResultadoDbNoLista, nil
+		}
 		if err := cancelarRuntimeOrdersReanimacionPorCooldown(nombre); err != nil {
 			return "", err
 		}
 		return resetReanimacionResultadoCooldownSostenido, nil
 	}
+	if !dbDisponible() {
+		return resetReanimacionResultadoDbNoLista, nil
+	}
 	if err := cancelarBootstrapObsoletoReanimacion(nombre); err != nil {
 		return "", err
+	}
+	if !dbDisponible() {
+		return resetReanimacionResultadoDbNoLista, nil
 	}
 	if err := registrarCheckpointRehabilitacionManual(nombre); err != nil {
 		return "", err
 	}
+	if !dbDisponible() {
+		return resetReanimacionResultadoDbNoLista, nil
+	}
 	if err := reactivarAgenteTrasReanimacionConMotivo(nombre, "manual_rehabilitation"); err != nil {
 		return "", err
+	}
+	if !dbDisponible() {
+		return resetReanimacionResultadoDbNoLista, nil
 	}
 	if err := db.ResetReanimacion(nombre); err != nil {
 		return "", err
@@ -411,6 +436,9 @@ func (dbAutomationService) ResetReanimacionResultado(nombre string) (resetReanim
 func cancelarBootstrapObsoletoReanimacion(agente string) error {
 	agente = strings.TrimSpace(agente)
 	if agente == "" {
+		return nil
+	}
+	if db.DB == nil || db.DB.DB == nil {
 		return nil
 	}
 	estados := []string{"pendiente", "tomada", "ejecutando"}
@@ -449,6 +477,9 @@ func cancelarBootstrapObsoletoReanimacion(agente string) error {
 func cancelarRuntimeOrdersReanimacionPorCooldown(agente string) error {
 	agente = strings.TrimSpace(agente)
 	if agente == "" {
+		return nil
+	}
+	if db.DB == nil || db.DB.DB == nil {
 		return nil
 	}
 	estados := []string{"pendiente", "tomada", "ejecutando"}
@@ -1509,6 +1540,9 @@ func procesarPresupuestoSesionObservadoBatch() (int, error) {
 
 func refrescarPresupuestoSesionObservadoAgente(nombre string) (int, error) {
 	nombre = strings.TrimSpace(nombre)
+	if db.DB == nil || db.DB.DB == nil {
+		return 0, nil
+	}
 	if nombre == "" {
 		procesados, err := procesarPresupuestoSesionObservadoBatch()
 		if err != nil {
@@ -1560,6 +1594,9 @@ func refrescarPresupuestoSesionObservadoAgente(nombre string) (int, error) {
 func listarRuntimeHandlesPresupuestoAgente(nombre string) ([]*db.RuntimeHandle, error) {
 	nombre = strings.TrimSpace(nombre)
 	if nombre == "" {
+		return nil, nil
+	}
+	if db.DB == nil || db.DB.DB == nil {
 		return nil, nil
 	}
 	handles, err := db.ListarRuntimeHandlesCanonicosRecientes(&nombre)
@@ -11040,6 +11077,9 @@ func reactivarAgenteTrasReanimacionConMotivo(agente, motivo string) error {
 	if agente == "" {
 		return nil
 	}
+	if db.DB == nil || db.DB.DB == nil {
+		return nil
+	}
 	infoAgente, err := db.GetAgente(agente)
 	if err != nil {
 		return err
@@ -11150,6 +11190,9 @@ func encolarReactivacionAgenteProyectoConHandleSiProcede(agente string, proyecto
 func resolverProyectoReactivacionAgente(agente string) (*db.Proyecto, error) {
 	agente = strings.TrimSpace(agente)
 	if agente == "" {
+		return nil, nil
+	}
+	if db.DB == nil || db.DB.DB == nil {
 		return nil, nil
 	}
 	if proyectoID, err := db.ObtenerProyectoActivoAgente(agente); err != nil {

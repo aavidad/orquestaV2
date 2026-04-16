@@ -9,6 +9,9 @@ func enriquecerAgentesSinCuotaProveedor(list []*Agente) {
 	if len(list) == 0 {
 		return
 	}
+	if DB == nil || DB.DB == nil {
+		return
+	}
 	nombres := make([]string, 0, len(list))
 	for _, agente := range list {
 		if agente == nil {
@@ -32,6 +35,9 @@ func enriquecerAgentesSinCuotaProveedor(list []*Agente) {
 
 func enriquecerAgenteSinCuotaProveedor(agente *Agente) {
 	if agente == nil {
+		return
+	}
+	if DB == nil || DB.DB == nil {
 		return
 	}
 	if nombrePareceAgenteSinCuotaProveedor(agente.Nombre) {
