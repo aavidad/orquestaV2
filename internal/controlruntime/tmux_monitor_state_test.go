@@ -373,6 +373,29 @@ func TestTMUXPaneHasUsageLimitPromptDetectaCapturaRealCodex2(t *testing.T) {
 	}
 }
 
+func TestTMUXPaneHasApproachingRateLimitPromptDetectaCambioInteractivoDeModelo(t *testing.T) {
+	captured := "" +
+		"• Ajusté el resolver de lease bootstrap y dejé el slice en verde.\n" +
+		"\n" +
+		"  Approaching rate limits\n" +
+		"  Switch to gpt-5.1-codex-mini for lower credit usage?\n" +
+		"\n" +
+		"› 1. Switch to gpt-5.1-codex-mini\n" +
+		"  2. Keep current model\n" +
+		"  3. Keep current model (never show again)\n" +
+		"\n" +
+		"  Press enter to confirm or esc to go back\n"
+	if !tmuxPaneHasApproachingRateLimitPrompt(captured) {
+		t.Fatal("el prompt de approaching rate limits deberia detectarse como bloqueo de cuota")
+	}
+	if tmuxPaneLooksReady(captured) {
+		t.Fatal("el prompt de approaching rate limits no deberia marcarse como ready")
+	}
+	if got := tmuxClassifyPaneState(captured); got != workerStatusBlockedQuota {
+		t.Fatalf("estado de pane inesperado: got=%q want=%q", got, workerStatusBlockedQuota)
+	}
+}
+
 func TestTMUXWorkerStateOnPaneFinalizedPreservaQuota(t *testing.T) {
 	state, exitErr := tmuxWorkerStateOnPaneFinalized(workerStatusBlockedQuota)
 	if state != workerStatusBlockedQuota {

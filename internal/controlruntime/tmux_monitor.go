@@ -530,6 +530,8 @@ func tmuxClassifyPaneState(captured string) string {
 		return workerStatusBlockedAuth
 	case tmuxPaneHasUsageLimitPrompt(captured):
 		return workerStatusBlockedQuota
+	case tmuxPaneHasApproachingRateLimitPrompt(captured):
+		return workerStatusBlockedQuota
 	case tmuxPaneHasActiveTask(captured):
 		return workerStatusRunning
 	case tmuxPaneLooksReady(captured):
@@ -688,7 +690,7 @@ func tmuxPaneLooksReady(captured string) bool {
 	if tmuxPaneHasGeminiAuthPrompt(captured) || tmuxPaneHasClaudeAuthPrompt(captured) || tmuxPaneHasCodexAuthPrompt(captured) {
 		return false
 	}
-	if tmuxPaneHasUsageLimitPrompt(captured) {
+	if tmuxPaneHasUsageLimitPrompt(captured) || tmuxPaneHasApproachingRateLimitPrompt(captured) {
 		return false
 	}
 	if tmuxPaneHasPendingSubmit(captured) {
@@ -835,6 +837,19 @@ func tmuxPaneHasUsageLimitPrompt(captured string) bool {
 		strings.Contains(normalized, "resets 2am") ||
 		strings.Contains(normalized, "resets ")
 	return hasUsageLimit && hasRetryHint
+}
+
+func tmuxPaneHasApproachingRateLimitPrompt(captured string) bool {
+	normalized := tmuxSemanticTail(captured)
+	if normalized == "" {
+		return false
+	}
+	hasBanner := strings.Contains(normalized, "approaching rate limits") ||
+		strings.Contains(normalized, "approaching usage limits")
+	hasMenu := strings.Contains(normalized, "switch to gpt-5.1-codex-mini") ||
+		strings.Contains(normalized, "keep current model") ||
+		strings.Contains(normalized, "never show again")
+	return hasBanner && hasMenu
 }
 
 func tmuxPaneIsBootstrapping(lines []string) bool {
