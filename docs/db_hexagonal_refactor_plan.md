@@ -24,7 +24,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte adicional en runtime: mover heurísticas `runtimeHandleLooksLikeCodexCLIRef` y `runtimeHandleLooksLikeCodexCommand` a `runtimepolicy`
 - corte adicional en runtime: mover scoring de contexto de entrega de `runtime_handle` (`RuntimeHandleDeliveryContextScore`) a `runtimepolicy`
 - corte adicional en runtime: mover política canónica TMUX y construcción de ref TMUX de `runtime_handle` (`runtimeHandleEsTMUXCanonico`, `runtimeHandleTMUXSessionRef`) a `runtimepolicy`
-- corte adicional en runtime: mover policy legacy de control plane de `runtime_handle` (`RuntimeHandleIsLegacyControlPlane`, `runtimeHandleEsLegacyControlPlane`) a `runtimepolicy`
+- corte adicional en runtime: mover policy legacy de control plane de `runtime_handle` (`RuntimeHandleIsLegacyControlPlane`, llamada desde `runtimeHandleEsCandidatoLegacyATMUX`) a `runtimepolicy`
 - corte adicional en autonomia: mover la política pura de score de rol de supervisor operativo a `autonomiapolicy`
 - `3b6d513` completo el grupo previo en runtime (`runtimepolicy`) para decisiones de `runtime_handle` de borde
 - `de6239a` completa el corte de policy legacy TMUX (`RuntimeHandleUsaLegacyCLITMUXPreferred`, `RuntimeHandleUsaLegacyProcessPTY`) en `runtimepolicy`
@@ -59,7 +59,7 @@ Estado del frente seguro:
 - policy de compactación/síntesis de metadata de `runtime_handle` movida a `runtimepolicy` (`CompactRuntimeHandleMetadata`) para minimizar policy en `db/controlplane_entities.go`
 - policy canónica TMUX y ref de sesión de `runtime_handle` movida a `runtimepolicy` (`RuntimeHandleEsTMUXCanonico`, `RuntimeHandleTMUXSessionRef`)
 - policy legacy de tmux CLI movida desde `db/controlplane_entities.go` a `runtimepolicy` (`RuntimeHandleUsaLegacyCLITMUXPreferred`, `RuntimeHandleUsaLegacyProcessPTY`)
-- policy legacy de control plane (`RuntimeHandleIsLegacyControlPlane`) movida desde `runtimesapp` hacia `runtimepolicy` para candidato legacy TMUX
+- policy legacy de control plane (`RuntimeHandleIsLegacyControlPlane`) movida desde `runtimesapp` hacia `runtimepolicy` para candidato legacy TMUX; `runtimeHandleEsCandidatoLegacyATMUX` queda como wrapper delegador
 - policy de scoring de contexto de entrega de `runtime_handle` movida a `runtimepolicy` para selector explícito de `runtime_order`
 - policy de skills movida a `skillspolicy`
 - policy de compactación de texto pendiente de transcript en runtime movida a `runtimepolicy`
