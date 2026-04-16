@@ -32,11 +32,15 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte adicional en runtime: mover la regla de estados que requieren `SyncSupervisedRuntimeHandle` fresca a `runtimepolicy.RuntimeHandleNeedsFreshSync`, dejando `runtimesapp` como delegador
 - corte adicional en runtime: mover la detección de falta de sesión tmux válida (`TMUXSessionExistsMetadata`) a `runtimepolicy.RuntimeHandleTMUXSessionMissing`
 - corte adicional en runtime: mover la comprobación de coincidencia runtime/sesión (`RuntimeHandleMatchesRuntime`) y extracción de `driver` (`RuntimeHandleDriver`) a `runtimepolicy`
+- `491c264` mueve el cálculo de capacidad/autonomía supervisor a lógica dedicada desde `planificador`, reduciendo decisión en `db/planificador.go`
+- `9f51a8f` mueve resolución de ruta/proyecto/worktree hacia `coordinacion` y reduce ensamblaje en `db`
+- `e1aa278` preserva el comportamiento de filtrado de `worktrees` al trasladar parte de la coherencia a `coordinacion`
+- `71bdf8e` extrae side effects de transición de tareas/asignaciones a coordinadores internos de `db` para wrappers más finos
 
 Estado del frente seguro:
 
 - `db/controlplane_entities.go` sigue siendo hotspot ajeno y no debe tocarse sin reasignación
-- `db/asignaciones.go` no ofrece ya un seam pequeño con buen ratio valor/riesgo
+- `db/asignaciones.go` fue endurecido con seam de transición más finito, pero aún conserva decisiones funcionales asociadas a transición de tareas
 - el frente `presupuestos/governanza` ha permitido sacar policy pura fuera de `db` sin tocar `cmd/`
 - en `presupuestos`, `db` ya conserva sobre todo carga/configuración/persistencia; la policy de TTL, cuota, scoring y evaluación efectiva vive fuera
 
