@@ -379,6 +379,10 @@ func (dbAutomationService) ResetReanimacionOutcome(nombre string) (string, error
 }
 
 func (dbAutomationService) ResetReanimacionResultado(nombre string) (resetReanimacionResultado, error) {
+	return (dbAutomationService{}).resetReanimacionResultadoConPermisoManual(nombre, false)
+}
+
+func (dbAutomationService) resetReanimacionResultadoConPermisoManual(nombre string, permitirManual bool) (resetReanimacionResultado, error) {
 	nombre = strings.TrimSpace(nombre)
 	if db.DB == nil || db.DB.DB == nil {
 		return resetReanimacionResultadoDbNoLista, nil
@@ -392,7 +396,7 @@ func (dbAutomationService) ResetReanimacionResultado(nombre string) (resetReanim
 	if !dbDisponible() {
 		return resetReanimacionResultadoDbNoLista, nil
 	}
-	bloqueado, err := sostenerCooldownSiLaCuotaVisibleSigueBloqueada(nombre)
+	bloqueado, err := sostenerCooldownSiLaCuotaVisibleSigueBloqueada(nombre, permitirManual)
 	if err != nil {
 		return "", err
 	}
@@ -572,7 +576,7 @@ func proyectoIfExists(ref string) (*db.Proyecto, error) {
 	return proyecto, err
 }
 
-func sostenerCooldownSiLaCuotaVisibleSigueBloqueada(nombre string) (bool, error) {
+func sostenerCooldownSiLaCuotaVisibleSigueBloqueada(nombre string, permitirManual bool) (bool, error) {
 	nombre = strings.TrimSpace(nombre)
 	if nombre == "" {
 		return false, nil
@@ -588,6 +592,9 @@ func sostenerCooldownSiLaCuotaVisibleSigueBloqueada(nombre string) (bool, error)
 		return false, nil
 	}
 	if agente.PresupuestoResetAt != nil && agente.PresupuestoResetAt.After(time.Now().UTC()) {
+		if permitirManual {
+			return false, nil
+		}
 		motivo := strings.TrimSpace(agente.MotivoPausa)
 		if motivo == "" {
 			if dbWindow := strings.TrimSpace(agente.PresupuestoVentana); dbWindow != "" {
@@ -2402,17 +2409,18 @@ func float64FromAny(raw any) (float64, bool) {
 }
 
 type runtimeMailboxBatchSnapshot struct {
-	hotHandles           map[string]*db.RuntimeHandle
-	activeHandles        map[string]*db.RuntimeHandle
-	activeHandleLoaded   map[string]struct{}
-	projectsByID         map[int64]*db.Proyecto
-	projectsLoaded       map[int64]struct{}
-	quotaState           map[string]bool
-	quotaStateLoaded     map[string]struct{}
-	ordersByAgentProject map[string][]*db.RuntimeOrder
-	ordersLoaded         map[string]struct{}
-	supervisedByHandleID map[int64]runtimeMailboxSupervisedHandleSnapshot
-	externalByHandleID   map[int64]runtimeMailboxExternalSessionSnapshot
+	hotHandles               map[string]*db.RuntimeHandle
+	activeHandles            map[string]*db.RuntimeHandle
+	activeHandleLoaded       map[string]struct{}
+	projectsByID             map[int64]*db.Proyecto
+	projectsLoaded           map[int64]struct{}
+	quotaState               map[string]bool
+	quotaStateLoaded         map[string]struct{}
+	ordersByAgentProject     map[string][]*db.RuntimeOrder
+	ordersLoaded             map[string]struct{}
+	pipelineLocalLatestByKey map[string]int64
+	supervisedByHandleID     map[int64]runtimeMailboxSupervisedHandleSnapshot
+	externalByHandleID       map[int64]runtimeMailboxExternalSessionSnapshot
 }
 
 type runtimeMailboxSupervisedHandleSnapshot struct {
@@ -2431,17 +2439,18 @@ type runtimeMailboxExternalSessionSnapshot struct {
 func newRuntimeMailboxBatchSnapshot() *runtimeMailboxBatchSnapshot {
 	hotHandles, _ := db.ListarRuntimeHandlesActivosOperativosRecientes()
 	return &runtimeMailboxBatchSnapshot{
-		hotHandles:           hotHandles,
-		activeHandles:        map[string]*db.RuntimeHandle{},
-		activeHandleLoaded:   map[string]struct{}{},
-		projectsByID:         map[int64]*db.Proyecto{},
-		projectsLoaded:       map[int64]struct{}{},
-		quotaState:           map[string]bool{},
-		quotaStateLoaded:     map[string]struct{}{},
-		ordersByAgentProject: map[string][]*db.RuntimeOrder{},
-		ordersLoaded:         map[string]struct{}{},
-		supervisedByHandleID: map[int64]runtimeMailboxSupervisedHandleSnapshot{},
-		externalByHandleID:   map[int64]runtimeMailboxExternalSessionSnapshot{},
+		hotHandles:               hotHandles,
+		activeHandles:            map[string]*db.RuntimeHandle{},
+		activeHandleLoaded:       map[string]struct{}{},
+		projectsByID:             map[int64]*db.Proyecto{},
+		projectsLoaded:           map[int64]struct{}{},
+		quotaState:               map[string]bool{},
+		quotaStateLoaded:         map[string]struct{}{},
+		ordersByAgentProject:     map[string][]*db.RuntimeOrder{},
+		ordersLoaded:             map[string]struct{}{},
+		pipelineLocalLatestByKey: map[string]int64{},
+		supervisedByHandleID:     map[int64]runtimeMailboxSupervisedHandleSnapshot{},
+		externalByHandleID:       map[int64]runtimeMailboxExternalSessionSnapshot{},
 	}
 }
 
@@ -2567,7 +2576,12 @@ func runtimeHandleCuentaComoActivoEnMailboxBatch(handle *db.RuntimeHandle) bool 
 	if handle == nil {
 		return false
 	}
-	return strings.EqualFold(strings.TrimSpace(handle.Estado), "activo")
+	estado := strings.ToLower(strings.TrimSpace(handle.Estado))
+	switch estado {
+	case "activo", "pausado":
+		return true
+	}
+	return false
 }
 
 func (s *runtimeMailboxBatchSnapshot) ordersForAgentProject(agente string, proyectoID *int64) ([]*db.RuntimeOrder, error) {
@@ -2621,6 +2635,16 @@ func (s *runtimeMailboxBatchSnapshot) quotaMatches(agente, estado string) (bool,
 	s.quotaStateLoaded[key] = struct{}{}
 	s.quotaState[key] = match
 	return match, nil
+}
+
+func (s *runtimeMailboxBatchSnapshot) pipelineLocalNoConsumirEnCuota(msg *db.RuntimeMailboxMessage) bool {
+	if s == nil || msg == nil || !strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") {
+		return false
+	}
+	agente := strings.TrimSpace(msg.ToAgente)
+	key := runtimeMailboxBatchKey(agente, msg.ProyectoID)
+	latest, ok := s.pipelineLocalLatestByKey[key]
+	return ok && latest != 0 && latest == msg.ID
 }
 
 func (s *runtimeMailboxBatchSnapshot) supervisedHandle(handle *db.RuntimeHandle) (*db.RuntimeHandle, *db.RuntimeInstance, string, error) {
@@ -2734,7 +2758,11 @@ func reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox []
 		agente   string
 		proyecto int64
 	}
-	newestByKey := map[clave]int64{}
+	type agregados struct {
+		latest int64
+		count  int
+	}
+	newestByKey := map[clave]agregados{}
 	for _, msg := range mailbox {
 		if msg == nil || !strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") {
 			continue
@@ -2748,9 +2776,12 @@ func reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox []
 			proyectoID = *msg.ProyectoID
 		}
 		k := clave{agente: agente, proyecto: proyectoID}
-		if newestByKey[k] == 0 || msg.ID > newestByKey[k] {
-			newestByKey[k] = msg.ID
+		entry := newestByKey[k]
+		entry.count++
+		if entry.latest == 0 || msg.ID > entry.latest {
+			entry.latest = msg.ID
 		}
+		newestByKey[k] = entry
 	}
 	total := 0
 	for _, msg := range mailbox {
@@ -2776,8 +2807,14 @@ func reconciliarRuntimeMailboxPipelineDuplicadoEnCuotaBatchConMailbox(mailbox []
 			proyectoID = *msg.ProyectoID
 		}
 		k := clave{agente: agente, proyecto: proyectoID}
-		if newestByKey[k] == msg.ID {
+		if newestByKey[k].count <= 1 {
 			continue
+		}
+		if newestByKey[k].latest == msg.ID {
+			continue
+		}
+		if _, ok := snapshot.pipelineLocalLatestByKey[runtimeMailboxBatchKey(agente, msg.ProyectoID)]; !ok {
+			snapshot.pipelineLocalLatestByKey[runtimeMailboxBatchKey(agente, msg.ProyectoID)] = newestByKey[k].latest
 		}
 		if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
 			return total, err
@@ -2869,6 +2906,9 @@ func reconciliarRuntimeMailboxPipelineEnfriamientoMensaje(msg *db.RuntimeMailbox
 
 func runtimeMailboxPipelinePuedeConsumirsePorEnfriamiento(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) bool {
 	if msg == nil || !strings.EqualFold(strings.TrimSpace(msg.Kind), "pipeline_local") {
+		return false
+	}
+	if snapshot != nil && snapshot.pipelineLocalNoConsumirEnCuota(msg) {
 		return false
 	}
 	ok, err := snapshot.quotaMatches(strings.TrimSpace(msg.ToAgente), "enfriamiento")
@@ -7487,8 +7527,20 @@ func procesarCompactacionExclusividadPremiumBatch(rows []agentesapp.Row, tareasA
 			continue
 		}
 		frentesActivos := 0
+		tareasCanon := map[int64]*db.Tarea{}
 		for _, tarea := range tareasActivasPorAgente[agente] {
-			if !tareaCuentaComoFrenteActivoCompactable(tarea, row.Asignacion.ProyectoID, agente) {
+			if tarea == nil || tarea.ID <= 0 {
+				continue
+			}
+			actual, err := tareasService.Get(tarea.ID)
+			if err != nil {
+				return procesadas, err
+			}
+			if actual == nil {
+				continue
+			}
+			tareasCanon[tarea.ID] = actual
+			if !tareaCuentaComoFrenteActivoCompactable(actual, row.Asignacion.ProyectoID, agente) {
 				continue
 			}
 			frentesActivos++
@@ -7500,9 +7552,16 @@ func procesarCompactacionExclusividadPremiumBatch(rows []agentesapp.Row, tareasA
 			if tarea == nil {
 				continue
 			}
-			actual, err := db.GetTarea(tarea.ID)
-			if err != nil {
-				return procesadas, err
+			actual := tareasCanon[tarea.ID]
+			if actual == nil {
+				var err error
+				actual, err = tareasService.Get(tarea.ID)
+				if err != nil {
+					return procesadas, err
+				}
+				if actual == nil {
+					continue
+				}
 			}
 			if !tareaDebeCompactarsePorExclusividadPremium(actual, row.Asignacion.ProyectoID, agente) {
 				continue
@@ -8686,6 +8745,9 @@ func rowPermiteAutoRecuperacion(row agentesapp.Row, now time.Time) bool {
 	if strings.TrimSpace(row.EstadoOperativo) != "bloqueado_por_runtime" {
 		return false
 	}
+	if rowPermiteAutoRecuperacionPorRuntimeActivo(row, now) {
+		return true
+	}
 	if !row.WorkerFresh(now) {
 		return false
 	}
@@ -8702,6 +8764,63 @@ func rowPermiteAutoRecuperacion(row agentesapp.Row, now time.Time) bool {
 		}
 	}
 	return false
+}
+
+func rowPermiteAutoRecuperacionPorRuntimeActivo(row agentesapp.Row, now time.Time) bool {
+	mailboxMode := rowWorkerMailboxDeliveryModeForRecovery(row)
+	if strings.EqualFold(mailboxMode, "") {
+		return false
+	}
+	if runtimeagente.NormalizeMailboxDeliveryMode(mailboxMode) != runtimeagente.MailboxDeliveryBootstrapOnly {
+		return false
+	}
+	if row.Runtime == nil {
+		return false
+	}
+	estado := strings.ToLower(strings.TrimSpace(row.Runtime.LogicalState))
+	if estado == "" {
+		estado = strings.ToLower(strings.TrimSpace(row.Runtime.ProcessState))
+	}
+	switch estado {
+	case "running", "starting", "ready", "working", "esperando_io", "waiting_io", "disponible", "idle", "pausado", "paused":
+	default:
+		return false
+	}
+	switch estado {
+	case "fallido", "degradado", "cerrado", "finalizado":
+		return false
+	}
+	var recency time.Time
+	for _, value := range []*time.Time{
+		row.Runtime.UltimaActividadAt,
+		row.Runtime.LastHeartbeatAt,
+		row.Runtime.LastEventAt,
+		&row.Runtime.UpdatedAt,
+		&row.Runtime.CreatedAt,
+	} {
+		if value == nil || value.IsZero() {
+			continue
+		}
+		if recency.IsZero() || value.After(recency) {
+			recency = *value
+		}
+	}
+	if recency.IsZero() {
+		return false
+	}
+	return !recency.Before(now.Add(-2 * time.Minute))
+}
+
+func rowWorkerMailboxDeliveryModeForRecovery(row agentesapp.Row) string {
+	mode := strings.TrimSpace(row.WorkerMailboxDeliveryMode)
+	if mode != "" {
+		return mode
+	}
+	snap := structuredWorkerSnapshotForRecovery(row)
+	if snap == nil {
+		return ""
+	}
+	return strings.TrimSpace(snap.MailboxDeliveryMode())
 }
 
 func openTasksProjectedFromRows(rows []agentesapp.Row) map[string]int {

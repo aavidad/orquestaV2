@@ -922,6 +922,14 @@ func webHandlerOpenClawAccion(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/openclaw?err="+url.QueryEscape("accion de agente invalida"), http.StatusSeeOther)
 			return
 		}
+		if strings.EqualFold(accion, "reset-reanimacion") {
+			if _, err := (dbAutomationService{}).resetReanimacionResultadoConPermisoManual(nombre, true); err != nil {
+				http.Redirect(w, r, "/openclaw?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
+				return
+			}
+			http.Redirect(w, r, "/openclaw?ok="+url.QueryEscape(fmt.Sprintf("Acción %s aplicada a %s", accion, nombre)), http.StatusSeeOther)
+			return
+		}
 		if err := webAplicarAccionEstadoAgentePorAPI(nombre, accion); err != nil {
 			http.Redirect(w, r, "/openclaw?err="+url.QueryEscape(err.Error()), http.StatusSeeOther)
 			return

@@ -194,6 +194,7 @@ func renderStatusSummary(ctx *statusContext) {
 		return
 	}
 	resumen.TareasActivas = filtrarTareasActivasVisibles(resumen.TareasActivas, resumen.Agentes)
+	resolverAgentesActivosDesdeCompatibilidad(resumen)
 	if len(resumen.TareasEnProgreso) == 0 {
 		resumen.TareasEnProgreso = filtrarOpenClawTareasPorEstado(resumen.TareasActivas, db.TareaEnProgreso)
 	} else {
@@ -289,7 +290,7 @@ func renderStatusSummary(ctx *statusContext) {
 			fmt.Println()
 		}
 	}
-	agentesEnPausa := agentesNoActivosEnPausaOperativa(resumen.Agentes)
+	agentesEnPausa := agentesNoActivosEnPausaOperativaConResumen(resumen.Agentes, resumen)
 	if len(agentesEnPausa) > 0 {
 		fmt.Printf("   ⏸️  En pausa operativa:\n")
 		for _, a := range agentesEnPausa {
@@ -371,7 +372,7 @@ func renderStatusSummary(ctx *statusContext) {
 	}
 	fmt.Println()
 
-	retenidas := tareasRetenidasPorCuota(resumen.TareasActivas, resumen.Agentes, resumen.AgentesQuotaBlocked)
+	retenidas := tareasRetenidasPorCuotaConResumen(resumen.TareasActivas, resumen.Agentes, resumen.AgentesQuotaBlocked, resumen)
 	retenidasIDs := make(map[int64]struct{}, len(retenidas))
 	for _, t := range retenidas {
 		retenidasIDs[t.ID] = struct{}{}
@@ -431,6 +432,72 @@ func renderStatusSummary(ctx *statusContext) {
 		}
 		fmt.Println()
 	}
+}
+
+func resolverAgentesActivosDesdeCompatibilidad(resumen *estadoResumen) {
+	if resumen == nil || len(resumen.AgentesActivos) > 0 {
+		return
+	}
+	if len(resumen.Agentes) == 0 {
+		return
+	}
+	if !resumenRequiereFallbackCompatibilidadCuota(resumen) {
+		return
+	}
+	agentesActivos := make([]*db.Agente, 0, len(resumen.Agentes))
+	for _, agente := range resumen.Agentes {
+		if agente != nil {
+			agentesActivos = append(agentesActivos, agente)
+		}
+	}
+	resumen.AgentesActivos = agentesActivos
+	if len(resumen.AgentesTrabajando) == 0 {
+		resumen.AgentesTrabajando = derivarAgentesTrabajando(resumen.AgentesActivos, resumen.TareasActivas)
+	}
+}
+
+func resumenRequiereFallbackCompatibilidadCuota(resumen *estadoResumen) bool {
+	if resumen == nil {
+		return false
+	}
+	for _, agente := range resumen.Agentes {
+		if agente == nil {
+			continue
+		}
+		if strings.TrimSpace(agente.EstadoCuota) != "" && !strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "activo") {
+			return true
+		}
+		if agente.ReanimarAt != nil {
+			return true
+		}
+		if agente.CuotaRestantePct != nil || agente.PresupuestoSesionPct != nil || agente.PresupuestoDiarioPct != nil || agente.PresupuestoSemanalPct != nil {
+			return true
+		}
+		if agente.PresupuestoCheckedAt != nil || agente.PresupuestoResetAt != nil {
+			return true
+		}
+		if strings.TrimSpace(agente.MotivoPausa) != "" {
+			return true
+		}
+		if strings.TrimSpace(agente.PresupuestoFuente) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func agenteResumenVisibleParaCompatibilidad(nombre string, resumen *estadoResumen) bool {
+	nombre = strings.TrimSpace(strings.ToLower(nombre))
+	if nombre == "" {
+		return false
+	}
+	if resumen == nil {
+		return agenteVisibleEnStatusFleet(nombre)
+	}
+	if len(resumen.Agentes) > 0 && len(resumen.AgentesActivos) == len(resumen.Agentes) {
+		return true
+	}
+	return agenteVisibleEnStatusFleet(nombre)
 }
 
 func resumenCuotaAgente(a *db.Agente) string {
@@ -554,6 +621,10 @@ func resumenDesgloseCuotaAgente(a *db.Agente) string {
 }
 
 func agentesNoActivosConCuota(agentes []*db.Agente) []*db.Agente {
+	return agentesNoActivosConCuotaConResumen(agentes, nil)
+}
+
+func agentesNoActivosConCuotaConResumen(agentes []*db.Agente, resumen *estadoResumen) []*db.Agente {
 	out := make([]*db.Agente, 0, len(agentes))
 	snapshotConHabilitado := snapshotExponeHabilitado(agentes)
 	for _, agente := range agentes {
@@ -561,6 +632,9 @@ func agentesNoActivosConCuota(agentes []*db.Agente) []*db.Agente {
 			continue
 		}
 		if !agenteBloqueadoPorCuotaVisible(agente) {
+			continue
+		}
+		if !agenteResumenVisibleParaCompatibilidad(agente.Nombre, resumen) {
 			continue
 		}
 		out = append(out, agente)
@@ -591,7 +665,7 @@ func agentesBloqueadosPorCuotaVisibles(resumen *estadoResumen) []*db.Agente {
 			if nombre == "" {
 				continue
 			}
-			if !agenteVisibleEnStatusFleet(nombre) {
+			if !agenteResumenVisibleParaCompatibilidad(nombre, resumen) {
 				continue
 			}
 			if base := agentesPorNombre[nombre]; base != nil && !agenteCuentaComoHabilitadoEnSnapshot(base, snapshotConHabilitado) {
@@ -605,17 +679,21 @@ func agentesBloqueadosPorCuotaVisibles(resumen *estadoResumen) []*db.Agente {
 		}
 	}
 	add(resumen.AgentesQuotaBlocked)
-	add(agentesNoActivosConCuota(resumen.Agentes))
+	add(agentesNoActivosConCuotaConResumen(resumen.Agentes, resumen))
 	return out
 }
 
 func agentesNoActivosEnPausaOperativa(agentes []*db.Agente) []*db.Agente {
+	return agentesNoActivosEnPausaOperativaConResumen(agentes, nil)
+}
+
+func agentesNoActivosEnPausaOperativaConResumen(agentes []*db.Agente, resumen *estadoResumen) []*db.Agente {
 	out := make([]*db.Agente, 0, len(agentes))
 	for _, agente := range agentes {
 		if agente == nil || agente.Activo {
 			continue
 		}
-		if !agenteVisibleEnStatusFleet(agente.Nombre) {
+		if !agenteResumenVisibleParaCompatibilidad(agente.Nombre, resumen) {
 			continue
 		}
 		if strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "activo") {
@@ -630,6 +708,10 @@ func agentesNoActivosEnPausaOperativa(agentes []*db.Agente) []*db.Agente {
 }
 
 func tareasRetenidasPorCuota(tareas []tareaLite, agentes []*db.Agente, quotaBlocked []*db.Agente) []tareaLite {
+	return tareasRetenidasPorCuotaConResumen(tareas, agentes, quotaBlocked, nil)
+}
+
+func tareasRetenidasPorCuotaConResumen(tareas []tareaLite, agentes []*db.Agente, quotaBlocked []*db.Agente, resumen *estadoResumen) []tareaLite {
 	if len(tareas) == 0 || (len(agentes) == 0 && len(quotaBlocked) == 0) {
 		return nil
 	}
@@ -639,7 +721,7 @@ func tareasRetenidasPorCuota(tareas []tareaLite, agentes []*db.Agente, quotaBloc
 		if agente == nil {
 			continue
 		}
-		if !agenteVisibleEnStatusFleet(agente.Nombre) {
+		if !agenteResumenVisibleParaCompatibilidad(agente.Nombre, resumen) {
 			continue
 		}
 		porNombre[strings.TrimSpace(agente.Nombre)] = agente
@@ -653,7 +735,7 @@ func tareasRetenidasPorCuota(tareas []tareaLite, agentes []*db.Agente, quotaBloc
 		if nombre == "" {
 			continue
 		}
-		if !agenteVisibleEnStatusFleet(nombre) {
+		if !agenteResumenVisibleParaCompatibilidad(nombre, resumen) {
 			continue
 		}
 		bloqueadosPorRuntime[nombre] = struct{}{}

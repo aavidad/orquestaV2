@@ -2214,6 +2214,12 @@ func (s *Service) buildInvestigationAgentResult(nombre string, projectID *int64)
 	if err != nil {
 		return nil, err
 	}
+	if projectID != nil && len(tasks) == 0 {
+		tasks, err = s.store.ListTasks(db.FiltroTareas{Agente: &nombre})
+		if err != nil {
+			return nil, err
+		}
+	}
 	checkpoints, err := s.store.ListRuntimeCheckpoints(db.FiltroRuntimeCheckpoints{Agente: &nombre, ProyectoID: projectID, Limit: 5})
 	if err != nil {
 		return nil, err
@@ -2440,17 +2446,17 @@ func deriveOperationalState(row Row, now time.Time, workerOutputStaleThreshold t
 		workerState != "failed" &&
 		workerState != "stopped"
 
+	if !sinCuotaProveedor {
+		if blocked, detalle := row.runtimeCheckpointQuotaBlocked(now); blocked {
+			return "bloqueado_por_cuota", detalle
+		}
+	}
 	if !sinCuotaProveedor && !workerOperativoFresco && estadoCuotaBloqueado(agente.EstadoCuota) {
 		detalle := strings.TrimSpace(agente.MotivoPausa)
 		if detalle == "" && agente.ReanimarAt != nil && !agente.ReanimarAt.IsZero() {
 			detalle = "reanimacion " + agente.ReanimarAt.Local().Format("15:04")
 		}
 		return "bloqueado_por_cuota", detalle
-	}
-	if !sinCuotaProveedor && !workerOperativoFresco {
-		if blocked, detalle := row.runtimeCheckpointQuotaBlocked(now); blocked {
-			return "bloqueado_por_cuota", detalle
-		}
 	}
 	if blocked, detalle := row.pendingControlOrderBlocksRuntime(now); blocked {
 		return "bloqueado_por_runtime", detalle

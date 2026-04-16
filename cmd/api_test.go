@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/agentesapp"
 	"orquesta/coordinacion"
 	"orquesta/db"
 	"orquesta/internal/a2ui"
@@ -424,6 +425,8 @@ func cargarPlantillaDBCmdTest() ([]byte, error) {
 func prepararDBTemporalCmd(t *testing.T) string {
 	t.Helper()
 	cmdTestDBMu.Lock()
+	agentesService = agentesapp.NewService(agentesapp.Repository{}, capacidadService)
+	capacidadService.SetAgentResolver(resolvedorAgentePipelineOperativo{rowsProvider: agentesService})
 	resetStatusSnapshotCache()
 	resetControlPlaneConfigCache()
 	resetRuntimeBudgetObservationBackgroundGate()
@@ -444,6 +447,8 @@ func prepararDBTemporalCmd(t *testing.T) string {
 	anteriorForceLocal, teniaForceLocal := os.LookupEnv("ORQUESTA_FORCE_LOCAL_DB")
 	anteriorDisableServer, teniaDisableServer := os.LookupEnv("ORQUESTA_DISABLE_SERVER_CLIENT")
 	t.Cleanup(func() {
+		agentesService = agentesapp.NewService(agentesapp.Repository{}, capacidadService)
+		capacidadService.SetAgentResolver(resolvedorAgentePipelineOperativo{rowsProvider: agentesService})
 		resetStatusSnapshotCache()
 		resetControlPlaneConfigCache()
 		resetRuntimeBudgetObservationBackgroundGate()

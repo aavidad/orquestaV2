@@ -267,10 +267,17 @@ func ResolverPoliticaModelo(input ResolverPoliticaInput) (*ResolucionModelo, err
 	if resultado.PoolSlug == "" && resultado.ModelSlug != "" {
 		pool, err := resolverPoolPorModelo(perfil, resultado.ModelSlug)
 		if err != nil {
-			return nil, err
+			// Si el modelo explícito no existe o no está activo en ningún pool, se
+			// omite para permitir fallback por perfil, preservando la disponibilidad.
+			if strings.Contains(strings.ToLower(strings.TrimSpace(err.Error())), "no hay pool activo para el modelo") {
+				resultado.ModelSlug = ""
+			} else {
+				return nil, err
+			}
+		} else {
+			resultado.PoolSlug = pool.Slug
+			resultado.FuentePool = "pool-por-modelo:" + resultado.ModelSlug
 		}
-		resultado.PoolSlug = pool.Slug
-		resultado.FuentePool = "pool-por-modelo:" + resultado.ModelSlug
 	}
 
 	if resultado.PoolSlug == "" {

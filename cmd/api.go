@@ -5472,7 +5472,7 @@ func launchAgentResetReanimation(nombre string) apiAgenteResetReanimacionRespons
 	if started {
 		go func(agent string, running *atomic.Bool) {
 			defer running.Store(false)
-			resultado, err := (dbAutomationService{}).ResetReanimacionResultado(agent)
+			resultado, err := (dbAutomationService{}).resetReanimacionResultadoConPermisoManual(agent, true)
 			if err != nil {
 				db.Audit("server", "agente_reset_reanimacion_error", "agente", 0,
 					fmt.Sprintf("agente=%s err=%v", strings.TrimSpace(agent), err))

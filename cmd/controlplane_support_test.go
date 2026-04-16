@@ -15465,6 +15465,24 @@ func TestRowPermiteAutoRecuperacionAceptaTMUXBootstrapOnlyFrescoConSoloBloqueada
 	}
 }
 
+func TestRowPermiteAutoRecuperacionAceptaRuntimeBootstrapOnlySinWorkerFresh(t *testing.T) {
+	now := time.Now().UTC()
+	row := agentesapp.Row{
+		EstadoOperativo:           "bloqueado_por_runtime",
+		OpenTasks:                 0,
+		BlockedTasks:              2,
+		WorkerMailboxDeliveryMode: runtimeagente.MailboxDeliveryBootstrapOnly,
+		Runtime:                   &db.RuntimeInstance{LogicalState: "esperando_io", LastHeartbeatAt: &now},
+		WorkerState:               "running",
+		WorkerAlive:               false,
+		WorkerHeartbeat:           nil,
+		WorkerUpdatedAt:           nil,
+	}
+	if !rowPermiteAutoRecuperacion(row, now) {
+		t.Fatalf("deberia reactivar backlog bloqueado en bootstrap_only cuando el runtime bootstrap está vivo")
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchEncolaPausePorBloqueoHumano(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
