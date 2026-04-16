@@ -54,3 +54,54 @@ func TestRuntimeHandleLooksLikeCodexCommand(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeHandleUsaTMUXPreferredCLI(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		meta map[string]any
+		want bool
+	}{
+		{"nil", nil, false},
+		{"legacy process_pty", map[string]any{"driver": "process_pty_cli", "rendered_command": "codex-perfil Codex1"}, true},
+		{"rendered command tmux", map[string]any{"rendered_command": "cat"}, false},
+		{"rendered command codex", map[string]any{"rendered_command": "codex --help"}, true},
+		{"herramienta claude", map[string]any{"herramienta": "claude-code"}, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RuntimeHandleUsaTMUXPreferredCLI(tc.meta); got != tc.want {
+				t.Fatalf("RuntimeHandleUsaTMUXPreferredCLI(%v) = %v; want %v", tc.meta, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRuntimeOrderUsaCLITMUXPreferred(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		refs []string
+		want bool
+	}{
+		{"vacio", nil, false},
+		{"sin datos", []string{"", "  "}, false},
+		{"codex-cli", []string{"codex-cli"}, true},
+		{"claude", []string{"claude-code"}, true},
+		{"gemini", []string{"  gemini --help"}, true},
+		{"ollama run", []string{"ollama run llama3"}, true},
+		{"no tmux", []string{"bash"}, false},
+		{"codex en segunda ref", []string{"bash", "codex"}, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RuntimeOrderUsaCLITMUXPreferred(tc.refs...); got != tc.want {
+				t.Fatalf("RuntimeOrderUsaCLITMUXPreferred(%v) = %v; want %v", tc.refs, got, tc.want)
+			}
+		})
+	}
+}

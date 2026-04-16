@@ -11132,7 +11132,7 @@ func RuntimeHandleMailboxDeliveryMode(handle *RuntimeHandle) string {
 	caps := mapFromJSON(handle.CapabilitiesJSON)
 	legacyTMUXPreferredCLI := runtimeHandleUsaLegacyCLITMUXPreferred(meta)
 	externalSessionReady := runtimeHandleTieneExternalSessionID(handle, nil)
-	localCLIBrokerNoInteractive := runtimeHandleUsaTMUXPreferredCLI(meta) && !RuntimeHandlePermiteSendInputInteractivo(handle)
+	localCLIBrokerNoInteractive := runtimepolicy.RuntimeHandleUsaTMUXPreferredCLI(meta) && !RuntimeHandlePermiteSendInputInteractivo(handle)
 	tmuxSessionResumeReady := strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "driver", "")), "tmux_cli_session") &&
 		strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
 		strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") &&
@@ -11183,27 +11183,6 @@ func RuntimeHandleMailboxDeliveryMode(handle *RuntimeHandle) string {
 		return runtimeagente.MailboxDeliveryBootstrapOnly
 	}
 	return runtimeagente.MailboxDeliveryInteractive
-}
-
-func runtimeHandleUsaTMUXPreferredCLI(meta map[string]any) bool {
-	if runtimeHandleUsaLegacyCLITMUXPreferred(meta) {
-		return true
-	}
-	if meta == nil {
-		return false
-	}
-	for _, candidate := range []string{
-		stringFromMap(meta, "rendered_command", ""),
-		stringFromMap(meta, "wrapped_command", ""),
-		stringFromMap(meta, "herramienta", ""),
-		stringFromMap(meta, "conector", ""),
-		stringFromMap(meta, "profile_status_wrapper", ""),
-	} {
-		if runtimeOrderUsaCLITMUXPreferred(candidate) {
-			return true
-		}
-	}
-	return false
 }
 
 func runtimeHandleTieneExternalSessionID(handle *RuntimeHandle, runtime *RuntimeInstance) bool {
@@ -11310,29 +11289,12 @@ func runtimeOrderBloqueaFallbackPID(order *RuntimeOrder, runtime *RuntimeInstanc
 			return true
 		}
 	}
-	if runtime != nil && runtimeOrderUsaCLITMUXPreferred(runtime.Connector) {
+	if runtime != nil && runtimepolicy.RuntimeOrderUsaCLITMUXPreferred(runtime.Connector) {
 		return true
 	}
 	sesion, err := resolverSesionParaOrden(order)
-	if err == nil && sesion != nil && runtimeOrderUsaCLITMUXPreferred(connectorDesdeSesion(sesion), sesion.Herramienta) {
+	if err == nil && sesion != nil && runtimepolicy.RuntimeOrderUsaCLITMUXPreferred(connectorDesdeSesion(sesion), sesion.Herramienta) {
 		return true
-	}
-	return false
-}
-
-func runtimeOrderUsaCLITMUXPreferred(refs ...string) bool {
-	for _, ref := range refs {
-		ref = strings.TrimSpace(ref)
-		if ref == "" {
-			continue
-		}
-		if controlruntime.RenderedCommandLooksLikeTMUXPreferredCLI(ref) {
-			return true
-		}
-		lower := strings.ToLower(ref)
-		if strings.Contains(lower, "codex") || strings.Contains(lower, "claude") || strings.Contains(lower, "gemini") {
-			return true
-		}
 	}
 	return false
 }
