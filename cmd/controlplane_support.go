@@ -4689,73 +4689,76 @@ func procesarRuntimeMailboxSessionResumeBatchConMailbox(mailbox []*db.RuntimeMai
 		if handle == nil {
 			continue
 		}
+		var dispatched bool
 		if strings.TrimSpace(externalSessionID) == "" {
-			if !runtimeHandleAdmiteFallbackInteractivoTransitorio(handle) {
-				continue
-			}
-			if !runtimeHandleListaParaDispatchInteractivo(handle) {
-				continue
-			}
-			if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "interactive_transitory", time.Now().UTC()); err != nil {
-				return total, err
-			} else if obsoleta {
-				consumed[msg.ID] = struct{}{}
-				total++
-				continue
-			}
-			if observada, err := consumirRuntimeMailboxBootstrapObservadoSiProcede(msg, handle, runtimeInstance, "interactive_transitory"); err != nil {
-				return total, err
-			} else if observada {
-				consumed[msg.ID] = struct{}{}
-				total++
-				continue
-			}
-			dispatch, err := encolarRuntimeMailboxSessionResumeSiCorresponde(msg, consumed, snapshot, handle, runtimeInstance, texto, "", "runtime_mailbox_session_resume_interactive_fallback", "runtime_mailbox_session_resume_interactive_supersede")
-			if err != nil {
-				return total, err
-			}
-			if dispatch {
-				total++
-			}
-			continue
+			dispatched, err = procesarRuntimeMailboxSessionResumeFallbackInteractivo(msg, consumed, snapshot, handle, runtimeInstance, texto)
+		} else {
+			dispatched, err = procesarRuntimeMailboxSessionResumeConSesion(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID)
 		}
-		if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "session_resume", time.Now().UTC()); err != nil {
-			return total, err
-		} else if obsoleta {
-			consumed[msg.ID] = struct{}{}
-			total++
-			continue
-		}
-		if observada, err := consumirRuntimeMailboxBootstrapObservadoSiProcede(msg, handle, runtimeInstance, "session_resume"); err != nil {
-			return total, err
-		} else if observada {
-			consumed[msg.ID] = struct{}{}
-			total++
-			continue
-		}
-		if blocked, err := runtimeMailboxBloqueadaPorBootstrapPendiente(msg, handle, runtimeInstance); err != nil {
-			return total, err
-		} else if blocked {
-			continue
-		}
-		if !runtimeMailboxShouldReevaluate("session_resume", msg.ID, handle.ID) {
-			continue
-		}
-		if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliverySessionResume {
-			continue
-		}
-		if !runtimeHandleListaParaDispatchSessionResumeTMUX(handle, runtimeInstance) {
-			continue
-		}
-		dispatch, err := encolarRuntimeMailboxSessionResumeSiCorresponde(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID, "runtime_mailbox_session_resume", "runtime_mailbox_session_resume_supersede")
 		if err != nil {
 			return total, err
 		}
-		if dispatch {
+		if dispatched {
 			total++
 		}
 	}
 	return total, nil
+}
+
+// procesarRuntimeMailboxSessionResumeFallbackInteractivo gestiona mensajes de resume
+// cuando no hay externalSessionID: usa el canal interactivo transitorio como fallback.
+func procesarRuntimeMailboxSessionResumeFallbackInteractivo(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, texto string) (bool, error) {
+	if !runtimeHandleAdmiteFallbackInteractivoTransitorio(handle) {
+		return false, nil
+	}
+	if !runtimeHandleListaParaDispatchInteractivo(handle) {
+		return false, nil
+	}
+	if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "interactive_transitory", time.Now().UTC()); err != nil {
+		return false, err
+	} else if obsoleta {
+		consumed[msg.ID] = struct{}{}
+		return true, nil
+	}
+	if observada, err := consumirRuntimeMailboxBootstrapObservadoSiProcede(msg, handle, runtimeInstance, "interactive_transitory"); err != nil {
+		return false, err
+	} else if observada {
+		consumed[msg.ID] = struct{}{}
+		return true, nil
+	}
+	return encolarRuntimeMailboxSessionResumeSiCorresponde(msg, consumed, snapshot, handle, runtimeInstance, texto, "", "runtime_mailbox_session_resume_interactive_fallback", "runtime_mailbox_session_resume_interactive_supersede")
+}
+
+// procesarRuntimeMailboxSessionResumeConSesion gestiona mensajes de resume cuando
+// hay una externalSessionID: verifica condiciones TMUX y encola el resume normal.
+func procesarRuntimeMailboxSessionResumeConSesion(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, texto, externalSessionID string) (bool, error) {
+	if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "session_resume", time.Now().UTC()); err != nil {
+		return false, err
+	} else if obsoleta {
+		consumed[msg.ID] = struct{}{}
+		return true, nil
+	}
+	if observada, err := consumirRuntimeMailboxBootstrapObservadoSiProcede(msg, handle, runtimeInstance, "session_resume"); err != nil {
+		return false, err
+	} else if observada {
+		consumed[msg.ID] = struct{}{}
+		return true, nil
+	}
+	if blocked, err := runtimeMailboxBloqueadaPorBootstrapPendiente(msg, handle, runtimeInstance); err != nil {
+		return false, err
+	} else if blocked {
+		return false, nil
+	}
+	if !runtimeMailboxShouldReevaluate("session_resume", msg.ID, handle.ID) {
+		return false, nil
+	}
+	if db.RuntimeHandleMailboxDeliveryMode(handle) != runtimeagente.MailboxDeliverySessionResume {
+		return false, nil
+	}
+	if !runtimeHandleListaParaDispatchSessionResumeTMUX(handle, runtimeInstance) {
+		return false, nil
+	}
+	return encolarRuntimeMailboxSessionResumeSiCorresponde(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID, "runtime_mailbox_session_resume", "runtime_mailbox_session_resume_supersede")
 }
 
 func encolarRuntimeMailboxSessionResumeSiCorresponde(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, texto, externalSessionID, auditAction, supersedeAction string) (bool, error) {
