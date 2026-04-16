@@ -705,9 +705,6 @@ func tieneTrabajoOrquestablePendiente() (bool, string, error) {
 		return false, "", err
 	}
 	for _, proyecto := range proyectos {
-		if _, ok := pipelineLocalProyectoElegible(proyecto); !ok {
-			continue
-		}
 		if pending, detail, err := proyectoTieneTrabajoOrquestablePendiente(proyecto); err != nil {
 			return false, "", err
 		} else if pending {
@@ -725,6 +722,9 @@ func proyectoTieneTrabajoOrquestablePendiente(proyecto *db.Proyecto) (bool, stri
 		return false, "", err
 	} else if pending {
 		return true, detail, nil
+	}
+	if _, ok := pipelineLocalProyectoElegible(proyecto); !ok {
+		return false, "", nil
 	}
 	for _, estado := range []db.EstadoTarea{
 		db.TareaEnProgreso,
