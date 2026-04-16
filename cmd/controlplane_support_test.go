@@ -15515,7 +15515,7 @@ func TestTieneTrabajoOrquestablePendienteDetectaMailboxRuntimeEnProyectoActivoNo
 	if !pending {
 		t.Fatal("deberia detectar mailbox runtime pendiente en proyecto activo no repo")
 	}
-	if !strings.Contains(detail, "grupo-runtime") || !strings.Contains(detail, "mailbox=pendiente") {
+	if !strings.Contains(detail, "runtime_mailbox=pendiente proyecto_id=") {
 		t.Fatalf("detalle inesperado: %q", detail)
 	}
 }
@@ -15551,7 +15551,80 @@ func TestTieneTrabajoOrquestablePendienteDetectaRuntimeOrderEnProyectoActivoNoRe
 	if !pending {
 		t.Fatal("deberia detectar runtime order pendiente en proyecto activo no repo")
 	}
-	if !strings.Contains(detail, "grupo-orders") || !strings.Contains(detail, "runtime_orders=pendiente") {
+	if !strings.Contains(detail, "runtime_orders=pendiente proyecto_id=") {
+		t.Fatalf("detalle inesperado: %q", detail)
+	}
+}
+
+func TestTieneTrabajoOrquestablePendienteDetectaMailboxRuntimeEnProyectoInactivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	if err := db.RegistrarAgente("CodexWarmInactive1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "grupo-inactivo-runtime",
+		Nombre:  "Grupo Inactivo Runtime",
+		RutaAbs: filepath.Join(tmp, "grupo-inactivo-runtime"),
+		Tipo:    db.ProyectoGrupo,
+		Activo:  false,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "CodexWarmInactive1",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo"}`,
+	}); err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+
+	pending, detail, err := tieneTrabajoOrquestablePendiente()
+	if err != nil {
+		t.Fatalf("tieneTrabajoOrquestablePendiente: %v", err)
+	}
+	if !pending {
+		t.Fatal("deberia detectar mailbox runtime pendiente en proyecto inactivo")
+	}
+	if !strings.Contains(detail, "runtime_mailbox=pendiente proyecto_id=") {
+		t.Fatalf("detalle inesperado: %q", detail)
+	}
+}
+
+func TestTieneTrabajoOrquestablePendienteDetectaRuntimeOrderEnProyectoInactivo(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+	if err := db.RegistrarAgente("CodexWarmInactive2", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "grupo-inactivo-orders",
+		Nombre:  "Grupo Inactivo Orders",
+		RutaAbs: filepath.Join(tmp, "grupo-inactivo-orders"),
+		Tipo:    db.ProyectoGrupo,
+		Activo:  false,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "CodexWarmInactive2",
+		ProyectoID:  &proyectoID,
+		Tipo:        "sync_status",
+		PayloadJSON: `{"motivo":"follow_up"}`,
+	}); err != nil {
+		t.Fatalf("encolar runtime order: %v", err)
+	}
+
+	pending, detail, err := tieneTrabajoOrquestablePendiente()
+	if err != nil {
+		t.Fatalf("tieneTrabajoOrquestablePendiente: %v", err)
+	}
+	if !pending {
+		t.Fatal("deberia detectar runtime order pendiente en proyecto inactivo")
+	}
+	if !strings.Contains(detail, "runtime_orders=pendiente proyecto_id=") {
 		t.Fatalf("detalle inesperado: %q", detail)
 	}
 }

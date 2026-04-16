@@ -700,7 +700,7 @@ func revalidarPresupuestoAgenteSiCorresponde(nombre string, minAge time.Duration
 }
 
 func tieneTrabajoOrquestablePendiente() (bool, string, error) {
-	if pending, detail, err := backlogRuntimeGlobalPendiente(); err != nil {
+	if pending, detail, err := backlogRuntimePendiente(); err != nil {
 		return false, "", err
 	} else if pending {
 		return true, detail, nil
@@ -719,22 +719,21 @@ func tieneTrabajoOrquestablePendiente() (bool, string, error) {
 	return false, "", nil
 }
 
-func backlogRuntimeGlobalPendiente() (bool, string, error) {
+func backlogRuntimePendiente() (bool, string, error) {
 	for _, estado := range []string{"pendiente", "entregado"} {
 		estado := estado
 		items, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &estado})
 		if err != nil {
 			return false, "", err
 		}
-		count := 0
 		for _, item := range items {
-			if item == nil || item.ProyectoID != nil {
+			if item == nil {
 				continue
 			}
-			count++
-		}
-		if count > 0 {
-			return true, fmt.Sprintf("runtime_mailbox_global=%s count=%d", estado, count), nil
+			if item.ProyectoID != nil && *item.ProyectoID > 0 {
+				return true, fmt.Sprintf("runtime_mailbox=%s proyecto_id=%d", estado, *item.ProyectoID), nil
+			}
+			return true, fmt.Sprintf("runtime_mailbox_global=%s", estado), nil
 		}
 	}
 	for _, estado := range []string{"pendiente", "tomada", "ejecutando"} {
@@ -743,15 +742,14 @@ func backlogRuntimeGlobalPendiente() (bool, string, error) {
 		if err != nil {
 			return false, "", err
 		}
-		count := 0
 		for _, order := range orders {
-			if order == nil || order.ProyectoID != nil {
+			if order == nil {
 				continue
 			}
-			count++
-		}
-		if count > 0 {
-			return true, fmt.Sprintf("runtime_orders_global=%s count=%d", estado, count), nil
+			if order.ProyectoID != nil && *order.ProyectoID > 0 {
+				return true, fmt.Sprintf("runtime_orders=%s proyecto_id=%d", estado, *order.ProyectoID), nil
+			}
+			return true, fmt.Sprintf("runtime_orders_global=%s", estado), nil
 		}
 	}
 	return false, "", nil
