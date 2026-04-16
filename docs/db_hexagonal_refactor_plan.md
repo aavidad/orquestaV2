@@ -75,6 +75,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: la recuperación automática de tareas bloqueadas desde sesión activa ya no consulta `BuildPanelRows()` global; usa detalle compacto por agente y reduce trabajo repetido en autonomía
 - corte operativo adicional fuera de `db`: la carga de tareas para autonomía degradada ya no barre todas las tareas del sistema; limita las lecturas a estados vivos (`asignada`, `en_progreso`, `bloqueada`) y reduce volumen por tick caliente
 - corte operativo adicional fuera de `db`: el snapshot de autonomía ahora cachea `ListarResumenBloqueos()` y la recuperación de tareas bloqueadas desde sesión activa deja de repetir esa consulta por cada sesión
+- corte operativo adicional fuera de `db`: la limpieza de runtimes fuera de asignación activa ya deduplica lecturas de runtimes/handles por agente cuando existen asignaciones activas anómalas duplicadas, evitando trabajo repetido sobre la misma flota sucia
 
 Estado del frente seguro:
 

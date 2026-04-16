@@ -7483,6 +7483,8 @@ func procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch() (int, error) {
 	}
 	procesadas := 0
 	dedup := map[string]struct{}{}
+	runtimesByAgent := map[string][]*db.RuntimeInstance{}
+	handlesByAgent := map[string][]*db.RuntimeHandle{}
 	for _, asignacion := range asignaciones {
 		if asignacion == nil || asignacion.ProyectoID <= 0 {
 			continue
@@ -7491,9 +7493,14 @@ func procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch() (int, error) {
 		if agente == "" {
 			continue
 		}
-		runtimes, err := db.ListarRuntimes(db.FiltroRuntimes{Agente: &agente})
-		if err != nil {
-			return procesadas, err
+		agentKey := strings.ToLower(agente)
+		runtimes, ok := runtimesByAgent[agentKey]
+		if !ok {
+			runtimes, err = db.ListarRuntimes(db.FiltroRuntimes{Agente: &agente})
+			if err != nil {
+				return procesadas, err
+			}
+			runtimesByAgent[agentKey] = runtimes
 		}
 		for _, runtime := range runtimes {
 			if runtime == nil || runtime.ProyectoID == nil || *runtime.ProyectoID <= 0 || *runtime.ProyectoID == asignacion.ProyectoID {
@@ -7515,9 +7522,13 @@ func procesarRuntimesFueraDeAsignacionActivaPorAsignacionBatch() (int, error) {
 				procesadas++
 			}
 		}
-		handles, err := db.ListarRuntimeHandles(&agente)
-		if err != nil {
-			return procesadas, err
+		handles, ok := handlesByAgent[agentKey]
+		if !ok {
+			handles, err = db.ListarRuntimeHandles(&agente)
+			if err != nil {
+				return procesadas, err
+			}
+			handlesByAgent[agentKey] = handles
 		}
 		for _, handle := range handles {
 			if handle == nil || handle.ProyectoID == nil || *handle.ProyectoID <= 0 || *handle.ProyectoID == asignacion.ProyectoID {
