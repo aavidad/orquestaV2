@@ -228,6 +228,10 @@ func bloqueoProyectoRequiereIntervencionHumana(motivo string) bool {
 	}
 }
 
+func BloqueoProyectoRequiereIntervencionHumana(motivo string) bool {
+	return bloqueoProyectoRequiereIntervencionHumana(motivo)
+}
+
 func ResolverBloqueoProyecto(proyectoID int64) (bool, string, error) {
 	if proyectoID == 0 {
 		return false, "", nil

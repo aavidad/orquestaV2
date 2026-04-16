@@ -97,3 +97,7 @@ func notificarRefreshGobernanza(actor, tipoAgente, motivo string, extra map[stri
 		}
 	}
 }
+
+func NotificarRefreshGobernanza(actor, tipoAgente, motivo string, extra map[string]any) {
+	notificarRefreshGobernanza(actor, tipoAgente, motivo, extra)
+}

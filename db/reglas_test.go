@@ -354,6 +354,10 @@ func TestSkillExternaQuedaPendienteYSoloAdminLaActiva(t *testing.T) {
 
 func TestCrearSkillNotificaRefreshAMailboxDeAgentesActivosDelRol(t *testing.T) {
 	prepararDBTemporal(t)
+	SetGovernanceTransitionCoordinator(testGovernanceTransitionCoordinator{})
+	t.Cleanup(func() {
+		SetGovernanceTransitionCoordinator(nil)
+	})
 	registrarAgentesBaseDBTest(t)
 	if _, err := IniciarSesion("Codex1"); err != nil {
 		t.Fatalf("IniciarSesion Codex1: %v", err)

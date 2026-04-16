@@ -202,6 +202,39 @@ func TestBuildLaunchBootstrapPromptCompactaAgenteCLIOrquestadoAunqueNoSeaBootstr
 	}
 }
 
+func TestBuildLaunchBootstrapPromptCompactaSinTareaActivaPideACKEspera(t *testing.T) {
+	prepararDBTemporal(t)
+
+	proyecto := &Proyecto{
+		ID:      1,
+		Slug:    "orquestador",
+		RutaAbs: filepath.Join(t.TempDir(), "repo"),
+	}
+	agente := &Agente{
+		Nombre: "Codex10",
+		Rol:    "programador",
+	}
+	canSendInput := false
+	plan := &runtimeagente.LaunchPlan{
+		Driver:              "cli",
+		WorkingDir:          proyecto.RutaAbs,
+		CanSendInput:        &canSendInput,
+		MailboxDeliveryMode: runtimeagente.MailboxDeliveryBootstrapOnly,
+	}
+	tareas := []*Tarea{{ID: 507, Estado: TareaCompletada, Titulo: "Tarea ya cerrada"}}
+
+	prompt := BuildLaunchBootstrapPrompt(agente, proyecto, plan, nil, nil, tareas, nil, "contexto largo", "gobernanza larga")
+	for _, token := range []string{
+		"Si todavía no tienes una microtarea cerrada, responde solo ACK-ESPERA y espera.",
+		"Cuando llegue una microtarea, ejecuta solo ese cambio y devuelve evidencia breve; no hagas trabajo adicional.",
+		"No hay una tarea activa única; consulta Orquesta antes de desviarte.",
+	} {
+		if !strings.Contains(prompt, token) {
+			t.Fatalf("falta %q en prompt compacto sin tarea activa:\n%s", token, prompt)
+		}
+	}
+}
+
 func TestBuildLaunchBootstrapPromptCompactaPriorizaSliceEjecutableDelFrente(t *testing.T) {
 	prepararDBTemporal(t)
 

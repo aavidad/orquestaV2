@@ -19,6 +19,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte adicional en planner: mover la detección de pool local compartido a `planificadorpolicy`
 - corte adicional en planner: mover la ventana de gracia de recuperación de tarea huérfana a `planificadorpolicy`
 - corte adicional en planner: mover la política de preservación de tarea huérfana enfocada (frente acotado) a `planificadorpolicy`
+- corte adicional en runtime: mover compactación/estado de prompt bootstrap a `runtimepolicy`
 - corte adicional en runtime: mover la compactación de transcript pending a `runtimepolicy`
 - corte adicional en runtime: mover compactación/síntesis de metadata de `runtime_handle` en `runtimepolicy` (`CompactRuntimeHandleMetadata`)
 - corte adicional en runtime: mover heurísticas `runtimeHandleLooksLikeCodexCLIRef` y `runtimeHandleLooksLikeCodexCommand` a `runtimepolicy`
@@ -72,6 +73,7 @@ Estado del frente seguro:
 - policy de match de runtime/sesión y extracción de `driver` (`RuntimeHandleMatchesRuntime`, `RuntimeHandleDriver`) delegada a `runtimepolicy`
 - policy de scoring de contexto de entrega de `runtime_handle` movida a `runtimepolicy` para selector explícito de `runtime_order`
 - policy de skills movida a `skillspolicy`
+- policy de compactación de prompt de bootstrap movida a `runtimepolicy`
 - policy de compactación de texto pendiente de transcript en runtime movida a `runtimepolicy`
 - policy de ordenación por rol en selección de supervisores operativos movida a `autonomiapolicy`
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"orquesta/runtimeagente"
+	"orquesta/runtimepolicy"
 )
 
 func BuildLaunchBootstrapPromptForContext(agente *Agente, proyecto *Proyecto, plan *runtimeagente.LaunchPlan) (string, error) {
@@ -55,7 +56,7 @@ func BuildLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan *runtim
 		workingDir = strings.TrimSpace(plan.WorkingDir)
 	}
 
-	if promptBootstrapCompacto(plan) {
+	if runtimepolicy.RuntimeLaunchBootstrapPromptCompact(plan) {
 		return buildCompactLaunchBootstrapPrompt(agente, proyecto, plan, workingDir, tareas)
 	}
 
@@ -125,20 +126,6 @@ func BuildLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan *runtim
 	return strings.Join(lines, "\n")
 }
 
-func promptBootstrapCompacto(plan *runtimeagente.LaunchPlan) bool {
-	if plan == nil {
-		return false
-	}
-	if plan.CanSendInput != nil && !*plan.CanSendInput &&
-		strings.EqualFold(strings.TrimSpace(plan.MailboxDeliveryMode), runtimeagente.MailboxDeliveryBootstrapOnly) {
-		return true
-	}
-	if planLooksLikeOrchestratedAgentCLI(plan) {
-		return true
-	}
-	return false
-}
-
 func buildCompactLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan *runtimeagente.LaunchPlan, workingDir string, tareas []*Tarea) string {
 	if planLooksLikeOllamaCLI(plan) {
 		return buildCompactLaunchBootstrapPromptOllama(agente, proyecto, workingDir, tareas)
@@ -162,7 +149,7 @@ func buildCompactLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan 
 		"Consulta solo el fragmento minimo de doctrina que necesites si aparece un bloqueo real o falta contrato operativo en la inbox/tarea.",
 		"No expliques planes largos ni reabras decisiones de diseño ya tomadas.",
 	}
-	if !bootstrapCompactoTieneTareaActiva(tareas) {
+	if !runtimepolicy.RuntimeLaunchBootstrapPromptHasActiveTask(runtimeBootstrapCompactTaskStates(tareas)) {
 		lines = append(lines,
 			"Si todavía no tienes una microtarea cerrada, responde solo ACK-ESPERA y espera.",
 			"Cuando llegue una microtarea, ejecuta solo ese cambio y devuelve evidencia breve; no hagas trabajo adicional.",
@@ -176,17 +163,18 @@ func buildCompactLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan 
 	return strings.Join(lines, "\n")
 }
 
-func bootstrapCompactoTieneTareaActiva(tareas []*Tarea) bool {
+func runtimeBootstrapCompactTaskStates(tareas []*Tarea) []string {
+	if len(tareas) == 0 {
+		return nil
+	}
+	states := make([]string, 0, len(tareas))
 	for _, tarea := range tareas {
 		if tarea == nil {
 			continue
 		}
-		switch tarea.Estado {
-		case TareaAsignada, TareaEnProgreso, TareaBloqueada:
-			return true
-		}
+		states = append(states, strings.TrimSpace(string(tarea.Estado)))
 	}
-	return false
+	return states
 }
 
 func buildCompactLaunchBootstrapPromptOllama(agente *Agente, proyecto *Proyecto, workingDir string, tareas []*Tarea) string {

@@ -51,3 +51,7 @@ func notificarRefreshSkillCatalogo(actor string, skill *Skill, motivo string) {
 		}
 	}
 }
+
+func NotificarRefreshSkillCatalogo(actor string, skill *Skill, motivo string) {
+	notificarRefreshSkillCatalogo(actor, skill, motivo)
+}
