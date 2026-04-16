@@ -2858,30 +2858,42 @@ func reconciliarRuntimeMailboxAgenteSinVidaBatchConMailbox(mailbox []*db.Runtime
 		if _, skip := consumed[msg.ID]; skip {
 			continue
 		}
-		debeConsumirse, detalle, err := runtimeMailboxDebeConsumirsePorAgenteSinVida(msg, snapshot)
+		dispatched, err := reconciliarRuntimeMailboxAgenteSinVidaMensaje(msg, consumed, snapshot)
 		if err != nil {
 			return total, err
 		}
-		if !debeConsumirse {
-			continue
+		if dispatched {
+			total++
 		}
-		if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
-			return total, err
-		} else if !canConsume {
-			continue
-		}
-		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
-			return total, err
-		}
-		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
-			return total, err
-		}
-		db.Audit("orquesta", "runtime_mailbox_agente_sin_vida", "runtime_mailbox", msg.ID,
-			fmt.Sprintf("agente=%s kind=%s %s", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), detalle))
-		consumed[msg.ID] = struct{}{}
-		total++
 	}
 	return total, nil
+}
+
+// reconciliarRuntimeMailboxAgenteSinVidaMensaje consume un mensaje cuyo agente destino
+// no está en la flota activa. Retorna true si el mensaje fue consumido.
+func reconciliarRuntimeMailboxAgenteSinVidaMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
+	debeConsumirse, detalle, err := runtimeMailboxDebeConsumirsePorAgenteSinVida(msg, snapshot)
+	if err != nil {
+		return false, err
+	}
+	if !debeConsumirse {
+		return false, nil
+	}
+	if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+		return false, err
+	} else if !canConsume {
+		return false, nil
+	}
+	if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+		return false, err
+	}
+	if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+		return false, err
+	}
+	db.Audit("orquesta", "runtime_mailbox_agente_sin_vida", "runtime_mailbox", msg.ID,
+		fmt.Sprintf("agente=%s kind=%s %s", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind), detalle))
+	consumed[msg.ID] = struct{}{}
+	return true, nil
 }
 
 func reconciliarRuntimeMailboxInstructionEnfriamientoBatchConMailbox(mailbox []*db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (int, error) {
