@@ -93,6 +93,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: la reanimación ya no resuelve dos veces el mismo `runtime_handle` cuando proyecto y handle ya están disponibles en la misma secuencia, y `runtimeRecuperacionSesionObjetivo` evita reintentar `GetRuntimeBySesionID` si ya se leyó al principio
 - corte operativo adicional fuera de `db`: la decisión de `continuar_trabajo` en sesión activa puede derivar el `tarea_id` desde `snapshot.tasks(...)` cuando existe una única tarea activa inequívoca, dejando la query canónica como fallback para casos ambiguos
 - corte operativo adicional fuera de `db`: la recuperación de tareas bloqueadas en sesión activa sale antes cuando el `snapshot` ya demuestra que no hay ninguna `TareaBloqueada` para ese agente/proyecto, evitando `BuildDetailCompact` y la carga de bloqueos en ese caso vacío
+- corte operativo adicional fuera de `db`: la derivación de semilla premium en sesión activa puede resolver la tarea activa desde `snapshot.tasks(...)` y reutilizar la propia `*db.Tarea` cuando la candidata es inequívoca, dejando la query directa como fallback
 
 Estado del frente seguro:
 

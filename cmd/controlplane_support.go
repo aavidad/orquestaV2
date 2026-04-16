@@ -9287,11 +9287,32 @@ func procesarDerivacionSemillaPremiumSesionActiva(sesion *db.Sesion, snapshot *a
 	if sesion == nil || sesion.ProyectoID == nil {
 		return 0, nil
 	}
-	tareaID, err := db.GetTareaActivaIDPorAgenteProyecto(sesion.Agente, sesion.ProyectoID)
-	if err != nil || tareaID <= 0 {
+	tareaID, err := tareaActivaSesionDesdeSnapshot(sesion, snapshot)
+	if err != nil {
 		return 0, err
 	}
-	tareaActual, err := tareasService.Get(tareaID)
+	var tareaActual *db.Tarea
+	if tareaID > 0 && snapshot != nil {
+		tareas, err := snapshot.tasks(strings.TrimSpace(sesion.Agente), *sesion.ProyectoID)
+		if err != nil {
+			return 0, err
+		}
+		for _, tarea := range tareas {
+			if tarea != nil && tarea.ID == tareaID {
+				tareaActual = tarea
+				break
+			}
+		}
+	}
+	if tareaActual == nil {
+		if tareaID <= 0 {
+			tareaID, err = db.GetTareaActivaIDPorAgenteProyecto(sesion.Agente, sesion.ProyectoID)
+			if err != nil || tareaID <= 0 {
+				return 0, err
+			}
+		}
+		tareaActual, err = tareasService.Get(tareaID)
+	}
 	if err != nil || tareaActual == nil {
 		return 0, err
 	}

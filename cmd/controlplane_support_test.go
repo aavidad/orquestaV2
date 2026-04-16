@@ -4658,6 +4658,78 @@ func TestProcesarRecuperacionTareasBloqueadasSesionActivaConSnapshotSaleSiNoHayB
 	}
 }
 
+func TestProcesarDerivacionSemillaPremiumSesionActivaConSnapshotUsaTareaActivaInequivoca(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexSeed", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-seed",
+		Nombre:  "Orquestador Seed",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := db.UpsertProyectoAutonomia(&db.ProyectoAutonomia{
+		ProyectoID:       proyectoID,
+		Enabled:          true,
+		ObjetivoGeneral:  "Terminar la app",
+		EstadoAutonomia:  db.AutonomiaProyectoActiva,
+		DefinitionOfDoneJSON: `{"ok":true}`,
+	}); err != nil {
+		t.Fatalf("upsert proyecto autonomia: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSeed",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	seedID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Semilla premium",
+		Descripcion: "autonomia:premium_frontier",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "test",
+		Notas:       "autonomia:premium_frontier",
+	})
+	if err != nil {
+		t.Fatalf("crear seed: %v", err)
+	}
+	if err := db.TomarTarea(seedID, "CodexSeed"); err != nil {
+		t.Fatalf("tomar seed: %v", err)
+	}
+	if err := db.IniciarTarea(seedID, "CodexSeed"); err != nil {
+		t.Fatalf("iniciar seed: %v", err)
+	}
+
+	snapshot := &autonomiaBatchSnapshot{
+		tareasByAgentProject: map[string][]*db.Tarea{
+			agentProjectCacheKey("CodexSeed", proyectoID): {{
+				ID:         seedID,
+				ProyectoID: &proyectoID,
+				Agente:     strPtr("CodexSeed"),
+				Estado:     db.TareaEnProgreso,
+				Notas:      "autonomia:premium_frontier",
+			}},
+		},
+		proyectosByID:   map[int64]*db.Proyecto{proyectoID: {ID: proyectoID, Slug: "orquestador-seed"}},
+		proyectosLoaded: map[int64]struct{}{proyectoID: {}},
+	}
+
+	_, err = procesarDerivacionSemillaPremiumSesionActiva(sesion, snapshot)
+	if err != nil {
+		t.Fatalf("procesarDerivacionSemillaPremiumSesionActiva: %v", err)
+	}
+}
+
 func TestSesionActivaDebeRecibirNudgeContinuacionIgnoraGuidanceDurableMailboxOnlyVigente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
