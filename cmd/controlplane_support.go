@@ -2764,24 +2764,36 @@ func reconciliarRuntimeMailboxPipelineEnfriamientoBatchConMailbox(mailbox []*db.
 		if _, skip := consumed[msg.ID]; skip {
 			continue
 		}
-		if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
-			return total, err
-		} else if !canConsume {
-			continue
-		}
-		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+		dispatched, err := reconciliarRuntimeMailboxPipelineEnfriamientoMensaje(msg, consumed)
+		if err != nil {
 			return total, err
 		}
-		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
-			return total, err
+		if dispatched {
+			total++
 		}
-		db.Audit("orquesta", "runtime_mailbox_pipeline_enfriamiento", "runtime_mailbox", msg.ID,
-			fmt.Sprintf("agente=%s kind=%s pipeline_local consumido por agente en enfriamiento",
-				strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
-		consumed[msg.ID] = struct{}{}
-		total++
 	}
 	return total, nil
+}
+
+// reconciliarRuntimeMailboxPipelineEnfriamientoMensaje consume un pipeline_local ya
+// cualificado como consumible por enfriamiento. Retorna true si fue consumido.
+func reconciliarRuntimeMailboxPipelineEnfriamientoMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}) (bool, error) {
+	if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+		return false, err
+	} else if !canConsume {
+		return false, nil
+	}
+	if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+		return false, err
+	}
+	if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+		return false, err
+	}
+	db.Audit("orquesta", "runtime_mailbox_pipeline_enfriamiento", "runtime_mailbox", msg.ID,
+		fmt.Sprintf("agente=%s kind=%s pipeline_local consumido por agente en enfriamiento",
+			strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
+	consumed[msg.ID] = struct{}{}
+	return true, nil
 }
 
 func runtimeMailboxPipelinePuedeConsumirsePorEnfriamiento(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) bool {
@@ -2820,24 +2832,36 @@ func reconciliarRuntimeMailboxRefreshEnfriamientoBatchConMailbox(mailbox []*db.R
 		if _, skip := consumed[msg.ID]; skip {
 			continue
 		}
-		if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
-			return total, err
-		} else if !canConsume {
-			continue
-		}
-		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+		dispatched, err := reconciliarRuntimeMailboxRefreshEnfriamientoMensaje(msg, consumed)
+		if err != nil {
 			return total, err
 		}
-		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
-			return total, err
+		if dispatched {
+			total++
 		}
-		db.Audit("orquesta", "runtime_mailbox_refresh_enfriamiento", "runtime_mailbox", msg.ID,
-			fmt.Sprintf("agente=%s kind=%s refresh consumido por agente en enfriamiento",
-				strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
-		consumed[msg.ID] = struct{}{}
-		total++
 	}
 	return total, nil
+}
+
+// reconciliarRuntimeMailboxRefreshEnfriamientoMensaje consume un refresh (governance/skills)
+// ya cualificado como consumible por enfriamiento. Retorna true si fue consumido.
+func reconciliarRuntimeMailboxRefreshEnfriamientoMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}) (bool, error) {
+	if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+		return false, err
+	} else if !canConsume {
+		return false, nil
+	}
+	if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+		return false, err
+	}
+	if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+		return false, err
+	}
+	db.Audit("orquesta", "runtime_mailbox_refresh_enfriamiento", "runtime_mailbox", msg.ID,
+		fmt.Sprintf("agente=%s kind=%s refresh consumido por agente en enfriamiento",
+			strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
+	consumed[msg.ID] = struct{}{}
+	return true, nil
 }
 
 func reconciliarRuntimeMailboxAgenteSinVidaBatch() (int, error) {
@@ -2905,24 +2929,36 @@ func reconciliarRuntimeMailboxInstructionEnfriamientoBatchConMailbox(mailbox []*
 		if _, skip := consumed[msg.ID]; skip {
 			continue
 		}
-		if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
-			return total, err
-		} else if !canConsume {
-			continue
-		}
-		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+		dispatched, err := reconciliarRuntimeMailboxInstructionEnfriamientoMensaje(msg, consumed)
+		if err != nil {
 			return total, err
 		}
-		if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
-			return total, err
+		if dispatched {
+			total++
 		}
-		db.Audit("orquesta", "runtime_mailbox_instruction_enfriamiento", "runtime_mailbox", msg.ID,
-			fmt.Sprintf("agente=%s kind=%s instruction consumida por agente en enfriamiento",
-				strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
-		consumed[msg.ID] = struct{}{}
-		total++
 	}
 	return total, nil
+}
+
+// reconciliarRuntimeMailboxInstructionEnfriamientoMensaje consume una instrucción
+// ya cualificada como consumible por enfriamiento. Retorna true si fue consumida.
+func reconciliarRuntimeMailboxInstructionEnfriamientoMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}) (bool, error) {
+	if canConsume, err := runtimeMailboxPuedeConsumirseFueraDeOrden(msg); err != nil {
+		return false, err
+	} else if !canConsume {
+		return false, nil
+	}
+	if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+		return false, err
+	}
+	if err := db.MarcarRuntimeMailboxConsumido(msg.ID); err != nil {
+		return false, err
+	}
+	db.Audit("orquesta", "runtime_mailbox_instruction_enfriamiento", "runtime_mailbox", msg.ID,
+		fmt.Sprintf("agente=%s kind=%s instruction consumida por agente en enfriamiento",
+			strings.TrimSpace(msg.ToAgente), strings.TrimSpace(msg.Kind)))
+	consumed[msg.ID] = struct{}{}
+	return true, nil
 }
 
 func reconciliarRuntimeMailboxWatchdogSinHandleBatch() (int, error) {
