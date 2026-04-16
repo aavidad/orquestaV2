@@ -4825,19 +4825,9 @@ func procesarRuntimeMailboxSessionResumeMensaje(msg *db.RuntimeMailboxMessage, c
 		return intentarReactivarRuntimeMailboxSinHandle(msg, snapshot)
 	}
 	var runtimeInstance *db.RuntimeInstance
-	if supervisedHandle, supervisedRuntime, _, err := snapshot.supervisedHandle(handle); err != nil {
+	runtimeInstance, err = runtimeCanonicoDesdeHandleAgenteProyecto(handle, strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	if err != nil {
 		return false, err
-	} else {
-		if supervisedHandle != nil {
-			handle = supervisedHandle
-		}
-		runtimeInstance = supervisedRuntime
-	}
-	if runtimeInstance == nil {
-		runtimeInstance, err = runtimeCanonicoDesdeHandleAgenteProyecto(handle, strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
-		if err != nil {
-			return false, err
-		}
 	}
 	handle, externalSessionID, err := snapshot.externalSessionHandle(handle, runtimeInstance)
 	if err != nil {
@@ -4847,14 +4837,14 @@ func procesarRuntimeMailboxSessionResumeMensaje(msg *db.RuntimeMailboxMessage, c
 		return false, nil
 	}
 	if strings.TrimSpace(externalSessionID) == "" {
-		return procesarRuntimeMailboxSessionResumeFallbackInteractivo(msg, consumed, snapshot, handle, runtimeInstance, texto)
+		return procesarRuntimeMailboxSessionResumeFallbackInteractivo(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID)
 	}
 	return procesarRuntimeMailboxSessionResumeConSesion(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID)
 }
 
 // procesarRuntimeMailboxSessionResumeFallbackInteractivo gestiona mensajes de resume
 // cuando no hay externalSessionID: usa el canal interactivo transitorio como fallback.
-func procesarRuntimeMailboxSessionResumeFallbackInteractivo(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, texto string) (bool, error) {
+func procesarRuntimeMailboxSessionResumeFallbackInteractivo(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot, handle *db.RuntimeHandle, runtimeInstance *db.RuntimeInstance, texto, externalSessionID string) (bool, error) {
 	if !runtimeHandleAdmiteFallbackInteractivoTransitorio(handle) {
 		return false, nil
 	}
@@ -4873,7 +4863,7 @@ func procesarRuntimeMailboxSessionResumeFallbackInteractivo(msg *db.RuntimeMailb
 		consumed[msg.ID] = struct{}{}
 		return true, nil
 	}
-	return encolarRuntimeMailboxSessionResumeSiCorresponde(msg, consumed, snapshot, handle, runtimeInstance, texto, "", "runtime_mailbox_session_resume_interactive_fallback", "runtime_mailbox_session_resume_interactive_supersede")
+	return encolarRuntimeMailboxSessionResumeSiCorresponde(msg, consumed, snapshot, handle, runtimeInstance, texto, externalSessionID, "runtime_mailbox_session_resume_interactive_fallback", "runtime_mailbox_session_resume_interactive_supersede")
 }
 
 // procesarRuntimeMailboxSessionResumeConSesion gestiona mensajes de resume cuando
@@ -5599,15 +5589,19 @@ func runtimeHandleListaParaDispatchInteractivo(handle *db.RuntimeHandle) bool {
 	}
 	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON))
 	if err != nil || snap == nil {
-		return true
+		return runtimeHandlePermiteInteractivoTmuxSinEstado(handle)
 	}
 	view := snap.View(time.Now().UTC(), time.Minute)
 	if view == nil {
-		return true
+		return runtimeHandlePermiteInteractivoTmuxSinEstado(handle)
 	}
-	if !strings.EqualFold(strings.TrimSpace(view.Driver), "tmux_cli_session") &&
-		!strings.EqualFold(strings.TrimSpace(view.Transport), "tmux") {
-		return true
+	if runtimeHandleEsTmuxLike(handle) {
+		if !strings.EqualFold(strings.TrimSpace(view.Driver), "tmux_cli_session") &&
+			!strings.EqualFold(strings.TrimSpace(view.Transport), "tmux") {
+			return false
+		}
+		ready, _ := snap.ReadyForTextDispatch(time.Now().UTC(), time.Minute)
+		return ready
 	}
 	ready, _ := snap.ReadyForTextDispatch(time.Now().UTC(), time.Minute)
 	return ready
@@ -5617,9 +5611,15 @@ func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle, r
 	if handle == nil {
 		return false
 	}
+	if !runtimeHandleEsTmuxLike(handle) && handle.ID > 0 {
+		if fresh, err := db.GetRuntimeHandle(handle.ID); err == nil && fresh != nil {
+			handle = fresh
+		}
+	}
+	if !runtimeHandleEsTmuxLike(handle) {
+		return true
+	}
 	if handle.SesionID == nil && handle.RuntimeID == nil {
-		// A fresh canonical handle can still route session_resume via the
-		// runtime/session external session even before the local link is hydrated.
 		return true
 	}
 	snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(strings.TrimSpace(handle.MetadataJSON))
@@ -5632,7 +5632,7 @@ func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle, r
 	}
 	if !strings.EqualFold(strings.TrimSpace(view.Driver), "tmux_cli_session") &&
 		!strings.EqualFold(strings.TrimSpace(view.Transport), "tmux") {
-		return true
+		return false
 	}
 	ready, _ := snap.ReadyForTextDispatch(time.Now().UTC(), time.Minute)
 	if !ready &&
@@ -5641,6 +5641,36 @@ func runtimeHandleListaParaDispatchSessionResumeTMUX(handle *db.RuntimeHandle, r
 		return true
 	}
 	return ready
+}
+
+func runtimeHandlePermiteInteractivoTmuxSinEstado(handle *db.RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	if !runtimeHandleEsTmuxLike(handle) {
+		return true
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	if strings.TrimSpace(stringMapValue(meta, "external_session_id")) != "" {
+		return true
+	}
+	return strings.TrimSpace(stringMapValue(meta, "tmux_session")) != "" ||
+		strings.TrimSpace(stringMapValue(meta, "tmux_pane_id")) != "" ||
+		strings.TrimSpace(stringMapValue(meta, "stdin_path")) != "" ||
+		strings.TrimSpace(stringMapValue(meta, "stdin_raw_path")) != ""
+}
+
+func runtimeHandlePuedeResumeTmuxSinSnapshot(handle *db.RuntimeHandle, runtime *db.RuntimeInstance) bool {
+	if handle == nil || !runtimeHandleEsTmuxLike(handle) {
+		return false
+	}
+	if runtime == nil {
+		return false
+	}
+	if !runtimeTMUXSessionResumePuedeDespacharPorRuntimeCanonico(runtime) {
+		return false
+	}
+	return runtimeHandlePermiteInteractivoTmuxSinEstado(handle)
 }
 
 func runtimeTMUXSessionResumeWorkerReady(handle *db.RuntimeHandle) bool {
@@ -6236,6 +6266,17 @@ func runtimeHandleRequiereCoordinatedRestartMailbox(handle *db.RuntimeHandle) bo
 	default:
 		return false
 	}
+}
+
+func runtimeHandleEsTmuxLike(handle *db.RuntimeHandle) bool {
+	if handle == nil {
+		return false
+	}
+	meta := mapFromJSON(handle.MetadataJSON)
+	driver := strings.TrimSpace(mapStringValue(meta, "driver"))
+	return strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") ||
+		strings.EqualFold(driver, "tmux_cli_session") ||
+		strings.EqualFold(strings.TrimSpace(mapStringValue(meta, "transport")), "tmux")
 }
 
 func runtimeMailboxDebeCoordinarReinicio(kind string, handle *db.RuntimeHandle) bool {
