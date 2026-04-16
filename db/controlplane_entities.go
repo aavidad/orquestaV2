@@ -3657,8 +3657,7 @@ func runtimeHandleSesionTMUXAusente(handle *RuntimeHandle) bool {
 	if handle == nil {
 		return false
 	}
-	known, exists := controlruntime.TMUXSessionExistsMetadata(strings.TrimSpace(handle.MetadataJSON))
-	return known && !exists
+	return runtimepolicy.RuntimeHandleTMUXSessionMissing(handle.MetadataJSON)
 }
 
 func runtimeWorkerSnapshotSatisfaceControlActual(orderType string, handle *RuntimeHandle, snap *runtimeagente.WorkerSnapshot, now time.Time) bool {
@@ -4885,8 +4884,8 @@ func runtimeProcesoLocalYaNoVive(order *RuntimeOrder) (bool, int, error) {
 		return yaNoVive, pid, err
 	}
 	if handle != nil && RuntimeHandlePauseRequiresFreshStart(handle) {
-		if known, exists := controlruntime.TMUXSessionExistsMetadata(handle.MetadataJSON); known {
-			return !exists, 0, nil
+		if runtimepolicy.RuntimeHandleTMUXSessionMissing(handle.MetadataJSON) {
+			return true, 0, nil
 		}
 	}
 	obj, err := objetivoProcesoDiagnosticoParaOrden(order)
@@ -11314,7 +11313,7 @@ func runtimeHandleDriverTransportObserved(handle *RuntimeHandle) (string, string
 		return "", ""
 	}
 	meta := mapFromJSON(handle.MetadataJSON)
-	driver := strings.TrimSpace(stringFromMap(meta, "driver", ""))
+	driver := strings.TrimSpace(runtimepolicy.RuntimeHandleDriver(handle.MetadataJSON))
 	transport := strings.TrimSpace(handle.Transporte)
 	if transport == "" {
 		transport = strings.TrimSpace(stringFromMap(meta, "transport", ""))
@@ -11451,7 +11450,7 @@ func SincronizarRuntimeHandleSupervisado(handle *RuntimeHandle, runtime *Runtime
 			}
 		}
 	}
-	if known, exists := controlruntime.TMUXSessionExistsMetadata(handle.MetadataJSON); known && !exists {
+	if runtimepolicy.RuntimeHandleTMUXSessionMissing(handle.MetadataJSON) {
 		if err := marcarProcesoLocalNoDisponible(handle, runtime); err != nil {
 			return nil, nil, "", err
 		}
@@ -11641,7 +11640,7 @@ func runtimeHandleExternalSessionIncompatible(handle *RuntimeHandle) bool {
 		return false
 	}
 	meta := mapFromJSON(handle.MetadataJSON)
-	driver := strings.ToLower(strings.TrimSpace(stringFromMap(meta, "driver", "")))
+	driver := strings.ToLower(strings.TrimSpace(runtimepolicy.RuntimeHandleDriver(handle.MetadataJSON)))
 	if driver != "tmux_cli_session" &&
 		!strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") &&
 		!strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") {

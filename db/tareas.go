@@ -32,6 +32,125 @@ const (
 	EstadoBacklog    = TareaBacklog
 )
 
+type tareaTransitionCoordinator interface {
+	afterTomarTarea(t *Tarea, agente string) error
+	afterIniciarTarea(t *Tarea, agente string) error
+	afterCompletarTarea(t *Tarea, agente, commit string) error
+	afterCancelarTarea(t *Tarea, agente, motivo string) error
+	afterBloquearTarea(t *Tarea, agente, motivo string) error
+	afterDesbloquearTarea(t *Tarea, agente, resolucion string) error
+}
+
+type defaultTareaTransitionCoordinator struct{}
+
+var defaultTaskTransitioner tareaTransitionCoordinator = defaultTareaTransitionCoordinator{}
+
+func (defaultTareaTransitionCoordinator) afterTomarTarea(t *Tarea, agente string) error {
+	if t == nil {
+		return nil
+	}
+	Audit(agente, "tomar_tarea", "tarea", t.ID, t.Titulo)
+	return nil
+}
+
+func (defaultTareaTransitionCoordinator) afterIniciarTarea(t *Tarea, agente string) error {
+	if t == nil {
+		return nil
+	}
+	Audit(agente, "iniciar_tarea", "tarea", t.ID, t.Titulo)
+	SetEstadoSesion(agente, "programando")
+	if t.ProyectoID != nil {
+		EmitirHookCicloVida(agente, HookTaskStart, *t.ProyectoID, "tarea", t.ID, agente, t.Titulo)
+	}
+	return nil
+}
+
+func (defaultTareaTransitionCoordinator) afterCompletarTarea(t *Tarea, agente, commit string) error {
+	if t == nil {
+		return nil
+	}
+	Audit(agente, "completar_tarea", "tarea", t.ID, t.Titulo+" commit="+commit)
+	SetEstadoSesion(agente, "disponible")
+	if t.ProyectoID != nil {
+		EmitirHookCicloVida(agente, HookTaskFinish, *t.ProyectoID, "tarea", t.ID, agente, t.Titulo)
+	}
+
+	if t.ProyectoID != nil {
+		stats, _ := GetEstadisticasProyecto(*t.ProyectoID)
+		if stats.Total > 0 && stats.Completadas == stats.Total {
+			p, _ := GetProyecto(fmt.Sprintf("%d", *t.ProyectoID))
+			if p != nil {
+				EmitirNotificacion(EventoNotificacion{
+					Tipo:       "fin_proyecto",
+					ID:         p.ID,
+					Texto:      p.Nombre,
+					ProyectoID: p.ID,
+				})
+			}
+		}
+	}
+	return nil
+}
+
+func (defaultTareaTransitionCoordinator) afterCancelarTarea(t *Tarea, agente, motivo string) error {
+	if t == nil {
+		return nil
+	}
+	Audit(agente, "cancelar_tarea", "tarea", t.ID, t.Titulo+": "+motivo)
+	SetEstadoSesion(agente, "disponible")
+	return nil
+}
+
+func (defaultTareaTransitionCoordinator) afterBloquearTarea(t *Tarea, agente, motivo string) error {
+	if t == nil {
+		return nil
+	}
+	if t.ProyectoID != nil {
+		if bloqueoProyectoRequiereIntervencionHumana(motivo) {
+			if err := MarcarProyectoEsperandoHumano(*t.ProyectoID, motivo); err != nil {
+				return err
+			}
+		}
+		EmitirHookCicloVida(agente, HookProjectBlocked, *t.ProyectoID, "tarea", t.ID, agente, motivo)
+	}
+	Audit(agente, "bloquear_tarea", "tarea", t.ID, t.Titulo+": "+motivo)
+	SetEstadoSesion(agente, "esperando")
+
+	EmitirNotificacion(EventoNotificacion{
+		Tipo:   "bloqueo",
+		ID:     t.ID,
+		Agente: agente,
+		Texto:  motivo,
+	})
+	return nil
+}
+
+func (defaultTareaTransitionCoordinator) afterDesbloquearTarea(t *Tarea, agente, resolucion string) error {
+	if t == nil {
+		return nil
+	}
+	if t.ProyectoID != nil {
+		op, err := GetProyectoOperacion(*t.ProyectoID)
+		if err != nil {
+			return err
+		}
+		if op.ResumeAutomatico {
+			if err := MarcarProyectoActivo(*t.ProyectoID, ""); err != nil {
+				return err
+			}
+		}
+		EmitirHookCicloVida(agente, HookProjectUnblocked, *t.ProyectoID, "tarea", t.ID, agente, resolucion)
+	}
+	Audit(agente, "desbloquear_tarea", "tarea", t.ID, resolucion)
+	SetEstadoSesion(agente, "disponible")
+
+	EmitirNotificacion(EventoNotificacion{
+		Tipo:  "mensaje",
+		Texto: fmt.Sprintf("🔓 *Tarea #%d Desbloqueada*\n\nResolución: %s", t.ID, resolucion),
+	})
+	return nil
+}
+
 type PrioridadTarea string
 
 const (
@@ -253,7 +372,7 @@ func TomarTarea(id int64, agente string) error {
 		agente, id,
 	)
 	if err == nil {
-		Audit(agente, "tomar_tarea", "tarea", id, t.Titulo)
+		err = defaultTaskTransitioner.afterTomarTarea(t, agente)
 	}
 	return err
 }
@@ -289,10 +408,8 @@ func IniciarTarea(id int64, agente string) error {
 		agente, id,
 	)
 	if err == nil {
-		Audit(agente, "iniciar_tarea", "tarea", id, t.Titulo)
-		SetEstadoSesion(agente, "programando")
-		if t.ProyectoID != nil {
-			EmitirHookCicloVida(agente, HookTaskStart, *t.ProyectoID, "tarea", id, agente, t.Titulo)
+		if err := defaultTaskTransitioner.afterIniciarTarea(t, agente); err != nil {
+			return err
 		}
 	}
 	return err
@@ -312,27 +429,7 @@ func CompletarTarea(id int64, agente, commit string) error {
 		commit, id,
 	)
 	if err == nil {
-		Audit(agente, "completar_tarea", "tarea", id, t.Titulo+" commit="+commit)
-		SetEstadoSesion(agente, "disponible")
-		if t.ProyectoID != nil {
-			EmitirHookCicloVida(agente, HookTaskFinish, *t.ProyectoID, "tarea", id, agente, t.Titulo)
-		}
-
-		// Detección de fin de proyecto (Autonomía Total)
-		if t.ProyectoID != nil {
-			stats, _ := GetEstadisticasProyecto(*t.ProyectoID)
-			if stats.Total > 0 && stats.Completadas == stats.Total {
-				p, _ := GetProyecto(fmt.Sprintf("%d", *t.ProyectoID))
-				if p != nil {
-					EmitirNotificacion(EventoNotificacion{
-						Tipo:       "fin_proyecto",
-						ID:         p.ID,
-						Texto:      p.Nombre,
-						ProyectoID: p.ID,
-					})
-				}
-			}
-		}
+		err = defaultTaskTransitioner.afterCompletarTarea(t, agente, commit)
 	}
 	return err
 }
@@ -348,8 +445,7 @@ func CancelarTarea(id int64, agente, motivo string) error {
 		motivo, id,
 	)
 	if err == nil {
-		Audit(agente, "cancelar_tarea", "tarea", id, t.Titulo+": "+motivo)
-		SetEstadoSesion(agente, "disponible")
+		err = defaultTaskTransitioner.afterCancelarTarea(t, agente, motivo)
 	}
 	return err
 }
@@ -378,24 +474,7 @@ func BloquearTarea(id int64, agente, motivo string) error {
 	if err = tx.Commit(); err != nil {
 		return err
 	}
-	if t.ProyectoID != nil {
-		if bloqueoProyectoRequiereIntervencionHumana(motivo) {
-			if err := MarcarProyectoEsperandoHumano(*t.ProyectoID, motivo); err != nil {
-				return err
-			}
-		}
-		EmitirHookCicloVida(agente, HookProjectBlocked, *t.ProyectoID, "tarea", id, agente, motivo)
-	}
-	Audit(agente, "bloquear_tarea", "tarea", id, t.Titulo+": "+motivo)
-	SetEstadoSesion(agente, "esperando")
-
-	EmitirNotificacion(EventoNotificacion{
-		Tipo:   "bloqueo",
-		ID:     id,
-		Agente: agente,
-		Texto:  motivo,
-	})
-	return nil
+	return defaultTaskTransitioner.afterBloquearTarea(t, agente, motivo)
 }
 
 // DesbloquearTarea resuelve el bloqueo y libera la tarea.
@@ -420,26 +499,7 @@ func DesbloquearTarea(id int64, agente, resolucion string) error {
 	if err = tx.Commit(); err != nil {
 		return err
 	}
-	if t.ProyectoID != nil {
-		op, err := GetProyectoOperacion(*t.ProyectoID)
-		if err != nil {
-			return err
-		}
-		if op.ResumeAutomatico {
-			if err := MarcarProyectoActivo(*t.ProyectoID, ""); err != nil {
-				return err
-			}
-		}
-		EmitirHookCicloVida(agente, HookProjectUnblocked, *t.ProyectoID, "tarea", id, agente, resolucion)
-	}
-	Audit(agente, "desbloquear_tarea", "tarea", id, resolucion)
-	SetEstadoSesion(agente, "disponible")
-
-	EmitirNotificacion(EventoNotificacion{
-		Tipo:  "mensaje",
-		Texto: fmt.Sprintf("🔓 *Tarea #%d Desbloqueada*\n\nResolución: %s", id, resolucion),
-	})
-	return nil
+	return defaultTaskTransitioner.afterDesbloquearTarea(t, agente, resolucion)
 }
 
 // AnotarTarea añade una nota a una tarea.

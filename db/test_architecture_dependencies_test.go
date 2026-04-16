@@ -11,68 +11,122 @@ import (
 	"testing"
 )
 
+type importSeam struct {
+	required bool
+	files    map[string]struct{}
+}
+
 func TestDBNoIntroduceDependenciasInternasFueraDeLaFronteraPermitida(t *testing.T) {
 	t.Helper()
 
-	permitidos := map[string]map[string]struct{}{
+	permitidos := map[string]importSeam{
 		"orquesta/coordinacion": {
-			"coordinacion_backend.go": {},
-			"diagnostico.go":          {},
-			"locks.go":                {},
-			"project_context.go":      {},
-			"proyectos.go":            {},
-			"worktrees.go":            {},
+			required: true,
+			files: map[string]struct{}{
+				"coordinacion_backend.go": {},
+				"diagnostico.go":          {},
+				"locks.go":                {},
+				"project_context.go":      {},
+				"proyectos.go":            {},
+				"worktrees.go":            {},
+			},
 		},
 		"orquesta/i18n": {
-			"lenguaje.go": {},
+			required: true,
+			files: map[string]struct{}{
+				"lenguaje.go": {},
+			},
 		},
 		"orquesta/internal/controlruntime": {
-			"controlplane_entities.go": {},
+			required: true,
+			files: map[string]struct{}{
+				"controlplane_entities.go": {},
+			},
 		},
 		"orquesta/internal/observabilidadruntime": {
-			"runtimes.go": {},
+			required: true,
+			files: map[string]struct{}{
+				"runtimes.go": {},
+			},
 		},
 		"orquesta/microprogramacionapp": {
-			"microprogramacionapp_adapter.go": {},
+			required: true,
+			files: map[string]struct{}{
+				"microprogramacionapp_adapter.go": {},
+			},
 		},
 		"orquesta/runtimeagente": {
-			"controlplane_entities.go":    {},
-			"resume_context_sanitizer.go": {},
-			"runtime_bootstrap_prompt.go": {},
+			required: true,
+			files: map[string]struct{}{
+				"controlplane_entities.go":    {},
+				"resume_context_sanitizer.go": {},
+				"runtime_bootstrap_prompt.go": {},
+			},
 		},
 		"orquesta/sesionesapp": {
-			"presupuestos_sesion.go": {},
-			"sesiones.go":            {},
-			"sesionesapp_adapter.go": {},
+			required: true,
+			files: map[string]struct{}{
+				"presupuestos_sesion.go": {},
+				"sesiones.go":            {},
+				"sesionesapp_adapter.go": {},
+			},
 		},
 		"orquesta/storage": {
-			"backend.go":                   {},
-			"backend_mysql.go":             {},
-			"backend_postgres.go":          {},
-			"backend_sqlite.go":            {},
-			"db.go":                        {},
-			"sqlwrap.go":                   {},
-			"verificacion_persistencia.go": {},
+			required: true,
+			files: map[string]struct{}{
+				"backend.go":                   {},
+				"backend_mysql.go":             {},
+				"backend_postgres.go":          {},
+				"backend_sqlite.go":            {},
+				"db.go":                        {},
+				"sqlwrap.go":                   {},
+				"verificacion_persistencia.go": {},
+			},
 		},
 		"orquesta/gobernanzapolicy": {
-			"governance_overrides.go": {},
-			"reglas.go":               {},
+			required: true,
+			files: map[string]struct{}{
+				"governance_overrides.go": {},
+				"reglas.go":               {},
+			},
 		},
 		"orquesta/planificadorpolicy": {
-			"planificador.go": {},
+			required: true,
+			files: map[string]struct{}{
+				"planificador.go": {},
+			},
 		},
 		"orquesta/runtimepolicy": {
-			"controlplane_entities.go": {},
-			"runtime_transcript.go":    {},
+			required: true,
+			files: map[string]struct{}{
+				"controlplane_entities.go": {},
+				"runtime_transcript.go":    {},
+			},
+		},
+		"orquesta/runtimesapp": {
+			required: false,
+			files: map[string]struct{}{
+				"service.go": {},
+				"trace.go":   {},
+			},
 		},
 		"orquesta/autonomiapolicy": {
-			"autonomia_supervisor_operativo.go": {},
+			required: true,
+			files: map[string]struct{}{
+				"autonomia_supervisor_operativo.go": {},
+			},
 		},
 		"orquesta/skillspolicy": {
-			"skills_catalog.go": {},
+			required: true,
+			files: map[string]struct{}{
+				"skills_catalog.go": {},
+			},
 		},
 		"orquesta/tareaspolicy": {
-			"tareas.go": {},
+			required: true,
+			files: map[string]struct{}{
+				"tareas.go": {},
+			},
 		},
 	}
 
@@ -104,8 +158,11 @@ func TestDBNoIntroduceDependenciasInternasFueraDeLaFronteraPermitida(t *testing.
 				violaciones = append(violaciones, fmt.Sprintf("%s importa %s fuera de la frontera permitida de db/", nombre, ruta))
 				continue
 			}
-			if _, ok := permitidosEnRuta[nombre]; !ok {
-				violaciones = append(violaciones, fmt.Sprintf("%s importa %s pero ese acoplamiento solo esta permitido en %v", nombre, ruta, keysSorted(permitidosEnRuta)))
+			if len(permitidosEnRuta.files) > 0 {
+				if _, ok := permitidosEnRuta.files[nombre]; !ok {
+					violaciones = append(violaciones, fmt.Sprintf("%s importa %s pero ese acoplamiento solo esta permitido en %v", nombre, ruta, keysSortedFromSet(permitidosEnRuta.files)))
+				}
+				continue
 			}
 		}
 	}
@@ -116,15 +173,18 @@ func TestDBNoIntroduceDependenciasInternasFueraDeLaFronteraPermitida(t *testing.
 	}
 
 	for ruta, permitidosEnRuta := range permitidos {
+		if !permitidosEnRuta.required {
+			continue
+		}
 		observados := uniqueSorted(observadosPorImport[ruta])
-		esperados := keysSorted(permitidosEnRuta)
+		esperados := keysSortedFromSet(permitidosEnRuta.files)
 		if strings.Join(observados, ",") != strings.Join(esperados, ",") {
 			t.Fatalf("allowlist de imports internos desactualizado para %s.\nobservados: %v\npermitidos: %v", ruta, observados, esperados)
 		}
 	}
 }
 
-func keysSorted(m map[string]struct{}) []string {
+func keysSortedFromSet(m map[string]struct{}) []string {
 	out := make([]string, 0, len(m))
 	for key := range m {
 		out = append(out, key)

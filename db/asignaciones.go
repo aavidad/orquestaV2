@@ -5,6 +5,25 @@ import (
 	"time"
 )
 
+type asignacionTransitionCoordinator interface {
+	afterActivarAsignacion(agente string, proyectoID int64, nota string) error
+	afterPausarAsignacion(agente string, proyectoID int64, nota string) error
+}
+
+type defaultAsignacionTransitionCoordinator struct{}
+
+var defaultAsignacionTransitioner asignacionTransitionCoordinator = defaultAsignacionTransitionCoordinator{}
+
+func (defaultAsignacionTransitionCoordinator) afterActivarAsignacion(agente string, proyectoID int64, nota string) error {
+	Audit(agente, "activar_asignacion", "proyecto", proyectoID, nota)
+	return nil
+}
+
+func (defaultAsignacionTransitionCoordinator) afterPausarAsignacion(agente string, proyectoID int64, nota string) error {
+	Audit(agente, "pausar_asignacion", "proyecto", proyectoID, nota)
+	return nil
+}
+
 type EstadoAsignacion string
 
 const (
@@ -47,7 +66,9 @@ func ActivarAsignacion(agente string, proyectoID int64, nota string) error {
 	if err = tx.Commit(); err != nil {
 		return err
 	}
-	Audit(agente, "activar_asignacion", "proyecto", proyectoID, nota)
+	if err = defaultAsignacionTransitioner.afterActivarAsignacion(agente, proyectoID, nota); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -68,7 +89,9 @@ func PausarAsignacion(agente string, proyectoID int64, nota string) error {
 	if err = tx.Commit(); err != nil {
 		return err
 	}
-	Audit(agente, "pausar_asignacion", "proyecto", proyectoID, nota)
+	if err = defaultAsignacionTransitioner.afterPausarAsignacion(agente, proyectoID, nota); err != nil {
+		return err
+	}
 	return nil
 }
 
