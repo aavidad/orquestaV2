@@ -37,6 +37,8 @@ type DespachoPipelineLocal struct {
 	SimbolosFoco     string               `json:"simbolos_foco,omitempty"`
 	TestsMinimos     string               `json:"tests_minimos,omitempty"`
 	AgenteSugerido   string               `json:"agente_sugerido,omitempty"`
+	RevisorObjetivo  *RevisorEscalonado   `json:"revisor_objetivo,omitempty"`
+	Especificacion   *EspecificacionFuncion `json:"especificacion,omitempty"`
 	Motivo           string               `json:"motivo,omitempty"`
 }
 
@@ -126,6 +128,10 @@ func (s *Service) construirDespachoPipelineLocalConAgente(paso *PasoPipelineLoca
 		out.WriteSet = append([]string(nil), tarea.WriteSet...)
 		out.SimbolosFoco = strings.TrimSpace(tarea.SimbolosFoco)
 		out.TestsMinimos = strings.TrimSpace(tarea.TestsMinimos)
+		out.Especificacion = construirEspecificacionFuncion(tarea, etapa)
+	}
+	if paso.RevisorObjetivo != nil {
+		out.RevisorObjetivo = paso.RevisorObjetivo
 	}
 	return out
 }
@@ -172,10 +178,7 @@ func (s *Service) asegurarReviewGatePipelineLocal(proyectoSlug string, despacho 
 	if !strings.EqualFold(strings.TrimSpace(despacho.Fase), "revision") || despacho.TareaObjetivoID <= 0 {
 		return nil
 	}
-	items, err := s.reviewGateProvider.List(reviewapp.ListInput{
-		ProyectoRef: strings.TrimSpace(proyectoSlug),
-		Limit:       20,
-	})
+	items, err := s.listarGatesPipelineLocal(proyectoSlug)
 	if err != nil {
 		return err
 	}
@@ -185,14 +188,47 @@ func (s *Service) asegurarReviewGatePipelineLocal(proyectoSlug string, despacho 
 		}
 		return nil
 	}
+	reviewerAgente := strings.TrimSpace(despacho.AgenteSugerido)
+	severityMax := "medium"
+	if despacho.RevisorObjetivo != nil {
+		if rol := strings.TrimSpace(despacho.RevisorObjetivo.NombreRol); rol != "" {
+			reviewerAgente = rol
+		}
+		if despacho.RevisorObjetivo.Premium {
+			severityMax = "high"
+		}
+	}
 	_, err = s.reviewGateManager.Create(reviewapp.CreateGateInput{
-		ProyectoRef:    strings.TrimSpace(proyectoSlug),
-		TareaID:        &despacho.TareaObjetivoID,
-		RequestedBy:    "orquesta",
-		ReviewerAgente: strings.TrimSpace(despacho.AgenteSugerido),
-		SeverityMax:    "medium",
+		ProyectoRef:     strings.TrimSpace(proyectoSlug),
+		TareaID:         &despacho.TareaObjetivoID,
+		RequestedBy:     "orquesta",
+		ReviewerAgente:  reviewerAgente,
+		SeverityMax:     severityMax,
+		InitialFindings: resumenEspecificacionGate(despacho.Especificacion),
 	})
 	return err
+}
+
+// resumenEspecificacionGate construye el texto de hallazgos iniciales para la gate de revisión
+// a partir de la especificación de función. Permite al revisor validar la entrega contra el contrato.
+func resumenEspecificacionGate(spec *EspecificacionFuncion) string {
+	if spec == nil {
+		return ""
+	}
+	var partes []string
+	if v := strings.TrimSpace(spec.Encabezado); v != "" {
+		partes = append(partes, "encabezado: "+v)
+	}
+	if v := strings.TrimSpace(spec.SalidaEsperada); v != "" {
+		partes = append(partes, "salida_esperada: "+v)
+	}
+	if len(spec.WriteSet) > 0 {
+		partes = append(partes, "write_set: "+strings.Join(spec.WriteSet, ", "))
+	}
+	if v := strings.TrimSpace(spec.TestsMinimos); v != "" {
+		partes = append(partes, "tests_minimos: "+v)
+	}
+	return strings.Join(partes, "\n")
 }
 
 func (s *Service) activarFasePipelineLocal(proyectoSlug, faseObjetivo string) (string, error) {

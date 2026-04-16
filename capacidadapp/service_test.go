@@ -1,6 +1,9 @@
 package capacidadapp
 
 import (
+	"database/sql"
+	"fmt"
+	"strings"
 	"testing"
 
 	"orquesta/db"
@@ -665,6 +668,121 @@ func TestCalcularSiguientePasoPipelineLocalDeterministaNoSigueRevisionHistoricaS
 	}
 }
 
+func TestCalcularSiguientePasoPipelineLocalDeterministaReconciliarFaseDesconocidaLlevaEspecificacion(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "fase_inexistente"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{
+			ID:          101,
+			Titulo:      "Implementar scheduler",
+			Estado:      db.TareaLibre,
+			Prioridad:   db.PrioridadAlta,
+			Descripcion: "Write-set exclusivo: capacidadapp/pipeline_local.go. Tests minimos: go test ./capacidadapp/...",
+		},
+	}})
+
+	paso, err := service.CalcularSiguientePasoPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("CalcularSiguientePasoPipelineLocalDeterminista: %v", err)
+	}
+	if paso == nil || paso.Accion != "reconciliar_fase" {
+		t.Fatalf("esperaba reconciliar_fase, got: %+v", paso)
+	}
+	if paso.Especificacion == nil {
+		t.Fatalf("reconciliar_fase a fase desconocida debe llevar especificacion")
+	}
+	if paso.Especificacion.Encabezado != "Implementar scheduler" {
+		t.Fatalf("encabezado inesperado: %q", paso.Especificacion.Encabezado)
+	}
+}
+
+func TestCalcularSiguientePasoPipelineLocalDeterministaReconciliarVuelveImplementacionConEspecificacion(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "revision"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{
+			ID:          102,
+			Titulo:      "Cerrar mailbox",
+			Estado:      db.TareaEnProgreso,
+			Prioridad:   db.PrioridadAlta,
+			Descripcion: "Write-set exclusivo: cmd/controlplane_support.go. Tests minimos: go test ./cmd -run TestX",
+		},
+	}})
+
+	paso, err := service.CalcularSiguientePasoPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("CalcularSiguientePasoPipelineLocalDeterminista: %v", err)
+	}
+	if paso == nil || paso.Accion != "reconciliar_fase" || paso.FaseObjetivo != "implementacion" {
+		t.Fatalf("esperaba reconciliar_fase a implementacion, got: %+v", paso)
+	}
+	if paso.Especificacion == nil {
+		t.Fatalf("reconciliar_fase a implementacion debe llevar especificacion")
+	}
+	if paso.Especificacion.Encabezado != "Cerrar mailbox" {
+		t.Fatalf("encabezado inesperado: %q", paso.Especificacion.Encabezado)
+	}
+	if len(paso.Especificacion.WriteSet) != 1 || paso.Especificacion.WriteSet[0] != "cmd/controlplane_support.go" {
+		t.Fatalf("write_set inesperado: %+v", paso.Especificacion.WriteSet)
+	}
+}
+
+func TestCalcularSiguientePasoPipelineLocalDeterministaArranqueLlevaEspecificacion(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: ""})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{
+			ID:          95,
+			Titulo:      "Especificar pipeline entrega",
+			Estado:      db.TareaLibre,
+			Prioridad:   db.PrioridadAlta,
+			Descripcion: "Write-set exclusivo: capacidadapp/pipeline_local.go. Tests minimos: go test ./capacidadapp/...",
+		},
+	}})
+
+	paso, err := service.CalcularSiguientePasoPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("CalcularSiguientePasoPipelineLocalDeterminista: %v", err)
+	}
+	if paso == nil || paso.Accion != "arrancar_fase" || paso.FaseObjetivo != "especificacion" {
+		t.Fatalf("paso inesperado: %+v", paso)
+	}
+	if paso.Especificacion == nil {
+		t.Fatalf("especificacion nil en arranque de fase: el paso debe llevar el contrato")
+	}
+	if paso.Especificacion.Encabezado != "Especificar pipeline entrega" {
+		t.Fatalf("encabezado inesperado: %q", paso.Especificacion.Encabezado)
+	}
+	if paso.Especificacion.SalidaEsperada != "git_worktree" {
+		t.Fatalf("salida_esperada inesperada: %q", paso.Especificacion.SalidaEsperada)
+	}
+	if len(paso.Especificacion.WriteSet) != 1 || paso.Especificacion.WriteSet[0] != "capacidadapp/pipeline_local.go" {
+		t.Fatalf("write_set inesperado: %+v", paso.Especificacion.WriteSet)
+	}
+}
+
+func TestCalcularSiguientePasoPipelineLocalDeterministaAvanzaAImplementacionCuandoEspecificacionCompleta(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "especificacion"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{ID: 80, Titulo: "Especificación cerrada", Estado: db.TareaCompletada, Prioridad: db.PrioridadAlta},
+	}})
+
+	paso, err := service.CalcularSiguientePasoPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("CalcularSiguientePasoPipelineLocalDeterminista: %v", err)
+	}
+	if paso == nil || paso.Accion != "avanzar_fase" || paso.FaseObjetivo != "implementacion" {
+		t.Fatalf("esperaba avanzar_fase a implementacion, got: %+v", paso)
+	}
+	if paso.AccionTarea != "implementar" {
+		t.Fatalf("accion_tarea inesperada: %q", paso.AccionTarea)
+	}
+	if paso.FaseActual != "especificacion" {
+		t.Fatalf("fase_actual inesperada: %q", paso.FaseActual)
+	}
+}
+
 func TestCalcularSiguientePasoPipelineLocalDeterministaAvanzaARevisionCuandoImplementacionCompleta(t *testing.T) {
 	service := NewService(fakeStore{})
 	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
@@ -1159,8 +1277,389 @@ func TestEjecutarSiguientePasoPipelineLocalDeterministaCreaGateRevisionSiNoExist
 	if manager.created[0].TareaID == nil || *manager.created[0].TareaID != 41 {
 		t.Fatalf("gate creada inesperada: %+v", manager.created[0])
 	}
-	if manager.created[0].ReviewerAgente != "Claude1" {
+	// Con RevisorObjetivo presente, se usa el NombreRol del revisor en lugar del AgenteSugerido genérico.
+	if manager.created[0].ReviewerAgente != "revisor_base_local" {
 		t.Fatalf("reviewer inesperado: %+v", manager.created[0])
+	}
+	if manager.created[0].SeverityMax != "medium" {
+		t.Fatalf("severity inesperada para revisor base: %+v", manager.created[0])
+	}
+}
+
+func TestResumenEspecificacionGateIncluyeContrato(t *testing.T) {
+	spec := &EspecificacionFuncion{
+		Encabezado:     "Cerrar session_resume",
+		SalidaEsperada: "git_worktree",
+		WriteSet:       []string{"cmd/controlplane_support.go", "db/controlplane_entities.go"},
+		TestsMinimos:   "go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'",
+	}
+	resumen := resumenEspecificacionGate(spec)
+	if resumen == "" {
+		t.Fatalf("resumen nil para spec completa")
+	}
+	if !strings.Contains(resumen, "encabezado: Cerrar session_resume") {
+		t.Fatalf("encabezado ausente: %q", resumen)
+	}
+	if !strings.Contains(resumen, "write_set: cmd/controlplane_support.go, db/controlplane_entities.go") {
+		t.Fatalf("write_set ausente: %q", resumen)
+	}
+	if !strings.Contains(resumen, "tests_minimos:") {
+		t.Fatalf("tests_minimos ausente: %q", resumen)
+	}
+}
+
+func TestResumenEspecificacionGateVacioSiNilSpec(t *testing.T) {
+	if got := resumenEspecificacionGate(nil); got != "" {
+		t.Fatalf("esperaba vacío para spec nil, got: %q", got)
+	}
+}
+
+func TestEjecutarSiguientePasoPipelineLocalDeterministaGateLlevaResumenEspecificacion(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "revision"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{
+			ID:          99,
+			Titulo:      "Cerrar mailbox premium",
+			Estado:      db.TareaCompletada,
+			Prioridad:   db.PrioridadAlta,
+			Descripcion: "Write-set exclusivo: cmd/controlplane_support.go. Tests minimos: go test ./cmd -run TestX",
+		},
+	}})
+	service.SetReviewGateProvider(fakeReviewGateProvider{})
+	manager := &fakeReviewGateManager{}
+	service.SetReviewGateManager(manager)
+	service.SetAgentResolver(fakeAgentResolver{agente: "Claude1"})
+
+	resultado, err := service.EjecutarSiguientePasoPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("EjecutarSiguientePasoPipelineLocalDeterminista: %v", err)
+	}
+	if resultado == nil || resultado.Despacho == nil {
+		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+	if len(manager.created) != 1 {
+		t.Fatalf("gates creadas=%d, want=1", len(manager.created))
+	}
+	findings := manager.created[0].InitialFindings
+	if findings == "" {
+		t.Fatalf("gate creada sin initial_findings: el revisor necesita el contrato de la especificación")
+	}
+	if !strings.Contains(findings, "Cerrar mailbox premium") {
+		t.Fatalf("findings no incluye encabezado de la especificacion: %q", findings)
+	}
+	if !strings.Contains(findings, "cmd/controlplane_support.go") {
+		t.Fatalf("findings no incluye write_set: %q", findings)
+	}
+}
+
+func TestEjecutarSiguientePasoPipelineLocalDeterministaCreaGatePremiumConSeveridadAlta(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{
+			ID:          98,
+			Titulo:      "Cerrar race en controlplane",
+			Estado:      db.TareaCompletada,
+			Prioridad:   db.PrioridadAlta,
+			Descripcion: "Write-set exclusivo: cmd/controlplane_support.go, cmd/controlplane_support_test.go. Tests minimos: go test ./cmd -run TestX",
+		},
+	}})
+	service.SetReviewGateProvider(fakeReviewGateProvider{})
+	manager := &fakeReviewGateManager{}
+	service.SetReviewGateManager(manager)
+	service.SetAgentResolver(fakeAgentResolver{agente: "Claude1"})
+	service.SetTaskActionProvider(&fakeTaskActionProvider{
+		tareas: map[int64]*db.Tarea{
+			98: {
+				ID:          98,
+				Titulo:      "Cerrar race en controlplane",
+				Estado:      db.TareaCompletada,
+				Prioridad:   db.PrioridadAlta,
+				Descripcion: "Write-set exclusivo: cmd/controlplane_support.go, cmd/controlplane_support_test.go. Tests minimos: go test ./cmd -run TestX",
+			},
+		},
+	})
+	service.SetPhaseControlProvider(&fakePhaseControlProvider{})
+
+	resultado, err := service.EjecutarSiguientePasoPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("EjecutarSiguientePasoPipelineLocalDeterminista: %v", err)
+	}
+	if resultado == nil || resultado.Despacho == nil {
+		t.Fatalf("resultado inesperado: %+v", resultado)
+	}
+	if resultado.Despacho.Fase != "revision" {
+		t.Fatalf("fase esperada revision, got: %q", resultado.Despacho.Fase)
+	}
+	if len(manager.created) != 1 {
+		t.Fatalf("gates creadas=%d, want=1", len(manager.created))
+	}
+	// zona_critica_control_plane → revisor premium → severity high
+	if manager.created[0].ReviewerAgente != "segunda_opinion_premium" {
+		t.Fatalf("revisor premium esperado, got: %q", manager.created[0].ReviewerAgente)
+	}
+	if manager.created[0].SeverityMax != "high" {
+		t.Fatalf("severity alta esperada para revisor premium, got: %q", manager.created[0].SeverityMax)
+	}
+}
+
+func TestSeleccionarRevisorEscalonadoPipelineEscalaAPremiumPorZonaCritica(t *testing.T) {
+	service := NewService(fakeStore{})
+	pipeline, err := service.ConstruirPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("ConstruirPipelineLocalDeterminista: %v", err)
+	}
+	tarea := &TareaPipelineLocal{
+		ID:       90,
+		Titulo:   "Cerrar race condition",
+		WriteSet: []string{"cmd/controlplane_support.go", "cmd/controlplane_support_test.go"},
+	}
+	señales := extraerSeñalesTareaPipelineLocal(tarea)
+	revisor := seleccionarRevisorEscalonadoPipeline(pipeline.Revision, señales)
+	if revisor == nil {
+		t.Fatalf("revisor nil")
+	}
+	if !revisor.Premium {
+		t.Fatalf("zona_critica_control_plane debería escalar a revisor premium; got=%+v", revisor)
+	}
+}
+
+func TestSeleccionarRevisorEscalonadoPipelineUsaBaseParaTareaSimple(t *testing.T) {
+	service := NewService(fakeStore{})
+	pipeline, err := service.ConstruirPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("ConstruirPipelineLocalDeterminista: %v", err)
+	}
+	tarea := &TareaPipelineLocal{
+		ID:       91,
+		Titulo:   "Ajustar timeout conexion",
+		WriteSet: []string{"internal/net/timeout.go"},
+	}
+	señales := extraerSeñalesTareaPipelineLocal(tarea)
+	revisor := seleccionarRevisorEscalonadoPipeline(pipeline.Revision, señales)
+	if revisor == nil {
+		t.Fatalf("revisor nil")
+	}
+	if revisor.Premium {
+		t.Fatalf("tarea simple debería usar revisor base; got=%+v", revisor)
+	}
+}
+
+func TestCalcularSiguientePasoPipelineLocalDeterministaEscalaRevisorPorZonaCritica(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetPhaseProvider(fakePhaseProvider{fase: "implementacion"})
+	service.SetTaskProvider(fakeTaskProvider{tareas: []*db.Tarea{
+		{
+			ID:          92,
+			Titulo:      "Cerrar mailbox premium",
+			Estado:      db.TareaCompletada,
+			Prioridad:   db.PrioridadAlta,
+			Descripcion: "Write-set exclusivo: cmd/controlplane_support.go, cmd/controlplane_support_test.go. Tests minimos: go test ./cmd -run 'TestX.*'",
+		},
+	}})
+
+	paso, err := service.CalcularSiguientePasoPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("CalcularSiguientePasoPipelineLocalDeterminista: %v", err)
+	}
+	if paso == nil || paso.Accion != "avanzar_fase" || paso.FaseObjetivo != "revision" {
+		t.Fatalf("paso inesperado: %+v", paso)
+	}
+	if paso.RevisorObjetivo == nil {
+		t.Fatalf("revisor_objetivo nil en avance a revision")
+	}
+	if !paso.RevisorObjetivo.Premium {
+		t.Fatalf("zona_critica_control_plane deberia escalar a revisor premium; got=%+v", paso.RevisorObjetivo)
+	}
+}
+
+func TestExtraerSeñalesTareaPipelineLocalZonaCriticaPorModulo(t *testing.T) {
+	tarea := &TareaPipelineLocal{
+		ID:     110,
+		Titulo: "Cerrar race condition",
+		Modulo: "control_plane",
+	}
+	señales := extraerSeñalesTareaPipelineLocal(tarea)
+	found := false
+	for _, s := range señales {
+		if s == "zona_critica_control_plane" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("modulo control_plane debe disparar zona_critica_control_plane; got=%v", señales)
+	}
+}
+
+func TestExtraerSeñalesTareaPipelineLocalCorreccionesRepetidas(t *testing.T) {
+	tarea := &TareaPipelineLocal{
+		ID:    111,
+		Titulo: "Cerrar mailbox",
+		Notas: "correcciones_repetidas; el agente ya fue corregido dos veces en este frente",
+	}
+	señales := extraerSeñalesTareaPipelineLocal(tarea)
+	found := false
+	for _, s := range señales {
+		if s == "correcciones_repetidas" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("notas con correcciones_repetidas deben disparar la señal; got=%v", señales)
+	}
+}
+
+func TestExtraerSeñalesTareaPipelineLocalHallazgosContradictorios(t *testing.T) {
+	tarea := &TareaPipelineLocal{
+		ID:          112,
+		Titulo:      "Revisar scheduler",
+		Descripcion: "hallazgos_contradictorios entre revisor1 y revisor2",
+	}
+	señales := extraerSeñalesTareaPipelineLocal(tarea)
+	found := false
+	for _, s := range señales {
+		if s == "hallazgos_contradictorios" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("descripcion con hallazgos_contradictorios debe disparar la señal; got=%v", señales)
+	}
+}
+
+func TestExtraerSeñalesTareaPipelineLocalCicloCorreccionEscalaSegundaOpinion(t *testing.T) {
+	service := NewService(fakeStore{})
+	pipeline, err := service.ConstruirPipelineLocalDeterminista("orquestador")
+	if err != nil {
+		t.Fatalf("ConstruirPipelineLocalDeterminista: %v", err)
+	}
+	tarea := &TareaPipelineLocal{
+		ID:    113,
+		Titulo: "Cerrar carril premium",
+		Notas: "ciclo_correccion:2 — agente ya aplicó dos rondas sin convergencia",
+	}
+	señales := extraerSeñalesTareaPipelineLocal(tarea)
+	revisor := seleccionarRevisorEscalonadoPipeline(pipeline.Revision, señales)
+	if revisor == nil {
+		t.Fatalf("revisor nil")
+	}
+	// correcciones_repetidas → segunda_opinion (no premium en primera instancia)
+	if !strings.Contains(revisor.NombreRol, "segunda_opinion") {
+		t.Fatalf("ciclo_correccion debe escalar a segunda_opinion; got=%q", revisor.NombreRol)
+	}
+}
+
+func TestConstruirDespachoPipelineLocalIncludeEspecificacionFuncion(t *testing.T) {
+	paso := &PasoPipelineLocalDeterminista{
+		ProyectoSlug: "orquestador",
+		AccionTarea:  "implementar",
+		Motivo:       "frente activo",
+		EtapaObjetivo: &EtapaPipelineLocal{
+			Fase:            "implementacion",
+			PerfilTarea:     "implementacion",
+			ModoEjecucion:   "worker_modelo",
+			Carril:          "premium_worktree",
+			EntregaCanonica: "git_worktree",
+			RequiereModelo:  true,
+		},
+		TareaObjetivo: &TareaPipelineLocal{
+			ID:           44,
+			Titulo:       "Cerrar session_resume premium",
+			WriteSet:     []string{"cmd/controlplane_support.go", "db/controlplane_entities.go"},
+			SimbolosFoco: "procesarRuntimeMailboxSessionResumeBatchConMailbox",
+			TestsMinimos: "go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'",
+		},
+	}
+
+	service := NewService(fakeStore{})
+	despacho := service.construirDespachoPipelineLocal(paso, nil)
+	if despacho == nil {
+		t.Fatalf("despacho nil")
+	}
+	spec := despacho.Especificacion
+	if spec == nil {
+		t.Fatalf("especificacion nil: el orquestador debe fijar contrato en el despacho")
+	}
+	if spec.Encabezado != "Cerrar session_resume premium" {
+		t.Fatalf("encabezado inesperado: %q", spec.Encabezado)
+	}
+	if spec.SalidaEsperada != "git_worktree" {
+		t.Fatalf("salida_esperada inesperada: %q", spec.SalidaEsperada)
+	}
+	if len(spec.WriteSet) != 2 || spec.WriteSet[0] != "cmd/controlplane_support.go" {
+		t.Fatalf("write_set inesperado: %+v", spec.WriteSet)
+	}
+	if spec.SimbolosFoco != "procesarRuntimeMailboxSessionResumeBatchConMailbox" {
+		t.Fatalf("simbolos_foco inesperados: %q", spec.SimbolosFoco)
+	}
+	if spec.TestsMinimos != "go test ./cmd -run 'TestProcesarRuntimeMailboxSessionResumeBatch.*'" {
+		t.Fatalf("tests_minimos inesperados: %q", spec.TestsMinimos)
+	}
+}
+
+func TestConstruirDespachoPipelineLocalNoIncludeEspecificacionSiEtapaNoRequiereModelo(t *testing.T) {
+	paso := &PasoPipelineLocalDeterminista{
+		ProyectoSlug: "orquestador",
+		AccionTarea:  "integrar",
+		Motivo:       "integracion determinista",
+		EtapaObjetivo: &EtapaPipelineLocal{
+			Fase:            "integracion",
+			PerfilTarea:     "analisis",
+			ModoEjecucion:   "determinista_app",
+			Carril:          "determinista_app",
+			EntregaCanonica: "merge_controlado",
+			RequiereModelo:  false,
+		},
+		TareaObjetivo: &TareaPipelineLocal{
+			ID:     45,
+			Titulo: "Integrar rama feature",
+		},
+	}
+
+	service := NewService(fakeStore{})
+	despacho := service.construirDespachoPipelineLocal(paso, nil)
+	if despacho == nil {
+		t.Fatalf("despacho nil")
+	}
+	if despacho.Especificacion != nil {
+		t.Fatalf("la etapa determinista no debe generar especificacion: %+v", despacho.Especificacion)
+	}
+}
+
+func TestConstruirDespachoPipelineLocalPropagaRevisorObjetivo(t *testing.T) {
+	revisor := &RevisorEscalonado{
+		NombreRol:       "revisor_base_local",
+		Clase:           "local",
+		ObjetivoModelo:  "deepseek-coder-v2",
+		EntregaCanonica: "hallazgos_estructurados",
+	}
+	paso := &PasoPipelineLocalDeterminista{
+		ProyectoSlug: "orquestador",
+		AccionTarea:  "revisar",
+		Motivo:       "revision pendiente",
+		EtapaObjetivo: &EtapaPipelineLocal{
+			Fase:            "revision",
+			PerfilTarea:     "revision",
+			ModoEjecucion:   "worker_modelo",
+			Carril:          "revision_diff",
+			EntregaCanonica: "hallazgos_estructurados",
+			RequiereModelo:  true,
+		},
+		TareaObjetivo:   &TareaPipelineLocal{ID: 46, Titulo: "Revisar control plane"},
+		RevisorObjetivo: revisor,
+	}
+
+	service := NewService(fakeStore{})
+	despacho := service.construirDespachoPipelineLocal(paso, nil)
+	if despacho == nil {
+		t.Fatalf("despacho nil")
+	}
+	if despacho.RevisorObjetivo == nil {
+		t.Fatalf("revisor_objetivo nil: debe propagarse desde el paso")
+	}
+	if despacho.RevisorObjetivo.NombreRol != "revisor_base_local" {
+		t.Fatalf("revisor_objetivo inesperado: %+v", despacho.RevisorObjetivo)
 	}
 }
 
@@ -1202,5 +1701,144 @@ func TestDescargarModelosRuntimeActivosDescargaTodosLosActivos(t *testing.T) {
 	}
 	if len(manager.downloaded) != 2 || manager.downloaded[0] != "qwen3.5-coder-local" || manager.downloaded[1] != "gemma4:26b" {
 		t.Fatalf("descargas inesperadas: %+v", manager.downloaded)
+	}
+}
+
+type fakeReviewGateProviderError struct {
+	err error
+}
+
+func (f fakeReviewGateProviderError) List(input reviewapp.ListInput) ([]*reviewapp.Gate, error) {
+	return nil, f.err
+}
+
+func TestListarGatesPipelineLocalDevuelveNilEnSqlErrNoRows(t *testing.T) {
+	service := NewService(fakeStore{})
+	service.SetReviewGateProvider(fakeReviewGateProviderError{err: sql.ErrNoRows})
+
+	items, err := service.listarGatesPipelineLocal("orquestador")
+	if err != nil {
+		t.Fatalf("sql.ErrNoRows debe tratarse como lista vacía, got err: %v", err)
+	}
+	if items != nil {
+		t.Fatalf("items debe ser nil para sql.ErrNoRows, got: %+v", items)
+	}
+}
+
+func TestListarGatesPipelineLocalPropagaErrorReal(t *testing.T) {
+	errReal := fmt.Errorf("fallo de conexión")
+	service := NewService(fakeStore{})
+	service.SetReviewGateProvider(fakeReviewGateProviderError{err: errReal})
+
+	_, err := service.listarGatesPipelineLocal("orquestador")
+	if err == nil {
+		t.Fatal("error real debe propagarse desde listarGatesPipelineLocal")
+	}
+}
+
+func TestElegirNuevaCandidataTareaPipelineLocalSinCandidataUsaScore(t *testing.T) {
+	nueva := &db.Tarea{ID: 1, Titulo: "T1", Estado: db.TareaLibre}
+	got, score := elegirNuevaCandidataTareaPipelineLocal(nil, nueva, "implementacion", -1)
+	if got != nueva {
+		t.Fatal("sin candidata, nueva con score>=0 debe ganar")
+	}
+	if score != 40 {
+		t.Fatalf("score esperado 40 para libre/implementacion, got %d", score)
+	}
+}
+
+func TestElegirNuevaCandidataTareaPipelineLocalSinCandidataScoreNegativoNoActualiza(t *testing.T) {
+	nueva := &db.Tarea{ID: 1, Estado: db.TareaBloqueada}
+	got, score := elegirNuevaCandidataTareaPipelineLocal(nil, nueva, "implementacion", -1)
+	if got != nil {
+		t.Fatalf("tarea bloqueada con score -1 no debe convertirse en candidata, got: %+v", got)
+	}
+	if score != -1 {
+		t.Fatalf("score debe permanecer -1, got %d", score)
+	}
+}
+
+func TestElegirNuevaCandidataTareaPipelineLocalSemillaVsContratoRealNuevaGana(t *testing.T) {
+	// candidata es semilla premium, nueva tiene contrato real → nueva debe ganar
+	candidata := &db.Tarea{
+		ID:     10,
+		Titulo: "Autonomía premium: abrir siguiente frente mayor útil",
+		Estado: db.TareaLibre,
+	}
+	nueva := &db.Tarea{
+		ID:          20,
+		Titulo:      "Implementar scheduler",
+		Estado:      db.TareaLibre,
+		Descripcion: "Write-set exclusivo: capacidadapp/pipeline_local.go. Tests minimos: go test ./capacidadapp/...",
+	}
+	got, _ := elegirNuevaCandidataTareaPipelineLocal(candidata, nueva, "implementacion", 40)
+	if got != nueva {
+		t.Fatalf("contrato real debe ganar a semilla, got ID=%d", got.ID)
+	}
+}
+
+func TestElegirNuevaCandidataTareaPipelineLocalSemillaVsContratoRealCandidataSeQueda(t *testing.T) {
+	// candidata tiene contrato real, nueva es semilla → candidata se mantiene
+	candidata := &db.Tarea{
+		ID:          10,
+		Titulo:      "Implementar scheduler",
+		Estado:      db.TareaLibre,
+		Descripcion: "Write-set exclusivo: capacidadapp/pipeline_local.go. Tests minimos: go test ./capacidadapp/...",
+	}
+	nueva := &db.Tarea{
+		ID:     20,
+		Titulo: "Autonomía premium: abrir siguiente frente mayor útil",
+		Estado: db.TareaLibre,
+	}
+	got, _ := elegirNuevaCandidataTareaPipelineLocal(candidata, nueva, "implementacion", 40)
+	if got != candidata {
+		t.Fatalf("candidata con contrato real debe mantenerse frente a semilla, got ID=%d", got.ID)
+	}
+}
+
+func TestElegirNuevaCandidataTareaPipelineLocalMicrocicloGanaASinMicrociclo(t *testing.T) {
+	candidata := &db.Tarea{ID: 5, Estado: db.TareaLibre}
+	nueva := &db.Tarea{
+		ID:     6,
+		Estado: db.TareaEnProgreso,
+		Notas:  "autonomia:microrefactor_loop",
+	}
+	got, _ := elegirNuevaCandidataTareaPipelineLocal(candidata, nueva, "implementacion", 40)
+	if got != nueva {
+		t.Fatalf("microciclo en progreso debe ganar a candidata sin microciclo, got ID=%d", got.ID)
+	}
+}
+
+func TestElegirNuevaCandidataTareaPipelineLocalCandidataMicrocicloSeQuedaFrenteANuevaSinMicrociclo(t *testing.T) {
+	candidata := &db.Tarea{
+		ID:     5,
+		Estado: db.TareaEnProgreso,
+		Notas:  "autonomia:microrefactor_loop",
+	}
+	nueva := &db.Tarea{ID: 6, Estado: db.TareaLibre}
+	got, _ := elegirNuevaCandidataTareaPipelineLocal(candidata, nueva, "implementacion", 50)
+	if got != candidata {
+		t.Fatalf("candidata microciclo debe mantenerse frente a nueva sin microciclo, got ID=%d", got.ID)
+	}
+}
+
+func TestElegirNuevaCandidataTareaPipelineLocalEmpateIDMayorGana(t *testing.T) {
+	candidata := &db.Tarea{ID: 3, Estado: db.TareaLibre}
+	nueva := &db.Tarea{ID: 7, Estado: db.TareaLibre}
+	got, _ := elegirNuevaCandidataTareaPipelineLocal(candidata, nueva, "implementacion", 40)
+	if got != nueva {
+		t.Fatalf("con igual score, ID mayor debe ganar, got ID=%d", got.ID)
+	}
+}
+
+func TestElegirNuevaCandidataTareaPipelineLocalScoreMayorGana(t *testing.T) {
+	candidata := &db.Tarea{ID: 10, Estado: db.TareaLibre}    // score 40
+	nueva := &db.Tarea{ID: 5, Estado: db.TareaEnProgreso}    // score 50
+	got, score := elegirNuevaCandidataTareaPipelineLocal(candidata, nueva, "implementacion", 40)
+	if got != nueva {
+		t.Fatalf("score mayor debe ganar, got ID=%d", got.ID)
+	}
+	if score != 50 {
+		t.Fatalf("score esperado 50, got %d", score)
 	}
 }

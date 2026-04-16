@@ -15,16 +15,18 @@ type ReviewGateProvider interface {
 }
 
 type PasoPipelineLocalDeterminista struct {
-	ProyectoSlug   string                     `json:"proyecto_slug,omitempty"`
-	Accion         string                     `json:"accion"`
-	AccionTarea    string                     `json:"accion_tarea,omitempty"`
-	Motivo         string                     `json:"motivo"`
-	FaseActual     string                     `json:"fase_actual,omitempty"`
-	FaseObjetivo   string                     `json:"fase_objetivo,omitempty"`
-	EtapaObjetivo  *EtapaPipelineLocal        `json:"etapa_objetivo,omitempty"`
-	GateBloqueante *reviewapp.Gate            `json:"gate_bloqueante,omitempty"`
-	TareaObjetivo  *TareaPipelineLocal        `json:"tarea_objetivo,omitempty"`
-	Pipeline       *PipelineLocalDeterminista `json:"pipeline,omitempty"`
+	ProyectoSlug    string                     `json:"proyecto_slug,omitempty"`
+	Accion          string                     `json:"accion"`
+	AccionTarea     string                     `json:"accion_tarea,omitempty"`
+	Motivo          string                     `json:"motivo"`
+	FaseActual      string                     `json:"fase_actual,omitempty"`
+	FaseObjetivo    string                     `json:"fase_objetivo,omitempty"`
+	EtapaObjetivo   *EtapaPipelineLocal        `json:"etapa_objetivo,omitempty"`
+	GateBloqueante  *reviewapp.Gate            `json:"gate_bloqueante,omitempty"`
+	TareaObjetivo   *TareaPipelineLocal        `json:"tarea_objetivo,omitempty"`
+	RevisorObjetivo *RevisorEscalonado         `json:"revisor_objetivo,omitempty"`
+	Especificacion  *EspecificacionFuncion     `json:"especificacion,omitempty"`
+	Pipeline        *PipelineLocalDeterminista `json:"pipeline,omitempty"`
 }
 
 type TareaPipelineLocal struct {
@@ -65,6 +67,7 @@ func (s *Service) CalcularSiguientePasoPipelineLocalDeterminista(proyectoSlug st
 		return nil, err
 	} else if ok {
 		etapa := buscarEtapaPipelineLocal(pipeline, "correccion")
+		tareaCorreccion := s.seleccionarTareaPipelineLocal(strings.TrimSpace(proyectoSlug), "correccion")
 		return &PasoPipelineLocalDeterminista{
 			ProyectoSlug:   strings.TrimSpace(proyectoSlug),
 			Accion:         "abrir_correccion",
@@ -74,7 +77,8 @@ func (s *Service) CalcularSiguientePasoPipelineLocalDeterminista(proyectoSlug st
 			FaseObjetivo:   "correccion",
 			EtapaObjetivo:  etapa,
 			GateBloqueante: gate,
-			TareaObjetivo:  s.seleccionarTareaPipelineLocal(strings.TrimSpace(proyectoSlug), "correccion"),
+			TareaObjetivo:  tareaCorreccion,
+			Especificacion: especificacionParaPaso(tareaCorreccion, etapa),
 			Pipeline:       pipeline,
 		}, nil
 	}
@@ -82,18 +86,21 @@ func (s *Service) CalcularSiguientePasoPipelineLocalDeterminista(proyectoSlug st
 	if gate, motivo, ok, err := s.resolverGateRevisionPendientePipelineLocal(strings.TrimSpace(proyectoSlug)); err != nil {
 		return nil, err
 	} else if ok {
-		etapa := buscarEtapaPipelineLocal(pipeline, "revision")
+		etapaRevision := buscarEtapaPipelineLocal(pipeline, "revision")
+		tareaRevision := s.seleccionarTareaPipelineLocal(strings.TrimSpace(proyectoSlug), "revision")
 		return &PasoPipelineLocalDeterminista{
-			ProyectoSlug:   strings.TrimSpace(proyectoSlug),
-			Accion:         "esperar_revision",
-			AccionTarea:    "revisar",
-			Motivo:         motivo,
-			FaseActual:     faseActual,
-			FaseObjetivo:   "revision",
-			EtapaObjetivo:  etapa,
-			GateBloqueante: gate,
-			TareaObjetivo:  s.seleccionarTareaPipelineLocal(strings.TrimSpace(proyectoSlug), "revision"),
-			Pipeline:       pipeline,
+			ProyectoSlug:    strings.TrimSpace(proyectoSlug),
+			Accion:          "esperar_revision",
+			AccionTarea:     "revisar",
+			Motivo:          motivo,
+			FaseActual:      faseActual,
+			FaseObjetivo:    "revision",
+			EtapaObjetivo:   etapaRevision,
+			GateBloqueante:  gate,
+			TareaObjetivo:   tareaRevision,
+			RevisorObjetivo: seleccionarRevisorEscalonadoPipeline(pipeline.Revision, extraerSeñalesTareaPipelineLocal(tareaRevision)),
+			Especificacion:  especificacionParaPaso(tareaRevision, etapaRevision),
+			Pipeline:        pipeline,
 		}, nil
 	}
 
@@ -102,31 +109,35 @@ func (s *Service) CalcularSiguientePasoPipelineLocalDeterminista(proyectoSlug st
 		if etapa == nil {
 			return nil, fmt.Errorf("pipeline local sin fases")
 		}
+		tareaInicial := s.seleccionarTareaPipelineLocal(strings.TrimSpace(proyectoSlug), etapa.Fase)
 		return &PasoPipelineLocalDeterminista{
-			ProyectoSlug:  strings.TrimSpace(proyectoSlug),
-			Accion:        "arrancar_fase",
-			AccionTarea:   accionTareaParaFase(etapa.Fase),
-			Motivo:        "no hay fase activa registrada; se arranca la primera fase canónica",
-			FaseObjetivo:  etapa.Fase,
-			EtapaObjetivo: etapa,
-			TareaObjetivo: s.seleccionarTareaPipelineLocal(strings.TrimSpace(proyectoSlug), etapa.Fase),
-			Pipeline:      pipeline,
+			ProyectoSlug:   strings.TrimSpace(proyectoSlug),
+			Accion:         "arrancar_fase",
+			AccionTarea:    accionTareaParaFase(etapa.Fase),
+			Motivo:         "no hay fase activa registrada; se arranca la primera fase canónica",
+			FaseObjetivo:   etapa.Fase,
+			EtapaObjetivo:  etapa,
+			TareaObjetivo:  tareaInicial,
+			Especificacion: especificacionParaPaso(tareaInicial, etapa),
+			Pipeline:       pipeline,
 		}, nil
 	}
 
 	etapa := buscarEtapaPipelineLocal(pipeline, faseActual)
 	if etapa == nil {
 		etapa = primeraEtapaPipelineLocal(pipeline)
+		tareaReconciliar := s.seleccionarTareaPipelineLocal(strings.TrimSpace(proyectoSlug), etapa.Fase)
 		return &PasoPipelineLocalDeterminista{
-			ProyectoSlug:  strings.TrimSpace(proyectoSlug),
-			Accion:        "reconciliar_fase",
-			AccionTarea:   accionTareaParaFase(etapa.Fase),
-			Motivo:        "la fase activa no coincide con el pipeline canónico; se propone reconciliación al inicio",
-			FaseActual:    faseActual,
-			FaseObjetivo:  etapa.Fase,
-			EtapaObjetivo: etapa,
-			TareaObjetivo: s.seleccionarTareaPipelineLocal(strings.TrimSpace(proyectoSlug), etapa.Fase),
-			Pipeline:      pipeline,
+			ProyectoSlug:   strings.TrimSpace(proyectoSlug),
+			Accion:         "reconciliar_fase",
+			AccionTarea:    accionTareaParaFase(etapa.Fase),
+			Motivo:         "la fase activa no coincide con el pipeline canónico; se propone reconciliación al inicio",
+			FaseActual:     faseActual,
+			FaseObjetivo:   etapa.Fase,
+			EtapaObjetivo:  etapa,
+			TareaObjetivo:  tareaReconciliar,
+			Especificacion: especificacionParaPaso(tareaReconciliar, etapa),
+			Pipeline:       pipeline,
 		}, nil
 	}
 	tareaActual := s.seleccionarTareaPipelineLocal(strings.TrimSpace(proyectoSlug), etapa.Fase)
@@ -135,31 +146,53 @@ func (s *Service) CalcularSiguientePasoPipelineLocalDeterminista(proyectoSlug st
 		etapaImplementacion := buscarEtapaPipelineLocal(pipeline, "implementacion")
 		if etapaImplementacion != nil {
 			return &PasoPipelineLocalDeterminista{
-				ProyectoSlug:  strings.TrimSpace(proyectoSlug),
-				Accion:        "reconciliar_fase",
-				AccionTarea:   accionTareaParaFase("implementacion"),
-				Motivo:        "hay trabajo abierto pendiente; el pipeline debe volver a implementación antes de seguir revisión o integración histórica",
-				FaseActual:    faseActual,
-				FaseObjetivo:  "implementacion",
-				EtapaObjetivo: etapaImplementacion,
-				TareaObjetivo: tareaAbiertaImplementacion,
-				Pipeline:      pipeline,
+				ProyectoSlug:   strings.TrimSpace(proyectoSlug),
+				Accion:         "reconciliar_fase",
+				AccionTarea:    accionTareaParaFase("implementacion"),
+				Motivo:         "hay trabajo abierto pendiente; el pipeline debe volver a implementación antes de seguir revisión o integración histórica",
+				FaseActual:     faseActual,
+				FaseObjetivo:   "implementacion",
+				EtapaObjetivo:  etapaImplementacion,
+				TareaObjetivo:  tareaAbiertaImplementacion,
+				Especificacion: especificacionParaPaso(tareaAbiertaImplementacion, etapaImplementacion),
+				Pipeline:       pipeline,
+			}, nil
+		}
+	}
+	if strings.EqualFold(etapa.Fase, "especificacion") {
+		if tareaActual != nil && strings.EqualFold(strings.TrimSpace(tareaActual.Estado), string(db.TareaCompletada)) {
+			etapaImplementacion := buscarEtapaPipelineLocal(pipeline, "implementacion")
+			tareaImplementacion := s.seleccionarTareaPipelineLocal(strings.TrimSpace(proyectoSlug), "implementacion")
+			return &PasoPipelineLocalDeterminista{
+				ProyectoSlug:   strings.TrimSpace(proyectoSlug),
+				Accion:         "avanzar_fase",
+				AccionTarea:    accionTareaParaFase("implementacion"),
+				Motivo:         "la especificación está completada; el pipeline debe avanzar a implementación",
+				FaseActual:     faseActual,
+				FaseObjetivo:   "implementacion",
+				EtapaObjetivo:  etapaImplementacion,
+				TareaObjetivo:  tareaImplementacion,
+				Especificacion: especificacionParaPaso(tareaImplementacion, etapaImplementacion),
+				Pipeline:       pipeline,
 			}, nil
 		}
 	}
 	if strings.EqualFold(etapa.Fase, "implementacion") || strings.EqualFold(etapa.Fase, "correccion") {
 		if tareaActual != nil && strings.EqualFold(strings.TrimSpace(tareaActual.Estado), string(db.TareaCompletada)) {
 			etapaRevision := buscarEtapaPipelineLocal(pipeline, "revision")
+			tareaRevision := s.seleccionarTareaPipelineLocal(strings.TrimSpace(proyectoSlug), "revision")
 			return &PasoPipelineLocalDeterminista{
-				ProyectoSlug:  strings.TrimSpace(proyectoSlug),
-				Accion:        "avanzar_fase",
-				AccionTarea:   accionTareaParaFase("revision"),
-				Motivo:        "la tarea activa ya está completada; el pipeline debe avanzar a revisión",
-				FaseActual:    faseActual,
-				FaseObjetivo:  "revision",
-				EtapaObjetivo: etapaRevision,
-				TareaObjetivo: s.seleccionarTareaPipelineLocal(strings.TrimSpace(proyectoSlug), "revision"),
-				Pipeline:      pipeline,
+				ProyectoSlug:    strings.TrimSpace(proyectoSlug),
+				Accion:          "avanzar_fase",
+				AccionTarea:     accionTareaParaFase("revision"),
+				Motivo:          "la tarea activa ya está completada; el pipeline debe avanzar a revisión",
+				FaseActual:      faseActual,
+				FaseObjetivo:    "revision",
+				EtapaObjetivo:   etapaRevision,
+				TareaObjetivo:   tareaRevision,
+				RevisorObjetivo: seleccionarRevisorEscalonadoPipeline(pipeline.Revision, extraerSeñalesTareaPipelineLocal(tareaRevision)),
+				Especificacion:  especificacionParaPaso(tareaRevision, etapaRevision),
+				Pipeline:        pipeline,
 			}, nil
 		}
 	}
@@ -190,17 +223,29 @@ func (s *Service) CalcularSiguientePasoPipelineLocalDeterminista(proyectoSlug st
 		accion = "integrar"
 		motivo = "la fase de integración es determinista y debe resolverla la app sin delegar en modelos"
 	}
+	var revisorObjetivo *RevisorEscalonado
+	if strings.EqualFold(etapa.Fase, "revision") {
+		revisorObjetivo = seleccionarRevisorEscalonadoPipeline(pipeline.Revision, extraerSeñalesTareaPipelineLocal(tareaActual))
+	}
 	return &PasoPipelineLocalDeterminista{
-		ProyectoSlug:  strings.TrimSpace(proyectoSlug),
-		Accion:        accion,
-		AccionTarea:   accionTareaParaFase(etapa.Fase),
-		Motivo:        motivo,
-		FaseActual:    faseActual,
-		FaseObjetivo:  etapa.Fase,
-		EtapaObjetivo: etapa,
-		TareaObjetivo: tareaActual,
-		Pipeline:      pipeline,
+		ProyectoSlug:    strings.TrimSpace(proyectoSlug),
+		Accion:          accion,
+		AccionTarea:     accionTareaParaFase(etapa.Fase),
+		Motivo:          motivo,
+		FaseActual:      faseActual,
+		FaseObjetivo:    etapa.Fase,
+		EtapaObjetivo:   etapa,
+		TareaObjetivo:   tareaActual,
+		RevisorObjetivo: revisorObjetivo,
+		Especificacion:  especificacionParaPaso(tareaActual, etapa),
+		Pipeline:        pipeline,
 	}, nil
+}
+
+// especificacionParaPaso construye la EspecificacionFuncion para incluirla en el paso del pipeline.
+// Solo se genera cuando la etapa objetivo requiere un modelo (carril real, no determinista).
+func especificacionParaPaso(tarea *TareaPipelineLocal, etapa *EtapaPipelineLocal) *EspecificacionFuncion {
+	return construirEspecificacionFuncion(tarea, etapa)
 }
 
 func accionTareaParaFase(fase string) string {
@@ -283,41 +328,50 @@ func (s *Service) seleccionarTareaPipelineLocal(proyectoSlug, fase string) *Tare
 	var candidata *db.Tarea
 	mejor := -1
 	for _, tarea := range tareas {
-		if candidata != nil {
-			candidataSemilla := tareaPipelineLocalEsFrentePremiumSemilla(candidata)
-			nuevaSemilla := tareaPipelineLocalEsFrentePremiumSemilla(tarea)
-			candidataContratoReal := tareaPipelineLocalTieneContratoPremiumReal(candidata)
-			nuevaContratoReal := tareaPipelineLocalTieneContratoPremiumReal(tarea)
-			if candidataSemilla != nuevaSemilla && candidataContratoReal != nuevaContratoReal {
-				if candidataSemilla && nuevaContratoReal {
-					candidata = tarea
-					mejor = puntuarTareaPipelineLocal(tarea, fase)
-					continue
-				}
-				if nuevaSemilla && candidataContratoReal {
-					continue
-				}
-			}
-			actualMicrociclo := tareaPipelineLocalMicrocicloPrioritario(candidata)
-			nuevaMicrociclo := tareaPipelineLocalMicrocicloPrioritario(tarea)
-			if nuevaMicrociclo != actualMicrociclo {
-				if nuevaMicrociclo {
-					candidata = tarea
-					mejor = puntuarTareaPipelineLocal(tarea, fase)
-				}
-				continue
-			}
-		}
-		score := puntuarTareaPipelineLocal(tarea, fase)
-		if score > mejor || (score == mejor && candidata != nil && tarea.ID > candidata.ID) {
-			mejor = score
-			candidata = tarea
-		}
+		candidata, mejor = elegirNuevaCandidataTareaPipelineLocal(candidata, tarea, fase, mejor)
 	}
 	if candidata == nil || mejor < 0 {
 		return nil
 	}
 	return tareaPipelineLocalDesdeDB(candidata)
+}
+
+// elegirNuevaCandidataTareaPipelineLocal aplica las reglas de prioridad entre la candidata
+// actual y una nueva tarea, devolviendo cuál debe ser la nueva candidata y su puntuación.
+// Reglas (en orden de prioridad):
+//  1. Semilla premium + nueva con contrato real → nueva gana
+//  2. Nueva semilla + candidata con contrato real → candidata se mantiene
+//  3. Nueva con microciclo activo + candidata sin él → nueva gana
+//  4. Candidata con microciclo activo + nueva sin él → candidata se mantiene
+//  5. Puntuación por fase (mayor score gana; empate se rompe por ID más alto)
+func elegirNuevaCandidataTareaPipelineLocal(candidata, nueva *db.Tarea, fase string, mejorScore int) (*db.Tarea, int) {
+	if candidata != nil {
+		candidataSemilla := tareaPipelineLocalEsFrentePremiumSemilla(candidata)
+		nuevaSemilla := tareaPipelineLocalEsFrentePremiumSemilla(nueva)
+		candidataContratoReal := tareaPipelineLocalTieneContratoPremiumReal(candidata)
+		nuevaContratoReal := tareaPipelineLocalTieneContratoPremiumReal(nueva)
+		if candidataSemilla != nuevaSemilla && candidataContratoReal != nuevaContratoReal {
+			if candidataSemilla && nuevaContratoReal {
+				return nueva, puntuarTareaPipelineLocal(nueva, fase)
+			}
+			if nuevaSemilla && candidataContratoReal {
+				return candidata, mejorScore
+			}
+		}
+		actualMicrociclo := tareaPipelineLocalMicrocicloPrioritario(candidata)
+		nuevaMicrociclo := tareaPipelineLocalMicrocicloPrioritario(nueva)
+		if nuevaMicrociclo != actualMicrociclo {
+			if nuevaMicrociclo {
+				return nueva, puntuarTareaPipelineLocal(nueva, fase)
+			}
+			return candidata, mejorScore
+		}
+	}
+	score := puntuarTareaPipelineLocal(nueva, fase)
+	if score > mejorScore || (score == mejorScore && candidata != nil && nueva.ID > candidata.ID) {
+		return nueva, score
+	}
+	return candidata, mejorScore
 }
 
 func puntuarTareaPipelineLocal(tarea *db.Tarea, fase string) int {
@@ -515,18 +569,26 @@ func extraerClauseTextoPipelineLocal(raw string, marcadores ...string) string {
 	return ""
 }
 
-func (s *Service) resolverGateBloqueantePipelineLocal(proyectoSlug string) (*reviewapp.Gate, string, bool, error) {
-	if s.reviewGateProvider == nil || strings.TrimSpace(proyectoSlug) == "" {
-		return nil, "", false, nil
-	}
+func (s *Service) listarGatesPipelineLocal(proyectoSlug string) ([]*reviewapp.Gate, error) {
 	items, err := s.reviewGateProvider.List(reviewapp.ListInput{
 		ProyectoRef: strings.TrimSpace(proyectoSlug),
 		Limit:       20,
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) || strings.Contains(strings.ToLower(err.Error()), "no rows") {
-			return nil, "", false, nil
+			return nil, nil
 		}
+		return nil, err
+	}
+	return items, nil
+}
+
+func (s *Service) resolverGateBloqueantePipelineLocal(proyectoSlug string) (*reviewapp.Gate, string, bool, error) {
+	if s.reviewGateProvider == nil || strings.TrimSpace(proyectoSlug) == "" {
+		return nil, "", false, nil
+	}
+	items, err := s.listarGatesPipelineLocal(proyectoSlug)
+	if err != nil {
 		return nil, "", false, err
 	}
 	for _, item := range items {
@@ -544,14 +606,8 @@ func (s *Service) resolverGateRevisionPendientePipelineLocal(proyectoSlug string
 	if s.reviewGateProvider == nil || strings.TrimSpace(proyectoSlug) == "" {
 		return nil, "", false, nil
 	}
-	items, err := s.reviewGateProvider.List(reviewapp.ListInput{
-		ProyectoRef: strings.TrimSpace(proyectoSlug),
-		Limit:       20,
-	})
+	items, err := s.listarGatesPipelineLocal(proyectoSlug)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) || strings.Contains(strings.ToLower(err.Error()), "no rows") {
-			return nil, "", false, nil
-		}
 		return nil, "", false, err
 	}
 	for _, item := range items {
@@ -569,14 +625,8 @@ func (s *Service) resolverGateAprobadoPipelineLocal(proyectoSlug string, tareaID
 	if s.reviewGateProvider == nil || strings.TrimSpace(proyectoSlug) == "" || tareaID <= 0 {
 		return nil, false, nil
 	}
-	items, err := s.reviewGateProvider.List(reviewapp.ListInput{
-		ProyectoRef: strings.TrimSpace(proyectoSlug),
-		Limit:       20,
-	})
+	items, err := s.listarGatesPipelineLocal(proyectoSlug)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) || strings.Contains(strings.ToLower(err.Error()), "no rows") {
-			return nil, false, nil
-		}
 		return nil, false, err
 	}
 	for _, item := range items {

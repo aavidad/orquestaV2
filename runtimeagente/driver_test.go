@@ -1312,6 +1312,267 @@ func TestPrepareCLIClaudeEmbebePromptPosicional(t *testing.T) {
 	}
 }
 
+func TestApplyLocalControlHintsNilMetadataNoCambiaPlan(t *testing.T) {
+	plan := &LaunchPlan{MailboxDeliveryMode: MailboxDeliveryInteractive}
+	applied := applyLocalControlHints(plan, nil)
+	if applied {
+		t.Fatal("nil metadata deberia devolver applied=false")
+	}
+	if plan.MailboxDeliveryMode != MailboxDeliveryInteractive {
+		t.Fatalf("nil metadata no deberia cambiar el modo existente: %s", plan.MailboxDeliveryMode)
+	}
+	if plan.CanSendInput != nil {
+		t.Fatalf("nil metadata no deberia tocar can_send_input: %v", plan.CanSendInput)
+	}
+}
+
+func TestApplyLocalControlHintsNilPlanDevuelveFalse(t *testing.T) {
+	applied := applyLocalControlHints(nil, map[string]any{"can_send_input": true})
+	if applied {
+		t.Fatal("plan nil deberia devolver applied=false")
+	}
+}
+
+func TestApplyLocalControlHintsAplicaAmbosKeysCuandoPresentes(t *testing.T) {
+	plan := &LaunchPlan{}
+	applied := applyLocalControlHints(plan, map[string]any{
+		"can_send_input":        false,
+		"mailbox_delivery_mode": MailboxDeliverySessionResume,
+	})
+	if !applied {
+		t.Fatal("deberia devolver applied=true cuando se aplican hints")
+	}
+	if plan.CanSendInput == nil || *plan.CanSendInput {
+		t.Fatalf("can_send_input esperado false: %v", plan.CanSendInput)
+	}
+	if plan.MailboxDeliveryMode != MailboxDeliverySessionResume {
+		t.Fatalf("mailbox_delivery_mode inesperado: %s", plan.MailboxDeliveryMode)
+	}
+}
+
+func TestApplyLocalControlHintsCanSendInputFalsoUsaBootstrapOnlyPorDefecto(t *testing.T) {
+	plan := &LaunchPlan{}
+	applied := applyLocalControlHints(plan, map[string]any{"can_send_input": false})
+	if !applied {
+		t.Fatal("deberia devolver applied=true cuando can_send_input esta presente")
+	}
+	if plan.CanSendInput == nil || *plan.CanSendInput {
+		t.Fatalf("can_send_input esperado false: %v", plan.CanSendInput)
+	}
+	if plan.MailboxDeliveryMode != MailboxDeliveryBootstrapOnly {
+		t.Fatalf("sin modo explicito y can_send_input=false deberia defaultear a bootstrap_only: %s", plan.MailboxDeliveryMode)
+	}
+}
+
+func TestApplyLocalControlHintsModoPorMetadataNoUsaDefault(t *testing.T) {
+	plan := &LaunchPlan{}
+	applied := applyLocalControlHints(plan, map[string]any{
+		"mailbox_delivery_mode": MailboxDeliveryCoordinatedRestart,
+	})
+	if !applied {
+		t.Fatal("deberia devolver applied=true cuando mailbox_delivery_mode esta presente")
+	}
+	if plan.MailboxDeliveryMode != MailboxDeliveryCoordinatedRestart {
+		t.Fatalf("modo inesperado: %s", plan.MailboxDeliveryMode)
+	}
+	if plan.CanSendInput != nil {
+		t.Fatalf("can_send_input no deberia tocarse si no esta en metadata: %v", plan.CanSendInput)
+	}
+}
+
+func TestApplyLocalControlHintsModoDesconocidoUsaDefault(t *testing.T) {
+	plan := &LaunchPlan{}
+	applied := applyLocalControlHints(plan, map[string]any{
+		"mailbox_delivery_mode": "modo_invalido",
+	})
+	if applied {
+		t.Fatal("modo desconocido no deberia contar como hint aplicado")
+	}
+	if plan.MailboxDeliveryMode != MailboxDeliveryInteractive {
+		t.Fatalf("modo desconocido deberia caer al default interactive (can_send_input nil): %s", plan.MailboxDeliveryMode)
+	}
+}
+
+func TestConectorPermiteResume(t *testing.T) {
+	// nil metadata → siempre permite
+	if !conectorPermiteResume(nil) {
+		t.Error("nil metadata deberia permitir resume")
+	}
+	// sin clave "reanudable" → permite por defecto
+	if !conectorPermiteResume(map[string]any{"otro": "valor"}) {
+		t.Error("ausencia de clave reanudable deberia permitir resume")
+	}
+	// reanudable=true → permite
+	if !conectorPermiteResume(map[string]any{"reanudable": true}) {
+		t.Error("reanudable=true deberia permitir resume")
+	}
+	// reanudable=false → no permite
+	if conectorPermiteResume(map[string]any{"reanudable": false}) {
+		t.Error("reanudable=false deberia bloquear resume")
+	}
+}
+
+func TestResumeActivaModoLocal(t *testing.T) {
+	cases := []struct {
+		name   string
+		resume ResumeContext
+		want   bool
+	}{
+		{"vacio", ResumeContext{}, false},
+		{"solo external session", ResumeContext{ExternalSessionID: "sess-1"}, true},
+		{"solo resumen continuidad", ResumeContext{ResumenContinuidad: "continua tarea"}, true},
+		{"ambos presentes", ResumeContext{ExternalSessionID: "sess-2", ResumenContinuidad: "continua"}, true},
+		{"solo espacios en blanco", ResumeContext{ExternalSessionID: "   ", ResumenContinuidad: "  "}, false},
+	}
+	for _, c := range cases {
+		got := resumeActivaModoLocal(c.resume)
+		if got != c.want {
+			t.Errorf("[%s] resumeActivaModoLocal = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestResumeActivaModoRemoto(t *testing.T) {
+	cases := []struct {
+		name   string
+		resume ResumeContext
+		want   bool
+	}{
+		{"vacio", ResumeContext{}, false},
+		{"con external session", ResumeContext{ExternalSessionID: "sess-remote"}, true},
+		{"solo resumen sin sesion externa", ResumeContext{ResumenContinuidad: "continua"}, false},
+		{"espacios en blanco", ResumeContext{ExternalSessionID: "   "}, false},
+	}
+	for _, c := range cases {
+		got := resumeActivaModoRemoto(c.resume)
+		if got != c.want {
+			t.Errorf("[%s] resumeActivaModoRemoto = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestNormalizeMailboxDeliveryModeCaseInsensitive(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want string
+	}{
+		{"interactive", MailboxDeliveryInteractive},
+		{"INTERACTIVE", MailboxDeliveryInteractive},
+		{"Interactive", MailboxDeliveryInteractive},
+		{"bootstrap_only", MailboxDeliveryBootstrapOnly},
+		{"BOOTSTRAP_ONLY", MailboxDeliveryBootstrapOnly},
+		{"coordinated_restart", MailboxDeliveryCoordinatedRestart},
+		{"COORDINATED_RESTART", MailboxDeliveryCoordinatedRestart},
+		{"session_resume", MailboxDeliverySessionResume},
+		{"SESSION_RESUME", MailboxDeliverySessionResume},
+		{"Session_Resume", MailboxDeliverySessionResume},
+		{"unknown", ""},
+		{"", ""},
+		{"  session_resume  ", MailboxDeliverySessionResume},
+	}
+	for _, c := range cases {
+		got := NormalizeMailboxDeliveryMode(c.raw)
+		if got != c.want {
+			t.Errorf("NormalizeMailboxDeliveryMode(%q) = %q, want %q", c.raw, got, c.want)
+		}
+	}
+}
+
+func TestDefaultMailboxDeliveryModePorCanSendInput(t *testing.T) {
+	f := false
+	tr := true
+	cases := []struct {
+		canSendInput *bool
+		want         string
+	}{
+		{nil, MailboxDeliveryInteractive},
+		{&tr, MailboxDeliveryInteractive},
+		{&f, MailboxDeliveryBootstrapOnly},
+	}
+	for _, c := range cases {
+		got := defaultMailboxDeliveryMode(c.canSendInput)
+		if got != c.want {
+			t.Errorf("defaultMailboxDeliveryMode(%v) = %q, want %q", c.canSendInput, got, c.want)
+		}
+	}
+}
+
+func TestApplyResumeDeliveryHintsNoCorrigeConSendInputActivo(t *testing.T) {
+	tr := true
+	plan := &LaunchPlan{
+		MailboxDeliveryMode: MailboxDeliveryInteractive,
+		CanSendInput:        &tr,
+	}
+	applyResumeDeliveryHints(plan, LaunchRequest{
+		Conector: ConnectorConfig{
+			Slug:       "codex-cli",
+			Transporte: "cli",
+			Comando:    "codex",
+		},
+		Resume: ResumeContext{ExternalSessionID: "sess-active"},
+	})
+	if plan.MailboxDeliveryMode != MailboxDeliveryInteractive {
+		t.Fatalf("no deberia corregir mailbox_delivery_mode cuando can_send_input es true: %s", plan.MailboxDeliveryMode)
+	}
+}
+
+func TestApplyResumeDeliveryHintsNoCorrigeSinSesionExterna(t *testing.T) {
+	f := false
+	plan := &LaunchPlan{
+		MailboxDeliveryMode: MailboxDeliveryBootstrapOnly,
+		CanSendInput:        &f,
+	}
+	applyResumeDeliveryHints(plan, LaunchRequest{
+		Conector: ConnectorConfig{
+			Slug:       "codex-cli",
+			Transporte: "cli",
+			Comando:    "codex",
+		},
+		Resume: ResumeContext{ExternalSessionID: ""},
+	})
+	if plan.MailboxDeliveryMode != MailboxDeliveryBootstrapOnly {
+		t.Fatalf("no deberia corregir mailbox_delivery_mode sin external_session_id: %s", plan.MailboxDeliveryMode)
+	}
+}
+
+func TestApplyResumeDeliveryHintsNoCorrigeConectorNoCodex(t *testing.T) {
+	f := false
+	plan := &LaunchPlan{
+		MailboxDeliveryMode: MailboxDeliveryBootstrapOnly,
+		CanSendInput:        &f,
+	}
+	applyResumeDeliveryHints(plan, LaunchRequest{
+		Conector: ConnectorConfig{
+			Slug:       "gemini-cli",
+			Transporte: "cli",
+			Comando:    "gemini",
+		},
+		Resume: ResumeContext{ExternalSessionID: "sess-gemini"},
+	})
+	if plan.MailboxDeliveryMode != MailboxDeliveryBootstrapOnly {
+		t.Fatalf("no deberia corregir mailbox_delivery_mode para conector no-codex: %s", plan.MailboxDeliveryMode)
+	}
+}
+
+func TestApplyResumeDeliveryHintsNoCorrigeSessionResumePrevio(t *testing.T) {
+	f := false
+	plan := &LaunchPlan{
+		MailboxDeliveryMode: MailboxDeliverySessionResume,
+		CanSendInput:        &f,
+	}
+	applyResumeDeliveryHints(plan, LaunchRequest{
+		Conector: ConnectorConfig{
+			Slug:       "codex-cli",
+			Transporte: "cli",
+			Comando:    "codex",
+		},
+		Resume: ResumeContext{ExternalSessionID: "sess-codex-ya-resume"},
+	})
+	if plan.MailboxDeliveryMode != MailboxDeliverySessionResume {
+		t.Fatalf("no deberia modificar session_resume ya establecido: %s", plan.MailboxDeliveryMode)
+	}
+}
+
 func TestPrepareCLICodexRespetaSandboxYApprovalExplicitos(t *testing.T) {
 	plan, err := DefaultRegistry().Prepare(LaunchRequest{
 		Agente:       "Codex1",

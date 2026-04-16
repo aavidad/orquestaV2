@@ -101,6 +101,110 @@ func (s *Service) construirEtapaPipelineLocal(proyectoSlug, fase, perfil, modo, 
 	return etapa
 }
 
+// EspecificacionFuncion consolida el contrato que el orquestador fija para cada entrega:
+// encabezado, salida esperada, write_set y tests mínimos.
+type EspecificacionFuncion struct {
+	Encabezado     string   `json:"encabezado"`
+	SalidaEsperada string   `json:"salida_esperada,omitempty"`
+	WriteSet       []string `json:"write_set,omitempty"`
+	SimbolosFoco   string   `json:"simbolos_foco,omitempty"`
+	TestsMinimos   string   `json:"tests_minimos,omitempty"`
+}
+
+// extraerSeñalesTareaPipelineLocal deriva las señales de escalación de revisión
+// a partir del contexto de la tarea (write_set, notas, descripción).
+func extraerSeñalesTareaPipelineLocal(tarea *TareaPipelineLocal) []string {
+	if tarea == nil {
+		return nil
+	}
+	ctx := strings.ToLower(strings.Join([]string{
+		strings.TrimSpace(tarea.Titulo),
+		strings.TrimSpace(tarea.Descripcion),
+		strings.TrimSpace(tarea.Notas),
+	}, "\n"))
+	var señales []string
+
+	// zona_critica_control_plane: write_set toca controlplane, o el módulo es control_plane
+	zonaCritica := false
+	for _, ruta := range tarea.WriteSet {
+		ruta = strings.ToLower(strings.TrimSpace(ruta))
+		if strings.Contains(ruta, "controlplane") || strings.Contains(ruta, "control_plane") {
+			zonaCritica = true
+			break
+		}
+	}
+	if !zonaCritica {
+		mod := strings.ToLower(strings.TrimSpace(tarea.Modulo))
+		if strings.Contains(mod, "controlplane") || strings.Contains(mod, "control_plane") {
+			zonaCritica = true
+		}
+	}
+	if zonaCritica {
+		señales = append(señales, "zona_critica_control_plane")
+	}
+
+	if strings.Contains(ctx, "seguridad") || strings.Contains(ctx, "concurrencia") || strings.Contains(ctx, "seguridad_o_concurrencia") {
+		señales = append(señales, "seguridad_o_concurrencia")
+	}
+	if strings.Contains(ctx, "riesgo_alto") || strings.Contains(ctx, "critico") || strings.EqualFold(strings.TrimSpace(tarea.Prioridad), "critica") {
+		señales = append(señales, "riesgo_alto")
+	}
+	if len(tarea.WriteSet) > 5 {
+		señales = append(señales, "diff_grande")
+	}
+	if strings.Contains(ctx, "correcciones_repetidas") || strings.Contains(ctx, "ciclo_correccion") {
+		señales = append(señales, "correcciones_repetidas")
+	}
+	if strings.Contains(ctx, "hallazgos_contradictorios") || strings.Contains(ctx, "contradiccion") {
+		señales = append(señales, "hallazgos_contradictorios")
+	}
+	return señales
+}
+
+func construirEspecificacionFuncion(tarea *TareaPipelineLocal, etapa *EtapaPipelineLocal) *EspecificacionFuncion {
+	if tarea == nil || etapa == nil || !etapa.RequiereModelo {
+		return nil
+	}
+	encabezado := strings.TrimSpace(tarea.Titulo)
+	if encabezado == "" {
+		return nil
+	}
+	return &EspecificacionFuncion{
+		Encabezado:     encabezado,
+		SalidaEsperada: strings.TrimSpace(etapa.EntregaCanonica),
+		WriteSet:       append([]string(nil), tarea.WriteSet...),
+		SimbolosFoco:   strings.TrimSpace(tarea.SimbolosFoco),
+		TestsMinimos:   strings.TrimSpace(tarea.TestsMinimos),
+	}
+}
+
+func seleccionarRevisorEscalonadoPipeline(revision *RevisionEscalonada, señales []string) *RevisorEscalonado {
+	if revision == nil || len(revision.Revisores) == 0 {
+		return nil
+	}
+	for _, señal := range señales {
+		switch strings.ToLower(strings.TrimSpace(señal)) {
+		case "seguridad_o_concurrencia", "zona_critica_control_plane", "riesgo_alto":
+			for i := range revision.Revisores {
+				if revision.Revisores[i].Premium {
+					return &revision.Revisores[i]
+				}
+			}
+		}
+	}
+	for _, señal := range señales {
+		switch strings.ToLower(strings.TrimSpace(señal)) {
+		case "hallazgos_contradictorios", "correcciones_repetidas", "diff_grande":
+			for i := range revision.Revisores {
+				if !revision.Revisores[i].Premium && strings.Contains(revision.Revisores[i].NombreRol, "segunda_opinion") {
+					return &revision.Revisores[i]
+				}
+			}
+		}
+	}
+	return &revision.Revisores[0]
+}
+
 func (s *Service) construirRevisorEscalonado(proyectoSlug, nombreRol, clase string, premium bool, perfil, carril, entregaCanonica string, requiereWorktree bool, objetivoModelo, modeloFallback string) RevisorEscalonado {
 	revisor := RevisorEscalonado{
 		NombreRol:        strings.TrimSpace(nombreRol),

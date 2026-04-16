@@ -6866,6 +6866,117 @@ func TestResolverBootstrapRuntimeLeasePendientePrefiereHandoffDerivadaConMailbox
 	}
 }
 
+func TestResolverBootstrapRuntimeLeasePendientePrefiereHandoffDerivadaSobreBootstrapFuente(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir workdir: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"handoff derivada sobre start fuente"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	startID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","mailbox_ids":[%d],"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			mailboxID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start bootstrap: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, startID); err != nil {
+		t.Fatalf("marcar start ejecutando: %v", err)
+	}
+
+	handoffPayload, err := json.Marshal(HandoffPayload{
+		AgenteOrigen:       "Codex0",
+		AgenteDestino:      "Codex1",
+		ResumenContinuidad: "handoff derivada concurrente con start",
+	})
+	if err != nil {
+		t.Fatalf("marshal handoff: %v", err)
+	}
+	handoffID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "handoff",
+		PayloadJSON: string(handoffPayload),
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","start_order_id":%d,"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			startID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar handoff derivada: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, handoffID); err != nil {
+		t.Fatalf("marcar handoff derivada ejecutando: %v", err)
+	}
+
+	order, startOrderID, mailboxIDs, sesionID, err := resolverBootstrapRuntimeLeasePendiente(handle, runtime)
+	if err != nil {
+		t.Fatalf("resolverBootstrapRuntimeLeasePendiente: %v", err)
+	}
+	if order == nil || order.ID != handoffID {
+		t.Fatalf("deberia priorizar la handoff derivada sobre la start fuente cuando ambas son pendientes: %+v", order)
+	}
+	if startOrderID != startID {
+		t.Fatalf("start_order_id inesperado: got=%d want=%d", startOrderID, startID)
+	}
+	if sesionID != sesion.ID {
+		t.Fatalf("sesion_id inesperado: got=%d want=%d", sesionID, sesion.ID)
+	}
+	if len(mailboxIDs) != 1 || mailboxIDs[0] != mailboxID {
+		t.Fatalf("mailbox_ids heredados inesperados: %+v", mailboxIDs)
+	}
+}
+
 func TestRuntimeMailboxEntregadoPorBootstrapObservadoReconoceMailboxDeLeaseAnterior(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
@@ -7257,6 +7368,109 @@ func TestResolverBootstrapRuntimeLeasePendienteIgnoraLeaseDerivadaSiStartFuenteY
 	}
 }
 
+func TestResolverBootstrapRuntimeLeasePendienteIgnoraHandoffDerivadaSiStartFuenteYaFueObservada(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir workdir: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"bootstrap observado fuente handoff"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	sourceStartID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		Estado:     "completada",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","delivery_state":"delivered","delivery_receipt_at":"2026-04-14T12:37:01Z","receipt_source":"git_worktree","mailbox_ids":[%d],"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			mailboxID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start fuente observada: %v", err)
+	}
+
+	handoffPayload, err := json.Marshal(HandoffPayload{
+		AgenteOrigen:       "Codex0",
+		AgenteDestino:      "Codex1",
+		ResumenContinuidad: "handoff derivada desde start ya observada",
+	})
+	if err != nil {
+		t.Fatalf("marshal handoff: %v", err)
+	}
+	handoffID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "handoff",
+		PayloadJSON: string(handoffPayload),
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","start_order_id":%d,"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			sourceStartID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar handoff derivada: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, handoffID); err != nil {
+		t.Fatalf("marcar handoff derivada ejecutando: %v", err)
+	}
+
+	order, startOrderID, mailboxIDs, sesionID, err := resolverBootstrapRuntimeLeasePendiente(handle, runtime)
+	if err != nil {
+		t.Fatalf("resolverBootstrapRuntimeLeasePendiente: %v", err)
+	}
+	if order != nil || startOrderID != 0 || len(mailboxIDs) != 0 {
+		t.Fatalf("no deberia exponer lease pendiente si la start fuente ya fue observada: order=%+v start=%d mailbox=%+v", order, startOrderID, mailboxIDs)
+	}
+	if sesionID != sesion.ID {
+		t.Fatalf("sesion_id inesperado: got=%d want=%d", sesionID, sesion.ID)
+	}
+}
+
 func TestRuntimeMailboxEntregadoPorBootstrapObservadoReconoceLeaseDerivadaSinReceiptPropio(t *testing.T) {
 	tmp := prepararDBTemporal(t)
 
@@ -7350,6 +7564,784 @@ func TestRuntimeMailboxEntregadoPorBootstrapObservadoReconoceLeaseDerivadaSinRec
 		t.Fatalf("lease observada inesperada: bootstrap=%d start=%d", bootstrapOrderID, startOrderID)
 	}
 	_ = resumeID
+}
+
+func TestRuntimeMailboxEntregadoPorBootstrapObservadoReconoceHandoffDerivadaSinReceiptPropio(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir workdir: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	mailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"bootstrap observado derivado handoff"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox: %v", err)
+	}
+	sourceStartID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		Estado:     "completada",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","delivery_state":"delivered","delivery_receipt_at":"2026-04-14T12:37:01Z","receipt_source":"git_worktree","mailbox_ids":[%d],"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			mailboxID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start fuente observada: %v", err)
+	}
+
+	handoffPayload, err := json.Marshal(HandoffPayload{
+		AgenteOrigen:       "Codex0",
+		AgenteDestino:      "Codex1",
+		ResumenContinuidad: "handoff derivada sin receipt propio",
+	})
+	if err != nil {
+		t.Fatalf("marshal handoff: %v", err)
+	}
+	handoffID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		RuntimeID:   &runtime.ID,
+		HandleID:    &handle.ID,
+		Tipo:        "handoff",
+		PayloadJSON: string(handoffPayload),
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","start_order_id":%d,"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			sourceStartID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar handoff derivada: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, handoffID); err != nil {
+		t.Fatalf("marcar handoff derivada ejecutando: %v", err)
+	}
+
+	observado, bootstrapOrderID, startOrderID, err := RuntimeMailboxEntregadoPorBootstrapObservado(mailboxID, handle, runtime)
+	if err != nil {
+		t.Fatalf("RuntimeMailboxEntregadoPorBootstrapObservado: %v", err)
+	}
+	if !observado {
+		t.Fatal("la handoff derivada deberia heredar el receipt util de la start fuente")
+	}
+	if bootstrapOrderID != sourceStartID || startOrderID != 0 {
+		t.Fatalf("lease observada inesperada: bootstrap=%d start=%d", bootstrapOrderID, startOrderID)
+	}
+	_ = handoffID
+}
+
+func TestResolverBootstrapRuntimeLeasePendienteRecuperaMailboxVigenteDesdeStartFuenteSiHandoffTraeMailboxConsumida(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir workdir: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	staleMailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"handoff stale"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox stale: %v", err)
+	}
+	if err := MarcarRuntimeMailboxConsumido(staleMailboxID); err != nil {
+		t.Fatalf("consumir mailbox stale: %v", err)
+	}
+
+	sourceMailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"bootstrap fuente vigente handoff"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox fuente: %v", err)
+	}
+	sourceStartID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"acked","mailbox_ids":[%d],"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			sourceMailboxID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start fuente: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='completada', started_at=CURRENT_TIMESTAMP, finished_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, sourceStartID); err != nil {
+		t.Fatalf("marcar start fuente completada: %v", err)
+	}
+
+	handoffPayload, err := json.Marshal(HandoffPayload{
+		AgenteOrigen:       "Codex0",
+		AgenteDestino:      "Codex1",
+		ResumenContinuidad: "handoff derivada mailbox consumida",
+	})
+	if err != nil {
+		t.Fatalf("marshal handoff: %v", err)
+	}
+	handoffID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "handoff",
+		PayloadJSON: string(handoffPayload),
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","start_order_id":%d,"mailbox_ids":[%d]}`,
+			sourceStartID, staleMailboxID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar handoff derivada: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, handoffID); err != nil {
+		t.Fatalf("marcar handoff derivada ejecutando: %v", err)
+	}
+
+	order, startOrderID, mailboxIDs, sesionID, err := resolverBootstrapRuntimeLeasePendiente(handle, runtime)
+	if err != nil {
+		t.Fatalf("resolverBootstrapRuntimeLeasePendiente: %v", err)
+	}
+	if order == nil || order.ID != handoffID {
+		t.Fatalf("deberia priorizar la lease handoff derivada vigente: %+v", order)
+	}
+	if startOrderID != sourceStartID {
+		t.Fatalf("start_order_id inesperado: got=%d want=%d", startOrderID, sourceStartID)
+	}
+	if sesionID != sesion.ID {
+		t.Fatalf("sesion_id inesperado: got=%d want=%d", sesionID, sesion.ID)
+	}
+	if len(mailboxIDs) != 1 || mailboxIDs[0] != sourceMailboxID {
+		t.Fatalf("mailbox_ids recuperados inesperados (deberian ser los de la start fuente): %+v", mailboxIDs)
+	}
+}
+
+func TestResolverBootstrapRuntimeLeasePendienteParaMailboxRecuperaMailboxVigenteDesdeStartFuenteSiHandoffTraeMailboxConsumida(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	workingDir := filepath.Join(tmp, "orquestador")
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Fatalf("mkdir workdir: %v", err)
+	}
+	sesion, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         workingDir,
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("runtime handle: %+v err=%v", handle, err)
+	}
+	runtime, err := GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("runtime: %+v err=%v", runtime, err)
+	}
+
+	staleMailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"handoff stale para-mailbox"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox stale: %v", err)
+	}
+	if err := MarcarRuntimeMailboxConsumido(staleMailboxID); err != nil {
+		t.Fatalf("consumir mailbox stale: %v", err)
+	}
+
+	sourceMailboxID, err := EnviarRuntimeMailbox(&RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "Codex1",
+		ProyectoID:  &proyectoID,
+		Kind:        "pipeline_local",
+		PayloadJSON: `{"texto":"bootstrap fuente vigente handoff para-mailbox"}`,
+	})
+	if err != nil {
+		t.Fatalf("crear mailbox fuente: %v", err)
+	}
+	sourceStartID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:     "Codex1",
+		ProyectoID: &proyectoID,
+		RuntimeID:  &runtime.ID,
+		HandleID:   &handle.ID,
+		Tipo:       "start",
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"acked","mailbox_ids":[%d],"sesion_id":%d,"runtime_id":%d,"handle_id":%d}`,
+			sourceMailboxID, sesion.ID, runtime.ID, handle.ID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar start fuente: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='completada', started_at=CURRENT_TIMESTAMP, finished_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, sourceStartID); err != nil {
+		t.Fatalf("marcar start fuente completada: %v", err)
+	}
+
+	handoffPayload, err := json.Marshal(HandoffPayload{
+		AgenteOrigen:       "Codex0",
+		AgenteDestino:      "Codex1",
+		ResumenContinuidad: "handoff derivada mailbox consumida para-mailbox",
+	})
+	if err != nil {
+		t.Fatalf("marshal handoff: %v", err)
+	}
+	handoffID, err := EncolarRuntimeOrder(&RuntimeOrder{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		Tipo:        "handoff",
+		PayloadJSON: string(handoffPayload),
+		ResultadoJSON: fmt.Sprintf(
+			`{"lease_state":"waiting_for_evidence","start_order_id":%d,"mailbox_ids":[%d]}`,
+			sourceStartID, staleMailboxID,
+		),
+	})
+	if err != nil {
+		t.Fatalf("encolar handoff derivada: %v", err)
+	}
+	if _, err := DB.Exec(`UPDATE runtime_orders SET estado='ejecutando', started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`, handoffID); err != nil {
+		t.Fatalf("marcar handoff derivada ejecutando: %v", err)
+	}
+
+	order, startOrderID, mailboxIDs, sesionID, err := resolverBootstrapRuntimeLeasePendienteParaMailbox(sourceMailboxID, handle, runtime)
+	if err != nil {
+		t.Fatalf("resolverBootstrapRuntimeLeasePendienteParaMailbox: %v", err)
+	}
+	if order == nil || order.ID != handoffID {
+		t.Fatalf("deberia priorizar la lease handoff derivada vigente: %+v", order)
+	}
+	if startOrderID != sourceStartID {
+		t.Fatalf("start_order_id inesperado: got=%d want=%d", startOrderID, sourceStartID)
+	}
+	if sesionID != sesion.ID {
+		t.Fatalf("sesion_id inesperado: got=%d want=%d", sesionID, sesion.ID)
+	}
+	if len(mailboxIDs) != 1 || mailboxIDs[0] != sourceMailboxID {
+		t.Fatalf("mailbox_ids recuperados inesperados (deberian ser los de la start fuente): %+v", mailboxIDs)
+	}
+}
+
+func TestRuntimeBootstrapLeaseTieneReceiptUtil(t *testing.T) {
+	cases := []struct {
+		name   string
+		result map[string]any
+		want   bool
+	}{
+		{"vacio", map[string]any{}, false},
+		{"nil", nil, false},
+		{"receipt_source presente", map[string]any{"receipt_source": "git_worktree"}, true},
+		{"receipt_source vacio", map[string]any{"receipt_source": ""}, false},
+		{"delivery_receipt_at presente", map[string]any{"delivery_receipt_at": "2026-04-14T10:00:00Z"}, true},
+		{"delivery_receipt_at vacio", map[string]any{"delivery_receipt_at": "  "}, false},
+		{"delivery_state delivered", map[string]any{"delivery_state": "delivered"}, true},
+		{"delivery_state DELIVERED mayusculas", map[string]any{"delivery_state": "DELIVERED"}, true},
+		{"delivery_state waiting_for_evidence", map[string]any{"delivery_state": "waiting_for_evidence"}, false},
+		{"delivery_state acked", map[string]any{"delivery_state": "acked"}, false},
+	}
+	for _, c := range cases {
+		got := runtimeBootstrapLeaseTieneReceiptUtil(c.result)
+		if got != c.want {
+			t.Errorf("[%s] runtimeBootstrapLeaseTieneReceiptUtil = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestRuntimeBootstrapLeaseTieneCoberturaDeclarada(t *testing.T) {
+	cases := []struct {
+		name   string
+		result map[string]any
+		want   bool
+	}{
+		{"vacio", map[string]any{}, false},
+		{"nil", nil, false},
+		{"mailbox_ids presente", map[string]any{"mailbox_ids": []any{int64(1)}}, true},
+		{"mailbox_ids slice vacio", map[string]any{"mailbox_ids": []any{}}, false},
+		{"start_order_id presente", map[string]any{"start_order_id": int64(42)}, true},
+		{"start_order_id cero", map[string]any{"start_order_id": int64(0)}, false},
+		{"ambos presentes", map[string]any{"mailbox_ids": []any{int64(5)}, "start_order_id": int64(3)}, true},
+	}
+	for _, c := range cases {
+		got := runtimeBootstrapLeaseTieneCoberturaDeclarada(c.result)
+		if got != c.want {
+			t.Errorf("[%s] runtimeBootstrapLeaseTieneCoberturaDeclarada = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestRuntimeBootstrapLeaseStateBlocksMailbox(t *testing.T) {
+	wfe := map[string]any{"lease_state": "waiting_for_evidence"}
+	wfeWithReceipt := map[string]any{"lease_state": "waiting_for_evidence", "receipt_source": "git_worktree"}
+	acked := map[string]any{"lease_state": "acked"}
+	inheritedReceipt := map[string]any{"receipt_source": "git_worktree"}
+
+	cases := []struct {
+		name      string
+		result    map[string]any
+		inherited map[string]any
+		want      bool
+	}{
+		{"wfe sin receipt bloquea", wfe, nil, true},
+		{"wfe con receipt propio no bloquea", wfeWithReceipt, nil, false},
+		{"wfe con receipt heredado no bloquea", wfe, inheritedReceipt, false},
+		{"acked no bloquea", acked, nil, false},
+		{"vacio no bloquea", map[string]any{}, nil, false},
+		{"nil no bloquea", nil, nil, false},
+		{"wfe case insensitive", map[string]any{"lease_state": "Waiting_For_Evidence"}, nil, true},
+	}
+	for _, c := range cases {
+		got := runtimeBootstrapLeaseStateBlocksMailbox(c.result, c.inherited)
+		if got != c.want {
+			t.Errorf("[%s] runtimeBootstrapLeaseStateBlocksMailbox = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestRuntimeOrderMantieneBootstrapLeasePendiente(t *testing.T) {
+	cases := []struct {
+		name   string
+		result map[string]any
+		want   bool
+	}{
+		{"wfe con mailbox_ids", map[string]any{"lease_state": "waiting_for_evidence", "mailbox_ids": []any{int64(1)}}, true},
+		{"wfe con start_order_id", map[string]any{"lease_state": "waiting_for_evidence", "start_order_id": int64(7)}, true},
+		{"delivered con cobertura", map[string]any{"lease_state": "delivered", "mailbox_ids": []any{int64(2)}}, true},
+		{"DELIVERED mayusculas con cobertura", map[string]any{"lease_state": "DELIVERED", "mailbox_ids": []any{int64(2)}}, true},
+		{"acked con cobertura", map[string]any{"lease_state": "acked", "mailbox_ids": []any{int64(1)}}, false},
+		{"wfe sin cobertura", map[string]any{"lease_state": "waiting_for_evidence"}, false},
+		{"vacio", map[string]any{}, false},
+		{"nil", nil, false},
+	}
+	for _, c := range cases {
+		got := runtimeOrderMantieneBootstrapLeasePendiente(c.result)
+		if got != c.want {
+			t.Errorf("[%s] runtimeOrderMantieneBootstrapLeasePendiente = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestRuntimeBootstrapLeaseFromOrder(t *testing.T) {
+	// nil order → zeros
+	startID, mailboxIDs, sesionID := runtimeBootstrapLeaseFromOrder(nil)
+	if startID != 0 || len(mailboxIDs) != 0 || sesionID != 0 {
+		t.Errorf("nil order deberia devolver zeros: %d %v %d", startID, mailboxIDs, sesionID)
+	}
+
+	// resultado completo
+	order := &RuntimeOrder{ResultadoJSON: `{"start_order_id":42,"mailbox_ids":[10,11],"sesion_id":7}`}
+	startID, mailboxIDs, sesionID = runtimeBootstrapLeaseFromOrder(order)
+	if startID != 42 {
+		t.Errorf("start_order_id: got %d, want 42", startID)
+	}
+	if len(mailboxIDs) != 2 || mailboxIDs[0] != 10 || mailboxIDs[1] != 11 {
+		t.Errorf("mailbox_ids: got %v, want [10 11]", mailboxIDs)
+	}
+	if sesionID != 7 {
+		t.Errorf("sesion_id: got %d, want 7", sesionID)
+	}
+
+	// resultado vacío → zeros
+	orderEmpty := &RuntimeOrder{ResultadoJSON: `{}`}
+	startID, mailboxIDs, sesionID = runtimeBootstrapLeaseFromOrder(orderEmpty)
+	if startID != 0 || len(mailboxIDs) != 0 || sesionID != 0 {
+		t.Errorf("resultado vacio deberia devolver zeros: %d %v %d", startID, mailboxIDs, sesionID)
+	}
+}
+
+func TestRuntimeBootstrapLeaseMailboxIDs(t *testing.T) {
+	orderWithIDs := &RuntimeOrder{ResultadoJSON: `{"mailbox_ids":[5,6]}`}
+	orderNoIDs := &RuntimeOrder{ResultadoJSON: `{}`}
+	startWithIDs := &RuntimeOrder{ResultadoJSON: `{"mailbox_ids":[100,101]}`}
+
+	// orden tiene propios → los devuelve
+	got := runtimeBootstrapLeaseMailboxIDs(orderWithIDs, startWithIDs)
+	if len(got) != 2 || got[0] != 5 || got[1] != 6 {
+		t.Errorf("deberia devolver mailbox_ids propios: %v", got)
+	}
+
+	// orden sin propios, start con ids → hereda start
+	got = runtimeBootstrapLeaseMailboxIDs(orderNoIDs, startWithIDs)
+	if len(got) != 2 || got[0] != 100 || got[1] != 101 {
+		t.Errorf("deberia heredar mailbox_ids de start: %v", got)
+	}
+
+	// orden sin propios y sin start → nil
+	got = runtimeBootstrapLeaseMailboxIDs(orderNoIDs, nil)
+	if got != nil {
+		t.Errorf("sin start deberia devolver nil: %v", got)
+	}
+
+	// nil order + start con ids → hereda start (cae al fallback)
+	got = runtimeBootstrapLeaseMailboxIDs(nil, startWithIDs)
+	if len(got) != 2 || got[0] != 100 || got[1] != 101 {
+		t.Errorf("nil order con start deberia heredar mailbox_ids de start: %v", got)
+	}
+
+	// nil order + nil start → nil
+	got = runtimeBootstrapLeaseMailboxIDs(nil, nil)
+	if got != nil {
+		t.Errorf("nil order y nil start deberia devolver nil: %v", got)
+	}
+}
+
+func TestRuntimeBootstrapLeaseSesionID(t *testing.T) {
+	// nil order → 0
+	if got := runtimeBootstrapLeaseSesionID(nil, nil); got != 0 {
+		t.Errorf("nil order: got %d, want 0", got)
+	}
+
+	// sesion_id en resultado de order → lo usa directamente
+	order := &RuntimeOrder{ResultadoJSON: `{"sesion_id":7}`}
+	if got := runtimeBootstrapLeaseSesionID(order, nil); got != 7 {
+		t.Errorf("sesion_id de order: got %d, want 7", got)
+	}
+
+	// sin sesion_id en order, con start que lo tiene → hereda start
+	orderNoSesion := &RuntimeOrder{ResultadoJSON: `{}`}
+	startWithSesion := &RuntimeOrder{ResultadoJSON: `{"sesion_id":99}`}
+	if got := runtimeBootstrapLeaseSesionID(orderNoSesion, startWithSesion); got != 99 {
+		t.Errorf("sesion_id heredada de start: got %d, want 99", got)
+	}
+
+	// sin sesion_id en ninguno → 0
+	if got := runtimeBootstrapLeaseSesionID(orderNoSesion, nil); got != 0 {
+		t.Errorf("sin sesion_id: got %d, want 0", got)
+	}
+}
+
+func TestRuntimeBootstrapLeaseLinkedToStart(t *testing.T) {
+	mkOrder := func(id int64, tipo, resultadoJSON string) *RuntimeOrder {
+		return &RuntimeOrder{ID: id, Tipo: tipo, ResultadoJSON: resultadoJSON}
+	}
+	start10 := mkOrder(10, "start", `{}`)
+	start10.ID = 10
+
+	cases := []struct {
+		name      string
+		order     *RuntimeOrder
+		startOrder *RuntimeOrder
+		want      bool
+	}{
+		{"order nil", nil, start10, false},
+		{"startOrder nil", mkOrder(1, "resume", `{"start_order_id":10}`), nil, false},
+		{"startOrder tipo no es start", mkOrder(1, "resume", `{"start_order_id":10}`), mkOrder(10, "resume", `{}`), false},
+		{"start_order_id coincide", mkOrder(1, "resume", `{"start_order_id":10}`), start10, true},
+		{"start_order_id no coincide", mkOrder(1, "resume", `{"start_order_id":99}`), start10, false},
+		{"handoff linked", mkOrder(2, "handoff", `{"start_order_id":10}`), start10, true},
+		{"sin start_order_id en resultado", mkOrder(3, "resume", `{}`), start10, false},
+	}
+	for _, c := range cases {
+		got := runtimeBootstrapLeaseLinkedToStart(c.order, c.startOrder)
+		if got != c.want {
+			t.Errorf("[%s] runtimeBootstrapLeaseLinkedToStart = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestRuntimeBootstrapLeaseTipoPrefiereStart(t *testing.T) {
+	mkOrder := func(id int64, tipo, resultadoJSON string) *RuntimeOrder {
+		return &RuntimeOrder{ID: id, Tipo: tipo, ResultadoJSON: resultadoJSON}
+	}
+	start10 := &RuntimeOrder{ID: 10, Tipo: "start", ResultadoJSON: `{}`}
+	resumeLinked := mkOrder(1, "resume", `{"start_order_id":10}`)
+	handoffLinked := mkOrder(2, "handoff", `{"start_order_id":10}`)
+	resumeUnlinked := mkOrder(3, "resume", `{"start_order_id":99}`)
+
+	// resume derivado PIERDE frente a su start fuente
+	if runtimeBootstrapLeaseResumeDerivadoPrefiereStart(resumeLinked, start10) != true {
+		t.Error("resumeDerivadoPrefiereStart deberia ser true para resume linked")
+	}
+	if runtimeBootstrapLeaseResumeDerivadoPrefiereStart(resumeUnlinked, start10) != false {
+		t.Error("resumeDerivadoPrefiereStart deberia ser false para resume no linked")
+	}
+	if runtimeBootstrapLeaseResumeDerivadoPrefiereStart(handoffLinked, start10) != false {
+		t.Error("resumeDerivadoPrefiereStart deberia ser false para handoff")
+	}
+	if runtimeBootstrapLeaseResumeDerivadoPrefiereStart(nil, start10) != false {
+		t.Error("resumeDerivadoPrefiereStart deberia ser false para order nil")
+	}
+
+	// handoff/otro GANA frente a su start fuente
+	if runtimeBootstrapLeaseFuenteLigadaPrefiereSobreStart(handoffLinked, start10) != true {
+		t.Error("fuenteLigadaPrefiereSobreStart deberia ser true para handoff linked")
+	}
+	if runtimeBootstrapLeaseFuenteLigadaPrefiereSobreStart(resumeLinked, start10) != false {
+		t.Error("fuenteLigadaPrefiereSobreStart deberia ser false para resume")
+	}
+	if runtimeBootstrapLeaseFuenteLigadaPrefiereSobreStart(handoffLinked, mkOrder(10, "resume", `{}`)) != false {
+		t.Error("fuenteLigadaPrefiereSobreStart deberia ser false si startOrder no es tipo start")
+	}
+}
+
+func TestRuntimeBootstrapLeaseAffinityScore(t *testing.T) {
+	handleID := int64(5)
+	runtimeID := int64(3)
+	sesionID := int64(7)
+
+	handle := &RuntimeHandle{ID: handleID}
+	runtime := &RuntimeInstance{ID: runtimeID}
+
+	// handle match via HandleID field: +8
+	hid := handleID
+	orderHandleField := &RuntimeOrder{HandleID: &hid, ResultadoJSON: `{}`}
+	if s := runtimeBootstrapLeaseAffinityScore(orderHandleField, nil, handle, nil, 0); s != 8 {
+		t.Errorf("handle field match: want 8, got %d", s)
+	}
+
+	// handle match via resultado handle_id: +8
+	orderHandleResult := &RuntimeOrder{ResultadoJSON: fmt.Sprintf(`{"handle_id":%d}`, handleID)}
+	if s := runtimeBootstrapLeaseAffinityScore(orderHandleResult, nil, handle, nil, 0); s != 8 {
+		t.Errorf("handle result match: want 8, got %d", s)
+	}
+
+	// runtime match via RuntimeID field: +4
+	rid := runtimeID
+	orderRuntimeField := &RuntimeOrder{RuntimeID: &rid, ResultadoJSON: `{}`}
+	if s := runtimeBootstrapLeaseAffinityScore(orderRuntimeField, nil, nil, runtime, 0); s != 4 {
+		t.Errorf("runtime field match: want 4, got %d", s)
+	}
+
+	// runtime match via resultado runtime_id: +4
+	orderRuntimeResult := &RuntimeOrder{ResultadoJSON: fmt.Sprintf(`{"runtime_id":%d}`, runtimeID)}
+	if s := runtimeBootstrapLeaseAffinityScore(orderRuntimeResult, nil, nil, runtime, 0); s != 4 {
+		t.Errorf("runtime result match: want 4, got %d", s)
+	}
+
+	// sesion match via resultado sesion_id: +2
+	orderSesion := &RuntimeOrder{ResultadoJSON: fmt.Sprintf(`{"sesion_id":%d}`, sesionID)}
+	if s := runtimeBootstrapLeaseAffinityScore(orderSesion, nil, nil, nil, sesionID); s != 2 {
+		t.Errorf("sesion match: want 2, got %d", s)
+	}
+
+	// combinado handle+runtime+sesion: +8+4+2 = 14
+	orderFull := &RuntimeOrder{
+		HandleID:      &hid,
+		RuntimeID:     &rid,
+		ResultadoJSON: fmt.Sprintf(`{"sesion_id":%d}`, sesionID),
+	}
+	if s := runtimeBootstrapLeaseAffinityScore(orderFull, nil, handle, runtime, sesionID); s != 14 {
+		t.Errorf("combinado handle+runtime+sesion: want 14, got %d", s)
+	}
+
+	// handle match via startOrder HandleID: +8
+	startWithHandle := &RuntimeOrder{HandleID: &hid, ResultadoJSON: `{}`}
+	orderNoHandle := &RuntimeOrder{ResultadoJSON: `{}`}
+	if s := runtimeBootstrapLeaseAffinityScore(orderNoHandle, startWithHandle, handle, nil, 0); s != 8 {
+		t.Errorf("handle via startOrder field: want 8, got %d", s)
+	}
+
+	// nil order: 0
+	if s := runtimeBootstrapLeaseAffinityScore(nil, nil, handle, runtime, sesionID); s != 0 {
+		t.Errorf("nil order: want 0, got %d", s)
+	}
+}
+
+func TestRuntimeBootstrapLeaseMailboxIDsConFallbackFuente(t *testing.T) {
+	mkOrder := func(id int64, tipo, resultadoJSON string) *RuntimeOrder {
+		return &RuntimeOrder{ID: id, Tipo: tipo, ResultadoJSON: resultadoJSON}
+	}
+
+	// helper: collapsa [][]int64 a string para comparar
+	dump := func(sets [][]int64) string {
+		b, _ := json.Marshal(sets)
+		return string(b)
+	}
+
+	start := mkOrder(10, "start", `{"mailbox_ids":[100,101]}`)
+
+	cases := []struct {
+		name       string
+		order      *RuntimeOrder
+		startOrder *RuntimeOrder
+		want       [][]int64
+	}{
+		{
+			"orden con mailbox propios, no linked",
+			mkOrder(1, "resume", `{"mailbox_ids":[5,6]}`),
+			nil,
+			[][]int64{{5, 6}},
+		},
+		{
+			"orden sin mailbox, linked a start → hereda mailbox de start",
+			mkOrder(2, "resume", fmt.Sprintf(`{"start_order_id":%d}`, start.ID)),
+			start,
+			[][]int64{{100, 101}},
+		},
+		{
+			"orden con mailbox distintos a start → ambos conjuntos como fallback",
+			mkOrder(3, "resume", fmt.Sprintf(`{"start_order_id":%d,"mailbox_ids":[99]}`, start.ID)),
+			start,
+			[][]int64{{99}, {100, 101}},
+		},
+		{
+			"orden con mismos mailbox que start → solo un conjunto (sin duplicar)",
+			mkOrder(4, "resume", fmt.Sprintf(`{"start_order_id":%d,"mailbox_ids":[100,101]}`, start.ID)),
+			start,
+			[][]int64{{100, 101}},
+		},
+		{
+			"orden no linked aunque startOrder presente → solo mailbox propios",
+			mkOrder(5, "resume", `{"start_order_id":99,"mailbox_ids":[7]}`),
+			start,
+			[][]int64{{7}},
+		},
+		{
+			"orden sin mailbox y no linked → sin candidatos",
+			mkOrder(6, "resume", `{}`),
+			nil,
+			[][]int64{},
+		},
+	}
+	for _, c := range cases {
+		got := runtimeBootstrapLeaseMailboxIDsConFallbackFuente(c.order, c.startOrder)
+		if dump(got) != dump(c.want) {
+			t.Errorf("[%s] got %s, want %s", c.name, dump(got), dump(c.want))
+		}
+	}
+}
+
+func TestRuntimeBootstrapLeaseSelectionMejora(t *testing.T) {
+	mkOrder := func(id int64, tipo, resultadoJSON string) *RuntimeOrder {
+		return &RuntimeOrder{ID: id, Tipo: tipo, ResultadoJSON: resultadoJSON}
+	}
+
+	start10 := mkOrder(10, "start", `{}`)
+	resumeLinked := mkOrder(1, "resume", fmt.Sprintf(`{"start_order_id":%d}`, start10.ID))
+	handoffLinked := mkOrder(2, "handoff", fmt.Sprintf(`{"start_order_id":%d}`, start10.ID))
+	orderA := mkOrder(20, "start", `{}`) // ID mayor
+	orderB := mkOrder(15, "start", `{}`) // ID menor
+
+	const targetSesion = int64(7)
+
+	mk := func(order *RuntimeOrder, sesionID int64, score int) bootstrapRuntimeLeaseSelection {
+		return newBootstrapRuntimeLeaseSelection(order, 0, nil, sesionID, score)
+	}
+
+	cases := []struct {
+		name      string
+		candidate bootstrapRuntimeLeaseSelection
+		selected  bootstrapRuntimeLeaseSelection
+		want      bool
+	}{
+		// Prioridad sesión
+		{"sesion: candidato coincide, selected no", mk(orderA, targetSesion, 0), mk(orderB, 0, 0), true},
+		{"sesion: selected coincide, candidato no", mk(orderA, 0, 0), mk(orderB, targetSesion, 0), false},
+		// Score
+		{"score: candidato mayor", mk(orderA, 0, 9), mk(orderB, 0, 4), true},
+		{"score: candidato menor", mk(orderA, 0, 3), mk(orderB, 0, 8), false},
+		// Tiebreaker resume derivado pierde frente a su start
+		{"tiebreaker: resume derivado pierde frente a start fuente", mk(resumeLinked, 0, 0), mk(start10, 0, 0), false},
+		// Tiebreaker start pierde frente a resume derivado (candidate=start, selected=resume)
+		{"tiebreaker: start pierde frente a resume derivado", mk(start10, 0, 0), mk(resumeLinked, 0, 0), true},
+		// Tiebreaker handoff gana sobre start
+		{"tiebreaker: handoff gana sobre start fuente", mk(handoffLinked, 0, 0), mk(start10, 0, 0), true},
+		// Tiebreaker start pierde frente a handoff
+		{"tiebreaker: start pierde frente a handoff derivado", mk(start10, 0, 0), mk(handoffLinked, 0, 0), false},
+		// Default: ID mayor gana
+		{"default: ID mayor gana", mk(orderA, 0, 0), mk(orderB, 0, 0), true},
+		{"default: ID menor pierde", mk(orderB, 0, 0), mk(orderA, 0, 0), false},
+		{"default: ID igual -> true (>=)", mk(orderA, 0, 0), mk(orderA, 0, 0), true},
+	}
+	for _, c := range cases {
+		got := runtimeBootstrapLeaseSelectionMejora(c.candidate, c.selected, targetSesion)
+		if got != c.want {
+			t.Errorf("[%s] runtimeBootstrapLeaseSelectionMejora = %v, want %v", c.name, got, c.want)
+		}
+	}
 }
 
 func TestAckBootstrapRuntimeSinLeaseEnStartAnexaLeaseAlStart(t *testing.T) {
