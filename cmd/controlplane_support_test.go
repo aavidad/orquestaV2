@@ -15556,6 +15556,57 @@ func TestTieneTrabajoOrquestablePendienteDetectaRuntimeOrderEnProyectoActivoNoRe
 	}
 }
 
+func TestTieneTrabajoOrquestablePendienteDetectaMailboxRuntimeGlobalSinProyecto(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	if err := db.RegistrarAgente("CodexWarmGlobal1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente: "server",
+		ToAgente:   "CodexWarmGlobal1",
+		Kind:       "handoff",
+		PayloadJSON: `{"accion":"continuar_trabajo"}`,
+	}); err != nil {
+		t.Fatalf("crear mailbox global: %v", err)
+	}
+
+	pending, detail, err := tieneTrabajoOrquestablePendiente()
+	if err != nil {
+		t.Fatalf("tieneTrabajoOrquestablePendiente: %v", err)
+	}
+	if !pending {
+		t.Fatal("deberia detectar mailbox runtime global pendiente sin proyecto")
+	}
+	if !strings.Contains(detail, "runtime_mailbox_global=pendiente") {
+		t.Fatalf("detalle inesperado: %q", detail)
+	}
+}
+
+func TestTieneTrabajoOrquestablePendienteDetectaRuntimeOrderGlobalSinProyecto(t *testing.T) {
+	prepararDBTemporalCmd(t)
+	if err := db.RegistrarAgente("CodexWarmGlobal2", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "CodexWarmGlobal2",
+		Tipo:        "handoff",
+		PayloadJSON: `{"motivo":"global_follow_up"}`,
+	}); err != nil {
+		t.Fatalf("encolar runtime order global: %v", err)
+	}
+
+	pending, detail, err := tieneTrabajoOrquestablePendiente()
+	if err != nil {
+		t.Fatalf("tieneTrabajoOrquestablePendiente: %v", err)
+	}
+	if !pending {
+		t.Fatal("deberia detectar runtime order global pendiente sin proyecto")
+	}
+	if !strings.Contains(detail, "runtime_orders_global=pendiente") {
+		t.Fatalf("detalle inesperado: %q", detail)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchEncolaPausePorBloqueoHumano(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

@@ -700,6 +700,11 @@ func revalidarPresupuestoAgenteSiCorresponde(nombre string, minAge time.Duration
 }
 
 func tieneTrabajoOrquestablePendiente() (bool, string, error) {
+	if pending, detail, err := backlogRuntimeGlobalPendiente(); err != nil {
+		return false, "", err
+	} else if pending {
+		return true, detail, nil
+	}
 	proyectos, err := db.ListarProyectosActivos()
 	if err != nil {
 		return false, "", err
@@ -709,6 +714,44 @@ func tieneTrabajoOrquestablePendiente() (bool, string, error) {
 			return false, "", err
 		} else if pending {
 			return true, detail, nil
+		}
+	}
+	return false, "", nil
+}
+
+func backlogRuntimeGlobalPendiente() (bool, string, error) {
+	for _, estado := range []string{"pendiente", "entregado"} {
+		estado := estado
+		items, err := db.ListarRuntimeMailbox(db.FiltroRuntimeMailbox{Estado: &estado})
+		if err != nil {
+			return false, "", err
+		}
+		count := 0
+		for _, item := range items {
+			if item == nil || item.ProyectoID != nil {
+				continue
+			}
+			count++
+		}
+		if count > 0 {
+			return true, fmt.Sprintf("runtime_mailbox_global=%s count=%d", estado, count), nil
+		}
+	}
+	for _, estado := range []string{"pendiente", "tomada", "ejecutando"} {
+		estado := estado
+		orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Estado: &estado})
+		if err != nil {
+			return false, "", err
+		}
+		count := 0
+		for _, order := range orders {
+			if order == nil || order.ProyectoID != nil {
+				continue
+			}
+			count++
+		}
+		if count > 0 {
+			return true, fmt.Sprintf("runtime_orders_global=%s count=%d", estado, count), nil
 		}
 	}
 	return false, "", nil
