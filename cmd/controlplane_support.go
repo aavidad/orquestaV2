@@ -9951,7 +9951,7 @@ func procesarReanudacionAutonomaSesion(sesion *db.Sesion, snapshot *autonomiaBat
 			return 0, nil
 		}
 	}
-	return reactivarSesionAutonomiaPorTrabajo(sesion)
+	return reactivarSesionAutonomiaPorTrabajoConSnapshot(sesion, snapshot)
 }
 
 func proyectoTerminadoAutonomamente(proyecto *db.Proyecto) (bool, string, error) {
@@ -10050,7 +10050,7 @@ func procesarAparcadoAutonomoSesion(sesion *db.Sesion, snapshot *autonomiaBatchS
 			}
 			if disponible {
 				if strings.EqualFold(strings.TrimSpace(sesion.Estado), "pausada") {
-					return reactivarSesionAutonomiaPorTrabajo(sesion)
+					return reactivarSesionAutonomiaPorTrabajoConSnapshot(sesion, snapshot)
 				}
 				return 0, nil
 			}
@@ -10155,6 +10155,10 @@ func reactivarTareasBloqueadasRecuperablesAutonomia(agente string, proyectoID in
 }
 
 func reactivarSesionAutonomiaPorTrabajo(sesion *db.Sesion) (int, error) {
+	return reactivarSesionAutonomiaPorTrabajoConSnapshot(sesion, nil)
+}
+
+func reactivarSesionAutonomiaPorTrabajoConSnapshot(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {
 	if sesion == nil || sesion.ProyectoID == nil {
 		return 0, nil
 	}
@@ -10163,7 +10167,15 @@ func reactivarSesionAutonomiaPorTrabajo(sesion *db.Sesion) (int, error) {
 	} else if !disponible {
 		return 0, nil
 	}
-	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	var (
+		proyecto *db.Proyecto
+		err      error
+	)
+	if snapshot != nil {
+		proyecto, err = snapshot.project(*sesion.ProyectoID)
+	} else {
+		proyecto, err = runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	}
 	if err != nil {
 		return 0, err
 	}
