@@ -6476,6 +6476,57 @@ func TestProcesarRuntimesFueraDeAsignacionActivaPorAsignacionBatchDeduplicaLectu
 	}
 }
 
+func TestResolverProyectoAutoasignacionDesdeAsignacionPausadaPrefierePremiumReactivable(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoAID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "proyecto-a",
+		Nombre:  "Proyecto A",
+		RutaAbs: filepath.Join(tmp, "proyecto-a"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto a: %v", err)
+	}
+	proyectoBID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "proyecto-b",
+		Nombre:  "Proyecto B",
+		RutaAbs: filepath.Join(tmp, "proyecto-b"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto b: %v", err)
+	}
+	if err := db.UpsertProyectoOperacion(&db.ProyectoOperacion{
+		ProyectoID:       proyectoBID,
+		EstadoOperativo:  db.ProyectoOperativoActivo,
+		Motivo:           "microrefactor_loop",
+		ResumeAutomatico: true,
+		MaxAgentes:       1,
+	}); err != nil {
+		t.Fatalf("upsert proyecto operacion premium: %v", err)
+	}
+	if _, err := db.DB.Exec(`INSERT INTO asignaciones (agente, proyecto_id, estado, nota) VALUES (?,?,?,?),(?,?,?,?)`,
+		"Codex1", proyectoAID, db.AsignacionPausada, "sin_trabajo_reactivacion_automatica",
+		"Codex1", proyectoBID, db.AsignacionPausada, "sin_trabajo_espera_automatica",
+	); err != nil {
+		t.Fatalf("insert asignaciones pausadas: %v", err)
+	}
+
+	proyecto, err := resolverProyectoAutoasignacionDesdeAsignacionPausada("Codex1")
+	if err != nil {
+		t.Fatalf("resolver proyecto autoasignacion: %v", err)
+	}
+	if proyecto == nil || proyecto.ID != proyectoBID {
+		t.Fatalf("deberia preferir el proyecto premium reactivable, got=%+v", proyecto)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchTimeoutSesionNoBloqueaDegradados(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 
