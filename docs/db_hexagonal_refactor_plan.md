@@ -88,6 +88,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: la recuperación de runtime degradado resuelve el proyecto una sola vez por sesión y reutiliza esa referencia en las ramas local/remota, evitando `GetProject` duplicados durante la misma secuencia de recuperación
 - corte operativo adicional fuera de `db`: la ruta de aparcado autónomo de sesión activa también reutiliza el proyecto cacheado del `autonomiaBatchSnapshot` cuando existe, evitando otra resolución redundante del mismo `proyectoID`
 - corte operativo adicional fuera de `db`: la reactivación automática de sesión por trabajo también acepta `snapshot` y reutiliza el proyecto cacheado cuando viene de un batch de autonomía, reduciendo otra resolución repetida del mismo `proyectoID`
+- corte operativo adicional fuera de `db`: el precheck de cierre automático de proyecto en sesión activa también acepta `snapshot` y reaprovecha el proyecto cacheado, cerrando otra resolución redundante dentro del mismo tick de autonomía
 
 Estado del frente seguro:
 

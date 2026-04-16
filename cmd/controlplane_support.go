@@ -8932,7 +8932,7 @@ func procesarPrechecksAutonomiaSesionActiva(sesion *db.Sesion, snapshot *autonom
 		return 0, nil
 	}
 	checks := []func() (int, error){
-		func() (int, error) { return procesarCierreProyectoSesion(sesion) },
+		func() (int, error) { return procesarCierreProyectoSesionConSnapshot(sesion, snapshot) },
 		func() (int, error) { return procesarReanudacionAutonomaSesion(sesion, snapshot) },
 		func() (int, error) { return procesarAparcadoAutonomoSesion(sesion, snapshot) },
 		func() (int, error) { return procesarRecuperacionRuntimeDegradadoSesion(sesion) },
@@ -9905,10 +9905,22 @@ func construirMotivoBloqueoCuotaAutonomia(agente, motivo string) string {
 }
 
 func procesarCierreProyectoSesion(sesion *db.Sesion) (int, error) {
+	return procesarCierreProyectoSesionConSnapshot(sesion, nil)
+}
+
+func procesarCierreProyectoSesionConSnapshot(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int, error) {
 	if sesion == nil || sesion.ProyectoID == nil {
 		return 0, nil
 	}
-	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	var (
+		proyecto *db.Proyecto
+		err      error
+	)
+	if snapshot != nil {
+		proyecto, err = snapshot.project(*sesion.ProyectoID)
+	} else {
+		proyecto, err = runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	}
 	if err != nil {
 		return 0, err
 	}
