@@ -10089,57 +10089,71 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 		return 0, nil
 	}
 	if !esTransporteRemotoAutonomia(handle.Transporte) {
-		if runtimeTMUXRecienteDebeSuplantarRecuperacionSesion(sesion, handle) {
-			return 0, nil
-		}
-		handle, runtime, _, err = db.SincronizarRuntimeHandleSupervisado(handle, runtime, "autonomia_runtime_recovery")
-		if err != nil {
-			return 0, err
-		}
-		if !runtimeLocalFallido(handle, runtime) {
-			return 0, nil
-		}
-		if pendiente, err := existeRuntimeOrderAbiertaAutonomia(sesion.Agente, sesion.ProyectoID, "start", "resume", "handoff"); err != nil {
-			return 0, err
-		} else if pendiente {
-			return 0, nil
-		}
-		proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
-		if err != nil {
-			return 0, err
-		}
-		tieneTrabajo, err := dbAgenteTieneTrabajoArrancable(strings.TrimSpace(sesion.Agente), proyecto.ID)
-		if err != nil {
-			return 0, err
-		}
-		if !tieneTrabajo {
-			return 0, nil
-		}
-		perfilPersistido, modeloPersistido, razonamientoPersistido := db.ResumePayloadPerfilEjecucion(sesion.ResumePayloadJSON)
-
-		// Sanear modelo si es legacy/placeholder para forzar re-resolución hexagonal en la recuperación
-		if strings.Contains(modeloPersistido, "gpt-5") || modeloPersistido == "" {
-			modeloPersistido = ""
-			razonamientoPersistido = ""
-		}
-
-		if err := encolarControlAutonomiaProyectoDetallado(apiAgenteControlRequest{
-			Agente:       strings.TrimSpace(sesion.Agente),
-			Proyecto:     proyecto.Slug,
-			Accion:       agenteControlAccionStart,
-			Modelo:       modeloPersistido,
-			Razonamiento: razonamientoPersistido,
-			Perfil:       perfilPersistido,
-			Motivo:       "local_runtime_failed",
-			Por:          "orquesta",
-		}); err != nil {
-			return 0, err
-		}
-		return 1, nil
+		return procesarRecuperacionRuntimeLocalSesion(sesion, handle, runtime)
 	}
 	if !runtimeRemotoDegradado(handle, runtime) {
 		return 0, nil
 	}
+	return procesarRecuperacionRuntimeRemotoDegradadoSesion(sesion, handle, runtime)
+}
+
+// procesarRecuperacionRuntimeLocalSesion intenta recuperar una sesión cuyo runtime local
+// ha fallado: sincroniza el handle, verifica si hay trabajo pendiente y encola un start.
+func procesarRecuperacionRuntimeLocalSesion(sesion *db.Sesion, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (int, error) {
+	if runtimeTMUXRecienteDebeSuplantarRecuperacionSesion(sesion, handle) {
+		return 0, nil
+	}
+	var err error
+	handle, runtime, _, err = db.SincronizarRuntimeHandleSupervisado(handle, runtime, "autonomia_runtime_recovery")
+	if err != nil {
+		return 0, err
+	}
+	if !runtimeLocalFallido(handle, runtime) {
+		return 0, nil
+	}
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(sesion.Agente, sesion.ProyectoID, "start", "resume", "handoff"); err != nil {
+		return 0, err
+	} else if pendiente {
+		return 0, nil
+	}
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	if err != nil {
+		return 0, err
+	}
+	tieneTrabajo, err := dbAgenteTieneTrabajoArrancable(strings.TrimSpace(sesion.Agente), proyecto.ID)
+	if err != nil {
+		return 0, err
+	}
+	if !tieneTrabajo {
+		return 0, nil
+	}
+	perfilPersistido, modeloPersistido, razonamientoPersistido := db.ResumePayloadPerfilEjecucion(sesion.ResumePayloadJSON)
+
+	// Sanear modelo si es legacy/placeholder para forzar re-resolución hexagonal en la recuperación
+	if strings.Contains(modeloPersistido, "gpt-5") || modeloPersistido == "" {
+		modeloPersistido = ""
+		razonamientoPersistido = ""
+	}
+
+	if err := encolarControlAutonomiaProyectoDetallado(apiAgenteControlRequest{
+		Agente:       strings.TrimSpace(sesion.Agente),
+		Proyecto:     proyecto.Slug,
+		Accion:       agenteControlAccionStart,
+		Modelo:       modeloPersistido,
+		Razonamiento: razonamientoPersistido,
+		Perfil:       perfilPersistido,
+		Motivo:       "local_runtime_failed",
+		Por:          "orquesta",
+	}); err != nil {
+		return 0, err
+	}
+	return 1, nil
+}
+
+// procesarRecuperacionRuntimeRemotoDegradadoSesion emite un checkpoint seguido de un
+// resume o start para recuperar una sesión con runtime remoto degradado. Si el conector
+// asociado tiene el circuito abierto, pausa el proyecto en su lugar.
+func procesarRecuperacionRuntimeRemotoDegradadoSesion(sesion *db.Sesion, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (int, error) {
 	conector, err := resolverConectorSesionAutonomia(sesion, runtime, handle)
 	if err != nil {
 		return 0, err
@@ -10186,15 +10200,16 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 	if err != nil {
 		return 0, err
 	}
+	runtimeID := func() *int64 {
+		if runtime != nil && runtime.ID > 0 {
+			return &runtime.ID
+		}
+		return handle.RuntimeID
+	}()
 	if _, err := runtimesService.EnqueueRuntimeOrder(&db.RuntimeOrder{
-		Agente:     strings.TrimSpace(sesion.Agente),
-		ProyectoID: sesion.ProyectoID,
-		RuntimeID: func() *int64 {
-			if runtime != nil && runtime.ID > 0 {
-				return &runtime.ID
-			}
-			return handle.RuntimeID
-		}(),
+		Agente:      strings.TrimSpace(sesion.Agente),
+		ProyectoID:  sesion.ProyectoID,
+		RuntimeID:   runtimeID,
 		HandleID:    &handle.ID,
 		Tipo:        "checkpoint",
 		PayloadJSON: string(checkpointPayload),
@@ -10216,14 +10231,9 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 			return 0, err
 		}
 		if _, err := runtimesService.EnqueueRuntimeOrder(&db.RuntimeOrder{
-			Agente:     strings.TrimSpace(sesion.Agente),
-			ProyectoID: sesion.ProyectoID,
-			RuntimeID: func() *int64 {
-				if runtime != nil && runtime.ID > 0 {
-					return &runtime.ID
-				}
-				return handle.RuntimeID
-			}(),
+			Agente:      strings.TrimSpace(sesion.Agente),
+			ProyectoID:  sesion.ProyectoID,
+			RuntimeID:   runtimeID,
 			HandleID:    &handle.ID,
 			Tipo:        agenteControlAccionResume,
 			PayloadJSON: string(payload),
