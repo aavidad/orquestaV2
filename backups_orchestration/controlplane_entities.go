@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"orquesta/internal/controlruntime"
 	"orquesta/runtimeagente"
+	"orquesta/runtimepolicy"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -4311,7 +4312,7 @@ func normalizarMetadataTranscriptObservada(meta map[string]any) {
 	if meta == nil {
 		return
 	}
-	pending := compactarPendingTranscript(strings.TrimSpace(stringFromMap(meta, "transcript_log_pending", "")))
+	pending := runtimepolicy.CompactPendingTranscript(strings.TrimSpace(stringFromMap(meta, "transcript_log_pending", "")))
 	if pending == "" {
 		delete(meta, "transcript_log_pending")
 	} else {
