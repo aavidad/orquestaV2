@@ -381,7 +381,7 @@ func (s *Service) ListRuntimeHandles(filtro *string) ([]*db.RuntimeHandle, error
 		if handle == nil {
 			continue
 		}
-		if synced >= 1 && !runtimeHandleNeedsFreshSync(handle) {
+		if synced >= 1 && !runtimepolicy.RuntimeHandleNeedsFreshSync(handle.Estado) {
 			continue
 		}
 		if refreshed, err := s.store.SyncSupervisedRuntimeHandle(handle, "runtimesapp_list_runtime_handles"); err == nil && refreshed != nil {
@@ -404,18 +404,6 @@ func (s *Service) ListRuntimeHandlesCompact(filtro *string) ([]*db.RuntimeHandle
 		return handles, nil
 	}
 	return s.ListRuntimeHandles(filtro)
-}
-
-func runtimeHandleNeedsFreshSync(handle *db.RuntimeHandle) bool {
-	if handle == nil {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
-	case "activo", "running", "ready", "starting", "paused", "fallido", "degradado":
-		return true
-	default:
-		return false
-	}
 }
 
 func (s *Service) resolveRuntimeStructuredWorker(runtime *db.RuntimeInstance) (*db.RuntimeHandle, *runtimeagente.WorkerStatusView, error) {

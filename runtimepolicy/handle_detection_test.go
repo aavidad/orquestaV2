@@ -233,3 +233,33 @@ func TestRuntimeHandleIsLegacyControlPlane(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeHandleNeedsFreshSync(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		estado  string
+		want    bool
+	}{
+		{"activo", "activo", true},
+		{"running", "running", true},
+		{"ready", "ready", true},
+		{"starting", "starting", true},
+		{"paused", "paused", true},
+		{"fallido", "fallido", true},
+		{"degradado", "degradado", true},
+		{"fallido con espacios", "  fallido  ", true},
+		{"cerrado", "cerrado", false},
+		{"vacio", "", false},
+		{"blank", "   ", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RuntimeHandleNeedsFreshSync(tc.estado); got != tc.want {
+				t.Fatalf("RuntimeHandleNeedsFreshSync(%q) = %v; want %v", tc.estado, got, tc.want)
+			}
+		})
+	}
+}

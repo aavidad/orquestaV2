@@ -115,6 +115,15 @@ func RuntimeHandleIsLegacyControlPlane(estado, transporte, handleKind string, me
 	return strings.EqualFold(mapValueString(meta, "driver", ""), "process_pty_cli")
 }
 
+func RuntimeHandleNeedsFreshSync(estado string) bool {
+	switch strings.ToLower(strings.TrimSpace(estado)) {
+	case "activo", "running", "ready", "starting", "paused", "fallido", "degradado":
+		return true
+	default:
+		return false
+	}
+}
+
 func RuntimeHandleUsaLegacyCLITMUXPreferred(meta map[string]any) bool {
 	if !RuntimeHandleUsaLegacyProcessPTY(meta) {
 		return false

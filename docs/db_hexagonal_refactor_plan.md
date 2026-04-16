@@ -29,6 +29,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - `3b6d513` completo el grupo previo en runtime (`runtimepolicy`) para decisiones de `runtime_handle` de borde
 - `de6239a` completa el corte de policy legacy TMUX (`RuntimeHandleUsaLegacyCLITMUXPreferred`, `RuntimeHandleUsaLegacyProcessPTY`) en `runtimepolicy`
 - corte adicional en runtime: dejar `runtimesapp` con wrapper fino en `runtimeHandleEsCandidatoLegacyATMUX` delegando en `runtimepolicy.RuntimeHandleIsLegacyControlPlane`
+- corte adicional en runtime: mover la regla de estados que requieren `SyncSupervisedRuntimeHandle` fresca a `runtimepolicy.RuntimeHandleNeedsFreshSync`, dejando `runtimesapp` como delegador
 
 Estado del frente seguro:
 
@@ -60,6 +61,7 @@ Estado del frente seguro:
 - policy canónica TMUX y ref de sesión de `runtime_handle` movida a `runtimepolicy` (`RuntimeHandleEsTMUXCanonico`, `RuntimeHandleTMUXSessionRef`)
 - policy legacy de tmux CLI movida desde `db/controlplane_entities.go` a `runtimepolicy` (`RuntimeHandleUsaLegacyCLITMUXPreferred`, `RuntimeHandleUsaLegacyProcessPTY`)
 - policy legacy de control plane (`RuntimeHandleIsLegacyControlPlane`) movida desde `runtimesapp` hacia `runtimepolicy` para candidato legacy TMUX; `runtimeHandleEsCandidatoLegacyATMUX` queda como wrapper delegador
+- policy de estado operativo que exige re-sincronización fresca de `runtime_handle` delegada a `runtimepolicy.RuntimeHandleNeedsFreshSync`
 - policy de scoring de contexto de entrega de `runtime_handle` movida a `runtimepolicy` para selector explícito de `runtime_order`
 - policy de skills movida a `skillspolicy`
 - policy de compactación de texto pendiente de transcript en runtime movida a `runtimepolicy`
