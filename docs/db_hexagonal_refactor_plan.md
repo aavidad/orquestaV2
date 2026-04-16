@@ -31,6 +31,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte adicional en runtime: dejar `runtimesapp` con wrapper fino en `runtimeHandleEsCandidatoLegacyATMUX` delegando en `runtimepolicy.RuntimeHandleIsLegacyControlPlane`
 - corte adicional en runtime: mover la regla de estados que requieren `SyncSupervisedRuntimeHandle` fresca a `runtimepolicy.RuntimeHandleNeedsFreshSync`, dejando `runtimesapp` como delegador
 - corte adicional en runtime: mover la detección de falta de sesión tmux válida (`TMUXSessionExistsMetadata`) a `runtimepolicy.RuntimeHandleTMUXSessionMissing`
+- corte adicional en runtime: mover la comprobación de coincidencia runtime/sesión (`RuntimeHandleMatchesRuntime`) y extracción de `driver` (`RuntimeHandleDriver`) a `runtimepolicy`
 
 Estado del frente seguro:
 
@@ -64,6 +65,7 @@ Estado del frente seguro:
 - policy legacy de control plane (`RuntimeHandleIsLegacyControlPlane`) movida desde `runtimesapp` hacia `runtimepolicy` para candidato legacy TMUX; `runtimeHandleEsCandidatoLegacyATMUX` queda como wrapper delegador
 - policy de estado operativo que exige re-sincronización fresca de `runtime_handle` delegada a `runtimepolicy.RuntimeHandleNeedsFreshSync`
 - policy de sesión tmux válida ausente (`RuntimeHandleTMUXSessionMissing`) delegada a `runtimepolicy`
+- policy de match de runtime/sesión y extracción de `driver` (`RuntimeHandleMatchesRuntime`, `RuntimeHandleDriver`) delegada a `runtimepolicy`
 - policy de scoring de contexto de entrega de `runtime_handle` movida a `runtimepolicy` para selector explícito de `runtime_order`
 - policy de skills movida a `skillspolicy`
 - policy de compactación de texto pendiente de transcript en runtime movida a `runtimepolicy`

@@ -415,7 +415,7 @@ func (s *Service) resolveRuntimeStructuredWorker(runtime *db.RuntimeInstance) (*
 		if refreshed, err := s.store.SyncSupervisedRuntimeHandle(handle, "runtimesapp_describe_runtime"); err == nil && refreshed != nil {
 			handle = refreshed
 		}
-		if runtimeHandleMatchesRuntime(runtime, handle) {
+		if runtimepolicy.RuntimeHandleMatchesRuntime(runtime.ID, runtime.SesionID, handle.RuntimeID, handle.SesionID) {
 			snap, err := runtimeagente.LoadWorkerSnapshotFromMetadataJSON(handle.MetadataJSON)
 			if err != nil || snap == nil {
 				return handle, nil, err
@@ -478,19 +478,6 @@ func (s *Service) preferredRuntimeHandle(runtime *db.RuntimeInstance) (*db.Runti
 	return s.store.GetActiveRuntimeHandle(strings.TrimSpace(runtime.Agente))
 }
 
-func runtimeHandleMatchesRuntime(runtime *db.RuntimeInstance, handle *db.RuntimeHandle) bool {
-	if runtime == nil || handle == nil {
-		return false
-	}
-	if runtime.ID > 0 && handle.RuntimeID != nil && *handle.RuntimeID == runtime.ID {
-		return true
-	}
-	if runtime.SesionID != nil && handle.SesionID != nil && *handle.SesionID == *runtime.SesionID {
-		return true
-	}
-	return false
-}
-
 func selectBestRuntimeHandle(runtime *db.RuntimeInstance, handles []*db.RuntimeHandle) *db.RuntimeHandle {
 	var (
 		best         *db.RuntimeHandle
@@ -546,7 +533,7 @@ func runtimeHandleScore(runtime *db.RuntimeInstance, handle *db.RuntimeHandle) i
 	if handle.LastSeenAt != nil && !handle.LastSeenAt.IsZero() {
 		score += 10
 	}
-	switch strings.ToLower(strings.TrimSpace(runtimeHandleDriver(handle))) {
+	switch strings.ToLower(strings.TrimSpace(runtimepolicy.RuntimeHandleDriver(handle.MetadataJSON))) {
 	case "tmux_cli_session":
 		score += 300
 	case "process_pty_cli":
@@ -567,20 +554,6 @@ func runtimeHandleScore(runtime *db.RuntimeInstance, handle *db.RuntimeHandle) i
 		}
 	}
 	return score
-}
-
-func runtimeHandleDriver(handle *db.RuntimeHandle) string {
-	if handle == nil || strings.TrimSpace(handle.MetadataJSON) == "" {
-		return ""
-	}
-	var meta map[string]any
-	if err := json.Unmarshal([]byte(handle.MetadataJSON), &meta); err != nil {
-		return ""
-	}
-	if value, ok := meta["driver"].(string); ok {
-		return strings.TrimSpace(value)
-	}
-	return ""
 }
 
 func (s *Service) PurgeInactiveRuntimeHandles(req RuntimeHandlePurgeRequest) (*db.PurgaRuntimeHandlesResultado, error) {

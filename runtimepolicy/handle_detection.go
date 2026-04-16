@@ -1,6 +1,7 @@
 package runtimepolicy
 
 import (
+	"encoding/json"
 	"orquesta/internal/controlruntime"
 	"path/filepath"
 	"strings"
@@ -122,6 +123,28 @@ func RuntimeHandleNeedsFreshSync(estado string) bool {
 	default:
 		return false
 	}
+}
+
+func RuntimeHandleDriver(metadataJSON string) string {
+	metadataJSON = strings.TrimSpace(metadataJSON)
+	if metadataJSON == "" {
+		return ""
+	}
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(metadataJSON), &meta); err != nil || meta == nil {
+		return ""
+	}
+	return mapValueString(meta, "driver", "")
+}
+
+func RuntimeHandleMatchesRuntime(runtimeID int64, runtimeSesionID *int64, handleRuntimeID *int64, handleSesionID *int64) bool {
+	if runtimeID > 0 && handleRuntimeID != nil && *handleRuntimeID == runtimeID {
+		return true
+	}
+	if runtimeSesionID != nil && handleSesionID != nil && *handleSesionID == *runtimeSesionID {
+		return true
+	}
+	return false
 }
 
 func RuntimeHandleTMUXSessionMissing(metadataJSON string) bool {

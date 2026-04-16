@@ -238,9 +238,9 @@ func TestRuntimeHandleNeedsFreshSync(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name    string
-		estado  string
-		want    bool
+		name   string
+		estado string
+		want   bool
 	}{
 		{"activo", "activo", true},
 		{"running", "running", true},
@@ -285,4 +285,63 @@ func TestRuntimeHandleTMUXSessionMissing(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRuntimeHandleMatchesRuntime(t *testing.T) {
+	t.Parallel()
+
+	runtimeID := int64(15)
+	sesionID := int64(55)
+	otroSesion := int64(99)
+	cases := []struct {
+		name            string
+		runtimeID       int64
+		runtimeSesionID *int64
+		handleRuntimeID *int64
+		handleSesionID  *int64
+		want            bool
+	}{
+		{"match por runtime id", runtimeID, nil, &runtimeID, nil, true},
+		{"match por sesion", runtimeID, &sesionID, nil, &sesionID, true},
+		{"match por runtime id y sesiones distintas", runtimeID, &sesionID, &runtimeID, &otroSesion, true},
+		{"sin coincidencia", runtimeID, &sesionID, ptrInt64(runtimeID + 1), &otroSesion, false},
+		{"runtime id sin sesiones nula", runtimeID, nil, ptrInt64(runtimeID + 1), &sesionID, false},
+		{"sin runtime id", 0, nil, &runtimeID, nil, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RuntimeHandleMatchesRuntime(tc.runtimeID, tc.runtimeSesionID, tc.handleRuntimeID, tc.handleSesionID); got != tc.want {
+				t.Fatalf("RuntimeHandleMatchesRuntime(%d, %+v, %+v, %+v) = %v; want %v", tc.runtimeID, tc.runtimeSesionID, tc.handleRuntimeID, tc.handleSesionID, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRuntimeHandleDriver(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name         string
+		metadataJSON string
+		want         string
+	}{
+		{"empty", "", ""},
+		{"invalid json", "{bad", ""},
+		{"driver en metadata", `{"driver":"tmux_cli_session"}`, "tmux_cli_session"},
+		{"driver con espacios", `{"driver":"  process_pty_cli  "}`, "process_pty_cli"},
+		{"sin driver", `{"worker":"x"}`, ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RuntimeHandleDriver(tc.metadataJSON); got != tc.want {
+				t.Fatalf("RuntimeHandleDriver(%q) = %q; want %q", tc.metadataJSON, got, tc.want)
+			}
+		})
+	}
+}
+
+func ptrInt64(v int64) *int64 {
+	return &v
 }
