@@ -22246,6 +22246,18 @@ func TestProcesarAgentesDegradadosAutonomiaBatchRecuperaBloqueoPorSobrecargaCuan
 	if tarea.Estado != db.EstadoEnProgreso || tarea.Agente == nil || *tarea.Agente != "CodexCapaz" {
 		t.Fatalf("la tarea bloqueada por sobrecarga deberia volver a en_progreso en el mismo agente: %+v", tarea)
 	}
+	agente := "CodexCapaz"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "nudge" {
+		t.Fatalf("deberia encolar un nudge de continuidad para la tarea reactivada: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"accion":"continuar_trabajo"`) {
+		t.Fatalf("payload nudge inesperado: %s", orders[0].PayloadJSON)
+	}
 }
 
 func TestAutonomiaOpenTasksCeilingForRowElevaTMUXFresh(t *testing.T) {
@@ -23016,6 +23028,18 @@ func TestProcesarAgentesDegradadosAutonomiaBatchRecuperaTareaBloqueadaSiElWorker
 	}
 	if tarea.Estado != db.EstadoEnProgreso {
 		t.Fatalf("la tarea deberia volver a en_progreso, got=%s", tarea.Estado)
+	}
+	agente := "Gemini1"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "nudge" {
+		t.Fatalf("deberia encolar continuidad al reactivar desde sesion activa: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"accion":"continuar_trabajo"`) {
+		t.Fatalf("payload nudge inesperado: %s", orders[0].PayloadJSON)
 	}
 }
 

@@ -7064,6 +7064,9 @@ func procesarRecuperacionTareasBloqueadasSobrecargaBatch(rows []agentesapp.Row, 
 				return count, err
 			}
 			openTasksProjected[agente]++
+			if err := encolarContinuacionTareaReasignadaSiCorresponde(agente, actual.ProyectoID, actual.ID, "", row.EstadoOperativo, "continúa con la tarea reactivada y deja evidencia de avance", nil); err != nil {
+				return count, err
+			}
 			count++
 		}
 	}
@@ -8216,6 +8219,9 @@ func desbloquearTareasBloqueadasRecuperablesSinRuntime(agente string, proyectoID
 		if !agentesapp.BloqueoAutonomiaRequiereIntervencion(agente, proyectoID, true, nil, nil, strings.TrimSpace(bloqueo.Motivo)) {
 			resolucion := "reactivación automática al reponer runtime premium"
 			if err := desbloquearYReactivarTareaAutonomia(actual.ID, resolucion, agente, fmt.Sprintf("Reactivada automáticamente en %s al reponer runtime premium", agente)); err != nil {
+				return procesadas, err
+			}
+			if err := encolarContinuacionTareaReasignadaSiCorresponde(agente, actual.ProyectoID, actual.ID, "", "runtime_premium_repuesto", "continúa con la tarea reactivada y deja evidencia de avance", nil); err != nil {
 				return procesadas, err
 			}
 			procesadas++
@@ -9490,6 +9496,9 @@ func procesarRecuperacionTareasBloqueadasSesionActiva(sesion *db.Sesion, snapsho
 		if err := desbloquearYReactivarTareaAutonomia(tarea.ID, resolucion, agente, fmt.Sprintf("Reactivada automáticamente en %s desde la sesión activa", agente)); err != nil {
 			return procesadas, err
 		}
+		if err := encolarContinuacionTareaReasignadaSiCorresponde(agente, tarea.ProyectoID, tarea.ID, "", "sesion_activa", "continúa con la tarea reactivada desde la sesión activa y deja evidencia de avance", nil); err != nil {
+			return procesadas, err
+		}
 		procesadas++
 	}
 	if procesadas > 0 {
@@ -10622,6 +10631,9 @@ func reactivarTareasBloqueadasRecuperablesAutonomia(agente string, proyectoID in
 		}
 		resolucion := "reactivación automática al salir de cuota o enfriamiento"
 		if err := desbloquearYReactivarTareaAutonomia(tarea.ID, resolucion, agente, strings.TrimSpace(nota)); err != nil {
+			return procesadas, err
+		}
+		if err := encolarContinuacionTareaReasignadaSiCorresponde(agente, tarea.ProyectoID, tarea.ID, "", "reanimacion", "continúa con la tarea reactivada y deja evidencia de avance", nil); err != nil {
 			return procesadas, err
 		}
 		procesadas++
