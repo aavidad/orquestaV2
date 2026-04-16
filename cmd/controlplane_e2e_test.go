@@ -417,6 +417,7 @@ func TestAPIControlPlaneArranqueRealConBootstrapMultilinea(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	runner := newControlPlaneRunner(nil, false)
+	runner.EnforceSafeFloors = false
 	runner.NotificationFeed = nil
 	runner.InitNotifications = nil
 	runner.Notifier = nil
@@ -568,6 +569,7 @@ func TestControlPlaneRunnerExponeEventoAutoGuidancePorAPI(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	runner := newControlPlaneRunner(nil, false)
+	runner.EnforceSafeFloors = false
 	runner.NotificationFeed = nil
 	runner.InitNotifications = nil
 	runner.Notifier = nil
@@ -738,6 +740,7 @@ func TestControlPlaneRunnerRecuperaRuntimeOrderStaleYLaProcesaEndToEnd(t *testin
 
 	ctx, cancel := context.WithCancel(context.Background())
 	runner := newControlPlaneRunner(nil, false)
+	runner.EnforceSafeFloors = false
 	runner.NotificationFeed = nil
 	runner.InitNotifications = nil
 	runner.Notifier = nil

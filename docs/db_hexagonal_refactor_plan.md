@@ -71,6 +71,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: el `control_plane_warm` conserva wakes explícitos, pero su requeue automático por “trabajo pendiente” baja de 10s a 30s por defecto para evitar bucles calientes sin perder capacidad de reacción
 - corte operativo adicional fuera de `db`: el polling base del `runtime mailbox` sube de 10s a 30s por defecto; los wakes explícitos siguen cubriendo la respuesta rápida cuando realmente entra trabajo
 - corte operativo adicional fuera de `db`: los intervalos configurables más calientes del control-plane ahora tienen suelos seguros (`mailbox reevaluation`, `continue nudge`, `budget observation`, `active sessions`, `idle autoassign`, `pipeline local dispatch`) para evitar que una mala config ponga al daemon a martillar CPU
+- corte operativo adicional fuera de `db`: el `Runner` creado por el servidor activa suelos seguros también a nivel de struct para los carriles más calientes (`warm`, `warm requeue`, `cold`, `runtime transcript`, `runtime mailbox`, `runtime orders`); los tests/e2e que necesitan milisegundos deben desactivarlo explícitamente
 
 Estado del frente seguro:
 

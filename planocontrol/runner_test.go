@@ -378,6 +378,36 @@ func TestRunnerRuntimeMailboxCadaUsaDefaultMenosAgresivo(t *testing.T) {
 	}
 }
 
+func TestRunnerSafeFloorsClampHotIntervalsCuandoEstanActivos(t *testing.T) {
+	r := &Runner{
+		EnforceSafeFloors:           true,
+		ControlPlaneWarmCada:        5 * time.Second,
+		ControlPlaneWarmRequeueCada: 5 * time.Second,
+		ControlPlaneColdCada:        10 * time.Second,
+		RuntimeTranscriptCada:       5 * time.Second,
+		RuntimeMailboxCada:          5 * time.Second,
+		RuntimeOrdersCada:           5 * time.Second,
+	}
+	if got := r.controlPlaneWarmCada(); got != 30*time.Second {
+		t.Fatalf("warm=%s", got)
+	}
+	if got := r.controlPlaneWarmRequeueCada(); got != 30*time.Second {
+		t.Fatalf("warm requeue=%s", got)
+	}
+	if got := r.controlPlaneColdCada(); got != time.Minute {
+		t.Fatalf("cold=%s", got)
+	}
+	if got := r.runtimeTranscriptCada(); got != 30*time.Second {
+		t.Fatalf("transcript=%s", got)
+	}
+	if got := r.runtimeMailboxCada(); got != 30*time.Second {
+		t.Fatalf("mailbox=%s", got)
+	}
+	if got := r.runtimeOrdersCada(); got != 30*time.Second {
+		t.Fatalf("orders=%s", got)
+	}
+}
+
 func TestRunnerStartRespetaStartupGrace(t *testing.T) {
 	service := &stubAutomationService{autonomyCount: 1}
 	r := &Runner{

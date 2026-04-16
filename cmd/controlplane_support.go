@@ -931,7 +931,8 @@ func newControlPlaneRunner(debugLogger *log.Logger, debugControlPlane bool) *pla
 		Notifier: func() notificaciones.Notificador {
 			return notificaciones.GlobalNotificador
 		},
-		BatchTimeout: controlPlaneBatchTimeoutEfectivo(),
+		EnforceSafeFloors: true,
+		BatchTimeout:      controlPlaneBatchTimeoutEfectivo(),
 	}
 	if debugControlPlane && debugLogger != nil {
 		runner.Debugf = debugLogger.Printf

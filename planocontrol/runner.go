@@ -54,6 +54,7 @@ type Runner struct {
 	InitNotifications           func()
 	Notifier                    func() notificaciones.Notificador
 	Debugf                      func(format string, args ...any)
+	EnforceSafeFloors           bool
 	StartupGrace                time.Duration
 	ReanimacionCada             time.Duration
 	SaludCada                   time.Duration
@@ -665,39 +666,39 @@ func (r *Runner) controlPlaneCada() time.Duration {
 
 func (r *Runner) controlPlaneWarmCada() time.Duration {
 	if r.ControlPlaneWarmCada <= 0 && r.ControlPlaneCada > 0 {
-		return r.ControlPlaneCada
+		return r.applySafeFloor(r.ControlPlaneCada, 30*time.Second)
 	}
 	if r.ControlPlaneWarmCada <= 0 {
 		return 2 * time.Minute
 	}
-	return r.ControlPlaneWarmCada
+	return r.applySafeFloor(r.ControlPlaneWarmCada, 30*time.Second)
 }
 
 func (r *Runner) controlPlaneWarmRequeueCada() time.Duration {
 	if r.ControlPlaneWarmRequeueCada <= 0 {
 		return 30 * time.Second
 	}
-	return r.ControlPlaneWarmRequeueCada
+	return r.applySafeFloor(r.ControlPlaneWarmRequeueCada, 30*time.Second)
 }
 
 func (r *Runner) controlPlaneColdCada() time.Duration {
 	if r.ControlPlaneColdCada <= 0 && r.ControlPlaneCada > 0 {
-		return r.ControlPlaneCada
+		return r.applySafeFloor(r.ControlPlaneCada, time.Minute)
 	}
 	if r.ControlPlaneColdCada <= 0 {
 		return 5 * time.Minute
 	}
-	return r.ControlPlaneColdCada
+	return r.applySafeFloor(r.ControlPlaneColdCada, time.Minute)
 }
 
 func (r *Runner) runtimeTranscriptCada() time.Duration {
 	if r.RuntimeTranscriptCada <= 0 && r.ControlPlaneCada > 0 {
-		return r.ControlPlaneCada
+		return r.applySafeFloor(r.ControlPlaneCada, 30*time.Second)
 	}
 	if r.RuntimeTranscriptCada <= 0 {
 		return time.Minute
 	}
-	return r.RuntimeTranscriptCada
+	return r.applySafeFloor(r.RuntimeTranscriptCada, 30*time.Second)
 }
 
 func (r *Runner) runtimeTranscriptStartupDelay() time.Duration {
@@ -711,14 +712,14 @@ func (r *Runner) runtimeMailboxCada() time.Duration {
 	if r.RuntimeMailboxCada <= 0 {
 		return 30 * time.Second
 	}
-	return r.RuntimeMailboxCada
+	return r.applySafeFloor(r.RuntimeMailboxCada, 30*time.Second)
 }
 
 func (r *Runner) runtimeOrdersCada() time.Duration {
 	if r.RuntimeOrdersCada <= 0 {
-		return r.controlPlaneCada()
+		return r.applySafeFloor(r.controlPlaneCada(), 30*time.Second)
 	}
-	return r.RuntimeOrdersCada
+	return r.applySafeFloor(r.RuntimeOrdersCada, 30*time.Second)
 }
 
 func (r *Runner) runtimeBudgetCada() time.Duration {
@@ -778,6 +779,16 @@ func (r *Runner) startupGrace() time.Duration {
 		return 0
 	}
 	return r.StartupGrace
+}
+
+func (r *Runner) applySafeFloor(value, floor time.Duration) time.Duration {
+	if r == nil || !r.EnforceSafeFloors || floor <= 0 {
+		return value
+	}
+	if value < floor {
+		return floor
+	}
+	return value
 }
 
 func (r *Runner) beginControlPlaneBatch(name string, timeout time.Duration) (token uint64, running bool, timedOut bool) {
