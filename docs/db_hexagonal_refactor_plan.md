@@ -18,6 +18,8 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte adicional en planner: mover la detección de operador manual fuera de flota a `planificadorpolicy`
 - corte adicional en planner: mover la detección de pool local compartido a `planificadorpolicy`
 - corte adicional en planner: mover la ventana de gracia de recuperación de tarea huérfana a `planificadorpolicy`
+- corte adicional en runtime: mover la compactación de transcript pending a `runtimepolicy`
+- corte adicional en autonomia: mover la política pura de score de rol de supervisor operativo a `autonomiapolicy`
 
 Estado del frente seguro:
 
@@ -45,6 +47,8 @@ Estado del frente seguro:
 - policy de ventana de gracia de recuperación de tarea huérfana movida a `planificadorpolicy`
 - policy de gobernanza movida a `gobernanzapolicy` para catálogo, validación de overrides y precedencia por capas
 - policy de skills movida a `skillspolicy`
+- policy de compactación de texto pendiente de transcript en runtime movida a `runtimepolicy`
+- policy de ordenación por rol en selección de supervisores operativos movida a `autonomiapolicy`
 
 ### 2. Aceptable Con Wrappers
 

@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"sort"
 	"strings"
+
+	"orquesta/autonomiapolicy"
 )
 
 type autonomiaSupervisorCandidato struct {
@@ -74,7 +76,7 @@ func SeleccionarSupervisorAutonomiaOperativo(proyectoID int64, exclude string) (
 			agente:    agente,
 			preferred: preferred != "" && strings.EqualFold(strings.TrimSpace(agente.Nombre), preferred),
 			activo:    activo,
-			score:     autonomiaSupervisorRoleScore(agente.Rol),
+			score:     autonomiapolicy.SupervisorRoleScore(agente.Rol),
 		})
 		return nil
 	}
@@ -199,19 +201,4 @@ func agenteAutonomiaActivoEnProyecto(agente string, proyectoID int64) (bool, err
 		return true, nil
 	}
 	return false, nil
-}
-
-func autonomiaSupervisorRoleScore(role string) int {
-	switch strings.ToLower(strings.TrimSpace(role)) {
-	case "supervisor", "orquestador":
-		return 0
-	case "admin":
-		return 1
-	case "programador":
-		return 2
-	case "revisor", "reviewer":
-		return 3
-	default:
-		return 4
-	}
 }
