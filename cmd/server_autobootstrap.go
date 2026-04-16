@@ -157,7 +157,7 @@ func loadServerAutobootstrapConfig() serverAutobootstrapConfig {
 		ProjectName:          strings.TrimSpace(configOrDefault("server_autobootstrap_project_name", "Orquestador")),
 		ProjectPath:          strings.TrimSpace(configOrDefault("server_autobootstrap_project_path", "")),
 		SupervisorAgent:      strings.TrimSpace(configOrDefault("server_autobootstrap_supervisor_agent", "Codex1")),
-		WorkerAgents:         splitServerAutobootstrapAgents(configOrDefault("server_autobootstrap_worker_agents", "Codex2,Codex3,Codex4,Codex5")),
+		WorkerAgents:         filtrarFlotaOficialAutobootstrap(splitServerAutobootstrapAgents(configOrDefault("server_autobootstrap_worker_agents", "Codex2,Codex3,Codex4,Codex5"))),
 		ObjetivoGeneral:      strings.TrimSpace(configOrDefault("server_autobootstrap_objective_general", "Terminar la app al completo, revisando el codigo real, reparando fallos de raiz y validando con pruebas reales.")),
 		DefinitionOfDoneJSON: strings.TrimSpace(configOrDefault("server_autobootstrap_definition_of_done_json", `{"estado":"app_completa","criterios":["codigo_real_y_funcional","sin_humo","pruebas_reales_en_verde","frentes_cerrados"]}`)),
 	}
@@ -172,13 +172,32 @@ func loadServerAutobootstrapConfig() serverAutobootstrapConfig {
 			cfg.ProjectPath = cwd
 		}
 	}
-	if cfg.SupervisorAgent == "" {
+	if !perteneceAFlotaOficialAutobootstrap(cfg.SupervisorAgent) {
 		cfg.SupervisorAgent = "Codex1"
 	}
 	if len(cfg.WorkerAgents) == 0 {
 		cfg.WorkerAgents = []string{"Codex2", "Codex3", "Codex4", "Codex5"}
 	}
 	return cfg
+}
+
+func perteneceAFlotaOficialAutobootstrap(nombre string) bool {
+	nombre = strings.ToLower(strings.TrimSpace(nombre))
+	return strings.HasPrefix(nombre, "codex")
+}
+
+func filtrarFlotaOficialAutobootstrap(nombres []string) []string {
+	if len(nombres) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(nombres))
+	for _, nombre := range nombres {
+		if !perteneceAFlotaOficialAutobootstrap(nombre) {
+			continue
+		}
+		out = append(out, strings.TrimSpace(nombre))
+	}
+	return out
 }
 
 func splitServerAutobootstrapAgents(raw string) []string {

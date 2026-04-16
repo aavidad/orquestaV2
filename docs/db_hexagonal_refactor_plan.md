@@ -60,6 +60,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: cuando una reanimación sigue bloqueada por cuota visible, Orquesta cancela `start/resume/handoff` vivos asociados a esa reanimación para evitar relanzamientos en bucle
 - corte operativo adicional fuera de `db`: `status` ya filtra tareas y agentes deshabilitados del pool visible; un agente retirado no debe seguir apareciendo en `En progreso ahora mismo`, `Retenidas por cuota` ni en el bloque visible de cuota solo por arrastre de snapshot
 - corte operativo adicional fuera de `db`: la entrada de reactivación automática ahora vuelve a comprobar `habilitado` antes de encolar `start/resume/handoff`, evitando reanimaciones residuales de agentes retirados aunque la llamada llegue por una ruta tardía
+- corte operativo adicional fuera de `db`: `server preparar-sesion` y el bootstrap de servidor filtran la flota oficial a agentes `Codex*`; una config contaminada ya no debe conservar `antigravity`/`claude`/otros perfiles fuera de política en la flota permitida
 
 Estado del frente seguro:
 

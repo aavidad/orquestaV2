@@ -86,8 +86,8 @@ func TestServerPrepararSesionAllowedAgentsIncluyeFlotaOficial(t *testing.T) {
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"config": map[string]string{
-				"server_autobootstrap_supervisor_agent": "Codex1",
-				"server_autobootstrap_worker_agents":    "Codex2,Codex3,Codex4,Codex5",
+				"server_autobootstrap_supervisor_agent": "antigravity",
+				"server_autobootstrap_worker_agents":    "Codex2,Codex3,Claude2,Codex4,Codex5",
 			},
 		})
 	})
@@ -98,12 +98,18 @@ func TestServerPrepararSesionAllowedAgentsIncluyeFlotaOficial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("serverPrepararSesionAllowedAgents: %v", err)
 	}
-	for _, nombre := range []string{"codex1", "codex2", "codex3", "codex4", "codex5"} {
+	for _, nombre := range []string{"codex2", "codex3", "codex4", "codex5"} {
 		if _, ok := allowed[nombre]; !ok {
 			t.Fatalf("faltaba %s en la flota oficial: %#v", nombre, allowed)
 		}
 	}
+	if _, ok := allowed["codex1"]; ok {
+		t.Fatalf("no deberia conservar supervisor no oficial como fallback implicito: %#v", allowed)
+	}
 	if _, ok := allowed["antigravity"]; ok {
 		t.Fatalf("antigravity no deberia pertenecer a la flota oficial: %#v", allowed)
+	}
+	if _, ok := allowed["claude2"]; ok {
+		t.Fatalf("claude2 no deberia pertenecer a la flota oficial: %#v", allowed)
 	}
 }

@@ -174,6 +174,25 @@ func TestBootstrapServerAutonomyNoDuplicaBootstrapEnAgenteYaOperativo(t *testing
 	}
 }
 
+func TestLoadServerAutobootstrapConfigFiltraNoCodex(t *testing.T) {
+	prepararDBTemporalCmd(t)
+
+	if err := db.ConfigSet("server_autobootstrap_supervisor_agent", "antigravity"); err != nil {
+		t.Fatalf("config supervisor: %v", err)
+	}
+	if err := db.ConfigSet("server_autobootstrap_worker_agents", "Codex2,Claude2,Codex3,RevisorCodigo"); err != nil {
+		t.Fatalf("config workers: %v", err)
+	}
+
+	cfg := loadServerAutobootstrapConfig()
+	if cfg.SupervisorAgent != "Codex1" {
+		t.Fatalf("supervisor filtrado inesperado: %+v", cfg)
+	}
+	if got := strings.Join(cfg.WorkerAgents, ","); got != "Codex2,Codex3" {
+		t.Fatalf("workers filtrados inesperados: %q", got)
+	}
+}
+
 func TestAgenteYaBootstrappeadoServidorDetectaMailboxDurablePendiente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 	t.Setenv("PWD", tmp)

@@ -11,8 +11,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -183,9 +183,9 @@ var serverPrepararSesionCmd = &cobra.Command{
 }
 
 type serverPrepareSessionPoolSummary struct {
-	SessionsFinished int
+	SessionsFinished  int
 	ReanimationsReset int
-	Agents []string
+	Agents            []string
 }
 
 var serverStopCmd = &cobra.Command{
@@ -404,7 +404,7 @@ func serverPrepararSesionAllowedAgents(baseURL string) (map[string]struct{}, err
 	allowed := map[string]struct{}{}
 	add := func(name string) {
 		name = strings.ToLower(strings.TrimSpace(name))
-		if name != "" {
+		if name != "" && perteneceAFlotaOficialAutobootstrap(name) {
 			allowed[name] = struct{}{}
 		}
 	}
