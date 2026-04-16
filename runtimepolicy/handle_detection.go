@@ -37,7 +37,7 @@ func RuntimeHandleLooksLikeCodexCommand(rendered string) bool {
 }
 
 func RuntimeHandleUsaTMUXPreferredCLI(meta map[string]any) bool {
-	if runtimeHandleUsaLegacyCLITMUXPreferred(meta) {
+	if RuntimeHandleUsaLegacyCLITMUXPreferred(meta) {
 		return true
 	}
 	if meta == nil {
@@ -103,8 +103,8 @@ func RuntimeHandleTMUXSessionRef(meta map[string]any, transporte, handleKind, ha
 	}
 }
 
-func runtimeHandleUsaLegacyCLITMUXPreferred(meta map[string]any) bool {
-	if !runtimeHandleUsaLegacyProcessPTY(meta) {
+func RuntimeHandleUsaLegacyCLITMUXPreferred(meta map[string]any) bool {
+	if !RuntimeHandleUsaLegacyProcessPTY(meta) {
 		return false
 	}
 	for _, candidate := range []string{
@@ -121,6 +121,6 @@ func runtimeHandleUsaLegacyCLITMUXPreferred(meta map[string]any) bool {
 	return false
 }
 
-func runtimeHandleUsaLegacyProcessPTY(meta map[string]any) bool {
+func RuntimeHandleUsaLegacyProcessPTY(meta map[string]any) bool {
 	return strings.EqualFold(mapValueString(meta, "driver", ""), "process_pty_cli")
 }

@@ -1141,7 +1141,7 @@ func runtimeHandleExcluidoDelActivoCanonico(handle *RuntimeHandle) bool {
 	if handle == nil {
 		return false
 	}
-	if runtimeHandleUsaLegacyProcessPTY(mapFromJSON(handle.MetadataJSON)) {
+	if runtimepolicy.RuntimeHandleUsaLegacyProcessPTY(mapFromJSON(handle.MetadataJSON)) {
 		return true
 	}
 	return false
@@ -1402,7 +1402,7 @@ func refrescarRuntimeHandleSiSigueVivo(handle *RuntimeHandle) (*RuntimeHandle, e
 		return revivirRuntimeHandle(handle, estado, pid)
 	}
 	meta := mapFromJSON(handle.MetadataJSON)
-	if runtimeHandleUsaLegacyProcessPTY(meta) {
+	if runtimepolicy.RuntimeHandleUsaLegacyProcessPTY(meta) {
 		return nil, nil
 	}
 	runtime, _ := runtimeHandleRuntime(handle)
@@ -1486,7 +1486,7 @@ func runtimeHandleReviveStateFromStructuredWorker(handle *RuntimeHandle, now tim
 	if view == nil {
 		return false, "", nil
 	}
-	if strings.EqualFold(strings.TrimSpace(view.Driver), "process_pty_cli") && runtimeHandleUsaLegacyProcessPTY(meta) {
+	if strings.EqualFold(strings.TrimSpace(view.Driver), "process_pty_cli") && runtimepolicy.RuntimeHandleUsaLegacyProcessPTY(meta) {
 		return false, "", nil
 	}
 	if view.HeartbeatStale || !view.Alive {
@@ -1520,7 +1520,7 @@ func runtimeHandleConfiaEstadoReciente(handle *RuntimeHandle, now time.Time) boo
 	if driver != "tmux_cli_session" && !strings.EqualFold(strings.TrimSpace(handle.Transporte), "tmux") && !strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") {
 		return false
 	}
-	if runtimeHandleUsaLegacyCLITMUXPreferred(meta) {
+	if runtimepolicy.RuntimeHandleUsaLegacyCLITMUXPreferred(meta) {
 		return false
 	}
 	recency := runtimeHandleRecency(handle)
@@ -1618,7 +1618,7 @@ func runtimeHandleSePuedeValidarLocalmente(handle *RuntimeHandle) bool {
 	if handle == nil {
 		return false
 	}
-	if runtimeHandleUsaLegacyProcessPTY(mapFromJSON(handle.MetadataJSON)) {
+	if runtimepolicy.RuntimeHandleUsaLegacyProcessPTY(mapFromJSON(handle.MetadataJSON)) {
 		return false
 	}
 	if strings.EqualFold(strings.TrimSpace(handle.HandleKind), "process") {
@@ -2457,7 +2457,7 @@ func runtimeHandlePermiteReinicioBootstrapHandoff(handle *RuntimeHandle) bool {
 	}
 	if strings.TrimSpace(handle.Transporte) == "cli" &&
 		strings.TrimSpace(handle.HandleKind) == "process" &&
-		!runtimeHandleUsaLegacyProcessPTY(meta) {
+		!runtimepolicy.RuntimeHandleUsaLegacyProcessPTY(meta) {
 		return true
 	}
 	return false
@@ -11096,7 +11096,7 @@ func RuntimeHandleMailboxDeliveryMode(handle *RuntimeHandle) string {
 	}
 	meta := mapFromJSON(handle.MetadataJSON)
 	caps := mapFromJSON(handle.CapabilitiesJSON)
-	legacyTMUXPreferredCLI := runtimeHandleUsaLegacyCLITMUXPreferred(meta)
+	legacyTMUXPreferredCLI := runtimepolicy.RuntimeHandleUsaLegacyCLITMUXPreferred(meta)
 	externalSessionReady := runtimeHandleTieneExternalSessionID(handle, nil)
 	localCLIBrokerNoInteractive := runtimepolicy.RuntimeHandleUsaTMUXPreferredCLI(meta) && !RuntimeHandlePermiteSendInputInteractivo(handle)
 	tmuxSessionResumeReady := strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "driver", "")), "tmux_cli_session") &&
@@ -11185,7 +11185,7 @@ func RuntimeHandlePermiteSendInputInteractivo(handle *RuntimeHandle) bool {
 	if _, ok := meta["can_send_input"]; ok && !boolFromMap(meta, "can_send_input") {
 		return false
 	}
-	if runtimeHandleUsaLegacyCLITMUXPreferred(meta) {
+	if runtimepolicy.RuntimeHandleUsaLegacyCLITMUXPreferred(meta) {
 		return false
 	}
 	if runtimeHandleUsaCodexTTYInestable(meta) {
@@ -11219,7 +11219,7 @@ func runtimeHandlePuedeInteractuarAntesDeSessionResume(handle *RuntimeHandle, me
 }
 
 func runtimeHandleUsaCodexTTYInestable(meta map[string]any) bool {
-	if runtimeHandleUsaLegacyCLITMUXPreferred(meta) {
+	if runtimepolicy.RuntimeHandleUsaLegacyCLITMUXPreferred(meta) {
 		return true
 	}
 	if meta == nil {
@@ -11251,7 +11251,7 @@ func runtimeOrderBloqueaFallbackPID(order *RuntimeOrder, runtime *RuntimeInstanc
 		driver, transport := runtimeHandleDriverTransportObserved(handle)
 		if strings.EqualFold(transport, "tmux") ||
 			strings.EqualFold(driver, "tmux_cli_session") ||
-			runtimeHandleUsaLegacyCLITMUXPreferred(meta) {
+			runtimepolicy.RuntimeHandleUsaLegacyCLITMUXPreferred(meta) {
 			return true
 		}
 	}
@@ -11274,7 +11274,7 @@ func runtimeHandleBloqueaFallbackPID(handle *RuntimeHandle) bool {
 	if strings.EqualFold(transport, "tmux") ||
 		strings.EqualFold(strings.TrimSpace(handle.HandleKind), "session") ||
 		strings.EqualFold(driver, "tmux_cli_session") ||
-		runtimeHandleUsaLegacyProcessPTY(meta) {
+		runtimepolicy.RuntimeHandleUsaLegacyProcessPTY(meta) {
 		return true
 	}
 	return false
@@ -11331,35 +11331,6 @@ func runtimeHandleDriverTransportObserved(handle *RuntimeHandle) (string, string
 		transport = "tmux"
 	}
 	return strings.ToLower(driver), strings.ToLower(transport)
-}
-
-func runtimeHandleUsaLegacyCLITMUXPreferred(meta map[string]any) bool {
-	if meta == nil {
-		return false
-	}
-	if !runtimeHandleUsaLegacyProcessPTY(meta) {
-		return false
-	}
-	for _, candidate := range []string{
-		stringFromMap(meta, "rendered_command", ""),
-		stringFromMap(meta, "wrapped_command", ""),
-		stringFromMap(meta, "herramienta", ""),
-		stringFromMap(meta, "conector", ""),
-		stringFromMap(meta, "profile_status_wrapper", ""),
-	} {
-		if !controlruntime.RenderedCommandLooksLikeTMUXPreferredCLI(candidate) {
-			continue
-		}
-		return true
-	}
-	return false
-}
-
-func runtimeHandleUsaLegacyProcessPTY(meta map[string]any) bool {
-	if meta == nil {
-		return false
-	}
-	return strings.EqualFold(strings.TrimSpace(stringFromMap(meta, "driver", "")), "process_pty_cli")
 }
 
 func runtimeHandleLocalProcesoSinCanalInteractivo(handle *RuntimeHandle, meta map[string]any) bool {

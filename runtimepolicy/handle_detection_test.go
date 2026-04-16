@@ -159,3 +159,49 @@ func TestRuntimeHandleTMUXSessionRef(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeHandleUsaLegacyCLITMUXPreferred(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		meta map[string]any
+		want bool
+	}{
+		{"nil", nil, false},
+		{"missing driver", map[string]any{"driver": "process_pty_cli"}, false},
+		{"codex in rendered command", map[string]any{"driver": "process_pty_cli", "rendered_command": "codex"}, true},
+		{"claude in herramienta", map[string]any{"driver": "process_pty_cli", "herramienta": "claude"}, true},
+		{"other driver", map[string]any{"driver": "bash", "rendered_command": "codex"}, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RuntimeHandleUsaLegacyCLITMUXPreferred(tc.meta); got != tc.want {
+				t.Fatalf("RuntimeHandleUsaLegacyCLITMUXPreferred(%v) = %v; want %v", tc.meta, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRuntimeHandleUsaLegacyProcessPTY(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		meta map[string]any
+		want bool
+	}{
+		{"nil", nil, false},
+		{"legacy driver", map[string]any{"driver": "process_pty_cli"}, true},
+		{"other driver", map[string]any{"driver": "tmux_cli_session"}, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RuntimeHandleUsaLegacyProcessPTY(tc.meta); got != tc.want {
+				t.Fatalf("RuntimeHandleUsaLegacyProcessPTY(%v) = %v; want %v", tc.meta, got, tc.want)
+			}
+		})
+	}
+}

@@ -23,7 +23,9 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte adicional en runtime: mover compactación/síntesis de metadata de `runtime_handle` en `runtimepolicy` (`CompactRuntimeHandleMetadata`)
 - corte adicional en runtime: mover heurísticas `runtimeHandleLooksLikeCodexCLIRef` y `runtimeHandleLooksLikeCodexCommand` a `runtimepolicy`
 - corte adicional en runtime: mover scoring de contexto de entrega de `runtime_handle` (`RuntimeHandleDeliveryContextScore`) a `runtimepolicy`
+- corte adicional en runtime: mover política canónica TMUX y construcción de ref TMUX de `runtime_handle` (`runtimeHandleEsTMUXCanonico`, `runtimeHandleTMUXSessionRef`) a `runtimepolicy`
 - corte adicional en autonomia: mover la política pura de score de rol de supervisor operativo a `autonomiapolicy`
+- `3b6d513` completo el grupo previo en runtime (`runtimepolicy`) para decisiones de `runtime_handle` de borde
 
 Estado del frente seguro:
 
@@ -52,6 +54,7 @@ Estado del frente seguro:
 - policy de preservación de tarea huérfana para frente acotado movida a `planificadorpolicy`
 - policy de gobernanza movida a `gobernanzapolicy` para catálogo, validación de overrides y precedencia por capas
 - policy de compactación/síntesis de metadata de `runtime_handle` movida a `runtimepolicy` (`CompactRuntimeHandleMetadata`) para minimizar policy en `db/controlplane_entities.go`
+- policy canónica TMUX y ref de sesión de `runtime_handle` movida a `runtimepolicy` (`RuntimeHandleEsTMUXCanonico`, `RuntimeHandleTMUXSessionRef`)
 - policy de scoring de contexto de entrega de `runtime_handle` movida a `runtimepolicy` para selector explícito de `runtime_order`
 - policy de skills movida a `skillspolicy`
 - policy de compactación de texto pendiente de transcript en runtime movida a `runtimepolicy`
@@ -323,6 +326,14 @@ Resultado esperado:
 - `db` no decide por sí sola si una evidencia es útil
 - `db` no aplica policy de `session_resume`, `mailbox_only`, `nudge`, `handoff` más allá de persistir
 - tests del núcleo siguen verdes
+- `db` no decide canonicalidad TMUX ni referencia TMUX final; esas decisiones viven en `runtimepolicy`
+
+Checklist próximo hito runtime/bootstrap:
+- [ ] Auditar `db/controlplane_entities.go` para políticas de bootstrap/start que aún empalmen decisión y persistencia
+- [ ] Extraer una sola regla autocontenida por corte (sin tocar estado) a `runtimepolicy` o app de runtime
+- [ ] Mantener contrato existente de `db` (carga/escritura + hot paths) y migrar solo policy pura
+- [ ] Actualizar frontera de imports/allowlist si aparece un nuevo seam externo permitido en `runtimepolicy`
+- [ ] Correr test de frontera `TestDBNoIntroduceDependenciasInternasFueraDeLaFronteraPermitida` tras cada cambio de frontera
 
 ### Planner / Autonomía
 
