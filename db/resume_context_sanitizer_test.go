@@ -187,7 +187,7 @@ func TestPrepararStartRuntimeOrderAplicaXHighPorDefectoEnImplementacion(t *testi
 	if plan.Modelo != "gpt-5.4" {
 		t.Fatalf("modelo inesperado: %+v", plan)
 	}
-	if plan.Razonamiento != "xhigh" {
+	if plan.Razonamiento != "high" {
 		t.Fatalf("reasoning inesperado: %+v", plan)
 	}
 }

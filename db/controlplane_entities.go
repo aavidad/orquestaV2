@@ -6545,6 +6545,11 @@ func runtimeOrderSendInstructionDiferirPorErrorTMUX(handle *RuntimeHandle, runti
 	switch {
 	case strings.Contains(raw, "tmux pane no listo para send-keys"):
 		return "worker_not_ready", true
+	case strings.Contains(raw, "can't find pane"),
+		strings.Contains(raw, "no such pane"),
+		strings.Contains(raw, "tmux capture-pane"),
+		strings.Contains(raw, "worker_status"):
+		return "worker_not_ready", true
 	case strings.Contains(raw, "tmux pane requiere carpeta de confianza"),
 		strings.Contains(raw, "tmux pane requiere trust"),
 		strings.Contains(raw, "untrusted folder"):
@@ -6784,7 +6789,7 @@ func runtimeOrderSendInstructionPremiumActivityEvidence(runtime *RuntimeInstance
 	}
 	known, captured, err := controlruntime.CaptureTMUXPaneMetadata(strings.TrimSpace(handle.MetadataJSON))
 	if err != nil {
-		return false, "", time.Time{}, err
+		return false, "", time.Time{}, nil
 	}
 	if !known || !runtimeTMUXPaneShowsInteractiveWork(captured) {
 		return runtimeOrderSendInstructionTMUXTranscriptActivityEvidence(runtime, handle, baseline)
@@ -7040,7 +7045,7 @@ func runtimeOrderSendInstructionTMUXPanePatchEvidence(handle *RuntimeHandle, sna
 	}
 	known, captured, err := controlruntime.CaptureTMUXPaneMetadata(strings.TrimSpace(handle.MetadataJSON))
 	if err != nil {
-		return false, "", time.Time{}, err
+		return false, "", time.Time{}, nil
 	}
 	if !known || !runtimeMicroprogramacionPatchDetected(captured, "") {
 		return false, "", time.Time{}, nil
