@@ -67,6 +67,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: la validación previa a despachar trabajo ya no construye el panel completo de agentes para un solo nombre; usa una lectura compacta por agente y reduce calor de CPU/DB en el control-plane
 - corte operativo adicional fuera de `db`: el resolvedor de carriles operativos ya no propone `claude/gemini/gemma/ollama`; la política viva queda alineada a `solo Codex` también en selección de agente, no solo en bootstrap/allowed-agents
 - corte operativo adicional fuera de `db`: `status` ya oculta de la vista operativa agentes y tareas fuera de la flota oficial `Codex*`; si quedan legados habilitados en BD no deben seguir contaminando progreso/cuota visible
+- corte operativo adicional fuera de `db`: el snapshot de autonomía ya no resuelve `operationalState` cargando `BuildPanelRows()` completo; cachea por agente con lectura compacta y reduce calor del daemon en ticks de autonomía
 
 Estado del frente seguro:
 
