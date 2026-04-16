@@ -1095,6 +1095,47 @@ func TestRenderStatusSummaryMuestraBloqueoPorCuotaOperativa(t *testing.T) {
 	}
 }
 
+func TestRenderStatusSummaryOcultaAgentesDeshabilitadosDeCuotaYProgreso(t *testing.T) {
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				Agentes: []*db.Agente{
+					{Nombre: "antigravity", Rol: "programador", Habilitado: false, EstadoCuota: "agotado"},
+					{Nombre: "Codex1", Rol: "programador", Habilitado: true, Activo: true, EstadoCuota: "activo"},
+				},
+				AgentesActivos: []*db.Agente{
+					{Nombre: "Codex1", Rol: "programador", Habilitado: true, Activo: true, EstadoCuota: "activo"},
+				},
+				AgentesTrabajando: []*db.Agente{
+					{Nombre: "Codex1", Rol: "programador", Habilitado: true, Activo: true, EstadoCuota: "activo"},
+				},
+				AgentesQuotaBlocked: []*db.Agente{
+					{Nombre: "antigravity", Rol: "programador", Habilitado: false, EstadoCuota: "agotado"},
+				},
+				TareasActivas: []tareaLite{
+					{ID: 535, Titulo: "Micro-refactor", Estado: db.TareaEnProgreso, Agente: "antigravity"},
+					{ID: 548, Titulo: "Runtime/control plane", Estado: db.TareaEnProgreso, Agente: "Codex1"},
+					{ID: 628, Titulo: "Loop interno", Estado: db.TareaEnProgreso, Agente: "orquesta"},
+				},
+				TareasEnProgreso: []tareaLite{
+					{ID: 535, Titulo: "Micro-refactor", Estado: db.TareaEnProgreso, Agente: "antigravity"},
+					{ID: 548, Titulo: "Runtime/control plane", Estado: db.TareaEnProgreso, Agente: "Codex1"},
+					{ID: 628, Titulo: "Loop interno", Estado: db.TareaEnProgreso, Agente: "orquesta"},
+				},
+				TareasPorEstado: map[string]int{
+					string(db.TareaEnProgreso): 3,
+				},
+			},
+		})
+	})
+	if strings.Contains(out, "antigravity") {
+		t.Fatalf("un agente deshabilitado no deberia contaminar status visible: %s", out)
+	}
+	if !strings.Contains(out, "[548]") || !strings.Contains(out, "[628]") {
+		t.Fatalf("deberia mantener progreso visible legitimo: %s", out)
+	}
+}
+
 func TestFetchServerConfig(t *testing.T) {
 	prevClient := serverHTTPClient
 	serverHTTPClient = &http.Client{

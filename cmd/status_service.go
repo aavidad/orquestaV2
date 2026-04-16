@@ -463,6 +463,7 @@ func fetchStatusFastFallback() (apiStatusResponse, error) {
 	if err != nil {
 		return apiStatusResponse{}, err
 	}
+	tareasActivas = filtrarTareasActivasVisibles(tareasActivas, agentes)
 	cuentas = reconciliarConteoTareasActivasVisible(cuentas, tareasActivas)
 	tareasEnProgreso := filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaEnProgreso)
 	tareasReservadas := filtrarOpenClawTareasPorEstado(tareasActivas, db.TareaAsignada)
@@ -606,6 +607,7 @@ func fetchStatusFresh() (apiStatusResponse, error) {
 	if err != nil {
 		return apiStatusResponse{}, err
 	}
+	tareasActivas = filtrarTareasActivasVisibles(tareasActivas, agentes)
 	cuentas = reconciliarConteoTareasActivasVisible(cuentas, tareasActivas)
 	trabajandoNombres := make(map[string]bool)
 	for _, tarea := range tareasActivas {
@@ -710,6 +712,65 @@ func reconciliarConteoTareasActivasVisible(cuentas map[string]int, tareasActivas
 		case db.TareaAsignada, db.TareaEnProgreso, db.TareaBloqueada:
 			out[string(tarea.Estado)]++
 		}
+	}
+	return out
+}
+
+func nombreAgenteCanonico(nombre string) string {
+	return strings.ToLower(strings.TrimSpace(nombre))
+}
+
+func snapshotExponeHabilitado(agentes []*db.Agente) bool {
+	for _, agente := range agentes {
+		if agente != nil && agente.Habilitado {
+			return true
+		}
+	}
+	return false
+}
+
+func agenteCuentaComoHabilitadoEnSnapshot(agente *db.Agente, snapshotConHabilitado bool) bool {
+	if agente == nil {
+		return false
+	}
+	if !snapshotConHabilitado {
+		return true
+	}
+	return agente.Habilitado
+}
+
+func tareaAgenteInternoSiempreVisible(nombre string) bool {
+	return nombreAgenteCanonico(nombre) == "orquesta"
+}
+
+func filtrarTareasActivasVisibles(tareas []tareaLite, agentes []*db.Agente) []tareaLite {
+	if len(tareas) == 0 {
+		return nil
+	}
+	agentesPorNombre := make(map[string]*db.Agente, len(agentes))
+	snapshotConHabilitado := snapshotExponeHabilitado(agentes)
+	for _, agente := range agentes {
+		if agente == nil {
+			continue
+		}
+		nombre := nombreAgenteCanonico(agente.Nombre)
+		if nombre == "" {
+			continue
+		}
+		agentesPorNombre[nombre] = agente
+	}
+	out := make([]tareaLite, 0, len(tareas))
+	for _, tarea := range tareas {
+		nombre := nombreAgenteCanonico(tarea.Agente)
+		if nombre == "" || tareaAgenteInternoSiempreVisible(nombre) {
+			out = append(out, tarea)
+			continue
+		}
+		agente := agentesPorNombre[nombre]
+		if agente != nil && !agenteCuentaComoHabilitadoEnSnapshot(agente, snapshotConHabilitado) {
+			continue
+		}
+		out = append(out, tarea)
 	}
 	return out
 }

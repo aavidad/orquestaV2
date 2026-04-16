@@ -463,3 +463,23 @@ func TestReconciliarConteoTareasActivasVisibleUsaSoloLaListaVisible(t *testing.T
 		t.Fatalf("completada no deberia cambiar: %+v", got)
 	}
 }
+
+func TestFiltrarTareasActivasVisiblesOcultaAgenteDeshabilitadoYPreservaOrquesta(t *testing.T) {
+	agentes := []*db.Agente{
+		{Nombre: "Codex1", Habilitado: true},
+		{Nombre: "antigravity", Habilitado: false},
+	}
+	tareas := []tareaLite{
+		{ID: 535, Estado: db.TareaEnProgreso, Agente: "antigravity", Titulo: "legacy"},
+		{ID: 548, Estado: db.TareaEnProgreso, Agente: "Codex1", Titulo: "real"},
+		{ID: 628, Estado: db.TareaEnProgreso, Agente: "orquesta", Titulo: "interna"},
+	}
+
+	got := filtrarTareasActivasVisibles(tareas, agentes)
+	if len(got) != 2 {
+		t.Fatalf("tareas visibles inesperadas: %+v", got)
+	}
+	if got[0].ID != 548 || got[1].ID != 628 {
+		t.Fatalf("orden/filtrado inesperado: %+v", got)
+	}
+}

@@ -58,6 +58,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: `worker starting` ya no cuenta como `trabajando`; pasa a `arrancando` en `agentesapp/status`, reduciendo sobreconteo de ocupación sin empujar lógica a persistencia
 - corte operativo adicional fuera de `db`: la autonomía trata una `pause` reciente ya completada como estado satisfecho para no reencolar pausas duplicadas en loops de cuota y reducir calor innecesario del daemon
 - corte operativo adicional fuera de `db`: cuando una reanimación sigue bloqueada por cuota visible, Orquesta cancela `start/resume/handoff` vivos asociados a esa reanimación para evitar relanzamientos en bucle
+- corte operativo adicional fuera de `db`: `status` ya filtra tareas y agentes deshabilitados del pool visible; un agente retirado no debe seguir apareciendo en `En progreso ahora mismo`, `Retenidas por cuota` ni en el bloque visible de cuota solo por arrastre de snapshot
 
 Estado del frente seguro:
 
@@ -87,6 +88,7 @@ Siguiente corte recomendado para Orquesta (orden):
 - [ ] 7) Vigilar que políticas y prompts no reintroduzcan `xhigh` por defecto fuera de los tres casos permitidos
 - [ ] 8) Diseñar e implementar `orquesta reload`: recarga en caliente de configuración/bootstrap/prompts/skills provisionadas sin reinicio completo del daemon y sin romper agentes activos
 - [ ] 9) Cerrar la clasificación operativa y enforcement de perfiles permitidos fuera de `db`: no contar `starting` como trabajo útil y evitar relanzamiento de perfiles fuera de política (`solo Codex`, etc.)
+- [ ] 10) Detectar prompts interactivos de cuota/rate-limit y seleccionar automáticamente el mejor modelo alternativo permitido para la microtarea sin bloquear el runtime
 
 ## Inventario Actual
 
