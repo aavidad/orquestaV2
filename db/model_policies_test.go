@@ -182,6 +182,38 @@ func TestResolverPoliticaModeloEconomicaPorPerfil(t *testing.T) {
 	})
 }
 
+func TestSeedPoliticasModeloInicialesUsaReasoningProfesionalPorPerfil(t *testing.T) {
+	withTempDBPools(t, func() {
+		insertPoolsYModelosTest(t)
+
+		if err := SeedPoliticasModeloIniciales(); err != nil {
+			t.Fatalf("SeedPoliticasModeloIniciales: %v", err)
+		}
+
+		casos := []struct {
+			perfil      string
+			razonamiento string
+		}{
+			{perfil: "orquestacion", razonamiento: "high"},
+			{perfil: "analisis", razonamiento: "high"},
+			{perfil: "implementacion", razonamiento: "high"},
+			{perfil: "revision", razonamiento: "high"},
+			{perfil: "script", razonamiento: "medium"},
+			{perfil: "handoff", razonamiento: "medium"},
+		}
+
+		for _, tc := range casos {
+			res, err := ResolverPoliticaModelo(ResolverPoliticaInput{PerfilTarea: tc.perfil})
+			if err != nil {
+				t.Fatalf("ResolverPoliticaModelo(%s): %v", tc.perfil, err)
+			}
+			if res.ReasoningEffort != tc.razonamiento {
+				t.Fatalf("reasoning inesperado para %s: got=%s want=%s", tc.perfil, res.ReasoningEffort, tc.razonamiento)
+			}
+		}
+	})
+}
+
 func TestEnsureCapacidadModeloBaseCodexFuerzaHighEnImplementacion(t *testing.T) {
 	withTempDBPools(t, func() {
 		if err := SeedPoolsIniciales(); err != nil {
