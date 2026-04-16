@@ -20257,6 +20257,56 @@ func TestProcesarPresupuestoSesionObservadoBatchToleraHandleRoto(t *testing.T) {
 	}
 }
 
+func TestPausaAutonomiaYaSatisfechaReconocePauseRecienteCompletada(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexPause", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexPause",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesion); err != nil {
+		t.Fatalf("upsert handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agentes SET estado_cuota='enfriamiento', motivo_pausa='Cuota diaria agotada' WHERE nombre='CodexPause'`); err != nil {
+		t.Fatalf("marcar cuota: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:     "CodexPause",
+		ProyectoID: &proyectoID,
+		Tipo:       "pause",
+		Estado:     "completada",
+		PayloadJSON: `{"accion":"pause","motivo":"Cuota diaria agotada","por":"orquesta","proyecto":"orquestador"}`,
+	}); err != nil {
+		t.Fatalf("encolar pause: %v", err)
+	}
+
+	ok, err := pausaAutonomiaYaSatisfecha("CodexPause", &proyectoID, sesion)
+	if err != nil {
+		t.Fatalf("pausaAutonomiaYaSatisfecha: %v", err)
+	}
+	if !ok {
+		t.Fatal("deberia considerar satisfecha una pause reciente ya completada")
+	}
+}
+
 func TestProcesarPresupuestoSesionObservadoBatchRespetaIntervaloBackground(t *testing.T) {
 	resetRuntimeBudgetObservationBackgroundGate()
 	t.Cleanup(resetRuntimeBudgetObservationBackgroundGate)

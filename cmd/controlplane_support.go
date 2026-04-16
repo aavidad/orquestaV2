@@ -10923,6 +10923,11 @@ func pausaAutonomiaYaSatisfecha(agente string, proyectoID *int64, sesion *db.Ses
 	} else if pendiente {
 		return true, nil
 	}
+	if reciente, err := existeRuntimeOrderAutonomiaReciente(agente, proyectoID, "pause", "", 2*time.Minute); err != nil {
+		return false, err
+	} else if reciente {
+		return true, nil
+	}
 	if sesion != nil && strings.EqualFold(strings.TrimSpace(sesion.Estado), "pausada") {
 		return true, nil
 	}

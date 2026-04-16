@@ -56,6 +56,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - `d3c36c6` reutiliza la búsqueda de proyecto con ruta efectiva al resolver la worktree activa por agente/proyecto
 - `1cd664d` centraliza la reutilización de ruta efectiva del proyecto en helpers de `db/proyectos.go` para evitar recomputación y seams duplicados
 - corte operativo adicional fuera de `db`: `worker starting` ya no cuenta como `trabajando`; pasa a `arrancando` en `agentesapp/status`, reduciendo sobreconteo de ocupación sin empujar lógica a persistencia
+- corte operativo adicional fuera de `db`: la autonomía trata una `pause` reciente ya completada como estado satisfecho para no reencolar pausas duplicadas en loops de cuota y reducir calor innecesario del daemon
 
 Estado del frente seguro:
 
