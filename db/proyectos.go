@@ -337,8 +337,8 @@ func rutaWorktreeActivaAgenteProyecto(proyectoID int64, agente string) string {
 		return ""
 	}
 	rutaProyectoEfectiva := ""
-	if proyecto, err := GetProyecto(jsonNumber(proyectoID)); err == nil && proyecto != nil {
-		rutaProyectoEfectiva = RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, "")
+	if proyecto, err := GetProyectoConRutaEfectiva(jsonNumber(proyectoID), ""); err == nil && proyecto != nil {
+		rutaProyectoEfectiva = proyecto.RutaAbs
 	}
 	estado := coordinacion.WorktreeActive
 	filter := coordinacion.WorktreeFilter{
