@@ -7547,6 +7547,84 @@ func TestProcesarRuntimeMailboxBatchCoordinaRestartParaTMUXBootstrapOnly(t *test
 	}
 }
 
+func TestProcesarRuntimeMailboxCoordinatedRestartMensajeEncolaReinicioCoordinado(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexTMUX", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexTMUX",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	if _, err := db.DB.Exec(
+		`UPDATE runtime_handles SET transporte='cli', handle_kind='process', capabilities_json=?, metadata_json=? WHERE id=?`,
+		`{"can_send_input":false,"mailbox_delivery_mode":"bootstrap_only"}`,
+		`{"driver":"tmux_cli_session","tmux_session":"orq-codextmux-1","tmux_pane_id":"%1","can_send_input":false,"mailbox_delivery_mode":"bootstrap_only"}`,
+		handle.ID,
+	); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	msgID, err := db.EnviarRuntimeMailbox(&db.RuntimeMailboxMessage{
+		FromAgente:  "server",
+		ToAgente:    "CodexTMUX",
+		ProyectoID:  &proyectoID,
+		Kind:        "autonomia",
+		PayloadJSON: `{"accion":"continuar_trabajo","motivo":"test"}`,
+	})
+	if err != nil {
+		t.Fatalf("mailbox: %v", err)
+	}
+	msg, err := db.GetRuntimeMailbox(msgID)
+	if err != nil || msg == nil {
+		t.Fatalf("get mailbox: %+v err=%v", msg, err)
+	}
+
+	dispatched, err := procesarRuntimeMailboxCoordinatedRestartMensaje(msg, newRuntimeMailboxBatchSnapshot())
+	if err != nil {
+		t.Fatalf("procesar mensaje: %v", err)
+	}
+	if !dispatched {
+		t.Fatalf("deberia despachar reinicio coordinado")
+	}
+
+	agente := "CodexTMUX"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	tipos := map[string]bool{}
+	for _, order := range orders {
+		if order != nil {
+			tipos[order.Tipo] = true
+		}
+	}
+	if !tipos["stop"] || !tipos["start"] {
+		t.Fatalf("deberia crear stop/start coordinados, got=%+v", orders)
+	}
+}
+
 func TestRuntimeHandleRequiereCoordinatedRestartMailboxAceptaTMUXCanonicoBootstrapOnly(t *testing.T) {
 	handle := &db.RuntimeHandle{
 		Transporte:       "tmux",

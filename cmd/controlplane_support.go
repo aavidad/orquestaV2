@@ -4587,47 +4587,60 @@ func procesarRuntimeMailboxCoordinatedRestartBatchConMailbox(mailbox []*db.Runti
 	})
 	total := 0
 	for _, key := range keys {
-		msg := latest[key]
-		if msg == nil {
-			continue
-		}
-		proyecto, err := snapshot.project(key.proyectoID)
-		if err != nil || proyecto == nil {
-			return total, err
-		}
-		handle, err := snapshot.activeHandle(key.agente, &key.proyectoID)
+		dispatched, err := procesarRuntimeMailboxCoordinatedRestartMensaje(latest[key], snapshot)
 		if err != nil {
 			return total, err
 		}
-		if handle == nil {
-			continue
-		}
-		if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "coordinated_restart", time.Now().UTC()); err != nil {
-			return total, err
-		} else if obsoleta {
+		if dispatched {
 			total++
-			continue
 		}
-		motivo := fmt.Sprintf("runtime_mailbox_coordinated_restart:%s:%d", strings.TrimSpace(msg.Kind), msg.ID)
-		stopOrderID, startOrderID, err := encolarReinicioCoordinadoMailbox(handle, proyecto, msg, motivo)
-		if err != nil {
-			return total, err
-		}
-		if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) {
-			superseded, err := db.ConsumirRuntimeMailboxPendienteSupersedido(strings.TrimSpace(msg.ToAgente), msg.ProyectoID, strings.TrimSpace(msg.Kind), msg.ID)
-			if err != nil {
-				return total, err
-			}
-			if superseded > 0 {
-				db.Audit("orquesta", "runtime_mailbox_coordinated_restart_supersede", "runtime_mailbox", msg.ID,
-					fmt.Sprintf("agente=%s kind=%s superseded=%d", key.agente, strings.TrimSpace(msg.Kind), superseded))
-			}
-		}
-		db.Audit("orquesta", "runtime_mailbox_coordinated_restart", "runtime_mailbox", msg.ID,
-			fmt.Sprintf("agente=%s proyecto=%s kind=%s stop_order_id=%d start_order_id=%d", key.agente, proyecto.Slug, strings.TrimSpace(msg.Kind), stopOrderID, startOrderID))
-		total++
 	}
 	return total, nil
+}
+
+// procesarRuntimeMailboxCoordinatedRestartMensaje despacha un mensaje coordinated_restart
+// ya seleccionado como candidato (el más reciente para su agente/proyecto).
+// Retorna true si se encoló el reinicio coordinado o se consumió como obsoleto.
+func procesarRuntimeMailboxCoordinatedRestartMensaje(msg *db.RuntimeMailboxMessage, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
+	if msg == nil || msg.ProyectoID == nil || *msg.ProyectoID <= 0 {
+		return false, nil
+	}
+	agente := strings.TrimSpace(msg.ToAgente)
+	proyectoID := *msg.ProyectoID
+	proyecto, err := snapshot.project(proyectoID)
+	if err != nil || proyecto == nil {
+		return false, err
+	}
+	handle, err := snapshot.activeHandle(agente, msg.ProyectoID)
+	if err != nil {
+		return false, err
+	}
+	if handle == nil {
+		return false, nil
+	}
+	if obsoleta, err := consumirRuntimeMailboxObsoletaPorWorkerSiProcede(msg, handle, "coordinated_restart", time.Now().UTC()); err != nil {
+		return false, err
+	} else if obsoleta {
+		return true, nil
+	}
+	motivo := fmt.Sprintf("runtime_mailbox_coordinated_restart:%s:%d", strings.TrimSpace(msg.Kind), msg.ID)
+	stopOrderID, startOrderID, err := encolarReinicioCoordinadoMailbox(handle, proyecto, msg, motivo)
+	if err != nil {
+		return false, err
+	}
+	if runtimeMailboxKindCoalescible(strings.TrimSpace(msg.Kind)) {
+		superseded, err := db.ConsumirRuntimeMailboxPendienteSupersedido(agente, msg.ProyectoID, strings.TrimSpace(msg.Kind), msg.ID)
+		if err != nil {
+			return false, err
+		}
+		if superseded > 0 {
+			db.Audit("orquesta", "runtime_mailbox_coordinated_restart_supersede", "runtime_mailbox", msg.ID,
+				fmt.Sprintf("agente=%s kind=%s superseded=%d", agente, strings.TrimSpace(msg.Kind), superseded))
+		}
+	}
+	db.Audit("orquesta", "runtime_mailbox_coordinated_restart", "runtime_mailbox", msg.ID,
+		fmt.Sprintf("agente=%s proyecto=%s kind=%s stop_order_id=%d start_order_id=%d", agente, proyecto.Slug, strings.TrimSpace(msg.Kind), stopOrderID, startOrderID))
+	return true, nil
 }
 
 func procesarRuntimeMailboxSessionResumeBatch() (int, error) {
