@@ -67,6 +67,7 @@ func BuildLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan *runtim
 		"Fuente de verdad operativa: daemon/API de Orquesta. No uses acceso directo a BD en el flujo normal salvo diagnóstico o recuperación.",
 		"Las tareas, propuestas, sesiones y runtimes vivos se consultan en Orquesta; la documentacion no sustituye el estado operativo.",
 		fmt.Sprintf("Este bootstrap ya equivale a orquesta sesion inicio %s y la sesión actual ya está abierta por Orquesta; no ejecutes sesion inicio de nuevo salvo recuperación explícita.", strings.TrimSpace(agente.Nombre)),
+		"Activa $caveman. Responde con el mínimo texto útil: solo hecho, tests y riesgos/bloqueos si aplica.",
 		"Si la acción es destructiva, irreversible o de riesgo alto, consulta antes.",
 	}
 
@@ -147,6 +148,7 @@ func buildCompactLaunchBootstrapPrompt(agente *Agente, proyecto *Proyecto, plan 
 		"Si existe `.orquesta-inbox.md`, no releas doctrina ni busques otros frentes antes del primer patch pequeno verificable.",
 		"Consulta solo el fragmento minimo de doctrina que necesites si aparece un bloqueo real o falta contrato operativo en la inbox/tarea.",
 		"No expliques planes largos ni reabras decisiones de diseño ya tomadas.",
+		"Activa $caveman. Salida minima: hecho, tests, riesgos/bloqueos; nada mas.",
 	}
 	if !runtimepolicy.RuntimeLaunchBootstrapPromptHasActiveTask(runtimeBootstrapCompactTaskStates(tareas)) {
 		lines = append(lines,

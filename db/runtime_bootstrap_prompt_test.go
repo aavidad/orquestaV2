@@ -131,6 +131,9 @@ func TestBuildLaunchBootstrapPromptCompactaArranqueBootstrapOnly(t *testing.T) {
 			t.Fatalf("falta %q en prompt compacto:\n%s", token, prompt)
 		}
 	}
+	if !strings.Contains(prompt, "Activa $caveman. Salida minima: hecho, tests, riesgos/bloqueos; nada mas.") {
+		t.Fatalf("faltaba instruccion de salida austera en prompt compacto:\n%s", prompt)
+	}
 	if !strings.Contains(prompt, "Primero lee `.orquesta-inbox.md` si existe; usalo como contrato operativo vigente antes de tocar codigo.") {
 		t.Fatalf("faltaba referencia al inbox durable en prompt compacto:\n%s", prompt)
 	}
@@ -184,6 +187,7 @@ func TestBuildLaunchBootstrapPromptCompactaAgenteCLIOrquestadoAunqueNoSeaBootstr
 		"No hagas rg global, broad scans ni recorridos del repo entero antes del primer patch pequeno dentro del write-set.",
 		"Si existe `.orquesta-inbox.md`, no releas doctrina ni busques otros frentes antes del primer patch pequeno verificable.",
 		"Consulta solo el fragmento minimo de doctrina que necesites si aparece un bloqueo real o falta contrato operativo en la inbox/tarea.",
+		"Activa $caveman. Salida minima: hecho, tests, riesgos/bloqueos; nada mas.",
 		"Tarea activa: #492 [en_progreso] Adaptador Codex broker-first sin control por PTY.",
 		"Alcance inmediato: Simbolos foco: procesarRuntimeMailboxSessionResumeBatchConMailbox y resolverBootstrapRuntimeLeasePendiente.",
 	} {
@@ -271,6 +275,7 @@ func TestBuildLaunchBootstrapPromptCompactaPriorizaSliceEjecutableDelFrente(t *t
 
 	prompt := BuildLaunchBootstrapPrompt(agente, proyecto, plan, nil, nil, tareas, nil, "", "")
 	for _, token := range []string{
+		"Activa $caveman. Salida minima: hecho, tests, riesgos/bloqueos; nada mas.",
 		"Alcance inmediato: Simbolos foco: procesarRuntimeMailboxSessionResumeBatchConMailbox y resolverBootstrapRuntimeLeasePendiente.",
 		"Write-set exclusivo: cmd/controlplane_support.go, db/controlplane_entities.go y db/controlplane_entities_test.go.",
 	} {
