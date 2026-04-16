@@ -50,6 +50,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - `f81c290` baja el razonamiento por defecto de implementación/orquestación rutinaria a `high` y fuerza salida mínima en continuidad/microtareas
 - `7d03d7e` alinea la doctrina de modelo/razonamiento y la regla operativa de `xhigh` reservado a casos excepcionales de alto riesgo
 - `27788af` añade guardarraíl de tests para que los perfiles semilla no reintroduzcan `xhigh` por defecto
+- `66ee3ef` reutiliza `coordinacion.WorktreePathRef` en la resolución de rutas de proyecto, eliminando duplicación de tipos en `db/proyectos.go`
 
 Estado del frente seguro:
 
