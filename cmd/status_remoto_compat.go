@@ -591,6 +591,9 @@ func agentesBloqueadosPorCuotaVisibles(resumen *estadoResumen) []*db.Agente {
 			if nombre == "" {
 				continue
 			}
+			if !agenteVisibleEnStatusFleet(nombre) {
+				continue
+			}
 			if base := agentesPorNombre[nombre]; base != nil && !agenteCuentaComoHabilitadoEnSnapshot(base, snapshotConHabilitado) {
 				continue
 			}
@@ -610,6 +613,9 @@ func agentesNoActivosEnPausaOperativa(agentes []*db.Agente) []*db.Agente {
 	out := make([]*db.Agente, 0, len(agentes))
 	for _, agente := range agentes {
 		if agente == nil || agente.Activo {
+			continue
+		}
+		if !agenteVisibleEnStatusFleet(agente.Nombre) {
 			continue
 		}
 		if strings.EqualFold(strings.TrimSpace(agente.EstadoCuota), "activo") {
@@ -633,6 +639,9 @@ func tareasRetenidasPorCuota(tareas []tareaLite, agentes []*db.Agente, quotaBloc
 		if agente == nil {
 			continue
 		}
+		if !agenteVisibleEnStatusFleet(agente.Nombre) {
+			continue
+		}
 		porNombre[strings.TrimSpace(agente.Nombre)] = agente
 	}
 	bloqueadosPorRuntime := make(map[string]struct{}, len(quotaBlocked))
@@ -642,6 +651,9 @@ func tareasRetenidasPorCuota(tareas []tareaLite, agentes []*db.Agente, quotaBloc
 		}
 		nombre := strings.TrimSpace(agente.Nombre)
 		if nombre == "" {
+			continue
+		}
+		if !agenteVisibleEnStatusFleet(nombre) {
 			continue
 		}
 		bloqueadosPorRuntime[nombre] = struct{}{}

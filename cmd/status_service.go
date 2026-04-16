@@ -147,6 +147,9 @@ func agentesVisiblesPorEstadoOperativoRows(agentes []*db.Agente, rows []agentesa
 		if agente == nil {
 			continue
 		}
+		if !agenteVisibleEnStatusFleet(agente.Nombre) {
+			continue
+		}
 		row, ok := rowPorNombre[strings.ToLower(strings.TrimSpace(agente.Nombre))]
 		if !ok {
 			continue
@@ -766,6 +769,9 @@ func filtrarTareasActivasVisibles(tareas []tareaLite, agentes []*db.Agente) []ta
 			out = append(out, tarea)
 			continue
 		}
+		if !agenteVisibleEnStatusFleet(nombre) {
+			continue
+		}
 		agente := agentesPorNombre[nombre]
 		if agente != nil && !agenteCuentaComoHabilitadoEnSnapshot(agente, snapshotConHabilitado) {
 			continue
@@ -773,4 +779,15 @@ func filtrarTareasActivasVisibles(tareas []tareaLite, agentes []*db.Agente) []ta
 		out = append(out, tarea)
 	}
 	return out
+}
+
+func agenteVisibleEnStatusFleet(nombre string) bool {
+	nombre = nombreAgenteCanonico(nombre)
+	if nombre == "" {
+		return false
+	}
+	if tareaAgenteInternoSiempreVisible(nombre) {
+		return true
+	}
+	return perteneceAFlotaOficialAutobootstrap(nombre)
 }

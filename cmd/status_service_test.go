@@ -483,3 +483,19 @@ func TestFiltrarTareasActivasVisiblesOcultaAgenteDeshabilitadoYPreservaOrquesta(
 		t.Fatalf("orden/filtrado inesperado: %+v", got)
 	}
 }
+
+func TestFiltrarTareasActivasVisiblesOcultaAgenteFueraDeFlotaOficial(t *testing.T) {
+	agentes := []*db.Agente{
+		{Nombre: "Codex1", Habilitado: true},
+		{Nombre: "Claude2", Habilitado: true},
+	}
+	tareas := []tareaLite{
+		{ID: 548, Estado: db.TareaEnProgreso, Agente: "Codex1", Titulo: "real"},
+		{ID: 549, Estado: db.TareaEnProgreso, Agente: "Claude2", Titulo: "fuera"},
+	}
+
+	got := filtrarTareasActivasVisibles(tareas, agentes)
+	if len(got) != 1 || got[0].ID != 548 {
+		t.Fatalf("tareas visibles inesperadas: %+v", got)
+	}
+}

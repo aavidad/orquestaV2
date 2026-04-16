@@ -1136,6 +1136,42 @@ func TestRenderStatusSummaryOcultaAgentesDeshabilitadosDeCuotaYProgreso(t *testi
 	}
 }
 
+func TestRenderStatusSummaryOcultaAgenteFueraDeFlotaOficial(t *testing.T) {
+	out := captureOutput(t, func() {
+		renderStatusSummary(&statusContext{
+			resumen: &estadoResumen{
+				Agentes: []*db.Agente{
+					{Nombre: "Claude2", Rol: "programador", Habilitado: true, EstadoCuota: "enfriamiento"},
+					{Nombre: "Codex1", Rol: "programador", Habilitado: true, Activo: true, EstadoCuota: "activo"},
+				},
+				AgentesActivos: []*db.Agente{
+					{Nombre: "Codex1", Rol: "programador", Habilitado: true, Activo: true, EstadoCuota: "activo"},
+				},
+				AgentesQuotaBlocked: []*db.Agente{
+					{Nombre: "Claude2", Rol: "programador", Habilitado: true, EstadoCuota: "enfriamiento"},
+				},
+				TareasActivas: []tareaLite{
+					{ID: 548, Titulo: "Runtime/control plane", Estado: db.TareaEnProgreso, Agente: "Codex1"},
+					{ID: 549, Titulo: "Legacy claude", Estado: db.TareaEnProgreso, Agente: "Claude2"},
+				},
+				TareasEnProgreso: []tareaLite{
+					{ID: 548, Titulo: "Runtime/control plane", Estado: db.TareaEnProgreso, Agente: "Codex1"},
+					{ID: 549, Titulo: "Legacy claude", Estado: db.TareaEnProgreso, Agente: "Claude2"},
+				},
+				TareasPorEstado: map[string]int{
+					string(db.TareaEnProgreso): 2,
+				},
+			},
+		})
+	})
+	if strings.Contains(out, "Claude2") {
+		t.Fatalf("un agente fuera de la flota oficial no deberia contaminar status visible: %s", out)
+	}
+	if !strings.Contains(out, "Codex1") || !strings.Contains(out, "[548]") {
+		t.Fatalf("deberia mantener la flota codex visible: %s", out)
+	}
+}
+
 func TestFetchServerConfig(t *testing.T) {
 	prevClient := serverHTTPClient
 	serverHTTPClient = &http.Client{
