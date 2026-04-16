@@ -1384,11 +1384,38 @@ func construirInstruccionCorreccionReview(policy *db.ProyectoAutonomia, proyecto
 func controlPlaneConfigIntOrDefault(clave string, fallback int) int {
 	v, err := controlPlaneConfigGetCached(clave)
 	if err != nil {
-		return fallback
+		return controlPlaneConfigIntWithSafeFloor(clave, fallback)
 	}
 	n, err := strconv.Atoi(strings.TrimSpace(v))
 	if err != nil || n <= 0 {
-		return fallback
+		return controlPlaneConfigIntWithSafeFloor(clave, fallback)
 	}
-	return n
+	return controlPlaneConfigIntWithSafeFloor(clave, n)
+}
+
+func controlPlaneConfigIntWithSafeFloor(clave string, value int) int {
+	minimo := controlPlaneConfigSafeFloor(clave)
+	if minimo > 0 && value < minimo {
+		return minimo
+	}
+	return value
+}
+
+func controlPlaneConfigSafeFloor(clave string) int {
+	switch strings.TrimSpace(clave) {
+	case "runtime_mailbox_reevaluation_interval_seconds":
+		return 15
+	case "autonomia_continue_nudge_interval_seconds":
+		return 30
+	case "runtime_budget_background_observation_interval_seconds":
+		return 60
+	case "autonomia_active_sessions_interval_seconds":
+		return 30
+	case "autonomia_idle_autoassign_interval_seconds":
+		return 120
+	case "pipeline_local_dispatch_interval_seconds":
+		return 60
+	default:
+		return 0
+	}
 }
