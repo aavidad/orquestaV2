@@ -10292,15 +10292,15 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 	if runtimeOperativoRecienteDistintoDeSesion(sesion) {
 		return 0, nil
 	}
+	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
+	if err != nil {
+		return 0, err
+	}
 	handle, runtime, err := runtimeRecuperacionSesionObjetivo(sesion)
 	if err != nil {
 		return 0, err
 	}
 	if handle == nil {
-		proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
-		if err != nil {
-			return 0, err
-		}
 		reactivado, err := encolarReactivacionAgenteProyectoSiProcede(strings.TrimSpace(sesion.Agente), proyecto, "local_runtime_missing")
 		if err != nil {
 			return 0, err
@@ -10311,17 +10311,17 @@ func procesarRecuperacionRuntimeDegradadoSesion(sesion *db.Sesion) (int, error) 
 		return 0, nil
 	}
 	if !esTransporteRemotoAutonomia(handle.Transporte) {
-		return procesarRecuperacionRuntimeLocalSesion(sesion, handle, runtime)
+		return procesarRecuperacionRuntimeLocalSesion(sesion, proyecto, handle, runtime)
 	}
 	if !runtimeRemotoDegradado(handle, runtime) {
 		return 0, nil
 	}
-	return procesarRecuperacionRuntimeRemotoDegradadoSesion(sesion, handle, runtime)
+	return procesarRecuperacionRuntimeRemotoDegradadoSesion(sesion, proyecto, handle, runtime)
 }
 
 // procesarRecuperacionRuntimeLocalSesion intenta recuperar una sesión cuyo runtime local
 // ha fallado: sincroniza el handle, verifica si hay trabajo pendiente y encola un start.
-func procesarRecuperacionRuntimeLocalSesion(sesion *db.Sesion, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (int, error) {
+func procesarRecuperacionRuntimeLocalSesion(sesion *db.Sesion, proyecto *db.Proyecto, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (int, error) {
 	if runtimeTMUXRecienteDebeSuplantarRecuperacionSesion(sesion, handle) {
 		return 0, nil
 	}
@@ -10337,10 +10337,6 @@ func procesarRecuperacionRuntimeLocalSesion(sesion *db.Sesion, handle *db.Runtim
 		return 0, err
 	} else if pendiente {
 		return 0, nil
-	}
-	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
-	if err != nil {
-		return 0, err
 	}
 	tieneTrabajo, err := dbAgenteTieneTrabajoArrancable(strings.TrimSpace(sesion.Agente), proyecto.ID)
 	if err != nil {
@@ -10375,7 +10371,7 @@ func procesarRecuperacionRuntimeLocalSesion(sesion *db.Sesion, handle *db.Runtim
 // procesarRecuperacionRuntimeRemotoDegradadoSesion emite un checkpoint seguido de un
 // resume o start para recuperar una sesión con runtime remoto degradado. Si el conector
 // asociado tiene el circuito abierto, pausa el proyecto en su lugar.
-func procesarRecuperacionRuntimeRemotoDegradadoSesion(sesion *db.Sesion, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (int, error) {
+func procesarRecuperacionRuntimeRemotoDegradadoSesion(sesion *db.Sesion, proyecto *db.Proyecto, handle *db.RuntimeHandle, runtime *db.RuntimeInstance) (int, error) {
 	conector, err := resolverConectorSesionAutonomia(sesion, runtime, handle)
 	if err != nil {
 		return 0, err
@@ -10388,10 +10384,6 @@ func procesarRecuperacionRuntimeRemotoDegradadoSesion(sesion *db.Sesion, handle 
 		if !disponible {
 			motivo := "conector:" + strings.TrimSpace(conector.Slug) + ":circuito_abierto"
 			if err := db.MarcarProyectoBloqueadoExterno(*sesion.ProyectoID, motivo); err != nil {
-				return 0, err
-			}
-			proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
-			if err != nil {
 				return 0, err
 			}
 			if satisfecha, err := pausaAutonomiaYaSatisfecha(sesion.Agente, sesion.ProyectoID, sesion); err != nil {
@@ -10409,10 +10401,6 @@ func procesarRecuperacionRuntimeRemotoDegradadoSesion(sesion *db.Sesion, handle 
 		return 0, err
 	} else if pendiente {
 		return 0, nil
-	}
-	proyecto, err := runtimesService.GetProject(strconv.FormatInt(*sesion.ProyectoID, 10))
-	if err != nil {
-		return 0, err
 	}
 	checkpointPayload, err := json.Marshal(map[string]any{
 		"checkpoint_kind": "remote_recovery",
