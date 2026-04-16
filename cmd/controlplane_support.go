@@ -9020,16 +9020,14 @@ func procesarRecuperacionTareasBloqueadasSesionActiva(sesion *db.Sesion, snapsho
 	if len(tareas) == 0 {
 		return 0, nil
 	}
-	bloqueosPorTarea := map[int64]db.ResumenBloqueo{}
+	var bloqueosPorTarea map[int64]db.ResumenBloqueo
 	if snapshot != nil {
-		cached, err := snapshot.bloqueoSummaryMap()
+		bloqueosPorTarea, err = snapshot.bloqueoSummaryMap()
 		if err != nil {
 			return 0, err
 		}
-		for id, bloqueo := range cached {
-			bloqueosPorTarea[id] = bloqueo
-		}
 	} else {
+		bloqueosPorTarea = map[int64]db.ResumenBloqueo{}
 		resumenBloqueos, err := db.ListarResumenBloqueos()
 		if err != nil {
 			return 0, err
