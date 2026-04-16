@@ -21,6 +21,7 @@ import (
 	"orquesta/internal/controlruntime"
 	"orquesta/microprogramacionapp"
 	"orquesta/runtimeagente"
+	"orquesta/runtimepolicy"
 )
 
 type Store interface {
@@ -513,7 +514,7 @@ func selectBestRuntimeHandle(runtime *db.RuntimeInstance, handles []*db.RuntimeH
 		if handle == nil || !strings.EqualFold(strings.TrimSpace(handle.Agente), strings.TrimSpace(runtime.Agente)) {
 			continue
 		}
-		if !runtimeHandleIsLegacyProcessPTY(handle) {
+		if !runtimepolicy.RuntimeHandleUsaLegacyProcessPTY(mapFromJSONRuntimeHandle(handle.MetadataJSON)) {
 			hasNonLegacy = true
 			break
 		}
@@ -522,7 +523,7 @@ func selectBestRuntimeHandle(runtime *db.RuntimeInstance, handles []*db.RuntimeH
 		if handle == nil || !strings.EqualFold(strings.TrimSpace(handle.Agente), strings.TrimSpace(runtime.Agente)) {
 			continue
 		}
-		if hasNonLegacy && runtimeHandleIsLegacyProcessPTY(handle) {
+		if hasNonLegacy && runtimepolicy.RuntimeHandleUsaLegacyProcessPTY(mapFromJSONRuntimeHandle(handle.MetadataJSON)) {
 			continue
 		}
 		score := runtimeHandleScore(runtime, handle)
@@ -593,10 +594,6 @@ func runtimeHandleDriver(handle *db.RuntimeHandle) string {
 		return strings.TrimSpace(value)
 	}
 	return ""
-}
-
-func runtimeHandleIsLegacyProcessPTY(handle *db.RuntimeHandle) bool {
-	return strings.EqualFold(strings.TrimSpace(runtimeHandleDriver(handle)), "process_pty_cli")
 }
 
 func (s *Service) PurgeInactiveRuntimeHandles(req RuntimeHandlePurgeRequest) (*db.PurgaRuntimeHandlesResultado, error) {
