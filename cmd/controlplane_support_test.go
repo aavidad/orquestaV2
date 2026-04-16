@@ -17244,6 +17244,175 @@ func TestProcesarAutonomiaAgentesBatchRecuperaRuntimeLocalFallidoRelanzaStart(t 
 	}
 }
 
+func TestProcesarRecuperacionRuntimeLocalSesionNoDuplicaSiHayPausePendiente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexPauseRecover", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-local-pause-pending",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexPauseRecover", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Trabajo local con pause pendiente",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "CodexPauseRecover"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "CodexPauseRecover"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexPauseRecover",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("get runtime: %+v err=%v", runtime, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='fallido' WHERE id=?`, handle.ID); err != nil {
+		t.Fatalf("degradar handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='fallido', process_state='fallido' WHERE id=?`, runtime.ID); err != nil {
+		t.Fatalf("degradar runtime: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "CodexPauseRecover",
+		ProyectoID:  &proyectoID,
+		Tipo:        "pause",
+		PayloadJSON: `{"accion":"pause","motivo":"bloqueo_humano","por":"orquesta"}`,
+	}); err != nil {
+		t.Fatalf("encolar pause: %v", err)
+	}
+
+	n, err := procesarRecuperacionRuntimeLocalSesion(sesion, &db.Proyecto{ID: proyectoID, Slug: "orquestador-local-pause-pending"}, handle, runtime)
+	if err != nil {
+		t.Fatalf("procesar recuperacion local: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia duplicar start local con pause pendiente, got=%d", n)
+	}
+
+	agente := "CodexPauseRecover"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "pause" {
+		t.Fatalf("solo deberia quedar la pause pendiente: %+v", orders)
+	}
+}
+
+func TestProcesarRecuperacionRuntimeRemotoDegradadoSesionNoDuplicaSiHayPausePendiente(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexRemotePause", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-remote-pause-pending",
+		Nombre:  "Orquestador",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if err := db.ActivarAsignacion("CodexRemotePause", proyectoID, "frente principal"); err != nil {
+		t.Fatalf("activar asignacion: %v", err)
+	}
+	conectorID, err := db.UpsertConector(&db.Conector{
+		Slug:       "codex-remote-pause",
+		Nombre:     "Codex Remote Pause",
+		Transporte: "api",
+		Comando:    "http://localhost:9999",
+		Activo:     true,
+	})
+	if err != nil {
+		t.Fatalf("upsert conector: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:             "CodexRemotePause",
+		ConectorID:         &conectorID,
+		ProyectoID:         &proyectoID,
+		CWD:                filepath.Join(tmp, "orquestador"),
+		Herramienta:        "codex-remote",
+		ExternalSessionID:  "sess-remote-pause",
+		ResumenContinuidad: "continuidad activa",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("get handle: %+v err=%v", handle, err)
+	}
+	runtime, err := db.GetRuntimeBySesionID(sesion.ID)
+	if err != nil || runtime == nil {
+		t.Fatalf("get runtime: %+v err=%v", runtime, err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET transporte='api', handle_kind='session', handle_ref=?, estado='fallido' WHERE id=?`, strconv.FormatInt(sesion.ID, 10), handle.ID); err != nil {
+		t.Fatalf("degradar handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='degradado', process_state='remote_status_error' WHERE id=?`, runtime.ID); err != nil {
+		t.Fatalf("degradar runtime: %v", err)
+	}
+	if _, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+		Agente:      "CodexRemotePause",
+		ProyectoID:  &proyectoID,
+		Tipo:        "pause",
+		PayloadJSON: `{"accion":"pause","motivo":"bloqueo_humano","por":"orquesta"}`,
+	}); err != nil {
+		t.Fatalf("encolar pause: %v", err)
+	}
+
+	n, err := procesarRecuperacionRuntimeRemotoDegradadoSesion(sesion, &db.Proyecto{ID: proyectoID, Slug: "orquestador-remote-pause-pending"}, handle, runtime)
+	if err != nil {
+		t.Fatalf("procesar recuperacion remota: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("no deberia duplicar checkpoint/start-resume remoto con pause pendiente, got=%d", n)
+	}
+
+	agente := "CodexRemotePause"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar orders: %v", err)
+	}
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "pause" {
+		t.Fatalf("solo deberia quedar la pause pendiente: %+v", orders)
+	}
+}
+
 func TestProcesarAutonomiaAgentesBatchNoRelanzaRuntimeLocalFallidoSinTrabajoArrancable(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

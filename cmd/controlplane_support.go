@@ -10873,7 +10873,7 @@ func procesarRecuperacionRuntimeLocalSesion(sesion *db.Sesion, proyecto *db.Proy
 	if !runtimeLocalFallido(handle, runtime) {
 		return 0, nil
 	}
-	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(sesion.Agente, sesion.ProyectoID, "start", "resume", "handoff"); err != nil {
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(sesion.Agente, sesion.ProyectoID, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
 		return 0, err
 	} else if pendiente {
 		return 0, nil
@@ -10937,7 +10937,7 @@ func procesarRecuperacionRuntimeRemotoDegradadoSesion(sesion *db.Sesion, proyect
 			return 1, nil
 		}
 	}
-	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(sesion.Agente, sesion.ProyectoID, "checkpoint", "start", "resume", "handoff"); err != nil {
+	if pendiente, err := existeRuntimeOrderAbiertaAutonomia(sesion.Agente, sesion.ProyectoID, "pause", "checkpoint", "start", "resume", "handoff"); err != nil {
 		return 0, err
 	} else if pendiente {
 		return 0, nil
