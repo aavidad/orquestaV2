@@ -4542,6 +4542,76 @@ func TestSesionActivaDebeRecibirNudgeContinuacionUsaHandleCanonicoNoEnlazado(t *
 	}
 }
 
+func TestSesionActivaDebeRecibirNudgeContinuacionConSnapshotUsaTareaActivaInequivoca(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	if err := db.RegistrarAgente("CodexSnap", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-snapshot",
+		Nombre:  "Orquestador Snapshot",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	sesion, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexSnap",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	handle, err := db.GetRuntimeHandleBySesionID(sesion.ID)
+	if err != nil || handle == nil {
+		t.Fatalf("handle: %+v err=%v", handle, err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"driver":       "tmux_cli_session",
+		"transport":    "tmux",
+		"tmux_session": "orq-codexsnap",
+		"tmux_pane_id": "%42",
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	capsJSON, err := json.Marshal(map[string]any{
+		"can_send_input":        false,
+		"mailbox_delivery_mode": runtimeagente.MailboxDeliverySessionResume,
+	})
+	if err != nil {
+		t.Fatalf("marshal caps: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo', transporte='tmux', metadata_json=?, capabilities_json=?, last_seen_at=CURRENT_TIMESTAMP WHERE id=?`,
+		string(metaJSON), string(capsJSON), handle.ID); err != nil {
+		t.Fatalf("update handle: %v", err)
+	}
+
+	snapshot := &autonomiaBatchSnapshot{
+		tareasByAgentProject: map[string][]*db.Tarea{
+			agentProjectCacheKey("CodexSnap", proyectoID): {{
+				ID:         77,
+				ProyectoID: &proyectoID,
+				Agente:     strPtr("CodexSnap"),
+				Estado:     db.TareaEnProgreso,
+			}},
+		},
+	}
+
+	gotTaskID, _, err := sesionActivaDebeRecibirNudgeContinuacionConSnapshot(sesion, &db.Proyecto{ID: proyectoID}, snapshot)
+	if err != nil {
+		t.Fatalf("sesionActivaDebeRecibirNudgeContinuacionConSnapshot: %v", err)
+	}
+	if gotTaskID != 77 {
+		t.Fatalf("tarea objetivo inesperada: got=%d want=77", gotTaskID)
+	}
+}
+
 func TestSesionActivaDebeRecibirNudgeContinuacionIgnoraGuidanceDurableMailboxOnlyVigente(t *testing.T) {
 	tmp := prepararDBTemporalCmd(t)
 

@@ -9509,7 +9509,7 @@ func procesarDecisionContinuarTrabajoSesionActivaAutonomia(sesion *db.Sesion, pr
 	if sesion == nil || proyecto == nil || sesion.ProyectoID == nil {
 		return 0, nil
 	}
-	tareaID, debe, err := sesionActivaDebeRecibirNudgeContinuacion(sesion, proyecto)
+	tareaID, debe, err := sesionActivaDebeRecibirNudgeContinuacionConSnapshot(sesion, proyecto, snapshot)
 	if err != nil || !debe {
 		return 0, err
 	}
@@ -9672,10 +9672,20 @@ func asegurarFrentePremiumSesionActivaIdle(sesion *db.Sesion, proyecto *db.Proye
 }
 
 func sesionActivaDebeRecibirNudgeContinuacion(sesion *db.Sesion, proyecto *db.Proyecto) (int64, bool, error) {
+	return sesionActivaDebeRecibirNudgeContinuacionConSnapshot(sesion, proyecto, nil)
+}
+
+func sesionActivaDebeRecibirNudgeContinuacionConSnapshot(sesion *db.Sesion, proyecto *db.Proyecto, snapshot *autonomiaBatchSnapshot) (int64, bool, error) {
 	if sesion == nil || proyecto == nil || sesion.ProyectoID == nil {
 		return 0, false, nil
 	}
-	tareaID, err := db.GetTareaActivaIDPorAgenteProyecto(sesion.Agente, sesion.ProyectoID)
+	tareaID, err := tareaActivaSesionDesdeSnapshot(sesion, snapshot)
+	if err != nil {
+		return 0, false, err
+	}
+	if tareaID <= 0 {
+		tareaID, err = db.GetTareaActivaIDPorAgenteProyecto(sesion.Agente, sesion.ProyectoID)
+	}
 	if err != nil || tareaID <= 0 {
 		return 0, false, err
 	}
@@ -9692,6 +9702,42 @@ func sesionActivaDebeRecibirNudgeContinuacion(sesion *db.Sesion, proyecto *db.Pr
 		return tareaID, false, nil
 	}
 	return tareaID, true, nil
+}
+
+func tareaActivaSesionDesdeSnapshot(sesion *db.Sesion, snapshot *autonomiaBatchSnapshot) (int64, error) {
+	if sesion == nil || sesion.ProyectoID == nil || snapshot == nil {
+		return 0, nil
+	}
+	tareas, err := snapshot.tasks(strings.TrimSpace(sesion.Agente), *sesion.ProyectoID)
+	if err != nil {
+		return 0, err
+	}
+	var candidata *db.Tarea
+	for _, tarea := range tareas {
+		if tarea == nil || tarea.Agente == nil || tarea.ProyectoID == nil {
+			continue
+		}
+		if *tarea.ProyectoID != *sesion.ProyectoID || !strings.EqualFold(strings.TrimSpace(*tarea.Agente), strings.TrimSpace(sesion.Agente)) {
+			continue
+		}
+		switch tarea.Estado {
+		case db.TareaEnProgreso:
+			if candidata != nil && candidata.ID != tarea.ID {
+				return 0, nil
+			}
+			candidata = tarea
+		case db.TareaAsignada:
+			if candidata == nil {
+				candidata = tarea
+			} else if candidata.Estado == db.TareaAsignada && candidata.ID != tarea.ID {
+				return 0, nil
+			}
+		}
+	}
+	if candidata == nil {
+		return 0, nil
+	}
+	return candidata.ID, nil
 }
 
 func sesionActivaTieneContinuidadDurableVigente(sesion *db.Sesion, handle *db.RuntimeHandle) (bool, error) {
