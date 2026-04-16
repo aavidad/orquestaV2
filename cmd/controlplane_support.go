@@ -8953,26 +8953,19 @@ func procesarRecuperacionTareasBloqueadasSesionActiva(sesion *db.Sesion, snapsho
 	if agente == "" {
 		return 0, nil
 	}
-	rows, err := agentesService.BuildPanelRows()
+	detail, err := agentesService.BuildDetailCompact(agente)
 	if err != nil {
 		return 0, err
 	}
 	now := time.Now().UTC()
-	var row *agentesapp.Row
-	for i := range rows {
-		candidato := rows[i]
-		if candidato.Agente == nil || !strings.EqualFold(strings.TrimSpace(candidato.Agente.Nombre), agente) {
-			continue
-		}
-		if proyectoID := rowProyectoIDPreferido(candidato); proyectoID != nil && *proyectoID == *sesion.ProyectoID {
-			row = &candidato
-			break
-		}
-		if row == nil {
-			row = &candidato
-		}
+	if detail == nil || detail.Row.Agente == nil {
+		return 0, nil
 	}
-	if row == nil || !rowPermiteAutoRecuperacion(*row, now) {
+	row := detail.Row
+	if proyectoID := rowProyectoIDPreferido(row); proyectoID != nil && *proyectoID != *sesion.ProyectoID {
+		return 0, nil
+	}
+	if !rowPermiteAutoRecuperacion(row, now) {
 		return 0, nil
 	}
 	var tareas []*db.Tarea

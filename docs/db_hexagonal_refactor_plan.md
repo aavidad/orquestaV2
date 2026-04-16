@@ -72,6 +72,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: el polling base del `runtime mailbox` sube de 10s a 30s por defecto; los wakes explícitos siguen cubriendo la respuesta rápida cuando realmente entra trabajo
 - corte operativo adicional fuera de `db`: los intervalos configurables más calientes del control-plane ahora tienen suelos seguros (`mailbox reevaluation`, `continue nudge`, `budget observation`, `active sessions`, `idle autoassign`, `pipeline local dispatch`) para evitar que una mala config ponga al daemon a martillar CPU
 - corte operativo adicional fuera de `db`: el `Runner` creado por el servidor activa suelos seguros también a nivel de struct para los carriles más calientes (`warm`, `warm requeue`, `cold`, `runtime transcript`, `runtime mailbox`, `runtime orders`); los tests/e2e que necesitan milisegundos deben desactivarlo explícitamente
+- corte operativo adicional fuera de `db`: la recuperación automática de tareas bloqueadas desde sesión activa ya no consulta `BuildPanelRows()` global; usa detalle compacto por agente y reduce trabajo repetido en autonomía
 
 Estado del frente seguro:
 
