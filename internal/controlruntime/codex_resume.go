@@ -458,9 +458,11 @@ func trimmedCommandOutput(raw []byte) string {
 	}
 	lower := strings.ToLower(texto)
 	for _, marker := range []string{
+		"approaching rate limits",
 		"hit your usage limit",
 		"usage limit",
 		"rate limit",
+		"switch to gpt-5.1-codex-mini",
 		"purchase more credits",
 		"try again at",
 		"error:",

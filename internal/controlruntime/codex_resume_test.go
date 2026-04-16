@@ -148,6 +148,17 @@ func TestTrimmedCommandOutputPrefiereErrorRelevanteAlBanner(t *testing.T) {
 	}
 }
 
+func TestTrimmedCommandOutputPrefierePromptDeApproachingRateLimits(t *testing.T) {
+	raw := []byte("Perfil activo: Codex2\nTests verdes\nApproaching rate limits\nSwitch to gpt-5.1-codex-mini for lower credit usage?\n")
+	got := strings.ToLower(trimmedCommandOutput(raw))
+	if !strings.Contains(got, "approaching rate limits") {
+		t.Fatalf("faltaba approaching rate limits en salida resumida: %q", got)
+	}
+	if strings.Contains(got, "perfil activo") {
+		t.Fatalf("el banner no deberia tapar el prompt relevante: %q", got)
+	}
+}
+
 func TestDetectExternalSessionIDUsaSupervisorLocalResidente(t *testing.T) {
 	tmp := t.TempDir()
 	wrapper := filepath.Join(tmp, "codex-perfiles", "bin", "codex-perfil")

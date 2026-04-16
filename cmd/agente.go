@@ -56,7 +56,9 @@ func debeAutoPausarPorAgotamiento(cuotaPct int, motivo string) bool {
 	return cuotaPct < 5 ||
 		strings.Contains(motivoLower, "token") ||
 		strings.Contains(motivoLower, "cuota") ||
-		strings.Contains(motivoLower, "rate limit")
+		strings.Contains(motivoLower, "rate limit") ||
+		strings.Contains(motivoLower, "usage limit") ||
+		strings.Contains(motivoLower, "approaching rate limits")
 }
 
 func registrarAutoPausaLocal(nombre string, minutos int, motivoPausa, detalle string) error {
