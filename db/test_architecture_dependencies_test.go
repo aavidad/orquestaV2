@@ -62,7 +62,8 @@ func TestDBNoIntroduceDependenciasInternasFueraDeLaFronteraPermitida(t *testing.
 			"planificador.go": {},
 		},
 		"orquesta/runtimepolicy": {
-			"runtime_transcript.go": {},
+			"controlplane_entities.go": {},
+			"runtime_transcript.go":    {},
 		},
 		"orquesta/autonomiapolicy": {
 			"autonomia_supervisor_operativo.go": {},
