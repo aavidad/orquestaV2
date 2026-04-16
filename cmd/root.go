@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"orquesta/db"
+	"orquesta/tareasapp/rules"
 )
 
 var rootCmd = &cobra.Command{
@@ -97,6 +98,7 @@ func initDB() {
 		fmt.Fprintf(os.Stderr, "error abriendo base de datos: %v\n", err)
 		os.Exit(1)
 	}
+	rules.Install()
 }
 
 func openDBForCommand(args []string) error {
