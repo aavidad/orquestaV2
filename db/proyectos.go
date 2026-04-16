@@ -307,20 +307,26 @@ func RutaTrabajoPreferidaAgenteProyecto(agente string, proyecto *Proyecto, cwd s
 	if proyecto == nil {
 		return normalizarRutaProyecto(cwd)
 	}
+	rutaProyectoEfectiva := rutaProyectoEfectivaDesdeProyecto(proyecto, "")
 	return coordinacion.PreferredWorkPath(
 		cwd,
 		rutaWorktreeActivaAgenteProyecto(proyecto.ID, agente),
-		RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, ""),
-		rutaSesionWorktreeProyecto(proyecto, cwd),
+		rutaProyectoEfectiva,
+		rutaSesionWorktreeProyectoConRuta(cwd, rutaProyectoEfectiva),
 	)
 }
 
 func rutaSesionWorktreeProyecto(proyecto *Proyecto, cwd string) bool {
+	return rutaSesionWorktreeProyectoConRuta(cwd, rutaProyectoEfectivaDesdeProyecto(proyecto, ""))
+}
+
+func rutaSesionWorktreeProyectoConRuta(cwd, rutaProyectoEfectiva string) bool {
 	cwd = normalizarRutaProyecto(cwd)
-	if proyecto == nil || cwd == "" {
+	rutaProyectoEfectiva = normalizarRutaProyecto(rutaProyectoEfectiva)
+	if cwd == "" || rutaProyectoEfectiva == "" {
 		return false
 	}
-	return coordinacion.CurrentPathInsideProjectWorktree(cwd, RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, ""))
+	return coordinacion.CurrentPathInsideProjectWorktree(cwd, rutaProyectoEfectiva)
 }
 
 func rutaTrabajoPerteneceAProyectoAgente(proyecto *Proyecto, agente, cwd string) bool {
@@ -328,8 +334,15 @@ func rutaTrabajoPerteneceAProyectoAgente(proyecto *Proyecto, agente, cwd string)
 	if proyecto == nil || cwd == "" {
 		return false
 	}
-	rutaBase := normalizarRutaProyecto(RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, ""))
+	rutaBase := rutaProyectoEfectivaDesdeProyecto(proyecto, "")
 	return coordinacion.WorkPathBelongsToProject(cwd, rutaBase, rutaWorktreeActivaAgenteProyecto(proyecto.ID, agente))
+}
+
+func rutaProyectoEfectivaDesdeProyecto(proyecto *Proyecto, cwdHint string) string {
+	if proyecto == nil {
+		return ""
+	}
+	return normalizarRutaProyecto(RutaProyectoEfectiva(proyecto.ID, proyecto.RutaAbs, cwdHint))
 }
 
 func rutaWorktreeActivaAgenteProyecto(proyectoID int64, agente string) string {
