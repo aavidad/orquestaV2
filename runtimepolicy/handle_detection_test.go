@@ -263,3 +263,26 @@ func TestRuntimeHandleNeedsFreshSync(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeHandleTMUXSessionMissing(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name         string
+		metadataJSON string
+		want         bool
+	}{
+		{"sin metadata", "", false},
+		{"metadata sin session", `{"worker":"x"}`, false},
+		{"metadata tmux incompleta", `{"tmux_session":"", "tmux_pane_id":""}`, false},
+		{"metadata session missing", `{"tmux_session":"", "tmux_pane_id":"", "child_pid":"123"}`, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RuntimeHandleTMUXSessionMissing(tc.metadataJSON); got != tc.want {
+				t.Fatalf("RuntimeHandleTMUXSessionMissing(%q) = %v; want %v", tc.metadataJSON, got, tc.want)
+			}
+		})
+	}
+}

@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"orquesta/db"
-	"orquesta/internal/controlruntime"
 	"orquesta/microprogramacionapp"
 	"orquesta/runtimeagente"
 	"orquesta/runtimepolicy"
@@ -2661,7 +2660,7 @@ func runtimeHandleShouldSupersedeStart(handle *db.RuntimeHandle, runtime *db.Run
 			return false
 		}
 	}
-	if runtimeHandleTMUXSessionMissing(handle) {
+	if runtimepolicy.RuntimeHandleTMUXSessionMissing(handle.MetadataJSON) {
 		return true
 	}
 	switch strings.ToLower(strings.TrimSpace(handle.Estado)) {
@@ -2681,14 +2680,6 @@ func runtimeHandleShouldSupersedeStart(handle *db.RuntimeHandle, runtime *db.Run
 		return true
 	}
 	return false
-}
-
-func runtimeHandleTMUXSessionMissing(handle *db.RuntimeHandle) bool {
-	if handle == nil {
-		return false
-	}
-	known, exists := controlruntime.TMUXSessionExistsMetadata(strings.TrimSpace(handle.MetadataJSON))
-	return known && !exists
 }
 
 func normalizeAgentControlAction(v string) (string, error) {

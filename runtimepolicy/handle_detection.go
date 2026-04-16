@@ -124,6 +124,11 @@ func RuntimeHandleNeedsFreshSync(estado string) bool {
 	}
 }
 
+func RuntimeHandleTMUXSessionMissing(metadataJSON string) bool {
+	known, exists := controlruntime.TMUXSessionExistsMetadata(strings.TrimSpace(metadataJSON))
+	return known && !exists
+}
+
 func RuntimeHandleUsaLegacyCLITMUXPreferred(meta map[string]any) bool {
 	if !RuntimeHandleUsaLegacyProcessPTY(meta) {
 		return false
