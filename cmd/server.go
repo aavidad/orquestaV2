@@ -415,15 +415,17 @@ func serverPrepararSesionAllowedAgents(baseURL string) (map[string]struct{}, err
 		return nil, err
 	}
 	supervisor := strings.TrimSpace(configResp.Config["server_autobootstrap_supervisor_agent"])
-	if supervisor == "" {
+	if !perteneceAFlotaOficialAutobootstrap(supervisor) {
 		supervisor = "Codex1"
 	}
 	add(supervisor)
 	workers := strings.TrimSpace(configResp.Config["server_autobootstrap_worker_agents"])
-	if workers == "" {
+	workersFiltrados := filtrarFlotaOficialAutobootstrap(splitServerAutobootstrapAgents(workers))
+	if len(workersFiltrados) == 0 {
 		workers = "Codex2,Codex3,Codex4,Codex5"
+		workersFiltrados = splitServerAutobootstrapAgents(workers)
 	}
-	for _, item := range splitServerAutobootstrapAgents(workers) {
+	for _, item := range workersFiltrados {
 		add(item)
 	}
 	return allowed, nil
