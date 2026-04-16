@@ -37,7 +37,7 @@ func TestResolvedorAgentePipelineOperativoPrefierePremiumDisponible(t *testing.T
 	}
 }
 
-func TestResolvedorAgentePipelineOperativoPrefiereGeminiParaEspecificacion(t *testing.T) {
+func TestResolvedorAgentePipelineOperativoUsaCodexTambienEnEspecificacion(t *testing.T) {
 	resolvedor := resolvedorAgentePipelineOperativo{
 		rowsProvider: fakeRowsProvider{rows: []agentesapp.Row{
 			{Agente: &db.Agente{Nombre: "Codex1", Habilitado: true}, EstadoOperativo: "disponible"},
@@ -53,12 +53,12 @@ func TestResolvedorAgentePipelineOperativoPrefiereGeminiParaEspecificacion(t *te
 	if err != nil {
 		t.Fatalf("ResolverAgentePipeline: %v", err)
 	}
-	if agente != "Gemini1" {
+	if agente != "Codex1" {
 		t.Fatalf("agente especificacion inesperado: %q", agente)
 	}
 }
 
-func TestResolvedorAgentePipelineOperativoPrefiereClaudeParaRevision(t *testing.T) {
+func TestResolvedorAgentePipelineOperativoUsaCodexParaRevision(t *testing.T) {
 	resolvedor := resolvedorAgentePipelineOperativo{
 		rowsProvider: fakeRowsProvider{rows: []agentesapp.Row{
 			{Agente: &db.Agente{Nombre: "Codex1", Habilitado: true}, EstadoOperativo: "disponible"},
@@ -74,7 +74,7 @@ func TestResolvedorAgentePipelineOperativoPrefiereClaudeParaRevision(t *testing.
 	if err != nil {
 		t.Fatalf("ResolverAgentePipeline: %v", err)
 	}
-	if agente != "Claude1" {
+	if agente != "Codex1" {
 		t.Fatalf("agente revision inesperado: %q", agente)
 	}
 }
@@ -118,7 +118,7 @@ func TestResolvedorAgentePipelineOperativoNoReusaReviewerTrabajando(t *testing.T
 	}
 }
 
-func TestResolvedorAgentePipelineOperativoPrefiereLocalParaMicroprogramacion(t *testing.T) {
+func TestResolvedorAgentePipelineOperativoUsaCodexParaMicroprogramacionLocal(t *testing.T) {
 	resolvedor := resolvedorAgentePipelineOperativo{
 		rowsProvider: fakeRowsProvider{rows: []agentesapp.Row{
 			{Agente: &db.Agente{Nombre: "Codex1", Habilitado: true}, EstadoOperativo: "disponible"},
@@ -132,7 +132,7 @@ func TestResolvedorAgentePipelineOperativoPrefiereLocalParaMicroprogramacion(t *
 	if err != nil {
 		t.Fatalf("ResolverAgentePipeline: %v", err)
 	}
-	if agente != "Gemma1" {
+	if agente != "Codex1" {
 		t.Fatalf("agente local inesperado: %q", agente)
 	}
 }

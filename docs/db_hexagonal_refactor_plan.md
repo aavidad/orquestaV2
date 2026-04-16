@@ -65,6 +65,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: tras aceptar el menú de cambio de modelo por rate limit, `waitForTMUXPaneReady` recaptura la pane y permite continuar con el dispatch; evita falsos `quota_blocked` justo después del auto-switch
 - corte operativo adicional fuera de `db`: `agentesapp/status` ya prioriza un worker fresco y operativo sobre la cuota visible observada; si el runtime ya volvió a `ready/running`, no debe seguir secuestrado como `bloqueado_por_cuota` solo por telemetría stale
 - corte operativo adicional fuera de `db`: la validación previa a despachar trabajo ya no construye el panel completo de agentes para un solo nombre; usa una lectura compacta por agente y reduce calor de CPU/DB en el control-plane
+- corte operativo adicional fuera de `db`: el resolvedor de carriles operativos ya no propone `claude/gemini/gemma/ollama`; la política viva queda alineada a `solo Codex` también en selección de agente, no solo en bootstrap/allowed-agents
 
 Estado del frente seguro:
 

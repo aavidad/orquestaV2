@@ -89,21 +89,13 @@ func agentePreferidoPorCarrilYFase(candidatos []string, entrada capacidadapp.Ent
 
 func preferenciasAgentePorCarrilYFase(entrada capacidadapp.EntradaResolverAgentePipeline) []string {
 	carril := strings.ToLower(strings.TrimSpace(entrada.Carril))
-	fase := strings.ToLower(strings.TrimSpace(entrada.Fase))
 	switch carril {
 	case "revision_diff":
-		return []string{"claude", "gemini", "codex"}
+		return []string{"codex"}
 	case "premium_worktree":
-		switch fase {
-		case "especificacion":
-			return []string{"gemini", "claude", "codex"}
-		case "implementacion", "correccion":
-			return []string{"codex", "claude", "gemini"}
-		default:
-			return []string{"codex", "claude", "gemini"}
-		}
+		return []string{"codex"}
 	case "microprogramacion_local":
-		return []string{"gemma", "ollama"}
+		return []string{"codex"}
 	default:
 		return nil
 	}
@@ -112,10 +104,8 @@ func preferenciasAgentePorCarrilYFase(entrada capacidadapp.EntradaResolverAgente
 func agenteCompatibleConCarril(nombre, carril string) bool {
 	nombre = strings.ToLower(strings.TrimSpace(nombre))
 	switch strings.ToLower(strings.TrimSpace(carril)) {
-	case "premium_worktree", "revision_diff":
-		return strings.HasPrefix(nombre, "codex") || strings.HasPrefix(nombre, "claude") || strings.HasPrefix(nombre, "gemini")
-	case "microprogramacion_local":
-		return strings.HasPrefix(nombre, "gemma") || strings.HasPrefix(nombre, "ollama")
+	case "premium_worktree", "revision_diff", "microprogramacion_local":
+		return strings.HasPrefix(nombre, "codex")
 	case "determinista_app":
 		return false
 	default:
