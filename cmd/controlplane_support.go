@@ -7427,6 +7427,7 @@ func procesarCompactacionExclusividadPremiumBatch(rows []agentesapp.Row, tareasA
 
 func procesarRuntimesFueraDeAsignacionActivaBatch(rows []agentesapp.Row, now time.Time) (int, error) {
 	procesadas := 0
+	proyectosByID := map[int64]*db.Proyecto{}
 	for _, row := range rows {
 		if !rowRuntimeFueraDeAsignacionActivaDebePararse(row, now) {
 			continue
@@ -7446,9 +7447,16 @@ func procesarRuntimesFueraDeAsignacionActivaBatch(rows []agentesapp.Row, now tim
 		} else if reciente {
 			continue
 		}
-		proyecto, err := runtimesService.GetProject(strconv.FormatInt(*proyectoActual, 10))
-		if err != nil {
-			return procesadas, err
+		proyecto := proyectosByID[*proyectoActual]
+		if proyecto == nil {
+			var err error
+			proyecto, err = runtimesService.GetProject(strconv.FormatInt(*proyectoActual, 10))
+			if err != nil {
+				return procesadas, err
+			}
+			if proyecto != nil {
+				proyectosByID[*proyectoActual] = proyecto
+			}
 		}
 		if proyecto == nil {
 			continue
