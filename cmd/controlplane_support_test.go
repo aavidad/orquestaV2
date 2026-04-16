@@ -17701,8 +17701,24 @@ func TestProcesarAgentesDegradadosAutonomiaBatchReactivaPremiumConTareaBloqueada
 	if err != nil {
 		t.Fatalf("listar orders: %v", err)
 	}
-	if len(orders) == 0 || orders[0].Tipo != "start" {
+	foundStart := false
+	foundNudge := false
+	for _, order := range orders {
+		if order == nil {
+			continue
+		}
+		if order.Tipo == "start" {
+			foundStart = true
+		}
+		if order.Tipo == "nudge" && strings.Contains(order.PayloadJSON, `"accion":"continuar_trabajo"`) {
+			foundNudge = true
+		}
+	}
+	if !foundStart {
 		t.Fatalf("deberia encolar start para tarea bloqueada recuperable: %+v", orders)
+	}
+	if !foundNudge {
+		t.Fatalf("deberia encolar continuidad para la tarea reactivada: %+v", orders)
 	}
 	actual, err := db.GetTarea(tareaID)
 	if err != nil {
@@ -23048,7 +23064,7 @@ func TestProcesarAgentesDegradadosAutonomiaBatchRecuperaTareaBloqueadaSiElWorker
 	if tarea.Estado != db.EstadoEnProgreso {
 		t.Fatalf("la tarea deberia volver a en_progreso, got=%s", tarea.Estado)
 	}
-	agente := "Gemini1"
+	agente := "Codex7"
 	estado := "pendiente"
 	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
 	if err != nil {
@@ -23789,6 +23805,151 @@ func TestProcesarAgentesDegradadosAutonomiaBatchEscalaTareaActivaSiWorkerTMUXAta
 	}
 	if stopCount != 2 {
 		t.Fatalf("no deberia encolar mas reinicios al escalar, got stop=%d", stopCount)
+	}
+}
+
+func TestProcesarAgentesDegradadosAutonomiaBatchEscalaTareaActivaSiWorkerTMUXAtascadoReincideConRelevoEncolaContinuidad(t *testing.T) {
+	tmp := prepararDBTemporalCmd(t)
+
+	proyectoID, err := db.UpsertProyecto(&db.Proyecto{
+		Slug:    "orquestador-atascado-relevo",
+		Nombre:  "Orquestador Atascado Relevo",
+		RutaAbs: filepath.Join(tmp, "orquestador"),
+		Tipo:    db.ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	for _, agente := range []string{"Codex7", "CodexLibre"} {
+		if err := db.RegistrarAgente(agente, "programador"); err != nil {
+			t.Fatalf("registrar agente %s: %v", agente, err)
+		}
+		if err := db.ActivarAsignacion(agente, proyectoID, "frente"); err != nil {
+			t.Fatalf("activar asignacion %s: %v", agente, err)
+		}
+	}
+	sesionAtascada, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "Codex7",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion atascada: %v", err)
+	}
+	handleAtascado, err := db.GetRuntimeHandleBySesionID(sesionAtascada.ID)
+	if err != nil || handleAtascado == nil {
+		t.Fatalf("handle atascado: %+v err=%v", handleAtascado, err)
+	}
+	runtimeAtascado, err := db.GetRuntimeBySesionID(sesionAtascada.ID)
+	if err != nil || runtimeAtascado == nil {
+		t.Fatalf("runtime atascado: %+v err=%v", runtimeAtascado, err)
+	}
+	sesionRelevo, err := db.IniciarSesionContexto(db.SesionInicio{
+		Agente:      "CodexLibre",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(tmp, "orquestador"),
+		Herramienta: "codex-cli",
+	})
+	if err != nil {
+		t.Fatalf("iniciar sesion relevo: %v", err)
+	}
+	if err := db.UpsertRuntimeHandleDesdeSesion(sesionRelevo); err != nil {
+		t.Fatalf("upsert handle relevo: %v", err)
+	}
+
+	traceDir := filepath.Join(tmp, "runtime", "codex7-relevo")
+	if err := os.MkdirAll(traceDir, 0o755); err != nil {
+		t.Fatalf("mkdir trace dir: %v", err)
+	}
+	now := time.Now().UTC()
+	staleAt := now.Add(-5 * time.Hour)
+	manifestPath := filepath.Join(traceDir, "manifest.json")
+	statusPath := filepath.Join(traceDir, "status.json")
+	heartbeatPath := filepath.Join(traceDir, "heartbeat.json")
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"agent":"Codex7","driver":"tmux_cli_session","transport":"tmux","tmux_session":"orq-codex7-relevo","created_at":"`+now.Format(time.RFC3339Nano)+`","started_at":"`+now.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(statusPath, []byte(`{"state":"running","alive":true,"updated_at":"`+now.Format(time.RFC3339Nano)+`","last_output_at":"`+staleAt.Format(time.RFC3339Nano)+`","last_progress_at":"`+staleAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write status: %v", err)
+	}
+	if err := os.WriteFile(heartbeatPath, []byte(`{"alive":true,"heartbeat_at":"`+now.Format(time.RFC3339Nano)+`","last_output_at":"`+staleAt.Format(time.RFC3339Nano)+`","last_progress_at":"`+staleAt.Format(time.RFC3339Nano)+`"}`), 0o644); err != nil {
+		t.Fatalf("write heartbeat: %v", err)
+	}
+	metaJSON, err := json.Marshal(map[string]any{
+		"worker_manifest_path":  manifestPath,
+		"worker_status_path":    statusPath,
+		"worker_heartbeat_path": heartbeatPath,
+	})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_handles SET estado='activo', metadata_json=? WHERE id=?`, string(metaJSON), handleAtascado.ID); err != nil {
+		t.Fatalf("activar handle: %v", err)
+	}
+	if _, err := db.DB.Exec(`UPDATE runtime_instances SET logical_state='esperando_io', process_state='running', updated_at=CURRENT_TIMESTAMP WHERE id=?`, runtimeAtascado.ID); err != nil {
+		t.Fatalf("activar runtime: %v", err)
+	}
+	db.ResetRuntimeHandlesHotCache()
+
+	for i := 0; i < 2; i++ {
+		orderID, err := db.EncolarRuntimeOrder(&db.RuntimeOrder{
+			Agente:      "Codex7",
+			ProyectoID:  &proyectoID,
+			Tipo:        "stop",
+			PayloadJSON: fmt.Sprintf(`{"accion":"stop","motivo":"worker_atascado_%d","por":"orquesta"}`, i),
+		})
+		if err != nil {
+			t.Fatalf("encolar stop reciente %d: %v", i, err)
+		}
+		if err := db.MarcarRuntimeOrderEstado(orderID, "completada", `{"ok":true}`, ""); err != nil {
+			t.Fatalf("completar stop reciente %d: %v", i, err)
+		}
+	}
+
+	tareaID, err := db.CrearTarea(&db.Tarea{
+		Titulo:      "Worker tmux atascado reincidente con relevo",
+		Descripcion: "test",
+		ProyectoID:  &proyectoID,
+		Prioridad:   db.PrioridadAlta,
+		CreadoPor:   "alberto",
+	})
+	if err != nil {
+		t.Fatalf("crear tarea: %v", err)
+	}
+	if err := db.TomarTarea(tareaID, "Codex7"); err != nil {
+		t.Fatalf("tomar tarea: %v", err)
+	}
+	if err := db.IniciarTarea(tareaID, "Codex7"); err != nil {
+		t.Fatalf("iniciar tarea: %v", err)
+	}
+
+	procesadas, err := procesarAgentesDegradadosAutonomiaBatch()
+	if err != nil {
+		t.Fatalf("procesar agentes degradados: %v", err)
+	}
+	if procesadas != 1 {
+		t.Fatalf("deberia reasignar la tarea activa del worker reincidente, got=%d", procesadas)
+	}
+	tarea, err := db.GetTarea(tareaID)
+	if err != nil {
+		t.Fatalf("get tarea: %v", err)
+	}
+	if tarea.Estado != db.EstadoEnProgreso || tarea.Agente == nil || *tarea.Agente != "CodexLibre" {
+		t.Fatalf("la tarea deberia quedar reasignada al relevo sano: %+v", tarea)
+	}
+	agente := "CodexLibre"
+	estado := "pendiente"
+	orders, err := db.ListarRuntimeOrders(db.FiltroRuntimeOrders{Agente: &agente, ProyectoID: &proyectoID, Estado: &estado})
+	if err != nil {
+		t.Fatalf("listar runtime orders relevo: %v", err)
+	}
+	if len(orders) != 1 || orders[0] == nil || orders[0].Tipo != "nudge" {
+		t.Fatalf("deberia encolar continuidad al relevo tras atasco persistente: %+v", orders)
+	}
+	if !strings.Contains(orders[0].PayloadJSON, `"accion":"continuar_trabajo"`) {
+		t.Fatalf("payload nudge inesperado: %s", orders[0].PayloadJSON)
 	}
 }
 

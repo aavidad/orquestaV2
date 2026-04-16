@@ -8488,6 +8488,9 @@ func escalarTareasWorkerAtascado(row agentesapp.Row, rows []agentesapp.Row, now 
 			openTasksProjected[agente]--
 		}
 		openTasksProjected[relevo]++
+		if err := encolarContinuacionTareaReasignadaSiCorresponde(relevo, actual.ProyectoID, actual.ID, agente, "atasco_persistente", "continúa con la tarea reasignada tras atasco persistente y deja evidencia de avance", nil); err != nil {
+			return procesadas, err
+		}
 		procesadas++
 	}
 	if procesadas > 0 {
