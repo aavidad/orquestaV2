@@ -387,6 +387,9 @@ func (dbAutomationService) ResetReanimacionResultado(nombre string) (resetReanim
 		return "", err
 	}
 	if bloqueado {
+		if err := cancelarRuntimeOrdersReanimacionPorCooldown(nombre); err != nil {
+			return "", err
+		}
 		return resetReanimacionResultadoCooldownSostenido, nil
 	}
 	if err := cancelarBootstrapObsoletoReanimacion(nombre); err != nil {
@@ -439,6 +442,42 @@ func cancelarBootstrapObsoletoReanimacion(agente string) error {
 	}
 	if err := db.LimpiarContinuidadAgente(agente); err != nil {
 		return err
+	}
+	return nil
+}
+
+func cancelarRuntimeOrdersReanimacionPorCooldown(agente string) error {
+	agente = strings.TrimSpace(agente)
+	if agente == "" {
+		return nil
+	}
+	estados := []string{"pendiente", "tomada", "ejecutando"}
+	for _, estado := range estados {
+		estado := estado
+		orders, err := runtimesService.ListRuntimeOrders(db.FiltroRuntimeOrders{
+			Agente: &agente,
+			Estado: &estado,
+		})
+		if err != nil {
+			return err
+		}
+		for _, order := range orders {
+			if order == nil {
+				continue
+			}
+			switch strings.ToLower(strings.TrimSpace(order.Tipo)) {
+			case "start", "resume", "handoff":
+			default:
+				continue
+			}
+			resultado := `{"ok":false,"dispatch_state":"cancelled","quota_blocked":true,"superseded_reason":"quota_cooldown"}`
+			detalle := "cooldown sostenido por cuota visible"
+			if err := db.MarcarRuntimeOrderEstado(order.ID, "cancelada", resultado, detalle); err != nil {
+				return err
+			}
+			db.Audit("orquesta", "reanimacion_cancela_bootstrap_por_cuota", "runtime_order", order.ID,
+				fmt.Sprintf("agente=%s tipo=%s estado_previo=%s", agente, strings.TrimSpace(order.Tipo), estado))
+		}
 	}
 	return nil
 }

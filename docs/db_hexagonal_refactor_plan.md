@@ -57,6 +57,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - `1cd664d` centraliza la reutilización de ruta efectiva del proyecto en helpers de `db/proyectos.go` para evitar recomputación y seams duplicados
 - corte operativo adicional fuera de `db`: `worker starting` ya no cuenta como `trabajando`; pasa a `arrancando` en `agentesapp/status`, reduciendo sobreconteo de ocupación sin empujar lógica a persistencia
 - corte operativo adicional fuera de `db`: la autonomía trata una `pause` reciente ya completada como estado satisfecho para no reencolar pausas duplicadas en loops de cuota y reducir calor innecesario del daemon
+- corte operativo adicional fuera de `db`: cuando una reanimación sigue bloqueada por cuota visible, Orquesta cancela `start/resume/handoff` vivos asociados a esa reanimación para evitar relanzamientos en bucle
 
 Estado del frente seguro:
 
