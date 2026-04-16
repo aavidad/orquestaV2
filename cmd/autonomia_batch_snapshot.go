@@ -42,6 +42,8 @@ type autonomiaBatchSnapshot struct {
 	supervisorByProject        map[int64]*db.Agente
 	supervisorLoaded           map[int64]struct{}
 	pauseByAgent               map[string]autonomiaBudgetPauseDecision
+	bloqueosPorTarea           map[int64]db.ResumenBloqueo
+	bloqueosLoaded             bool
 }
 
 var autonomiaOperationalStateResolver = func(agente string) (string, string, error) {
@@ -80,6 +82,7 @@ func newAutonomiaBatchSnapshot(sesiones []*db.Sesion) (*autonomiaBatchSnapshot, 
 		supervisorByProject:        map[int64]*db.Agente{},
 		supervisorLoaded:           map[int64]struct{}{},
 		pauseByAgent:               map[string]autonomiaBudgetPauseDecision{},
+		bloqueosPorTarea:           map[int64]db.ResumenBloqueo{},
 	}
 	for key, agente := range agentesByName {
 		if agente == nil {
@@ -159,6 +162,8 @@ func (s *autonomiaBatchSnapshot) invalidateProject(proyectoID int64) {
 			delete(s.activeHandleByAgentProject, cacheKey)
 		}
 	}
+	s.bloqueosLoaded = false
+	s.bloqueosPorTarea = map[int64]db.ResumenBloqueo{}
 }
 
 func (s *autonomiaBatchSnapshot) assignment(agente string, proyectoID int64) (bool, string, error) {
@@ -466,6 +471,32 @@ func (s *autonomiaBatchSnapshot) activeProject(agente string) (int64, error) {
 	}
 	s.activeProjectByAgent[key] = proyectoID
 	return proyectoID, nil
+}
+
+func (s *autonomiaBatchSnapshot) bloqueoSummaryMap() (map[int64]db.ResumenBloqueo, error) {
+	if s == nil {
+		return nil, nil
+	}
+	if s.bloqueosPorTarea == nil {
+		s.bloqueosPorTarea = map[int64]db.ResumenBloqueo{}
+	}
+	if s.bloqueosLoaded {
+		return s.bloqueosPorTarea, nil
+	}
+	resumenBloqueos, err := db.ListarResumenBloqueos()
+	if err != nil {
+		return nil, err
+	}
+	for _, bloqueo := range resumenBloqueos {
+		if bloqueo.ID <= 0 {
+			continue
+		}
+		if _, ok := s.bloqueosPorTarea[bloqueo.ID]; !ok {
+			s.bloqueosPorTarea[bloqueo.ID] = bloqueo
+		}
+	}
+	s.bloqueosLoaded = true
+	return s.bloqueosPorTarea, nil
 }
 
 func (s *autonomiaBatchSnapshot) autonomiaActivoEnProyecto(agente string, proyectoID int64, info *db.Agente) (bool, error) {

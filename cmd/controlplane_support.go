@@ -8988,13 +8988,23 @@ func procesarRecuperacionTareasBloqueadasSesionActiva(sesion *db.Sesion, snapsho
 	if len(tareas) == 0 {
 		return 0, nil
 	}
-	resumenBloqueos, err := db.ListarResumenBloqueos()
-	if err != nil {
-		return 0, err
-	}
 	bloqueosPorTarea := map[int64]db.ResumenBloqueo{}
-	for _, bloqueo := range resumenBloqueos {
-		bloqueosPorTarea[bloqueo.ID] = bloqueo
+	if snapshot != nil {
+		cached, err := snapshot.bloqueoSummaryMap()
+		if err != nil {
+			return 0, err
+		}
+		for id, bloqueo := range cached {
+			bloqueosPorTarea[id] = bloqueo
+		}
+	} else {
+		resumenBloqueos, err := db.ListarResumenBloqueos()
+		if err != nil {
+			return 0, err
+		}
+		for _, bloqueo := range resumenBloqueos {
+			bloqueosPorTarea[bloqueo.ID] = bloqueo
+		}
 	}
 	procesadas := 0
 	for _, tarea := range tareas {

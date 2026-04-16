@@ -74,6 +74,7 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - corte operativo adicional fuera de `db`: el `Runner` creado por el servidor activa suelos seguros también a nivel de struct para los carriles más calientes (`warm`, `warm requeue`, `cold`, `runtime transcript`, `runtime mailbox`, `runtime orders`); los tests/e2e que necesitan milisegundos deben desactivarlo explícitamente
 - corte operativo adicional fuera de `db`: la recuperación automática de tareas bloqueadas desde sesión activa ya no consulta `BuildPanelRows()` global; usa detalle compacto por agente y reduce trabajo repetido en autonomía
 - corte operativo adicional fuera de `db`: la carga de tareas para autonomía degradada ya no barre todas las tareas del sistema; limita las lecturas a estados vivos (`asignada`, `en_progreso`, `bloqueada`) y reduce volumen por tick caliente
+- corte operativo adicional fuera de `db`: el snapshot de autonomía ahora cachea `ListarResumenBloqueos()` y la recuperación de tareas bloqueadas desde sesión activa deja de repetir esa consulta por cada sesión
 
 Estado del frente seguro:
 
