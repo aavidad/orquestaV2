@@ -1,7 +1,6 @@
 package db
 
 import (
-	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -105,47 +104,25 @@ func getActiveWorktreeSummary(agente string, proyecto *Proyecto) map[string]any 
 	if strings.TrimSpace(agente) == "" || proyecto == nil || proyecto.ID == 0 {
 		return nil
 	}
-	row := DB.QueryRow(`
-		SELECT id, nombre, ruta_abs, branch, base_ref, motivo
-		FROM worktrees
-		WHERE proyecto_id = ? AND agente = ? AND estado = 'activa'
-		ORDER BY id DESC
-		LIMIT 1`,
-		proyecto.ID, strings.TrimSpace(agente),
-	)
-	var (
-		id      int64
-		nombre  sql.NullString
-		ruta    sql.NullString
-		branch  sql.NullString
-		baseRef sql.NullString
-		motivo  sql.NullString
-	)
-	if err := row.Scan(&id, &nombre, &ruta, &branch, &baseRef, &motivo); err != nil {
+	agente = strings.TrimSpace(agente)
+	estado := coordinacion.WorktreeActive
+	worktrees, err := ListarWorktreesCoord(coordinacion.WorktreeFilter{
+		ProjectID: &proyecto.ID,
+		Agent:     &agente,
+		State:     &estado,
+	})
+	if err != nil || len(worktrees) == 0 || worktrees[0] == nil {
 		return nil
 	}
-	if !esWorktreeActivaCoherenteConProyecto(proyecto, ruta.String) {
-		return nil
-	}
+	worktree := worktrees[0]
 	return map[string]any{
-		"id":       id,
-		"nombre":   strings.TrimSpace(nombre.String),
-		"ruta":     strings.TrimSpace(ruta.String),
-		"branch":   strings.TrimSpace(branch.String),
-		"base_ref": strings.TrimSpace(baseRef.String),
-		"motivo":   strings.TrimSpace(motivo.String),
+		"id":       worktree.ID,
+		"nombre":   strings.TrimSpace(worktree.Name),
+		"ruta":     strings.TrimSpace(worktree.Path),
+		"branch":   strings.TrimSpace(worktree.Branch),
+		"base_ref": strings.TrimSpace(worktree.BaseRef),
+		"motivo":   strings.TrimSpace(worktree.Reason),
 	}
-}
-
-func esWorktreeActivaCoherenteConProyecto(proyecto *Proyecto, worktreePath string) bool {
-	if proyecto == nil {
-		return false
-	}
-	rutaProyecto := strings.TrimSpace(proyecto.RutaAbs)
-	if rutaProyecto == "" {
-		return false
-	}
-	return coordinacion.ActiveWorktreePathCoherent(worktreePath, rutaProyecto)
 }
 
 func getActiveTaskSummaries(agente string, proyectoID int64) []map[string]any {

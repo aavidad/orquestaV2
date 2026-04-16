@@ -10,6 +10,7 @@ package db
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"orquesta/coordinacion"
@@ -301,6 +302,63 @@ func TestListarWorktreesOcultaActivasEnRutaHistoricaSiElProyectoYaSeMovio(t *tes
 	}
 	if len(worktrees) != 0 {
 		t.Fatalf("la worktree historica deberia ocultarse al listar activas: %+v", worktrees)
+	}
+}
+
+func TestBuildProjectContextSummaryOcultaWorktreeActivaHistoricaSiElProyectoYaSeMovio(t *testing.T) {
+	tmp := prepararDBTemporal(t)
+	rutaHistorica := filepath.Join(tmp, "historico", "orquestador")
+	rutaActual := filepath.Join(tmp, "actual", "orquesta")
+	rutaWorktreeHistorica := filepath.Join(rutaHistorica, ".orquesta-worktrees", "orq-codex1")
+	if err := os.MkdirAll(filepath.Join(rutaActual, "cmd"), 0o755); err != nil {
+		t.Fatalf("mkdir ruta actual: %v", err)
+	}
+	if err := os.MkdirAll(rutaWorktreeHistorica, 0o755); err != nil {
+		t.Fatalf("mkdir worktree historica: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rutaActual, "go.mod"), []byte("module orquesta\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod actual: %v", err)
+	}
+
+	if err := RegistrarAgente("Codex1", "programador"); err != nil {
+		t.Fatalf("registrar agente: %v", err)
+	}
+	proyectoID, err := UpsertProyecto(&Proyecto{
+		Slug:    "orquestador",
+		Nombre:  "Orquestador",
+		RutaAbs: rutaHistorica,
+		Tipo:    ProyectoRepo,
+		Activo:  true,
+	})
+	if err != nil {
+		t.Fatalf("upsert proyecto: %v", err)
+	}
+	if _, err := IniciarSesionContexto(SesionInicio{
+		Agente:      "Codex1",
+		ProyectoID:  &proyectoID,
+		CWD:         filepath.Join(rutaActual, "cmd"),
+		Herramienta: "codex-cli",
+	}); err != nil {
+		t.Fatalf("iniciar sesion: %v", err)
+	}
+	if _, err := DB.Exec(`
+		INSERT INTO worktrees (proyecto_id, agente, nombre, ruta_abs, branch, base_ref, estado, motivo)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		proyectoID, "Codex1", "orq-codex1", rutaWorktreeHistorica, "feature/wt-codex1", "HEAD", "activa", "test",
+	); err != nil {
+		t.Fatalf("crear worktree historica: %v", err)
+	}
+
+	proyecto, err := GetProyecto("orquestador")
+	if err != nil {
+		t.Fatalf("get proyecto: %v", err)
+	}
+	contexto, resumen := BuildProjectContextSummary("Codex1", proyecto)
+	if _, ok := contexto["worktree_activa"]; ok {
+		t.Fatalf("la worktree historica no deberia entrar en project_context: %+v", contexto)
+	}
+	if strings.Contains(resumen, "Worktree activa en") {
+		t.Fatalf("el resumen no deberia anunciar una worktree historica: %s", resumen)
 	}
 }
 

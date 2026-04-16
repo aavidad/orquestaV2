@@ -67,6 +67,7 @@ Riesgos abiertos:
 - Riesgo de estabilidad de transición en `controlplane_entities.go` por contratos implícitos con `runtimesapp` y `db` en `session_resume`/`mailbox` durante cambios concurrentes.
 - Riesgo de backlog de pruebas: faltan tests de equivalencia específicos para ruta de `CrearSkillNotificaRefreshAMailboxDeAgentesDelRol` en escenarios con coordinadores instalados por defecto.
 - Riesgo de coordinación: `controlplane_entities.go` y `db/asignaciones.go` siguen siendo los puntos de mayor fricción para merge si se pisan fronteras de escritura.
+- Riesgo operativo del daemon: hoy muchos cambios de bootstrap/configuración/runtime siguen empujando a reinicio completo; falta un mecanismo de `reload` tipo Apache para aplicar cambios sin cortar ni colgar agentes vivos.
 
 Siguiente corte recomendado para Orquesta (orden):
 
@@ -77,6 +78,7 @@ Siguiente corte recomendado para Orquesta (orden):
 - [ ] 5) Cerrar seam de transición final en `db/tareas.go` + `db/asignaciones.go` migrando reglas funcionales remanentes a `tareasapp`
 - [ ] 6) Reforzar frontera en `db/test_architecture_dependencies_test.go` para imports y wrappers tras cada corte
 - [ ] 7) Vigilar que políticas y prompts no reintroduzcan `xhigh` por defecto fuera de los tres casos permitidos
+- [ ] 8) Diseñar e implementar `orquesta reload`: recarga en caliente de configuración/bootstrap/prompts/skills provisionadas sin reinicio completo del daemon y sin romper agentes activos
 
 ## Inventario Actual
 
