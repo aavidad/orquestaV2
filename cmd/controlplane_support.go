@@ -4937,47 +4937,60 @@ func reconciliarRuntimeMailboxGuidanceDurableEnInboxBatchConMailbox(mailbox []*d
 		if _, skip := consumed[msg.ID]; skip {
 			continue
 		}
-		handle, err := snapshot.activeHandle(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+		dispatched, err := reconciliarRuntimeMailboxGuidanceDurableEnInboxMensaje(msg, consumed, snapshot)
 		if err != nil {
 			return total, err
 		}
-		if handle == nil {
-			continue
+		if dispatched {
+			total++
 		}
-		if !runtimeMailboxGuidanceDurableUsaInbox(handle) {
-			continue
-		}
-		if ok, err := runtimeMailboxGuidanceDurableTieneEntregaMailboxOnly(snapshot, msg, handle); err != nil {
-			return total, err
-		} else if !ok {
-			continue
-		}
-		if msg.ProyectoID == nil || *msg.ProyectoID <= 0 {
-			continue
-		}
-		proyecto, err := snapshot.project(*msg.ProyectoID)
-		if err != nil {
-			return total, err
-		}
-		if proyecto == nil {
-			continue
-		}
-		tarea, err := tareaActivaAutonomiaProyectoAgente(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
-		if err != nil {
-			return total, err
-		}
-		if err := escribirInboxRuntimeMailboxDurable(proyecto, strings.TrimSpace(msg.ToAgente), tarea, msg, handle); err != nil {
-			return total, err
-		}
-		if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
-			return total, err
-		}
-		db.Audit("orquesta", "runtime_mailbox_guidance_durable_inbox", "runtime_mailbox", msg.ID,
-			fmt.Sprintf("agente=%s proyecto=%s kind=%s", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(proyecto.Slug), strings.TrimSpace(msg.Kind)))
-		consumed[msg.ID] = struct{}{}
-		total++
 	}
 	return total, nil
+}
+
+// reconciliarRuntimeMailboxGuidanceDurableEnInboxMensaje valida y escribe en inbox
+// un mensaje guidance-durable para el agente destino.
+// Retorna true si el mensaje fue entregado y consumido.
+func reconciliarRuntimeMailboxGuidanceDurableEnInboxMensaje(msg *db.RuntimeMailboxMessage, consumed map[int64]struct{}, snapshot *runtimeMailboxBatchSnapshot) (bool, error) {
+	handle, err := snapshot.activeHandle(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	if err != nil {
+		return false, err
+	}
+	if handle == nil {
+		return false, nil
+	}
+	if !runtimeMailboxGuidanceDurableUsaInbox(handle) {
+		return false, nil
+	}
+	if ok, err := runtimeMailboxGuidanceDurableTieneEntregaMailboxOnly(snapshot, msg, handle); err != nil {
+		return false, err
+	} else if !ok {
+		return false, nil
+	}
+	if msg.ProyectoID == nil || *msg.ProyectoID <= 0 {
+		return false, nil
+	}
+	proyecto, err := snapshot.project(*msg.ProyectoID)
+	if err != nil {
+		return false, err
+	}
+	if proyecto == nil {
+		return false, nil
+	}
+	tarea, err := tareaActivaAutonomiaProyectoAgente(strings.TrimSpace(msg.ToAgente), msg.ProyectoID)
+	if err != nil {
+		return false, err
+	}
+	if err := escribirInboxRuntimeMailboxDurable(proyecto, strings.TrimSpace(msg.ToAgente), tarea, msg, handle); err != nil {
+		return false, err
+	}
+	if err := db.MarcarRuntimeMailboxEntregado(msg.ID); err != nil {
+		return false, err
+	}
+	db.Audit("orquesta", "runtime_mailbox_guidance_durable_inbox", "runtime_mailbox", msg.ID,
+		fmt.Sprintf("agente=%s proyecto=%s kind=%s", strings.TrimSpace(msg.ToAgente), strings.TrimSpace(proyecto.Slug), strings.TrimSpace(msg.Kind)))
+	consumed[msg.ID] = struct{}{}
+	return true, nil
 }
 
 func runtimeMailboxBootstrapPendientePermiteGuidanceDurable(msg *db.RuntimeMailboxMessage, handle *db.RuntimeHandle) bool {
