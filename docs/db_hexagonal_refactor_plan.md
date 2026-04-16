@@ -51,6 +51,10 @@ Progreso ya aterrizado en commits pequeños para no pisarse:
 - `7d03d7e` alinea la doctrina de modelo/razonamiento y la regla operativa de `xhigh` reservado a casos excepcionales de alto riesgo
 - `27788af` añade guardarraíl de tests para que los perfiles semilla no reintroduzcan `xhigh` por defecto
 - `66ee3ef` reutiliza `coordinacion.WorktreePathRef` en la resolución de rutas de proyecto, eliminando duplicación de tipos en `db/proyectos.go`
+- `51a0420` reutiliza la policy de listado/coherencia de worktrees en `project_context`, evitando query ad hoc y guard duplicado
+- `aa13fa1` reutiliza `GetProyectoConRutaEfectiva` en el filtrado de `worktrees`, reduciendo ensamblaje repetido en `db/worktrees.go`
+- `d3c36c6` reutiliza la búsqueda de proyecto con ruta efectiva al resolver la worktree activa por agente/proyecto
+- `1cd664d` centraliza la reutilización de ruta efectiva del proyecto en helpers de `db/proyectos.go` para evitar recomputación y seams duplicados
 
 Estado del frente seguro:
 
